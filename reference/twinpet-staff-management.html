@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TwinPet POS — จัดการพนักงาน</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600&family=Sarabun:wght@300;400;500&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" rel="stylesheet">
+<style>
+:root {
+  --p600: #534AB7;
+  --p500: #6B62C9;
+  --p100: #CECBF6;
+  --p50:  #EEEDFE;
+  --g50:  #F8F8FC;
+  --g100: #EDEDF5;
+  --topbar-h: 56px;
+  --tabs-h: 44px;
+  --footer-h: 58px;
+  --sidebar-w: 0px;
+  --white: #ffffff;
+  --border: rgba(0,0,0,0.08);
+  --border-md: rgba(0,0,0,0.13);
+  --text-primary: #1A1A2E;
+  --text-secondary: #6B7280;
+  --text-muted: #9CA3AF;
+  --success: #0F6E56;
+  --success-bg: #E1F5EE;
+  --danger: #A32D2D;
+  --danger-bg: #FCEBEB;
+  --warn: #854F0B;
+  --warn-bg: #FAEEDA;
+  --info: #185FA5;
+  --info-bg: #E6F1FB;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Prompt', 'Sarabun', sans-serif;
+  background: var(--g50);
+  color: var(--text-primary);
+  height: 100vh;
+  overflow: hidden;
+  font-size: 14px;
+}
+
+/* ── Layout Shell ── */
+.shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* ── Topbar ── */
+.topbar {
+  height: var(--topbar-h);
+  background: var(--white);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  gap: 12px;
+  flex-shrink: 0;
+  z-index: 50;
+}
+.topbar-icon {
+  width: 34px; height: 34px; border-radius: var(--radius-md);
+  background: var(--p50); display: flex; align-items: center; justify-content: center;
+  color: var(--p600); font-size: 18px; flex-shrink: 0;
+}
+.topbar-title { font-size: 15px; font-weight: 500; color: var(--text-primary); }
+.topbar-sub { font-size: 12px; color: var(--text-secondary); margin-top: 1px; }
+.topbar-center { flex: 1; }
+.branch-badge {
+  font-size: 11px; padding: 4px 12px; border-radius: 20px;
+  background: var(--p50); color: var(--p600); font-weight: 500;
+  border: 1px solid var(--p100); letter-spacing: 0.02em;
+  display: flex; align-items: center; gap: 5px;
+}
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 16px; border-radius: var(--radius-md); font-size: 13px; font-family: inherit; font-weight: 400; cursor: pointer; transition: all 0.15s; border: 1px solid transparent; white-space: nowrap; }
+.btn-primary { background: var(--p600); color: #fff; border-color: var(--p600); }
+.btn-primary:hover { background: var(--p500); border-color: var(--p500); }
+.btn-ghost { background: transparent; color: var(--text-secondary); border-color: var(--border-md); }
+.btn-ghost:hover { background: var(--g50); color: var(--text-primary); }
+.btn-danger-ghost { background: transparent; color: var(--danger); border-color: var(--danger-bg); }
+.btn-danger-ghost:hover { background: var(--danger-bg); }
+.btn-sm { padding: 5px 12px; font-size: 12px; }
+
+/* ── Tabs ── */
+.tabs-bar {
+  height: var(--tabs-h);
+  background: var(--white);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: flex-end;
+  padding: 0 20px;
+  gap: 0;
+  flex-shrink: 0;
+}
+.tab-btn {
+  padding: 10px 18px 10px;
+  font-size: 13px; font-family: inherit; font-weight: 400;
+  background: none; border: none; cursor: pointer;
+  color: var(--text-secondary);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  display: flex; align-items: center; gap: 6px;
+  transition: color 0.15s;
+  white-space: nowrap;
+}
+.tab-btn:hover { color: var(--text-primary); }
+.tab-btn.active { color: var(--p600); border-bottom-color: var(--p600); font-weight: 500; }
+.tab-badge { font-size: 10px; padding: 1px 7px; border-radius: 10px; background: var(--g100); color: var(--text-secondary); font-weight: 500; }
+.tab-btn.active .tab-badge { background: var(--p50); color: var(--p600); }
+
+/* ── Content Area ── */
+.content-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ── Panels ── */
+.panel { display: none; flex-direction: column; gap: 16px; }
+.panel.active { display: flex; }
+
+/* ── Toolbar Row ── */
+.toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.search-wrap { position: relative; flex: 1; min-width: 200px; max-width: 300px; }
+.search-wrap i { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 16px; pointer-events: none; }
+.search-wrap input { width: 100%; padding: 7px 12px 7px 34px; font-size: 13px; font-family: inherit; border: 1px solid var(--border-md); border-radius: var(--radius-md); background: var(--white); color: var(--text-primary); }
+.search-wrap input:focus { outline: none; border-color: var(--p600); box-shadow: 0 0 0 3px rgba(83,74,183,0.08); }
+.select-filter { padding: 7px 12px; font-size: 13px; font-family: inherit; border: 1px solid var(--border-md); border-radius: var(--radius-md); background: var(--white); color: var(--text-primary); cursor: pointer; }
+.select-filter:focus { outline: none; border-color: var(--p600); }
+
+/* ── Card ── */
+.card { background: var(--white); border-radius: var(--radius-lg); border: 1px solid var(--border); overflow: hidden; }
+
+/* ── Table ── */
+.table-scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 700px; }
+thead th { padding: 10px 16px; text-align: left; font-size: 11px; font-weight: 500; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; background: var(--g50); border-bottom: 1px solid var(--border); white-space: nowrap; }
+tbody td { padding: 12px 16px; border-bottom: 1px solid var(--border); vertical-align: middle; color: var(--text-primary); }
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover td { background: var(--g50); }
+
+/* ── Avatar ── */
+.avatar { width: 34px; height: 34px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 500; flex-shrink: 0; }
+.av-purple { background: var(--p50); color: var(--p600); }
+.av-teal   { background: #E1F5EE; color: #0F6E56; }
+.av-coral  { background: #FAECE7; color: #993C1D; }
+.av-blue   { background: var(--info-bg); color: var(--info); }
+.av-amber  { background: #FAEEDA; color: #854F0B; }
+
+.emp-cell { display: flex; align-items: center; gap: 10px; }
+.emp-name { font-weight: 500; font-size: 13px; line-height: 1.3; }
+.emp-id   { font-size: 11px; color: var(--text-muted); font-family: 'Sarabun', sans-serif; }
+
+/* ── Role Badge ── */
+.role-badge { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 11px; font-weight: 500; line-height: 1.6; }
+.role-admin   { background: var(--p50);   color: #3C3489; }
+.role-manager { background: var(--info-bg); color: #0C447C; }
+.role-staff   { background: #F1EFE8; color: #444441; }
+
+/* ── Status ── */
+.status-pill { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; }
+.dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.dot-on  { background: #1D9E75; box-shadow: 0 0 0 2px rgba(29,158,117,0.2); }
+.dot-off { background: #D1D5DB; }
+.status-on  { color: var(--success); }
+.status-off { color: var(--text-muted); }
+
+/* ── Branch Tags ── */
+.branch-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.branch-tag { font-size: 10px; padding: 2px 8px; border-radius: 4px; background: var(--g100); color: var(--text-secondary); white-space: nowrap; }
+
+/* ── Action Buttons in table ── */
+.action-group { display: flex; gap: 4px; }
+.icon-btn { width: 30px; height: 30px; border-radius: var(--radius-sm); border: 1px solid var(--border-md); background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 15px; color: var(--text-secondary); transition: all 0.15s; }
+.icon-btn:hover { background: var(--g50); color: var(--text-primary); border-color: var(--border-md); }
+.icon-btn.danger:hover { background: var(--danger-bg); color: var(--danger); border-color: rgba(163,45,45,0.2); }
+.icon-btn.warn:hover { background: var(--warn-bg); color: var(--warn); border-color: rgba(133,79,11,0.2); }
+
+/* ── Permission Matrix ── */
+.perm-role-sel-wrap { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+.perm-matrix-header { display: grid; grid-template-columns: 1fr 100px 100px 100px; padding: 10px 16px; background: var(--g50); border-bottom: 1px solid var(--border); font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
+.perm-matrix-header span { text-align: center; }
+.perm-matrix-header span:first-child { text-align: left; color: var(--text-secondary); }
+.perm-col-admin   { color: #3C3489 !important; }
+.perm-col-manager { color: #0C447C !important; }
+.perm-col-staff   { color: #444441 !important; }
+
+.perm-group-header { padding: 8px 16px; background: var(--g50); border-bottom: 1px solid var(--border); font-size: 11px; font-weight: 500; color: var(--text-secondary); display: flex; align-items: center; gap: 6px; text-transform: uppercase; letter-spacing: 0.06em; }
+.perm-row { display: grid; grid-template-columns: 1fr 100px 100px 100px; padding: 11px 16px; border-bottom: 1px solid var(--border); align-items: center; transition: background 0.1s; }
+.perm-row:last-child { border-bottom: none; }
+.perm-row:hover { background: var(--g50); }
+.perm-label { font-size: 13px; color: var(--text-primary); }
+.perm-desc  { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.perm-cell  { display: flex; align-items: center; justify-content: center; }
+
+/* ── Toggle ── */
+.toggle { position: relative; width: 38px; height: 22px; cursor: pointer; display: inline-block; }
+.toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+.toggle-track { position: absolute; inset: 0; border-radius: 11px; background: #D1D5DB; transition: background 0.2s; }
+.toggle input:checked + .toggle-track { background: var(--p600); }
+.toggle input:disabled + .toggle-track { opacity: 0.6; cursor: not-allowed; }
+.toggle-thumb { position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.2); transition: transform 0.2s; pointer-events: none; }
+.toggle input:checked ~ .toggle-thumb { transform: translateX(16px); }
+
+/* ── Log Chips ── */
+.chip-bar { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { padding: 5px 14px; border-radius: 20px; font-size: 12px; cursor: pointer; border: 1px solid var(--border-md); background: var(--white); color: var(--text-secondary); font-family: inherit; transition: all 0.15s; }
+.chip:hover { border-color: var(--p100); color: var(--p600); }
+.chip.active { background: var(--p50); color: var(--p600); border-color: var(--p100); font-weight: 500; }
+
+/* ── Log Table ── */
+.log-type-icon { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+.log-cell { display: flex; align-items: center; gap: 10px; }
+
+/* ── Footer ── */
+.footer {
+  height: var(--footer-h);
+  background: var(--white);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 24px;
+  gap: 0;
+  flex-shrink: 0;
+}
+.footer-stat { display: flex; flex-direction: column; align-items: center; padding: 0 20px; border-right: 1px solid var(--border); }
+.footer-stat:last-child { border-right: none; }
+.footer-num { font-size: 20px; font-weight: 500; line-height: 1.2; color: var(--text-primary); }
+.footer-lbl { font-size: 10px; color: var(--text-muted); margin-top: 1px; letter-spacing: 0.03em; text-transform: uppercase; }
+.footer-num.clr-green  { color: var(--success); }
+.footer-num.clr-purple { color: var(--p600); }
+.footer-num.clr-blue   { color: var(--info); }
+.footer-num.clr-gray   { color: var(--text-secondary); }
+.footer-spacer { flex: 1; }
+.footer-time { font-size: 12px; color: var(--text-muted); display: flex; align-items: center; gap: 5px; }
+
+/* ── Modal ── */
+.modal-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+  align-items: center; justify-content: center; z-index: 200;
+  backdrop-filter: blur(2px);
+}
+.modal-overlay.open { display: flex; }
+.modal {
+  background: var(--white); border-radius: var(--radius-lg);
+  border: 1px solid var(--border); width: 520px; max-width: 96vw;
+  max-height: 92vh; overflow-y: auto; box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+  animation: modal-in 0.18s ease;
+}
+@keyframes modal-in { from { opacity: 0; transform: translateY(-10px) scale(0.98); } to { opacity: 1; transform: none; } }
+.modal-header { padding: 18px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.modal-title { font-size: 15px; font-weight: 500; }
+.modal-body { padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+.modal-footer { padding: 14px 20px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
+
+.form-group { display: flex; flex-direction: column; gap: 5px; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+.form-label { font-size: 12px; font-weight: 500; color: var(--text-secondary); }
+.form-required { color: #E24B4A; margin-left: 2px; }
+.form-input, .form-select {
+  padding: 8px 12px; font-size: 13px; font-family: inherit;
+  border: 1px solid var(--border-md); border-radius: var(--radius-md);
+  background: var(--white); color: var(--text-primary); width: 100%;
+}
+.form-input:focus, .form-select:focus { outline: none; border-color: var(--p600); box-shadow: 0 0 0 3px rgba(83,74,183,0.08); }
+.form-hint { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+.form-section-title { font-size: 12px; font-weight: 500; color: var(--p600); padding-bottom: 8px; border-bottom: 1px solid var(--p50); display: flex; align-items: center; gap: 5px; }
+
+/* Branch checkboxes */
+.branch-check-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.branch-check-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border: 1px solid var(--border-md); border-radius: var(--radius-md); cursor: pointer; transition: all 0.15s; font-size: 13px; color: var(--text-primary); }
+.branch-check-item:hover { border-color: var(--p100); background: var(--p50); }
+.branch-check-item input[type=checkbox] { accent-color: var(--p600); width: 15px; height: 15px; cursor: pointer; flex-shrink: 0; }
+.branch-check-item.checked { border-color: var(--p100); background: var(--p50); color: var(--p600); }
+
+/* ── Confirm Modal ── */
+.confirm-modal { width: 360px; }
+.confirm-icon { width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 22px; margin: 0 auto 12px; }
+.confirm-icon.danger { background: var(--danger-bg); color: var(--danger); }
+.confirm-icon.warn   { background: var(--warn-bg); color: var(--warn); }
+.confirm-body { text-align: center; padding: 24px 20px 20px; }
+.confirm-title { font-size: 15px; font-weight: 500; margin-bottom: 6px; }
+.confirm-desc  { font-size: 13px; color: var(--text-secondary); line-height: 1.6; }
+
+/* ── Toast ── */
+.toast-wrap { position: fixed; bottom: 70px; right: 20px; display: flex; flex-direction: column; gap: 8px; z-index: 300; pointer-events: none; }
+.toast { padding: 10px 16px; border-radius: var(--radius-md); font-size: 13px; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); animation: toast-in 0.2s ease; pointer-events: none; }
+.toast.success { background: #0F6E56; color: #fff; }
+.toast.info    { background: var(--p600); color: #fff; }
+.toast.warn    { background: var(--warn); color: #fff; }
+@keyframes toast-in { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: none; } }
+
+/* ── Empty State ── */
+.empty-state { text-align: center; padding: 48px 20px; color: var(--text-muted); }
+.empty-state i { font-size: 36px; display: block; margin-bottom: 12px; opacity: 0.4; }
+.empty-state p { font-size: 13px; }
+
+/* scrollbar */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--g100); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #C4C4D4; }
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- ══════ TOPBAR ══════ -->
+  <div class="topbar">
+    <div class="topbar-icon"><i class="ti ti-users" aria-hidden="true"></i></div>
+    <div class="topbar-center">
+      <div class="topbar-title">จัดการพนักงาน &amp; สิทธิ์</div>
+      <div class="topbar-sub">Staff &amp; Permissions Management</div>
+    </div>
+    <span class="branch-badge"><i class="ti ti-map-pin" style="font-size:12px;" aria-hidden="true"></i>สาขา: ลาดพร้าว</span>
+    <button class="btn btn-primary" onclick="openAddModal()">
+      <i class="ti ti-user-plus" aria-hidden="true"></i> เพิ่มพนักงาน
+    </button>
+  </div>
+
+  <!-- ══════ TABS ══════ -->
+  <div class="tabs-bar">
+    <button class="tab-btn active" onclick="switchTab('staff', this)">
+      <i class="ti ti-id-badge" aria-hidden="true"></i> พนักงาน
+      <span class="tab-badge" id="tab-badge-staff">4</span>
+    </button>
+    <button class="tab-btn" onclick="switchTab('permissions', this)">
+      <i class="ti ti-shield-lock" aria-hidden="true"></i> สิทธิ์การใช้งาน
+    </button>
+    <button class="tab-btn" onclick="switchTab('activity', this)">
+      <i class="ti ti-timeline" aria-hidden="true"></i> ประวัติการใช้งาน
+      <span class="tab-badge" id="tab-badge-log">9</span>
+    </button>
+  </div>
+
+  <!-- ══════ CONTENT ══════ -->
+  <div class="content-area" id="content-area">
+
+    <!-- ─── TAB 1: Staff Directory ─── -->
+    <div id="panel-staff" class="panel active">
+      <!-- Toolbar -->
+      <div class="toolbar">
+        <div class="search-wrap">
+          <i class="ti ti-search" aria-hidden="true"></i>
+          <input type="text" id="search-input" placeholder="ค้นหาชื่อ, รหัส..." oninput="applyFilters()">
+        </div>
+        <select class="select-filter" id="role-filter" onchange="applyFilters()">
+          <option value="">ทุก Role</option>
+          <option value="Admin">Admin</option>
+          <option value="Manager">Manager</option>
+          <option value="Staff">Staff</option>
+        </select>
+        <select class="select-filter" id="status-filter" onchange="applyFilters()">
+          <option value="">ทุกสถานะ</option>
+          <option value="online">ออนไลน์</option>
+          <option value="offline">ออฟไลน์</option>
+        </select>
+      </div>
+
+      <!-- Table -->
+      <div class="card">
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>พนักงาน</th>
+                <th>Role</th>
+                <th>สาขา</th>
+                <th>สถานะ</th>
+                <th>เข้าสู่ระบบล่าสุด</th>
+                <th style="text-align:right;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="staff-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── TAB 2: Permission Matrix ─── -->
+    <div id="panel-permissions" class="panel">
+      <div class="toolbar">
+        <span style="font-size:13px; color:var(--text-secondary);">กำหนดสิทธิ์เข้าถึงตาม Role — Admin ถูกล็อคไว้ทั้งหมด</span>
+        <button class="btn btn-ghost btn-sm" onclick="resetPerms()"><i class="ti ti-refresh" aria-hidden="true"></i> Reset Default</button>
+      </div>
+      <div class="card" id="perm-matrix-card">
+        <div class="perm-matrix-header">
+          <span>การอนุญาต / Module</span>
+          <span class="perm-col-admin">Admin</span>
+          <span class="perm-col-manager">Manager</span>
+          <span class="perm-col-staff">Staff</span>
+        </div>
+        <div id="perm-body"></div>
+      </div>
+    </div>
+
+    <!-- ─── TAB 3: Activity Log ─── -->
+    <div id="panel-activity" class="panel">
+      <div class="toolbar">
+        <div class="chip-bar" id="log-chips">
+          <button class="chip active" data-filter="all" onclick="filterLog('all',this)">ทั้งหมด</button>
+          <button class="chip" data-filter="login" onclick="filterLog('login',this)">เข้า/ออก</button>
+          <button class="chip" data-filter="sale" onclick="filterLog('sale',this)">การขาย</button>
+          <button class="chip" data-filter="edit" onclick="filterLog('edit',this)">แก้ไขสินค้า</button>
+          <button class="chip" data-filter="void" onclick="filterLog('void',this)">ยกเลิก/Void</button>
+          <button class="chip" data-filter="discount" onclick="filterLog('discount',this)">ส่วนลด</button>
+        </div>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto;" onclick="exportCSV()">
+          <i class="ti ti-download" aria-hidden="true"></i> Export CSV
+        </button>
+      </div>
+      <div class="card">
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>เวลา</th>
+                <th>พนักงาน</th>
+                <th>ประเภท</th>
+                <th>รายละเอียด</th>
+                <th>IP / Terminal</th>
+              </tr>
+            </thead>
+            <tbody id="log-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ══════ FOOTER ══════ -->
+  <div class="footer">
+    <div class="footer-stat">
+      <span class="footer-num" id="f-total">4</span>
+      <span class="footer-lbl">พนักงานทั้งหมด</span>
+    </div>
+    <div class="footer-stat">
+      <span class="footer-num clr-green" id="f-online">2</span>
+      <span class="footer-lbl">ออนไลน์</span>
+    </div>
+    <div class="footer-stat">
+      <span class="footer-num clr-purple" id="f-admin">1</span>
+      <span class="footer-lbl">Admin</span>
+    </div>
+    <div class="footer-stat">
+      <span class="footer-num clr-blue" id="f-manager">1</span>
+      <span class="footer-lbl">Manager</span>
+    </div>
+    <div class="footer-stat">
+      <span class="footer-num clr-gray" id="f-staff">2</span>
+      <span class="footer-lbl">Staff</span>
+    </div>
+    <div class="footer-spacer"></div>
+    <div class="footer-time">
+      <i class="ti ti-clock" aria-hidden="true"></i>
+      <span id="footer-clock">--:--:--</span>
+    </div>
+  </div>
+
+</div>
+
+<!-- ══════ MODAL: Add/Edit Staff ══════ -->
+<div class="modal-overlay" id="staff-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="modal-title-text">เพิ่มพนักงานใหม่</span>
+      <button class="icon-btn" onclick="closeModal('staff-modal')"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="edit-id">
+
+      <div class="form-section-title"><i class="ti ti-user" aria-hidden="true"></i> ข้อมูลส่วนตัว</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">ชื่อ<span class="form-required">*</span></label>
+          <input class="form-input" type="text" id="f-fname" placeholder="ชื่อ">
+        </div>
+        <div class="form-group">
+          <label class="form-label">นามสกุล<span class="form-required">*</span></label>
+          <input class="form-input" type="text" id="f-lname" placeholder="นามสกุล">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">รหัสพนักงาน<span class="form-required">*</span></label>
+          <input class="form-input" type="text" id="f-code" placeholder="EMP-XXX">
+        </div>
+        <div class="form-group">
+          <label class="form-label">เบอร์โทร</label>
+          <input class="form-input" type="text" id="f-phone" placeholder="08X-XXX-XXXX">
+        </div>
+      </div>
+
+      <div class="form-section-title"><i class="ti ti-shield" aria-hidden="true"></i> บัญชีและสิทธิ์</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Role<span class="form-required">*</span></label>
+          <select class="form-select" id="f-role">
+            <option value="Staff">Staff</option>
+            <option value="Manager">Manager</option>
+            <option value="Admin">Admin</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">PIN (4 หลัก)</label>
+          <input class="form-input" type="password" id="f-pin" placeholder="••••" maxlength="4" inputmode="numeric">
+          <span class="form-hint">ใช้สำหรับ Quick Switch ขณะใช้งาน POS</span>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Username<span class="form-required">*</span></label>
+          <input class="form-input" type="text" id="f-username" placeholder="username" autocomplete="new-password">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Password</label>
+          <input class="form-input" type="password" id="f-password" placeholder="••••••••" autocomplete="new-password">
+          <span class="form-hint" id="pw-hint">ปล่อยว่างเพื่อไม่เปลี่ยน</span>
+        </div>
+      </div>
+
+      <div class="form-section-title"><i class="ti ti-building-store" aria-hidden="true"></i> สาขาที่เข้าถึงได้</div>
+      <div class="branch-check-grid" id="branch-checks"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('staff-modal')">ยกเลิก</button>
+      <button class="btn btn-primary" onclick="saveStaff()"><i class="ti ti-check" aria-hidden="true"></i> บันทึก</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════ MODAL: Confirm ══════ -->
+<div class="modal-overlay" id="confirm-modal">
+  <div class="modal confirm-modal">
+    <div class="confirm-body">
+      <div class="confirm-icon" id="confirm-icon-el"><i id="confirm-icon-i" class="ti ti-alert-triangle"></i></div>
+      <div class="confirm-title" id="confirm-title-text">ยืนยันการดำเนินการ</div>
+      <div class="confirm-desc"  id="confirm-desc-text">คุณแน่ใจหรือไม่?</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('confirm-modal')">ยกเลิก</button>
+      <button class="btn" id="confirm-ok-btn" onclick="confirmAction()">ยืนยัน</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════ TOAST ══════ -->
+<div class="toast-wrap" id="toast-wrap"></div>
+
+<script>
+// ── Data ──────────────────────────────────────────────────────────────────────
+const BRANCHES = ['ลาดพร้าว','เอกมัย','อ่อนนุช','ทุกสาขา'];
+
+let staff = [
+  { id:1, fname:'สมชาย',  lname:'ดีมาก',   code:'EMP-001', role:'Admin',   phone:'081-234-5678', username:'somchai',  pin:'1234', branches:['ทุกสาขา'],            online:true,  lastLogin:'วันนี้ 09:12', av:'สด', avClass:'av-purple' },
+  { id:2, fname:'สุดา',   lname:'ใจดี',     code:'EMP-002', role:'Manager', phone:'089-876-5432', username:'suda',     pin:'2345', branches:['ลาดพร้าว','เอกมัย'], online:true,  lastLogin:'วันนี้ 08:45', av:'สใ', avClass:'av-blue'   },
+  { id:3, fname:'วิชัย',  lname:'ขยันดี',   code:'EMP-003', role:'Staff',   phone:'083-111-2222', username:'wichai',   pin:'3456', branches:['ลาดพร้าว'],          online:false, lastLogin:'เมื่อวาน 18:30', av:'วข', avClass:'av-teal'  },
+  { id:4, fname:'นงนุช',  lname:'สวัสดี',   code:'EMP-004', role:'Staff',   phone:'086-999-0001', username:'nongnuch', pin:'4567', branches:['เอกมัย','อ่อนนุช'],  online:false, lastLogin:'23/05/26 14:00', av:'นส', avClass:'av-coral' },
+];
+let nextId = 5;
+
+const PERM_MODULES = [
+  { section:'การขาย', icon:'ti-shopping-cart', items:[
+    { key:'pos_sale',     label:'ขายสินค้า',           desc:'เปิดหน้า POS และบันทึกการขาย' },
+    { key:'pos_discount', label:'ให้ส่วนลด',           desc:'ส่วนลดรายการและส่วนลดรวม' },
+    { key:'pos_void',     label:'ยกเลิกรายการ / Void', desc:'ยกเลิกบิลหรือรายการสินค้า' },
+    { key:'quotation',    label:'ใบเสนอราคา',           desc:'สร้างและแก้ไขใบเสนอราคา' },
+  ]},
+  { section:'สินค้าและสต็อก', icon:'ti-package', items:[
+    { key:'product_view',  label:'ดูสินค้า',       desc:'รายการสินค้าและราคาทุน' },
+    { key:'product_edit',  label:'แก้ไขสินค้า',    desc:'เพิ่ม/แก้ไข/ลบสินค้า' },
+    { key:'stock_receive', label:'รับสินค้าเข้า',   desc:'บันทึก GRN และ Lot FIFO' },
+    { key:'cost_view',     label:'ดูราคาทุน',       desc:'Average Cost และ FIFO Lot' },
+  ]},
+  { section:'รายงาน', icon:'ti-chart-bar', items:[
+    { key:'report_sales',  label:'รายงานการขาย',  desc:'ยอดขายรายวัน/สรุป' },
+    { key:'report_stock',  label:'รายงานสต็อก',   desc:'สินค้าคงเหลือและ FIFO' },
+    { key:'report_profit', label:'รายงานกำไร',    desc:'กำไรขั้นต้น และ margin' },
+  ]},
+  { section:'ระบบ', icon:'ti-settings', items:[
+    { key:'employee_manage', label:'จัดการพนักงาน', desc:'CRUD พนักงานและสิทธิ์' },
+    { key:'settings',        label:'ตั้งค่าระบบ',    desc:'ตั้งค่าสาขา ภาษี และอื่นๆ' },
+  ]},
+];
+
+const DEFAULT_PERMS = {
+  admin:   new Set(['pos_sale','pos_discount','pos_void','quotation','product_view','product_edit','stock_receive','cost_view','report_sales','report_stock','report_profit','employee_manage','settings']),
+  manager: new Set(['pos_sale','pos_discount','pos_void','quotation','product_view','product_edit','stock_receive','cost_view','report_sales','report_stock']),
+  staff:   new Set(['pos_sale','product_view']),
+};
+let perms = {
+  admin:   new Set(DEFAULT_PERMS.admin),
+  manager: new Set(DEFAULT_PERMS.manager),
+  staff:   new Set(DEFAULT_PERMS.staff),
+};
+
+const LOG_ICONS = {
+  login:    { icon:'ti-login',         cls:'login',    bg:'#EAF3DE', color:'#3B6D11', label:'เข้าระบบ' },
+  logout:   { icon:'ti-logout',        cls:'logout',   bg:'#F1EFE8', color:'#5F5E5A', label:'ออกระบบ' },
+  sale:     { icon:'ti-shopping-cart', cls:'sale',     bg:'#EEEDFE', color:'#534AB7', label:'การขาย' },
+  discount: { icon:'ti-tag',           cls:'discount', bg:'#FAEEDA', color:'#854F0B', label:'ส่วนลด' },
+  void:     { icon:'ti-trash',         cls:'void',     bg:'#FCEBEB', color:'#A32D2D', label:'Void' },
+  edit:     { icon:'ti-edit',          cls:'edit',     bg:'#E6F1FB', color:'#185FA5', label:'แก้ไข' },
+};
+
+let logs = [
+  { id:1, time:'09:12', date:'24/05/26', staffId:1, type:'login',    detail:'เข้าสู่ระบบจาก Terminal POS-01', ip:'192.168.1.10' },
+  { id:2, time:'08:45', date:'24/05/26', staffId:2, type:'login',    detail:'เข้าสู่ระบบจาก Terminal POS-02', ip:'192.168.1.11' },
+  { id:3, time:'08:55', date:'24/05/26', staffId:2, type:'sale',     detail:'บันทึกการขาย บิล #TW-0582 ฿1,240', ip:'192.168.1.11' },
+  { id:4, time:'08:57', date:'24/05/26', staffId:2, type:'discount', detail:'ให้ส่วนลด 5% บิล #TW-0582', ip:'192.168.1.11' },
+  { id:5, time:'09:30', date:'24/05/26', staffId:1, type:'sale',     detail:'บันทึกการขาย บิล #TW-0583 ฿860', ip:'192.168.1.10' },
+  { id:6, time:'10:05', date:'24/05/26', staffId:1, type:'edit',     detail:'แก้ไขสินค้า "Royal Canin Adult 3kg" ราคา: ฿450→฿480', ip:'192.168.1.10' },
+  { id:7, time:'10:45', date:'24/05/26', staffId:1, type:'void',     detail:'Void รายการ "Whiskas Tuna 85g" บิล #TW-0584', ip:'192.168.1.10' },
+  { id:8, time:'11:20', date:'24/05/26', staffId:2, type:'edit',     detail:'รับสินค้าเข้า GRN-0088 รวม 12 รายการ', ip:'192.168.1.11' },
+  { id:9, time:'18:30', date:'23/05/26', staffId:3, type:'logout',   detail:'ออกจากระบบ Terminal POS-01', ip:'192.168.1.10' },
+];
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function getStaff(id){ return staff.find(s => s.id === id); }
+function roleClass(r){ return r==='Admin'?'role-admin':r==='Manager'?'role-manager':'role-staff'; }
+
+// ── Tab Switching ──────────────────────────────────────────────────────────────
+function switchTab(name, el){
+  document.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('panel-'+name).classList.add('active');
+  document.getElementById('content-area').scrollTop = 0;
+}
+
+// ── Staff Table ───────────────────────────────────────────────────────────────
+function renderStaffTable(list){
+  const tbody = document.getElementById('staff-tbody');
+  if(!list.length){
+    tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><i class="ti ti-users-off" aria-hidden="true"></i><p>ไม่พบพนักงานที่ตรงตามเงื่อนไข</p></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = list.map(e => {
+    const branchTags = e.branches.map(b => `<span class="branch-tag">${b}</span>`).join('');
+    return `<tr>
+      <td>
+        <div class="emp-cell">
+          <div class="avatar ${e.avClass}">${e.av}</div>
+          <div>
+            <div class="emp-name">${e.fname} ${e.lname}</div>
+            <div class="emp-id">${e.code} · ${e.phone}</div>
+          </div>
+        </div>
+      </td>
+      <td><span class="role-badge ${roleClass(e.role)}">${e.role}</span></td>
+      <td><div class="branch-tags">${branchTags}</div></td>
+      <td>
+        ${e.online
+          ? '<span class="status-pill status-on"><span class="dot dot-on"></span>ออนไลน์</span>'
+          : '<span class="status-pill status-off"><span class="dot dot-off"></span>ออฟไลน์</span>'}
+      </td>
+      <td style="font-size:12px;color:var(--text-muted);">${e.lastLogin}</td>
+      <td>
+        <div class="action-group" style="justify-content:flex-end;">
+          <button class="icon-btn" title="แก้ไข" onclick="openEditModal(${e.id})"><i class="ti ti-edit"></i></button>
+          <button class="icon-btn warn" title="Force Logout" onclick="forceLogout(${e.id},'${e.fname}')"><i class="ti ti-logout"></i></button>
+          <button class="icon-btn danger" title="ลบ" onclick="confirmDelete(${e.id},'${e.fname} ${e.lname}')"><i class="ti ti-trash"></i></button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function applyFilters(){
+  const q    = document.getElementById('search-input').value.toLowerCase();
+  const role = document.getElementById('role-filter').value;
+  const stat = document.getElementById('status-filter').value;
+  let list = staff.filter(e => {
+    const matchQ    = !q    || (e.fname+' '+e.lname+' '+e.code).toLowerCase().includes(q);
+    const matchRole = !role || e.role === role;
+    const matchStat = !stat || (stat==='online' ? e.online : !e.online);
+    return matchQ && matchRole && matchStat;
+  });
+  renderStaffTable(list);
+  updateFooter();
+}
+
+function updateFooter(){
+  document.getElementById('f-total').textContent   = staff.length;
+  document.getElementById('f-online').textContent  = staff.filter(s=>s.online).length;
+  document.getElementById('f-admin').textContent   = staff.filter(s=>s.role==='Admin').length;
+  document.getElementById('f-manager').textContent = staff.filter(s=>s.role==='Manager').length;
+  document.getElementById('f-staff').textContent   = staff.filter(s=>s.role==='Staff').length;
+  document.getElementById('tab-badge-staff').textContent = staff.length;
+}
+
+// ── Modal: Add/Edit ────────────────────────────────────────────────────────────
+function buildBranchChecks(selected=[]){
+  const wrap = document.getElementById('branch-checks');
+  wrap.innerHTML = BRANCHES.map(b => {
+    const chk = selected.includes(b);
+    return `<label class="branch-check-item ${chk?'checked':''}" onclick="toggleBranchLabel(this)">
+      <input type="checkbox" value="${b}" ${chk?'checked':''} onchange="this.closest('label').classList.toggle('checked',this.checked)">
+      <i class="ti ti-building-store" style="font-size:15px;color:var(--p600);" aria-hidden="true"></i> ${b}
+    </label>`;
+  }).join('');
+}
+function toggleBranchLabel(el){ /* handled by checkbox onchange */ }
+
+function openAddModal(){
+  document.getElementById('modal-title-text').textContent = 'เพิ่มพนักงานใหม่';
+  document.getElementById('pw-hint').textContent = 'ต้องกรอก password สำหรับพนักงานใหม่';
+  document.getElementById('edit-id').value = '';
+  ['f-fname','f-lname','f-code','f-phone','f-username','f-password','f-pin'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('f-role').value = 'Staff';
+  buildBranchChecks(['ลาดพร้าว']);
+  openModal('staff-modal');
+}
+
+function openEditModal(id){
+  const e = getStaff(id);
+  if(!e) return;
+  document.getElementById('modal-title-text').textContent = 'แก้ไขข้อมูลพนักงาน';
+  document.getElementById('pw-hint').textContent = 'ปล่อยว่างเพื่อไม่เปลี่ยน password';
+  document.getElementById('edit-id').value   = id;
+  document.getElementById('f-fname').value   = e.fname;
+  document.getElementById('f-lname').value   = e.lname;
+  document.getElementById('f-code').value    = e.code;
+  document.getElementById('f-phone').value   = e.phone;
+  document.getElementById('f-username').value= e.username;
+  document.getElementById('f-password').value= '';
+  document.getElementById('f-pin').value     = e.pin;
+  document.getElementById('f-role').value    = e.role;
+  buildBranchChecks(e.branches);
+  openModal('staff-modal');
+}
+
+function saveStaff(){
+  const fname    = document.getElementById('f-fname').value.trim();
+  const lname    = document.getElementById('f-lname').value.trim();
+  const code     = document.getElementById('f-code').value.trim();
+  const phone    = document.getElementById('f-phone').value.trim();
+  const username = document.getElementById('f-username').value.trim();
+  const pin      = document.getElementById('f-pin').value.trim();
+  const role     = document.getElementById('f-role').value;
+  const branches = [...document.querySelectorAll('#branch-checks input:checked')].map(c=>c.value);
+  const editId   = document.getElementById('edit-id').value;
+
+  if(!fname || !lname || !code || !username){ showToast('กรุณากรอกข้อมูลที่จำเป็น','warn'); return; }
+  if(!branches.length){ showToast('กรุณาเลือกสาขาอย่างน้อย 1 สาขา','warn'); return; }
+
+  if(editId){
+    const e = getStaff(parseInt(editId));
+    Object.assign(e, { fname, lname, code, phone, username, pin, role, branches });
+    showToast(`อัปเดตข้อมูล "${fname} ${lname}" เรียบร้อย`,'success');
+  } else {
+    const colors = ['av-purple','av-blue','av-teal','av-coral','av-amber'];
+    staff.push({ id:nextId++, fname, lname, code, role, phone, username, pin, branches, online:false, lastLogin:'ยังไม่เคย', av:(fname[0]||'?')+(lname[0]||'?'), avClass:colors[staff.length%colors.length] });
+    showToast(`เพิ่มพนักงาน "${fname} ${lname}" เรียบร้อย`,'success');
+  }
+  closeModal('staff-modal');
+  applyFilters();
+  updateFooter();
+}
+
+// ── Force Logout & Delete ─────────────────────────────────────────────────────
+let _pendingAction = null;
+
+function forceLogout(id, name){
+  const e = getStaff(id);
+  if(!e || !e.online){ showToast(`${name} ออฟไลน์อยู่แล้ว`,'info'); return; }
+  _pendingAction = { type:'forceLogout', id };
+  document.getElementById('confirm-icon-el').className = 'confirm-icon warn';
+  document.getElementById('confirm-icon-i').className  = 'ti ti-logout';
+  document.getElementById('confirm-title-text').textContent = `Force Logout: ${name}`;
+  document.getElementById('confirm-desc-text').textContent  = 'พนักงานจะถูกตัดการเชื่อมต่อทันที และต้องเข้าสู่ระบบใหม่';
+  document.getElementById('confirm-ok-btn').className = 'btn btn-danger-ghost';
+  document.getElementById('confirm-ok-btn').textContent = 'Force Logout';
+  openModal('confirm-modal');
+}
+
+function confirmDelete(id, name){
+  const e = getStaff(id);
+  if(e && e.role==='Admin' && staff.filter(s=>s.role==='Admin').length===1){ showToast('ต้องมี Admin อย่างน้อย 1 คน','warn'); return; }
+  _pendingAction = { type:'delete', id };
+  document.getElementById('confirm-icon-el').className = 'confirm-icon danger';
+  document.getElementById('confirm-icon-i').className  = 'ti ti-trash';
+  document.getElementById('confirm-title-text').textContent = `ลบพนักงาน: ${name}`;
+  document.getElementById('confirm-desc-text').textContent  = 'ข้อมูลพนักงานจะถูกลบออกอย่างถาวร ไม่สามารถกู้คืนได้';
+  document.getElementById('confirm-ok-btn').className = 'btn btn-danger-ghost';
+  document.getElementById('confirm-ok-btn').textContent = 'ลบ';
+  openModal('confirm-modal');
+}
+
+function confirmAction(){
+  if(!_pendingAction) return;
+  if(_pendingAction.type === 'forceLogout'){
+    const e = getStaff(_pendingAction.id);
+    if(e){ e.online = false; showToast(`Force Logout "${e.fname}" เรียบร้อย`,'success'); }
+  } else if(_pendingAction.type === 'delete'){
+    const e = getStaff(_pendingAction.id);
+    if(e){
+      staff = staff.filter(s => s.id !== _pendingAction.id);
+      showToast(`ลบ "${e.fname} ${e.lname}" เรียบร้อย`,'success');
+    }
+  }
+  _pendingAction = null;
+  closeModal('confirm-modal');
+  applyFilters();
+  updateFooter();
+}
+
+// ── Permission Matrix ─────────────────────────────────────────────────────────
+function renderPermMatrix(){
+  const body = document.getElementById('perm-body');
+  body.innerHTML = '';
+  PERM_MODULES.forEach(mod => {
+    const grp = document.createElement('div');
+    grp.innerHTML = `<div class="perm-group-header"><i class="ti ${mod.icon}" aria-hidden="true"></i>${mod.section}</div>`;
+    mod.items.forEach(item => {
+      const row = document.createElement('div');
+      row.className = 'perm-row';
+      row.innerHTML = `
+        <div><div class="perm-label">${item.label}</div><div class="perm-desc">${item.desc}</div></div>
+        ${['admin','manager','staff'].map(r => `
+          <div class="perm-cell">
+            <label class="toggle">
+              <input type="checkbox" ${perms[r].has(item.key)?'checked':''} ${r==='admin'?'disabled':''}
+                onchange="togglePerm('${r}','${item.key}',this.checked)">
+              <div class="toggle-track"></div>
+              <div class="toggle-thumb"></div>
+            </label>
+          </div>`).join('')}`;
+      grp.appendChild(row);
+    });
+    body.appendChild(grp);
+  });
+}
+
+function togglePerm(role, key, val){
+  if(val) perms[role].add(key); else perms[role].delete(key);
+  showToast(`อัปเดตสิทธิ์ ${role.charAt(0).toUpperCase()+role.slice(1)}: ${key}`,'info');
+}
+
+function resetPerms(){
+  perms = { admin: new Set(DEFAULT_PERMS.admin), manager: new Set(DEFAULT_PERMS.manager), staff: new Set(DEFAULT_PERMS.staff) };
+  renderPermMatrix();
+  showToast('Reset สิทธิ์เป็นค่าเริ่มต้นเรียบร้อย','success');
+}
+
+// ── Activity Log ──────────────────────────────────────────────────────────────
+let activeLogFilter = 'all';
+
+function renderLogTable(filter){
+  const tbody = document.getElementById('log-tbody');
+  const filtered = filter==='all' ? logs : logs.filter(l=>l.type===filter);
+  document.getElementById('tab-badge-log').textContent = filtered.length;
+  if(!filtered.length){
+    tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><i class="ti ti-history-off" aria-hidden="true"></i><p>ไม่พบรายการในหมวดนี้</p></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = filtered.map(l => {
+    const meta = LOG_ICONS[l.type] || LOG_ICONS.edit;
+    const emp  = getStaff(l.staffId);
+    const empName = emp ? `${emp.fname} ${emp.lname}` : 'Unknown';
+    const empRole = emp ? emp.role : '';
+    return `<tr>
+      <td style="font-size:12px; white-space:nowrap;">
+        <div style="font-weight:500;color:var(--text-primary);">${l.time}</div>
+        <div style="color:var(--text-muted);">${l.date}</div>
+      </td>
+      <td>
+        <div class="emp-cell">
+          ${emp ? `<div class="avatar ${emp.avClass}" style="width:28px;height:28px;font-size:10px;">${emp.av}</div>` : ''}
+          <div>
+            <div style="font-size:13px;font-weight:500;">${empName}</div>
+            <span class="role-badge ${roleClass(empRole)}" style="font-size:10px;">${empRole}</span>
+          </div>
+        </div>
+      </td>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div class="log-type-icon" style="background:${meta.bg};color:${meta.color};">
+            <i class="ti ${meta.icon}" aria-hidden="true"></i>
+          </div>
+          <span style="font-size:12px;color:var(--text-secondary);">${meta.label}</span>
+        </div>
+      </td>
+      <td style="font-size:13px;color:var(--text-primary);max-width:260px;">${l.detail}</td>
+      <td style="font-size:11px;color:var(--text-muted);font-family:'Sarabun',sans-serif;">${l.ip}</td>
+    </tr>`;
+  }).join('');
+}
+
+function filterLog(type, el){
+  document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  activeLogFilter = type;
+  renderLogTable(type);
+}
+
+function exportCSV(){
+  const filtered = activeLogFilter==='all' ? logs : logs.filter(l=>l.type===activeLogFilter);
+  const header = ['Date','Time','StaffID','Name','Role','Type','Detail','IP'];
+  const rows = filtered.map(l => {
+    const emp = getStaff(l.staffId);
+    return [l.date, l.time, emp?emp.code:'', emp?`${emp.fname} ${emp.lname}`:'', emp?emp.role:'', l.type, `"${l.detail}"`, l.ip];
+  });
+  const csv = [header, ...rows].map(r=>r.join(',')).join('\n');
+  const blob = new Blob(['\ufeff'+csv], {type:'text/csv;charset=utf-8;'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = `activity_log_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click(); URL.revokeObjectURL(url);
+  showToast('Export CSV เรียบร้อย','success');
+}
+
+// ── Modal Helpers ─────────────────────────────────────────────────────────────
+function openModal(id){  document.getElementById(id).classList.add('open'); }
+function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+document.querySelectorAll('.modal-overlay').forEach(o => {
+  o.addEventListener('click', e => { if(e.target === o) o.classList.remove('open'); });
+});
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+function showToast(msg, type='info'){
+  const wrap = document.getElementById('toast-wrap');
+  const el   = document.createElement('div');
+  el.className = `toast ${type}`;
+  const iconMap = { success:'ti-circle-check', warn:'ti-alert-triangle', info:'ti-info-circle' };
+  el.innerHTML = `<i class="ti ${iconMap[type]||'ti-info-circle'}" aria-hidden="true"></i> ${msg}`;
+  wrap.appendChild(el);
+  setTimeout(() => { el.style.opacity='0'; el.style.transition='opacity 0.3s'; setTimeout(()=>el.remove(),300); }, 2800);
+}
+
+// ── Clock ─────────────────────────────────────────────────────────────────────
+function updateClock(){
+  const now = new Date();
+  document.getElementById('footer-clock').textContent =
+    now.toLocaleTimeString('th-TH', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+}
+setInterval(updateClock, 1000); updateClock();
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+applyFilters();
+renderPermMatrix();
+renderLogTable('all');
+</script>
+</body>
+</html>

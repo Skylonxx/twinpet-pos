@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TwinPet POS v2</title>
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600&family=Sarabun:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+<style>
+* { box-sizing:border-box; margin:0; padding:0; }
+:root {
+  --p50:#EEEDFE;--p100:#CECBF6;--p200:#AFA9EC;--p400:#7F77DD;--p600:#534AB7;--p800:#3C3489;--p900:#26215C;
+  --g50:#F8F8FC;--g100:#F1EFE8;--g200:#D3D1C7;--g400:#888780;--g600:#5F5E5A;
+  --green:#1D9E75;--teal50:#E1F5EE;--amber:#BA7517;--red:#E24B4A;
+}
+html,body{height:100%;font-family:'Sarabun',sans-serif;background:var(--g50);overflow:hidden;}
+
+/* ===== LAYOUT ===== */
+.app{display:flex;height:100vh;}
+
+/* SIDEBAR */
+.sidebar{width:52px;background:var(--p900);display:flex;flex-direction:column;align-items:center;padding:10px 0;gap:4px;flex-shrink:0;}
+.sb-logo{width:36px;height:36px;background:var(--p600);border-radius:9px;display:flex;align-items:center;justify-content:center;font-family:'Prompt',sans-serif;font-weight:600;font-size:14px;color:white;margin-bottom:8px;}
+.nav-item{width:40px;height:40px;border-radius:9px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:rgba(255,255,255,.4);transition:all .13s;}
+.nav-item:hover{background:rgba(255,255,255,.08);color:rgba(255,255,255,.8);}
+.nav-item.on{background:var(--p600);color:white;}
+.nav-item i{font-size:20px;}
+.nav-sp{flex:1;}
+.avatar{width:32px;height:32px;border-radius:50%;background:var(--p400);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:500;color:white;border:2px solid rgba(255,255,255,.15);}
+.online{width:8px;height:8px;border-radius:50%;background:var(--green);border:1.5px solid var(--p900);margin-top:-10px;margin-left:22px;}
+
+/* MAIN */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+
+/* TOPBAR */
+.topbar{background:white;border-bottom:0.5px solid var(--g200);padding:0 14px;height:48px;display:flex;align-items:center;gap:8px;flex-shrink:0;}
+
+/* branch badge — read-only ไม่มี chevron */
+.branch-badge{display:flex;align-items:center;gap:6px;padding:4px 10px;background:var(--p50);border:0.5px solid var(--p200);border-radius:8px;font-size:12px;color:var(--p800);font-weight:500;cursor:default;user-select:none;}
+.branch-badge i{font-size:13px;color:var(--p600);}
+
+/* search + เลือกสินค้า */
+.search-group{display:flex;align-items:center;gap:6px;flex:1;max-width:500px;}
+.topbar-search{flex:1;display:flex;align-items:center;gap:7px;background:var(--g50);border:0.5px solid var(--g200);border-radius:8px;padding:0 12px;height:32px;}
+.topbar-search i{font-size:14px;color:var(--g400);flex-shrink:0;}
+.topbar-search input{border:none;background:transparent;outline:none;font-size:12px;font-family:'Sarabun',sans-serif;color:var(--g600);width:100%;}
+.topbar-search input::placeholder{color:var(--g200);}
+.add-prod-btn{display:flex;align-items:center;gap:4px;padding:0 12px;height:32px;background:var(--p600);border:none;border-radius:8px;color:white;font-size:11px;font-family:'Sarabun',sans-serif;font-weight:500;cursor:pointer;white-space:nowrap;flex-shrink:0;}
+.add-prod-btn:hover{background:var(--p800);}
+.add-prod-btn i{font-size:13px;}
+
+.topbar-sp{flex:1;}
+.topbar-btn{width:32px;height:32px;border-radius:8px;border:0.5px solid var(--g200);background:white;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--g400);}
+.topbar-btn:hover{background:var(--g50);color:var(--p600);}
+.topbar-btn i{font-size:16px;}
+.user-info{display:flex;align-items:center;gap:6px;padding:4px 8px;border:0.5px solid var(--g200);border-radius:8px;cursor:pointer;}
+.user-av{width:26px;height:26px;border-radius:50%;background:var(--p100);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:500;color:var(--p800);}
+
+/* CONTENT */
+.content-row{flex:1;display:flex;overflow:hidden;}
+.product-area{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+
+/* CATEGORY BAR */
+.cat-bar{background:white;border-bottom:0.5px solid var(--g200);padding:8px 14px;display:flex;gap:6px;overflow-x:auto;flex-shrink:0;}
+.cat-bar::-webkit-scrollbar{display:none;}
+.cat-pill{padding:5px 14px;border-radius:20px;font-size:11px;font-weight:500;cursor:pointer;white-space:nowrap;border:0.5px solid transparent;transition:all .12s;position:relative;overflow:hidden;}
+.cat-pill .cat-bg{position:absolute;inset:0;background-size:cover;background-position:center;}
+.cat-pill .cat-overlay{position:absolute;inset:0;background:rgba(0,0,0,0.45);}
+.cat-pill .cat-text{position:relative;z-index:1;color:white;}
+.cat-pill.no-img{background:var(--g50);border-color:var(--g200);color:var(--g400);}
+.cat-pill.no-img:hover{border-color:var(--p400);color:var(--p600);}
+.cat-pill.no-img.on{color:white;border-color:transparent;}
+
+/* PRODUCT GRID */
+.product-grid{flex:1;overflow-y:auto;padding:12px;display:grid;grid-template-columns:repeat(6,1fr);gap:8px;align-content:start;}
+.product-grid::-webkit-scrollbar{width:4px;}
+.product-grid::-webkit-scrollbar-thumb{background:var(--g200);border-radius:4px;}
+.prod-wrap{position:relative;}
+.prod-card{background:white;border:0.5px solid var(--g200);border-radius:10px;overflow:hidden;cursor:pointer;transition:all .12s;display:flex;flex-direction:column;}
+.prod-card:hover{border-color:var(--p400);box-shadow:0 2px 8px rgba(83,74,183,.12);transform:translateY(-1px);}
+.prod-card.in-cart{border-color:var(--p600);background:var(--p50);}
+.prod-img{height:80px;display:flex;align-items:center;justify-content:center;font-size:36px;background:var(--g50);flex-shrink:0;}
+.prod-info{padding:7px 8px;flex:1;display:flex;flex-direction:column;gap:3px;}
+.prod-name{font-size:10px;font-weight:500;color:var(--p900);line-height:1.35;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;}
+.prod-bottom{display:flex;align-items:center;justify-content:space-between;margin-top:auto;padding-top:4px;}
+.prod-price{font-size:11px;font-weight:600;color:var(--p600);font-family:'Prompt',sans-serif;}
+.prod-stock{font-size:9px;color:var(--g400);}
+.cart-badge{position:absolute;top:5px;right:5px;width:18px;height:18px;background:var(--p600);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;color:white;font-weight:600;}
+
+/* CART */
+.cart{width:220px;background:white;border-left:0.5px solid var(--g200);display:flex;flex-direction:column;flex-shrink:0;}
+.cart-hd{padding:10px 12px;border-bottom:0.5px solid var(--g200);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+.cart-title{font-size:13px;font-weight:500;color:var(--p900);}
+.hold-btn{padding:3px 8px;border-radius:6px;border:0.5px solid var(--g200);background:white;font-size:10px;color:var(--g400);cursor:pointer;}
+.hold-btn:hover{border-color:var(--p400);color:var(--p600);}
+
+/* customer bar */
+.cust-bar{padding:6px 12px;border-bottom:0.5px solid var(--g200);display:flex;align-items:center;gap:6px;flex-shrink:0;background:var(--g50);}
+.cust-name{font-size:11px;color:var(--p800);font-weight:500;flex:1;}
+.cust-ph{font-size:11px;color:var(--g200);flex:1;}
+
+/* cart items */
+.cart-items{flex:1;overflow-y:auto;}
+.cart-items::-webkit-scrollbar{width:3px;}
+.cart-items::-webkit-scrollbar-thumb{background:var(--g200);border-radius:4px;}
+.ci{padding:7px 12px;border-bottom:0.5px solid var(--g100);}
+.ci-name{font-size:10px;font-weight:500;color:var(--p900);line-height:1.3;margin-bottom:5px;}
+.ci-row{display:flex;align-items:center;gap:5px;}
+.qty-btn{width:20px;height:20px;border-radius:5px;border:0.5px solid var(--g200);background:white;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:11px;color:var(--g600);flex-shrink:0;}
+.qty-btn:hover{border-color:var(--p400);color:var(--p600);}
+.qty-n{font-size:12px;font-weight:500;color:var(--p900);font-family:'Prompt',sans-serif;min-width:20px;text-align:center;}
+
+/* ราคาในตะกร้าคลิกได้ */
+.ci-price-wrap{display:flex;align-items:center;gap:3px;margin-left:auto;cursor:pointer;}
+.ci-price{font-size:11px;font-weight:500;color:var(--p800);font-family:'Prompt',sans-serif;}
+.ci-edit-icon{font-size:11px;color:var(--g200);}
+.ci-price-wrap:hover .ci-price{color:var(--p600);}
+.ci-price-wrap:hover .ci-edit-icon{color:var(--p400);}
+
+.ci-del{width:18px;height:18px;border-radius:4px;border:none;background:transparent;cursor:pointer;color:var(--g200);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.ci-del:hover{color:var(--red);}
+.ci-del i{font-size:11px;}
+
+/* cart footer */
+.cart-footer{border-top:0.5px solid var(--g200);padding:10px 12px;display:flex;flex-direction:column;gap:7px;flex-shrink:0;}
+.cf-row{display:flex;align-items:center;justify-content:space-between;font-size:11px;}
+.cf-lbl{color:var(--g400);}
+.cf-val{color:var(--p900);font-family:'Prompt',sans-serif;font-weight:500;}
+.disc-row{display:flex;align-items:center;gap:5px;}
+.disc-inp{width:60px;border:0.5px solid var(--g200);border-radius:5px;padding:2px 6px;font-size:11px;font-family:'Prompt',sans-serif;text-align:right;outline:none;}
+.disc-inp:focus{border-color:var(--p400);}
+.disc-tog{padding:1px 6px;border-radius:4px;border:0.5px solid var(--g200);background:var(--g50);font-size:10px;cursor:pointer;color:var(--g600);}
+.disc-tog.on{background:var(--p600);border-color:var(--p600);color:white;}
+.fee-chips{display:flex;gap:4px;}
+.fee-chip{padding:2px 7px;border-radius:10px;border:0.5px solid var(--g200);font-size:10px;color:var(--g400);cursor:pointer;white-space:nowrap;}
+.fee-chip.on{background:var(--p50);border-color:var(--p400);color:var(--p800);}
+.grand-row{display:flex;align-items:baseline;justify-content:space-between;padding-top:4px;border-top:1px dashed var(--g200);}
+.gt-lbl{font-size:13px;font-weight:500;color:var(--p900);}
+.gt-val{font-size:20px;font-weight:600;color:var(--p600);font-family:'Prompt',sans-serif;}
+.checkout-area{display:flex;gap:5px;}
+.checkout-btn{flex:1;background:var(--p600);color:white;border:none;border-radius:9px;height:42px;font-size:13px;font-family:'Sarabun',sans-serif;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;}
+.checkout-btn:hover{background:var(--p800);}
+.more-btn{width:36px;height:42px;border-radius:9px;border:0.5px solid var(--g200);background:white;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--g400);}
+.more-btn:hover{background:var(--g50);}
+
+/* ===== UOM POPUP ===== */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;z-index:500;}
+.modal-bg.hidden{display:none;}
+.uom-popup{background:white;border-radius:14px;padding:20px;width:300px;display:flex;flex-direction:column;gap:14px;}
+.uom-popup-title{font-size:13px;font-weight:500;color:var(--p900);}
+.uom-popup-sub{font-size:11px;color:var(--g400);}
+.uom-options{display:flex;flex-direction:column;gap:7px;}
+.uom-opt{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-radius:9px;border:0.5px solid var(--g200);cursor:pointer;transition:all .12s;}
+.uom-opt:hover{border-color:var(--p400);background:var(--p50);}
+.uom-opt-left{display:flex;flex-direction:column;gap:2px;}
+.uom-opt-name{font-size:12px;font-weight:500;color:var(--p900);}
+.uom-opt-eq{font-size:10px;color:var(--g400);}
+.uom-opt-price{font-size:13px;font-weight:600;color:var(--p600);font-family:'Prompt',sans-serif;}
+.uom-cancel{padding:8px;border-radius:8px;border:0.5px solid var(--g200);background:white;font-size:12px;font-family:'Sarabun',sans-serif;color:var(--g600);cursor:pointer;width:100%;}
+.uom-cancel:hover{background:var(--g50);}
+
+/* ===== ITEM DISCOUNT POPUP ===== */
+.item-disc-popup{background:white;border-radius:14px;padding:18px;width:280px;display:flex;flex-direction:column;gap:10px;}
+.idp-title{font-size:12px;font-weight:500;color:var(--p900);}
+.idp-prod{font-size:11px;color:var(--g400);}
+.idp-tabs{display:flex;gap:0;border:0.5px solid var(--g200);border-radius:7px;overflow:hidden;}
+.idp-tab{flex:1;padding:6px 0;text-align:center;font-size:11px;cursor:pointer;color:var(--g400);background:white;border:none;}
+.idp-tab.on{background:var(--p600);color:white;}
+.idp-input-wrap{display:flex;flex-direction:column;gap:5px;}
+.idp-input-lbl{font-size:10px;color:var(--g400);}
+.idp-input{border:0.5px solid var(--g200);border-radius:7px;padding:8px 10px;font-size:14px;font-family:'Prompt',sans-serif;text-align:right;outline:none;width:100%;}
+.idp-input:focus{border-color:var(--p400);}
+.idp-result{background:var(--g50);border-radius:7px;padding:7px 10px;display:flex;justify-content:space-between;font-size:11px;}
+.idp-result-lbl{color:var(--g400);}
+.idp-result-val{font-weight:500;color:var(--p800);font-family:'Prompt',sans-serif;}
+.idp-actions{display:flex;gap:6px;}
+.idp-cancel{flex:1;padding:7px;border-radius:7px;border:0.5px solid var(--g200);background:white;font-size:12px;font-family:'Sarabun',sans-serif;color:var(--g600);cursor:pointer;}
+.idp-save{flex:1;padding:7px;border-radius:7px;border:none;background:var(--p600);color:white;font-size:12px;font-family:'Sarabun',sans-serif;font-weight:500;cursor:pointer;}
+.idp-save:hover{background:var(--p800);}
+</style>
+</head>
+<body>
+<!-- UOM Popup -->
+<div class="modal-bg hidden" id="uom-modal">
+  <div class="uom-popup">
+    <div>
+      <div class="uom-popup-title" id="uom-prod-name">เลือกขนาดบรรจุ</div>
+      <div class="uom-popup-sub" style="margin-top:3px;">กรุณาเลือกหน่วยนับก่อนเพิ่มลงตะกร้า</div>
+    </div>
+    <div class="uom-options" id="uom-options"></div>
+    <button class="uom-cancel" onclick="closeUom()">ยกเลิก</button>
+  </div>
+</div>
+
+<!-- Item Discount Popup -->
+<div class="modal-bg hidden" id="idp-modal">
+  <div class="item-disc-popup">
+    <div>
+      <div class="idp-title">แก้ไขราคา / ส่วนลดรายชิ้น</div>
+      <div class="idp-prod" id="idp-prod-name"></div>
+    </div>
+    <div class="idp-tabs">
+      <button class="idp-tab on" onclick="setIdpMode('disc_thb',this)">ลด ฿</button>
+      <button class="idp-tab" onclick="setIdpMode('disc_pct',this)">ลด %</button>
+      <button class="idp-tab" onclick="setIdpMode('override',this)">แก้ราคา</button>
+    </div>
+    <div class="idp-input-wrap">
+      <div class="idp-input-lbl" id="idp-lbl">ส่วนลด (฿)</div>
+      <input class="idp-input" type="number" id="idp-val" min="0" placeholder="0" oninput="previewIdp()"/>
+    </div>
+    <div class="idp-result">
+      <span class="idp-result-lbl">ราคาหลังปรับ</span>
+      <span class="idp-result-val" id="idp-preview">-</span>
+    </div>
+    <div class="idp-actions">
+      <button class="idp-cancel" onclick="closeIdp()">ยกเลิก</button>
+      <button class="idp-save" onclick="saveIdp()">บันทึก</button>
+    </div>
+  </div>
+</div>
+
+<div class="app">
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sb-logo">P</div>
+    <div class="nav-item on"><i class="ti ti-shopping-cart"></i></div>
+    <div class="nav-item"><i class="ti ti-chart-bar"></i></div>
+    <div class="nav-item"><i class="ti ti-package"></i></div>
+    <div class="nav-item"><i class="ti ti-truck"></i></div>
+    <div class="nav-item"><i class="ti ti-megaphone"></i></div>
+    <div class="nav-item"><i class="ti ti-users"></i></div>
+    <div class="nav-sp"></div>
+    <div class="nav-item"><i class="ti ti-settings"></i></div>
+    <div class="avatar">ชน</div>
+    <div class="online"></div>
+  </div>
+
+  <div class="main">
+    <!-- TOPBAR -->
+    <div class="topbar">
+      <!-- Branch badge — read-only ไม่มี chevron -->
+      <div class="branch-badge"><i class="ti ti-building-store"></i> สาขาลาดพร้าว</div>
+
+      <!-- Search + เลือกสินค้า -->
+      <div class="search-group">
+        <div class="topbar-search">
+          <i class="ti ti-search"></i>
+          <input placeholder="ค้นหา name/serial/barcode (Ctrl+f)" id="search-input" oninput="filterGrid()"/>
+        </div>
+        <button class="add-prod-btn" onclick="alert('เปิด Dialog เลือกสินค้า')">
+          <i class="ti ti-plus"></i> เลือกสินค้า
+        </button>
+      </div>
+
+      <div class="topbar-sp"></div>
+      <div class="topbar-btn"><i class="ti ti-calculator"></i></div>
+      <div class="topbar-btn"><i class="ti ti-refresh"></i></div>
+      <div class="topbar-btn"><i class="ti ti-map-pin"></i></div>
+      <div class="user-info">
+        <div class="user-av">ชน</div>
+        <span style="font-size:11px;color:var(--g600);">ชนิษา เกษมทรัพย์</span>
+        <i class="ti ti-chevron-down" style="font-size:11px;color:var(--g400);"></i>
+      </div>
+      <span style="font-size:16px;">🇹🇭</span>
+    </div>
+
+    <div class="content-row">
+      <div class="product-area">
+        <!-- CATEGORY BAR — มี bg image + overlay -->
+        <div class="cat-bar">
+          <div class="cat-pill no-img on" style="background:var(--p600);" onclick="filterCat('',this)"><span class="cat-text">ทั้งหมด</span></div>
+          <!-- มีรูป bg + overlay -->
+          <div class="cat-pill" style="padding:5px 14px;" onclick="filterCat('อาหารสัตว์',this)">
+            <div class="cat-bg" style="background:linear-gradient(135deg,#1D9E75,#085041);"></div>
+            <div class="cat-overlay"></div>
+            <span class="cat-text">อาหารสัตว์</span>
+          </div>
+          <div class="cat-pill" onclick="filterCat('ทรีทและขนม',this)">
+            <div class="cat-bg" style="background:linear-gradient(135deg,#BA7517,#633806);"></div>
+            <div class="cat-overlay"></div>
+            <span class="cat-text">ทรีทและขนม</span>
+          </div>
+          <div class="cat-pill" onclick="filterCat('ของเล่น',this)">
+            <div class="cat-bg" style="background:linear-gradient(135deg,#D85A30,#993C1D);"></div>
+            <div class="cat-overlay"></div>
+            <span class="cat-text">ของเล่น</span>
+          </div>
+          <div class="cat-pill no-img" onclick="filterCat('กรายแมว',this)">กรายแมว</div>
+          <div class="cat-pill no-img" onclick="filterCat('อาหารเสริม',this)">อาหารเสริม</div>
+        </div>
+
+        <div class="product-grid" id="product-grid"></div>
+      </div>
+
+      <!-- CART -->
+      <div class="cart">
+        <div class="cart-hd">
+          <span class="cart-title">ตะกร้า</span>
+          <button class="hold-btn"><i class="ti ti-clock-pause" style="font-size:11px;vertical-align:-1px;"></i> พักบิล</button>
+        </div>
+        <div class="cust-bar">
+          <i class="ti ti-user" style="font-size:13px;color:var(--g400);flex-shrink:0;"></i>
+          <span class="cust-name">น้ำ แก้วกานต์</span>
+          <i class="ti ti-x" style="font-size:13px;color:var(--g200);cursor:pointer;flex-shrink:0;" onclick="this.parentElement.querySelector('.cust-name').style.display='none';this.previousElementSibling.style.display='none';"></i>
+        </div>
+        <div class="cart-items" id="cart-items"></div>
+        <div class="cart-footer">
+          <div class="cf-row">
+            <span class="cf-lbl">พนักงาน</span>
+            <span class="cf-val" style="display:flex;align-items:center;gap:4px;"><i class="ti ti-user" style="font-size:11px;color:var(--p400);"></i>ชนิษา</span>
+          </div>
+          <div class="cf-row">
+            <span class="cf-lbl">ลดท้ายบิล</span>
+            <div class="disc-row">
+              <input class="disc-inp" value="0" type="number" min="0" id="disc-val" oninput="recalc()"/>
+              <button class="disc-tog on" id="disc-tog" onclick="toggleDisc()">฿</button>
+            </div>
+          </div>
+          <div class="cf-row">
+            <span class="cf-lbl">ค่าธรรมเนียม</span>
+            <div class="fee-chips">
+              <div class="fee-chip on" onclick="setFee(0,this)">ไม่มี</div>
+              <div class="fee-chip" onclick="setFee(1,this)">1%</div>
+              <div class="fee-chip" onclick="setFee(3,this)">3%</div>
+            </div>
+          </div>
+          <div class="cf-row"><span class="cf-lbl">รวม</span><span class="cf-val" id="sub-val">฿0.00</span></div>
+          <div class="cf-row"><span class="cf-lbl">ส่วนลด</span><span class="cf-val" style="color:var(--green);" id="disc-disp">-฿0.00</span></div>
+          <div class="cf-row"><span class="cf-lbl">ค่าธรรมเนียม</span><span class="cf-val" style="color:var(--amber);" id="fee-disp">฿0.00</span></div>
+          <div class="grand-row">
+            <span class="gt-lbl">รวมสุทธิ</span>
+            <span class="gt-val" id="grand-val">฿0.00</span>
+          </div>
+          <div style="font-size:10px;color:var(--g400);text-align:right;" id="items-sum">0 รายการ | 0 ชิ้น</div>
+          <div class="checkout-area">
+            <button class="checkout-btn" onclick="alert('ชำระเงิน F12')"><i class="ti ti-cash"></i> ชำระเงิน (F12)</button>
+            <div class="more-btn"><i class="ti ti-dots-vertical"></i></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const PRODUCTS = [
+  {id:1,name:"Hill's Science Diet สุนัขสูงอายุ 7+ 5.67 kg",price:2400,stock:98,emoji:"🐕",cat:"อาหารสัตว์",uoms:null},
+  {id:2,name:"Royal Canin Mini Indoor Senior 3 kg",price:1029,stock:96,emoji:"🐩",cat:"อาหารสัตว์",uoms:null},
+  {id:3,name:"Maxima อาหารเปียก กระป๋อง 380 g",price:79,stock:99,emoji:"🥫",cat:"อาหารสัตว์",
+    uoms:[{name:'ชิ้น',factor:1,price:79},{name:'แพ็ค',factor:6,price:450},{name:'ลัง',factor:24,price:1700}]},
+  {id:4,name:"Smart Heart อาหารลูกสุนัข เนื้อวัวนม 8 kg",price:759,stock:99,emoji:"🐶",cat:"อาหารสัตว์",uoms:null},
+  {id:5,name:"Jerhigh ฮอทดอกบาร์ รสไก่ 150 g",price:45,stock:99,emoji:"🌭",cat:"ทรีทและขนม",
+    uoms:[{name:'ชิ้น',factor:1,price:45},{name:'โหล',factor:12,price:510},{name:'ลัง',factor:48,price:1900}]},
+  {id:6,name:"Biscal ขนมคุกกี้สุนัข สูตรชีส 60 g",price:197,stock:100,emoji:"🍪",cat:"ทรีทและขนม",uoms:null},
+  {id:7,name:"Pedigree เดนตาสติก พันธุ์เล็ก 210 g",price:126,stock:100,emoji:"🦷",cat:"ทรีทและขนม",uoms:null},
+  {id:8,name:"Kaniva อาหารเม็ด รสแกะทูน่าข้าว 1.4 kg",price:279,stock:100,emoji:"🐱",cat:"อาหารสัตว์",uoms:null},
+  {id:9,name:"Orijen สูตรแมวเด็กและแมวโต 1.8 kg",price:1100,stock:100,emoji:"🐈",cat:"อาหารสัตว์",uoms:null},
+  {id:10,name:"Purina One ลูกแมวอายุ 3 สัปดาห์ 1.3 kg",price:433,stock:99,emoji:"🐟",cat:"อาหารสัตว์",uoms:null},
+  {id:11,name:"Nekko อาหารเปียกลูกแมว 70 g",price:23,stock:100,emoji:"🦈",cat:"อาหารสัตว์",uoms:null},
+  {id:12,name:"Royal Canin อาหารเปียกแมวโต 85 g",price:329,stock:100,emoji:"🐾",cat:"อาหารสัตว์",uoms:null},
+];
+
+// cart: { id: { qty, unitPrice, uomName, discount:{type,val} } }
+let cart={};
+let discType='thb', feeRate=0;
+let currentCat='', currentQ='';
+let idpTargetId=null, idpMode='disc_thb';
+
+const fmt=n=>parseFloat(n||0).toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+/* ===== GRID ===== */
+function renderGrid(){
+  const grid=document.getElementById('product-grid');
+  const list=PRODUCTS.filter(p=>{
+    const mq=!currentQ||p.name.toLowerCase().includes(currentQ.toLowerCase());
+    const mc=!currentCat||p.cat===currentCat;
+    return mq&&mc;
+  });
+  grid.innerHTML=list.map(p=>{
+    const inCart=cart[p.id];
+    const qty=inCart?inCart.qty:0;
+    return`<div class="prod-wrap">
+      <div class="prod-card${qty>0?' in-cart':''}" onclick="onProdClick(${p.id})">
+        <div class="prod-img">${p.emoji}</div>
+        <div class="prod-info">
+          <div class="prod-name">${p.name}</div>
+          <div class="prod-bottom">
+            <span class="prod-price">฿${fmt(p.price)}</span>
+            <span class="prod-stock">${p.stock}</span>
+          </div>
+        </div>
+      </div>
+      ${qty>0?`<div class="cart-badge">${qty}</div>`:''}
+    </div>`;
+  }).join('');
+}
+
+function filterGrid(){currentQ=document.getElementById('search-input').value;renderGrid();}
+function filterCat(cat,el){
+  currentCat=cat;
+  document.querySelectorAll('.cat-pill').forEach(p=>{
+    p.classList.remove('on');
+    if(p.classList.contains('no-img')){p.style.background='';p.style.color='';}
+  });
+  el.classList.add('on');
+  if(el.classList.contains('no-img')){el.style.background=cat?'var(--p600)':'var(--p600)';el.style.color='white';}
+  renderGrid();
+}
+
+/* ===== PRODUCT CLICK — UOM Check ===== */
+function onProdClick(id){
+  const p=PRODUCTS.find(x=>x.id===id);
+  if(!p) return;
+  if(p.uoms && p.uoms.length>1){
+    // มีหลายหน่วย → แสดง popup
+    showUomPopup(p);
+  } else {
+    // หน่วยเดียว → ลงตะกร้าทันที
+    addToCart(id, p.price, 'ชิ้น');
+  }
+}
+
+/* ===== UOM POPUP ===== */
+function showUomPopup(p){
+  document.getElementById('uom-prod-name').textContent=p.name;
+  document.getElementById('uom-options').innerHTML=p.uoms.map((u,i)=>`
+    <div class="uom-opt" onclick="selectUom(${p.id},${u.price},'${u.name}')">
+      <div class="uom-opt-left">
+        <div class="uom-opt-name">${u.name}</div>
+        <div class="uom-opt-eq">${u.factor===1?'หน่วยฐาน':`= ${u.factor} ชิ้น`}</div>
+      </div>
+      <div class="uom-opt-price">฿${fmt(u.price)}</div>
+    </div>`).join('');
+  document.getElementById('uom-modal').classList.remove('hidden');
+}
+function selectUom(id,price,uomName){
+  closeUom();
+  addToCart(id,price,uomName);
+}
+function closeUom(){document.getElementById('uom-modal').classList.add('hidden');}
+
+/* ===== CART ===== */
+function addToCart(id,price,uomName){
+  if(cart[id]){
+    cart[id].qty++;
+  } else {
+    cart[id]={qty:1,unitPrice:price,uomName:uomName||'ชิ้น',discount:{type:'none',val:0}};
+  }
+  renderGrid();renderCart();
+}
+function changeQty(id,d){
+  if(!cart[id]) return;
+  cart[id].qty+=d;
+  if(cart[id].qty<=0) delete cart[id];
+  renderGrid();renderCart();
+}
+function removeItem(id){delete cart[id];renderGrid();renderCart();}
+
+function getItemFinalPrice(item){
+  const base=item.unitPrice*item.qty;
+  if(item.discount.type==='disc_thb') return Math.max(0,base-item.discount.val);
+  if(item.discount.type==='disc_pct') return Math.max(0,base*(1-item.discount.val/100));
+  if(item.discount.type==='override') return item.discount.val*item.qty;
+  return base;
+}
+
+function renderCart(){
+  const el=document.getElementById('cart-items');
+  const items=PRODUCTS.filter(p=>cart[p.id]);
+  if(!items.length){el.innerHTML='<div style="text-align:center;padding:20px;font-size:11px;color:var(--g200);">ยังไม่มีสินค้า</div>';recalc();return;}
+  el.innerHTML=items.map(p=>{
+    const ci=cart[p.id];
+    const finalPrice=getItemFinalPrice(ci);
+    const hasDisc=ci.discount.type!=='none';
+    return`<div class="ci">
+      <div class="ci-name">${p.name}${ci.uomName!=='ชิ้น'?` <span style="font-size:9px;color:var(--p400);background:var(--p50);padding:1px 4px;border-radius:4px;">${ci.uomName}</span>`:''}${hasDisc?` <span style="font-size:9px;color:var(--red);background:#FCEBEB;padding:1px 4px;border-radius:4px;">มีส่วนลด</span>`:''}</div>
+      <div class="ci-row">
+        <div class="qty-btn" onclick="changeQty(${p.id},-1)"><i class="ti ti-minus" style="font-size:10px;"></i></div>
+        <span class="qty-n">${ci.qty}</span>
+        <div class="qty-btn" onclick="changeQty(${p.id},1)"><i class="ti ti-plus" style="font-size:10px;"></i></div>
+        <!-- ราคาคลิกได้ — เปิด item discount popup -->
+        <div class="ci-price-wrap" onclick="openIdp(${p.id})" title="แก้ไขราคา/ส่วนลดรายชิ้น">
+          <span class="ci-price${hasDisc?' style=color:var(--red)':''}">฿${fmt(finalPrice)}</span>
+          <i class="ti ti-pencil ci-edit-icon"></i>
+        </div>
+        <div class="ci-del" onclick="removeItem(${p.id})"><i class="ti ti-trash"></i></div>
+      </div>
+    </div>`;
+  }).join('');
+  recalc();
+}
+
+/* ===== ITEM DISCOUNT POPUP ===== */
+function openIdp(id){
+  idpTargetId=id;
+  idpMode='disc_thb';
+  const p=PRODUCTS.find(x=>x.id===id);
+  const ci=cart[id];
+  document.getElementById('idp-prod-name').textContent=p.name;
+  document.getElementById('idp-val').value=ci.discount.val||'';
+  document.querySelectorAll('.idp-tab').forEach(t=>t.classList.remove('on'));
+  document.querySelectorAll('.idp-tab')[0].classList.add('on');
+  document.getElementById('idp-lbl').textContent='ส่วนลด (฿)';
+  previewIdp();
+  document.getElementById('idp-modal').classList.remove('hidden');
+}
+function closeIdp(){document.getElementById('idp-modal').classList.add('hidden');idpTargetId=null;}
+function setIdpMode(mode,el){
+  idpMode=mode;
+  document.querySelectorAll('.idp-tab').forEach(t=>t.classList.remove('on'));
+  el.classList.add('on');
+  document.getElementById('idp-lbl').textContent=mode==='disc_thb'?'ส่วนลด (฿)':mode==='disc_pct'?'ส่วนลด (%)':'ราคาขายใหม่ (ต่อหน่วย)';
+  document.getElementById('idp-val').value='';
+  previewIdp();
+}
+function previewIdp(){
+  if(!idpTargetId) return;
+  const ci=cart[idpTargetId];
+  const base=ci.unitPrice*ci.qty;
+  const v=parseFloat(document.getElementById('idp-val').value)||0;
+  let result=base;
+  if(idpMode==='disc_thb') result=Math.max(0,base-v);
+  else if(idpMode==='disc_pct') result=Math.max(0,base*(1-v/100));
+  else if(idpMode==='override') result=v*ci.qty;
+  document.getElementById('idp-preview').textContent='฿'+fmt(result);
+}
+function saveIdp(){
+  if(!idpTargetId) return;
+  const v=parseFloat(document.getElementById('idp-val').value)||0;
+  cart[idpTargetId].discount={type:v>0?idpMode:'none',val:v};
+  closeIdp();
+  renderCart();
+}
+
+/* ===== FOOTER CALC ===== */
+function recalc(){
+  const items=PRODUCTS.filter(p=>cart[p.id]);
+  const subtotal=items.reduce((s,p)=>s+getItemFinalPrice(cart[p.id]),0);
+  const dv=parseFloat(document.getElementById('disc-val').value)||0;
+  const discType2=document.getElementById('disc-tog').textContent;
+  const disc=discType2==='%'?subtotal*dv/100:Math.min(dv,subtotal);
+  const afterDisc=Math.max(0,subtotal-disc);
+  const fee=afterDisc*feeRate/100;
+  const grand=afterDisc+fee;
+  const totalQty=items.reduce((s,p)=>s+(cart[p.id]?.qty||0),0);
+  document.getElementById('sub-val').textContent='฿'+fmt(subtotal);
+  document.getElementById('disc-disp').textContent='-฿'+fmt(disc);
+  document.getElementById('fee-disp').textContent='฿'+fmt(fee);
+  document.getElementById('grand-val').textContent='฿'+fmt(grand);
+  document.getElementById('items-sum').textContent=`${items.length} รายการ | ${totalQty} ชิ้น`;
+}
+function toggleDisc(){
+  discType=discType==='pct'?'thb':'pct';
+  const btn=document.getElementById('disc-tog');
+  btn.textContent=discType==='pct'?'%':'฿';
+  btn.classList.toggle('on',true);
+  recalc();
+}
+function setFee(r,el){
+  feeRate=r;
+  document.querySelectorAll('.fee-chip').forEach(c=>c.classList.remove('on'));
+  el.classList.add('on');
+  recalc();
+}
+
+// init
+cart={4:{qty:1,unitPrice:759,uomName:'ชิ้น',discount:{type:'none',val:0}}};
+renderGrid();renderCart();
+</script>
+</body>
+</html>

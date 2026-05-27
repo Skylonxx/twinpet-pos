@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TwinPet POS — Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600&family=Sarabun:wght@300;400;500&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root{
+  --p600:#534AB7;--p500:#6B62C9;--p100:#CECBF6;--p50:#EEEDFE;
+  --g50:#F8F8FC;--g100:#EDEDF5;
+  --white:#ffffff;
+  --border:rgba(0,0,0,0.08);--border-md:rgba(0,0,0,0.13);
+  --text-primary:#1A1A2E;--text-secondary:#6B7280;--text-muted:#9CA3AF;
+  --success:#0F6E56;--success-bg:#E1F5EE;
+  --danger:#A32D2D;--danger-bg:#FCEBEB;
+  --warn:#854F0B;--warn-bg:#FAEEDA;--warn-light:#FAC775;
+  --info:#185FA5;--info-bg:#E6F1FB;
+  --topbar-h:56px;--footer-h:52px;
+  --radius-sm:6px;--radius-md:8px;--radius-lg:12px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Prompt','Sarabun',sans-serif;background:var(--g50);color:var(--text-primary);height:100vh;overflow:hidden;font-size:14px;}
+.shell{display:flex;flex-direction:column;height:100vh;}
+
+/* Topbar */
+.topbar{height:var(--topbar-h);background:var(--white);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:12px;flex-shrink:0;}
+.topbar-icon{width:34px;height:34px;border-radius:var(--radius-md);background:var(--p50);display:flex;align-items:center;justify-content:center;color:var(--p600);font-size:18px;flex-shrink:0;}
+.topbar-title{font-size:15px;font-weight:500;}
+.topbar-sub{font-size:12px;color:var(--text-secondary);margin-top:1px;}
+.topbar-center{flex:1;}
+.branch-badge{font-size:11px;padding:4px 12px;border-radius:20px;background:var(--p50);color:var(--p600);font-weight:500;border:1px solid var(--p100);display:flex;align-items:center;gap:5px;}
+.live-dot{width:7px;height:7px;border-radius:50%;background:#1D9E75;box-shadow:0 0 0 2px rgba(29,158,117,0.25);animation:pulse 2s infinite;}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 2px rgba(29,158,117,0.25);}50%{box-shadow:0 0 0 5px rgba(29,158,117,0.1);}}
+
+/* Period selector */
+.period-tabs{display:flex;background:var(--g50);border-radius:var(--radius-md);padding:3px;gap:2px;border:1px solid var(--border);}
+.period-tab{padding:5px 14px;border-radius:var(--radius-sm);font-size:12px;font-family:inherit;background:transparent;border:none;cursor:pointer;color:var(--text-muted);transition:all 0.15s;white-space:nowrap;}
+.period-tab.active{background:var(--white);color:var(--p600);font-weight:500;box-shadow:0 1px 3px rgba(0,0,0,0.08);}
+
+/* Content */
+.content-area{flex:1;overflow-y:auto;padding:18px 20px;display:flex;flex-direction:column;gap:14px;}
+
+/* KPI grid */
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+.kpi-card{background:var(--white);border-radius:var(--radius-lg);border:1px solid var(--border);padding:16px 18px;position:relative;overflow:hidden;cursor:default;}
+.kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:var(--radius-lg) var(--radius-lg) 0 0;}
+.kc-rev::before{background:var(--p600);}
+.kc-profit::before{background:var(--success);}
+.kc-orders::before{background:var(--info);}
+.kc-stock::before{background:var(--warn);}
+.kpi-icon-bg{position:absolute;right:14px;top:14px;font-size:24px;opacity:0.1;}
+.kc-rev .kpi-icon-bg{color:var(--p600);}
+.kc-profit .kpi-icon-bg{color:var(--success);}
+.kc-orders .kpi-icon-bg{color:var(--info);}
+.kc-stock .kpi-icon-bg{color:var(--warn);}
+.kpi-label{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;display:flex;align-items:center;gap:5px;}
+.kpi-num{font-size:22px;font-weight:500;line-height:1.2;margin-bottom:6px;}
+.kc-rev .kpi-num{color:var(--p600);}
+.kc-profit .kpi-num{color:var(--success);}
+.kc-orders .kpi-num{color:var(--info);}
+.kc-stock .kpi-num{color:var(--warn);}
+.kpi-compare{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.kpi-badge{display:inline-flex;align-items:center;gap:3px;font-size:11px;padding:2px 8px;border-radius:20px;}
+.badge-up{background:var(--success-bg);color:var(--success);}
+.badge-dn{background:var(--danger-bg);color:var(--danger);}
+.badge-flat{background:var(--g100);color:var(--text-muted);}
+.kpi-vs{font-size:11px;color:var(--text-muted);}
+/* Sparkline mini chart inside card */
+.kpi-spark{height:32px;margin-top:8px;}
+
+/* 2-column chart grid */
+.chart-row{display:grid;grid-template-columns:2fr 1fr;gap:14px;}
+.chart-box{background:var(--white);border-radius:var(--radius-lg);border:1px solid var(--border);padding:16px 18px;}
+.chart-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+.chart-title{font-size:13px;font-weight:500;display:flex;align-items:center;gap:6px;}
+.chart-title i{color:var(--p600);font-size:15px;}
+.chart-legend{display:flex;gap:12px;}
+.legend-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-secondary);}
+.legend-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.chart-canvas-wrap{position:relative;height:190px;}
+
+/* Donut legend */
+.donut-wrap{display:flex;gap:16px;align-items:flex-start;}
+.donut-canvas{position:relative;width:140px;height:140px;flex-shrink:0;}
+.donut-legend-list{display:flex;flex-direction:column;gap:6px;flex:1;padding-top:4px;}
+.dl-row{display:flex;align-items:center;gap:7px;font-size:12px;}
+.dl-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.dl-lbl{flex:1;color:var(--text-secondary);}
+.dl-val{font-weight:500;color:var(--text-primary);}
+.dl-pct{font-size:10px;color:var(--text-muted);min-width:28px;text-align:right;}
+
+/* 3-column bottom row */
+.bottom-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;}
+.table-card{background:var(--white);border-radius:var(--radius-lg);border:1px solid var(--border);overflow:hidden;display:flex;flex-direction:column;}
+.tc-head{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px;font-size:13px;font-weight:500;flex-shrink:0;}
+.tc-head i{color:var(--p600);font-size:15px;}
+.tc-head .badge-count{margin-left:auto;font-size:10px;padding:2px 8px;border-radius:20px;background:var(--p50);color:var(--p600);}
+.tc-body{overflow-y:auto;flex:1;}
+table.mini{width:100%;border-collapse:collapse;font-size:12px;}
+table.mini th{padding:7px 14px;text-align:left;font-size:10px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;background:var(--g50);border-bottom:1px solid var(--border);white-space:nowrap;}
+table.mini td{padding:9px 14px;border-bottom:1px solid var(--border);vertical-align:middle;}
+table.mini tr:last-child td{border-bottom:none;}
+table.mini tr:hover td{background:var(--g50);}
+table.mini th.r,table.mini td.r{text-align:right;}
+.rank-ball{width:20px;height:20px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;}
+.rb-1{background:var(--p600);color:#fff;}
+.rb-2{background:#6B62C9;color:#fff;}
+.rb-3{background:var(--p100);color:var(--p600);}
+.rb-n{background:var(--g100);color:var(--text-muted);}
+.prod-mini{display:flex;align-items:center;gap:7px;}
+.prod-icon-sm{width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;}
+.bar-inline{height:4px;border-radius:2px;background:var(--g100);overflow:hidden;margin-top:3px;}
+.bar-fill-p{height:100%;background:var(--p600);border-radius:2px;}
+.bar-fill-g{height:100%;background:var(--success);border-radius:2px;}
+
+/* Stock alert table */
+.alert-dot{width:7px;height:7px;border-radius:50%;}
+.ad-low{background:var(--warn);}
+.ad-crit{background:var(--danger);}
+.ad-ok{background:#1D9E75;}
+.stock-num-low{color:var(--warn);font-weight:500;}
+.stock-num-crit{color:var(--danger);font-weight:500;}
+
+/* Footer */
+.footer{height:var(--footer-h);background:var(--white);border-top:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:0;flex-shrink:0;}
+.footer-stat{display:flex;flex-direction:column;align-items:center;padding:0 16px;border-right:1px solid var(--border);}
+.footer-stat:last-of-type{border-right:none;}
+.footer-num{font-size:17px;font-weight:500;line-height:1.2;}
+.footer-lbl{font-size:10px;color:var(--text-muted);margin-top:1px;text-transform:uppercase;letter-spacing:0.03em;}
+.footer-spacer{flex:1;}
+.footer-clock{font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:5px;}
+
+/* Payment section */
+.pay-section{background:var(--white);border-radius:var(--radius-lg);border:1px solid var(--border);padding:16px 18px;}
+.pay-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:14px;padding-bottom:4px;}.pay-scroll::-webkit-scrollbar{height:4px;}.pay-grid{display:flex;gap:10px;min-width:max-content;}.pay-card{flex:0 0 200px;}
+.pay-card{border-radius:var(--radius-md);border:1px solid var(--border);padding:12px 14px;display:flex;align-items:center;gap:12px;transition:border-color 0.15s;}
+.pay-card:hover{border-color:var(--p100);}
+.pay-icon{width:38px;height:38px;border-radius:var(--radius-md);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
+.pay-info{flex:1;min-width:0;}
+.pay-name{font-size:12px;font-weight:500;color:var(--text-secondary);}
+.pay-rev{font-size:16px;font-weight:500;line-height:1.3;}
+.pay-meta{display:flex;align-items:center;gap:6px;margin-top:3px;}
+.pay-bills{font-size:11px;color:var(--text-muted);}
+.pay-pct-pill{font-size:10px;padding:1px 7px;border-radius:20px;font-weight:500;}
+/* horizontal bar inside pay card */
+.pay-bar-wrap{margin-top:8px;}
+.pay-bar-bg{height:4px;border-radius:2px;background:var(--g100);overflow:hidden;}
+.pay-bar-fill{height:100%;border-radius:2px;transition:width 0.4s ease;}
+</style>
+</head>
+<body>
+<div class="shell">
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="topbar-icon"><i class="ti ti-layout-dashboard" aria-hidden="true"></i></div>
+  <div class="topbar-center">
+    <div class="topbar-title">Dashboard</div>
+    <div class="topbar-sub">ภาพรวมธุรกิจ TwinPet</div>
+  </div>
+  <div class="period-tabs" id="period-tabs">
+    <button class="period-tab active" onclick="setPeriod('today',this)">วันนี้</button>
+    <button class="period-tab" onclick="setPeriod('week',this)">สัปดาห์นี้</button>
+    <button class="period-tab" onclick="setPeriod('month',this)">เดือนนี้</button>
+  </div>
+  <div class="live-dot" title="Live data"></div>
+  <span class="branch-badge"><i class="ti ti-map-pin" style="font-size:12px;" aria-hidden="true"></i>สาขา: ลาดพร้าว</span>
+</div>
+
+<!-- CONTENT -->
+<div class="content-area">
+
+  <!-- KPI CARDS -->
+  <div class="kpi-grid" id="kpi-grid"></div>
+
+  <!-- CHARTS ROW -->
+  <div class="chart-row">
+    <!-- Bar/Line: Sales trend -->
+    <div class="chart-box">
+      <div class="chart-head">
+        <div class="chart-title"><i class="ti ti-chart-bar" aria-hidden="true"></i><span id="trend-title">ยอดขาย vs กำไร รายชั่วโมง</span></div>
+        <div class="chart-legend">
+          <div class="legend-item"><div class="legend-dot" style="background:var(--p600);"></div>ยอดขาย</div>
+          <div class="legend-item"><div class="legend-dot" style="background:var(--success);"></div>กำไร</div>
+        </div>
+      </div>
+      <div class="chart-canvas-wrap"><canvas id="trend-chart"></canvas></div>
+    </div>
+    <!-- Donut: category -->
+    <div class="chart-box">
+      <div class="chart-head">
+        <div class="chart-title"><i class="ti ti-chart-donut" aria-hidden="true"></i>ยอดขายตามหมวดหมู่</div>
+      </div>
+      <div class="donut-wrap">
+        <div class="donut-canvas"><canvas id="cat-donut"></canvas></div>
+        <div class="donut-legend-list" id="donut-legend"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PAYMENT METHODS -->
+  <div class="pay-section">
+    <div class="chart-head" style="margin-bottom:0;">
+      <div class="chart-title"><i class="ti ti-credit-card" aria-hidden="true"></i>ช่องทางการชำระเงิน</div>
+      <span style="font-size:12px;color:var(--text-muted);" id="pay-period-label">วันนี้</span>
+    </div>
+    <div class="pay-scroll"><div class="pay-grid" id="pay-grid"></div></div>
+  </div>
+
+  <!-- BOTTOM ROW: Top products | Top customers | Stock alerts -->
+  <div class="bottom-row">
+    <!-- Top products -->
+    <div class="table-card">
+      <div class="tc-head">
+        <i class="ti ti-medal" aria-hidden="true"></i> Top สินค้าขายดี
+        <span class="badge-count" id="top-prod-badge">5</span>
+      </div>
+      <div class="tc-body">
+        <table class="mini"><thead><tr>
+          <th>#</th><th>สินค้า</th><th class="r">ยอดขาย</th><th class="r">กำไร</th>
+        </tr></thead><tbody id="top-prod-body"></tbody></table>
+      </div>
+    </div>
+    <!-- Top customers -->
+    <div class="table-card">
+      <div class="tc-head">
+        <i class="ti ti-crown" aria-hidden="true"></i> Top ลูกค้า
+        <span class="badge-count" id="top-cust-badge">5</span>
+      </div>
+      <div class="tc-body">
+        <table class="mini"><thead><tr>
+          <th>#</th><th>ลูกค้า</th><th class="r">ยอดขาย</th><th class="r">บิล</th>
+        </tr></thead><tbody id="top-cust-body"></tbody></table>
+      </div>
+    </div>
+    <!-- Stock alerts -->
+    <div class="table-card">
+      <div class="tc-head">
+        <i class="ti ti-alert-triangle" aria-hidden="true"></i> แจ้งเตือนสต็อก
+        <span class="badge-count" id="stock-alert-badge">5</span>
+      </div>
+      <div class="tc-body">
+        <table class="mini"><thead><tr>
+          <th>สินค้า</th><th class="r">คงเหลือ</th><th class="r">Reorder</th>
+        </tr></thead><tbody id="stock-alert-body"></tbody></table>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- FOOTER -->
+<div class="footer">
+  <div class="footer-stat">
+    <span class="footer-num" id="f-rev" style="color:var(--p600);">฿0</span>
+    <span class="footer-lbl">ยอดขาย</span>
+  </div>
+  <div class="footer-stat">
+    <span class="footer-num" id="f-profit" style="color:var(--success);">฿0</span>
+    <span class="footer-lbl">กำไร</span>
+  </div>
+  <div class="footer-stat">
+    <span class="footer-num" id="f-bills" style="color:var(--info);">0</span>
+    <span class="footer-lbl">บิล</span>
+  </div>
+  <div class="footer-stat">
+    <span class="footer-num" id="f-margin" style="color:var(--text-secondary);">0%</span>
+    <span class="footer-lbl">Margin</span>
+  </div>
+  <div class="footer-spacer"></div>
+  <div class="footer-clock"><i class="ti ti-clock" aria-hidden="true"></i><span id="clock"></span></div>
+</div>
+
+</div><!-- shell -->
+
+<script>
+// ── DATA ─────────────────────────────────────────────────────────────────────
+const CATS      = ['อาหารสุนัข','อาหารแมว','ของเล่น','ยาและวิตามิน','อุปกรณ์','ทรายแมว'];
+const CAT_CLR   = ['#534AB7','#1D9E75','#EF9F27','#E24B4A','#185FA5','#D4537E'];
+const PRODUCTS  = [
+  {id:1,  name:'Royal Canin Adult 3kg',   sku:'RC-A3',  cat:'อาหารสุนัข', icon:'🐕', bg:'#EEEDFE', reorder:20},
+  {id:2,  name:'Hills Science Diet Cat',  sku:'HS-C1',  cat:'อาหารแมว',   icon:'🐈', bg:'#E1F5EE', reorder:20},
+  {id:3,  name:'Whiskas Tuna 85g (24pc)', sku:'WK-T24', cat:'อาหารแมว',   icon:'🐟', bg:'#E1F5EE', reorder:12},
+  {id:4,  name:'Purina Pro Plan Puppy',   sku:'PP-PUP', cat:'อาหารสุนัข', icon:'🐶', bg:'#EEEDFE', reorder:15},
+  {id:5,  name:'Pedigree Dentastix',      sku:'PD-DX',  cat:'อาหารสุนัข', icon:'🦴', bg:'#EEEDFE', reorder:10},
+  {id:6,  name:'Cat Scratcher Deluxe',    sku:'CS-DX',  cat:'ของเล่น',    icon:'🧸', bg:'#FAEEDA', reorder:5},
+  {id:7,  name:'Frontline Plus Dog L',    sku:'FL-DL',  cat:'ยาและวิตามิน',icon:'💊',bg:'#FCEBEB', reorder:8},
+  {id:8,  name:'Catit Water Fountain',    sku:'CW-F1',  cat:'อุปกรณ์',    icon:'💧', bg:'#E6F1FB', reorder:4},
+  {id:9,  name:'Petsafe Clicker',         sku:'PC-CL',  cat:'ของเล่น',    icon:'🔔', bg:'#FAEEDA', reorder:5},
+  {id:10, name:'Tidy Cats Clumping 8kg',  sku:'TC-C8',  cat:'ทรายแมว',    icon:'🪣', bg:'#F1EFE8', reorder:20},
+  {id:11, name:'NexGard Chewable M',      sku:'NG-M',   cat:'ยาและวิตามิน',icon:'💊',bg:'#FCEBEB', reorder:8},
+  {id:12, name:'Rolf Club 3D Collar Cat', sku:'RC-CC',  cat:'อุปกรณ์',    icon:'🎀', bg:'#FBEAF0', reorder:6},
+];
+const STOCK = {1:48,2:15,3:6,4:32,5:0,6:8,7:22,8:3,9:18,10:40,11:5,12:11};
+
+// Sales transactions mock
+const SALES = [
+  // today (2026-05-24) hourly-ish
+  {date:'2026-05-24',h:9,  bill:'TW-0583',prodId:1, qty:5,rev:2400,cogs:1600,cust:'คุณมาลี สุขใจ',    pay:'card'},
+  {date:'2026-05-24',h:9,  bill:'TW-0583',prodId:4, qty:2,rev:1040,cogs: 824,cust:'คุณมาลี สุขใจ',    pay:'card'},
+  {date:'2026-05-24',h:10, bill:'TW-0584',prodId:6, qty:2,rev: 440,cogs: 360,cust:'สมาชิกทั่วไป',     pay:'qr'},
+  {date:'2026-05-24',h:11, bill:'TW-0585',prodId:10,qty:4,rev: 920,cogs: 728,cust:'คุณวิชัย เก่งมาก', pay:'cash'},
+  {date:'2026-05-24',h:14, bill:'TW-0586',prodId:9, qty:3,rev: 285,cogs: 225,cust:'คุณสุดา เจริญ',    pay:'kbank'},
+  {date:'2026-05-24',h:16, bill:'TW-0587',prodId:12,qty:1,rev: 160,cogs: 120,cust:'สมาชิกทั่วไป',     pay:'cash'},
+  {date:'2026-05-24',h:16, bill:'TW-0587',prodId:7, qty:1,rev: 250,cogs: 195,cust:'คุณอนุชา บุญมา',  pay:'cash'},
+  // week (Mon-Sun)
+  {date:'2026-05-18',h:9,  bill:'TW-0561',prodId:1, qty:2,rev: 960,cogs: 630,cust:'คุณมาลี สุขใจ',       pay:'card'},
+  {date:'2026-05-18',h:11, bill:'TW-0562',prodId:2, qty:1,rev: 360,cogs: 280,cust:'คุณวิชัย เก่งมาก',    pay:'cash'},
+  {date:'2026-05-19',h:9,  bill:'TW-0564',prodId:4, qty:1,rev: 520,cogs: 405,cust:'คุณอนุชา บุญมา',     pay:'qr'},
+  {date:'2026-05-19',h:10, bill:'TW-0565',prodId:3, qty:5,rev: 600,cogs: 460,cust:'คุณพรทิพย์ สง่างาม', pay:'cash'},
+  {date:'2026-05-20',h:9,  bill:'TW-0568',prodId:5, qty:5,rev: 375,cogs: 275,cust:'คุณสมหมาย รักดี',    pay:'kbank'},
+  {date:'2026-05-20',h:11, bill:'TW-0569',prodId:8, qty:1,rev: 820,cogs: 650,cust:'คุณวิชัย เก่งมาก',   pay:'card'},
+  {date:'2026-05-21',h:10, bill:'TW-0572',prodId:2, qty:2,rev: 720,cogs: 570,cust:'คุณอนุชา บุญมา',     pay:'credit'},
+  {date:'2026-05-21',h:12, bill:'TW-0573',prodId:4, qty:2,rev:1040,cogs: 824,cust:'คุณพรทิพย์ สง่างาม', pay:'card'},
+  {date:'2026-05-22',h:9,  bill:'TW-0576',prodId:7, qty:3,rev: 750,cogs: 585,cust:'คุณวิชัย เก่งมาก',   pay:'cash'},
+  {date:'2026-05-22',h:11, bill:'TW-0577',prodId:1, qty:3,rev:1440,cogs: 960,cust:'คุณมาลี สุขใจ',      pay:'qr'},
+  {date:'2026-05-23',h:8,  bill:'TW-0580',prodId:11,qty:2,rev: 620,cogs: 480,cust:'คุณอนุชา บุญมา',     pay:'credit'},
+  {date:'2026-05-23',h:15, bill:'TW-0582',prodId:3, qty:6,rev: 720,cogs: 552,cust:'คุณณัฐ วงศ์ดี',     pay:'kbank'},
+];
+
+// Reference periods for comparison
+const REF = {
+  today: {rev:4820, profit:1640, bills:5},   // yesterday
+  week:  {rev:15200,profit:4900, bills:22},  // last week
+  month: {rev:42000,profit:13500,bills:64},  // last month
+};
+
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+const fmtB   = n=>'฿'+n.toLocaleString('th-TH',{maximumFractionDigits:0});
+const fmtPct = n=>n.toFixed(1)+'%';
+const fmt    = n=>n.toLocaleString('th-TH');
+const pctChg = (a,b)=>b>0?((a-b)/b*100):0;
+
+let trendChart=null, donutChart=null;
+let activePeriod='today';
+
+// ── PAYMENT CONFIG (อ้างอิงจาก Modal ชำระเงินในระบบ) ─────────────────────────
+const PAY_META = {
+  cash:   {label:'เงินสด',        icon:'ti-cash',          iconBg:'#EAF3DE', clr:'#3B6D11', barClr:'#1D9E75'},
+  qr:     {label:'โอน PromptPay', icon:'ti-qrcode',        iconBg:'#FBE8F9', clr:'#7A1FA2', barClr:'#A93FBF'},
+  kbank:  {label:'QR Kbank',      icon:'ti-building-bank', iconBg:'#E8F5E0', clr:'#1F6E00', barClr:'#4CAF50'},
+  card:   {label:'EDC',           icon:'ti-credit-card',   iconBg:'#EEEDFE', clr:'#534AB7', barClr:'#534AB7'},
+  credit: {label:'เชื่อ',          icon:'ti-clock-dollar',  iconBg:'#FAEEDA', clr:'#854F0B', barClr:'#EF9F27'},
+};
+
+function renderPayment(data, period){
+  const LABELS = {today:'วันนี้', week:'สัปดาห์นี้', month:'เดือนนี้'};
+  document.getElementById('pay-period-label').textContent = LABELS[period]||'';
+
+  // Group by bill (each bill has one pay method from first row)
+  const billPay = {};
+  data.forEach(r=>{ if(!billPay[r.bill]) billPay[r.bill]=r.pay; });
+
+  // Aggregate rev/bills per pay method
+  const payMap = {};
+  data.forEach(r=>{
+    const pm = billPay[r.bill]||'cash';
+    if(!payMap[pm]) payMap[pm]={rev:0, bills:new Set()};
+    payMap[pm].rev   += r.rev;
+    payMap[pm].bills.add(r.bill);
+  });
+
+  // Sort by rev desc, ensure all 4 methods shown (zero if missing)
+  const methods = Object.keys(PAY_META);
+  const totalRev = methods.reduce((a,k)=>a+(payMap[k]?.rev||0),0);
+  const maxRev   = Math.max(...methods.map(k=>payMap[k]?.rev||0), 1);
+
+  document.getElementById('pay-grid').innerHTML = methods.map(key=>{
+    const m   = PAY_META[key];
+    const val = payMap[key]||{rev:0, bills:new Set()};
+    const pct = totalRev>0 ? val.rev/totalRev*100 : 0;
+    const barW= val.rev/maxRev*100;
+    const billCount = val.bills.size;
+    return `<div class="pay-card">
+      <div class="pay-icon" style="background:${m.iconBg};color:${m.clr};"><i class="ti ${m.icon}" aria-hidden="true" style="font-size:18px;"></i></div>
+      <div class="pay-info">
+        <div class="pay-name">${m.label}</div>
+        <div class="pay-rev" style="color:${m.clr};">${fmtB(val.rev)}</div>
+        <div class="pay-meta">
+          <span class="pay-bills">${billCount} บิล</span>
+          <span class="pay-pct-pill" style="background:${m.iconBg};color:${m.clr};">${pct.toFixed(1)}%</span>
+        </div>
+        <div class="pay-bar-wrap">
+          <div class="pay-bar-bg">
+            <div class="pay-bar-fill" style="width:${barW}%;background:${m.barClr};"></div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+function getPeriodData(period){
+  if(period==='today')  return SALES.filter(s=>s.date==='2026-05-24');
+  if(period==='week')   return SALES.filter(s=>s.date>='2026-05-18'&&s.date<='2026-05-24');
+  if(period==='month')  return SALES; // all data as "month"
+  return SALES;
+}
+
+// ── SET PERIOD ────────────────────────────────────────────────────────────────
+function setPeriod(period, el){
+  activePeriod=period;
+  document.querySelectorAll('.period-tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  renderAll(period);
+}
+
+// ── RENDER ALL ────────────────────────────────────────────────────────────────
+function renderAll(period){
+  const data=getPeriodData(period);
+  const rev   =data.reduce((a,r)=>a+r.rev,0);
+  const profit=data.reduce((a,r)=>a+(r.rev-r.cogs),0);
+  const cogs  =data.reduce((a,r)=>a+r.cogs,0);
+  const bills =new Set(data.map(r=>r.bill)).size;
+  const margin=rev>0?profit/rev*100:0;
+  const ref   =REF[period];
+  renderKPI(rev,profit,bills,margin,ref,period);
+  renderTrendChart(data,period);
+  renderDonut(data);
+  renderTopProds(data);
+  renderTopCusts(data);
+  renderStockAlerts();
+  renderPayment(data,period);
+  renderFooter(rev,profit,bills,margin);
+}
+
+// ── KPI CARDS ─────────────────────────────────────────────────────────────────
+const PERIOD_LABELS={today:'vs เมื่อวาน',week:'vs สัปดาห์ก่อน',month:'vs เดือนก่อน'};
+function badge(pct){
+  if(Math.abs(pct)<0.5) return `<span class="kpi-badge badge-flat">— ทรงตัว</span>`;
+  const up=pct>0;
+  return `<span class="kpi-badge ${up?'badge-up':'badge-dn'}"><i class="ti ti-arrow-${up?'up':'down'}" aria-hidden="true"></i>${Math.abs(pct).toFixed(1)}%</span>`;
+}
+function renderKPI(rev,profit,bills,margin,ref,period){
+  const vsLabel=PERIOD_LABELS[period]||'';
+  const revPct   =pctChg(rev,ref.rev);
+  const profPct  =pctChg(profit,ref.profit);
+  const billPct  =pctChg(bills,ref.bills);
+  document.getElementById('kpi-grid').innerHTML=`
+    <div class="kpi-card kc-rev">
+      <i class="kpi-icon-bg ti ti-coin" aria-hidden="true"></i>
+      <div class="kpi-label"><i class="ti ti-coin" style="font-size:12px;" aria-hidden="true"></i>ยอดขายรวม</div>
+      <div class="kpi-num">${fmtB(rev)}</div>
+      <div class="kpi-compare">${badge(revPct)}<span class="kpi-vs">${vsLabel}</span></div>
+    </div>
+    <div class="kpi-card kc-profit">
+      <i class="kpi-icon-bg ti ti-trending-up" aria-hidden="true"></i>
+      <div class="kpi-label"><i class="ti ti-trending-up" style="font-size:12px;" aria-hidden="true"></i>กำไรขั้นต้น</div>
+      <div class="kpi-num">${fmtB(profit)}</div>
+      <div class="kpi-compare">${badge(profPct)}<span class="kpi-vs">${vsLabel}</span></div>
+    </div>
+    <div class="kpi-card kc-orders">
+      <i class="kpi-icon-bg ti ti-receipt" aria-hidden="true"></i>
+      <div class="kpi-label"><i class="ti ti-receipt" style="font-size:12px;" aria-hidden="true"></i>จำนวนบิล</div>
+      <div class="kpi-num">${fmt(bills)}</div>
+      <div class="kpi-compare">${badge(billPct)}<span class="kpi-vs">${vsLabel}</span></div>
+    </div>
+    <div class="kpi-card kc-stock">
+      <i class="kpi-icon-bg ti ti-percentage" aria-hidden="true"></i>
+      <div class="kpi-label"><i class="ti ti-percentage" style="font-size:12px;" aria-hidden="true"></i>Gross Margin</div>
+      <div class="kpi-num">${fmtPct(margin)}</div>
+      <div class="kpi-compare">
+        <span class="kpi-badge ${margin>=20?'badge-up':margin>=10?'badge-flat':'badge-dn'}">
+          ${margin>=20?'✓ ดี':margin>=10?'⚠ ปานกลาง':'✗ ต่ำ'}
+        </span>
+      </div>
+    </div>`;
+}
+
+// ── TREND CHART ────────────────────────────────────────────────────────────────
+const PERIOD_CHART_TITLE={today:'ยอดขาย vs กำไร รายชั่วโมง',week:'ยอดขาย vs กำไร รายวัน (7 วัน)',month:'ยอดขาย vs กำไร รายวัน (เดือนนี้)'};
+function renderTrendChart(data,period){
+  document.getElementById('trend-title').textContent=PERIOD_CHART_TITLE[period]||'';
+  let labels=[], revArr=[], profArr=[];
+
+  if(period==='today'){
+    const hours=[8,9,10,11,12,13,14,15,16,17];
+    labels=hours.map(h=>`${h}:00`);
+    revArr =hours.map(h=>data.filter(r=>r.h===h).reduce((a,r)=>a+r.rev,0));
+    profArr=hours.map(h=>data.filter(r=>r.h===h).reduce((a,r)=>a+(r.rev-r.cogs),0));
+  } else {
+    // Daily
+    const days=period==='week'
+      ?['18/05','19/05','20/05','21/05','22/05','23/05','24/05']
+      :['18/05','19/05','20/05','21/05','22/05','23/05','24/05'];
+    const dates=period==='week'
+      ?['2026-05-18','2026-05-19','2026-05-20','2026-05-21','2026-05-22','2026-05-23','2026-05-24']
+      :['2026-05-18','2026-05-19','2026-05-20','2026-05-21','2026-05-22','2026-05-23','2026-05-24'];
+    labels=days;
+    revArr =dates.map(d=>data.filter(r=>r.date===d).reduce((a,r)=>a+r.rev,0));
+    profArr=dates.map(d=>data.filter(r=>r.date===d).reduce((a,r)=>a+(r.rev-r.cogs),0));
+  }
+
+  const ctx=document.getElementById('trend-chart').getContext('2d');
+  if(trendChart) trendChart.destroy();
+  trendChart=new Chart(ctx,{
+    type:'bar',
+    data:{labels,datasets:[
+      {label:'ยอดขาย',data:revArr,backgroundColor:'rgba(83,74,183,0.82)',borderRadius:4,borderSkipped:false,order:2},
+      {label:'กำไร',  data:profArr,backgroundColor:'rgba(15,110,86,0.82)',borderRadius:4,borderSkipped:false,order:1},
+    ]},
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${fmtB(c.raw)}`}}},
+      scales:{
+        x:{ticks:{font:{size:10},color:'#9CA3AF',maxRotation:0},grid:{display:false}},
+        y:{ticks:{callback:v=>v>=1000?'฿'+(v/1000).toFixed(0)+'k':'฿'+v,font:{size:10},color:'#9CA3AF'},grid:{color:'rgba(0,0,0,0.04)'}}
+      }
+    }
+  });
+}
+
+// ── DONUT ─────────────────────────────────────────────────────────────────────
+function renderDonut(data){
+  const catMap={};
+  data.forEach(r=>{
+    const p=PRODUCTS.find(x=>x.id===r.prodId);
+    if(p){ catMap[p.cat]=(catMap[p.cat]||0)+r.rev; }
+  });
+  const labels=Object.keys(catMap); const vals=labels.map(k=>catMap[k]);
+  const colors=labels.map(l=>CAT_CLR[CATS.indexOf(l)]||'#888');
+  const total=vals.reduce((a,b)=>a+b,0);
+  const ctx=document.getElementById('cat-donut').getContext('2d');
+  if(donutChart) donutChart.destroy();
+  if(!labels.length){ ctx.clearRect(0,0,200,200); document.getElementById('donut-legend').innerHTML=''; return; }
+  donutChart=new Chart(ctx,{type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:0,hoverOffset:4}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.label}: ${fmtB(c.raw)}`}}},cutout:'65%'}});
+  document.getElementById('donut-legend').innerHTML=labels.map((l,i)=>`
+    <div class="dl-row">
+      <div class="dl-dot" style="background:${colors[i]};"></div>
+      <span class="dl-lbl">${l}</span>
+      <span class="dl-val">${fmtB(vals[i])}</span>
+      <span class="dl-pct">${total>0?fmtPct(vals[i]/total*100):'-'}</span>
+    </div>`).join('');
+}
+
+// ── TOP PRODUCTS ──────────────────────────────────────────────────────────────
+function renderTopProds(data){
+  const map={};
+  data.forEach(r=>{map[r.prodId]=(map[r.prodId]||{rev:0,profit:0,qty:0});map[r.prodId].rev+=r.rev;map[r.prodId].profit+=(r.rev-r.cogs);map[r.prodId].qty+=r.qty;});
+  const sorted=Object.entries(map).sort((a,b)=>b[1].rev-a[1].rev).slice(0,5);
+  const maxRev=sorted[0]?.[1]?.rev||1;
+  document.getElementById('top-prod-badge').textContent=sorted.length;
+  const rankCls=['rb-1','rb-2','rb-3','rb-n','rb-n'];
+  document.getElementById('top-prod-body').innerHTML=sorted.map(([id,v],i)=>{
+    const p=PRODUCTS.find(x=>x.id==id);if(!p) return '';
+    const pct=v.rev/maxRev*100;
+    return `<tr>
+      <td><span class="rank-ball ${rankCls[i]}">${i+1}</span></td>
+      <td>
+        <div class="prod-mini">
+          <div class="prod-icon-sm" style="background:${p.bg};">${p.icon}</div>
+          <div>
+            <div style="font-size:12px;font-weight:500;line-height:1.2;">${p.name.length>18?p.name.slice(0,16)+'…':p.name}</div>
+            <div class="bar-inline" style="width:70px;"><div class="bar-fill-p" style="width:${pct}%;"></div></div>
+          </div>
+        </div>
+      </td>
+      <td class="r" style="color:var(--p600);font-weight:500;">${fmtB(v.rev)}</td>
+      <td class="r" style="color:var(--success);">${fmtB(v.profit)}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── TOP CUSTOMERS ─────────────────────────────────────────────────────────────
+function renderTopCusts(data){
+  const map={};
+  data.forEach(r=>{
+    if(!map[r.cust]) map[r.cust]={rev:0,bills:new Set()};
+    map[r.cust].rev+=r.rev; map[r.cust].bills.add(r.bill);
+  });
+  const sorted=Object.entries(map).sort((a,b)=>b[1].rev-a[1].rev).slice(0,5);
+  const maxRev=sorted[0]?.[1]?.rev||1;
+  document.getElementById('top-cust-badge').textContent=sorted.length;
+  const rankCls=['rb-1','rb-2','rb-3','rb-n','rb-n'];
+  document.getElementById('top-cust-body').innerHTML=sorted.map(([name,v],i)=>{
+    const pct=v.rev/maxRev*100;
+    return `<tr>
+      <td><span class="rank-ball ${rankCls[i]}">${i+1}</span></td>
+      <td>
+        <div style="font-size:12px;font-weight:500;">${name.length>14?name.slice(0,12)+'…':name}</div>
+        <div class="bar-inline" style="width:80px;"><div class="bar-fill-g" style="width:${pct}%;"></div></div>
+      </td>
+      <td class="r" style="color:var(--p600);font-weight:500;">${fmtB(v.rev)}</td>
+      <td class="r" style="color:var(--text-muted);">${v.bills.size}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── STOCK ALERTS ──────────────────────────────────────────────────────────────
+function renderStockAlerts(){
+  const alerts=PRODUCTS.map(p=>({...p,qty:STOCK[p.id]||0}))
+    .filter(p=>p.qty<=p.reorder).sort((a,b)=>a.qty-b.qty).slice(0,6);
+  document.getElementById('stock-alert-badge').textContent=alerts.length;
+  document.getElementById('stock-alert-body').innerHTML=alerts.map(p=>{
+    const crit=p.qty===0||p.qty<=p.reorder*0.4;
+    const cls=p.qty===0?'ad-crit':crit?'ad-crit':'ad-low';
+    const numCls=p.qty===0?'stock-num-crit':crit?'stock-num-crit':'stock-num-low';
+    return `<tr>
+      <td>
+        <div class="prod-mini">
+          <div class="prod-icon-sm" style="background:${p.bg};">${p.icon}</div>
+          <div style="font-size:12px;font-weight:500;">${p.name.length>16?p.name.slice(0,14)+'…':p.name}</div>
+        </div>
+      </td>
+      <td class="r"><span class="${numCls}">${p.qty===0?'หมด':p.qty}</span></td>
+      <td class="r" style="color:var(--text-muted);">${p.reorder}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── FOOTER ────────────────────────────────────────────────────────────────────
+function renderFooter(rev,profit,bills,margin){
+  document.getElementById('f-rev').textContent=fmtB(rev);
+  document.getElementById('f-profit').textContent=fmtB(profit);
+  document.getElementById('f-bills').textContent=fmt(bills);
+  document.getElementById('f-margin').textContent=fmtPct(margin);
+}
+
+// ── CLOCK ─────────────────────────────────────────────────────────────────────
+function updateClock(){document.getElementById('clock').textContent=new Date().toLocaleString('th-TH',{hour:'2-digit',minute:'2-digit',second:'2-digit'});}
+updateClock(); setInterval(updateClock,1000);
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+renderAll('today');
+</script>
+</body>
+</html>

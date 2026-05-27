@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TwinPet — จัดการลูกค้า</title>
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600&family=Sarabun:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --p50:#EEEDFE;--p100:#CECBF6;--p200:#AFA9EC;--p400:#7F77DD;--p600:#534AB7;--p800:#3C3489;--p900:#26215C;
+  --g50:#F8F8FC;--g100:#F1EFE8;--g200:#D3D1C7;--g400:#888780;--g600:#5F5E5A;
+  --green:#1D9E75;--teal50:#E1F5EE;--amber:#BA7517;--red:#E24B4A;--amber50:#FAEEDA;
+}
+html,body{height:100%;font-family:'Sarabun',sans-serif;background:rgba(30,24,60,.5);display:flex;align-items:center;justify-content:center;overflow:hidden;}
+
+/* ===== MODAL SHELL ===== */
+.modal{
+  width:98vw;max-width:1100px;height:92vh;
+  background:white;border-radius:14px;
+  display:flex;flex-direction:column;overflow:hidden;
+  box-shadow:0 20px 60px rgba(0,0,0,.3);
+}
+
+/* TOPBAR */
+.topbar{
+  padding:11px 20px;border-bottom:.5px solid var(--g200);
+  display:flex;align-items:center;gap:10px;flex-shrink:0;background:white;
+}
+.modal-title{font-size:15px;font-weight:500;color:var(--p900);flex:1;}
+.customer-id{font-size:11px;color:var(--g400);background:var(--g50);border:.5px solid var(--g200);padding:2px 9px;border-radius:8px;font-family:'Prompt',sans-serif;}
+.btn-cancel{padding:6px 16px;border-radius:8px;border:.5px solid var(--g200);background:white;font-size:12px;font-family:'Sarabun',sans-serif;color:var(--g600);cursor:pointer;}
+.btn-cancel:hover{background:var(--g50);}
+.btn-save{padding:6px 18px;border-radius:8px;border:none;background:var(--p600);color:white;font-size:12px;font-family:'Sarabun',sans-serif;font-weight:500;cursor:pointer;}
+.btn-save:hover{background:var(--p800);}
+
+/* BODY */
+.modal-body{flex:1;display:flex;overflow:hidden;}
+
+/* ===== LEFT — SIDEBAR NAV ===== */
+.sidebar{
+  width:160px;border-right:.5px solid var(--g200);
+  display:flex;flex-direction:column;padding:12px 8px;gap:2px;flex-shrink:0;
+  background:var(--g50);
+}
+.nav-item{
+  display:flex;align-items:center;gap:9px;
+  padding:9px 11px;border-radius:9px;cursor:pointer;
+  font-size:12px;color:var(--g600);transition:all .12s;
+  border:.5px solid transparent;
+}
+.nav-item:hover{background:white;color:var(--p800);}
+.nav-item.active{background:white;color:var(--p800);border-color:var(--p200);font-weight:500;box-shadow:0 1px 4px rgba(83,74,183,.08);}
+.nav-item i{font-size:16px;color:var(--g400);}
+.nav-item.active i{color:var(--p600);}
+
+/* ===== CENTER — CONTENT ===== */
+.content{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:16px;}
+.content::-webkit-scrollbar{width:4px;}
+.content::-webkit-scrollbar-thumb{background:var(--g200);border-radius:4px;}
+.tab-panel{display:none;}
+.tab-panel.active{display:flex;flex-direction:column;gap:16px;}
+
+/* section card */
+.sec{background:white;border:.5px solid var(--g200);border-radius:10px;overflow:hidden;}
+.sec-head{padding:11px 14px;border-bottom:.5px solid var(--g200);font-size:12px;font-weight:500;color:var(--p900);display:flex;align-items:center;gap:7px;}
+.sec-head i{font-size:15px;color:var(--p400);}
+.sec-body{padding:14px;}
+
+/* form */
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.form-grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;}
+.form-full{grid-column:1/-1;}
+.field{display:flex;flex-direction:column;gap:4px;}
+.field label{font-size:11px;color:var(--g400);font-weight:500;}
+.field input,.field select,.field textarea{
+  border:.5px solid var(--g200);border-radius:7px;padding:7px 10px;
+  font-size:12px;font-family:'Sarabun',sans-serif;color:var(--p900);outline:none;
+}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--p400);}
+.field textarea{resize:none;min-height:70px;}
+.field input[readonly]{background:var(--g50);color:var(--g400);}
+
+/* profile upload */
+.photo-upload{display:flex;align-items:center;gap:14px;}
+.photo-preview{width:72px;height:72px;border-radius:50%;background:var(--p100);display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:500;color:var(--p800);flex-shrink:0;overflow:hidden;border:2px solid var(--p200);}
+.photo-preview img{width:100%;height:100%;object-fit:cover;}
+.photo-actions{display:flex;flex-direction:column;gap:6px;}
+.photo-btn{display:flex;align-items:center;gap:5px;padding:5px 12px;border-radius:7px;font-size:11px;cursor:pointer;border:.5px solid var(--g200);background:white;color:var(--g600);font-family:'Sarabun',sans-serif;}
+.photo-btn:hover{border-color:var(--p400);color:var(--p600);}
+.photo-btn i{font-size:13px;}
+
+/* membership tiers */
+.tier-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+.tier-card{border:.5px solid var(--g200);border-radius:9px;padding:12px 10px;cursor:pointer;transition:all .12s;text-align:center;display:flex;flex-direction:column;gap:5px;}
+.tier-card:hover{border-color:var(--p400);}
+.tier-card.selected{border-color:var(--p600);background:var(--p50);}
+.tier-icon{font-size:24px;margin-bottom:2px;}
+.tier-name{font-size:12px;font-weight:500;color:var(--p900);}
+.tier-desc{font-size:10px;color:var(--g400);line-height:1.4;}
+.tier-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:500;margin-top:3px;}
+
+/* points display */
+.points-row{display:flex;gap:10px;}
+.points-card{flex:1;background:var(--g50);border:.5px solid var(--g200);border-radius:9px;padding:11px 12px;display:flex;flex-direction:column;gap:3px;}
+.points-label{font-size:10px;color:var(--g400);}
+.points-val{font-size:20px;font-weight:600;color:var(--p900);font-family:'Prompt',sans-serif;}
+.points-sub{font-size:10px;color:var(--g400);}
+
+/* credit */
+.credit-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.credit-card{background:var(--g50);border:.5px solid var(--g200);border-radius:9px;padding:11px 12px;}
+.credit-lbl{font-size:10px;color:var(--g400);margin-bottom:4px;}
+.credit-val{font-size:18px;font-weight:600;font-family:'Prompt',sans-serif;}
+.credit-bar-wrap{margin-top:8px;}
+.credit-bar{height:5px;background:var(--g200);border-radius:3px;overflow:hidden;}
+.credit-bar-fill{height:100%;border-radius:3px;background:var(--p600);}
+.credit-bar-lbl{font-size:10px;color:var(--g400);margin-top:4px;display:flex;justify-content:space-between;}
+
+/* order history table */
+.order-table{width:100%;border-collapse:collapse;font-size:11px;}
+.order-table thead th{background:var(--g50);padding:7px 10px;text-align:left;color:var(--g400);border-bottom:.5px solid var(--g200);font-weight:500;white-space:nowrap;}
+.order-table thead th.r{text-align:right;}
+.order-table tbody tr{border-bottom:.5px solid var(--g100);cursor:pointer;transition:background .08s;}
+.order-table tbody tr:hover{background:var(--p50);}
+.order-table td{padding:8px 10px;color:var(--g600);vertical-align:middle;}
+.order-table td.r{text-align:right;font-family:'Prompt',sans-serif;font-weight:500;color:var(--p800);}
+.status-badge{display:inline-block;padding:2px 7px;border-radius:8px;font-size:10px;font-weight:500;}
+.status-paid{background:var(--teal50);color:var(--green);}
+.status-pending{background:var(--amber50);color:var(--amber);}
+.status-cancel{background:#FCEBEB;color:var(--red);}
+
+/* notes */
+.note-item{display:flex;gap:10px;padding:10px 0;border-bottom:.5px solid var(--g100);}
+.note-avatar{width:30px;height:30px;border-radius:50%;background:var(--p100);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;color:var(--p800);flex-shrink:0;}
+.note-body{flex:1;}
+.note-header{display:flex;justify-content:space-between;margin-bottom:3px;}
+.note-who{font-size:11px;font-weight:500;color:var(--p900);}
+.note-when{font-size:10px;color:var(--g400);}
+.note-text{font-size:11px;color:var(--g600);line-height:1.5;}
+.add-note{display:flex;gap:8px;margin-top:10px;}
+.add-note textarea{flex:1;border:.5px solid var(--g200);border-radius:7px;padding:7px 10px;font-size:12px;font-family:'Sarabun',sans-serif;outline:none;resize:none;height:60px;}
+.add-note textarea:focus{border-color:var(--p400);}
+.add-note-btn{align-self:flex-end;padding:7px 14px;border-radius:7px;border:none;background:var(--p600);color:white;font-size:11px;font-family:'Sarabun',sans-serif;cursor:pointer;}
+
+/* ===== RIGHT — PROFILE PANEL ===== */
+.profile-panel{
+  width:220px;border-left:.5px solid var(--g200);
+  display:flex;flex-direction:column;flex-shrink:0;
+  background:var(--g50);overflow-y:auto;
+}
+.profile-panel::-webkit-scrollbar{width:3px;}
+.profile-panel::-webkit-scrollbar-thumb{background:var(--g200);border-radius:4px;}
+.profile-top{padding:20px 16px;display:flex;flex-direction:column;align-items:center;gap:8px;border-bottom:.5px solid var(--g200);}
+.profile-photo{width:72px;height:72px;border-radius:50%;background:var(--p100);display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:600;color:var(--p800);border:3px solid var(--p200);}
+.profile-name{font-size:14px;font-weight:500;color:var(--p900);text-align:center;}
+.profile-id{font-size:10px;color:var(--g400);}
+.profile-badges{display:flex;gap:5px;flex-wrap:wrap;justify-content:center;}
+.p-badge{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:500;}
+.badge-active{background:var(--teal50);color:var(--green);}
+.badge-tier{background:var(--amber50);color:var(--amber);}
+.badge-credit{background:var(--p50);color:var(--p800);}
+
+.profile-stats{padding:12px 14px;display:flex;flex-direction:column;gap:0;}
+.stat-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:.5px solid var(--g100);}
+.stat-row:last-child{border-bottom:none;}
+.stat-label{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--g400);}
+.stat-label i{font-size:13px;}
+.stat-val{font-size:11px;font-weight:500;color:var(--p900);text-align:right;font-family:'Prompt',sans-serif;}
+
+.profile-actions{padding:12px 14px;display:flex;flex-direction:column;gap:6px;border-top:.5px solid var(--g200);}
+.p-action-btn{display:flex;align-items:center;justify-content:center;gap:5px;padding:7px;border-radius:8px;font-size:11px;cursor:pointer;font-family:'Sarabun',sans-serif;border:.5px solid var(--g200);background:white;color:var(--g600);}
+.p-action-btn:hover{border-color:var(--p400);color:var(--p600);}
+.p-action-btn.primary{background:var(--p600);color:white;border-color:var(--p600);}
+.p-action-btn.primary:hover{background:var(--p800);}
+.p-action-btn i{font-size:13px;}
+
+/* divider */
+.divider{height:.5px;background:var(--g200);}
+
+/* search/filter bar */
+.filter-bar{display:flex;gap:7px;align-items:center;}
+.filter-bar input{flex:1;border:.5px solid var(--g200);border-radius:7px;padding:6px 10px;font-size:11px;font-family:'Sarabun',sans-serif;outline:none;}
+.filter-bar input:focus{border-color:var(--p400);}
+.filter-bar select{border:.5px solid var(--g200);border-radius:7px;padding:5px 8px;font-size:11px;font-family:'Sarabun',sans-serif;outline:none;background:white;color:var(--g600);}
+</style>
+</head>
+<body>
+
+<div class="modal">
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <span class="modal-title">ข้อมูลลูกค้า</span>
+    <span class="customer-id">M000003</span>
+    <button class="btn-cancel" onclick="alert('ยกเลิก')">ยกเลิก</button>
+    <button class="btn-save" onclick="alert('บันทึกสำเร็จ ✅')">บันทึก</button>
+  </div>
+
+  <div class="modal-body">
+    <!-- LEFT SIDEBAR -->
+    <div class="sidebar">
+      <div class="nav-item active" onclick="switchTab('info',this)">
+        <i class="ti ti-user"></i> ข้อมูล
+      </div>
+      <div class="nav-item" onclick="switchTab('member',this)">
+        <i class="ti ti-crown"></i> สมาชิก
+      </div>
+      <div class="nav-item" onclick="switchTab('credit',this)">
+        <i class="ti ti-credit-card"></i> บัญชีเชื่อ
+      </div>
+      <div class="nav-item" onclick="switchTab('orders',this)">
+        <i class="ti ti-receipt"></i> ประวัติคำสั่ง
+      </div>
+      <div class="nav-item" onclick="switchTab('notes',this)">
+        <i class="ti ti-notes"></i> บันทึก
+      </div>
+    </div>
+
+    <!-- CENTER CONTENT -->
+    <div class="content">
+
+      <!-- TAB: ข้อมูล -->
+      <div class="tab-panel active" id="tab-info">
+        <div class="sec">
+          <div class="sec-head"><i class="ti ti-user-circle"></i> รูปโปรไฟล์</div>
+          <div class="sec-body">
+            <div class="photo-upload">
+              <div class="photo-preview">น้ำ</div>
+              <div class="photo-actions">
+                <button class="photo-btn"><i class="ti ti-upload"></i> อัปโหลดรูป</button>
+                <button class="photo-btn"><i class="ti ti-camera"></i> ถ่ายรูป</button>
+                <button class="photo-btn" style="color:var(--red);"><i class="ti ti-trash"></i> ลบรูป</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sec">
+          <div class="sec-head"><i class="ti ti-id-badge"></i> ข้อมูลพื้นฐาน</div>
+          <div class="sec-body">
+            <div class="form-grid">
+              <div class="field">
+                <label>ชื่อ-นามสกุล *</label>
+                <input value="นาง น้ำ แก้วกานต์" />
+              </div>
+              <div class="field">
+                <label>เพศ</label>
+                <select>
+                  <option>หญิง</option>
+                  <option>ชาย</option>
+                  <option>ไม่ระบุ</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>เบอร์โทรศัพท์ *</label>
+                <input value="081-234-5678" />
+              </div>
+              <div class="field">
+                <label>อีเมล</label>
+                <input value="nam.kaew@email.com" type="email" />
+              </div>
+              <div class="field">
+                <label>วันเกิด</label>
+                <input type="date" value="1990-05-12" />
+              </div>
+              <div class="field">
+                <label>เลขประจำตัวผู้เสียภาษี</label>
+                <input placeholder="13 หลัก" />
+              </div>
+              <div class="field form-full">
+                <label>ที่อยู่</label>
+                <textarea>123 ถ.ลาดพร้าว แขวงจอมพล เขตจตุจักร กรุงเทพฯ 10900</textarea>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sec">
+          <div class="sec-head"><i class="ti ti-tag"></i> แท็กและหมายเหตุ</div>
+          <div class="sec-body">
+            <div class="form-grid">
+              <div class="field">
+                <label>แท็ก</label>
+                <input placeholder="เช่น VIP, ลูกค้าประจำ..." />
+              </div>
+              <div class="field">
+                <label>หมายเหตุ</label>
+                <input placeholder="บันทึกสั้นๆ..." />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB: สมาชิก -->
+      <div class="tab-panel" id="tab-member">
+        <div class="sec">
+          <div class="sec-head"><i class="ti ti-crown"></i> ระดับสมาชิก</div>
+          <div class="sec-body">
+            <div class="tier-grid">
+              <div class="tier-card" onclick="selectTier(this)">
+                <div class="tier-icon">🛒</div>
+                <div class="tier-name">Retail</div>
+                <div class="tier-desc">ลูกค้าทั่วไป<br>ราคามาตรฐาน</div>
+                <span class="tier-badge" style="background:var(--g100);color:var(--g600);">General</span>
+              </div>
+              <div class="tier-card selected" onclick="selectTier(this)">
+                <div class="tier-icon">⭐</div>
+                <div class="tier-name">Wholesale 1</div>
+                <div class="tier-desc">ลูกค้าส่งระดับ 1<br>ราคาพิเศษ</div>
+                <span class="tier-badge" style="background:var(--amber50);color:var(--amber);">Silver</span>
+              </div>
+              <div class="tier-card" onclick="selectTier(this)">
+                <div class="tier-icon">💎</div>
+                <div class="tier-name">Wholesale 2</div>
+                <div class="tier-desc">ลูกค้าส่งระดับ 2<br>ราคาสุดพิเศษ</div>
+                <span class="tier-badge" style="background:var(--p50);color:var(--p800);">Gold</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sec">
+          <div class="sec-head"><i class="ti ti-star"></i> แต้มสะสม</div>
+          <div class="sec-body">
+            <div class="points-row">
+              <div class="points-card">
+                <span class="points-label">แต้มคงเหลือ</span>
+                <span class="points-val" style="color:var(--p600);">98</span>
+                <span class="points-sub">แต้ม</span>
+              </div>
+              <div class="points-card">
+                <span class="points-label">แต้มสะสมรวม</span>
+                <span class="points-val">1,240</span>
+                <span class="points-sub">แต้มตลอดกาล</span>
+              </div>
+              <div class="points-card">
+                <span class="points-label">แต้มที่ใช้แล้ว</span>
+                <span class="points-val" style="color:var(--red);">1,142</span>
+                <span class="points-sub">แต้มที่แลก</span>
+              </div>
+            </div>
+            <div style="margin-top:12px;" class="form-grid">
+              <div class="field">
+                <label>ปรับแต้มด้วยตนเอง</label>
+                <input type="number" placeholder="+ หรือ - จำนวนแต้ม" />
+              </div>
+              <div class="field">
+                <label>เหตุผล</label>
+                <input placeholder="เหตุผลการปรับแต้ม..." />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sec">
+          <div class="sec-head"><i class="ti ti-settings"></i> ตั้งค่าสมาชิก</div>
+          <div class="sec-body">
+            <div class="form-grid">
+              <div class="field">
+                <label>วันที่สมัครสมาชิก</label>
+                <input type="date" value="2023-01-15" readonly />
+              </div>
+              <div class="field">
+                <label>วันหมดอายุสมาชิก</label>
+                <input type="date" value="2025-01-15" />
+              </div>
+              <div class="field">
+                <label>อัตราสะสมแต้ม</label>
+                <select>
+                  <option>1 แต้ม / 100 บาท</option>
+                  <option>2 แต้ม / 100 บาท</option>
+                  <option>ไม่สะสมแต้ม</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>สถานะ</label>
+                <select>
+                  <option>ใช้งานอยู่</option>
+                  <option>ระงับชั่วคราว</option>
+                  <option>ยกเลิก</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB: บัญชีเชื่อ -->
+      <div class="tab-panel" id="tab-credit">
+        <div class="sec">
+          <div class="sec-head"><i class="ti ti-credit-card"></i> ภาพรวมวงเงิน</div>
+          <div class="sec-body">
+            <div class="credit-grid">
+              <div class="credit-card">
+                <div class="credit-lbl">วงเงินเชื่อทั้งหมด</div>
+                <div class="credit-val" style="color:var(--p600);">฿10,000</div>
+                <div class="credit-bar-wrap">
+                  <div class="credit-bar"><div class="credit-bar-fill" style="width:25%;background:var(--green);"></div></div>
+                  <div class="credit-bar-lbl"><span>ใช้ไป 25%</span><span>฿2,500</span></div>
+                </div>
+              </div>
+              <div class="credit-card">
+                <div class="credit-lbl">วงเงินคงเหลือ</div>
+                <div class="credit-val" style="color:var(--green);">฿7,500</div>
+              </div>
+              <div class="credit-card">
+                <div class="credit-lbl">หนี้ค้างชำระ</div>
+                <div class="credit-val" style="color:var(--red);">฿2,500</div>
+              </div>
+              <div class="credit-card">
+                <div class="credit-lbl">เกินกำหนดชำระ</div>
+                <div class="credit-val" style="color:var(--amber);">฿0</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sec">
+          <div class="sec-head"><i class="ti ti-settings"></i> ตั้งค่าบัญชีเชื่อ</div>
+          <div class="sec-body">
+            <div class="form-grid">
+              <div class="field">
+                <label>วงเงินเชื่อ (฿)</label>
+                <input type="number" value="10000" />
+              </div>
+              <div class="field">
+                <label>เครดิตเทอม (วัน)</label>
+                <input type="number" value="30" />
+              </div>
+              <div class="field">
+                <label>วันครบกำหนดชำระถัดไป</label>
+                <input type="date" value="2026-06-23" readonly />
+              </div>
+              <div class="field">
+                <label>สถานะบัญชีเชื่อ</label>
+                <select>
+                  <option>เปิดใช้งาน</option>
+                  <option>ระงับชั่วคราว</option>
+                  <option>ปิดบัญชี</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sec">
+          <div class="sec-head"><i class="ti ti-history"></i> ประวัติการชำระหนี้</div>
+          <div class="sec-body" style="padding:0;">
+            <table class="order-table">
+              <thead><tr>
+                <th>วันที่</th><th>รายการ</th><th class="r">จำนวน</th><th>ช่องทาง</th><th>สถานะ</th>
+              </tr></thead>
+              <tbody>
+                <tr><td>20/05/2026</td><td>ชำระหนี้ Order #1120</td><td class="r">฿1,200</td><td>โอนเงิน</td><td><span class="status-badge status-paid">ชำระแล้ว</span></td></tr>
+                <tr><td>10/05/2026</td><td>ชำระหนี้ Order #1098</td><td class="r">฿3,500</td><td>เงินสด</td><td><span class="status-badge status-paid">ชำระแล้ว</span></td></tr>
+                <tr><td>01/05/2026</td><td>Order #1085 ค้างชำระ</td><td class="r">฿2,500</td><td>—</td><td><span class="status-badge status-pending">รอชำระ</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB: ประวัติคำสั่ง -->
+      <div class="tab-panel" id="tab-orders">
+        <div class="sec">
+          <div class="sec-head"><i class="ti ti-receipt"></i> ประวัติคำสั่งซื้อ</div>
+          <div class="sec-body" style="padding:10px 14px;padding-bottom:0;">
+            <div class="filter-bar" style="margin-bottom:10px;">
+              <input placeholder="ค้นหาเลขออเดอร์..." />
+              <select>
+                <option>ทุกสถานะ</option>
+                <option>ชำระแล้ว</option>
+                <option>รอชำระ</option>
+                <option>ยกเลิก</option>
+              </select>
+              <select>
+                <option>30 วันล่าสุด</option>
+                <option>90 วันล่าสุด</option>
+                <option>ปีนี้</option>
+                <option>ทั้งหมด</option>
+              </select>
+            </div>
+          </div>
+          <div style="overflow-x:auto;">
+            <table class="order-table">
+              <thead><tr>
+                <th>#</th><th>วันที่</th><th>รายการ</th><th class="r">ยอด</th><th>ช่องทาง</th><th>สถานะ</th>
+              </tr></thead>
+              <tbody id="order-tbody"></tbody>
+            </table>
+          </div>
+          <div style="padding:10px 14px;display:flex;justify-content:space-between;align-items:center;border-top:.5px solid var(--g200);">
+            <span style="font-size:11px;color:var(--g400);">แสดง 1–8 จาก 24 รายการ</span>
+            <div style="display:flex;gap:4px;">
+              <div style="width:26px;height:26px;border-radius:6px;border:.5px solid var(--g200);background:white;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--g400);"><i class="ti ti-chevron-left" style="font-size:12px;"></i></div>
+              <div style="width:26px;height:26px;border-radius:6px;background:var(--p600);border-color:var(--p600);display:flex;align-items:center;justify-content:center;font-size:11px;color:white;font-family:'Prompt',sans-serif;">1</div>
+              <div style="width:26px;height:26px;border-radius:6px;border:.5px solid var(--g200);background:white;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:11px;color:var(--g600);font-family:'Prompt',sans-serif;">2</div>
+              <div style="width:26px;height:26px;border-radius:6px;border:.5px solid var(--g200);background:white;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:11px;color:var(--g600);font-family:'Prompt',sans-serif;">3</div>
+              <div style="width:26px;height:26px;border-radius:6px;border:.5px solid var(--g200);background:white;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--g400);"><i class="ti ti-chevron-right" style="font-size:12px;"></i></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB: บันทึก -->
+      <div class="tab-panel" id="tab-notes">
+        <div class="sec">
+          <div class="sec-head"><i class="ti ti-notes"></i> บันทึกและหมายเหตุ</div>
+          <div class="sec-body">
+            <div id="notes-list">
+              <div class="note-item">
+                <div class="note-avatar">ชน</div>
+                <div class="note-body">
+                  <div class="note-header"><span class="note-who">ชนิษา เกษมทรัพย์</span><span class="note-when">23/05/2026 14:30</span></div>
+                  <div class="note-text">ลูกค้าแจ้งว่าสนใจสินค้าประเภทอาหารสุนัข Royal Canin เพิ่มเติม — แนะนำให้ติดต่อกลับเมื่อมีโปรโมชั่น</div>
+                </div>
+              </div>
+              <div class="note-item">
+                <div class="note-avatar">สม</div>
+                <div class="note-body">
+                  <div class="note-header"><span class="note-who">สมชาย รักดี</span><span class="note-when">15/05/2026 10:15</span></div>
+                  <div class="note-text">ลูกค้าขอใบกำกับภาษีทุกครั้ง — บริษัท แก้วกานต์ จำกัด เลขที่ 0105563012345</div>
+                </div>
+              </div>
+              <div class="note-item">
+                <div class="note-avatar">ชน</div>
+                <div class="note-body">
+                  <div class="note-header"><span class="note-who">ชนิษา เกษมทรัพย์</span><span class="note-when">01/05/2026 09:00</span></div>
+                  <div class="note-text">ต้องการจัดส่งทุกครั้ง ที่อยู่เดิม ไม่รับที่หน้าร้าน</div>
+                </div>
+              </div>
+            </div>
+            <div class="add-note">
+              <textarea id="new-note" placeholder="เพิ่มบันทึกใหม่..."></textarea>
+              <button class="add-note-btn" onclick="addNote()"><i class="ti ti-send" style="font-size:13px;"></i></button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- end content -->
+
+    <!-- RIGHT PROFILE PANEL -->
+    <div class="profile-panel">
+      <div class="profile-top">
+        <div class="profile-photo">น้ำ</div>
+        <div class="profile-name">นาง น้ำ แก้วกานต์</div>
+        <div class="profile-id">M000003 · 081-234-5678</div>
+        <div class="profile-badges">
+          <span class="p-badge badge-active"><i class="ti ti-circle-check" style="font-size:10px;"></i> ใช้งานอยู่</span>
+          <span class="p-badge badge-tier"><i class="ti ti-star" style="font-size:10px;"></i> Wholesale 1</span>
+          <span class="p-badge badge-credit"><i class="ti ti-credit-card" style="font-size:10px;"></i> มีวงเงินเชื่อ</span>
+        </div>
+      </div>
+
+      <div class="profile-stats">
+        <div class="stat-row">
+          <span class="stat-label"><i class="ti ti-calendar" style="color:var(--g400);"></i> สมาชิกตั้งแต่</span>
+          <span class="stat-val">ม.ค. 2566</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label"><i class="ti ti-shopping-cart" style="color:var(--g400);"></i> ซื้อล่าสุด</span>
+          <span class="stat-val">23/05/2569</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label"><i class="ti ti-receipt" style="color:var(--g400);"></i> จำนวนออเดอร์</span>
+          <span class="stat-val">24 ครั้ง</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label"><i class="ti ti-coins" style="color:var(--g400);"></i> ยอดซื้อรวม</span>
+          <span class="stat-val" style="color:var(--p600);">฿48,500</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label"><i class="ti ti-star" style="color:var(--g400);"></i> แต้มคงเหลือ</span>
+          <span class="stat-val" style="color:var(--amber);">98 แต้ม</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label"><i class="ti ti-credit-card" style="color:var(--g400);"></i> วงเงินคงเหลือ</span>
+          <span class="stat-val" style="color:var(--green);">฿7,500</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label"><i class="ti ti-alert-triangle" style="color:var(--g400);"></i> ค้างชำระ</span>
+          <span class="stat-val" style="color:var(--red);">฿2,500</span>
+        </div>
+      </div>
+
+      <div class="profile-actions">
+        <button class="p-action-btn primary" onclick="alert('ขายสินค้าให้ลูกค้านี้')"><i class="ti ti-shopping-cart"></i> ขายสินค้า</button>
+        <button class="p-action-btn" onclick="alert('รับชำระหนี้')"><i class="ti ti-cash"></i> รับชำระหนี้</button>
+        <button class="p-action-btn" onclick="alert('ดูใบเสนอราคา')"><i class="ti ti-file-invoice"></i> ใบเสนอราคา</button>
+        <button class="p-action-btn" onclick="alert('ส่ง SMS/LINE')"><i class="ti ti-message"></i> ส่งข้อความ</button>
+      </div>
+    </div>
+
+  </div><!-- end modal-body -->
+</div>
+
+<script>
+/* TAB SWITCH */
+function switchTab(id, el) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  el.classList.add('active');
+}
+
+/* TIER SELECT */
+function selectTier(el) {
+  document.querySelectorAll('.tier-card').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+/* ORDER DATA */
+const ORDERS = [
+  {id:'#1234',date:'23/05/2569',items:'Smart Heart 8kg × 1',amt:759,pay:'เงินสด',status:'paid'},
+  {id:'#1220',date:'15/05/2569',items:'Royal Canin Mini × 2',amt:2058,pay:'โอนเงิน',status:'paid'},
+  {id:'#1210',date:'10/05/2569',items:'Jerhigh × 5, Biscal × 3',amt:816,pay:'บัตร',status:'paid'},
+  {id:'#1198',date:'01/05/2569',items:'Hill\'s 5.67kg × 1',amt:2400,pay:'เชื่อ',status:'pending'},
+  {id:'#1185',date:'20/04/2569',items:'Orijen 1.8kg × 1',amt:1100,pay:'เงินสด',status:'paid'},
+  {id:'#1170',date:'10/04/2569',items:'Maxima ลัง × 2',amt:3400,pay:'โอนเงิน',status:'paid'},
+  {id:'#1155',date:'01/04/2569',items:'Purina One × 3',amt:1299,pay:'เงินสด',status:'cancel'},
+  {id:'#1140',date:'20/03/2569',items:'Kaniva 1.4kg × 4',amt:1116,pay:'บัตร',status:'paid'},
+];
+const fmt = n => parseFloat(n).toLocaleString('th-TH', {minimumFractionDigits:2});
+const statusMap = {paid:'status-paid',pending:'status-pending',cancel:'status-cancel'};
+const statusLabel = {paid:'ชำระแล้ว',pending:'รอชำระ',cancel:'ยกเลิก'};
+document.getElementById('order-tbody').innerHTML = ORDERS.map(o =>
+  `<tr>
+    <td style="color:var(--p600);font-weight:500;">${o.id}</td>
+    <td>${o.date}</td>
+    <td style="max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${o.items}</td>
+    <td class="r">฿${fmt(o.amt)}</td>
+    <td style="font-size:11px;color:var(--g400);">${o.pay}</td>
+    <td><span class="status-badge ${statusMap[o.status]}">${statusLabel[o.status]}</span></td>
+  </tr>`
+).join('');
+
+/* ADD NOTE */
+function addNote() {
+  const txt = document.getElementById('new-note').value.trim();
+  if (!txt) return;
+  const list = document.getElementById('notes-list');
+  const now = new Date().toLocaleDateString('th-TH', {day:'2-digit',month:'2-digit',year:'numeric'}) + ' ' + new Date().toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
+  const el = document.createElement('div');
+  el.className = 'note-item';
+  el.innerHTML = `<div class="note-avatar">ชน</div>
+    <div class="note-body">
+      <div class="note-header"><span class="note-who">ชนิษา เกษมทรัพย์</span><span class="note-when">${now}</span></div>
+      <div class="note-text">${txt}</div>
+    </div>`;
+  list.prepend(el);
+  document.getElementById('new-note').value = '';
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,247 @@
+/* TwinPet Inventory Hub */
+.inv-page {
+  --pc-p50: #eeedfe;
+  --pc-p100: #cecbf6;
+  --pc-p600: #534ab7;
+  --pc-p800: #3c3489;
+  --pc-p900: #26215c;
+  --pc-g50: #f8f8fc;
+  --pc-g200: #d3d1c7;
+  --pc-g400: #888780;
+  --pc-g600: #5f5e5a;
+  --p50: var(--pc-p50);
+  --p600: var(--pc-p600);
+  --p800: var(--pc-p800);
+  --p900: var(--pc-p900);
+  --g50: var(--pc-g50);
+  --g200: var(--pc-g200);
+  --g400: var(--pc-g400);
+  --g600: var(--pc-g600);
+  --green: #1d9e75;
+  --red: #e24b4a;
+
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  font-family: 'Sarabun', sans-serif;
+  background: var(--g50);
+  color: var(--p900);
+}
+
+.inv-topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 48px;
+  padding: 0 20px;
+  background: #fff;
+  border-bottom: 0.5px solid var(--g200);
+  flex-shrink: 0;
+}
+
+.inv-topbar-title {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.inv-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.inv-add-btn-secondary {
+  background: #fff;
+  color: var(--p600);
+  border: 0.5px solid var(--pc-p100, #cecbf6);
+}
+
+.inv-add-btn-secondary:hover {
+  background: var(--p50);
+  filter: none;
+}
+
+.inv-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: none;
+  border-radius: 8px;
+  background: var(--p600);
+  color: #fff;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: filter 0.15s;
+}
+
+.inv-add-btn:hover {
+  filter: brightness(1.05);
+}
+
+.inv-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  min-height: 0;
+}
+
+.inv-card {
+  background: #fff;
+  border: 0.5px solid var(--g200);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.inv-card-head {
+  padding: 12px 16px;
+  border-bottom: 0.5px solid var(--g200);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.inv-card-head-tabs {
+  padding: 0;
+}
+
+.inv-tabs {
+  display: flex;
+  gap: 0;
+}
+
+.inv-tab {
+  padding: 12px 20px;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--g400);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.inv-tab:hover {
+  color: var(--p600);
+}
+
+.inv-tab.active {
+  color: var(--p600);
+  font-weight: 600;
+  border-bottom-color: var(--p600);
+}
+
+.inv-tr-id {
+  font-family: 'Prompt', sans-serif;
+  font-size: 11px;
+  color: var(--p600);
+  font-weight: 500;
+}
+
+.inv-tr-route {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.inv-tr-route i {
+  font-size: 14px;
+  color: var(--g400);
+}
+
+.inv-tr-note {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--g600);
+}
+
+.inv-table-wrap {
+  overflow-x: auto;
+}
+
+.inv-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.inv-table th,
+.inv-table td {
+  padding: 10px 14px;
+  border-bottom: 0.5px solid var(--g200);
+  text-align: left;
+}
+
+.inv-table th {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--g400);
+  background: var(--g50);
+}
+
+.inv-empty {
+  padding: 48px 24px;
+  text-align: center;
+}
+
+.inv-empty-icon {
+  font-size: 40px;
+  color: var(--g200);
+  margin-bottom: 12px;
+}
+
+.inv-empty-title {
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 6px;
+}
+
+.inv-empty-sub {
+  font-size: 12px;
+  color: var(--g400);
+}
+
+.inv-table th.inv-r,
+.inv-table td.inv-r {
+  text-align: right;
+}
+
+.inv-table-msg {
+  text-align: center;
+  padding: 24px;
+  color: var(--g400);
+}
+
+.inv-value-pos {
+  color: var(--green);
+  font-weight: 600;
+  font-family: 'Prompt', sans-serif;
+}
+
+.inv-value-neg {
+  color: var(--red, #e24b4a);
+  font-weight: 600;
+  font-family: 'Prompt', sans-serif;
+}
+
+.inv-value-zero {
+  color: var(--g400);
+  font-family: 'Prompt', sans-serif;
+}
+
+.inv-status-badge {
+  display: inline-block;
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: #e1f5ee;
+  color: #085041;
+  font-weight: 500;
+}

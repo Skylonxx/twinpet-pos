@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TwinPet — รับสินค้าเข้า</title>
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600&family=Sarabun:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --p50:#EEEDFE;--p100:#CECBF6;--p200:#AFA9EC;--p400:#7F77DD;--p600:#534AB7;--p800:#3C3489;--p900:#26215C;
+  --g50:#F8F8FC;--g100:#F1EFE8;--g200:#D3D1C7;--g400:#888780;--g600:#5F5E5A;
+  --green:#1D9E75;--teal50:#E1F5EE;--amber:#BA7517;--red:#E24B4A;
+}
+html,body{height:100%;font-family:'Sarabun',sans-serif;background:var(--g50);}
+
+.page{display:flex;flex-direction:column;height:100vh;}
+
+/* TOPBAR */
+.topbar{background:white;border-bottom:.5px solid var(--g200);padding:0 20px;height:48px;display:flex;align-items:center;gap:8px;flex-shrink:0;position:sticky;top:0;z-index:10;}
+.back-btn{display:flex;align-items:center;cursor:pointer;color:var(--g400);}
+.page-title{font-size:15px;font-weight:500;color:var(--p900);flex:1;}
+.ref-badge{background:var(--p50);border:.5px solid var(--p200);border-radius:8px;padding:3px 10px;font-size:11px;color:var(--p800);font-family:'Prompt',sans-serif;flex-shrink:0;}
+.cancel-btn{padding:6px 14px;border-radius:8px;border:.5px solid var(--g200);background:white;font-size:12px;font-family:'Sarabun',sans-serif;color:var(--g600);cursor:pointer;flex-shrink:0;}
+.cancel-btn:hover{background:var(--g50);}
+.save-btn{display:flex;align-items:center;gap:5px;padding:6px 16px;background:var(--p600);color:white;border:none;border-radius:8px;font-size:12px;font-family:'Sarabun',sans-serif;font-weight:500;cursor:pointer;flex-shrink:0;}
+.save-btn:hover{background:var(--p800);}
+
+/* SCROLL CONTENT */
+.scroll-content{flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:14px;}
+.scroll-content::-webkit-scrollbar{width:4px;}
+.scroll-content::-webkit-scrollbar-thumb{background:var(--g200);border-radius:4px;}
+
+/* CARD */
+.card{background:white;border:.5px solid var(--g200);border-radius:10px;overflow:hidden;}
+.card-head{padding:12px 16px;border-bottom:.5px solid var(--g200);font-size:13px;font-weight:500;color:var(--p900);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+.card-head-left{display:flex;flex-direction:column;gap:2px;}
+.card-head-sub{font-size:10px;color:var(--g400);font-weight:400;margin-top:2px;}
+
+/* FORM */
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 20px;padding:14px;}
+.form-full{grid-column:1/-1;}
+.field{display:flex;flex-direction:column;gap:3px;}
+.field label{font-size:11px;color:var(--g400);font-weight:500;}
+.field input,.field select,.field textarea{border:.5px solid var(--g200);border-radius:7px;padding:6px 10px;font-size:12px;font-family:'Sarabun',sans-serif;color:var(--p900);outline:none;}
+.field input:focus,.field select:focus{border-color:var(--p400);}
+.field textarea{resize:none;min-height:52px;}
+.branch-tag{display:flex;align-items:center;gap:5px;padding:6px 10px;background:var(--g50);border:.5px solid var(--g200);border-radius:7px;font-size:12px;color:var(--g600);}
+.branch-tag i{font-size:13px;color:var(--p400);}
+
+/* ACTION BUTTONS */
+.action-btns{display:flex;gap:8px;}
+.a-btn{display:flex;align-items:center;gap:5px;padding:6px 12px;border-radius:7px;font-size:12px;cursor:pointer;white-space:nowrap;}
+.a-btn.outline{border:.5px solid var(--p200);background:white;color:var(--p600);}
+.a-btn.outline:hover{background:var(--p50);}
+.a-btn.filled{border:none;background:var(--p600);color:white;}
+.a-btn.filled:hover{background:var(--p800);}
+.a-btn i{font-size:13px;}
+
+/* SCAN BAR */
+.scan-bar{padding:8px 16px;border-bottom:.5px solid var(--g200);display:flex;gap:8px;align-items:center;}
+.scan-wrap{flex:1;display:flex;align-items:center;gap:7px;border:.5px solid var(--p200);border-radius:8px;padding:0 12px;height:32px;background:var(--p50);}
+.scan-wrap i{font-size:15px;color:var(--p600);flex-shrink:0;}
+.scan-wrap input{border:none;background:transparent;outline:none;font-size:12px;font-family:'Sarabun',sans-serif;color:var(--p900);width:100%;}
+.scan-wrap input::placeholder{color:var(--g400);}
+.scan-status{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--green);white-space:nowrap;flex-shrink:0;}
+.scan-dot{width:7px;height:7px;border-radius:50%;background:var(--green);}
+
+/* TABLE */
+table{width:100%;border-collapse:collapse;}
+thead th{background:var(--g50);padding:7px 10px;text-align:left;font-size:10px;font-weight:500;color:var(--g400);border-bottom:.5px solid var(--g200);white-space:nowrap;}
+th.r{text-align:right;}
+tbody tr{border-bottom:.5px solid var(--g100);transition:background .08s;}
+tbody tr:hover{background:var(--p50);}
+td{padding:7px 10px;font-size:11px;color:var(--g600);vertical-align:middle;}
+td.r{text-align:right;}
+.prod-emoji{font-size:17px;width:28px;height:28px;background:var(--g100);border-radius:5px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.prod-name{font-size:11px;font-weight:500;color:var(--p900);}
+.prod-meta{font-size:9px;color:var(--g400);margin-top:1px;}
+.ii{border:.5px solid var(--g200);border-radius:5px;padding:4px 7px;font-size:11px;font-family:'Prompt',sans-serif;color:var(--p900);outline:none;text-align:right;}
+.ii:focus{border-color:var(--p400);}
+.w56{width:56px;} .w72{width:72px;} .w50{width:50px;}
+.uom-sel{border:.5px solid var(--g200);border-radius:5px;padding:4px 7px;font-size:11px;font-family:'Sarabun',sans-serif;outline:none;background:white;}
+.del-btn{width:22px;height:22px;border-radius:5px;background:#FCEBEB;border:none;cursor:pointer;color:var(--red);display:flex;align-items:center;justify-content:center;}
+.del-btn:hover{background:#F7C1C1;}
+.avg-old{font-size:9px;color:var(--g400);}
+.avg-new{font-size:10px;font-weight:500;color:var(--green);font-family:'Prompt',sans-serif;}
+.empty-state{text-align:center;padding:32px;font-size:13px;color:var(--g200);}
+
+/* FOOTER */
+.footer{background:white;border-top:1px solid var(--g200);display:flex;align-items:stretch;flex-shrink:0;position:sticky;bottom:0;z-index:10;}
+.fdiv{width:.5px;background:var(--g200);flex-shrink:0;}
+.fsec{flex:1;padding:10px 16px;display:flex;flex-direction:column;justify-content:center;gap:5px;min-width:0;min-height:80px;}
+.fsec:first-child{padding-left:20px;}
+.fs-lbl{font-size:10px;color:var(--g400);font-weight:500;}
+.disc-wrap{display:flex;align-items:center;gap:5px;}
+.disc-inp{flex:1;min-width:0;border:.5px solid var(--g200);border-radius:5px;padding:4px 7px;font-size:12px;font-family:'Prompt',sans-serif;outline:none;text-align:right;}
+.disc-inp:focus{border-color:var(--p400);}
+.disc-tog{padding:3px 8px;border-radius:5px;font-size:10px;cursor:pointer;border:.5px solid var(--g200);background:var(--g50);color:var(--g600);font-family:'Prompt',sans-serif;font-weight:500;flex-shrink:0;}
+.disc-tog.on{background:var(--p600);border-color:var(--p600);color:white;}
+.tog-row{display:flex;align-items:center;gap:6px;height:20px;}
+.tog-lbl{font-size:11px;white-space:nowrap;transition:color .15s;}
+.tog-lbl.active{color:var(--p900);font-weight:500;}
+.tog-lbl.inactive{color:var(--g400);}
+.tog-lbl.locked{color:var(--g200);}
+.tog{position:relative;width:32px;height:18px;flex-shrink:0;}
+.tog input{opacity:0;width:0;height:0;position:absolute;}
+.tog-track{position:absolute;inset:0;background:var(--g200);border-radius:9px;cursor:pointer;transition:background .2s;}
+.tog input:checked+.tog-track{background:var(--p600);}
+.tog input:disabled+.tog-track{cursor:not-allowed;opacity:.4;}
+.tog-thumb{position:absolute;top:2px;left:2px;width:14px;height:14px;background:white;border-radius:50%;pointer-events:none;transition:transform .18s;box-shadow:0 1px 3px rgba(0,0,0,.12);}
+.tog input:checked~.tog-thumb{transform:translateX(14px);}
+.vat-amt{font-size:10px;color:var(--amber);font-family:'Prompt',sans-serif;height:14px;display:block;line-height:14px;}
+.totals-sec{flex-shrink:0;padding:10px 20px;display:flex;gap:18px;align-items:center;border-left:.5px solid var(--g200);}
+.ti{display:flex;flex-direction:column;align-items:flex-end;gap:1px;}
+.ti .tl{font-size:10px;color:var(--g400);white-space:nowrap;}
+.ti .tv{font-size:12px;font-family:'Prompt',sans-serif;font-weight:500;color:var(--p900);}
+.ti .tv.g{color:var(--green);}
+.ti .tv.a{color:var(--amber);}
+.ti .tv.dim{opacity:.25;}
+.ti.grand .tl{font-size:11px;color:var(--p800);font-weight:500;}
+.ti.grand .tv{font-size:18px;font-weight:600;color:var(--p600);}
+
+/* MODALS */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:999;}
+.modal-overlay.hidden{display:none;}
+
+/* Select Product Modal */
+.sel-modal{background:white;border-radius:14px;width:620px;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;}
+.sel-top{padding:13px 18px;border-bottom:.5px solid var(--g200);display:flex;align-items:center;gap:8px;flex-shrink:0;}
+.sel-filters{
+  padding:9px 14px;border-bottom:.5px solid var(--g200);flex-shrink:0;
+  display:grid;grid-template-columns:auto 100px 1fr 60px 54px;gap:6px;align-items:center;
+}
+.sel-label{font-size:12px;color:var(--g600);white-space:nowrap;}
+.sel-type{width:100%;height:30px;border:.5px solid var(--g200);border-radius:6px;padding:0 6px;font-size:11px;font-family:'Sarabun',sans-serif;color:var(--g600);background:white;outline:none;}
+.sel-input{width:100%;height:30px;border:.5px solid var(--g200);border-radius:6px;padding:0 8px;font-size:12px;font-family:'Sarabun',sans-serif;color:var(--p900);outline:none;}
+.sel-input:focus{border-color:var(--p400);}
+.sel-search-btn{width:100%;height:30px;background:var(--p600);border:none;border-radius:6px;color:white;font-size:11px;cursor:pointer;}
+.sel-search-btn:hover{background:var(--p800);}
+.sel-reset-btn{width:100%;height:30px;background:white;border:.5px solid var(--g200);border-radius:6px;color:var(--g600);font-size:11px;cursor:pointer;}
+.sel-reset-btn:hover{background:var(--g50);}
+.sel-list-wrap{flex:1;overflow-y:auto;}
+.sel-list-wrap::-webkit-scrollbar{width:3px;}
+.sel-list-wrap::-webkit-scrollbar-thumb{background:var(--g200);border-radius:4px;}
+.sel-table{width:100%;border-collapse:collapse;}
+.sel-table thead th{background:var(--g50);padding:6px 12px;text-align:left;font-size:10px;font-weight:500;color:var(--g400);border-bottom:.5px solid var(--g200);}
+.sel-table thead th.r{text-align:right;}
+.sel-table tbody tr{border-bottom:.5px solid var(--g100);cursor:pointer;transition:background .08s;}
+.sel-table tbody tr:hover{background:var(--g50);}
+.sel-table tbody tr.sel-on{background:var(--p50);}
+.sel-table td{padding:7px 12px;font-size:11px;color:var(--g600);vertical-align:middle;}
+.sel-table td.r{text-align:right;}
+.sel-cb{width:13px;height:13px;accent-color:var(--p600);cursor:pointer;}
+.sel-footer{padding:11px 16px;border-top:.5px solid var(--g200);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+
+/* Pay Status Modal */
+.pay-modal{background:white;border-radius:14px;padding:20px;width:320px;display:flex;flex-direction:column;gap:12px;}
+.psb{flex:1;padding:12px 8px;border-radius:10px;border:.5px solid var(--g200);background:white;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;transition:all .13s;}
+.psb:hover{border-color:var(--p400);background:var(--p50);}
+.psb.on{border-color:var(--p600);background:var(--p50);}
+.psb i{font-size:20px;color:var(--g400);}
+.psb.on i{color:var(--p600);}
+.psb span{font-size:11px;font-weight:500;color:var(--g600);}
+.psb.on span{color:var(--p800);}
+.psb small{font-size:10px;color:var(--g400);text-align:center;line-height:1.4;}
+.pm-btn{display:flex;align-items:center;gap:4px;padding:4px 9px;border-radius:6px;font-size:11px;border:.5px solid var(--g200);background:white;color:var(--g600);cursor:pointer;}
+.pm-btn.on{background:var(--p50);border-color:var(--p600);color:var(--p800);font-weight:500;}
+
+/* Confirm Modal */
+.conf-modal{background:white;border-radius:14px;padding:20px;width:380px;display:flex;flex-direction:column;gap:12px;}
+.conf-items{display:flex;flex-direction:column;gap:4px;max-height:160px;overflow-y:auto;}
+.conf-item{display:flex;justify-content:space-between;font-size:11px;padding:4px 0;border-bottom:.5px solid var(--g100);gap:8px;}
+.cost-impact{background:#FAEEDA;border-radius:7px;padding:8px 10px;font-size:10px;color:#633806;line-height:1.7;}
+
+/* Shared modal button */
+.m-btn{padding:7px 16px;border-radius:8px;font-size:12px;font-family:'Sarabun',sans-serif;cursor:pointer;font-weight:500;}
+.m-cancel{background:white;color:var(--g600);border:.5px solid var(--g200);}
+.m-cancel:hover{background:var(--g50);}
+.m-confirm{background:var(--p600);color:white;border:none;}
+.m-confirm:hover{background:var(--p800);}
+.m-confirm:disabled{background:var(--g200);cursor:not-allowed;}
+</style>
+</head>
+<body>
+
+<!-- Select Product Modal -->
+<div class="modal-overlay hidden" id="sel-modal">
+  <div class="sel-modal">
+    <div class="sel-top">
+      <span style="font-size:13px;font-weight:500;color:var(--p900);flex:1;">เลือกสินค้า</span>
+      <span style="font-size:12px;color:var(--p800);font-weight:500;" id="sel-count-hd">เลือก 0 รายการ</span>
+      <div style="width:24px;height:24px;border-radius:50%;border:.5px solid var(--g200);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--g400);" onclick="closeModal('sel-modal')"><i class="ti ti-x" style="font-size:12px;"></i></div>
+    </div>
+    <div class="sel-filters">
+      <span class="sel-label">ค้นหา</span>
+      <select class="sel-type" id="sel-type"><option value="name">ชื่อสินค้า</option><option value="sku">รหัสสินค้า</option><option value="barcode">บาร์โค้ด</option><option value="cat">กลุ่มสินค้า</option></select>
+      <input class="sel-input" id="sel-q" placeholder="ค้นหาสินค้า..." onkeydown="if(event.key==='Enter')doSelSearch()" />
+      <button class="sel-search-btn" onclick="doSelSearch()">ค้นหา</button>
+      <button class="sel-reset-btn" onclick="doSelReset()">รีเซต</button>
+    </div>
+    <div class="sel-list-wrap">
+      <table class="sel-table">
+        <thead><tr>
+          <th style="width:32px;"><input type="checkbox" class="sel-cb" id="sel-all-cb" onchange="selToggleAll(this.checked)"></th>
+          <th style="width:36px;"></th>
+          <th>ชื่อสินค้า</th>
+          <th style="width:130px;">รหัสสินค้า</th>
+          <th style="width:130px;">กลุ่มสินค้า</th>
+          <th class="r" style="width:80px;">คงเหลือ</th>
+        </tr></thead>
+        <tbody id="sel-tbody"></tbody>
+      </table>
+    </div>
+    <div class="sel-footer">
+      <span style="font-size:12px;color:var(--p800);font-weight:500;" id="sel-count-ft">เลือก 0 รายการ</span>
+      <div style="display:flex;gap:8px;">
+        <button class="m-btn m-cancel" onclick="closeModal('sel-modal')">ยกเลิก</button>
+        <button class="m-btn m-confirm" id="sel-ok" onclick="confirmSel()">ยืนยัน</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm Receive Modal -->
+<div class="modal-overlay hidden" id="conf-modal">
+  <div class="conf-modal">
+    <div style="text-align:center;">
+      <div style="width:44px;height:44px;border-radius:50%;background:var(--teal50);display:flex;align-items:center;justify-content:center;margin:0 auto 8px;"><i class="ti ti-check" style="font-size:22px;color:var(--green);"></i></div>
+      <div style="font-size:13px;font-weight:500;color:var(--p900);">ยืนยันการรับสินค้าเข้า</div>
+    </div>
+    <div class="conf-items" id="conf-items"></div>
+    <div class="cost-impact" id="conf-cost"></div>
+    <div style="font-size:10px;color:var(--g400);text-align:center;">ต้นทุนเฉลี่ยคำนวณทันที — ไม่กระทบย้อนหลัง</div>
+    <div style="display:flex;gap:6px;">
+      <button class="m-btn m-cancel" style="flex:1;" onclick="closeModal('conf-modal')">กลับแก้ไข</button>
+      <button class="m-btn m-confirm" style="flex:1;" onclick="openPayModal()">ยืนยันรับสินค้า</button>
+    </div>
+  </div>
+</div>
+
+<!-- Pay Status Modal -->
+<div class="modal-overlay hidden" id="pay-modal">
+  <div class="pay-modal">
+    <div style="text-align:center;">
+      <div style="width:40px;height:40px;border-radius:50%;background:var(--teal50);display:flex;align-items:center;justify-content:center;margin:0 auto 6px;"><i class="ti ti-check" style="font-size:20px;color:var(--green);"></i></div>
+      <div style="font-size:13px;font-weight:500;color:var(--p900);">รับสินค้าสำเร็จ</div>
+      <div style="font-size:11px;color:var(--g400);margin-top:2px;">เลือกสถานะการชำระเงิน</div>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <div class="psb on" id="ps-paid" onclick="setPS('paid')"><i class="ti ti-circle-check"></i><span>ชำระแล้ว</span><small>บันทึกชำระครบ</small></div>
+      <div class="psb" id="ps-pending" onclick="setPS('pending')"><i class="ti ti-clock"></i><span>ค้างชำระ</span><small>บันทึกรอชำระ</small></div>
+    </div>
+    <div id="pm-section">
+      <div style="font-size:10px;color:var(--g400);margin-bottom:5px;font-weight:500;">ช่องทางชำระ</div>
+      <div style="display:flex;gap:5px;flex-wrap:wrap;">
+        <div class="pm-btn on" id="pm-cash" onclick="setPM('cash')"><i class="ti ti-cash"></i> เงินสด</div>
+        <div class="pm-btn" id="pm-transfer" onclick="setPM('transfer')"><i class="ti ti-building-bank"></i> โอนเงิน</div>
+        <div class="pm-btn" id="pm-credit" onclick="setPM('credit')"><i class="ti ti-credit-card"></i> เครดิต</div>
+        <div class="pm-btn" id="pm-cheque" onclick="setPM('cheque')"><i class="ti ti-file-invoice"></i> เช็ค</div>
+      </div>
+    </div>
+    <button class="m-btn m-confirm" style="width:100%;" onclick="finalConfirm()">บันทึกสถานะ</button>
+  </div>
+</div>
+
+<div class="page">
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div class="back-btn"><i class="ti ti-arrow-left" style="font-size:16px;"></i></div>
+    <span class="page-title">สร้างเอกสารรับสินค้าเข้า</span>
+    <span class="ref-badge">GRN-2026-0042</span>
+    <button class="cancel-btn">ยกเลิก</button>
+    <button class="save-btn" onclick="openConfirm()"><i class="ti ti-check"></i> บันทึก</button>
+  </div>
+
+  <div class="scroll-content">
+    <!-- Card 1: ข้อมูลเบื้องต้น -->
+    <div class="card">
+      <div class="card-head">ข้อมูลเบื้องต้น</div>
+      <div class="form-grid">
+        <div class="field"><label>วันที่ซื้อในบิล</label><input type="date" value="2026-05-26"></div>
+        <div class="field"><label>เลขที่ในบิลซื้อ</label><input placeholder="เลขที่บิลจาก supplier..."></div>
+        <div class="field"><label>ร้านค้า (สาขา)</label><div class="branch-tag"><i class="ti ti-building-store"></i> TwinPet — สาขาลาดพร้าว</div></div>
+        <div class="field"><label>ผู้จำหน่าย</label><input value="บริษัท เพ็ท ดิสทริบิวเตอร์ จำกัด"></div>
+        <div class="field form-full"><label>หมายเหตุ</label><textarea placeholder="หมายเหตุ..."></textarea></div>
+      </div>
+    </div>
+
+    <!-- Card 2: รายการสินค้า -->
+    <div class="card">
+      <div class="card-head">
+        <div class="card-head-left">
+          <span>รายการสินค้ารับเข้า</span>
+          <span class="card-head-sub">เพิ่มสินค้าลงรายการรับเข้า และตั้งค่าส่วนลดของสินค้าในแต่ละชิ้น</span>
+        </div>
+        <div class="action-btns">
+          <button class="a-btn outline" onclick="alert('Import Excel')"><i class="ti ti-file-spreadsheet"></i> + นำเข้าจากเอกสาร</button>
+          <button class="a-btn filled" onclick="openSelModal()"><i class="ti ti-plus"></i> + เพิ่มสินค้า</button>
+        </div>
+      </div>
+      <!-- Scan Bar -->
+      <div class="scan-bar">
+        <div class="scan-wrap">
+          <i class="ti ti-barcode" style="font-size:16px;"></i>
+          <input id="scan-input" placeholder="สแกนบาร์โค้ด หรือพิมพ์ชื่อสินค้า แล้วกด Enter..." onkeydown="onScanKey(event)">
+        </div>
+        <div class="scan-status"><div class="scan-dot"></div> พร้อมสแกน</div>
+      </div>
+      <!-- Table -->
+      <div style="overflow-x:auto;">
+        <table>
+          <thead><tr>
+            <th style="width:30px;">#</th>
+            <th style="width:36px;"></th>
+            <th>สินค้า</th>
+            <th style="width:95px;">หน่วย</th>
+            <th class="r" style="width:65px;">จำนวน</th>
+            <th class="r" style="width:90px;">ต้นทุน/หน่วย (฿)</th>
+            <th class="r" style="width:65px;">ส่วนลด</th>
+            <th class="r" style="width:90px;">รวม (฿)</th>
+            <th class="r" style="width:115px;">ต้นทุนเฉลี่ยใหม่</th>
+            <th style="width:26px;"></th>
+          </tr></thead>
+          <tbody id="recv-tbody">
+            <tr><td colspan="10" class="empty-state">ไม่มีรายการ — สแกนบาร์โค้ด หรือกด "+ เพิ่มสินค้า"</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div style="height:14px;"></div>
+  </div>
+
+  <!-- FOOTER STICKY -->
+  <div class="footer">
+    <div class="fsec">
+      <span class="fs-lbl">ส่วนลด</span>
+      <div class="disc-wrap">
+        <input class="disc-inp" id="disc-val" type="number" min="0" placeholder="0" oninput="recalc()">
+        <button class="disc-tog on" id="disc-btn" onclick="toggleDisc()">%</button>
+      </div>
+      <span style="font-size:10px;color:var(--green);font-family:'Prompt',sans-serif;height:14px;display:block;" id="disc-lbl"></span>
+    </div>
+    <div class="fdiv"></div>
+    <div class="fsec">
+      <span class="fs-lbl">ภาษีมูลค่าเพิ่ม</span>
+      <div class="tog-row">
+        <label class="tog"><input type="checkbox" id="vat-on" onchange="onVatChange()"><div class="tog-track"></div><div class="tog-thumb"></div></label>
+        <span class="tog-lbl inactive" id="vat-on-lbl">มี VAT 7%</span>
+      </div>
+      <div class="tog-row">
+        <label class="tog"><input type="checkbox" id="vat-inc" disabled onchange="recalc()"><div class="tog-track"></div><div class="tog-thumb"></div></label>
+        <span class="tog-lbl locked" id="vat-inc-lbl">ราคารวมภาษีแล้ว</span>
+      </div>
+      <span class="vat-amt" id="vat-amt"></span>
+    </div>
+    <div class="fdiv"></div>
+    <div class="totals-sec">
+      <div class="ti"><span class="tl">รวมมูลค่าสินค้า</span><span class="tv" id="t-sub">0.00</span></div>
+      <div class="ti"><span class="tl">ส่วนลด</span><span class="tv g" id="t-disc">0.00</span></div>
+      <div class="ti"><span class="tl" id="t-vat-lbl">ภาษีมูลค่าเพิ่ม 7%</span><span class="tv a dim" id="t-vat">0.00</span></div>
+      <div class="ti grand"><span class="tl">ยอดขาย</span><span class="tv" id="t-grand">0.00</span></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const BRANCH_VAT=true;
+const ALL_PRODUCTS=[
+  {id:1,name:"Hill's Science Diet สุนัขสูงอายุ 7+ 5.67kg",sku:"SKU001",barcode:"8850007890123",emoji:"🐕",cat:"อาหารสัตว์",avgCost:1820,stock:98,uoms:[{n:'ชิ้น',f:1}]},
+  {id:2,name:"Royal Canin Mini Indoor Senior 3kg",sku:"SKU002",barcode:"3182550789456",emoji:"🐩",cat:"อาหารสัตว์",avgCost:780,stock:96,uoms:[{n:'ชิ้น',f:1}]},
+  {id:3,name:"Maxima อาหารเปียก กระป๋อง 380g",sku:"SKU003",barcode:"8850001234567",emoji:"🥫",cat:"อาหารสัตว์",avgCost:45,stock:99,uoms:[{n:'ชิ้น',f:1},{n:'แพ็ค',f:6},{n:'ลัง',f:24}]},
+  {id:4,name:"Smart Heart อาหารลูกสุนัข 8kg",sku:"SKU004",barcode:"8850009876543",emoji:"🐶",cat:"อาหารสัตว์",avgCost:580,stock:8,uoms:[{n:'ชิ้น',f:1}]},
+  {id:5,name:"Jerhigh ฮอทดอกบาร์ รสไก่ 150g",sku:"SKU005",barcode:"8858753012345",emoji:"🌭",cat:"ทรีทและขนม",avgCost:28,stock:99,uoms:[{n:'ชิ้น',f:1},{n:'โหล',f:12},{n:'ลัง',f:48}]},
+  {id:6,name:"Biscal ขนมคุกกี้สุนัข สูตรชีส 60g",sku:"SKU006",barcode:"8858753098765",emoji:"🍪",cat:"ทรีทและขนม",avgCost:120,stock:100,uoms:[{n:'ชิ้น',f:1}]},
+  {id:7,name:"Pedigree เดนตาสติก 14ชิ้น",sku:"SKU007",barcode:"8850003456789",emoji:"🦷",cat:"ทรีทและขนม",avgCost:140,stock:3,uoms:[{n:'ชิ้น',f:1},{n:'แพ็ค',f:6}]},
+  {id:8,name:"Kaniva อาหารแมวโต รสแกะทูน่า 8kg",sku:"SKU008",barcode:"8858656001234",emoji:"🐱",cat:"อาหารสัตว์",avgCost:650,stock:0,uoms:[{n:'ชิ้น',f:1}]},
+  {id:9,name:"Purina ONE แมวโต รสทูน่า 1.8kg",sku:"SKU009",barcode:"7613287890123",emoji:"🐟",cat:"อาหารสัตว์",avgCost:390,stock:27,uoms:[{n:'ชิ้น',f:1}]},
+  {id:10,name:"Fresh Step กรายแมวก้อน 20L",sku:"SKU010",barcode:"0044600309768",emoji:"🪣",cat:"กรายแมว",avgCost:250,stock:14,uoms:[{n:'ชิ้น',f:1},{n:'ลัง',f:6}]},
+];
+
+let items=[
+  {pid:3,qty:2,uomIdx:2,cost:960,disc:0},
+  {pid:5,qty:3,uomIdx:1,cost:300,disc:0},
+  {pid:7,qty:10,uomIdx:0,cost:140,disc:0},
+];
+let discType='pct',payStatus='paid',payMethod='cash',selSel=new Set();
+
+const fmt=n=>parseFloat(n||0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,',');
+const gP=pid=>ALL_PRODUCTS.find(p=>p.id===pid);
+const gU=(p,i)=>p.uoms[i]||p.uoms[0];
+const bq=it=>it.qty*gU(gP(it.pid),it.uomIdx).f;
+const cpb=it=>it.cost/gU(gP(it.pid),it.uomIdx).f;
+const lt=it=>Math.max(0,bq(it)*cpb(it)-(it.disc||0));
+const nav=it=>{const p=gP(it.pid);const b=bq(it);const c=cpb(it);return b>0?(p.stock*p.avgCost+b*c)/(p.stock+b):p.avgCost;};
+
+function recalc(){
+  const sub=items.reduce((s,it)=>s+lt(it),0);
+  const dv=parseFloat(document.getElementById('disc-val').value)||0;
+  const disc=discType==='pct'?sub*dv/100:Math.min(dv,sub);
+  const ad=Math.max(0,sub-disc);
+  const vatOn=BRANCH_VAT&&document.getElementById('vat-on').checked;
+  const vatInc=document.getElementById('vat-inc').checked;
+  let vat=0,grand=ad;
+  if(vatOn){
+    if(vatInc){vat=ad-ad/1.07;grand=ad;document.getElementById('t-vat-lbl').textContent='VAT (รวมแล้ว)';}
+    else{vat=ad*0.07;grand=ad+vat;document.getElementById('t-vat-lbl').textContent='ภาษีมูลค่าเพิ่ม 7%';}
+    document.getElementById('t-vat').className='tv a';
+    document.getElementById('vat-amt').textContent=vat>0?'VAT = ฿'+fmt(vat):'';
+  } else {
+    document.getElementById('t-vat').className='tv a dim';
+    document.getElementById('vat-amt').textContent='';
+  }
+  document.getElementById('vat-inc-lbl').className='tog-lbl'+(vatOn?(vatInc?'active':'inactive'):'locked');
+  document.getElementById('disc-lbl').textContent=disc>0?'-฿'+fmt(disc):'';
+  document.getElementById('t-sub').textContent=fmt(sub);
+  document.getElementById('t-disc').textContent=fmt(disc);
+  document.getElementById('t-vat').textContent=fmt(vat);
+  document.getElementById('t-grand').textContent=fmt(grand);
+}
+
+function onVatChange(){
+  const on=document.getElementById('vat-on').checked;
+  document.getElementById('vat-on-lbl').className='tog-lbl'+(on?' active':' inactive');
+  document.getElementById('vat-inc').disabled=!on;
+  if(!on)document.getElementById('vat-inc').checked=false;
+  document.getElementById('vat-inc-lbl').className='tog-lbl'+(on?' inactive':' locked');
+  recalc();
+}
+function toggleDisc(){discType=discType==='pct'?'thb':'pct';const b=document.getElementById('disc-btn');b.textContent=discType==='pct'?'%':'฿';b.className='disc-tog'+(discType==='pct'?' on':'');recalc();}
+
+function renderTable(){
+  const tbody=document.getElementById('recv-tbody');
+  if(!items.length){tbody.innerHTML='<tr><td colspan="10" class="empty-state">ไม่มีรายการ — สแกนบาร์โค้ด หรือกด "+ เพิ่มสินค้า"</td></tr>';recalc();return;}
+  tbody.innerHTML=items.map((it,i)=>{
+    const p=gP(it.pid);
+    const uopts=p.uoms.map((u,ui)=>`<option value="${ui}"${ui===it.uomIdx?' selected':''}>${u.n}</option>`).join('');
+    return`<tr>
+      <td style="color:var(--g400);font-size:10px;">${i+1}</td>
+      <td><div class="prod-emoji">${p.emoji}</div></td>
+      <td><div class="prod-name">${p.name}</div><div class="prod-meta">${p.sku} · ${bq(it)} ชิ้น (ฐาน)</div></td>
+      <td><select class="uom-sel" onchange="items[${i}].uomIdx=parseInt(this.value);renderAll()">${uopts}</select></td>
+      <td class="r"><input class="ii w56" type="number" value="${it.qty}" min="0" onchange="items[${i}].qty=parseFloat(this.value)||0;renderAll()"></td>
+      <td class="r"><input class="ii w72" type="number" value="${it.cost}" min="0" step="0.01" onchange="items[${i}].cost=parseFloat(this.value)||0;renderAll()"></td>
+      <td class="r"><input class="ii w50" type="number" value="${it.disc||0}" min="0" onchange="items[${i}].disc=parseFloat(this.value)||0;renderAll()"></td>
+      <td class="r" style="font-family:'Prompt',sans-serif;font-weight:500;color:var(--p800);">${fmt(lt(it))}</td>
+      <td class="r"><div class="avg-old">เดิม ฿${fmt(gP(it.pid).avgCost)}</div><div class="avg-new">→ ฿${fmt(nav(it))}</div></td>
+      <td><button class="del-btn" onclick="items.splice(${i},1);renderAll()"><i class="ti ti-trash"></i></button></td>
+    </tr>`;
+  }).join('');
+  recalc();
+}
+function renderAll(){renderTable();}
+
+function onScanKey(e){
+  if(e.key!=='Enter')return;
+  const v=e.target.value.trim();if(!v)return;
+  const p=ALL_PRODUCTS.find(x=>x.barcode===v||x.name.toLowerCase().includes(v.toLowerCase()));
+  if(p){const ex=items.findIndex(it=>it.pid===p.id);if(ex>=0)items[ex].qty++;else items.push({pid:p.id,qty:1,uomIdx:0,cost:p.avgCost,disc:0});e.target.value='';renderAll();}
+  else{e.target.style.borderColor='var(--red)';setTimeout(()=>e.target.style.borderColor='',1000);}
+}
+
+// Select modal
+let selFiltered=[...ALL_PRODUCTS];
+function openSelModal(){
+  selSel=new Set(items.map(it=>it.pid));
+  document.getElementById('sel-q').value='';
+  document.getElementById('sel-type').value='name';
+  selFiltered=[...ALL_PRODUCTS];
+  renderSelTable();
+  openModal('sel-modal');
+}
+function renderSelTable(){
+  const tbody=document.getElementById('sel-tbody');
+  tbody.innerHTML=selFiltered.map(p=>`<tr class="${selSel.has(p.id)?'sel-on':''}" onclick="selTog(${p.id})">
+    <td><input type="checkbox" class="sel-cb" ${selSel.has(p.id)?'checked':''} onclick="event.stopPropagation();selTog(${p.id})"></td>
+    <td><div style="width:26px;height:26px;background:var(--g100);border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:14px;">${p.emoji}</div></td>
+    <td><div style="font-size:11px;font-weight:500;color:var(--p900);">${p.name}</div></td>
+    <td style="font-size:10px;color:var(--g400);">${p.sku}</td>
+    <td style="font-size:10px;color:var(--g400);">${p.cat}</td>
+    <td class="r" style="font-family:'Prompt',sans-serif;font-size:11px;color:${p.stock<0?'var(--red)':p.stock===0?'var(--amber)':'var(--p900)'};">${p.stock}</td>
+  </tr>`).join('');
+  const allS=selFiltered.every(p=>selSel.has(p.id)),someS=selFiltered.some(p=>selSel.has(p.id));
+  const cb=document.getElementById('sel-all-cb');cb.checked=allS;cb.indeterminate=!allS&&someS;
+  updSelCount();
+}
+function selTog(id){selSel.has(id)?selSel.delete(id):selSel.add(id);renderSelTable();}
+function selToggleAll(c){selFiltered.forEach(p=>c?selSel.add(p.id):selSel.delete(p.id));renderSelTable();}
+function updSelCount(){
+  const t=selSel.size;
+  ['sel-count-hd','sel-count-ft'].forEach(id=>document.getElementById(id).textContent=`เลือก ${t} รายการ`);
+  const btn=document.getElementById('sel-ok');btn.disabled=t===0;btn.textContent=t>0?`ยืนยัน (${t})`:'ยืนยัน';
+}
+function doSelSearch(){
+  const t=document.getElementById('sel-type').value,q=document.getElementById('sel-q').value.trim().toLowerCase();
+  if(!q){selFiltered=[...ALL_PRODUCTS];renderSelTable();return;}
+  selFiltered=ALL_PRODUCTS.filter(p=>t==='name'?p.name.toLowerCase().includes(q):t==='sku'?p.sku.toLowerCase().includes(q):t==='barcode'?p.barcode.includes(q):p.cat.toLowerCase().includes(q));
+  renderSelTable();
+}
+function doSelReset(){document.getElementById('sel-q').value='';selFiltered=[...ALL_PRODUCTS];renderSelTable();}
+function confirmSel(){
+  selSel.forEach(id=>{if(!items.find(it=>it.pid===id)){const p=ALL_PRODUCTS.find(x=>x.id===id);if(p)items.push({pid:p.id,qty:0,uomIdx:0,cost:p.avgCost,disc:0});}});
+  closeModal('sel-modal');renderAll();
+}
+
+// Confirm modal
+function openConfirm(){
+  if(!items.length){alert('กรุณาเพิ่มสินค้าก่อน');return;}
+  const total=items.reduce((s,it)=>s+lt(it),0);
+  document.getElementById('conf-items').innerHTML=items.map(it=>{const p=gP(it.pid);const u=gU(p,it.uomIdx);return`<div class="conf-item"><span style="color:var(--g600);flex:1;">${p.emoji} ${p.name} ${it.qty} ${u.n}</span><span style="color:var(--green);font-family:'Prompt',sans-serif;">฿${fmt(lt(it))}</span></div>`;}).join('');
+  document.getElementById('conf-cost').innerHTML='<strong>ต้นทุนเฉลี่ยใหม่:</strong><br>'+items.map(it=>{const p=gP(it.pid);return`• ${p.name}: ฿${fmt(p.avgCost)} → <strong>฿${fmt(nav(it))}</strong>`;}).join('<br>')+`<br><strong>รวม: ฿${fmt(total)}</strong>`;
+  openModal('conf-modal');
+}
+
+// Pay modal
+function openPayModal(){closeModal('conf-modal');openModal('pay-modal');}
+function setPS(s){payStatus=s;document.getElementById('ps-paid').className='psb'+(s==='paid'?' on':'');document.getElementById('ps-pending').className='psb'+(s==='pending'?' on':'');document.getElementById('pm-section').style.display=s==='paid'?'block':'none';}
+function setPM(m){payMethod=m;['cash','transfer','credit','cheque'].forEach(k=>document.getElementById('pm-'+k).className='pm-btn'+(m===k?' on':''));}
+function finalConfirm(){closeModal('pay-modal');alert(payStatus==='paid'?'✅ บันทึกสำเร็จ — ชำระแล้ว':'✅ บันทึกสำเร็จ\nสถานะ: รอชำระ');}
+
+function openModal(id){document.getElementById(id).classList.remove('hidden');}
+function closeModal(id){document.getElementById(id).classList.add('hidden');}
+
+renderAll();
+</script>
+</body>
+</html>

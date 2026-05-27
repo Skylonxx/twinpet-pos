@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TwinPet POS — Export รายงาน Excel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600&family=Sarabun:wght@300;400;500&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+:root{
+  --p600:#534AB7;--p500:#6B62C9;--p100:#CECBF6;--p50:#EEEDFE;
+  --g50:#F8F8FC;--g100:#EDEDF5;
+  --white:#fff;
+  --border:rgba(0,0,0,0.08);--border-md:rgba(0,0,0,0.13);
+  --text-primary:#1A1A2E;--text-secondary:#6B7280;--text-muted:#9CA3AF;
+  --success:#0F6E56;--success-bg:#E1F5EE;
+  --danger:#A32D2D;--danger-bg:#FCEBEB;
+  --warn:#854F0B;--warn-bg:#FAEEDA;
+  --info:#185FA5;--info-bg:#E6F1FB;
+  --radius-sm:6px;--radius-md:8px;--radius-lg:12px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Prompt','Sarabun',sans-serif;background:var(--g50);color:var(--text-primary);min-height:100vh;font-size:14px;}
+
+/* Topbar */
+.topbar{background:var(--white);border-bottom:1px solid var(--border);height:56px;display:flex;align-items:center;padding:0 24px;gap:12px;position:sticky;top:0;z-index:10;}
+.topbar-icon{width:34px;height:34px;border-radius:var(--radius-md);background:var(--success-bg);display:flex;align-items:center;justify-content:center;color:var(--success);font-size:18px;}
+.topbar-title{font-size:15px;font-weight:500;}
+.topbar-sub{font-size:12px;color:var(--text-secondary);}
+.topbar-center{flex:1;}
+.branch-badge{font-size:11px;padding:4px 12px;border-radius:20px;background:var(--p50);color:var(--p600);font-weight:500;border:1px solid var(--p100);display:flex;align-items:center;gap:5px;}
+
+/* Layout */
+.page{max-width:820px;margin:0 auto;padding:28px 24px 48px;}
+
+/* Card */
+.card{background:var(--white);border-radius:var(--radius-lg);border:1px solid var(--border);overflow:hidden;margin-bottom:16px;}
+.card-head{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;font-size:14px;font-weight:500;}
+.card-head i{color:var(--p600);font-size:16px;}
+.card-body{padding:20px;}
+
+/* Date range row */
+.date-row{display:grid;grid-template-columns:1fr auto 1fr;gap:12px;align-items:center;margin-bottom:16px;}
+.date-sep{color:var(--text-muted);font-size:18px;text-align:center;}
+.form-group{display:flex;flex-direction:column;gap:5px;}
+.form-label{font-size:12px;font-weight:500;color:var(--text-secondary);}
+.form-input{padding:10px 14px;font-size:13px;font-family:inherit;border:1.5px solid var(--border-md);border-radius:var(--radius-md);background:var(--g50);color:var(--text-primary);width:100%;}
+.form-input:focus{outline:none;border-color:var(--p600);background:var(--white);box-shadow:0 0 0 3px rgba(83,74,183,0.1);}
+.form-select{padding:10px 14px;font-size:13px;font-family:inherit;border:1.5px solid var(--border-md);border-radius:var(--radius-md);background:var(--g50);color:var(--text-primary);width:100%;cursor:pointer;}
+.form-select:focus{outline:none;border-color:var(--p600);}
+
+/* Preset chips */
+.preset-row{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:4px;}
+.preset-chip{padding:5px 14px;border-radius:20px;font-size:12px;cursor:pointer;border:1px solid var(--border-md);background:var(--white);color:var(--text-secondary);font-family:inherit;transition:all 0.15s;}
+.preset-chip:hover{border-color:var(--p100);background:var(--p50);color:var(--p600);}
+.preset-chip.active{background:var(--p50);color:var(--p600);border-color:var(--p100);font-weight:500;}
+
+/* Sheet checkboxes */
+.sheet-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.sheet-item{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border:1.5px solid var(--border-md);border-radius:var(--radius-md);cursor:pointer;transition:all 0.15s;background:var(--white);}
+.sheet-item:hover{border-color:var(--p100);background:var(--p50);}
+.sheet-item.checked{border-color:var(--p600);background:var(--p50);}
+.sheet-item input[type=checkbox]{accent-color:var(--p600);width:15px;height:15px;margin-top:1px;flex-shrink:0;cursor:pointer;}
+.sheet-info{min-width:0;}
+.sheet-name{font-size:13px;font-weight:500;color:var(--text-primary);display:flex;align-items:center;gap:6px;}
+.sheet-desc{font-size:11px;color:var(--text-muted);margin-top:2px;line-height:1.5;}
+.sheet-badge{font-size:10px;padding:1px 7px;border-radius:10px;font-weight:500;}
+
+/* Select all row */
+.select-all-row{display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:12px;color:var(--text-secondary);}
+.select-all-row input{accent-color:var(--p600);cursor:pointer;}
+.link-btn{background:none;border:none;color:var(--p600);font-size:12px;font-family:inherit;cursor:pointer;padding:0;}
+.link-btn:hover{text-decoration:underline;}
+
+/* Preview table */
+.preview-wrap{overflow-x:auto;border-radius:var(--radius-md);border:1px solid var(--border);}
+table{width:100%;border-collapse:collapse;font-size:12px;min-width:500px;}
+thead th{padding:8px 12px;text-align:left;font-size:11px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;background:var(--g50);border-bottom:1px solid var(--border);white-space:nowrap;}
+thead th.r{text-align:right;}
+tbody td{padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:middle;}
+tbody tr:last-child td{border-bottom:none;}
+tbody tr:hover td{background:var(--g50);}
+td.r{text-align:right;}
+.badge-sheet{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:2px 8px;border-radius:20px;}
+
+/* Export button */
+.export-btn{width:100%;padding:14px;border-radius:var(--radius-md);background:var(--p600);color:#fff;border:none;font-size:14px;font-family:inherit;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:all 0.15s;margin-top:4px;}
+.export-btn:hover{background:var(--p500);}
+.export-btn:active{transform:scale(0.99);}
+.export-btn.loading{opacity:0.7;pointer-events:none;}
+.export-btn .spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin 0.6s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* Info strip */
+.info-strip{display:flex;align-items:center;gap:8px;padding:12px 14px;background:var(--info-bg);border-radius:var(--radius-md);font-size:12px;color:var(--info);margin-bottom:16px;border:1px solid rgba(24,95,165,0.15);}
+
+/* KPI preview */
+.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;}
+.kpi-mini{background:var(--white);border-radius:var(--radius-md);border:1px solid var(--border);padding:12px 14px;}
+.kpi-mini-label{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px;}
+.kpi-mini-val{font-size:18px;font-weight:500;}
+
+/* Toast */
+.toast-wrap{position:fixed;bottom:24px;right:24px;display:flex;flex-direction:column;gap:8px;z-index:100;pointer-events:none;}
+.toast{padding:10px 16px;border-radius:var(--radius-md);font-size:13px;display:flex;align-items:center;gap:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);animation:toast-in 0.2s ease;pointer-events:none;color:#fff;}
+.toast.success{background:var(--success);}
+.toast.info{background:var(--p600);}
+.toast.error{background:var(--danger);}
+@keyframes toast-in{from{opacity:0;transform:translateX(16px);}to{opacity:1;transform:none;}}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-icon"><i class="ti ti-file-spreadsheet" aria-hidden="true"></i></div>
+  <div class="topbar-center">
+    <div class="topbar-title">Export รายงาน Excel</div>
+    <div class="topbar-sub">TwinPet POS — สรุปยอดขายรายวัน</div>
+  </div>
+  <span class="branch-badge"><i class="ti ti-map-pin" style="font-size:12px;" aria-hidden="true"></i>สาขา: ลาดพร้าว</span>
+</div>
+
+<div class="page">
+
+  <!-- Info -->
+  <div class="info-strip">
+    <i class="ti ti-info-circle" style="font-size:16px;flex-shrink:0;" aria-hidden="true"></i>
+    เลือกช่วงวันที่และ Sheet ที่ต้องการ แล้วกด Export — ไฟล์ .xlsx จะถูกสร้างและดาวน์โหลดทันทีใน Browser
+  </div>
+
+  <!-- Step 1: Date Range -->
+  <div class="card">
+    <div class="card-head">
+      <i class="ti ti-calendar" aria-hidden="true"></i>
+      <span>ขั้นตอนที่ 1 — เลือกช่วงวันที่</span>
+    </div>
+    <div class="card-body">
+      <!-- Preset chips -->
+      <div style="margin-bottom:12px;">
+        <div class="form-label" style="margin-bottom:7px;">ช่วงเวลาด่วน</div>
+        <div class="preset-row" id="preset-row"></div>
+      </div>
+      <!-- Date inputs -->
+      <div class="date-row">
+        <div class="form-group">
+          <label class="form-label" for="date-from">วันที่เริ่มต้น</label>
+          <input class="form-input" type="date" id="date-from" onchange="onDateChange()">
+        </div>
+        <div class="date-sep">—</div>
+        <div class="form-group">
+          <label class="form-label" for="date-to">วันที่สิ้นสุด</label>
+          <input class="form-input" type="date" id="date-to" onchange="onDateChange()">
+        </div>
+      </div>
+      <!-- Branch & staff filter -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:4px;">
+        <div class="form-group">
+          <label class="form-label" for="sel-branch">สาขา</label>
+          <select class="form-select" id="sel-branch">
+            <option value="all">ทุกสาขา</option>
+            <option value="ladprao" selected>สาขาลาดพร้าว</option>
+            <option value="ekkamai">สาขาเอกมัย</option>
+            <option value="onnuch">สาขาอ่อนนุช</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="sel-staff">พนักงาน</label>
+          <select class="form-select" id="sel-staff">
+            <option value="all">ทุกคน</option>
+            <option value="somchai">สมชาย ดีมาก</option>
+            <option value="suda">สุดา ใจดี</option>
+            <option value="wichai">วิชัย ขยันดี</option>
+            <option value="nongnuch">นงนุช สวัสดี</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 2: Select sheets -->
+  <div class="card">
+    <div class="card-head">
+      <i class="ti ti-table" aria-hidden="true"></i>
+      <span>ขั้นตอนที่ 2 — เลือก Sheet ที่ต้องการ</span>
+    </div>
+    <div class="card-body">
+      <div class="select-all-row">
+        <input type="checkbox" id="chk-all" onchange="toggleAll(this.checked)" checked>
+        <label for="chk-all" style="cursor:pointer;">เลือกทั้งหมด</label>
+        <span style="color:var(--text-muted);">·</span>
+        <button class="link-btn" onclick="setRecommended()">แนะนำ (5 Sheet หลัก)</button>
+        <span style="margin-left:auto;font-size:12px;color:var(--text-muted);">เลือกแล้ว <b id="sheet-count" style="color:var(--p600);">8</b> Sheet</span>
+      </div>
+      <div class="sheet-grid" id="sheet-grid"></div>
+    </div>
+  </div>
+
+  <!-- Step 3: Preview -->
+  <div class="card">
+    <div class="card-head">
+      <i class="ti ti-eye" aria-hidden="true"></i>
+      <span>ตัวอย่างข้อมูล — สรุปรายวัน</span>
+      <span id="preview-range" style="margin-left:auto;font-size:12px;color:var(--text-muted);font-weight:400;"></span>
+    </div>
+    <div class="card-body" style="padding:16px;">
+      <div class="kpi-row" id="kpi-row"></div>
+      <div class="preview-wrap">
+        <table>
+          <thead><tr>
+            <th>วันที่</th><th class="r">บิล</th><th class="r">ยอดขาย</th>
+            <th class="r">ต้นทุน</th><th class="r">กำไร</th><th class="r">Margin%</th>
+          </tr></thead>
+          <tbody id="preview-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Export button -->
+  <button class="export-btn" id="export-btn" onclick="doExport()">
+    <i class="ti ti-download" aria-hidden="true"></i>
+    Export Excel ดาวน์โหลดทันที
+  </button>
+
+</div><!-- page -->
+
+<div class="toast-wrap" id="toast-wrap"></div>
+
+<script>
+// ── MOCK DATA (อ้างอิงจากระบบ TwinPet POS) ────────────────────────────────────
+const TODAY = new Date('2026-05-25');
+function toISO(d){ return d.toISOString().slice(0,10); }
+function addDays(d,n){ const r=new Date(d); r.setDate(r.getDate()+n); return r; }
+function fmtDate(d){ const p=d.split('-'); return `${p[2]}/${p[1]}/${p[0]}`; }
+function fmtB(n){ return '฿'+Math.round(n).toLocaleString('th-TH'); }
+function fmtPct(n){ return (n*100).toFixed(1)+'%'; }
+
+const PAY_METHODS = {
+  cash:   {label:'เงินสด',       color:'0F6E56'},
+  qr:     {label:'PromptPay QR', color:'7A1FA2'},
+  kbank:  {label:'KBank QR',     color:'1F6E00'},
+  card:   {label:'EDC บัตร',     color:'534AB7'},
+  credit: {label:'เชื่อ',         color:'854F0B'},
+};
+const PAY_KEYS = Object.keys(PAY_METHODS);
+const STAFF = ['สมชาย ดีมาก','สุดา ใจดี','วิชัย ขยันดี','นงนุช สวัสดี'];
+const CUSTS = ['คุณมาลี สุขใจ','คุณวิชัย เก่งมาก','คุณอนุชา บุญมา','คุณพรทิพย์','สมาชิกทั่วไป'];
+const PRODUCTS = [
+  {name:'Royal Canin Adult 3kg',sku:'RC-A3',  cat:'อาหารสุนัข',price:480,cost:315,uom:'3kg'},
+  {name:'Hills Science Diet',   sku:'HS-C1',  cat:'อาหารแมว',  price:360,cost:280,uom:'1.5kg'},
+  {name:'Whiskas Tuna 85g',     sku:'WK-T24', cat:'อาหารแมว',  price:120,cost:92, uom:'24pc'},
+  {name:'Purina Pro Plan',      sku:'PP-PUP', cat:'อาหารสุนัข',price:520,cost:412,uom:'3kg'},
+  {name:'Pedigree Dentastix',   sku:'PD-DX',  cat:'อาหารสุนัข',price:75, cost:55, uom:'7pcs'},
+  {name:'Cat Scratcher',        sku:'CS-DX',  cat:'ของเล่น',   price:220,cost:180,uom:'1pc'},
+  {name:'Frontline Plus L',     sku:'FL-DL',  cat:'ยาวิตามิน', price:250,cost:195,uom:'1pc'},
+  {name:'Catit Fountain',       sku:'CW-F1',  cat:'อุปกรณ์',   price:820,cost:650,uom:'1set'},
+  {name:'Petsafe Clicker',      sku:'PC-CL',  cat:'ของเล่น',   price:95, cost:75, uom:'1pc'},
+  {name:'Tidy Cats 8kg',        sku:'TC-C8',  cat:'ทรายแมว',   price:230,cost:182,uom:'8kg'},
+  {name:'NexGard M',            sku:'NG-M',   cat:'ยาวิตามิน', price:310,cost:240,uom:'3tabs'},
+  {name:'Rolf Collar Cat',      sku:'RC-CC',  cat:'อุปกรณ์',   price:160,cost:120,uom:'1pc'},
+];
+
+// seed-based random
+function seededRand(seed){ let s=seed%2147483647; return ()=>{ s=s*16807%2147483647; return (s-1)/2147483646; }; }
+
+function generateSales(dateFrom, dateTo){
+  const rand=seededRand(42);
+  const bills=[];
+  let d=new Date(dateFrom);
+  const end=new Date(dateTo);
+  let billNo=500;
+  while(d<=end){
+    const n=Math.floor(rand()*5)+2;
+    for(let i=0;i<n;i++){
+      const pay=PAY_KEYS[Math.floor(rand()*PAY_KEYS.length)];
+      const cust=CUSTS[Math.floor(rand()*CUSTS.length)];
+      const staff=STAFF[Math.floor(rand()*STAFF.length)];
+      const nItems=Math.floor(rand()*3)+1;
+      let rev=0,cogs=0; const items=[];
+      for(let j=0;j<nItems;j++){
+        const p=PRODUCTS[Math.floor(rand()*PRODUCTS.length)];
+        const qty=Math.floor(rand()*3)+1;
+        rev+=p.price*qty; cogs+=p.cost*qty;
+        items.push({...p,qty});
+      }
+      bills.push({date:toISO(d),bill:`TW-${billNo++}`,cust,pay,staff,rev,cogs,items});
+    }
+    d=addDays(d,1);
+  }
+  return bills;
+}
+
+// ── SHEET DEFINITIONS ────────────────────────────────────────────────────────
+const SHEETS = [
+  {key:'daily',    name:'1_สรุปรายวัน',         icon:'ti-calendar',  desc:'ยอดขาย กำไร จำนวนบิล แยกรายวัน', color:'534AB7', rec:true},
+  {key:'product',  name:'2_สรุปสินค้า',          icon:'ti-package',   desc:'ยอดขายและกำไรแยกรายสินค้า เรียงสูงสุด', color:'185FA5', rec:true},
+  {key:'payment',  name:'3_ช่องทางชำระเงิน',    icon:'ti-credit-card',desc:'สัดส่วน 5 ช่องทาง: เงินสด QR EDC เชื่อ', color:'0F6E56', rec:true},
+  {key:'bills',    name:'4_รายละเอียดบิล',       icon:'ti-receipt',   desc:'ทุกบิล: วันที่ ลูกค้า พนักงาน ยอด', color:'854F0B', rec:true},
+  {key:'unsold',   name:'5_ไม่มีการขาย',          icon:'ti-alert-triangle',desc:'สินค้าที่ยังไม่ถูกขายในช่วงเวลา', color:'A32D2D', rec:false},
+  {key:'cashflow', name:'6_เงินเข้า-ออก',         icon:'ti-arrows-exchange',desc:'Cash flow: เงินเข้าจากขาย vs ค่าใช้จ่าย', color:'0F6E56', rec:false},
+  {key:'uom',      name:'7_ยอดขายตามขนาด',       icon:'ti-ruler',    desc:'ยอดขายแยก UOM / ขนาดบรรจุภัณฑ์', color:'6B62C9', rec:false},
+  {key:'profit',   name:'8_กำไรจากการขาย',       icon:'ti-trending-up',desc:'Profit analysis — margin สี ≥20% / <10%', color:'1D9E75', rec:true},
+];
+
+let selected=new Set(SHEETS.map(s=>s.key));
+
+// ── PRESET DATES ─────────────────────────────────────────────────────────────
+const PRESETS=[
+  {label:'วันนี้',      fn:()=>[toISO(TODAY),toISO(TODAY)]},
+  {label:'เมื่อวาน',   fn:()=>{const d=addDays(TODAY,-1);return[toISO(d),toISO(d)];}},
+  {label:'7 วัน',     fn:()=>[toISO(addDays(TODAY,-6)),toISO(TODAY)]},
+  {label:'30 วัน',    fn:()=>[toISO(addDays(TODAY,-29)),toISO(TODAY)]},
+  {label:'เดือนนี้',   fn:()=>[`${toISO(TODAY).slice(0,7)}-01`,toISO(TODAY)]},
+  {label:'เดือนก่อน', fn:()=>{
+    const d=new Date(TODAY); d.setDate(1); d.setMonth(d.getMonth()-1);
+    const from=toISO(d); const last=new Date(d.getFullYear(),d.getMonth()+1,0);
+    return[from,toISO(last)];
+  }},
+];
+let activePreset='7d';
+
+function buildPresets(){
+  const row=document.getElementById('preset-row');
+  PRESETS.forEach((p,i)=>{
+    const btn=document.createElement('button');
+    btn.className='preset-chip'+(i===2?' active':'');
+    btn.textContent=p.label;
+    btn.onclick=()=>{ applyPreset(i,btn); };
+    row.appendChild(btn);
+  });
+}
+
+function applyPreset(i,btn){
+  document.querySelectorAll('.preset-chip').forEach(c=>c.classList.remove('active'));
+  btn.classList.add('active');
+  const [from,to]=PRESETS[i].fn();
+  document.getElementById('date-from').value=from;
+  document.getElementById('date-to').value=to;
+  onDateChange();
+}
+
+function onDateChange(){
+  document.querySelectorAll('.preset-chip').forEach(c=>c.classList.remove('active'));
+  updatePreview();
+}
+
+// ── SHEET GRID ────────────────────────────────────────────────────────────────
+function buildSheetGrid(){
+  const grid=document.getElementById('sheet-grid');
+  SHEETS.forEach(s=>{
+    const div=document.createElement('div');
+    div.className='sheet-item checked';
+    div.id=`item-${s.key}`;
+    div.innerHTML=`
+      <input type="checkbox" id="chk-${s.key}" checked onchange="toggleSheet('${s.key}',this.checked)">
+      <div class="sheet-info">
+        <div class="sheet-name">
+          <i class="ti ${s.icon}" aria-hidden="true" style="color:#${s.color};font-size:14px;"></i>
+          ${s.name}
+          ${s.rec?`<span class="sheet-badge" style="background:#EEEDFE;color:#534AB7;">แนะนำ</span>`:''}
+        </div>
+        <div class="sheet-desc">${s.desc}</div>
+      </div>`;
+    div.onclick=(e)=>{ if(e.target.tagName!=='INPUT'){ const chk=div.querySelector('input'); chk.checked=!chk.checked; toggleSheet(s.key,chk.checked); } };
+    grid.appendChild(div);
+  });
+}
+
+function toggleSheet(key,checked){
+  if(checked) selected.add(key); else selected.delete(key);
+  document.getElementById(`item-${key}`).classList.toggle('checked',checked);
+  document.getElementById('sheet-count').textContent=selected.size;
+  updateAllCheckbox();
+}
+function toggleAll(checked){
+  SHEETS.forEach(s=>{ selected[checked?'add':'delete'](s.key); document.getElementById(`chk-${s.key}`).checked=checked; document.getElementById(`item-${s.key}`).classList.toggle('checked',checked); });
+  document.getElementById('sheet-count').textContent=selected.size;
+}
+function setRecommended(){
+  SHEETS.forEach(s=>{ const on=s.rec; selected[on?'add':'delete'](s.key); document.getElementById(`chk-${s.key}`).checked=on; document.getElementById(`item-${s.key}`).classList.toggle('checked',on); });
+  document.getElementById('sheet-count').textContent=selected.size;
+  updateAllCheckbox();
+}
+function updateAllCheckbox(){ document.getElementById('chk-all').checked=selected.size===SHEETS.length; }
+
+// ── PREVIEW ───────────────────────────────────────────────────────────────────
+function updatePreview(){
+  const from=document.getElementById('date-from').value;
+  const to=document.getElementById('date-to').value;
+  if(!from||!to) return;
+  document.getElementById('preview-range').textContent=`${fmtDate(from)} – ${fmtDate(to)}`;
+
+  const bills=generateSales(from,to);
+  const rev=bills.reduce((a,b)=>a+b.rev,0);
+  const cogs=bills.reduce((a,b)=>a+b.cogs,0);
+  const profit=rev-cogs;
+  const margin=rev>0?profit/rev:0;
+
+  // KPI
+  document.getElementById('kpi-row').innerHTML=[
+    {label:'ยอดขายรวม',val:fmtB(rev),color:'var(--p600)'},
+    {label:'กำไรขั้นต้น',val:fmtB(profit),color:'var(--success)'},
+    {label:'จำนวนบิล',val:new Set(bills.map(b=>b.bill)).size,color:'var(--info)'},
+    {label:'Gross Margin',val:fmtPct(margin),color:'var(--warn)'},
+  ].map(k=>`<div class="kpi-mini"><div class="kpi-mini-label">${k.label}</div><div class="kpi-mini-val" style="color:${k.color};">${k.val}</div></div>`).join('');
+
+  // Daily aggregate
+  const daily={};
+  bills.forEach(b=>{ if(!daily[b.date]) daily[b.date]={bills:0,rev:0,cogs:0}; daily[b.date].bills++; daily[b.date].rev+=b.rev; daily[b.date].cogs+=b.cogs; });
+  const rows=Object.entries(daily).sort((a,b)=>a[0]<b[0]?-1:1).slice(0,7);
+
+  document.getElementById('preview-tbody').innerHTML=rows.map(([date,v],i)=>{
+    const gp=v.rev-v.cogs; const mg=gp/v.rev;
+    const bg=i%2===1?'background:var(--g50)':'';
+    return `<tr style="${bg}">
+      <td>${fmtDate(date)}</td>
+      <td class="r">${v.bills}</td>
+      <td class="r" style="color:var(--p600);font-weight:500;">${fmtB(v.rev)}</td>
+      <td class="r" style="color:var(--warn);">${fmtB(v.cogs)}</td>
+      <td class="r" style="color:var(--success);font-weight:500;">${fmtB(gp)}</td>
+      <td class="r" style="color:${mg>=0.2?'var(--success)':mg>=0.1?'var(--warn)':'var(--danger)'};">${fmtPct(mg)}</td>
+    </tr>`;
+  }).join('');
+  if(Object.keys(daily).length>7){
+    document.getElementById('preview-tbody').innerHTML+=`<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:10px;font-size:11px;">… แสดง 7 วันแรก จาก ${Object.keys(daily).length} วัน</td></tr>`;
+  }
+}
+
+// ── EXPORT EXCEL (SheetJS) ────────────────────────────────────────────────────
+function makeWB(bills, from, to, branch, staffFilter){
+  const wb = XLSX.utils.book_new();
+  const fmtD=d=>{ const p=d.split('-'); return `${p[2]}/${p[1]}/${p[0]}`; };
+  const metaRow=[`สาขา: ${branch}  |  ช่วงวันที่: ${fmtD(from)} – ${fmtD(to)}  |  สร้างเมื่อ: ${new Date().toLocaleString('th-TH')}`];
+
+  // Shared helper: append meta rows
+  function mkSheet(rows, cols){
+    const data=[metaRow,cols,...rows];
+    return XLSX.utils.aoa_to_sheet(data);
+  }
+
+  if(selected.has('daily')){
+    const daily={};
+    bills.forEach(b=>{ if(!daily[b.date]) daily[b.date]={bills:0,rev:0,cogs:0,custs:new Set()}; daily[b.date].bills++; daily[b.date].rev+=b.rev; daily[b.date].cogs+=b.cogs; daily[b.date].custs.add(b.cust); });
+    const rows=Object.entries(daily).sort((a,b)=>a[0]<b[0]?-1:1).map(([d,v])=>{
+      const gp=v.rev-v.cogs; return [fmtD(d),v.bills,v.rev,v.cogs,gp,gp/v.rev||0,v.custs.size,v.rev/v.bills||0];
+    });
+    const totalRev=rows.reduce((a,r)=>a+r[2],0); const totalCogs=rows.reduce((a,r)=>a+r[3],0);
+    rows.push(['รวม',rows.reduce((a,r)=>a+r[1],0),totalRev,totalCogs,totalRev-totalCogs,(totalRev-totalCogs)/totalRev||0,'','']);
+    const ws=mkSheet(rows,['วันที่','จำนวนบิล','ยอดขาย','ต้นทุน','กำไร','Margin%','ลูกค้า(คน)','บิลเฉลี่ย']);
+    XLSX.utils.book_append_sheet(wb,ws,'1_สรุปรายวัน');
+  }
+
+  if(selected.has('product')){
+    const pm={};
+    bills.forEach(b=>b.items.forEach(p=>{ const k=p.sku; if(!pm[k]) pm[k]={name:p.name,sku:p.sku,cat:p.cat,qty:0,rev:0,cogs:0}; pm[k].qty+=p.qty; pm[k].rev+=p.price*p.qty; pm[k].cogs+=p.cost*p.qty; }));
+    const rows=Object.values(pm).sort((a,b)=>b.rev-a.rev).map(v=>[v.name,v.sku,v.cat,v.qty,v.rev,v.cogs,v.rev-v.cogs,(v.rev-v.cogs)/v.rev||0]);
+    const ws=mkSheet(rows,['ชื่อสินค้า','SKU','หมวดหมู่','จำนวนขาย','ยอดขาย','ต้นทุน','กำไร','Margin%']);
+    XLSX.utils.book_append_sheet(wb,ws,'2_สรุปสินค้า');
+  }
+
+  if(selected.has('payment')){
+    const pm={};
+    bills.forEach(b=>{ if(!pm[b.pay]) pm[b.pay]={bills:0,rev:0}; pm[b.pay].bills++; pm[b.pay].rev+=b.rev; });
+    const totalRev=bills.reduce((a,b)=>a+b.rev,0);
+    const rows=Object.entries(pm).sort((a,b)=>b[1].rev-a[1].rev).map(([k,v])=>{
+      const meta=PAY_METHODS[k]||{label:k};
+      return [meta.label,v.bills,v.rev,v.rev/totalRev||0,v.rev/v.bills||0];
+    });
+    const ws=mkSheet(rows,['ช่องทาง','จำนวนบิล','ยอดรวม','สัดส่วน%','บิลเฉลี่ย']);
+    XLSX.utils.book_append_sheet(wb,ws,'3_ช่องทางชำระเงิน');
+  }
+
+  if(selected.has('bills')){
+    const rows=bills.sort((a,b)=>a.date<b.date?-1:1).map(b=>{
+      const pay=PAY_METHODS[b.pay]?.label||b.pay;
+      return [fmtD(b.date),b.bill,b.cust,pay,b.staff,b.rev,b.cogs,b.rev-b.cogs,(b.rev-b.cogs)/b.rev||0];
+    });
+    const ws=mkSheet(rows,['วันที่','เลขบิล','ลูกค้า','ช่องทาง','พนักงาน','ยอดขาย','ต้นทุน','กำไร','Margin%']);
+    XLSX.utils.book_append_sheet(wb,ws,'4_รายละเอียดบิล');
+  }
+
+  if(selected.has('unsold')){
+    const soldSkus=new Set(bills.flatMap(b=>b.items.map(p=>p.sku)));
+    const unsold=PRODUCTS.filter(p=>!soldSkus.has(p.sku));
+    const rows=unsold.map(p=>[p.name,p.sku,p.cat,p.price,p.cost,'ตรวจสอบโปรโมชั่น']);
+    const ws=mkSheet(rows.length?rows:[['ไม่มีสินค้าค้างขาย','','','','','']],['ชื่อสินค้า','SKU','หมวดหมู่','ราคาขาย','ต้นทุน','หมายเหตุ']);
+    XLSX.utils.book_append_sheet(wb,ws,'5_ไม่มีการขาย');
+  }
+
+  if(selected.has('cashflow')){
+    const totalRev=bills.reduce((a,b)=>a+b.rev,0);
+    const totalCogs=bills.reduce((a,b)=>a+b.cogs,0);
+    const rows=[
+      ['== เงินเข้า ==','',''],
+      ['ยอดขายรวม','รายได้',totalRev],
+      ['== เงินออก ==','',''],
+      ['ต้นทุนสินค้าขาย','COGS',totalCogs],
+      ['ค่าจ้างพนักงาน','ค่าใช้จ่าย',28000],
+      ['ค่าเช่าสถานที่','ค่าใช้จ่าย',15000],
+      ['ค่าสาธารณูปโภค','ค่าใช้จ่าย',3200],
+      ['== กระแสเงินสดสุทธิ ==','',totalRev-totalCogs-28000-15000-3200],
+    ];
+    const ws=mkSheet(rows,['รายการ','ประเภท','จำนวน (฿)']);
+    XLSX.utils.book_append_sheet(wb,ws,'6_เงินเข้า-ออก');
+  }
+
+  if(selected.has('uom')){
+    const uomMap={};
+    bills.forEach(b=>b.items.forEach(p=>{ const k=p.sku; if(!uomMap[k]) uomMap[k]={name:p.name,sku:p.sku,cat:p.cat,uom:p.uom,qty:0,rev:0,cogs:0}; uomMap[k].qty+=p.qty; uomMap[k].rev+=p.price*p.qty; uomMap[k].cogs+=p.cost*p.qty; }));
+    const rows=Object.values(uomMap).sort((a,b)=>b.rev-a.rev).map(v=>[v.name,v.uom,v.cat,v.qty,v.rev/v.qty||0,v.rev,v.rev-v.cogs]);
+    const ws=mkSheet(rows,['สินค้า','ขนาดบรรจุ','หมวดหมู่','จำนวนขาย','ราคา/หน่วย','ยอดขาย','กำไร']);
+    XLSX.utils.book_append_sheet(wb,ws,'7_ยอดขายตามขนาด');
+  }
+
+  if(selected.has('profit')){
+    const pm={};
+    bills.forEach(b=>b.items.forEach(p=>{ const k=p.sku; if(!pm[k]) pm[k]={name:p.name,sku:p.sku,cat:p.cat,qty:0,rev:0,cogs:0}; pm[k].qty+=p.qty; pm[k].rev+=p.price*p.qty; pm[k].cogs+=p.cost*p.qty; }));
+    const rows=Object.values(pm).sort((a,b)=>(b.rev-b.cogs)-(a.rev-a.cogs)).map(v=>{
+      const gp=v.rev-v.cogs; return [v.name,v.sku,v.cat,v.qty,v.rev,v.cogs,gp,gp/v.rev||0,gp/v.qty||0];
+    });
+    const ws=mkSheet(rows,['สินค้า','SKU','หมวด','จำนวนขาย','ยอดขาย','ต้นทุน','กำไร','Margin%','กำไร/ชิ้น']);
+    XLSX.utils.book_append_sheet(wb,ws,'8_กำไรจากการขาย');
+  }
+
+  return wb;
+}
+
+function doExport(){
+  const from=document.getElementById('date-from').value;
+  const to=document.getElementById('date-to').value;
+  if(!from||!to){ showToast('กรุณาเลือกช่วงวันที่ก่อน','error'); return; }
+  if(selected.size===0){ showToast('กรุณาเลือก Sheet อย่างน้อย 1 Sheet','error'); return; }
+  if(new Date(from)>new Date(to)){ showToast('วันที่เริ่มต้นต้องน้อยกว่าวันสิ้นสุด','error'); return; }
+
+  const btn=document.getElementById('export-btn');
+  btn.classList.add('loading');
+  btn.innerHTML='<span class="spinner"></span> กำลังสร้างไฟล์...';
+
+  setTimeout(()=>{
+    try{
+      const branch=document.getElementById('sel-branch').options[document.getElementById('sel-branch').selectedIndex].text;
+      const bills=generateSales(from,to);
+      const wb=makeWB(bills,from,to,branch,'all');
+      if(wb.SheetNames.length===0){ showToast('ไม่มี Sheet ที่เลือก','error'); return; }
+      const fn=`TwinPet_Report_${from}_to_${to}.xlsx`;
+      XLSX.writeFile(wb,fn);
+      showToast(`Export สำเร็จ ${wb.SheetNames.length} Sheet — ${fn}`,'success');
+    }catch(e){ showToast('เกิดข้อผิดพลาด: '+e.message,'error'); }
+    finally{
+      btn.classList.remove('loading');
+      btn.innerHTML='<i class="ti ti-download" aria-hidden="true"></i> Export Excel ดาวน์โหลดทันที';
+    }
+  },400);
+}
+
+function showToast(msg,type='info'){
+  const wrap=document.getElementById('toast-wrap');
+  const el=document.createElement('div'); el.className=`toast ${type}`;
+  const icons={success:'ti-circle-check',error:'ti-alert-circle',info:'ti-info-circle'};
+  el.innerHTML=`<i class="ti ${icons[type]||'ti-info-circle'}" aria-hidden="true"></i> ${msg}`;
+  wrap.appendChild(el);
+  setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity 0.3s'; setTimeout(()=>el.remove(),300); },3000);
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+buildPresets();
+buildSheetGrid();
+// Default: 7 วันล่าสุด
+const [df,dt]=PRESETS[2].fn();
+document.getElementById('date-from').value=df;
+document.getElementById('date-to').value=dt;
+updatePreview();
+</script>
+</body>
+</html>

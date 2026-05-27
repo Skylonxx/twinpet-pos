@@ -1,0 +1,1119 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TwinPet POS — รายงานกำไร</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600&family=Sarabun:wght@300;400;500&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root{
+  --p600:#534AB7;--p500:#6B62C9;--p100:#CECBF6;--p50:#EEEDFE;
+  --g50:#F8F8FC;--g100:#EDEDF5;
+  --white:#ffffff;
+  --border:rgba(0,0,0,0.08);--border-md:rgba(0,0,0,0.13);
+  --text-primary:#1A1A2E;--text-secondary:#6B7280;--text-muted:#9CA3AF;
+  --success:#0F6E56;--success-bg:#E1F5EE;
+  --danger:#A32D2D;--danger-bg:#FCEBEB;
+  --warn:#854F0B;--warn-bg:#FAEEDA;--warn-light:#FAC775;
+  --info:#185FA5;--info-bg:#E6F1FB;
+  --topbar-h:56px;--footer-h:58px;
+  --radius-sm:6px;--radius-md:8px;--radius-lg:12px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Prompt','Sarabun',sans-serif;background:var(--g50);color:var(--text-primary);height:100vh;overflow:hidden;font-size:14px;}
+.shell{display:flex;flex-direction:column;height:100vh;}
+
+/* Topbar */
+.topbar{height:var(--topbar-h);background:var(--white);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:12px;flex-shrink:0;z-index:50;}
+.topbar-icon{width:34px;height:34px;border-radius:var(--radius-md);background:var(--success-bg);display:flex;align-items:center;justify-content:center;color:var(--success);font-size:18px;flex-shrink:0;}
+.topbar-title{font-size:15px;font-weight:500;}
+.topbar-sub{font-size:12px;color:var(--text-secondary);margin-top:1px;}
+.topbar-center{flex:1;}
+.branch-badge{font-size:11px;padding:4px 12px;border-radius:20px;background:var(--p50);color:var(--p600);font-weight:500;border:1px solid var(--p100);display:flex;align-items:center;gap:5px;}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 16px;border-radius:var(--radius-md);font-size:13px;font-family:inherit;cursor:pointer;transition:all 0.15s;border:1px solid transparent;white-space:nowrap;}
+.btn-ghost{background:transparent;color:var(--text-secondary);border-color:var(--border-md);}
+.btn-ghost:hover{background:var(--g50);color:var(--text-primary);}
+.btn-primary{background:var(--p600);color:#fff;border-color:var(--p600);}
+.btn-primary:hover{background:var(--p500);}
+.btn-sm{padding:5px 12px;font-size:12px;}
+.btn-picker{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:var(--radius-md);font-size:13px;font-family:inherit;cursor:pointer;transition:all 0.15s;border:1px solid var(--border-md);background:var(--white);color:var(--text-primary);white-space:nowrap;}
+.btn-picker:hover{border-color:var(--p100);background:var(--p50);color:var(--p600);}
+.btn-picker.has-sel{border-color:var(--p100);background:var(--p50);color:var(--p600);}
+
+/* Date range */
+.date-range{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary);background:var(--g50);border:1px solid var(--border-md);border-radius:var(--radius-md);padding:6px 12px;}
+.date-range input{border:none;background:transparent;font-size:12px;font-family:inherit;color:var(--text-primary);width:90px;cursor:pointer;}
+.date-range input:focus{outline:none;}
+
+/* Content — flex column, no overflow: card ยืดเต็มพื้นที่ */
+.content-area{flex:1;overflow:hidden;padding:20px;display:flex;flex-direction:column;gap:16px;min-height:0;}
+.content-area > :not(.card){flex-shrink:0;}
+.card{background:var(--white);border-radius:var(--radius-lg);border:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;flex:1;min-height:0;}
+.card-head{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;flex-shrink:0;}
+.card-head i{color:var(--p600);font-size:16px;}
+
+/* Table scroll — flex:1, fills remaining height inside card */
+.table-scroll{flex:1;overflow:auto;min-height:0;}
+table{width:100%;border-collapse:collapse;font-size:13px;min-width:850px;}
+thead th{position:sticky;top:0;z-index:2;padding:10px 16px;text-align:left;font-size:11px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;background:var(--g50);border-bottom:1px solid var(--border);white-space:nowrap;}
+tbody td{padding:11px 16px;border-bottom:1px solid var(--border);vertical-align:middle;}
+tbody tr:last-child td{border-bottom:none;}
+tbody tr:hover td{background:var(--g50);}
+th.num,td.num{text-align:right;}
+
+/* Pagination bar */
+.pagi-bar{display:flex;align-items:center;gap:0;padding:10px 16px;border-top:1px solid var(--border);flex-shrink:0;flex-wrap:wrap;row-gap:6px;}
+.pagi-info{font-size:12px;color:var(--text-muted);margin-right:12px;white-space:nowrap;}
+.pagi-pages{display:flex;gap:0;}
+.pagi-btn{min-width:32px;height:30px;padding:0 6px;border:1px solid var(--border-md);border-right:none;background:var(--white);font-size:12px;font-family:inherit;color:var(--text-secondary);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all 0.12s;}
+.pagi-btn:first-child{border-radius:var(--radius-sm) 0 0 var(--radius-sm);}
+.pagi-btn:last-child{border-right:1px solid var(--border-md);border-radius:0 var(--radius-sm) var(--radius-sm) 0;}
+.pagi-btn:hover:not(.active):not(.disabled){background:var(--g50);color:var(--text-primary);}
+.pagi-btn.active{background:var(--p600);color:#fff;border-color:var(--p600);font-weight:500;}
+.pagi-btn.disabled{opacity:0.35;cursor:not-allowed;}
+.pagi-btn.ellipsis{cursor:default;pointer-events:none;}
+
+/* Toolbar */
+.toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.search-wrap{position:relative;min-width:180px;max-width:240px;}
+.search-wrap i{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:16px;pointer-events:none;}
+.search-wrap input{width:100%;padding:7px 12px 7px 34px;font-size:13px;font-family:inherit;border:1px solid var(--border-md);border-radius:var(--radius-md);background:var(--white);color:var(--text-primary);}
+.search-wrap input:focus{outline:none;border-color:var(--p600);box-shadow:0 0 0 3px rgba(83,74,183,0.08);}
+.sel{padding:7px 12px;font-size:13px;font-family:inherit;border:1px solid var(--border-md);border-radius:var(--radius-md);background:var(--white);color:var(--text-primary);cursor:pointer;}
+.sel:focus{outline:none;border-color:var(--p600);}
+
+/* KPI Cards */
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;}
+.kpi-card{background:var(--white);border-radius:var(--radius-lg);border:1px solid var(--border);padding:18px 20px;position:relative;overflow:hidden;}
+.kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:var(--radius-lg) var(--radius-lg) 0 0;}
+.kpi-primary::before{background:var(--p600);}
+.kpi-warn::before{background:var(--warn);}
+.kpi-success::before{background:var(--success);}
+.kpi-info::before{background:var(--info);}
+.kpi-label{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;display:flex;align-items:center;gap:5px;margin-bottom:8px;}
+.kpi-num{font-size:24px;font-weight:500;line-height:1.2;margin-bottom:4px;}
+.kpi-primary .kpi-num{color:var(--p600);}
+.kpi-warn .kpi-num{color:var(--warn);}
+.kpi-success .kpi-num{color:var(--success);}
+.kpi-info .kpi-num{color:var(--info);}
+.kpi-sub{font-size:11px;color:var(--text-muted);}
+.kpi-chip{display:inline-flex;align-items:center;gap:3px;font-size:11px;padding:2px 8px;border-radius:20px;margin-top:5px;}
+.chip-up{background:var(--success-bg);color:var(--success);}
+.chip-dn{background:var(--danger-bg);color:var(--danger);}
+.kpi-icon{position:absolute;right:16px;top:16px;font-size:22px;opacity:0.12;}
+.kpi-primary .kpi-icon{color:var(--p600);}
+.kpi-warn .kpi-icon{color:var(--warn);}
+.kpi-success .kpi-icon{color:var(--success);}
+.kpi-info .kpi-icon{color:var(--info);}
+/* Sortable column headers */
+th.sortable{cursor:pointer;user-select:none;white-space:nowrap;}
+th.sortable:hover{color:var(--p600);background:var(--p50);}
+th.sort-active{color:var(--p600);background:var(--p50);}
+.sort-icon{display:inline-flex;flex-direction:column;gap:1px;vertical-align:middle;margin-left:4px;opacity:0.3;}
+.sort-icon.asc .arr-up,.sort-icon.desc .arr-dn{opacity:1;color:var(--p600);}
+.arr-up::before{content:'▲';font-size:7px;line-height:1;}
+.arr-dn::before{content:'▼';font-size:7px;line-height:1;}
+
+/* Chart grid */
+.chart-grid{display:grid;grid-template-columns:2fr 1fr 1fr;gap:16px;}
+.chart-box{background:var(--white);border-radius:var(--radius-lg);border:1px solid var(--border);padding:16px 20px;}
+.chart-title{font-size:13px;font-weight:500;margin-bottom:12px;display:flex;align-items:center;gap:6px;}
+.chart-title i{color:var(--p600);font-size:15px;}
+.chart-canvas-wrap{position:relative;height:200px;}
+
+/* Donut legend */
+.donut-legend{display:flex;flex-direction:column;gap:5px;margin-top:8px;}
+.legend-row{display:flex;align-items:center;gap:8px;font-size:11px;}
+.legend-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.legend-lbl{flex:1;color:var(--text-secondary);}
+.legend-val{font-weight:500;color:var(--text-primary);}
+.legend-pct{font-size:10px;color:var(--text-muted);min-width:30px;text-align:right;}
+
+.rank-num{width:20px;height:20px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;}
+.rank-1{background:var(--p600);color:#fff;}
+.rank-2{background:#6B62C9;color:#fff;}
+.rank-3{background:var(--p100);color:var(--p600);}
+.rank-n{background:var(--g100);color:var(--text-muted);}
+
+/* Product cell */
+.prod-cell{display:flex;align-items:center;gap:9px;}
+.prod-icon{width:30px;height:30px;border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;}
+
+/* Margin badge */
+.margin-ok{color:var(--success);font-weight:500;}
+.margin-mid{color:var(--warn);font-weight:500;}
+.margin-low{color:var(--danger);font-weight:500;}
+.margin-bar-bg{height:4px;border-radius:2px;background:var(--g100);width:52px;display:inline-block;vertical-align:middle;margin-left:5px;overflow:hidden;}
+
+/* Footer */
+.footer{height:var(--footer-h);background:var(--white);border-top:1px solid var(--border);display:flex;align-items:center;padding:0 24px;flex-shrink:0;gap:0;}
+.footer-stat{display:flex;flex-direction:column;align-items:center;padding:0 18px;border-right:1px solid var(--border);}
+.footer-stat:last-of-type{border-right:none;}
+.footer-num{font-size:19px;font-weight:500;line-height:1.2;}
+.footer-lbl{font-size:10px;color:var(--text-muted);margin-top:1px;text-transform:uppercase;letter-spacing:0.03em;}
+.footer-spacer{flex:1;}
+
+/* Modal */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);align-items:center;justify-content:center;z-index:200;backdrop-filter:blur(2px);}
+.modal-overlay.open{display:flex;}
+.modal{background:var(--white);border-radius:var(--radius-lg);border:1px solid var(--border);box-shadow:0 8px 32px rgba(0,0,0,0.15);animation:modal-in 0.18s ease;display:flex;flex-direction:column;overflow:hidden;}
+@keyframes modal-in{from{opacity:0;transform:translateY(-10px) scale(0.98);}to{opacity:1;transform:none;}}
+.modal-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+.modal-title{font-size:15px;font-weight:500;}
+.modal-footer{padding:14px 20px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-shrink:0;}
+.icon-btn{width:30px;height:30px;border-radius:var(--radius-sm);border:1px solid var(--border-md);background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:15px;color:var(--text-secondary);}
+.icon-btn:hover{background:var(--g50);}
+
+/* Product Picker */
+.pd-modal{width:680px;max-width:96vw;height:88vh;max-height:640px;}
+.pd-toolbar{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;flex-shrink:0;}
+.pd-search{position:relative;flex:1;min-width:160px;}
+.pd-search i{position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:15px;pointer-events:none;}
+.pd-search input{width:100%;padding:6px 10px 6px 30px;font-size:13px;font-family:inherit;border:1px solid var(--border-md);border-radius:var(--radius-md);background:var(--white);color:var(--text-primary);}
+.pd-search input:focus{outline:none;border-color:var(--p600);}
+.pd-sel-info{font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:4px;white-space:nowrap;}
+.pd-sel-info b{color:var(--p600);}
+.pd-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;padding:12px 16px;overflow-y:auto;flex:1;}
+.pd-item{border:1px solid var(--border);border-radius:var(--radius-md);padding:10px 12px;cursor:pointer;display:flex;align-items:center;gap:10px;transition:all 0.12s;background:var(--white);position:relative;}
+.pd-item:hover{border-color:var(--p100);background:var(--p50);}
+.pd-item.selected{border-color:var(--p600);background:var(--p50);}
+.pd-item-icon{width:32px;height:32px;border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;}
+.pd-item-name{font-size:12px;font-weight:500;color:var(--text-primary);line-height:1.3;}
+.pd-item-sku{font-size:10px;color:var(--text-muted);margin-top:2px;}
+.pd-check{position:absolute;top:6px;right:6px;width:16px;height:16px;border-radius:50%;background:var(--p600);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity 0.12s;}
+.pd-item.selected .pd-check{opacity:1;}
+.pd-check i{font-size:10px;color:#fff;}
+.pd-pagination{padding:10px 16px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;font-size:12px;color:var(--text-secondary);}
+.pd-page-btns{display:flex;gap:4px;}
+.pd-page-btn{width:28px;height:28px;border-radius:var(--radius-sm);border:1px solid var(--border-md);background:transparent;cursor:pointer;font-size:12px;font-family:inherit;color:var(--text-secondary);display:flex;align-items:center;justify-content:center;}
+.pd-page-btn:hover{background:var(--g50);}
+.pd-page-btn.active{background:var(--p600);color:#fff;border-color:var(--p600);}
+.pd-page-btn:disabled{opacity:0.35;cursor:not-allowed;}
+.pd-empty{grid-column:1/-1;text-align:center;padding:40px;color:var(--text-muted);font-size:13px;}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:5px;height:5px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--g100);border-radius:4px;}
+::-webkit-scrollbar-thumb:hover{background:#C4C4D4;}
+
+/* Toast */
+.toast-wrap{position:fixed;bottom:70px;right:20px;display:flex;flex-direction:column;gap:8px;z-index:300;pointer-events:none;}
+.toast{padding:10px 16px;border-radius:var(--radius-md);font-size:13px;display:flex;align-items:center;gap:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);animation:toast-in 0.2s ease;pointer-events:none;color:#fff;}
+.toast.success{background:var(--success);}
+.toast.info{background:var(--p600);}
+@keyframes toast-in{from{opacity:0;transform:translateX(20px);}to{opacity:1;transform:none;}}
+/* Top5 custom bar list */
+.top5-list{display:flex;flex-direction:column;gap:10px;padding:12px 16px;overflow-y:auto;}
+.top5-item{display:flex;flex-direction:column;gap:5px;}
+.top5-item-top{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.top5-item-name{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:500;color:var(--text-primary);min-width:0;}
+.top5-item-name span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.top5-item-rev{font-size:11px;color:var(--text-secondary);white-space:nowrap;flex-shrink:0;}
+.top5-item-bar-row{display:flex;align-items:center;gap:8px;}
+.top5-bar-bg{flex:1;height:8px;border-radius:4px;background:var(--g100);overflow:hidden;}
+.top5-bar-fill{height:100%;border-radius:4px;background:var(--success);transition:width 0.4s ease;}
+.top5-profit{font-size:12px;font-weight:500;color:var(--success);white-space:nowrap;flex-shrink:0;min-width:70px;text-align:right;}
+/* Group badge in table */
+.group-label{display:inline-flex;align-items:center;gap:6px;}
+.group-icon{width:28px;height:28px;border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;}
+.group-row td{background:var(--g50);font-weight:500;}
+.subtotal-row td{background:var(--p50);font-weight:600;font-size:12px;color:var(--p600);}
+</style>
+</head>
+<body>
+<div class="shell">
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="topbar-icon"><i class="ti ti-chart-bar" aria-hidden="true"></i></div>
+  <div class="topbar-center">
+    <div class="topbar-title">รายงานกำไร</div>
+    <div class="topbar-sub">Sales &amp; Profit Report — FIFO Costing</div>
+  </div>
+  <span class="branch-badge"><i class="ti ti-map-pin" style="font-size:12px;" aria-hidden="true"></i>สาขา: ลาดพร้าว</span>
+</div>
+
+<!-- CONTENT -->
+<div class="content-area">
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <button class="btn-picker" id="btn-pick-prod" onclick="openPicker()">
+      <i class="ti ti-package" aria-hidden="true" style="font-size:14px;"></i>
+      <span id="lbl-pick-prod">ทุกสินค้า</span>
+    </button>
+    <div class="search-wrap">
+      <i class="ti ti-search" aria-hidden="true"></i>
+      <input type="text" id="q-search" placeholder="ค้นหาสินค้า / บิล..." oninput="applyFilters()">
+    </div>
+    <select class="sel" id="q-groupby" onchange="applyFilters()">
+      <option value="bill">จัดกลุ่ม: รายบิล</option>
+      <option value="cat">จัดกลุ่ม: หมวดหมู่</option>
+      <option value="product">จัดกลุ่ม: สินค้า</option>
+      <option value="customer">จัดกลุ่ม: ลูกค้า</option>
+    </select>
+    <select class="sel" id="q-cat" onchange="applyFilters()">
+      <option value="">ทุกหมวดหมู่</option>
+    </select>
+    <div class="date-range">
+      <i class="ti ti-calendar" aria-hidden="true" style="font-size:14px;"></i>
+      <input type="date" id="q-from" value="2026-05-18" onchange="onDateChange()">
+      <span>—</span>
+      <input type="date" id="q-to" value="2026-05-24" onchange="onDateChange()">
+    </div>
+    <select class="sel" id="q-preset" onchange="applyPreset()">
+      <option value="">เลือกช่วงเวลา</option>
+      <option value="today">วันนี้</option>
+      <option value="yesterday">เมื่อวาน</option>
+      <option value="7d">7 วันล่าสุด</option>
+      <option value="30d">30 วันล่าสุด</option>
+      <option value="thismonth">เดือนนี้</option>
+      <option value="lastmonth">เดือนก่อน</option>
+      <option value="1y">1 ปีล่าสุด</option>
+    </select>
+    <button class="btn btn-ghost btn-sm" onclick="exportCSV()" style="margin-left:auto;">
+      <i class="ti ti-download" aria-hidden="true"></i> Export CSV
+    </button>
+  </div>
+
+  <!-- KPI Cards -->
+  <div class="kpi-grid" id="kpi-grid"></div>
+
+  <!-- Charts row: Bar | Donut | Top5 -->
+  <div class="chart-grid">
+    <div class="chart-box">
+      <div class="chart-title"><i class="ti ti-chart-bar" aria-hidden="true"></i><span id="bar-chart-title">ยอดขาย vs กำไร (รายวัน)</span></div>
+      <div class="chart-canvas-wrap"><canvas id="bar-chart"></canvas></div>
+    </div>
+    <div class="chart-box">
+      <div class="chart-title"><i class="ti ti-chart-donut" aria-hidden="true"></i>สัดส่วนกำไรตามหมวด</div>
+      <div class="chart-canvas-wrap"><canvas id="donut-chart"></canvas></div>
+      <div class="donut-legend" id="donut-legend"></div>
+    </div>
+    <div class="chart-box" style="overflow:hidden;display:flex;flex-direction:column;">
+      <div class="chart-title"><i class="ti ti-crown" aria-hidden="true"></i>Top 5 ลูกค้ากำไรสูงสุด</div>
+      <div class="top5-list" id="top5-list"></div>
+    </div>
+  </div>
+
+  <!-- Sales Table -->
+  <div class="card">
+    <div class="card-head">
+      <i class="ti ti-receipt" aria-hidden="true"></i>
+      <span id="table-head-label">ประวัติการขาย</span>
+      <span style="margin-left:4px;font-size:12px;color:var(--text-muted);font-weight:400;" id="row-count"></span>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead id="sales-thead">
+          <tr>
+            <th>วันที่/เวลา</th><th>บิลอ้างอิง</th><th>ลูกค้า</th><th>สินค้า</th>
+            <th class="num">Qty</th><th class="num">ยอดขาย</th>
+            <th class="num">COGS (FIFO)</th><th class="num">กำไร</th><th class="num">Margin %</th>
+          </tr>
+        </thead>
+        <tbody id="sales-tbody"></tbody>
+      </table>
+    </div>
+    <div class="pagi-bar" id="pagi-bar"></div>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<div class="footer">
+  <div class="footer-stat">
+    <span class="footer-num" id="f-bills" style="color:var(--p600);">0</span>
+    <span class="footer-lbl">จำนวนบิล</span>
+  </div>
+  <div class="footer-stat">
+    <span class="footer-num" id="f-revenue">฿0</span>
+    <span class="footer-lbl">ยอดขายรวม</span>
+  </div>
+  <div class="footer-stat">
+    <span class="footer-num" id="f-cogs" style="color:var(--warn);">฿0</span>
+    <span class="footer-lbl">ต้นทุนรวม</span>
+  </div>
+  <div class="footer-stat">
+    <span class="footer-num" id="f-profit" style="color:var(--success);">฿0</span>
+    <span class="footer-lbl">กำไรรวม</span>
+  </div>
+  <div class="footer-stat">
+    <span class="footer-num" id="f-margin" style="color:var(--info);">0%</span>
+    <span class="footer-lbl">Margin เฉลี่ย</span>
+  </div>
+  <div class="footer-spacer"></div>
+  <span style="font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:5px;">
+    <i class="ti ti-clock" aria-hidden="true"></i><span id="footer-clock"></span>
+  </span>
+</div>
+
+</div><!-- shell -->
+
+<!-- Product Picker Modal -->
+<div class="modal-overlay" id="picker-modal">
+  <div class="modal pd-modal">
+    <div class="modal-header">
+      <span class="modal-title">เลือกสินค้า</span>
+      <button class="icon-btn" onclick="closePicker()"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="pd-toolbar">
+      <select class="sel" id="pd-cat" onchange="pdFilter()" style="font-size:13px;">
+        <option value="">ทุกหมวดหมู่</option>
+      </select>
+      <div class="pd-search">
+        <i class="ti ti-search" aria-hidden="true"></i>
+        <input type="text" id="pd-search" placeholder="ค้นหาชื่อ / SKU..." oninput="pdFilter()">
+      </div>
+      <span class="pd-sel-info">เลือกแล้ว: <b id="pd-sel-count">0</b> รายการ</span>
+    </div>
+    <div class="pd-grid" id="pd-grid"></div>
+    <div class="pd-pagination">
+      <span id="pd-page-info"></span>
+      <div class="pd-page-btns" id="pd-page-btns"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost btn-sm" onclick="pdClearAll()">
+        <i class="ti ti-x" aria-hidden="true"></i> ล้างทั้งหมด
+      </button>
+      <div class="footer-spacer"></div>
+      <button class="btn btn-ghost" onclick="closePicker()">ยกเลิก</button>
+      <button class="btn btn-primary" onclick="pdConfirm()">
+        <i class="ti ti-check" aria-hidden="true"></i> ยืนยัน
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-wrap" id="toast-wrap"></div>
+
+<script>
+// ─── CONSTANTS ────────────────────────────────────────────────────────────────
+const TODAY     = '2026-05-24';
+const CATS      = ['อาหารสุนัข','อาหารแมว','ของเล่น','ยาและวิตามิน','อุปกรณ์','ทรายแมว'];
+const CAT_COLORS= ['#534AB7','#1D9E75','#EF9F27','#E24B4A','#185FA5','#D4537E'];
+
+const PRODUCTS = [
+  {id:1, name:'Royal Canin Adult 3kg',   sku:'RC-A3',  cat:'อาหารสุนัข', icon:'🐕', iconBg:'#EEEDFE'},
+  {id:2, name:'Hills Science Diet Cat',  sku:'HS-C1',  cat:'อาหารแมว',   icon:'🐈', iconBg:'#E1F5EE'},
+  {id:3, name:'Whiskas Tuna 85g (24pc)', sku:'WK-T24', cat:'อาหารแมว',   icon:'🐟', iconBg:'#E1F5EE'},
+  {id:4, name:'Purina Pro Plan Puppy',   sku:'PP-PUP', cat:'อาหารสุนัข', icon:'🐶', iconBg:'#EEEDFE'},
+  {id:5, name:'Pedigree Dentastix',      sku:'PD-DX',  cat:'อาหารสุนัข', icon:'🦴', iconBg:'#EEEDFE'},
+  {id:6, name:'Cat Scratcher Deluxe',    sku:'CS-DX',  cat:'ของเล่น',    icon:'🧸', iconBg:'#FAEEDA'},
+  {id:7, name:'Frontline Plus Dog L',    sku:'FL-DL',  cat:'ยาและวิตามิน',icon:'💊', iconBg:'#FCEBEB'},
+  {id:8, name:'Catit Water Fountain',    sku:'CW-F1',  cat:'อุปกรณ์',    icon:'💧', iconBg:'#E6F1FB'},
+  {id:9, name:'Petsafe Clicker',         sku:'PC-CL',  cat:'ของเล่น',    icon:'🔔', iconBg:'#FAEEDA'},
+  {id:10,name:'Tidy Cats Clumping 8kg',  sku:'TC-C8',  cat:'ทรายแมว',    icon:'🪣', iconBg:'#F1EFE8'},
+  {id:11,name:'NexGard Chewable M',      sku:'NG-M',   cat:'ยาและวิตามิน',icon:'💊', iconBg:'#FCEBEB'},
+  {id:12,name:'Rolf Club 3D Collar Cat', sku:'RC-CC',  cat:'อุปกรณ์',    icon:'🎀', iconBg:'#FBEAF0'},
+];
+
+const CUSTOMERS = ['คุณมาลี สุขใจ','คุณวิชัย เก่งมาก','คุณสุดา เจริญ','คุณอนุชา บุญมา','คุณพรทิพย์ สง่างาม','คุณณัฐ วงศ์ดี','คุณสมหมาย รักดี','สมาชิกทั่วไป'];
+
+const SALES_RAW = [
+  // 18 May
+  {date:'2026-05-18',time:'09:15',bill:'TW-0561',prodId:1, qty:2, salePrice:480, fifoCost:315, customer:'คุณมาลี สุขใจ'},
+  {date:'2026-05-18',time:'09:15',bill:'TW-0561',prodId:5, qty:3, salePrice:75,  fifoCost:55,  customer:'คุณมาลี สุขใจ'},
+  {date:'2026-05-18',time:'11:30',bill:'TW-0562',prodId:2, qty:1, salePrice:360, fifoCost:280, customer:'คุณวิชัย เก่งมาก'},
+  {date:'2026-05-18',time:'11:30',bill:'TW-0562',prodId:9, qty:4, salePrice:95,  fifoCost:75,  customer:'คุณวิชัย เก่งมาก'},
+  {date:'2026-05-18',time:'14:00',bill:'TW-0563',prodId:10,qty:2, salePrice:230, fifoCost:182, customer:'คุณสุดา เจริญ'},
+  // 19 May
+  {date:'2026-05-19',time:'08:50',bill:'TW-0564',prodId:4, qty:1, salePrice:520, fifoCost:405, customer:'คุณอนุชา บุญมา'},
+  {date:'2026-05-19',time:'08:50',bill:'TW-0564',prodId:7, qty:2, salePrice:250, fifoCost:190, customer:'คุณอนุชา บุญมา'},
+  {date:'2026-05-19',time:'10:20',bill:'TW-0565',prodId:3, qty:5, salePrice:120, fifoCost:92,  customer:'คุณพรทิพย์ สง่างาม'},
+  {date:'2026-05-19',time:'13:45',bill:'TW-0566',prodId:6, qty:1, salePrice:220, fifoCost:180, customer:'คุณณัฐ วงศ์ดี'},
+  {date:'2026-05-19',time:'15:30',bill:'TW-0567',prodId:11,qty:1, salePrice:310, fifoCost:240, customer:'คุณมาลี สุขใจ'},
+  // 20 May
+  {date:'2026-05-20',time:'09:00',bill:'TW-0568',prodId:5, qty:5, salePrice:75,  fifoCost:55,  customer:'คุณสมหมาย รักดี'},
+  {date:'2026-05-20',time:'09:00',bill:'TW-0568',prodId:1, qty:1, salePrice:480, fifoCost:320, customer:'คุณสมหมาย รักดี'},
+  {date:'2026-05-20',time:'11:00',bill:'TW-0569',prodId:8, qty:1, salePrice:820, fifoCost:650, customer:'คุณวิชัย เก่งมาก'},
+  {date:'2026-05-20',time:'14:30',bill:'TW-0570',prodId:12,qty:2, salePrice:160, fifoCost:120, customer:'คุณสุดา เจริญ'},
+  {date:'2026-05-20',time:'16:00',bill:'TW-0571',prodId:11,qty:3, salePrice:310, fifoCost:240, customer:'คุณมาลี สุขใจ'},
+  // 21 May
+  {date:'2026-05-21',time:'10:10',bill:'TW-0572',prodId:2, qty:2, salePrice:360, fifoCost:285, customer:'คุณอนุชา บุญมา'},
+  {date:'2026-05-21',time:'10:10',bill:'TW-0572',prodId:3, qty:3, salePrice:120, fifoCost:95,  customer:'คุณอนุชา บุญมา'},
+  {date:'2026-05-21',time:'12:30',bill:'TW-0573',prodId:4, qty:2, salePrice:520, fifoCost:412, customer:'คุณพรทิพย์ สง่างาม'},
+  {date:'2026-05-21',time:'15:00',bill:'TW-0574',prodId:9, qty:6, salePrice:95,  fifoCost:75,  customer:'สมาชิกทั่วไป'},
+  {date:'2026-05-21',time:'17:00',bill:'TW-0575',prodId:6, qty:2, salePrice:220, fifoCost:180, customer:'คุณณัฐ วงศ์ดี'},
+  // 22 May
+  {date:'2026-05-22',time:'09:30',bill:'TW-0576',prodId:7, qty:3, salePrice:250, fifoCost:195, customer:'คุณวิชัย เก่งมาก'},
+  {date:'2026-05-22',time:'09:30',bill:'TW-0576',prodId:10,qty:3, salePrice:230, fifoCost:185, customer:'คุณวิชัย เก่งมาก'},
+  {date:'2026-05-22',time:'11:45',bill:'TW-0577',prodId:1, qty:3, salePrice:480, fifoCost:320, customer:'คุณมาลี สุขใจ'},
+  {date:'2026-05-22',time:'14:00',bill:'TW-0578',prodId:8, qty:1, salePrice:820, fifoCost:645, customer:'คุณสุดา เจริญ'},
+  {date:'2026-05-22',time:'16:20',bill:'TW-0579',prodId:5, qty:2, salePrice:75,  fifoCost:55,  customer:'สมาชิกทั่วไป'},
+  // 23 May
+  {date:'2026-05-23',time:'08:40',bill:'TW-0580',prodId:11,qty:2, salePrice:310, fifoCost:240, customer:'คุณอนุชา บุญมา'},
+  {date:'2026-05-23',time:'08:40',bill:'TW-0580',prodId:7, qty:1, salePrice:250, fifoCost:195, customer:'คุณอนุชา บุญมา'},
+  {date:'2026-05-23',time:'10:30',bill:'TW-0581',prodId:12,qty:3, salePrice:160, fifoCost:120, customer:'คุณพรทิพย์ สง่างาม'},
+  {date:'2026-05-23',time:'13:00',bill:'TW-0581',prodId:2, qty:1, salePrice:360, fifoCost:280, customer:'คุณพรทิพย์ สง่างาม'},
+  {date:'2026-05-23',time:'15:45',bill:'TW-0582',prodId:3, qty:6, salePrice:120, fifoCost:92,  customer:'คุณณัฐ วงศ์ดี'},
+  // 24 May
+  {date:'2026-05-24',time:'09:30',bill:'TW-0583',prodId:4, qty:2, salePrice:520, fifoCost:412, customer:'คุณมาลี สุขใจ'},
+  {date:'2026-05-24',time:'09:30',bill:'TW-0583',prodId:1, qty:5, salePrice:480, fifoCost:320, customer:'คุณมาลี สุขใจ'},
+  {date:'2026-05-24',time:'10:45',bill:'TW-0584',prodId:6, qty:2, salePrice:220, fifoCost:180, customer:'คุณสมหมาย รักดี'},
+  {date:'2026-05-24',time:'11:20',bill:'TW-0585',prodId:10,qty:4, salePrice:230, fifoCost:182, customer:'คุณวิชัย เก่งมาก'},
+  {date:'2026-05-24',time:'14:00',bill:'TW-0586',prodId:9, qty:3, salePrice:95,  fifoCost:75,  customer:'คุณสุดา เจริญ'},
+  {date:'2026-05-24',time:'16:30',bill:'TW-0587',prodId:12,qty:1, salePrice:160, fifoCost:120, customer:'สมาชิกทั่วไป'},
+];
+
+const SALES = SALES_RAW.map((r,i)=>{
+  const p=PRODUCTS.find(x=>x.id===r.prodId);
+  const revenue=r.qty*r.salePrice, cogs=r.qty*r.fifoCost;
+  const profit=revenue-cogs, margin=revenue>0?profit/revenue*100:0;
+  return {...r,id:i+1,prod:p,revenue,cogs,profit,margin};
+});
+
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
+const fmt    = n=>n.toLocaleString('th-TH');
+const fmtB   = n=>'฿'+n.toLocaleString('th-TH',{minimumFractionDigits:0,maximumFractionDigits:0});
+const fmtPct = n=>n.toFixed(1)+'%';
+const getVal = id=>{const el=document.getElementById(id);return el?el.value:'';};
+const dateAdd= (d,days)=>{const dt=new Date(d);dt.setDate(dt.getDate()+days);return dt.toISOString().slice(0,10);};
+
+function dateDiffDays(a,b){return Math.round((new Date(b)-new Date(a))/(86400000));}
+function marginClass(m){return m>=20?'margin-ok':m>=10?'margin-mid':'margin-low';}
+function marginBarColor(m){return m>=20?'var(--success)':m>=10?'var(--warn)':'var(--danger)';}
+
+// ─── DATE PRESET ─────────────────────────────────────────────────────────────
+const PRESET_LABELS={
+  today:'ยอดขาย vs กำไร (รายวัน — วันนี้)',
+  yesterday:'ยอดขาย vs กำไร (รายวัน — เมื่อวาน)',
+  '7d':'ยอดขาย vs กำไร (7 วันล่าสุด — รายวัน)',
+  '30d':'ยอดขาย vs กำไร (30 วันล่าสุด — รายวัน)',
+  thismonth:'ยอดขาย vs กำไร (เดือนนี้ — รายวัน)',
+  lastmonth:'ยอดขาย vs กำไร (เดือนที่แล้ว — รายวัน)',
+  '1y':'ยอดขาย vs กำไร (1 ปีล่าสุด — รายเดือน)',
+};
+
+function applyPreset(){
+  const p=getVal('q-preset');
+  if(!p) return;
+  const ref=new Date(TODAY);
+  let from,to=TODAY;
+  if(p==='today'){from=TODAY;}
+  else if(p==='yesterday'){from=dateAdd(TODAY,-1);to=dateAdd(TODAY,-1);}
+  else if(p==='7d'){from=dateAdd(TODAY,-6);}
+  else if(p==='30d'){from=dateAdd(TODAY,-29);}
+  else if(p==='thismonth'){from=`${TODAY.slice(0,7)}-01`;}
+  else if(p==='lastmonth'){
+    const d=new Date(TODAY); d.setDate(1); d.setMonth(d.getMonth()-1);
+    from=d.toISOString().slice(0,10);
+    const last=new Date(d.getFullYear(),d.getMonth()+1,0);
+    to=last.toISOString().slice(0,10);
+  }
+  else if(p==='1y'){from=dateAdd(TODAY,-364);}
+  document.getElementById('q-from').value=from;
+  document.getElementById('q-to').value=to;
+  applyFilters(p);
+}
+
+function onDateChange(){
+  document.getElementById('q-preset').value='';
+  applyFilters('');
+}
+
+// ─── FILTER ───────────────────────────────────────────────────────────────────
+let pickerSelected=new Set();
+
+function getFiltered(){
+  const q=getVal('q-search').toLowerCase().trim();
+  const cat=getVal('q-cat');
+  const from=getVal('q-from'), to=getVal('q-to');
+  return SALES.filter(r=>{
+    const mq=!q||(r.prod.name+r.prod.sku+r.bill+r.customer).toLowerCase().includes(q);
+    const mc=!cat||r.prod.cat===cat;
+    const md=(!from||r.date>=from)&&(!to||r.date<=to);
+    const mp=pickerSelected.size===0||pickerSelected.has(r.prodId);
+    return mq&&mc&&md&&mp;
+  });
+}
+
+// ─── APPLY ALL ────────────────────────────────────────────────────────────────
+let barChartInst=null,donutChartInst=null;
+let _currentPage=1;
+const PAGE_SIZE=10;
+let _lastFullData=[];  // full filtered array — KPI/charts always use this
+
+function applyFilters(preset=''){
+  const data=getFiltered();
+  _lastFullData=data;
+  _currentPage=1;          // reset to page 1 on any filter change
+  renderKPI(data);          // KPI from full data
+  renderBarChart(data,preset||getVal('q-preset'));  // chart from full data
+  renderDonut(data);        // chart from full data
+  renderTop5(data);         // chart from full data
+  updateFooter(data);       // footer from full data
+  renderTable(data);        // table handles pagination internally
+}
+
+function goPage(n){
+  const pages=Math.ceil(_lastFullData.length/PAGE_SIZE)||1;
+  _currentPage=Math.max(1,Math.min(n,pages));
+  renderTable(_lastFullData);
+}
+
+// ─── PAGINATION RENDERER ──────────────────────────────────────────────────────
+function renderPagination(total, page){
+  const pages=Math.max(1,Math.ceil(total/PAGE_SIZE));
+  const bar=document.getElementById('pagi-bar');
+  if(pages<=1){ bar.innerHTML=''; return; }
+
+  const start=(page-1)*PAGE_SIZE+1;
+  const end=Math.min(page*PAGE_SIZE,total);
+
+  // Build page number list with ellipsis: always show first 2, last 2, and ±2 around current
+  const show=new Set([1,2,pages-1,pages,page-2,page-1,page,page+1,page+2].filter(p=>p>=1&&p<=pages));
+  const nums=[...show].sort((a,b)=>a-b);
+
+  let btns=[];
+  // Prev
+  btns.push(`<button class="pagi-btn${page===1?' disabled':''}" onclick="goPage(${page-1})"><i class="ti ti-chevron-left" style="font-size:12px;"></i></button>`);
+  // Numbers + ellipsis
+  let prev=0;
+  nums.forEach(n=>{
+    if(prev && n-prev>1) btns.push(`<button class="pagi-btn ellipsis">…</button>`);
+    btns.push(`<button class="pagi-btn${n===page?' active':''}" onclick="goPage(${n})">${n}</button>`);
+    prev=n;
+  });
+  // Next
+  btns.push(`<button class="pagi-btn${page===pages?' disabled':''}" onclick="goPage(${page+1})"><i class="ti ti-chevron-right" style="font-size:12px;"></i></button>`);
+
+  bar.innerHTML=`<span class="pagi-info">แสดง ${start}–${end} จาก ${total} รายการ</span><div class="pagi-pages">${btns.join('')}</div>`;
+}
+
+// ─── KPI ─────────────────────────────────────────────────────────────────────
+function renderKPI(data){
+  const revenue=data.reduce((a,r)=>a+r.revenue,0);
+  const cogs=data.reduce((a,r)=>a+r.cogs,0);
+  const profit=data.reduce((a,r)=>a+r.profit,0);
+  const margin=revenue>0?profit/revenue*100:0;
+  const bills=new Set(data.map(r=>r.bill)).size;
+  document.getElementById('kpi-grid').innerHTML=`
+    <div class="kpi-card kpi-primary">
+      <i class="kpi-icon ti ti-coin" aria-hidden="true"></i>
+      <div class="kpi-label"><i class="ti ti-coin" style="font-size:13px;" aria-hidden="true"></i>ยอดขายรวม</div>
+      <div class="kpi-num">${fmtB(revenue)}</div>
+      <div class="kpi-sub">${bills} บิล · ${data.length} รายการ</div>
+      <span class="kpi-chip chip-up"><i class="ti ti-arrow-up" aria-hidden="true"></i>+12.4% vs เดือนก่อน</span>
+    </div>
+    <div class="kpi-card kpi-warn">
+      <i class="kpi-icon ti ti-box" aria-hidden="true"></i>
+      <div class="kpi-label"><i class="ti ti-box" style="font-size:13px;" aria-hidden="true"></i>ต้นทุน FIFO</div>
+      <div class="kpi-num">${fmtB(cogs)}</div>
+      <div class="kpi-sub">COGS จากการตัด Lot FIFO</div>
+      <span class="kpi-chip" style="background:var(--warn-bg);color:var(--warn);">${fmtPct(revenue>0?cogs/revenue*100:0)} ของยอดขาย</span>
+    </div>
+    <div class="kpi-card kpi-success">
+      <i class="kpi-icon ti ti-trending-up" aria-hidden="true"></i>
+      <div class="kpi-label"><i class="ti ti-trending-up" style="font-size:13px;" aria-hidden="true"></i>กำไรขั้นต้น</div>
+      <div class="kpi-num">${fmtB(profit)}</div>
+      <div class="kpi-sub">Gross Profit หลังหัก COGS</div>
+      <span class="kpi-chip ${profit>=0?'chip-up':'chip-dn'}"><i class="ti ti-arrow-${profit>=0?'up':'down'}" aria-hidden="true"></i>${profit>=0?'+':''}${fmtB(profit)}</span>
+    </div>
+    <div class="kpi-card kpi-info">
+      <i class="kpi-icon ti ti-percentage" aria-hidden="true"></i>
+      <div class="kpi-label"><i class="ti ti-percentage" style="font-size:13px;" aria-hidden="true"></i>Gross Margin</div>
+      <div class="kpi-num">${fmtPct(margin)}</div>
+      <div class="kpi-sub">กำไรขั้นต้น / ยอดขาย</div>
+      <span class="kpi-chip ${margin>=20?'chip-up':margin>=10?'':'chip-dn'}" style="${margin>=10&&margin<20?'background:var(--warn-bg);color:var(--warn);':''}">
+        ${margin>=20?'✓ ดี':margin>=10?'⚠ ปานกลาง':'✗ ต่ำ'}</span>
+    </div>`;
+}
+
+// ─── TABLE with GROUP BY + SORTABLE COLUMNS ──────────────────────────────────
+let sortField = 'profit';   // current sort field key
+let sortDir   = 'desc';     // 'asc' | 'desc'
+
+function thSort(field, label, isNum=true, grp){
+  const isSame = sortField===field && (sortField+grp)===(_lastSortKey||'');
+  if(isSame) sortDir = sortDir==='desc'?'asc':'desc';
+  else { sortField=field; sortDir='desc'; _currentPage=1; }
+  _lastSortKey = field+grp;
+  renderTable(_lastFullData);  // sort only — KPI/charts untouched
+}
+let _lastSortKey='';
+
+// Helper: build a <th> cell string with sort icon
+function _th(label, field, isNum, grp, extraCls=''){
+  const active = sortField===field;
+  const iconCls = active ? sortDir : '';
+  const cls=[isNum?'num':'','sortable',active?'sort-active':'',extraCls].filter(Boolean).join(' ');
+  return `<th class="${cls}" onclick="thSort('${field}','${label}',${isNum},'${grp}')">
+    ${label}<span class="sort-icon ${iconCls}"><span class="arr-up"></span><span class="arr-dn"></span></span>
+  </th>`;
+}
+
+// Sort any array by current sortField/sortDir
+function sortArr(arr, fieldFn){
+  return [...arr].sort((a,b)=>{
+    const av=fieldFn(a), bv=fieldFn(b);
+    if(typeof av==='string') return sortDir==='asc'?av.localeCompare(bv,'th'):bv.localeCompare(av,'th');
+    return sortDir==='asc'?av-bv:bv-av;
+  });
+}
+
+function renderTable(data){
+  const grp=getVal('q-groupby')||'bill';
+  const tbody=document.getElementById('sales-tbody');
+  const thead=document.getElementById('sales-thead');
+
+  const labels={bill:'ประวัติการขาย (รายบิล)',cat:'ยอดขายจัดกลุ่มตาม หมวดหมู่',
+    product:'ยอดขายจัดกลุ่มตาม สินค้า',customer:'ยอดขายจัดกลุ่มตาม ลูกค้า'};
+  document.getElementById('table-head-label').textContent=labels[grp]||'';
+  const colspans={bill:9,cat:7,product:8,customer:8};
+
+  if(!data.length){
+    thead.innerHTML=`<tr><th></th></tr>`;
+    tbody.innerHTML=`<tr><td colspan="${colspans[grp]||9}"><div class="empty-state"><i class="ti ti-receipt-off" aria-hidden="true"></i><p>ไม่พบรายการในช่วงที่เลือก</p></div></td></tr>`;
+    document.getElementById('row-count').textContent='(0 รายการ)';
+    document.getElementById('pagi-bar').innerHTML='';
+    return;
+  }
+
+  // Helper: slice to current page
+  const pageSlice=arr=>{
+    const s=(_currentPage-1)*PAGE_SIZE;
+    return arr.slice(s,s+PAGE_SIZE);
+  };
+
+  // ── MODE: bill ──────────────────────────────────────────────────────────────
+  if(grp==='bill'){
+    const fieldMap={date:r=>r.date+r.time,bill:r=>r.bill,customer:r=>r.customer,
+      product:r=>r.prod.name,qty:r=>r.qty,revenue:r=>r.revenue,
+      cogs:r=>r.cogs,profit:r=>r.profit,margin:r=>r.margin};
+    const sorted=sortArr(data, fieldMap[sortField]||fieldMap['date']);
+    const page=pageSlice(sorted);
+
+    thead.innerHTML=`<tr>
+      ${_th('วันที่/เวลา','date',false,grp)}
+      ${_th('บิลอ้างอิง','bill',false,grp)}
+      ${_th('ลูกค้า','customer',false,grp)}
+      ${_th('สินค้า','product',false,grp)}
+      ${_th('Qty','qty',true,grp)}
+      ${_th('ยอดขาย','revenue',true,grp)}
+      ${_th('COGS','cogs',true,grp)}
+      ${_th('กำไร','profit',true,grp)}
+      ${_th('Margin %','margin',true,grp)}
+    </tr>`;
+
+    document.getElementById('row-count').textContent=`(${sorted.length} รายการ)`;
+    renderPagination(sorted.length, _currentPage);
+    tbody.innerHTML=page.map(r=>{
+      const mc=marginClass(r.margin);
+      const barW=Math.min(100,Math.max(0,r.margin/40*100));
+      const barC=marginBarColor(r.margin);
+      return `<tr>
+        <td style="white-space:nowrap;font-size:12px;">
+          <div style="font-weight:500;">${r.time}</div>
+          <div style="color:var(--text-muted);">${r.date.slice(5).replace('-','/')}</div>
+        </td>
+        <td style="font-size:12px;color:var(--info);font-family:'Sarabun',sans-serif;">${r.bill}</td>
+        <td style="font-size:12px;color:var(--text-secondary);white-space:nowrap;">${r.customer}</td>
+        <td>
+          <div class="prod-cell">
+            <div class="prod-icon" style="background:${r.prod.iconBg};">${r.prod.icon}</div>
+            <div>
+              <div style="font-weight:500;font-size:13px;">${r.prod.name}</div>
+              <div style="font-size:11px;color:var(--text-muted);">${r.prod.sku} · ${r.prod.cat}</div>
+            </div>
+          </div>
+        </td>
+        <td class="num" style="font-weight:500;">${fmt(r.qty)}</td>
+        <td class="num" style="color:var(--p600);font-weight:500;">${fmtB(r.revenue)}</td>
+        <td class="num" style="color:var(--warn);">${fmtB(r.cogs)}</td>
+        <td class="num" style="color:${r.profit>=0?'var(--success)':'var(--danger)'};font-weight:500;">${fmtB(r.profit)}</td>
+        <td class="num">
+          <span class="${mc}">${fmtPct(r.margin)}</span>
+          <span class="margin-bar-bg"><span style="display:block;height:100%;width:${barW}%;background:${barC};border-radius:2px;"></span></span>
+        </td>
+      </tr>`;
+    }).join('');
+    return;
+  }
+
+  // ── Build aggregate groups ─────────────────────────────────────────────────
+  const groupMap={};
+  const getKey=r=>grp==='cat'?r.prod.cat:grp==='product'?String(r.prodId):r.customer;
+  data.forEach(r=>{
+    const k=getKey(r);
+    if(!groupMap[k]) groupMap[k]={items:[],prod:r.prod,cat:r.prod.cat,customer:r.customer};
+    groupMap[k].items.push(r);
+  });
+  const aggArr=Object.entries(groupMap).map(([key,g])=>{
+    const qty=g.items.reduce((a,r)=>a+r.qty,0);
+    const revenue=g.items.reduce((a,r)=>a+r.revenue,0);
+    const cogs=g.items.reduce((a,r)=>a+r.cogs,0);
+    const profit=g.items.reduce((a,r)=>a+r.profit,0);
+    const margin=revenue>0?profit/revenue*100:0;
+    return {key,qty,revenue,cogs,profit,margin,count:g.items.length,
+            bills:new Set(g.items.map(r=>r.bill)).size,prod:g.prod,cat:g.cat,customer:g.customer};
+  });
+
+  // ── MODE: cat ───────────────────────────────────────────────────────────────
+  if(grp==='cat'){
+    const fieldMap={cat:g=>g.key,count:g=>g.count,qty:g=>g.qty,
+      revenue:g=>g.revenue,cogs:g=>g.cogs,profit:g=>g.profit,margin:g=>g.margin};
+    const sorted=sortArr(aggArr, fieldMap[sortField]||fieldMap['profit']);
+    const page=pageSlice(sorted);
+
+    thead.innerHTML=`<tr>
+      ${_th('หมวดหมู่','cat',false,grp)}
+      ${_th('รายการ','count',true,grp)}
+      ${_th('Qty รวม','qty',true,grp)}
+      ${_th('ยอดขายรวม','revenue',true,grp)}
+      ${_th('COGS รวม','cogs',true,grp)}
+      ${_th('กำไรรวม','profit',true,grp)}
+      ${_th('Margin %','margin',true,grp)}
+    </tr>`;
+    document.getElementById('row-count').textContent=`(${sorted.length} กลุ่ม จาก ${data.length} รายการ)`;
+    renderPagination(sorted.length, _currentPage);
+    tbody.innerHTML=page.map(g=>{
+      const mc=marginClass(g.margin);const barW=Math.min(100,Math.max(0,g.margin/40*100));const barC=marginBarColor(g.margin);
+      const ci=CATS.indexOf(g.key);const clr=CAT_COLORS[ci]||'#888';
+      return `<tr>
+        <td><div class="group-label"><div style="width:10px;height:10px;border-radius:50%;background:${clr};flex-shrink:0;"></div><span style="font-weight:500;">${g.key}</span></div></td>
+        <td class="num" style="color:var(--text-muted);">${g.count}</td>
+        <td class="num" style="font-weight:500;">${fmt(g.qty)}</td>
+        <td class="num" style="color:var(--p600);font-weight:500;">${fmtB(g.revenue)}</td>
+        <td class="num" style="color:var(--warn);">${fmtB(g.cogs)}</td>
+        <td class="num" style="color:${g.profit>=0?'var(--success)':'var(--danger)'};font-weight:500;">${fmtB(g.profit)}</td>
+        <td class="num"><span class="${mc}">${fmtPct(g.margin)}</span><span class="margin-bar-bg"><span style="display:block;height:100%;width:${barW}%;background:${barC};border-radius:2px;"></span></span></td>
+      </tr>`;
+    }).join('');
+  }
+
+  // ── MODE: product ────────────────────────────────────────────────────────────
+  else if(grp==='product'){
+    const fieldMap={product:g=>g.prod.name,cat:g=>g.cat,count:g=>g.count,
+      qty:g=>g.qty,revenue:g=>g.revenue,cogs:g=>g.cogs,profit:g=>g.profit,margin:g=>g.margin};
+    const sorted=sortArr(aggArr, fieldMap[sortField]||fieldMap['profit']);
+    const page=pageSlice(sorted);
+
+    thead.innerHTML=`<tr>
+      ${_th('สินค้า','product',false,grp)}
+      ${_th('หมวดหมู่','cat',false,grp)}
+      ${_th('รายการ','count',true,grp)}
+      ${_th('Qty รวม','qty',true,grp)}
+      ${_th('ยอดขายรวม','revenue',true,grp)}
+      ${_th('COGS รวม','cogs',true,grp)}
+      ${_th('กำไรรวม','profit',true,grp)}
+      ${_th('Margin %','margin',true,grp)}
+    </tr>`;
+    document.getElementById('row-count').textContent=`(${sorted.length} กลุ่ม จาก ${data.length} รายการ)`;
+    renderPagination(sorted.length, _currentPage);
+    tbody.innerHTML=page.map(g=>{
+      const mc=marginClass(g.margin);const barW=Math.min(100,Math.max(0,g.margin/40*100));const barC=marginBarColor(g.margin);
+      return `<tr>
+        <td>
+          <div class="prod-cell">
+            <div class="prod-icon" style="background:${g.prod.iconBg};">${g.prod.icon}</div>
+            <div><div style="font-weight:500;font-size:13px;">${g.prod.name}</div>
+            <div style="font-size:11px;color:var(--text-muted);">${g.prod.sku}</div></div>
+          </div>
+        </td>
+        <td style="font-size:12px;color:var(--text-secondary);">${g.cat}</td>
+        <td class="num" style="color:var(--text-muted);">${g.count}</td>
+        <td class="num" style="font-weight:500;">${fmt(g.qty)}</td>
+        <td class="num" style="color:var(--p600);font-weight:500;">${fmtB(g.revenue)}</td>
+        <td class="num" style="color:var(--warn);">${fmtB(g.cogs)}</td>
+        <td class="num" style="color:${g.profit>=0?'var(--success)':'var(--danger)'};font-weight:500;">${fmtB(g.profit)}</td>
+        <td class="num"><span class="${mc}">${fmtPct(g.margin)}</span><span class="margin-bar-bg"><span style="display:block;height:100%;width:${barW}%;background:${barC};border-radius:2px;"></span></span></td>
+      </tr>`;
+    }).join('');
+  }
+
+  // ── MODE: customer ──────────────────────────────────────────────────────────
+  else if(grp==='customer'){
+    const fieldMap={customer:g=>g.key,bills:g=>g.bills,count:g=>g.count,
+      qty:g=>g.qty,revenue:g=>g.revenue,cogs:g=>g.cogs,profit:g=>g.profit,margin:g=>g.margin};
+    const sorted=sortArr(aggArr, fieldMap[sortField]||fieldMap['profit']);
+    const page=pageSlice(sorted);
+
+    thead.innerHTML=`<tr>
+      ${_th('ลูกค้า','customer',false,grp)}
+      ${_th('บิล','bills',true,grp)}
+      ${_th('รายการ','count',true,grp)}
+      ${_th('Qty รวม','qty',true,grp)}
+      ${_th('ยอดขายรวม','revenue',true,grp)}
+      ${_th('COGS รวม','cogs',true,grp)}
+      ${_th('กำไรรวม','profit',true,grp)}
+      ${_th('Margin %','margin',true,grp)}
+    </tr>`;
+    document.getElementById('row-count').textContent=`(${sorted.length} กลุ่ม จาก ${data.length} รายการ)`;
+    renderPagination(sorted.length, _currentPage);
+    tbody.innerHTML=page.map((g,i)=>{
+      // rank based on position in full sorted array (not just page)
+      const globalIdx=(_currentPage-1)*PAGE_SIZE+i;
+      const rankCls=['rank-1','rank-2','rank-3','rank-n','rank-n'][Math.min(globalIdx,4)];
+      const mc=marginClass(g.margin);const barW=Math.min(100,Math.max(0,g.margin/40*100));const barC=marginBarColor(g.margin);
+      return `<tr>
+        <td>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span class="rank-num ${rankCls}">${globalIdx+1}</span>
+            <span style="font-weight:500;font-size:13px;">${g.key}</span>
+          </div>
+        </td>
+        <td class="num" style="color:var(--text-muted);">${g.bills}</td>
+        <td class="num" style="color:var(--text-muted);">${g.count}</td>
+        <td class="num" style="font-weight:500;">${fmt(g.qty)}</td>
+        <td class="num" style="color:var(--p600);font-weight:500;">${fmtB(g.revenue)}</td>
+        <td class="num" style="color:var(--warn);">${fmtB(g.cogs)}</td>
+        <td class="num" style="color:${g.profit>=0?'var(--success)':'var(--danger)'};font-weight:500;">${fmtB(g.profit)}</td>
+        <td class="num"><span class="${mc}">${fmtPct(g.margin)}</span><span class="margin-bar-bg"><span style="display:block;height:100%;width:${barW}%;background:${barC};border-radius:2px;"></span></span></td>
+      </tr>`;
+    }).join('');
+  }
+}
+
+// ─── BAR CHART — daily vs monthly logic ────────────────────────────────────
+function renderBarChart(data, preset){
+  const from=getVal('q-from'), to=getVal('q-to');
+  const diffDays=from&&to?dateDiffDays(from,to):7;
+  const monthly=diffDays>31;
+  document.getElementById('bar-chart-title').textContent=
+    PRESET_LABELS[preset]||(monthly?'ยอดขาย vs กำไร (รายเดือน)':'ยอดขาย vs กำไร (รายวัน)');
+
+  let labels=[], revArr=[], profArr=[];
+
+  if(monthly){
+    // Group by month (yyyy-mm)
+    const monthMap={};
+    data.forEach(r=>{
+      const m=r.date.slice(0,7);
+      if(!monthMap[m]) monthMap[m]={rev:0,prof:0};
+      monthMap[m].rev+=r.revenue; monthMap[m].prof+=r.profit;
+    });
+    const months=Object.keys(monthMap).sort();
+    labels=months.map(m=>{const p=m.split('-');return `${+p[1]}/${p[0].slice(2)}`; });
+    revArr=months.map(m=>monthMap[m].rev);
+    profArr=months.map(m=>monthMap[m].prof);
+  } else {
+    // Build daily range
+    if(!from||!to){ labels=[]; revArr=[]; profArr=[]; }
+    else {
+      const cur=new Date(from);
+      const end=new Date(to);
+      while(cur<=end){
+        const d=cur.toISOString().slice(0,10);
+        const p=d.split('-');
+        labels.push(`${+p[2]}/${+p[1]}`);
+        const rows=data.filter(r=>r.date===d);
+        revArr.push(rows.reduce((a,r)=>a+r.revenue,0));
+        profArr.push(rows.reduce((a,r)=>a+r.profit,0));
+        cur.setDate(cur.getDate()+1);
+      }
+    }
+  }
+
+  const ctx=document.getElementById('bar-chart').getContext('2d');
+  if(barChartInst) barChartInst.destroy();
+  barChartInst=new Chart(ctx,{
+    type:'bar',
+    data:{labels,datasets:[
+      {label:'ยอดขาย',data:revArr,backgroundColor:'rgba(83,74,183,0.85)',borderRadius:4,borderSkipped:false},
+      {label:'กำไร',  data:profArr,backgroundColor:'rgba(15,110,86,0.85)',borderRadius:4,borderSkipped:false},
+    ]},
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:'top',labels:{font:{size:11,family:'Prompt'},boxWidth:10,padding:12}},
+               tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${fmtB(c.raw)}`}}},
+      scales:{
+        x:{ticks:{font:{size:10},color:'#9CA3AF',maxRotation:45},grid:{display:false}},
+        y:{ticks:{callback:v=>v>=1000?'฿'+(v/1000).toFixed(0)+'k':'฿'+v,font:{size:10},color:'#9CA3AF'},grid:{color:'rgba(0,0,0,0.04)'}}
+      }
+    }
+  });
+}
+
+// ─── DONUT CHART ──────────────────────────────────────────────────────────────
+function renderDonut(data){
+  const catMap={};
+  data.forEach(r=>{ catMap[r.prod.cat]=(catMap[r.prod.cat]||0)+r.profit; });
+  const labels=Object.keys(catMap).filter(k=>catMap[k]>0);
+  const vals=labels.map(k=>catMap[k]);
+  const colors=labels.map(l=>CAT_COLORS[CATS.indexOf(l)]||'#888');
+  const total=vals.reduce((a,b)=>a+b,0);
+  const ctx=document.getElementById('donut-chart').getContext('2d');
+  if(donutChartInst) donutChartInst.destroy();
+  if(!labels.length){ ctx.clearRect(0,0,ctx.canvas.width,ctx.canvas.height); document.getElementById('donut-legend').innerHTML=''; return; }
+  donutChartInst=new Chart(ctx,{type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:0,hoverOffset:4}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.label}: ${fmtB(c.raw)}`}}},cutout:'68%'}});
+  document.getElementById('donut-legend').innerHTML=labels.map((l,i)=>`
+    <div class="legend-row">
+      <div class="legend-dot" style="background:${colors[i]};"></div>
+      <span class="legend-lbl">${l}</span>
+      <span class="legend-val">${fmtB(vals[i])}</span>
+      <span class="legend-pct">${total>0?fmtPct(vals[i]/total*100):'-'}</span>
+    </div>`).join('');
+}
+
+// ─── TOP 5 CUSTOMERS ──────────────────────────────────────────────────────────
+function renderTop5(data){
+  const cmap={};
+  data.forEach(r=>{
+    if(!cmap[r.customer]) cmap[r.customer]={revenue:0,profit:0};
+    cmap[r.customer].revenue+=r.revenue;
+    cmap[r.customer].profit+=r.profit;
+  });
+  const sorted=Object.entries(cmap).sort((a,b)=>b[1].profit-a[1].profit).slice(0,5);
+  const list=document.getElementById('top5-list');
+  if(!sorted.length){
+    list.innerHTML=`<div style="text-align:center;padding:24px;color:var(--text-muted);font-size:13px;">ไม่มีข้อมูล</div>`;
+    return;
+  }
+  const maxProfit=sorted[0][1].profit;
+  const rankCls=['rank-1','rank-2','rank-3','rank-n','rank-n'];
+  list.innerHTML=sorted.map(([name,vals],i)=>{
+    const pct=maxProfit>0?Math.max(4,vals.profit/maxProfit*100):4;
+    return `<div class="top5-item">
+      <div class="top5-item-top">
+        <div class="top5-item-name">
+          <span class="rank-num ${rankCls[i]}">${i+1}</span>
+          <span title="${name}">${name}</span>
+        </div>
+        <span class="top5-item-rev">ยอดขาย: ${fmtB(vals.revenue)}</span>
+      </div>
+      <div class="top5-item-bar-row">
+        <div class="top5-bar-bg"><div class="top5-bar-fill" style="width:${pct}%;"></div></div>
+        <span class="top5-profit">กำไร: ${fmtB(vals.profit)}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ─── FOOTER ───────────────────────────────────────────────────────────────────
+function updateFooter(data){
+  const revenue=data.reduce((a,r)=>a+r.revenue,0);
+  const cogs=data.reduce((a,r)=>a+r.cogs,0);
+  const profit=data.reduce((a,r)=>a+r.profit,0);
+  const margin=revenue>0?profit/revenue*100:0;
+  const bills=new Set(data.map(r=>r.bill)).size;
+  document.getElementById('f-bills').textContent=bills;
+  document.getElementById('f-revenue').textContent=fmtB(revenue);
+  document.getElementById('f-cogs').textContent=fmtB(cogs);
+  document.getElementById('f-profit').textContent=fmtB(profit);
+  document.getElementById('f-margin').textContent=fmtPct(margin);
+  document.getElementById('f-profit').style.color=profit>=0?'var(--success)':'var(--danger)';
+}
+
+// ─── EXPORT ───────────────────────────────────────────────────────────────────
+function exportCSV(){
+  const data=getFiltered();
+  const rows=[['Date','Time','Bill','Customer','SKU','Product','Category','Qty','SalePrice','Revenue','COGS','Profit','Margin%']];
+  data.forEach(r=>rows.push([r.date,r.time,r.bill,`"${r.customer}"`,r.prod.sku,`"${r.prod.name}"`,r.prod.cat,r.qty,r.salePrice,r.revenue,r.cogs,r.profit,r.margin.toFixed(2)]));
+  const csv=rows.map(r=>r.join(',')).join('\n');
+  const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download=`profit_report_${new Date().toISOString().slice(0,10)}.csv`; a.click();
+  showToast('Export CSV เรียบร้อย','success');
+}
+
+// ─── PRODUCT PICKER ───────────────────────────────────────────────────────────
+const PD_PAGE=25;
+let pdPage=1, pdFiltered=[];
+
+function openPicker(){
+  pdPage=1;
+  document.getElementById('pd-search').value='';
+  document.getElementById('pd-cat').value='';
+  pdFilter();
+  document.getElementById('picker-modal').classList.add('open');
+}
+function closePicker(){ document.getElementById('picker-modal').classList.remove('open'); }
+document.getElementById('picker-modal').addEventListener('click',e=>{ if(e.target===e.currentTarget) closePicker(); });
+
+function pdFilter(){
+  const q=document.getElementById('pd-search').value.toLowerCase().trim();
+  const cat=document.getElementById('pd-cat').value;
+  pdFiltered=PRODUCTS.filter(p=>(!cat||p.cat===cat)&&(!q||(p.name+p.sku).toLowerCase().includes(q)));
+  pdPage=1; pdRenderGrid(); pdRenderPagination();
+  document.getElementById('pd-sel-count').textContent=pickerSelected.size;
+}
+
+function pdRenderGrid(){
+  const grid=document.getElementById('pd-grid');
+  const start=(pdPage-1)*PD_PAGE;
+  const page=pdFiltered.slice(start,start+PD_PAGE);
+  if(!page.length){ grid.innerHTML=`<div class="pd-empty"><i class="ti ti-package-off" style="font-size:28px;display:block;margin-bottom:8px;opacity:0.3;"></i>ไม่พบสินค้า</div>`; return; }
+  grid.innerHTML=page.map(p=>`
+    <div class="pd-item${pickerSelected.has(p.id)?' selected':''}" onclick="pdToggle(${p.id})">
+      <div class="pd-item-icon" style="background:${p.iconBg};">${p.icon}</div>
+      <div style="min-width:0;">
+        <div class="pd-item-name">${p.name}</div>
+        <div class="pd-item-sku">${p.sku} · ${p.cat}</div>
+      </div>
+      <div class="pd-check"><i class="ti ti-check" aria-hidden="true"></i></div>
+    </div>`).join('');
+}
+
+function pdRenderPagination(){
+  const total=pdFiltered.length;
+  const pages=Math.max(1,Math.ceil(total/PD_PAGE));
+  const s=(pdPage-1)*PD_PAGE+1, e=Math.min(pdPage*PD_PAGE,total);
+  document.getElementById('pd-page-info').textContent=total?`แสดง ${s}–${e} จาก ${total} รายการ`:'ไม่พบสินค้า';
+  const wrap=document.getElementById('pd-page-btns');
+  if(pages<=1){ wrap.innerHTML=''; return; }
+  let pts=[];
+  if(pages<=7){ for(let i=1;i<=pages;i++) pts.push(i); }
+  else{
+    pts=[1];
+    if(pdPage>3) pts.push('…');
+    for(let i=Math.max(2,pdPage-1);i<=Math.min(pages-1,pdPage+1);i++) pts.push(i);
+    if(pdPage<pages-2) pts.push('…');
+    pts.push(pages);
+  }
+  wrap.innerHTML=
+    `<button class="pd-page-btn" onclick="pdGoPage(${pdPage-1})" ${pdPage===1?'disabled':''}><i class="ti ti-chevron-left" aria-hidden="true"></i></button>`
+    +pts.map(p=>p==='…'?`<span style="padding:0 4px;color:var(--text-muted);line-height:28px;">…</span>`
+      :`<button class="pd-page-btn${p===pdPage?' active':''}" onclick="pdGoPage(${p})">${p}</button>`).join('')
+    +`<button class="pd-page-btn" onclick="pdGoPage(${pdPage+1})" ${pdPage===pages?'disabled':''}><i class="ti ti-chevron-right" aria-hidden="true"></i></button>`;
+}
+
+function pdGoPage(n){ const pages=Math.ceil(pdFiltered.length/PD_PAGE); if(n<1||n>pages) return; pdPage=n; pdRenderGrid(); pdRenderPagination(); }
+function pdToggle(id){ pickerSelected.has(id)?pickerSelected.delete(id):pickerSelected.add(id); document.getElementById('pd-sel-count').textContent=pickerSelected.size; pdRenderGrid(); }
+function pdClearAll(){ pickerSelected.clear(); document.getElementById('pd-sel-count').textContent=0; pdRenderGrid(); }
+
+function pdConfirm(){
+  closePicker();
+  // Update picker button label
+  const btn=document.getElementById('btn-pick-prod');
+  const lbl=document.getElementById('lbl-pick-prod');
+  if(pickerSelected.size===0){ lbl.textContent='ทุกสินค้า'; btn.classList.remove('has-sel'); }
+  else if(pickerSelected.size===1){
+    const p=PRODUCTS.find(x=>x.id===[...pickerSelected][0]);
+    lbl.textContent=p?p.name:'1 รายการ'; btn.classList.add('has-sel');
+  } else { lbl.textContent=`${pickerSelected.size} รายการที่เลือก`; btn.classList.add('has-sel'); }
+  applyFilters();
+  if(pickerSelected.size>0) showToast(`กรองเฉพาะ ${pickerSelected.size} สินค้าที่เลือก`,'info');
+}
+
+// ─── TOAST ────────────────────────────────────────────────────────────────────
+function showToast(msg,type='info'){
+  const wrap=document.getElementById('toast-wrap');
+  const el=document.createElement('div'); el.className=`toast ${type}`;
+  el.innerHTML=`<i class="ti ti-circle-check" aria-hidden="true"></i> ${msg}`;
+  wrap.appendChild(el);
+  setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity 0.3s'; setTimeout(()=>el.remove(),300); },2600);
+}
+
+// ─── INIT ────────────────────────────────────────────────────────────────────
+// Build cat filters
+const qcat=document.getElementById('q-cat'), pdcat=document.getElementById('pd-cat');
+CATS.forEach(c=>{
+  [qcat,pdcat].forEach(sel=>{ const o=document.createElement('option'); o.value=c; o.textContent=c; sel.appendChild(o); });
+});
+// Clock
+function updateClock(){ document.getElementById('footer-clock').textContent=new Date().toLocaleString('th-TH',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'short'}); }
+updateClock(); setInterval(updateClock,60000);
+// Initial render
+applyFilters('7d');
+// Set preset label to match initial date
+document.getElementById('q-preset').value='7d';
+</script>
+</body>
+</html>

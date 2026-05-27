@@ -1,0 +1,950 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TwinPet POS — ตั้งค่าระบบ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600&family=Sarabun:wght@300;400;500&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" rel="stylesheet">
+<style>
+:root{
+  --p600:#534AB7;--p500:#6B62C9;--p100:#CECBF6;--p50:#EEEDFE;
+  --g50:#F8F8FC;--g100:#EDEDF5;
+  --white:#fff;
+  --border:rgba(0,0,0,0.08);--border-md:rgba(0,0,0,0.13);
+  --text-primary:#1A1A2E;--text-secondary:#6B7280;--text-muted:#9CA3AF;
+  --success:#0F6E56;--success-bg:#E1F5EE;
+  --danger:#A32D2D;--danger-bg:#FCEBEB;
+  --warn:#854F0B;--warn-bg:#FAEEDA;--warn-light:#FAC775;
+  --info:#185FA5;--info-bg:#E6F1FB;
+  --topbar-h:56px;--footer-h:58px;--sidebar-w:220px;
+  --radius-sm:6px;--radius-md:8px;--radius-lg:12px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Prompt','Sarabun',sans-serif;background:var(--g50);color:var(--text-primary);height:100vh;overflow:hidden;font-size:14px;}
+.shell{display:flex;flex-direction:column;height:100vh;}
+
+/* Topbar */
+.topbar{height:var(--topbar-h);background:var(--white);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:12px;flex-shrink:0;z-index:50;}
+.topbar-icon{width:34px;height:34px;border-radius:var(--radius-md);background:var(--p50);display:flex;align-items:center;justify-content:center;color:var(--p600);font-size:18px;}
+.topbar-title{font-size:15px;font-weight:500;}
+.topbar-sub{font-size:12px;color:var(--text-secondary);}
+.topbar-center{flex:1;}
+.branch-badge{font-size:11px;padding:4px 12px;border-radius:20px;background:var(--p50);color:var(--p600);font-weight:500;border:1px solid var(--p100);display:flex;align-items:center;gap:5px;}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 16px;border-radius:var(--radius-md);font-size:13px;font-family:inherit;cursor:pointer;transition:all .15s;border:1px solid transparent;white-space:nowrap;}
+.btn-primary{background:var(--p600);color:#fff;}
+.btn-primary:hover{background:var(--p500);}
+.btn-ghost{background:transparent;color:var(--text-secondary);border-color:var(--border-md);}
+.btn-ghost:hover{background:var(--g50);color:var(--text-primary);}
+.btn-danger-ghost{background:transparent;color:var(--danger);border-color:rgba(163,45,45,.2);}
+.btn-danger-ghost:hover{background:var(--danger-bg);}
+.btn-sm{padding:5px 12px;font-size:12px;}
+
+/* Body layout */
+.body{display:flex;flex:1;overflow:hidden;}
+
+/* Sidebar nav */
+.sidebar{width:var(--sidebar-w);background:var(--white);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;overflow-y:auto;}
+.sidebar-header{padding:16px 16px 8px;font-size:11px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 16px;cursor:pointer;font-size:13px;color:var(--text-secondary);border-radius:0;transition:all .12s;border-left:3px solid transparent;user-select:none;}
+.nav-item:hover{background:var(--g50);color:var(--text-primary);}
+.nav-item.active{background:var(--p50);color:var(--p600);border-left-color:var(--p600);font-weight:500;}
+.nav-item i{font-size:16px;flex-shrink:0;}
+.nav-item .nav-badge{margin-left:auto;font-size:10px;padding:1px 7px;border-radius:10px;background:var(--danger-bg);color:var(--danger);font-weight:500;}
+.nav-divider{height:1px;background:var(--border);margin:6px 0;}
+
+/* Main content */
+.main{flex:1;overflow-y:auto;padding:24px;}
+.section{display:none;}
+.section.active{display:block;}
+.section-title{font-size:17px;font-weight:500;margin-bottom:4px;}
+.section-sub{font-size:13px;color:var(--text-muted);margin-bottom:20px;}
+
+/* Card */
+.card{background:var(--white);border-radius:var(--radius-lg);border:1px solid var(--border);margin-bottom:16px;overflow:hidden;}
+.card-head{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;}
+.card-head i{color:var(--p600);font-size:15px;}
+.card-head .card-head-right{margin-left:auto;display:flex;gap:8px;align-items:center;}
+.card-body{padding:18px 20px;display:flex;flex-direction:column;gap:14px;}
+
+/* Form elements */
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.form-row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;}
+.form-group{display:flex;flex-direction:column;gap:5px;}
+.form-label{font-size:12px;font-weight:500;color:var(--text-secondary);}
+.form-hint{font-size:11px;color:var(--text-muted);margin-top:3px;}
+.form-input,.form-select,.form-textarea{padding:8px 12px;font-size:13px;font-family:inherit;border:1.5px solid var(--border-md);border-radius:var(--radius-md);background:var(--g50);color:var(--text-primary);width:100%;}
+.form-input:focus,.form-select:focus,.form-textarea:focus{outline:none;border-color:var(--p600);background:var(--white);box-shadow:0 0 0 3px rgba(83,74,183,.1);}
+.form-textarea{resize:vertical;min-height:72px;}
+.form-input.readonly,.form-select[disabled]{background:var(--g100);color:var(--text-muted);cursor:not-allowed;}
+
+/* Toggle switch */
+.toggle-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;}
+.toggle-row+.toggle-row{border-top:1px solid var(--border);}
+.toggle-info{flex:1;}
+.toggle-label{font-size:13px;font-weight:500;}
+.toggle-desc{font-size:12px;color:var(--text-muted);margin-top:2px;}
+.toggle{position:relative;width:40px;height:22px;flex-shrink:0;cursor:pointer;}
+.toggle input{opacity:0;width:0;height:0;position:absolute;}
+.toggle-track{position:absolute;inset:0;border-radius:11px;background:#D1D5DB;transition:background .2s;}
+.toggle input:checked+.toggle-track{background:var(--p600);}
+.toggle input:disabled+.toggle-track{opacity:.5;cursor:not-allowed;}
+.toggle-thumb{position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2);transition:transform .2s;pointer-events:none;}
+.toggle input:checked~.toggle-thumb{transform:translateX(18px);}
+
+/* Badge */
+.badge{display:inline-block;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:500;}
+.badge-ok{background:var(--success-bg);color:var(--success);}
+.badge-warn{background:var(--warn-bg);color:var(--warn);}
+.badge-danger{background:var(--danger-bg);color:var(--danger);}
+.badge-info{background:var(--info-bg);color:var(--info);}
+.badge-gray{background:var(--g100);color:var(--text-muted);}
+
+/* Price level table */
+.price-table{width:100%;border-collapse:collapse;font-size:13px;}
+.price-table th{padding:8px 12px;text-align:left;font-size:11px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;background:var(--g50);border-bottom:1px solid var(--border);}
+.price-table td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:middle;}
+.price-table tr:last-child td{border-bottom:none;}
+.price-table tr:hover td{background:var(--g50);}
+.drag-handle{color:var(--text-muted);cursor:grab;font-size:16px;padding:0 4px;}
+
+/* UOM table */
+.uom-table{width:100%;border-collapse:collapse;font-size:13px;}
+.uom-table th{padding:8px 12px;text-align:left;font-size:11px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;background:var(--g50);border-bottom:1px solid var(--border);}
+.uom-table td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:middle;}
+.uom-table tr:last-child td{border-bottom:none;}
+
+/* Payment method row */
+.pay-method-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);}
+.pay-method-row:last-child{border-bottom:none;}
+.pay-icon{width:36px;height:36px;border-radius:var(--radius-md);display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;}
+.pay-info{flex:1;}
+.pay-name{font-size:13px;font-weight:500;}
+.pay-desc{font-size:11px;color:var(--text-muted);margin-top:2px;}
+
+/* POS device table */
+.device-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);}
+.device-row:last-child{border-bottom:none;}
+.device-status{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.ds-online{background:#1D9E75;box-shadow:0 0 0 2px rgba(29,158,117,.2);}
+.ds-offline{background:#D1D5DB;}
+.device-info{flex:1;}
+.device-name{font-size:13px;font-weight:500;}
+.device-meta{font-size:11px;color:var(--text-muted);margin-top:2px;}
+.device-actions{display:flex;gap:6px;}
+
+/* Notification row */
+.notif-row{display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);}
+.notif-row:last-child{border-bottom:none;}
+.notif-icon{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;}
+.notif-info{flex:1;}
+.notif-label{font-size:13px;font-weight:500;}
+.notif-channels{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;}
+.notif-chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;padding:3px 10px;border-radius:20px;cursor:pointer;border:1px solid var(--border-md);background:var(--white);color:var(--text-secondary);font-family:inherit;}
+.notif-chip.on{background:var(--p50);color:var(--p600);border-color:var(--p100);}
+
+/* Receipt preview box */
+.receipt-preview{background:#1A1A2E;border-radius:var(--radius-md);padding:16px;font-family:'Sarabun',monospace;font-size:12px;color:#e2e2e2;line-height:1.8;max-height:260px;overflow-y:auto;}
+.receipt-preview .rp-center{text-align:center;}
+.receipt-preview .rp-bold{font-weight:600;color:#fff;}
+.receipt-preview .rp-divider{border-top:1px dashed #444;margin:6px 0;}
+.receipt-preview .rp-row{display:flex;justify-content:space-between;}
+
+/* Danger zone */
+.danger-zone{border:1px solid rgba(163,45,45,.25);border-radius:var(--radius-lg);padding:18px 20px;background:rgba(252,235,235,.4);}
+.danger-zone-title{font-size:13px;font-weight:500;color:var(--danger);margin-bottom:4px;display:flex;align-items:center;gap:6px;}
+.danger-zone-desc{font-size:12px;color:var(--text-secondary);margin-bottom:12px;}
+
+/* Footer */
+.footer{height:var(--footer-h);background:var(--white);border-top:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:8px;flex-shrink:0;}
+.footer-spacer{flex:1;}
+
+/* Modal overlay */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);align-items:center;justify-content:center;z-index:200;backdrop-filter:blur(2px);}
+.modal-overlay.open{display:flex;}
+.modal{background:var(--white);border-radius:var(--radius-lg);border:1px solid var(--border);width:440px;max-width:96vw;box-shadow:0 8px 32px rgba(0,0,0,.15);animation:modal-in .18s ease;}
+@keyframes modal-in{from{opacity:0;transform:translateY(-10px) scale(.98);}to{opacity:1;transform:none;}}
+.modal-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.modal-title{font-size:15px;font-weight:500;}
+.modal-body{padding:20px;display:flex;flex-direction:column;gap:14px;}
+.modal-footer{padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;}
+.icon-btn{width:30px;height:30px;border-radius:var(--radius-sm);border:1px solid var(--border-md);background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:15px;color:var(--text-secondary);}
+.icon-btn:hover{background:var(--g50);}
+
+/* Toast */
+.toast-wrap{position:fixed;bottom:70px;right:20px;display:flex;flex-direction:column;gap:8px;z-index:300;pointer-events:none;}
+.toast{padding:10px 16px;border-radius:var(--radius-md);font-size:13px;display:flex;align-items:center;gap:8px;box-shadow:0 4px 12px rgba(0,0,0,.15);animation:toast-in .2s ease;pointer-events:none;color:#fff;}
+.toast.success{background:var(--success);}
+.toast.info{background:var(--p600);}
+.toast.warn{background:var(--warn);}
+@keyframes toast-in{from{opacity:0;transform:translateX(20px);}to{opacity:1;transform:none;}}
+::-webkit-scrollbar{width:4px;height:4px;}
+::-webkit-scrollbar-thumb{background:var(--g100);border-radius:4px;}
+</style>
+</head>
+<body>
+<div class="shell">
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="topbar-icon"><i class="ti ti-settings" aria-hidden="true"></i></div>
+  <div class="topbar-center">
+    <div class="topbar-title">ตั้งค่าระบบ</div>
+    <div class="topbar-sub">System &amp; Branch Settings</div>
+  </div>
+  <span class="branch-badge"><i class="ti ti-map-pin" style="font-size:12px;" aria-hidden="true"></i>สาขา: ลาดพร้าว</span>
+  <button class="btn btn-ghost" onclick="handleCancel()">ยกเลิก</button>
+  <button class="btn btn-primary" onclick="handleSave()"><i class="ti ti-check" aria-hidden="true"></i> บันทึก</button>
+</div>
+
+<!-- BODY -->
+<div class="body">
+
+  <!-- SIDEBAR -->
+  <nav class="sidebar">
+    <div class="sidebar-header">ข้อมูลสาขา</div>
+    <div class="nav-item active" onclick="switchSection('branch',this)"><i class="ti ti-building-store" aria-hidden="true"></i> ข้อมูลสาขา</div>
+    <div class="nav-divider"></div>
+    <div class="sidebar-header">ราคา & ภาษี</div>
+    <div class="nav-item" onclick="switchSection('vat',this)"><i class="ti ti-receipt-tax" aria-hidden="true"></i> VAT & ภาษี</div>
+    <div class="nav-item" onclick="switchSection('pricelevel',this)"><i class="ti ti-layers-difference" aria-hidden="true"></i> ระดับราคา</div>
+    <div class="nav-item" onclick="switchSection('uom',this)"><i class="ti ti-ruler" aria-hidden="true"></i> UOM & หน่วยนับ</div>
+    <div class="nav-divider"></div>
+    <div class="sidebar-header">การชำระเงิน & เอกสาร</div>
+    <div class="nav-item" onclick="switchSection('payment',this)"><i class="ti ti-credit-card" aria-hidden="true"></i> ช่องทางชำระเงิน</div>
+    <div class="nav-item" onclick="switchSection('receipt',this)"><i class="ti ti-receipt" aria-hidden="true"></i> ใบเสร็จ & Invoice</div>
+    <div class="nav-divider"></div>
+    <div class="sidebar-header">ระบบ</div>
+    <div class="nav-item" onclick="switchSection('notification',this)"><i class="ti ti-bell" aria-hidden="true"></i> การแจ้งเตือน<span class="nav-badge">3</span></div>
+    <div class="nav-item" onclick="switchSection('pos',this)"><i class="ti ti-device-desktop" aria-hidden="true"></i> เครื่อง POS</div>
+    <div class="nav-item" onclick="switchSection('admin',this)"><i class="ti ti-shield-lock" aria-hidden="true"></i> Admin & ความปลอดภัย</div>
+  </nav>
+
+  <!-- MAIN CONTENT -->
+  <div class="main">
+
+    <!-- ── SECTION: ข้อมูลสาขา ── -->
+    <div id="sec-branch" class="section active">
+      <div class="section-title">ข้อมูลสาขา</div>
+      <div class="section-sub">ชื่อ ที่อยู่ เบอร์ติดต่อ และโลโก้ที่แสดงบนเอกสาร</div>
+      <div class="card">
+        <div class="card-head"><i class="ti ti-building-store" aria-hidden="true"></i> ข้อมูลพื้นฐาน</div>
+        <div class="card-body">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">ชื่อสาขา <span style="color:var(--danger)">*</span></label>
+              <input class="form-input" type="text" value="TwinPet ลาดพร้าว">
+            </div>
+            <div class="form-group">
+              <label class="form-label">รหัสสาขา</label>
+              <input class="form-input readonly" type="text" value="LDP-001" readonly>
+              <span class="form-hint">สร้างโดยระบบ — ไม่สามารถแก้ไขได้</span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">ที่อยู่สาขา</label>
+            <textarea class="form-textarea">123/45 ถ.ลาดพร้าว แขวงลาดพร้าว เขตลาดพร้าว กรุงเทพฯ 10230</textarea>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">เบอร์โทรศัพท์</label>
+              <input class="form-input" type="text" value="02-123-4567">
+            </div>
+            <div class="form-group">
+              <label class="form-label">อีเมล</label>
+              <input class="form-input" type="email" value="ladprao@twinpet.co.th">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">เลขประจำตัวผู้เสียภาษี</label>
+              <input class="form-input" type="text" value="0105560123456" placeholder="13 หลัก">
+            </div>
+            <div class="form-group">
+              <label class="form-label">เว็บไซต์</label>
+              <input class="form-input" type="text" value="www.twinpet.co.th">
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><i class="ti ti-photo" aria-hidden="true"></i> โลโก้และรูปสาขา</div>
+        <div class="card-body">
+          <div style="display:flex;gap:16px;align-items:flex-start;">
+            <div style="width:80px;height:80px;border-radius:var(--radius-md);background:var(--p50);display:flex;align-items:center;justify-content:center;font-size:32px;flex-shrink:0;border:2px dashed var(--p100);">🐾</div>
+            <div style="flex:1;">
+              <div style="font-size:13px;font-weight:500;margin-bottom:6px;">โลโก้สาขา</div>
+              <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">แนะนำ PNG/SVG ขนาด 200×200px ขึ้นไป — ใช้แสดงบนใบเสร็จและเอกสาร</div>
+              <div style="display:flex;gap:8px;">
+                <button class="btn btn-ghost btn-sm"><i class="ti ti-upload" aria-hidden="true"></i> อัปโหลด</button>
+                <button class="btn btn-ghost btn-sm" style="color:var(--danger);">ลบ</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── SECTION: VAT & ภาษี ── -->
+    <div id="sec-vat" class="section">
+      <div class="section-title">VAT & ภาษี</div>
+      <div class="section-sub">กำหนดการจดภาษีและอัตราภาษีมูลค่าเพิ่มของสาขา</div>
+      <div class="card">
+        <div class="card-head"><i class="ti ti-receipt-tax" aria-hidden="true"></i> การจด VAT</div>
+        <div class="card-body">
+          <div class="toggle-row">
+            <div class="toggle-info">
+              <div class="toggle-label">สาขานี้จดทะเบียนภาษีมูลค่าเพิ่ม (VAT)</div>
+              <div class="toggle-desc">เปิด = ออกใบกำกับภาษีได้, ปิด = ออกได้แค่ใบเสร็จรับเงิน</div>
+            </div>
+            <label class="toggle"><input type="checkbox" id="vat-reg" checked onchange="onVatRegChange()"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+          </div>
+          <div class="form-row" id="vat-fields">
+            <div class="form-group">
+              <label class="form-label">อัตราภาษี (%)</label>
+              <input class="form-input" type="number" value="7" min="0" max="100" step="0.5">
+              <span class="form-hint">มาตรฐานประเทศไทย 7%</span>
+            </div>
+            <div class="form-group">
+              <label class="form-label">ประเภทราคาสินค้า</label>
+              <select class="form-select">
+                <option value="excl">ราคาไม่รวม VAT (บวกเพิ่มตอนคิดเงิน)</option>
+                <option value="incl" selected>ราคารวม VAT แล้ว</option>
+              </select>
+            </div>
+          </div>
+          <div class="toggle-row">
+            <div class="toggle-info">
+              <div class="toggle-label">แสดงแยก VAT บนใบเสร็จ</div>
+              <div class="toggle-desc">แสดงบรรทัด "ภาษีมูลค่าเพิ่ม 7%" แยกในใบเสร็จ</div>
+            </div>
+            <label class="toggle"><input type="checkbox" checked><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+          </div>
+          <div class="toggle-row">
+            <div class="toggle-info">
+              <div class="toggle-label">แสดงเลขประจำตัวผู้เสียภาษีของลูกค้าบนใบกำกับ</div>
+              <div class="toggle-desc">ให้พนักงานกรอก Tax ID ลูกค้าตอนออกใบกำกับ</div>
+            </div>
+            <label class="toggle"><input type="checkbox" checked><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── SECTION: ระดับราคา ── -->
+    <div id="sec-pricelevel" class="section">
+      <div class="section-title">ระดับราคา (Price Level)</div>
+      <div class="section-sub">กำหนดระดับราคาที่ใช้ร่วมกันทุกสินค้า — สืบทอดไปยังทุกสาขา</div>
+      <div class="card">
+        <div class="card-head">
+          <i class="ti ti-layers-difference" aria-hidden="true"></i> ระดับราคาทั้งหมด
+          <div class="card-head-right"><button class="btn btn-primary btn-sm" onclick="addPriceLevel()"><i class="ti ti-plus" aria-hidden="true"></i> เพิ่มระดับ</button></div>
+        </div>
+        <div class="card-body" style="padding:0;">
+          <table class="price-table" id="price-table">
+            <thead><tr>
+              <th style="width:32px;"></th>
+              <th>ชื่อระดับ</th><th>รหัส</th><th>คำอธิบาย</th><th>สถานะ</th><th></th>
+            </tr></thead>
+            <tbody id="price-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><i class="ti ti-info-circle" aria-hidden="true"></i> วิธีใช้งาน</div>
+        <div class="card-body">
+          <p style="font-size:13px;color:var(--text-secondary);line-height:1.8;">ระดับราคาใช้กำหนดราคาขายต่างกันตามกลุ่มลูกค้า เช่น ราคาปลีก, ราคาส่ง, ราคาสมาชิก — สามารถตั้งราคาต่อระดับในหน้า <b>จัดการสินค้า</b> และเลือกระดับได้ตอนออกบิล</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── SECTION: UOM ── -->
+    <div id="sec-uom" class="section">
+      <div class="section-title">UOM & หน่วยนับ</div>
+      <div class="section-sub">กำหนดหน่วยนับที่ใช้ในระบบ — สต็อกเก็บเป็นหน่วยฐานเสมอ</div>
+      <div class="card">
+        <div class="card-head">
+          <i class="ti ti-ruler" aria-hidden="true"></i> หน่วยทั้งหมด
+          <div class="card-head-right"><button class="btn btn-primary btn-sm" onclick="addUOM()"><i class="ti ti-plus" aria-hidden="true"></i> เพิ่มหน่วย</button></div>
+        </div>
+        <div class="card-body" style="padding:0;">
+          <table class="uom-table" id="uom-table">
+            <thead><tr>
+              <th>ชื่อหน่วย</th><th>รหัสย่อ</th><th>หน่วยฐาน</th><th>ค่าแปลง</th><th>สถานะ</th><th></th>
+            </tr></thead>
+            <tbody id="uom-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><i class="ti ti-calculator" aria-hidden="true"></i> กฎการแปลง</div>
+        <div class="card-body">
+          <p style="font-size:13px;color:var(--text-secondary);line-height:1.8;">หน่วยฐาน = <b>ชิ้น</b> — ระบบเก็บสต็อกเป็นชิ้นเสมอ เมื่อขายเป็นแพ็ค/กล่อง ระบบจะตัดสต็อกตามค่าแปลงอัตโนมัติ<br>ตัวอย่าง: กล่อง×24 → ตัด 24 ชิ้น</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── SECTION: ช่องทางชำระเงิน ── -->
+    <div id="sec-payment" class="section">
+      <div class="section-title">ช่องทางชำระเงิน</div>
+      <div class="section-sub">เปิด/ปิดช่องทางที่แสดงบน Modal ชำระเงินของสาขานี้</div>
+      <div class="card">
+        <div class="card-head"><i class="ti ti-credit-card" aria-hidden="true"></i> ช่องทางที่ใช้งาน</div>
+        <div class="card-body" id="payment-body"></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><i class="ti ti-clock-dollar" aria-hidden="true"></i> ตั้งค่าเครดิต (เชื่อ)</div>
+        <div class="card-body">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">วงเงินเชื่อสูงสุด / ลูกค้า (฿)</label>
+              <input class="form-input" type="number" value="5000" min="0" step="100">
+            </div>
+            <div class="form-group">
+              <label class="form-label">ระยะเวลาชำระ (วัน)</label>
+              <input class="form-input" type="number" value="30" min="1">
+            </div>
+          </div>
+          <div class="toggle-row">
+            <div class="toggle-info">
+              <div class="toggle-label">ต้องการ Admin อนุมัติก่อนให้เชื่อ</div>
+              <div class="toggle-desc">พนักงานจะขอได้แต่ต้องรอ Manager/Admin กด approve</div>
+            </div>
+            <label class="toggle"><input type="checkbox"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── SECTION: ใบเสร็จ & Invoice ── -->
+    <div id="sec-receipt" class="section">
+      <div class="section-title">ใบเสร็จ & Invoice</div>
+      <div class="section-sub">กำหนด template และข้อความที่แสดงบนใบเสร็จ/ใบกำกับภาษี</div>
+      <div class="card">
+        <div class="card-head"><i class="ti ti-printer" aria-hidden="true"></i> ใบเสร็จ Thermal 80mm</div>
+        <div class="card-body">
+          <!-- Logo upload row -->
+          <div style="display:flex;align-items:center;gap:14px;padding:12px 14px;background:var(--g50);border-radius:var(--radius-md);border:1px solid var(--border);">
+            <div id="receipt-logo-preview" style="width:56px;height:56px;border-radius:var(--radius-md);background:var(--p50);display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0;border:2px dashed var(--p100);overflow:hidden;">🐾</div>
+            <div style="flex:1;">
+              <div style="font-size:13px;font-weight:500;margin-bottom:3px;">โลโก้บนหัวใบเสร็จ</div>
+              <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">PNG/JPG สีขาว/โมโน แนะนำ — Thermal พิมพ์เป็นขาวดำ · ขนาดแนะนำ 200×80px</div>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <label style="cursor:pointer;">
+                  <input type="file" id="receipt-logo-input" accept="image/*" style="display:none;" onchange="onReceiptLogoChange(this)">
+                  <span class="btn btn-ghost btn-sm" onclick="document.getElementById('receipt-logo-input').click()"><i class="ti ti-upload" aria-hidden="true"></i> อัปโหลดโลโก้</span>
+                </label>
+                <button class="btn btn-ghost btn-sm" id="receipt-logo-remove" style="display:none;color:var(--danger);" onclick="removeReceiptLogo()"><i class="ti ti-trash" aria-hidden="true"></i> ลบ</button>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:4px;">
+              <div class="toggle-row" style="padding:0;gap:10px;">
+                <div class="toggle-info"><div class="toggle-label" style="font-size:12px;">แสดงโลโก้บนใบเสร็จ</div></div>
+                <label class="toggle"><input type="checkbox" id="receipt-logo-show" checked onchange="renderReceiptPreview()"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+              </div>
+              <div style="font-size:11px;color:var(--text-muted);margin-left:2px;">ปิด = แสดงแต่ข้อความ</div>
+            </div>
+          </div>
+
+          <div class="form-row" style="margin-top:4px;">
+            <div style="display:flex;flex-direction:column;gap:14px;">
+              <div class="form-group">
+                <label class="form-label">ข้อความหัวใบเสร็จ</label>
+                <textarea class="form-textarea" id="receipt-header-text" rows="2" oninput="renderReceiptPreview()">TwinPet Pet Shop
+สาขาลาดพร้าว</textarea>
+              </div>
+              <div class="form-group">
+                <label class="form-label">ข้อความท้ายใบเสร็จ</label>
+                <textarea class="form-textarea" rows="2">ขอบคุณที่ใช้บริการ
+Tel: 02-123-4567</textarea>
+              </div>
+              <div class="toggle-row" style="padding:0;">
+                <div class="toggle-info"><div class="toggle-label">แสดงบาร์โค้ดเลขบิล</div></div>
+                <label class="toggle"><input type="checkbox" checked><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+              </div>
+              <div class="toggle-row" style="padding:0;">
+                <div class="toggle-info"><div class="toggle-label">แสดง QR โปรโมชั่น</div></div>
+                <label class="toggle"><input type="checkbox"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+              </div>
+            </div>
+            <div>
+              <div class="form-label" style="margin-bottom:8px;">ตัวอย่างใบเสร็จ</div>
+              <div class="receipt-preview" id="receipt-preview"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><i class="ti ti-file-invoice" aria-hidden="true"></i> ใบกำกับภาษี A4</div>
+        <div class="card-body">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">ชื่อบริษัทบนหัวกระดาษ</label>
+              <input class="form-input" type="text" value="บริษัท ทวิน เพ็ท จำกัด">
+            </div>
+            <div class="form-group">
+              <label class="form-label">รูปแบบเลขเอกสาร</label>
+              <input class="form-input" type="text" value="INV-{YYYY}{MM}-{NNN}">
+              <span class="form-hint">ตัวอย่าง: INV-202605-001</span>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">สีหัวกระดาษ</label>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <input type="color" value="#534AB7" style="width:40px;height:36px;border-radius:var(--radius-sm);border:1px solid var(--border-md);cursor:pointer;padding:2px;">
+                <input class="form-input" type="text" value="#534AB7" style="flex:1;">
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">ฟอนต์</label>
+              <select class="form-select">
+                <option selected>Sarabun (แนะนำ — รองรับภาษาไทย)</option>
+                <option>Prompt</option>
+                <option>TH Sarabun New</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── SECTION: การแจ้งเตือน ── -->
+    <div id="sec-notification" class="section">
+      <div class="section-title">การแจ้งเตือน</div>
+      <div class="section-sub">กำหนดเงื่อนไขและช่องทางแจ้งเตือนสำหรับสาขา</div>
+      <div class="card">
+        <div class="card-head"><i class="ti ti-bell" aria-hidden="true"></i> เหตุการณ์และช่องทาง</div>
+        <div class="card-body" id="notif-body"></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><i class="ti ti-message" aria-hidden="true"></i> ตั้งค่า LINE Notify / Webhook</div>
+        <div class="card-body">
+          <div class="form-group">
+            <label class="form-label">LINE Notify Token</label>
+            <div style="display:flex;gap:8px;">
+              <input class="form-input" type="password" placeholder="xxxxxxxx" value="abc123token" style="flex:1;">
+              <button class="btn btn-ghost btn-sm">ทดสอบ</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Webhook URL (Slack / Teams / อื่นๆ)</label>
+            <input class="form-input" type="url" placeholder="https://hooks.slack.com/...">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── SECTION: เครื่อง POS ── -->
+    <div id="sec-pos" class="section">
+      <div class="section-title">เครื่อง POS</div>
+      <div class="section-sub">จัดการเครื่อง POS ที่เชื่อมต่อกับสาขานี้</div>
+      <div class="card">
+        <div class="card-head">
+          <i class="ti ti-device-desktop" aria-hidden="true"></i> เครื่องที่ลงทะเบียน
+          <div class="card-head-right">
+            <span class="badge badge-ok" id="device-online-count">2 ออนไลน์</span>
+            <button class="btn btn-primary btn-sm" onclick="openModal('add-device-modal')"><i class="ti ti-plus" aria-hidden="true"></i> เพิ่มเครื่อง</button>
+          </div>
+        </div>
+        <div class="card-body" id="device-body"></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><i class="ti ti-printer" aria-hidden="true"></i> เครื่องพิมพ์</div>
+        <div class="card-body">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">เครื่องพิมพ์หลัก</label>
+              <select class="form-select">
+                <option>Epson TM-T82X (USB)</option>
+                <option>Star TSP143III (LAN)</option>
+                <option>Bixolon SRP-350 (BT)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">ขนาดกระดาษ</label>
+              <select class="form-select">
+                <option>80mm (มาตรฐาน)</option>
+                <option>58mm</option>
+              </select>
+            </div>
+          </div>
+          <div class="toggle-row">
+            <div class="toggle-info"><div class="toggle-label">พิมพ์ใบเสร็จอัตโนมัติหลังชำระเงิน</div></div>
+            <label class="toggle"><input type="checkbox" checked><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+          </div>
+          <div class="toggle-row">
+            <div class="toggle-info">
+              <div class="toggle-label">พิมพ์สำเนา (2 ใบ)</div>
+              <div class="toggle-desc">ใบแรกสำหรับลูกค้า ใบที่สองสำหรับร้าน</div>
+            </div>
+            <label class="toggle"><input type="checkbox"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── SECTION: Admin ── -->
+    <div id="sec-admin" class="section">
+      <div class="section-title">Admin & ความปลอดภัย</div>
+      <div class="section-sub">การตั้งค่าระดับระบบ — ต้องใช้สิทธิ์ Admin เท่านั้น</div>
+      <div class="card">
+        <div class="card-head"><i class="ti ti-lock" aria-hidden="true"></i> นโยบาย PIN & Session</div>
+        <div class="card-body">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">หมดเวลา session (นาที)</label>
+              <input class="form-input" type="number" value="30" min="5" max="480">
+              <span class="form-hint">0 = ไม่หมดเวลา (ไม่แนะนำ)</span>
+            </div>
+            <div class="form-group">
+              <label class="form-label">จำนวนครั้งพิมพ์ PIN ผิดสูงสุด</label>
+              <input class="form-input" type="number" value="5" min="1" max="10">
+            </div>
+          </div>
+          <div class="toggle-row">
+            <div class="toggle-info">
+              <div class="toggle-label">ล็อคจอหน้า POS เมื่อไม่มีการใช้งาน</div>
+              <div class="toggle-desc">ต้องกด PIN อีกครั้งเพื่อใช้งานต่อ</div>
+            </div>
+            <label class="toggle"><input type="checkbox" checked><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+          </div>
+          <div class="toggle-row">
+            <div class="toggle-info">
+              <div class="toggle-label">บันทึก Activity Log ทุก action</div>
+              <div class="toggle-desc">เก็บประวัติการกระทำทุกอย่างใน Audit Trail</div>
+            </div>
+            <label class="toggle"><input type="checkbox" checked><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><i class="ti ti-database" aria-hidden="true"></i> ข้อมูลและ Backup</div>
+        <div class="card-body">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Backup อัตโนมัติ</label>
+              <select class="form-select">
+                <option>ทุกวัน 02:00 น.</option>
+                <option>ทุก 6 ชั่วโมง</option>
+                <option>ทุกชั่วโมง</option>
+                <option>ปิด</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">เก็บ Backup ไว้ (วัน)</label>
+              <input class="form-input" type="number" value="30" min="7">
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:4px;">
+            <button class="btn btn-ghost btn-sm"><i class="ti ti-database-export" aria-hidden="true"></i> Export ข้อมูลทั้งหมด</button>
+            <button class="btn btn-ghost btn-sm"><i class="ti ti-history" aria-hidden="true"></i> ดู Backup ล่าสุด</button>
+          </div>
+        </div>
+      </div>
+      <div class="danger-zone">
+        <div class="danger-zone-title"><i class="ti ti-alert-triangle" aria-hidden="true"></i> Danger Zone</div>
+        <div class="danger-zone-desc">การกระทำต่อไปนี้ไม่สามารถย้อนกลับได้ กรุณาระวัง</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-danger-ghost btn-sm" onclick="confirmDanger('รีเซ็ตตัวเลข Running Number ทั้งหมด')"><i class="ti ti-refresh" aria-hidden="true"></i> รีเซ็ต Running Number</button>
+          <button class="btn btn-danger-ghost btn-sm" onclick="confirmDanger('ลบข้อมูล Demo/Test ทั้งหมด')"><i class="ti ti-trash" aria-hidden="true"></i> ลบข้อมูล Demo</button>
+          <button class="btn btn-danger-ghost btn-sm" onclick="confirmDanger('ปิดใช้งานสาขานี้')"><i class="ti ti-building-off" aria-hidden="true"></i> ปิดสาขา</button>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- main -->
+</div><!-- body -->
+
+<!-- FOOTER -->
+<div class="footer">
+  <span style="font-size:12px;color:var(--text-muted);" id="footer-saved">บันทึกล่าสุด: วันนี้ 10:30 น.</span>
+  <div class="footer-spacer"></div>
+  <button class="btn btn-ghost" onclick="handleCancel()">ยกเลิก</button>
+  <button class="btn btn-primary" onclick="handleSave()"><i class="ti ti-check" aria-hidden="true"></i> บันทึกการตั้งค่า</button>
+</div>
+
+</div><!-- shell -->
+
+<!-- Modal: Add Device -->
+<div class="modal-overlay" id="add-device-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">เพิ่มเครื่อง POS</span>
+      <button class="icon-btn" onclick="closeModal('add-device-modal')"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label">ชื่อเครื่อง</label><input class="form-input" type="text" placeholder="เช่น POS-03, เคาน์เตอร์หน้า"></div>
+      <div class="form-group"><label class="form-label">Device Token</label><input class="form-input" type="text" placeholder="กรอก Token จาก App"></div>
+      <div class="form-group"><label class="form-label">ประเภทเครื่อง</label>
+        <select class="form-select"><option>Desktop / Tablet</option><option>Mobile</option><option>Kiosk</option></select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('add-device-modal')">ยกเลิก</button>
+      <button class="btn btn-primary" onclick="closeModal('add-device-modal');showToast('เพิ่มเครื่องสำเร็จ','success')">เพิ่มเครื่อง</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Confirm Danger -->
+<div class="modal-overlay" id="danger-modal">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title" style="color:var(--danger);">⚠️ ยืนยันการดำเนินการ</span><button class="icon-btn" onclick="closeModal('danger-modal')"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--text-secondary);" id="danger-desc"></p>
+      <div class="form-group" style="margin-top:8px;">
+        <label class="form-label">พิมพ์ "ยืนยัน" เพื่อดำเนินการต่อ</label>
+        <input class="form-input" type="text" id="danger-confirm-input" placeholder="ยืนยัน">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('danger-modal')">ยกเลิก</button>
+      <button class="btn btn-danger-ghost" onclick="executeDanger()">ดำเนินการ</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-wrap" id="toast-wrap"></div>
+
+<script>
+// ── NAV ───────────────────────────────────────────────────────────────────────
+function switchSection(id, el){
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('sec-'+id).classList.add('active');
+  el.classList.add('active');
+  document.querySelector('.main').scrollTop=0;
+}
+
+// ── VAT ───────────────────────────────────────────────────────────────────────
+function onVatRegChange(){
+  const on=document.getElementById('vat-reg').checked;
+  document.getElementById('vat-fields').style.opacity=on?'1':'0.4';
+  document.getElementById('vat-fields').style.pointerEvents=on?'':'none';
+}
+
+// ── PRICE LEVELS ─────────────────────────────────────────────────────────────
+const priceLevels=[
+  {id:1,name:'ราคาปลีก',code:'RETAIL',desc:'ราคามาตรฐานทั่วไป',active:true},
+  {id:2,name:'ราคาสมาชิก',code:'MEMBER',desc:'ส่วนลด 5-10% จากราคาปลีก',active:true},
+  {id:3,name:'ราคาส่ง',code:'WHOLESALE',desc:'สำหรับการซื้อจำนวนมาก',active:true},
+  {id:4,name:'ราคาพิเศษ',code:'SPECIAL',desc:'โปรโมชั่นหรือตามเงื่อนไข',active:false},
+];
+function renderPriceLevels(){
+  document.getElementById('price-tbody').innerHTML=priceLevels.map(p=>`
+    <tr>
+      <td><i class="ti ti-grip-vertical drag-handle" aria-hidden="true"></i></td>
+      <td><input class="form-input" style="padding:5px 9px;font-size:12px;" value="${p.name}"></td>
+      <td><span style="font-family:'Sarabun',monospace;font-size:12px;color:var(--text-muted);">${p.code}</span></td>
+      <td><input class="form-input" style="padding:5px 9px;font-size:12px;" value="${p.desc}"></td>
+      <td>
+        <label class="toggle" style="width:34px;height:20px;">
+          <input type="checkbox" ${p.active?'checked':''}>
+          <div class="toggle-track"></div>
+          <div class="toggle-thumb" style="top:2px;left:2px;width:14px;height:14px;"></div>
+        </label>
+      </td>
+      <td><button class="icon-btn" onclick="removePriceLevel(${p.id})" title="ลบ"><i class="ti ti-trash" style="font-size:14px;color:var(--danger);"></i></button></td>
+    </tr>`).join('');
+}
+function addPriceLevel(){ priceLevels.push({id:Date.now(),name:'ระดับใหม่',code:'NEW',desc:'',active:true}); renderPriceLevels(); showToast('เพิ่มระดับราคาแล้ว','info'); }
+function removePriceLevel(id){ if(priceLevels.length<=1){showToast('ต้องมีอย่างน้อย 1 ระดับ','warn');return;} priceLevels.splice(priceLevels.findIndex(p=>p.id===id),1); renderPriceLevels(); }
+
+// ── UOM ───────────────────────────────────────────────────────────────────────
+const uoms=[
+  {id:1,name:'ชิ้น',code:'PC',base:'ชิ้น',factor:1,active:true},
+  {id:2,name:'แพ็ค',code:'PACK',base:'ชิ้น',factor:6,active:true},
+  {id:3,name:'กล่อง',code:'BOX',base:'ชิ้น',factor:24,active:true},
+  {id:4,name:'โหล',code:'DOZ',base:'ชิ้น',factor:12,active:true},
+  {id:5,name:'กิโลกรัม',code:'KG',base:'กิโลกรัม',factor:1,active:true},
+  {id:6,name:'ถุง',code:'BAG',base:'ชิ้น',factor:1,active:false},
+];
+function renderUOM(){
+  document.getElementById('uom-tbody').innerHTML=uoms.map(u=>`
+    <tr>
+      <td><input class="form-input" style="padding:5px 9px;font-size:12px;width:110px;" value="${u.name}"></td>
+      <td><input class="form-input" style="padding:5px 9px;font-size:12px;width:70px;font-family:'Sarabun',monospace;" value="${u.code}"></td>
+      <td><input class="form-input" style="padding:5px 9px;font-size:12px;width:90px;" value="${u.base}"></td>
+      <td><input class="form-input" type="number" style="padding:5px 9px;font-size:12px;width:80px;" value="${u.factor}" min="0.001" step="0.001" ${u.factor===1&&u.name==='ชิ้น'?'readonly class="form-input readonly"':''}></td>
+      <td><label class="toggle" style="width:34px;height:20px;"><input type="checkbox" ${u.active?'checked':''}><div class="toggle-track"></div><div class="toggle-thumb" style="top:2px;left:2px;width:14px;height:14px;"></div></label></td>
+      <td><button class="icon-btn" onclick="removeUOM(${u.id})" ${u.name==='ชิ้น'?'disabled style="opacity:.3"':''}><i class="ti ti-trash" style="font-size:14px;color:var(--danger);"></i></button></td>
+    </tr>`).join('');
+}
+function addUOM(){ uoms.push({id:Date.now(),name:'หน่วยใหม่',code:'NEW',base:'ชิ้น',factor:1,active:true}); renderUOM(); showToast('เพิ่มหน่วยนับแล้ว','info'); }
+function removeUOM(id){ const u=uoms.find(x=>x.id===id); if(u&&u.name==='ชิ้น'){showToast('ไม่สามารถลบหน่วยฐานได้','warn');return;} uoms.splice(uoms.findIndex(x=>x.id===id),1); renderUOM(); }
+
+// ── PAYMENT METHODS ───────────────────────────────────────────────────────────
+const payMethods=[
+  {key:'cash',  icon:'ti-cash',         label:'เงินสด',       desc:'พิมพ์ Quick Bills ได้',  on:true,  color:'0F6E56', bg:'E1F5EE'},
+  {key:'qr',    icon:'ti-qrcode',       label:'PromptPay QR', desc:'QR PromptPay กลาง',      on:true,  color:'7A1FA2', bg:'FBE8F9'},
+  {key:'kbank', icon:'ti-building-bank',label:'QR Kbank',     desc:'QR KBank สาขา',          on:true,  color:'1F6E00', bg:'E8F5E0'},
+  {key:'card',  icon:'ti-credit-card',  label:'EDC บัตร',     desc:'เครื่องรูดบัตร EDC',     on:true,  color:'534AB7', bg:'EEEDFE'},
+  {key:'credit',icon:'ti-clock-dollar', label:'เชื่อ',         desc:'บันทึกหนี้ค้างชำระ',    on:true,  color:'854F0B', bg:'FAEEDA'},
+];
+function renderPayment(){
+  document.getElementById('payment-body').innerHTML=payMethods.map(p=>`
+    <div class="pay-method-row">
+      <div class="pay-icon" style="background:#${p.bg};color:#${p.color};"><i class="ti ${p.icon}" aria-hidden="true"></i></div>
+      <div class="pay-info">
+        <div class="pay-name">${p.label}</div>
+        <div class="pay-desc">${p.desc}</div>
+      </div>
+      <label class="toggle"><input type="checkbox" ${p.on?'checked':''}><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+    </div>`).join('');
+}
+
+// ── NOTIFICATIONS ─────────────────────────────────────────────────────────────
+const notifs=[
+  {icon:'ti-alert-triangle',bg:'FAEEDA',fc:'854F0B',label:'สต็อกต่ำกว่า Reorder Point',channels:['line','email'],on:true},
+  {icon:'ti-trash',bg:'FCEBEB',fc:'A32D2D',label:'มีการ Void บิล',channels:['line'],on:true},
+  {icon:'ti-clock-dollar',bg:'FAEEDA',fc:'854F0B',label:'หนี้เกินวงเงินหรือเกินกำหนด',channels:['line','email'],on:true},
+  {icon:'ti-login',bg:'E1F5EE',fc:'0F6E56',label:'พนักงาน Login/Logout',channels:[],on:false},
+  {icon:'ti-report-money',bg:'EEEDFE',fc:'534AB7',label:'ยอดขายรายวันสรุปตอนปิดร้าน',channels:['line'],on:true},
+  {icon:'ti-device-desktop-off',bg:'E6F1FB',fc:'185FA5',label:'เครื่อง POS หลุดออฟไลน์',channels:['line'],on:true},
+];
+const notifChannelLabels={line:'LINE',email:'Email',sms:'SMS',push:'Push'};
+function renderNotifs(){
+  document.getElementById('notif-body').innerHTML=notifs.map((n,i)=>`
+    <div class="notif-row">
+      <div class="notif-icon" style="background:#${n.bg};color:#${n.fc};"><i class="ti ${n.icon}" aria-hidden="true"></i></div>
+      <div class="notif-info">
+        <div class="notif-label">${n.label}</div>
+        <div class="notif-channels">
+          ${['line','email','sms','push'].map(ch=>`<button class="notif-chip${n.channels.includes(ch)?' on':''}" onclick="toggleNotifChannel(${i},'${ch}',this)">${notifChannelLabels[ch]}</button>`).join('')}
+        </div>
+      </div>
+      <label class="toggle"><input type="checkbox" ${n.on?'checked':''}><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+    </div>`).join('');
+}
+function toggleNotifChannel(i,ch,btn){ const n=notifs[i]; const idx=n.channels.indexOf(ch); if(idx>=0) n.channels.splice(idx,1); else n.channels.push(ch); btn.classList.toggle('on',n.channels.includes(ch)); }
+
+// ── DEVICES ───────────────────────────────────────────────────────────────────
+const devices=[
+  {id:1,name:'POS-01',type:'Desktop',ip:'192.168.1.10',staff:'สมชาย ดีมาก',online:true,  last:'วันนี้ 09:12'},
+  {id:2,name:'POS-02',type:'Tablet', ip:'192.168.1.11',staff:'สุดา ใจดี',   online:true,  last:'วันนี้ 08:45'},
+  {id:3,name:'POS-03',type:'Mobile', ip:'192.168.1.15',staff:'—',           online:false, last:'เมื่อวาน 18:30'},
+];
+function renderDevices(){
+  document.getElementById('device-body').innerHTML=devices.map(d=>`
+    <div class="device-row">
+      <div class="device-status ${d.online?'ds-online':'ds-offline'}"></div>
+      <div class="device-info">
+        <div class="device-name">${d.name} <span style="font-size:11px;color:var(--text-muted);margin-left:6px;">${d.type}</span></div>
+        <div class="device-meta">IP: ${d.ip} · ใช้งานล่าสุด: ${d.last}${d.staff!=='—'?' · '+d.staff:''}</div>
+      </div>
+      <div class="device-actions">
+        ${d.online?`<button class="btn btn-ghost btn-sm" onclick="forceLogout(${d.id})"><i class="ti ti-logout" aria-hidden="true"></i> Logout</button>`:''}
+        <button class="btn btn-ghost btn-sm"><i class="ti ti-settings" aria-hidden="true"></i></button>
+        <button class="btn btn-danger-ghost btn-sm" onclick="removeDevice(${d.id})"><i class="ti ti-trash" aria-hidden="true"></i></button>
+      </div>
+    </div>`).join('');
+  document.getElementById('device-online-count').textContent=devices.filter(d=>d.online).length+' ออนไลน์';
+}
+function forceLogout(id){ showToast('Force logout เครื่อง POS-0'+id+' สำเร็จ','info'); }
+function removeDevice(id){ if(!confirm('ลบเครื่องนี้ออกจากระบบ?')) return; devices.splice(devices.findIndex(d=>d.id===id),1); renderDevices(); showToast('ลบเครื่องแล้ว','info'); }
+
+// ── RECEIPT LOGO ──────────────────────────────────────────────────────────────
+let receiptLogoDataUrl = null;
+
+function onReceiptLogoChange(input){
+  const file = input.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    receiptLogoDataUrl = e.target.result;
+    // update thumbnail
+    const prev = document.getElementById('receipt-logo-preview');
+    prev.innerHTML = `<img src="${receiptLogoDataUrl}" style="width:100%;height:100%;object-fit:contain;border-radius:var(--radius-sm);">`;
+    prev.style.border = '1px solid var(--border)';
+    prev.style.background = 'var(--white)';
+    document.getElementById('receipt-logo-remove').style.display = '';
+    renderReceiptPreview();
+    showToast('อัปโหลดโลโก้เรียบร้อย','success');
+  };
+  reader.readAsDataURL(file);
+}
+
+function removeReceiptLogo(){
+  receiptLogoDataUrl = null;
+  const prev = document.getElementById('receipt-logo-preview');
+  prev.innerHTML = '🐾';
+  prev.style.border = '2px dashed var(--p100)';
+  prev.style.background = 'var(--p50)';
+  document.getElementById('receipt-logo-remove').style.display = 'none';
+  document.getElementById('receipt-logo-input').value = '';
+  renderReceiptPreview();
+  showToast('ลบโลโก้แล้ว','info');
+}
+
+// ── RECEIPT PREVIEW ───────────────────────────────────────────────────────────
+function renderReceiptPreview(){
+  const showLogo = document.getElementById('receipt-logo-show')?.checked;
+  const headerText = document.getElementById('receipt-header-text')?.value || 'TwinPet Pet Shop\nสาขาลาดพร้าว';
+  const lines = headerText.split('\n');
+
+  const logoHtml = showLogo && receiptLogoDataUrl
+    ? `<div style="text-align:center;margin-bottom:6px;"><img src="${receiptLogoDataUrl}" style="max-width:120px;max-height:40px;object-fit:contain;filter:invert(1);opacity:.9;"></div>`
+    : (showLogo && !receiptLogoDataUrl
+        ? `<div style="text-align:center;margin-bottom:6px;font-size:22px;">🐾</div>`
+        : '');
+
+  document.getElementById('receipt-preview').innerHTML=`
+    ${logoHtml}
+    ${lines.map((l,i)=>`<div class="rp-center${i===0?' rp-bold':''}">${l}</div>`).join('')}
+    <div class="rp-center" style="font-size:11px;color:#aaa;">123/45 ถ.ลาดพร้าว กรุงเทพฯ</div>
+    <div class="rp-center" style="font-size:11px;color:#aaa;">Tel: 02-123-4567</div>
+    <div class="rp-divider"></div>
+    <div class="rp-row"><span>บิลเลขที่</span><span>TW-0588</span></div>
+    <div class="rp-row"><span>วันที่</span><span>25/05/2026 14:30</span></div>
+    <div class="rp-row"><span>พนักงาน</span><span>สมชาย</span></div>
+    <div class="rp-divider"></div>
+    <div class="rp-row"><span>Royal Canin 3kg</span><span></span></div>
+    <div class="rp-row"><span>  1 x ฿480</span><span>฿480</span></div>
+    <div class="rp-row"><span>Whiskas Tuna 24pc</span><span></span></div>
+    <div class="rp-row"><span>  2 x ฿120</span><span>฿240</span></div>
+    <div class="rp-divider"></div>
+    <div class="rp-row"><span>รวม</span><span>฿720</span></div>
+    <div class="rp-row"><span>VAT 7%</span><span>฿47.10</span></div>
+    <div class="rp-row rp-bold"><span>ยอดสุทธิ</span><span>฿720</span></div>
+    <div class="rp-row"><span>เงินสด</span><span>฿1,000</span></div>
+    <div class="rp-row"><span>ทอน</span><span>฿280</span></div>
+    <div class="rp-divider"></div>
+    <div class="rp-center" style="font-size:11px;">ขอบคุณที่ใช้บริการ</div>
+    <div class="rp-center" style="font-size:11px;color:#aaa;">www.twinpet.co.th</div>`;
+}
+
+// ── MODAL ─────────────────────────────────────────────────────────────────────
+function openModal(id){ document.getElementById(id).classList.add('open'); }
+function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+document.querySelectorAll('.modal-overlay').forEach(o=>o.addEventListener('click',e=>{if(e.target===o) o.classList.remove('open');}));
+
+let _dangerAction='';
+function confirmDanger(action){ _dangerAction=action; document.getElementById('danger-desc').textContent='คุณกำลังจะ: '+action+'\nการกระทำนี้ไม่สามารถย้อนกลับได้'; document.getElementById('danger-confirm-input').value=''; openModal('danger-modal'); }
+function executeDanger(){ if(document.getElementById('danger-confirm-input').value.trim()==='ยืนยัน'){ closeModal('danger-modal'); showToast(_dangerAction+' เสร็จสิ้น','warn'); } else { showToast('กรุณาพิมพ์ "ยืนยัน" ก่อน','warn'); } }
+
+// ── SAVE / CANCEL ─────────────────────────────────────────────────────────────
+function handleSave(){ showToast('บันทึกการตั้งค่าเรียบร้อย','success'); document.getElementById('footer-saved').textContent='บันทึกล่าสุด: '+new Date().toLocaleString('th-TH',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'short'}); }
+function handleCancel(){ showToast('ยกเลิกการเปลี่ยนแปลง','info'); }
+
+// ── TOAST ─────────────────────────────────────────────────────────────────────
+function showToast(msg,type='info'){
+  const wrap=document.getElementById('toast-wrap');
+  const el=document.createElement('div'); el.className=`toast ${type}`;
+  const icons={success:'ti-circle-check',warn:'ti-alert-triangle',info:'ti-info-circle'};
+  el.innerHTML=`<i class="ti ${icons[type]||'ti-info-circle'}" aria-hidden="true"></i> ${msg}`;
+  wrap.appendChild(el);
+  setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity 0.3s'; setTimeout(()=>el.remove(),300); },2800);
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+renderPriceLevels();
+renderUOM();
+renderPayment();
+renderNotifs();
+renderDevices();
+renderReceiptPreview();
+</script>
+</body>
+</html>

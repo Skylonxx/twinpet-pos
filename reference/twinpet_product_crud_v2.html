@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TwinPet — จัดการสินค้า v2</title>
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600&family=Sarabun:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --p50:#EEEDFE;--p100:#CECBF6;--p200:#AFA9EC;--p400:#7F77DD;--p600:#534AB7;--p800:#3C3489;--p900:#26215C;
+  --g50:#F8F8FC;--g100:#F1EFE8;--g200:#D3D1C7;--g400:#888780;--g600:#5F5E5A;
+  --green:#1D9E75;--teal50:#E1F5EE;--amber:#BA7517;--amber50:#FAEEDA;--red:#E24B4A;
+}
+html,body{height:100%;font-family:'Sarabun',sans-serif;background:var(--g50);overflow:hidden;}
+
+.page{display:flex;height:100vh;flex-direction:column;}
+
+/* TOPBAR */
+.topbar{background:white;border-bottom:.5px solid var(--g200);padding:0 20px;height:48px;display:flex;align-items:center;gap:10px;flex-shrink:0;}
+.page-title{font-size:15px;font-weight:500;color:var(--p900);flex:1;}
+.icon-btn{width:32px;height:32px;border-radius:8px;border:.5px solid var(--g200);background:white;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--g400);}
+.icon-btn:hover{background:var(--g50);color:var(--p600);}
+.icon-btn i{font-size:15px;}
+.add-btn{display:flex;align-items:center;gap:5px;padding:6px 14px;background:var(--p600);color:white;border:none;border-radius:8px;font-size:12px;font-family:'Sarabun',sans-serif;font-weight:500;cursor:pointer;}
+.add-btn:hover{background:var(--p800);}
+
+/* FILTER BAR */
+.filter-bar{background:white;border-bottom:.5px solid var(--g200);padding:8px 20px;display:flex;gap:8px;align-items:center;flex-shrink:0;}
+.search-wrap{flex:1;display:flex;align-items:center;gap:6px;border:.5px solid var(--g200);border-radius:7px;padding:0 10px;height:32px;background:var(--g50);}
+.search-wrap i{font-size:14px;color:var(--g400);flex-shrink:0;}
+.search-wrap input{border:none;background:transparent;outline:none;font-size:12px;font-family:'Sarabun',sans-serif;color:var(--g600);width:100%;}
+.scan-badge{display:flex;align-items:center;gap:4px;font-size:10px;padding:3px 9px;border-radius:10px;background:var(--teal50);color:var(--green);border:.5px solid #9FE1CB;white-space:nowrap;flex-shrink:0;}
+.scan-dot{width:6px;height:6px;border-radius:50%;background:var(--green);}
+.cat-dropdown{position:relative;flex-shrink:0;}
+.cat-dropdown-btn{display:flex;align-items:center;gap:5px;padding:0 10px;height:32px;border:.5px solid var(--g200);border-radius:7px;background:white;font-size:11px;color:var(--g600);cursor:pointer;white-space:nowrap;min-width:90px;justify-content:space-between;}
+.cat-dropdown-btn:hover{border-color:var(--p400);color:var(--p600);}
+.cat-dropdown-menu{position:absolute;top:36px;left:0;background:white;border:.5px solid var(--g200);border-radius:9px;box-shadow:0 4px 16px rgba(0,0,0,.1);z-index:100;min-width:130px;overflow:hidden;display:none;}
+.cat-dropdown-menu.open{display:block;}
+.cat-menu-item{padding:8px 12px;font-size:12px;color:var(--g600);cursor:pointer;}
+.cat-menu-item:hover{background:var(--p50);color:var(--p800);}
+.cat-menu-item.active{color:var(--p600);font-weight:500;}
+.stock-filter{display:flex;gap:3px;flex-shrink:0;}
+.sf{padding:3px 9px;border-radius:10px;border:.5px solid var(--g200);background:white;font-size:10px;color:var(--g400);cursor:pointer;white-space:nowrap;}
+.sf.on{background:var(--p50);border-color:var(--p400);color:var(--p800);font-weight:500;}
+
+/* BODY */
+.body-row{flex:1;display:flex;overflow:hidden;}
+.table-area{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+.table-wrap{flex:1;overflow-y:auto;}
+.table-wrap::-webkit-scrollbar{width:4px;}
+.table-wrap::-webkit-scrollbar-thumb{background:var(--g200);border-radius:4px;}
+table{width:100%;border-collapse:collapse;}
+thead th{position:sticky;top:0;background:var(--g50);padding:7px 12px;text-align:left;font-size:10px;font-weight:500;color:var(--g400);border-bottom:.5px solid var(--g200);white-space:nowrap;z-index:1;}
+th.r{text-align:right;}
+tbody tr{border-bottom:.5px solid var(--g100);cursor:pointer;transition:background .08s;}
+tbody tr:hover{background:var(--p50);}
+tbody tr.selected{background:var(--p50);border-left:2px solid var(--p600);}
+tbody tr.flash{animation:fl .6s ease;}
+@keyframes fl{0%{background:var(--p100)}100%{background:var(--p50)}}
+td{padding:7px 12px;font-size:11px;color:var(--g600);vertical-align:middle;}
+td.r{text-align:right;}
+.prod-cell{display:flex;align-items:center;gap:8px;}
+.prod-emoji{font-size:18px;width:30px;height:30px;background:var(--g100);border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.prod-name{font-size:11px;font-weight:500;color:var(--p900);line-height:1.3;}
+.prod-sku{font-size:9px;color:var(--g400);}
+.cat-badge{display:inline-block;padding:2px 6px;border-radius:8px;font-size:9px;font-weight:500;}
+.stock-ok{background:var(--teal50);color:var(--green);}
+.stock-low{background:var(--amber50);color:var(--amber);}
+.stock-out{background:#FCEBEB;color:var(--red);}
+.uom-chip{display:inline-flex;align-items:center;gap:2px;padding:1px 5px;border-radius:5px;font-size:9px;background:var(--p50);color:var(--p800);border:.5px solid var(--p100);margin-left:4px;}
+.row-actions{display:flex;gap:3px;opacity:0;transition:opacity .1s;}
+tbody tr:hover .row-actions{opacity:1;}
+.ra{width:22px;height:22px;border-radius:4px;border:.5px solid var(--g200);background:white;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--g400);}
+.ra:hover{border-color:var(--p400);color:var(--p600);}
+.ra.del:hover{border-color:var(--red);color:var(--red);}
+.ra i{font-size:11px;}
+
+/* BOTTOM */
+.bottom-bar{background:white;border-top:.5px solid var(--g200);padding:6px 20px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+.bottom-left{display:flex;align-items:center;gap:10px;}
+.bottom-info{font-size:11px;color:var(--g400);}
+.per-page-wrap{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--g400);}
+.per-page-sel{border:.5px solid var(--g200);border-radius:6px;padding:2px 6px;font-size:11px;font-family:'Sarabun',sans-serif;outline:none;background:white;}
+.pagination{display:flex;gap:3px;}
+.pg{width:26px;height:26px;border-radius:6px;border:.5px solid var(--g200);background:white;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:10px;color:var(--g600);}
+.pg.on{background:var(--p600);color:white;border-color:var(--p600);}
+.pg:hover:not(.on){background:var(--g50);}
+
+/* DRAWER */
+.drawer{width:0;background:white;border-left:.5px solid var(--g200);display:flex;flex-direction:column;overflow:hidden;transition:width .2s;flex-shrink:0;}
+.drawer.open{width:440px;}
+.drawer-top{padding:10px 16px;border-bottom:.5px solid var(--g200);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+.drawer-title{font-size:13px;font-weight:500;color:var(--p900);}
+.drawer-close{width:24px;height:24px;border-radius:50%;border:.5px solid var(--g200);background:white;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--g400);}
+.drawer-tabs{display:flex;border-bottom:.5px solid var(--g200);flex-shrink:0;}
+.dtab{flex:1;padding:8px 0;text-align:center;font-size:11px;color:var(--g400);cursor:pointer;border-bottom:2px solid transparent;}
+.dtab.on{color:var(--p600);border-bottom-color:var(--p600);font-weight:500;}
+.drawer-body{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;}
+.drawer-body::-webkit-scrollbar{width:3px;}
+.drawer-body::-webkit-scrollbar-thumb{background:var(--g200);border-radius:4px;}
+.drawer-footer{border-top:.5px solid var(--g200);padding:9px 14px;display:flex;gap:6px;flex-shrink:0;}
+.df-btn{flex:1;padding:7px;border-radius:7px;font-size:12px;font-family:'Sarabun',sans-serif;cursor:pointer;font-weight:500;}
+.df-save{background:var(--p600);color:white;border:none;}
+.df-save:hover{background:var(--p800);}
+.df-cancel{background:white;color:var(--g600);border:.5px solid var(--g200);}
+.df-del{background:#FCEBEB;color:var(--red);border:.5px solid #F09595;}
+
+/* FORM */
+.field{display:flex;flex-direction:column;gap:4px;}
+.field label{font-size:10px;color:var(--g400);font-weight:500;}
+.field label .req{color:var(--red);}
+.field input,.field select{border:.5px solid var(--g200);border-radius:6px;padding:6px 9px;font-size:12px;font-family:'Sarabun',sans-serif;color:var(--p900);outline:none;}
+.field input:focus,.field select:focus{border-color:var(--p400);}
+.field input[readonly]{background:var(--g50);color:var(--g400);}
+.fg2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.fg3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
+.sec-label{font-size:10px;font-weight:500;color:var(--g400);padding-bottom:4px;border-bottom:.5px solid var(--g100);}
+.barcode-row{display:flex;gap:5px;}
+.barcode-row input{flex:1;}
+.scan-btn{padding:0 9px;background:var(--p50);border:.5px solid var(--p200);border-radius:6px;font-size:10px;color:var(--p800);cursor:pointer;display:flex;align-items:center;gap:3px;white-space:nowrap;}
+
+/* TOGGLE */
+.tog-row{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;background:var(--g50);border-radius:7px;}
+.tog-lbl{font-size:11px;color:var(--g600);display:flex;align-items:center;gap:5px;}
+.tog-lbl i{font-size:13px;color:var(--p400);}
+.tog{position:relative;width:30px;height:17px;flex-shrink:0;}
+.tog input{opacity:0;width:0;height:0;position:absolute;}
+.tog-track{position:absolute;inset:0;background:var(--g200);border-radius:9px;cursor:pointer;transition:background .2s;}
+.tog input:checked+.tog-track{background:var(--p600);}
+.tog input:disabled+.tog-track{cursor:not-allowed;opacity:.4;}
+.tog-thumb{position:absolute;top:2px;left:2px;width:13px;height:13px;background:white;border-radius:50%;pointer-events:none;transition:transform .15s;box-shadow:0 1px 3px rgba(0,0,0,.15);}
+.tog input:checked~.tog-thumb{transform:translateX(13px);}
+
+/* ===== COST DISPLAY — FIFO style ===== */
+.cost-display{background:var(--g50);border:.5px solid var(--g200);border-radius:8px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;}
+.cost-left{display:flex;flex-direction:column;gap:3px;}
+.cost-lbl{font-size:10px;color:var(--g400);}
+.cost-val-row{display:flex;align-items:baseline;gap:6px;}
+.cost-avg{font-size:16px;font-weight:600;color:var(--p900);font-family:'Prompt',sans-serif;}
+.cost-unit{font-size:10px;color:var(--g400);}
+.cost-fifo-note{font-size:9px;color:var(--g400);}
+.cost-fifo-note span{color:var(--amber);font-weight:500;}
+.view-batch-btn{display:flex;align-items:center;gap:4px;padding:5px 10px;border:.5px solid var(--p200);border-radius:7px;background:white;font-size:11px;color:var(--p600);cursor:pointer;white-space:nowrap;font-family:'Sarabun',sans-serif;}
+.view-batch-btn:hover{background:var(--p50);}
+.view-batch-btn i{font-size:14px;}
+
+/* UOM */
+.uom-section{border:.5px solid var(--p100);border-radius:8px;overflow:hidden;}
+.uom-sec-head{background:var(--p50);padding:8px 10px;display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:500;color:var(--p900);}
+.uom-sec-body{padding:8px 10px;display:flex;flex-direction:column;gap:8px;}
+.uom-unit{background:white;border:.5px solid var(--g200);border-radius:7px;overflow:hidden;}
+.uom-unit.base-unit{border-color:var(--p200);}
+.uom-unit-hd{display:flex;align-items:center;gap:6px;padding:6px 9px;background:var(--g50);cursor:pointer;user-select:none;}
+.uom-unit.base-unit .uom-unit-hd{background:var(--p50);}
+.uom-unit-name{font-size:11px;font-weight:500;color:var(--p900);}
+.base-badge{background:var(--p600);color:white;font-size:9px;padding:1px 5px;border-radius:6px;flex-shrink:0;}
+.uom-eq{font-size:10px;color:var(--g400);flex:1;}
+.uom-exp-btn{width:16px;height:16px;border:none;background:transparent;cursor:pointer;color:var(--g400);display:flex;align-items:center;justify-content:center;}
+.uom-exp-btn i{font-size:12px;transition:transform .15s;}
+.uom-exp-btn.open i{transform:rotate(180deg);}
+.uom-del{width:16px;height:16px;border:none;background:transparent;cursor:pointer;color:var(--g200);display:flex;align-items:center;justify-content:center;}
+.uom-del:hover{color:var(--red);}
+.uom-unit-body{padding:8px 10px;display:flex;flex-direction:column;gap:7px;}
+.tier-table{width:100%;border-collapse:collapse;font-size:11px;}
+.tier-table th{background:var(--g50);padding:5px 7px;text-align:left;color:var(--g400);border:.5px solid var(--g200);font-weight:500;}
+.tier-table td{padding:4px 6px;border:.5px solid var(--g200);}
+.tier-table td input{border:none;outline:none;width:100%;font-size:11px;font-family:'Prompt',sans-serif;color:var(--p900);background:transparent;text-align:right;}
+.tier-dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:4px;}
+.chain-conn{display:flex;align-items:center;padding:0 0 0 16px;}
+.chain-line{width:1px;height:14px;background:var(--p200);}
+.chain-lbl{font-size:9px;color:var(--p400);padding-left:5px;}
+.add-uom-row{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--p600);cursor:pointer;padding:6px 9px;border:1px dashed var(--p200);border-radius:7px;}
+.add-uom-row:hover{background:var(--p50);}
+
+/* STOCK TAB */
+.stock-summary{background:var(--g50);border-radius:8px;padding:10px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center;}
+.st-card{display:flex;flex-direction:column;gap:2px;}
+.st-val{font-size:18px;font-weight:600;font-family:'Prompt',sans-serif;}
+.st-lbl{font-size:9px;color:var(--g400);}
+.hist-table{width:100%;border-collapse:collapse;font-size:11px;}
+.hist-table th{background:var(--g50);padding:5px 8px;text-align:left;color:var(--g400);border-bottom:.5px solid var(--g200);font-weight:500;}
+.hist-table td{padding:5px 8px;border-bottom:.5px solid var(--g100);color:var(--g600);}
+.h-in{color:var(--green);font-weight:500;}
+.h-out{color:var(--red);font-weight:500;}
+
+/* ===== FIFO BATCH MODAL ===== */
+.modal-overlay{position:fixed;inset:0;background:rgba(30,24,60,.45);display:flex;align-items:center;justify-content:center;z-index:500;}
+.modal-overlay.hidden{display:none;}
+
+.fifo-modal{background:white;border-radius:14px;width:680px;max-height:82vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 16px 48px rgba(0,0,0,.22);}
+.fifo-head{padding:14px 20px;border-bottom:.5px solid var(--g200);display:flex;align-items:center;gap:10px;flex-shrink:0;}
+.fifo-title{font-size:14px;font-weight:500;color:var(--p900);flex:1;}
+.fifo-close{width:26px;height:26px;border-radius:50%;border:.5px solid var(--g200);background:white;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--g400);}
+
+/* FIFO summary bar */
+.fifo-summary{padding:12px 20px;background:var(--g50);border-bottom:.5px solid var(--g200);display:flex;gap:16px;flex-shrink:0;}
+.fifo-sum-item{display:flex;flex-direction:column;gap:2px;}
+.fsi-lbl{font-size:10px;color:var(--g400);}
+.fsi-val{font-size:15px;font-weight:600;font-family:'Prompt',sans-serif;}
+
+/* FIFO note */
+.fifo-note{padding:8px 20px;background:var(--amber50);border-bottom:.5px solid var(--g200);display:flex;align-items:center;gap:7px;font-size:11px;color:#633806;flex-shrink:0;}
+.fifo-note i{font-size:15px;color:var(--amber);flex-shrink:0;}
+
+/* FIFO table */
+.fifo-table-wrap{flex:1;overflow-y:auto;}
+.fifo-table-wrap::-webkit-scrollbar{width:3px;}
+.fifo-table-wrap::-webkit-scrollbar-thumb{background:var(--g200);border-radius:4px;}
+.fifo-table{width:100%;border-collapse:collapse;}
+.fifo-table thead th{position:sticky;top:0;background:var(--g50);padding:8px 16px;text-align:left;font-size:11px;font-weight:500;color:var(--g400);border-bottom:.5px solid var(--g200);white-space:nowrap;z-index:1;}
+.fifo-table thead th.r{text-align:right;}
+.fifo-table tbody tr{border-bottom:.5px solid var(--g100);transition:background .08s;}
+.fifo-table tbody tr:hover{background:var(--g50);}
+.fifo-table tbody tr.depleted td{opacity:.4;}
+.fifo-table td{padding:9px 16px;font-size:12px;color:var(--g600);vertical-align:middle;}
+.fifo-table td.r{text-align:right;font-family:'Prompt',sans-serif;font-weight:500;}
+/* lot order badge */
+.lot-order{width:22px;height:22px;border-radius:50%;background:var(--p50);border:.5px solid var(--p200);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:var(--p800);font-family:'Prompt',sans-serif;}
+.lot-order.next{background:var(--p600);border-color:var(--p600);color:white;}
+/* status chip */
+.lot-status{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:8px;font-size:10px;font-weight:500;}
+.lot-active{background:var(--teal50);color:var(--green);}
+.lot-partial{background:var(--amber50);color:var(--amber);}
+.lot-depleted{background:var(--g100);color:var(--g400);}
+/* editable cost per batch */
+.batch-cost-cell{display:flex;align-items:center;gap:5px;}
+.batch-cost-inp{width:72px;border:.5px solid var(--g200);border-radius:5px;padding:3px 7px;font-size:11px;font-family:'Prompt',sans-serif;color:var(--p900);outline:none;text-align:right;}
+.batch-cost-inp:focus{border-color:var(--p400);}
+.batch-save-btn{padding:2px 7px;border-radius:5px;border:none;background:var(--p600);color:white;font-size:10px;cursor:pointer;font-family:'Sarabun',sans-serif;display:none;}
+.batch-cost-inp:focus~.batch-save-btn,.batch-cost-inp:not(:placeholder-shown)~.batch-save-btn{display:inline-block;}
+
+.fifo-footer{padding:12px 20px;border-top:.5px solid var(--g200);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+.fifo-footer-note{font-size:11px;color:var(--g400);}
+.fifo-footer-note strong{color:var(--p800);}
+.close-modal-btn{padding:7px 18px;border-radius:8px;border:.5px solid var(--g200);background:white;font-size:12px;font-family:'Sarabun',sans-serif;color:var(--g600);cursor:pointer;}
+.close-modal-btn:hover{background:var(--g50);}
+</style>
+</head>
+<body>
+
+<!-- FIFO BATCH MODAL -->
+<div class="modal-overlay hidden" id="fifo-modal">
+  <div class="fifo-modal">
+    <div class="fifo-head">
+      <div>
+        <div class="fifo-title" id="fifo-prod-name">คิวล็อต FIFO</div>
+        <div style="font-size:11px;color:var(--g400);margin-top:1px;" id="fifo-prod-sku"></div>
+      </div>
+      <div class="fifo-close" onclick="closeFifo()"><i class="ti ti-x" style="font-size:12px;"></i></div>
+    </div>
+
+    <!-- FIFO summary -->
+    <div class="fifo-summary">
+      <div class="fifo-sum-item">
+        <span class="fsi-lbl">สต็อกรวม (ฐาน)</span>
+        <span class="fsi-val" id="fs-total-qty" style="color:var(--p600);">—</span>
+      </div>
+      <div class="fifo-sum-item">
+        <span class="fsi-lbl">ต้นทุนเฉลี่ยถ่วงน้ำหนัก</span>
+        <span class="fsi-val" id="fs-avg-cost" style="color:var(--p900);">—</span>
+      </div>
+      <div class="fifo-sum-item">
+        <span class="fsi-lbl">มูลค่าสต็อกรวม</span>
+        <span class="fsi-val" id="fs-total-val" style="color:var(--green);">—</span>
+      </div>
+      <div class="fifo-sum-item">
+        <span class="fsi-lbl">จำนวน lot ทั้งหมด</span>
+        <span class="fsi-val" id="fs-lots" style="color:var(--amber);">—</span>
+      </div>
+    </div>
+
+    <!-- FIFO note -->
+    <div class="fifo-note">
+      <i class="ti ti-info-circle"></i>
+      ระบบตัดสต็อกแบบ <strong>FIFO</strong> — lot ที่รับเข้าก่อนถูกตัดออกก่อน &nbsp;|&nbsp;
+      ปรับต้นทุนได้ต่อ lot โดยตรง มีผลกับออเดอร์ใหม่เท่านั้น
+    </div>
+
+    <!-- FIFO table -->
+    <div class="fifo-table-wrap">
+      <table class="fifo-table">
+        <thead>
+          <tr>
+            <th style="width:36px;text-align:center;">ลำดับ</th>
+            <th>วันที่รับเข้า</th>
+            <th>เลขอ้างอิง GRN</th>
+            <th class="r" style="width:90px;">คงเหลือ (ชิ้น)</th>
+            <th class="r" style="width:90px;">รับเข้าทั้งหมด</th>
+            <th class="r" style="width:110px;">ต้นทุน/ชิ้น (฿)</th>
+            <th class="r" style="width:100px;">มูลค่ารวม (฿)</th>
+            <th style="width:80px;text-align:center;">สถานะ</th>
+          </tr>
+        </thead>
+        <tbody id="fifo-tbody"></tbody>
+      </table>
+    </div>
+
+    <div class="fifo-footer">
+      <div class="fifo-footer-note">
+        <i class="ti ti-lock" style="font-size:12px;vertical-align:-2px;color:var(--g400);"></i>
+        การปรับต้นทุนต่อ lot บันทึก <strong>audit log</strong> อัตโนมัติ
+      </div>
+      <button class="close-modal-btn" onclick="closeFifo()">ปิด</button>
+    </div>
+  </div>
+</div>
+
+<div class="page">
+  <div class="topbar">
+    <span class="page-title">จัดการสินค้า</span>
+    <div class="icon-btn" title="Import"><i class="ti ti-upload"></i></div>
+    <div class="icon-btn" title="Export"><i class="ti ti-download"></i></div>
+    <button class="add-btn" onclick="openDrawer('new')"><i class="ti ti-plus"></i> เพิ่มสินค้า</button>
+  </div>
+
+  <div class="filter-bar">
+    <div class="search-wrap">
+      <i class="ti ti-search"></i>
+      <input id="search-inp" placeholder="ค้นหาชื่อ, SKU, บาร์โค้ด..." oninput="renderTable()" />
+    </div>
+    <div class="scan-badge"><div class="scan-dot"></div> พร้อมสแกน</div>
+    <div class="cat-dropdown" id="cat-dd">
+      <div class="cat-dropdown-btn" onclick="toggleCatDd()">
+        <span id="cat-label">ทุกหมวด</span>
+        <i class="ti ti-chevron-down" style="font-size:10px;"></i>
+      </div>
+      <div class="cat-dropdown-menu" id="cat-menu">
+        <div class="cat-menu-item active" onclick="selectCat('',this)">ทุกหมวด</div>
+        <div class="cat-menu-item" onclick="selectCat('อาหารสัตว์',this)">อาหารสัตว์</div>
+        <div class="cat-menu-item" onclick="selectCat('ทรีทและขนม',this)">ทรีทและขนม</div>
+        <div class="cat-menu-item" onclick="selectCat('ของเล่น',this)">ของเล่น</div>
+        <div class="cat-menu-item" onclick="selectCat('กรายแมว',this)">กรายแมว</div>
+        <div class="cat-menu-item" onclick="selectCat('ผลิตภัณฑ์ดูแล',this)">ผลิตภัณฑ์ดูแล</div>
+      </div>
+    </div>
+    <div class="stock-filter">
+      <button class="sf on" onclick="setSF('',this)">ทั้งหมด</button>
+      <button class="sf" onclick="setSF('low',this)">ใกล้หมด</button>
+      <button class="sf" onclick="setSF('out',this)">หมด</button>
+    </div>
+  </div>
+
+  <div class="body-row">
+    <div class="table-area">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:28px;"><input type="checkbox" style="width:11px;height:11px;"/></th>
+              <th>สินค้า</th>
+              <th>หมวด</th>
+              <th class="r">ราคาขาย</th>
+              <th class="r">ต้นทุนเฉลี่ย</th>
+              <th class="r">สต็อก (สาขานี้)</th>
+              <th style="width:56px;"></th>
+            </tr>
+          </thead>
+          <tbody id="prod-tbody"></tbody>
+        </table>
+      </div>
+      <div class="bottom-bar">
+        <div class="bottom-left">
+          <span class="bottom-info" id="bottom-info"></span>
+          <div class="per-page-wrap">
+            แสดง
+            <select class="per-page-sel" id="per-page" onchange="renderTable()">
+              <option value="50">50</option><option value="100">100</option><option value="200">200</option>
+            </select>
+            รายการ/หน้า
+          </div>
+        </div>
+        <div class="pagination">
+          <div class="pg"><i class="ti ti-chevron-left" style="font-size:11px;"></i></div>
+          <div class="pg on">1</div>
+          <div class="pg"><i class="ti ti-chevron-right" style="font-size:11px;"></i></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DRAWER -->
+    <div class="drawer" id="drawer">
+      <div class="drawer-top">
+        <span class="drawer-title" id="drawer-title">เพิ่มสินค้าใหม่</span>
+        <div class="drawer-close" onclick="closeDrawer()"><i class="ti ti-x" style="font-size:12px;"></i></div>
+      </div>
+      <div class="drawer-tabs">
+        <div class="dtab on" onclick="switchDTab('info',this)">ข้อมูลสินค้า</div>
+        <div class="dtab" onclick="switchDTab('stock',this)">สต็อก</div>
+        <div class="dtab" onclick="switchDTab('history',this)">ประวัติ</div>
+      </div>
+      <div class="drawer-body" id="drawer-body"></div>
+      <div class="drawer-footer" id="drawer-footer"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const TIERS=[{name:'ราคาปกติ',color:'#534AB7'},{name:'VIP',color:'#1D9E75'},{name:'ราคาส่ง',color:'#BA7517'},{name:'สมาชิก Gold',color:'#D4537E'}];
+const CAT_COLORS={'อาหารสัตว์':'background:#E1F5EE;color:#085041','ทรีทและขนม':'background:#FAEEDA;color:#633806','ของเล่น':'background:#FAECE7;color:#993C1D','กรายแมว':'background:#F1EFE8;color:#444441','ผลิตภัณฑ์ดูแล':'background:#FBEAF0;color:#72243E'};
+
+const PRODUCTS=[
+  {id:1,name:"Hill's Science Diet สุนัขสูงอายุ 7+ 5.67kg",sku:"SKU001",barcode:"8850007890123",cat:"อาหารสัตว์",price:2400,avgCost:1820,stock:98,minStock:10,emoji:"🐕",active:true,hasUom:false},
+  {id:2,name:"Royal Canin Mini Indoor Senior 3kg",sku:"SKU002",barcode:"3182550789456",cat:"อาหารสัตว์",price:1029,avgCost:780,stock:96,minStock:10,emoji:"🐩",active:true,hasUom:false},
+  {id:3,name:"Maxima อาหารเปียก กระป๋อง 380g",sku:"SKU003",barcode:"8850001234567",cat:"อาหารสัตว์",price:79,avgCost:45,stock:99,minStock:20,emoji:"🥫",active:true,hasUom:true},
+  {id:4,name:"Smart Heart อาหารลูกสุนัข 8kg",sku:"SKU004",barcode:"8850009876543",cat:"อาหารสัตว์",price:759,avgCost:580,stock:8,minStock:10,emoji:"🐶",active:true,hasUom:false},
+  {id:5,name:"Jerhigh ฮอทดอกบาร์ รสไก่ 150g",sku:"SKU005",barcode:"8858753012345",cat:"ทรีทและขนม",price:45,avgCost:28,stock:99,minStock:30,emoji:"🌭",active:true,hasUom:true},
+  {id:6,name:"Biscal ขนมคุกกี้สุนัข สูตรชีส 60g",sku:"SKU006",barcode:"8858753098765",cat:"ทรีทและขนม",price:197,avgCost:120,stock:100,minStock:15,emoji:"🍪",active:true,hasUom:false},
+  {id:7,name:"Pedigree เดนตาสติก แท่งขัดฟัน",sku:"SKU007",barcode:"8850003456789",cat:"ทรีทและขนม",price:199,avgCost:140,stock:3,minStock:10,emoji:"🦷",active:true,hasUom:false},
+  {id:8,name:"Kaniva อาหารแมวโต รสแกะทูน่า 8kg",sku:"SKU008",barcode:"8858656001234",cat:"อาหารสัตว์",price:890,avgCost:650,stock:0,minStock:5,emoji:"🐱",active:false,hasUom:false},
+  {id:9,name:"Purina ONE แมวโต รสทูน่า 1.8kg",sku:"SKU009",barcode:"7613287890123",cat:"อาหารสัตว์",price:540,avgCost:390,stock:27,minStock:10,emoji:"🐟",active:true,hasUom:false},
+  {id:10,name:"Boltz ของเล่นแมว ไม้เท้าขนนก",sku:"SKU010",barcode:"8858888012345",cat:"ของเล่น",price:149,avgCost:70,stock:18,minStock:5,emoji:"🪄",active:true,hasUom:false},
+  {id:11,name:"Fresh Step กรายแมวก้อน 20L",sku:"SKU011",barcode:"0044600309768",cat:"กรายแมว",price:399,avgCost:250,stock:14,minStock:8,emoji:"🪣",active:true,hasUom:false},
+  {id:12,name:"Nekko Kitten อาหารเปียกลูกแมว 70g",sku:"SKU012",barcode:"8858636001234",cat:"อาหารสัตว์",price:25,avgCost:14,stock:88,minStock:50,emoji:"🐈",active:true,hasUom:true},
+];
+
+// FIFO batch data per product
+const FIFO_BATCHES={
+  1:[
+    {grn:'GRN-0038',date:'15/04/2026',received:50,remaining:50,cost:1800},
+    {grn:'GRN-0029',date:'01/03/2026',received:30,remaining:28,cost:1820},
+    {grn:'GRN-0018',date:'10/01/2026',received:40,remaining:20,cost:1790},
+    {grn:'GRN-0010',date:'05/11/2025',received:30,remaining:0,cost:1750},
+  ],
+  3:[
+    {grn:'GRN-0041',date:'20/05/2026',received:120,remaining:99,cost:44},
+    {grn:'GRN-0033',date:'15/03/2026',received:60,remaining:0,cost:46},
+  ],
+  4:[
+    {grn:'GRN-0039',date:'20/04/2026',received:10,remaining:8,cost:578},
+    {grn:'GRN-0025',date:'15/02/2026',received:20,remaining:0,cost:582},
+  ],
+};
+
+let selectedId=null,drawerMode='new',sfFilter='',catFilter='',currentTab='info',editData={};
+const fmt=n=>parseFloat(n||0).toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+function stockStatus(p){
+  if(p.stock===0)return{cls:'stock-out',lbl:'หมด'};
+  if(p.stock<=p.minStock)return{cls:'stock-low',lbl:p.stock+' ⚠'};
+  return{cls:'stock-ok',lbl:String(p.stock)};
+}
+
+function renderTable(){
+  const q=(document.getElementById('search-inp')?.value||'').toLowerCase();
+  const pp=parseInt(document.getElementById('per-page')?.value||50);
+  const list=PRODUCTS.filter(p=>{
+    const mq=!q||p.name.toLowerCase().includes(q)||p.sku.toLowerCase().includes(q)||p.barcode.includes(q);
+    const mc=!catFilter||p.cat===catFilter;
+    const ms=!sfFilter||(sfFilter==='low'&&p.stock>0&&p.stock<=p.minStock)||(sfFilter==='out'&&p.stock===0);
+    return mq&&mc&&ms;
+  });
+  document.getElementById('bottom-info').textContent=`แสดง 1–${Math.min(pp,list.length)} จาก ${list.length} รายการ`;
+  document.getElementById('prod-tbody').innerHTML=list.slice(0,pp).map(p=>{
+    const ss=stockStatus(p);
+    const cs=CAT_COLORS[p.cat]||'background:var(--g100);color:var(--g600)';
+    return`<tr id="row-${p.id}" class="${selectedId===p.id?'selected':''}" onclick="selectRow(${p.id})">
+      <td><input type="checkbox" style="width:11px;height:11px;" onclick="event.stopPropagation()" /></td>
+      <td><div class="prod-cell">
+        <div class="prod-emoji">${p.emoji}</div>
+        <div><div class="prod-name">${p.name}${p.hasUom?'<span class="uom-chip">UOM</span>':''}</div><div class="prod-sku">${p.sku} · ${p.barcode}</div></div>
+      </div></td>
+      <td><span class="cat-badge" style="${cs}">${p.cat}</span></td>
+      <td class="r" style="font-family:'Prompt',sans-serif;font-weight:500;color:var(--p800);">฿${fmt(p.price)}</td>
+      <td class="r" style="font-size:11px;color:var(--g400);font-family:'Prompt',sans-serif;">฿${fmt(p.avgCost)}</td>
+      <td><span class="cat-badge ${ss.cls}">${ss.lbl}</span></td>
+      <td><div class="row-actions">
+        <div class="ra" onclick="event.stopPropagation();openDrawer('edit',${p.id})" title="แก้ไข"><i class="ti ti-edit"></i></div>
+        <div class="ra del" onclick="event.stopPropagation();if(confirm('ลบ?'))alert('ลบแล้ว')" title="ลบ"><i class="ti ti-trash"></i></div>
+      </div></td>
+    </tr>`;
+  }).join('');
+}
+
+function setSF(v,btn){sfFilter=v;document.querySelectorAll('.sf').forEach(b=>b.classList.remove('on'));btn.classList.add('on');renderTable();}
+function toggleCatDd(){document.getElementById('cat-menu').classList.toggle('open');}
+function selectCat(val,el){catFilter=val;document.getElementById('cat-label').textContent=el.textContent;document.querySelectorAll('.cat-menu-item').forEach(m=>m.classList.remove('active'));el.classList.add('active');document.getElementById('cat-menu').classList.remove('open');renderTable();}
+document.addEventListener('click',e=>{if(!document.getElementById('cat-dd').contains(e.target))document.getElementById('cat-menu').classList.remove('open');});
+
+let bcBuf='',bcTimer=null;
+document.addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&bcBuf.length>4){
+    const bc=bcBuf.trim();bcBuf='';
+    const p=PRODUCTS.find(x=>x.barcode===bc);
+    if(p){const row=document.getElementById('row-'+p.id);if(row){row.scrollIntoView({behavior:'smooth',block:'center'});row.classList.add('flash');setTimeout(()=>row.classList.remove('flash'),700);}openDrawer('edit',p.id);}
+    return;
+  }
+  if(e.key.length===1){bcBuf+=e.key;clearTimeout(bcTimer);bcTimer=setTimeout(()=>{bcBuf='';},500);}
+});
+
+function selectRow(id){selectedId=id;openDrawer('edit',id);}
+function openDrawer(mode,id){
+  drawerMode=mode;selectedId=id||null;
+  document.getElementById('drawer').classList.add('open');
+  if(mode==='edit'&&id){editData={...PRODUCTS.find(x=>x.id===id)};document.getElementById('drawer-title').textContent='แก้ไขสินค้า';}
+  else{editData={active:true,stock:0,minStock:10,hasUom:false,isNew:true};document.getElementById('drawer-title').textContent='เพิ่มสินค้าใหม่';}
+  switchDTab('info',document.querySelector('.dtab'));
+  renderTable();
+}
+function closeDrawer(){selectedId=null;document.getElementById('drawer').classList.remove('open');renderTable();}
+function switchDTab(tab,el){currentTab=tab;document.querySelectorAll('.dtab').forEach(t=>t.classList.remove('on'));if(el)el.classList.add('on');renderDrawer();}
+const isNew=()=>drawerMode==='new';
+
+function renderDrawer(){
+  const body=document.getElementById('drawer-body');
+  const footer=document.getElementById('drawer-footer');
+  const p=editData;
+
+  if(currentTab==='info'){
+    const hasBatches=FIFO_BATCHES[p.id]&&FIFO_BATCHES[p.id].length>0;
+    const activeBatches=hasBatches?FIFO_BATCHES[p.id].filter(b=>b.remaining>0):[];
+    const nextCost=activeBatches.length>0?activeBatches[0].cost:p.avgCost;
+
+    body.innerHTML=`
+      <div class="field"><label>ชื่อสินค้า <span class="req">*</span></label><input value="${p.name||''}" placeholder="ระบุชื่อสินค้า" /></div>
+      <div class="fg2">
+        <div class="field"><label>SKU</label><input value="${p.sku||''}" /></div>
+        <div class="field"><label>หมวดหมู่ <span class="req">*</span></label><select>${['อาหารสัตว์','ทรีทและขนม','ของเล่น','กรายแมว','ผลิตภัณฑ์ดูแล'].map(c=>`<option${p.cat===c?' selected':''}>${c}</option>`).join('')}</select></div>
+      </div>
+      <div class="field"><label>บาร์โค้ด</label><div class="barcode-row"><input value="${p.barcode||''}" /><div class="scan-btn"><i class="ti ti-barcode"></i> สแกน</div></div></div>
+
+      <!-- COST — FIFO style: แสดง avg + ปุ่มดูล็อต ไม่มีปุ่มปรับ global -->
+      <div class="sec-label">ต้นทุน (FIFO)</div>
+      ${isNew()?`
+        <div class="field"><label>ต้นทุนเริ่มต้น lot แรก (ต่อชิ้น) <span class="req">*</span></label><input type="number" placeholder="0.00" /></div>
+        <div style="font-size:10px;color:var(--g400);padding:4px 0;">ระบบจะสร้าง FIFO batch แรกให้อัตโนมัติ</div>
+      `:`
+        <div class="cost-display">
+          <div class="cost-left">
+            <div class="cost-lbl">ต้นทุนเฉลี่ยถ่วงน้ำหนัก (Avg Cost)</div>
+            <div class="cost-val-row">
+              <span class="cost-avg">฿${fmt(p.avgCost)}</span>
+              <span class="cost-unit">/ ชิ้น</span>
+            </div>
+            <div class="cost-fifo-note">
+              lot ถัดไป (FIFO): <span>฿${fmt(nextCost)}/ชิ้น</span>
+              ${hasBatches?` · ${activeBatches.length} lot ที่ยังมีสต็อก`:''}
+            </div>
+          </div>
+          <button class="view-batch-btn" onclick="openFifo(${p.id})">
+            <i class="ti ti-stack-2"></i> ดูคิวล็อต
+          </button>
+        </div>
+      `}
+
+      <div class="tog-row">
+        <span class="tog-lbl"><i class="ti ti-layers-intersect"></i> มีหลายหน่วยนับ (UOM)</span>
+        <label class="tog"><input type="checkbox" ${p.hasUom?'checked':''} onchange="toggleUom(this.checked)" /><div class="tog-track"></div><div class="tog-thumb"></div></label>
+      </div>
+
+      <div id="simple-price-sec" style="${p.hasUom?'display:none':''}">
+        <div class="sec-label" style="margin-bottom:6px;">ราคาขายต่อระดับ</div>
+        <table class="tier-table"><thead><tr><th style="width:110px;">ระดับ</th><th>ราคาขาย (฿)</th></tr></thead><tbody>
+          ${TIERS.map(t=>`<tr><td><span class="tier-dot" style="background:${t.color};"></span>${t.name}</td><td><input type="number" value="${t.name==='ราคาปกติ'?p.price||'':''}" placeholder="0" /></td></tr>`).join('')}
+        </tbody></table>
+      </div>
+
+      <div id="uom-sec" style="${p.hasUom?'':'display:none'}">
+        <div class="uom-section">
+          <div class="uom-sec-head"><span>หน่วยนับ + ราคาขายต่อระดับ</span><span style="font-size:10px;color:var(--p600);">สต็อกเก็บเป็น <strong>ชิ้น</strong> เสมอ</span></div>
+          <div class="uom-sec-body" id="uom-body">
+            <div class="uom-unit base-unit">
+              <div class="uom-unit-hd" onclick="toggleUomUnit('u0')">
+                <span class="uom-unit-name">ชิ้น</span><span class="base-badge">หน่วยฐาน</span><span class="uom-eq">= 1 ชิ้น</span>
+                <button class="uom-exp-btn open" id="u0-exp"><i class="ti ti-chevron-down"></i></button>
+              </div>
+              <div class="uom-unit-body" id="u0-body">
+                <div class="fg2"><div class="field"><label>ชื่อหน่วย</label><input value="ชิ้น" readonly style="background:var(--g50);" /></div><div class="field"><label>บาร์โค้ด</label><input value="${p.barcode||''}" /></div></div>
+                <table class="tier-table"><thead><tr><th>ระดับ</th><th>ราคาขาย (฿)</th></tr></thead><tbody>
+                  ${TIERS.map(t=>`<tr><td><span class="tier-dot" style="background:${t.color};"></span>${t.name}</td><td><input type="number" value="${t.name==='ราคาปกติ'?p.price||'':''}" placeholder="0" /></td></tr>`).join('')}
+                </tbody></table>
+              </div>
+            </div>
+            <div class="chain-conn"><div class="chain-line"></div><div class="chain-lbl">× 12 = 1 โหล</div></div>
+            <div class="uom-unit">
+              <div class="uom-unit-hd" onclick="toggleUomUnit('u1')">
+                <span class="uom-unit-name">โหล</span><span class="uom-eq">= 12 ชิ้น</span>
+                <button class="uom-exp-btn open" id="u1-exp"><i class="ti ti-chevron-down"></i></button>
+                <button class="uom-del" onclick="event.stopPropagation();this.closest('.uom-unit').previousElementSibling.remove();this.closest('.uom-unit').remove()"><i class="ti ti-trash"></i></button>
+              </div>
+              <div class="uom-unit-body" id="u1-body">
+                <div class="fg3"><div class="field"><label>ชื่อหน่วย</label><input value="โหล" /></div><div class="field"><label>= กี่หน่วยฐาน</label><input type="number" value="12" /></div><div class="field"><label>บาร์โค้ด</label><input placeholder="บาร์โค้ด" /></div></div>
+                <table class="tier-table"><thead><tr><th>ระดับ</th><th>ราคาขาย (฿)</th></tr></thead><tbody>
+                  ${TIERS.map(t=>`<tr><td><span class="tier-dot" style="background:${t.color};"></span>${t.name}</td><td><input type="number" placeholder="0" /></td></tr>`).join('')}
+                </tbody></table>
+              </div>
+            </div>
+            <div class="add-uom-row" onclick="addUomUnit()"><i class="ti ti-plus" style="font-size:13px;"></i> เพิ่มหน่วยนับ</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tog-row">
+        <span class="tog-lbl">แสดงในหน้า POS</span>
+        <label class="tog"><input type="checkbox" ${p.active?'checked':''} /><div class="tog-track"></div><div class="tog-thumb"></div></label>
+      </div>`;
+
+    footer.innerHTML=`
+      ${!isNew()?`<button class="df-btn df-del" style="flex:.6;" onclick="if(confirm('ลบ?'))alert('ลบแล้ว')"><i class="ti ti-trash" style="font-size:13px;vertical-align:-2px;"></i> ลบ</button>`:''}
+      <button class="df-btn df-cancel" onclick="closeDrawer()">ยกเลิก</button>
+      <button class="df-btn df-save" onclick="alert('บันทึกสำเร็จ ✅')">บันทึก</button>`;
+
+  } else if(currentTab==='stock'){
+    body.innerHTML=`
+      <div class="stock-summary">
+        <div class="st-card"><div class="st-val" style="color:var(--p600);">${p.stock||0}</div><div class="st-lbl">สต็อก สาขานี้</div></div>
+        <div class="st-card"><div class="st-val" style="color:var(--amber);">${p.minStock||0}</div><div class="st-lbl">แจ้งเตือนเมื่อต่ำกว่า</div></div>
+        <div class="st-card"><div class="st-val" style="color:var(--green);">฿${fmt((p.avgCost||0)*(p.stock||0))}</div><div class="st-lbl">มูลค่าสต็อก</div></div>
+      </div>
+      <div class="sec-label">ปรับสต็อก (สาขานี้เท่านั้น)</div>
+      <div class="fg2">
+        <div class="field"><label>ประเภท</label><select><option>รับเข้า (+)</option><option>ตัดออก (-)</option><option>ปรับยอด (=)</option></select></div>
+        <div class="field"><label>จำนวน (หน่วยฐาน)</label><input type="number" placeholder="0" /></div>
+      </div>
+      <div class="field"><label>หมายเหตุ</label><input placeholder="เหตุผล..." /></div>
+      <div class="field"><label>แจ้งเตือนเมื่อต่ำกว่า</label><input type="number" value="${p.minStock||10}" /></div>
+      <div class="sec-label">สต็อกสาขาอื่น (ดูได้อย่างเดียว)</div>
+      <table style="width:100%;border-collapse:collapse;font-size:11px;">
+        <thead><tr style="background:var(--g50);border-bottom:.5px solid var(--g200);">
+          <th style="padding:5px 8px;text-align:left;color:var(--g400);font-weight:500;">สาขา</th>
+          <th style="padding:5px 8px;text-align:right;color:var(--g400);font-weight:500;">สต็อก</th>
+          <th style="padding:5px 8px;text-align:right;color:var(--g400);font-weight:500;">แจ้งเตือน</th>
+        </tr></thead>
+        <tbody>
+          <tr style="border-bottom:.5px solid var(--g100);"><td style="padding:5px 8px;color:var(--p800);font-weight:500;"><span style="width:6px;height:6px;border-radius:50%;background:var(--p600);display:inline-block;margin-right:5px;vertical-align:2px;"></span>ลาดพร้าว (สาขานี้)</td><td style="padding:5px 8px;text-align:right;font-family:'Prompt',sans-serif;color:var(--p900);">${p.stock||0}</td><td style="padding:5px 8px;text-align:right;color:var(--g400);">${p.minStock||0}</td></tr>
+          <tr style="border-bottom:.5px solid var(--g100);"><td style="padding:5px 8px;color:var(--g600);">สาขาสีลม</td><td style="padding:5px 8px;text-align:right;font-family:'Prompt',sans-serif;color:var(--g600);">12</td><td style="padding:5px 8px;text-align:right;color:var(--g400);">5</td></tr>
+          <tr><td style="padding:5px 8px;color:var(--g600);">สาขาอ่อนนุช</td><td style="padding:5px 8px;text-align:right;font-family:'Prompt',sans-serif;color:var(--g600);">0</td><td style="padding:5px 8px;text-align:right;color:var(--g400);">5</td></tr>
+        </tbody>
+      </table>`;
+    footer.innerHTML=`<button class="df-btn df-cancel" onclick="closeDrawer()">ยกเลิก</button><button class="df-btn df-save" onclick="alert('ปรับสต็อกสำเร็จ ✅')">บันทึกการปรับ</button>`;
+
+  } else if(currentTab==='history'){
+    body.innerHTML=`
+      <div style="font-size:11px;color:var(--g400);">ประวัติเคลื่อนไหวสต็อก — สาขานี้</div>
+      <table class="hist-table">
+        <thead><tr><th>วันที่</th><th>ประเภท</th><th>จำนวน</th><th>คงเหลือ</th><th>โดย</th></tr></thead>
+        <tbody>
+          ${[{d:'23/05 15:30',t:'ขาย',q:-1,r:editData.stock,by:'ชนิษา'},{d:'22/05 10:15',t:'รับเข้า',q:+20,r:editData.stock+1,by:'สมชาย'},{d:'20/05 14:00',t:'ปรับยอด',q:-2,r:editData.stock-19,by:'ชนิษา'},{d:'18/05 09:45',t:'รับเข้า',q:+50,r:editData.stock-17,by:'สมชาย'}].map(h=>`
+          <tr><td>${h.d}</td><td>${h.t}</td><td class="${h.q>0?'h-in':'h-out'}">${h.q>0?'+':''}${h.q}</td><td style="font-family:'Prompt',sans-serif;">${h.r}</td><td>${h.by}</td></tr>`).join('')}
+        </tbody>
+      </table>`;
+    footer.innerHTML=`<button class="df-btn df-cancel" style="flex:1;" onclick="closeDrawer()">ปิด</button>`;
+  }
+}
+
+// UOM helpers
+function toggleUom(on){document.getElementById('simple-price-sec').style.display=on?'none':'';document.getElementById('uom-sec').style.display=on?'':'none';}
+let uomCount=2;
+function toggleUomUnit(id){const b=document.getElementById(id+'-body');const e=document.getElementById(id+'-exp');if(!b)return;const open=b.style.display!=='none';b.style.display=open?'none':'';if(e)e.classList.toggle('open',!open);}
+function addUomUnit(){
+  const idx='u'+uomCount++;
+  const body=document.getElementById('uom-body');
+  const addBtn=body.querySelector('.add-uom-row');
+  const conn=document.createElement('div');conn.className='chain-conn';conn.innerHTML='<div class="chain-line"></div><div class="chain-lbl">× 1 = 1 หน่วยใหม่</div>';
+  const el=document.createElement('div');el.className='uom-unit';
+  el.innerHTML=`<div class="uom-unit-hd" onclick="toggleUomUnit('${idx}')"><span class="uom-unit-name">หน่วยใหม่</span><span class="uom-eq">= 1 ชิ้น</span><button class="uom-exp-btn open" id="${idx}-exp"><i class="ti ti-chevron-down"></i></button><button class="uom-del" onclick="event.stopPropagation();this.closest('.uom-unit').previousElementSibling.remove();this.closest('.uom-unit').remove()"><i class="ti ti-trash"></i></button></div>
+    <div class="uom-unit-body" id="${idx}-body"><div class="fg3"><div class="field"><label>ชื่อหน่วย</label><input placeholder="เช่น แพ็ค" /></div><div class="field"><label>= กี่หน่วยฐาน</label><input type="number" value="1" /></div><div class="field"><label>บาร์โค้ด</label><input placeholder="บาร์โค้ด" /></div></div>
+    <table class="tier-table"><thead><tr><th>ระดับ</th><th>ราคาขาย (฿)</th></tr></thead><tbody>${TIERS.map(t=>`<tr><td><span class="tier-dot" style="background:${t.color};"></span>${t.name}</td><td><input type="number" placeholder="0" /></td></tr>`).join('')}</tbody></table></div>`;
+  body.insertBefore(conn,addBtn);body.insertBefore(el,addBtn);
+}
+
+// ===== FIFO MODAL =====
+function openFifo(productId){
+  const p=PRODUCTS.find(x=>x.id===productId);
+  const batches=FIFO_BATCHES[productId]||[];
+  document.getElementById('fifo-prod-name').textContent=`📦 คิวล็อต FIFO — ${p.name}`;
+  document.getElementById('fifo-prod-sku').textContent=`${p.sku} · ${p.barcode}`;
+
+  // calculate summary
+  const activeBatches=batches.filter(b=>b.remaining>0);
+  const totalQty=activeBatches.reduce((s,b)=>s+b.remaining,0);
+  const totalVal=activeBatches.reduce((s,b)=>s+b.remaining*b.cost,0);
+  const avgCost=totalQty>0?totalVal/totalQty:0;
+  document.getElementById('fs-total-qty').textContent=totalQty+' ชิ้น';
+  document.getElementById('fs-avg-cost').textContent='฿'+fmt(avgCost)+' / ชิ้น';
+  document.getElementById('fs-total-val').textContent='฿'+fmt(totalVal);
+  document.getElementById('fs-lots').textContent=batches.length+' lot';
+
+  // active lot queue (FIFO order)
+  let fifoQueue=[];
+  let order=1;
+  batches.forEach(b=>{
+    if(b.remaining>0){fifoQueue.push({...b,order:order++,isNext:fifoQueue.length===0,status:b.remaining<b.received?'partial':'active'});}
+  });
+  // depleted lots
+  batches.forEach(b=>{if(b.remaining===0)fifoQueue.push({...b,order:null,isNext:false,status:'depleted'});});
+
+  document.getElementById('fifo-tbody').innerHTML=fifoQueue.map((b,i)=>{
+    const rowVal=b.remaining*b.cost;
+    const isDepleted=b.status==='depleted';
+    const statusHtml=b.status==='active'?`<span class="lot-status lot-active"><i class="ti ti-circle-check" style="font-size:10px;"></i> พร้อมตัด</span>`:b.status==='partial'?`<span class="lot-status lot-partial"><i class="ti ti-circle-half-2" style="font-size:10px;"></i> กำลังตัด</span>`:`<span class="lot-status lot-depleted">หมดแล้ว</span>`;
+    const orderBadge=b.order?`<div class="lot-order${b.isNext?' next':''}${b.status==='partial'?' next':''}">${b.order}</div>`:`<div style="width:22px;height:22px;display:flex;align-items:center;justify-content:center;"><i class="ti ti-check" style="font-size:12px;color:var(--g200);"></i></div>`;
+    return`<tr class="${isDepleted?'depleted':''}">
+      <td style="text-align:center;">${orderBadge}</td>
+      <td>${b.date}</td>
+      <td style="font-size:11px;color:var(--p600);font-weight:500;">${b.grn}</td>
+      <td class="r" style="color:${isDepleted?'var(--g400)':b.remaining<b.received?'var(--amber)':'var(--p900)'};">${b.remaining}</td>
+      <td class="r" style="color:var(--g400);">${b.received}</td>
+      <td class="r">
+        ${isDepleted?`<span style="font-family:'Prompt',sans-serif;color:var(--g400);">฿${fmt(b.cost)}</span>`:`
+          <div class="batch-cost-cell">
+            <span style="font-size:10px;color:var(--g400);">฿</span>
+            <input class="batch-cost-inp" type="number" value="${b.cost}" step="0.01"
+              onchange="saveBatchCost(${productId},${i},this.value,this)"
+              title="แก้ไขต้นทุน lot นี้" />
+          </div>`}
+      </td>
+      <td class="r" style="color:${isDepleted?'var(--g400)':'var(--green)'};">฿${fmt(rowVal)}</td>
+      <td style="text-align:center;">${statusHtml}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('fifo-modal').classList.remove('hidden');
+}
+
+function saveBatchCost(productId, batchIdx, newCost, inputEl){
+  const v=parseFloat(newCost);
+  if(isNaN(v)||v<0){alert('ต้นทุนไม่ถูกต้อง');return;}
+  if(FIFO_BATCHES[productId]){
+    FIFO_BATCHES[productId][batchIdx].cost=v;
+    // recalculate avg cost for this product
+    const active=FIFO_BATCHES[productId].filter(b=>b.remaining>0);
+    const totalQty=active.reduce((s,b)=>s+b.remaining,0);
+    const totalVal=active.reduce((s,b)=>s+b.remaining*b.cost,0);
+    if(totalQty>0){
+      const p=PRODUCTS.find(x=>x.id===productId);
+      if(p) p.avgCost=totalVal/totalQty;
+    }
+  }
+  inputEl.style.borderColor='var(--green)';
+  setTimeout(()=>{inputEl.style.borderColor='';},1500);
+  // update summary
+  openFifo(productId);
+  renderTable();
+}
+
+function closeFifo(){document.getElementById('fifo-modal').classList.add('hidden');}
+
+document.querySelectorAll('.dtab').forEach((t,i)=>{t.addEventListener('click',()=>switchDTab(['info','stock','history'][i],t));});
+renderTable();
+</script>
+</body>
+</html>

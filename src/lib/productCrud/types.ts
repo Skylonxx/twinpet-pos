@@ -1,0 +1,347 @@
+import type { Product, ProductPrice, StockLot, StockMovement, UomConversion, ProductCategory } from '../types';
+import { matchesCategoryFilter } from '../inventory/categoryService';
+
+export type StockFilter = '' | 'low' | 'out';
+
+export type DrawerTab = 'info' | 'pricing' | 'stock' | 'history';
+
+export const DRAWER_TABS: { id: DrawerTab; label: string }[] = [
+  { id: 'info', label: 'ข้อมูลสินค้า' },
+  { id: 'pricing', label: 'ราคา & หน่วยนับ' },
+  { id: 'stock', label: 'สต็อก' },
+  { id: 'history', label: 'ประวัติ' },
+];
+
+export type PriceTierDef = {
+  id: string;
+  name: string;
+  color: string;
+};
+
+export const PRICE_TIERS: PriceTierDef[] = [
+  { id: 'RETAIL', name: 'ราคาปกติ', color: '#534AB7' },
+  { id: 'WHOLESALE1', name: 'VIP', color: '#1D9E75' },
+  { id: 'WHOLESALE2', name: 'ราคาส่ง', color: '#BA7517' },
+  { id: 'MEMBER', name: 'สมาชิก Gold', color: '#D4537E' },
+];
+
+export const CATEGORIES = [
+  'อาหารสัตว์',
+  'ทรีทและขนม',
+  'ของเล่น',
+  'กรายแมว',
+  'ผลิตภัณฑ์ดูแล',
+] as const;
+
+export const CATEGORY_STYLE: Record<string, { background: string; color: string }> = {
+  'อาหารสัตว์': { background: '#E1F5EE', color: '#085041' },
+  'ทรีทและขนม': { background: '#FAEEDA', color: '#633806' },
+  'ของเล่น': { background: '#FAECE7', color: '#993C1D' },
+  'กรายแมว': { background: '#F1EFE8', color: '#444441' },
+  'ผลิตภัณฑ์ดูแล': { background: '#FBEAF0', color: '#72243E' },
+};
+
+export const CATEGORY_EMOJI: Record<string, string> = {
+  'อาหารสัตว์': '🐾',
+  'ทรีทและขนม': '🍪',
+  'ของเล่น': '🧸',
+  'กรายแมว': '🪣',
+  'ผลิตภัณฑ์ดูแล': '💊',
+};
+
+export type ProductUomFormRow = {
+  id: string;
+  unit: string;
+  factor: number;
+  barcode: string;
+  prices: Record<string, number>;
+  /** Tier prices for this UOM unit (non-base rows only in Firestore) */
+  tierPrices: Record<string, number>;
+  expanded: boolean;
+  isBase: boolean;
+};
+
+export type ProductFormData = {
+  name: string;
+  sku: string;
+  barcode: string;
+  category: string;
+  description: string;
+  baseUnit: string;
+  hasUom: boolean;
+  isActive: boolean;
+  reorderPoint: number;
+  initialCost: number;
+  simplePrices: Record<string, number>;
+  /** CRM dynamic tier prices (base unit) — keys match customer.customerType */
+  tierPrices: Record<string, number>;
+  allowNegativeStock: boolean;
+  uomRows: ProductUomFormRow[];
+};
+
+export type ProductListItem = Product & {
+  stock: number;
+  branchReorderPoint: number;
+  emoji: string;
+  retailPrice: number;
+};
+
+export type FifoLotRow = StockLot & {
+  fifoOrder: number | null;
+  isNext: boolean;
+  grnLabel: string;
+};
+
+export function fmtBaht(n: number): string {
+  return parseFloat(String(n || 0)).toLocaleString('th-TH', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+/** Auto SKU: `[Prefix]-[YYYYMMDD]-[Random4Digits]` */
+export function generateSku(prefix: string): string {
+  const p = (prefix.trim() || 'PD').toUpperCase().replace(/[^A-Z0-9]/g, '') || 'PD';
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  const rnd = String(Math.floor(1000 + Math.random() * 9000));
+  return `${p}-${y}${m}${d}-${rnd}`;
+}
+
+/** Greedy UOM breakdown — largest factor first, remainder in base unit */
+export function formatUomBreakdown(
+  totalBase: number,
+  uomRows: ProductUomFormRow[],
+): string | null {
+  const largerUnits = uomRows
+    .filter((r) => !r.isBase && r.factor > 0)
+    .sort((a, b) => b.factor - a.factor);
+
+  if (largerUnits.length === 0) return null;
+
+  let remaining = totalBase;
+  const parts: string[] = [];
+
+  for (const u of largerUnits) {
+    const count = Math.floor(remaining / u.factor);
+    if (count > 0) {
+      parts.push(`${count} ${u.unit}`);
+      remaining -= count * u.factor;
+    }
+  }
+
+  const baseUnit = uomRows.find((r) => r.isBase)?.unit ?? 'ชิ้น';
+  if (remaining > 0) {
+    parts.push(`${remaining} ${baseUnit}`);
+  }
+
+  return parts.length > 0 ? parts.join(' ') : null;
+}
+
+export function stockStatus(stock: number, minStock: number): { cls: string; lbl: string } {
+  if (stock === 0) return { cls: 'pc-stock-out', lbl: 'หมด' };
+  if (stock <= minStock) return { cls: 'pc-stock-low', lbl: `${stock} ⚠` };
+  return { cls: 'pc-stock-ok', lbl: String(stock) };
+}
+
+export function getRetailPrice(product: Product): number {
+  return (
+    product.prices.find((p) => p.priceLevelId === 'RETAIL' && p.unit === product.baseUnit)?.price ??
+    product.prices[0]?.price ??
+    0
+  );
+}
+
+export function sanitizeTierPrices(
+  tierPrices: Record<string, number>,
+): Record<string, number> | undefined {
+  const cleaned: Record<string, number> = {};
+  for (const [key, val] of Object.entries(tierPrices)) {
+    const k = key.trim();
+    if (!k || !Number.isFinite(val) || val <= 0) continue;
+    cleaned[k] = val;
+  }
+  return Object.keys(cleaned).length > 0 ? cleaned : undefined;
+}
+
+export function emptyForm(): ProductFormData {
+  return {
+    name: '',
+    sku: '',
+    barcode: '',
+    category: '',
+    description: '',
+    baseUnit: 'ชิ้น',
+    hasUom: false,
+    isActive: true,
+    reorderPoint: 10,
+    initialCost: 0,
+    simplePrices: { RETAIL: 0 },
+    tierPrices: {},
+    allowNegativeStock: false,
+    uomRows: [
+      {
+        id: 'base',
+        unit: 'ชิ้น',
+        factor: 1,
+        barcode: '',
+        prices: { RETAIL: 0 },
+        tierPrices: {},
+        expanded: true,
+        isBase: true,
+      },
+    ],
+  };
+}
+
+export function productToForm(product: Product): ProductFormData {
+  const hasUom = product.uomConversions.length > 0;
+  const retailPrice =
+    product.prices.find((x) => x.priceLevelId === 'RETAIL' && x.unit === product.baseUnit)?.price ??
+    product.prices.find((x) => x.unit === product.baseUnit)?.price ??
+    0;
+  const simplePrices: Record<string, number> = { RETAIL: retailPrice };
+
+  const baseRow: ProductUomFormRow = {
+    id: 'base',
+    unit: product.baseUnit,
+    factor: 1,
+    barcode: product.barcode ?? '',
+    prices: { ...simplePrices },
+    tierPrices: { ...(product.tierPrices ?? {}) },
+    expanded: true,
+    isBase: true,
+  };
+
+  const uomRows: ProductUomFormRow[] = [baseRow];
+  for (const conv of product.uomConversions) {
+    const unitRetail =
+      product.prices.find((x) => x.priceLevelId === 'RETAIL' && x.unit === conv.unit)?.price ??
+      product.prices.find((x) => x.unit === conv.unit)?.price ??
+      0;
+    uomRows.push({
+      id: `uom-${conv.unit}`,
+      unit: conv.unit,
+      factor: conv.factor,
+      barcode: conv.barcode ?? '',
+      prices: { RETAIL: unitRetail },
+      tierPrices: { ...(conv.tierPrices ?? {}) },
+      expanded: true,
+      isBase: false,
+    });
+  }
+
+  return {
+    name: product.name,
+    sku: product.sku,
+    barcode: product.barcode ?? '',
+    category: product.category,
+    description: product.description,
+    baseUnit: product.baseUnit,
+    hasUom,
+    isActive: product.isActive,
+    reorderPoint: product.reorderPoint,
+    initialCost: 0,
+    simplePrices,
+    tierPrices: { ...(product.tierPrices ?? {}) },
+    allowNegativeStock: product.allowNegativeStock ?? false,
+    uomRows,
+  };
+}
+
+export function formToProduct(form: ProductFormData, id: string): Omit<Product, 'createdAt' | 'updatedAt' | 'deletedAt' | 'avgCost'> {
+  const uomConversions: UomConversion[] = form.hasUom
+    ? form.uomRows
+        .filter((r) => !r.isBase)
+        .map((r) => {
+          const conv: UomConversion = {
+            unit: r.unit,
+            factor: r.factor,
+          };
+          if (r.barcode.trim()) conv.barcode = r.barcode.trim();
+          const uomTiers = sanitizeTierPrices(r.tierPrices ?? {});
+          if (uomTiers) conv.tierPrices = uomTiers;
+          return conv;
+        })
+    : [];
+
+  const prices: ProductPrice[] = [];
+  const pushRetailPrice = (unit: string, price: number | undefined) => {
+    if (price != null && price > 0) {
+      prices.push({ priceLevelId: 'RETAIL', unit, price });
+    }
+  };
+
+  if (form.hasUom) {
+    for (const row of form.uomRows) {
+      pushRetailPrice(row.unit, row.prices.RETAIL);
+    }
+  } else {
+    pushRetailPrice(form.baseUnit, form.simplePrices.RETAIL);
+  }
+
+  return {
+    id,
+    name: form.name.trim(),
+    sku: form.sku.trim(),
+    barcode: form.barcode.trim() || null,
+    category: form.category,
+    description: form.description,
+    imageUrl: null,
+    baseUnit: form.baseUnit,
+    uomConversions,
+    prices,
+    tierPrices: sanitizeTierPrices(form.tierPrices),
+    allowNegativeStock: form.allowNegativeStock,
+    reorderPoint: form.reorderPoint,
+    isActive: form.isActive,
+  };
+}
+
+export function filterProducts(
+  items: ProductListItem[],
+  search: string,
+  categoryFilterId: string,
+  stockFilter: StockFilter,
+  categories: ProductCategory[] = [],
+): ProductListItem[] {
+  const q = search.trim().toLowerCase();
+  return items.filter((p) => {
+    const matchQ =
+      !q ||
+      p.name.toLowerCase().includes(q) ||
+      p.sku.toLowerCase().includes(q) ||
+      (p.barcode ?? '').toLowerCase().includes(q) ||
+      p.uomConversions.some(
+        (uom) => uom.barcode && uom.barcode.toLowerCase().includes(q),
+      );
+    const matchCat = matchesCategoryFilter(p.category, categoryFilterId, categories);
+    const matchStock =
+      !stockFilter ||
+      (stockFilter === 'low' && p.stock > 0 && p.stock <= p.branchReorderPoint) ||
+      (stockFilter === 'out' && p.stock === 0);
+    return matchQ && matchCat && matchStock;
+  });
+}
+
+export type StockHistoryRow = {
+  date: string;
+  type: string;
+  qty: number;
+  balance: number;
+  by: string;
+};
+
+export function movementLabel(type: StockMovement['type']): string {
+  const map: Record<StockMovement['type'], string> = {
+    sale: 'ขาย',
+    receive: 'รับเข้า',
+    adjust: 'ปรับยอด',
+    transfer_in: 'โอนเข้า',
+    transfer_out: 'โอนออก',
+    void: 'คืนสต็อก',
+  };
+  return map[type] ?? type;
+}

@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TwinPet POS — ใบเสร็จ Thermal 80mm</title>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=Prompt:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" rel="stylesheet">
+<style>
+:root{
+  --p600:#534AB7;--p50:#EEEDFE;--p100:#CECBF6;
+  --g50:#F8F8FC;--g100:#EDEDF5;
+  --white:#fff;
+  --border:rgba(0,0,0,0.08);--border-md:rgba(0,0,0,0.13);
+  --text-primary:#1A1A2E;--text-secondary:#6B7280;--text-muted:#9CA3AF;
+  --success:#0F6E56;--success-bg:#E1F5EE;
+  --danger:#A32D2D;--danger-bg:#FCEBEB;
+  --warn:#854F0B;--warn-bg:#FAEEDA;
+  --radius-sm:6px;--radius-md:8px;--radius-lg:12px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Sarabun','Prompt',sans-serif;background:var(--g50);color:var(--text-primary);font-size:14px;min-height:100vh;}
+
+/* ── TOOLBAR (screen only) ── */
+.toolbar{background:var(--white);border-bottom:1px solid var(--border);height:52px;display:flex;align-items:center;padding:0 20px;gap:10px;position:sticky;top:0;z-index:100;}
+.toolbar-icon{width:30px;height:30px;border-radius:var(--radius-sm);background:var(--p50);display:flex;align-items:center;justify-content:center;color:var(--p600);font-size:16px;}
+.toolbar-title{font-size:14px;font-weight:500;flex:1;}
+.btn{display:inline-flex;align-items:center;gap:5px;padding:6px 14px;border-radius:var(--radius-sm);font-size:12px;font-family:inherit;cursor:pointer;transition:all .15s;border:1px solid transparent;white-space:nowrap;}
+.btn-primary{background:var(--p600);color:#fff;}
+.btn-primary:hover{background:#443E9B;}
+.btn-ghost{background:transparent;color:var(--text-secondary);border-color:var(--border-md);}
+.btn-ghost:hover{background:var(--g50);}
+.btn-success{background:var(--success);color:#fff;}
+.btn-success:hover{background:#0a5a46;}
+.seg{display:flex;background:var(--g50);border:1px solid var(--border-md);border-radius:var(--radius-sm);overflow:hidden;}
+.seg-btn{padding:5px 12px;font-size:12px;font-family:inherit;cursor:pointer;background:transparent;border:none;color:var(--text-muted);transition:all .12s;}
+.seg-btn.active{background:var(--white);color:var(--p600);font-weight:500;box-shadow:0 1px 3px rgba(0,0,0,.08);}
+.toggle-wrap{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary);padding:4px 10px;border:1px solid var(--border-md);border-radius:var(--radius-sm);background:var(--white);cursor:pointer;}
+.toggle-wrap input{accent-color:var(--p600);cursor:pointer;}
+
+/* ── PREVIEW AREA ── */
+.preview-area{display:flex;gap:24px;justify-content:center;align-items:flex-start;padding:28px 24px 48px;}
+
+/* ── THERMAL PAPER ── */
+.thermal-wrap{display:flex;flex-direction:column;align-items:center;}
+.thermal-label{font-size:11px;color:var(--text-muted);margin-bottom:10px;display:flex;align-items:center;gap:5px;}
+.thermal{
+  width:80mm;
+  background:#fff;
+  padding:4mm 5mm 6mm;
+  font-family:'Sarabun',monospace;
+  font-size:8pt;
+  color:#111;
+  line-height:1.7;
+  box-shadow:0 2px 12px rgba(0,0,0,.12), 0 0 0 1px rgba(0,0,0,.06);
+  border-radius:1mm;
+  position:relative;
+}
+/* Torn top edge */
+.thermal::before{
+  content:'';position:absolute;top:-4px;left:0;right:0;height:8px;
+  background:var(--g50);
+  clip-path:polygon(0 0,2% 100%,4% 0,6% 100%,8% 0,10% 100%,12% 0,14% 100%,16% 0,18% 100%,20% 0,22% 100%,24% 0,26% 100%,28% 0,30% 100%,32% 0,34% 100%,36% 0,38% 100%,40% 0,42% 100%,44% 0,46% 100%,48% 0,50% 100%,52% 0,54% 100%,56% 0,58% 100%,60% 0,62% 100%,64% 0,66% 100%,68% 0,70% 100%,72% 0,74% 100%,76% 0,78% 100%,80% 0,82% 100%,84% 0,86% 100%,88% 0,90% 100%,92% 0,94% 100%,96% 0,98% 100%,100% 0);
+}
+.thermal::after{
+  content:'';position:absolute;bottom:-4px;left:0;right:0;height:8px;
+  background:var(--g50);
+  clip-path:polygon(0 100%,2% 0,4% 100%,6% 0,8% 100%,10% 0,12% 100%,14% 0,16% 100%,18% 0,20% 100%,22% 0,24% 100%,26% 0,28% 100%,30% 0,32% 100%,34% 0,36% 100%,38% 0,40% 100%,42% 0,44% 100%,46% 0,48% 100%,50% 0,52% 100%,54% 0,56% 100%,58% 0,60% 100%,62% 0,64% 100%,66% 0,68% 100%,70% 0,72% 100%,74% 0,76% 100%,78% 0,80% 100%,82% 0,84% 100%,86% 0,88% 100%,90% 0,92% 100%,94% 0,96% 100%,98% 0,100% 100%);
+}
+/* Typography helpers */
+.t-center{text-align:center;}
+.t-right{text-align:right;}
+.t-bold{font-weight:700;}
+.t-lg{font-size:10pt;font-weight:700;}
+.t-xl{font-size:12pt;font-weight:700;}
+.t-sm{font-size:7pt;color:#555;}
+.t-muted{color:#777;}
+.t-dash{border:none;border-top:1px dashed #bbb;margin:2mm 0;}
+.t-solid{border:none;border-top:1px solid #333;margin:2mm 0;}
+.t-double{border:none;border-top:3px double #333;margin:2mm 0;}
+/* Row */
+.t-row{display:flex;justify-content:space-between;align-items:baseline;}
+.t-row .t-l{flex:1;min-width:0;}
+.t-row .t-r{flex-shrink:0;margin-left:3mm;text-align:right;}
+.t-indent{padding-left:3mm;}
+/* Logo area */
+.logo-area{text-align:center;margin-bottom:2mm;font-size:18pt;line-height:1;}
+.logo-area img{max-width:40mm;max-height:14mm;object-fit:contain;filter:grayscale(1);}
+/* Barcode placeholder */
+.barcode-block{text-align:center;margin:2mm 0;}
+.barcode-svg{display:inline-block;}
+/* QR placeholder */
+.qr-block{text-align:center;margin:2mm 0;}
+.qr-placeholder{display:inline-block;width:18mm;height:18mm;background:#111;border-radius:1mm;position:relative;overflow:hidden;}
+.qr-placeholder::before,.qr-placeholder::after{content:'';position:absolute;background:#fff;}
+.qr-placeholder::before{top:2mm;left:2mm;width:4mm;height:4mm;box-shadow:8mm 0 0 #fff,0 8mm 0 #fff,8mm 8mm 0 #fff;}
+.qr-placeholder::after{top:4mm;left:4mm;width:2mm;height:2mm;box-shadow:8mm 0 0 #fff,0 8mm 0 #fff,8mm 8mm 0 #fff;}
+
+/* ── SETTINGS PANEL ── */
+.settings-panel{width:260px;flex-shrink:0;}
+.panel-card{background:var(--white);border-radius:var(--radius-lg);border:1px solid var(--border);overflow:hidden;margin-bottom:14px;}
+.panel-head{padding:11px 14px;border-bottom:1px solid var(--border);font-size:12px;font-weight:500;display:flex;align-items:center;gap:7px;}
+.panel-head i{color:var(--p600);font-size:14px;}
+.panel-body{padding:12px 14px;display:flex;flex-direction:column;gap:10px;}
+.field-group{display:flex;flex-direction:column;gap:4px;}
+.field-label{font-size:11px;font-weight:500;color:var(--text-secondary);}
+.field-input{padding:6px 10px;font-size:12px;font-family:inherit;border:1.5px solid var(--border-md);border-radius:var(--radius-sm);background:var(--g50);color:var(--text-primary);width:100%;}
+.field-input:focus{outline:none;border-color:var(--p600);background:var(--white);}
+.field-textarea{padding:6px 10px;font-size:12px;font-family:inherit;border:1.5px solid var(--border-md);border-radius:var(--radius-sm);background:var(--g50);color:var(--text-primary);width:100%;resize:vertical;min-height:52px;}
+.field-textarea:focus{outline:none;border-color:var(--p600);background:var(--white);}
+.tog-row{display:flex;align-items:center;justify-content:space-between;}
+.tog-label{font-size:12px;color:var(--text-primary);}
+.tog{position:relative;width:34px;height:19px;flex-shrink:0;cursor:pointer;}
+.tog input{opacity:0;width:0;height:0;position:absolute;}
+.tog-track{position:absolute;inset:0;border-radius:10px;background:#D1D5DB;transition:background .2s;}
+.tog input:checked+.tog-track{background:var(--p600);}
+.tog-thumb{position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2);transition:transform .2s;pointer-events:none;}
+.tog input:checked~.tog-thumb{transform:translateX(15px);}
+.logo-upload-box{border:1.5px dashed var(--p100);border-radius:var(--radius-sm);padding:10px;text-align:center;background:var(--p50);cursor:pointer;}
+.logo-upload-box:hover{border-color:var(--p600);}
+.logo-thumb{max-width:100%;max-height:32px;object-fit:contain;margin-bottom:4px;display:none;}
+.logo-hint{font-size:10px;color:var(--text-muted);}
+
+@media print{
+  body{background:#fff;}
+  .toolbar,.settings-panel,.thermal-label,.no-print{display:none!important;}
+  .preview-area{padding:0;justify-content:flex-start;}
+  .thermal{box-shadow:none;width:80mm;}
+  .thermal::before,.thermal::after{display:none;}
+}
+</style>
+</head>
+<body>
+
+<!-- TOOLBAR -->
+<div class="toolbar no-print">
+  <div class="toolbar-icon"><i class="ti ti-receipt" aria-hidden="true"></i></div>
+  <div class="toolbar-title">ใบเสร็จ Thermal 80mm — TwinPet POS</div>
+
+  <!-- Doc mode -->
+  <div class="seg">
+    <button class="seg-btn active" onclick="setMode('receipt',this)"><i class="ti ti-receipt" style="font-size:12px;" aria-hidden="true"></i> ใบเสร็จ</button>
+    <button class="seg-btn" onclick="setMode('picklist',this)"><i class="ti ti-clipboard-list" style="font-size:12px;" aria-hidden="true"></i> ใบจัดของ</button>
+  </div>
+
+  <!-- Copy mode toggle -->
+  <div class="seg" id="copy-seg">
+    <button class="seg-btn active" onclick="setCopies(1,this)">1 ใบ</button>
+    <button class="seg-btn" onclick="setCopies(2,this)">2 ใบ (สำเนา)</button>
+  </div>
+
+  <button class="btn btn-ghost" onclick="window.print()">
+    <i class="ti ti-printer" aria-hidden="true"></i> พิมพ์
+  </button>
+  <button class="btn btn-primary" onclick="window.close()">
+    <i class="ti ti-x" aria-hidden="true"></i> ปิด
+  </button>
+</div>
+
+<!-- PREVIEW AREA -->
+<div class="preview-area">
+
+  <!-- RECEIPTS -->
+  <div id="receipts-wrap" style="display:flex;gap:14px;align-items:flex-start;">
+    <div class="thermal-wrap">
+      <div class="thermal-label"><i class="ti ti-receipt" aria-hidden="true"></i> ต้นฉบับ</div>
+      <div class="thermal" id="receipt-main"></div>
+    </div>
+    <div class="thermal-wrap" id="copy-wrap" style="display:none;">
+      <div class="thermal-label"><i class="ti ti-copy" aria-hidden="true"></i> สำเนา</div>
+      <div class="thermal" id="receipt-copy"></div>
+    </div>
+  </div>
+
+  <!-- SETTINGS PANEL -->
+  <div class="settings-panel no-print">
+
+    <!-- Shop info -->
+    <div class="panel-card">
+      <div class="panel-head"><i class="ti ti-building-store" aria-hidden="true"></i> ข้อมูลร้าน</div>
+      <div class="panel-body">
+        <div class="field-group">
+          <label class="field-label">โลโก้ร้าน</label>
+          <div class="logo-upload-box" onclick="document.getElementById('logo-file').click()">
+            <img id="logo-thumb" class="logo-thumb">
+            <input type="file" id="logo-file" accept="image/*" style="display:none;" onchange="uploadLogo(this)">
+            <div class="logo-hint" id="logo-hint"><i class="ti ti-upload" aria-hidden="true"></i> คลิกเพื่ออัปโหลด PNG/JPG</div>
+          </div>
+        </div>
+        <div class="tog-row">
+          <span class="tog-label">แสดงโลโก้</span>
+          <label class="tog"><input type="checkbox" id="tog-logo" checked onchange="render()"><div class="tog-track"></div><div class="tog-thumb"></div></label>
+        </div>
+        <div class="field-group">
+          <label class="field-label">ชื่อร้าน / หัวใบเสร็จ</label>
+          <textarea class="field-textarea" id="f-header" oninput="render()">TwinPet Pet Shop
+สาขาลาดพร้าว</textarea>
+        </div>
+        <div class="field-group">
+          <label class="field-label">ที่อยู่ / เบอร์</label>
+          <textarea class="field-textarea" id="f-addr" oninput="render()">123/45 ถ.ลาดพร้าว กรุงเทพฯ
+โทร: 02-123-4567</textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- Options -->
+    <div class="panel-card">
+      <div class="panel-head"><i class="ti ti-settings" aria-hidden="true"></i> ตัวเลือกการแสดงผล</div>
+      <div class="panel-body">
+        <div id="receipt-only-opts">
+          <div class="tog-row" style="margin-bottom:10px;">
+            <span class="tog-label">แสดง VAT (7%)</span>
+            <label class="tog"><input type="checkbox" id="tog-vat" onchange="render()"><div class="tog-track"></div><div class="tog-thumb"></div></label>
+          </div>
+          <div class="tog-row" style="margin-bottom:10px;">
+            <span class="tog-label">แสดง QR โปรโมชั่น</span>
+            <label class="tog"><input type="checkbox" id="tog-qr" onchange="render()"><div class="tog-track"></div><div class="tog-thumb"></div></label>
+          </div>
+        </div>
+        <div class="tog-row">
+          <span class="tog-label">แสดงบาร์โค้ดเลขบิล</span>
+          <label class="tog"><input type="checkbox" id="tog-barcode" checked onchange="render()"><div class="tog-track"></div><div class="tog-thumb"></div></label>
+        </div>
+        <div class="tog-row">
+          <span class="tog-label">แสดงชื่อพนักงาน</span>
+          <label class="tog"><input type="checkbox" id="tog-staff" checked onchange="render()"><div class="tog-track"></div><div class="tog-thumb"></div></label>
+        </div>
+        <div class="tog-row">
+          <span class="tog-label">แสดงลายเซ็นลูกค้า</span>
+          <label class="tog"><input type="checkbox" id="tog-sig" onchange="render()"><div class="tog-track"></div><div class="tog-thumb"></div></label>
+        </div>
+        <div class="field-group">
+          <label class="field-label">ข้อความท้ายใบเสร็จ</label>
+          <textarea class="field-textarea" id="f-footer" oninput="render()">ขอบคุณที่ใช้บริการ
+www.twinpet.co.th</textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bill data (mock editable) -->
+    <div class="panel-card">
+      <div class="panel-head"><i class="ti ti-receipt-2" aria-hidden="true"></i> ข้อมูลบิล (ตัวอย่าง)</div>
+      <div class="panel-body">
+        <div class="field-group">
+          <label class="field-label">เลขบิล</label>
+          <input class="field-input" id="f-billno" value="TW-0588" oninput="render()">
+        </div>
+        <div class="field-group">
+          <label class="field-label">ลูกค้า</label>
+          <input class="field-input" id="f-cust" value="คุณมาลี สุขใจ" oninput="render()">
+        </div>
+        <div class="field-group">
+          <label class="field-label">ช่องทางชำระ</label>
+          <select class="field-input" id="f-pay" onchange="render()">
+            <option>เงินสด</option>
+            <option>PromptPay QR</option>
+            <option>KBank QR</option>
+            <option>EDC บัตร</option>
+            <option>เชื่อ</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- settings-panel -->
+</div><!-- preview-area -->
+
+<script>
+// ── MOCK BILL DATA ────────────────────────────────────────────────────────────
+const ITEMS = [
+  {name:'Royal Canin Adult 3kg', qty:2, unit:'ถุง',  price:480,  disc:0},
+  {name:'Whiskas Tuna 24pc',     qty:3, unit:'กล่อง',price:120,  disc:0},
+  {name:'Frontline Plus Dog L',  qty:1, unit:'กล่อง',price:250,  disc:25},
+  {name:'NexGard M',             qty:2, unit:'กล่อง',price:310,  disc:0},
+];
+
+const STAFF  = 'สมชาย ดีมาก';
+const TODAY  = '25/05/2569  14:32';
+
+let logoDataUrl = null;
+
+// ── LOGO ─────────────────────────────────────────────────────────────────────
+function uploadLogo(input){
+  if(!input.files[0]) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    logoDataUrl = e.target.result;
+    document.getElementById('logo-thumb').src = logoDataUrl;
+    document.getElementById('logo-thumb').style.display = 'block';
+    document.getElementById('logo-hint').style.display = 'none';
+    render();
+  };
+  reader.readAsDataURL(input.files[0]);
+}
+
+// ── COPIES ────────────────────────────────────────────────────────────────────
+function setCopies(n, btn){
+  document.querySelectorAll('.seg-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('copy-wrap').style.display = n===2 ? '' : 'none';
+  if(n===2) render(); // ensure copy is rendered
+}
+
+// ── BARCODE SVG (simple bars representation) ──────────────────────────────────
+function barcodeSVG(text){
+  const seed = [...text].reduce((a,c)=>a+c.charCodeAt(0),0);
+  let bars = '';
+  const n = 60;
+  for(let i=0;i<n;i++){
+    const w = ((seed*i*31+7)%3)+1;
+    const x = i*(3)+i;
+    if((seed*i)%5!==0) bars+=`<rect x="${x}" y="0" width="${w}" height="28" fill="#111"/>`;
+  }
+  return `<svg class="barcode-svg" width="58mm" height="10mm" viewBox="0 0 220 36" xmlns="http://www.w3.org/2000/svg">
+    ${bars}
+    <text x="110" y="35" text-anchor="middle" font-size="7" font-family="Sarabun,monospace" fill="#333">${text}</text>
+  </svg>`;
+}
+
+// ── MODE ──────────────────────────────────────────────────────────────────────
+let currentMode = 'receipt';
+
+function setMode(mode, btn){
+  currentMode = mode;
+  document.querySelectorAll('.seg .seg-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  // show/hide receipt-only options
+  const receiptOpts = document.getElementById('receipt-only-opts');
+  const copySegWrap = document.getElementById('copy-seg');
+  if(mode === 'picklist'){
+    receiptOpts.style.display = 'none';
+    // picklist has no copy mode — force 1 copy
+    copySegWrap.style.display = 'none';
+    document.getElementById('copy-wrap').style.display = 'none';
+  } else {
+    receiptOpts.style.display = '';
+    copySegWrap.style.display = '';
+  }
+  // update label on main thermal
+  document.querySelector('#receipts-wrap .thermal-label').innerHTML =
+    mode==='picklist'
+      ? '<i class="ti ti-clipboard-list" aria-hidden="true"></i> ใบจัดของ'
+      : '<i class="ti ti-receipt" aria-hidden="true"></i> ต้นฉบับ';
+  render();
+}
+
+// ── RENDER ────────────────────────────────────────────────────────────────────
+function render(){
+  const html = currentMode==='picklist' ? buildPickList() : buildReceipt(false);
+  document.getElementById('receipt-main').innerHTML = html;
+  if(currentMode==='receipt' && document.getElementById('copy-wrap').style.display !== 'none'){
+    document.getElementById('receipt-copy').innerHTML = buildReceipt(true);
+  }
+}
+
+// ── BUILD PICK LIST ───────────────────────────────────────────────────────────
+function buildPickList(){
+  const header    = document.getElementById('f-header').value;
+  const addr      = document.getElementById('f-addr').value;
+  const billno    = document.getElementById('f-billno').value;
+  const cust      = document.getElementById('f-cust').value;
+  const showLogo  = document.getElementById('tog-logo').checked;
+  const showStaff = document.getElementById('tog-staff').checked;
+  const showBarcode = document.getElementById('tog-barcode').checked;
+
+  let html = '';
+
+  // Logo
+  if(showLogo){
+    html += logoDataUrl
+      ? `<div class="logo-area"><img src="${logoDataUrl}" style="max-width:40mm;max-height:14mm;object-fit:contain;filter:grayscale(1);"></div>`
+      : `<div class="logo-area">🐾</div>`;
+  }
+
+  // Header
+  const hLines = header.split('\n');
+  html += hLines.map((l,i)=>`<div class="t-center${i===0?' t-bold t-lg':''}">${l}</div>`).join('');
+  addr.split('\n').forEach(l=>{ html+=`<div class="t-center t-sm">${l}</div>`; });
+
+  html += `<div class="t-dash"></div>`;
+
+  // Title
+  html += `<div class="t-center t-bold" style="font-size:10pt;letter-spacing:0.05em;">ใบจัดของ / PICK LIST</div>`;
+  html += `<div class="t-dash"></div>`;
+
+  // Bill info
+  html += `<div class="t-row"><span>บิลเลขที่</span><span class="t-bold">${billno}</span></div>`;
+  html += `<div class="t-row"><span>วันที่</span><span>${TODAY}</span></div>`;
+  if(cust) html += `<div class="t-row"><span>ลูกค้า</span><span>${cust}</span></div>`;
+  if(showStaff) html += `<div class="t-row"><span>ผู้จัด</span><span>${STAFF}</span></div>`;
+
+  html += `<div class="t-solid"></div>`;
+
+  // Items — with checkbox, qty, name — NO price
+  html += `<div class="t-row" style="font-weight:700;font-size:8pt;">`;
+  html += `<span style="width:5mm;flex-shrink:0;text-align:center;">✓</span>`;
+  html += `<span style="flex:1;padding-left:2mm;">รายการ</span>`;
+  html += `<span style="width:14mm;text-align:right;">จำนวน</span>`;
+  html += `</div>`;
+  html += `<div class="t-solid" style="margin-top:0;"></div>`;
+
+  ITEMS.forEach((it, i)=>{
+    // checkbox SVG (print-friendly empty square)
+    const chk = `<svg width="4mm" height="4mm" viewBox="0 0 12 12" style="vertical-align:middle;flex-shrink:0;" xmlns="http://www.w3.org/2000/svg"><rect x="0.5" y="0.5" width="11" height="11" rx="1.5" fill="none" stroke="#333" stroke-width="1.2"/></svg>`;
+    html += `<div style="display:flex;align-items:center;gap:2mm;padding:1mm 0;${i%2===1?'background:#f8f8f8;':''};border-bottom:0.3pt dashed #ddd;">`;
+    html += `<div style="width:5mm;flex-shrink:0;display:flex;justify-content:center;">${chk}</div>`;
+    html += `<div style="flex:1;min-width:0;">`;
+    html += `<div style="font-size:8pt;font-weight:500;line-height:1.4;">${it.name}</div>`;
+    html += `<div style="font-size:7pt;color:#777;">SKU: ${it.name.slice(0,3).toUpperCase()}-${i+1} · ${it.unit}</div>`;
+    html += `</div>`;
+    html += `<div style="width:14mm;text-align:right;font-weight:700;font-size:9pt;">${it.qty}</div>`;
+    html += `</div>`;
+  });
+
+  html += `<div class="t-solid"></div>`;
+  html += `<div class="t-row t-bold"><span>รวมทั้งหมด</span><span>${ITEMS.reduce((a,it)=>a+it.qty,0)} ชิ้น</span></div>`;
+
+  // Signature
+  html += `<div class="t-dash"></div>`;
+  html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:4mm;font-size:7.5pt;margin-top:1mm;">`;
+  html += `<div style="text-align:center;padding-top:8mm;border-top:0.5pt solid #aaa;">ผู้จัดสินค้า</div>`;
+  html += `<div style="text-align:center;padding-top:8mm;border-top:0.5pt solid #aaa;">ผู้รับสินค้า</div>`;
+  html += `</div>`;
+
+  // Barcode
+  if(showBarcode){
+    html += `<div class="t-dash"></div>`;
+    html += `<div class="barcode-block">${barcodeSVG(billno)}</div>`;
+  }
+
+  html += `<div class="t-center t-sm t-muted" style="margin-top:2mm;">TwinPet POS v2.4.1</div>`;
+  return html;
+}
+
+function buildReceipt(isCopy){
+  const header  = document.getElementById('f-header').value;
+  const addr    = document.getElementById('f-addr').value;
+  const footer  = document.getElementById('f-footer').value;
+  const billno  = document.getElementById('f-billno').value;
+  const cust    = document.getElementById('f-cust').value;
+  const pay     = document.getElementById('f-pay').value;
+  const showVat     = document.getElementById('tog-vat').checked;
+  const showBarcode = document.getElementById('tog-barcode').checked;
+  const showQR      = document.getElementById('tog-qr').checked;
+  const showStaff   = document.getElementById('tog-staff').checked;
+  const showSig     = document.getElementById('tog-sig').checked;
+  const showLogo    = document.getElementById('tog-logo').checked;
+
+  // calc
+  let subtotal=0, totalDisc=0;
+  ITEMS.forEach(it=>{ subtotal+=it.price*it.qty; totalDisc+=it.disc; });
+  const beforeVat = subtotal - totalDisc;
+  const vatAmt    = showVat ? Math.round(beforeVat*7/107*100)/100 : 0;
+  const vatBase   = showVat ? Math.round(beforeVat*100/107*100)/100 : 0;
+  const total     = beforeVat;
+  const cash      = pay==='เงินสด' ? Math.ceil(total/100)*100 : total;
+  const change    = pay==='เงินสด' ? cash-total : 0;
+
+  const fmtB = n => n.toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+  let html = '';
+
+  // Logo
+  if(showLogo){
+    if(logoDataUrl){
+      html += `<div class="logo-area"><img src="${logoDataUrl}" style="max-width:40mm;max-height:14mm;object-fit:contain;filter:grayscale(1);"></div>`;
+    } else {
+      html += `<div class="logo-area">🐾</div>`;
+    }
+  }
+
+  // Header text
+  const hLines = header.split('\n');
+  html += hLines.map((l,i)=>`<div class="t-center${i===0?' t-bold t-lg':''}">${l}</div>`).join('');
+
+  // Address
+  const aLines = addr.split('\n');
+  html += aLines.map(l=>`<div class="t-center t-sm">${l}</div>`).join('');
+
+  if(isCopy) html += `<div class="t-center t-bold" style="margin-top:1mm;font-size:8pt;">(สำเนา / COPY)</div>`;
+
+  html += `<div class="t-dash"></div>`;
+
+  // Bill info
+  html += `<div class="t-row"><span>บิลเลขที่</span><span class="t-bold">${billno}</span></div>`;
+  html += `<div class="t-row"><span>วันที่/เวลา</span><span>${TODAY}</span></div>`;
+  if(cust) html += `<div class="t-row"><span>ลูกค้า</span><span>${cust}</span></div>`;
+  if(showStaff) html += `<div class="t-row"><span>พนักงาน</span><span>${STAFF}</span></div>`;
+
+  html += `<div class="t-dash"></div>`;
+  html += `<div class="t-row"><span class="t-bold">รายการสินค้า</span><span class="t-bold">฿</span></div>`;
+  html += `<div class="t-solid" style="margin-top:0;"></div>`;
+
+  // Items
+  ITEMS.forEach(it=>{
+    const lineTotal = it.price*it.qty - it.disc;
+    html += `<div class="t-row"><span>${it.name}</span></div>`;
+    html += `<div class="t-indent t-row t-sm">`;
+    html += `<span>${it.qty} ${it.unit} × ฿${fmtB(it.price)}`;
+    if(it.disc>0) html += ` <span style="color:#A32D2D;">(-฿${fmtB(it.disc)})</span>`;
+    html += `</span><span>฿${fmtB(lineTotal)}</span></div>`;
+  });
+
+  html += `<div class="t-solid"></div>`;
+
+  // Subtotal & discounts
+  if(totalDisc>0){
+    html += `<div class="t-row"><span>รวมก่อนส่วนลด</span><span>฿${fmtB(subtotal)}</span></div>`;
+    html += `<div class="t-row" style="color:#A32D2D;"><span>ส่วนลดรวม</span><span>-฿${fmtB(totalDisc)}</span></div>`;
+  }
+
+  if(showVat){
+    html += `<div class="t-row"><span>ราคาสินค้า (excl.VAT)</span><span>฿${fmtB(vatBase)}</span></div>`;
+    html += `<div class="t-row"><span>VAT 7%</span><span>฿${fmtB(vatAmt)}</span></div>`;
+  }
+
+  html += `<div class="t-double"></div>`;
+  html += `<div class="t-row t-bold t-lg"><span>ยอดสุทธิ</span><span>฿${fmtB(total)}</span></div>`;
+  html += `<div class="t-dash"></div>`;
+
+  // Payment
+  html += `<div class="t-row"><span>ช่องทาง</span><span>${pay}</span></div>`;
+  if(pay==='เงินสด'){
+    html += `<div class="t-row"><span>รับเงิน</span><span>฿${fmtB(cash)}</span></div>`;
+    html += `<div class="t-row t-bold"><span>เงินทอน</span><span>฿${fmtB(change)}</span></div>`;
+  } else {
+    html += `<div class="t-row t-bold"><span>ชำระ</span><span>฿${fmtB(total)}</span></div>`;
+  }
+
+  // Signature
+  if(showSig){
+    html += `<div class="t-dash"></div>`;
+    html += `<div class="t-center t-sm" style="margin-bottom:8mm;">ลายเซ็นลูกค้า ...................................</div>`;
+  }
+
+  // Barcode
+  if(showBarcode){
+    html += `<div class="t-dash"></div>`;
+    html += `<div class="barcode-block">${barcodeSVG(billno)}</div>`;
+  }
+
+  // QR
+  if(showQR){
+    html += `<div class="t-dash"></div>`;
+    html += `<div class="t-center t-sm">QR โปรโมชั่น / สะสมแต้ม</div>`;
+    html += `<div class="qr-block"><div class="qr-placeholder"></div></div>`;
+    html += `<div class="t-center t-sm">scan เพื่อรับส่วนลดครั้งต่อไป</div>`;
+  }
+
+  // Footer
+  html += `<div class="t-dash"></div>`;
+  const fLines = footer.split('\n');
+  html += fLines.map(l=>`<div class="t-center t-sm">${l}</div>`).join('');
+  html += `<div class="t-center t-sm t-muted" style="margin-top:1mm;">TwinPet POS v2.4.1</div>`;
+
+  return html;
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+render();
+</script>
+</body>
+</html>

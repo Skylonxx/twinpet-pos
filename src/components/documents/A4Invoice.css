@@ -1,0 +1,415 @@
+/* A4 Invoice — hidden on screen, visible when printing */
+
+@media screen {
+  .a4-print-root {
+    position: fixed;
+    left: -9999px;
+    top: 0;
+    opacity: 0;
+    pointer-events: none;
+    z-index: -1;
+    overflow: hidden;
+    width: 0;
+    height: 0;
+  }
+}
+
+@media print {
+  .a4-print-root {
+    position: static;
+    left: auto;
+    opacity: 1;
+    pointer-events: auto;
+    z-index: auto;
+    overflow: visible;
+    width: auto;
+    height: auto;
+  }
+}
+
+.a4-print-root .a4 {
+  width: 210mm;
+  min-height: 297mm;
+  background: #fff;
+  padding: 14mm 16mm;
+  font-family: 'Sarabun', sans-serif;
+  font-size: 9.5pt;
+  color: #1a1a2e;
+  line-height: 1.5;
+  position: relative;
+}
+
+@media screen {
+  .a4-print-root .a4 {
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+  }
+}
+
+@media print {
+  .a4-print-root .a4 {
+    width: 100%;
+    min-height: auto;
+    padding: 10mm 14mm;
+    box-shadow: none;
+  }
+}
+
+.a4-print-root .doc-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  margin-bottom: 6mm;
+}
+
+.a4-print-root .doc-brand {
+  flex: 1;
+}
+
+.a4-print-root .doc-logo {
+  font-size: 26pt;
+  font-family: 'Prompt', sans-serif;
+  font-weight: 600;
+  color: #534ab7;
+  line-height: 1;
+}
+
+.a4-print-root .doc-logo img {
+  max-height: 14mm;
+  max-width: 50mm;
+  object-fit: contain;
+}
+
+.a4-print-root .doc-brand-name {
+  font-size: 11pt;
+  font-weight: 600;
+  color: #1a1a2e;
+  margin-top: 1mm;
+}
+
+.a4-print-root .doc-brand-sub {
+  font-size: 8pt;
+  color: #6b7280;
+  margin-top: 0.5mm;
+}
+
+.a4-print-root .doc-brand-addr {
+  font-size: 8pt;
+  color: #6b7280;
+  margin-top: 2mm;
+  line-height: 1.6;
+}
+
+.a4-print-root .doc-title-block {
+  min-width: 68mm;
+  text-align: right;
+}
+
+.a4-print-root .doc-type-badge {
+  display: inline-block;
+  padding: 3mm 6mm;
+  border-radius: 3mm;
+  font-size: 14pt;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 3mm;
+  font-family: 'Prompt', sans-serif;
+}
+
+.a4-print-root .doc-ref-table {
+  font-size: 8.5pt;
+  width: 100%;
+}
+
+.a4-print-root .doc-ref-table td {
+  padding: 1mm 0;
+}
+
+.a4-print-root .doc-ref-table td:first-child {
+  color: #6b7280;
+  padding-right: 4mm;
+  white-space: nowrap;
+}
+
+.a4-print-root .doc-ref-table td:last-child {
+  font-weight: 500;
+  text-align: right;
+}
+
+.a4-print-root .hline {
+  border: none;
+  border-top: 0.5pt solid #e0e0e0;
+  margin: 3mm 0;
+}
+
+.a4-print-root .hline-accent {
+  border: none;
+  border-top: 2pt solid #534ab7;
+  margin: 0 0 4mm 0;
+}
+
+.a4-print-root .parties {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6mm;
+  margin-bottom: 5mm;
+}
+
+.a4-print-root .party-box {
+  border: 0.5pt solid #e8e8e8;
+  border-radius: 2mm;
+  padding: 3mm 4mm;
+}
+
+.a4-print-root .party-label {
+  font-size: 7.5pt;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 1.5mm;
+  font-weight: 500;
+}
+
+.a4-print-root .party-name {
+  font-size: 10pt;
+  font-weight: 600;
+  color: #1a1a2e;
+  margin-bottom: 1mm;
+}
+
+.a4-print-root .party-detail {
+  font-size: 8.5pt;
+  color: #444;
+  line-height: 1.7;
+}
+
+.a4-print-root .items-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 8.5pt;
+  margin-bottom: 4mm;
+}
+
+.a4-print-root .items-table thead tr {
+  background-color: #534ab7;
+}
+
+.a4-print-root .items-table thead th {
+  padding: 2mm 3mm;
+  color: #fff;
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.a4-print-root .items-table thead th.r {
+  text-align: right;
+}
+
+.a4-print-root .items-table thead th.c {
+  text-align: center;
+}
+
+.a4-print-root .items-table tbody tr:nth-child(even) {
+  background: #f8f8fc;
+}
+
+.a4-print-root .items-table tbody td {
+  padding: 2mm 3mm;
+  border-bottom: 0.3pt solid #e8e8e8;
+  vertical-align: top;
+}
+
+.a4-print-root .items-table tbody td.r {
+  text-align: right;
+}
+
+.a4-print-root .items-table tbody td.c {
+  text-align: center;
+}
+
+.a4-print-root .items-table tfoot tr {
+  background: #f0eff9;
+}
+
+.a4-print-root .items-table tfoot td {
+  padding: 2mm 3mm;
+  font-weight: 500;
+}
+
+.a4-print-root .items-table tfoot td.r {
+  text-align: right;
+}
+
+.a4-print-root .prod-name {
+  font-weight: 500;
+  color: #1a1a2e;
+}
+
+.a4-print-root .prod-sku {
+  font-size: 7.5pt;
+  color: #9ca3af;
+}
+
+.a4-print-root .summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5mm 0;
+  font-size: 9pt;
+}
+
+.a4-print-root .summary-row.total {
+  font-size: 11pt;
+  font-weight: 600;
+  color: #534ab7;
+  border-top: 1pt solid #534ab7;
+  padding-top: 2.5mm;
+  margin-top: 1mm;
+}
+
+.a4-print-root .summary-right {
+  text-align: right;
+}
+
+.a4-print-root .bottom-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6mm;
+  margin-top: 5mm;
+}
+
+.a4-print-root .pay-box {
+  border: 0.5pt solid #e8e8e8;
+  border-radius: 2mm;
+  padding: 3mm 4mm;
+}
+
+.a4-print-root .pay-label {
+  font-size: 7.5pt;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 2mm;
+  font-weight: 500;
+}
+
+.a4-print-root .pay-row {
+  display: flex;
+  align-items: center;
+  gap: 2mm;
+  font-size: 8.5pt;
+  margin-bottom: 1mm;
+}
+
+.a4-print-root .pay-dot {
+  width: 5pt;
+  height: 5pt;
+  border-radius: 50%;
+  background: #534ab7;
+  flex-shrink: 0;
+}
+
+.a4-print-root .pay-dot.success {
+  background: #0f6e56;
+}
+
+.a4-print-root .note-box {
+  border: 0.5pt solid #e8e8e8;
+  border-radius: 2mm;
+  padding: 3mm 4mm;
+}
+
+.a4-print-root .note-label {
+  font-size: 7.5pt;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 2mm;
+  font-weight: 500;
+}
+
+.a4-print-root .note-text {
+  font-size: 8.5pt;
+  color: #444;
+  line-height: 1.7;
+}
+
+.a4-print-root .summary-box {
+  border: 0.5pt solid #e8e8e8;
+  border-radius: 2mm;
+  padding: 3mm 4mm;
+}
+
+.a4-print-root .summary-layout {
+  display: grid;
+  grid-template-columns: 1fr 56mm;
+  gap: 6mm;
+  align-items: start;
+}
+
+.a4-print-root .sig-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8mm;
+  margin-top: 8mm;
+}
+
+.a4-print-root .sig-box {
+  text-align: center;
+  padding-top: 8mm;
+  border-top: 0.5pt solid #ccc;
+}
+
+.a4-print-root .sig-label {
+  font-size: 8pt;
+  color: #6b7280;
+}
+
+.a4-print-root .sig-name {
+  font-size: 8pt;
+  color: #1a1a2e;
+  margin-top: 1mm;
+}
+
+.a4-print-root .doc-footer {
+  margin-top: 6mm;
+  padding-top: 3mm;
+  border-top: 0.5pt solid #e0e0e0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.a4-print-root .doc-footer-left,
+.a4-print-root .doc-footer-right {
+  font-size: 7.5pt;
+  color: #9ca3af;
+}
+
+.a4-print-root .stamp {
+  display: inline-block;
+  padding: 1.5mm 5mm;
+  border: 2pt solid;
+  border-radius: 2mm;
+  font-size: 11pt;
+  font-weight: 700;
+  font-family: 'Prompt', sans-serif;
+  transform: rotate(-12deg);
+  opacity: 0.15;
+  position: absolute;
+  top: 40mm;
+  right: 22mm;
+  pointer-events: none;
+}
+
+.a4-print-root .text-danger {
+  color: #a32d2d;
+}
+
+.a4-print-root .text-success {
+  color: #0f6e56;
+}
+
+.a4-print-root .text-muted {
+  color: #6b7280;
+}

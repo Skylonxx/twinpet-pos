@@ -1,0 +1,350 @@
+.ar-page {
+  --p50: #eeedfe;
+  --p600: #534ab7;
+  --p800: #3c3489;
+  --p900: #26215c;
+  --g50: #f8f8fc;
+  --g200: #d3d1c7;
+  --g400: #888780;
+  --g600: #5f5e5a;
+  --red: #e24b4a;
+  --green: #1d9e75;
+
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  font-family: 'Prompt', 'Sarabun', sans-serif;
+  background: var(--g50);
+  color: var(--p900);
+}
+
+.ar-topbar {
+  height: 56px;
+  background: #fff;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.ar-topbar-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: var(--p50);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--p600);
+  font-size: 18px;
+}
+
+.ar-topbar-center {
+  flex: 1;
+  min-width: 0;
+}
+
+.ar-topbar-title {
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.ar-topbar-sub {
+  font-size: 12px;
+  color: var(--g400);
+  margin-top: 1px;
+}
+
+.ar-branch-badge {
+  font-size: 11px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  background: var(--p50);
+  color: var(--p600);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ar-summary-row {
+  padding: 16px 20px 0;
+  flex-shrink: 0;
+}
+
+.ar-summary-card {
+  background: #fff;
+  border: 0.5px solid var(--g200);
+  border-radius: 12px;
+  padding: 16px 18px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.ar-summary-label {
+  font-size: 12px;
+  color: var(--g600);
+}
+
+.ar-summary-value {
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--red);
+  font-family: 'Prompt', sans-serif;
+  margin-top: 4px;
+}
+
+.ar-summary-meta {
+  font-size: 11px;
+  color: var(--g400);
+  margin-top: 4px;
+}
+
+.ar-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 20px 0;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.ar-search-wrap {
+  flex: 1;
+  min-width: 220px;
+  position: relative;
+}
+
+.ar-search-wrap i {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 15px;
+  color: var(--g400);
+  pointer-events: none;
+}
+
+.ar-search-wrap input {
+  width: 100%;
+  padding: 9px 12px 9px 36px;
+  border: 0.5px solid var(--g200);
+  border-radius: 9px;
+  background: #fff;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--p900);
+  outline: none;
+}
+
+.ar-search-wrap input:focus {
+  border-color: var(--p600);
+  box-shadow: 0 0 0 2px rgba(83, 74, 183, 0.12);
+}
+
+.ar-select-filter {
+  padding: 9px 12px;
+  border: 0.5px solid var(--g200);
+  border-radius: 9px;
+  background: #fff;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--g600);
+  cursor: pointer;
+  min-width: 160px;
+}
+
+.ar-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 10px 20px 0;
+  flex-shrink: 0;
+}
+
+.ar-tab {
+  padding: 7px 14px;
+  border-radius: 8px;
+  border: 0.5px solid var(--g200);
+  background: #fff;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--g600);
+  cursor: pointer;
+}
+
+.ar-tab.active {
+  background: var(--p600);
+  border-color: var(--p600);
+  color: #fff;
+  font-weight: 500;
+}
+
+.ar-body {
+  flex: 1;
+  min-height: 0;
+  padding: 14px 20px 20px;
+  overflow: auto;
+}
+
+.ar-table-wrap {
+  background: #fff;
+  border: 0.5px solid var(--g200);
+  border-radius: 12px;
+  overflow: auto;
+}
+
+.ar-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.ar-table th {
+  text-align: left;
+  padding: 10px 14px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--g400);
+  border-bottom: 0.5px solid var(--g200);
+  background: var(--g50);
+  white-space: nowrap;
+}
+
+.ar-table th.r,
+.ar-table td.r {
+  text-align: right;
+}
+
+.ar-table td {
+  padding: 11px 14px;
+  border-bottom: 0.5px solid rgba(0, 0, 0, 0.06);
+  vertical-align: middle;
+}
+
+.ar-table tr:last-child td {
+  border-bottom: none;
+}
+
+.ar-name {
+  font-weight: 500;
+  color: var(--p800);
+}
+
+.ar-sub {
+  font-size: 11px;
+  color: var(--g400);
+  margin-top: 2px;
+}
+
+.ar-debt {
+  color: var(--red);
+  font-weight: 600;
+  font-family: 'Prompt', sans-serif;
+}
+
+.ar-activity-label {
+  font-size: 10px;
+  color: var(--g400);
+  margin-bottom: 2px;
+}
+
+.ar-activity-date {
+  font-size: 12px;
+  color: var(--p800);
+  font-weight: 500;
+}
+
+.ar-muted {
+  color: var(--g400);
+}
+
+.ar-badge-overdue {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: #fde8e8;
+  color: #b42318;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.ar-badge-ok {
+  font-size: 12px;
+  color: var(--green);
+  font-weight: 500;
+}
+
+.ar-notes {
+  font-size: 12px;
+  color: var(--g600);
+  max-width: 220px;
+}
+
+.ar-empty {
+  text-align: center;
+  padding: 32px 16px !important;
+  color: var(--g400);
+}
+
+.ar-action-group {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: nowrap;
+}
+
+.ar-action-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 0.5px solid var(--p600);
+  background: var(--p50);
+  color: var(--p600);
+  font-size: 14px;
+  font-family: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ar-action-btn:hover {
+  background: #fff;
+}
+
+.ar-action-btn-ghost {
+  background: #fff;
+  border-color: var(--g200);
+  color: var(--g600);
+}
+
+.ar-action-btn-ghost:hover {
+  background: var(--g50);
+}
+
+.ar-toast-wrap {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 500;
+  pointer-events: none;
+}
+
+.ar-toast {
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.ar-toast-success {
+  background: var(--green);
+}
+
+.ar-toast-warn {
+  background: #ba7517;
+}

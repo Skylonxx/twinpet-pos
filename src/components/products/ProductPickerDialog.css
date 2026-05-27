@@ -1,0 +1,448 @@
+/* TwinPet — Product select dialog (from twinpet_product_select_dialog.html) */
+.pps-overlay {
+  --p50: #eeedfe;
+  --p100: #cecbf6;
+  --p200: #afa9ec;
+  --p400: #7f77dd;
+  --p600: #534ab7;
+  --p800: #3c3489;
+  --p900: #26215c;
+  --g50: #f8f8fc;
+  --g100: #f1efe8;
+  --g200: #d3d1c7;
+  --g400: #888780;
+  --g600: #5f5e5a;
+  --green: #1d9e75;
+  --amber: #ba7517;
+  --red: #e24b4a;
+
+  position: fixed;
+  inset: 0;
+  z-index: 600;
+  background: rgba(30, 24, 60, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  backdrop-filter: blur(2px);
+  font-family: 'Sarabun', 'Prompt', sans-serif;
+}
+
+.pps-overlay *,
+.pps-overlay *::before,
+.pps-overlay *::after {
+  box-sizing: border-box;
+}
+
+.pps-overlay .dialog {
+  width: 80vw;
+  height: 80vh;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.pps-overlay .dlg-head {
+  padding: 13px 20px;
+  border-bottom: 0.5px solid var(--g200);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.pps-overlay .dlg-title {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--p900);
+  flex: 1;
+}
+
+.pps-overlay .dlg-sel-count-hd {
+  font-size: 12px;
+  color: var(--p800);
+  font-weight: 500;
+}
+
+.pps-overlay .close-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 0.5px solid var(--g200);
+  background: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--g400);
+  padding: 0;
+}
+
+.pps-overlay .close-btn:hover {
+  background: var(--g50);
+}
+
+.pps-overlay .close-btn i {
+  font-size: 13px;
+}
+
+.pps-overlay .search-bar {
+  padding: 10px 20px;
+  border-bottom: 0.5px solid var(--g200);
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: auto 100px 1fr 68px 60px;
+  gap: 6px;
+  align-items: center;
+}
+
+.pps-overlay .search-label {
+  font-size: 12px;
+  color: var(--g600);
+  white-space: nowrap;
+}
+
+.pps-overlay .search-type {
+  width: 100%;
+  height: 32px;
+  border: 0.5px solid var(--g200);
+  border-radius: 6px;
+  padding: 0 6px;
+  font-size: 11px;
+  font-family: inherit;
+  color: var(--g600);
+  background: white;
+  outline: none;
+}
+
+.pps-overlay .search-input {
+  width: 100%;
+  height: 32px;
+  border: 0.5px solid var(--g200);
+  border-radius: 6px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--p900);
+  outline: none;
+}
+
+.pps-overlay .search-input:focus {
+  border-color: var(--p400);
+}
+
+.pps-overlay .search-btn {
+  width: 100%;
+  height: 32px;
+  background: var(--p600);
+  border: none;
+  border-radius: 6px;
+  color: white;
+  font-size: 11px;
+  font-family: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.pps-overlay .search-btn:hover {
+  background: var(--p800);
+}
+
+.pps-overlay .reset-btn {
+  width: 100%;
+  height: 32px;
+  background: white;
+  border: 0.5px solid var(--g200);
+  border-radius: 6px;
+  color: var(--g600);
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.pps-overlay .reset-btn:hover {
+  background: var(--g50);
+}
+
+.pps-overlay .table-wrap {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.pps-overlay .table-wrap::-webkit-scrollbar {
+  width: 4px;
+}
+
+.pps-overlay .table-wrap::-webkit-scrollbar-thumb {
+  background: var(--g200);
+  border-radius: 4px;
+}
+
+.pps-overlay table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.pps-overlay thead th {
+  position: sticky;
+  top: 0;
+  background: var(--g50);
+  padding: 7px 14px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--g400);
+  border-bottom: 0.5px solid var(--g200);
+  white-space: nowrap;
+  z-index: 1;
+}
+
+.pps-overlay th.r {
+  text-align: right;
+}
+
+.pps-overlay tbody tr {
+  border-bottom: 0.5px solid var(--g100);
+  cursor: pointer;
+  transition: background 0.08s;
+}
+
+.pps-overlay tbody tr:hover {
+  background: var(--g50);
+}
+
+.pps-overlay tbody tr.sel {
+  background: #f0fff8;
+}
+
+.pps-overlay td {
+  padding: 8px 14px;
+  font-size: 12px;
+  color: var(--g600);
+  vertical-align: middle;
+}
+
+.pps-overlay td.r {
+  text-align: right;
+}
+
+.pps-overlay .cb {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--p600);
+  cursor: pointer;
+}
+
+.pps-overlay .prod-img {
+  width: 30px;
+  height: 30px;
+  background: var(--g100);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+}
+
+.pps-overlay .prod-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--p900);
+}
+
+.pps-overlay .prod-sku {
+  font-size: 10px;
+  color: var(--g400);
+  margin-top: 1px;
+}
+
+.pps-overlay .cat-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.pps-overlay .stock-pos {
+  color: var(--p900);
+  font-family: 'Prompt', sans-serif;
+  font-weight: 500;
+}
+
+.pps-overlay .stock-zero {
+  color: var(--amber);
+  font-family: 'Prompt', sans-serif;
+  font-weight: 500;
+}
+
+.pps-overlay .stock-neg {
+  color: var(--red);
+  font-family: 'Prompt', sans-serif;
+  font-weight: 500;
+}
+
+.pps-overlay .empty-msg {
+  text-align: center;
+  padding: 40px;
+  font-size: 13px;
+  color: var(--g200);
+}
+
+.pps-overlay .pag-bar {
+  padding: 8px 20px;
+  border-top: 0.5px solid var(--g200);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.pps-overlay .pag-info {
+  font-size: 11px;
+  color: var(--g400);
+}
+
+.pps-overlay .pag-btns {
+  display: flex;
+  gap: 4px;
+}
+
+.pps-overlay .pg {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  border: 0.5px solid var(--g200);
+  background: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--g600);
+  font-family: 'Prompt', sans-serif;
+  user-select: none;
+  transition: all 0.1s;
+  padding: 0;
+}
+
+.pps-overlay .pg:hover:not(.on):not(.dis) {
+  background: var(--p50);
+  border-color: var(--p400);
+  color: var(--p600);
+}
+
+.pps-overlay .pg.on {
+  background: var(--p600);
+  border-color: var(--p600);
+  color: white;
+}
+
+.pps-overlay .pg.dis {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.pps-overlay .dlg-footer {
+  padding: 11px 20px;
+  border-top: 0.5px solid var(--g200);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.pps-overlay .sel-label {
+  font-size: 12px;
+  color: var(--g400);
+}
+
+.pps-overlay .sel-label strong {
+  color: var(--p800);
+}
+
+.pps-overlay .cancel-btn {
+  padding: 7px 18px;
+  border-radius: 8px;
+  border: 0.5px solid var(--g200);
+  background: white;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--g600);
+  cursor: pointer;
+}
+
+.pps-overlay .cancel-btn:hover {
+  background: var(--g50);
+}
+
+.pps-overlay .confirm-btn {
+  padding: 7px 22px;
+  border-radius: 8px;
+  border: none;
+  background: var(--p600);
+  color: white;
+  font-size: 12px;
+  font-family: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.pps-overlay .confirm-btn:hover:not(:disabled) {
+  background: var(--p800);
+}
+
+.pps-overlay .confirm-btn:disabled {
+  background: var(--g200);
+  cursor: not-allowed;
+}
+
+.pps-overlay .cat-food {
+  background: #e1f5ee;
+  color: #085041;
+}
+
+.pps-overlay .cat-treat {
+  background: #faeeda;
+  color: #633806;
+}
+
+.pps-overlay .cat-toy {
+  background: #faece7;
+  color: #993c1d;
+}
+
+.pps-overlay .cat-litter {
+  background: #f1efe8;
+  color: #444441;
+}
+
+.pps-overlay .cat-supp {
+  background: #fbeaf0;
+  color: #72243e;
+}
+
+.pps-overlay .cat-other {
+  background: var(--g100);
+  color: var(--g600);
+}
+
+@media (max-width: 768px) {
+  .pps-overlay .dialog {
+    width: calc(100vw - 16px);
+    height: calc(100vh - 16px);
+  }
+
+  .pps-overlay .search-bar {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto;
+  }
+
+  .pps-overlay .search-label {
+    grid-column: 1 / -1;
+  }
+}

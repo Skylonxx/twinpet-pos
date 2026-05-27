@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TwinPet POS — เข้าสู่ระบบ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600&family=Sarabun:wght@300;400;500&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" rel="stylesheet">
+<style>
+:root{
+  --p600:#534AB7;--p500:#6B62C9;--p400:#8279D3;--p300:#A9A3E3;
+  --p100:#CECBF6;--p50:#EEEDFE;
+  --g50:#F8F8FC;--g100:#EDEDF5;
+  --white:#ffffff;
+  --border:rgba(0,0,0,0.08);--border-md:rgba(0,0,0,0.13);
+  --text-primary:#1A1A2E;--text-secondary:#6B7280;--text-muted:#9CA3AF;
+  --success:#0F6E56;--success-bg:#E1F5EE;
+  --danger:#A32D2D;--danger-bg:#FCEBEB;
+  --warn:#854F0B;--warn-bg:#FAEEDA;
+  --radius-sm:6px;--radius-md:8px;--radius-lg:12px;--radius-xl:20px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{
+  font-family:'Prompt','Sarabun',sans-serif;
+  background:var(--g50);
+  color:var(--text-primary);
+  height:100vh;
+  overflow:hidden;
+  font-size:14px;
+  display:flex;
+  align-items:stretch;
+}
+
+/* ── Layout shell ── */
+.shell{display:flex;width:100%;height:100vh;}
+
+/* ── Left panel — brand/illustration ── */
+.left-panel{
+  width:420px;flex-shrink:0;
+  background:linear-gradient(145deg,#3D3597 0%,#534AB7 45%,#6B62C9 100%);
+  display:flex;flex-direction:column;
+  padding:40px 44px;
+  position:relative;overflow:hidden;
+}
+/* Background decoration dots */
+.left-panel::before{
+  content:'';position:absolute;top:-80px;right:-80px;
+  width:280px;height:280px;border-radius:50%;
+  background:rgba(255,255,255,0.06);
+}
+.left-panel::after{
+  content:'';position:absolute;bottom:-100px;left:-60px;
+  width:320px;height:320px;border-radius:50%;
+  background:rgba(255,255,255,0.05);
+}
+.brand{display:flex;align-items:center;gap:12px;margin-bottom:auto;position:relative;z-index:1;}
+.brand-icon{
+  width:44px;height:44px;border-radius:14px;
+  background:rgba(255,255,255,0.15);
+  backdrop-filter:blur(8px);
+  border:1px solid rgba(255,255,255,0.2);
+  display:flex;align-items:center;justify-content:center;
+  font-size:22px;
+}
+.brand-name{font-size:18px;font-weight:600;color:#fff;letter-spacing:0.01em;}
+.brand-sub{font-size:11px;color:rgba(255,255,255,0.6);margin-top:1px;letter-spacing:0.04em;text-transform:uppercase;}
+
+.hero-area{flex:1;display:flex;flex-direction:column;justify-content:center;position:relative;z-index:1;}
+.hero-headline{font-size:28px;font-weight:600;color:#fff;line-height:1.3;margin-bottom:12px;}
+.hero-sub{font-size:14px;color:rgba(255,255,255,0.65);line-height:1.7;max-width:300px;}
+
+/* Feature chips */
+.feature-list{display:flex;flex-direction:column;gap:10px;margin-top:28px;}
+.feature-item{display:flex;align-items:center;gap:10px;font-size:13px;color:rgba(255,255,255,0.8);}
+.feature-dot{width:28px;height:28px;border-radius:8px;background:rgba(255,255,255,0.12);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;}
+
+.left-footer{font-size:11px;color:rgba(255,255,255,0.35);position:relative;z-index:1;margin-top:auto;padding-top:24px;}
+
+/* ── Right panel — login form ── */
+.right-panel{
+  flex:1;display:flex;align-items:center;justify-content:center;
+  background:var(--white);padding:40px;overflow-y:auto;
+}
+.login-box{width:100%;max-width:380px;}
+
+.login-header{margin-bottom:32px;}
+.login-title{font-size:22px;font-weight:600;color:var(--text-primary);margin-bottom:6px;}
+.login-sub{font-size:13px;color:var(--text-muted);line-height:1.6;}
+
+/* Branch selector */
+.branch-select-wrap{margin-bottom:24px;}
+.branch-select-label{font-size:12px;font-weight:500;color:var(--text-secondary);margin-bottom:6px;display:block;}
+.branch-select{
+  width:100%;padding:10px 14px;font-size:13px;font-family:inherit;
+  border:1.5px solid var(--border-md);border-radius:var(--radius-md);
+  background:var(--g50);color:var(--text-primary);cursor:pointer;
+  appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%239CA3AF' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 12px center;padding-right:32px;
+}
+.branch-select:focus{outline:none;border-color:var(--p600);box-shadow:0 0 0 3px rgba(83,74,183,0.1);}
+
+/* Mode tabs */
+.mode-tabs{display:flex;background:var(--g50);border-radius:var(--radius-md);padding:3px;gap:2px;margin-bottom:24px;}
+.mode-tab{
+  flex:1;padding:8px 12px;border-radius:var(--radius-sm);font-size:13px;font-family:inherit;
+  background:transparent;border:none;cursor:pointer;color:var(--text-muted);
+  display:flex;align-items:center;justify-content:center;gap:6px;
+  transition:all 0.15s;font-weight:400;
+}
+.mode-tab.active{background:var(--white);color:var(--p600);font-weight:500;box-shadow:0 1px 3px rgba(0,0,0,0.08);}
+.mode-tab i{font-size:15px;}
+
+/* Form */
+.form-group{display:flex;flex-direction:column;gap:5px;margin-bottom:16px;}
+.form-label{font-size:12px;font-weight:500;color:var(--text-secondary);}
+.form-input-wrap{position:relative;}
+.form-input-wrap i.pre{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:16px;pointer-events:none;}
+.form-input-wrap i.suf{position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:16px;cursor:pointer;}
+.form-input-wrap i.suf:hover{color:var(--text-secondary);}
+.form-input{
+  width:100%;padding:10px 14px 10px 38px;font-size:13px;font-family:inherit;
+  border:1.5px solid var(--border-md);border-radius:var(--radius-md);
+  background:var(--g50);color:var(--text-primary);
+  transition:border 0.15s,box-shadow 0.15s;
+}
+.form-input:focus{outline:none;border-color:var(--p600);background:var(--white);box-shadow:0 0 0 3px rgba(83,74,183,0.1);}
+.form-input.no-icon{padding-left:14px;}
+.form-input.has-suf{padding-right:38px;}
+.form-input.error{border-color:var(--danger);}
+
+/* PIN pad */
+.pin-panel{display:none;}
+.pin-panel.active{display:block;}
+.pin-display{
+  display:flex;align-items:center;justify-content:center;gap:12px;
+  margin-bottom:20px;
+}
+.pin-dot{
+  width:14px;height:14px;border-radius:50%;
+  border:2px solid var(--p100);background:transparent;
+  transition:all 0.15s;
+}
+.pin-dot.filled{background:var(--p600);border-color:var(--p600);}
+.pin-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.pin-btn{
+  height:54px;border-radius:var(--radius-md);
+  border:1px solid var(--border-md);background:var(--g50);
+  font-size:18px;font-weight:500;font-family:inherit;
+  color:var(--text-primary);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:all 0.12s;user-select:none;
+}
+.pin-btn:hover{background:var(--p50);border-color:var(--p100);color:var(--p600);}
+.pin-btn:active{transform:scale(0.96);background:var(--p100);}
+.pin-btn.del{font-size:20px;color:var(--text-muted);}
+.pin-btn.zero{grid-column:2;}
+.pin-quick-name{text-align:center;font-size:13px;color:var(--text-secondary);margin-bottom:16px;display:flex;align-items:center;justify-content:center;gap:8px;}
+.pin-quick-name .avatar{width:28px;height:28px;border-radius:50%;background:var(--p50);color:var(--p600);display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;}
+
+/* Error msg */
+.error-msg{font-size:12px;color:var(--danger);display:flex;align-items:center;gap:5px;margin-top:-8px;margin-bottom:4px;display:none;}
+.error-msg.show{display:flex;}
+
+/* Submit button */
+.btn-login{
+  width:100%;padding:12px;border-radius:var(--radius-md);
+  background:var(--p600);color:#fff;border:none;
+  font-size:14px;font-family:inherit;font-weight:500;
+  cursor:pointer;transition:all 0.15s;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  margin-top:4px;
+}
+.btn-login:hover{background:var(--p500);}
+.btn-login:active{transform:scale(0.99);}
+.btn-login.loading{opacity:0.7;pointer-events:none;}
+.btn-login .spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin 0.6s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* Divider */
+.divider{display:flex;align-items:center;gap:12px;margin:16px 0;color:var(--text-muted);font-size:12px;}
+.divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border);}
+
+/* Quick select user (PIN mode) */
+.quick-users{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;}
+.quick-user-btn{
+  display:flex;align-items:center;gap:8px;padding:9px 12px;
+  border:1.5px solid var(--border-md);border-radius:var(--radius-md);
+  background:var(--g50);cursor:pointer;transition:all 0.15s;
+  font-family:inherit;
+}
+.quick-user-btn:hover{border-color:var(--p100);background:var(--p50);}
+.quick-user-btn.selected{border-color:var(--p600);background:var(--p50);}
+.qu-avatar{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;flex-shrink:0;}
+.qu-info{min-width:0;text-align:left;}
+.qu-name{font-size:12px;font-weight:500;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.qu-role{font-size:10px;color:var(--text-muted);}
+
+/* Forgot / help */
+.login-help{display:flex;justify-content:space-between;align-items:center;margin-top:16px;}
+.link-btn{font-size:12px;color:var(--p600);background:none;border:none;cursor:pointer;font-family:inherit;padding:0;}
+.link-btn:hover{text-decoration:underline;}
+.login-version{font-size:11px;color:var(--text-muted);text-align:center;margin-top:24px;}
+
+/* Success overlay */
+.success-overlay{
+  display:none;position:fixed;inset:0;
+  background:rgba(255,255,255,0.95);
+  align-items:center;justify-content:center;
+  z-index:100;flex-direction:column;gap:12px;
+  backdrop-filter:blur(4px);
+}
+.success-overlay.show{display:flex;}
+.success-check{
+  width:64px;height:64px;border-radius:50%;background:var(--success-bg);
+  display:flex;align-items:center;justify-content:center;
+  font-size:28px;color:var(--success);
+  animation:pop 0.3s cubic-bezier(0.34,1.56,0.64,1);
+}
+@keyframes pop{from{transform:scale(0.5);opacity:0;}to{transform:scale(1);opacity:1;}}
+.success-name{font-size:16px;font-weight:500;color:var(--text-primary);}
+.success-sub{font-size:13px;color:var(--text-muted);}
+
+/* Toast */
+.toast-wrap{position:fixed;bottom:20px;right:20px;display:flex;flex-direction:column;gap:8px;z-index:200;pointer-events:none;}
+.toast{padding:10px 16px;border-radius:var(--radius-md);font-size:13px;display:flex;align-items:center;gap:8px;box-shadow:0 4px 12px rgba(0,0,0,0.12);animation:toast-in 0.2s ease;pointer-events:none;color:#fff;}
+.toast.error{background:var(--danger);}
+.toast.info{background:var(--p600);}
+@keyframes toast-in{from{opacity:0;transform:translateX(16px);}to{opacity:1;transform:none;}}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:4px;}
+::-webkit-scrollbar-thumb{background:var(--g100);border-radius:4px;}
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- ══ LEFT PANEL ══ -->
+  <div class="left-panel">
+    <!-- Brand -->
+    <div class="brand">
+      <div class="brand-icon">🐾</div>
+      <div>
+        <div class="brand-name">TwinPet POS</div>
+        <div class="brand-sub">Point of Sale System</div>
+      </div>
+    </div>
+
+    <!-- Hero -->
+    <div class="hero-area">
+      <div class="hero-headline">ระบบขายหน้าร้าน<br>สำหรับร้านสัตว์เลี้ยง</div>
+      <div class="hero-sub">จัดการสต็อก FIFO, รายงานกำไร, และระบบสมาชิกครบในที่เดียว</div>
+      <div class="feature-list">
+        <div class="feature-item">
+          <div class="feature-dot"><i class="ti ti-stack" aria-hidden="true"></i></div>
+          ระบบสต็อก FIFO & ต้นทุนแม่นยำ
+        </div>
+        <div class="feature-item">
+          <div class="feature-dot"><i class="ti ti-chart-bar" aria-hidden="true"></i></div>
+          รายงานยอดขายและกำไรแบบ Real-time
+        </div>
+        <div class="feature-item">
+          <div class="feature-dot"><i class="ti ti-users" aria-hidden="true"></i></div>
+          จัดการสมาชิกและสิทธิ์พนักงาน
+        </div>
+        <div class="feature-item">
+          <div class="feature-dot"><i class="ti ti-building-store" aria-hidden="true"></i></div>
+          รองรับหลายสาขา
+        </div>
+      </div>
+    </div>
+
+    <div class="left-footer">TwinPet POS v2.4.1 · © 2026 TwinPet Co., Ltd.</div>
+  </div>
+
+  <!-- ══ RIGHT PANEL ══ -->
+  <div class="right-panel">
+    <div class="login-box">
+
+      <div class="login-header">
+        <div class="login-title">เข้าสู่ระบบ</div>
+        <div class="login-sub">เลือกสาขาและกรอกข้อมูลเพื่อเริ่มงาน</div>
+      </div>
+
+      <!-- Branch selector -->
+      <div class="branch-select-wrap">
+        <label class="branch-select-label" for="branch-sel">
+          <i class="ti ti-map-pin" style="font-size:12px;" aria-hidden="true"></i> สาขา
+        </label>
+        <select class="branch-select" id="branch-sel" onchange="onBranchChange()">
+          <option value="ladprao">สาขา ลาดพร้าว</option>
+          <option value="ekkamai">สาขา เอกมัย</option>
+          <option value="onnuch">สาขา อ่อนนุช</option>
+        </select>
+      </div>
+
+      <!-- Mode tabs -->
+      <div class="mode-tabs">
+        <button class="mode-tab" id="tab-password" onclick="switchMode('password')">
+          <i class="ti ti-lock" aria-hidden="true"></i> Username / Password
+        </button>
+        <button class="mode-tab active" id="tab-pin" onclick="switchMode('pin')">
+          <i class="ti ti-keyframe" aria-hidden="true"></i> Quick PIN
+        </button>
+      </div>
+
+      <!-- ── PASSWORD PANEL ── -->
+      <div id="password-panel">
+        <div class="form-group">
+          <label class="form-label" for="inp-user">Username</label>
+          <div class="form-input-wrap">
+            <i class="ti ti-user pre" aria-hidden="true"></i>
+            <input class="form-input" type="text" id="inp-user" placeholder="กรอก username"
+              autocomplete="username" oninput="clearError()">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="inp-pass">Password</label>
+          <div class="form-input-wrap">
+            <i class="ti ti-lock pre" aria-hidden="true"></i>
+            <input class="form-input has-suf" type="password" id="inp-pass" placeholder="••••••••"
+              autocomplete="current-password" oninput="clearError()" onkeydown="if(event.key==='Enter')doLogin()">
+            <i class="ti ti-eye suf" id="pw-eye" onclick="togglePw()" aria-hidden="true"></i>
+          </div>
+        </div>
+        <div class="error-msg" id="pw-error">
+          <i class="ti ti-alert-circle" aria-hidden="true"></i>
+          <span id="pw-error-text">Username หรือ Password ไม่ถูกต้อง</span>
+        </div>
+        <button class="btn-login" id="btn-pw-login" onclick="doLogin()">
+          <i class="ti ti-login" aria-hidden="true"></i> เข้าสู่ระบบ
+        </button>
+        <div class="login-help">
+          <button class="link-btn" onclick="showToast('ติดต่อผู้ดูแลระบบเพื่อรีเซ็ต Password','info')">
+            <i class="ti ti-help-circle" style="font-size:13px;" aria-hidden="true"></i> ลืม Password?
+          </button>
+          <button class="link-btn" onclick="switchMode('pin')">ใช้ Quick PIN แทน</button>
+        </div>
+      </div>
+
+      <!-- ── PIN PANEL ── -->
+      <div id="pin-panel" class="pin-panel">
+        <!-- PIN dots -->
+        <div class="pin-display" id="pin-dots">
+          <div class="pin-dot" id="dot-0"></div>
+          <div class="pin-dot" id="dot-1"></div>
+          <div class="pin-dot" id="dot-2"></div>
+          <div class="pin-dot" id="dot-3"></div>
+        </div>
+        <div class="error-msg" id="pin-error" style="justify-content:center;margin-bottom:8px;">
+          <i class="ti ti-alert-circle" aria-hidden="true"></i>
+          <span>PIN ไม่ถูกต้อง กรุณาลองใหม่</span>
+        </div>
+        <!-- Numpad -->
+        <div class="pin-grid">
+          <button class="pin-btn" onclick="pinPress('1')">1</button>
+          <button class="pin-btn" onclick="pinPress('2')">2</button>
+          <button class="pin-btn" onclick="pinPress('3')">3</button>
+          <button class="pin-btn" onclick="pinPress('4')">4</button>
+          <button class="pin-btn" onclick="pinPress('5')">5</button>
+          <button class="pin-btn" onclick="pinPress('6')">6</button>
+          <button class="pin-btn" onclick="pinPress('7')">7</button>
+          <button class="pin-btn" onclick="pinPress('8')">8</button>
+          <button class="pin-btn" onclick="pinPress('9')">9</button>
+          <button class="pin-btn zero" onclick="pinPress('0')">0</button>
+          <button class="pin-btn del" onclick="pinDel()"><i class="ti ti-backspace" aria-hidden="true"></i></button>
+        </div>
+        <div class="login-help" style="margin-top:12px;">
+          <button class="link-btn" onclick="switchMode('password')">ใช้ Username/Password แทน</button>
+        </div>
+      </div>
+
+      <div class="login-version">v2.4.1 · สาขา <span id="footer-branch">ลาดพร้าว</span></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Success overlay -->
+<div class="success-overlay" id="success-overlay">
+  <div class="success-check"><i class="ti ti-check" aria-hidden="true"></i></div>
+  <div class="success-name" id="success-name">ยินดีต้อนรับ</div>
+  <div class="success-sub" id="success-sub">กำลังเข้าสู่ระบบ...</div>
+</div>
+
+<div class="toast-wrap" id="toast-wrap"></div>
+
+<script>
+// ── MOCK DATA ─────────────────────────────────────────────────────────────────
+const USERS = [
+  {id:1, fname:'สมชาย',  lname:'ดีมาก',  username:'somchai',  password:'admin1234', pin:'1234', role:'Admin',   branches:['ladprao','ekkamai','onnuch'], av:'สด', avCls:'av-purple'},
+  {id:2, fname:'สุดา',   lname:'ใจดี',   username:'suda',     password:'manager01', pin:'2345', role:'Manager', branches:['ladprao','ekkamai'],          av:'สใ', avCls:'av-blue'},
+  {id:3, fname:'วิชัย',  lname:'ขยันดี', username:'wichai',   password:'staff001',  pin:'3456', role:'Staff',   branches:['ladprao'],                   av:'วข', avCls:'av-teal'},
+  {id:4, fname:'นงนุช',  lname:'สวัสดี', username:'nongnuch', password:'staff002',  pin:'4567', role:'Staff',   branches:['ekkamai','onnuch'],           av:'นส', avCls:'av-coral'},
+];
+const AV_COLORS = {
+  'av-purple':['#EEEDFE','#534AB7'],
+  'av-blue':  ['#E6F1FB','#185FA5'],
+  'av-teal':  ['#E1F5EE','#0F6E56'],
+  'av-coral': ['#FAECE7','#993C1D'],
+};
+const BRANCH_NAMES = {ladprao:'ลาดพร้าว', ekkamai:'เอกมัย', onnuch:'อ่อนนุช'};
+
+let currentBranch = 'ladprao';
+let currentMode   = 'password';
+let pinValue      = '';
+let selectedPinUser = null;
+
+// ── Branch ────────────────────────────────────────────────────────────────────
+function onBranchChange(){
+  currentBranch = document.getElementById('branch-sel').value;
+  document.getElementById('footer-branch').textContent = BRANCH_NAMES[currentBranch];
+  clearError(); clearPin();
+}
+
+// ── Mode tabs ─────────────────────────────────────────────────────────────────
+function switchMode(mode){
+  currentMode = mode;
+  document.getElementById('tab-password').classList.toggle('active', mode==='password');
+  document.getElementById('tab-pin').classList.toggle('active', mode==='pin');
+  document.getElementById('password-panel').style.display = mode==='password'?'':'none';
+  document.getElementById('pin-panel').classList.toggle('active', mode==='pin');
+  clearError(); clearPin();
+}
+
+// ── Quick Users (PIN mode) ────────────────────────────────────────────────────
+function buildQuickUsers(){
+  const branch = currentBranch;
+  const eligible = USERS.filter(u=>u.branches.includes(branch));
+  const wrap = document.getElementById('quick-users');
+  wrap.innerHTML = eligible.map(u=>{
+    const [bg,clr]=AV_COLORS[u.avCls]||['#EEEDFE','#534AB7'];
+    const sel = selectedPinUser && selectedPinUser.id===u.id;
+    return `<button class="quick-user-btn${sel?' selected':''}" onclick="selectPinUser(${u.id})">
+      <div class="qu-avatar" style="background:${bg};color:${clr};">${u.av}</div>
+      <div class="qu-info">
+        <div class="qu-name">${u.fname} ${u.lname}</div>
+        <div class="qu-role">${u.role}</div>
+      </div>
+    </button>`;
+  }).join('');
+  // Auto-select first
+  if(!selectedPinUser||!eligible.find(u=>u.id===selectedPinUser.id)){
+    if(eligible.length) selectPinUser(eligible[0].id, true);
+  }
+}
+
+function selectPinUser(id, silent=false){
+  const u = USERS.find(x=>x.id===id);
+  if(!u) return;
+  selectedPinUser = u;
+  clearPin();
+  buildQuickUsers();
+}
+
+// ── PIN Pad ────────────────────────────────────────────────────────────────────
+function pinPress(digit){
+  if(pinValue.length>=4) return;
+  clearError();
+  pinValue += digit;
+  updatePinDots();
+  if(pinValue.length===4) setTimeout(checkPin, 200);
+}
+function pinDel(){
+  clearError();
+  pinValue = pinValue.slice(0,-1);
+  updatePinDots();
+}
+function clearPin(){
+  pinValue='';
+  updatePinDots();
+}
+function updatePinDots(){
+  for(let i=0;i<4;i++){
+    document.getElementById(`dot-${i}`).classList.toggle('filled', i<pinValue.length);
+  }
+}
+function checkPin(){
+  const eligible = USERS.filter(u=>u.branches.includes(currentBranch));
+  const matched  = eligible.find(u=>u.pin===pinValue);
+  if(matched){
+    showSuccess(matched);
+  } else {
+    document.getElementById('pin-error').classList.add('show');
+    const dots=document.getElementById('pin-dots');
+    dots.style.animation='none'; dots.offsetHeight;
+    dots.style.animation='shake 0.3s ease';
+    setTimeout(clearPin, 600);
+  }
+}
+
+// ── Password Login ─────────────────────────────────────────────────────────────
+function doLogin(){
+  const username = document.getElementById('inp-user').value.trim().toLowerCase();
+  const password = document.getElementById('inp-pass').value;
+  if(!username||!password){ showPwError('กรุณากรอก Username และ Password'); return; }
+  const btn = document.getElementById('btn-pw-login');
+  btn.classList.add('loading');
+  btn.innerHTML='<span class="spinner"></span> กำลังตรวจสอบ...';
+  setTimeout(()=>{
+    const user = USERS.find(u=>u.username===username && u.password===password && u.branches.includes(currentBranch));
+    btn.classList.remove('loading');
+    btn.innerHTML='<i class="ti ti-login" aria-hidden="true"></i> เข้าสู่ระบบ';
+    if(user) showSuccess(user);
+    else {
+      if(USERS.find(u=>u.username===username && u.password===password)){
+        showPwError('บัญชีนี้ไม่มีสิทธิ์เข้าถึงสาขาที่เลือก');
+      } else {
+        showPwError('Username หรือ Password ไม่ถูกต้อง');
+      }
+    }
+  }, 900);
+}
+
+function showPwError(msg){
+  document.getElementById('pw-error-text').textContent=msg;
+  document.getElementById('pw-error').classList.add('show');
+  document.getElementById('inp-user').classList.add('error');
+  document.getElementById('inp-pass').classList.add('error');
+}
+function clearError(){
+  document.getElementById('pw-error')?.classList.remove('show');
+  document.getElementById('inp-user')?.classList.remove('error');
+  document.getElementById('inp-pass')?.classList.remove('error');
+  document.getElementById('pin-error')?.classList.remove('show');
+}
+
+function togglePw(){
+  const inp=document.getElementById('inp-pass');
+  const eye=document.getElementById('pw-eye');
+  if(inp.type==='password'){ inp.type='text'; eye.className='ti ti-eye-off suf'; }
+  else { inp.type='password'; eye.className='ti ti-eye suf'; }
+}
+
+// ── Success ───────────────────────────────────────────────────────────────────
+function showSuccess(user){
+  const ov=document.getElementById('success-overlay');
+  document.getElementById('success-name').textContent=`ยินดีต้อนรับ, ${user.fname} ${user.lname}`;
+  document.getElementById('success-sub').textContent=`${user.role} · สาขา${BRANCH_NAMES[currentBranch]}`;
+  ov.classList.add('show');
+  setTimeout(()=>{ ov.classList.remove('show'); showToast(`เข้าสู่ระบบสำเร็จ (Demo)`, 'info'); clearPin(); }, 2200);
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+function showToast(msg, type='info'){
+  const wrap=document.getElementById('toast-wrap');
+  const el=document.createElement('div'); el.className=`toast ${type}`;
+  el.innerHTML=`<i class="ti ti-${type==='error'?'alert-circle':'info-circle'}" aria-hidden="true"></i> ${msg}`;
+  wrap.appendChild(el);
+  setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity 0.3s'; setTimeout(()=>el.remove(),300); }, 2600);
+}
+
+// ── Shake keyframe inject ─────────────────────────────────────────────────────
+const styleEl=document.createElement('style');
+styleEl.textContent='@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)}}';
+document.head.appendChild(styleEl);
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+currentMode = 'pin';
+document.getElementById('password-panel').style.display = 'none';
+document.getElementById('pin-panel').classList.add('active');
+</script>
+</body>
+</html>

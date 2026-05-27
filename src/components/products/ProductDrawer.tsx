@@ -1,0 +1,804 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { useCategories } from '../../lib/inventory/categoryService';
+import {
+  emptyForm,
+  fmtBaht,
+  formatUomBreakdown,
+  generateSku,
+  movementLabel,
+  productToForm,
+  DRAWER_TABS,
+  type DrawerTab,
+  type ProductFormData,
+  type ProductListItem,
+  type ProductUomFormRow,
+} from '../../lib/productCrud/types';
+import { useSystemSettings } from '../../lib/settings/useSystemSettings';
+import { buildUnitSelectOptions, useUnitList } from '../../lib/settings/useUnitList';
+import type { StockLot, StockMovement } from '../../lib/types';
+import FifoLotDialog from './FifoLotDialog';
+import ProductSaveConfirmDialog from './ProductSaveConfirmDialog';
+import TierPriceManagerDialog from './TierPriceManagerDialog';
+import UnitManagerModal from './UnitManagerModal';
+
+const RETAIL_PRICE_KEY = 'RETAIL';
+
+type TierDialogConfig = {
+  title: string;
+  basePrice: number;
+  initialTierPrices: Record<string, number>;
+  onSave: (next: Record<string, number>) => void;
+};
+
+function TierPriceManageButton({
+  customCount,
+  onClick,
+}: {
+  customCount: number;
+  onClick: () => void;
+}) {
+  return (
+    <button type="button" className="pc-tier-manage-btn" onClick={onClick}>
+      🏷️ จัดการราคาตามกลุ่มลูกค้า
+      {customCount > 0 ? <span className="pc-tier-manage-badge">{customCount} กลุ่ม</span> : null}
+    </button>
+  );
+}
+
+function parseDate(d: unknown): Date {
+  if (d != null && typeof d === 'object' && 'toDate' in d && typeof (d as { toDate: unknown }).toDate === 'function') {
+    return (d as { toDate: () => Date }).toDate();
+  }
+  if (d instanceof Date) return d;
+  if (d != null && typeof d === 'object' && 'seconds' in d && typeof (d as { seconds: unknown }).seconds === 'number') {
+    return new Date((d as { seconds: number }).seconds * 1000);
+  }
+  if (typeof d === 'string' || typeof d === 'number') {
+    const parsed = new Date(d);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+  return new Date(0);
+}
+
+function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+  return (
+    <label className="pc-tog">
+      <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
+      <div className="pc-tog-track" />
+      <div className="pc-tog-thumb" />
+    </label>
+  );
+}
+
+function BaseRetailPriceInput({
+  value,
+  onChange,
+  label = 'ราคาขายหลัก (฿)',
+}: {
+  value: number;
+  onChange: (val: number) => void;
+  label?: string;
+}) {
+  return (
+    <div className="pc-field pc-base-price-field">
+      <label>{label}</label>
+      <input
+        type="number"
+        min={0}
+        step={0.01}
+        value={value || ''}
+        placeholder="0.00"
+        onChange={(e) => onChange(Number(e.target.value))}
+      />
+    </div>
+  );
+}
+
+function UomPricingCard({
+  row,
+  baseUnit,
+  unitSelectOptions,
+  customTierCount,
+  onUpdate,
+  onManageTierPrices,
+  onRemove,
+}: {
+  row: ProductUomFormRow;
+  baseUnit: string;
+  unitSelectOptions: string[];
+  customTierCount: number;
+  onUpdate: (patch: Partial<ProductUomFormRow>) => void;
+  onManageTierPrices: () => void;
+  onRemove?: () => void;
+}) {
+  return (
+    <div className={`pc-uom-card${row.isBase ? ' pc-uom-card-base' : ''}`}>
+      <div className="pc-uom-card-top">
+        <div className="pc-uom-card-top-left">
+          {row.isBase ? <span className="pc-uom-card-base-badge">หน่วยฐาน</span> : null}
+          <div className="pc-uom-card-title">{row.unit}</div>
+          <div className="pc-uom-card-sub">
+            {row.isBase ? `สต็อกเก็บเป็น ${baseUnit}` : `= ${row.factor} ${baseUnit}`}
+          </div>
+        </div>
+        {!row.isBase && onRemove ? (
+          <button type="button" className="pc-uom-card-del" onClick={onRemove} aria-label="ลบหน่วยนับ">
+            🗑️
+          </button>
+        ) : null}
+      </div>
+
+      <div className="pc-uom-card-grid">
+        <div className="pc-field">
+          <label>ชื่อหน่วย</label>
+          {row.isBase ? (
+            <input value={row.unit} readOnly />
+          ) : (
+            <select
+              value={row.unit}
+              onChange={(e) => onUpdate({ unit: e.target.value })}
+            >
+              {!row.unit ? (
+                <option value="" disabled>
+                  — เลือกหน่วย —
+                </option>
+              ) : null}
+              {unitSelectOptions.map((unit) => (
+                <option key={unit} value={unit}>
+                  {unit}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+        {!row.isBase ? (
+          <div className="pc-field">
+            <label>ตัวคูณ (× หน่วยฐาน)</label>
+            <input
+              type="number"
+              min={0.001}
+              step={0.001}
+              value={row.factor}
+              onChange={(e) => onUpdate({ factor: Number(e.target.value) })}
+            />
+          </div>
+        ) : (
+          <div className="pc-field">
+            <label>หน่วยฐาน</label>
+            <input value={baseUnit} readOnly />
+          </div>
+        )}
+      </div>
+
+      <div className="pc-field">
+        <label>บาร์โค้ด</label>
+        <input
+          value={row.barcode}
+          placeholder="สแกนหรือพิมพ์บาร์โค้ด"
+          onChange={(e) => onUpdate({ barcode: e.target.value })}
+        />
+      </div>
+
+      <BaseRetailPriceInput
+        label={`ราคาขาย (${row.unit})`}
+        value={row.prices[RETAIL_PRICE_KEY] ?? 0}
+        onChange={(val) => onUpdate({ prices: { ...row.prices, [RETAIL_PRICE_KEY]: val } })}
+      />
+
+      <TierPriceManageButton customCount={customTierCount} onClick={onManageTierPrices} />
+    </div>
+  );
+}
+
+type Props = {
+  open: boolean;
+  mode: 'new' | 'edit';
+  product: ProductListItem | null;
+  saving: boolean;
+  onClose: () => void;
+  onSave: (form: ProductFormData) => Promise<void>;
+  onDelete: () => void;
+  fetchLots: (productId: string) => Promise<StockLot[]>;
+  loadMovements: (productId: string) => Promise<StockMovement[]>;
+};
+
+export default function ProductDrawer({
+  open,
+  mode,
+  product,
+  saving,
+  onClose,
+  onSave,
+  onDelete,
+  fetchLots,
+  loadMovements,
+}: Props) {
+  const { form: systemSettings } = useSystemSettings();
+  const { units, saving: unitsSaving, saveUnits } = useUnitList();
+  const { categories: productCategories } = useCategories();
+
+  const [tab, setTab] = useState<DrawerTab>('info');
+  const [form, setForm] = useState<ProductFormData>(emptyForm());
+  const [tierDialog, setTierDialog] = useState<TierDialogConfig | null>(null);
+  const [movements, setMovements] = useState<StockMovement[]>([]);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [unitMgrOpen, setUnitMgrOpen] = useState(false);
+  const [fifoOpen, setFifoOpen] = useState(false);
+
+  const skuPrefix = useMemo(() => {
+    const prefix = systemSettings?.linePrefixes?.productSku?.trim();
+    return prefix && prefix.length > 0 ? prefix : 'PD';
+  }, [systemSettings]);
+
+  useEffect(() => {
+    if (!open) return;
+    setTab('info');
+    setConfirmOpen(false);
+    setUnitMgrOpen(false);
+    setFifoOpen(false);
+    setTierDialog(null);
+    if (mode === 'edit' && product) {
+      setForm(productToForm(product));
+      void loadMovements(product.id).then(setMovements);
+    } else {
+      setForm(emptyForm());
+      setMovements([]);
+    }
+  }, [open, mode, product, loadMovements]);
+
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [open]);
+
+  const unitOptions = useMemo(
+    () => buildUnitSelectOptions(units, form.baseUnit),
+    [units, form.baseUnit],
+  );
+
+  const defaultSubUnit = units[0] ?? '';
+
+  const uomBreakdown = useMemo(() => {
+    if (!form.hasUom || !product) return null;
+    return formatUomBreakdown(product.stock, form.uomRows);
+  }, [form.hasUom, form.uomRows, product]);
+
+  const set = useCallback(
+    <K extends keyof ProductFormData>(key: K, val: ProductFormData[K]) => {
+      setForm((f) => ({ ...f, [key]: val }));
+    },
+    [],
+  );
+
+  const setBaseUnit = useCallback((unit: string) => {
+    setForm((f) => ({
+      ...f,
+      baseUnit: unit,
+      uomRows: f.uomRows.map((r) => (r.isBase ? { ...r, unit } : r)),
+    }));
+  }, []);
+
+  const updateUomRow = (id: string, patch: Partial<ProductUomFormRow>) => {
+    setForm((f) => ({
+      ...f,
+      uomRows: f.uomRows.map((r) => (r.id === id ? { ...r, ...patch } : r)),
+    }));
+  };
+
+  const addUomRow = () => {
+    const id = `uom-${Date.now()}`;
+    setForm((f) => ({
+      ...f,
+      uomRows: [
+        ...f.uomRows,
+        {
+          id,
+          unit: defaultSubUnit,
+          factor: 1,
+          barcode: '',
+          prices: {},
+          tierPrices: {},
+          expanded: true,
+          isBase: false,
+        },
+      ],
+    }));
+  };
+
+  const removeUomRow = (id: string) => {
+    setForm((f) => ({ ...f, uomRows: f.uomRows.filter((r) => r.id !== id || r.isBase) }));
+  };
+
+  const countCustomTierPrices = (tierPrices: Record<string, number>) =>
+    Object.keys(tierPrices).filter((k) => tierPrices[k] != null && tierPrices[k] > 0).length;
+
+  const openTierDialog = (config: TierDialogConfig) => {
+    setTierDialog({
+      ...config,
+      initialTierPrices: { ...config.initialTierPrices },
+    });
+  };
+
+  const handleSaveClick = () => {
+    if (!form.name.trim() || !form.category.trim()) return;
+    setConfirmOpen(true);
+  };
+
+  const handleConfirmSave = async () => {
+    let saveForm = { ...form };
+    if (!saveForm.sku.trim()) {
+      saveForm = { ...saveForm, sku: generateSku(skuPrefix) };
+      setForm(saveForm);
+    }
+    try {
+      await onSave(saveForm);
+      setConfirmOpen(false);
+    } catch {
+      setConfirmOpen(false);
+    }
+  };
+
+  if (!open) return null;
+
+  const activeLots = product ? product.stock : 0;
+  const nextCost = product?.avgCost ?? 0;
+
+  return createPortal(
+    <>
+      <div className="pc-dialog-overlay" role="dialog" aria-modal="true" onClick={onClose}>
+        <div className="pc-dialog" onClick={(e) => e.stopPropagation()}>
+          <div className="pc-drawer-shell">
+            <div className="pc-drawer-top">
+            <span className="pc-drawer-title">{mode === 'new' ? 'เพิ่มสินค้าใหม่' : 'แก้ไขสินค้า'}</span>
+            <button type="button" className="pc-drawer-close" onClick={onClose} aria-label="ปิด">
+              <i className="ti ti-x" style={{ fontSize: 12 }} aria-hidden="true" />
+            </button>
+          </div>
+
+          <div className="pc-drawer-tabs">
+            {DRAWER_TABS.map((t) => (
+              <div
+                key={t.id}
+                className={`pc-dtab${tab === t.id ? ' pc-on' : ''}`}
+                onClick={() => setTab(t.id)}
+                onKeyDown={(e) => e.key === 'Enter' && setTab(t.id)}
+                role="button"
+                tabIndex={0}
+              >
+                {t.label}
+              </div>
+            ))}
+          </div>
+
+          <div className="pc-drawer-body">
+            {tab === 'info' ? (
+              <>
+                <div className="pc-field">
+                  <label>
+                    ชื่อสินค้า <span className="req">*</span>
+                  </label>
+                  <input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="ระบุชื่อสินค้า" />
+                </div>
+                <div className="pc-fg2">
+                  <div className="pc-field">
+                    <label>SKU</label>
+                    <input
+                      value={form.sku}
+                      onChange={(e) => set('sku', e.target.value)}
+                      placeholder={mode === 'new' ? 'ว่างไว้เพื่อสร้างอัตโนมัติ' : ''}
+                    />
+                  </div>
+                  <div className="pc-field">
+                    <label>
+                      หมวดหมู่ <span className="req">*</span>
+                    </label>
+                    <select value={form.category} onChange={(e) => set('category', e.target.value)}>
+                      <option value="" disabled>
+                        ระบุหมวดหมู่
+                      </option>
+                      {productCategories.map((cat) => (
+                        <option key={cat.id} value={cat.name}>
+                          {cat.name}
+                        </option>
+                      ))}
+                      {form.category && !productCategories.some((c) => c.name === form.category) ? (
+                        <option value={form.category}>{form.category} (legacy)</option>
+                      ) : null}
+                    </select>
+                  </div>
+                </div>
+                <div className="pc-field">
+                  <label>บาร์โค้ด (หน่วยฐาน)</label>
+                  <div className="pc-barcode-row">
+                    <input value={form.barcode} onChange={(e) => set('barcode', e.target.value)} />
+                    <div className="pc-scan-btn">
+                      <i className="ti ti-barcode" aria-hidden="true" /> สแกน
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pc-sec-label">ต้นทุน (FIFO)</div>
+                {mode === 'new' ? (
+                  <>
+                    <div className="pc-field">
+                      <label>
+                        ต้นทุนเริ่มต้น lot แรก (ต่อชิ้น) <span className="req">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        value={form.initialCost || ''}
+                        placeholder="0.00"
+                        onChange={(e) => set('initialCost', Number(e.target.value))}
+                      />
+                    </div>
+                    <div className="pc-drawer-hint">ระบบจะสร้าง FIFO batch แรกให้อัตโนมัติ</div>
+                  </>
+                ) : product ? (
+                  <div className="pc-cost-display">
+                    <div className="pc-cost-left">
+                      <div className="pc-cost-lbl">ต้นทุนเฉลี่ยถ่วงน้ำหนัก (Avg Cost)</div>
+                      <div className="pc-cost-val-row">
+                        <span className="pc-cost-avg">฿{fmtBaht(product.avgCost)}</span>
+                        <span className="pc-cost-unit">/ {form.baseUnit}</span>
+                      </div>
+                      <div className="pc-cost-fifo-note">
+                        lot ถัดไป (FIFO): <span>฿{fmtBaht(nextCost)}/{form.baseUnit}</span>
+                        {activeLots > 0 ? ` · ${product.stock} ${form.baseUnit} คงเหลือ` : ''}
+                      </div>
+                    </div>
+                    <button type="button" className="pc-view-batch-btn" onClick={() => setFifoOpen(true)}>
+                      <i className="ti ti-stack-2" aria-hidden="true" /> ดูคิวล็อต
+                    </button>
+                  </div>
+                ) : null}
+
+                <div className="pc-tog-row">
+                  <span className="pc-tog-lbl">แสดงในหน้า POS</span>
+                  <Toggle checked={form.isActive} onChange={(v) => set('isActive', v)} />
+                </div>
+              </>
+            ) : null}
+
+            {tab === 'pricing' ? (
+              <>
+                <div className="pc-tog-row">
+                  <span className="pc-tog-lbl">
+                    <i className="ti ti-layers-intersect" aria-hidden="true" /> มีหลายหน่วยนับ (UOM)
+                  </span>
+                  <Toggle
+                    checked={form.hasUom}
+                    onChange={(v) => {
+                      set('hasUom', v);
+                      if (v && form.uomRows.length <= 1) {
+                        setForm((f) => ({
+                          ...f,
+                          hasUom: true,
+                          uomRows: [
+                            ...f.uomRows,
+                            {
+                              id: `uom-${Date.now()}`,
+                              unit: defaultSubUnit,
+                              factor: 12,
+                              barcode: '',
+                              prices: {},
+                              tierPrices: {},
+                              expanded: true,
+                              isBase: false,
+                            },
+                          ],
+                        }));
+                      }
+                    }}
+                  />
+                </div>
+
+                {!form.hasUom ? (
+                  <>
+                    <div className="pc-base-unit-row">
+                      <div className="pc-field">
+                        <label>หน่วยนับ (Base Unit)</label>
+                        <select value={form.baseUnit} onChange={(e) => setBaseUnit(e.target.value)}>
+                          {unitOptions.map((u) => (
+                            <option key={u} value={u}>
+                              {u}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <button
+                        type="button"
+                        className="pc-unit-gear-btn"
+                        onClick={() => setUnitMgrOpen(true)}
+                        title="จัดการหน่วยนับ"
+                        aria-label="จัดการหน่วยนับ"
+                      >
+                        <i className="ti ti-settings" aria-hidden="true" />
+                      </button>
+                    </div>
+
+                    <div className="pc-sec-label">ราคาขาย</div>
+                    <BaseRetailPriceInput
+                      value={form.simplePrices[RETAIL_PRICE_KEY] ?? 0}
+                      onChange={(val) =>
+                        setForm((f) => ({
+                          ...f,
+                          simplePrices: { ...f.simplePrices, [RETAIL_PRICE_KEY]: val },
+                        }))
+                      }
+                    />
+
+                    <TierPriceManageButton
+                      customCount={countCustomTierPrices(form.tierPrices)}
+                      onClick={() =>
+                        openTierDialog({
+                          title: form.name.trim() || form.baseUnit,
+                          basePrice: form.simplePrices[RETAIL_PRICE_KEY] ?? 0,
+                          initialTierPrices: form.tierPrices,
+                          onSave: (next) => setForm((f) => ({ ...f, tierPrices: next })),
+                        })
+                      }
+                    />
+                  </>
+                ) : (
+                  <>
+                    <div className="pc-base-unit-row">
+                      <div className="pc-field">
+                        <label>หน่วยฐาน (Base Unit)</label>
+                        <select value={form.baseUnit} onChange={(e) => setBaseUnit(e.target.value)}>
+                          {unitOptions.map((u) => (
+                            <option key={u} value={u}>
+                              {u}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <button
+                        type="button"
+                        className="pc-unit-gear-btn"
+                        onClick={() => setUnitMgrOpen(true)}
+                        title="จัดการหน่วยนับ"
+                        aria-label="จัดการหน่วยนับ"
+                      >
+                        <i className="ti ti-settings" aria-hidden="true" />
+                      </button>
+                    </div>
+
+                    <div className="pc-drawer-hint">
+                      สต็อกเก็บเป็น <strong>{form.baseUnit}</strong> เสมอ — กำหนดราคาและบาร์โค้ดแยกตามหน่วยด้านล่าง
+                    </div>
+
+                    <div className="pc-uom-card-list">
+                      {form.uomRows.map((row) => (
+                        <UomPricingCard
+                          key={row.id}
+                          row={row}
+                          baseUnit={form.baseUnit}
+                          unitSelectOptions={buildUnitSelectOptions(units, row.unit)}
+                          customTierCount={countCustomTierPrices(
+                            row.isBase ? form.tierPrices : row.tierPrices,
+                          )}
+                          onUpdate={(patch) => {
+                            updateUomRow(row.id, patch);
+                            if (row.isBase && patch.barcode != null) {
+                              set('barcode', patch.barcode);
+                            }
+                          }}
+                          onManageTierPrices={() =>
+                            openTierDialog({
+                              title: `${form.name.trim() || 'สินค้า'} — ${row.unit}`,
+                              basePrice: row.prices[RETAIL_PRICE_KEY] ?? 0,
+                              initialTierPrices: row.isBase ? form.tierPrices : row.tierPrices,
+                              onSave: (next) => {
+                                if (row.isBase) {
+                                  setForm((f) => ({ ...f, tierPrices: next }));
+                                } else {
+                                  updateUomRow(row.id, { tierPrices: next });
+                                }
+                              },
+                            })
+                          }
+                          onRemove={row.isBase ? undefined : () => removeUomRow(row.id)}
+                        />
+                      ))}
+                    </div>
+
+                    <button type="button" className="pc-add-uom-card-btn" onClick={addUomRow}>
+                      <i className="ti ti-plus" aria-hidden="true" /> เพิ่มหน่วยนับ
+                    </button>
+                  </>
+                )}
+              </>
+            ) : null}
+
+            {tab === 'stock' ? (
+            <>
+              {product ? (
+                <>
+              <div className="pc-stock-summary">
+                <div className="pc-st-card">
+                  <div className="pc-st-val" style={{ color: 'var(--p600, #534ab7)' }}>
+                    {product.stock}
+                  </div>
+                  <div className="pc-st-lbl">สต็อก สาขานี้ ({form.baseUnit})</div>
+                  {form.hasUom && uomBreakdown ? (
+                    <div className="pc-stock-uom-equiv">เทียบเท่ากับ: {uomBreakdown}</div>
+                  ) : null}
+                </div>
+                <div className="pc-st-card">
+                  <div className="pc-st-val" style={{ color: 'var(--amber, #ba7517)' }}>
+                    {form.reorderPoint}
+                  </div>
+                  <div className="pc-st-lbl">แจ้งเตือนเมื่อต่ำกว่า</div>
+                </div>
+                <div className="pc-st-card">
+                  <div className="pc-st-val" style={{ color: 'var(--green, #1d9e75)' }}>
+                    ฿{fmtBaht(product.avgCost * product.stock)}
+                  </div>
+                  <div className="pc-st-lbl">มูลค่าสต็อก</div>
+                </div>
+              </div>
+                </>
+              ) : null}
+
+              <div className="pc-tog-row">
+                <div className="pc-tog-lbl-col">
+                  <span className="pc-tog-lbl">อนุญาตให้สต็อกติดลบได้ (Allow Overselling)</span>
+                  <span className="pc-tog-desc">ยอมให้ขายสินค้าหน้าร้านได้แม้สต็อกในระบบจะหมดแล้ว</span>
+                </div>
+                <Toggle
+                  checked={form.allowNegativeStock}
+                  onChange={(v) => set('allowNegativeStock', v)}
+                />
+              </div>
+
+              {product ? (
+                <>
+              <div className="pc-sec-label">ปรับสต็อก (สาขานี้เท่านั้น)</div>
+              <div className="pc-fg2">
+                <div className="pc-field">
+                  <label>ประเภท</label>
+                  <select defaultValue="in">
+                    <option value="in">รับเข้า (+)</option>
+                    <option value="out">ตัดออก (-)</option>
+                    <option value="set">ปรับยอด (=)</option>
+                  </select>
+                </div>
+                <div className="pc-field">
+                  <label>จำนวน (หน่วยฐาน)</label>
+                  <input type="number" placeholder="0" />
+                </div>
+              </div>
+              <div className="pc-field">
+                <label>หมายเหตุ</label>
+                <input placeholder="เหตุผล..." />
+              </div>
+              <div className="pc-field">
+                <label>แจ้งเตือนเมื่อต่ำกว่า</label>
+                <input type="number" value={form.reorderPoint} onChange={(e) => set('reorderPoint', Number(e.target.value))} />
+              </div>
+                </>
+              ) : null}
+            </>
+          ) : null}
+
+          {tab === 'history' ? (
+            product ? (
+              <>
+                <div className="pc-drawer-hint">ประวัติเคลื่อนไหวสต็อก — สาขานี้</div>
+                <table className="pc-hist-table">
+                  <thead>
+                    <tr>
+                      <th>วันที่</th>
+                      <th>ประเภท</th>
+                      <th>จำนวน</th>
+                      <th>คงเหลือ</th>
+                      <th>โดย</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {movements.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="pc-table-empty">
+                          ยังไม่มีประวัติ
+                        </td>
+                      </tr>
+                    ) : (
+                      movements.map((m) => (
+                        <tr key={m.id}>
+                          <td>
+                            {parseDate(m.createdAt).toLocaleDateString('th-TH', {
+                              day: '2-digit',
+                              month: '2-digit',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </td>
+                          <td>{movementLabel(m.type)}</td>
+                          <td className={m.qty > 0 ? 'pc-h-in' : 'pc-h-out'}>
+                            {m.qty > 0 ? '+' : ''}
+                            {m.qty}
+                          </td>
+                          <td style={{ fontFamily: 'Prompt, sans-serif' }}>—</td>
+                          <td>{m.createdBy}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </>
+            ) : (
+              <div className="pc-drawer-hint">บันทึกสินค้าเพื่อดูประวัติการเคลื่อนไหวสต็อก</div>
+            )
+          ) : null}
+          </div>
+
+          <div className="pc-drawer-footer">
+            {mode === 'edit' ? (
+              <button type="button" className="pc-df-btn pc-df-del" onClick={onDelete} disabled={saving}>
+                <i className="ti ti-trash" style={{ fontSize: 13, verticalAlign: -2 }} aria-hidden="true" /> ลบ
+              </button>
+            ) : (
+              <span aria-hidden="true" />
+            )}
+            <div className="pc-drawer-footer-actions">
+              <button type="button" className="pc-df-btn pc-df-cancel" onClick={onClose}>
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                className="pc-df-btn pc-df-save"
+                disabled={saving || !form.name.trim() || !form.category.trim()}
+                onClick={handleSaveClick}
+              >
+                {saving ? 'กำลังบันทึก...' : 'บันทึก'}
+              </button>
+            </div>
+          </div>
+        </div>
+        </div>
+      </div>
+
+      {tierDialog ? (
+        <TierPriceManagerDialog
+          isOpen
+          title={tierDialog.title}
+          basePrice={tierDialog.basePrice}
+          initialTierPrices={tierDialog.initialTierPrices}
+          onSave={tierDialog.onSave}
+          onClose={() => setTierDialog(null)}
+        />
+      ) : null}
+
+      <ProductSaveConfirmDialog
+        open={confirmOpen}
+        productName={form.name.trim()}
+        saving={saving}
+        onConfirm={() => void handleConfirmSave()}
+        onCancel={() => setConfirmOpen(false)}
+      />
+
+      <UnitManagerModal
+        open={unitMgrOpen}
+        units={units}
+        saving={unitsSaving}
+        onSave={saveUnits}
+        onClose={() => setUnitMgrOpen(false)}
+      />
+
+      {product ? (
+        <FifoLotDialog
+          open={fifoOpen}
+          product={product}
+          fetchLots={fetchLots}
+          onClose={() => setFifoOpen(false)}
+        />
+      ) : null}
+    </>,
+    document.body,
+  );
+}
