@@ -2,6 +2,7 @@ import {
   doc,
   getDoc,
   serverTimestamp,
+  type DocumentReference,
   type Firestore,
   type Transaction,
 } from 'firebase/firestore';
@@ -104,6 +105,61 @@ export function resolveDevReceiptNumberConfig(): ReceiptNumberConfig {
   };
 }
 
+export type ReceiptCounterAllocation = {
+  counterRef: DocumentReference;
+  counterKey: string;
+  nextSeq: number;
+  billId: string;
+  prefix: string;
+};
+
+function buildReceiptCounterRef(
+  firestore: Firestore,
+  counterKey: string,
+): DocumentReference {
+  return doc(firestore, collections.settings, 'system', 'docCounters', counterKey);
+}
+
+/** Read the next receipt number inside a transaction — does not write. */
+export async function readReceiptCounterInTransaction(
+  tx: Transaction,
+  firestore: Firestore,
+  config: ReceiptNumberConfig,
+  now = new Date(),
+): Promise<ReceiptCounterAllocation> {
+  const counterKey = buildReceiptCounterKey(config.prefix, now);
+  const counterRef = buildReceiptCounterRef(firestore, counterKey);
+  const counterSnap = await tx.get(counterRef);
+  const prevSeq = counterSnap.exists() ? Number(counterSnap.data().seq ?? 0) : 0;
+  const nextSeq = prevSeq + 1;
+  const prefix = config.prefix.trim().toUpperCase();
+
+  return {
+    counterRef,
+    counterKey,
+    nextSeq,
+    billId: formatReceiptNumber(config.prefix, now, nextSeq, config.padding),
+    prefix,
+  };
+}
+
+/** Persist a receipt counter allocation — call only after all transaction reads. */
+export function commitReceiptCounterInTransaction(
+  tx: Transaction,
+  allocation: ReceiptCounterAllocation,
+): void {
+  tx.set(
+    allocation.counterRef,
+    {
+      seq: allocation.nextSeq,
+      prefix: allocation.prefix,
+      dateKey: allocation.counterKey.split('_').slice(1).join('_'),
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true },
+  );
+}
+
 /** Atomically allocate the next receipt number inside an existing Firestore transaction. */
 export async function allocateReceiptNumberInTransaction(
   tx: Transaction,
@@ -111,30 +167,9 @@ export async function allocateReceiptNumberInTransaction(
   config: ReceiptNumberConfig,
   now = new Date(),
 ): Promise<string> {
-  const counterKey = buildReceiptCounterKey(config.prefix, now);
-  const counterRef = doc(
-    firestore,
-    collections.settings,
-    'system',
-    'docCounters',
-    counterKey,
-  );
-  const counterSnap = await tx.get(counterRef);
-  const prevSeq = counterSnap.exists() ? Number(counterSnap.data().seq ?? 0) : 0;
-  const nextSeq = prevSeq + 1;
-
-  tx.set(
-    counterRef,
-    {
-      seq: nextSeq,
-      prefix: config.prefix.trim().toUpperCase(),
-      dateKey: counterKey.split('_').slice(1).join('_'),
-      updatedAt: serverTimestamp(),
-    },
-    { merge: true },
-  );
-
-  return formatReceiptNumber(config.prefix, now, nextSeq, config.padding);
+  const allocation = await readReceiptCounterInTransaction(tx, firestore, config, now);
+  commitReceiptCounterInTransaction(tx, allocation);
+  return allocation.billId;
 }
 
 /** Dev-mode counter (localStorage) when Firestore is unavailable. */

@@ -12,6 +12,7 @@ import {
   formatSaleDate,
   formatSaleDateTime,
   formatSaleTime,
+  getDateRange,
   orderCreatedAt,
   saleDisplayStatus,
   type DatePreset,
@@ -26,9 +27,8 @@ import { voidOrderSafe } from '../lib/voidOrder';
 import type { PaymentMethod } from '../lib/types';
 import './SalesHistoryPage.css';
 
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
+const DEFAULT_DATE_PRESET: DatePreset = '30d';
+const initialDateRange = getDateRange(DEFAULT_DATE_PRESET, '', '');
 
 function fmtShort(n: number): string {
   return parseFloat(String(n || 0)).toLocaleString('th-TH', {
@@ -155,9 +155,9 @@ export default function SalesHistoryPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [paymentFilter, setPaymentFilter] = useState<PaymentMethod | 'all'>('all');
-  const [datePreset, setDatePreset] = useState<DatePreset>('today');
-  const [dateFrom, setDateFrom] = useState(todayIso());
-  const [dateTo, setDateTo] = useState(todayIso());
+  const [datePreset, setDatePreset] = useState<DatePreset>(DEFAULT_DATE_PRESET);
+  const [dateFrom, setDateFrom] = useState(initialDateRange.start.toISOString().slice(0, 10));
+  const [dateTo, setDateTo] = useState(initialDateRange.end.toISOString().slice(0, 10));
   const [dateMenuOpen, setDateMenuOpen] = useState(false);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -304,12 +304,6 @@ export default function SalesHistoryPage() {
               ตรวจสอบ Console (F12) สำหรับรายละเอียด — อาจต้องสร้าง Firestore Index
             </div>
           </div>
-        </div>
-      ) : null}
-
-      {!loading && !error && records.length > 0 && filtered.length === 0 ? (
-        <div className="sh-filter-hint">
-          มี {records.length} บิลในสาขานี้ แต่ไม่ตรงกับตัวกรองวันที่/สถานะ — ลองเปลี่ยนเป็น &quot;30 วันล่าสุด&quot;
         </div>
       ) : null}
 
@@ -476,7 +470,7 @@ export default function SalesHistoryPage() {
                 <tbody>
                   {filtered.length === 0 ? (
                     <tr className="sh-empty-row">
-                      <td colSpan={7}>ไม่พบรายการตามเงื่อนไขที่เลือก</td>
+                      <td colSpan={7}>ไม่พบรายการขายในช่วงเวลาที่เลือก</td>
                     </tr>
                   ) : (
                     filtered.map((record) => {

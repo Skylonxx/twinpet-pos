@@ -89,17 +89,6 @@
   flex-shrink: 0;
 }
 
-.sh-filter-hint {
-  margin: 8px 20px 0;
-  padding: 8px 12px;
-  background: var(--p50, #eeedfe);
-  border: 1px solid var(--p100, #cecbf6);
-  border-radius: 8px;
-  font-size: 12px;
-  color: var(--p800, #3c3489);
-  flex-shrink: 0;
-}
-
 .sh-summary-strip {
   background: white;
   border-bottom: 0.5px solid var(--g200, #d3d1c7);

@@ -100,6 +100,7 @@ export function productListItemToPosProduct(product: ProductListItem): PosProduc
     barcode: product.barcode ?? null,
     category: product.category,
     emoji: product.emoji,
+    imageUrl: product.imageUrl ?? null,
     stock: product.stock,
     baseUnit: product.baseUnit,
     uomOptions: [...unique.values()],

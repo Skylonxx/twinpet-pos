@@ -35,7 +35,7 @@ export default function UnitManagerModal({ open, units, saving, onSave, onClose 
   };
 
   return createPortal(
-    <div className="pc-modal-overlay" role="dialog" aria-modal="true" onClick={onClose}>
+    <div className="pc-modal-overlay pc-modal-overlay--stack" role="dialog" aria-modal="true" onClick={onClose}>
       <div className="pc-unit-mgr-modal" onClick={(e) => e.stopPropagation()}>
         <div className="pc-unit-mgr-head">
           <div>

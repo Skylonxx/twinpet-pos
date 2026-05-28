@@ -83,7 +83,7 @@ export default function TierPriceManagerDialog({
   return createPortal(
     <>
       <div
-        className="tpmd-overlay"
+        className="tpmd-overlay pc-modal-overlay--stack"
         role="dialog"
         aria-modal="true"
         aria-labelledby="tpmd-title"
@@ -181,7 +181,7 @@ export default function TierPriceManagerDialog({
 
       {adjustGroup ? (
         <div
-          className="tpmd-adjust-overlay"
+          className="tpmd-adjust-overlay pc-modal-overlay--stack tpmd-adjust-overlay--stack"
           role="dialog"
           aria-modal="true"
           onClick={() => setAdjustGroup(null)}

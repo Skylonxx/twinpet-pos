@@ -29,6 +29,7 @@ export type PosProduct = {
   barcode: string | null;
   category: string;
   emoji: string;
+  imageUrl: string | null;
   stock: number;
   baseUnit: string;
   allowNegativeStock?: boolean;

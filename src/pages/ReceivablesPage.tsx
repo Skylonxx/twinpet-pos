@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react';
-import CreditHistoryModal from '../components/customers/CreditHistoryModal';
-import CreditPaymentModal from '../components/customers/CreditPaymentModal';
+import DebtorManagerDialog from '../components/customers/DebtorManagerDialog';
 import { getBranchLabel } from '../lib/branches';
 import {
   creditPaymentMethodLabel,
@@ -14,7 +13,6 @@ import {
 import { customerFullName, fmtBaht, fmtBahtDec } from '../lib/customers/types';
 import { useCustomers } from '../lib/customers/useCustomers';
 import { useAuth } from '../lib/hooks/useAuth';
-import type { Customer } from '../lib/types';
 import './ReceivablesPage.css';
 
 type ReceivablesTab = 'debtors' | 'history';
@@ -31,8 +29,7 @@ export default function ReceivablesPage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
   const [minBalanceFilter, setMinBalanceFilter] = useState(0);
-  const [historyCustomer, setHistoryCustomer] = useState<Customer | null>(null);
-  const [paymentCustomer, setPaymentCustomer] = useState<Customer | null>(null);
+  const [activeDebtorId, setActiveDebtorId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'warn' } | null>(null);
 
   const { debtors, loading: debtorsLoading } = useDebtors(branchId, refreshKey);
@@ -40,6 +37,11 @@ export default function ReceivablesPage() {
   const { creditMap, refreshDev } = useCustomers(branchId);
 
   const branchDisplay = branchId ? getBranchLabel(branchId) : '—';
+
+  const activeDebtor = useMemo(
+    () => (activeDebtorId ? debtors.find((c) => c.id === activeDebtorId) ?? null : null),
+    [activeDebtorId, debtors],
+  );
 
   const filteredDebtors = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
@@ -150,7 +152,7 @@ export default function ReceivablesPage() {
                   <th className="r">ยอดค้างชำระ</th>
                   <th>วันที่เคลื่อนไหวล่าสุด</th>
                   <th>สถานะ</th>
-                  <th style={{ width: 220, textAlign: 'right' }}>Actions</th>
+                  <th style={{ width: 120, textAlign: 'right' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -199,22 +201,13 @@ export default function ReceivablesPage() {
                           )}
                         </td>
                         <td style={{ textAlign: 'right' }}>
-                          <div className="ar-action-group">
-                            <button
-                              type="button"
-                              className="ar-action-btn ar-action-btn-ghost"
-                              onClick={() => setHistoryCustomer(c)}
-                            >
-                              👁️ ประวัติ
-                            </button>
-                            <button
-                              type="button"
-                              className="ar-action-btn"
-                              onClick={() => setPaymentCustomer(c)}
-                            >
-                              💰 รับชำระ
-                            </button>
-                          </div>
+                          <button
+                            type="button"
+                            className="ar-action-btn ar-action-btn-manage"
+                            onClick={() => setActiveDebtorId(c.id)}
+                          >
+                            จัดการ
+                          </button>
                         </td>
                       </tr>
                     );
@@ -268,24 +261,15 @@ export default function ReceivablesPage() {
         )}
       </div>
 
-      {historyCustomer ? (
-        <CreditHistoryModal
-          customer={historyCustomer}
-          creditAccount={creditMap.get(historyCustomer.id) ?? null}
-          isOpen
-          refreshKey={refreshKey}
-          onClose={() => setHistoryCustomer(null)}
-        />
-      ) : null}
-
-      {paymentCustomer && branchId && user ? (
-        <CreditPaymentModal
-          customer={paymentCustomer}
+      {activeDebtor && branchId && user ? (
+        <DebtorManagerDialog
+          customer={activeDebtor}
           branchId={branchId}
           actorId={user.id}
-          creditAccount={creditMap.get(paymentCustomer.id) ?? null}
+          creditAccount={creditMap.get(activeDebtor.id) ?? null}
+          refreshKey={refreshKey}
           isOpen
-          onClose={() => setPaymentCustomer(null)}
+          onClose={() => setActiveDebtorId(null)}
           onSuccess={handlePaymentSuccess}
           onToast={showToast}
         />

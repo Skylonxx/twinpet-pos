@@ -18,7 +18,7 @@ export default function ProductSaveConfirmDialog({
   if (!open) return null;
 
   return createPortal(
-    <div className="pc-modal-overlay" role="dialog" aria-modal="true" onClick={onCancel}>
+    <div className="pc-modal-overlay pc-modal-overlay--stack" role="dialog" aria-modal="true" onClick={onCancel}>
       <div className="pc-save-confirm-modal" onClick={(e) => e.stopPropagation()}>
         <div className="pc-save-confirm-icon">
           <i className="ti ti-device-floppy" aria-hidden="true" />

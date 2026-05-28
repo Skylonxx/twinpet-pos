@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import ProductImageThumb from '../components/products/ProductImageThumb';
 import ProductDrawer from '../components/products/ProductDrawer';
 import CategoryManagementModal from '../components/products/CategoryManagementModal';
 import ProductPickerDialog from '../components/products/ProductPickerDialog';
@@ -12,6 +13,7 @@ import {
   type ProductListItem,
   type StockFilter,
 } from '../lib/productCrud/types';
+import { getBranchLabel } from '../lib/branches';
 import { resolveCategoryName, useCategories } from '../lib/inventory/categoryService';
 import { useProductCrud } from '../lib/productCrud/useProductCrud';
 import './ProductCRUDPage.css';
@@ -72,6 +74,13 @@ function sortProducts(
   });
 }
 
+function ProductStockBadge({ stock, minStock }: { stock: number; minStock: number }) {
+  const { lbl } = stockStatus(stock, minStock);
+  const cls =
+    stock === 0 ? 'pc-badge-oos' : stock <= minStock ? 'pc-badge-low' : 'pc-badge-ok';
+  return <span className={`pc-badge ${cls}`}>{lbl}</span>;
+}
+
 export default function ProductCRUDPage() {
   const { branchId } = useAuth();
   const { categories } = useCategories();
@@ -81,7 +90,6 @@ export default function ProductCRUDPage() {
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('');
   const [stockFilter, setStockFilter] = useState<StockFilter>('');
-  const [catMenuOpen, setCatMenuOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(50);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -94,7 +102,6 @@ export default function ProductCRUDPage() {
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'warn' } | null>(null);
   const bcBuf = useRef('');
   const bcTimer = useRef<number | null>(null);
-  const catRef = useRef<HTMLDivElement>(null);
   const selectAllRef = useRef<HTMLInputElement>(null);
 
   const filtered = useMemo(
@@ -162,14 +169,6 @@ export default function ProductCRUDPage() {
     });
   };
 
-  useEffect(() => {
-    const onClick = (e: MouseEvent) => {
-      if (catRef.current && !catRef.current.contains(e.target as Node)) setCatMenuOpen(false);
-    };
-    document.addEventListener('click', onClick);
-    return () => document.removeEventListener('click', onClick);
-  }, []);
-
   const selectedProduct = useMemo(
     () => (selectedId ? products.find((p) => p.id === selectedId) ?? null : null),
     [products, selectedId],
@@ -187,9 +186,17 @@ export default function ProductCRUDPage() {
   }, []);
 
   const handleSave = async (form: ProductFormData) => {
-    await saveProduct(form, drawerMode === 'edit' ? selectedId ?? undefined : undefined);
-    closeDrawer();
-    void reload();
+    try {
+      await saveProduct(form, drawerMode === 'edit' ? selectedId ?? undefined : undefined);
+      closeDrawer();
+      void reload();
+      showToast('บันทึกสินค้าเรียบร้อย');
+    } catch (err) {
+      console.error('[ProductCRUDPage] handleSave failed:', err);
+      const msg = err instanceof Error ? err.message : 'บันทึกสินค้าไม่สำเร็จ';
+      showToast(msg, 'warn');
+      throw err;
+    }
   };
 
   const handleDelete = async () => {
@@ -244,9 +251,7 @@ export default function ProductCRUDPage() {
     return () => window.removeEventListener('keydown', onKey);
   }, [products, drawerMode, showPicker, openDrawer]);
 
-  const catLabel = category
-    ? resolveCategoryName(category, categories)
-    : 'ทุกหมวด';
+  const branchDisplay = branchId ? getBranchLabel(branchId) : '—';
   const rangeStart = sorted.length === 0 ? 0 : (page - 1) * perPage + 1;
   const rangeEnd = Math.min(page * perPage, sorted.length);
 
@@ -257,30 +262,51 @@ export default function ProductCRUDPage() {
 
   return (
     <div className="pc-page">
-      <div className="pc-topbar">
-        <span className="pc-page-title">จัดการสินค้า</span>
-        <button type="button" className="pc-icon-btn" title="Import">
-          <i className="ti ti-upload" aria-hidden="true" />
-        </button>
-        <button type="button" className="pc-icon-btn" title="Export">
-          <i className="ti ti-download" aria-hidden="true" />
-        </button>
-        <div className="pc-topbar-actions">
-          <button
-            type="button"
-            className="pc-manage-btn"
-            onClick={() => setCategoryModalOpen(true)}
-          >
-            ⚙️ จัดการหมวดหมู่
-          </button>
-          <button type="button" className="pc-add-btn" onClick={() => openDrawer('new')}>
-            <i className="ti ti-plus" aria-hidden="true" /> เพิ่มสินค้า
-          </button>
+      <header className="pc-topbar">
+        <div className="pc-topbar-icon">
+          <i className="ti ti-box" aria-hidden="true" />
         </div>
-      </div>
+        <div className="pc-topbar-center">
+          <div className="pc-topbar-title">จัดการสินค้า</div>
+          <div className="pc-topbar-sub">Product Management</div>
+        </div>
+        <span className="pc-branch-badge">
+          <i className="ti ti-map-pin" style={{ fontSize: 12 }} aria-hidden="true" />
+          สาขา: {branchDisplay}
+        </span>
+        <button type="button" className="pc-btn pc-btn-ghost pc-btn-sm" title="Import">
+          <i className="ti ti-upload" aria-hidden="true" /> Import
+        </button>
+        <button type="button" className="pc-btn pc-btn-ghost pc-btn-sm" title="Export">
+          <i className="ti ti-download" aria-hidden="true" /> Export
+        </button>
+        <button
+          type="button"
+          className="pc-btn pc-btn-ghost pc-btn-sm"
+          onClick={() => setCategoryModalOpen(true)}
+        >
+          <i className="ti ti-category" aria-hidden="true" /> จัดการหมวดหมู่
+        </button>
+        <button type="button" className="pc-btn pc-btn-primary" onClick={() => openDrawer('new')}>
+          <i className="ti ti-plus" aria-hidden="true" /> เพิ่มสินค้า
+        </button>
+      </header>
 
-      <div className="pc-filter-bar">
-        <div className="pc-search-group">
+      <div className="pc-content">
+        <div className="pc-toolbar">
+          <select
+            className="pc-sel"
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            aria-label="หมวดหมู่"
+          >
+            <option value="">ทุกหมวด</option>
+            {categories.map((cat) => (
+              <option key={cat.id} value={cat.id}>
+                {cat.name}
+              </option>
+            ))}
+          </select>
           <div className="pc-search-wrap">
             <i className="ti ti-search" aria-hidden="true" />
             <input
@@ -289,62 +315,29 @@ export default function ProductCRUDPage() {
               placeholder="ค้นหาชื่อ, SKU, บาร์โค้ด..."
             />
           </div>
-          <button type="button" className="pc-pick-btn" onClick={() => setShowPicker(true)}>
+          <button type="button" className="pc-btn pc-btn-ghost pc-btn-sm" onClick={() => setShowPicker(true)}>
             <i className="ti ti-list-search" aria-hidden="true" /> เลือกสินค้า
           </button>
-        </div>
-        <div className="pc-cat-dropdown" ref={catRef}>
-          <button type="button" className="pc-cat-dropdown-btn" onClick={() => setCatMenuOpen((v) => !v)}>
-            <span>{catLabel}</span>
-            <i className="ti ti-chevron-down" style={{ fontSize: 10 }} aria-hidden="true" />
-          </button>
-          {catMenuOpen ? (
-            <div className="pc-cat-dropdown-menu pc-open">
-              <div
-                className={`pc-cat-menu-item${!category ? ' pc-active' : ''}`}
-                onClick={() => { setCategory(''); setCatMenuOpen(false); }}
-                onKeyDown={(e) => e.key === 'Enter' && setCategory('')}
-                role="button"
-                tabIndex={0}
+          <div className="pc-stock-filter">
+            {([
+              ['', 'ทั้งหมด'],
+              ['low', 'ใกล้หมด'],
+              ['out', 'หมด'],
+            ] as const).map(([val, lbl]) => (
+              <button
+                key={val || 'all'}
+                type="button"
+                className={`pc-sf${stockFilter === val ? ' pc-on' : ''}`}
+                onClick={() => setStockFilter(val)}
               >
-                ทุกหมวด
-              </div>
-              {categories.map((cat) => (
-                <div
-                  key={cat.id}
-                  className={`pc-cat-menu-item${category === cat.id ? ' pc-active' : ''}`}
-                  onClick={() => { setCategory(cat.id); setCatMenuOpen(false); }}
-                  onKeyDown={(e) => e.key === 'Enter' && setCategory(cat.id)}
-                  role="button"
-                  tabIndex={0}
-                >
-                  {cat.name}
-                </div>
-              ))}
-            </div>
-          ) : null}
+                {lbl}
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="pc-stock-filter">
-          {([
-            ['', 'ทั้งหมด'],
-            ['low', 'ใกล้หมด'],
-            ['out', 'หมด'],
-          ] as const).map(([val, lbl]) => (
-            <button
-              key={val || 'all'}
-              type="button"
-              className={`pc-sf${stockFilter === val ? ' pc-on' : ''}`}
-              onClick={() => setStockFilter(val)}
-            >
-              {lbl}
-            </button>
-          ))}
-        </div>
-      </div>
 
-      <div className="pc-body-row">
-        <div className="pc-table-area">
-          <div className="pc-table-wrap">
+        <div className="pc-card">
+          <div className="pc-table-scroll">
             <table className="pc-table">
               <thead>
                 <tr>
@@ -361,7 +354,7 @@ export default function ProductCRUDPage() {
                   {TABLE_COLUMNS.map((col) => (
                     <th
                       key={col.key}
-                      className={`pc-sort-th${col.align === 'r' ? ' pc-r' : ''}${col.sortable === false ? ' pc-sort-th-static' : ''}${sortConfig?.key === col.key ? ' pc-sort-active' : ''}`}
+                      className={`pc-sort-th${col.align === 'r' ? ' num' : ''}${col.sortable === false ? ' pc-sort-th-static' : ''}${sortConfig?.key === col.key ? ' pc-sort-active' : ''}`}
                       onClick={col.sortable === false ? undefined : () => handleSort(col.key as SortKey)}
                       onKeyDown={
                         col.sortable === false
@@ -394,7 +387,6 @@ export default function ProductCRUDPage() {
                   </tr>
                 ) : (
                   pageItems.map((p) => {
-                    const ss = stockStatus(p.stock, p.branchReorderPoint);
                     const categoryLabel = resolveCategoryName(p.category, categories);
                     const catStyle = CATEGORY_STYLE[p.category] ?? CATEGORY_STYLE[categoryLabel] ?? { background: 'var(--g100)', color: 'var(--g600)' };
                     return (
@@ -418,7 +410,7 @@ export default function ProductCRUDPage() {
                         </td>
                         <td>
                           <div className="pc-prod-cell">
-                            <div className="pc-prod-emoji">{p.emoji}</div>
+                            <ProductImageThumb imageUrl={p.imageUrl} alt={p.name} />
                             <div className="pc-prod-name">{p.name}</div>
                           </div>
                         </td>
@@ -427,10 +419,10 @@ export default function ProductCRUDPage() {
                             {categoryLabel}
                           </span>
                         </td>
-                        <td className="pc-r pc-col-price">
+                        <td className="num pc-col-price">
                           ฿{fmtBaht(p.retailPrice)}
                         </td>
-                        <td className="pc-r pc-col-cost">
+                        <td className="num pc-col-cost">
                           ฿{fmtBaht(p.avgCost)}
                         </td>
                         <td>
@@ -451,8 +443,8 @@ export default function ProductCRUDPage() {
                             ))}
                           </div>
                         </td>
-                        <td className="pc-r pc-col-stock">
-                          <span className={`pc-cat-badge ${ss.cls}`}>{ss.lbl}</span>
+                        <td className="num pc-col-stock">
+                          <ProductStockBadge stock={p.stock} minStock={p.branchReorderPoint} />
                         </td>
                       </tr>
                     );
@@ -504,6 +496,8 @@ export default function ProductCRUDPage() {
         saving={saving}
         onClose={closeDrawer}
         onSave={handleSave}
+        onNotify={showToast}
+        branchId={branchId}
         onDelete={() => void handleDelete()}
         fetchLots={fetchLots}
         loadMovements={fetchMovements}

@@ -7,7 +7,7 @@ export type DrawerTab = 'info' | 'pricing' | 'stock' | 'history';
 
 export const DRAWER_TABS: { id: DrawerTab; label: string }[] = [
   { id: 'info', label: 'ข้อมูลสินค้า' },
-  { id: 'pricing', label: 'ราคา & หน่วยนับ' },
+  { id: 'pricing', label: 'หน่วยย่อย & ราคาส่ง' },
   { id: 'stock', label: 'สต็อก' },
   { id: 'history', label: 'ประวัติ' },
 ];
@@ -65,6 +65,9 @@ export type ProductFormData = {
   name: string;
   sku: string;
   barcode: string;
+  imageUrl: string;
+  /** Selected category id from settings */
+  categoryId: string;
   category: string;
   description: string;
   baseUnit: string;
@@ -78,6 +81,12 @@ export type ProductFormData = {
   allowNegativeStock: boolean;
   uomRows: ProductUomFormRow[];
 };
+
+export type ProductFormFieldErrors = Partial<
+  Record<'name' | 'categoryId' | 'unit' | 'price' | 'cost', string>
+>;
+
+const REQUIRED_FIELD_MSG = 'กรุณาระบุข้อมูล';
 
 export type ProductListItem = Product & {
   stock: number;
@@ -99,15 +108,88 @@ export function fmtBaht(n: number): string {
   });
 }
 
-/** Auto SKU: `[Prefix]-[YYYYMMDD]-[Random4Digits]` */
-export function generateSku(prefix: string): string {
-  const p = (prefix.trim() || 'PD').toUpperCase().replace(/[^A-Z0-9]/g, '') || 'PD';
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const d = String(now.getDate()).padStart(2, '0');
-  const rnd = String(Math.floor(1000 + Math.random() * 9000));
-  return `${p}-${y}${m}${d}-${rnd}`;
+export function sanitizeProductForm(
+  form: ProductFormData,
+  categories: ProductCategory[] = [],
+): ProductFormData {
+  const categoryId = form.categoryId.trim();
+  const category =
+    categories.find((c) => c.id === categoryId)?.name ?? form.category.trim();
+  const sku = form.sku.trim();
+  const barcode = form.barcode.trim();
+  const initialCost = Number.isFinite(form.initialCost) ? Math.max(0, form.initialCost) : 0;
+  const retail = Math.max(0, resolveRetailPrice(form) || 0);
+
+  const simplePrices = {
+    ...form.simplePrices,
+    RETAIL: form.hasUom ? form.simplePrices.RETAIL : retail,
+  };
+
+  const uomRows = form.uomRows.map((row) => ({
+    ...row,
+    prices: {
+      ...row.prices,
+      RETAIL:
+        row.isBase && form.hasUom
+          ? Math.max(0, row.prices.RETAIL ?? 0)
+          : row.prices.RETAIL,
+    },
+  }));
+
+  return {
+    ...form,
+    name: form.name.trim(),
+    sku,
+    barcode,
+    categoryId,
+    category,
+    baseUnit: form.baseUnit.trim() || 'ชิ้น',
+    initialCost,
+    simplePrices,
+    uomRows,
+    reorderPoint: Number.isFinite(form.reorderPoint) ? Math.max(0, form.reorderPoint) : 0,
+  };
+}
+
+function resolveRetailPrice(form: ProductFormData): number {
+  const main = form.simplePrices.RETAIL;
+  if (main != null && Number.isFinite(main)) return main;
+  if (form.hasUom) {
+    const baseRow = form.uomRows.find((r) => r.isBase);
+    return baseRow?.prices.RETAIL ?? Number.NaN;
+  }
+  return Number.NaN;
+}
+
+export function validateProductForm(
+  form: ProductFormData,
+  options: { mode: 'new' | 'edit'; editAvgCost?: number },
+): ProductFormFieldErrors {
+  const errors: ProductFormFieldErrors = {};
+
+  if (!form.name.trim()) errors.name = REQUIRED_FIELD_MSG;
+  if (!form.categoryId.trim() && !form.category.trim()) errors.categoryId = REQUIRED_FIELD_MSG;
+  if (!form.baseUnit.trim()) errors.unit = REQUIRED_FIELD_MSG;
+
+  if (form.hasUom) {
+    const missingSubUnit = form.uomRows.some((r) => !r.isBase && !r.unit.trim());
+    if (missingSubUnit) errors.unit = REQUIRED_FIELD_MSG;
+  }
+
+  const retailPrice = resolveRetailPrice(form);
+  if (retailPrice == null || !Number.isFinite(retailPrice) || retailPrice < 0) {
+    errors.price = REQUIRED_FIELD_MSG;
+  }
+
+  const cost =
+    options.mode === 'edit' && options.editAvgCost != null
+      ? options.editAvgCost
+      : form.initialCost;
+  if (!Number.isFinite(cost) || cost < 0) {
+    errors.cost = REQUIRED_FIELD_MSG;
+  }
+
+  return errors;
 }
 
 /** Greedy UOM breakdown — largest factor first, remainder in base unit */
@@ -171,6 +253,8 @@ export function emptyForm(): ProductFormData {
     name: '',
     sku: '',
     barcode: '',
+    imageUrl: '',
+    categoryId: '',
     category: '',
     description: '',
     baseUnit: 'ชิ้น',
@@ -235,15 +319,17 @@ export function productToForm(product: Product): ProductFormData {
 
   return {
     name: product.name,
-    sku: product.sku,
+    sku: product.sku ?? '',
     barcode: product.barcode ?? '',
+    imageUrl: product.imageUrl ?? '',
+    categoryId: '',
     category: product.category,
     description: product.description,
     baseUnit: product.baseUnit,
     hasUom,
     isActive: product.isActive,
     reorderPoint: product.reorderPoint,
-    initialCost: 0,
+    initialCost: product.avgCost ?? 0,
     simplePrices,
     tierPrices: { ...(product.tierPrices ?? {}) },
     allowNegativeStock: product.allowNegativeStock ?? false,
@@ -282,22 +368,29 @@ export function formToProduct(form: ProductFormData, id: string): Omit<Product, 
     pushRetailPrice(form.baseUnit, form.simplePrices.RETAIL);
   }
 
-  return {
+  const productTierPrices = sanitizeTierPrices(form.tierPrices);
+
+  const base: Omit<Product, 'createdAt' | 'updatedAt' | 'deletedAt' | 'avgCost'> = {
     id,
     name: form.name.trim(),
     sku: form.sku.trim(),
     barcode: form.barcode.trim() || null,
     category: form.category,
     description: form.description,
-    imageUrl: null,
+    imageUrl: form.imageUrl.trim() || null,
     baseUnit: form.baseUnit,
     uomConversions,
     prices,
-    tierPrices: sanitizeTierPrices(form.tierPrices),
     allowNegativeStock: form.allowNegativeStock,
     reorderPoint: form.reorderPoint,
     isActive: form.isActive,
   };
+
+  if (productTierPrices) {
+    base.tierPrices = productTierPrices;
+  }
+
+  return base;
 }
 
 export function filterProducts(

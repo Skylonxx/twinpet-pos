@@ -12,6 +12,10 @@ import {
   where,
 } from 'firebase/firestore';
 import { collections, db, isFirebaseConfigured } from '../firebase';
+import {
+  sanitizeProductDocForFirestore,
+  stripUndefinedDeep,
+} from '../firestoreSanitize';
 import type { Product, ProductStock, StockLot, StockMovement } from '../types';
 import {
   devGetProduct,
@@ -22,6 +26,7 @@ import {
   getDevMovements,
   getDevProductList,
 } from './devMock';
+import { fetchProductStockLots } from '../inventory/stockLotQueries';
 import { formToProduct, type ProductFormData, type ProductListItem } from './types';
 
 function tsNow(): Product['createdAt'] {
@@ -114,20 +119,34 @@ export function useProductCrud(branchId: string | null) {
 
   const saveProduct = useCallback(
     async (form: ProductFormData, editId?: string) => {
-      if (!branchId) return;
+      if (!branchId) {
+        throw new Error('ไม่พบสาขา — กรุณาเข้าสู่ระบบใหม่');
+      }
+
       setSaving(true);
       try {
-        const id = editId ?? `prod-${Date.now()}`;
+        const id =
+          editId ??
+          (db ? doc(collection(db, collections.products)).id : `prod-${Date.now()}`);
+
         const payload = formToProduct(form, id);
 
         if (!isFirebaseConfigured || !db) {
           const existing = editId ? devGetProduct(editId) : null;
           devSaveProduct(
-            { ...payload, avgCost: existing?.avgCost ?? form.initialCost, deletedAt: null, createdAt: existing?.createdAt ?? tsNow(), updatedAt: tsNow() },
+            {
+              ...payload,
+              avgCost: existing?.avgCost ?? form.initialCost,
+              deletedAt: null,
+              createdAt: existing?.createdAt ?? tsNow(),
+              updatedAt: tsNow(),
+            },
             {
               branchId,
-              totalStockBase: existing ? (getDevProductList(branchId).find((p) => p.id === id)?.stock ?? 0) : 0,
-              reorderPoint: form.reorderPoint,
+              totalStockBase: existing
+                ? (getDevProductList(branchId).find((p) => p.id === id)?.stock ?? 0)
+                : 0,
+              reorderPoint: form.reorderPoint ?? 0,
               lastMovementAt: tsNow(),
               updatedAt: tsNow(),
             },
@@ -136,35 +155,46 @@ export function useProductCrud(branchId: string | null) {
           return id;
         }
 
-        const ref = doc(db, collections.products, id);
-        const existingSnap = editId ? await getDoc(ref) : null;
-        await setDoc(
-          ref,
-          {
-            ...payload,
-            avgCost: existingSnap?.exists() ? (existingSnap.data() as Product).avgCost : form.initialCost,
-            deletedAt: null,
-            updatedAt: serverTimestamp(),
-            ...(existingSnap?.exists() ? {} : { createdAt: serverTimestamp() }),
-          },
-          { merge: true },
+        const productRef = doc(db, collections.products, id);
+        const existingSnap = editId ? await getDoc(productRef) : null;
+        const existingProduct = existingSnap?.exists()
+          ? (existingSnap.data() as Product)
+          : null;
+
+        const rawProductDoc = {
+          ...payload,
+          avgCost: existingProduct?.avgCost ?? form.initialCost,
+          deletedAt: null,
+          updatedAt: serverTimestamp(),
+          ...(existingSnap?.exists() ? {} : { createdAt: serverTimestamp() }),
+        };
+
+        const firestoreProductDoc = sanitizeProductDocForFirestore(
+          rawProductDoc as Record<string, unknown>,
         );
+
+        await setDoc(productRef, firestoreProductDoc, { merge: true });
+
+        const rawStockDoc = {
+          branchId,
+          reorderPoint: form.reorderPoint ?? 0,
+          updatedAt: serverTimestamp(),
+          ...(existingSnap?.exists()
+            ? {}
+            : { totalStockBase: 0, lastMovementAt: serverTimestamp() }),
+        };
 
         await setDoc(
           doc(db, collections.products, id, collections.productStocks, branchId),
-          {
-            branchId,
-            reorderPoint: form.reorderPoint,
-            updatedAt: serverTimestamp(),
-            ...(existingSnap?.exists()
-              ? {}
-              : { totalStockBase: 0, lastMovementAt: serverTimestamp() }),
-          },
+          stripUndefinedDeep(rawStockDoc) as Record<string, unknown>,
           { merge: true },
         );
 
         await load();
         return id;
+      } catch (err) {
+        console.error('[useProductCrud] saveProduct failed:', err);
+        throw err instanceof Error ? err : new Error('บันทึกสินค้าไม่สำเร็จ');
       } finally {
         setSaving(false);
       }
@@ -196,17 +226,15 @@ export function useProductCrud(branchId: string | null) {
 
   const fetchLots = useCallback(
     async (productId: string): Promise<StockLot[]> => {
-      if (!branchId) return [];
-      if (!isFirebaseConfigured || !db) return getDevLots(productId, branchId);
+      if (!branchId) {
+        console.warn('[fetchLots] missing branchId', { productId });
+        return [];
+      }
+      if (!isFirebaseConfigured || !db) {
+        return getDevLots(productId, branchId);
+      }
 
-      const q = query(
-        collection(db, collections.stockLots),
-        where('productId', '==', productId),
-        where('branchId', '==', branchId),
-        orderBy('receivedAt', 'asc'),
-      );
-      const snap = await getDocs(q);
-      return snap.docs.map((d) => ({ ...(d.data() as StockLot), id: d.id }));
+      return fetchProductStockLots(db, productId, branchId);
     },
     [branchId],
   );

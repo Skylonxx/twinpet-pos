@@ -15,13 +15,15 @@ import {
 import { collections, db } from './firebase';
 import { buildCrmSaleUpdateFields } from './customers/crmService';
 import {
-  allocateReceiptNumberInTransaction,
+  commitReceiptCounterInTransaction,
+  readReceiptCounterInTransaction,
   resolveReceiptNumberConfig,
 } from './pos/billId';
 import { calcShiftPaymentTotals } from './pos/shiftService';
 import type { CartLine, PaymentSplit } from './pos/types';
 import { getLineTotal } from './pos/cartUtils';
 import type {
+  CreditAccount,
   LotRef,
   Order,
   OrderItem,
@@ -30,6 +32,7 @@ import type {
   ProductStock,
   Customer,
   Shift,
+  CreditTransaction,
 } from './types';
 
 export type CompleteSaleInput = {
@@ -163,8 +166,6 @@ export async function completePosSale(input: CompleteSaleInput): Promise<string>
   const uniqueProductIds = [...new Set(input.lines.map((l) => l.productId))];
 
   const billIdResult = await runTransaction(firestore, async (tx) => {
-    const billId = await allocateReceiptNumberInTransaction(tx, firestore, receiptConfig);
-
     const orderRef = doc(collection(firestore, collections.orders));
     const orderItemsCol = collection(orderRef, collections.orderItems);
 
@@ -178,6 +179,9 @@ export async function completePosSale(input: CompleteSaleInput): Promise<string>
     }
 
     // ── Phase 1: all reads ──
+    const receiptAllocation = await readReceiptCounterInTransaction(tx, firestore, receiptConfig);
+    const billId = receiptAllocation.billId;
+
     const shiftRef = doc(firestore, collections.shifts, input.shiftId);
     const shiftSnap = await tx.get(shiftRef);
 
@@ -197,9 +201,15 @@ export async function completePosSale(input: CompleteSaleInput): Promise<string>
 
     let customerRef: DocumentReference | null = null;
     let customerSnap: DocumentSnapshot | null = null;
+    let credRef: DocumentReference | null = null;
+    let credSnap: DocumentSnapshot | null = null;
     if (input.customerId) {
       customerRef = doc(firestore, collections.customers, input.customerId);
       customerSnap = await tx.get(customerRef);
+      if (creditAmt > 0) {
+        credRef = doc(firestore, collections.creditAccounts, input.customerId);
+        credSnap = await tx.get(credRef);
+      }
     }
 
     // ── Phase 2: validate & plan (in memory) ──
@@ -313,6 +323,8 @@ export async function completePosSale(input: CompleteSaleInput): Promise<string>
     }
 
     // ── Phase 3: all writes ──
+    commitReceiptCounterInTransaction(tx, receiptAllocation);
+
     tx.update(shiftRef, {
       expectedCash: increment(netCash),
       expectedQr: increment(qrTotal),
@@ -433,6 +445,35 @@ export async function completePosSale(input: CompleteSaleInput): Promise<string>
       if (creditAmt > 0) {
         customerUpdates.outstandingBalance = increment(creditAmt);
         customerUpdates.lastCreditPurchaseDate = Timestamp.now();
+
+        if (credRef && credSnap?.exists()) {
+          const account = credSnap.data() as CreditAccount;
+          const newUsed = account.creditUsed + creditAmt;
+          tx.update(credRef, {
+            creditUsed: increment(creditAmt),
+            creditBalance: account.creditLimit - newUsed,
+            lastTransAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+
+          const creditTxRef = doc(collection(firestore, collections.creditTransactions));
+          const creditTx: CreditTransaction = {
+            id: creditTxRef.id,
+            customerId: input.customerId,
+            branchId: input.branchId,
+            type: 'charge',
+            amount: creditAmt,
+            balance: account.creditLimit - newUsed,
+            refOrderId: orderRef.id,
+            note: '',
+            createdBy: input.staffId,
+            createdAt: serverTimestamp() as never,
+            dueDate: null,
+            isPaid: false,
+            paidAt: null,
+          };
+          tx.set(creditTxRef, creditTx);
+        }
       }
       tx.update(customerRef, customerUpdates);
     }

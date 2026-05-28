@@ -59,6 +59,7 @@ function toPosProduct(product: Product, stock: number): PosProduct {
     barcode: product.barcode ?? null,
     category: product.category,
     emoji: CATEGORY_EMOJI[product.category] ?? '📦',
+    imageUrl: product.imageUrl ?? null,
     stock,
     baseUnit: product.baseUnit,
     allowNegativeStock: product.allowNegativeStock ?? false,

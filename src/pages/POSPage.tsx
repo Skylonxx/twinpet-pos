@@ -5,6 +5,11 @@ import PaymentModal, { type PaymentReceiptLine } from '../components/PaymentModa
 import ProductPickerDialog, { posProductToPickerItem } from '../components/products/ProductPickerDialog';
 import CashTransactionModal from '../components/pos/CashTransactionModal';
 import { CloseShiftModal, OpenShiftModal } from '../components/pos/ShiftModals';
+import {
+  HoldBillNoteModal,
+  SuspendedBillsListModal,
+} from '../components/pos/SuspendedBillModals';
+import NumpadDialog from '../components/pos/NumpadDialog';
 import UomModal from '../components/pos/UomModal';
 import { getBranchLabel } from '../lib/branches';
 import { fmtBaht } from '../lib/dashboard/format';
@@ -26,6 +31,10 @@ import { customerTierLabel, useCustomerTiers } from '../lib/customers/customerTi
 import { devIncrementShiftTotals } from '../lib/pos/shiftDevMock';
 import { devApplyCrmAfterSale, devApplyCreditCharge } from '../lib/customers/devMock';
 import { POS_FEATURES } from '../lib/config/features';
+import { cartLinesToRecord } from '../lib/pos/suspendedBills';
+import type { SuspendedBill } from '../lib/pos/suspendedBills';
+import { useSuspendedBills } from '../lib/pos/useSuspendedBills';
+import ProductImageThumb from '../components/products/ProductImageThumb';
 import { usePosProducts } from '../lib/pos/usePosProducts';
 import { resolvePosUnitPrice } from '../lib/pos/tierPricing';
 import type { CartLine, ItemDiscountType, PosProduct, UomOption } from '../lib/pos/types';
@@ -90,6 +99,8 @@ export default function POSPage() {
   const { user, branchId } = useAuth();
   const { branch } = useBranch();
   const { products, categories, loading } = usePosProducts(branchId);
+  const { bills: suspendedBills, count: suspendedCount, addBill, removeBill } =
+    useSuspendedBills(branchId);
   const { tiers: customerTiers } = useCustomerTiers();
 
   const pickerProducts = useMemo(() => products.map(posProductToPickerItem), [products]);
@@ -102,16 +113,20 @@ export default function POSPage() {
   const [billDiscValue, setBillDiscValue] = useState(0);
   const [billDiscPercent, setBillDiscPercent] = useState(false);
   const [feeRate, setFeeRate] = useState(0);
+  const [showExtraOptions, setShowExtraOptions] = useState(false);
 
   const [uomProduct, setUomProduct] = useState<PosProduct | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [discountLineKey, setDiscountLineKey] = useState<string | null>(null);
+  const [qtyNumpadLineKey, setQtyNumpadLineKey] = useState<string | null>(null);
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [activeShift, setActiveShift] = useState<Shift | null>(null);
   const [shiftReady, setShiftReady] = useState(false);
   const [showCloseShift, setShowCloseShift] = useState(false);
+  const [holdNoteOpen, setHoldNoteOpen] = useState(false);
+  const [suspendedListOpen, setSuspendedListOpen] = useState(false);
   const [showCashTx, setShowCashTx] = useState(false);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -123,18 +138,6 @@ export default function POSPage() {
   const totals = useMemo(
     () => calcCartTotals(cartLines, billDiscValue, billDiscPercent, feeRate),
     [cartLines, billDiscValue, billDiscPercent, feeRate],
-  );
-
-  const totalTierSavings = useMemo(
-    () =>
-      cartLines.reduce((sum, line) => {
-        const orig = line.originalPrice;
-        if (orig != null && orig > line.unitPrice) {
-          return sum + (orig - line.unitPrice) * line.qty;
-        }
-        return sum;
-      }, 0),
-    [cartLines],
   );
 
   const receiptLines = useMemo<PaymentReceiptLine[]>(
@@ -310,6 +313,37 @@ export default function POSPage() {
     });
   }, []);
 
+  const setLineQty = useCallback(
+    (lineKey: string, newQty: number): boolean => {
+      const line = cart[lineKey];
+      if (!line) return false;
+      if (newQty <= 0) {
+        removeLine(lineKey);
+        return true;
+      }
+      if (newQty === line.qty) return true;
+      const delta = newQty - line.qty;
+      if (delta > 0) {
+        const product = products.find((p) => p.id === line.productId);
+        const option = product?.uomOptions.find((o) => o.unit === line.unit);
+        if (product && option) {
+          const stockErr = validateAddToCartStock(product, option, delta, cart);
+          if (stockErr) {
+            showToast(stockErr);
+            return false;
+          }
+        }
+      }
+      setCart((prev) => {
+        const current = prev[lineKey];
+        if (!current) return prev;
+        return { ...prev, [lineKey]: { ...current, qty: newQty } };
+      });
+      return true;
+    },
+    [cart, products, removeLine, showToast],
+  );
+
   const handlePaymentConfirm = useCallback(
     async (payments: PaymentSplit[]): Promise<string> => {
       if (!user || !branchId || cartLines.length === 0 || !activeShift) {
@@ -423,14 +457,97 @@ export default function POSPage() {
     setShowCashTx(false);
   }, [user, branchId]);
 
-  const handleNewSale = useCallback(() => {
+  const clearPosCart = useCallback(() => {
     setCart({});
     setBillDiscValue(0);
+    setBillDiscPercent(false);
     setFeeRate(0);
     setCustomer(null);
+  }, []);
+
+  const handleNewSale = useCallback(() => {
+    clearPosCart();
     setPaymentOpen(false);
     focusSearch();
-  }, [focusSearch]);
+  }, [clearPosCart, focusSearch]);
+
+  const handleClearCartClick = useCallback(() => {
+    if (cartLines.length === 0) return;
+    if (!window.confirm('ล้างสินค้าในตะกร้าทั้งหมด?')) return;
+    setCart({});
+    setBillDiscValue(0);
+    setBillDiscPercent(false);
+    setFeeRate(0);
+    showToast('ล้างตะกร้าแล้ว');
+    focusSearch();
+  }, [cartLines.length, focusSearch, showToast]);
+
+  const handleHoldClick = useCallback(() => {
+    if (cartLines.length === 0) {
+      showToast('ไม่มีสินค้าในตะกร้า');
+      return;
+    }
+    setHoldNoteOpen(true);
+  }, [cartLines.length, showToast]);
+
+  const handleHoldConfirm = useCallback(
+    (note: string) => {
+      const totalsNow = calcCartTotals(
+        cartLines,
+        billDiscValue,
+        billDiscPercent,
+        feeRate,
+      );
+      const bill: SuspendedBill = {
+        id: crypto.randomUUID(),
+        note,
+        cartItems: cartLines.map((line) => ({ ...line, discount: { ...line.discount } })),
+        customerId: customer?.id ?? null,
+        discount: billDiscValue,
+        createdAt: new Date().toISOString(),
+        customer: customer ? { ...customer } : null,
+        discountPercent: billDiscPercent,
+        feeRate,
+        totalAmount: totalsNow.grandTotal,
+        itemCount: totalsNow.totalQty,
+      };
+      addBill(bill);
+      clearPosCart();
+      setHoldNoteOpen(false);
+      showToast('พักบิลเรียบร้อย');
+      focusSearch();
+    },
+    [
+      addBill,
+      billDiscPercent,
+      billDiscValue,
+      cartLines,
+      clearPosCart,
+      customer,
+      feeRate,
+      focusSearch,
+      showToast,
+    ],
+  );
+
+  const handleRestoreBill = useCallback(
+    (bill: SuspendedBill) => {
+      if (cartLines.length > 0) {
+        showToast('กรุณาชำระหรือพักบิลปัจจุบันก่อนเรียกคืน');
+        return;
+      }
+      setCart(cartLinesToRecord(bill.cartItems));
+      setCustomer(bill.customer);
+      setBillDiscValue(bill.discount);
+      setBillDiscPercent(bill.discountPercent);
+      setFeeRate(bill.feeRate);
+      removeBill(bill.id);
+      setSuspendedListOpen(false);
+      showToast('เรียกคืนบิลแล้ว');
+      focusSearch();
+    },
+    [cartLines.length, focusSearch, removeBill, showToast],
+  );
 
   useEffect(() => {
     setCart((prev) => repriceCartLines(prev, products, customer));
@@ -579,7 +696,7 @@ export default function POSPage() {
                       className={`pos-prod-card${qty > 0 ? ' in-cart' : ''}`}
                       onClick={() => onProductClick(p)}
                     >
-                      <div className="pos-prod-img">{p.emoji}</div>
+                      <ProductImageThumb imageUrl={p.imageUrl} alt={p.name} variant="pos" className="pos-prod-img" />
                       <div className="pos-prod-info">
                         <div className="pos-prod-name">{p.name}</div>
                         <div className="pos-prod-bottom">
@@ -598,11 +715,35 @@ export default function POSPage() {
 
         <aside className="pos-cart">
           <div className="pos-cart-hd">
-            <span className="pos-cart-title">ตะกร้า</span>
-            <button type="button" className="pos-hold-btn">
-              <i className="ti ti-clock-pause" style={{ fontSize: 11 }} aria-hidden="true" />{' '}
-              พักบิล
-            </button>
+            <div className="pos-cart-hd-actions">
+              <button
+                type="button"
+                className="pos-suspended-btn"
+                onClick={() => setSuspendedListOpen(true)}
+                disabled={suspendedCount === 0}
+              >
+                บิลที่พักไว้ ({suspendedCount})
+              </button>
+              <button
+                type="button"
+                className="pos-hold-btn"
+                onClick={handleHoldClick}
+                disabled={cartLines.length === 0}
+              >
+                <i className="ti ti-clock-pause" style={{ fontSize: 11 }} aria-hidden="true" />{' '}
+                พักบิล
+              </button>
+              <button
+                type="button"
+                className="pos-cart-clear-btn"
+                onClick={handleClearCartClick}
+                disabled={cartLines.length === 0}
+                aria-label="ล้างตะกร้า"
+                title="ล้างตะกร้า"
+              >
+                <i className="ti ti-trash-x" aria-hidden="true" />
+              </button>
+            </div>
           </div>
 
           <div className="pos-cust-bar">
@@ -659,7 +800,28 @@ export default function POSPage() {
                         <span className="pos-ci-tier-tag">ราคาสมาชิก</span>
                       )}
                     </div>
-                    <div className="pos-ci-actions">
+
+                    <div className="pos-ci-price-bar">
+                      <div className="pos-ci-price-row">
+                        {hasTierDisc && (
+                          <del className="pos-ci-orig-price">
+                            {fmtBaht(line.originalPrice!, { decimals: 2 })}
+                          </del>
+                        )}
+                        <span
+                          className={
+                            hasTierDisc ? 'pos-ci-tier-unit' : 'pos-ci-unit-at'
+                          }
+                        >
+                          @ {fmtBaht(line.unitPrice, { decimals: 2 })}
+                        </span>
+                      </div>
+                      <div className={`pos-ci-line-total${hasDisc ? ' has-disc' : ''}`}>
+                        {fmtBaht(finalPrice, { decimals: 2 })}
+                      </div>
+                    </div>
+
+                    <div className="pos-ci-toolbar">
                       <div className="pos-ci-qty-group">
                         <button
                           type="button"
@@ -669,7 +831,14 @@ export default function POSPage() {
                         >
                           <i className="ti ti-minus" aria-hidden="true" />
                         </button>
-                        <div className="pos-ci-qty-val">{line.qty}</div>
+                        <button
+                          type="button"
+                          className="pos-ci-qty-val"
+                          onClick={() => setQtyNumpadLineKey(line.lineKey)}
+                          aria-label={`จำนวน ${line.qty} — แตะเพื่อแก้ไข`}
+                        >
+                          {line.qty}
+                        </button>
                         <button
                           type="button"
                           className="pos-ci-qty-seg"
@@ -679,42 +848,22 @@ export default function POSPage() {
                           <i className="ti ti-plus" aria-hidden="true" />
                         </button>
                       </div>
-
-                      <div className="pos-ci-pricing">
-                        <div className="pos-ci-price-row">
-                          {hasTierDisc && (
-                            <del className="pos-ci-orig-price">
-                              ฿{fmtBaht(line.originalPrice!, { decimals: 2 })}
-                            </del>
-                          )}
-                          <span
-                            className={
-                              hasTierDisc ? 'pos-ci-tier-unit' : 'pos-ci-unit-at'
-                            }
-                          >
-                            @ ฿{fmtBaht(line.unitPrice, { decimals: 2 })}
-                          </span>
-                          <button
-                            type="button"
-                            className="pos-ci-icon-btn"
-                            onClick={() => setDiscountLineKey(line.lineKey)}
-                            aria-label="แก้ไขราคา / ส่วนลด"
-                          >
-                            <i className="ti ti-pencil" aria-hidden="true" />
-                          </button>
-                          <button
-                            type="button"
-                            className="pos-ci-icon-btn pos-ci-icon-btn--danger"
-                            onClick={() => removeLine(line.lineKey)}
-                            aria-label="ลบ"
-                          >
-                            <i className="ti ti-trash" aria-hidden="true" />
-                          </button>
-                        </div>
-                        <div className={`pos-ci-line-total${hasDisc ? ' has-disc' : ''}`}>
-                          ฿{formatMoney(finalPrice)}
-                        </div>
-                      </div>
+                      <button
+                        type="button"
+                        className="pos-ci-icon-btn"
+                        onClick={() => setDiscountLineKey(line.lineKey)}
+                        aria-label="แก้ไขราคา / ส่วนลด"
+                      >
+                        <i className="ti ti-pencil" aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        className="pos-ci-icon-btn pos-ci-icon-btn--danger"
+                        onClick={() => removeLine(line.lineKey)}
+                        aria-label="ลบ"
+                      >
+                        <i className="ti ti-trash" aria-hidden="true" />
+                      </button>
                     </div>
                   </div>
                 );
@@ -723,76 +872,84 @@ export default function POSPage() {
           </div>
 
           <footer className="pos-cart-footer">
-            <div className="pos-cf-row">
-              <span className="pos-cf-lbl">พนักงาน</span>
-              <span className="pos-cf-val">
-                <i className="ti ti-user" style={{ fontSize: 11 }} aria-hidden="true" />{' '}
-                {user?.firstName ?? '—'}
+            <button
+              type="button"
+              className="pos-cf-extra-toggle"
+              onClick={() => setShowExtraOptions((prev) => !prev)}
+            >
+              <span>
+                {showExtraOptions ? 'ซ่อนส่วนลด / ค่าธรรมเนียม' : 'เพิ่มส่วนลด / ค่าธรรมเนียม'}
               </span>
-            </div>
-            <div className="pos-cf-row">
-              <span className="pos-cf-lbl">ลดท้ายบิล</span>
-              <div className="pos-disc-row">
-                <input
-                  className="pos-disc-inp"
-                  type="number"
-                  min={0}
-                  value={billDiscValue}
-                  onChange={(e) => setBillDiscValue(parseFloat(e.target.value) || 0)}
-                />
-                <button
-                  type="button"
-                  className={`pos-disc-tog${!billDiscPercent ? ' on' : ''}`}
-                  onClick={() => setBillDiscPercent(false)}
-                >
-                  ฿
-                </button>
-                <button
-                  type="button"
-                  className={`pos-disc-tog${billDiscPercent ? ' on' : ''}`}
-                  onClick={() => setBillDiscPercent(true)}
-                >
-                  %
-                </button>
-              </div>
-            </div>
-            <div className="pos-cf-row">
-              <span className="pos-cf-lbl">ค่าธรรมเนียม</span>
-              <div className="pos-fee-chips">
-                {([0, 1, 3] as const).map((rate) => (
-                  <button
-                    key={rate}
-                    type="button"
-                    className={`pos-fee-chip${feeRate === rate ? ' on' : ''}`}
-                    onClick={() => setFeeRate(rate)}
-                  >
-                    {rate === 0 ? 'ไม่มี' : `${rate}%`}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {totalTierSavings > 0 && (
-              <div className="pos-cf-row pos-cf-row--tier-save">
-                <span className="pos-cf-lbl">ประหยัดจากราคาสมาชิก</span>
-                <span className="pos-cf-val pos-cf-val--green">-฿{fmtBaht(totalTierSavings, { decimals: 2 })}</span>
-              </div>
+              <i
+                className={`ti ti-chevron-${showExtraOptions ? 'up' : 'down'}`}
+                aria-hidden="true"
+              />
+            </button>
+            {showExtraOptions && (
+              <>
+                <div className="pos-cf-row">
+                  <span className="pos-cf-lbl">ลดท้ายบิล</span>
+                  <div className="pos-disc-row">
+                    <input
+                      className="pos-disc-inp"
+                      type="number"
+                      min={0}
+                      value={billDiscValue}
+                      onChange={(e) => setBillDiscValue(parseFloat(e.target.value) || 0)}
+                    />
+                    <button
+                      type="button"
+                      className={`pos-disc-tog${!billDiscPercent ? ' on' : ''}`}
+                      onClick={() => setBillDiscPercent(false)}
+                    >
+                      ฿
+                    </button>
+                    <button
+                      type="button"
+                      className={`pos-disc-tog${billDiscPercent ? ' on' : ''}`}
+                      onClick={() => setBillDiscPercent(true)}
+                    >
+                      %
+                    </button>
+                  </div>
+                </div>
+                <div className="pos-cf-row">
+                  <span className="pos-cf-lbl">ค่าธรรมเนียม</span>
+                  <div className="pos-fee-chips">
+                    {([0, 1, 3] as const).map((rate) => (
+                      <button
+                        key={rate}
+                        type="button"
+                        className={`pos-fee-chip${feeRate === rate ? ' on' : ''}`}
+                        onClick={() => setFeeRate(rate)}
+                      >
+                        {rate === 0 ? 'ไม่มี' : `${rate}%`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>
             )}
             <div className="pos-cf-row">
               <span className="pos-cf-lbl">รวม</span>
               <span className="pos-cf-val">฿{formatMoney(totals.subtotal)}</span>
             </div>
-            <div className="pos-cf-row">
-              <span className="pos-cf-lbl">ส่วนลด</span>
-              <span className="pos-cf-val" style={{ color: '#1d9e75' }}>
-                -฿{formatMoney(totals.billDiscount)}
-              </span>
-            </div>
-            <div className="pos-cf-row">
-              <span className="pos-cf-lbl">ค่าธรรมเนียม</span>
-              <span className="pos-cf-val" style={{ color: '#ba7517' }}>
-                ฿{formatMoney(totals.fee)}
-              </span>
-            </div>
+            {totals.billDiscount > 0 && (
+              <div className="pos-cf-row">
+                <span className="pos-cf-lbl">ส่วนลด</span>
+                <span className="pos-cf-val" style={{ color: '#1d9e75' }}>
+                  -฿{formatMoney(totals.billDiscount)}
+                </span>
+              </div>
+            )}
+            {totals.fee > 0 && (
+              <div className="pos-cf-row">
+                <span className="pos-cf-lbl">ค่าธรรมเนียม</span>
+                <span className="pos-cf-val" style={{ color: '#ba7517' }}>
+                  ฿{formatMoney(totals.fee)}
+                </span>
+              </div>
+            )}
             <div className="pos-grand-row">
               <span className="pos-gt-lbl">รวมสุทธิ</span>
               <span className="pos-gt-val">฿{formatMoney(totals.grandTotal)}</span>
@@ -908,20 +1065,33 @@ export default function POSPage() {
         />
       )}
 
+      <HoldBillNoteModal
+        open={holdNoteOpen}
+        onClose={() => setHoldNoteOpen(false)}
+        onConfirm={handleHoldConfirm}
+      />
+
+      <SuspendedBillsListModal
+        open={suspendedListOpen}
+        bills={suspendedBills}
+        onClose={() => setSuspendedListOpen(false)}
+        onRestore={handleRestoreBill}
+      />
+
+      <NumpadDialog
+        open={qtyNumpadLineKey !== null}
+        title={qtyNumpadLineKey ? cart[qtyNumpadLineKey]?.productName : undefined}
+        initialValue={qtyNumpadLineKey ? (cart[qtyNumpadLineKey]?.qty ?? 1) : 1}
+        onClose={() => setQtyNumpadLineKey(null)}
+        onConfirm={(qty) => {
+          if (qtyNumpadLineKey && setLineQty(qtyNumpadLineKey, qty)) {
+            setQtyNumpadLineKey(null);
+          }
+        }}
+      />
+
       {toast && (
-        <div
-          style={{
-            position: 'fixed',
-            bottom: 20,
-            right: 20,
-            background: 'var(--p600)',
-            color: '#fff',
-            padding: '10px 16px',
-            borderRadius: 8,
-            fontSize: 13,
-            zIndex: 700,
-          }}
-        >
+        <div className="pos-toast" role="status" aria-live="polite">
           {toast}
         </div>
       )}

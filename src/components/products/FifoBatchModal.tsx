@@ -43,7 +43,7 @@ export default function FifoBatchModal({ product, lots, onClose, onUpdateCost }:
   const nextCost = active[0]?.costPerUnit ?? product.avgCost;
 
   return (
-    <div className="pc-modal-overlay" role="dialog" aria-modal="true" onClick={onClose}>
+    <div className="pc-modal-overlay pc-modal-overlay--stack" role="dialog" aria-modal="true" onClick={onClose}>
       <div className="pc-fifo-modal" onClick={(e) => e.stopPropagation()}>
         <div className="pc-fifo-head">
           <div>

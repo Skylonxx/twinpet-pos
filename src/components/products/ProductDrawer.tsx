@@ -1,23 +1,25 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { useCategories } from '../../lib/inventory/categoryService';
 import {
   emptyForm,
   fmtBaht,
   formatUomBreakdown,
-  generateSku,
   movementLabel,
   productToForm,
+  sanitizeProductForm,
+  validateProductForm,
   DRAWER_TABS,
   type DrawerTab,
   type ProductFormData,
+  type ProductFormFieldErrors,
   type ProductListItem,
   type ProductUomFormRow,
 } from '../../lib/productCrud/types';
-import { useSystemSettings } from '../../lib/settings/useSystemSettings';
 import { buildUnitSelectOptions, useUnitList } from '../../lib/settings/useUnitList';
+import { resizeProductImageToDataUrl } from '../../lib/productCrud/resizeProductImage';
 import type { StockLot, StockMovement } from '../../lib/types';
-import FifoLotDialog from './FifoLotDialog';
+import FifoQueueModal from '../inventory/FifoQueueModal';
 import ProductSaveConfirmDialog from './ProductSaveConfirmDialog';
 import TierPriceManagerDialog from './TierPriceManagerDialog';
 import UnitManagerModal from './UnitManagerModal';
@@ -39,7 +41,15 @@ function TierPriceManageButton({
   onClick: () => void;
 }) {
   return (
-    <button type="button" className="pc-tier-manage-btn" onClick={onClick}>
+    <button
+      type="button"
+      className="pc-tier-manage-btn"
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onClick();
+      }}
+    >
       🏷️ จัดการราคาตามกลุ่มลูกค้า
       {customCount > 0 ? <span className="pc-tier-manage-badge">{customCount} กลุ่ม</span> : null}
     </button>
@@ -75,22 +85,37 @@ function BaseRetailPriceInput({
   value,
   onChange,
   label = 'ราคาขายหลัก (฿)',
+  error,
+  onClearError,
+  inputRef,
 }: {
   value: number;
   onChange: (val: number) => void;
   label?: string;
+  error?: string;
+  onClearError?: () => void;
+  inputRef?: RefObject<HTMLInputElement | null>;
 }) {
   return (
     <div className="pc-field pc-base-price-field">
-      <label>{label}</label>
+      <label>
+        {label} <span className="req">*</span>
+      </label>
       <input
+        ref={inputRef}
         type="number"
         min={0}
         step={0.01}
-        value={value || ''}
+        value={value || value === 0 ? value : ''}
         placeholder="0.00"
-        onChange={(e) => onChange(Number(e.target.value))}
+        aria-invalid={Boolean(error)}
+        onChange={(e) => {
+          const parsed = e.target.value === '' ? Number.NaN : Number(e.target.value);
+          onChange(parsed);
+          onClearError?.();
+        }}
       />
+      {error ? <p className="pc-field-error">{error}</p> : null}
     </div>
   );
 }
@@ -100,17 +125,21 @@ function UomPricingCard({
   baseUnit,
   unitSelectOptions,
   customTierCount,
+  priceError,
   onUpdate,
   onManageTierPrices,
   onRemove,
+  onClearPriceError,
 }: {
   row: ProductUomFormRow;
   baseUnit: string;
   unitSelectOptions: string[];
   customTierCount: number;
+  priceError?: string;
   onUpdate: (patch: Partial<ProductUomFormRow>) => void;
   onManageTierPrices: () => void;
   onRemove?: () => void;
+  onClearPriceError?: () => void;
 }) {
   return (
     <div className={`pc-uom-card${row.isBase ? ' pc-uom-card-base' : ''}`}>
@@ -183,6 +212,8 @@ function UomPricingCard({
       <BaseRetailPriceInput
         label={`ราคาขาย (${row.unit})`}
         value={row.prices[RETAIL_PRICE_KEY] ?? 0}
+        error={row.isBase ? priceError : undefined}
+        onClearError={row.isBase ? onClearPriceError : undefined}
         onChange={(val) => onUpdate({ prices: { ...row.prices, [RETAIL_PRICE_KEY]: val } })}
       />
 
@@ -199,9 +230,33 @@ type Props = {
   onClose: () => void;
   onSave: (form: ProductFormData) => Promise<void>;
   onDelete: () => void;
+  onNotify?: (msg: string, type?: 'success' | 'warn') => void;
+  branchId?: string | null;
   fetchLots: (productId: string) => Promise<StockLot[]>;
   loadMovements: (productId: string) => Promise<StockMovement[]>;
 };
+
+function focusTabForErrors(
+  errors: ProductFormFieldErrors,
+  setTab: (tab: DrawerTab) => void,
+  form: ProductFormData,
+) {
+  if (errors.name || errors.categoryId || errors.cost || errors.price) {
+    setTab('info');
+    return;
+  }
+  if (errors.unit) {
+    setTab(form.baseUnit.trim() ? 'pricing' : 'info');
+  }
+}
+
+const ERROR_FOCUS_ORDER: (keyof ProductFormFieldErrors)[] = [
+  'name',
+  'categoryId',
+  'cost',
+  'unit',
+  'price',
+];
 
 export default function ProductDrawer({
   open,
@@ -211,10 +266,11 @@ export default function ProductDrawer({
   onClose,
   onSave,
   onDelete,
+  onNotify,
+  branchId,
   fetchLots,
   loadMovements,
 }: Props) {
-  const { form: systemSettings } = useSystemSettings();
   const { units, saving: unitsSaving, saveUnits } = useUnitList();
   const { categories: productCategories } = useCategories();
 
@@ -223,29 +279,68 @@ export default function ProductDrawer({
   const [tierDialog, setTierDialog] = useState<TierDialogConfig | null>(null);
   const [movements, setMovements] = useState<StockMovement[]>([]);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<ProductFormFieldErrors>({});
   const [unitMgrOpen, setUnitMgrOpen] = useState(false);
   const [fifoOpen, setFifoOpen] = useState(false);
+  const [imageProcessing, setImageProcessing] = useState(false);
 
-  const skuPrefix = useMemo(() => {
-    const prefix = systemSettings?.linePrefixes?.productSku?.trim();
-    return prefix && prefix.length > 0 ? prefix : 'PD';
-  }, [systemSettings]);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+
+  const nameRef = useRef<HTMLInputElement>(null);
+  const categoryRef = useRef<HTMLSelectElement>(null);
+  const costRef = useRef<HTMLInputElement>(null);
+  const unitRef = useRef<HTMLSelectElement>(null);
+  const priceRef = useRef<HTMLInputElement>(null);
+
+  const fieldRefMap = useMemo(
+    () =>
+      ({
+        name: nameRef,
+        categoryId: categoryRef,
+        cost: costRef,
+        unit: unitRef,
+        price: priceRef,
+      }) as Record<keyof ProductFormFieldErrors, RefObject<HTMLElement | null>>,
+    [],
+  );
 
   useEffect(() => {
     if (!open) return;
     setTab('info');
     setConfirmOpen(false);
+    setFieldErrors({});
     setUnitMgrOpen(false);
     setFifoOpen(false);
     setTierDialog(null);
+    setImageProcessing(false);
     if (mode === 'edit' && product) {
-      setForm(productToForm(product));
+      const nextForm = productToForm(product);
+      const matchedCategory = productCategories.find((c) => c.name === product.category);
+      setForm({ ...nextForm, categoryId: matchedCategory?.id ?? '' });
       void loadMovements(product.id).then(setMovements);
     } else {
       setForm(emptyForm());
       setMovements([]);
     }
-  }, [open, mode, product, loadMovements]);
+  }, [open, mode, product, loadMovements, productCategories]);
+
+  const displayImageUrl = form.imageUrl || null;
+
+  const handleImageSelect = async (file: File) => {
+    setImageProcessing(true);
+    try {
+      const dataUrl = await resizeProductImageToDataUrl(file);
+      setForm((f) => ({ ...f, imageUrl: dataUrl }));
+    } catch (err) {
+      console.error('[ProductDrawer] image resize failed:', err);
+      onNotify?.(
+        err instanceof Error ? err.message : 'ประมวลผลรูปภาพไม่สำเร็จ',
+        'warn',
+      );
+    } finally {
+      setImageProcessing(false);
+    }
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -283,6 +378,39 @@ export default function ProductDrawer({
     }));
   }, []);
 
+  const setMainPrice = useCallback((val: number) => {
+    setForm((f) => ({
+      ...f,
+      simplePrices: { ...f.simplePrices, [RETAIL_PRICE_KEY]: val },
+      uomRows: f.uomRows.map((r) =>
+        r.isBase ? { ...r, prices: { ...r.prices, [RETAIL_PRICE_KEY]: val } } : r,
+      ),
+    }));
+  }, []);
+
+  const openUnitManager = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setUnitMgrOpen(true);
+  }, []);
+
+  const focusFirstInvalidField = useCallback(
+    (errors: ProductFormFieldErrors, currentForm: ProductFormData) => {
+      focusTabForErrors(errors, setTab, currentForm);
+      window.requestAnimationFrame(() => {
+        for (const key of ERROR_FOCUS_ORDER) {
+          if (!errors[key]) continue;
+          const el = fieldRefMap[key]?.current;
+          if (!el) continue;
+          el.focus();
+          el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+          break;
+        }
+      });
+    },
+    [fieldRefMap],
+  );
+
   const updateUomRow = (id: string, patch: Partial<ProductUomFormRow>) => {
     setForm((f) => ({
       ...f,
@@ -317,29 +445,61 @@ export default function ProductDrawer({
   const countCustomTierPrices = (tierPrices: Record<string, number>) =>
     Object.keys(tierPrices).filter((k) => tierPrices[k] != null && tierPrices[k] > 0).length;
 
-  const openTierDialog = (config: TierDialogConfig) => {
+  const openTierDialog = useCallback((config: TierDialogConfig) => {
     setTierDialog({
       ...config,
       initialTierPrices: { ...config.initialTierPrices },
     });
-  };
+  }, []);
+
+  const openMainTierDialog = useCallback(() => {
+    openTierDialog({
+      title: form.name.trim() || form.baseUnit || 'สินค้า',
+      basePrice: form.simplePrices[RETAIL_PRICE_KEY] ?? 0,
+      initialTierPrices: form.tierPrices,
+      onSave: (next) => setForm((f) => ({ ...f, tierPrices: next })),
+    });
+  }, [form.baseUnit, form.name, form.simplePrices, form.tierPrices, openTierDialog]);
+
+  const runValidation = useCallback(() => {
+    return validateProductForm(form, {
+      mode,
+      editAvgCost: product?.avgCost,
+    });
+  }, [form, mode, product?.avgCost]);
 
   const handleSaveClick = () => {
-    if (!form.name.trim() || !form.category.trim()) return;
+    const errors = runValidation();
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      focusFirstInvalidField(errors, form);
+      onNotify?.('กรุณากรอกข้อมูลสำคัญให้ครบถ้วน', 'warn');
+      return;
+    }
     setConfirmOpen(true);
   };
 
   const handleConfirmSave = async () => {
-    let saveForm = { ...form };
-    if (!saveForm.sku.trim()) {
-      saveForm = { ...saveForm, sku: generateSku(skuPrefix) };
-      setForm(saveForm);
+    const errors = runValidation();
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      focusFirstInvalidField(errors, form);
+      setConfirmOpen(false);
+      onNotify?.('กรุณากรอกข้อมูลสำคัญให้ครบถ้วน', 'warn');
+      return;
     }
+
+    const saveForm = sanitizeProductForm(form, productCategories);
+    setForm(saveForm);
+
     try {
       await onSave(saveForm);
       setConfirmOpen(false);
-    } catch {
-      setConfirmOpen(false);
+      setFieldErrors({});
+    } catch (err) {
+      console.error('[ProductDrawer] save failed:', err);
+      const msg = err instanceof Error ? err.message : 'บันทึกสินค้าไม่สำเร็จ';
+      onNotify?.(msg, 'warn');
     }
   };
 
@@ -378,11 +538,74 @@ export default function ProductDrawer({
           <div className="pc-drawer-body">
             {tab === 'info' ? (
               <>
+                <div className="pc-product-image-field">
+                  <label className="pc-product-image-label">รูปสินค้า</label>
+                  <div className="pc-product-image-row">
+                    <div className="pc-product-image-preview" aria-hidden={!displayImageUrl}>
+                      {imageProcessing ? (
+                        <span className="pc-product-image-loading">กำลังปรับขนาด...</span>
+                      ) : displayImageUrl ? (
+                        <img src={displayImageUrl} alt={form.name.trim() || 'รูปสินค้า'} />
+                      ) : (
+                        <i className="ti ti-photo" aria-hidden="true" />
+                      )}
+                    </div>
+                    <div className="pc-product-image-actions">
+                      <button
+                        type="button"
+                        className="pc-product-image-btn"
+                        disabled={imageProcessing || saving}
+                        onClick={() => imageInputRef.current?.click()}
+                      >
+                        <i className="ti ti-upload" aria-hidden="true" />{' '}
+                        {displayImageUrl ? 'เปลี่ยนรูป' : 'เลือกรูป'}
+                      </button>
+                      {displayImageUrl ? (
+                        <button
+                          type="button"
+                          className="pc-product-image-btn pc-product-image-btn-muted"
+                          disabled={imageProcessing || saving}
+                          onClick={() => {
+                            setForm((f) => ({ ...f, imageUrl: '' }));
+                          }}
+                        >
+                          ลบรูป
+                        </button>
+                      ) : null}
+                      <p className="pc-product-image-hint">
+                        ปรับเป็น 400×300 px อัตโนมัติ — ไม่บังคับ
+                      </p>
+                    </div>
+                  </div>
+                  <input
+                    ref={imageInputRef}
+                    type="file"
+                    accept="image/*"
+                    hidden
+                    disabled={imageProcessing || saving}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) void handleImageSelect(file);
+                      e.target.value = '';
+                    }}
+                  />
+                </div>
+
                 <div className="pc-field">
                   <label>
                     ชื่อสินค้า <span className="req">*</span>
                   </label>
-                  <input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="ระบุชื่อสินค้า" />
+                  <input
+                    ref={nameRef}
+                    value={form.name}
+                    onChange={(e) => {
+                      set('name', e.target.value);
+                      if (fieldErrors.name) setFieldErrors((prev) => ({ ...prev, name: undefined }));
+                    }}
+                    placeholder="ระบุชื่อสินค้า"
+                    aria-invalid={Boolean(fieldErrors.name)}
+                  />
+                  {fieldErrors.name ? <p className="pc-field-error">{fieldErrors.name}</p> : null}
                 </div>
                 <div className="pc-fg2">
                   <div className="pc-field">
@@ -397,19 +620,53 @@ export default function ProductDrawer({
                     <label>
                       หมวดหมู่ <span className="req">*</span>
                     </label>
-                    <select value={form.category} onChange={(e) => set('category', e.target.value)}>
+                    <select
+                      ref={categoryRef}
+                      value={
+                        form.categoryId ||
+                        productCategories.find((c) => c.name === form.category)?.id ||
+                        ''
+                      }
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val.startsWith('legacy:')) {
+                          setForm((f) => ({
+                            ...f,
+                            categoryId: '',
+                            category: val.slice('legacy:'.length),
+                          }));
+                        } else {
+                          const cat = productCategories.find((c) => c.id === val);
+                          setForm((f) => ({
+                            ...f,
+                            categoryId: val,
+                            category: cat?.name ?? '',
+                          }));
+                        }
+                        if (fieldErrors.categoryId) {
+                          setFieldErrors((prev) => ({ ...prev, categoryId: undefined }));
+                        }
+                      }}
+                      aria-invalid={Boolean(fieldErrors.categoryId)}
+                    >
                       <option value="" disabled>
                         ระบุหมวดหมู่
                       </option>
                       {productCategories.map((cat) => (
-                        <option key={cat.id} value={cat.name}>
+                        <option key={cat.id} value={cat.id}>
                           {cat.name}
                         </option>
                       ))}
-                      {form.category && !productCategories.some((c) => c.name === form.category) ? (
-                        <option value={form.category}>{form.category} (legacy)</option>
+                      {form.category &&
+                      !productCategories.some(
+                        (c) => c.id === form.categoryId || c.name === form.category,
+                      ) ? (
+                        <option value={`legacy:${form.category}`}>{form.category} (legacy)</option>
                       ) : null}
                     </select>
+                    {fieldErrors.categoryId ? (
+                      <p className="pc-field-error">{fieldErrors.categoryId}</p>
+                    ) : null}
                   </div>
                 </div>
                 <div className="pc-field">
@@ -430,11 +687,21 @@ export default function ProductDrawer({
                         ต้นทุนเริ่มต้น lot แรก (ต่อชิ้น) <span className="req">*</span>
                       </label>
                       <input
+                        ref={costRef}
                         type="number"
                         value={form.initialCost || ''}
                         placeholder="0.00"
-                        onChange={(e) => set('initialCost', Number(e.target.value))}
+                        onChange={(e) => {
+                          set('initialCost', Number(e.target.value));
+                          if (fieldErrors.cost) {
+                            setFieldErrors((prev) => ({ ...prev, cost: undefined }));
+                          }
+                        }}
+                        aria-invalid={Boolean(fieldErrors.cost)}
                       />
+                      {fieldErrors.cost ? (
+                        <p className="pc-field-error">{fieldErrors.cost}</p>
+                      ) : null}
                     </div>
                     <div className="pc-drawer-hint">ระบบจะสร้าง FIFO batch แรกให้อัตโนมัติ</div>
                   </>
@@ -446,16 +713,78 @@ export default function ProductDrawer({
                         <span className="pc-cost-avg">฿{fmtBaht(product.avgCost)}</span>
                         <span className="pc-cost-unit">/ {form.baseUnit}</span>
                       </div>
+                      {fieldErrors.cost ? (
+                        <p className="pc-field-error">{fieldErrors.cost}</p>
+                      ) : null}
                       <div className="pc-cost-fifo-note">
                         lot ถัดไป (FIFO): <span>฿{fmtBaht(nextCost)}/{form.baseUnit}</span>
                         {activeLots > 0 ? ` · ${product.stock} ${form.baseUnit} คงเหลือ` : ''}
                       </div>
                     </div>
-                    <button type="button" className="pc-view-batch-btn" onClick={() => setFifoOpen(true)}>
+                    <button
+                      type="button"
+                      className="pc-view-batch-btn"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setFifoOpen(true);
+                      }}
+                    >
                       <i className="ti ti-stack-2" aria-hidden="true" /> ดูคิวล็อต
                     </button>
                   </div>
                 ) : null}
+
+                <div className="pc-sec-label">หน่วย & ราคาขายหลัก</div>
+                <div className="pc-base-unit-row">
+                  <div className="pc-field">
+                    <label>
+                      หน่วยนับหลัก <span className="req">*</span>
+                    </label>
+                    <select
+                      ref={unitRef}
+                      value={form.baseUnit}
+                      aria-invalid={Boolean(fieldErrors.unit)}
+                      onChange={(e) => {
+                        setBaseUnit(e.target.value);
+                        if (fieldErrors.unit) {
+                          setFieldErrors((prev) => ({ ...prev, unit: undefined }));
+                        }
+                      }}
+                    >
+                      {unitOptions.map((u) => (
+                        <option key={u} value={u}>
+                          {u}
+                        </option>
+                      ))}
+                    </select>
+                    {fieldErrors.unit && !form.hasUom ? (
+                      <p className="pc-field-error">{fieldErrors.unit}</p>
+                    ) : null}
+                  </div>
+                  <button
+                    type="button"
+                    className="pc-unit-gear-btn"
+                    onClick={openUnitManager}
+                    title="จัดการหน่วยนับ"
+                    aria-label="จัดการหน่วยนับ"
+                  >
+                    <i className="ti ti-settings" aria-hidden="true" />
+                  </button>
+                </div>
+
+                <BaseRetailPriceInput
+                  inputRef={priceRef}
+                  value={form.simplePrices[RETAIL_PRICE_KEY] ?? 0}
+                  error={fieldErrors.price}
+                  onClearError={() => setFieldErrors((prev) => ({ ...prev, price: undefined }))}
+                  onChange={setMainPrice}
+                />
+
+                <TierPriceManageButton
+                  customCount={countCustomTierPrices(form.tierPrices)}
+                  onClick={openMainTierDialog}
+                />
 
                 <div className="pc-tog-row">
                   <span className="pc-tog-lbl">แสดงในหน้า POS</span>
@@ -473,13 +802,22 @@ export default function ProductDrawer({
                   <Toggle
                     checked={form.hasUom}
                     onChange={(v) => {
-                      set('hasUom', v);
-                      if (v && form.uomRows.length <= 1) {
-                        setForm((f) => ({
-                          ...f,
-                          hasUom: true,
-                          uomRows: [
-                            ...f.uomRows,
+                      setForm((f) => {
+                        let uomRows = f.uomRows.map((r) =>
+                          r.isBase
+                            ? {
+                                ...r,
+                                unit: f.baseUnit,
+                                prices: {
+                                  ...r.prices,
+                                  [RETAIL_PRICE_KEY]: f.simplePrices[RETAIL_PRICE_KEY] ?? 0,
+                                },
+                              }
+                            : r,
+                        );
+                        if (v && uomRows.length <= 1) {
+                          uomRows = [
+                            ...uomRows,
                             {
                               id: `uom-${Date.now()}`,
                               unit: defaultSubUnit,
@@ -490,126 +828,60 @@ export default function ProductDrawer({
                               expanded: true,
                               isBase: false,
                             },
-                          ],
-                        }));
-                      }
+                          ];
+                        }
+                        return { ...f, hasUom: v, uomRows };
+                      });
                     }}
                   />
                 </div>
 
                 {!form.hasUom ? (
-                  <>
-                    <div className="pc-base-unit-row">
-                      <div className="pc-field">
-                        <label>หน่วยนับ (Base Unit)</label>
-                        <select value={form.baseUnit} onChange={(e) => setBaseUnit(e.target.value)}>
-                          {unitOptions.map((u) => (
-                            <option key={u} value={u}>
-                              {u}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <button
-                        type="button"
-                        className="pc-unit-gear-btn"
-                        onClick={() => setUnitMgrOpen(true)}
-                        title="จัดการหน่วยนับ"
-                        aria-label="จัดการหน่วยนับ"
-                      >
-                        <i className="ti ti-settings" aria-hidden="true" />
-                      </button>
-                    </div>
-
-                    <div className="pc-sec-label">ราคาขาย</div>
-                    <BaseRetailPriceInput
-                      value={form.simplePrices[RETAIL_PRICE_KEY] ?? 0}
-                      onChange={(val) =>
-                        setForm((f) => ({
-                          ...f,
-                          simplePrices: { ...f.simplePrices, [RETAIL_PRICE_KEY]: val },
-                        }))
-                      }
-                    />
-
-                    <TierPriceManageButton
-                      customCount={countCustomTierPrices(form.tierPrices)}
-                      onClick={() =>
-                        openTierDialog({
-                          title: form.name.trim() || form.baseUnit,
-                          basePrice: form.simplePrices[RETAIL_PRICE_KEY] ?? 0,
-                          initialTierPrices: form.tierPrices,
-                          onSave: (next) => setForm((f) => ({ ...f, tierPrices: next })),
-                        })
-                      }
-                    />
-                  </>
+                  <div className="pc-drawer-hint">
+                    สินค้ามาตรฐานกรอกข้อมูลในแท็บ &quot;ข้อมูลสินค้า&quot; ได้ครบแล้ว — เปิดใช้หลายหน่วยนับด้านบนหากต้องการหน่วยย่อยและราคาเพิ่มเติม
+                  </div>
                 ) : (
                   <>
-                    <div className="pc-base-unit-row">
-                      <div className="pc-field">
-                        <label>หน่วยฐาน (Base Unit)</label>
-                        <select value={form.baseUnit} onChange={(e) => setBaseUnit(e.target.value)}>
-                          {unitOptions.map((u) => (
-                            <option key={u} value={u}>
-                              {u}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <button
-                        type="button"
-                        className="pc-unit-gear-btn"
-                        onClick={() => setUnitMgrOpen(true)}
-                        title="จัดการหน่วยนับ"
-                        aria-label="จัดการหน่วยนับ"
-                      >
-                        <i className="ti ti-settings" aria-hidden="true" />
-                      </button>
-                    </div>
-
                     <div className="pc-drawer-hint">
-                      สต็อกเก็บเป็น <strong>{form.baseUnit}</strong> เสมอ — กำหนดราคาและบาร์โค้ดแยกตามหน่วยด้านล่าง
+                      หน่วยหลักและราคาขายหลักตั้งในแท็บ &quot;ข้อมูลสินค้า&quot; — กำหนดหน่วยย่อยและราคาเพิ่มเติมด้านล่าง
                     </div>
 
                     <div className="pc-uom-card-list">
-                      {form.uomRows.map((row) => (
-                        <UomPricingCard
-                          key={row.id}
-                          row={row}
-                          baseUnit={form.baseUnit}
-                          unitSelectOptions={buildUnitSelectOptions(units, row.unit)}
-                          customTierCount={countCustomTierPrices(
-                            row.isBase ? form.tierPrices : row.tierPrices,
-                          )}
-                          onUpdate={(patch) => {
-                            updateUomRow(row.id, patch);
-                            if (row.isBase && patch.barcode != null) {
-                              set('barcode', patch.barcode);
+                      {form.uomRows
+                        .filter((row) => !row.isBase)
+                        .map((row) => (
+                          <UomPricingCard
+                            key={row.id}
+                            row={row}
+                            baseUnit={form.baseUnit}
+                            unitSelectOptions={buildUnitSelectOptions(units, row.unit)}
+                            customTierCount={countCustomTierPrices(row.tierPrices)}
+                            onUpdate={(patch) => {
+                              updateUomRow(row.id, patch);
+                              if (fieldErrors.unit) {
+                                setFieldErrors((prev) => ({ ...prev, unit: undefined }));
+                              }
+                            }}
+                            onManageTierPrices={() =>
+                              openTierDialog({
+                                title: `${form.name.trim() || 'สินค้า'} — ${row.unit}`,
+                                basePrice: row.prices[RETAIL_PRICE_KEY] ?? 0,
+                                initialTierPrices: row.tierPrices,
+                                onSave: (next) => updateUomRow(row.id, { tierPrices: next }),
+                              })
                             }
-                          }}
-                          onManageTierPrices={() =>
-                            openTierDialog({
-                              title: `${form.name.trim() || 'สินค้า'} — ${row.unit}`,
-                              basePrice: row.prices[RETAIL_PRICE_KEY] ?? 0,
-                              initialTierPrices: row.isBase ? form.tierPrices : row.tierPrices,
-                              onSave: (next) => {
-                                if (row.isBase) {
-                                  setForm((f) => ({ ...f, tierPrices: next }));
-                                } else {
-                                  updateUomRow(row.id, { tierPrices: next });
-                                }
-                              },
-                            })
-                          }
-                          onRemove={row.isBase ? undefined : () => removeUomRow(row.id)}
-                        />
-                      ))}
+                            onRemove={() => removeUomRow(row.id)}
+                          />
+                        ))}
                     </div>
 
                     <button type="button" className="pc-add-uom-card-btn" onClick={addUomRow}>
-                      <i className="ti ti-plus" aria-hidden="true" /> เพิ่มหน่วยนับ
+                      <i className="ti ti-plus" aria-hidden="true" /> เพิ่มหน่วยย่อย
                     </button>
+
+                    {fieldErrors.unit && form.hasUom ? (
+                      <p className="pc-field-error">{fieldErrors.unit}</p>
+                    ) : null}
                   </>
                 )}
               </>
@@ -752,7 +1024,7 @@ export default function ProductDrawer({
               <button
                 type="button"
                 className="pc-df-btn pc-df-save"
-                disabled={saving || !form.name.trim() || !form.category.trim()}
+                disabled={saving}
                 onClick={handleSaveClick}
               >
                 {saving ? 'กำลังบันทึก...' : 'บันทึก'}
@@ -791,9 +1063,12 @@ export default function ProductDrawer({
       />
 
       {product ? (
-        <FifoLotDialog
+        <FifoQueueModal
           open={fifoOpen}
-          product={product}
+          stack
+          productName={product.name}
+          productId={product.id}
+          branchId={branchId}
           fetchLots={fetchLots}
           onClose={() => setFifoOpen(false)}
         />

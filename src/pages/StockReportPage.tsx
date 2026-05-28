@@ -9,7 +9,10 @@ import {
 } from 'chart.js';
 import { useMemo, useState } from 'react';
 import { Bar, Doughnut } from 'react-chartjs-2';
+import FifoQueueModal from '../components/inventory/FifoQueueModal';
+import ProductImageThumb from '../components/products/ProductImageThumb';
 import { getBranchLabel } from '../lib/branches';
+import { formatFifoLotDate, formatFifoLotExpiry } from '../lib/inventory/fifoQueueUtils';
 import { downloadCsv } from '../lib/stockReport/exportCsv';
 import {
   applyCogsRange,
@@ -30,7 +33,6 @@ import {
   type StockStatus,
   type StockTab,
 } from '../lib/stockReport/types';
-import type { StockLot } from '../lib/types';
 import { useAuth } from '../lib/hooks/useAuth';
 import './StockReportPage.css';
 
@@ -182,96 +184,6 @@ function SortableTh({
       {label}
       <i className={`ti ${icon} sr-sort-icon`} aria-hidden="true" />
     </th>
-  );
-}
-
-function formatLotDate(ts: StockLot['receivedAt']): string {
-  return tsToDate(ts).toLocaleDateString('th-TH', {
-    day: '2-digit',
-    month: '2-digit',
-    year: '2-digit',
-  });
-}
-
-function FifoModal({
-  product,
-  onClose,
-}: {
-  product: StockReportProduct | null;
-  onClose: () => void;
-}) {
-  if (!product) return null;
-  const lots = product.lots.filter((l) => l.qtyRemaining > 0);
-  const totalRemain = lots.reduce((s, l) => s + l.qtyRemaining, 0);
-
-  return (
-    <div className="sr-modal-overlay" role="dialog" aria-modal="true" onClick={onClose}>
-      <div className="sr-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="sr-modal-header">
-          <span className="sr-modal-title">FIFO Queue: {product.name}</span>
-          <button type="button" className="sr-icon-btn" onClick={onClose} aria-label="ปิด">
-            <i className="ti ti-x" aria-hidden="true" />
-          </button>
-        </div>
-        <div className="sr-modal-body">
-          {lots.length === 0 ? (
-            <p style={{ color: 'var(--text-muted)' }}>ไม่มีข้อมูล Lot</p>
-          ) : (
-            <>
-              <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 4 }}>
-                คงเหลือรวม <b>{fmtNum(totalRemain)}</b> หน่วย จาก <b>{lots.length}</b> Lot
-              </p>
-              {lots.map((lot, i) => (
-                <div key={lot.id} className={`sr-lot-modal-item${i === 0 ? ' next' : ''}`}>
-                  <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      marginBottom: 6,
-                      alignItems: 'center',
-                    }}
-                  >
-                    <span style={{ fontWeight: 500, fontSize: 13 }}>{lot.receivingId || lot.id}</span>
-                    {i === 0 && <span className="sr-next-label">ตัดออกก่อน</span>}
-                  </div>
-                  <div
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: '1fr 1fr 1fr',
-                      gap: '6px 12px',
-                      fontSize: 12,
-                    }}
-                  >
-                    <div>
-                      <span style={{ color: 'var(--text-muted)' }}>รับเข้า</span>
-                      <br />
-                      <b>{formatLotDate(lot.receivedAt)}</b>
-                    </div>
-                    <div>
-                      <span style={{ color: 'var(--text-muted)' }}>คงเหลือ</span>
-                      <br />
-                      <b>
-                        {fmtNum(lot.qtyRemaining)}/{fmtNum(lot.qtyReceived)}
-                      </b>
-                    </div>
-                    <div>
-                      <span style={{ color: 'var(--text-muted)' }}>ต้นทุน</span>
-                      <br />
-                      <b style={{ color: 'var(--p600)' }}>{fmtBaht(lot.costPerUnit)}</b>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </>
-          )}
-        </div>
-        <div className="sr-modal-footer">
-          <button type="button" className="sr-btn sr-btn-ghost sr-btn-sm" onClick={onClose}>
-            ปิด
-          </button>
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -758,9 +670,7 @@ export default function StockReportPage() {
                         <tr key={p.id}>
                           <td>
                             <div className="sr-prod-cell">
-                              <div className="sr-prod-icon" style={{ background: p.iconBg }}>
-                                {p.emoji}
-                              </div>
+                              <ProductImageThumb imageUrl={p.imageUrl} alt={p.name} />
                               <div style={{ fontWeight: 500 }}>{p.name}</div>
                             </div>
                           </td>
@@ -897,9 +807,7 @@ export default function StockReportPage() {
                           <td className="sr-col-sku">{p.sku}</td>
                           <td>
                             <div className="sr-prod-cell">
-                              <div className="sr-prod-icon" style={{ background: p.iconBg }}>
-                                {p.emoji}
-                              </div>
+                              <ProductImageThumb imageUrl={p.imageUrl} alt={p.name} />
                               <div style={{ fontWeight: 500 }}>{p.name}</div>
                             </div>
                           </td>
@@ -1077,17 +985,15 @@ export default function StockReportPage() {
                         <div className="sr-lot-detail-grid">
                           <div className="sr-lot-kv">
                             <label>วันรับเข้า</label>
-                            <span>{formatLotDate(lot.receivedAt)}</span>
+                            <span>{formatFifoLotDate(lot.receivedAt)}</span>
                           </div>
                           <div className="sr-lot-kv">
                             <label>ต้นทุน/หน่วย</label>
                             <span style={{ color: 'var(--p600)' }}>{fmtBaht(lot.costPerUnit)}</span>
                           </div>
                           <div className="sr-lot-kv">
-                            <label>หมดอายุ</label>
-                            <span>
-                              {lot.expiryDate ? formatLotDate(lot.expiryDate) : '—'}
-                            </span>
+                            <label>วันหมดอายุ</label>
+                            <span>{formatFifoLotExpiry(lot.expiryDate)}</span>
                           </div>
                           <div className="sr-lot-kv">
                             <label>รับเข้าทั้งหมด</label>
@@ -1313,7 +1219,12 @@ export default function StockReportPage() {
         </button>
       </footer>
 
-      <FifoModal product={fifoModalProduct} onClose={() => setFifoModalProduct(null)} />
+      <FifoQueueModal
+        open={fifoModalProduct !== null}
+        productName={fifoModalProduct?.name ?? ''}
+        lots={fifoModalProduct?.lots}
+        onClose={() => setFifoModalProduct(null)}
+      />
       {toast && <div className="sr-toast">{toast}</div>}
     </div>
   );

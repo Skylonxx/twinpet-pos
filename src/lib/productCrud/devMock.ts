@@ -120,6 +120,25 @@ function initDev() {
     });
   }
 
+  for (const r of RAW) {
+    const hasLot = devLots.some((l) => l.productId === r.id && l.qtyRemaining > 0);
+    if (!hasLot && r.stock > 0) {
+      devLots.push({
+        id: `lot-${r.id}-init`,
+        productId: r.id,
+        branchId: 'LDP-001',
+        receivingId: 'GRN-INIT',
+        costPerUnit: r.avgCost,
+        qtyReceived: r.stock,
+        qtyRemaining: r.stock,
+        receivedAt: ts(new Date('2026-05-01')),
+        expiryDate: null,
+        isDepleted: false,
+        createdAt: ts(new Date('2026-05-01')),
+      });
+    }
+  }
+
   devMovements = [
     { id: 'mv-1', productId: '1', branchId: 'LDP-001', type: 'sale', qty: -1, costPerUnit: 1820, refId: 'TW-0588', refType: 'order', note: '', createdBy: 'staff', createdAt: ts(new Date('2026-05-23T15:30:00')) },
     { id: 'mv-2', productId: '1', branchId: 'LDP-001', type: 'receive', qty: 20, costPerUnit: 1800, refId: 'GRN-0038', refType: 'receiving', note: '', createdBy: 'staff', createdAt: ts(new Date('2026-05-22T10:15:00')) },
@@ -161,7 +180,12 @@ export function devSaveProduct(product: Product, stock?: ProductStock) {
   const idx = devProducts.findIndex((p) => p.id === product.id);
   if (idx >= 0) devProducts[idx] = { ...product, updatedAt: ts() };
   else devProducts.push({ ...product, createdAt: ts(), updatedAt: ts(), deletedAt: null });
-  if (stock) devStocks[product.id] = stock;
+  if (stock) {
+    devStocks[product.id] = {
+      ...stock,
+      totalStockBase: stock.totalStockBase ?? 0,
+    };
+  }
 }
 
 export function devSoftDeleteProduct(id: string) {

@@ -11,6 +11,7 @@ export type StockReportProduct = {
   category: string;
   emoji: string;
   iconBg: string;
+  imageUrl: string | null;
   qty: number;
   reorderPoint: number;
   avgCost: number;
@@ -132,6 +133,7 @@ export function buildProductRows(
       category: p.category,
       emoji: visual.emoji,
       iconBg: visual.iconBg,
+      imageUrl: p.imageUrl ?? null,
       qty,
       reorderPoint,
       avgCost,
