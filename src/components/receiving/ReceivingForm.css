@@ -1,0 +1,53 @@
+@import '../../pages/ReceivingPage.css';
+
+.rcv-form-root {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.rcv-form-root--drawer {
+  height: 100%;
+  background: var(--g50, #f8f8fc);
+  font-family: 'Sarabun', 'Prompt', sans-serif;
+  color: var(--p900, #26215c);
+  font-size: 14px;
+}
+
+.rcv-form-root--drawer .rcv-scroll-content {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.rcv-form-root--drawer .rcv-footer {
+  position: sticky;
+  bottom: 0;
+}
+
+.rcv-form-root--drawer .rcv-card {
+  margin-left: 0;
+  margin-right: 0;
+}
+
+.rcv-form-root--drawer .rcv-footer-summary {
+  flex-wrap: wrap;
+}
+
+.rcv-form-root--drawer .rcv-fsec {
+  min-height: 64px;
+  padding: 8px 12px;
+}
+
+@media (max-width: 900px) {
+  .rcv-summary-main {
+    flex-direction: column;
+  }
+
+  .rcv-summary-block {
+    border-left: none;
+    border-top: 0.5px solid var(--g200);
+  }
+}

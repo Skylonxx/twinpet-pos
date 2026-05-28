@@ -13,6 +13,7 @@ type Raw = {
   barcode: string;
   cat: string;
   price: number;
+  cost?: number;
   avgCost: number;
   stock: number;
   minStock: number;
@@ -56,6 +57,7 @@ function rawToProduct(r: Raw): Product {
     baseUnit: 'ชิ้น',
     uomConversions: (r.uom ?? []).map((u) => ({ unit: u.unit, factor: u.factor })),
     prices,
+    cost: r.cost ?? r.avgCost,
     avgCost: r.avgCost,
     reorderPoint: r.minStock,
     isActive: r.active,

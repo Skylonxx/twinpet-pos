@@ -33,7 +33,9 @@ function NavLinks({
             ? location.pathname.startsWith('/settings')
             : item.path === '/inventory'
               ? location.pathname.startsWith('/inventory')
-              : location.pathname === item.path;
+              : item.path === '/receiving' || item.path === '/receiving/history'
+                ? location.pathname.startsWith('/receiving')
+                : location.pathname === item.path;
 
         return (
           <NavLink
@@ -65,7 +67,8 @@ export default function AppShell() {
       (n) =>
         n.path === location.pathname ||
         (n.path === '/settings' && location.pathname.startsWith('/settings')) ||
-        (n.path === '/inventory' && location.pathname.startsWith('/inventory')),
+        (n.path === '/inventory' && location.pathname.startsWith('/inventory')) ||
+        (n.path === '/receiving/history' && location.pathname.startsWith('/receiving')),
     )?.label ?? 'TwinPet POS';
 
   return (

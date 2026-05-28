@@ -121,13 +121,18 @@ export type Product = SoftDelete & {
   prices: ProductPrice[];
   /** Per-tier base-unit prices — key is tier id (e.g. retail, wholesale, agent1) */
   tierPrices?: Record<string, number>;
-  avgCost: number; // display only
+  /** Manual standard/base cost — editable in product form; not updated by GRNs */
+  cost: number;
+  /** Moving average from GRN receipts — system calculated */
+  avgCost: number;
   reorderPoint: number; // global (per-branch lives in ProductStock)
   isActive: boolean;
   /** สินค้าคิด VAT — ค่าเริ่มต้น true เมื่อไม่ระบุ */
   hasVat?: boolean;
   /** อนุญาตขายเมื่อสต็อกหมด (overselling) — ต่อสินค้า */
   allowNegativeStock?: boolean;
+  /** นโยบายแจ้งเตือนวันหมดอายุ — ใช้ค่าเริ่มต้นเมื่อไม่ระบุ */
+  expiryPolicyId?: string | null;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 };

@@ -12,6 +12,8 @@ import POSPage from './pages/POSPage';
 import ProductCRUDPage from './pages/ProductCRUDPage';
 import ProfitReportPage from './pages/ProfitReportPage';
 import ReceivingPage from './pages/ReceivingPage';
+import ReceivingHistoryPage from './pages/ReceivingHistoryPage';
+import ReceivingEditPage from './pages/ReceivingEditPage';
 import SalesHistoryPage from './pages/SalesHistoryPage';
 import ReceivablesPage from './pages/ReceivablesPage';
 import SettingsLayout from './layouts/SettingsLayout';
@@ -34,6 +36,8 @@ export default function App() {
           <Route path="/pos" element={<POSPage />} />
           <Route path="/products" element={<ProductCRUDPage />} />
           <Route path="/receiving" element={<ReceivingPage />} />
+          <Route path="/receiving/history/edit/:id" element={<ReceivingEditPage />} />
+          <Route path="/receiving/history" element={<ReceivingHistoryPage />} />
           <Route path="/inventory" element={<InventoryPage />} />
           <Route path="/inventory/adjust" element={<InventoryAdjustmentPage />} />
           <Route path="/inventory/transfer" element={<BranchTransferPage />} />

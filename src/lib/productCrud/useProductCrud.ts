@@ -86,7 +86,15 @@ export function useProductCrud(branchId: string | null) {
 
       const snap = await getDocs(collection(db, collections.products));
       const raw = snap.docs
-        .map((d) => ({ ...(d.data() as Product), id: d.id }))
+        .map((d) => {
+          const data = d.data() as Product;
+          return {
+            ...data,
+            id: d.id,
+            cost: data.cost ?? 0,
+            avgCost: data.avgCost ?? 0,
+          };
+        })
         .filter((p) => !p.deletedAt);
 
       const list = await Promise.all(
@@ -136,7 +144,7 @@ export function useProductCrud(branchId: string | null) {
           devSaveProduct(
             {
               ...payload,
-              avgCost: existing?.avgCost ?? form.initialCost,
+              avgCost: existing?.avgCost ?? 0,
               deletedAt: null,
               createdAt: existing?.createdAt ?? tsNow(),
               updatedAt: tsNow(),
@@ -163,7 +171,7 @@ export function useProductCrud(branchId: string | null) {
 
         const rawProductDoc = {
           ...payload,
-          avgCost: existingProduct?.avgCost ?? form.initialCost,
+          avgCost: existingProduct?.avgCost ?? 0,
           deletedAt: null,
           updatedAt: serverTimestamp(),
           ...(existingSnap?.exists() ? {} : { createdAt: serverTimestamp() }),

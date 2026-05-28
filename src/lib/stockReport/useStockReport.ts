@@ -11,6 +11,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { collections, db, isFirebaseConfigured } from '../firebase';
 import type { Product, ProductStock, StockLot, StockMovement } from '../types';
+import { normalizeStockLot } from '../inventory/stockLotQueries';
 import { getDevStockReportData } from './devMock';
 import {
   buildProductRows,
@@ -48,6 +49,7 @@ export function useStockReport(branchId: string | null) {
         ...m,
         productName: p?.name ?? m.productId,
         productSku: p?.sku ?? '',
+        imageUrl: p?.imageUrl ?? null,
         emoji: p?.emoji ?? '📦',
         iconBg: p?.iconBg ?? '#EEEDFE',
         displayType: movementDisplayType(m.type),
@@ -102,6 +104,7 @@ export function useStockReport(branchId: string | null) {
           ...m,
           productName: p?.name ?? productMap.get(m.productId)?.name ?? m.productId,
           productSku: p?.sku ?? productMap.get(m.productId)?.sku ?? '',
+          imageUrl: p?.imageUrl ?? productMap.get(m.productId)?.imageUrl ?? null,
           emoji: p?.emoji ?? visual.emoji,
           iconBg: p?.iconBg ?? visual.iconBg,
           displayType: movementDisplayType(m.type),
@@ -153,12 +156,44 @@ export function useStockReport(branchId: string | null) {
       (snap) => {
         lotsByProduct = new Map();
         snap.forEach((d) => {
-          const lot = { ...(d.data() as StockLot), id: d.id };
-          const list = lotsByProduct.get(lot.productId) ?? [];
-          list.push(lot);
-          lotsByProduct.set(lot.productId, list);
+          try {
+            const lot = normalizeStockLot(d.id, d.data() as Record<string, unknown>);
+            if (lot.qtyRemaining <= 0) return;
+            const list = lotsByProduct.get(lot.productId) ?? [];
+            list.push(lot);
+            lotsByProduct.set(lot.productId, list);
+          } catch (err) {
+            console.warn('[useStockReport] skip invalid lot doc', d.id, err);
+          }
         });
         void rebuild();
+      },
+      async (err) => {
+        console.error('[useStockReport] lots indexed query failed, using fallback:', err);
+        try {
+          const fallback = await getDocs(
+            query(
+              collection(db!, collections.stockLots),
+              where('branchId', '==', branchId),
+              where('isDepleted', '==', false),
+            ),
+          );
+          lotsByProduct = new Map();
+          fallback.forEach((d) => {
+            try {
+              const lot = normalizeStockLot(d.id, d.data() as Record<string, unknown>);
+              if (lot.qtyRemaining <= 0) return;
+              const list = lotsByProduct.get(lot.productId) ?? [];
+              list.push(lot);
+              lotsByProduct.set(lot.productId, list);
+            } catch (lotErr) {
+              console.warn('[useStockReport] skip invalid lot doc', d.id, lotErr);
+            }
+          });
+          void rebuild();
+        } catch (fallbackErr) {
+          console.error('[useStockReport] lots fallback query failed:', fallbackErr);
+        }
       },
     );
 

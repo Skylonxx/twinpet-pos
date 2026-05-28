@@ -17,6 +17,7 @@ import {
   type ProductUomFormRow,
 } from '../../lib/productCrud/types';
 import { buildUnitSelectOptions, useUnitList } from '../../lib/settings/useUnitList';
+import { useExpiryPolicies } from '../../lib/inventory/useExpiryPolicies';
 import { resizeProductImageToDataUrl } from '../../lib/productCrud/resizeProductImage';
 import type { StockLot, StockMovement } from '../../lib/types';
 import FifoQueueModal from '../inventory/FifoQueueModal';
@@ -272,6 +273,7 @@ export default function ProductDrawer({
   loadMovements,
 }: Props) {
   const { units, saving: unitsSaving, saveUnits } = useUnitList();
+  const { policies: expiryPolicies, defaultPolicy } = useExpiryPolicies();
   const { categories: productCategories } = useCategories();
 
   const [tab, setTab] = useState<DrawerTab>('info');
@@ -462,11 +464,8 @@ export default function ProductDrawer({
   }, [form.baseUnit, form.name, form.simplePrices, form.tierPrices, openTierDialog]);
 
   const runValidation = useCallback(() => {
-    return validateProductForm(form, {
-      mode,
-      editAvgCost: product?.avgCost,
-    });
-  }, [form, mode, product?.avgCost]);
+    return validateProductForm(form);
+  }, [form]);
 
   const handleSaveClick = () => {
     const errors = runValidation();
@@ -679,47 +678,38 @@ export default function ProductDrawer({
                   </div>
                 </div>
 
-                <div className="pc-sec-label">ต้นทุน (FIFO)</div>
-                {mode === 'new' ? (
-                  <>
-                    <div className="pc-field">
-                      <label>
-                        ต้นทุนเริ่มต้น lot แรก (ต่อชิ้น) <span className="req">*</span>
-                      </label>
-                      <input
-                        ref={costRef}
-                        type="number"
-                        value={form.initialCost || ''}
-                        placeholder="0.00"
-                        onChange={(e) => {
-                          set('initialCost', Number(e.target.value));
-                          if (fieldErrors.cost) {
-                            setFieldErrors((prev) => ({ ...prev, cost: undefined }));
-                          }
-                        }}
-                        aria-invalid={Boolean(fieldErrors.cost)}
-                      />
-                      {fieldErrors.cost ? (
-                        <p className="pc-field-error">{fieldErrors.cost}</p>
-                      ) : null}
-                    </div>
-                    <div className="pc-drawer-hint">ระบบจะสร้าง FIFO batch แรกให้อัตโนมัติ</div>
-                  </>
-                ) : product ? (
-                  <div className="pc-cost-display">
-                    <div className="pc-cost-left">
-                      <div className="pc-cost-lbl">ต้นทุนเฉลี่ยถ่วงน้ำหนัก (Avg Cost)</div>
-                      <div className="pc-cost-val-row">
-                        <span className="pc-cost-avg">฿{fmtBaht(product.avgCost)}</span>
-                        <span className="pc-cost-unit">/ {form.baseUnit}</span>
-                      </div>
-                      {fieldErrors.cost ? (
-                        <p className="pc-field-error">{fieldErrors.cost}</p>
-                      ) : null}
-                      <div className="pc-cost-fifo-note">
-                        lot ถัดไป (FIFO): <span>฿{fmtBaht(nextCost)}/{form.baseUnit}</span>
-                        {activeLots > 0 ? ` · ${product.stock} ${form.baseUnit} คงเหลือ` : ''}
-                      </div>
+                <div className="pc-sec-label">ต้นทุน</div>
+                <div className="pc-field">
+                  <label>
+                    ต้นทุน (ต่อ{form.baseUnit}) <span className="req">*</span>
+                  </label>
+                  <input
+                    ref={costRef}
+                    type="number"
+                    value={form.cost || ''}
+                    placeholder="0.00"
+                    onChange={(e) => {
+                      set('cost', Number(e.target.value));
+                      if (fieldErrors.cost) {
+                        setFieldErrors((prev) => ({ ...prev, cost: undefined }));
+                      }
+                    }}
+                    aria-invalid={Boolean(fieldErrors.cost)}
+                  />
+                  {fieldErrors.cost ? (
+                    <p className="pc-field-error">{fieldErrors.cost}</p>
+                  ) : null}
+                  {mode === 'edit' && product ? (
+                    <p className="pc-cost-avg-hint">
+                      ทุนเฉลี่ยปัจจุบัน: ฿{fmtBaht(product.avgCost)}
+                    </p>
+                  ) : null}
+                </div>
+                {mode === 'edit' && product ? (
+                  <div className="pc-cost-fifo-row">
+                    <div className="pc-cost-fifo-note">
+                      lot ถัดไป (FIFO): <span>฿{fmtBaht(nextCost)}/{form.baseUnit}</span>
+                      {activeLots > 0 ? ` · ${product.stock} ${form.baseUnit} คงเหลือ` : ''}
                     </div>
                     <button
                       type="button"
@@ -916,6 +906,29 @@ export default function ProductDrawer({
               </div>
                 </>
               ) : null}
+
+              <div className="pc-field">
+                <label>นโยบายวันหมดอายุ</label>
+                <select
+                  value={form.expiryPolicyId}
+                  onChange={(e) => set('expiryPolicyId', e.target.value)}
+                >
+                  <option value="">
+                    ใช้ค่าเริ่มต้น ({defaultPolicy?.name ?? 'มาตรฐาน'})
+                  </option>
+                  {expiryPolicies.map((pol) => (
+                    <option key={pol.id} value={pol.id}>
+                      {pol.name}
+                      {pol.isDefault ? ' (ค่าเริ่มต้น)' : ''}
+                      {' — เฝ้าระวัง '}
+                      {pol.warningDays} วัน / วิกฤต {pol.criticalDays} วัน
+                    </option>
+                  ))}
+                </select>
+                <span className="pc-tog-desc" style={{ display: 'block', marginTop: 4 }}>
+                  ใช้คำนวณสถานะ Lot ใน FIFO Queue ของสต็อกรายงาน
+                </span>
+              </div>
 
               <div className="pc-tog-row">
                 <div className="pc-tog-lbl-col">

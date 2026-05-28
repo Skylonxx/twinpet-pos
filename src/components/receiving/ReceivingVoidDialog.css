@@ -1,0 +1,118 @@
+.rcv-void-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(38, 33, 92, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.rcv-void-modal {
+  width: min(420px, 100%);
+  background: #fff;
+  border-radius: 14px;
+  padding: 24px 22px 20px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.18);
+}
+
+.rcv-void-modal-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #fcebeb;
+  color: #e24b4a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  margin: 0 auto 12px;
+}
+
+.rcv-void-modal-title {
+  text-align: center;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--p900, #26215c);
+  margin-bottom: 6px;
+}
+
+.rcv-void-modal-sub {
+  text-align: center;
+  font-size: 12px;
+  color: var(--g600, #5f5e5a);
+  line-height: 1.5;
+  margin-bottom: 16px;
+}
+
+.rcv-void-field {
+  margin-bottom: 12px;
+}
+
+.rcv-void-field label {
+  display: block;
+  font-size: 11px;
+  color: var(--g600, #5f5e5a);
+  margin-bottom: 4px;
+}
+
+.rcv-void-req {
+  color: #e24b4a;
+}
+
+.rcv-void-field select,
+.rcv-void-field textarea {
+  width: 100%;
+  border: 0.5px solid var(--g200, #d3d1c7);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--p900, #26215c);
+  outline: none;
+}
+
+.rcv-void-field select:focus,
+.rcv-void-field textarea:focus {
+  border-color: var(--p400, #7f77dd);
+}
+
+.rcv-void-field textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
+.rcv-void-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.rcv-void-cancel,
+.rcv-void-confirm {
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.rcv-void-cancel {
+  border: 0.5px solid var(--g200, #d3d1c7);
+  background: #fff;
+  color: var(--g600, #5f5e5a);
+}
+
+.rcv-void-confirm {
+  border: none;
+  background: #e24b4a;
+  color: #fff;
+  font-weight: 500;
+}
+
+.rcv-void-confirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

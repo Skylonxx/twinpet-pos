@@ -1,5 +1,7 @@
 import {
   collection,
+  doc,
+  getDoc,
   getDocs,
   onSnapshot,
   orderBy,
@@ -8,7 +10,7 @@ import {
 } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { collections, db, isFirebaseConfigured } from '../firebase';
-import type { Order, OrderItem } from '../types';
+import type { Order, OrderItem, Product } from '../types';
 import { getDevProfitLines } from './devMock';
 import { orderToProfitLines } from './devMock';
 import type { ProfitSaleLine } from './types';
@@ -19,6 +21,20 @@ async function fetchOrderItems(orderId: string): Promise<OrderItem[]> {
     collection(db, collections.orders, orderId, collections.orderItems),
   );
   return snap.docs.map((d) => ({ ...(d.data() as OrderItem), id: d.id }));
+}
+
+async function fetchProductImageMap(productIds: string[]): Promise<Map<string, string | null>> {
+  const map = new Map<string, string | null>();
+  const firestore = db;
+  if (!firestore || productIds.length === 0) return map;
+  await Promise.all(
+    productIds.map(async (id) => {
+      const snap = await getDoc(doc(firestore, collections.products, id));
+      if (!snap.exists()) return;
+      map.set(id, (snap.data() as Product).imageUrl ?? null);
+    }),
+  );
+  return map;
 }
 
 export function useProfitReport(branchId: string | null) {
@@ -61,8 +77,15 @@ export function useProfitReport(branchId: string | null) {
               return orderToProfitLines(order, items);
             }),
           );
+          const flat = itemSets.flat();
+          const imageMap = await fetchProductImageMap([...new Set(flat.map((l) => l.productId))]);
           if (cancelled) return;
-          setLines(itemSets.flat());
+          setLines(
+            flat.map((line) => ({
+              ...line,
+              imageUrl: imageMap.get(line.productId) ?? null,
+            })),
+          );
           setLoading(false);
         } catch (err) {
           if (!cancelled) {

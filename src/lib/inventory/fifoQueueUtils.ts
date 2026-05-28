@@ -8,16 +8,32 @@ export function stockLotTimestampToDate(value: unknown): Date | null {
     'toDate' in value &&
     typeof (value as { toDate: unknown }).toDate === 'function'
   ) {
-    return (value as { toDate: () => Date }).toDate();
+    try {
+      const d = (value as { toDate: () => Date }).toDate();
+      return d && Number.isFinite(d.getTime()) ? d : null;
+    } catch {
+      return null;
+    }
   }
   if (
     typeof value === 'object' &&
     'seconds' in value &&
     typeof (value as { seconds: unknown }).seconds === 'number'
   ) {
-    return new Date((value as { seconds: number }).seconds * 1000);
+    const d = new Date((value as { seconds: number }).seconds * 1000);
+    return Number.isFinite(d.getTime()) ? d : null;
   }
-  if (value instanceof Date) return value;
+  if (value instanceof Date) {
+    return Number.isFinite(value.getTime()) ? value : null;
+  }
+  if (typeof value === 'string' && value.trim()) {
+    const d = new Date(value.trim());
+    return Number.isFinite(d.getTime()) ? d : null;
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const d = new Date(value);
+    return Number.isFinite(d.getTime()) ? d : null;
+  }
   return null;
 }
 

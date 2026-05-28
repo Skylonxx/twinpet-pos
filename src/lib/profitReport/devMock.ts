@@ -11,18 +11,18 @@ export const DEV_CATEGORIES = [
 ];
 
 const PRODUCTS: ProfitProduct[] = [
-  { id: '1', name: 'Royal Canin Adult 3kg', sku: 'RC-A3', category: 'อาหารสุนัข', emoji: '🐕', iconBg: '#EEEDFE' },
-  { id: '2', name: 'Hills Science Diet Cat', sku: 'HS-C1', category: 'อาหารแมว', emoji: '🐈', iconBg: '#E1F5EE' },
-  { id: '3', name: 'Whiskas Tuna 85g (24pc)', sku: 'WK-T24', category: 'อาหารแมว', emoji: '🐟', iconBg: '#E1F5EE' },
-  { id: '4', name: 'Purina Pro Plan Puppy', sku: 'PP-PUP', category: 'อาหารสุนัข', emoji: '🐶', iconBg: '#EEEDFE' },
-  { id: '5', name: 'Pedigree Dentastix', sku: 'PD-DX', category: 'อาหารสุนัข', emoji: '🦴', iconBg: '#EEEDFE' },
-  { id: '6', name: 'Cat Scratcher Deluxe', sku: 'CS-DX', category: 'ของเล่น', emoji: '🧸', iconBg: '#FAEEDA' },
-  { id: '7', name: 'Frontline Plus Dog L', sku: 'FL-DL', category: 'ยาและวิตามิน', emoji: '💊', iconBg: '#FCEBEB' },
-  { id: '8', name: 'Catit Water Fountain', sku: 'CW-F1', category: 'อุปกรณ์', emoji: '💧', iconBg: '#E6F1FB' },
-  { id: '9', name: 'Petsafe Clicker', sku: 'PC-CL', category: 'ของเล่น', emoji: '🔔', iconBg: '#FAEEDA' },
-  { id: '10', name: 'Tidy Cats Clumping 8kg', sku: 'TC-C8', category: 'ทรายแมว', emoji: '🪣', iconBg: '#F1EFE8' },
-  { id: '11', name: 'NexGard Chewable M', sku: 'NG-M', category: 'ยาและวิตามิน', emoji: '💊', iconBg: '#FCEBEB' },
-  { id: '12', name: 'Rolf Club 3D Collar Cat', sku: 'RC-CC', category: 'อุปกรณ์', emoji: '🎀', iconBg: '#FBEAF0' },
+  { id: '1', name: 'Royal Canin Adult 3kg', sku: 'RC-A3', category: 'อาหารสุนัข', emoji: '🐕', iconBg: '#EEEDFE', imageUrl: null },
+  { id: '2', name: 'Hills Science Diet Cat', sku: 'HS-C1', category: 'อาหารแมว', emoji: '🐈', iconBg: '#E1F5EE', imageUrl: null },
+  { id: '3', name: 'Whiskas Tuna 85g (24pc)', sku: 'WK-T24', category: 'อาหารแมว', emoji: '🐟', iconBg: '#E1F5EE', imageUrl: null },
+  { id: '4', name: 'Purina Pro Plan Puppy', sku: 'PP-PUP', category: 'อาหารสุนัข', emoji: '🐶', iconBg: '#EEEDFE', imageUrl: null },
+  { id: '5', name: 'Pedigree Dentastix', sku: 'PD-DX', category: 'อาหารสุนัข', emoji: '🦴', iconBg: '#EEEDFE', imageUrl: null },
+  { id: '6', name: 'Cat Scratcher Deluxe', sku: 'CS-DX', category: 'ของเล่น', emoji: '🧸', iconBg: '#FAEEDA', imageUrl: null },
+  { id: '7', name: 'Frontline Plus Dog L', sku: 'FL-DL', category: 'ยาและวิตามิน', emoji: '💊', iconBg: '#FCEBEB', imageUrl: null },
+  { id: '8', name: 'Catit Water Fountain', sku: 'CW-F1', category: 'อุปกรณ์', emoji: '💧', iconBg: '#E6F1FB', imageUrl: null },
+  { id: '9', name: 'Petsafe Clicker', sku: 'PC-CL', category: 'ของเล่น', emoji: '🔔', iconBg: '#FAEEDA', imageUrl: null },
+  { id: '10', name: 'Tidy Cats Clumping 8kg', sku: 'TC-C8', category: 'ทรายแมว', emoji: '🪣', iconBg: '#F1EFE8', imageUrl: null },
+  { id: '11', name: 'NexGard Chewable M', sku: 'NG-M', category: 'ยาและวิตามิน', emoji: '💊', iconBg: '#FCEBEB', imageUrl: null },
+  { id: '12', name: 'Rolf Club 3D Collar Cat', sku: 'RC-CC', category: 'อุปกรณ์', emoji: '🎀', iconBg: '#FBEAF0', imageUrl: null },
 ];
 
 type RawSale = {
@@ -94,6 +94,7 @@ function toLine(raw: RawSale, idx: number): ProfitSaleLine {
     category: prod.category,
     emoji: prod.emoji,
     iconBg: prod.iconBg,
+    imageUrl: prod.imageUrl ?? null,
     qty: raw.qty,
     salePrice: raw.salePrice,
     revenue,
@@ -156,6 +157,7 @@ export function orderToProfitLines(
       category: item.productSnap.category || 'อื่นๆ',
       emoji: visual.emoji,
       iconBg: visual.iconBg,
+      imageUrl: null,
       qty: item.qty,
       salePrice: item.unitPrice,
       revenue,

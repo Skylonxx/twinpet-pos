@@ -27,6 +27,91 @@ import { voidOrderSafe } from '../lib/voidOrder';
 import type { PaymentMethod } from '../lib/types';
 import './SalesHistoryPage.css';
 
+const PAGE_SIZE = 15;
+
+function buildPaginationItems(current: number, total: number): (number | 'ellipsis')[] {
+  if (total <= 1) return [1];
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+
+  const items: (number | 'ellipsis')[] = [1];
+  let left = Math.max(2, current - 1);
+  let right = Math.min(total - 1, current + 1);
+
+  if (current <= 3) {
+    left = 2;
+    right = 4;
+  } else if (current >= total - 2) {
+    left = total - 3;
+    right = total - 1;
+  }
+
+  if (left > 2) items.push('ellipsis');
+  for (let i = left; i <= right; i++) items.push(i);
+  if (right < total - 1) items.push('ellipsis');
+  items.push(total);
+  return items;
+}
+
+function PaginationBar({
+  total,
+  page,
+  onPage,
+}: {
+  total: number;
+  page: number;
+  onPage: (n: number) => void;
+}) {
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const safePage = Math.min(page, pages);
+  const start = total === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
+  const end = Math.min(safePage * PAGE_SIZE, total);
+  const pageItems = buildPaginationItems(safePage, pages);
+
+  return (
+    <div className="sh-bottom-bar">
+      <span className="sh-bottom-info">
+        {total === 0 ? 'ไม่มีรายการ' : `แสดง ${start}–${end} จาก ${total} รายการ`}
+      </span>
+      <div className="sh-pagination">
+        <button
+          type="button"
+          className="sh-pg"
+          disabled={safePage <= 1}
+          onClick={() => onPage(safePage - 1)}
+          aria-label="หน้าก่อน"
+        >
+          <i className="ti ti-chevron-left" style={{ fontSize: 11 }} aria-hidden="true" />
+        </button>
+        {pageItems.map((item, idx) =>
+          item === 'ellipsis' ? (
+            <span key={`ellipsis-${idx}`} className="sh-pg sh-pg-ellipsis" aria-hidden="true">
+              …
+            </span>
+          ) : (
+            <button
+              key={item}
+              type="button"
+              className={`sh-pg${safePage === item ? ' sh-on' : ''}`}
+              onClick={() => onPage(item)}
+            >
+              {item}
+            </button>
+          ),
+        )}
+        <button
+          type="button"
+          className="sh-pg"
+          disabled={safePage >= pages}
+          onClick={() => onPage(safePage + 1)}
+          aria-label="หน้าถัดไป"
+        >
+          <i className="ti ti-chevron-right" style={{ fontSize: 11 }} aria-hidden="true" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 const DEFAULT_DATE_PRESET: DatePreset = '30d';
 const initialDateRange = getDateRange(DEFAULT_DATE_PRESET, '', '');
 
@@ -167,8 +252,10 @@ export default function SalesHistoryPage() {
   const [voidOpen, setVoidOpen] = useState(false);
   const [voidProcessing, setVoidProcessing] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [tablePage, setTablePage] = useState(1);
 
   const dateDdRef = useRef<HTMLDivElement>(null);
+  const tableCardRef = useRef<HTMLDivElement>(null);
 
   const branchDisplay = branchId ? getBranchLabel(branchId) : '—';
 
@@ -190,6 +277,15 @@ export default function SalesHistoryPage() {
 
   const filtered = useMemo(() => filterSales(records, filters), [records, filters]);
   const summary = useMemo(() => computeSummary(filtered), [filtered]);
+  const pageRows = useMemo(
+    () => filtered.slice((tablePage - 1) * PAGE_SIZE, tablePage * PAGE_SIZE),
+    [filtered, tablePage],
+  );
+
+  const handleTablePageChange = useCallback((nextPage: number) => {
+    setTablePage(nextPage);
+    tableCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
 
   const selected = useMemo(
     () => filtered.find((r) => r.order.id === selectedId) ?? null,
@@ -252,6 +348,15 @@ export default function SalesHistoryPage() {
   );
 
   useEffect(() => {
+    setTablePage(1);
+  }, [search, statusFilter, paymentFilter, datePreset, dateFrom, dateTo]);
+
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    if (tablePage > maxPage) setTablePage(maxPage);
+  }, [filtered.length, tablePage]);
+
+  useEffect(() => {
     const onDocClick = (e: MouseEvent) => {
       if (dateDdRef.current && !dateDdRef.current.contains(e.target as Node)) {
         setDateMenuOpen(false);
@@ -267,6 +372,24 @@ export default function SalesHistoryPage() {
     }
   }, [selected]);
 
+  useEffect(() => {
+    if (!selectedId) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !voidOpen) closeDrawer();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [selectedId, voidOpen, closeDrawer]);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [selectedId]);
+
   const dateLabel =
     datePreset === 'custom'
       ? `${dateFrom} – ${dateTo}`
@@ -280,261 +403,276 @@ export default function SalesHistoryPage() {
   return (
     <div className="sh-page">
       <header className="sh-topbar">
-        <span className="sh-page-title">ประวัติการขาย</span>
+        <div className="sh-topbar-icon">
+          <i className="ti ti-receipt" aria-hidden="true" />
+        </div>
+        <div className="sh-topbar-center">
+          <div className="sh-topbar-title">ประวัติการขาย</div>
+          <div className="sh-topbar-sub">Sales History</div>
+        </div>
+        <span className="sh-branch-badge">
+          <i className="ti ti-map-pin" style={{ fontSize: 12 }} aria-hidden="true" />
+          สาขา: {branchDisplay}
+        </span>
         <button
           type="button"
-          className="sh-icon-btn"
+          className="sh-btn sh-btn-ghost sh-btn-sm"
           title="รีเฟรช"
           onClick={() => refresh()}
         >
-          <i className="ti ti-refresh" aria-hidden="true" />
+          <i className="ti ti-refresh" aria-hidden="true" /> Refresh
         </button>
-        <button type="button" className="sh-export-btn">
-          <i className="ti ti-download" style={{ fontSize: 14 }} aria-hidden="true" /> Export
+        <button type="button" className="sh-btn sh-btn-ghost sh-btn-sm">
+          <i className="ti ti-download" aria-hidden="true" /> Export
         </button>
       </header>
 
-      {error ? (
-        <div className="sh-error-banner" role="alert">
-          <i className="ti ti-alert-circle" aria-hidden="true" />
-          <div>
-            <strong>โหลดประวัติการขายไม่สำเร็จ</strong>
-            <div style={{ fontSize: 12, marginTop: 4 }}>{error.message}</div>
-            <div style={{ fontSize: 11, marginTop: 4, opacity: 0.85 }}>
-              ตรวจสอบ Console (F12) สำหรับรายละเอียด — อาจต้องสร้าง Firestore Index
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      <div className="sh-summary-strip">
-        <div className="sh-sum-card">
-          <span className="sh-sum-lbl">ยอดขายรวม</span>
-          <span className="sh-sum-val" style={{ color: 'var(--p600, #534ab7)' }}>
-            ฿{fmtShort(summary.totalAmt)}
-          </span>
-          <span className="sh-sum-sub">{summary.billCount} บิล</span>
-        </div>
-        <div className="sh-sum-card">
-          <span className="sh-sum-lbl">บิลสำเร็จ</span>
-          <span className="sh-sum-val" style={{ color: '#1d9e75' }}>
-            {summary.paidCount}
-          </span>
-          <span className="sh-sum-sub">฿{fmtShort(summary.paidAmt)}</span>
-        </div>
-        <div className="sh-sum-card">
-          <span className="sh-sum-lbl">บิลเงินเชื่อ</span>
-          <span className="sh-sum-val" style={{ color: '#ba7517' }}>
-            {summary.creditCount}
-          </span>
-          <span className="sh-sum-sub">฿{fmtShort(summary.creditAmt)}</span>
-        </div>
-        <div className="sh-sum-card">
-          <span className="sh-sum-lbl">บิลยกเลิก</span>
-          <span className="sh-sum-val" style={{ color: '#e24b4a' }}>
-            {summary.voidCount}
-          </span>
-          <span className="sh-sum-sub">{summary.voidCount} บิล</span>
-        </div>
-        <div className="sh-sum-card">
-          <span className="sh-sum-lbl">เงินสด</span>
-          <span className="sh-sum-val" style={{ color: 'var(--p900, #26215c)' }}>
-            ฿{fmtShort(summary.cashAmt)}
-          </span>
-          <span className="sh-sum-sub">ช่องทางหลัก</span>
-        </div>
-      </div>
-
-      <div className="sh-filter-bar">
-        <div className="sh-search-wrap">
-          <i className="ti ti-search" aria-hidden="true" />
-          <input
-            placeholder="ค้นหาเลขที่บิล, ชื่อลูกค้า, เบอร์โทร..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-
-        <div className="sh-date-dd" ref={dateDdRef}>
-          <button
-            type="button"
-            className="sh-date-dd-btn"
-            onClick={(e) => {
-              e.stopPropagation();
-              setDateMenuOpen((v) => !v);
-            }}
-          >
-            <i className="ti ti-calendar" aria-hidden="true" />
-            <span>{dateLabel}</span>
-            <i className="ti ti-chevron-down" style={{ fontSize: 10 }} aria-hidden="true" />
-          </button>
-          {dateMenuOpen && (
-            <div className="sh-date-dd-menu">
-              {(
-                [
-                  ['today', 'วันนี้'],
-                  ['yesterday', 'เมื่อวาน'],
-                  ['7d', '7 วันล่าสุด'],
-                  ['30d', '30 วันล่าสุด'],
-                  ['month', 'เดือนนี้'],
-                ] as const
-              ).map(([key, label]) => (
-                <button
-                  key={key}
-                  type="button"
-                  className={`sh-date-menu-item${datePreset === key ? ' on' : ''}`}
-                  onClick={() => {
-                    setDatePreset(key);
-                    setDateMenuOpen(false);
-                  }}
-                >
-                  {label}
-                </button>
-              ))}
-              <div className="sh-date-custom-label">กำหนดเอง</div>
-              <div className="sh-date-custom">
-                <input
-                  type="date"
-                  value={dateFrom}
-                  onChange={(e) => {
-                    setDateFrom(e.target.value);
-                    setDatePreset('custom');
-                  }}
-                />
-                <input
-                  type="date"
-                  value={dateTo}
-                  onChange={(e) => {
-                    setDateTo(e.target.value);
-                    setDatePreset('custom');
-                  }}
-                />
+      <div className="sh-content">
+        {error ? (
+          <div className="sh-error-banner" role="alert">
+            <i className="ti ti-alert-circle" aria-hidden="true" />
+            <div>
+              <strong>โหลดประวัติการขายไม่สำเร็จ</strong>
+              <div style={{ fontSize: 12, marginTop: 4 }}>{error.message}</div>
+              <div style={{ fontSize: 11, marginTop: 4, opacity: 0.85 }}>
+                ตรวจสอบ Console (F12) สำหรับรายละเอียด — อาจต้องสร้าง Firestore Index
               </div>
             </div>
-          )}
+          </div>
+        ) : null}
+
+        <div className="sh-metrics-grid">
+          <div className="sh-metric-card">
+            <span className="sh-metric-label">ยอดขายรวม</span>
+            <span className="sh-metric-num" style={{ color: 'var(--p600, #534ab7)' }}>
+              ฿{fmtShort(summary.totalAmt)}
+            </span>
+            <span className="sh-metric-sub">{summary.billCount} บิล</span>
+          </div>
+          <div className="sh-metric-card">
+            <span className="sh-metric-label">บิลสำเร็จ</span>
+            <span className="sh-metric-num" style={{ color: '#0f6e56' }}>
+              {summary.paidCount}
+            </span>
+            <span className="sh-metric-sub">฿{fmtShort(summary.paidAmt)}</span>
+          </div>
+          <div className="sh-metric-card">
+            <span className="sh-metric-label">บิลเงินเชื่อ</span>
+            <span className="sh-metric-num" style={{ color: '#854f0b' }}>
+              {summary.creditCount}
+            </span>
+            <span className="sh-metric-sub">฿{fmtShort(summary.creditAmt)}</span>
+          </div>
+          <div className="sh-metric-card">
+            <span className="sh-metric-label">บิลยกเลิก</span>
+            <span className="sh-metric-num" style={{ color: '#a32d2d' }}>
+              {summary.voidCount}
+            </span>
+            <span className="sh-metric-sub">{summary.voidCount} บิล</span>
+          </div>
+          <div className="sh-metric-card">
+            <span className="sh-metric-label">เงินสด</span>
+            <span className="sh-metric-num">฿{fmtShort(summary.cashAmt)}</span>
+            <span className="sh-metric-sub">ช่องทางหลัก</span>
+          </div>
         </div>
 
-        <select
-          className="sh-pay-filter"
-          value={paymentFilter}
-          onChange={(e) => setPaymentFilter(e.target.value as PaymentMethod | 'all')}
-        >
-          {PAYMENT_FILTER_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
+        <div className="sh-toolbar">
+          <div className="sh-search-wrap">
+            <i className="ti ti-search" aria-hidden="true" />
+            <input
+              placeholder="ค้นหาเลขที่บิล, ชื่อลูกค้า, เบอร์โทร..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
 
-        <div className="sh-status-filter">
-          {(
-            [
-              ['all', 'sh-sf-all', 'ทั้งหมด'],
-              ['paid', 'sh-sf-paid', '✓ สำเร็จ'],
-              ['credit', 'sh-sf-credit', '⏳ เงินเชื่อ'],
-              ['void', 'sh-sf-void', '✕ ยกเลิก'],
-            ] as const
-          ).map(([value, cls, label]) => (
+          <div className="sh-date-dd" ref={dateDdRef}>
             <button
-              key={value}
               type="button"
-              className={`sh-sf ${cls}${statusFilter === value ? ' on' : ''}`}
-              onClick={() => setStatusFilter(value)}
+              className="sh-date-dd-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                setDateMenuOpen((v) => !v);
+              }}
             >
-              {label}
+              <i className="ti ti-calendar" aria-hidden="true" />
+              <span>{dateLabel}</span>
+              <i className="ti ti-chevron-down" style={{ fontSize: 10 }} aria-hidden="true" />
             </button>
-          ))}
+            {dateMenuOpen && (
+              <div className="sh-date-dd-menu">
+                {(
+                  [
+                    ['today', 'วันนี้'],
+                    ['yesterday', 'เมื่อวาน'],
+                    ['7d', '7 วันล่าสุด'],
+                    ['30d', '30 วันล่าสุด'],
+                    ['month', 'เดือนนี้'],
+                  ] as const
+                ).map(([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    className={`sh-date-menu-item${datePreset === key ? ' on' : ''}`}
+                    onClick={() => {
+                      setDatePreset(key);
+                      setDateMenuOpen(false);
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+                <div className="sh-date-custom-label">กำหนดเอง</div>
+                <div className="sh-date-custom">
+                  <input
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => {
+                      setDateFrom(e.target.value);
+                      setDatePreset('custom');
+                    }}
+                  />
+                  <input
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => {
+                      setDateTo(e.target.value);
+                      setDatePreset('custom');
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          <select
+            className="sh-sel"
+            value={paymentFilter}
+            onChange={(e) => setPaymentFilter(e.target.value as PaymentMethod | 'all')}
+          >
+            {PAYMENT_FILTER_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+
+          <div className="sh-stock-filter">
+            {(
+              [
+                ['all', 'ทั้งหมด'],
+                ['paid', 'สำเร็จ'],
+                ['credit', 'เงินเชื่อ'],
+                ['void', 'ยกเลิก'],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                className={`sh-sf${statusFilter === value ? ' sh-on' : ''}`}
+                onClick={() => setStatusFilter(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="sh-body-row">
+          <div className="sh-card" ref={tableCardRef}>
+            <div className="sh-card-head">
+              <i className="ti ti-list" aria-hidden="true" />
+              <span>รายการขาย</span>
+              <span className="sh-card-count">
+                {loading ? '…' : `${filtered.length} รายการ`}
+              </span>
+            </div>
+            <div className="sh-table-scroll">
+              {loading ? (
+                <div className="sh-loading">กำลังโหลดประวัติการขาย...</div>
+              ) : (
+                <table className="sh-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: 70 }}>เวลา</th>
+                      <th style={{ width: 120 }}>เลขที่บิล</th>
+                      <th>ลูกค้า</th>
+                      <th style={{ width: 110 }}>ช่องทางชำระ</th>
+                      <th style={{ width: 100 }}>พนักงาน</th>
+                      <th className="num" style={{ width: 100 }}>
+                        ยอดสุทธิ
+                      </th>
+                      <th style={{ width: 90, textAlign: 'center' }}>สถานะ</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.length === 0 ? (
+                      <tr className="sh-empty-row">
+                        <td colSpan={7}>ไม่พบรายการขายในช่วงเวลาที่เลือก</td>
+                      </tr>
+                    ) : (
+                      pageRows.map((record) => {
+                        const { order } = record;
+                        const created = orderCreatedAt(order);
+                        const status = saleDisplayStatus(order);
+                        const isVoid = status === 'void';
+                        return (
+                          <tr
+                            key={order.id}
+                            className={selectedId === order.id ? 'selected' : undefined}
+                            onClick={() => void openDrawer(record)}
+                          >
+                            <td className="sh-col-time">{formatSaleTime(created)}</td>
+                            <td>
+                              <span className="sh-bill-no">{order.billId || order.id}</span>
+                            </td>
+                            <td>
+                              {order.customerSnap ? (
+                                <div className="sh-cust-cell">
+                                  <div className="sh-cust-name-td">{order.customerSnap.name}</div>
+                                  <div className="sh-cust-phone">{order.customerSnap.phone}</div>
+                                </div>
+                              ) : (
+                                <span className="sh-guest">— Guest —</span>
+                              )}
+                            </td>
+                            <td>
+                              <PayChip record={record} />
+                            </td>
+                            <td>
+                              <span className="sh-staff-name">{order.staffName}</span>
+                            </td>
+                            <td className="num">
+                              <span className={`sh-total-amt${isVoid ? ' void' : ''}`}>
+                                ฿{formatMoney(order.total)}
+                              </span>
+                            </td>
+                            <td style={{ textAlign: 'center' }}>
+                              <StatusBadge status={status} />
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              )}
+            </div>
+            <PaginationBar total={filtered.length} page={tablePage} onPage={handleTablePageChange} />
+          </div>
         </div>
       </div>
 
-      <div className="sh-body-row">
-        <div className="sh-table-area">
-          <div className="sh-table-wrap">
-            {loading ? (
-              <div className="sh-loading">กำลังโหลดประวัติการขาย...</div>
-            ) : (
-              <table className="sh-table">
-                <thead>
-                  <tr>
-                    <th style={{ width: 70 }}>เวลา</th>
-                    <th style={{ width: 120 }}>เลขที่บิล</th>
-                    <th>ลูกค้า</th>
-                    <th style={{ width: 110 }}>ช่องทางชำระ</th>
-                    <th style={{ width: 100 }}>พนักงาน</th>
-                    <th className="r" style={{ width: 100 }}>
-                      ยอดสุทธิ
-                    </th>
-                    <th style={{ width: 90, textAlign: 'center' }}>สถานะ</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.length === 0 ? (
-                    <tr className="sh-empty-row">
-                      <td colSpan={7}>ไม่พบรายการขายในช่วงเวลาที่เลือก</td>
-                    </tr>
-                  ) : (
-                    filtered.map((record) => {
-                      const { order } = record;
-                      const created = orderCreatedAt(order);
-                      const status = saleDisplayStatus(order);
-                      const isVoid = status === 'void';
-                      return (
-                        <tr
-                          key={order.id}
-                          className={selectedId === order.id ? 'selected' : undefined}
-                          onClick={() => void openDrawer(record)}
-                        >
-                          <td style={{ color: 'var(--g400)', fontSize: 11 }}>
-                            {formatSaleTime(created)}
-                          </td>
-                          <td>
-                            <span className="sh-bill-no">{order.billId || order.id}</span>
-                          </td>
-                          <td>
-                            {order.customerSnap ? (
-                              <div className="sh-cust-cell">
-                                <div className="sh-cust-name-td">{order.customerSnap.name}</div>
-                                <div className="sh-cust-phone">{order.customerSnap.phone}</div>
-                              </div>
-                            ) : (
-                              <span className="sh-guest">— Guest —</span>
-                            )}
-                          </td>
-                          <td>
-                            <PayChip record={record} />
-                          </td>
-                          <td>
-                            <span className="sh-staff-name">{order.staffName}</span>
-                          </td>
-                          <td className="r">
-                            <span className={`sh-total-amt${isVoid ? ' void' : ''}`}>
-                              ฿{formatMoney(order.total)}
-                            </span>
-                          </td>
-                          <td style={{ textAlign: 'center' }}>
-                            <StatusBadge status={status} />
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            )}
-          </div>
-          <div className="sh-bottom-bar">
-            <span className="sh-bottom-info">
-              แสดง {filtered.length} รายการ
-              {!loading && records.length !== filtered.length
-                ? ` (จากทั้งหมด ${records.length} บิล)`
-                : ''}
-            </span>
-          </div>
-        </div>
-
-        <aside className={`sh-drawer${selected ? ' open' : ''}`}>
-          {selected && (
-            <>
+      {selected ? (
+        <div className="sh-drawer-root">
+          <button
+            type="button"
+            className="sh-drawer-backdrop"
+            aria-label="ปิดรายละเอียดบิล"
+            onClick={closeDrawer}
+          />
+          <aside className="sh-drawer open" role="dialog" aria-modal="true" aria-label="รายละเอียดบิล">
               <div className="sh-drawer-top">
                 <div className="sh-drawer-top-left">
                   <span className="sh-drawer-bill-no">{selected.order.billId || selected.order.id}</span>
@@ -772,10 +910,9 @@ export default function SalesHistoryPage() {
                   </>
                 )}
               </footer>
-            </>
-          )}
-        </aside>
-      </div>
+          </aside>
+        </div>
+      ) : null}
 
       <VoidModal
         open={voidOpen}

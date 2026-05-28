@@ -98,7 +98,8 @@ export async function confirmReceiving(input: ConfirmReceivingInput): Promise<st
   }
 
   const firestore = db;
-  const receivingId = generateGrnId();
+  const receivingId = input.receivingId ?? generateGrnId();
+  const isFinalizingDraft = Boolean(input.receivingId);
 
   const uniqueProductIds = [...new Set(input.lines.map((l) => l.productId))];
 
@@ -110,12 +111,34 @@ export async function confirmReceiving(input: ConfirmReceivingInput): Promise<st
     );
   }
 
+  let draftItemRefs: ReturnType<typeof doc>[] = [];
+  if (isFinalizingDraft) {
+    const preReceivingRef = doc(firestore, collections.receivings, receivingId);
+    const preItemsCol = collection(preReceivingRef, collections.receivingItems);
+    const oldItemsSnap = await getDocs(preItemsCol);
+    draftItemRefs = oldItemsSnap.docs.map((d) => d.ref);
+  }
+
   await runTransaction(firestore, async (tx) => {
     const now = serverTimestamp();
     const receivingRef = doc(firestore, collections.receivings, receivingId);
     const itemsCol = collection(receivingRef, collections.receivingItems);
 
-    // ── Phase 1: READS ONLY ──────────────────────────────────────────────
+    // ── Phase 1: ALL READS ───────────────────────────────────────────────
+    if (isFinalizingDraft) {
+      const existingSnap = await tx.get(receivingRef);
+      if (!existingSnap.exists()) {
+        throw new Error('ไม่พบเอกสารรับเข้า');
+      }
+      const existing = existingSnap.data() as Receiving;
+      if (existing.branchId !== input.branchId) {
+        throw new Error('เอกสารนี้ไม่ใช่ของสาขาปัจจุบัน');
+      }
+      if (existing.status !== 'draft') {
+        throw new Error('เอกสารนี้ไม่ใช่แบบร่าง');
+      }
+    }
+
     const settingsRef = doc(firestore, collections.settings, input.branchId);
     const settingsSnap = await tx.get(settingsRef);
     const allowNegativeStock =
@@ -166,7 +189,7 @@ export async function confirmReceiving(input: ConfirmReceivingInput): Promise<st
       });
     }
 
-    // ── Phase 2: WRITES ONLY (plan in memory, then commit) ───────────────
+    // ── Phase 2: PLAN WRITES (in memory only) ────────────────────────────
     const writePlans: LineWritePlan[] = [];
 
     for (const line of input.lines) {
@@ -239,6 +262,13 @@ export async function confirmReceiving(input: ConfirmReceivingInput): Promise<st
         itemRef: doc(itemsCol),
         newAvgCost,
       });
+    }
+
+    // ── Phase 3: ALL WRITES ──────────────────────────────────────────────
+    if (isFinalizingDraft) {
+      for (const itemRef of draftItemRefs) {
+        tx.delete(itemRef);
+      }
     }
 
     for (const plan of writePlans) {
@@ -342,7 +372,23 @@ export async function confirmReceiving(input: ConfirmReceivingInput): Promise<st
       createdAt: now as never,
       updatedAt: now as never,
     };
-    tx.set(receivingRef, receiving);
+    if (isFinalizingDraft) {
+      tx.update(receivingRef, {
+        supplierId: receiving.supplierId,
+        supplierName: receiving.supplierName,
+        status: 'completed',
+        subtotal: receiving.subtotal,
+        discountAmt: receiving.discountAmt,
+        total: receiving.total,
+        payStatus: receiving.payStatus,
+        paidAmt: receiving.paidAmt,
+        note: receiving.note,
+        receivedAt: now,
+        updatedAt: now,
+      });
+    } else {
+      tx.set(receivingRef, receiving);
+    }
   });
 
   return receivingId;

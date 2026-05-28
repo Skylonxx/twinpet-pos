@@ -129,6 +129,62 @@
   cursor: not-allowed;
 }
 
+.rcv-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.rcv-top-btn-secondary {
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 0.5px solid var(--g200);
+  background: #fff;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--g600);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.rcv-top-btn-secondary:hover {
+  background: var(--g50);
+}
+
+.rcv-top-btn-danger {
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 0.5px solid #f7c1c1;
+  background: #fcebeb;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--red);
+  cursor: pointer;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.rcv-top-btn-danger:hover:not(:disabled) {
+  background: #f9d4d4;
+}
+
+.rcv-top-btn-danger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.rcv-back-btn--action {
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.rcv-back-btn--action:hover {
+  color: var(--p600);
+}
+
 /* ── Scroll ── */
 .rcv-scroll-content {
   flex: 1;
@@ -279,12 +335,37 @@
   font-size: 13px;
 }
 
+.rcv-a-btn--compact {
+  padding: 4px 9px;
+  font-size: 11px;
+  gap: 4px;
+  min-height: 28px;
+}
+
+.rcv-a-btn--compact i {
+  font-size: 11px;
+}
+
+.rcv-table-empty-btn.rcv-a-btn--compact {
+  max-width: 154px;
+}
+
 /* ── Form ── */
 .rcv-form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px 20px;
   padding: 14px;
+}
+
+.rcv-form-grid-dates {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 767px) {
+  .rcv-form-grid-dates {
+    grid-template-columns: 1fr;
+  }
 }
 
 .rcv-form-full {
@@ -923,8 +1004,8 @@
 .summary-line {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  justify-content: flex-start;
+  gap: 8px;
   font-size: 11px;
 }
 
@@ -943,7 +1024,7 @@
   align-items: center;
   gap: 4px;
   flex-wrap: wrap;
-  justify-content: flex-end;
+  justify-content: flex-start;
 }
 
 .summary-disc {
@@ -1052,6 +1133,51 @@
   font-size: 18px;
   font-weight: 600;
   color: var(--p600);
+}
+
+.rcv-summary-panel--page {
+  margin: 0 12px 12px;
+  background: #fff;
+  border: 0.5px solid var(--g200);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.rcv-summary-main {
+  display: flex;
+  align-items: stretch;
+}
+
+.rcv-summary-block {
+  flex: 1 1 200px;
+  padding: 10px 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  border-left: 0.5px solid var(--g200);
+}
+
+.rcv-ti-discount {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rcv-disc-wrap--inline {
+  max-width: none;
+  flex-shrink: 0;
+}
+
+.rcv-footer .rcv-summary-panel {
+  border: none;
+  border-radius: 0;
+  margin: 0;
+  background: transparent;
+}
+
+.rcv-footer .rcv-summary-main {
+  border-bottom: 0.5px solid var(--g200);
 }
 
 /* ── Footer actions ── */

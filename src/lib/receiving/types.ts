@@ -26,6 +26,8 @@ export type ConfirmReceivingInput = {
   note: string;
   finalDiscount: number;
   lines: ReceivingLine[];
+  /** Finalize an existing draft GRN (uses this id instead of generating a new one) */
+  receivingId?: string;
 };
 
 export function productHasVat(product: Pick<Product, 'hasVat'> | null | undefined): boolean {
@@ -74,7 +76,7 @@ export function emptyLineFromProductListItem(product: ProductListItem): Receivin
     unit,
     unitFactor: factor,
     qty: 1,
-    costPerUnit: product.avgCost * factor,
+    costPerUnit: (product.cost ?? product.avgCost ?? 0) * factor,
     itemDiscount: 0,
     hasExpiry: false,
     expiryDate: '',

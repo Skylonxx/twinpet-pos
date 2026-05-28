@@ -83,6 +83,7 @@ export function getDevStockReportData(branchId: string) {
     baseUnit: 'ชิ้น',
     uomConversions: [],
     prices: [],
+    cost: p.avgCost,
     avgCost: p.avgCost,
     reorderPoint: p.reorder,
     isActive: true,

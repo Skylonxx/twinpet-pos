@@ -12,6 +12,7 @@ export type StockReportProduct = {
   emoji: string;
   iconBg: string;
   imageUrl: string | null;
+  expiryPolicyId: string | null;
   qty: number;
   reorderPoint: number;
   avgCost: number;
@@ -25,6 +26,7 @@ export type MovementDisplayType = 'in' | 'out' | 'adj' | 'void';
 export type StockReportMovement = StockMovement & {
   productName: string;
   productSku: string;
+  imageUrl: string | null;
   emoji: string;
   iconBg: string;
   displayType: MovementDisplayType;
@@ -134,6 +136,7 @@ export function buildProductRows(
       emoji: visual.emoji,
       iconBg: visual.iconBg,
       imageUrl: p.imageUrl ?? null,
+      expiryPolicyId: p.expiryPolicyId ?? null,
       qty,
       reorderPoint,
       avgCost,

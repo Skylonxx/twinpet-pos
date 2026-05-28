@@ -1228,6 +1228,20 @@
   transform: translateX(13px);
 }
 
+.pc-cost-avg-hint {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--g500, #6b6a65);
+}
+
+.pc-cost-fifo-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
 /* COST DISPLAY — FIFO style */
 .pc-cost-display {
   background: var(--g50, #f8f8fc);

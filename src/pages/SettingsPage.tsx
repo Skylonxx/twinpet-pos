@@ -12,6 +12,7 @@ import {
 } from '../lib/settings/types';
 import { useSettings } from '../lib/settings/useSettings';
 import type { PosDevice, PosDeviceType, UomUnit } from '../lib/types';
+import ExpiryPolicySettings from './settings/ExpiryPolicySettings';
 import './SettingsPage.css';
 
 function Toggle({
@@ -553,6 +554,8 @@ export default function SettingsPage() {
               </div>
             </>
           ) : null}
+
+          {section === 'expiryPolicy' ? <ExpiryPolicySettings /> : null}
 
           {/* ── ช่องทางชำระเงิน ── */}
           {section === 'payment' ? (

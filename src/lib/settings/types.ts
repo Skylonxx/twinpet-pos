@@ -12,6 +12,7 @@ export type SettingsSection =
   | 'vat'
   | 'pricelevel'
   | 'uom'
+  | 'expiryPolicy'
   | 'payment'
   | 'receipt'
   | 'notification'
@@ -109,6 +110,7 @@ export const NAV_SECTIONS: Array<{
       { id: 'vat', icon: 'ti-receipt-tax', label: 'VAT & ภาษี' },
       { id: 'pricelevel', icon: 'ti-layers-difference', label: 'ระดับราคา' },
       { id: 'uom', icon: 'ti-ruler', label: 'UOM & หน่วยนับ' },
+      { id: 'expiryPolicy', icon: 'ti-calendar-event', label: 'นโยบายวันหมดอายุ' },
     ],
   },
   {

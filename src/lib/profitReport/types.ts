@@ -16,6 +16,7 @@ export type ProfitProduct = {
   category: string;
   emoji: string;
   iconBg: string;
+  imageUrl: string | null;
 };
 
 export type ProfitSaleLine = {
@@ -31,6 +32,7 @@ export type ProfitSaleLine = {
   category: string;
   emoji: string;
   iconBg: string;
+  imageUrl: string | null;
   qty: number;
   salePrice: number;
   revenue: number;
@@ -53,6 +55,7 @@ export type ProfitAggregateRow = {
   category?: string;
   emoji?: string;
   iconBg?: string;
+  imageUrl?: string | null;
   customer?: string;
 };
 
@@ -79,7 +82,7 @@ export const CAT_COLORS = [
   '#D4537E',
 ];
 
-export const PAGE_SIZE = 10;
+export const PAGE_SIZE = 15;
 
 export function fmtNum(n: number): string {
   return parseFloat(String(n || 0)).toLocaleString('th-TH');
@@ -184,6 +187,7 @@ export function aggregateLines(data: ProfitSaleLine[], groupBy: GroupBy): Profit
       category: first.category,
       emoji: first.emoji,
       iconBg: first.iconBg,
+      imageUrl: first.imageUrl ?? null,
       customer: first.customer,
     };
   });

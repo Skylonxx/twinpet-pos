@@ -74,11 +74,14 @@ export type ProductFormData = {
   hasUom: boolean;
   isActive: boolean;
   reorderPoint: number;
-  initialCost: number;
+  /** Manual standard/base cost (maps to Product.cost) */
+  cost: number;
   simplePrices: Record<string, number>;
   /** CRM dynamic tier prices (base unit) — keys match customer.customerType */
   tierPrices: Record<string, number>;
   allowNegativeStock: boolean;
+  /** Expiry alert policy id — empty uses system default */
+  expiryPolicyId: string;
   uomRows: ProductUomFormRow[];
 };
 
@@ -117,7 +120,7 @@ export function sanitizeProductForm(
     categories.find((c) => c.id === categoryId)?.name ?? form.category.trim();
   const sku = form.sku.trim();
   const barcode = form.barcode.trim();
-  const initialCost = Number.isFinite(form.initialCost) ? Math.max(0, form.initialCost) : 0;
+  const cost = Number.isFinite(form.cost) ? Math.max(0, form.cost) : 0;
   const retail = Math.max(0, resolveRetailPrice(form) || 0);
 
   const simplePrices = {
@@ -144,7 +147,7 @@ export function sanitizeProductForm(
     categoryId,
     category,
     baseUnit: form.baseUnit.trim() || 'ชิ้น',
-    initialCost,
+    cost,
     simplePrices,
     uomRows,
     reorderPoint: Number.isFinite(form.reorderPoint) ? Math.max(0, form.reorderPoint) : 0,
@@ -161,10 +164,7 @@ function resolveRetailPrice(form: ProductFormData): number {
   return Number.NaN;
 }
 
-export function validateProductForm(
-  form: ProductFormData,
-  options: { mode: 'new' | 'edit'; editAvgCost?: number },
-): ProductFormFieldErrors {
+export function validateProductForm(form: ProductFormData): ProductFormFieldErrors {
   const errors: ProductFormFieldErrors = {};
 
   if (!form.name.trim()) errors.name = REQUIRED_FIELD_MSG;
@@ -181,10 +181,7 @@ export function validateProductForm(
     errors.price = REQUIRED_FIELD_MSG;
   }
 
-  const cost =
-    options.mode === 'edit' && options.editAvgCost != null
-      ? options.editAvgCost
-      : form.initialCost;
+  const cost = form.cost;
   if (!Number.isFinite(cost) || cost < 0) {
     errors.cost = REQUIRED_FIELD_MSG;
   }
@@ -261,10 +258,11 @@ export function emptyForm(): ProductFormData {
     hasUom: false,
     isActive: true,
     reorderPoint: 10,
-    initialCost: 0,
+    cost: 0,
     simplePrices: { RETAIL: 0 },
     tierPrices: {},
     allowNegativeStock: false,
+    expiryPolicyId: '',
     uomRows: [
       {
         id: 'base',
@@ -329,10 +327,11 @@ export function productToForm(product: Product): ProductFormData {
     hasUom,
     isActive: product.isActive,
     reorderPoint: product.reorderPoint,
-    initialCost: product.avgCost ?? 0,
+    cost: product.cost ?? product.avgCost ?? 0,
     simplePrices,
     tierPrices: { ...(product.tierPrices ?? {}) },
     allowNegativeStock: product.allowNegativeStock ?? false,
+    expiryPolicyId: product.expiryPolicyId ?? '',
     uomRows,
   };
 }
@@ -383,8 +382,13 @@ export function formToProduct(form: ProductFormData, id: string): Omit<Product, 
     prices,
     allowNegativeStock: form.allowNegativeStock,
     reorderPoint: form.reorderPoint,
+    cost: Number.isFinite(form.cost) ? Math.max(0, form.cost) : 0,
     isActive: form.isActive,
   };
+
+  if (form.expiryPolicyId.trim()) {
+    base.expiryPolicyId = form.expiryPolicyId.trim();
+  }
 
   if (productTierPrices) {
     base.tierPrices = productTierPrices;

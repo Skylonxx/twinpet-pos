@@ -121,6 +121,7 @@ export function deriveProducts(lines: ProfitSaleLine[]): Array<{
   category: string;
   emoji: string;
   iconBg: string;
+  imageUrl: string | null;
 }> {
   const map = new Map<string, ProfitSaleLine>();
   for (const line of lines) {
@@ -133,6 +134,7 @@ export function deriveProducts(lines: ProfitSaleLine[]): Array<{
     category: l.category,
     emoji: l.emoji,
     iconBg: l.iconBg,
+    imageUrl: l.imageUrl ?? null,
   }));
 }
 

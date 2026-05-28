@@ -11,8 +11,17 @@ import { useMemo, useState } from 'react';
 import { Bar, Doughnut } from 'react-chartjs-2';
 import FifoQueueModal from '../components/inventory/FifoQueueModal';
 import ProductImageThumb from '../components/products/ProductImageThumb';
+import ProductPickerDialog from '../components/products/ProductPickerDialog';
 import { getBranchLabel } from '../lib/branches';
 import { formatFifoLotDate, formatFifoLotExpiry } from '../lib/inventory/fifoQueueUtils';
+import { EXPIRY_ALERT_LABELS, type ExpiryAlertLevel } from '../lib/inventory/expiryPolicyTypes';
+import {
+  buildFifoTableRows,
+  countSystemActiveLots,
+  fifoHasActiveToolbarFilters,
+  safeLotRemaining,
+} from '../lib/inventory/fifoTableUtils';
+import { useExpiryPolicies } from '../lib/inventory/useExpiryPolicies';
 import { downloadCsv } from '../lib/stockReport/exportCsv';
 import {
   applyCogsRange,
@@ -54,6 +63,32 @@ function StatusBadge({ status }: { status: StockStatus }) {
   } as const;
   const [cls, label] = map[status];
   return <span className={`sr-badge ${cls}`}>{label}</span>;
+}
+
+function ExpiryAlertBadge({
+  level,
+  daysLeft,
+}: {
+  level: ExpiryAlertLevel;
+  daysLeft: number | null;
+}) {
+  const map = {
+    safe: 'sr-expiry-safe',
+    warning: 'sr-expiry-warning',
+    critical: 'sr-expiry-critical',
+  } as const;
+  const detail =
+    daysLeft == null
+      ? null
+      : daysLeft < 0
+        ? `หมดอายุ ${Math.abs(daysLeft)} วัน`
+        : `${daysLeft} วัน`;
+  return (
+    <span className={`sr-expiry-badge ${map[level] ?? map.safe}`}>
+      {EXPIRY_ALERT_LABELS[level] ?? EXPIRY_ALERT_LABELS.safe}
+      {detail ? ` · ${detail}` : ''}
+    </span>
+  );
 }
 
 function stockBarClass(status: StockStatus): string {
@@ -189,6 +224,7 @@ function SortableTh({
 
 export default function StockReportPage() {
   const { branchId } = useAuth();
+  const { policies: expiryPolicies, defaultPolicy } = useExpiryPolicies();
   const { products, movements, categories, loading, lastUpdated, refresh } =
     useStockReport(branchId);
 
@@ -197,7 +233,9 @@ export default function StockReportPage() {
   const [ovTo, setOvTo] = useState(todayIso());
   const [prodSearch, setProdSearch] = useState('');
   const [prodCat, setProdCat] = useState('');
-  const [prodStatus, setProdStatus] = useState('');
+  const [prodStockFilter, setProdStockFilter] = useState<'' | 'low' | 'out'>('');
+  const [prodPickedIds, setProdPickedIds] = useState<Set<string>>(new Set());
+  const [showProdPicker, setShowProdPicker] = useState(false);
   const [productSort, setProductSort] = useState<{ key: StockProductSortKey; direction: SortDirection }>({
     key: 'stockValue',
     direction: 'desc',
@@ -206,11 +244,13 @@ export default function StockReportPage() {
     key: 'qty',
     direction: 'asc',
   });
-  const [fifoProductId, setFifoProductId] = useState('');
+  const [fifoPickedIds, setFifoPickedIds] = useState<Set<string>>(new Set());
+  const [showFifoPicker, setShowFifoPicker] = useState(false);
   const [fifoSearch, setFifoSearch] = useState('');
   const [fifoCat, setFifoCat] = useState('');
-  const [fifoFrom, setFifoFrom] = useState(monthStartIso());
-  const [fifoTo, setFifoTo] = useState(todayIso());
+  const [fifoExpiryFilter, setFifoExpiryFilter] = useState<'' | ExpiryAlertLevel>('');
+  const [fifoFrom, setFifoFrom] = useState('');
+  const [fifoTo, setFifoTo] = useState('');
   const [mvSearch, setMvSearch] = useState('');
   const [mvCat, setMvCat] = useState('');
   const [mvType, setMvType] = useState('');
@@ -273,41 +313,73 @@ export default function StockReportPage() {
     const list = productsWithCogs.filter((p) => {
       const mq = !q || `${p.name}${p.sku}`.toLowerCase().includes(q);
       const mc = !prodCat || p.category === prodCat;
-      const st = stockStatus(p.qty, p.reorderPoint);
-      const ms = !prodStatus || st === prodStatus;
-      return mq && mc && ms;
+      const mp = prodPickedIds.size === 0 || prodPickedIds.has(p.id);
+      const ms =
+        !prodStockFilter ||
+        (prodStockFilter === 'low' && p.qty > 0 && p.qty <= p.reorderPoint) ||
+        (prodStockFilter === 'out' && p.qty === 0);
+      return mq && mc && mp && ms;
     });
     return sortStockProducts(list, productSort.key, productSort.direction);
-  }, [productsWithCogs, prodSearch, prodCat, prodStatus, productSort]);
+  }, [productsWithCogs, prodSearch, prodCat, prodStockFilter, prodPickedIds, productSort]);
 
   const sortedLowStockProducts = useMemo(
     () => sortLowStockProducts(lowStockProducts, lowStockSort.key, lowStockSort.direction),
     [lowStockProducts, lowStockSort],
   );
 
-  const fifoProduct = useMemo(() => {
-    const withLots = productsWithCogs.filter((p) => p.lots.some((l) => l.qtyRemaining > 0));
-    let list = withLots.filter((p) => {
-      const q = fifoSearch.trim().toLowerCase();
-      const mq = !q || `${p.name}${p.sku}`.toLowerCase().includes(q);
-      const mc = !fifoCat || p.category === fifoCat;
-      return mq && mc;
-    });
-    if (fifoProductId) {
-      const picked = list.find((p) => p.id === fifoProductId);
-      if (picked) return picked;
-    }
-    return list[0] ?? null;
-  }, [productsWithCogs, fifoSearch, fifoCat, fifoProductId]);
+  const fifoSystemActiveLotCount = useMemo(
+    () => countSystemActiveLots(productsWithCogs),
+    [productsWithCogs],
+  );
 
-  const fifoLots = useMemo(() => {
-    if (!fifoProduct) return [];
-    return fifoProduct.lots.filter((l) => {
-      if (l.qtyRemaining <= 0) return false;
-      const d = tsToDate(l.receivedAt).toISOString().slice(0, 10);
-      return (!fifoFrom || d >= fifoFrom) && (!fifoTo || d <= fifoTo);
-    });
-  }, [fifoProduct, fifoFrom, fifoTo]);
+  const fifoTableRows = useMemo(
+    () =>
+      buildFifoTableRows({
+        products: productsWithCogs,
+        policies: expiryPolicies,
+        search: fifoSearch,
+        category: fifoCat,
+        pickedProductIds: fifoPickedIds,
+        receivedFrom: fifoFrom,
+        receivedTo: fifoTo,
+        expiryFilter: fifoExpiryFilter,
+      }),
+    [
+      productsWithCogs,
+      expiryPolicies,
+      fifoSearch,
+      fifoCat,
+      fifoPickedIds,
+      fifoFrom,
+      fifoTo,
+      fifoExpiryFilter,
+    ],
+  );
+
+  const fifoToolbarFiltered = useMemo(
+    () =>
+      fifoHasActiveToolbarFilters({
+        search: fifoSearch,
+        category: fifoCat,
+        pickedProductIds: fifoPickedIds,
+        receivedFrom: fifoFrom,
+        receivedTo: fifoTo,
+        expiryFilter: fifoExpiryFilter,
+      }),
+    [fifoSearch, fifoCat, fifoPickedIds, fifoFrom, fifoTo, fifoExpiryFilter],
+  );
+
+  const fifoMetrics = useMemo(() => {
+    const lotCount = fifoTableRows.length;
+    const totalQty = fifoTableRows.reduce((s, r) => s + safeLotRemaining(r.lot), 0);
+    const totalValue = fifoTableRows.reduce(
+      (s, r) => s + safeLotRemaining(r.lot) * (Number(r.lot.costPerUnit) || 0),
+      0,
+    );
+    const criticalCount = fifoTableRows.filter((r) => r.alertLevel === 'critical').length;
+    return { lotCount, totalQty, totalValue, criticalCount };
+  }, [fifoTableRows]);
 
   const filteredMovements = useMemo(() => {
     const q = mvSearch.trim().toLowerCase();
@@ -698,7 +770,7 @@ export default function StockReportPage() {
         <div className={`sr-panel${tab === 'products' ? ' active' : ''}`}>
           <div className="sr-toolbar">
             <select className="sr-sel" value={prodCat} onChange={(e) => setProdCat(e.target.value)}>
-              <option value="">ทั้งหมด</option>
+              <option value="">ทุกหมวด</option>
               {categories.map((c) => (
                 <option key={c} value={c}>
                   {c}
@@ -708,22 +780,37 @@ export default function StockReportPage() {
             <div className="sr-search-wrap">
               <i className="ti ti-search" aria-hidden="true" />
               <input
-                placeholder="ค้นหาสินค้า..."
+                placeholder="ค้นหาชื่อ, SKU, บาร์โค้ด..."
                 value={prodSearch}
                 onChange={(e) => setProdSearch(e.target.value)}
               />
             </div>
-            <select
-              className="sr-sel"
-              value={prodStatus}
-              onChange={(e) => setProdStatus(e.target.value)}
+            <button
+              type="button"
+              className="sr-btn sr-btn-ghost sr-btn-sm"
+              onClick={() => setShowProdPicker(true)}
             >
-              <option value="">ทุกสถานะ</option>
-              <option value="ok">ปกติ</option>
-              <option value="low">ต่ำ</option>
-              <option value="critical">วิกฤต</option>
-              <option value="oos">หมด</option>
-            </select>
+              <i className="ti ti-list-search" aria-hidden="true" /> เลือกสินค้า
+            </button>
+            <div className="sr-stock-filter">
+              {([
+                ['', 'ทั้งหมด'],
+                ['low', 'ใกล้หมด'],
+                ['out', 'หมด'],
+              ] as const).map(([val, lbl]) => (
+                <button
+                  key={val || 'all'}
+                  type="button"
+                  className={`sr-sf${prodStockFilter === val ? ' sr-on' : ''}`}
+                  onClick={() => {
+                    setProdStockFilter(val);
+                    if (!val) setProdPickedIds(new Set());
+                  }}
+                >
+                  {lbl}
+                </button>
+              ))}
+            </div>
             <button type="button" className="sr-btn sr-btn-ghost sr-btn-sm" onClick={exportStockCsv}>
               <i className="ti ti-download" aria-hidden="true" /> Export
             </button>
@@ -861,7 +948,7 @@ export default function StockReportPage() {
         <div className={`sr-panel${tab === 'fifo' ? ' active' : ''}`}>
           <div className="sr-toolbar">
             <select className="sr-sel" value={fifoCat} onChange={(e) => setFifoCat(e.target.value)}>
-              <option value="">ทั้งหมด</option>
+              <option value="">ทุกหมวด</option>
               {categories.map((c) => (
                 <option key={c} value={c}>
                   {c}
@@ -876,33 +963,50 @@ export default function StockReportPage() {
                 onChange={(e) => setFifoSearch(e.target.value)}
               />
             </div>
-            <select
-              className="sr-sel"
-              value={fifoProductId}
-              onChange={(e) => setFifoProductId(e.target.value)}
+            <button
+              type="button"
+              className="sr-btn sr-btn-ghost sr-btn-sm"
+              onClick={() => setShowFifoPicker(true)}
             >
-              <option value="">สินค้าแรกที่มี Lot</option>
-              {productsWithCogs
-                .filter((p) => p.lots.some((l) => l.qtyRemaining > 0))
-                .map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-            </select>
+              <i className="ti ti-list-search" aria-hidden="true" /> เลือกสินค้า
+              {fifoPickedIds.size > 0 ? ` (${fifoPickedIds.size})` : ''}
+            </button>
             <div className="sr-date-range">
               <i className="ti ti-calendar" aria-hidden="true" style={{ fontSize: 14 }} />
               <input type="date" value={fifoFrom} onChange={(e) => setFifoFrom(e.target.value)} />
               <span>—</span>
               <input type="date" value={fifoTo} onChange={(e) => setFifoTo(e.target.value)} />
             </div>
+            <div className="sr-stock-filter">
+              {([
+                ['', 'ทั้งหมด'],
+                ['safe', 'ปลอดภัย'],
+                ['warning', 'เฝ้าระวัง'],
+                ['critical', 'วิกฤต'],
+              ] as const).map(([val, lbl]) => (
+                <button
+                  key={val || 'all'}
+                  type="button"
+                  className={`sr-sf${fifoExpiryFilter === val ? ' sr-on' : ''}`}
+                  onClick={() => setFifoExpiryFilter(val)}
+                >
+                  {lbl}
+                </button>
+              ))}
+            </div>
             <span className="sr-hint">Lot เก่าสุดออกก่อน</span>
           </div>
 
-          {!fifoProduct ? (
-            <div className="sr-empty">เลือกสินค้าเพื่อดู FIFO Lot Queue</div>
-          ) : fifoLots.length === 0 ? (
-            <div className="sr-empty">ไม่มี Lot ในช่วงวันที่เลือก</div>
+          {fifoTableRows.length === 0 ? (
+            <div className="sr-empty">
+              {fifoSystemActiveLotCount > 0
+                ? fifoToolbarFiltered
+                  ? 'ไม่มี Lot ตรงกับตัวกรองที่เลือก'
+                  : 'ไม่สามารถแสดง Lot ได้ — กดรีเฟรชหรือลองอีกครั้ง'
+                : productsWithCogs.some((p) => p.qty > 0)
+                  ? 'มีสต็อกในระบบแต่ยังไม่พบ Lot — รอการซิงค์หรือกดรีเฟรช'
+                  : 'ยังไม่มี Lot คงเหลือในระบบ'}
+            </div>
           ) : (
             <>
               <div className="sr-fifo-metrics">
@@ -912,9 +1016,9 @@ export default function StockReportPage() {
                     Lot ในช่วง
                   </div>
                   <div className="sr-metric-num" style={{ color: 'var(--p600)' }}>
-                    {fifoLots.length}
+                    {fifoMetrics.lotCount}
                   </div>
-                  <div className="sr-metric-sub">จาก {fifoProduct.lots.filter((l) => l.qtyRemaining > 0).length} Lot</div>
+                  <div className="sr-metric-sub">นโยบายเริ่มต้น: {defaultPolicy.name}</div>
                 </div>
                 <div className="sr-metric-card">
                   <div className="sr-metric-label">
@@ -922,120 +1026,106 @@ export default function StockReportPage() {
                     คงเหลือรวม
                   </div>
                   <div className="sr-metric-num" style={{ color: 'var(--success)' }}>
-                    {fmtNum(fifoLots.reduce((s, l) => s + l.qtyRemaining, 0))}
+                    {fmtNum(fifoMetrics.totalQty)}
                   </div>
                   <div className="sr-metric-sub">หน่วย</div>
                 </div>
                 <div className="sr-metric-card">
                   <div className="sr-metric-label">
                     <i className="ti ti-calculator" style={{ color: 'var(--info)' }} aria-hidden="true" />
-                    Weighted Avg Cost
+                    มูลค่ารวม
                   </div>
                   <div className="sr-metric-num" style={{ color: 'var(--info)' }}>
-                    {fmtBaht(
-                      Math.round(
-                        fifoLots.reduce((s, l) => s + l.qtyRemaining * l.costPerUnit, 0) /
-                          Math.max(
-                            1,
-                            fifoLots.reduce((s, l) => s + l.qtyRemaining, 0),
-                          ),
-                      ),
-                    )}
+                    {fmtBaht(Math.round(fifoMetrics.totalValue))}
                   </div>
-                  <div className="sr-metric-sub">ต้นทุนเฉลี่ยถ่วงน้ำหนัก</div>
+                  <div className="sr-metric-sub">จาก Lot ที่แสดง</div>
+                </div>
+                <div className="sr-metric-card">
+                  <div className="sr-metric-label">
+                    <i className="ti ti-alert-triangle" style={{ color: 'var(--danger)' }} aria-hidden="true" />
+                    วิกฤต
+                  </div>
+                  <div className="sr-metric-num" style={{ color: 'var(--danger)' }}>
+                    {fifoMetrics.criticalCount}
+                  </div>
+                  <div className="sr-metric-sub">Lot ใกล้/เลยหมดอายุ</div>
                 </div>
               </div>
-              <div className="sr-fifo-stack">
-                {fifoLots.map((lot, i) => {
-                  const pct = Math.round((lot.qtyRemaining / lot.qtyReceived) * 100);
-                  const pctCls = pct > 60 ? 'full' : pct > 30 ? 'mid' : 'low';
-                  const barClr = pct > 60 ? 'var(--p600)' : pct > 30 ? '#ba7517' : '#a32d2d';
-                  return (
-                    <div key={lot.id} className={`sr-lot-card${i === 0 ? ' next' : ''}`}>
-                      <div>
-                        <div className={`sr-lot-num${i === 0 ? ' next' : ''}`}>{i + 1}</div>
-                        {i === 0 && (
-                          <div
-                            style={{
-                              fontSize: 9,
-                              color: 'var(--p600)',
-                              textAlign: 'center',
-                              marginTop: 3,
-                              fontWeight: 500,
-                            }}
+              <div className="sr-card">
+                <div className="sr-table-scroll">
+                  <table className="sr-table sr-fifo-table">
+                    <thead>
+                      <tr>
+                        <th style={{ width: 44 }}>#</th>
+                        <th>รหัส (SKU)</th>
+                        <th>ชื่อสินค้า</th>
+                        <th>Lot / GRN</th>
+                        <th>วันรับเข้า</th>
+                        <th>วันหมดอายุ</th>
+                        <th>สถานะ</th>
+                        <th className="num">คงเหลือ</th>
+                        <th className="num">ต้นทุน/หน่วย</th>
+                        <th className="num">มูลค่า</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {fifoTableRows.map((row) => {
+                        const { lot, product, fifoIndex, alertLevel, daysLeft } = row;
+                        const remain = safeLotRemaining(lot);
+                        const received = Number(lot.qtyReceived) || remain;
+                        const pct = received > 0 ? Math.round((remain / received) * 100) : 0;
+                        return (
+                          <tr
+                            key={lot.id}
+                            className={fifoIndex === 1 ? 'sr-fifo-next-row' : undefined}
                           >
-                            NEXT
-                          </div>
-                        )}
-                      </div>
-                      <div>
-                        <div
-                          style={{
-                            fontSize: 13,
-                            fontWeight: 500,
-                            marginBottom: 8,
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 8,
-                          }}
-                        >
-                          {lot.receivingId || lot.id}
-                          {i === 0 && <span className="sr-next-label">ตัดออกก่อน</span>}
-                        </div>
-                        <div className="sr-lot-detail-grid">
-                          <div className="sr-lot-kv">
-                            <label>วันรับเข้า</label>
-                            <span>{formatFifoLotDate(lot.receivedAt)}</span>
-                          </div>
-                          <div className="sr-lot-kv">
-                            <label>ต้นทุน/หน่วย</label>
-                            <span style={{ color: 'var(--p600)' }}>{fmtBaht(lot.costPerUnit)}</span>
-                          </div>
-                          <div className="sr-lot-kv">
-                            <label>วันหมดอายุ</label>
-                            <span>{formatFifoLotExpiry(lot.expiryDate)}</span>
-                          </div>
-                          <div className="sr-lot-kv">
-                            <label>รับเข้าทั้งหมด</label>
-                            <span>{fmtNum(lot.qtyReceived)} หน่วย</span>
-                          </div>
-                          <div className="sr-lot-kv">
-                            <label>คงเหลือ</label>
-                            <span>{fmtNum(lot.qtyRemaining)} หน่วย</span>
-                          </div>
-                          <div className="sr-lot-kv">
-                            <label>มูลค่า Lot</label>
-                            <span style={{ color: 'var(--success)' }}>
-                              {fmtBaht(lot.qtyRemaining * lot.costPerUnit)}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="sr-lot-remain-bar">
-                        <span className={`sr-lot-pct ${pctCls}`}>{pct}%</span>
-                        <div
-                          style={{
-                            width: 80,
-                            height: 8,
-                            borderRadius: 4,
-                            background: 'var(--g100)',
-                            overflow: 'hidden',
-                          }}
-                        >
-                          <div
-                            style={{
-                              height: '100%',
-                              width: `${pct}%`,
-                              background: barClr,
-                              borderRadius: 4,
-                            }}
-                          />
-                        </div>
-                        <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>คงเหลือ</span>
-                      </div>
-                    </div>
-                  );
-                })}
+                            <td>
+                              <div className={`sr-lot-num${fifoIndex === 1 ? ' next' : ''}`}>
+                                {fifoIndex}
+                              </div>
+                            </td>
+                            <td className="sr-col-sku">{product.sku}</td>
+                            <td>
+                              <div className="sr-prod-cell">
+                                <ProductImageThumb
+                                  imageUrl={product.imageUrl}
+                                  alt={product.name}
+                                  variant="thumb"
+                                />
+                                <div>
+                                  <div style={{ fontWeight: 500, fontSize: 13 }}>{product.name}</div>
+                                  {fifoIndex === 1 ? (
+                                    <span className="sr-next-label">ตัดออกก่อน</span>
+                                  ) : null}
+                                </div>
+                              </div>
+                            </td>
+                            <td style={{ fontSize: 12 }}>{lot.receivingId || lot.id}</td>
+                            <td style={{ whiteSpace: 'nowrap', fontSize: 12 }}>
+                              {formatFifoLotDate(lot.receivedAt)}
+                            </td>
+                            <td style={{ whiteSpace: 'nowrap', fontSize: 12 }}>
+                              {formatFifoLotExpiry(lot.expiryDate)}
+                            </td>
+                            <td>
+                              <ExpiryAlertBadge level={alertLevel} daysLeft={daysLeft} />
+                            </td>
+                            <td className="num">
+                              <div style={{ fontWeight: 500 }}>{fmtNum(remain)}</div>
+                              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                                / {fmtNum(received)} ({pct}%)
+                              </div>
+                            </td>
+                            <td className="num">{fmtBaht(Number(lot.costPerUnit) || 0)}</td>
+                            <td className="num" style={{ fontWeight: 500, color: 'var(--success)' }}>
+                              {fmtBaht(remain * (Number(lot.costPerUnit) || 0))}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </>
           )}
@@ -1083,8 +1173,8 @@ export default function StockReportPage() {
                 <thead>
                   <tr>
                     <th>วันที่/เวลา</th>
-                    <th>สินค้า</th>
                     <th>รหัส (SKU)</th>
+                    <th>ชื่อสินค้า</th>
                     <th>ประเภท</th>
                     <th className="num">จำนวน</th>
                     <th className="num">ต้นทุน/หน่วย</th>
@@ -1123,15 +1213,17 @@ export default function StockReportPage() {
                               {d.toLocaleDateString('th-TH')}
                             </div>
                           </td>
+                          <td className="sr-col-sku">{m.productSku}</td>
                           <td>
                             <div className="sr-prod-cell">
-                              <div className="sr-prod-icon" style={{ background: m.iconBg, fontSize: 14 }}>
-                                {m.emoji}
-                              </div>
+                              <ProductImageThumb
+                                imageUrl={m.imageUrl}
+                                alt={m.productName}
+                                variant="thumb"
+                              />
                               <div style={{ fontWeight: 500, fontSize: 13 }}>{m.productName}</div>
                             </div>
                           </td>
-                          <td className="sr-col-sku">{m.productSku}</td>
                           <td>
                             <div className="sr-mv-cell">
                               <div className={`sr-mv-icon ${meta.cls}`}>
@@ -1224,6 +1316,28 @@ export default function StockReportPage() {
         productName={fifoModalProduct?.name ?? ''}
         lots={fifoModalProduct?.lots}
         onClose={() => setFifoModalProduct(null)}
+      />
+      <ProductPickerDialog
+        open={showProdPicker}
+        branchId={branchId}
+        onConfirm={(items) => {
+          setProdPickedIds(new Set(items.map((item) => item.id)));
+          setShowProdPicker(false);
+          setToast(`กรองแสดง ${items.length} รายการที่เลือก`);
+          window.setTimeout(() => setToast(null), 2600);
+        }}
+        onClose={() => setShowProdPicker(false)}
+      />
+      <ProductPickerDialog
+        open={showFifoPicker}
+        branchId={branchId}
+        onConfirm={(items) => {
+          setFifoPickedIds(new Set(items.map((item) => item.id)));
+          setShowFifoPicker(false);
+          setToast(`กรอง FIFO ${items.length} รายการที่เลือก`);
+          window.setTimeout(() => setToast(null), 2600);
+        }}
+        onClose={() => setShowFifoPicker(false)}
       />
       {toast && <div className="sr-toast">{toast}</div>}
     </div>

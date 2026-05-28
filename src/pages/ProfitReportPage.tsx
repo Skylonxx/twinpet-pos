@@ -7,8 +7,9 @@ import {
   LinearScale,
   Tooltip,
 } from 'chart.js';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Bar, Doughnut } from 'react-chartjs-2';
+import ProductImageThumb from '../components/products/ProductImageThumb';
 import { getBranchLabel } from '../lib/branches';
 import {
   PRESET_LABELS,
@@ -116,6 +117,29 @@ function SortTh({
   );
 }
 
+function buildPaginationItems(current: number, total: number): (number | 'ellipsis')[] {
+  if (total <= 1) return [1];
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+
+  const items: (number | 'ellipsis')[] = [1];
+  let left = Math.max(2, current - 1);
+  let right = Math.min(total - 1, current + 1);
+
+  if (current <= 3) {
+    left = 2;
+    right = 4;
+  } else if (current >= total - 2) {
+    left = total - 3;
+    right = total - 1;
+  }
+
+  if (left > 2) items.push('ellipsis');
+  for (let i = left; i <= right; i++) items.push(i);
+  if (right < total - 1) items.push('ellipsis');
+  items.push(total);
+  return items;
+}
+
 function PaginationBar({
   total,
   page,
@@ -126,57 +150,50 @@ function PaginationBar({
   onPage: (n: number) => void;
 }) {
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  if (pages <= 1) return null;
-
-  const start = (page - 1) * PAGE_SIZE + 1;
-  const end = Math.min(page * PAGE_SIZE, total);
-  const show = new Set(
-    [1, 2, pages - 1, pages, page - 2, page - 1, page, page + 1, page + 2].filter(
-      (p) => p >= 1 && p <= pages,
-    ),
-  );
-  const nums = [...show].sort((a, b) => a - b);
+  const safePage = Math.min(page, pages);
+  const start = total === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
+  const end = Math.min(safePage * PAGE_SIZE, total);
+  const pageItems = buildPaginationItems(safePage, pages);
 
   return (
-    <div className="pr-pagi-bar">
-      <span className="pr-pagi-info">
-        แสดง {start}–{end} จาก {total} รายการ
+    <div className="pr-bottom-bar">
+      <span className="pr-bottom-info">
+        {total === 0 ? 'ไม่มีรายการ' : `แสดง ${start}–${end} จาก ${total} รายการ`}
       </span>
-      <div className="pr-pagi-pages">
+      <div className="pr-pagination">
         <button
           type="button"
-          className={`pr-pagi-btn${page === 1 ? ' disabled' : ''}`}
-          onClick={() => onPage(page - 1)}
-          disabled={page === 1}
+          className="pr-pg"
+          disabled={safePage <= 1}
+          onClick={() => onPage(safePage - 1)}
+          aria-label="หน้าก่อน"
         >
-          <i className="ti ti-chevron-left" style={{ fontSize: 12 }} aria-hidden="true" />
+          <i className="ti ti-chevron-left" style={{ fontSize: 11 }} aria-hidden="true" />
         </button>
-        {nums.map((n, i) => {
-          const prev = nums[i - 1];
-          return (
-            <span key={n} style={{ display: 'contents' }}>
-              {prev !== undefined && n - prev > 1 ? (
-                <button type="button" className="pr-pagi-btn ellipsis" tabIndex={-1}>
-                  …
-                </button>
-              ) : null}
-              <button
-                type="button"
-                className={`pr-pagi-btn${n === page ? ' active' : ''}`}
-                onClick={() => onPage(n)}
-              >
-                {n}
-              </button>
+        {pageItems.map((item, idx) =>
+          item === 'ellipsis' ? (
+            <span key={`ellipsis-${idx}`} className="pr-pg pr-pg-ellipsis" aria-hidden="true">
+              …
             </span>
-          );
-        })}
+          ) : (
+            <button
+              key={item}
+              type="button"
+              className={`pr-pg${safePage === item ? ' pr-on' : ''}`}
+              onClick={() => onPage(item)}
+            >
+              {item}
+            </button>
+          ),
+        )}
         <button
           type="button"
-          className={`pr-pagi-btn${page === pages ? ' disabled' : ''}`}
-          onClick={() => onPage(page + 1)}
-          disabled={page === pages}
+          className="pr-pg"
+          disabled={safePage >= pages}
+          onClick={() => onPage(safePage + 1)}
+          aria-label="หน้าถัดไป"
         >
-          <i className="ti ti-chevron-right" style={{ fontSize: 12 }} aria-hidden="true" />
+          <i className="ti ti-chevron-right" style={{ fontSize: 11 }} aria-hidden="true" />
         </button>
       </div>
     </div>
@@ -282,8 +299,8 @@ function ProductPickerModal({
                 role="button"
                 tabIndex={0}
               >
-                <div className="pr-pd-item-icon" style={{ background: p.iconBg }}>
-                  {p.emoji}
+                <div className="pr-pd-item-icon">
+                  <ProductImageThumb imageUrl={p.imageUrl} alt={p.name} />
                 </div>
                 <div style={{ minWidth: 0 }}>
                   <div className="pr-pd-item-name">{p.name}</div>
@@ -361,6 +378,7 @@ export default function ProfitReportPage() {
   const [sortKey, setSortKey] = useState('');
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'info' } | null>(null);
   const [clock, setClock] = useState('');
+  const tableCardRef = useRef<HTMLDivElement>(null);
 
   const branchDisplay = branchId ? getBranchLabel(branchId) : '—';
 
@@ -442,9 +460,19 @@ export default function ProfitReportPage() {
   const tableRows = groupBy === 'bill' ? sortedBillRows : sortedAggRows;
   const pageRows = tableRows.slice((tablePage - 1) * PAGE_SIZE, tablePage * PAGE_SIZE);
 
+  const handleTablePageChange = useCallback((nextPage: number) => {
+    setTablePage(nextPage);
+    tableCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
+
   useEffect(() => {
     setTablePage(1);
   }, [search, category, dateFrom, dateTo, groupBy, selectedProducts]);
+
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(tableRows.length / PAGE_SIZE));
+    if (tablePage > maxPage) setTablePage(maxPage);
+  }, [tableRows.length, tablePage]);
 
   useEffect(() => {
     const tick = () =>
@@ -532,9 +560,7 @@ export default function ProfitReportPage() {
       <td style={{ fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{r.customer}</td>
       <td>
         <div className="pr-prod-cell">
-          <div className="pr-prod-icon" style={{ background: r.iconBg }}>
-            {r.emoji}
-          </div>
+          <ProductImageThumb imageUrl={r.imageUrl} alt={r.productName} />
           <div>
             <div style={{ fontWeight: 500, fontSize: 13 }}>{r.productName}</div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
@@ -594,9 +620,7 @@ export default function ProfitReportPage() {
     <tr key={g.key}>
       <td>
         <div className="pr-prod-cell">
-          <div className="pr-prod-icon" style={{ background: g.iconBg }}>
-            {g.emoji}
-          </div>
+          <ProductImageThumb imageUrl={g.imageUrl} alt={g.productName ?? g.key} />
           <div>
             <div style={{ fontWeight: 500, fontSize: 13 }}>{g.productName}</div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{g.productSku}</div>
@@ -942,7 +966,7 @@ export default function ProfitReportPage() {
               </div>
             </div>
 
-            <div className="pr-card">
+            <div className="pr-card" ref={tableCardRef}>
               <div className="pr-card-head">
                 <i className="ti ti-receipt" aria-hidden="true" />
                 <span>{TABLE_LABELS[groupBy]}</span>
@@ -1021,7 +1045,7 @@ export default function ProfitReportPage() {
                   </tbody>
                 </table>
               </div>
-              <PaginationBar total={tableRows.length} page={tablePage} onPage={setTablePage} />
+              <PaginationBar total={tableRows.length} page={tablePage} onPage={handleTablePageChange} />
             </div>
           </>
         )}

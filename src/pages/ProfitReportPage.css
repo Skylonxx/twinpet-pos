@@ -2,9 +2,7 @@
 .pr-page {
   display: flex;
   flex-direction: column;
-  height: 100%;
-  min-height: 0;
-  overflow: hidden;
+  min-height: 100%;
   font-family: 'Prompt', 'Sarabun', sans-serif;
   background: var(--g50, #f8f8fc);
   color: var(--text-primary, #1a1a2e);
@@ -190,12 +188,10 @@
 
 .pr-content {
   flex: 1;
-  overflow: hidden;
   padding: 20px;
   display: flex;
   flex-direction: column;
   gap: 16px;
-  min-height: 0;
 }
 
 .pr-content > :not(.pr-card) {
@@ -208,9 +204,7 @@
   border: 1px solid var(--border, rgba(0, 0, 0, 0.08));
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-  flex: 1;
-  min-height: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .pr-card-head {
@@ -230,9 +224,7 @@
 }
 
 .pr-table-scroll {
-  flex: 1;
-  overflow: auto;
-  min-height: 0;
+  overflow-x: auto;
 }
 
 .pr-page table {
@@ -277,75 +269,71 @@
   text-align: right;
 }
 
-.pr-pagi-bar {
+.pr-bottom-bar {
+  background: var(--g50, #f8f8fc);
+  border-top: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+  padding: 10px 16px;
   display: flex;
   align-items: center;
-  gap: 0;
-  padding: 10px 16px;
-  border-top: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+  justify-content: space-between;
   flex-shrink: 0;
+  gap: 12px;
   flex-wrap: wrap;
-  row-gap: 6px;
 }
 
-.pr-pagi-info {
+.pr-bottom-info {
   font-size: 12px;
   color: var(--text-muted, #9ca3af);
-  margin-right: 12px;
-  white-space: nowrap;
 }
 
-.pr-pagi-pages {
+.pr-pagination {
   display: flex;
-  gap: 0;
+  gap: 4px;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
-.pr-pagi-btn {
-  min-width: 32px;
-  height: 30px;
+.pr-pg {
+  min-width: 28px;
+  height: 28px;
   padding: 0 6px;
+  border-radius: var(--radius-md, 8px);
   border: 1px solid var(--border-md, rgba(0, 0, 0, 0.13));
-  border-right: none;
   background: var(--white, #fff);
-  font-size: 12px;
-  font-family: inherit;
-  color: var(--text-secondary, #6b7280);
-  cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.12s;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-secondary, #6b7280);
+  font-family: inherit;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
 
-.pr-pagi-btn:first-child {
-  border-radius: var(--radius-sm, 6px) 0 0 var(--radius-sm, 6px);
-}
-
-.pr-pagi-btn:last-child {
-  border-right: 1px solid var(--border-md, rgba(0, 0, 0, 0.13));
-  border-radius: 0 var(--radius-sm, 6px) var(--radius-sm, 6px) 0;
-}
-
-.pr-pagi-btn:hover:not(.active):not(.disabled) {
-  background: var(--g50, #f8f8fc);
-  color: var(--text-primary, #1a1a2e);
-}
-
-.pr-pagi-btn.active {
+.pr-pg.pr-on {
   background: var(--p600, #534ab7);
   color: #fff;
   border-color: var(--p600, #534ab7);
   font-weight: 500;
 }
 
-.pr-pagi-btn.disabled {
-  opacity: 0.35;
+.pr-pg:hover:not(:disabled):not(.pr-on):not(.pr-pg-ellipsis) {
+  background: var(--g50, #f8f8fc);
+  color: var(--text-primary, #1a1a2e);
+}
+
+.pr-pg:disabled {
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
-.pr-pagi-btn.ellipsis {
+.pr-pg-ellipsis {
   cursor: default;
   pointer-events: none;
+  border-color: transparent;
+  background: transparent;
+  min-width: 20px;
+  padding: 0 2px;
 }
 
 .pr-toolbar {
@@ -930,14 +918,11 @@
 }
 
 .pr-pd-item-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-sm, 6px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px;
   flex-shrink: 0;
+}
+
+.pr-pd-item-icon .product-img--thumb {
+  width: 40px;
 }
 
 .pr-pd-item-name {
