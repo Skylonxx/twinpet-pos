@@ -1,4 +1,6 @@
+import { useEffect } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
+import { fetchActiveBranches } from '../lib/branches';
 import { useAuth } from '../lib/hooks/useAuth';
 import AppShell from './AppShell';
 
@@ -6,6 +8,12 @@ import AppShell from './AppShell';
 export default function ProtectedRoute() {
   const { isAuthenticated, isLoading, user, branchId, logout } = useAuth();
   const location = useLocation();
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      void fetchActiveBranches();
+    }
+  }, [isAuthenticated]);
 
   if (isLoading) {
     return (

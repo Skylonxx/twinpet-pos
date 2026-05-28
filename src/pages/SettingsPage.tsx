@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { getBranchLabel } from '../lib/branches';
+import { useUomUnits, createUomUnit } from '../lib/settings/useUomUnits';
 import { useAuth } from '../lib/hooks/useAuth';
 import {
   NAV_SECTIONS,
@@ -137,8 +138,6 @@ export default function SettingsPage() {
     updateForm,
     priceLevels,
     setPriceLevels,
-    uomUnits,
-    setUomUnits,
     devices,
     loading,
     saving,
@@ -151,6 +150,15 @@ export default function SettingsPage() {
     removeDevice,
     addDevice,
   } = useSettings(branchId);
+
+  const {
+    units: uomUnits,
+    setUnits: setUomUnits,
+    saving: uomSaving,
+    saveAll: saveUomUnits,
+    isDirty: isUomDirty,
+    cancel: cancelUom,
+  } = useUomUnits();
 
   const [section, setSection] = useState<SettingsSection>('branch');
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'info' | 'warn' } | null>(null);
@@ -170,6 +178,9 @@ export default function SettingsPage() {
   const handleSave = async () => {
     try {
       await save();
+      if (isUomDirty()) {
+        await saveUomUnits(uomUnits);
+      }
       showToast('บันทึกการตั้งค่าเรียบร้อย', 'success');
     } catch {
       showToast('บันทึกไม่สำเร็จ', 'warn');
@@ -178,6 +189,7 @@ export default function SettingsPage() {
 
   const handleCancel = () => {
     cancel();
+    cancelUom();
     showToast('ยกเลิกการเปลี่ยนแปลง', 'info');
   };
 
@@ -228,18 +240,16 @@ export default function SettingsPage() {
   };
 
   const addUom = () => {
-    const id = `uom-${Date.now()}`;
     setUomUnits([
       ...uomUnits,
-      { id, name: 'หน่วยใหม่', code: 'NEW', baseUnit: 'ชิ้น', factor: 1, isBase: false, isActive: true },
+      createUomUnit('หน่วยใหม่', { code: 'NEW' }),
     ]);
     showToast('เพิ่มหน่วยนับแล้ว', 'info');
   };
 
   const removeUom = (id: string) => {
-    const u = uomUnits.find((x) => x.id === id);
-    if (u?.isBase) {
-      showToast('ไม่สามารถลบหน่วยฐานได้', 'warn');
+    if (uomUnits.length <= 1) {
+      showToast('ต้องมีอย่างน้อย 1 ชื่อหน่วย', 'warn');
       return;
     }
     setUomUnits(uomUnits.filter((x) => x.id !== id));
@@ -248,6 +258,9 @@ export default function SettingsPage() {
   const updateUom = (id: string, patch: Partial<UomUnit>) => {
     setUomUnits(uomUnits.map((u) => (u.id === id ? { ...u, ...patch } : u)));
   };
+
+  const formDirty = isDirty() || isUomDirty();
+  const formSaving = saving || uomSaving;
 
   if (loading || !form) {
     return (
@@ -281,11 +294,11 @@ export default function SettingsPage() {
           <i className="ti ti-map-pin" style={{ fontSize: 12 }} aria-hidden="true" />
           สาขา: {branchId ? getBranchLabel(branchId) : '—'}
         </span>
-        <button type="button" className="stg-btn stg-btn-ghost" onClick={handleCancel} disabled={!isDirty()}>
+        <button type="button" className="stg-btn stg-btn-ghost" onClick={handleCancel} disabled={!formDirty}>
           ยกเลิก
         </button>
-        <button type="button" className="stg-btn stg-btn-primary" onClick={() => void handleSave()} disabled={saving}>
-          <i className="ti ti-check" aria-hidden="true" /> {saving ? 'กำลังบันทึก...' : 'บันทึก'}
+        <button type="button" className="stg-btn stg-btn-primary" onClick={() => void handleSave()} disabled={formSaving}>
+          <i className="ti ti-check" aria-hidden="true" /> {formSaving ? 'กำลังบันทึก...' : 'บันทึก'}
         </button>
       </div>
 
@@ -501,10 +514,12 @@ export default function SettingsPage() {
           {section === 'uom' ? (
             <>
               <div className="stg-section-title">UOM &amp; หน่วยนับ</div>
-              <div className="stg-section-sub">กำหนดหน่วยนับที่ใช้ในระบบ — สต็อกเก็บเป็นหน่วยฐานเสมอ</div>
+              <div className="stg-section-sub">
+                กำหนดชื่อหน่วยนับที่ใช้ในระบบ — ตัวคูณแปลงหน่วย (เช่น 1 กล่อง = 12 ชิ้น) ตั้งแยกในแต่ละสินค้า
+              </div>
               <div className="stg-card">
                 <div className="stg-card-head">
-                  <i className="ti ti-ruler" aria-hidden="true" /> หน่วยทั้งหมด
+                  <i className="ti ti-ruler" aria-hidden="true" /> ชื่อหน่วยทั้งหมด
                   <div className="stg-card-head-right">
                     <button type="button" className="stg-btn stg-btn-primary stg-btn-sm" onClick={addUom}>
                       <i className="ti ti-plus" aria-hidden="true" /> เพิ่มหน่วย
@@ -517,8 +532,6 @@ export default function SettingsPage() {
                       <tr>
                         <th>ชื่อหน่วย</th>
                         <th>รหัสย่อ</th>
-                        <th>หน่วยฐาน</th>
-                        <th>ค่าแปลง</th>
                         <th>สถานะ</th>
                         <th />
                       </tr>
@@ -527,22 +540,16 @@ export default function SettingsPage() {
                       {uomUnits.map((u) => (
                         <tr key={u.id}>
                           <td>
-                            <input className="stg-form-input stg-input-inline stg-input-w110" value={u.name} onChange={(e) => updateUom(u.id, { name: e.target.value })} readOnly={u.isBase} />
+                            <input className="stg-form-input stg-input-inline stg-input-w110" value={u.name} onChange={(e) => updateUom(u.id, { name: e.target.value })} />
                           </td>
                           <td>
-                            <input className="stg-form-input stg-input-inline stg-input-w70 stg-code" value={u.code} onChange={(e) => updateUom(u.id, { code: e.target.value })} readOnly={u.isBase} />
+                            <input className="stg-form-input stg-input-inline stg-input-w70 stg-code" value={u.code} onChange={(e) => updateUom(u.id, { code: e.target.value })} />
                           </td>
                           <td>
-                            <input className="stg-form-input stg-input-inline stg-input-w90" value={u.baseUnit} onChange={(e) => updateUom(u.id, { baseUnit: e.target.value })} readOnly={u.isBase} />
+                            <Toggle small checked={u.isActive} onChange={(v) => updateUom(u.id, { isActive: v })} />
                           </td>
                           <td>
-                            <input className="stg-form-input stg-input-inline stg-input-w80" type="number" min={0.001} step={0.001} value={u.factor} onChange={(e) => updateUom(u.id, { factor: Number(e.target.value) })} readOnly={u.isBase} />
-                          </td>
-                          <td>
-                            <Toggle small checked={u.isActive} onChange={(v) => updateUom(u.id, { isActive: v })} disabled={u.isBase} />
-                          </td>
-                          <td>
-                            <button type="button" className="stg-icon-btn" onClick={() => removeUom(u.id)} disabled={u.isBase} style={{ opacity: u.isBase ? 0.3 : 1 }}>
+                            <button type="button" className="stg-icon-btn" onClick={() => removeUom(u.id)} disabled={uomUnits.length <= 1} style={{ opacity: uomUnits.length <= 1 ? 0.3 : 1 }}>
                               <i className="ti ti-trash" style={{ fontSize: 14, color: 'var(--danger)' }} aria-hidden="true" />
                             </button>
                           </td>
@@ -930,10 +937,10 @@ export default function SettingsPage() {
             : 'ยังไม่ได้บันทึก'}
         </span>
         <div className="stg-footer-spacer" />
-        <button type="button" className="stg-btn stg-btn-ghost" onClick={handleCancel} disabled={!isDirty()}>
+        <button type="button" className="stg-btn stg-btn-ghost" onClick={handleCancel} disabled={!formDirty}>
           ยกเลิก
         </button>
-        <button type="button" className="stg-btn stg-btn-primary" onClick={() => void handleSave()} disabled={saving}>
+        <button type="button" className="stg-btn stg-btn-primary" onClick={() => void handleSave()} disabled={formSaving}>
           <i className="ti ti-check" aria-hidden="true" /> บันทึกการตั้งค่า
         </button>
       </div>

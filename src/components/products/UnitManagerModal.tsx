@@ -40,7 +40,7 @@ export default function UnitManagerModal({ open, units, saving, onSave, onClose 
         <div className="pc-unit-mgr-head">
           <div>
             <div className="pc-unit-mgr-title">จัดการหน่วยนับ</div>
-            <div className="pc-unit-mgr-sub">เพิ่มหรือลบชื่อหน่วยนับที่ใช้ในระบบ</div>
+            <div className="pc-unit-mgr-sub">เพิ่มหรือลบชื่อหน่วยนับ — ตัวคูณแปลงหน่วยตั้งในแต่ละสินค้า</div>
           </div>
           <button type="button" className="pc-fifo-close" onClick={onClose} aria-label="ปิด">
             <i className="ti ti-x" style={{ fontSize: 12 }} aria-hidden="true" />

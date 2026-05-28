@@ -141,3 +141,22 @@ export function buildSubmitPayload(values: ReceivingFormValues): ReceivingFormSu
     }),
   };
 }
+
+/** Strip submit-only fields — used when seeding the edit page after save draft. */
+export function submitPayloadToFormValues(
+  payload: ReceivingFormSubmitPayload,
+): ReceivingFormValues {
+  return {
+    lines: payload.lines.map((line) => ({ ...line })),
+    supplierId: payload.supplierId,
+    supplierName: payload.supplierName,
+    billDate: payload.billDate,
+    receiveDate: payload.receiveDate,
+    purchaseBillNo: payload.purchaseBillNo,
+    note: payload.note,
+    discType: payload.discType,
+    discValue: payload.discValue,
+    vatOn: payload.vatOn,
+    vatInc: payload.vatInc,
+  };
+}

@@ -16,7 +16,7 @@ import {
   type ProductListItem,
   type ProductUomFormRow,
 } from '../../lib/productCrud/types';
-import { buildUnitSelectOptions, useUnitList } from '../../lib/settings/useUnitList';
+import { buildSubUnitSelectOptions, buildUnitSelectOptions, useUomUnits } from '../../lib/settings/useUomUnits';
 import { useExpiryPolicies } from '../../lib/inventory/useExpiryPolicies';
 import { resizeProductImageToDataUrl } from '../../lib/productCrud/resizeProductImage';
 import type { StockLot, StockMovement } from '../../lib/types';
@@ -149,7 +149,7 @@ function UomPricingCard({
           {row.isBase ? <span className="pc-uom-card-base-badge">หน่วยฐาน</span> : null}
           <div className="pc-uom-card-title">{row.unit}</div>
           <div className="pc-uom-card-sub">
-            {row.isBase ? `สต็อกเก็บเป็น ${baseUnit}` : `= ${row.factor} ${baseUnit}`}
+            {row.isBase ? `สต็อกเก็บเป็น ${baseUnit}` : `1 ${row.unit} = ${row.factor} ${baseUnit}`}
           </div>
         </div>
         {!row.isBase && onRemove ? (
@@ -161,7 +161,7 @@ function UomPricingCard({
 
       <div className="pc-uom-card-grid">
         <div className="pc-field">
-          <label>ชื่อหน่วย</label>
+          <label>ชื่อหน่วย (จากระบบ)</label>
           {row.isBase ? (
             <input value={row.unit} readOnly />
           ) : (
@@ -184,7 +184,7 @@ function UomPricingCard({
         </div>
         {!row.isBase ? (
           <div className="pc-field">
-            <label>ตัวคูณ (× หน่วยฐาน)</label>
+            <label>ตัวคูณสินค้านี้ (1 หน่วย = × หน่วยฐาน)</label>
             <input
               type="number"
               min={0.001}
@@ -272,7 +272,7 @@ export default function ProductDrawer({
   fetchLots,
   loadMovements,
 }: Props) {
-  const { units, saving: unitsSaving, saveUnits } = useUnitList();
+  const { unitNames, saving: unitsSaving, saveUnitNames } = useUomUnits();
   const { policies: expiryPolicies, defaultPolicy } = useExpiryPolicies();
   const { categories: productCategories } = useCategories();
 
@@ -354,11 +354,19 @@ export default function ProductDrawer({
   }, [open]);
 
   const unitOptions = useMemo(
-    () => buildUnitSelectOptions(units, form.baseUnit),
-    [units, form.baseUnit],
+    () => buildUnitSelectOptions(unitNames, form.baseUnit),
+    [unitNames, form.baseUnit],
   );
 
-  const defaultSubUnit = units[0] ?? '';
+  const defaultSubUnit = useMemo(() => {
+    const used = new Set(form.uomRows.map((r) => r.unit));
+    return unitNames.find((u) => u !== form.baseUnit && !used.has(u)) ?? unitNames.find((u) => u !== form.baseUnit) ?? '';
+  }, [form.baseUnit, form.uomRows, unitNames]);
+
+  const usedSubUnits = useMemo(
+    () => form.uomRows.filter((r) => !r.isBase).map((r) => r.unit),
+    [form.uomRows],
+  );
 
   const uomBreakdown = useMemo(() => {
     if (!form.hasUom || !product) return null;
@@ -832,8 +840,11 @@ export default function ProductDrawer({
                   </div>
                 ) : (
                   <>
+                    <div className="pc-sec-label">หน่วยย่อย &amp; ตัวคูณ (เฉพาะสินค้านี้)</div>
                     <div className="pc-drawer-hint">
-                      หน่วยหลักและราคาขายหลักตั้งในแท็บ &quot;ข้อมูลสินค้า&quot; — กำหนดหน่วยย่อยและราคาเพิ่มเติมด้านล่าง
+                      หน่วยฐาน: <strong>{form.baseUnit}</strong> — สต็อกเก็บเป็นหน่วยนี้เสมอ
+                      <br />
+                      เลือกชื่อหน่วยจากรายการระบบ แล้วกำหนดตัวคูณแปลงเป็นหน่วยฐาน (เช่น 1 กล่อง = 24 {form.baseUnit})
                     </div>
 
                     <div className="pc-uom-card-list">
@@ -844,7 +855,12 @@ export default function ProductDrawer({
                             key={row.id}
                             row={row}
                             baseUnit={form.baseUnit}
-                            unitSelectOptions={buildUnitSelectOptions(units, row.unit)}
+                            unitSelectOptions={buildSubUnitSelectOptions(
+                              unitNames,
+                              form.baseUnit,
+                              usedSubUnits,
+                              row.unit,
+                            )}
                             customTierCount={countCustomTierPrices(row.tierPrices)}
                             onUpdate={(patch) => {
                               updateUomRow(row.id, patch);
@@ -1069,9 +1085,9 @@ export default function ProductDrawer({
 
       <UnitManagerModal
         open={unitMgrOpen}
-        units={units}
+        units={unitNames}
         saving={unitsSaving}
-        onSave={saveUnits}
+        onSave={saveUnitNames}
         onClose={() => setUnitMgrOpen(false)}
       />
 

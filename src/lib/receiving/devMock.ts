@@ -2,8 +2,8 @@ import type { ProductStock, Receiving, ReceivingItem, StockLot, StockMovement } 
 import type { CancelReceivingInput, SaveReceivingDraftInput, UpdateReceivingInput } from '../receivingHistory/types';
 import { DRAFT_LOT_ID } from '../receivingHistory/types';
 import { getDevProductList } from '../productCrud/devMock';
+import { allocateDevReceivingNumber } from './receivingId';
 import {
-  generateGrnId,
   lineCostBase,
   lineQtyBase,
   lineSubtotal,
@@ -38,7 +38,7 @@ function initStocks(branchId: string) {
 
 export function devConfirmReceiving(input: ConfirmReceivingInput): string {
   initStocks(input.branchId);
-  const receivingId = input.receivingId ?? generateGrnId();
+  const receivingId = input.receivingId ?? allocateDevReceivingNumber();
   const isFinalizingDraft = Boolean(input.receivingId);
   const now = new Date();
 
@@ -356,7 +356,7 @@ export function devUpdateReceiving(input: UpdateReceivingInput): void {
 }
 
 export function devSaveReceivingDraft(input: SaveReceivingDraftInput): string {
-  const receivingId = input.receivingId ?? generateGrnId();
+  const receivingId = input.receivingId ?? allocateDevReceivingNumber();
   const now = new Date();
   const linesSubtotal = receivingSubtotal(input.lines);
   const billDiscount = Math.max(0, input.finalDiscount || 0);

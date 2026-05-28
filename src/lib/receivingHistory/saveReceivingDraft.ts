@@ -8,13 +8,15 @@ import {
 } from 'firebase/firestore';
 import { collections, db, isFirebaseConfigured } from '../firebase';
 import {
-  generateGrnId,
   lineCostBase,
   lineQtyBase,
   lineSubtotal,
   receivingGrandTotal,
   receivingSubtotal,
 } from '../receiving/types';
+import {
+  allocateReceivingNumber,
+} from '../receiving/receivingId';
 import { devSaveReceivingDraft } from '../receiving/devMock';
 import type { Receiving } from '../types';
 import { DRAFT_LOT_ID, type SaveReceivingDraftInput } from './types';
@@ -28,7 +30,7 @@ export async function saveReceivingDraft(input: SaveReceivingDraftInput): Promis
   }
 
   const firestore = db;
-  const receivingId = input.receivingId ?? generateGrnId();
+  const receivingId = input.receivingId ?? (await allocateReceivingNumber(firestore));
   const receivingRef = doc(firestore, collections.receivings, receivingId);
   const now = serverTimestamp();
 
@@ -113,5 +115,11 @@ export async function saveReceivingDraft(input: SaveReceivingDraftInput): Promis
   }
 
   await batch.commit();
+
+  const verifySnap = await getDoc(receivingRef);
+  if (!verifySnap.exists()) {
+    throw new Error('บันทึกแบบร่างไม่สำเร็จ — กรุณาลองใหม่');
+  }
+
   return receivingId;
 }

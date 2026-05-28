@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { BRANCH_OPTIONS, getBranchLabel } from '../lib/branches';
+import { getBranchLabel, useActiveBranches } from '../lib/branches';
 import { useAuth } from '../lib/hooks/useAuth';
 import { downloadCsv } from '../lib/stockReport/exportCsv';
 import {
@@ -65,12 +65,14 @@ function Toggle({
 function StaffModal({
   open,
   editUser,
+  branches,
   onClose,
   onSave,
   saving,
 }: {
   open: boolean;
   editUser: User | null;
+  branches: Array<{ id: string; name: string }>;
   onClose: () => void;
   onSave: (form: StaffFormData) => Promise<void>;
   saving: boolean;
@@ -90,9 +92,9 @@ function StaffModal({
         branchIds: [...editUser.branchIds],
       });
     } else {
-      setForm({ ...EMPTY_FORM, branchIds: [BRANCH_OPTIONS[0]!.id] });
+      setForm({ ...EMPTY_FORM, branchIds: branches[0] ? [branches[0].id] : [] });
     }
-  }, [open, editUser]);
+  }, [open, editUser, branches]);
 
   if (!open) return null;
 
@@ -218,7 +220,7 @@ function StaffModal({
             <i className="ti ti-building-store" aria-hidden="true" /> สาขาที่เข้าถึงได้
           </div>
           <div className="sm-branch-check-grid">
-            {BRANCH_OPTIONS.map((b) => {
+            {branches.map((b) => {
               const checked = form.branchIds.includes(b.id);
               return (
                 <label
@@ -231,7 +233,7 @@ function StaffModal({
                     onChange={() => toggleBranch(b.id)}
                   />
                   <i className="ti ti-building-store" style={{ fontSize: 15, color: 'var(--p600)' }} aria-hidden="true" />
-                  {b.label.replace('สาขา ', '')}
+                  {b.name}
                 </label>
               );
             })}
@@ -297,6 +299,7 @@ function ConfirmModal({
 
 export default function StaffManagementPage() {
   const { branchId, user: actor } = useAuth();
+  const { branches: activeBranches } = useActiveBranches();
   const actorInfo = actor
     ? { id: actor.id, name: `${actor.firstName} ${actor.lastName}` }
     : null;
@@ -858,6 +861,7 @@ export default function StaffManagementPage() {
       <StaffModal
         open={staffModalOpen}
         editUser={editUser}
+        branches={activeBranches}
         onClose={() => setStaffModalOpen(false)}
         onSave={handleSave}
         saving={saving}

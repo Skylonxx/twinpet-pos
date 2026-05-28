@@ -18,6 +18,19 @@ export const DEV_BRANCH: Branch = {
   updatedAt: ts(),
 };
 
+export const DEV_BRANCH_BKK: Branch = {
+  id: 'BKK-002',
+  name: 'TwinPet เอกมัย',
+  address: '88/12 ถ.สุขุมวิท แขวงคลองตัน เขตวัฒนา กรุงเทพฯ 10110',
+  phone: '02-987-6543',
+  email: 'ekamai@twinpet.co.th',
+  taxId: '0105560123456',
+  logoUrl: null,
+  isActive: true,
+  createdAt: ts(),
+  updatedAt: ts(),
+};
+
 export const DEV_SETTINGS: Settings = {
   branchId: 'LDP-001',
   vatRegistered: true,
@@ -49,12 +62,12 @@ export const DEV_PRICE_LEVELS: PriceLevelRow[] = [
 ];
 
 export const DEV_UOM_UNITS: UomUnit[] = [
-  { id: 'uom-pc', name: 'ชิ้น', code: 'PC', baseUnit: 'ชิ้น', factor: 1, isBase: true, isActive: true },
-  { id: 'uom-pack', name: 'แพ็ค', code: 'PACK', baseUnit: 'ชิ้น', factor: 6, isBase: false, isActive: true },
-  { id: 'uom-box', name: 'กล่อง', code: 'BOX', baseUnit: 'ชิ้น', factor: 24, isBase: false, isActive: true },
-  { id: 'uom-doz', name: 'โหล', code: 'DOZ', baseUnit: 'ชิ้น', factor: 12, isBase: false, isActive: true },
-  { id: 'uom-kg', name: 'กิโลกรัม', code: 'KG', baseUnit: 'กิโลกรัม', factor: 1, isBase: true, isActive: true },
-  { id: 'uom-bag', name: 'ถุง', code: 'BAG', baseUnit: 'ชิ้น', factor: 1, isBase: false, isActive: false },
+  { id: 'uom-pc', name: 'ชิ้น', code: 'PC', isActive: true },
+  { id: 'uom-pack', name: 'แพ็ค', code: 'PACK', isActive: true },
+  { id: 'uom-box', name: 'กล่อง', code: 'BOX', isActive: true },
+  { id: 'uom-doz', name: 'โหล', code: 'DOZ', isActive: true },
+  { id: 'uom-kg', name: 'กิโลกรัม', code: 'KG', isActive: true },
+  { id: 'uom-bag', name: 'ถุง', code: 'BAG', isActive: false },
 ];
 
 export const DEV_DEVICES: PosDevice[] = [
@@ -120,6 +133,14 @@ export function getDevUomUnits() {
   return devUom.map((u) => ({ ...u }));
 }
 
+export function saveDevUomUnits(units: UomUnit[]) {
+  devUom = units.map((u) => ({ ...u }));
+}
+
+export function getDevBranches(): Branch[] {
+  return [devBranch, DEV_BRANCH_BKK].filter((b) => b.isActive);
+}
+
 export function getDevDevices() {
   return devDevices.map((d) => ({ ...d }));
 }
@@ -129,14 +150,12 @@ export function saveDevData(data: {
   settings: Settings;
   extras: SettingsExtras;
   priceLevels: PriceLevelRow[];
-  uomUnits: UomUnit[];
   devices: PosDevice[];
 }) {
   devBranch = { ...data.branch };
   devSettings = { ...data.settings, updatedAt: ts() };
   devExtras = { ...data.extras };
   devPriceLevels = data.priceLevels.map((p) => ({ ...p }));
-  devUom = data.uomUnits.map((u) => ({ ...u }));
   devDevices = data.devices.map((d) => ({ ...d }));
 }
 

@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import ReceivingForm from '../components/receiving/ReceivingForm';
 import { getBranchLabel } from '../lib/branches';
 import { useAuth } from '../lib/hooks/useAuth';
 import { confirmReceiving } from '../lib/receiving/confirmReceiving';
-import type { ReceivingFormSubmitPayload } from '../lib/receiving/receivingFormUtils';
+import type { ReceivingFormSubmitPayload, ReceivingFormValues } from '../lib/receiving/receivingFormUtils';
 import { cancelReceiving } from '../lib/receivingHistory/cancelReceiving';
 import {
   formLinesToDraftLines,
@@ -12,21 +12,71 @@ import {
   receivingFormValuesFromRecord,
 } from '../lib/receivingHistory/receivingFormValues';
 import { saveReceivingDraft } from '../lib/receivingHistory/saveReceivingDraft';
+import {
+  loadReceivingWithRetry,
+  type ReceivingEditNavState,
+} from '../lib/receivingHistory/types';
 import { updateReceiving } from '../lib/receivingHistory/updateReceiving';
 import { useReceivingHistory } from '../lib/receivingHistory/useReceivingHistory';
 import type { Receiving, ReceivingItem } from '../lib/types';
 import './ReceivingPage.css';
 
+type LoadPhase = 'loading' | 'ready' | 'missing';
+
+function ReceivingEditLoadingShell({
+  grnId,
+  isDraft,
+}: {
+  grnId?: string;
+  isDraft?: boolean;
+}) {
+  return (
+    <div className="rcv-page rcv-page--loading">
+      <header className="rcv-topbar">
+        <div className="rcv-back-btn" aria-hidden="true">
+          <i className="ti ti-arrow-left" />
+        </div>
+        <span className="rcv-topbar-title">
+          {isDraft ? 'ดำเนินการแบบร่างรับเข้า' : 'แก้ไขเอกสารรับสินค้าเข้า'}
+        </span>
+        <span className="rcv-ref-badge">{grnId ?? 'GRN —'}</span>
+        <div className="rcv-topbar-actions" aria-hidden="true">
+          <span className="rcv-top-btn-secondary rcv-skeleton-btn" />
+          <span className="rcv-save-top-btn rcv-skeleton-btn rcv-skeleton-btn--primary" />
+        </div>
+      </header>
+      <div className="rcv-edit-loading-body">
+        <div className="rcv-edit-loading-card">
+          <i className="ti ti-loader rcv-spin" aria-hidden="true" />
+          <span>กำลังโหลดเอกสารรับเข้า...</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ReceivingEditPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const navState = location.state as ReceivingEditNavState | null;
+  const draftSeed =
+    navState?.draftSeed && navState.draftSeed.receivingId === id
+      ? navState.draftSeed
+      : undefined;
+
   const { user, branchId } = useAuth();
   const { loadItems, loadReceiving } = useReceivingHistory(branchId);
 
   const [receiving, setReceiving] = useState<Receiving | null>(null);
   const [items, setItems] = useState<ReceivingItem[]>([]);
-  const [docLoading, setDocLoading] = useState(true);
-  const [itemsLoading, setItemsLoading] = useState(true);
+  const [loadPhase, setLoadPhase] = useState<LoadPhase>(() =>
+    draftSeed ? 'ready' : 'loading',
+  );
+
+  const initialValuesRef = useRef<ReceivingFormValues | undefined>(
+    draftSeed?.formValues,
+  );
 
   useEffect(() => {
     if (!id) return;
@@ -34,43 +84,49 @@ export default function ReceivingEditPage() {
     let cancelled = false;
 
     async function load() {
-      setDocLoading(true);
-      setItemsLoading(true);
-      try {
-        const doc = await loadReceiving(receivingId);
-        if (cancelled) return;
-        setReceiving(doc);
-        if (doc) {
-          const loadedItems = await loadItems(receivingId);
-          if (!cancelled) setItems(loadedItems);
-        }
-      } finally {
-        if (!cancelled) {
-          setDocLoading(false);
-          setItemsLoading(false);
-        }
+      if (!draftSeed) {
+        setLoadPhase('loading');
       }
+
+      const doc = await loadReceivingWithRetry(loadReceiving, receivingId);
+      if (cancelled) return;
+
+      if (!doc) {
+        if (draftSeed) {
+          setLoadPhase('ready');
+          return;
+        }
+        setLoadPhase('missing');
+        return;
+      }
+
+      setReceiving(doc);
+      const loadedItems = await loadItems(receivingId);
+      if (cancelled) return;
+
+      setItems(loadedItems);
+      if (!initialValuesRef.current) {
+        initialValuesRef.current = receivingFormValuesFromRecord(doc, loadedItems);
+      }
+      setLoadPhase('ready');
     }
 
     void load();
     return () => {
       cancelled = true;
     };
-  }, [id, loadItems, loadReceiving]);
+  }, [id, draftSeed, loadItems, loadReceiving]);
 
   useEffect(() => {
-    if (docLoading || itemsLoading || !id) return;
-    if (!receiving) {
-      navigate('/receiving/history', { replace: true });
-    }
-  }, [docLoading, itemsLoading, id, receiving, navigate]);
+    if (loadPhase !== 'missing') return;
+    navigate('/receiving/history', { replace: true });
+  }, [loadPhase, navigate]);
 
-  const initialValues = useMemo(() => {
-    if (!receiving) return undefined;
-    return receivingFormValuesFromRecord(receiving, items);
-  }, [receiving, items]);
+  const initialValues = initialValuesRef.current;
 
   const existingItemIds = useMemo(() => new Set(items.map((item) => item.id)), [items]);
+
+  const documentStatus = receiving?.status ?? (draftSeed ? 'draft' : undefined);
 
   const goBack = () => {
     navigate('/receiving/history');
@@ -92,9 +148,10 @@ export default function ReceivingEditPage() {
   };
 
   const handleSubmit = async (payload: ReceivingFormSubmitPayload) => {
-    if (!id || !branchId || !user || !receiving) return;
+    if (!id || !branchId || !user) return;
 
-    if (receiving.status === 'draft') {
+    const status = receiving?.status ?? documentStatus;
+    if (status === 'draft') {
       await confirmReceiving({
         receivingId: id,
         branchId,
@@ -109,6 +166,8 @@ export default function ReceivingEditPage() {
       navigate('/receiving/history', { state: { toast: 'ยืนยันรับเข้าและอัปเดตสต็อกเรียบร้อย' } });
       return;
     }
+
+    if (!receiving) return;
 
     await updateReceiving({
       receivingId: id,
@@ -143,16 +202,17 @@ export default function ReceivingEditPage() {
     );
   }
 
-  if (docLoading || itemsLoading || !receiving || !initialValues || !id) {
+  if (loadPhase === 'loading' || !initialValues || !id) {
     return (
-      <div className="rcv-page">
-        <div className="rcv-loading">กำลังโหลดเอกสารรับเข้า...</div>
-      </div>
+      <ReceivingEditLoadingShell
+        grnId={id}
+        isDraft={Boolean(draftSeed) || documentStatus === 'draft'}
+      />
     );
   }
 
-  const isCancelled = receiving.status === 'cancelled';
-  const isDraft = receiving.status === 'draft';
+  const isCancelled = receiving?.status === 'cancelled';
+  const isDraft = documentStatus === 'draft';
 
   return (
     <div className="rcv-page">
@@ -164,7 +224,7 @@ export default function ReceivingEditPage() {
         grnId={id}
         initialValues={initialValues}
         staffId={user?.id}
-        documentStatus={receiving.status}
+        documentStatus={documentStatus}
         isCancelled={isCancelled}
         onSubmit={handleSubmit}
         onSaveDraft={isDraft ? handleSaveDraft : undefined}

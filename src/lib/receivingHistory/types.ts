@@ -163,6 +163,31 @@ export type SaveReceivingDraftInput = {
 
 export const DRAFT_LOT_ID = 'DRAFT';
 
+export type ReceivingEditNavState = {
+  toast?: string;
+  draftSeed?: {
+    receivingId: string;
+    formValues: import('../receiving/receivingFormUtils').ReceivingFormValues;
+  };
+};
+
+const LOAD_RECEIVING_RETRY_MS = [0, 250, 500, 800];
+
+export async function loadReceivingWithRetry(
+  loadReceiving: (id: string) => Promise<Receiving | null>,
+  receivingId: string,
+): Promise<Receiving | null> {
+  for (let attempt = 0; attempt < LOAD_RECEIVING_RETRY_MS.length; attempt++) {
+    const delay = LOAD_RECEIVING_RETRY_MS[attempt];
+    if (delay > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+    const doc = await loadReceiving(receivingId);
+    if (doc) return doc;
+  }
+  return null;
+}
+
 export function receivingItemToLine(item: ReceivingItem): EditReceivingLine {
   return {
     lineKey: item.id,

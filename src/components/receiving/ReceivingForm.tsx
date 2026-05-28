@@ -43,6 +43,8 @@ export type ReceivingFormProps = {
   staffId?: string;
   onSubmit: (payload: ReceivingFormSubmitPayload) => Promise<void>;
   onSaveDraft?: (payload: ReceivingFormSubmitPayload) => Promise<void>;
+  /** When controlled by parent (e.g. create page keeps overlay through navigation). */
+  draftSaving?: boolean;
   onCancel?: () => void;
   onVoid?: (reason: string, note: string) => Promise<void>;
   documentStatus?: ReceivingStatus;
@@ -67,6 +69,7 @@ export default function ReceivingForm({
   staffId,
   documentStatus,
   isCancelled = false,
+  draftSaving: draftSavingProp,
 }: ReceivingFormProps) {
   const { products, loading } = useProductCrud(branchId);
   const { customers, priceLevels, creditMap, saveCustomer, refreshDev } = useCustomers(branchId);
@@ -88,7 +91,8 @@ export default function ReceivingForm({
   const [supplierPickerOpen, setSupplierPickerOpen] = useState(false);
   const [detailSupplier, setDetailSupplier] = useState<Customer | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [draftSaving, setDraftSaving] = useState(false);
+  const [draftSavingLocal, setDraftSavingLocal] = useState(false);
+  const draftSaving = draftSavingProp ?? draftSavingLocal;
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [flashKey, setFlashKey] = useState<string | null>(null);
@@ -304,7 +308,7 @@ export default function ReceivingForm({
       return;
     }
     if (draftSaving || submitting) return;
-    setDraftSaving(true);
+    if (draftSavingProp == null) setDraftSavingLocal(true);
     setError(null);
     try {
       const payload = buildSubmitPayload({
@@ -322,9 +326,8 @@ export default function ReceivingForm({
       });
       await onSaveDraft(payload);
     } catch (err) {
+      if (draftSavingProp == null) setDraftSavingLocal(false);
       setError(err instanceof Error ? err.message : 'บันทึกแบบร่างไม่สำเร็จ');
-    } finally {
-      setDraftSaving(false);
     }
   };
 
@@ -375,7 +378,7 @@ export default function ReceivingForm({
     }
   };
 
-  const rootClass = `rcv-form-root${variant === 'drawer' ? ' rcv-form-root--drawer' : ''}`;
+  const rootClass = `rcv-form-root${variant === 'drawer' ? ' rcv-form-root--drawer' : ''}${draftSaving ? ' rcv-form-root--saving' : ''}`;
   const showTopbar = variant === 'page';
   const showPageSummary = variant === 'page';
   const idPrefix = variant === 'drawer' ? 'rcv-drawer' : 'rcv';
@@ -468,6 +471,14 @@ export default function ReceivingForm({
 
   return (
     <div className={rootClass}>
+      {draftSaving && draftSavingProp == null ? (
+        <div className="rcv-form-saving-overlay" aria-live="polite" aria-busy="true">
+          <div className="rcv-form-saving-inner">
+            <i className="ti ti-loader rcv-spin" aria-hidden="true" />
+            <span>กำลังบันทึกแบบร่าง...</span>
+          </div>
+        </div>
+      ) : null}
       {showTopbar ? (
         <header className="rcv-topbar">
           {mode === 'edit' ? (

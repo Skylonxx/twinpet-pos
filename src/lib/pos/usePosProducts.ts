@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   collection,
+  collectionGroup,
   doc,
-  getDoc,
   onSnapshot,
   query,
   where,
+  type Unsubscribe,
 } from 'firebase/firestore';
 import { collections, db, isFirebaseConfigured } from '../firebase';
 import type { Product } from '../types';
@@ -22,6 +23,11 @@ const CATEGORY_EMOJI: Record<string, string> = {
   'อุปกรณ์': '💧',
   'ทรายแมว': '🪣',
 };
+
+function isIndexError(err: unknown): boolean {
+  const code = (err as { code?: string })?.code;
+  return code === 'failed-precondition' || code === 'unimplemented';
+}
 
 function buildUomOptions(product: Product): UomOption[] {
   const retailPrices = product.prices.filter((p) => p.priceLevelId === 'RETAIL');
@@ -68,6 +74,10 @@ function toPosProduct(product: Product, stock: number): PosProduct {
   };
 }
 
+function mergePosProducts(rawProducts: Product[], stockByProduct: Map<string, number>): PosProduct[] {
+  return rawProducts.map((p) => toPosProduct(p, stockByProduct.get(p.id) ?? 0));
+}
+
 export function usePosProducts(branchId: string | null) {
   const [products, setProducts] = useState<PosProduct[]>([]);
   const [loading, setLoading] = useState(true);
@@ -87,43 +97,122 @@ export function usePosProducts(branchId: string | null) {
     }
 
     setLoading(true);
-    const q = query(
+
+    let rawProducts: Product[] = [];
+    const stockByProduct = new Map<string, number>();
+    const perProductStockUnsubs = new Map<string, Unsubscribe>();
+    let stockGroupUnsub: Unsubscribe | null = null;
+    let usePerProductStock = false;
+
+    const publish = () => {
+      setProducts(mergePosProducts(rawProducts, stockByProduct));
+      setLoading(false);
+    };
+
+    const clearPerProductStockListeners = () => {
+      for (const unsub of perProductStockUnsubs.values()) unsub();
+      perProductStockUnsubs.clear();
+    };
+
+    const syncPerProductStockListeners = (productIds: string[]) => {
+      const idSet = new Set(productIds);
+
+      for (const [id, unsub] of perProductStockUnsubs) {
+        if (!idSet.has(id)) {
+          unsub();
+          perProductStockUnsubs.delete(id);
+          stockByProduct.delete(id);
+        }
+      }
+
+      for (const id of productIds) {
+        if (perProductStockUnsubs.has(id)) continue;
+
+        const stockRef = doc(
+          db!,
+          collections.products,
+          id,
+          collections.productStocks,
+          branchId,
+        );
+
+        const unsub = onSnapshot(
+          stockRef,
+          (snap) => {
+            stockByProduct.set(
+              id,
+              snap.exists() ? ((snap.data()?.totalStockBase as number) ?? 0) : 0,
+            );
+            publish();
+          },
+          (err) => {
+            setError(err instanceof Error ? err : new Error(String(err)));
+          },
+        );
+
+        perProductStockUnsubs.set(id, unsub);
+      }
+    };
+
+    const attachStockListener = () => {
+      if (usePerProductStock) {
+        syncPerProductStockListeners(rawProducts.map((p) => p.id));
+        return;
+      }
+
+      const stockQ = query(
+        collectionGroup(db!, collections.productStocks),
+        where('branchId', '==', branchId),
+      );
+
+      stockGroupUnsub = onSnapshot(
+        stockQ,
+        (snap) => {
+          for (const d of snap.docs) {
+            const productId = d.ref.parent.parent?.id;
+            if (!productId) continue;
+            stockByProduct.set(productId, (d.data()?.totalStockBase as number) ?? 0);
+          }
+          publish();
+        },
+        (err) => {
+          if (isIndexError(err)) {
+            console.warn(
+              '[usePosProducts] productStocks collectionGroup unavailable — using per-product listeners',
+            );
+            usePerProductStock = true;
+            stockGroupUnsub?.();
+            stockGroupUnsub = null;
+            syncPerProductStockListeners(rawProducts.map((p) => p.id));
+            return;
+          }
+          setError(err instanceof Error ? err : new Error(String(err)));
+        },
+      );
+    };
+
+    const productQ = query(
       collection(db, collections.products),
       where('isActive', '==', true),
     );
 
-    const unsub = onSnapshot(
-      q,
-      async (snap) => {
+    const unsubProducts = onSnapshot(
+      productQ,
+      (snap) => {
         try {
-          const raw = snap.docs
+          rawProducts = snap.docs
             .map((d) => ({ ...(d.data() as Product), id: d.id }))
             .filter((p) => !p.deletedAt);
 
-          const withStock = await Promise.all(
-            raw.map(async (product) => {
-              const stockRef = doc(
-                db!,
-                collections.products,
-                product.id,
-                collections.productStocks,
-                branchId,
-              );
-              const stockSnap = await getDoc(stockRef);
-              const stock = stockSnap.exists()
-                ? (stockSnap.data()?.totalStockBase as number) ?? 0
-                : 0;
-              return toPosProduct(product, stock);
-            }),
-          );
+          if (usePerProductStock) {
+            syncPerProductStockListeners(rawProducts.map((p) => p.id));
+          }
 
-          setProducts(withStock);
+          publish();
           setError(null);
         } catch (err) {
           setError(err instanceof Error ? err : new Error(String(err)));
           if (import.meta.env.DEV) setProducts(DEV_POS_PRODUCTS);
-        } finally {
-          setLoading(false);
         }
       },
       (err) => {
@@ -133,7 +222,13 @@ export function usePosProducts(branchId: string | null) {
       },
     );
 
-    return unsub;
+    attachStockListener();
+
+    return () => {
+      unsubProducts();
+      stockGroupUnsub?.();
+      clearPerProductStockListeners();
+    };
   }, [branchId]);
 
   const categories = useMemo(() => {

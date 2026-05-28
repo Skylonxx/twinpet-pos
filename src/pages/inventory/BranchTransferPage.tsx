@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import TransferConfirmDialog from '../../components/inventory/TransferConfirmDialog';
 import ProductPickerDialog, { productListItemToPickerItem } from '../../components/products/ProductPickerDialog';
 import type { ProductPickerItem } from '../../components/products/productPickerTypes';
-import { BRANCH_OPTIONS, getBranchLabel } from '../../lib/branches';
+import { getBranchLabel, useActiveBranches } from '../../lib/branches';
 import { useAuth } from '../../lib/hooks/useAuth';
 import { confirmBranchTransfer } from '../../lib/inventory/transferCrud';
 import { lineFromPickerForTransfer, type TransferLine } from '../../lib/inventory/transferTypes';
@@ -17,6 +17,7 @@ function todayIso(): string {
 export default function BranchTransferPage() {
   const navigate = useNavigate();
   const { branchId, user } = useAuth();
+  const { branches: activeBranches } = useActiveBranches();
   const { products, loading } = useProductCrud(branchId);
 
   const [transferDate, setTransferDate] = useState(todayIso);
@@ -46,8 +47,8 @@ export default function BranchTransferPage() {
   }, [activeProducts]);
 
   const destBranches = useMemo(
-    () => BRANCH_OPTIONS.filter((b) => b.id !== branchId),
-    [branchId],
+    () => activeBranches.filter((b) => b.id !== branchId),
+    [activeBranches, branchId],
   );
 
   const linesWithQty = useMemo(
@@ -224,7 +225,7 @@ export default function BranchTransferPage() {
                 <option value="">— เลือกสาขาปลายทาง —</option>
                 {destBranches.map((b) => (
                   <option key={b.id} value={b.id}>
-                    {b.label}
+                    {b.name}
                   </option>
                 ))}
               </select>

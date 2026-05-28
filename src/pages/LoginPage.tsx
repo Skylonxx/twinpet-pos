@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { BRANCH_OPTIONS, getBranchLabel } from '../lib/branches';
+import { getBranchLabel, useActiveBranches } from '../lib/branches';
 import { useAuth } from '../lib/hooks/useAuth';
 import type { User, UserRole } from '../lib/types';
 import './LoginPage.css';
@@ -24,9 +24,10 @@ function formatRole(role: UserRole): string {
 
 export default function LoginPage() {
   const { loginWithPin, loginWithUsername, completeLogin } = useAuth();
+  const { branches, loading: branchesLoading } = useActiveBranches();
 
   const [mode, setMode] = useState<LoginMode>('pin');
-  const [branchId, setBranchId] = useState<string>(BRANCH_OPTIONS[0]!.id);
+  const [branchId, setBranchId] = useState<string>('');
   const [pinValue, setPinValue] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -40,7 +41,16 @@ export default function LoginPage() {
 
   const pinSubmitting = useRef(false);
 
-  const branchLabel = getBranchLabel(branchId);
+  useEffect(() => {
+    if (branches.length === 0) return;
+    setBranchId((current) =>
+      current && branches.some((b) => b.id === current) ? current : branches[0]!.id,
+    );
+  }, [branches]);
+
+  const branchLabel = branchId
+    ? (branches.find((b) => b.id === branchId)?.name ?? getBranchLabel(branchId))
+    : '—';
 
   const showToast = useCallback((message: string, type: Toast['type'] = 'info') => {
     const id = Date.now();
@@ -80,7 +90,7 @@ export default function LoginPage() {
 
   const submitPin = useCallback(
     async (pin: string) => {
-      if (pinSubmitting.current) return;
+      if (pinSubmitting.current || !branchId) return;
       pinSubmitting.current = true;
       setIsLoading(true);
       clearErrors();
@@ -122,6 +132,10 @@ export default function LoginPage() {
   }, [clearErrors, isLoading]);
 
   const handlePasswordLogin = useCallback(async () => {
+    if (!branchId) {
+      setPwError('กรุณาเลือกสาขา');
+      return;
+    }
     const normalizedUsername = username.trim().toLowerCase();
     if (!normalizedUsername || !password) {
       setPwError('กรุณากรอก Username และ Password');
@@ -229,6 +243,7 @@ export default function LoginPage() {
                 id="branch-sel"
                 className="login-branch-select"
                 value={branchId}
+                disabled={branchesLoading || branches.length === 0}
                 onChange={(e) => {
                   setBranchId(e.target.value);
                   clearErrors();
@@ -236,11 +251,17 @@ export default function LoginPage() {
                   pinSubmitting.current = false;
                 }}
               >
-                {BRANCH_OPTIONS.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.label}
-                  </option>
-                ))}
+                {branchesLoading ? (
+                  <option value="">กำลังโหลดสาขา...</option>
+                ) : branches.length === 0 ? (
+                  <option value="">ไม่พบสาขาที่ใช้งานได้</option>
+                ) : (
+                  branches.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))
+                )}
               </select>
             </div>
 

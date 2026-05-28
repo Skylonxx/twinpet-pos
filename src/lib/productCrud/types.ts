@@ -172,8 +172,28 @@ export function validateProductForm(form: ProductFormData): ProductFormFieldErro
   if (!form.baseUnit.trim()) errors.unit = REQUIRED_FIELD_MSG;
 
   if (form.hasUom) {
-    const missingSubUnit = form.uomRows.some((r) => !r.isBase && !r.unit.trim());
+    const subs = form.uomRows.filter((r) => !r.isBase);
+    if (subs.length === 0) {
+      errors.unit = 'กรุณาเพิ่มอย่างน้อย 1 หน่วยย่อย';
+    }
+    const missingSubUnit = subs.some((r) => !r.unit.trim());
     if (missingSubUnit) errors.unit = REQUIRED_FIELD_MSG;
+    const badFactor = subs.some((r) => !Number.isFinite(r.factor) || r.factor <= 0);
+    if (badFactor) errors.unit = 'ตัวคูณต้องมากกว่า 0';
+    const seen = new Set<string>();
+    for (const r of subs) {
+      const name = r.unit.trim();
+      if (!name) continue;
+      if (name === form.baseUnit.trim()) {
+        errors.unit = 'หน่วยย่อยต้องไม่ซ้ำกับหน่วยฐาน';
+        break;
+      }
+      if (seen.has(name)) {
+        errors.unit = 'หน่วยย่อยซ้ำกัน';
+        break;
+      }
+      seen.add(name);
+    }
   }
 
   const retailPrice = resolveRetailPrice(form);
@@ -339,10 +359,10 @@ export function productToForm(product: Product): ProductFormData {
 export function formToProduct(form: ProductFormData, id: string): Omit<Product, 'createdAt' | 'updatedAt' | 'deletedAt' | 'avgCost'> {
   const uomConversions: UomConversion[] = form.hasUom
     ? form.uomRows
-        .filter((r) => !r.isBase)
+        .filter((r) => !r.isBase && r.unit.trim() && Number.isFinite(r.factor) && r.factor > 0)
         .map((r) => {
           const conv: UomConversion = {
-            unit: r.unit,
+            unit: r.unit.trim(),
             factor: r.factor,
           };
           if (r.barcode.trim()) conv.barcode = r.barcode.trim();

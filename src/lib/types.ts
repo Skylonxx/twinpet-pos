@@ -90,7 +90,9 @@ export type User = SoftDelete & {
 // -----------------------------
 
 export type UomConversion = {
+  /** Unit label — must match a name from the global master unit list */
   unit: string;
+  /** Product-specific multiplier: 1 `unit` = `factor` × product.baseUnit */
   factor: number;
   barcode?: string | null;
   /** Per-tier prices for this unit — keys match customer.customerType */
@@ -116,7 +118,9 @@ export type Product = SoftDelete & {
   category: string;
   description: string;
   imageUrl: string | null;
+  /** Stock-keeping unit — smallest inventory unit for this product */
   baseUnit: string;
+  /** Alternate sell/receive units with product-specific conversion to baseUnit */
   uomConversions: UomConversion[];
   prices: ProductPrice[];
   /** Per-tier base-unit prices — key is tier id (e.g. retail, wholesale, agent1) */
@@ -237,7 +241,7 @@ export type Customer = SoftDelete & {
 };
 
 // -----------------------------
-// priceLevels + uomUnits
+// priceLevels + master unit names (uomUnits collection)
 // -----------------------------
 
 export type PriceLevel = {
@@ -248,13 +252,11 @@ export type PriceLevel = {
   isActive: boolean;
 };
 
+/** Global unit name registry — conversion factors are stored per product in uomConversions */
 export type UomUnit = {
   id: string;
   name: string;
   code: string;
-  baseUnit: string;
-  factor: number;
-  isBase: boolean;
   isActive: boolean;
 };
 

@@ -14,8 +14,8 @@ import {
 import { collections, db, isFirebaseConfigured } from '../firebase';
 import type { ProductStock, Receiving, ReceivingItem, Settings, StockLot, StockMovement } from '../types';
 import { devConfirmReceiving } from './devMock';
+import { allocateReceivingNumber } from './receivingId';
 import {
-  generateGrnId,
   lineCostBase,
   lineQtyBase,
   lineSubtotal,
@@ -98,7 +98,9 @@ export async function confirmReceiving(input: ConfirmReceivingInput): Promise<st
   }
 
   const firestore = db;
-  const receivingId = input.receivingId ?? generateGrnId();
+  const receivingId =
+    input.receivingId ??
+    (await allocateReceivingNumber(firestore));
   const isFinalizingDraft = Boolean(input.receivingId);
 
   const uniqueProductIds = [...new Set(input.lines.map((l) => l.productId))];

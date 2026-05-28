@@ -13,7 +13,7 @@ import {
   type Firestore,
 } from 'firebase/firestore';
 import { collections, db, isFirebaseConfigured } from '../firebase';
-import type { Branch, PosDevice, Settings, UomUnit } from '../types';
+import type { Branch, PosDevice, Settings } from '../types';
 import {
   devAddDevice,
   devForceLogout,
@@ -23,7 +23,6 @@ import {
   getDevExtras,
   getDevPriceLevels,
   getDevSettings,
-  getDevUomUnits,
   priceLevelToRow,
   rowToPriceLevel,
   saveDevData,
@@ -109,7 +108,6 @@ async function loadExtras(firestore: Firestore, branchId: string) {
 export function useSettings(branchId: string | null) {
   const [form, setForm] = useState<SettingsFormData | null>(null);
   const [priceLevels, setPriceLevels] = useState<PriceLevelRow[]>([]);
-  const [uomUnits, setUomUnits] = useState<UomUnit[]>([]);
   const [devices, setDevices] = useState<PosDevice[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -132,17 +130,15 @@ export function useSettings(branchId: string | null) {
         const nextForm = settingsToForm(settings, branch, extras);
         setForm(nextForm);
         setPriceLevels(getDevPriceLevels());
-        setUomUnits(getDevUomUnits());
         setDevices(getDevDevices());
-        snapshotRef.current = JSON.stringify({ nextForm, priceLevels: getDevPriceLevels(), uomUnits: getDevUomUnits(), devices: getDevDevices() });
+        snapshotRef.current = JSON.stringify({ nextForm, priceLevels: getDevPriceLevels(), devices: getDevDevices() });
         return;
       }
 
-      const [branchSnap, settingsSnap, plSnap, uomSnap, devSnap] = await Promise.all([
+      const [branchSnap, settingsSnap, plSnap, devSnap] = await Promise.all([
         getDoc(doc(db, collections.branches, branchId)),
         getDoc(doc(db, collections.settings, branchId)),
         getDocs(query(collection(db, collections.priceLevels), orderBy('order', 'asc'))),
-        getDocs(query(collection(db, collections.uomUnits), orderBy('name', 'asc'))),
         getDocs(query(collection(db, collections.posDevices), where('branchId', '==', branchId))),
       ]);
 
@@ -157,15 +153,13 @@ export function useSettings(branchId: string | null) {
       const pls = plSnap.docs.map((d) =>
         priceLevelToRow({ ...(d.data() as PriceLevelRow), id: d.id }),
       );
-      const uoms = uomSnap.docs.map((d) => ({ ...(d.data() as UomUnit), id: d.id }));
       const devs = devSnap.docs.map((d) => ({ ...(d.data() as PosDevice), id: d.id }));
 
       const nextForm = settingsToForm(settings, branch, extras);
       setForm(nextForm);
       setPriceLevels(pls);
-      setUomUnits(uoms);
       setDevices(devs);
-      snapshotRef.current = JSON.stringify({ nextForm, priceLevels: pls, uomUnits: uoms, devices: devs });
+      snapshotRef.current = JSON.stringify({ nextForm, priceLevels: pls, devices: devs });
     } finally {
       setLoading(false);
     }
@@ -193,11 +187,10 @@ export function useSettings(branchId: string | null) {
           settings: { ...settingsPayload, updatedAt: getDevSettings().updatedAt },
           extras: extrasPayload,
           priceLevels,
-          uomUnits,
           devices,
         });
         setLastSavedAt(new Date());
-        snapshotRef.current = JSON.stringify({ form, priceLevels, uomUnits, devices });
+        snapshotRef.current = JSON.stringify({ form, priceLevels, devices });
         return;
       }
 
@@ -217,16 +210,12 @@ export function useSettings(branchId: string | null) {
         await setDoc(doc(db, collections.priceLevels, pl.id), rowToPriceLevel(pl), { merge: true });
       }
 
-      for (const u of uomUnits) {
-        await setDoc(doc(db, collections.uomUnits, u.id), u, { merge: true });
-      }
-
       setLastSavedAt(new Date());
-      snapshotRef.current = JSON.stringify({ form, priceLevels, uomUnits, devices });
+      snapshotRef.current = JSON.stringify({ form, priceLevels, devices });
     } finally {
       setSaving(false);
     }
-  }, [branchId, form, priceLevels, uomUnits, devices]);
+  }, [branchId, form, priceLevels, devices]);
 
   const cancel = useCallback(() => {
     void load();
@@ -234,8 +223,8 @@ export function useSettings(branchId: string | null) {
 
   const isDirty = useCallback(() => {
     if (!form) return false;
-    return JSON.stringify({ form, priceLevels, uomUnits, devices }) !== snapshotRef.current;
-  }, [form, priceLevels, uomUnits, devices]);
+    return JSON.stringify({ form, priceLevels, devices }) !== snapshotRef.current;
+  }, [form, priceLevels, devices]);
 
   const uploadLogo = useCallback(
     async (file: File, kind: 'branch' | 'receipt') => {
@@ -311,8 +300,6 @@ export function useSettings(branchId: string | null) {
     updateForm,
     priceLevels,
     setPriceLevels,
-    uomUnits,
-    setUomUnits,
     devices,
     setDevices,
     loading,
