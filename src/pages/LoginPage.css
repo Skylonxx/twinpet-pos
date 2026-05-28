@@ -459,6 +459,10 @@
   pointer-events: none;
 }
 
+.login-btn-login.pin-submit {
+  margin-top: 12px;
+}
+
 .login-btn-login .spinner {
   width: 16px;
   height: 16px;

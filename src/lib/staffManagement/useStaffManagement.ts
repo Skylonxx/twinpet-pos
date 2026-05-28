@@ -81,8 +81,13 @@ export function useStaffManagement(
       where('branchId', '==', branchId),
       orderBy('createdAt', 'desc'),
     );
+    const actFallbackQ = query(
+      collection(db, collections.staffActivities),
+      where('branchId', '==', branchId),
+    );
 
     let cancelled = false;
+    let unsubActFallback: (() => void) | null = null;
 
     const unsubUsers = onSnapshot(
       usersQ,
@@ -102,10 +107,37 @@ export function useStaffManagement(
       },
     );
 
-    const unsubAct = onSnapshot(actQ, (snap) => {
-      if (cancelled) return;
-      setActivities(snap.docs.map((d) => ({ ...(d.data() as StaffActivity), id: d.id })));
-    });
+    const mapActivities = (snap: { docs: { id: string; data: () => unknown }[] }) =>
+      snap.docs.map((d) => ({ ...(d.data() as StaffActivity), id: d.id }));
+
+    const sortActivitiesDesc = (list: StaffActivity[]) =>
+      [...list].sort((a, b) => {
+        const ta =
+          a.createdAt && typeof a.createdAt === 'object' && 'toDate' in a.createdAt
+            ? (a.createdAt as Timestamp).toDate().getTime()
+            : 0;
+        const tb =
+          b.createdAt && typeof b.createdAt === 'object' && 'toDate' in b.createdAt
+            ? (b.createdAt as Timestamp).toDate().getTime()
+            : 0;
+        return tb - ta;
+      });
+
+    const unsubAct = onSnapshot(
+      actQ,
+      (snap) => {
+        if (cancelled) return;
+        setActivities(mapActivities(snap));
+      },
+      (err) => {
+        if (cancelled) return;
+        console.warn('[useStaffManagement] staffActivities indexed query failed, using fallback:', err);
+        unsubActFallback = onSnapshot(actFallbackQ, (snap) => {
+          if (cancelled) return;
+          setActivities(sortActivitiesDesc(mapActivities(snap)));
+        });
+      },
+    );
 
     void getDoc(doc(db, collections.settings, ROLE_PERMISSIONS_DOC_ID)).then((snap) => {
       if (cancelled) return;
@@ -119,6 +151,7 @@ export function useStaffManagement(
       cancelled = true;
       unsubUsers();
       unsubAct();
+      unsubActFallback?.();
     };
   }, [branchId]);
 

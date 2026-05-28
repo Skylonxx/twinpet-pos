@@ -1,6 +1,13 @@
 import { initializeApp, type FirebaseApp } from 'firebase/app';
 import { getAuth, type Auth } from 'firebase/auth';
-import { getFirestore, type Firestore } from 'firebase/firestore';
+import {
+  getFirestore,
+  initializeFirestore,
+  memoryLocalCache,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  type Firestore,
+} from 'firebase/firestore';
 import { getStorage, type FirebaseStorage } from 'firebase/storage';
 
 const firebaseConfig = {
@@ -21,10 +28,38 @@ let auth: Auth | undefined;
 let db: Firestore | undefined;
 let storage: FirebaseStorage | undefined;
 
+function initFirestore(appInstance: FirebaseApp): Firestore {
+  try {
+    return initializeFirestore(appInstance, {
+      localCache: persistentLocalCache({
+        tabManager: persistentMultipleTabManager(),
+      }),
+    });
+  } catch (err) {
+    console.warn('[firebase] multi-tab persistence unavailable — trying single-tab', err);
+  }
+
+  try {
+    return initializeFirestore(appInstance, {
+      localCache: persistentLocalCache(),
+    });
+  } catch (err) {
+    console.warn('[firebase] IndexedDB persistence unavailable — using memory cache', err);
+  }
+
+  try {
+    return initializeFirestore(appInstance, {
+      localCache: memoryLocalCache(),
+    });
+  } catch {
+    return getFirestore(appInstance);
+  }
+}
+
 if (isFirebaseConfigured) {
   app = initializeApp(firebaseConfig);
   auth = getAuth(app);
-  db = getFirestore(app);
+  db = initFirestore(app);
   storage = getStorage(app);
 }
 

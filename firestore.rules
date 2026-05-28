@@ -1,0 +1,277 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Custom-claim helpers (set by verifyPinLogin Cloud Function) ──
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isStaff() {
+      return isAuthenticated() && request.auth.token.staffId != null;
+    }
+
+    function staffId() {
+      return request.auth.token.staffId;
+    }
+
+    function role() {
+      return request.auth.token.role;
+    }
+
+    function branchIds() {
+      return request.auth.token.branchIds;
+    }
+
+    function isAdmin() {
+      return isStaff() && role() == 'admin';
+    }
+
+    function isManagerOrAdmin() {
+      return isStaff() && role() in ['admin', 'manager'];
+    }
+
+    function hasBranchAccess(branchId) {
+      return isStaff() && branchId in branchIds();
+    }
+
+    /** productStocks doc id is often the branch id (e.g. LDP-001) */
+    function requestProductStockBranchId(stockDocId) {
+      return request.resource.data.branchId != null
+        ? request.resource.data.branchId
+        : stockDocId;
+    }
+
+    function isGlobalSettingsId(settingId) {
+      return settingId in ['system', 'expiryPolicies', '_rolePermissions'];
+    }
+
+    function canReadSettingsDoc(settingId) {
+      return isStaff() && (isGlobalSettingsId(settingId) || hasBranchAccess(settingId));
+    }
+
+    function canWriteSettingsDoc(settingId) {
+      return isAdmin() && (isGlobalSettingsId(settingId) || hasBranchAccess(settingId));
+    }
+
+    // ── Branches (login dropdown — any signed-in client incl. anonymous) ──
+    match /branches/{branchId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // ── Staff profiles ──
+    match /users/{userId} {
+      allow read: if isStaff() && (staffId() == userId || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    // ── Settings (global + per-branch) ──
+    match /settings/{settingId} {
+      allow read: if canReadSettingsDoc(settingId);
+      allow write: if canWriteSettingsDoc(settingId);
+
+      match /docCounters/{counterId} {
+        allow read, write: if isStaff();
+      }
+    }
+
+    // ── Global master data ──
+    match /categories/{docId} {
+      allow read: if isStaff();
+      allow write: if isManagerOrAdmin();
+    }
+
+    match /customerTiers/{docId} {
+      allow read: if isStaff();
+      allow write: if isManagerOrAdmin();
+    }
+
+    match /priceLevels/{docId} {
+      allow read: if isStaff();
+      allow write: if isManagerOrAdmin();
+    }
+
+    match /uomUnits/{docId} {
+      allow read: if isStaff();
+      allow write: if isManagerOrAdmin();
+    }
+
+    // ── Catalog ──
+    match /products/{productId} {
+      allow read: if isStaff();
+      allow write: if isManagerOrAdmin();
+
+      match /productStocks/{stockBranchId} {
+        allow read: if hasBranchAccess(stockBranchId);
+        allow write: if isStaff() && hasBranchAccess(stockBranchId);
+      }
+    }
+
+    // collectionGroup('productStocks') — query filters on resource.data.branchId
+    match /{path=**}/productStocks/{stockDocId} {
+      allow read: if isStaff()
+        && resource.data.branchId is string
+        && hasBranchAccess(resource.data.branchId);
+      allow write: if isStaff() && hasBranchAccess(requestProductStockBranchId(stockDocId));
+    }
+
+    // ── Customers & credit ──
+    match /customers/{customerId} {
+      allow read: if isStaff();
+      allow write: if isStaff();
+    }
+
+    match /creditAccounts/{accountId} {
+      allow read: if isStaff();
+      allow write: if isStaff();
+    }
+
+    match /creditTransactions/{txId} {
+      allow read: if isStaff();
+      allow create: if isStaff();
+      allow update: if isManagerOrAdmin();
+    }
+
+    match /creditPayments/{paymentId} {
+      allow read: if isStaff();
+      allow create: if isStaff();
+    }
+
+    // ── Sales ──
+    match /orders/{orderId} {
+      allow read: if isStaff() && hasBranchAccess(resource.data.branchId);
+      allow create: if isStaff()
+        && hasBranchAccess(request.resource.data.branchId)
+        && request.resource.data.staffId == staffId();
+      allow update: if isManagerOrAdmin()
+        && hasBranchAccess(resource.data.branchId);
+
+      match /orderItems/{itemId} {
+        allow read: if isStaff();
+        // Parent order may be created in the same batch — cannot get() it yet
+        allow create: if isStaff();
+        allow update, delete: if isStaff()
+          && hasBranchAccess(get(/databases/$(database)/documents/orders/$(orderId)).data.branchId);
+      }
+    }
+
+    match /payments/{paymentId} {
+      allow read: if isStaff();
+      allow create: if isStaff();
+    }
+
+    match /parkedOrders/{parkedId} {
+      allow read: if isStaff() && hasBranchAccess(resource.data.branchId);
+      allow write: if isStaff() && hasBranchAccess(request.resource.data.branchId);
+
+      match /parkedItems/{itemId} {
+        allow read: if isStaff();
+        allow create: if isStaff();
+        allow update, delete: if isStaff()
+          && hasBranchAccess(get(/databases/$(database)/documents/parkedOrders/$(parkedId)).data.branchId);
+      }
+    }
+
+    match /quotations/{quotationId} {
+      allow read: if isStaff() && hasBranchAccess(resource.data.branchId);
+      allow write: if isStaff() && hasBranchAccess(request.resource.data.branchId);
+
+      match /quotationItems/{itemId} {
+        allow read: if isStaff();
+        allow create: if isStaff();
+        allow update, delete: if isStaff()
+          && hasBranchAccess(get(/databases/$(database)/documents/quotations/$(quotationId)).data.branchId);
+      }
+    }
+
+    // ── Inventory ──
+    match /stockLots/{lotId} {
+      allow read: if isStaff();
+      allow create, delete: if isManagerOrAdmin();
+      allow update: if isStaff();
+    }
+
+    match /stockMovements/{movementId} {
+      allow read: if isStaff();
+      allow create: if isStaff()
+        && hasBranchAccess(request.resource.data.branchId);
+    }
+
+    match /receivings/{receivingId} {
+      allow read: if isStaff() && hasBranchAccess(resource.data.branchId);
+      allow write: if isManagerOrAdmin() && hasBranchAccess(request.resource.data.branchId);
+
+      match /receivingItems/{itemId} {
+        allow read: if isStaff();
+        allow create: if isStaff();
+        allow update, delete: if isStaff()
+          && hasBranchAccess(get(/databases/$(database)/documents/receivings/$(receivingId)).data.branchId);
+      }
+    }
+
+    match /inventoryAdjustments/{adjustmentId} {
+      allow read: if isStaff() && hasBranchAccess(resource.data.branchId);
+      allow write: if isStaff() && hasBranchAccess(request.resource.data.branchId);
+
+      match /adjustmentItems/{itemId} {
+        allow read: if isStaff();
+        allow create: if isStaff();
+        allow update, delete: if isStaff()
+          && hasBranchAccess(get(/databases/$(database)/documents/inventoryAdjustments/$(adjustmentId)).data.branchId);
+      }
+    }
+
+    match /inventoryTransfers/{transferId} {
+      allow read: if isStaff()
+        && (hasBranchAccess(resource.data.fromBranchId)
+          || hasBranchAccess(resource.data.toBranchId));
+      allow write: if isStaff()
+        && hasBranchAccess(request.resource.data.fromBranchId);
+
+      match /transferItems/{itemId} {
+        allow read: if isStaff();
+        allow create: if isStaff();
+        allow update, delete: if isStaff()
+          && hasBranchAccess(get(/databases/$(database)/documents/inventoryTransfers/$(transferId)).data.fromBranchId);
+      }
+    }
+
+    // ── Shifts & cash ──
+    match /shifts/{shiftId} {
+      allow read: if isStaff() && hasBranchAccess(resource.data.branchId);
+      allow create: if isStaff()
+        && hasBranchAccess(request.resource.data.branchId);
+      allow update: if isStaff()
+        && hasBranchAccess(resource.data.branchId);
+    }
+
+    match /cashTransactions/{txId} {
+      allow read: if isStaff() && hasBranchAccess(resource.data.branchId);
+      allow create: if isStaff()
+        && hasBranchAccess(request.resource.data.branchId);
+    }
+
+    match /posDevices/{deviceId} {
+      allow read: if isStaff() && hasBranchAccess(resource.data.branchId);
+      allow write: if isAdmin() && hasBranchAccess(request.resource.data.branchId);
+    }
+
+    // ── Staff activity & audit ──
+    match /staffActivities/{activityId} {
+      allow read: if isStaff();
+      allow create: if isStaff();
+    }
+
+    match /auditLogs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isStaff();
+    }
+
+    // ── Default deny for unlisted collections ──
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -11,6 +11,7 @@ import {
   orderBy,
   type DocumentReference,
   type DocumentSnapshot,
+  type Transaction,
 } from 'firebase/firestore';
 import { collections, db } from './firebase';
 import { buildCrmSaleUpdateFields } from './customers/crmService';
@@ -35,6 +36,8 @@ import type {
   CreditTransaction,
 } from './types';
 
+export const OVERSELL_LOT_ID = 'oversell';
+
 export type CompleteSaleInput = {
   branchId: string;
   staffId: string;
@@ -51,11 +54,10 @@ export type CompleteSaleInput = {
   priceLevelId?: string;
 };
 
-type LotUpdate = {
+type LotCut = {
   ref: DocumentReference;
-  newQty: number;
-  costPerUnit: number;
   cutQty: number;
+  costPerUnit: number;
 };
 
 type MutableLot = {
@@ -63,40 +65,83 @@ type MutableLot = {
   id: string;
   qtyRemaining: number;
   costPerUnit: number;
+  receivedAtMs: number;
 };
 
-async function queryLots(productId: string, branchId: string) {
-  if (!db) return [];
-  const snap = await getDocs(
-    query(
-      collection(db, collections.stockLots),
-      where('productId', '==', productId),
-      where('branchId', '==', branchId),
-      where('isDepleted', '==', false),
-      orderBy('receivedAt', 'asc'),
-    ),
-  );
-  return snap.docs;
+function parseReceivedAtMs(value: unknown): number {
+  if (
+    value != null &&
+    typeof value === 'object' &&
+    'toDate' in value &&
+    typeof (value as { toDate: unknown }).toDate === 'function'
+  ) {
+    return (value as { toDate: () => Date }).toDate().getTime();
+  }
+  if (
+    value != null &&
+    typeof value === 'object' &&
+    'seconds' in value &&
+    typeof (value as { seconds: unknown }).seconds === 'number'
+  ) {
+    return (value as { seconds: number }).seconds * 1000;
+  }
+  return 0;
 }
 
-function cloneLots(lotDocs: Awaited<ReturnType<typeof queryLots>>): MutableLot[] {
-  return lotDocs.map((lotDoc) => {
-    const lot = lotDoc.data();
-    return {
-      ref: lotDoc.ref,
-      id: lotDoc.id,
-      qtyRemaining: lot.qtyRemaining ?? 0,
-      costPerUnit: lot.costPerUnit ?? 0,
-    };
-  });
+function buildLotsQuery(firestore: NonNullable<typeof db>, productId: string, branchId: string) {
+  return query(
+    collection(firestore, collections.stockLots),
+    where('productId', '==', productId),
+    where('branchId', '==', branchId),
+    where('isDepleted', '==', false),
+    orderBy('receivedAt', 'asc'),
+  );
+}
+
+/** Discover lot doc refs (outside tx) — same pattern as confirmReceiving ghost lots */
+async function fetchActiveLotRefs(
+  firestore: NonNullable<typeof db>,
+  productId: string,
+  branchId: string,
+): Promise<DocumentReference[]> {
+  const snap = await getDocs(buildLotsQuery(firestore, productId, branchId));
+  return snap.docs.map((d) => d.ref);
+}
+
+/** Read fresh lot qty inside tx — one tx.get per ref, all reads before writes */
+async function readProductLotsInTransaction(
+  tx: Transaction,
+  lotRefs: DocumentReference[],
+): Promise<MutableLot[]> {
+  const lots: MutableLot[] = [];
+
+  for (const lotRef of lotRefs) {
+    const snap = await tx.get(lotRef);
+    if (!snap.exists()) continue;
+
+    const lot = snap.data();
+    const qtyRemaining = (lot.qtyRemaining as number) ?? 0;
+    if (qtyRemaining <= 0 || lot.isDepleted === true) continue;
+
+    lots.push({
+      ref: lotRef,
+      id: snap.id,
+      qtyRemaining,
+      costPerUnit: (lot.costPerUnit as number) ?? 0,
+      receivedAtMs: parseReceivedAtMs(lot.receivedAt),
+    });
+  }
+
+  lots.sort((a, b) => a.receivedAtMs - b.receivedAtMs);
+  return lots;
 }
 
 function planFifoCutFromState(
   lots: MutableLot[],
   qtyBase: number,
-): { updates: LotUpdate[]; lotRefs: LotRef[]; remaining: number } {
+): { cuts: LotCut[]; lotRefs: LotRef[]; remaining: number } {
   let remaining = qtyBase;
-  const updates: LotUpdate[] = [];
+  const cuts: LotCut[] = [];
   const lotRefs: LotRef[] = [];
 
   for (const lot of lots) {
@@ -105,29 +150,28 @@ function planFifoCutFromState(
 
     const cut = Math.min(remaining, lot.qtyRemaining);
     lotRefs.push({ lotId: lot.id, qty: cut, cost: lot.costPerUnit });
-    updates.push({
+    cuts.push({
       ref: lot.ref,
-      newQty: lot.qtyRemaining - cut,
-      costPerUnit: lot.costPerUnit,
       cutQty: cut,
+      costPerUnit: lot.costPerUnit,
     });
     lot.qtyRemaining -= cut;
     remaining -= cut;
   }
 
-  return { updates, lotRefs, remaining };
+  return { cuts, lotRefs, remaining };
 }
 
-function mergeLotUpdates(updates: LotUpdate[]): LotUpdate[] {
-  const byRef = new Map<string, LotUpdate>();
-  for (const u of updates) {
-    const existing = byRef.get(u.ref.path);
+function mergeLotCuts(cuts: LotCut[]): LotCut[] {
+  const byRef = new Map<string, LotCut>();
+  for (const cut of cuts) {
+    if (!cut.ref?.path || cut.cutQty <= 0) continue;
+    const existing = byRef.get(cut.ref.path);
     if (!existing) {
-      byRef.set(u.ref.path, { ...u });
+      byRef.set(cut.ref.path, { ...cut });
       continue;
     }
-    existing.newQty = u.newQty;
-    existing.cutQty += u.cutQty;
+    existing.cutQty += cut.cutQty;
   }
   return [...byRef.values()];
 }
@@ -154,16 +198,15 @@ export async function completePosSale(input: CompleteSaleInput): Promise<string>
   const firestore = db;
 
   const receiptConfig = await resolveReceiptNumberConfig(firestore, input.branchId);
-
-  const lotsByProduct = new Map<string, MutableLot[]>();
-  for (const line of input.lines) {
-    if (!lotsByProduct.has(line.productId)) {
-      const lotDocs = await queryLots(line.productId, input.branchId);
-      lotsByProduct.set(line.productId, cloneLots(lotDocs));
-    }
-  }
-
   const uniqueProductIds = [...new Set(input.lines.map((l) => l.productId))];
+
+  const lotRefsByProduct = new Map<string, DocumentReference[]>();
+  for (const productId of uniqueProductIds) {
+    lotRefsByProduct.set(
+      productId,
+      await fetchActiveLotRefs(firestore, productId, input.branchId),
+    );
+  }
 
   const billIdResult = await runTransaction(firestore, async (tx) => {
     const orderRef = doc(collection(firestore, collections.orders));
@@ -178,7 +221,7 @@ export async function completePosSale(input: CompleteSaleInput): Promise<string>
       throw new Error('ต้องเลือกลูกค้าก่อนบันทึกเชื่อ');
     }
 
-    // ── Phase 1: all reads ──
+    // ── Phase 1: all reads (tx.get only — before any writes) ──
     const receiptAllocation = await readReceiptCounterInTransaction(tx, firestore, receiptConfig);
     const billId = receiptAllocation.billId;
 
@@ -197,6 +240,17 @@ export async function completePosSale(input: CompleteSaleInput): Promise<string>
       );
       stockSnaps.set(productId, await tx.get(productStockRef));
       productSnaps.set(productId, await tx.get(doc(firestore, collections.products, productId)));
+    }
+
+    const lotsByProduct = new Map<string, MutableLot[]>();
+    const initialLotQty = new Map<string, number>();
+    for (const productId of uniqueProductIds) {
+      const lotRefs = lotRefsByProduct.get(productId) ?? [];
+      const lots = await readProductLotsInTransaction(tx, lotRefs);
+      lotsByProduct.set(productId, lots);
+      for (const lot of lots) {
+        initialLotQty.set(lot.ref.path, lot.qtyRemaining);
+      }
     }
 
     let customerRef: DocumentReference | null = null;
@@ -248,7 +302,7 @@ export async function completePosSale(input: CompleteSaleInput): Promise<string>
 
     const itemWrites: Array<{ ref: DocumentReference; data: OrderItem }> = [];
     const stockDeduct = new Map<string, number>();
-    const allLotUpdates: LotUpdate[] = [];
+    const allLotCuts: LotCut[] = [];
 
     for (const line of input.lines) {
       const qtyBase = line.qty * line.unitFactor;
@@ -267,7 +321,7 @@ export async function completePosSale(input: CompleteSaleInput): Promise<string>
 
       const sourceLots = lotsByProduct.get(line.productId) ?? [];
       const lots = lotStates.get(line.productId) ?? [];
-      const { updates, lotRefs, remaining } = planFifoCutFromState(lots, qtyBase);
+      const { cuts, lotRefs, remaining } = planFifoCutFromState(lots, qtyBase);
 
       if (remaining > 0) {
         if (!allowNegative) {
@@ -275,13 +329,13 @@ export async function completePosSale(input: CompleteSaleInput): Promise<string>
         }
         const fallbackCost = resolveOversellCost(sourceLots, productData, line);
         lotRefs.push({
-          lotId: 'oversell',
+          lotId: OVERSELL_LOT_ID,
           qty: remaining,
           cost: fallbackCost,
         });
       }
 
-      allLotUpdates.push(...updates);
+      allLotCuts.push(...cuts);
 
       const lineFifoCost = lotRefs.reduce((s, r) => s + r.qty * r.cost, 0);
       const itemRef = doc(orderItemsCol);
@@ -334,10 +388,12 @@ export async function completePosSale(input: CompleteSaleInput): Promise<string>
       totalBills: increment(1),
     });
 
-    for (const u of mergeLotUpdates(allLotUpdates)) {
-      tx.update(u.ref, {
-        qtyRemaining: u.newQty,
-        isDepleted: u.newQty === 0,
+    for (const cut of mergeLotCuts(allLotCuts)) {
+      if (!cut.ref) continue;
+      const initialQty = initialLotQty.get(cut.ref.path) ?? cut.cutQty;
+      tx.update(cut.ref, {
+        qtyRemaining: increment(-cut.cutQty),
+        isDepleted: initialQty - cut.cutQty <= 0,
       });
     }
 
@@ -353,11 +409,16 @@ export async function completePosSale(input: CompleteSaleInput): Promise<string>
         input.branchId,
       );
 
-      tx.update(productStockRef, {
-        totalStockBase: increment(-deduct),
-        lastMovementAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
+      tx.set(
+        productStockRef,
+        {
+          branchId: input.branchId,
+          totalStockBase: increment(-deduct),
+          lastMovementAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
     }
 
     for (let i = 0; i < input.lines.length; i++) {
@@ -393,6 +454,7 @@ export async function completePosSale(input: CompleteSaleInput): Promise<string>
         : null,
       staffId: input.staffId,
       staffName: input.staffName,
+      shiftId: input.shiftId,
       status: creditAmt > 0 && paidAmt < input.grandTotal ? 'pending_payment' : 'completed',
       subtotal: input.subtotal,
       discountAmt: input.lines.reduce(

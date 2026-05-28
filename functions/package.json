@@ -1,0 +1,28 @@
+{
+  "name": "twinpet-pos-functions",
+  "private": true,
+  "main": "lib/index.js",
+  "engines": {
+    "node": "20"
+  },
+  "scripts": {
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "serve": "npm run build && firebase emulators:start --only functions",
+    "deploy": "firebase deploy --only functions:verifyPinLogin",
+    "seed-admin": "npm run build && node lib/scripts/seed-admin.js",
+    "seed-branch": "npm run build && node lib/scripts/seed-branch.js",
+    "backfill-product-stocks": "npm run build && node lib/scripts/backfill-product-stocks.js",
+    "fix-invoker": "npm run build && node lib/scripts/fix-invoker.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "firebase-admin": "^13.6.0",
+    "firebase-functions": "^6.6.0",
+    "google-auth-library": "^9.15.1"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "typescript": "~5.9.3"
+  }
+}

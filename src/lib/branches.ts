@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import { collection, getDocs } from 'firebase/firestore';
 import { collections, db, isFirebaseConfigured } from './firebase';
+import { ensureFirebaseAuth } from './firebaseAuth';
 import { getDevBranches } from './settings/devMock';
 import type { Branch } from './types';
 
@@ -21,7 +22,18 @@ function sortBranches(branches: Branch[]): Branch[] {
   return [...branches].sort((a, b) => a.name.localeCompare(b.name, 'th'));
 }
 
-/** Fetch active branches from Firestore (or dev seed) and refresh the label cache. */
+/** Treat missing isActive as active (legacy / seed docs without the field). */
+function isBranchActive(branch: Branch): boolean {
+  return branch.isActive !== false;
+}
+
+function mapBranchDocs(
+  docs: { id: string; data: () => Record<string, unknown> }[],
+): Branch[] {
+  return docs.map((d) => ({ ...(d.data() as Branch), id: d.id }));
+}
+
+/** Fetch branches from Firestore (or dev seed) and refresh the label cache. */
 export async function fetchActiveBranches(): Promise<Branch[]> {
   if (!isFirebaseConfigured || !db) {
     const branches = sortBranches(getDevBranches());
@@ -29,13 +41,27 @@ export async function fetchActiveBranches(): Promise<Branch[]> {
     return branches;
   }
 
-  const snap = await getDocs(
-    query(collection(db, collections.branches), where('isActive', '==', true)),
-  );
+  // Login reads branches before PIN verify — need anonymous Auth for rules.
+  await ensureFirebaseAuth();
+
+  const snap = await getDocs(collection(db, collections.branches));
+  const allBranches = mapBranchDocs(snap.docs);
+  const activeBranches = allBranches.filter(isBranchActive);
 
   const branches = sortBranches(
-    snap.docs.map((d) => ({ ...(d.data() as Branch), id: d.id })),
+    activeBranches.length > 0 ? activeBranches : allBranches,
   );
+
+  if (activeBranches.length === 0 && allBranches.length > 0) {
+    console.warn(
+      '[branches] no branches with isActive !== false — showing all branches as fallback',
+      allBranches.map((b) => ({ id: b.id, name: b.name, isActive: b.isActive })),
+    );
+  }
+
+  if (allBranches.length === 0) {
+    console.warn('[branches] branches collection is empty');
+  }
 
   seedBranchLabelCache(branches);
   return branches;
@@ -53,7 +79,9 @@ export function useActiveBranches() {
       const list = await fetchActiveBranches();
       setBranches(list);
     } catch (err) {
-      setError(err instanceof Error ? err : new Error(String(err)));
+      const error = err instanceof Error ? err : new Error(String(err));
+      console.error('[branches] fetchActiveBranches failed', error);
+      setError(error);
       setBranches([]);
     } finally {
       setLoading(false);

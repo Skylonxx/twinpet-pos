@@ -42,6 +42,11 @@ export default function LoginPage() {
   const pinSubmitting = useRef(false);
 
   useEffect(() => {
+    if (branchesLoading) return;
+    console.log('Fetched branches inside login:', branches);
+  }, [branches, branchesLoading]);
+
+  useEffect(() => {
     if (branches.length === 0) return;
     setBranchId((current) =>
       current && branches.some((b) => b.id === current) ? current : branches[0]!.id,
@@ -90,25 +95,61 @@ export default function LoginPage() {
 
   const submitPin = useCallback(
     async (pin: string) => {
-      if (pinSubmitting.current || !branchId) return;
+      console.log('Submit clicked', { pin, branchId });
+
+      if (pinSubmitting.current) {
+        console.warn('[login] PIN submit ignored — already in progress');
+        return;
+      }
+
+      if (branchesLoading) {
+        showToast('กำลังโหลดรายการสาขา กรุณารอสักครู่', 'error');
+        return;
+      }
+
+      if (!branchId || branches.length === 0) {
+        showToast('กรุณาเลือกสาขาก่อนกรอก PIN', 'error');
+        setPinValue('');
+        return;
+      }
+
+      const normalizedPin = pin.trim();
+      if (!/^\d{4}$/.test(normalizedPin)) {
+        showToast('PIN ต้องเป็นตัวเลข 4 หลัก', 'error');
+        setPinValue('');
+        return;
+      }
+
       pinSubmitting.current = true;
       setIsLoading(true);
       clearErrors();
 
       try {
-        const user = await loginWithPin(pin, branchId);
+        const user = await loginWithPin(normalizedPin, branchId);
         handleSuccess(user);
-      } catch {
+      } catch (err) {
+        console.error('[login] PIN submit failed', err);
+        const message =
+          err instanceof Error ? err.message : 'PIN ไม่ถูกต้อง กรุณาลองใหม่';
+        showToast(message, 'error');
         setPinError(true);
         setPinShake(true);
         window.setTimeout(() => setPinShake(false), 300);
         setPinValue('');
-        pinSubmitting.current = false;
       } finally {
         setIsLoading(false);
+        pinSubmitting.current = false;
       }
     },
-    [branchId, clearErrors, handleSuccess, loginWithPin],
+    [
+      branchId,
+      branches.length,
+      branchesLoading,
+      clearErrors,
+      handleSuccess,
+      loginWithPin,
+      showToast,
+    ],
   );
 
   const handlePinPress = useCallback(
@@ -447,6 +488,30 @@ export default function LoginPage() {
                     <i className="ti ti-backspace" aria-hidden="true" />
                   </button>
                 </div>
+
+                <button
+                  type="button"
+                  className={`login-btn-login pin-submit${isLoading ? ' loading' : ''}`}
+                  onClick={() => void submitPin(pinValue)}
+                  disabled={
+                    isLoading ||
+                    branchesLoading ||
+                    !branchId ||
+                    pinValue.length !== 4
+                  }
+                >
+                  {isLoading ? (
+                    <>
+                      <span className="spinner" />
+                      กำลังตรวจสอบ PIN...
+                    </>
+                  ) : (
+                    <>
+                      <i className="ti ti-login" aria-hidden="true" />
+                      ยืนยัน PIN
+                    </>
+                  )}
+                </button>
 
                 <div className="login-login-help single" style={{ marginTop: 12 }}>
                   <button

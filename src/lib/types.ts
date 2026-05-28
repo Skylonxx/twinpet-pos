@@ -278,6 +278,8 @@ export type Order = {
   customerSnap: CustomerSnap | null;
   staffId: string;
   staffName: string;
+  /** Shift active when the sale was recorded — used to reverse shift totals on void */
+  shiftId?: string;
   status: OrderStatus;
   subtotal: number;
   discountAmt: number;
