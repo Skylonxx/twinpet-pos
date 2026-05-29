@@ -60,11 +60,23 @@ export function useInventoryTransfers(branchId: string | null) {
       } catch (err) {
         console.error('Error loading inventory transfers:', err);
 
-        const fallbackSnap = await getDocs(collection(db, collections.inventoryTransfers));
-        const filtered = fallbackSnap.docs
-          .map((d) => ({ ...(d.data() as InventoryTransfer), id: d.id }))
-          .filter((t) => t.fromBranchId === branchId || t.toBranchId === branchId);
-        setTransfers(sortByCreatedDesc(filtered));
+        const fallbackFromQ = query(
+          collection(db, collections.inventoryTransfers),
+          where('fromBranchId', '==', branchId),
+        );
+        const fallbackToQ = query(
+          collection(db, collections.inventoryTransfers),
+          where('toBranchId', '==', branchId),
+        );
+        const [fallbackFromSnap, fallbackToSnap] = await Promise.all([
+          getDocs(fallbackFromQ),
+          getDocs(fallbackToQ),
+        ]);
+        const merged = mergeUnique([
+          ...fallbackFromSnap.docs.map((d) => ({ ...(d.data() as InventoryTransfer), id: d.id })),
+          ...fallbackToSnap.docs.map((d) => ({ ...(d.data() as InventoryTransfer), id: d.id })),
+        ]);
+        setTransfers(sortByCreatedDesc(merged));
       }
     } catch (err) {
       console.error('Error loading inventory transfers:', err);

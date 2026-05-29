@@ -229,13 +229,19 @@ service cloud.firestore {
       // Admin creates movements for any branch (cross-branch receiving via confirmReceiving)
       allow create: if isAdmin() || (isStaff()
         && hasBranchAccess(request.resource.data.branchId));
+      // Managers/admins can update or delete movements when editing a confirmed receiving
+      allow update, delete: if isAdmin() || (isManagerOrAdmin()
+        && hasBranchAccess(resource.data.branchId));
     }
 
     match /receivings/{receivingId} {
       // Admin reads all receivings across every branch (HQ cross-branch visibility)
       allow read: if isAdmin() || (isStaff() && hasBranchAccess(resource.data.branchId));
-      // Admin writes receivings for any branch (HQ cross-branch receiving creation)
-      allow write: if isAdmin() || (isManagerOrAdmin() && hasBranchAccess(request.resource.data.branchId));
+      // Admin creates receivings for any branch (HQ cross-branch receiving creation)
+      allow create: if isAdmin() || (isManagerOrAdmin() && hasBranchAccess(request.resource.data.branchId));
+      // Admin updates any receiving (e.g. fixing supplierId); managers can update within their branch
+      allow update: if isAdmin() || (isManagerOrAdmin() && hasBranchAccess(resource.data.branchId) && hasBranchAccess(request.resource.data.branchId));
+      allow delete: if isAdmin() || (isManagerOrAdmin() && hasBranchAccess(resource.data.branchId));
 
       match /receivingItems/{itemId} {
         allow read: if isStaff();
@@ -247,21 +253,21 @@ service cloud.firestore {
     }
 
     match /inventoryAdjustments/{adjustmentId} {
-      allow read: if isStaff() && hasBranchAccess(resource.data.branchId);
-      allow write: if isStaff() && hasBranchAccess(request.resource.data.branchId);
+      allow read: if isAdmin() || (isStaff() && hasBranchAccess(resource.data.branchId));
+      allow write: if isAdmin() || (isStaff() && hasBranchAccess(request.resource.data.branchId));
 
       match /adjustmentItems/{itemId} {
         allow read: if isStaff();
         allow create: if isStaff();
-        allow update, delete: if isStaff()
-          && hasBranchAccess(get(/databases/$(database)/documents/inventoryAdjustments/$(adjustmentId)).data.branchId);
+        allow update, delete: if isAdmin() || (isStaff()
+          && hasBranchAccess(get(/databases/$(database)/documents/inventoryAdjustments/$(adjustmentId)).data.branchId));
       }
     }
 
     match /inventoryTransfers/{transferId} {
-      allow read: if isStaff()
+      allow read: if isAdmin() || (isStaff()
         && (hasBranchAccess(resource.data.fromBranchId)
-          || hasBranchAccess(resource.data.toBranchId));
+          || hasBranchAccess(resource.data.toBranchId)));
       allow write: if isStaff()
         && hasBranchAccess(request.resource.data.fromBranchId);
 
