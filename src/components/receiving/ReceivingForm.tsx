@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
-import CustomerDetailModal from '../customers/CustomerDetailModal';
-import SupplierPickerDialog from '../customers/SupplierPickerDialog';
 import ProductPickerDialog, { productListItemToPickerItem } from '../products/ProductPickerDialog';
-import { customerFullName, inferContactType, normalizeCustomerForm } from '../../lib/customers/types';
-import { useCustomers } from '../../lib/customers/useCustomers';
+import SupplierPickerDialog from './SupplierPickerDialog';
+import PosSupplierModal from './PosSupplierModal';
+import { useActiveSuppliers } from '../../lib/pos/useSuppliers';
 import { useProductCrud } from '../../lib/productCrud/useProductCrud';
 import type { ProductListItem } from '../../lib/productCrud/types';
+import type { Supplier } from '../../lib/types';
 import {
   buildSubmitPayload,
   emptyReceivingFormValues,
@@ -27,7 +27,6 @@ import {
   uomOptionsForProduct,
   type ReceivingLine,
 } from '../../lib/receiving/types';
-import type { Customer } from '../../lib/types';
 import type { ReceivingStatus } from '../../lib/types';
 import './ReceivingForm.css';
 import ReceivingVoidDialog from './ReceivingVoidDialog';
@@ -66,13 +65,13 @@ export default function ReceivingForm({
   onSaveDraft,
   onCancel,
   onVoid,
-  staffId,
+  staffId: _staffId,
   documentStatus,
   isCancelled = false,
   draftSaving: draftSavingProp,
 }: ReceivingFormProps) {
   const { products, loading } = useProductCrud(branchId);
-  const { customers, priceLevels, creditMap, saveCustomer, refreshDev } = useCustomers(branchId);
+  const catalogSuppliers = useActiveSuppliers(branchId);
 
   const formKey = grnId ?? 'create';
   const [lines, setLines] = useState<ReceivingLine[]>(() => valuesOrEmpty(initialValues).lines);
@@ -89,7 +88,8 @@ export default function ReceivingForm({
   const [scanValue, setScanValue] = useState('');
   const [pickerOpen, setPickerOpen] = useState(false);
   const [supplierPickerOpen, setSupplierPickerOpen] = useState(false);
-  const [detailSupplier, setDetailSupplier] = useState<Customer | null>(null);
+  const [posSupplierModalOpen, setPosSupplierModalOpen] = useState(false);
+  const [supplierAddPrefill, setSupplierAddPrefill] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [draftSavingLocal, setDraftSavingLocal] = useState(false);
   const draftSaving = draftSavingProp ?? draftSavingLocal;
@@ -121,6 +121,37 @@ export default function ReceivingForm({
   const bcTimer = useRef<number | null>(null);
   const scanRef = useRef<HTMLInputElement>(null);
 
+  /**
+   * Resolved catalog entry for the currently stored supplierId.
+   * null when supplierId is absent, empty, or refers to a legacy Customer ID.
+   */
+  const catalogMatch = useMemo(
+    () => (supplierId ? (catalogSuppliers.find((s) => s.id === supplierId) ?? null) : null),
+    [catalogSuppliers, supplierId],
+  );
+
+  /**
+   * True when the supplier info came from free-text entry (no catalog link)
+   * or when supplierId is a legacy Customer ID not present in the new catalog.
+   */
+  const showManualInput = !catalogMatch && (!!supplierName || (!!supplierId && !catalogMatch));
+
+  const handleSelectSupplier = useCallback((s: Supplier) => {
+    setSupplierId(s.id);
+    setSupplierName(s.name);
+    setError(null);
+  }, []);
+
+  const handleManualEntry = useCallback(() => {
+    setSupplierId(null);
+    setSupplierPickerOpen(false);
+  }, []);
+
+  const handleAddNew = useCallback((prefillName: string) => {
+    setSupplierAddPrefill(prefillName);
+    setPosSupplierModalOpen(true);
+  }, []);
+
   const activeProducts = useMemo(
     () => products.filter((p) => p.isActive && !p.deletedAt),
     [products],
@@ -136,17 +167,6 @@ export default function ReceivingForm({
     for (const p of activeProducts) m.set(p.id, p);
     return m;
   }, [activeProducts]);
-
-  const suppliers = useMemo(
-    () => customers.filter((c) => c.isActive && inferContactType(c) === 'supplier'),
-    [customers],
-  );
-
-  const selectSupplier = useCallback((supplier: Customer) => {
-    setSupplierId(supplier.id);
-    setSupplierName(customerFullName(supplier));
-    setError(null);
-  }, []);
 
   const addProduct = useCallback((product: ProductListItem) => {
     const line = emptyLineFromProductListItem(product);
@@ -481,12 +501,12 @@ export default function ReceivingForm({
       ) : null}
       {showTopbar ? (
         <header className="rcv-topbar">
-          {mode === 'edit' ? (
+          {mode === 'edit' || onCancel ? (
             <button
               type="button"
               className="rcv-back-btn rcv-back-btn--action"
               onClick={onCancel}
-              aria-label="กลับไปประวัติรับเข้า"
+              aria-label="กลับ"
             >
               <i className="ti ti-arrow-left" />
             </button>
@@ -594,45 +614,72 @@ export default function ReceivingForm({
               />
             </div>
             <div className="rcv-field rcv-form-full">
-              <label htmlFor={`${idPrefix}-supplier`}>ผู้จำหน่าย</label>
-              <div className="rcv-supplier-input-row">
+              <label>ผู้จำหน่าย</label>
+              <div className="rcv-supplier-trigger-row">
+                <button
+                  type="button"
+                  className={`rcv-supplier-trigger${catalogMatch ? ' rcv-supplier-trigger--linked' : showManualInput ? ' rcv-supplier-trigger--manual' : ''}`}
+                  onClick={() => !isCancelled && setSupplierPickerOpen(true)}
+                  disabled={isCancelled}
+                  aria-label="เลือกผู้จำหน่าย"
+                >
+                  {catalogMatch ? (
+                    <>
+                      <span className="rcv-supplier-avatar rcv-supplier-avatar--trigger">
+                        {(catalogMatch.name[0] ?? 'S').toUpperCase()}
+                      </span>
+                      <span className="rcv-supplier-trigger-body">
+                        <span className="rcv-supplier-trigger-name">{catalogMatch.name}</span>
+                        <span className="rcv-supplier-trigger-sub">
+                          {catalogMatch.code}
+                          {catalogMatch.phone ? ` · ${catalogMatch.phone}` : ''}
+                        </span>
+                      </span>
+                      <span className="rcv-supplier-trigger-badge">ในระบบ</span>
+                    </>
+                  ) : showManualInput ? (
+                    <>
+                      <i className="ti ti-user-edit rcv-supplier-trigger-icon" aria-hidden="true" />
+                      <span className="rcv-supplier-trigger-body">
+                        <span className="rcv-supplier-trigger-name">{supplierName || '…'}</span>
+                        <span className="rcv-supplier-trigger-sub">ระบุเอง — คลิกเพื่อค้นหาในระบบ</span>
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <i className="ti ti-building-store rcv-supplier-trigger-icon" aria-hidden="true" />
+                      <span className="rcv-supplier-trigger-placeholder">
+                        เลือก / ค้นหาผู้จำหน่าย...
+                      </span>
+                      <i className="ti ti-chevron-down rcv-supplier-trigger-chevron" aria-hidden="true" />
+                    </>
+                  )}
+                </button>
+                {(supplierId || supplierName) && !isCancelled ? (
+                  <button
+                    type="button"
+                    className="rcv-supplier-clear-btn"
+                    title="ล้างการเลือก"
+                    aria-label="ล้างการเลือกผู้จำหน่าย"
+                    onClick={() => {
+                      setSupplierId(null);
+                      setSupplierName('');
+                    }}
+                  >
+                    <i className="ti ti-x" aria-hidden="true" />
+                  </button>
+                ) : null}
+              </div>
+              {showManualInput && !isCancelled ? (
                 <input
-                  id={`${idPrefix}-supplier`}
-                  className="rcv-supplier-input"
-                  placeholder="ชื่อซัพพลายเออร์"
+                  className="rcv-supplier-manual-input"
+                  placeholder="ชื่อผู้จำหน่าย (ระบุเอง)"
                   value={supplierName}
                   onChange={(e) => {
                     setSupplierName(e.target.value);
                     setSupplierId(null);
                   }}
-                  disabled={isCancelled}
                 />
-                <button
-                  type="button"
-                  className="rcv-supplier-search-btn"
-                  title="ค้นหาผู้จัดจำหน่าย"
-                  aria-label="ค้นหาผู้จัดจำหน่าย"
-                  onClick={() => setSupplierPickerOpen(true)}
-                  disabled={isCancelled}
-                >
-                  <i className="ti ti-search" aria-hidden="true" />
-                </button>
-              </div>
-              {supplierId ? (
-                <div className="rcv-supplier-linked">
-                  <i className="ti ti-link" aria-hidden="true" />
-                  เชื่อมกับรายชื่อในระบบ
-                  <button
-                    type="button"
-                    className="rcv-supplier-view-link"
-                    onClick={() => {
-                      const s = suppliers.find((x) => x.id === supplierId);
-                      if (s) setDetailSupplier(s);
-                    }}
-                  >
-                    ดูรายละเอียด
-                  </button>
-                </div>
               ) : null}
             </div>
             <div className="rcv-field rcv-form-full">
@@ -929,8 +976,8 @@ export default function ReceivingForm({
           <div className="rcv-footer-actions">
             <div />
             <div className="rcv-footer-btns">
-              {mode === 'edit' ? (
-                <button type="button" className="rcv-btn-draft" onClick={resetBill}>
+              {mode === 'edit' || onCancel ? (
+                <button type="button" className="rcv-btn-draft" onClick={onCancel ?? resetBill}>
                   ยกเลิก
                 </button>
               ) : null}
@@ -967,35 +1014,22 @@ export default function ReceivingForm({
 
       <SupplierPickerDialog
         open={supplierPickerOpen}
-        suppliers={suppliers}
-        onSelect={selectSupplier}
-        onViewDetail={(s) => {
-          setSupplierPickerOpen(false);
-          setDetailSupplier(s);
-        }}
+        suppliers={catalogSuppliers}
+        onSelect={handleSelectSupplier}
+        onManualEntry={handleManualEntry}
+        onAddNew={handleAddNew}
         onClose={() => setSupplierPickerOpen(false)}
       />
 
-      {detailSupplier && branchId && staffId ? (
-        <CustomerDetailModal
-          customer={detailSupplier}
-          creditAccount={creditMap.get(detailSupplier.id) ?? null}
-          priceLevels={priceLevels}
-          branchId={branchId}
-          actorId={staffId}
-          open={!!detailSupplier}
-          onClose={() => setDetailSupplier(null)}
-          onSave={async (form) => {
-            const saved = await saveCustomer(normalizeCustomerForm(form), detailSupplier.id);
-            setDetailSupplier(saved);
-            if (supplierId === saved.id) {
-              setSupplierName(customerFullName(saved));
-            }
-            refreshDev();
-          }}
-          onCreditPaid={refreshDev}
-        />
-      ) : null}
+      <PosSupplierModal
+        open={posSupplierModalOpen}
+        branchId={branchId}
+        prefillName={supplierAddPrefill}
+        onSaved={(newSupplier) => {
+          handleSelectSupplier(newSupplier);
+        }}
+        onClose={() => setPosSupplierModalOpen(false)}
+      />
 
       <ProductPickerDialog
         open={pickerOpen}

@@ -61,15 +61,10 @@ export default function CustomerFormModal({
     setForm((f) => {
       const next = { ...f, contactType: type };
       if (type === 'retail') next.priceLevelId = 'RETAIL';
-      if (type === 'supplier') {
-        next.creditLimit = 0;
-        next.creditDays = 0;
-      }
       return next;
     });
   };
 
-  const isSupplier = form.contactType === 'supplier';
   const isWholesale = form.contactType === 'wholesale';
   const wholesaleLevels = priceLevels.filter((p) => p.id !== 'RETAIL');
 
@@ -77,13 +72,7 @@ export default function CustomerFormModal({
     void onSave(normalizeCustomerForm(form));
   };
 
-  const title = editCustomer
-    ? isSupplier
-      ? 'แก้ไขผู้จำหน่าย'
-      : 'แก้ไขลูกค้า'
-    : isSupplier
-      ? 'เพิ่มผู้จำหน่าย'
-      : 'เพิ่มลูกค้าใหม่';
+  const title = editCustomer ? 'แก้ไขลูกค้า' : 'เพิ่มลูกค้าใหม่';
 
   return (
     <div className="cm-dialog-overlay" role="dialog" aria-modal="true" onClick={onClose}>
@@ -91,9 +80,7 @@ export default function CustomerFormModal({
         <div className="cm-dialog-header cm-dialog-header-premium">
           <div>
             <span className="cm-dialog-title">{title}</span>
-            <span className="cm-dialog-subtitle">
-              {isSupplier ? 'Supplier · ข้อมูลซัพพลายเออร์' : 'Customer · ข้อมูลลูกค้า / สมาชิก'}
-            </span>
+            <span className="cm-dialog-subtitle">Customer · ข้อมูลลูกค้า / สมาชิก</span>
           </div>
           <button type="button" className="cm-icon-btn" onClick={onClose} aria-label="ปิด">
             <i className="ti ti-x" aria-hidden="true" />
@@ -132,19 +119,18 @@ export default function CustomerFormModal({
                   className="cm-form-input"
                   value={form.firstName}
                   onChange={(e) => set('firstName', e.target.value)}
-                  placeholder={isSupplier ? 'ชื่อบริษัท / ผู้ติดต่อ' : 'ชื่อ'}
+                  placeholder="ชื่อ"
                 />
               </div>
               <div className="cm-form-group">
                 <label className="cm-form-label">
-                  {isSupplier ? 'ชื่อย่อ / ผู้ติดต่อ' : 'นามสกุล'}{' '}
-                  <span className="cm-form-required">*</span>
+                  นามสกุล <span className="cm-form-required">*</span>
                 </label>
                 <input
                   className="cm-form-input"
                   value={form.lastName}
                   onChange={(e) => set('lastName', e.target.value)}
-                  placeholder={isSupplier ? 'เช่น จำกัด' : 'นามสกุล'}
+                  placeholder="นามสกุล"
                 />
               </div>
             </div>
@@ -198,123 +184,93 @@ export default function CustomerFormModal({
             </div>
           </section>
 
-          {isSupplier ? (
-            <>
-              <div className="cm-form-divider" />
-              <section className="cm-form-section">
-                <SectionTitle icon="ti-building-bank">ข้อมูลบัญชีธนาคาร</SectionTitle>
-                <div className="cm-form-row">
-                  <div className="cm-form-group">
-                    <label className="cm-form-label">ชื่อธนาคาร</label>
-                    <input
-                      className="cm-form-input"
-                      value={form.bankName}
-                      onChange={(e) => set('bankName', e.target.value)}
-                      placeholder="เช่น กสิกรไทย, ไทยพาณิชย์"
-                    />
-                  </div>
-                  <div className="cm-form-group">
-                    <label className="cm-form-label">เลขที่บัญชี</label>
-                    <input
-                      className="cm-form-input"
-                      value={form.bankAccount}
-                      onChange={(e) => set('bankAccount', e.target.value)}
-                      placeholder="xxx-x-xxxxx-x"
-                    />
-                  </div>
-                </div>
-              </section>
-            </>
-          ) : (
-            <>
-              <div className="cm-form-divider" />
-              <section className="cm-form-section">
-                <SectionTitle icon="ti-credit-card">ข้อมูลบัญชี / เครดิต</SectionTitle>
-                <div className="cm-form-group">
-                  <label className="cm-form-label">กลุ่มลูกค้า (Customer Type)</label>
-                  <select
-                    className="cm-form-select"
-                    value={selectValue}
-                    onChange={(e) => set('customerType', e.target.value)}
-                  >
-                    {!tierIds.has(customerTypeValue) && customerTypeValue !== DEFAULT_CUSTOMER_TIER ? (
-                      <option value={customerTypeValue}>{customerTypeValue} (ไม่พบในระบบ)</option>
-                    ) : null}
-                    {tiers.map((tier) => (
-                      <option key={tier.id} value={tier.id}>
-                        {tier.name}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="cm-form-hint">
-                    เลือกจากกลุ่มที่กำหนดใน &quot;จัดการกลุ่มลูกค้า&quot; — ใช้กำหนดราคาพิเศษใน POS
-                  </p>
-                </div>
-                {isWholesale ? (
-                  <div className="cm-form-group">
-                    <label className="cm-form-label">ระดับราคาขายส่ง</label>
-                    <select
-                      className="cm-form-select"
-                      value={form.priceLevelId}
-                      onChange={(e) => set('priceLevelId', e.target.value)}
-                    >
-                      {(wholesaleLevels.length ? wholesaleLevels : priceLevels).map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                ) : (
-                  <p className="cm-form-hint">ลูกค้าทั่วไปใช้ราคา Retail มาตรฐาน</p>
-                )}
-                <div className="cm-form-row">
-                  <div className="cm-form-group">
-                    <label className="cm-form-label">วงเงินเชื่อ (฿)</label>
-                    <input
-                      className="cm-form-input"
-                      type="number"
-                      min={0}
-                      value={form.creditLimit}
-                      onChange={(e) => set('creditLimit', Number(e.target.value))}
-                    />
-                  </div>
-                  <div className="cm-form-group">
-                    <label className="cm-form-label">เครดิตเทอม (วัน)</label>
-                    <input
-                      className="cm-form-input"
-                      type="number"
-                      min={0}
-                      value={form.creditDays}
-                      onChange={(e) => set('creditDays', Number(e.target.value))}
-                    />
-                  </div>
-                </div>
-                <div className="cm-form-row">
-                  <div className="cm-form-group">
-                    <label className="cm-form-label">แท็ก</label>
-                    <input
-                      className="cm-form-input"
-                      value={form.tags}
-                      onChange={(e) => set('tags', e.target.value)}
-                      placeholder="VIP, ลูกค้าประจำ..."
-                    />
-                  </div>
-                  <div className="cm-form-group">
-                    <label className="cm-form-label">สถานะ</label>
-                    <select
-                      className="cm-form-select"
-                      value={form.isActive ? 'active' : 'inactive'}
-                      onChange={(e) => set('isActive', e.target.value === 'active')}
-                    >
-                      <option value="active">ใช้งานอยู่</option>
-                      <option value="inactive">ระงับชั่วคราว</option>
-                    </select>
-                  </div>
-                </div>
-              </section>
-            </>
-          )}
+          <div className="cm-form-divider" />
+
+          <section className="cm-form-section">
+            <SectionTitle icon="ti-credit-card">ข้อมูลบัญชี / เครดิต</SectionTitle>
+            <div className="cm-form-group">
+              <label className="cm-form-label">กลุ่มลูกค้า (Customer Type)</label>
+              <select
+                className="cm-form-select"
+                value={selectValue}
+                onChange={(e) => set('customerType', e.target.value)}
+              >
+                {!tierIds.has(customerTypeValue) && customerTypeValue !== DEFAULT_CUSTOMER_TIER ? (
+                  <option value={customerTypeValue}>{customerTypeValue} (ไม่พบในระบบ)</option>
+                ) : null}
+                {tiers.map((tier) => (
+                  <option key={tier.id} value={tier.id}>
+                    {tier.name}
+                  </option>
+                ))}
+              </select>
+              <p className="cm-form-hint">
+                เลือกจากกลุ่มที่กำหนดใน &quot;จัดการกลุ่มลูกค้า&quot; — ใช้กำหนดราคาพิเศษใน POS
+              </p>
+            </div>
+            {isWholesale ? (
+              <div className="cm-form-group">
+                <label className="cm-form-label">ระดับราคาขายส่ง</label>
+                <select
+                  className="cm-form-select"
+                  value={form.priceLevelId}
+                  onChange={(e) => set('priceLevelId', e.target.value)}
+                >
+                  {(wholesaleLevels.length ? wholesaleLevels : priceLevels).map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <p className="cm-form-hint">ลูกค้าทั่วไปใช้ราคา Retail มาตรฐาน</p>
+            )}
+            <div className="cm-form-row">
+              <div className="cm-form-group">
+                <label className="cm-form-label">วงเงินเชื่อ (฿)</label>
+                <input
+                  className="cm-form-input"
+                  type="number"
+                  min={0}
+                  value={form.creditLimit}
+                  onChange={(e) => set('creditLimit', Number(e.target.value))}
+                />
+              </div>
+              <div className="cm-form-group">
+                <label className="cm-form-label">เครดิตเทอม (วัน)</label>
+                <input
+                  className="cm-form-input"
+                  type="number"
+                  min={0}
+                  value={form.creditDays}
+                  onChange={(e) => set('creditDays', Number(e.target.value))}
+                />
+              </div>
+            </div>
+            <div className="cm-form-row">
+              <div className="cm-form-group">
+                <label className="cm-form-label">แท็ก</label>
+                <input
+                  className="cm-form-input"
+                  value={form.tags}
+                  onChange={(e) => set('tags', e.target.value)}
+                  placeholder="VIP, ลูกค้าประจำ..."
+                />
+              </div>
+              <div className="cm-form-group">
+                <label className="cm-form-label">สถานะ</label>
+                <select
+                  className="cm-form-select"
+                  value={form.isActive ? 'active' : 'inactive'}
+                  onChange={(e) => set('isActive', e.target.value === 'active')}
+                >
+                  <option value="active">ใช้งานอยู่</option>
+                  <option value="inactive">ระงับชั่วคราว</option>
+                </select>
+              </div>
+            </div>
+          </section>
 
           <div className="cm-form-divider" />
 
@@ -329,19 +285,6 @@ export default function CustomerFormModal({
                 placeholder="บันทึกเพิ่มเติม..."
               />
             </div>
-            {isSupplier ? (
-              <div className="cm-form-group" style={{ marginTop: 12 }}>
-                <label className="cm-form-label">สถานะ</label>
-                <select
-                  className="cm-form-select"
-                  value={form.isActive ? 'active' : 'inactive'}
-                  onChange={(e) => set('isActive', e.target.value === 'active')}
-                >
-                  <option value="active">ใช้งานอยู่</option>
-                  <option value="inactive">ระงับชั่วคราว</option>
-                </select>
-              </div>
-            ) : null}
           </section>
         </div>
 

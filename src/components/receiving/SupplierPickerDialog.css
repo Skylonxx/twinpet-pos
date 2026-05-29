@@ -1,4 +1,4 @@
-/* Supplier picker modal — floating overlay (Receiving + shared) */
+/* Supplier picker modal — floating overlay used by ReceivingForm */
 .rcv-supplier-overlay {
   position: fixed;
   inset: 0;
@@ -104,7 +104,7 @@
   height: 38px;
   border: 1px solid #d3d1c7;
   border-radius: 8px;
-  padding: 0 12px 0 36px;
+  padding: 0 36px 0 36px;
   font-family: 'Sarabun', 'Prompt', sans-serif;
   font-size: 14px;
   color: #26215c;
@@ -114,6 +114,29 @@
 .rcv-supplier-search input:focus {
   border-color: #534ab7;
   box-shadow: 0 0 0 2px #eeedfe;
+}
+
+.rcv-supplier-search-clear {
+  position: absolute;
+  right: 28px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: #d3d1c7;
+  color: #5f5e5a;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: 11px;
+}
+.rcv-supplier-search-clear:hover {
+  background: #888780;
+  color: #fff;
 }
 
 .rcv-supplier-list {
@@ -213,22 +236,81 @@
   flex-shrink: 0;
 }
 
-.rcv-supplier-detail-btn {
-  width: 40px;
-  flex-shrink: 0;
-  border: 1px solid #d3d1c7;
-  border-radius: 10px;
-  background: #fff;
-  color: #888780;
-  cursor: pointer;
-  display: flex;
+/* Footer */
+.rcv-supplier-footer-addnew {
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  padding: 0;
+  gap: 6px;
+  padding: 7px 14px;
+  border: 1.5px solid #534ab7;
+  border-radius: 8px;
+  background: #534ab7;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.rcv-supplier-footer-addnew:hover {
+  background: #3c3489;
+  border-color: #3c3489;
 }
 
-.rcv-supplier-detail-btn:hover {
-  border-color: #534ab7;
+.rcv-supplier-dialog-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid #f1efe8;
+  background: #fafaf8;
+  flex-shrink: 0;
+}
+
+.rcv-supplier-footer-hint {
+  font-size: 12px;
+  color: #888780;
+  flex-shrink: 0;
+}
+
+.rcv-supplier-footer-manual {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  border: 1px solid #d3d1c7;
+  border-radius: 7px;
+  background: #fff;
   color: #534ab7;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.13s;
+  flex-shrink: 0;
+}
+.rcv-supplier-footer-manual:hover {
   background: #eeedfe;
+  border-color: #cecbf6;
+}
+
+.rcv-supplier-footer-sep {
+  flex: 1;
+}
+
+.rcv-supplier-footer-admin {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #888780;
+  text-decoration: none;
+  padding: 4px 8px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+.rcv-supplier-footer-admin:hover {
+  background: #f1efe8;
+  color: #534ab7;
+  text-decoration: underline;
 }

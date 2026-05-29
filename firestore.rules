@@ -69,7 +69,8 @@ service cloud.firestore {
 
     // ── Settings (global + per-branch) ──
     match /settings/{settingId} {
-      allow read: if canReadSettingsDoc(settingId);
+      // Admin reads any branch's settings (e.g. allowNegativeStock for cross-branch receiving)
+      allow read: if isAdmin() || canReadSettingsDoc(settingId);
       allow write: if canWriteSettingsDoc(settingId);
 
       match /docCounters/{counterId} {
@@ -104,17 +105,47 @@ service cloud.firestore {
       allow write: if isManagerOrAdmin();
 
       match /productStocks/{stockBranchId} {
-        allow read: if hasBranchAccess(stockBranchId);
-        allow write: if isStaff() && hasBranchAccess(stockBranchId);
+        allow read: if isAdmin() || hasBranchAccess(stockBranchId);
+        // Admin writes stock for any branch (cross-branch receiving via confirmReceiving)
+        allow write: if isAdmin() || (isStaff() && hasBranchAccess(stockBranchId));
       }
     }
 
     // collectionGroup('productStocks') — query filters on resource.data.branchId
     match /{path=**}/productStocks/{stockDocId} {
-      allow read: if isStaff()
+      allow read: if isAdmin() || (isStaff()
         && resource.data.branchId is string
-        && hasBranchAccess(resource.data.branchId);
-      allow write: if isStaff() && hasBranchAccess(requestProductStockBranchId(stockDocId));
+        && hasBranchAccess(resource.data.branchId));
+      allow write: if isAdmin() || (isStaff() && hasBranchAccess(requestProductStockBranchId(stockDocId)));
+    }
+
+    // ── Suppliers (centralized catalog — HQ manages all; branches can add local ones) ──
+    match /suppliers/{supplierId} {
+      // Admin: full access
+      allow read, write: if isAdmin();
+
+      // Staff: read when supplier is visible to their branch
+      allow read: if isStaff()
+        && resource.data.isActive == true
+        && (
+          resource.data.allowedBranchIds.hasAny(['ALL'])
+          || resource.data.allowedBranchIds.hasAny(branchIds())
+        );
+
+      // Staff: create a new supplier when their own branchId is in the new doc's allowedBranchIds
+      // (POS staff can only create branch-local suppliers, not global ones)
+      allow create: if isStaff()
+        && request.resource.data.allowedBranchIds is list
+        && request.resource.data.allowedBranchIds.hasAny(branchIds())
+        && !request.resource.data.allowedBranchIds.hasAny(['ALL']);
+
+      // Staff: update a supplier that is already visible to (i.e. owned by) their branch
+      allow update: if isStaff()
+        && (
+          resource.data.allowedBranchIds.hasAny(branchIds())
+        )
+        // Cannot escalate to ALL-branches visibility
+        && !request.resource.data.allowedBranchIds.hasAny(['ALL']);
     }
 
     // ── Customers & credit ──
@@ -141,7 +172,7 @@ service cloud.firestore {
 
     // ── Sales ──
     match /orders/{orderId} {
-      allow read: if isStaff() && hasBranchAccess(resource.data.branchId);
+      allow read: if isAdmin() || (isStaff() && hasBranchAccess(resource.data.branchId));
       allow create: if isStaff()
         && hasBranchAccess(request.resource.data.branchId)
         && request.resource.data.staffId == staffId();
@@ -195,19 +226,23 @@ service cloud.firestore {
 
     match /stockMovements/{movementId} {
       allow read: if isStaff();
-      allow create: if isStaff()
-        && hasBranchAccess(request.resource.data.branchId);
+      // Admin creates movements for any branch (cross-branch receiving via confirmReceiving)
+      allow create: if isAdmin() || (isStaff()
+        && hasBranchAccess(request.resource.data.branchId));
     }
 
     match /receivings/{receivingId} {
-      allow read: if isStaff() && hasBranchAccess(resource.data.branchId);
-      allow write: if isManagerOrAdmin() && hasBranchAccess(request.resource.data.branchId);
+      // Admin reads all receivings across every branch (HQ cross-branch visibility)
+      allow read: if isAdmin() || (isStaff() && hasBranchAccess(resource.data.branchId));
+      // Admin writes receivings for any branch (HQ cross-branch receiving creation)
+      allow write: if isAdmin() || (isManagerOrAdmin() && hasBranchAccess(request.resource.data.branchId));
 
       match /receivingItems/{itemId} {
         allow read: if isStaff();
         allow create: if isStaff();
-        allow update, delete: if isStaff()
-          && hasBranchAccess(get(/databases/$(database)/documents/receivings/$(receivingId)).data.branchId);
+        // Admin deletes items when finalizing a cross-branch draft
+        allow update, delete: if isAdmin() || (isStaff()
+          && hasBranchAccess(get(/databases/$(database)/documents/receivings/$(receivingId)).data.branchId));
       }
     }
 

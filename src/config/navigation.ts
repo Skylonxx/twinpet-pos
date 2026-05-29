@@ -10,6 +10,7 @@ export const MAIN_NAV: NavItem[] = [
   { path: '/products', label: 'สินค้า', icon: 'ti-package' },
   { path: '/receiving', label: 'รับเข้า', icon: 'ti-truck-delivery' },
   { path: '/receiving/history', label: 'ประวัติรับเข้า', icon: 'ti-history' },
+  { path: '/suppliers', label: 'ผู้จำหน่าย', icon: 'ti-truck' },
   { path: '/inventory', label: 'จัดการสต็อก', icon: 'ti-box-seam' },
   { path: '/sales-history', label: 'ประวัติขาย', icon: 'ti-receipt' },
   { path: '/customers', label: 'ลูกค้า', icon: 'ti-users' },

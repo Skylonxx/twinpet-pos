@@ -7,6 +7,16 @@ const now = Timestamp.now();
 /** Dev-only mock staff (see docs/twinpet_cursor_guide.md) */
 const DEV_USERS_SEED = [
   {
+    id: 'dev-global-admin',
+    firstName: 'Global',
+    lastName: 'Admin',
+    username: 'globaladmin',
+    password: 'global9999',
+    pin: '9999',
+    role: 'admin' as const,
+    branchIds: ['ALL'],           // Global Admin — access to every branch
+  },
+  {
     id: 'dev-somchai',
     firstName: 'สมชาย',
     lastName: 'ใจดี',
@@ -106,7 +116,8 @@ export async function findDevUserByPin(
 ): Promise<User | null> {
   await ensureDevCaches();
   const users = cachedUsers!.filter(
-    (u) => u.isActive && u.branchIds.includes(branchId) && !u.deletedAt,
+    // 'ALL' sentinel grants access to any branch
+    (u) => u.isActive && (u.branchIds.includes('ALL') || u.branchIds.includes(branchId)) && !u.deletedAt,
   );
 
   for (const user of users) {
@@ -128,7 +139,8 @@ export async function findDevUserByUsernamePassword(
     (u) =>
       u.username === username &&
       u.isActive &&
-      u.branchIds.includes(branchId) &&
+      // 'ALL' sentinel grants access to any branch
+      (u.branchIds.includes('ALL') || u.branchIds.includes(branchId)) &&
       !u.deletedAt,
   );
   if (!user) return null;

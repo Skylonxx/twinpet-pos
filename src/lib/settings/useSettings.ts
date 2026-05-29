@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -113,6 +114,8 @@ export function useSettings(branchId: string | null) {
   const [saving, setSaving] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const snapshotRef = useRef<string>('');
+  // Track the price level IDs that came from Firestore so we can deleteDoc removed ones on save
+  const firestorePriceLevelIdsRef = useRef<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     if (!branchId) {
@@ -128,10 +131,13 @@ export function useSettings(branchId: string | null) {
         const settings = getDevSettings();
         const extras = getDevExtras();
         const nextForm = settingsToForm(settings, branch, extras);
+        const devPls = getDevPriceLevels();
+        const devDevs = getDevDevices();
         setForm(nextForm);
-        setPriceLevels(getDevPriceLevels());
-        setDevices(getDevDevices());
-        snapshotRef.current = JSON.stringify({ nextForm, priceLevels: getDevPriceLevels(), devices: getDevDevices() });
+        setPriceLevels(devPls);
+        setDevices(devDevs);
+        firestorePriceLevelIdsRef.current = new Set(devPls.map((p) => p.id));
+        snapshotRef.current = JSON.stringify({ nextForm, priceLevels: devPls, devices: devDevs });
         return;
       }
 
@@ -159,7 +165,17 @@ export function useSettings(branchId: string | null) {
       setForm(nextForm);
       setPriceLevels(pls);
       setDevices(devs);
+      firestorePriceLevelIdsRef.current = new Set(pls.map((p) => p.id));
       snapshotRef.current = JSON.stringify({ nextForm, priceLevels: pls, devices: devs });
+    } catch (err) {
+      console.error('[useSettings] load failed', err);
+      // Fall back to defaults so the page renders instead of hanging on the loading spinner
+      const fallbackBranch = defaultBranch(branchId);
+      const fallbackSettings = defaultSettings(branchId);
+      setForm(settingsToForm(fallbackSettings, fallbackBranch));
+      setPriceLevels([]);
+      setDevices([]);
+      firestorePriceLevelIdsRef.current = new Set();
     } finally {
       setLoading(false);
     }
@@ -206,9 +222,19 @@ export function useSettings(branchId: string | null) {
         { merge: true },
       );
 
+      // Delete any price levels that were removed from the UI since last load/save
+      const currentPriceLevelIds = new Set(priceLevels.map((p) => p.id));
+      for (const id of firestorePriceLevelIdsRef.current) {
+        if (!currentPriceLevelIds.has(id)) {
+          await deleteDoc(doc(db, collections.priceLevels, id));
+        }
+      }
+      // Write/update remaining levels
       for (const pl of priceLevels) {
         await setDoc(doc(db, collections.priceLevels, pl.id), rowToPriceLevel(pl), { merge: true });
       }
+      // Keep the ref in sync so subsequent saves within the same session work correctly
+      firestorePriceLevelIdsRef.current = new Set(currentPriceLevelIds);
 
       setLastSavedAt(new Date());
       snapshotRef.current = JSON.stringify({ form, priceLevels, devices });

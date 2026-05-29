@@ -151,6 +151,12 @@ export function getDevStaffActivities(branchId: string): StaffActivity[] {
     .sort((a, b) => b.createdAt.toDate().getTime() - a.createdAt.toDate().getTime());
 }
 
+export function getDevAllStaffActivities(): StaffActivity[] {
+  return [...devActivities].sort(
+    (a, b) => b.createdAt.toDate().getTime() - a.createdAt.toDate().getTime(),
+  );
+}
+
 export function getDevRoleMatrix(): RolePermissionMatrix {
   return {
     admin: [...devRoleMatrix.admin],

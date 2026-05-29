@@ -55,8 +55,9 @@ export type TopProductRow = {
   revenue: number;
 };
 
+/** Contact type options for Customer forms — supplier type removed (managed separately via Supplier Catalog). */
 export const CONTACT_TYPE_OPTIONS: Array<{
-  id: ContactType;
+  id: Exclude<ContactType, 'supplier'>;
   icon: string;
   label: string;
   desc: string;
@@ -72,12 +73,6 @@ export const CONTACT_TYPE_OPTIONS: Array<{
     icon: '📦',
     label: 'ลูกค้าขายส่ง',
     desc: 'Wholesale — ราคาพิเศษ',
-  },
-  {
-    id: 'supplier',
-    icon: '🏭',
-    label: 'ผู้จำหน่าย',
-    desc: 'Supplier — ซัพพลายเออร์',
   },
 ];
 
@@ -202,7 +197,6 @@ export function formatCustomerLastVisit(ts: Customer['lastVisitAt']): string {
 }
 
 export function contactTypeBadgeStyle(type: ContactType): { bg: string; color: string } {
-  if (type === 'supplier') return { bg: '#E8F0FE', color: '#185FA5' };
   if (type === 'wholesale') return { bg: 'var(--amber50)', color: 'var(--amber)' };
   return { bg: 'var(--g100)', color: 'var(--g600)' };
 }
@@ -280,20 +274,13 @@ export function creditUsagePct(account: CreditAccount | null, limit: number): nu
 }
 
 export function normalizeCustomerForm(form: CustomerFormData): CustomerFormData {
-  const contactType = form.contactType;
   const customerType = form.customerType.trim() || DEFAULT_CUSTOMER_TIER;
   return {
     ...form,
     customerType,
-    priceLevelId:
-      contactType === 'retail'
-        ? 'RETAIL'
-        : contactType === 'supplier'
-          ? 'RETAIL'
-          : form.priceLevelId,
-    creditLimit: contactType === 'supplier' ? 0 : form.creditLimit,
-    creditDays: contactType === 'supplier' ? 0 : form.creditDays,
-    bankName: contactType === 'supplier' ? form.bankName : '',
-    bankAccount: contactType === 'supplier' ? form.bankAccount : '',
+    priceLevelId: form.contactType === 'retail' ? 'RETAIL' : form.priceLevelId,
+    // Bank fields not used on customer forms — zero out to keep data clean
+    bankName: '',
+    bankAccount: '',
   };
 }

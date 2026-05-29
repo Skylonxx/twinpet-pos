@@ -1,9 +1,9 @@
-import { createUserWithEmailAndPassword } from 'firebase/auth';
 import bcrypt from 'bcryptjs';
 import {
   collection,
   doc,
   getDoc,
+  getDocs,
   onSnapshot,
   orderBy,
   query,
@@ -14,7 +14,7 @@ import {
   type Timestamp,
 } from 'firebase/firestore';
 import { useCallback, useEffect, useState } from 'react';
-import { auth, authEmailForUsername, collections, db, isFirebaseConfigured } from '../firebase';
+import { collections, db, isFirebaseConfigured } from '../firebase';
 import type { StaffActivity, User, UserRole } from '../types';
 import { diffUserFields, writeStaffActivity, writeUserAuditLog } from './audit';
 import {
@@ -25,6 +25,7 @@ import {
   devToggleUserActive,
   getDevRoleMatrix,
   getDevStaffActivities,
+  getDevAllStaffActivities,
   getDevStaffUsers,
   initDevStaffStore,
   setDevRoleMatrix,
@@ -41,10 +42,31 @@ type RolePermDoc = {
   rolePermissions?: RolePermissionMatrix;
 };
 
+export type UseStaffManagementOptions = {
+  /** HQ admin panel — list all staff across branches */
+  hq?: boolean;
+};
+
+function resolveActivityBranchId(
+  hq: boolean,
+  branchId: string | null,
+  branchIds: string[],
+): string {
+  if (hq) {
+    const id = branchIds[0];
+    if (!id) throw new Error('กรุณาเลือกสาขา');
+    return id;
+  }
+  if (!branchId) throw new Error('ไม่พบสาขา');
+  return branchId;
+}
+
 export function useStaffManagement(
   branchId: string | null,
   actor: { id: string; name: string } | null,
+  options?: UseStaffManagementOptions,
 ) {
+  const hq = options?.hq === true;
   const [users, setUsers] = useState<User[]>([]);
   const [activities, setActivities] = useState<StaffActivity[]>([]);
   const [roleMatrix, setRoleMatrix] = useState<RolePermissionMatrix>(cloneDefaultMatrix());
@@ -52,7 +74,7 @@ export function useStaffManagement(
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
-    if (!branchId) {
+    if (!hq && !branchId) {
       setUsers([]);
       setActivities([]);
       setLoading(false);
@@ -61,8 +83,13 @@ export function useStaffManagement(
 
     if (!isFirebaseConfigured || !db) {
       void initDevStaffStore().then(() => {
-        setUsers(getDevStaffUsers().filter((u) => u.branchIds.includes(branchId) && !u.deletedAt));
-        setActivities(getDevStaffActivities(branchId));
+        if (hq) {
+          setUsers(getDevStaffUsers().filter((u) => !u.deletedAt));
+          setActivities(getDevAllStaffActivities());
+        } else {
+          setUsers(getDevStaffUsers().filter((u) => u.branchIds.includes(branchId!) && !u.deletedAt));
+          setActivities(getDevStaffActivities(branchId!));
+        }
         setRoleMatrix(getDevRoleMatrix());
         setLoading(false);
       });
@@ -72,19 +99,21 @@ export function useStaffManagement(
     setLoading(true);
     setError(null);
 
-    const usersQ = query(
-      collection(db, collections.users),
-      where('branchIds', 'array-contains', branchId),
-    );
-    const actQ = query(
-      collection(db, collections.staffActivities),
-      where('branchId', '==', branchId),
-      orderBy('createdAt', 'desc'),
-    );
-    const actFallbackQ = query(
-      collection(db, collections.staffActivities),
-      where('branchId', '==', branchId),
-    );
+    const usersQ = hq
+      ? query(collection(db, collections.users))
+      : query(collection(db, collections.users), where('branchIds', 'array-contains', branchId!));
+
+    const actQ = hq
+      ? query(collection(db, collections.staffActivities), orderBy('createdAt', 'desc'))
+      : query(
+          collection(db, collections.staffActivities),
+          where('branchId', '==', branchId!),
+          orderBy('createdAt', 'desc'),
+        );
+
+    const actFallbackQ = hq
+      ? query(collection(db, collections.staffActivities))
+      : query(collection(db, collections.staffActivities), where('branchId', '==', branchId!));
 
     let cancelled = false;
     let unsubActFallback: (() => void) | null = null;
@@ -153,18 +182,29 @@ export function useStaffManagement(
       unsubAct();
       unsubActFallback?.();
     };
-  }, [branchId]);
+  }, [branchId, hq]);
 
   const refreshDev = useCallback(() => {
-    if (!branchId || isFirebaseConfigured) return;
+    if (isFirebaseConfigured) return;
+    if (hq) {
+      setUsers(getDevStaffUsers().filter((u) => !u.deletedAt));
+      setActivities(getDevAllStaffActivities());
+      setRoleMatrix(getDevRoleMatrix());
+      return;
+    }
+    if (!branchId) return;
     setUsers(getDevStaffUsers().filter((u) => u.branchIds.includes(branchId) && !u.deletedAt));
     setActivities(getDevStaffActivities(branchId));
     setRoleMatrix(getDevRoleMatrix());
-  }, [branchId]);
+  }, [branchId, hq]);
 
   const saveUser = useCallback(
     async (form: StaffFormData, editId?: string): Promise<void> => {
-      if (!branchId || !actor) throw new Error('ไม่พบสาขาหรือผู้ใช้งาน');
+      if (!actor) throw new Error('ไม่พบผู้ใช้งาน');
+      if (!hq && !branchId) throw new Error('ไม่พบสาขา');
+      if (hq && form.branchIds.length === 0) throw new Error('กรุณาเลือกสาขา');
+
+      const activityBranchId = resolveActivityBranchId(hq, branchId, form.branchIds);
 
       const permissions = permissionsForRole(form.role, roleMatrix);
       const now = serverTimestamp() as Timestamp;
@@ -192,7 +232,7 @@ export function useStaffManagement(
 
           if (before.role !== updated.role) {
             devAddActivity({
-              branchId,
+              branchId: activityBranchId,
               userId: actor.id,
               userName: actor.name,
               action: 'ROLE_CHANGE',
@@ -222,7 +262,7 @@ export function useStaffManagement(
           };
           await devSaveStaffUser(user, form.password, form.pin);
           devAddActivity({
-            branchId,
+            branchId: activityBranchId,
             userId: actor.id,
             userName: actor.name,
             action: 'STAFF_CREATE',
@@ -280,7 +320,7 @@ export function useStaffManagement(
           await writeStaffActivity(
             { firestore: db, changedBy: actor.id, changedByName: actor.name },
             {
-              branchId,
+              branchId: activityBranchId,
               userId: actor.id,
               userName: actor.name,
               action: 'ROLE_CHANGE',
@@ -290,18 +330,26 @@ export function useStaffManagement(
           );
         }
       } else {
-        if (!form.password) throw new Error('กรุณากรอก password สำหรับพนักงานใหม่');
-        if (!auth) throw new Error('Firebase Auth ไม่พร้อมใช้งาน');
+        if (!form.pin || !/^\d{4}$/.test(form.pin)) {
+          throw new Error('กรุณากรอก PIN 4 หลักสำหรับพนักงานใหม่');
+        }
 
-        const email = authEmailForUsername(form.username);
-        const cred = await createUserWithEmailAndPassword(auth, email, form.password);
-        const pinHash = form.pin ? await bcrypt.hash(form.pin, 10) : '';
+        const normalizedUsername = form.username.trim().toLowerCase();
+        const usernameSnap = await getDocs(
+          query(collection(db, collections.users), where('username', '==', normalizedUsername)),
+        );
+        if (!usernameSnap.empty) {
+          throw new Error('ชื่อผู้ใช้นี้มีอยู่แล้ว');
+        }
+
+        const userRef = doc(collection(db, collections.users));
+        const pinHash = await bcrypt.hash(form.pin, 10);
 
         const user: User = {
-          id: cred.user.uid,
+          id: userRef.id,
           firstName: form.firstName.trim(),
           lastName: form.lastName.trim(),
-          username: form.username.trim().toLowerCase(),
+          username: normalizedUsername,
           pin: pinHash,
           role: form.role,
           branchIds: form.branchIds,
@@ -313,12 +361,12 @@ export function useStaffManagement(
           deletedAt: null,
         };
 
-        await setDoc(doc(db, collections.users, cred.user.uid), user);
+        await setDoc(userRef, user);
 
         await writeStaffActivity(
           { firestore: db, changedBy: actor.id, changedByName: actor.name },
           {
-            branchId,
+            branchId: activityBranchId,
             userId: actor.id,
             userName: actor.name,
             action: 'STAFF_CREATE',
@@ -328,18 +376,21 @@ export function useStaffManagement(
         );
       }
     },
-    [branchId, actor, roleMatrix, refreshDev],
+    [branchId, actor, roleMatrix, refreshDev, hq],
   );
 
   const toggleActive = useCallback(
     async (userId: string, isActive: boolean): Promise<void> => {
-      if (!branchId || !actor) return;
+      if (!actor) return;
+      if (!hq && !branchId) return;
 
       if (!isFirebaseConfigured || !db) {
         const user = devToggleUserActive(userId, isActive);
         if (user) {
+          const logBranchId = hq ? (user.branchIds[0] ?? branchId) : branchId;
+          if (!logBranchId) return;
           devAddActivity({
-            branchId,
+            branchId: logBranchId,
             userId: actor.id,
             userName: actor.name,
             action: 'STAFF_TOGGLE',
@@ -357,6 +408,8 @@ export function useStaffManagement(
       const snap = await getDoc(ref);
       if (!snap.exists()) return;
       const existing = snap.data() as User;
+      const logBranchId = hq ? (existing.branchIds[0] ?? branchId) : branchId;
+      if (!logBranchId) return;
 
       await updateDoc(ref, { isActive, updatedAt: serverTimestamp() });
 
@@ -374,7 +427,7 @@ export function useStaffManagement(
       await writeStaffActivity(
         { firestore: db, changedBy: actor.id, changedByName: actor.name },
         {
-          branchId,
+          branchId: logBranchId,
           userId: actor.id,
           userName: actor.name,
           action: 'STAFF_TOGGLE',
@@ -383,19 +436,22 @@ export function useStaffManagement(
         },
       );
     },
-    [branchId, actor, refreshDev],
+    [branchId, actor, refreshDev, hq],
   );
 
   const softDeleteUser = useCallback(
     async (userId: string): Promise<void> => {
-      if (!branchId || !actor) return;
+      if (!actor) return;
+      if (!hq && !branchId) return;
 
       if (!isFirebaseConfigured || !db) {
         const user = getDevStaffUsers().find((u) => u.id === userId);
         devSoftDeleteUser(userId);
         if (user) {
+          const logBranchId = hq ? (user.branchIds[0] ?? branchId) : branchId;
+          if (!logBranchId) return;
           devAddActivity({
-            branchId,
+            branchId: logBranchId,
             userId: actor.id,
             userName: actor.name,
             action: 'STAFF_DELETE',
@@ -413,6 +469,8 @@ export function useStaffManagement(
       const snap = await getDoc(ref);
       if (!snap.exists()) return;
       const existing = snap.data() as User;
+      const logBranchId = hq ? (existing.branchIds[0] ?? branchId) : branchId;
+      if (!logBranchId) return;
 
       await updateDoc(ref, {
         deletedAt: serverTimestamp(),
@@ -434,7 +492,7 @@ export function useStaffManagement(
       await writeStaffActivity(
         { firestore: db, changedBy: actor.id, changedByName: actor.name },
         {
-          branchId,
+          branchId: logBranchId,
           userId: actor.id,
           userName: actor.name,
           action: 'STAFF_DELETE',
@@ -443,13 +501,17 @@ export function useStaffManagement(
         },
       );
     },
-    [branchId, actor, refreshDev],
+    [branchId, actor, refreshDev, hq],
   );
 
   const updateRoleMatrix = useCallback(
     async (role: UserRole, key: string, enabled: boolean): Promise<void> => {
-      if (!branchId || !actor) return;
+      if (!actor) return;
+      if (!hq && !branchId) return;
       if (role === 'admin') return;
+
+      const logBranchId = branchId;
+      if (!logBranchId) return;
 
       const next: RolePermissionMatrix = {
         ...roleMatrix,
@@ -463,7 +525,7 @@ export function useStaffManagement(
       if (!isFirebaseConfigured || !db) {
         setDevRoleMatrix(next);
         devAddActivity({
-          branchId,
+          branchId: logBranchId,
           userId: actor.id,
           userName: actor.name,
           action: 'PERM_CHANGE',
@@ -485,7 +547,7 @@ export function useStaffManagement(
       await writeStaffActivity(
         { firestore: db, changedBy: actor.id, changedByName: actor.name },
         {
-          branchId,
+          branchId: logBranchId,
           userId: actor.id,
           userName: actor.name,
           action: 'PERM_CHANGE',
@@ -493,19 +555,22 @@ export function useStaffManagement(
         },
       );
     },
-    [branchId, actor, roleMatrix, refreshDev],
+    [branchId, actor, roleMatrix, refreshDev, hq],
   );
 
   const resetRoleMatrix = useCallback(async (): Promise<void> => {
     const next = cloneDefaultMatrix();
     setRoleMatrix(next);
 
-    if (!branchId || !actor) return;
+    if (!actor) return;
+    if (!hq && !branchId) return;
+    const logBranchId = branchId;
+    if (!logBranchId) return;
 
     if (!isFirebaseConfigured || !db) {
       setDevRoleMatrix(next);
       devAddActivity({
-        branchId,
+        branchId: logBranchId,
         userId: actor.id,
         userName: actor.name,
         action: 'PERM_CHANGE',
@@ -527,14 +592,14 @@ export function useStaffManagement(
     await writeStaffActivity(
       { firestore: db, changedBy: actor.id, changedByName: actor.name },
       {
-        branchId,
+        branchId: logBranchId,
         userId: actor.id,
         userName: actor.name,
         action: 'PERM_CHANGE',
         detail: 'Reset สิทธิ์ Role เป็นค่าเริ่มต้น',
       },
     );
-  }, [branchId, actor, refreshDev]);
+  }, [branchId, actor, refreshDev, hq]);
 
   return {
     users,

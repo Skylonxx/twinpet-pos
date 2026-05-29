@@ -100,6 +100,7 @@ export const collections = {
   cashTransactions: 'cashTransactions',
   staffActivities: 'staffActivities',
   auditLogs: 'auditLogs',
+  suppliers: 'suppliers',
 } as const;
 
 export type CollectionName = (typeof collections)[keyof typeof collections];

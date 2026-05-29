@@ -56,7 +56,6 @@ export default function CustomerPage() {
     () => ({
       total: customers.length,
       active: customers.filter((c) => c.isActive).length,
-      suppliers: customers.filter((c) => inferContactType(c) === 'supplier').length,
       withCredit: customers.filter((c) => (creditMap.get(c.id)?.creditUsed ?? 0) > 0).length,
       totalDebt: [...creditMap.values()].reduce((s, a) => s + a.creditUsed, 0),
     }),
@@ -82,9 +81,7 @@ export default function CustomerPage() {
       if (detailCustomer?.id === editCustomer?.id) {
         setDetailCustomer(saved);
       }
-      const label =
-        normalized.contactType === 'supplier' ? 'ผู้จำหน่าย' : 'ลูกค้า';
-      showToast(editCustomer ? `อัปเดต${label}เรียบร้อย` : `เพิ่ม${label}เรียบร้อย`);
+      showToast(editCustomer ? 'อัปเดตลูกค้าเรียบร้อย' : 'เพิ่มลูกค้าเรียบร้อย');
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'บันทึกไม่สำเร็จ', 'warn');
     } finally {
@@ -109,8 +106,8 @@ export default function CustomerPage() {
           <i className="ti ti-users" aria-hidden="true" />
         </div>
         <div className="cm-topbar-center">
-          <div className="cm-topbar-title">จัดการลูกค้า / ผู้จำหน่าย</div>
-          <div className="cm-topbar-sub">Customer, Wholesale &amp; Supplier Management</div>
+          <div className="cm-topbar-title">จัดการลูกค้า</div>
+          <div className="cm-topbar-sub">Customer &amp; Wholesale Management</div>
         </div>
         <span className="cm-branch-badge">
           <i className="ti ti-map-pin" style={{ fontSize: 12 }} aria-hidden="true" />
@@ -156,7 +153,6 @@ export default function CustomerPage() {
             <option value="">ทุกประเภท</option>
             <option value="retail">ลูกค้าทั่วไป</option>
             <option value="wholesale">ลูกค้าขายส่ง</option>
-            <option value="supplier">ผู้จำหน่าย</option>
           </select>
           <select
             className="cm-select-filter"
@@ -206,12 +202,11 @@ export default function CustomerPage() {
                       const debt = c.outstandingBalance ?? creditMap.get(c.id)?.creditUsed ?? 0;
                       const type = inferContactType(c);
                       const typeStyle = contactTypeBadgeStyle(type);
-                      const isSupplier = type === 'supplier';
                       return (
                         <tr key={c.id} onClick={() => openDetail(c)} style={{ cursor: 'pointer' }}>
                           <td>
                             <div className="cm-emp-cell">
-                              <div className={`cm-avatar${isSupplier ? ' cm-avatar-supplier' : ''}`}>
+                              <div className="cm-avatar">
                                 {customerInitials(c)}
                               </div>
                               <div>
@@ -234,9 +229,9 @@ export default function CustomerPage() {
                             {c.memberNo}
                           </td>
                           <td>{c.phone}</td>
-                          <td>{isSupplier ? '—' : levelMap.get(c.priceLevelId) ?? c.priceLevelId}</td>
+                          <td>{levelMap.get(c.priceLevelId) ?? c.priceLevelId}</td>
                           <td className="num" style={{ color: debt > 0 ? 'var(--red)' : undefined }}>
-                            {!isSupplier && debt > 0 ? fmtBaht(debt) : '—'}
+                            {debt > 0 ? fmtBaht(debt) : '—'}
                           </td>
                           <td>
                             <span className={`cm-status-pill ${c.isActive ? 'cm-status-on' : 'cm-status-off'}`}>
@@ -294,10 +289,6 @@ export default function CustomerPage() {
         <div className="cm-footer-stat">
           <span className="cm-footer-num clr-green">{stats.active}</span>
           <span className="cm-footer-lbl">ใช้งาน</span>
-        </div>
-        <div className="cm-footer-stat">
-          <span className="cm-footer-num clr-purple">{stats.suppliers}</span>
-          <span className="cm-footer-lbl">ผู้จำหน่าย</span>
         </div>
         <div className="cm-footer-stat">
           <span className="cm-footer-num clr-red">{fmtBaht(stats.totalDebt)}</span>

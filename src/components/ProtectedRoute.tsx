@@ -1,12 +1,11 @@
 import { useEffect } from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { fetchActiveBranches } from '../lib/branches';
 import { useAuth } from '../lib/hooks/useAuth';
-import AppShell from './AppShell';
 
-/** Auth + branch guard; renders AppShell layout with nested routes */
+/** Auth guard only — renders nested routes without a layout shell */
 export default function ProtectedRoute() {
-  const { isAuthenticated, isLoading, user, branchId, logout } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
   const location = useLocation();
 
   useEffect(() => {
@@ -27,10 +26,5 @@ export default function ProtectedRoute() {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  if (!branchId || !user?.branchIds.includes(branchId)) {
-    void logout();
-    return <Navigate to="/login" replace />;
-  }
-
-  return <AppShell />;
+  return <Outlet />;
 }

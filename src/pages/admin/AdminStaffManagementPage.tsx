@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import StaffFormModal from '../components/staff/StaffFormModal';
-import { getBranchLabel, useActiveBranches } from '../lib/branches';
-import { useAuth } from '../lib/hooks/useAuth';
-import { downloadCsv } from '../lib/stockReport/exportCsv';
+import StaffFormModal from '../../components/staff/StaffFormModal';
+import { fetchAllBranches } from '../../lib/admin/branchManagement';
+import { getBranchLabel, seedBranchLabelCache } from '../../lib/branches';
+import { useAuth } from '../../lib/hooks/useAuth';
+import { downloadCsv } from '../../lib/stockReport/exportCsv';
 import {
   avatarClass,
   formatLastLogin,
@@ -16,10 +17,10 @@ import {
   type LogFilter,
   type StaffFormData,
   type StaffTab,
-} from '../lib/staffManagement/types';
-import { useStaffManagement } from '../lib/staffManagement/useStaffManagement';
-import type { User } from '../lib/types';
-import './StaffManagementPage.css';
+} from '../../lib/staffManagement/types';
+import { useStaffManagement } from '../../lib/staffManagement/useStaffManagement';
+import type { User } from '../../lib/types';
+import '../StaffManagementPage.css';
 
 const LOG_CHIPS: { id: LogFilter; label: string }[] = [
   { id: 'all', label: 'ทั้งหมด' },
@@ -98,12 +99,14 @@ function ConfirmModal({
   );
 }
 
-export default function StaffManagementPage() {
+export default function AdminStaffManagementPage() {
   const { branchId, user: actor } = useAuth();
-  const { branches: activeBranches } = useActiveBranches();
+  const [allBranches, setAllBranches] = useState<Array<{ id: string; name: string }>>([]);
   const actorInfo = actor
     ? { id: actor.id, name: `${actor.firstName} ${actor.lastName}` }
     : null;
+
+  const activityBranchId = branchId ?? actor?.branchIds[0] ?? null;
 
   const {
     users,
@@ -116,7 +119,19 @@ export default function StaffManagementPage() {
     softDeleteUser,
     updateRoleMatrix,
     resetRoleMatrix,
-  } = useStaffManagement(branchId, actorInfo);
+  } = useStaffManagement(activityBranchId, actorInfo, { hq: true });
+
+  useEffect(() => {
+    void fetchAllBranches().then((list) => {
+      seedBranchLabelCache(list);
+      setAllBranches(list.map((b) => ({ id: b.id, name: b.name?.trim() || b.id })));
+    });
+  }, []);
+
+  const branchLabel = useCallback(
+    (id: string) => allBranches.find((b) => b.id === id)?.name ?? getBranchLabel(id),
+    [allBranches],
+  );
 
   const [tab, setTab] = useState<StaffTab>('staff');
   const [search, setSearch] = useState('');
@@ -130,7 +145,7 @@ export default function StaffManagementPage() {
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'info' | 'warn' } | null>(null);
   const [clock, setClock] = useState('');
 
-  const branchDisplay = branchId ? getBranchLabel(branchId) : '—';
+  const branchDisplay = 'HQ — ทุกสาขา';
   const permSets = useMemo(() => setsFromMatrix(roleMatrix), [roleMatrix]);
 
   const filteredUsers = useMemo(() => {
@@ -282,12 +297,12 @@ export default function StaffManagementPage() {
           <i className="ti ti-users" aria-hidden="true" />
         </div>
         <div className="sm-topbar-center">
-          <div className="sm-topbar-title">จัดการพนักงาน &amp; สิทธิ์</div>
-          <div className="sm-topbar-sub">Staff &amp; Permissions Management</div>
+          <div className="sm-topbar-title">จัดการพนักงาน (Admin HQ)</div>
+          <div className="sm-topbar-sub">Staff Management — ทุกสาขา</div>
         </div>
         <span className="sm-branch-badge">
-          <i className="ti ti-map-pin" style={{ fontSize: 12 }} aria-hidden="true" />
-          สาขา: {branchDisplay}
+          <i className="ti ti-building" style={{ fontSize: 12 }} aria-hidden="true" />
+          {branchDisplay}
         </span>
         <button type="button" className="sm-btn sm-btn-primary" onClick={openAdd}>
           <i className="ti ti-user-plus" aria-hidden="true" /> เพิ่มพนักงาน
@@ -409,7 +424,7 @@ export default function StaffManagementPage() {
                             <div className="sm-branch-tags">
                               {u.branchIds.map((bid) => (
                                 <span key={bid} className="sm-branch-tag">
-                                  {getBranchLabel(bid)}
+                                  {branchLabel(bid)}
                                 </span>
                               ))}
                             </div>
@@ -662,8 +677,8 @@ export default function StaffManagementPage() {
       <StaffFormModal
         open={staffModalOpen}
         editUser={editUser}
-        branches={activeBranches}
-        branchPicker="checkbox"
+        branches={allBranches}
+        branchPicker="dropdown"
         onClose={() => setStaffModalOpen(false)}
         onSave={handleSave}
         saving={saving}

@@ -46,10 +46,8 @@ function formToCustomerFields(form: CustomerFormData) {
     taxId: normalized.taxId.trim() || null,
     address: normalized.address.trim() || null,
     contactType: normalized.contactType,
-    bankName:
-      normalized.contactType === 'supplier' ? normalized.bankName.trim() || null : null,
-    bankAccount:
-      normalized.contactType === 'supplier' ? normalized.bankAccount.trim() || null : null,
+    bankName: null,
+    bankAccount: null,
     priceLevelId: normalized.priceLevelId,
     creditLimit: normalized.creditLimit,
     creditDays: normalized.creditDays,

@@ -62,7 +62,9 @@ function assertActiveBranchUser(user: UserDoc, branchId: string): void {
   if (!user.isActive || user.deletedAt != null) {
     throw new HttpsError('permission-denied', 'PIN ไม่ถูกต้องหรือไม่มีสิทธิ์สาขานี้');
   }
-  if (!user.branchIds?.includes(branchId)) {
+  // Global Admins (branchIds: ['ALL']) are allowed to log in at any physical branch.
+  const hasAccess = user.branchIds?.includes('ALL') || user.branchIds?.includes(branchId);
+  if (!hasAccess) {
     throw new HttpsError('permission-denied', 'PIN ไม่ถูกต้องหรือไม่มีสิทธิ์สาขานี้');
   }
 }
@@ -76,32 +78,62 @@ async function pinMatches(storedHash: string | undefined, pin: string): Promise<
   }
 }
 
+/**
+ * Merge docs from two parallel Firestore queries, deduplicating by document ID.
+ * This is needed because Firestore's array-contains cannot OR two values in one
+ * query, so we fetch branch-specific users and Global Admin ('ALL') users separately.
+ */
+function mergeDocs(
+  a: FirebaseFirestore.QuerySnapshot,
+  b: FirebaseFirestore.QuerySnapshot,
+): FirebaseFirestore.QueryDocumentSnapshot[] {
+  const seen = new Set<string>();
+  const result: FirebaseFirestore.QueryDocumentSnapshot[] = [];
+  for (const doc of [...a.docs, ...b.docs]) {
+    if (seen.has(doc.id)) continue;
+    seen.add(doc.id);
+    result.push(doc);
+  }
+  return result;
+}
+
 async function findUserByPinInBranch(
   pin: string,
   branchId: string,
   username?: string,
   userId?: string,
 ): Promise<{ user: UserDoc; id: string } | null> {
+  // ── Fast path: direct lookup by UID ────────────────────────────────────────
   if (userId) {
     const snap = await db.collection('users').doc(userId).get();
     if (!snap.exists) return null;
     const user = snap.data() as UserDoc;
     if (!(await pinMatches(user.pin, pin))) return null;
-    assertActiveBranchUser(user, branchId);
+    assertActiveBranchUser(user, branchId);   // handles 'ALL' bypass
     return { user, id: snap.id };
   }
 
+  // ── Lookup by username ──────────────────────────────────────────────────────
+  // Run two queries in parallel: users assigned to the requested branch, and
+  // Global Admins (branchIds array contains 'ALL'). Deduplicate by doc ID.
   if (username) {
     const normalized = username.trim().toLowerCase();
-    const snap = await db
-      .collection('users')
-      .where('username', '==', normalized)
-      .where('branchIds', 'array-contains', branchId)
-      .where('isActive', '==', true)
-      .limit(5)
-      .get();
+    const [branchSnap, globalSnap] = await Promise.all([
+      db.collection('users')
+        .where('username', '==', normalized)
+        .where('branchIds', 'array-contains', branchId)
+        .where('isActive', '==', true)
+        .limit(5)
+        .get(),
+      db.collection('users')
+        .where('username', '==', normalized)
+        .where('branchIds', 'array-contains', 'ALL')
+        .where('isActive', '==', true)
+        .limit(5)
+        .get(),
+    ]);
 
-    for (const docSnap of snap.docs) {
+    for (const docSnap of mergeDocs(branchSnap, globalSnap)) {
       const user = docSnap.data() as UserDoc;
       if (user.deletedAt != null) continue;
       if (await pinMatches(user.pin, pin)) {
@@ -111,13 +143,20 @@ async function findUserByPinInBranch(
     return null;
   }
 
-  const snap = await db
-    .collection('users')
-    .where('branchIds', 'array-contains', branchId)
-    .where('isActive', '==', true)
-    .get();
+  // ── General PIN scan ────────────────────────────────────────────────────────
+  // Same two-query strategy: branch-specific users + Global Admins.
+  const [branchSnap, globalSnap] = await Promise.all([
+    db.collection('users')
+      .where('branchIds', 'array-contains', branchId)
+      .where('isActive', '==', true)
+      .get(),
+    db.collection('users')
+      .where('branchIds', 'array-contains', 'ALL')
+      .where('isActive', '==', true)
+      .get(),
+  ]);
 
-  for (const docSnap of snap.docs) {
+  for (const docSnap of mergeDocs(branchSnap, globalSnap)) {
     const user = docSnap.data() as UserDoc;
     if (user.deletedAt != null || !user.pin) continue;
     if (await pinMatches(user.pin, pin)) {

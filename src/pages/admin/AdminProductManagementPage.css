@@ -1,0 +1,13 @@
+/* AdminProductManagementPage — admin-specific overrides only.
+   All visual styling comes from ../ProductCRUDPage.css (imported in the TSX).   */
+
+/* Spin animation for the Refresh button loading state */
+.apm-admin-spin {
+  animation: apm-admin-spin 0.8s linear infinite;
+}
+
+@keyframes apm-admin-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

@@ -58,6 +58,9 @@ function isActiveUser(user: User): boolean {
 }
 
 function assertBranchAccess(user: User, branchId: string): void {
+  // Global Admins (branchIds: ['ALL']) may establish a session for any branch,
+  // including the sentinel 'ALL' itself which is used for cross-branch admin work.
+  if (user.branchIds.includes('ALL')) return;
   if (!user.branchIds.includes(branchId)) {
     throw new Error('คุณไม่มีสิทธิ์เข้าถึงสาขานี้');
   }

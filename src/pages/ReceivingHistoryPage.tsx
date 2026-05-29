@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { getBranchLabel } from '../lib/branches';
 import { useAuth } from '../lib/hooks/useAuth';
 import { fmtMoney } from '../lib/receiving/types';
+import { parseReceivingNote } from '../lib/receiving/receivingFormUtils';
 import {
   RECEIVING_STATUS_LABELS,
   computeReceivingSummary,
@@ -119,6 +120,13 @@ function fmtShort(n: number): string {
   return parseFloat(String(n || 0)).toLocaleString('th-TH', { maximumFractionDigits: 0 });
 }
 
+function fmtIsoDate(iso: string): string {
+  if (!iso) return '—';
+  const d = new Date(iso + 'T12:00:00');
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
 export default function ReceivingHistoryPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -190,6 +198,11 @@ export default function ReceivingHistoryPage() {
   const selected = useMemo(
     () => records.find((r) => r.receiving.id === selectedId) ?? null,
     [records, selectedId],
+  );
+
+  const drawerParsedNote = useMemo(
+    () => (selected ? parseReceivingNote(selected.receiving.note) : null),
+    [selected],
   );
 
   const openDrawer = useCallback(
@@ -467,11 +480,29 @@ export default function ReceivingHistoryPage() {
                         <span>ส่วนลดท้ายบิล</span>
                         <strong>฿{fmtMoney(selected.receiving.discountAmt)}</strong>
                       </div>
-                    {selected.receiving.note ? (
-                      <div className="rh-drawer-note" style={{ marginTop: 8 }}>
-                        {selected.receiving.note}
-                      </div>
-                    ) : null}
+                      {drawerParsedNote?.purchaseBillNo ? (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                          <span>เลขที่บิล</span>
+                          <strong style={{ fontFamily: 'monospace', fontSize: 12 }}>{drawerParsedNote.purchaseBillNo}</strong>
+                        </div>
+                      ) : null}
+                      {drawerParsedNote?.receiveDate ? (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                          <span>วันที่รับเข้า</span>
+                          <strong>{fmtIsoDate(drawerParsedNote.receiveDate)}</strong>
+                        </div>
+                      ) : null}
+                      {drawerParsedNote?.billDate ? (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                          <span>วันที่ซื้อในบิล</span>
+                          <strong>{fmtIsoDate(drawerParsedNote.billDate)}</strong>
+                        </div>
+                      ) : null}
+                      {drawerParsedNote?.freeNote ? (
+                        <div className="rh-drawer-note" style={{ marginTop: 8 }}>
+                          {drawerParsedNote.freeNote}
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                   <div className="sh-d-sec">

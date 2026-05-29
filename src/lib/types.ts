@@ -199,6 +199,34 @@ export type CustomerTier = {
   name: string; // e.g. 'ขายส่ง', 'ลูกค้า VIP', 'ตัวแทนจำกัด'
 };
 
+// -----------------------------
+// suppliers (root collection — HQ managed)
+// -----------------------------
+
+/**
+ * Supplier (ผู้จำหน่าย) — root-level collection.
+ * `allowedBranchIds: ['ALL']` means visible at every branch.
+ * Otherwise only branches listed can see/use this supplier.
+ */
+export type Supplier = SoftDelete & {
+  id: string;
+  code: string; // e.g. "SUP-001"
+  name: string;
+  contactName: string;
+  phone: string;
+  email: string | null;
+  taxId: string | null;
+  address: string | null;
+  bankName: string | null;
+  bankAccount: string | null;
+  note: string;
+  isActive: boolean;
+  /** ['ALL'] = ทุกสาขา, otherwise list of specific branch IDs */
+  allowedBranchIds: string[];
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+};
+
 export type Customer = SoftDelete & {
   id: string;
   branchId: string;
@@ -250,6 +278,7 @@ export type PriceLevel = {
   code: string;
   order: number;
   isActive: boolean;
+  desc?: string;
 };
 
 /** Global unit name registry — conversion factors are stored per product in uomConversions */

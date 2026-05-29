@@ -34,6 +34,29 @@
   flex: 1;
 }
 
+.dash-branch-select {
+  height: 32px;
+  padding: 0 30px 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.dash-branch-select:hover {
+  border-color: var(--p400, #7f77dd);
+}
+
+.dash-branch-select:focus {
+  border-color: var(--p600, #534ab7);
+  box-shadow: 0 0 0 3px rgba(83, 74, 183, 0.08);
+}
+
 .dash-period-tabs {
   display: flex;
   background: var(--g50);

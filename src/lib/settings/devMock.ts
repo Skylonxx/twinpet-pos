@@ -174,10 +174,9 @@ export function devAddDevice(device: PosDevice) {
 }
 
 export function priceLevelToRow(p: PriceLevel): PriceLevelRow {
-  return { ...p, desc: '' };
+  return { ...p, desc: p.desc ?? '' };
 }
 
 export function rowToPriceLevel(p: PriceLevelRow): PriceLevel {
-  const { desc: _d, ...rest } = p;
-  return rest;
+  return { ...p };
 }

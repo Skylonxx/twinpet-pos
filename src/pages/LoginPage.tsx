@@ -84,8 +84,12 @@ export default function LoginPage() {
   const handleSuccess = useCallback(
     (user: User) => {
       setSuccessUser(user);
+      // Global Admins (branchIds: ['ALL']) are not tied to a physical branch.
+      // Pass 'ALL' so the session is created correctly and PosShellRoute can
+      // redirect them straight to /admin.
+      const effectiveBranchId = user.branchIds.includes('ALL') ? 'ALL' : branchId;
       window.setTimeout(() => {
-        void completeLogin(user, branchId).then(() => {
+        void completeLogin(user, effectiveBranchId).then(() => {
           setSuccessUser(null);
         });
       }, 2200);
@@ -529,7 +533,7 @@ export default function LoginPage() {
               v2.4.1 · สาขา {branchLabel}
               {import.meta.env.DEV && (
                 <span style={{ display: 'block', marginTop: 4, fontSize: 10 }}>
-                  Dev: somchai/1234 · suda/2345 · wichai/3456 · nongnuch/4567
+                  Dev: somchai/1234 · suda/2345 · wichai/3456 · nongnuch/4567 · globaladmin/9999 (ALL)
                 </span>
               )}
             </p>
@@ -552,7 +556,9 @@ export default function LoginPage() {
         </div>
         <div className="login-success-sub">
           {successUser
-            ? `${formatRole(successUser.role)} · สาขา${branchLabel}`
+            ? successUser.branchIds.includes('ALL')
+              ? 'Global Admin · ทุกสาขา'
+              : `${formatRole(successUser.role)} · สาขา${branchLabel}`
             : 'กำลังเข้าสู่ระบบ...'}
         </div>
       </div>
