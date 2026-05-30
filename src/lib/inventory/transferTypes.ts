@@ -11,14 +11,33 @@ export type TransferLine = {
   transferQty: number;
 };
 
+/**
+ * Exact FIFO cut carried from the SOURCE branch on a transfer.
+ * Persisted on every transfer item so costing stays exact and a later
+ * cancel/edit can restore the source branch at the original cost basis.
+ */
+export type TransferLotDetail = {
+  /** Source lot the qty was cut from ('oversell' for an un-lotted remainder). */
+  lotId: string;
+  /** Exact FIFO cost per base unit carried from that source lot. */
+  costPerUnit: number;
+  /** Base units cut from this lot. */
+  qty: number;
+};
+
 export type InventoryTransferItem = {
   productId: string;
   productName: string;
   sku: string;
   sourceStock: number;
   transferQty: number;
+  /** Blended (weighted) cost of this line — derived from {@link sourceLotDetails}. */
   unitCost: number;
+  /** Exact source FIFO cuts (cost + qty) — financial source of truth. */
+  sourceLotDetails: TransferLotDetail[];
 };
+
+export type InventoryTransferStatus = 'completed' | 'cancelled';
 
 export type InventoryTransfer = {
   id: string;
@@ -29,8 +48,21 @@ export type InventoryTransfer = {
   staffId: string;
   staffName: string;
   itemCount: number;
-  status: 'completed';
+  status: InventoryTransferStatus;
   createdAt: Timestamp;
+  /** Cancellation metadata (set by cancelBranchTransfer). */
+  cancelledBy?: string;
+  cancelledByName?: string;
+  cancelledAt?: Timestamp;
+  cancelReason?: string;
+  updatedAt?: Timestamp;
+};
+
+export type CancelBranchTransferInput = {
+  transferId: string;
+  staffId: string;
+  staffName: string;
+  reason: string;
 };
 
 export type BranchTransferForm = {

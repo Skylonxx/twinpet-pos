@@ -1,8 +1,36 @@
 import { useCallback, useEffect, useState } from 'react';
 import { collection, getDocs, orderBy, query, where } from 'firebase/firestore';
 import { collections, db, isFirebaseConfigured } from '../firebase';
-import { devGetTransfers } from './transferDevMock';
-import type { InventoryTransfer } from './transferTypes';
+import { devGetAllTransfers, devGetTransferItems, devGetTransfers } from './transferDevMock';
+import type { InventoryTransfer, InventoryTransferItem } from './transferTypes';
+
+/** Fetch the line items of a single transfer (for the detail view). */
+export async function fetchTransferItems(transferId: string): Promise<InventoryTransferItem[]> {
+  if (!isFirebaseConfigured || !db) return devGetTransferItems(transferId);
+  const snap = await getDocs(
+    collection(db, collections.inventoryTransfers, transferId, collections.transferItems),
+  );
+  return snap.docs.map((d) => d.data() as InventoryTransferItem);
+}
+
+/** Fetch ALL transfers across every branch (admin / HQ view). */
+export async function fetchAllTransfers(): Promise<InventoryTransfer[]> {
+  if (!isFirebaseConfigured || !db) return devGetAllTransfers();
+  try {
+    const snap = await getDocs(
+      query(collection(db, collections.inventoryTransfers), orderBy('createdAt', 'desc')),
+    );
+    return snap.docs.map((d) => ({ ...(d.data() as InventoryTransfer), id: d.id }));
+  } catch {
+    const snap = await getDocs(collection(db, collections.inventoryTransfers));
+    const rows = snap.docs.map((d) => ({ ...(d.data() as InventoryTransfer), id: d.id }));
+    return rows.sort((a, b) => {
+      const ta = a.createdAt?.toDate?.()?.getTime() ?? 0;
+      const tb = b.createdAt?.toDate?.()?.getTime() ?? 0;
+      return tb - ta;
+    });
+  }
+}
 
 function sortByCreatedDesc(rows: InventoryTransfer[]): InventoryTransfer[] {
   return [...rows].sort((a, b) => {

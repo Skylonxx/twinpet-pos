@@ -32,16 +32,23 @@ function NavLinks({
           item.path === '/settings'
             ? location.pathname.startsWith('/settings')
             : item.path === '/inventory'
-              ? location.pathname.startsWith('/inventory')
-              : item.path === '/receiving' || item.path === '/receiving/history'
-                ? location.pathname.startsWith('/receiving')
-                : location.pathname === item.path;
+              ? location.pathname.startsWith('/inventory') &&
+                !location.pathname.startsWith('/inventory/transfer')
+              : item.path === '/inventory/transfer'
+                ? location.pathname.startsWith('/inventory/transfer')
+                : item.path === '/receiving' || item.path === '/receiving/history'
+                  ? location.pathname.startsWith('/receiving')
+                  : location.pathname === item.path;
 
         return (
           <NavLink
             key={item.path}
             to={item.path}
-            end={item.path !== '/settings' && item.path !== '/inventory'}
+            end={
+              item.path !== '/settings' &&
+              item.path !== '/inventory' &&
+              item.path !== '/inventory/transfer'
+            }
             className={`app-shell-nav-link${active ? ' active' : ''}`}
             title={item.label}
           >
@@ -67,7 +74,11 @@ export default function AppShell() {
       (n) =>
         n.path === location.pathname ||
         (n.path === '/settings' && location.pathname.startsWith('/settings')) ||
-        (n.path === '/inventory' && location.pathname.startsWith('/inventory')) ||
+        (n.path === '/inventory' &&
+          location.pathname.startsWith('/inventory') &&
+          !location.pathname.startsWith('/inventory/transfer')) ||
+        (n.path === '/inventory/transfer' &&
+          location.pathname.startsWith('/inventory/transfer')) ||
         (n.path === '/receiving/history' && location.pathname.startsWith('/receiving')),
     )?.label ?? 'TwinPet POS';
 

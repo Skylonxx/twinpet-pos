@@ -39,6 +39,18 @@ const ADMIN_NAV = [
     label: 'Receiving (HQ)',
     icon: 'ti-truck-delivery',
   },
+  {
+    path: '/admin/transfers',
+    end: false,
+    label: 'Transfers (HQ)',
+    icon: 'ti-arrows-exchange',
+  },
+  {
+    path: '/admin/stock-report',
+    end: false,
+    label: 'Stock Report (HQ)',
+    icon: 'ti-box',
+  },
 ] as const;
 
 export default function AdminLayout() {

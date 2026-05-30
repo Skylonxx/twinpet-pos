@@ -14,8 +14,15 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-export default function BranchTransferPage() {
+type Props = {
+  /** When provided (hub mode), used for the back action and after a successful
+   *  save instead of router navigation, returning to the transfer list view. */
+  onExit?: () => void;
+};
+
+export default function BranchTransferPage({ onExit }: Props = {}) {
   const navigate = useNavigate();
+  const exit = onExit ?? (() => navigate('/inventory'));
   const { branchId, user } = useAuth();
   const { branches: activeBranches } = useActiveBranches();
   const { products, loading } = useProductCrud(branchId);
@@ -161,7 +168,7 @@ export default function BranchTransferPage() {
       );
       setShowConfirmModal(false);
       setToast('บันทึกสำเร็จ');
-      window.setTimeout(() => navigate('/inventory'), 400);
+      window.setTimeout(() => exit(), 400);
     } catch (err) {
       setValidationError(err instanceof Error ? err.message : 'บันทึกไม่สำเร็จ');
       setShowConfirmModal(false);
@@ -187,7 +194,7 @@ export default function BranchTransferPage() {
         <button
           type="button"
           className="inv-adj-back"
-          onClick={() => navigate('/inventory')}
+          onClick={() => exit()}
           aria-label="กลับ"
         >
           <i className="ti ti-arrow-left" aria-hidden="true" />

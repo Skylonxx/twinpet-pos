@@ -6,10 +6,28 @@ export const ADJUSTMENT_REASONS = [
   'สินค้าชำรุด',
   'สินค้าสูญหาย',
   'นำไปใช้ในกิจการ',
+  'รับคืนจากลูกค้า',
+  'รับเข้าเพิ่มเติม',
   'อื่นๆ',
 ] as const;
 
 export type AdjustmentReason = (typeof ADJUSTMENT_REASONS)[number];
+
+/** Direction of an adjustment: stock In (รับเข้า) vs Out (ตัดทิ้ง). */
+export type AdjustmentDirection = 'in' | 'out';
+
+/**
+ * Reasons shown per direction. The UI collects a positive magnitude and applies
+ * the sign from the chosen direction, so the reason list is filtered to match
+ * (e.g. "สินค้าชำรุด" only makes sense when adjusting stock out).
+ */
+export const ADJUSTMENT_REASONS_BY_DIRECTION: Record<
+  AdjustmentDirection,
+  readonly AdjustmentReason[]
+> = {
+  in: ['ตรวจนับสต็อก', 'รับคืนจากลูกค้า', 'รับเข้าเพิ่มเติม', 'อื่นๆ'],
+  out: ['ตรวจนับสต็อก', 'สินค้าชำรุด', 'สินค้าสูญหาย', 'นำไปใช้ในกิจการ', 'อื่นๆ'],
+};
 
 /** Form state line (before confirm) */
 export type AdjustmentLine = {

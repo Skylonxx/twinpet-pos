@@ -1,0 +1,51 @@
+.asr-wrap {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.asr-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 20px;
+  background: #fff;
+  border-bottom: 1px solid #eceaf5;
+  flex-shrink: 0;
+}
+
+.asr-bar-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 15px;
+  color: #211f3a;
+}
+.asr-bar-title i { color: #534ab7; }
+
+.asr-bar-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+.asr-bar-field label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #4a4866;
+}
+
+.asr-report {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.asr-empty {
+  padding: 48px;
+  text-align: center;
+  color: #9b98b8;
+  font-size: 14px;
+}

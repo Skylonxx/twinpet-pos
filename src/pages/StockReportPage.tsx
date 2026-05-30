@@ -222,8 +222,11 @@ function SortableTh({
   );
 }
 
-export default function StockReportPage() {
-  const { branchId } = useAuth();
+export default function StockReportPage({ branchId: branchIdProp }: { branchId?: string } = {}) {
+  // When embedded (e.g. Admin), a branchId prop overrides the auth branch.
+  // This is the ONLY change to source — the core useStockReport logic is untouched.
+  const { branchId: authBranchId } = useAuth();
+  const branchId = branchIdProp ?? authBranchId;
   const { policies: expiryPolicies, defaultPolicy } = useExpiryPolicies();
   const { products, movements, categories, loading, lastUpdated, refresh } =
     useStockReport(branchId);

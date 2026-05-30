@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import InventoryAdjustmentConfirmDialog from '../../components/inventory/InventoryAdjustmentConfirmDialog';
 import ProductPickerDialog, { productListItemToPickerItem } from '../../components/products/ProductPickerDialog';
 import type { ProductPickerItem } from '../../components/products/productPickerTypes';
@@ -8,12 +8,13 @@ import { confirmInventoryAdjustment } from '../../lib/inventory/confirmInventory
 import { useAuth } from '../../lib/hooks/useAuth';
 import { useProductCrud } from '../../lib/productCrud/useProductCrud';
 import {
-  ADJUSTMENT_REASONS,
+  ADJUSTMENT_REASONS_BY_DIRECTION,
   computeLineImpact,
   computeTotalValueImpact,
   formatAdjustQty,
   lineFromPickerItem,
   newStock,
+  type AdjustmentDirection,
   type AdjustmentLine,
   type AdjustmentReason,
 } from '../../lib/inventory/types';
@@ -31,11 +32,21 @@ function qtyClass(qty: number): string {
 
 export default function InventoryAdjustmentPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { branchId, user } = useAuth();
   const { products, loading } = useProductCrud(branchId);
 
+  // Direction is chosen on the previous screen and passed via `?mode=in|out`,
+  // so this page is a dedicated In or Out flow (no in-form toggle). Read once
+  // on mount; defaults to "out" for any missing/invalid value.
+  const initialDirection: AdjustmentDirection =
+    searchParams.get('mode') === 'in' ? 'in' : 'out';
+
   const [adjustDate, setAdjustDate] = useState(todayIso);
-  const [reason, setReason] = useState<AdjustmentReason>(ADJUSTMENT_REASONS[0]);
+  const [direction] = useState<AdjustmentDirection>(initialDirection);
+  const [reason, setReason] = useState<AdjustmentReason>(
+    ADJUSTMENT_REASONS_BY_DIRECTION[initialDirection][0],
+  );
   const [note, setNote] = useState('');
   const [lines, setLines] = useState<AdjustmentLine[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -90,6 +101,12 @@ export default function InventoryAdjustmentPage() {
   const removeLine = (lineKey: string) => {
     setLines((prev) => prev.filter((l) => l.lineKey !== lineKey));
   };
+
+  const reasonOptions = ADJUSTMENT_REASONS_BY_DIRECTION[direction];
+  const dirLabel = direction === 'in' ? 'รับเข้า' : 'จ่ายออก';
+
+  // The user types a positive magnitude; the sign comes from the direction.
+  const signedQty = (mag: number) => (direction === 'out' ? -Math.abs(mag) : Math.abs(mag));
 
   const linesWithAdjust = lines.filter((l) => l.adjustQty !== 0);
 
@@ -176,8 +193,14 @@ export default function InventoryAdjustmentPage() {
         >
           <i className="ti ti-arrow-left" aria-hidden="true" />
         </button>
-        <span className="inv-adj-title">ปรับปรุงยอดสต็อก</span>
-        <span className="inv-adj-badge">ADJ — ร่าง</span>
+        <span className="inv-adj-title">ปรับปรุงยอดสต็อก — {dirLabel}</span>
+        <span className={`inv-adj-badge inv-adj-badge-${direction}`}>
+          <i
+            className={`ti ti-arrow-${direction === 'in' ? 'down-left' : 'up-right'}`}
+            aria-hidden="true"
+          />{' '}
+          {direction === 'in' ? 'รับเข้า (Adjust In)' : 'จ่ายออก (Adjust Out)'}
+        </span>
       </header>
 
       {validationError ? <div className="inv-adj-error-banner">{validationError}</div> : null}
@@ -202,7 +225,7 @@ export default function InventoryAdjustmentPage() {
                 value={reason}
                 onChange={(e) => setReason(e.target.value as AdjustmentReason)}
               >
-                {ADJUSTMENT_REASONS.map((r) => (
+                {reasonOptions.map((r) => (
                   <option key={r} value={r}>
                     {r}
                   </option>
@@ -252,7 +275,7 @@ export default function InventoryAdjustmentPage() {
                       คงเหลือปัจจุบัน
                     </th>
                     <th className="r" style={{ width: 120 }}>
-                      ยอดที่ปรับปรุง (+/-)
+                      จำนวนที่{dirLabel}
                     </th>
                     <th className="r" style={{ width: 110 }}>
                       ยอดคงเหลือใหม่
@@ -276,12 +299,14 @@ export default function InventoryAdjustmentPage() {
                           <input
                             className="inv-adj-qty-input"
                             type="number"
+                            min={0}
                             step={1}
-                            value={line.adjustQty || ''}
+                            value={Math.abs(line.adjustQty) || ''}
                             placeholder="0"
                             onChange={(e) =>
                               updateLine(line.lineKey, {
-                                adjustQty: e.target.value === '' ? 0 : Number(e.target.value),
+                                adjustQty:
+                                  e.target.value === '' ? 0 : signedQty(Number(e.target.value)),
                               })
                             }
                           />

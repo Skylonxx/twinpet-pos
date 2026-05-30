@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import type { User, UserRole } from '../lib/types';
-import type { StaffFormData } from '../lib/staffManagement/types';
+import type { User, UserRole } from '../../lib/types';
+import type { StaffFormData } from '../../lib/staffManagement/types';
 
 export const EMPTY_STAFF_FORM: StaffFormData = {
   firstName: '',

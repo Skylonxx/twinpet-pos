@@ -1262,6 +1262,8 @@
   padding: 10px 16px;
   border-radius: var(--radius-md, 8px);
   font-size: 13px;
-  z-index: 700;
+  /* Above all modals/backdrops (max overlay z-index is ~2000) so toasts
+     stay visible while a modal is open (e.g. Transfer Edit Modal). */
+  z-index: 9999;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }

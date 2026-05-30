@@ -33,7 +33,10 @@ service cloud.firestore {
     }
 
     function hasBranchAccess(branchId) {
-      return isStaff() && branchId in branchIds();
+      // 'ALL' in the token's branchIds = global admin → access to every branch.
+      // The app code (PosShellRoute / useBranch) already treats 'ALL' this way;
+      // the rules must match, or global admins fail per-branch write checks.
+      return isStaff() && ('ALL' in branchIds() || branchId in branchIds());
     }
 
     /** productStocks doc id is often the branch id (e.g. LDP-001) */
@@ -106,8 +109,11 @@ service cloud.firestore {
 
       match /productStocks/{stockBranchId} {
         allow read: if isAdmin() || hasBranchAccess(stockBranchId);
-        // Admin writes stock for any branch (cross-branch receiving via confirmReceiving)
-        allow write: if isAdmin() || (isStaff() && hasBranchAccess(stockBranchId));
+        // Own-branch stock writes, plus cross-branch destination writes for branch
+        // transfers: confirmBranchTransfer increments the DESTINATION branch's stock,
+        // and the source-branch user has no branch access to that destination.
+        // These docs are only ever written by the inventory transaction services.
+        allow write: if isStaff();
       }
     }
 
@@ -220,15 +226,23 @@ service cloud.firestore {
     // ── Inventory ──
     match /stockLots/{lotId} {
       allow read: if isStaff();
-      allow create, delete: if isManagerOrAdmin();
+      // Lots are created by receiving, positive adjustments (ADJUST_IN), the
+      // destination side of branch transfers, and oversell reconciliation.
+      // A transfer creates a lot in the DESTINATION branch, so we cannot require
+      // destination-branch access here — any authenticated staff may create.
+      allow create: if isStaff();
       allow update: if isStaff();
+      allow delete: if isManagerOrAdmin();
     }
 
     match /stockMovements/{movementId} {
       allow read: if isStaff();
-      // Admin creates movements for any branch (cross-branch receiving via confirmReceiving)
+      // Own-branch movements (sale, receive, adjust, transfer_out) require branch
+      // access. The transfer_in leg writes to the DESTINATION branch, so allow
+      // movements tagged refType 'inventoryTransfer' to be created cross-branch.
       allow create: if isAdmin() || (isStaff()
-        && hasBranchAccess(request.resource.data.branchId));
+        && (hasBranchAccess(request.resource.data.branchId)
+          || request.resource.data.refType == 'inventoryTransfer'));
       // Managers/admins can update or delete movements when editing a confirmed receiving
       allow update, delete: if isAdmin() || (isManagerOrAdmin()
         && hasBranchAccess(resource.data.branchId));
@@ -268,8 +282,9 @@ service cloud.firestore {
       allow read: if isAdmin() || (isStaff()
         && (hasBranchAccess(resource.data.fromBranchId)
           || hasBranchAccess(resource.data.toBranchId)));
-      allow write: if isStaff()
-        && hasBranchAccess(request.resource.data.fromBranchId);
+      // Admin (incl. global 'ALL') or a staff member at the SOURCE branch.
+      allow write: if isAdmin()
+        || (isStaff() && hasBranchAccess(request.resource.data.fromBranchId));
 
       match /transferItems/{itemId} {
         allow read: if isStaff();

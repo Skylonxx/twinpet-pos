@@ -2,7 +2,7 @@ import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../lib/hooks/useAuth';
 
 export default function GuestRoute() {
-  const { isAuthenticated, isLoading, user, branchId } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
 
   if (isLoading) {
     return (

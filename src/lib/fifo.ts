@@ -54,13 +54,13 @@ export type CompleteSaleInput = {
   priceLevelId?: string;
 };
 
-type LotCut = {
+export type LotCut = {
   ref: DocumentReference;
   cutQty: number;
   costPerUnit: number;
 };
 
-type MutableLot = {
+export type MutableLot = {
   ref: DocumentReference;
   id: string;
   qtyRemaining: number;
@@ -99,7 +99,7 @@ function buildLotsQuery(firestore: NonNullable<typeof db>, productId: string, br
 }
 
 /** Discover lot doc refs (outside tx) — same pattern as confirmReceiving ghost lots */
-async function fetchActiveLotRefs(
+export async function fetchActiveLotRefs(
   firestore: NonNullable<typeof db>,
   productId: string,
   branchId: string,
@@ -109,7 +109,7 @@ async function fetchActiveLotRefs(
 }
 
 /** Read fresh lot qty inside tx — one tx.get per ref, all reads before writes */
-async function readProductLotsInTransaction(
+export async function readProductLotsInTransaction(
   tx: Transaction,
   lotRefs: DocumentReference[],
 ): Promise<MutableLot[]> {
@@ -136,7 +136,14 @@ async function readProductLotsInTransaction(
   return lots;
 }
 
-function planFifoCutFromState(
+/**
+ * Walk `lots` oldest-first, cutting up to `qtyBase` base units.
+ * MUTATES each lot's `qtyRemaining` in place so the same array can be passed
+ * to multiple sequential cuts (e.g. several cart lines / adjustment lines for
+ * the same product).  Returns the per-lot cuts, the cut refs, and any
+ * `remaining` demand that the available lots could not cover.
+ */
+export function planFifoCutFromState(
   lots: MutableLot[],
   qtyBase: number,
 ): { cuts: LotCut[]; lotRefs: LotRef[]; remaining: number } {
@@ -162,7 +169,9 @@ function planFifoCutFromState(
   return { cuts, lotRefs, remaining };
 }
 
-function mergeLotCuts(cuts: LotCut[]): LotCut[] {
+/** Collapse multiple cuts against the same lot doc into a single cut — so one
+ *  transaction never issues two conflicting writes to the same lot ref. */
+export function mergeLotCuts(cuts: LotCut[]): LotCut[] {
   const byRef = new Map<string, LotCut>();
   for (const cut of cuts) {
     if (!cut.ref?.path || cut.cutQty <= 0) continue;

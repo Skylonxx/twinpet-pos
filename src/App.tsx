@@ -5,7 +5,7 @@ import PosShellRoute from './components/PosShellRoute';
 import CustomerPage from './pages/CustomerPage';
 import DashboardPage from './pages/DashboardPage';
 import ExportReportPage from './pages/ExportReportPage';
-import BranchTransferPage from './pages/inventory/BranchTransferPage';
+import TransferPage from './pages/inventory/TransferPage';
 import InventoryAdjustmentPage from './pages/inventory/InventoryAdjustmentPage';
 import InventoryPage from './pages/inventory/InventoryPage';
 import LoginPage from './pages/LoginPage';
@@ -23,6 +23,9 @@ import AdminDashboardPage from './pages/admin/AdminDashboardPage';
 import WorkspaceSelector from './pages/WorkspaceSelector';
 import AdminProductManagementPage from './pages/admin/AdminProductManagementPage';
 import AdminReceivingPage from './pages/admin/AdminReceivingPage';
+import AdminTransferPage from './pages/admin/AdminTransferPage';
+import AdminTransferCreatePage from './pages/admin/AdminTransferCreatePage';
+import AdminStockReportPage from './pages/admin/AdminStockReportPage';
 import BranchManagementPage from './pages/admin/BranchManagementPage';
 import AdminStaffManagementPage from './pages/admin/AdminStaffManagementPage';
 import AdminSupplierManagementPage from './pages/admin/AdminSupplierManagementPage';
@@ -53,7 +56,11 @@ export default function App() {
             <Route path="/receiving/history" element={<ReceivingHistoryPage />} />
             <Route path="/inventory" element={<InventoryPage />} />
             <Route path="/inventory/adjust" element={<InventoryAdjustmentPage />} />
-            <Route path="/inventory/transfer" element={<BranchTransferPage />} />
+            <Route path="/inventory/transfer" element={<TransferPage />} />
+            <Route
+              path="/inventory/transfer/history"
+              element={<Navigate to="/inventory/transfer" replace />}
+            />
             <Route path="/sales-history" element={<SalesHistoryPage />} />
             <Route path="/receivables" element={<ReceivablesPage />} />
             <Route path="/customers" element={<CustomerPage />} />
@@ -76,6 +83,9 @@ export default function App() {
             <Route path="products" element={<AdminProductManagementPage />} />
             <Route path="suppliers" element={<AdminSupplierManagementPage />} />
             <Route path="receiving" element={<AdminReceivingPage />} />
+            <Route path="transfers" element={<AdminTransferPage />} />
+            <Route path="transfers/new" element={<AdminTransferCreatePage />} />
+            <Route path="stock-report" element={<AdminStockReportPage />} />
           </Route>
         </Route>
 

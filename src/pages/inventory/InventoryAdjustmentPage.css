@@ -99,11 +99,26 @@
   flex-shrink: 0;
 }
 
+/* Direction badge — the page is a dedicated In or Out flow chosen upstream. */
+.inv-adj-badge-in {
+  background: #e1f5ee;
+  color: #0f6e56;
+  border-color: #b6e3d3;
+}
+
+.inv-adj-badge-out {
+  background: #faece7;
+  color: #b23c17;
+  border-color: #f3c9b8;
+}
+
 .inv-adj-toast {
   position: fixed;
   bottom: 24px;
   right: 24px;
-  z-index: 600;
+  /* Above all modals/backdrops (max overlay z-index is ~2000) so toasts
+     stay visible while a modal is open (e.g. Transfer Edit Modal). */
+  z-index: 9999;
   background: var(--p900);
   color: #fff;
   padding: 14px 20px;

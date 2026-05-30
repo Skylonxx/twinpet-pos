@@ -1,0 +1,206 @@
+/* Shared styling for transfer detail / cancel / edit modals.
+   Mirrors the inv-tr-* aesthetic from TransferConfirmDialog.css. */
+
+.tr-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 17, 32, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1200;
+  padding: 16px;
+}
+
+.tr-modal {
+  background: #fff;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 560px;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 24px 60px rgba(17, 17, 32, 0.28);
+  overflow: hidden;
+}
+
+.tr-modal-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 20px;
+  border-bottom: 1px solid #eceaf5;
+}
+
+.tr-modal-head-id {
+  font-weight: 700;
+  font-size: 15px;
+  color: #211f3a;
+}
+
+.tr-modal-head-spacer { flex: 1; }
+
+.tr-modal-close {
+  border: none;
+  background: #f3f2fa;
+  color: #534ab7;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tr-modal-body {
+  padding: 16px 20px;
+  overflow-y: auto;
+}
+
+.tr-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.tr-status-completed { background: #e1f5ee; color: #0f6e56; }
+.tr-status-cancelled { background: #faece7; color: #993c1d; }
+
+.tr-route {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+  color: #211f3a;
+  background: #f7f6fc;
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+}
+.tr-route i { color: #534ab7; }
+
+.tr-meta-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  margin-bottom: 6px;
+  color: #4a4866;
+}
+.tr-meta-row strong { color: #211f3a; }
+
+.tr-note-box {
+  background: #fbfaff;
+  border: 1px solid #eceaf5;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12.5px;
+  color: #4a4866;
+  margin-top: 8px;
+}
+
+.tr-item-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+  font-size: 13px;
+}
+.tr-item-table th,
+.tr-item-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #f0eff7;
+  text-align: left;
+}
+.tr-item-table th { color: #76739a; font-weight: 600; font-size: 12px; }
+.tr-item-table .r { text-align: right; }
+.tr-item-name { font-weight: 500; color: #211f3a; }
+.tr-item-sku { font-size: 11px; color: #9b98b8; }
+
+.tr-lot-details {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #76739a;
+}
+.tr-lot-chip {
+  display: inline-block;
+  background: #f3f2fa;
+  border-radius: 6px;
+  padding: 1px 6px;
+  margin: 2px 4px 0 0;
+}
+
+.tr-sec-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #76739a;
+  margin: 14px 0 2px;
+}
+
+.tr-modal-footer {
+  display: flex;
+  gap: 10px;
+  padding: 14px 20px;
+  border-top: 1px solid #eceaf5;
+}
+.tr-modal-footer .tr-spacer { flex: 1; }
+
+.tr-btn {
+  border: none;
+  border-radius: 10px;
+  padding: 9px 16px;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.tr-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.tr-btn-ghost { background: #f3f2fa; color: #4a4866; }
+.tr-btn-danger { background: #fbe9e3; color: #b23c17; }
+.tr-btn-primary { background: #534ab7; color: #fff; }
+
+.tr-cancel-field { margin-top: 12px; }
+.tr-cancel-field label {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #4a4866;
+  margin-bottom: 4px;
+}
+.tr-cancel-field textarea,
+.tr-qty-input {
+  width: 100%;
+  border: 1px solid #ddd9ee;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: inherit;
+}
+.tr-qty-input { width: 90px; text-align: right; }
+
+.tr-warn {
+  background: #fff6e9;
+  border: 1px solid #f3dca6;
+  color: #8a5a12;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12.5px;
+  margin-top: 10px;
+}
+
+.tr-del-btn {
+  border: none;
+  background: #fbe9e3;
+  color: #b23c17;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.tr-spin { animation: tr-spin 0.8s linear infinite; }
+@keyframes tr-spin { to { transform: rotate(360deg); } }
