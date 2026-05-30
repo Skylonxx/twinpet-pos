@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
+import { useActiveBranches } from '../../lib/branches';
 import { useCategories } from '../../lib/inventory/categoryService';
 import {
   emptyForm,
@@ -37,9 +38,11 @@ type TierDialogConfig = {
 function TierPriceManageButton({
   customCount,
   onClick,
+  label = 'จัดการราคาตามกลุ่มลูกค้า',
 }: {
   customCount: number;
   onClick: () => void;
+  label?: string;
 }) {
   return (
     <button
@@ -51,7 +54,7 @@ function TierPriceManageButton({
         onClick();
       }}
     >
-      🏷️ จัดการราคาตามกลุ่มลูกค้า
+      🏷️ {label}
       {customCount > 0 ? <span className="pc-tier-manage-badge">{customCount} กลุ่ม</span> : null}
     </button>
   );
@@ -279,6 +282,7 @@ export default function ProductDrawer({
   const { unitNames, saving: unitsSaving, saveUnitNames } = useUomUnits();
   const { policies: expiryPolicies, defaultPolicy } = useExpiryPolicies();
   const { categories: productCategories } = useCategories();
+  const { branches: allBranches } = useActiveBranches();
 
   const [tab, setTab] = useState<DrawerTab>('info');
   const [form, setForm] = useState<ProductFormData>(emptyForm());
@@ -474,6 +478,15 @@ export default function ProductDrawer({
       onSave: (next) => setForm((f) => ({ ...f, tierPrices: next })),
     });
   }, [form.baseUnit, form.name, form.simplePrices, form.tierPrices, openTierDialog]);
+
+  const openBranchTierDialog = useCallback(() => {
+    openTierDialog({
+      title: form.name.trim() || form.baseUnit || 'สินค้า',
+      basePrice: form.simplePrices[RETAIL_PRICE_KEY] || form.basePrice || 0,
+      initialTierPrices: form.overrideTierPrices,
+      onSave: (next) => setForm((f) => ({ ...f, overrideTierPrices: next })),
+    });
+  }, [form.baseUnit, form.name, form.simplePrices, form.basePrice, form.overrideTierPrices, openTierDialog]);
 
   const runValidation = useCallback(() => {
     return validateProductForm(form);
@@ -807,14 +820,102 @@ export default function ProductDrawer({
                   />
                 ) : null}
 
-                <TierPriceManageButton
-                  customCount={countCustomTierPrices(form.tierPrices)}
-                  onClick={openMainTierDialog}
-                />
+                {isHQContext ? (
+                  <TierPriceManageButton
+                    label="ราคาตามกลุ่มลูกค้า (กลาง)"
+                    customCount={countCustomTierPrices(form.tierPrices)}
+                    onClick={openMainTierDialog}
+                  />
+                ) : (
+                  <TierPriceManageButton
+                    label="ราคาตามกลุ่มลูกค้า (สาขานี้)"
+                    customCount={countCustomTierPrices(form.overrideTierPrices)}
+                    onClick={openBranchTierDialog}
+                  />
+                )}
 
                 <div className="pc-tog-row">
                   <span className="pc-tog-lbl">แสดงในหน้า POS</span>
                   <Toggle checked={form.isActive} onChange={(v) => set('isActive', v)} />
+                </div>
+
+                <div className="pc-sec-label">สาขาที่มีจำหน่าย</div>
+                <div className="pc-field">
+                  {allBranches.length === 0 ? (
+                    <p className="pc-cost-avg-hint">กำลังโหลดข้อมูลสาขา...</p>
+                  ) : (
+                    allBranches.map((b) => {
+                      const isChecked =
+                        form.availableBranches.length === 0 ||
+                        form.availableBranches.includes(b.id);
+                      return (
+                        <label
+                          key={b.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 7,
+                            marginBottom: 5,
+                            cursor: isHQContext ? 'pointer' : 'default',
+                            opacity: isHQContext ? 1 : 0.7,
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            disabled={!isHQContext}
+                            onChange={(e) => {
+                              setForm((f) => {
+                                const effective =
+                                  f.availableBranches.length === 0
+                                    ? allBranches.map((br) => br.id)
+                                    : [...f.availableBranches];
+                                const next = e.target.checked
+                                  ? [...new Set([...effective, b.id])]
+                                  : effective.filter((id) => id !== b.id);
+                                const allSelected = allBranches.every((br) =>
+                                  next.includes(br.id),
+                                );
+                                return {
+                                  ...f,
+                                  availableBranches: allSelected ? [] : next,
+                                };
+                              });
+                            }}
+                          />
+                          <span style={{ fontSize: 13 }}>{b.name || b.id}</span>
+                        </label>
+                      );
+                    })
+                  )}
+                  <p className="pc-cost-avg-hint" style={{ marginTop: 4 }}>
+                    {form.availableBranches.length === 0
+                      ? 'ว่างไว้ = มีจำหน่ายทุกสาขา'
+                      : `เลือก ${form.availableBranches.length} สาขา`}
+                    {isHQContext && form.availableBranches.length > 0 ? (
+                      <>
+                        {' — '}
+                        <button
+                          type="button"
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            textDecoration: 'underline',
+                            color: 'inherit',
+                            fontSize: 'inherit',
+                            padding: 0,
+                          }}
+                          onClick={() => set('availableBranches', [])}
+                        >
+                          ล้าง (= ทุกสาขา)
+                        </button>
+                      </>
+                    ) : null}
+                  </p>
+                  {!isHQContext ? (
+                    <p className="pc-cost-avg-hint">กำหนดโดย HQ เท่านั้น</p>
+                  ) : null}
                 </div>
               </>
             ) : null}

@@ -27,7 +27,7 @@ import {
   getDevProductList,
 } from './devMock';
 import { fetchProductStockLots } from '../inventory/stockLotQueries';
-import { formToProduct, type ProductFormData, type ProductListItem } from './types';
+import { formToProduct, sanitizeTierPrices, type ProductFormData, type ProductListItem } from './types';
 
 function tsNow(): Product['createdAt'] {
   return serverTimestamp() as Product['createdAt'];
@@ -111,6 +111,7 @@ export function useProductCrud(branchId: string | null) {
               product.prices.find((p) => p.priceLevelId === 'RETAIL' && p.unit === product.baseUnit)?.price ??
               product.prices[0]?.price ??
               0,
+            overrideTierPrices: stockDoc?.overrideTierPrices ?? {},
           } satisfies ProductListItem;
         }),
       );
@@ -183,9 +184,11 @@ export function useProductCrud(branchId: string | null) {
 
         await setDoc(productRef, firestoreProductDoc, { merge: true });
 
+        const sanitizedOverrideTiers = sanitizeTierPrices(form.overrideTierPrices ?? {});
         const rawStockDoc = {
           branchId,
           reorderPoint: form.reorderPoint ?? 0,
+          overrideTierPrices: sanitizedOverrideTiers ?? {},
           updatedAt: serverTimestamp(),
           ...(existingSnap?.exists()
             ? {}

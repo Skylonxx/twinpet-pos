@@ -139,6 +139,8 @@ export type Product = SoftDelete & {
   allowNegativeStock?: boolean;
   /** นโยบายแจ้งเตือนวันหมดอายุ — ใช้ค่าเริ่มต้นเมื่อไม่ระบุ */
   expiryPolicyId?: string | null;
+  /** Branches carrying this product — empty array or absent means all branches */
+  availableBranches?: string[];
   createdAt: Timestamp;
   updatedAt: Timestamp;
 };
@@ -147,6 +149,8 @@ export type ProductStock = {
   branchId: string;
   totalStockBase: number;
   reorderPoint: number;
+  /** Branch-level tier price overrides — keys match customer.customerType */
+  overrideTierPrices?: Record<string, number>;
   lastMovementAt: Timestamp;
   updatedAt: Timestamp;
 };

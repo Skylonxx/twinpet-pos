@@ -81,6 +81,10 @@ export type ProductFormData = {
   simplePrices: Record<string, number>;
   /** CRM dynamic tier prices (base unit) — keys match customer.customerType */
   tierPrices: Record<string, number>;
+  /** Branch-level tier price overrides — saved to productStocks/{branchId}, not the product doc */
+  overrideTierPrices: Record<string, number>;
+  /** Branches carrying this product — empty = all branches */
+  availableBranches: string[];
   allowNegativeStock: boolean;
   /** Expiry alert policy id — empty uses system default */
   expiryPolicyId: string;
@@ -98,6 +102,8 @@ export type ProductListItem = Product & {
   branchReorderPoint: number;
   emoji: string;
   retailPrice: number;
+  /** Branch-level tier price overrides loaded from productStocks/{branchId} */
+  overrideTierPrices?: Record<string, number>;
 };
 
 export type FifoLotRow = StockLot & {
@@ -286,6 +292,8 @@ export function emptyForm(): ProductFormData {
     basePrice: 0,
     simplePrices: { RETAIL: 0 },
     tierPrices: {},
+    overrideTierPrices: {},
+    availableBranches: [],
     allowNegativeStock: false,
     expiryPolicyId: '',
     uomRows: [
@@ -303,7 +311,7 @@ export function emptyForm(): ProductFormData {
   };
 }
 
-export function productToForm(product: Product): ProductFormData {
+export function productToForm(product: Product & { overrideTierPrices?: Record<string, number> }): ProductFormData {
   const hasUom = product.uomConversions.length > 0;
   const retailPrice =
     product.prices.find((x) => x.priceLevelId === 'RETAIL' && x.unit === product.baseUnit)?.price ??
@@ -356,6 +364,8 @@ export function productToForm(product: Product): ProductFormData {
     basePrice: product.basePrice ?? 0,
     simplePrices,
     tierPrices: { ...(product.tierPrices ?? {}) },
+    overrideTierPrices: { ...(product.overrideTierPrices ?? {}) },
+    availableBranches: product.availableBranches ?? [],
     allowNegativeStock: product.allowNegativeStock ?? false,
     expiryPolicyId: product.expiryPolicyId ?? '',
     uomRows,
@@ -410,6 +420,7 @@ export function formToProduct(form: ProductFormData, id: string): Omit<Product, 
     reorderPoint: form.reorderPoint,
     cost: Number.isFinite(form.cost) ? Math.max(0, form.cost) : 0,
     basePrice: Number.isFinite(form.basePrice) && form.basePrice > 0 ? form.basePrice : undefined,
+    availableBranches: form.availableBranches,
     isActive: form.isActive,
   };
 
