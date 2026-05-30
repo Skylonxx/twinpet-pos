@@ -42,13 +42,14 @@ function buildUomOptions(product: Product): UomOption[] {
     unit: product.baseUnit,
     factor: 1,
     price: basePrice,
+    barcode: product.barcode ?? null,
   });
 
   for (const conv of product.uomConversions) {
     const price =
       retailPrices.find((p) => p.unit === conv.unit)?.price ??
       basePrice * conv.factor;
-    options.push({ unit: conv.unit, factor: conv.factor, price });
+    options.push({ unit: conv.unit, factor: conv.factor, price, barcode: conv.barcode ?? null });
   }
 
   const unique = new Map<string, UomOption>();
@@ -56,7 +57,9 @@ function buildUomOptions(product: Product): UomOption[] {
   return [...unique.values()];
 }
 
-function toPosProduct(product: Product, stock: number): PosProduct {
+type StockEntry = { stock: number; overrideTierPrices?: Record<string, number> };
+
+function toPosProduct(product: Product, entry: StockEntry): PosProduct {
   const uomOptions = buildUomOptions(product);
   return {
     id: product.id,
@@ -66,16 +69,17 @@ function toPosProduct(product: Product, stock: number): PosProduct {
     category: product.category,
     emoji: CATEGORY_EMOJI[product.category] ?? '📦',
     imageUrl: product.imageUrl ?? null,
-    stock,
+    stock: entry.stock,
     baseUnit: product.baseUnit,
     allowNegativeStock: product.allowNegativeStock ?? false,
     tierPrices: product.tierPrices,
+    overrideTierPrices: entry.overrideTierPrices,
     uomOptions,
   };
 }
 
-function mergePosProducts(rawProducts: Product[], stockByProduct: Map<string, number>): PosProduct[] {
-  return rawProducts.map((p) => toPosProduct(p, stockByProduct.get(p.id) ?? 0));
+function mergePosProducts(rawProducts: Product[], stockByProduct: Map<string, StockEntry>): PosProduct[] {
+  return rawProducts.map((p) => toPosProduct(p, stockByProduct.get(p.id) ?? { stock: 0 }));
 }
 
 export function usePosProducts(branchId: string | null) {
@@ -99,7 +103,7 @@ export function usePosProducts(branchId: string | null) {
     setLoading(true);
 
     let rawProducts: Product[] = [];
-    const stockByProduct = new Map<string, number>();
+    const stockByProduct = new Map<string, StockEntry>();
     const perProductStockUnsubs = new Map<string, Unsubscribe>();
     let stockGroupUnsub: Unsubscribe | null = null;
     let usePerProductStock = false;
@@ -139,10 +143,11 @@ export function usePosProducts(branchId: string | null) {
         const unsub = onSnapshot(
           stockRef,
           (snap) => {
-            stockByProduct.set(
-              id,
-              snap.exists() ? ((snap.data()?.totalStockBase as number) ?? 0) : 0,
-            );
+            const data = snap.exists() ? snap.data() : null;
+            stockByProduct.set(id, {
+              stock: (data?.totalStockBase as number) ?? 0,
+              overrideTierPrices: (data?.overrideTierPrices as Record<string, number>) ?? undefined,
+            });
             publish();
           },
           (err) => {
@@ -171,7 +176,11 @@ export function usePosProducts(branchId: string | null) {
           for (const d of snap.docs) {
             const productId = d.ref.parent.parent?.id;
             if (!productId) continue;
-            stockByProduct.set(productId, (d.data()?.totalStockBase as number) ?? 0);
+            const data = d.data();
+            stockByProduct.set(productId, {
+              stock: (data?.totalStockBase as number) ?? 0,
+              overrideTierPrices: (data?.overrideTierPrices as Record<string, number>) ?? undefined,
+            });
           }
           publish();
         },

@@ -20,6 +20,8 @@ export type UomOption = {
   unit: string;
   factor: number;
   price: number;
+  /** UOM-specific barcode — present when scanned to auto-select this unit */
+  barcode?: string | null;
 };
 
 export type PosProduct = {
@@ -34,6 +36,8 @@ export type PosProduct = {
   baseUnit: string;
   allowNegativeStock?: boolean;
   tierPrices?: Record<string, number>;
+  /** Branch-level tier price overrides — takes precedence over tierPrices when non-empty */
+  overrideTierPrices?: Record<string, number>;
   uomOptions: UomOption[];
 };
 

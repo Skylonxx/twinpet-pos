@@ -87,12 +87,27 @@ function repriceCartLines(
   return changed ? next : cart;
 }
 
-function findProductByScanCode(products: PosProduct[], code: string): PosProduct | undefined {
+type ScanMatch = { product: PosProduct; option: UomOption | null };
+
+function findByScanCode(products: PosProduct[], code: string): ScanMatch | undefined {
   const trimmed = code.trim();
   if (!trimmed) return undefined;
-  return products.find(
-    (p) => p.sku === trimmed || (p.barcode != null && p.barcode === trimmed),
-  );
+
+  for (const p of products) {
+    // Top-level barcode or SKU — keep existing UomModal behaviour
+    if (p.sku === trimmed || (p.barcode != null && p.barcode === trimmed)) {
+      return { product: p, option: null };
+    }
+    // UOM-specific barcode — auto-select that unit, bypass UomModal
+    const matchedOption = p.uomOptions.find(
+      (o) => o.barcode != null && o.barcode === trimmed,
+    );
+    if (matchedOption) {
+      return { product: p, option: matchedOption };
+    }
+  }
+
+  return undefined;
 }
 
 export default function POSPage() {
@@ -245,16 +260,22 @@ export default function POSPage() {
       if (!trimmed) return;
 
       e.preventDefault();
-      const matched = findProductByScanCode(products, trimmed);
-      if (matched) {
-        onProductClick(matched);
+      const match = findByScanCode(products, trimmed);
+      if (match) {
+        if (match.option) {
+          // UOM-specific barcode: add that unit directly, no modal
+          addToCart(match.product, match.option);
+        } else {
+          // Top-level barcode/SKU: existing flow (shows UomModal when multi-UOM)
+          onProductClick(match.product);
+        }
         setSearch('');
         focusSearch();
       } else {
         showToast('ไม่พบสินค้านี้');
       }
     },
-    [search, products, onProductClick, focusSearch, showToast],
+    [search, products, addToCart, onProductClick, focusSearch, showToast],
   );
 
   const handleCustomerSelect = useCallback(
@@ -578,12 +599,12 @@ export default function POSPage() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'F12') {
         e.preventDefault();
-        if (cartLines.length > 0) setPaymentOpen(true);
+        if (cartLines.length > 0 && activeShift) setPaymentOpen(true);
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [cartLines.length]);
+  }, [cartLines.length, activeShift]);
 
   return (
     <div className="pos-page">
@@ -960,7 +981,7 @@ export default function POSPage() {
             <button
               type="button"
               className="pos-checkout-btn"
-              disabled={cartLines.length === 0}
+              disabled={cartLines.length === 0 || !activeShift}
               onClick={() => setPaymentOpen(true)}
             >
               <i className="ti ti-cash" aria-hidden="true" /> ชำระเงิน (F12)

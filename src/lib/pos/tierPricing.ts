@@ -32,7 +32,8 @@ export function getPosProductBasePrice(product: PosProduct): number {
   return baseOption?.price ?? 0;
 }
 
-/** Resolve unit price for a UOM option, scaling tier base price proportionally. */
+/** Resolve unit price for a UOM option, scaling tier base price proportionally.
+ *  Branch-level overrideTierPrices take precedence over master tierPrices. */
 export function resolvePosUnitPrice(
   product: PosProduct,
   option: UomOption,
@@ -40,8 +41,14 @@ export function resolvePosUnitPrice(
 ): { unitPrice: number; originalPrice: number } {
   const originalPrice = option.price;
   const baseRetail = getPosProductBasePrice(product);
+
+  const effectiveTierPrices =
+    product.overrideTierPrices && Object.keys(product.overrideTierPrices).length > 0
+      ? product.overrideTierPrices
+      : product.tierPrices;
+
   const activeBase = getActivePrice(
-    { price: baseRetail, tierPrices: product.tierPrices },
+    { price: baseRetail, tierPrices: effectiveTierPrices },
     customerType,
   );
 
