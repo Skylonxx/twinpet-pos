@@ -2,29 +2,35 @@ import { useEffect, useState } from 'react';
 import { fetchAllBranches } from '../../lib/admin/branchManagement';
 import { seedBranchLabelCache } from '../../lib/branches';
 import StockReportPage from '../StockReportPage';
+import AllBranchesStockOverview from './AllBranchesStockOverview';
 import type { Branch } from '../../lib/types';
 import './AdminStockReportPage.css';
 
+/** Sentinel for the consolidated cross-branch view. */
+const ALL_BRANCHES = 'ALL';
+
 /**
- * Admin wrapper around the (perfect, untouched) StockReportPage.
+ * Admin wrapper around the (perfect, untouched) single-branch StockReportPage.
  *
- * A branch selector chooses ONE branch at a time and feeds it to the report via
- * the `branchId` prop. The core `useStockReport` aggregation is single-branch by
- * design, so this honours "do not modify the core logic" — there is no 'ALL'
- * rollup here (a true cross-branch aggregate would need a separate layer).
+ * The branch selector either picks ONE branch — feeding it to the report via
+ * the `branchId` prop, leaving `useStockReport` exactly as-is — or "รวมทุกสาขา"
+ * (ALL), which swaps in the separate {@link AllBranchesStockOverview} executive
+ * rollup. The two paths never share state, so the branch-level report is
+ * guaranteed unaffected.
  */
 export default function AdminStockReportPage() {
   const [branches, setBranches] = useState<Branch[]>([]);
-  const [selectedBranchId, setSelectedBranchId] = useState('');
+  const [selectedBranchId, setSelectedBranchId] = useState<string>(ALL_BRANCHES);
 
   useEffect(() => {
     void fetchAllBranches().then((list) => {
       const active = list.filter((b) => b.isActive !== false);
       setBranches(active);
       seedBranchLabelCache(list);
-      setSelectedBranchId((cur) => cur || active[0]?.id || '');
     });
   }, []);
+
+  const isAllBranches = selectedBranchId === ALL_BRANCHES;
 
   return (
     <div className="asr-wrap">
@@ -40,27 +46,23 @@ export default function AdminStockReportPage() {
             className="arv-branch-select"
             value={selectedBranchId}
             onChange={(e) => setSelectedBranchId(e.target.value)}
-            disabled={branches.length === 0}
           >
-            {branches.length === 0 ? (
-              <option value="">กำลังโหลดสาขา...</option>
-            ) : (
-              branches.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name?.trim() || b.id}
-                </option>
-              ))
-            )}
+            <option value={ALL_BRANCHES}>รวมทุกสาขา</option>
+            {branches.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name?.trim() || b.id}
+              </option>
+            ))}
           </select>
         </div>
       </div>
 
       <div className="asr-report">
-        {selectedBranchId ? (
+        {isAllBranches ? (
+          <AllBranchesStockOverview />
+        ) : (
           // Re-mount on branch change so the report's hook re-subscribes cleanly.
           <StockReportPage key={selectedBranchId} branchId={selectedBranchId} />
-        ) : (
-          <div className="asr-empty">เลือกสาขาเพื่อดูรายงานสต็อก</div>
         )}
       </div>
     </div>
