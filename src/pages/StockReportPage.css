@@ -49,19 +49,6 @@
   margin-top: 1px;
 }
 
-.sr-branch-badge {
-  font-size: 11px;
-  padding: 4px 12px;
-  border-radius: 20px;
-  background: var(--p50, #eeedfe);
-  color: var(--p600, #534ab7);
-  font-weight: 500;
-  border: 1px solid var(--p100, #cecbf6);
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
 .sr-btn {
   display: inline-flex;
   align-items: center;
@@ -303,30 +290,94 @@
   font-weight: 500;
 }
 
-.sr-date-range {
-  display: flex;
+/* Date Range Picker dropdown — mirrors the /sales-history (.sh-date-*) design. */
+.sr-date-dd {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.sr-date-dd-btn {
+  display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
-  color: var(--text-secondary, #6b7280);
-  background: var(--g50, #f8f8fc);
+  padding: 7px 12px;
   border: 1px solid var(--border-md, rgba(0, 0, 0, 0.13));
   border-radius: var(--radius-md, 8px);
-  padding: 6px 12px;
-}
-
-.sr-date-range input {
-  border: none;
-  background: transparent;
-  font-size: 12px;
+  background: var(--white, #fff);
+  font-size: 13px;
   font-family: inherit;
   color: var(--text-primary, #1a1a2e);
-  width: 110px;
+  cursor: pointer;
+  white-space: nowrap;
 }
 
-.sr-date-warn {
-  background: #faeeda;
-  border-color: #fac775;
+.sr-date-dd-btn:hover {
+  border-color: var(--p100, #cecbf6);
+  color: var(--p600, #534ab7);
+}
+
+.sr-date-dd-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: var(--white, #fff);
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+  border-radius: var(--radius-md, 8px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  z-index: 100;
+  min-width: 180px;
+  overflow: hidden;
+}
+
+.sr-date-menu-item {
+  padding: 8px 14px;
+  font-size: 13px;
+  color: var(--text-secondary, #6b7280);
+  cursor: pointer;
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+}
+
+.sr-date-menu-item:hover {
+  background: var(--p50, #eeedfe);
+  color: var(--p600, #534ab7);
+}
+
+.sr-date-menu-item.on {
+  color: var(--p600, #534ab7);
+  font-weight: 500;
+  background: var(--p50, #eeedfe);
+}
+
+.sr-date-custom-label {
+  border-top: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+  padding: 8px 12px 4px;
+  font-size: 11px;
+  color: var(--text-muted, #9ca3af);
+}
+
+.sr-date-custom {
+  padding: 8px 12px 12px;
+  display: flex;
+  gap: 6px;
+}
+
+.sr-date-custom input {
+  flex: 1;
+  border: 1px solid var(--border-md, rgba(0, 0, 0, 0.13));
+  border-radius: var(--radius-md, 8px);
+  padding: 6px 8px;
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+}
+
+.sr-date-custom input:focus {
+  border-color: var(--p600, #534ab7);
+  box-shadow: 0 0 0 2px rgba(83, 74, 183, 0.12);
 }
 
 .sr-table-scroll {
@@ -730,45 +781,6 @@
   gap: 8px;
 }
 
-.sr-footer {
-  height: 58px;
-  background: var(--white, #fff);
-  border-top: 1px solid var(--border, rgba(0, 0, 0, 0.08));
-  display: flex;
-  align-items: center;
-  padding: 0 24px;
-  flex-shrink: 0;
-}
-
-.sr-footer-stat {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 0 18px;
-  border-right: 1px solid var(--border, rgba(0, 0, 0, 0.08));
-}
-
-.sr-footer-stat:last-of-type {
-  border-right: none;
-}
-
-.sr-footer-num {
-  font-size: 19px;
-  font-weight: 500;
-  line-height: 1.2;
-}
-
-.sr-footer-lbl {
-  font-size: 10px;
-  color: var(--text-muted, #9ca3af);
-  margin-top: 1px;
-  text-transform: uppercase;
-}
-
-.sr-footer-spacer {
-  flex: 1;
-}
-
 .sr-modal-overlay {
   position: fixed;
   inset: 0;
@@ -850,6 +862,32 @@
   padding: 32px;
   color: var(--text-muted, #9ca3af);
   font-size: 13px;
+}
+
+/* Placeholder shown in a chart card when there is no valuation data to plot. */
+.sr-chart-empty {
+  height: 200px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-muted, #9ca3af);
+  font-size: 13px;
+}
+
+.sr-chart-empty i {
+  font-size: 32px;
+  opacity: 0.5;
+}
+
+/* "มีอีก X รายการ" overflow row appended to capped overview tables. */
+.sr-table-more {
+  text-align: center;
+  padding: 12px;
+  color: var(--text-muted, #9ca3af);
+  font-size: 12px;
+  font-style: italic;
 }
 
 .sr-card-head {

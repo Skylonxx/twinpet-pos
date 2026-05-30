@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { fetchAllBranches } from '../../lib/admin/branchManagement';
 import { seedBranchLabelCache } from '../../lib/branches';
 import StockReportPage from '../StockReportPage';
 import AllBranchesStockOverview from './AllBranchesStockOverview';
+import AsrBranchSelector, { type AsrBranchOption } from './AsrBranchSelector';
 import type { Branch } from '../../lib/types';
 import './AdminStockReportPage.css';
 
@@ -32,6 +33,14 @@ export default function AdminStockReportPage() {
 
   const isAllBranches = selectedBranchId === ALL_BRANCHES;
 
+  const branchOptions = useMemo<AsrBranchOption[]>(
+    () => [
+      { id: ALL_BRANCHES, label: 'รวมทุกสาขา' },
+      ...branches.map((b) => ({ id: b.id, label: b.name?.trim() || b.id })),
+    ],
+    [branches],
+  );
+
   return (
     <div className="asr-wrap">
       <div className="asr-bar">
@@ -40,20 +49,11 @@ export default function AdminStockReportPage() {
           รายงานสต็อก (HQ)
         </div>
         <div className="asr-bar-field">
-          <label htmlFor="asr-branch">สาขา</label>
-          <select
-            id="asr-branch"
-            className="arv-branch-select"
+          <AsrBranchSelector
             value={selectedBranchId}
-            onChange={(e) => setSelectedBranchId(e.target.value)}
-          >
-            <option value={ALL_BRANCHES}>รวมทุกสาขา</option>
-            {branches.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name?.trim() || b.id}
-              </option>
-            ))}
-          </select>
+            options={branchOptions}
+            onChange={setSelectedBranchId}
+          />
         </div>
       </div>
 

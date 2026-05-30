@@ -1,7 +1,9 @@
 import { collection, collectionGroup, getDocs, query, where } from 'firebase/firestore';
 import { useEffect, useMemo, useState } from 'react';
+import { fetchAllBranches } from '../admin/branchManagement';
 import { collections, db, isFirebaseConfigured } from '../firebase';
 import type { Product, ProductStock } from '../types';
+import { stockStatus, type StockStatus } from './types';
 
 /** One aggregated row: a product's stock summed across every branch. */
 export type AllBranchesStockRow = {
@@ -15,36 +17,74 @@ export type AllBranchesStockRow = {
   totalQty: number;
   /** How many branch stock rows contributed (i.e. branches carrying it). */
   branchCount: number;
+  /** Company-wide reorder point — summed across branches (falls back to the
+   *  product's global reorderPoint when no branch rows exist). */
+  reorderPoint: number;
   /** Valuation: totalQty × avgCost. */
   totalValue: number;
+  /** Company-wide stock status derived from totalQty vs reorderPoint. */
+  status: StockStatus;
+};
+
+/** Total stock valuation held by one branch (feeds the donut chart). */
+export type BranchStockValue = {
+  branchId: string;
+  branchName: string;
+  value: number;
+  qty: number;
 };
 
 export type AllBranchesStockResult = {
   rows: AllBranchesStockRow[];
+  /** Per-branch valuation, highest first. */
+  branchValues: BranchStockValue[];
+  /** Products below their reorder point (status !== 'ok'), worst first. */
+  lowStock: AllBranchesStockRow[];
   /** Grand total quantity across every product and branch. */
   totalQty: number;
   /** Grand total valuation across every product and branch. */
   totalValue: number;
   productCount: number;
+  /** Branches that currently hold any stock for an active product. */
+  branchCount: number;
+  lowStockCount: number;
+  criticalCount: number;
+  oosCount: number;
   loading: boolean;
   error: string | null;
 };
 
+const EMPTY: Omit<AllBranchesStockResult, 'loading' | 'error'> = {
+  rows: [],
+  branchValues: [],
+  lowStock: [],
+  totalQty: 0,
+  totalValue: 0,
+  productCount: 0,
+  branchCount: 0,
+  lowStockCount: 0,
+  criticalCount: 0,
+  oosCount: 0,
+};
+
 /**
  * Consolidated, cross-branch stock aggregation for the Admin "ALL branches"
- * overview.
+ * executive overview.
  *
  * This is a deliberately SEPARATE layer from the single-branch `useStockReport`
  * — it never touches that hook, so the branch-level report stays untouched.
  * It fetches active products once and sums each product's `totalStockBase`
  * across every branch via a `collectionGroup('productStocks')` query (the same
- * pattern the admin dashboard already uses). Valuation is `totalQty × avgCost`.
+ * pattern the admin dashboard already uses), while also rolling up:
+ *   • per-branch total valuation (for the "value by branch" donut), and
+ *   • company-wide low-stock status (totalQty vs summed reorder points).
  *
  * Admin-only: the Firestore `productStocks` collection-group rule grants
  * unrestricted read to `isAdmin()`, so the unfiltered group query is allowed.
  */
 export function useAllBranchesStock(): AllBranchesStockResult {
-  const [rows, setRows] = useState<AllBranchesStockRow[]>([]);
+  const [data, setData] =
+    useState<Omit<AllBranchesStockResult, 'loading' | 'error'>>(EMPTY);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -58,39 +98,61 @@ export function useAllBranchesStock(): AllBranchesStockResult {
       // No backend configured (dev/preview) — surface an empty, non-erroring view.
       if (!isFirebaseConfigured || !db) {
         if (!cancelled) {
-          setRows([]);
+          setData(EMPTY);
           setLoading(false);
         }
         return;
       }
 
       try {
-        // Active, non-deleted products provide the row set + names/costs.
-        const productsSnap = await getDocs(
-          query(collection(db, collections.products), where('isActive', '==', true)),
-        );
+        const [productsSnap, stockSnap, branchList] = await Promise.all([
+          getDocs(query(collection(db, collections.products), where('isActive', '==', true))),
+          getDocs(collectionGroup(db, collections.productStocks)),
+          fetchAllBranches(),
+        ]);
+
         const products = productsSnap.docs
           .map((d) => ({ ...(d.data() as Product), id: d.id }))
           .filter((p) => !p.deletedAt);
 
-        // Sum totalStockBase per product across EVERY branch.
-        const aggByProduct = new Map<string, { qty: number; branches: number }>();
-        const stockSnap = await getDocs(collectionGroup(db, collections.productStocks));
-        for (const d of stockSnap.docs) {
-          const productId = d.ref.parent.parent?.id;
-          if (!productId) continue;
-          const stock = d.data() as ProductStock;
-          const prev = aggByProduct.get(productId) ?? { qty: 0, branches: 0 };
-          aggByProduct.set(productId, {
-            qty: prev.qty + (stock.totalStockBase ?? 0),
-            branches: prev.branches + 1,
+        const costById = new Map(products.map((p) => [p.id, p.avgCost ?? 0]));
+        const branchNameById = new Map(
+          branchList.map((b) => [b.id, b.name?.trim() || b.id]),
+        );
+
+        // Per-product and per-branch accumulators (active products only, so the
+        // branch breakdown sums exactly to the grand total).
+        const productAgg = new Map<string, { qty: number; branches: number; reorder: number }>();
+        const branchAgg = new Map<string, { value: number; qty: number }>();
+
+        for (const docSnap of stockSnap.docs) {
+          const productId = docSnap.ref.parent.parent?.id;
+          if (!productId || !costById.has(productId)) continue;
+
+          const stock = docSnap.data() as ProductStock;
+          const qty = stock.totalStockBase ?? 0;
+          const cost = costById.get(productId) ?? 0;
+          const branchId = stock.branchId || docSnap.id;
+
+          const pPrev = productAgg.get(productId) ?? { qty: 0, branches: 0, reorder: 0 };
+          productAgg.set(productId, {
+            qty: pPrev.qty + qty,
+            branches: pPrev.branches + 1,
+            reorder: pPrev.reorder + (stock.reorderPoint ?? 0),
+          });
+
+          const bPrev = branchAgg.get(branchId) ?? { value: 0, qty: 0 };
+          branchAgg.set(branchId, {
+            value: bPrev.value + qty * cost,
+            qty: bPrev.qty + qty,
           });
         }
 
-        const result: AllBranchesStockRow[] = products.map((p) => {
-          const agg = aggByProduct.get(p.id);
+        const rows: AllBranchesStockRow[] = products.map((p) => {
+          const agg = productAgg.get(p.id);
           const totalQty = agg?.qty ?? 0;
           const avgCost = p.avgCost ?? 0;
+          const reorderPoint = agg && agg.branches > 0 ? agg.reorder : p.reorderPoint ?? 0;
           return {
             id: p.id,
             name: p.name,
@@ -99,15 +161,44 @@ export function useAllBranchesStock(): AllBranchesStockResult {
             avgCost,
             totalQty,
             branchCount: agg?.branches ?? 0,
+            reorderPoint,
             totalValue: totalQty * avgCost,
+            status: stockStatus(totalQty, reorderPoint),
           };
         });
 
         // Highest valuation first — the executive view leads with what matters.
-        result.sort((a, b) => b.totalValue - a.totalValue);
+        rows.sort((a, b) => b.totalValue - a.totalValue);
+
+        const branchValues: BranchStockValue[] = [...branchAgg.entries()]
+          .map(([branchId, agg]) => ({
+            branchId,
+            branchName: branchNameById.get(branchId) || branchId,
+            value: agg.value,
+            qty: agg.qty,
+          }))
+          .sort((a, b) => b.value - a.value);
+
+        const lowStock = rows
+          .filter((r) => r.status !== 'ok')
+          .sort((a, b) => a.totalQty - b.totalQty);
+
+        const totalQty = rows.reduce((s, r) => s + r.totalQty, 0);
+        const totalValue = rows.reduce((s, r) => s + r.totalValue, 0);
 
         if (!cancelled) {
-          setRows(result);
+          setData({
+            rows,
+            branchValues,
+            lowStock,
+            totalQty,
+            totalValue,
+            productCount: rows.length,
+            branchCount: branchValues.length,
+            lowStockCount: lowStock.length,
+            criticalCount: rows.filter((r) => r.status === 'critical').length,
+            oosCount: rows.filter((r) => r.status === 'oos').length,
+          });
           setLoading(false);
         }
       } catch (err) {
@@ -124,13 +215,5 @@ export function useAllBranchesStock(): AllBranchesStockResult {
     };
   }, []);
 
-  const { totalQty, totalValue } = useMemo(
-    () => ({
-      totalQty: rows.reduce((s, r) => s + r.totalQty, 0),
-      totalValue: rows.reduce((s, r) => s + r.totalValue, 0),
-    }),
-    [rows],
-  );
-
-  return { rows, totalQty, totalValue, productCount: rows.length, loading, error };
+  return useMemo(() => ({ ...data, loading, error }), [data, loading, error]);
 }

@@ -49,3 +49,110 @@
   color: #9b98b8;
   font-size: 14px;
 }
+
+/* ── Sleek branch selector (mirrors the report's 📍 สาขา pill) ─────────── */
+.asr-bsel {
+  position: relative;
+}
+
+.asr-bsel-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: var(--p50, #eeedfe);
+  color: var(--p600, #534ab7);
+  border: 1px solid var(--p100, #cecbf6);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.asr-bsel-btn:hover {
+  background: #e6e4fb;
+  border-color: #b9b4f1;
+}
+.asr-bsel-btn.asr-bsel-all {
+  background: #534ab7;
+  color: #fff;
+  border-color: #534ab7;
+}
+.asr-bsel-btn.asr-bsel-all:hover {
+  background: #463da3;
+}
+
+.asr-bsel-label {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asr-bsel-caret {
+  font-size: 14px;
+  transition: transform 0.18s ease;
+}
+.asr-bsel-caret.open {
+  transform: rotate(180deg);
+}
+
+.asr-bsel-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+
+.asr-bsel-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 50;
+  min-width: 240px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #eceaf5;
+  border-radius: 12px;
+  box-shadow: 0 16px 40px rgba(17, 17, 32, 0.16);
+  padding: 6px;
+}
+
+.asr-bsel-opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 10px;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: inherit;
+  color: #4a4866;
+  cursor: pointer;
+  text-align: left;
+}
+.asr-bsel-opt i { color: #9b98b8; font-size: 15px; }
+.asr-bsel-opt:hover {
+  background: #f5f4fc;
+  color: #211f3a;
+}
+.asr-bsel-opt.active {
+  background: #f3f2fa;
+  color: #534ab7;
+  font-weight: 600;
+}
+.asr-bsel-opt.active i { color: #534ab7; }
+
+.asr-bsel-opt-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asr-bsel-check {
+  margin-left: auto;
+}

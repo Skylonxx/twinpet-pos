@@ -7,12 +7,11 @@ import {
   LinearScale,
   Tooltip,
 } from 'chart.js';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Bar, Doughnut } from 'react-chartjs-2';
 import FifoQueueModal from '../components/inventory/FifoQueueModal';
 import ProductImageThumb from '../components/products/ProductImageThumb';
 import ProductPickerDialog from '../components/products/ProductPickerDialog';
-import { getBranchLabel } from '../lib/branches';
 import { formatFifoLotDate, formatFifoLotExpiry } from '../lib/inventory/fifoQueueUtils';
 import { EXPIRY_ALERT_LABELS, type ExpiryAlertLevel } from '../lib/inventory/expiryPolicyTypes';
 import {
@@ -23,6 +22,11 @@ import {
 } from '../lib/inventory/fifoTableUtils';
 import { useExpiryPolicies } from '../lib/inventory/useExpiryPolicies';
 import { downloadCsv } from '../lib/stockReport/exportCsv';
+import {
+  datePresetLabel,
+  getDateRange,
+  type DatePreset,
+} from '../lib/salesHistory/types';
 import {
   applyCogsRange,
   useStockReport,
@@ -46,6 +50,112 @@ import { useAuth } from '../lib/hooks/useAuth';
 import './StockReportPage.css';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Tooltip, Legend);
+
+// Compact ฿ axis labels (e.g. ฿1.5M, ฿50k) so large valuations don't squish the chart.
+function compactBahtAxis(value: number | string): string {
+  const n = Number(value);
+  if (n >= 1_000_000) return `฿${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
+  if (n >= 1_000) return `฿${Math.round(n / 1_000)}k`;
+  return `฿${n}`;
+}
+
+// Date Range Picker mirroring the /sales-history dropdown: preset shortcuts on
+// top + a custom range at the bottom. The parent keeps the resolved from/to ISO
+// strings (which drive the existing filters); selecting a preset resolves the
+// concrete range via the shared getDateRange helper.
+function DateRangeDropdown({
+  preset,
+  from,
+  to,
+  onChange,
+}: {
+  preset: DatePreset;
+  from: string;
+  to: string;
+  onChange: (next: { preset: DatePreset; from: string; to: string }) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ddRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      if (ddRef.current && !ddRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('click', onDocClick);
+    return () => document.removeEventListener('click', onDocClick);
+  }, []);
+
+  const label =
+    preset === 'custom'
+      ? from && to
+        ? `${from} – ${to}`
+        : 'ทั้งหมด'
+      : datePresetLabel(preset);
+
+  const pickPreset = (key: DatePreset) => {
+    const range = getDateRange(key, from, to);
+    onChange({
+      preset: key,
+      from: range.start.toISOString().slice(0, 10),
+      to: range.end.toISOString().slice(0, 10),
+    });
+    setOpen(false);
+  };
+
+  return (
+    <div className="sr-date-dd" ref={ddRef}>
+      <button
+        type="button"
+        className="sr-date-dd-btn"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+      >
+        <i className="ti ti-calendar" aria-hidden="true" />
+        <span>{label}</span>
+        <i className="ti ti-chevron-down" style={{ fontSize: 10 }} aria-hidden="true" />
+      </button>
+      {open && (
+        <div className="sr-date-dd-menu">
+          {(
+            [
+              ['today', 'วันนี้'],
+              ['yesterday', 'เมื่อวาน'],
+              ['7d', '7 วันล่าสุด'],
+              ['30d', '30 วันล่าสุด'],
+              ['month', 'เดือนนี้'],
+            ] as const
+          ).map(([key, lbl]) => (
+            <button
+              key={key}
+              type="button"
+              className={`sr-date-menu-item${preset === key ? ' on' : ''}`}
+              onClick={() => pickPreset(key)}
+            >
+              {lbl}
+            </button>
+          ))}
+          <div className="sr-date-custom-label">กำหนดเอง</div>
+          <div className="sr-date-custom">
+            <input
+              type="date"
+              value={from}
+              onChange={(e) => onChange({ preset: 'custom', from: e.target.value, to })}
+            />
+            <input
+              type="date"
+              value={to}
+              onChange={(e) => onChange({ preset: 'custom', from, to: e.target.value })}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 const MV_META = {
   in: { icon: 'ti-arrow-bar-to-down', cls: 'sr-mv-in', label: 'รับเข้า', clr: '#3B6D11' },
@@ -108,8 +218,8 @@ function sortStockProducts<T extends StockReportProduct>(
 ): T[] {
   const mult = direction === 'asc' ? 1 : -1;
   return [...list].sort((a, b) => {
-    let av: string | number = 0;
-    let bv: string | number = 0;
+    let av: string | number;
+    let bv: string | number;
     switch (key) {
       case 'name':
         av = a.name.toLowerCase();
@@ -155,8 +265,8 @@ function sortLowStockProducts(
 ): StockReportProduct[] {
   const mult = direction === 'asc' ? 1 : -1;
   return [...list].sort((a, b) => {
-    let av: string | number = 0;
-    let bv: string | number = 0;
+    let av: string | number;
+    let bv: string | number;
     switch (key) {
       case 'name':
         av = a.name.toLowerCase();
@@ -228,12 +338,12 @@ export default function StockReportPage({ branchId: branchIdProp }: { branchId?:
   const { branchId: authBranchId } = useAuth();
   const branchId = branchIdProp ?? authBranchId;
   const { policies: expiryPolicies, defaultPolicy } = useExpiryPolicies();
-  const { products, movements, categories, loading, lastUpdated, refresh } =
-    useStockReport(branchId);
+  const { products, movements, categories, loading } = useStockReport(branchId);
 
   const [tab, setTab] = useState<StockTab>('overview');
-  const [ovFrom, setOvFrom] = useState(monthStartIso());
-  const [ovTo, setOvTo] = useState(todayIso());
+  // Overview COGS window is fixed to the current month (the picker was removed for a cleaner UI).
+  const ovFrom = monthStartIso();
+  const ovTo = todayIso();
   const [prodSearch, setProdSearch] = useState('');
   const [prodCat, setProdCat] = useState('');
   const [prodStockFilter, setProdStockFilter] = useState<'' | 'low' | 'out'>('');
@@ -254,15 +364,15 @@ export default function StockReportPage({ branchId: branchIdProp }: { branchId?:
   const [fifoExpiryFilter, setFifoExpiryFilter] = useState<'' | ExpiryAlertLevel>('');
   const [fifoFrom, setFifoFrom] = useState('');
   const [fifoTo, setFifoTo] = useState('');
+  const [fifoDatePreset, setFifoDatePreset] = useState<DatePreset>('custom');
   const [mvSearch, setMvSearch] = useState('');
   const [mvCat, setMvCat] = useState('');
   const [mvType, setMvType] = useState('');
   const [mvFrom, setMvFrom] = useState(monthStartIso());
   const [mvTo, setMvTo] = useState(todayIso());
+  const [mvDatePreset, setMvDatePreset] = useState<DatePreset>('month');
   const [fifoModalProduct, setFifoModalProduct] = useState<StockReportProduct | null>(null);
   const [toast, setToast] = useState<string | null>(null);
-
-  const branchDisplay = branchId ? getBranchLabel(branchId) : '—';
 
   const productsWithCogs = useMemo(
     () => applyCogsRange(products, movements, ovFrom, ovTo),
@@ -280,16 +390,6 @@ export default function StockReportPage({ branchId: branchIdProp }: { branchId?:
         const st = stockStatus(p.qty, p.reorderPoint);
         return st !== 'ok';
       }),
-    [productsWithCogs],
-  );
-
-  const alertOos = useMemo(
-    () => productsWithCogs.filter((p) => p.qty <= 0),
-    [productsWithCogs],
-  );
-  const alertCritical = useMemo(
-    () =>
-      productsWithCogs.filter((p) => stockStatus(p.qty, p.reorderPoint) === 'critical'),
     [productsWithCogs],
   );
 
@@ -461,10 +561,6 @@ export default function StockReportPage({ branchId: branchIdProp }: { branchId?:
           <div className="sr-topbar-title">รายงานสต็อก &amp; FIFO</div>
           <div className="sr-topbar-sub">Stock Report &amp; FIFO Costing</div>
         </div>
-        <span className="sr-branch-badge">
-          <i className="ti ti-map-pin" style={{ fontSize: 12 }} aria-hidden="true" />
-          สาขา: {branchDisplay}
-        </span>
         <button type="button" className="sr-btn sr-btn-ghost sr-btn-sm" onClick={exportStockCsv}>
           <i className="ti ti-download" aria-hidden="true" /> Export
         </button>
@@ -495,39 +591,6 @@ export default function StockReportPage({ branchId: branchIdProp }: { branchId?:
       <div className="sr-content">
         {/* TAB 1 — Overview */}
         <div className={`sr-panel${tab === 'overview' ? ' active' : ''}`}>
-          <div className="sr-toolbar">
-            <div className="sr-date-range">
-              <i className="ti ti-calendar" aria-hidden="true" style={{ fontSize: 14 }} />
-              <input type="date" value={ovFrom} onChange={(e) => setOvFrom(e.target.value)} />
-              <span>—</span>
-              <input type="date" value={ovTo} onChange={(e) => setOvTo(e.target.value)} />
-            </div>
-            <span className="sr-hint">แสดงข้อมูลสต็อก ณ สิ้นช่วงวันที่เลือก</span>
-          </div>
-
-          {(alertOos.length > 0 || alertCritical.length > 0) && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {alertOos.length > 0 && (
-                <div className="sr-alert-bar sr-alert-danger">
-                  <i className="ti ti-alert-circle" aria-hidden="true" style={{ fontSize: 16 }} />
-                  <span>
-                    <b>หมดสต็อก {alertOos.length} รายการ:</b>{' '}
-                    {alertOos.map((p) => p.name).join(', ')}
-                  </span>
-                </div>
-              )}
-              {alertCritical.length > 0 && (
-                <div className="sr-alert-bar sr-alert-warn">
-                  <i className="ti ti-alert-triangle" aria-hidden="true" style={{ fontSize: 16 }} />
-                  <span>
-                    <b>สต็อกวิกฤต {alertCritical.length} รายการ:</b>{' '}
-                    {alertCritical.map((p) => p.name).join(', ')}
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
-
           <div className="sr-metrics-grid">
             {[
               {
@@ -602,73 +665,88 @@ export default function StockReportPage({ branchId: branchIdProp }: { branchId?:
                 <i className="ti ti-chart-donut" style={{ color: 'var(--p600)' }} aria-hidden="true" />{' '}
                 มูลค่าสินค้าตามหมวดหมู่
               </div>
-              <div className="sr-chart-wrap">
-                <Doughnut
-                  data={{
-                    labels: catLabels,
-                    datasets: [
-                      {
-                        data: catVals,
-                        backgroundColor: CAT_COLORS,
-                        borderWidth: 0,
-                      },
-                    ],
-                  }}
-                  options={{
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    cutout: '68%',
-                  }}
-                />
-              </div>
-              <div className="sr-donut-legend">
-                {catLabels.map((l, i) => (
-                  <div key={l} className="sr-legend-item">
-                    <div className="sr-legend-dot" style={{ background: CAT_COLORS[i] }} />
-                    <span className="sr-legend-lbl">{l}</span>
-                    <span className="sr-legend-val">{fmtBaht(catVals[i] ?? 0)}</span>
+              {overviewMetrics.totalVal === 0 ? (
+                <div className="sr-chart-empty">
+                  <i className="ti ti-chart-donut" aria-hidden="true" />
+                  <span>ไม่มีข้อมูลมูลค่าสต็อก</span>
+                </div>
+              ) : (
+                <>
+                  <div className="sr-chart-wrap">
+                    <Doughnut
+                      data={{
+                        labels: catLabels,
+                        datasets: [
+                          {
+                            data: catVals,
+                            backgroundColor: CAT_COLORS,
+                            borderWidth: 0,
+                          },
+                        ],
+                      }}
+                      options={{
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        cutout: '68%',
+                      }}
+                    />
                   </div>
-                ))}
-              </div>
+                  <div className="sr-donut-legend">
+                    {catLabels.map((l, i) => (
+                      <div key={l} className="sr-legend-item">
+                        <div className="sr-legend-dot" style={{ background: CAT_COLORS[i] }} />
+                        <span className="sr-legend-lbl">{l}</span>
+                        <span className="sr-legend-val">{fmtBaht(catVals[i] ?? 0)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
             <div className="sr-chart-box">
               <div className="sr-chart-title">
                 <i className="ti ti-chart-bar" style={{ color: 'var(--p600)' }} aria-hidden="true" />{' '}
                 Top 8 สินค้า — มูลค่าสต็อก
               </div>
-              <div className="sr-chart-wrap">
-                <Bar
-                  data={{
-                    labels: topProducts.map((p) =>
-                      p.name.length > 18 ? `${p.name.slice(0, 16)}…` : p.name,
-                    ),
-                    datasets: [
-                      {
-                        data: topProducts.map((p) => p.stockValue),
-                        backgroundColor: '#534AB7',
-                        borderRadius: 4,
-                      },
-                    ],
-                  }}
-                  options={{
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: {
-                      x: { ticks: { font: { size: 10 } }, grid: { display: false } },
-                      y: {
-                        ticks: {
-                          callback: (v) =>
-                            Number(v) >= 1000 ? `฿${Number(v) / 1000}k` : `฿${v}`,
-                          font: { size: 10 },
+              {overviewMetrics.totalVal === 0 ? (
+                <div className="sr-chart-empty">
+                  <i className="ti ti-chart-bar" aria-hidden="true" />
+                  <span>ไม่มีข้อมูลมูลค่าสต็อก</span>
+                </div>
+              ) : (
+                <div className="sr-chart-wrap">
+                  <Bar
+                    data={{
+                      labels: topProducts.map((p) =>
+                        p.name.length > 18 ? `${p.name.slice(0, 16)}…` : p.name,
+                      ),
+                      datasets: [
+                        {
+                          data: topProducts.map((p) => p.stockValue),
+                          backgroundColor: '#534AB7',
+                          borderRadius: 4,
                         },
-                        grid: { color: 'rgba(0,0,0,0.04)' },
+                      ],
+                    }}
+                    options={{
+                      responsive: true,
+                      maintainAspectRatio: false,
+                      plugins: { legend: { display: false } },
+                      scales: {
+                        x: { ticks: { font: { size: 10 } }, grid: { display: false } },
+                        y: {
+                          ticks: {
+                            callback: (v) => compactBahtAxis(v),
+                            font: { size: 10 },
+                          },
+                          grid: { color: 'rgba(0,0,0,0.04)' },
+                        },
                       },
-                    },
-                  }}
-                />
-              </div>
+                    }}
+                  />
+                </div>
+              )}
             </div>
           </div>
 
@@ -739,29 +817,39 @@ export default function StockReportPage({ branchId: branchIdProp }: { branchId?:
                       </td>
                     </tr>
                   ) : (
-                    sortedLowStockProducts.map((p) => {
-                      const st = stockStatus(p.qty, p.reorderPoint);
-                      return (
-                        <tr key={p.id}>
-                          <td>
-                            <div className="sr-prod-cell">
-                              <ProductImageThumb imageUrl={p.imageUrl} alt={p.name} />
-                              <div style={{ fontWeight: 500 }}>{p.name}</div>
-                            </div>
-                          </td>
-                          <td className="sr-col-sku">{p.sku}</td>
-                          <td className="num" style={{ fontWeight: 500, color: p.qty === 0 ? 'var(--danger)' : 'var(--warn)' }}>
-                            {fmtNum(p.qty)}
-                          </td>
-                          <td className="num">{fmtNum(p.reorderPoint)}</td>
-                          <td className="num">{fmtBaht(p.avgCost)}</td>
-                          <td className="num">{fmtBaht(p.stockValue)}</td>
-                          <td>
-                            <StatusBadge status={st} />
+                    <>
+                      {sortedLowStockProducts.slice(0, 10).map((p) => {
+                        const st = stockStatus(p.qty, p.reorderPoint);
+                        return (
+                          <tr key={p.id}>
+                            <td>
+                              <div className="sr-prod-cell">
+                                <ProductImageThumb imageUrl={p.imageUrl} alt={p.name} />
+                                <div style={{ fontWeight: 500 }}>{p.name}</div>
+                              </div>
+                            </td>
+                            <td className="sr-col-sku">{p.sku}</td>
+                            <td className="num" style={{ fontWeight: 500, color: p.qty === 0 ? 'var(--danger)' : 'var(--warn)' }}>
+                              {fmtNum(p.qty)}
+                            </td>
+                            <td className="num">{fmtNum(p.reorderPoint)}</td>
+                            <td className="num">{fmtBaht(p.avgCost)}</td>
+                            <td className="num">{fmtBaht(p.stockValue)}</td>
+                            <td>
+                              <StatusBadge status={st} />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {sortedLowStockProducts.length > 10 && (
+                        <tr>
+                          <td colSpan={7} className="sr-table-more">
+                            มีอีก {sortedLowStockProducts.length - 10} รายการ — ดูทั้งหมดในแท็บ
+                            &lsquo;รายสินค้า&rsquo;
                           </td>
                         </tr>
-                      );
-                    })
+                      )}
+                    </>
                   )}
                 </tbody>
               </table>
@@ -974,12 +1062,16 @@ export default function StockReportPage({ branchId: branchIdProp }: { branchId?:
               <i className="ti ti-list-search" aria-hidden="true" /> เลือกสินค้า
               {fifoPickedIds.size > 0 ? ` (${fifoPickedIds.size})` : ''}
             </button>
-            <div className="sr-date-range">
-              <i className="ti ti-calendar" aria-hidden="true" style={{ fontSize: 14 }} />
-              <input type="date" value={fifoFrom} onChange={(e) => setFifoFrom(e.target.value)} />
-              <span>—</span>
-              <input type="date" value={fifoTo} onChange={(e) => setFifoTo(e.target.value)} />
-            </div>
+            <DateRangeDropdown
+              preset={fifoDatePreset}
+              from={fifoFrom}
+              to={fifoTo}
+              onChange={({ preset, from, to }) => {
+                setFifoDatePreset(preset);
+                setFifoFrom(from);
+                setFifoTo(to);
+              }}
+            />
             <div className="sr-stock-filter">
               {([
                 ['', 'ทั้งหมด'],
@@ -1160,12 +1252,16 @@ export default function StockReportPage({ branchId: branchIdProp }: { branchId?:
               <option value="adj">ปรับสต็อก</option>
               <option value="void">Void คืน</option>
             </select>
-            <div className="sr-date-range">
-              <i className="ti ti-calendar" aria-hidden="true" style={{ fontSize: 14 }} />
-              <input type="date" value={mvFrom} onChange={(e) => setMvFrom(e.target.value)} />
-              <span>—</span>
-              <input type="date" value={mvTo} onChange={(e) => setMvTo(e.target.value)} />
-            </div>
+            <DateRangeDropdown
+              preset={mvDatePreset}
+              from={mvFrom}
+              to={mvTo}
+              onChange={({ preset, from, to }) => {
+                setMvDatePreset(preset);
+                setMvFrom(from);
+                setMvTo(to);
+              }}
+            />
             <button type="button" className="sr-btn sr-btn-ghost sr-btn-sm" onClick={exportMovementCsv}>
               <i className="ti ti-download" aria-hidden="true" /> Export
             </button>
@@ -1257,62 +1353,6 @@ export default function StockReportPage({ branchId: branchIdProp }: { branchId?:
           </div>
         </div>
       </div>
-
-      <footer className="sr-footer">
-        <div className="sr-footer-stat">
-          <span className="sr-footer-num">{overviewMetrics.skuCount}</span>
-          <span className="sr-footer-lbl">SKU ทั้งหมด</span>
-        </div>
-        <div className="sr-footer-stat">
-          <span className="sr-footer-num" style={{ color: 'var(--p600)' }}>
-            {fmtBaht(overviewMetrics.totalVal)}
-          </span>
-          <span className="sr-footer-lbl">มูลค่าสต็อกรวม</span>
-        </div>
-        <div className="sr-footer-stat">
-          <span className="sr-footer-num" style={{ color: 'var(--success)' }}>
-            {fmtBaht(overviewMetrics.totalCogs)}
-          </span>
-          <span className="sr-footer-lbl">COGS ช่วงที่เลือก</span>
-        </div>
-        <div className="sr-footer-stat">
-          <span
-            className="sr-footer-num"
-            style={{ color: overviewMetrics.low > 0 ? 'var(--warn)' : 'var(--text-muted)' }}
-          >
-            {overviewMetrics.low}
-          </span>
-          <span className="sr-footer-lbl">Low Stock</span>
-        </div>
-        <div className="sr-footer-stat">
-          <span
-            className="sr-footer-num"
-            style={{ color: overviewMetrics.oos > 0 ? 'var(--danger)' : 'var(--text-muted)' }}
-          >
-            {overviewMetrics.oos}
-          </span>
-          <span className="sr-footer-lbl">หมดสต็อก</span>
-        </div>
-        <div className="sr-footer-spacer" />
-        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-          อัปเดตล่าสุด:{' '}
-          {lastUpdated.toLocaleString('th-TH', {
-            hour: '2-digit',
-            minute: '2-digit',
-            day: '2-digit',
-            month: 'short',
-          })}
-        </span>
-        <button
-          type="button"
-          className="sr-btn sr-btn-ghost sr-btn-sm"
-          style={{ marginLeft: 8 }}
-          onClick={() => refresh()}
-          title="รีเฟรช"
-        >
-          <i className="ti ti-refresh" aria-hidden="true" />
-        </button>
-      </footer>
 
       <FifoQueueModal
         open={fifoModalProduct !== null}
