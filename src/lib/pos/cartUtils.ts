@@ -1,4 +1,9 @@
+import { roundMoney } from '../money';
 import type { CartLine, CartTotals, ItemDiscountType, PosProduct, UomOption } from './types';
+
+// Re-exported from the centralized money util so existing
+// `import { formatMoney } from '.../pos/cartUtils'` call-sites keep working.
+export { formatMoney } from '../money';
 
 export function cartLineKey(productId: string, unit: string): string {
   return `${productId}::${unit}`;
@@ -7,10 +12,10 @@ export function cartLineKey(productId: string, unit: string): string {
 export function getLineTotal(line: CartLine): number {
   const base = line.unitPrice * line.qty;
   const { type, val } = line.discount;
-  if (type === 'disc_thb') return Math.max(0, base - val);
-  if (type === 'disc_pct') return Math.max(0, base * (1 - val / 100));
-  if (type === 'override') return Math.max(0, val * line.qty);
-  return base;
+  if (type === 'disc_thb') return roundMoney(Math.max(0, base - val));
+  if (type === 'disc_pct') return roundMoney(Math.max(0, base * (1 - val / 100)));
+  if (type === 'override') return roundMoney(Math.max(0, val * line.qty));
+  return roundMoney(base);
 }
 
 export function calcCartTotals(
@@ -19,13 +24,15 @@ export function calcCartTotals(
   billDiscountIsPercent: boolean,
   feeRatePercent: number,
 ): CartTotals {
-  const subtotal = lines.reduce((sum, line) => sum + getLineTotal(line), 0);
-  const billDiscount = billDiscountIsPercent
-    ? subtotal * (billDiscountValue / 100)
-    : Math.min(billDiscountValue, subtotal);
-  const afterDiscount = Math.max(0, subtotal - billDiscount);
-  const fee = afterDiscount * (feeRatePercent / 100);
-  const grandTotal = afterDiscount + fee;
+  const subtotal = roundMoney(lines.reduce((sum, line) => sum + getLineTotal(line), 0));
+  const billDiscount = roundMoney(
+    billDiscountIsPercent
+      ? subtotal * (billDiscountValue / 100)
+      : Math.min(billDiscountValue, subtotal),
+  );
+  const afterDiscount = roundMoney(Math.max(0, subtotal - billDiscount));
+  const fee = roundMoney(afterDiscount * (feeRatePercent / 100));
+  const grandTotal = roundMoney(afterDiscount + fee);
   const totalQty = lines.reduce((sum, line) => sum + line.qty, 0);
 
   return {
@@ -36,13 +43,6 @@ export function calcCartTotals(
     itemCount: lines.length,
     totalQty,
   };
-}
-
-export function formatMoney(n: number): string {
-  return parseFloat(String(n || 0)).toLocaleString('th-TH', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
 }
 
 export const IDP_LABELS: Record<Exclude<ItemDiscountType, 'none'>, string> = {

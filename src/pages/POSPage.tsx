@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ItemDiscountModal from '../components/pos/ItemDiscountModal';
-import CustomerPickerModal, { type PosCustomerPick } from '../components/customers/CustomerPickerModal';
-import PaymentModal, { type PaymentReceiptLine } from '../components/PaymentModal';
+import CustomerPickerModal from '../components/customers/CustomerPickerModal';
+import PaymentModal from '../components/PaymentModal';
 import ProductPickerDialog, { posProductToPickerItem } from '../components/products/ProductPickerDialog';
 import CashTransactionModal from '../components/pos/CashTransactionModal';
 import { CloseShiftModal, OpenShiftModal } from '../components/pos/ShiftModals';
@@ -13,35 +13,21 @@ import NumpadDialog from '../components/pos/NumpadDialog';
 import UomModal from '../components/pos/UomModal';
 import { getBranchLabel } from '../lib/branches';
 import { fmtBaht } from '../lib/dashboard/format';
-import { completePosSale } from '../lib/fifo';
-import { isFirebaseConfigured } from '../lib/firebase';
-import {
-  calcCartTotals,
-  cartLineKey,
-  formatMoney,
-  getLineTotal,
-  validateAddToCartStock,
-  validateCartStock,
-} from '../lib/pos/cartUtils';
-import { allocateDevReceiptNumber } from '../lib/pos/billId';
+import { formatMoney, getLineTotal } from '../lib/pos/cartUtils';
 import { DEV_CATEGORY_GRADIENTS } from '../lib/pos/devProducts';
-import { applyShiftPaymentTotals, calcShiftPaymentTotals, getActiveShift } from '../lib/pos/shiftService';
-import { applyCrmSaleLocally } from '../lib/customers/crmService';
+import { getActiveShift } from '../lib/pos/shiftService';
 import { customerTierLabel, useCustomerTiers } from '../lib/customers/customerTiers';
-import { devIncrementShiftTotals } from '../lib/pos/shiftDevMock';
-import { devApplyCrmAfterSale, devApplyCreditCharge } from '../lib/customers/devMock';
 import { POS_FEATURES } from '../lib/config/features';
-import { cartLinesToRecord } from '../lib/pos/suspendedBills';
 import type { SuspendedBill } from '../lib/pos/suspendedBills';
 import { useSuspendedBills } from '../lib/pos/useSuspendedBills';
 import ProductImageThumb from '../components/products/ProductImageThumb';
 import { usePosProducts } from '../lib/pos/usePosProducts';
-import { resolvePosUnitPrice } from '../lib/pos/tierPricing';
-import type { CartLine, ItemDiscountType, PosProduct, UomOption } from '../lib/pos/types';
-import type { PaymentSplit } from '../lib/pos/types';
+import type { ItemDiscountType, PosProduct, UomOption } from '../lib/pos/types';
 import type { Shift } from '../lib/types';
 import { useAuth } from '../lib/hooks/useAuth';
 import { useBranch } from '../lib/hooks/useBranch';
+import { getActivePriceForCustomer, useCart } from '../hooks/pos/useCart';
+import { useCheckout } from '../hooks/pos/useCheckout';
 import './POSPage.css';
 
 const CATEGORY_GRADIENTS: Record<string, string> = {
@@ -49,43 +35,6 @@ const CATEGORY_GRADIENTS: Record<string, string> = {
   'กรายแมว': 'linear-gradient(135deg,#6B62C9,#3C3489)',
   'อาหารเสริม': 'linear-gradient(135deg,#185FA5,#0B3D6B)',
 };
-
-type PosCustomer = PosCustomerPick;
-
-function getActivePriceForCustomer(
-  product: PosProduct,
-  option: UomOption,
-  customer: PosCustomer | null,
-): { unitPrice: number; originalPrice: number } {
-  const tier = customer?.customerType?.trim() || null;
-  return resolvePosUnitPrice(product, option, tier);
-}
-
-function priceChanged(a: number, b: number): boolean {
-  return Math.round(a * 100) !== Math.round(b * 100);
-}
-
-function repriceCartLines(
-  cart: Record<string, CartLine>,
-  products: PosProduct[],
-  customer: PosCustomer | null,
-): Record<string, CartLine> {
-  if (Object.keys(cart).length === 0) return cart;
-  let changed = false;
-  const next = { ...cart };
-  for (const [key, line] of Object.entries(cart)) {
-    const product = products.find((p) => p.id === line.productId);
-    if (!product) continue;
-    const option = product.uomOptions.find((o) => o.unit === line.unit);
-    if (!option) continue;
-    const { unitPrice, originalPrice } = getActivePriceForCustomer(product, option, customer);
-    if (priceChanged(line.unitPrice, unitPrice) || priceChanged(line.originalPrice ?? 0, originalPrice)) {
-      next[key] = { ...line, unitPrice, originalPrice };
-      changed = true;
-    }
-  }
-  return changed ? next : cart;
-}
 
 type ScanMatch = { product: PosProduct; option: UomOption | null };
 
@@ -121,13 +70,7 @@ export default function POSPage() {
   const pickerProducts = useMemo(() => products.map(posProductToPickerItem), [products]);
 
   const [search, setSearch] = useState('');
-  const [customer, setCustomer] = useState<PosCustomer | null>(null);
-  const [customerModalOpen, setCustomerModalOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState('');
-  const [cart, setCart] = useState<Record<string, CartLine>>({});
-  const [billDiscValue, setBillDiscValue] = useState(0);
-  const [billDiscPercent, setBillDiscPercent] = useState(false);
-  const [feeRate, setFeeRate] = useState(0);
   const [showExtraOptions, setShowExtraOptions] = useState(false);
 
   const [uomProduct, setUomProduct] = useState<PosProduct | null>(null);
@@ -135,7 +78,6 @@ export default function POSPage() {
   const [discountLineKey, setDiscountLineKey] = useState<string | null>(null);
   const [qtyNumpadLineKey, setQtyNumpadLineKey] = useState<string | null>(null);
   const [paymentOpen, setPaymentOpen] = useState(false);
-  const [processing, setProcessing] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [activeShift, setActiveShift] = useState<Shift | null>(null);
   const [shiftReady, setShiftReady] = useState(false);
@@ -146,26 +88,28 @@ export default function POSPage() {
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
+  const showToast = useCallback((msg: string) => {
+    setToast(msg);
+    window.setTimeout(() => setToast(null), 2600);
+  }, []);
+
+  // Checkout owns the customer; the cart re-prices against it. Checkout is set
+  // up first so the cart can read `checkout.customer` (no circular dependency —
+  // checkout receives live cart data only at `confirmSale` call time).
+  const checkout = useCheckout({
+    user,
+    branchId,
+    products,
+    activeShift,
+    setActiveShift,
+    showToast,
+  });
+  const { customer } = checkout;
+
+  const cart = useCart({ products, customer, showToast });
+  const { cartLines, totals } = cart;
+
   const branchDisplay = branch?.name ?? (branchId ? getBranchLabel(branchId) : '—');
-
-  const cartLines = useMemo(() => Object.values(cart), [cart]);
-
-  const totals = useMemo(
-    () => calcCartTotals(cartLines, billDiscValue, billDiscPercent, feeRate),
-    [cartLines, billDiscValue, billDiscPercent, feeRate],
-  );
-
-  const receiptLines = useMemo<PaymentReceiptLine[]>(
-    () =>
-      cartLines.map((line) => ({
-        productName: line.productName,
-        sku: line.sku,
-        qty: line.qty,
-        unit: line.unit,
-        lineTotal: getLineTotal(line),
-      })),
-    [cartLines],
-  );
 
   const filteredProducts = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -185,72 +129,21 @@ export default function POSPage() {
     [categories],
   );
 
-  const cartQtyByProduct = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const line of cartLines) {
-      map.set(line.productId, (map.get(line.productId) ?? 0) + line.qty);
-    }
-    return map;
-  }, [cartLines]);
-
-  const discountLine = discountLineKey ? cart[discountLineKey] ?? null : null;
-
-  const showToast = useCallback((msg: string) => {
-    setToast(msg);
-    window.setTimeout(() => setToast(null), 2600);
-  }, []);
+  const discountLine = discountLineKey ? cart.cart[discountLineKey] ?? null : null;
 
   const focusSearch = useCallback(() => {
     window.requestAnimationFrame(() => searchInputRef.current?.focus());
   }, []);
-
-  const addToCart = useCallback(
-    (product: PosProduct, option: UomOption) => {
-      const stockErr = validateAddToCartStock(product, option, 1, cart);
-      if (stockErr) {
-        showToast(stockErr);
-        return;
-      }
-      const key = cartLineKey(product.id, option.unit);
-      const { unitPrice, originalPrice } = getActivePriceForCustomer(product, option, customer);
-      setCart((prev) => {
-        const existing = prev[key];
-        if (existing) {
-          return {
-            ...prev,
-            [key]: { ...existing, qty: existing.qty + 1 },
-          };
-        }
-        return {
-          ...prev,
-          [key]: {
-            lineKey: key,
-            productId: product.id,
-            productName: product.name,
-            category: product.category,
-            sku: product.sku,
-            unit: option.unit,
-            unitFactor: option.factor,
-            unitPrice,
-            originalPrice,
-            qty: 1,
-            discount: { type: 'none', val: 0 },
-          },
-        };
-      });
-    },
-    [customer, cart, showToast],
-  );
 
   const onProductClick = useCallback(
     (product: PosProduct) => {
       if (product.uomOptions.length > 1) {
         setUomProduct(product);
       } else {
-        addToCart(product, product.uomOptions[0]!);
+        cart.addToCart(product, product.uomOptions[0]!);
       }
     },
-    [addToCart],
+    [cart],
   );
 
   const handleSearchKeyDown = useCallback(
@@ -264,7 +157,7 @@ export default function POSPage() {
       if (match) {
         if (match.option) {
           // UOM-specific barcode: add that unit directly, no modal
-          addToCart(match.product, match.option);
+          cart.addToCart(match.product, match.option);
         } else {
           // Top-level barcode/SKU: existing flow (shows UomModal when multi-UOM)
           onProductClick(match.product);
@@ -275,216 +168,13 @@ export default function POSPage() {
         showToast('ไม่พบสินค้านี้');
       }
     },
-    [search, products, addToCart, onProductClick, focusSearch, showToast],
+    [search, products, cart, onProductClick, focusSearch, showToast],
   );
-
-  const handleCustomerSelect = useCallback(
-    (cust: PosCustomer) => {
-      setCustomer(cust);
-      setCart((prev) => repriceCartLines(prev, products, cust));
-      setCustomerModalOpen(false);
-      focusSearch();
-    },
-    [focusSearch, products],
-  );
-
-  const handleClearCustomer = useCallback(() => {
-    setCustomer(null);
-    setCart((prev) => repriceCartLines(prev, products, null));
-  }, [products]);
-
-  const handleCustomerModalClose = useCallback(() => {
-    setCustomerModalOpen(false);
-    focusSearch();
-  }, [focusSearch]);
-
-  const changeQty = useCallback(
-    (lineKey: string, delta: number) => {
-      setCart((prev) => {
-        const line = prev[lineKey];
-        if (!line) return prev;
-        const qty = line.qty + delta;
-        if (qty <= 0) {
-          const next = { ...prev };
-          delete next[lineKey];
-          return next;
-        }
-        if (delta > 0) {
-          const product = products.find((p) => p.id === line.productId);
-          const option = product?.uomOptions.find((o) => o.unit === line.unit);
-          if (product && option) {
-            const stockErr = validateAddToCartStock(product, option, delta, prev);
-            if (stockErr) {
-              showToast(stockErr);
-              return prev;
-            }
-          }
-        }
-        return { ...prev, [lineKey]: { ...line, qty } };
-      });
-    },
-    [products, showToast],
-  );
-
-  const removeLine = useCallback((lineKey: string) => {
-    setCart((prev) => {
-      const next = { ...prev };
-      delete next[lineKey];
-      return next;
-    });
-  }, []);
-
-  const setLineQty = useCallback(
-    (lineKey: string, newQty: number): boolean => {
-      const line = cart[lineKey];
-      if (!line) return false;
-      if (newQty <= 0) {
-        removeLine(lineKey);
-        return true;
-      }
-      if (newQty === line.qty) return true;
-      const delta = newQty - line.qty;
-      if (delta > 0) {
-        const product = products.find((p) => p.id === line.productId);
-        const option = product?.uomOptions.find((o) => o.unit === line.unit);
-        if (product && option) {
-          const stockErr = validateAddToCartStock(product, option, delta, cart);
-          if (stockErr) {
-            showToast(stockErr);
-            return false;
-          }
-        }
-      }
-      setCart((prev) => {
-        const current = prev[lineKey];
-        if (!current) return prev;
-        return { ...prev, [lineKey]: { ...current, qty: newQty } };
-      });
-      return true;
-    },
-    [cart, products, removeLine, showToast],
-  );
-
-  const handlePaymentConfirm = useCallback(
-    async (payments: PaymentSplit[]): Promise<string> => {
-      if (!user || !branchId || cartLines.length === 0 || !activeShift) {
-        throw new Error('ไม่สามารถบันทึกการขายได้');
-      }
-      const stockErr = validateCartStock(products, cartLines);
-      if (stockErr) {
-        showToast(stockErr);
-        throw new Error(stockErr);
-      }
-      setProcessing(true);
-      try {
-        if (isFirebaseConfigured) {
-          const billId = await completePosSale({
-            branchId,
-            staffId: user.id,
-            staffName: `${user.firstName} ${user.lastName}`,
-            shiftId: activeShift.id,
-            lines: cartLines,
-            subtotal: totals.subtotal,
-            billDiscount: totals.billDiscount,
-            fee: totals.fee,
-            grandTotal: totals.grandTotal,
-            payments,
-            customerId: customer?.id ?? null,
-            customerName: customer?.name ?? null,
-            priceLevelId: 'RETAIL',
-          });
-          setActiveShift((prev) =>
-            prev ? applyShiftPaymentTotals(prev, payments, totals.grandTotal) : prev,
-          );
-          if (customer) {
-            const creditPaid = payments
-              .filter((p) => p.method === 'credit')
-              .reduce((s, p) => s + p.amount, 0);
-            setCustomer((prev) => {
-              if (!prev) return prev;
-              const updated = applyCrmSaleLocally(
-                {
-                  lifetimeValue: prev.lifetimeValue,
-                  totalSpent: prev.lifetimeValue,
-                  points: prev.points,
-                },
-                totals.grandTotal,
-              );
-              return {
-                ...prev,
-                lifetimeValue: updated.lifetimeValue,
-                points: updated.points,
-                outstandingBalance:
-                  creditPaid > 0 ? prev.outstandingBalance + creditPaid : prev.outstandingBalance,
-              };
-            });
-          }
-          return billId;
-        }
-        await new Promise((r) => window.setTimeout(r, 600));
-        devIncrementShiftTotals(activeShift.id, calcShiftPaymentTotals(payments, totals.grandTotal));
-        const creditPaid = payments
-          .filter((p) => p.method === 'credit')
-          .reduce((s, p) => s + p.amount, 0);
-        if (customer && creditPaid > 0) {
-          devApplyCreditCharge(
-            customer.id,
-            branchId,
-            creditPaid,
-            `dev-${Date.now()}`,
-            user.id,
-          );
-        }
-        if (customer) {
-          devApplyCrmAfterSale(customer.id, totals.grandTotal);
-          setCustomer((prev) => {
-            if (!prev) return prev;
-            const updated = applyCrmSaleLocally(
-              {
-                lifetimeValue: prev.lifetimeValue,
-                totalSpent: prev.lifetimeValue,
-                points: prev.points,
-              },
-              totals.grandTotal,
-            );
-            return {
-              ...prev,
-              lifetimeValue: updated.lifetimeValue,
-              points: updated.points,
-              outstandingBalance:
-                creditPaid > 0 ? prev.outstandingBalance + creditPaid : prev.outstandingBalance,
-            };
-          });
-        }
-        setActiveShift((prev) =>
-          prev ? applyShiftPaymentTotals(prev, payments, totals.grandTotal) : prev,
-        );
-        return allocateDevReceiptNumber();
-      } catch (err) {
-        showToast(err instanceof Error ? err.message : 'บันทึกไม่สำเร็จ');
-        throw err;
-      } finally {
-        setProcessing(false);
-      }
-    },
-    [user, branchId, cartLines, totals, customer, showToast, activeShift, products],
-  );
-
-  const handleCashTxSuccess = useCallback(async () => {
-    if (user && branchId) {
-      const shift = await getActiveShift(branchId, user.id);
-      setActiveShift(shift);
-    }
-    setShowCashTx(false);
-  }, [user, branchId]);
 
   const clearPosCart = useCallback(() => {
-    setCart({});
-    setBillDiscValue(0);
-    setBillDiscPercent(false);
-    setFeeRate(0);
-    setCustomer(null);
-  }, []);
+    cart.clearCart();
+    checkout.clearCustomer();
+  }, [cart, checkout]);
 
   const handleNewSale = useCallback(() => {
     clearPosCart();
@@ -495,13 +185,10 @@ export default function POSPage() {
   const handleClearCartClick = useCallback(() => {
     if (cartLines.length === 0) return;
     if (!window.confirm('ล้างสินค้าในตะกร้าทั้งหมด?')) return;
-    setCart({});
-    setBillDiscValue(0);
-    setBillDiscPercent(false);
-    setFeeRate(0);
+    cart.clearCart();
     showToast('ล้างตะกร้าแล้ว');
     focusSearch();
-  }, [cartLines.length, focusSearch, showToast]);
+  }, [cartLines.length, cart, focusSearch, showToast]);
 
   const handleHoldClick = useCallback(() => {
     if (cartLines.length === 0) {
@@ -513,24 +200,18 @@ export default function POSPage() {
 
   const handleHoldConfirm = useCallback(
     (note: string) => {
-      const totalsNow = calcCartTotals(
-        cartLines,
-        billDiscValue,
-        billDiscPercent,
-        feeRate,
-      );
       const bill: SuspendedBill = {
         id: crypto.randomUUID(),
         note,
         cartItems: cartLines.map((line) => ({ ...line, discount: { ...line.discount } })),
         customerId: customer?.id ?? null,
-        discount: billDiscValue,
+        discount: cart.billDiscValue,
         createdAt: new Date().toISOString(),
         customer: customer ? { ...customer } : null,
-        discountPercent: billDiscPercent,
-        feeRate,
-        totalAmount: totalsNow.grandTotal,
-        itemCount: totalsNow.totalQty,
+        discountPercent: cart.billDiscPercent,
+        feeRate: cart.feeRate,
+        totalAmount: totals.grandTotal,
+        itemCount: totals.totalQty,
       };
       addBill(bill);
       clearPosCart();
@@ -538,17 +219,7 @@ export default function POSPage() {
       showToast('พักบิลเรียบร้อย');
       focusSearch();
     },
-    [
-      addBill,
-      billDiscPercent,
-      billDiscValue,
-      cartLines,
-      clearPosCart,
-      customer,
-      feeRate,
-      focusSearch,
-      showToast,
-    ],
+    [addBill, cart, cartLines, clearPosCart, customer, totals, focusSearch, showToast],
   );
 
   const handleRestoreBill = useCallback(
@@ -557,31 +228,31 @@ export default function POSPage() {
         showToast('กรุณาชำระหรือพักบิลปัจจุบันก่อนเรียกคืน');
         return;
       }
-      setCart(cartLinesToRecord(bill.cartItems));
-      setCustomer(bill.customer);
-      setBillDiscValue(bill.discount);
-      setBillDiscPercent(bill.discountPercent);
-      setFeeRate(bill.feeRate);
+      cart.restoreCart(bill);
+      checkout.setCustomer(bill.customer);
       removeBill(bill.id);
       setSuspendedListOpen(false);
       showToast('เรียกคืนบิลแล้ว');
       focusSearch();
     },
-    [cartLines.length, focusSearch, removeBill, showToast],
+    [cartLines.length, cart, checkout, removeBill, focusSearch, showToast],
   );
 
-  useEffect(() => {
-    setCart((prev) => repriceCartLines(prev, products, customer));
-  }, [customer, products]);
-
-  useEffect(() => {
-    if (!user || !branchId) {
-      setShiftReady(true);
-      return;
+  const handleCashTxSuccess = useCallback(async () => {
+    if (user && branchId) {
+      const shift = await getActiveShift(branchId, user.id);
+      setActiveShift(shift);
     }
+    setShowCashTx(false);
+  }, [user, branchId]);
 
+  useEffect(() => {
     let cancelled = false;
     void (async () => {
+      if (!user || !branchId) {
+        if (!cancelled) setShiftReady(true);
+        return;
+      }
       try {
         const shift = await getActiveShift(branchId, user.id);
         if (!cancelled) setActiveShift(shift);
@@ -705,7 +376,7 @@ export default function POSPage() {
           ) : (
             <div className="pos-product-grid">
               {filteredProducts.map((p) => {
-                const qty = cartQtyByProduct.get(p.id) ?? 0;
+                const qty = cart.cartQtyByProduct.get(p.id) ?? 0;
                 const baseOption = p.uomOptions[0];
                 const displayPrice = baseOption
                   ? getActivePriceForCustomer(p, baseOption, customer).unitPrice
@@ -785,7 +456,7 @@ export default function POSPage() {
                   <button
                     type="button"
                     className="pos-cust-clear"
-                    onClick={handleClearCustomer}
+                    onClick={checkout.clearCustomer}
                     aria-label="ลบลูกค้า"
                   >
                     <i className="ti ti-x" aria-hidden="true" />
@@ -793,7 +464,7 @@ export default function POSPage() {
                 </div>
               </>
             ) : (
-              <button type="button" className="pos-cust-pick" onClick={() => setCustomerModalOpen(true)}>
+              <button type="button" className="pos-cust-pick" onClick={checkout.openCustomerModal}>
                 <i className="ti ti-user-plus" aria-hidden="true" />
                 เลือกลูกค้า
               </button>
@@ -847,7 +518,7 @@ export default function POSPage() {
                         <button
                           type="button"
                           className="pos-ci-qty-seg"
-                          onClick={() => changeQty(line.lineKey, -1)}
+                          onClick={() => cart.changeQty(line.lineKey, -1)}
                           aria-label="ลดจำนวน"
                         >
                           <i className="ti ti-minus" aria-hidden="true" />
@@ -863,7 +534,7 @@ export default function POSPage() {
                         <button
                           type="button"
                           className="pos-ci-qty-seg"
-                          onClick={() => changeQty(line.lineKey, 1)}
+                          onClick={() => cart.changeQty(line.lineKey, 1)}
                           aria-label="เพิ่มจำนวน"
                         >
                           <i className="ti ti-plus" aria-hidden="true" />
@@ -880,7 +551,7 @@ export default function POSPage() {
                       <button
                         type="button"
                         className="pos-ci-icon-btn pos-ci-icon-btn--danger"
-                        onClick={() => removeLine(line.lineKey)}
+                        onClick={() => cart.removeLine(line.lineKey)}
                         aria-label="ลบ"
                       >
                         <i className="ti ti-trash" aria-hidden="true" />
@@ -915,20 +586,20 @@ export default function POSPage() {
                       className="pos-disc-inp"
                       type="number"
                       min={0}
-                      value={billDiscValue}
-                      onChange={(e) => setBillDiscValue(parseFloat(e.target.value) || 0)}
+                      value={cart.billDiscValue}
+                      onChange={(e) => cart.setBillDiscValue(parseFloat(e.target.value) || 0)}
                     />
                     <button
                       type="button"
-                      className={`pos-disc-tog${!billDiscPercent ? ' on' : ''}`}
-                      onClick={() => setBillDiscPercent(false)}
+                      className={`pos-disc-tog${!cart.billDiscPercent ? ' on' : ''}`}
+                      onClick={() => cart.setBillDiscPercent(false)}
                     >
                       ฿
                     </button>
                     <button
                       type="button"
-                      className={`pos-disc-tog${billDiscPercent ? ' on' : ''}`}
-                      onClick={() => setBillDiscPercent(true)}
+                      className={`pos-disc-tog${cart.billDiscPercent ? ' on' : ''}`}
+                      onClick={() => cart.setBillDiscPercent(true)}
                     >
                       %
                     </button>
@@ -941,8 +612,8 @@ export default function POSPage() {
                       <button
                         key={rate}
                         type="button"
-                        className={`pos-fee-chip${feeRate === rate ? ' on' : ''}`}
-                        onClick={() => setFeeRate(rate)}
+                        className={`pos-fee-chip${cart.feeRate === rate ? ' on' : ''}`}
+                        onClick={() => cart.setFeeRate(rate)}
                       >
                         {rate === 0 ? 'ไม่มี' : `${rate}%`}
                       </button>
@@ -993,7 +664,7 @@ export default function POSPage() {
       <UomModal
         product={uomProduct}
         onSelect={(opt) => {
-          if (uomProduct) addToCart(uomProduct, opt);
+          if (uomProduct) cart.addToCart(uomProduct, opt);
           setUomProduct(null);
         }}
         onClose={() => setUomProduct(null)}
@@ -1003,14 +674,7 @@ export default function POSPage() {
         line={discountLine}
         onSave={(type: ItemDiscountType, val: number) => {
           if (!discountLineKey) return;
-          setCart((prev) => {
-            const line = prev[discountLineKey];
-            if (!line) return prev;
-            return {
-              ...prev,
-              [discountLineKey]: { ...line, discount: { type, val } },
-            };
-          });
+          cart.setLineDiscount(discountLineKey, type, val);
         }}
         onClose={() => setDiscountLineKey(null)}
       />
@@ -1028,10 +692,16 @@ export default function POSPage() {
       />
 
       <CustomerPickerModal
-        open={customerModalOpen}
+        open={checkout.customerModalOpen}
         branchId={branchId}
-        onClose={handleCustomerModalClose}
-        onSelect={handleCustomerSelect}
+        onClose={() => {
+          checkout.closeCustomerModal();
+          focusSearch();
+        }}
+        onSelect={(cust) => {
+          checkout.selectCustomer(cust);
+          focusSearch();
+        }}
       />
 
       <PaymentModal
@@ -1042,18 +712,18 @@ export default function POSPage() {
         subtotal={totals.subtotal}
         billDiscount={totals.billDiscount}
         fee={totals.fee}
-        lines={receiptLines}
+        lines={cart.receiptLines}
         customerId={customer?.id ?? null}
         customerName={customer?.name ?? null}
         customerCreditLimit={customer?.creditLimit ?? 0}
         customerOutstandingBalance={customer?.outstandingBalance ?? 0}
-        processing={processing}
+        processing={checkout.processing}
         onClose={() => {
-          if (processing) return;
+          if (checkout.processing) return;
           setPaymentOpen(false);
           focusSearch();
         }}
-        onConfirm={handlePaymentConfirm}
+        onConfirm={(payments) => checkout.confirmSale(payments, cartLines, totals)}
         onNewSale={handleNewSale}
       />
 
@@ -1101,11 +771,11 @@ export default function POSPage() {
 
       <NumpadDialog
         open={qtyNumpadLineKey !== null}
-        title={qtyNumpadLineKey ? cart[qtyNumpadLineKey]?.productName : undefined}
-        initialValue={qtyNumpadLineKey ? (cart[qtyNumpadLineKey]?.qty ?? 1) : 1}
+        title={qtyNumpadLineKey ? cart.cart[qtyNumpadLineKey]?.productName : undefined}
+        initialValue={qtyNumpadLineKey ? (cart.cart[qtyNumpadLineKey]?.qty ?? 1) : 1}
         onClose={() => setQtyNumpadLineKey(null)}
         onConfirm={(qty) => {
-          if (qtyNumpadLineKey && setLineQty(qtyNumpadLineKey, qty)) {
+          if (qtyNumpadLineKey && cart.setLineQty(qtyNumpadLineKey, qty)) {
             setQtyNumpadLineKey(null);
           }
         }}

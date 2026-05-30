@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  getDoc,
   getDocs,
   increment,
   query,
@@ -14,6 +15,7 @@ import {
   type Transaction,
 } from 'firebase/firestore';
 import { collections, db } from './firebase';
+import { roundMoney } from './money';
 import { buildCrmSaleUpdateFields } from './customers/crmService';
 import {
   commitReceiptCounterInTransaction,
@@ -54,6 +56,16 @@ export type CompleteSaleInput = {
   priceLevelId?: string;
 };
 
+export type CompleteSaleResult = {
+  /** Receipt/bill number of the recorded sale. */
+  billId: string;
+  /**
+   * Soft warning flag: the credit customer has an overdue unpaid balance.
+   * The sale still completes — this is surfaced as a notification, not a block.
+   */
+  hasOverdueCredit?: boolean;
+};
+
 export type LotCut = {
   ref: DocumentReference;
   cutQty: number;
@@ -86,6 +98,59 @@ function parseReceivedAtMs(value: unknown): number {
     return (value as { seconds: number }).seconds * 1000;
   }
   return 0;
+}
+
+const MS_PER_DAY = 86_400_000;
+
+/**
+ * Detect whether a customer has an OVERDUE unpaid balance — a SOFT signal only.
+ *
+ * Business rule: a `creditLimit` of 0 means UNLIMITED credit (allowed). Overdue
+ * invoices DO NOT block the sale; the cashier may still complete a credit sale.
+ * This returns `true` when the customer has any still-unpaid (`pending_payment`)
+ * order whose credit term has lapsed — i.e. `now > order.createdAt + creditDays`
+ * (`creditTermDays`, when present, overrides `creditDays`) — so the caller can
+ * surface a warning notification.
+ *
+ * Runs OUTSIDE the sale transaction because the Firestore web SDK cannot execute
+ * collection queries inside a transaction.
+ */
+async function checkHasOverdueCredit(
+  firestore: NonNullable<typeof db>,
+  customerId: string,
+  now: Date,
+): Promise<boolean> {
+  const custSnap = await getDoc(doc(firestore, collections.customers, customerId));
+  const customer = custSnap.exists() ? (custSnap.data() as Customer) : null;
+  const creditDays = customer?.creditTermDays ?? customer?.creditDays ?? 0;
+
+  let unpaid: Order[];
+  try {
+    const snap = await getDocs(
+      query(
+        collection(firestore, collections.orders),
+        where('customerId', '==', customerId),
+        where('status', '==', 'pending_payment'),
+      ),
+    );
+    unpaid = snap.docs.map((d) => d.data() as Order);
+  } catch {
+    // Composite index unavailable — fall back to a single-field query + client filter.
+    const snap = await getDocs(
+      query(collection(firestore, collections.orders), where('customerId', '==', customerId)),
+    );
+    unpaid = snap.docs
+      .map((d) => d.data() as Order)
+      .filter((o) => o.status === 'pending_payment');
+  }
+
+  const nowMs = now.getTime();
+  return unpaid.some((order) => {
+    const createdMs = parseReceivedAtMs(order.createdAt);
+    if (createdMs === 0) return false;
+    const dueMs = createdMs + creditDays * MS_PER_DAY;
+    return nowMs > dueMs;
+  });
 }
 
 function buildLotsQuery(firestore: NonNullable<typeof db>, productId: string, branchId: string) {
@@ -200,7 +265,7 @@ function resolveOversellCost(
   return line.unitPrice;
 }
 
-export async function completePosSale(input: CompleteSaleInput): Promise<string> {
+export async function completePosSale(input: CompleteSaleInput): Promise<CompleteSaleResult> {
   if (!db) {
     throw new Error('Firestore is not configured');
   }
@@ -208,6 +273,22 @@ export async function completePosSale(input: CompleteSaleInput): Promise<string>
 
   const receiptConfig = await resolveReceiptNumberConfig(firestore, input.branchId);
   const uniqueProductIds = [...new Set(input.lines.map((l) => l.productId))];
+
+  const grandTotal = roundMoney(input.grandTotal);
+  const creditAmt = roundMoney(
+    input.payments.filter((p) => p.method === 'credit').reduce((s, p) => s + p.amount, 0),
+  );
+
+  // Credit validations that require collection queries must run OUTSIDE the
+  // transaction (Firestore web SDK cannot query inside a transaction).
+  if (creditAmt > 0 && !input.customerId) {
+    throw new Error('ต้องเลือกลูกค้าก่อนบันทึกเชื่อ');
+  }
+  // Soft signal only — an overdue balance warns the cashier but never blocks the sale.
+  const hasOverdueCredit =
+    creditAmt > 0 && input.customerId
+      ? await checkHasOverdueCredit(firestore, input.customerId, new Date())
+      : false;
 
   const lotRefsByProduct = new Map<string, DocumentReference[]>();
   for (const productId of uniqueProductIds) {
@@ -221,14 +302,7 @@ export async function completePosSale(input: CompleteSaleInput): Promise<string>
     const orderRef = doc(collection(firestore, collections.orders));
     const orderItemsCol = collection(orderRef, collections.orderItems);
 
-    const paidAmt = input.payments.reduce((s, p) => s + p.amount, 0);
-    const creditAmt = input.payments
-      .filter((p) => p.method === 'credit')
-      .reduce((s, p) => s + p.amount, 0);
-
-    if (creditAmt > 0 && !input.customerId) {
-      throw new Error('ต้องเลือกลูกค้าก่อนบันทึกเชื่อ');
-    }
+    const paidAmt = roundMoney(input.payments.reduce((s, p) => s + p.amount, 0));
 
     // ── Phase 1: all reads (tx.get only — before any writes) ──
     const receiptAllocation = await readReceiptCounterInTransaction(tx, firestore, receiptConfig);
@@ -289,7 +363,7 @@ export async function completePosSale(input: CompleteSaleInput): Promise<string>
 
     const { netCash, qrTotal, kbankTotal, cardTotal, creditTotal } = calcShiftPaymentTotals(
       input.payments,
-      input.grandTotal,
+      grandTotal,
     );
 
     const stockRemaining = new Map<string, number>();
@@ -346,7 +420,7 @@ export async function completePosSale(input: CompleteSaleInput): Promise<string>
 
       allLotCuts.push(...cuts);
 
-      const lineFifoCost = lotRefs.reduce((s, r) => s + r.qty * r.cost, 0);
+      const lineFifoCost = roundMoney(lotRefs.reduce((s, r) => s + r.qty * r.cost, 0));
       const itemRef = doc(orderItemsCol);
       const lineTotal = getLineTotal(line);
 
@@ -366,7 +440,7 @@ export async function completePosSale(input: CompleteSaleInput): Promise<string>
           qtyBase,
           unitPrice: line.unitPrice,
           originalPrice: line.originalPrice ?? line.unitPrice,
-          discountAmt: line.unitPrice * line.qty - lineTotal,
+          discountAmt: roundMoney(line.unitPrice * line.qty - lineTotal),
           lineTotal,
           fifoCost: lineFifoCost,
           lotRefs,
@@ -464,19 +538,18 @@ export async function completePosSale(input: CompleteSaleInput): Promise<string>
       staffId: input.staffId,
       staffName: input.staffName,
       shiftId: input.shiftId,
-      status: creditAmt > 0 && paidAmt < input.grandTotal ? 'pending_payment' : 'completed',
-      subtotal: input.subtotal,
-      discountAmt: input.lines.reduce(
-        (s, l) => s + (l.unitPrice * l.qty - getLineTotal(l)),
-        0,
+      status: creditAmt > 0 && paidAmt < grandTotal ? 'pending_payment' : 'completed',
+      subtotal: roundMoney(input.subtotal),
+      discountAmt: roundMoney(
+        input.lines.reduce((s, l) => s + (l.unitPrice * l.qty - getLineTotal(l)), 0),
       ),
-      billDiscount: input.billDiscount,
+      billDiscount: roundMoney(input.billDiscount),
       vatRate: 0,
       vatAmt: 0,
-      surcharge: input.fee,
-      total: input.grandTotal,
+      surcharge: roundMoney(input.fee),
+      total: grandTotal,
       paidAmt,
-      changeAmt: Math.max(0, paidAmt - input.grandTotal),
+      changeAmt: roundMoney(Math.max(0, paidAmt - grandTotal)),
       creditAmt,
       priceLevelId: input.priceLevelId ?? 'RETAIL',
       note: '',
@@ -511,7 +584,7 @@ export async function completePosSale(input: CompleteSaleInput): Promise<string>
 
     if (input.customerId && customerRef && customerSnap?.exists()) {
       const customerUpdates: Record<string, unknown> = {
-        ...buildCrmSaleUpdateFields(input.grandTotal),
+        ...buildCrmSaleUpdateFields(grandTotal),
       };
       if (creditAmt > 0) {
         customerUpdates.outstandingBalance = increment(creditAmt);
@@ -552,5 +625,5 @@ export async function completePosSale(input: CompleteSaleInput): Promise<string>
     return billId;
   });
 
-  return billIdResult;
+  return { billId: billIdResult, hasOverdueCredit };
 }
