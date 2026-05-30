@@ -20,11 +20,12 @@ import './ProductCRUDPage.css';
 
 type SortKey = 'sku' | 'name' | 'category' | 'retailPrice' | 'avgCost' | 'stock';
 
-const TABLE_COLUMNS: { key: SortKey | 'uom'; label: string; align?: 'r'; sortable?: boolean }[] = [
+const TABLE_COLUMNS: { key: SortKey | 'uom' | 'basePrice'; label: string; align?: 'r'; sortable?: boolean }[] = [
   { key: 'sku', label: 'รหัส (SKU)' },
   { key: 'name', label: 'สินค้า' },
   { key: 'category', label: 'หมวดหมู่' },
-  { key: 'retailPrice', label: 'ราคาขาย', align: 'r' },
+  { key: 'basePrice', label: 'ราคากลาง', align: 'r', sortable: false },
+  { key: 'retailPrice', label: 'ราคาของสาขา', align: 'r' },
   { key: 'avgCost', label: 'ต้นทุนเฉลี่ย', align: 'r' },
   { key: 'uom', label: 'หน่วย (UOM)', sortable: false },
   { key: 'stock', label: 'สต็อก (สาขานี้)', align: 'r' },
@@ -420,6 +421,9 @@ export default function ProductCRUDPage() {
                           </span>
                         </td>
                         <td className="num pc-col-price">
+                          ฿{fmtBaht(p.basePrice ?? 0)}
+                        </td>
+                        <td className="num pc-col-price">
                           ฿{fmtBaht(p.retailPrice)}
                         </td>
                         <td className="num pc-col-cost">
@@ -498,6 +502,7 @@ export default function ProductCRUDPage() {
         onSave={handleSave}
         onNotify={showToast}
         branchId={branchId}
+        isHQContext={false}
         onDelete={() => void handleDelete()}
         fetchLots={fetchLots}
         loadMovements={fetchMovements}

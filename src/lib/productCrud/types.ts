@@ -76,6 +76,8 @@ export type ProductFormData = {
   reorderPoint: number;
   /** Manual standard/base cost (maps to Product.cost) */
   cost: number;
+  /** HQ master/central price ราคากลาง — visible to all, editable by admin/manager only */
+  basePrice: number;
   simplePrices: Record<string, number>;
   /** CRM dynamic tier prices (base unit) — keys match customer.customerType */
   tierPrices: Record<string, number>;
@@ -121,6 +123,7 @@ export function sanitizeProductForm(
   const sku = form.sku.trim();
   const barcode = form.barcode.trim();
   const cost = Number.isFinite(form.cost) ? Math.max(0, form.cost) : 0;
+  const basePrice = Number.isFinite(form.basePrice) ? Math.max(0, form.basePrice) : 0;
   const retail = Math.max(0, resolveRetailPrice(form) || 0);
 
   const simplePrices = {
@@ -148,6 +151,7 @@ export function sanitizeProductForm(
     category,
     baseUnit: form.baseUnit.trim() || 'ชิ้น',
     cost,
+    basePrice,
     simplePrices,
     uomRows,
     reorderPoint: Number.isFinite(form.reorderPoint) ? Math.max(0, form.reorderPoint) : 0,
@@ -279,6 +283,7 @@ export function emptyForm(): ProductFormData {
     isActive: true,
     reorderPoint: 10,
     cost: 0,
+    basePrice: 0,
     simplePrices: { RETAIL: 0 },
     tierPrices: {},
     allowNegativeStock: false,
@@ -348,6 +353,7 @@ export function productToForm(product: Product): ProductFormData {
     isActive: product.isActive,
     reorderPoint: product.reorderPoint,
     cost: product.cost ?? product.avgCost ?? 0,
+    basePrice: product.basePrice ?? 0,
     simplePrices,
     tierPrices: { ...(product.tierPrices ?? {}) },
     allowNegativeStock: product.allowNegativeStock ?? false,
@@ -403,6 +409,7 @@ export function formToProduct(form: ProductFormData, id: string): Omit<Product, 
     allowNegativeStock: form.allowNegativeStock,
     reorderPoint: form.reorderPoint,
     cost: Number.isFinite(form.cost) ? Math.max(0, form.cost) : 0,
+    basePrice: Number.isFinite(form.basePrice) && form.basePrice > 0 ? form.basePrice : undefined,
     isActive: form.isActive,
   };
 

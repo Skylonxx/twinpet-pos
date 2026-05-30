@@ -28,7 +28,7 @@ import './AdminProductManagementPage.css';
 type AdminSortKey = 'sku' | 'name' | 'category' | 'retailPrice' | 'cost';
 
 const TABLE_COLUMNS: {
-  key: AdminSortKey | 'uom' | 'status';
+  key: AdminSortKey | 'uom' | 'status' | 'basePrice';
   label: string;
   align?: 'r';
   sortable?: boolean;
@@ -36,6 +36,7 @@ const TABLE_COLUMNS: {
   { key: 'sku', label: 'รหัส (SKU)' },
   { key: 'name', label: 'สินค้า' },
   { key: 'category', label: 'หมวดหมู่' },
+  { key: 'basePrice', label: 'ราคากลาง', align: 'r', sortable: false },
   { key: 'retailPrice', label: 'ราคาขาย', align: 'r' },
   { key: 'cost', label: 'ต้นทุน', align: 'r' },
   { key: 'uom', label: 'หน่วย (UOM)', sortable: false },
@@ -556,6 +557,7 @@ export default function AdminProductManagementPage() {
                             {categoryLabel}
                           </span>
                         </td>
+                        <td className="num pc-col-price">฿{fmtBaht(p.basePrice ?? 0)}</td>
                         <td className="num pc-col-price">฿{fmtBaht(getRetailPrice(p))}</td>
                         <td className="num pc-col-cost">฿{fmtBaht(p.cost ?? 0)}</td>
                         <td>
@@ -647,7 +649,7 @@ export default function AdminProductManagementPage() {
         </div>
       </div>
 
-      {/* ── ProductDrawer (same wiring as before) ── */}
+      {/* ── ProductDrawer (HQ context — overridePrice hidden, basePrice editable) ── */}
       <ProductDrawer
         open={drawerMode !== null}
         mode={drawerMode === 'new' ? 'new' : 'edit'}
@@ -658,6 +660,7 @@ export default function AdminProductManagementPage() {
         onDelete={() => void handleDelete()}
         onNotify={showToast}
         branchId={branchId}
+        isHQContext={true}
         fetchLots={fetchLots}
         loadMovements={fetchMovements}
       />

@@ -63,7 +63,7 @@ service cloud.firestore {
 
     // ── Staff profiles ──
     match /users/{userId} {
-      allow read: if isStaff() && (staffId() == userId || isAdmin());
+      allow read: if isStaff();
       allow write: if isAdmin();
     }
 

@@ -233,6 +233,9 @@ type Props = {
   onDelete: () => void;
   onNotify?: (msg: string, type?: 'success' | 'warn') => void;
   branchId?: string | null;
+  /** true = HQ/admin context: basePrice editable, overridePrice hidden.
+   *  false (default) = branch context: basePrice read-only, overridePrice editable. */
+  isHQContext?: boolean;
   fetchLots: (productId: string) => Promise<StockLot[]>;
   loadMovements: (productId: string) => Promise<StockMovement[]>;
 };
@@ -269,6 +272,7 @@ export default function ProductDrawer({
   onDelete,
   onNotify,
   branchId,
+  isHQContext = false,
   fetchLots,
   loadMovements,
 }: Props) {
@@ -733,6 +737,27 @@ export default function ProductDrawer({
                   </div>
                 ) : null}
 
+                <div className="pc-field">
+                  <label>ราคากลาง / Master Price (฿)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={form.basePrice > 0 ? form.basePrice : ''}
+                    placeholder="0.00"
+                    disabled={!isHQContext}
+                    readOnly={!isHQContext}
+                    onChange={(e) => {
+                      const parsed = e.target.value === '' ? 0 : Number(e.target.value);
+                      set('basePrice', parsed);
+                      setMainPrice(parsed);
+                    }}
+                  />
+                  {!isHQContext ? (
+                    <p className="pc-cost-avg-hint">ราคากลาง — กำหนดโดย HQ เท่านั้น</p>
+                  ) : null}
+                </div>
+
                 <div className="pc-sec-label">หน่วย & ราคาขายหลัก</div>
                 <div className="pc-base-unit-row">
                   <div className="pc-field">
@@ -771,13 +796,16 @@ export default function ProductDrawer({
                   </button>
                 </div>
 
-                <BaseRetailPriceInput
-                  inputRef={priceRef}
-                  value={form.simplePrices[RETAIL_PRICE_KEY] ?? 0}
-                  error={fieldErrors.price}
-                  onClearError={() => setFieldErrors((prev) => ({ ...prev, price: undefined }))}
-                  onChange={setMainPrice}
-                />
+                {!isHQContext ? (
+                  <BaseRetailPriceInput
+                    label="ราคาของสาขา (฿)"
+                    inputRef={priceRef}
+                    value={form.simplePrices[RETAIL_PRICE_KEY] ?? 0}
+                    error={fieldErrors.price}
+                    onClearError={() => setFieldErrors((prev) => ({ ...prev, price: undefined }))}
+                    onChange={setMainPrice}
+                  />
+                ) : null}
 
                 <TierPriceManageButton
                   customCount={countCustomTierPrices(form.tierPrices)}

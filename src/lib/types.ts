@@ -127,6 +127,8 @@ export type Product = SoftDelete & {
   tierPrices?: Record<string, number>;
   /** Manual standard/base cost — editable in product form; not updated by GRNs */
   cost: number;
+  /** HQ master/central price (ราคากลาง) — admin/manager only; reference price for branches */
+  basePrice?: number;
   /** Moving average from GRN receipts — system calculated */
   avgCost: number;
   reorderPoint: number; // global (per-branch lives in ProductStock)
