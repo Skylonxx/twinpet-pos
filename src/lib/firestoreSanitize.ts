@@ -108,6 +108,7 @@ export function sanitizeProductDocForFirestore(
     reorderPoint: data.reorderPoint ?? 0,
     allowNegativeStock: data.allowNegativeStock ?? false,
     isActive: data.isActive ?? true,
+    muteAlerts: data.muteAlerts ?? false,
   };
 
   return stripUndefinedDeep(doc) as Record<string, unknown>;

@@ -133,6 +133,8 @@ export type Product = SoftDelete & {
   avgCost: number;
   reorderPoint: number; // global (per-branch lives in ProductStock)
   isActive: boolean;
+  /** ปิดการแจ้งเตือนสต็อก — ซ่อนจาก low/critical/OOS alerts (เช่น สินค้าตามฤดูกาล). ค่าเริ่มต้น false เมื่อไม่ระบุ */
+  muteAlerts?: boolean;
   /** สินค้าคิด VAT — ค่าเริ่มต้น true เมื่อไม่ระบุ */
   hasVat?: boolean;
   /** อนุญาตขายเมื่อสต็อกหมด (overselling) — ต่อสินค้า */

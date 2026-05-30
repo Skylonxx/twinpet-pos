@@ -835,8 +835,23 @@ export default function ProductDrawer({
                 )}
 
                 <div className="pc-tog-row">
-                  <span className="pc-tog-lbl">แสดงในหน้า POS</span>
+                  <div className="pc-tog-lbl-col">
+                    <span className="pc-tog-lbl">สถานะการขาย (Active/Inactive)</span>
+                    <span className="pc-tog-desc">
+                      สินค้าที่ปิดอยู่จะถูกซ่อนจากหน้า POS และรายงานสต็อก — เปิดกลับมาใช้งานได้ทุกเมื่อ
+                    </span>
+                  </div>
                   <Toggle checked={form.isActive} onChange={(v) => set('isActive', v)} />
+                </div>
+
+                <div className="pc-tog-row">
+                  <div className="pc-tog-lbl-col">
+                    <span className="pc-tog-lbl">ปิดการแจ้งเตือนสต็อก (Mute Alerts)</span>
+                    <span className="pc-tog-desc">
+                      ซ่อนสินค้านี้จากการแจ้งเตือนสต็อกต่ำ/หมด (เหมาะกับสินค้าตามฤดูกาล) — สต็อกยังนับตามปกติ
+                    </span>
+                  </div>
+                  <Toggle checked={form.muteAlerts} onChange={(v) => set('muteAlerts', v)} />
                 </div>
 
                 <div className="pc-sec-label">สาขาที่มีจำหน่าย</div>

@@ -615,6 +615,21 @@
   color: var(--text-muted, #9ca3af);
 }
 
+.pc-badge-muted {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: #faeeda;
+  color: #854f0b;
+}
+
+.pc-status-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
 .pc-uom-chip {
   display: inline-flex;
   align-items: center;

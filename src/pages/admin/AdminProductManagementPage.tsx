@@ -62,8 +62,8 @@ function sortAdminProducts(
   if (!sortConfig) return items;
   const mult = sortConfig.direction === 'asc' ? 1 : -1;
   return [...items].sort((a, b) => {
-    let av: string | number = '';
-    let bv: string | number = '';
+    let av: string | number;
+    let bv: string | number;
     switch (sortConfig.key as AdminSortKey) {
       case 'sku':
         av = (a.sku ?? '').toLowerCase();
@@ -579,11 +579,18 @@ export default function AdminProductManagementPage() {
                           </div>
                         </td>
                         <td>
-                          <span
-                            className={`pc-badge ${p.isActive ? 'pc-badge-ok' : 'pc-badge-oos'}`}
-                          >
-                            {p.isActive ? 'Active' : 'Inactive'}
-                          </span>
+                          <div className="pc-status-cell">
+                            <span
+                              className={`pc-badge ${p.isActive ? 'pc-badge-ok' : 'pc-badge-oos'}`}
+                            >
+                              {p.isActive ? 'Active' : 'Inactive'}
+                            </span>
+                            {p.muteAlerts ? (
+                              <span className="pc-badge pc-badge-muted" title="ปิดการแจ้งเตือนสต็อก">
+                                <i className="ti ti-bell-off" aria-hidden="true" /> Muted
+                              </span>
+                            ) : null}
+                          </div>
                         </td>
                       </tr>
                     );

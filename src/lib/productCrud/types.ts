@@ -73,6 +73,8 @@ export type ProductFormData = {
   baseUnit: string;
   hasUom: boolean;
   isActive: boolean;
+  /** ปิดการแจ้งเตือนสต็อกต่ำ/หมด สำหรับสินค้านี้ */
+  muteAlerts: boolean;
   reorderPoint: number;
   /** Manual standard/base cost (maps to Product.cost) */
   cost: number;
@@ -287,6 +289,7 @@ export function emptyForm(): ProductFormData {
     baseUnit: 'ชิ้น',
     hasUom: false,
     isActive: true,
+    muteAlerts: false,
     reorderPoint: 10,
     cost: 0,
     basePrice: 0,
@@ -359,6 +362,7 @@ export function productToForm(product: Product & { overrideTierPrices?: Record<s
     baseUnit: product.baseUnit,
     hasUom,
     isActive: product.isActive,
+    muteAlerts: product.muteAlerts ?? false,
     reorderPoint: product.reorderPoint,
     cost: product.cost ?? product.avgCost ?? 0,
     basePrice: product.basePrice ?? 0,
@@ -422,6 +426,7 @@ export function formToProduct(form: ProductFormData, id: string): Omit<Product, 
     basePrice: Number.isFinite(form.basePrice) && form.basePrice > 0 ? form.basePrice : undefined,
     availableBranches: form.availableBranches,
     isActive: form.isActive,
+    muteAlerts: form.muteAlerts,
   };
 
   if (form.expiryPolicyId.trim()) {

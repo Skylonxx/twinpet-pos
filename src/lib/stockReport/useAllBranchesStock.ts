@@ -24,6 +24,8 @@ export type AllBranchesStockRow = {
   totalValue: number;
   /** Company-wide stock status derived from totalQty vs reorderPoint. */
   status: StockStatus;
+  /** When true the product is excluded from low/critical/OOS alert metrics. */
+  muteAlerts: boolean;
 };
 
 /** Total stock valuation held by one branch (feeds the donut chart). */
@@ -164,6 +166,7 @@ export function useAllBranchesStock(): AllBranchesStockResult {
             reorderPoint,
             totalValue: totalQty * avgCost,
             status: stockStatus(totalQty, reorderPoint),
+            muteAlerts: p.muteAlerts ?? false,
           };
         });
 
@@ -179,8 +182,9 @@ export function useAllBranchesStock(): AllBranchesStockResult {
           }))
           .sort((a, b) => b.value - a.value);
 
+        // Muted products are normal stock for valuation, but never raise alerts.
         const lowStock = rows
-          .filter((r) => r.status !== 'ok')
+          .filter((r) => r.status !== 'ok' && !r.muteAlerts)
           .sort((a, b) => a.totalQty - b.totalQty);
 
         const totalQty = rows.reduce((s, r) => s + r.totalQty, 0);
@@ -196,8 +200,8 @@ export function useAllBranchesStock(): AllBranchesStockResult {
             productCount: rows.length,
             branchCount: branchValues.length,
             lowStockCount: lowStock.length,
-            criticalCount: rows.filter((r) => r.status === 'critical').length,
-            oosCount: rows.filter((r) => r.status === 'oos').length,
+            criticalCount: rows.filter((r) => r.status === 'critical' && !r.muteAlerts).length,
+            oosCount: rows.filter((r) => r.status === 'oos' && !r.muteAlerts).length,
           });
           setLoading(false);
         }

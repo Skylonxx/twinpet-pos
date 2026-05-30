@@ -387,6 +387,7 @@ export default function StockReportPage({ branchId: branchIdProp }: { branchId?:
   const lowStockProducts = useMemo(
     () =>
       productsWithCogs.filter((p) => {
+        if (p.muteAlerts) return false;
         const st = stockStatus(p.qty, p.reorderPoint);
         return st !== 'ok';
       }),

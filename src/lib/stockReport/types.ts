@@ -18,6 +18,8 @@ export type StockReportProduct = {
   avgCost: number;
   cogsMonth: number;
   stockValue: number;
+  /** เมื่อ true สินค้าจะไม่ถูกนับใน low/critical/OOS alerts */
+  muteAlerts: boolean;
   lots: StockLot[];
 };
 
@@ -142,6 +144,7 @@ export function buildProductRows(
       avgCost,
       cogsMonth,
       stockValue: qty * avgCost,
+      muteAlerts: p.muteAlerts ?? false,
       lots: [...lots].sort((a, b) => tsToDate(a.receivedAt).getTime() - tsToDate(b.receivedAt).getTime()),
     };
   });
@@ -165,10 +168,12 @@ export function computeCogsFromMovements(
 
 export function computeOverviewMetrics(products: StockReportProduct[], totalCogs: number) {
   const totalVal = products.reduce((s, p) => s + p.stockValue, 0);
-  const low = products.filter(
+  // Muted products still count toward valuation/SKU totals but never trigger alerts.
+  const alertable = products.filter((p) => !p.muteAlerts);
+  const low = alertable.filter(
     (p) => stockStatus(p.qty, p.reorderPoint) === 'low' || stockStatus(p.qty, p.reorderPoint) === 'critical',
   ).length;
-  const oos = products.filter((p) => p.qty <= 0).length;
+  const oos = alertable.filter((p) => p.qty <= 0).length;
   const turnover = totalVal > 0 ? ((totalCogs / totalVal) * 12).toFixed(1) : '0.0';
   return { totalVal, totalCogs, low, oos, turnover, skuCount: products.length };
 }
