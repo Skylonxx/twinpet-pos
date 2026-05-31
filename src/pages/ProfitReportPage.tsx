@@ -377,7 +377,6 @@ export default function ProfitReportPage() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [sortKey, setSortKey] = useState('');
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'info' } | null>(null);
-  const [clock, setClock] = useState('');
   const tableCardRef = useRef<HTMLDivElement>(null);
 
   const branchDisplay = branchId ? getBranchLabel(branchId) : '—';
@@ -473,21 +472,6 @@ export default function ProfitReportPage() {
     const maxPage = Math.max(1, Math.ceil(tableRows.length / PAGE_SIZE));
     if (tablePage > maxPage) setTablePage(maxPage);
   }, [tableRows.length, tablePage]);
-
-  useEffect(() => {
-    const tick = () =>
-      setClock(
-        new Date().toLocaleString('th-TH', {
-          hour: '2-digit',
-          minute: '2-digit',
-          day: '2-digit',
-          month: 'short',
-        }),
-      );
-    tick();
-    const id = setInterval(tick, 60000);
-    return () => clearInterval(id);
-  }, []);
 
   useEffect(() => {
     if (!toast) return;
@@ -1049,42 +1033,6 @@ export default function ProfitReportPage() {
             </div>
           </>
         )}
-      </div>
-
-      <div className="pr-footer">
-        <div className="pr-footer-stat">
-          <span className="pr-footer-num" style={{ color: 'var(--p600)' }}>
-            {kpi.bills}
-          </span>
-          <span className="pr-footer-lbl">จำนวนบิล</span>
-        </div>
-        <div className="pr-footer-stat">
-          <span className="pr-footer-num">{fmtBaht(kpi.revenue)}</span>
-          <span className="pr-footer-lbl">ยอดขายรวม</span>
-        </div>
-        <div className="pr-footer-stat">
-          <span className="pr-footer-num" style={{ color: 'var(--warn)' }}>
-            {fmtBaht(kpi.cogs)}
-          </span>
-          <span className="pr-footer-lbl">ต้นทุนรวม</span>
-        </div>
-        <div className="pr-footer-stat">
-          <span className="pr-footer-num" style={{ color: kpi.profit >= 0 ? 'var(--success)' : 'var(--danger)' }}>
-            {fmtBaht(kpi.profit)}
-          </span>
-          <span className="pr-footer-lbl">กำไรรวม</span>
-        </div>
-        <div className="pr-footer-stat">
-          <span className="pr-footer-num" style={{ color: 'var(--info)' }}>
-            {fmtPct(kpi.margin)}
-          </span>
-          <span className="pr-footer-lbl">Margin เฉลี่ย</span>
-        </div>
-        <div className="pr-footer-spacer" />
-        <span style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 5 }}>
-          <i className="ti ti-clock" aria-hidden="true" />
-          {clock}
-        </span>
       </div>
 
       <ProductPickerModal
