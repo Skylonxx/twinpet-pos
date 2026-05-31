@@ -1,4 +1,5 @@
 import type { Product, ProductPrice, StockLot, StockMovement, UomConversion, ProductCategory } from '../types';
+import { RETAIL_PRICE_LEVEL_ID } from '../types';
 import { matchesCategoryFilter } from '../inventory/categoryService';
 
 export type StockFilter = '' | 'low' | 'out';
@@ -10,19 +11,6 @@ export const DRAWER_TABS: { id: DrawerTab; label: string }[] = [
   { id: 'pricing', label: 'หน่วยย่อย & ราคาส่ง' },
   { id: 'stock', label: 'สต็อก' },
   { id: 'history', label: 'ประวัติ' },
-];
-
-export type PriceTierDef = {
-  id: string;
-  name: string;
-  color: string;
-};
-
-export const PRICE_TIERS: PriceTierDef[] = [
-  { id: 'RETAIL', name: 'ราคาปกติ', color: '#534AB7' },
-  { id: 'WHOLESALE1', name: 'VIP', color: '#1D9E75' },
-  { id: 'WHOLESALE2', name: 'ราคาส่ง', color: '#BA7517' },
-  { id: 'MEMBER', name: 'สมาชิก Gold', color: '#D4537E' },
 ];
 
 export const CATEGORIES = [
@@ -136,17 +124,17 @@ export function sanitizeProductForm(
 
   const simplePrices = {
     ...form.simplePrices,
-    RETAIL: form.hasUom ? form.simplePrices.RETAIL : retail,
+    [RETAIL_PRICE_LEVEL_ID]: form.hasUom ? form.simplePrices[RETAIL_PRICE_LEVEL_ID] : retail,
   };
 
   const uomRows = form.uomRows.map((row) => ({
     ...row,
     prices: {
       ...row.prices,
-      RETAIL:
+      [RETAIL_PRICE_LEVEL_ID]:
         row.isBase && form.hasUom
-          ? Math.max(0, row.prices.RETAIL ?? 0)
-          : row.prices.RETAIL,
+          ? Math.max(0, row.prices[RETAIL_PRICE_LEVEL_ID] ?? 0)
+          : row.prices[RETAIL_PRICE_LEVEL_ID],
     },
   }));
 
@@ -167,11 +155,11 @@ export function sanitizeProductForm(
 }
 
 function resolveRetailPrice(form: ProductFormData): number {
-  const main = form.simplePrices.RETAIL;
+  const main = form.simplePrices[RETAIL_PRICE_LEVEL_ID];
   if (main != null && Number.isFinite(main)) return main;
   if (form.hasUom) {
     const baseRow = form.uomRows.find((r) => r.isBase);
-    return baseRow?.prices.RETAIL ?? Number.NaN;
+    return baseRow?.prices[RETAIL_PRICE_LEVEL_ID] ?? Number.NaN;
   }
   return Number.NaN;
 }
@@ -259,7 +247,7 @@ export function stockStatus(stock: number, minStock: number): { cls: string; lbl
 
 export function getRetailPrice(product: Product): number {
   return (
-    product.prices.find((p) => p.priceLevelId === 'RETAIL' && p.unit === product.baseUnit)?.price ??
+    product.prices.find((p) => p.priceLevelId === RETAIL_PRICE_LEVEL_ID && p.unit === product.baseUnit)?.price ??
     product.prices[0]?.price ??
     0
   );
@@ -293,7 +281,7 @@ export function emptyForm(): ProductFormData {
     reorderPoint: 10,
     cost: 0,
     basePrice: 0,
-    simplePrices: { RETAIL: 0 },
+    simplePrices: { [RETAIL_PRICE_LEVEL_ID]: 0 },
     tierPrices: {},
     overrideTierPrices: {},
     availableBranches: [],
@@ -305,7 +293,7 @@ export function emptyForm(): ProductFormData {
         unit: 'ชิ้น',
         factor: 1,
         barcode: '',
-        prices: { RETAIL: 0 },
+        prices: { [RETAIL_PRICE_LEVEL_ID]: 0 },
         tierPrices: {},
         expanded: true,
         isBase: true,
@@ -317,10 +305,10 @@ export function emptyForm(): ProductFormData {
 export function productToForm(product: Product & { overrideTierPrices?: Record<string, number> }): ProductFormData {
   const hasUom = product.uomConversions.length > 0;
   const retailPrice =
-    product.prices.find((x) => x.priceLevelId === 'RETAIL' && x.unit === product.baseUnit)?.price ??
+    product.prices.find((x) => x.priceLevelId === RETAIL_PRICE_LEVEL_ID && x.unit === product.baseUnit)?.price ??
     product.prices.find((x) => x.unit === product.baseUnit)?.price ??
     0;
-  const simplePrices: Record<string, number> = { RETAIL: retailPrice };
+  const simplePrices: Record<string, number> = { [RETAIL_PRICE_LEVEL_ID]: retailPrice };
 
   const baseRow: ProductUomFormRow = {
     id: 'base',
@@ -336,7 +324,7 @@ export function productToForm(product: Product & { overrideTierPrices?: Record<s
   const uomRows: ProductUomFormRow[] = [baseRow];
   for (const conv of product.uomConversions) {
     const unitRetail =
-      product.prices.find((x) => x.priceLevelId === 'RETAIL' && x.unit === conv.unit)?.price ??
+      product.prices.find((x) => x.priceLevelId === RETAIL_PRICE_LEVEL_ID && x.unit === conv.unit)?.price ??
       product.prices.find((x) => x.unit === conv.unit)?.price ??
       0;
     uomRows.push({
@@ -344,7 +332,7 @@ export function productToForm(product: Product & { overrideTierPrices?: Record<s
       unit: conv.unit,
       factor: conv.factor,
       barcode: conv.barcode ?? '',
-      prices: { RETAIL: unitRetail },
+      prices: { [RETAIL_PRICE_LEVEL_ID]: unitRetail },
       tierPrices: { ...(conv.tierPrices ?? {}) },
       expanded: true,
       isBase: false,
@@ -395,16 +383,16 @@ export function formToProduct(form: ProductFormData, id: string): Omit<Product, 
   const prices: ProductPrice[] = [];
   const pushRetailPrice = (unit: string, price: number | undefined) => {
     if (price != null && price > 0) {
-      prices.push({ priceLevelId: 'RETAIL', unit, price });
+      prices.push({ priceLevelId: RETAIL_PRICE_LEVEL_ID, unit, price });
     }
   };
 
   if (form.hasUom) {
     for (const row of form.uomRows) {
-      pushRetailPrice(row.unit, row.prices.RETAIL);
+      pushRetailPrice(row.unit, row.prices[RETAIL_PRICE_LEVEL_ID]);
     }
   } else {
-    pushRetailPrice(form.baseUnit, form.simplePrices.RETAIL);
+    pushRetailPrice(form.baseUnit, form.simplePrices[RETAIL_PRICE_LEVEL_ID]);
   }
 
   const productTierPrices = sanitizeTierPrices(form.tierPrices);

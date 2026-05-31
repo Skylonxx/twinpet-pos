@@ -37,6 +37,7 @@ import type {
   Shift,
   CreditTransaction,
 } from './types';
+import { RETAIL_PRICE_LEVEL_ID } from './types';
 
 export const OVERSELL_LOT_ID = 'oversell';
 
@@ -250,19 +251,25 @@ export function mergeLotCuts(cuts: LotCut[]): LotCut[] {
   return [...byRef.values()];
 }
 
+/**
+ * Resolve the per-base-unit cost for an oversold quantity (no FIFO lot covers it).
+ * Priority: most-recent lot cost → product.cost (manual standard cost) →
+ * product.avgCost. We deliberately NEVER fall back to the selling price — doing
+ * so would set COGS ≈ revenue and zero out (or invert) profit. When no cost is
+ * known we return 0 so the line is treated as zero-cost rather than mislabelling
+ * revenue as cost.
+ */
 function resolveOversellCost(
   sourceLots: MutableLot[],
   product: Product | undefined,
-  line: CartLine,
 ): number {
   for (let i = sourceLots.length - 1; i >= 0; i--) {
     const cost = sourceLots[i]?.costPerUnit ?? 0;
     if (cost > 0) return cost;
   }
+  if (product?.cost && product.cost > 0) return product.cost;
   if (product?.avgCost && product.avgCost > 0) return product.avgCost;
-  const retail = product?.prices?.find((p) => p.priceLevelId === 'RETAIL')?.price;
-  if (retail && retail > 0) return retail;
-  return line.unitPrice;
+  return 0;
 }
 
 export async function completePosSale(input: CompleteSaleInput): Promise<CompleteSaleResult> {
@@ -410,7 +417,7 @@ export async function completePosSale(input: CompleteSaleInput): Promise<Complet
         if (!allowNegative) {
           throw new Error(`สต็อกล็อตไม่พอสำหรับ ${line.productName}`);
         }
-        const fallbackCost = resolveOversellCost(sourceLots, productData, line);
+        const fallbackCost = resolveOversellCost(sourceLots, productData);
         lotRefs.push({
           lotId: OVERSELL_LOT_ID,
           qty: remaining,
@@ -527,6 +534,13 @@ export async function completePosSale(input: CompleteSaleInput): Promise<Complet
       });
     }
 
+    // COGS & profit captured natively at sale time. Defined so that
+    // order.profit === Σ(item.lineTotal − item.fifoCost) === subtotal − cogs,
+    // keeping persisted values identical to the report's sum-of-lines fallback.
+    const orderSubtotal = roundMoney(input.subtotal);
+    const totalCogs = roundMoney(itemWrites.reduce((s, w) => s + w.data.fifoCost, 0));
+    const grossProfit = roundMoney(orderSubtotal - totalCogs);
+
     const orderData: Order = {
       id: orderRef.id,
       billId,
@@ -539,7 +553,7 @@ export async function completePosSale(input: CompleteSaleInput): Promise<Complet
       staffName: input.staffName,
       shiftId: input.shiftId,
       status: creditAmt > 0 && paidAmt < grandTotal ? 'pending_payment' : 'completed',
-      subtotal: roundMoney(input.subtotal),
+      subtotal: orderSubtotal,
       discountAmt: roundMoney(
         input.lines.reduce((s, l) => s + (l.unitPrice * l.qty - getLineTotal(l)), 0),
       ),
@@ -551,7 +565,9 @@ export async function completePosSale(input: CompleteSaleInput): Promise<Complet
       paidAmt,
       changeAmt: roundMoney(Math.max(0, paidAmt - grandTotal)),
       creditAmt,
-      priceLevelId: input.priceLevelId ?? 'RETAIL',
+      cogs: totalCogs,
+      profit: grossProfit,
+      priceLevelId: input.priceLevelId ?? RETAIL_PRICE_LEVEL_ID,
       note: '',
       voidReason: null,
       voidedBy: null,

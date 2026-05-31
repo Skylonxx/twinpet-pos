@@ -1,0 +1,12 @@
+{
+  "global": [
+    { "id": "retail", "name": "ลูกค้าทั่วไป", "code": "RETAIL", "order": 0, "isActive": true, "desc": "ราคามาตรฐานทั่วไป" },
+    { "id": "wholesale", "name": "ขายส่ง", "code": "WHOLESALE", "order": 1, "isActive": true, "desc": "สำหรับการซื้อจำนวนมาก" },
+    { "id": "vip", "name": "ลูกค้า VIP", "code": "VIP", "order": 2, "isActive": true, "desc": "ส่วนลดสำหรับลูกค้าคนสำคัญ" },
+    { "id": "agent1", "name": "ตัวแทนจำกัด", "code": "AGENT1", "order": 3, "isActive": true, "desc": "ราคาตัวแทนจำหน่าย" },
+    { "id": "farm_large", "name": "ฟาร์มขนาดใหญ่", "code": "FARM_LARGE", "order": 4, "isActive": true, "desc": "ราคาพิเศษฟาร์มขนาดใหญ่" }
+  ],
+  "branch": [
+    { "id": "branch_promo", "name": "โปรโมชั่นสาขา", "code": "BRANCH_PROMO", "order": 5, "isActive": true, "desc": "ระดับราคาเฉพาะสาขา (ตัวอย่าง Branch Tier)" }
+  ]
+}

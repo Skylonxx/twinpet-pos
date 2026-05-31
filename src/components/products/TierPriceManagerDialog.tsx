@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useCustomerTiers } from '../../lib/customers/customerTiers';
+import { usePriceLevels } from '../../lib/pricing/priceLevels';
 import { fmtBaht } from '../../lib/productCrud/types';
-import type { CustomerTier } from '../../lib/types';
+import type { PriceLevel } from '../../lib/types';
 
 type Props = {
   isOpen: boolean;
@@ -21,10 +21,10 @@ export default function TierPriceManagerDialog({
   initialTierPrices,
   onSave,
 }: Props) {
-  const { tiers, loading } = useCustomerTiers();
+  const { priceLevels: tiers, loading } = usePriceLevels();
   const [tierPrices, setTierPrices] = useState<Record<string, number>>({});
   const [search, setSearch] = useState('');
-  const [adjustGroup, setAdjustGroup] = useState<CustomerTier | null>(null);
+  const [adjustGroup, setAdjustGroup] = useState<PriceLevel | null>(null);
   const [priceMode, setPriceMode] = useState<'default' | 'custom'>('default');
   const [customPrice, setCustomPrice] = useState<number | ''>('');
 
@@ -43,7 +43,7 @@ export default function TierPriceManagerDialog({
     );
   }, [tiers, search]);
 
-  const openAdjust = (tier: CustomerTier) => {
+  const openAdjust = (tier: PriceLevel) => {
     const existing = tierPrices[tier.id];
     setAdjustGroup(tier);
     if (existing != null) {

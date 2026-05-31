@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { POS_FEATURES } from '../../lib/config/features';
-import { customerTierLabel, useCustomerTiers } from '../../lib/customers/customerTiers';
+import { priceLevelLabel, usePriceLevels } from '../../lib/pricing/priceLevels';
 import { customerFullName, customerInitials, inferContactType } from '../../lib/customers/types';
 import { useCustomers } from '../../lib/customers/useCustomers';
 import './CustomerPickerModal.css';
@@ -49,7 +49,7 @@ function toPick(c: {
 
 export default function CustomerPickerModal({ open, branchId, onClose, onSelect }: Props) {
   const { customers, loading } = useCustomers(branchId);
-  const { tiers: customerTiers } = useCustomerTiers();
+  const { priceLevels: customerTiers } = usePriceLevels(branchId);
   const [query, setQuery] = useState('');
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -126,7 +126,7 @@ export default function CustomerPickerModal({ open, branchId, onClose, onSelect 
                 <span className="cps-info">
                   <span className="cps-name">{customerFullName(c)}</span>
                   <span className="cps-meta">
-                    {c.memberNo} · {c.phone} · {customerTierLabel(customerTiers, c.customerType)}
+                    {c.memberNo} · {c.phone} · {priceLevelLabel(customerTiers, c.customerType)}
                     {POS_FEATURES.enableLoyaltyPoints ? ` · ${c.points} แต้ม` : ''}
                   </span>
                 </span>

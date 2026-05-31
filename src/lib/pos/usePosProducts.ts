@@ -10,6 +10,7 @@ import {
 } from 'firebase/firestore';
 import { collections, db, isFirebaseConfigured } from '../firebase';
 import type { Product } from '../types';
+import { RETAIL_PRICE_LEVEL_ID } from '../types';
 import { DEV_POS_PRODUCTS } from './devProducts';
 import type { PosProduct, UomOption } from './types';
 
@@ -30,7 +31,7 @@ function isIndexError(err: unknown): boolean {
 }
 
 function buildUomOptions(product: Product): UomOption[] {
-  const retailPrices = product.prices.filter((p) => p.priceLevelId === 'RETAIL');
+  const retailPrices = product.prices.filter((p) => p.priceLevelId === RETAIL_PRICE_LEVEL_ID);
   const options: UomOption[] = [];
 
   const basePrice =

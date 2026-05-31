@@ -100,7 +100,8 @@ export type UomConversion = {
 };
 
 export type ProductPrice = {
-  priceLevelId: string; // "RETAIL"
+  /** Price-level id this base/list price belongs to — defaults to {@link RETAIL_PRICE_LEVEL_ID} */
+  priceLevelId: string;
   unit: string; // "ชิ้น"
   price: number;
 };
@@ -151,8 +152,10 @@ export type ProductStock = {
   branchId: string;
   totalStockBase: number;
   reorderPoint: number;
-  /** Branch-level tier price overrides — keys match customer.customerType */
+  /** Branch-level tier price overrides — keys match customer.customerType / price-level id */
   overrideTierPrices?: Record<string, number>;
+  /** Branch-level flat price override applied when no tier price matches */
+  overridePrice?: number;
   lastMovementAt: Timestamp;
   updatedAt: Timestamp;
 };
@@ -198,14 +201,15 @@ export type StockMovement = {
 
 export type ContactType = 'retail' | 'wholesale' | 'supplier';
 
-/** CRM / pricing tier id — dynamic string (e.g. retail, wholesale, agent1, farm_vip) */
-export const DEFAULT_CUSTOMER_TIER = 'retail';
+/**
+ * Canonical id of the built-in retail / base price level. Replaces the legacy
+ * hardcoded `'RETAIL'` string sentinel — the base price in {@link ProductPrice}
+ * and the default customer tier both resolve to this id.
+ */
+export const RETAIL_PRICE_LEVEL_ID = 'retail';
 
-/** Centralized CRM pricing tier — keys match {@link Product.tierPrices} and {@link Customer.customerType} */
-export type CustomerTier = {
-  id: string; // e.g. 'wholesale', 'vip', 'agent1'
-  name: string; // e.g. 'ขายส่ง', 'ลูกค้า VIP', 'ตัวแทนจำกัด'
-};
+/** CRM / pricing tier id — the retail level is the default (e.g. retail, wholesale, agent1, farm_large) */
+export const DEFAULT_CUSTOMER_TIER = RETAIL_PRICE_LEVEL_ID;
 
 // -----------------------------
 // suppliers (root collection — HQ managed)
@@ -286,6 +290,10 @@ export type PriceLevel = {
   code: string;
   order: number;
   isActive: boolean;
+  /** true = available at every branch. Branch-scoped levels set this false + a branchId. */
+  isGlobal: boolean;
+  /** Owning branch for a branch-scoped level; null for global levels. */
+  branchId: string | null;
   desc?: string;
 };
 
@@ -328,6 +336,10 @@ export type Order = {
   paidAmt: number;
   changeAmt: number;
   creditAmt: number;
+  /** Total cost of goods sold (Σ orderItems.fifoCost) captured at sale time. */
+  cogs?: number;
+  /** Gross profit (subtotal − discounts − cogs) captured at sale time. */
+  profit?: number;
   priceLevelId: string;
   note: string;
   voidReason: string | null;

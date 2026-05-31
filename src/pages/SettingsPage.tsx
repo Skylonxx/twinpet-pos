@@ -219,10 +219,19 @@ export default function SettingsPage() {
   };
 
   const addPriceLevel = () => {
-    const id = `PL-${Date.now()}`;
+    const id = `pl_${Date.now().toString(36)}`;
     setPriceLevels([
       ...priceLevels,
-      { id, name: 'ระดับใหม่', code: 'NEW', order: priceLevels.length + 1, isActive: true, desc: '' },
+      {
+        id,
+        name: 'ระดับใหม่',
+        code: 'NEW',
+        order: priceLevels.length + 1,
+        isActive: true,
+        isGlobal: true,
+        branchId: null,
+        desc: '',
+      },
     ]);
     showToast('เพิ่มระดับราคาแล้ว', 'info');
   };

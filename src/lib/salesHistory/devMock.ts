@@ -278,7 +278,7 @@ function buildRecord(row: MockRow, branchId: string, seq: number): SaleRecord {
     paidAmt,
     changeAmt: Math.max(0, paidAmt - total),
     creditAmt,
-    priceLevelId: row.customer?.tier ?? 'RETAIL',
+    priceLevelId: row.customer?.tier ?? 'retail',
     note: '',
     voidReason: row.voidReason ?? null,
     voidedBy: row.status === 'voided' ? 'dev-staff' : null,

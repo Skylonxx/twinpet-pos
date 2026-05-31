@@ -38,7 +38,10 @@ type NewLotPlan = {
 type ProductCtx = {
   productRef: DocumentReference;
   stockRef: DocumentReference;
+  /** Moving-average cost (used as cost basis for ADJUST_OUT shrinkage). */
   avgCost: number;
+  /** Manual standard cost — preferred cost basis for ADJUST_IN surplus lots. */
+  cost: number;
   allowNegative: boolean;
   /** Running base-unit stock, advanced line-by-line (handles duplicate products). */
   runningStock: number;
@@ -65,7 +68,8 @@ type ProductCtx = {
  *     FIFO-cut the oldest `stockLots`. Throws if the resulting stock is
  *     negative and the product disallows negative stock.
  *   • adjustQty > 0 (ADJUST_IN): increment `totalStockBase` AND create a new
- *     lot priced at the product's current `avgCost` (0 when none).
+ *     lot priced at the product's manual standard `cost` (falling back to
+ *     `avgCost`, then 0) so surplus carries a real cost basis for COGS.
  *   • Always append a `stockMovements` ledger row (type 'adjust').
  *
  * Strict 3-phase transaction: lot refs are queried OUTSIDE the tx, then
@@ -146,6 +150,7 @@ export async function confirmInventoryAdjustment(
         productRef,
         stockRef,
         avgCost: product.avgCost ?? 0,
+        cost: product.cost ?? 0,
         allowNegative: product.allowNegativeStock === true,
         runningStock: stock?.totalStockBase ?? 0,
         netDelta: 0,
@@ -173,7 +178,12 @@ export async function confirmInventoryAdjustment(
         throw new Error(`ยอดคงเหลือใหม่ติดลบ: ${line.name}`);
       }
 
-      const { unitCost, valueImpact } = computeLineImpact(line.adjustQty, ctx.avgCost);
+      // ADJUST_IN surplus is valued at the manual standard cost (product.cost),
+      // falling back to the moving average when no standard cost is set. Shrinkage
+      // (ADJUST_OUT) stays valued at the moving-average cost.
+      const inboundCost = ctx.cost > 0 ? ctx.cost : ctx.avgCost;
+      const costBasis = line.adjustQty > 0 ? inboundCost : ctx.avgCost;
+      const { unitCost, valueImpact } = computeLineImpact(line.adjustQty, costBasis);
 
       if (line.adjustQty < 0) {
         // ADJUST_OUT — FIFO cut the oldest lots (mutates ctx.lotPool in place).
@@ -192,19 +202,19 @@ export async function confirmInventoryAdjustment(
           );
         }
       } else {
-        // ADJUST_IN — create a new lot priced at current avgCost (0 if none).
+        // ADJUST_IN — create a new lot priced at product.cost (fallback avgCost).
         const lotRef = doc(collection(firestore, collections.stockLots));
         const mutable: MutableLot = {
           ref: lotRef,
           id: lotRef.id,
           qtyRemaining: line.adjustQty,
-          costPerUnit: ctx.avgCost,
+          costPerUnit: inboundCost,
           receivedAtMs: Date.now(), // newest → only cut after existing lots
         };
         ctx.newLots.set(lotRef.path, {
           ref: lotRef,
           mutable,
-          costPerUnit: ctx.avgCost,
+          costPerUnit: inboundCost,
           qtyReceived: line.adjustQty,
         });
         // Make it available to any later negative line for the same product.

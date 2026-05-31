@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import {
-  slugFromTierName,
-  useCustomerTiers,
-} from '../../lib/customers/customerTiers';
+  slugFromLevelName,
+  usePriceLevels,
+} from '../../lib/pricing/priceLevels';
 import { DEFAULT_CUSTOMER_TIER } from '../../lib/types';
 
 type Props = {
@@ -12,7 +12,7 @@ type Props = {
 };
 
 export default function TierManagementModal({ open, onClose, onToast }: Props) {
-  const { tiers, loading, saving, addTier, removeTier } = useCustomerTiers();
+  const { priceLevels: tiers, loading, saving, addLevel, removeLevel } = usePriceLevels();
   const [name, setName] = useState('');
   const [idInput, setIdInput] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -32,7 +32,7 @@ export default function TierManagementModal({ open, onClose, onToast }: Props) {
       return;
     }
     try {
-      await addTier(name, idInput || undefined);
+      await addLevel(name, idInput || undefined);
       setName('');
       setIdInput('');
       onToast?.('เพิ่มกลุ่มลูกค้าแล้ว');
@@ -48,7 +48,7 @@ export default function TierManagementModal({ open, onClose, onToast }: Props) {
     }
     setDeletingId(tierId);
     try {
-      await removeTier(tierId);
+      await removeLevel(tierId);
       onToast?.('ลบกลุ่มลูกค้าแล้ว');
     } catch (err) {
       onToast?.(err instanceof Error ? err.message : 'ลบกลุ่มไม่สำเร็จ', 'warn');
@@ -57,7 +57,7 @@ export default function TierManagementModal({ open, onClose, onToast }: Props) {
     }
   };
 
-  const previewId = idInput.trim() || (name.trim() ? slugFromTierName(name) : '');
+  const previewId = idInput.trim() || (name.trim() ? slugFromLevelName(name) : '');
 
   return (
     <div className="cm-dialog-overlay" role="dialog" aria-modal="true" onClick={onClose}>

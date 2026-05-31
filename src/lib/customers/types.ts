@@ -1,6 +1,6 @@
 import type { CreditAccount, Customer, Order } from '../types';
 import type { ContactType } from '../types';
-import { DEFAULT_CUSTOMER_TIER } from '../types';
+import { DEFAULT_CUSTOMER_TIER, RETAIL_PRICE_LEVEL_ID } from '../types';
 
 export type CustomerTab = 'sales' | 'credit' | 'products' | 'pricing' | 'info';
 
@@ -76,40 +76,6 @@ export const CONTACT_TYPE_OPTIONS: Array<{
   },
 ];
 
-export const TIER_CARDS: Array<{
-  id: string;
-  icon: string;
-  name: string;
-  desc: string;
-  badge: string;
-  badgeStyle: { bg: string; color: string };
-}> = [
-  {
-    id: 'RETAIL',
-    icon: '🛒',
-    name: 'Retail',
-    desc: 'ลูกค้าทั่วไป\nราคามาตรฐาน',
-    badge: 'General',
-    badgeStyle: { bg: 'var(--g100)', color: 'var(--g600)' },
-  },
-  {
-    id: 'WHOLESALE1',
-    icon: '⭐',
-    name: 'Wholesale 1',
-    desc: 'ลูกค้าส่งระดับ 1\nราคาพิเศษ',
-    badge: 'Silver',
-    badgeStyle: { bg: 'var(--amber50)', color: 'var(--amber)' },
-  },
-  {
-    id: 'WHOLESALE2',
-    icon: '💎',
-    name: 'Wholesale 2',
-    desc: 'ลูกค้าส่งระดับ 2\nราคาสุดพิเศษ',
-    badge: 'Gold',
-    badgeStyle: { bg: 'var(--p50)', color: 'var(--p800)' },
-  },
-];
-
 export function customerFullName(c: Pick<Customer, 'firstName' | 'lastName'>): string {
   return `${c.firstName} ${c.lastName}`.trim();
 }
@@ -155,22 +121,13 @@ export function customerInitials(c: Pick<Customer, 'firstName' | 'lastName'>): s
 
 export function inferContactType(c: Pick<Customer, 'contactType' | 'priceLevelId'>): ContactType {
   if (c.contactType) return c.contactType;
-  if (c.priceLevelId === 'WHOLESALE1' || c.priceLevelId === 'WHOLESALE2') return 'wholesale';
+  // Any non-retail price level implies a wholesale contact.
+  if (c.priceLevelId && c.priceLevelId !== RETAIL_PRICE_LEVEL_ID) return 'wholesale';
   return 'retail';
 }
 
 export function contactTypeLabel(type: ContactType): string {
   return CONTACT_TYPE_OPTIONS.find((o) => o.id === type)?.label ?? type;
-}
-
-export function customerTypeLabel(type: string): string {
-  const known: Record<string, string> = {
-    retail: 'ลูกค้าทั่วไป',
-    wholesale: 'ลูกค้าขายส่ง',
-    vip: 'VIP',
-  };
-  const key = type?.trim() || DEFAULT_CUSTOMER_TIER;
-  return known[key] ?? key;
 }
 
 export function customerTypeBadgeStyle(type: string): { bg: string; color: string } {
@@ -237,7 +194,7 @@ export const EMPTY_FORM: CustomerFormData = {
   contactType: 'retail',
   bankName: '',
   bankAccount: '',
-  priceLevelId: 'RETAIL',
+  priceLevelId: RETAIL_PRICE_LEVEL_ID,
   creditLimit: 0,
   creditDays: 30,
   note: '',
@@ -278,7 +235,7 @@ export function normalizeCustomerForm(form: CustomerFormData): CustomerFormData 
   return {
     ...form,
     customerType,
-    priceLevelId: form.contactType === 'retail' ? 'RETAIL' : form.priceLevelId,
+    priceLevelId: form.contactType === 'retail' ? RETAIL_PRICE_LEVEL_ID : form.priceLevelId,
     // Bank fields not used on customer forms — zero out to keep data clean
     bankName: '',
     bankAccount: '',

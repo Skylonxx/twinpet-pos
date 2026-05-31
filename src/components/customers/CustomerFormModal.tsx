@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { useCustomerTiers } from '../../lib/customers/customerTiers';
+import { usePriceLevels } from '../../lib/pricing/priceLevels';
 import {
   CONTACT_TYPE_OPTIONS,
   customerToForm,
@@ -8,7 +8,7 @@ import {
   type CustomerFormData,
 } from '../../lib/customers/types';
 import type { ContactType, Customer } from '../../lib/types';
-import { DEFAULT_CUSTOMER_TIER } from '../../lib/types';
+import { DEFAULT_CUSTOMER_TIER, RETAIL_PRICE_LEVEL_ID } from '../../lib/types';
 
 type Props = {
   open: boolean;
@@ -37,7 +37,7 @@ export default function CustomerFormModal({
   saving,
 }: Props) {
   const [form, setForm] = useState<CustomerFormData>(EMPTY_FORM);
-  const { tiers } = useCustomerTiers();
+  const { priceLevels: tiers } = usePriceLevels();
 
   const tierIds = useMemo(() => new Set(tiers.map((t) => t.id)), [tiers]);
   const customerTypeValue = form.customerType.trim() || DEFAULT_CUSTOMER_TIER;
@@ -60,13 +60,13 @@ export default function CustomerFormModal({
   const setContactType = (type: ContactType) => {
     setForm((f) => {
       const next = { ...f, contactType: type };
-      if (type === 'retail') next.priceLevelId = 'RETAIL';
+      if (type === 'retail') next.priceLevelId = RETAIL_PRICE_LEVEL_ID;
       return next;
     });
   };
 
   const isWholesale = form.contactType === 'wholesale';
-  const wholesaleLevels = priceLevels.filter((p) => p.id !== 'RETAIL');
+  const wholesaleLevels = priceLevels.filter((p) => p.id !== RETAIL_PRICE_LEVEL_ID);
 
   const handleSubmit = () => {
     void onSave(normalizeCustomerForm(form));

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   ArcElement,
   BarElement,
@@ -89,13 +89,6 @@ function CompareBadge({ pct }: { pct: number }) {
 export default function DashboardPage() {
   const { branchId } = useAuth();
   const [period, setPeriod] = useState<DashboardPeriod>('today');
-  const [clock, setClock] = useState(() =>
-    new Date().toLocaleString('th-TH', {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    }),
-  );
 
   const { saleLines, paymentRecords, stockMap, loading, error, now, bounds } =
     useDashboardData(branchId, period);
@@ -161,19 +154,6 @@ export default function DashboardPage() {
 
   const maxProdRev = data.topProducts[0]?.revenue ?? 1;
   const maxCustRev = data.topCustomers[0]?.revenue ?? 1;
-
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      setClock(
-        new Date().toLocaleString('th-TH', {
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit',
-        }),
-      );
-    }, 1000);
-    return () => window.clearInterval(id);
-  }, []);
 
   const chartOptions = useMemo(
     () => ({
@@ -589,38 +569,6 @@ export default function DashboardPage() {
           </>
         )}
       </div>
-
-      <footer className="dash-footer">
-        <div className="dash-footer-stat">
-          <span className="dash-footer-num" style={{ color: 'var(--p600)' }}>
-            {fmtBaht(kpi.revenue)}
-          </span>
-          <span className="dash-footer-lbl">ยอดขาย</span>
-        </div>
-        <div className="dash-footer-stat">
-          <span className="dash-footer-num" style={{ color: 'var(--success)' }}>
-            {fmtBaht(kpi.profit)}
-          </span>
-          <span className="dash-footer-lbl">กำไร</span>
-        </div>
-        <div className="dash-footer-stat">
-          <span className="dash-footer-num" style={{ color: 'var(--info)' }}>
-            {fmtNumber(kpi.bills)}
-          </span>
-          <span className="dash-footer-lbl">บิล</span>
-        </div>
-        <div className="dash-footer-stat">
-          <span className="dash-footer-num" style={{ color: 'var(--text-secondary)' }}>
-            {fmtPct(kpi.margin)}
-          </span>
-          <span className="dash-footer-lbl">Margin</span>
-        </div>
-        <div className="dash-footer-spacer" />
-        <div className="dash-footer-clock">
-          <i className="ti ti-clock" aria-hidden="true" />
-          {clock}
-        </div>
-      </footer>
     </div>
   );
 }

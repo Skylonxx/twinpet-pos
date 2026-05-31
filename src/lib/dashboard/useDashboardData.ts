@@ -205,12 +205,30 @@ async function fetchOrderItems(orders: Order[]): Promise<DashboardSaleLine[]> {
 
   const lines: DashboardSaleLine[] = [];
 
+  const finiteOr = (value: number | undefined, fallback: number): number =>
+    typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+
   orders.forEach((order, idx) => {
     const createdAt = toDate(order.createdAt);
     const customerName = order.customerSnap?.name ?? 'สมาชิกทั่วไป';
 
-    itemSnaps[idx]?.docs.forEach((itemDoc) => {
-      const item = itemDoc.data() as OrderItem;
+    const items = (itemSnaps[idx]?.docs ?? []).map((d) => d.data() as OrderItem);
+    // Authoritative order COGS: prefer the value persisted at sale time, else
+    // fall back to the summed item fifoCost (NaN-guarded). Per-line COGS is then
+    // reconciled to that total so dashboard breakdowns sum to the headline.
+    const itemCogsSum = items.reduce((s, it) => s + finiteOr(it.fifoCost, 0), 0);
+    const itemRevenueSum = items.reduce((s, it) => s + finiteOr(it.lineTotal, 0), 0);
+    const orderCogs = finiteOr(order.cogs, itemCogsSum);
+    const scale = itemCogsSum > 0 ? orderCogs / itemCogsSum : 0;
+
+    items.forEach((item) => {
+      const revenue = finiteOr(item.lineTotal, 0);
+      const cogs =
+        itemCogsSum > 0
+          ? finiteOr(item.fifoCost, 0) * scale
+          : itemRevenueSum > 0
+            ? orderCogs * (revenue / itemRevenueSum)
+            : 0;
       lines.push({
         orderId: order.id,
         createdAt,
@@ -218,8 +236,8 @@ async function fetchOrderItems(orders: Order[]): Promise<DashboardSaleLine[]> {
         productName: item.productSnap.name,
         category: item.productSnap.category,
         customerName,
-        revenue: item.lineTotal,
-        cogs: item.fifoCost,
+        revenue,
+        cogs,
         qty: item.qty,
         paymentMethod: 'cash',
       });

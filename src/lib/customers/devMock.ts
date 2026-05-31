@@ -40,9 +40,11 @@ function crmFields(
 const now = Timestamp.now();
 
 export const DEV_PRICE_LEVELS: PriceLevel[] = [
-  { id: 'RETAIL', name: 'Retail', code: 'RETAIL', order: 1, isActive: true },
-  { id: 'WHOLESALE1', name: 'Wholesale 1', code: 'WHL1', order: 2, isActive: true },
-  { id: 'WHOLESALE2', name: 'Wholesale 2', code: 'WHL2', order: 3, isActive: true },
+  { id: 'retail', name: 'ลูกค้าทั่วไป', code: 'RETAIL', order: 0, isActive: true, isGlobal: true, branchId: null },
+  { id: 'wholesale', name: 'ขายส่ง', code: 'WHOLESALE', order: 1, isActive: true, isGlobal: true, branchId: null },
+  { id: 'vip', name: 'ลูกค้า VIP', code: 'VIP', order: 2, isActive: true, isGlobal: true, branchId: null },
+  { id: 'agent1', name: 'ตัวแทนจำกัด', code: 'AGENT1', order: 3, isActive: true, isGlobal: true, branchId: null },
+  { id: 'farm_large', name: 'ฟาร์มขนาดใหญ่', code: 'FARM_LARGE', order: 4, isActive: true, isGlobal: true, branchId: null },
 ];
 
 let devCustomers: Customer[] | null = null;
@@ -99,7 +101,7 @@ function seedCustomers(): Customer[] {
       contactType: 'retail',
       bankName: null,
       bankAccount: null,
-      priceLevelId: 'RETAIL',
+      priceLevelId: 'retail',
       creditLimit: 0,
       creditDays: 0,
       totalSpent: 12400,
@@ -152,7 +154,7 @@ function seedCustomers(): Customer[] {
       contactType: 'retail',
       bankName: null,
       bankAccount: null,
-      priceLevelId: 'RETAIL',
+      priceLevelId: 'retail',
       creditLimit: 5000,
       creditDays: 15,
       outstandingBalance: 0,
@@ -178,7 +180,7 @@ function seedCustomers(): Customer[] {
       contactType: 'supplier',
       bankName: 'ธนาคารกสิกรไทย',
       bankAccount: '123-4-56789-0',
-      priceLevelId: 'RETAIL',
+      priceLevelId: 'retail',
       creditLimit: 0,
       creditDays: 0,
       totalSpent: 0,

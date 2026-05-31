@@ -21,12 +21,13 @@ import { buildSubUnitSelectOptions, buildUnitSelectOptions, useUomUnits } from '
 import { useExpiryPolicies } from '../../lib/inventory/useExpiryPolicies';
 import { resizeProductImageToDataUrl } from '../../lib/productCrud/resizeProductImage';
 import type { StockLot, StockMovement } from '../../lib/types';
+import { RETAIL_PRICE_LEVEL_ID } from '../../lib/types';
 import FifoQueueModal from '../inventory/FifoQueueModal';
 import ProductSaveConfirmDialog from './ProductSaveConfirmDialog';
 import TierPriceManagerDialog from './TierPriceManagerDialog';
 import UnitManagerModal from './UnitManagerModal';
 
-const RETAIL_PRICE_KEY = 'RETAIL';
+const RETAIL_PRICE_KEY = RETAIL_PRICE_LEVEL_ID;
 
 type TierDialogConfig = {
   title: string;

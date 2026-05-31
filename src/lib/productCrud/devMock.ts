@@ -1,4 +1,5 @@
 import type { Product, ProductStock, StockLot, StockMovement } from '../types';
+import { RETAIL_PRICE_LEVEL_ID } from '../types';
 import type { ProductListItem } from './types';
 import { CATEGORY_EMOJI, getRetailPrice } from './types';
 
@@ -40,10 +41,10 @@ const RAW: Raw[] = [
 ];
 
 function rawToProduct(r: Raw): Product {
-  const prices = [{ priceLevelId: 'RETAIL', unit: 'ชิ้น', price: r.price }];
+  const prices = [{ priceLevelId: RETAIL_PRICE_LEVEL_ID, unit: 'ชิ้น', price: r.price }];
   if (r.uom) {
     for (const u of r.uom) {
-      if (u.prices?.RETAIL) prices.push({ priceLevelId: 'RETAIL', unit: u.unit, price: u.prices.RETAIL });
+      if (u.prices?.RETAIL) prices.push({ priceLevelId: RETAIL_PRICE_LEVEL_ID, unit: u.unit, price: u.prices.RETAIL });
     }
   }
   return {

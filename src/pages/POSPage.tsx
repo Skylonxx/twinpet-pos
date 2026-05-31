@@ -16,7 +16,7 @@ import { fmtBaht } from '../lib/dashboard/format';
 import { formatMoney, getLineTotal } from '../lib/pos/cartUtils';
 import { DEV_CATEGORY_GRADIENTS } from '../lib/pos/devProducts';
 import { getActiveShift } from '../lib/pos/shiftService';
-import { customerTierLabel, useCustomerTiers } from '../lib/customers/customerTiers';
+import { priceLevelLabel, usePriceLevels } from '../lib/pricing/priceLevels';
 import { POS_FEATURES } from '../lib/config/features';
 import type { SuspendedBill } from '../lib/pos/suspendedBills';
 import { useSuspendedBills } from '../lib/pos/useSuspendedBills';
@@ -65,7 +65,7 @@ export default function POSPage() {
   const { products, categories, loading } = usePosProducts(branchId);
   const { bills: suspendedBills, count: suspendedCount, addBill, removeBill } =
     useSuspendedBills(branchId);
-  const { tiers: customerTiers } = useCustomerTiers();
+  const { priceLevels: customerTiers } = usePriceLevels(branchId);
 
   const pickerProducts = useMemo(() => products.map(posProductToPickerItem), [products]);
 
@@ -446,7 +446,7 @@ export default function POSPage() {
                   <div className="pos-cust-text">
                     <span className="pos-cust-name">{customer.name}</span>
                     <span className="pos-cust-meta">
-                      {customerTierLabel(customerTiers, customer.customerType)}
+                      {priceLevelLabel(customerTiers, customer.customerType)}
                       {POS_FEATURES.enableLoyaltyPoints ? ` · ${customer.points} แต้ม` : ''}
                       {customer.outstandingBalance > 0
                         ? ` · ค้างชำระ ฿${customer.outstandingBalance.toLocaleString('th-TH')}`

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import '../../pages/CustomerPage.css';
 import { POS_FEATURES } from '../../lib/config/features';
-import { customerTierLabel, useCustomerTiers } from '../../lib/customers/customerTiers';
+import { priceLevelLabel, usePriceLevels } from '../../lib/pricing/priceLevels';
 import CreditPaymentModal from './CreditPaymentModal';
 import { DEV_TOP_PRODUCTS } from '../../lib/customers/devMock';
 import { loadCreditTransactions, loadCustomerOrders } from '../../lib/customers/useCustomers';
@@ -68,8 +68,8 @@ export default function CustomerDetailModal({
   onCreditPaid,
   onToast,
 }: Props) {
-  const { tiers: customerTiers } = useCustomerTiers();
-  const tierDisplay = (type: string) => customerTierLabel(customerTiers, type);
+  const { priceLevels: customerTiers } = usePriceLevels(branchId);
+  const tierDisplay = (type: string) => priceLevelLabel(customerTiers, type);
   const [tab, setTab] = useState<CustomerTab>('sales');
   const [form, setForm] = useState<CustomerFormData>(() => customerToForm(customer));
   const [orders, setOrders] = useState<Order[]>([]);

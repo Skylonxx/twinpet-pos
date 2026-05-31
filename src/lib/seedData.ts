@@ -1,10 +1,14 @@
 /**
  * UAT mock-data seeder. This module is a pure logic handler ("the chef"): all of
  * the mock data ("the ingredients") lives in the sibling JSON files under
- * {@link ./mocks/} — {@link ./mocks/mock-products.json},
- * {@link ./mocks/mock-customers.json}, and {@link ./mocks/mock-suppliers.json}.
- * This file only orchestrates reading those arrays and batch-writing them to
- * Firestore.
+ * {@link ./mocks/} — mock-products.json, mock-customers.json, mock-suppliers.json,
+ * and mock-pricelevels.json. This file only orchestrates reading those arrays
+ * and batch-writing them to Firestore.
+ *
+ * Price levels (the unified tier system) are seeded into the `priceLevels`
+ * collection: global tiers (`isGlobal: true`, `branchId: null`) plus a
+ * branch-scoped example tier assigned to the primary branch. Products reference
+ * the canonical lowercase ids (retail / wholesale / vip / agent1 / farm_large).
  *
  * Design notes:
  *  - Docs are written with their explicit IDs (PROD-001, CUST-001, …) via
@@ -31,6 +35,8 @@ import { sanitizeProductDocForFirestore, stripUndefinedDeep } from './firestoreS
 import mockProducts from './mocks/mock-products.json';
 import mockCustomers from './mocks/mock-customers.json';
 import mockSuppliers from './mocks/mock-suppliers.json';
+import mockPriceLevels from './mocks/mock-pricelevels.json';
+import type { PriceLevel } from './types';
 
 const BATCH_LIMIT = 500;
 
@@ -94,12 +100,17 @@ type RawSeedSupplier = {
   allowedBranchIds: string[];
 };
 
+/** Shape of a price-level entry in mocks/mock-pricelevels.json (isGlobal/branchId set by the seeder). */
+type RawSeedPriceLevel = Omit<PriceLevel, 'isGlobal' | 'branchId'>;
+
 export type SeedSummary = {
   customers: number;
   suppliers: number;
+  priceLevels: number;
   creditAccounts: number;
   products: number;
   productStocks: number;
+  stockLots: number;
   branches: number;
 };
 
@@ -194,10 +205,12 @@ function buildProductDoc(raw: RawSeedProduct) {
   // `stock` is a seed-only hint for the productStocks subcollection — set it to
   // undefined here so the sanitizer (which strips undefined) keeps it off the
   // product document, matching the real Product schema the POS reads.
+  // avgCost mirrors the standard cost so profit/COGS reporting has a real cost
+  // baseline even before any GRN recalculates the moving average.
   const sanitized = sanitizeProductDocForFirestore({
     ...raw,
     stock: undefined,
-    avgCost: 0,
+    avgCost: raw.cost ?? 0,
   });
   return {
     ...sanitized,
@@ -229,16 +242,42 @@ export async function seedMockData(): Promise<SeedSummary> {
   const rawCustomers = mockCustomers as unknown as RawSeedCustomer[];
   const rawSuppliers = mockSuppliers as unknown as RawSeedSupplier[];
   const rawProducts = mockProducts as unknown as RawSeedProduct[];
+  const rawPriceLevels = mockPriceLevels as unknown as {
+    global: RawSeedPriceLevel[];
+    branch: RawSeedPriceLevel[];
+  };
 
   const writer = createBatchWriter(firestore);
   const summary: SeedSummary = {
     customers: 0,
     suppliers: 0,
+    priceLevels: 0,
     creditAccounts: 0,
     products: 0,
     productStocks: 0,
+    stockLots: 0,
     branches: targetBranches.length,
   };
+
+  // ── Price levels (unified tier system) — global + a branch-scoped example ──
+  for (const lvl of rawPriceLevels.global) {
+    await writer.set(doc(firestore, collections.priceLevels, lvl.id), {
+      ...lvl,
+      isGlobal: true,
+      branchId: null,
+    });
+    summary.priceLevels += 1;
+  }
+  const branchTierIds: string[] = [];
+  for (const lvl of rawPriceLevels.branch) {
+    await writer.set(doc(firestore, collections.priceLevels, lvl.id), {
+      ...lvl,
+      isGlobal: false,
+      branchId: primaryBranchId,
+    });
+    branchTierIds.push(lvl.id);
+    summary.priceLevels += 1;
+  }
 
   // ── Customers (+ credit accounts for credit-enabled, non-supplier customers) ──
   for (let index = 0; index < rawCustomers.length; index += 1) {
@@ -276,10 +315,19 @@ export async function seedMockData(): Promise<SeedSummary> {
     summary.products += 1;
 
     for (const branch of targetBranches) {
+      // Demonstrate branch-scoped tiers: give the primary branch a 10%-off price
+      // for the branch-only price level(s) via the productStocks override map.
+      const basePrice = raw.basePrice ?? 0;
+      const overrideTierPrices: Record<string, number> =
+        branch.id === primaryBranchId && basePrice > 0
+          ? Object.fromEntries(
+              branchTierIds.map((id) => [id, Math.round(basePrice * 0.9 * 100) / 100]),
+            )
+          : {};
       const stockDoc = stripUndefinedDeep({
         branchId: branch.id,
         reorderPoint: raw.reorderPoint ?? 0,
-        overrideTierPrices: {},
+        overrideTierPrices,
         // POS reads stock from this field (usePosProducts: data.totalStockBase).
         totalStockBase: raw.stock ?? 0,
         lastMovementAt: serverTimestamp(),
@@ -290,6 +338,29 @@ export async function seedMockData(): Promise<SeedSummary> {
         stockDoc,
       );
       summary.productStocks += 1;
+
+      // ── FIFO lot: a single seed lot so sales draw real cost (not oversell) ──
+      // costPerUnit is per BASE unit (== product.cost) and qtyRemaining mirrors
+      // the seeded stock, so COGS = qtyBase × cost is accurate end-to-end.
+      const seedStock = raw.stock ?? 0;
+      if (seedStock > 0) {
+        const lotId = `${raw.id}_${branch.id}_seed`;
+        const lotDoc = stripUndefinedDeep({
+          id: lotId,
+          productId: raw.id,
+          branchId: branch.id,
+          receivingId: 'SEED',
+          costPerUnit: raw.cost ?? 0,
+          qtyReceived: seedStock,
+          qtyRemaining: seedStock,
+          receivedAt: serverTimestamp(),
+          expiryDate: null,
+          isDepleted: false,
+          createdAt: serverTimestamp(),
+        }) as Record<string, unknown>;
+        await writer.set(doc(firestore, collections.stockLots, lotId), lotDoc);
+        summary.stockLots += 1;
+      }
     }
   }
 

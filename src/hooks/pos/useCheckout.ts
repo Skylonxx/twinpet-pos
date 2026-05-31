@@ -10,6 +10,7 @@ import { applyShiftPaymentTotals, calcShiftPaymentTotals } from '../../lib/pos/s
 import { devIncrementShiftTotals } from '../../lib/pos/shiftDevMock';
 import type { CartLine, CartTotals, PaymentSplit, PosProduct } from '../../lib/pos/types';
 import type { Shift, User } from '../../lib/types';
+import { RETAIL_PRICE_LEVEL_ID } from '../../lib/types';
 import type { PosCustomer } from './useCart';
 
 export type UseCheckoutArgs = {
@@ -83,7 +84,7 @@ export function useCheckout({
             payments,
             customerId: customer?.id ?? null,
             customerName: customer?.name ?? null,
-            priceLevelId: 'RETAIL',
+            priceLevelId: RETAIL_PRICE_LEVEL_ID,
           });
           // Soft warning: the sale already succeeded; just notify the cashier.
           if (saleResult.hasOverdueCredit) {

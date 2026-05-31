@@ -16,6 +16,7 @@ import {
 import { useCustomers } from '../lib/customers/useCustomers';
 import { useAuth } from '../lib/hooks/useAuth';
 import type { ContactType, Customer } from '../lib/types';
+import { RETAIL_PRICE_LEVEL_ID } from '../lib/types';
 import './CustomerPage.css';
 
 export default function CustomerPage() {
@@ -300,7 +301,7 @@ export default function CustomerPage() {
       <CustomerFormModal
         open={formOpen}
         editCustomer={editCustomer}
-        priceLevels={priceLevels.length ? priceLevels : [{ id: 'RETAIL', name: 'Retail' }]}
+        priceLevels={priceLevels.length ? priceLevels : [{ id: RETAIL_PRICE_LEVEL_ID, name: 'ลูกค้าทั่วไป' }]}
         onClose={() => {
           setFormOpen(false);
           setEditCustomer(null);

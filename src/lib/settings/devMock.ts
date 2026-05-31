@@ -55,10 +55,11 @@ export const DEV_SETTINGS: Settings = {
 export const DEV_EXTRAS: SettingsExtras = { ...DEFAULT_EXTRAS };
 
 export const DEV_PRICE_LEVELS: PriceLevelRow[] = [
-  { id: 'RETAIL', name: 'ราคาปลีก', code: 'RETAIL', order: 1, isActive: true, desc: 'ราคามาตรฐานทั่วไป' },
-  { id: 'MEMBER', name: 'ราคาสมาชิก', code: 'MEMBER', order: 2, isActive: true, desc: 'ส่วนลด 5-10% จากราคาปลีก' },
-  { id: 'WHOLESALE', name: 'ราคาส่ง', code: 'WHOLESALE', order: 3, isActive: true, desc: 'สำหรับการซื้อจำนวนมาก' },
-  { id: 'SPECIAL', name: 'ราคาพิเศษ', code: 'SPECIAL', order: 4, isActive: false, desc: 'โปรโมชั่นหรือตามเงื่อนไข' },
+  { id: 'retail', name: 'ลูกค้าทั่วไป', code: 'RETAIL', order: 0, isActive: true, isGlobal: true, branchId: null, desc: 'ราคามาตรฐานทั่วไป' },
+  { id: 'wholesale', name: 'ขายส่ง', code: 'WHOLESALE', order: 1, isActive: true, isGlobal: true, branchId: null, desc: 'สำหรับการซื้อจำนวนมาก' },
+  { id: 'vip', name: 'ลูกค้า VIP', code: 'VIP', order: 2, isActive: true, isGlobal: true, branchId: null, desc: 'ส่วนลดสำหรับลูกค้าคนสำคัญ' },
+  { id: 'agent1', name: 'ตัวแทนจำกัด', code: 'AGENT1', order: 3, isActive: true, isGlobal: true, branchId: null, desc: 'ราคาตัวแทนจำหน่าย' },
+  { id: 'farm_large', name: 'ฟาร์มขนาดใหญ่', code: 'FARM_LARGE', order: 4, isActive: true, isGlobal: true, branchId: null, desc: 'ราคาพิเศษฟาร์มขนาดใหญ่' },
 ];
 
 export const DEV_UOM_UNITS: UomUnit[] = [

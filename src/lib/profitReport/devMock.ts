@@ -114,13 +114,46 @@ export function getDevProfitLines(_branchId: string): ProfitSaleLine[] {
   return DEV_LINES;
 }
 
+/** A finite number or `undefined` → coerces NaN/missing to a safe fallback. */
+function finiteOr(value: number | undefined, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+/**
+ * Authoritative COGS/profit for an order. Prefers the values persisted on the
+ * order at sale time ({@link Order.cogs}/{@link Order.profit}); for legacy orders
+ * that predate persistence it falls back to summing the items' `fifoCost`
+ * (NaN-guarded). Never throws and never returns NaN.
+ */
+export function resolveOrderFinancials(
+  order: { cogs?: number; profit?: number },
+  items: Array<{ lineTotal: number; fifoCost: number }>,
+): { cogs: number; profit: number } {
+  const itemRevenue = items.reduce((s, it) => s + finiteOr(it.lineTotal, 0), 0);
+  const itemCogs = items.reduce((s, it) => s + finiteOr(it.fifoCost, 0), 0);
+  const cogs = finiteOr(order.cogs, itemCogs);
+  const profit = finiteOr(order.profit, itemRevenue - itemCogs);
+  return { cogs, profit };
+}
+
+/**
+ * A Firestore Timestamp's `toDate()`, or `new Date()` when the value is null —
+ * which happens during latency compensation, when a `serverTimestamp()` field
+ * is still pending and reads back as null locally.
+ */
+export function safeToDate(ts: { toDate(): Date } | null | undefined): Date {
+  return ts && typeof ts.toDate === 'function' ? ts.toDate() : new Date();
+}
+
 export function orderToProfitLines(
   order: {
     id: string;
     billId?: string;
     customerSnap: { name: string } | null;
-    createdAt: { toDate(): Date };
+    createdAt: { toDate(): Date } | null;
     status: string;
+    cogs?: number;
+    profit?: number;
   },
   items: Array<{
     id: string;
@@ -133,15 +166,29 @@ export function orderToProfitLines(
   }>,
 ): ProfitSaleLine[] {
   if (order.status === 'voided') return [];
-  const created = order.createdAt.toDate();
+  const created = safeToDate(order.createdAt);
   const date = created.toISOString().slice(0, 10);
   const time = created.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', hour12: false });
   const customer = order.customerSnap?.name ?? 'สมาชิกทั่วไป';
 
+  // Reconcile per-line COGS to the authoritative order total so report rows sum
+  // to the persisted order.cogs. For new orders (persisted == Σ item.fifoCost)
+  // `scale` is 1 (no-op). For legacy orders whose items lack fifoCost we spread
+  // the persisted COGS proportionally by revenue.
+  const { cogs: orderCogs } = resolveOrderFinancials(order, items);
+  const itemCogsSum = items.reduce((s, it) => s + finiteOr(it.fifoCost, 0), 0);
+  const itemRevenueSum = items.reduce((s, it) => s + finiteOr(it.lineTotal, 0), 0);
+  const scale = itemCogsSum > 0 ? orderCogs / itemCogsSum : 0;
+
   return items.map((item) => {
     const visual = productVisual(item.productSnap.category);
-    const revenue = item.lineTotal;
-    const cogs = item.fifoCost;
+    const revenue = finiteOr(item.lineTotal, 0);
+    const cogs =
+      itemCogsSum > 0
+        ? finiteOr(item.fifoCost, 0) * scale
+        : itemRevenueSum > 0
+          ? orderCogs * (revenue / itemRevenueSum)
+          : 0;
     const profit = revenue - cogs;
     const margin = revenue > 0 ? (profit / revenue) * 100 : 0;
     return {

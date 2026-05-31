@@ -1,5 +1,6 @@
 import type { PosProduct } from '../pos/types';
 import type { Product } from '../types';
+import { RETAIL_PRICE_LEVEL_ID } from '../types';
 import type { ProductListItem } from '../productCrud/types';
 
 export type ReceivingLine = {
@@ -88,7 +89,7 @@ export function productListItemToPosProduct(product: ProductListItem): PosProduc
     { unit: product.baseUnit, factor: 1, price: product.retailPrice },
     ...product.uomConversions.map((c) => {
       const price =
-        product.prices.find((p) => p.unit === c.unit && p.priceLevelId === 'RETAIL')?.price ??
+        product.prices.find((p) => p.unit === c.unit && p.priceLevelId === RETAIL_PRICE_LEVEL_ID)?.price ??
         product.retailPrice * c.factor;
       return { unit: c.unit, factor: c.factor, price };
     }),

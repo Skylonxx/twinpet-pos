@@ -93,8 +93,15 @@ service cloud.firestore {
     }
 
     match /priceLevels/{docId} {
+      // Staff read all levels; the client merges global + their branch.
       allow read: if isStaff();
-      allow write: if isManagerOrAdmin();
+      // Global levels (branchId == null) are manager/admin managed; branch-scoped
+      // levels additionally require access to that branch. Delete (request.resource
+      // null) stays manager/admin gated.
+      allow write: if isManagerOrAdmin()
+        && (request.resource == null
+            || request.resource.data.branchId == null
+            || hasBranchAccess(request.resource.data.branchId));
     }
 
     match /uomUnits/{docId} {
