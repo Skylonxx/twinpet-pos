@@ -18,6 +18,7 @@
  */
 import {
   collection,
+  collectionGroup,
   getDocs,
   limit,
   query,
@@ -371,6 +372,69 @@ export async function resetCustomerCreditBalances(): Promise<DeletionSummary> {
     customersCreditReset: customers,
     creditAccountsReset: creditAccounts,
   };
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Hard-delete master data (UAT only) — these remove catalog/contact records
+// entirely, not just their transactions. Use with extreme care.
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * Hard-delete the entire product catalog. The per-branch `productStocks`
+ * subcollection docs are removed first via a `collectionGroup` query (so no
+ * orphaned subcollections survive their parent), then the `products` docs.
+ */
+export async function hardDeleteProducts(): Promise<DeletionSummary> {
+  const firestore = requireDb();
+  await ensureFirebaseAuth();
+
+  // collectionGroup sweeps every productStocks doc regardless of parent product.
+  const productStocks = await deleteAllInChunks(
+    firestore,
+    collectionGroup(firestore, collections.productStocks),
+  );
+  const products = await deleteAllInChunks(
+    firestore,
+    collection(firestore, collections.products),
+  );
+
+  return { productStocks, products };
+}
+
+/**
+ * Hard-delete all customers along with their `creditAccounts` (a 1:1 master-data
+ * record keyed by customerId). Credit accounts are removed first to avoid leaving
+ * them orphaned.
+ */
+export async function hardDeleteCustomers(): Promise<DeletionSummary> {
+  const firestore = requireDb();
+  await ensureFirebaseAuth();
+
+  const creditAccounts = await deleteAllInChunks(
+    firestore,
+    collection(firestore, collections.creditAccounts),
+  );
+  const customers = await deleteAllInChunks(
+    firestore,
+    collection(firestore, collections.customers),
+  );
+
+  return { creditAccounts, customers };
+}
+
+/**
+ * Hard-delete all supplier master records.
+ */
+export async function hardDeleteSuppliers(): Promise<DeletionSummary> {
+  const firestore = requireDb();
+  await ensureFirebaseAuth();
+
+  const suppliers = await deleteAllInChunks(
+    firestore,
+    collection(firestore, collections.suppliers),
+  );
+
+  return { suppliers };
 }
 
 /**

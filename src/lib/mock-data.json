@@ -1,0 +1,192 @@
+{
+  "customers": [
+    {
+      "id": "CUST-001",
+      "firstName": "สมชาย",
+      "lastName": "ฟาร์มหมูใหญ่",
+      "contactType": "retail",
+      "customerType": "WHOLESALE2",
+      "priceLevelId": "WHOLESALE2",
+      "creditLimit": 50000,
+      "creditDays": 30,
+      "isActive": true,
+      "phone": "081-111-1111",
+      "tags": ["ฟาร์มหมู", "ลูกค้าประจำ"]
+    },
+    {
+      "id": "CUST-002",
+      "firstName": "ป้าแจ๋ว",
+      "lastName": "ร้านชำอาหารสัตว์",
+      "contactType": "retail",
+      "customerType": "WHOLESALE1",
+      "priceLevelId": "WHOLESALE1",
+      "creditLimit": 10000,
+      "creditDays": 15,
+      "isActive": true,
+      "phone": "082-222-2222",
+      "tags": []
+    },
+    {
+      "id": "CUST-003",
+      "firstName": "ลุงบุญ",
+      "lastName": "เลี้ยงไก่",
+      "contactType": "retail",
+      "customerType": "RETAIL",
+      "priceLevelId": "RETAIL",
+      "creditLimit": 0,
+      "creditDays": 7,
+      "isActive": true,
+      "phone": "083-333-3333",
+      "tags": ["เครดิตพิเศษ"]
+    },
+    {
+      "id": "SUPP-001",
+      "firstName": "บจก.",
+      "lastName": "ซีพีเอฟ (ประเทศไทย)",
+      "contactType": "supplier",
+      "customerType": "RETAIL",
+      "priceLevelId": "RETAIL",
+      "creditLimit": 0,
+      "creditDays": 0,
+      "isActive": true,
+      "phone": "02-000-0000",
+      "tags": []
+    },
+    {
+      "id": "SUPP-002",
+      "firstName": "หจก.",
+      "lastName": "ลีพัฒนาอาหารสัตว์",
+      "contactType": "supplier",
+      "customerType": "RETAIL",
+      "priceLevelId": "RETAIL",
+      "creditLimit": 0,
+      "creditDays": 0,
+      "isActive": true,
+      "phone": "02-111-1111",
+      "tags": []
+    }
+  ],
+  "products": [
+    {
+      "id": "PROD-001",
+      "sku": "CP-PIG-904",
+      "barcode": "885000000001",
+      "name": "อาหารหมูขุน CP 904",
+      "category": "อาหารหมู",
+      "description": "อาหารสุกรขุนน้ำหนัก 60 กก. ขึ้นไป",
+      "imageUrl": null,
+      "baseUnit": "กก.",
+      "cost": 15,
+      "basePrice": 20,
+      "prices": [
+        { "priceLevelId": "RETAIL", "unit": "กก.", "price": 20 },
+        { "priceLevelId": "RETAIL", "unit": "กระสอบ", "price": 540 }
+      ],
+      "tierPrices": { "WHOLESALE1": 19, "WHOLESALE2": 18, "MEMBER": 19.5 },
+      "uomConversions": [
+        { "unit": "กระสอบ", "factor": 30, "barcode": "885000000001-S", "tierPrices": { "WHOLESALE1": 520, "WHOLESALE2": 500 } }
+      ],
+      "allowNegativeStock": true,
+      "reorderPoint": 50,
+      "isActive": true,
+      "muteAlerts": false
+    },
+    {
+      "id": "PROD-002",
+      "sku": "CHICK-WATER-8L",
+      "barcode": "PLU3014112782",
+      "name": "ขวดน้ำไก่ 8 ลิตร (ใหญ่)",
+      "category": "อุปกรณ์เลี้ยงสัตว์",
+      "description": "อุปกรณ์ให้น้ำไก่",
+      "imageUrl": null,
+      "baseUnit": "ขวด",
+      "cost": 51,
+      "basePrice": 80,
+      "prices": [
+        { "priceLevelId": "RETAIL", "unit": "ขวด", "price": 80 },
+        { "priceLevelId": "RETAIL", "unit": "แพ็ค", "price": 450 },
+        { "priceLevelId": "RETAIL", "unit": "ลัง", "price": 1680 }
+      ],
+      "tierPrices": { "WHOLESALE1": 75, "WHOLESALE2": 70, "MEMBER": 78 },
+      "uomConversions": [
+        { "unit": "แพ็ค", "factor": 6, "barcode": "PLU3014112782-P6" },
+        { "unit": "ลัง", "factor": 24, "barcode": "PLU3014112782-C24" }
+      ],
+      "allowNegativeStock": true,
+      "reorderPoint": 20,
+      "isActive": true,
+      "muteAlerts": true
+    },
+    {
+      "id": "PROD-003",
+      "sku": "PIG-NIPPLE",
+      "barcode": "PLU4017786800",
+      "name": "จุ๊บน้ำหมู สแตนเลส",
+      "category": "อุปกรณ์ฟาร์ม",
+      "description": "หัวนมหมูดื่มน้ำ",
+      "imageUrl": null,
+      "baseUnit": "อัน",
+      "cost": 30,
+      "basePrice": 60,
+      "prices": [
+        { "priceLevelId": "RETAIL", "unit": "อัน", "price": 60 },
+        { "priceLevelId": "RETAIL", "unit": "ถุง", "price": 2500 }
+      ],
+      "tierPrices": { "WHOLESALE1": 55, "WHOLESALE2": 50, "MEMBER": 58 },
+      "uomConversions": [
+        { "unit": "ถุง", "factor": 50, "barcode": "PLU4017786800-B50" }
+      ],
+      "allowNegativeStock": true,
+      "reorderPoint": 100,
+      "isActive": true,
+      "muteAlerts": false
+    },
+    {
+      "id": "PROD-004",
+      "sku": "MED-OXY-100",
+      "barcode": "885M001",
+      "name": "ยาสัตว์ อ็อกซี่เตตราซัยคลิน (แก้หวัด)",
+      "category": "ยาสัตว์",
+      "description": "ยาปฏิชีวนะสำหรับสัตว์",
+      "imageUrl": null,
+      "baseUnit": "ขวด",
+      "cost": 80,
+      "basePrice": 150,
+      "prices": [
+        { "priceLevelId": "RETAIL", "unit": "ขวด", "price": 150 },
+        { "priceLevelId": "RETAIL", "unit": "กล่อง", "price": 1400 }
+      ],
+      "tierPrices": { "WHOLESALE1": 130, "WHOLESALE2": 120, "MEMBER": 140 },
+      "uomConversions": [
+        { "unit": "กล่อง", "factor": 12, "barcode": "885M001-B12" }
+      ],
+      "allowNegativeStock": true,
+      "reorderPoint": 12,
+      "isActive": true,
+      "muteAlerts": false
+    },
+    {
+      "id": "PROD-005",
+      "sku": "COW-MILK-REP",
+      "barcode": "885C001",
+      "name": "นมผงลูกวัว นิวทริคาว",
+      "category": "อาหารวัว",
+      "description": "อาหารแทนนมสำหรับลูกโค",
+      "imageUrl": null,
+      "baseUnit": "ถุง",
+      "cost": 500,
+      "basePrice": 750,
+      "prices": [
+        { "priceLevelId": "RETAIL", "unit": "ถุง", "price": 750 }
+      ],
+      "tierPrices": { "WHOLESALE1": 700, "WHOLESALE2": 680, "MEMBER": 720 },
+      "uomConversions": [
+        { "unit": "กระสอบ", "factor": 5, "barcode": "885C001-S5" }
+      ],
+      "allowNegativeStock": true,
+      "reorderPoint": 5,
+      "isActive": true,
+      "muteAlerts": false
+    }
+  ]
+}

@@ -15,9 +15,13 @@ import {
   clearInventoryTransactions,
   clearSalesData,
   clearStockLedgerAndFifo,
+  hardDeleteCustomers,
+  hardDeleteProducts,
+  hardDeleteSuppliers,
   resetAllProductStocks,
   type DeletionSummary,
 } from '../../lib/admin/clearTestData';
+import { seedMockData } from '../../lib/seedData';
 import './BranchManagementPage.css';
 
 const DANGER_CONFIRM =
@@ -67,6 +71,38 @@ const FACTORY_RESET: DangerAction = {
     'นี่คือการล้างข้อมูลธุรกรรมทั้งหมด (การขาย, การรับเข้า, การโอน, Movement, FIFO และสต็อก)\n\n',
   run: clearAllTransactionData,
 };
+
+/**
+ * Hard-deletes of MASTER data (catalog/contacts), not just transactions. Each
+ * carries its own explicit warning describing exactly what is removed.
+ */
+const HARD_DELETE_ACTIONS: DangerAction[] = [
+  {
+    key: 'hard-products',
+    label: 'ลบข้อมูลสินค้าทั้งหมด (Hard Delete Products)',
+    icon: 'ti-trash-x',
+    confirmPrefix:
+      'ลบสินค้าทั้งหมดและสต็อกของทุกสาขา (products + productStocks) ออกจากระบบอย่างถาวร\n' +
+      'การขาย/รับเข้าที่อ้างถึงสินค้าเหล่านี้จะไม่มีข้อมูลสินค้าอีกต่อไป\n\n',
+    run: hardDeleteProducts,
+  },
+  {
+    key: 'hard-customers',
+    label: 'ลบข้อมูลลูกค้าทั้งหมด (Hard Delete Customers)',
+    icon: 'ti-user-x',
+    confirmPrefix:
+      'ลบลูกค้าทั้งหมดและบัญชีเครดิตที่เกี่ยวข้อง (customers + creditAccounts) ออกจากระบบอย่างถาวร\n\n',
+    run: hardDeleteCustomers,
+  },
+  {
+    key: 'hard-suppliers',
+    label: 'ลบข้อมูลซัพพลายเออร์ทั้งหมด (Hard Delete Suppliers)',
+    icon: 'ti-building-warehouse',
+    confirmPrefix:
+      'ลบซัพพลายเออร์ทั้งหมด (suppliers) ออกจากระบบอย่างถาวร\n\n',
+    run: hardDeleteSuppliers,
+  },
+];
 
 function formatSummary(summary: DeletionSummary): string {
   const entries = Object.entries(summary).filter(([, count]) => count > 0);
@@ -155,6 +191,95 @@ function DangerZone() {
       </div>
 
       <div className="admin-danger-master">{renderButton(FACTORY_RESET, true)}</div>
+
+      <div className="admin-danger-subgroup">
+        <h3 className="admin-danger-subtitle-strong">
+          ลบข้อมูลหลัก (Hard Delete Master Data)
+        </h3>
+        <p className="admin-danger-subtitle">
+          ลบ catalog / รายชื่อผู้ติดต่อออกถาวร — ไม่ใช่แค่ธุรกรรม ใช้ด้วยความระมัดระวังสูงสุด
+        </p>
+        <div className="admin-danger-actions">
+          {HARD_DELETE_ACTIONS.map((action) => renderButton(action))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function SeedZone() {
+  const [running, setRunning] = useState(false);
+  const [status, setStatus] = useState<
+    { kind: 'success' | 'error'; message: string } | null
+  >(null);
+
+  const handleSeed = async () => {
+    if (running) return;
+    if (
+      !window.confirm(
+        'นำเข้าข้อมูลตัวอย่างสำหรับ UAT (ลูกค้า + สินค้า 10 รายการ)?\n\nรายการที่มี ID เดิมจะถูกเขียนทับ',
+      )
+    ) {
+      return;
+    }
+
+    setRunning(true);
+    setStatus(null);
+    try {
+      const summary = await seedMockData();
+      setStatus({
+        kind: 'success',
+        message: `✅ นำเข้าข้อมูลสำเร็จ — ลูกค้า: ${summary.customers}, บัญชีเครดิต: ${summary.creditAccounts}, สินค้า: ${summary.products}, สต็อก (${summary.branches} สาขา): ${summary.productStocks}`,
+      });
+    } catch (err) {
+      console.error('[SeedZone] seedMockData failed', err);
+      setStatus({
+        kind: 'error',
+        message: `❌ นำเข้าข้อมูลล้มเหลว: ${
+          err instanceof Error ? err.message : 'เกิดข้อผิดพลาด'
+        }`,
+      });
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  return (
+    <section className="admin-seed-zone" aria-label="Seed Mock Data">
+      <div className="admin-seed-header">
+        <i className="ti ti-database-import" aria-hidden="true" />
+        <div>
+          <h2 className="admin-seed-title">นำเข้าข้อมูลตัวอย่าง (UAT Seed Data)</h2>
+          <p className="admin-seed-subtitle">
+            สร้างลูกค้า/ผู้จำหน่าย และสินค้าตัวอย่าง 10 รายการ พร้อมสต็อกเริ่มต้น 0
+            สำหรับการทดสอบ — รันซ้ำได้โดยไม่สร้างข้อมูลซ้ำ
+          </p>
+        </div>
+      </div>
+
+      {status && (
+        <div
+          className={`admin-seed-status${
+            status.kind === 'error' ? ' admin-seed-status-error' : ''
+          }`}
+          role={status.kind === 'error' ? 'alert' : 'status'}
+        >
+          {status.message}
+        </div>
+      )}
+
+      <button
+        type="button"
+        className="admin-seed-btn"
+        onClick={() => void handleSeed()}
+        disabled={running}
+      >
+        <i
+          className={`ti ${running ? 'ti-loader-2 spin' : 'ti-database-plus'}`}
+          aria-hidden="true"
+        />
+        {running ? 'กำลังนำเข้าข้อมูล…' : 'นำเข้าข้อมูลตัวอย่าง'}
+      </button>
     </section>
   );
 }
@@ -471,6 +596,8 @@ export default function BranchManagementPage() {
           </>
         )}
       </div>
+
+      <SeedZone />
 
       <DangerZone />
 

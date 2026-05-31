@@ -106,6 +106,8 @@ service cloud.firestore {
     match /products/{productId} {
       allow read: if isStaff();
       allow write: if isManagerOrAdmin();
+      // Admin-only — used by the Danger Zone hard-delete to wipe the product catalog
+      allow delete: if isAdmin();
 
       match /productStocks/{stockBranchId} {
         allow read: if isAdmin() || hasBranchAccess(stockBranchId);
@@ -114,6 +116,8 @@ service cloud.firestore {
         // and the source-branch user has no branch access to that destination.
         // These docs are only ever written by the inventory transaction services.
         allow write: if isStaff();
+        // Admin-only — used by the Danger Zone hard-delete (collectionGroup sweep)
+        allow delete: if isAdmin();
       }
     }
 
@@ -123,12 +127,16 @@ service cloud.firestore {
         && resource.data.branchId is string
         && hasBranchAccess(resource.data.branchId));
       allow write: if isAdmin() || (isStaff() && hasBranchAccess(requestProductStockBranchId(stockDocId)));
+      // Admin-only — explicit delete for the Danger Zone hard-delete collectionGroup sweep
+      allow delete: if isAdmin();
     }
 
     // ── Suppliers (centralized catalog — HQ manages all; branches can add local ones) ──
     match /suppliers/{supplierId} {
       // Admin: full access
       allow read, write: if isAdmin();
+      // Admin-only — explicit delete for the Danger Zone hard-delete of suppliers
+      allow delete: if isAdmin();
 
       // Staff: read when supplier is visible to their branch
       allow read: if isStaff()
@@ -158,11 +166,15 @@ service cloud.firestore {
     match /customers/{customerId} {
       allow read: if isStaff();
       allow write: if isStaff();
+      // Admin-only — used by the Danger Zone hard-delete of customer master data
+      allow delete: if isAdmin();
     }
 
     match /creditAccounts/{accountId} {
       allow read: if isStaff();
       allow write: if isStaff();
+      // Admin-only — used by the Danger Zone hard-delete of customer master data
+      allow delete: if isAdmin();
     }
 
     match /creditTransactions/{txId} {
