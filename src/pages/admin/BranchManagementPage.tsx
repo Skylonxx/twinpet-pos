@@ -229,7 +229,7 @@ function SeedZone() {
       const summary = await seedMockData();
       setStatus({
         kind: 'success',
-        message: `✅ นำเข้าข้อมูลสำเร็จ — ลูกค้า: ${summary.customers}, บัญชีเครดิต: ${summary.creditAccounts}, สินค้า: ${summary.products}, สต็อก (${summary.branches} สาขา): ${summary.productStocks}`,
+        message: `✅ นำเข้าข้อมูลสำเร็จ — ลูกค้า: ${summary.customers}, ผู้จำหน่าย: ${summary.suppliers}, บัญชีเครดิต: ${summary.creditAccounts}, สินค้า: ${summary.products}, สต็อก (${summary.branches} สาขา): ${summary.productStocks}`,
       });
     } catch (err) {
       console.error('[SeedZone] seedMockData failed', err);

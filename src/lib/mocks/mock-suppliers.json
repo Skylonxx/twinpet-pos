@@ -1,0 +1,32 @@
+[
+  {
+    "id": "SUPP-001",
+    "code": "SUPP-001",
+    "name": "บจก. ซีพีเอฟ (ประเทศไทย)",
+    "contactName": "ฝ่ายขายอาหารสัตว์",
+    "phone": "02-000-0000",
+    "email": "sales@cpf.co.th",
+    "taxId": "0107537000123",
+    "address": "313 ถ.สีลม แขวงสีลม เขตบางรัก กรุงเทพฯ 10500",
+    "bankName": "กสิกรไทย",
+    "bankAccount": "001-2-34567-8",
+    "note": "ซัพพลายเออร์หลักอาหารหมู/ไก่",
+    "isActive": true,
+    "allowedBranchIds": ["ALL"]
+  },
+  {
+    "id": "SUPP-002",
+    "code": "SUPP-002",
+    "name": "หจก. ลีพัฒนาอาหารสัตว์",
+    "contactName": "คุณลี",
+    "phone": "02-111-1111",
+    "email": null,
+    "taxId": null,
+    "address": "88/9 ถ.พหลโยธิน อ.เมือง จ.สระบุรี 18000",
+    "bankName": "ไทยพาณิชย์",
+    "bankAccount": "123-4-56789-0",
+    "note": "อุปกรณ์ฟาร์มและจุ๊บน้ำ",
+    "isActive": true,
+    "allowedBranchIds": ["ALL"]
+  }
+]

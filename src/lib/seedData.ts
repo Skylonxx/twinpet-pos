@@ -1,7 +1,10 @@
 /**
- * UAT mock-data seeder. Uploads the bundled {@link ./mock-data.json} customers
- * and products (plus 5 extra generated products) into Firestore so testers have
- * a realistic catalog to work with.
+ * UAT mock-data seeder. This module is a pure logic handler ("the chef"): all of
+ * the mock data ("the ingredients") lives in the sibling JSON files under
+ * {@link ./mocks/} — {@link ./mocks/mock-products.json},
+ * {@link ./mocks/mock-customers.json}, and {@link ./mocks/mock-suppliers.json}.
+ * This file only orchestrates reading those arrays and batch-writing them to
+ * Firestore.
  *
  * Design notes:
  *  - Docs are written with their explicit IDs (PROD-001, CUST-001, …) via
@@ -25,11 +28,13 @@ import { collections, db, isFirebaseConfigured } from './firebase';
 import { ensureFirebaseAuth } from './firebaseAuth';
 import { branchIsActive, fetchAllBranches } from './admin/branchManagement';
 import { sanitizeProductDocForFirestore, stripUndefinedDeep } from './firestoreSanitize';
-import mockData from './mock-data.json';
+import mockProducts from './mocks/mock-products.json';
+import mockCustomers from './mocks/mock-customers.json';
+import mockSuppliers from './mocks/mock-suppliers.json';
 
 const BATCH_LIMIT = 500;
 
-/** Shape of a product entry in mock-data.json (and the generated extras). */
+/** Shape of a product entry in mocks/mock-products.json. */
 type RawSeedProduct = {
   id: string;
   sku: string;
@@ -41,6 +46,8 @@ type RawSeedProduct = {
   baseUnit: string;
   cost: number;
   basePrice?: number;
+  /** Seed-only stock hint — written to productStocks/{branchId}.totalStockBase, NOT to the product doc. */
+  stock?: number;
   prices: Array<{ priceLevelId: string; unit: string; price: number }>;
   tierPrices?: Record<string, number>;
   uomConversions: Array<{
@@ -55,7 +62,7 @@ type RawSeedProduct = {
   muteAlerts: boolean;
 };
 
-/** Shape of a customer/supplier entry in mock-data.json. */
+/** Shape of a customer entry in mocks/mock-customers.json. */
 type RawSeedCustomer = {
   id: string;
   firstName: string;
@@ -70,166 +77,31 @@ type RawSeedCustomer = {
   tags: string[];
 };
 
+/** Shape of a supplier entry in mocks/mock-suppliers.json — matches the `suppliers` collection schema. */
+type RawSeedSupplier = {
+  id: string;
+  code: string;
+  name: string;
+  contactName: string;
+  phone: string;
+  email: string | null;
+  taxId: string | null;
+  address: string | null;
+  bankName: string | null;
+  bankAccount: string | null;
+  note: string;
+  isActive: boolean;
+  allowedBranchIds: string[];
+};
+
 export type SeedSummary = {
   customers: number;
+  suppliers: number;
   creditAccounts: number;
   products: number;
   productStocks: number;
   branches: number;
 };
-
-/**
- * 5 additional products generated in memory to round the catalog out to 10,
- * covering the full category set requested for UAT. Same schema as the JSON
- * products (UOM conversions + per-tier prices).
- */
-const GENERATED_PRODUCTS: RawSeedProduct[] = [
-  {
-    id: 'PROD-006',
-    sku: 'CP-PIG-901',
-    barcode: '885000000006',
-    name: 'อาหารหมูเล็ก CP 901',
-    category: 'อาหารหมู',
-    description: 'อาหารสุกรเล็ก แรกเกิด–25 กก.',
-    imageUrl: null,
-    baseUnit: 'กก.',
-    cost: 18,
-    basePrice: 24,
-    prices: [
-      { priceLevelId: 'RETAIL', unit: 'กก.', price: 24 },
-      { priceLevelId: 'RETAIL', unit: 'กระสอบ', price: 690 },
-    ],
-    tierPrices: { WHOLESALE1: 23, WHOLESALE2: 22, MEMBER: 23.5 },
-    uomConversions: [
-      {
-        unit: 'กระสอบ',
-        factor: 30,
-        barcode: '885000000006-S',
-        tierPrices: { WHOLESALE1: 670, WHOLESALE2: 650 },
-      },
-    ],
-    allowNegativeStock: true,
-    reorderPoint: 40,
-    isActive: true,
-    muteAlerts: false,
-  },
-  {
-    id: 'PROD-007',
-    sku: 'BTG-CHICK-311',
-    barcode: '885000000007',
-    name: 'อาหารไก่ไข่ เบทาโกร 311',
-    category: 'อาหารไก่',
-    description: 'อาหารไก่ไข่ระยะให้ไข่',
-    imageUrl: null,
-    baseUnit: 'กก.',
-    cost: 16,
-    basePrice: 21,
-    prices: [
-      { priceLevelId: 'RETAIL', unit: 'กก.', price: 21 },
-      { priceLevelId: 'RETAIL', unit: 'กระสอบ', price: 600 },
-    ],
-    tierPrices: { WHOLESALE1: 20, WHOLESALE2: 19, MEMBER: 20.5 },
-    uomConversions: [
-      {
-        unit: 'กระสอบ',
-        factor: 30,
-        barcode: '885000000007-S',
-        tierPrices: { WHOLESALE1: 580, WHOLESALE2: 560 },
-      },
-    ],
-    allowNegativeStock: true,
-    reorderPoint: 40,
-    isActive: true,
-    muteAlerts: false,
-  },
-  {
-    id: 'PROD-008',
-    sku: 'COW-CONC-21',
-    barcode: '885000000008',
-    name: 'อาหารข้นโคนม 21% โปรตีน',
-    category: 'อาหารวัว',
-    description: 'อาหารข้นสำหรับโคนมรีดนม',
-    imageUrl: null,
-    baseUnit: 'กก.',
-    cost: 13,
-    basePrice: 18,
-    prices: [
-      { priceLevelId: 'RETAIL', unit: 'กก.', price: 18 },
-      { priceLevelId: 'RETAIL', unit: 'กระสอบ', price: 500 },
-    ],
-    tierPrices: { WHOLESALE1: 17, WHOLESALE2: 16, MEMBER: 17.5 },
-    uomConversions: [
-      {
-        unit: 'กระสอบ',
-        factor: 30,
-        barcode: '885000000008-S',
-        tierPrices: { WHOLESALE1: 480, WHOLESALE2: 460 },
-      },
-    ],
-    allowNegativeStock: true,
-    reorderPoint: 30,
-    isActive: true,
-    muteAlerts: false,
-  },
-  {
-    id: 'PROD-009',
-    sku: 'MED-VITA-MIX',
-    barcode: '885000000009',
-    name: 'วิตามินรวมละลายน้ำ สำหรับสัตว์',
-    category: 'ยาสัตว์',
-    description: 'วิตามินรวมเสริมภูมิ ละลายน้ำให้สัตว์ปีก',
-    imageUrl: null,
-    baseUnit: 'ซอง',
-    cost: 25,
-    basePrice: 45,
-    prices: [
-      { priceLevelId: 'RETAIL', unit: 'ซอง', price: 45 },
-      { priceLevelId: 'RETAIL', unit: 'กล่อง', price: 800 },
-    ],
-    tierPrices: { WHOLESALE1: 42, WHOLESALE2: 40, MEMBER: 43 },
-    uomConversions: [
-      {
-        unit: 'กล่อง',
-        factor: 20,
-        barcode: '885000000009-B20',
-        tierPrices: { WHOLESALE1: 780, WHOLESALE2: 760 },
-      },
-    ],
-    allowNegativeStock: true,
-    reorderPoint: 24,
-    isActive: true,
-    muteAlerts: false,
-  },
-  {
-    id: 'PROD-010',
-    sku: 'FARM-FEEDER-AUTO',
-    barcode: '885000000010',
-    name: 'ถังให้อาหารอัตโนมัติ 10 กก.',
-    category: 'อุปกรณ์ฟาร์ม',
-    description: 'ถังให้อาหารไก่/หมูแบบอัตโนมัติ',
-    imageUrl: null,
-    baseUnit: 'ใบ',
-    cost: 120,
-    basePrice: 220,
-    prices: [
-      { priceLevelId: 'RETAIL', unit: 'ใบ', price: 220 },
-      { priceLevelId: 'RETAIL', unit: 'แพ็ค', price: 2000 },
-    ],
-    tierPrices: { WHOLESALE1: 200, WHOLESALE2: 190, MEMBER: 210 },
-    uomConversions: [
-      {
-        unit: 'แพ็ค',
-        factor: 10,
-        barcode: '885000000010-P10',
-        tierPrices: { WHOLESALE1: 1950, WHOLESALE2: 1900 },
-      },
-    ],
-    allowNegativeStock: true,
-    reorderPoint: 10,
-    isActive: true,
-    muteAlerts: false,
-  },
-];
 
 function requireDb(): Firestore {
   if (!isFirebaseConfigured || !db) {
@@ -296,10 +168,35 @@ function buildCustomerDoc(raw: RawSeedCustomer, branchId: string, index: number)
   };
 }
 
+function buildSupplierDoc(raw: RawSeedSupplier) {
+  return {
+    id: raw.id,
+    code: raw.code,
+    name: raw.name,
+    contactName: raw.contactName ?? '',
+    phone: raw.phone ?? '',
+    email: raw.email ?? null,
+    taxId: raw.taxId ?? null,
+    address: raw.address ?? null,
+    bankName: raw.bankName ?? null,
+    bankAccount: raw.bankAccount ?? null,
+    note: raw.note ?? '',
+    isActive: raw.isActive ?? true,
+    allowedBranchIds: raw.allowedBranchIds ?? ['ALL'],
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    deletedAt: null,
+  };
+}
+
 function buildProductDoc(raw: RawSeedProduct) {
   // Run through the same sanitizer the product form uses, then stamp timestamps.
+  // `stock` is a seed-only hint for the productStocks subcollection — set it to
+  // undefined here so the sanitizer (which strips undefined) keeps it off the
+  // product document, matching the real Product schema the POS reads.
   const sanitized = sanitizeProductDocForFirestore({
     ...raw,
+    stock: undefined,
     avgCost: 0,
   });
   return {
@@ -311,8 +208,8 @@ function buildProductDoc(raw: RawSeedProduct) {
 }
 
 /**
- * Seed customers + 10 products (5 from JSON, 5 generated) into Firestore.
- * Returns counts of everything written.
+ * Seed customers, suppliers, and products into Firestore from the bundled mock
+ * JSON files. Returns counts of everything written.
  */
 export async function seedMockData(): Promise<SeedSummary> {
   const firestore = requireDb();
@@ -326,15 +223,17 @@ export async function seedMockData(): Promise<SeedSummary> {
   }
   const primaryBranchId = targetBranches[0]!.id;
 
-  const rawCustomers = mockData.customers as unknown as RawSeedCustomer[];
-  const rawProducts = [
-    ...(mockData.products as unknown as RawSeedProduct[]),
-    ...GENERATED_PRODUCTS,
-  ];
+  // Customers and suppliers live in STRICTLY SEPARATE Firestore collections
+  // (`customers` vs `suppliers`) with different schemas, so they are seeded
+  // independently below.
+  const rawCustomers = mockCustomers as unknown as RawSeedCustomer[];
+  const rawSuppliers = mockSuppliers as unknown as RawSeedSupplier[];
+  const rawProducts = mockProducts as unknown as RawSeedProduct[];
 
   const writer = createBatchWriter(firestore);
   const summary: SeedSummary = {
     customers: 0,
+    suppliers: 0,
     creditAccounts: 0,
     products: 0,
     productStocks: 0,
@@ -363,6 +262,13 @@ export async function seedMockData(): Promise<SeedSummary> {
     }
   }
 
+  // ── Suppliers (separate `suppliers` collection, written by code-based id) ──
+  for (const raw of rawSuppliers) {
+    const supplierDoc = buildSupplierDoc(raw);
+    await writer.set(doc(firestore, collections.suppliers, raw.id), supplierDoc);
+    summary.suppliers += 1;
+  }
+
   // ── Products + a productStocks doc per branch ──
   for (const raw of rawProducts) {
     const productDoc = buildProductDoc(raw);
@@ -374,7 +280,8 @@ export async function seedMockData(): Promise<SeedSummary> {
         branchId: branch.id,
         reorderPoint: raw.reorderPoint ?? 0,
         overrideTierPrices: {},
-        totalStockBase: 0,
+        // POS reads stock from this field (usePosProducts: data.totalStockBase).
+        totalStockBase: raw.stock ?? 0,
         lastMovementAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       }) as Record<string, unknown>;

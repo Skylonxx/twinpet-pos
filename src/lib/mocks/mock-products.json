@@ -1,0 +1,308 @@
+[
+  {
+    "id": "PROD-001",
+    "sku": "CP-PIG-904",
+    "barcode": "885000000001",
+    "name": "อาหารหมูขุน CP 904",
+    "category": "อาหารหมู",
+    "description": "อาหารสุกรขุนน้ำหนัก 60 กก. ขึ้นไป",
+    "imageUrl": null,
+    "baseUnit": "กก.",
+    "cost": 15,
+    "basePrice": 20,
+    "stock": 120,
+    "prices": [
+      { "priceLevelId": "RETAIL", "unit": "กก.", "price": 20 },
+      { "priceLevelId": "RETAIL", "unit": "กระสอบ", "price": 540 }
+    ],
+    "tierPrices": { "wholesale": 19, "vip": 18.5, "agent1": 18, "farm_large": 17.5 },
+    "uomConversions": [
+      {
+        "unit": "กระสอบ",
+        "factor": 30,
+        "barcode": "885000000001-S",
+        "tierPrices": { "wholesale": 530, "vip": 520, "agent1": 510, "farm_large": 500 }
+      }
+    ],
+    "allowNegativeStock": true,
+    "reorderPoint": 50,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-002",
+    "sku": "CHICK-WATER-8L",
+    "barcode": "PLU3014112782",
+    "name": "ขวดน้ำไก่ 8 ลิตร (ใหญ่)",
+    "category": "อุปกรณ์เลี้ยงสัตว์",
+    "description": "อุปกรณ์ให้น้ำไก่",
+    "imageUrl": null,
+    "baseUnit": "ขวด",
+    "cost": 51,
+    "basePrice": 80,
+    "stock": 45,
+    "prices": [
+      { "priceLevelId": "RETAIL", "unit": "ขวด", "price": 80 },
+      { "priceLevelId": "RETAIL", "unit": "แพ็ค", "price": 450 },
+      { "priceLevelId": "RETAIL", "unit": "ลัง", "price": 1680 }
+    ],
+    "tierPrices": { "wholesale": 75, "vip": 70, "agent1": 68, "farm_large": 65 },
+    "uomConversions": [
+      {
+        "unit": "แพ็ค",
+        "factor": 6,
+        "barcode": "PLU3014112782-P6",
+        "tierPrices": { "wholesale": 432, "vip": 420, "agent1": 408, "farm_large": 390 }
+      },
+      {
+        "unit": "ลัง",
+        "factor": 24,
+        "barcode": "PLU3014112782-C24",
+        "tierPrices": { "wholesale": 1620, "vip": 1560, "agent1": 1512, "farm_large": 1440 }
+      }
+    ],
+    "allowNegativeStock": true,
+    "reorderPoint": 20,
+    "isActive": true,
+    "muteAlerts": true
+  },
+  {
+    "id": "PROD-003",
+    "sku": "PIG-NIPPLE",
+    "barcode": "PLU4017786800",
+    "name": "จุ๊บน้ำหมู สแตนเลส",
+    "category": "อุปกรณ์ฟาร์ม",
+    "description": "หัวนมหมูดื่มน้ำ",
+    "imageUrl": null,
+    "baseUnit": "อัน",
+    "cost": 30,
+    "basePrice": 60,
+    "stock": 300,
+    "prices": [
+      { "priceLevelId": "RETAIL", "unit": "อัน", "price": 60 },
+      { "priceLevelId": "RETAIL", "unit": "ถุง", "price": 2500 }
+    ],
+    "tierPrices": { "wholesale": 55, "vip": 52, "agent1": 50, "farm_large": 48 },
+    "uomConversions": [
+      {
+        "unit": "ถุง",
+        "factor": 50,
+        "barcode": "PLU4017786800-B50",
+        "tierPrices": { "wholesale": 2400, "vip": 2350, "agent1": 2300, "farm_large": 2250 }
+      }
+    ],
+    "allowNegativeStock": true,
+    "reorderPoint": 100,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-004",
+    "sku": "MED-OXY-100",
+    "barcode": "885M001",
+    "name": "ยาสัตว์ อ็อกซี่เตตราซัยคลิน (แก้หวัด)",
+    "category": "ยาสัตว์",
+    "description": "ยาปฏิชีวนะสำหรับสัตว์",
+    "imageUrl": null,
+    "baseUnit": "ขวด",
+    "cost": 80,
+    "basePrice": 150,
+    "stock": 60,
+    "prices": [
+      { "priceLevelId": "RETAIL", "unit": "ขวด", "price": 150 },
+      { "priceLevelId": "RETAIL", "unit": "กล่อง", "price": 1400 }
+    ],
+    "tierPrices": { "wholesale": 140, "vip": 135, "agent1": 130, "farm_large": 125 },
+    "uomConversions": [
+      {
+        "unit": "กล่อง",
+        "factor": 12,
+        "barcode": "885M001-B12",
+        "tierPrices": { "wholesale": 1350, "vip": 1320, "agent1": 1300, "farm_large": 1280 }
+      }
+    ],
+    "allowNegativeStock": true,
+    "reorderPoint": 12,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-005",
+    "sku": "COW-MILK-REP",
+    "barcode": "885C001",
+    "name": "นมผงลูกวัว นิวทริคาว",
+    "category": "อาหารวัว",
+    "description": "อาหารแทนนมสำหรับลูกโค",
+    "imageUrl": null,
+    "baseUnit": "ถุง",
+    "cost": 500,
+    "basePrice": 750,
+    "stock": 25,
+    "prices": [
+      { "priceLevelId": "RETAIL", "unit": "ถุง", "price": 750 }
+    ],
+    "tierPrices": { "wholesale": 720, "vip": 700, "agent1": 690, "farm_large": 680 },
+    "uomConversions": [
+      {
+        "unit": "กระสอบ",
+        "factor": 5,
+        "barcode": "885C001-S5",
+        "tierPrices": { "wholesale": 3500, "vip": 3450, "agent1": 3400, "farm_large": 3350 }
+      }
+    ],
+    "allowNegativeStock": true,
+    "reorderPoint": 5,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-006",
+    "sku": "CP-PIG-901",
+    "barcode": "885000000006",
+    "name": "อาหารหมูเล็ก CP 901",
+    "category": "อาหารหมู",
+    "description": "อาหารสุกรเล็ก แรกเกิด–25 กก.",
+    "imageUrl": null,
+    "baseUnit": "กก.",
+    "cost": 18,
+    "basePrice": 24,
+    "stock": 100,
+    "prices": [
+      { "priceLevelId": "RETAIL", "unit": "กก.", "price": 24 },
+      { "priceLevelId": "RETAIL", "unit": "กระสอบ", "price": 690 }
+    ],
+    "tierPrices": { "wholesale": 23, "vip": 22.5, "agent1": 22, "farm_large": 21.5 },
+    "uomConversions": [
+      {
+        "unit": "กระสอบ",
+        "factor": 30,
+        "barcode": "885000000006-S",
+        "tierPrices": { "wholesale": 680, "vip": 670, "agent1": 660, "farm_large": 650 }
+      }
+    ],
+    "allowNegativeStock": true,
+    "reorderPoint": 40,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-007",
+    "sku": "BTG-CHICK-311",
+    "barcode": "885000000007",
+    "name": "อาหารไก่ไข่ เบทาโกร 311",
+    "category": "อาหารไก่",
+    "description": "อาหารไก่ไข่ระยะให้ไข่",
+    "imageUrl": null,
+    "baseUnit": "กก.",
+    "cost": 16,
+    "basePrice": 21,
+    "stock": 90,
+    "prices": [
+      { "priceLevelId": "RETAIL", "unit": "กก.", "price": 21 },
+      { "priceLevelId": "RETAIL", "unit": "กระสอบ", "price": 600 }
+    ],
+    "tierPrices": { "wholesale": 20, "vip": 19.5, "agent1": 19, "farm_large": 18.5 },
+    "uomConversions": [
+      {
+        "unit": "กระสอบ",
+        "factor": 30,
+        "barcode": "885000000007-S",
+        "tierPrices": { "wholesale": 590, "vip": 580, "agent1": 570, "farm_large": 560 }
+      }
+    ],
+    "allowNegativeStock": true,
+    "reorderPoint": 40,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-008",
+    "sku": "COW-CONC-21",
+    "barcode": "885000000008",
+    "name": "อาหารข้นโคนม 21% โปรตีน",
+    "category": "อาหารวัว",
+    "description": "อาหารข้นสำหรับโคนมรีดนม",
+    "imageUrl": null,
+    "baseUnit": "กก.",
+    "cost": 13,
+    "basePrice": 18,
+    "stock": 80,
+    "prices": [
+      { "priceLevelId": "RETAIL", "unit": "กก.", "price": 18 },
+      { "priceLevelId": "RETAIL", "unit": "กระสอบ", "price": 500 }
+    ],
+    "tierPrices": { "wholesale": 17, "vip": 16.5, "agent1": 16, "farm_large": 15.5 },
+    "uomConversions": [
+      {
+        "unit": "กระสอบ",
+        "factor": 30,
+        "barcode": "885000000008-S",
+        "tierPrices": { "wholesale": 490, "vip": 480, "agent1": 470, "farm_large": 460 }
+      }
+    ],
+    "allowNegativeStock": true,
+    "reorderPoint": 30,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-009",
+    "sku": "MED-VITA-MIX",
+    "barcode": "885000000009",
+    "name": "วิตามินรวมละลายน้ำ สำหรับสัตว์",
+    "category": "ยาสัตว์",
+    "description": "วิตามินรวมเสริมภูมิ ละลายน้ำให้สัตว์ปีก",
+    "imageUrl": null,
+    "baseUnit": "ซอง",
+    "cost": 25,
+    "basePrice": 45,
+    "stock": 150,
+    "prices": [
+      { "priceLevelId": "RETAIL", "unit": "ซอง", "price": 45 },
+      { "priceLevelId": "RETAIL", "unit": "กล่อง", "price": 800 }
+    ],
+    "tierPrices": { "wholesale": 43, "vip": 42, "agent1": 41, "farm_large": 40 },
+    "uomConversions": [
+      {
+        "unit": "กล่อง",
+        "factor": 20,
+        "barcode": "885000000009-B20",
+        "tierPrices": { "wholesale": 780, "vip": 770, "agent1": 760, "farm_large": 750 }
+      }
+    ],
+    "allowNegativeStock": true,
+    "reorderPoint": 24,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-010",
+    "sku": "FARM-FEEDER-AUTO",
+    "barcode": "885000000010",
+    "name": "ถังให้อาหารอัตโนมัติ 10 กก.",
+    "category": "อุปกรณ์ฟาร์ม",
+    "description": "ถังให้อาหารไก่/หมูแบบอัตโนมัติ",
+    "imageUrl": null,
+    "baseUnit": "ใบ",
+    "cost": 120,
+    "basePrice": 220,
+    "stock": 35,
+    "prices": [
+      { "priceLevelId": "RETAIL", "unit": "ใบ", "price": 220 },
+      { "priceLevelId": "RETAIL", "unit": "แพ็ค", "price": 2000 }
+    ],
+    "tierPrices": { "wholesale": 210, "vip": 205, "agent1": 200, "farm_large": 195 },
+    "uomConversions": [
+      {
+        "unit": "แพ็ค",
+        "factor": 10,
+        "barcode": "885000000010-P10",
+        "tierPrices": { "wholesale": 1950, "vip": 1920, "agent1": 1900, "farm_large": 1880 }
+      }
+    ],
+    "allowNegativeStock": true,
+    "reorderPoint": 10,
+    "isActive": true,
+    "muteAlerts": false
+  }
+]

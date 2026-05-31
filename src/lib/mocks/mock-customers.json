@@ -1,0 +1,67 @@
+[
+  {
+    "id": "CUST-001",
+    "firstName": "สมชาย",
+    "lastName": "ฟาร์มหมูใหญ่",
+    "contactType": "wholesale",
+    "customerType": "farm_large",
+    "priceLevelId": "farm_large",
+    "creditLimit": 50000,
+    "creditDays": 30,
+    "isActive": true,
+    "phone": "081-111-1111",
+    "tags": ["ฟาร์มหมู", "ลูกค้าประจำ"]
+  },
+  {
+    "id": "CUST-002",
+    "firstName": "ป้าแจ๋ว",
+    "lastName": "ร้านชำอาหารสัตว์",
+    "contactType": "wholesale",
+    "customerType": "wholesale",
+    "priceLevelId": "wholesale",
+    "creditLimit": 10000,
+    "creditDays": 15,
+    "isActive": true,
+    "phone": "082-222-2222",
+    "tags": []
+  },
+  {
+    "id": "CUST-003",
+    "firstName": "ลุงบุญ",
+    "lastName": "เลี้ยงไก่",
+    "contactType": "retail",
+    "customerType": "retail",
+    "priceLevelId": "retail",
+    "creditLimit": 0,
+    "creditDays": 7,
+    "isActive": true,
+    "phone": "083-333-3333",
+    "tags": ["เครดิตพิเศษ"]
+  },
+  {
+    "id": "CUST-004",
+    "firstName": "คุณวิภา",
+    "lastName": "คลินิกสัตว์เลี้ยงรัก",
+    "contactType": "retail",
+    "customerType": "vip",
+    "priceLevelId": "vip",
+    "creditLimit": 20000,
+    "creditDays": 15,
+    "isActive": true,
+    "phone": "084-444-4444",
+    "tags": ["VIP", "คลินิก"]
+  },
+  {
+    "id": "CUST-005",
+    "firstName": "เฮียตี๋",
+    "lastName": "ตัวแทนจำหน่ายภาคเหนือ",
+    "contactType": "wholesale",
+    "customerType": "agent1",
+    "priceLevelId": "agent1",
+    "creditLimit": 80000,
+    "creditDays": 45,
+    "isActive": true,
+    "phone": "085-555-5555",
+    "tags": ["ตัวแทน"]
+  }
+]
