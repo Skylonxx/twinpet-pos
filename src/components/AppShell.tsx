@@ -1,5 +1,11 @@
+import { useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { BOTTOM_NAV, MAIN_NAV } from '../config/navigation';
+import {
+  ALL_NAV_ITEMS,
+  isNavItemActive,
+  NAV_CATEGORIES,
+  type NavCategory,
+} from '../config/navigation';
 import { getBranchLabel } from '../lib/branches';
 import { useAuth } from '../lib/hooks/useAuth';
 import { useBranch } from '../lib/hooks/useBranch';
@@ -16,48 +22,12 @@ function userInitials(firstName: string, lastName: string): string {
   return `${firstName.charAt(0)}${lastName.charAt(0)}`;
 }
 
-function NavLinks({
-  items,
-  ariaLabel,
-}: {
-  items: typeof MAIN_NAV;
-  ariaLabel: string;
-}) {
-  const location = useLocation();
-
+/** The category whose route is currently active (for default accordion open). */
+function activeCategoryId(pathname: string): string | null {
   return (
-    <nav className="app-shell-nav" aria-label={ariaLabel}>
-      {items.map((item) => {
-        const active =
-          item.path === '/settings'
-            ? location.pathname.startsWith('/settings')
-            : item.path === '/inventory'
-              ? location.pathname.startsWith('/inventory') &&
-                !location.pathname.startsWith('/inventory/transfer')
-              : item.path === '/inventory/transfer'
-                ? location.pathname.startsWith('/inventory/transfer')
-                : item.path === '/receiving' || item.path === '/receiving/history'
-                  ? location.pathname.startsWith('/receiving')
-                  : location.pathname === item.path;
-
-        return (
-          <NavLink
-            key={item.path}
-            to={item.path}
-            end={
-              item.path !== '/settings' &&
-              item.path !== '/inventory' &&
-              item.path !== '/inventory/transfer'
-            }
-            className={`app-shell-nav-link${active ? ' active' : ''}`}
-            title={item.label}
-          >
-            <i className={item.icon} aria-hidden="true" />
-            <span className="app-shell-nav-label">{item.label}</span>
-          </NavLink>
-        );
-      })}
-    </nav>
+    NAV_CATEGORIES.find((cat) =>
+      cat.items.some((item) => isNavItemActive(item.path, pathname)),
+    )?.id ?? null
   );
 }
 
@@ -66,34 +36,106 @@ export default function AppShell() {
   const { branch } = useBranch();
   const location = useLocation();
 
-  const branchDisplay =
-    branch?.name ?? (branchId ? getBranchLabel(branchId) : '—');
+  // Click-to-expand sidebar (no hover). Collapsed = icon rail.
+  const [open, setOpen] = useState(true);
+  // Single-open accordion — defaults to the category holding the active route.
+  const [expandedCategory, setExpandedCategory] = useState<string | null>(() =>
+    activeCategoryId(location.pathname),
+  );
+
+  const branchDisplay = branch?.name ?? (branchId ? getBranchLabel(branchId) : '—');
 
   const pageTitle =
-    [...MAIN_NAV, ...BOTTOM_NAV].find(
-      (n) =>
-        n.path === location.pathname ||
-        (n.path === '/settings' && location.pathname.startsWith('/settings')) ||
-        (n.path === '/inventory' &&
-          location.pathname.startsWith('/inventory') &&
-          !location.pathname.startsWith('/inventory/transfer')) ||
-        (n.path === '/inventory/transfer' &&
-          location.pathname.startsWith('/inventory/transfer')) ||
-        (n.path === '/receiving/history' && location.pathname.startsWith('/receiving')),
-    )?.label ?? 'TwinPet POS';
+    ALL_NAV_ITEMS.find((item) => isNavItemActive(item.path, location.pathname))?.label ??
+    'TwinPet POS';
+
+  const toggleSidebar = () => setOpen((v) => !v);
+
+  const handleCategoryClick = (cat: NavCategory) => {
+    if (!open) {
+      // Collapsed: expand the rail AND open the clicked category.
+      setOpen(true);
+      setExpandedCategory(cat.id);
+      return;
+    }
+    setExpandedCategory((cur) => (cur === cat.id ? null : cat.id));
+  };
 
   return (
     <div className="app-shell w-full min-h-screen">
-      <aside className="app-shell-sidebar" aria-label="แถบนำทาง">
-        <div className="app-shell-logo" title="TwinPet POS">
-          P
+      <aside
+        className={`app-shell-sidebar${open ? ' is-open' : ''}`}
+        aria-label="แถบนำทาง"
+      >
+        <div className="app-shell-head">
+          <button
+            type="button"
+            className="app-shell-hamburger"
+            onClick={toggleSidebar}
+            aria-label={open ? 'ย่อเมนู' : 'ขยายเมนู'}
+            aria-expanded={open}
+            title={open ? 'ย่อเมนู' : 'ขยายเมนู'}
+          >
+            <i className="ti ti-menu-2" aria-hidden="true" />
+          </button>
+          <div className="app-shell-logo" title="TwinPet POS">
+            <span className="app-shell-logo-mark">P</span>
+            <span className="app-shell-logo-text">TwinPet</span>
+          </div>
         </div>
 
-        <NavLinks items={MAIN_NAV} ariaLabel="เมนูหลัก" />
+        <nav className="app-shell-nav" aria-label="เมนูหลัก">
+          {NAV_CATEGORIES.map((cat) => {
+            const catActive = cat.items.some((item) =>
+              isNavItemActive(item.path, location.pathname),
+            );
+            const isExpanded = open && expandedCategory === cat.id;
+
+            return (
+              <div key={cat.id} className="app-shell-cat">
+                <button
+                  type="button"
+                  className={`app-shell-cat-head${catActive ? ' active' : ''}${
+                    isExpanded ? ' expanded' : ''
+                  }`}
+                  onClick={() => handleCategoryClick(cat)}
+                  aria-expanded={isExpanded}
+                  title={cat.label}
+                >
+                  <i className={`app-shell-cat-icon ti ${cat.icon}`} aria-hidden="true" />
+                  <span className="app-shell-cat-label">{cat.label}</span>
+                  <i
+                    className={`app-shell-cat-chevron ti ${
+                      isExpanded ? 'ti-chevron-up' : 'ti-chevron-down'
+                    }`}
+                    aria-hidden="true"
+                  />
+                </button>
+
+                {isExpanded && (
+                  <div className="app-shell-sub">
+                    {cat.items.map((item) => {
+                      const active = isNavItemActive(item.path, location.pathname);
+                      return (
+                        <NavLink
+                          key={item.path}
+                          to={item.path}
+                          className={`app-shell-sub-link${active ? ' active' : ''}`}
+                          title={item.label}
+                        >
+                          <i className={`ti ${item.icon}`} aria-hidden="true" />
+                          <span className="app-shell-sub-label">{item.label}</span>
+                        </NavLink>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </nav>
 
         <div className="app-shell-nav-spacer" />
-
-        <NavLinks items={BOTTOM_NAV} ariaLabel="เมนูระบบ" />
 
         <div className="app-shell-sidebar-footer">
           {user && (
@@ -105,9 +147,7 @@ export default function AppShell() {
                 <div className="app-shell-user-name">
                   {user.firstName} {user.lastName}
                 </div>
-                <div className="app-shell-user-role">
-                  {ROLE_LABELS[user.role]}
-                </div>
+                <div className="app-shell-user-role">{ROLE_LABELS[user.role]}</div>
               </div>
             </div>
           )}

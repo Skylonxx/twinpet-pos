@@ -9,7 +9,7 @@
 }
 
 .app-shell-sidebar {
-  width: 52px;
+  width: 60px;
   flex-shrink: 0;
   background: var(--p900);
   display: flex;
@@ -17,21 +17,60 @@
   align-items: stretch;
   padding: 10px 0;
   gap: 4px;
-  transition: width 0.2s ease;
+  /* Click-to-expand only — width changes when `.is-open` is toggled, never on hover. */
+  transition: width 0.22s ease;
   overflow: hidden;
   z-index: 50;
 }
 
-.app-shell-sidebar:hover {
-  width: 200px;
+.app-shell-sidebar.is-open {
+  width: 232px;
+}
+
+/* ── Head: hamburger + logo ───────────────────────────────────────────── */
+.app-shell-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px 8px;
+  min-height: 44px;
+}
+
+.app-shell-hamburger {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.75);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  transition: background 0.13s, color 0.13s;
+}
+
+.app-shell-hamburger:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--white);
 }
 
 .app-shell-logo {
-  width: 36px;
-  height: 36px;
-  margin: 0 auto 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.app-shell-logo-mark {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
   background: var(--p600);
-  border-radius: 9px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -39,61 +78,162 @@
   font-weight: 600;
   font-size: 14px;
   color: var(--white);
-  flex-shrink: 0;
 }
 
-.app-shell-sidebar:hover .app-shell-logo {
-  margin-left: 8px;
-  margin-right: auto;
+.app-shell-logo-text {
+  font-family: 'Prompt', sans-serif;
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--white);
+  white-space: nowrap;
+}
+
+/* Collapsed: hide the logo block entirely so only the hamburger shows. */
+.app-shell-sidebar:not(.is-open) .app-shell-logo {
+  display: none;
 }
 
 .app-shell-nav {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 0 6px;
+  gap: 2px;
+  padding: 0 8px;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
-.app-shell-nav-link {
+.app-shell-cat {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Category header (accordion toggle) ───────────────────────────────── */
+.app-shell-cat-head {
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 40px;
-  padding: 0 10px;
+  gap: 12px;
+  width: 100%;
+  min-height: 42px;
+  padding: 0 12px;
+  border: none;
   border-radius: 9px;
-  color: rgba(255, 255, 255, 0.45);
-  text-decoration: none;
-  transition: all 0.13s;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.55);
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
   white-space: nowrap;
   overflow: hidden;
+  transition: background 0.13s, color 0.13s;
 }
 
-.app-shell-nav-link i {
+.app-shell-cat-icon {
   font-size: 20px;
   flex-shrink: 0;
   width: 20px;
   text-align: center;
 }
 
-.app-shell-nav-label {
+.app-shell-cat-label {
+  flex: 1;
   font-size: 13px;
-  font-weight: 500;
-  opacity: 0;
-  transition: opacity 0.15s ease;
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.app-shell-sidebar:hover .app-shell-nav-label {
-  opacity: 1;
+.app-shell-cat-chevron {
+  font-size: 16px;
+  flex-shrink: 0;
+  opacity: 0.6;
+  transition: opacity 0.13s;
 }
 
-.app-shell-nav-link:hover {
+.app-shell-cat-head:hover {
   background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.app-shell-cat-head.active {
+  color: var(--white);
+}
+
+.app-shell-cat-head.expanded {
+  color: rgba(255, 255, 255, 0.95);
+}
+
+/* Collapsed: center the icon, hide label + chevron. */
+.app-shell-sidebar:not(.is-open) .app-shell-cat-head {
+  justify-content: center;
+  padding: 0;
+  gap: 0;
+}
+
+.app-shell-sidebar:not(.is-open) .app-shell-cat-label,
+.app-shell-sidebar:not(.is-open) .app-shell-cat-chevron {
+  display: none;
+}
+
+/* ── Sub-menu (accordion body) ────────────────────────────────────────── */
+.app-shell-sub {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 2px 0 4px;
+  animation: app-shell-sub-in 0.16s ease;
+}
+
+@keyframes app-shell-sub-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.app-shell-sub-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 0 10px 0 18px;
+  margin-left: 14px;
+  border-left: 1.5px solid rgba(255, 255, 255, 0.12);
+  border-radius: 0 8px 8px 0;
+  color: rgba(255, 255, 255, 0.5);
+  text-decoration: none;
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  transition: background 0.13s, color 0.13s;
+}
+
+.app-shell-sub-link i {
+  font-size: 16px;
+  flex-shrink: 0;
+  width: 18px;
+  text-align: center;
+}
+
+.app-shell-sub-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-shell-sub-link:hover {
+  background: rgba(255, 255, 255, 0.07);
   color: rgba(255, 255, 255, 0.85);
 }
 
-.app-shell-nav-link.active {
+.app-shell-sub-link.active {
   background: var(--p600);
   color: var(--white);
+  border-left-color: var(--p600);
 }
 
 .app-shell-nav-spacer {
@@ -102,15 +242,15 @@
 }
 
 .app-shell-sidebar-footer {
-  padding: 8px 6px 4px;
+  padding: 8px 8px 4px;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   gap: 6px;
 }
 
-.app-shell-sidebar:hover .app-shell-sidebar-footer {
-  align-items: stretch;
+.app-shell-sidebar:not(.is-open) .app-shell-sidebar-footer {
+  align-items: center;
 }
 
 .app-shell-user-block {
@@ -140,12 +280,11 @@
 
 .app-shell-user-meta {
   min-width: 0;
-  opacity: 0;
-  transition: opacity 0.15s ease;
+  display: none;
 }
 
-.app-shell-sidebar:hover .app-shell-user-meta {
-  opacity: 1;
+.app-shell-sidebar.is-open .app-shell-user-meta {
+  display: block;
 }
 
 .app-shell-user-name {
@@ -180,10 +319,10 @@
   transition: all 0.13s;
 }
 
-.app-shell-sidebar:hover .app-shell-logout {
+.app-shell-sidebar.is-open .app-shell-logout {
   width: auto;
-  margin: 0 6px;
-  padding: 0 10px;
+  margin: 0;
+  padding: 0 12px;
   justify-content: flex-start;
 }
 
@@ -193,12 +332,12 @@
 }
 
 .app-shell-logout-label {
-  opacity: 0;
   white-space: nowrap;
+  display: none;
 }
 
-.app-shell-sidebar:hover .app-shell-logout-label {
-  opacity: 1;
+.app-shell-sidebar.is-open .app-shell-logout-label {
+  display: inline;
 }
 
 .app-shell-main {
