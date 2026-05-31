@@ -131,6 +131,7 @@ export function useCart({ products, customer, showToast }: UseCartArgs) {
             productName: product.name,
             category: product.category,
             sku: product.sku,
+            barcode: option.barcode ?? null,
             unit: option.unit,
             unitFactor: option.factor,
             unitPrice,

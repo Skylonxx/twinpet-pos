@@ -27,6 +27,7 @@ import AdminTransferPage from './pages/admin/AdminTransferPage';
 import AdminTransferCreatePage from './pages/admin/AdminTransferCreatePage';
 import AdminStockReportPage from './pages/admin/AdminStockReportPage';
 import BranchManagementPage from './pages/admin/BranchManagementPage';
+import TierManagementPage from './pages/admin/TierManagementPage';
 import AdminStaffManagementPage from './pages/admin/AdminStaffManagementPage';
 import AdminSupplierManagementPage from './pages/admin/AdminSupplierManagementPage';
 import DocumentSettings from './pages/settings/DocumentSettings';
@@ -82,6 +83,7 @@ export default function App() {
             <Route path="staff" element={<AdminStaffManagementPage />} />
             <Route path="products" element={<AdminProductManagementPage />} />
             <Route path="suppliers" element={<AdminSupplierManagementPage />} />
+            <Route path="price-levels" element={<TierManagementPage />} />
             <Route path="receiving" element={<AdminReceivingPage />} />
             <Route path="transfers" element={<AdminTransferPage />} />
             <Route path="transfers/new" element={<AdminTransferCreatePage />} />

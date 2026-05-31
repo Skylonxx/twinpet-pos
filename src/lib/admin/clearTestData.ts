@@ -437,6 +437,37 @@ export async function hardDeleteSuppliers(): Promise<DeletionSummary> {
   return { suppliers };
 }
 
+/** Protected default category — must never be deleted (mirrors categoryService). */
+const GENERAL_CATEGORY_ID = 'general';
+
+/**
+ * Hard-delete all product categories EXCEPT the protected default ('general').
+ * Paged in chunks; the preserved 'general' doc is filtered out of every batch,
+ * so once only it remains the loop finds nothing deletable and terminates.
+ */
+export async function hardDeleteCategories(): Promise<DeletionSummary> {
+  const firestore = requireDb();
+  await ensureFirebaseAuth();
+
+  let categories = 0;
+  for (;;) {
+    const snap = await getDocs(
+      query(collection(firestore, collections.categories), limit(BATCH_LIMIT)),
+    );
+    const deletable = snap.docs.filter((d) => d.id !== GENERAL_CATEGORY_ID);
+    if (deletable.length === 0) break;
+
+    const batch = writeBatch(firestore);
+    for (const docSnap of deletable) batch.delete(docSnap.ref);
+    await batch.commit();
+    categories += deletable.length;
+
+    if (snap.size < BATCH_LIMIT) break;
+  }
+
+  return { categories };
+}
+
 /**
  * Factory reset: run every clear/reset step in dependency-safe order and return
  * the merged document counts. Transactions are removed first, then the ledger and

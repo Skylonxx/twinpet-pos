@@ -7,13 +7,13 @@ import {
   NOTIF_EVENTS,
   PAY_METHOD_DEFS,
   type NotifEventKey,
-  type PriceLevelRow,
   type SettingsFormData,
   type SettingsSection,
 } from '../lib/settings/types';
 import { useSettings } from '../lib/settings/useSettings';
 import type { PosDevice, PosDeviceType, UomUnit } from '../lib/types';
 import ExpiryPolicySettings from './settings/ExpiryPolicySettings';
+import PriceLevelManager from '../components/admin/PriceLevelManager';
 import './SettingsPage.css';
 
 function Toggle({
@@ -216,36 +216,6 @@ export default function SettingsPage() {
     const next = { ...form.notifications };
     next[key] = { ...next[key], [channel]: !next[key][channel] };
     updateForm({ notifications: next });
-  };
-
-  const addPriceLevel = () => {
-    const id = `pl_${Date.now().toString(36)}`;
-    setPriceLevels([
-      ...priceLevels,
-      {
-        id,
-        name: 'ระดับใหม่',
-        code: 'NEW',
-        order: priceLevels.length + 1,
-        isActive: true,
-        isGlobal: true,
-        branchId: null,
-        desc: '',
-      },
-    ]);
-    showToast('เพิ่มระดับราคาแล้ว', 'info');
-  };
-
-  const removePriceLevel = (id: string) => {
-    if (priceLevels.length <= 1) {
-      showToast('ต้องมีอย่างน้อย 1 ระดับ', 'warn');
-      return;
-    }
-    setPriceLevels(priceLevels.filter((p) => p.id !== id));
-  };
-
-  const updatePriceLevel = (id: string, patch: Partial<PriceLevelRow>) => {
-    setPriceLevels(priceLevels.map((p) => (p.id === id ? { ...p, ...patch } : p)));
   };
 
   const addUom = () => {
@@ -470,52 +440,11 @@ export default function SettingsPage() {
             <>
               <div className="stg-section-title">ระดับราคา (Price Level)</div>
               <div className="stg-section-sub">กำหนดระดับราคาที่ใช้ร่วมกันทุกสินค้า — สืบทอดไปยังทุกสาขา</div>
-              <div className="stg-card">
-                <div className="stg-card-head">
-                  <i className="ti ti-layers-difference" aria-hidden="true" /> ระดับราคาทั้งหมด
-                  <div className="stg-card-head-right">
-                    <button type="button" className="stg-btn stg-btn-primary stg-btn-sm" onClick={addPriceLevel}>
-                      <i className="ti ti-plus" aria-hidden="true" /> เพิ่มระดับ
-                    </button>
-                  </div>
-                </div>
-                <div className="stg-card-body stg-card-body-flush">
-                  <table className="stg-price-table">
-                    <thead>
-                      <tr>
-                        <th style={{ width: 32 }} />
-                        <th>ชื่อระดับ</th>
-                        <th>รหัส</th>
-                        <th>คำอธิบาย</th>
-                        <th>สถานะ</th>
-                        <th />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {priceLevels.map((p) => (
-                        <tr key={p.id}>
-                          <td><i className="ti ti-grip-vertical stg-drag-handle" aria-hidden="true" /></td>
-                          <td>
-                            <input className="stg-form-input stg-input-inline" value={p.name} onChange={(e) => updatePriceLevel(p.id, { name: e.target.value })} />
-                          </td>
-                          <td><span className="stg-code">{p.code}</span></td>
-                          <td>
-                            <input className="stg-form-input stg-input-inline" value={p.desc} onChange={(e) => updatePriceLevel(p.id, { desc: e.target.value })} />
-                          </td>
-                          <td>
-                            <Toggle small checked={p.isActive} onChange={(v) => updatePriceLevel(p.id, { isActive: v })} />
-                          </td>
-                          <td>
-                            <button type="button" className="stg-icon-btn" onClick={() => removePriceLevel(p.id)} title="ลบ">
-                              <i className="ti ti-trash" style={{ fontSize: 14, color: 'var(--danger)' }} aria-hidden="true" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+              <PriceLevelManager
+                priceLevels={priceLevels}
+                setPriceLevels={setPriceLevels}
+                showToast={showToast}
+              />
             </>
           ) : null}
 

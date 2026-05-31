@@ -107,12 +107,28 @@ export type SeedSummary = {
   customers: number;
   suppliers: number;
   priceLevels: number;
+  categories: number;
   creditAccounts: number;
   products: number;
   productStocks: number;
   stockLots: number;
   branches: number;
 };
+
+/**
+ * Deterministic category id derived from the (often Thai) category name via a
+ * 32-bit FNV-1a hash. Stable per name regardless of product ordering, so the
+ * seed stays idempotent — crucially avoiding the non-deterministic `cat_<ts>`
+ * fallback that `slugFromCategoryName` produces for non-ASCII names.
+ */
+function stableCategoryId(name: string): string {
+  let h = 0x811c9dc5; // FNV-1a offset basis
+  for (let i = 0; i < name.length; i += 1) {
+    h ^= name.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return `cat-seed-${h.toString(36)}`;
+}
 
 function requireDb(): Firestore {
   if (!isFirebaseConfigured || !db) {
@@ -252,6 +268,7 @@ export async function seedMockData(): Promise<SeedSummary> {
     customers: 0,
     suppliers: 0,
     priceLevels: 0,
+    categories: 0,
     creditAccounts: 0,
     products: 0,
     productStocks: 0,
@@ -306,6 +323,17 @@ export async function seedMockData(): Promise<SeedSummary> {
     const supplierDoc = buildSupplierDoc(raw);
     await writer.set(doc(firestore, collections.suppliers, raw.id), supplierDoc);
     summary.suppliers += 1;
+  }
+
+  // ── Master categories (DERIVED from products, deterministic ids) ──
+  // Seeded BEFORE products so each product's `category` name resolves to a real
+  // master doc instead of showing as "(legacy)". Products keep their existing
+  // name strings; the category picker matches by name, so no product edits needed.
+  const categoryNames = [...new Set(rawProducts.map((p) => p.category).filter(Boolean))];
+  for (const name of categoryNames) {
+    const id = stableCategoryId(name);
+    await writer.set(doc(firestore, collections.categories, id), { id, name });
+    summary.categories += 1;
   }
 
   // ── Products + a productStocks doc per branch ──

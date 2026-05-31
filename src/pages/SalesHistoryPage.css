@@ -65,21 +65,6 @@
   margin-top: 1px;
 }
 
-.sh-branch-badge {
-  font-size: 11px;
-  padding: 4px 12px;
-  border-radius: 20px;
-  background: var(--p50, #eeedfe);
-  color: var(--p600, #534ab7);
-  font-weight: 500;
-  border: 1px solid var(--p100, #cecbf6);
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
 .sh-btn {
   display: inline-flex;
   align-items: center;
@@ -450,11 +435,16 @@
   white-space: nowrap;
 }
 
+.sh-col-bill {
+  white-space: nowrap;
+}
+
 .sh-bill-no {
   font-size: 12px;
   font-weight: 500;
   color: var(--p600, #534ab7);
   font-family: 'Prompt', sans-serif;
+  white-space: nowrap;
 }
 
 .sh-cust-cell {

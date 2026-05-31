@@ -15,6 +15,7 @@ import {
   clearInventoryTransactions,
   clearSalesData,
   clearStockLedgerAndFifo,
+  hardDeleteCategories,
   hardDeleteCustomers,
   hardDeleteProducts,
   hardDeleteSuppliers,
@@ -101,6 +102,15 @@ const HARD_DELETE_ACTIONS: DangerAction[] = [
     confirmPrefix:
       'ลบซัพพลายเออร์ทั้งหมด (suppliers) ออกจากระบบอย่างถาวร\n\n',
     run: hardDeleteSuppliers,
+  },
+  {
+    key: 'hard-categories',
+    label: 'ลบหมวดหมู่ทั้งหมด (Hard Delete Categories)',
+    icon: 'ti-tags-off',
+    confirmPrefix:
+      'ลบหมวดหมู่สินค้าทั้งหมด (categories) ยกเว้นหมวดเริ่มต้น "ทั่วไป"\n' +
+      'สินค้ายังเก็บชื่อหมวดเดิมไว้ แต่จะแสดงเป็น "(legacy)" จนกว่าจะ seed หรือสร้างหมวดใหม่\n\n',
+    run: hardDeleteCategories,
   },
 ];
 
@@ -229,7 +239,7 @@ function SeedZone() {
       const summary = await seedMockData();
       setStatus({
         kind: 'success',
-        message: `✅ นำเข้าข้อมูลสำเร็จ — ลูกค้า: ${summary.customers}, ผู้จำหน่าย: ${summary.suppliers}, ระดับราคา: ${summary.priceLevels}, บัญชีเครดิต: ${summary.creditAccounts}, สินค้า: ${summary.products}, สต็อก (${summary.branches} สาขา): ${summary.productStocks}, ล็อตต้นทุน: ${summary.stockLots}`,
+        message: `✅ นำเข้าข้อมูลสำเร็จ — ลูกค้า: ${summary.customers}, ผู้จำหน่าย: ${summary.suppliers}, ระดับราคา: ${summary.priceLevels}, หมวดหมู่: ${summary.categories}, บัญชีเครดิต: ${summary.creditAccounts}, สินค้า: ${summary.products}, สต็อก (${summary.branches} สาขา): ${summary.productStocks}, ล็อตต้นทุน: ${summary.stockLots}`,
       });
     } catch (err) {
       console.error('[SeedZone] seedMockData failed', err);

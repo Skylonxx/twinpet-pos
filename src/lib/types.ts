@@ -354,6 +354,12 @@ export type ProductSnap = {
   name: string;
   sku: string;
   category: string;
+  /**
+   * Barcode of the exact UOM sold, snapshotted at checkout for audit accuracy.
+   * Absent on legacy bills (pre-snapshot) and null when the sold unit has no
+   * barcode — readers must fall back gracefully (see SalesHistory hybrid lookup).
+   */
+  barcode?: string | null;
 };
 
 export type LotRef = {

@@ -34,6 +34,12 @@ const ADMIN_NAV = [
     icon: 'ti-building-factory-2',
   },
   {
+    path: '/admin/price-levels',
+    end: false,
+    label: 'Price Levels',
+    icon: 'ti-layers-difference',
+  },
+  {
     path: '/admin/receiving',
     end: false,
     label: 'Receiving (HQ)',

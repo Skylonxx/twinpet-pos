@@ -440,6 +440,7 @@ export async function completePosSale(input: CompleteSaleInput): Promise<Complet
             name: line.productName,
             sku: line.sku,
             category: line.category,
+            barcode: line.barcode ?? null,
           },
           unit: line.unit,
           unitFactor: line.unitFactor,

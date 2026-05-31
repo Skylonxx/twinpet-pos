@@ -436,10 +436,6 @@ export default function SalesHistoryPage() {
           <div className="sh-topbar-title">ประวัติการขาย</div>
           <div className="sh-topbar-sub">Sales History</div>
         </div>
-        <span className="sh-branch-badge">
-          <i className="ti ti-map-pin" style={{ fontSize: 12 }} aria-hidden="true" />
-          สาขา: {branchDisplay}
-        </span>
         <button
           type="button"
           className="sh-btn sh-btn-ghost sh-btn-sm"
@@ -621,8 +617,8 @@ export default function SalesHistoryPage() {
                 <table className="sh-table">
                   <thead>
                     <tr>
-                      <th style={{ width: 70 }}>เวลา</th>
-                      <th style={{ width: 120 }}>เลขที่บิล</th>
+                      <th style={{ width: 150 }}>เวลา</th>
+                      <th style={{ width: 150 }}>เลขที่บิล</th>
                       <th>ลูกค้า</th>
                       <th style={{ width: 110 }}>ช่องทางชำระ</th>
                       <th style={{ width: 100 }}>พนักงาน</th>
@@ -649,8 +645,10 @@ export default function SalesHistoryPage() {
                             className={selectedId === order.id ? 'selected' : undefined}
                             onClick={() => void openDrawer(record)}
                           >
-                            <td className="sh-col-time">{formatSaleTime(created)}</td>
-                            <td>
+                            <td className="sh-col-time">
+                              {`${formatSaleDate(created)} ${formatSaleTime(created)}`}
+                            </td>
+                            <td className="sh-col-bill">
                               <span className="sh-bill-no">{order.billId || order.id}</span>
                             </td>
                             <td>
@@ -785,7 +783,10 @@ export default function SalesHistoryPage() {
                         </thead>
                         <tbody>
                           {drawerItems.map((it) => {
-                            const barcode = resolveItemBarcode(it);
+                            // Hybrid: prefer the immutable barcode snapshotted at
+                            // checkout; fall back to a live product lookup only for
+                            // legacy bills where the snapshot is absent.
+                            const barcode = it.productSnap.barcode ?? resolveItemBarcode(it);
                             return (
                               <tr key={it.id}>
                                 <td>

@@ -8,6 +8,8 @@ export type CartLine = {
   productName: string;
   category: string;
   sku: string;
+  /** Barcode of the selected UOM — carried to the order snapshot at checkout. */
+  barcode?: string | null;
   unit: string;
   unitFactor: number;
   unitPrice: number;
