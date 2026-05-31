@@ -169,11 +169,15 @@ service cloud.firestore {
       allow read: if isStaff();
       allow create: if isStaff();
       allow update: if isManagerOrAdmin();
+      // Admin-only — used by the Danger Zone UAT reset to wipe credit history
+      allow delete: if isAdmin();
     }
 
     match /creditPayments/{paymentId} {
       allow read: if isStaff();
       allow create: if isStaff();
+      // Admin-only — used by the Danger Zone UAT reset to wipe credit history
+      allow delete: if isAdmin();
     }
 
     // ── Sales ──
@@ -184,19 +188,23 @@ service cloud.firestore {
         && request.resource.data.staffId == staffId();
       allow update: if isManagerOrAdmin()
         && hasBranchAccess(resource.data.branchId);
+      // Admin-only — used by the Danger Zone UAT reset to wipe sales history
+      allow delete: if isAdmin();
 
       match /orderItems/{itemId} {
         allow read: if isStaff();
         // Parent order may be created in the same batch — cannot get() it yet
         allow create: if isStaff();
-        allow update, delete: if isStaff()
-          && hasBranchAccess(get(/databases/$(database)/documents/orders/$(orderId)).data.branchId);
+        allow update, delete: if isAdmin() || (isStaff()
+          && hasBranchAccess(get(/databases/$(database)/documents/orders/$(orderId)).data.branchId));
       }
     }
 
     match /payments/{paymentId} {
       allow read: if isStaff();
       allow create: if isStaff();
+      // Admin-only — used by the Danger Zone UAT reset to wipe sales history
+      allow delete: if isAdmin();
     }
 
     match /parkedOrders/{parkedId} {
@@ -289,8 +297,8 @@ service cloud.firestore {
       match /transferItems/{itemId} {
         allow read: if isStaff();
         allow create: if isStaff();
-        allow update, delete: if isStaff()
-          && hasBranchAccess(get(/databases/$(database)/documents/inventoryTransfers/$(transferId)).data.fromBranchId);
+        allow update, delete: if isAdmin() || (isStaff()
+          && hasBranchAccess(get(/databases/$(database)/documents/inventoryTransfers/$(transferId)).data.fromBranchId));
       }
     }
 
@@ -301,12 +309,16 @@ service cloud.firestore {
         && hasBranchAccess(request.resource.data.branchId);
       allow update: if isStaff()
         && hasBranchAccess(resource.data.branchId);
+      // Admin-only — used by the Danger Zone UAT reset to wipe shift history
+      allow delete: if isAdmin();
     }
 
     match /cashTransactions/{txId} {
       allow read: if isStaff() && hasBranchAccess(resource.data.branchId);
       allow create: if isStaff()
         && hasBranchAccess(request.resource.data.branchId);
+      // Admin-only — used by the Danger Zone UAT reset to wipe cash history
+      allow delete: if isAdmin();
     }
 
     match /posDevices/{deviceId} {
@@ -318,11 +330,15 @@ service cloud.firestore {
     match /staffActivities/{activityId} {
       allow read: if isStaff();
       allow create: if isStaff();
+      // Admin-only — used by the Danger Zone UAT reset to wipe activity logs
+      allow delete: if isAdmin();
     }
 
     match /auditLogs/{logId} {
       allow read: if isAdmin();
       allow create: if isStaff();
+      // Admin-only — used by the Danger Zone UAT reset to wipe audit logs
+      allow delete: if isAdmin();
     }
 
     // ── Default deny for unlisted collections ──

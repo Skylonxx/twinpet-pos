@@ -412,3 +412,112 @@
 .admin-branches-toggle input:disabled + .admin-branches-toggle-track {
   opacity: 0.6;
 }
+
+/* ── Danger Zone (developer / UAT tools) ─────────────────────────────── */
+.admin-danger-zone {
+  margin-top: 8px;
+  padding: 20px;
+  border: 1px solid #f5b5b5;
+  border-radius: 12px;
+  background: #fff5f5;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.admin-danger-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  color: #b42318;
+}
+
+.admin-danger-header > i {
+  font-size: 22px;
+  line-height: 1.2;
+  flex-shrink: 0;
+}
+
+.admin-danger-title {
+  margin: 0 0 2px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #b42318;
+}
+
+.admin-danger-subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: #985353;
+}
+
+.admin-danger-status {
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  background: #ecfdf3;
+  border: 1px solid #a6e9bf;
+  color: #05603a;
+  word-break: break-word;
+}
+
+.admin-danger-status-error {
+  background: #fef3f2;
+  border-color: #f5b5b5;
+  color: #b42318;
+}
+
+.admin-danger-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.admin-danger-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border-radius: 8px;
+  border: 1px solid #e89b9b;
+  background: #fff;
+  color: #b42318;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.admin-danger-btn:hover:not(:disabled) {
+  background: #fee4e2;
+  border-color: #d92d20;
+}
+
+.admin-danger-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.admin-danger-master {
+  border-top: 1px dashed #f0c0c0;
+  padding-top: 16px;
+}
+
+.admin-danger-btn-master {
+  width: 100%;
+  justify-content: center;
+  padding: 12px 16px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+  background: #d92d20;
+  border-color: #b42318;
+}
+
+.admin-danger-btn-master:hover:not(:disabled) {
+  background: #b42318;
+}
+
+.admin-danger-btn i.spin {
+  animation: admin-branches-spin 0.8s linear infinite;
+}

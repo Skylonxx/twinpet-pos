@@ -10,7 +10,154 @@ import {
   validateBranchForm,
   type BranchFormInput,
 } from '../../lib/admin/branchManagement';
+import {
+  clearAllTransactionData,
+  clearInventoryTransactions,
+  clearSalesData,
+  clearStockLedgerAndFifo,
+  resetAllProductStocks,
+  type DeletionSummary,
+} from '../../lib/admin/clearTestData';
 import './BranchManagementPage.css';
+
+const DANGER_CONFIRM =
+  'คุณแน่ใจหรือไม่? ข้อมูลจะถูกลบถาวรและกู้คืนไม่ได้';
+
+type DangerAction = {
+  key: string;
+  label: string;
+  icon: string;
+  /** Extra warning prepended to the standard confirm for the destructive master action. */
+  confirmPrefix?: string;
+  run: () => Promise<DeletionSummary>;
+};
+
+const DANGER_ACTIONS: DangerAction[] = [
+  {
+    key: 'sales',
+    label: 'ลบประวัติการขายทั้งหมด',
+    icon: 'ti-receipt',
+    run: clearSalesData,
+  },
+  {
+    key: 'inventory',
+    label: 'ลบประวัติการรับเข้าและโอนสินค้า',
+    icon: 'ti-truck-delivery',
+    run: clearInventoryTransactions,
+  },
+  {
+    key: 'ledger',
+    label: 'ลบประวัติ Movement และ FIFO',
+    icon: 'ti-history',
+    run: clearStockLedgerAndFifo,
+  },
+  {
+    key: 'stocks',
+    label: 'รีเซ็ตสต็อกสินค้าเป็น 0',
+    icon: 'ti-package-off',
+    run: resetAllProductStocks,
+  },
+];
+
+const FACTORY_RESET: DangerAction = {
+  key: 'factory',
+  label: '🔥 ล้างข้อมูลธุรกรรมทั้งหมด (Factory Reset)',
+  icon: 'ti-flame',
+  confirmPrefix:
+    'นี่คือการล้างข้อมูลธุรกรรมทั้งหมด (การขาย, การรับเข้า, การโอน, Movement, FIFO และสต็อก)\n\n',
+  run: clearAllTransactionData,
+};
+
+function formatSummary(summary: DeletionSummary): string {
+  const entries = Object.entries(summary).filter(([, count]) => count > 0);
+  if (entries.length === 0) return 'ไม่มีข้อมูลที่ต้องลบ';
+  return entries.map(([name, count]) => `${name}: ${count}`).join(', ');
+}
+
+function DangerZone() {
+  const [runningKey, setRunningKey] = useState<string | null>(null);
+  const [status, setStatus] = useState<
+    { kind: 'success' | 'error'; message: string } | null
+  >(null);
+
+  const busy = runningKey !== null;
+
+  const handleRun = async (action: DangerAction) => {
+    if (busy) return;
+    const confirmMessage = `${action.confirmPrefix ?? ''}${DANGER_CONFIRM}`;
+    if (!window.confirm(confirmMessage)) return;
+
+    setRunningKey(action.key);
+    setStatus(null);
+    try {
+      const summary = await action.run();
+      setStatus({
+        kind: 'success',
+        message: `✅ ${action.label} สำเร็จ — ${formatSummary(summary)}`,
+      });
+    } catch (err) {
+      console.error(`[DangerZone] ${action.key} failed`, err);
+      setStatus({
+        kind: 'error',
+        message: `❌ ${action.label} ล้มเหลว: ${
+          err instanceof Error ? err.message : 'เกิดข้อผิดพลาด'
+        }`,
+      });
+    } finally {
+      setRunningKey(null);
+    }
+  };
+
+  const renderButton = (action: DangerAction, master = false) => {
+    const isRunning = runningKey === action.key;
+    return (
+      <button
+        key={action.key}
+        type="button"
+        className={`admin-danger-btn${master ? ' admin-danger-btn-master' : ''}`}
+        onClick={() => void handleRun(action)}
+        disabled={busy}
+      >
+        <i
+          className={`ti ${isRunning ? 'ti-loader-2 spin' : action.icon}`}
+          aria-hidden="true"
+        />
+        {isRunning ? 'กำลังดำเนินการ…' : action.label}
+      </button>
+    );
+  };
+
+  return (
+    <section className="admin-danger-zone" aria-label="Danger Zone">
+      <div className="admin-danger-header">
+        <i className="ti ti-alert-triangle" aria-hidden="true" />
+        <div>
+          <h2 className="admin-danger-title">เครื่องมือสำหรับนักพัฒนา (Danger Zone)</h2>
+          <p className="admin-danger-subtitle">
+            ใช้สำหรับล้างข้อมูลทดสอบในช่วง UAT เท่านั้น — การลบเป็นการถาวรและกู้คืนไม่ได้
+          </p>
+        </div>
+      </div>
+
+      {status && (
+        <div
+          className={`admin-danger-status${
+            status.kind === 'error' ? ' admin-danger-status-error' : ''
+          }`}
+          role={status.kind === 'error' ? 'alert' : 'status'}
+        >
+          {status.message}
+        </div>
+      )}
+
+      <div className="admin-danger-actions">
+        {DANGER_ACTIONS.map((action) => renderButton(action))}
+      </div>
+
+      <div className="admin-danger-master">{renderButton(FACTORY_RESET, true)}</div>
+    </section>
+  );
+}
 
 function StatusBadge({ active }: { active: boolean }) {
   return (
@@ -324,6 +471,8 @@ export default function BranchManagementPage() {
           </>
         )}
       </div>
+
+      <DangerZone />
 
       <BranchFormModal
         open={modalOpen}
