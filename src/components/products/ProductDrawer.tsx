@@ -23,6 +23,8 @@ import { resizeProductImageToDataUrl } from '../../lib/productCrud/resizeProduct
 import type { StockLot, StockMovement } from '../../lib/types';
 import { RETAIL_PRICE_LEVEL_ID } from '../../lib/types';
 import FifoQueueModal from '../inventory/FifoQueueModal';
+import CategoryCombobox from './CategoryCombobox';
+import CategoryManagementModal from './CategoryManagementModal';
 import ProductSaveConfirmDialog from './ProductSaveConfirmDialog';
 import TierPriceManagerDialog from './TierPriceManagerDialog';
 import UnitManagerModal from './UnitManagerModal';
@@ -293,12 +295,13 @@ export default function ProductDrawer({
   const [fieldErrors, setFieldErrors] = useState<ProductFormFieldErrors>({});
   const [unitMgrOpen, setUnitMgrOpen] = useState(false);
   const [fifoOpen, setFifoOpen] = useState(false);
+  const [categoryMgrOpen, setCategoryMgrOpen] = useState(false);
   const [imageProcessing, setImageProcessing] = useState(false);
 
   const imageInputRef = useRef<HTMLInputElement>(null);
 
   const nameRef = useRef<HTMLInputElement>(null);
-  const categoryRef = useRef<HTMLSelectElement>(null);
+  const categoryRef = useRef<HTMLInputElement>(null);
   const costRef = useRef<HTMLInputElement>(null);
   const unitRef = useRef<HTMLSelectElement>(null);
   const priceRef = useRef<HTMLInputElement>(null);
@@ -645,50 +648,20 @@ export default function ProductDrawer({
                     <label>
                       หมวดหมู่ <span className="req">*</span>
                     </label>
-                    <select
-                      ref={categoryRef}
-                      value={
-                        form.categoryId ||
-                        productCategories.find((c) => c.name === form.category)?.id ||
-                        ''
-                      }
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (val.startsWith('legacy:')) {
-                          setForm((f) => ({
-                            ...f,
-                            categoryId: '',
-                            category: val.slice('legacy:'.length),
-                          }));
-                        } else {
-                          const cat = productCategories.find((c) => c.id === val);
-                          setForm((f) => ({
-                            ...f,
-                            categoryId: val,
-                            category: cat?.name ?? '',
-                          }));
-                        }
+                    <CategoryCombobox
+                      inputRef={categoryRef}
+                      categories={productCategories}
+                      categoryId={form.categoryId}
+                      category={form.category}
+                      invalid={Boolean(fieldErrors.categoryId)}
+                      onManage={() => setCategoryMgrOpen(true)}
+                      onChange={(next) => {
+                        setForm((f) => ({ ...f, ...next }));
                         if (fieldErrors.categoryId) {
                           setFieldErrors((prev) => ({ ...prev, categoryId: undefined }));
                         }
                       }}
-                      aria-invalid={Boolean(fieldErrors.categoryId)}
-                    >
-                      <option value="" disabled>
-                        ระบุหมวดหมู่
-                      </option>
-                      {productCategories.map((cat) => (
-                        <option key={cat.id} value={cat.id}>
-                          {cat.name}
-                        </option>
-                      ))}
-                      {form.category &&
-                      !productCategories.some(
-                        (c) => c.id === form.categoryId || c.name === form.category,
-                      ) ? (
-                        <option value={`legacy:${form.category}`}>{form.category} (legacy)</option>
-                      ) : null}
-                    </select>
+                    />
                     {fieldErrors.categoryId ? (
                       <p className="pc-field-error">{fieldErrors.categoryId}</p>
                     ) : null}
@@ -1234,6 +1207,12 @@ export default function ProductDrawer({
         saving={unitsSaving}
         onSave={saveUnitNames}
         onClose={() => setUnitMgrOpen(false)}
+      />
+
+      <CategoryManagementModal
+        open={categoryMgrOpen}
+        onClose={() => setCategoryMgrOpen(false)}
+        onToast={onNotify}
       />
 
       {product ? (

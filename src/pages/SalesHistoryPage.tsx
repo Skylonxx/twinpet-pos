@@ -21,10 +21,11 @@ import {
   type StatusFilter,
 } from '../lib/salesHistory/types';
 import { useSalesHistory } from '../lib/salesHistory/useSalesHistory';
+import { usePosProducts } from '../lib/pos/usePosProducts';
 import { useAuth } from '../lib/hooks/useAuth';
 import { isFirebaseConfigured } from '../lib/firebase';
 import { voidOrderSafe } from '../lib/voidOrder';
-import type { PaymentMethod } from '../lib/types';
+import type { OrderItem, PaymentMethod } from '../lib/types';
 import './SalesHistoryPage.css';
 
 const PAGE_SIZE = 15;
@@ -236,6 +237,9 @@ function VoidModal({
 export default function SalesHistoryPage() {
   const { user, branchId } = useAuth();
   const { records, loading, error, loadItems, refresh, syncDevRecords } = useSalesHistory(branchId);
+  // Source of UOM-specific barcodes — order line items don't persist a barcode,
+  // so we resolve it from each product's uomOptions by the sold unit.
+  const { products } = usePosProducts(branchId);
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -258,6 +262,28 @@ export default function SalesHistoryPage() {
   const tableCardRef = useRef<HTMLDivElement>(null);
 
   const branchDisplay = branchId ? getBranchLabel(branchId) : '—';
+
+  const productById = useMemo(() => {
+    const map = new Map<string, (typeof products)[number]>();
+    for (const p of products) map.set(p.id, p);
+    return map;
+  }, [products]);
+
+  /**
+   * Resolve the barcode to show for an order line. The line item stores no
+   * barcode, only the sold `unit` (e.g. "ลัง"). We match that unit against the
+   * product's uomOptions (which includes the base unit) to get the UOM-specific
+   * barcode, falling back to the product's base barcode when that unit has none.
+   */
+  const resolveItemBarcode = useCallback(
+    (it: OrderItem): string | null => {
+      const product = productById.get(it.productId);
+      if (!product) return null;
+      const uom = product.uomOptions.find((u) => u.unit === it.unit);
+      return (uom?.barcode || product.barcode) ?? null;
+    },
+    [productById],
+  );
 
   const canVoid = Boolean(
     user?.permissions.canVoidOrder || user?.role === 'admin' || user?.role === 'manager',
@@ -746,44 +772,53 @@ export default function SalesHistoryPage() {
                         <thead>
                           <tr>
                             <th>สินค้า</th>
-                            <th className="r" style={{ width: 36 }}>
+                            <th className="r" style={{ width: 70 }}>
                               จำนวน
                             </th>
-                            <th className="r" style={{ width: 70 }}>
+                            <th className="r" style={{ width: 110 }}>
                               ราคา
                             </th>
-                            <th className="r" style={{ width: 70 }}>
+                            <th className="r" style={{ width: 120 }}>
                               รวม
                             </th>
                           </tr>
                         </thead>
                         <tbody>
-                          {drawerItems.map((it) => (
-                            <tr key={it.id}>
-                              <td>
-                                <div className="sh-item-name">
-                                  {it.productSnap.name}
-                                  {it.unit ? (
-                                    <span className="sh-item-unit">({it.unit})</span>
+                          {drawerItems.map((it) => {
+                            const barcode = resolveItemBarcode(it);
+                            return (
+                              <tr key={it.id}>
+                                <td>
+                                  <div className="sh-item-name">
+                                    {it.productSnap.name}
+                                    {it.unit ? (
+                                      <span className="sh-item-unit">({it.unit})</span>
+                                    ) : null}
+                                  </div>
+                                  <div className="sh-item-sku">
+                                    {it.productSnap.sku}
+                                    {it.discountAmt > 0 && (
+                                      <>
+                                        {' '}
+                                        <span className="sh-item-disc">
+                                          ลด ฿{formatMoney(it.discountAmt)}
+                                        </span>
+                                      </>
+                                    )}
+                                  </div>
+                                  {barcode ? (
+                                    <div className="sh-item-barcode">
+                                      <i className="ti ti-barcode" aria-hidden="true" />
+                                      {barcode}
+                                    </div>
                                   ) : null}
-                                </div>
-                                <div className="sh-item-sku">
-                                  {it.productSnap.sku}
-                                  {it.discountAmt > 0 && (
-                                    <>
-                                      {' '}
-                                      <span className="sh-item-disc">
-                                        ลด ฿{formatMoney(it.discountAmt)}
-                                      </span>
-                                    </>
-                                  )}
-                                </div>
-                              </td>
-                              <td className="r">{it.qty}</td>
-                              <td className="r">฿{formatMoney(it.unitPrice)}</td>
-                              <td className="r">฿{formatMoney(it.lineTotal)}</td>
-                            </tr>
-                          ))}
+                                </td>
+                                <td className="r">{it.qty}</td>
+                                <td className="r">฿{formatMoney(it.unitPrice)}</td>
+                                <td className="r">฿{formatMoney(it.lineTotal)}</td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     )}

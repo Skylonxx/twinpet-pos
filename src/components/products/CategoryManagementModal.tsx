@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import '../../pages/CustomerPage.css';
 import {
   slugFromCategoryName,
@@ -61,8 +62,17 @@ export default function CategoryManagementModal({ open, onClose, onToast }: Prop
 
   const previewId = idInput.trim() || (name.trim() ? slugFromCategoryName(name) : '');
 
-  return (
-    <div className="cm-dialog-overlay" role="dialog" aria-modal="true" onClick={onClose}>
+  // Portaled to <body> with an elevated z-index so it always stacks ABOVE the
+  // ProductDrawer overlay (.pc-dialog-overlay, z-index: 1000), which also portals
+  // to body. Without this the modal renders behind the drawer it was opened from.
+  return createPortal(
+    <div
+      className="cm-dialog-overlay"
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+      style={{ zIndex: 1200 }}
+    >
       <div className="cm-dialog cm-dialog-form cm-tier-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="cm-dialog-header cm-dialog-header-premium">
           <div>
@@ -183,6 +193,7 @@ export default function CategoryManagementModal({ open, onClose, onToast }: Prop
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

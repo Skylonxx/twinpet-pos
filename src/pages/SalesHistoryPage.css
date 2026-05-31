@@ -681,8 +681,8 @@
 
 @media (min-width: 768px) {
   .sh-drawer {
-    width: 480px;
-    max-width: min(500px, 92vw);
+    width: 780px;
+    max-width: min(840px, 96vw);
   }
 }
 
@@ -945,6 +945,7 @@
 
 .sh-item-table th.r {
   text-align: right;
+  white-space: nowrap;
 }
 
 .sh-item-table td {
@@ -1006,6 +1007,27 @@
 .sh-item-disc {
   font-size: 10px;
   color: #a32d2d;
+}
+
+.sh-item-barcode {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 5px;
+  font-family: 'Prompt', monospace;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--text-secondary, #6b7280);
+  background: var(--g50, #f8f8fc);
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+  padding: 2px 8px;
+  border-radius: 5px;
+  white-space: nowrap;
+}
+
+.sh-item-barcode i {
+  font-size: 13px;
+  color: var(--text-muted, #9ca3af);
 }
 
 .sh-pay-row {
