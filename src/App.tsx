@@ -32,6 +32,10 @@ import AdminStaffManagementPage from './pages/admin/AdminStaffManagementPage';
 import AdminSupplierManagementPage from './pages/admin/AdminSupplierManagementPage';
 import DocumentSettings from './pages/settings/DocumentSettings';
 import SettingsPage from './pages/SettingsPage';
+import {
+  FIRST_SETTINGS_SLUG,
+  SETTINGS_NAV_ITEMS,
+} from './lib/settings/settingsNav';
 import StaffManagementPage from './pages/StaffManagementPage';
 import StockReportPage from './pages/StockReportPage';
 import SupplierPage from './pages/SupplierPage';
@@ -71,9 +75,17 @@ export default function App() {
             <Route path="/staff" element={<StaffManagementPage />} />
             <Route path="/export" element={<ExportReportPage />} />
             <Route path="/settings" element={<SettingsLayout />}>
-              <Route index element={<Navigate to="document" replace />} />
-              <Route path="document" element={<DocumentSettings />} />
-              <Route path="branch" element={<SettingsPage />} />
+              <Route index element={<Navigate to={FIRST_SETTINGS_SLUG} replace />} />
+              {SETTINGS_NAV_ITEMS.map((item) => (
+                <Route
+                  key={item.slug}
+                  path={item.slug}
+                  element={item.scope === 'system' ? <DocumentSettings /> : <SettingsPage />}
+                />
+              ))}
+              {/* Back-compat redirects for the previous two-page URLs */}
+              <Route path="document" element={<Navigate to="/settings/general" replace />} />
+              <Route path="branch" element={<Navigate to="/settings/branch-info" replace />} />
             </Route>
           </Route>
 

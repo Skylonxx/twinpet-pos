@@ -1,8 +1,9 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useOutletContext } from 'react-router-dom';
 import { useUomUnits, createUomUnit } from '../lib/settings/useUomUnits';
 import { useAuth } from '../lib/hooks/useAuth';
+import { navItemBySlug, type SettingsOutletContext } from '../lib/settings/settingsNav';
 import {
-  NAV_SECTIONS,
   NOTIF_EVENTS,
   PAY_METHOD_DEFS,
   type NotifEventKey,
@@ -159,7 +160,13 @@ export default function SettingsPage() {
     cancel: cancelUom,
   } = useUomUnits();
 
-  const [section, setSection] = useState<SettingsSection>('branch');
+  // Active section is driven by the URL (unified Settings sidebar), not local state.
+  const location = useLocation();
+  const slug = location.pathname.split('/').pop() ?? '';
+  const section = (navItemBySlug(slug)?.section ?? 'branch') as SettingsSection;
+
+  // Report unsaved-changes upward so SettingsLayout can guard cross-scope nav.
+  const { setDirty } = useOutletContext<SettingsOutletContext>();
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'info' | 'warn' } | null>(null);
   const [addDeviceOpen, setAddDeviceOpen] = useState(false);
   const [dangerOpen, setDangerOpen] = useState(false);
@@ -240,17 +247,14 @@ export default function SettingsPage() {
   const formDirty = isDirty() || isUomDirty();
   const formSaving = saving || uomSaving;
 
+  useEffect(() => {
+    setDirty(formDirty);
+  }, [setDirty, formDirty]);
+  useEffect(() => () => setDirty(false), [setDirty]);
+
   if (loading || !form) {
     return (
       <div className="stg-page">
-        <div className="stg-topbar">
-          <div className="stg-topbar-icon">
-            <i className="ti ti-settings" aria-hidden="true" />
-          </div>
-          <div className="stg-topbar-center">
-            <div className="stg-topbar-title">ตั้งค่าระบบ</div>
-          </div>
-        </div>
         <div style={{ padding: 24, color: 'var(--text-muted)' }}>กำลังโหลด...</div>
       </div>
     );
@@ -260,46 +264,7 @@ export default function SettingsPage() {
 
   return (
     <div className="stg-page">
-      <div className="stg-topbar">
-        <div className="stg-topbar-icon">
-          <i className="ti ti-settings" aria-hidden="true" />
-        </div>
-        <div className="stg-topbar-center">
-          <div className="stg-topbar-title">ตั้งค่าระบบ</div>
-          <div className="stg-topbar-sub">System &amp; Branch Settings</div>
-        </div>
-        <button type="button" className="stg-btn stg-btn-ghost" onClick={handleCancel} disabled={!formDirty}>
-          ยกเลิก
-        </button>
-        <button type="button" className="stg-btn stg-btn-primary" onClick={() => void handleSave()} disabled={formSaving}>
-          <i className="ti ti-check" aria-hidden="true" /> {formSaving ? 'กำลังบันทึก...' : 'บันทึก'}
-        </button>
-      </div>
-
       <div className="stg-body">
-        <nav className="stg-sidebar">
-          {NAV_SECTIONS.map((group, gi) => (
-            <div key={gi}>
-              {group.header ? <div className="stg-sidebar-header">{group.header}</div> : null}
-              {group.items.map((item) => (
-                <div
-                  key={item.id}
-                  className={`stg-nav-item${section === item.id ? ' active' : ''}`}
-                  onClick={() => setSection(item.id)}
-                  onKeyDown={(e) => e.key === 'Enter' && setSection(item.id)}
-                  role="button"
-                  tabIndex={0}
-                >
-                  <i className={`ti ${item.icon}`} aria-hidden="true" />
-                  {item.label}
-                  {item.badge ? <span className="stg-nav-badge">{item.badge}</span> : null}
-                </div>
-              ))}
-              {gi < NAV_SECTIONS.length - 1 ? <div className="stg-nav-divider" /> : null}
-            </div>
-          ))}
-        </nav>
-
         <div className="stg-main">
           {/* ── ข้อมูลสาขา ── */}
           {section === 'branch' ? (

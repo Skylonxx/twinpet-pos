@@ -1,4 +1,5 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { useLocation, useOutletContext } from 'react-router-dom';
 import {
   CURRENCY_OPTIONS,
   DOC_PREFIX_FIELDS,
@@ -9,16 +10,10 @@ import {
   type SystemSettingsForm,
 } from '../../lib/settings/systemTypes';
 import { useSystemSettings } from '../../lib/settings/useSystemSettings';
+import { navItemBySlug, type SettingsOutletContext } from '../../lib/settings/settingsNav';
 import './DocumentSettings.css';
 
 type DocTab = 'general' | 'docPrefix' | 'linePrefix' | 'other';
-
-const TABS: { id: DocTab; label: string; icon: string }[] = [
-  { id: 'general', label: 'ทั่วไป & ภาษี', icon: 'ti-receipt-tax' },
-  { id: 'docPrefix', label: 'คำนำหน้าเอกสาร', icon: 'ti-file-invoice' },
-  { id: 'linePrefix', label: 'คำนำหน้ารายการ', icon: 'ti-list-numbers' },
-  { id: 'other', label: 'อื่นๆ', icon: 'ti-dots' },
-];
 
 const MONTH_OPTIONS = [
   { value: 1, label: 'มกราคม' },
@@ -37,8 +32,19 @@ const MONTH_OPTIONS = [
 
 export default function DocumentSettings() {
   const { form, loading, saving, updateForm, save, cancel, isDirty } = useSystemSettings();
-  const [tab, setTab] = useState<DocTab>('general');
+  // Active tab is driven by the URL (unified Settings sidebar), not local state.
+  const location = useLocation();
+  const slug = location.pathname.split('/').pop() ?? '';
+  const tab = (navItemBySlug(slug)?.section ?? 'general') as DocTab;
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'warn' } | null>(null);
+
+  // Report unsaved-changes upward so SettingsLayout can guard cross-scope nav.
+  const { setDirty } = useOutletContext<SettingsOutletContext>();
+  const dirty = isDirty();
+  useEffect(() => {
+    setDirty(dirty);
+  }, [setDirty, dirty]);
+  useEffect(() => () => setDirty(false), [setDirty]);
 
   const showToast = useCallback((msg: string, type: 'success' | 'warn' = 'success') => {
     setToast({ msg, type });
@@ -96,48 +102,6 @@ export default function DocumentSettings() {
 
   return (
     <div className="docstg-page">
-      <div className="docstg-header">
-        <div>
-          <div className="docstg-title">ตั้งค่าทั่วไป & เอกสาร</div>
-          <div className="docstg-sub">การตั้งค่าระดับระบบ — ภาษี สกุลเงิน และคำนำหน้าเอกสาร</div>
-        </div>
-        <div className="docstg-header-actions">
-          <button
-            type="button"
-            className="docstg-btn docstg-btn-ghost"
-            onClick={handleCancel}
-            disabled={!isDirty() || saving}
-          >
-            ยกเลิก
-          </button>
-          <button
-            type="button"
-            className="docstg-btn docstg-btn-primary"
-            onClick={() => void handleSave()}
-            disabled={saving}
-          >
-            <i className="ti ti-device-floppy" aria-hidden="true" />
-            {saving ? 'กำลังบันทึก...' : 'บันทึก'}
-          </button>
-        </div>
-      </div>
-
-      <div className="docstg-tabs" role="tablist" aria-label="แท็บตั้งค่า">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            role="tab"
-            aria-selected={tab === t.id}
-            className={`docstg-tab${tab === t.id ? ' active' : ''}`}
-            onClick={() => setTab(t.id)}
-          >
-            <i className={`ti ${t.icon}`} aria-hidden="true" />
-            {t.label}
-          </button>
-        ))}
-      </div>
-
       <div className="docstg-content">
         {tab === 'general' ? (
           <>
@@ -378,6 +342,27 @@ export default function DocumentSettings() {
             </div>
           </>
         ) : null}
+      </div>
+
+      <div className="docstg-footer">
+        <div className="docstg-footer-spacer" />
+        <button
+          type="button"
+          className="docstg-btn docstg-btn-ghost"
+          onClick={handleCancel}
+          disabled={!isDirty() || saving}
+        >
+          ยกเลิก
+        </button>
+        <button
+          type="button"
+          className="docstg-btn docstg-btn-primary"
+          onClick={() => void handleSave()}
+          disabled={saving}
+        >
+          <i className="ti ti-device-floppy" aria-hidden="true" />
+          {saving ? 'กำลังบันทึก...' : 'บันทึก'}
+        </button>
       </div>
 
       {toast ? (
