@@ -13,7 +13,6 @@ import {
   type ProductListItem,
   type StockFilter,
 } from '../lib/productCrud/types';
-import { getBranchLabel } from '../lib/branches';
 import { resolveCategoryName, useCategories } from '../lib/inventory/categoryService';
 import { useProductCrud } from '../lib/productCrud/useProductCrud';
 import './ProductCRUDPage.css';
@@ -252,7 +251,6 @@ export default function ProductCRUDPage() {
     return () => window.removeEventListener('keydown', onKey);
   }, [products, drawerMode, showPicker, openDrawer]);
 
-  const branchDisplay = branchId ? getBranchLabel(branchId) : '—';
   const rangeStart = sorted.length === 0 ? 0 : (page - 1) * perPage + 1;
   const rangeEnd = Math.min(page * perPage, sorted.length);
 
@@ -271,10 +269,6 @@ export default function ProductCRUDPage() {
           <div className="pc-topbar-title">จัดการสินค้า</div>
           <div className="pc-topbar-sub">Product Management</div>
         </div>
-        <span className="pc-branch-badge">
-          <i className="ti ti-map-pin" style={{ fontSize: 12 }} aria-hidden="true" />
-          สาขา: {branchDisplay}
-        </span>
         <button type="button" className="pc-btn pc-btn-ghost pc-btn-sm" title="Import">
           <i className="ti ti-upload" aria-hidden="true" /> Import
         </button>

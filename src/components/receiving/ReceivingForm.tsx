@@ -28,6 +28,7 @@ import {
   type ReceivingLine,
 } from '../../lib/receiving/types';
 import type { ReceivingStatus } from '../../lib/types';
+import { SingleDatePicker } from '../common/SingleDatePicker';
 import './ReceivingForm.css';
 import ReceivingVoidDialog from './ReceivingVoidDialog';
 
@@ -585,21 +586,19 @@ export default function ReceivingForm({
           <div className="rcv-form-grid rcv-form-grid-dates">
             <div className="rcv-field">
               <label htmlFor={`${idPrefix}-bill-date`}>วันที่ซื้อในบิล</label>
-              <input
+              <SingleDatePicker
                 id={`${idPrefix}-bill-date`}
-                type="date"
                 value={billDate}
-                onChange={(e) => setBillDate(e.target.value)}
+                onChange={setBillDate}
                 disabled={isCancelled}
               />
             </div>
             <div className="rcv-field">
               <label htmlFor={`${idPrefix}-receive-date`}>วันที่รับเข้า</label>
-              <input
+              <SingleDatePicker
                 id={`${idPrefix}-receive-date`}
-                type="date"
                 value={receiveDate}
-                onChange={(e) => setReceiveDate(e.target.value)}
+                onChange={setReceiveDate}
                 disabled={isCancelled}
               />
             </div>
@@ -933,13 +932,11 @@ export default function ReceivingForm({
                               <span>{line.hasExpiry ? 'กำหนดวัน' : 'ไม่กำหนด'}</span>
                             </label>
                             {line.hasExpiry ? (
-                              <input
-                                type="date"
-                                className="rcv-expiry-date"
+                              <SingleDatePicker
                                 value={line.expiryDate}
-                                onChange={(e) =>
+                                onChange={(iso) =>
                                   setLines((prev) =>
-                                    updateReceivingLine(prev, line.lineKey, { expiryDate: e.target.value }),
+                                    updateReceivingLine(prev, line.lineKey, { expiryDate: iso }),
                                   )
                                 }
                               />

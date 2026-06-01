@@ -7,7 +7,6 @@ import {
   VOID_REASONS,
   computeSummary,
   customerInitials,
-  datePresetLabel,
   filterSales,
   formatSaleDate,
   formatSaleDateTime,
@@ -26,6 +25,7 @@ import { useAuth } from '../lib/hooks/useAuth';
 import { isFirebaseConfigured } from '../lib/firebase';
 import { voidOrderSafe } from '../lib/voidOrder';
 import type { OrderItem, PaymentMethod } from '../lib/types';
+import { DateRangeDropdown } from '../components/common/DateRangeDropdown';
 import './SalesHistoryPage.css';
 
 const PAGE_SIZE = 15;
@@ -113,7 +113,7 @@ function PaginationBar({
   );
 }
 
-const DEFAULT_DATE_PRESET: DatePreset = '30d';
+const DEFAULT_DATE_PRESET: DatePreset = 'today';
 const initialDateRange = getDateRange(DEFAULT_DATE_PRESET, '', '');
 
 function fmtShort(n: number): string {
@@ -247,7 +247,6 @@ export default function SalesHistoryPage() {
   const [datePreset, setDatePreset] = useState<DatePreset>(DEFAULT_DATE_PRESET);
   const [dateFrom, setDateFrom] = useState(initialDateRange.start.toISOString().slice(0, 10));
   const [dateTo, setDateTo] = useState(initialDateRange.end.toISOString().slice(0, 10));
-  const [dateMenuOpen, setDateMenuOpen] = useState(false);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [drawerItems, setDrawerItems] = useState<SaleRecord['items']>([]);
@@ -258,7 +257,6 @@ export default function SalesHistoryPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [tablePage, setTablePage] = useState(1);
 
-  const dateDdRef = useRef<HTMLDivElement>(null);
   const tableCardRef = useRef<HTMLDivElement>(null);
 
   const branchDisplay = branchId ? getBranchLabel(branchId) : '—';
@@ -383,16 +381,6 @@ export default function SalesHistoryPage() {
   }, [filtered.length, tablePage]);
 
   useEffect(() => {
-    const onDocClick = (e: MouseEvent) => {
-      if (dateDdRef.current && !dateDdRef.current.contains(e.target as Node)) {
-        setDateMenuOpen(false);
-      }
-    };
-    document.addEventListener('click', onDocClick);
-    return () => document.removeEventListener('click', onDocClick);
-  }, []);
-
-  useEffect(() => {
     if (selected && selected.items.length) {
       setDrawerItems(selected.items);
     }
@@ -415,11 +403,6 @@ export default function SalesHistoryPage() {
       document.body.style.overflow = prev;
     };
   }, [selectedId]);
-
-  const dateLabel =
-    datePreset === 'custom'
-      ? `${dateFrom} – ${dateTo}`
-      : datePresetLabel(datePreset);
 
   const itemsSubtotal =
     drawerItems.reduce((s, i) => s + i.unitPrice * i.qty, 0) ||
@@ -509,64 +492,16 @@ export default function SalesHistoryPage() {
             />
           </div>
 
-          <div className="sh-date-dd" ref={dateDdRef}>
-            <button
-              type="button"
-              className="sh-date-dd-btn"
-              onClick={(e) => {
-                e.stopPropagation();
-                setDateMenuOpen((v) => !v);
-              }}
-            >
-              <i className="ti ti-calendar" aria-hidden="true" />
-              <span>{dateLabel}</span>
-              <i className="ti ti-chevron-down" style={{ fontSize: 10 }} aria-hidden="true" />
-            </button>
-            {dateMenuOpen && (
-              <div className="sh-date-dd-menu">
-                {(
-                  [
-                    ['today', 'วันนี้'],
-                    ['yesterday', 'เมื่อวาน'],
-                    ['7d', '7 วันล่าสุด'],
-                    ['30d', '30 วันล่าสุด'],
-                    ['month', 'เดือนนี้'],
-                  ] as const
-                ).map(([key, label]) => (
-                  <button
-                    key={key}
-                    type="button"
-                    className={`sh-date-menu-item${datePreset === key ? ' on' : ''}`}
-                    onClick={() => {
-                      setDatePreset(key);
-                      setDateMenuOpen(false);
-                    }}
-                  >
-                    {label}
-                  </button>
-                ))}
-                <div className="sh-date-custom-label">กำหนดเอง</div>
-                <div className="sh-date-custom">
-                  <input
-                    type="date"
-                    value={dateFrom}
-                    onChange={(e) => {
-                      setDateFrom(e.target.value);
-                      setDatePreset('custom');
-                    }}
-                  />
-                  <input
-                    type="date"
-                    value={dateTo}
-                    onChange={(e) => {
-                      setDateTo(e.target.value);
-                      setDatePreset('custom');
-                    }}
-                  />
-                </div>
-              </div>
-            )}
-          </div>
+          <DateRangeDropdown
+            preset={datePreset}
+            from={dateFrom}
+            to={dateTo}
+            onChange={({ preset, from, to }) => {
+              setDatePreset(preset);
+              setDateFrom(from);
+              setDateTo(to);
+            }}
+          />
 
           <select
             className="sh-sel"

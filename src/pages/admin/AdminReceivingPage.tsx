@@ -19,7 +19,6 @@ import { cancelReceiving } from '../../lib/receivingHistory/cancelReceiving';
 import {
   RECEIVING_STATUS_LABELS,
   computeReceivingSummary,
-  datePresetLabel,
   filterReceivings,
   formatReceivingDate,
   formatReceivingDateTime,
@@ -28,6 +27,7 @@ import {
   type ReceivingRecord,
   type ReceivingStatusFilter,
 } from '../../lib/receivingHistory/types';
+import { DateRangeDropdown } from '../../components/common/DateRangeDropdown';
 import ReceivingForm from '../../components/receiving/ReceivingForm';
 import type { Branch, Receiving, ReceivingItem, ReceivingStatus } from '../../lib/types';
 import '../ReceivingHistoryPage.css';
@@ -35,6 +35,14 @@ import '../ReceivingPage.css';
 import './AdminReceivingPage.css';
 
 const PAGE_SIZE = 15;
+
+const ADMIN_RECEIVING_PRESETS: ReadonlyArray<readonly [DatePreset, string]> = [
+  ['today', 'วันนี้'],
+  ['yesterday', 'เมื่อวาน'],
+  ['7d', '7 วันล่าสุด'],
+  ['30d', '30 วันล่าสุด'],
+  ['month', 'เดือนนี้'],
+];
 
 // ── Firestore helpers ──────────────────────────────────────────────────────
 
@@ -211,8 +219,6 @@ export default function AdminReceivingPage() {
   const [datePreset, setDatePreset] = useState<DatePreset>('30d');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const [dateMenuOpen, setDateMenuOpen] = useState(false);
-  const dateDdRef = useRef<HTMLDivElement>(null);
   const [page, setPage] = useState(1);
 
   // ── Detail drawer ─────────────────────────────────────────────────────
@@ -264,18 +270,6 @@ export default function AdminReceivingPage() {
     const id = setTimeout(() => setToast(null), 2600);
     return () => clearTimeout(id);
   }, [toast]);
-
-  // Close date dropdown on outside click
-  useEffect(() => {
-    if (!dateMenuOpen) return;
-    const onDoc = (e: MouseEvent) => {
-      if (dateDdRef.current && !dateDdRef.current.contains(e.target as Node)) {
-        setDateMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
-  }, [dateMenuOpen]);
 
   // ESC closes drawer
   useEffect(() => {
@@ -509,8 +503,6 @@ export default function AdminReceivingPage() {
     }
   }, [user, activeFormBranch, closeForm, load]);
 
-  const dateLabel = datePresetLabel(datePreset, dateFrom, dateTo);
-
   function fmtShort(n: number) {
     return parseFloat(String(n || 0)).toLocaleString('th-TH', { maximumFractionDigits: 0 });
   }
@@ -528,10 +520,6 @@ export default function AdminReceivingPage() {
           <div className="sh-topbar-title">รับเข้าสต็อก (HQ)</div>
           <div className="sh-topbar-sub">Inbound Receiving — ทุกสาขา</div>
         </div>
-        <span className="sh-branch-badge">
-          <i className="ti ti-building" style={{ fontSize: 12 }} aria-hidden="true" />
-          HQ — ทุกสาขา
-        </span>
         <button type="button" className="sh-btn sh-btn-ghost sh-btn-sm" onClick={() => void load()} disabled={loading}>
           <i className={`ti ti-refresh${loading ? ' arv-spin' : ''}`} aria-hidden="true" />
           Refresh
@@ -613,34 +601,18 @@ export default function AdminReceivingPage() {
             />
           </div>
 
-          <div className="sh-date-dd" ref={dateDdRef}>
-            <button type="button" className="sh-date-dd-btn" onClick={() => setDateMenuOpen((v) => !v)}>
-              <i className="ti ti-calendar" aria-hidden="true" />
-              <span>{dateLabel}</span>
-              <i className="ti ti-chevron-down" style={{ fontSize: 10 }} aria-hidden="true" />
-            </button>
-            {dateMenuOpen && (
-              <div className="sh-date-dd-menu">
-                {(['today', '7d', '30d', 'month'] as const).map((key) => ({
-                  today: 'วันนี้', '7d': '7 วันล่าสุด', '30d': '30 วันล่าสุด', month: 'เดือนนี้',
-                }[key] ? (
-                  <button
-                    key={key}
-                    type="button"
-                    className={`sh-date-menu-item${datePreset === key ? ' on' : ''}`}
-                    onClick={() => { setDatePreset(key); setDateMenuOpen(false); }}
-                  >
-                    {({ today: 'วันนี้', '7d': '7 วันล่าสุด', '30d': '30 วันล่าสุด', month: 'เดือนนี้' } as Record<string, string>)[key]}
-                  </button>
-                ) : null))}
-                <div className="sh-date-custom-label">กำหนดเอง</div>
-                <div className="sh-date-custom">
-                  <input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setDatePreset('custom'); }} />
-                  <input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setDatePreset('custom'); }} />
-                </div>
-              </div>
-            )}
-          </div>
+          <DateRangeDropdown
+            preset={datePreset}
+            from={dateFrom}
+            to={dateTo}
+            presets={ADMIN_RECEIVING_PRESETS}
+            resolveRange={getDateRange}
+            onChange={({ preset, from, to }) => {
+              setDatePreset(preset);
+              setDateFrom(from);
+              setDateTo(to);
+            }}
+          />
 
           <div className="sh-stock-filter">
             {([['all', 'ทั้งหมด'], ['completed', 'สำเร็จ'], ['draft', 'แบบร่าง'], ['cancelled', 'ยกเลิก']] as const).map(

@@ -1,5 +1,4 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { getBranchLabel } from '../lib/branches';
 import { useUomUnits, createUomUnit } from '../lib/settings/useUomUnits';
 import { useAuth } from '../lib/hooks/useAuth';
 import {
@@ -269,10 +268,6 @@ export default function SettingsPage() {
           <div className="stg-topbar-title">ตั้งค่าระบบ</div>
           <div className="stg-topbar-sub">System &amp; Branch Settings</div>
         </div>
-        <span className="stg-branch-badge">
-          <i className="ti ti-map-pin" style={{ fontSize: 12 }} aria-hidden="true" />
-          สาขา: {branchId ? getBranchLabel(branchId) : '—'}
-        </span>
         <button type="button" className="stg-btn stg-btn-ghost" onClick={handleCancel} disabled={!formDirty}>
           ยกเลิก
         </button>

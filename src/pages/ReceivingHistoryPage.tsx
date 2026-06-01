@@ -1,13 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { getBranchLabel } from '../lib/branches';
+import { DateRangeDropdown } from '../components/common/DateRangeDropdown';
 import { useAuth } from '../lib/hooks/useAuth';
 import { fmtMoney } from '../lib/receiving/types';
 import { parseReceivingNote } from '../lib/receiving/receivingFormUtils';
 import {
   RECEIVING_STATUS_LABELS,
   computeReceivingSummary,
-  datePresetLabel,
   filterReceivings,
   formatReceivingDate,
   formatReceivingDateTime,
@@ -21,6 +20,18 @@ import type { ReceivingStatus } from '../lib/types';
 import './ReceivingHistoryPage.css';
 
 const PAGE_SIZE = 15;
+
+const RECEIVING_DATE_PRESETS: ReadonlyArray<readonly [DatePreset, string]> = [
+  ['today', 'วันนี้'],
+  ['yesterday', 'เมื่อวาน'],
+  ['7d', '7 วันล่าสุด'],
+  ['30d', '30 วันล่าสุด'],
+  ['month', 'เดือนนี้'],
+];
+
+/** Default date filter on load: today. Resolve the concrete range so the
+ *  initial data load stays in sync with the 'today' preset. */
+const INITIAL_RECEIVING_RANGE = getDateRange('today', '', '');
 
 function buildPaginationItems(current: number, total: number): (number | 'ellipsis')[] {
   if (total <= 1) return [1];
@@ -135,11 +146,9 @@ export default function ReceivingHistoryPage() {
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<ReceivingStatusFilter>('all');
-  const [datePreset, setDatePreset] = useState<DatePreset>('30d');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
-  const [dateMenuOpen, setDateMenuOpen] = useState(false);
-  const dateDdRef = useRef<HTMLDivElement>(null);
+  const [datePreset, setDatePreset] = useState<DatePreset>('today');
+  const [dateFrom, setDateFrom] = useState(INITIAL_RECEIVING_RANGE.start.toISOString().slice(0, 10));
+  const [dateTo, setDateTo] = useState(INITIAL_RECEIVING_RANGE.end.toISOString().slice(0, 10));
 
   const [page, setPage] = useState(1);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -155,7 +164,6 @@ export default function ReceivingHistoryPage() {
     navigate(location.pathname, { replace: true, state: null });
   }, [location.pathname, location.state, navigate]);
 
-  const branchDisplay = branchId ? getBranchLabel(branchId) : '—';
 
   const dateRange = useMemo(
     () => getDateRange(datePreset, dateFrom, dateTo),
@@ -183,17 +191,6 @@ export default function ReceivingHistoryPage() {
   useEffect(() => {
     setPage(1);
   }, [search, statusFilter, datePreset, dateFrom, dateTo]);
-
-  useEffect(() => {
-    if (!dateMenuOpen) return;
-    const onDoc = (e: MouseEvent) => {
-      if (dateDdRef.current && !dateDdRef.current.contains(e.target as Node)) {
-        setDateMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
-  }, [dateMenuOpen]);
 
   const selected = useMemo(
     () => records.find((r) => r.receiving.id === selectedId) ?? null,
@@ -243,8 +240,6 @@ export default function ReceivingHistoryPage() {
     };
   }, [selectedId, closeDrawer]);
 
-  const dateLabel = datePresetLabel(datePreset, dateFrom, dateTo);
-
   return (
     <div className="sh-page">
       <header className="sh-topbar">
@@ -255,10 +250,6 @@ export default function ReceivingHistoryPage() {
           <div className="sh-topbar-title">ประวัติการรับเข้า</div>
           <div className="sh-topbar-sub">Inbound History</div>
         </div>
-        <span className="sh-branch-badge">
-          <i className="ti ti-map-pin" style={{ fontSize: 12 }} aria-hidden="true" />
-          สาขา: {branchDisplay}
-        </span>
         <button type="button" className="sh-btn sh-btn-ghost sh-btn-sm" onClick={() => refresh()}>
           <i className="ti ti-refresh" aria-hidden="true" /> Refresh
         </button>
@@ -307,60 +298,18 @@ export default function ReceivingHistoryPage() {
             />
           </div>
 
-          <div className="sh-date-dd" ref={dateDdRef}>
-            <button
-              type="button"
-              className="sh-date-dd-btn"
-              onClick={() => setDateMenuOpen((v) => !v)}
-            >
-              <i className="ti ti-calendar" aria-hidden="true" />
-              <span>{dateLabel}</span>
-              <i className="ti ti-chevron-down" style={{ fontSize: 10 }} aria-hidden="true" />
-            </button>
-            {dateMenuOpen ? (
-              <div className="sh-date-dd-menu">
-                {(
-                  [
-                    ['today', 'วันนี้'],
-                    ['7d', '7 วันล่าสุด'],
-                    ['30d', '30 วันล่าสุด'],
-                    ['month', 'เดือนนี้'],
-                  ] as const
-                ).map(([key, label]) => (
-                  <button
-                    key={key}
-                    type="button"
-                    className={`sh-date-menu-item${datePreset === key ? ' on' : ''}`}
-                    onClick={() => {
-                      setDatePreset(key);
-                      setDateMenuOpen(false);
-                    }}
-                  >
-                    {label}
-                  </button>
-                ))}
-                <div className="sh-date-custom-label">กำหนดเอง</div>
-                <div className="sh-date-custom">
-                  <input
-                    type="date"
-                    value={dateFrom}
-                    onChange={(e) => {
-                      setDateFrom(e.target.value);
-                      setDatePreset('custom');
-                    }}
-                  />
-                  <input
-                    type="date"
-                    value={dateTo}
-                    onChange={(e) => {
-                      setDateTo(e.target.value);
-                      setDatePreset('custom');
-                    }}
-                  />
-                </div>
-              </div>
-            ) : null}
-          </div>
+          <DateRangeDropdown
+            preset={datePreset}
+            from={dateFrom}
+            to={dateTo}
+            presets={RECEIVING_DATE_PRESETS}
+            resolveRange={getDateRange}
+            onChange={({ preset, from, to }) => {
+              setDatePreset(preset);
+              setDateFrom(from);
+              setDateTo(to);
+            }}
+          />
 
           <div className="sh-stock-filter">
             {(

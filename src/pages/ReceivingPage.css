@@ -852,13 +852,13 @@
   margin: 0;
 }
 
-.rcv-expiry-date {
-  border: 0.5px solid var(--g200);
+.rcv-expiry-cell .sdp-field {
   border-radius: 5px;
+}
+
+.rcv-expiry-cell .sdp-display {
   padding: 3px 6px;
   font-size: 10px;
-  font-family: inherit;
-  width: 100%;
 }
 
 .rcv-del-btn {

@@ -130,7 +130,6 @@ export default function StaffManagementPage() {
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'info' | 'warn' } | null>(null);
   const [clock, setClock] = useState('');
 
-  const branchDisplay = branchId ? getBranchLabel(branchId) : '—';
   const permSets = useMemo(() => setsFromMatrix(roleMatrix), [roleMatrix]);
 
   const filteredUsers = useMemo(() => {
@@ -285,10 +284,6 @@ export default function StaffManagementPage() {
           <div className="sm-topbar-title">จัดการพนักงาน &amp; สิทธิ์</div>
           <div className="sm-topbar-sub">Staff &amp; Permissions Management</div>
         </div>
-        <span className="sm-branch-badge">
-          <i className="ti ti-map-pin" style={{ fontSize: 12 }} aria-hidden="true" />
-          สาขา: {branchDisplay}
-        </span>
         <button type="button" className="sm-btn sm-btn-primary" onClick={openAdd}>
           <i className="ti ti-user-plus" aria-hidden="true" /> เพิ่มพนักงาน
         </button>

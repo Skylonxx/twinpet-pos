@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { SingleDatePicker } from '../../components/common/SingleDatePicker';
 import TransferConfirmDialog from '../../components/inventory/TransferConfirmDialog';
 import ProductPickerDialog, {
   productListItemToPickerItem,
@@ -226,11 +227,10 @@ export default function AdminTransferCreatePage() {
           <div className="inv-adj-form-grid">
             <div className="inv-adj-field">
               <label htmlFor="adm-tr-date">วันที่</label>
-              <input
+              <SingleDatePicker
                 id="adm-tr-date"
-                type="date"
                 value={transferDate}
-                onChange={(e) => setTransferDate(e.target.value)}
+                onChange={setTransferDate}
               />
             </div>
             <div className="inv-adj-field">

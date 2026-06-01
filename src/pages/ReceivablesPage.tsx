@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react';
 import DebtorManagerDialog from '../components/customers/DebtorManagerDialog';
-import { getBranchLabel } from '../lib/branches';
 import {
   creditPaymentMethodLabel,
   formatCreditPaymentDate,
@@ -35,8 +34,6 @@ export default function ReceivablesPage() {
   const { debtors, loading: debtorsLoading } = useDebtors(branchId, refreshKey);
   const { paymentHistory, loading: historyLoading } = useCreditPaymentHistory(branchId, refreshKey);
   const { creditMap, refreshDev } = useCustomers(branchId);
-
-  const branchDisplay = branchId ? getBranchLabel(branchId) : '—';
 
   const activeDebtor = useMemo(
     () => (activeDebtorId ? debtors.find((c) => c.id === activeDebtorId) ?? null : null),
@@ -87,10 +84,6 @@ export default function ReceivablesPage() {
           <div className="ar-topbar-title">สมุดบัญชีลูกหนี้</div>
           <div className="ar-topbar-sub">Accounts Receivable</div>
         </div>
-        <span className="ar-branch-badge">
-          <i className="ti ti-map-pin" style={{ fontSize: 12 }} aria-hidden="true" />
-          สาขา: {branchDisplay}
-        </span>
       </div>
 
       <div className="ar-summary-row">

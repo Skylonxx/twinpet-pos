@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { SingleDatePicker } from '../../components/common/SingleDatePicker';
 import InventoryAdjustmentConfirmDialog from '../../components/inventory/InventoryAdjustmentConfirmDialog';
 import ProductPickerDialog, { productListItemToPickerItem } from '../../components/products/ProductPickerDialog';
 import type { ProductPickerItem } from '../../components/products/productPickerTypes';
@@ -211,11 +212,10 @@ export default function InventoryAdjustmentPage() {
           <div className="inv-adj-form-grid">
             <div className="inv-adj-field">
               <label htmlFor="inv-adj-date">วันที่</label>
-              <input
+              <SingleDatePicker
                 id="inv-adj-date"
-                type="date"
                 value={adjustDate}
-                onChange={(e) => setAdjustDate(e.target.value)}
+                onChange={setAdjustDate}
               />
             </div>
             <div className="inv-adj-field">

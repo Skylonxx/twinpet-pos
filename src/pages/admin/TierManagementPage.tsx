@@ -1,5 +1,4 @@
 import { useCallback, useState } from 'react';
-import { getBranchLabel } from '../../lib/branches';
 import { useAuth } from '../../lib/hooks/useAuth';
 import { useSettings } from '../../lib/settings/useSettings';
 import PriceLevelManager from '../../components/admin/PriceLevelManager';
@@ -53,10 +52,6 @@ export default function TierManagementPage() {
           <div className="stg-topbar-title">ระดับราคา (Price Level)</div>
           <div className="stg-topbar-sub">Tier Management — ใช้ร่วมกันทุกสินค้าและทุกสาขา</div>
         </div>
-        <span className="stg-branch-badge">
-          <i className="ti ti-map-pin" style={{ fontSize: 12 }} aria-hidden="true" />
-          สาขา: {branchId ? getBranchLabel(branchId) : '—'}
-        </span>
         <button type="button" className="stg-btn stg-btn-ghost" onClick={handleCancel} disabled={!dirty}>
           ยกเลิก
         </button>

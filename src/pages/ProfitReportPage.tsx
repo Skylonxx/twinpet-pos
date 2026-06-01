@@ -9,8 +9,8 @@ import {
 } from 'chart.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Bar, Doughnut } from 'react-chartjs-2';
+import { DateRangeDropdown } from '../components/common/DateRangeDropdown';
 import ProductImageThumb from '../components/products/ProductImageThumb';
-import { getBranchLabel } from '../lib/branches';
 import {
   PRESET_LABELS,
   aggregateFieldMap,
@@ -50,13 +50,17 @@ import './ProfitReportPage.css';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Tooltip, Legend);
 
-const PRESET_CHIPS: { id: DatePreset; label: string }[] = [
-  { id: 'today', label: 'วันนี้' },
-  { id: 'yesterday', label: 'เมื่อวาน' },
-  { id: '7d', label: '7 วัน' },
-  { id: '30d', label: '30 วัน' },
-  { id: 'thismonth', label: 'เดือนนี้' },
-  { id: 'lastmonth', label: 'เดือนก่อน' },
+/** Presets shown in the shared DateRangeDropdown. `custom` is the dropdown's
+ *  sentinel for a manually-entered range (the page stores that as activePreset=''). */
+type ProfitDatePreset = DatePreset | 'custom';
+
+const PROFIT_DATE_PRESETS: ReadonlyArray<readonly [ProfitDatePreset, string]> = [
+  ['today', 'วันนี้'],
+  ['yesterday', 'เมื่อวาน'],
+  ['7d', '7 วัน'],
+  ['30d', '30 วัน'],
+  ['thismonth', 'เดือนนี้'],
+  ['lastmonth', 'เดือนก่อน'],
 ];
 
 const TABLE_LABELS: Record<GroupBy, string> = {
@@ -363,10 +367,10 @@ export default function ProfitReportPage() {
   const { branchId } = useAuth();
   const { lines, loading, error } = useProfitReport(branchId);
 
-  const initialRange = applyDatePreset('7d');
+  const initialRange = applyDatePreset('today');
   const [dateFrom, setDateFrom] = useState(initialRange.from);
   const [dateTo, setDateTo] = useState(initialRange.to);
-  const [activePreset, setActivePreset] = useState<DatePreset | ''>('7d');
+  const [activePreset, setActivePreset] = useState<DatePreset | ''>('today');
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('');
   const [groupBy, setGroupBy] = useState<GroupBy>('bill');
@@ -379,7 +383,6 @@ export default function ProfitReportPage() {
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'info' } | null>(null);
   const tableCardRef = useRef<HTMLDivElement>(null);
 
-  const branchDisplay = branchId ? getBranchLabel(branchId) : '—';
 
   const allProducts = useMemo(() => {
     if (!isFirebaseConfigured) return getDevProfitProducts();
@@ -479,11 +482,18 @@ export default function ProfitReportPage() {
     return () => clearTimeout(id);
   }, [toast]);
 
-  const applyPreset = (preset: DatePreset) => {
+  // Adapter so the shared DateRangeDropdown can resolve a preset into the
+  // {start,end} Date shape it expects, reusing the page's applyDatePreset.
+  const resolveProfitRange = (preset: ProfitDatePreset, from: string, to: string) => {
+    const toLocalDate = (iso: string) => {
+      const [y, m, d] = iso.split('-').map(Number);
+      return new Date(y ?? 1970, (m ?? 1) - 1, d ?? 1);
+    };
+    if (preset === 'custom') {
+      return { start: toLocalDate(from), end: toLocalDate(to) };
+    }
     const range = applyDatePreset(preset);
-    setDateFrom(range.from);
-    setDateTo(range.to);
-    setActivePreset(preset);
+    return { start: toLocalDate(range.from), end: toLocalDate(range.to) };
   };
 
   const pickerLabel = useMemo(() => {
@@ -679,10 +689,6 @@ export default function ProfitReportPage() {
           <div className="pr-topbar-title">รายงานกำไร</div>
           <div className="pr-topbar-sub">Sales &amp; Profit Report — FIFO Costing</div>
         </div>
-        <span className="pr-branch-badge">
-          <i className="ti ti-map-pin" style={{ fontSize: 12 }} aria-hidden="true" />
-          สาขา: {branchDisplay}
-        </span>
       </div>
 
       <div className="pr-content">
@@ -718,38 +724,18 @@ export default function ProfitReportPage() {
               </option>
             ))}
           </select>
-          <div className="pr-date-range">
-            <i className="ti ti-calendar" style={{ fontSize: 14 }} aria-hidden="true" />
-            <input
-              type="date"
-              value={dateFrom}
-              onChange={(e) => {
-                setDateFrom(e.target.value);
-                setActivePreset('');
-              }}
-            />
-            <span>—</span>
-            <input
-              type="date"
-              value={dateTo}
-              onChange={(e) => {
-                setDateTo(e.target.value);
-                setActivePreset('');
-              }}
-            />
-          </div>
-          <div className="pr-preset-chips">
-            {PRESET_CHIPS.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                className={`pr-chip${activePreset === p.id ? ' active' : ''}`}
-                onClick={() => applyPreset(p.id)}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
+          <DateRangeDropdown
+            preset={activePreset === '' ? 'custom' : activePreset}
+            from={dateFrom}
+            to={dateTo}
+            presets={PROFIT_DATE_PRESETS}
+            resolveRange={resolveProfitRange}
+            onChange={({ preset, from, to }) => {
+              setActivePreset(preset === 'custom' ? '' : preset);
+              setDateFrom(from);
+              setDateTo(to);
+            }}
+          />
           <button
             type="button"
             className="pr-btn pr-btn-ghost pr-btn-sm"

@@ -16,7 +16,7 @@ export type ReceivingFilters = {
   status: ReceivingStatusFilter;
 };
 
-export type DatePreset = 'today' | '7d' | '30d' | 'month' | 'custom';
+export type DatePreset = 'today' | 'yesterday' | '7d' | '30d' | 'month' | 'custom';
 
 export function receivingTimestamp(r: Receiving): Date {
   const ts = r.receivedAt ?? r.createdAt;
@@ -58,6 +58,10 @@ export function getDateRange(
     case 'today':
       start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       break;
+    case 'yesterday': {
+      const y = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+      return { start: y, end: new Date(y.getFullYear(), y.getMonth(), y.getDate(), 23, 59, 59, 999) };
+    }
     case '7d':
       start = new Date(end);
       start.setDate(start.getDate() - 6);
@@ -85,6 +89,7 @@ export function getDateRange(
 
 export function datePresetLabel(preset: DatePreset, from: string, to: string): string {
   if (preset === 'today') return 'วันนี้';
+  if (preset === 'yesterday') return 'เมื่อวาน';
   if (preset === '7d') return '7 วันล่าสุด';
   if (preset === '30d') return '30 วันล่าสุด';
   if (preset === 'month') return 'เดือนนี้';

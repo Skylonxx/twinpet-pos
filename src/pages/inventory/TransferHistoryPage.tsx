@@ -127,7 +127,7 @@ export default function TransferHistoryPage({ onCreateNew, onBack }: Props = {})
         </div>
         <div className="sh-topbar-center">
           <div className="sh-topbar-title">ประวัติการโอนย้ายสต็อก</div>
-          <div className="sh-topbar-sub">Branch Transfers — สาขา {branchId ? getBranchLabel(branchId) : '—'}</div>
+          <div className="sh-topbar-sub">Branch Transfers</div>
         </div>
         <button type="button" className="sh-btn sh-btn-ghost sh-btn-sm" onClick={() => void reload()} disabled={loading}>
           <i className="ti ti-refresh" aria-hidden="true" /> รีเฟรช

@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react';
 import PosSupplierModal from '../components/receiving/PosSupplierModal';
-import { getBranchLabel } from '../lib/branches';
 import { useAuth } from '../lib/hooks/useAuth';
 import { useActiveSuppliers } from '../lib/pos/useSuppliers';
 import type { Supplier } from '../lib/types';
@@ -15,7 +14,6 @@ export default function SupplierPage() {
   const [editSupplier, setEditSupplier] = useState<Supplier | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
-  const branchDisplay = branchId ? getBranchLabel(branchId) : '—';
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -65,7 +63,7 @@ export default function SupplierPage() {
         </div>
         <div className="sup-topbar-center">
           <div className="sup-topbar-title">ข้อมูลผู้จำหน่าย</div>
-          <div className="sup-topbar-sub">Supplier Directory · สาขา {branchDisplay}</div>
+          <div className="sup-topbar-sub">Supplier Directory</div>
         </div>
         <button type="button" className="sup-btn sup-btn-primary" onClick={openAdd}>
           <i className="ti ti-plus" aria-hidden="true" />

@@ -130,62 +130,6 @@
   color: var(--p600, #534ab7);
 }
 
-.pr-date-range {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--text-secondary, #6b7280);
-  background: var(--g50, #f8f8fc);
-  border: 1px solid var(--border-md, rgba(0, 0, 0, 0.13));
-  border-radius: var(--radius-md, 8px);
-  padding: 6px 12px;
-}
-
-.pr-date-range input {
-  border: none;
-  background: transparent;
-  font-size: 12px;
-  font-family: inherit;
-  color: var(--text-primary, #1a1a2e);
-  width: 90px;
-  cursor: pointer;
-}
-
-.pr-date-range input:focus {
-  outline: none;
-}
-
-.pr-preset-chips {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.pr-chip {
-  padding: 5px 12px;
-  border-radius: 20px;
-  font-size: 12px;
-  font-family: inherit;
-  cursor: pointer;
-  border: 1px solid var(--border-md, rgba(0, 0, 0, 0.13));
-  background: var(--white, #fff);
-  color: var(--text-secondary, #6b7280);
-  transition: all 0.12s;
-}
-
-.pr-chip:hover {
-  border-color: var(--p100, #cecbf6);
-  color: var(--p600, #534ab7);
-}
-
-.pr-chip.active {
-  background: var(--p600, #534ab7);
-  color: #fff;
-  border-color: var(--p600, #534ab7);
-}
-
 .pr-content {
   flex: 1;
   padding: 20px;

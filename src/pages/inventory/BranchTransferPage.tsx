@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { SingleDatePicker } from '../../components/common/SingleDatePicker';
 import TransferConfirmDialog from '../../components/inventory/TransferConfirmDialog';
 import ProductPickerDialog, { productListItemToPickerItem } from '../../components/products/ProductPickerDialog';
 import type { ProductPickerItem } from '../../components/products/productPickerTypes';
@@ -211,11 +212,10 @@ export default function BranchTransferPage({ onExit }: Props = {}) {
           <div className="inv-adj-form-grid">
             <div className="inv-adj-field">
               <label htmlFor="inv-tr-date">วันที่</label>
-              <input
+              <SingleDatePicker
                 id="inv-tr-date"
-                type="date"
                 value={transferDate}
-                onChange={(e) => setTransferDate(e.target.value)}
+                onChange={setTransferDate}
               />
             </div>
             <div className="inv-adj-field">

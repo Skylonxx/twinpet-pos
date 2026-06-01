@@ -327,10 +327,6 @@ export default function AdminProductManagementPage() {
           <div className="pc-topbar-title">จัดการสินค้า (HQ)</div>
           <div className="pc-topbar-sub">Product Master Data — ข้อมูลกลาง</div>
         </div>
-        <span className="pc-branch-badge">
-          <i className="ti ti-building" style={{ fontSize: 12 }} aria-hidden="true" />
-          HQ — ทุกสาขา
-        </span>
         <button
           type="button"
           className="pc-btn pc-btn-ghost pc-btn-sm"

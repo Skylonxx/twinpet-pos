@@ -184,10 +184,6 @@ export default function AdminTransferPage() {
           <div className="sh-topbar-title">โอนย้ายสต็อก (HQ)</div>
           <div className="sh-topbar-sub">Branch Transfers — ทุกสาขา</div>
         </div>
-        <span className="sh-branch-badge">
-          <i className="ti ti-building" style={{ fontSize: 12 }} aria-hidden="true" />
-          HQ — ทุกสาขา
-        </span>
         <button type="button" className="sh-btn sh-btn-ghost sh-btn-sm" onClick={() => void load()} disabled={loading}>
           <i className={`ti ti-refresh${loading ? ' arv-spin' : ''}`} aria-hidden="true" /> Refresh
         </button>

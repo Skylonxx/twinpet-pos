@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react';
 import CustomerDetailModal from '../components/customers/CustomerDetailModal';
 import CustomerFormModal from '../components/customers/CustomerFormModal';
 import TierManagementModal from '../components/customers/TierManagementModal';
-import { getBranchLabel } from '../lib/branches';
 import {
   contactTypeBadgeStyle,
   contactTypeLabel,
@@ -35,7 +34,6 @@ export default function CustomerPage() {
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'warn' } | null>(null);
 
-  const branchDisplay = branchId ? getBranchLabel(branchId) : '—';
 
   const levelMap = useMemo(() => new Map(priceLevels.map((p) => [p.id, p.name])), [priceLevels]);
 
@@ -110,10 +108,6 @@ export default function CustomerPage() {
           <div className="cm-topbar-title">จัดการลูกค้า</div>
           <div className="cm-topbar-sub">Customer &amp; Wholesale Management</div>
         </div>
-        <span className="cm-branch-badge">
-          <i className="ti ti-map-pin" style={{ fontSize: 12 }} aria-hidden="true" />
-          สาขา: {branchDisplay}
-        </span>
         <div className="cm-topbar-actions">
           <button
             type="button"
