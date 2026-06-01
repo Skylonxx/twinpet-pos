@@ -11,6 +11,7 @@ import {
 } from '../components/pos/SuspendedBillModals';
 import NumpadDialog from '../components/pos/NumpadDialog';
 import UomModal from '../components/pos/UomModal';
+import SortingSettingsModal from '../components/pos/SortingSettingsModal';
 import { getBranchLabel } from '../lib/branches';
 import { fmtBaht } from '../lib/dashboard/format';
 import { formatMoney, getLineTotal } from '../lib/pos/cartUtils';
@@ -21,8 +22,16 @@ import type { SuspendedBill } from '../lib/pos/suspendedBills';
 import { useSuspendedBills } from '../lib/pos/useSuspendedBills';
 import ProductImageThumb from '../components/products/ProductImageThumb';
 import { usePosProducts } from '../lib/pos/usePosProducts';
+import { useCategories } from '../lib/inventory/categoryService';
+import {
+  BEST_SELLERS_KEY,
+  getVisibleCategories,
+  resolveActiveCategory,
+  sortCategories,
+  sortProductsByCustomOrder,
+} from '../lib/pos/categoryService';
 import type { ItemDiscountType, PosProduct, UomOption } from '../lib/pos/types';
-import type { Shift } from '../lib/types';
+import type { Shift, ProductCategory } from '../lib/types';
 import { useAuth } from '../lib/hooks/useAuth';
 import { useBranch } from '../lib/hooks/useBranch';
 import { getActivePriceForCustomer, useCart } from '../hooks/pos/useCart';
@@ -57,6 +66,7 @@ export default function POSPage() {
   const { user, branchId } = useAuth();
   const { branch } = useBranch();
   const { products, categories, loading } = usePosProducts(branchId);
+  const { categories: richCategories } = useCategories();
   const { bills: suspendedBills, count: suspendedCount, addBill, removeBill } =
     useSuspendedBills(branchId);
   const { priceLevels: customerTiers } = usePriceLevels(branchId);
@@ -81,6 +91,7 @@ export default function POSPage() {
   const [showCashTx, setShowCashTx] = useState(false);
   const [catModalOpen, setCatModalOpen] = useState(false);
   const [catSearch, setCatSearch] = useState('');
+  const [isSortingModalOpen, setIsSortingModalOpen] = useState(false);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -106,10 +117,25 @@ export default function POSPage() {
   const { cartLines, totals } = cart;
 
   const branchDisplay = branch?.name ?? (branchId ? getBranchLabel(branchId) : '—');
+  // This terminal's branch — drives all branch-scoped ordering & visibility.
+  const posBranchId = branchId ?? '';
 
   const filteredProducts = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return products.filter((p) => {
+    // Hidden products are revealed only by an EXACT identifier match typed by a
+    // clerk (hardware scans bypass this filter entirely via findByScanCode).
+    const isExactCodeMatch = (p: PosProduct) =>
+      q.length > 0 &&
+      (p.sku.toLowerCase() === q ||
+        p.name.toLowerCase() === q ||
+        (p.barcode ?? '').toLowerCase() === q);
+
+    const filtered = products.filter((p) => {
+      if (p.branchSettings?.[posBranchId]?.isVisibleInPos === false) {
+        // Hidden for THIS branch: excluded from category grids and the virtual
+        // best-sellers tab unless explicitly summoned by exact SKU/name/barcode.
+        return isExactCodeMatch(p);
+      }
       const matchQ =
         !q ||
         p.name.toLowerCase().includes(q) ||
@@ -118,12 +144,38 @@ export default function POSPage() {
       const matchCat = !activeCategory || p.category === activeCategory;
       return matchQ && matchCat;
     });
-  }, [products, search, activeCategory]);
+    // Apply this branch's custom ranking for the active group ('' shows the
+    // branch "best sellers" master order). Pure helper — never mutates `products`.
+    return sortProductsByCustomOrder(filtered, activeCategory || BEST_SELLERS_KEY, posBranchId);
+  }, [products, search, activeCategory, posBranchId]);
 
-  const categoryList = useMemo(
-    () => categories.filter((c) => c !== ''),
-    [categories],
-  );
+  // Enrich the product-derived category strings with admin metadata (branch
+  // order/visibility/background) from the categories collection, then keep only
+  // the categories visible for THIS branch, in this branch's display order.
+  const visibleCategories = useMemo<ProductCategory[]>(() => {
+    const metaByKey = new Map<string, ProductCategory>();
+    for (const c of richCategories) {
+      metaByKey.set(c.id, c);
+      metaByKey.set(c.name, c);
+    }
+    const enriched: ProductCategory[] = categories
+      .filter((c) => c !== '')
+      .map((catStr) => {
+        const meta = metaByKey.get(catStr);
+        return {
+          id: catStr, // the value used to filter products (p.category)
+          name: meta?.name ?? catStr,
+          branchSettings: meta?.branchSettings,
+        };
+      });
+    return sortCategories(getVisibleCategories(enriched, posBranchId), posBranchId);
+  }, [categories, richCategories, posBranchId]);
+
+  // Ghost-active fallback: if the selected category gets hidden, reset to "all".
+  useEffect(() => {
+    const safe = resolveActiveCategory(activeCategory, visibleCategories, '');
+    if (safe !== activeCategory) setActiveCategory(safe);
+  }, [activeCategory, visibleCategories]);
 
   const discountLine = discountLineKey ? cart.cart[discountLineKey] ?? null : null;
 
@@ -296,6 +348,13 @@ export default function POSPage() {
           >
             <i className="ti ti-plus" aria-hidden="true" /> เลือกสินค้า
           </button>
+          <button
+            type="button"
+            className="pos-action-link"
+            onClick={() => setIsSortingModalOpen(true)}
+          >
+            <i className="ti ti-arrows-sort" aria-hidden="true" /> จัดเรียง
+          </button>
         </div>
         {activeShift && (
           <div className="pos-topbar-actions">
@@ -361,16 +420,30 @@ export default function POSPage() {
             >
               ทั้งหมด
             </button>
-            {categoryList.map((cat) => (
-              <button
-                key={cat}
-                type="button"
-                className={`pos-cat-pill${activeCategory === cat ? ' on' : ''}`}
-                onClick={() => setActiveCategory(cat)}
-              >
-                {cat}
-              </button>
-            ))}
+            {visibleCategories.map((cat) => {
+              const setting = cat.branchSettings?.[posBranchId];
+              const bgColor = setting?.backgroundColor;
+              const bgImage = setting?.imageUrl;
+              const hasBg = Boolean(bgImage || bgColor);
+              return (
+                <button
+                  key={cat.id}
+                  type="button"
+                  className={`pos-cat-pill${activeCategory === cat.id ? ' on' : ''}${hasBg ? ' has-bg' : ''}`}
+                  style={
+                    bgImage
+                      ? { backgroundImage: `url(${bgImage})` }
+                      : bgColor
+                        ? { background: bgColor }
+                        : undefined
+                  }
+                  onClick={() => setActiveCategory(cat.id)}
+                >
+                  {bgImage ? <span className="pos-cat-pill-overlay" aria-hidden="true" /> : null}
+                  <span className="pos-cat-pill-label">{cat.name}</span>
+                </button>
+              );
+            })}
           </div>
 
           {loading ? (
@@ -780,21 +853,21 @@ export default function POSPage() {
                   ทั้งหมด
                 </button>
               )}
-              {categoryList
+              {visibleCategories
                 .filter((cat) =>
-                  cat.toLowerCase().includes(catSearch.trim().toLowerCase()),
+                  cat.name.toLowerCase().includes(catSearch.trim().toLowerCase()),
                 )
                 .map((cat) => (
                   <button
-                    key={cat}
+                    key={cat.id}
                     type="button"
-                    className={`pos-category-cell${activeCategory === cat ? ' active' : ''}`}
+                    className={`pos-category-cell${activeCategory === cat.id ? ' active' : ''}`}
                     onClick={() => {
-                      setActiveCategory(cat);
+                      setActiveCategory(cat.id);
                       setCatModalOpen(false);
                     }}
                   >
-                    {cat}
+                    {cat.name}
                   </button>
                 ))}
             </div>
@@ -812,6 +885,12 @@ export default function POSPage() {
             setQtyNumpadLineKey(null);
           }
         }}
+      />
+
+      <SortingSettingsModal
+        isOpen={isSortingModalOpen}
+        onClose={() => setIsSortingModalOpen(false)}
+        defaultBranchId={posBranchId}
       />
 
       {toast && (

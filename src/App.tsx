@@ -30,6 +30,7 @@ import BranchManagementPage from './pages/admin/BranchManagementPage';
 import TierManagementPage from './pages/admin/TierManagementPage';
 import AdminStaffManagementPage from './pages/admin/AdminStaffManagementPage';
 import AdminSupplierManagementPage from './pages/admin/AdminSupplierManagementPage';
+import SortingSettingsPage from './pages/admin/SortingSettingsPage';
 import DocumentSettings from './pages/settings/DocumentSettings';
 import SettingsPage from './pages/SettingsPage';
 import {
@@ -100,6 +101,7 @@ export default function App() {
             <Route path="transfers" element={<AdminTransferPage />} />
             <Route path="transfers/new" element={<AdminTransferCreatePage />} />
             <Route path="stock-report" element={<AdminStockReportPage />} />
+            <Route path="sorting" element={<SortingSettingsPage />} />
           </Route>
         </Route>
 

@@ -36,8 +36,8 @@ export default function AppShell() {
   const { branch } = useBranch();
   const location = useLocation();
 
-  // Click-to-expand sidebar (no hover). Collapsed = icon rail.
-  const [open, setOpen] = useState(true);
+  // Click-to-expand sidebar (no hover). Collapsed = icon rail. Default closed.
+  const [open, setOpen] = useState(false);
   // Single-open accordion — defaults to the category holding the active route.
   const [expandedCategory, setExpandedCategory] = useState<string | null>(() =>
     activeCategoryId(location.pathname),

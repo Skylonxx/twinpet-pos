@@ -1,4 +1,4 @@
-import type { PaymentMethod } from '../types';
+import type { PaymentMethod, ProductBranchSetting } from '../types';
 
 export type ItemDiscountType = 'none' | 'disc_thb' | 'disc_pct' | 'override';
 
@@ -40,6 +40,8 @@ export type PosProduct = {
   tierPrices?: Record<string, number>;
   /** Branch-level tier price overrides — takes precedence over tierPrices when non-empty */
   overrideTierPrices?: Record<string, number>;
+  /** Branch-scoped POS ordering / visibility, keyed by branchId. */
+  branchSettings?: Record<string, ProductBranchSetting>;
   uomOptions: UomOption[];
 };
 

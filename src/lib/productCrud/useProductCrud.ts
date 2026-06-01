@@ -28,6 +28,7 @@ import {
   getDevProductList,
 } from './devMock';
 import { fetchProductStockLots } from '../inventory/stockLotQueries';
+import { cascadeDeleteProduct } from '../admin/sortingStore';
 import { formToProduct, sanitizeTierPrices, type ProductFormData, type ProductListItem } from './types';
 
 function tsNow(): Product['createdAt'] {
@@ -183,6 +184,10 @@ export function useProductCrud(branchId: string | null) {
           rawProductDoc as Record<string, unknown>,
         );
 
+        // Merge-write. `formToProduct` intentionally OMITS the POS-presentation
+        // fields (`sortOrders`, `displayOrder`, `isVisibleInPos`), so this edit
+        // preserves any ranking/visibility set by the Sorting admin. Do NOT add
+        // those keys to the form payload or they'd be overwritten here.
         await setDoc(productRef, firestoreProductDoc, { merge: true });
 
         const sanitizedOverrideTiers = sanitizeTierPrices(form.overrideTierPrices ?? {});
@@ -220,6 +225,12 @@ export function useProductCrud(branchId: string | null) {
       try {
         if (!isFirebaseConfigured || !db) {
           devSoftDeleteProduct(id);
+          // Cascade: drop the product from all custom rankings (best-effort).
+          try {
+            await cascadeDeleteProduct(id);
+          } catch (err) {
+            console.warn('[useProductCrud] cascadeDeleteProduct (dev) failed:', err);
+          }
           if (branchId) setProducts(getDevProductList(branchId));
           return;
         }
@@ -228,6 +239,13 @@ export function useProductCrud(branchId: string | null) {
           isActive: false,
           updatedAt: serverTimestamp(),
         });
+        // Cascade: remove from all rankings and compact remaining indexes.
+        // Best-effort — the product is already removed even if cleanup fails.
+        try {
+          await cascadeDeleteProduct(id);
+        } catch (err) {
+          console.warn('[useProductCrud] cascadeDeleteProduct failed:', err);
+        }
         await load();
       } finally {
         setSaving(false);

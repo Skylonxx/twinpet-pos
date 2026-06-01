@@ -77,6 +77,28 @@
   background: var(--p800, #3c3489);
 }
 
+/* Action link in the topbar (opens the sorting/visibility modal). */
+.pos-action-link {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 10px;
+  height: 32px;
+  border: none;
+  background: none;
+  color: var(--p600, #534ab7);
+  font-size: 12px;
+  font-family: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.pos-action-link:hover {
+  text-decoration: underline;
+}
+
 .pos-topbar-actions {
   margin-left: auto;
   display: flex;
@@ -217,6 +239,7 @@
   text-align: center;
   max-height: 48px;
   overflow: hidden;
+  position: relative;
   border: 0.5px solid var(--g200, #d3d1c7);
   background: var(--g50, #f8f8fc);
   color: var(--g600, #5f5e5a);
@@ -226,6 +249,37 @@
   background: var(--p600, #534ab7);
   color: white;
   border-color: transparent;
+}
+
+/* Category block with an admin-set color or image background. */
+.pos-cat-pill.has-bg {
+  border-color: transparent;
+  background-size: cover;
+  background-position: center;
+  color: #fff;
+}
+
+/* 40% dark scrim under the label so text stays sharp white over images. */
+.pos-cat-pill-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.pos-cat-pill-label {
+  position: relative;
+  z-index: 1;
+}
+
+.pos-cat-pill.has-bg .pos-cat-pill-label {
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+}
+
+/* Keep the selected ring visible even with a custom background. */
+.pos-cat-pill.has-bg.on {
+  outline: 2px solid var(--p600, #534ab7);
+  outline-offset: 1px;
 }
 
 .pos-product-grid {

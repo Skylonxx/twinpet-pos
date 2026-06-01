@@ -106,9 +106,31 @@ export type ProductPrice = {
   price: number;
 };
 
+/** Per-branch POS presentation for a category. */
+export interface CategoryBranchSetting {
+  /** POS category-bar ordering for this branch (ascending — lower shows first). */
+  displayOrder: number;
+  /** When false, the category is hidden from this branch's POS sell screen. */
+  isVisibleInPos: boolean;
+  /** Optional solid background color for the category block (e.g. "#534ab7"). */
+  backgroundColor?: string;
+  /** Optional background image URL for the category block. */
+  imageUrl?: string;
+}
+
+/** Per-branch POS presentation for a product. */
+export interface ProductBranchSetting {
+  /** When false, hidden from this branch's POS grids (still scannable by exact code). */
+  isVisibleInPos: boolean;
+  /** Custom sort positions per category key ('best-sellers' or a category id). */
+  sortOrders: Record<string, number>;
+}
+
 export type ProductCategory = {
   id: string;
   name: string;
+  /** Branch-scoped ordering / visibility / styling. Keyed by branchId. */
+  branchSettings?: Record<string, CategoryBranchSetting>;
 };
 
 export type Product = SoftDelete & {
@@ -140,6 +162,8 @@ export type Product = SoftDelete & {
   hasVat?: boolean;
   /** อนุญาตขายเมื่อสต็อกหมด (overselling) — ต่อสินค้า */
   allowNegativeStock?: boolean;
+  /** Branch-scoped POS ordering / visibility. Keyed by branchId. */
+  branchSettings?: Record<string, ProductBranchSetting>;
   /** นโยบายแจ้งเตือนวันหมดอายุ — ใช้ค่าเริ่มต้นเมื่อไม่ระบุ */
   expiryPolicyId?: string | null;
   /** Branches carrying this product — empty array or absent means all branches */

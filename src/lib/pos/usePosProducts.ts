@@ -75,6 +75,7 @@ function toPosProduct(product: Product, entry: StockEntry): PosProduct {
     allowNegativeStock: product.allowNegativeStock ?? false,
     tierPrices: product.tierPrices,
     overrideTierPrices: entry.overrideTierPrices,
+    branchSettings: product.branchSettings,
     uomOptions,
   };
 }

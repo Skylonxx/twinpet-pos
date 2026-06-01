@@ -1,7 +1,7 @@
 import { collection, deleteDoc, doc, onSnapshot, orderBy, query, setDoc } from 'firebase/firestore';
 import { useCallback, useEffect, useState } from 'react';
 import { collections, db, isFirebaseConfigured } from '../firebase';
-import type { ProductCategory } from '../types';
+import type { CategoryBranchSetting, ProductCategory } from '../types';
 
 export const DEFAULT_PRODUCT_CATEGORIES: ProductCategory[] = [
   { id: 'general', name: 'ทั่วไป' },
@@ -32,7 +32,12 @@ function sanitizeCategories(categories: ProductCategory[]): ProductCategory[] {
     const name = cat.name.trim();
     if (!id || !name || seen.has(id)) continue;
     seen.add(id);
-    cleaned.push({ id, name });
+    // Preserve the branch-scoped POS settings map when present.
+    const entry: ProductCategory = { id, name };
+    if (cat.branchSettings && Object.keys(cat.branchSettings).length > 0) {
+      entry.branchSettings = cat.branchSettings;
+    }
+    cleaned.push(entry);
   }
   return cleaned.length > 0 ? cleaned : DEFAULT_PRODUCT_CATEGORIES.map((c) => ({ ...c }));
 }
@@ -44,7 +49,11 @@ function mapCategoryDocs(
     const data = d.data();
     const id = String(data.id ?? d.id).trim();
     const name = String(data.name ?? id).trim();
-    return { id, name };
+    const entry: ProductCategory = { id, name };
+    if (data.branchSettings && typeof data.branchSettings === 'object') {
+      entry.branchSettings = data.branchSettings as ProductCategory['branchSettings'];
+    }
+    return entry;
   });
   return sanitizeCategories(mapped);
 }
@@ -94,6 +103,50 @@ export async function addProductCategory(category: ProductCategory): Promise<voi
   await setDoc(doc(db, collections.categories, id), { id, name });
 }
 
+/**
+ * Persists a category's POS presentation for ONE branch only. Merge-writes under
+ * `branchSettings[branchId]` so other branches' settings are never touched.
+ */
+export async function saveCategoryBranchSetting(
+  categoryId: string,
+  branchId: string,
+  patch: Partial<CategoryBranchSetting>,
+): Promise<void> {
+  const id = categoryId.trim();
+  if (!id || !branchId) throw new Error('ต้องระบุหมวดหมู่และสาขา');
+
+  // Drop undefined values — Firestore rejects them and merge should keep priors.
+  const cleanPatch: Partial<CategoryBranchSetting> = {};
+  for (const [key, value] of Object.entries(patch)) {
+    if (value !== undefined) {
+      (cleanPatch as Record<string, unknown>)[key] = value;
+    }
+  }
+
+  if (!isFirebaseConfigured || !db) {
+    const current = readDevCategories();
+    const next = current.map((c) => {
+      if (c.id !== id) return c;
+      const prev = c.branchSettings?.[branchId];
+      const merged: CategoryBranchSetting = {
+        displayOrder: cleanPatch.displayOrder ?? prev?.displayOrder ?? 0,
+        isVisibleInPos: cleanPatch.isVisibleInPos ?? prev?.isVisibleInPos ?? true,
+        ...(prev ?? {}),
+        ...cleanPatch,
+      };
+      return { ...c, branchSettings: { ...c.branchSettings, [branchId]: merged } };
+    });
+    writeDevCategories(sanitizeCategories(next));
+    return;
+  }
+
+  await setDoc(
+    doc(db, collections.categories, id),
+    { id, branchSettings: { [branchId]: cleanPatch } },
+    { merge: true },
+  );
+}
+
 export async function deleteProductCategory(id: string): Promise<void> {
   const catId = id.trim();
   if (!catId) return;
@@ -102,10 +155,25 @@ export async function deleteProductCategory(id: string): Promise<void> {
   if (!isFirebaseConfigured || !db) {
     const current = readDevCategories();
     writeDevCategories(sanitizeCategories(current.filter((c) => c.id !== catId)));
+    await cascadeCleanupAfterCategoryDelete(catId);
     return;
   }
 
   await deleteDoc(doc(db, collections.categories, catId));
+  await cascadeCleanupAfterCategoryDelete(catId);
+}
+
+/**
+ * Strips the deleted category's orphan rank keys from all products. Best-effort:
+ * the category is already gone even if cleanup throws, so we never block the delete.
+ */
+async function cascadeCleanupAfterCategoryDelete(categoryId: string): Promise<void> {
+  try {
+    const { cascadeDeleteCategory } = await import('../admin/sortingStore');
+    await cascadeDeleteCategory(categoryId);
+  } catch (err) {
+    console.warn('[categoryService] cascadeDeleteCategory failed:', err);
+  }
 }
 
 export function useCategories() {
