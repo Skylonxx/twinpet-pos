@@ -14,7 +14,6 @@ import UomModal from '../components/pos/UomModal';
 import { getBranchLabel } from '../lib/branches';
 import { fmtBaht } from '../lib/dashboard/format';
 import { formatMoney, getLineTotal } from '../lib/pos/cartUtils';
-import { DEV_CATEGORY_GRADIENTS } from '../lib/pos/devProducts';
 import { getActiveShift } from '../lib/pos/shiftService';
 import { priceLevelLabel, usePriceLevels } from '../lib/pricing/priceLevels';
 import { POS_FEATURES } from '../lib/config/features';
@@ -30,11 +29,6 @@ import { getActivePriceForCustomer, useCart } from '../hooks/pos/useCart';
 import { useCheckout } from '../hooks/pos/useCheckout';
 import './POSPage.css';
 
-const CATEGORY_GRADIENTS: Record<string, string> = {
-  ...DEV_CATEGORY_GRADIENTS,
-  'กรายแมว': 'linear-gradient(135deg,#6B62C9,#3C3489)',
-  'อาหารเสริม': 'linear-gradient(135deg,#185FA5,#0B3D6B)',
-};
 
 type ScanMatch = { product: PosProduct; option: UomOption | null };
 
@@ -85,6 +79,8 @@ export default function POSPage() {
   const [holdNoteOpen, setHoldNoteOpen] = useState(false);
   const [suspendedListOpen, setSuspendedListOpen] = useState(false);
   const [showCashTx, setShowCashTx] = useState(false);
+  const [catModalOpen, setCatModalOpen] = useState(false);
+  const [catSearch, setCatSearch] = useState('');
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -306,16 +302,40 @@ export default function POSPage() {
             <button
               type="button"
               className="pos-topbar-btn pos-topbar-btn--secondary"
+              onClick={() => setSuspendedListOpen(true)}
+              disabled={suspendedCount === 0}
+            >
+              บิลที่พักไว้ ({suspendedCount})
+            </button>
+            <button
+              type="button"
+              className="pos-topbar-btn pos-topbar-btn--secondary"
+              onClick={handleHoldClick}
+              disabled={cartLines.length === 0}
+            >
+              พักบิล
+            </button>
+            <button
+              type="button"
+              className="pos-topbar-btn pos-topbar-btn--secondary"
               onClick={() => setShowCashTx(true)}
             >
-              💵 นำเงินเข้า/ออก
+              นำเงินเข้า/ออก
             </button>
             <button
               type="button"
               className="pos-topbar-btn pos-topbar-btn--close"
               onClick={() => setShowCloseShift(true)}
             >
-              🔒 ปิดกะ
+              ปิดกะ
+            </button>
+            <button
+              type="button"
+              className="pos-topbar-btn pos-topbar-btn--clear"
+              onClick={handleClearCartClick}
+              disabled={cartLines.length === 0}
+            >
+              <i className="ti ti-trash" aria-hidden="true" /> ล้างตะกร้า
             </button>
           </div>
         )}
@@ -326,49 +346,31 @@ export default function POSPage() {
           <div className="pos-cat-bar">
             <button
               type="button"
+              className="pos-cat-trigger-btn"
+              onClick={() => {
+                setCatSearch('');
+                setCatModalOpen(true);
+              }}
+            >
+              ค้นหาหมวดหมู่ ▾
+            </button>
+            <button
+              type="button"
               className={`pos-cat-pill${!activeCategory ? ' on' : ''}`}
-              style={
-                !activeCategory
-                  ? { background: 'var(--p600)', color: 'white' }
-                  : undefined
-              }
               onClick={() => setActiveCategory('')}
             >
               ทั้งหมด
             </button>
-            {categoryList.map((cat) => {
-              const gradient = CATEGORY_GRADIENTS[cat];
-              const isOn = activeCategory === cat;
-              if (gradient) {
-                return (
-                  <button
-                    key={cat}
-                    type="button"
-                    className={`pos-cat-pill has-bg${isOn ? ' on' : ''}`}
-                    onClick={() => setActiveCategory(cat)}
-                  >
-                    <span className="pos-cat-bg" style={{ background: gradient }} />
-                    <span className="pos-cat-overlay" />
-                    <span className="pos-cat-text">{cat}</span>
-                  </button>
-                );
-              }
-              return (
-                <button
-                  key={cat}
-                  type="button"
-                  className={`pos-cat-pill${isOn ? ' on' : ''}`}
-                  style={
-                    isOn
-                      ? { background: 'var(--p600)', color: 'white' }
-                      : undefined
-                  }
-                  onClick={() => setActiveCategory(cat)}
-                >
-                  {cat}
-                </button>
-              );
-            })}
+            {categoryList.map((cat) => (
+              <button
+                key={cat}
+                type="button"
+                className={`pos-cat-pill${activeCategory === cat ? ' on' : ''}`}
+                onClick={() => setActiveCategory(cat)}
+              >
+                {cat}
+              </button>
+            ))}
           </div>
 
           {loading ? (
@@ -406,39 +408,8 @@ export default function POSPage() {
         </div>
 
         <aside className="pos-cart">
-          <div className="pos-cart-hd">
-            <div className="pos-cart-hd-actions">
-              <button
-                type="button"
-                className="pos-suspended-btn"
-                onClick={() => setSuspendedListOpen(true)}
-                disabled={suspendedCount === 0}
-              >
-                บิลที่พักไว้ ({suspendedCount})
-              </button>
-              <button
-                type="button"
-                className="pos-hold-btn"
-                onClick={handleHoldClick}
-                disabled={cartLines.length === 0}
-              >
-                <i className="ti ti-clock-pause" style={{ fontSize: 11 }} aria-hidden="true" />{' '}
-                พักบิล
-              </button>
-              <button
-                type="button"
-                className="pos-cart-clear-btn"
-                onClick={handleClearCartClick}
-                disabled={cartLines.length === 0}
-                aria-label="ล้างตะกร้า"
-                title="ล้างตะกร้า"
-              >
-                <i className="ti ti-trash-x" aria-hidden="true" />
-              </button>
-            </div>
-          </div>
-
           <div className="pos-cust-bar">
+            <div className="pos-cust-main">
             {customer ? (
               <>
                 <i className="ti ti-user pos-cust-icon" aria-hidden="true" />
@@ -469,6 +440,7 @@ export default function POSPage() {
                 เลือกลูกค้า
               </button>
             )}
+            </div>
           </div>
 
           <div className="pos-cart-items">
@@ -768,6 +740,67 @@ export default function POSPage() {
         onClose={() => setSuspendedListOpen(false)}
         onRestore={handleRestoreBill}
       />
+
+      {catModalOpen && (
+        <div
+          className="pos-category-overlay"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setCatModalOpen(false)}
+        >
+          <div className="pos-category-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="pos-category-modal-hd">
+              <span>เลือกหมวดหมู่</span>
+              <button
+                type="button"
+                className="pos-category-close"
+                onClick={() => setCatModalOpen(false)}
+              >
+                ปิด
+              </button>
+            </div>
+            <div className="pos-picker-search">
+              <input
+                placeholder="พิมพ์เพื่อค้นหาหมวดหมู่..."
+                value={catSearch}
+                onChange={(e) => setCatSearch(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div className="pos-category-grid">
+              {!catSearch.trim() && (
+                <button
+                  type="button"
+                  className={`pos-category-cell${!activeCategory ? ' active' : ''}`}
+                  onClick={() => {
+                    setActiveCategory('');
+                    setCatModalOpen(false);
+                  }}
+                >
+                  ทั้งหมด
+                </button>
+              )}
+              {categoryList
+                .filter((cat) =>
+                  cat.toLowerCase().includes(catSearch.trim().toLowerCase()),
+                )
+                .map((cat) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    className={`pos-category-cell${activeCategory === cat ? ' active' : ''}`}
+                    onClick={() => {
+                      setActiveCategory(cat);
+                      setCatModalOpen(false);
+                    }}
+                  >
+                    {cat}
+                  </button>
+                ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       <NumpadDialog
         open={qtyNumpadLineKey !== null}
