@@ -6,7 +6,12 @@ import {
 import type { ProductCategory } from '../../lib/types';
 import type { PosProduct } from '../../lib/pos/types';
 
-const EMPTY_SNAPSHOT: InventorySnapshot = { products: [], categories: [] };
+const EMPTY_SNAPSHOT: InventorySnapshot = {
+  products: [],
+  categories: [],
+  sorting: {},
+  quickMenus: [],
+};
 
 /**
  * Static, pull-based POS inventory feed — the UI-facing half of the Repository
@@ -76,6 +81,10 @@ export function usePosInventory(branchId: string | null) {
     products: snapshot.products as PosProduct[],
     categories,
     richCategories: snapshot.categories as ProductCategory[],
+    /** Sharded product order per categoryKey — fed to `sortProductsByCustomOrder`. */
+    sorting: snapshot.sorting,
+    /** Admin virtual categories for this branch (POS shows the active ones). */
+    quickMenus: snapshot.quickMenus,
     loading,
     refreshing,
     error,

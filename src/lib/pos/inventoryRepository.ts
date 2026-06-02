@@ -24,16 +24,22 @@ import {
   query,
   where,
 } from 'firebase/firestore';
+import { getQuickMenus, type QuickMenu } from '../admin/quickMenuStore';
 import { collections, db, isFirebaseConfigured } from '../firebase';
 import type { Product, ProductCategory } from '../types';
 import { DEV_POS_PRODUCTS } from './devProducts';
 import { mergePosProducts, type StockEntry } from './posProductMapper';
+import { getBranchSortOrders } from './productSorting';
 import type { PosProduct } from './types';
 
 /** Static, point-in-time view of a branch's sellable catalog. */
 export type InventorySnapshot = {
   products: PosProduct[];
   categories: ProductCategory[];
+  /** Sharded product ordering per `categoryKey` ('best-sellers' or a category id). */
+  sorting: Record<string, string[]>;
+  /** Admin-curated virtual categories (order-sorted; POS filters to active ones). */
+  quickMenus: QuickMenu[];
 };
 
 function isIndexError(err: unknown): boolean {
@@ -41,8 +47,8 @@ function isIndexError(err: unknown): boolean {
   return code === 'failed-precondition' || code === 'unimplemented';
 }
 
-/** Dev / unconfigured-Firebase fallback: derive a usable snapshot from seeds. */
-function devSnapshot(): InventorySnapshot {
+/** Dev / unconfigured-Firebase fallback: derive products + categories from seeds. */
+function devProductsAndCategories(): Pick<InventorySnapshot, 'products' | 'categories'> {
   const categories: ProductCategory[] = [...new Set(DEV_POS_PRODUCTS.map((p) => p.category))].map(
     (cat) => ({ id: cat, name: cat }),
   );
@@ -103,16 +109,25 @@ async function fetchStockByProduct(branchId: string, productIds: string[]): Prom
  */
 export async function getInventorySnapshot(branchId: string): Promise<InventorySnapshot> {
   if (!isFirebaseConfigured || !db) {
-    return devSnapshot();
+    return {
+      ...devProductsAndCategories(),
+      sorting: await getBranchSortOrders(branchId),
+      quickMenus: await getQuickMenus(branchId),
+    };
   }
 
   const productQ = query(
     collection(db, collections.products),
     where('isActive', '==', true),
   );
-  const [productSnap, categorySnap] = await Promise.all([
+  // Sharded sorting + quick menus are read here as part of the same static
+  // snapshot, so the grid order is point-in-time too — no live listener on the
+  // POS, Light Path intact.
+  const [productSnap, categorySnap, sorting, quickMenus] = await Promise.all([
     getDocs(productQ),
     getDocs(collection(db, collections.categories)),
+    getBranchSortOrders(branchId),
+    getQuickMenus(branchId),
   ]);
 
   const rawProducts: Product[] = productSnap.docs
@@ -127,5 +142,7 @@ export async function getInventorySnapshot(branchId: string): Promise<InventoryS
   return {
     products: mergePosProducts(rawProducts, stockByProduct),
     categories: categorySnap.docs.map(mapCategoryDoc),
+    sorting,
+    quickMenus,
   };
 }

@@ -1,0 +1,133 @@
+/* Quick Menu admin — layered on top of SortingSettingsPage.css (shared shell). */
+
+.qm-menu-row {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  margin-bottom: 4px;
+}
+
+.qm-menu-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  text-align: left;
+}
+
+.qm-menu-tab-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qm-off-badge {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 600;
+  color: #9a3b3b;
+  background: #fde7e7;
+  border-radius: 6px;
+  padding: 1px 6px;
+}
+
+.qm-menu-row-move {
+  display: flex;
+  flex-direction: row;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 0 4px 2px;
+}
+
+.qm-create-btn {
+  margin-top: 10px;
+  width: 100%;
+}
+
+.qm-editor-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.qm-name-input {
+  flex: 1;
+  min-width: 220px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 0.5px solid var(--g200, #d3d1c7);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.qm-delete-btn {
+  padding: 7px 12px;
+  border-radius: 8px;
+  border: 0.5px solid #d98a8a;
+  background: #fff;
+  color: #b23b3b;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.qm-delete-btn:hover {
+  background: #fde7e7;
+}
+
+.qm-remove-btn {
+  color: #b23b3b;
+}
+
+.qm-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+.qm-col {
+  min-width: 0;
+}
+
+.qm-search-input {
+  width: 100%;
+  margin-bottom: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 0.5px solid var(--g200, #d3d1c7);
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.qm-picker {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.qm-pick-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-bottom: 0.5px solid var(--g100, #ece9e0);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.qm-pick-row:hover {
+  background: var(--p50, #eeedfe);
+}
+
+.qm-pick-cat {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--g500, #8a8678);
+}

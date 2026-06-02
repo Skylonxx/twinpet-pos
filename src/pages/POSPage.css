@@ -307,6 +307,20 @@
   border-color: transparent;
 }
 
+/* Quick Menu (virtual category) — visually distinct amber pill at the front. */
+.pos-cat-pill--quick {
+  background: #fff4d6;
+  border-color: #f0b429;
+  color: #7a4b00;
+  font-weight: 600;
+}
+
+.pos-cat-pill--quick.on {
+  background: #f0b429;
+  color: #4a2e00;
+  border-color: transparent;
+}
+
 /* Category block with an admin-set color or image background. */
 .pos-cat-pill.has-bg {
   border-color: transparent;

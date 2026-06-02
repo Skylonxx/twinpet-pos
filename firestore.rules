@@ -369,6 +369,21 @@ service cloud.firestore {
       allow write: if isManagerOrAdmin() && hasBranchAccess(branchId);
     }
 
+    // Sharded POS product ordering — one doc per (branch, categoryKey) holding
+    // { order: string[], rev, updatedAt }. POS staff read it for the grid;
+    // managers/admins with branch access write it from the Sorting editor.
+    match /pos_configs/branches/{branchId}/sorting/categories/{categoryKey} {
+      allow read: if isStaff() && hasBranchAccess(branchId);
+      allow write: if isManagerOrAdmin() && hasBranchAccess(branchId);
+    }
+
+    // Quick Menus (virtual categories) — one doc per branch holding the menus
+    // array. POS staff read them; managers/admins with branch access edit them.
+    match /pos_configs/branches/{branchId}/quick_menus {
+      allow read: if isStaff() && hasBranchAccess(branchId);
+      allow write: if isManagerOrAdmin() && hasBranchAccess(branchId);
+    }
+
     // ── Default deny for unlisted collections ──
     match /{document=**} {
       allow read, write: if false;

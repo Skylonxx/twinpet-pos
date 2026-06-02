@@ -63,6 +63,12 @@ const ADMIN_NAV = [
     label: 'ตั้งค่าการจัดเรียง (POS)',
     icon: 'ti-arrows-sort',
   },
+  {
+    path: '/admin/quick-menus',
+    end: false,
+    label: 'ตั้งค่าเมนูด่วน (Quick Menus)',
+    icon: 'ti-bolt',
+  },
 ] as const;
 
 export default function AdminLayout() {

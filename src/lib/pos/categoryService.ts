@@ -62,26 +62,44 @@ export function sortCategories(
   });
 }
 
+/** Thai-dictionary order by `name`. Pure — never mutates input. */
+export function sortByThaiName<T extends { name: string }>(items: readonly T[]): T[] {
+  return [...items].sort((a, b) => thaiCollator.compare(a.name, b.name));
+}
+
 /**
- * Returns a NEW array of products ordered by this branch's custom rank for
- * `categoryKey` (`branchSettings[branchId].sortOrders[categoryKey]`), then Thai
- * name. Never mutates the input array.
+ * Self-healing, branch-scoped product ordering. Takes the saved `order` (the
+ * array of product ids from the sharded sorting doc) and returns a NEW array:
+ *   • products whose id appears in `order` come first, in array order;
+ *   • products NOT in `order` (new / never-ranked) are appended in Thai-name order;
+ *   • ids in `order` with no live product ("ghosts") are dropped on read;
+ *   • a missing / empty `order` degrades to pure Thai-name order (never blank).
+ *
+ * The live `products` set is authoritative — `order` only ranks it. This is what
+ * lets a single reference array stay correct as products are created/deleted
+ * without any per-document index rewrites. Never mutates the input array.
  */
 export function sortProductsByCustomOrder<T extends SortableProduct>(
   products: readonly T[],
-  categoryKey: string,
-  branchId: string,
+  order: readonly string[] | undefined,
 ): T[] {
-  const rankOf = (p: T): number => {
-    const custom = p.branchSettings?.[branchId]?.sortOrders?.[categoryKey];
-    return typeof custom === 'number' ? custom : Number.MAX_SAFE_INTEGER;
-  };
-  return [...products].sort((a, b) => {
-    const ra = rankOf(a);
-    const rb = rankOf(b);
-    if (ra !== rb) return ra - rb;
-    return thaiCollator.compare(a.name, b.name);
+  if (!order || order.length === 0) return sortByThaiName(products);
+
+  const rank = new Map<string, number>();
+  order.forEach((id, index) => {
+    if (!rank.has(id)) rank.set(id, index); // first occurrence wins (dedupe)
   });
+
+  const ranked: T[] = [];
+  const unranked: T[] = [];
+  for (const p of products) {
+    if (rank.has(p.id)) ranked.push(p);
+    else unranked.push(p);
+  }
+  ranked.sort((a, b) => rank.get(a.id)! - rank.get(b.id)!);
+  // Ghost ids (in `order` but no live product) never enter `ranked`, so they
+  // are dropped automatically. Unranked products self-append alphabetically.
+  return [...ranked, ...sortByThaiName(unranked)];
 }
 
 /**

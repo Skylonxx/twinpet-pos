@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   matchesCategoryFilter,
   saveCategoryBranchSetting,
@@ -8,15 +8,17 @@ import { useActiveBranches } from '../../lib/branches';
 import {
   BEST_SELLERS_KEY,
   generateAlphabeticalOrder,
+  sortByThaiName,
   sortCategories,
   sortProductsByCustomOrder,
   type SortableProduct,
 } from '../../lib/pos/categoryService';
+import { saveProductVisibility, useSortableProducts } from '../../lib/admin/sortingStore';
 import {
-  saveProductSortOrders,
-  saveProductVisibility,
-  useSortableProducts,
-} from '../../lib/admin/sortingStore';
+  ConcurrentEditError,
+  getProductSortOrder,
+  saveProductSortOrder,
+} from '../../lib/pos/productSorting';
 import { broadcastInventoryUpdate } from '../../lib/pos/syncSignal';
 import type { CategoryBranchSetting, ProductCategory } from '../../lib/types';
 import '../../pages/admin/SortingSettingsPage.css';
@@ -129,26 +131,74 @@ export function SortingSettingsContent({ defaultBranchId = '' }: { defaultBranch
   // ── Product ranking working copy (branch-scoped) ────────────────────────
   const [selectedKey, setSelectedKey] = useState<string>(BEST_SELLERS_KEY);
   const [workingProducts, setWorkingProducts] = useState<SortableProduct[]>([]);
+  // Bump to force a re-fetch of the order doc (e.g. after a concurrent-edit conflict).
+  const [reloadToken, setReloadToken] = useState(0);
+  // `rev` of the order doc this working copy is based on (optimistic-concurrency).
+  const sortRevRef = useRef(0);
+  // Serializes saves so rapid moves don't false-conflict with our own in-flight write.
+  const saveChainRef = useRef<Promise<void>>(Promise.resolve());
 
   const categoryOptions = useMemo(
     () => sortCategories(categories, selectedBranchId),
     [categories, selectedBranchId],
   );
 
+  // Load the working list from the sharded order doc (self-healing merge with
+  // the live product set). Re-runs on branch/category/product change or reload.
   useEffect(() => {
+    if (!selectedBranchId) {
+      setWorkingProducts([]);
+      return;
+    }
+    let cancelled = false;
     const scoped =
       selectedKey === BEST_SELLERS_KEY
         ? products
         : products.filter((p) => matchesCategoryFilter(p.category, selectedKey, categories));
-    setWorkingProducts(sortProductsByCustomOrder(scoped, selectedKey, selectedBranchId));
-  }, [selectedKey, products, categories, selectedBranchId]);
+    void getProductSortOrder(selectedBranchId, selectedKey)
+      .then(({ order, rev }) => {
+        if (cancelled) return;
+        sortRevRef.current = rev;
+        setWorkingProducts(sortProductsByCustomOrder(scoped, order));
+      })
+      .catch(() => {
+        if (!cancelled) setWorkingProducts(sortProductsByCustomOrder(scoped, undefined));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedKey, products, categories, selectedBranchId, reloadToken]);
+
+  /**
+   * Persist the full order as a single O(1) write. Saves are chained so our own
+   * sequential moves never collide; the `rev` guard still catches a *foreign*
+   * editor (→ reload). `force` skips the guard (used by the A–Z reset).
+   */
+  const persistOrder = useCallback(
+    (ids: string[], opts?: { force?: boolean }) => {
+      const branchId = selectedBranchId;
+      const key = selectedKey;
+      saveChainRef.current = saveChainRef.current.then(async () => {
+        try {
+          const expectedRev = opts?.force ? undefined : sortRevRef.current;
+          sortRevRef.current = await saveProductSortOrder(branchId, key, ids, expectedRev);
+        } catch (err) {
+          if (err instanceof ConcurrentEditError) {
+            flash('มีการแก้ไขลำดับจากผู้อื่น — กำลังโหลดใหม่');
+            setReloadToken((t) => t + 1);
+          } else {
+            flash('บันทึกไม่สำเร็จ');
+          }
+        }
+      });
+    },
+    [selectedBranchId, selectedKey, flash],
+  );
 
   const moveProduct = (index: number, dir: -1 | 1) => {
     const next = move(workingProducts, index, dir);
     setWorkingProducts(next);
-    void saveProductSortOrders(selectedBranchId, selectedKey, next.map((p) => p.id)).catch(() =>
-      flash('บันทึกไม่สำเร็จ'),
-    );
+    persistOrder(next.map((p) => p.id));
   };
 
   const toggleProductVisibility = (id: string, visible: boolean) => {
@@ -172,12 +222,9 @@ export function SortingSettingsContent({ defaultBranchId = '' }: { defaultBranch
   };
 
   const resetProductsAlpha = () => {
-    const order = generateAlphabeticalOrder(workingProducts);
-    const next = [...workingProducts].sort((a, b) => (order[a.id] ?? 0) - (order[b.id] ?? 0));
+    const next = sortByThaiName(workingProducts);
     setWorkingProducts(next);
-    void saveProductSortOrders(selectedBranchId, selectedKey, next.map((p) => p.id)).catch(() =>
-      flash('บันทึกไม่สำเร็จ'),
-    );
+    persistOrder(next.map((p) => p.id), { force: true });
     flash('เรียงสินค้าตามชื่อ ก-ฮ แล้ว');
   };
 

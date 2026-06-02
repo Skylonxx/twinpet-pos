@@ -68,8 +68,16 @@ export default function POSPage() {
   // Static, pull-based inventory: the grid no longer reacts to live Firestore
   // edits (no mid-sale reshuffle). A fresh snapshot loads on mount; the cashier
   // pulls updates on demand via the "อัปเดตข้อมูลหน้าจอ" button (refreshInventory).
-  const { products, categories, richCategories, loading, refreshing, refreshInventory } =
-    usePosInventory(branchId);
+  const {
+    products,
+    categories,
+    richCategories,
+    sorting,
+    quickMenus,
+    loading,
+    refreshing,
+    refreshInventory,
+  } = usePosInventory(branchId);
   const { bills: suspendedBills, count: suspendedCount, addBill, removeBill } =
     useSuspendedBills(branchId);
   const { priceLevels: customerTiers } = usePriceLevels(branchId);
@@ -78,6 +86,9 @@ export default function POSPage() {
 
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState('');
+  // Selected Quick Menu (virtual category). Mutually exclusive with a physical
+  // category tab — selecting one clears the other.
+  const [activeQuickMenuId, setActiveQuickMenuId] = useState<string | null>(null);
   const [showExtraOptions, setShowExtraOptions] = useState(false);
 
   const [uomProduct, setUomProduct] = useState<PosProduct | null>(null);
@@ -165,8 +176,43 @@ export default function POSPage() {
   // This terminal's branch — drives all branch-scoped ordering & visibility.
   const posBranchId = branchId ?? '';
 
+  // Active (admin-enabled) Quick Menus, strictly ordered by their `order` field
+  // so the POS tab sequence always matches the admin's arrangement.
+  const activeQuickMenus = useMemo(
+    () => quickMenus.filter((m) => m.isActive).sort((a, b) => a.order - b.order),
+    [quickMenus],
+  );
+
+  const selectCategory = useCallback((catId: string) => {
+    setActiveQuickMenuId(null);
+    setActiveCategory(catId);
+  }, []);
+
+  const selectQuickMenu = useCallback((id: string) => {
+    setActiveCategory('');
+    setActiveQuickMenuId(id);
+  }, []);
+
   const filteredProducts = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const matchesSearch = (p: PosProduct) =>
+      !q ||
+      p.name.toLowerCase().includes(q) ||
+      p.sku.toLowerCase().includes(q) ||
+      (p.barcode ?? '').toLowerCase().includes(q);
+
+    // Quick Menu (virtual category): show ONLY its hand-picked products, strictly
+    // in the `productIds` sequence. The self-healing reader drops ghost ids. The
+    // physical-category and visibility filters intentionally do NOT apply — these
+    // are deliberately curated shortcuts (often to otherwise-hidden SKUs).
+    if (activeQuickMenuId) {
+      const menu = activeQuickMenus.find((m) => m.id === activeQuickMenuId);
+      if (!menu) return [];
+      const idSet = new Set(menu.productIds);
+      const scoped = products.filter((p) => idSet.has(p.id) && matchesSearch(p));
+      return sortProductsByCustomOrder(scoped, menu.productIds);
+    }
+
     // Hidden products are revealed only by an EXACT identifier match typed by a
     // clerk (hardware scans bypass this filter entirely via findByScanCode).
     const isExactCodeMatch = (p: PosProduct) =>
@@ -181,18 +227,34 @@ export default function POSPage() {
         // best-sellers tab unless explicitly summoned by exact SKU/name/barcode.
         return isExactCodeMatch(p);
       }
-      const matchQ =
-        !q ||
-        p.name.toLowerCase().includes(q) ||
-        p.sku.toLowerCase().includes(q) ||
-        (p.barcode ?? '').toLowerCase().includes(q);
       const matchCat = !activeCategory || p.category === activeCategory;
-      return matchQ && matchCat;
+      return matchesSearch(p) && matchCat;
     });
     // Apply this branch's custom ranking for the active group ('' shows the
-    // branch "best sellers" master order). Pure helper — never mutates `products`.
-    return sortProductsByCustomOrder(filtered, activeCategory || BEST_SELLERS_KEY, posBranchId);
-  }, [products, search, activeCategory, posBranchId]);
+    // branch "best sellers" master order) from the sharded sorting array. The
+    // reader is self-healing — unranked/new products fall to the end A–Z, ghost
+    // ids are dropped. Pure helper — never mutates `products`.
+    //
+    // The Admin editor saves a category's order under the categories-collection
+    // *id* (`selectedKey = c.id`). `activeCategory` mirrors the product's stored
+    // `category` field, which may be a legacy *name* — so resolve it back to the
+    // canonical id before the lookup, or specific-category order is missed and
+    // we wrongly fall back to alphabetical.
+    const sortKey = activeCategory
+      ? richCategories.find((c) => c.id === activeCategory || c.name === activeCategory)?.id ??
+        activeCategory
+      : BEST_SELLERS_KEY;
+    return sortProductsByCustomOrder(filtered, sorting[sortKey]);
+  }, [
+    products,
+    search,
+    activeCategory,
+    posBranchId,
+    sorting,
+    richCategories,
+    activeQuickMenuId,
+    activeQuickMenus,
+  ]);
 
   // Enrich the product-derived category strings with admin metadata (branch
   // order/visibility/background) from the categories collection, then keep only
@@ -221,6 +283,14 @@ export default function POSPage() {
     const safe = resolveActiveCategory(activeCategory, visibleCategories, '');
     if (safe !== activeCategory) setActiveCategory(safe);
   }, [activeCategory, visibleCategories]);
+
+  // If the selected Quick Menu is deleted/deactivated (e.g. after a refresh),
+  // fall back to "all" so the grid never points at a vanished virtual category.
+  useEffect(() => {
+    if (activeQuickMenuId && !activeQuickMenus.some((m) => m.id === activeQuickMenuId)) {
+      setActiveQuickMenuId(null);
+    }
+  }, [activeQuickMenuId, activeQuickMenus]);
 
   const discountLine = discountLineKey ? cart.cart[discountLineKey] ?? null : null;
 
@@ -482,13 +552,27 @@ export default function POSPage() {
             >
               ค้นหาหมวดหมู่ ▾
             </button>
+            {/* Tab order is fixed: (1) All/Best-Sellers default, (2) Quick Menus
+                in their admin `order`, (3) physical categories. */}
             <button
               type="button"
-              className={`pos-cat-pill${!activeCategory ? ' on' : ''}`}
-              onClick={() => setActiveCategory('')}
+              className={`pos-cat-pill${!activeCategory && !activeQuickMenuId ? ' on' : ''}`}
+              onClick={() => selectCategory('')}
             >
               ทั้งหมด
             </button>
+            {activeQuickMenus.map((qm) => (
+              <button
+                key={qm.id}
+                type="button"
+                className={`pos-cat-pill pos-cat-pill--quick${activeQuickMenuId === qm.id ? ' on' : ''}`}
+                onClick={() => selectQuickMenu(qm.id)}
+              >
+                <span className="pos-cat-pill-label">
+                  {qm.icon ?? '⚡'} {qm.name}
+                </span>
+              </button>
+            ))}
             {visibleCategories.map((cat) => {
               const setting = cat.branchSettings?.[posBranchId];
               const bgColor = setting?.backgroundColor;
@@ -506,7 +590,7 @@ export default function POSPage() {
                         ? { background: bgColor }
                         : undefined
                   }
-                  onClick={() => setActiveCategory(cat.id)}
+                  onClick={() => selectCategory(cat.id)}
                 >
                   {bgImage ? <span className="pos-cat-pill-overlay" aria-hidden="true" /> : null}
                   <span className="pos-cat-pill-label">{cat.name}</span>

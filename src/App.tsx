@@ -31,6 +31,7 @@ import TierManagementPage from './pages/admin/TierManagementPage';
 import AdminStaffManagementPage from './pages/admin/AdminStaffManagementPage';
 import AdminSupplierManagementPage from './pages/admin/AdminSupplierManagementPage';
 import SortingSettingsPage from './pages/admin/SortingSettingsPage';
+import QuickMenuSettingsPage from './pages/admin/QuickMenuSettingsPage';
 import DocumentSettings from './pages/settings/DocumentSettings';
 import SettingsPage from './pages/SettingsPage';
 import {
@@ -102,6 +103,7 @@ export default function App() {
             <Route path="transfers/new" element={<AdminTransferCreatePage />} />
             <Route path="stock-report" element={<AdminStockReportPage />} />
             <Route path="sorting" element={<SortingSettingsPage />} />
+            <Route path="quick-menus" element={<QuickMenuSettingsPage />} />
           </Route>
         </Route>
 
