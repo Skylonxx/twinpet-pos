@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { PaymentReceiptLine } from '../../components/PaymentModal';
 import type { PosCustomerPick } from '../../components/customers/CustomerPickerModal';
 import {
@@ -63,8 +63,14 @@ export type UseCartArgs = {
 
 /**
  * Owns the POS cart: line items, bill-level discount, and fee — plus the
- * derived totals/receipt lines. Tier re-pricing is derived on read (no effect),
- * so the cart always reflects the active customer without cascading renders.
+ * derived totals/receipt lines.
+ *
+ * Price freezing: a cart line snapshots its price (`unitPrice`/`originalPrice`)
+ * and name (`productName`) at add-time. Live Firestore product edits update the
+ * grid but must NEVER mutate an active cart line. The cart is therefore the raw
+ * stored lines verbatim — there is no live re-derivation on read. The one
+ * sanctioned reprice is an explicit customer/tier change (effect below), which
+ * is a deliberate cashier action, not a backend snapshot update.
  */
 export function useCart({ products, customer, showToast }: UseCartArgs) {
   const [rawCart, setRawCart] = useState<Record<string, CartLine>>({});
@@ -72,13 +78,22 @@ export function useCart({ products, customer, showToast }: UseCartArgs) {
   const [billDiscPercent, setBillDiscPercent] = useState(false);
   const [feeRate, setFeeRate] = useState(0);
 
-  // The stored cart holds raw lines; the priced view is derived for the active
-  // customer/products. This replaces the previous reprice-in-useEffect.
-  const cart = useMemo(
-    () => repriceCartLines(rawCart, products, customer),
-    [rawCart, products, customer],
-  );
+  // Reprice the whole cart when — and only when — the customer's pricing tier
+  // changes. The effect also re-runs on a `products` change, but the tier guard
+  // early-returns in that case: a Firestore product/price edit therefore leaves
+  // active lines frozen, while a wholesale/tier customer swap re-rates them
+  // against the current products.
+  const activeTier = customer?.customerType?.trim() || null;
+  const pricedTierRef = useRef(activeTier);
+  useEffect(() => {
+    if (pricedTierRef.current === activeTier) return;
+    pricedTierRef.current = activeTier;
+    setRawCart((prev) => repriceCartLines(prev, products, customer));
+  }, [activeTier, customer, products]);
 
+  // The cart is the frozen lines as stored — no per-render reprice from live
+  // products. (Tier changes mutate `rawCart` via the effect above.)
+  const cart = rawCart;
   const cartLines = useMemo(() => Object.values(cart), [cart]);
 
   const totals = useMemo(
