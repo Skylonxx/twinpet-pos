@@ -23,6 +23,8 @@ import { useSuspendedBills } from '../lib/pos/useSuspendedBills';
 import ProductImageThumb from '../components/products/ProductImageThumb';
 import { usePosInventory } from '../hooks/pos/usePosInventory';
 import { usePosSyncSignal } from '../hooks/pos/usePosSyncSignal';
+import SyncIndicator from '../components/pos/SyncIndicator';
+import { refreshReceiptConfigCache } from '../lib/pos/billId';
 import {
   BEST_SELLERS_KEY,
   getVisibleCategories,
@@ -120,7 +122,6 @@ export default function POSPage() {
   const checkout = useCheckout({
     user,
     branchId,
-    products,
     activeShift,
     setActiveShift,
     showToast,
@@ -291,6 +292,12 @@ export default function POSPage() {
       setActiveQuickMenuId(null);
     }
   }, [activeQuickMenuId, activeQuickMenus]);
+
+  // While online, cache this branch's document prefix so offline receipts use the
+  // real prefix (setting/doc-prefix + per-branch posPrefix), not a hardcoded "RCP".
+  useEffect(() => {
+    if (branchId) void refreshReceiptConfigCache(branchId);
+  }, [branchId]);
 
   const discountLine = discountLineKey ? cart.cart[discountLineKey] ?? null : null;
 
@@ -494,6 +501,7 @@ export default function POSPage() {
             />{' '}
             {refreshing ? 'กำลังอัปเดต...' : 'อัปเดตข้อมูลหน้าจอ'}
           </button>
+          <SyncIndicator branchId={branchId} />
         </div>
         {activeShift && (
           <div className="pos-topbar-actions">

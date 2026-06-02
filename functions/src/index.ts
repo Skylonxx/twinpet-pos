@@ -1,15 +1,15 @@
-import { initializeApp } from 'firebase-admin/app';
+import { getApps, initializeApp, type App } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
-import { FieldValue, getFirestore, Timestamp } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp, getFirestore } from 'firebase-admin/firestore';
 import bcrypt from 'bcryptjs';
-import { onCall, HttpsError } from 'firebase-functions/v2/https';
+import { onCall, onRequest, HttpsError } from 'firebase-functions/v2/https';
 import { setGlobalOptions } from 'firebase-functions/v2';
+import { db } from './db';
 
 setGlobalOptions({ region: 'asia-southeast1' });
 
-initializeApp();
-
-const db = getFirestore();
+// Offline-first async checkout reconciler (Firestore onWrite trigger, pos-db).
+export { reconcileOrder } from './reconcileOrder';
 
 type UserRole = 'admin' | 'manager' | 'staff';
 
@@ -217,6 +217,77 @@ export const verifyPinLogin = onCall(
       if (err instanceof HttpsError) throw err;
       console.error('[verifyPinLogin] unhandled error', err);
       throw new HttpsError('internal', 'ระบบ PIN ขัดข้อง กรุณาลองใหม่');
+    }
+  },
+);
+
+/**
+ * TEMPORARY one-shot migration: copies every document from the (default)
+ * Firestore database into the named `pos-db` database, preserving exact paths
+ * (including nested subcollections).
+ *
+ * Runs entirely inside Cloud Functions with Admin privileges, so no Service
+ * Account JSON key is needed locally.
+ *
+ * ⚠️ DELETE THIS FUNCTION AFTER THE MIGRATION COMPLETES.
+ */
+async function copyCollection(
+  sourceColl: FirebaseFirestore.CollectionReference,
+  targetDb: FirebaseFirestore.Firestore,
+): Promise<number> {
+  let copied = 0;
+  const snapshot = await sourceColl.get();
+
+  for (const doc of snapshot.docs) {
+    // Write the document to the identical path in the target database.
+    await targetDb.doc(doc.ref.path).set(doc.data());
+    copied += 1;
+
+    // Recurse into any subcollections so nested paths are preserved exactly.
+    const subColls = await doc.ref.listCollections();
+    for (const subColl of subColls) {
+      copied += await copyCollection(subColl, targetDb);
+    }
+  }
+
+  return copied;
+}
+
+export const migrateDataToPosDb = onRequest(
+  { invoker: 'public' },
+  async (_req, res) => {
+    try {
+      const app: App = getApps()[0] ?? initializeApp();
+
+      // Source: the original (default) database.
+      const sourceDb = getFirestore(app);
+      // Target: the new named multi-database.
+      const targetDb = getFirestore(app, 'pos-db');
+
+      const rootCollections = await sourceDb.listCollections();
+
+      let totalCopied = 0;
+      const perCollection: Record<string, number> = {};
+
+      for (const coll of rootCollections) {
+        const count = await copyCollection(coll, targetDb);
+        perCollection[coll.id] = count;
+        totalCopied += count;
+      }
+
+      res.status(200).json({
+        success: true,
+        message: `Migration complete. Copied ${totalCopied} documents from (default) to pos-db.`,
+        totalCopied,
+        perCollection,
+      });
+    } catch (err) {
+      console.error('[migrateDataToPosDb] migration failed', err);
+      res.status(500).json({
+        success: false,
+        message: 'Migration failed. Check the function logs for details.',
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   },
 );

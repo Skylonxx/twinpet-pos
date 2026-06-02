@@ -199,6 +199,20 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // ── Async sales (offline-first checkout "intent" inbox) ──
+    // The client writes the sale here with a single queueable setDoc (offline-safe).
+    // The reconcileOrder Cloud Function (Admin SDK — bypasses these rules) settles
+    // it and dual-writes the canonical `orders`. Staff create/read their own branch;
+    // updates (e.g. future void-intent) are manager/admin only.
+    match /asyncOrders/{orderId} {
+      allow read: if isAdmin() || (isStaff() && hasBranchAccess(resource.data.branchId));
+      allow create: if isStaff()
+        && hasBranchAccess(request.resource.data.branchId)
+        && request.resource.data.staffId == staffId();
+      allow update: if isManagerOrAdmin() && hasBranchAccess(resource.data.branchId);
+      allow delete: if isAdmin();
+    }
+
     // ── Sales ──
     match /orders/{orderId} {
       allow read: if isAdmin() || (isStaff() && hasBranchAccess(resource.data.branchId));
@@ -342,7 +356,8 @@ service cloud.firestore {
 
     match /posDevices/{deviceId} {
       allow read: if isStaff() && hasBranchAccess(resource.data.branchId);
-      allow write: if isAdmin() && hasBranchAccess(request.resource.data.branchId);
+      // Managers/admins register & label their branch's terminals (Settings → POS Devices).
+      allow write: if isManagerOrAdmin() && hasBranchAccess(request.resource.data.branchId);
     }
 
     // ── Staff activity & audit ──

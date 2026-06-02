@@ -29,35 +29,47 @@ let auth: Auth | undefined;
 let db: Firestore | undefined;
 let storage: FirebaseStorage | undefined;
 
+/** Named Firestore database this project uses (multi-database, asia-southeast1). */
+const FIRESTORE_DATABASE_ID = 'pos-db';
+
 function initFirestore(appInstance: FirebaseApp): Firestore {
   // Unlimited on-disk cache: the offline-first POS must hold the full catalog
   // (10,000+ items) in IndexedDB so the Repository can resolve snapshots from
   // cache without eviction during long offline stretches.
+  // The 3rd arg pins every path to the named `pos-db` database.
   try {
-    return initializeFirestore(appInstance, {
-      localCache: persistentLocalCache({
-        tabManager: persistentMultipleTabManager(),
-        cacheSizeBytes: CACHE_SIZE_UNLIMITED,
-      }),
-    });
+    return initializeFirestore(
+      appInstance,
+      {
+        localCache: persistentLocalCache({
+          tabManager: persistentMultipleTabManager(),
+          cacheSizeBytes: CACHE_SIZE_UNLIMITED,
+        }),
+      },
+      FIRESTORE_DATABASE_ID,
+    );
   } catch (err) {
     console.warn('[firebase] multi-tab persistence unavailable — trying single-tab', err);
   }
 
   try {
-    return initializeFirestore(appInstance, {
-      localCache: persistentLocalCache({ cacheSizeBytes: CACHE_SIZE_UNLIMITED }),
-    });
+    return initializeFirestore(
+      appInstance,
+      { localCache: persistentLocalCache({ cacheSizeBytes: CACHE_SIZE_UNLIMITED }) },
+      FIRESTORE_DATABASE_ID,
+    );
   } catch (err) {
     console.warn('[firebase] IndexedDB persistence unavailable — using memory cache', err);
   }
 
   try {
-    return initializeFirestore(appInstance, {
-      localCache: memoryLocalCache(),
-    });
+    return initializeFirestore(
+      appInstance,
+      { localCache: memoryLocalCache() },
+      FIRESTORE_DATABASE_ID,
+    );
   } catch {
-    return getFirestore(appInstance);
+    return getFirestore(appInstance, FIRESTORE_DATABASE_ID);
   }
 }
 

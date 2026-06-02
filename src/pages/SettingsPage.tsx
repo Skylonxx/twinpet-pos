@@ -13,6 +13,7 @@ import {
 import { useSettings } from '../lib/settings/useSettings';
 import type { PosDevice, PosDeviceType, UomUnit } from '../lib/types';
 import ExpiryPolicySettings from './settings/ExpiryPolicySettings';
+import PosDevicesSettings from './settings/PosDevicesSettings';
 import PriceLevelManager from '../components/admin/PriceLevelManager';
 import './SettingsPage.css';
 
@@ -669,6 +670,7 @@ export default function SettingsPage() {
             <>
               <div className="stg-section-title">เครื่อง POS</div>
               <div className="stg-section-sub">จัดการเครื่อง POS ที่เชื่อมต่อกับสาขานี้</div>
+              <PosDevicesSettings branchId={branchId} userId={user?.id ?? null} onToast={showToast} />
               <div className="stg-card">
                 <div className="stg-card-head">
                   <i className="ti ti-device-desktop" aria-hidden="true" /> เครื่องที่ลงทะเบียน

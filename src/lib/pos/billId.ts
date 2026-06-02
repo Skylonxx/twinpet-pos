@@ -6,7 +6,7 @@ import {
   type Firestore,
   type Transaction,
 } from 'firebase/firestore';
-import { collections } from '../firebase';
+import { collections, db, isFirebaseConfigured } from '../firebase';
 import { mergeSystemSettings } from '../settings/systemTypes';
 import type { Settings } from '../types';
 
@@ -170,6 +170,71 @@ export async function allocateReceiptNumberInTransaction(
   const allocation = await readReceiptCounterInTransaction(tx, firestore, config, now);
   commitReceiptCounterInTransaction(tx, allocation);
   return allocation.billId;
+}
+
+// ── Offline prefix cache: keep the latest online prefix/padding for offline use ──
+const RECEIPT_CONFIG_CACHE_KEY = 'twinpet-receipt-config-cache';
+
+/** Read the durably-cached receipt config (set while online), or null if empty. */
+export function getCachedReceiptConfig(): ReceiptNumberConfig | null {
+  try {
+    const raw = localStorage.getItem(RECEIPT_CONFIG_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<ReceiptNumberConfig>;
+    const prefix = typeof parsed.prefix === 'string' ? parsed.prefix.trim() : '';
+    if (!prefix) return null;
+    const padding = typeof parsed.padding === 'number' && parsed.padding > 0 ? parsed.padding : 4;
+    return { prefix, padding };
+  } catch {
+    return null;
+  }
+}
+
+export function cacheReceiptConfig(config: ReceiptNumberConfig): void {
+  try {
+    localStorage.setItem(
+      RECEIPT_CONFIG_CACHE_KEY,
+      JSON.stringify({ prefix: config.prefix, padding: config.padding }),
+    );
+  } catch {
+    // ignore storage quota/availability errors
+  }
+}
+
+/**
+ * While ONLINE: resolve the branch/system document prefix (`setting/doc-prefix`
+ * + per-branch `posPrefix`) and cache it durably so offline receipts use the real
+ * prefix, not a hardcoded default. Best-effort — keeps the last good cache on error.
+ */
+export async function refreshReceiptConfigCache(branchId: string): Promise<void> {
+  if (!isFirebaseConfigured || !db || !branchId) return;
+  try {
+    cacheReceiptConfig(await resolveReceiptNumberConfig(db, branchId));
+  } catch {
+    // keep last good cache
+  }
+}
+
+/**
+ * Offline-first receipt number: `[PREFIX]-[YYMMDD]-[SEGMENT]-[SEQ]`, where
+ * SEGMENT is the device label (or raw id). Prefix/padding come from the cached
+ * online config, then dev/local settings, and ONLY fall back to `RCP` when both
+ * are empty. The device segment makes it collision-free with no server
+ * coordination, so it generates synchronously offline.
+ */
+export function formatOfflineReceiptNumber(
+  deviceSegment: string,
+  seq: number,
+  now = new Date(),
+): string {
+  const config = getCachedReceiptConfig() ?? resolveDevReceiptNumberConfig();
+  const safePrefix = config.prefix.trim().toUpperCase().replace(/[^A-Z0-9]/g, '') || 'RCP';
+  const segment = deviceSegment.trim().toUpperCase().replace(/[^A-Z0-9]/g, '') || 'DEV';
+  const yy = String(now.getFullYear()).slice(-2);
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  const run = String(seq).padStart(Math.max(1, config.padding), '0');
+  return `${safePrefix}-${yy}${mm}${dd}-${segment}-${run}`;
 }
 
 /** Dev-mode counter (localStorage) when Firestore is unavailable. */

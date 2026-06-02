@@ -154,8 +154,10 @@ export function useFirestoreSubcollection<T extends DocumentData>(
     );
   }, [parentCollection, parentId, subcollectionName]);
 
+  // A CollectionReference is a Query at runtime; the firebase SDK's two-param
+  // Query<App, Db> generics need the through-`unknown` cast (TS-recommended).
   const [data, loading, error] = useCollectionData<T>(
-    ref as Query<T> | null,
+    ref as unknown as Query<T> | null,
   );
 
   const items = useMemo(

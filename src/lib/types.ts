@@ -414,11 +414,14 @@ export type OrderItem = {
 
 /**
  * Sync/reconcile lifecycle of an offline-written sale:
- *  - `pending`   : intent written by the client; not yet processed server-side.
- *  - `settled`   : the reconciler Cloud Function applied FIFO/stock/credit/shift.
- *  - `exception` : reconciler failed (surfaced in the admin exceptions view).
+ *  - `pending_reconcile` : intent written by the client; awaiting server settlement.
+ *  - `settled`           : the reconciler Cloud Function applied FIFO/stock/credit/shift.
+ *  - `exception`         : reconciler failed (surfaced in the admin exceptions view).
+ *
+ * ("pending_sync" — still in the device's local write queue — is a client-only UI
+ * state derived from Firestore snapshot metadata, not a stored field value.)
  */
-export type ReconcileStatus = 'pending' | 'settled' | 'exception';
+export type ReconcileStatus = 'pending_reconcile' | 'settled' | 'exception';
 
 /** Payment embedded in the order doc so a sale is a SINGLE offline-queueable write. */
 export type AsyncPayment = {

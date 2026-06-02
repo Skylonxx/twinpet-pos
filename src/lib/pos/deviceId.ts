@@ -8,9 +8,12 @@
  * number is `[PREFIX]-[YYMMDD]-[DEVICE_ID]-[LOCAL_SEQ]`, and the per-device
  * `LOCAL_SEQ` is a durable monotonic counter owned here.
  *
- * Storage: `localStorage` (synchronous, available before first paint).
- * ⚠️ Hardening follow-up (tracked, not in this step): mirror `id` and `seq` into
- * IndexedDB so a PWA cache-clear can't wipe the identity / reuse a sequence.
+ * Storage: `localStorage` is the synchronous source of truth (available before
+ * first paint, used on the hot checkout path). It is MIRRORED to IndexedDB so a
+ * PWA cache-clear that wipes localStorage can't lose the identity / reuse a
+ * sequence — `initDeviceIdentity()` recovers id + seq + label from IndexedDB at
+ * boot (await it before render). A total wipe of BOTH stores is handled by the
+ * "Claim Device" recovery flow in the POS Devices settings screen.
  */
 
 const DEVICE_ID_KEY = 'twinpet_device_id';
@@ -33,6 +36,63 @@ function hasLocalStorage(): boolean {
   } catch {
     return false;
   }
+}
+
+// ── IndexedDB mirror (standard API, no new dependency) ──────────────────────
+const IDB_DB_NAME = 'twinpet-device';
+const IDB_STORE = 'kv';
+const IDB_KEYS = { id: 'deviceId', seq: 'deviceSeq', label: 'deviceLabel' } as const;
+
+function idbOpen(): Promise<IDBDatabase | null> {
+  return new Promise((resolve) => {
+    if (typeof indexedDB === 'undefined') {
+      resolve(null);
+      return;
+    }
+    try {
+      const req = indexedDB.open(IDB_DB_NAME, 1);
+      req.onupgradeneeded = () => req.result.createObjectStore(IDB_STORE);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+/** Fire-and-forget write to the IndexedDB mirror. */
+async function idbSet(key: string, value: string | number): Promise<void> {
+  const dbi = await idbOpen();
+  if (!dbi) return;
+  await new Promise<void>((resolve) => {
+    try {
+      const tx = dbi.transaction(IDB_STORE, 'readwrite');
+      tx.objectStore(IDB_STORE).put(value, key);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+      tx.onabort = () => resolve();
+    } catch {
+      resolve();
+    }
+  });
+  dbi.close();
+}
+
+async function idbGet(key: string): Promise<string | number | undefined> {
+  const dbi = await idbOpen();
+  if (!dbi) return undefined;
+  const result = await new Promise<string | number | undefined>((resolve) => {
+    try {
+      const tx = dbi.transaction(IDB_STORE, 'readonly');
+      const req = tx.objectStore(IDB_STORE).get(key);
+      req.onsuccess = () => resolve(req.result as string | number | undefined);
+      req.onerror = () => resolve(undefined);
+    } catch {
+      resolve(undefined);
+    }
+  });
+  dbi.close();
+  return result;
 }
 
 /** 40 random bits → 8 unambiguous base32 chars. Falls back to Math.random only if needed. */
@@ -68,6 +128,7 @@ export function getDeviceId(): string {
   if (!id) {
     id = generateShortId();
     localStorage.setItem(DEVICE_ID_KEY, id);
+    void idbSet(IDB_KEYS.id, id);
   }
   return id;
 }
@@ -84,10 +145,34 @@ export function setDeviceLabel(label: string): void {
   const clean = label.trim();
   if (clean) localStorage.setItem(DEVICE_LABEL_KEY, clean);
   else localStorage.removeItem(DEVICE_LABEL_KEY);
+  void idbSet(IDB_KEYS.label, clean);
 }
 
 export function getDeviceIdentity(): DeviceIdentity {
   return { id: getDeviceId(), label: getDeviceLabel() };
+}
+
+/** The admin-assigned label, or null if this device still uses its default id. */
+export function getDeviceLabelRaw(): string | null {
+  if (!hasLocalStorage()) return null;
+  const v = localStorage.getItem(DEVICE_LABEL_KEY)?.trim();
+  return v ? v : null;
+}
+
+/**
+ * Receipt device segment: a sanitized admin label (e.g. "iPad-01" → "IPAD01")
+ * when assigned, else the raw device id. Uppercased, unambiguous, hyphen-free so
+ * it slots into `PREFIX-YYMMDD-SEGMENT-SEQ`. The underlying order id always uses
+ * the raw device id for guaranteed uniqueness; admins should keep labels unique
+ * per branch so the human receipt number stays unique too.
+ */
+export function getReceiptDeviceSegment(): string {
+  const label = getDeviceLabelRaw();
+  if (label) {
+    const slug = label.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (slug) return slug;
+  }
+  return getDeviceId();
 }
 
 /**
@@ -100,6 +185,7 @@ export function nextLocalSeq(): number {
   const current = Number.parseInt(localStorage.getItem(DEVICE_SEQ_KEY) ?? '0', 10);
   const next = (Number.isFinite(current) ? current : 0) + 1;
   localStorage.setItem(DEVICE_SEQ_KEY, String(next));
+  void idbSet(IDB_KEYS.seq, next);
   return next;
 }
 
@@ -117,4 +203,54 @@ export function peekLocalSeq(): number {
  */
 export function makeAsyncOrderId(deviceId: string, seq: number): string {
   return `${deviceId}-${seq}`;
+}
+
+/**
+ * Overwrite this terminal's identity + sequence — used by the "Claim Device"
+ * recovery flow to adopt an orphaned device id after a total cache wipe. `seq`
+ * should be set ABOVE the device's last known receipt so numbers never collide.
+ * Mirrors to both localStorage and IndexedDB.
+ */
+export function setDeviceIdentity(id: string, seq: number): void {
+  const safeSeq = Math.max(0, Math.floor(seq));
+  if (hasLocalStorage()) {
+    localStorage.setItem(DEVICE_ID_KEY, id);
+    localStorage.setItem(DEVICE_SEQ_KEY, String(safeSeq));
+  }
+  void idbSet(IDB_KEYS.id, id);
+  void idbSet(IDB_KEYS.seq, safeSeq);
+}
+
+/**
+ * Boot recovery — call (and await) once at app start, before any getDeviceId() /
+ * nextLocalSeq(). If localStorage is intact, refresh the IndexedDB mirror from it.
+ * If localStorage was wiped but IndexedDB still holds the identity, restore id +
+ * seq + label to localStorage so the device keeps its number space. If BOTH are
+ * empty it's a genuinely new device (or one needing a manual Claim).
+ */
+export async function initDeviceIdentity(): Promise<void> {
+  if (!hasLocalStorage()) return;
+
+  const lsId = localStorage.getItem(DEVICE_ID_KEY);
+  if (lsId) {
+    void idbSet(IDB_KEYS.id, lsId);
+    void idbSet(IDB_KEYS.seq, peekLocalSeq());
+    const label = getDeviceLabelRaw();
+    if (label) void idbSet(IDB_KEYS.label, label);
+    return;
+  }
+
+  // localStorage wiped — recover from the IndexedDB mirror if present.
+  const idbId = await idbGet(IDB_KEYS.id);
+  if (typeof idbId === 'string' && idbId) {
+    localStorage.setItem(DEVICE_ID_KEY, idbId);
+    const idbSeq = await idbGet(IDB_KEYS.seq);
+    if (typeof idbSeq === 'number') {
+      localStorage.setItem(DEVICE_SEQ_KEY, String(Math.max(0, Math.floor(idbSeq))));
+    }
+    const idbLabel = await idbGet(IDB_KEYS.label);
+    if (typeof idbLabel === 'string' && idbLabel) {
+      localStorage.setItem(DEVICE_LABEL_KEY, idbLabel);
+    }
+  }
 }

@@ -1,4 +1,12 @@
 /* TwinPet Settings — from reference/twinpet-settings.html */
+
+/* "Claim existing device" recovery box — visually set apart from the label field. */
+.stg-claim-box {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--g200, #d3d1c7);
+}
+
 .stg-page {
   display: flex;
   flex-direction: column;
