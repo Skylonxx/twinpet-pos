@@ -409,6 +409,117 @@ export type OrderItem = {
 };
 
 // -----------------------------
+// asyncOrders (Offline-First Async Checkout — eventual consistency)
+// -----------------------------
+
+/**
+ * Sync/reconcile lifecycle of an offline-written sale:
+ *  - `pending`   : intent written by the client; not yet processed server-side.
+ *  - `settled`   : the reconciler Cloud Function applied FIFO/stock/credit/shift.
+ *  - `exception` : reconciler failed (surfaced in the admin exceptions view).
+ */
+export type ReconcileStatus = 'pending' | 'settled' | 'exception';
+
+/** Payment embedded in the order doc so a sale is a SINGLE offline-queueable write. */
+export type AsyncPayment = {
+  method: PaymentMethod;
+  amount: number;
+  ref?: string | null;
+};
+
+/**
+ * A cart line as the client knows it at sale time. FIFO cost + lot refs are
+ * intentionally absent — they are assigned by the server-side reconciler, which
+ * is the only place with authoritative current lot quantities.
+ */
+export type AsyncOrderLine = {
+  productId: string;
+  productSnap: ProductSnap;
+  unit: string;
+  unitFactor: number;
+  qty: number;
+  qtyBase: number;
+  unitPrice: number;
+  originalPrice?: number;
+  discountAmt: number;
+  lineTotal: number;
+  /** Assigned by the reconciler (FIFO). Absent until `reconcileStatus === 'settled'`. */
+  fifoCost?: number;
+  lotRefs?: LotRef[];
+};
+
+/**
+ * The offline-first sale "intent" document (collection: `asyncOrders`). Written
+ * by the client with ONLY queueable ops (no `runTransaction`, no server reads),
+ * so it commits offline and flushes on reconnect. The reconciler Cloud Function
+ * then enriches it (FIFO/COGS) and applies stock/credit/shift side-effects.
+ *
+ * `id` is the deterministic `${deviceId}-${localSeq}` — also the Firestore doc id
+ * and the reconciler idempotency key (a retry re-writes the same doc).
+ */
+export type AsyncOrder = {
+  id: string;
+  /** Client-authoritative, device-segmented receipt number. The server NEVER renumbers it. */
+  billId: string;
+  deviceId: string;
+  /** Human terminal label at sale time (e.g. "iPad-01"); informational. */
+  deviceLabel?: string;
+
+  branchId: string;
+  shiftId: string;
+  staffId: string;
+  staffName: string;
+
+  customerId: string | null;
+  customerSnap: CustomerSnap | null;
+  priceLevelId: string;
+
+  lines: AsyncOrderLine[];
+  payments: AsyncPayment[];
+
+  subtotal: number;
+  discountAmt: number;
+  billDiscount: number;
+  fee: number;
+  vatRate: number;
+  vatAmt: number;
+  total: number;
+  paidAmt: number;
+  changeAmt: number;
+  creditAmt: number;
+
+  /** Business status (mirrors {@link Order}). */
+  status: OrderStatus;
+
+  // ── Reconcile lifecycle (server-owned after creation) ──
+  reconcileStatus: ReconcileStatus;
+  reconciledAt: Timestamp | null;
+  reconcileError?: string | null;
+  /** True when the reconciler had to oversell (negative stock) on ≥1 line. */
+  hadOversell?: boolean;
+  /** COGS / gross profit assigned by the reconciler. Absent until settled. */
+  cogs?: number;
+  profit?: number;
+
+  // ── Offline-safe void intent ──
+  // A `pending` order is cancelled before it settles (tombstone the reconciler
+  // honors); a `settled` order is reversed by the reconciler.
+  voidRequested?: boolean;
+  voidReason?: string | null;
+  voidedBy?: string | null;
+  voidedAt?: Timestamp | null;
+
+  note: string;
+  printCount: number;
+
+  /** Device clock at sale (display/ordering hint; may be skewed). */
+  clientCreatedAt: number;
+  /** Authoritative server time — null in the local cache until the write flushes. */
+  serverCreatedAt: Timestamp | null;
+  updatedAt: Timestamp | null;
+};
+
+// -----------------------------
 // payments
 // -----------------------------
 
@@ -624,6 +735,32 @@ export type PosDevice = {
 
 export type ShiftStatus = 'open' | 'closed';
 
+/** Whether a shift's open/close has been confirmed by the server yet. */
+export type ShiftSyncState = 'pending' | 'synced';
+
+/**
+ * Cash in/out recorded against a shift, EMBEDDED in the shift doc so the local
+ * Z-report is fully printable offline (no `cashTransactions` query needed). The
+ * server may also fan these out to the `cashTransactions` collection on sync.
+ */
+export type ShiftCashEntry = {
+  id: string;
+  type: CashTransactionType; // 'pay_in' | 'pay_out'
+  amount: number;
+  note: string;
+  staffId: string;
+  staffName: string;
+  /** Device clock when recorded (offline-safe). */
+  at: number;
+};
+
+/**
+ * A cashier shift. Now offline-capable: a shift can be opened AND closed with no
+ * network (outages may last days). The terminal computes the summary locally —
+ * including unsynced {@link AsyncOrder}s — prints the Z-report, and queues the
+ * open/close state to sync later. All new fields are optional so existing
+ * (online-written) shift docs remain valid.
+ */
 export type Shift = {
   id: string;
   branchId: string;
@@ -644,6 +781,21 @@ export type Shift = {
   payOutTotal: number;
   variance: number;
   note: string;
+
+  // ── Offline-first additions (optional → back-compatible) ──
+  /** Terminal that owns this shift (offline open/close lives on one device). */
+  deviceId?: string;
+  /** Sync lifecycle for fully-offline open/close. */
+  syncState?: ShiftSyncState;
+  openedOffline?: boolean;
+  closedOffline?: boolean;
+  /** Authoritative server time once the open/close write flushes (null while queued). */
+  openedAtServer?: Timestamp | null;
+  closedAtServer?: Timestamp | null;
+  /** Embedded cash movements so the Z-report renders offline. */
+  cashEntries?: ShiftCashEntry[];
+  /** Orders folded into the locally-computed summary (incl. not-yet-synced). */
+  localOrderCount?: number;
 };
 
 export type CashTransactionType = 'pay_in' | 'pay_out';
