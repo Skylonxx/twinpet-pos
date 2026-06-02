@@ -8,9 +8,10 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { GoogleAuth } from 'google-auth-library';
+import { FUNCTIONS_REGION } from '../deployConfig';
 
 const PROJECT_ID = process.env.FIREBASE_PROJECT_ID ?? 'twinpet-pos';
-const REGION = 'asia-southeast1';
+const REGION = FUNCTIONS_REGION;
 const FUNCTION_ID = 'verifyPinLogin';
 const RUN_SERVICE_ID = 'verifypinlogin';
 

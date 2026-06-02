@@ -28,7 +28,8 @@ function getVerifyPinLoginCallable() {
     throw new Error('Firebase is not configured');
   }
 
-  const functions = getFunctions(app, 'asia-southeast1');
+  // Region sourced from firebase.json via the generated env (see gen-deploy-config.mjs).
+  const functions = getFunctions(app, import.meta.env.VITE_FUNCTIONS_REGION);
 
   if (
     import.meta.env.DEV &&

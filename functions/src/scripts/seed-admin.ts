@@ -16,6 +16,7 @@ import { initializeApp, cert, getApps, App, ServiceAccount } from 'firebase-admi
 import { getAuth } from 'firebase-admin/auth';
 import { FieldValue, getFirestore, Timestamp, Firestore } from 'firebase-admin/firestore';
 import bcrypt from 'bcryptjs';
+import { FIRESTORE_DATABASE_ID } from '../deployConfig';
 
 // ─── Edit these defaults or override via environment variables ───────────────
 
@@ -172,7 +173,7 @@ async function main(): Promise<void> {
 
   const app = initAdminApp();
   const projectId = app.options.projectId!;
-  const db = getFirestore(app);
+  const db = getFirestore(app, FIRESTORE_DATABASE_ID);
   const auth = getAuth(app);
 
   const branchId = await resolveBranchId(db);

@@ -29,14 +29,19 @@ let auth: Auth | undefined;
 let db: Firestore | undefined;
 let storage: FirebaseStorage | undefined;
 
-/** Named Firestore database this project uses (multi-database, asia-southeast1). */
-const FIRESTORE_DATABASE_ID = 'pos-db';
+/**
+ * Named Firestore database this project uses. Sourced from the build-time env
+ * (VITE_FIRESTORE_DATABASE_ID), which is generated from firebase.json by
+ * scripts/gen-deploy-config.mjs (run automatically on dev/build). firebase.json
+ * is the single source of truth — do not hardcode the id here.
+ */
+const FIRESTORE_DATABASE_ID = import.meta.env.VITE_FIRESTORE_DATABASE_ID;
 
 function initFirestore(appInstance: FirebaseApp): Firestore {
   // Unlimited on-disk cache: the offline-first POS must hold the full catalog
   // (10,000+ items) in IndexedDB so the Repository can resolve snapshots from
   // cache without eviction during long offline stretches.
-  // The 3rd arg pins every path to the named `pos-db` database.
+  // The 3rd arg pins every path to the configured named database.
   try {
     return initializeFirestore(
       appInstance,
@@ -74,6 +79,15 @@ function initFirestore(appInstance: FirebaseApp): Firestore {
 }
 
 if (isFirebaseConfigured) {
+  if (!FIRESTORE_DATABASE_ID) {
+    // Guard against silently connecting to the (default) database — the cause of
+    // the original missing-index / reconcile failures. The id is generated from
+    // firebase.json; `npm run dev`/`build` regenerate it.
+    throw new Error(
+      'VITE_FIRESTORE_DATABASE_ID is not set. Run `node scripts/gen-deploy-config.mjs` ' +
+        '(or any `npm run dev`/`build`) to regenerate .env from firebase.json.',
+    );
+  }
   app = initializeApp(firebaseConfig);
   auth = getAuth(app);
   db = initFirestore(app);

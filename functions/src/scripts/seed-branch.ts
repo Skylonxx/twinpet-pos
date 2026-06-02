@@ -12,6 +12,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { initializeApp, cert, getApps, App, ServiceAccount } from 'firebase-admin/app';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
+import { FIRESTORE_DATABASE_ID } from '../deployConfig';
 
 const CONFIG = {
   branchId: (process.env.SEED_BRANCH_ID ?? 'LDP-001').trim(),
@@ -73,7 +74,7 @@ function initAdminApp(): App {
 
 async function main(): Promise<void> {
   const app = initAdminApp();
-  const db = getFirestore(app);
+  const db = getFirestore(app, FIRESTORE_DATABASE_ID);
   const ref = db.collection('branches').doc(CONFIG.branchId);
   const existing = await ref.get();
 

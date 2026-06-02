@@ -1,6 +1,7 @@
 import { collection, deleteDoc, doc, onSnapshot, orderBy, query, setDoc } from 'firebase/firestore';
 import { useCallback, useEffect, useState } from 'react';
 import { collections, db, isFirebaseConfigured } from '../firebase';
+import { cascadeDeleteCategory } from '../admin/sortingStore';
 import type { CategoryBranchSetting, ProductCategory } from '../types';
 
 export const DEFAULT_PRODUCT_CATEGORIES: ProductCategory[] = [
@@ -169,7 +170,6 @@ export async function deleteProductCategory(id: string): Promise<void> {
  */
 async function cascadeCleanupAfterCategoryDelete(categoryId: string): Promise<void> {
   try {
-    const { cascadeDeleteCategory } = await import('../admin/sortingStore');
     await cascadeDeleteCategory(categoryId);
   } catch (err) {
     console.warn('[categoryService] cascadeDeleteCategory failed:', err);

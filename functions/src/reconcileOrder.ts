@@ -18,9 +18,9 @@
  *    OVERSELL lot cut, and flags `hadOversell` for admin audit.
  */
 
-// 2nd Gen (v2) trigger pointed at the named `pos-db` database (asia-southeast1),
-// so Eventarc's same-region requirement is satisfied — function and database are
-// both in asia-southeast1.
+// 2nd Gen (v2) trigger pointed at the configured Firestore database + region
+// (firebase.json → firestore.database / firestore.location), so Eventarc's
+// same-region requirement is satisfied — function and database are co-located.
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import {
   FieldValue,
@@ -28,8 +28,9 @@ import {
   type DocumentData,
   type DocumentReference,
 } from 'firebase-admin/firestore';
-// Shared Admin SDK handle — already pointed at `pos-db` (see ./db).
+// Shared Admin SDK handle — already pointed at the configured database (see ./db).
 import { db } from './db';
+import { FIRESTORE_DATABASE_ID, FUNCTIONS_REGION } from './deployConfig';
 
 const C = {
   products: 'products',
@@ -189,7 +190,7 @@ function calcShiftPaymentTotals(payments: AsyncPayment[], grandTotal: number) {
  * later offline void-intent flag on the same doc.
  */
 export const reconcileOrder = onDocumentWritten(
-  { document: 'asyncOrders/{orderId}', region: 'asia-southeast1', database: 'pos-db' },
+  { document: 'asyncOrders/{orderId}', region: FUNCTIONS_REGION, database: FIRESTORE_DATABASE_ID },
   async (event) => {
     const after = event.data?.after;
     if (!after || !after.exists) return; // deleted — nothing to do

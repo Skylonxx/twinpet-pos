@@ -5,10 +5,12 @@ import bcrypt from 'bcryptjs';
 import { onCall, onRequest, HttpsError } from 'firebase-functions/v2/https';
 import { setGlobalOptions } from 'firebase-functions/v2';
 import { db } from './db';
+import { FIRESTORE_DATABASE_ID, FUNCTIONS_REGION } from './deployConfig';
 
-setGlobalOptions({ region: 'asia-southeast1' });
+setGlobalOptions({ region: FUNCTIONS_REGION });
 
-// Offline-first async checkout reconciler (Firestore onWrite trigger, pos-db).
+// Offline-first async checkout reconciler (Firestore onWrite trigger) — targets
+// the database/region configured in firebase.json.
 export { reconcileOrder } from './reconcileOrder';
 
 type UserRole = 'admin' | 'manager' | 'staff';
@@ -223,7 +225,7 @@ export const verifyPinLogin = onCall(
 
 /**
  * TEMPORARY one-shot migration: copies every document from the (default)
- * Firestore database into the named `pos-db` database, preserving exact paths
+ * Firestore database into the configured named database, preserving exact paths
  * (including nested subcollections).
  *
  * Runs entirely inside Cloud Functions with Admin privileges, so no Service
@@ -261,8 +263,8 @@ export const migrateDataToPosDb = onRequest(
 
       // Source: the original (default) database.
       const sourceDb = getFirestore(app);
-      // Target: the new named multi-database.
-      const targetDb = getFirestore(app, 'pos-db');
+      // Target: the configured named database (firebase.json → firestore.database).
+      const targetDb = getFirestore(app, FIRESTORE_DATABASE_ID);
 
       const rootCollections = await sourceDb.listCollections();
 
@@ -277,7 +279,7 @@ export const migrateDataToPosDb = onRequest(
 
       res.status(200).json({
         success: true,
-        message: `Migration complete. Copied ${totalCopied} documents from (default) to pos-db.`,
+        message: `Migration complete. Copied ${totalCopied} documents from (default) to ${FIRESTORE_DATABASE_ID}.`,
         totalCopied,
         perCollection,
       });

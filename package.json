@@ -4,7 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "gen-config": "node scripts/gen-deploy-config.mjs",
+    "predev": "npm run gen-config",
     "dev": "vite",
+    "prebuild": "npm run gen-config",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",

@@ -1,16 +1,30 @@
 /**
- * Backfill `branchId` on products/{id}/productStocks/{branchId} docs.
- * Required for collectionGroup('productStocks').where('branchId', '==', …) queries.
+ * Repair orphaned `settled` async orders — sales that flipped to
+ * reconcileStatus 'settled' but whose canonical `orders/{id}` doc is missing.
  *
- * Run:
+ * Backfills the read-model docs (orders/orderItems/payments) from the settled
+ * asyncOrder. Does NOT re-run FIFO / stock / credit / shift (those already
+ * committed when the order settled). See functions/src/sweeper.ts for the why.
+ *
+ * Targets the configured named database (firebase.json → firestore.database),
+ * NOT the (default) one.
+ *
+ * Run (dry-run — reports only, writes nothing):
  *   cd functions
- *   npm run backfill-product-stocks
+ *   npm run repair-orphaned-orders
+ *
+ * Apply the repairs for real:
+ *   npm run repair-orphaned-orders -- --apply
+ *
+ * Requires a serviceAccount.json (see seed-branch.ts) or
+ * GOOGLE_APPLICATION_CREDENTIALS / --credentials=<path>.
  */
 
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { initializeApp, cert, getApps, App, ServiceAccount } from 'firebase-admin/app';
-import { FieldValue, getFirestore } from 'firebase-admin/firestore';
+import { getFirestore } from 'firebase-admin/firestore';
+import { sweepStuckOrders } from '../sweeper';
 import { FIRESTORE_DATABASE_ID } from '../deployConfig';
 
 function loadServiceAccount(): ServiceAccount {
@@ -56,47 +70,28 @@ function initAdminApp(): App {
 }
 
 async function main(): Promise<void> {
+  const apply = process.argv.includes('--apply');
+  // 2nd arg pins this handle to the configured named database.
   const db = getFirestore(initAdminApp(), FIRESTORE_DATABASE_ID);
-  const productsSnap = await db.collection('products').get();
 
-  let scanned = 0;
-  let updated = 0;
-  let skipped = 0;
-
-  for (const productDoc of productsSnap.docs) {
-    const stocksSnap = await productDoc.ref.collection('productStocks').get();
-    for (const stockDoc of stocksSnap.docs) {
-      scanned += 1;
-      const data = stockDoc.data();
-      const branchId = typeof data.branchId === 'string' ? data.branchId : stockDoc.id;
-
-      if (data.branchId === branchId) {
-        skipped += 1;
-        continue;
-      }
-
-      await stockDoc.ref.set(
-        {
-          branchId,
-          updatedAt: FieldValue.serverTimestamp(),
-        },
-        { merge: true },
-      );
-      updated += 1;
-      console.log(`  ✓ ${productDoc.id}/productStocks/${stockDoc.id} → branchId=${branchId}`);
-    }
+  if (!apply) {
+    console.log('');
+    console.log('DRY-RUN. No documents will be written. Re-run with --apply to repair.');
+    console.log('');
   }
 
-  console.log('');
-  console.log('✓ backfill-product-stocks เสร็จสิ้น');
-  console.log(`  scanned : ${scanned}`);
-  console.log(`  updated : ${updated}`);
-  console.log(`  skipped : ${skipped}`);
+  const report = await sweepStuckOrders(db, { apply });
+
+  if (report.unrepairable.length > 0) {
+    console.log('');
+    console.log('Unrepairable orders (need manual review):');
+    for (const u of report.unrepairable) console.log(`  - ${u.id}: ${u.reason}`);
+  }
 }
 
 main().catch((err) => {
   console.error('');
-  console.error('✗ backfill-product-stocks ล้มเหลว:');
+  console.error('✗ repair-orphaned-orders ล้มเหลว:');
   console.error(err instanceof Error ? err.message : err);
   process.exit(1);
 });
