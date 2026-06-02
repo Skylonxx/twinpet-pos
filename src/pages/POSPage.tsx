@@ -21,8 +21,8 @@ import { POS_FEATURES } from '../lib/config/features';
 import type { SuspendedBill } from '../lib/pos/suspendedBills';
 import { useSuspendedBills } from '../lib/pos/useSuspendedBills';
 import ProductImageThumb from '../components/products/ProductImageThumb';
-import { usePosProducts } from '../lib/pos/usePosProducts';
-import { useCategories } from '../lib/inventory/categoryService';
+import { usePosInventory } from '../hooks/pos/usePosInventory';
+import { usePosSyncSignal } from '../hooks/pos/usePosSyncSignal';
 import {
   BEST_SELLERS_KEY,
   getVisibleCategories,
@@ -65,8 +65,11 @@ function findByScanCode(products: PosProduct[], code: string): ScanMatch | undef
 export default function POSPage() {
   const { user, branchId } = useAuth();
   const { branch } = useBranch();
-  const { products, categories, loading } = usePosProducts(branchId);
-  const { categories: richCategories } = useCategories();
+  // Static, pull-based inventory: the grid no longer reacts to live Firestore
+  // edits (no mid-sale reshuffle). A fresh snapshot loads on mount; the cashier
+  // pulls updates on demand via the "อัปเดตข้อมูลหน้าจอ" button (refreshInventory).
+  const { products, categories, richCategories, loading, refreshing, refreshInventory } =
+    usePosInventory(branchId);
   const { bills: suspendedBills, count: suspendedCount, addBill, removeBill } =
     useSuspendedBills(branchId);
   const { priceLevels: customerTiers } = usePriceLevels(branchId);
@@ -115,6 +118,48 @@ export default function POSPage() {
 
   const cart = useCart({ products, customer, showToast });
   const { cartLines, totals } = cart;
+
+  // ── Admin Broadcast → Smart Auto-Sync ──────────────────────────────────────
+  // One cheap listener on the branch's sync_state doc. When the admin "rings the
+  // bell": if the cart is empty, pull fresh inventory immediately; if a sale is
+  // in progress, surface a sticky banner and defer the refresh until checkout
+  // clears the cart or the cashier opts in — so prices never shift mid-sale.
+  const { lastForceUpdate, initialized: syncInitialized } = usePosSyncSignal(branchId);
+  const [updateBanner, setUpdateBanner] = useState(false);
+  // Broadcast timestamp already reflected on screen. Seeded from the listener's
+  // first emission so a signal that pre-dates mount is never treated as fresh.
+  const syncedStampRef = useRef<number | null>(null);
+  const baselineSetRef = useRef(false);
+
+  /** Pull fresh data and acknowledge the pending signal (banner + normal button). */
+  const handleManualRefresh = useCallback(() => {
+    syncedStampRef.current = lastForceUpdate;
+    setUpdateBanner(false);
+    void refreshInventory();
+  }, [lastForceUpdate, refreshInventory]);
+
+  useEffect(() => {
+    if (!syncInitialized) return;
+    // First emission establishes the baseline (even if null) — never a refresh.
+    if (!baselineSetRef.current) {
+      baselineSetRef.current = true;
+      syncedStampRef.current = lastForceUpdate;
+      return;
+    }
+    if (lastForceUpdate == null) return;
+    // Ignore anything not strictly newer than what the grid already reflects.
+    if (syncedStampRef.current != null && lastForceUpdate <= syncedStampRef.current) return;
+    if (cartLines.length === 0) {
+      // No sale in progress — swap data instantly.
+      syncedStampRef.current = lastForceUpdate;
+      setUpdateBanner(false);
+      void refreshInventory();
+    } else {
+      // Sale in progress — defer; the cashier reloads via the banner, or the
+      // empty-cart branch above fires automatically once checkout clears it.
+      setUpdateBanner(true);
+    }
+  }, [syncInitialized, lastForceUpdate, cartLines.length, refreshInventory]);
 
   const branchDisplay = branch?.name ?? (branchId ? getBranchLabel(branchId) : '—');
   // This terminal's branch — drives all branch-scoped ordering & visibility.
@@ -327,6 +372,17 @@ export default function POSPage() {
 
   return (
     <div className="pos-page">
+      {updateBanner && (
+        <button
+          type="button"
+          className="pos-sync-banner"
+          onClick={handleManualRefresh}
+          disabled={refreshing}
+        >
+          ⚠️ มีการอัปเดตข้อมูลจากผู้จัดการ{' '}
+          <span className="pos-sync-banner-cta">[คลิกเพื่อโหลดข้อมูลใหม่]</span>
+        </button>
+      )}
       <header className="pos-topbar">
         <div className="pos-search-group">
           <div className="pos-topbar-search">
@@ -354,6 +410,19 @@ export default function POSPage() {
             onClick={() => setIsSortingModalOpen(true)}
           >
             <i className="ti ti-arrows-sort" aria-hidden="true" /> จัดเรียง
+          </button>
+          <button
+            type="button"
+            className="pos-action-link"
+            onClick={handleManualRefresh}
+            disabled={refreshing}
+            title="ดึงข้อมูลสินค้า/ราคา/การจัดเรียงล่าสุดจากเซิร์ฟเวอร์"
+          >
+            <i
+              className={`ti ti-refresh${refreshing ? ' pos-spin' : ''}`}
+              aria-hidden="true"
+            />{' '}
+            {refreshing ? 'กำลังอัปเดต...' : 'อัปเดตข้อมูลหน้าจอ'}
           </button>
         </div>
         {activeShift && (

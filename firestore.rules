@@ -360,6 +360,15 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // ── POS sync signal (admin "ring the bell" → branch POS terminals pull) ──
+    // pos_configs/branches/{branchId}/sync_state — a single tiny doc per branch
+    // holding lastForceUpdate. Staff on the branch read it (POS listener);
+    // managers/admins with branch access write it (broadcast).
+    match /pos_configs/branches/{branchId}/sync_state {
+      allow read: if isStaff() && hasBranchAccess(branchId);
+      allow write: if isManagerOrAdmin() && hasBranchAccess(branchId);
+    }
+
     // ── Default deny for unlisted collections ──
     match /{document=**} {
       allow read, write: if false;

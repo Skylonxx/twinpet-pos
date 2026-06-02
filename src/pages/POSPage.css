@@ -99,6 +99,62 @@
   text-decoration: underline;
 }
 
+.pos-action-link:disabled {
+  opacity: 0.6;
+  cursor: default;
+  text-decoration: none;
+}
+
+@keyframes pos-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.pos-sync-banner {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: block;
+  width: 100%;
+  padding: 10px 16px;
+  border: none;
+  border-bottom: 1px solid #d98a00;
+  background: #fff4d6;
+  color: #7a4b00;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  cursor: pointer;
+  animation: pos-sync-pulse 1.4s ease-in-out infinite;
+}
+
+.pos-sync-banner:hover:not(:disabled) {
+  background: #ffe9ad;
+}
+
+.pos-sync-banner:disabled {
+  opacity: 0.7;
+  cursor: default;
+  animation: none;
+}
+
+.pos-sync-banner-cta {
+  text-decoration: underline;
+}
+
+@keyframes pos-sync-pulse {
+  50% {
+    background: #ffe2a1;
+  }
+}
+
+.pos-spin {
+  display: inline-block;
+  animation: pos-spin 0.8s linear infinite;
+}
+
 .pos-topbar-actions {
   margin-left: auto;
   display: flex;

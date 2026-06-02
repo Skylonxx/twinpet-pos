@@ -17,6 +17,7 @@ import {
   saveProductVisibility,
   useSortableProducts,
 } from '../../lib/admin/sortingStore';
+import { broadcastInventoryUpdate } from '../../lib/pos/syncSignal';
 import type { CategoryBranchSetting, ProductCategory } from '../../lib/types';
 import '../../pages/admin/SortingSettingsPage.css';
 
@@ -48,6 +49,21 @@ export function SortingSettingsContent({ defaultBranchId = '' }: { defaultBranch
     setStatus(msg);
     window.setTimeout(() => setStatus(null), 2400);
   }, []);
+
+  // ── "Ring the bell": broadcast a sync signal to this branch's POS terminals ─
+  const [ringing, setRinging] = useState(false);
+  const ringBell = useCallback(async () => {
+    if (!selectedBranchId) return;
+    setRinging(true);
+    try {
+      await broadcastInventoryUpdate(selectedBranchId);
+      flash('🔔 แจ้งหน้าร้านให้อัปเดตข้อมูลแล้ว');
+    } catch {
+      flash('แจ้งเตือนไม่สำเร็จ');
+    } finally {
+      setRinging(false);
+    }
+  }, [selectedBranchId, flash]);
 
   // ── Category ranking working copy (branch-scoped) ───────────────────────
   const [cats, setCats] = useState<ProductCategory[]>([]);
@@ -181,6 +197,15 @@ export function SortingSettingsContent({ defaultBranchId = '' }: { defaultBranch
             </option>
           ))}
         </select>
+        <button
+          type="button"
+          className="ss-bell-btn"
+          onClick={() => void ringBell()}
+          disabled={!selectedBranchId || ringing}
+          title="ส่งสัญญาณให้เครื่อง POS ของสาขานี้ดึงข้อมูลล่าสุดจากเซิร์ฟเวอร์"
+        >
+          {ringing ? 'กำลังแจ้ง...' : '🔔 แจ้งหน้าร้านให้อัปเดตข้อมูล'}
+        </button>
       </div>
 
       {!selectedBranchId ? (

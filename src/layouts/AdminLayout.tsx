@@ -57,6 +57,12 @@ const ADMIN_NAV = [
     label: 'Stock Report (HQ)',
     icon: 'ti-box',
   },
+  {
+    path: '/admin/sorting',
+    end: false,
+    label: 'ตั้งค่าการจัดเรียง (POS)',
+    icon: 'ti-arrows-sort',
+  },
 ] as const;
 
 export default function AdminLayout() {

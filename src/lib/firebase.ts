@@ -1,6 +1,7 @@
 import { initializeApp, type FirebaseApp } from 'firebase/app';
 import { getAuth, type Auth } from 'firebase/auth';
 import {
+  CACHE_SIZE_UNLIMITED,
   getFirestore,
   initializeFirestore,
   memoryLocalCache,
@@ -29,10 +30,14 @@ let db: Firestore | undefined;
 let storage: FirebaseStorage | undefined;
 
 function initFirestore(appInstance: FirebaseApp): Firestore {
+  // Unlimited on-disk cache: the offline-first POS must hold the full catalog
+  // (10,000+ items) in IndexedDB so the Repository can resolve snapshots from
+  // cache without eviction during long offline stretches.
   try {
     return initializeFirestore(appInstance, {
       localCache: persistentLocalCache({
         tabManager: persistentMultipleTabManager(),
+        cacheSizeBytes: CACHE_SIZE_UNLIMITED,
       }),
     });
   } catch (err) {
@@ -41,7 +46,7 @@ function initFirestore(appInstance: FirebaseApp): Firestore {
 
   try {
     return initializeFirestore(appInstance, {
-      localCache: persistentLocalCache(),
+      localCache: persistentLocalCache({ cacheSizeBytes: CACHE_SIZE_UNLIMITED }),
     });
   } catch (err) {
     console.warn('[firebase] IndexedDB persistence unavailable — using memory cache', err);
