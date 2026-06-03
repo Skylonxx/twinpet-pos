@@ -253,14 +253,14 @@ export function CloseShiftModal({ shift, onClose, onSuccess }: CloseShiftModalPr
     setSubmitting(true);
     setError(null);
     try {
-      const result = await closeShift(shift.id, count, note.trim());
+      const result = await closeShift(shift, count, note.trim());
       setClosedShift(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'ปิดกะไม่สำเร็จ');
     } finally {
       setSubmitting(false);
     }
-  }, [shift.id, actualCash, note]);
+  }, [shift, actualCash, note]);
 
   const handlePrint = useCallback(() => {
     if (!closedShift) return;

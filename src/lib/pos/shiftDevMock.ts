@@ -1,5 +1,5 @@
 import { Timestamp } from 'firebase/firestore';
-import type { CashTransactionType, Shift } from '../types';
+import type { Shift, ShiftCashEntry } from '../types';
 
 const devShifts = new Map<string, Shift>();
 
@@ -125,22 +125,23 @@ export function devApplyCreditPaymentToShift(
 
 export function devRecordCashTransaction(input: {
   shiftId: string;
-  type: CashTransactionType;
-  amount: number;
+  entry: ShiftCashEntry;
 }): void {
   const shift = devShifts.get(input.shiftId);
   if (!shift || shift.status !== 'open') {
     throw new Error('ไม่พบกะที่เปิดอยู่');
   }
-  if (input.type === 'pay_in') {
-    devShifts.set(input.shiftId, {
-      ...shift,
-      payInTotal: shift.payInTotal + input.amount,
-    });
-    return;
-  }
+  const { entry } = input;
+  // Append to cashEntries[] for parity with the real path, and also keep the
+  // counter increment: dev mode does not run deriveShiftDrawer, so the drawer/
+  // Z-report still reads payInTotal/payOutTotal directly.
+  const counters =
+    entry.type === 'pay_in'
+      ? { payInTotal: shift.payInTotal + entry.amount }
+      : { payOutTotal: shift.payOutTotal + entry.amount };
   devShifts.set(input.shiftId, {
     ...shift,
-    payOutTotal: shift.payOutTotal + input.amount,
+    ...counters,
+    cashEntries: [...(shift.cashEntries ?? []), entry],
   });
 }

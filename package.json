@@ -5,8 +5,10 @@
   "type": "module",
   "scripts": {
     "gen-config": "node scripts/gen-deploy-config.mjs",
-    "predev": "npm run gen-config",
-    "dev": "vite",
+    "predev": "npm run gen-config && npm --prefix functions run build",
+    "dev": "firebase emulators:exec --ui --export-on-exit=./.emulator-data $([ -f .emulator-data/firebase-export-metadata.json ] && echo --import=./.emulator-data) \"vite\"",
+    "dev:web": "vite",
+    "seed:emulator": "FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 GCLOUD_PROJECT=twinpet-pos npm --prefix functions run seed-branch && FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 GCLOUD_PROJECT=twinpet-pos npm --prefix functions run seed-admin",
     "prebuild": "npm run gen-config",
     "build": "tsc -b && vite build",
     "lint": "eslint .",

@@ -6,6 +6,20 @@ export type SaleRecord = {
   order: Order;
   payments: Payment[];
   items: OrderItem[];
+  /**
+   * True for hybrid-overlay rows synthesized from a still-pending `asyncOrders`
+   * doc (sale written locally, not yet settled on the server). Drives the
+   * "⏳ รอซิงก์" badge and disables Void. Absent/false for canonical rows.
+   */
+  pendingSync?: boolean;
+  /**
+   * True for a SETTLED canonical row whose `asyncOrder` carries a `voidRequested`
+   * intent that the server reconciler has not yet applied (offline/in-flight
+   * void). Drives the "ยกเลิก (รอซิงก์)" badge; transitions to the normal "ยกเลิก"
+   * once the reconciler flips the canonical `orders` doc to `voided`. Treated as
+   * voided for summary totals so it never inflates revenue.
+   */
+  voidPendingSync?: boolean;
 };
 
 export type StatusFilter = 'all' | SaleStatus;
@@ -203,9 +217,13 @@ export function computeSummary(records: SaleRecord[]) {
   let voidCount = 0;
   let cashAmt = 0;
 
-  for (const { order, payments } of records) {
+  for (const record of records) {
+    const { order, payments } = record;
     const status = saleDisplayStatus(order);
-    if (status === 'void') {
+    // A settled void still in-flight (voidPendingSync) is treated as voided so it
+    // never inflates revenue — keeping the summary consistent with the drawer,
+    // which already drops it via the local ledger.
+    if (record.voidPendingSync || status === 'void') {
       voidCount += 1;
       continue;
     }

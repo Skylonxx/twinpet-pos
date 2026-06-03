@@ -1,4 +1,5 @@
 import {
+  arrayUnion,
   collection,
   doc,
   getDoc,
@@ -6,14 +7,13 @@ import {
   increment,
   limit,
   query,
-  runTransaction,
   serverTimestamp,
   setDoc,
   updateDoc,
   where,
 } from 'firebase/firestore';
 import { collections, db, isFirebaseConfigured } from '../firebase';
-import type { CashTransactionType, Shift } from '../types';
+import type { CashTransactionType, Shift, ShiftCashEntry } from '../types';
 import type { PaymentSplit } from './types';
 import {
   devCloseShift,
@@ -108,6 +108,8 @@ function mapShift(id: string, data: Record<string, unknown>): Shift {
     payOutTotal: (data.payOutTotal as number) ?? 0,
     variance: (data.variance as number) ?? 0,
     note: (data.note as string) ?? '',
+    // Embedded offline cash movements — folded into the derived drawer.
+    cashEntries: (data.cashEntries as ShiftCashEntry[]) ?? [],
   };
 }
 
@@ -166,22 +168,29 @@ export async function openShift(
   return ref.id;
 }
 
+/**
+ * Close a shift. Under the drawer single-writer model the terminal is the sole
+ * authority for the shift's sale totals, so the caller passes the shift it has
+ * already DERIVED from its local ledger ({@link deriveShiftDrawer}); we never
+ * re-read the (now reconciler-untouched, stale) stored `expected*` fields. The
+ * derived `expected*` are persisted at close so the closed doc is the correct
+ * historical snapshot for back-office reads, and variance is computed from them.
+ */
 export async function closeShift(
-  shiftId: string,
+  shift: Shift,
   actualCashCount: number,
   note: string,
 ): Promise<Shift> {
   if (!isFirebaseConfigured || !db) {
-    return devCloseShift(shiftId, actualCashCount, note);
+    return devCloseShift(shift.id, actualCashCount, note);
   }
 
-  const ref = doc(db, collections.shifts, shiftId);
+  const ref = doc(db, collections.shifts, shift.id);
   const snap = await getDoc(ref);
   if (!snap.exists()) {
     throw new Error('ไม่พบกะที่เปิดอยู่');
   }
 
-  const shift = mapShift(snap.id, snap.data());
   const totalExpected = calcShiftDrawerExpected(shift);
   const variance = actualCashCount - totalExpected;
 
@@ -191,59 +200,89 @@ export async function closeShift(
     actualCashCount,
     variance,
     note,
+    // Commit the terminal's authoritative sale totals onto the closed doc.
+    expectedCash: shift.expectedCash,
+    expectedQr: shift.expectedQr,
+    expectedKbank: shift.expectedKbank,
+    expectedCard: shift.expectedCard,
+    expectedCredit: shift.expectedCredit,
+    totalBills: shift.totalBills,
+    // Cash movements are also derived locally (from cashEntries[]); freeze the
+    // snapshot so the closed doc + HQ variance are correct without the counters.
+    payInTotal: shift.payInTotal,
+    payOutTotal: shift.payOutTotal,
   });
 
   const updated = await getDoc(ref);
   return mapShift(updated.id, updated.data()!);
 }
 
-export async function recordCashTransaction(input: RecordCashTransactionInput): Promise<void> {
+/**
+ * Record a cash in/out — offline-first. Returns the {@link ShiftCashEntry}
+ * SYNCHRONOUSLY (so the caller can append it to the live shift instantly) and
+ * fires two QUEUEABLE writes fire-and-forget:
+ *   1. `arrayUnion` the entry onto `shifts/{id}.cashEntries[]` — the durable
+ *      local source the derived drawer folds (survives an offline reload).
+ *   2. a plain `setDoc` to `cashTransactions/{id}` — back-office audit trail.
+ * Neither uses `runTransaction`, so both commit to `persistentLocalCache`
+ * instantly and flush on reconnect; we must NOT await them or an offline cashier
+ * would hang. The old transactional `payInTotal`/`payOutTotal` increment is gone
+ * (those totals are now derived from `cashEntries[]` via `foldCashEntries`).
+ */
+export function recordCashTransaction(input: RecordCashTransactionInput): ShiftCashEntry {
   if (input.amount <= 0) {
     throw new Error('จำนวนเงินต้องมากกว่า 0');
   }
-  if (!input.note.trim()) {
+  const note = input.note.trim();
+  if (!note) {
     throw new Error('กรุณาระบุหมายเหตุ');
   }
 
+  const id =
+    isFirebaseConfigured && db
+      ? doc(collection(db, collections.cashTransactions)).id
+      : `cash-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  const entry: ShiftCashEntry = {
+    id,
+    type: input.type,
+    amount: input.amount,
+    note,
+    staffId: input.staffId,
+    staffName: input.staffName,
+    at: Date.now(),
+  };
+
   if (!isFirebaseConfigured || !db) {
-    devRecordCashTransaction({
-      shiftId: input.shiftId,
-      type: input.type,
-      amount: input.amount,
-    });
-    return;
+    devRecordCashTransaction({ shiftId: input.shiftId, entry });
+    return entry;
   }
 
   const firestore = db;
-  await runTransaction(firestore, async (tx) => {
-    const shiftRef = doc(firestore, collections.shifts, input.shiftId);
-    const shiftSnap = await tx.get(shiftRef);
+  const shiftRef = doc(firestore, collections.shifts, input.shiftId);
 
-    if (!shiftSnap.exists()) {
-      throw new Error('ไม่พบกะที่เปิดอยู่');
-    }
-
-    const shift = shiftSnap.data();
-    if (shift.status !== 'open') {
-      throw new Error('กะนี้ถูกปิดแล้ว');
-    }
-
-    const txRef = doc(collection(firestore, collections.cashTransactions));
-    tx.set(txRef, {
-      id: txRef.id,
-      shiftId: input.shiftId,
-      branchId: input.branchId,
-      staffId: input.staffId,
-      staffName: input.staffName,
-      type: input.type,
-      amount: input.amount,
-      note: input.note.trim(),
-      createdAt: serverTimestamp(),
-    });
-
-    const field = input.type === 'pay_in' ? 'payInTotal' : 'payOutTotal';
-    tx.update(shiftRef, {
-      [field]: increment(input.amount),
-    });
+  // 1. Durable local drawer source — queueable append.
+  void updateDoc(shiftRef, {
+    cashEntries: arrayUnion(entry),
+    updatedAt: serverTimestamp(),
+  }).catch((err) => {
+    console.warn('[shiftService] cashEntry append not yet acked (queued, will retry)', err);
   });
+
+  // 2. Back-office audit doc — queueable setDoc (offline-safe; NOT a transaction).
+  void setDoc(doc(firestore, collections.cashTransactions, id), {
+    id,
+    shiftId: input.shiftId,
+    branchId: input.branchId,
+    staffId: input.staffId,
+    staffName: input.staffName,
+    type: input.type,
+    amount: input.amount,
+    note,
+    createdAt: serverTimestamp(),
+  }).catch((err) => {
+    console.warn('[shiftService] cashTransaction audit not yet acked (queued, will retry)', err);
+  });
+
+  return entry;
 }

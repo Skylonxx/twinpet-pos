@@ -82,14 +82,16 @@ export function useCheckout({
           priceLevelId: RETAIL_PRICE_LEVEL_ID,
         });
 
-        // Optimistic local roll-ups so the on-screen shift + customer reflect the
-        // sale instantly (incl. offline). The server reconciles authoritatively.
-        setActiveShift((prev) =>
-          prev ? applyShiftPaymentTotals(prev, payments, totals.grandTotal) : prev,
-        );
-
+        // Drawer single-writer: with Firebase, the shift drawer is DERIVED live
+        // from the local ledger (`useLocalLedger` → `deriveShiftDrawer`), which
+        // already reflects this just-written `asyncOrders` doc from the cache
+        // instantly — even offline. So we must NOT also increment the shift here,
+        // or the sale would be counted twice. Dev (no ledger) still rolls up the
+        // mock shift store optimistically.
         if (!isFirebaseConfigured) {
-          // Dev (no Firebase): keep the local mock stores in sync.
+          setActiveShift((prev) =>
+            prev ? applyShiftPaymentTotals(prev, payments, totals.grandTotal) : prev,
+          );
           devIncrementShiftTotals(
             activeShift.id,
             calcShiftPaymentTotals(payments, totals.grandTotal),

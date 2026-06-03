@@ -14,7 +14,8 @@
     "seed-branch": "npm run build && node lib/scripts/seed-branch.js",
     "backfill-product-stocks": "npm run build && node lib/scripts/backfill-product-stocks.js",
     "repair-orphaned-orders": "npm run build && node lib/scripts/repair-orphaned-orders.js",
-    "fix-invoker": "npm run build && node lib/scripts/fix-invoker.js"
+    "fix-invoker": "npm run build && node lib/scripts/fix-invoker.js",
+    "test:unit": "vitest run"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
@@ -24,6 +25,7 @@
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
-    "typescript": "~5.9.3"
+    "typescript": "~5.9.3",
+    "vitest": "^4.1.7"
   }
 }

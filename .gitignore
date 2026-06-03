@@ -10,3 +10,8 @@ build/
 .idea/
 # Generated from firebase.json by scripts/gen-deploy-config.mjs (run on dev/build/deploy)
 functions/src/deployConfig.ts
+# Local Firebase emulator data dump (seed + test state persisted between runs)
+.emulator-data/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log

@@ -3,18 +3,14 @@ import {
   doc,
   getDocs,
   increment,
-  query,
   runTransaction,
   serverTimestamp,
-  where,
   type DocumentReference,
 } from 'firebase/firestore';
 import { collections, db, isFirebaseConfigured } from './firebase';
 import { OVERSELL_LOT_ID } from './fifo';
-import { calcShiftPaymentTotals } from './pos/shiftService';
-import type { PaymentSplit } from './pos/types';
 import { voidDevOrder } from './salesHistory/devMock';
-import type { AuditLog, CreditAccount, CreditTransaction, Order, OrderItem, Payment } from './types';
+import type { AuditLog, CreditAccount, CreditTransaction, Order, OrderItem } from './types';
 
 export type VoidOrderInput = {
   orderId: string;
@@ -49,14 +45,10 @@ export async function voidOrder(input: VoidOrderInput): Promise<void> {
   const firestore = db;
 
   const orderRef = doc(firestore, collections.orders, input.orderId);
-  const [itemsSnap, paymentsSnap] = await Promise.all([
-    getDocs(collection(firestore, collections.orders, input.orderId, collections.orderItems)),
-    getDocs(
-      query(collection(firestore, collections.payments), where('orderId', '==', input.orderId)),
-    ),
-  ]);
+  const itemsSnap = await getDocs(
+    collection(firestore, collections.orders, input.orderId, collections.orderItems),
+  );
   const items = itemsSnap.docs.map((d) => ({ ...(d.data() as OrderItem), id: d.id }));
-  const payments = paymentsSnap.docs.map((d) => ({ ...(d.data() as Payment), id: d.id }));
 
   await runTransaction(firestore, async (tx) => {
     // ── Phase 1: all reads ──
@@ -73,14 +65,6 @@ export async function voidOrder(input: VoidOrderInput): Promise<void> {
 
     if (order.status === 'voided') {
       throw new Error('บิลนี้ถูกยกเลิกแล้ว');
-    }
-
-    let shiftRef: DocumentReference | null = null;
-    let shiftExists = false;
-    if (order.shiftId) {
-      shiftRef = doc(firestore, collections.shifts, order.shiftId);
-      const shiftSnap = await tx.get(shiftRef);
-      shiftExists = shiftSnap.exists();
     }
 
     let credRef: DocumentReference | null = null;
@@ -105,14 +89,6 @@ export async function voidOrder(input: VoidOrderInput): Promise<void> {
     const voidNote = input.note?.trim()
       ? `${input.reason} — ${input.note.trim()}`
       : input.reason;
-
-    let shiftReversal: ReturnType<typeof calcShiftPaymentTotals> | null = null;
-    if (shiftExists && order.shiftId) {
-      const paymentSplits: PaymentSplit[] = payments
-        .filter((p) => p.amount > 0)
-        .map((p) => ({ method: p.method, amount: p.amount }));
-      shiftReversal = calcShiftPaymentTotals(paymentSplits, order.total);
-    }
 
     let creditReversal: { newUsed: number; newBalance: number } | null = null;
     if (creditAccount && order.creditAmt > 0) {
@@ -226,16 +202,13 @@ export async function voidOrder(input: VoidOrderInput): Promise<void> {
       updatedAt: serverTimestamp(),
     });
 
-    if (shiftReversal && shiftRef) {
-      tx.update(shiftRef, {
-        expectedCash: increment(-shiftReversal.netCash),
-        expectedQr: increment(-shiftReversal.qrTotal),
-        expectedKbank: increment(-shiftReversal.kbankTotal),
-        expectedCard: increment(-shiftReversal.cardTotal),
-        expectedCredit: increment(-shiftReversal.creditTotal),
-        totalBills: increment(-1),
-      });
-    }
+    // Shift reversal REMOVED — drawer single-writer (Standalone POS): the local
+    // ledger ({@link isLedgerSale}) excludes voided sales, so the terminal's
+    // derived drawer self-corrects on void. The server must not decrement
+    // `shifts.expected*` (no terminal reads server-maintained totals anymore).
+    // NOTE: this online void flips only the canonical `orders` doc; propagating
+    // the void onto the source `asyncOrders` doc (so it drops from the device's
+    // live ledger) is the Phase 6/7 offline-void work.
 
     if (creditReversal && credRef) {
       tx.update(credRef, {

@@ -5,7 +5,7 @@ import {
   httpsCallableFromURL,
   connectFunctionsEmulator,
 } from 'firebase/functions';
-import { auth, app, isFirebaseConfigured } from '../firebase';
+import { auth, app, isFirebaseConfigured, USE_EMULATOR } from '../firebase';
 import { ensureFirebaseAuth } from '../firebaseAuth';
 import type { User } from '../types';
 
@@ -31,17 +31,14 @@ function getVerifyPinLoginCallable() {
   // Region sourced from firebase.json via the generated env (see gen-deploy-config.mjs).
   const functions = getFunctions(app, import.meta.env.VITE_FUNCTIONS_REGION);
 
-  if (
-    import.meta.env.DEV &&
-    import.meta.env.VITE_USE_FUNCTIONS_EMULATOR === 'true' &&
-    !emulatorConnected
-  ) {
+  if (USE_EMULATOR && !emulatorConnected) {
     connectFunctionsEmulator(functions, '127.0.0.1', 5001);
     emulatorConnected = true;
   }
 
-  // In dev, route via Vite proxy (same origin) to bypass Cloud Run CORS/IAM preflight issues.
-  if (import.meta.env.DEV && import.meta.env.VITE_USE_FUNCTIONS_EMULATOR !== 'true') {
+  // In dev (NOT on the emulator), route via Vite proxy (same origin) to bypass
+  // Cloud Run CORS/IAM preflight issues.
+  if (import.meta.env.DEV && !USE_EMULATOR) {
     const proxyUrl = `${window.location.origin}/__/firebase/functions/verifyPinLogin`;
     return httpsCallableFromURL<VerifyPinLoginRequest, VerifyPinLoginResponse>(
       functions,

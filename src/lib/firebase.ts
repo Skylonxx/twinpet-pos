@@ -1,7 +1,8 @@
 import { initializeApp, type FirebaseApp } from 'firebase/app';
-import { getAuth, type Auth } from 'firebase/auth';
+import { connectAuthEmulator, getAuth, type Auth } from 'firebase/auth';
 import {
   CACHE_SIZE_UNLIMITED,
+  connectFirestoreEmulator,
   getFirestore,
   initializeFirestore,
   memoryLocalCache,
@@ -9,7 +10,18 @@ import {
   persistentMultipleTabManager,
   type Firestore,
 } from 'firebase/firestore';
-import { getStorage, type FirebaseStorage } from 'firebase/storage';
+import { connectStorageEmulator, getStorage, type FirebaseStorage } from 'firebase/storage';
+
+/**
+ * Unified local-emulator switch. When `VITE_USE_EMULATOR=true` in a DEV build,
+ * EVERY Firebase SDK (Firestore, Auth, Storage, and the Functions callables in
+ * verifyPinLogin.ts) is pointed at the local emulator suite — so the browser →
+ * local Firestore → local Functions trigger round-trip actually closes. Off (or
+ * any production build) → the real cloud project, untouched. One flag for all
+ * SDKs avoids the dangerous split-brain (e.g. functions local but Firestore cloud).
+ */
+export const USE_EMULATOR =
+  import.meta.env.DEV && import.meta.env.VITE_USE_EMULATOR === 'true';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -92,6 +104,21 @@ if (isFirebaseConfigured) {
   auth = getAuth(app);
   db = initFirestore(app);
   storage = getStorage(app);
+
+  if (USE_EMULATOR) {
+    // Must run before any read/write. Ports match firebase.json → emulators.
+    try {
+      connectFirestoreEmulator(db, '127.0.0.1', 8080);
+      connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+      connectStorageEmulator(storage, '127.0.0.1', 9199);
+      // Functions callables connect to :5001 in verifyPinLogin.ts (same flag).
+      console.info(
+        `[firebase] 🔌 LOCAL EMULATORS — Firestore:8080 Auth:9099 Storage:9199 Functions:5001 (db="${FIRESTORE_DATABASE_ID}")`,
+      );
+    } catch (err) {
+      console.error('[firebase] failed to connect to local emulators', err);
+    }
+  }
 }
 
 export { app, auth, db, storage };
@@ -111,6 +138,7 @@ export const collections = {
   uomUnits: 'uomUnits',
   orders: 'orders',
   orderItems: 'orderItems',
+  asyncOrders: 'asyncOrders',
   parkedOrders: 'parkedOrders',
   parkedItems: 'parkedItems',
   payments: 'payments',

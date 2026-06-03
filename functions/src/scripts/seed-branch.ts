@@ -65,6 +65,15 @@ function loadServiceAccount(): ServiceAccount {
 function initAdminApp(): App {
   if (getApps().length > 0) return getApps()[0]!;
 
+  // Emulator mode: the Admin SDK auto-routes to the local emulators when their
+  // *_EMULATOR_HOST envs are set — no service account / real credentials needed.
+  if (process.env.FIRESTORE_EMULATOR_HOST || process.env.FIREBASE_AUTH_EMULATOR_HOST) {
+    const projectId =
+      process.env.GCLOUD_PROJECT ?? process.env.GOOGLE_CLOUD_PROJECT ?? 'twinpet-pos';
+    console.log(`[seed-branch] 🔌 emulator mode → project="${projectId}" (no service account needed)`);
+    return initializeApp({ projectId });
+  }
+
   const serviceAccount = loadServiceAccount();
   return initializeApp({
     credential: cert(serviceAccount),

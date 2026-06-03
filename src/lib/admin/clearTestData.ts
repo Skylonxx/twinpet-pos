@@ -8,6 +8,7 @@
  *
  * Collection names follow {@link collections} (see docs/twinpet_firestore_schema.md):
  *   - orders               + orderItems     (subcollection)
+ *   - asyncOrders          (offline-first sale intents; lines embedded, no subcoll)
  *   - payments             (top-level, linked to orders)
  *   - receivings           + receivingItems (subcollection)  ← purchases / GRN
  *   - inventoryTransfers   + transferItems  (subcollection)  ← branch transfers
@@ -111,7 +112,10 @@ async function deleteCollectionWithSubcollection(
 
 /**
  * Delete all sales history: every `orders` document, its `orderItems`
- * subcollection, and the linked `payments`.
+ * subcollection, the linked `payments`, AND the offline-first `asyncOrders`
+ * intents (the local-first write-model — lines are embedded, so no subcollection).
+ * Clearing asyncOrders too gives the soak test a truly clean slate; otherwise a
+ * stale pending intent would re-settle into a fresh `orders` doc on reconnect.
  */
 export async function clearSalesData(): Promise<DeletionSummary> {
   const firestore = requireDb();
@@ -126,11 +130,16 @@ export async function clearSalesData(): Promise<DeletionSummary> {
     firestore,
     collection(firestore, collections.payments),
   );
+  const asyncOrders = await deleteAllInChunks(
+    firestore,
+    collection(firestore, collections.asyncOrders),
+  );
 
   return {
     orders: orders.parents,
     orderItems: orders.children,
     payments,
+    asyncOrders,
   };
 }
 

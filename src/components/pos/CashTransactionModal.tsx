@@ -1,13 +1,13 @@
 import { useCallback, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { recordCashTransaction } from '../../lib/pos/shiftService';
-import type { CashTransactionType, Shift } from '../../lib/types';
+import type { CashTransactionType, Shift, ShiftCashEntry } from '../../lib/types';
 import './CashTransactionModal.css';
 
 type CashTransactionModalProps = {
   shift: Shift;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (entry: ShiftCashEntry) => void;
 };
 
 export default function CashTransactionModal({
@@ -35,7 +35,9 @@ export default function CashTransactionModal({
     setSubmitting(true);
     setError(null);
     try {
-      await recordCashTransaction({
+      // Synchronous + queueable: returns the entry immediately and queues the
+      // writes (offline-safe), so the cashier is never blocked during an outage.
+      const entry = recordCashTransaction({
         shiftId: shift.id,
         branchId: shift.branchId,
         staffId: shift.staffId,
@@ -47,7 +49,7 @@ export default function CashTransactionModal({
       window.alert(
         `จำลองการสั่งพิมพ์สลิป ${type === 'pay_in' ? 'นำเงินเข้า' : 'นำเงินออก'}`,
       );
-      onSuccess();
+      onSuccess(entry);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'บันทึกไม่สำเร็จ');
     } finally {

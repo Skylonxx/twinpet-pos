@@ -31,6 +31,7 @@ import {
 // Shared Admin SDK handle — already pointed at the configured database (see ./db).
 import { db } from './db';
 import { FIRESTORE_DATABASE_ID, FUNCTIONS_REGION } from './deployConfig';
+import { handleVoidIntent } from './voidIntent';
 
 const C = {
   products: 'products',
@@ -43,6 +44,7 @@ const C = {
   shifts: 'shifts',
   asyncOrders: 'asyncOrders',
   posDevices: 'posDevices',
+  auditLogs: 'auditLogs',
   // Canonical sales collections — dual-written for backward-compat with reports.
   orders: 'orders',
   orderItems: 'orderItems',
@@ -101,6 +103,10 @@ type AsyncOrderDoc = {
   creditAmt: number;
   reconcileStatus: ReconcileStatus;
   voidRequested?: boolean;
+  voidReason?: string | null;
+  voidedBy?: string | null;
+  /** Phase 7 idempotency flag — set once a SETTLED order's reversal is applied. */
+  voidReconciled?: boolean;
   /** Device clock at sale — used as the canonical order `createdAt` (true sale day). */
   clientCreatedAt?: number;
 };
@@ -171,53 +177,68 @@ function resolveOversellCost(sourceLots: MutableLot[], product: DocumentData | u
   return 0;
 }
 
-function calcShiftPaymentTotals(payments: AsyncPayment[], grandTotal: number) {
-  const sumBy = (m: string) =>
-    payments.filter((p) => p.method === m).reduce((s, p) => s + p.amount, 0);
-  const paidAmt = payments.reduce((s, p) => s + p.amount, 0);
-  const changeAmt = Math.max(0, paidAmt - grandTotal);
-  return {
-    netCash: Math.max(0, sumBy('cash') - changeAmt),
-    qrTotal: sumBy('qr'),
-    kbankTotal: sumBy('kbank'),
-    cardTotal: sumBy('card'),
-    creditTotal: sumBy('credit'),
-  };
-}
-
 /**
  * Trigger on WRITE (create + update) so we catch both the initial sale and a
  * later offline void-intent flag on the same doc.
  */
-export const reconcileOrder = onDocumentWritten(
-  { document: 'asyncOrders/{orderId}', region: FUNCTIONS_REGION, database: FIRESTORE_DATABASE_ID },
-  async (event) => {
-    const after = event.data?.after;
-    if (!after || !after.exists) return; // deleted — nothing to do
-    const data = after.data() as AsyncOrderDoc | undefined;
-    if (!data) return;
+/** Minimal shape the handler reads — the real FirestoreEvent is assignable to it. */
+type WrittenEvent = {
+  data?: {
+    after?: { exists: boolean; ref: DocumentReference; data: () => DocumentData | undefined };
+  };
+};
 
-    // Cheap routing gate before opening a transaction.
-    if (data.voidRequested) {
-      await handleVoidIntent(after.ref);
-      return;
-    }
-    if (data.reconcileStatus !== 'pending_reconcile') return;
+/**
+ * Trigger handler — EXTRACTED and EXPORTED so the routing is unit-tested without
+ * an emulator (see reconcileTrigger.test.ts). The `voidRequested` gate runs
+ * FIRST — before the pending-only reconcile gate — so a SETTLED void is routed to
+ * `handleVoidIntent` and is NEVER silently dropped.
+ */
+export async function reconcileOnWrite(event: WrittenEvent): Promise<void> {
+  const after = event.data?.after;
+  if (!after || !after.exists) return; // deleted — nothing to do
+  const data = after.data() as AsyncOrderDoc | undefined;
+  if (!data) return;
 
+  // Routing gate: ANY void-intent (pending OR settled) → handleVoidIntent, BEFORE
+  // the `reconcileStatus !== 'pending_reconcile'` gate below.
+  if (data.voidRequested) {
     try {
-      await reconcileSale(after.ref);
+      await handleVoidIntent(db, after.ref);
     } catch (err) {
+      // Make a failed void VISIBLE on the doc — never a silent stuck void.
       await after.ref.set(
         {
-          reconcileStatus: 'exception' satisfies ReconcileStatus,
-          reconcileError: err instanceof Error ? err.message : String(err),
-          reconciledAt: FieldValue.serverTimestamp(),
+          voidError: err instanceof Error ? err.message : String(err),
+          voidErroredAt: FieldValue.serverTimestamp(),
         },
         { merge: true },
       );
-      throw err; // surface to Cloud Functions for retry/alerting
+      throw err; // also surface to Cloud Functions logs for retry/alerting
     }
-  },
+    return;
+  }
+
+  if (data.reconcileStatus !== 'pending_reconcile') return;
+
+  try {
+    await reconcileSale(after.ref);
+  } catch (err) {
+    await after.ref.set(
+      {
+        reconcileStatus: 'exception' satisfies ReconcileStatus,
+        reconcileError: err instanceof Error ? err.message : String(err),
+        reconciledAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+    throw err; // surface to Cloud Functions for retry/alerting
+  }
+}
+
+export const reconcileOrder = onDocumentWritten(
+  { document: 'asyncOrders/{orderId}', region: FUNCTIONS_REGION, database: FIRESTORE_DATABASE_ID },
+  (event) => reconcileOnWrite(event),
 );
 
 /** Settle ONE offline sale atomically. Mirrors the old `completePosSale` phases. */
@@ -232,9 +253,6 @@ async function reconcileSale(orderRef: DocumentReference): Promise<void> {
 
     const branchId = order.branchId;
     const productIds = [...new Set(order.lines.map((l) => l.productId))];
-
-    const shiftRef = db.collection(C.shifts).doc(order.shiftId);
-    const shiftSnap = await tx.get(shiftRef);
 
     const stockRefs = new Map<string, DocumentReference>();
     const productData = new Map<string, DocumentData | undefined>();
@@ -343,7 +361,6 @@ async function reconcileSale(orderRef: DocumentReference): Promise<void> {
     const grandTotal = roundMoney(order.total);
     const totalCogs = roundMoney(enrichedLines.reduce((s, l) => s + (l.fifoCost ?? 0), 0));
     const grossProfit = roundMoney(roundMoney(order.subtotal) - totalCogs);
-    const totals = calcShiftPaymentTotals(order.payments, grandTotal);
 
     // ── Phase 3: writes ──
     // Lot consumption (may drive qtyRemaining negative — tolerated).
@@ -389,19 +406,11 @@ async function reconcileSale(orderRef: DocumentReference): Promise<void> {
       });
     }
 
-    // Shift roll-up — best-effort: only when the shift exists and is open. A
-    // not-yet-synced shift must not fail a real sale (the Z-report is computed
-    // client-side anyway, incl. unsynced orders).
-    if (shiftSnap.exists && shiftSnap.data()?.status === 'open') {
-      tx.update(shiftRef, {
-        expectedCash: FieldValue.increment(totals.netCash),
-        expectedQr: FieldValue.increment(totals.qrTotal),
-        expectedKbank: FieldValue.increment(totals.kbankTotal),
-        expectedCard: FieldValue.increment(totals.cardTotal),
-        expectedCredit: FieldValue.increment(totals.creditTotal),
-        totalBills: FieldValue.increment(1),
-      });
-    }
+    // Shift roll-up REMOVED — drawer single-writer (Standalone POS, Local-First):
+    // the terminal is the sole authority for its shift totals, derived from its
+    // local `asyncOrders` ledger (see selectLocalLedger / deriveShiftDrawer) and
+    // committed onto the shift doc at close. The reconciler must NOT touch
+    // `shifts.expected*` or it would double-count against the client's ledger.
 
     // Advance the device's receipt high-watermark (atomic max via the read above)
     // so "Claim Device" can resume numbering in O(1) without scanning orders.
@@ -553,32 +562,10 @@ async function reconcileSale(orderRef: DocumentReference): Promise<void> {
   });
 }
 
-/**
- * Offline-safe void. A `pending_reconcile` order is cancelled BEFORE it ever
- * settles (no stock side-effects to reverse); a `settled` order is reversed.
- * [Reversal of a settled order is implemented in P5.]
- */
-async function handleVoidIntent(orderRef: DocumentReference): Promise<void> {
-  await db.runTransaction(async (tx) => {
-    const snap = await tx.get(orderRef);
-    if (!snap.exists) return;
-    const status = (snap.data() as AsyncOrderDoc).reconcileStatus;
-
-    if (status === 'pending_reconcile') {
-      // Never applied → tombstone so reconcileSale skips it entirely.
-      tx.set(
-        orderRef,
-        {
-          status: 'voided',
-          reconcileStatus: 'settled' satisfies ReconcileStatus,
-          voidedAt: FieldValue.serverTimestamp(),
-        },
-        { merge: true },
-      );
-    }
-    // status === 'settled' → reverse stock/lots/shift/credit (idempotent). TODO P5.
-  });
-}
+// Offline void is handled by handleVoidIntent (./voidIntent.ts), invoked from the
+// trigger's voidRequested gate above. Extracted there so it can be unit-tested
+// against an injected (fake) Firestore — see voidIntent.test.ts.
 
 // TODO (separate fn): scheduled `sweepStuckOrders` — retry `exception`/stale
 // `pending_reconcile` orders past an SLA, and alert on stale devices.
+

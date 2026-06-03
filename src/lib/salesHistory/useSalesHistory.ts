@@ -9,7 +9,9 @@ import {
 } from 'firebase/firestore';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { collections, db, isFirebaseConfigured } from '../firebase';
-import type { Order, OrderItem, Payment } from '../types';
+import { getDeviceId } from '../pos/deviceId';
+import type { AsyncOrder, Order, OrderItem, Payment } from '../types';
+import { buildPendingOverlay, mergeWithOverlay } from './asyncOverlay';
 import { getDevSalesRecords, resetDevSalesRecords } from './devMock';
 import { orderCreatedAt, type SaleRecord } from './types';
 
@@ -96,6 +98,12 @@ export function useSalesHistory(branchId: string | null) {
   const [error, setError] = useState<Error | null>(null);
   const [itemsCache, setItemsCache] = useState<Map<string, OrderItem[]>>(new Map());
   const [reloadToken, setReloadToken] = useState(0);
+  // Hybrid overlay: this device's still-pending `asyncOrders` (not yet in the
+  // canonical `orders` projection), surfaced as `pendingSync` rows.
+  const [pendingRecords, setPendingRecords] = useState<SaleRecord[]>([]);
+  // Ids of this device's `asyncOrders` carrying a `voidRequested` intent — used to
+  // flag SETTLED canonical rows whose void hasn't been reconciled yet (Phase 7b).
+  const [voidIntentIds, setVoidIntentIds] = useState<Set<string>>(() => new Set());
 
   const refresh = useCallback(() => {
     if (!branchId) {
@@ -192,11 +200,44 @@ export function useSalesHistory(branchId: string | null) {
     };
   }, [branchId, reloadToken]);
 
+  // Pending-overlay listener — bounded, equality-only (no composite index),
+  // scoped to THIS device like SyncIndicator. Resolves from persistentLocalCache,
+  // so a sale the cashier just rang up appears in history instantly, even offline.
+  useEffect(() => {
+    if (!branchId || !isFirebaseConfigured || !db) {
+      setPendingRecords([]);
+      setVoidIntentIds(new Set());
+      return;
+    }
+    // ONE bounded listener over this device's asyncOrders (like useLocalLedger).
+    // We derive BOTH the pending overlay AND the void-intent set from it.
+    const q = query(
+      collection(db, 'asyncOrders'),
+      where('branchId', '==', branchId),
+      where('deviceId', '==', getDeviceId()),
+    );
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const orders = snap.docs.map((d) => ({ ...(d.data() as AsyncOrder), id: d.id }));
+        setPendingRecords(buildPendingOverlay(orders));
+        setVoidIntentIds(new Set(orders.filter((o) => o.voidRequested === true).map((o) => o.id)));
+      },
+      (err) => console.warn('[SalesHistory] async-overlay listener error', err),
+    );
+    return unsub;
+  }, [branchId]);
+
   const loadItems = useCallback(
     async (orderId: string): Promise<OrderItem[]> => {
       if (itemsCache.has(orderId)) {
         return itemsCache.get(orderId)!;
       }
+
+      // Pending-overlay rows carry their lines inline — there is no canonical
+      // `orders/{id}` subcollection to fetch yet.
+      const pending = pendingRecords.find((r) => r.order.id === orderId);
+      if (pending) return pending.items;
 
       if (!isFirebaseConfigured || !db) {
         const rec = records.find((r) => r.order.id === orderId);
@@ -215,20 +256,25 @@ export function useSalesHistory(branchId: string | null) {
         throw err;
       }
     },
-    [itemsCache, records],
+    [itemsCache, records, pendingRecords],
   );
 
   const syncDevRecords = useCallback(() => {
     if (branchId) setRecords(getDevSalesRecords(branchId));
   }, [branchId]);
 
-  const sortedRecords = useMemo(
-    () =>
-      [...records].sort(
-        (a, b) => orderCreatedAt(b.order).getTime() - orderCreatedAt(a.order).getTime(),
-      ),
-    [records],
-  );
+  const sortedRecords = useMemo(() => {
+    const merged = mergeWithOverlay(records, pendingRecords).map((r) =>
+      // Flag settled canonical rows whose void-intent is not yet reconciled
+      // (canonical still non-voided). Pending/already-voided rows are unaffected.
+      voidIntentIds.has(r.order.id) && r.order.status !== 'voided'
+        ? { ...r, voidPendingSync: true }
+        : r,
+    );
+    return merged.sort(
+      (a, b) => orderCreatedAt(b.order).getTime() - orderCreatedAt(a.order).getTime(),
+    );
+  }, [records, pendingRecords, voidIntentIds]);
 
   return {
     records: sortedRecords,

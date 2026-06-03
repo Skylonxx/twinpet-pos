@@ -5,12 +5,19 @@ import {
   doc,
   getDoc,
   getDocs,
+  onSnapshot,
   query,
   Timestamp,
   where,
 } from 'firebase/firestore';
 import { collections, db, isFirebaseConfigured } from '../firebase';
-import type { Order, OrderItem, Payment, Product, ProductStock } from '../types';
+import { getDeviceId } from '../pos/deviceId';
+import {
+  buildDashboardOverlay,
+  mergeDashboardOverlay,
+  type DashboardOverlay,
+} from './asyncOverlay';
+import type { AsyncOrder, Order, OrderItem, Payment, Product, ProductStock } from '../types';
 import {
   getDevDashboardNow,
   getDevDashboardPayments,
@@ -256,6 +263,9 @@ export function useDashboardData(
   const [stockMap, setStockMap] = useState(() => new Map<string, StockMapEntry>());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  // Hybrid overlay: this device's still-pending `asyncOrders`, projected live so
+  // "today's" revenue reflects offline/just-rung sales before they sync.
+  const [overlay, setOverlay] = useState<DashboardOverlay>({ lines: [], payments: [] });
 
   const now = useMemo(
     () => (import.meta.env.DEV && !isFirebaseConfigured ? getDevDashboardNow() : new Date()),
@@ -335,9 +345,40 @@ export function useDashboardData(
     };
   }, [branchId, period, now]);
 
+  // Pending-overlay listener — bounded, equality-only (no composite index),
+  // scoped to THIS device. Resolves from persistentLocalCache (incl. queued
+  // writes), so offline sales appear in "today" instantly.
+  useEffect(() => {
+    if (!branchId || !isFirebaseConfigured || !db || !bounds) {
+      setOverlay({ lines: [], payments: [] });
+      return;
+    }
+    const { fetchStart, end } = bounds;
+    const q = query(
+      collection(db, 'asyncOrders'),
+      where('branchId', '==', branchId),
+      where('deviceId', '==', getDeviceId()),
+      where('reconcileStatus', '==', 'pending_reconcile'),
+    );
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const orders = snap.docs.map((d) => ({ ...(d.data() as AsyncOrder), id: d.id }));
+        setOverlay(buildDashboardOverlay(orders, fetchStart, end));
+      },
+      (err) => console.warn('[dashboard] pending-overlay listener error', err),
+    );
+    return unsub;
+  }, [branchId, bounds]);
+
+  const merged = useMemo(
+    () => mergeDashboardOverlay(saleLines, paymentRecords, overlay),
+    [saleLines, paymentRecords, overlay],
+  );
+
   return {
-    saleLines,
-    paymentRecords,
+    saleLines: merged.saleLines,
+    paymentRecords: merged.paymentRecords,
     stockMap,
     loading,
     error,

@@ -33,9 +33,12 @@ import {
   sortProductsByCustomOrder,
 } from '../lib/pos/categoryService';
 import type { ItemDiscountType, PosProduct, UomOption } from '../lib/pos/types';
-import type { Shift, ProductCategory } from '../lib/types';
+import type { Shift, ProductCategory, ShiftCashEntry } from '../lib/types';
 import { useAuth } from '../lib/hooks/useAuth';
 import { useBranch } from '../lib/hooks/useBranch';
+import { useLocalLedger } from '../lib/hooks/useLocalLedger';
+import { deriveShiftDrawer } from '../lib/pos/shiftLedger';
+import { isFirebaseConfigured } from '../lib/firebase';
 import { getActivePriceForCustomer, useCart } from '../hooks/pos/useCart';
 import { useCheckout } from '../hooks/pos/useCheckout';
 import './POSPage.css';
@@ -130,6 +133,19 @@ export default function POSPage() {
 
   const cart = useCart({ products, customer, showToast });
   const { cartLines, totals } = cart;
+
+  // Drawer single-writer: the terminal owns its shift totals by folding its own
+  // local ledger of `asyncOrders`. The stored shift doc's `expected*` fields are
+  // ignored online (the reconciler no longer maintains them); we derive them live
+  // — instantly, offline-safe — from the ledger for the active shift. Dev (no
+  // Firebase) keeps using the mock shift store, which the dev path still updates.
+  const localLedger = useLocalLedger(branchId);
+  const drawerShift = useMemo(() => {
+    if (!activeShift) return null;
+    if (!isFirebaseConfigured) return activeShift;
+    const shiftSales = localLedger.filter((s) => s.shiftId === activeShift.id);
+    return deriveShiftDrawer(activeShift, shiftSales);
+  }, [activeShift, localLedger]);
 
   // ── Admin Broadcast → Smart Auto-Sync ──────────────────────────────────────
   // One cheap listener on the branch's sync_state doc. When the admin "rings the
@@ -408,13 +424,17 @@ export default function POSPage() {
     [cartLines.length, cart, checkout, removeBill, focusSearch, showToast],
   );
 
-  const handleCashTxSuccess = useCallback(async () => {
-    if (user && branchId) {
-      const shift = await getActiveShift(branchId, user.id);
-      setActiveShift(shift);
-    }
+  // Optimistically append the cash entry to the live shift. The DURABLE source is
+  // `cashEntries[]` on the shift doc (queued to cache by recordCashTransaction);
+  // this only mirrors it into state so the derived drawer updates instantly. On
+  // reload, getActiveShift re-reads cashEntries from cache and deriveShiftDrawer
+  // recomputes — so this is not the "lost on reload" optimistic-counter trap.
+  const handleCashTxRecorded = useCallback((entry: ShiftCashEntry) => {
+    setActiveShift((prev) =>
+      prev ? { ...prev, cashEntries: [...(prev.cashEntries ?? []), entry] } : prev,
+    );
     setShowCashTx(false);
-  }, [user, branchId]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -946,13 +966,13 @@ export default function POSPage() {
         <CashTransactionModal
           shift={activeShift}
           onClose={() => setShowCashTx(false)}
-          onSuccess={() => void handleCashTxSuccess()}
+          onSuccess={handleCashTxRecorded}
         />
       )}
 
-      {showCloseShift && activeShift && (
+      {showCloseShift && drawerShift && (
         <CloseShiftModal
-          shift={activeShift}
+          shift={drawerShift}
           onClose={() => setShowCloseShift(false)}
           onSuccess={() => {
             setActiveShift(null);

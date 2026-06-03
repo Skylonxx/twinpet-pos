@@ -24,6 +24,7 @@ import { usePosProducts } from '../lib/pos/usePosProducts';
 import { useAuth } from '../lib/hooks/useAuth';
 import { isFirebaseConfigured } from '../lib/firebase';
 import { voidOrderSafe } from '../lib/voidOrder';
+import { requestPendingVoid } from '../lib/pos/voidPendingOrder';
 import type { OrderItem, PaymentMethod } from '../lib/types';
 import { DateRangeDropdown } from '../components/common/DateRangeDropdown';
 import './SalesHistoryPage.css';
@@ -347,6 +348,25 @@ export default function SalesHistoryPage() {
   const handleVoidConfirm = useCallback(
     async (reason: string, note: string) => {
       if (!selected || !user || !branchId) return;
+
+      // Unified local-first void (Phase 6 + 7b). With Firebase, BOTH a pending
+      // sale (Phase A → tombstone) and a settled sale (Phase B → server reversal)
+      // are voided by the SAME queueable merge-write on the asyncOrders doc; the
+      // reconciler routes by reconcileStatus. Offline-safe — never hits
+      // voidOrderSafe's runTransaction. The drawer/dashboard drop it instantly via
+      // isLedgerSale; the canonical row shows "ยกเลิก (รอซิงก์)" until reconciled.
+      if (isFirebaseConfigured) {
+        requestPendingVoid(selected.order.id, { reason, note, voidedBy: user.id }, branchId);
+        setVoidOpen(false);
+        showToast(
+          selected.pendingSync
+            ? 'ยกเลิกบิลแล้ว · จะซิงก์อัตโนมัติเมื่อออนไลน์'
+            : 'ส่งคำขอยกเลิกบิลแล้ว · จะคืนสต็อก/เครดิตเมื่อซิงก์',
+        );
+        return;
+      }
+
+      // Dev mode (no Firebase): canonical void via the dev-mock path.
       setVoidProcessing(true);
       try {
         await voidOrderSafe({
@@ -573,7 +593,9 @@ export default function SalesHistoryPage() {
                         const { order } = record;
                         const created = orderCreatedAt(order);
                         const status = saleDisplayStatus(order);
-                        const isVoid = status === 'void';
+                        // Settled void still syncing — show as voided (in-flight).
+                        const voidPending = record.voidPendingSync === true;
+                        const isVoid = status === 'void' || voidPending;
                         return (
                           <tr
                             key={order.id}
@@ -585,6 +607,24 @@ export default function SalesHistoryPage() {
                             </td>
                             <td className="sh-col-bill">
                               <span className="sh-bill-no">{order.billId || order.id}</span>
+                              {record.pendingSync && (
+                                <span
+                                  className="sh-sync-badge"
+                                  title="บันทึกในเครื่องแล้ว · กำลังรอซิงก์ขึ้นเซิร์ฟเวอร์"
+                                  style={{
+                                    display: 'inline-block',
+                                    marginTop: 2,
+                                    fontSize: 10,
+                                    fontWeight: 600,
+                                    color: '#b26a00',
+                                    background: '#fff4e0',
+                                    borderRadius: 6,
+                                    padding: '1px 6px',
+                                  }}
+                                >
+                                  ⏳ รอซิงก์
+                                </span>
+                              )}
                             </td>
                             <td>
                               {order.customerSnap ? (
@@ -608,7 +648,21 @@ export default function SalesHistoryPage() {
                               </span>
                             </td>
                             <td style={{ textAlign: 'center' }}>
-                              <StatusBadge status={status} />
+                              {voidPending ? (
+                                <span
+                                  className="sh-status-badge sh-st-void"
+                                  title="ส่งคำขอยกเลิกแล้ว · รอเซิร์ฟเวอร์คืนสต็อก/เครดิต"
+                                >
+                                  <i
+                                    className="ti ti-ban"
+                                    style={{ fontSize: 10 }}
+                                    aria-hidden="true"
+                                  />{' '}
+                                  ยกเลิก (รอซิงก์)
+                                </span>
+                              ) : (
+                                <StatusBadge status={status} />
+                              )}
                             </td>
                           </tr>
                         );
@@ -860,7 +914,7 @@ export default function SalesHistoryPage() {
               </div>
 
               <footer className="sh-drawer-footer">
-                {saleDisplayStatus(selected.order) === 'void' ? (
+                {saleDisplayStatus(selected.order) === 'void' || selected.voidPendingSync ? (
                   <button type="button" className="sh-df-btn sh-df-disabled" disabled>
                     <i className="ti ti-printer" aria-hidden="true" /> พิมพ์ใบยกเลิก
                   </button>
@@ -874,8 +928,14 @@ export default function SalesHistoryPage() {
                         type="button"
                         className="sh-df-btn sh-df-void"
                         onClick={() => setVoidOpen(true)}
+                        title={
+                          selected.pendingSync
+                            ? 'ยกเลิกบิลที่ยังรอซิงก์ (ทำงานแบบออฟไลน์ได้)'
+                            : undefined
+                        }
                       >
                         <i className="ti ti-ban" aria-hidden="true" /> ยกเลิกบิล
+                        {selected.pendingSync ? ' (ออฟไลน์)' : ''}
                       </button>
                     )}
                   </>
