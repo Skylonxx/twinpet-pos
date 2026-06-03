@@ -15,6 +15,41 @@ export { reconcileOrder } from './reconcileOrder';
 
 type UserRole = 'admin' | 'manager' | 'staff';
 
+// Fallback mirror of the client DEFAULT_ROLE_PERMS (src/lib/staffManagement/types.ts).
+// Used only when settings/_rolePermissions is missing/unreadable so a login never
+// strips a user down to zero granular permissions. Keep in sync if the permission
+// vocabulary grows (functions cannot import from src/).
+const DEFAULT_ROLE_PERMS: Record<UserRole, string[]> = {
+  admin: [
+    'pos_sale', 'pos_discount', 'pos_void', 'quotation', 'product_view',
+    'product_edit', 'stock_receive', 'cost_view', 'report_sales', 'report_stock',
+    'report_profit', 'employee_manage', 'settings',
+  ],
+  manager: [
+    'pos_sale', 'pos_discount', 'pos_void', 'quotation', 'product_view',
+    'product_edit', 'stock_receive', 'cost_view', 'report_sales', 'report_stock',
+  ],
+  staff: ['pos_sale', 'product_view'],
+};
+
+/**
+ * Resolve the granular permission-key array for a role from the live
+ * settings/_rolePermissions matrix doc (the source of truth the admin panel
+ * edits). Falls back to DEFAULT_ROLE_PERMS when the doc is missing/unreadable or
+ * the role row is empty, so login is never left without permissions.
+ */
+async function resolvePermissionKeys(role: UserRole): Promise<string[]> {
+  try {
+    const snap = await db.collection('settings').doc('_rolePermissions').get();
+    const matrix = snap.data()?.rolePermissions as Record<string, string[]> | undefined;
+    const keys = matrix?.[role];
+    if (Array.isArray(keys) && keys.length > 0) return keys;
+  } catch (err) {
+    console.warn('[verifyPinLogin] _rolePermissions unreadable, using defaults', err);
+  }
+  return DEFAULT_ROLE_PERMS[role];
+}
+
 type UserDoc = {
   id?: string;
   firstName: string;
@@ -201,10 +236,13 @@ export const verifyPinLogin = onCall(
       const staffId = match.id;
       const user = match.user;
 
+      const permissions = await resolvePermissionKeys(user.role);
+
       await getAuth().setCustomUserClaims(request.auth.uid, {
         staffId,
         role: user.role,
         branchIds: user.branchIds,
+        permissions,
       });
 
       await db.collection('users').doc(staffId).update({

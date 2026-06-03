@@ -16,8 +16,31 @@ service cloud.firestore {
       return request.auth.token.staffId;
     }
 
+    // Null-safe "caller stamped their own staffId on this doc" check. Reading a
+    // MISSING map property via dot/bracket notation HARD-ERRORS in rules
+    // ("Property staffId is undefined on object."), which surfaces as a
+    // PERMISSION_DENIED crash rather than a clean deny. `.get(key, default)`
+    // returns the default instead, so this is safe even when the payload omits
+    // staffId — e.g. the offline void merge (`requestPendingVoid`) writes only
+    // the void fields + branchId/deviceId and may CREATE the asyncOrders doc.
+    function stampedOwnStaffId(data) {
+      return data.get('staffId', null) == staffId();
+    }
+
     function role() {
       return request.auth.token.role;
+    }
+
+    // Granular permission keys stamped into the token by verifyPinLogin (e.g.
+    // ['pos_sale','pos_void',...]). `.get('permissions', [])` is null-safe:
+    // tokens minted BEFORE this rollout carry no permissions claim and resolve
+    // to [] instead of hard-erroring.
+    function tokenPerms() {
+      return request.auth.token.get('permissions', []);
+    }
+
+    function hasPerm(p) {
+      return isStaff() && (p in tokenPerms());
     }
 
     function branchIds() {
@@ -202,24 +225,33 @@ service cloud.firestore {
     // ── Async sales (offline-first checkout "intent" inbox) ──
     // The client writes the sale here with a single queueable setDoc (offline-safe).
     // The reconcileOrder Cloud Function (Admin SDK — bypasses these rules) settles
-    // it and dual-writes the canonical `orders`. Staff create/read their own branch;
-    // updates (e.g. future void-intent) are manager/admin only.
+    // it and dual-writes the canonical `orders`. Checkout needs `pos_sale`;
+    // void-intent (create or update) needs `pos_void`.
     match /asyncOrders/{orderId} {
       allow read: if isAdmin() || (isStaff() && hasBranchAccess(resource.data.branchId));
-      allow create: if isStaff()
-        && hasBranchAccess(request.resource.data.branchId)
-        && request.resource.data.staffId == staffId();
-      allow update: if isManagerOrAdmin() && hasBranchAccess(resource.data.branchId);
+      // A normal checkout stamps the caller's own staffId. The offline void merge
+      // (`requestPendingVoid`) is a queueable setDoc(merge) that may MATERIALISE a
+      // not-yet-cached doc — a create whose payload carries no staffId. Permit
+      // that path when it is a `pos_void` void-intent (`voidRequested == true`),
+      // mirroring the `pos_void` gate on the update path below.
+      allow create: if hasBranchAccess(request.resource.data.branchId)
+        && (
+          (hasPerm('pos_sale') && stampedOwnStaffId(request.resource.data))
+          || (hasPerm('pos_void')
+            && request.resource.data.get('voidRequested', false) == true)
+        );
+      allow update: if hasPerm('pos_void')
+        && hasBranchAccess(resource.data.branchId);
       allow delete: if isAdmin();
     }
 
     // ── Sales ──
     match /orders/{orderId} {
       allow read: if isAdmin() || (isStaff() && hasBranchAccess(resource.data.branchId));
-      allow create: if isStaff()
+      allow create: if hasPerm('pos_sale')
         && hasBranchAccess(request.resource.data.branchId)
-        && request.resource.data.staffId == staffId();
-      allow update: if isManagerOrAdmin()
+        && stampedOwnStaffId(request.resource.data);
+      allow update: if hasPerm('pos_void')
         && hasBranchAccess(resource.data.branchId);
       // Admin-only — used by the Danger Zone UAT reset to wipe sales history
       allow delete: if isAdmin();

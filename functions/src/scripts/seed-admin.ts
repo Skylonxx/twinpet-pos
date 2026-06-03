@@ -113,6 +113,45 @@ const ADMIN_PERMISSIONS = {
   canManageStaff: true,
 } as const;
 
+// Default role → granular permission-key matrix. Mirrors the client
+// DEFAULT_ROLE_PERMS (src/lib/staffManagement/types.ts) and the functions
+// fallback (functions/src/index.ts). verifyPinLogin reads this doc to stamp the
+// token's `permissions` array; the admin Staff panel edits it live.
+const DEFAULT_ROLE_PERMISSIONS_MATRIX = {
+  admin: [
+    'pos_sale', 'pos_discount', 'pos_void', 'quotation', 'product_view',
+    'product_edit', 'stock_receive', 'cost_view', 'report_sales', 'report_stock',
+    'report_profit', 'employee_manage', 'settings',
+  ],
+  manager: [
+    'pos_sale', 'pos_discount', 'pos_void', 'quotation', 'product_view',
+    'product_edit', 'stock_receive', 'cost_view', 'report_sales', 'report_stock',
+  ],
+  staff: ['pos_sale', 'product_view'],
+} as const;
+
+/**
+ * Ensure settings/_rolePermissions exists so the Emulator mirrors production and
+ * verifyPinLogin can resolve granular permission keys. Creates it only when
+ * absent — never clobbers a matrix already edited via the admin panel.
+ */
+async function seedRolePermissions(db: Firestore): Promise<void> {
+  const ref = db.collection('settings').doc('_rolePermissions');
+  const snap = await ref.get();
+  if (snap.exists && snap.data()?.rolePermissions) {
+    console.log('settings/_rolePermissions มีอยู่แล้ว — ข้ามการสร้าง');
+    return;
+  }
+  await ref.set(
+    {
+      rolePermissions: { ...DEFAULT_ROLE_PERMISSIONS_MATRIX },
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    { merge: true },
+  );
+  console.log('✓ สร้าง settings/_rolePermissions (role → permission matrix)');
+}
+
 async function resolveBranchId(db: Firestore): Promise<string> {
   if (CONFIG.branchId) {
     const snap = await db.collection('branches').doc(CONFIG.branchId).get();
@@ -186,6 +225,7 @@ async function main(): Promise<void> {
   const auth = getAuth(app);
 
   const branchId = await resolveBranchId(db);
+  await seedRolePermissions(db);
   const email = authEmailForUsername(CONFIG.username, projectId);
 
   const existing = await db

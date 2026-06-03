@@ -16,6 +16,7 @@
     "preview": "vite preview",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",
+    "test:rules": "firebase emulators:exec --only firestore --project demo-twinpet \"vitest run --config vitest.rules.config.ts\"",
     "test": "playwright test",
     "test:ui": "playwright test --ui",
     "test:headed": "playwright test --headed"
@@ -32,6 +33,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@firebase/rules-unit-testing": "^5.0.1",
     "@playwright/test": "^1.60.0",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^24.12.3",
