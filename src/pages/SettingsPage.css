@@ -19,6 +19,50 @@
   font-size: 14px;
 }
 
+/* Page topbar — layout mirrors the admin/receiving header (.sh-topbar in
+   SalesHistoryPage.css). The flex row + `.stg-topbar-center { flex: 1 }` spacer
+   right-aligns the action buttons (ยกเลิก / บันทึก). */
+.stg-topbar {
+  height: 56px;
+  background: var(--white, #fff);
+  border-bottom: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  gap: 12px;
+  flex-shrink: 0;
+  z-index: 50;
+}
+
+.stg-topbar-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-md, 8px);
+  background: var(--p50, #eeedfe);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--p600, #534ab7);
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.stg-topbar-center {
+  flex: 1;
+  min-width: 0;
+}
+
+.stg-topbar-title {
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.stg-topbar-sub {
+  font-size: 12px;
+  color: var(--text-secondary, #6b7280);
+  margin-top: 1px;
+}
+
 .stg-btn {
   display: inline-flex;
   align-items: center;
@@ -346,13 +390,6 @@
 
 .stg-price-table tr:hover td {
   background: var(--g50, #f8f8fc);
-}
-
-.stg-drag-handle {
-  color: var(--text-muted, #9ca3af);
-  cursor: grab;
-  font-size: 16px;
-  padding: 0 4px;
 }
 
 /* UOM table */
@@ -845,6 +882,21 @@
   font-size: 12px !important;
 }
 
+/* Inline action row: a full-size input/select sitting beside a full-size
+   stg-btn. Centers the items and forces a single shared height (38px ≥ the
+   button's natural ~34px and the input's ~37px) so they sit on one clean
+   baseline — full-size buttons stay full-size, the field scales up to match. */
+.stg-inline-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.stg-inline-row > .stg-form-input,
+.stg-inline-row > .stg-form-select,
+.stg-inline-row > .stg-btn {
+  height: 38px;
+}
+
 .stg-input-w110 { width: 110px; }
 .stg-input-w70 { width: 70px; }
 .stg-input-w90 { width: 90px; }
@@ -854,13 +906,6 @@
   font-family: 'Sarabun', monospace;
   font-size: 12px;
   color: var(--text-muted, #9ca3af);
-}
-
-.stg-drag-handle {
-  color: var(--text-muted, #9ca3af);
-  cursor: grab;
-  font-size: 16px;
-  padding: 0 4px;
 }
 
 .stg-receipt-preview .stg-rp-bold {

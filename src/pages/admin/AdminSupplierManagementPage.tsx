@@ -423,24 +423,24 @@ export default function AdminSupplierManagementPage() {
   };
 
   return (
-    <div className="sup-page">
+    <div className="asup-page">
       {/* Topbar */}
-      <div className="sup-topbar">
-        <div className="sup-topbar-icon">
+      <div className="asup-topbar">
+        <div className="asup-topbar-icon">
           <i className="ti ti-truck-delivery" aria-hidden="true" />
         </div>
-        <div className="sup-topbar-center">
-          <div className="sup-topbar-title">จัดการผู้จำหน่าย (ซัพพลายเออร์)</div>
-          <div className="sup-topbar-sub">Supplier Management — Centralized HQ</div>
+        <div className="asup-topbar-center">
+          <div className="asup-topbar-title">จัดการผู้จำหน่าย (ซัพพลายเออร์)</div>
+          <div className="asup-topbar-sub">Supplier Management — Centralized HQ</div>
         </div>
-        <span className="sup-hq-badge">
+        <span className="asup-hq-badge">
           <i className="ti ti-shield-lock" style={{ fontSize: 12 }} aria-hidden="true" />
           HQ — ทุกสาขา
         </span>
-        <div className="sup-topbar-actions">
+        <div className="asup-topbar-actions">
           <button
             type="button"
-            className="sup-btn sup-btn-primary"
+            className="asup-btn asup-btn-primary"
             onClick={() => {
               setEditSupplier(null);
               setFormOpen(true);
@@ -452,9 +452,9 @@ export default function AdminSupplierManagementPage() {
       </div>
 
       {/* Content */}
-      <div className="sup-content">
-        <div className="sup-toolbar">
-          <div className="sup-search-wrap">
+      <div className="asup-content">
+        <div className="asup-toolbar">
+          <div className="asup-search-wrap">
             <i className="ti ti-search" aria-hidden="true" />
             <input
               type="text"
@@ -464,7 +464,7 @@ export default function AdminSupplierManagementPage() {
             />
           </div>
           <select
-            className="sup-select-filter"
+            className="asup-select-filter"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
           >
@@ -475,14 +475,14 @@ export default function AdminSupplierManagementPage() {
         </div>
 
         {loading ? (
-          <div className="sup-loading">กำลังโหลดข้อมูล...</div>
+          <div className="asup-loading">กำลังโหลดข้อมูล...</div>
         ) : error ? (
-          <div className="sup-loading" style={{ color: 'var(--red)' }}>
+          <div className="asup-loading" style={{ color: 'var(--red)' }}>
             โหลดข้อมูลไม่สำเร็จ: {error}
           </div>
         ) : (
-          <div className="sup-card">
-            <div className="sup-table-scroll">
+          <div className="asup-card">
+            <div className="asup-table-scroll">
               <table>
                 <thead>
                   <tr>
@@ -498,7 +498,7 @@ export default function AdminSupplierManagementPage() {
                   {filtered.length === 0 ? (
                     <tr>
                       <td colSpan={6}>
-                        <div className="sup-empty-state">
+                        <div className="asup-empty-state">
                           <i className="ti ti-building-off" aria-hidden="true" />
                           <p>ไม่พบผู้จำหน่ายที่ตรงตามเงื่อนไข</p>
                         </div>
@@ -508,18 +508,18 @@ export default function AdminSupplierManagementPage() {
                     filtered.map((s) => (
                       <tr key={s.id}>
                         <td>
-                          <div className="sup-emp-cell">
-                            <div className="sup-avatar">{supplierInitials(s)}</div>
+                          <div className="asup-emp-cell">
+                            <div className="asup-avatar">{supplierInitials(s)}</div>
                             <div>
-                              <div className="sup-emp-name">{s.name}</div>
+                              <div className="asup-emp-name">{s.name}</div>
                               {s.taxId && (
-                                <div className="sup-emp-sub">TAX: {s.taxId}</div>
+                                <div className="asup-emp-sub">TAX: {s.taxId}</div>
                               )}
                             </div>
                           </div>
                         </td>
                         <td>
-                          <span className="sup-code">{s.code}</span>
+                          <span className="asup-code">{s.code}</span>
                         </td>
                         <td>
                           <div>{s.contactName || '—'}</div>
@@ -527,8 +527,8 @@ export default function AdminSupplierManagementPage() {
                         </td>
                         <td>
                           <span
-                            className={`sup-scope-pill ${
-                              s.allowedBranchIds.includes('ALL') ? 'sup-scope-all' : 'sup-scope-some'
+                            className={`asup-scope-pill ${
+                              s.allowedBranchIds.includes('ALL') ? 'asup-scope-all' : 'asup-scope-some'
                             }`}
                           >
                             <i
@@ -544,17 +544,17 @@ export default function AdminSupplierManagementPage() {
                         </td>
                         <td>
                           <span
-                            className={`sup-status-pill ${s.isActive ? 'sup-status-on' : 'sup-status-off'}`}
+                            className={`asup-status-pill ${s.isActive ? 'asup-status-on' : 'asup-status-off'}`}
                           >
-                            <span className="sup-dot" />
+                            <span className="asup-dot" />
                             {s.isActive ? 'ใช้งาน' : 'ระงับ'}
                           </span>
                         </td>
                         <td>
-                          <div className="sup-action-group">
+                          <div className="asup-action-group">
                             <button
                               type="button"
-                              className="sup-icon-btn"
+                              className="asup-icon-btn"
                               title="แก้ไข"
                               onClick={() => {
                                 setEditSupplier(s);
@@ -565,7 +565,7 @@ export default function AdminSupplierManagementPage() {
                             </button>
                             <button
                               type="button"
-                              className="sup-icon-btn danger"
+                              className="asup-icon-btn danger"
                               title="ลบ"
                               onClick={() => setDeleteId(s.id)}
                             >
@@ -584,20 +584,20 @@ export default function AdminSupplierManagementPage() {
       </div>
 
       {/* Footer stats */}
-      <div className="sup-footer">
-        <div className="sup-footer-stat">
-          <span className="sup-footer-num">{stats.total}</span>
-          <span className="sup-footer-lbl">ทั้งหมด</span>
+      <div className="asup-footer">
+        <div className="asup-footer-stat">
+          <span className="asup-footer-num">{stats.total}</span>
+          <span className="asup-footer-lbl">ทั้งหมด</span>
         </div>
-        <div className="sup-footer-stat">
-          <span className="sup-footer-num clr-green">{stats.active}</span>
-          <span className="sup-footer-lbl">ใช้งาน</span>
+        <div className="asup-footer-stat">
+          <span className="asup-footer-num clr-green">{stats.active}</span>
+          <span className="asup-footer-lbl">ใช้งาน</span>
         </div>
-        <div className="sup-footer-stat">
-          <span className="sup-footer-num clr-purple">{stats.allBranch}</span>
-          <span className="sup-footer-lbl">ทุกสาขา</span>
+        <div className="asup-footer-stat">
+          <span className="asup-footer-num clr-purple">{stats.allBranch}</span>
+          <span className="asup-footer-lbl">ทุกสาขา</span>
         </div>
-        <div className="sup-footer-spacer" />
+        <div className="asup-footer-spacer" />
       </div>
 
       {/* Add / Edit form modal */}
@@ -615,9 +615,9 @@ export default function AdminSupplierManagementPage() {
 
       {/* Delete confirmation */}
       {deleteId ? (
-        <div className="sup-dialog-overlay" onClick={() => setDeleteId(null)}>
-          <div className="sup-dialog sup-dialog-sm" onClick={(e) => e.stopPropagation()}>
-            <div className="sup-dialog-body" style={{ textAlign: 'center', padding: '24px 20px' }}>
+        <div className="asup-dialog-overlay" onClick={() => setDeleteId(null)}>
+          <div className="asup-dialog asup-dialog-sm" onClick={(e) => e.stopPropagation()}>
+            <div className="asup-dialog-body" style={{ textAlign: 'center', padding: '24px 20px' }}>
               <i
                 className="ti ti-trash"
                 style={{ fontSize: 32, color: 'var(--red)', marginBottom: 12, display: 'block' }}
@@ -628,17 +628,17 @@ export default function AdminSupplierManagementPage() {
                 ข้อมูลจะถูก soft delete และไม่แสดงในรายการ
               </div>
             </div>
-            <div className="sup-dialog-footer">
+            <div className="asup-dialog-footer">
               <button
                 type="button"
-                className="sup-btn sup-btn-ghost"
+                className="asup-btn asup-btn-ghost"
                 onClick={() => setDeleteId(null)}
               >
                 ยกเลิก
               </button>
               <button
                 type="button"
-                className="sup-btn sup-btn-danger-ghost"
+                className="asup-btn asup-btn-danger-ghost"
                 onClick={() => void handleDelete()}
               >
                 ลบ
@@ -650,8 +650,8 @@ export default function AdminSupplierManagementPage() {
 
       {/* Toast */}
       {toast ? (
-        <div className="sup-toast-wrap">
-          <div className={`sup-toast ${toast.type}`}>{toast.msg}</div>
+        <div className="asup-toast-wrap">
+          <div className={`asup-toast ${toast.type}`}>{toast.msg}</div>
         </div>
       ) : null}
     </div>

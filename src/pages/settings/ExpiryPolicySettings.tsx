@@ -82,13 +82,13 @@ export default function ExpiryPolicySettings() {
           <i className="ti ti-calendar-event" aria-hidden="true" /> นโยบายทั้งหมด
           <div className="stg-card-head-right">
             {dirty ? (
-              <button type="button" className="stg-btn stg-btn-ghost stg-btn-sm" onClick={handleReset}>
+              <button type="button" className="stg-btn stg-btn-ghost" onClick={handleReset}>
                 ยกเลิก
               </button>
             ) : null}
             <button
               type="button"
-              className="stg-btn stg-btn-primary stg-btn-sm"
+              className="stg-btn stg-btn-primary"
               disabled={!dirty || saving}
               onClick={() => void handleSave()}
             >
@@ -164,7 +164,7 @@ export default function ExpiryPolicySettings() {
           </table>
         </div>
         <div className="stg-card-body">
-          <button type="button" className="stg-btn stg-btn-ghost stg-btn-sm" onClick={addPolicy}>
+          <button type="button" className="stg-btn stg-btn-ghost" onClick={addPolicy}>
             <i className="ti ti-plus" aria-hidden="true" /> เพิ่มนโยบาย
           </button>
           <p className="stg-section-sub" style={{ marginTop: 12, marginBottom: 0 }}>

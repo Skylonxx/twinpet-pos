@@ -83,7 +83,7 @@ export default function PriceLevelManager({ priceLevels, setPriceLevels, showToa
       <div className="stg-card-head">
         <i className="ti ti-layers-difference" aria-hidden="true" /> ระดับราคาทั้งหมด
         <div className="stg-card-head-right">
-          <button type="button" className="stg-btn stg-btn-primary stg-btn-sm" onClick={openAddDialog}>
+          <button type="button" className="stg-btn stg-btn-primary" onClick={openAddDialog}>
             <i className="ti ti-plus" aria-hidden="true" /> เพิ่มระดับราคา
           </button>
         </div>
@@ -92,7 +92,6 @@ export default function PriceLevelManager({ priceLevels, setPriceLevels, showToa
         <table className="stg-price-table">
           <thead>
             <tr>
-              <th style={{ width: 32 }} />
               <th>ชื่อระดับ</th>
               <th>รหัส</th>
               <th>คำอธิบาย</th>
@@ -102,7 +101,6 @@ export default function PriceLevelManager({ priceLevels, setPriceLevels, showToa
           <tbody>
             {priceLevels.map((p) => (
               <tr key={p.id}>
-                <td><i className="ti ti-grip-vertical stg-drag-handle" aria-hidden="true" /></td>
                 <td>
                   <input className="stg-form-input stg-input-inline" value={p.name} onChange={(e) => updatePriceLevel(p.id, { name: e.target.value })} />
                 </td>

@@ -122,7 +122,7 @@ export default function PosDevicesSettings({
 
         <div className="stg-form-group">
           <label className="stg-form-label">ชื่อเครื่อง (Device Label)</label>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div className="stg-inline-row">
             <input
               className="stg-form-input"
               style={{ flex: 1 }}
@@ -136,7 +136,7 @@ export default function PosDevicesSettings({
             />
             <button
               type="button"
-              className="stg-btn stg-btn-primary stg-btn-sm"
+              className="stg-btn stg-btn-primary"
               onClick={() => void save()}
               disabled={saving || !branchId}
             >
@@ -153,7 +153,7 @@ export default function PosDevicesSettings({
             <label className="stg-form-label">
               <i className="ti ti-history" aria-hidden="true" /> กู้คืนอุปกรณ์เดิม (Claim Existing Device)
             </label>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div className="stg-inline-row">
               <select
                 className="stg-form-select"
                 style={{ flex: 1 }}
@@ -169,7 +169,7 @@ export default function PosDevicesSettings({
               </select>
               <button
                 type="button"
-                className="stg-btn stg-btn-ghost stg-btn-sm"
+                className="stg-btn stg-btn-ghost"
                 onClick={() => void claim()}
                 disabled={!claimTargetId || claiming}
               >

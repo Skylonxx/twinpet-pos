@@ -499,31 +499,33 @@ export default function AdminStaffManagementPage() {
                 <span className="sm-perm-col-manager">Manager</span>
                 <span className="sm-perm-col-staff">Staff</span>
               </div>
-              {PERM_MODULES.map((mod) => (
-                <div key={mod.section}>
-                  <div className="sm-perm-group-header">
-                    <i className={`ti ${mod.icon}`} aria-hidden="true" />
-                    {mod.section}
-                  </div>
-                  {mod.items.map((item) => (
-                    <div key={item.key} className="sm-perm-row">
-                      <div>
-                        <div className="sm-perm-label">{item.label}</div>
-                        <div className="sm-perm-desc">{item.desc}</div>
-                      </div>
-                      {(['admin', 'manager', 'staff'] as const).map((role) => (
-                        <div key={role} className="sm-perm-cell">
-                          <Toggle
-                            checked={permSets[role].has(item.key)}
-                            disabled={role === 'admin'}
-                            onChange={(v) => void updateRoleMatrix(role, item.key, v)}
-                          />
-                        </div>
-                      ))}
+              <div className="sm-perm-scroll">
+                {PERM_MODULES.map((mod) => (
+                  <div key={mod.section}>
+                    <div className="sm-perm-group-header">
+                      <i className={`ti ${mod.icon}`} aria-hidden="true" />
+                      {mod.section}
                     </div>
-                  ))}
-                </div>
-              ))}
+                    {mod.items.map((item) => (
+                      <div key={item.key} className="sm-perm-row">
+                        <div>
+                          <div className="sm-perm-label">{item.label}</div>
+                          <div className="sm-perm-desc">{item.desc}</div>
+                        </div>
+                        {(['admin', 'manager', 'staff'] as const).map((role) => (
+                          <div key={role} className="sm-perm-cell">
+                            <Toggle
+                              checked={permSets[role].has(item.key)}
+                              disabled={role === 'admin'}
+                              onChange={(v) => void updateRoleMatrix(role, item.key, v)}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
             </div>
           </>
         ) : (

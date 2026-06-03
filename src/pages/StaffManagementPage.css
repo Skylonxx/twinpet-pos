@@ -167,7 +167,9 @@
 
 .sm-content {
   flex: 1;
-  overflow-y: auto;
+  /* Content itself does NOT scroll — each tab's table/matrix wrapper owns the
+     internal scroll so the toolbar + sticky headers stay pinned. */
+  overflow: hidden;
   padding: 20px;
   display: flex;
   flex-direction: column;
@@ -180,6 +182,7 @@
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
 .sm-search-wrap {
@@ -232,10 +235,27 @@
   border-radius: var(--radius-lg, 12px);
   border: 1px solid var(--border, rgba(0, 0, 0, 0.08));
   overflow: hidden;
+  /* Fill the remaining content height and become a flex column so the inner
+     scroll region (table or perm matrix) can flex + scroll internally. */
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .sm-table-scroll {
-  overflow-x: auto;
+  /* Scroll both axes internally; fills the card so only the rows scroll. */
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Permissions tab: the role matrix is a div grid, not a <table>. This wrapper
+   gives it the same internal vertical scroll while the matrix header stays pinned. */
+.sm-perm-scroll {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
 }
 
 .sm-page table {
@@ -256,6 +276,10 @@
   background: var(--g50, #f8f8fc);
   border-bottom: 1px solid var(--border, rgba(0, 0, 0, 0.08));
   white-space: nowrap;
+  /* Keep column labels visible while scrolling rows inside .sm-table-scroll. */
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
 
 .sm-page tbody td {
@@ -436,6 +460,7 @@
   border-bottom: 1px solid var(--border, rgba(0, 0, 0, 0.08));
   font-size: 11px;
   font-weight: 500;
+  flex-shrink: 0;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--text-muted, #9ca3af);

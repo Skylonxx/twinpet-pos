@@ -44,7 +44,7 @@ export default function TierManagementPage() {
 
   return (
     <div className="stg-page">
-      <div className="stg-topbar">
+      <header className="stg-topbar">
         <div className="stg-topbar-icon">
           <i className="ti ti-layers-difference" aria-hidden="true" />
         </div>
@@ -63,7 +63,7 @@ export default function TierManagementPage() {
         >
           <i className="ti ti-check" aria-hidden="true" /> {saving ? 'กำลังบันทึก...' : 'บันทึก'}
         </button>
-      </div>
+      </header>
 
       <div className="stg-body">
         <div className="stg-main">
