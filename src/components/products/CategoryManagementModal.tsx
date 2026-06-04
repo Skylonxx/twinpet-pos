@@ -5,6 +5,14 @@ import {
   slugFromCategoryName,
   useCategories,
 } from '../../lib/inventory/categoryService';
+import {
+  Table,
+  TableHead,
+  TableHeadCell,
+  TableBody,
+  TableRow,
+  TableCell,
+} from '../ui';
 
 const DEFAULT_CATEGORY_ID = 'general';
 
@@ -142,27 +150,27 @@ export default function CategoryManagementModal({ open, onClose, onToast }: Prop
               <p className="cm-form-hint">กำลังโหลด...</p>
             ) : (
               <div className="cm-tier-table-wrap">
-                <table className="cm-tier-table">
-                  <thead>
-                    <tr>
-                      <th>ชื่อ</th>
-                      <th>รหัส (ID)</th>
-                      <th style={{ width: 56, textAlign: 'right' }}>ลบ</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableHeadCell>ชื่อ</TableHeadCell>
+                      <TableHeadCell>รหัส (ID)</TableHeadCell>
+                      <TableHeadCell className="w-14 text-right">ลบ</TableHeadCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
                     {categories.map((cat) => {
                       const isDefault = cat.id === DEFAULT_CATEGORY_ID;
                       return (
-                        <tr key={cat.id}>
-                          <td>{cat.name}</td>
-                          <td>
+                        <TableRow key={cat.id}>
+                          <TableCell>{cat.name}</TableCell>
+                          <TableCell>
                             <code className="cm-tier-id">{cat.id}</code>
                             {isDefault ? (
                               <span className="cm-tier-default-tag">ค่าเริ่มต้น</span>
                             ) : null}
-                          </td>
-                          <td style={{ textAlign: 'right' }}>
+                          </TableCell>
+                          <TableCell className="text-right">
                             {isDefault ? (
                               <span className="cm-form-hint">—</span>
                             ) : (
@@ -176,12 +184,12 @@ export default function CategoryManagementModal({ open, onClose, onToast }: Prop
                                 🗑️
                               </button>
                             )}
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       );
                     })}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
             )}
           </section>

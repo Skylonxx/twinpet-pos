@@ -182,53 +182,7 @@
   border-radius: 4px;
 }
 
-.pps-overlay table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.pps-overlay thead th {
-  position: sticky;
-  top: 0;
-  background: var(--g50);
-  padding: 7px 14px;
-  text-align: left;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--g400);
-  border-bottom: 0.5px solid var(--g200);
-  white-space: nowrap;
-  z-index: 1;
-}
-
-.pps-overlay th.r {
-  text-align: right;
-}
-
-.pps-overlay tbody tr {
-  border-bottom: 0.5px solid var(--g100);
-  cursor: pointer;
-  transition: background 0.08s;
-}
-
-.pps-overlay tbody tr:hover {
-  background: var(--g50);
-}
-
-.pps-overlay tbody tr.sel {
-  background: #f0fff8;
-}
-
-.pps-overlay td {
-  padding: 8px 14px;
-  font-size: 12px;
-  color: var(--g600);
-  vertical-align: middle;
-}
-
-.pps-overlay td.r {
-  text-align: right;
-}
+/* .pps-overlay element-descendant table rules (table/thead th/th.r/tbody tr/tr:hover/tr.sel/td/td.r) removed — migrated to flowbite Table (Batch 4b-3). These descendant selectors would otherwise match the flowbite <table>. Selected-row, sticky head, alignment now via Tailwind. Content helpers below kept. */
 
 .pps-overlay .cb {
   width: 14px;

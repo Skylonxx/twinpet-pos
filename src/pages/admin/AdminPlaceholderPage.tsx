@@ -28,11 +28,11 @@ export default function AdminPlaceholderPage() {
   const copy = PLACEHOLDER_COPY[pathname] ?? PLACEHOLDER_COPY['/admin']!;
 
   return (
-    <div className="admin-layout-placeholder">
-      <div className="admin-layout-placeholder-card">
-        <i className={`ti ${copy.icon}`} aria-hidden="true" />
-        <h1>{copy.title}</h1>
-        <p>{copy.hint}</p>
+    <div className="flex flex-1 items-center justify-center px-6 py-8">
+      <div className="rounded-xl border-[0.5px] border-[var(--g200)] bg-white px-14 py-12 text-center shadow-[0_1px_3px_rgba(26,26,46,0.04)]">
+        <i className={`ti ${copy.icon} mb-4 block text-[40px] text-[var(--p600)]`} aria-hidden="true" />
+        <h1 className="mb-2 text-xl font-semibold text-[var(--text-primary)]">{copy.title}</h1>
+        <p className="text-sm text-[#5f5e5a]">{copy.hint}</p>
       </div>
     </div>
   );

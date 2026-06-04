@@ -1578,43 +1578,7 @@
   border-radius: 4px;
 }
 
-.pc-tier-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 11px;
-}
-
-.pc-tier-table th {
-  background: var(--g50, #f8f8fc);
-  padding: 5px 7px;
-  text-align: left;
-  color: var(--g400, #888780);
-  border: 0.5px solid var(--g200, #d3d1c7);
-  font-weight: 500;
-}
-
-.pc-tier-table td {
-  padding: 4px 6px;
-  border: 0.5px solid var(--g200, #d3d1c7);
-}
-
-.pc-tier-table td input {
-  border: 0.5px solid var(--g200, #d3d1c7);
-  border-radius: 4px;
-  outline: none;
-  width: 100%;
-  font-size: 11px;
-  font-family: 'Prompt', sans-serif;
-  color: var(--p900, #26215c);
-  background: #fff;
-  text-align: right;
-  padding: 4px 6px;
-}
-
-.pc-tier-table td input:focus {
-  border-color: var(--p600, #534ab7);
-  box-shadow: 0 0 0 2px var(--p50, #eeedfe);
-}
+/* .pc-tier-table rules removed (Batch 4b) — no consumer (dead CSS); tier pricing uses TierPriceManagerDialog (.tpmd-table). */
 
 .pc-tier-dot {
   width: 7px;
@@ -1686,26 +1650,7 @@
   color: var(--g400, #888780);
 }
 
-.pc-hist-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 11px;
-}
-
-.pc-hist-table th {
-  background: var(--g50, #f8f8fc);
-  padding: 5px 8px;
-  text-align: left;
-  color: var(--g400, #888780);
-  border-bottom: 0.5px solid var(--g200, #d3d1c7);
-  font-weight: 500;
-}
-
-.pc-hist-table td {
-  padding: 5px 8px;
-  border-bottom: 0.5px solid var(--g100, #f1efe8);
-  color: var(--g600, #5f5e5a);
-}
+/* .pc-hist-table table rules removed — ProductDrawer history migrated to flowbite Table (Batch 4b-1). pc-h-in/pc-h-out kept (cell-content). */
 
 .pc-h-in {
   color: var(--green, #1d9e75);
@@ -1835,54 +1780,7 @@
   border-radius: 4px;
 }
 
-.pc-fifo-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.pc-fifo-table thead th {
-  position: sticky;
-  top: 0;
-  background: var(--g50, #f8f8fc);
-  padding: 8px 16px;
-  text-align: left;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--g400, #888780);
-  border-bottom: 0.5px solid var(--g200, #d3d1c7);
-  white-space: nowrap;
-  z-index: 1;
-}
-
-.pc-fifo-table thead th.pc-r {
-  text-align: right;
-}
-
-.pc-fifo-table tbody tr {
-  border-bottom: 0.5px solid var(--g100, #f1efe8);
-  transition: background 0.08s;
-}
-
-.pc-fifo-table tbody tr:hover {
-  background: var(--g50, #f8f8fc);
-}
-
-.pc-fifo-table tbody tr.pc-depleted td {
-  opacity: 0.4;
-}
-
-.pc-fifo-table td {
-  padding: 9px 16px;
-  font-size: 12px;
-  color: var(--g600, #5f5e5a);
-  vertical-align: middle;
-}
-
-.pc-fifo-table td.pc-r {
-  text-align: right;
-  font-family: 'Prompt', sans-serif;
-  font-weight: 500;
-}
+/* .pc-fifo-table table rules removed — FifoBatchModal migrated to flowbite Table (Batch 4b-1). pc-fifo-table-wrap scroll + pc-lot and pc-batch-cost helpers kept (cell-content). */
 
 .pc-lot-order {
   width: 22px;
@@ -2553,33 +2451,7 @@
   border-radius: 8px;
 }
 
-.tpmd-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 12px;
-}
-
-.tpmd-table th {
-  text-align: left;
-  padding: 10px 12px;
-  background: var(--g50, #f8f8fc);
-  color: var(--g400, #888780);
-  font-weight: 500;
-  border-bottom: 0.5px solid var(--g200, #d3d1c7);
-  position: sticky;
-  top: 0;
-}
-
-.tpmd-table th.r,
-.tpmd-table td.r {
-  text-align: right;
-}
-
-.tpmd-table td {
-  padding: 10px 12px;
-  border-bottom: 0.5px solid rgba(0, 0, 0, 0.06);
-  vertical-align: middle;
-}
+/* .tpmd-table rules removed — TierPriceManagerDialog migrated to flowbite Table (Batch 4b-3). tpmd-table-wrap (scroll/border) + tpmd-group/type/price/adjust helpers kept (cell-content). */
 
 .tpmd-group-name {
   font-weight: 500;

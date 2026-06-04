@@ -10,7 +10,15 @@ import {
 import { useMemo, useState } from 'react';
 import { Bar, Doughnut } from 'react-chartjs-2';
 import ProductImageThumb from '../products/ProductImageThumb';
-import { Badge } from '../ui';
+import {
+  Badge,
+  Table,
+  TableHead,
+  TableHeadCell,
+  TableBody,
+  TableRow,
+  TableCell,
+} from '../ui';
 import {
   sortLowStockProducts,
   type LowStockSortKey,
@@ -255,10 +263,10 @@ export default function StockOverviewTab({
             {lowStockProducts.length}
           </Badge>
         </div>
-        <div className="sr-table-scroll">
-          <table className="sr-table">
-            <thead>
-              <tr>
+        <div className="overflow-x-auto">
+          <Table hoverable className="min-w-[600px]">
+            <TableHead>
+              <TableRow>
                 <SortableTh
                   label="สินค้า"
                   sortKey="name"
@@ -279,7 +287,7 @@ export default function StockOverviewTab({
                   activeKey={lowStockSort.key}
                   direction={lowStockSort.direction}
                   onSort={(k) => handleLowStockSort(k as LowStockSortKey)}
-                  className="num"
+                  className="text-right"
                 />
                 <SortableTh
                   label="Reorder Point"
@@ -287,7 +295,7 @@ export default function StockOverviewTab({
                   activeKey={lowStockSort.key}
                   direction={lowStockSort.direction}
                   onSort={(k) => handleLowStockSort(k as LowStockSortKey)}
-                  className="num"
+                  className="text-right"
                 />
                 <SortableTh
                   label="Average Cost"
@@ -295,7 +303,7 @@ export default function StockOverviewTab({
                   activeKey={lowStockSort.key}
                   direction={lowStockSort.direction}
                   onSort={(k) => handleLowStockSort(k as LowStockSortKey)}
-                  className="num"
+                  className="text-right"
                 />
                 <SortableTh
                   label="มูลค่า"
@@ -303,55 +311,69 @@ export default function StockOverviewTab({
                   activeKey={lowStockSort.key}
                   direction={lowStockSort.direction}
                   onSort={(k) => handleLowStockSort(k as LowStockSortKey)}
-                  className="num"
+                  className="text-right"
                 />
-                <th>สถานะ</th>
-              </tr>
-            </thead>
-            <tbody>
+                <TableHeadCell>สถานะ</TableHeadCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
               {sortedLowStockProducts.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="sr-empty">
+                <TableRow>
+                  <TableCell
+                    colSpan={7}
+                    className="py-8 text-center text-[13px] text-[var(--text-muted)]"
+                  >
                     ทุกรายการมีสต็อกเพียงพอ ✓
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ) : (
                 <>
                   {sortedLowStockProducts.slice(0, 10).map((p) => {
                     const st = stockStatus(p.qty, p.reorderPoint);
                     return (
-                      <tr key={p.id}>
-                        <td>
-                          <div className="sr-prod-cell">
+                      <TableRow key={p.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-2.5">
                             <ProductImageThumb imageUrl={p.imageUrl} alt={p.name} />
-                            <div style={{ fontWeight: 500 }}>{p.name}</div>
+                            <div className="font-medium">{p.name}</div>
                           </div>
-                        </td>
-                        <td className="sr-col-sku">{p.sku}</td>
-                        <td className="num" style={{ fontWeight: 500, color: p.qty === 0 ? 'var(--danger)' : 'var(--warn)' }}>
+                        </TableCell>
+                        <TableCell
+                          className="whitespace-nowrap text-xs text-[var(--text-secondary)]"
+                          style={{ fontFamily: "'Prompt', sans-serif" }}
+                        >
+                          {p.sku}
+                        </TableCell>
+                        <TableCell
+                          className="text-right font-medium"
+                          style={{ color: p.qty === 0 ? 'var(--danger)' : 'var(--warn)' }}
+                        >
                           {fmtNum(p.qty)}
-                        </td>
-                        <td className="num">{fmtNum(p.reorderPoint)}</td>
-                        <td className="num">{fmtBaht(p.avgCost)}</td>
-                        <td className="num">{fmtBaht(p.stockValue)}</td>
-                        <td>
+                        </TableCell>
+                        <TableCell className="text-right">{fmtNum(p.reorderPoint)}</TableCell>
+                        <TableCell className="text-right">{fmtBaht(p.avgCost)}</TableCell>
+                        <TableCell className="text-right">{fmtBaht(p.stockValue)}</TableCell>
+                        <TableCell>
                           <StatusBadge status={st} />
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     );
                   })}
                   {sortedLowStockProducts.length > 10 && (
-                    <tr>
-                      <td colSpan={7} className="sr-table-more">
+                    <TableRow>
+                      <TableCell
+                        colSpan={7}
+                        className="py-2.5 text-center text-xs text-[var(--text-muted)]"
+                      >
                         มีอีก {sortedLowStockProducts.length - 10} รายการ — ดูทั้งหมดในแท็บ
                         &lsquo;รายสินค้า&rsquo;
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   )}
                 </>
               )}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       </div>
     </div>

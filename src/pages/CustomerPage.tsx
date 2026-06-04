@@ -16,6 +16,14 @@ import { useCustomers } from '../lib/customers/useCustomers';
 import { useAuth } from '../lib/hooks/useAuth';
 import type { ContactType, Customer } from '../lib/types';
 import { RETAIL_PRICE_LEVEL_ID } from '../lib/types';
+import {
+  Table,
+  TableHead,
+  TableHeadCell,
+  TableBody,
+  TableRow,
+  TableCell,
+} from '../components/ui';
 import './CustomerPage.css';
 
 export default function CustomerPage() {
@@ -169,37 +177,37 @@ export default function CustomerPage() {
         ) : (
           <div className="cm-card">
             <div className="cm-table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th>ชื่อ</th>
-                    <th>ประเภท</th>
-                    <th>รหัส</th>
-                    <th>เบอร์โทร</th>
-                    <th>ระดับราคา</th>
-                    <th className="num">หนี้ค้าง</th>
-                    <th>สถานะ</th>
-                    <th style={{ textAlign: 'right' }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <Table hoverable>
+                <TableHead>
+                  <TableRow>
+                    <TableHeadCell>ชื่อ</TableHeadCell>
+                    <TableHeadCell>ประเภท</TableHeadCell>
+                    <TableHeadCell>รหัส</TableHeadCell>
+                    <TableHeadCell>เบอร์โทร</TableHeadCell>
+                    <TableHeadCell>ระดับราคา</TableHeadCell>
+                    <TableHeadCell className="text-right">หนี้ค้าง</TableHeadCell>
+                    <TableHeadCell>สถานะ</TableHeadCell>
+                    <TableHeadCell className="text-right">Actions</TableHeadCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
                   {filtered.length === 0 ? (
-                    <tr>
-                      <td colSpan={8}>
+                    <TableRow>
+                      <TableCell colSpan={8}>
                         <div className="cm-empty-state">
                           <i className="ti ti-users-off" aria-hidden="true" />
                           <p>ไม่พบรายชื่อที่ตรงตามเงื่อนไข</p>
                         </div>
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ) : (
                     filtered.map((c) => {
                       const debt = c.outstandingBalance ?? creditMap.get(c.id)?.creditUsed ?? 0;
                       const type = inferContactType(c);
                       const typeStyle = contactTypeBadgeStyle(type);
                       return (
-                        <tr key={c.id} onClick={() => openDetail(c)} style={{ cursor: 'pointer' }}>
-                          <td>
+                        <TableRow key={c.id} onClick={() => openDetail(c)} className="cursor-pointer">
+                          <TableCell>
                             <div className="cm-emp-cell">
                               <div className="cm-avatar">
                                 {customerInitials(c)}
@@ -211,30 +219,30 @@ export default function CustomerPage() {
                                 ) : null}
                               </div>
                             </div>
-                          </td>
-                          <td>
+                          </TableCell>
+                          <TableCell>
                             <span
                               className="cm-type-badge"
                               style={{ background: typeStyle.bg, color: typeStyle.color }}
                             >
                               {contactTypeLabel(type)}
                             </span>
-                          </td>
-                          <td style={{ fontFamily: "'Prompt',sans-serif", color: 'var(--p600)' }}>
+                          </TableCell>
+                          <TableCell style={{ fontFamily: "'Prompt',sans-serif", color: 'var(--p600)' }}>
                             {c.memberNo}
-                          </td>
-                          <td>{c.phone}</td>
-                          <td>{levelMap.get(c.priceLevelId) ?? c.priceLevelId}</td>
-                          <td className="num" style={{ color: debt > 0 ? 'var(--red)' : undefined }}>
+                          </TableCell>
+                          <TableCell>{c.phone}</TableCell>
+                          <TableCell>{levelMap.get(c.priceLevelId) ?? c.priceLevelId}</TableCell>
+                          <TableCell className="text-right" style={{ color: debt > 0 ? 'var(--red)' : undefined }}>
                             {debt > 0 ? fmtBaht(debt) : '—'}
-                          </td>
-                          <td>
+                          </TableCell>
+                          <TableCell>
                             <span className={`cm-status-pill ${c.isActive ? 'cm-status-on' : 'cm-status-off'}`}>
                               <span className={`cm-dot ${c.isActive ? 'cm-dot-on' : 'cm-dot-off'}`} />
                               {c.isActive ? 'ใช้งาน' : 'ระงับ'}
                             </span>
-                          </td>
-                          <td onClick={(e) => e.stopPropagation()}>
+                          </TableCell>
+                          <TableCell onClick={(e) => e.stopPropagation()}>
                             <div className="cm-action-group">
                               <button
                                 type="button"
@@ -264,13 +272,13 @@ export default function CustomerPage() {
                                 <i className="ti ti-trash" aria-hidden="true" />
                               </button>
                             </div>
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       );
                     })
                   )}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
           </div>
         )}

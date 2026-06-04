@@ -1,6 +1,5 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/hooks/useAuth';
-import './AdminLayout.css';
 
 const ADMIN_NAV = [
   {
@@ -71,6 +70,10 @@ const ADMIN_NAV = [
   },
 ] as const;
 
+// Shared topbar button styling (Tailwind; replaces .admin-layout-topbar-btn).
+const TOPBAR_BTN =
+  'inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-[7px] border border-[var(--g200)] bg-transparent px-3 text-xs text-[#5f5e5a] transition hover:border-[#888780] hover:bg-[var(--g50)] hover:text-[var(--text-primary)]';
+
 export default function AdminLayout() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -88,23 +91,23 @@ export default function AdminLayout() {
   };
 
   return (
-    <div className="admin-layout">
-      <header className="admin-layout-topbar">
-        <div className="admin-layout-topbar-icon">
+    <div className="flex h-screen w-full flex-col overflow-hidden bg-[var(--g50)] font-sans text-[var(--text-primary)]">
+      <header className="flex h-12 shrink-0 items-center gap-3 border-b-[0.5px] border-[var(--g200)] bg-white px-5">
+        <div className="flex h-[34px] w-[34px] items-center justify-center rounded-lg bg-[var(--p50)] text-[18px] text-[var(--p600)]">
           <i className="ti ti-shield-lock" aria-hidden="true" />
         </div>
         <div>
-          <div className="admin-layout-topbar-title">Admin Backoffice</div>
-          <div className="admin-layout-topbar-sub">
+          <div className="text-[15px] font-semibold">Admin Backoffice</div>
+          <div className="text-xs text-[#5f5e5a]">
             จัดการระบบหลังบ้าน — {activeNav?.label ?? 'Dashboard'}
           </div>
         </div>
 
-        <div className="admin-layout-topbar-spacer" />
+        <div className="flex-1" />
 
         {displayName && (
-          <div className="admin-layout-topbar-user">
-            <i className="ti ti-user-shield" aria-hidden="true" />
+          <div className="flex items-center gap-1.5 whitespace-nowrap px-1 text-xs text-[#5f5e5a]">
+            <i className="ti ti-user-shield text-sm text-[var(--p600)]" aria-hidden="true" />
             <span>{displayName}</span>
           </div>
         )}
@@ -112,7 +115,7 @@ export default function AdminLayout() {
         {isGlobalAdmin && (
           <button
             type="button"
-            className="admin-layout-topbar-btn"
+            className={TOPBAR_BTN}
             onClick={() => navigate('/workspace-selector')}
             title="เปลี่ยนโหมดการทำงาน"
           >
@@ -123,7 +126,7 @@ export default function AdminLayout() {
 
         <button
           type="button"
-          className="admin-layout-topbar-btn admin-layout-topbar-btn--logout"
+          className={`${TOPBAR_BTN} border-[rgba(226,75,74,0.3)] text-[#c0392b] hover:border-[#e24b4a] hover:bg-[#fef2f2] hover:text-[#a32d2d]`}
           onClick={handleLogout}
           title="ออกจากระบบ"
         >
@@ -132,27 +135,36 @@ export default function AdminLayout() {
         </button>
       </header>
 
-      <div className="admin-layout-body">
-        <aside className="admin-layout-sidebar" aria-label="เมนู Admin">
-          <div className="admin-layout-sidebar-header">เมนูหลัก</div>
-          <nav className="admin-layout-nav">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <aside
+          className="flex w-60 shrink-0 flex-col overflow-y-auto border-r-[0.5px] border-[var(--g200)] bg-white"
+          aria-label="เมนู Admin"
+        >
+          <div className="px-4 pb-2 pt-4 text-[11px] font-semibold uppercase tracking-[0.04em] text-[#888780]">
+            เมนูหลัก
+          </div>
+          <nav className="flex flex-col gap-0.5 px-2 pb-4">
             {ADMIN_NAV.map((item) => (
               <NavLink
                 key={item.path}
                 to={item.path}
                 end={item.end}
                 className={({ isActive }) =>
-                  `admin-layout-nav-item${isActive ? ' active' : ''}`
+                  `flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13px] no-underline transition ${
+                    isActive
+                      ? 'bg-[var(--p50)] font-medium text-[var(--p600)]'
+                      : 'text-[#5f5e5a] hover:bg-[var(--g50)] hover:text-[var(--text-primary)]'
+                  }`
                 }
               >
-                <i className={`ti ${item.icon}`} aria-hidden="true" />
+                <i className={`ti ${item.icon} shrink-0 text-base`} aria-hidden="true" />
                 {item.label}
               </NavLink>
             ))}
           </nav>
         </aside>
 
-        <main className="admin-layout-main">
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto">
           <Outlet />
         </main>
       </div>

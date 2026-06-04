@@ -11,6 +11,14 @@ import {
   type ProductPickerItem,
   type ProductPickerSearchType,
 } from './productPickerTypes';
+import {
+  Table,
+  TableHead,
+  TableHeadCell,
+  TableBody,
+  TableRow,
+  TableCell,
+} from '../ui';
 import './ProductPickerDialog.css';
 
 export type { ProductPickerItem } from './productPickerTypes';
@@ -199,10 +207,10 @@ export default function ProductPickerDialog({
         </div>
 
         <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th style={{ width: 38, textAlign: 'center' }}>
+          <Table>
+            <TableHead className="sticky top-0 z-[1]">
+              <TableRow>
+                <TableHeadCell className="w-[38px] text-center">
                   <input
                     ref={selectAllRef}
                     type="checkbox"
@@ -211,41 +219,39 @@ export default function ProductPickerDialog({
                     onChange={(e) => toggleAllOnPage(e.target.checked)}
                     aria-label="เลือกทั้งหมดในหน้านี้"
                   />
-                </th>
-                <th style={{ width: 38 }} />
-                <th>ชื่อสินค้า</th>
-                <th style={{ width: 140 }}>รหัสสินค้า</th>
-                <th style={{ width: 150 }}>กลุ่มสินค้า</th>
-                <th className="r" style={{ width: 90 }}>
-                  คงเหลือ
-                </th>
-              </tr>
-            </thead>
-            <tbody>
+                </TableHeadCell>
+                <TableHeadCell className="w-[38px]" />
+                <TableHeadCell>ชื่อสินค้า</TableHeadCell>
+                <TableHeadCell className="w-[140px]">รหัสสินค้า</TableHeadCell>
+                <TableHeadCell className="w-[150px]">กลุ่มสินค้า</TableHeadCell>
+                <TableHeadCell className="w-[90px] text-right">คงเหลือ</TableHeadCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
               {loading && !productsProp ? (
-                <tr>
-                  <td colSpan={6} className="empty-msg">
+                <TableRow>
+                  <TableCell colSpan={6} className="empty-msg">
                     กำลังโหลดสินค้า...
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ) : pageItems.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="empty-msg">
+                <TableRow>
+                  <TableCell colSpan={6} className="empty-msg">
                     ไม่พบสินค้า
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ) : (
                 pageItems.map((p) => {
                   const isSel = selected.has(p.id);
                   const catCls = categoryBadgeClass(p.category);
                   const catStyle = categoryBadgeStyle(p.category);
                   return (
-                    <tr
+                    <TableRow
                       key={p.id}
-                      className={isSel ? 'sel' : undefined}
+                      className={`cursor-pointer${isSel ? ' bg-[#f0fff8]' : ''}`}
                       onClick={() => toggleOne(p.id)}
                     >
-                      <td style={{ textAlign: 'center' }}>
+                      <TableCell className="text-center">
                         <input
                           type="checkbox"
                           className="cb"
@@ -254,31 +260,31 @@ export default function ProductPickerDialog({
                           onChange={() => toggleOne(p.id)}
                           aria-label={`เลือก ${p.name}`}
                         />
-                      </td>
-                      <td>
+                      </TableCell>
+                      <TableCell>
                         <div className="prod-img">{p.emoji}</div>
-                      </td>
-                      <td>
+                      </TableCell>
+                      <TableCell>
                         <div className="prod-name">{p.name}</div>
                         <div className="prod-sku">
                           {p.sku} · {p.barcode}
                         </div>
-                      </td>
-                      <td style={{ fontSize: 11, color: 'var(--g400)' }}>{p.sku}</td>
-                      <td>
+                      </TableCell>
+                      <TableCell style={{ fontSize: 11, color: 'var(--g400)' }}>{p.sku}</TableCell>
+                      <TableCell>
                         <span className={`cat-badge ${catCls}`} style={catStyle}>
                           {p.category}
                         </span>
-                      </td>
-                      <td className="r">
+                      </TableCell>
+                      <TableCell className="text-right">
                         <span className={stockClass(p.stock)}>{p.stock}</span>
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   );
                 })
               )}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
 
         <div className="pag-bar">

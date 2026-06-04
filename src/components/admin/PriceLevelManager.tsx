@@ -1,5 +1,13 @@
 import { useState } from 'react';
 import type { PriceLevelRow } from '../../lib/settings/types';
+import {
+  Table,
+  TableHead,
+  TableHeadCell,
+  TableBody,
+  TableRow,
+  TableCell,
+} from '../ui';
 import '../../pages/SettingsPage.css';
 
 type Props = {
@@ -89,34 +97,34 @@ export default function PriceLevelManager({ priceLevels, setPriceLevels, showToa
         </div>
       </div>
       <div className="stg-card-body stg-card-body-flush">
-        <table className="stg-price-table">
-          <thead>
-            <tr>
-              <th>ชื่อระดับ</th>
-              <th>รหัส</th>
-              <th>คำอธิบาย</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
+        <Table hoverable>
+          <TableHead>
+            <TableRow>
+              <TableHeadCell>ชื่อระดับ</TableHeadCell>
+              <TableHeadCell>รหัส</TableHeadCell>
+              <TableHeadCell>คำอธิบาย</TableHeadCell>
+              <TableHeadCell />
+            </TableRow>
+          </TableHead>
+          <TableBody>
             {priceLevels.map((p) => (
-              <tr key={p.id}>
-                <td>
+              <TableRow key={p.id}>
+                <TableCell>
                   <input className="stg-form-input stg-input-inline" value={p.name} onChange={(e) => updatePriceLevel(p.id, { name: e.target.value })} />
-                </td>
-                <td><span className="stg-code">{p.code}</span></td>
-                <td>
+                </TableCell>
+                <TableCell><span className="stg-code">{p.code}</span></TableCell>
+                <TableCell>
                   <input className="stg-form-input stg-input-inline" value={p.desc} onChange={(e) => updatePriceLevel(p.id, { desc: e.target.value })} />
-                </td>
-                <td>
+                </TableCell>
+                <TableCell>
                   <button type="button" className="stg-icon-btn" onClick={() => removePriceLevel(p.id)} title="ลบ">
                     <i className="ti ti-trash" style={{ fontSize: 14, color: 'var(--danger)' }} aria-hidden="true" />
                   </button>
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
 
       {/* Add Tier Modal — mirrors the Settings page's existing modal pattern */}

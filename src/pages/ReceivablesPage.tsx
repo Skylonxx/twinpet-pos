@@ -12,6 +12,14 @@ import {
 import { customerFullName, fmtBaht, fmtBahtDec } from '../lib/customers/types';
 import { useCustomers } from '../lib/customers/useCustomers';
 import { useAuth } from '../lib/hooks/useAuth';
+import {
+  Table,
+  TableHead,
+  TableHeadCell,
+  TableBody,
+  TableRow,
+  TableCell,
+} from '../components/ui';
 import './ReceivablesPage.css';
 
 type ReceivablesTab = 'debtors' | 'history';
@@ -137,44 +145,44 @@ export default function ReceivablesPage() {
       <div className="ar-body">
         {tab === 'debtors' ? (
           <div className="ar-table-wrap">
-            <table className="ar-table">
-              <thead>
-                <tr>
-                  <th>ชื่อลูกค้า</th>
-                  <th>เบอร์โทร</th>
-                  <th className="r">ยอดค้างชำระ</th>
-                  <th>วันที่เคลื่อนไหวล่าสุด</th>
-                  <th>สถานะ</th>
-                  <th style={{ width: 120, textAlign: 'right' }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table hoverable>
+              <TableHead>
+                <TableRow>
+                  <TableHeadCell>ชื่อลูกค้า</TableHeadCell>
+                  <TableHeadCell>เบอร์โทร</TableHeadCell>
+                  <TableHeadCell className="text-right">ยอดค้างชำระ</TableHeadCell>
+                  <TableHeadCell>วันที่เคลื่อนไหวล่าสุด</TableHeadCell>
+                  <TableHeadCell>สถานะ</TableHeadCell>
+                  <TableHeadCell className="text-right" style={{ width: 120 }}>Actions</TableHeadCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
                 {debtorsLoading ? (
-                  <tr>
-                    <td colSpan={6} className="ar-empty">
+                  <TableRow>
+                    <TableCell colSpan={6} className="ar-empty">
                       กำลังโหลด...
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ) : filteredDebtors.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="ar-empty">
+                  <TableRow>
+                    <TableCell colSpan={6} className="ar-empty">
                       {debtors.length === 0 ? 'ไม่มีลูกหนี้คงค้าง' : 'ไม่พบรายการที่ตรงตามเงื่อนไข'}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ) : (
                   filteredDebtors.map((c) => {
                     const lastActivity = getCustomerLastActivity(c);
                     const overdue = isCustomerCreditOverdue(c);
 
                     return (
-                      <tr key={c.id}>
-                        <td>
+                      <TableRow key={c.id}>
+                        <TableCell>
                           <div className="ar-name">{customerFullName(c)}</div>
                           <div className="ar-sub">{c.memberNo}</div>
-                        </td>
-                        <td>{c.phone}</td>
-                        <td className="r ar-debt">{fmtBahtDec(c.outstandingBalance ?? 0)}</td>
-                        <td>
+                        </TableCell>
+                        <TableCell>{c.phone}</TableCell>
+                        <TableCell className="text-right ar-debt">{fmtBahtDec(c.outstandingBalance ?? 0)}</TableCell>
+                        <TableCell>
                           {lastActivity ? (
                             <>
                               <div className="ar-activity-label">{lastActivity.label}</div>
@@ -185,15 +193,15 @@ export default function ReceivablesPage() {
                           ) : (
                             <span className="ar-muted">—</span>
                           )}
-                        </td>
-                        <td>
+                        </TableCell>
+                        <TableCell>
                           {overdue ? (
                             <span className="ar-badge-overdue">🔴 เกินกำหนด</span>
                           ) : (
                             <span className="ar-badge-ok">ปกติ</span>
                           )}
-                        </td>
-                        <td style={{ textAlign: 'right' }}>
+                        </TableCell>
+                        <TableCell className="text-right">
                           <button
                             type="button"
                             className="ar-action-btn ar-action-btn-manage"
@@ -201,55 +209,55 @@ export default function ReceivablesPage() {
                           >
                             จัดการ
                           </button>
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     );
                   })
                 )}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         ) : (
           <div className="ar-table-wrap">
-            <table className="ar-table">
-              <thead>
-                <tr>
-                  <th>วันที่/เวลา</th>
-                  <th>ลูกค้า</th>
-                  <th className="r">ยอดชำระ</th>
-                  <th>วิธีชำระ</th>
-                  <th>หมายเหตุ</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table hoverable>
+              <TableHead>
+                <TableRow>
+                  <TableHeadCell>วันที่/เวลา</TableHeadCell>
+                  <TableHeadCell>ลูกค้า</TableHeadCell>
+                  <TableHeadCell className="text-right">ยอดชำระ</TableHeadCell>
+                  <TableHeadCell>วิธีชำระ</TableHeadCell>
+                  <TableHeadCell>หมายเหตุ</TableHeadCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
                 {historyLoading ? (
-                  <tr>
-                    <td colSpan={5} className="ar-empty">
+                  <TableRow>
+                    <TableCell colSpan={5} className="ar-empty">
                       กำลังโหลด...
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ) : paymentHistory.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="ar-empty">
+                  <TableRow>
+                    <TableCell colSpan={5} className="ar-empty">
                       ยังไม่มีประวัติรับชำระ
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ) : (
                   paymentHistory.map((p) => (
-                    <tr key={p.id}>
-                      <td>{formatCreditPaymentDate(p.createdAt)}</td>
-                      <td>
+                    <TableRow key={p.id}>
+                      <TableCell>{formatCreditPaymentDate(p.createdAt)}</TableCell>
+                      <TableCell>
                         <div className="ar-name">{p.customerName}</div>
                         <div className="ar-sub">{p.customerId}</div>
-                      </td>
-                      <td className="r">{fmtBahtDec(p.amount)}</td>
-                      <td>{creditPaymentMethodLabel(p.paymentMethod)}</td>
-                      <td className="ar-notes">{p.notes || '—'}</td>
-                    </tr>
+                      </TableCell>
+                      <TableCell className="text-right">{fmtBahtDec(p.amount)}</TableCell>
+                      <TableCell>{creditPaymentMethodLabel(p.paymentMethod)}</TableCell>
+                      <TableCell className="ar-notes">{p.notes || '—'}</TableCell>
+                    </TableRow>
                   ))
                 )}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         )}
       </div>

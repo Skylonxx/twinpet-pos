@@ -106,8 +106,44 @@ async function collectAll(host, dbId, parentName) {
   return out;
 }
 
-/** Dump pos-db to `outPath`. Returns the number of documents written. */
-export async function dumpPosDb(outPath = DEFAULT_SNAPSHOT_PATH) {
+/** Count top-level product docs (products/<id>, not subcollections) in an entries array. */
+function countProducts(entries) {
+  return entries.filter((e) => /^products\/[^/]+$/.test(e.path)).length;
+}
+
+/** Total doc count currently stored in the snapshot file (0 if absent/corrupt). */
+export function snapshotDocCount(inPath = DEFAULT_SNAPSHOT_PATH) {
+  try {
+    if (!existsSync(inPath)) return 0;
+    const snap = JSON.parse(readFileSync(inPath, "utf8"));
+    return Array.isArray(snap.docs) ? snap.docs.length : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/** Product doc count currently stored in the snapshot file. */
+function snapshotProductCount(inPath) {
+  try {
+    if (!existsSync(inPath)) return 0;
+    const snap = JSON.parse(readFileSync(inPath, "utf8"));
+    return Array.isArray(snap.docs) ? countProducts(snap.docs) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Dump pos-db to `outPath`. Returns the number of documents written, or -1 when a
+ * guarded write was REFUSED to protect established data.
+ *
+ * `guard` (used by the automated autosave/final dump): never overwrite a
+ * product-bearing snapshot with a product-empty dump. This defuses the data-loss
+ * loop where a boot whose restore yielded nothing seeds admin/branch only, and a
+ * 5s autosave then clobbers the real snapshot with that seed-only state. Manual
+ * dumps (CLI / `npm run snapshot:dump`) default to guard:false = authoritative.
+ */
+export async function dumpPosDb(outPath = DEFAULT_SNAPSHOT_PATH, { guard = false } = {}) {
   const host = emulatorHost();
   const dbId = databaseId();
   const docs = await collectAll(host, dbId, null);
@@ -116,6 +152,11 @@ export async function dumpPosDb(outPath = DEFAULT_SNAPSHOT_PATH) {
     path: d.name.split("/documents/")[1],
     fields: d.fields,
   }));
+
+  if (guard && snapshotProductCount(outPath) > 0 && countProducts(entries) === 0) {
+    return -1; // refuse to clobber an established product snapshot with an empty one
+  }
+
   mkdirSync(dirname(outPath), { recursive: true });
   writeFileSync(outPath, JSON.stringify({ database: dbId, docs: entries }, null, 2), "utf8");
   return entries.length;

@@ -11,6 +11,14 @@ import {
   type SettingsSection,
 } from '../lib/settings/types';
 import { useSettings } from '../lib/settings/useSettings';
+import {
+  Table,
+  TableHead,
+  TableHeadCell,
+  TableBody,
+  TableRow,
+  TableCell,
+} from '../components/ui';
 import type { PosDevice, PosDeviceType, UomUnit } from '../lib/types';
 import ExpiryPolicySettings from './settings/ExpiryPolicySettings';
 import PosDevicesSettings from './settings/PosDevicesSettings';
@@ -426,36 +434,38 @@ export default function SettingsPage() {
                   </div>
                 </div>
                 <div className="stg-card-body stg-card-body-flush">
-                  <table className="stg-uom-table">
-                    <thead>
-                      <tr>
-                        <th>ชื่อหน่วย</th>
-                        <th>รหัสย่อ</th>
-                        <th>สถานะ</th>
-                        <th />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {uomUnits.map((u) => (
-                        <tr key={u.id}>
-                          <td>
-                            <input className="stg-form-input stg-input-inline stg-input-w110" value={u.name} onChange={(e) => updateUom(u.id, { name: e.target.value })} />
-                          </td>
-                          <td>
-                            <input className="stg-form-input stg-input-inline stg-input-w70 stg-code" value={u.code} onChange={(e) => updateUom(u.id, { code: e.target.value })} />
-                          </td>
-                          <td>
-                            <Toggle small checked={u.isActive} onChange={(v) => updateUom(u.id, { isActive: v })} />
-                          </td>
-                          <td>
-                            <button type="button" className="stg-icon-btn" onClick={() => removeUom(u.id)} disabled={uomUnits.length <= 1} style={{ opacity: uomUnits.length <= 1 ? 0.3 : 1 }}>
-                              <i className="ti ti-trash" style={{ fontSize: 14, color: 'var(--danger)' }} aria-hidden="true" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  <div className="overflow-x-auto">
+                    <Table hoverable className="min-w-[420px]">
+                      <TableHead>
+                        <TableRow>
+                          <TableHeadCell>ชื่อหน่วย</TableHeadCell>
+                          <TableHeadCell>รหัสย่อ</TableHeadCell>
+                          <TableHeadCell>สถานะ</TableHeadCell>
+                          <TableHeadCell />
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {uomUnits.map((u) => (
+                          <TableRow key={u.id}>
+                            <TableCell>
+                              <input className="stg-form-input stg-input-inline stg-input-w110" value={u.name} onChange={(e) => updateUom(u.id, { name: e.target.value })} />
+                            </TableCell>
+                            <TableCell>
+                              <input className="stg-form-input stg-input-inline stg-input-w70 stg-code" value={u.code} onChange={(e) => updateUom(u.id, { code: e.target.value })} />
+                            </TableCell>
+                            <TableCell>
+                              <Toggle small checked={u.isActive} onChange={(v) => updateUom(u.id, { isActive: v })} />
+                            </TableCell>
+                            <TableCell>
+                              <button type="button" className="stg-icon-btn" onClick={() => removeUom(u.id)} disabled={uomUnits.length <= 1} style={{ opacity: uomUnits.length <= 1 ? 0.3 : 1 }}>
+                                <i className="ti ti-trash" style={{ fontSize: 14, color: 'var(--danger)' }} aria-hidden="true" />
+                              </button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 </div>
               </div>
             </>

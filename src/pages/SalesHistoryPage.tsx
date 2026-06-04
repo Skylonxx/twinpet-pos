@@ -27,6 +27,14 @@ import { voidOrderSafe } from '../lib/voidOrder';
 import { requestPendingVoid } from '../lib/pos/voidPendingOrder';
 import type { OrderItem, PaymentMethod } from '../lib/types';
 import { DateRangeDropdown } from '../components/common/DateRangeDropdown';
+import {
+  Table,
+  TableHead,
+  TableHeadCell,
+  TableBody,
+  TableRow,
+  TableCell,
+} from '../components/ui';
 import './SalesHistoryPage.css';
 
 const PAGE_SIZE = 15;
@@ -569,25 +577,27 @@ export default function SalesHistoryPage() {
               {loading ? (
                 <div className="sh-loading">กำลังโหลดประวัติการขาย...</div>
               ) : (
-                <table className="sh-table">
-                  <thead>
-                    <tr>
-                      <th style={{ width: 150 }}>เวลา</th>
-                      <th style={{ width: 150 }}>เลขที่บิล</th>
-                      <th>ลูกค้า</th>
-                      <th style={{ width: 110 }}>ช่องทางชำระ</th>
-                      <th style={{ width: 100 }}>พนักงาน</th>
-                      <th className="num" style={{ width: 100 }}>
+                <Table hoverable>
+                  <TableHead>
+                    <TableRow>
+                      <TableHeadCell style={{ width: 150 }}>เวลา</TableHeadCell>
+                      <TableHeadCell style={{ width: 150 }}>เลขที่บิล</TableHeadCell>
+                      <TableHeadCell>ลูกค้า</TableHeadCell>
+                      <TableHeadCell style={{ width: 110 }}>ช่องทางชำระ</TableHeadCell>
+                      <TableHeadCell style={{ width: 100 }}>พนักงาน</TableHeadCell>
+                      <TableHeadCell className="text-right" style={{ width: 100 }}>
                         ยอดสุทธิ
-                      </th>
-                      <th style={{ width: 90, textAlign: 'center' }}>สถานะ</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+                      </TableHeadCell>
+                      <TableHeadCell className="text-center" style={{ width: 90 }}>สถานะ</TableHeadCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
                     {filtered.length === 0 ? (
-                      <tr className="sh-empty-row">
-                        <td colSpan={7}>ไม่พบรายการขายในช่วงเวลาที่เลือก</td>
-                      </tr>
+                      <TableRow>
+                        <TableCell colSpan={7} className="py-8 text-center text-[var(--text-muted)]">
+                          ไม่พบรายการขายในช่วงเวลาที่เลือก
+                        </TableCell>
+                      </TableRow>
                     ) : (
                       pageRows.map((record) => {
                         const { order } = record;
@@ -597,15 +607,15 @@ export default function SalesHistoryPage() {
                         const voidPending = record.voidPendingSync === true;
                         const isVoid = status === 'void' || voidPending;
                         return (
-                          <tr
+                          <TableRow
                             key={order.id}
-                            className={selectedId === order.id ? 'selected' : undefined}
+                            className={`cursor-pointer ${selectedId === order.id ? 'bg-[var(--p50)]' : ''}`}
                             onClick={() => void openDrawer(record)}
                           >
-                            <td className="sh-col-time">
+                            <TableCell className="sh-col-time">
                               {`${formatSaleDate(created)} ${formatSaleTime(created)}`}
-                            </td>
-                            <td className="sh-col-bill">
+                            </TableCell>
+                            <TableCell className="sh-col-bill">
                               <span className="sh-bill-no">{order.billId || order.id}</span>
                               {record.pendingSync && (
                                 <span
@@ -625,8 +635,8 @@ export default function SalesHistoryPage() {
                                   ⏳ รอซิงก์
                                 </span>
                               )}
-                            </td>
-                            <td>
+                            </TableCell>
+                            <TableCell>
                               {order.customerSnap ? (
                                 <div className="sh-cust-cell">
                                   <div className="sh-cust-name-td">{order.customerSnap.name}</div>
@@ -635,19 +645,19 @@ export default function SalesHistoryPage() {
                               ) : (
                                 <span className="sh-guest">— Guest —</span>
                               )}
-                            </td>
-                            <td>
+                            </TableCell>
+                            <TableCell>
                               <PayChip record={record} />
-                            </td>
-                            <td>
+                            </TableCell>
+                            <TableCell>
                               <span className="sh-staff-name">{order.staffName}</span>
-                            </td>
-                            <td className="num">
+                            </TableCell>
+                            <TableCell className="text-right">
                               <span className={`sh-total-amt${isVoid ? ' void' : ''}`}>
                                 ฿{formatMoney(order.total)}
                               </span>
-                            </td>
-                            <td style={{ textAlign: 'center' }}>
+                            </TableCell>
+                            <TableCell className="text-center">
                               {voidPending ? (
                                 <span
                                   className="sh-status-badge sh-st-void"
@@ -663,13 +673,13 @@ export default function SalesHistoryPage() {
                               ) : (
                                 <StatusBadge status={status} />
                               )}
-                            </td>
-                          </tr>
+                            </TableCell>
+                          </TableRow>
                         );
                       })
                     )}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               )}
             </div>
             <PaginationBar total={filtered.length} page={tablePage} onPage={handleTablePageChange} />
@@ -755,30 +765,30 @@ export default function SalesHistoryPage() {
                     {itemsLoading ? (
                       <div className="sh-loading">กำลังโหลดรายการ...</div>
                     ) : (
-                      <table className="sh-item-table">
-                        <thead>
-                          <tr>
-                            <th>สินค้า</th>
-                            <th className="r" style={{ width: 70 }}>
+                      <Table>
+                        <TableHead>
+                          <TableRow>
+                            <TableHeadCell>สินค้า</TableHeadCell>
+                            <TableHeadCell className="text-right" style={{ width: 70 }}>
                               จำนวน
-                            </th>
-                            <th className="r" style={{ width: 110 }}>
+                            </TableHeadCell>
+                            <TableHeadCell className="text-right" style={{ width: 110 }}>
                               ราคา
-                            </th>
-                            <th className="r" style={{ width: 120 }}>
+                            </TableHeadCell>
+                            <TableHeadCell className="text-right" style={{ width: 120 }}>
                               รวม
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody>
+                            </TableHeadCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
                           {drawerItems.map((it) => {
                             // Hybrid: prefer the immutable barcode snapshotted at
                             // checkout; fall back to a live product lookup only for
                             // legacy bills where the snapshot is absent.
                             const barcode = it.productSnap.barcode ?? resolveItemBarcode(it);
                             return (
-                              <tr key={it.id}>
-                                <td>
+                              <TableRow key={it.id}>
+                                <TableCell>
                                   <div className="sh-item-name">
                                     {it.productSnap.name}
                                     {it.unit ? (
@@ -802,15 +812,15 @@ export default function SalesHistoryPage() {
                                       {barcode}
                                     </div>
                                   ) : null}
-                                </td>
-                                <td className="r">{it.qty}</td>
-                                <td className="r">฿{formatMoney(it.unitPrice)}</td>
-                                <td className="r">฿{formatMoney(it.lineTotal)}</td>
-                              </tr>
+                                </TableCell>
+                                <TableCell className="text-right">{it.qty}</TableCell>
+                                <TableCell className="text-right">฿{formatMoney(it.unitPrice)}</TableCell>
+                                <TableCell className="text-right">฿{formatMoney(it.lineTotal)}</TableCell>
+                              </TableRow>
                             );
                           })}
-                        </tbody>
-                      </table>
+                        </TableBody>
+                      </Table>
                     )}
                   </div>
                 </div>

@@ -4,6 +4,14 @@ import { getBranchLabel, useActiveBranches } from '../lib/branches';
 import { useAuth } from '../lib/hooks/useAuth';
 import { downloadCsv } from '../lib/stockReport/exportCsv';
 import {
+  Table,
+  TableHead,
+  TableHeadCell,
+  TableBody,
+  TableRow,
+  TableCell,
+} from '../components/ui';
+import {
   avatarClass,
   formatLastLogin,
   LOG_ICONS,
@@ -355,32 +363,32 @@ export default function StaffManagementPage() {
               </select>
             </div>
             <div className="sm-card">
-              <div className="sm-table-scroll">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>พนักงาน</th>
-                      <th>Role</th>
-                      <th>สาขา</th>
-                      <th>สถานะ</th>
-                      <th>เข้าสู่ระบบล่าสุด</th>
-                      <th style={{ textAlign: 'right' }}>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+              <div className="flex-1 min-h-0 overflow-auto">
+                <Table hoverable className="min-w-[700px]">
+                  <TableHead className="sticky top-0 z-[1]">
+                    <TableRow>
+                      <TableHeadCell>พนักงาน</TableHeadCell>
+                      <TableHeadCell>Role</TableHeadCell>
+                      <TableHeadCell>สาขา</TableHeadCell>
+                      <TableHeadCell>สถานะ</TableHeadCell>
+                      <TableHeadCell>เข้าสู่ระบบล่าสุด</TableHeadCell>
+                      <TableHeadCell className="text-right">Actions</TableHeadCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
                     {filteredUsers.length === 0 ? (
-                      <tr>
-                        <td colSpan={6}>
+                      <TableRow>
+                        <TableCell colSpan={6}>
                           <div className="sm-empty-state">
                             <i className="ti ti-users-off" aria-hidden="true" />
                             <p>ไม่พบพนักงานที่ตรงตามเงื่อนไข</p>
                           </div>
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     ) : (
                       filteredUsers.map((u) => (
-                        <tr key={u.id}>
-                          <td>
+                        <TableRow key={u.id}>
+                          <TableCell>
                             <div className="sm-emp-cell">
                               <div className={`sm-avatar ${avatarClass(u.id)}`}>
                                 {userInitials(u.firstName, u.lastName)}
@@ -394,13 +402,13 @@ export default function StaffManagementPage() {
                                 </div>
                               </div>
                             </div>
-                          </td>
-                          <td>
+                          </TableCell>
+                          <TableCell>
                             <span className={`sm-role-badge ${roleBadgeClass(u.role)}`}>
                               {roleLabel(u.role)}
                             </span>
-                          </td>
-                          <td>
+                          </TableCell>
+                          <TableCell>
                             <div className="sm-branch-tags">
                               {u.branchIds.map((bid) => (
                                 <span key={bid} className="sm-branch-tag">
@@ -408,8 +416,8 @@ export default function StaffManagementPage() {
                                 </span>
                               ))}
                             </div>
-                          </td>
-                          <td>
+                          </TableCell>
+                          <TableCell>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                               <Toggle
                                 checked={u.isActive}
@@ -422,11 +430,11 @@ export default function StaffManagementPage() {
                                 {u.isActive ? 'ใช้งาน' : 'ปิดใช้งาน'}
                               </span>
                             </div>
-                          </td>
-                          <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                          </TableCell>
+                          <TableCell style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                             {formatLastLogin(u.lastLoginAt)}
-                          </td>
-                          <td>
+                          </TableCell>
+                          <TableCell>
                             <div className="sm-action-group">
                               <button
                                 type="button"
@@ -450,12 +458,12 @@ export default function StaffManagementPage() {
                                 <i className="ti ti-trash" aria-hidden="true" />
                               </button>
                             </div>
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       ))
                     )}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
             </div>
           </>
@@ -538,39 +546,39 @@ export default function StaffManagementPage() {
               </button>
             </div>
             <div className="sm-card">
-              <div className="sm-table-scroll">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>เวลา</th>
-                      <th>พนักงาน</th>
-                      <th>ประเภท</th>
-                      <th>รายละเอียด</th>
-                      <th>IP / Terminal</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+              <div className="flex-1 min-h-0 overflow-auto">
+                <Table hoverable className="min-w-[700px]">
+                  <TableHead className="sticky top-0 z-[1]">
+                    <TableRow>
+                      <TableHeadCell>เวลา</TableHeadCell>
+                      <TableHeadCell>พนักงาน</TableHeadCell>
+                      <TableHeadCell>ประเภท</TableHeadCell>
+                      <TableHeadCell>รายละเอียด</TableHeadCell>
+                      <TableHeadCell>IP / Terminal</TableHeadCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
                     {filteredLogs.length === 0 ? (
-                      <tr>
-                        <td colSpan={5}>
+                      <TableRow>
+                        <TableCell colSpan={5}>
                           <div className="sm-empty-state">
                             <i className="ti ti-history-off" aria-hidden="true" />
                             <p>ไม่พบรายการในหมวดนี้</p>
                           </div>
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     ) : (
                       filteredLogs.map((l) => {
                         const meta = LOG_ICONS[l.action] ?? LOG_ICONS.EDIT!;
                         const u = users.find((x) => x.id === l.userId);
                         const t = formatActivityTime(l.createdAt);
                         return (
-                          <tr key={l.id}>
-                            <td style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
+                          <TableRow key={l.id}>
+                            <TableCell style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
                               <div style={{ fontWeight: 500 }}>{t.time}</div>
                               <div style={{ color: 'var(--text-muted)' }}>{t.date}</div>
-                            </td>
-                            <td>
+                            </TableCell>
+                            <TableCell>
                               <div className="sm-emp-cell">
                                 {u ? (
                                   <div
@@ -592,8 +600,8 @@ export default function StaffManagementPage() {
                                   ) : null}
                                 </div>
                               </div>
-                            </td>
-                            <td>
+                            </TableCell>
+                            <TableCell>
                               <div className="sm-log-cell">
                                 <div
                                   className="sm-log-type-icon"
@@ -605,9 +613,9 @@ export default function StaffManagementPage() {
                                   {meta.label}
                                 </span>
                               </div>
-                            </td>
-                            <td style={{ fontSize: 13, maxWidth: 260 }}>{l.detail}</td>
-                            <td
+                            </TableCell>
+                            <TableCell style={{ fontSize: 13, maxWidth: 260 }}>{l.detail}</TableCell>
+                            <TableCell
                               style={{
                                 fontSize: 11,
                                 color: 'var(--text-muted)',
@@ -615,13 +623,13 @@ export default function StaffManagementPage() {
                               }}
                             >
                               {[l.ip, l.deviceId].filter(Boolean).join(' · ') || '—'}
-                            </td>
-                          </tr>
+                            </TableCell>
+                          </TableRow>
                         );
                       })
                     )}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
             </div>
           </>

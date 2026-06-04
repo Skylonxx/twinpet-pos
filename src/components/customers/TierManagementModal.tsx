@@ -4,6 +4,14 @@ import {
   usePriceLevels,
 } from '../../lib/pricing/priceLevels';
 import { DEFAULT_CUSTOMER_TIER } from '../../lib/types';
+import {
+  Table,
+  TableHead,
+  TableHeadCell,
+  TableBody,
+  TableRow,
+  TableCell,
+} from '../ui';
 
 type Props = {
   open: boolean;
@@ -124,27 +132,27 @@ export default function TierManagementModal({ open, onClose, onToast }: Props) {
               <p className="cm-form-hint">กำลังโหลด...</p>
             ) : (
               <div className="cm-tier-table-wrap">
-                <table className="cm-tier-table">
-                  <thead>
-                    <tr>
-                      <th>ชื่อ</th>
-                      <th>รหัส (ID)</th>
-                      <th style={{ width: 56, textAlign: 'right' }}>ลบ</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableHeadCell>ชื่อ</TableHeadCell>
+                      <TableHeadCell>รหัส (ID)</TableHeadCell>
+                      <TableHeadCell className="w-14 text-right">ลบ</TableHeadCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
                     {tiers.map((tier) => {
                       const isRetail = tier.id === DEFAULT_CUSTOMER_TIER;
                       return (
-                        <tr key={tier.id}>
-                          <td>{tier.name}</td>
-                          <td>
+                        <TableRow key={tier.id}>
+                          <TableCell>{tier.name}</TableCell>
+                          <TableCell>
                             <code className="cm-tier-id">{tier.id}</code>
                             {isRetail ? (
                               <span className="cm-tier-default-tag">ค่าเริ่มต้น</span>
                             ) : null}
-                          </td>
-                          <td style={{ textAlign: 'right' }}>
+                          </TableCell>
+                          <TableCell className="text-right">
                             {isRetail ? (
                               <span className="cm-form-hint">—</span>
                             ) : (
@@ -158,12 +166,12 @@ export default function TierManagementModal({ open, onClose, onToast }: Props) {
                                 🗑️
                               </button>
                             )}
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       );
                     })}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
             )}
           </section>

@@ -1,3 +1,11 @@
+import {
+  Table,
+  TableHead,
+  TableHeadCell,
+  TableBody,
+  TableRow,
+  TableCell,
+} from '../ui';
 import '../../pages/CustomerPage.css';
 import {
   creditAvailable,
@@ -70,40 +78,40 @@ export default function CreditHistoryModal({
           ) : null}
 
           <div className="cm-credit-history-table-wrap">
-            <table className="cm-modal-order-table">
-              <thead>
-                <tr>
-                  <th>วันที่/เวลา</th>
-                  <th className="r">ยอดชำระ</th>
-                  <th>วิธีชำระ</th>
-                  <th>หมายเหตุ</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table hoverable>
+              <TableHead>
+                <TableRow>
+                  <TableHeadCell>วันที่/เวลา</TableHeadCell>
+                  <TableHeadCell className="text-right">ยอดชำระ</TableHeadCell>
+                  <TableHeadCell>วิธีชำระ</TableHeadCell>
+                  <TableHeadCell>หมายเหตุ</TableHeadCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
                 {loading ? (
-                  <tr>
-                    <td colSpan={4} className="cm-credit-history-cell-empty">
+                  <TableRow>
+                    <TableCell colSpan={4} className="cm-credit-history-cell-empty">
                       กำลังโหลด...
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ) : payments.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="cm-credit-history-cell-empty">
+                  <TableRow>
+                    <TableCell colSpan={4} className="cm-credit-history-cell-empty">
                       ยังไม่มีประวัติการชำระหนี้
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ) : (
                   payments.map((p) => (
-                    <tr key={p.id}>
-                      <td>{formatCreditPaymentDate(p.createdAt)}</td>
-                      <td className="r">{fmtBahtDec(p.amount)}</td>
-                      <td>{creditPaymentMethodLabel(p.paymentMethod)}</td>
-                      <td>{p.notes || '—'}</td>
-                    </tr>
+                    <TableRow key={p.id}>
+                      <TableCell>{formatCreditPaymentDate(p.createdAt)}</TableCell>
+                      <TableCell className="text-right">{fmtBahtDec(p.amount)}</TableCell>
+                      <TableCell>{creditPaymentMethodLabel(p.paymentMethod)}</TableCell>
+                      <TableCell>{p.notes || '—'}</TableCell>
+                    </TableRow>
                   ))
                 )}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         </div>
         <div className="cm-pay-footer">

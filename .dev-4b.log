@@ -1,0 +1,76 @@
+
+> twinpet-pos@0.0.0 predev
+> npm run gen-config && npm --prefix functions run build
+
+
+> twinpet-pos@0.0.0 gen-config
+> node scripts/gen-deploy-config.mjs
+
+[gen-deploy-config] database="pos-db" region="asia-southeast1" → functions/src/deployConfig.ts, .env
+
+> build
+> node ../scripts/gen-deploy-config.mjs && tsc
+
+[gen-deploy-config] database="pos-db" region="asia-southeast1" → functions/src/deployConfig.ts, .env
+
+> twinpet-pos@0.0.0 dev
+> node scripts/start-emulator.mjs
+
+[emulator] พอร์ตทั้งหมดว่าง พร้อมเริ่มงาน
+[emulator] พบข้อมูลเก่า → import จาก C:\Users\Narachat\twinpet-pos\emulator-data
+(node:41500) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+[36m[1mi  emulators:[22m[39m Starting emulators: auth, functions, firestore, storage, extensions
+[33m[1m!  functions:[22m[39m The following emulators are not running, calls to these services from the Functions emulator will affect production: [1mapphosting, database, hosting, pubsub, dataconnect[22m
+[36m[1mi  firestore:[22m[39m Importing data from C:\Users\Narachat\twinpet-pos\emulator-data\firestore_export\firestore_export.overall_export_metadata
+[36m[1mi  firestore:[22m[39m Firestore Emulator logging to [1mfirestore-debug.log[22m
+[32m[1m+  firestore:[22m[39m Firestore Emulator was started in standard edition.
+[32m[1m+  firestore:[22m[39m Firestore Emulator UI websocket is running on 9150.
+[36m[1mi  auth:[22m[39m Importing config from C:\Users\Narachat\twinpet-pos\emulator-data\auth_export\config.json
+[36m[1mi  auth:[22m[39m Importing accounts from C:\Users\Narachat\twinpet-pos\emulator-data\auth_export\accounts.json
+[36m[1mi  functions:[22m[39m Watching "C:\Users\Narachat\twinpet-pos\functions" for Cloud Functions...
+[33m[1m!  functions:[22m[39m Your requested "node" version "22" doesn't match your global version "24". Using node@24 from host.
+Serving at port 8007
+
+[32m[1m+  functions:[22m[39m Loaded functions definitions from source: reconcileOrder, verifyPinLogin, migrateDataToPosDb.
+[32m[1m+  functions[asia-southeast1-reconcileOrder]:[22m[39m [1mfirestore[22m function initialized.
+[32m[1m+  functions[asia-southeast1-verifyPinLogin]:[22m[39m [1mhttp[22m function initialized (http://127.0.0.1:5001/twinpet-pos/asia-southeast1/verifyPinLogin).
+[32m[1m+  functions[asia-southeast1-migrateDataToPosDb]:[22m[39m [1mhttp[22m function initialized (http://127.0.0.1:5001/twinpet-pos/asia-southeast1/migrateDataToPosDb).
+[36m[1mi [22m[39m Running script: [1mnode scripts/dev-after-emulators.mjs[22m
+[snapshot] ♻️  กู้คืน pos-db จาก snapshot: 74 เอกสาร
+[auto-seed] ✓ พบ users/branches แล้ว — ข้ามการ seed
+[snapshot] ⏱️  autosave ทุก 5s → C:\Users\Narachat\twinpet-pos\.local-persist\pos-db-snapshot.json
+(node:47824) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+
+> twinpet-pos@0.0.0 dev:web
+> vite
+
+[36m[1mi  functions:[22m[39m Beginning execution of "asia-southeast1-reconcileOrder"
+[36m[1mi  functions:[22m[39m Finished "asia-southeast1-reconcileOrder" in 8.9971ms
+[36m[1mi  functions:[22m[39m Beginning execution of "asia-southeast1-reconcileOrder"
+[36m[1mi  functions:[22m[39m Finished "asia-southeast1-reconcileOrder" in 2.6197ms
+Generating .flowbite-react\class-list.json file...
+[2m9:37:00 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m Re-optimizing dependencies because vite config has changed
+
+  [32m[1mVITE[22m v8.0.14[39m  [2mready in [0m[1m1059[22m[2m[0m ms[22m
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m5173[22m/[39m
+[2m  [32m➜[39m  [1mNetwork[22m[2m: use [22m[1m--host[22m[2m to expose[22m
+[36m[1mi  functions:[22m[39m Beginning execution of "asia-southeast1-verifyPinLogin"
+[36m[1mi  functions:[22m[39m Finished "asia-southeast1-verifyPinLogin" in 2.1064ms
+[36m[1mi  functions:[22m[39m Beginning execution of "asia-southeast1-verifyPinLogin"
+[90m> [39m {"verifications":{"app":"MISSING","auth":"VALID"},"logging.googleapis.com/labels":{"firebase-log-type":"callable-request-verification"},"severity":"DEBUG","message":"Callable request verification passed"}
+[36m[1mi  functions:[22m[39m Finished "asia-southeast1-verifyPinLogin" in 418.6039ms
+[snapshot] ⚠️  บันทึกไม่สำเร็จ: fetch failed
+[snapshot] ⚠️  บันทึกไม่สำเร็จ: fetch failed
+[snapshot] ⚠️  บันทึกไม่สำเร็จ: fetch failed
+[snapshot] ⚠️  บันทึกไม่สำเร็จ: fetch failed
+[snapshot] ⚠️  บันทึกไม่สำเร็จ: fetch failed
+[snapshot] ⚠️  บันทึกไม่สำเร็จ: fetch failed
+[snapshot] ⚠️  บันทึกไม่สำเร็จ: fetch failed
+[snapshot] ⚠️  บันทึกไม่สำเร็จ: fetch failed
+[snapshot] ⚠️  บันทึกไม่สำเร็จ: fetch failed
+
+[snapshot] 💾 กำลังบันทึก pos-db ครั้งสุดท้ายก่อนปิด…
+[snapshot] ⚠️  บันทึกไม่สำเร็จ: fetch failed

@@ -1,4 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
+import {
+  Table,
+  TableHead,
+  TableHeadCell,
+  TableBody,
+  TableRow,
+  TableCell,
+} from '../ui';
 import '../../pages/CustomerPage.css';
 import { POS_FEATURES } from '../../lib/config/features';
 import { priceLevelLabel, usePriceLevels } from '../../lib/pricing/priceLevels';
@@ -204,48 +212,48 @@ export default function CustomerDetailModal({
                   </div>
                 </div>
                 <div style={{ overflowX: 'auto' }}>
-                  <table className="cm-modal-order-table">
-                    <thead>
-                      <tr>
-                        <th>#</th>
-                        <th>วันที่</th>
-                        <th className="r">ยอด</th>
-                        <th>ช่องทาง</th>
-                        <th>สถานะ</th>
-                      </tr>
-                    </thead>
-                    <tbody>
+                  <Table hoverable>
+                    <TableHead>
+                      <TableRow>
+                        <TableHeadCell>#</TableHeadCell>
+                        <TableHeadCell>วันที่</TableHeadCell>
+                        <TableHeadCell className="text-right">ยอด</TableHeadCell>
+                        <TableHeadCell>ช่องทาง</TableHeadCell>
+                        <TableHeadCell>สถานะ</TableHeadCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
                       {filteredOrders.length === 0 ? (
-                        <tr>
-                          <td colSpan={5} style={{ textAlign: 'center', padding: 24, color: 'var(--g400)' }}>
+                        <TableRow>
+                          <TableCell colSpan={5} style={{ textAlign: 'center', padding: 24, color: 'var(--g400)' }}>
                             ไม่มีประวัติการซื้อ
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       ) : (
                         filteredOrders.map((o) => {
                           const st = orderStatusLabel(o.status, o.creditAmt);
                           const [cls, lbl] = STATUS_MAP[st];
                           return (
-                            <tr key={o.id}>
-                              <td style={{ color: 'var(--p600)', fontWeight: 500 }}>{o.id}</td>
-                              <td>
+                            <TableRow key={o.id}>
+                              <TableCell style={{ color: 'var(--p600)', fontWeight: 500 }}>{o.id}</TableCell>
+                              <TableCell>
                                 {parseDate(o.createdAt).toLocaleDateString('th-TH', {
                                   day: '2-digit',
                                   month: '2-digit',
                                   year: '2-digit',
                                 })}
-                              </td>
-                              <td className="r">{fmtBahtDec(o.total)}</td>
-                              <td style={{ fontSize: 11, color: 'var(--g400)' }}>{payMethodLabel(o)}</td>
-                              <td>
+                              </TableCell>
+                              <TableCell className="text-right">{fmtBahtDec(o.total)}</TableCell>
+                              <TableCell style={{ fontSize: 11, color: 'var(--g400)' }}>{payMethodLabel(o)}</TableCell>
+                              <TableCell>
                                 <span className={`cm-modal-status-badge ${cls}`}>{lbl}</span>
-                              </td>
-                            </tr>
+                              </TableCell>
+                            </TableRow>
                           );
                         })
                       )}
-                    </tbody>
-                  </table>
+                    </TableBody>
+                  </Table>
                 </div>
               </div>
             </div>
@@ -317,50 +325,50 @@ export default function CustomerDetailModal({
                   ประวัติการชำระหนี้ / ยอดเชื่อ
                 </div>
                 <div className="cm-modal-sec-body flush">
-                  <table className="cm-modal-order-table">
-                    <thead>
-                      <tr>
-                        <th>วันที่</th>
-                        <th>รายการ</th>
-                        <th className="r">จำนวน</th>
-                        <th>ประเภท</th>
-                        <th>สถานะ</th>
-                      </tr>
-                    </thead>
-                    <tbody>
+                  <Table hoverable>
+                    <TableHead>
+                      <TableRow>
+                        <TableHeadCell>วันที่</TableHeadCell>
+                        <TableHeadCell>รายการ</TableHeadCell>
+                        <TableHeadCell className="text-right">จำนวน</TableHeadCell>
+                        <TableHeadCell>ประเภท</TableHeadCell>
+                        <TableHeadCell>สถานะ</TableHeadCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
                       {creditTx.length === 0 ? (
-                        <tr>
-                          <td colSpan={5} style={{ textAlign: 'center', padding: 24, color: 'var(--g400)' }}>
+                        <TableRow>
+                          <TableCell colSpan={5} style={{ textAlign: 'center', padding: 24, color: 'var(--g400)' }}>
                             ไม่มีรายการเชื่อ
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       ) : (
                         creditTx.map((t) => (
-                          <tr key={t.id}>
-                            <td>
+                          <TableRow key={t.id}>
+                            <TableCell>
                               {parseDate(t.createdAt).toLocaleDateString('th-TH', {
                                 day: '2-digit',
                                 month: '2-digit',
                                 year: '2-digit',
                               })}
-                            </td>
-                            <td>{t.note || (t.refOrderId ? `Order ${t.refOrderId}` : '—')}</td>
-                            <td className="r">{fmtBahtDec(t.amount)}</td>
-                            <td style={{ fontSize: 11 }}>
+                            </TableCell>
+                            <TableCell>{t.note || (t.refOrderId ? `Order ${t.refOrderId}` : '—')}</TableCell>
+                            <TableCell className="text-right">{fmtBahtDec(t.amount)}</TableCell>
+                            <TableCell style={{ fontSize: 11 }}>
                               {t.type === 'charge' ? 'ตั้งหนี้' : t.type === 'payment' ? 'ชำระ' : 'ปรับ'}
-                            </td>
-                            <td>
+                            </TableCell>
+                            <TableCell>
                               <span
                                 className={`cm-modal-status-badge ${t.type === 'payment' ? 'cm-modal-status-paid' : 'cm-modal-status-pending'}`}
                               >
                                 {t.type === 'payment' ? 'ชำระแล้ว' : 'รอชำระ'}
                               </span>
-                            </td>
-                          </tr>
+                            </TableCell>
+                          </TableRow>
                         ))
                       )}
-                    </tbody>
-                  </table>
+                    </TableBody>
+                  </Table>
                 </div>
               </div>
             </div>
@@ -373,34 +381,34 @@ export default function CustomerDetailModal({
                   สินค้าที่ซื้อบ่อย
                 </div>
                 <div className="cm-modal-sec-body flush">
-                  <table className="cm-modal-order-table">
-                    <thead>
-                      <tr>
-                        <th>สินค้า</th>
-                        <th>SKU</th>
-                        <th className="r">Qty</th>
-                        <th className="r">ยอดรวม</th>
-                      </tr>
-                    </thead>
-                    <tbody>
+                  <Table hoverable>
+                    <TableHead>
+                      <TableRow>
+                        <TableHeadCell>สินค้า</TableHeadCell>
+                        <TableHeadCell>SKU</TableHeadCell>
+                        <TableHeadCell className="text-right">Qty</TableHeadCell>
+                        <TableHeadCell className="text-right">ยอดรวม</TableHeadCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
                       {topProducts.length === 0 ? (
-                        <tr>
-                          <td colSpan={4} style={{ textAlign: 'center', padding: 24, color: 'var(--g400)' }}>
+                        <TableRow>
+                          <TableCell colSpan={4} style={{ textAlign: 'center', padding: 24, color: 'var(--g400)' }}>
                             ยังไม่มีข้อมูล
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       ) : (
                         topProducts.map((p) => (
-                          <tr key={p.sku}>
-                            <td>{p.name}</td>
-                            <td style={{ color: 'var(--g400)' }}>{p.sku}</td>
-                            <td className="r">{p.qty}</td>
-                            <td className="r">{fmtBahtDec(p.revenue)}</td>
-                          </tr>
+                          <TableRow key={p.sku}>
+                            <TableCell>{p.name}</TableCell>
+                            <TableCell style={{ color: 'var(--g400)' }}>{p.sku}</TableCell>
+                            <TableCell className="text-right">{p.qty}</TableCell>
+                            <TableCell className="text-right">{fmtBahtDec(p.revenue)}</TableCell>
+                          </TableRow>
                         ))
                       )}
-                    </tbody>
-                  </table>
+                    </TableBody>
+                  </Table>
                 </div>
               </div>
             </div>

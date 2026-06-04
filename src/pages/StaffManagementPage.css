@@ -243,12 +243,8 @@
   flex-direction: column;
 }
 
-.sm-table-scroll {
-  /* Scroll both axes internally; fills the card so only the rows scroll. */
-  overflow: auto;
-  flex: 1;
-  min-height: 0;
-}
+/* .sm-table-scroll removed — flowbite tables use a Tailwind overflow wrapper
+   (flex-1 min-h-0 overflow-auto) for the same internal scroll (Batch 4e). */
 
 /* Permissions tab: the role matrix is a div grid, not a <table>. This wrapper
    gives it the same internal vertical scroll while the matrix header stays pinned. */
@@ -258,43 +254,10 @@
   min-height: 0;
 }
 
-.sm-page table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-  min-width: 700px;
-}
-
-.sm-page thead th {
-  padding: 10px 16px;
-  text-align: left;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-muted, #9ca3af);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  background: var(--g50, #f8f8fc);
-  border-bottom: 1px solid var(--border, rgba(0, 0, 0, 0.08));
-  white-space: nowrap;
-  /* Keep column labels visible while scrolling rows inside .sm-table-scroll. */
-  position: sticky;
-  top: 0;
-  z-index: 1;
-}
-
-.sm-page tbody td {
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border, rgba(0, 0, 0, 0.08));
-  vertical-align: middle;
-}
-
-.sm-page tbody tr:last-child td {
-  border-bottom: none;
-}
-
-.sm-page tbody tr:hover td {
-  background: var(--g50, #f8f8fc);
-}
+/* Bare-<table> chrome removed — staff tables now use flowbite <Table> + the
+   compact ui/theme.ts theme + sticky <TableHead> (Batch 4e). Cell-content
+   helpers (.sm-emp-cell, .sm-avatar, .sm-role-badge, .sm-status-pill, …) are
+   kept below — they style the contents inside cells, not the table structure. */
 
 .sm-avatar {
   width: 34px;

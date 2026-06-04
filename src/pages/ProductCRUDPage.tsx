@@ -15,6 +15,14 @@ import {
 } from '../lib/productCrud/types';
 import { resolveCategoryName, useCategories } from '../lib/inventory/categoryService';
 import { useProductCrud } from '../lib/productCrud/useProductCrud';
+import {
+  Table,
+  TableHead,
+  TableHeadCell,
+  TableBody,
+  TableRow,
+  TableCell,
+} from '../components/ui';
 import './ProductCRUDPage.css';
 
 type SortKey = 'sku' | 'name' | 'category' | 'retailPrice' | 'avgCost' | 'stock';
@@ -332,11 +340,11 @@ export default function ProductCRUDPage() {
         </div>
 
         <div className="pc-card">
-          <div className="pc-table-scroll">
-            <table className="pc-table">
-              <thead>
-                <tr>
-                  <th style={{ width: 28 }}>
+          <div className="flex-1 min-h-0 overflow-auto">
+            <Table hoverable className="min-w-[960px]">
+              <TableHead className="sticky top-0 z-[1]">
+                <TableRow>
+                  <TableHeadCell className="w-7">
                     <input
                       ref={selectAllRef}
                       type="checkbox"
@@ -345,11 +353,11 @@ export default function ProductCRUDPage() {
                       onChange={togglePageSelect}
                       aria-label="เลือกทั้งหมดในหน้านี้"
                     />
-                  </th>
+                  </TableHeadCell>
                   {TABLE_COLUMNS.map((col) => (
-                    <th
+                    <TableHeadCell
                       key={col.key}
-                      className={`pc-sort-th${col.align === 'r' ? ' num' : ''}${col.sortable === false ? ' pc-sort-th-static' : ''}${sortConfig?.key === col.key ? ' pc-sort-active' : ''}`}
+                      className={`pc-sort-th${col.align === 'r' ? ' text-right' : ''}${col.sortable === false ? ' pc-sort-th-static' : ''}${sortConfig?.key === col.key ? ' pc-sort-active' : ''}`}
                       onClick={col.sortable === false ? undefined : () => handleSort(col.key as SortKey)}
                       onKeyDown={
                         col.sortable === false
@@ -363,35 +371,37 @@ export default function ProductCRUDPage() {
                       {col.sortable === false ? null : (
                         <i className={`ti ${sortIcon(col.key as SortKey)} pc-sort-icon`} aria-hidden="true" />
                       )}
-                    </th>
+                    </TableHeadCell>
                   ))}
-                </tr>
-              </thead>
-              <tbody>
+                </TableRow>
+              </TableHead>
+              <TableBody>
                 {loading ? (
-                  <tr>
-                    <td colSpan={8} className="pc-table-empty">
+                  <TableRow>
+                    <TableCell colSpan={9} className="pc-table-empty">
                       กำลังโหลด...
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ) : pageItems.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="pc-table-empty">
+                  <TableRow>
+                    <TableCell colSpan={9} className="pc-table-empty">
                       ไม่พบสินค้า
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ) : (
                   pageItems.map((p) => {
                     const categoryLabel = resolveCategoryName(p.category, categories);
                     const catStyle = CATEGORY_STYLE[p.category] ?? CATEGORY_STYLE[categoryLabel] ?? { background: 'var(--g100)', color: 'var(--g600)' };
+                    const rowBg =
+                      selectedId === p.id || selectedIds.has(p.id) ? 'bg-[var(--p50)]' : '';
                     return (
-                      <tr
+                      <TableRow
                         key={p.id}
                         id={`row-${p.id}`}
-                        className={`${selectedId === p.id ? 'pc-selected' : ''}${selectedIds.has(p.id) ? ' pc-row-checked' : ''}${flashId === p.id ? ' pc-flash' : ''}`}
+                        className={`cursor-pointer ${rowBg}${flashId === p.id ? ' [animation:pc-fl_0.6s_ease]' : ''}`}
                         onClick={() => openDrawer('edit', p.id)}
                       >
-                        <td onClick={(e) => e.stopPropagation()}>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
                           <input
                             type="checkbox"
                             style={{ width: 11, height: 11 }}
@@ -399,31 +409,31 @@ export default function ProductCRUDPage() {
                             onChange={() => toggleRowSelect(p.id)}
                             aria-label={`เลือก ${p.name}`}
                           />
-                        </td>
-                        <td>
+                        </TableCell>
+                        <TableCell>
                           <span className="pc-col-sku">{p.sku}</span>
-                        </td>
-                        <td>
+                        </TableCell>
+                        <TableCell>
                           <div className="pc-prod-cell">
                             <ProductImageThumb imageUrl={p.imageUrl} alt={p.name} />
                             <div className="pc-prod-name">{p.name}</div>
                           </div>
-                        </td>
-                        <td>
+                        </TableCell>
+                        <TableCell>
                           <span className="pc-cat-badge" style={catStyle}>
                             {categoryLabel}
                           </span>
-                        </td>
-                        <td className="num pc-col-price">
+                        </TableCell>
+                        <TableCell className="text-right pc-col-price">
                           ฿{fmtBaht(p.basePrice ?? 0)}
-                        </td>
-                        <td className="num pc-col-price">
+                        </TableCell>
+                        <TableCell className="text-right pc-col-price">
                           ฿{fmtBaht(p.retailPrice)}
-                        </td>
-                        <td className="num pc-col-cost">
+                        </TableCell>
+                        <TableCell className="text-right pc-col-cost">
                           ฿{fmtBaht(p.avgCost)}
-                        </td>
-                        <td>
+                        </TableCell>
+                        <TableCell>
                           <div className="pc-col-uom">
                             <div className="pc-uom-base">
                               {p.baseUnit}
@@ -440,16 +450,16 @@ export default function ProductCRUDPage() {
                               </div>
                             ))}
                           </div>
-                        </td>
-                        <td className="num pc-col-stock">
+                        </TableCell>
+                        <TableCell className="text-right pc-col-stock">
                           <ProductStockBadge stock={p.stock} minStock={p.branchReorderPoint} />
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     );
                   })
                 )}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
 
           <div className="pc-bottom-bar">

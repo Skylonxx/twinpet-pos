@@ -104,29 +104,7 @@
   overflow: hidden;
 }
 
-.cm-tier-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-
-.cm-tier-table th,
-.cm-tier-table td {
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--g200);
-  text-align: left;
-}
-
-.cm-tier-table th {
-  background: var(--g50);
-  color: var(--g600);
-  font-weight: 500;
-  font-size: 12px;
-}
-
-.cm-tier-table tr:last-child td {
-  border-bottom: none;
-}
+/* .cm-tier-table rules removed — CategoryManagementModal + TierManagementModal migrated to flowbite Table (Batch 4b-2). cm-tier-table-wrap (border) + cm-tier-id/cm-tier-default-tag (cell-content) kept. */
 
 .cm-tier-id {
   font-size: 11px;
@@ -304,56 +282,9 @@
   min-height: 0;
 }
 
-.cm-page table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-  min-width: 860px;
-}
-
-.cm-page thead th {
-  padding: 10px 16px;
-  text-align: left;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--g400);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  background: var(--g50);
-  border-bottom: 1px solid var(--border, rgba(0, 0, 0, 0.08));
-  white-space: nowrap;
-}
-
-.cm-page thead th.r {
-  text-align: right;
-}
-
-.cm-page tbody td {
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border, rgba(0, 0, 0, 0.08));
-  vertical-align: middle;
-  color: var(--g600);
-}
-
-.cm-page tbody td.r {
-  text-align: right;
-  font-family: 'Prompt', sans-serif;
-  font-weight: 500;
-  color: var(--p800);
-}
-
-.cm-page tbody tr:last-child td {
-  border-bottom: none;
-}
-
-.cm-page tbody tr {
-  cursor: pointer;
-  transition: background 0.1s;
-}
-
-.cm-page tbody tr:hover td {
-  background: var(--p50);
-}
+/* .cm-page table (descendant chrome) migrated to flowbite Table + ui/theme.ts
+   compact theme (Batch 4a-3). Removed because it would still match the flowbite
+   table under .cm-page. Content helpers (.cm-avatar etc.) kept below. */
 
 .cm-avatar {
   width: 34px;
@@ -1496,65 +1427,8 @@
   justify-content: space-between;
 }
 
-.cm-modal-order-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 11px;
-}
-
-.cm-modal-order-table thead th {
-  background: var(--g50);
-  padding: 7px 10px;
-  text-align: left;
-  color: var(--g400);
-  border-bottom: 0.5px solid var(--g200);
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.cm-modal-order-table thead th.r {
-  text-align: right;
-}
-
-.cm-modal-order-table tbody tr {
-  border-bottom: 0.5px solid var(--g100);
-  cursor: pointer;
-  transition: background 0.08s;
-}
-
-.cm-modal-order-table tbody tr:hover {
-  background: var(--p50);
-}
-
-.cm-modal-order-table td {
-  padding: 8px 10px;
-  color: var(--g600);
-  vertical-align: middle;
-}
-
-.cm-modal-order-table td.r {
-  text-align: right;
-  font-family: 'Prompt', sans-serif;
-  font-weight: 500;
-  color: var(--p800);
-}
-
-.cm-modal-order-table td.order-id {
-  color: var(--p600);
-  font-weight: 500;
-}
-
-.cm-modal-order-table td.ellipsis {
-  max-width: 160px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.cm-modal-order-table td.muted {
-  font-size: 11px;
-  color: var(--g400);
-}
+/* .cm-modal-order-table migrated to flowbite Table (Batch 4a-3) — used only by
+   CustomerDetailModal + CreditHistoryModal, both now flowbite. */
 
 .cm-modal-status-badge {
   display: inline-block;

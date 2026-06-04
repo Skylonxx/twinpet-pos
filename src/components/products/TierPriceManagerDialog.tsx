@@ -3,6 +3,14 @@ import { createPortal } from 'react-dom';
 import { usePriceLevels } from '../../lib/pricing/priceLevels';
 import { fmtBaht } from '../../lib/productCrud/types';
 import type { PriceLevel } from '../../lib/types';
+import {
+  Table,
+  TableHead,
+  TableHeadCell,
+  TableBody,
+  TableRow,
+  TableCell,
+} from '../ui';
 
 type Props = {
   isOpen: boolean;
@@ -113,28 +121,28 @@ export default function TierPriceManagerDialog({
           </div>
 
           <div className="tpmd-table-wrap">
-            <table className="tpmd-table">
-              <thead>
-                <tr>
-                  <th>ชื่อกลุ่มลูกค้า</th>
-                  <th>ประเภท</th>
-                  <th className="r">ราคาขาย</th>
-                  <th style={{ width: 72 }} />
-                </tr>
-              </thead>
-              <tbody>
+            <Table>
+              <TableHead className="sticky top-0 z-[1]">
+                <TableRow>
+                  <TableHeadCell>ชื่อกลุ่มลูกค้า</TableHeadCell>
+                  <TableHeadCell>ประเภท</TableHeadCell>
+                  <TableHeadCell className="text-right">ราคาขาย</TableHeadCell>
+                  <TableHeadCell className="w-[72px]" />
+                </TableRow>
+              </TableHead>
+              <TableBody>
                 {loading ? (
-                  <tr>
-                    <td colSpan={4} className="tpmd-empty">
+                  <TableRow>
+                    <TableCell colSpan={4} className="tpmd-empty">
                       กำลังโหลด...
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ) : filteredTiers.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="tpmd-empty">
+                  <TableRow>
+                    <TableCell colSpan={4} className="tpmd-empty">
                       ไม่พบกลุ่มลูกค้า
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ) : (
                   filteredTiers.map((tier) => {
                     const custom = tierPrices[tier.id];
@@ -142,30 +150,30 @@ export default function TierPriceManagerDialog({
                     const displayPrice = hasCustom ? custom : basePrice;
 
                     return (
-                      <tr key={tier.id}>
-                        <td>
+                      <TableRow key={tier.id}>
+                        <TableCell>
                           <div className="tpmd-group-name">{tier.name}</div>
                           <div className="tpmd-group-id">{tier.id}</div>
-                        </td>
-                        <td>
+                        </TableCell>
+                        <TableCell>
                           {hasCustom ? (
                             <span className="tpmd-type-custom">ระบุราคาขาย</span>
                           ) : (
                             <span className="tpmd-type-default">(ราคาปกติ)</span>
                           )}
-                        </td>
-                        <td className="r tpmd-price">฿{fmtBaht(displayPrice)}</td>
-                        <td className="r">
+                        </TableCell>
+                        <TableCell className="text-right tpmd-price">฿{fmtBaht(displayPrice)}</TableCell>
+                        <TableCell className="text-right">
                           <button type="button" className="tpmd-adjust-btn" onClick={() => openAdjust(tier)}>
                             ปรับ
                           </button>
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     );
                   })
                 )}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
 
           <div className="tpmd-footer">

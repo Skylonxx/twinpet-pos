@@ -17,7 +17,15 @@ import {
 } from '../../lib/stockReport/types';
 import { useAllBranchesStock } from '../../lib/stockReport/useAllBranchesStock';
 import StatusBadge from '../../components/stockReport/StatusBadge';
-import { Badge } from '../../components/ui';
+import {
+  Badge,
+  Table,
+  TableHead,
+  TableHeadCell,
+  TableBody,
+  TableRow,
+  TableCell,
+} from '../../components/ui';
 import '../StockReportPage.css';
 import './AllBranchesStockOverview.css';
 
@@ -287,63 +295,71 @@ export default function AllBranchesStockOverview() {
                 {lowStockCount}
               </Badge>
             </div>
-            <div className="sr-table-scroll">
-              <table className="sr-table">
-                <thead>
-                  <tr>
-                    <th>สินค้า</th>
-                    <th>รหัส (SKU)</th>
-                    <th className="num">คงเหลือรวม</th>
-                    <th className="num">Reorder (รวม)</th>
-                    <th className="num">จำนวนสาขา</th>
-                    <th className="num">มูลค่ารวม</th>
-                    <th>สถานะ</th>
-                  </tr>
-                </thead>
-                <tbody>
+            <div className="overflow-x-auto">
+              <Table hoverable className="min-w-[600px]">
+                <TableHead>
+                  <TableRow>
+                    <TableHeadCell>สินค้า</TableHeadCell>
+                    <TableHeadCell>รหัส (SKU)</TableHeadCell>
+                    <TableHeadCell className="text-right">คงเหลือรวม</TableHeadCell>
+                    <TableHeadCell className="text-right">Reorder (รวม)</TableHeadCell>
+                    <TableHeadCell className="text-right">จำนวนสาขา</TableHeadCell>
+                    <TableHeadCell className="text-right">มูลค่ารวม</TableHeadCell>
+                    <TableHeadCell>สถานะ</TableHeadCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
                   {lowStock.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="sr-empty">
+                    <TableRow>
+                      <TableCell
+                        colSpan={7}
+                        className="py-8 text-center text-[13px] text-[var(--text-muted)]"
+                      >
                         ทุกรายการมีสต็อกเพียงพอทั้งบริษัท ✓
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ) : (
                     <>
                       {lowStock.slice(0, 10).map((p) => (
-                        <tr key={p.id}>
-                          <td>
-                            <div style={{ fontWeight: 500 }}>{p.name}</div>
-                          </td>
-                          <td className="sr-col-sku">{p.sku}</td>
-                          <td
-                            className="num"
-                            style={{
-                              fontWeight: 500,
-                              color: p.totalQty === 0 ? 'var(--danger)' : 'var(--warn)',
-                            }}
+                        <TableRow key={p.id}>
+                          <TableCell>
+                            <div className="font-medium">{p.name}</div>
+                          </TableCell>
+                          <TableCell
+                            className="whitespace-nowrap text-xs text-[var(--text-secondary)]"
+                            style={{ fontFamily: "'Prompt', sans-serif" }}
+                          >
+                            {p.sku}
+                          </TableCell>
+                          <TableCell
+                            className="text-right font-medium"
+                            style={{ color: p.totalQty === 0 ? 'var(--danger)' : 'var(--warn)' }}
                           >
                             {fmtNum(p.totalQty)}
-                          </td>
-                          <td className="num">{fmtNum(p.reorderPoint)}</td>
-                          <td className="num">{fmtNum(p.branchCount)}</td>
-                          <td className="num">{fmtBaht(p.totalValue)}</td>
-                          <td>
+                          </TableCell>
+                          <TableCell className="text-right">{fmtNum(p.reorderPoint)}</TableCell>
+                          <TableCell className="text-right">{fmtNum(p.branchCount)}</TableCell>
+                          <TableCell className="text-right">{fmtBaht(p.totalValue)}</TableCell>
+                          <TableCell>
                             <StatusBadge status={p.status} />
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       ))}
                       {lowStock.length > 10 && (
-                        <tr>
-                          <td colSpan={7} className="sr-table-more">
+                        <TableRow>
+                          <TableCell
+                            colSpan={7}
+                            className="py-2.5 text-center text-xs italic text-[var(--text-muted)]"
+                          >
                             มีอีก {lowStock.length - 10} รายการ — ดูทั้งหมดในแท็บ
                             &lsquo;รายสินค้า&rsquo;
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       )}
                     </>
                   )}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
           </div>
         </div>

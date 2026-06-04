@@ -360,66 +360,10 @@
 }
 
 /* Price level table */
-.stg-price-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
+/* .stg-price-table rules removed — PriceLevelManager migrated to flowbite Table (Batch 4b-3). Inline inputs (stg-form-input/stg-input-inline) + stg-code kept (cell-content). */
 
-.stg-price-table th {
-  padding: 8px 12px;
-  text-align: left;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-muted, #9ca3af);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  background: var(--g50, #f8f8fc);
-  border-bottom: 1px solid var(--border, rgba(0, 0, 0, 0.08));
-}
-
-.stg-price-table td {
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border, rgba(0, 0, 0, 0.08));
-  vertical-align: middle;
-}
-
-.stg-price-table tr:last-child td {
-  border-bottom: none;
-}
-
-.stg-price-table tr:hover td {
-  background: var(--g50, #f8f8fc);
-}
-
-/* UOM table */
-.stg-uom-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-
-.stg-uom-table th {
-  padding: 8px 12px;
-  text-align: left;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-muted, #9ca3af);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  background: var(--g50, #f8f8fc);
-  border-bottom: 1px solid var(--border, rgba(0, 0, 0, 0.08));
-}
-
-.stg-uom-table td {
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border, rgba(0, 0, 0, 0.08));
-  vertical-align: middle;
-}
-
-.stg-uom-table tr:last-child td {
-  border-bottom: none;
-}
+/* UOM/Expiry tables → flowbite <Table> + ui/theme.ts compact theme (Batch 4e);
+   the .stg-uom-table chrome is removed. */
 
 /* Payment method row */
 .stg-pay-method-row {

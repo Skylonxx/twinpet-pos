@@ -195,37 +195,8 @@
   overflow: auto;
 }
 
-.ar-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-
-.ar-table th {
-  text-align: left;
-  padding: 10px 14px;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--g400);
-  border-bottom: 0.5px solid var(--g200);
-  background: var(--g50);
-  white-space: nowrap;
-}
-
-.ar-table th.r,
-.ar-table td.r {
-  text-align: right;
-}
-
-.ar-table td {
-  padding: 11px 14px;
-  border-bottom: 0.5px solid rgba(0, 0, 0, 0.06);
-  vertical-align: middle;
-}
-
-.ar-table tr:last-child td {
-  border-bottom: none;
-}
+/* .ar-table chrome migrated to flowbite Table + ui/theme.ts compact theme (Batch 4a-1).
+   The .ar-table-wrap card and content helpers (ar-name, ar-debt, ar-badge, etc.) are kept. */
 
 .ar-name {
   font-weight: 500;

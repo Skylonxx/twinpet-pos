@@ -290,146 +290,8 @@
   font-weight: 500;
 }
 
-.sr-table-scroll {
-  overflow-x: auto;
-}
-
-.sr-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-  min-width: 600px;
-}
-
-.sr-table thead th {
-  padding: 10px 16px;
-  text-align: left;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-muted, #9ca3af);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  background: var(--g50, #f8f8fc);
-  border-bottom: 1px solid var(--border, rgba(0, 0, 0, 0.08));
-  white-space: nowrap;
-}
-
-.sr-table tbody td {
-  padding: 11px 16px;
-  border-bottom: 1px solid var(--border, rgba(0, 0, 0, 0.08));
-  vertical-align: middle;
-}
-
-.sr-table tbody tr:last-child td {
-  border-bottom: none;
-}
-
-.sr-table tbody tr:hover td {
-  background: var(--g50, #f8f8fc);
-}
-
-.sr-table th.num,
-.sr-table td.num {
-  text-align: right;
-}
-
-.sr-col-sku {
-  font-family: 'Prompt', sans-serif;
-  font-size: 12px;
-  color: var(--text-secondary, #6b7280);
-  white-space: nowrap;
-}
-
-.sr-prod-cell {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.sr-prod-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-md, 8px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px;
-  flex-shrink: 0;
-}
-
-.sr-stock-bar-wrap {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.sr-stock-bar-bg {
-  height: 6px;
-  border-radius: 3px;
-  background: var(--g100, #ededf5);
-  flex: 1;
-  min-width: 60px;
-  overflow: hidden;
-}
-
-.sr-stock-bar-fill {
-  height: 100%;
-  border-radius: 3px;
-}
-
-.sr-bar-ok {
-  background: #1d9e75;
-}
-
-.sr-bar-low {
-  background: #ef9f27;
-}
-
-.sr-bar-critical {
-  background: #e24b4a;
-}
-
-.sr-stock-qty {
-  font-size: 12px;
-  font-weight: 500;
-  min-width: 28px;
-  text-align: right;
-}
-
-.sr-expiry-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 3px 10px;
-  border-radius: 20px;
-  font-size: 11px;
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.sr-expiry-safe {
-  background: #e1f5ee;
-  color: #0f6e56;
-}
-
-.sr-expiry-warning {
-  background: #faeeda;
-  color: #854f0b;
-}
-
-.sr-expiry-critical {
-  background: #fcebeb;
-  color: #a32d2d;
-}
-
-.sr-fifo-table .sr-lot-num {
-  width: 28px;
-  height: 28px;
-  font-size: 12px;
-}
-
-.sr-fifo-next-row {
-  background: rgba(83, 74, 183, 0.04);
-}
+/* Stock-report tables migrated to flowbite <Table> (Batch 3a/3b). Table +
+   cell-helper styles removed; page chrome below is unchanged. */
 
 .sr-alert-bar {
   display: flex;
@@ -529,24 +391,6 @@
   background: var(--p50, #eeedfe);
 }
 
-.sr-lot-num {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: var(--p50, #eeedfe);
-  color: var(--p600, #534ab7);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.sr-lot-num.next {
-  background: var(--p600, #534ab7);
-  color: #fff;
-}
-
 .sr-lot-detail-grid {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
@@ -591,51 +435,6 @@
 
 .sr-lot-pct.low {
   color: #a32d2d;
-}
-
-.sr-next-label {
-  font-size: 10px;
-  background: var(--p600, #534ab7);
-  color: #fff;
-  padding: 2px 8px;
-  border-radius: 20px;
-  white-space: nowrap;
-}
-
-.sr-mv-icon {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 13px;
-}
-
-.sr-mv-in {
-  background: #eaf3de;
-  color: #3b6d11;
-}
-
-.sr-mv-out {
-  background: #eeedfe;
-  color: #534ab7;
-}
-
-.sr-mv-adj {
-  background: #e6f1fb;
-  color: #185fa5;
-}
-
-.sr-mv-void {
-  background: #fcebeb;
-  color: #a32d2d;
-}
-
-.sr-mv-cell {
-  display: flex;
-  align-items: center;
-  gap: 8px;
 }
 
 .sr-modal-overlay {
@@ -714,13 +513,6 @@
   background: var(--p50, #eeedfe);
 }
 
-.sr-empty {
-  text-align: center;
-  padding: 32px;
-  color: var(--text-muted, #9ca3af);
-  font-size: 13px;
-}
-
 /* Placeholder shown in a chart card when there is no valuation data to plot. */
 .sr-chart-empty {
   height: 200px;
@@ -739,14 +531,6 @@
 }
 
 /* "มีอีก X รายการ" overflow row appended to capped overview tables. */
-.sr-table-more {
-  text-align: center;
-  padding: 12px;
-  color: var(--text-muted, #9ca3af);
-  font-size: 12px;
-  font-style: italic;
-}
-
 .sr-card-head {
   padding: 14px 18px;
   border-bottom: 1px solid var(--border, rgba(0, 0, 0, 0.08));

@@ -12,6 +12,14 @@ import { customerFullName, fmtBaht, fmtBahtDec } from '../../lib/customers/types
 import { db, isFirebaseConfigured } from '../../lib/firebase';
 import { useActiveShift } from '../../lib/hooks/useActiveShift';
 import type { CreditAccount, Customer } from '../../lib/types';
+import {
+  Table,
+  TableHead,
+  TableHeadCell,
+  TableBody,
+  TableRow,
+  TableCell,
+} from '../ui';
 import '../../pages/ReceivablesPage.css';
 
 type DialogTab = 'payment' | 'history';
@@ -224,40 +232,40 @@ export default function DebtorManagerDialog({
               ) : null}
 
               <div className="ar-dlg-history-table-wrap">
-                <table className="ar-table ar-dlg-history-table">
-                  <thead>
-                    <tr>
-                      <th>วันที่/เวลา</th>
-                      <th className="r">ยอดชำระ</th>
-                      <th>วิธีชำระ</th>
-                      <th>หมายเหตุ</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+                <Table hoverable>
+                  <TableHead>
+                    <TableRow>
+                      <TableHeadCell>วันที่/เวลา</TableHeadCell>
+                      <TableHeadCell className="text-right">ยอดชำระ</TableHeadCell>
+                      <TableHeadCell>วิธีชำระ</TableHeadCell>
+                      <TableHeadCell>หมายเหตุ</TableHeadCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
                     {historyLoading ? (
-                      <tr>
-                        <td colSpan={4} className="ar-empty">
+                      <TableRow>
+                        <TableCell colSpan={4} className="ar-empty">
                           กำลังโหลด...
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     ) : payments.length === 0 ? (
-                      <tr>
-                        <td colSpan={4} className="ar-empty">
+                      <TableRow>
+                        <TableCell colSpan={4} className="ar-empty">
                           ยังไม่มีประวัติการชำระหนี้
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     ) : (
                       payments.map((p) => (
-                        <tr key={p.id}>
-                          <td>{formatCreditPaymentDate(p.createdAt)}</td>
-                          <td className="r">{fmtBahtDec(p.amount)}</td>
-                          <td>{creditPaymentMethodLabel(p.paymentMethod)}</td>
-                          <td className="ar-notes">{p.notes || '—'}</td>
-                        </tr>
+                        <TableRow key={p.id}>
+                          <TableCell>{formatCreditPaymentDate(p.createdAt)}</TableCell>
+                          <TableCell className="text-right">{fmtBahtDec(p.amount)}</TableCell>
+                          <TableCell>{creditPaymentMethodLabel(p.paymentMethod)}</TableCell>
+                          <TableCell className="ar-notes">{p.notes || '—'}</TableCell>
+                        </TableRow>
                       ))
                     )}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
             </>
           )}

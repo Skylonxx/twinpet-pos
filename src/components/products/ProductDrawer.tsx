@@ -28,6 +28,14 @@ import CategoryManagementModal from './CategoryManagementModal';
 import ProductSaveConfirmDialog from './ProductSaveConfirmDialog';
 import TierPriceManagerDialog from './TierPriceManagerDialog';
 import UnitManagerModal from './UnitManagerModal';
+import {
+  Table,
+  TableHead,
+  TableHeadCell,
+  TableBody,
+  TableRow,
+  TableCell,
+} from '../ui';
 
 const RETAIL_PRICE_KEY = RETAIL_PRICE_LEVEL_ID;
 
@@ -1109,46 +1117,46 @@ export default function ProductDrawer({
             product ? (
               <>
                 <div className="pc-drawer-hint">ประวัติเคลื่อนไหวสต็อก — สาขานี้</div>
-                <table className="pc-hist-table">
-                  <thead>
-                    <tr>
-                      <th>วันที่</th>
-                      <th>ประเภท</th>
-                      <th>จำนวน</th>
-                      <th>คงเหลือ</th>
-                      <th>โดย</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableHeadCell>วันที่</TableHeadCell>
+                      <TableHeadCell>ประเภท</TableHeadCell>
+                      <TableHeadCell>จำนวน</TableHeadCell>
+                      <TableHeadCell>คงเหลือ</TableHeadCell>
+                      <TableHeadCell>โดย</TableHeadCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
                     {movements.length === 0 ? (
-                      <tr>
-                        <td colSpan={5} className="pc-table-empty">
+                      <TableRow>
+                        <TableCell colSpan={5} className="pc-table-empty">
                           ยังไม่มีประวัติ
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     ) : (
                       movements.map((m) => (
-                        <tr key={m.id}>
-                          <td>
+                        <TableRow key={m.id}>
+                          <TableCell>
                             {parseDate(m.createdAt).toLocaleDateString('th-TH', {
                               day: '2-digit',
                               month: '2-digit',
                               hour: '2-digit',
                               minute: '2-digit',
                             })}
-                          </td>
-                          <td>{movementLabel(m.type)}</td>
-                          <td className={m.qty > 0 ? 'pc-h-in' : 'pc-h-out'}>
+                          </TableCell>
+                          <TableCell>{movementLabel(m.type)}</TableCell>
+                          <TableCell className={m.qty > 0 ? 'pc-h-in' : 'pc-h-out'}>
                             {m.qty > 0 ? '+' : ''}
                             {m.qty}
-                          </td>
-                          <td style={{ fontFamily: 'Prompt, sans-serif' }}>—</td>
-                          <td>{m.createdBy}</td>
-                        </tr>
+                          </TableCell>
+                          <TableCell style={{ fontFamily: 'Prompt, sans-serif' }}>—</TableCell>
+                          <TableCell>{m.createdBy}</TableCell>
+                        </TableRow>
                       ))
                     )}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </>
             ) : (
               <div className="pc-drawer-hint">บันทึกสินค้าเพื่อดูประวัติการเคลื่อนไหวสต็อก</div>

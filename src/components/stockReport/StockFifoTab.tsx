@@ -2,6 +2,14 @@ import { useMemo, useState } from 'react';
 import ProductImageThumb from '../products/ProductImageThumb';
 import ProductPickerDialog from '../products/ProductPickerDialog';
 import { DateRangeDropdown } from '../common/DateRangeDropdown';
+import {
+  Table,
+  TableHead,
+  TableHeadCell,
+  TableBody,
+  TableRow,
+  TableCell,
+} from '../ui';
 import { formatFifoLotDate, formatFifoLotExpiry } from '../../lib/inventory/fifoQueueUtils';
 import { EXPIRY_ALERT_LABELS, type ExpiryAlertLevel } from '../../lib/inventory/expiryPolicyTypes';
 import {
@@ -22,9 +30,9 @@ function ExpiryAlertBadge({
   daysLeft: number | null;
 }) {
   const map = {
-    safe: 'sr-expiry-safe',
-    warning: 'sr-expiry-warning',
-    critical: 'sr-expiry-critical',
+    safe: 'bg-[#e1f5ee] text-[#0f6e56]',
+    warning: 'bg-[#faeeda] text-[#854f0b]',
+    critical: 'bg-[#fcebeb] text-[#a32d2d]',
   } as const;
   const detail =
     daysLeft == null
@@ -33,7 +41,11 @@ function ExpiryAlertBadge({
         ? `หมดอายุ ${Math.abs(daysLeft)} วัน`
         : `${daysLeft} วัน`;
   return (
-    <span className={`sr-expiry-badge ${map[level] ?? map.safe}`}>
+    <span
+      className={`inline-flex items-center whitespace-nowrap rounded-[20px] px-2.5 py-[3px] text-[11px] font-medium ${
+        map[level] ?? map.safe
+      }`}
+    >
       {EXPIRY_ALERT_LABELS[level] ?? EXPIRY_ALERT_LABELS.safe}
       {detail ? ` · ${detail}` : ''}
     </span>
@@ -173,7 +185,7 @@ export default function StockFifoTab({
       </div>
 
       {fifoTableRows.length === 0 ? (
-        <div className="sr-empty">
+        <div className="py-8 text-center text-[13px] text-[var(--text-muted)]">
           {fifoSystemActiveLotCount > 0
             ? fifoToolbarFiltered
               ? 'ไม่มี Lot ตรงกับตัวกรองที่เลือก'
@@ -227,79 +239,94 @@ export default function StockFifoTab({
             </div>
           </div>
           <div className="sr-card">
-            <div className="sr-table-scroll">
-              <table className="sr-table sr-fifo-table">
-                <thead>
-                  <tr>
-                    <th style={{ width: 44 }}>#</th>
-                    <th>รหัส (SKU)</th>
-                    <th>ชื่อสินค้า</th>
-                    <th>Lot / GRN</th>
-                    <th>วันรับเข้า</th>
-                    <th>วันหมดอายุ</th>
-                    <th>สถานะ</th>
-                    <th className="num">คงเหลือ</th>
-                    <th className="num">ต้นทุน/หน่วย</th>
-                    <th className="num">มูลค่า</th>
-                  </tr>
-                </thead>
-                <tbody>
+            <div className="overflow-x-auto">
+              <Table hoverable className="min-w-[600px]">
+                <TableHead>
+                  <TableRow>
+                    <TableHeadCell className="w-11">#</TableHeadCell>
+                    <TableHeadCell>รหัส (SKU)</TableHeadCell>
+                    <TableHeadCell>ชื่อสินค้า</TableHeadCell>
+                    <TableHeadCell>Lot / GRN</TableHeadCell>
+                    <TableHeadCell>วันรับเข้า</TableHeadCell>
+                    <TableHeadCell>วันหมดอายุ</TableHeadCell>
+                    <TableHeadCell>สถานะ</TableHeadCell>
+                    <TableHeadCell className="text-right">คงเหลือ</TableHeadCell>
+                    <TableHeadCell className="text-right">ต้นทุน/หน่วย</TableHeadCell>
+                    <TableHeadCell className="text-right">มูลค่า</TableHeadCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
                   {fifoTableRows.map((row) => {
                     const { lot, product, fifoIndex, alertLevel, daysLeft } = row;
                     const remain = safeLotRemaining(lot);
                     const received = Number(lot.qtyReceived) || remain;
                     const pct = received > 0 ? Math.round((remain / received) * 100) : 0;
                     return (
-                      <tr
+                      <TableRow
                         key={lot.id}
-                        className={fifoIndex === 1 ? 'sr-fifo-next-row' : undefined}
+                        className={fifoIndex === 1 ? 'bg-[rgba(83,74,183,0.04)]' : undefined}
                       >
-                        <td>
-                          <div className={`sr-lot-num${fifoIndex === 1 ? ' next' : ''}`}>
+                        <TableCell>
+                          <div
+                            className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-medium ${
+                              fifoIndex === 1
+                                ? 'bg-[var(--p600)] text-white'
+                                : 'bg-[var(--p50)] text-[var(--p600)]'
+                            }`}
+                          >
                             {fifoIndex}
                           </div>
-                        </td>
-                        <td className="sr-col-sku">{product.sku}</td>
-                        <td>
-                          <div className="sr-prod-cell">
+                        </TableCell>
+                        <TableCell
+                          className="whitespace-nowrap text-xs text-[var(--text-secondary)]"
+                          style={{ fontFamily: "'Prompt', sans-serif" }}
+                        >
+                          {product.sku}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2.5">
                             <ProductImageThumb
                               imageUrl={product.imageUrl}
                               alt={product.name}
                               variant="thumb"
                             />
                             <div>
-                              <div style={{ fontWeight: 500, fontSize: 13 }}>{product.name}</div>
+                              <div className="text-[13px] font-medium">{product.name}</div>
                               {fifoIndex === 1 ? (
-                                <span className="sr-next-label">ตัดออกก่อน</span>
+                                <span className="inline-block whitespace-nowrap rounded-[20px] bg-[var(--p600)] px-2 py-0.5 text-[10px] text-white">
+                                  ตัดออกก่อน
+                                </span>
                               ) : null}
                             </div>
                           </div>
-                        </td>
-                        <td style={{ fontSize: 12 }}>{lot.receivingId || lot.id}</td>
-                        <td style={{ whiteSpace: 'nowrap', fontSize: 12 }}>
+                        </TableCell>
+                        <TableCell className="text-xs">{lot.receivingId || lot.id}</TableCell>
+                        <TableCell className="whitespace-nowrap text-xs">
                           {formatFifoLotDate(lot.receivedAt)}
-                        </td>
-                        <td style={{ whiteSpace: 'nowrap', fontSize: 12 }}>
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap text-xs">
                           {formatFifoLotExpiry(lot.expiryDate)}
-                        </td>
-                        <td>
+                        </TableCell>
+                        <TableCell>
                           <ExpiryAlertBadge level={alertLevel} daysLeft={daysLeft} />
-                        </td>
-                        <td className="num">
-                          <div style={{ fontWeight: 500 }}>{fmtNum(remain)}</div>
-                          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="font-medium">{fmtNum(remain)}</div>
+                          <div className="text-[11px] text-[var(--text-muted)]">
                             / {fmtNum(received)} ({pct}%)
                           </div>
-                        </td>
-                        <td className="num">{fmtBaht(Number(lot.costPerUnit) || 0)}</td>
-                        <td className="num" style={{ fontWeight: 500, color: 'var(--success)' }}>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {fmtBaht(Number(lot.costPerUnit) || 0)}
+                        </TableCell>
+                        <TableCell className="text-right font-medium text-[var(--success)]">
                           {fmtBaht(remain * (Number(lot.costPerUnit) || 0))}
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     );
                   })}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
           </div>
         </>

@@ -16,7 +16,11 @@ export default function ProtectedRoute() {
 
   if (isLoading) {
     return (
-      <div className="app-loading" role="status" aria-live="polite">
+      <div
+        className="flex h-screen items-center justify-center text-[var(--text-secondary)]"
+        role="status"
+        aria-live="polite"
+      >
         กำลังโหลด...
       </div>
     );

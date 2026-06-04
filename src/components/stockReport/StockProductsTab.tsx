@@ -16,11 +16,19 @@ import {
 } from '../../lib/stockReport/types';
 import { SortableTh } from './SortableTh';
 import { StatusBadge } from './StatusBadge';
+import {
+  Table,
+  TableHead,
+  TableHeadCell,
+  TableBody,
+  TableRow,
+  TableCell,
+} from '../ui';
 
 function stockBarClass(status: StockStatus): string {
-  if (status === 'ok') return 'sr-bar-ok';
-  if (status === 'low') return 'sr-bar-low';
-  return 'sr-bar-critical';
+  if (status === 'ok') return 'bg-[#1d9e75]';
+  if (status === 'low') return 'bg-[#ef9f27]';
+  return 'bg-[#e24b4a]';
 }
 
 export default function StockProductsTab({
@@ -121,10 +129,10 @@ export default function StockProductsTab({
         </button>
       </div>
       <div className="sr-card">
-        <div className="sr-table-scroll">
-          <table className="sr-table">
-            <thead>
-              <tr>
+        <div className="overflow-x-auto">
+          <Table hoverable className="min-w-[600px]">
+            <TableHead>
+              <TableRow>
                 <SortableTh
                   label="รหัส (SKU)"
                   sortKey="sku"
@@ -152,7 +160,7 @@ export default function StockProductsTab({
                   activeKey={productSort.key}
                   direction={productSort.direction}
                   onSort={(k) => handleProductSort(k as StockProductSortKey)}
-                  className="num"
+                  className="text-right"
                 />
                 <SortableTh
                   label="Avg Cost"
@@ -160,7 +168,7 @@ export default function StockProductsTab({
                   activeKey={productSort.key}
                   direction={productSort.direction}
                   onSort={(k) => handleProductSort(k as StockProductSortKey)}
-                  className="num"
+                  className="text-right"
                 />
                 <SortableTh
                   label="COGS (ช่วงที่เลือก)"
@@ -168,7 +176,7 @@ export default function StockProductsTab({
                   activeKey={productSort.key}
                   direction={productSort.direction}
                   onSort={(k) => handleProductSort(k as StockProductSortKey)}
-                  className="num"
+                  className="text-right"
                 />
                 <SortableTh
                   label="มูลค่าสต็อก"
@@ -176,60 +184,70 @@ export default function StockProductsTab({
                   activeKey={productSort.key}
                   direction={productSort.direction}
                   onSort={(k) => handleProductSort(k as StockProductSortKey)}
-                  className="num"
+                  className="text-right"
                 />
-                <th>สถานะ</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
+                <TableHeadCell>สถานะ</TableHeadCell>
+                <TableHeadCell>
+                  <span className="sr-only">การกระทำ</span>
+                </TableHeadCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
               {filteredProducts.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="sr-empty">
+                <TableRow>
+                  <TableCell
+                    colSpan={9}
+                    className="py-8 text-center text-[13px] text-[var(--text-muted)]"
+                  >
                     ไม่พบสินค้า
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ) : (
                 filteredProducts.map((p) => {
                   const st = stockStatus(p.qty, p.reorderPoint);
                   const maxQty = Math.max(...filteredProducts.map((x) => x.qty), 1);
                   const pct = Math.round((p.qty / maxQty) * 100);
                   return (
-                    <tr key={p.id}>
-                      <td className="sr-col-sku">{p.sku}</td>
-                      <td>
-                        <div className="sr-prod-cell">
+                    <TableRow key={p.id}>
+                      <TableCell
+                        className="whitespace-nowrap text-xs text-[var(--text-secondary)]"
+                        style={{ fontFamily: "'Prompt', sans-serif" }}
+                      >
+                        {p.sku}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2.5">
                           <ProductImageThumb imageUrl={p.imageUrl} alt={p.name} />
-                          <div style={{ fontWeight: 500 }}>{p.name}</div>
+                          <div className="font-medium">{p.name}</div>
                         </div>
-                      </td>
-                      <td>
-                        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                          {p.category}
-                        </span>
-                      </td>
-                      <td className="num">
-                        <div className="sr-stock-bar-wrap">
-                          <div className="sr-stock-bar-bg">
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-xs text-[var(--text-secondary)]">{p.category}</span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center gap-2">
+                          <div className="h-1.5 min-w-[60px] flex-1 overflow-hidden rounded-[3px] bg-[var(--g100)]">
                             <div
-                              className={`sr-stock-bar-fill ${stockBarClass(st)}`}
+                              className={`h-full rounded-[3px] ${stockBarClass(st)}`}
                               style={{ width: `${pct}%` }}
                             />
                           </div>
-                          <span className="sr-stock-qty">{fmtNum(p.qty)}</span>
+                          <span className="min-w-[28px] text-right text-xs font-medium">
+                            {fmtNum(p.qty)}
+                          </span>
                         </div>
-                      </td>
-                      <td className="num">{fmtBaht(p.avgCost)}</td>
-                      <td className="num" style={{ color: 'var(--success)' }}>
+                      </TableCell>
+                      <TableCell className="text-right">{fmtBaht(p.avgCost)}</TableCell>
+                      <TableCell className="text-right text-[var(--success)]">
                         {fmtBaht(p.cogsMonth)}
-                      </td>
-                      <td className="num" style={{ fontWeight: 500, color: 'var(--p600)' }}>
+                      </TableCell>
+                      <TableCell className="text-right font-medium text-[var(--p600)]">
                         {fmtBaht(p.stockValue)}
-                      </td>
-                      <td>
+                      </TableCell>
+                      <TableCell>
                         <StatusBadge status={st} />
-                      </td>
-                      <td>
+                      </TableCell>
+                      <TableCell>
                         <button
                           type="button"
                           className="sr-btn sr-btn-ghost sr-btn-sm"
@@ -238,13 +256,13 @@ export default function StockProductsTab({
                         >
                           <i className="ti ti-stack" aria-hidden="true" />
                         </button>
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   );
                 })
               )}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       </div>
 

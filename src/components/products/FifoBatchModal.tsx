@@ -1,6 +1,14 @@
 import { useMemo } from 'react';
 import type { StockLot } from '../../lib/types';
 import { fmtBaht, type FifoLotRow, type ProductListItem } from '../../lib/productCrud/types';
+import {
+  Table,
+  TableHead,
+  TableHeadCell,
+  TableBody,
+  TableRow,
+  TableCell,
+} from '../ui';
 
 type Props = {
   product: ProductListItem;
@@ -89,35 +97,27 @@ export default function FifoBatchModal({ product, lots, onClose, onUpdateCost }:
         </div>
 
         <div className="pc-fifo-table-wrap">
-          <table className="pc-fifo-table">
-            <thead>
-              <tr>
-                <th style={{ width: 36, textAlign: 'center' }}>ลำดับ</th>
-                <th>วันที่รับเข้า</th>
-                <th>เลขอ้างอิง GRN</th>
-                <th className="r" style={{ width: 90 }}>
-                  คงเหลือ (ชิ้น)
-                </th>
-                <th className="r" style={{ width: 90 }}>
-                  รับเข้าทั้งหมด
-                </th>
-                <th className="r" style={{ width: 110 }}>
-                  ต้นทุน/ชิ้น (฿)
-                </th>
-                <th className="r" style={{ width: 100 }}>
-                  มูลค่ารวม (฿)
-                </th>
-                <th style={{ width: 80, textAlign: 'center' }}>สถานะ</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table>
+            <TableHead className="sticky top-0 z-[1]">
+              <TableRow>
+                <TableHeadCell className="w-9 text-center">ลำดับ</TableHeadCell>
+                <TableHeadCell>วันที่รับเข้า</TableHeadCell>
+                <TableHeadCell>เลขอ้างอิง GRN</TableHeadCell>
+                <TableHeadCell className="w-[90px] text-right">คงเหลือ (ชิ้น)</TableHeadCell>
+                <TableHeadCell className="w-[90px] text-right">รับเข้าทั้งหมด</TableHeadCell>
+                <TableHeadCell className="w-[110px] text-right">ต้นทุน/ชิ้น (฿)</TableHeadCell>
+                <TableHeadCell className="w-[100px] text-right">มูลค่ารวม (฿)</TableHeadCell>
+                <TableHeadCell className="w-20 text-center">สถานะ</TableHeadCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
               {rows.map((b) => {
                 const depleted = b.qtyRemaining <= 0;
                 const partial = !depleted && b.qtyRemaining < b.qtyReceived;
                 const rowVal = b.qtyRemaining * b.costPerUnit;
                 return (
-                  <tr key={b.id} className={depleted ? 'depleted' : ''}>
-                    <td style={{ textAlign: 'center' }}>
+                  <TableRow key={b.id} className={depleted ? 'opacity-40' : ''}>
+                    <TableCell className="text-center">
                       {b.fifoOrder ? (
                         <div className={`pc-lot-order${b.isNext ? ' next' : ''}`}>{b.fifoOrder}</div>
                       ) : (
@@ -125,25 +125,25 @@ export default function FifoBatchModal({ product, lots, onClose, onUpdateCost }:
                           <i className="ti ti-check" style={{ fontSize: 12, color: 'var(--g200, #d3d1c7)' }} aria-hidden="true" />
                         </div>
                       )}
-                    </td>
-                    <td>
+                    </TableCell>
+                    <TableCell>
                       {b.receivedAt.toDate().toLocaleDateString('th-TH', {
                         day: '2-digit',
                         month: '2-digit',
                         year: 'numeric',
                       })}
-                    </td>
-                    <td style={{ fontSize: 11, color: 'var(--p600, #534ab7)', fontWeight: 500 }}>{b.grnLabel}</td>
-                    <td
-                      className="r"
+                    </TableCell>
+                    <TableCell style={{ fontSize: 11, color: 'var(--p600, #534ab7)', fontWeight: 500 }}>{b.grnLabel}</TableCell>
+                    <TableCell
+                      className="text-right"
                       style={{ color: depleted ? 'var(--g400)' : partial ? 'var(--amber)' : 'var(--p900)' }}
                     >
                       {b.qtyRemaining}
-                    </td>
-                    <td className="r" style={{ color: 'var(--g400)' }}>
+                    </TableCell>
+                    <TableCell className="text-right" style={{ color: 'var(--g400)' }}>
                       {b.qtyReceived}
-                    </td>
-                    <td className="r">
+                    </TableCell>
+                    <TableCell className="text-right">
                       {depleted ? (
                         <span style={{ fontFamily: 'Prompt, sans-serif', color: 'var(--g400)' }}>฿{fmtBaht(b.costPerUnit)}</span>
                       ) : (
@@ -163,11 +163,11 @@ export default function FifoBatchModal({ product, lots, onClose, onUpdateCost }:
                           />
                         </div>
                       )}
-                    </td>
-                    <td className="r" style={{ color: depleted ? 'var(--g400)' : 'var(--green)' }}>
+                    </TableCell>
+                    <TableCell className="text-right" style={{ color: depleted ? 'var(--g400)' : 'var(--green)' }}>
                       ฿{fmtBaht(rowVal)}
-                    </td>
-                    <td style={{ textAlign: 'center' }}>
+                    </TableCell>
+                    <TableCell className="text-center">
                       {depleted ? (
                         <span className="pc-lot-status pc-lot-depleted">หมดแล้ว</span>
                       ) : partial ? (
@@ -179,12 +179,12 @@ export default function FifoBatchModal({ product, lots, onClose, onUpdateCost }:
                           <i className="ti ti-circle-check" style={{ fontSize: 10 }} aria-hidden="true" /> พร้อมตัด
                         </span>
                       )}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 );
               })}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
 
         <div className="pc-fifo-footer">

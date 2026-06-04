@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useExpiryPolicies } from '../../lib/inventory/useExpiryPolicies';
 import type { ExpiryPolicy } from '../../lib/inventory/expiryPolicyTypes';
+import {
+  Table,
+  TableHead,
+  TableHeadCell,
+  TableBody,
+  TableRow,
+  TableCell,
+} from '../../components/ui';
 
 function newPolicyId(): string {
   return `exp-${Date.now()}`;
@@ -97,71 +105,73 @@ export default function ExpiryPolicySettings() {
           </div>
         </div>
         <div className="stg-card-body stg-card-body-flush">
-          <table className="stg-uom-table">
-            <thead>
-              <tr>
-                <th>ชื่อนโยบาย</th>
-                <th>เฝ้าระวัง (วัน)</th>
-                <th>วิกฤต (วัน)</th>
-                <th>ค่าเริ่มต้น</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {draft.map((p) => (
-                <tr key={p.id}>
-                  <td>
-                    <input
-                      className="stg-form-input stg-input-inline stg-input-w110"
-                      value={p.name}
-                      onChange={(e) => updateRow(p.id, { name: e.target.value })}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="number"
-                      min={0}
-                      className="stg-form-input stg-input-inline stg-input-w80"
-                      value={p.warningDays}
-                      onChange={(e) => updateRow(p.id, { warningDays: Number(e.target.value) })}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="number"
-                      min={0}
-                      className="stg-form-input stg-input-inline stg-input-w80"
-                      value={p.criticalDays}
-                      onChange={(e) => updateRow(p.id, { criticalDays: Number(e.target.value) })}
-                    />
-                  </td>
-                  <td>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+          <div className="overflow-x-auto">
+            <Table hoverable className="min-w-[480px]">
+              <TableHead>
+                <TableRow>
+                  <TableHeadCell>ชื่อนโยบาย</TableHeadCell>
+                  <TableHeadCell>เฝ้าระวัง (วัน)</TableHeadCell>
+                  <TableHeadCell>วิกฤต (วัน)</TableHeadCell>
+                  <TableHeadCell>ค่าเริ่มต้น</TableHeadCell>
+                  <TableHeadCell />
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {draft.map((p) => (
+                  <TableRow key={p.id}>
+                    <TableCell>
                       <input
-                        type="radio"
-                        name="expiry-default"
-                        checked={!!p.isDefault}
-                        onChange={() => setDefault(p.id)}
+                        className="stg-form-input stg-input-inline stg-input-w110"
+                        value={p.name}
+                        onChange={(e) => updateRow(p.id, { name: e.target.value })}
                       />
-                      ค่าเริ่มต้น
-                    </label>
-                  </td>
-                  <td>
-                    <button
-                      type="button"
-                      className="stg-icon-btn"
-                      title="ลบ"
-                      disabled={draft.length <= 1}
-                      onClick={() => removePolicy(p.id)}
-                      style={{ opacity: draft.length <= 1 ? 0.3 : 1 }}
-                    >
-                      <i className="ti ti-trash" style={{ fontSize: 14, color: 'var(--danger)' }} aria-hidden="true" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    </TableCell>
+                    <TableCell>
+                      <input
+                        type="number"
+                        min={0}
+                        className="stg-form-input stg-input-inline stg-input-w80"
+                        value={p.warningDays}
+                        onChange={(e) => updateRow(p.id, { warningDays: Number(e.target.value) })}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <input
+                        type="number"
+                        min={0}
+                        className="stg-form-input stg-input-inline stg-input-w80"
+                        value={p.criticalDays}
+                        onChange={(e) => updateRow(p.id, { criticalDays: Number(e.target.value) })}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+                        <input
+                          type="radio"
+                          name="expiry-default"
+                          checked={!!p.isDefault}
+                          onChange={() => setDefault(p.id)}
+                        />
+                        ค่าเริ่มต้น
+                      </label>
+                    </TableCell>
+                    <TableCell>
+                      <button
+                        type="button"
+                        className="stg-icon-btn"
+                        title="ลบ"
+                        disabled={draft.length <= 1}
+                        onClick={() => removePolicy(p.id)}
+                        style={{ opacity: draft.length <= 1 ? 0.3 : 1 }}
+                      >
+                        <i className="ti ti-trash" style={{ fontSize: 14, color: 'var(--danger)' }} aria-hidden="true" />
+                      </button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         </div>
         <div className="stg-card-body">
           <button type="button" className="stg-btn stg-btn-ghost" onClick={addPolicy}>

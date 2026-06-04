@@ -11,9 +11,10 @@
  *   3. Hand off to Vite.
  *
  * Persist:
- *   - Autosave the snapshot every 20s while running, AND a final best-effort dump
- *     on exit. Periodic saves mean even a hard window-close keeps near-latest data
- *     — we don't depend on a perfectly clean Ctrl+C.
+ *   - Autosave the snapshot every 5s while running, AND a final best-effort dump
+ *     on exit. Both are GUARDED: they never overwrite a product-bearing snapshot
+ *     with a seed-only/empty dump (see dumpPosDb guard). Periodic saves mean even
+ *     a hard window-close keeps near-latest data — no clean Ctrl+C required.
  *
  * Auth + Storage keep persisting via the native `--export-on-exit`; this only
  * covers the `pos-db` Firestore data that export misses.
@@ -23,6 +24,7 @@ import {
   dumpPosDb,
   restorePosDb,
   collectionHasDocs,
+  snapshotDocCount,
   DEFAULT_SNAPSHOT_PATH,
 } from "./pos-db-snapshot.mjs";
 
@@ -54,13 +56,22 @@ function runSeed() {
   console.log("");
 }
 
-/** Dump pos-db, guarded against overlapping runs. Never throws. */
+/**
+ * Dump pos-db, guarded against overlapping runs AND against clobbering an
+ * established product snapshot with a seed-only/empty state. Never throws.
+ */
 async function snapshot(label) {
   if (dumping) return;
   dumping = true;
   try {
-    const n = await dumpPosDb();
-    if (label) console.log(`[snapshot] 💾 ${label}: บันทึก ${n} เอกสาร → pos-db-snapshot.json`);
+    const n = await dumpPosDb(DEFAULT_SNAPSHOT_PATH, { guard: true });
+    if (n === -1) {
+      console.warn(
+        "[snapshot] 🛡️  pos-db ไม่มีสินค้าแต่ snapshot เดิมมี → งดเขียนทับ (กันข้อมูลหาย)",
+      );
+    } else if (label) {
+      console.log(`[snapshot] 💾 ${label}: บันทึก ${n} เอกสาร → pos-db-snapshot.json`);
+    }
   } catch (err) {
     console.warn(`[snapshot] ⚠️  บันทึกไม่สำเร็จ: ${err instanceof Error ? err.message : err}`);
   } finally {
@@ -78,6 +89,9 @@ async function finalize() {
 }
 
 async function boot() {
+  // How much real data is on disk? Used to decide retry-vs-seed below.
+  const onDiskDocs = snapshotDocCount();
+
   // 1. Restore named-db snapshot (no-op if absent/empty).
   let restored = 0;
   try {
@@ -91,7 +105,22 @@ async function boot() {
     console.warn(`[snapshot] ⚠️  กู้คืนไม่สำเร็จ: ${err instanceof Error ? err.message : err}`);
   }
 
-  // 2. Failsafe seed if essentials are still missing.
+  // 1b. If the snapshot HAS data but restore left Firestore empty, that's a
+  // transient restore miss — retry once before falling back to seeding. (The
+  // dump guard already prevents a seed-only autosave from clobbering the
+  // snapshot, but retrying avoids an unnecessarily empty session.)
+  if (onDiskDocs > 0 && !(await firestoreIsSeeded())) {
+    console.warn("[snapshot] ⚠️  restore ไม่ครบทั้งที่มี snapshot — ลองกู้คืนอีกครั้ง");
+    try {
+      restored = await restorePosDb();
+      console.log(`[snapshot] ♻️  กู้คืนรอบสอง: ${restored} เอกสาร`);
+    } catch (err) {
+      console.warn(`[snapshot] ⚠️  กู้คืนรอบสองไม่สำเร็จ: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+
+  // 2. Failsafe seed if essentials are still missing. Safe even when a real
+  // snapshot exists: the dump guard refuses to overwrite it with seed-only data.
   let seeded = false;
   try {
     if (!(await firestoreIsSeeded())) {

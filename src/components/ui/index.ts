@@ -30,6 +30,12 @@ export {
   DropdownHeader,
   DropdownItem,
   DropdownDivider,
+  // Sidebar / navigation
+  Sidebar,
+  SidebarItems,
+  SidebarItemGroup,
+  SidebarItem,
+  SidebarCollapse,
   // Table
   Table,
   TableHead,

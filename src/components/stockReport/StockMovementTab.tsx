@@ -1,6 +1,14 @@
 import { useMemo, useState } from 'react';
 import ProductImageThumb from '../products/ProductImageThumb';
 import { DateRangeDropdown } from '../common/DateRangeDropdown';
+import {
+  Table,
+  TableHead,
+  TableHeadCell,
+  TableBody,
+  TableRow,
+  TableCell,
+} from '../ui';
 import { downloadCsv } from '../../lib/stockReport/exportCsv';
 import type { DatePreset } from '../../lib/salesHistory/types';
 import {
@@ -15,10 +23,10 @@ import {
 } from '../../lib/stockReport/types';
 
 const MV_META = {
-  in: { icon: 'ti-arrow-bar-to-down', cls: 'sr-mv-in', label: 'รับเข้า', clr: '#3B6D11' },
-  out: { icon: 'ti-arrow-bar-up', cls: 'sr-mv-out', label: 'ตัดออก', clr: '#534AB7' },
-  adj: { icon: 'ti-adjustments-alt', cls: 'sr-mv-adj', label: 'ปรับสต็อก', clr: '#185FA5' },
-  void: { icon: 'ti-arrow-back-up', cls: 'sr-mv-void', label: 'Void คืน', clr: '#A32D2D' },
+  in: { icon: 'ti-arrow-bar-to-down', cls: 'bg-[#eaf3de] text-[#3b6d11]', label: 'รับเข้า', clr: '#3B6D11' },
+  out: { icon: 'ti-arrow-bar-up', cls: 'bg-[#eeedfe] text-[#534ab7]', label: 'ตัดออก', clr: '#534AB7' },
+  adj: { icon: 'ti-adjustments-alt', cls: 'bg-[#e6f1fb] text-[#185fa5]', label: 'ปรับสต็อก', clr: '#185FA5' },
+  void: { icon: 'ti-arrow-back-up', cls: 'bg-[#fcebeb] text-[#a32d2d]', label: 'Void คืน', clr: '#A32D2D' },
 } as const;
 
 export default function StockMovementTab({
@@ -114,28 +122,31 @@ export default function StockMovementTab({
         </button>
       </div>
       <div className="sr-card">
-        <div className="sr-table-scroll">
-          <table className="sr-table">
-            <thead>
-              <tr>
-                <th>วันที่/เวลา</th>
-                <th>รหัส (SKU)</th>
-                <th>ชื่อสินค้า</th>
-                <th>ประเภท</th>
-                <th className="num">จำนวน</th>
-                <th className="num">ต้นทุน/หน่วย</th>
-                <th className="num">มูลค่า</th>
-                <th>เอกสารอ้างอิง</th>
-                <th>โดย</th>
-              </tr>
-            </thead>
-            <tbody>
+        <div className="overflow-x-auto">
+          <Table hoverable className="min-w-[600px]">
+            <TableHead>
+              <TableRow>
+                <TableHeadCell>วันที่/เวลา</TableHeadCell>
+                <TableHeadCell>รหัส (SKU)</TableHeadCell>
+                <TableHeadCell>ชื่อสินค้า</TableHeadCell>
+                <TableHeadCell>ประเภท</TableHeadCell>
+                <TableHeadCell className="text-right">จำนวน</TableHeadCell>
+                <TableHeadCell className="text-right">ต้นทุน/หน่วย</TableHeadCell>
+                <TableHeadCell className="text-right">มูลค่า</TableHeadCell>
+                <TableHeadCell>เอกสารอ้างอิง</TableHeadCell>
+                <TableHeadCell>โดย</TableHeadCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
               {filteredMovements.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="sr-empty">
+                <TableRow>
+                  <TableCell
+                    colSpan={9}
+                    className="py-8 text-center text-[13px] text-[var(--text-muted)]"
+                  >
                     ไม่พบรายการในช่วงวันที่เลือก
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ) : (
                 filteredMovements.map((m) => {
                   const meta = MV_META[m.displayType];
@@ -147,55 +158,64 @@ export default function StockMovementTab({
                   const qClr =
                     m.displayType === 'out' || m.qty < 0 ? 'var(--danger)' : 'var(--success)';
                   return (
-                    <tr key={m.id}>
-                      <td style={{ whiteSpace: 'nowrap', fontSize: 12 }}>
-                        <div style={{ fontWeight: 500 }}>
+                    <TableRow key={m.id}>
+                      <TableCell className="whitespace-nowrap text-xs">
+                        <div className="font-medium">
                           {d.toLocaleTimeString('th-TH', {
                             hour: '2-digit',
                             minute: '2-digit',
                           })}
                         </div>
-                        <div style={{ color: 'var(--text-muted)' }}>
+                        <div className="text-[var(--text-muted)]">
                           {d.toLocaleDateString('th-TH')}
                         </div>
-                      </td>
-                      <td className="sr-col-sku">{m.productSku}</td>
-                      <td>
-                        <div className="sr-prod-cell">
+                      </TableCell>
+                      <TableCell
+                        className="whitespace-nowrap text-xs text-[var(--text-secondary)]"
+                        style={{ fontFamily: "'Prompt', sans-serif" }}
+                      >
+                        {m.productSku}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2.5">
                           <ProductImageThumb
                             imageUrl={m.imageUrl}
                             alt={m.productName}
                             variant="thumb"
                           />
-                          <div style={{ fontWeight: 500, fontSize: 13 }}>{m.productName}</div>
+                          <div className="text-[13px] font-medium">{m.productName}</div>
                         </div>
-                      </td>
-                      <td>
-                        <div className="sr-mv-cell">
-                          <div className={`sr-mv-icon ${meta.cls}`}>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <div
+                            className={`flex h-7 w-7 items-center justify-center rounded-full text-[13px] ${meta.cls}`}
+                          >
                             <i className={`ti ${meta.icon}`} aria-hidden="true" />
                           </div>
-                          <span style={{ fontSize: 12, color: meta.clr }}>{meta.label}</span>
+                          <span className="text-xs" style={{ color: meta.clr }}>
+                            {meta.label}
+                          </span>
                         </div>
-                      </td>
-                      <td className="num" style={{ fontWeight: 500, color: qClr }}>
+                      </TableCell>
+                      <TableCell className="text-right font-medium" style={{ color: qClr }}>
                         {qSign}
                         {fmtNum(Math.abs(m.qty))}
-                      </td>
-                      <td className="num">{fmtBaht(m.costPerUnit)}</td>
-                      <td className="num" style={{ fontWeight: 500 }}>
+                      </TableCell>
+                      <TableCell className="text-right">{fmtBaht(m.costPerUnit)}</TableCell>
+                      <TableCell className="text-right font-medium">
                         {fmtBaht(Math.abs(m.qty) * m.costPerUnit)}
-                      </td>
-                      <td style={{ fontSize: 12, color: 'var(--info)' }}>{m.refId}</td>
-                      <td style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                      </TableCell>
+                      <TableCell className="text-xs text-[var(--info)]">{m.refId}</TableCell>
+                      <TableCell className="text-xs text-[var(--text-secondary)]">
                         {m.staffName}
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   );
                 })
               )}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       </div>
     </div>
