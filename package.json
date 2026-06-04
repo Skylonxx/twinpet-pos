@@ -6,8 +6,11 @@
   "scripts": {
     "gen-config": "node scripts/gen-deploy-config.mjs",
     "predev": "npm run gen-config && npm --prefix functions run build",
-    "dev": "firebase emulators:exec --ui --export-on-exit=./.emulator-data $([ -f .emulator-data/firebase-export-metadata.json ] && echo --import=./.emulator-data) \"vite\"",
+    "dev": "node scripts/start-emulator.mjs",
     "dev:emulator": "node scripts/start-emulator.mjs",
+    "free:ports": "node scripts/free-emulator-ports.mjs",
+    "snapshot:dump": "node scripts/pos-db-snapshot.mjs dump",
+    "snapshot:restore": "node scripts/pos-db-snapshot.mjs restore",
     "dev:web": "vite",
     "seed:emulator": "node scripts/seed-emulator.mjs",
     "prebuild": "npm run gen-config",

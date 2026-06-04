@@ -17,6 +17,9 @@ firestore-debug.log
 ui-debug.log
 # Local emulator data (dev:emulator script)
 emulator-data/
+# Custom pos-db snapshot (named-db persistence; kept OUTSIDE emulator-data so
+# firebase --export-on-exit can't wipe it). See scripts/pos-db-snapshot.mjs.
+.local-persist/
 # Firebase emulator export dumps
 firebase-export-*/
 # Playwright output
