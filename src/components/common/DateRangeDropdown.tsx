@@ -4,7 +4,6 @@ import {
   getDateRange as defaultGetDateRange,
   type DatePreset,
 } from '../../lib/salesHistory/types';
-import './DateRangeDropdown.css';
 
 export type DateRangeChange<P extends string = DatePreset> = {
   preset: P;
@@ -127,49 +126,69 @@ export function DateRangeDropdown<P extends string = DatePreset>({
   };
 
   return (
-    <div className="drd-wrapper" ref={ddRef}>
-      <button type="button" className="drd-toggle-btn" onClick={() => setOpen((v) => !v)}>
+    <div className="relative inline-flex shrink-0" ref={ddRef}>
+      <button
+        type="button"
+        className="flex w-[232px] cursor-pointer items-center justify-between gap-1.5 rounded-md border border-[var(--border-md)] bg-white px-3 py-[7px] text-[13px] text-[var(--text-primary)] hover:border-[var(--p100)] hover:text-[var(--p600)]"
+        onClick={() => setOpen((v) => !v)}
+      >
         <i className="ti ti-calendar" aria-hidden="true" />
-        <span className="drd-toggle-label">{label}</span>
+        <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left">
+          {label}
+        </span>
         <i className="ti ti-chevron-down" style={{ fontSize: 10 }} aria-hidden="true" />
       </button>
       {open && (
-        <div className="drd-menu">
+        <div className="absolute left-0 top-full z-[100] mt-1.5 min-w-[260px] overflow-hidden rounded-md border border-[var(--border)] bg-white p-1 shadow-[0_8px_24px_rgba(0,0,0,0.1)]">
           {presetList.map(([key, lbl]) => (
             <button
               key={key}
               type="button"
-              className={`drd-menu-item${preset === key ? ' on' : ''}`}
+              className={`block w-full cursor-pointer rounded-md px-3.5 py-2 text-left text-[13px] hover:bg-[#f4f3fe] ${
+                preset === key
+                  ? 'bg-[var(--p50)] font-semibold text-[var(--p600)]'
+                  : 'text-[var(--text-primary)]'
+              }`}
               onClick={() => pickPreset(key)}
             >
               {lbl}
             </button>
           ))}
-          <div className="drd-custom-label">กำหนดเอง</div>
-          <div className="drd-custom">
+          <div className="px-3.5 pb-1 pt-2 text-[11px] font-semibold text-[var(--text-muted)]">
+            กำหนดเอง
+          </div>
+          <div className="flex gap-1.5 px-2.5 pb-2">
             {/* Invisible-overlay hack: a visible DD/MM/YYYY layer with the real
                 native <input type="date"> stretched transparently on top, so the
                 user keeps the OS calendar popup but always SEES DD/MM/YYYY. */}
-            <div className="drd-date-field">
-              <span className={`drd-date-display${from ? '' : ' is-placeholder'}`}>
+            <div className="relative min-w-0 flex-1">
+              <span
+                className={`block overflow-hidden text-ellipsis whitespace-nowrap rounded-md border border-[var(--border-md)] bg-white px-2 py-1.5 text-xs ${
+                  from ? 'text-[var(--text-primary)]' : 'text-[var(--text-muted)]'
+                }`}
+              >
                 {from ? isoToDisplay(from) : 'DD/MM/YYYY'}
               </span>
               <input
                 ref={fromInputRef}
                 type="date"
-                className="drd-date-native"
+                className="absolute left-0 top-0 m-0 h-full w-full cursor-pointer border-0 p-0 opacity-0"
                 value={from}
                 onClick={openNativePicker}
                 onChange={(e) => onChange({ preset: 'custom' as P, from: e.target.value, to })}
               />
             </div>
-            <div className="drd-date-field">
-              <span className={`drd-date-display${to ? '' : ' is-placeholder'}`}>
+            <div className="relative min-w-0 flex-1">
+              <span
+                className={`block overflow-hidden text-ellipsis whitespace-nowrap rounded-md border border-[var(--border-md)] bg-white px-2 py-1.5 text-xs ${
+                  to ? 'text-[var(--text-primary)]' : 'text-[var(--text-muted)]'
+                }`}
+              >
                 {to ? isoToDisplay(to) : 'DD/MM/YYYY'}
               </span>
               <input
                 type="date"
-                className="drd-date-native"
+                className="absolute left-0 top-0 m-0 h-full w-full cursor-pointer border-0 p-0 opacity-0"
                 value={to}
                 onClick={openNativePicker}
                 onChange={(e) => onChange({ preset: 'custom' as P, from, to: e.target.value })}

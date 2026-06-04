@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs'
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
+import flowbiteReact from "flowbite-react/plugin/vite";
 
 // firebase.json is the single source of truth for the deployment region; read it
 // here (build tool runs in Node) so the dev proxy host isn't hardcoded.
@@ -22,7 +24,7 @@ export default defineConfig(({ mode }) => {
   const functionsHost = `https://${firestoreLocation()}-${projectId}.cloudfunctions.net`
 
   return {
-    plugins: [react()],
+    plugins: [react(), tailwindcss(), flowbiteReact()],
     build: {
       // Vendor chunks (below) keep the app chunk lean for caching; the remaining
       // app bundle still sits above Vite's 500 kB default, so lift the warning

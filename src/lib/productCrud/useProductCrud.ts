@@ -110,8 +110,8 @@ export function useProductCrud(branchId: string | null) {
             branchReorderPoint,
             emoji: '📦',
             retailPrice:
-              product.prices.find((p) => p.priceLevelId === RETAIL_PRICE_LEVEL_ID && p.unit === product.baseUnit)?.price ??
-              product.prices[0]?.price ??
+              product.prices?.find((p) => p.priceLevelId === RETAIL_PRICE_LEVEL_ID && p.unit === product.baseUnit)?.price ??
+              product.prices?.[0]?.price ??
               0,
             overrideTierPrices: stockDoc?.overrideTierPrices ?? {},
           } satisfies ProductListItem;

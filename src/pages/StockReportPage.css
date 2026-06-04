@@ -333,31 +333,6 @@
   text-align: right;
 }
 
-.sr-sort-th {
-  cursor: pointer;
-  user-select: none;
-  transition: color 0.12s;
-}
-
-.sr-sort-th:hover {
-  color: var(--p600, #534ab7);
-}
-
-.sr-sort-th.sr-sort-active {
-  color: var(--p600, #534ab7);
-}
-
-.sr-sort-icon {
-  font-size: 11px;
-  margin-left: 4px;
-  vertical-align: -1px;
-  opacity: 0.65;
-}
-
-.sr-sort-th.sr-sort-active .sr-sort-icon {
-  opacity: 1;
-}
-
 .sr-col-sku {
   font-family: 'Prompt', sans-serif;
   font-size: 12px;
@@ -419,34 +394,6 @@
   font-weight: 500;
   min-width: 28px;
   text-align: right;
-}
-
-.sr-badge {
-  display: inline-block;
-  padding: 2px 10px;
-  border-radius: 20px;
-  font-size: 11px;
-  font-weight: 500;
-}
-
-.sr-badge-ok {
-  background: #e1f5ee;
-  color: #0f6e56;
-}
-
-.sr-badge-low {
-  background: #faeeda;
-  color: #854f0b;
-}
-
-.sr-badge-critical {
-  background: #fcebeb;
-  color: #a32d2d;
-}
-
-.sr-badge-oos {
-  background: var(--g100, #ededf5);
-  color: var(--text-muted, #9ca3af);
 }
 
 .sr-expiry-badge {

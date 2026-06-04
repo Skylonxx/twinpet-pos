@@ -1,11 +1,27 @@
-@import './styles/variables.css';
+@import "tailwindcss";
+@import "flowbite-react/plugin/tailwindcss";
+@source "../.flowbite-react/class-list.json";
+@import "./styles/variables.css";
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
+/* Bridge our design tokens → Tailwind theme so utilities like bg-primary-900 /
+   text-primary-600 / font-sans resolve to the existing palette and Thai fonts.
+   (Grays/semantics stay as CSS vars in variables.css — referenced via bg-[var(--g50)].) */
+@theme {
+  --color-primary-50: #eeedfe;
+  --color-primary-100: #cecbf6;
+  --color-primary-200: #afa9ec;
+  --color-primary-300: #a9a3e3;
+  --color-primary-400: #8279d3;
+  --color-primary-500: #6b62c9;
+  --color-primary-600: #534ab7;
+  --color-primary-700: #483fa0;
+  --color-primary-800: #3c3489;
+  --color-primary-900: #26215c;
+  --font-sans: 'Sarabun', 'Prompt', sans-serif;
 }
 
+/* Layout-critical globals that Tailwind's Preflight removes. The app's full-height
+   flex chain (#root → AppShell) depends on these, so re-establish them explicitly. */
 html,
 body,
 #root {
@@ -15,37 +31,18 @@ body,
   padding: 0;
 }
 
-body {
-  font-family: 'Sarabun', 'Prompt', sans-serif;
-  font-size: 14px;
-  line-height: 1.5;
-  color: var(--text-primary);
-  background: var(--g50);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
 #root {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
 }
 
-.w-full {
-  width: 100%;
-}
-
-.min-h-screen {
-  min-height: 100vh;
-}
-
-button,
-input,
-select,
-textarea {
-  font-family: inherit;
-}
-
-a {
-  color: inherit;
+body {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  background: var(--g50);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }

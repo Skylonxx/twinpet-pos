@@ -62,7 +62,7 @@ export default function AppShell() {
   };
 
   return (
-    <div className="app-shell w-full min-h-screen">
+    <div className="flex w-full h-screen overflow-hidden bg-[var(--g50)] font-sans">
       <aside
         className={`app-shell-sidebar${open ? ' is-open' : ''}`}
         aria-label="แถบนำทาง"
@@ -163,17 +163,17 @@ export default function AppShell() {
         </div>
       </aside>
 
-      <div className="app-shell-main">
-        <header className="app-shell-topbar">
+      <div className="flex-1 flex flex-col w-full min-w-0 overflow-hidden">
+        <header className="h-12 flex-shrink-0 flex items-center gap-3 px-4 bg-white border-b-[0.5px] border-[var(--g200)]">
           <div className="app-shell-branch-badge" title="สาขาปัจจุบัน">
             <i className="ti ti-building-store" aria-hidden="true" />
             สาขา{branchDisplay}
           </div>
           <span className="app-shell-topbar-title">{pageTitle}</span>
-          <div className="app-shell-topbar-spacer" />
+          <div className="flex-1" />
         </header>
 
-        <main className="app-shell-content">
+        <main className="flex-1 overflow-auto min-h-0">
           <Outlet />
         </main>
       </div>

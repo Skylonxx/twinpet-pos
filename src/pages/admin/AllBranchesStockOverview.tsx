@@ -14,9 +14,10 @@ import {
   CAT_COLORS,
   fmtBaht,
   fmtNum,
-  type StockStatus,
 } from '../../lib/stockReport/types';
 import { useAllBranchesStock } from '../../lib/stockReport/useAllBranchesStock';
+import StatusBadge from '../../components/stockReport/StatusBadge';
+import { Badge } from '../../components/ui';
 import '../StockReportPage.css';
 import './AllBranchesStockOverview.css';
 
@@ -28,17 +29,6 @@ function compactBahtAxis(value: number | string): string {
   if (n >= 1_000_000) return `฿${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
   if (n >= 1_000) return `฿${Math.round(n / 1_000)}k`;
   return `฿${n}`;
-}
-
-function StatusBadge({ status }: { status: StockStatus }) {
-  const map = {
-    ok: ['sr-badge-ok', 'ปกติ'],
-    low: ['sr-badge-low', 'ต่ำ'],
-    critical: ['sr-badge-critical', 'วิกฤต'],
-    oos: ['sr-badge-oos', 'หมด'],
-  } as const;
-  const [cls, label] = map[status];
-  return <span className={`sr-badge ${cls}`}>{label}</span>;
 }
 
 /**
@@ -293,7 +283,9 @@ export default function AllBranchesStockOverview() {
             <div className="sr-card-head">
               <i className="ti ti-alert-triangle" style={{ color: 'var(--warn)' }} aria-hidden="true" />
               สินค้าที่ต้องเติม (ต่ำกว่า Reorder — รวมทุกสาขา)
-              <span className="sr-badge sr-badge-low">{lowStockCount}</span>
+              <Badge color="warning" className="ml-1 w-fit">
+                {lowStockCount}
+              </Badge>
             </div>
             <div className="sr-table-scroll">
               <table className="sr-table">

@@ -1,4 +1,6 @@
+import { ThemeProvider } from 'flowbite-react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { twinpetTheme } from './components/ui';
 import GuestRoute from './components/GuestRoute';
 import ProtectedRoute from './components/ProtectedRoute';
 import PosShellRoute from './components/PosShellRoute';
@@ -44,6 +46,7 @@ import SupplierPage from './pages/SupplierPage';
 
 export default function App() {
   return (
+    <ThemeProvider theme={twinpetTheme}>
     <BrowserRouter>
       <Routes>
         <Route element={<GuestRoute />}>
@@ -110,5 +113,6 @@ export default function App() {
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </BrowserRouter>
+    </ThemeProvider>
   );
 }

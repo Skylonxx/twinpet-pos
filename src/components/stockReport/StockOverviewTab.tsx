@@ -10,6 +10,7 @@ import {
 import { useMemo, useState } from 'react';
 import { Bar, Doughnut } from 'react-chartjs-2';
 import ProductImageThumb from '../products/ProductImageThumb';
+import { Badge } from '../ui';
 import {
   sortLowStockProducts,
   type LowStockSortKey,
@@ -250,7 +251,9 @@ export default function StockOverviewTab({
         <div className="sr-card-head">
           <i className="ti ti-alert-triangle" style={{ color: 'var(--warn)' }} aria-hidden="true" />
           สินค้าที่ต้องสั่งเพิ่ม (ต่ำกว่า Reorder Point)
-          <span className="sr-badge sr-badge-low">{lowStockProducts.length}</span>
+          <Badge color="warning" className="ml-1 w-fit">
+            {lowStockProducts.length}
+          </Badge>
         </div>
         <div className="sr-table-scroll">
           <table className="sr-table">
