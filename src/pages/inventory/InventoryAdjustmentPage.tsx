@@ -19,6 +19,14 @@ import {
   type AdjustmentLine,
   type AdjustmentReason,
 } from '../../lib/inventory/types';
+import {
+  Table,
+  TableHead,
+  TableHeadCell,
+  TableBody,
+  TableRow,
+  TableCell,
+} from '../../components/ui';
 import './InventoryAdjustmentPage.css';
 
 function todayIso(): string {
@@ -264,38 +272,30 @@ export default function InventoryAdjustmentPage() {
                 ยังไม่มีรายการ — กด &quot;+ เลือกสินค้า&quot; เพื่อเพิ่มสินค้าที่ต้องการปรับยอด
               </div>
             ) : (
-              <table className="inv-adj-table">
-                <thead>
-                  <tr>
-                    <th className="c" style={{ width: 36 }}>
-                      #
-                    </th>
-                    <th>สินค้า</th>
-                    <th className="r" style={{ width: 100 }}>
-                      คงเหลือปัจจุบัน
-                    </th>
-                    <th className="r" style={{ width: 120 }}>
-                      จำนวนที่{dirLabel}
-                    </th>
-                    <th className="r" style={{ width: 110 }}>
-                      ยอดคงเหลือใหม่
-                    </th>
-                    <th className="c" style={{ width: 48 }} />
-                  </tr>
-                </thead>
-                <tbody>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableHeadCell className="text-center w-9">#</TableHeadCell>
+                    <TableHeadCell>สินค้า</TableHeadCell>
+                    <TableHeadCell className="text-right w-[100px]">คงเหลือปัจจุบัน</TableHeadCell>
+                    <TableHeadCell className="text-right w-[120px]">จำนวนที่{dirLabel}</TableHeadCell>
+                    <TableHeadCell className="text-right w-[110px]">ยอดคงเหลือใหม่</TableHeadCell>
+                    <TableHeadCell className="text-center w-12" />
+                  </TableRow>
+                </TableHead>
+                <TableBody>
                   {lines.map((line, idx) => {
                     const next = newStock(line);
                     const nextWarn = next < 0;
                     return (
-                      <tr key={line.lineKey}>
-                        <td className="c">{idx + 1}</td>
-                        <td>
+                      <TableRow key={line.lineKey}>
+                        <TableCell className="text-center">{idx + 1}</TableCell>
+                        <TableCell>
                           <div className="inv-adj-prod-name">{line.name}</div>
                           <div className="inv-adj-prod-sku">{line.sku}</div>
-                        </td>
-                        <td className="r">{line.currentStock}</td>
-                        <td className="r">
+                        </TableCell>
+                        <TableCell className="text-right">{line.currentStock}</TableCell>
+                        <TableCell className="text-right">
                           <input
                             className="inv-adj-qty-input"
                             type="number"
@@ -313,13 +313,13 @@ export default function InventoryAdjustmentPage() {
                           <div className={qtyClass(line.adjustQty)} style={{ marginTop: 4, fontSize: 11 }}>
                             {formatAdjustQty(line.adjustQty)}
                           </div>
-                        </td>
-                        <td className="r">
+                        </TableCell>
+                        <TableCell className="text-right">
                           <span className={`inv-adj-new-stock${nextWarn ? ' inv-adj-new-warn' : ''}`}>
                             {next}
                           </span>
-                        </td>
-                        <td className="c">
+                        </TableCell>
+                        <TableCell className="text-center">
                           <button
                             type="button"
                             className="inv-adj-del-btn"
@@ -328,12 +328,12 @@ export default function InventoryAdjustmentPage() {
                           >
                             <i className="ti ti-trash" aria-hidden="true" />
                           </button>
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     );
                   })}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             )}
           </div>
         </div>

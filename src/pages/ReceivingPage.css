@@ -667,45 +667,10 @@
   overflow-x: auto;
 }
 
-.rcv-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.rcv-table thead th {
-  background: var(--g50);
-  padding: 7px 10px;
-  text-align: left;
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--g400);
-  border-bottom: 0.5px solid var(--g200);
-  white-space: nowrap;
-}
-
-.rcv-table thead th.r {
-  text-align: right;
-}
-
-.rcv-table tbody tr {
-  border-bottom: 0.5px solid var(--g100);
-  transition: background 0.08s;
-}
-
-.rcv-table tbody tr:hover {
-  background: var(--p50);
-}
-
-.rcv-table td {
-  padding: 7px 10px;
-  font-size: 11px;
-  color: var(--g600);
-  vertical-align: middle;
-}
-
-.rcv-table td.r {
-  text-align: right;
-}
+/* .rcv-table structure rules removed — migrated to Flowbite <Table> (Batch 4d).
+   Content-helper classes below (rcv-row-num, rcv-prod-*, rcv-vat-badge, rcv-qty-*,
+   rcv-ii, rcv-w*, rcv-line-total, rcv-avg-*, rcv-expiry-*, rcv-del-btn) are kept —
+   they style cell contents and still apply inside Flowbite cells. */
 
 .rcv-row-num {
   color: var(--g400) !important;

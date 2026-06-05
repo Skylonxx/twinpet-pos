@@ -209,38 +209,10 @@
   border-radius: 4px;
 }
 
-.sup-table-scroll table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-
-.sup-table-scroll th {
-  position: sticky;
-  top: 0;
-  background: var(--g50);
-  padding: 10px 14px;
-  text-align: left;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--g600);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  border-bottom: 1px solid var(--g200);
-  white-space: nowrap;
-  z-index: 1;
-}
-
-.sup-table-scroll td {
-  padding: 11px 14px;
-  border-bottom: 1px solid var(--g100);
-  vertical-align: middle;
-  color: var(--p900);
-}
-
-.sup-table-scroll tbody tr:last-child td {
-  border-bottom: none;
-}
+/* .sup-table-scroll table / th / td structure rules removed — migrated to
+   Flowbite <Table> (Batch 4f). These were element-descendant selectors under
+   .sup-table-scroll that would still match the Flowbite native table. The scroll
+   wrapper (overflow + scrollbar) above and .sup-row-clickable below are kept. */
 
 .sup-row-clickable {
   cursor: pointer;

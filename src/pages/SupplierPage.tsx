@@ -3,6 +3,14 @@ import PosSupplierModal from '../components/receiving/PosSupplierModal';
 import { useAuth } from '../lib/hooks/useAuth';
 import { useActiveSuppliers } from '../lib/pos/useSuppliers';
 import type { Supplier } from '../lib/types';
+import {
+  Table,
+  TableHead,
+  TableHeadCell,
+  TableBody,
+  TableRow,
+  TableCell,
+} from '../components/ui';
 import './SupplierPage.css';
 
 export default function SupplierPage() {
@@ -102,22 +110,22 @@ export default function SupplierPage() {
         {/* Table */}
         <div className="sup-card">
           <div className="sup-table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>รหัส</th>
-                  <th>ชื่อผู้จำหน่าย</th>
-                  <th>ผู้ติดต่อ</th>
-                  <th>เบอร์โทร</th>
-                  <th>เลขผู้เสียภาษี</th>
-                  <th>ที่อยู่</th>
-                  <th style={{ textAlign: 'right' }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableHeadCell>รหัส</TableHeadCell>
+                  <TableHeadCell>ชื่อผู้จำหน่าย</TableHeadCell>
+                  <TableHeadCell>ผู้ติดต่อ</TableHeadCell>
+                  <TableHeadCell>เบอร์โทร</TableHeadCell>
+                  <TableHeadCell>เลขผู้เสียภาษี</TableHeadCell>
+                  <TableHeadCell>ที่อยู่</TableHeadCell>
+                  <TableHeadCell className="text-right">Actions</TableHeadCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
                 {filtered.length === 0 ? (
-                  <tr>
-                    <td colSpan={7}>
+                  <TableRow>
+                    <TableCell colSpan={7}>
                       <div className="sup-empty">
                         <i className="ti ti-truck-off" aria-hidden="true" />
                         <p>
@@ -126,30 +134,30 @@ export default function SupplierPage() {
                             : 'ไม่พบผู้จำหน่ายที่ตรงกับคำค้นหา'}
                         </p>
                       </div>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ) : (
                   filtered.map((s) => (
-                    <tr
+                    <TableRow
                       key={s.id}
                       className="sup-row-clickable"
                       onClick={() => openEdit(s)}
                       title="คลิกเพื่อแก้ไข"
                     >
-                      <td>
+                      <TableCell>
                         <span className="sup-code">{s.code}</span>
-                      </td>
-                      <td>
+                      </TableCell>
+                      <TableCell>
                         <div className="sup-name-cell">
                           <div className="sup-avatar">{(s.name[0] ?? 'S').toUpperCase()}</div>
                           <span className="sup-name">{s.name}</span>
                         </div>
-                      </td>
-                      <td className="sup-text-muted">{s.contactName || '—'}</td>
-                      <td>{s.phone || '—'}</td>
-                      <td className="sup-mono">{s.taxId || '—'}</td>
-                      <td className="sup-text-muted sup-address">{s.address || '—'}</td>
-                      <td onClick={(e) => e.stopPropagation()}>
+                      </TableCell>
+                      <TableCell className="sup-text-muted">{s.contactName || '—'}</TableCell>
+                      <TableCell>{s.phone || '—'}</TableCell>
+                      <TableCell className="sup-mono">{s.taxId || '—'}</TableCell>
+                      <TableCell className="sup-text-muted sup-address">{s.address || '—'}</TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
                         <div className="sup-action-group">
                           <button
                             type="button"
@@ -160,12 +168,12 @@ export default function SupplierPage() {
                             <i className="ti ti-edit" aria-hidden="true" />
                           </button>
                         </div>
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ))
                 )}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         </div>
       </div>

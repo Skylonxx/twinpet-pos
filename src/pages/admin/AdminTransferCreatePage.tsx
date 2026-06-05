@@ -14,6 +14,14 @@ import { lineFromPickerForTransfer, type TransferLine } from '../../lib/inventor
 import { useProductCrud } from '../../lib/productCrud/useProductCrud';
 import type { Branch } from '../../lib/types';
 import '../inventory/InventoryAdjustmentPage.css';
+import {
+  Table,
+  TableHead,
+  TableHeadCell,
+  TableBody,
+  TableRow,
+  TableCell,
+} from '../../components/ui';
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
@@ -298,35 +306,35 @@ export default function AdminTransferCreatePage() {
                 ยังไม่มีรายการ — กด &quot;+ เลือกสินค้า&quot; เพื่อเพิ่มสินค้าที่ต้องการโอน
               </div>
             ) : (
-              <table className="inv-adj-table">
-                <thead>
-                  <tr>
-                    <th className="c" style={{ width: 36 }}>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableHeadCell className="text-center" style={{ width: 36 }}>
                       #
-                    </th>
-                    <th>สินค้า</th>
-                    <th className="r" style={{ width: 100 }}>
+                    </TableHeadCell>
+                    <TableHeadCell>สินค้า</TableHeadCell>
+                    <TableHeadCell className="text-right" style={{ width: 100 }}>
                       สต็อกต้นทาง
-                    </th>
-                    <th className="r" style={{ width: 120 }}>
+                    </TableHeadCell>
+                    <TableHeadCell className="text-right" style={{ width: 120 }}>
                       จำนวนที่โอน
-                    </th>
-                    <th className="c" style={{ width: 48 }} />
-                  </tr>
-                </thead>
-                <tbody>
+                    </TableHeadCell>
+                    <TableHeadCell className="text-center" style={{ width: 48 }} />
+                  </TableRow>
+                </TableHead>
+                <TableBody>
                   {lines.map((line, idx) => {
                     const liveStock = productMap.get(line.productId)?.stock ?? line.sourceStock;
                     const overStock = line.transferQty > liveStock;
                     return (
-                      <tr key={line.lineKey}>
-                        <td className="c">{idx + 1}</td>
-                        <td>
+                      <TableRow key={line.lineKey}>
+                        <TableCell className="text-center">{idx + 1}</TableCell>
+                        <TableCell>
                           <div className="inv-adj-prod-name">{line.name}</div>
                           <div className="inv-adj-prod-sku">{line.sku}</div>
-                        </td>
-                        <td className="r">{liveStock}</td>
-                        <td className="r">
+                        </TableCell>
+                        <TableCell className="text-right">{liveStock}</TableCell>
+                        <TableCell className="text-right">
                           <input
                             className="inv-adj-qty-input"
                             type="number"
@@ -346,8 +354,8 @@ export default function AdminTransferCreatePage() {
                               เกินสต็อก ({liveStock})
                             </div>
                           ) : null}
-                        </td>
-                        <td className="c">
+                        </TableCell>
+                        <TableCell className="text-center">
                           <button
                             type="button"
                             className="inv-adj-del-btn"
@@ -356,12 +364,12 @@ export default function AdminTransferCreatePage() {
                           >
                             <i className="ti ti-trash" aria-hidden="true" />
                           </button>
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     );
                   })}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             )}
           </div>
         </div>

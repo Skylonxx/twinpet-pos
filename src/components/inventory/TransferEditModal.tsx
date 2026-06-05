@@ -2,6 +2,14 @@ import { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { BranchTransferLineInput } from '../../lib/inventory/transferTypes';
 import type { InventoryTransfer, InventoryTransferItem } from '../../lib/inventory/transferTypes';
+import {
+  Table,
+  TableHead,
+  TableHeadCell,
+  TableBody,
+  TableRow,
+  TableCell,
+} from '../ui';
 import './TransferModals.css';
 
 type EditLine = {
@@ -116,29 +124,29 @@ export default function TransferEditModal({
 
           {error ? <div className="tr-warn" style={{ background: '#fbe9e3', borderColor: '#f3c0ad', color: '#b23c17' }}>{error}</div> : null}
 
-          <table className="tr-item-table">
-            <thead>
-              <tr>
-                <th>สินค้า</th>
-                <th className="r">จำนวนที่โอน</th>
-                <th className="r" style={{ width: 44 }} />
-              </tr>
-            </thead>
-            <tbody>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableHeadCell>สินค้า</TableHeadCell>
+                <TableHeadCell className="text-right">จำนวนที่โอน</TableHeadCell>
+                <TableHeadCell className="text-right w-11" />
+              </TableRow>
+            </TableHead>
+            <TableBody>
               {lines.length === 0 ? (
-                <tr>
-                  <td colSpan={3} style={{ textAlign: 'center', color: '#9b98b8', padding: 16 }}>
+                <TableRow>
+                  <TableCell colSpan={3} style={{ textAlign: 'center', color: '#9b98b8', padding: 16 }}>
                     ไม่มีรายการ
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ) : (
                 lines.map((l) => (
-                  <tr key={l.productId}>
-                    <td>
+                  <TableRow key={l.productId}>
+                    <TableCell>
                       <div className="tr-item-name">{l.name}</div>
                       <div className="tr-item-sku">{l.sku}</div>
-                    </td>
-                    <td className="r">
+                    </TableCell>
+                    <TableCell className="text-right">
                       <input
                         className="tr-qty-input"
                         type="number"
@@ -150,8 +158,8 @@ export default function TransferEditModal({
                           updateQty(l.productId, e.target.value === '' ? 0 : Number(e.target.value))
                         }
                       />
-                    </td>
-                    <td className="r">
+                    </TableCell>
+                    <TableCell className="text-right">
                       <button
                         type="button"
                         className="tr-del-btn"
@@ -160,12 +168,12 @@ export default function TransferEditModal({
                       >
                         <i className="ti ti-trash" aria-hidden="true" />
                       </button>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))
               )}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
 
           <div className="tr-cancel-field">
             <label htmlFor="tr-edit-reason">เหตุผลการแก้ไข (ไม่บังคับ)</label>

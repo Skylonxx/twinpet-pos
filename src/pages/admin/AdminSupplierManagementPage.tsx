@@ -11,6 +11,14 @@ import {
 import type { Branch, Supplier } from '../../lib/types';
 import '../CustomerPage.css';
 import './AdminSupplierManagementPage.css';
+import {
+  Table,
+  TableHead,
+  TableHeadCell,
+  TableBody,
+  TableRow,
+  TableCell,
+} from '../../components/ui';
 
 // ─── Form Modal ───────────────────────────────────────────────────────────────
 
@@ -483,31 +491,31 @@ export default function AdminSupplierManagementPage() {
         ) : (
           <div className="asup-card">
             <div className="asup-table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th>ชื่อผู้จำหน่าย</th>
-                    <th>รหัส</th>
-                    <th>ผู้ติดต่อ / โทร</th>
-                    <th>สาขาที่ใช้งานได้</th>
-                    <th>สถานะ</th>
-                    <th style={{ textAlign: 'right' }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <Table className="min-w-[700px]">
+                <TableHead>
+                  <TableRow>
+                    <TableHeadCell>ชื่อผู้จำหน่าย</TableHeadCell>
+                    <TableHeadCell>รหัส</TableHeadCell>
+                    <TableHeadCell>ผู้ติดต่อ / โทร</TableHeadCell>
+                    <TableHeadCell>สาขาที่ใช้งานได้</TableHeadCell>
+                    <TableHeadCell>สถานะ</TableHeadCell>
+                    <TableHeadCell className="text-right">Actions</TableHeadCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
                   {filtered.length === 0 ? (
-                    <tr>
-                      <td colSpan={6}>
+                    <TableRow>
+                      <TableCell colSpan={6}>
                         <div className="asup-empty-state">
                           <i className="ti ti-building-off" aria-hidden="true" />
                           <p>ไม่พบผู้จำหน่ายที่ตรงตามเงื่อนไข</p>
                         </div>
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ) : (
                     filtered.map((s) => (
-                      <tr key={s.id}>
-                        <td>
+                      <TableRow key={s.id}>
+                        <TableCell>
                           <div className="asup-emp-cell">
                             <div className="asup-avatar">{supplierInitials(s)}</div>
                             <div>
@@ -517,15 +525,15 @@ export default function AdminSupplierManagementPage() {
                               )}
                             </div>
                           </div>
-                        </td>
-                        <td>
+                        </TableCell>
+                        <TableCell>
                           <span className="asup-code">{s.code}</span>
-                        </td>
-                        <td>
+                        </TableCell>
+                        <TableCell>
                           <div>{s.contactName || '—'}</div>
                           <div style={{ fontSize: 12, color: 'var(--g400)' }}>{s.phone}</div>
-                        </td>
-                        <td>
+                        </TableCell>
+                        <TableCell>
                           <span
                             className={`asup-scope-pill ${
                               s.allowedBranchIds.includes('ALL') ? 'asup-scope-all' : 'asup-scope-some'
@@ -541,16 +549,16 @@ export default function AdminSupplierManagementPage() {
                             />
                             {fmtBranchScope(s.allowedBranchIds)}
                           </span>
-                        </td>
-                        <td>
+                        </TableCell>
+                        <TableCell>
                           <span
                             className={`asup-status-pill ${s.isActive ? 'asup-status-on' : 'asup-status-off'}`}
                           >
                             <span className="asup-dot" />
                             {s.isActive ? 'ใช้งาน' : 'ระงับ'}
                           </span>
-                        </td>
-                        <td>
+                        </TableCell>
+                        <TableCell>
                           <div className="asup-action-group">
                             <button
                               type="button"
@@ -572,12 +580,12 @@ export default function AdminSupplierManagementPage() {
                               <i className="ti ti-trash" aria-hidden="true" />
                             </button>
                           </div>
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     ))
                   )}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
           </div>
         )}

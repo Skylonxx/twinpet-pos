@@ -577,7 +577,7 @@ export default function SalesHistoryPage() {
               {loading ? (
                 <div className="sh-loading">กำลังโหลดประวัติการขาย...</div>
               ) : (
-                <Table hoverable>
+                <Table hoverable className="min-w-[720px]">
                   <TableHead>
                     <TableRow>
                       <TableHeadCell style={{ width: 150 }}>เวลา</TableHeadCell>
@@ -765,7 +765,7 @@ export default function SalesHistoryPage() {
                     {itemsLoading ? (
                       <div className="sh-loading">กำลังโหลดรายการ...</div>
                     ) : (
-                      <Table>
+                      <Table className="table-fixed">
                         <TableHead>
                           <TableRow>
                             <TableHeadCell>สินค้า</TableHeadCell>

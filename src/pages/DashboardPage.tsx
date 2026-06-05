@@ -19,6 +19,14 @@ import { useDashboardData } from '../lib/dashboard/useDashboardData';
 import type { DashboardPeriod } from '../lib/dashboard/types';
 import type { PaymentMethod } from '../lib/types';
 import { useAuth } from '../lib/hooks/useAuth';
+import {
+  Table,
+  TableHead,
+  TableHeadCell,
+  TableBody,
+  TableRow,
+  TableCell,
+} from '../components/ui';
 import './DashboardPage.css';
 
 ChartJS.register(
@@ -421,26 +429,26 @@ export default function DashboardPage() {
                   <span className="dash-badge-count">{data.topProducts.length}</span>
                 </div>
                 <div className="dash-tc-body">
-                  <table className="dash-mini">
-                    <thead>
-                      <tr>
-                        <th>#</th>
-                        <th>สินค้า</th>
-                        <th className="r">ยอดขาย</th>
-                        <th className="r">กำไร</th>
-                      </tr>
-                    </thead>
-                    <tbody>
+                  <Table>
+                    <TableHead>
+                      <TableRow>
+                        <TableHeadCell>#</TableHeadCell>
+                        <TableHeadCell>สินค้า</TableHeadCell>
+                        <TableHeadCell className="text-right">ยอดขาย</TableHeadCell>
+                        <TableHeadCell className="text-right">กำไร</TableHeadCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
                       {data.topProducts.map((row, i) => {
                         const pct = (row.revenue / maxProdRev) * 100;
                         return (
-                          <tr key={row.productId}>
-                            <td>
+                          <TableRow key={row.productId}>
+                            <TableCell>
                               <span className={`dash-rank-ball ${RANK_CLASSES[i]}`}>
                                 {i + 1}
                               </span>
-                            </td>
-                            <td>
+                            </TableCell>
+                            <TableCell>
                               <div style={{ fontSize: 12, fontWeight: 500, lineHeight: 1.2 }}>
                                 {truncate(row.name, 22)}
                               </div>
@@ -450,18 +458,18 @@ export default function DashboardPage() {
                                   style={{ width: `${pct}%` }}
                                 />
                               </div>
-                            </td>
-                            <td className="r" style={{ color: 'var(--p600)', fontWeight: 500 }}>
+                            </TableCell>
+                            <TableCell className="text-right" style={{ color: 'var(--p600)', fontWeight: 500 }}>
                               {fmtBaht(row.revenue)}
-                            </td>
-                            <td className="r" style={{ color: 'var(--success)' }}>
+                            </TableCell>
+                            <TableCell className="text-right" style={{ color: 'var(--success)' }}>
                               {fmtBaht(row.profit)}
-                            </td>
-                          </tr>
+                            </TableCell>
+                          </TableRow>
                         );
                       })}
-                    </tbody>
-                  </table>
+                    </TableBody>
+                  </Table>
                 </div>
               </div>
 
@@ -472,26 +480,26 @@ export default function DashboardPage() {
                   <span className="dash-badge-count">{data.topCustomers.length}</span>
                 </div>
                 <div className="dash-tc-body">
-                  <table className="dash-mini">
-                    <thead>
-                      <tr>
-                        <th>#</th>
-                        <th>ลูกค้า</th>
-                        <th className="r">ยอดขาย</th>
-                        <th className="r">บิล</th>
-                      </tr>
-                    </thead>
-                    <tbody>
+                  <Table>
+                    <TableHead>
+                      <TableRow>
+                        <TableHeadCell>#</TableHeadCell>
+                        <TableHeadCell>ลูกค้า</TableHeadCell>
+                        <TableHeadCell className="text-right">ยอดขาย</TableHeadCell>
+                        <TableHeadCell className="text-right">บิล</TableHeadCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
                       {data.topCustomers.map((row, i) => {
                         const pct = (row.revenue / maxCustRev) * 100;
                         return (
-                          <tr key={row.name}>
-                            <td>
+                          <TableRow key={row.name}>
+                            <TableCell>
                               <span className={`dash-rank-ball ${RANK_CLASSES[i]}`}>
                                 {i + 1}
                               </span>
-                            </td>
-                            <td>
+                            </TableCell>
+                            <TableCell>
                               <div style={{ fontSize: 12, fontWeight: 500 }}>
                                 {truncate(row.name, 16)}
                               </div>
@@ -501,18 +509,18 @@ export default function DashboardPage() {
                                   style={{ width: `${pct}%` }}
                                 />
                               </div>
-                            </td>
-                            <td className="r" style={{ color: 'var(--p600)', fontWeight: 500 }}>
+                            </TableCell>
+                            <TableCell className="text-right" style={{ color: 'var(--p600)', fontWeight: 500 }}>
                               {fmtBaht(row.revenue)}
-                            </td>
-                            <td className="r" style={{ color: 'var(--text-muted)' }}>
+                            </TableCell>
+                            <TableCell className="text-right" style={{ color: 'var(--text-muted)' }}>
                               {row.bills}
-                            </td>
-                          </tr>
+                            </TableCell>
+                          </TableRow>
                         );
                       })}
-                    </tbody>
-                  </table>
+                    </TableBody>
+                  </Table>
                 </div>
               </div>
 
@@ -523,28 +531,28 @@ export default function DashboardPage() {
                   <span className="dash-badge-count">{data.stockAlerts.length}</span>
                 </div>
                 <div className="dash-tc-body">
-                  <table className="dash-mini">
-                    <thead>
-                      <tr>
-                        <th>สินค้า</th>
-                        <th className="r">คงเหลือ</th>
-                        <th className="r">Reorder</th>
-                      </tr>
-                    </thead>
-                    <tbody>
+                  <Table>
+                    <TableHead>
+                      <TableRow>
+                        <TableHeadCell>สินค้า</TableHeadCell>
+                        <TableHeadCell className="text-right">คงเหลือ</TableHeadCell>
+                        <TableHeadCell className="text-right">Reorder</TableHeadCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
                       {data.stockAlerts.length === 0 ? (
-                        <tr>
-                          <td colSpan={3} style={{ color: 'var(--text-muted)' }}>
+                        <TableRow>
+                          <TableCell colSpan={3} style={{ color: 'var(--text-muted)' }}>
                             สต็อกปกติทุกรายการ
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       ) : (
                         data.stockAlerts.map((row) => (
-                          <tr key={row.productId}>
-                            <td style={{ fontSize: 12, fontWeight: 500 }}>
+                          <TableRow key={row.productId}>
+                            <TableCell style={{ fontSize: 12, fontWeight: 500 }}>
                               {truncate(row.name, 18)}
-                            </td>
-                            <td className="r">
+                            </TableCell>
+                            <TableCell className="text-right">
                               <span
                                 className={
                                   row.qty === 0 || row.critical
@@ -554,15 +562,15 @@ export default function DashboardPage() {
                               >
                                 {row.qty === 0 ? 'หมด' : row.qty}
                               </span>
-                            </td>
-                            <td className="r" style={{ color: 'var(--text-muted)' }}>
+                            </TableCell>
+                            <TableCell className="text-right" style={{ color: 'var(--text-muted)' }}>
                               {row.reorderPoint}
-                            </td>
-                          </tr>
+                            </TableCell>
+                          </TableRow>
                         ))
                       )}
-                    </tbody>
-                  </table>
+                    </TableBody>
+                  </Table>
                 </div>
               </div>
             </div>

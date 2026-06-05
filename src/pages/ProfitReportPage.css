@@ -171,47 +171,12 @@
   overflow-x: auto;
 }
 
-.pr-page table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-  min-width: 850px;
-}
-
-.pr-page thead th {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  padding: 10px 16px;
-  text-align: left;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-muted, #9ca3af);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  background: var(--g50, #f8f8fc);
-  border-bottom: 1px solid var(--border, rgba(0, 0, 0, 0.08));
-  white-space: nowrap;
-}
-
-.pr-page tbody td {
-  padding: 11px 16px;
-  border-bottom: 1px solid var(--border, rgba(0, 0, 0, 0.08));
-  vertical-align: middle;
-}
-
-.pr-page tbody tr:last-child td {
-  border-bottom: none;
-}
-
-.pr-page tbody tr:hover td {
-  background: var(--g50, #f8f8fc);
-}
-
-.pr-page th.num,
-.pr-page td.num {
-  text-align: right;
-}
+/* .pr-page table / thead th / tbody td structure rules removed — the report
+   table migrated to Flowbite <Table> (Batch 4d). These were .pr-page-scoped
+   DESCENDANT selectors that would still match (and override) the Flowbite-
+   rendered native table/thead/td, so they had to go. min-w-[850px] is now on
+   the <Table> via className; right-align (.num) is reimplemented as Tailwind
+   text-right on each cell. */
 
 .pr-bottom-bar {
   background: var(--g50, #f8f8fc);
@@ -460,21 +425,11 @@
   color: var(--info, #185fa5);
 }
 
-.pr-page th.sortable {
-  cursor: pointer;
-  user-select: none;
-  white-space: nowrap;
-}
-
-.pr-page th.sortable:hover {
-  color: var(--p600, #534ab7);
-  background: var(--p50, #eeedfe);
-}
-
-.pr-page th.sort-active {
-  color: var(--p600, #534ab7);
-  background: var(--p50, #eeedfe);
-}
+/* .pr-page th.sortable / :hover / .sort-active removed — reimplemented as
+   Tailwind utilities on <TableHeadCell> in SortTh (cursor-pointer select-none
+   whitespace-nowrap + hover/active bg-[var(--p50)] text-[var(--p600)]). The
+   sort-arrow indicator classes below (.pr-sort-icon, .pr-arr-up/dn) are content
+   helpers and stay. */
 
 .pr-sort-icon {
   display: inline-flex;

@@ -292,53 +292,13 @@
   overflow-x: auto;
 }
 
-.sh-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-  min-width: 720px;
-}
-
-.sh-table thead th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  padding: 10px 16px;
-  text-align: left;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-muted, #9ca3af);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  background: var(--g50, #f8f8fc);
-  border-bottom: 1px solid var(--border, rgba(0, 0, 0, 0.08));
-  white-space: nowrap;
-}
-
-.sh-table th.num,
-.sh-table td.num {
-  text-align: right;
-}
-
-.sh-table tbody tr {
-  cursor: pointer;
-  transition: background 0.08s;
-}
-
-.sh-table tbody tr:hover td {
-  background: var(--g50, #f8f8fc);
-}
-
-.sh-table tbody tr.selected td {
-  background: var(--p50, #eeedfe);
-}
-
-.sh-table td {
-  padding: 11px 16px;
-  border-bottom: 1px solid var(--border, rgba(0, 0, 0, 0.08));
-  vertical-align: middle;
-  color: var(--text-secondary, #6b7280);
-}
+/* .sh-table structure rules removed — all consumers (SalesHistory 4a-2,
+   TransferHistory 4c, ReceivingHistory 4d, AdminReceiving + AdminTransfer 4f)
+   migrated to Flowbite <Table>. min-width:720px moved onto each <Table
+   className="min-w-[720px]">; `.num` right-align → Tailwind text-right; clickable
+   cursor + selected highlight → cursor-pointer + bg-[var(--p50)] per row. The
+   .sh-table-scroll wrapper above + content helpers (sh-col-*, sh-empty-cell,
+   sh-item-name/sku, badges) are kept. */
 
 .sh-col-time {
   font-size: 12px;
@@ -825,51 +785,10 @@
   color: #854f0b;
 }
 
-.sh-item-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-  table-layout: fixed;
-}
-
-.sh-item-table th {
-  padding: 8px 10px;
-  text-align: left;
-  color: var(--text-muted, #9ca3af);
-  border-bottom: 1px solid var(--border, rgba(0, 0, 0, 0.08));
-  font-weight: 500;
-  font-size: 11px;
-  background: var(--g50, #f8f8fc);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.sh-item-table th.r {
-  text-align: right;
-  white-space: nowrap;
-}
-
-.sh-item-table td {
-  padding: 10px;
-  border-bottom: 1px solid var(--border, rgba(0, 0, 0, 0.08));
-  color: var(--text-secondary, #6b7280);
-  vertical-align: top;
-}
-
-.sh-item-table td:first-child {
-  word-break: break-word;
-  overflow-wrap: break-word;
-  white-space: normal;
-}
-
-.sh-item-table td.r {
-  text-align: right;
-  font-family: 'Prompt', sans-serif;
-  font-weight: 500;
-  color: var(--text-primary, #1a1a2e);
-  white-space: nowrap;
-  vertical-align: top;
-}
+/* .sh-item-table structure rules removed — drawer item tables (SalesHistory 4a-2,
+   ReceivingHistory 4d, AdminReceiving 4f) migrated to Flowbite <Table>.
+   table-layout:fixed moved onto each <Table className="table-fixed">; `.r`
+   right-align → Tailwind text-right per cell. sh-item-name/sku kept below. */
 
 .sh-item-name {
   font-size: 13px;

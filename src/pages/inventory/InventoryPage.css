@@ -166,25 +166,7 @@
   overflow-x: auto;
 }
 
-.inv-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 12px;
-}
-
-.inv-table th,
-.inv-table td {
-  padding: 10px 14px;
-  border-bottom: 0.5px solid var(--g200);
-  text-align: left;
-}
-
-.inv-table th {
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--g400);
-  background: var(--g50);
-}
+/* .inv-table table rules removed — InventoryPage migrated to flowbite Table (Batch 4c). Kept (cell-content): inv-table-wrap scroll, inv-table-msg, inv-empty, inv-value-pos/neg/zero, inv-status-badge. */
 
 .inv-empty {
   padding: 48px 24px;
@@ -208,10 +190,7 @@
   color: var(--g400);
 }
 
-.inv-table th.inv-r,
-.inv-table td.inv-r {
-  text-align: right;
-}
+/* .inv-table .inv-r alignment removed (Batch 4c) — now text-right via Tailwind on TableHeadCell/TableCell. */
 
 .inv-table-msg {
   text-align: center;

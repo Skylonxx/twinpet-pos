@@ -31,6 +31,14 @@ import type { ReceivingStatus } from '../../lib/types';
 import { SingleDatePicker } from '../common/SingleDatePicker';
 import './ReceivingForm.css';
 import ReceivingVoidDialog from './ReceivingVoidDialog';
+import {
+  Table,
+  TableHead,
+  TableHeadCell,
+  TableBody,
+  TableRow,
+  TableCell,
+} from '../ui';
 
 export type ReceivingFormProps = {
   mode: 'create' | 'edit';
@@ -770,33 +778,33 @@ export default function ReceivingForm({
                 </div>
               </div>
             ) : (
-              <table className="rcv-table">
-                <thead>
-                  <tr>
-                    <th style={{ width: 30 }}>#</th>
-                    <th style={{ width: 36 }} />
-                    <th>สินค้า</th>
-                    <th style={{ width: 95 }}>หน่วย</th>
-                    <th className="r" style={{ width: 90 }}>
+              <Table hoverable>
+                <TableHead>
+                  <TableRow>
+                    <TableHeadCell style={{ width: 30 }}>#</TableHeadCell>
+                    <TableHeadCell style={{ width: 36 }} />
+                    <TableHeadCell>สินค้า</TableHeadCell>
+                    <TableHeadCell style={{ width: 95 }}>หน่วย</TableHeadCell>
+                    <TableHeadCell className="text-right" style={{ width: 90 }}>
                       จำนวน
-                    </th>
-                    <th className="r" style={{ width: 100 }}>
+                    </TableHeadCell>
+                    <TableHeadCell className="text-right" style={{ width: 100 }}>
                       ต้นทุน/หน่วย (฿)
-                    </th>
-                    <th className="r" style={{ width: 65 }}>
+                    </TableHeadCell>
+                    <TableHeadCell className="text-right" style={{ width: 65 }}>
                       ส่วนลด
-                    </th>
-                    <th className="r" style={{ width: 90 }}>
+                    </TableHeadCell>
+                    <TableHeadCell className="text-right" style={{ width: 90 }}>
                       รวม (฿)
-                    </th>
-                    <th className="r" style={{ width: 115 }}>
+                    </TableHeadCell>
+                    <TableHeadCell className="text-right" style={{ width: 115 }}>
                       ต้นทุนเฉลี่ยใหม่
-                    </th>
-                    <th style={{ width: 110 }}>หมดอายุ</th>
-                    <th style={{ width: 26 }} />
-                  </tr>
-                </thead>
-                <tbody>
+                    </TableHeadCell>
+                    <TableHeadCell style={{ width: 110 }}>หมดอายุ</TableHeadCell>
+                    <TableHeadCell style={{ width: 26 }} />
+                  </TableRow>
+                </TableHead>
+                <TableBody>
                   {lines.map((line, index) => {
                     const product = productMap.get(line.productId);
                     const uoms = product ? uomOptionsForProduct(product) : [];
@@ -808,15 +816,15 @@ export default function ReceivingForm({
                     const baseUnit = product?.baseUnit ?? 'ชิ้น';
 
                     return (
-                      <tr
+                      <TableRow
                         key={line.lineKey}
                         className={flashKey === line.lineKey ? 'rcv-flash' : undefined}
                       >
-                        <td className="rcv-row-num">{index + 1}</td>
-                        <td>
+                        <TableCell className="rcv-row-num">{index + 1}</TableCell>
+                        <TableCell>
                           <div className="rcv-prod-emoji">{product?.emoji ?? '📦'}</div>
-                        </td>
-                        <td>
+                        </TableCell>
+                        <TableCell>
                           <div className="rcv-prod-name-row">
                             <div className="rcv-prod-name">{line.productName}</div>
                             <span className={`rcv-vat-badge${line.hasVat ? '' : ' rcv-vat-badge--no'}`}>
@@ -826,8 +834,8 @@ export default function ReceivingForm({
                           <div className="rcv-prod-meta">
                             SKU: {line.sku} · {line.qty} {line.unit} = {qtyBase} {baseUnit}
                           </div>
-                        </td>
-                        <td>
+                        </TableCell>
+                        <TableCell>
                           {uoms.length > 1 ? (
                             <select
                               className="rcv-uom-sel"
@@ -843,8 +851,8 @@ export default function ReceivingForm({
                           ) : (
                             <span className="rcv-uom-label">{line.unit}</span>
                           )}
-                        </td>
-                        <td className="r">
+                        </TableCell>
+                        <TableCell className="text-right">
                           <div className="rcv-qty-cell">
                             <input
                               type="number"
@@ -867,8 +875,8 @@ export default function ReceivingForm({
                             />
                             <span className="rcv-qty-conn">{line.unit}</span>
                           </div>
-                        </td>
-                        <td className="r">
+                        </TableCell>
+                        <TableCell className="text-right">
                           <input
                             type="number"
                             className="rcv-ii rcv-w72"
@@ -888,8 +896,8 @@ export default function ReceivingForm({
                               );
                             }}
                           />
-                        </td>
-                        <td className="r">
+                        </TableCell>
+                        <TableCell className="text-right">
                           <input
                             type="number"
                             className="rcv-ii rcv-w50"
@@ -908,13 +916,13 @@ export default function ReceivingForm({
                               )
                             }
                           />
-                        </td>
-                        <td className="r rcv-line-total">฿{fmtMoney(lineSubtotal(line))}</td>
-                        <td className="r">
+                        </TableCell>
+                        <TableCell className="text-right rcv-line-total">฿{fmtMoney(lineSubtotal(line))}</TableCell>
+                        <TableCell className="text-right">
                           <div className="rcv-avg-old">เดิม ฿{fmtMoney(product?.avgCost ?? 0)}</div>
                           <div className="rcv-avg-new">→ ฿{fmtMoney(newAvg)}</div>
-                        </td>
-                        <td>
+                        </TableCell>
+                        <TableCell>
                           <div className="rcv-expiry-cell">
                             <label className="rcv-expiry-toggle">
                               <input
@@ -942,8 +950,8 @@ export default function ReceivingForm({
                               />
                             ) : null}
                           </div>
-                        </td>
-                        <td>
+                        </TableCell>
+                        <TableCell>
                           <button
                             type="button"
                             className="rcv-del-btn"
@@ -954,12 +962,12 @@ export default function ReceivingForm({
                           >
                             <i className="ti ti-trash" aria-hidden="true" />
                           </button>
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     );
                   })}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             )}
           </div>
         </div>

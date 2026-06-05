@@ -17,6 +17,14 @@ import {
 } from '../lib/receivingHistory/types';
 import { useReceivingHistory } from '../lib/receivingHistory/useReceivingHistory';
 import type { ReceivingStatus } from '../lib/types';
+import {
+  Table,
+  TableHead,
+  TableHeadCell,
+  TableBody,
+  TableRow,
+  TableCell,
+} from '../components/ui';
 import './ReceivingHistoryPage.css';
 
 const PAGE_SIZE = 15;
@@ -342,45 +350,44 @@ export default function ReceivingHistoryPage() {
             {loading ? (
               <div className="sh-loading">กำลังโหลดประวัติรับเข้า...</div>
             ) : (
-              <table className="sh-table">
-                <thead>
-                  <tr>
-                    <th>วันที่</th>
-                    <th>เลขที่ GRN</th>
-                    <th>ผู้จำหน่าย</th>
-                    <th className="num">มูลค่ารวม</th>
-                    <th>สถานะ</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <Table hoverable className="min-w-[720px]">
+                <TableHead>
+                  <TableRow>
+                    <TableHeadCell>วันที่</TableHeadCell>
+                    <TableHeadCell>เลขที่ GRN</TableHeadCell>
+                    <TableHeadCell>ผู้จำหน่าย</TableHeadCell>
+                    <TableHeadCell className="text-right">มูลค่ารวม</TableHeadCell>
+                    <TableHeadCell>สถานะ</TableHeadCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
                   {paged.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="sh-empty-cell">
+                    <TableRow>
+                      <TableCell colSpan={5} className="sh-empty-cell">
                         ไม่พบรายการในช่วงที่เลือก
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ) : (
                     paged.map((record) => (
-                      <tr
+                      <TableRow
                         key={record.receiving.id}
-                        className={selectedId === record.receiving.id ? 'selected' : undefined}
+                        className={`cursor-pointer ${selectedId === record.receiving.id ? 'bg-[var(--p50)]' : ''}`}
                         onClick={() => void openDrawer(record)}
-                        style={{ cursor: 'pointer' }}
                       >
-                        <td>{formatReceivingDate(record.receiving)}</td>
-                        <td style={{ fontWeight: 500 }}>{record.receiving.id}</td>
-                        <td>{record.receiving.supplierName}</td>
-                        <td className="num" style={{ fontWeight: 500 }}>
+                        <TableCell>{formatReceivingDate(record.receiving)}</TableCell>
+                        <TableCell style={{ fontWeight: 500 }}>{record.receiving.id}</TableCell>
+                        <TableCell>{record.receiving.supplierName}</TableCell>
+                        <TableCell className="text-right" style={{ fontWeight: 500 }}>
                           ฿{fmtMoney(record.receiving.total)}
-                        </td>
-                        <td>
+                        </TableCell>
+                        <TableCell>
                           <StatusBadge status={record.receiving.status} />
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     ))
                   )}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             )}
           </div>
           <PaginationBar total={filtered.length} page={page} onPage={setPage} />
@@ -462,31 +469,31 @@ export default function ReceivingHistoryPage() {
                     {itemsLoading ? (
                       <div className="sh-loading">กำลังโหลดรายการ...</div>
                     ) : (
-                      <table className="sh-item-table">
-                        <thead>
-                          <tr>
-                            <th>สินค้า</th>
-                            <th className="r">จำนวน</th>
-                            <th className="r">ต้นทุน/หน่วย</th>
-                            <th className="r">รวม</th>
-                          </tr>
-                        </thead>
-                        <tbody>
+                      <Table className="table-fixed">
+                        <TableHead>
+                          <TableRow>
+                            <TableHeadCell>สินค้า</TableHeadCell>
+                            <TableHeadCell className="text-right">จำนวน</TableHeadCell>
+                            <TableHeadCell className="text-right">ต้นทุน/หน่วย</TableHeadCell>
+                            <TableHeadCell className="text-right">รวม</TableHeadCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
                           {drawerItems.map((item) => (
-                            <tr key={item.id}>
-                              <td>
+                            <TableRow key={item.id}>
+                              <TableCell>
                                 <div className="sh-item-name">{item.productSnap.name}</div>
                                 <div className="sh-item-sku">{item.productSnap.sku}</div>
-                              </td>
-                              <td className="r">
+                              </TableCell>
+                              <TableCell className="text-right">
                                 {item.qty} {item.unit}
-                              </td>
-                              <td className="r">฿{fmtMoney(item.costPerUnit)}</td>
-                              <td className="r">฿{fmtMoney(item.lineTotal)}</td>
-                            </tr>
+                              </TableCell>
+                              <TableCell className="text-right">฿{fmtMoney(item.costPerUnit)}</TableCell>
+                              <TableCell className="text-right">฿{fmtMoney(item.lineTotal)}</TableCell>
+                            </TableRow>
                           ))}
-                        </tbody>
-                      </table>
+                        </TableBody>
+                      </Table>
                     )}
                     </div>
                   </div>

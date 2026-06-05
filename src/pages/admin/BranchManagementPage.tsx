@@ -23,6 +23,14 @@ import {
   type DeletionSummary,
 } from '../../lib/admin/clearTestData';
 import { seedMockData } from '../../lib/seedData';
+import {
+  Table,
+  TableHead,
+  TableHeadCell,
+  TableBody,
+  TableRow,
+  TableCell,
+} from '../../components/ui';
 import './BranchManagementPage.css';
 
 const DANGER_CONFIRM =
@@ -558,32 +566,32 @@ export default function BranchManagementPage() {
         ) : (
           <>
             <div className="admin-branches-table-wrap">
-              <table className="admin-branches-table">
-                <thead>
-                  <tr>
-                    <th scope="col">Branch ID</th>
-                    <th scope="col">Name</th>
-                    <th scope="col">Status</th>
-                    <th scope="col" className="admin-branches-th-actions">
+              <Table hoverable className="min-w-[560px]">
+                <TableHead>
+                  <TableRow>
+                    <TableHeadCell>Branch ID</TableHeadCell>
+                    <TableHeadCell>Name</TableHeadCell>
+                    <TableHeadCell>Status</TableHeadCell>
+                    <TableHeadCell className="admin-branches-th-actions">
                       Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
+                    </TableHeadCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
                   {branches.map((branch) => (
-                    <tr key={branch.id}>
-                      <td>
+                    <TableRow key={branch.id}>
+                      <TableCell>
                         <span className="admin-branches-id">{branch.id}</span>
-                      </td>
-                      <td>
+                      </TableCell>
+                      <TableCell>
                         <span className="admin-branches-name">
                           {branch.name?.trim() || '—'}
                         </span>
-                      </td>
-                      <td>
+                      </TableCell>
+                      <TableCell>
                         <StatusBadge active={branchIsActive(branch)} />
-                      </td>
-                      <td className="admin-branches-td-actions">
+                      </TableCell>
+                      <TableCell className="admin-branches-td-actions">
                         <button
                           type="button"
                           className="admin-branches-icon-btn"
@@ -593,11 +601,11 @@ export default function BranchManagementPage() {
                         >
                           <i className="ti ti-pencil" aria-hidden="true" />
                         </button>
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
             <div className="admin-branches-meta">
               {branches.length} สาขา

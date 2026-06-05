@@ -102,20 +102,7 @@
   margin-top: 8px;
 }
 
-.tr-item-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 10px;
-  font-size: 13px;
-}
-.tr-item-table th,
-.tr-item-table td {
-  padding: 8px 10px;
-  border-bottom: 1px solid #f0eff7;
-  text-align: left;
-}
-.tr-item-table th { color: #76739a; font-weight: 600; font-size: 12px; }
-.tr-item-table .r { text-align: right; }
+/* .tr-item-table rules removed — TransferEditModal + TransferDetailModal migrated to flowbite Table (Batch 4c). .r→text-right via Tailwind; tr-item-name/sku/lot/qty-input kept (cell-content). */
 .tr-item-name { font-weight: 500; color: #211f3a; }
 .tr-item-sku { font-size: 11px; color: #9b98b8; }
 

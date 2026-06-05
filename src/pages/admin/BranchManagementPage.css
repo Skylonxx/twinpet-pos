@@ -104,40 +104,10 @@
   overflow-x: auto;
 }
 
-.admin-branches-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-  min-width: 560px;
-}
-
-.admin-branches-table thead th {
-  padding: 12px 20px;
-  text-align: left;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--g400, #888780);
-  background: var(--g50, #f8f8fc);
-  border-bottom: 0.5px solid var(--g200, #d3d1c7);
-  white-space: nowrap;
-}
-
-.admin-branches-table tbody td {
-  padding: 14px 20px;
-  border-bottom: 0.5px solid var(--g200, #d3d1c7);
-  vertical-align: middle;
-  color: #1a1a2e;
-}
-
-.admin-branches-table tbody tr:last-child td {
-  border-bottom: none;
-}
-
-.admin-branches-table tbody tr:hover td {
-  background: var(--g50, #f8f8fc);
-}
+/* .admin-branches-table structure rules removed — migrated to Flowbite <Table>
+   (Batch 4f); class dropped from the element. min-width:560px moved to
+   <Table className="min-w-[560px]">. Kept: .admin-branches-table-wrap (scroll),
+   .admin-branches-th-actions/td-actions, .admin-branches-id/name/icon-btn. */
 
 .admin-branches-id {
   font-family: 'Sarabun', monospace;

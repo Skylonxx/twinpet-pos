@@ -21,6 +21,14 @@ import TransferEditModal from '../../components/inventory/TransferEditModal';
 import type { Branch } from '../../lib/types';
 import '../ReceivingHistoryPage.css';
 import './AdminReceivingPage.css';
+import {
+  Table,
+  TableHead,
+  TableHeadCell,
+  TableBody,
+  TableRow,
+  TableCell,
+} from '../../components/ui';
 
 type StatusFilter = 'all' | 'completed' | 'cancelled';
 
@@ -252,39 +260,38 @@ export default function AdminTransferPage() {
             {loading ? (
               <div className="sh-loading">กำลังโหลด...</div>
             ) : (
-              <table className="sh-table">
-                <thead>
-                  <tr>
-                    <th>วันที่</th>
-                    <th>เลขที่เอกสาร</th>
-                    <th>ต้นทาง</th>
-                    <th>ปลายทาง</th>
-                    <th className="num">รายการ</th>
-                    <th>สถานะ</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <Table hoverable className="min-w-[720px]">
+                <TableHead>
+                  <TableRow>
+                    <TableHeadCell>วันที่</TableHeadCell>
+                    <TableHeadCell>เลขที่เอกสาร</TableHeadCell>
+                    <TableHeadCell>ต้นทาง</TableHeadCell>
+                    <TableHeadCell>ปลายทาง</TableHeadCell>
+                    <TableHeadCell className="text-right">รายการ</TableHeadCell>
+                    <TableHeadCell>สถานะ</TableHeadCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
                   {filtered.length === 0 ? (
-                    <tr><td colSpan={6} className="sh-empty-cell">ไม่พบรายการ</td></tr>
+                    <TableRow><TableCell colSpan={6} className="sh-empty-cell">ไม่พบรายการ</TableCell></TableRow>
                   ) : (
                     filtered.map((t) => (
-                      <tr
+                      <TableRow
                         key={t.id}
-                        className={detail?.id === t.id ? 'selected' : undefined}
-                        style={{ cursor: 'pointer' }}
+                        className={`cursor-pointer ${detail?.id === t.id ? 'bg-[var(--p50)]' : ''}`}
                         onClick={() => void openDetail(t)}
                       >
-                        <td>{fmtDate(t.createdAt)}</td>
-                        <td style={{ fontWeight: 500 }}>{t.id}</td>
-                        <td><span className="arv-branch-chip">{branchName(t.fromBranchId)}</span></td>
-                        <td><span className="arv-branch-chip">{branchName(t.toBranchId)}</span></td>
-                        <td className="num">{t.itemCount}</td>
-                        <td><TransferStatusBadge status={t.status} /></td>
-                      </tr>
+                        <TableCell>{fmtDate(t.createdAt)}</TableCell>
+                        <TableCell style={{ fontWeight: 500 }}>{t.id}</TableCell>
+                        <TableCell><span className="arv-branch-chip">{branchName(t.fromBranchId)}</span></TableCell>
+                        <TableCell><span className="arv-branch-chip">{branchName(t.toBranchId)}</span></TableCell>
+                        <TableCell className="text-right">{t.itemCount}</TableCell>
+                        <TableCell><TransferStatusBadge status={t.status} /></TableCell>
+                      </TableRow>
                     ))
                   )}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             )}
           </div>
         </div>
@@ -303,7 +310,7 @@ export default function AdminTransferPage() {
       />
 
       <TransferCancelDialog
-        key={cancelTarget?.id ?? 'none'}
+        key={`cancel-${cancelTarget?.id ?? 'none'}`}
         open={cancelTarget !== null}
         transferId={cancelTarget?.id ?? ''}
         saving={busy}
@@ -312,7 +319,7 @@ export default function AdminTransferPage() {
       />
 
       <TransferEditModal
-        key={editTarget?.id ?? 'none'}
+        key={`edit-${editTarget?.id ?? 'none'}`}
         open={editTarget !== null}
         transfer={editTarget}
         items={detailItems}

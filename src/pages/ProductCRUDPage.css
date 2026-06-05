@@ -271,50 +271,14 @@
   flex: 1;
 }
 
-.pc-table-scroll {
-  flex: 1;
-  overflow: auto;
-  min-height: 0;
-}
-
-.pc-table-scroll::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-.pc-table-scroll::-webkit-scrollbar-thumb {
-  background: var(--border-md, rgba(0, 0, 0, 0.13));
-  border-radius: 4px;
-}
-
-.pc-table-scroll table,
-.pc-table-scroll .pc-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-  min-width: 960px;
-}
-
-.pc-table-scroll thead th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  padding: 10px 16px;
-  text-align: left;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-muted, #9ca3af);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  background: var(--g50, #f8f8fc);
-  border-bottom: 1px solid var(--border, rgba(0, 0, 0, 0.08));
-  white-space: nowrap;
-}
-
-.pc-table-scroll th.num,
-.pc-table-scroll td.num {
-  text-align: right;
-}
+/* .pc-table-scroll wrapper + .pc-table-scroll table/thead th/td structure rules
+   removed — both consumers (ProductCRUDPage 4b + AdminProductManagementPage 4f)
+   migrated to Flowbite <Table> and replaced the wrapper with Tailwind
+   `flex-1 min-h-0 overflow-auto`. min-width:960px moved to <Table
+   className="min-w-[960px]">; `.num` → Tailwind text-right; thead sticky → the
+   <TableHead className="sticky top-0 z-[1]">. Sort/content helpers below
+   (.pc-sort-th, .pc-sort-icon, .pc-table-empty, .pc-col-*, .pc-prod-*, .pc-badge*)
+   are class-based and kept. */
 
 .pc-sort-th {
   cursor: pointer;
@@ -408,9 +372,8 @@
   margin-left: 4px;
 }
 
-.pc-table-scroll tbody tr.pc-row-checked td {
-  background: var(--p50, #eeedfe);
-}
+/* .pc-table-scroll tbody tr.pc-row-checked td removed — checked-row highlight
+   now bg-[var(--p50)] on <TableRow> (Batch 4b/4f). */
 
 /* Bulk actions toolbar */
 .pc-bulk-toolbar {
@@ -533,26 +496,10 @@
   }
 }
 
-.pc-table-scroll tbody tr {
-  cursor: pointer;
-  transition: background 0.08s;
-}
-
-.pc-table-scroll tbody tr:last-child td {
-  border-bottom: none;
-}
-
-.pc-table-scroll tbody tr:hover td {
-  background: var(--g50, #f8f8fc);
-}
-
-.pc-table-scroll tbody tr.pc-selected td {
-  background: var(--p50, #eeedfe);
-}
-
-.pc-table-scroll tbody tr.pc-flash td {
-  animation: pc-fl 0.6s ease;
-}
+/* .pc-table-scroll tbody row rules (cursor/hover/selected/flash) removed —
+   migrated to Flowbite <Table>; reimplemented on <TableRow> as cursor-pointer +
+   bg-[var(--p50)] (selected/checked) and [animation:pc-fl_0.6s_ease] (flash,
+   reusing the kept keyframe below). */
 
 @keyframes pc-fl {
   0% {
@@ -563,13 +510,8 @@
   }
 }
 
-.pc-table-scroll td {
-  padding: 11px 16px;
-  font-size: 13px;
-  color: var(--text-secondary, #6b7280);
-  vertical-align: middle;
-  border-bottom: 1px solid var(--border, rgba(0, 0, 0, 0.08));
-}
+/* .pc-table-scroll td removed — cell padding/border now from the Flowbite table
+   theme (Batch 4b/4f). */
 
 .pc-prod-cell {
   display: flex;
@@ -650,9 +592,8 @@
   transition: opacity 0.1s;
 }
 
-.pc-table-scroll tbody tr:hover .pc-row-actions {
-  opacity: 1;
-}
+/* .pc-table-scroll tbody tr:hover .pc-row-actions removed (pc-table-scroll
+   eradicated in Batch 4f; pc-row-actions has no current consumer). */
 
 .pc-ra {
   width: 22px;

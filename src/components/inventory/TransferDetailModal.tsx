@@ -1,5 +1,13 @@
 import { createPortal } from 'react-dom';
 import type { InventoryTransfer, InventoryTransferItem } from '../../lib/inventory/transferTypes';
+import {
+  Table,
+  TableHead,
+  TableHeadCell,
+  TableBody,
+  TableRow,
+  TableCell,
+} from '../ui';
 import './TransferModals.css';
 
 function baht(n: number): string {
@@ -102,26 +110,26 @@ export default function TransferDetailModal({
               กำลังโหลดรายการ...
             </div>
           ) : (
-            <table className="tr-item-table">
-              <thead>
-                <tr>
-                  <th>สินค้า</th>
-                  <th className="r">จำนวน</th>
-                  <th className="r">ต้นทุน/หน่วย</th>
-                  <th className="r">มูลค่ารวม</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableHeadCell>สินค้า</TableHeadCell>
+                  <TableHeadCell className="text-right">จำนวน</TableHeadCell>
+                  <TableHeadCell className="text-right">ต้นทุน/หน่วย</TableHeadCell>
+                  <TableHeadCell className="text-right">มูลค่ารวม</TableHeadCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
                 {items.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} style={{ textAlign: 'center', color: '#9b98b8', padding: 16 }}>
+                  <TableRow>
+                    <TableCell colSpan={4} style={{ textAlign: 'center', color: '#9b98b8', padding: 16 }}>
                       ไม่มีรายการ
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ) : (
                   items.map((item, idx) => (
-                    <tr key={`${item.productId}-${idx}`}>
-                      <td>
+                    <TableRow key={`${item.productId}-${idx}`}>
+                      <TableCell>
                         <div className="tr-item-name">{item.productName}</div>
                         <div className="tr-item-sku">{item.sku}</div>
                         {item.sourceLotDetails?.length ? (
@@ -134,15 +142,15 @@ export default function TransferDetailModal({
                             ))}
                           </div>
                         ) : null}
-                      </td>
-                      <td className="r">{item.transferQty}</td>
-                      <td className="r">฿{baht(item.unitCost)}</td>
-                      <td className="r">฿{baht(item.unitCost * item.transferQty)}</td>
-                    </tr>
+                      </TableCell>
+                      <TableCell className="text-right">{item.transferQty}</TableCell>
+                      <TableCell className="text-right">฿{baht(item.unitCost)}</TableCell>
+                      <TableCell className="text-right">฿{baht(item.unitCost * item.transferQty)}</TableCell>
+                    </TableRow>
                   ))
                 )}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           )}
         </div>
 

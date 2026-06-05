@@ -46,6 +46,14 @@ import {
 } from '../lib/profitReport/types';
 import { useAuth } from '../lib/hooks/useAuth';
 import { isFirebaseConfigured } from '../lib/firebase';
+import {
+  Table,
+  TableHead,
+  TableHeadCell,
+  TableBody,
+  TableRow,
+  TableCell,
+} from '../components/ui';
 import './ProfitReportPage.css';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Tooltip, Legend);
@@ -75,7 +83,7 @@ const PD_PAGE = 25;
 function MarginCell({ margin }: { margin: number }) {
   const barW = Math.min(100, Math.max(0, (margin / 40) * 100));
   return (
-    <td className="num">
+    <TableCell className="text-right">
       <span className={marginClass(margin)}>{fmtPct(margin)}</span>
       <span className="pr-margin-bar-bg">
         <span
@@ -88,7 +96,7 @@ function MarginCell({ margin }: { margin: number }) {
           }}
         />
       </span>
-    </td>
+    </TableCell>
   );
 }
 
@@ -108,8 +116,14 @@ function SortTh({
   onSort: (field: SortField) => void;
 }) {
   return (
-    <th
-      className={[isNum ? 'num' : '', 'sortable', active ? 'sort-active' : ''].filter(Boolean).join(' ')}
+    <TableHeadCell
+      className={[
+        isNum ? 'text-right' : '',
+        'cursor-pointer select-none whitespace-nowrap hover:bg-[var(--p50)] hover:text-[var(--p600)]',
+        active ? 'bg-[var(--p50)] text-[var(--p600)]' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
       onClick={() => onSort(field)}
     >
       {label}
@@ -117,7 +131,7 @@ function SortTh({
         <span className="pr-arr-up" />
         <span className="pr-arr-dn" />
       </span>
-    </th>
+    </TableHeadCell>
   );
 }
 
@@ -545,14 +559,14 @@ export default function ProfitReportPage() {
     ['pr-rank-1', 'pr-rank-2', 'pr-rank-3', 'pr-rank-n', 'pr-rank-n'][Math.min(i, 4)]!;
 
   const renderBillRow = (r: ProfitSaleLine) => (
-    <tr key={r.id}>
-      <td style={{ whiteSpace: 'nowrap', fontSize: 12 }}>
+    <TableRow key={r.id}>
+      <TableCell style={{ whiteSpace: 'nowrap', fontSize: 12 }}>
         <div style={{ fontWeight: 500 }}>{r.time}</div>
         <div style={{ color: 'var(--text-muted)' }}>{r.date.slice(5).replace('-', '/')}</div>
-      </td>
-      <td style={{ fontSize: 12, color: 'var(--info)', fontFamily: "'Sarabun',sans-serif" }}>{r.bill || r.orderId}</td>
-      <td style={{ fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{r.customer}</td>
-      <td>
+      </TableCell>
+      <TableCell style={{ fontSize: 12, color: 'var(--info)', fontFamily: "'Sarabun',sans-serif" }}>{r.bill || r.orderId}</TableCell>
+      <TableCell style={{ fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{r.customer}</TableCell>
+      <TableCell>
         <div className="pr-prod-cell">
           <ProductImageThumb imageUrl={r.imageUrl} alt={r.productName} />
           <div>
@@ -562,57 +576,57 @@ export default function ProfitReportPage() {
             </div>
           </div>
         </div>
-      </td>
-      <td className="num" style={{ fontWeight: 500 }}>
+      </TableCell>
+      <TableCell className="text-right" style={{ fontWeight: 500 }}>
         {fmtNum(r.qty)}
-      </td>
-      <td className="num" style={{ color: 'var(--p600)', fontWeight: 500 }}>
+      </TableCell>
+      <TableCell className="text-right" style={{ color: 'var(--p600)', fontWeight: 500 }}>
         {fmtBaht(r.revenue)}
-      </td>
-      <td className="num" style={{ color: 'var(--warn)' }}>
+      </TableCell>
+      <TableCell className="text-right" style={{ color: 'var(--warn)' }}>
         {fmtBaht(r.cogs)}
-      </td>
-      <td className="num" style={{ color: r.profit >= 0 ? 'var(--success)' : 'var(--danger)', fontWeight: 500 }}>
+      </TableCell>
+      <TableCell className="text-right" style={{ color: r.profit >= 0 ? 'var(--success)' : 'var(--danger)', fontWeight: 500 }}>
         {fmtBaht(r.profit)}
-      </td>
+      </TableCell>
       <MarginCell margin={r.margin} />
-    </tr>
+    </TableRow>
   );
 
   const renderCatRow = (g: ProfitAggregateRow) => {
     const ci = allCategories.indexOf(g.key);
     const clr = CAT_COLORS[ci] ?? '#888';
     return (
-      <tr key={g.key}>
-        <td>
+      <TableRow key={g.key}>
+        <TableCell>
           <div className="pr-group-label">
             <div style={{ width: 10, height: 10, borderRadius: '50%', background: clr, flexShrink: 0 }} />
             <span style={{ fontWeight: 500 }}>{g.key}</span>
           </div>
-        </td>
-        <td className="num" style={{ color: 'var(--text-muted)' }}>
+        </TableCell>
+        <TableCell className="text-right" style={{ color: 'var(--text-muted)' }}>
           {g.count}
-        </td>
-        <td className="num" style={{ fontWeight: 500 }}>
+        </TableCell>
+        <TableCell className="text-right" style={{ fontWeight: 500 }}>
           {fmtNum(g.qty)}
-        </td>
-        <td className="num" style={{ color: 'var(--p600)', fontWeight: 500 }}>
+        </TableCell>
+        <TableCell className="text-right" style={{ color: 'var(--p600)', fontWeight: 500 }}>
           {fmtBaht(g.revenue)}
-        </td>
-        <td className="num" style={{ color: 'var(--warn)' }}>
+        </TableCell>
+        <TableCell className="text-right" style={{ color: 'var(--warn)' }}>
           {fmtBaht(g.cogs)}
-        </td>
-        <td className="num" style={{ color: g.profit >= 0 ? 'var(--success)' : 'var(--danger)', fontWeight: 500 }}>
+        </TableCell>
+        <TableCell className="text-right" style={{ color: g.profit >= 0 ? 'var(--success)' : 'var(--danger)', fontWeight: 500 }}>
           {fmtBaht(g.profit)}
-        </td>
+        </TableCell>
         <MarginCell margin={g.margin} />
-      </tr>
+      </TableRow>
     );
   };
 
   const renderProductRow = (g: ProfitAggregateRow) => (
-    <tr key={g.key}>
-      <td>
+    <TableRow key={g.key}>
+      <TableCell>
         <div className="pr-prod-cell">
           <ProductImageThumb imageUrl={g.imageUrl} alt={g.productName ?? g.key} />
           <div>
@@ -620,57 +634,57 @@ export default function ProfitReportPage() {
             <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{g.productSku}</div>
           </div>
         </div>
-      </td>
-      <td style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{g.category}</td>
-      <td className="num" style={{ color: 'var(--text-muted)' }}>
+      </TableCell>
+      <TableCell style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{g.category}</TableCell>
+      <TableCell className="text-right" style={{ color: 'var(--text-muted)' }}>
         {g.count}
-      </td>
-      <td className="num" style={{ fontWeight: 500 }}>
+      </TableCell>
+      <TableCell className="text-right" style={{ fontWeight: 500 }}>
         {fmtNum(g.qty)}
-      </td>
-      <td className="num" style={{ color: 'var(--p600)', fontWeight: 500 }}>
+      </TableCell>
+      <TableCell className="text-right" style={{ color: 'var(--p600)', fontWeight: 500 }}>
         {fmtBaht(g.revenue)}
-      </td>
-      <td className="num" style={{ color: 'var(--warn)' }}>
+      </TableCell>
+      <TableCell className="text-right" style={{ color: 'var(--warn)' }}>
         {fmtBaht(g.cogs)}
-      </td>
-      <td className="num" style={{ color: g.profit >= 0 ? 'var(--success)' : 'var(--danger)', fontWeight: 500 }}>
+      </TableCell>
+      <TableCell className="text-right" style={{ color: g.profit >= 0 ? 'var(--success)' : 'var(--danger)', fontWeight: 500 }}>
         {fmtBaht(g.profit)}
-      </td>
+      </TableCell>
       <MarginCell margin={g.margin} />
-    </tr>
+    </TableRow>
   );
 
   const renderCustomerRow = (g: ProfitAggregateRow, i: number) => {
     const globalIdx = (tablePage - 1) * PAGE_SIZE + i;
     return (
-      <tr key={g.key}>
-        <td>
+      <TableRow key={g.key}>
+        <TableCell>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span className={`pr-rank-num ${rankCls(globalIdx)}`}>{globalIdx + 1}</span>
             <span style={{ fontWeight: 500, fontSize: 13 }}>{g.key}</span>
           </div>
-        </td>
-        <td className="num" style={{ color: 'var(--text-muted)' }}>
+        </TableCell>
+        <TableCell className="text-right" style={{ color: 'var(--text-muted)' }}>
           {g.bills}
-        </td>
-        <td className="num" style={{ color: 'var(--text-muted)' }}>
+        </TableCell>
+        <TableCell className="text-right" style={{ color: 'var(--text-muted)' }}>
           {g.count}
-        </td>
-        <td className="num" style={{ fontWeight: 500 }}>
+        </TableCell>
+        <TableCell className="text-right" style={{ fontWeight: 500 }}>
           {fmtNum(g.qty)}
-        </td>
-        <td className="num" style={{ color: 'var(--p600)', fontWeight: 500 }}>
+        </TableCell>
+        <TableCell className="text-right" style={{ color: 'var(--p600)', fontWeight: 500 }}>
           {fmtBaht(g.revenue)}
-        </td>
-        <td className="num" style={{ color: 'var(--warn)' }}>
+        </TableCell>
+        <TableCell className="text-right" style={{ color: 'var(--warn)' }}>
           {fmtBaht(g.cogs)}
-        </td>
-        <td className="num" style={{ color: g.profit >= 0 ? 'var(--success)' : 'var(--danger)', fontWeight: 500 }}>
+        </TableCell>
+        <TableCell className="text-right" style={{ color: g.profit >= 0 ? 'var(--success)' : 'var(--danger)', fontWeight: 500 }}>
           {fmtBaht(g.profit)}
-        </td>
+        </TableCell>
         <MarginCell margin={g.margin} />
-      </tr>
+      </TableRow>
     );
   };
 
@@ -945,10 +959,10 @@ export default function ProfitReportPage() {
                 </span>
               </div>
               <div className="pr-table-scroll">
-                <table>
-                  <thead>
+                <Table className="min-w-[850px]">
+                  <TableHead>
                     {groupBy === 'bill' ? (
-                      <tr>
+                      <TableRow>
                         <SortTh label="วันที่/เวลา" field="date" active={sortField === 'date'} dir={sortDir} onSort={handleSort} />
                         <SortTh label="บิลอ้างอิง" field="bill" active={sortField === 'bill'} dir={sortDir} onSort={handleSort} />
                         <SortTh label="ลูกค้า" field="customer" active={sortField === 'customer'} dir={sortDir} onSort={handleSort} />
@@ -958,9 +972,9 @@ export default function ProfitReportPage() {
                         <SortTh label="COGS" field="cogs" isNum active={sortField === 'cogs'} dir={sortDir} onSort={handleSort} />
                         <SortTh label="กำไร" field="profit" isNum active={sortField === 'profit'} dir={sortDir} onSort={handleSort} />
                         <SortTh label="Margin %" field="margin" isNum active={sortField === 'margin'} dir={sortDir} onSort={handleSort} />
-                      </tr>
+                      </TableRow>
                     ) : groupBy === 'cat' ? (
-                      <tr>
+                      <TableRow>
                         <SortTh label="หมวดหมู่" field="cat" active={sortField === 'cat'} dir={sortDir} onSort={handleSort} />
                         <SortTh label="รายการ" field="count" isNum active={sortField === 'count'} dir={sortDir} onSort={handleSort} />
                         <SortTh label="Qty รวม" field="qty" isNum active={sortField === 'qty'} dir={sortDir} onSort={handleSort} />
@@ -968,9 +982,9 @@ export default function ProfitReportPage() {
                         <SortTh label="COGS รวม" field="cogs" isNum active={sortField === 'cogs'} dir={sortDir} onSort={handleSort} />
                         <SortTh label="กำไรรวม" field="profit" isNum active={sortField === 'profit'} dir={sortDir} onSort={handleSort} />
                         <SortTh label="Margin %" field="margin" isNum active={sortField === 'margin'} dir={sortDir} onSort={handleSort} />
-                      </tr>
+                      </TableRow>
                     ) : groupBy === 'product' ? (
-                      <tr>
+                      <TableRow>
                         <SortTh label="สินค้า" field="product" active={sortField === 'product'} dir={sortDir} onSort={handleSort} />
                         <SortTh label="หมวดหมู่" field="cat" active={sortField === 'cat'} dir={sortDir} onSort={handleSort} />
                         <SortTh label="รายการ" field="count" isNum active={sortField === 'count'} dir={sortDir} onSort={handleSort} />
@@ -979,9 +993,9 @@ export default function ProfitReportPage() {
                         <SortTh label="COGS รวม" field="cogs" isNum active={sortField === 'cogs'} dir={sortDir} onSort={handleSort} />
                         <SortTh label="กำไรรวม" field="profit" isNum active={sortField === 'profit'} dir={sortDir} onSort={handleSort} />
                         <SortTh label="Margin %" field="margin" isNum active={sortField === 'margin'} dir={sortDir} onSort={handleSort} />
-                      </tr>
+                      </TableRow>
                     ) : (
-                      <tr>
+                      <TableRow>
                         <SortTh label="ลูกค้า" field="customer" active={sortField === 'customer'} dir={sortDir} onSort={handleSort} />
                         <SortTh label="บิล" field="bills" isNum active={sortField === 'bills'} dir={sortDir} onSort={handleSort} />
                         <SortTh label="รายการ" field="count" isNum active={sortField === 'count'} dir={sortDir} onSort={handleSort} />
@@ -990,19 +1004,19 @@ export default function ProfitReportPage() {
                         <SortTh label="COGS รวม" field="cogs" isNum active={sortField === 'cogs'} dir={sortDir} onSort={handleSort} />
                         <SortTh label="กำไรรวม" field="profit" isNum active={sortField === 'profit'} dir={sortDir} onSort={handleSort} />
                         <SortTh label="Margin %" field="margin" isNum active={sortField === 'margin'} dir={sortDir} onSort={handleSort} />
-                      </tr>
+                      </TableRow>
                     )}
-                  </thead>
-                  <tbody>
+                  </TableHead>
+                  <TableBody>
                     {filteredData.length === 0 ? (
-                      <tr>
-                        <td colSpan={groupBy === 'bill' ? 9 : groupBy === 'cat' ? 7 : 8}>
+                      <TableRow>
+                        <TableCell colSpan={groupBy === 'bill' ? 9 : groupBy === 'cat' ? 7 : 8}>
                           <div className="pr-empty-state">
                             <i className="ti ti-receipt-off" aria-hidden="true" />
                             <p>ไม่พบรายการในช่วงที่เลือก</p>
                           </div>
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     ) : groupBy === 'bill' ? (
                       (pageRows as ProfitSaleLine[]).map(renderBillRow)
                     ) : groupBy === 'cat' ? (
@@ -1012,8 +1026,8 @@ export default function ProfitReportPage() {
                     ) : (
                       (pageRows as ProfitAggregateRow[]).map(renderCustomerRow)
                     )}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
               <PaginationBar total={tableRows.length} page={tablePage} onPage={handleTablePageChange} />
             </div>

@@ -250,36 +250,12 @@
   overflow-x: auto;
 }
 
-.inv-adj-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 12px;
-}
-
-.inv-adj-table th,
-.inv-adj-table td {
-  padding: 10px 12px;
-  border-bottom: 0.5px solid var(--g200);
-  vertical-align: middle;
-}
-
-.inv-adj-table th {
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--g400);
-  background: var(--g50);
-  white-space: nowrap;
-}
-
-.inv-adj-table th.r,
-.inv-adj-table td.r {
-  text-align: right;
-}
-
-.inv-adj-table th.c,
-.inv-adj-table td.c {
-  text-align: center;
-}
+/* .inv-adj-table structure rules removed — all consumers (InventoryAdjustmentPage
+   + BranchTransferPage 4c, AdminTransferCreatePage 4f) migrated to Flowbite
+   <Table>; class dropped. `.r`/`.c` (right/center) reimplemented as Tailwind
+   text-right/text-center per cell. The .inv-adj-table-wrap scroll wrapper above +
+   content helpers (inv-adj-prod-name/sku, inv-adj-qty-input, inv-adj-del-btn,
+   inv-adj-new-warn, inv-adj-empty) are kept. */
 
 .inv-adj-prod-name {
   font-weight: 500;

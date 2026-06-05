@@ -1,48 +1,36 @@
- All 8 files migrated to Flowbite, build green, and screenshot-verified (0 runtime console errors). Executed in 3 cautious sub-chunks.
+ Duplicate-key warning on /admin/transfers — FIXED ✅
 
-  What shipped
+  The actual root cause (not the branch filter)
 
-  4b-1 — pc-* group
-  - ProductCRUDPage main list, ProductDrawer history (pc-hist-table), FifoBatchModal (pc-fifo-table) → Flowbite <Table>.
-  - ⚠️ Critical shared-CSS save: AdminProductManagementPage (a 4f file) shares pc-table-scroll/pc-table/pc-sort-icon, so I kept all that CSS and only dropped the
-  class from ProductCRUDPage's markup. Its table styling was descendant-scoped under .pc-table-scroll, so I swapped that wrapper for Tailwind (flex-1 min-h-0
-  overflow-auto) — selected/checked rows, the flash animation (reusing the kept pc-fl keyframe), and right-alignment reimplemented via Tailwind.
-  - Purged only batch-exclusive rules (.pc-hist-table, .pc-fifo-table) + dead .pc-tier-table (no consumer). Kept content helpers (pc-lot-*, pc-batch-cost-*,
-  pc-h-in/out, pc-fifo-table-wrap).
+  I investigated before patching, and the branch dropdown turned out to be a red herring — it renders only ["", "LDP-001"], no duplicates. Capturing the full React
+  error revealed the duplicate key value was none.
 
-  4b-2 — cm-tier-table
-  - CategoryManagementModal + TierManagementModal → Flowbite; purged .cm-tier-table descendant rules, kept the bordered wrap + cm-tier-id/cm-tier-default-tag.     
+  The real source: AdminTransferPage renders two modals as siblings, each using the "remount-on-target-change" key idiom with a shared fallback:
+  <TransferCancelDialog key={cancelTarget?.id ?? 'none'} … />
+  <TransferEditModal    key={editTarget?.id ?? 'none'} … />
+  When the page is idle (both targets null) — i.e. on every initial load — both siblings get key="none", so React warns "two children with the same key: none" (×3
+  across the mount + two async-load re-renders).
 
-  4b-3 — the pricing trio (your top concern)
-  - TierPriceManagerDialog (tpmd-table) — the number input lives in a separate adjust sub-dialog, left fully untouched.
-  - ProductPickerDialog (bare <table> under .pps-overlay) — purged the element-descendant rules that would've matched the Flowbite table; selected-row
-  reimplemented as bg-[#f0fff8].
-  - PriceLevelManager (stg-price-table) — inline value/onChange input cells preserved exactly.
+  The fix
 
-  Visual verification (Read the PNGs, not node counts)
+  Type-prefixed the fallback keys so a collision is impossible, while preserving the remount-on-id-change behavior:
+  key={`cancel-${cancelTarget?.id ?? 'none'}`}
+  key={`edit-${editTarget?.id ?? 'none'}`}
 
-  ┌─────────────────────┬──────────────────────────────────────────────────────────────────────────┐
-  │     Screenshot      │                                  Result                                  │
-  ├─────────────────────┼──────────────────────────────────────────────────────────────────────────┤
-  │ /products list      │ ✅ sort arrows, badges, right-aligned prices, UOM sub-rows, stock badges │
-  ├─────────────────────┼──────────────────────────────────────────────────────────────────────────┤
-  │ Product Picker      │ ✅ checkbox col, thumbnails, badges, footer                              │
-  ├─────────────────────┼──────────────────────────────────────────────────────────────────────────┤
-  │ Tier Price grid     │ ✅ 5 tiers, working ปรับbuttons, drawer form bindings intact             │
-  ├─────────────────────┼──────────────────────────────────────────────────────────────────────────┤
-  │ PriceLevelManager   │ ✅ inline name/desc inputs populated with data                           │
-  ├─────────────────────┼──────────────────────────────────────────────────────────────────────────┤
-  │ TierManagementModal │ ✅ code badges + "ค่าเริ่มตtag                                           │
-  ├─────────────────────┼──────────────────────────────────────────────────────────────────────────┤
-  │ Drawer history      │ ✅ -1 rendered red (pc-h-out)                                            │
-  └─────────────────────┴──────────────────────────────────────────────────────────────────────────┘
+  Scope check (per your request)
 
-  One stumble: my CSS purge comment pc-lot-*/pc-batch-cost-* contained */ and closed the comment early (the same gotcha as 4a-1) — caught by the build, reworded,  
-  green.
+  - AdminTransferCreatePage and AdminReceivingPage: grep found zero ?? 'none' key patterns — they don't share this bug, nothing to change.
+  - TransferHistoryPage: had the same fragile idiom (one cancelTarget?.id ?? 'none') but wasn't currently colliding (its only other modal sibling is unkeyed). I       
+  hardened it to cancel-${…} anyway to prevent a latent regression if an edit modal is ever added.
 
-  Cleaned up: emulator + vite stopped, ports freed. Roadmap memory updated.
+  So the dedup approach you suggested wasn't needed — the branch list was never the problem.
 
-  Not yet authorized: 4c (Inventory/Transfers), 4d (Receiving/Reports/Dashboard), 4f (remaining Admin pages incl. AdminProductManagementPage — which still uses the
-  pc-table CSS I deliberately preserved). Standing by for your next GO.
+  Verification
 
-✻ Cogitated for 21m 24s
+  - tsc -b clean, vite build green.
+  - Headless console probe on both /admin/transfers and /inventory/transfer/history: dupKey=0, otherErrors=0 — console completely clean.
+  - Throwaway probe scripts removed; dev server still running.
+
+  Ready to move on to the UOM Searchable Dropdown feature whenever you are.
+
+✻ Sautéed for 3m 57s · 1 shell still running

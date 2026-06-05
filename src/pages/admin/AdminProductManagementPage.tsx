@@ -20,6 +20,14 @@ import ProductPickerDialog, { productListItemToPickerItem } from '../../componen
 import CategoryManagementModal from '../../components/products/CategoryManagementModal';
 import ProductImageThumb from '../../components/products/ProductImageThumb';
 import type { Product } from '../../lib/types';
+import {
+  Table,
+  TableHead,
+  TableHeadCell,
+  TableBody,
+  TableRow,
+  TableCell,
+} from '../../components/ui';
 import '../ProductCRUDPage.css';
 import './AdminProductManagementPage.css';
 
@@ -448,11 +456,11 @@ export default function AdminProductManagementPage() {
 
         {/* ── Table card (mirrors POS pc-card exactly) ── */}
         <div className="pc-card">
-          <div className="pc-table-scroll">
-            <table className="pc-table">
-              <thead>
-                <tr>
-                  <th style={{ width: 32, textAlign: 'center' }}>
+          <div className="flex-1 min-h-0 overflow-auto">
+            <Table hoverable className="min-w-[960px]">
+              <TableHead className="sticky top-0 z-[1]">
+                <TableRow>
+                  <TableHeadCell className="text-center" style={{ width: 32 }}>
                     <input
                       ref={selectAllRef}
                       type="checkbox"
@@ -461,13 +469,13 @@ export default function AdminProductManagementPage() {
                       onChange={togglePageSelect}
                       aria-label="เลือกทั้งหมดในหน้านี้"
                     />
-                  </th>
+                  </TableHeadCell>
                   {TABLE_COLUMNS.map((col) => (
-                    <th
+                    <TableHeadCell
                       key={col.key}
                       className={[
                         'pc-sort-th',
-                        col.align === 'r' ? 'num' : '',
+                        col.align === 'r' ? 'text-right' : '',
                         col.sortable === false ? 'pc-sort-th-static' : '',
                         sortConfig?.key === col.key ? 'pc-sort-active' : '',
                       ]
@@ -493,25 +501,25 @@ export default function AdminProductManagementPage() {
                           aria-hidden="true"
                         />
                       )}
-                    </th>
+                    </TableHeadCell>
                   ))}
-                </tr>
-              </thead>
-              <tbody>
+                </TableRow>
+              </TableHead>
+              <TableBody>
                 {loading && products.length === 0 ? (
-                  <tr>
-                    <td colSpan={TABLE_COLUMNS.length + 1} className="pc-table-empty">
+                  <TableRow>
+                    <TableCell colSpan={TABLE_COLUMNS.length + 1} className="pc-table-empty">
                       กำลังโหลด...
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ) : pageItems.length === 0 ? (
-                  <tr>
-                    <td colSpan={TABLE_COLUMNS.length + 1} className="pc-table-empty">
+                  <TableRow>
+                    <TableCell colSpan={TABLE_COLUMNS.length + 1} className="pc-table-empty">
                       {products.length === 0
                         ? 'ยังไม่มีสินค้าในระบบ'
                         : 'ไม่พบสินค้าที่ตรงตามเงื่อนไข'}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ) : (
                   pageItems.map((p) => {
                     const categoryLabel = resolveCategoryName(p.category, categories);
@@ -522,13 +530,13 @@ export default function AdminProductManagementPage() {
                         color: 'var(--g600)',
                       };
                     return (
-                      <tr
+                      <TableRow
                         key={p.id}
-                        className={`${selectedId === p.id ? 'pc-selected' : ''}${selectedIds.has(p.id) ? ' pc-row-checked' : ''}`}
+                        className={`cursor-pointer ${selectedId === p.id || selectedIds.has(p.id) ? 'bg-[var(--p50)]' : ''}`}
                         onClick={() => openEdit(p.id)}
                       >
-                        <td
-                          style={{ textAlign: 'center' }}
+                        <TableCell
+                          className="text-center"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <input
@@ -538,25 +546,25 @@ export default function AdminProductManagementPage() {
                             onChange={() => toggleRowSelect(p.id)}
                             aria-label={`เลือก ${p.name}`}
                           />
-                        </td>
-                        <td>
+                        </TableCell>
+                        <TableCell>
                           <span className="pc-col-sku">{p.sku || '—'}</span>
-                        </td>
-                        <td>
+                        </TableCell>
+                        <TableCell>
                           <div className="pc-prod-cell">
                             <ProductImageThumb imageUrl={p.imageUrl} alt={p.name} />
                             <div className="pc-prod-name">{p.name}</div>
                           </div>
-                        </td>
-                        <td>
+                        </TableCell>
+                        <TableCell>
                           <span className="pc-cat-badge" style={catStyle}>
                             {categoryLabel}
                           </span>
-                        </td>
-                        <td className="num pc-col-price">฿{fmtBaht(p.basePrice ?? 0)}</td>
-                        <td className="num pc-col-price">฿{fmtBaht(getRetailPrice(p))}</td>
-                        <td className="num pc-col-cost">฿{fmtBaht(p.cost ?? 0)}</td>
-                        <td>
+                        </TableCell>
+                        <TableCell className="text-right pc-col-price">฿{fmtBaht(p.basePrice ?? 0)}</TableCell>
+                        <TableCell className="text-right pc-col-price">฿{fmtBaht(getRetailPrice(p))}</TableCell>
+                        <TableCell className="text-right pc-col-cost">฿{fmtBaht(p.cost ?? 0)}</TableCell>
+                        <TableCell>
                           <div className="pc-col-uom">
                             <div className="pc-uom-base">
                               {p.baseUnit}
@@ -573,8 +581,8 @@ export default function AdminProductManagementPage() {
                               </div>
                             ))}
                           </div>
-                        </td>
-                        <td>
+                        </TableCell>
+                        <TableCell>
                           <div className="pc-status-cell">
                             <span
                               className={`pc-badge ${p.isActive ? 'pc-badge-ok' : 'pc-badge-oos'}`}
@@ -587,13 +595,13 @@ export default function AdminProductManagementPage() {
                               </span>
                             ) : null}
                           </div>
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     );
                   })
                 )}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
 
           {/* ── Bottom bar (mirrors POS pc-bottom-bar exactly) ── */}

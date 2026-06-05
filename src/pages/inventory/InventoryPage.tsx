@@ -2,6 +2,14 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../lib/hooks/useAuth';
 import { formatValueImpact, type InventoryAdjustment } from '../../lib/inventory/types';
 import { useInventoryAdjustments } from '../../lib/inventory/useInventoryAdjustments';
+import {
+  Table,
+  TableHead,
+  TableHeadCell,
+  TableBody,
+  TableRow,
+  TableCell,
+} from '../../components/ui';
 import './InventoryPage.css';
 
 function formatDocDate(dateStr: string, createdAt: InventoryAdjustment['createdAt']): string {
@@ -57,28 +65,28 @@ export default function InventoryPage() {
           <div className="inv-card-head">ประวัติการปรับปรุงสต็อก</div>
 
           <div className="inv-table-wrap">
-            <table className="inv-table">
-              <thead>
-                <tr>
-                  <th>วันที่</th>
-                  <th>ประเภท</th>
-                  <th>สาเหตุ</th>
-                  <th className="inv-r">จำนวนรายการ</th>
-                  <th className="inv-r">มูลค่าผลกระทบ (฿)</th>
-                  <th>ผู้ทำรายการ</th>
-                  <th>สถานะ</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table hoverable>
+              <TableHead>
+                <TableRow>
+                  <TableHeadCell>วันที่</TableHeadCell>
+                  <TableHeadCell>ประเภท</TableHeadCell>
+                  <TableHeadCell>สาเหตุ</TableHeadCell>
+                  <TableHeadCell className="text-right">จำนวนรายการ</TableHeadCell>
+                  <TableHeadCell className="text-right">มูลค่าผลกระทบ (฿)</TableHeadCell>
+                  <TableHeadCell>ผู้ทำรายการ</TableHeadCell>
+                  <TableHeadCell>สถานะ</TableHeadCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
                 {adjLoading ? (
-                  <tr>
-                    <td colSpan={7} className="inv-table-msg">
+                  <TableRow>
+                    <TableCell colSpan={7} className="inv-table-msg">
                       กำลังโหลด...
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ) : adjustments.length === 0 ? (
-                  <tr>
-                    <td colSpan={7}>
+                  <TableRow>
+                    <TableCell colSpan={7}>
                       <div className="inv-empty">
                         <div className="inv-empty-icon">
                           <i className="ti ti-box-seam" aria-hidden="true" />
@@ -88,16 +96,16 @@ export default function InventoryPage() {
                           กดปุ่ม &quot;ปรับปรุงยอด&quot; ด้านบนเพื่อสร้างเอกสารปรับยอดสต็อกครั้งแรก
                         </div>
                       </div>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ) : (
                   adjustments.map((adj) => (
-                    <tr key={adj.id}>
-                      <td>{formatDocDate(adj.adjustDate, adj.createdAt)}</td>
-                      <td>ปรับปรุงสต็อก</td>
-                      <td>{adj.reason}</td>
-                      <td className="inv-r">{adj.itemCount}</td>
-                      <td className="inv-r">
+                    <TableRow key={adj.id}>
+                      <TableCell>{formatDocDate(adj.adjustDate, adj.createdAt)}</TableCell>
+                      <TableCell>ปรับปรุงสต็อก</TableCell>
+                      <TableCell>{adj.reason}</TableCell>
+                      <TableCell className="text-right">{adj.itemCount}</TableCell>
+                      <TableCell className="text-right">
                         <span
                           className={
                             adj.totalValueImpact < 0
@@ -109,16 +117,16 @@ export default function InventoryPage() {
                         >
                           {formatValueImpact(adj.totalValueImpact)}
                         </span>
-                      </td>
-                      <td>{adj.staffName}</td>
-                      <td>
+                      </TableCell>
+                      <TableCell>{adj.staffName}</TableCell>
+                      <TableCell>
                         <span className="inv-status-badge">เสร็จสิ้น</span>
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ))
                 )}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         </div>
       </div>

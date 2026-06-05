@@ -15,6 +15,14 @@ import TransferDetailModal, {
   TransferStatusBadge,
 } from '../../components/inventory/TransferDetailModal';
 import TransferCancelDialog from '../../components/inventory/TransferCancelDialog';
+import {
+  Table,
+  TableHead,
+  TableHeadCell,
+  TableBody,
+  TableRow,
+  TableCell,
+} from '../../components/ui';
 import '../ReceivingHistoryPage.css';
 
 type StatusFilter = 'all' | 'completed' | 'cancelled';
@@ -173,29 +181,29 @@ export default function TransferHistoryPage({ onCreateNew, onBack }: Props = {})
             {loading ? (
               <div className="sh-loading">กำลังโหลด...</div>
             ) : (
-              <table className="sh-table">
-                <thead>
-                  <tr>
-                    <th>วันที่</th>
-                    <th>เลขที่เอกสาร</th>
-                    <th>ทิศทาง</th>
-                    <th className="num">รายการ</th>
-                    <th>สถานะ</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <Table hoverable className="min-w-[720px]">
+                <TableHead>
+                  <TableRow>
+                    <TableHeadCell>วันที่</TableHeadCell>
+                    <TableHeadCell>เลขที่เอกสาร</TableHeadCell>
+                    <TableHeadCell>ทิศทาง</TableHeadCell>
+                    <TableHeadCell className="text-right">รายการ</TableHeadCell>
+                    <TableHeadCell>สถานะ</TableHeadCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
                   {filtered.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="sh-empty-cell">ไม่พบรายการ</td>
-                    </tr>
+                    <TableRow>
+                      <TableCell colSpan={5} className="sh-empty-cell">ไม่พบรายการ</TableCell>
+                    </TableRow>
                   ) : (
                     filtered.map((t) => {
                       const outgoing = t.fromBranchId === branchId;
                       return (
-                        <tr key={t.id} style={{ cursor: 'pointer' }} onClick={() => void openDetail(t)}>
-                          <td>{fmtDate(t.createdAt)}</td>
-                          <td style={{ fontWeight: 500 }}>{t.id}</td>
-                          <td>
+                        <TableRow key={t.id} className="cursor-pointer" onClick={() => void openDetail(t)}>
+                          <TableCell>{fmtDate(t.createdAt)}</TableCell>
+                          <TableCell style={{ fontWeight: 500 }}>{t.id}</TableCell>
+                          <TableCell>
                             <span style={{ color: outgoing ? '#b23c17' : '#0f6e56', fontWeight: 600, fontSize: 12 }}>
                               <i
                                 className={`ti ti-arrow-${outgoing ? 'up-right' : 'down-left'}`}
@@ -204,15 +212,15 @@ export default function TransferHistoryPage({ onCreateNew, onBack }: Props = {})
                               {outgoing ? 'ส่งออก' : 'รับเข้า'}
                             </span>{' '}
                             {getBranchLabel(t.fromBranchId)} → {getBranchLabel(t.toBranchId)}
-                          </td>
-                          <td className="num">{t.itemCount}</td>
-                          <td><TransferStatusBadge status={t.status} /></td>
-                        </tr>
+                          </TableCell>
+                          <TableCell className="text-right">{t.itemCount}</TableCell>
+                          <TableCell><TransferStatusBadge status={t.status} /></TableCell>
+                        </TableRow>
                       );
                     })
                   )}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             )}
           </div>
         </div>
@@ -230,7 +238,7 @@ export default function TransferHistoryPage({ onCreateNew, onBack }: Props = {})
       />
 
       <TransferCancelDialog
-        key={cancelTarget?.id ?? 'none'}
+        key={`cancel-${cancelTarget?.id ?? 'none'}`}
         open={cancelTarget !== null}
         transferId={cancelTarget?.id ?? ''}
         saving={busy}
