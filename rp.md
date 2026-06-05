@@ -1,36 +1,47 @@
- Duplicate-key warning on /admin/transfers — FIXED ✅
+  Searchable UOM Dropdown — DONE ✅
 
-  The actual root cause (not the branch filter)
+  1. Analyzed the existing pattern
 
-  I investigated before patching, and the branch dropdown turned out to be a red herring — it renders only ["", "LDP-001"], no duplicates. Capturing the full React
-  error revealed the duplicate key value was none.
+  The Category field uses CategoryCombobox — a Flowbite <Dropdown> whose DropdownHeader hosts a <TextInput> search box, with the list
+  rendered as filtered <DropdownItem>s (typeahead). No third-party lib; pure flowbite-react composition bound via value/onChange.       
+                                                                                                                            
+  2. Built a reusable UnitCombobox
 
-  The real source: AdminTransferPage renders two modals as siblings, each using the "remount-on-target-change" key idiom with a shared fallback:
-  <TransferCancelDialog key={cancelTarget?.id ?? 'none'} … />
-  <TransferEditModal    key={editTarget?.id ?? 'none'} … />
-  When the page is idle (both targets null) — i.e. on every initial load — both siblings get key="none", so React warns "two children with the same key: none" (×3
-  across the mount + two async-load re-renders).
+  Created src/components/products/UnitCombobox.tsx — the same composition as CategoryCombobox but for plain unit-name strings (the UOM
+  data is string[], simpler than category objects). Props: options, value, onChange, placeholder, invalid, inputRef. Adds a ✓ check on
+  the currently-selected item.
 
-  The fix
+  3. Replaced both native <select>s in ProductDrawer (the shared edit form)
 
-  Type-prefixed the fallback keys so a collision is impossible, while preserving the remount-on-id-change behavior:
-  key={`cancel-${cancelTarget?.id ?? 'none'}`}
-  key={`edit-${editTarget?.id ?? 'none'}`}
+  - Base UOM (หน่วยนับหลัก<select> → <UnitCombobox>, preserving the invalid state, the error-clear-on-change, and the
+  focus-first-invalid unitRef (retyped HTMLSelectElement→HTMLInputElement so it focuses the search box, exactly like the Category       
+  field). The gear "จัดการหน่วยนัbutton stays beside it.
+  - Sub-UOM (หน่วยย่อยinside UomPricingCard): <select> → <UnitCombobox> with placeholder "— เลือกหน่ว—", onChange → onUpdate({ unit }). 
 
-  Scope check (per your request)
+  Both ProductCRUDPage and AdminProductManagementPage render this one ProductDrawer, so both are covered by the single change.
 
-  - AdminTransferCreatePage and AdminReceivingPage: grep found zero ?? 'none' key patterns — they don't share this bug, nothing to change.
-  - TransferHistoryPage: had the same fragile idiom (one cancelTarget?.id ?? 'none') but wasn't currently colliding (its only other modal sibling is unkeyed). I       
-  hardened it to cancel-${…} anyway to prevent a latent regression if an edit modal is ever added.
+  4. Data-binding integrity (the critical part)
 
-  So the dedup approach you suggested wasn't needed — the branch list was never the problem.
+  The option builders (buildUnitSelectOptions / buildSubUnitSelectOptions) are unchanged — they still produce the same unit strings     
+  (including legacy-value prepending and base-unit/used-unit exclusion). The combobox simply feeds the selected string into the same    
+  state setters (setBaseUnit / onUpdate({unit})), so the exact same unit codes save to the DB. No data-shape change.
 
-  Verification
+  5. Verification (headless, real app)
 
-  - tsc -b clean, vite build green.
-  - Headless console probe on both /admin/transfers and /inventory/transfer/history: dupKey=0, otherErrors=0 — console completely clean.
-  - Throwaway probe scripts removed; dev server still running.
+  - Base UOM: "ชิ้น→ typed "กล" → selected → "กล่อง"(state changed ✓)
+  - Sub-UOM: enabled multi-UOM → default "กิโลกรัม→ typed "โห" → selected → "โหล" (state changed ✓), base unit "ชิ้นcorrectly excluded  
+  from the list
+  - 0 console errors on both flows; tsc -b + vite build green
+  - Screenshots confirm the visual polish matches the Category dropdown — trigger + chevron, search header, ✓ on selected item,
+  widths/alignment intact within the Flowbite form layout
 
-  Ready to move on to the UOM Searchable Dropdown feature whenever you are.
+  Consistent-UX summary
 
-✻ Sautéed for 3m 57s · 1 shell still running
+  By extracting the same Dropdown-with-search composition the Category field already uses into a dedicated UnitCombobox, the Base and   
+  Sub UOM pickers now behave and look identical to Category (type-to-filter, "ไม่พบหน่วยempty state, same border/focus styling) — so the
+  admin gets one consistent searchable-select interaction across the whole product form.
+
+  One housekeeping note: I had to restart the dev server mid-task — the previous emulator backend had died (snapshot autosave was       
+  logging fetch failed), so I freed ports and relaunched dev:emulator cleanly before verifying. It's running now.
+
+✻ Sautéed for 14m 34s · 1 shell still running

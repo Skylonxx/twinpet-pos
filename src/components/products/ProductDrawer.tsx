@@ -24,6 +24,7 @@ import type { StockLot, StockMovement } from '../../lib/types';
 import { RETAIL_PRICE_LEVEL_ID } from '../../lib/types';
 import FifoQueueModal from '../inventory/FifoQueueModal';
 import CategoryCombobox from './CategoryCombobox';
+import UnitCombobox from './UnitCombobox';
 import CategoryManagementModal from './CategoryManagementModal';
 import ProductSaveConfirmDialog from './ProductSaveConfirmDialog';
 import TierPriceManagerDialog from './TierPriceManagerDialog';
@@ -179,21 +180,12 @@ function UomPricingCard({
           {row.isBase ? (
             <input value={row.unit} readOnly />
           ) : (
-            <select
+            <UnitCombobox
+              options={unitSelectOptions}
               value={row.unit}
-              onChange={(e) => onUpdate({ unit: e.target.value })}
-            >
-              {!row.unit ? (
-                <option value="" disabled>
-                  — เลือกหน่วย —
-                </option>
-              ) : null}
-              {unitSelectOptions.map((unit) => (
-                <option key={unit} value={unit}>
-                  {unit}
-                </option>
-              ))}
-            </select>
+              placeholder="— เลือกหน่วย —"
+              onChange={(unit) => onUpdate({ unit })}
+            />
           )}
         </div>
         {!row.isBase ? (
@@ -311,7 +303,7 @@ export default function ProductDrawer({
   const nameRef = useRef<HTMLInputElement>(null);
   const categoryRef = useRef<HTMLInputElement>(null);
   const costRef = useRef<HTMLInputElement>(null);
-  const unitRef = useRef<HTMLSelectElement>(null);
+  const unitRef = useRef<HTMLInputElement>(null);
   const priceRef = useRef<HTMLInputElement>(null);
 
   const fieldRefMap = useMemo(
@@ -759,23 +751,19 @@ export default function ProductDrawer({
                     <label>
                       หน่วยนับหลัก <span className="req">*</span>
                     </label>
-                    <select
-                      ref={unitRef}
+                    <UnitCombobox
+                      options={unitOptions}
                       value={form.baseUnit}
-                      aria-invalid={Boolean(fieldErrors.unit)}
-                      onChange={(e) => {
-                        setBaseUnit(e.target.value);
+                      invalid={Boolean(fieldErrors.unit)}
+                      inputRef={unitRef}
+                      placeholder="ค้นหา / เลือกหน่วยนับ"
+                      onChange={(unit) => {
+                        setBaseUnit(unit);
                         if (fieldErrors.unit) {
                           setFieldErrors((prev) => ({ ...prev, unit: undefined }));
                         }
                       }}
-                    >
-                      {unitOptions.map((u) => (
-                        <option key={u} value={u}>
-                          {u}
-                        </option>
-                      ))}
-                    </select>
+                    />
                     {fieldErrors.unit && !form.hasUom ? (
                       <p className="pc-field-error">{fieldErrors.unit}</p>
                     ) : null}
