@@ -48,10 +48,21 @@ Per-row **Retry** button → confirm dialog → calls the `retryReconcile({ orde
 ## 9. Backlog note
 After the security phases close **and** `stash@{0}` (the Flowbite migration) is applied, upgrade this isolated page to Flowbite components (Table/TableHead…, Button, Badge, Modal) for visual consistency with the migrated admin surface. Until then it stays deliberately plain to remain conflict-free.
 
-## 10. Tests needed before implementation
-- **Route / admin-gate** (added per Codex): confirm `/admin/reconciliation-exceptions` renders the page under `AdminLayout`; confirm the existing `AdminLayout` admin gate (verify its role check) — a non-admin hitting the URL is redirected/blocked, not shown data; confirm the page degrades safely (not-authorized/empty state) rather than crashing if reached by a non-admin. Pure routing/guard logic to be node-testable; full render gating verified via emulator smoke test if RTL infra is absent.
-- **Callable wrapper** (`retryReconcile.ts`): invokes with `orderId`; maps each `HttpsError` code to a user-facing message; surfaces success. (Node unit test — current tooling.)
-- **Query hook** (`useReconciliationExceptions.ts`): subscribes to the exception query, maps fields, handles empty + error. (Extract pure mapping for node test; subscription verified via emulator.)
-- **Component (RTL):** renders rows; Retry disabled at cap / when `voidRequested` / while in-flight; confirm dialog gates the call; loading/empty/error states render. **Note:** RTL/jsdom is NOT in the current test tooling (vitest `node` env, `src/**/*.test.ts`); component tests require new infra → out of scope here, so view logic is kept in pure helpers (node-testable) + a manual emulator smoke test.
-- **Index**: equality-only query needs **none**; only add a composite index if a future change introduces a second `where` + `orderBy` (not in this step).
-- **Rules** (regression, no change expected): a non-admin cannot read another branch's exception docs (already covered by the `asyncOrders` read rule) — keep green.
+## 10. Tests needed before implementation (exact file names)
+Current src tooling is vitest **`node` env**, collecting **`src/**/*.test.ts`** only — no jsdom/RTL. So all logic lives in **pure helpers** that are node-testable; React rendering is verified by a manual emulator smoke test (full RTL component tests would need new infra and are **out of scope**).
+
+- **Route / admin-gate tests** → `src/lib/reconciliation/adminGate.test.ts`
+  Tests the pure gate predicate `canViewReconciliationExceptions(role)` (true only for `'admin'`; false for `manager`/`staff`/`undefined`) — the same predicate the page uses to degrade safely for a non-admin who reaches the direct URL.
+- **Query-hook tests** → `src/lib/reconciliation/exceptionRows.test.ts`
+  Tests the pure mapping `mapExceptionRow(id, data)` (doc → view row, sanitized fields) and `retryDisableReason(row, inFlight)` (disabled at cap / when `voidRequested` / in-flight; enabled otherwise).
+- **Callable-wrapper tests** → `src/lib/reconciliation/retryReconcile.test.ts`
+  Mocks `firebase/functions` + `../firebase`; asserts `callRetryReconcile(orderId)` invokes the `retryReconcile` callable with `{ orderId }` and that `mapRetryError(code)` maps each `HttpsError` code to a user message.
+- **Component/page tests:** **none in this step** — RTL/jsdom is not in the current tooling. The `.tsx` page only composes the above pure helpers + Firestore subscription; verified via emulator smoke test. (Adding RTL infra is a separate, approved step.)
+- **Index:** equality-only query needs **none**; do not add a composite index in this step.
+- **Rules (regression, no change expected):** a non-admin cannot read another branch's exception docs (existing `asyncOrders` read rule) — keep the rules suite green.
+
+## 11. Step 2 Paranoid Checklist (route-only)
+1. **Business Logic Integrity:** POS create, oversell, and the void flow remain **untouched** — additive route + read-only list + the existing Step-1 callable; no checkout/reconcile/void/rules changes.
+2. **State Isolation:** `stash@{0}` remains **untouched** — the only app-code edit is the additive route line in `App.tsx` (not in the stash).
+3. **Cross-contamination:** **no** `AdminDashboardPage.tsx`, navigation, settings/layout, Flowbite, or transfer changes; no broadened query/index; no unrelated cleanup.
+4. **Devil's Advocate (one hidden risk):** access rests entirely on (a) `AdminLayout`'s gate and (b) the Firestore read rule. If `AdminLayout` admits a non-admin, the single-`where` query returns cross-branch docs the read rule **denies** → would throw `permission-denied`. Mitigation: the page checks `canViewReconciliationExceptions(role)` and renders a not-authorized state (degrades, never crashes), independent of `AdminLayout`.

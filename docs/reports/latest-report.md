@@ -1,7 +1,48 @@
 # Latest Report
 
 > Rolling "latest report" for the stock-write security workstream. Updated at each phase boundary.
-> **Current state:** Phase 2 Track B **Step 1 COMPLETE** (backend/rules retry safety + full client-write lockdown). Admin UI (Step 2) is **proposed only — not implemented**. Track A + Phase 1 + Phase 0 retained below.
+> **Current state:** Phase 2 Track B **Step 2 IMPLEMENTED (route-only Admin UI)** on top of the complete Step 1 backend. Track A + Phase 1 + Phase 0 retained below.
+
+---
+
+## Phase 2 — Track B, Step 2: Reconciliation Exceptions Admin UI (ROUTE-ONLY, IMPLEMENTED)
+
+**Implemented strictly route-only.** Direct-URL access only — **no** dashboard card, **no** nav link, **no** menu entry. `AdminDashboardPage.tsx`, navigation, settings/layout, Flowbite files, and `stash@{0}` were **not** touched.
+
+### Direct URL path
+`/admin/reconciliation-exceptions` (leaf under `AdminLayout`; reached only by typing the URL).
+
+### Files created
+- `src/pages/admin/ReconciliationExceptionsPage.tsx` — the page (admin-gated, read-only list + per-row Retry; plain JSX, no Flowbite).
+- `src/pages/admin/ReconciliationExceptionsPage.css` — namespaced `recex-` plain CSS.
+- `src/lib/reconciliation/adminGate.ts` — pure `canViewReconciliationExceptions(role)` gate.
+- `src/lib/reconciliation/exceptionRows.ts` — pure view helpers (`mapExceptionRow`, `retryDisableReason`, `mapRetryError`, `RECONCILE_RETRY_CAP`).
+- `src/lib/reconciliation/useReconciliationExceptions.ts` — read-only `onSnapshot` hook (equality-only query).
+- `src/lib/reconciliation/retryReconcile.ts` — `httpsCallable` wrapper for the secured `retryReconcile` function.
+- Tests: `src/lib/reconciliation/adminGate.test.ts`, `exceptionRows.test.ts`, `retryReconcile.test.ts`.
+
+### Files modified
+- `src/App.tsx` — **one** import + **one** `<Route path="reconciliation-exceptions" …/>` line under the existing `/admin` block (route-only). `App.tsx` is not in `stash@{0}`.
+- `docs/reports/*` — this report + the revised Step 2 proposal/manifest.
+
+### Query / backend
+- Query: **single equality** `where('reconcileStatus','==','exception')`, no `orderBy` (newest-first sort done in-memory) → **no composite index**.
+- Repair: ONLY via the admin-only `retryReconcile` callable; the UI never writes `asyncOrders` directly. Retry button is disabled at cap / when `voidRequested` / while in-flight (mirrors server guards).
+- Permissions: admin-only — server callable role check + the page's own `canViewReconciliationExceptions` gate (degrades to a not-authorized state, never crashes).
+
+### Tests run / results
+- src unit: **100 passed (11 files)** — incl. `adminGate` (admin-only gate), `exceptionRows` (doc→row mapping + disable-reason), `retryReconcile` (callable invokes `{orderId}`, error propagation, `mapRetryError`).
+- Web build: `tsc -b && vite build` **green**.
+- Functions: **43 passed (5 files)** — unchanged. Rules: **83 passed (4 files)** — unchanged regression.
+
+### Backlog note
+After the security phases close **and** `stash@{0}` (the Flowbite migration) is applied, upgrade this isolated page to Flowbite components (Table/Button/Badge/Modal) for visual consistency. Until then it stays deliberately plain to remain conflict-free. A nav/dashboard entry (also deferred) can be added then.
+
+### Step 2 Paranoid Checklist
+1. **Business Logic Integrity:** POS create, oversell, and the void flow remain **untouched** — additive route + read-only list + the existing Step-1 callable; functions (43) and rules (83) suites green and unchanged.
+2. **State Isolation:** `stash@{0}` remains **untouched** — only `App.tsx` (not in the stash) was edited in app code.
+3. **Cross-contamination:** **no** `AdminDashboardPage.tsx`, navigation, settings/layout, Flowbite, or transfer changes; query/index scope not broadened (single equality `where`, no index).
+4. **Devil's Advocate (one hidden risk):** access leans on `AdminLayout`'s gate + the Firestore read rule; if `AdminLayout` admitted a non-admin, the query would `permission-denied`. Mitigated by the page's own `canViewReconciliationExceptions` check rendering a not-authorized state. Still worth a follow-up: confirm `AdminLayout`'s role gate so non-admins are redirected *before* the page mounts (defense in depth), and watch that the equality-only query stays index-free if anyone later adds a branch filter/`orderBy`.
 
 ---
 

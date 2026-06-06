@@ -28,6 +28,7 @@ import AdminReceivingPage from './pages/admin/AdminReceivingPage';
 import AdminTransferPage from './pages/admin/AdminTransferPage';
 import AdminTransferCreatePage from './pages/admin/AdminTransferCreatePage';
 import AdminStockReportPage from './pages/admin/AdminStockReportPage';
+import ReconciliationExceptionsPage from './pages/admin/ReconciliationExceptionsPage';
 import BranchManagementPage from './pages/admin/BranchManagementPage';
 import TierManagementPage from './pages/admin/TierManagementPage';
 import AdminStaffManagementPage from './pages/admin/AdminStaffManagementPage';
@@ -105,6 +106,8 @@ export default function App() {
             <Route path="transfers" element={<AdminTransferPage />} />
             <Route path="transfers/new" element={<AdminTransferCreatePage />} />
             <Route path="stock-report" element={<AdminStockReportPage />} />
+            {/* Route-only (direct URL); no dashboard/nav entry by design. */}
+            <Route path="reconciliation-exceptions" element={<ReconciliationExceptionsPage />} />
             <Route path="sorting" element={<SortingSettingsPage />} />
             <Route path="quick-menus" element={<QuickMenuSettingsPage />} />
           </Route>
