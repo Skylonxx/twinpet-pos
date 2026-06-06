@@ -1,7 +1,46 @@
 # Latest Report
 
 > Rolling "latest report" for the stock-write security workstream. Updated at each phase boundary.
-> **Current state:** Phase 2 Track B **Step 2 route-only Admin UI — query-gated** (non-admins start no Firestore read). Track A + Phase 1 + Phase 0 retained below.
+> **Current state:** **Phase 2 COMPLETE** (stock-write rules hardening + reconciliation retry safety + route-only Admin UI). Phase 3 proposed (not started). Detailed phase history retained below.
+
+---
+
+## Phase 2 — CLOSEOUT (COMPLETE)
+
+**Phase 2 is officially complete.** Closeout documentation only — no code/behavior change in this entry.
+
+### What's done
+- **Track A — productStocks/stockLots security hardening: COMPLETE.**
+  - `productStocks`: writes require `branchId == docId` (anti-spoof) + a stock-capable permission (blocks pos_sale-only cashiers); delete is genuinely admin-only; oversell and staff-initiated transfers preserved.
+  - `stockLots`: create/update require a stock-capable permission; `branchId` present on create and **immutable** on update; delete remains manager/admin; reads intentionally unchanged.
+- **Track B — reconciliation retry safety + route-only Admin UI: COMPLETE.**
+  - Backend: enriched + sanitized exception logging; atomic (`FieldValue.increment`) attempt counting; admin-only `retryReconcile` callable (idempotent re-arm, cap = 3, `voidRequested` rejected, already-settled no-op); recovery audit (clear active error, preserve sanitized history); full `asyncOrders` client-write lockdown (create-spoof block + update field allowlist).
+  - UI: route-only `/admin/reconciliation-exceptions` (direct URL, no dashboard/nav entry), admin-gated so non-admins start **no** Firestore read; repair only via the secured callable.
+
+### Testing posture (accepted for now)
+- Automated: rules suite (83), functions suite (43), and src pure-logic unit tests (gate/query-gate, row mapping, disable-reason, callable wrapper) — all green.
+- **Deferred to backlog:** React UI **render tests** for the Admin Reconciliation Exceptions page (loading / error / toast / retry-click states) and a **router-level test** for `/admin/reconciliation-exceptions` — the current tooling has no jsdom/RTL.
+- **Manual QA is accepted** for this internal, admin-only tool for now (low blast radius, server-enforced permissions + query gate).
+
+### Technical debt / backlog (Phase 2 carry-over)
+1. **React render tests — Admin Reconciliation Exceptions UI:** add jsdom + `@testing-library/react` (new test config) and cover loading/empty/error/toast/retry-disabled states. *Why deferred:* no RTL infra today; logic kept in node-tested pure helpers.
+2. **Router-level test — `/admin/reconciliation-exceptions`:** assert the route mounts the page and a non-admin is handled (redirect/not-authorized) at the router level. *Why deferred:* needs RTL/router test harness.
+3. **Flowbite upgrade for this isolated Admin UI:** after the security phases close **and** `stash@{0}` (Flowbite migration) is applied, migrate the plain `recex-` page to Flowbite (Table/Button/Badge/Modal). *Why deferred:* avoid conflict with the un-applied stash.
+4. **Transfer destination isolation / server-side transfer flow:** move the cross-branch transfer destination `productStocks`/`stockLots` writes to a Cloud Function so client writes can be fully branch-isolated (`hasBranchAccess(docId)`). *Why deferred:* Phase 1/2 explicitly kept staff transfers working without a transfer refactor.
+5. **stockLots read scoping review:** reads are currently any-staff (not branch-scoped) to preserve cross-branch visibility/transfer planning/reporting; audit read call-sites, then decide on branch scoping. *Why deferred:* needs a read-call-site audit to avoid breaking reports/FIFO.
+6. **Value-level constraints for approved void fields:** the `asyncOrders` update allowlist controls *which* fields a `pos_void` client may change but not their *values* (e.g. forcing `status == 'voided'`). *Why deferred:* tightening values risks breaking the legitimate offline void flow.
+
+### Secure-state summary
+| Area | Status |
+|---|---|
+| **productStocks** | ✅ Hardened — anti-spoof (`branchId==docId`), permission-gated writes, admin-only delete; oversell + staff transfers preserved. |
+| **stockLots** | ✅ Hardened — permission-gated create/update, `branchId` immutable on update; delete manager/admin. **Reads not branch-scoped** (deferred review #5). |
+| **Reconciliation exception/retry** | ✅ Safe — atomic attempt counting, admin-only idempotent retry (cap 3), `voidRequested` rejected, recovery audit, sanitized errors; no double-deduction (atomic settle). |
+| **Admin UI** | ✅ Route-only `/admin/reconciliation-exceptions`, admin-gated (non-admin starts no query), repair via secured callable. UI render tests deferred (#1/#2). |
+| **Remaining deferred risks** | Transfer dest cross-branch writes still client-side (#4); stockLots reads unscoped (#5); void field values unconstrained (#6); UI render/router tests absent (#1/#2). None are open client-write spoofing holes. |
+
+### Next phase (proposed, not started)
+**Phase 3 — Production Readiness & Environment Safety** → see `docs/reports/phase-3-proposal.md`. Goal: the app can't accidentally use emulator settings in prod, can't deploy to the wrong project/database/region, and has clear release/deploy/monitoring safety checks. Not implemented yet.
 
 ---
 
