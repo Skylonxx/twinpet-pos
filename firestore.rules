@@ -62,11 +62,20 @@ service cloud.firestore {
       return isStaff() && ('ALL' in branchIds() || branchId in branchIds());
     }
 
-    /** productStocks doc id is often the branch id (e.g. LDP-001) */
-    function requestProductStockBranchId(stockDocId) {
-      return request.resource.data.branchId != null
-        ? request.resource.data.branchId
-        : stockDocId;
+    /**
+     * A productStocks write must come from a STOCK-CAPABLE staffer, not a
+     * pos_sale-only checkout terminal. Regular staff carry 'product_view' (so
+     * staff-initiated branch transfers keep working, business decision #1); any
+     * receiving/adjust/void/product role qualifies; admins always qualify.
+     * Sales never reach here — POS checkout decrements stock server-side via the
+     * reconcileOrder Cloud Function (Admin SDK), which bypasses these rules.
+     */
+    function canMutateStock() {
+      return isAdmin()
+        || 'stock_receive' in tokenPerms()
+        || 'product_edit' in tokenPerms()
+        || 'pos_void' in tokenPerms()
+        || 'product_view' in tokenPerms();
     }
 
     function isGlobalSettingsId(settingId) {
@@ -141,12 +150,21 @@ service cloud.firestore {
 
       match /productStocks/{stockBranchId} {
         allow read: if isAdmin() || hasBranchAccess(stockBranchId);
-        // Own-branch stock writes, plus cross-branch destination writes for branch
-        // transfers: confirmBranchTransfer increments the DESTINATION branch's stock,
-        // and the source-branch user has no branch access to that destination.
-        // These docs are only ever written by the inventory transaction services.
-        allow write: if isStaff();
-        // Admin-only — used by the Danger Zone hard-delete (collectionGroup sweep)
+        // Phase 1 hardening:
+        //  • branchId in the payload MUST equal the doc id → blocks branch-id
+        //    spoofing (writing branch B's doc while stamping branchId "A").
+        //  • writer must be stock-capable (canMutateStock) → blocks pos_sale-only
+        //    cashiers from directly mutating stock.
+        // Cross-branch destination writes for branch transfers stay allowed
+        // (confirmBranchTransfer stamps branchId == toBranch == doc id), per
+        // business decision #1. Full branch isolation of that dest leg is Phase 2
+        // (move the cross-branch write to a Cloud Function) — NOT done here.
+        // Sales never write here: POS checkout decrements via reconcileOrder
+        // (Admin SDK), so oversell/negative stock is unaffected (decision #2).
+        allow create, update: if isStaff()
+          && request.resource.data.branchId == stockBranchId
+          && canMutateStock();
+        // Admin-only — explicit (NOT a broad `write`, so delete is not subsumed).
         allow delete: if isAdmin();
       }
     }
@@ -156,7 +174,11 @@ service cloud.firestore {
       allow read: if isAdmin() || (isStaff()
         && resource.data.branchId is string
         && hasBranchAccess(resource.data.branchId));
-      allow write: if isAdmin() || (isStaff() && hasBranchAccess(requestProductStockBranchId(stockDocId)));
+      // Mirror the nested block exactly — rules grant on the UNION of matching
+      // blocks, so leaving this permissive would re-open the writes hardened above.
+      allow create, update: if isStaff()
+        && request.resource.data.branchId == stockDocId
+        && canMutateStock();
       // Admin-only — explicit delete for the Danger Zone hard-delete collectionGroup sweep
       allow delete: if isAdmin();
     }
