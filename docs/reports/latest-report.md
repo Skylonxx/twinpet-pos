@@ -24,17 +24,18 @@
 Not implemented. Proposed in **Track B Step 2** — see `docs/reports/phase-2-track-b-step2-admin-ui-proposal.md` and the summary + Paranoid Checklist below.
 
 ### Track B Step 2 — Admin UI proposal summary (NOT implemented)
-Full proposal: **`docs/reports/phase-2-track-b-step2-admin-ui-proposal.md`**.
-- **Route:** `/admin/reconciliation-exceptions` (under `AdminLayout`, admin-only).
-- **Isolated files:** `src/pages/admin/ReconciliationExceptionsPage.tsx` + `.css` (namespaced `recex-`, plain CSS — no Flowbite), `src/lib/reconciliation/useReconciliationExceptions.ts` (read-only `onSnapshot`), `src/lib/reconciliation/retryReconcile.ts` (callable wrapper), one additive route line in `App.tsx`.
+Full proposal: **`docs/reports/phase-2-track-b-step2-admin-ui-proposal.md`** (revised to ROUTE-ONLY per Codex).
+- **Route:** `/admin/reconciliation-exceptions` (under `AdminLayout`). **ROUTE-ONLY / direct-URL access** — no dashboard card, no nav link, no menu entry. `AdminDashboardPage.tsx` and navigation files are NOT modified.
+- **Isolated files:** `src/pages/admin/ReconciliationExceptionsPage.tsx` + `.css` (namespaced `recex-`, plain CSS — no Flowbite), `src/lib/reconciliation/useReconciliationExceptions.ts` (read-only `onSnapshot`), `src/lib/reconciliation/retryReconcile.ts` (callable wrapper), `src/lib/reconciliation/retryReconcile.test.ts`, and **one additive route line** in `App.tsx`.
 - **Data:** exception rows (billId, branch, total, staff, createdAt, attempts vs cap, sanitized `lastReconcileError`, `firstFailedAt`, `adminRetryCount`, `lastRetryBy/At`, `voidRequested` badge); detail = lines/payments/sanitized errors.
 - **Retry:** per-row button → confirm → `retryReconcile({orderId})` callable (re-arms server-side); disabled at cap / when `voidRequested` / while in-flight; live list auto-updates.
 - **Consumes backend:** reads via Firestore `onSnapshot` (admin-readable); repairs ONLY via the `retryReconcile` `httpsCallable`; never writes reconcile fields from the client.
-- **Permissions:** admin-only, defense-in-depth (callable role check + client route gate + existing rules).
+- **Permissions:** admin-only, defense-in-depth (callable role check + `AdminLayout` gate + existing rules); page degrades safely for a non-admin who hits the URL.
 - **States:** loading / empty ("no exceptions 🎉") / error banner / per-row in-flight + disabled-with-reason.
-- **stash conflict avoidance:** plain namespaced CSS + non-Flowbite primitives; no edits to stashed settings/nav/layout files; entry surfaced from the Admin dashboard, not the stashed nav config.
+- **Query:** single equality `where('reconcileStatus','==','exception')`, no `orderBy`, **no composite index** required.
+- **stash conflict avoidance:** plain namespaced CSS + non-Flowbite primitives; no edits to stashed settings/nav/layout files, no `AdminDashboardPage.tsx` edit; only `App.tsx` (not in the stash) gets the additive route line.
 - **Backlog:** upgrade this isolated page to Flowbite *after* security phases close and `stash@{0}` is applied.
-- **Tests before impl:** callable-wrapper error mapping, query hook (empty/error), component (retry disable rules, confirm, states), index addition if branch+orderBy query, rules regression.
+- **Tests before impl:** route/admin-gate test, callable-wrapper error mapping, query-hook mapping (empty/error), pure disable-reason logic, rules regression. (Full RTL component tests need new infra — out of scope; view logic kept node-testable + emulator smoke test.)
 
 ### Paranoid Checklist (Track B Step 1 close)
 1. **Business Logic Integrity:** POS `asyncOrders` create (safe baseline) ✅, oversell / negative stock ✅ (sale decrement is Admin-SDK, rules-exempt; create rule unchanged), and the legitimate offline void flow ✅ (full approved-field void merge passes) — all confirmed by green rules/functions tests.
