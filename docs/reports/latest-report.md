@@ -9,6 +9,8 @@
 
 **Phase 2 is officially complete.** Closeout documentation only — no code/behavior change in this entry.
 
+**Scope clarification (important):** Phase 2 closed the **client-write spoofing / security-hardening gaps** for `productStocks`, `stockLots`, and the reconciliation exception flow. It does **not** mean all data risks are solved — several **deferred data risks remain open and documented** (notably transfer destination cross-branch isolation, `stockLots` read scoping, and value-level void-field constraints; see backlog #4–#6). A separate **production deploy blocker** is also outstanding: the temporary public `migrateDataToPosDb` Cloud Function (see Phase 3 / backlog #7).
+
 ### What's done
 - **Track A — productStocks/stockLots security hardening: COMPLETE.**
   - `productStocks`: writes require `branchId == docId` (anti-spoof) + a stock-capable permission (blocks pos_sale-only cashiers); delete is genuinely admin-only; oversell and staff-initiated transfers preserved.
@@ -29,6 +31,7 @@
 4. **Transfer destination isolation / server-side transfer flow:** move the cross-branch transfer destination `productStocks`/`stockLots` writes to a Cloud Function so client writes can be fully branch-isolated (`hasBranchAccess(docId)`). *Why deferred:* Phase 1/2 explicitly kept staff transfers working without a transfer refactor.
 5. **stockLots read scoping review:** reads are currently any-staff (not branch-scoped) to preserve cross-branch visibility/transfer planning/reporting; audit read call-sites, then decide on branch scoping. *Why deferred:* needs a read-call-site audit to avoid breaking reports/FIFO.
 6. **Value-level constraints for approved void fields:** the `asyncOrders` update allowlist controls *which* fields a `pos_void` client may change but not their *values* (e.g. forcing `status == 'voided'`). *Why deferred:* tightening values risks breaking the legitimate offline void flow.
+7. **PRODUCTION DEPLOY BLOCKER — remove `migrateDataToPosDb`:** `functions/src/index.ts` exports `migrateDataToPosDb` as a **public** (`invoker: 'public'`) temporary one-shot DB-copy migration (its header says "DELETE AFTER MIGRATION"). It must be **removed/disabled/excluded before ANY production functions deploy** and is a **hard deploy blocker** until resolved (Phase 3). *Not modified here — docs-only flag.*
 
 ### Secure-state summary
 | Area | Status |
@@ -37,10 +40,10 @@
 | **stockLots** | ✅ Hardened — permission-gated create/update, `branchId` immutable on update; delete manager/admin. **Reads not branch-scoped** (deferred review #5). |
 | **Reconciliation exception/retry** | ✅ Safe — atomic attempt counting, admin-only idempotent retry (cap 3), `voidRequested` rejected, recovery audit, sanitized errors; no double-deduction (atomic settle). |
 | **Admin UI** | ✅ Route-only `/admin/reconciliation-exceptions`, admin-gated (non-admin starts no query), repair via secured callable. UI render tests deferred (#1/#2). |
-| **Remaining deferred risks** | Transfer dest cross-branch writes still client-side (#4); stockLots reads unscoped (#5); void field values unconstrained (#6); UI render/router tests absent (#1/#2). None are open client-write spoofing holes. |
+| **Remaining deferred risks** | Transfer dest cross-branch writes still client-side (#4); stockLots reads unscoped (#5); void field values unconstrained (#6); UI render/router tests absent (#1/#2); **public `migrateDataToPosDb` migration fn = production deploy blocker (#7)**. These are documented/deferred — **not** all solved. None are *new* open client-write spoofing holes. |
 
 ### Next phase (proposed, not started)
-**Phase 3 — Production Readiness & Environment Safety** → see `docs/reports/phase-3-proposal.md`. Goal: the app can't accidentally use emulator settings in prod, can't deploy to the wrong project/database/region, and has clear release/deploy/monitoring safety checks. Not implemented yet.
+**Phase 3 — Production Readiness & Environment Safety** → see `docs/reports/phase-3-proposal.md`. Goal: the app can't accidentally use emulator settings in prod, can't deploy to the wrong project/database/region, and has clear release/deploy/monitoring safety checks. **Includes a hard production deploy blocker: remove/disable/exclude the public `migrateDataToPosDb` function before any prod functions deploy.** Not implemented yet.
 
 ---
 
