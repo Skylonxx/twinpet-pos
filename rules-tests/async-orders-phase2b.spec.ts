@@ -100,6 +100,40 @@ describe('asyncOrders reconcile-control immutability (client updates)', () => {
   });
 });
 
+// Every server-owned reconcile/audit field must be frozen on client updates.
+const SERVER_OWNED_FIELDS: Record<string, unknown> = {
+  reconcileError: 'spoof',
+  lastReconcileError: 'spoof',
+  lastReconcileErrorAt: 1_700_000_000_000,
+  firstFailedAt: 1_700_000_000_000,
+  previousReconcileError: 'spoof',
+  reconcileRecoveredAt: 1_700_000_000_000,
+  adminRetryCount: 9,
+  lastRetryBy: 'staff1',
+  lastRetryAt: 1_700_000_000_000,
+  reconciledAt: 1_700_000_000_000,
+};
+
+describe('asyncOrders update — freeze ALL server-owned reconcile/audit fields', () => {
+  for (const [field, value] of Object.entries(SERVER_OWNED_FIELDS)) {
+    it(`a pos_void client CANNOT mutate server-owned field "${field}"`, async () => {
+      const db = testEnv.authenticatedContext('staff1', voidStaff).firestore();
+      await assertFails(updateDoc(doc(db, 'asyncOrders', 'a1'), { [field]: value }));
+    });
+  }
+
+  it('a void merge that also tries to sneak in an audit field is DENIED (whole update rejected)', async () => {
+    const db = testEnv.authenticatedContext('staff1', voidStaff).firestore();
+    await assertFails(
+      setDoc(
+        doc(db, 'asyncOrders', 'a1'),
+        { voidRequested: true, status: 'voided', voidReason: 'x', adminRetryCount: 1 },
+        { merge: true },
+      ),
+    );
+  });
+});
+
 describe('asyncOrders create — block server-owned reconcile-field spoofing', () => {
   it('a normal POS checkout intent (safe baseline) still SUCCEEDS', async () => {
     const db = testEnv.authenticatedContext('staff2', saleStaff).firestore();

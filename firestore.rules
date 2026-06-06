@@ -45,6 +45,25 @@ service cloud.firestore {
         && !('lastRetryAt' in data);
     }
 
+    // asyncOrders client UPDATE: every server-owned reconcile/audit field must be
+    // UNCHANGED (frozen). These move only via the Admin-SDK reconciler /
+    // retryReconcile callable (which bypass rules). `.get(_, null)` compares
+    // cleanly whether or not a field is present on either side.
+    function reconcileAuditFrozen(req, res) {
+      return req.get('reconcileStatus', null) == res.get('reconcileStatus', null)
+        && req.get('reconcileAttempts', null) == res.get('reconcileAttempts', null)
+        && req.get('reconciledAt', null) == res.get('reconciledAt', null)
+        && req.get('reconcileError', null) == res.get('reconcileError', null)
+        && req.get('lastReconcileError', null) == res.get('lastReconcileError', null)
+        && req.get('lastReconcileErrorAt', null) == res.get('lastReconcileErrorAt', null)
+        && req.get('firstFailedAt', null) == res.get('firstFailedAt', null)
+        && req.get('previousReconcileError', null) == res.get('previousReconcileError', null)
+        && req.get('reconcileRecoveredAt', null) == res.get('reconcileRecoveredAt', null)
+        && req.get('adminRetryCount', null) == res.get('adminRetryCount', null)
+        && req.get('lastRetryBy', null) == res.get('lastRetryBy', null)
+        && req.get('lastRetryAt', null) == res.get('lastRetryAt', null);
+    }
+
     function role() {
       return request.auth.token.role;
     }
@@ -282,14 +301,13 @@ service cloud.firestore {
             && request.resource.data.get('voidRequested', false) == true)
         );
       // Client updates = the offline void-intent merge only. The reconcile state
-      // machine is SERVER-OWNED: clients may never flip `reconcileStatus` or the
-      // retry counter `reconcileAttempts` (those move only via the Admin-SDK
-      // reconciler / retryReconcile callable, which bypass these rules). `.get`
-      // gives a clean compare even when a field is absent on either side.
+      // machine + audit trail is SERVER-OWNED: clients may not mutate ANY of the
+      // reconcile/audit fields (status, counter, error/audit, retry control) —
+      // those move only via the Admin-SDK reconciler / retryReconcile callable,
+      // which bypass these rules. Approved void fields stay writable.
       allow update: if hasPerm('pos_void')
         && hasBranchAccess(resource.data.branchId)
-        && request.resource.data.get('reconcileStatus', null) == resource.data.get('reconcileStatus', null)
-        && request.resource.data.get('reconcileAttempts', null) == resource.data.get('reconcileAttempts', null);
+        && reconcileAuditFrozen(request.resource.data, resource.data);
       allow delete: if isAdmin();
     }
 

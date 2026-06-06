@@ -1,7 +1,23 @@
 # Latest Report
 
 > Rolling "latest report" for the stock-write security workstream. Updated at each phase boundary.
-> **Current state:** Phase 2 Track B **Step 1 + follow-up guards COMPLETE** (backend/rules only). Admin UI still deferred to a later, isolated step. Track A + Phase 1 + Phase 0 retained below.
+> **Current state:** Phase 2 Track B **Step 1 + guards + full audit-field freeze COMPLETE** (backend/rules only). Admin UI still deferred to a later, isolated step. Track A + Phase 1 + Phase 0 retained below.
+
+---
+
+## Phase 2 — Track B, Step 1 PATCH: Freeze ALL server-owned reconcile/audit fields (RULES ONLY)
+
+**Closes the Codex High finding.** The previous `asyncOrders` update rule froze only `reconcileStatus` + `reconcileAttempts`, so a `pos_void` client could still mutate other server-owned reconcile/audit fields. **Now ALL of them are frozen on client updates.** Rules-only change; no functions, no Admin UI, no transfer/UI-stash changes.
+
+- New rules helper `reconcileAuditFrozen(req, res)` requires every server-owned field to be **unchanged** on a client update: `reconcileStatus`, `reconcileAttempts`, `reconciledAt`, `reconcileError`, `lastReconcileError`, `lastReconcileErrorAt`, `firstFailedAt`, `previousReconcileError`, `reconcileRecoveredAt`, `adminRetryCount`, `lastRetryBy`, `lastRetryAt`. The `asyncOrders` update rule now gates on it (still requires `pos_void` + branch access).
+- These fields move **only** via the Admin-SDK reconciler / `retryReconcile` callable, which bypass rules. Approved void fields (`voidRequested`, `status`, `voidReason`, `voidedBy`, `voidedAt`, `updatedAt`) remain writable, so the offline void-intent merge still works. POS checkout (create) and oversell are unaffected.
+
+### Tests run / results
+- Rules: **63 passed (4 files)** — adds a per-field update-denial test for each server-owned field (incl. `reconcileError`, `lastReconcileError`, `lastReconcileErrorAt`, `firstFailedAt`, `previousReconcileError`, `reconcileRecoveredAt`, `adminRetryCount`, `lastRetryBy`, `lastRetryAt`, `reconciledAt`) + a "sneak an audit field into a void merge → whole update denied" case; normal POS create, approved void merge, and create-spoofing denials still pass.
+- Functions: **43 passed (5 files)** — unchanged (no function code touched); retry admin-only, voidRequested+exception rejection, concurrent-retry idempotency, and successful-retry audit behavior all still green.
+
+### Remaining gaps
+None known for the client-write surface: create-spoofing and update-spoofing of server-owned reconcile/audit fields are both closed. Admin UI (exceptions list, badge, retry button) remains the only deferred Track B item (standalone route/component; Flowbite upgrade = backlog/docs only).
 
 ---
 
