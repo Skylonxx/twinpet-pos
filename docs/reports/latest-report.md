@@ -1,7 +1,27 @@
 # Latest Report
 
 > Rolling "latest report" for the stock-write security workstream. Updated at each phase boundary.
-> **Current state:** Phase 2 Track B **Step 1 + guards + full audit-field freeze COMPLETE** (backend/rules only). Admin UI still deferred to a later, isolated step. Track A + Phase 1 + Phase 0 retained below.
+> **Current state:** Phase 2 Track B **Step 1 + guards + void-update field allowlist COMPLETE** (backend/rules only). Admin UI still deferred to a later, isolated step. Track A + Phase 1 + Phase 0 retained below.
+
+---
+
+## Phase 2 — Track B, Step 1 PATCH: Restrict pos_void updates to approved void fields (RULES ONLY)
+
+**Closes the Codex High finding.** Previously a `pos_void` client update only had reconcile/audit fields frozen, so it could still mutate **sale-payload** fields (`lines`, `payments`, `total`, `creditAmt`, `staffId`, `branchId`, …) — and `handleVoidIntent` reads reversal inputs from the async order. Now a `pos_void` client update may change **only approved void-intent fields**; everything else is frozen. Rules-only; no functions, no Admin UI, no transfer/UI-stash changes.
+
+### Approved void-intent fields (the ONLY keys a pos_void update may change)
+`voidRequested`, `status`, `voidReason`, `voidedBy`, `voidedAt`, `updatedAt`, `deviceId`.
+
+- New rules helper `voidIntentChangesOnly()` uses `request.resource.data.diff(resource.data).affectedKeys().hasOnly([...approved])`. This is strictly stronger than the prior per-field freeze: it blocks **sale-payload mutation** AND **all server-owned reconcile/audit fields** in one gate, and (via diff) also denies absent→null writes on protected fields. `branchId` is intentionally NOT in the allowlist — the void merge re-writes the same value (not an affected key); any real change is denied.
+- `safeInitialReconcileState` (create) now also constrains `reconciledAt` to the safe baseline (`null`), so a create can't spoof a settled timestamp.
+- Trusted backend paths (Admin-SDK reconciler / `retryReconcile` callable) still write all these fields — they bypass rules.
+
+### Tests run / results
+- Rules: **71 passed (4 files)** — adds `pos_void` sale-payload denial tests (`lines`, `payments`, `total`, `creditAmt`, `staffId`, `branchId`), a "void + sneak sale-payload edit → whole update denied" case, and a FULL legitimate void merge (all approved fields) that still passes; existing reconcile/audit freeze, create-spoofing denials, and normal POS create all still pass.
+- Functions: **43 passed (5 files)** — unchanged (no function code touched).
+
+### Remaining gaps
+None known on the `asyncOrders` client-write surface: create-spoofing and update-spoofing are both closed; `pos_void` updates are restricted to approved void-intent fields; reconcile/audit + sale-payload fields are frozen. Admin UI (exceptions list, badge, retry button) remains the only deferred Track B item (standalone route/component; Flowbite upgrade = backlog/docs only).
 
 ---
 

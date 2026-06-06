@@ -58,13 +58,17 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await testEnv.clearFirestore();
-  // A settled async order (server-owned reconcile state) to attempt updates against.
+  // A settled async order with representative SALE PAYLOAD + server-owned reconcile
+  // state, to attempt illegitimate client mutations against.
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
     await setDoc(doc(ctx.firestore(), 'asyncOrders', 'a1'), {
       id: 'a1',
       branchId: BRANCH,
       staffId: 'staff1',
       total: 100,
+      creditAmt: 0,
+      lines: [{ productId: 'p1', qtyBase: 1, lineTotal: 100 }],
+      payments: [{ method: 'cash', amount: 100 }],
       status: 'completed',
       reconcileStatus: 'settled',
       reconcileAttempts: 1,
@@ -113,6 +117,55 @@ const SERVER_OWNED_FIELDS: Record<string, unknown> = {
   lastRetryAt: 1_700_000_000_000,
   reconciledAt: 1_700_000_000_000,
 };
+
+// Sale-payload fields a pos_void client must NOT be able to mutate.
+const SALE_PAYLOAD_MUTATIONS: Record<string, unknown> = {
+  lines: [{ productId: 'evil', qtyBase: 999, lineTotal: 0 }],
+  payments: [{ method: 'cash', amount: 0 }],
+  total: 1,
+  creditAmt: 9999,
+  staffId: 'someoneElse',
+  branchId: 'BKK-002',
+};
+
+describe('asyncOrders update — pos_void cannot mutate SALE PAYLOAD fields', () => {
+  for (const [field, value] of Object.entries(SALE_PAYLOAD_MUTATIONS)) {
+    it(`a pos_void client CANNOT mutate sale-payload field "${field}"`, async () => {
+      const db = testEnv.authenticatedContext('staff1', voidStaff).firestore();
+      await assertFails(updateDoc(doc(db, 'asyncOrders', 'a1'), { [field]: value }));
+    });
+  }
+
+  it('a void that ALSO edits sale payload (lines) is DENIED (whole update rejected)', async () => {
+    const db = testEnv.authenticatedContext('staff1', voidStaff).firestore();
+    await assertFails(
+      setDoc(
+        doc(db, 'asyncOrders', 'a1'),
+        { voidRequested: true, status: 'voided', voidReason: 'x', lines: [] },
+        { merge: true },
+      ),
+    );
+  });
+
+  it('a FULL legitimate void merge (all approved void fields) still SUCCEEDS', async () => {
+    const db = testEnv.authenticatedContext('staff1', voidStaff).firestore();
+    await assertSucceeds(
+      setDoc(
+        doc(db, 'asyncOrders', 'a1'),
+        {
+          voidRequested: true,
+          status: 'voided',
+          voidReason: 'ลูกค้าเปลี่ยนใจ',
+          voidedBy: 'staff1',
+          deviceId: 'pos-1',
+          voidedAt: 1_700_000_000_000,
+          updatedAt: 1_700_000_000_000,
+        },
+        { merge: true },
+      ),
+    );
+  });
+});
 
 describe('asyncOrders update — freeze ALL server-owned reconcile/audit fields', () => {
   for (const [field, value] of Object.entries(SERVER_OWNED_FIELDS)) {

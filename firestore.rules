@@ -33,6 +33,8 @@ service cloud.firestore {
     // Blocks spoofing a sale straight to 'settled' or pre-loading attempt/error state.
     function safeInitialReconcileState(data) {
       return data.get('reconcileStatus', 'pending_reconcile') == 'pending_reconcile'
+        // reconciledAt safe baseline only (null) — never spoof a settled timestamp.
+        && data.get('reconciledAt', null) == null
         && !('reconcileAttempts' in data)
         && !('reconcileError' in data)
         && !('lastReconcileError' in data)
@@ -45,23 +47,17 @@ service cloud.firestore {
         && !('lastRetryAt' in data);
     }
 
-    // asyncOrders client UPDATE: every server-owned reconcile/audit field must be
-    // UNCHANGED (frozen). These move only via the Admin-SDK reconciler /
-    // retryReconcile callable (which bypass rules). `.get(_, null)` compares
-    // cleanly whether or not a field is present on either side.
-    function reconcileAuditFrozen(req, res) {
-      return req.get('reconcileStatus', null) == res.get('reconcileStatus', null)
-        && req.get('reconcileAttempts', null) == res.get('reconcileAttempts', null)
-        && req.get('reconciledAt', null) == res.get('reconciledAt', null)
-        && req.get('reconcileError', null) == res.get('reconcileError', null)
-        && req.get('lastReconcileError', null) == res.get('lastReconcileError', null)
-        && req.get('lastReconcileErrorAt', null) == res.get('lastReconcileErrorAt', null)
-        && req.get('firstFailedAt', null) == res.get('firstFailedAt', null)
-        && req.get('previousReconcileError', null) == res.get('previousReconcileError', null)
-        && req.get('reconcileRecoveredAt', null) == res.get('reconcileRecoveredAt', null)
-        && req.get('adminRetryCount', null) == res.get('adminRetryCount', null)
-        && req.get('lastRetryBy', null) == res.get('lastRetryBy', null)
-        && req.get('lastRetryAt', null) == res.get('lastRetryAt', null);
+    // asyncOrders client UPDATE = the offline void-intent merge ONLY. A pos_void
+    // client may change ONLY these approved void-intent fields; EVERY other field
+    // (sale payload — lines/payments/total/creditAmt/staffId/branchId — AND every
+    // server-owned reconcile/audit field) must stay unchanged. Using diff/hasOnly
+    // also correctly denies absent→null writes on protected fields (they appear as
+    // affected keys). branchId is intentionally NOT approved: the void merge
+    // re-writes the SAME branchId (not an affected key), but any real change is denied.
+    function voidIntentChangesOnly() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+        'voidRequested', 'status', 'voidReason', 'voidedBy', 'voidedAt', 'updatedAt', 'deviceId'
+      ]);
     }
 
     function role() {
@@ -300,14 +296,14 @@ service cloud.firestore {
           || (hasPerm('pos_void')
             && request.resource.data.get('voidRequested', false) == true)
         );
-      // Client updates = the offline void-intent merge only. The reconcile state
-      // machine + audit trail is SERVER-OWNED: clients may not mutate ANY of the
-      // reconcile/audit fields (status, counter, error/audit, retry control) —
-      // those move only via the Admin-SDK reconciler / retryReconcile callable,
-      // which bypass these rules. Approved void fields stay writable.
+      // Client updates = the offline void-intent merge only. A pos_void client may
+      // change ONLY approved void-intent fields; sale-payload fields (lines,
+      // payments, total, creditAmt, staffId, branchId, …) and ALL server-owned
+      // reconcile/audit fields stay frozen (those move only via the Admin-SDK
+      // reconciler / retryReconcile callable, which bypass these rules).
       allow update: if hasPerm('pos_void')
         && hasBranchAccess(resource.data.branchId)
-        && reconcileAuditFrozen(request.resource.data, resource.data);
+        && voidIntentChangesOnly();
       allow delete: if isAdmin();
     }
 
