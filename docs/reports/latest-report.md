@@ -1,7 +1,21 @@
 # Latest Report
 
 > Rolling "latest report" for the stock-write security workstream. Updated at each phase boundary.
-> **Current state:** Phase 2 Track B **Step 2 IMPLEMENTED (route-only Admin UI)** on top of the complete Step 1 backend. Track A + Phase 1 + Phase 0 retained below.
+> **Current state:** Phase 2 Track B **Step 2 route-only Admin UI — query-gated** (non-admins start no Firestore read). Track A + Phase 1 + Phase 0 retained below.
+
+---
+
+## Phase 2 — Track B, Step 2 PATCH: gate the exception query (security fix + honest coverage)
+
+**Closes the Codex High findings on Step 2.**
+
+- **Non-admins no longer start the exception query.** The page now computes `isAdmin = canViewReconciliationExceptions(user?.role)` and passes it to `useReconciliationExceptions(enabled)`. The hook's effect short-circuits via the pure `shouldStartExceptionsQuery(enabled, firebaseReady, dbPresent)` — when `enabled` is false (any non-admin), **no `onSnapshot`/read is ever started**. This is the authoritative gate; we do **NOT** rely on `AdminLayout` (which does not enforce `role === 'admin'`).
+- **Real gate test added** (`adminGate.test.ts`): proves `shouldStartExceptionsQuery` is false for every non-admin role (`manager`/`staff`/`null`/`undefined`) even when Firestore is ready, and true only for admin + configured Firestore. Combined with the `canViewReconciliationExceptions` test this proves: non-admin → no query.
+- **Coverage claim corrected (honesty).** The automated src tests are **pure-logic unit tests only** — the admin/query gate (`shouldStartExceptionsQuery`, `canViewReconciliationExceptions`), row mapping (`mapExceptionRow`), disable-reason (`retryDisableReason`), and the callable wrapper (`callRetryReconcile` + `mapRetryError`). There are **NO** React render tests: loading/empty/error/retry-click **UI states are NOT covered by automated tests** (no jsdom/RTL in the current tooling) — they are verified manually via the emulator. Adding RTL infra is a separate, approved step.
+
+### Tests run / results (this patch)
+- src unit: **103 passed (11 files)** — adds the `shouldStartExceptionsQuery` gate tests; existing reconciliation pure-logic tests still green.
+- Web build `tsc -b && vite build`: **green**. Functions **43** / Rules **83**: unchanged (not affected).
 
 ---
 
@@ -31,7 +45,7 @@
 - Permissions: admin-only — server callable role check + the page's own `canViewReconciliationExceptions` gate (degrades to a not-authorized state, never crashes).
 
 ### Tests run / results
-- src unit: **100 passed (11 files)** — incl. `adminGate` (admin-only gate), `exceptionRows` (doc→row mapping + disable-reason), `retryReconcile` (callable invokes `{orderId}`, error propagation, `mapRetryError`).
+- src unit (pure-logic ONLY — see the PATCH section above for the corrected coverage statement): `adminGate` (gate + query-start gate), `exceptionRows` (doc→row mapping + disable-reason), `retryReconcile` (callable invokes `{orderId}`, error propagation, `mapRetryError`). **No** React render/UI-state tests (no RTL in tooling).
 - Web build: `tsc -b && vite build` **green**.
 - Functions: **43 passed (5 files)** — unchanged. Rules: **83 passed (4 files)** — unchanged regression.
 
@@ -42,7 +56,7 @@ After the security phases close **and** `stash@{0}` (the Flowbite migration) is 
 1. **Business Logic Integrity:** POS create, oversell, and the void flow remain **untouched** — additive route + read-only list + the existing Step-1 callable; functions (43) and rules (83) suites green and unchanged.
 2. **State Isolation:** `stash@{0}` remains **untouched** — only `App.tsx` (not in the stash) was edited in app code.
 3. **Cross-contamination:** **no** `AdminDashboardPage.tsx`, navigation, settings/layout, Flowbite, or transfer changes; query/index scope not broadened (single equality `where`, no index).
-4. **Devil's Advocate (one hidden risk):** access leans on `AdminLayout`'s gate + the Firestore read rule; if `AdminLayout` admitted a non-admin, the query would `permission-denied`. Mitigated by the page's own `canViewReconciliationExceptions` check rendering a not-authorized state. Still worth a follow-up: confirm `AdminLayout`'s role gate so non-admins are redirected *before* the page mounts (defense in depth), and watch that the equality-only query stays index-free if anyone later adds a branch filter/`orderBy`.
+4. **Devil's Advocate (one hidden risk):** `AdminLayout` does **not** enforce `role === 'admin'`, so it is **not** relied on. Enforcement is page-level: the query is gated by `isAdmin` (`enabled`) so a non-admin starts no read, and the page renders a not-authorized state. Remaining watch-items: UI render states are not RTL-tested (manual only), and the equality-only query must stay index-free if anyone later adds a branch filter/`orderBy`. (Superseded by the PATCH section above.)
 
 ---
 

@@ -15,7 +15,11 @@ import './ReconciliationExceptionsPage.css';
  */
 export default function ReconciliationExceptionsPage() {
   const { user } = useAuth();
-  const { rows, loading, error } = useReconciliationExceptions();
+  // Admin gate FIRST. `isAdmin` drives the query's `enabled` flag, so a non-admin
+  // never starts the Firestore exception subscription (the security boundary —
+  // we do NOT rely on AdminLayout for enforcement).
+  const isAdmin = canViewReconciliationExceptions(user?.role);
+  const { rows, loading, error } = useReconciliationExceptions(isAdmin);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -40,8 +44,9 @@ export default function ReconciliationExceptionsPage() {
   }, []);
 
   // Degrade SAFELY for any non-admin who reaches the direct URL (independent of
-  // the AdminLayout gate) — never crash, never show cross-branch data.
-  if (!canViewReconciliationExceptions(user?.role)) {
+  // the AdminLayout gate) — never crash, never show cross-branch data. The query
+  // above was already gated off (enabled=false), so nothing was read.
+  if (!isAdmin) {
     return (
       <div className="recex-page">
         <div className="recex-empty">เฉพาะผู้ดูแลระบบ (admin) เท่านั้นที่เข้าถึงหน้านี้ได้</div>

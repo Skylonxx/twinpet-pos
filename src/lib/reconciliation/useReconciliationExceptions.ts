@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '../firebase';
+import { shouldStartExceptionsQuery } from './adminGate';
 import { mapExceptionRow, type ReconExceptionRow } from './exceptionRows';
 
 export type ExceptionsState = {
@@ -12,21 +13,22 @@ export type ExceptionsState = {
 /**
  * Live, read-only subscription to async orders stuck in `reconcileStatus ==
  * 'exception'`. EQUALITY-ONLY query (single `where`, no `orderBy`) → needs NO
- * composite index. Admin-readable per firestore.rules. Display ordering (newest
- * failure first) is done in-memory to keep the query index-free.
+ * composite index. Display ordering (newest failure first) is done in-memory.
  *
- * The page NEVER writes asyncOrders — repair goes only through the secured
- * `retryReconcile` callable.
+ * SECURITY: `enabled` is the admin-derived gate. When `enabled` is false (a
+ * non-admin), the effect short-circuits via `shouldStartExceptionsQuery` and
+ * NO Firestore subscription/read is ever started. The page NEVER writes
+ * asyncOrders — repair goes only through the secured `retryReconcile` callable.
  */
-export function useReconciliationExceptions(): ExceptionsState {
-  const [state, setState] = useState<ExceptionsState>({ rows: [], loading: true, error: null });
+export function useReconciliationExceptions(enabled: boolean): ExceptionsState {
+  const [state, setState] = useState<ExceptionsState>({ rows: [], loading: enabled, error: null });
 
   useEffect(() => {
-    if (!isFirebaseConfigured || !db) {
+    if (!shouldStartExceptionsQuery(enabled, isFirebaseConfigured, !!db)) {
       setState({ rows: [], loading: false, error: null });
       return;
     }
-    const q = query(collection(db, 'asyncOrders'), where('reconcileStatus', '==', 'exception'));
+    const q = query(collection(db!, 'asyncOrders'), where('reconcileStatus', '==', 'exception'));
     const unsub = onSnapshot(
       q,
       (snap) => {
@@ -40,7 +42,7 @@ export function useReconciliationExceptions(): ExceptionsState {
       },
     );
     return unsub;
-  }, []);
+  }, [enabled]);
 
   return state;
 }
