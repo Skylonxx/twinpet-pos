@@ -25,3 +25,6 @@ firebase-export-*/
 # Playwright output
 playwright-report/
 test-results/
+# Cursor: ignore local workspace settings, but KEEP shared project rules
+/.cursor/*
+!/.cursor/rules/
