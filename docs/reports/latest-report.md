@@ -1,7 +1,27 @@
 # Latest Report
 
 > Rolling "latest report" for the stock-write security workstream. Updated at each phase boundary.
-> **Current state:** Phase 2 Track B **Step 1 + guards + void-update field allowlist COMPLETE** (backend/rules only). Admin UI still deferred to a later, isolated step. Track A + Phase 1 + Phase 0 retained below.
+> **Current state:** Phase 2 Track B **Step 1 COMPLETE** (backend/rules retry safety + full client-write lockdown). Admin UI (Step 2) is **proposed only — not implemented**. Track A + Phase 1 + Phase 0 retained below.
+
+---
+
+## Phase 2 — Track B, Step 1 FINAL: paranoia tests + Step 1 closed
+
+**Track B Step 1 is COMPLETE.** Backend retry safety + the full `asyncOrders` client-write lockdown are done and tested. This final patch is **test-only** (no rules/functions/behavior change) plus a Step 2 UI proposal (see below).
+
+### Paranoia tests added (rules, test-only)
+- **absent→null on protected fields:** explicit denial that a `pos_void` client can write `null` to a server-owned reconcile/audit field that is ABSENT on the stored doc (`reconcileError`, `lastReconcileError`, `lastReconcileErrorAt`, `firstFailedAt`, `previousReconcileError`, `reconcileRecoveredAt`, `adminRetryCount`, `lastRetryBy`, `lastRetryAt`, `reconciledAt`). The `diff().affectedKeys().hasOnly(...)` gate denies these because absent→null is an *added* key.
+- **create reconciledAt spoofing:** explicit denial of a non-null `reconciledAt` on create (settled-timestamp spoof), plus proof that `reconciledAt: null` (the safe initial value POS checkout uses) is allowed.
+
+### Test results
+- Rules: **83 passed (4 files)**.
+- Functions: **43 passed (5 files)** — unchanged (no function code touched).
+
+### Tech-debt note (deferred)
+**Value-level constraints on the approved void fields are intentionally deferred** to a future hardening pass. The current rule allowlists *which* fields a `pos_void` client may change (`voidRequested`, `status`, `voidReason`, `voidedBy`, `voidedAt`, `updatedAt`, `deviceId`) but does not constrain their *values* (e.g. forcing `voidRequested == true` or `status == 'voided'`). Tightening values now risks breaking the legitimate offline POS void flow (which legitimately varies `voidReason`/`deviceId`/timestamps); it is logged as future work, not a Step 1 blocker.
+
+### Admin UI
+Not implemented. Proposed in **Track B Step 2** — see `docs/reports/phase-2-track-b-step2-admin-ui-proposal.md` and the summary + Paranoid Checklist below.
 
 ---
 

@@ -187,6 +187,31 @@ describe('asyncOrders update — freeze ALL server-owned reconcile/audit fields'
   });
 });
 
+// Paranoia: a protected field ABSENT on the stored doc must not be writable even
+// as an explicit `null` (the value-equality trap — diff/affectedKeys catches it
+// because absent→null adds the key). All these fields are absent on the seed.
+const ABSENT_PROTECTED_FIELDS = [
+  'reconcileError',
+  'lastReconcileError',
+  'lastReconcileErrorAt',
+  'firstFailedAt',
+  'previousReconcileError',
+  'reconcileRecoveredAt',
+  'adminRetryCount',
+  'lastRetryBy',
+  'lastRetryAt',
+  'reconciledAt',
+];
+
+describe('asyncOrders update — absent→null writes on protected fields are DENIED', () => {
+  for (const field of ABSENT_PROTECTED_FIELDS) {
+    it(`writing ${field}=null (absent → null) is DENIED`, async () => {
+      const db = testEnv.authenticatedContext('staff1', voidStaff).firestore();
+      await assertFails(updateDoc(doc(db, 'asyncOrders', 'a1'), { [field]: null }));
+    });
+  }
+});
+
 describe('asyncOrders create — block server-owned reconcile-field spoofing', () => {
   it('a normal POS checkout intent (safe baseline) still SUCCEEDS', async () => {
     const db = testEnv.authenticatedContext('staff2', saleStaff).firestore();
@@ -201,6 +226,16 @@ describe('asyncOrders create — block server-owned reconcile-field spoofing', (
   it('create seeding reconcileAttempts is DENIED', async () => {
     const db = testEnv.authenticatedContext('staff2', saleStaff).firestore();
     await assertFails(setDoc(doc(db, 'asyncOrders', 'c1'), posCreate({ reconcileAttempts: 5 })));
+  });
+
+  it('create stamping a non-null reconciledAt (settled-timestamp spoof) is DENIED', async () => {
+    const db = testEnv.authenticatedContext('staff2', saleStaff).firestore();
+    await assertFails(setDoc(doc(db, 'asyncOrders', 'c1'), posCreate({ reconciledAt: 1_700_000_000_000 })));
+  });
+
+  it('create with reconciledAt=null (the safe initial value) is ALLOWED', async () => {
+    const db = testEnv.authenticatedContext('staff2', saleStaff).firestore();
+    await assertSucceeds(setDoc(doc(db, 'asyncOrders', 'c1'), posCreate({ reconciledAt: null })));
   });
 
   it('create seeding error/audit control fields is DENIED', async () => {
