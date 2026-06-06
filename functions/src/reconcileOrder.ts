@@ -102,6 +102,10 @@ type AsyncOrderDoc = {
   changeAmt?: number;
   creditAmt: number;
   reconcileStatus: ReconcileStatus;
+  /** Total settlement attempts that have FAILED (automatic + post-retry). */
+  reconcileAttempts?: number;
+  /** First failure's admin-safe error (set once, preserved for debugging). */
+  reconcileError?: string | null;
   voidRequested?: boolean;
   voidReason?: string | null;
   voidedBy?: string | null;
@@ -224,16 +228,44 @@ export async function reconcileOnWrite(event: WrittenEvent): Promise<void> {
   try {
     await reconcileSale(after.ref);
   } catch (err) {
-    await after.ref.set(
-      {
-        reconcileStatus: 'exception' satisfies ReconcileStatus,
-        reconcileError: err instanceof Error ? err.message : String(err),
-        reconciledAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true },
-    );
-    throw err; // surface to Cloud Functions for retry/alerting
+    // Admin-visible fields are SANITIZED (message only, single-lined, truncated).
+    // The full/raw error is preserved ONLY in the Cloud Functions logs via the
+    // rethrow below — never written to an admin-facing field.
+    const safeError = sanitizeReconcileError(err);
+    const priorAttempts =
+      typeof data.reconcileAttempts === 'number' ? data.reconcileAttempts : 0;
+    const patch: Record<string, unknown> = {
+      reconcileStatus: 'exception' satisfies ReconcileStatus,
+      // Counts every FAILED settle (initial automatic + each post-retry attempt).
+      reconcileAttempts: priorAttempts + 1,
+      lastReconcileError: safeError,
+      lastReconcileErrorAt: FieldValue.serverTimestamp(),
+      reconciledAt: FieldValue.serverTimestamp(),
+    };
+    // Preserve the FIRST failure's error + time as a stable debugging anchor.
+    if (data.reconcileError == null) {
+      patch.reconcileError = safeError;
+      patch.firstFailedAt = FieldValue.serverTimestamp();
+    }
+    await after.ref.set(patch, { merge: true });
+    throw err; // full (unsanitized) error still surfaces to Cloud Functions logs
   }
+}
+
+const MAX_ADMIN_ERROR_LEN = 300;
+
+/**
+ * Admin-safe error string for the async-order doc: the error MESSAGE only (never
+ * the stack or internal objects), collapsed to a single line and truncated. Raw
+ * detail stays in Cloud Functions logs (the handler rethrows), not in Firestore.
+ */
+export function sanitizeReconcileError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  const oneLine = raw.replace(/\s+/g, ' ').trim();
+  if (oneLine.length === 0) return 'unknown error';
+  return oneLine.length > MAX_ADMIN_ERROR_LEN
+    ? `${oneLine.slice(0, MAX_ADMIN_ERROR_LEN)}…`
+    : oneLine;
 }
 
 export const reconcileOrder = onDocumentWritten(

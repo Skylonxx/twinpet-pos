@@ -13,6 +13,11 @@ setGlobalOptions({ region: FUNCTIONS_REGION });
 // the database/region configured in firebase.json.
 export { reconcileOrder } from './reconcileOrder';
 
+// Admin-only manual repair: re-arm a failed (`exception`) reconciliation. Safety
+// net only — see docs/reports/phase-2-track-b-proposal.md. (Exported after
+// setGlobalOptions so the callable inherits the configured region.)
+export { retryReconcile } from './retryReconcile';
+
 type UserRole = 'admin' | 'manager' | 'staff';
 
 // Fallback mirror of the client DEFAULT_ROLE_PERMS (src/lib/staffManagement/types.ts).

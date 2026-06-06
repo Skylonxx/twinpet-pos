@@ -262,8 +262,15 @@ service cloud.firestore {
           || (hasPerm('pos_void')
             && request.resource.data.get('voidRequested', false) == true)
         );
+      // Client updates = the offline void-intent merge only. The reconcile state
+      // machine is SERVER-OWNED: clients may never flip `reconcileStatus` or the
+      // retry counter `reconcileAttempts` (those move only via the Admin-SDK
+      // reconciler / retryReconcile callable, which bypass these rules). `.get`
+      // gives a clean compare even when a field is absent on either side.
       allow update: if hasPerm('pos_void')
-        && hasBranchAccess(resource.data.branchId);
+        && hasBranchAccess(resource.data.branchId)
+        && request.resource.data.get('reconcileStatus', null) == resource.data.get('reconcileStatus', null)
+        && request.resource.data.get('reconcileAttempts', null) == resource.data.get('reconcileAttempts', null);
       allow delete: if isAdmin();
     }
 

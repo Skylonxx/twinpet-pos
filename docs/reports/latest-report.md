@@ -1,7 +1,40 @@
 # Latest Report
 
 > Rolling "latest report" for the stock-write security workstream. Updated at each phase boundary.
-> **Current state:** Phase 2 Track A COMPLETE — stockLots write hardening done (incl. branchId invariant). Track B (reconciliation) deferred. Phase 1 + Phase 0 retained below.
+> **Current state:** Phase 2 Track B **Step 1 (backend retry safety) COMPLETE**. Admin UI deferred to a later, isolated step. Track A + Phase 1 + Phase 0 retained below.
+
+---
+
+## Phase 2 — Track B, Step 1: Reconciliation Retry Safety (BACKEND ONLY)
+
+**Scope executed = backend safety + tests + rules + docs only.** No Admin UI was implemented (no page, no dashboard badge, no retry button, no Flowbite migration). No transfer refactor, no UI/Flowbite `stash@{0}` changes, no unrelated app changes.
+
+### Admin UI isolation strategy (for the later, separate step)
+When the Admin UI is approved, it must be built as a **standalone component/route** (e.g. a dedicated "Reconciliation Exceptions" admin route + thin callable hook), and must **not** modify volatile layout/settings/navigation files that conflict with `stash@{0}` Flowbite work. The Flowbite upgrade needed for that future UI is **backlog/documentation only** at this time — not started here.
+
+### What was implemented (backend)
+- **Exception logging (enriched, sanitized):** on a failed settle, `reconcileOnWrite` now writes `reconcileStatus:'exception'`, `reconcileAttempts` (incremented), `lastReconcileError` + `lastReconcileErrorAt`, `reconciledAt`, and — **only on the first failure** — `reconcileError` + `firstFailedAt` (preserved debugging anchor). All admin-facing error fields go through `sanitizeReconcileError` (message only, single-lined, truncated to 300 chars). The raw/full error stays in Cloud Functions logs via the rethrow — never in Firestore.
+- **Retry trigger (callable, admin-only):** new `retryReconcile` `onCall` (`functions/src/retryReconcile.ts`), core extracted as `performReconcileRetry(db, orderId, auth)` for unit testing. Requires `auth.token.role === 'admin'`; normal staff/clients cannot use it.
+- **Server-owned status:** `firestore.rules` `asyncOrders` update tightened so non-admin clients **cannot** flip `reconcileStatus` or `reconcileAttempts` (immutable across client updates); the legitimate offline void-intent merge still passes. Reconcile state moves only via the Admin-SDK reconciler / callable (which bypass rules).
+
+### Retry CAP = 3
+`RECONCILE_RETRY_CAP = 3` total settlement attempts (initial automatic failure + admin retries combined; `reconcileAttempts` counts every failed settle, `adminRetryCount`/`lastRetryBy`/`lastRetryAt` give admin-retry audit). At/over the cap the callable refuses with `resource-exhausted` → **manual investigation required**.
+
+### Idempotency strategy (no double stock deduction)
+`reconcileSale` settles in **one atomic transaction**, so an `exception` means **nothing committed** → re-running cannot double-deduct. The callable **never calls `reconcileSale`**; it only transactionally re-arms `exception → pending_reconcile`, and the existing trigger re-runs the guarded settle (whose in-transaction `reconcileStatus !== 'pending_reconcile'` guard makes stale/duplicate deliveries no-ops). An already-`settled` order is a safe no-op; a non-`exception` order is rejected.
+
+### voidRequested + exception handling
+A `voidRequested` exception order is **never** re-armed to `pending_reconcile` (the callable rejects it with `failed-precondition`) — the void path owns it (the trigger routes `voidRequested → handleVoidIntent` first). Defined in code and covered by tests.
+
+### Manual console repair = emergency-only fallback
+Directly editing `reconcileStatus` in the Firestore console remains an **emergency-only** fallback and is **not normal operation**. The governed, audited path is the `retryReconcile` callable (admin-only, capped). Settled-but-orphaned read-model repair stays the separate `sweeper` tooling.
+
+### Tests run / results
+- Functions: **40 passed (5 files)** — adds `retryReconcile.test.ts` (admin-only; re-arm + idempotency; cap; voidRequested) and extends `reconcileException.test.ts` (attempt increment, first-error preservation, `sanitizeReconcileError` truncation/single-line). Existing reconcile/void behavior still green.
+- Rules: **47 passed (4 files)** — adds `async-orders-phase2b.spec.ts` (non-admin cannot flip `reconcileStatus`/`reconcileAttempts`; legit void merge still passes; non-`pos_void` still blocked). Track A + Phase 1 still green.
+
+### Deferred to the next (separate) step
+Admin UI: exceptions list page, dashboard badge, retry button, and the Flowbite upgrade for that UI — **not implemented here**.
 
 ---
 

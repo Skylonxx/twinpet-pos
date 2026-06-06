@@ -28,9 +28,14 @@ vi.mock('firebase-admin/firestore', () => ({
   Timestamp: { now: () => ({}), fromMillis: () => ({}) },
 }));
 
-import { reconcileOnWrite } from './reconcileOrder';
+import { reconcileOnWrite, sanitizeReconcileError } from './reconcileOrder';
 
-type EvtData = { voidRequested?: boolean; reconcileStatus?: string };
+type EvtData = {
+  voidRequested?: boolean;
+  reconcileStatus?: string;
+  reconcileAttempts?: number;
+  reconcileError?: string | null;
+};
 function event(data: EvtData | null, refSet = vi.fn()) {
   if (data === null) return { data: { after: { exists: false } } } as never;
   return {
@@ -51,7 +56,12 @@ describe('reconcileOnWrite — SALE reconcile exception handling (Phase 0)', () 
 
     expect(runTransactionMock).toHaveBeenCalledTimes(1);
     expect(refSet).toHaveBeenCalledWith(
-      expect.objectContaining({ reconcileStatus: 'exception', reconcileError: 'tx boom' }),
+      expect.objectContaining({
+        reconcileStatus: 'exception',
+        reconcileAttempts: 1, // first failure
+        reconcileError: 'tx boom', // first error preserved
+        lastReconcileError: 'tx boom',
+      }),
       { merge: true },
     );
   });
@@ -80,5 +90,43 @@ describe('reconcileOnWrite — SALE reconcile exception handling (Phase 0)', () 
     await reconcileOnWrite(event({ reconcileStatus: 'settled' }, refSet));
     expect(runTransactionMock).not.toHaveBeenCalled();
     expect(refSet).not.toHaveBeenCalled();
+  });
+});
+
+describe('reconcileOnWrite — exception enrichment & audit (Track B Step 1)', () => {
+  test('a SECOND failure increments attempts and PRESERVES the first error', async () => {
+    runTransactionMock.mockRejectedValueOnce(new Error('second boom'));
+    const refSet = vi.fn();
+    // Re-armed doc already carries the prior failure's attempts + first error.
+    await expect(
+      reconcileOnWrite(
+        event(
+          { reconcileStatus: 'pending_reconcile', reconcileAttempts: 1, reconcileError: 'first boom' },
+          refSet,
+        ),
+      ),
+    ).rejects.toThrow('second boom');
+
+    const patch = refSet.mock.calls[0][0] as Record<string, unknown>;
+    expect(patch.reconcileStatus).toBe('exception');
+    expect(patch.reconcileAttempts).toBe(2); // 1 → 2
+    expect(patch.lastReconcileError).toBe('second boom'); // latest
+    expect(patch.reconcileError).toBeUndefined(); // first error NOT overwritten
+  });
+});
+
+describe('sanitizeReconcileError — admin-safe error fields', () => {
+  test('collapses multi-line / whitespace to a single line', () => {
+    expect(sanitizeReconcileError(new Error('line one\n   line two\tend'))).toBe('line one line two end');
+  });
+  test('truncates very long messages (≤ ~300 chars) with an ellipsis', () => {
+    const long = 'x'.repeat(500);
+    const out = sanitizeReconcileError(new Error(long));
+    expect(out.length).toBeLessThanOrEqual(301);
+    expect(out.endsWith('…')).toBe(true);
+  });
+  test('non-Error and empty inputs are handled', () => {
+    expect(sanitizeReconcileError('plain string')).toBe('plain string');
+    expect(sanitizeReconcileError(new Error('   '))).toBe('unknown error');
   });
 });
