@@ -1,7 +1,50 @@
 # Latest Report
 
 > Rolling "latest report" for the stock-write security workstream. Updated at each phase boundary.
-> **Current state:** **Phase 2 COMPLETE** (stock-write rules hardening + reconciliation retry safety + route-only Admin UI). Phase 3 proposed (not started). Detailed phase history retained below.
+> **Current state:** **Phase 3 Gate 1 done** — production function-export safety (removed the public `migrateDataToPosDb` blocker). Phase 2 COMPLETE. Detailed history below.
+
+---
+
+## Phase 3 — Gate 1: Production Functions Export Safety (DONE, no deploy)
+
+**Goal:** ensure only intended production Cloud Functions can be deployed; remove the public temporary migration blocker. **No deployment was executed.**
+
+### 1. Functions exported BEFORE this task (`functions/src/index.ts`)
+- `reconcileOrder` — Firestore `onDocumentWritten` trigger (offline-sale reconciler). **Production-safe.**
+- `retryReconcile` — `onCall`, admin-only manual repair. **Production-safe.**
+- `verifyPinLogin` — `onCall`, PIN/username auth. **Production-safe.**
+- `migrateDataToPosDb` — `onRequest`, **`invoker: 'public'`**, TEMPORARY one-shot (default)→pos-db DB copier. **NOT production-safe (blocker).**
+
+(Non-function exports — `db`, `deployConfig` constants, `RECONCILE_RETRY_CAP`, `OVERSELL_LOT_ID`, and `sweeper.ts`'s `sweepStuckOrders`/`repairSettledOrder` — are NOT re-exported from `index.ts`, so they are **not** deployed as Cloud Functions; the sweeper is a script-invoked helper.)
+
+### 2. Functions remaining enabled for production export
+`verifyPinLogin`, `reconcileOrder`, `retryReconcile` — **exactly these three.**
+
+### 3. Functions removed/disabled/excluded from production export
+- `migrateDataToPosDb` — **REMOVED** from `functions/src/index.ts` (function + its private `copyCollection` helper deleted). Its own header said "DELETE AFTER MIGRATION"; the (default)→pos-db migration is complete.
+
+### 4. What changed in `functions/src/index.ts`
+- Deleted the `migrateDataToPosDb` export and the `copyCollection` helper.
+- Removed now-unused imports: `getApps, initializeApp, App` (firebase-admin/app), `getFirestore` (firebase-admin/firestore), `onRequest` (firebase-functions/v2/https), `FIRESTORE_DATABASE_ID` (deployConfig).
+- Added a guard comment documenting the removal + the production export allowlist.
+- No other functions touched; no app/frontend behavior changed.
+
+### 5. Deploy allowlist / checklist
+- **Allowlist (already in `functions/package.json` `deploy`):** `firebase deploy --only functions:verifyPinLogin,functions:reconcileOrder,functions:retryReconcile` — only the three production functions are ever targeted (never a bare `--only functions`).
+- **Checklist (documented):** before any `functions` deploy — (a) green `functions` unit tests + `test:rules`; (b) confirm **no** dev/mock/test/migration function is exported from `index.ts` (currently only the 3 above); (c) verify active `firebase use` project = `twinpet-pos`, database `pos-db`, region `asia-southeast1`; (d) use the explicit `--only` allowlist. (Broader Phase 3 gates will codify these as scripted guards.)
+
+### 6–7. Confirmations
+- **No deployment executed** — no `firebase deploy` was run (build + unit tests only).
+- **`stash@{0}` untouched** — not applied, dropped, or modified.
+
+### Build / test
+- `functions` build (tsc): **green** (clean import removal). Functions unit tests: **43 passed (5 files)**. (No frontend/rules changes in this gate.)
+
+### Paranoid Checklist (Gate 1)
+1. **Business Logic Integrity:** the three production functions (auth, reconcile trigger, admin retry) are unchanged; only a public ops-migration endpoint the app never calls was removed → no runtime behavior change. Functions tests green (43).
+2. **State Isolation / `stash@{0}`:** untouched — change is confined to `functions/src/index.ts` + this report.
+3. **Cross-contamination:** no frontend, no rules, no transfer, no Flowbite/UI-stash, no unrelated edits; deploy allowlist already excluded it (defense in depth) — code removal makes it robust against a bare `--only functions`.
+4. **Devil's Advocate (hidden risk):** removal is code-level; **the function may still exist as a *deployed* Cloud Function in the live project** from a prior deploy. A later Phase 3 deploy gate must explicitly **delete the deployed `migrateDataToPosDb`** (e.g. `firebase functions:delete migrateDataToPosDb`) — re-deploying with the allowlist alone will NOT remove an already-deployed function. Tracked for the deploy gate.
 
 ---
 
@@ -31,7 +74,7 @@
 4. **Transfer destination isolation / server-side transfer flow:** move the cross-branch transfer destination `productStocks`/`stockLots` writes to a Cloud Function so client writes can be fully branch-isolated (`hasBranchAccess(docId)`). *Why deferred:* Phase 1/2 explicitly kept staff transfers working without a transfer refactor.
 5. **stockLots read scoping review:** reads are currently any-staff (not branch-scoped) to preserve cross-branch visibility/transfer planning/reporting; audit read call-sites, then decide on branch scoping. *Why deferred:* needs a read-call-site audit to avoid breaking reports/FIFO.
 6. **Value-level constraints for approved void fields:** the `asyncOrders` update allowlist controls *which* fields a `pos_void` client may change but not their *values* (e.g. forcing `status == 'voided'`). *Why deferred:* tightening values risks breaking the legitimate offline void flow.
-7. **PRODUCTION DEPLOY BLOCKER — remove `migrateDataToPosDb`:** `functions/src/index.ts` exports `migrateDataToPosDb` as a **public** (`invoker: 'public'`) temporary one-shot DB-copy migration (its header says "DELETE AFTER MIGRATION"). It must be **removed/disabled/excluded before ANY production functions deploy** and is a **hard deploy blocker** until resolved (Phase 3). *Not modified here — docs-only flag.*
+7. **PRODUCTION DEPLOY BLOCKER — `migrateDataToPosDb`:** ✅ **code removed in Phase 3 Gate 1** (export + helper deleted from `functions/src/index.ts`). **Remaining:** if it was ever deployed, the **live deployed instance must still be deleted** (`firebase functions:delete migrateDataToPosDb`) during the Phase 3 deploy gate — re-deploying with the allowlist does not remove an already-deployed function.
 
 ### Secure-state summary
 | Area | Status |

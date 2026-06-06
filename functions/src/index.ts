@@ -1,11 +1,10 @@
-import { getApps, initializeApp, type App } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
-import { FieldValue, Timestamp, getFirestore } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import bcrypt from 'bcryptjs';
-import { onCall, onRequest, HttpsError } from 'firebase-functions/v2/https';
+import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { setGlobalOptions } from 'firebase-functions/v2';
 import { db } from './db';
-import { FIRESTORE_DATABASE_ID, FUNCTIONS_REGION } from './deployConfig';
+import { FUNCTIONS_REGION } from './deployConfig';
 
 setGlobalOptions({ region: FUNCTIONS_REGION });
 
@@ -266,73 +265,10 @@ export const verifyPinLogin = onCall(
   },
 );
 
-/**
- * TEMPORARY one-shot migration: copies every document from the (default)
- * Firestore database into the configured named database, preserving exact paths
- * (including nested subcollections).
- *
- * Runs entirely inside Cloud Functions with Admin privileges, so no Service
- * Account JSON key is needed locally.
- *
- * ⚠️ DELETE THIS FUNCTION AFTER THE MIGRATION COMPLETES.
- */
-async function copyCollection(
-  sourceColl: FirebaseFirestore.CollectionReference,
-  targetDb: FirebaseFirestore.Firestore,
-): Promise<number> {
-  let copied = 0;
-  const snapshot = await sourceColl.get();
-
-  for (const doc of snapshot.docs) {
-    // Write the document to the identical path in the target database.
-    await targetDb.doc(doc.ref.path).set(doc.data());
-    copied += 1;
-
-    // Recurse into any subcollections so nested paths are preserved exactly.
-    const subColls = await doc.ref.listCollections();
-    for (const subColl of subColls) {
-      copied += await copyCollection(subColl, targetDb);
-    }
-  }
-
-  return copied;
-}
-
-export const migrateDataToPosDb = onRequest(
-  { invoker: 'public' },
-  async (_req, res) => {
-    try {
-      const app: App = getApps()[0] ?? initializeApp();
-
-      // Source: the original (default) database.
-      const sourceDb = getFirestore(app);
-      // Target: the configured named database (firebase.json → firestore.database).
-      const targetDb = getFirestore(app, FIRESTORE_DATABASE_ID);
-
-      const rootCollections = await sourceDb.listCollections();
-
-      let totalCopied = 0;
-      const perCollection: Record<string, number> = {};
-
-      for (const coll of rootCollections) {
-        const count = await copyCollection(coll, targetDb);
-        perCollection[coll.id] = count;
-        totalCopied += count;
-      }
-
-      res.status(200).json({
-        success: true,
-        message: `Migration complete. Copied ${totalCopied} documents from (default) to ${FIRESTORE_DATABASE_ID}.`,
-        totalCopied,
-        perCollection,
-      });
-    } catch (err) {
-      console.error('[migrateDataToPosDb] migration failed', err);
-      res.status(500).json({
-        success: false,
-        message: 'Migration failed. Check the function logs for details.',
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-  },
-);
+// NOTE: the TEMPORARY one-shot `migrateDataToPosDb` ((default) → pos-db copier,
+// `invoker: 'public'`) was REMOVED in Phase 3 Gate 1 — a public DB-copy endpoint
+// must never ship to production. The (default) → pos-db migration is complete.
+// Production function exports are limited to: verifyPinLogin, reconcileOrder,
+// retryReconcile (see the deploy allowlist/checklist in functions/package.json
+// + docs/reports/latest-report.md). Do NOT add dev/mock/test/migration
+// functions to this entrypoint.
