@@ -23,6 +23,25 @@
 ### Admin UI
 Not implemented. Proposed in **Track B Step 2** — see `docs/reports/phase-2-track-b-step2-admin-ui-proposal.md` and the summary + Paranoid Checklist below.
 
+### Track B Step 2 — Admin UI proposal summary (NOT implemented)
+Full proposal: **`docs/reports/phase-2-track-b-step2-admin-ui-proposal.md`**.
+- **Route:** `/admin/reconciliation-exceptions` (under `AdminLayout`, admin-only).
+- **Isolated files:** `src/pages/admin/ReconciliationExceptionsPage.tsx` + `.css` (namespaced `recex-`, plain CSS — no Flowbite), `src/lib/reconciliation/useReconciliationExceptions.ts` (read-only `onSnapshot`), `src/lib/reconciliation/retryReconcile.ts` (callable wrapper), one additive route line in `App.tsx`.
+- **Data:** exception rows (billId, branch, total, staff, createdAt, attempts vs cap, sanitized `lastReconcileError`, `firstFailedAt`, `adminRetryCount`, `lastRetryBy/At`, `voidRequested` badge); detail = lines/payments/sanitized errors.
+- **Retry:** per-row button → confirm → `retryReconcile({orderId})` callable (re-arms server-side); disabled at cap / when `voidRequested` / while in-flight; live list auto-updates.
+- **Consumes backend:** reads via Firestore `onSnapshot` (admin-readable); repairs ONLY via the `retryReconcile` `httpsCallable`; never writes reconcile fields from the client.
+- **Permissions:** admin-only, defense-in-depth (callable role check + client route gate + existing rules).
+- **States:** loading / empty ("no exceptions 🎉") / error banner / per-row in-flight + disabled-with-reason.
+- **stash conflict avoidance:** plain namespaced CSS + non-Flowbite primitives; no edits to stashed settings/nav/layout files; entry surfaced from the Admin dashboard, not the stashed nav config.
+- **Backlog:** upgrade this isolated page to Flowbite *after* security phases close and `stash@{0}` is applied.
+- **Tests before impl:** callable-wrapper error mapping, query hook (empty/error), component (retry disable rules, confirm, states), index addition if branch+orderBy query, rules regression.
+
+### Paranoid Checklist (Track B Step 1 close)
+1. **Business Logic Integrity:** POS `asyncOrders` create (safe baseline) ✅, oversell / negative stock ✅ (sale decrement is Admin-SDK, rules-exempt; create rule unchanged), and the legitimate offline void flow ✅ (full approved-field void merge passes) — all confirmed by green rules/functions tests.
+2. **State Isolation:** `stash@{0}` (Batches 1–3 Flowbite/UI) remains **untouched** — not applied, dropped, or modified.
+3. **Cross-contamination:** this work added **no UI code, no Flowbite, no transfer refactor, no unrelated cleanup** — Part 1 is rules-tests + report; Part 2 is a docs proposal only.
+4. **Devil's Advocate (one easy-to-forget detail):** the future exceptions-list query is only index-free while it stays **equality-only** (`reconcileStatus == 'exception'`). The moment Step 2 adds a branch `where` + `orderBy(createdAt)`, it needs a **composite index** in `firestore.indexes.json` — and a missing index fails at runtime in a way that *looks* like a rules/permission error, which could send a debugger down the wrong path. (Secondary: value-level void-field constraints remain deferred — a compromised `pos_void` token could still set an odd `status` value within an otherwise-approved void update; low impact, logged as future hardening.)
+
 ---
 
 ## Phase 2 — Track B, Step 1 PATCH: Restrict pos_void updates to approved void fields (RULES ONLY)
