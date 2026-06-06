@@ -320,13 +320,20 @@ service cloud.firestore {
 
     // ── Inventory ──
     match /stockLots/{lotId} {
+      // READ unchanged (Phase 2 Track A): any staff may read lots — preserves
+      // cross-branch visibility, transfer planning, and aggregate reporting.
       allow read: if isStaff();
       // Lots are created by receiving, positive adjustments (ADJUST_IN), the
       // destination side of branch transfers, and oversell reconciliation.
-      // A transfer creates a lot in the DESTINATION branch, so we cannot require
-      // destination-branch access here — any authenticated staff may create.
-      allow create: if isStaff();
-      allow update: if isStaff();
+      // Phase 2 Track A hardening: writer must be stock-capable (canMutateStock)
+      // — this blocks pos_sale-only cashiers from fabricating/rewriting lot
+      // qty/cost. A transfer still creates a lot in the DESTINATION branch, so we
+      // intentionally do NOT require destination-branch access here (staff
+      // transfers preserved); branch isolation of that leg is a later phase.
+      // Create additionally requires a declared branchId (every real lot has one).
+      allow create: if isStaff() && canMutateStock()
+        && request.resource.data.branchId is string;
+      allow update: if isStaff() && canMutateStock();
       allow delete: if isManagerOrAdmin();
     }
 

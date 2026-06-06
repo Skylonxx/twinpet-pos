@@ -1,7 +1,35 @@
 # Latest Report
 
 > Rolling "latest report" for the stock-write security workstream. Updated at each phase boundary.
-> **Current state:** Phase 1 complete (productStocks hardening). Phase 0 characterization retained below.
+> **Current state:** Phase 2 Track A complete (stockLots create/update hardening). Phase 1 + Phase 0 retained below.
+
+---
+
+## Phase 2 — Track A: stockLots create/update Hardening
+
+### Scope executed
+Track A only — `stockLots` create/update rules + write-related tests + report + isolated commit. Read behavior unchanged. Track B (reconciliation exception handling) NOT started. No transfer refactor, no UI/stash changes.
+
+### Rules change (`firestore.rules`, `stockLots/{lotId}`)
+- `allow create: if isStaff() && canMutateStock() && request.resource.data.branchId is string;`
+- `allow update: if isStaff() && canMutateStock();`
+- `allow read: if isStaff();` — **UNCHANGED**.
+- `allow delete: if isManagerOrAdmin();` — **UNCHANGED**.
+
+`canMutateStock()` (added in Phase 1) = `isAdmin()` OR any of `stock_receive` / `product_edit` / `pos_void` / `product_view`. This blocks `pos_sale`-only cashiers from fabricating/rewriting lot qty/cost, while preserving receiving (`stock_receive`), staff-initiated transfer dest-lot creation (regular staff carry `product_view`), and void restock (`pos_void`). Cross-branch dest-lot creation is intentionally still allowed (branch isolation of that leg is a later phase).
+
+### Tests
+- `rules-tests/stock-lots-phase0.spec.ts` (characterization) → replaced by `rules-tests/stock-lots-phase2.spec.ts` (expected-behavior): pos_sale-only create/update now **DENIED**; create without `branchId` **DENIED**; receiving/transfer/void create+update **ALLOWED**; reads + delete **unchanged**.
+
+### Test results
+- Rules: **40 passed (3 files)** — `product-stocks-phase1`, `stock-lots-phase2`, `firestore-permissions`.
+- Functions: **25 passed (4 files)** — unchanged (no function code touched).
+
+### Behavior preserved
+stockLots reads unchanged (cross-branch visibility / transfer planning / aggregate reporting intact); staff-initiated transfers; receiving; void restock; oversell/negative stock; productStocks Phase 1 behavior (still green); delete still manager/admin-only.
+
+### Not touched
+Track B / reconciliation logic, transfer refactor, `productStocks` rules, UI/Flowbite `stash@{0}`, app behavior.
 
 ---
 
