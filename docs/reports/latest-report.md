@@ -1,32 +1,33 @@
 # Latest Report
 
 > Rolling "latest report" for the stock-write security workstream. Updated at each phase boundary.
-> **Current state:** Phase 2 Track A complete (stockLots create/update hardening). Phase 1 + Phase 0 retained below.
+> **Current state:** Phase 2 Track A COMPLETE — stockLots write hardening done (incl. branchId invariant). Track B (reconciliation) deferred. Phase 1 + Phase 0 retained below.
 
 ---
 
-## Phase 2 — Track A: stockLots create/update Hardening
+## Phase 2 — Track A: stockLots Write Hardening (COMPLETE)
 
-### Scope executed
-Track A only — `stockLots` create/update rules + write-related tests + report + isolated commit. Read behavior unchanged. Track B (reconciliation exception handling) NOT started. No transfer refactor, no UI/stash changes.
+**Status: Track A complete.** `stockLots` write hardening is finished: create is permission-gated and requires a branchId, update is permission-gated and the `branchId` invariant is enforced (immutable + non-removable). `stockLots` read behavior is intentionally unchanged. **Track B (reconciliation exception handling) remains deferred.**
 
-### Rules change (`firestore.rules`, `stockLots/{lotId}`)
+### Rules (`firestore.rules`, `stockLots/{lotId}`) — final Track A state
 - `allow create: if isStaff() && canMutateStock() && request.resource.data.branchId is string;`
-- `allow update: if isStaff() && canMutateStock();`
-- `allow read: if isStaff();` — **UNCHANGED**.
+- `allow update: if isStaff() && canMutateStock() && request.resource.data.get('branchId', null) == resource.data.branchId;`
+- `allow read: if isStaff();` — **UNCHANGED** (intentional).
 - `allow delete: if isManagerOrAdmin();` — **UNCHANGED**.
 
-`canMutateStock()` (added in Phase 1) = `isAdmin()` OR any of `stock_receive` / `product_edit` / `pos_void` / `product_view`. This blocks `pos_sale`-only cashiers from fabricating/rewriting lot qty/cost, while preserving receiving (`stock_receive`), staff-initiated transfer dest-lot creation (regular staff carry `product_view`), and void restock (`pos_void`). Cross-branch dest-lot creation is intentionally still allowed (branch isolation of that leg is a later phase).
+`canMutateStock()` (added in Phase 1) = `isAdmin()` OR any of `stock_receive` / `product_edit` / `pos_void` / `product_view`. It blocks `pos_sale`-only cashiers from fabricating/rewriting lot qty/cost, while preserving receiving (`stock_receive`), staff-initiated transfer dest-lot creation (regular staff carry `product_view`), and void restock (`pos_void`).
+
+**branchId invariant (enforced + tested):** on create `branchId` must be present and a string; on update it must stay present and **equal** the existing value (`.get(_, null)` gives a clean deny on removal). Cross-branch dest-lot creation by stock-capable staff is intentionally still allowed (branch isolation of that leg is a later phase).
 
 ### Tests
-- `rules-tests/stock-lots-phase0.spec.ts` (characterization) → replaced by `rules-tests/stock-lots-phase2.spec.ts` (expected-behavior): pos_sale-only create/update now **DENIED**; create without `branchId` **DENIED**; receiving/transfer/void create+update **ALLOWED**; reads + delete **unchanged**.
+- `rules-tests/stock-lots-phase2.spec.ts` (replaced the Phase 0 characterization spec): pos_sale-only create/update **DENIED**; create without `branchId` **DENIED**; **branchId mutation on update DENIED**; **branchId removal on update DENIED**; valid same-branchId update **ALLOWED**; receiving/transfer/void create+update **ALLOWED**; reads + delete **unchanged**.
 
 ### Test results
-- Rules: **40 passed (3 files)** — `product-stocks-phase1`, `stock-lots-phase2`, `firestore-permissions`.
+- Rules: **43 passed (3 files)** — `product-stocks-phase1`, `stock-lots-phase2`, `firestore-permissions`.
 - Functions: **25 passed (4 files)** — unchanged (no function code touched).
 
 ### Behavior preserved
-stockLots reads unchanged (cross-branch visibility / transfer planning / aggregate reporting intact); staff-initiated transfers; receiving; void restock; oversell/negative stock; productStocks Phase 1 behavior (still green); delete still manager/admin-only.
+stockLots **reads intentionally unchanged** (cross-branch visibility / transfer planning / aggregate reporting intact); staff-initiated transfers; receiving; void restock; oversell/negative stock; productStocks Phase 1 behavior (still green); delete still manager/admin-only.
 
 ### Not touched
 Track B / reconciliation logic, transfer refactor, `productStocks` rules, UI/Flowbite `stash@{0}`, app behavior.
@@ -88,7 +89,7 @@ Acceptance criteria: all rules + function tests pass; Phase-0 insecure cases now
 
 ### 8. Known remaining risks
 - **Cross-branch write breadth (accepted for now):** any stock-capable staffer can still write *another* branch's stock (needed for the transfer dest leg, since rules can't tell a transfer from an arbitrary write). branchId-spoof is closed, but branch isolation of the dest leg is not — that is Phase 2.
-- **`stockLots` writes remain unscoped** (`isStaff()`, any branch, arbitrary qty/cost) — out of scope this phase; characterized in `stock-lots-phase0.spec.ts`.
+- **`stockLots` writes** were unscoped at Phase 1 time — **now hardened in Phase 2 Track A** (permission gate + branchId invariant); see the Phase 2 section above.
 - **`product_view` as a write gate is intentionally weak** — it draws the line between a pos_sale-only terminal and a real staffer, not true least-privilege.
 - **Value integrity** (absolute vs increment) is not enforceable in rules — only a Cloud Function can guarantee it.
 

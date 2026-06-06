@@ -24,7 +24,7 @@ import {
   assertFails,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, deleteDoc, deleteField } from 'firebase/firestore';
 import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest';
 
 const HOME = 'LDP-001';
@@ -146,6 +146,22 @@ describe('stockLots UPDATE (hardened)', () => {
   it('pos_sale-only cashier update is DENIED (now blocked)', async () => {
     const db = testEnv.authenticatedContext('staff1', CASHIER_ONLY).firestore();
     await assertFails(updateDoc(doc(db, 'stockLots', 'lotHome'), { costPerUnit: 1 }));
+  });
+});
+
+// ── UPDATE: branchId is IMMUTABLE (must not change or be removed) ─────────────
+describe('stockLots UPDATE — branchId invariant', () => {
+  it('changing branchId on an existing lot is DENIED', async () => {
+    const db = testEnv.authenticatedContext('staff1', RECEIVER).firestore();
+    await assertFails(updateDoc(doc(db, 'stockLots', 'lotHome'), { branchId: OTHER, qtyRemaining: 4 }));
+  });
+  it('removing branchId on an existing lot is DENIED', async () => {
+    const db = testEnv.authenticatedContext('staff1', RECEIVER).firestore();
+    await assertFails(updateDoc(doc(db, 'stockLots', 'lotHome'), { branchId: deleteField() }));
+  });
+  it('an update that re-sends the SAME branchId is ALLOWED', async () => {
+    const db = testEnv.authenticatedContext('staff1', RECEIVER).firestore();
+    await assertSucceeds(updateDoc(doc(db, 'stockLots', 'lotHome'), { branchId: HOME, qtyRemaining: 6 }));
   });
 });
 

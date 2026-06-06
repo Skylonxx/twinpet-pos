@@ -333,7 +333,11 @@ service cloud.firestore {
       // Create additionally requires a declared branchId (every real lot has one).
       allow create: if isStaff() && canMutateStock()
         && request.resource.data.branchId is string;
-      allow update: if isStaff() && canMutateStock();
+      // Update: stock-capable staff only, and branchId is IMMUTABLE — it must
+      // stay present and unchanged (no mutation, no removal). `.get(_, null)` on
+      // the request side gives a CLEAN deny on removal instead of a hard-error.
+      allow update: if isStaff() && canMutateStock()
+        && request.resource.data.get('branchId', null) == resource.data.branchId;
       allow delete: if isManagerOrAdmin();
     }
 
