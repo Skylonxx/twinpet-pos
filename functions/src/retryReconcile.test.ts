@@ -35,9 +35,13 @@ function makeDb(seed: Record<string, Doc>) {
     return inc;
   };
   const ref = (path: string) => ({ path, id: path.slice(path.lastIndexOf('/') + 1) });
+  // Serialize transactions so overlapping calls behave like Firestore's
+  // serializable transactions (a conflicting tx effectively runs after the
+  // other commits) — lets us model an Admin double-click on Retry.
+  let txLock: Promise<unknown> = Promise.resolve();
   const db = {
     collection: (c: string) => ({ doc: (id: string) => ref(`${c}/${id}`) }),
-    runTransaction: async (fn: (tx: unknown) => Promise<unknown>) => {
+    runTransaction: (fn: (tx: unknown) => Promise<unknown>) => {
       const tx = {
         get: async (r: { path: string }) => {
           const d = store.get(r.path);
@@ -50,7 +54,9 @@ function makeDb(seed: Record<string, Doc>) {
           store.set(r.path, next);
         },
       };
-      return fn(tx);
+      const run = txLock.then(() => fn(tx));
+      txLock = run.catch(() => undefined);
+      return run;
     },
     __store: store,
   };
@@ -120,6 +126,28 @@ describe('performReconcileRetry — re-arm + idempotency', () => {
   });
 });
 
+describe('performReconcileRetry — concurrent retry (Admin double-click)', () => {
+  test('two concurrent admin retries re-arm exactly ONCE (idempotent, no double-deduct)', async () => {
+    const [a, b] = await Promise.allSettled([
+      performReconcileRetry(db as never, 'o1', admin),
+      performReconcileRetry(db as never, 'o1', admin),
+    ]);
+
+    const statuses = [a, b].map((r) => r.status);
+    // Exactly one fulfilled (re-armed); the other safely rejected (no longer 'exception').
+    expect(statuses.filter((s) => s === 'fulfilled')).toHaveLength(1);
+    expect(statuses.filter((s) => s === 'rejected')).toHaveLength(1);
+    const rejected = [a, b].find((r) => r.status === 'rejected') as PromiseRejectedResult;
+    expect(rejected.reason).toMatchObject({ code: 'failed-precondition' });
+
+    const o = db.__store.get('asyncOrders/o1')!;
+    expect(o.reconcileStatus).toBe('pending_reconcile'); // single re-arm
+    expect(o.adminRetryCount).toBe(1); // NOT 2 — second click did not double-apply
+    expect(o.reconcileAttempts).toBe(1); // counter untouched by re-arm (no double-deduct)
+    expect([...db.__store.keys()]).toEqual(['asyncOrders/o1']); // no stock/lot writes
+  });
+});
+
 describe('performReconcileRetry — retry CAP', () => {
   test(`refuses re-arm once attempts reach the cap (${RECONCILE_RETRY_CAP})`, async () => {
     db = makeDb({ 'asyncOrders/o1': exceptionOrder({ reconcileAttempts: RECONCILE_RETRY_CAP }) });
@@ -133,10 +161,13 @@ describe('performReconcileRetry — retry CAP', () => {
   });
 });
 
-describe('performReconcileRetry — voidRequested + exception', () => {
-  test('a voidRequested exception is NOT re-armed (void path owns it)', async () => {
+describe('performReconcileRetry — voidRequested + exception conflict', () => {
+  test('a voidRequested exception is safely rejected: NOT re-armed, no stock mutation', async () => {
     db = makeDb({ 'asyncOrders/o1': exceptionOrder({ voidRequested: true }) });
     await expect(performReconcileRetry(db as never, 'o1', admin)).rejects.toMatchObject({ code: 'failed-precondition' });
-    expect(db.__store.get('asyncOrders/o1')!.reconcileStatus).toBe('exception'); // unchanged, not pending
+    const o = db.__store.get('asyncOrders/o1')!;
+    expect(o.reconcileStatus).toBe('exception'); // NOT blindly re-armed to pending_reconcile
+    expect(o.adminRetryCount).toBeUndefined(); // no write occurred
+    expect([...db.__store.keys()]).toEqual(['asyncOrders/o1']); // no stock/lot mutation
   });
 });

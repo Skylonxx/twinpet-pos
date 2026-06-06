@@ -23,7 +23,20 @@ import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest';
 
 const BRANCH = 'LDP-001';
 const voidStaff = { staffId: 'staff1', role: 'staff', branchIds: [BRANCH], permissions: ['pos_void'] };
-const saleOnly = { staffId: 'staff2', role: 'staff', branchIds: [BRANCH], permissions: ['pos_sale'] };
+const saleStaff = { staffId: 'staff2', role: 'staff', branchIds: [BRANCH], permissions: ['pos_sale'] };
+const saleOnly = saleStaff;
+
+// A normal POS checkout intent (matches asyncCheckout.ts): safe baseline only.
+const posCreate = (over: Record<string, unknown> = {}) => ({
+  id: 'c1',
+  branchId: BRANCH,
+  staffId: 'staff2', // == token.staffId for stampedOwnStaffId
+  total: 50,
+  status: 'completed',
+  reconcileStatus: 'pending_reconcile',
+  reconciledAt: null,
+  ...over,
+});
 
 let testEnv: RulesTestEnvironment;
 
@@ -84,5 +97,45 @@ describe('asyncOrders reconcile-control immutability (client updates)', () => {
   it('a client without pos_void cannot update at all (existing gate intact)', async () => {
     const db = testEnv.authenticatedContext('staff2', saleOnly).firestore();
     await assertFails(updateDoc(doc(db, 'asyncOrders', 'a1'), { voidRequested: true, status: 'voided' }));
+  });
+});
+
+describe('asyncOrders create — block server-owned reconcile-field spoofing', () => {
+  it('a normal POS checkout intent (safe baseline) still SUCCEEDS', async () => {
+    const db = testEnv.authenticatedContext('staff2', saleStaff).firestore();
+    await assertSucceeds(setDoc(doc(db, 'asyncOrders', 'c1'), posCreate()));
+  });
+
+  it('create stamping reconcileStatus=settled is DENIED (spoof a sale straight to settled)', async () => {
+    const db = testEnv.authenticatedContext('staff2', saleStaff).firestore();
+    await assertFails(setDoc(doc(db, 'asyncOrders', 'c1'), posCreate({ reconcileStatus: 'settled' })));
+  });
+
+  it('create seeding reconcileAttempts is DENIED', async () => {
+    const db = testEnv.authenticatedContext('staff2', saleStaff).firestore();
+    await assertFails(setDoc(doc(db, 'asyncOrders', 'c1'), posCreate({ reconcileAttempts: 5 })));
+  });
+
+  it('create seeding error/audit control fields is DENIED', async () => {
+    const db = testEnv.authenticatedContext('staff2', saleStaff).firestore();
+    await assertFails(
+      setDoc(doc(db, 'asyncOrders', 'c1'), posCreate({ reconcileError: 'x', lastReconcileError: 'x' })),
+    );
+    await assertFails(
+      setDoc(doc(db, 'asyncOrders', 'c2'), posCreate({ id: 'c2', adminRetryCount: 1, lastRetryBy: 'staff2' })),
+    );
+  });
+
+  it('the offline void-intent create (materialize, no reconcile fields) still SUCCEEDS', async () => {
+    const db = testEnv.authenticatedContext('staff1', voidStaff).firestore();
+    await assertSucceeds(
+      setDoc(doc(db, 'asyncOrders', 'v1'), {
+        id: 'v1',
+        branchId: BRANCH,
+        voidRequested: true,
+        status: 'voided',
+        voidReason: 'ลูกค้าเปลี่ยนใจ',
+      }),
+    );
   });
 });

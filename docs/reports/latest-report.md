@@ -1,7 +1,26 @@
 # Latest Report
 
 > Rolling "latest report" for the stock-write security workstream. Updated at each phase boundary.
-> **Current state:** Phase 2 Track B **Step 1 (backend retry safety) COMPLETE**. Admin UI deferred to a later, isolated step. Track A + Phase 1 + Phase 0 retained below.
+> **Current state:** Phase 2 Track B **Step 1 + follow-up guards COMPLETE** (backend/rules only). Admin UI still deferred to a later, isolated step. Track A + Phase 1 + Phase 0 retained below.
+
+---
+
+## Phase 2 — Track B, Step 1 FOLLOW-UP: Hardened Retry Guards (BACKEND/RULES ONLY)
+
+**Still backend-only — no Admin UI implemented** (no page, no dashboard badge, no retry button, no Flowbite migration). `stash@{0}` untouched; no transfer refactor; no unrelated app changes. Closes the remaining safety gaps before any UI work.
+
+- **Client spoofing on `asyncOrders` create is blocked.** New rules helper `safeInitialReconcileState` permits only the safe baseline (`reconcileStatus` absent or `'pending_reconcile'`) and forbids seeding any server-owned control field (`reconcileAttempts`, `reconcileError`, `lastReconcileError`, `lastReconcileErrorAt`, `firstFailedAt`, `previousReconcileError`, `reconcileRecoveredAt`, `adminRetryCount`, `lastRetryBy`, `lastRetryAt`). Normal POS checkout + offline void-intent creates still pass.
+- **Attempt counting is atomic/transaction-safe.** The exception path now writes `reconcileAttempts: FieldValue.increment(1)` (server-side increment against current stored state) instead of `priorAttempts + 1` from the (possibly stale) event payload — safe under duplicate trigger deliveries / concurrent attempts.
+- **Concurrent retry is tested.** A simulated Admin double-click (two concurrent `performReconcileRetry`) re-arms **exactly once**: one fulfilled, one rejected (`failed-precondition`), `adminRetryCount == 1`, no stock/lot writes — proven against a serialized fake transaction.
+- **voidRequested + exception conflict secured (tested).** Admin retry of an `exception` order with `voidRequested == true` is rejected (`failed-precondition`): not re-armed to `pending_reconcile`, no write, no stock mutation. The void path owns that order.
+- **Audit preservation on successful retry.** New `buildRecoveryAuditPatch` (merged into `reconcileSale`'s settled write) **clears** the active error state (`reconcileError`/`lastReconcileError`/`lastReconcileErrorAt`/`firstFailedAt` via `FieldValue.delete()`) and, when a prior failure was recovered, **preserves** the sanitized previous error in `previousReconcileError` (+ `reconcileRecoveredAt`). Only the already-sanitized string is kept — never raw stack/internal detail.
+
+### Tests run / results
+- Functions: **43 passed (5 files)** — adds concurrent-retry idempotency, `buildRecoveryAuditPatch` (clear + history / first-time no-history), and atomic-increment assertions; existing reconcile/void/retry tests still green.
+- Rules: **52 passed (4 files)** — adds create-spoofing denials (reconcileStatus/attempts/error/audit fields) + normal POS create + void-materialize create pass; Track A + Phase 1 still green.
+
+### Still deferred (separate step)
+Admin UI (exceptions list, dashboard badge, retry button) as a **standalone route/component**; the Flowbite upgrade for that UI remains **backlog/docs only**.
 
 ---
 

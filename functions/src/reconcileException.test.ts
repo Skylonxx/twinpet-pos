@@ -24,11 +24,15 @@ vi.mock('firebase-functions/v2/firestore', () => ({
   onDocumentWritten: (_opts: unknown, handler: unknown) => handler,
 }));
 vi.mock('firebase-admin/firestore', () => ({
-  FieldValue: { serverTimestamp: () => ({ __fv: 'ts' }), increment: (n: number) => ({ __fv: 'inc', n }) },
+  FieldValue: {
+    serverTimestamp: () => ({ __fv: 'ts' }),
+    increment: (n: number) => ({ __fv: 'inc', n }),
+    delete: () => ({ __fv: 'del' }),
+  },
   Timestamp: { now: () => ({}), fromMillis: () => ({}) },
 }));
 
-import { reconcileOnWrite, sanitizeReconcileError } from './reconcileOrder';
+import { reconcileOnWrite, sanitizeReconcileError, buildRecoveryAuditPatch } from './reconcileOrder';
 
 type EvtData = {
   voidRequested?: boolean;
@@ -58,7 +62,7 @@ describe('reconcileOnWrite — SALE reconcile exception handling (Phase 0)', () 
     expect(refSet).toHaveBeenCalledWith(
       expect.objectContaining({
         reconcileStatus: 'exception',
-        reconcileAttempts: 1, // first failure
+        reconcileAttempts: { __fv: 'inc', n: 1 }, // ATOMIC increment, not stale +1
         reconcileError: 'tx boom', // first error preserved
         lastReconcileError: 'tx boom',
       }),
@@ -109,9 +113,30 @@ describe('reconcileOnWrite — exception enrichment & audit (Track B Step 1)', (
 
     const patch = refSet.mock.calls[0][0] as Record<string, unknown>;
     expect(patch.reconcileStatus).toBe('exception');
-    expect(patch.reconcileAttempts).toBe(2); // 1 → 2
+    expect(patch.reconcileAttempts).toEqual({ __fv: 'inc', n: 1 }); // atomic +1 (stored 1 → 2 server-side)
     expect(patch.lastReconcileError).toBe('second boom'); // latest
     expect(patch.reconcileError).toBeUndefined(); // first error NOT overwritten
+  });
+});
+
+describe('buildRecoveryAuditPatch — clear active error, preserve sanitized history', () => {
+  test('a recovered retry clears active error fields and preserves the prior sanitized error', () => {
+    const patch = buildRecoveryAuditPatch({ lastReconcileError: 'second boom', reconcileError: 'first boom' });
+    // Active error state cleared.
+    expect(patch.reconcileError).toEqual({ __fv: 'del' });
+    expect(patch.lastReconcileError).toEqual({ __fv: 'del' });
+    expect(patch.lastReconcileErrorAt).toEqual({ __fv: 'del' });
+    expect(patch.firstFailedAt).toEqual({ __fv: 'del' });
+    // History preserved (sanitized string we had stored — never raw).
+    expect(patch.previousReconcileError).toBe('second boom');
+    expect(patch.reconcileRecoveredAt).toEqual({ __fv: 'ts' });
+  });
+
+  test('a first-time clean settle clears nothing-of-note and writes NO history field', () => {
+    const patch = buildRecoveryAuditPatch({});
+    expect(patch.reconcileError).toEqual({ __fv: 'del' }); // delete is a no-op on an absent field
+    expect('previousReconcileError' in patch).toBe(false);
+    expect('reconcileRecoveredAt' in patch).toBe(false);
   });
 });
 

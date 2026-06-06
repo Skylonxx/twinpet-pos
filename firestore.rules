@@ -27,6 +27,24 @@ service cloud.firestore {
       return data.get('staffId', null) == staffId();
     }
 
+    // asyncOrders create: the reconcile state machine is SERVER-OWNED. A client
+    // may only set the safe baseline (`reconcileStatus` absent or
+    // 'pending_reconcile') and may NOT seed any retry/audit/error control field.
+    // Blocks spoofing a sale straight to 'settled' or pre-loading attempt/error state.
+    function safeInitialReconcileState(data) {
+      return data.get('reconcileStatus', 'pending_reconcile') == 'pending_reconcile'
+        && !('reconcileAttempts' in data)
+        && !('reconcileError' in data)
+        && !('lastReconcileError' in data)
+        && !('lastReconcileErrorAt' in data)
+        && !('firstFailedAt' in data)
+        && !('previousReconcileError' in data)
+        && !('reconcileRecoveredAt' in data)
+        && !('adminRetryCount' in data)
+        && !('lastRetryBy' in data)
+        && !('lastRetryAt' in data);
+    }
+
     function role() {
       return request.auth.token.role;
     }
@@ -257,6 +275,7 @@ service cloud.firestore {
       // that path when it is a `pos_void` void-intent (`voidRequested == true`),
       // mirroring the `pos_void` gate on the update path below.
       allow create: if hasBranchAccess(request.resource.data.branchId)
+        && safeInitialReconcileState(request.resource.data)
         && (
           (hasPerm('pos_sale') && stampedOwnStaffId(request.resource.data))
           || (hasPerm('pos_void')

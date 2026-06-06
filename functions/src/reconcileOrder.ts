@@ -232,12 +232,13 @@ export async function reconcileOnWrite(event: WrittenEvent): Promise<void> {
     // The full/raw error is preserved ONLY in the Cloud Functions logs via the
     // rethrow below — never written to an admin-facing field.
     const safeError = sanitizeReconcileError(err);
-    const priorAttempts =
-      typeof data.reconcileAttempts === 'number' ? data.reconcileAttempts : 0;
     const patch: Record<string, unknown> = {
       reconcileStatus: 'exception' satisfies ReconcileStatus,
-      // Counts every FAILED settle (initial automatic + each post-retry attempt).
-      reconcileAttempts: priorAttempts + 1,
+      // ATOMIC counter — server-side increment against the CURRENT stored value,
+      // never the (possibly stale) event payload. Safe under duplicate trigger
+      // deliveries / concurrent attempts. Counts every FAILED settle (initial
+      // automatic + each post-retry attempt).
+      reconcileAttempts: FieldValue.increment(1),
       lastReconcileError: safeError,
       lastReconcileErrorAt: FieldValue.serverTimestamp(),
       reconciledAt: FieldValue.serverTimestamp(),
@@ -266,6 +267,37 @@ export function sanitizeReconcileError(err: unknown): string {
   return oneLine.length > MAX_ADMIN_ERROR_LEN
     ? `${oneLine.slice(0, MAX_ADMIN_ERROR_LEN)}…`
     : oneLine;
+}
+
+/**
+ * Patch fragment merged into the doc when a sale (re)settles SUCCESSFULLY:
+ * clears the ACTIVE error state and, if this settle recovered a prior failure,
+ * preserves the (already-sanitized) previous error in a historical audit field.
+ * No raw/internal detail is ever surfaced — `previousReconcileError` is the
+ * sanitized string we had stored. Exported for unit testing.
+ */
+export function buildRecoveryAuditPatch(order: {
+  reconcileError?: unknown;
+  lastReconcileError?: unknown;
+}): Record<string, unknown> {
+  const prior =
+    typeof order.lastReconcileError === 'string'
+      ? order.lastReconcileError
+      : typeof order.reconcileError === 'string'
+        ? order.reconcileError
+        : null;
+  const patch: Record<string, unknown> = {
+    // Clear active error state on success.
+    reconcileError: FieldValue.delete(),
+    lastReconcileError: FieldValue.delete(),
+    lastReconcileErrorAt: FieldValue.delete(),
+    firstFailedAt: FieldValue.delete(),
+  };
+  if (prior) {
+    patch.previousReconcileError = prior; // sanitized history (recovery audit)
+    patch.reconcileRecoveredAt = FieldValue.serverTimestamp();
+  }
+  return patch;
 }
 
 export const reconcileOrder = onDocumentWritten(
@@ -577,6 +609,8 @@ async function reconcileSale(orderRef: DocumentReference): Promise<void> {
     }
 
     // Settle the async order — same transaction flips the idempotency flag.
+    // On a recovered retry, also clear the active error state and preserve the
+    // sanitized prior error in a historical audit field (buildRecoveryAuditPatch).
     tx.set(
       orderRef,
       {
@@ -588,6 +622,7 @@ async function reconcileSale(orderRef: DocumentReference): Promise<void> {
         profit: grossProfit,
         hadOversell,
         updatedAt: FieldValue.serverTimestamp(),
+        ...buildRecoveryAuditPatch(order),
       },
       { merge: true },
     );
