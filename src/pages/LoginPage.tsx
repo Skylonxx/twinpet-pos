@@ -2,7 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { getBranchLabel, useActiveBranches } from '../lib/branches';
 import { useAuth } from '../lib/hooks/useAuth';
 import type { User, UserRole } from '../lib/types';
-import './LoginPage.css';
+import { PinPad } from '../components/auth/PinPad';
+import { BranchSelector } from '../components/auth/BranchSelector';
+
+// Note: Removing LoginPage.css as the layout has been fully transitioned to Flowbite/Tailwind primitives.
 
 type LoginMode = 'pin' | 'password';
 
@@ -99,7 +102,8 @@ export default function LoginPage() {
 
   const submitPin = useCallback(
     async (pin: string) => {
-      console.log('Submit clicked', { pin, branchId });
+      // SECURITY FIX: Removed raw PIN logging. Replaced with safe telemetry.
+      console.log('[login] Submit clicked', { branchId, pinLength: pin.length, mode });
 
       if (pinSubmitting.current) {
         console.warn('[login] PIN submit ignored — already in progress');
@@ -152,6 +156,7 @@ export default function LoginPage() {
       clearErrors,
       handleSuccess,
       loginWithPin,
+      mode,
       showToast,
     ],
   );
@@ -217,363 +222,324 @@ export default function LoginPage() {
   }, [successUser]);
 
   return (
-    <div className="login-page">
-      <div className="login-shell">
-        <aside className="login-left-panel">
-          <div className="login-brand">
-            <div className="login-brand-icon" aria-hidden="true">
-              🐾
-            </div>
-            <div>
-              <div className="login-brand-name">TwinPet POS</div>
-              <div className="login-brand-sub">Point of Sale System</div>
-            </div>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col md:flex-row font-sans">
+      <aside className="md:w-[420px] shrink-0 bg-gradient-to-br from-indigo-800 via-indigo-700 to-indigo-900 flex flex-col p-8 md:p-10 relative overflow-hidden text-white">
+        <div className="absolute -top-20 -right-20 w-72 h-72 rounded-full bg-white/5 blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-24 -left-16 w-80 h-80 rounded-full bg-white/5 blur-3xl pointer-events-none" />
+        
+        <div className="flex items-center gap-3 mb-auto relative z-10">
+          <div className="w-11 h-11 rounded-xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-2xl shadow-lg">
+            🐾
+          </div>
+          <div>
+            <div className="text-lg font-semibold tracking-wide">TwinPet POS</div>
+            <div className="text-[11px] text-white/60 uppercase tracking-widest mt-0.5">Point of Sale System</div>
+          </div>
+        </div>
+
+        <div className="flex-1 flex flex-col justify-center relative z-10 py-10 md:py-0">
+          <h1 className="text-3xl font-semibold leading-tight mb-4 text-white">
+            ระบบขายหน้าร้าน<br />สำหรับร้านสัตว์เลี้ยง
+          </h1>
+          <p className="text-sm text-indigo-200 leading-relaxed max-w-[300px] mb-8">
+            จัดการสต็อก FIFO, รายงานกำไร, และระบบสมาชิกครบในที่เดียว
+          </p>
+          <ul className="flex flex-col gap-4">
+            <li className="flex items-center gap-3 text-sm text-indigo-100">
+              <span className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
+                <i className="ti ti-stack text-base" aria-hidden="true" />
+              </span>
+              ระบบสต็อก FIFO & ต้นทุนแม่นยำ
+            </li>
+            <li className="flex items-center gap-3 text-sm text-indigo-100">
+              <span className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
+                <i className="ti ti-chart-bar text-base" aria-hidden="true" />
+              </span>
+              รายงานยอดขายและกำไรแบบ Real-time
+            </li>
+            <li className="flex items-center gap-3 text-sm text-indigo-100">
+              <span className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
+                <i className="ti ti-users text-base" aria-hidden="true" />
+              </span>
+              จัดการสมาชิกและสิทธิ์พนักงาน
+            </li>
+            <li className="flex items-center gap-3 text-sm text-indigo-100">
+              <span className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
+                <i className="ti ti-building-store text-base" aria-hidden="true" />
+              </span>
+              รองรับหลายสาขา
+            </li>
+          </ul>
+        </div>
+
+        <div className="text-[11px] text-indigo-300/50 mt-auto pt-6 relative z-10">
+          TwinPet POS v2.4.1 · © 2026 TwinPet Co., Ltd.
+        </div>
+      </aside>
+
+      <main className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-gray-900 p-6 md:p-12 overflow-y-auto">
+        <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-2xl shadow-xl shadow-gray-200/50 dark:shadow-gray-900/50 border border-gray-100 dark:border-gray-700 p-6 sm:p-8">
+          <header className="mb-8">
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">เข้าสู่ระบบ</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400">เลือกสาขาและกรอกข้อมูลเพื่อเริ่มงาน</p>
+          </header>
+
+          <BranchSelector
+            branches={branches}
+            branchId={branchId}
+            loading={branchesLoading}
+            disabled={isLoading}
+            onChange={(val) => {
+              setBranchId(val);
+              clearErrors();
+              setPinValue('');
+              pinSubmitting.current = false;
+            }}
+          />
+
+          <div className="flex bg-gray-100 dark:bg-gray-700/50 rounded-lg p-1 mb-8" role="tablist">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === 'password'}
+              className={`flex-1 py-2 px-3 text-sm font-medium rounded-md transition-all flex items-center justify-center gap-2 ${
+                mode === 'password'
+                  ? 'bg-white dark:bg-gray-600 text-primary-600 dark:text-primary-400 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+              }`}
+              onClick={() => switchMode('password')}
+            >
+              <i className="ti ti-lock" aria-hidden="true" />
+              Username
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === 'pin'}
+              className={`flex-1 py-2 px-3 text-sm font-medium rounded-md transition-all flex items-center justify-center gap-2 ${
+                mode === 'pin'
+                  ? 'bg-white dark:bg-gray-600 text-primary-600 dark:text-primary-400 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+              }`}
+              onClick={() => switchMode('pin')}
+            >
+              <i className="ti ti-keyframe" aria-hidden="true" />
+              Quick PIN
+            </button>
           </div>
 
-          <div className="login-hero-area">
-            <h1 className="login-hero-headline">
-              ระบบขายหน้าร้าน
-              <br />
-              สำหรับร้านสัตว์เลี้ยง
-            </h1>
-            <p className="login-hero-sub">
-              จัดการสต็อก FIFO, รายงานกำไร, และระบบสมาชิกครบในที่เดียว
-            </p>
-            <ul className="login-feature-list">
-              <li className="login-feature-item">
-                <span className="login-feature-dot">
-                  <i className="ti ti-stack" aria-hidden="true" />
-                </span>
-                ระบบสต็อก FIFO &amp; ต้นทุนแม่นยำ
-              </li>
-              <li className="login-feature-item">
-                <span className="login-feature-dot">
-                  <i className="ti ti-chart-bar" aria-hidden="true" />
-                </span>
-                รายงานยอดขายและกำไรแบบ Real-time
-              </li>
-              <li className="login-feature-item">
-                <span className="login-feature-dot">
-                  <i className="ti ti-users" aria-hidden="true" />
-                </span>
-                จัดการสมาชิกและสิทธิ์พนักงาน
-              </li>
-              <li className="login-feature-item">
-                <span className="login-feature-dot">
-                  <i className="ti ti-building-store" aria-hidden="true" />
-                </span>
-                รองรับหลายสาขา
-              </li>
-            </ul>
-          </div>
+          {mode === 'password' && (
+            <div className="space-y-5 animate-fadeIn">
+              <div>
+                <label htmlFor="inp-user" className="block mb-2 text-sm font-medium text-gray-900 dark:text-white">
+                  Username
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none">
+                    <i className="ti ti-user text-gray-400 dark:text-gray-500" aria-hidden="true" />
+                  </div>
+                  <input
+                    type="text"
+                    id="inp-user"
+                    className={`bg-gray-50 border text-gray-900 text-sm rounded-lg focus:ring-primary-500 focus:border-primary-500 block w-full pl-10 p-2.5 dark:bg-gray-700 dark:placeholder-gray-400 dark:text-white dark:focus:ring-primary-500 dark:focus:border-primary-500 ${
+                      pwError ? 'border-red-500 dark:border-red-500' : 'border-gray-300 dark:border-gray-600'
+                    }`}
+                    placeholder="กรอก username"
+                    autoComplete="username"
+                    value={username}
+                    onChange={(e) => {
+                      setUsername(e.target.value);
+                      clearErrors();
+                    }}
+                    disabled={isLoading}
+                  />
+                </div>
+              </div>
 
-          <div className="login-left-footer">
-            TwinPet POS v2.4.1 · © 2026 TwinPet Co., Ltd.
-          </div>
-        </aside>
+              <div>
+                <label htmlFor="inp-pass" className="block mb-2 text-sm font-medium text-gray-900 dark:text-white">
+                  Password
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none">
+                    <i className="ti ti-lock text-gray-400 dark:text-gray-500" aria-hidden="true" />
+                  </div>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    id="inp-pass"
+                    className={`bg-gray-50 border text-gray-900 text-sm rounded-lg focus:ring-primary-500 focus:border-primary-500 block w-full pl-10 p-2.5 pr-10 dark:bg-gray-700 dark:placeholder-gray-400 dark:text-white dark:focus:ring-primary-500 dark:focus:border-primary-500 ${
+                      pwError ? 'border-red-500 dark:border-red-500' : 'border-gray-300 dark:border-gray-600'
+                    }`}
+                    placeholder="••••••••"
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      clearErrors();
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') void handlePasswordLogin();
+                    }}
+                    disabled={isLoading}
+                  />
+                  <button
+                    type="button"
+                    className="absolute inset-y-0 right-0 flex items-center pr-3.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 focus:outline-none"
+                    onClick={() => setShowPassword(!showPassword)}
+                    aria-label={showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
+                  >
+                    <i className={`ti ${showPassword ? 'ti-eye-off' : 'ti-eye'}`} />
+                  </button>
+                </div>
+              </div>
 
-        <main className="login-right-panel">
-          <div className="login-box">
-            <header className="login-header">
-              <h2 className="login-title">เข้าสู่ระบบ</h2>
-              <p className="login-sub">เลือกสาขาและกรอกข้อมูลเพื่อเริ่มงาน</p>
-            </header>
+              {pwError && (
+                <p className="mt-2 text-sm text-red-600 dark:text-red-500 font-medium flex items-center gap-1">
+                  <i className="ti ti-alert-circle" aria-hidden="true" />
+                  {pwError ?? 'Username หรือ Password ไม่ถูกต้อง'}
+                </p>
+              )}
 
-            <div className="login-branch-select-wrap">
-              <label className="login-branch-select-label" htmlFor="branch-sel">
-                <i className="ti ti-map-pin" style={{ fontSize: 12 }} aria-hidden="true" />{' '}
-                สาขา
-              </label>
-              <select
-                id="branch-sel"
-                className="login-branch-select"
-                value={branchId}
-                disabled={branchesLoading || branches.length === 0}
-                onChange={(e) => {
-                  setBranchId(e.target.value);
-                  clearErrors();
-                  setPinValue('');
-                  pinSubmitting.current = false;
-                }}
+              <button
+                type="button"
+                className="w-full text-white bg-primary-600 hover:bg-primary-700 focus:ring-4 focus:outline-none focus:ring-primary-300 font-medium rounded-lg text-sm px-5 py-2.5 text-center flex justify-center items-center gap-2 dark:bg-primary-600 dark:hover:bg-primary-700 dark:focus:ring-primary-800 disabled:opacity-50 disabled:cursor-not-allowed mt-2 transition-colors"
+                onClick={() => void handlePasswordLogin()}
+                disabled={isLoading}
               >
-                {branchesLoading ? (
-                  <option value="">กำลังโหลดสาขา...</option>
-                ) : branches.length === 0 ? (
-                  <option value="">ไม่พบสาขาที่ใช้งานได้</option>
+                {isLoading ? (
+                  <>
+                    <svg aria-hidden="true" role="status" className="inline w-4 h-4 text-white animate-spin" viewBox="0 0 100 101" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M100 50.5908C100 78.2051 77.6142 100.591 50 100.591C22.3858 100.591 0 78.2051 0 50.5908C0 22.9766 22.3858 0.59082 50 0.59082C77.6142 0.59082 100 22.9766 100 50.5908ZM9.08144 50.5908C9.08144 73.1895 27.4013 91.5094 50 91.5094C72.5987 91.5094 90.9186 73.1895 90.9186 50.5908C90.9186 27.9921 72.5987 9.67226 50 9.67226C27.4013 9.67226 9.08144 27.9921 9.08144 50.5908Z" fill="#E5E7EB"/>
+                      <path d="M93.9676 39.0409C96.393 38.4018 97.6632 35.9116 97.0079 33.5539C95.2932 28.8227 92.871 24.3692 89.8167 20.348C85.8452 15.1192 80.8826 10.7238 75.2124 7.41289C69.5422 4.10194 63.2754 1.94025 56.7698 1.05124C51.7666 0.367541 46.6976 0.446843 41.7345 1.27873C39.2613 1.69328 37.813 4.19778 38.4501 6.62326C39.0873 9.04874 41.5694 10.4717 44.0505 10.1071C47.8511 9.54855 51.7191 9.52689 55.5402 10.0491C60.8642 10.7766 65.9928 12.5457 70.6331 15.2552C75.2735 17.9648 79.3347 21.5619 82.5849 25.841C84.9175 28.9121 86.7997 32.2913 88.1811 35.8758C89.083 38.2158 91.5421 39.6799 93.9676 39.0409Z" fill="currentColor"/>
+                    </svg>
+                    กำลังตรวจสอบ...
+                  </>
                 ) : (
-                  branches.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                    </option>
-                  ))
+                  <>
+                    <i className="ti ti-login" aria-hidden="true" />
+                    เข้าสู่ระบบ
+                  </>
                 )}
-              </select>
-            </div>
-
-            <div className="login-mode-tabs" role="tablist">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={mode === 'password'}
-                className={`login-mode-tab${mode === 'password' ? ' active' : ''}`}
-                onClick={() => switchMode('password')}
-              >
-                <i className="ti ti-lock" aria-hidden="true" />
-                Username / Password
               </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={mode === 'pin'}
-                className={`login-mode-tab${mode === 'pin' ? ' active' : ''}`}
-                onClick={() => switchMode('pin')}
-              >
-                <i className="ti ti-keyframe" aria-hidden="true" />
-                Quick PIN
-              </button>
-            </div>
 
-            {mode === 'password' && (
-              <div id="password-panel">
-                <div className="login-form-group">
-                  <label className="login-form-label" htmlFor="inp-user">
-                    Username
-                  </label>
-                  <div className="login-form-input-wrap">
-                    <i className="ti ti-user pre" aria-hidden="true" />
-                    <input
-                      id="inp-user"
-                      className={`login-form-input${pwError ? ' error' : ''}`}
-                      type="text"
-                      placeholder="กรอก username"
-                      autoComplete="username"
-                      value={username}
-                      onChange={(e) => {
-                        setUsername(e.target.value);
-                        clearErrors();
-                      }}
-                      disabled={isLoading}
-                    />
-                  </div>
-                </div>
-
-                <div className="login-form-group">
-                  <label className="login-form-label" htmlFor="inp-pass">
-                    Password
-                  </label>
-                  <div className="login-form-input-wrap">
-                    <i className="ti ti-lock pre" aria-hidden="true" />
-                    <input
-                      id="inp-pass"
-                      className={`login-form-input has-suf${pwError ? ' error' : ''}`}
-                      type={showPassword ? 'text' : 'password'}
-                      placeholder="••••••••"
-                      autoComplete="current-password"
-                      value={password}
-                      onChange={(e) => {
-                        setPassword(e.target.value);
-                        clearErrors();
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') void handlePasswordLogin();
-                      }}
-                      disabled={isLoading}
-                    />
-                    <i
-                      className={`ti ${showPassword ? 'ti-eye-off' : 'ti-eye'} suf`}
-                      role="button"
-                      tabIndex={0}
-                      aria-label={showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
-                      onClick={() => setShowPassword((v) => !v)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          setShowPassword((v) => !v);
-                        }
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div className={`login-error-msg${pwError ? ' show' : ''}`}>
-                  <i className="ti ti-alert-circle" aria-hidden="true" />
-                  <span>{pwError ?? 'Username หรือ Password ไม่ถูกต้อง'}</span>
-                </div>
-
+              <div className="flex items-center justify-between mt-4">
                 <button
                   type="button"
-                  className={`login-btn-login${isLoading ? ' loading' : ''}`}
-                  onClick={() => void handlePasswordLogin()}
-                  disabled={isLoading}
+                  className="text-sm font-medium text-primary-600 hover:underline dark:text-primary-500"
+                  onClick={() => showToast('ติดต่อผู้ดูแลระบบเพื่อรีเซ็ต Password', 'info')}
                 >
-                  {isLoading ? (
-                    <>
-                      <span className="spinner" />
-                      กำลังตรวจสอบ...
-                    </>
-                  ) : (
-                    <>
-                      <i className="ti ti-login" aria-hidden="true" />
-                      เข้าสู่ระบบ
-                    </>
-                  )}
+                  <i className="ti ti-help-circle" aria-hidden="true" /> ลืม Password?
                 </button>
-
-                <div className="login-login-help">
-                  <button
-                    type="button"
-                    className="login-link-btn"
-                    onClick={() =>
-                      showToast('ติดต่อผู้ดูแลระบบเพื่อรีเซ็ต Password', 'info')
-                    }
-                  >
-                    <i className="ti ti-help-circle" style={{ fontSize: 13 }} aria-hidden="true" />{' '}
-                    ลืม Password?
-                  </button>
-                  <button
-                    type="button"
-                    className="login-link-btn"
-                    onClick={() => switchMode('pin')}
-                  >
-                    ใช้ Quick PIN แทน
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {mode === 'pin' && (
-              <div id="pin-panel" className="login-pin-panel active">
-                <div
-                  className={`login-pin-display${pinShake ? ' shake' : ''}`}
-                  id="pin-dots"
-                >
-                  {[0, 1, 2, 3].map((i) => (
-                    <div
-                      key={i}
-                      className={`login-pin-dot${i < pinValue.length ? ' filled' : ''}`}
-                    />
-                  ))}
-                </div>
-
-                <div
-                  className={`login-error-msg center${pinError ? ' show' : ''}`}
-                  id="pin-error"
-                >
-                  <i className="ti ti-alert-circle" aria-hidden="true" />
-                  <span>PIN ไม่ถูกต้อง กรุณาลองใหม่</span>
-                </div>
-
-                <div className="login-pin-grid">
-                  {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((d) => (
-                    <button
-                      key={d}
-                      type="button"
-                      className="login-pin-btn"
-                      onClick={() => handlePinPress(d)}
-                      disabled={isLoading}
-                    >
-                      {d}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    className="login-pin-btn zero"
-                    onClick={() => handlePinPress('0')}
-                    disabled={isLoading}
-                  >
-                    0
-                  </button>
-                  <button
-                    type="button"
-                    className="login-pin-btn del"
-                    onClick={handlePinDel}
-                    disabled={isLoading}
-                    aria-label="ลบ"
-                  >
-                    <i className="ti ti-backspace" aria-hidden="true" />
-                  </button>
-                </div>
-
                 <button
                   type="button"
-                  className={`login-btn-login pin-submit${isLoading ? ' loading' : ''}`}
-                  onClick={() => void submitPin(pinValue)}
-                  disabled={
-                    isLoading ||
-                    branchesLoading ||
-                    !branchId ||
-                    pinValue.length !== 4
-                  }
+                  className="text-sm font-medium text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
+                  onClick={() => switchMode('pin')}
                 >
-                  {isLoading ? (
-                    <>
-                      <span className="spinner" />
-                      กำลังตรวจสอบ PIN...
-                    </>
-                  ) : (
-                    <>
-                      <i className="ti ti-login" aria-hidden="true" />
-                      ยืนยัน PIN
-                    </>
-                  )}
+                  ใช้ Quick PIN แทน
                 </button>
-
-                <div className="login-login-help single" style={{ marginTop: 12 }}>
-                  <button
-                    type="button"
-                    className="login-link-btn"
-                    onClick={() => switchMode('password')}
-                  >
-                    ใช้ Username/Password แทน
-                  </button>
-                </div>
               </div>
-            )}
+            </div>
+          )}
 
-            <p className="login-version">
+          {mode === 'pin' && (
+            <div className="animate-fadeIn">
+              <PinPad
+                pinValue={pinValue}
+                onPinPress={handlePinPress}
+                onPinDel={handlePinDel}
+                onSubmit={() => void submitPin(pinValue)}
+                isLoading={isLoading}
+                pinError={pinError}
+                pinShake={pinShake}
+              />
+              <div className="text-center mt-6">
+                <button
+                  type="button"
+                  className="text-sm font-medium text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors"
+                  onClick={() => switchMode('password')}
+                >
+                  ใช้ Username/Password แทน
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="mt-8 pt-6 border-t border-gray-100 dark:border-gray-700/50">
+            <p className="text-xs text-gray-400 dark:text-gray-500 text-center">
               v2.4.1 · สาขา {branchLabel}
               {import.meta.env.DEV && (
-                <span style={{ display: 'block', marginTop: 4, fontSize: 10 }}>
+                <span className="block mt-1.5 text-[10px]">
                   Dev: somchai/1234 · suda/2345 · wichai/3456 · nongnuch/4567 · globaladmin/9999 (ALL)
                 </span>
               )}
             </p>
           </div>
-        </main>
-      </div>
+        </div>
+      </main>
 
+      {/* Success Overlay overlay matching Flowbite backdrop */}
       <div
-        className={`login-success-overlay${successUser ? ' show' : ''}`}
+        className={`fixed inset-0 z-50 flex flex-col items-center justify-center bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm transition-all duration-500 ${
+          successUser ? 'opacity-100 visible' : 'opacity-0 invisible pointer-events-none'
+        }`}
         role="status"
         aria-live="polite"
       >
-        <div className="login-success-check">
+        <div className="w-20 h-20 rounded-full bg-green-100 dark:bg-green-900/30 text-green-500 dark:text-green-400 flex items-center justify-center text-4xl mb-6 shadow-xl shadow-green-500/20 scale-in">
           <i className="ti ti-check" aria-hidden="true" />
         </div>
-        <div className="login-success-name">
+        <div className="text-2xl font-bold text-gray-900 dark:text-white mb-2 slide-up-fade">
           {successUser
             ? `ยินดีต้อนรับ, ${successUser.firstName} ${successUser.lastName}`
             : 'ยินดีต้อนรับ'}
         </div>
-        <div className="login-success-sub">
+        <div className="text-gray-500 dark:text-gray-400 font-medium slide-up-fade-delay">
           {successUser
             ? successUser.branchIds.includes('ALL')
               ? 'Global Admin · ทุกสาขา'
-              : `${formatRole(successUser.role)} · สาขา${branchLabel}`
+              : `${formatRole(successUser.role)} · สาขา ${branchLabel}`
             : 'กำลังเข้าสู่ระบบ...'}
         </div>
       </div>
 
-      <div className="login-toast-wrap" aria-live="polite">
+      {/* Toasts */}
+      <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2" aria-live="polite">
         {toasts.map((t) => (
-          <div key={t.id} className={`login-toast ${t.type}`}>
-            <i
-              className={`ti ti-${t.type === 'error' ? 'alert-circle' : 'info-circle'}`}
-              aria-hidden="true"
-            />
-            {t.message}
+          <div
+            key={t.id}
+            className={`flex items-center w-full max-w-xs p-4 text-gray-500 bg-white rounded-lg shadow dark:text-gray-400 dark:bg-gray-800 animate-slideInRight border ${
+              t.type === 'error' ? 'border-red-100 dark:border-red-900/50' : 'border-gray-100 dark:border-gray-700'
+            }`}
+          >
+            <div
+              className={`inline-flex items-center justify-center shrink-0 w-8 h-8 rounded-lg ${
+                t.type === 'error'
+                  ? 'text-red-500 bg-red-100 dark:bg-red-800 dark:text-red-200'
+                  : 'text-blue-500 bg-blue-100 dark:bg-blue-800 dark:text-blue-200'
+              }`}
+            >
+              <i
+                className={`ti ti-${t.type === 'error' ? 'alert-circle' : 'info-circle'} text-lg`}
+                aria-hidden="true"
+              />
+            </div>
+            <div className="ml-3 text-sm font-normal">{t.message}</div>
           </div>
         ))}
       </div>
+      
+      {/* Required for simple custom animations not covered by tailwind defaults */}
+      <style>{`
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideInRight { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        .animate-fadeIn { animation: fadeIn 0.3s ease-out; }
+        .animate-slideInRight { animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+        .scale-in { animation: scaleIn 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
+        .slide-up-fade { animation: slideUpFade 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; opacity: 0; }
+        .slide-up-fade-delay { animation: slideUpFade 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.1s forwards; opacity: 0; }
+        @keyframes scaleIn { 0% { transform: scale(0.5); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+        @keyframes slideUpFade { 0% { transform: translateY(20px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
+      `}</style>
     </div>
   );
 }
