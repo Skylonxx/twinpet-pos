@@ -1,7 +1,41 @@
 # Latest Report
 
 > Rolling "latest report" for the stock-write security workstream. Updated at each phase boundary.
-> **Current state:** **Phase 4 Step 1 (PIN Login UI) Implemented & Verified**. The login screen has been modernized with professional Flowbite styles without altering authentication logic. The `docs/reports/phase-4-step-1-pin-login-manifest.md` audit trail is packaged. Full build verified: `npm run build` PASSED (client environment compiled via `tsc -b && vite build` with 547 modules transformed in ~683ms).
+> **Current state:** **Phase 4 Step 1 (PIN Login UI) Implemented**. The login screen has been modernized with clean Tailwind/Flowbite-compatible utility classes, preserving all authentication logic. The `docs/reports/phase-4-step-1-pin-login-manifest.md` audit trail is packaged.
+> 
+> **Build Evidence:**
+> Command: `npm run build` at 2026-06-07T08:25:32Z
+> ```text
+> > twinpet-pos@0.0.0 prebuild
+> > npm run gen-config
+> 
+> > twinpet-pos@0.0.0 gen-config
+> > node scripts/gen-deploy-config.mjs
+> 
+> [gen-deploy-config] database="pos-db" region="asia-southeast1" → functions/src/deployConfig.ts, .env
+> 
+> > twinpet-pos@0.0.0 build
+> > tsc -b && vite build
+> 
+> vite v8.0.14 building client environment for production...
+> Generating .flowbite-react\class-list.json file...
+> transforming...✓ 547 modules transformed.
+> rendering chunks...
+> computing gzip size...
+> dist/index.html                             1.42 kB │ gzip:   0.62 kB
+> dist/assets/index-mwM5xWu-.css            320.92 kB │ gzip:  49.83 kB
+> dist/assets/rolldown-runtime-Bh1tDfsg.js    0.56 kB │ gzip:   0.36 kB
+> dist/assets/react-router-BVImBSaZ.js       42.27 kB │ gzip:  15.07 kB
+> dist/assets/vendor-CAze_z6h.js            109.15 kB │ gzip:  31.38 kB
+> dist/assets/charts-xn6RU_C7.js            177.58 kB │ gzip:  61.51 kB
+> dist/assets/react-vendor-CzRZBWxH.js      250.54 kB │ gzip:  80.54 kB
+> dist/assets/firebase-BYlOybkJ.js          463.72 kB │ gzip: 139.79 kB
+> dist/assets/index-4Wvcbczk.js             940.33 kB │ gzip: 214.68 kB
+> 
+> ✓ built in 726ms
+> ```
+> 
+> **Follow-up Note:** Replacing the manual spinner/button/select markup with project-standard Flowbite React primitives is tracked as a non-blocking follow-up polish item.
 > **Backlog Note:** GCS `gcf-sources` / deployment artifact IAM and lifecycle audit is deferred to post-MVP hardening.
 
 **Docs note (2026-06-07):** AI role/prompt instructions centralized in new `docs/ai-roles/` files (`developer`, `reviewer`, `tech-lead`, `environment-auditor`, `ui-implementer`, `README.md`) — **intentionally untracked until staged** as part of this docs-only patch. `AGENTS.md` prompt routing tightened (execute only on explicit `TO:` to the active agent; role-file name alone is not permission). `.cursor/rules/reviewer.md` points to `reviewer.md`. Antigravity documented in `README.md` (reuses `environment-auditor.md` / `developer.md`; no separate role file). Unrelated `rp.md` deletion excluded from this change set (file restored). `.claude/settings.local.json` is untracked, local-only, and out of scope for this role centralization change. No app/rules/functions change.

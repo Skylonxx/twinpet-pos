@@ -9,7 +9,7 @@
 ## 1. Step 1 Scope Summary
 
 Step 1 is strictly limited to the authentication and PIN login entry points. 
-* **Includes:** Visual layout overhaul of the login screen to adopt modern Flowbite/Tailwind primitives, replacing custom CSS with utility classes. Rebinding existing `verifyPinLogin` logic to new Flowbite loading states, toasts, and visual cues.
+* **Includes:** Visual layout overhaul of the login screen to adopt modern Tailwind/Flowbite-compatible utility classes, replacing custom CSS. Rebinding existing `verifyPinLogin` logic to new Flowbite loading states, toasts, and visual cues.
 * **Excludes:** Point of Sale (POS) cart, checkout logic, payment modals, administrative exception UI, stock transfer screens, and all Firestore security rules.
 
 ---
@@ -27,12 +27,14 @@ Step 1 is strictly limited to the authentication and PIN login entry points.
 1. **`src/components/auth/PinPad.tsx`**
    * **Purpose:** A clean, reusable numeric keypad component.
    * **Origin:** Newly created (not from stash).
-   * **Visual/UX:** Will use Flowbite Button primitives, managing its own disabled states, hover effects, and touch-target sizes for mobile to ensure "impeccable style."
+   * **Visual/UX:** Will use Tailwind utility classes mapping to Flowbite button styles, managing its own disabled states, hover effects, and touch-target sizes for mobile to ensure "impeccable style."
 
 2. **`src/components/auth/BranchSelector.tsx`**
    * **Purpose:** A dropdown for branch selection prior to PIN entry.
    * **Origin:** Newly created (not from stash).
-   * **Visual/UX:** Will utilize Flowbite Select (`bg-gray-50 border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500`) with clear disabled/loading states.
+   * **Visual/UX:** Will utilize Tailwind utility classes mapping to Flowbite select styles (`bg-gray-50 border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500`) with clear disabled/loading states.
+   
+*(Note: Full replacement of these manual HTML structures with project-standard Flowbite React component primitives [e.g., `<Button>`, `<Select>`] is tracked as a non-blocking follow-up polish item.)*
 
 ---
 
