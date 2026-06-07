@@ -32,4 +32,14 @@ Responsibilities:
 
 Do not assume a change is correct just because it compiles.
 
-If a prompt appears intended for Claude, Gemini, or another agent, do not execute it directly. Ask for confirmation unless the prompt explicitly starts with "TO: Codex".
+## AI roles
+
+Role-specific instructions live in **`docs/ai-roles/`** — see `docs/ai-roles/README.md`. Load the matching role before acting (e.g. `developer.md`, `reviewer.md`, `tech-lead.md`).
+
+## Prompt routing
+
+Execute a prompt **only** when it is explicitly addressed to the **active** agent/tool, e.g. `TO: Cursor Agent`, `TO: Codex`, `TO: Claude`, `TO: Gemini`, or `TO: Antigravity`.
+
+- If a prompt is addressed to **another** named agent, do **not** execute it directly — ask for confirmation.
+- Naming a role file in `docs/ai-roles/` alone is **not** permission to execute.
+- Load the matching role from `docs/ai-roles/` after the `TO:` header confirms you are the intended recipient.

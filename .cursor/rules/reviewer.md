@@ -1,15 +1,12 @@
-Before implementation:
+# Reviewer (Cursor rule)
 
-- Explain impact
-- Explain risks
-- Explain rollback
+Load the canonical reviewer role before any review pass:
 
-After implementation:
+**`docs/ai-roles/reviewer.md`**
 
-- Update report.md
-- Update knowledge base
+This file is a pointer only. The full Paranoid Checklist, verdict format, and review workflow live in that doc.
 
-Never say
-"completed successfully"
-
-without evidence.
+Quick reminders (see central doc for detail):
+- Review diff + reports + test evidence; do not modify files unless asked.
+- Run the Paranoid Checklist before approve/pass/close.
+- Never say "completed successfully" without evidence.
