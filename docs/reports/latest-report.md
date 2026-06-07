@@ -1,7 +1,7 @@
 # Latest Report
 
 > Rolling "latest report" for the stock-write security workstream. Updated at each phase boundary.
-> **Current state:** **Phase 3 Micro Gate 4 Final Smoke Checks Completed**. `docs/reports/phase-3-gate-2-live-audit.md` packaged. Live production endpoints (`verifyPinLogin`, `reconcileOrder`, `retryReconcile`) verified.
+> **Current state:** **Phase 3 Micro Gate 4 Final Smoke Checks Completed**. `docs/reports/phase-3-gate-2-live-audit.md` packaged. Smoke checks passed with captured safe evidence in [phase-3-gate-4-smoke-checks.md](file:///C:/Users/Narachat/twinpet-pos/docs/reports/phase-3-gate-4-smoke-checks.md).
 > **Backlog Note:** GCS `gcf-sources` / deployment artifact IAM and lifecycle audit is deferred to post-MVP hardening.
 
 **Docs note (2026-06-07):** AI role/prompt instructions centralized in new `docs/ai-roles/` files (`developer`, `reviewer`, `tech-lead`, `environment-auditor`, `ui-implementer`, `README.md`) — **intentionally untracked until staged** as part of this docs-only patch. `AGENTS.md` prompt routing tightened (execute only on explicit `TO:` to the active agent; role-file name alone is not permission). `.cursor/rules/reviewer.md` points to `reviewer.md`. Antigravity documented in `README.md` (reuses `environment-auditor.md` / `developer.md`; no separate role file). Unrelated `rp.md` deletion excluded from this change set (file restored). `.claude/settings.local.json` is untracked, local-only, and out of scope for this role centralization change. No app/rules/functions change.
