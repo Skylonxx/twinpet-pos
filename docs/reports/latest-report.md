@@ -1,16 +1,11 @@
 # Latest Report
 
 > Rolling "latest report" for the stock-write security workstream. Updated at each phase boundary.
-> **Current state:** **Phase 4 Step 2 (Main POS / Cart / Void UI) Implemented & Rules Aligned (Option A)**. 
-> - **Oversell bypass:** The UI now allows adding, increasing, and setting quantities beyond available stock. Insufficient stock displays a non-blocking Tailwind soft warning badge.
-> - **Void authorization (Option A):** `firestore.rules` expanded. Cashiers can now successfully trigger `voidRequested` on already-created `asyncOrders` without `pos_void` manager permission, provided they rigidly stamp their own UID into the `voidedBy` audit field.
-> - **UI / Backend Sync:** `requestPendingVoid` no longer fires-and-forgets. The UI actively `await`s the network response. It blocks duplicate clicks via a loading state and visibly toasts Firestore rejection if the rule validation fails.
+> **Current state:** **Phase 4 Step 2 (Main POS / Cart / Void UI) Implemented & Rules Secured (Option A Patch)**. 
+> - **Void authorization (Option A Patch):** Fixed a critical gap in `firestore.rules`. `asyncOrders` void-intent creations (materializing the offline tombstone via `setDoc`) are now protected by `isStrictVoidIntentCreate`. This strictly allowlists the minimal approved fields and blocks any attempts to seed or spoof sale payloads (`lines`, `payments`, `total`, `staffId`) or server-owned reconcile/audit fields.
+> - **Actor identity:** Cashiers can trigger `voidRequested` on uncached orders without `pos_void`, provided they strictly set `voidedBy: request.auth.uid`. *Note:* This assumes the app's `user.id` strictly matches the Firebase Auth UID minted by `verifyPinLogin`.
+> - **UI / Backend Sync & Offline:** `requestPendingVoid` natively `await`s the network response. To prevent indefinite hangs when offline, an explicit 5-second `Promise.race` timeout is included. If the write queues locally while offline, it gracefully closes the UI and warns the cashier that the request is queued and will sync when online.
 > - **Boundary Check:** Unrelated sale-payload fields, server-owned reconcile fields, `PaymentModal.tsx`, and `useCheckout.ts` remain completely locked down and untouched.
-> - **Build/Test Status:** `npm run build` PASSED (775ms). `npm run test:rules` PASSED (85 tests).
-> 
-> **Build Evidence:**
-> Command: `npm run build` at 2026-06-07T08:25:32Z
-> ```text
 > > twinpet-pos@0.0.0 prebuild
 > > npm run gen-config
 > 

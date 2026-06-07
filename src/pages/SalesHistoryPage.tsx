@@ -374,7 +374,11 @@ export default function SalesHistoryPage() {
               : 'ส่งคำขอยกเลิกบิลแล้ว · จะคืนสต็อก/เครดิตเมื่อซิงก์',
           );
         } catch (err) {
-          showToast(err instanceof Error ? err.message : 'คำขอยกเลิกบิลถูกปฏิเสธ (ตรวจสอบสิทธิ์หรือการเชื่อมต่อ)');
+          const msg = err instanceof Error ? err.message : 'คำขอยกเลิกบิลถูกปฏิเสธ (ตรวจสอบสิทธิ์หรือการเชื่อมต่อ)';
+          showToast(msg);
+          if (msg.includes('แบบออฟไลน์แล้ว')) {
+            setVoidOpen(false);
+          }
         } finally {
           setVoidProcessing(false);
         }

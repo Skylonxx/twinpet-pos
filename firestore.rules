@@ -60,6 +60,19 @@ service cloud.firestore {
       ]);
     }
 
+    // asyncOrders client CREATE = the offline void-intent tombstone. A cashier
+    // creating a void intent for an uncached order may ONLY write the required
+    // void/routing fields. Absolutely NO sale payload fields (lines, payments, total,
+    // staffId) or reconcile/audit fields may be seeded.
+    function isStrictVoidIntentCreate(data) {
+      return data.keys().hasOnly([
+        'id', 'branchId', 'deviceId', 'voidRequested', 'status', 'voidReason', 'voidedBy', 'voidedAt', 'updatedAt'
+      ])
+      && data.get('voidRequested', false) == true
+      && data.get('status', '') == 'voided'
+      && data.get('voidedBy', '') == request.auth.uid;
+    }
+
     function role() {
       return request.auth.token.role;
     }
@@ -293,9 +306,7 @@ service cloud.firestore {
         && safeInitialReconcileState(request.resource.data)
         && (
           (hasPerm('pos_sale') && stampedOwnStaffId(request.resource.data))
-          || (isStaff()
-            && request.resource.data.get('voidRequested', false) == true
-            && request.resource.data.get('voidedBy', '') == request.auth.uid)
+          || (isStaff() && isStrictVoidIntentCreate(request.resource.data))
         );
       // Client updates = the offline void-intent merge only. A pos_void client may
       // change ONLY approved void-intent fields; sale-payload fields (lines,

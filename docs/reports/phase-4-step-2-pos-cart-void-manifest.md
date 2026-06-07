@@ -53,19 +53,17 @@ Step 2 focuses on the operational cashier interface, with a **Tech Lead / CEO ap
 
 ---
 
-## 5. Existing Files Planned for Modification
+## 5. Actual Files Modified
 
-1. **`src/pages/POSPage.tsx`**
-   * **Exact Reason:** UI layout overhaul. Converting the massive DOM structure to a clean Tailwind Grid/Flex layout.
-   * **Change Type:** UI layout, cart presentation, void UI, styling.
-   * **Risk Level:** Medium (High lines-of-code churn, but isolated strictly to presentation).
-   * **Why it does not touch excluded scope:** Logic hooks (`useCart`, `useCheckout`, `usePosInventory`) are imported and used as-is.
+1. **`src/pages/POSPage.tsx`** & **`src/hooks/pos/useCart.ts`**
+   * **Change:** UI layout improvements and removing the hard blocker on stock validation. Insufficient stock now shows a non-blocking UI warning.
 
-2. **`src/pages/POSPage.css`**
-   * **Exact Reason:** Styling cleanup.
-   * **Change Type:** Styling. Delete legacy hacky CSS rules in favor of Tailwind utility classes.
-   * **Risk Level:** Low.
-   * **Why it does not touch excluded scope:** Scoped only to the POS visual layer.
+2. **`firestore.rules`** & **`rules-tests/*`**
+   * **Change (Option A):** Expanded void rules. Any staff member can now create an `asyncOrders` void intent. 
+   * **Strict Allowlist:** The create rule uses `isStrictVoidIntentCreate` to rigorously prevent spoofing of sale payload fields (`lines`, `payments`, etc.) and server-owned audit fields.
+
+3. **`src/lib/pos/voidPendingOrder.ts`** & **`src/pages/SalesHistoryPage.tsx`**
+   * **Change (Option A):** `requestPendingVoid` now returns a Promise and includes a 5-second timeout guard. The UI awaits the result, disables double-clicks, and handles offline queueing gracefully.
 
 ---
 
@@ -76,27 +74,23 @@ Step 2 focuses on the operational cashier interface, with a **Tech Lead / CEO ap
 * **Transfer:** `src/pages/inventory/TransferPage.tsx`, `src/pages/inventory/TransferHistoryPage.tsx`
 * **Admin Exception UI:** `src/pages/admin/ReconciliationExceptionsPage.tsx`
 * **Auth/Login:** `src/pages/LoginPage.tsx`, `src/components/auth/*`
-* **Backend:** `firestore.rules`, `functions/src/*`, `src/lib/pos/reconcileSync.ts`
+* **Backend Functions:** `functions/src/*`, `src/lib/pos/reconcileSync.ts`
 
 ---
 
 ## 7. Business Logic Preservation Plan
 
-* **Oversell allowed:** The UI will display stock levels but will *never* block the `addItem` or `increaseQty` functions if stock is zero or negative.
-* **Async checkout/reconcile flow:** The `handleCheckout` invocation will remain exactly the same, passing control to the untouched `PaymentModal`.
-* **pos_void permission handling:** Cart item deletion and global cart clearing will conditionally render or trigger authorization checks exactly as currently implemented.
-* **Cart state behavior:** `useCart` will not be altered. The UI will faithfully render whatever `cart.items`, `cart.subtotal`, and `cart.total` output.
-* **Product quantity/price behavior:** All price levels, discounts, and UOM multipliers calculated by the existing hooks will be preserved.
-* **No client-side stock sufficiency blocker:** Re-verified. The UI is strictly dumb to validation limits.
+* **Oversell allowed:** The UI displays stock levels and warns, but *never* blocks the action if stock is zero or negative.
+* **Async checkout/reconcile flow:** The `handleCheckout` invocation remains exactly the same, passing control to the untouched `PaymentModal`.
+* **Product quantity/price behavior:** All price levels, discounts, and UOM multipliers calculated by the existing hooks are preserved.
+* **No client-side stock sufficiency blocker:** Verified. 
 
 ---
 
-## 8. Void UI Plan
+## 8. Void UI & Network Plan
 
-* **Presentation:** Voiding a line item will use a distinct icon (e.g., a red trash can or `ti-x`) with a clear touch target inside the `CartPanel`. Global void (Clear Cart) will be a secondary button at the bottom of the cart.
-* **Permission denial:** If the user lacks the `pos_void` permission, the void buttons will either be disabled (`opacity-50 cursor-not-allowed`) or will trigger the existing manager PIN override flow if one exists in the current architecture.
-* **Loading/Disabled:** During void execution or cart resetting, buttons will show a Flowbite spinner to prevent double-tapping.
-* **Explicitly NOT refactored:** The actual state mutation removing the item from the array will remain handled by `useCart`.
+* **Actor Logging:** The `voidedBy` field securely logs the cashier's UID and is validated by `firestore.rules`.
+* **Offline Resilience:** If the void write remains pending for 5 seconds (offline), a timeout guard safely alerts the cashier that it is queued and will sync later, preventing UI freezes.
 
 ---
 

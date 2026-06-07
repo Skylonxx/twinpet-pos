@@ -73,7 +73,7 @@ export async function requestPendingVoid(
   branchId: string,
 ): Promise<void> {
   if (!isFirebaseConfigured || !db) return;
-  await setDoc(
+  const writePromise = setDoc(
     doc(db, 'asyncOrders', orderId),
     {
       ...buildPendingVoidFields(input),
@@ -87,4 +87,19 @@ export async function requestPendingVoid(
     },
     { merge: true },
   );
+
+  const timeoutError = new Error('OFFLINE_TIMEOUT');
+  const timeoutPromise = new Promise<void>((_, reject) => 
+    setTimeout(() => reject(timeoutError), 5000)
+  );
+
+  try {
+    await Promise.race([writePromise, timeoutPromise]);
+  } catch (err) {
+    if (err === timeoutError) {
+      // The write is queued locally and will flush when online.
+      throw new Error('บันทึกคำขอยกเลิกแบบออฟไลน์แล้ว (จะซิงก์เมื่อเชื่อมต่ออินเทอร์เน็ต)');
+    }
+    throw err; // Genuine Firestore rejection
+  }
 }
