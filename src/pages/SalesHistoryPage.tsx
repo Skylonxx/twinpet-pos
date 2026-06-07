@@ -263,7 +263,7 @@ export default function SalesHistoryPage() {
 
   const [voidOpen, setVoidOpen] = useState(false);
   const [voidProcessing, setVoidProcessing] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const [tablePage, setTablePage] = useState(1);
 
   const tableCardRef = useRef<HTMLDivElement>(null);
@@ -330,8 +330,8 @@ export default function SalesHistoryPage() {
     return today === orderDate;
   }, [selected]);
 
-  const showToast = useCallback((msg: string) => {
-    setToast(msg);
+  const showToast = useCallback((msg: string, type: 'success' | 'error' = 'success') => {
+    setToast({ msg, type });
     window.setTimeout(() => setToast(null), 2600);
   }, []);
 
@@ -378,7 +378,7 @@ export default function SalesHistoryPage() {
             isSettled = true;
             console.error('Void request rejected:', err);
             const msg = err instanceof Error ? err.message : String(err);
-            showToast(`❌ คำขอยกเลิกถูกปฏิเสธ: ${msg}`);
+            showToast(`❌ คำขอยกเลิกถูกปฏิเสธ: ${msg}`, 'error');
           });
 
         setVoidOpen(false);
@@ -415,7 +415,7 @@ export default function SalesHistoryPage() {
           syncDevRecords();
         }
       } catch (err) {
-        showToast(err instanceof Error ? err.message : 'ยกเลิกบิลไม่สำเร็จ');
+        showToast(err instanceof Error ? err.message : 'ยกเลิกบิลไม่สำเร็จ', 'error');
       } finally {
         setVoidProcessing(false);
       }
@@ -996,7 +996,7 @@ export default function SalesHistoryPage() {
         onConfirm={handleVoidConfirm}
       />
 
-      {toast && <div className="sh-toast">{toast}</div>}
+      {toast && <div className={`sh-toast sh-toast-${toast.type}`}>{toast.msg}</div>}
     </div>
   );
 }

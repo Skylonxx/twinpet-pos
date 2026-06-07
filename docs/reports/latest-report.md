@@ -3,11 +3,12 @@
 > Rolling "latest report" for the stock-write security workstream. Updated at each phase boundary.
 > **Current state:** **Phase 4 Step 2 (Main POS / Cart / Void UI) Remediation Implemented**. 
 > - **Void authorization (Option A2):** `firestore.rules` strictly prevents voiding orders created on previous operational days via a server-side timestamp comparison (`(request.time + duration.value(7, 'h')).date() == (resource.data.serverCreatedAt + duration.value(7, 'h')).date()`). Cross-day voids are definitively blocked at the database layer. 
-> - **Legacy Doc Compatibility (`serverCreatedAt` missing):** The rules explicitly require `"serverCreatedAt" in resource.data`. Attempting to void older, legacy documents that lack this timestamp will automatically and safely be denied.
-> - **Actor identity:** The system uses Anonymous Auth on the device, meaning `request.auth.uid` is a randomized string. The POS PIN-login (`verifyPinLogin` CF) stamps the actual user's ID as a custom claim (`request.auth.token.staffId`). `firestore.rules` was strictly patched to validate `request.resource.data.voidedBy == request.auth.token.staffId`, completely protecting against spoofing while accurately logging identity.
-> - **UI / Backend Sync & Offline (Anti-Silent Failure):** `requestPendingVoid` no longer swallows the `updateDoc` promise rejection. The UI executes `setVoidOpen(false)` immediately and waits up to 300ms. If a synchronous rule rejection occurs (e.g. cross-day limit or offline write queue fails), the `.catch` explicitly traps the error and throws a prominent red toast. Success states are never displayed for rejected writes.
+> - **Legacy Doc Compatibility (`serverCreatedAt` missing or null):** The rules explicitly require `"serverCreatedAt" in resource.data` and `resource.data.serverCreatedAt != null`. Attempting to void legacy documents that lack this timestamp will automatically and safely be denied without throwing a runtime rule evaluation error.
+> - **Actor identity:** The system uses Anonymous Auth on the device, meaning `request.auth.uid` is a randomized string. The POS PIN-login (`verifyPinLogin` CF) stamps the actual user's ID as a custom claim (`request.auth.token.staffId`). `firestore.rules` was strictly patched to validate `request.resource.data.voidedBy == request.auth.token.staffId`, completely protecting against spoofing while accurately logging identity. 
+>   * *Auth limitation:* The username/password fallback login path may not carry the `token.staffId` custom claim, which would cause same-day cashier voids to be denied by `firestore.rules`. The PIN login path is the supported and proven path for cashier voids.
+> - **UI / Backend Sync & Offline (Anti-Silent Failure):** `requestPendingVoid` no longer swallows the `updateDoc` promise rejection. The UI executes `setVoidOpen(false)` immediately and waits up to 300ms. If a synchronous rule rejection occurs (e.g. cross-day limit or offline write queue fails), the `.catch` explicitly traps the error and throws a visually distinct red `.sh-toast-error` toast (`❌ คำขอยกเลิกถูกปฏิเสธ`). Success states use the green `.sh-toast-success` variant and are never displayed for rejected writes.
 > - **Boundary Check:** Unrelated sale-payload fields, server-owned reconcile fields, `PaymentModal.tsx`, and `useCheckout.ts` remain completely locked down and untouched.
-> - **Build/Test Status:** `npm run build` PASSED (670ms). `npm run test:rules` PASSED (90 tests in 8.13s).
+> - **Build/Test Status:** `npm run build` PASSED. `npm run test:rules` PASSED (91 tests in 9.05s).
 > 
 > **Build Evidence:**
 > Command: `npm run build`
@@ -21,33 +22,33 @@
 > rendering chunks...
 > computing gzip size...
 > dist/index.html                             1.42 kB │ gzip:   0.62 kB
-> dist/assets/index-D43QRzO-.css            321.34 kB │ gzip:  49.91 kB
+> dist/assets/index-B--aDUti.css            321.39 kB │ gzip:  49.92 kB
 > dist/assets/rolldown-runtime-Bh1tDfsg.js    0.56 kB │ gzip:   0.36 kB
 > dist/assets/react-router-BVImBSaZ.js       42.27 kB │ gzip:  15.07 kB
 > dist/assets/vendor-CAze_z6h.js            109.15 kB │ gzip:  31.38 kB
 > dist/assets/charts-xn6RU_C7.js            177.58 kB │ gzip:  61.51 kB
 > dist/assets/react-vendor-CzRZBWxH.js      250.54 kB │ gzip:  80.54 kB
 > dist/assets/firebase-BYlOybkJ.js          463.72 kB │ gzip: 139.79 kB
-> dist/assets/index-B46_DTu4.js             941.51 kB │ gzip: 214.99 kB
+> dist/assets/index-BGnippa1.js             941.50 kB │ gzip: 214.98 kB
 > 
-> ✓ built in 670ms
+> ✓ built in 791ms
 > ```
 >
 > **Rules Test Evidence:**
 > Command: `npm run test:rules`
 > ```text
->  ✓ rules-tests/async-orders-phase2b.spec.ts (11 tests) 1007ms
+>  ✓ rules-tests/async-orders-phase2b.spec.ts (11 tests) 1032ms
 >  ✓ rules-tests/async-orders.spec.ts (6 tests) 412ms
->  ✓ rules-tests/product-stocks-phase1.spec.ts (17 tests) 1068ms
->  ✓ rules-tests/stock-lots-phase2.spec.ts (19 tests) 1127ms
+>  ✓ rules-tests/product-stocks-phase1.spec.ts (17 tests) 1207ms
+>  ✓ rules-tests/stock-lots-phase2.spec.ts (19 tests) 1196ms
 >  ✓ rules-tests/products.spec.ts (12 tests) 835ms
->  ✓ rules-tests/firestore-permissions.spec.ts (10 tests) 706ms
+>  ✓ rules-tests/firestore-permissions.spec.ts (11 tests) 838ms
 >  ✓ rules-tests/shifts-phase3.spec.ts (15 tests) 819ms
 > 
 >  Test Files  7 passed (7)
->       Tests  90 passed (90)
->    Start at  17:55:45
->    Duration  8.13s (transform 50ms, setup 0ms, import 760ms, tests 6.73s, environment 0ms)
+>       Tests  91 passed (91)
+>    Start at  18:29:39
+>    Duration  9.05s (transform 78ms, setup 0ms, import 879ms, tests 7.41s, environment 0ms)
 > ```
 > 
 > **Follow-up Note:** Replacing the manual spinner/button/select markup with project-standard Flowbite React primitives is tracked as a non-blocking follow-up polish item.

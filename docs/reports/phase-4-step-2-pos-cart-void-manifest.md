@@ -141,10 +141,9 @@ Step 2 focuses on the operational cashier interface, with a **Tech Lead / CEO ap
 
 ---
 
-## 13. Questions for Tech Lead / CEO
+## 13. Open Questions (Resolved)
 
-* *Are there any specific manager PIN override behaviors for voiding that currently exist but are broken, or should we strictly honor the boolean `user.permissions.includes('pos_void')`?*
-* *For mobile (phone) viewports, do you prefer the cart as a sliding bottom drawer or a separate tab?* (Defaulting to sliding drawer for speed).
+* *Is cross-day voiding allowed for standard cashiers?* **No**. Cashiers may only void orders created on the same local calendar day. Cross-day voids are strictly denied by `firestore.rules`. Legacy documents missing `serverCreatedAt` are safely denied.
 
 ---
 

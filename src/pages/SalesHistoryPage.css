@@ -1099,7 +1099,6 @@
   position: fixed;
   bottom: 70px;
   right: 20px;
-  background: #0f6e56;
   color: white;
   padding: 10px 16px;
   border-radius: var(--radius-md, 8px);
@@ -1108,4 +1107,12 @@
      stay visible while a modal is open (e.g. Transfer Edit Modal). */
   z-index: 9999;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.sh-toast-success {
+  background: #0f6e56;
+}
+
+.sh-toast-error {
+  background: #c92a2a;
 }

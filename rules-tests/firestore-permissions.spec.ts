@@ -180,6 +180,26 @@ describe("any staff → async void intent", () => {
       setDoc(doc(db, 'asyncOrders', 'a_void_update_missing_date'), { voidRequested: true, status: 'voided', voidedBy: 'staff1' }, { merge: true }),
     );
   });
+
+  it('DENIES async void update if serverCreatedAt is explicitly null', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'asyncOrders', 'a_void_update_null_date'), {
+        branchId: BRANCH,
+        reconcileStatus: 'pending_reconcile',
+        lines: [], payments: [], total: 100, creditAmt: 0,
+        staffId: 'staff_sale',
+        deviceId: 'dev1',
+        id: 'a_void_update_null_date',
+        reconciledAt: null,
+        serverCreatedAt: null,
+      });
+    });
+
+    const db = testEnv.authenticatedContext('staff1', staffWith(['pos_sale'])).firestore();
+    await assertFails(
+      setDoc(doc(db, 'asyncOrders', 'a_void_update_null_date'), { voidRequested: true, status: 'voided', voidedBy: 'staff1' }, { merge: true }),
+    );
+  });
 });
 
 // Sanity: the rules file compiled & loaded into the emulator at all.
