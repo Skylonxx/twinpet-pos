@@ -37,38 +37,25 @@ Step 2 focuses on the operational cashier interface, with a **Tech Lead / CEO ap
 
 ---
 
-## 4. New Files Planned
 
-1. **`src/components/pos/CartPanel.tsx`** (Optional extraction, depending on `POSPage.tsx` size)
-   * **Purpose:** Isolate the right-hand cart presentation and line-item list.
-   * **Origin:** Newly created (extracted from `POSPage.tsx`).
-   * **Visual/UX:** Touch-friendly line items, clear quantity indicators, and integrated void/remove buttons.
-   * **Why Step 2-only:** Purely presentational for the cart.
+## 4. Final Scope & Files Modified
 
-2. **`src/components/pos/ProductGrid.tsx`** (Optional extraction)
-   * **Purpose:** Isolate the left-hand category tabs and product buttons.
-   * **Origin:** Newly created (extracted from `POSPage.tsx`).
-   * **Visual/UX:** High-contrast, easy-to-tap square buttons for products.
-   * **Why Step 2-only:** Purely presentational for POS inventory viewing.
+The Phase 4 Step 2 final scope included:
+* `firestore.rules` (Added strictly validated `request.auth.token.staffId` and same-day bounds)
+* `rules-tests/*` (Proved same-day logic, null/legacy safety, and identity gates)
+* `src/hooks/pos/useCart.ts` (Removed client-side stock blockers)
+* `src/pages/SalesHistoryPage.tsx` (Anti-silent-failure toast & void modal behavior)
+* `src/lib/pos/voidPendingOrder.ts` (`requestPendingVoid` error propagation)
+* `src/pages/POSPage.tsx` (UI warnings)
+* Reports and manifests
 
+Crucially, the following were explicitly **untouched**:
+* `PaymentModal.tsx` and `useCheckout.ts` (Checkout/Payment boundaries)
+* Cloud Functions (`functions/src/*`)
+* `stash0` (Remains unapplied)
 ---
 
-## 5. Actual Files Modified
-
-1. **`src/pages/POSPage.tsx`** & **`src/hooks/pos/useCart.ts`**
-   * **Change:** UI layout improvements and removing the hard blocker on stock validation. Insufficient stock now shows a non-blocking UI warning.
-
-2. **`firestore.rules`** & **`rules-tests/*`**
-   * **Change (Option A2):** Expanded void rules. Any staff member can now update an existing `asyncOrders` void intent. Void tombstone creation is strictly denied.
-   * **Strict Allowlist & Identity:** The update rule rigorously prevents spoofing of sale payload fields and server-owned audit fields. The actor identity `voidedBy` is strictly validated against the Custom Auth Claim (`request.auth.token.staffId`), accurately bridging Anonymous Auth to the real cashier ID.
-   * **Legacy Doc Safety:** The rules explicitly enforce a same-day local calendar check. Legacy documents missing `serverCreatedAt` are safely and automatically denied.
-
-3. **`src/lib/pos/voidPendingOrder.ts`** & **`src/pages/SalesHistoryPage.tsx`**
-   * **Change (Option A2):** `requestPendingVoid` has been refactored to be purely optimistic and offline-first, firing an `updateDoc` without awaiting a network response. `SalesHistoryPage.tsx` enforces a new same-day void constraint for cashiers and dismisses the void modal instantly without network blocking.
-
----
-
-## 6. Files Explicitly NOT Touched in Step 2
+## 5. Files Explicitly NOT Touched in Step 2
 
 * **Checkout/Payment:** `src/components/PaymentModal.tsx`, `src/hooks/pos/useCheckout.ts`, `src/components/pos/CashTransactionModal.tsx`
 * **Receiving/Stock:** `src/pages/ReceivingPage.tsx`, `src/pages/ReceivingHistoryPage.tsx`
@@ -79,7 +66,7 @@ Step 2 focuses on the operational cashier interface, with a **Tech Lead / CEO ap
 
 ---
 
-## 7. Business Logic Preservation Plan
+## 6. Business Logic Preservation Plan
 
 * **Oversell allowed:** The UI displays stock levels and warns, but *never* blocks the action if stock is zero or negative.
 * **Async checkout/reconcile flow:** The `handleCheckout` invocation remains exactly the same, passing control to the untouched `PaymentModal`.
@@ -88,14 +75,14 @@ Step 2 focuses on the operational cashier interface, with a **Tech Lead / CEO ap
 
 ---
 
-## 8. Void UI & Network Plan
+## 7. Void UI & Network Plan
 
-* **Actor Logging:** The `voidedBy` field securely logs the cashier's UID and is firmly validated against `token.staffId` by `firestore.rules`.
+* **Actor Logging:** The `voidedBy` field securely logs the cashier's staffId and is firmly validated against `token.staffId` by `firestore.rules`.
 * **Offline Resilience (Anti-Silent Failure):** The void write uses a fire-and-forget optimistic `updateDoc`. The UI renders instantly and never freezes the cashier. Crucially, the UI captures the promise `.catch()` so that any immediate or queue rejection perfectly surfaces as a prominent red toast, guaranteeing no silent console-only failures.
 
 ---
 
-## 9. Cart UX Plan
+## 8. Cart UX Plan
 
 * **Feedback:** Tapping a product in the grid will show a brief micro-animation or toast indicating addition.
 * **Quantity Controls:** Tapping a cart line item will open the existing `NumpadDialog` or provide inline `+`/`-` buttons if space permits, prioritizing touch speed.
@@ -108,7 +95,7 @@ Step 2 focuses on the operational cashier interface, with a **Tech Lead / CEO ap
 
 ---
 
-## 10. Impeccable.style Plan
+## 9. Impeccable.style Plan
 
 * **Layout System:** Tailwind CSS Grid for the main layout to ensure strict, unmoving panes.
 * **Spacing/Typography:** Clean Inter/Prompt fonts, using standard Tailwind spacing (`p-4`, `gap-3`).
@@ -118,7 +105,7 @@ Step 2 focuses on the operational cashier interface, with a **Tech Lead / CEO ap
 
 ---
 
-## 11. Test/Check Plan
+## 10. Test/Check Plan
 
 1. **POS page render:** Verify layout is strictly bounded to the viewport height (`h-screen overflow-hidden`) with internal scrolling.
 2. **Product search/grid render:** Verify categories load and filter products correctly.
@@ -133,23 +120,22 @@ Step 2 focuses on the operational cashier interface, with a **Tech Lead / CEO ap
 
 ---
 
-## 12. Packaging Plan
+## 11. Packaging Plan
 
 * **Commit boundary:** One strictly isolated commit for "phase 4 step 2 pos cart void ui".
 * **Isolation:** No backend, checkout, or stock transfer logic will be staged in this commit.
-* **Report update:** Update `latest-report.md` with build evidence upon completion.
 
 ---
 
-## 13. Open Questions (Resolved)
+## 12. Open Questions (Resolved)
 
 * *Is cross-day voiding allowed for standard cashiers?* **No**. Cashiers may only void orders created on the same local calendar day. Cross-day voids are strictly denied by `firestore.rules`. Legacy documents missing `serverCreatedAt` are safely denied.
 
 ---
 
-## 14. Paranoid Checklist
+## 13. Paranoid Checklist
 
-* **Business Logic Integrity:** Confirmed. No stock/reconcile/checkout hooks will be edited.
+* **Business Logic Integrity:** Confirmed. The `useCart.ts` hook was safely modified to allow oversell per CEO mandate, but checkout/reconcile logic was strictly preserved.
 * **State Isolation:** Confirmed. `stash@{0}` remains unpopped.
 * **Cross-contamination:** Confirmed. Payment/admin/transfer UI is strictly excluded.
 * **Devil's Advocate (Hidden Risk):** Extracting components from the massive `POSPage.tsx` could sever `useMemo` dependencies, causing the entire product grid to re-render on every keystroke in the search bar. We must carefully maintain React rendering boundaries.

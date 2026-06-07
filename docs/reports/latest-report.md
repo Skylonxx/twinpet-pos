@@ -8,9 +8,10 @@
 >   * *Auth limitation:* The username/password fallback login path may not carry the `token.staffId` custom claim, which would cause same-day cashier voids to be denied by `firestore.rules`. The PIN login path is the supported and proven path for cashier voids.
 > - **UI / Backend Sync & Offline (Anti-Silent Failure):** `requestPendingVoid` no longer swallows the `updateDoc` promise rejection. The UI executes `setVoidOpen(false)` immediately and waits up to 300ms. If a synchronous rule rejection occurs (e.g. cross-day limit or offline write queue fails), the `.catch` explicitly traps the error and throws a visually distinct red `.sh-toast-error` toast (`❌ คำขอยกเลิกถูกปฏิเสธ`). Success states use the green `.sh-toast-success` variant and are never displayed for rejected writes.
 > - **Boundary Check:** Unrelated sale-payload fields, server-owned reconcile fields, `PaymentModal.tsx`, and `useCheckout.ts` remain completely locked down and untouched.
-> - **Build/Test Status:** `npm run build` PASSED. `npm run test:rules` PASSED (91 tests in 9.05s).
+> - **Build/Test Status:** `npm run build` PASSED. `npm run test:rules` PASSED (91 tests).
 > 
-> **Build Evidence:**
+> **Build Evidence (Sample from verification run):**
+> *Note: Exact bundle sizes, file hashes, and build durations are point-in-time samples and will naturally drift in future runs.*
 > Command: `npm run build`
 > ```text
 > > twinpet-pos@0.0.0 build
@@ -34,7 +35,8 @@
 > ✓ built in 791ms
 > ```
 >
-> **Rules Test Evidence:**
+> **Rules Test Evidence (Sample from verification run):**
+> *Note: Exact test file counts and execution times are point-in-time samples and will naturally drift.*
 > Command: `npm run test:rules`
 > ```text
 >  ✓ rules-tests/async-orders-phase2b.spec.ts (11 tests) 1032ms
@@ -51,7 +53,9 @@
 >    Duration  9.05s (transform 78ms, setup 0ms, import 879ms, tests 7.41s, environment 0ms)
 > ```
 > 
-> **Follow-up Note:** Replacing the manual spinner/button/select markup with project-standard Flowbite React primitives is tracked as a non-blocking follow-up polish item.
+> **Follow-up Notes:** 
+> 1. Replacing the manual spinner/button/select markup with project-standard Flowbite React primitives is tracked as a non-blocking follow-up polish item.
+> 2. Add `role="alert"` / `aria-live` to toast accessibility in future polish pass.
 > **Backlog Note:** GCS `gcf-sources` / deployment artifact IAM and lifecycle audit is deferred to post-MVP hardening.
 
 **Docs note (2026-06-07):** AI role/prompt instructions centralized in new `docs/ai-roles/` files (`developer`, `reviewer`, `tech-lead`, `environment-auditor`, `ui-implementer`, `README.md`) — **intentionally untracked until staged** as part of this docs-only patch. `AGENTS.md` prompt routing tightened (execute only on explicit `TO:` to the active agent; role-file name alone is not permission). `.cursor/rules/reviewer.md` points to `reviewer.md`. Antigravity documented in `README.md` (reuses `environment-auditor.md` / `developer.md`; no separate role file). Unrelated `rp.md` deletion excluded from this change set (file restored). `.claude/settings.local.json` is untracked, local-only, and out of scope for this role centralization change. No app/rules/functions change.
