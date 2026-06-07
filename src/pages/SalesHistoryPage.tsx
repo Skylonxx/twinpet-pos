@@ -367,13 +367,34 @@ export default function SalesHistoryPage() {
       // optimistic updateDoc on the asyncOrders doc.
       // Offline-safe and non-blocking — never waits for a network response.
       if (isFirebaseConfigured) {
-        requestPendingVoid(selected.order.id, { reason, note, voidedBy: user.id });
+        let isSettled = false;
+        
+        requestPendingVoid(selected.order.id, { reason, note, voidedBy: user.id })
+          .then(() => {
+            isSettled = true;
+            showToast('✅ ยืนยันคำขอยกเลิกบิลสำเร็จ');
+          })
+          .catch((err) => {
+            isSettled = true;
+            console.error('Void request rejected:', err);
+            const msg = err instanceof Error ? err.message : String(err);
+            showToast(`❌ คำขอยกเลิกถูกปฏิเสธ: ${msg}`);
+          });
+
         setVoidOpen(false);
-        showToast(
-          selected.pendingSync
-            ? 'ยกเลิกบิลแล้ว (รอซิงก์ขึ้นระบบ)'
-            : 'บันทึกคำขอยกเลิกแล้ว (อยู่ในคิวซิงก์)'
-        );
+
+        // Allow 300ms for a synchronous/online rejection or success to surface.
+        // If it takes longer (offline or slow network), gracefully show the queued message.
+        window.setTimeout(() => {
+          if (!isSettled) {
+            showToast(
+              selected.pendingSync
+                ? 'ยกเลิกบิลแล้ว (อยู่ในคิวซิงก์แบบออฟไลน์)'
+                : 'บันทึกคำขอยกเลิกแล้ว (อยู่ในคิวซิงก์)'
+            );
+          }
+        }, 300);
+
         return;
       }
 
@@ -936,7 +957,16 @@ export default function SalesHistoryPage() {
                     <button type="button" className="sh-df-btn sh-df-print">
                       <i className="ti ti-printer" aria-hidden="true" /> พิมพ์ใบเสร็จ
                     </button>
-                    {canVoid && (
+                    {!canVoid ? (
+                      <button
+                        type="button"
+                        className="sh-df-btn sh-df-disabled"
+                        disabled
+                        title="ไม่อนุญาตให้ยกเลิกบิลข้ามวัน"
+                      >
+                        <i className="ti ti-ban" aria-hidden="true" /> ยกเลิกบิล (ข้ามวัน)
+                      </button>
+                    ) : (
                       <button
                         type="button"
                         className="sh-df-btn sh-df-void"

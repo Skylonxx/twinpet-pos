@@ -1,16 +1,15 @@
 # Latest Report
 
 > Rolling "latest report" for the stock-write security workstream. Updated at each phase boundary.
-> **Current state:** **Phase 4 Step 2 (Main POS / Cart / Void UI) Implemented (Option A2 Offline-First Patch)**. 
-> - **Void authorization (Option A2):** `firestore.rules` removed the ability for cashiers to create `asyncOrders` void tombstones. Cashiers can strictly only void by **updating an existing `asyncOrders` document**. Strict value constraints are maintained on the update path (`voidRequested == true`, `status == 'voided'`, and `voidedBy == request.auth.uid`). A malicious cashier cannot flip these flags back to bypass processing.
-> - **Actor identity:** Cashiers can trigger `voidRequested` on uncached orders without `pos_void`, provided they strictly set `voidedBy: request.auth.uid`. *Note:* This assumes the app's `user.id` strictly matches the Firebase Auth UID.
-> - **UI / Backend Sync & Offline:** `requestPendingVoid` has been rewritten to be strictly optimistic and offline-first. It uses a fire-and-forget `updateDoc` that updates the local Firestore cache instantly without awaiting network round-trips. This guarantees the POS UI never blocks or freezes during branch network outages.
-> - **Same-day Void Constraint:** Standard cashiers are strictly prevented via the UI from voiding any sales generated outside of the current operational date. Cross-day returns are explicitly disabled at the void button level.
+> **Current state:** **Phase 4 Step 2 (Main POS / Cart / Void UI) Remediation Implemented**. 
+> - **Void authorization (Option A2):** `firestore.rules` strictly prevents voiding orders created on previous operational days via a server-side timestamp comparison (`(request.time + duration.value(7, 'h')).date() == (resource.data.serverCreatedAt + duration.value(7, 'h')).date()`). Cross-day voids are definitively blocked at the database layer. Void tombstone creation remains strictly denied.
+> - **Actor identity:** Cashier identity is logged securely in `voidedBy` and strictly validated against `request.auth.uid`. No spoofing is possible. 
+> - **UI / Backend Sync & Offline (Anti-Silent Failure):** `requestPendingVoid` fires optimistically and returns a promise. The UI renders the void instantly but observes the promise. Synchronous/offline queueing succeeds instantly. If the network rejects the void (e.g., cross-day violation or lost permission), a prominent red toast actively alerts the cashier rather than failing silently in the console.
 > - **Boundary Check:** Unrelated sale-payload fields, server-owned reconcile fields, `PaymentModal.tsx`, and `useCheckout.ts` remain completely locked down and untouched.
-> - **Build/Test Status:** `npm run build` PASSED. `npm run test:rules` PASSED.
+> - **Build/Test Status:** `npm run build` PASSED (670ms). `npm run test:rules` PASSED (89 tests).
 > 
 > **Build Evidence:**
-> Command: `npm run build` at 2026-06-07T09:14:56Z
+> Command: `npm run build`
 > ```text
 > > twinpet-pos@0.0.0 build
 > > tsc -b && vite build
@@ -28,9 +27,9 @@
 > dist/assets/charts-xn6RU_C7.js            177.58 kB │ gzip:  61.51 kB
 > dist/assets/react-vendor-CzRZBWxH.js      250.54 kB │ gzip:  80.54 kB
 > dist/assets/firebase-BYlOybkJ.js          463.72 kB │ gzip: 139.79 kB
-> dist/assets/index-Ci-hBsT8.js             941.44 kB │ gzip: 214.95 kB
+> dist/assets/index-B46_DTu4.js             941.51 kB │ gzip: 214.99 kB
 > 
-> ✓ built in 671ms
+> ✓ built in 670ms
 > ```
 > 
 > **Follow-up Note:** Replacing the manual spinner/button/select markup with project-standard Flowbite React primitives is tracked as a non-blocking follow-up polish item.

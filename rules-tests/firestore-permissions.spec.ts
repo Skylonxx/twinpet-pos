@@ -96,7 +96,7 @@ describe("staff ['pos_void'] → void/update", () => {
   });
 });
 
-// ── 3. ANY 'staff' can request async void if they log themselves ─────
+// ── 3. ANY 'staff' can request async void if they log themselves AND it's same-day ─────
 describe("any staff → async void intent", () => {
   it('updates an existing asyncOrder with void-intent (voidRequested) by logging own UID (voidedBy)', async () => {
     await testEnv.withSecurityRulesDisabled(async (ctx) => {
@@ -108,6 +108,7 @@ describe("any staff → async void intent", () => {
         deviceId: 'dev1',
         id: 'a_void_update',
         reconciledAt: null,
+        serverCreatedAt: new Date(), // Same day
       });
     });
 
@@ -127,12 +128,36 @@ describe("any staff → async void intent", () => {
         deviceId: 'dev1',
         id: 'a_void_update_bad',
         reconciledAt: null,
+        serverCreatedAt: new Date(), // Same day
       });
     });
 
     const db = testEnv.authenticatedContext('staff1', staffWith(['pos_sale'])).firestore();
     await assertFails(
       setDoc(doc(db, 'asyncOrders', 'a_void_update_bad'), { voidRequested: true, status: 'voided', voidedBy: 'staff2' }, { merge: true }),
+    );
+  });
+
+  it('DENIES cross-day async void update for standard staff', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1); // 24 hours ago, guaranteed cross-day
+      
+      await setDoc(doc(ctx.firestore(), 'asyncOrders', 'a_void_update_crossday'), {
+        branchId: BRANCH,
+        reconcileStatus: 'pending_reconcile',
+        lines: [], payments: [], total: 100, creditAmt: 0,
+        staffId: 'staff_sale',
+        deviceId: 'dev1',
+        id: 'a_void_update_crossday',
+        reconciledAt: null,
+        serverCreatedAt: yesterday,
+      });
+    });
+
+    const db = testEnv.authenticatedContext('staff1', staffWith(['pos_sale'])).firestore();
+    await assertFails(
+      setDoc(doc(db, 'asyncOrders', 'a_void_update_crossday'), { voidRequested: true, status: 'voided', voidedBy: 'staff1' }, { merge: true }),
     );
   });
 });

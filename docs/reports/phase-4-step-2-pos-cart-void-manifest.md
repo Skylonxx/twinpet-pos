@@ -32,7 +32,7 @@ Step 2 focuses on the operational cashier interface, with a **Tech Lead / CEO ap
 * **Cart state:** Driven by `src/hooks/pos/useCart.ts` and `src/lib/pos/cartUtils.ts`.
 * **Cart item mutation:** Driven by `NumpadDialog.tsx`, `UomModal.tsx`, and `ItemDiscountModal.tsx`.
 * **Void action / intent:** Triggered from the cart line items or the global clear cart action.
-* **Permissions:** Checked via `user.permissions?.includes('pos_void')` (or similar logic within `user.role`).
+* **Permissions:** Checked via server-side same-day timestamp rules (`serverCreatedAt` vs `request.time`) and strictly logged via `voidedBy`.
 * **Async checkout boundary (EXCLUDED):** `src/hooks/pos/useCheckout.ts` and `src/components/PaymentModal.tsx` handle the actual transaction commit. We only call these, we do not modify them.
 
 ---
@@ -89,8 +89,8 @@ Step 2 focuses on the operational cashier interface, with a **Tech Lead / CEO ap
 
 ## 8. Void UI & Network Plan
 
-* **Actor Logging:** The `voidedBy` field securely logs the cashier's UID and is validated by `firestore.rules`.
-* **Offline Resilience:** If the void write remains pending for 5 seconds (offline), a timeout guard safely alerts the cashier that it is queued and will sync later, preventing UI freezes.
+* **Actor Logging:** The `voidedBy` field securely logs the cashier's UID and is firmly validated by `firestore.rules`.
+* **Offline Resilience:** The void write uses an unawaited, fire-and-forget optimistic `updateDoc`. The UI renders instantly, never freezes the cashier, and catches/surfaces any synchronous rejections as a prominent red toast.
 
 ---
 
@@ -123,7 +123,7 @@ Step 2 focuses on the operational cashier interface, with a **Tech Lead / CEO ap
 2. **Product search/grid render:** Verify categories load and filter products correctly.
 3. **Add item to cart:** Verify tapping a product instantly updates the cart pane.
 4. **Increase/decrease quantity:** Verify the numpad or controls correctly update the line item total.
-5. **Remove item / Void:** Verify `pos_void` checks apply and the item is removed.
+5. **Remove item / Void:** Verify server-side same-day void checks apply for standard cashiers.
 6. **Empty cart:** Verify the global clear function resets the state and shows the empty UI.
 7. **Oversell check:** Add an item with 0 stock and verify the UI does not block the addition.
 8. **Checkout handoff:** Click Pay and verify the `PaymentModal` opens normally without errors.

@@ -55,9 +55,9 @@ export function buildPendingVoidFields(input: PendingVoidInput): PendingVoidFiel
 export function requestPendingVoid(
   orderId: string,
   input: PendingVoidInput,
-): void {
-  if (!isFirebaseConfigured || !db) return;
-  void updateDoc(
+): Promise<void> {
+  if (!isFirebaseConfigured || !db) return Promise.resolve();
+  return updateDoc(
     doc(db, 'asyncOrders', orderId),
     {
       ...buildPendingVoidFields(input),
