@@ -121,6 +121,29 @@ describe('asyncOrders reconcile-control immutability (client updates)', () => {
   });
 });
 
+describe('asyncOrders void update — strict value constraints', () => {
+  it('update setting voidRequested to false is DENIED', async () => {
+    const db = testEnv.authenticatedContext('staff1', voidStaff).firestore();
+    await assertFails(
+      setDoc(doc(db, 'asyncOrders', 'a1'), { voidRequested: false, status: 'voided', voidedBy: 'staff1' }, { merge: true })
+    );
+  });
+
+  it('update setting status to a non-voided value is DENIED', async () => {
+    const db = testEnv.authenticatedContext('staff1', voidStaff).firestore();
+    await assertFails(
+      setDoc(doc(db, 'asyncOrders', 'a1'), { voidRequested: true, status: 'completed', voidedBy: 'staff1' }, { merge: true })
+    );
+  });
+
+  it('update spoofing voidedBy to another staff ID is DENIED', async () => {
+    const db = testEnv.authenticatedContext('staff1', voidStaff).firestore();
+    await assertFails(
+      setDoc(doc(db, 'asyncOrders', 'a1'), { voidRequested: true, status: 'voided', voidedBy: 'staff2' }, { merge: true })
+    );
+  });
+});
+
 // Every server-owned reconcile/audit field must be frozen on client updates.
 const SERVER_OWNED_FIELDS: Record<string, unknown> = {
   reconcileError: 'spoof',

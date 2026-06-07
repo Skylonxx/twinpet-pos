@@ -52,20 +52,12 @@ export function buildPendingVoidFields(input: PendingVoidInput): PendingVoidFiel
 }
 
 /**
- * Fire the void intent: a SINGLE queueable `setDoc(..., { merge: true })` on the
- * local `asyncOrders` doc. Fire-and-forget (never awaited) so an offline cashier
- * is never blocked — it commits to `persistentLocalCache` immediately and flushes
- * on reconnect. Dev (no Firebase) has no async cache to mutate → no-op.
- *
- * Why `setDoc(merge)` and not `updateDoc`: `updateDoc` REQUIRES the target doc to
- * already exist, so OFFLINE it silently does nothing when `asyncOrders/{id}` is
- * not in this device's cache (a synced bill rung on another device, an old
- * canonical-only order, or a cleared cache) — the cashier sees no effect.
- * `setDoc(merge)` materialises the doc locally either way, so the void always
- * commits offline and the overlay listener (scoped to `branchId` + `deviceId`)
- * surfaces it on screen immediately. For an existing settled doc the merge is a
- * no-op on its data fields; the reconciler still routes `voidRequested` →
- * `handleVoidIntent` for the server-side reversal on reconnect.
+ * Submits an offline-first void request for a pending or completed sale.
+ * 
+ * This merges the approved void fields into the asyncOrders document.
+ * - If the device is online, this awaits confirmation from Firestore rules.
+ * - If the device is offline, it queues the write and throws a timeout
+ *   so the UI can transition to a pending/unresolved state gracefully without hanging.
  */
 export async function requestPendingVoid(
   orderId: string,
@@ -97,8 +89,8 @@ export async function requestPendingVoid(
     await Promise.race([writePromise, timeoutPromise]);
   } catch (err) {
     if (err === timeoutError) {
-      // The write is queued locally and will flush when online.
-      throw new Error('บันทึกคำขอยกเลิกแบบออฟไลน์แล้ว (จะซิงก์เมื่อเชื่อมต่ออินเทอร์เน็ต)');
+      // The write is queued locally but not yet acknowledged by the server.
+      throw new Error('คำขอยังไม่เสร็จสมบูรณ์ (ออฟไลน์) — กรุณาตรวจสอบประวัติเมื่อออนไลน์อีกครั้ง');
     }
     throw err; // Genuine Firestore rejection
   }

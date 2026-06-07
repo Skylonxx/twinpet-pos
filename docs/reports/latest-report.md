@@ -1,19 +1,16 @@
 # Latest Report
 
 > Rolling "latest report" for the stock-write security workstream. Updated at each phase boundary.
-> **Current state:** **Phase 4 Step 2 (Main POS / Cart / Void UI) Implemented & Rules Secured (Option A Patch)**. 
-> - **Void authorization (Option A Patch):** Fixed a critical gap in `firestore.rules`. `asyncOrders` void-intent creations (materializing the offline tombstone via `setDoc`) are now protected by `isStrictVoidIntentCreate`. This strictly allowlists the minimal approved fields and blocks any attempts to seed or spoof sale payloads (`lines`, `payments`, `total`, `staffId`) or server-owned reconcile/audit fields.
+> **Current state:** **Phase 4 Step 2 (Main POS / Cart / Void UI) Implemented & Rules Secured (Option A Constraints Patch)**. 
+> - **Void authorization (Option A Constraints Patch):** `firestore.rules` enforces strict value constraints on `asyncOrders` updates. Even though `voidIntentChangesOnly()` restricts which keys can be mutated, cashiers are now explicitly required to maintain `voidRequested == true`, `status == 'voided'`, and `voidedBy == request.auth.uid`. A malicious cashier can no longer flip `voidRequested` to false or mutate `status` to bypass processing.
 > - **Actor identity:** Cashiers can trigger `voidRequested` on uncached orders without `pos_void`, provided they strictly set `voidedBy: request.auth.uid`. *Note:* This assumes the app's `user.id` strictly matches the Firebase Auth UID minted by `verifyPinLogin`.
-> - **UI / Backend Sync & Offline:** `requestPendingVoid` natively `await`s the network response. To prevent indefinite hangs when offline, an explicit 5-second `Promise.race` timeout is included. If the write queues locally while offline, it gracefully closes the UI and warns the cashier that the request is queued and will sync when online.
+> - **UI / Backend Sync & Offline:** `requestPendingVoid` natively `await`s the network response and is no longer marked as fire-and-forget. To prevent indefinite hangs when offline, an explicit 5-second `Promise.race` timeout is included. If the write queues locally while offline, it gracefully closes the UI and clearly warns the cashier: `คำขอยังไม่เสร็จสมบูรณ์ (ออฟไลน์) — กรุณาตรวจสอบประวัติเมื่อออนไลน์อีกครั้ง`. It strictly avoids claiming success when unresolved.
 > - **Boundary Check:** Unrelated sale-payload fields, server-owned reconcile fields, `PaymentModal.tsx`, and `useCheckout.ts` remain completely locked down and untouched.
-> > twinpet-pos@0.0.0 prebuild
-> > npm run gen-config
+> - **Build/Test Status:** `npm run build` PASSED (671ms). `npm run test:rules` PASSED (96 tests).
 > 
-> > twinpet-pos@0.0.0 gen-config
-> > node scripts/gen-deploy-config.mjs
-> 
-> [gen-deploy-config] database="pos-db" region="asia-southeast1" → functions/src/deployConfig.ts, .env
-> 
+> **Build Evidence:**
+> Command: `npm run build` at 2026-06-07T09:14:56Z
+> ```text
 > > twinpet-pos@0.0.0 build
 > > tsc -b && vite build
 > 
@@ -23,16 +20,16 @@
 > rendering chunks...
 > computing gzip size...
 > dist/index.html                             1.42 kB │ gzip:   0.62 kB
-> dist/assets/index-mwM5xWu-.css            320.92 kB │ gzip:  49.83 kB
+> dist/assets/index-D43QRzO-.css            321.34 kB │ gzip:  49.91 kB
 > dist/assets/rolldown-runtime-Bh1tDfsg.js    0.56 kB │ gzip:   0.36 kB
 > dist/assets/react-router-BVImBSaZ.js       42.27 kB │ gzip:  15.07 kB
 > dist/assets/vendor-CAze_z6h.js            109.15 kB │ gzip:  31.38 kB
 > dist/assets/charts-xn6RU_C7.js            177.58 kB │ gzip:  61.51 kB
 > dist/assets/react-vendor-CzRZBWxH.js      250.54 kB │ gzip:  80.54 kB
 > dist/assets/firebase-BYlOybkJ.js          463.72 kB │ gzip: 139.79 kB
-> dist/assets/index-4Wvcbczk.js             940.33 kB │ gzip: 214.68 kB
+> dist/assets/index-Ci-hBsT8.js             941.44 kB │ gzip: 214.95 kB
 > 
-> ✓ built in 726ms
+> ✓ built in 671ms
 > ```
 > 
 > **Follow-up Note:** Replacing the manual spinner/button/select markup with project-standard Flowbite React primitives is tracked as a non-blocking follow-up polish item.
