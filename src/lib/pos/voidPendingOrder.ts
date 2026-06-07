@@ -65,7 +65,5 @@ export function requestPendingVoid(
       voidedAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     }
-  ).catch((err) => {
-    console.warn('[voidPending] void-intent failed or deferred', err);
-  });
+  );
 }

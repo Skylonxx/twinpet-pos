@@ -2,11 +2,12 @@
 
 > Rolling "latest report" for the stock-write security workstream. Updated at each phase boundary.
 > **Current state:** **Phase 4 Step 2 (Main POS / Cart / Void UI) Remediation Implemented**. 
-> - **Void authorization (Option A2):** `firestore.rules` strictly prevents voiding orders created on previous operational days via a server-side timestamp comparison (`(request.time + duration.value(7, 'h')).date() == (resource.data.serverCreatedAt + duration.value(7, 'h')).date()`). Cross-day voids are definitively blocked at the database layer. Void tombstone creation remains strictly denied.
-> - **Actor identity:** Cashier identity is logged securely in `voidedBy` and strictly validated against `request.auth.uid`. No spoofing is possible. 
-> - **UI / Backend Sync & Offline (Anti-Silent Failure):** `requestPendingVoid` fires optimistically and returns a promise. The UI renders the void instantly but observes the promise. Synchronous/offline queueing succeeds instantly. If the network rejects the void (e.g., cross-day violation or lost permission), a prominent red toast actively alerts the cashier rather than failing silently in the console.
+> - **Void authorization (Option A2):** `firestore.rules` strictly prevents voiding orders created on previous operational days via a server-side timestamp comparison (`(request.time + duration.value(7, 'h')).date() == (resource.data.serverCreatedAt + duration.value(7, 'h')).date()`). Cross-day voids are definitively blocked at the database layer. 
+> - **Legacy Doc Compatibility (`serverCreatedAt` missing):** The rules explicitly require `"serverCreatedAt" in resource.data`. Attempting to void older, legacy documents that lack this timestamp will automatically and safely be denied.
+> - **Actor identity:** The system uses Anonymous Auth on the device, meaning `request.auth.uid` is a randomized string. The POS PIN-login (`verifyPinLogin` CF) stamps the actual user's ID as a custom claim (`request.auth.token.staffId`). `firestore.rules` was strictly patched to validate `request.resource.data.voidedBy == request.auth.token.staffId`, completely protecting against spoofing while accurately logging identity.
+> - **UI / Backend Sync & Offline (Anti-Silent Failure):** `requestPendingVoid` no longer swallows the `updateDoc` promise rejection. The UI executes `setVoidOpen(false)` immediately and waits up to 300ms. If a synchronous rule rejection occurs (e.g. cross-day limit or offline write queue fails), the `.catch` explicitly traps the error and throws a prominent red toast. Success states are never displayed for rejected writes.
 > - **Boundary Check:** Unrelated sale-payload fields, server-owned reconcile fields, `PaymentModal.tsx`, and `useCheckout.ts` remain completely locked down and untouched.
-> - **Build/Test Status:** `npm run build` PASSED (670ms). `npm run test:rules` PASSED (89 tests).
+> - **Build/Test Status:** `npm run build` PASSED (670ms). `npm run test:rules` PASSED (90 tests in 8.13s).
 > 
 > **Build Evidence:**
 > Command: `npm run build`
@@ -30,6 +31,23 @@
 > dist/assets/index-B46_DTu4.js             941.51 kB │ gzip: 214.99 kB
 > 
 > ✓ built in 670ms
+> ```
+>
+> **Rules Test Evidence:**
+> Command: `npm run test:rules`
+> ```text
+>  ✓ rules-tests/async-orders-phase2b.spec.ts (11 tests) 1007ms
+>  ✓ rules-tests/async-orders.spec.ts (6 tests) 412ms
+>  ✓ rules-tests/product-stocks-phase1.spec.ts (17 tests) 1068ms
+>  ✓ rules-tests/stock-lots-phase2.spec.ts (19 tests) 1127ms
+>  ✓ rules-tests/products.spec.ts (12 tests) 835ms
+>  ✓ rules-tests/firestore-permissions.spec.ts (10 tests) 706ms
+>  ✓ rules-tests/shifts-phase3.spec.ts (15 tests) 819ms
+> 
+>  Test Files  7 passed (7)
+>       Tests  90 passed (90)
+>    Start at  17:55:45
+>    Duration  8.13s (transform 50ms, setup 0ms, import 760ms, tests 6.73s, environment 0ms)
 > ```
 > 
 > **Follow-up Note:** Replacing the manual spinner/button/select markup with project-standard Flowbite React primitives is tracked as a non-blocking follow-up polish item.

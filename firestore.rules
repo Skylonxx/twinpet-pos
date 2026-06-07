@@ -295,12 +295,13 @@ service cloud.firestore {
       // reconcile/audit fields stay frozen (those move only via the Admin-SDK
       // reconciler / retryReconcile callable, which bypass these rules).
       allow update: if isStaff()
-        && request.resource.data.voidedBy == request.auth.uid
+        && request.resource.data.voidedBy == request.auth.token.staffId
         && request.resource.data.get('voidRequested', false) == true
         && request.resource.data.get('status', '') == 'voided'
         && hasBranchAccess(resource.data.branchId)
         && voidIntentChangesOnly()
         // SAME-DAY CONSTRAINT: standard staff can only void orders created on the same local calendar day.
+        && "serverCreatedAt" in resource.data
         && (request.time + duration.value(7, 'h')).date() == (resource.data.serverCreatedAt + duration.value(7, 'h')).date();
       allow delete: if isAdmin();
     }

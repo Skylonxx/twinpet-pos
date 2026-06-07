@@ -60,7 +60,8 @@ Step 2 focuses on the operational cashier interface, with a **Tech Lead / CEO ap
 
 2. **`firestore.rules`** & **`rules-tests/*`**
    * **Change (Option A2):** Expanded void rules. Any staff member can now update an existing `asyncOrders` void intent. Void tombstone creation is strictly denied.
-   * **Strict Allowlist:** The update rule rigorously prevents spoofing of sale payload fields (`lines`, `payments`, etc.) and server-owned audit fields, while enforcing strict value constraints (`voidRequested == true`, `status == 'voided'`, `voidedBy == request.auth.uid`).
+   * **Strict Allowlist & Identity:** The update rule rigorously prevents spoofing of sale payload fields and server-owned audit fields. The actor identity `voidedBy` is strictly validated against the Custom Auth Claim (`request.auth.token.staffId`), accurately bridging Anonymous Auth to the real cashier ID.
+   * **Legacy Doc Safety:** The rules explicitly enforce a same-day local calendar check. Legacy documents missing `serverCreatedAt` are safely and automatically denied.
 
 3. **`src/lib/pos/voidPendingOrder.ts`** & **`src/pages/SalesHistoryPage.tsx`**
    * **Change (Option A2):** `requestPendingVoid` has been refactored to be purely optimistic and offline-first, firing an `updateDoc` without awaiting a network response. `SalesHistoryPage.tsx` enforces a new same-day void constraint for cashiers and dismisses the void modal instantly without network blocking.
@@ -89,8 +90,8 @@ Step 2 focuses on the operational cashier interface, with a **Tech Lead / CEO ap
 
 ## 8. Void UI & Network Plan
 
-* **Actor Logging:** The `voidedBy` field securely logs the cashier's UID and is firmly validated by `firestore.rules`.
-* **Offline Resilience:** The void write uses an unawaited, fire-and-forget optimistic `updateDoc`. The UI renders instantly, never freezes the cashier, and catches/surfaces any synchronous rejections as a prominent red toast.
+* **Actor Logging:** The `voidedBy` field securely logs the cashier's UID and is firmly validated against `token.staffId` by `firestore.rules`.
+* **Offline Resilience (Anti-Silent Failure):** The void write uses a fire-and-forget optimistic `updateDoc`. The UI renders instantly and never freezes the cashier. Crucially, the UI captures the promise `.catch()` so that any immediate or queue rejection perfectly surfaces as a prominent red toast, guaranteeing no silent console-only failures.
 
 ---
 

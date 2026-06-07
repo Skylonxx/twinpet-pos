@@ -72,6 +72,7 @@ beforeEach(async () => {
       status: 'completed',
       reconcileStatus: 'settled',
       reconcileAttempts: 1,
+      serverCreatedAt: new Date(),
     });
   });
 });
