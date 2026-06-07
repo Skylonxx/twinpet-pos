@@ -27,7 +27,7 @@ function formatRole(role: UserRole): string {
 
 export default function LoginPage() {
   const { loginWithPin, loginWithUsername, completeLogin } = useAuth();
-  const { branches, loading: branchesLoading } = useActiveBranches();
+  const { branches, loading: branchesLoading, error: branchesError, reload: reloadBranches } = useActiveBranches();
 
   const [mode, setMode] = useState<LoginMode>('pin');
   const [branchId, setBranchId] = useState<string>('');
@@ -46,8 +46,8 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (branchesLoading) return;
-    console.log('Fetched branches inside login:', branches);
-  }, [branches, branchesLoading]);
+    // Removing full branch object logging in production
+  }, [branchesLoading]);
 
   useEffect(() => {
     if (branches.length === 0) return;
@@ -223,12 +223,9 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col md:flex-row font-sans">
-      <aside className="md:w-[420px] shrink-0 bg-gradient-to-br from-indigo-800 via-indigo-700 to-indigo-900 flex flex-col p-8 md:p-10 relative overflow-hidden text-white">
-        <div className="absolute -top-20 -right-20 w-72 h-72 rounded-full bg-white/5 blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-24 -left-16 w-80 h-80 rounded-full bg-white/5 blur-3xl pointer-events-none" />
-        
+      <aside className="md:w-[400px] shrink-0 bg-slate-900 flex flex-col p-8 md:p-10 relative overflow-hidden text-white border-r border-slate-800">
         <div className="flex items-center gap-3 mb-auto relative z-10">
-          <div className="w-11 h-11 rounded-xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-2xl shadow-lg">
+          <div className="w-10 h-10 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-xl shadow-sm">
             🐾
           </div>
           <div>
@@ -238,33 +235,33 @@ export default function LoginPage() {
         </div>
 
         <div className="flex-1 flex flex-col justify-center relative z-10 py-10 md:py-0">
-          <h1 className="text-3xl font-semibold leading-tight mb-4 text-white">
+          <h1 className="text-2xl font-semibold leading-tight mb-4 text-white">
             ระบบขายหน้าร้าน<br />สำหรับร้านสัตว์เลี้ยง
           </h1>
-          <p className="text-sm text-indigo-200 leading-relaxed max-w-[300px] mb-8">
+          <p className="text-sm text-slate-400 leading-relaxed max-w-[300px] mb-8">
             จัดการสต็อก FIFO, รายงานกำไร, และระบบสมาชิกครบในที่เดียว
           </p>
           <ul className="flex flex-col gap-4">
-            <li className="flex items-center gap-3 text-sm text-indigo-100">
-              <span className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
+            <li className="flex items-center gap-3 text-sm text-slate-300">
+              <span className="w-8 h-8 rounded bg-slate-800 flex items-center justify-center shrink-0">
                 <i className="ti ti-stack text-base" aria-hidden="true" />
               </span>
               ระบบสต็อก FIFO & ต้นทุนแม่นยำ
             </li>
-            <li className="flex items-center gap-3 text-sm text-indigo-100">
-              <span className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
+            <li className="flex items-center gap-3 text-sm text-slate-300">
+              <span className="w-8 h-8 rounded bg-slate-800 flex items-center justify-center shrink-0">
                 <i className="ti ti-chart-bar text-base" aria-hidden="true" />
               </span>
               รายงานยอดขายและกำไรแบบ Real-time
             </li>
-            <li className="flex items-center gap-3 text-sm text-indigo-100">
-              <span className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
+            <li className="flex items-center gap-3 text-sm text-slate-300">
+              <span className="w-8 h-8 rounded bg-slate-800 flex items-center justify-center shrink-0">
                 <i className="ti ti-users text-base" aria-hidden="true" />
               </span>
               จัดการสมาชิกและสิทธิ์พนักงาน
             </li>
-            <li className="flex items-center gap-3 text-sm text-indigo-100">
-              <span className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
+            <li className="flex items-center gap-3 text-sm text-slate-300">
+              <span className="w-8 h-8 rounded bg-slate-800 flex items-center justify-center shrink-0">
                 <i className="ti ti-building-store text-base" aria-hidden="true" />
               </span>
               รองรับหลายสาขา
@@ -272,15 +269,15 @@ export default function LoginPage() {
           </ul>
         </div>
 
-        <div className="text-[11px] text-indigo-300/50 mt-auto pt-6 relative z-10">
+        <div className="text-[11px] text-slate-500 mt-auto pt-6 relative z-10">
           TwinPet POS v2.4.1 · © 2026 TwinPet Co., Ltd.
         </div>
       </aside>
 
       <main className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-gray-900 p-6 md:p-12 overflow-y-auto">
-        <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-2xl shadow-xl shadow-gray-200/50 dark:shadow-gray-900/50 border border-gray-100 dark:border-gray-700 p-6 sm:p-8">
-          <header className="mb-8">
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">เข้าสู่ระบบ</h2>
+        <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-lg shadow-md border border-gray-200 dark:border-gray-700 p-6 sm:p-8">
+          <header className="mb-8 border-b border-gray-100 dark:border-gray-700 pb-4">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-1">เข้าสู่ระบบ</h2>
             <p className="text-sm text-gray-500 dark:text-gray-400">เลือกสาขาและกรอกข้อมูลเพื่อเริ่มงาน</p>
           </header>
 
@@ -288,7 +285,9 @@ export default function LoginPage() {
             branches={branches}
             branchId={branchId}
             loading={branchesLoading}
+            error={branchesError}
             disabled={isLoading}
+            onRetry={() => void reloadBranches()}
             onChange={(val) => {
               setBranchId(val);
               clearErrors();
