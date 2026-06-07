@@ -292,10 +292,6 @@ export default function SalesHistoryPage() {
     [productById],
   );
 
-  // CEO Override: Cashiers must be able to void already-created orders without special manager permission.
-  // We rely on post-action reports. The backend request already logs `voidedBy: user.id`.
-  const canVoid = true;
-
   const filters: SalesFilters = useMemo(
     () => ({
       search,
@@ -324,6 +320,15 @@ export default function SalesHistoryPage() {
     () => filtered.find((r) => r.order.id === selectedId) ?? null,
     [filtered, selectedId],
   );
+
+  // CEO Override: Cashiers must be able to void already-created orders.
+  // Option A2 Mandate: Same-day orders ONLY.
+  const canVoid = useMemo(() => {
+    if (!selected) return false;
+    const today = new Date().toDateString();
+    const orderDate = new Date(orderCreatedAt(selected.order)).toDateString();
+    return today === orderDate;
+  }, [selected]);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -358,30 +363,17 @@ export default function SalesHistoryPage() {
       if (!selected || !user || !branchId) return;
 
       // Unified local-first void (Phase 6 + 7b). With Firebase, BOTH a pending
-      // sale (Phase A → tombstone) and a settled sale (Phase B → server reversal)
-      // are voided by the SAME queueable merge-write on the asyncOrders doc; the
-      // reconciler routes by reconcileStatus. Offline-safe — never hits
-      // voidOrderSafe's runTransaction. The drawer/dashboard drop it instantly via
-      // isLedgerSale; the canonical row shows "ยกเลิก (รอซิงก์)" until reconciled.
+      // sale (Phase A) and a settled sale (Phase B) are voided by the SAME 
+      // optimistic updateDoc on the asyncOrders doc.
+      // Offline-safe and non-blocking — never waits for a network response.
       if (isFirebaseConfigured) {
-        setVoidProcessing(true);
-        try {
-          await requestPendingVoid(selected.order.id, { reason, note, voidedBy: user.id }, branchId);
-          setVoidOpen(false);
-          showToast(
-            selected.pendingSync
-              ? 'ยกเลิกบิลแล้ว · จะซิงก์อัตโนมัติเมื่อออนไลน์'
-              : 'ส่งคำขอยกเลิกบิลแล้ว · จะคืนสต็อก/เครดิตเมื่อซิงก์',
-          );
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : 'คำขอยกเลิกบิลถูกปฏิเสธ (ตรวจสอบสิทธิ์หรือการเชื่อมต่อ)';
-          showToast(msg);
-          if (msg.includes('แบบออฟไลน์แล้ว')) {
-            setVoidOpen(false);
-          }
-        } finally {
-          setVoidProcessing(false);
-        }
+        requestPendingVoid(selected.order.id, { reason, note, voidedBy: user.id });
+        setVoidOpen(false);
+        showToast(
+          selected.pendingSync
+            ? 'ยกเลิกบิลแล้ว (รอซิงก์ขึ้นระบบ)'
+            : 'บันทึกคำขอยกเลิกแล้ว (อยู่ในคิวซิงก์)'
+        );
         return;
       }
 

@@ -8,11 +8,11 @@
 
 ## 1. Step 2 Scope Summary & Option A Expansion
 
-Step 2 focuses on the operational cashier interface, with a **Tech Lead / CEO approved scope expansion (Option A)** to address a critical mismatch in void authorization.
+Step 2 focuses on the operational cashier interface, with a **Tech Lead / CEO approved scope expansion (Option A2)** to address a critical mismatch in void authorization while enforcing an offline-first mandate.
 
 * **Includes:** 
   * Main POS screen layout (`POSPage.tsx`), cart mapping (`useCart.ts`), and void actions (`SalesHistoryPage.tsx`, `voidPendingOrder.ts`).
-  * **Option A Expansion:** Narrow `firestore.rules` modifications to securely permit cashiers to trigger async void requests, plus corresponding updates to the `rules-tests` suite to assert accurate actor logging (`voidedBy`).
+  * **Option A2 Expansion:** Narrow `firestore.rules` modifications to securely permit cashiers to trigger async void requests by updating existing orders only, plus corresponding updates to the `rules-tests` suite to assert accurate actor logging (`voidedBy`).
 * **Excludes:** Async checkout/reconciliation implementation (`useCheckout`), `PaymentModal`, receiving/stock logic, transfer pages, Admin Exception UI, Cloud Functions, and any canonical (`orders`) void rule changes.
 
 ---
@@ -59,11 +59,11 @@ Step 2 focuses on the operational cashier interface, with a **Tech Lead / CEO ap
    * **Change:** UI layout improvements and removing the hard blocker on stock validation. Insufficient stock now shows a non-blocking UI warning.
 
 2. **`firestore.rules`** & **`rules-tests/*`**
-   * **Change (Option A):** Expanded void rules. Any staff member can now create an `asyncOrders` void intent. 
-   * **Strict Allowlist:** The create rule uses `isStrictVoidIntentCreate` to rigorously prevent spoofing of sale payload fields (`lines`, `payments`, etc.) and server-owned audit fields.
+   * **Change (Option A2):** Expanded void rules. Any staff member can now update an existing `asyncOrders` void intent. Void tombstone creation is strictly denied.
+   * **Strict Allowlist:** The update rule rigorously prevents spoofing of sale payload fields (`lines`, `payments`, etc.) and server-owned audit fields, while enforcing strict value constraints (`voidRequested == true`, `status == 'voided'`, `voidedBy == request.auth.uid`).
 
 3. **`src/lib/pos/voidPendingOrder.ts`** & **`src/pages/SalesHistoryPage.tsx`**
-   * **Change (Option A):** `requestPendingVoid` now returns a Promise and includes a 5-second timeout guard. The UI awaits the result, disables double-clicks, and handles offline queueing gracefully.
+   * **Change (Option A2):** `requestPendingVoid` has been refactored to be purely optimistic and offline-first, firing an `updateDoc` without awaiting a network response. `SalesHistoryPage.tsx` enforces a new same-day void constraint for cashiers and dismisses the void modal instantly without network blocking.
 
 ---
 

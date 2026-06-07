@@ -288,9 +288,9 @@ describe('asyncOrders create — block server-owned reconcile-field spoofing', (
     );
   });
 
-  it('the offline void-intent create (materialize, no reconcile fields) still SUCCEEDS', async () => {
+  it('the offline void-intent create (tombstone) is entirely DENIED', async () => {
     const db = testEnv.authenticatedContext('staff1', voidStaff).firestore();
-    await assertSucceeds(
+    await assertFails(
       setDoc(doc(db, 'asyncOrders', 'v1'), {
         id: 'v1',
         branchId: BRANCH,
@@ -299,41 +299,6 @@ describe('asyncOrders create — block server-owned reconcile-field spoofing', (
         voidReason: 'ลูกค้าเปลี่ยนใจ',
         voidedBy: 'staff1',
       }),
-    );
-  });
-});
-
-describe('asyncOrders void create — STRICT field allowlist', () => {
-  const baseVoidCreate = {
-    id: 'v_strict',
-    branchId: BRANCH,
-    voidRequested: true,
-    status: 'voided',
-    voidReason: 'Test',
-    voidedBy: 'staff1',
-  };
-
-  for (const [field, value] of Object.entries(SALE_PAYLOAD_MUTATIONS)) {
-    it(`void create with sale-payload field "${field}" is DENIED`, async () => {
-      const db = testEnv.authenticatedContext('staff1', voidStaff).firestore();
-      await assertFails(
-        setDoc(doc(db, 'asyncOrders', 'v_strict_' + field), { ...baseVoidCreate, [field]: value })
-      );
-    });
-  }
-
-  it(`void create with server-owned reconcile fields is DENIED`, async () => {
-    const db = testEnv.authenticatedContext('staff1', voidStaff).firestore();
-    await assertFails(
-      setDoc(doc(db, 'asyncOrders', 'v_strict_audit'), { ...baseVoidCreate, reconcileError: 'spoof' })
-    );
-  });
-
-  it('void create with branch spoof is DENIED', async () => {
-    const db = testEnv.authenticatedContext('staff1', voidStaff).firestore();
-    // voidStaff only has access to BRANCH
-    await assertFails(
-      setDoc(doc(db, 'asyncOrders', 'v_strict_branch'), { ...baseVoidCreate, branchId: 'BKK-999' })
     );
   });
 });

@@ -1,12 +1,13 @@
 # Latest Report
 
 > Rolling "latest report" for the stock-write security workstream. Updated at each phase boundary.
-> **Current state:** **Phase 4 Step 2 (Main POS / Cart / Void UI) Implemented & Rules Secured (Option A Constraints Patch)**. 
-> - **Void authorization (Option A Constraints Patch):** `firestore.rules` enforces strict value constraints on `asyncOrders` updates. Even though `voidIntentChangesOnly()` restricts which keys can be mutated, cashiers are now explicitly required to maintain `voidRequested == true`, `status == 'voided'`, and `voidedBy == request.auth.uid`. A malicious cashier can no longer flip `voidRequested` to false or mutate `status` to bypass processing.
-> - **Actor identity:** Cashiers can trigger `voidRequested` on uncached orders without `pos_void`, provided they strictly set `voidedBy: request.auth.uid`. *Note:* This assumes the app's `user.id` strictly matches the Firebase Auth UID minted by `verifyPinLogin`.
-> - **UI / Backend Sync & Offline:** `requestPendingVoid` natively `await`s the network response and is no longer marked as fire-and-forget. To prevent indefinite hangs when offline, an explicit 5-second `Promise.race` timeout is included. If the write queues locally while offline, it gracefully closes the UI and clearly warns the cashier: `คำขอยังไม่เสร็จสมบูรณ์ (ออฟไลน์) — กรุณาตรวจสอบประวัติเมื่อออนไลน์อีกครั้ง`. It strictly avoids claiming success when unresolved.
+> **Current state:** **Phase 4 Step 2 (Main POS / Cart / Void UI) Implemented (Option A2 Offline-First Patch)**. 
+> - **Void authorization (Option A2):** `firestore.rules` removed the ability for cashiers to create `asyncOrders` void tombstones. Cashiers can strictly only void by **updating an existing `asyncOrders` document**. Strict value constraints are maintained on the update path (`voidRequested == true`, `status == 'voided'`, and `voidedBy == request.auth.uid`). A malicious cashier cannot flip these flags back to bypass processing.
+> - **Actor identity:** Cashiers can trigger `voidRequested` on uncached orders without `pos_void`, provided they strictly set `voidedBy: request.auth.uid`. *Note:* This assumes the app's `user.id` strictly matches the Firebase Auth UID.
+> - **UI / Backend Sync & Offline:** `requestPendingVoid` has been rewritten to be strictly optimistic and offline-first. It uses a fire-and-forget `updateDoc` that updates the local Firestore cache instantly without awaiting network round-trips. This guarantees the POS UI never blocks or freezes during branch network outages.
+> - **Same-day Void Constraint:** Standard cashiers are strictly prevented via the UI from voiding any sales generated outside of the current operational date. Cross-day returns are explicitly disabled at the void button level.
 > - **Boundary Check:** Unrelated sale-payload fields, server-owned reconcile fields, `PaymentModal.tsx`, and `useCheckout.ts` remain completely locked down and untouched.
-> - **Build/Test Status:** `npm run build` PASSED (671ms). `npm run test:rules` PASSED (96 tests).
+> - **Build/Test Status:** `npm run build` PASSED. `npm run test:rules` PASSED.
 > 
 > **Build Evidence:**
 > Command: `npm run build` at 2026-06-07T09:14:56Z

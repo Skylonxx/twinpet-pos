@@ -60,19 +60,6 @@ service cloud.firestore {
       ]);
     }
 
-    // asyncOrders client CREATE = the offline void-intent tombstone. A cashier
-    // creating a void intent for an uncached order may ONLY write the required
-    // void/routing fields. Absolutely NO sale payload fields (lines, payments, total,
-    // staffId) or reconcile/audit fields may be seeded.
-    function isStrictVoidIntentCreate(data) {
-      return data.keys().hasOnly([
-        'id', 'branchId', 'deviceId', 'voidRequested', 'status', 'voidReason', 'voidedBy', 'voidedAt', 'updatedAt'
-      ])
-      && data.get('voidRequested', false) == true
-      && data.get('status', '') == 'voided'
-      && data.get('voidedBy', '') == request.auth.uid;
-    }
-
     function role() {
       return request.auth.token.role;
     }
@@ -297,17 +284,11 @@ service cloud.firestore {
     // void-intent (create or update) needs `pos_void`.
     match /asyncOrders/{orderId} {
       allow read: if isAdmin() || (isStaff() && hasBranchAccess(resource.data.branchId));
-      // A normal checkout stamps the caller's own staffId. The offline void merge
-      // (`requestPendingVoid`) is a queueable setDoc(merge) that may MATERIALISE a
-      // not-yet-cached doc — a create whose payload carries no staffId. Permit
-      // that path when it is a `pos_void` void-intent (`voidRequested == true`),
-      // mirroring the `pos_void` gate on the update path below.
+      // A normal checkout stamps the caller's own staffId. 
       allow create: if hasBranchAccess(request.resource.data.branchId)
         && safeInitialReconcileState(request.resource.data)
-        && (
-          (hasPerm('pos_sale') && stampedOwnStaffId(request.resource.data))
-          || (isStaff() && isStrictVoidIntentCreate(request.resource.data))
-        );
+        && hasPerm('pos_sale') 
+        && stampedOwnStaffId(request.resource.data);
       // Client updates = the offline void-intent merge only. A pos_void client may
       // change ONLY approved void-intent fields; sale-payload fields (lines,
       // payments, total, creditAmt, staffId, branchId, …) and ALL server-owned

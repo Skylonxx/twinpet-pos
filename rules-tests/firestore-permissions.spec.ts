@@ -98,17 +98,41 @@ describe("staff ['pos_void'] → void/update", () => {
 
 // ── 3. ANY 'staff' can request async void if they log themselves ─────
 describe("any staff → async void intent", () => {
-  it('creates an async void-intent (voidRequested) by logging own UID (voidedBy)', async () => {
+  it('updates an existing asyncOrder with void-intent (voidRequested) by logging own UID (voidedBy)', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'asyncOrders', 'a_void_update'), {
+        branchId: BRANCH,
+        reconcileStatus: 'pending_reconcile',
+        lines: [], payments: [], total: 100, creditAmt: 0,
+        staffId: 'staff_sale',
+        deviceId: 'dev1',
+        id: 'a_void_update',
+        reconciledAt: null,
+      });
+    });
+
     const db = testEnv.authenticatedContext('staff1', staffWith(['pos_sale'])).firestore();
     await assertSucceeds(
-      setDoc(doc(db, 'asyncOrders', 'a_void'), { branchId: BRANCH, voidRequested: true, status: 'voided', voidedBy: 'staff1' }),
+      setDoc(doc(db, 'asyncOrders', 'a_void_update'), { voidRequested: true, status: 'voided', voidedBy: 'staff1' }, { merge: true }),
     );
   });
 
-  it('DENIES async void if voidedBy does not match their own UID', async () => {
+  it('DENIES async void update if voidedBy does not match their own UID', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'asyncOrders', 'a_void_update_bad'), {
+        branchId: BRANCH,
+        reconcileStatus: 'pending_reconcile',
+        lines: [], payments: [], total: 100, creditAmt: 0,
+        staffId: 'staff_sale',
+        deviceId: 'dev1',
+        id: 'a_void_update_bad',
+        reconciledAt: null,
+      });
+    });
+
     const db = testEnv.authenticatedContext('staff1', staffWith(['pos_sale'])).firestore();
     await assertFails(
-      setDoc(doc(db, 'asyncOrders', 'a_void_bad'), { branchId: BRANCH, voidRequested: true, status: 'voided', voidedBy: 'staff2' }),
+      setDoc(doc(db, 'asyncOrders', 'a_void_update_bad'), { voidRequested: true, status: 'voided', voidedBy: 'staff2' }, { merge: true }),
     );
   });
 });
