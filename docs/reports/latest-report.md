@@ -1,7 +1,7 @@
 # Latest Report
 
 > Rolling "latest report" for the stock-write security workstream. Updated at each phase boundary.
-> **Current state:** **Phase 4 Step 1 (PIN Login UI) Implemented & Patched**. The login screen has been modernized with professional Flowbite styles. Branch loading errors are securely handled, unused React imports removed, and build verified successfully (`npm run build` completed via Vite/TSC in 800ms).
+> **Current state:** **Phase 4 Step 1 (PIN Login UI) Implemented & Verified**. The login screen has been modernized with professional Flowbite styles without altering authentication logic. The `docs/reports/phase-4-step-1-pin-login-manifest.md` audit trail is packaged. Full build verified: `npm run build` PASSED (client environment compiled via `tsc -b && vite build` with 547 modules transformed in ~683ms).
 > **Backlog Note:** GCS `gcf-sources` / deployment artifact IAM and lifecycle audit is deferred to post-MVP hardening.
 
 **Docs note (2026-06-07):** AI role/prompt instructions centralized in new `docs/ai-roles/` files (`developer`, `reviewer`, `tech-lead`, `environment-auditor`, `ui-implementer`, `README.md`) — **intentionally untracked until staged** as part of this docs-only patch. `AGENTS.md` prompt routing tightened (execute only on explicit `TO:` to the active agent; role-file name alone is not permission). `.cursor/rules/reviewer.md` points to `reviewer.md`. Antigravity documented in `README.md` (reuses `environment-auditor.md` / `developer.md`; no separate role file). Unrelated `rp.md` deletion excluded from this change set (file restored). `.claude/settings.local.json` is untracked, local-only, and out of scope for this role centralization change. No app/rules/functions change.
