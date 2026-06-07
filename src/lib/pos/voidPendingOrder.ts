@@ -67,13 +67,13 @@ export function buildPendingVoidFields(input: PendingVoidInput): PendingVoidFiel
  * no-op on its data fields; the reconciler still routes `voidRequested` →
  * `handleVoidIntent` for the server-side reversal on reconnect.
  */
-export function requestPendingVoid(
+export async function requestPendingVoid(
   orderId: string,
   input: PendingVoidInput,
   branchId: string,
-): void {
+): Promise<void> {
   if (!isFirebaseConfigured || !db) return;
-  void setDoc(
+  await setDoc(
     doc(db, 'asyncOrders', orderId),
     {
       ...buildPendingVoidFields(input),
@@ -86,7 +86,5 @@ export function requestPendingVoid(
       updatedAt: serverTimestamp(),
     },
     { merge: true },
-  ).catch((err) => {
-    console.warn('[voidPending] void-intent not yet acked (queued, will retry)', err);
-  });
+  );
 }

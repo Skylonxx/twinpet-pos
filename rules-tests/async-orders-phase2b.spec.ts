@@ -98,9 +98,26 @@ describe('asyncOrders reconcile-control immutability (client updates)', () => {
     );
   });
 
-  it('a client without pos_void cannot update at all (existing gate intact)', async () => {
+  it('a client without pos_void CAN void if they securely stamp their own voidedBy', async () => {
     const db = testEnv.authenticatedContext('staff2', saleOnly).firestore();
-    await assertFails(updateDoc(doc(db, 'asyncOrders', 'a1'), { voidRequested: true, status: 'voided' }));
+    await assertSucceeds(
+      setDoc(
+        doc(db, 'asyncOrders', 'a1'),
+        { voidRequested: true, status: 'voided', voidedBy: 'staff2' },
+        { merge: true },
+      ),
+    );
+  });
+
+  it('a client DENIED void if they spoof another staff ID in voidedBy', async () => {
+    const db = testEnv.authenticatedContext('staff2', saleOnly).firestore();
+    await assertFails(
+      setDoc(
+        doc(db, 'asyncOrders', 'a1'),
+        { voidRequested: true, status: 'voided', voidedBy: 'staff1' },
+        { merge: true },
+      ),
+    );
   });
 });
 
@@ -257,6 +274,7 @@ describe('asyncOrders create — block server-owned reconcile-field spoofing', (
         voidRequested: true,
         status: 'voided',
         voidReason: 'ลูกค้าเปลี่ยนใจ',
+        voidedBy: 'staff1',
       }),
     );
   });

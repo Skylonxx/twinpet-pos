@@ -364,13 +364,20 @@ export default function SalesHistoryPage() {
       // voidOrderSafe's runTransaction. The drawer/dashboard drop it instantly via
       // isLedgerSale; the canonical row shows "ยกเลิก (รอซิงก์)" until reconciled.
       if (isFirebaseConfigured) {
-        requestPendingVoid(selected.order.id, { reason, note, voidedBy: user.id }, branchId);
-        setVoidOpen(false);
-        showToast(
-          selected.pendingSync
-            ? 'ยกเลิกบิลแล้ว · จะซิงก์อัตโนมัติเมื่อออนไลน์'
-            : 'ส่งคำขอยกเลิกบิลแล้ว · จะคืนสต็อก/เครดิตเมื่อซิงก์',
-        );
+        setVoidProcessing(true);
+        try {
+          await requestPendingVoid(selected.order.id, { reason, note, voidedBy: user.id }, branchId);
+          setVoidOpen(false);
+          showToast(
+            selected.pendingSync
+              ? 'ยกเลิกบิลแล้ว · จะซิงก์อัตโนมัติเมื่อออนไลน์'
+              : 'ส่งคำขอยกเลิกบิลแล้ว · จะคืนสต็อก/เครดิตเมื่อซิงก์',
+          );
+        } catch (err) {
+          showToast(err instanceof Error ? err.message : 'คำขอยกเลิกบิลถูกปฏิเสธ (ตรวจสอบสิทธิ์หรือการเชื่อมต่อ)');
+        } finally {
+          setVoidProcessing(false);
+        }
         return;
       }
 

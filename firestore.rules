@@ -293,15 +293,17 @@ service cloud.firestore {
         && safeInitialReconcileState(request.resource.data)
         && (
           (hasPerm('pos_sale') && stampedOwnStaffId(request.resource.data))
-          || (hasPerm('pos_void')
-            && request.resource.data.get('voidRequested', false) == true)
+          || (isStaff()
+            && request.resource.data.get('voidRequested', false) == true
+            && request.resource.data.get('voidedBy', '') == request.auth.uid)
         );
       // Client updates = the offline void-intent merge only. A pos_void client may
       // change ONLY approved void-intent fields; sale-payload fields (lines,
       // payments, total, creditAmt, staffId, branchId, …) and ALL server-owned
       // reconcile/audit fields stay frozen (those move only via the Admin-SDK
       // reconciler / retryReconcile callable, which bypass these rules).
-      allow update: if hasPerm('pos_void')
+      allow update: if isStaff()
+        && request.resource.data.voidedBy == request.auth.uid
         && hasBranchAccess(resource.data.branchId)
         && voidIntentChangesOnly();
       allow delete: if isAdmin();

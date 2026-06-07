@@ -79,7 +79,7 @@ describe("staff ['pos_sale'] → checkout create", () => {
   });
 });
 
-// ── 2. Plain 'staff' with ['pos_void'] can void — role-escalation bypass ─────
+// ── 2. Plain 'staff' with ['pos_void'] can void canonical orders ─────
 describe("staff ['pos_void'] → void/update", () => {
   it('updates (voids) a canonical order with NO manager/admin role', async () => {
     const db = testEnv.authenticatedContext('staff1', staffWith(['pos_void'])).firestore();
@@ -88,17 +88,27 @@ describe("staff ['pos_void'] → void/update", () => {
     );
   });
 
-  it('creates an async void-intent (voidRequested) without stamping own staffId', async () => {
-    const db = testEnv.authenticatedContext('staff1', staffWith(['pos_void'])).firestore();
-    await assertSucceeds(
-      setDoc(doc(db, 'asyncOrders', 'a_void'), { branchId: BRANCH, voidRequested: true, status: 'voided' }),
-    );
-  });
-
-  it('DENIES void when only pos_sale is granted (no pos_void)', async () => {
+  it('DENIES void of canonical orders when only pos_sale is granted (no pos_void)', async () => {
     const db = testEnv.authenticatedContext('staff1', staffWith(['pos_sale'])).firestore();
     await assertFails(
       updateDoc(doc(db, 'orders', 'o1'), { status: 'voided' }),
+    );
+  });
+});
+
+// ── 3. ANY 'staff' can request async void if they log themselves ─────
+describe("any staff → async void intent", () => {
+  it('creates an async void-intent (voidRequested) by logging own UID (voidedBy)', async () => {
+    const db = testEnv.authenticatedContext('staff1', staffWith(['pos_sale'])).firestore();
+    await assertSucceeds(
+      setDoc(doc(db, 'asyncOrders', 'a_void'), { branchId: BRANCH, voidRequested: true, status: 'voided', voidedBy: 'staff1' }),
+    );
+  });
+
+  it('DENIES async void if voidedBy does not match their own UID', async () => {
+    const db = testEnv.authenticatedContext('staff1', staffWith(['pos_sale'])).firestore();
+    await assertFails(
+      setDoc(doc(db, 'asyncOrders', 'a_void_bad'), { branchId: BRANCH, voidRequested: true, status: 'voided', voidedBy: 'staff2' }),
     );
   });
 });

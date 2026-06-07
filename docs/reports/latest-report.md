@@ -1,11 +1,12 @@
 # Latest Report
 
 > Rolling "latest report" for the stock-write security workstream. Updated at each phase boundary.
-> **Current state:** **Phase 4 Step 2 (Main POS / Cart / Void UI) Implemented**. 
+> **Current state:** **Phase 4 Step 2 (Main POS / Cart / Void UI) Implemented & Rules Aligned (Option A)**. 
 > - **Oversell bypass:** The UI now allows adding, increasing, and setting quantities beyond available stock. Insufficient stock displays a non-blocking Tailwind soft warning badge.
-> - **Void behavior:** Cashiers can remove cart lines, clear the cart, and void already-created orders without needing `pos_void` manager permission. Void actions log the user actor (`voidedBy: user.id`).
-> - **Boundary Check:** `PaymentModal` and `useCheckout` remain completely untouched. No backend/rules/functions modified.
-> - **Build Status:** `npm run build` PASSED cleanly (client env compiled via Vite/TSC in 671ms).
+> - **Void authorization (Option A):** `firestore.rules` expanded. Cashiers can now successfully trigger `voidRequested` on already-created `asyncOrders` without `pos_void` manager permission, provided they rigidly stamp their own UID into the `voidedBy` audit field.
+> - **UI / Backend Sync:** `requestPendingVoid` no longer fires-and-forgets. The UI actively `await`s the network response. It blocks duplicate clicks via a loading state and visibly toasts Firestore rejection if the rule validation fails.
+> - **Boundary Check:** Unrelated sale-payload fields, server-owned reconcile fields, `PaymentModal.tsx`, and `useCheckout.ts` remain completely locked down and untouched.
+> - **Build/Test Status:** `npm run build` PASSED (775ms). `npm run test:rules` PASSED (85 tests).
 > 
 > **Build Evidence:**
 > Command: `npm run build` at 2026-06-07T08:25:32Z
