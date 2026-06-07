@@ -292,9 +292,9 @@ export default function SalesHistoryPage() {
     [productById],
   );
 
-  const canVoid = Boolean(
-    user?.permissions.canVoidOrder || user?.role === 'admin' || user?.role === 'manager',
-  );
+  // CEO Override: Cashiers must be able to void already-created orders without special manager permission.
+  // We rely on post-action reports. The backend request already logs `voidedBy: user.id`.
+  const canVoid = true;
 
   const filters: SalesFilters = useMemo(
     () => ({

@@ -1,7 +1,11 @@
 # Latest Report
 
 > Rolling "latest report" for the stock-write security workstream. Updated at each phase boundary.
-> **Current state:** **Phase 4 Step 1 (PIN Login UI) Implemented**. The login screen has been modernized with clean Tailwind/Flowbite-compatible utility classes, preserving all authentication logic. The `docs/reports/phase-4-step-1-pin-login-manifest.md` audit trail is packaged.
+> **Current state:** **Phase 4 Step 2 (Main POS / Cart / Void UI) Implemented**. 
+> - **Oversell bypass:** The UI now allows adding, increasing, and setting quantities beyond available stock. Insufficient stock displays a non-blocking Tailwind soft warning badge.
+> - **Void behavior:** Cashiers can remove cart lines, clear the cart, and void already-created orders without needing `pos_void` manager permission. Void actions log the user actor (`voidedBy: user.id`).
+> - **Boundary Check:** `PaymentModal` and `useCheckout` remain completely untouched. No backend/rules/functions modified.
+> - **Build Status:** `npm run build` PASSED cleanly (client env compiled via Vite/TSC in 671ms).
 > 
 > **Build Evidence:**
 > Command: `npm run build` at 2026-06-07T08:25:32Z

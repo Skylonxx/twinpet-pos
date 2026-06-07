@@ -706,8 +706,14 @@ export default function POSPage() {
                 const hasDisc = line.discount.type !== 'none';
                 const hasTierDisc =
                   line.originalPrice != null && line.originalPrice > line.unitPrice;
+                
+                // Oversell soft warning check
+                const product = products.find((p) => p.id === line.productId);
+                const neededBase = line.qty * line.unitFactor;
+                const isOversold = product && !product.allowNegativeStock && product.stock < neededBase;
+
                 return (
-                  <div key={line.lineKey} className="pos-ci">
+                  <div key={line.lineKey} className={`pos-ci ${isOversold ? 'bg-yellow-50/50 border-yellow-200' : ''}`}>
                     <div className="pos-ci-name">
                       {line.productName}
                       {line.unit !== 'ชิ้น' && (
@@ -716,6 +722,12 @@ export default function POSPage() {
                       {hasDisc && <span className="pos-ci-disc-tag">มีส่วนลด</span>}
                       {hasTierDisc && !hasDisc && (
                         <span className="pos-ci-tier-tag">ราคาสมาชิก</span>
+                      )}
+                      {isOversold && (
+                        <span className="ml-2 inline-flex items-center rounded bg-yellow-100 px-2 py-0.5 text-[10px] font-medium text-yellow-800 border border-yellow-200 shadow-sm">
+                          <i className="ti ti-alert-triangle mr-1" aria-hidden="true" />
+                          ขายเกินสต๊อก ({product.stock})
+                        </span>
                       )}
                     </div>
 

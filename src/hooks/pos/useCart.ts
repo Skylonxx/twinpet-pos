@@ -125,8 +125,7 @@ export function useCart({ products, customer, showToast }: UseCartArgs) {
     (product: PosProduct, option: UomOption) => {
       const stockErr = validateAddToCartStock(product, option, 1, rawCart);
       if (stockErr) {
-        showToast(stockErr);
-        return;
+        showToast(`⚠️ คำเตือนสต๊อก: ${stockErr}`);
       }
       const key = cartLineKey(product.id, option.unit);
       const { unitPrice, originalPrice } = getActivePriceForCustomer(product, option, customer);
@@ -177,8 +176,7 @@ export function useCart({ products, customer, showToast }: UseCartArgs) {
           if (product && option) {
             const stockErr = validateAddToCartStock(product, option, delta, prev);
             if (stockErr) {
-              showToast(stockErr);
-              return prev;
+              showToast(`⚠️ คำเตือนสต๊อก: ${stockErr}`);
             }
           }
         }
@@ -212,8 +210,7 @@ export function useCart({ products, customer, showToast }: UseCartArgs) {
         if (product && option) {
           const stockErr = validateAddToCartStock(product, option, delta, rawCart);
           if (stockErr) {
-            showToast(stockErr);
-            return false;
+            showToast(`⚠️ คำเตือนสต๊อก: ${stockErr}`);
           }
         }
       }
