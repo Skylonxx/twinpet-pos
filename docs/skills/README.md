@@ -10,6 +10,7 @@ When working on a feature, you must read and adhere to the relevant skill files:
 - **`SKILL-AGENT-ROUTING.md`**: Definitions of which AI model owns which decisions.
 - **`SKILL-FIREBASE-GCP-AUDIT.md`**: Protocol for live cloud environment checks and deploys.
 - **`SKILL-RELEASE-EVIDENCE.md`**: Standard for capturing honest, truthful test and build artifacts.
+- **`SKILL-DEVELOPER-SELF-REVIEW.md`**: Strict self-review checklist every Developer agent must output before requesting Codex review, before any implementation closeout, and before report/update/commit handoff.
 
 ## Evaluating External Skills (e.g. `google/skills`)
 

@@ -1,8 +1,13 @@
 # Latest Report
 
 > Rolling "latest report" for the stock-write security workstream. Updated at each phase boundary.
-> **Current state:** **Phase 4 Step 4 (Back Office / Admin Exception UI) Implemented**.
-> **See:** `docs/reports/phase-4-step-4-admin-exception-ui-manifest.md` for the strict Step 4 constraints and inspection details.
+> **Current state:** **Phase 5 (MVP Readiness / Pre-UAT Stabilization) Planning**.
+> **See:** `docs/reports/phase-5-mvp-readiness-manifest.md` for the Phase 5 scope and UAT script details.
+> 
+> ## Phase 5 (Planning/Docs Only)
+> - **Phase 5 Approved:** Moving to MVP Pre-UAT Stabilization.
+> - **Self-Review Gate:** Created `docs/skills/SKILL-DEVELOPER-SELF-REVIEW.md` and `docs/reports/ai-failure-ledger.md` to enforce self-review before Codex handoff.
+> - **Docs-only:** No app code, rules, functions, or tests were changed.
 > 
 > ## Phase 4 Step 4 Implementation Summary
 > - **Files Changed:** `docs/reports/latest-report.md`, `docs/reports/phase-4-step-4-admin-exception-ui-manifest.md`, `src/pages/admin/ReconciliationExceptionsPage.tsx`, `src/pages/admin/ReconciliationExceptionsPage.css`.

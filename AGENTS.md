@@ -36,6 +36,8 @@ Do not assume a change is correct just because it compiles.
 
 Role-specific instructions live in **`docs/ai-roles/`** — see `docs/ai-roles/README.md`. Load the matching role before acting (e.g. `developer.md`, `reviewer.md`, `tech-lead.md`).
 
+> **Note**: Developer agents MUST run the Developer Self-Review Gate (`docs/skills/SKILL-DEVELOPER-SELF-REVIEW.md`) before requesting Codex review.
+
 ## Workflow Skills
 
 Cross-cutting guidelines and workflow rules live in **`docs/skills/`** — see `docs/skills/README.md`. These codify project-specific constraints (e.g., `SKILL-UI-IMPECCABLE.md`) and must be strictly followed when relevant to your task. Skills supplement roles; they do not replace them.
