@@ -6,7 +6,7 @@
 > 
 > ## Phase 5 (Planning/Docs Only)
 > - **Phase 5 Approved:** Phase 5 approved by Tech Lead / CEO via external directive. This report records the approval context, Developer Self-Review Gate, and MVP readiness manifest.
-> - **Pre-UAT Evidence Collected:** Automated evidence collected in `docs/reports/phase-5-batch-1-pre-uat-evidence.md`. `npm run build` PASSED (694ms). `playwright` E2E PASSED (36.8s). All manual UI/responsive checks are explicitly marked DEFERRED.
+> - **Pre-UAT Evidence Collected:** Automated evidence collected in `docs/reports/phase-5-batch-1-pre-uat-evidence.md`. Exact terminal output for `npm run build` and Playwright E2E checkout test is fully captured and recorded. All manual UI/responsive checks are explicitly marked DEFERRED.
 > - **Self-Review Gate:** Created `docs/skills/SKILL-DEVELOPER-SELF-REVIEW.md` and `docs/reports/ai-failure-ledger.md` to enforce self-review before Codex handoff.
 > - **Docs-only:** No app code, rules, functions, or tests were changed.
 > 

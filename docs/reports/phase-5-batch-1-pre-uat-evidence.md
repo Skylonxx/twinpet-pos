@@ -10,8 +10,49 @@ The scope is limited strictly to automated build tests, playwright E2E checkout 
 - Project Directory: `C:\Users\Narachat\twinpet-pos`
 
 ## 3. Exact Evidence Method
-- Automation verification: Build verification and Playwright E2E checkout test execution.
+- Automation verification: Build verification and Playwright E2E checkout test execution with actual terminal output captured.
 - Manual inspection: Marked as DEFERRED / NOT RUN since no human visual inspection was performed during this automated AI session.
+
+### Captured Build Output
+Command: `npm run build`
+Result: **PASS**
+```text
+> twinpet-pos@0.0.0 build
+> tsc -b && vite build
+
+vite v8.0.14 building client environment for production...
+Generating .flowbite-react\class-list.json file...
+transforming...✓ 547 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                             1.42 kB │ gzip:   0.62 kB
+dist/assets/index-AEkK5P7P.css            339.18 kB │ gzip:  52.48 kB
+dist/assets/rolldown-runtime-Bh1tDfsg.js    0.56 kB │ gzip:   0.36 kB
+dist/assets/react-router-BVImBSaZ.js       42.27 kB │ gzip:  15.07 kB
+dist/assets/vendor-ech4Bep8.js            117.86 kB │ gzip:  33.73 kB
+dist/assets/charts-xn6RU_C7.js            177.58 kB │ gzip:  61.51 kB
+dist/assets/react-vendor-CzRZBWxH.js      250.54 kB │ gzip:  80.54 kB
+dist/assets/firebase-BYlOybkJ.js          463.72 kB │ gzip: 139.79 kB
+dist/assets/index-C0lUr4sc.js             943.23 kB │ gzip: 215.43 kB
+
+✓ built in 750ms
+```
+
+### Captured Playwright Output
+Command: `npx.cmd playwright test tests/pos-human-checkout.spec.ts`
+Result: **PASS**
+```text
+  VITE v8.0.14   test   ready in 980 ms
+
+  ➜  Local:   http://localhost:5174/
+  ➜  Network: use --host to expose
+
+Running 1 test using 1 worker
+
+  ✓  1 [chromium] › tests\pos-human-checkout.spec.ts:132:3 › Human-Like Cashier Checkout › complete sale — forgetful cashier makes a typo then recovers (11.7s)
+
+  1 passed (35.6s)
+```
 
 ## 4. Responsive Viewport Checks
 **Surfaces:** Auth / PIN Login, POS product grid / cart, Payment modal, Admin Exception UI
@@ -64,8 +105,12 @@ The scope is limited strictly to automated build tests, playwright E2E checkout 
 - [x] **Anti-silent-failure behavior**: Deferred manual check.
 - [x] **Flowbite / Impeccable.style compliance**: Deferred visual check.
 - [x] **Security/rules impact**: None (docs only).
-- [x] **Tests/build run**: `npm run build`, `npx playwright test tests/pos-human-checkout.spec.ts`.
-- [x] **Evidence captured**: Build passed in 694ms. Playwright passed in 36.8s.
+- [x] **Tests/build run**: `npm run build`, `npx.cmd playwright test tests/pos-human-checkout.spec.ts`.
+- [x] **Evidence captured**: 
+  - Build output captured: Yes, in Section 3 exact console output.
+  - Playwright output captured: Yes, in Section 3 exact console output.
+  - Responsive/manual checks: DEFERRED
+  - Screenshots captured: No (none captured since tests were non-visual terminal runs).
 - [x] **Report accuracy**: Checked.
 - [x] **Failure ledger items checked**: Used explicit "DEFERRED" instead of false "PASSED" for manual checks.
 - [x] **Deferred items**: Manual and responsive checks.
