@@ -11,6 +11,26 @@
 > - **Self-Review Gate:** Created `docs/skills/SKILL-DEVELOPER-SELF-REVIEW.md` and `docs/reports/ai-failure-ledger.md` to enforce self-review before Codex handoff.
 > - **Docs-only:** No app code, rules, functions, or tests were changed.
 > 
+> ```markdown
+> ### Developer Self-Review Before Codex
+> 
+> - [x] **Scope implemented**: Capacitor native wrapper architecture docs + native storage planning only.
+> - [x] **Files changed**: `docs/skills/SKILL-GLOBAL-ARCHITECTURE.md`, `docs/skills/SKILL-OFFLINE-FIRST-POS.md`, `docs/skills/README.md`, `docs/reports/phase-5-mvp-readiness-manifest.md`, `docs/reports/latest-report.md`
+> - [x] **Forbidden files untouched**: app code, rules, functions, tests, package scripts, build config, scripts, android/, ios/, node_modules.
+> - [x] **Business logic preserved**: no runtime behavior changed.
+> - [x] **Offline-first / async-safe behavior**: architecture updated to require native durable storage planning no implementation yet.
+> - [x] **Anti-silent-failure behavior**: no UI behavior changed.
+> - [x] **Flowbite / Impeccable.style compliance**: not applicable except docs still preserve existing UI standards.
+> - [x] **Security/rules impact**: none.
+> - [x] **Tests/build run**: not run because docs-only.
+> - [x] **Evidence captured**: git diff/scope + Codex architecture review findings.
+> - [x] **Report accuracy**: Checked.
+> - [x] **Failure ledger items checked**: no overclaiming native storage implemented no packages installed no runtime changes claimed.
+> - [x] **Deferred items**: Capacitor setup, native storage plugin choice, SQLite schema/migration, hardware plugin feasibility, App Store/Play Store pipeline.
+> - [x] **Known remaining risks**: storage sync/conflict strategy and plugin selection unresolved.
+> - [x] **Ready for Codex review**: Yes.
+> ```
+> 
 > ## Phase 4 Step 4 Implementation Summary
 > - **Files Changed:** `docs/reports/latest-report.md`, `docs/reports/phase-4-step-4-admin-exception-ui-manifest.md`, `src/pages/admin/ReconciliationExceptionsPage.tsx`, `src/pages/admin/ReconciliationExceptionsPage.css`.
 > - **Manifest Correction:** Clarified `retryReconcile` backend may return `{ success: true, status, attempts }`, but the UI must preserve `Promise<void>` wrapper usage and not depend on it. Tech Lead resolved the Route-Only strategy (keep as is) and Table Pagination (unpaginated MVP approved).
