@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Badge } from 'flowbite-react';
 import ItemDiscountModal from '../components/pos/ItemDiscountModal';
 import CustomerPickerModal from '../components/customers/CustomerPickerModal';
 import PaymentModal from '../components/PaymentModal';
@@ -524,6 +525,11 @@ export default function POSPage() {
             {refreshing ? 'กำลังอัปเดต...' : 'อัปเดตข้อมูลหน้าจอ'}
           </button>
           <SyncIndicator branchId={branchId} />
+          {fromCache && products.length > 0 && (
+            <Badge color="gray" icon={() => <i className="ti ti-wifi-off mr-1" aria-hidden="true" />} className="ml-2 whitespace-nowrap">
+              ออฟไลน์ (ใช้ข้อมูลในเครื่อง)
+            </Badge>
+          )}
         </div>
         {activeShift && (
           <div className="pos-topbar-actions">
@@ -633,12 +639,6 @@ export default function POSPage() {
             <div className="pos-loading-overlay">กำลังโหลดสินค้า...</div>
           ) : (
             <div className="pos-product-grid">
-              {fromCache && products.length > 0 && (
-                <div className="col-span-full mb-4 rounded bg-yellow-50 p-3 text-sm text-yellow-800 border border-yellow-200 flex items-center justify-center">
-                  <i className="ti ti-wifi-off mr-2" aria-hidden="true" />
-                  ออฟไลน์ แสดงข้อมูลสินค้าล่าสุดในเครื่อง
-                </div>
-              )}
               {fromCache && products.length === 0 && !error && (
                 <div className="col-span-full mb-4 rounded bg-red-50 p-3 text-sm text-red-800 border border-red-200 flex items-center justify-center">
                   <i className="ti ti-alert-circle mr-2" aria-hidden="true" />
