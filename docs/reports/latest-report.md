@@ -4,7 +4,7 @@
 > **Current state:** **Phase 4 Step 3 (Checkout / Payment Loading UI) Implemented**.
 > **See:** `docs/reports/phase-4-step-3-checkout-payment-loading-manifest.md` for the strict Step 3 constraints and inspection details. 
 > 
-> **Docs note (latest):** Added internal `docs/skills/` directory to codify workflow rules (e.g., `SKILL-UI-IMPECCABLE.md`, `SKILL-RELEASE-EVIDENCE.md`). This was a **docs-only** addition. No app logic, rules, or functions were modified, and no external `google/skills` were installed.
+> **Docs note (latest):** Added internal `docs/skills/` directory to codify workflow rules (e.g., `SKILL-UI-IMPECCABLE.md`, `SKILL-RELEASE-EVIDENCE.md`). This was a **docs-only** addition. No app logic, rules, or functions were modified, and no external `google/skills` were installed. Explicit vendor skill boundaries were added to ignore `node_modules/**/SKILL.md`.
 > 
 > ## Phase 4 Step 3 Implementation Summary
 > - **Files Changed:** `src/components/PaymentModal.tsx`, `src/components/PaymentModal.css`, `tests/pos-human-checkout.spec.ts`, `scripts/start-emulator.mjs`, `scripts/dev-after-emulators.mjs`.
