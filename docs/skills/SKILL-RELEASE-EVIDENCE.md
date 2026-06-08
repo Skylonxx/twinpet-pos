@@ -2,9 +2,18 @@
 
 Every phase or step release must provide undeniable evidence of its success or failure.
 
-- **Build output evidence:** Always capture the exact result of `npm run build` or equivalent.
-- **Rules test output evidence:** Always capture the result of `npm run test:rules`.
-- **Playwright evidence:** Always capture the result of E2E tests (`npx playwright test`).
+- **Build output evidence:** Always capture the exact result of `npm run build` or equivalent (when applicable).
+- **Rules test output evidence:** Always capture the result of `npm run test:rules` (when applicable).
+- **Playwright evidence:** Always capture the result of E2E tests (`npx playwright test`) (when applicable).
+
+## Docs-Only Exception
+- Docs-only changes do not require build/rules/Playwright evidence unless they affect executable workflow, commands, or test harness behavior.
+- For docs-only changes, the required evidence is:
+  - git diff/scope
+  - files changed
+  - confirmation no app/rules/functions/tests touched
+  - reviewer validation
+- Build/rules/Playwright evidence is strictly required when app logic, rules, functions, tests, or release behavior are affected.
 - **Do not overclaim:** Only report success if the test actually completed the assertion path.
 - **Captured output:** Exact output logs must be recorded as sample evidence (but recognize that file sizes and timings are point-in-time samples, not permanent invariants).
 - **Distinguish status clearly:** Reports MUST explicitly distinguish:

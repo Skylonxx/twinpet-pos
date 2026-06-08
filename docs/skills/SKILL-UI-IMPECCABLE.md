@@ -15,6 +15,8 @@ This is the foundational frontend, UI, and UX generation skill for Twinpet POS. 
   - minor alignment around Flowbite components
 - Do not create custom handmade button/input/modal patterns unless Flowbite lacks the needed component or the deviation is explicitly approved.
 
+**Important Scope Exception:** Skills supplement roles, but Tech Lead / CEO directives win. For newly approved frontend/UI work, this skill is the standard. However, do **not** use this skill as permission to apply/pop `stash@{0}` or start a broad Flowbite migration unless explicitly approved. Do not touch stash-conflict areas unless the current task scope allows it. If the current task explicitly says "no Flowbite migration", preserve scope and use the best safe local implementation instead.
+
 ## 2. Tailwind CSS Discipline
 - Use Tailwind utility classes cleanly and consistently.
 - No arbitrary inline styles.

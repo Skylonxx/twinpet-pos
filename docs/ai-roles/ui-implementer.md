@@ -18,7 +18,7 @@ Read `AGENTS.md` first. UI work often runs parallel to `stash@{0}` (Flowbite mig
 
 - **Avoid `stash@{0}`** — do not apply, drop, or edit stashed files unless Tech Lead approves.
 - **Route-only when specified** — direct URL access only; no dashboard card, nav link, or menu entry unless approved.
-- **Namespaced CSS** — use page-specific prefixes (e.g. `recex-`); plain CSS unless Flowbite upgrade is explicitly in scope.
+- **Namespaced CSS vs Flowbite** — `flowbite-react` is the preferred TSX component library (see `docs/skills/SKILL-UI-IMPECCABLE.md`). However, if the current task explicitly forbids a Flowbite migration or avoids `stash@{0}` conflicts, use namespaced plain CSS and the best safe local implementation instead. Do not use the UI Impeccable skill as permission to apply/pop `stash@{0}` or start a broad migration.
 - **No volatile file edits** — settings, navigation, `AppShell`, layout, and `AdminDashboardPage` stay untouched unless approved.
 
 ---
