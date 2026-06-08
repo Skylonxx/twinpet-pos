@@ -65,7 +65,7 @@ async function loginAsWichai(page: import('@playwright/test').Page) {
   // up correctly.  350 ms > a typical React render + event-loop tick, so each
   // click lands on a fresh closure with the updated pinValue.
   for (const digit of ['3', '4', '5', '6']) {
-    await page.click(`.login-pin-btn:text-is("${digit}")`);
+    await page.getByRole('button', { name: digit, exact: true }).click();
     await page.waitForTimeout(350);
   }
   // No manual submit click needed — the component auto-submits via

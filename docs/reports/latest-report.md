@@ -9,8 +9,9 @@
 > - **Wording Changes:** Replaced "ชำระเงินสำเร็จ" and "บันทึกการขายสำเร็จ" with async-safe wording: "รับรายการขายแล้ว รอระบบประมวลผล" (online) and "บันทึกรายการลงเครื่องแล้ว ระบบกำลังรอซิงก์" (offline hint via `navigator.onLine`).
 > - **Duplicate-Submit Handling:** `pay-confirm` button disables immediately using `confirming || processing` states. Added visual 'กำลังบันทึกคำสั่งซื้อ...' text on the button.
 > - **onConfirm Rejection Behavior:** Rejection from `onConfirm` is explicitly trapped. Raw errors are logged to the console, and a cashier-safe message is shown in the UI (`ไม่สามารถบันทึกรายการได้ กรุณาตรวจสอบการเชื่อมต่อหรือแจ้งผู้ดูแล`).
-> - **Playwright Test Changes:** Updated selectors and comments from `Success` to `Accepted`.
-> - **Build/Test Evidence:** `npm run build` PASSED (921ms). `npx playwright test tests/pos-human-checkout.spec.ts` **FAILED**. Playwright port mismatch was fixed by threading `process.argv` down to Vite, allowing the test to boot on port 5174. However, the test timed out (15000ms) waiting for the login PIN keypad (`.login-pin-btn:text-is("3")`). Test is NOT passing.
+> - **Playwright Test Changes:** Fixed login PIN selector to use `page.getByRole('button', { name: digit })`. Updated selectors and comments from `Success` to `Accepted`.
+> - **Build/Test Evidence:** `npm run build` PASSED (898ms). `npx playwright test tests/pos-human-checkout.spec.ts` **PASSED** (1 passed, 37.6s). All E2E checkout evidence is fully verified and passing.
+> - **Responsive Checks:** 320px / 768px / 1080px (Deferred / manual-not-run).
 > - **Untouched Files:** `POSPage.tsx`, `useCheckout.ts`, `firestore.rules`, `functions/src/*`, and `stash@{0}` were strictly untouched.
 > - **Paranoid Checklist:** Business logic integrity preserved; State isolation maintained; Cross-contamination avoided.
 > - **Void authorization (Option A2):** `firestore.rules` strictly prevents voiding orders created on previous operational days via a server-side timestamp comparison (`(request.time + duration.value(7, 'h')).date() == (resource.data.serverCreatedAt + duration.value(7, 'h')).date()`). Cross-day voids are definitively blocked at the database layer. 

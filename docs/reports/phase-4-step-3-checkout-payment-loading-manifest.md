@@ -94,7 +94,7 @@ Do not claim server completion. Exact Thai wording:
 - [x] No false sale completed wording used.
 - [x] `npm run build` succeeds without type errors.
 - [x] No rules/functions/backend/POSPage/useCheckout files modified.
-- [ ] Existing Playwright checkout flow (`tests/pos-human-checkout.spec.ts`) preserved or extended. Playwright failed/timed out waiting for login PIN keypad, but selectors were correctly updated.
+- [x] Existing Playwright checkout flow (`tests/pos-human-checkout.spec.ts`) preserved or extended. Playwright PASSED (1 passed, 37.6s), verifying F12, quick bills, `.pay-confirm` and accepted flow.
 - [ ] Responsive visual checks pass at 320px / 768px / 1080px (Manual check not run in this automated step).
 
 ---
