@@ -639,10 +639,16 @@ export default function POSPage() {
                   ออฟไลน์ แสดงข้อมูลสินค้าล่าสุดในเครื่อง
                 </div>
               )}
-              {error && products.length === 0 && (
+              {fromCache && products.length === 0 && !error && (
                 <div className="col-span-full mb-4 rounded bg-red-50 p-3 text-sm text-red-800 border border-red-200 flex items-center justify-center">
                   <i className="ti ti-alert-circle mr-2" aria-hidden="true" />
                   ไม่มีข้อมูลสินค้าในเครื่อง ต้องเชื่อมต่ออินเทอร์เน็ตเพื่อโหลดครั้งแรก
+                </div>
+              )}
+              {error && (
+                <div className="col-span-full mb-4 rounded bg-red-50 p-3 text-sm text-red-800 border border-red-200 flex items-center justify-center">
+                  <i className="ti ti-alert-triangle mr-2" aria-hidden="true" />
+                  ข้อผิดพลาดของระบบ: {error.message}
                 </div>
               )}
               {filteredProducts.map((p) => {
@@ -674,6 +680,11 @@ export default function POSPage() {
               {filteredProducts.length === 0 && products.length > 0 && (
                 <div className="p-8 text-center text-gray-500 w-full col-span-full">
                   ไม่พบสินค้าที่ตรงกับการค้นหา
+                </div>
+              )}
+              {products.length === 0 && !fromCache && !error && (
+                <div className="p-8 text-center text-gray-500 w-full col-span-full">
+                  ยังไม่มีข้อมูลสินค้าในระบบ
                 </div>
               )}
             </div>

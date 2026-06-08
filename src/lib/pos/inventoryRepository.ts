@@ -70,14 +70,28 @@ function mapCategoryDoc(d: { id: string; data: () => Record<string, unknown> }):
   return entry;
 }
 
+function isOfflineLikeFirestoreError(err: unknown): boolean {
+  if (err instanceof Error) {
+    const code = (err as { code?: string }).code;
+    const msg = err.message || '';
+    if (code === 'unavailable') return true;
+    if (msg.includes('ERR_INTERNET_DISCONNECTED')) return true;
+    if (msg.includes('WebChannelConnection')) return true;
+    if (msg.includes('transport errored')) return true;
+    if (msg.includes('offline')) return true;
+  }
+  return false;
+}
+
 async function safeGetDocs(q: any): Promise<any> {
   try {
     return await getDocs(q);
   } catch (err) {
-    if (!isIndexError(err)) {
-      console.warn('[inventoryRepository] getDocs failed, trying cache', err);
+    if (isOfflineLikeFirestoreError(err)) {
+      console.warn('[inventoryRepository] offline/transport error, falling back to cache', err);
+      return await getDocsFromCache(q);
     }
-    return await getDocsFromCache(q);
+    throw err;
   }
 }
 
@@ -85,8 +99,11 @@ async function safeGetDoc(ref: any): Promise<any> {
   try {
     return await getDoc(ref);
   } catch (err) {
-    console.warn('[inventoryRepository] getDoc failed, trying cache', err);
-    return await getDocFromCache(ref);
+    if (isOfflineLikeFirestoreError(err)) {
+      console.warn('[inventoryRepository] offline/transport error, falling back to cache', err);
+      return await getDocFromCache(ref);
+    }
+    throw err;
   }
 }
 

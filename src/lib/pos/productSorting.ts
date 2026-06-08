@@ -52,6 +52,20 @@ export function productSortingCollectionRef(branchId: string): CollectionReferen
 // ── Dev (no-Firebase) fallback: localStorage keyed by `${branchId}::${key}` ──
 const DEV_SORT_KEY = 'twinpet-pos-sort-orders';
 type DevSortStore = Record<string, ProductSortOrder>;
+
+function isOfflineLikeFirestoreError(err: unknown): boolean {
+  if (err instanceof Error) {
+    const code = (err as { code?: string }).code;
+    const msg = err.message || '';
+    if (code === 'unavailable') return true;
+    if (msg.includes('ERR_INTERNET_DISCONNECTED')) return true;
+    if (msg.includes('WebChannelConnection')) return true;
+    if (msg.includes('transport errored')) return true;
+    if (msg.includes('offline')) return true;
+  }
+  return false;
+}
+
 const devCompositeKey = (branchId: string, categoryKey: string) => `${branchId}::${categoryKey}`;
 
 function readDevSort(): DevSortStore {
@@ -84,8 +98,12 @@ export async function getBranchSortOrders(branchId: string): Promise<Record<stri
   try {
     snap = await getDocs(productSortingCollectionRef(branchId));
   } catch (err) {
-    console.warn('[productSorting] getDocs failed, trying cache', err);
-    snap = await getDocsFromCache(productSortingCollectionRef(branchId));
+    if (isOfflineLikeFirestoreError(err)) {
+      console.warn('[productSorting] offline/transport error, trying cache', err);
+      snap = await getDocsFromCache(productSortingCollectionRef(branchId));
+    } else {
+      throw err;
+    }
   }
   const out: Record<string, string[]> = {};
   for (const d of snap.docs) {
@@ -108,8 +126,12 @@ export async function getProductSortOrder(
   try {
     snap = await getDoc(productSortingDocRef(branchId, categoryKey));
   } catch (err) {
-    console.warn('[productSorting] getDoc failed, trying cache', err);
-    snap = await getDocFromCache(productSortingDocRef(branchId, categoryKey));
+    if (isOfflineLikeFirestoreError(err)) {
+      console.warn('[productSorting] offline/transport error, trying cache', err);
+      snap = await getDocFromCache(productSortingDocRef(branchId, categoryKey));
+    } else {
+      throw err;
+    }
   }
   if (!snap.exists()) return { order: [], rev: 0 };
   const data = snap.data();

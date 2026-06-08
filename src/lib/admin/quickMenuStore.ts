@@ -31,6 +31,23 @@ export type QuickMenu = {
   order: number;
 };
 
+export type QuickMenuDoc = {
+  menus: QuickMenu[];
+};
+
+function isOfflineLikeFirestoreError(err: unknown): boolean {
+  if (err instanceof Error) {
+    const code = (err as { code?: string }).code;
+    const msg = err.message || '';
+    if (code === 'unavailable') return true;
+    if (msg.includes('ERR_INTERNET_DISCONNECTED')) return true;
+    if (msg.includes('WebChannelConnection')) return true;
+    if (msg.includes('transport errored')) return true;
+    if (msg.includes('offline')) return true;
+  }
+  return false;
+}
+
 export function quickMenusDocRef(branchId: string): DocumentReference {
   // pos_configs (col) / branches (doc) / {branchId} (col) / quick_menus (doc)
   return doc(db!, 'pos_configs', 'branches', branchId, 'quick_menus');
@@ -109,8 +126,12 @@ export async function getQuickMenus(branchId: string): Promise<QuickMenu[]> {
   try {
     snap = await getDoc(quickMenusDocRef(branchId));
   } catch (err) {
-    console.warn('[quickMenuStore] getDoc failed, trying cache', err);
-    snap = await getDocFromCache(quickMenusDocRef(branchId));
+    if (isOfflineLikeFirestoreError(err)) {
+      console.warn('[quickMenuStore] offline/transport error, trying cache', err);
+      snap = await getDocFromCache(quickMenusDocRef(branchId));
+    } else {
+      throw err;
+    }
   }
   return snap.exists() ? parseMenus(snap.data()) : [];
 }
