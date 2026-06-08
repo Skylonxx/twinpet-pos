@@ -8,7 +8,7 @@
 > - **Phase 5 Approved:** Phase 5 approved by Tech Lead / CEO via external directive. This report records the approval context, Developer Self-Review Gate, and MVP readiness manifest.
 > - **Strategic Capacitor Pivot:** Twinpet POS architecture updated to target Native App deployment via Capacitor (`docs/skills/SKILL-GLOBAL-ARCHITECTURE.md`). This is a docs/architecture-only update; no code/packages/config changed. Phase 5 UAT remains paused until architecture docs are aligned.
 > - **Pre-UAT Evidence Collected:** Automated evidence collected in `docs/reports/phase-5-batch-1-pre-uat-evidence.md`. Exact terminal output for `npm run build` and Playwright E2E checkout test is fully captured and recorded.
-> - **Batch 2 & 3 UAT (Manual/Visual & Offline):** Logged in `docs/reports/phase-5-batch-2-uat-results.md` and `docs/reports/phase-5-batch-3-offline-uat-results.md`. All visual manual UI/responsive and offline flow checks are explicitly marked DEFERRED as they require human interaction and network throttling. MVP UAT remains blocked pending human manual UAT execution/evidence. No code patches requested or made. `git status` shows pre-existing `.claude/` which is out of scope.
+> - **Batch 2, 3, & 4 UAT (Manual/Visual & Offline):** Logged in `docs/reports/phase-5-batch-2-uat-results.md`, `docs/reports/phase-5-batch-3-offline-uat-results.md`, and `docs/reports/phase-5-batch-4-human-offline-uat.md`. All visual manual UI/responsive and offline flow checks are explicitly marked DEFERRED as they require human interaction and network throttling. MVP UAT remains blocked pending real human manual UAT execution/evidence. No code patches requested or made. `git status` shows pre-existing `.claude/` which is out of scope.
 > - **Self-Review Gate:** Created `docs/skills/SKILL-DEVELOPER-SELF-REVIEW.md` and `docs/reports/ai-failure-ledger.md` to enforce self-review before Codex handoff.
 > - **Docs-only:** No app code, rules, functions, or tests were changed.
 > 
@@ -24,7 +24,7 @@
 > - [x] **Flowbite / Impeccable.style compliance**: not applicable except docs still preserve existing UI standards.
 > - [x] **Security/rules impact**: none.
 > - [x] **Tests/build run**: not run because docs-only.
-> - [x] **Evidence captured**: Batch 2 & 3 captured documentation status only; manual screenshots not captured. Automated evidence reused Batch 1 or was rerun with output matching Batch 1.
+> - [x] **Evidence captured**: Batch 2, 3 & 4 captured documentation status only; manual screenshots not captured. Automated evidence reused Batch 1.
 > - [x] **Report accuracy**: Checked.
 > - [x] **Failure ledger items checked**: no overclaiming native storage implemented no packages installed no runtime changes claimed.
 > - [x] **Deferred items**: Capacitor setup, native storage plugin choice, SQLite schema/migration, hardware plugin feasibility, App Store/Play Store pipeline. All responsive/manual state/offline checks remain deferred.
