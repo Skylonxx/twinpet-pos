@@ -1,10 +1,13 @@
 # Latest Report
 
 > Rolling "latest report" for the stock-write security workstream. Updated at each phase boundary.
-> **Current state:** **Phase 4 Step 3 (Checkout / Payment Loading UI) Implemented**.
-> **See:** `docs/reports/phase-4-step-3-checkout-payment-loading-manifest.md` for the strict Step 3 constraints and inspection details. 
+> **Current state:** **Phase 4 Step 4 (Back Office / Admin Exception UI) Planning**.
+> **See:** `docs/reports/phase-4-step-4-admin-exception-ui-manifest.md` for the strict Step 4 constraints and inspection details.
 > 
-> **Docs note (latest):** Added internal `docs/skills/` directory to codify workflow rules (e.g., `SKILL-UI-IMPECCABLE.md`, `SKILL-RELEASE-EVIDENCE.md`). This was a **docs-only** addition. No app logic, rules, or functions were modified, and no external `google/skills` were installed. Explicit vendor skill boundaries were added to ignore `node_modules/**/SKILL.md`.
+> ## Phase 4 Step 4 (Planning/Manifest Only)
+> - Step 4 is currently in manifest-only state.
+> - The goal is to upgrade the Admin Exception UI (`ReconciliationExceptionsPage.tsx`) to use Flowbite React components (`SKILL-UI-IMPECCABLE.md`) and improve the retry UX with Anti-Silent Failure handling.
+> - No app code, rules, or functions have been modified.
 > 
 > ## Phase 4 Step 3 Implementation Summary
 > - **Files Changed:** `src/components/PaymentModal.tsx`, `src/components/PaymentModal.css`, `tests/pos-human-checkout.spec.ts`, `scripts/start-emulator.mjs`, `scripts/dev-after-emulators.mjs`.
