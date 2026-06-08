@@ -1,6 +1,7 @@
 import {
   doc,
   getDoc,
+  getDocFromCache,
   onSnapshot,
   runTransaction,
   type DocumentReference,
@@ -104,7 +105,13 @@ export async function getQuickMenus(branchId: string): Promise<QuickMenu[]> {
   if (!isFirebaseConfigured || !db) {
     return sortByOrder(readDev()[branchId] ?? []);
   }
-  const snap = await getDoc(quickMenusDocRef(branchId));
+  let snap;
+  try {
+    snap = await getDoc(quickMenusDocRef(branchId));
+  } catch (err) {
+    console.warn('[quickMenuStore] getDoc failed, trying cache', err);
+    snap = await getDocFromCache(quickMenusDocRef(branchId));
+  }
   return snap.exists() ? parseMenus(snap.data()) : [];
 }
 

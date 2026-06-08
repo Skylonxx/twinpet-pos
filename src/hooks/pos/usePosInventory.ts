@@ -85,6 +85,7 @@ export function usePosInventory(branchId: string | null) {
     sorting: snapshot.sorting,
     /** Admin virtual categories for this branch (POS shows the active ones). */
     quickMenus: snapshot.quickMenus,
+    fromCache: snapshot.fromCache ?? false,
     loading,
     refreshing,
     error,

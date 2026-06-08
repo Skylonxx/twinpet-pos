@@ -9,6 +9,7 @@
 > - **Strategic Capacitor Pivot:** Twinpet POS architecture updated to target Native App deployment via Capacitor (`docs/skills/SKILL-GLOBAL-ARCHITECTURE.md`). This is a docs/architecture-only update; no code/packages/config changed. Phase 5 UAT remains paused until architecture docs are aligned.
 > - **Pre-UAT Evidence Collected:** Automated evidence collected in `docs/reports/phase-5-batch-1-pre-uat-evidence.md`. Exact terminal output for `npm run build` and Playwright E2E checkout test is fully captured and recorded.
 > - **Batch 2, 3, & 4 UAT (Manual/Visual & Offline):** Logged in `docs/reports/phase-5-batch-2-uat-results.md`, `docs/reports/phase-5-batch-3-offline-uat-results.md`, and `docs/reports/phase-5-batch-4-human-offline-uat.md`. All visual manual UI/responsive and offline flow checks are explicitly marked DEFERRED as they require human interaction and network throttling. MVP UAT remains blocked pending real human manual UAT execution/evidence. No code patches requested or made. `git status` shows pre-existing `.claude/` which is out of scope.
+> - **DEFECT-UAT-001 Patched:** Addressed offline product grid cache wipe issue. See `docs/reports/phase-5-defect-uat-001-offline-product-cache.md`.
 > - **Self-Review Gate:** Created `docs/skills/SKILL-DEVELOPER-SELF-REVIEW.md` and `docs/reports/ai-failure-ledger.md` to enforce self-review before Codex handoff.
 > - **Docs-only:** No app code, rules, functions, or tests were changed.
 > 

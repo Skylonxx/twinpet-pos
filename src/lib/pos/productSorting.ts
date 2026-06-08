@@ -4,7 +4,9 @@ import {
   deleteDoc,
   doc,
   getDoc,
+  getDocFromCache,
   getDocs,
+  getDocsFromCache,
   runTransaction,
   serverTimestamp,
   updateDoc,
@@ -78,7 +80,13 @@ export async function getBranchSortOrders(branchId: string): Promise<Record<stri
     }
     return out;
   }
-  const snap = await getDocs(productSortingCollectionRef(branchId));
+  let snap;
+  try {
+    snap = await getDocs(productSortingCollectionRef(branchId));
+  } catch (err) {
+    console.warn('[productSorting] getDocs failed, trying cache', err);
+    snap = await getDocsFromCache(productSortingCollectionRef(branchId));
+  }
   const out: Record<string, string[]> = {};
   for (const d of snap.docs) {
     const order = d.data().order;
@@ -96,7 +104,13 @@ export async function getProductSortOrder(
     const entry = readDevSort()[devCompositeKey(branchId, categoryKey)];
     return { order: entry?.order ?? [], rev: entry?.rev ?? 0 };
   }
-  const snap = await getDoc(productSortingDocRef(branchId, categoryKey));
+  let snap;
+  try {
+    snap = await getDoc(productSortingDocRef(branchId, categoryKey));
+  } catch (err) {
+    console.warn('[productSorting] getDoc failed, trying cache', err);
+    snap = await getDocFromCache(productSortingDocRef(branchId, categoryKey));
+  }
   if (!snap.exists()) return { order: [], rev: 0 };
   const data = snap.data();
   return {

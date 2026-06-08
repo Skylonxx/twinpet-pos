@@ -79,8 +79,10 @@ export default function POSPage() {
     richCategories,
     sorting,
     quickMenus,
+    fromCache,
     loading,
     refreshing,
+    error,
     refreshInventory,
   } = usePosInventory(branchId);
   const { bills: suspendedBills, count: suspendedCount, addBill, removeBill } =
@@ -631,6 +633,18 @@ export default function POSPage() {
             <div className="pos-loading-overlay">กำลังโหลดสินค้า...</div>
           ) : (
             <div className="pos-product-grid">
+              {fromCache && products.length > 0 && (
+                <div className="col-span-full mb-4 rounded bg-yellow-50 p-3 text-sm text-yellow-800 border border-yellow-200 flex items-center justify-center">
+                  <i className="ti ti-wifi-off mr-2" aria-hidden="true" />
+                  ออฟไลน์ แสดงข้อมูลสินค้าล่าสุดในเครื่อง
+                </div>
+              )}
+              {error && products.length === 0 && (
+                <div className="col-span-full mb-4 rounded bg-red-50 p-3 text-sm text-red-800 border border-red-200 flex items-center justify-center">
+                  <i className="ti ti-alert-circle mr-2" aria-hidden="true" />
+                  ไม่มีข้อมูลสินค้าในเครื่อง ต้องเชื่อมต่ออินเทอร์เน็ตเพื่อโหลดครั้งแรก
+                </div>
+              )}
               {filteredProducts.map((p) => {
                 const qty = cart.cartQtyByProduct.get(p.id) ?? 0;
                 const baseOption = p.uomOptions[0];
@@ -657,6 +671,11 @@ export default function POSPage() {
                   </div>
                 );
               })}
+              {filteredProducts.length === 0 && products.length > 0 && (
+                <div className="p-8 text-center text-gray-500 w-full col-span-full">
+                  ไม่พบสินค้าที่ตรงกับการค้นหา
+                </div>
+              )}
             </div>
           )}
         </div>

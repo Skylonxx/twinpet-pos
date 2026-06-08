@@ -20,7 +20,9 @@ import {
   collectionGroup,
   doc,
   getDoc,
+  getDocFromCache,
   getDocs,
+  getDocsFromCache,
   query,
   where,
 } from 'firebase/firestore';
@@ -40,6 +42,8 @@ export type InventorySnapshot = {
   sorting: Record<string, string[]>;
   /** Admin-curated virtual categories (order-sorted; POS filters to active ones). */
   quickMenus: QuickMenu[];
+  /** True if the snapshot was served from the local offline cache. */
+  fromCache?: boolean;
 };
 
 function isIndexError(err: unknown): boolean {
@@ -66,6 +70,26 @@ function mapCategoryDoc(d: { id: string; data: () => Record<string, unknown> }):
   return entry;
 }
 
+async function safeGetDocs(q: any): Promise<any> {
+  try {
+    return await getDocs(q);
+  } catch (err) {
+    if (!isIndexError(err)) {
+      console.warn('[inventoryRepository] getDocs failed, trying cache', err);
+    }
+    return await getDocsFromCache(q);
+  }
+}
+
+async function safeGetDoc(ref: any): Promise<any> {
+  try {
+    return await getDoc(ref);
+  } catch (err) {
+    console.warn('[inventoryRepository] getDoc failed, trying cache', err);
+    return await getDocFromCache(ref);
+  }
+}
+
 /** Read this branch's per-product stock + price overrides, keyed by productId. */
 async function fetchStockByProduct(branchId: string, productIds: string[]): Promise<Map<string, StockEntry>> {
   const stockByProduct = new Map<string, StockEntry>();
@@ -83,7 +107,7 @@ async function fetchStockByProduct(branchId: string, productIds: string[]): Prom
       collectionGroup(db!, collections.productStocks),
       where('branchId', '==', branchId),
     );
-    const snap = await getDocs(stockQ);
+    const snap = await safeGetDocs(stockQ);
     for (const d of snap.docs) apply(d.ref.parent.parent?.id, d.data());
     return stockByProduct;
   } catch (err) {
@@ -94,7 +118,7 @@ async function fetchStockByProduct(branchId: string, productIds: string[]): Prom
     await Promise.all(
       productIds.map(async (id) => {
         const stockRef = doc(db!, collections.products, id, collections.productStocks, branchId);
-        const stockSnap = await getDoc(stockRef);
+        const stockSnap = await safeGetDoc(stockRef);
         apply(id, stockSnap.exists() ? stockSnap.data() : undefined);
       }),
     );
@@ -124,15 +148,15 @@ export async function getInventorySnapshot(branchId: string): Promise<InventoryS
   // snapshot, so the grid order is point-in-time too — no live listener on the
   // POS, Light Path intact.
   const [productSnap, categorySnap, sorting, quickMenus] = await Promise.all([
-    getDocs(productQ),
-    getDocs(collection(db, collections.categories)),
+    safeGetDocs(productQ),
+    safeGetDocs(collection(db, collections.categories)),
     getBranchSortOrders(branchId),
     getQuickMenus(branchId),
   ]);
 
   const rawProducts: Product[] = productSnap.docs
-    .map((d) => ({ ...(d.data() as Product), id: d.id }))
-    .filter((p) => !p.deletedAt);
+    .map((d: any) => ({ ...(d.data() as Product), id: d.id }))
+    .filter((p: any) => !p.deletedAt);
 
   const stockByProduct = await fetchStockByProduct(
     branchId,
@@ -144,5 +168,6 @@ export async function getInventorySnapshot(branchId: string): Promise<InventoryS
     categories: categorySnap.docs.map(mapCategoryDoc),
     sorting,
     quickMenus,
+    fromCache: productSnap.metadata?.fromCache === true,
   };
 }
