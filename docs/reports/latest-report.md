@@ -5,14 +5,14 @@
 > **See:** `docs/reports/phase-4-step-3-checkout-payment-loading-manifest.md` for the strict Step 3 constraints and inspection details. 
 > 
 > ## Phase 4 Step 3 Implementation Summary
-> - **Files Changed:** `src/components/PaymentModal.tsx`, `src/components/PaymentModal.css`, `tests/pos-human-checkout.spec.ts`.
+> - **Files Changed:** `src/components/PaymentModal.tsx`, `src/components/PaymentModal.css`, `tests/pos-human-checkout.spec.ts`, `scripts/start-emulator.mjs`, `scripts/dev-after-emulators.mjs`.
 > - **Wording Changes:** Replaced "ชำระเงินสำเร็จ" and "บันทึกการขายสำเร็จ" with async-safe wording: "รับรายการขายแล้ว รอระบบประมวลผล" (online) and "บันทึกรายการลงเครื่องแล้ว ระบบกำลังรอซิงก์" (offline hint via `navigator.onLine`).
 > - **Duplicate-Submit Handling:** `pay-confirm` button disables immediately using `confirming || processing` states. Added visual 'กำลังบันทึกคำสั่งซื้อ...' text on the button.
-> - **onConfirm Rejection Behavior:** Rejection from `onConfirm` is now explicitly trapped in a `catch` block and visually surfaced via `confirmError` state rendered directly inside the modal (Anti-Silent Failure).
-> - **Playwright Test Changes:** Updated `aria-label` selector in `tests/pos-human-checkout.spec.ts` from `"ชำระเงินสำเร็จ"` to `"รับรายการขายแล้ว"`.
-> - **Build/Test Evidence:** `npm run build` completed successfully. Playwright tests updated and ready.
+> - **onConfirm Rejection Behavior:** Rejection from `onConfirm` is explicitly trapped. Raw errors are logged to the console, and a cashier-safe message is shown in the UI (`ไม่สามารถบันทึกรายการได้ กรุณาตรวจสอบการเชื่อมต่อหรือแจ้งผู้ดูแล`).
+> - **Playwright Test Changes:** Updated selectors and comments from `Success` to `Accepted`.
+> - **Build/Test Evidence:** `npm run build` PASSED (921ms). `npx playwright test tests/pos-human-checkout.spec.ts` **FAILED**. Playwright port mismatch was fixed by threading `process.argv` down to Vite, allowing the test to boot on port 5174. However, the test timed out (15000ms) waiting for the login PIN keypad (`.login-pin-btn:text-is("3")`). Test is NOT passing.
 > - **Untouched Files:** `POSPage.tsx`, `useCheckout.ts`, `firestore.rules`, `functions/src/*`, and `stash@{0}` were strictly untouched.
-> - **Paranoid Checklist:** Business logic integrity preserved; State isolation maintained; Cross-contamination avoided; Devil's Advocate (Playwright selector breakage) addressed. 
+> - **Paranoid Checklist:** Business logic integrity preserved; State isolation maintained; Cross-contamination avoided.
 > - **Void authorization (Option A2):** `firestore.rules` strictly prevents voiding orders created on previous operational days via a server-side timestamp comparison (`(request.time + duration.value(7, 'h')).date() == (resource.data.serverCreatedAt + duration.value(7, 'h')).date()`). Cross-day voids are definitively blocked at the database layer. 
 > - **Legacy Doc Compatibility (`serverCreatedAt` missing or null):** The rules explicitly require `"serverCreatedAt" in resource.data` and `resource.data.serverCreatedAt != null`. Attempting to void legacy documents that lack this timestamp will automatically and safely be denied without throwing a runtime rule evaluation error.
 > - **Actor identity:** The system uses Anonymous Auth on the device, meaning `request.auth.uid` is a randomized string. The POS PIN-login (`verifyPinLogin` CF) stamps the actual user's ID as a custom claim (`request.auth.token.staffId`). `firestore.rules` was strictly patched to validate `request.resource.data.voidedBy == request.auth.token.staffId`, completely protecting against spoofing while accurately logging identity. 

@@ -144,7 +144,11 @@ async function boot() {
 }
 
 function startVite() {
-  const proc = spawn("npm", ["run", "dev:web"], { stdio: "inherit", shell: true });
+  const args = ["run", "dev:web"];
+  if (process.argv.length > 2) {
+    args.push("--", ...process.argv.slice(2));
+  }
+  const proc = spawn("npm", args, { stdio: "inherit", shell: true });
   proc.on("exit", async (code) => {
     await finalize();
     process.exit(code ?? 0);

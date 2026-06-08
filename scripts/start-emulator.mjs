@@ -28,7 +28,8 @@ if (existsSync(metaFile)) {
 // out of an empty app. emulators:exec exports state when this command exits.
 // Quote it: emulators:exec takes ONE script argument, and shell:true concatenates
 // args unquoted, so the space in this command would otherwise be split into two.
-args.push('"node scripts/dev-after-emulators.mjs"');
+const childArgs = process.argv.slice(2).join(" ");
+args.push(`"node scripts/dev-after-emulators.mjs ${childArgs}"`);
 
 const proc = spawn("firebase", args, { stdio: "inherit", shell: true });
 proc.on("exit", (code) => process.exit(code ?? 0));

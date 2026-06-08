@@ -115,8 +115,8 @@ const SEL = {
   paymentDialog: '[role="dialog"][aria-label="ชำระเงิน"]',
   payQuickBill1000: '.pay-quick-bills button:text("+1000")',
   payConfirmBtn: '.pay-confirm',
-  paySuccessDialog: '[aria-label="รับรายการขายแล้ว"]',
-  paySuccessChange: '.pay-success-change',
+  payAcceptedDialog: '[aria-label="รับรายการขายแล้ว"]',
+  payAcceptedChange: '.pay-success-change',
   payNewSaleBtn: '.pay-success-btn--primary',
 } as const;
 
@@ -246,12 +246,12 @@ test.describe('Human-Like Cashier Checkout', () => {
     // Confirm the payment.
     await page.click(SEL.payConfirmBtn);
 
-    // ── Scene 9: Success ─────────────────────────────────────────────────────
-    // The sale is saved. The success screen appears with the change amount.
-    const successDialog = page.locator(SEL.paySuccessDialog);
-    await expect(successDialog).toBeVisible({ timeout: 10_000 });
+    // ── Scene 9: Accepted ─────────────────────────────────────────────────────
+    // The sale is saved locally. The accepted screen appears with the change amount.
+    const acceptedDialog = page.locator(SEL.payAcceptedDialog);
+    await expect(acceptedDialog).toBeVisible({ timeout: 10_000 });
 
-    const changeText = page.locator(SEL.paySuccessChange);
+    const changeText = page.locator(SEL.payAcceptedChange);
     await expect(changeText).toContainText('900');
 
     // Cashier clicks "บิลใหม่" to reset for the next customer.

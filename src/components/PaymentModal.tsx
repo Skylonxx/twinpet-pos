@@ -246,7 +246,8 @@ export default function PaymentModal({
       setIsSuccess(true);
       setConfirmError(null);
     } catch (err: any) {
-      setConfirmError(err?.message || 'เกิดข้อผิดพลาดในการบันทึก กรุณาลองใหม่');
+      console.error('Payment confirmation error:', err);
+      setConfirmError('ไม่สามารถบันทึกรายการได้ กรุณาตรวจสอบการเชื่อมต่อหรือแจ้งผู้ดูแล');
     } finally {
       setConfirming(false);
     }
