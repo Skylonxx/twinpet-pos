@@ -1,16 +1,16 @@
 # Phase 5 Batch 2: UAT Results
 
 ## 1. Executive Summary
-- **Overall status**: BLOCKED PENDING MANUAL QA. Automated evidence was gathered, but true visual UAT requires human execution.
-- **Number of items**: 0 PASS / 0 FAIL / 0 BLOCKED / 44 DEFERRED
-- **Blocking defects**: None observed in automated run, but visual QA is incomplete.
-- **UAT Recommendation**: Not ready for UAT sign-off. Blocked pending manual visual QA by a human.
+- **Overall status**: Not ready for UAT sign-off; blocked pending human manual UAT execution/evidence.
+- **Number of items**: 0 PASS / 0 FAIL / 1 BLOCKED / 44 DEFERRED
+- **Blocking defects**: 1 (ISS-UAT-001) - Missing human manual QA.
+- **UAT Recommendation**: Blocked pending human manual UAT execution/evidence.
 
 ## 2. Environment / Setup
 - **Current branch**: main
-- **`git status --short`**: Clean (no changes).
+- **`git status --short`**: `git status` shows pre-existing untracked `.claude/`. `.claude/` is out of scope and not included in the docs/evidence commit. No tracked app/rules/functions/tests/package/scripts/native/node_modules files changed.
 - **`git stash list`**: `stash@{0}: On main: WIP: Batches 1-3 UI/settings/UOM/transfer-UI (unrelated to stock-security Phase 1)`
-- **Command used to run app**: `npm run build` and `npx.cmd playwright test tests/pos-human-checkout.spec.ts`
+- **Command used to run app**: `npm run build` and `npx.cmd playwright test tests/pos-human-checkout.spec.ts` were rerun in Batch 2 to confirm environment health. Output matches Batch 1 and is omitted here; see Batch 1 for raw captured logs.
 - **Browser/device/emulation method**: Playwright Chromium (Automated). Manual visual browser checks deferred.
 - **Viewport method**: None (Automated).
 - **Screenshots captured**: No
@@ -120,7 +120,9 @@
 - **Recommended follow-up**: Authorize a human-driven Batch 3 or equivalent to manually run the UAT checklist.
 
 ## 10. Production/UAT Recommendation
-- **Blocked pending patch approval** (requires human execution of the test plan).
+- Blocked pending human manual UAT execution/evidence.
+- No code patch requested in this batch.
+- Any future defect discovered during manual UAT will require separate Tech Lead approval before patching.
 
 ## 11. Developer Self-Review Before Codex
 ```markdown
@@ -134,11 +136,11 @@
 - [x] **Anti-silent-failure behavior**: Deferred to manual check.
 - [x] **Flowbite / Impeccable.style compliance**: Deferred to manual check.
 - [x] **Security/rules impact**: None.
-- [x] **Tests/build run**: `npm run build` and Playwright tests were run to confirm environment health, but visual tests were deferred.
-- [x] **Evidence captured**: Honest accounting of DEFERRED items due to AI execution constraints.
+- [x] **Tests/build run**: `npm run build` and Playwright tests were rerun in Batch 2 to confirm health, but output is omitted here (see Batch 1). Visual manual tests were deferred.
+- [x] **Evidence captured**: Batch 2 captured documentation status only; manual screenshots not captured. Automated evidence was rerun but references Batch 1 for logs.
 - [x] **Report accuracy**: Checked.
 - [x] **Failure ledger items checked**: Strictly avoided overclaiming "PASS" when no actual visual check occurred.
-- [x] **Deferred items**: ALL manual UI and responsive checks.
-- [x] **Known remaining risks**: Entire MVP UI validation remains untested visually.
-- [x] **Ready for Codex review**: Yes
+- [x] **Deferred items**: All responsive/manual state checks remain deferred.
+- [x] **Known remaining risks**: UAT sign-off blocked until human manual evidence is collected. Entire MVP UI validation remains untested visually.
+- [x] **Ready for Codex review**: Yes, after this cleanup.
 ```
