@@ -95,6 +95,12 @@ Current known deferred items:
 * Flowbite React primitive polish where still manual.
 * First real sale reconciliation log monitoring.
 * GCS `gcf-sources` / artifact IAM/lifecycle audit post-MVP.
+* **Capacitor Native Deployment Checklist**:
+  - Capacitor project setup and build pipeline integration.
+  - Native offline storage plugin selection (e.g. SQLite).
+  - iOS bundle identifier / Android applicationId config.
+  - App icons and splash screens.
+  - Native permissions and compliance review.
 
 ## J. Phase 5 Paranoid Checklist
 - [ ] **Business Logic Integrity**: Ensured no logic modified.

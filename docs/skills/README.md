@@ -11,6 +11,7 @@ When working on a feature, you must read and adhere to the relevant skill files:
 - **`SKILL-FIREBASE-GCP-AUDIT.md`**: Protocol for live cloud environment checks and deploys.
 - **`SKILL-RELEASE-EVIDENCE.md`**: Standard for capturing honest, truthful test and build artifacts.
 - **`SKILL-DEVELOPER-SELF-REVIEW.md`**: Strict self-review checklist every Developer agent must output before requesting Codex review, before any implementation closeout, and before report/update/commit handoff.
+- **`SKILL-GLOBAL-ARCHITECTURE.md`**: Global architecture strategy covering single codebase rules, Capacitor native shell, offline native persistence, and hardware readiness.
 
 ## Evaluating External Skills (e.g. `google/skills`)
 
