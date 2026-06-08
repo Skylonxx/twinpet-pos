@@ -32,7 +32,7 @@ When the POS operates offline (network disconnected) and a cashier navigates awa
 2. **Preserved Firestore Index/Security Errors**: Non-offline errors (like `permission-denied` or `failed-precondition`) bypass the cache fallback and are thrown directly to the caller. This ensures that the POS UI accurately renders real errors instead of hiding them behind a stale cache, and preserves the intended per-product fallback in `fetchStockByProduct` when a collection-group index is missing.
 3. **`fromCache` Flag**: Modified `InventorySnapshot` to surface whether the data was loaded from cache (`productSnap.metadata?.fromCache === true`).
 4. **Empty/Offline State UI**: Updated `POSPage.tsx` to handle the empty state distinctively:
-   - If cache fallback succeeds but the user is offline: "ออฟไลน์ แสดงข้อมูลสินค้าล่าสุดในเครื่อง" (Yellow alert).
+   - If cache fallback succeeds but the user is offline: A subtle gray Flowbite badge appears near the sync/status area stating "ออฟไลน์ (ใช้ข้อมูลในเครื่อง)".
    - If the cache is truly empty and offline: "ไม่มีข้อมูลสินค้าในเครื่อง ต้องเชื่อมต่ออินเทอร์เน็ตเพื่อโหลดครั้งแรก" (Red alert).
    - If a real Firestore/system error occurs: "ข้อผิดพลาดของระบบ: [error message]" (Red alert).
    - If the server snapshot is genuinely empty: "ยังไม่มีข้อมูลสินค้าในระบบ".
@@ -75,7 +75,7 @@ Running 1 test using 1 worker
   2. Confirm products are visible.
   3. Disconnect network.
   4. Navigate away from POS, then back to POS.
-  5. Verify cached product grid is still visible, with a yellow offline indicator.
+  5. Verify cached product grid is still visible, with a subtle gray offline badge in the top bar.
 
 ## 5. Security & Rule Impact
 - No Firebase rules or Cloud Functions were modified.
