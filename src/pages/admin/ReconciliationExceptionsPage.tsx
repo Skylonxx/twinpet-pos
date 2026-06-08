@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell, Button, Badge, Alert, Spinner, Card } from 'flowbite-react';
 import { useAuth } from '../../lib/hooks/useAuth';
 import { canViewReconciliationExceptions } from '../../lib/reconciliation/adminGate';
 import { useReconciliationExceptions } from '../../lib/reconciliation/useReconciliationExceptions';
@@ -7,117 +8,135 @@ import { mapRetryError, retryDisableReason } from '../../lib/reconciliation/exce
 import './ReconciliationExceptionsPage.css';
 
 /**
- * Track B Step 2 — Reconciliation Exceptions admin page (ROUTE-ONLY).
- * Reached by direct URL `/admin/reconciliation-exceptions` only — no dashboard
- * card, no nav link. Read-only Firestore subscription + the secured
- * `retryReconcile` callable. Plain CSS (no Flowbite) so it stays orthogonal to
- * the stash@{0} Flowbite migration.
+ * Track B Step 2 / Phase 4 Step 4 — Reconciliation Exceptions admin page.
+ * Route-only access via `/admin/reconciliation-exceptions`.
+ * Refactored to use Flowbite React with Anti-Silent Failure UX.
  */
 export default function ReconciliationExceptionsPage() {
   const { user } = useAuth();
-  // Admin gate FIRST. `isAdmin` drives the query's `enabled` flag, so a non-admin
-  // never starts the Firestore exception subscription (the security boundary —
-  // we do NOT rely on AdminLayout for enforcement).
+  // Admin gate FIRST.
   const isAdmin = canViewReconciliationExceptions(user?.role);
   const { rows, loading, error } = useReconciliationExceptions(isAdmin);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'failure' } | null>(null);
 
   useEffect(() => {
     if (!toast) return;
-    const t = window.setTimeout(() => setToast(null), 3200);
+    const t = window.setTimeout(() => setToast(null), 5000);
     return () => window.clearTimeout(t);
   }, [toast]);
 
   const onRetry = useCallback(async (orderId: string) => {
-    if (!window.confirm(`รีทรายการกระทบยอดของบิล ${orderId}?`)) return;
+    if (!window.confirm(`ส่งคำขอรีทรายรายการกระทบยอดของบิล ${orderId}?`)) return;
     setBusyId(orderId);
+    setToast(null);
     try {
       await callRetryReconcile(orderId);
-      setToast(`ส่งคำขอรีทราย ${orderId} แล้ว — ระบบกำลังประมวลผลใหม่`);
+      // Async-safe success wording — backend only arms the state, doesn't immediately guarantee success
+      setToast({ message: `ส่งคำขอ retry บิล ${orderId} แล้ว ระบบจะประมวลผลต่อ`, type: 'success' });
     } catch (err) {
       const code = (err as { code?: string }).code?.replace(/^functions\//, '');
-      setToast(mapRetryError(code));
+      setToast({ message: mapRetryError(code) || 'เกิดข้อผิดพลาดในการเชื่อมต่อ', type: 'failure' });
     } finally {
       setBusyId(null);
     }
   }, []);
 
-  // Degrade SAFELY for any non-admin who reaches the direct URL (independent of
-  // the AdminLayout gate) — never crash, never show cross-branch data. The query
-  // above was already gated off (enabled=false), so nothing was read.
   if (!isAdmin) {
     return (
-      <div className="recex-page">
-        <div className="recex-empty">เฉพาะผู้ดูแลระบบ (admin) เท่านั้นที่เข้าถึงหน้านี้ได้</div>
+      <div className="p-6 max-w-4xl mx-auto">
+        <Alert color="failure">
+          <span className="font-medium">ข้อผิดพลาด!</span> เฉพาะผู้ดูแลระบบ (admin) เท่านั้นที่เข้าถึงหน้านี้ได้
+        </Alert>
       </div>
     );
   }
 
   return (
-    <div className="recex-page">
-      <header className="recex-topbar">
+    <div className="p-4 md:p-6 max-w-6xl mx-auto flex flex-col gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <div className="recex-title">รายการกระทบยอดค้าง (Reconciliation Exceptions)</div>
-          <div className="recex-sub">การซ่อมแซมด้วยตนเอง — ใช้เมื่อจำเป็นเท่านั้น</div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">รายการกระทบยอดค้าง</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            (Reconciliation Exceptions) การซ่อมแซมด้วยตนเอง — ใช้เมื่อจำเป็นเท่านั้น
+          </p>
         </div>
-        <span className="recex-count">{loading ? '…' : `${rows.length} รายการ`}</span>
-      </header>
+        <Badge color="gray" size="sm" className="w-fit">
+          {loading ? <Spinner size="sm" /> : `${rows.length} รายการ`}
+        </Badge>
+      </div>
 
-      {error ? (
-        <div className="recex-error">โหลดข้อมูลไม่สำเร็จ: {error}</div>
-      ) : loading ? (
-        <div className="recex-empty">กำลังโหลด...</div>
-      ) : rows.length === 0 ? (
-        <div className="recex-empty">ไม่มีรายการกระทบยอดค้าง 🎉</div>
-      ) : (
-        <div className="recex-table-wrap">
-          <table className="recex-table">
-            <thead>
-              <tr>
-                <th>บิล</th>
-                <th>สาขา</th>
-                <th>พนักงาน</th>
-                <th className="recex-right">ยอด</th>
-                <th className="recex-right">ครั้ง</th>
-                <th>ข้อผิดพลาดล่าสุด</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => {
-                const disabled = retryDisableReason(r, busyId === r.id);
-                return (
-                  <tr key={r.id}>
-                    <td className="recex-mono">{r.billId}</td>
-                    <td>{r.branchId}</td>
-                    <td>{r.staffName}</td>
-                    <td className="recex-right">{r.total.toLocaleString('th-TH')}</td>
-                    <td className="recex-right">
-                      {r.reconcileAttempts}
-                      {r.voidRequested ? <span className="recex-badge">void</span> : null}
-                    </td>
-                    <td className="recex-err" title={r.lastReconcileError}>{r.lastReconcileError}</td>
-                    <td className="recex-right">
-                      <button
-                        type="button"
-                        className="recex-retry-btn"
-                        disabled={disabled !== null}
-                        title={disabled ?? 'รีทราย'}
-                        onClick={() => void onRetry(r.id)}
-                      >
-                        {busyId === r.id ? '...' : 'รีทราย'}
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+      {toast && (
+        <Alert color={toast.type} onDismiss={() => setToast(null)}>
+          {toast.message}
+        </Alert>
       )}
 
-      {toast ? <div className="recex-toast" role="status">{toast}</div> : null}
+      {error ? (
+        <Alert color="failure">
+          <span className="font-medium">โหลดข้อมูลไม่สำเร็จ:</span> {error}
+        </Alert>
+      ) : loading ? (
+        <div className="flex justify-center p-8">
+          <Spinner size="xl" aria-label="Loading exceptions" />
+        </div>
+      ) : rows.length === 0 ? (
+        <Alert color="success">
+          ไม่มีรายการกระทบยอดค้าง 🎉
+        </Alert>
+      ) : (
+        <Card className="overflow-hidden p-0">
+          <div className="overflow-x-auto">
+            <Table hoverable>
+              <TableHead>
+                <TableHeadCell>บิล</TableHeadCell>
+                <TableHeadCell>สาขา</TableHeadCell>
+                <TableHeadCell>พนักงาน</TableHeadCell>
+                <TableHeadCell className="text-right">ยอด</TableHeadCell>
+                <TableHeadCell className="text-right">ครั้ง</TableHeadCell>
+                <TableHeadCell>ข้อผิดพลาดล่าสุด</TableHeadCell>
+                <TableHeadCell>
+                  <span className="sr-only">การกระทำ</span>
+                </TableHeadCell>
+              </TableHead>
+              <TableBody className="divide-y">
+                {rows.map((r) => {
+                  const disabledReason = retryDisableReason(r, busyId === r.id);
+                  const isBusy = busyId === r.id;
+                  return (
+                    <TableRow key={r.id} className="bg-white dark:border-gray-700 dark:bg-gray-800">
+                      <TableCell className="font-mono text-xs whitespace-nowrap">{r.billId}</TableCell>
+                      <TableCell className="whitespace-nowrap">{r.branchId}</TableCell>
+                      <TableCell className="whitespace-nowrap">{r.staffName}</TableCell>
+                      <TableCell className="text-right whitespace-nowrap">{r.total.toLocaleString('th-TH')}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <span>{r.reconcileAttempts}</span>
+                          {r.voidRequested && <Badge color="warning">void</Badge>}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-red-600 dark:text-red-400 max-w-xs truncate" title={r.lastReconcileError}>
+                        {r.lastReconcileError}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          size="sm"
+                          color="light"
+                          disabled={disabledReason !== null || isBusy}
+                          title={disabledReason ?? 'รีทราย'}
+                          onClick={() => void onRetry(r.id)}
+                        >
+                          {isBusy ? <Spinner size="sm" /> : 'รีทราย'}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        </Card>
+      )}
     </div>
   );
 }

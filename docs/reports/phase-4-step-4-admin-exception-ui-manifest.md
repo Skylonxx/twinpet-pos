@@ -36,10 +36,10 @@ Implementation must be strictly limited to the following files:
 ## 3. `retryReconcile` Contract Inspection
 - **Callable Name**: `retryReconcile`
 - **Request Payload**: `{ orderId: string }`
-- **Response Shape**: Implicitly void/success or throws an error.
+- **Response Shape**: The backend callable may return `{ success: true, status, attempts }`, but the existing client wrapper exposes `Promise<void>` and ignores the backend body.
 - **Client Wrapper**: `callRetryReconcile(orderId: string)` in `retryReconcile.ts`.
 - **Current Error Behavior**: Throws an exception, catches it, maps code via `mapRetryError(code)`, and displays it.
-- **Must Preserve**: The UI MUST NEVER write to `asyncOrders` directly to "fix" an exception. It must strictly call the wrapper and let the server re-arm the status.
+- **Must Preserve**: The UI MUST NEVER write to `asyncOrders` directly to "fix" an exception. It must strictly call the wrapper and let the server re-arm the status. The UI must preserve the wrapper usage and not depend on the backend response body unless a future Tech Lead directive approves wrapper changes.
 
 ---
 
@@ -94,8 +94,8 @@ Implementation must be strictly limited to the following files:
 ---
 
 ## 10. Questions for Tech Lead / CEO
-1. **Route-Only Scope**: Is it acceptable to leave this as a route-only/direct URL page to avoid `stash@{0}` conflicts, or must we add a dashboard card/link now?
-2. **Table Pagination**: Are we okay with an unpaginated in-memory table list, assuming the total concurrent exception count is operationally very small?
+1. **Route-Only Scope**: **RESOLVED**. It is approved to leave this as a route-only/direct URL page to avoid `stash@{0}` conflicts.
+2. **Table Pagination**: **RESOLVED**. Use an in-memory unpaginated table for the MVP since exception volume should be low. Do not add pagination/index/orderBy complexity.
 
 ---
 

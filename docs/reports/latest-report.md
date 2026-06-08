@@ -1,13 +1,19 @@
 # Latest Report
 
 > Rolling "latest report" for the stock-write security workstream. Updated at each phase boundary.
-> **Current state:** **Phase 4 Step 4 (Back Office / Admin Exception UI) Planning**.
+> **Current state:** **Phase 4 Step 4 (Back Office / Admin Exception UI) Implemented**.
 > **See:** `docs/reports/phase-4-step-4-admin-exception-ui-manifest.md` for the strict Step 4 constraints and inspection details.
 > 
-> ## Phase 4 Step 4 (Planning/Manifest Only)
-> - Step 4 is currently in manifest-only state.
-> - The goal is to upgrade the Admin Exception UI (`ReconciliationExceptionsPage.tsx`) to use Flowbite React components (`SKILL-UI-IMPECCABLE.md`) and improve the retry UX with Anti-Silent Failure handling.
-> - No app code, rules, or functions have been modified.
+> ## Phase 4 Step 4 Implementation Summary
+> - **Files Changed:** `src/pages/admin/ReconciliationExceptionsPage.tsx`, `src/pages/admin/ReconciliationExceptionsPage.css`, `docs/reports/phase-4-step-4-admin-exception-ui-manifest.md`.
+> - **Manifest Correction:** Clarified `retryReconcile` backend may return `{ success: true, status, attempts }`, but the UI must preserve `Promise<void>` wrapper usage and not depend on it. Tech Lead resolved the Route-Only strategy (keep as is) and Table Pagination (unpaginated MVP approved).
+> - **Flowbite Migration:** Transformed the HTML `table` to use `flowbite-react` components (`Table`, `TableHead`, `TableRow`, etc.), along with `Card`, `Badge`, `Spinner`, `Button`, and `Alert`.
+> - **Anti-Silent Failure UX:** Replaced plain text with color-coded `Alert` blocks. Red alerts prominently show permission, query, or retry errors.
+> - **Async-Safe Wording:** A successful wrapper call triggers a green `Alert` with truthfully non-final wording: "ส่งคำขอ retry บิล {orderId} แล้ว ระบบจะประมวลผลต่อ" (Retry requested — processing).
+> - **Admin Access:** Preserved `isAdmin` hook gate; non-admins never trigger a read.
+> - **Build/Test Evidence:** `npm run build` PASSED (690ms). Route-only access and exception states (loading/empty/error/pending) are visually verifiable.
+> - **Untouched Files:** `App.tsx`, nav/dashboard files, `firestore.rules`, `functions/src/*`, POS/checkout flows, and `stash@{0}` were strictly untouched.
+> - **Paranoid Checklist:** `retryReconcile` logic is fully preserved; UI uses the wrapper without direct mutation. Table wrapped in `overflow-x-auto` for 320px screens.
 > 
 > ## Phase 4 Step 3 Implementation Summary
 > - **Files Changed:** `src/components/PaymentModal.tsx`, `src/components/PaymentModal.css`, `tests/pos-human-checkout.spec.ts`, `scripts/start-emulator.mjs`, `scripts/dev-after-emulators.mjs`.
