@@ -1,6 +1,6 @@
 # Phase 4 Step 4: Admin Exception UI Manifest
 
-**Status**: Planning / Manifest Only
+**Status**: Implemented
 
 ## 1. Step 4 Scope Summary
 **IN Scope**:
@@ -76,13 +76,13 @@ Implementation must be strictly limited to the following files:
 ---
 
 ## 8. Test/Check Plan
-- [ ] Non-admin access correctly renders unauthorized message and starts no query.
-- [ ] Exception list correctly shows empty state or populated Table.
-- [ ] Retry button is disabled while pending.
-- [ ] Retry rejection surfaces a prominent red error Toast/Alert.
-- [ ] No direct Firestore mutation executed by the UI.
-- [ ] `npm run build` succeeds without type errors.
-- [ ] Responsive checks at 320px / 768px / 1080px (Ensure table scrolls horizontally on mobile).
+- [x] Non-admin access correctly renders unauthorized message and starts no query. (Verified via backend test coverage of adminGate and manual code inspection)
+- [ ] **DEFERRED**: Exception list correctly shows empty state or populated Table (Manual state evidence deferred).
+- [ ] **DEFERRED**: Retry button is disabled while pending (Manual state evidence deferred).
+- [ ] **DEFERRED**: Retry rejection surfaces a prominent red error Toast/Alert (Manual state evidence deferred).
+- [x] No direct Firestore mutation executed by the UI. (Verified by code review: wrapper only)
+- [x] `npm run build` succeeds without type errors.
+- [ ] **DEFERRED**: Responsive checks at 320px / 768px / 1080px were not run in this pass. The table uses `overflow-x-auto` / responsive wrapping as implementation support, but that is not proof of viewport testing. Add as follow-up before MVP UAT.
 
 ---
 
