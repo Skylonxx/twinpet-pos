@@ -5,7 +5,7 @@
 > **See:** `docs/reports/phase-5-mvp-readiness-manifest.md` for the Phase 5 scope and UAT script details.
 > 
 > ## Phase 5 (Planning/Docs Only)
-> - **Phase 5 Approved:** Moving to MVP Pre-UAT Stabilization.
+> - **Phase 5 Approved:** Phase 5 approved by Tech Lead / CEO via external directive. This report records the approval context, Developer Self-Review Gate, and MVP readiness manifest.
 > - **Self-Review Gate:** Created `docs/skills/SKILL-DEVELOPER-SELF-REVIEW.md` and `docs/reports/ai-failure-ledger.md` to enforce self-review before Codex handoff.
 > - **Docs-only:** No app code, rules, functions, or tests were changed.
 > 
