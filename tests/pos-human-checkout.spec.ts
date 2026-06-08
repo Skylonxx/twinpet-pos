@@ -115,7 +115,7 @@ const SEL = {
   paymentDialog: '[role="dialog"][aria-label="ชำระเงิน"]',
   payQuickBill1000: '.pay-quick-bills button:text("+1000")',
   payConfirmBtn: '.pay-confirm',
-  paySuccessDialog: '[aria-label="ชำระเงินสำเร็จ"]',
+  paySuccessDialog: '[aria-label="รับรายการขายแล้ว"]',
   paySuccessChange: '.pay-success-change',
   payNewSaleBtn: '.pay-success-btn--primary',
 } as const;

@@ -101,6 +101,7 @@ export default function PaymentModal({
   const [savedTendered, setSavedTendered] = useState(0);
   const [savedReceiptTime, setSavedReceiptTime] = useState<Date | null>(null);
   const [printType, setPrintType] = useState<'receipt' | 'prep' | null>(null);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
 
   const autoPrintedRef = useRef(false);
 
@@ -114,6 +115,7 @@ export default function PaymentModal({
     setSavedTendered(0);
     setSavedReceiptTime(null);
     setPrintType(null);
+    setConfirmError(null);
     autoPrintedRef.current = false;
     const first = enabledMethods[0] ?? 'cash';
     setActiveMethod(first);
@@ -242,8 +244,9 @@ export default function PaymentModal({
       setSavedTendered(snapshotTendered);
       setSavedReceiptTime(new Date());
       setIsSuccess(true);
-    } catch {
-      // Parent shows error toast
+      setConfirmError(null);
+    } catch (err: any) {
+      setConfirmError(err?.message || 'เกิดข้อผิดพลาดในการบันทึก กรุณาลองใหม่');
     } finally {
       setConfirming(false);
     }
@@ -363,16 +366,22 @@ export default function PaymentModal({
   );
 
   if (isSuccess) {
+    const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
     return (
       <>
         {thermalPortal}
-        <div className="pay-modal-bg pay-modal-bg--success" role="dialog" aria-modal="true" aria-label="ชำระเงินสำเร็จ">
+        <div className="pay-modal-bg pay-modal-bg--success" role="dialog" aria-modal="true" aria-label="รับรายการขายแล้ว">
           <div className="pay-modal pay-modal--success">
             <div className="pay-success-view">
               <div className="pay-success-icon">
-                <i className="ti ti-circle-check" aria-hidden="true" />
+                <i className={isOffline ? "ti ti-cloud-upload" : "ti ti-circle-check"} aria-hidden="true" />
               </div>
-              <h3 className="pay-success-title">บันทึกการขายสำเร็จ</h3>
+              <h3 className="pay-success-title">
+                {isOffline ? 'บันทึกรายการลงเครื่องแล้ว' : 'รับรายการขายแล้ว'}
+              </h3>
+              <p className="pay-success-status-text">
+                {isOffline ? 'ระบบกำลังรอซิงก์' : 'รอระบบประมวลผล'}
+              </p>
               <p className="pay-success-order">เลขที่: {savedOrderId}</p>
               <div className="pay-success-change">
                 เงินทอน: <strong>฿{formatMoney(savedChange)}</strong>
@@ -648,13 +657,19 @@ export default function PaymentModal({
               <strong>฿{formatMoney(summaryStatus.value)}</strong>
             </div>
 
+            {confirmError && (
+              <div className="pay-confirm-error" role="alert">
+                <i className="ti ti-alert-triangle" aria-hidden="true" /> {confirmError}
+              </div>
+            )}
+
             <button
               type="button"
               className="pay-confirm"
               disabled={!canConfirm || busy}
               onClick={() => void handleConfirm()}
             >
-              {busy ? 'กำลังบันทึก...' : 'ยืนยันชำระเงิน'}
+              {busy ? 'กำลังบันทึกคำสั่งซื้อ...' : 'ยืนยันชำระเงิน'}
             </button>
           </aside>
         </div>
