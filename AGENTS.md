@@ -36,6 +36,10 @@ Do not assume a change is correct just because it compiles.
 
 Role-specific instructions live in **`docs/ai-roles/`** — see `docs/ai-roles/README.md`. Load the matching role before acting (e.g. `developer.md`, `reviewer.md`, `tech-lead.md`).
 
+## Workflow Skills
+
+Cross-cutting guidelines and workflow rules live in **`docs/skills/`** — see `docs/skills/README.md`. These codify project-specific constraints (e.g., `SKILL-UI-IMPECCABLE.md`) and must be strictly followed when relevant to your task. Skills supplement roles; they do not replace them.
+
 ## Prompt routing
 
 Execute a prompt **only** when it is explicitly addressed to the **active** agent/tool, e.g. `TO: Cursor Agent`, `TO: Codex`, `TO: Claude`, `TO: Gemini`, or `TO: Antigravity`.
