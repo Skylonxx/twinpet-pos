@@ -1,0 +1,256 @@
+.dc-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+
+.dc-modal {
+  background: white;
+  border-radius: 8px;
+  width: 100%;
+  max-width: 440px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.dc-modal-head {
+  display: flex;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.dc-modal-head-title {
+  font-weight: 600;
+  font-size: 1.125rem;
+  color: #111827;
+}
+
+.dc-modal-head-spacer {
+  flex-grow: 1;
+}
+
+.dc-modal-close {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0.25rem;
+  color: #6b7280;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+}
+.dc-modal-close:hover:not(:disabled) {
+  background-color: #f3f4f6;
+  color: #111827;
+}
+.dc-modal-close:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dc-modal-body {
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  overflow-y: auto;
+  max-height: calc(100vh - 150px);
+}
+
+.dc-warn-box {
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+.dc-error-box {
+  background-color: #fef2f2;
+  color: #b91c1c;
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.dc-offline-notice {
+  background-color: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #92400e;
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+}
+
+.dc-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.dc-field label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #374151;
+}
+
+.dc-field input,
+.dc-field select,
+.dc-field textarea {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  color: #111827;
+  background-color: #fff;
+}
+.dc-field input:focus,
+.dc-field select:focus,
+.dc-field textarea:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 1px #2563eb;
+}
+.dc-field input:disabled,
+.dc-field select:disabled,
+.dc-field textarea:disabled {
+  background-color: #f3f4f6;
+  color: #9ca3af;
+  cursor: not-allowed;
+}
+
+.dc-pin-input-container {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  margin-top: 0.5rem;
+}
+
+.dc-pin-char {
+  width: 2.5rem;
+  height: 3rem;
+  font-size: 1.5rem;
+  text-align: center;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background-color: #fff;
+  color: #111827;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dc-pin-char.filled {
+  border-color: #2563eb;
+  background-color: #eff6ff;
+}
+
+.dc-modal-footer {
+  display: flex;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  border-top: 1px solid #e5e7eb;
+  background-color: #f9fafb;
+}
+
+.dc-btn {
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  border: 1px solid transparent;
+  transition: all 0.15s ease-in-out;
+}
+.dc-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dc-btn-ghost {
+  background-color: transparent;
+  color: #374151;
+  border-color: #d1d5db;
+}
+.dc-btn-ghost:hover:not(:disabled) {
+  background-color: #f3f4f6;
+}
+
+.dc-btn-danger {
+  background-color: #dc2626;
+  color: white;
+}
+.dc-btn-danger:hover:not(:disabled) {
+  background-color: #b91c1c;
+}
+
+.dc-spacer {
+  flex-grow: 1;
+}
+
+.dc-spin {
+  animation: dc-spin-anim 1s linear infinite;
+}
+
+@keyframes dc-spin-anim {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.dc-meta-row {
+  font-weight: 500;
+  font-size: 0.875rem;
+}
+
+.dc-icon-space {
+  margin-right: 0.25rem;
+}
+
+.dc-pin-field {
+  margin-top: 0.5rem;
+}
+
+.dc-pin-label {
+  text-align: center;
+}
+
+.dc-pin-wrapper {
+  position: relative;
+  margin: 0 auto;
+}
+
+.dc-pin-hidden-input {
+  opacity: 0;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 10;
+  cursor: text;
+}
+
+.dc-pin-hidden-input:disabled {
+  cursor: not-allowed;
+}
