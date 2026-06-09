@@ -111,6 +111,44 @@ service cloud.firestore {
         || 'product_view' in tokenPerms();
     }
 
+    // ── Phase 7B-2 helpers (Origin-Controlled Discrepancy Handling) ──
+    function transferData(transferId) {
+      return get(/databases/$(database)/documents/inventoryTransfers/$(transferId)).data;
+    }
+
+    // Destination-only REPORT: a discrepancy doc may be created only by the
+    // transfer's destination branch, in the 'reported' state, with branch fields
+    // matching the parent transfer and NO resolution fields present. RESOLUTION is
+    // NOT a client write — it is performed by the resolveTransferDiscrepancy Cloud
+    // Function (Admin SDK), so there is no client `update` rule (default deny).
+    function validDiscrepancyReport(transferId) {
+      let t = transferData(transferId);
+      let d = request.resource.data;
+      return d.status == 'reported'
+        && d.transferId == transferId
+        && d.fromBranchId == t.fromBranchId
+        && d.toBranchId == t.toBranchId
+        && d.reportedByBranchId == t.toBranchId
+        && hasBranchAccess(t.toBranchId)
+        && d.reason is string
+        && d.lines is list
+        && d.lines.size() > 0
+        && !('resolvedByStaffId' in d)
+        && !('resolvedByBranchId' in d)
+        && !('resolvedAt' in d)
+        && !('resolutionAdjustmentId' in d);
+    }
+
+    // An inventoryAdjustment that carries the discrepancy markers is a transfer-
+    // discrepancy RESOLUTION. These are created ONLY by the resolveTransferDiscrepancy
+    // Cloud Function (Admin SDK, which bypasses rules), so NO client may create a
+    // marked adjustment — this closes the bypass where a branch could otherwise
+    // self-resolve/conceal a discrepancy with an adjustment.
+    function isDiscrepancyResolutionAdjustment() {
+      return ('refTransferId' in request.resource.data)
+        || ('refDiscrepancyId' in request.resource.data);
+    }
+
     function isGlobalSettingsId(settingId) {
       return settingId in ['system', 'expiryPolicies', '_rolePermissions'];
     }
@@ -414,7 +452,15 @@ service cloud.firestore {
 
     match /inventoryAdjustments/{adjustmentId} {
       allow read: if isAdmin() || (isStaff() && hasBranchAccess(resource.data.branchId));
-      allow write: if isAdmin() || (isStaff() && hasBranchAccess(request.resource.data.branchId));
+      // Create: a generic adjustment needs own-branch access (unchanged). An
+      // adjustment carrying the Phase 7B-2 discrepancy markers (refTransferId /
+      // refDiscrepancyId) is a transfer-discrepancy RESOLUTION — those are created
+      // ONLY by the resolveTransferDiscrepancy Cloud Function (Admin SDK), so NO
+      // client may create one. This prevents any branch (destination OR origin)
+      // from self-resolving/concealing a discrepancy via a marked adjustment.
+      allow create: if !isDiscrepancyResolutionAdjustment()
+        && (isAdmin() || (isStaff() && hasBranchAccess(request.resource.data.branchId)));
+      allow update, delete: if isAdmin() || (isStaff() && hasBranchAccess(resource.data.branchId));
 
       match /adjustmentItems/{itemId} {
         allow read: if isStaff();
@@ -437,6 +483,24 @@ service cloud.firestore {
         allow create: if isStaff();
         allow update, delete: if isAdmin() || (isStaff()
           && hasBranchAccess(get(/databases/$(database)/documents/inventoryTransfers/$(transferId)).data.fromBranchId));
+      }
+
+      // ── Phase 7B-2: Origin-Controlled Discrepancy Handling ──
+      // The DESTINATION branch may only REPORT (create, status 'reported') — a
+      // metadata record that carries no stock mutation and no resolution fields.
+      // RESOLUTION is SERVER-ONLY: the resolveTransferDiscrepancy Cloud Function
+      // (Admin SDK) validates origin authority + identity and atomically performs
+      // the stock correction and flips status → 'resolved'. There is therefore NO
+      // client `update` rule — no client (origin or destination) may resolve, mark
+      // resolved, or mutate a reported discrepancy.
+      match /transferDiscrepancies/{discId} {
+        allow read: if isAdmin() || (isStaff()
+          && (hasBranchAccess(transferData(transferId).fromBranchId)
+            || hasBranchAccess(transferData(transferId).toBranchId)));
+        allow create: if isAdmin() || (isStaff() && validDiscrepancyReport(transferId));
+        // update: SERVER-ONLY (Admin SDK) — no client may write a resolution.
+        allow update: if false;
+        allow delete: if isAdmin();
       }
     }
 

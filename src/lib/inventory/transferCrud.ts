@@ -6,6 +6,7 @@ import {
   increment,
   runTransaction,
   serverTimestamp,
+  setDoc,
   Timestamp,
   type DocumentReference,
 } from 'firebase/firestore';
@@ -22,12 +23,16 @@ import {
 } from '../fifo';
 import { devCancelBranchTransfer, devConfirmBranchTransfer } from './transferDevMock';
 import {
+  generateDiscrepancyId,
   generateTransferId,
   type BranchTransferForm,
   type BranchTransferLineInput,
   type CancelBranchTransferInput,
   type InventoryTransfer,
   type InventoryTransferItem,
+  type ReportTransferDiscrepancyInput,
+  type TransferDiscrepancy,
+  type TransferDiscrepancyLine,
   type TransferLotDetail,
 } from './transferTypes';
 
@@ -693,3 +698,118 @@ export async function editBranchTransfer(
   });
   return confirmBranchTransfer(form, items);
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// Phase 7B-2 — Origin-Controlled Discrepancy Handling
+//
+// Destination branches can only REPORT a quantity discrepancy (metadata, never a
+// stock mutation). Resolution is SERVER-AUTHORITATIVE: the origin branch resolves
+// via the `resolveTransferDiscrepancy` Cloud Function (Admin SDK), which performs
+// the FIFO-correct stock adjustment atomically. The client wrapper in
+// `src/lib/inventory/resolveTransferDiscrepancy.ts` only invokes the callable —
+// it does NOT perform any direct stock mutation. Firestore rules deny all
+// client-side resolution updates, and no third FIFO source is introduced.
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Destination-only: record a transfer discrepancy as METADATA. Recording a
+ * report NEVER touches `productStocks`, `stockLots`, or `stockMovements` — it
+ * cannot change the received quantity to hide the difference. The origin branch
+ * later resolves it via {@link resolveTransferDiscrepancy}.
+ *
+ * Authority: the caller's `branchId` must equal the transfer's `toBranchId`
+ * (destination). Anyone else — including the origin branch — is rejected here.
+ *
+ * Returns the new discrepancy id.
+ */
+export async function reportTransferDiscrepancy(
+  input: ReportTransferDiscrepancyInput,
+): Promise<string> {
+  const reason = input.reason.trim();
+  if (!reason) throw new Error('กรุณาระบุเหตุผลของส่วนต่าง');
+  if (!input.lines || input.lines.length === 0) {
+    throw new Error('ไม่มีรายการส่วนต่างที่รายงาน');
+  }
+
+  if (!isFirebaseConfigured || !db) {
+    throw new Error('ต้องเชื่อมต่อระบบเพื่อรายงานส่วนต่างการโอนย้าย');
+  }
+
+  const firestore = db;
+  const transferRef = doc(firestore, collections.inventoryTransfers, input.transferId);
+
+  const transferSnap = await getDoc(transferRef);
+  if (!transferSnap.exists()) throw new Error('ไม่พบเอกสารโอนย้าย');
+  const transfer = transferSnap.data() as InventoryTransfer;
+  if (transfer.status === 'cancelled') throw new Error('เอกสารนี้ถูกยกเลิกแล้ว');
+
+  // ── AUTHORITY: only the DESTINATION branch may report a discrepancy. ──
+  if (input.branchId !== transfer.toBranchId) {
+    throw new Error('เฉพาะสาขาปลายทางเท่านั้นที่รายงานส่วนต่างได้');
+  }
+
+  // Expected (shipped) quantity per product comes from the immutable transfer
+  // items — the destination cannot rewrite these.
+  const itemsSnap = await getDocs(collection(transferRef, collections.transferItems));
+  const expectedByProduct = new Map<string, InventoryTransferItem>();
+  for (const d of itemsSnap.docs) {
+    const item = d.data() as InventoryTransferItem;
+    expectedByProduct.set(item.productId, item);
+  }
+
+  const lines: TransferDiscrepancyLine[] = input.lines.map((l) => {
+    const item = expectedByProduct.get(l.productId);
+    if (!item) {
+      throw new Error(`สินค้านี้ไม่ได้อยู่ในเอกสารโอนย้าย: ${l.productId}`);
+    }
+    if (!Number.isFinite(l.actualQty) || l.actualQty < 0) {
+      throw new Error(`จำนวนที่รับจริงไม่ถูกต้อง: ${item.productName}`);
+    }
+    return {
+      productId: item.productId,
+      productName: item.productName,
+      sku: item.sku,
+      expectedQty: item.transferQty,
+      actualQty: l.actualQty,
+      difference: l.actualQty - item.transferQty,
+    };
+  });
+
+  const discrepancyId = generateDiscrepancyId();
+  const discRef = doc(
+    firestore,
+    collections.inventoryTransfers,
+    input.transferId,
+    collections.transferDiscrepancies,
+    discrepancyId,
+  );
+
+  // Metadata-only write. No stock / lot / movement document is touched.
+  const discrepancy: Omit<TransferDiscrepancy, 'reportedAt'> & {
+    reportedAt: ReturnType<typeof serverTimestamp>;
+  } = {
+    id: discrepancyId,
+    transferId: input.transferId,
+    fromBranchId: transfer.fromBranchId,
+    toBranchId: transfer.toBranchId,
+    status: 'reported',
+    reason,
+    lines,
+    reportedByStaffId: input.staffId,
+    reportedByStaffName: input.staffName,
+    reportedByBranchId: input.branchId,
+    reportedAt: serverTimestamp(),
+  };
+  await setDoc(discRef, discrepancy);
+
+  return discrepancyId;
+}
+
+// NOTE: `resolveTransferDiscrepancy` is no longer here. Discrepancy RESOLUTION is
+// server-authoritative (Phase 7B-2 blocker-fix): the stock correction runs in the
+// `resolveTransferDiscrepancy` Cloud Function (functions/src/resolveTransferDiscrepancy.ts)
+// under Admin SDK authority, gated to the origin branch by verified claims. The
+// thin client caller lives in ./resolveTransferDiscrepancy.ts. This keeps the
+// destination branch from ever mutating destination stock to resolve/conceal a
+// discrepancy (client marked-resolution adjustments + disc resolution are denied
+// by firestore.rules).

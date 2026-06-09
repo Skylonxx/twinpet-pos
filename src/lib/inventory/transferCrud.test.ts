@@ -1,5 +1,9 @@
 import { describe, test, expect, beforeEach, vi } from 'vitest';
-import { confirmBranchTransfer, cancelBranchTransfer } from './transferCrud';
+import {
+  confirmBranchTransfer,
+  cancelBranchTransfer,
+  reportTransferDiscrepancy,
+} from './transferCrud';
 import type { BranchTransferForm } from './transferTypes';
 
 // vi.hoisted runs before the (hoisted) vi.mock factories
@@ -147,6 +151,19 @@ const fb = vi.hoisted(() => {
     return { id: ref.id, exists: () => data !== undefined, data: () => data };
   }
 
+  async function setDoc(ref: Ref, data: Record<string, unknown>) {
+    const next: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(data)) next[k] = resolveValue(v, undefined);
+    store.set(ref.path, next);
+  }
+
+  async function updateDoc(ref: Ref, data: Record<string, unknown>) {
+    const existing = store.get(ref.path);
+    const base: Record<string, unknown> = existing ? { ...existing } : {};
+    for (const [k, v] of Object.entries(data)) base[k] = resolveValue(v, existing?.[k]);
+    store.set(ref.path, base);
+  }
+
   const reset = () => {
     store.clear();
     idSeq = 0;
@@ -169,6 +186,8 @@ const fb = vi.hoisted(() => {
     runTransaction,
     getDocs,
     getDoc,
+    setDoc,
+    updateDoc,
     query,
     where,
     orderBy,
@@ -193,6 +212,9 @@ vi.mock('../firebase', () => ({
     stockMovements: 'stockMovements',
     inventoryTransfers: 'inventoryTransfers',
     transferItems: 'transferItems',
+    transferDiscrepancies: 'transferDiscrepancies',
+    inventoryAdjustments: 'inventoryAdjustments',
+    adjustmentItems: 'adjustmentItems',
   },
 }));
 
@@ -204,6 +226,8 @@ vi.mock('firebase/firestore', () => ({
   runTransaction: fb.runTransaction,
   getDocs: fb.getDocs,
   getDoc: fb.getDoc,
+  setDoc: fb.setDoc,
+  updateDoc: fb.updateDoc,
   query: fb.query,
   where: fb.where,
   orderBy: fb.orderBy,
@@ -449,4 +473,122 @@ describe('Branch Transfer FIFO carry-over (7B-1)', () => {
     expect(cuts[0].qty).toBe(5);
     expect(cuts[0].receivedAtMs).toBe(1000);
   });
+});
+
+describe('Origin-Controlled Discrepancy Handling (7B-2)', () => {
+  // Shared scenario: SRC ships 10 of PD (FIFO 6@10 @t1000 + 4@20 @t2000) → DEST.
+  async function makeTransfer() {
+    seedProduct('PD', 10);
+    seedStock('PD', BRANCH_SRC, 20);
+    seedStock('PD', BRANCH_DEST, 0);
+    seedLot('PD', BRANCH_SRC, 6, 10, 1000); // older
+    seedLot('PD', BRANCH_SRC, 14, 20, 2000); // newer
+    const form: BranchTransferForm = {
+      fromBranchId: BRANCH_SRC,
+      toBranchId: BRANCH_DEST,
+      transferDate: '2026-06-09',
+      note: 'disc base',
+      staffId: 's-src',
+      staffName: 'Origin Staff',
+    };
+    const transferId = await confirmBranchTransfer(form, [
+      { productId: 'PD', name: 'PD', sku: 'SKU-PD', sourceStock: 20, transferQty: 10 },
+    ]);
+    return transferId;
+  }
+
+  const discrepancies = (transferId: string) =>
+    fb.docsUnder(`inventoryTransfers/${transferId}/transferDiscrepancies`) as any[];
+
+  test('Destination can flag/report a discrepancy as metadata WITHOUT mutating stock', async () => {
+    const transferId = await makeTransfer();
+    const destStockBefore = fb.get(`products/PD/productStocks/${BRANCH_DEST}`)?.totalStockBase;
+    const lotsBefore = JSON.stringify(fb.lots());
+
+    const discId = await reportTransferDiscrepancy({
+      transferId,
+      branchId: BRANCH_DEST, // destination reports
+      staffId: 's-dest',
+      staffName: 'Dest Staff',
+      reason: 'received short by 2',
+      lines: [{ productId: 'PD', actualQty: 8 }],
+    });
+
+    const recs = discrepancies(transferId);
+    expect(recs).toHaveLength(1);
+    expect(recs[0].id).toBe(discId);
+    expect(recs[0].status).toBe('reported');
+    expect(recs[0].reportedByBranchId).toBe(BRANCH_DEST);
+    expect(recs[0].fromBranchId).toBe(BRANCH_SRC);
+    expect(recs[0].toBranchId).toBe(BRANCH_DEST);
+    expect(recs[0].lines).toHaveLength(1);
+    expect(recs[0].lines[0].expectedQty).toBe(10);
+    expect(recs[0].lines[0].actualQty).toBe(8);
+    expect(recs[0].lines[0].difference).toBe(-2);
+
+    // Metadata-only: NO stock or lot mutation occurred.
+    expect(fb.get(`products/PD/productStocks/${BRANCH_DEST}`)?.totalStockBase).toBe(destStockBefore);
+    expect(JSON.stringify(fb.lots())).toBe(lotsBefore);
+  });
+
+  test('Destination cannot hide a discrepancy: reporting never rewrites received qty or stock', async () => {
+    const transferId = await makeTransfer();
+    const itemsBefore = fb.docsUnder(`inventoryTransfers/${transferId}/transferItems`) as any[];
+    const transferQtyBefore = itemsBefore[0].transferQty;
+
+    await reportTransferDiscrepancy({
+      transferId,
+      branchId: BRANCH_DEST,
+      staffId: 's-dest',
+      staffName: 'Dest Staff',
+      reason: 'short',
+      lines: [{ productId: 'PD', actualQty: 8 }],
+    });
+
+    // The shipped (expected) quantity on the transfer item is immutable …
+    const itemsAfter = fb.docsUnder(`inventoryTransfers/${transferId}/transferItems`) as any[];
+    expect(itemsAfter[0].transferQty).toBe(transferQtyBefore);
+    expect(itemsAfter[0].transferQty).toBe(10);
+    // … and destination system stock still reflects the full shipped qty until
+    // the ORIGIN resolves — the destination cannot absorb the difference itself.
+    expect(fb.get(`products/PD/productStocks/${BRANCH_DEST}`)?.totalStockBase).toBe(10);
+  });
+
+  test('Origin branch cannot REPORT a discrepancy (only the destination can)', async () => {
+    const transferId = await makeTransfer();
+    await expect(
+      reportTransferDiscrepancy({
+        transferId,
+        branchId: BRANCH_SRC, // origin trying to report
+        staffId: 's-src',
+        staffName: 'Origin Staff',
+        reason: 'x',
+        lines: [{ productId: 'PD', actualQty: 8 }],
+      }),
+    ).rejects.toThrow(/สาขาปลายทาง/);
+    expect(discrepancies(transferId)).toHaveLength(0);
+  });
+
+  test('No-discrepancy report: equal quantity records zero difference and mutates no stock', async () => {
+    const transferId = await makeTransfer();
+    await reportTransferDiscrepancy({
+      transferId,
+      branchId: BRANCH_DEST,
+      staffId: 's-dest',
+      staffName: 'Dest Staff',
+      reason: 'count confirm',
+      lines: [{ productId: 'PD', actualQty: 10 }], // matches expected
+    });
+    expect(discrepancies(transferId)[0].lines[0].difference).toBe(0);
+    // Reporting is metadata-only — it never touches stock or creates an adjustment.
+    expect(fb.get(`products/PD/productStocks/${BRANCH_DEST}`)?.totalStockBase).toBe(10);
+    expect(fb.docsUnder('inventoryAdjustments')).toHaveLength(0);
+  });
+
+  // NOTE: discrepancy RESOLUTION is server-authoritative (Phase 7B-2 blocker-fix).
+  // The stock correction, origin-only authority, and identity validation against
+  // the parent transfer are covered by the Cloud Function unit tests in
+  // functions/src/resolveTransferDiscrepancy.test.ts; the thin client→CF caller by
+  // ./resolveTransferDiscrepancy.test.ts; and the Firestore-rules denial of any
+  // client-side resolution by rules-tests/transfer-discrepancy-phase7b2.spec.ts.
 });

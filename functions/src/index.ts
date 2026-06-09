@@ -17,6 +17,12 @@ export { reconcileOrder } from './reconcileOrder';
 // setGlobalOptions so the callable inherits the configured region.)
 export { retryReconcile } from './retryReconcile';
 
+// Phase 7B-2: ORIGIN-controlled, server-authoritative resolution of branch-transfer
+// discrepancies. The destination branch can only REPORT (metadata); this callable
+// is the sole path that corrects inventory, gated to the origin branch by verified
+// claims and run under Admin SDK so it never needs destination write access.
+export { resolveTransferDiscrepancy } from './resolveTransferDiscrepancy';
+
 type UserRole = 'admin' | 'manager' | 'staff';
 
 // Fallback mirror of the client DEFAULT_ROLE_PERMS (src/lib/staffManagement/types.ts).

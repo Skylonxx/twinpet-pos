@@ -64,6 +64,14 @@ export type InventoryAdjustment = {
   totalValueImpact: number;
   status: 'completed';
   createdAt: Timestamp;
+  /**
+   * Phase 7B-2 discrepancy-resolution markers. Present ONLY when this adjustment
+   * resolves a branch-transfer discrepancy (written by `resolveTransferDiscrepancy`).
+   * Their presence makes the adjustment ORIGIN-only at the Firestore-rules layer,
+   * so a destination branch cannot forge a "resolution" adjustment.
+   */
+  refTransferId?: string;
+  refDiscrepancyId?: string;
 };
 
 export type ConfirmAdjustmentLineInput = {
@@ -82,6 +90,13 @@ export type ConfirmInventoryAdjustmentInput = {
   reason: AdjustmentReason;
   note: string;
   lines: ConfirmAdjustmentLineInput[];
+  /**
+   * Optional Phase 7B-2 discrepancy-resolution markers. Set ONLY by
+   * `resolveTransferDiscrepancy`; when present they are persisted on the
+   * adjustment doc and gate it to the ORIGIN branch via Firestore rules.
+   */
+  refTransferId?: string;
+  refDiscrepancyId?: string;
 };
 
 export function lineFromPickerItem(item: ProductPickerItem): AdjustmentLine {

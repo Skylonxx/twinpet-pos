@@ -150,6 +150,7 @@ export const collections = {
   adjustmentItems: 'adjustmentItems',
   inventoryTransfers: 'inventoryTransfers',
   transferItems: 'transferItems',
+  transferDiscrepancies: 'transferDiscrepancies',
   creditAccounts: 'creditAccounts',
   creditTransactions: 'creditTransactions',
   creditPayments: 'creditPayments',

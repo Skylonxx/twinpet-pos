@@ -254,6 +254,11 @@ export async function confirmInventoryAdjustment(
       totalValueImpact,
       status: 'completed',
       createdAt: now,
+      // Phase 7B-2: discrepancy-resolution markers (only set by
+      // resolveTransferDiscrepancy). Their presence makes this adjustment
+      // origin-only at the rules layer — see firestore.rules inventoryAdjustments.
+      ...(input.refTransferId ? { refTransferId: input.refTransferId } : {}),
+      ...(input.refDiscrepancyId ? { refDiscrepancyId: input.refDiscrepancyId } : {}),
     });
 
     // Per-line: adjustment item + stock movement ledger row.

@@ -32,6 +32,16 @@ import {
 import { db } from './db';
 import { FIRESTORE_DATABASE_ID, FUNCTIONS_REGION } from './deployConfig';
 import { handleVoidIntent } from './voidIntent';
+// Canonical server-side FIFO source of truth (shared with resolveTransferDiscrepancy).
+import {
+  roundMoney,
+  parseReceivedAtMs,
+  planFifoCutFromState,
+  mergeLotCuts,
+  type LotRef,
+  type MutableLot,
+  type LotCut,
+} from './fifo';
 
 const C = {
   products: 'products',
@@ -62,8 +72,8 @@ function parseSeqFromId(orderId: string): number {
 }
 
 // ── Local shapes (the functions package is independent of the web app) ──
+// LotRef / MutableLot / LotCut + the FIFO primitives live in ./fifo (imported above).
 type ReconcileStatus = 'pending_reconcile' | 'settled' | 'exception';
-type LotRef = { lotId: string; qty: number; cost: number };
 
 type AsyncPayment = { method: string; amount: number; ref?: string | null };
 type AsyncLine = {
@@ -115,58 +125,10 @@ type AsyncOrderDoc = {
   clientCreatedAt?: number;
 };
 
-type MutableLot = {
-  ref: DocumentReference;
-  id: string;
-  qtyRemaining: number;
-  costPerUnit: number;
-  receivedAtMs: number;
-};
-type LotCut = { ref: DocumentReference; cutQty: number };
-
-// ── Pure helpers (ported from fifo.ts / shiftService.ts) ──
-const roundMoney = (n: number): number => Math.round(n * 100) / 100;
-
-function parseReceivedAtMs(value: unknown): number {
-  if (value instanceof Timestamp) return value.toMillis();
-  if (value && typeof value === 'object' && 'seconds' in value) {
-    const s = (value as { seconds: unknown }).seconds;
-    if (typeof s === 'number') return s * 1000;
-  }
-  return 0;
-}
-
-/** Walk lots oldest-first, cutting up to `qtyBase`. Mutates each lot's remaining. */
-function planFifoCutFromState(
-  lots: MutableLot[],
-  qtyBase: number,
-): { cuts: LotCut[]; lotRefs: LotRef[]; remaining: number } {
-  let remaining = qtyBase;
-  const cuts: LotCut[] = [];
-  const lotRefs: LotRef[] = [];
-  for (const lot of lots) {
-    if (remaining <= 0) break;
-    if (lot.qtyRemaining <= 0) continue;
-    const cut = Math.min(remaining, lot.qtyRemaining);
-    lotRefs.push({ lotId: lot.id, qty: cut, cost: lot.costPerUnit });
-    cuts.push({ ref: lot.ref, cutQty: cut });
-    lot.qtyRemaining -= cut;
-    remaining -= cut;
-  }
-  return { cuts, lotRefs, remaining };
-}
-
-/** Collapse cuts against the same lot doc so the tx never double-writes one ref. */
-function mergeLotCuts(cuts: LotCut[]): LotCut[] {
-  const byRef = new Map<string, LotCut>();
-  for (const cut of cuts) {
-    if (!cut.ref?.path || cut.cutQty <= 0) continue;
-    const existing = byRef.get(cut.ref.path);
-    if (existing) existing.cutQty += cut.cutQty;
-    else byRef.set(cut.ref.path, { ...cut });
-  }
-  return [...byRef.values()];
-}
+// FIFO primitives (MutableLot / LotCut / LotRef shapes, roundMoney,
+// parseReceivedAtMs, planFifoCutFromState, mergeLotCuts) now live in the single
+// canonical server-side source ./fifo.ts (imported above), shared verbatim with
+// resolveTransferDiscrepancy.ts — there is no per-file FIFO copy.
 
 /** Cost for an oversold qty (no lot covers it): newest lot cost → product cost → avgCost → 0. */
 function resolveOversellCost(sourceLots: MutableLot[], product: DocumentData | undefined): number {
