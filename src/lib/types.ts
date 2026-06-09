@@ -390,6 +390,11 @@ export type LotRef = {
   lotId: string;
   qty: number; // base unit qty cut from this lot
   cost: number; // costPerUnit used
+  /**
+   * Original receipt time (ms) of the source lot. Optional — only branch-transfer
+   * FIFO cuts populate it, to carry source receipt chronology to the destination.
+   */
+  receivedAtMs?: number;
 };
 
 export type OrderItem = {

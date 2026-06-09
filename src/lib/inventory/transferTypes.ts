@@ -23,6 +23,14 @@ export type TransferLotDetail = {
   costPerUnit: number;
   /** Base units cut from this lot. */
   qty: number;
+  /**
+   * Original receipt time (ms) of the source lot — the FIFO chronology key.
+   * The destination lot inherits this (NOT the transfer arrival time) so stock
+   * age continues seamlessly across branches, and a cancel restores the source
+   * lot at its original receipt time. Optional for backward compatibility with
+   * legacy transfer items saved before chronology tracking.
+   */
+  receivedAtMs?: number;
 };
 
 export type InventoryTransferItem = {

@@ -6,6 +6,7 @@ import {
   increment,
   runTransaction,
   serverTimestamp,
+  Timestamp,
   type DocumentReference,
 } from 'firebase/firestore';
 import { collections, db, isFirebaseConfigured } from '../firebase';
@@ -50,8 +51,19 @@ type ProductCtx = {
   totalQty: number;
 };
 
-/** A destination lot to create — mirrors one source FIFO cut at the EXACT cost. */
-type DestLotPlan = { ref: DocumentReference; productId: string; qty: number; cost: number };
+/**
+ * A destination lot to create — mirrors one source FIFO cut at the EXACT cost
+ * AND the EXACT original source receipt time. `receivedAtMs` is the original
+ * source-lot receipt time the dest lot must inherit as its FIFO key; `null` means
+ * there is no source lot (oversell/drift remainder) so the transfer time is used.
+ */
+type DestLotPlan = {
+  ref: DocumentReference;
+  productId: string;
+  qty: number;
+  cost: number;
+  receivedAtMs: number | null;
+};
 
 /** Fully-planned transfer line (computed in memory before any write). */
 type LinePlan = {
@@ -203,16 +215,20 @@ export async function confirmBranchTransfer(
       cutsByProduct.set(line.productId, acc);
 
       // Mirror each source cut into the item detail AND a matching dest lot.
+      // `receivedAtMs` carries the ORIGINAL source lot receipt time so the dest
+      // lot inherits the source FIFO chronology (not the transfer arrival time).
       const sourceLotDetails: TransferLotDetail[] = lotRefs.map((r) => ({
         lotId: r.lotId,
         costPerUnit: r.cost,
         qty: r.qty,
+        receivedAtMs: r.receivedAtMs,
       }));
       const destLots: DestLotPlan[] = lotRefs.map((r) => ({
         ref: doc(collection(firestore, collections.stockLots)),
         productId: line.productId,
         qty: r.qty,
         cost: r.cost,
+        receivedAtMs: r.receivedAtMs ?? null,
       }));
 
       // Oversell / drift remainder has no source lot — fall back to avgCost so
@@ -222,12 +238,15 @@ export async function confirmBranchTransfer(
           `[confirmBranchTransfer] lot shortfall for ${ctx.productName}: ` +
             `${remaining} base unit(s) priced at avgCost fallback`,
         );
+        // No source lot for this remainder → no chronology to inherit; the dest
+        // lot keeps the transfer arrival time (receivedAtMs: null).
         sourceLotDetails.push({ lotId: OVERSELL_LOT_ID, costPerUnit: ctx.avgCost, qty: remaining });
         destLots.push({
           ref: doc(collection(firestore, collections.stockLots)),
           productId: line.productId,
           qty: remaining,
           cost: ctx.avgCost,
+          receivedAtMs: null,
         });
       }
 
@@ -330,7 +349,10 @@ export async function confirmBranchTransfer(
       }
     }
 
-    // Dest lots: one per source cut, at the EXACT carried cost (never avgCost).
+    // Dest lots: one per source cut, at the EXACT carried cost (never avgCost)
+    // AND the EXACT original source receipt time (never the transfer arrival
+    // time). Inheriting `receivedAt` keeps stock age continuous across branches
+    // so FIFO depletion still consumes the oldest original receipt first.
     for (const plan of linePlans) {
       for (const destLot of plan.destLots) {
         if (destLot.qty <= 0) continue;
@@ -342,11 +364,14 @@ export async function confirmBranchTransfer(
           costPerUnit: destLot.cost,
           qtyReceived: destLot.qty,
           qtyRemaining: destLot.qty,
-          receivedAt: now as StockLot['receivedAt'],
+          receivedAt:
+            destLot.receivedAtMs != null
+              ? (Timestamp.fromMillis(destLot.receivedAtMs) as StockLot['receivedAt'])
+              : (now as StockLot['receivedAt']),
           expiryDate: null,
           isDepleted: false,
           isGhost: false,
-          createdAt: now as StockLot['createdAt'],
+          createdAt: now as StockLot['createdAt'], // actual creation time (audit)
         };
         tx.set(destLot.ref, lot);
       }
@@ -368,8 +393,19 @@ type CancelCtx = {
   initialDestLotQty: Map<string, number>;
 };
 
-/** A source lot to (re)create on cancel — restores the EXACT original cost. */
-type SrcRestorePlan = { ref: DocumentReference; productId: string; qty: number; cost: number };
+/**
+ * A source lot to (re)create on cancel — restores the EXACT original cost AND,
+ * when known, the EXACT original receipt time so source FIFO chronology is
+ * preserved. `receivedAtMs` is `null` for legacy items saved without it (falls
+ * back to the cancel time).
+ */
+type SrcRestorePlan = {
+  ref: DocumentReference;
+  productId: string;
+  qty: number;
+  cost: number;
+  receivedAtMs: number | null;
+};
 
 /**
  * Cancel a completed branch transfer — atomic, FIFO-correct, cost-exact reverse.
@@ -514,16 +550,19 @@ export async function cancelBranchTransfer(input: CancelBranchTransferInput): Pr
             productId: item.productId,
             qty: d.qty,
             cost: d.costPerUnit,
+            // Restore at the original source receipt time when tracked.
+            receivedAtMs: d.receivedAtMs ?? null,
           });
         }
       } else {
         // Legacy transfer saved before exact-cost tracking — best-effort single
-        // lot at the stored blended unitCost.
+        // lot at the stored blended unitCost (no original receipt time known).
         srcRestorePlans.push({
           ref: doc(collection(firestore, collections.stockLots)),
           productId: item.productId,
           qty: item.transferQty,
           cost: item.unitCost ?? 0,
+          receivedAtMs: null,
         });
       }
     }
@@ -572,7 +611,10 @@ export async function cancelBranchTransfer(input: CancelBranchTransferInput): Pr
         costPerUnit: plan.cost,
         qtyReceived: plan.qty,
         qtyRemaining: plan.qty,
-        receivedAt: now as StockLot['receivedAt'],
+        receivedAt:
+          plan.receivedAtMs != null
+            ? (Timestamp.fromMillis(plan.receivedAtMs) as StockLot['receivedAt'])
+            : (now as StockLot['receivedAt']),
         expiryDate: null,
         isDepleted: false,
         isGhost: false,

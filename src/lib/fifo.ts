@@ -26,6 +26,12 @@ export type LotCut = {
   ref: DocumentReference;
   cutQty: number;
   costPerUnit: number;
+  /**
+   * Original receipt time (ms) of the SOURCE lot this cut came from. Carried so
+   * branch transfers can preserve FIFO chronology — the destination lot inherits
+   * this timestamp instead of the transfer arrival time.
+   */
+  receivedAtMs: number;
 };
 
 export type MutableLot = {
@@ -124,11 +130,12 @@ export function planFifoCutFromState(
     if (lot.qtyRemaining <= 0) continue;
 
     const cut = Math.min(remaining, lot.qtyRemaining);
-    lotRefs.push({ lotId: lot.id, qty: cut, cost: lot.costPerUnit });
+    lotRefs.push({ lotId: lot.id, qty: cut, cost: lot.costPerUnit, receivedAtMs: lot.receivedAtMs });
     cuts.push({
       ref: lot.ref,
       cutQty: cut,
       costPerUnit: lot.costPerUnit,
+      receivedAtMs: lot.receivedAtMs,
     });
     lot.qtyRemaining -= cut;
     remaining -= cut;
