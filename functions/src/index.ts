@@ -23,6 +23,11 @@ export { retryReconcile } from './retryReconcile';
 // claims and run under Admin SDK so it never needs destination write access.
 export { resolveTransferDiscrepancy } from './resolveTransferDiscrepancy';
 
+// Phase 7B-3D-2: server-authoritative REVERSAL resolver for receiving_reversal /
+// transfer_reversal — idempotent, audited (reversalDocuments), with structured
+// rejection codes; the single path that may reverse stock for these document types.
+export { resolveReversal } from './resolveReversal';
+
 type UserRole = 'admin' | 'manager' | 'staff';
 
 // Fallback mirror of the client DEFAULT_ROLE_PERMS (src/lib/staffManagement/types.ts).

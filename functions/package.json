@@ -9,7 +9,7 @@
     "build": "node ../scripts/gen-deploy-config.mjs && tsc",
     "build:watch": "tsc --watch",
     "serve": "npm run build && firebase emulators:start --only functions",
-    "deploy": "npm run build && firebase deploy --only functions:verifyPinLogin,functions:reconcileOrder,functions:retryReconcile,functions:resolveTransferDiscrepancy",
+    "deploy": "npm run build && firebase deploy --only functions:verifyPinLogin,functions:reconcileOrder,functions:retryReconcile,functions:resolveTransferDiscrepancy,functions:resolveReversal",
     "seed-admin": "npm run build && node lib/scripts/seed-admin.js",
     "seed-branch": "npm run build && node lib/scripts/seed-branch.js",
     "backfill-product-stocks": "npm run build && node lib/scripts/backfill-product-stocks.js",
