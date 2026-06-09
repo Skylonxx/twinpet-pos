@@ -28,3 +28,5 @@ test-results/
 # Cursor: ignore local workspace settings, but KEEP shared project rules
 /.cursor/*
 !/.cursor/rules/
+# Claude Code local tooling config — never commit
+.claude/
