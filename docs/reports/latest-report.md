@@ -1,7 +1,58 @@
 # Latest Report
 
 > Rolling "latest report" for the stock-write security workstream. Updated at each phase boundary.
-> **Current state:** **Phase 7B-2 Blocker-Fix #3 (single canonical server FIFO source)**.
+> **Current state:** **Phase 7B-3B (branch void-password setting + field-scoped rules)**.
+
+## Phase 7B-3B: Branch Void-Password Setting + Rules (Settings-only batch)
+
+> **Baseline:** committed on top of Phase 7B-2 (`5eebb2b feat(inventory): enforce origin-controlled transfer discrepancy resolution`). Preflight was clean (no staged/unstaged diff, HEAD = 7B-2) before any 7B-3B change.
+
+### ⚠️ CEO Correction Captured — Void/Reversal must support OFFLINE execution (future 7B-3D)
+
+Per the CEO correction, **Void/Reversal must NOT be online-only.** When the internet is down, the cashier must be able to void/reverse **locally** (correct local stock in IndexedDB), keep selling, and **queue the void action** for automatic Cloud Function sync on reconnect. The earlier 7B-3 design note that recommended "require connectivity for reversals" is **superseded**: future **7B-3D must include an Offline Sync Queue for Void actions** + local IndexedDB stock correction, reconciled by the server resolver when back online (analogous to the existing async-checkout → `reconcileOrder` pattern). **None of that offline machinery is implemented in 7B-3B** — this batch is settings + rules only; the note is recorded so 7B-3D plans for it.
+
+### Scope delivered (7B-3B — settings + rules ONLY)
+
+- **Branch setting** `requiresPasswordForVoid: boolean`, **default `true`** (security-first) when the field is missing, stored on the per-branch settings doc `settings/{branchId}` (the `Settings` type). When enabled, a future void/reversal flow will require a Staff to enter their own PIN; Manager/Admin bypass the PIN but still confirm.
+- **Default-on-read everywhere:** `useSettings.defaultSettings` (`true`), `settingsToForm` (`?? true`), `formToSettings` (`?? true`), and the runtime `useBranchSettings` hook (new `requiresPasswordForVoid` + `DEFAULT_REQUIRES_PASSWORD_FOR_VOID = true`, returned for 7B-3D to consume). A legacy settings doc without the field reads as `true`.
+- **Settings UI toggle** in **Settings → Admin & ความปลอดภัย** (`SettingsPage.tsx`): a new "ความปลอดภัยการ Void / ยกเลิกเอกสาร" card with a toggle + helper text. Enabled for **Manager/Admin**, disabled (with a hint) for **Staff**. It persists immediately via a **narrow, field-scoped writer** (`useSettings.saveVoidPasswordSetting`) that writes only `{ requiresPasswordForVoid, updatedAt }` — because the existing full-settings Save is Admin-only, this is the path a Manager is permitted to use. Reuses existing `Toggle`/`stg-card`/`stg-toggle-row` styles (no new/inline styles).
+- **Firestore field-scoped rule:** added to `match /settings/{settingId}` an `allow update` for `isManagerOrAdmin() && hasBranchAccess(settingId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['requiresPasswordForVoid','updatedAt'])`. The existing Admin-only full-doc `allow write` is unchanged; the narrow grant cannot touch any other field or another branch. Staff have neither path.
+
+### How the boundary is enforced
+- **Staff denied:** not `isManagerOrAdmin()` → fails the narrow `allow update`; not admin → fails the full `allow write`. UI toggle is also `disabled` for Staff.
+- **Manager/Admin, own branch only:** `hasBranchAccess(settingId)` (settingId = branchId) gates to authorized branches; another branch → denied.
+- **Field-only:** `affectedKeys().hasOnly([...])` blocks changing any unrelated setting through the narrow path; a Manager full-doc write is still denied (Admin-only).
+- **No weakening / no broad rules:** the existing settings/stock rules are untouched; no stock/productStocks/stockLots rules were added or relaxed.
+
+### Files inspected
+`src/lib/types.ts` (Settings/Branch/User/UserRole), `src/lib/settings/types.ts`, `src/lib/settings/useSettings.ts`, `src/lib/hooks/useBranchSettings.ts`, `src/lib/settings/settingsNav.ts`, `src/pages/SettingsPage.tsx`, `src/components/ProtectedRoute.tsx`, `src/App.tsx`, `firestore.rules`, `rules-tests/firestore-permissions.spec.ts`.
+
+### Files changed
+- `src/lib/types.ts` — `requiresPasswordForVoid?: boolean` on `Settings`.
+- `src/lib/settings/useSettings.ts` — default `true`; narrow `saveVoidPasswordSetting` writer.
+- `src/lib/settings/types.ts` — default-on-read in `settingsToForm` + pass-through in `formToSettings`.
+- `src/lib/hooks/useBranchSettings.ts` — expose `requiresPasswordForVoid` (default true) + `DEFAULT_REQUIRES_PASSWORD_FOR_VOID`.
+- `src/pages/SettingsPage.tsx` — Admin/Security toggle card + `isManagerOrAdmin` + narrow-write handler.
+- `firestore.rules` — field-scoped Manager/Admin settings `allow update`.
+- `rules-tests/settings-void-password-phase7b3b.spec.ts` (NEW) — 6 field-scoped rules tests.
+- `src/lib/settings/voidPasswordSetting.test.ts` (NEW) — 5 default-on-read unit tests.
+- `docs/reports/latest-report.md`.
+
+### Tests
+- **Unit (`voidPasswordSetting.test.ts`, 5):** missing field → `true`; explicit false/true preserved; `formToSettings` round-trip + legacy (no field) → `true`; `DEFAULT_REQUIRES_PASSWORD_FOR_VOID === true`.
+- **Rules (`settings-void-password-phase7b3b.spec.ts`, 6):** Manager toggles own branch (allowed); Admin toggles (allowed); Staff denied; Manager other-branch denied; Manager unrelated-field-via-narrow-path denied; Manager full write denied.
+- **No Settings *component* test exists** in the repo (the page is an untested large page); honest gap — covered instead by the unit (default-on-read) + rules (permission) tests, which carry the security-relevant behavior. UI wiring (toggle visibility/disable + narrow writer) is verified by tsc + manual reading.
+- 7B-1/7B-2 suites remain green (web 118, functions unchanged, rules 114).
+
+### Commands run (all PASS)
+`git status`/diff/`--check`; `tsc -b --noEmit` (web, no errors); `npx.cmd vitest run` (118, 14 files); `npm run test:rules` (114, 6 files). (Full results in the handoff.)
+
+### Boundaries preserved
+No Confirmation Modal, PIN input, PIN verification, Cloud Function reversal resolver, offline queue, IndexedDB stock correction, receiving/transfer/adjustment reversal logic, Customer Returns, RTV, 7B-4, POS/cart/checkout/offline/cache implementation, native/SQLite, or Android. No unrelated UI/Flowbite changes. `.claude/` excluded; `stash@{0}` untouched.
+
+### Known risks / notes
+- The Manager toggle persists immediately (narrow write) rather than via the main Save button (which is Admin-only). If `settings/{branchId}` does not yet exist (brand-new branch), the narrow `update` path has no doc to update — the Admin initializes the settings doc first (normal flow); a Manager on a doc-less branch cannot create it (by design).
+- `requiresPasswordForVoid` is read but **not yet consumed** by any void flow — there is no void/reversal behavior change in 7B-3B (intentional).
 
 ## Phase 7B-2 Blocker-Fix #3: Remove Third FIFO Source in Server Resolver
 

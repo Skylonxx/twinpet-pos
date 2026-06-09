@@ -174,6 +174,8 @@ export function settingsToForm(
     allowNegativeStock: settings.allowNegativeStock,
     negativeStockWarning: settings.negativeStockWarning,
     parkedOrderExpiryHours: settings.parkedOrderExpiryHours,
+    // Phase 7B-3: default ON when the field is missing (security-first).
+    requiresPasswordForVoid: settings.requiresPasswordForVoid ?? true,
     ...e,
   };
 }
@@ -229,6 +231,7 @@ export function formToSettings(form: SettingsFormData, branchId: string): Omit<S
     allowNegativeStock: form.allowNegativeStock,
     negativeStockWarning: form.negativeStockWarning,
     parkedOrderExpiryHours: form.parkedOrderExpiryHours,
+    requiresPasswordForVoid: form.requiresPasswordForVoid ?? true,
   };
 }
 

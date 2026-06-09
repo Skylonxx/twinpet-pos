@@ -76,6 +76,7 @@ function defaultSettings(branchId: string): Settings {
     allowNegativeStock: false,
     negativeStockWarning: true,
     parkedOrderExpiryHours: 4,
+    requiresPasswordForVoid: true, // Phase 7B-3: security-first default.
     updatedAt: serverTimestamp() as Settings['updatedAt'],
   };
 }
@@ -243,6 +244,39 @@ export function useSettings(branchId: string | null) {
     }
   }, [branchId, form, priceLevels, devices]);
 
+  /**
+   * Phase 7B-3B: persist ONLY `requiresPasswordForVoid` (+ updatedAt). This is a
+   * narrow, field-scoped write — the single settings write a Manager is permitted
+   * by firestore.rules (the full-doc Save below stays Admin-only). Updates the
+   * form + dirty snapshot in place so the main Save button state is unaffected.
+   */
+  const saveVoidPasswordSetting = useCallback(
+    async (value: boolean) => {
+      if (!branchId || !form) return;
+      const nextForm = { ...form, requiresPasswordForVoid: value };
+      setForm(nextForm);
+      snapshotRef.current = JSON.stringify({ form: nextForm, priceLevels, devices });
+
+      if (!isFirebaseConfigured || !db) {
+        saveDevData({
+          branch: getDevBranch(),
+          settings: { ...getDevSettings(), requiresPasswordForVoid: value },
+          extras: getDevExtras(),
+          priceLevels,
+          devices,
+        });
+        return;
+      }
+
+      await setDoc(
+        doc(db, collections.settings, branchId),
+        { requiresPasswordForVoid: value, updatedAt: serverTimestamp() },
+        { merge: true },
+      );
+    },
+    [branchId, form, priceLevels, devices],
+  );
+
   const cancel = useCallback(() => {
     void load();
   }, [load]);
@@ -332,6 +366,7 @@ export function useSettings(branchId: string | null) {
     saving,
     lastSavedAt,
     save,
+    saveVoidPasswordSetting,
     cancel,
     isDirty,
     uploadLogo,

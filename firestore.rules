@@ -179,6 +179,16 @@ service cloud.firestore {
       allow read: if isAdmin() || canReadSettingsDoc(settingId);
       allow write: if canWriteSettingsDoc(settingId);
 
+      // Phase 7B-3B: Manager/Admin (with branch access) may update ONLY the
+      // requiresPasswordForVoid policy on THEIR per-branch settings doc. The full
+      // settings write above stays Admin-only; this narrow grant is field-scoped
+      // so it can never change any other setting, and the branch check blocks
+      // toggling another branch. Staff have neither path → denied.
+      allow update: if isManagerOrAdmin()
+        && hasBranchAccess(settingId)
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['requiresPasswordForVoid', 'updatedAt']);
+
       match /docCounters/{counterId} {
         allow read, write: if isStaff();
       }

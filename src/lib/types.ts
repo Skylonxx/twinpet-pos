@@ -715,6 +715,14 @@ export type Settings = {
   allowNegativeStock: boolean;
   negativeStockWarning: boolean;
   parkedOrderExpiryHours: number;
+  /**
+   * Phase 7B-3: when true (the security-first default when the field is missing),
+   * a Staff member must enter their own PIN before voiding/reversing a receiving
+   * or transfer document. Manager/Admin bypass the PIN but still confirm. Stored
+   * per branch on `settings/{branchId}`; Manager/Admin (with branch access) may
+   * toggle it, Staff may not. Consumed by the future 7B-3C/7B-3D void flow.
+   */
+  requiresPasswordForVoid?: boolean;
   posPrefix?: string | null;
   updatedAt: Timestamp;
 };

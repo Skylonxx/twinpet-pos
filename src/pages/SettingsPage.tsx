@@ -152,6 +152,7 @@ export default function SettingsPage() {
     saving,
     lastSavedAt,
     save,
+    saveVoidPasswordSetting,
     cancel,
     isDirty,
     uploadLogo,
@@ -270,6 +271,21 @@ export default function SettingsPage() {
   }
 
   const isAdmin = user?.role === 'admin';
+  // Phase 7B-3B: Manager OR Admin may toggle the void-password policy for their
+  // branch (Staff may not). Persisted via the narrow, field-scoped writer.
+  const isManagerOrAdmin = user?.role === 'admin' || user?.role === 'manager';
+
+  const onToggleVoidPassword = async (v: boolean) => {
+    try {
+      await saveVoidPasswordSetting(v);
+      showToast(
+        v ? 'เปิดการบังคับ PIN ก่อน Void/ยกเลิกแล้ว' : 'ปิดการบังคับ PIN ก่อน Void/ยกเลิกแล้ว',
+        'info',
+      );
+    } catch {
+      showToast('บันทึกไม่สำเร็จ — ตรวจสอบสิทธิ์ของคุณ', 'warn');
+    }
+  };
 
   return (
     <div className="stg-page">
@@ -762,6 +778,31 @@ export default function SettingsPage() {
             <>
               <div className="stg-section-title">Admin &amp; ความปลอดภัย</div>
               <div className="stg-section-sub">การตั้งค่าระดับระบบ — ต้องใช้สิทธิ์ Admin เท่านั้น</div>
+              {/* Phase 7B-3B: Void/Reversal password policy — Manager/Admin editable. */}
+              <div className="stg-card">
+                <div className="stg-card-head">
+                  <i className="ti ti-shield-lock" aria-hidden="true" /> ความปลอดภัยการ Void / ยกเลิกเอกสาร
+                </div>
+                <div className="stg-card-body">
+                  <div className="stg-toggle-row">
+                    <div className="stg-toggle-info">
+                      <div className="stg-toggle-label">บังคับใส่ PIN ของพนักงานก่อน Void / ยกเลิก</div>
+                      <div className="stg-toggle-desc">
+                        เมื่อเปิด พนักงาน (Staff) ต้องกรอก PIN ของตนเองก่อนยกเลิก/Void เอกสารรับเข้าหรือโอนย้าย —
+                        ผู้จัดการ/แอดมินยังต้องยืนยันแต่ไม่ต้องกรอก PIN
+                      </div>
+                    </div>
+                    <Toggle
+                      checked={form.requiresPasswordForVoid ?? true}
+                      onChange={(v) => void onToggleVoidPassword(v)}
+                      disabled={!isManagerOrAdmin}
+                    />
+                  </div>
+                  {!isManagerOrAdmin ? (
+                    <span className="stg-form-hint">เฉพาะผู้จัดการหรือแอดมินเท่านั้นที่แก้ไขได้</span>
+                  ) : null}
+                </div>
+              </div>
               <div className="stg-card">
                 <div className="stg-card-head">
                   <i className="ti ti-lock" aria-hidden="true" /> นโยบาย PIN &amp; Session
