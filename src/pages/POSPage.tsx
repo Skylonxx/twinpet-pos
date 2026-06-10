@@ -13,6 +13,7 @@ import {
 import NumpadDialog from '../components/pos/NumpadDialog';
 import UomModal from '../components/pos/UomModal';
 import SortingSettingsModal from '../components/pos/SortingSettingsModal';
+import DestructiveConfirmModal from '../components/common/DestructiveConfirmModal';
 import { getBranchLabel } from '../lib/branches';
 import { fmtBaht } from '../lib/dashboard/format';
 import { formatMoney, getLineTotal } from '../lib/pos/cartUtils';
@@ -114,6 +115,9 @@ export default function POSPage() {
   const [catModalOpen, setCatModalOpen] = useState(false);
   const [catSearch, setCatSearch] = useState('');
   const [isSortingModalOpen, setIsSortingModalOpen] = useState(false);
+
+  type ConfirmModalPayload = { type: 'clearCart' } | { type: 'cancelParkedOrder'; bill: SuspendedBill };
+  const [confirmModalState, setConfirmModalState] = useState<{ open: boolean; payload?: ConfirmModalPayload }>({ open: false });
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -373,11 +377,8 @@ export default function POSPage() {
 
   const handleClearCartClick = useCallback(() => {
     if (cartLines.length === 0) return;
-    if (!window.confirm('ล้างสินค้าในตะกร้าทั้งหมด?')) return;
-    cart.clearCart();
-    showToast('ล้างตะกร้าแล้ว');
-    focusSearch();
-  }, [cartLines.length, cart, focusSearch, showToast]);
+    setConfirmModalState({ open: true, payload: { type: 'clearCart' } });
+  }, [cartLines.length]);
 
   const handleHoldClick = useCallback(() => {
     if (cartLines.length === 0) {
@@ -426,6 +427,10 @@ export default function POSPage() {
     },
     [cartLines.length, cart, checkout, removeBill, focusSearch, showToast],
   );
+
+  const handleCancelParkedOrderClick = useCallback((bill: SuspendedBill) => {
+    setConfirmModalState({ open: true, payload: { type: 'cancelParkedOrder', bill } });
+  }, []);
 
   // Optimistically append the cash entry to the live shift. The DURABLE source is
   // `cashEntries[]` on the shift doc (queued to cache by recordCashTransaction);
@@ -1035,6 +1040,7 @@ export default function POSPage() {
         bills={suspendedBills}
         onClose={() => setSuspendedListOpen(false)}
         onRestore={handleRestoreBill}
+        onRemove={handleCancelParkedOrderClick}
       />
 
       {catModalOpen && (
@@ -1114,6 +1120,30 @@ export default function POSPage() {
         isOpen={isSortingModalOpen}
         onClose={() => setIsSortingModalOpen(false)}
         defaultBranchId={posBranchId}
+      />
+
+      <DestructiveConfirmModal
+        open={confirmModalState.open}
+        title={confirmModalState.payload?.type === 'clearCart' ? 'ยืนยันล้างตะกร้า' : 'ยกเลิกบิลที่พักไว้'}
+        description={
+          confirmModalState.payload?.type === 'clearCart'
+            ? 'คุณแน่ใจหรือไม่ว่าต้องการล้างสินค้าในตะกร้าทั้งหมด?'
+            : 'คุณแน่ใจหรือไม่ว่าต้องการยกเลิกและลบบิลที่พักไว้นี้?'
+        }
+        destructiveLabel="ยืนยัน"
+        onConfirm={() => {
+          if (confirmModalState.payload?.type === 'clearCart') {
+            cart.clearCart();
+            showToast('ล้างตะกร้าแล้ว');
+            focusSearch();
+          } else if (confirmModalState.payload?.type === 'cancelParkedOrder') {
+            removeBill(confirmModalState.payload.bill.id);
+            showToast('ลบบิลที่พักไว้แล้ว');
+            focusSearch();
+          }
+          setConfirmModalState({ open: false });
+        }}
+        onCancel={() => setConfirmModalState({ open: false })}
       />
 
       {toast && (

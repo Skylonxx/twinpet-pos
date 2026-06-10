@@ -97,6 +97,7 @@ type SuspendedBillsListModalProps = {
   bills: SuspendedBill[];
   onClose: () => void;
   onRestore: (bill: SuspendedBill) => void;
+  onRemove?: (bill: SuspendedBill) => void;
 };
 
 export function SuspendedBillsListModal({
@@ -104,6 +105,7 @@ export function SuspendedBillsListModal({
   bills,
   onClose,
   onRestore,
+  onRemove,
 }: SuspendedBillsListModalProps) {
   if (!open) return null;
 
@@ -142,13 +144,24 @@ export function SuspendedBillsListModal({
                   </div>
                   <div className="pos-sb-item-right">
                     <div className="pos-sb-item-total">฿{formatMoney(bill.totalAmount)}</div>
-                    <button
-                      type="button"
-                      className="pos-sb-restore-btn"
-                      onClick={() => onRestore(bill)}
-                    >
-                      เรียกคืน
-                    </button>
+                    <div className="pos-sb-item-actions">
+                      {onRemove && (
+                        <button
+                          type="button"
+                          className="pos-sb-remove-btn"
+                          onClick={() => onRemove(bill)}
+                        >
+                          ยกเลิก
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="pos-sb-restore-btn"
+                        onClick={() => onRestore(bill)}
+                      >
+                        เรียกคืน
+                      </button>
+                    </div>
                   </div>
                 </li>
               ))}
