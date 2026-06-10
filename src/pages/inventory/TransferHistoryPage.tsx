@@ -14,7 +14,7 @@ import type {
 import TransferDetailModal, {
   TransferStatusBadge,
 } from '../../components/inventory/TransferDetailModal';
-import TransferCancelDialog from '../../components/inventory/TransferCancelDialog';
+import DestructiveConfirmModal from '../../components/common/DestructiveConfirmModal';
 import {
   Table,
   TableHead,
@@ -93,16 +93,22 @@ export default function TransferHistoryPage({ onCreateNew, onBack }: Props = {})
     setDetailItems([]);
   }, []);
 
+  // Transfer cancel keeps the LEGACY `cancelBranchTransfer` executor behind the
+  // DestructiveConfirmModal gate. Completed transfers are intentionally NOT routed
+  // through the Phase 7B-3D-3 offline reversal queue / 7B-3D-2 resolver, because the
+  // resolver only reverses `sent`/`received` transfers (see
+  // TRANSFER_REVERSAL_DEFERRED_NOTE in lib/inventory/reversalCoordinator.ts).
   const handleCancel = useCallback(
-    async (reason: string) => {
+    async (reason: string, note?: string) => {
       if (!cancelTarget || !user) return;
+      const fullReason = note?.trim() ? `${reason} — ${note.trim()}` : reason;
       setBusy(true);
       try {
         await cancelBranchTransfer({
           transferId: cancelTarget.id,
           staffId: user.id,
           staffName: `${user.firstName} ${user.lastName}`.trim(),
-          reason,
+          reason: fullReason,
         });
         setCancelTarget(null);
         closeDetail();
@@ -237,13 +243,16 @@ export default function TransferHistoryPage({ onCreateNew, onBack }: Props = {})
         busy={busy}
       />
 
-      <TransferCancelDialog
-        key={`cancel-${cancelTarget?.id ?? 'none'}`}
+      <DestructiveConfirmModal
         open={cancelTarget !== null}
-        transferId={cancelTarget?.id ?? ''}
-        saving={busy}
-        onConfirm={(reason) => void handleCancel(reason)}
-        onClose={() => setCancelTarget(null)}
+        title="ยกเลิกการโอนย้าย"
+        documentSummary={cancelTarget ? `เอกสาร ${cancelTarget.id}` : undefined}
+        description="การยกเลิกจะคืนสต็อกกลับสาขาต้นทาง (ตามต้นทุนเดิม) และตัดออกจากสาขาปลายทาง หากสาขาปลายทางขายสินค้าไปแล้วและสต็อกไม่พอ ระบบจะไม่อนุญาตให้ยกเลิก"
+        destructiveLabel="ยืนยันการยกเลิก"
+        reasonRequired
+        loading={busy}
+        onConfirm={({ reason, note }) => void handleCancel(reason ?? '', note)}
+        onCancel={() => setCancelTarget(null)}
       />
 
       {toast && <div className="sh-toast">{toast}</div>}

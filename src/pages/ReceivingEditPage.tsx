@@ -5,7 +5,10 @@ import { getBranchLabel } from '../lib/branches';
 import { useAuth } from '../lib/hooks/useAuth';
 import { confirmReceiving } from '../lib/receiving/confirmReceiving';
 import type { ReceivingFormSubmitPayload, ReceivingFormValues } from '../lib/receiving/receivingFormUtils';
-import { cancelReceiving } from '../lib/receivingHistory/cancelReceiving';
+import {
+  createDefaultReversalCoordinatorDeps,
+  executeReceivingReversal,
+} from '../lib/inventory/reversalCoordinator';
 import {
   formLinesToDraftLines,
   formLinesToEditLines,
@@ -182,16 +185,29 @@ export default function ReceivingEditPage() {
     navigate('/receiving/history', { state: { toast: 'บันทึกการแก้ไขรับเข้าเรียบร้อย' } });
   };
 
+  // Queue-first receiving reversal (Track A): the confirmed void routes through the
+  // offline reversal queue — immediate local IndexedDB correction + durable queue,
+  // synced to the server resolver when online. Supersedes the legacy direct
+  // `cancelReceiving`. A Staff actor is rejected before any write (the thrown error
+  // surfaces in the existing ReceivingVoidDialog, which stays open). TODO: a later
+  // UI-standardization pass replaces ReceivingVoidDialog with DestructiveConfirmModal.
   const handleVoid = async (reason: string, note: string) => {
     if (!id || !branchId || !user) return;
-    await cancelReceiving({
+    const outcome = await executeReceivingReversal(createDefaultReversalCoordinatorDeps(), {
       receivingId: id,
       branchId,
+      actorRole: user.role,
       staffId: user.id,
       reason,
       note,
+      items: items.map((it) => ({ productId: it.productId, qtyBase: it.qtyBase, lotId: it.lotId })),
     });
-    navigate('/receiving/history', { state: { toast: 'ยกเลิกเอกสารรับเข้าเรียบร้อย' } });
+    const toast = outcome.manualReviewRequired
+      ? 'ยกเลิกในเครื่องแล้ว — รอผู้จัดการตรวจสอบ (manual review)'
+      : outcome.synced && outcome.status === 'server_accepted'
+        ? 'ยกเลิกเอกสารรับเข้าเรียบร้อย'
+        : 'บันทึกการยกเลิกลงเครื่องแล้ว ระบบจะซิงก์เมื่อออนไลน์';
+    navigate('/receiving/history', { state: { toast } });
   };
 
   if (!branchId) {
