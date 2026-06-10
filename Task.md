@@ -1,11 +1,54 @@
-# Current Task Tracker — Phase 7B-H2 / D1 Checkpoint
+# Current Task Tracker — Phase 7B-H3 (active)
 
 > Living checkpoint doc for agents. Detailed history: `docs/reports/latest-report.md` (do not duplicate long-form evidence here).
 
 ## Current active phase
 
-**Phase 7B-D1 — Project Context and Task Tracking Docs**
-**Status:** **DOCS-ONLY / READY TO COMMIT**
+**Phase 7B-H3: Manual Review Operations UI**
+**Status:** **IMPLEMENTED / AWAITING REVIEW — no commit**
+
+> Activation reviewed → **PASS WITH NOTE**: this is a LOCAL/device-visible queue UI, NOT a global Firestore admin dashboard. No global Firestore queries; no stock reconciliation; Firestore reconciliation stays an external manual admin process.
+
+### Purpose
+
+Close the operational loop introduced in H2 by giving Admin/Manager users a safe UI surface to view local/device-visible `manual_review_required` intents and execute the H2 `resolveManualReview` transition after manual Firestore reconciliation has been completed outside the app.
+
+### Scope checklist
+
+- [x] Read-only view of local/device-visible `manual_review_required` intents (via `listQueue(store, ['manual_review_required'])`).
+- [x] Controlled UI action to execute `resolveManualReview` from H2.
+- [x] Required `reasonCode` input.
+- [x] Optional `note` input.
+- [x] Admin/Manager authority gating (`canViewManualReviewOps`, delegates to the H2 authority rule).
+- [x] Unit tests for correct `resolveManualReview` payload mapping (`manualReviewOps.test.ts`).
+- [x] Unit/integration tests proving standard Staff cannot see or execute the resolution action.
+- [x] `tsc -b --noEmit` passes.
+- [x] `git diff --check` clean.
+
+> **Test-infra note:** the repo has no `@testing-library/react` / jsdom DOM harness (adding test deps is out of scope), so the security-relevant logic was extracted into pure helpers (`manualReviewOps.ts`) and covered by node unit + real-store integration tests instead of DOM-render tests.
+
+### Non-goals (explicit)
+
+- No core H2 state logic changes.
+- No `offlineReversalLogic.ts` changes.
+- No `resolveReversal.ts` changes.
+- No client-side Firestore stock mutations.
+- No POS Checkout/Cart changes.
+- No `reversalStockOverlay.ts` changes.
+- No offline queue / IndexedDB changes.
+- No Android/Capacitor/.claude contamination.
+- No `stash@{0}` interaction.
+
+### Implementation gate
+
+- React implementation may begin only after this Task.md update is reviewed.
+
+---
+
+## Phase 7B-D1 — Project Context and Task Tracking Docs
+
+**Status:** **CLOSED / COMMITTED**
+**Commit:** `dacccd1` — `docs: add project context and task tracker`
 
 | File | Purpose |
 |------|---------|

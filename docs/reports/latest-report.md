@@ -1,7 +1,39 @@
 # Latest Report
 
 > Rolling "latest report" for the stock-write security workstream. Updated at each phase boundary.
-> **Current state:** **Phase 7B-H2 — Manual Review Operational Guard** (local resolve helper that clears `manual_review_required` so the POS overlay drops the delta). Implemented on top of H1; **not closed** — pending Codex review. No commit made. Server resolver (Phase 7B-3D-2, `functions/src/resolveReversal.ts`) is **unchanged**.
+> **Current state:** **Phase 7B-H3 — Manual Review Operations UI** (local/device-visible Manager/Admin page to view `manual_review_required` intents and execute the H2 `resolveManualReview` transition). Implemented on top of the committed H2/D1 baseline; **not closed** — pending review. No commit made. Server resolver (Phase 7B-3D-2, `functions/src/resolveReversal.ts`) is **unchanged**.
+
+## Phase 7B-H3: Manual Review Operations UI (UNDER REVIEW)
+
+> **Status:** implemented, **awaiting review**. No commit made. **LOCAL/device-visible** queue UI only — NOT a global Firestore admin dashboard. No global Firestore queries, no stock mutation, no Firestore reconciliation (that stays an external manual admin process).
+
+### What was added
+
+- **Pure UI helpers** `src/lib/pos/offline/manualReviewOps.ts` (node-testable, dependency-free): `canViewManualReviewOps(role)` — the authority gate, **delegating** to the canonical H2 rule `isOfflineReversalAuthoritySupported` (Manager/Admin only) so the UI gate can never drift from the helper's own guard; and `buildManualReviewResolvePayload(actor, form)` — maps actor + form to the exact `ManualReviewResolveInput`, enforcing required `reasonCode` and re-checking authority (defense-in-depth), omitting a blank `note`.
+- **Page** `src/pages/ManualReviewOpsPage.tsx` (Flowbite React, route-only `/manual-review` under the authenticated POS shell): a read-only table of THIS DEVICE's `manual_review_required` intents (read via the existing `listQueue(store, ['manual_review_required'])` abstraction — no queue-internal changes), a Manager/Admin-only resolve action behind a modal with `reasonCode` (required) + `note` (optional), success/error Alert + toast, and a not-authorized Alert for Staff. Copy explicitly states **"เฉพาะอุปกรณ์นี้" (this device only)** and that it does not mutate stock/server.
+- **Route** added to `src/App.tsx` (one import + one `<Route>` line under the existing PosShellRoute group). No nav/menu changes, no route-guard changes.
+
+### Safety boundaries (verified)
+
+- **Authority:** Manager/Admin only; Staff sees the not-authorized state and the resolve action is never rendered; the payload builder returns `unauthorized` for Staff; and the H2 helper itself throws `ManualReviewResolveError` for a staff role (defense-in-depth).
+- **Data source:** the local/offline IndexedDB reversal queue only (`listQueue`) — device-scoped, no Firestore query, no cross-device/global scan.
+- **No stock mutation / no Firestore reconciliation:** the page calls only `resolveManualReview` (H2), which leaves the internal stock counter untouched; reconciliation remains external.
+- **Untouched:** `offlineReversalLogic.ts`, `offlineReversalQueue.ts`, `reversalStockOverlay.ts`, `resolveReversal.ts`, Firestore rules, POS/cart/checkout, returns/RTV, IndexedDB schema, Android/Capacitor, `.claude/`, `stash@{0}`.
+
+### Tests (this pass — all green)
+
+- `manualReviewOps.test.ts` (NEW): **10 passed** — gate (Manager/Admin true; Staff/unknown/null false); payload mapping (note included/omitted, reasonCode trimmed, missing reason blocks, Staff/missing-id unauthorized); integration against the real in-memory store (built payload → `resolveManualReview` → `resolved`, intent leaves the `manual_review_required` list, internal counter unchanged); Staff blocked at payload boundary + H2 helper throws; data source lists only `manual_review_required`; resolve flow makes no network call.
+- **Full web unit suite:** **284 passed** (24 files). `tsc -b --noEmit`: clean.
+
+### Test-infra note (honest)
+
+The repo has no `@testing-library/react` / jsdom harness and adding test-framework deps is out of scope, so the security-relevant logic was extracted into pure helpers and covered by node unit + real-store integration tests rather than DOM-render tests. The page is a thin Flowbite shell over those tested helpers.
+
+### Deferred
+
+- DOM/component render tests (needs a jsdom + testing-library setup — separate infra task).
+- Multi-device/server-broadcast propagation of resolution (still per-device, from H2).
+- Nav/menu entry for the page (currently route-only by direct URL).
 
 ## Phase 7B-H2: Manual Review Operational Guard (UNDER REVIEW)
 

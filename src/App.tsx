@@ -42,6 +42,7 @@ import {
   SETTINGS_NAV_ITEMS,
 } from './lib/settings/settingsNav';
 import StaffManagementPage from './pages/StaffManagementPage';
+import ManualReviewOpsPage from './pages/ManualReviewOpsPage';
 import StockReportPage from './pages/StockReportPage';
 import SupplierPage from './pages/SupplierPage';
 
@@ -79,6 +80,7 @@ export default function App() {
             <Route path="/stock-report" element={<StockReportPage />} />
             <Route path="/profit-report" element={<ProfitReportPage />} />
             <Route path="/staff" element={<StaffManagementPage />} />
+            <Route path="/manual-review" element={<ManualReviewOpsPage />} />
             <Route path="/export" element={<ExportReportPage />} />
             <Route path="/settings" element={<SettingsLayout />}>
               <Route index element={<Navigate to={FIRST_SETTINGS_SLUG} replace />} />
