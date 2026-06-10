@@ -56,6 +56,13 @@ export type ReversalEvidenceSource = 'header_snapshot' | 'legacy_subcollection';
  *  - `manual_review_required`  — server rejected but rollback was unsafe (later local
  *                                activity depends on the corrected stock) OR the
  *                                server itself asked for manual reconciliation.
+ *  - `manual_review_resolved`  — (Phase 7B-H2) a Manager/Admin has operationally
+ *                                reconciled the rejected/conflicted intent (e.g. in
+ *                                Firestore) and explicitly cleared the LOCAL manual-
+ *                                review state. TERMINAL and overlay-excluded, so the
+ *                                POS overlay drops the delta and returns to tracking
+ *                                the authoritative Firestore snapshot. The local
+ *                                correction history is preserved (NOT rolled back).
  *  - `retryable_error`         — transient (network/transport/server_error). Local
  *                                correction stays applied; retry later.
  */
@@ -65,7 +72,28 @@ export type OfflineReversalStatus =
   | 'server_accepted'
   | 'server_rejected'
   | 'manual_review_required'
+  | 'manual_review_resolved'
   | 'retryable_error';
+
+/**
+ * Phase 7B-H2 — audit record of a manual-review resolution. Stamped on the intent
+ * when a Manager/Admin operationally clears a `manual_review_required` state (after
+ * reconciling the authoritative store). It records WHO cleared it, WHEN, and WHY; it
+ * is an operator-declared action (not server-verified) and does NOT roll back or
+ * invert the local stock correction — it only transitions the intent out of overlay.
+ */
+export type ManualReviewResolution = {
+  /** ISO time the manual-review state was cleared (from the injected clock). */
+  resolvedAt: string;
+  /** Id of the Manager/Admin who resolved it. */
+  resolvedByStaffId: string;
+  /** Verified role of the resolver (manager | admin — staff cannot resolve). */
+  resolvedByRole: ReversalActorRole;
+  /** Required reason code for the audit trail. */
+  reasonCode: string;
+  /** Optional free-text note. */
+  note?: string;
+};
 
 /**
  * One signed correction to a local stock counter. `delta` is what we ADD to the
@@ -184,6 +212,8 @@ export type OfflineReversalIntent = {
   syncAttempt?: number;
   /** ISO time of the last claim attempt. */
   lastSyncAttemptAt?: string;
+  /** Phase 7B-H2: audit of a manual-review resolution (set when status → manual_review_resolved). */
+  manualReviewResolution?: ManualReviewResolution;
   localCorrection: LocalCorrection;
 };
 

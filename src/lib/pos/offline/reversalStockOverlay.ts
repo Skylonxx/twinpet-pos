@@ -46,6 +46,10 @@ import type { OfflineReversalIntent, OfflineReversalStatus } from './offlineReve
  *    refresh — preferred over a permanent double-count.
  *  - `server_rejected` — the correction was safely rolled back (`reversed === true`); the
  *    `applied && !reversed` guard below excludes it regardless.
+ *  - `manual_review_resolved` — (Phase 7B-H2) a Manager/Admin has operationally reconciled
+ *    the rejected/conflicted intent and explicitly cleared the local manual-review state,
+ *    so the device must stop overlaying and return to the authoritative Firestore snapshot.
+ *    It is simply absent from `POS_OVERLAY_STATUSES` below — no predicate change needed.
  */
 export const POS_OVERLAY_STATUSES: ReadonlySet<OfflineReversalStatus> = new Set([
   'queued',

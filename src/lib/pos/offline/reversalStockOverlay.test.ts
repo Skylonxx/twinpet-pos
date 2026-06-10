@@ -64,6 +64,11 @@ describe('isOverlayEligible', () => {
     expect(isOverlayEligible(intent('server_rejected', [d('p1', -5)], { reversed: true }))).toBe(false);
   });
 
+  test('manual_review_resolved is NOT eligible (Phase 7B-H2 — operator cleared it; back to Firestore)', () => {
+    // Correction history is preserved (applied=true, reversed=false), yet it must drop.
+    expect(isOverlayEligible(intent('manual_review_resolved', [d('p1', -5)]))).toBe(false);
+  });
+
   test('an unapplied or reversed correction is excluded even when status is eligible', () => {
     expect(isOverlayEligible(intent('queued', [d('p1', -5)], { applied: false }))).toBe(false);
     expect(isOverlayEligible(intent('manual_review_required', [d('p1', -5)], { reversed: true }))).toBe(false);

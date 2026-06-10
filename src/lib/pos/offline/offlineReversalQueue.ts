@@ -18,15 +18,19 @@
 
 import {
   aggregateDeltasByCounter,
+  assertManualReviewResolveInput,
   assertOfflineReversalAuthority,
   buildOfflineReversalIntent,
+  buildResolvedManualReviewIntent,
   classifyServerResult,
   computeReversalDelta,
   deriveReversalIds,
   invertDeltas,
   isClaimable,
+  isManualReviewResolvable,
   isRollbackSafe,
   stockCounterKey,
+  type ManualReviewResolveInput,
   type ServerReversalResponse,
 } from './offlineReversalLogic';
 import type {
@@ -389,6 +393,60 @@ export async function applyServerResult(
       await txn.put('markers', intent.localMutationId, { ...marker, reversed: true });
     }
     return { outcome: 'applied', intent: rolledBack };
+  });
+}
+
+// ─── Manual-review resolution (Phase 7B-H2) ──────────────────────────────────
+
+/** Discriminated outcome of {@link resolveManualReview} (state cases — never thrown). */
+export type ResolveManualReviewOutcome = 'resolved' | 'already_resolved' | 'not_found' | 'not_eligible';
+
+export type ResolveManualReviewResult = {
+  outcome: ResolveManualReviewOutcome;
+  /** The intent post-transition (`resolved`), unchanged (`already_resolved`/`not_eligible`), or null (`not_found`). */
+  intent: OfflineReversalIntent | null;
+};
+
+/**
+ * Operationally clear a `manual_review_required` intent (Phase 7B-H2). After a
+ * Manager/Admin reconciles the authoritative store, this transitions the LOCAL intent
+ * to `manual_review_resolved` (terminal, overlay-excluded) so the POS overlay drops the
+ * pending delta and returns to the plain Firestore snapshot for that product.
+ *
+ * It does NOT roll back or invert the local stock correction (the POS overlay reads
+ * intents, not the internal counter; the counter is left untouched by design) and does
+ * NOT change any server/resolver state. The whole read-check-write runs in ONE atomic
+ * transaction so concurrent calls cannot both transition.
+ *
+ * Authority + required-field guards (Staff actor, missing actor id, missing reason) throw
+ * {@link ManualReviewResolveError} BEFORE any read/write. State cases are returned:
+ *  - `resolved`         — transitioned + metadata stamped.
+ *  - `already_resolved` — idempotent no-op; original metadata preserved (NOT overwritten).
+ *  - `not_eligible`     — any other status / unapplied / already-reversed; no mutation.
+ *  - `not_found`        — no such intent.
+ */
+export async function resolveManualReview(
+  store: ReversalLocalStore,
+  intentId: string,
+  input: ManualReviewResolveInput,
+  deps: QueueDeps = defaultDeps,
+): Promise<ResolveManualReviewResult> {
+  // Contract guards FIRST — throw before touching the store on misuse.
+  assertManualReviewResolveInput(input);
+
+  return store.transact(['intents'], 'readwrite', async (txn) => {
+    const intent = await txn.get<OfflineReversalIntent>('intents', intentId);
+    if (!intent) return { outcome: 'not_found', intent: null };
+    // Idempotent: an already-resolved intent is returned untouched (metadata preserved).
+    if (intent.status === 'manual_review_resolved') {
+      return { outcome: 'already_resolved', intent };
+    }
+    if (!isManualReviewResolvable(intent)) {
+      return { outcome: 'not_eligible', intent };
+    }
+    const resolved = buildResolvedManualReviewIntent(intent, input, deps.now());
+    await txn.put('intents', intentId, resolved);
+    return { outcome: 'resolved', intent: resolved };
   });
 }
 

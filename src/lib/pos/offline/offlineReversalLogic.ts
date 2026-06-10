@@ -10,6 +10,7 @@
 import type {
   CreateReversalInput,
   LocalStockDelta,
+  ManualReviewResolution,
   OfflineReversalIntent,
   OriginalStockEffect,
   ReversalActorRole,
@@ -80,6 +81,97 @@ export function assertOfflineReversalAuthority(role: ReversalActorRole): void {
       'พนักงาน (Staff) ไม่สามารถสร้างคำสั่งย้อนกลับแบบออฟไลน์ได้ — ต้องให้ผู้จัดการ/ผู้ดูแลดำเนินการ',
     );
   }
+}
+
+// ─── Manual-review resolution (Phase 7B-H2) ──────────────────────────────────
+
+/** Structured codes for a manual-review-resolution authority / field failure. */
+export type ManualReviewResolveRejectCode =
+  | 'manual_review_resolve_staff_unsupported'
+  | 'manual_review_resolve_missing_actor'
+  | 'manual_review_resolve_missing_reason';
+
+/**
+ * Thrown ONLY for contract misuse of `resolveManualReview` — a Staff actor, a missing
+ * actor id, or a missing reason code. Normal state cases (not found / not eligible /
+ * already resolved) are returned as discriminated outcomes, not thrown.
+ */
+export class ManualReviewResolveError extends Error {
+  readonly code: ManualReviewResolveRejectCode;
+  constructor(code: ManualReviewResolveRejectCode, message: string) {
+    super(message);
+    this.name = 'ManualReviewResolveError';
+    this.code = code;
+  }
+}
+
+/** Caller-supplied fields for a manual-review resolution (the clock supplies `resolvedAt`). */
+export type ManualReviewResolveInput = Omit<ManualReviewResolution, 'resolvedAt'>;
+
+/**
+ * Eligibility predicate (pure): an intent may be manually resolved ONLY when it is in
+ * `manual_review_required` with its local correction still applied and not rolled back.
+ * Every other status — including `server_rejected` (already safely rolled back) and a
+ * prior `manual_review_resolved` — is NOT resolvable here.
+ */
+export function isManualReviewResolvable(
+  intent: Pick<OfflineReversalIntent, 'status' | 'localCorrection'>,
+): boolean {
+  return (
+    intent.status === 'manual_review_required' &&
+    intent.localCorrection.applied === true &&
+    intent.localCorrection.reversed === false
+  );
+}
+
+/**
+ * Validate the resolver's authority + required fields. Throws `ManualReviewResolveError`
+ * for a Staff actor, a missing/blank actor id, or a missing/blank reason code. Reuses the
+ * create-time authority rule (Manager/Admin only).
+ */
+export function assertManualReviewResolveInput(input: ManualReviewResolveInput): void {
+  if (typeof input.resolvedByStaffId !== 'string' || input.resolvedByStaffId.trim().length === 0) {
+    throw new ManualReviewResolveError(
+      'manual_review_resolve_missing_actor',
+      'ต้องระบุผู้ดำเนินการ (resolvedByStaffId) สำหรับการปิดงานตรวจสอบด้วยตนเอง',
+    );
+  }
+  if (!isOfflineReversalAuthoritySupported(input.resolvedByRole)) {
+    throw new ManualReviewResolveError(
+      'manual_review_resolve_staff_unsupported',
+      'พนักงาน (Staff) ไม่สามารถปิดงานตรวจสอบด้วยตนเองได้ — ต้องให้ผู้จัดการ/ผู้ดูแลดำเนินการ',
+    );
+  }
+  if (typeof input.reasonCode !== 'string' || input.reasonCode.trim().length === 0) {
+    throw new ManualReviewResolveError(
+      'manual_review_resolve_missing_reason',
+      'ต้องระบุเหตุผล (reasonCode) สำหรับการปิดงานตรวจสอบด้วยตนเอง',
+    );
+  }
+}
+
+/**
+ * Build the transitioned intent (pure): status → `manual_review_resolved` with the
+ * resolution metadata stamped. The local correction is PRESERVED verbatim — `applied`
+ * stays true and `reversed` stays false (no rollback, no counter inversion); only the
+ * status + audit metadata change, which is what drops the intent from the POS overlay.
+ */
+export function buildResolvedManualReviewIntent(
+  intent: OfflineReversalIntent,
+  input: ManualReviewResolveInput,
+  nowIso: string,
+): OfflineReversalIntent {
+  return {
+    ...intent,
+    status: 'manual_review_resolved',
+    manualReviewResolution: {
+      resolvedAt: nowIso,
+      resolvedByStaffId: input.resolvedByStaffId,
+      resolvedByRole: input.resolvedByRole,
+      reasonCode: input.reasonCode,
+      ...(input.note ? { note: input.note } : {}),
+    },
+  };
 }
 
 // ─── Deterministic identity ──────────────────────────────────────────────────

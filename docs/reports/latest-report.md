@@ -1,7 +1,52 @@
 # Latest Report
 
 > Rolling "latest report" for the stock-write security workstream. Updated at each phase boundary.
-> **Current state:** **Phase 7B-H1 — Receiving Evidence Hardening** (header `reversalEvidence` snapshot + header-preferred reversal). Implemented on top of Track A; **not closed** — pending Codex re-review. No commit made. Server resolver (Phase 7B-3D-2, `functions/src/resolveReversal.ts`) is **unchanged**.
+> **Current state:** **Phase 7B-H2 — Manual Review Operational Guard** (local resolve helper that clears `manual_review_required` so the POS overlay drops the delta). Implemented on top of H1; **not closed** — pending Codex review. No commit made. Server resolver (Phase 7B-3D-2, `functions/src/resolveReversal.ts`) is **unchanged**.
+
+## Phase 7B-H2: Manual Review Operational Guard (UNDER REVIEW)
+
+> **Status:** implemented, **awaiting Codex review**. Does NOT claim closure. No commit made. Single-device/local-intent cleanup only — no Admin UI, no server/rules changes.
+
+### Problem closed
+
+`manual_review_required` intents stay in `reversalStockOverlay` while `localCorrection.applied === true && reversed === false` (correct while unresolved). But if a Manager/Admin reconciles Firestore `productStocks` and the local intent stays `manual_review_required`, that device keeps overlaying the delta and can show **ghost stock**. H2 adds a local transition so the overlay drops after manual reconciliation.
+
+### What was added (approved decisions)
+
+- **New terminal status `manual_review_resolved`** (`offlineReversalTypes.ts`) + optional audit block `manualReviewResolution { resolvedAt, resolvedByStaffId, resolvedByRole, reasonCode, note? }` on `OfflineReversalIntent`. No `firestoreReconciled` flag (Decision B — unverifiable locally).
+- **Pure helpers** (`offlineReversalLogic.ts`): `isManualReviewResolvable` (eligibility), `assertManualReviewResolveInput` (authority + required fields), `buildResolvedManualReviewIntent` (status → `manual_review_resolved`, stamp metadata, **preserve** `localCorrection` — `applied` stays true, `reversed` stays false), and `ManualReviewResolveError`.
+- **Orchestration** (`offlineReversalQueue.ts`): `resolveManualReview(store, intentId, input, deps?)` runs the whole read-check-write in ONE `transact(['intents'],'readwrite')`.
+- **Overlay** (`reversalStockOverlay.ts`): **predicate unchanged** — `manual_review_resolved` is simply not in `POS_OVERLAY_STATUSES`, so the existing `POS_OVERLAY_STATUSES.has(status) && applied && !reversed` gate excludes it. Doc comment updated to list it as deliberately excluded.
+
+### Approved semantics
+
+- **Internal local stock counter is NOT touched** (Decision C) and `localCorrection.reversed` is **NOT** set to true — the overlay reads intents (not the counter), Firestore is authoritative post-reconciliation, and inverting the counter would risk double-correction. The correction history is preserved for audit.
+- **Outcome contract** (Decision D): discriminated outcomes `resolved | already_resolved | not_found | not_eligible`; throws `ManualReviewResolveError` **only** for authority (Staff) or missing required fields (actor id / reason).
+- **Eligibility:** only `manual_review_required` with `applied && !reversed`. `server_rejected` is **not** resolvable (Decision F — already safely rolled back / overlay-excluded). `queued`/`syncing`/`retryable_error`/`server_accepted`/`manual_review_resolved` → `not_eligible`.
+- **Idempotency:** first call → `resolved` + metadata; second call → `already_resolved`, **no mutation**, original metadata preserved; unknown id → `not_found`.
+- **Sync-path inert:** `manual_review_resolved` is terminal — `isClaimable` already excludes it, so it is never re-claimed or re-synced (no sync-path code changed).
+- **Multi-device propagation deferred** (Decision E): clearing is per-device/local; a true server-broadcast resolution is a future phase.
+
+### Files changed
+
+- `src/lib/pos/offline/offlineReversalTypes.ts` — `manual_review_resolved` status + `ManualReviewResolution` type + `manualReviewResolution?` field.
+- `src/lib/pos/offline/offlineReversalLogic.ts` — eligibility/guard/build pure helpers + `ManualReviewResolveError`.
+- `src/lib/pos/offline/offlineReversalQueue.ts` — `resolveManualReview` orchestration + outcome types.
+- `src/lib/pos/offline/reversalStockOverlay.ts` — doc comment only (exclusion note).
+- `src/lib/pos/offline/manualReviewResolution.test.ts` (NEW) — helper/eligibility/guard/idempotency/outcome/inertness tests.
+- `src/lib/pos/offline/reversalStockOverlay.test.ts` — `manual_review_resolved` exclusion test.
+
+### Tests (this pass — all green)
+
+- `manualReviewResolution.test.ts` (NEW): **15 passed** — overlays while unresolved; transition drops overlay; metadata recorded; counter & `reversed` untouched; idempotent (metadata preserved); Staff/missing-actor/missing-reason throw; `not_found`/`not_eligible`/`server_rejected not resolvable`; `manual_review_resolved` not claimable.
+- `reversalStockOverlay.test.ts`: **19 passed** (added `manual_review_resolved` exclusion; queued/syncing/retryable/server_accepted/server_rejected behavior unchanged).
+- `offlineReversalQueue.test.ts`: **28 passed**; `offlineReversalLogic.test.ts`: **16 passed** (no regression).
+- **Full web unit suite:** **274 passed** (23 files). `tsc -b --noEmit`: clean. `tests/pos-safety.spec.ts` (Playwright): **2 passed**. functions `resolveReversal.test.ts`: **29 passed** (server resolver unchanged).
+
+### Scope of the H2 guarantee (honest boundary)
+
+- **H2 guarantees** that a Manager/Admin can locally clear a `manual_review_required` intent so the POS overlay on that device stops showing the pending delta and returns to the Firestore snapshot — without rolling back the local correction or changing server state.
+- **H2 does not** verify that Firestore was actually reconciled (operator-declared, like the rest of the manual-review path), and does **not** propagate the resolution to other devices' local queues (deferred).
 
 ## Phase 7B-H1: Receiving Evidence Hardening (UNDER REVIEW)
 
