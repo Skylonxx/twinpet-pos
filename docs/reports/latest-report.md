@@ -1,15 +1,53 @@
 # Latest Report
 
 > Rolling "latest report" for the stock-write security workstream. Updated at each phase boundary.
-> **Current state:** **Phase 7B-3D-3 — IN PROGRESS / UNDER REVIEW** (Offline Reversal Queue + immediate IndexedDB stock correction). Implemented; **not closed** — pending Codex re-review after blocker fixes. Server resolver (Phase 7B-3D-2, `functions/src/resolveReversal.ts`) is unchanged.
+> **Current state:** **Phase 7B Post-Commit Track A — destructive reversal flows integrated into live screens** (merged on top of the 7B-3D-3 engine). Implemented; **not closed** — pending Codex re-review. Server resolver (Phase 7B-3D-2, `functions/src/resolveReversal.ts`) is **unchanged**.
 
-## Phase 7B-3D-3: Offline Reversal Queue + Immediate IndexedDB Stock Correction (UNDER REVIEW)
+## Phase 7B Post-Commit: Destructive Reversal Flow Integration + POS Overlay (UNDER REVIEW)
+
+> **Status:** post-merge integration of the 7B-3D-3 offline engine into the live POS / Receiving / Transfer screens, plus the POS-visible stock overlay. Does NOT claim closure. No commit made. Reflects the mainline state after the latest audit's blocker fixes. **Supersedes the "engine only — not wired into any screen" framing of the 7B-3D-3 section below**, which described the pre-integration engine.
+
+### What is now wired into live screens
+
+- **POS Clear Cart / Cancel Parked Order** are **modal-confirmed** (`DestructiveConfirmModal` / suspended-bill modals) — no `window.confirm` remains in the POS safety path. Covered by `tests/pos-safety.spec.ts` (2 passing).
+- **`ReceivingEditPage`** routes a confirmed void through **queue-first `executeReceivingReversal`** behind the existing **`ReceivingVoidDialog`** (no instant execution; the legacy direct `cancelReceiving` is off the confirmed path). Receiving **evidence is fail-closed before any queue write / local correction** (`assertReceivingReversalEvidence` — missing/empty/malformed items, missing `lotId`, non-finite or `≤ 0` `qtyBase` all reject all-or-nothing). A Staff actor is rejected before any write.
+- **`TransferHistoryPage`** is **modal-gated with `DestructiveConfirmModal`**; on confirm it still runs the **legacy `cancelBranchTransfer`** for **completed** transfers. Completed transfers are **NOT** routed through the resolver/offline queue (the resolver only reverses `sent`/`received`).
+- **POS inventory now overlays pending local reversal deltas** (NEW — this audit's Blocker 1 fix). `inventoryRepository.getInventorySnapshot` presents `visible stock = Firestore productStocks snapshot + pending reversal deltas`, so the queue's immediate local correction is reflected in the grid instead of being invisible until server sync.
+
+### POS-visible reversal overlay (Blocker 1 fix)
+
+- **New module** `src/lib/pos/offline/reversalStockOverlay.ts` (read-only — no IndexedDB mutation): derives, from the durable intent queue, the **net pending reversal delta per product** at a branch and overlays it on the Firestore snapshot in `inventoryRepository`.
+- **Derived from intents, not the queue's internal `stock` counter**, so the overlay is status-aware. **Included** statuses: `queued`, `syncing`, `retryable_error`, `manual_review_required` — and only while `localCorrection.applied && !reversed`. **Excluded**: `server_accepted` and any rolled-back (`reversed`) correction.
+- **Double-correction bound:** `server_accepted` is **excluded** because the server is becoming authoritative and Firestore `productStocks` will reflect the reversal — there is **no reliable local "Firestore caught up" marker yet**, so keeping the overlay would risk a **permanent double-count**. The conservative trade-off is a **transient under-correction** in the brief window between server-accept and the next snapshot refresh. Idempotent intent ids (one record per source+action) mean a delta is never summed twice; a replay does not double the overlay.
+- **Fail-safe:** if the local store is unavailable (SSR / no IndexedDB) or the read throws, the overlay is empty and the POS degrades to plain Firestore stock — it never breaks.
+- **Comment corrections:** `offlineReversalTypes.ts` no longer claims the engine is "not wired into any screen" nor that the internal local counter "is what the POS grid reads"; both now describe the real overlay path.
+
+### Tests (this pass — all green)
+
+- **POS overlay** `src/lib/pos/offline/reversalStockOverlay.test.ts` (NEW): **18 passed** — eligibility per status; branch scoping; queued/retryable/manual deltas overlaid; `server_accepted` and reversed excluded (no permanent double-count); summing multiple intents; durable-queue integration (POS-visible delta immediately after an offline receiving reversal, idempotent replay not doubled, other-branch isolation, no-pending → empty, throwing-store fail-safe).
+- **Receiving reversal evidence gate** `src/lib/inventory/reversalCoordinator.test.ts`: **19 passed** (fail-closed before queue write on missing/empty/malformed items, missing/null `lotId`, `qtyBase` 0/negative/NaN/Infinity, mixed all-or-nothing; valid lot-backed set still queues + applies local correction).
+- **Offline engine** `offlineReversalLogic.test.ts` + `offlineReversalQueue.test.ts`: **39 passed** (unchanged).
+- **Full web unit suite:** **210 passed** (19 files). Server `resolveReversal.test.ts`: **29 passed** (unchanged). `tests/pos-safety.spec.ts` (Playwright): **2 passed**. `tsc -b --noEmit`: clean.
+
+### Still deferred (not claimed closed)
+
+- **Completed-transfer queue-first reversal** — deferred until the resolver contract covers `completed` or the transfer lifecycle emits `sent`/`received`.
+- **`AdminReceivingPage` / `AdminTransferPage`** reversal integration — deferred.
+- **Receiving header checksum / itemCount / original-effects snapshot** hardening (defence against a silently truncated item subcollection) — future hardening.
+- **Staff online-PIN receiving reversal** — out of scope (Staff rejected before any offline write).
+- **`ReceivingVoidDialog` → `DestructiveConfirmModal`** UI standardization — deferred.
+
+### Boundaries preserved
+
+No server-resolver, Firestore-rules, Android/Capacitor, `.claude/`, Returns/RTV, inventory-adjustment-reversal, or settings/UOM changes. `stash@{0}` untouched.
+
+## Phase 7B-3D-3: Offline Reversal Queue + Immediate IndexedDB Stock Correction (engine — superseded framing)
 
 > **Status:** implementation in progress, **awaiting Codex re-review**. Does NOT claim closure. No commit made. The first pass returned Codex `FAIL`; this section reflects the state **after** the blocker fixes below.
 
-### Scope delivered (engine only — no live UI integration)
+### Scope delivered (engine layer)
 
-A dedicated client-side durable queue (`src/lib/pos/offline/`) that lets a Manager/Admin create a void/reverse **intent** for a Goods-Receiving or branch Transfer while offline, **immediately corrects local IndexedDB stock** so selling can continue, durably queues the intent (survives reload/crash), and reconciles with the server `resolveReversal` resolver on reconnect. **Not wired into any receiving/transfer/POS screen** — live modal integration remains deferred.
+A dedicated client-side durable queue (`src/lib/pos/offline/`) that lets a Manager/Admin create a void/reverse **intent** for a Goods-Receiving or branch Transfer while offline, **immediately corrects local IndexedDB stock** so selling can continue, durably queues the intent (survives reload/crash), and reconciles with the server `resolveReversal` resolver on reconnect. _(Historical note: this section described the engine before screen integration. It is **now wired** into Receiving/Transfer/POS and surfaced in the grid via the overlay — see the **Phase 7B Post-Commit** section at the top.)_
 
 - **Files added** (all under `src/lib/pos/offline/`): `offlineReversalTypes.ts`, `offlineReversalLogic.ts` (pure), `reversalLocalStore.ts` (atomic IndexedDB store + in-memory test store), `offlineReversalQueue.ts` (orchestration), `syncOfflineReversals.ts` (sync worker → callable), plus `offlineReversalLogic.test.ts` and `offlineReversalQueue.test.ts`. `docs/reports/latest-report.md` (this section).
 - **Immediate local correction:** create runs the 9-step order inside ONE IndexedDB `readwrite` transaction (assert mutation-marker not applied → write intent → apply stock delta → write ledger rows → write marker → finalise) so the corrected counter is visible the instant the call resolves. Idempotent: a replay of the same source/action returns the existing intent without re-applying.
@@ -27,12 +65,12 @@ A dedicated client-side durable queue (`src/lib/pos/offline/`) that lets a Manag
 - **Unsafe / unproven rollback** of a rejected reversal goes to **`manual_review_required`** (never auto-reverses local stock).
 - Sync claims use a **recoverable lease** so a crash mid-sync cannot strand a queue item.
 
-### Tests (this pass — all green)
+### Tests (engine pass — all green; superseded counts updated in the top section)
 - `offlineReversalLogic.test.ts` + `offlineReversalQueue.test.ts`: **39 passed** (covers durable create, immediate correction, atomic abort, mutation-id/replay no-double-apply, accept-no-re-apply + confirmed, network→retryable keeps correction, manual-review, fail-closed rollback by default / unknown / proof-false, rollback only when proven, Staff rejected before write + no correction, Manager/Admin queue, lease recovery after crash, live-lease lockout).
-- Full web unit suite: **168 passed** (17 files). Server `resolveReversal.test.ts`: **29 passed** (unchanged). Rules suite: **114 passed** (unchanged — no rules touched).
+- _(Engine-pass suite total was 168/17 files; the current mainline total is **210 passed / 19 files** — see the top section.)_ Server `resolveReversal.test.ts`: **29 passed** (unchanged). Rules suite: **114 passed** (unchanged — no rules touched).
 
-### Boundaries preserved
-No live modal/receiving/transfer/POS/cart/checkout UI, Returns/RTV, inventory-adjustment reversal, Flowbite/styling, Android/Capacitor, Firestore rules, or server-resolver changes. `.claude/` untouched; `stash@{0}` untouched.
+### Boundaries preserved (engine pass)
+_(The engine pass touched no live UI; screen wiring landed later — see the top section.)_ Returns/RTV, inventory-adjustment reversal, Flowbite/styling, Android/Capacitor, Firestore rules, and server-resolver changes remain untouched. `.claude/` untouched; `stash@{0}` untouched.
 
 ### Known risks
 - The default rollback path fail-closes to manual review because **no comprehensive local dependency probe exists yet** (POS/offline-sales integration is deferred) — Managers will see more manual-review items until that probe is built and injected.

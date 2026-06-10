@@ -30,6 +30,7 @@ import { getQuickMenus, type QuickMenu } from '../admin/quickMenuStore';
 import { collections, db, isFirebaseConfigured } from '../firebase';
 import type { Product, ProductCategory } from '../types';
 import { DEV_POS_PRODUCTS } from './devProducts';
+import { readReversalOverlay } from './offline/reversalStockOverlay';
 import { mergePosProducts, type StockEntry } from './posProductMapper';
 import { getBranchSortOrders } from './productSorting';
 import type { PosProduct } from './types';
@@ -144,14 +145,44 @@ async function fetchStockByProduct(branchId: string, productIds: string[]): Prom
 }
 
 /**
+ * Overlay pending offline-reversal deltas onto the Firestore stock map (mutates in
+ * place). This is what makes the queue's IMMEDIATE local stock correction visible to
+ * the POS grid — `visible stock = Firestore productStocks + pending reversal deltas`.
+ * A product touched only by a reversal (absent from the Firestore map) is seeded from 0.
+ */
+function applyReversalOverlay(
+  stockByProduct: Map<string, StockEntry>,
+  overlay: Map<string, number>,
+): void {
+  for (const [productId, delta] of overlay) {
+    const cur = stockByProduct.get(productId);
+    stockByProduct.set(productId, {
+      stock: (cur?.stock ?? 0) + delta,
+      overrideTierPrices: cur?.overrideTierPrices,
+    });
+  }
+}
+
+/**
  * Resolve a fresh, static inventory snapshot for `branchId`. Reads come from the
  * SDK cache (offline) or server (online); either way the returned arrays are
  * detached, primitive-only, and safe to hand straight to the POS grid + cart.
+ *
+ * The Firestore stock is overlaid with any pending offline-reversal deltas
+ * (`offline/reversalStockOverlay`) so a just-voided receiving/transfer is reflected
+ * immediately — re-read on every refresh, keeping the Light Path point-in-time.
  */
 export async function getInventorySnapshot(branchId: string): Promise<InventorySnapshot> {
   if (!isFirebaseConfigured || !db) {
+    const { products, categories } = devProductsAndCategories();
+    const reversalOverlay = await readReversalOverlay(branchId);
     return {
-      ...devProductsAndCategories(),
+      products: reversalOverlay.size
+        ? products.map((p) =>
+            reversalOverlay.has(p.id) ? { ...p, stock: p.stock + reversalOverlay.get(p.id)! } : p,
+          )
+        : products,
+      categories,
       sorting: await getBranchSortOrders(branchId),
       quickMenus: await getQuickMenus(branchId),
     };
@@ -175,10 +206,11 @@ export async function getInventorySnapshot(branchId: string): Promise<InventoryS
     .map((d: any) => ({ ...(d.data() as Product), id: d.id }))
     .filter((p: any) => !p.deletedAt);
 
-  const stockByProduct = await fetchStockByProduct(
-    branchId,
-    rawProducts.map((p) => p.id),
-  );
+  const [stockByProduct, reversalOverlay] = await Promise.all([
+    fetchStockByProduct(branchId, rawProducts.map((p) => p.id)),
+    readReversalOverlay(branchId),
+  ]);
+  applyReversalOverlay(stockByProduct, reversalOverlay);
 
   return {
     products: mergePosProducts(rawProducts, stockByProduct),

@@ -15,9 +15,13 @@
  * logic layer (offlineReversalLogic.ts) and the orchestration layer
  * (offlineReversalQueue.ts) can be unit-tested without a browser/IndexedDB.
  *
- * NOTE: this module is NOT wired into any live receiving/transfer/POS screen in
- * this phase (UI integration is explicitly deferred). It is the storage + sync
- * engine only.
+ * INTEGRATION (Phase 7B Post-Commit Track A): this engine is now wired into the
+ * live destructive flows — `ReceivingEditPage` routes a confirmed void through
+ * `executeReceivingReversal` (queue-first), and the POS grid surfaces the immediate
+ * local correction via the read-only overlay in `offline/reversalStockOverlay.ts`
+ * (`inventoryRepository` adds pending reversal deltas on top of the Firestore
+ * `productStocks` snapshot). Completed-transfer queue-first reversal remains deferred
+ * (the page keeps the legacy `cancelBranchTransfer` behind a confirmation gate).
  */
 
 /** Actor roles, mirroring the client `UserRole` (src/lib/types.ts). Only Manager/Admin
@@ -61,9 +65,12 @@ export type OfflineReversalStatus =
  * yields negative deltas at the receiving branch; reversing a transfer yields a
  * negative delta at the destination and a positive delta back at the source.
  *
- * `lotId` is carried for audit fidelity only — the device's local stock truth is
- * the product×location counter (what the POS grid reads via inventoryRepository),
- * so the counter is keyed by product+location and lot-level deltas are summed in.
+ * `lotId` is carried for audit fidelity only — the local correction is tracked at
+ * product×location granularity, so the queue's internal `stock` counter is keyed by
+ * product+location and lot-level deltas are summed in. (That internal counter is
+ * bookkeeping, NOT what the POS grid reads: the grid reads the Firestore
+ * `productStocks` snapshot, onto which `offline/reversalStockOverlay.ts` overlays
+ * these pending deltas — see `inventoryRepository`.)
  */
 export type LocalStockDelta = {
   productId: string;
