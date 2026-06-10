@@ -1,7 +1,42 @@
 # Latest Report
 
 > Rolling "latest report" for the stock-write security workstream. Updated at each phase boundary.
-> **Current state:** **Phase 7B-3B (branch void-password setting + field-scoped rules)**.
+> **Current state:** **Phase 7B-3D-3 — IN PROGRESS / UNDER REVIEW** (Offline Reversal Queue + immediate IndexedDB stock correction). Implemented; **not closed** — pending Codex re-review after blocker fixes. Server resolver (Phase 7B-3D-2, `functions/src/resolveReversal.ts`) is unchanged.
+
+## Phase 7B-3D-3: Offline Reversal Queue + Immediate IndexedDB Stock Correction (UNDER REVIEW)
+
+> **Status:** implementation in progress, **awaiting Codex re-review**. Does NOT claim closure. No commit made. The first pass returned Codex `FAIL`; this section reflects the state **after** the blocker fixes below.
+
+### Scope delivered (engine only — no live UI integration)
+
+A dedicated client-side durable queue (`src/lib/pos/offline/`) that lets a Manager/Admin create a void/reverse **intent** for a Goods-Receiving or branch Transfer while offline, **immediately corrects local IndexedDB stock** so selling can continue, durably queues the intent (survives reload/crash), and reconciles with the server `resolveReversal` resolver on reconnect. **Not wired into any receiving/transfer/POS screen** — live modal integration remains deferred.
+
+- **Files added** (all under `src/lib/pos/offline/`): `offlineReversalTypes.ts`, `offlineReversalLogic.ts` (pure), `reversalLocalStore.ts` (atomic IndexedDB store + in-memory test store), `offlineReversalQueue.ts` (orchestration), `syncOfflineReversals.ts` (sync worker → callable), plus `offlineReversalLogic.test.ts` and `offlineReversalQueue.test.ts`. `docs/reports/latest-report.md` (this section).
+- **Immediate local correction:** create runs the 9-step order inside ONE IndexedDB `readwrite` transaction (assert mutation-marker not applied → write intent → apply stock delta → write ledger rows → write marker → finalise) so the corrected counter is visible the instant the call resolves. Idempotent: a replay of the same source/action returns the existing intent without re-applying.
+
+### Codex blocker fixes (this pass)
+
+- **Blocker 1 — Recoverable sync lease (no stranded `syncing` items).** Claims now write a lease (`syncLeaseOwner`, `syncLeaseExpiresAt`, `syncAttempt`, `lastSyncAttemptAt`). An item is claimable when `queued`/`retryable_error`, **or** `syncing` with an **expired** lease (crash/reload recovery); a live lease locks out concurrent workers. `applyServerResult` releases the lease in every outcome. `listClaimable`/`syncPendingReversals` drain expired-lease items too.
+- **Blocker 1b — Stale-worker claim token (no terminal downgrade).** `claimForSync` returns a `SyncClaimToken` (`{ intentId, syncLeaseOwner, syncAttempt }`) that `syncOneReversal` captures before the network call and passes into `applyServerResult`, which **re-verifies it inside the transaction**: if the item is no longer `syncing` or the owner/attempt no longer matches (a newer claim reclaimed an expired lease and bumped `syncAttempt`), the late result is a `stale_noop` and the item is left untouched. A stalled, superseded worker can therefore never downgrade a newer terminal state (e.g. `server_accepted → retryable_error`). `applyServerResult` now returns `{ outcome: 'applied' | 'stale_noop' | 'not_found', intent }`.
+- **Blocker 2 — Offline reversal is Manager/Admin only.** A Staff actor (`actorRole: 'staff'`) is rejected **before** any local write (`OfflineReversalRejectedError` / `offline_staff_authority_unsupported`) — no stock correction, no queue item — because the server resolver requires a server-verified raw PIN for Staff that an offline queue cannot (and must not) satisfy. No insecure offline PIN protocol; no raw PIN stored.
+- **Blocker 3 — Rollback is fail-closed.** A definitive server rejection auto-rolls-back the local correction **only when comprehensive dependency safety is explicitly proven** (`proveRollbackSafe` returns `true`). Missing / unknown / incomplete / throwing evidence (the default — there is no POS/local-stock-consumer probe yet) ⇒ `manual_review_required` with the correction preserved and the reject code/message kept. By design this almost always fail-closes.
+- **Blocker 4 — This report updated** honestly: 7B-3D-3 is under review, not closed.
+
+### Known policy (this phase)
+- Offline **Staff** reversal is **not supported** unless an approved offline authority proof exists (none does yet) → rejected before queue creation.
+- **Unsafe / unproven rollback** of a rejected reversal goes to **`manual_review_required`** (never auto-reverses local stock).
+- Sync claims use a **recoverable lease** so a crash mid-sync cannot strand a queue item.
+
+### Tests (this pass — all green)
+- `offlineReversalLogic.test.ts` + `offlineReversalQueue.test.ts`: **39 passed** (covers durable create, immediate correction, atomic abort, mutation-id/replay no-double-apply, accept-no-re-apply + confirmed, network→retryable keeps correction, manual-review, fail-closed rollback by default / unknown / proof-false, rollback only when proven, Staff rejected before write + no correction, Manager/Admin queue, lease recovery after crash, live-lease lockout).
+- Full web unit suite: **168 passed** (17 files). Server `resolveReversal.test.ts`: **29 passed** (unchanged). Rules suite: **114 passed** (unchanged — no rules touched).
+
+### Boundaries preserved
+No live modal/receiving/transfer/POS/cart/checkout UI, Returns/RTV, inventory-adjustment reversal, Flowbite/styling, Android/Capacitor, Firestore rules, or server-resolver changes. `.claude/` untouched; `stash@{0}` untouched.
+
+### Known risks
+- The default rollback path fail-closes to manual review because **no comprehensive local dependency probe exists yet** (POS/offline-sales integration is deferred) — Managers will see more manual-review items until that probe is built and injected.
+- The lease is advisory (single-device durability via IndexedDB); cross-tab concurrency relies on the atomic claim transaction, not OS-level locks.
 
 ## Phase 7B-3B: Branch Void-Password Setting + Rules (Settings-only batch)
 
