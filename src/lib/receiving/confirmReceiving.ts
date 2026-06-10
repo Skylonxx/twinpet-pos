@@ -12,8 +12,21 @@ import {
   type Firestore,
 } from 'firebase/firestore';
 import { collections, db, isFirebaseConfigured } from '../firebase';
-import type { ProductStock, Receiving, ReceivingItem, Settings, StockLot, StockMovement } from '../types';
+import type {
+  ProductStock,
+  Receiving,
+  ReceivingItem,
+  ReversalEvidence,
+  Settings,
+  StockLot,
+  StockMovement,
+} from '../types';
 import { devConfirmReceiving } from './devMock';
+import {
+  aggregateLotEffects,
+  assertReversalEvidenceCoversCompletion,
+  buildReceivingReversalEvidence,
+} from './reversalEvidence';
 import { allocateReceivingNumber } from './receivingId';
 import {
   lineCostBase,
@@ -78,6 +91,13 @@ type LineWritePlan = {
     qty: number;
     expiryDate: Date | null;
   } | null;
+  /**
+   * Phase 7B-H1: the actual lot-level stock-effect segments this line applies — one
+   * per ghost-lot reconciliation plus the new-lot remainder. Their qty sums to
+   * `qtyBase`. This is the canonical set both the lot writes and the header evidence
+   * derive from (so the evidence reflects EVERY lot mutation, not just a primary lot).
+   */
+  lotEffects: { lotId: string; qtyBase: number }[];
   movementRef: DocumentReference;
   itemRef: DocumentReference;
   newAvgCost: number;
@@ -206,6 +226,8 @@ export async function confirmReceiving(input: ConfirmReceivingInput): Promise<st
       let incoming = qtyBase;
       let primaryLotId = '';
       const ghostUpdates: LineWritePlan['ghostUpdates'] = [];
+      // One lot-effect segment per ACTUAL lot mutation this line performs.
+      const lotEffects: LineWritePlan['lotEffects'] = [];
 
       if (allowNegativeStock) {
         for (const ghost of ctx.ghosts) {
@@ -226,6 +248,8 @@ export async function confirmReceiving(input: ConfirmReceivingInput): Promise<st
             isDepleted: ghost.isDepleted,
           });
 
+          // Segment: this exact quantity is reconciled INTO this ghost lot.
+          lotEffects.push({ lotId: ghost.ref.id, qtyBase: reconcileQty });
           if (!primaryLotId) primaryLotId = ghost.ref.id;
           incoming -= reconcileQty;
         }
@@ -240,6 +264,8 @@ export async function confirmReceiving(input: ConfirmReceivingInput): Promise<st
           expiryDate: parseExpiry(line),
         };
         primaryLotId = lotRef.id;
+        // Segment: the remainder lands in the newly created lot.
+        lotEffects.push({ lotId: lotRef.id, qtyBase: incoming });
       }
 
       const oldStock = ctx.currentStock;
@@ -260,11 +286,35 @@ export async function confirmReceiving(input: ConfirmReceivingInput): Promise<st
         primaryLotId,
         ghostUpdates,
         newLot,
+        lotEffects,
         movementRef: doc(collection(firestore, collections.stockMovements)),
         itemRef: doc(itemsCol),
         newAvgCost,
       });
     }
+
+    // Phase 7B-H1 completeness invariant — run BEFORE any write in Phase 3. The
+    // canonical set is LOT-LEVEL: every ghost-reconciliation and new-lot segment from
+    // every line, aggregated by (productId, lotId). This same set drives the header
+    // `reversalEvidence.effects`/checksums; the productStocks increments use the
+    // per-line `qtyBase` which equals each line's segment total by construction.
+    // Asserting per-product coverage against `input.lines` guarantees the snapshot
+    // represents every stock-affecting line AND every actual lot mutation — so a path
+    // that mutates stock outside this set aborts here instead of certifying an
+    // incomplete-but-self-consistent snapshot.
+    const plannedEffects = aggregateLotEffects(
+      writePlans.flatMap((plan) =>
+        plan.lotEffects.map((seg) => ({
+          productId: plan.line.productId,
+          lotId: seg.lotId,
+          qtyBase: seg.qtyBase,
+        })),
+      ),
+    );
+    assertReversalEvidenceCoversCompletion(
+      input.lines.map((line) => ({ productId: line.productId, qtyBase: lineQtyBase(line) })),
+      plannedEffects,
+    );
 
     // ── Phase 3: ALL WRITES ──────────────────────────────────────────────
     if (isFinalizingDraft) {
@@ -355,6 +405,16 @@ export async function confirmReceiving(input: ConfirmReceivingInput): Promise<st
     const billDiscount = Math.max(0, input.finalDiscount || 0);
     const grandTotal = receivingGrandTotal(input.lines, billDiscount);
 
+    // Phase 7B-H1: header reversal-evidence snapshot of the EXACT effects applied —
+    // built from the SAME `plannedEffects` that increase stock (and were just proven
+    // to cover the canonical completion input), written in THIS transaction so it is
+    // atomic with the stock increase (never a later rebuild).
+    const reversalEvidence: ReversalEvidence = {
+      ...buildReceivingReversalEvidence(plannedEffects),
+      createdAt: now as never,
+      createdBy: input.staffId,
+    };
+
     const receiving: Receiving = {
       id: receivingId,
       branchId: input.branchId,
@@ -373,6 +433,7 @@ export async function confirmReceiving(input: ConfirmReceivingInput): Promise<st
       receivedAt: now as never,
       createdAt: now as never,
       updatedAt: now as never,
+      reversalEvidence,
     };
     if (isFinalizingDraft) {
       tx.update(receivingRef, {
@@ -387,6 +448,7 @@ export async function confirmReceiving(input: ConfirmReceivingInput): Promise<st
         note: receiving.note,
         receivedAt: now,
         updatedAt: now,
+        reversalEvidence,
       });
     } else {
       tx.set(receivingRef, receiving);

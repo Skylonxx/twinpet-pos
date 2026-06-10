@@ -186,6 +186,8 @@ export function buildOfflineReversalIntent(
     createdByRole: input.actorRole,
     idempotencyKey: ids.idempotencyKey,
     localMutationId: ids.localMutationId,
+    // Phase 7B-H1: preserve the evidence provenance on the durable intent (audit).
+    ...(input.evidenceSource ? { evidenceSource: input.evidenceSource } : {}),
     status: 'queued',
     localCorrection: {
       applied: false,

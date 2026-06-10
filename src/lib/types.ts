@@ -569,6 +569,33 @@ export type QuotationItem = Omit<OrderItem, 'fifoCost' | 'lotRefs'>;
 // receivings + receivingItems (subcollection)
 // -----------------------------
 
+/** One stock effect captured in the header reversal-evidence snapshot (Phase 7B-H1). */
+export type ReversalEvidenceEffect = {
+  productId: string;
+  lotId: string;
+  /** Base-unit quantity ADDED to stock for this line when the receiving completed. */
+  qtyBase: number;
+};
+
+/**
+ * Header-level snapshot of the EXACT stock effects applied when a receiving was
+ * completed (Phase 7B-H1 — Receiving Evidence Hardening). Persisted atomically with
+ * the stock increase inside the completion transaction, so a later reversal can
+ * validate completeness from the header WITHOUT trusting that the item subcollection
+ * was loaded in full. `itemCount` / `totalQtyBase` are integrity checksums over
+ * `effects`; `version` guards the schema. Absent on legacy/pre-H1 records (which fall
+ * back to strict item-subcollection validation).
+ */
+export type ReversalEvidence = {
+  version: 1;
+  source: 'receiving_completion';
+  itemCount: number;
+  totalQtyBase: number;
+  effects: ReversalEvidenceEffect[];
+  createdAt: Timestamp;
+  createdBy: string;
+};
+
 export type Receiving = {
   id: string;
   branchId: string;
@@ -587,6 +614,8 @@ export type Receiving = {
   receivedAt: Timestamp;
   createdAt: Timestamp;
   updatedAt: Timestamp;
+  /** Phase 7B-H1: header stock-effect snapshot for reversal hardening (absent on legacy records). */
+  reversalEvidence?: ReversalEvidence;
 };
 
 export type ReceivingProductSnap = {

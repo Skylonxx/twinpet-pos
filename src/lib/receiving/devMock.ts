@@ -1,8 +1,20 @@
-import type { ProductStock, Receiving, ReceivingItem, StockLot, StockMovement } from '../types';
+import type {
+  ProductStock,
+  Receiving,
+  ReceivingItem,
+  ReversalEvidence,
+  StockLot,
+  StockMovement,
+} from '../types';
 import type { CancelReceivingInput, SaveReceivingDraftInput, UpdateReceivingInput } from '../receivingHistory/types';
 import { DRAFT_LOT_ID } from '../receivingHistory/types';
 import { getDevProductList } from '../productCrud/devMock';
 import { allocateDevReceivingNumber } from './receivingId';
+import {
+  aggregateLotEffects,
+  assertReversalEvidenceCoversCompletion,
+  buildReceivingReversalEvidence,
+} from './reversalEvidence';
 import {
   lineCostBase,
   lineQtyBase,
@@ -55,6 +67,9 @@ export function devConfirmReceiving(input: ConfirmReceivingInput): string {
   }
 
   const savedItems: ReceivingItem[] = [];
+  // Phase 7B-H1: one lot-effect segment per ACTUAL lot mutation (ghost reconcile +
+  // new lot), the dev mirror of confirmReceiving's canonical segment set.
+  const lotSegments: { productId: string; lotId: string; qtyBase: number }[] = [];
 
   for (const line of input.lines) {
     const qtyBase = lineQtyBase(line);
@@ -89,6 +104,7 @@ export function devConfirmReceiving(input: ConfirmReceivingInput): string {
       ghost.isGhost = ghost.qtyRemaining < 0;
       ghost.isDepleted = ghost.qtyRemaining === 0;
       ghost.receivingId = receivingId;
+      lotSegments.push({ productId: line.productId, lotId: ghost.id, qtyBase: reconcileQty });
       incoming -= reconcileQty;
     }
 
@@ -107,6 +123,7 @@ export function devConfirmReceiving(input: ConfirmReceivingInput): string {
         isGhost: false,
         createdAt: ts(now),
       });
+      lotSegments.push({ productId: line.productId, lotId, qtyBase: incoming });
     }
 
     savedItems.push({
@@ -152,6 +169,21 @@ export function devConfirmReceiving(input: ConfirmReceivingInput): string {
 
   devReceivingItems.set(receivingId, savedItems);
 
+  // Phase 7B-H1: aggregate the lot-effect segments (one per actual lot mutation) into
+  // the single canonical, duplicate-free set. Prove it covers the canonical completion
+  // input before marking the receiving completed, then build the header evidence from
+  // the SAME set so the snapshot reflects every lot mutation, not one lot per line.
+  const plannedEffects = aggregateLotEffects(lotSegments);
+  assertReversalEvidenceCoversCompletion(
+    input.lines.map((line) => ({ productId: line.productId, qtyBase: lineQtyBase(line) })),
+    plannedEffects,
+  );
+  const reversalEvidence: ReversalEvidence = {
+    ...buildReceivingReversalEvidence(plannedEffects),
+    createdAt: ts(now),
+    createdBy: input.staffId,
+  };
+
   if (isFinalizingDraft) {
     const existing = devReceivings.find((r) => r.id === receivingId)!;
     existing.supplierId = input.supplierId;
@@ -165,6 +197,7 @@ export function devConfirmReceiving(input: ConfirmReceivingInput): string {
     existing.note = input.note;
     existing.receivedAt = ts(now);
     existing.updatedAt = ts(now);
+    existing.reversalEvidence = reversalEvidence;
     return receivingId;
   }
 
@@ -186,6 +219,7 @@ export function devConfirmReceiving(input: ConfirmReceivingInput): string {
     receivedAt: ts(now),
     createdAt: ts(now),
     updatedAt: ts(now),
+    reversalEvidence,
   });
 
   return receivingId;

@@ -39,8 +39,10 @@ import type {
   OriginalStockEffect,
   ReversalAction,
   ReversalActorRole,
+  ReversalEvidenceSource,
   ReversalSourceType,
 } from '../pos/offline/offlineReversalTypes';
+import { REVERSAL_EVIDENCE_VERSION } from '../receiving/reversalEvidence';
 
 /**
  * Why completed-transfer reversal is NOT queue-first in this phase. Surfaced in
@@ -82,13 +84,25 @@ export type ReceivingReversalItem = {
 
 /** Structured codes for an incomplete/malformed receiving evidence rejection. */
 export type ReceivingReversalEvidenceCode =
+  // ── Legacy item-subcollection evidence (fallback path) ──
   | 'missing_items'
   | 'empty_items'
   | 'missing_product_id'
   | 'missing_lot_id'
   | 'non_finite_qty'
   | 'non_positive_qty'
-  | 'no_effects';
+  | 'no_effects'
+  // ── Header `reversalEvidence` snapshot (Phase 7B-H1, preferred path) ──
+  | 'header_not_object'
+  | 'header_unsupported_version'
+  | 'header_empty_effects'
+  | 'header_malformed_effect'
+  | 'header_missing_product_id'
+  | 'header_missing_lot_id'
+  | 'header_non_finite_qty'
+  | 'header_non_positive_qty'
+  | 'header_item_count_mismatch'
+  | 'header_total_qty_mismatch';
 
 /**
  * Thrown when receiving item/lot evidence is incomplete or malformed. Throwing
@@ -164,6 +178,88 @@ export function buildReceivingReversalEffects(
   return effects;
 }
 
+// ─── Header reversal-evidence gate (Phase 7B-H1 — preferred over legacy items) ──
+
+/** Float tolerance for the `totalQtyBase` checksum (base units may be fractional). */
+const HEADER_QTY_EPSILON = 1e-9;
+
+/**
+ * Validate the receiving header's `reversalEvidence` snapshot and project it into the
+ * reversal's original stock effects. FAIL-CLOSED: a present-but-malformed snapshot
+ * (wrong shape/version, empty/invalid effects, or a failed `itemCount` / `totalQtyBase`
+ * checksum) THROWS — it must never silently fall back to the item subcollection,
+ * because a corrupt/partial header write is itself a danger signal.
+ *
+ * Evidence is LOT-EFFECT SEGMENT based (Phase 7B-H1): one segment per actual lot
+ * mutation. A repeated `(productId, lotId)` is therefore LEGITIMATE (e.g. two lines
+ * reconciling the same ghost lot), so duplicates are NOT rejected — they are AGGREGATED
+ * (summed once) into the projected effects. The integrity checksums are verified
+ * against the RAW persisted entries (so a tampered count/total still fails closed);
+ * aggregation only affects the projected set handed to the queue, which can therefore
+ * never double-apply beyond the summed quantity.
+ *
+ * `raw` is treated as fully UNTRUSTED (it crosses the Firestore boundary), so every
+ * field is type-checked before use.
+ */
+export function validateReceivingHeaderEvidence(
+  raw: unknown,
+  branchId: string,
+): OriginalStockEffect[] {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new ReceivingReversalEvidenceError('header_not_object', RECEIVING_EVIDENCE_INCOMPLETE_MESSAGE);
+  }
+  const ev = raw as Record<string, unknown>;
+  if (ev.version !== REVERSAL_EVIDENCE_VERSION) {
+    throw new ReceivingReversalEvidenceError('header_unsupported_version', RECEIVING_EVIDENCE_INCOMPLETE_MESSAGE);
+  }
+  const rawEffects = ev.effects;
+  if (!Array.isArray(rawEffects) || rawEffects.length === 0) {
+    throw new ReceivingReversalEvidenceError('header_empty_effects', RECEIVING_EVIDENCE_INCOMPLETE_MESSAGE);
+  }
+
+  // Aggregate by (productId, lotId) — duplicates are summed once, not rejected.
+  const byKey = new Map<string, OriginalStockEffect>();
+  const order: string[] = [];
+  let total = 0;
+  for (const entry of rawEffects) {
+    if (!entry || typeof entry !== 'object') {
+      throw new ReceivingReversalEvidenceError('header_malformed_effect', RECEIVING_EVIDENCE_INCOMPLETE_MESSAGE);
+    }
+    const e = entry as Record<string, unknown>;
+    if (typeof e.productId !== 'string' || e.productId.length === 0) {
+      throw new ReceivingReversalEvidenceError('header_missing_product_id', RECEIVING_EVIDENCE_INCOMPLETE_MESSAGE);
+    }
+    if (typeof e.lotId !== 'string' || e.lotId.length === 0) {
+      throw new ReceivingReversalEvidenceError('header_missing_lot_id', RECEIVING_EVIDENCE_INCOMPLETE_MESSAGE);
+    }
+    if (typeof e.qtyBase !== 'number' || !Number.isFinite(e.qtyBase)) {
+      throw new ReceivingReversalEvidenceError('header_non_finite_qty', RECEIVING_EVIDENCE_INCOMPLETE_MESSAGE);
+    }
+    if (e.qtyBase <= 0) {
+      throw new ReceivingReversalEvidenceError('header_non_positive_qty', RECEIVING_EVIDENCE_INCOMPLETE_MESSAGE);
+    }
+    total += e.qtyBase;
+    const key = `${e.productId} ${e.lotId}`;
+    const cur = byKey.get(key);
+    if (cur) {
+      cur.quantity += e.qtyBase; // duplicate (product, lot) → sum once
+    } else {
+      byKey.set(key, { productId: e.productId, locationId: branchId, lotId: e.lotId, quantity: e.qtyBase });
+      order.push(key);
+    }
+  }
+
+  // Integrity checksums verified against the RAW persisted entries (pre-aggregation),
+  // so a tampered count/total cannot slip through.
+  if (typeof ev.itemCount !== 'number' || ev.itemCount !== rawEffects.length) {
+    throw new ReceivingReversalEvidenceError('header_item_count_mismatch', RECEIVING_EVIDENCE_INCOMPLETE_MESSAGE);
+  }
+  if (typeof ev.totalQtyBase !== 'number' || Math.abs(ev.totalQtyBase - total) > HEADER_QTY_EPSILON) {
+    throw new ReceivingReversalEvidenceError('header_total_qty_mismatch', RECEIVING_EVIDENCE_INCOMPLETE_MESSAGE);
+  }
+  return order.map((k) => byKey.get(k)!);
+}
+
 /** Everything the page supplies to reverse a receiving. */
 export type ReceivingReversalInput = {
   receivingId: string;
@@ -173,6 +269,13 @@ export type ReceivingReversalInput = {
   reason: string;
   note?: string;
   items: readonly ReceivingReversalItem[];
+  /**
+   * Phase 7B-H1: the receiving header's `reversalEvidence` snapshot, passed straight
+   * from the loaded Firestore doc (UNTRUSTED). When present it is PREFERRED over
+   * `items` and must validate or the reversal fails closed (no fallback). When
+   * `null`/`undefined` (legacy/pre-H1 record) the strict `items` fallback is used.
+   */
+  headerEvidence?: unknown;
   /** Defaults to `void` (the cashier's "cancel bill" wording). */
   action?: ReversalAction;
 };
@@ -194,6 +297,8 @@ export type ReceivingReversalOutcome = {
   manualReviewRequired: boolean;
   /** True if an online sync to the resolver was attempted this call. */
   synced: boolean;
+  /** Phase 7B-H1: which evidence the reversal effects were proven from. */
+  evidenceSource: ReversalEvidenceSource;
 };
 
 /** Browser-default dependencies (real IndexedDB store + Firebase resolver callable). */
@@ -209,11 +314,50 @@ export function createDefaultReversalCoordinatorDeps(): ReversalCoordinatorDeps 
 }
 
 /**
+ * Resolve the reversal's original stock effects + the evidence source they came from,
+ * applying the Phase 7B-H1 precedence (all gates run BEFORE any queue write / local
+ * mutation, so every rejection is fail-closed):
+ *
+ *   Case 1 — header evidence present & valid  → use header effects; `header_snapshot`.
+ *   Case 2 — header evidence present & invalid → THROW (no fallback — a corrupt/partial
+ *            header write is a danger signal that must not be silently ignored).
+ *   Case 3 — header evidence absent           → strict legacy item-subcollection gate;
+ *            `legacy_subcollection`.
+ *   Case 4 — header absent AND legacy invalid → THROW (legacy gate fails closed).
+ *
+ * "Present" means `headerEvidence != null`; an empty/partial object is present-but-invalid.
+ */
+function resolveReceivingReversalEffects(
+  input: ReceivingReversalInput,
+): { originalEffects: OriginalStockEffect[]; evidenceSource: ReversalEvidenceSource } {
+  if (input.headerEvidence != null) {
+    // Case 1/2 — header present: must validate or fail closed. NEVER falls back.
+    return {
+      originalEffects: validateReceivingHeaderEvidence(input.headerEvidence, input.branchId),
+      evidenceSource: 'header_snapshot',
+    };
+  }
+
+  // Case 3/4 — no header snapshot (legacy record): strict item-subcollection fallback.
+  assertReceivingReversalEvidence(input.items);
+  const originalEffects = buildReceivingReversalEffects(input.items, input.branchId);
+  if (originalEffects.length === 0) {
+    // Defense-in-depth: every line was validated positive above, so this should be
+    // unreachable, but it guarantees we never queue an empty correction.
+    throw new ReceivingReversalEvidenceError('no_effects', RECEIVING_EVIDENCE_INCOMPLETE_MESSAGE);
+  }
+  return { originalEffects, evidenceSource: 'legacy_subcollection' };
+}
+
+/**
  * Execute a confirmed RECEIVING reversal, queue-first:
- *   1. `createOfflineReversal` — asserts authority (Staff → throws BEFORE any
- *      write), applies the immediate local IndexedDB stock correction, and durably
- *      queues the intent (atomic).
- *   2. If online — sync the intent to the server resolver. A network error stays a
+ *   1. Resolve + validate the original stock effects, preferring the receiving header's
+ *      `reversalEvidence` snapshot over the item subcollection (Phase 7B-H1). Any
+ *      missing/malformed evidence fails closed HERE — before any write.
+ *   2. `createOfflineReversal` — asserts authority (Staff → throws BEFORE any write),
+ *      applies the immediate local IndexedDB stock correction, and durably queues the
+ *      intent (atomic), tagging it with the `evidenceSource` for audit.
+ *   3. If online — sync the intent to the server resolver. A network error stays a
  *      `retryable_error` (correction preserved); a definitive rejection becomes
  *      `manual_review_required` (fail-closed: no auto-rollback proof is supplied).
  *
@@ -225,16 +369,9 @@ export async function executeReceivingReversal(
 ): Promise<ReceivingReversalOutcome> {
   const queueDeps: QueueDeps | undefined = deps.now ? { now: deps.now } : undefined;
 
-  // Fail-closed evidence gate (Track A blocker): refuse BEFORE any local stock
-  // correction or durable queue write when the receiving item/lot evidence is
-  // missing, empty, or malformed. All-or-nothing — one bad line rejects the set.
-  assertReceivingReversalEvidence(input.items);
-  const originalEffects = buildReceivingReversalEffects(input.items, input.branchId);
-  if (originalEffects.length === 0) {
-    // Defense-in-depth: every line was validated positive above, so this should be
-    // unreachable, but it guarantees we never queue an empty correction.
-    throw new ReceivingReversalEvidenceError('no_effects', RECEIVING_EVIDENCE_INCOMPLETE_MESSAGE);
-  }
+  // Fail-closed evidence gate (Phase 7B-H1): prefer header snapshot, strict legacy
+  // fallback only when no header is present; present-but-invalid header rejects.
+  const { originalEffects, evidenceSource } = resolveReceivingReversalEffects(input);
 
   const createInput: CreateReversalInput = {
     // Source doc id (GRN) is globally unique; branch scopes the idempotency key.
@@ -248,6 +385,7 @@ export async function executeReceivingReversal(
     reasonCode: input.reason,
     reasonNote: input.note,
     originalEffects,
+    evidenceSource,
   };
 
   // Authority + immediate local correction + durable queue (atomic). A Staff actor
@@ -267,5 +405,6 @@ export async function executeReceivingReversal(
     status: current.status,
     manualReviewRequired: current.status === 'manual_review_required',
     synced,
+    evidenceSource,
   };
 }

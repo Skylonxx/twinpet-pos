@@ -4,6 +4,7 @@ import {
   decideReversalRoute,
   executeReceivingReversal,
   ReceivingReversalEvidenceError,
+  validateReceivingHeaderEvidence,
   TRANSFER_REVERSAL_DEFERRED_NOTE,
   type ReceivingReversalInput,
   type ReceivingReversalItem,
@@ -255,6 +256,293 @@ describe('executeReceivingReversal — incomplete item/lot evidence fails closed
     expect(await listQueue(store)).toHaveLength(1);
     expect(await readLocalStock(store, 'p1', 'b1')).toBe(5); // 10 - 5
     expect(await readLocalStock(store, 'p2', 'b1')).toBe(1); // 4 - 3
+  });
+});
+
+// ─── Phase 7B-H1: header reversal-evidence preference + fail-closed ───────────
+
+/** A well-formed header snapshot matching `baseInput`'s effects (p1×5/lot-1, p2×3/lot-2). */
+function validHeaderEvidence() {
+  return {
+    version: 1,
+    source: 'receiving_completion',
+    itemCount: 2,
+    totalQtyBase: 8,
+    effects: [
+      { productId: 'p1', lotId: 'lot-1', qtyBase: 5 },
+      { productId: 'p2', lotId: 'lot-2', qtyBase: 3 },
+    ],
+    createdAt: { seconds: 1 },
+    createdBy: 'mgr-1',
+  };
+}
+
+describe('validateReceivingHeaderEvidence (pure projection)', () => {
+  test('projects each effect to +qtyBase at the branch', () => {
+    expect(validateReceivingHeaderEvidence(validHeaderEvidence(), 'b1')).toEqual([
+      { productId: 'p1', locationId: 'b1', lotId: 'lot-1', quantity: 5 },
+      { productId: 'p2', locationId: 'b1', lotId: 'lot-2', quantity: 3 },
+    ]);
+  });
+
+  test('preserves distinct lot-level segments for the same product (ghost reconcile + new lot)', () => {
+    const header = {
+      version: 1,
+      source: 'receiving_completion',
+      itemCount: 3,
+      totalQtyBase: 10,
+      effects: [
+        { productId: 'p1', lotId: 'ghost-A', qtyBase: 3 },
+        { productId: 'p1', lotId: 'ghost-B', qtyBase: 2 },
+        { productId: 'p1', lotId: 'new-C', qtyBase: 5 },
+      ],
+    };
+    expect(validateReceivingHeaderEvidence(header, 'b1')).toEqual([
+      { productId: 'p1', locationId: 'b1', lotId: 'ghost-A', quantity: 3 },
+      { productId: 'p1', locationId: 'b1', lotId: 'ghost-B', quantity: 2 },
+      { productId: 'p1', locationId: 'b1', lotId: 'new-C', quantity: 5 },
+    ]);
+  });
+
+  test('accepts duplicate (product, lot) effects and AGGREGATES them (summed once, not rejected)', () => {
+    const header = {
+      version: 1,
+      source: 'receiving_completion',
+      itemCount: 2, // raw persisted count (checksum is over raw entries)
+      totalQtyBase: 8,
+      effects: [
+        { productId: 'p1', lotId: 'lot-1', qtyBase: 5 },
+        { productId: 'p1', lotId: 'lot-1', qtyBase: 3 }, // same product+lot
+      ],
+    };
+    expect(validateReceivingHeaderEvidence(header, 'b1')).toEqual([
+      { productId: 'p1', locationId: 'b1', lotId: 'lot-1', quantity: 8 }, // 5 + 3, once
+    ]);
+  });
+});
+
+describe('executeReceivingReversal — header evidence is preferred (Phase 7B-H1)', () => {
+  test('valid header is used and recorded as evidenceSource=header_snapshot', async () => {
+    await store.transact(['stock'], 'readwrite', async (txn) => {
+      await txn.put('stock', 'p1::b1', { productId: 'p1', locationId: 'b1', quantity: 10 });
+      await txn.put('stock', 'p2::b1', { productId: 'p2', locationId: 'b1', quantity: 4 });
+    });
+    const out = await executeReceivingReversal(makeDeps({ isOnline: () => false }), {
+      ...baseInput,
+      headerEvidence: validHeaderEvidence(),
+    });
+
+    expect(out.status).toBe('queued');
+    expect(out.evidenceSource).toBe('header_snapshot');
+    expect(out.intent.evidenceSource).toBe('header_snapshot'); // durably on the intent
+    expect(await readLocalStock(store, 'p1', 'b1')).toBe(5); // 10 - 5
+    expect(await readLocalStock(store, 'p2', 'b1')).toBe(1); // 4 - 3
+  });
+
+  test('duplicate same-lot header evidence is accepted and does NOT double-apply beyond the summed qty (Blocker 2)', async () => {
+    await store.transact(['stock'], 'readwrite', async (txn) => {
+      await txn.put('stock', 'p1::b1', { productId: 'p1', locationId: 'b1', quantity: 20 });
+    });
+    const out = await executeReceivingReversal(makeDeps({ isOnline: () => false }), {
+      ...baseInput,
+      headerEvidence: {
+        version: 1,
+        source: 'receiving_completion',
+        itemCount: 2,
+        totalQtyBase: 10,
+        effects: [
+          { productId: 'p1', lotId: 'lot-1', qtyBase: 6 },
+          { productId: 'p1', lotId: 'lot-1', qtyBase: 4 }, // same product+lot → sums to 10
+        ],
+      },
+    });
+
+    expect(out.status).toBe('queued'); // accepted, not rejected
+    expect(out.evidenceSource).toBe('header_snapshot');
+    // Summed ONCE: 20 - 10 = 10 (not 20 - 20 from a double-apply).
+    expect(await readLocalStock(store, 'p1', 'b1')).toBe(10);
+  });
+
+  test('lot-segment header (ghost reconcile + new lot) applies the correct product-level correction', async () => {
+    await store.transact(['stock'], 'readwrite', async (txn) => {
+      await txn.put('stock', 'p1::b1', { productId: 'p1', locationId: 'b1', quantity: 30 });
+    });
+    const out = await executeReceivingReversal(makeDeps({ isOnline: () => false }), {
+      ...baseInput,
+      headerEvidence: {
+        version: 1,
+        source: 'receiving_completion',
+        itemCount: 3,
+        totalQtyBase: 10,
+        effects: [
+          { productId: 'p1', lotId: 'ghost-A', qtyBase: 3 },
+          { productId: 'p1', lotId: 'ghost-B', qtyBase: 2 },
+          { productId: 'p1', lotId: 'new-C', qtyBase: 5 },
+        ],
+      },
+    });
+
+    expect(out.status).toBe('queued');
+    expect(out.evidenceSource).toBe('header_snapshot');
+    expect(await readLocalStock(store, 'p1', 'b1')).toBe(20); // 30 - (3+2+5)
+  });
+
+  test('valid header is used even when the item subcollection is empty/garbage (no dependency on items)', async () => {
+    await store.transact(['stock'], 'readwrite', async (txn) => {
+      await txn.put('stock', 'p1::b1', { productId: 'p1', locationId: 'b1', quantity: 10 });
+      await txn.put('stock', 'p2::b1', { productId: 'p2', locationId: 'b1', quantity: 4 });
+    });
+    // Items that would FAIL the legacy gate — proves the header path ignores them.
+    const out = await executeReceivingReversal(makeDeps({ isOnline: () => false }), {
+      ...baseInput,
+      items: [],
+      headerEvidence: validHeaderEvidence(),
+    });
+
+    expect(out.status).toBe('queued');
+    expect(out.evidenceSource).toBe('header_snapshot');
+    expect(await readLocalStock(store, 'p1', 'b1')).toBe(5);
+    expect(await readLocalStock(store, 'p2', 'b1')).toBe(1);
+  });
+
+  test('missing header (null) falls back to strict legacy items → evidenceSource=legacy_subcollection', async () => {
+    const out = await executeReceivingReversal(makeDeps({ isOnline: () => false }), {
+      ...baseInput,
+      headerEvidence: null,
+    });
+    expect(out.status).toBe('queued');
+    expect(out.evidenceSource).toBe('legacy_subcollection');
+    expect(out.intent.evidenceSource).toBe('legacy_subcollection');
+  });
+
+  test('absent header (undefined) also uses the legacy fallback', async () => {
+    const out = await executeReceivingReversal(makeDeps({ isOnline: () => false }), baseInput);
+    expect(out.evidenceSource).toBe('legacy_subcollection');
+  });
+});
+
+describe('executeReceivingReversal — present-but-invalid header fails closed (no fallback)', () => {
+  // Even with a PERFECTLY VALID item subcollection, a present-but-malformed header
+  // must reject before any write — a corrupt/partial header is a danger signal.
+  async function expectHeaderRejectedNoFallback(
+    headerEvidence: unknown,
+  ): Promise<ReceivingReversalEvidenceError> {
+    await store.transact(['stock'], 'readwrite', async (txn) => {
+      await txn.put('stock', 'p1::b1', { productId: 'p1', locationId: 'b1', quantity: 10 });
+    });
+    const call = vi.fn<CallResolveReversal>();
+    let caught: unknown;
+    try {
+      await executeReceivingReversal(makeDeps({ isOnline: () => true, call }), {
+        ...baseInput, // items are VALID — the header invalidity must still win
+        headerEvidence,
+      });
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(ReceivingReversalEvidenceError);
+    expect(call).not.toHaveBeenCalled(); // resolver never reached
+    expect(await listQueue(store)).toHaveLength(0); // no queue write
+    expect(await readLocalStock(store, 'p1', 'b1')).toBe(10); // no local mutation
+    return caught as ReceivingReversalEvidenceError;
+  }
+
+  test('non-object header rejects', async () => {
+    expect((await expectHeaderRejectedNoFallback('corrupt')).code).toBe('header_not_object');
+    expect((await expectHeaderRejectedNoFallback([])).code).toBe('header_not_object');
+  });
+
+  test('unsupported version rejects', async () => {
+    const err = await expectHeaderRejectedNoFallback({ ...validHeaderEvidence(), version: 2 });
+    expect(err.code).toBe('header_unsupported_version');
+  });
+
+  test('empty effects rejects', async () => {
+    const err = await expectHeaderRejectedNoFallback({
+      ...validHeaderEvidence(),
+      itemCount: 0,
+      totalQtyBase: 0,
+      effects: [],
+    });
+    expect(err.code).toBe('header_empty_effects');
+  });
+
+  test('missing productId rejects', async () => {
+    const err = await expectHeaderRejectedNoFallback({
+      version: 1,
+      source: 'receiving_completion',
+      itemCount: 1,
+      totalQtyBase: 5,
+      effects: [{ lotId: 'lot-1', qtyBase: 5 }],
+    });
+    expect(err.code).toBe('header_missing_product_id');
+  });
+
+  test('missing lotId rejects', async () => {
+    const err = await expectHeaderRejectedNoFallback({
+      version: 1,
+      source: 'receiving_completion',
+      itemCount: 1,
+      totalQtyBase: 5,
+      effects: [{ productId: 'p1', qtyBase: 5 }],
+    });
+    expect(err.code).toBe('header_missing_lot_id');
+  });
+
+  test('non-finite qtyBase rejects', async () => {
+    const err = await expectHeaderRejectedNoFallback({
+      version: 1,
+      source: 'receiving_completion',
+      itemCount: 1,
+      totalQtyBase: 5,
+      effects: [{ productId: 'p1', lotId: 'lot-1', qtyBase: Number.NaN }],
+    });
+    expect(err.code).toBe('header_non_finite_qty');
+  });
+
+  test('non-positive qtyBase rejects', async () => {
+    const err = await expectHeaderRejectedNoFallback({
+      version: 1,
+      source: 'receiving_completion',
+      itemCount: 1,
+      totalQtyBase: 0,
+      effects: [{ productId: 'p1', lotId: 'lot-1', qtyBase: 0 }],
+    });
+    expect(err.code).toBe('header_non_positive_qty');
+  });
+
+  test('itemCount mismatch rejects', async () => {
+    const err = await expectHeaderRejectedNoFallback({ ...validHeaderEvidence(), itemCount: 3 });
+    expect(err.code).toBe('header_item_count_mismatch');
+  });
+
+  test('totalQtyBase mismatch rejects', async () => {
+    const err = await expectHeaderRejectedNoFallback({ ...validHeaderEvidence(), totalQtyBase: 99 });
+    expect(err.code).toBe('header_total_qty_mismatch');
+  });
+});
+
+describe('executeReceivingReversal — header absent AND legacy invalid fails closed', () => {
+  test('no header + empty items rejects before any write', async () => {
+    await store.transact(['stock'], 'readwrite', async (txn) => {
+      await txn.put('stock', 'p1::b1', { productId: 'p1', locationId: 'b1', quantity: 10 });
+    });
+    const call = vi.fn<CallResolveReversal>();
+    let caught: unknown;
+    try {
+      await executeReceivingReversal(makeDeps({ isOnline: () => true, call }), {
+        ...baseInput,
+        headerEvidence: null,
+        items: [],
+      });
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(ReceivingReversalEvidenceError);
+    expect((caught as ReceivingReversalEvidenceError).code).toBe('empty_items');
+    expect(call).not.toHaveBeenCalled();
+    expect(await listQueue(store)).toHaveLength(0);
+    expect(await readLocalStock(store, 'p1', 'b1')).toBe(10);
   });
 });
 

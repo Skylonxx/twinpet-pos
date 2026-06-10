@@ -1,7 +1,97 @@
 # Latest Report
 
 > Rolling "latest report" for the stock-write security workstream. Updated at each phase boundary.
-> **Current state:** **Phase 7B Post-Commit Track A — destructive reversal flows integrated into live screens** (merged on top of the 7B-3D-3 engine). Implemented; **not closed** — pending Codex re-review. Server resolver (Phase 7B-3D-2, `functions/src/resolveReversal.ts`) is **unchanged**.
+> **Current state:** **Phase 7B-H1 — Receiving Evidence Hardening** (header `reversalEvidence` snapshot + header-preferred reversal). Implemented on top of Track A; **not closed** — pending Codex re-review. No commit made. Server resolver (Phase 7B-3D-2, `functions/src/resolveReversal.ts`) is **unchanged**.
+
+## Phase 7B-H1: Receiving Evidence Hardening (UNDER REVIEW)
+
+> **Status:** implemented, **awaiting Codex re-review**. Does NOT claim closure. No commit made. Closes the Track A "no independent receiving-header completeness signal" note by persisting a header `reversalEvidence` snapshot at completion and preferring it (fail-closed) at reversal time.
+
+### Blocker fix — lot-effect segment evidence (this pass)
+
+Codex re-review (FAIL) found the header evidence modelled **one effect per line under a single `primaryLotId` with the full `qtyBase`**, while a line can actually mutate **multiple lots** (ghost-lot reconciliation(s) + a new lot). The checksum could pass while the lot evidence was incomplete. Also, the reversal validator rejected duplicate `productId+lotId`, which can legitimately occur. Fixed:
+
+- **Lot-effect segment model (Blocker 1).** Completion now records **one segment per actual lot mutation**: each ghost reconciliation under the **ghost lotId** with the reconciled quantity, and the remainder under the **new lotId**. `confirmReceiving` builds `plan.lotEffects` during planning (the dev mirror builds `lotSegments`); the header `reversalEvidence.effects` and the checksums derive from that **same** segment set. Example: a line of qty 10 that reconciles `ghost-A` 3, `ghost-B` 2 and creates `new-C` 5 persists three segments `[{A,3},{B,2},{C,5}]`, matching the real lot mutations — not one `{primaryLot,10}`.
+- **Per-product coverage invariant.** Since a line maps to many segments, `assertReversalEvidenceCoversCompletion` now proves coverage **per product** (summed segment qty == summed line qty for every product) plus a grand-total checksum, instead of one-effect-per-line. It still runs before any write, so a divergence aborts completion.
+- **Duplicate aggregation (Blocker 2 — Option A + safe projection).** `aggregateLotEffects` sums duplicate `(productId, lotId)` segments (e.g. two lines reconciling the same ghost lot) into a deterministic, duplicate-free set **before persisting**. The reversal-time `validateReceivingHeaderEvidence` no longer rejects duplicates — it **aggregates** them (summed once) during projection, verifying `itemCount`/`totalQtyBase` against the **raw persisted** entries first. So a valid duplicate/aggregated same-lot scenario is accepted and the local correction never double-applies beyond the summed quantity.
+- **productStocks consistency:** product-level increments use each line's `qtyBase`, which equals that line's segment total by construction, so stock totals stay consistent with the segment evidence.
+
+**Files (this fix):** `reversalEvidence.ts` (segment-aware invariant + `aggregateLotEffects`, new codes), `confirmReceiving.ts` + `devMock.ts` (per-lot segments → aggregated canonical set), `reversalCoordinator.ts` (validator aggregates duplicates, drops `header_duplicate_effect`), tests below.
+
+**Tests (this fix):** `reversalEvidence.test.ts` (segment split passes, per-product coverage/total rejections, aggregation); `reversalCoordinator.test.ts` (lot-segment projection preserved, duplicate accepted+aggregated, duplicate same-lot reversal does **not** double-apply, lot-segment reversal applies correct product correction); `confirmReceiving.evidence.test.ts` (completion persists separate ghost/new-lot segments, two-lines-same-ghost aggregates).
+
+### Earlier blocker fix — canonical completeness invariant
+
+> _Refined by the lot-effect segment fix above: the invariant is now PER-PRODUCT (a line maps to many lot segments), not one-effect-per-line. The pre-write, fail-closed, single-canonical-set discipline below is unchanged._
+
+Codex correctly noted a checksum only proves the snapshot **matches itself**, not that it **covers every stock-affecting line**. Fixed by making the completion path enforce a single **canonical stock-effect set** and proving the snapshot equals it:
+
+- **Canonical segments from the same planning values.** At completion, `confirmReceiving` derives the canonical **lot-effect segments** from the same planning variables used for the lot writes (each ghost-reconcile quantity and the new-lot remainder), then aggregates them by `productId+lotId`. `productStocks` increments use **product-level line totals** (`qtyBase`), while the header `reversalEvidence.effects` stores the **aggregated lot-level segment** detail (the dev mirror does the same). The guard verifies per-product and grand-total agreement between line totals and segment totals before any completion write, so the two cannot diverge silently.
+- **Pre-write invariant.** Pure `assertReversalEvidenceCoversCompletion(canonicalLines, plannedEffects)` (in `reversalEvidence.ts`) runs in `confirmReceiving` **Phase 2 — before any `tx` write** (and in the dev mirror before the receiving is marked completed). It throws `ReceivingCompletionEvidenceError` (fail-closed) when: the grand-total qtyBase differs, a product's summed segment qty ≠ its summed line qty (per-product coverage), a product is present on only one side, a canonical line is missing productId / non-finite / ≤ 0 qty, or a lot segment is missing productId/lotId / non-finite / ≤ 0 qty. Because it runs before writes, completion **aborts before stock mutation** on any divergence.
+- **Why this is real completeness, not self-consistency:** the snapshot is built from the proven canonical segment set, so if a future completion path ever applies a stock effect outside the segment set (or drops a line), the per-product/grand-total agreement breaks and the receiving never completes — rather than certifying an incomplete-but-self-consistent snapshot. **Accepted note:** the current implementation derives lot write quantities and evidence segments from the same local planning values tightly enough for this phase; future maintainers must preserve the segment invariant, and any future partial/async receiving completion must model stock-effect segments explicitly or preserve equivalent per-segment evidence. The checksum is **not** a standalone proof of completeness.
+
+**Files (blocker fix):** `reversalEvidence.ts` (+ invariant, error type), `confirmReceiving.ts` + `devMock.ts` (single canonical set + pre-write guard), `reversalEvidence.test.ts` (+19 invariant tests), `confirmReceiving.guard.test.ts` (NEW — proves the guard is wired into new-doc & draft-finalize and aborts completion on throw).
+
+### Problem closed
+
+Track A's receiving-reversal gate validated the loaded item subcollection but still **assumed `loadItems()` returned the complete set of lines** — there was no independent header completeness signal (itemCount / total-qty checksum / source-effect snapshot). H1 adds that signal.
+
+### What was added
+
+- **Header snapshot (Option C).** New `Receiving.reversalEvidence` (`src/lib/types.ts`): `{ version: 1, source: 'receiving_completion', itemCount, totalQtyBase, effects: [{ productId, lotId, qtyBase }], createdAt, createdBy }`. `itemCount`/`totalQtyBase` are integrity checksums derived from `effects`.
+- **Atomic persistence at completion (Decision C).** `confirmReceiving` builds the snapshot from the **same `writePlans` that increase stock**, inside the **same `runTransaction`**, and writes it on the receiving header (both the new-doc `tx.set` and the draft-finalize `tx.update`). The dev mirror (`devConfirmReceiving`) does the same from `savedItems`. A pure builder (`src/lib/receiving/reversalEvidence.ts`) derives the checksums so they can never drift.
+- **Header-preferred reversal (Decision D), fail-closed.** `executeReceivingReversal` now resolves effects via `resolveReceivingReversalEffects`:
+  - **Case 1** header present & valid → use header effects (`evidenceSource = header_snapshot`); does **not** depend on item-subcollection completeness.
+  - **Case 2** header present & invalid → **THROW before any queue write / local mutation / sync** (no fallback — a present-but-corrupt snapshot is a danger signal).
+  - **Case 3** header absent → strict **legacy** item-subcollection gate (Option 1 fallback; `evidenceSource = legacy_subcollection`).
+  - **Case 4** header absent AND legacy invalid → fail closed.
+- **Evidence-source audit (Decision E).** `CreateReversalInput` + `OfflineReversalIntent` carry an optional `evidenceSource` (`header_snapshot | legacy_subcollection`), recorded durably on the queued intent and returned on `ReceivingReversalOutcome`. Carried conditionally so it never adds an `undefined` key (idempotency/shape unchanged).
+- **Page wiring.** `ReceivingEditPage` passes `headerEvidence: receiving?.reversalEvidence ?? null`; the coordinator falls back to `items` only for legacy records.
+
+### Header validation rules (all fail-closed, before any write)
+
+`validateReceivingHeaderEvidence` rejects: non-object/array (`header_not_object`), unsupported `version` (`header_unsupported_version`), empty `effects` (`header_empty_effects`), non-object effect (`header_malformed_effect`), missing `productId`/`lotId`, non-finite or `≤ 0` `qtyBase`, and the `itemCount` / `totalQtyBase` checksum mismatches (`header_item_count_mismatch` / `header_total_qty_mismatch`, the latter with a 1e-9 float tolerance; checksums are verified against the **raw persisted** entries before aggregation). Duplicate `(productId, lotId)` effects are **aggregated by summed `qtyBase` before persistence**, and reversal-time validation **aggregates duplicate persisted entries defensively** (summed once) rather than rejecting — so the local correction never double-applies beyond the summed quantity.
+
+### Files inspected
+
+`confirmReceiving.ts`, `devMock.ts`, `receiving/types.ts`, `lib/types.ts` (Receiving/ReceivingItem), `reversalCoordinator.ts` (+ test), `offlineReversalTypes.ts`, `offlineReversalLogic.ts` (`buildOfflineReversalIntent`), `offlineReversalQueue.ts`, `reversalStockOverlay.ts`, `ReceivingEditPage.tsx`, `receivingId.ts`, `vitest.config.ts`.
+
+### Files changed
+
+- `src/lib/types.ts` — `ReversalEvidence` / `ReversalEvidenceEffect` types + `Receiving.reversalEvidence?`.
+- `src/lib/receiving/reversalEvidence.ts` (NEW) — pure evidence builder, `REVERSAL_EVIDENCE_VERSION`, `aggregateLotEffects`, and the per-product completeness invariant `assertReversalEvidenceCoversCompletion`.
+- `src/lib/receiving/confirmReceiving.ts` — capture per-lot segments, aggregate, run the pre-write invariant, persist evidence atomically (new + draft-finalize).
+- `src/lib/receiving/devMock.ts` — same lot-segment capture + aggregate for the dev completion mirror.
+- `src/lib/pos/offline/offlineReversalTypes.ts` — `ReversalEvidenceSource` + `evidenceSource?` on input/intent.
+- `src/lib/pos/offline/offlineReversalLogic.ts` — carry `evidenceSource` onto the intent (conditional).
+- `src/lib/inventory/reversalCoordinator.ts` — header validator (aggregates duplicates) + header-preferred resolution + `evidenceSource` on outcome/createInput.
+- `src/pages/ReceivingEditPage.tsx` — pass `headerEvidence`.
+- Tests (NEW): `reversalEvidence.test.ts`, `confirmReceiving.evidence.test.ts`, `confirmReceiving.guard.test.ts`; (UPDATED) `reversalCoordinator.test.ts`.
+
+### Tests (latest Codex-verified run — all green)
+
+- `npx.cmd tsc -b --noEmit` → **PASS**
+- `npx.cmd vitest run` → **PASS — 22 files, 258 tests**
+- Receiving H1 suites (`reversalEvidence.test.ts`, `confirmReceiving.evidence.test.ts`, `confirmReceiving.guard.test.ts`) → **PASS — 3 files, 29 tests** (segment split passes; per-product coverage/total rejections; duplicate aggregation; completion persists separate ghost/new-lot segments; two-lines-same-ghost aggregates; guard wired into new-doc & draft-finalize and aborts on throw).
+- `reversalCoordinator.test.ts` → **PASS — 38 tests** (header preferred & recorded `header_snapshot`; lot-segment projection preserved; duplicate `(productId, lotId)` accepted + aggregated, same-lot reversal does **not** double-apply; present-but-invalid header fails closed; legacy fallback only when header missing; Staff authority preserved).
+- `reversalStockOverlay.test.ts` → **PASS — 18 tests** (no regression).
+- `npx.cmd playwright test tests/pos-safety.spec.ts` → **PASS — 2 tests**.
+- `npm.cmd --prefix functions run test:unit -- resolveReversal.test.ts` → **PASS — 29 tests** (server resolver unchanged).
+- `git diff --check` → **PASS — LF/CRLF warnings only**.
+
+### Scope of the H1 guarantee (honest boundary)
+
+- **H1 guarantees** `reversalEvidence` matches the **transaction's completed stock effects** — every ghost-lot reconciliation and new-lot remainder is represented as a lot-level segment, proven per-product and by grand total before any write.
+- **H1 does not prove** that upstream UI/draft assembly captured the **user's full intent** before `confirmReceiving` was called — if a stock-affecting line is dropped before the completion call receives it, both the stock writes and the evidence omit it consistently and the guard still passes.
+
+### Still deferred (not claimed closed)
+
+- Backfill of `reversalEvidence` onto **pre-H1 historical records** (they use the strict legacy fallback by design).
+- Completed-transfer queue-first reversal; `AdminReceivingPage` / `AdminTransferPage` wiring; `ReceivingVoidDialog → DestructiveConfirmModal` standardization — all unchanged/deferred.
+
+### Boundaries preserved
+
+No transfer lifecycle, POS destructive-confirm, POS overlay, server-resolver, Firestore-rules, Android/Capacitor, `.claude/`, Returns/RTV, inventory-adjustment-reversal, or settings/UOM changes. `stash@{0}` untouched.
 
 ## Phase 7B Post-Commit: Destructive Reversal Flow Integration + POS Overlay (UNDER REVIEW)
 

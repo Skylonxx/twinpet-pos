@@ -200,6 +200,9 @@ export default function ReceivingEditPage() {
       staffId: user.id,
       reason,
       note,
+      // Phase 7B-H1: prefer the header reversal-evidence snapshot when present; the
+      // coordinator falls back to these items only for legacy/pre-H1 records.
+      headerEvidence: receiving?.reversalEvidence ?? null,
       items: items.map((it) => ({ productId: it.productId, qtyBase: it.qtyBase, lotId: it.lotId })),
     });
     const toast = outcome.manualReviewRequired

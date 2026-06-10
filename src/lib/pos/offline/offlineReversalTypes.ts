@@ -36,6 +36,14 @@ export type ReversalSourceType = 'receiving' | 'transfer';
 export type ReversalAction = 'void' | 'reverse';
 
 /**
+ * Which evidence the reversal's stock effects were derived from (Phase 7B-H1):
+ *  - `header_snapshot`      — the receiving header's `reversalEvidence` (preferred).
+ *  - `legacy_subcollection` — strict fallback to the item subcollection (pre-H1 records).
+ * Recorded on the intent for audit so a reviewer can see how the effects were proven.
+ */
+export type ReversalEvidenceSource = 'header_snapshot' | 'legacy_subcollection';
+
+/**
  * Durable lifecycle of a queued intent. This is the LOCAL queue status — distinct
  * from the server's own `ReversalStatus`. The mapping server→queue is performed by
  * {@link classifyServerResult} in the logic layer.
@@ -118,6 +126,8 @@ export type CreateReversalInput = {
   terminalId?: string;
   /** The original local stock effects to be reversed (negated into the correction). */
   originalEffects: OriginalStockEffect[];
+  /** Phase 7B-H1: how those effects were proven (header snapshot vs legacy subcollection). */
+  evidenceSource?: ReversalEvidenceSource;
 };
 
 /** Bookkeeping of the local correction attached to an intent. */
@@ -151,6 +161,8 @@ export type OfflineReversalIntent = {
   createdByRole: ReversalActorRole;
   idempotencyKey: string;
   localMutationId: string;
+  /** Phase 7B-H1: evidence the reversal effects were derived from (audit trail). */
+  evidenceSource?: ReversalEvidenceSource;
   /** ISO time the local stock correction was applied (set inside the create txn). */
   localAppliedAt?: string;
   status: OfflineReversalStatus;
