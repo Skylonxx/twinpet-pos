@@ -1,11 +1,38 @@
 # Latest Report
 
 > Rolling "latest report" for the stock-write security workstream. Updated at each phase boundary.
-> **Current state:** **Phase 7B-H3 — Manual Review Operations UI** (local/device-visible Manager/Admin page to view `manual_review_required` intents and execute the H2 `resolveManualReview` transition). Implemented on top of the committed H2/D1 baseline; **not closed** — pending review. No commit made. Server resolver (Phase 7B-3D-2, `functions/src/resolveReversal.ts`) is **unchanged**.
+> **Current state:** **Phase 7B-D2 — Docs Cleanup & Phase Tracker Hygiene** (active). H3 closed and committed (`4d69143` — `feat(pos): add manual review ops UI`). D1 closed and committed (`dacccd1` — `docs: add project context and task tracker`). H2 closed and committed (`8b48513` — `feat(pos): add manual review resolution state`). Server resolver (Phase 7B-3D-2, `functions/src/resolveReversal.ts`) is **unchanged**. Phase 7B-H4 (Resolver Hardening / Stale Client Guard) is **queued next**.
 
-## Phase 7B-H3: Manual Review Operations UI (UNDER REVIEW)
+## Phase 7B-D2: Docs Cleanup & Phase Tracker Hygiene (ACTIVE)
 
-> **Status:** implemented, **awaiting review**. No commit made. **LOCAL/device-visible** queue UI only — NOT a global Firestore admin dashboard. No global Firestore queries, no stock mutation, no Firestore reconciliation (that stays an external manual admin process).
+**Status:** active.
+
+### Verification baseline (post-H3 commit)
+
+- H3 post-commit working tree was **clean** — no staged or unstaged changes after `4d69143`.
+- `stash@{0}` remains **present and untouched**.
+
+### H3 Codex result
+
+**PASS WITH NOTES** — no blockers, no required fixes before commit.
+
+### H3 architectural boundaries (confirmed)
+
+- Local/device-visible UI only — NOT a global Firestore dashboard.
+- No stock mutation.
+- No server resolver changes.
+- Firestore reconciliation remains an external manual admin process.
+
+### Next step after D2
+
+**Phase 7B-H4: Resolver Hardening / Stale Client Guard** — queued, not yet started.
+
+---
+
+## Phase 7B-H3: Manual Review Operations UI (CLOSED / COMMITTED)
+
+**Commit:** `4d69143` — `feat(pos): add manual review ops UI`
+> **Status:** **closed and committed**. **LOCAL/device-visible** queue UI only — NOT a global Firestore admin dashboard. No global Firestore queries, no stock mutation, no Firestore reconciliation (that stays an external manual admin process).
 
 ### What was added
 
@@ -35,9 +62,9 @@ The repo has no `@testing-library/react` / jsdom harness and adding test-framewo
 - Multi-device/server-broadcast propagation of resolution (still per-device, from H2).
 - Nav/menu entry for the page (currently route-only by direct URL).
 
-## Phase 7B-H2: Manual Review Operational Guard (UNDER REVIEW)
+## Phase 7B-H2: Manual Review Operational Guard (CLOSED / COMMITTED)
 
-> **Status:** implemented, **awaiting Codex review**. Does NOT claim closure. No commit made. Single-device/local-intent cleanup only — no Admin UI, no server/rules changes.
+> **Status:** **closed and committed**. Commit: `8b48513` — `feat(pos): add manual review resolution state`. Single-device/local-intent cleanup only — no Admin UI, no server/rules changes.
 
 ### Problem closed
 
@@ -80,9 +107,10 @@ The repo has no `@testing-library/react` / jsdom harness and adding test-framewo
 - **H2 guarantees** that a Manager/Admin can locally clear a `manual_review_required` intent so the POS overlay on that device stops showing the pending delta and returns to the Firestore snapshot — without rolling back the local correction or changing server state.
 - **H2 does not** verify that Firestore was actually reconciled (operator-declared, like the rest of the manual-review path), and does **not** propagate the resolution to other devices' local queues (deferred).
 
-## Phase 7B-H1: Receiving Evidence Hardening (UNDER REVIEW)
+## Phase 7B-H1: Receiving Evidence Hardening (CLOSED / COMMITTED)
 
-> **Status:** implemented, **awaiting Codex re-review**. Does NOT claim closure. No commit made. Closes the Track A "no independent receiving-header completeness signal" note by persisting a header `reversalEvidence` snapshot at completion and preferring it (fail-closed) at reversal time.
+**Commit:** `e56561b` — `feat(receiving): persist reversal evidence snapshot`
+> **Status:** **closed and committed**. Closes the Track A "no independent receiving-header completeness signal" note by persisting a header `reversalEvidence` snapshot at completion and preferring it (fail-closed) at reversal time.
 
 ### Blocker fix — lot-effect segment evidence (this pass)
 
@@ -170,9 +198,10 @@ Track A's receiving-reversal gate validated the loaded item subcollection but st
 
 No transfer lifecycle, POS destructive-confirm, POS overlay, server-resolver, Firestore-rules, Android/Capacitor, `.claude/`, Returns/RTV, inventory-adjustment-reversal, or settings/UOM changes. `stash@{0}` untouched.
 
-## Phase 7B Post-Commit: Destructive Reversal Flow Integration + POS Overlay (UNDER REVIEW)
+## Phase 7B Post-Commit: Destructive Reversal Flow Integration + POS Overlay (CLOSED / COMMITTED)
 
-> **Status:** post-merge integration of the 7B-3D-3 offline engine into the live POS / Receiving / Transfer screens, plus the POS-visible stock overlay. Does NOT claim closure. No commit made. Reflects the mainline state after the latest audit's blocker fixes. **Supersedes the "engine only — not wired into any screen" framing of the 7B-3D-3 section below**, which described the pre-integration engine.
+**Commit:** `645896c` — `fix(pos): overlay offline reversal stock in inventory`
+> **Status:** **closed and committed**. Post-merge integration of the 7B-3D-3 offline engine into the live POS / Receiving / Transfer screens, plus the POS-visible stock overlay. Reflects the mainline state after the latest audit's blocker fixes. **Supersedes the "engine only — not wired into any screen" framing of the 7B-3D-3 section below**, which described the pre-integration engine.
 
 ### What is now wired into live screens
 

@@ -72,10 +72,24 @@ See `docs/skills/SKILL-GLOBAL-ARCHITECTURE.md` and `docs/skills/SKILL-OFFLINE-FI
 
 ## Key offline-reversal concepts (Phase 7B)
 
-- **7B-3D-2** — server resolver `functions/src/resolveReversal.ts` (unchanged in H2).
-- **7B-3D-3** — client offline reversal queue + local IndexedDB correction + POS overlay.
-- **7B-H1** — receiving header `reversalEvidence` snapshot (fail-closed at reversal).
-- **7B-H2** — local `manual_review_resolved` transition so overlay drops after operator reconciliation.
+Phase 7B delivers a complete offline reversal lifecycle for Goods-Receiving and Transfer voids. The following tracks are closed and committed:
+
+- **7B-3D-2** — server resolver `functions/src/resolveReversal.ts`: Cloud Function that authorizes and applies a reversal server-side. Unchanged throughout Phase 7B.
+- **7B-3D-3** — client offline reversal queue + local IndexedDB correction + POS overlay: a Manager/Admin can reverse offline, correct local stock immediately in IndexedDB, and queue the intent for server settlement on reconnect. The POS overlay (`reversalStockOverlay`) surfaces pending reversal deltas in the inventory grid.
+- **7B-H1** — receiving header `reversalEvidence` snapshot (fail-closed at reversal): completion atomically persists a lot-effect-segment evidence set; reversal uses the header as the authoritative source of truth, or fails closed.
+- **7B-H2** — `manual_review_required → manual_review_resolved` local transition: when a Manager/Admin has reconciled Firestore stock externally, they can locally clear a `manual_review_required` intent so the POS overlay on that device stops showing the pending delta. The local stock counter is **not** touched; the correction history is preserved for audit. Eligibility is `manual_review_required` with `applied && !reversed` only.
+- **7B-H3** — local/device-visible Manual Review Ops UI (CLOSED / COMMITTED — `4d69143`): a Manager/Admin-only page (`/manual-review`) that lists `manual_review_required` intents **from this device's local IndexedDB queue only** and provides a controlled action to execute the H2 `resolveManualReview` transition. **This is NOT a global Firestore admin dashboard** — it cannot see other devices' or branches' queues. It does **not** perform Firestore reconciliation (that remains an external manual admin process outside the app). It does **not** mutate stock directly. Staff cannot access it.
+
+**Queued next — not yet implemented:**
+
+- **7B-H4** — server-side resolver hardening / stale client guard: planned hardening of `resolveReversal.ts` against stale client state and addition of server-side guards. **Not started.**
+
+**Key boundaries that must be preserved:**
+
+- Firestore reconciliation of stock is always an **external manual admin process** — no part of the Phase 7B client UI automates it.
+- The H3 UI is **per-device and per-branch local only** — a global ops dashboard across devices or branches does not exist.
+- Staff cannot resolve `manual_review_required` intents — Manager/Admin only.
+- Server-side resolver hardening (H4) is **not yet implemented**.
 
 ---
 
