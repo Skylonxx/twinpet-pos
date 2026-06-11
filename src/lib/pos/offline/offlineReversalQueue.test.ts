@@ -226,6 +226,43 @@ describe('offline staff authority (Blocker 2)', () => {
       localIntentId: intent.id,
     });
   });
+
+  // ── Phase 7B-H5: client-observed timestamp wiring ──
+  test('H5: toResolveRequest includes clientObservedDocumentUpdatedAt when the intent has it', async () => {
+    const observed = '2026-06-09T12:00:00.000Z';
+    const intent = await createOfflineReversal(
+      store,
+      { ...receivingInput, observedDocumentUpdatedAt: observed },
+      fixedClock(),
+    );
+    expect(intent.observedDocumentUpdatedAt).toBe(observed);
+    expect(toResolveRequest(intent).clientObservedDocumentUpdatedAt).toBe(observed);
+  });
+
+  test('H5: toResolveRequest omits clientObservedDocumentUpdatedAt for legacy intents without it', async () => {
+    const intent = await createOfflineReversal(store, receivingInput, fixedClock());
+    expect('observedDocumentUpdatedAt' in intent).toBe(false);
+    const req = toResolveRequest(intent);
+    expect('clientObservedDocumentUpdatedAt' in req).toBe(false);
+  });
+
+  test('H5: observed timestamp does not change the immediate local stock correction', async () => {
+    const withObs = createInMemoryReversalStore();
+    const without = createInMemoryReversalStore();
+    const i1 = await createOfflineReversal(
+      withObs,
+      { ...receivingInput, observedDocumentUpdatedAt: '2026-06-09T12:00:00.000Z' },
+      fixedClock(),
+    );
+    const i2 = await createOfflineReversal(without, receivingInput, fixedClock());
+    // Identical deltas and identical post-correction counters.
+    expect(i1.localCorrection.stockDelta).toEqual(i2.localCorrection.stockDelta);
+    expect(await readLocalStock(withObs, 'p1', 'b1')).toBe(await readLocalStock(without, 'p1', 'b1'));
+    expect(await readLocalStock(withObs, 'p2', 'b1')).toBe(await readLocalStock(without, 'p2', 'b1'));
+    // ...and the idempotency identity is unaffected by the observation.
+    expect(i1.idempotencyKey).toBe(i2.idempotencyKey);
+    expect(i1.id).toBe(i2.id);
+  });
 });
 
 // ─── claimForSync + recoverable lease (Blocker 1) ────────────────────────────

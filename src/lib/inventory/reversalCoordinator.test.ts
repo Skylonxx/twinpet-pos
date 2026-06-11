@@ -4,6 +4,7 @@ import {
   decideReversalRoute,
   executeReceivingReversal,
   ReceivingReversalEvidenceError,
+  toObservedDocumentUpdatedAtIso,
   validateReceivingHeaderEvidence,
   TRANSFER_REVERSAL_DEFERRED_NOTE,
   type ReceivingReversalInput,
@@ -559,5 +560,70 @@ describe('executeReceivingReversal — Staff authority (Blocker 2 preserved)', (
     expect(call).not.toHaveBeenCalled(); // never reached the resolver
     expect(await listQueue(store)).toHaveLength(0); // no queue item
     expect(await readLocalStock(store, 'p1', 'b1')).toBe(10); // stock untouched
+  });
+});
+
+// ─── Phase 7B-H5: client-observed timestamp capture + wiring ──────────────────
+
+describe('toObservedDocumentUpdatedAtIso (defensive Timestamp→ISO)', () => {
+  const ms = 1_700_000_000_000;
+  const iso = new Date(ms).toISOString();
+
+  test('converts a Firestore Timestamp (toDate) to ISO', () => {
+    expect(toObservedDocumentUpdatedAtIso({ toDate: () => new Date(ms) })).toBe(iso);
+  });
+  test('converts a Timestamp exposing only toMillis to ISO', () => {
+    expect(toObservedDocumentUpdatedAtIso({ toMillis: () => ms })).toBe(iso);
+  });
+  test('converts a plain { seconds, nanoseconds } shape to ISO', () => {
+    expect(toObservedDocumentUpdatedAtIso({ seconds: ms / 1000, nanoseconds: 0 })).toBe(iso);
+  });
+  test('converts a Date, epoch millis, and ISO string', () => {
+    expect(toObservedDocumentUpdatedAtIso(new Date(ms))).toBe(iso);
+    expect(toObservedDocumentUpdatedAtIso(ms)).toBe(iso);
+    expect(toObservedDocumentUpdatedAtIso(iso)).toBe(iso);
+  });
+  test('returns undefined (omit) for missing / malformed / unconvertible values', () => {
+    expect(toObservedDocumentUpdatedAtIso(null)).toBeUndefined();
+    expect(toObservedDocumentUpdatedAtIso(undefined)).toBeUndefined();
+    expect(toObservedDocumentUpdatedAtIso('not-a-date')).toBeUndefined();
+    expect(toObservedDocumentUpdatedAtIso(Number.NaN)).toBeUndefined();
+    expect(toObservedDocumentUpdatedAtIso({ toDate: () => new Date(Number.NaN) })).toBeUndefined();
+    expect(toObservedDocumentUpdatedAtIso({})).toBeUndefined();
+  });
+});
+
+describe('executeReceivingReversal — H5 observed-timestamp wiring', () => {
+  const observed = '2026-06-09T12:00:00.000Z';
+
+  test('threads observed timestamp onto the intent and into the synced resolver request', async () => {
+    const call = vi.fn<CallResolveReversal>().mockResolvedValue(okResponse);
+    const out = await executeReceivingReversal(makeDeps({ isOnline: () => true, call }), {
+      ...baseInput,
+      observedDocumentUpdatedAt: observed,
+    });
+    expect(out.intent.observedDocumentUpdatedAt).toBe(observed); // durable on the intent
+    expect(call).toHaveBeenCalledTimes(1);
+    expect(call.mock.calls[0][0]).toMatchObject({ clientObservedDocumentUpdatedAt: observed });
+  });
+
+  test('omits the field from the intent and request when not supplied (legacy/unconvertible)', async () => {
+    const call = vi.fn<CallResolveReversal>().mockResolvedValue(okResponse);
+    const out = await executeReceivingReversal(makeDeps({ isOnline: () => true, call }), baseInput);
+    expect('observedDocumentUpdatedAt' in out.intent).toBe(false);
+    expect('clientObservedDocumentUpdatedAt' in call.mock.calls[0][0]).toBe(false);
+  });
+
+  test('observed timestamp does not change the immediate local stock correction', async () => {
+    await store.transact(['stock'], 'readwrite', async (txn) => {
+      await txn.put('stock', 'p1::b1', { productId: 'p1', locationId: 'b1', quantity: 10 });
+      await txn.put('stock', 'p2::b1', { productId: 'p2', locationId: 'b1', quantity: 4 });
+    });
+    await executeReceivingReversal(makeDeps({ isOnline: () => false }), {
+      ...baseInput,
+      observedDocumentUpdatedAt: observed,
+    });
+    expect(await readLocalStock(store, 'p1', 'b1')).toBe(5); // 10 - 5 (unchanged by H5)
+    expect(await readLocalStock(store, 'p2', 'b1')).toBe(1); // 4 - 3
   });
 });

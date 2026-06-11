@@ -278,7 +278,53 @@ export type ReceivingReversalInput = {
   headerEvidence?: unknown;
   /** Defaults to `void` (the cashier's "cancel bill" wording). */
   action?: ReversalAction;
+  /**
+   * Phase 7B-H5: the receiving header's `updatedAt` as the page observed it (ISO 8601),
+   * forwarded to the resolver as `clientObservedDocumentUpdatedAt` for the H4 stale-client
+   * guard. Optional — the page omits it when the loaded doc has no convertible `updatedAt`
+   * (use {@link toObservedDocumentUpdatedAtIso} to convert defensively).
+   */
+  observedDocumentUpdatedAt?: string | null;
 };
+
+/**
+ * Phase 7B-H5: defensively convert a loaded source document's `updatedAt` to an ISO 8601
+ * string for the stale-client observation. Returns `undefined` (NOT '' or `null`) when the
+ * value is missing or cannot be converted, so callers OMIT the field rather than send a
+ * misleading observation. Accepts a Firestore `Timestamp` (`toDate()`/`toMillis()`), a
+ * `Date`, epoch millis, an ISO string, or a plain `{ seconds, nanoseconds }`.
+ */
+export function toObservedDocumentUpdatedAtIso(updatedAt: unknown): string | undefined {
+  if (updatedAt == null) return undefined;
+  try {
+    const ts = updatedAt as { toDate?: () => Date; toMillis?: () => number; seconds?: number; nanoseconds?: number };
+    if (typeof ts.toDate === 'function') {
+      const d = ts.toDate();
+      return d instanceof Date && !Number.isNaN(d.getTime()) ? d.toISOString() : undefined;
+    }
+    if (typeof ts.toMillis === 'function') {
+      const ms = ts.toMillis();
+      return Number.isFinite(ms) ? new Date(ms).toISOString() : undefined;
+    }
+    if (updatedAt instanceof Date) {
+      return Number.isNaN(updatedAt.getTime()) ? undefined : updatedAt.toISOString();
+    }
+    if (typeof updatedAt === 'number') {
+      return Number.isFinite(updatedAt) ? new Date(updatedAt).toISOString() : undefined;
+    }
+    if (typeof updatedAt === 'string') {
+      const t = Date.parse(updatedAt);
+      return Number.isNaN(t) ? undefined : new Date(t).toISOString();
+    }
+    if (typeof ts.seconds === 'number') {
+      const ms = ts.seconds * 1000 + Math.floor((ts.nanoseconds ?? 0) / 1e6);
+      return Number.isFinite(ms) ? new Date(ms).toISOString() : undefined;
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
+}
 
 /** Injectable dependencies — overridden in tests, defaulted for the browser. */
 export type ReversalCoordinatorDeps = {
@@ -386,6 +432,9 @@ export async function executeReceivingReversal(
     reasonNote: input.note,
     originalEffects,
     evidenceSource,
+    // Phase 7B-H5: thread the observed source `updatedAt` onto the durable intent so a
+    // later sync forwards it to the resolver. Null when unavailable ⇒ intent omits it.
+    observedDocumentUpdatedAt: input.observedDocumentUpdatedAt ?? null,
   };
 
   // Authority + immediate local correction + durable queue (atomic). A Staff actor

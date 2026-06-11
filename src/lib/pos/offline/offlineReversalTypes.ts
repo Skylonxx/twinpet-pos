@@ -156,6 +156,13 @@ export type CreateReversalInput = {
   originalEffects: OriginalStockEffect[];
   /** Phase 7B-H1: how those effects were proven (header snapshot vs legacy subcollection). */
   evidenceSource?: ReversalEvidenceSource;
+  /**
+   * Phase 7B-H5: the source document's `updatedAt` as the client observed it when
+   * capturing this reversal (ISO 8601). Threaded to the server resolver as
+   * `clientObservedDocumentUpdatedAt` to drive the H4 stale-client guard. Optional —
+   * omitted when the loaded document carries no convertible `updatedAt`.
+   */
+  observedDocumentUpdatedAt?: string | null;
 };
 
 /** Bookkeeping of the local correction attached to an intent. */
@@ -191,6 +198,12 @@ export type OfflineReversalIntent = {
   localMutationId: string;
   /** Phase 7B-H1: evidence the reversal effects were derived from (audit trail). */
   evidenceSource?: ReversalEvidenceSource;
+  /**
+   * Phase 7B-H5: source document `updatedAt` observed at capture (ISO 8601). Persisted
+   * durably so a later sync (possibly long after going offline) sends the SAME observed
+   * value to the resolver as `clientObservedDocumentUpdatedAt`. Absent on legacy intents.
+   */
+  observedDocumentUpdatedAt?: string | null;
   /** ISO time the local stock correction was applied (set inside the create txn). */
   localAppliedAt?: string;
   status: OfflineReversalStatus;

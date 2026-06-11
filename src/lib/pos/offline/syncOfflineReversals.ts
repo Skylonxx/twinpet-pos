@@ -53,6 +53,13 @@ export type ResolveReversalRequest = {
   reasonCode: string;
   reasonNote?: string;
   localIntentId: string;
+  /**
+   * Phase 7B-H5: the source document's `updatedAt` as the client observed it at capture
+   * (ISO 8601). The server's H4 stale-client guard rejects the reversal when the live
+   * document is newer than this. Sent ONLY when known; absent ⇒ server treats the
+   * observation as missing (fresh), preserving pre-H5 behavior for legacy intents.
+   */
+  clientObservedDocumentUpdatedAt?: string;
 };
 
 /** Network transport for a single reversal request. Injected for testability. */
@@ -70,6 +77,10 @@ export function toResolveRequest(intent: OfflineReversalIntent): ResolveReversal
     reasonCode: intent.reasonCode,
     reasonNote: intent.reasonNote ?? undefined,
     localIntentId: intent.id,
+    // Phase 7B-H5: forward the observed source `updatedAt` ONLY when present, so the H4
+    // server guard can detect a stale client view. Omitted (never null/empty) for legacy
+    // intents — the server then treats the observation as absent (fresh).
+    ...(intent.observedDocumentUpdatedAt ? { clientObservedDocumentUpdatedAt: intent.observedDocumentUpdatedAt } : {}),
   };
 }
 

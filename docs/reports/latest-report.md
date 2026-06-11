@@ -1,7 +1,44 @@
 # Latest Report
 
 > Rolling "latest report" for the stock-write security workstream. Updated at each phase boundary.
-> **Current state:** **Phase 7B-D3 — Docs/Context Sync After H4 Closure** (active; docs-only). H4 closed and committed (`4da7757` — `feat(pos): harden resolver against stale client observations`). H3 closed and committed (`4d69143` — `feat(pos): add manual review ops UI`). D1 closed and committed (`dacccd1` — `docs: add project context and task tracker`). H2 closed and committed (`8b48513` — `feat(pos): add manual review resolution state`). Phase 7B-H5 (Wire Client Observation Timestamp Payload) queued next — not yet started.
+> **Current state:** **Phase 7B-H5 — Wire Client Observation Timestamp Payload** (implemented, awaiting Codex re-review; uncommitted). Clean baseline before H5: `fb4c3b0 docs: sync phase 7b tracker after h4 closure` (Phase 7B-D3 CLOSED/COMMITTED). H4 closed and committed (`4da7757` — `feat(pos): harden resolver against stale client observations`). H3 closed and committed (`4d69143` — `feat(pos): add manual review ops UI`). D1 closed and committed (`dacccd1` — `docs: add project context and task tracker`). H2 closed and committed (`8b48513` — `feat(pos): add manual review resolution state`). H5 threads `clientObservedDocumentUpdatedAt` through the live **receiving** reversal payload so the H4 server guard becomes active end-to-end (Codex GPT-5.5 review + CEO approval pending before closure).
+
+## Phase 7B-H5: Wire Client Observation Timestamp Payload (IMPLEMENTED — AWAITING CODEX RE-REVIEW)
+
+**Status:** implemented; not committed; not closed. Authorization: Option A — APPROVED (receiving-only). No server resolver change. **Clean baseline before H5:** `fb4c3b0 docs: sync phase 7b tracker after h4 closure`. **Codex prior pass:** REJECTED for stale docs/tracker wording only (code/tests/scope confirmed correct); this docs correction resolves that blocker.
+
+### What was added (receiving-only client/offline payload wiring)
+
+- `ReceivingEditPage.handleVoid` captures the loaded receiving doc's `updatedAt` and converts it defensively to ISO 8601 via the new exported helper `toObservedDocumentUpdatedAtIso` (handles Firestore `Timestamp`, `Date`, epoch millis, ISO string, `{seconds,nanoseconds}`; returns `undefined` — omit — on missing/malformed input).
+- The value flows `ReceivingReversalInput` → `CreateReversalInput` → durable `OfflineReversalIntent` as the optional **internal** field `observedDocumentUpdatedAt` (ISO 8601), persisted so a later (possibly much-delayed) sync forwards the SAME observation.
+- `toResolveRequest` maps the internal field to the **server wire** field `clientObservedDocumentUpdatedAt` ONLY when present — omitting it (never `''`/`null`) otherwise.
+
+### Behavior guarantees (proven by tests)
+
+- **End-to-end activation:** a receiving reversal now carries `clientObservedDocumentUpdatedAt`, so the H4 guard can detect a stale client view.
+- **Backward compatible:** legacy queued intents (no `observedDocumentUpdatedAt`) → request omits the field → H4 guard stays inert (fresh). No migration.
+- **Idempotency unchanged:** the observation is excluded from `deriveReversalIds` (id / idempotencyKey / localMutationId); two intents differing only by the observation derive identical ids.
+- **Local stock correction unchanged:** immediate IndexedDB deltas/counters are identical with and without the observation.
+
+### Files changed
+
+- `src/pages/ReceivingEditPage.tsx`, `src/lib/inventory/reversalCoordinator.ts`, `src/lib/pos/offline/offlineReversalTypes.ts`, `src/lib/pos/offline/offlineReversalLogic.ts`, `src/lib/pos/offline/syncOfflineReversals.ts`.
+- Tests: `offlineReversalQueue.test.ts` (+3), `offlineReversalLogic.test.ts` (+3), `reversalCoordinator.test.ts` (+8).
+- Docs: `Task.md`, `Context.md`, this report.
+
+### Evidence
+
+- Web `npx vitest run` → **298 passed** (24 files). Server `functions` `npx vitest run resolveReversal` → **39 passed** (unchanged).
+- `npx tsc -b` (web) → clean; `npm --prefix functions run build` → clean.
+- `git diff --check` clean; `stash@{0}` present and untouched; no forbidden areas touched.
+
+### Out of scope (unchanged)
+
+Transfer wiring (legacy executor / dormant resolver path); manual-review server calls (local-only); global Admin UI; multi-device propagation; POS/cart/checkout/returns/RTV; Firestore rules; `functions/src/resolveReversal.ts(.test.ts)`.
+
+### Hidden risk
+
+The observation is captured from the page's already-loaded receiving doc at void time; a staler in-memory copy could trigger a guard rejection of a reversal the operator believes is current — surfaced via the existing manual-review path, never silent loss.
 
 ## Phase 7B-H4: Resolver Hardening / Stale Client Guard (CLOSED / COMMITTED)
 
@@ -35,13 +72,13 @@
 
 The guard is inert until the offline-queue client populates `clientObservedDocumentUpdatedAt` (deliberately out of this slice's scope), so end-to-end staleness is not yet detected in production traffic. **Accepted by CEO (Option B) as a non-blocking known risk.** Wiring `clientObservedDocumentUpdatedAt` into the client/offline resolver payload is the primary Phase 7B-H5 requirement.
 
-## Phase 7B-D3: Docs/Context Sync After H4 Closure (ACTIVE)
+## Phase 7B-D3: Docs/Context Sync After H4 Closure (CLOSED / COMMITTED)
 
-**Status:** active; docs-only. No source code or tests modified.
+**Status:** **CLOSED / COMMITTED.** **Commit:** `fb4c3b0` — `docs: sync phase 7b tracker after h4 closure`. Docs-only; no source code or tests modified. D3 is no longer active — it is the clean baseline before H5.
 
 ### Authorization
 
-CEO Option A approved. D3 executed immediately after H4 closure.
+CEO Option A approved. D3 executed immediately after H4 closure and is committed at `fb4c3b0`.
 
 ### Verification baseline (post-H4 commit)
 
@@ -49,15 +86,15 @@ CEO Option A approved. D3 executed immediately after H4 closure.
 - Post-H4-commit working tree was **clean** — confirmed by `git status --short` before D3 edits.
 - `stash@{0}` present and untouched throughout.
 
-### What D3 updates
+### What D3 updated
 
-- `Task.md` — H4 marked CLOSED/COMMITTED; commit recorded; hidden risk carried; H5 queued.
+- `Task.md` — H4 marked CLOSED/COMMITTED; commit recorded; hidden risk carried; H5 queued (now superseded — H5 is implemented below).
 - `Context.md` — H4 moved to closed tracks; H5 added to queued next; key boundaries updated.
-- `docs/reports/latest-report.md` — this section; H4 section updated to CLOSED/COMMITTED; H5 queued.
+- `docs/reports/latest-report.md` — this section; H4 section updated to CLOSED/COMMITTED.
 
 ### Next step after D3
 
-**Phase 7B-H5: Wire Client Observation Timestamp Payload** — queued; not yet started.
+**Phase 7B-H5: Wire Client Observation Timestamp Payload** — now **IMPLEMENTED / AWAITING CODEX RE-REVIEW** (uncommitted). See the H5 section near the top of this report for the package and evidence.
 
 ## Phase 7B-D2: Docs Cleanup & Phase Tracker Hygiene (CLOSED)
 

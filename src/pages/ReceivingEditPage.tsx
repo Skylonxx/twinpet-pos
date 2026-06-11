@@ -8,6 +8,7 @@ import type { ReceivingFormSubmitPayload, ReceivingFormValues } from '../lib/rec
 import {
   createDefaultReversalCoordinatorDeps,
   executeReceivingReversal,
+  toObservedDocumentUpdatedAtIso,
 } from '../lib/inventory/reversalCoordinator';
 import {
   formLinesToDraftLines,
@@ -204,6 +205,9 @@ export default function ReceivingEditPage() {
       // coordinator falls back to these items only for legacy/pre-H1 records.
       headerEvidence: receiving?.reversalEvidence ?? null,
       items: items.map((it) => ({ productId: it.productId, qtyBase: it.qtyBase, lotId: it.lotId })),
+      // Phase 7B-H5: observed receiving `updatedAt` for the server stale-client guard.
+      // Omitted automatically when the loaded doc has no convertible `updatedAt`.
+      observedDocumentUpdatedAt: toObservedDocumentUpdatedAtIso(receiving?.updatedAt),
     });
     const toast = outcome.manualReviewRequired
       ? 'ยกเลิกในเครื่องแล้ว — รอผู้จัดการตรวจสอบ (manual review)'

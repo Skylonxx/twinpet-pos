@@ -280,6 +280,9 @@ export function buildOfflineReversalIntent(
     localMutationId: ids.localMutationId,
     // Phase 7B-H1: preserve the evidence provenance on the durable intent (audit).
     ...(input.evidenceSource ? { evidenceSource: input.evidenceSource } : {}),
+    // Phase 7B-H5: preserve the client-observed source `updatedAt` for the stale-client
+    // guard (sent at sync as `clientObservedDocumentUpdatedAt`). Omitted when unavailable.
+    ...(input.observedDocumentUpdatedAt ? { observedDocumentUpdatedAt: input.observedDocumentUpdatedAt } : {}),
     status: 'queued',
     localCorrection: {
       applied: false,

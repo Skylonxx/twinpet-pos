@@ -1,45 +1,81 @@
-# Current Task Tracker — Phase 7B-D3 (active)
+# Current Task Tracker — Phase 7B-H5 (implemented, awaiting Codex re-review)
 
 > Living checkpoint doc for agents. Detailed history: `docs/reports/latest-report.md` (do not duplicate long-form evidence here).
 
 ## Current active phase
 
-**Phase 7B-D3: Docs/Context Sync After H4 Closure**
-**Status:** **ACTIVE**
+**Phase 7B-H5: Wire Client Observation Timestamp Payload**
+**Status:** **IMPLEMENTED — AWAITING CODEX RE-REVIEW** (not committed; not closed). See the H5 section below for the full package.
 
-### Scope
+**Clean baseline before H5:** `fb4c3b0 docs: sync phase 7b tracker after h4 closure`.
 
-Docs-only sync pass after Phase 7B-H4 was closed and committed (`4da7757`). No source code or tests modified.
+---
 
-### Scope checklist
+## Phase 7B-D3 — Docs/Context Sync After H4 Closure
 
-- [ ] Update Task.md: record H4 as CLOSED / COMMITTED with commit `4da7757`.
-- [ ] Update Context.md: advance baseline to H4 commit; queue H5.
-- [ ] Update docs/reports/latest-report.md: record H4 closure, accepted hidden risk, H5 direction.
-- [ ] Ensure markdown-only change set.
-- [ ] Ensure git diff --check clean.
+**Status:** **CLOSED / COMMITTED**
+**Commit:** `fb4c3b0` — `docs: sync phase 7b tracker after h4 closure`
 
-### Next step after D3
-
-**Phase 7B-H5: Wire Client Observation Timestamp Payload** — queued; not yet started.
+Docs-only sync pass after Phase 7B-H4 was closed and committed (`4da7757`). Recorded H4 as CLOSED/COMMITTED, advanced the baseline to the H4 commit, and queued H5. No source code or tests modified. D3 is no longer active.
 
 ---
 
 ## Phase 7B-H5 — Wire Client Observation Timestamp Payload
 
-**Status:** **QUEUED — NOT STARTED**
+**Status:** **IMPLEMENTED — AWAITING CODEX RE-REVIEW** (not committed; not closed. Codex GPT-5.5 re-review + CEO approval required before closure)
+**Authorization:** Option A — APPROVED (receiving-only)
+**Codex (prior pass):** REJECTED for stale docs/tracker wording only — code/tests/scope confirmed correct; this docs/tracker correction resolves that blocker.
 
 ### Goal
 
-Wire `clientObservedDocumentUpdatedAt` into the offline/client resolver payload so Phase 7B-H4's server-side stale-client guard becomes fully active end-to-end. The H4 guard currently rejects stale attempts correctly when the field is present, but production protection remains partially inert until all caller paths consistently populate it.
+Wire `clientObservedDocumentUpdatedAt` into the offline/client resolver payload so Phase 7B-H4's server-side stale-client guard becomes active end-to-end for the **live receiving reversal flow**.
 
-### Why this is H5's primary requirement
+### What was delivered (receiving-only payload wiring)
 
-H4's hidden risk (accepted by CEO, Option B): the guard is conservative — absent observation is treated as fresh — so legacy callers are unaffected, but real-world staleness in offline/client paths is not yet detected end-to-end.
+- The receiving void page (`ReceivingEditPage.handleVoid`) captures the loaded receiving doc's `updatedAt`, converts it defensively to an ISO 8601 string (`toObservedDocumentUpdatedAtIso`), and passes it through `ReceivingReversalInput`.
+- The value is persisted on the durable offline intent as the optional **internal** field `observedDocumentUpdatedAt` (ISO 8601), so a later sync forwards the same observation.
+- At the sync boundary, `toResolveRequest` maps it to the **server wire** field `clientObservedDocumentUpdatedAt`, **omitting** it entirely when unavailable.
+- No server resolver change (H4 guard already shipped in `4da7757`).
 
-### Not started
+### Backward compatibility
 
-No H5 implementation has begun. Authorization required before any source changes.
+- All new fields optional. Legacy queued intents (pre-H5) carry no `observedDocumentUpdatedAt` ⇒ `toResolveRequest` omits `clientObservedDocumentUpdatedAt` ⇒ H4 guard stays inert (fresh) for them. No migration required.
+- Missing / malformed / unconvertible `updatedAt` ⇒ field omitted (never `''`, never `null` on the wire).
+
+### Idempotency
+
+- The observed timestamp is **not** part of `deriveReversalIds` (intent id / idempotency key / localMutationId) and is excluded from the server payload hash by H4's design. Tests prove two intents differing only by `observedDocumentUpdatedAt` derive identical ids.
+
+### Files changed
+
+```
+src/pages/ReceivingEditPage.tsx                    (capture + convert at void)
+src/lib/inventory/reversalCoordinator.ts           (input field + toObservedDocumentUpdatedAtIso + thread-through)
+src/lib/pos/offline/offlineReversalTypes.ts        (CreateReversalInput + OfflineReversalIntent fields)
+src/lib/pos/offline/offlineReversalLogic.ts        (persist on intent)
+src/lib/pos/offline/syncOfflineReversals.ts        (wire field + emit in toResolveRequest)
+src/lib/pos/offline/offlineReversalQueue.test.ts   (3 new H5 tests)
+src/lib/pos/offline/offlineReversalLogic.test.ts   (3 new H5 tests)
+src/lib/inventory/reversalCoordinator.test.ts      (8 new H5 tests)
+```
+
+### Evidence
+
+- `npx vitest run` (web) → 298 passed (24 files).
+- Server resolver `functions: npx vitest run resolveReversal` → 39 passed (**unchanged**).
+- `npx tsc -b` (web) → clean; `npm --prefix functions run build` → clean.
+- `git diff --check` clean; `stash@{0}` untouched; no forbidden areas touched.
+
+### Out of scope (unchanged by H5)
+
+- Transfer reversal wiring (routes to the legacy executor; resolver transfer path dormant).
+- Manual-review resolution (local-only; never calls the server).
+- Global Admin UI; multi-device/server-broadcast propagation.
+- POS/cart/checkout/returns/RTV; Firestore rules; server resolver logic.
+
+### Hidden risk
+
+The observation is captured at void time from the page's already-loaded receiving doc; if that in-memory copy is staler than Firestore at the moment of voiding, the guard could reject a reversal the operator believes is current — surfaced via the existing manual-review path, not silent data loss.
 
 ---
 

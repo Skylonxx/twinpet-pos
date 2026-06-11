@@ -81,16 +81,16 @@ Phase 7B delivers a complete offline reversal lifecycle for Goods-Receiving and 
 - **7B-H3** — local/device-visible Manual Review Ops UI (CLOSED / COMMITTED — `4d69143`): a Manager/Admin-only page (`/manual-review`) that lists `manual_review_required` intents **from this device's local IndexedDB queue only** and provides a controlled action to execute the H2 `resolveManualReview` transition. **This is NOT a global Firestore admin dashboard** — it cannot see other devices' or branches' queues. It does **not** perform Firestore reconciliation (that remains an external manual admin process outside the app). It does **not** mutate stock directly. Staff cannot access it.
 - **7B-H4** — server-side stale-client guard in `resolveReversal.ts` (CLOSED / COMMITTED — `4da7757`): rejects reversals where `clientObservedDocumentUpdatedAt` is older than the live server `updatedAt` with structured reject code `stale_client_observation` (status `rejected`). Mutation-free: zero stock, zero lots, no state advance, no audit/intent-ledger write on a stale rejection. Guard is placed after authority check and before every status check and write in both `resolveReceivingReversal` and `resolveTransferReversal`. Conservative: absent observation ⇒ not stale; equal instants ⇒ fresh. **Accepted hidden risk (CEO Option B):** the guard is partially inert in production until `clientObservedDocumentUpdatedAt` is populated by the client/offline resolver payload — that wiring is the H5 follow-up.
 
-**Queued next — not yet started:**
+**Implemented — awaiting Codex review (uncommitted):**
 
-- **7B-H5** — Wire Client Observation Timestamp Payload: wire `clientObservedDocumentUpdatedAt` into the offline/client resolver payload so Phase 7B-H4's server-side guard becomes fully active end-to-end. No H5 implementation has started.
+- **7B-H5** — Wire Client Observation Timestamp Payload (receiving-only): the live receiving void path now captures the loaded receiving doc's `updatedAt`, converts it defensively to ISO 8601 (`toObservedDocumentUpdatedAtIso`), persists it on the durable offline intent as the internal field `observedDocumentUpdatedAt`, and `toResolveRequest` forwards it to the resolver as `clientObservedDocumentUpdatedAt` — so the H4 guard is active end-to-end for receiving reversals. Backward compatible (legacy intents omit the field; H4 stays inert/fresh), idempotency unchanged (observation excluded from id derivation), local stock correction unchanged. **No server resolver change.** Transfer wiring, manual-review server calls, global Admin UI, and multi-device propagation remain out of scope. Not committed; Codex re-review + CEO approval pending before closure (a prior Codex pass rejected only stale docs/tracker wording, now corrected).
 
 **Key boundaries that must be preserved:**
 
 - Firestore reconciliation of stock is always an **external manual admin process** — no part of the Phase 7B client UI automates it.
 - The H3 UI is **per-device and per-branch local only** — a global ops dashboard across devices or branches does not exist.
 - Staff cannot resolve `manual_review_required` intents — Manager/Admin only.
-- The H4 stale-client guard requires the client/offline resolver payload to include `clientObservedDocumentUpdatedAt` to be fully active end-to-end — wiring this field is the Phase 7B-H5 follow-up.
+- The H4 stale-client guard requires the client/offline resolver payload to include `clientObservedDocumentUpdatedAt` to be fully active end-to-end — Phase 7B-H5 wires this for the **receiving** path; the transfer path remains on the legacy executor (resolver transfer branch dormant), so its end-to-end guard wiring is still a future follow-up.
 
 ---
 

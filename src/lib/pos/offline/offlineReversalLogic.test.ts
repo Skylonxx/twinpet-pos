@@ -101,6 +101,50 @@ describe('buildOfflineReversalIntent', () => {
     expect(intent.idempotencyKey).toBe(ids.idempotencyKey);
     expect(intent.createdAt).toBe('2026-06-10T00:00:00.000Z');
   });
+
+  // ── Phase 7B-H5: observed-document timestamp persistence ──
+  test('H5: persists observedDocumentUpdatedAt when supplied', () => {
+    const ids = deriveReversalIds(baseInput);
+    const delta = computeReversalDelta(baseInput.originalEffects);
+    const observed = '2026-06-09T12:00:00.000Z';
+    const intent = buildOfflineReversalIntent(
+      ids,
+      { ...baseInput, observedDocumentUpdatedAt: observed },
+      delta,
+      '2026-06-10T00:00:00.000Z',
+    );
+    expect(intent.observedDocumentUpdatedAt).toBe(observed);
+    // The observation never alters the local correction.
+    expect(intent.localCorrection).toEqual({ applied: false, reversed: false, stockDelta: delta });
+  });
+
+  test('H5: omits observedDocumentUpdatedAt when absent / null (legacy)', () => {
+    const ids = deriveReversalIds(baseInput);
+    const delta = computeReversalDelta(baseInput.originalEffects);
+    const absent = buildOfflineReversalIntent(ids, baseInput, delta, '2026-06-10T00:00:00.000Z');
+    expect('observedDocumentUpdatedAt' in absent).toBe(false);
+    const nulled = buildOfflineReversalIntent(
+      ids,
+      { ...baseInput, observedDocumentUpdatedAt: null },
+      delta,
+      '2026-06-10T00:00:00.000Z',
+    );
+    expect('observedDocumentUpdatedAt' in nulled).toBe(false);
+  });
+
+  test('H5: idempotency key is unchanged when only observedDocumentUpdatedAt differs', () => {
+    const delta = computeReversalDelta(baseInput.originalEffects);
+    const a = buildOfflineReversalIntent(deriveReversalIds(baseInput), baseInput, delta, 't');
+    const b = buildOfflineReversalIntent(
+      deriveReversalIds(baseInput),
+      { ...baseInput, observedDocumentUpdatedAt: '2026-06-09T12:00:00.000Z' },
+      delta,
+      't',
+    );
+    expect(a.idempotencyKey).toBe(b.idempotencyKey);
+    expect(a.id).toBe(b.id);
+    expect(a.localMutationId).toBe(b.localMutationId);
+  });
 });
 
 describe('classifyServerResult', () => {
