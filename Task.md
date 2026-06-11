@@ -1,22 +1,76 @@
-# Current Task Tracker — Phase 7B-D4 (docs/context sync after H5 closure)
+# Current Task Tracker — Phase 7B-H6-B (architecture decision — docs only)
 
 > Living checkpoint doc for agents. Detailed history: `docs/reports/latest-report.md` (do not duplicate long-form evidence here).
 
 ## Current active phase
 
-**Phase 7B-D4: Docs/Context Sync After H5 Closure**
-**Status:** **IN PROGRESS — docs-only update, not yet committed.** H5 is CLOSED / COMMITTED (`4762d97`). End-to-End Receiving Reversal Hardening is functionally complete. H6 is queued next (read-only Transfer Reversal Planning / Environment Audit — no code changes).
+**Phase 7B-H6-B: Transfer Reversal Architecture Decision — Docs Recording**
+**Status:** **IN PROGRESS — docs-only, not yet committed.** Architecture direction approved by CEO (Option A). No source code or tests modified. H6-C (Server Resolver Activation + Tests) is queued as planning-only next — no implementation until Tech Lead approves the execution plan.
 
-**Clean baseline before D4:** `4762d97 feat(pos): wire client observation timestamp for reversals`.
+**Clean baseline:** `f61e94e docs: sync phase 7b tracker after h5 receiving hardening closure`
+
+---
+
+## Phase 7B-H6-B — Transfer Reversal Architecture Decision
+
+**Status:** **IN PROGRESS — docs-only, not yet committed.**
+**Authorization:** CEO Option A — APPROVED. Docs-only architecture decision recording. No TypeScript implementation in H6-B.
+
+### H6 Environment Audit Findings (read-only)
+
+| Finding | Detail |
+|---------|--------|
+| Current Transfer state model | Two states only: `completed` \| `cancelled` |
+| Live transfer creation | Transfers are created directly as `completed` (no intermediate `sent`/`received` steps in the current production path) |
+| Existing server resolver transfer branch | Dormant — `resolveTransferReversal` currently gates on `sent`/`received` status; no live transfer doc currently carries those states |
+| Impact | The existing resolver transfer path cannot fire end-to-end until the gate is updated or the state model changes |
+
+### CEO Architecture Decision (Option A)
+
+For the current Transfer model, **`completed` is approved as the reversible state** for future queue-first Transfer Reversal.
+
+**Semantics clarification:**
+- `completed` does NOT mean "always reversible."
+- `completed` means "**eligible for reversal under strict server-authoritative guards**."
+- The same guard stack (authority, stale-client, idempotency, already-reversed, stock/lot sufficiency) applies as for receiving reversals.
+
+**Deferred:** A full `sent → received → completed` lifecycle refactor is explicitly out of scope for the H6 implementation track and must not be introduced unless separately authorized.
+
+### Long-Term Risk Documentation
+
+#### Technical Debt
+
+Treating `completed` as reversible creates **controlled technical debt, not blocking debt**. It matches the current production data model exactly. Forcing a broad transfer lifecycle refactor now would be riskier and broader than the immediate problem warrants. The debt is bounded: if business requirements later introduce a multi-step workflow, only the reversible-state policy needs to change — not the resolver logic everywhere.
+
+#### Future Scalability
+
+If a future `sent → received → completed` workflow is introduced, the resolver remains adaptable **if and only if** H6-C centralizes reversible-state eligibility in one helper/policy (e.g. `isTransferReversible(transfer)`) and tests both accepted and rejected states against that helper. A single centralized change then covers all call sites.
+
+#### Mitigation Pattern (H6-C must follow)
+
+| Requirement | Rule |
+|-------------|------|
+| Reversible-state check | Centralized helper — do NOT scatter `status === 'completed'` checks across resolver code |
+| Semantics | `completed` = "eligible under guard," never "reversible unconditionally" |
+| Server authority | Final mutation always server-authoritative |
+| Stock/lot sufficiency | Destination stock/lot sufficiency must be required before reversal |
+| Cost preservation | Source lot restoration must preserve original cost and `receivedAt` evidence |
+| Stale-client guard | Must remain active when client payload is wired (same H4/H5 pattern) |
+| Idempotency | Already-reversed check mandatory |
+| Lifecycle refactor | No transfer lifecycle refactor unless separately authorized |
+
+### Next queued slice
+
+**Phase 7B-H6-C: Server Resolver Activation + Tests — Planning Only.**
+No code implementation until Tech Lead approves the H6-C execution plan.
 
 ---
 
 ## Phase 7B-D4 — Docs/Context Sync After H5 Closure
 
-**Status:** **IN PROGRESS — not yet committed.**
-Docs-only sync pass after Phase 7B-H5 was closed and committed (`4762d97`). Records H5 as CLOSED/COMMITTED, advances the baseline to the H5 commit, records End-to-End Receiving Reversal Hardening as functionally complete, and queues H6. No source code or tests modified.
-
-**Next queued slice:** Phase 7B-H6: Transfer Reversal Planning / Environment Audit (read-only planning only — no code changes until Tech Lead approves a proposal).
+**Status:** **CLOSED / COMMITTED**
+**Commit:** `f61e94e` — `docs: sync phase 7b tracker after h5 receiving hardening closure`
+Docs-only sync pass after Phase 7B-H5 was closed and committed (`4762d97`). Recorded H5 as CLOSED/COMMITTED, advanced the baseline to the H5 commit, recorded End-to-End Receiving Reversal Hardening as functionally complete, and queued H6. No source code or tests modified.
 
 ---
 

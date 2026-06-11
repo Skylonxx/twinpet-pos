@@ -83,18 +83,36 @@ Phase 7B delivers a complete offline reversal lifecycle for Goods-Receiving and 
 
 - **7B-H5** — Wire Client Observation Timestamp Payload (receiving-only, CLOSED / COMMITTED — `4762d97`): the live receiving void path now captures the loaded receiving doc's `updatedAt`, converts it defensively to ISO 8601 (`toObservedDocumentUpdatedAtIso`), persists it on the durable offline intent as the internal field `observedDocumentUpdatedAt`, and `toResolveRequest` forwards it to the resolver as `clientObservedDocumentUpdatedAt` — so the H4 guard is active end-to-end for receiving reversals. Backward compatible (legacy intents omit the field; H4 stays inert/fresh), idempotency unchanged (observation excluded from id derivation), local stock correction unchanged. **No server resolver change.** Transfer wiring, manual-review server calls, global Admin UI, and multi-device propagation remain out of scope. **Milestone: End-to-End Receiving Reversal Hardening is functionally complete** (H4 server-side guard + H5 client payload wiring together).
 
-**Current baseline (post-H5):** `4762d97 feat(pos): wire client observation timestamp for reversals`
+**Current baseline (post-D4):** `f61e94e docs: sync phase 7b tracker after h5 receiving hardening closure`
 
-**Active docs sync:** Phase 7B-D4 — docs/context sync after H5 closure (not yet committed). No source code or tests modified in D4.
+**Active slice:** Phase 7B-H6-B — Transfer Reversal Architecture Decision (docs-only, not yet committed). CEO Option A approved: `completed` is the reversible state for the current Transfer model. No source code or tests modified.
 
-**Next queued slice after D4:** Phase 7B-H6: Transfer Reversal Planning / Environment Audit — **read-only planning only**. H6 must inspect the transfer lifecycle, Sent/Received/Completed states, existing transfer reversal resolver branch, and map how Transfer can safely join the queue-first pattern. No code changes and no implementation until Tech Lead approves a proposal. No H6 implementation has started yet.
+**Next queued slice after H6-B:** Phase 7B-H6-C: Server Resolver Activation + Tests — **planning only**. No code implementation until Tech Lead approves the execution plan.
+
+### H6 Transfer State Model — Architecture Decision (CEO Option A)
+
+Current production Transfer state model is two-state: `completed` | `cancelled`. Live transfers are created directly as `completed`. The existing `resolveTransferReversal` server branch is dormant because it gates on `sent`/`received` — states no live transfer currently carries.
+
+**CEO decision:** `completed` is approved as the reversible state for queue-first Transfer Reversal. This means "eligible for reversal under strict server-authoritative guards," NOT "always reversible." The same guard stack applies: authority, stale-client, idempotency, already-reversed, stock/lot sufficiency.
+
+**Full `sent → received → completed` lifecycle refactor is deferred and not part of the H6 implementation track.**
+
+**H6-C implementation constraints (when authorized):**
+- Reversible-state eligibility must be centralized in one helper — do not scatter `status === 'completed'` checks.
+- Destination stock/lot sufficiency required before reversal.
+- Source lot restoration must preserve original cost and `receivedAt` evidence.
+- Stale-client guard must remain active when client payload is wired.
+- Idempotency and already-reversed checks mandatory.
+- No transfer lifecycle refactor unless separately authorized.
+
+**Future scalability:** If a `sent → received → completed` workflow is introduced later, only the centralized eligibility helper needs to change — not resolver logic everywhere. This is controlled technical debt, not blocking debt.
 
 **Key boundaries that must be preserved:**
 
 - Firestore reconciliation of stock is always an **external manual admin process** — no part of the Phase 7B client UI automates it.
 - The H3 UI is **per-device and per-branch local only** — a global ops dashboard across devices or branches does not exist.
 - Staff cannot resolve `manual_review_required` intents — Manager/Admin only.
-- The H4 stale-client guard is now fully active end-to-end for the **receiving** path (H5 committed). The transfer path remains on the legacy executor (resolver transfer branch dormant) — Transfer end-to-end guard wiring is the H6 follow-up, but H6 is read-only planning only; no Transfer wiring code may be written until Tech Lead approves.
+- The H4 stale-client guard is fully active end-to-end for the **receiving** path (H5 committed). The transfer resolver path is dormant — H6-C will activate it for `completed` transfers, but H6-C is planning-only until Tech Lead approves; no Transfer resolver code may be written yet.
 
 ---
 
