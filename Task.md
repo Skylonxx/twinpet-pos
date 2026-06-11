@@ -1,20 +1,58 @@
-# Current Task Tracker — Phase 7B-H6-C (server resolver activation + tests)
+# Current Task Tracker — Phase 7B-H6-D1 (latent transfer queue-first executor)
 
 > Living checkpoint doc for agents. Detailed history: `docs/reports/latest-report.md` (do not duplicate long-form evidence here).
 
 ## Current active phase
 
-**Phase 7B-H6-C: Server Resolver Activation + Tests**
+**Phase 7B-H6-D1: Transfer Queue-first Executor (LATENT)**
 **Status:** **ACTIVE / IN PROGRESS — implemented, awaiting Codex review (not committed, not closed).**
-**Scope:** server resolver + tests ONLY. No client routing, no UI wiring, no offline-queue integration, no legacy `cancelBranchTransfer` retirement, no transfer lifecycle refactor.
+**Scope:** latent executor + unit tests ONLY. NOT wired into any UI; `decideReversalRoute('transfer')` unchanged (still `transfer_legacy_executor`); `cancelBranchTransfer`/`editBranchTransfer` untouched. Live route flip + page migration are H6-D2 (separately authorized).
 
-**Clean baseline before H6-C:** `7bd74c1 docs: record transfer reversal state model architecture decision`
+**Clean baseline before H6-D1:** `68f46e2 feat(pos): activate server transfer reversal resolver` (H6-C CLOSED / COMMITTED).
+
+---
+
+## Phase 7B-H6-D1 — Transfer Queue-first Executor (LATENT)
+
+**Status:** **IMPLEMENTED — AWAITING CODEX REVIEW** (not committed; not closed).
+**Authorization:** CEO Option A — APPROVED (latent executor + tests only).
+
+### What was delivered
+
+- Latent `executeTransferReversal` in `reversalCoordinator.ts` mirroring `executeReceivingReversal`: fail-closed validation (`assertTransferReversalInput` + `TransferReversalEvidenceError`), dual-branch `buildTransferReversalEffects`, `observedDocumentUpdatedAt` threading, queue-first create + sync.
+- Intent uses `sourceType:'transfer'`, `sourceId: transferId`, `branchId: fromBranchId` (origin — matches server authority). No offline-queue schema change.
+- **Not wired into any UI.** `decideReversalRoute('transfer')` still returns `transfer_legacy_executor`; the two transfer pages and `cancelBranchTransfer`/`editBranchTransfer` are untouched — capability is dead-but-tested until H6-D2.
+
+### Dual-branch math (proven)
+
+- Original effects: destination `+transferQty`, source `−transferQty`. Reversal engine negates → local correction destination `−qty`, source `+qty`; aggregated by product×branch.
+
+### Files changed (code)
+
+```
+src/lib/inventory/reversalCoordinator.ts        (executeTransferReversal + builder + validation + types)
+src/lib/inventory/reversalCoordinator.test.ts   (16 new H6-D1 tests)
+```
+
+### Evidence
+
+- `npx vitest run reversalCoordinator` → 63 passed; full web `npx vitest run` → 315 passed (24 files); `npx tsc -b` → clean.
+- `git diff --check` clean; `stash@{0}` untouched; no forbidden areas touched.
+
+### Out of scope (unchanged)
+
+UI route flip, transfer page migration, legacy `cancelBranchTransfer` retirement, server resolver, offline-queue schema, transfer evidence/checksum snapshot, `updatedAt`-at-completion, `sent→received` lifecycle refactor.
+
+### Hidden risk
+
+The executor is fully functional but unreferenced by production UI, so a future H6-D2 that forgets to also remove the legacy `cancelBranchTransfer` page calls could leave two live reversal paths for the same transfer.
 
 ---
 
 ## Phase 7B-H6-C — Server Resolver Activation + Tests
 
-**Status:** **IMPLEMENTED — AWAITING CODEX REVIEW** (not committed; not closed; H6-C implementation has started).
+**Status:** **CLOSED / COMMITTED**
+**Commit:** `68f46e2` — `feat(pos): activate server transfer reversal resolver` (CEO Option B — APPROVED WITH NOTES)
 **Authorization:** CEO Option A — APPROVED (server resolver + tests only).
 
 ### What was delivered

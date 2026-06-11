@@ -1,15 +1,20 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import {
+  assertTransferReversalInput,
   buildReceivingReversalEffects,
+  buildTransferReversalEffects,
   decideReversalRoute,
   executeReceivingReversal,
+  executeTransferReversal,
   ReceivingReversalEvidenceError,
   toObservedDocumentUpdatedAtIso,
+  TransferReversalEvidenceError,
   validateReceivingHeaderEvidence,
   TRANSFER_REVERSAL_DEFERRED_NOTE,
   type ReceivingReversalInput,
   type ReceivingReversalItem,
   type ReversalCoordinatorDeps,
+  type TransferReversalInput,
 } from './reversalCoordinator';
 import { OfflineReversalRejectedError, type ServerReversalResponse } from '../pos/offline/offlineReversalLogic';
 import { listQueue, readLocalStock } from '../pos/offline/offlineReversalQueue';
@@ -625,5 +630,196 @@ describe('executeReceivingReversal — H5 observed-timestamp wiring', () => {
     });
     expect(await readLocalStock(store, 'p1', 'b1')).toBe(5); // 10 - 5 (unchanged by H5)
     expect(await readLocalStock(store, 'p2', 'b1')).toBe(1); // 4 - 3
+  });
+});
+
+// ─── Phase 7B-H6-D1: LATENT queue-first transfer reversal executor ────────────
+
+const transferInput: TransferReversalInput = {
+  transferId: 'T1',
+  fromBranchId: 'b1', // source
+  toBranchId: 'b2', // destination
+  actorRole: 'manager',
+  staffId: 'mgr-1',
+  reason: 'wrong_entry',
+  note: 'ทดสอบ',
+  items: [
+    { productId: 'p1', transferQty: 5, sourceLotDetails: [{ lotId: 'lot-1' }] },
+    { productId: 'p2', transferQty: 3 },
+  ],
+};
+
+describe('H6-D1: buildTransferReversalEffects (dual-branch original effects)', () => {
+  test('destination original gain is +qty; source original loss is -qty', () => {
+    expect(buildTransferReversalEffects(transferInput.items, 'b1', 'b2')).toEqual([
+      { productId: 'p1', locationId: 'b2', lotId: null, quantity: 5 }, // dest gained +5
+      { productId: 'p1', locationId: 'b1', lotId: 'lot-1', quantity: -5 }, // source lost -5
+      { productId: 'p2', locationId: 'b2', lotId: null, quantity: 3 },
+      { productId: 'p2', locationId: 'b1', lotId: null, quantity: -3 }, // no single lot → null
+    ]);
+  });
+  test('drops zero-qty lines; source lotId null when not exactly one detail', () => {
+    expect(
+      buildTransferReversalEffects(
+        [
+          { productId: 'p1', transferQty: 0, sourceLotDetails: [{ lotId: 'lot-1' }] },
+          { productId: 'p2', transferQty: 4, sourceLotDetails: [{ lotId: 'a' }, { lotId: 'b' }] },
+        ],
+        'b1',
+        'b2',
+      ),
+    ).toEqual([
+      { productId: 'p2', locationId: 'b2', lotId: null, quantity: 4 },
+      { productId: 'p2', locationId: 'b1', lotId: null, quantity: -4 }, // two details → null
+    ]);
+  });
+});
+
+describe('H6-D1: executeTransferReversal — latent (no UI route change)', () => {
+  test('decideReversalRoute still returns the LEGACY executor for transfer (route NOT flipped)', () => {
+    expect(decideReversalRoute('transfer')).toBe('transfer_legacy_executor');
+  });
+
+  test('creates a transfer intent: sourceType=transfer, branchId=fromBranchId, observed preserved', async () => {
+    const observed = '2026-06-09T12:00:00.000Z';
+    const out = await executeTransferReversal(makeDeps({ isOnline: () => false }), {
+      ...transferInput,
+      observedDocumentUpdatedAt: observed,
+    });
+    expect(out.status).toBe('queued');
+    expect(out.intent.sourceType).toBe('transfer');
+    expect(out.intent.sourceId).toBe('T1');
+    expect(out.intent.branchId).toBe('b1'); // fromBranchId (origin) — matches server authority
+    expect(out.intent.observedDocumentUpdatedAt).toBe(observed);
+    expect(out.intent.idempotencyKey).toBe('rev:b1:transfer:T1:reverse');
+    expect(await listQueue(store)).toHaveLength(1);
+  });
+
+  test('local correction: destination -qty, source +qty (dual-branch), aggregated by product×branch', async () => {
+    await store.transact(['stock'], 'readwrite', async (txn) => {
+      await txn.put('stock', 'p1::b1', { productId: 'p1', locationId: 'b1', quantity: 10 }); // source
+      await txn.put('stock', 'p1::b2', { productId: 'p1', locationId: 'b2', quantity: 10 }); // dest
+      await txn.put('stock', 'p2::b1', { productId: 'p2', locationId: 'b1', quantity: 4 });
+      await txn.put('stock', 'p2::b2', { productId: 'p2', locationId: 'b2', quantity: 4 });
+    });
+    await executeTransferReversal(makeDeps({ isOnline: () => false }), transferInput);
+    expect(await readLocalStock(store, 'p1', 'b1')).toBe(15); // source restored +5
+    expect(await readLocalStock(store, 'p1', 'b2')).toBe(5); // dest removed -5
+    expect(await readLocalStock(store, 'p2', 'b1')).toBe(7); // source restored +3
+    expect(await readLocalStock(store, 'p2', 'b2')).toBe(1); // dest removed -3
+  });
+
+  test('multiple lines of the SAME product aggregate onto the right branch counters', async () => {
+    await store.transact(['stock'], 'readwrite', async (txn) => {
+      await txn.put('stock', 'p1::b1', { productId: 'p1', locationId: 'b1', quantity: 0 });
+      await txn.put('stock', 'p1::b2', { productId: 'p1', locationId: 'b2', quantity: 10 });
+    });
+    await executeTransferReversal(makeDeps({ isOnline: () => false }), {
+      ...transferInput,
+      items: [
+        { productId: 'p1', transferQty: 2 },
+        { productId: 'p1', transferQty: 3 },
+      ],
+    });
+    expect(await readLocalStock(store, 'p1', 'b1')).toBe(5); // source +2+3
+    expect(await readLocalStock(store, 'p1', 'b2')).toBe(5); // dest -(2+3)
+  });
+
+  test('online: syncs to resolver and confirms (server_accepted)', async () => {
+    const call = vi.fn<CallResolveReversal>().mockResolvedValue({
+      ok: true,
+      idempotencyKey: 'rev:b1:transfer:T1:reverse',
+      status: 'confirmed',
+      serverReversalId: 'REV-T1',
+    });
+    const out = await executeTransferReversal(makeDeps({ isOnline: () => true, call }), transferInput);
+    expect(call).toHaveBeenCalledTimes(1);
+    expect(call.mock.calls[0][0]).toMatchObject({
+      actionType: 'transfer_reversal',
+      sourceDocumentType: 'transfer',
+      sourceDocumentId: 'T1',
+      branchId: 'b1',
+    });
+    expect(out.synced).toBe(true);
+    expect(out.status).toBe('server_accepted');
+  });
+
+  test('idempotency identity is stable for the same transfer/action', async () => {
+    const a = createInMemoryReversalStore();
+    const b = createInMemoryReversalStore();
+    const r1 = await executeTransferReversal(makeDeps({ store: a, isOnline: () => false }), transferInput);
+    const r2 = await executeTransferReversal(makeDeps({ store: b, isOnline: () => false }), transferInput);
+    expect(r1.intent.idempotencyKey).toBe(r2.intent.idempotencyKey);
+    expect(r1.intent.id).toBe(r2.intent.id);
+  });
+});
+
+describe('H6-D1: executeTransferReversal — fail-closed before any write', () => {
+  async function expectRejectedBeforeAnyWrite(
+    over: Partial<TransferReversalInput>,
+  ): Promise<TransferReversalEvidenceError> {
+    await store.transact(['stock'], 'readwrite', async (txn) => {
+      await txn.put('stock', 'p1::b1', { productId: 'p1', locationId: 'b1', quantity: 10 });
+      await txn.put('stock', 'p1::b2', { productId: 'p1', locationId: 'b2', quantity: 10 });
+    });
+    const call = vi.fn<CallResolveReversal>();
+    let caught: unknown;
+    try {
+      await executeTransferReversal(makeDeps({ isOnline: () => true, call }), { ...transferInput, ...over });
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(TransferReversalEvidenceError);
+    expect(call).not.toHaveBeenCalled(); // resolver never reached
+    expect(await listQueue(store)).toHaveLength(0); // no durable queue item
+    expect(await readLocalStock(store, 'p1', 'b1')).toBe(10); // source untouched
+    expect(await readLocalStock(store, 'p1', 'b2')).toBe(10); // dest untouched
+    return caught as TransferReversalEvidenceError;
+  }
+
+  test('empty items → empty_items', async () => {
+    expect((await expectRejectedBeforeAnyWrite({ items: [] })).code).toBe('empty_items');
+  });
+  test('missing productId → missing_product_id', async () => {
+    expect((await expectRejectedBeforeAnyWrite({ items: [{ productId: '', transferQty: 5 }] })).code).toBe('missing_product_id');
+  });
+  test('non-positive qty → non_positive_qty', async () => {
+    expect((await expectRejectedBeforeAnyWrite({ items: [{ productId: 'p1', transferQty: 0 }] })).code).toBe('non_positive_qty');
+  });
+  test('non-finite qty → non_finite_qty', async () => {
+    expect((await expectRejectedBeforeAnyWrite({ items: [{ productId: 'p1', transferQty: Number.NaN }] })).code).toBe('non_finite_qty');
+  });
+  test('same source/dest branch → same_branch', async () => {
+    expect((await expectRejectedBeforeAnyWrite({ toBranchId: 'b1' })).code).toBe('same_branch');
+  });
+  test('missing reason → missing_reason', async () => {
+    expect((await expectRejectedBeforeAnyWrite({ reason: '   ' })).code).toBe('missing_reason');
+  });
+  test('missing transferId → missing_transfer_id', async () => {
+    expect((await expectRejectedBeforeAnyWrite({ transferId: '' })).code).toBe('missing_transfer_id');
+  });
+});
+
+describe('H6-D1: executeTransferReversal — Staff authority (Blocker 2 mirror)', () => {
+  test('Staff is rejected BEFORE any queue write or local stock mutation', async () => {
+    await store.transact(['stock'], 'readwrite', async (txn) => {
+      await txn.put('stock', 'p1::b1', { productId: 'p1', locationId: 'b1', quantity: 10 });
+      await txn.put('stock', 'p1::b2', { productId: 'p1', locationId: 'b2', quantity: 10 });
+    });
+    const call = vi.fn<CallResolveReversal>();
+    await expect(
+      executeTransferReversal(makeDeps({ isOnline: () => true, call }), { ...transferInput, actorRole: 'staff' }),
+    ).rejects.toBeInstanceOf(OfflineReversalRejectedError);
+    expect(call).not.toHaveBeenCalled();
+    expect(await listQueue(store)).toHaveLength(0);
+    expect(await readLocalStock(store, 'p1', 'b1')).toBe(10);
+    expect(await readLocalStock(store, 'p1', 'b2')).toBe(10);
+  });
+});
+
+describe('H6-D1: assertTransferReversalInput is pure (throws, no side effects)', () => {
+  test('valid input passes; invalid throws TransferReversalEvidenceError', () => {
+    expect(() => assertTransferReversalInput(transferInput)).not.toThrow();
+    expect(() => assertTransferReversalInput({ ...transferInput, fromBranchId: '' })).toThrow(TransferReversalEvidenceError);
   });
 });

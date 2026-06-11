@@ -457,3 +457,230 @@ export async function executeReceivingReversal(
     evidenceSource,
   };
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Phase 7B-H6-D1 — LATENT queue-first Transfer Reversal executor.
+//
+// This mirrors `executeReceivingReversal` for the (H6-C-activated) `completed`
+// transfer reversal. It is intentionally NOT wired into any UI in this slice —
+// `TransferHistoryPage` / `AdminTransferPage` keep the legacy `cancelBranchTransfer`
+// path, and `decideReversalRoute('transfer')` is unchanged. The live route flip and
+// page migration are H6-D2 (separately authorized). Until then this is dead-but-tested
+// capability: it proves the dual-branch local-correction math and offline-queue
+// compatibility without changing any production behavior.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * A transfer line as needed to compute the reversal's original (dual-branch) stock
+ * effect. UNTRUSTED boundary value (Firestore subcollection) — validated fail-closed
+ * by {@link assertTransferReversalInput} before any queue write or local mutation.
+ */
+export type TransferReversalItem = {
+  productId: string;
+  /** Base units moved from source → destination on the original completed transfer. */
+  transferQty: number;
+  /**
+   * Exact source FIFO cuts persisted on the transfer item (lotId/cost/qty/receivedAtMs).
+   * SERVER-side evidence for authoritative source lot restoration. The client local
+   * correction is product×branch counter-based and does NOT replay FIFO — these are
+   * carried for audit fidelity only (lotId is not part of the local counter key).
+   */
+  sourceLotDetails?: readonly { lotId?: string | null }[] | null;
+};
+
+/** Everything the (future H6-D2) page will supply to reverse a completed transfer. */
+export type TransferReversalInput = {
+  transferId: string;
+  /** Source (origin) branch — the server checks ORIGIN-branch authority for transfers. */
+  fromBranchId: string;
+  /** Destination branch — where the transfer added stock. */
+  toBranchId: string;
+  actorRole: ReversalActorRole;
+  staffId: string;
+  reason: string;
+  note?: string;
+  items: readonly TransferReversalItem[];
+  /** Phase 7B-H5/H6: observed transfer `updatedAt` (ISO) for the H4 stale-client guard. */
+  observedDocumentUpdatedAt?: string | null;
+  /** Defaults to `reverse`. */
+  action?: ReversalAction;
+};
+
+/** Outcome handed back to the (future) page — same async-safe shape as receiving. */
+export type TransferReversalOutcome = {
+  intent: OfflineReversalIntent;
+  status: OfflineReversalStatus;
+  /** Server rejected + rollback unsafe → manual review (local correction preserved). */
+  manualReviewRequired: boolean;
+  /** True if an online sync to the resolver was attempted this call. */
+  synced: boolean;
+};
+
+/** Structured codes for an incomplete/malformed transfer reversal rejection. */
+export type TransferReversalEvidenceCode =
+  | 'missing_transfer_id'
+  | 'missing_from_branch'
+  | 'missing_to_branch'
+  | 'same_branch'
+  | 'missing_staff'
+  | 'missing_reason'
+  | 'missing_items'
+  | 'empty_items'
+  | 'missing_product_id'
+  | 'non_finite_qty'
+  | 'non_positive_qty';
+
+/** Honest user-facing message: an incomplete-evidence transfer reversal is refused, not faked. */
+export const TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE =
+  'ไม่สามารถยกเลิกการโอนย้ายได้ เนื่องจากข้อมูลโอนย้ายไม่สมบูรณ์ — กรุณาโหลดใหม่หรือติดต่อผู้ดูแลระบบ';
+
+/**
+ * Thrown when transfer reversal input is incomplete or malformed. Throwing (rather than
+ * coercing/dropping) guarantees NO queue write and NO local IndexedDB correction happen
+ * on incomplete data — the validation is all-or-nothing, mirroring the receiving gate.
+ */
+export class TransferReversalEvidenceError extends Error {
+  readonly code: TransferReversalEvidenceCode;
+  constructor(code: TransferReversalEvidenceCode, message: string) {
+    super(message);
+    this.name = 'TransferReversalEvidenceError';
+    this.code = code;
+  }
+}
+
+/**
+ * Fail-closed completeness gate. Rejects (throws) BEFORE any effects are built — and
+ * therefore before `createOfflineReversal` does any local correction or queue write —
+ * when required transfer data is missing/malformed. No invalid line is silently dropped.
+ */
+export function assertTransferReversalInput(
+  input: TransferReversalInput,
+): asserts input is TransferReversalInput {
+  if (typeof input.transferId !== 'string' || input.transferId.trim().length === 0) {
+    throw new TransferReversalEvidenceError('missing_transfer_id', TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
+  }
+  if (typeof input.fromBranchId !== 'string' || input.fromBranchId.trim().length === 0) {
+    throw new TransferReversalEvidenceError('missing_from_branch', TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
+  }
+  if (typeof input.toBranchId !== 'string' || input.toBranchId.trim().length === 0) {
+    throw new TransferReversalEvidenceError('missing_to_branch', TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
+  }
+  if (input.fromBranchId === input.toBranchId) {
+    throw new TransferReversalEvidenceError('same_branch', TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
+  }
+  if (typeof input.staffId !== 'string' || input.staffId.trim().length === 0) {
+    throw new TransferReversalEvidenceError('missing_staff', TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
+  }
+  if (typeof input.reason !== 'string' || input.reason.trim().length === 0) {
+    throw new TransferReversalEvidenceError('missing_reason', TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
+  }
+  if (input.items == null) {
+    throw new TransferReversalEvidenceError('missing_items', TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
+  }
+  if (!Array.isArray(input.items) || input.items.length === 0) {
+    throw new TransferReversalEvidenceError('empty_items', TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
+  }
+  for (const it of input.items) {
+    if (!it || typeof it.productId !== 'string' || it.productId.length === 0) {
+      throw new TransferReversalEvidenceError('missing_product_id', TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
+    }
+    if (typeof it.transferQty !== 'number' || !Number.isFinite(it.transferQty)) {
+      throw new TransferReversalEvidenceError('non_finite_qty', TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
+    }
+    if (it.transferQty <= 0) {
+      throw new TransferReversalEvidenceError('non_positive_qty', TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
+    }
+  }
+}
+
+/**
+ * The completed transfer's original DUAL-BRANCH stock effect, to be reversed:
+ *   • destination GAINED `+transferQty` (reversal negates → removes from dest), and
+ *   • source LOST `-transferQty` (reversal negates → restores to source).
+ * The reversal engine (`computeReversalDelta`) negates these into the local correction,
+ * and `aggregateDeltasByCounter` sums per product×branch — so multiple items/products
+ * aggregate naturally onto the correct branch counters. `lotId` is audit-only.
+ */
+export function buildTransferReversalEffects(
+  items: readonly TransferReversalItem[],
+  fromBranchId: string,
+  toBranchId: string,
+): OriginalStockEffect[] {
+  const effects: OriginalStockEffect[] = [];
+  for (const it of items) {
+    if (!it.transferQty) continue;
+    // Destination original GAIN (+qty) → reversal local correction becomes -qty.
+    effects.push({ productId: it.productId, locationId: toBranchId, lotId: null, quantity: it.transferQty });
+    // Source original LOSS (-qty) → reversal local correction becomes +qty.
+    const details = it.sourceLotDetails ?? null;
+    const sourceLotId =
+      details && details.length === 1 && typeof details[0]?.lotId === 'string' && details[0]!.lotId!.length > 0
+        ? details[0]!.lotId!
+        : null;
+    effects.push({ productId: it.productId, locationId: fromBranchId, lotId: sourceLotId, quantity: -it.transferQty });
+  }
+  return effects;
+}
+
+/**
+ * Execute a confirmed (completed) TRANSFER reversal, queue-first — the latent H6-D1
+ * counterpart of {@link executeReceivingReversal}:
+ *   1. Fail-closed validation of the transfer input — BEFORE any write.
+ *   2. Build the dual-branch original effects (dest `+qty`, source `-qty`).
+ *   3. `createOfflineReversal` — asserts authority (Staff → throws BEFORE any write),
+ *      applies the immediate local IndexedDB correction (dest `-qty`, source `+qty`),
+ *      and durably queues the intent (`sourceType: 'transfer'`, `branchId: fromBranchId`).
+ *   4. If online — sync to the server resolver. Network error stays `retryable_error`;
+ *      a definitive rejection becomes `manual_review_required` (fail-closed, no auto-rollback).
+ *
+ * NOT wired into any UI in this slice — see the H6-D1 banner above.
+ */
+export async function executeTransferReversal(
+  deps: ReversalCoordinatorDeps,
+  input: TransferReversalInput,
+): Promise<TransferReversalOutcome> {
+  const queueDeps: QueueDeps | undefined = deps.now ? { now: deps.now } : undefined;
+
+  // Fail-closed gate — nothing is queued or corrected on incomplete/malformed input.
+  assertTransferReversalInput(input);
+  const originalEffects = buildTransferReversalEffects(input.items, input.fromBranchId, input.toBranchId);
+  if (originalEffects.length === 0) {
+    // Defense-in-depth: every line was validated positive above, so unreachable.
+    throw new TransferReversalEvidenceError('empty_items', TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
+  }
+
+  const createInput: CreateReversalInput = {
+    // Origin branch scopes the idempotency key and matches the server's origin authority.
+    businessId: input.fromBranchId,
+    sourceType: 'transfer',
+    sourceId: input.transferId,
+    action: input.action ?? 'reverse',
+    createdByStaffId: input.staffId,
+    actorRole: input.actorRole,
+    branchId: input.fromBranchId,
+    reasonCode: input.reason,
+    reasonNote: input.note,
+    originalEffects,
+    // Phase 7B-H5/H6: thread the observed transfer `updatedAt` for the H4 stale guard.
+    observedDocumentUpdatedAt: input.observedDocumentUpdatedAt ?? null,
+  };
+
+  // Authority + immediate local correction + durable queue (atomic). A Staff actor
+  // throws OfflineReversalRejectedError here — nothing is written or corrected.
+  const intent = await createOfflineReversal(deps.store, createInput, queueDeps);
+
+  let current = intent;
+  let synced = false;
+  if (deps.isOnline()) {
+    const result = await syncOneReversal(deps.store, intent.id, deps.call, queueDeps ? { deps: queueDeps } : {});
+    synced = result.claimed;
+    if (result.intent) current = result.intent;
+  }
+
+  return {
+    intent: current,
+    status: current.status,
+    manualReviewRequired: current.status === 'manual_review_required',
+    synced,
+  };
+}
