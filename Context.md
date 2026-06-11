@@ -91,7 +91,9 @@ Phase 7B delivers a complete offline reversal lifecycle for Goods-Receiving and 
 
 **Current baseline before H6-E1:** `bb30881 feat(pos): wire ui to queue-first transfer reversal and retire legacy path`
 
-**Active slice:** Phase 7B-H6-E1 — Transfer `updatedAt` Stamping (timestamp-only; implemented, awaiting Codex review; not committed). `confirmBranchTransfer` and `devConfirmBranchTransfer` now stamp `updatedAt` at transfer completion (alongside the existing `createdAt`), so the H4/H6-C server stale-client guard has an authoritative baseline and the H6-D2 client capture (`observedDocumentUpdatedAt`) is reliably populated for new transfers — activating the transfer stale-client guard end-to-end with no page/coordinator/resolver change. Timestamp-only: NO evidence/checksum snapshot, NO resolver/offline-queue change, NO legacy backfill (existing docs stay fresh-by-default; server mutation remains authoritative). Transfer header evidence/checksum hardening is the future **H6-E2** slice.
+**Active slices (both uncommitted, awaiting Codex review):**
+- **Phase 7B-H6-E1 — Transfer `updatedAt` Stamping** (timestamp-only): `confirmBranchTransfer` and `devConfirmBranchTransfer` stamp `updatedAt` at transfer completion (alongside `createdAt`), activating the transfer stale-client guard end-to-end. Timestamp-only: no evidence/checksum snapshot, no resolver/offline-queue change, no legacy backfill.
+- **Phase 7B-H6-E2-A — Pure Transfer Evidence Builder + Dual-Branch Invariant** (latent): new pure file `src/lib/inventory/transferReversalEvidence.ts` with `buildTransferReversalEvidence` builder and `assertTransferReversalEvidenceCoversCompletion` invariant. Models both destination gain and source loss; derives `itemCount`/`totalQtyBase` from input; deterministic effect ordering; source lot identity audit-only (no multi-lot over-rejection). 41 tests prove the evidence math and dual-branch balance (including branch-direction binding). **No runtime wiring, no header write, no coordinator validation.** H6-E2-B (header write) and H6-E2-C (coordinator validation) are future slices.
 
 ### H6 Transfer State Model — Architecture Decision (CEO Option A)
 

@@ -1,14 +1,54 @@
-# Current Task Tracker — Phase 7B-H6-E1 (transfer updatedAt stamping)
+# Current Task Tracker — Phase 7B-H6-E2-A (pure transfer evidence builder)
 
 > Living checkpoint doc for agents. Detailed history: `docs/reports/latest-report.md` (do not duplicate long-form evidence here).
 
 ## Current active phase
 
-**Phase 7B-H6-E1: Transfer `updatedAt` Stamping (timestamp-only)**
-**Status:** **ACTIVE / IN PROGRESS — implemented, awaiting Codex review (not committed, not closed).**
-**Scope:** stamp `updatedAt` at transfer completion in `confirmBranchTransfer` (production) and `devConfirmBranchTransfer` (dev/mock) so the H4/H6-C server stale-client guard has an authoritative baseline and the H6-D2 client capture (`observedDocumentUpdatedAt`) is reliably populated for new transfers. Timestamp-only — NO evidence/checksum snapshot, NO server resolver change, NO UI/coordinator change, NO legacy backfill. `cancelBranchTransfer`/`editBranchTransfer` behavior unchanged (cancel already stamped `updatedAt`; edit creates via `confirmBranchTransfer`).
+**Phase 7B-H6-E2-A: Pure Transfer Evidence Builder + Dual-Branch Invariant**
+**Status:** **IMPLEMENTED — AWAITING CODEX REVIEW** (not committed; not closed).
+**Scope:** pure latent `buildTransferReversalEvidence` builder + `assertTransferReversalEvidenceCoversCompletion` invariant in `src/lib/inventory/transferReversalEvidence.ts`. No runtime wiring. No header write. No coordinator validation. No evidence persistence. H6-E2-B (header write) and H6-E2-C (coordinator validation) remain future slices.
 
-**Clean baseline before H6-E1:** `bb30881 feat(pos): wire ui to queue-first transfer reversal and retire legacy path` (H6-D2 — CLOSED / COMMITTED).
+**Stacked on H6-E1** (also implemented, awaiting Codex review, not committed): `confirmBranchTransfer` / `devConfirmBranchTransfer` stamp `updatedAt`. **Both H6-E1 and H6-E2-A are uncommitted.**
+
+**Clean baseline before H6-E1/E2-A:** `bb30881 feat(pos): wire ui to queue-first transfer reversal and retire legacy path` (H6-D2 — CLOSED / COMMITTED).
+
+---
+
+## Phase 7B-H6-E2-A — Pure Transfer Evidence Builder + Dual-Branch Invariant
+
+**Status:** **IMPLEMENTED — AWAITING CODEX REVIEW** (not committed; not closed).
+**Authorization:** CEO Option A — APPROVED (pure evidence builder + invariant only).
+
+### What was delivered
+
+- New pure file `src/lib/inventory/transferReversalEvidence.ts`:
+  - `TransferReversalEvidence` / `TransferReversalEvidenceEffect` / `TransferReversalEvidenceDirection` types.
+  - `TransferReversalEvidenceInput` / `TransferReversalEvidenceItemInput` builder input types (decoupled from runtime transfer types).
+  - `TransferReversalEvidenceError` (structured codes: builder + invariant).
+  - `buildTransferReversalEvidence(input)` — validates input fail-closed; produces one `dest_gain` + one `source_loss` effect per item (both positive qty); derives `itemCount` and `totalQtyBase` from input; sorts effects deterministically by `productId|direction|branchId|lotId`. Source lot identity is audit-only (populated for single-lot; null for multi-lot — no over-rejection gate).
+  - `assertTransferReversalEvidenceCoversCompletion(input, evidence)` — proves version/source, branch IDs, effect well-formedness, `itemCount` == `input.items.length`, `totalQtyBase` == sum(transferQty), and per-product dual-branch balance (dest_gain total == source_loss total == input qty for every product; extra products in effects also fail closed).
+- New test file `src/lib/inventory/transferReversalEvidence.test.ts`: 41 tests (36 original + 5 branch-direction invariant tests from the Codex blocker fix) covering all 24 required specification cases plus the branch-direction binding cases.
+
+### What is NOT in this slice
+
+No runtime wiring. No header write. No coordinator validation. No evidence persistence. `transferCrud.ts`, `reversalCoordinator.ts`, `transferDevMock.ts`, UI, server resolver, offline queue — all UNCHANGED. H6-E2-B (header write at completion) and H6-E2-C (coordinator validation) are future slices.
+
+### Files changed (code)
+
+```
+src/lib/inventory/transferReversalEvidence.ts       (NEW — pure builder + invariant)
+src/lib/inventory/transferReversalEvidence.test.ts  (NEW — 41 tests)
+```
+
+### Evidence
+
+- `npx vitest run transferReversalEvidence` → **41 passed**; `npx vitest run transferCrud` → **10 passed**; `npx vitest run reversalCoordinator` → **76 passed**; full web `npx vitest run` → **371 passed** (25 files); `npx tsc -b` → clean.
+- `npm --prefix functions run test:unit -- resolveReversal` → **43 passed** (resolver UNCHANGED).
+- `git diff --check` clean; `stash@{0}` untouched; no diff in any forbidden file.
+
+### Hidden risk
+
+H6-E2-A proves the evidence math but remains latent; it does not yet protect live queue-first local correction until a later write/validation slice is authorized.
 
 ---
 
