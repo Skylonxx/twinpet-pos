@@ -1,8 +1,13 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
+// Raw page/source text for the H6-D2 source-level mutual-exclusion checks (Vite `?raw`).
+import transferHistorySrc from '../../pages/inventory/TransferHistoryPage.tsx?raw';
+import adminTransferSrc from '../../pages/admin/AdminTransferPage.tsx?raw';
+import transferCrudSrc from './transferCrud.ts?raw';
 import {
   assertTransferReversalInput,
   buildReceivingReversalEffects,
   buildTransferReversalEffects,
+  canBranchReverseTransfer,
   decideReversalRoute,
   executeReceivingReversal,
   executeTransferReversal,
@@ -10,7 +15,6 @@ import {
   toObservedDocumentUpdatedAtIso,
   TransferReversalEvidenceError,
   validateReceivingHeaderEvidence,
-  TRANSFER_REVERSAL_DEFERRED_NOTE,
   type ReceivingReversalInput,
   type ReceivingReversalItem,
   type ReversalCoordinatorDeps,
@@ -64,14 +68,9 @@ beforeEach(() => {
 // ─── Pure routing / effect building ──────────────────────────────────────────
 
 describe('decideReversalRoute', () => {
-  test('receiving → queue-first; transfer → legacy executor', () => {
+  test('receiving → queue-first; transfer → queue-first (H6-D2 route flip)', () => {
     expect(decideReversalRoute('receiving')).toBe('receiving_queue_first');
-    expect(decideReversalRoute('transfer')).toBe('transfer_legacy_executor');
-  });
-
-  test('the transfer deferral note documents why completed transfers stay legacy', () => {
-    expect(TRANSFER_REVERSAL_DEFERRED_NOTE).toMatch(/sent.*received/);
-    expect(TRANSFER_REVERSAL_DEFERRED_NOTE).toMatch(/cancelBranchTransfer/);
+    expect(decideReversalRoute('transfer')).toBe('transfer_queue_first');
   });
 });
 
@@ -675,9 +674,9 @@ describe('H6-D1: buildTransferReversalEffects (dual-branch original effects)', (
   });
 });
 
-describe('H6-D1: executeTransferReversal — latent (no UI route change)', () => {
-  test('decideReversalRoute still returns the LEGACY executor for transfer (route NOT flipped)', () => {
-    expect(decideReversalRoute('transfer')).toBe('transfer_legacy_executor');
+describe('H6-D1/D2: executeTransferReversal — queue-first transfer reversal', () => {
+  test('decideReversalRoute routes transfer to the queue-first executor (H6-D2 flip)', () => {
+    expect(decideReversalRoute('transfer')).toBe('transfer_queue_first');
   });
 
   test('creates a transfer intent: sourceType=transfer, branchId=fromBranchId, observed preserved', async () => {
@@ -783,6 +782,9 @@ describe('H6-D1: executeTransferReversal — fail-closed before any write', () =
   test('missing productId → missing_product_id', async () => {
     expect((await expectRejectedBeforeAnyWrite({ items: [{ productId: '', transferQty: 5 }] })).code).toBe('missing_product_id');
   });
+  test('whitespace-only productId → missing_product_id (D2-α tightening)', async () => {
+    expect((await expectRejectedBeforeAnyWrite({ items: [{ productId: '   ', transferQty: 5 }] })).code).toBe('missing_product_id');
+  });
   test('non-positive qty → non_positive_qty', async () => {
     expect((await expectRejectedBeforeAnyWrite({ items: [{ productId: 'p1', transferQty: 0 }] })).code).toBe('non_positive_qty');
   });
@@ -791,6 +793,9 @@ describe('H6-D1: executeTransferReversal — fail-closed before any write', () =
   });
   test('same source/dest branch → same_branch', async () => {
     expect((await expectRejectedBeforeAnyWrite({ toBranchId: 'b1' })).code).toBe('same_branch');
+  });
+  test('trim-equal source/dest branch ids → same_branch (D2-α tightening)', async () => {
+    expect((await expectRejectedBeforeAnyWrite({ fromBranchId: 'b1 ', toBranchId: ' b1' })).code).toBe('same_branch');
   });
   test('missing reason → missing_reason', async () => {
     expect((await expectRejectedBeforeAnyWrite({ reason: '   ' })).code).toBe('missing_reason');
@@ -821,5 +826,121 @@ describe('H6-D1: assertTransferReversalInput is pure (throws, no side effects)',
   test('valid input passes; invalid throws TransferReversalEvidenceError', () => {
     expect(() => assertTransferReversalInput(transferInput)).not.toThrow();
     expect(() => assertTransferReversalInput({ ...transferInput, fromBranchId: '' })).toThrow(TransferReversalEvidenceError);
+  });
+});
+
+// ─── Phase 7B-H6-D2: UI route wiring & legacy-path retirement (source-level) ───
+// The two transfer cancellation PAGES carry a heavy runtime harness (Firebase,
+// react-router, AuthProvider, modal stack), so the legacy-path-retirement and
+// queue-first-wiring guarantees are proven by inspecting the page SOURCE for
+// import/call shape rather than mounting the components. This is the deliberately
+// targeted approach noted in the H6-D2 self-review (page-harness limitation).
+describe('H6-D2: legacy cancelBranchTransfer retired from the two cancel UI surfaces', () => {
+  const transferHistory = transferHistorySrc;
+  const adminTransfer = adminTransferSrc;
+  const transferCrud = transferCrudSrc;
+
+  // A named-import binding of cancelBranchTransfer, e.g. `import { cancelBranchTransfer } from ...`.
+  const importsCancel = /import\s+\{[^}]*\bcancelBranchTransfer\b[^}]*\}/;
+  // A call of cancelBranchTransfer(...) — distinct from a prose mention in a comment.
+  const callsCancel = /\bcancelBranchTransfer\s*\(/;
+
+  test('TransferHistoryPage neither imports nor calls cancelBranchTransfer', () => {
+    expect(transferHistory).not.toMatch(importsCancel);
+    expect(transferHistory).not.toMatch(callsCancel);
+    // It no longer pulls anything from transferCrud at all.
+    expect(transferHistory).not.toMatch(/from\s+['"][^'"]*\/transferCrud['"]/);
+  });
+
+  test('AdminTransferPage neither imports nor calls cancelBranchTransfer (but keeps editBranchTransfer)', () => {
+    expect(adminTransfer).not.toMatch(importsCancel);
+    expect(adminTransfer).not.toMatch(callsCancel);
+    expect(adminTransfer).toMatch(/import\s+\{\s*editBranchTransfer\s*\}\s+from\s+['"][^'"]*\/transferCrud['"]/);
+    expect(adminTransfer).toMatch(/\beditBranchTransfer\s*\(/); // edit flow still calls it
+  });
+
+  test('both pages route the confirmed cancel through the queue-first executeTransferReversal', () => {
+    expect(transferHistory).toMatch(/executeTransferReversal\(/);
+    expect(adminTransfer).toMatch(/executeTransferReversal\(/);
+  });
+
+  test('both pages build the executor payload with the required transfer fields', () => {
+    for (const src of [transferHistory, adminTransfer]) {
+      expect(src).toMatch(/transferId:\s*cancelTarget\.id/);
+      expect(src).toMatch(/fromBranchId:\s*cancelTarget\.fromBranchId/);
+      expect(src).toMatch(/toBranchId:\s*cancelTarget\.toBranchId/);
+      expect(src).toMatch(/sourceLotDetails:\s*it\.sourceLotDetails/);
+      expect(src).toMatch(/transferQty:\s*it\.transferQty/);
+      // observedDocumentUpdatedAt captured (when available) via the defensive converter.
+      expect(src).toMatch(/observedDocumentUpdatedAt:\s*toObservedDocumentUpdatedAtIso\(cancelTarget\.updatedAt\)/);
+    }
+    // TransferHistory threads the note; Admin's dialog supplies reason only.
+    expect(transferHistory).toMatch(/\breason,/);
+    expect(transferHistory).toMatch(/\bnote,/);
+    expect(adminTransfer).toMatch(/\breason,/);
+  });
+
+  test('editBranchTransfer in transferCrud still preserves its internal cancelBranchTransfer step', () => {
+    expect(transferCrud).toMatch(/export async function editBranchTransfer/);
+    // The cancel-then-recreate edit path must keep awaiting cancelBranchTransfer internally.
+    const editBody = transferCrud.slice(transferCrud.indexOf('export async function editBranchTransfer'));
+    expect(editBody).toMatch(/await cancelBranchTransfer\(/);
+  });
+});
+
+// ─── Phase 7B-H6-D2 (Codex blocker fix): origin-branch preflight gate ──────────
+
+describe('canBranchReverseTransfer (origin-branch preflight, pure + fail-closed)', () => {
+  test('true only when the active branch trim-equals the transfer origin (fromBranchId)', () => {
+    expect(canBranchReverseTransfer('b1', 'b1')).toBe(true);
+    expect(canBranchReverseTransfer(' b1 ', 'b1')).toBe(true); // trim-tolerant
+  });
+  test('false for a destination-only branch (current is toBranchId, not fromBranchId)', () => {
+    // The transfer feed lists incoming transfers too; a dest-branch user must be blocked.
+    expect(canBranchReverseTransfer('b2', 'b1')).toBe(false);
+  });
+  test('fail-closed for any missing / empty / whitespace branch id', () => {
+    expect(canBranchReverseTransfer(null, 'b1')).toBe(false);
+    expect(canBranchReverseTransfer(undefined, 'b1')).toBe(false);
+    expect(canBranchReverseTransfer('', 'b1')).toBe(false);
+    expect(canBranchReverseTransfer('   ', 'b1')).toBe(false);
+    expect(canBranchReverseTransfer('b1', null)).toBe(false);
+    expect(canBranchReverseTransfer('b1', '')).toBe(false);
+    expect(canBranchReverseTransfer('b1', '   ')).toBe(false);
+  });
+});
+
+describe('H6-D2 blocker fix: TransferHistoryPage gates the reversal on origin-branch authority', () => {
+  test('TransferHistoryPage imports and uses canBranchReverseTransfer', () => {
+    expect(transferHistorySrc).toMatch(/canBranchReverseTransfer/);
+  });
+
+  test('the modal cancel entry point is gated by canBranchReverseTransfer(branchId, …fromBranchId)', () => {
+    // onCancelTransfer is only wired when the active branch is the transfer origin, so a
+    // destination-branch user viewing an incoming transfer never gets a reversal entry point.
+    expect(transferHistorySrc).toMatch(
+      /onCancelTransfer=\{[\s\S]*canBranchReverseTransfer\(branchId,\s*detail\.fromBranchId\)[\s\S]*setCancelTarget\(detail\)/,
+    );
+  });
+
+  test('handleCancel hard-guards on origin branch BEFORE reaching executeTransferReversal', () => {
+    const handlerStart = transferHistorySrc.indexOf('const handleCancel');
+    const executorCall = transferHistorySrc.indexOf('executeTransferReversal(', handlerStart);
+    const guard = transferHistorySrc.indexOf('canBranchReverseTransfer(branchId, cancelTarget.fromBranchId)', handlerStart);
+    expect(handlerStart).toBeGreaterThanOrEqual(0);
+    expect(guard).toBeGreaterThanOrEqual(0);
+    expect(executorCall).toBeGreaterThanOrEqual(0);
+    // The fail-closed guard must appear BEFORE the executor call in the handler body.
+    expect(guard).toBeLessThan(executorCall);
+    // And the guard early-returns (no local correction / queue write on the dest path).
+    const guardBlock = transferHistorySrc.slice(guard, executorCall);
+    expect(guardBlock).toMatch(/return;/);
+  });
+
+  test('AdminTransferPage is a global-admin surface and does NOT add the branch-origin gate', () => {
+    // Admin tokens have cross-branch authority server-side (hasBranchAccess → true), so the
+    // HQ surface must remain able to reverse any branch transfer.
+    expect(adminTransferSrc).not.toMatch(/canBranchReverseTransfer/);
+    expect(adminTransferSrc).toMatch(/executeTransferReversal\(/);
   });
 });

@@ -12,11 +12,13 @@
  *    `cancelReceiving` for the confirmed path. Manager/Admin only — a Staff intent
  *    is rejected BEFORE any local write (the queue cannot satisfy the resolver's
  *    server-verified PIN contract, and a raw Staff PIN must never be stored).
- *  - TRANSFER (completed) → LEGACY executor only. The current server resolver only
- *    reverses transfers in state `sent`/`received` and rejects `completed` by
- *    design, so completed transfers are intentionally NOT routed through the
- *    resolver/queue here. The page keeps `cancelBranchTransfer` behind the modal
- *    gate. See {@link TRANSFER_REVERSAL_DEFERRED_NOTE}.
+ *  - TRANSFER (completed) → queue-first (Phase 7B-H6): `createOfflineReversal` applies
+ *    the immediate DUAL-BRANCH local IndexedDB correction (dest `-qty`, source `+qty`)
+ *    + durably queues the intent, then (if online) syncs to the H6-C server resolver,
+ *    which reverses `completed` transfers under ORIGIN-branch authority. Wired live in
+ *    H6-D2: this supersedes the legacy direct `cancelBranchTransfer` for the confirmed
+ *    UI path. `cancelBranchTransfer` survives ONLY as an internal step of
+ *    `editBranchTransfer` (cancel-then-recreate), never from a cancel UI surface.
  *
  * This module owns NO UI and NO modal state — the page owns the confirmation gate
  * (no-instant-execution) and calls in here only on explicit confirm.
@@ -44,26 +46,41 @@ import type {
 } from '../pos/offline/offlineReversalTypes';
 import { REVERSAL_EVIDENCE_VERSION } from '../receiving/reversalEvidence';
 
-/**
- * Why completed-transfer reversal is NOT queue-first in this phase. Surfaced in
- * the page UI + report so the deferral is explicit, not silently dropped.
- */
-export const TRANSFER_REVERSAL_DEFERRED_NOTE =
-  'Completed-transfer reversal is not yet resolver-compatible (the Phase 7B-3D-2 ' +
-  'resolver only reverses `sent`/`received`). Completed transfers stay on the legacy ' +
-  '`cancelBranchTransfer` executor behind the confirmation gate; queue-first transfer ' +
-  'reversal is deferred until the transfer lifecycle emits `sent`/`received` or the ' +
-  'resolver contract is extended by an approved future phase.';
-
 /** Which execution path a confirmed destructive action takes. */
-export type ReversalRoute = 'receiving_queue_first' | 'transfer_legacy_executor';
+export type ReversalRoute = 'receiving_queue_first' | 'transfer_queue_first';
 
 /**
- * Pure routing decision. Receiving goes queue-first; transfer uses the legacy
- * executor (completed transfers are not resolver-compatible — see the note above).
+ * Pure routing decision. BOTH receiving and (completed) transfer now go queue-first:
+ * the H6-C server resolver reverses `completed` transfers under origin-branch authority,
+ * so the legacy direct `cancelBranchTransfer` path is retired from the cancel UI surfaces
+ * (Phase 7B-H6-D2). `cancelBranchTransfer` remains only inside `editBranchTransfer`.
  */
 export function decideReversalRoute(sourceType: ReversalSourceType): ReversalRoute {
-  return sourceType === 'receiving' ? 'receiving_queue_first' : 'transfer_legacy_executor';
+  return sourceType === 'receiving' ? 'receiving_queue_first' : 'transfer_queue_first';
+}
+
+/**
+ * Phase 7B-H6-D2 (Codex blocker fix) — ORIGIN-branch preflight for a branch-scoped
+ * Transfer Reversal. A branch-scoped Transfer History feed lists BOTH outgoing
+ * (`fromBranchId`) and incoming (`toBranchId`) transfers, but the queue-first executor
+ * applies an immediate local IndexedDB correction + durable queue write BEFORE any
+ * server sync and treats `fromBranchId` as the authority branch. Relying on the server
+ * to reject a destination-branch caller is therefore NOT enough — the local correction
+ * already happened. A branch-scoped user may only queue a reversal when their active
+ * branch IS the transfer's origin (source) branch.
+ *
+ * Pure + fail-closed: any missing/empty/whitespace id, or a current branch that is not
+ * trim-equal to the origin branch, returns `false` (no reversal). This is NOT for the
+ * global Admin surface — an `admin` token has cross-branch authority server-side
+ * (`hasBranchAccess` → `true`), so `AdminTransferPage` does not use this gate.
+ */
+export function canBranchReverseTransfer(
+  currentBranchId: string | null | undefined,
+  fromBranchId: string | null | undefined,
+): boolean {
+  if (typeof currentBranchId !== 'string' || currentBranchId.trim().length === 0) return false;
+  if (typeof fromBranchId !== 'string' || fromBranchId.trim().length === 0) return false;
+  return currentBranchId.trim() === fromBranchId.trim();
 }
 
 /**
@@ -459,15 +476,19 @@ export async function executeReceivingReversal(
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Phase 7B-H6-D1 — LATENT queue-first Transfer Reversal executor.
+// Phase 7B-H6 — queue-first Transfer Reversal executor.
 //
-// This mirrors `executeReceivingReversal` for the (H6-C-activated) `completed`
-// transfer reversal. It is intentionally NOT wired into any UI in this slice —
-// `TransferHistoryPage` / `AdminTransferPage` keep the legacy `cancelBranchTransfer`
-// path, and `decideReversalRoute('transfer')` is unchanged. The live route flip and
-// page migration are H6-D2 (separately authorized). Until then this is dead-but-tested
-// capability: it proves the dual-branch local-correction math and offline-queue
-// compatibility without changing any production behavior.
+// Mirrors `executeReceivingReversal` for the (H6-C-activated) `completed` transfer
+// reversal. WIRED LIVE in H6-D2: `decideReversalRoute('transfer')` now returns
+// `transfer_queue_first`, and `TransferHistoryPage` / `AdminTransferPage` call this
+// executor behind their confirmation gates instead of the legacy direct
+// `cancelBranchTransfer`. `cancelBranchTransfer` survives ONLY as an internal step of
+// `editBranchTransfer` (cancel-then-recreate). Proves the dual-branch local-correction
+// math and offline-queue compatibility.
+//
+// Known limitation (H6-E): `confirmBranchTransfer` may not reliably stamp `updatedAt` at
+// creation yet, so `observedDocumentUpdatedAt` is THREADED WHEN PRESENT but not required —
+// full stale-client protection for transfers lands in the H6-E hardening slice.
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
@@ -565,7 +586,7 @@ export function assertTransferReversalInput(
   if (typeof input.toBranchId !== 'string' || input.toBranchId.trim().length === 0) {
     throw new TransferReversalEvidenceError('missing_to_branch', TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
   }
-  if (input.fromBranchId === input.toBranchId) {
+  if (input.fromBranchId.trim() === input.toBranchId.trim()) {
     throw new TransferReversalEvidenceError('same_branch', TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
   }
   if (typeof input.staffId !== 'string' || input.staffId.trim().length === 0) {
@@ -581,7 +602,7 @@ export function assertTransferReversalInput(
     throw new TransferReversalEvidenceError('empty_items', TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
   }
   for (const it of input.items) {
-    if (!it || typeof it.productId !== 'string' || it.productId.length === 0) {
+    if (!it || typeof it.productId !== 'string' || it.productId.trim().length === 0) {
       throw new TransferReversalEvidenceError('missing_product_id', TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
     }
     if (typeof it.transferQty !== 'number' || !Number.isFinite(it.transferQty)) {
@@ -633,7 +654,8 @@ export function buildTransferReversalEffects(
  *   4. If online — sync to the server resolver. Network error stays `retryable_error`;
  *      a definitive rejection becomes `manual_review_required` (fail-closed, no auto-rollback).
  *
- * NOT wired into any UI in this slice — see the H6-D1 banner above.
+ * Wired live in H6-D2 — called by the transfer cancellation pages behind their
+ * confirmation gates (see the banner above).
  */
 export async function executeTransferReversal(
   deps: ReversalCoordinatorDeps,

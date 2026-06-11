@@ -1,9 +1,51 @@
 # Latest Report
 
 > Rolling "latest report" for the stock-write security workstream. Updated at each phase boundary.
-> **Current state:** **Phase 7B-H6-C — Server Resolver Activation + Tests** (implemented, awaiting Codex review; uncommitted). Clean baseline before H6-C: `7bd74c1 docs: record transfer reversal state model architecture decision`. H6-C activates the dormant transfer reversal resolver for the live model — `completed` is the reversible state (H6-B Option A), eligibility centralized in `isTransferStatusReversible`, admitted only into the existing strict guards. Server resolver + tests only; no client/UI/offline-queue change (latent until future H6-D). Functions suite 112 passed; build clean.
+> **Current state:** **Phase 7B-H6-D2 — UI Route Wiring & Legacy Path Retirement** (implemented + Codex blocker FIXED; awaiting Codex re-review; uncommitted). Clean baseline before H6-D2: `4aa8065 feat(pos): implement latent queue-first transfer reversal executor`. H6-D2 flips `decideReversalRoute('transfer')` to `transfer_queue_first` and migrates the two transfer cancellation UI surfaces (`TransferHistoryPage`, `AdminTransferPage`) from the legacy direct `cancelBranchTransfer` to the queue-first `executeTransferReversal`; D2-α removed the stale `TRANSFER_REVERSAL_DEFERRED_NOTE` and tightened whitespace validation. **Codex blocker fix:** a pure fail-closed `canBranchReverseTransfer` origin-branch preflight gates both the modal entry point and `handleCancel` in the branch-scoped `TransferHistoryPage`, so a destination-only branch user can never queue/local-correct a source-authoritative reversal; `AdminTransferPage` (global-admin) is intentionally ungated. `transferCrud.ts` untouched (`cancelBranchTransfer` stays internal to `editBranchTransfer`). Server resolver unchanged. Web suite 328 passed; `tsc -b` clean; functions `resolveReversal` 43 passed. **Known limitation:** transfer `observedDocumentUpdatedAt` is threaded when present but not required (full stale-client coverage deferred to H6-E).
+>
+> **Prior state:** **Phase 7B-H6-C — Server Resolver Activation + Tests** (CLOSED / COMMITTED — `68f46e2`) then **H6-D1 — latent queue-first transfer executor** (COMMITTED — `4aa8065`). H6-C activated the dormant transfer reversal resolver for the live model — `completed` is the reversible state (H6-B Option A), eligibility centralized in `isTransferStatusReversible`, admitted only into the existing strict guards. H6-D1 added the latent `executeTransferReversal` (dual-branch, queue-first) but did NOT wire it into any UI — superseded by H6-D2.
 >
 > **Prior state:** **Phase 7B-D4 — Docs/Context Sync After H5 Closure** (docs-only; not yet committed). H5 CLOSED / COMMITTED (`4762d97` — `feat(pos): wire client observation timestamp for reversals`; CEO Option B — APPROVED WITH NOTES). Post-commit working tree was **clean**. `stash@{0}` present and untouched. No forbidden areas touched. **End-to-End Receiving Reversal Hardening is functionally complete** (H4 server-side stale-client guard + H5 client/offline timestamp payload wiring). D3 closed and committed (`fb4c3b0`). H4 closed and committed (`4da7757`). H3 closed and committed (`4d69143`). D1 closed and committed (`dacccd1`). H2 closed and committed (`8b48513`). **Next after D4:** Phase 7B-H6 — Transfer Reversal Planning / Environment Audit (read-only planning only; no code changes; no implementation until Tech Lead approves).
+
+## Phase 7B-H6-D2: UI Route Wiring & Legacy Path Retirement (IMPLEMENTED + BLOCKER FIXED — AWAITING CODEX RE-REVIEW)
+
+**Status:** implemented + Codex blocker fixed; not committed; not closed. Authorization: CEO Option A — APPROVED. Clean baseline before H6-D2: `4aa8065`.
+
+### Codex blocker fix — origin-branch authority gate
+
+**Codex returned FAIL:** `TransferHistoryPage` lists both outgoing (`fromBranchId`) and incoming (`toBranchId`) transfers, and the queue-first executor applies the local IndexedDB correction + queue write BEFORE server sync, using `fromBranchId` as the authority branch — so a destination-branch user could locally apply/queue a reversal for an origin branch they don't control (server would only reject it afterwards). **Fix:** new pure, fail-closed predicate `canBranchReverseTransfer(currentBranchId, fromBranchId)` (`reversalCoordinator.ts`) — `true` only when the active branch trim-equals the transfer origin, `false` for any missing/empty/whitespace id or a destination-only branch. `TransferHistoryPage` uses it to gate (a) the modal entry point — `onCancelTransfer` is only wired when active branch === origin, so an incoming transfer offers no reversal control — and (b) `handleCancel`, which hard early-returns (with a Thai "only the source branch can reverse" toast) BEFORE `executeTransferReversal`, so no local correction or queue write occurs on the destination path. `AdminTransferPage` is the HQ global-admin surface (server `hasBranchAccess` returns `true` for an `admin` token), so it intentionally remains ungated. Verified against the server model: `resolveTransferReversal` checks origin-branch authority via `checkActorAuthority(..., fromBranchId)` and `hasBranchAccess` grants admins all branches.
+
+### What was added / changed
+
+- **D2-α prerequisite cleanup** (`reversalCoordinator.ts`):
+  - Removed the stale `TRANSFER_REVERSAL_DEFERRED_NOTE` constant + its JSDoc/test references. After H6-C (resolver activation) and H6-D1 (latent executor) its claim that completed transfers were not resolver-compatible was false. The module doc-comment + H6-D1 banner were refreshed to the queue-first-live wording.
+  - Tightened `assertTransferReversalInput`: whitespace-only `productId` now fails closed as `missing_product_id` (`.trim()` check); trim-equal `fromBranchId`/`toBranchId` now fail closed as `same_branch`.
+- **D2-β UI route wiring:**
+  - `decideReversalRoute('transfer')` now returns `transfer_queue_first` (and `transfer_legacy_executor` is removed from the `ReversalRoute` union).
+  - `TransferHistoryPage` + `AdminTransferPage` confirmed-cancel handlers call `executeTransferReversal(createDefaultReversalCoordinatorDeps(), …)` queue-first. Each fetches transfer items fresh via `fetchTransferItems(cancelTarget.id)` and builds the payload: `transferId`, `fromBranchId`, `toBranchId`, mapped items (`productId`/`transferQty`/`sourceLotDetails`), `reason` (+ `note` on TransferHistory), `actorRole: user.role`, `staffId`, and `observedDocumentUpdatedAt: toObservedDocumentUpdatedAtIso(cancelTarget.updatedAt)`. Outcome wording mirrors the receiving reversal UX (manual-review / server-accepted / queued-offline).
+  - Legacy `cancelBranchTransfer` import + call removed from BOTH pages. `AdminTransferPage` keeps its `editBranchTransfer` import/use; `transferCrud.ts` is untouched, so `editBranchTransfer` still performs its internal `cancelBranchTransfer` cancel-then-recreate step.
+
+### Tests (`reversalCoordinator.test.ts`)
+
+- `decideReversalRoute('transfer')` → `transfer_queue_first` (route flip); the H6-D1 "route NOT flipped" assertion inverted accordingly.
+- New D2-α validation cases: whitespace-only `productId` → `missing_product_id`; trim-equal branch ids → `same_branch`.
+- New H6-D2 **source-level mutual-exclusion** suite (via Vite `?raw` imports of the two pages + `transferCrud.ts`): neither page imports/calls `cancelBranchTransfer`; both call `executeTransferReversal` with the required payload fields; `AdminTransferPage` keeps `editBranchTransfer`; `editBranchTransfer` in `transferCrud.ts` still awaits `cancelBranchTransfer` internally. (Page components carry a heavy Firebase/router/auth/modal harness, so the guarantees are proven by source inspection rather than mounting — the deliberate D2 limitation.)
+
+### Evidence (post blocker fix)
+
+- `npx vitest run reversalCoordinator` → **76 passed**; full web `npx vitest run` → **328 passed** (24 files); `npx tsc -b` → clean.
+- `npm --prefix functions run test:unit -- resolveReversal` → **43 passed** (server resolver unchanged — regression green).
+- `git diff --check` clean; `stash@{0}` untouched; no forbidden areas touched.
+
+### Out of scope (unchanged)
+
+Server resolver (`functions/src/resolveReversal.ts(.test.ts)`), offline-queue schema, Firestore rules, receiving/POS/cart/checkout/returns/RTV, `transferCrud.ts` (`cancelBranchTransfer`/`editBranchTransfer` behavior), transfer header evidence/checksum snapshot, `updatedAt` stamping at transfer completion (H6-E), `sent→received` lifecycle refactor.
+
+### Hidden risk
+
+Page-component guarantees are proven by source-level import/call regex inspection (the pages carry a heavy runtime harness), so a future refactor re-introducing a legacy `cancelBranchTransfer` call through an alias or indirection could evade the guards without failing the suite.
+
+---
 
 ## Phase 7B-H6-C: Server Resolver Activation + Tests (IMPLEMENTED — AWAITING CODEX REVIEW)
 
@@ -93,7 +135,7 @@ CEO Option A approved. D4 executing immediately after H5 closure.
 
 ### Out of scope (unchanged)
 
-Transfer wiring (legacy executor / dormant resolver path); manual-review server calls (local-only); global Admin UI; multi-device propagation; POS/cart/checkout/returns/RTV; Firestore rules; `functions/src/resolveReversal.ts(.test.ts)`.
+Transfer wiring (out of scope for that phase; at that time the legacy executor / dormant resolver path — since superseded by H6-C activation, H6-D1 executor, and H6-D2 UI wiring); manual-review server calls (local-only); global Admin UI; multi-device propagation; POS/cart/checkout/returns/RTV; Firestore rules; `functions/src/resolveReversal.ts(.test.ts)`.
 
 ### Hidden risk
 
@@ -344,7 +386,7 @@ Track A's receiving-reversal gate validated the loaded item subcollection but st
 ### Still deferred (not claimed closed)
 
 - Backfill of `reversalEvidence` onto **pre-H1 historical records** (they use the strict legacy fallback by design).
-- Completed-transfer queue-first reversal; `AdminReceivingPage` / `AdminTransferPage` wiring; `ReceivingVoidDialog → DestructiveConfirmModal` standardization — all unchanged/deferred.
+- Completed-transfer reversal is **no longer deferred** *(historical note from this earlier phase; since delivered)*: H6-C activated the server resolver for current-model `completed` transfers under strict guards, H6-D1 added the latent queue-first executor, and H6-D2 wires `TransferHistoryPage`/`AdminTransferPage` transfer reversal to queue-first (legacy direct cancel retired from those surfaces). Remaining unrelated deferred items, if still applicable: `AdminReceivingPage` wiring and `ReceivingVoidDialog → DestructiveConfirmModal` standardization.
 
 ### Boundaries preserved
 
@@ -359,7 +401,7 @@ No transfer lifecycle, POS destructive-confirm, POS overlay, server-resolver, Fi
 
 - **POS Clear Cart / Cancel Parked Order** are **modal-confirmed** (`DestructiveConfirmModal` / suspended-bill modals) — no `window.confirm` remains in the POS safety path. Covered by `tests/pos-safety.spec.ts` (2 passing).
 - **`ReceivingEditPage`** routes a confirmed void through **queue-first `executeReceivingReversal`** behind the existing **`ReceivingVoidDialog`** (no instant execution; the legacy direct `cancelReceiving` is off the confirmed path). Receiving **evidence is fail-closed before any queue write / local correction** (`assertReceivingReversalEvidence` — missing/empty/malformed items, missing `lotId`, non-finite or `≤ 0` `qtyBase` all reject all-or-nothing). A Staff actor is rejected before any write.
-- **`TransferHistoryPage`** is **modal-gated with `DestructiveConfirmModal`**; on confirm it still runs the **legacy `cancelBranchTransfer`** for **completed** transfers. Completed transfers are **NOT** routed through the resolver/offline queue (the resolver only reverses `sent`/`received`).
+- **`TransferHistoryPage`** is **modal-gated with `DestructiveConfirmModal`**; on confirm it routes the cancel through the **queue-first `executeTransferReversal`** (Phase 7B-H6-D2 — supersedes the prior legacy `cancelBranchTransfer` path described in earlier audits). `AdminTransferPage` was migrated identically. The H6-C server resolver reverses `completed` transfers under origin-branch authority.
 - **POS inventory now overlays pending local reversal deltas** (NEW — this audit's Blocker 1 fix). `inventoryRepository.getInventorySnapshot` presents `visible stock = Firestore productStocks snapshot + pending reversal deltas`, so the queue's immediate local correction is reflected in the grid instead of being invisible until server sync.
 
 ### POS-visible reversal overlay (Blocker 1 fix)
@@ -379,8 +421,8 @@ No transfer lifecycle, POS destructive-confirm, POS overlay, server-resolver, Fi
 
 ### Still deferred (not claimed closed)
 
-- **Completed-transfer queue-first reversal** — deferred until the resolver contract covers `completed` or the transfer lifecycle emits `sent`/`received`.
-- **`AdminReceivingPage` / `AdminTransferPage`** reversal integration — deferred.
+- **Completed-transfer queue-first reversal** — *(historical note from this earlier phase; SINCE DELIVERED)* H6-C activated the server resolver for `completed` transfers under strict guards, H6-D1 added the latent queue-first executor, and H6-D2 wired the targeted UI surfaces (legacy direct cancel retired from them). H6-E remains pending for reliable `updatedAt`/evidence hardening.
+- **`AdminReceivingPage`** reversal integration — deferred. (**`AdminTransferPage`** transfer-reversal integration was since delivered in H6-D2.)
 - **Receiving header checksum / itemCount / original-effects snapshot** hardening (defence against a silently truncated item subcollection) — future hardening.
 - **Staff online-PIN receiving reversal** — out of scope (Staff rejected before any offline write).
 - **`ReceivingVoidDialog` → `DestructiveConfirmModal`** UI standardization — deferred.

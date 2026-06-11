@@ -3,7 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { fetchAllBranches } from '../../lib/admin/branchManagement';
 import { getBranchLabel, seedBranchLabelCache } from '../../lib/branches';
 import { useAuth } from '../../lib/hooks/useAuth';
-import { cancelBranchTransfer, editBranchTransfer } from '../../lib/inventory/transferCrud';
+import { editBranchTransfer } from '../../lib/inventory/transferCrud';
+import {
+  createDefaultReversalCoordinatorDeps,
+  executeTransferReversal,
+  toObservedDocumentUpdatedAtIso,
+} from '../../lib/inventory/reversalCoordinator';
 import {
   fetchAllTransfers,
   fetchTransferItems,
@@ -127,20 +132,44 @@ export default function AdminTransferPage() {
     setDetailItems([]);
   }, []);
 
+  // Phase 7B-H6-D2: the confirmed cancel routes through the QUEUE-FIRST transfer
+  // reversal executor (immediate dual-branch local IndexedDB correction + durable
+  // queue, synced to the H6-C server resolver when online), retiring the legacy
+  // direct `cancelBranchTransfer` from this UI surface. `editBranchTransfer` keeps
+  // its own internal `cancelBranchTransfer` step (cancel-then-recreate) untouched.
+  // Items are fetched fresh so the executor always has complete dual-branch evidence.
   const handleCancel = useCallback(
     async (reason: string) => {
       if (!cancelTarget || !user) return;
       setBusy(true);
       try {
-        await cancelBranchTransfer({
+        const items = await fetchTransferItems(cancelTarget.id);
+        const outcome = await executeTransferReversal(createDefaultReversalCoordinatorDeps(), {
           transferId: cancelTarget.id,
+          fromBranchId: cancelTarget.fromBranchId,
+          toBranchId: cancelTarget.toBranchId,
+          actorRole: user.role,
           staffId: user.id,
-          staffName: `${user.firstName} ${user.lastName}`.trim(),
           reason,
+          items: items.map((it) => ({
+            productId: it.productId,
+            transferQty: it.transferQty,
+            sourceLotDetails: it.sourceLotDetails,
+          })),
+          // Phase 7B-H5/H6: observed transfer `updatedAt` for the server stale-client
+          // guard — omitted automatically when the loaded doc has no convertible value
+          // (confirmBranchTransfer may not stamp it yet; full coverage lands in H6-E).
+          observedDocumentUpdatedAt: toObservedDocumentUpdatedAtIso(cancelTarget.updatedAt),
         });
         setCancelTarget(null);
         closeDetail();
-        setToast('ยกเลิกการโอนย้ายเรียบร้อย');
+        setToast(
+          outcome.manualReviewRequired
+            ? 'ยกเลิกในเครื่องแล้ว — รอผู้จัดการตรวจสอบ (manual review)'
+            : outcome.synced && outcome.status === 'server_accepted'
+              ? 'ยกเลิกการโอนย้ายเรียบร้อย'
+              : 'บันทึกการยกเลิกลงเครื่องแล้ว ระบบจะซิงก์เมื่อออนไลน์',
+        );
         void load();
       } catch (err) {
         setToast(err instanceof Error ? err.message : 'ยกเลิกไม่สำเร็จ');

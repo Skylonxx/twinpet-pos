@@ -1,14 +1,62 @@
-# Current Task Tracker — Phase 7B-H6-D1 (latent transfer queue-first executor)
+# Current Task Tracker — Phase 7B-H6-D2 (transfer UI route wiring & legacy path retirement)
 
 > Living checkpoint doc for agents. Detailed history: `docs/reports/latest-report.md` (do not duplicate long-form evidence here).
 
 ## Current active phase
 
-**Phase 7B-H6-D1: Transfer Queue-first Executor (LATENT)**
+**Phase 7B-H6-D2: UI Route Wiring & Legacy Path Retirement**
 **Status:** **ACTIVE / IN PROGRESS — implemented, awaiting Codex review (not committed, not closed).**
-**Scope:** latent executor + unit tests ONLY. NOT wired into any UI; `decideReversalRoute('transfer')` unchanged (still `transfer_legacy_executor`); `cancelBranchTransfer`/`editBranchTransfer` untouched. Live route flip + page migration are H6-D2 (separately authorized).
+**Scope:** flip `decideReversalRoute('transfer')` to queue-first; migrate the two transfer cancellation UI surfaces (`TransferHistoryPage`, `AdminTransferPage`) from the legacy direct `cancelBranchTransfer` to `executeTransferReversal`; D2-α prerequisite cleanup (stale deferred note + whitespace validation). `editBranchTransfer` and `cancelBranchTransfer` in `transferCrud.ts` are UNTOUCHED — `cancelBranchTransfer` stays internal to `editBranchTransfer`.
 
-**Clean baseline before H6-D1:** `68f46e2 feat(pos): activate server transfer reversal resolver` (H6-C CLOSED / COMMITTED).
+**Clean baseline before H6-D2:** `4aa8065 feat(pos): implement latent queue-first transfer reversal executor` (H6-D1 — awaiting Codex but on mainline).
+
+---
+
+## Phase 7B-H6-D2 — UI Route Wiring & Legacy Path Retirement
+
+**Status:** **IMPLEMENTED + CODEX BLOCKER FIXED — AWAITING CODEX RE-REVIEW** (not committed; not closed).
+**Authorization:** CEO Option A — APPROVED.
+
+### Codex blocker fix (origin-branch authority gate)
+
+Codex returned **FAIL**: `TransferHistoryPage` lists both outgoing (`fromBranchId`) and incoming (`toBranchId`) transfers, but the queue-first executor applies a local IndexedDB correction + queue write BEFORE server sync using `fromBranchId` as authority — so a destination-branch user could locally apply/queue a reversal they don't control. **Fix:** a pure fail-closed preflight `canBranchReverseTransfer(currentBranchId, fromBranchId)` (in `reversalCoordinator.ts`) gates BOTH the modal entry point (`onCancelTransfer` is only wired when active branch === origin) AND `handleCancel` (hard early-return before `executeTransferReversal`). `AdminTransferPage` is the global-admin surface (`hasBranchAccess` → `true` for `admin`), so it intentionally does NOT use the gate. New tests prove the helper's fail-closed behavior, the gated entry point, the guard-before-executor ordering, and that Admin stays ungated. Server resolver, offline-queue schema, and `transferCrud.ts` unchanged.
+
+### What was delivered
+
+- **D2-α prerequisite cleanup:**
+  - Removed the now-stale `TRANSFER_REVERSAL_DEFERRED_NOTE` constant (and its tests/JSDoc references); it claimed completed transfers were not resolver-compatible, which H6-C (resolver activation) + H6-D1 (latent executor) made false.
+  - Tightened `assertTransferReversalInput`: whitespace-only `productId` now fails closed as `missing_product_id`; trim-equal `fromBranchId`/`toBranchId` now fail closed as `same_branch`.
+- **D2-β UI route wiring:**
+  - `decideReversalRoute('transfer')` now returns `transfer_queue_first` (the `transfer_legacy_executor` route value is retired from `ReversalRoute`).
+  - `TransferHistoryPage` + `AdminTransferPage` confirmed-cancel handlers now call `executeTransferReversal` queue-first, fetching transfer items fresh and building the payload (`transferId`, `fromBranchId`, `toBranchId`, items, `sourceLotDetails`, reason/note, `observedDocumentUpdatedAt` via `toObservedDocumentUpdatedAtIso`). Queue-first outcome wording mirrors the receiving reversal UX (manual-review / synced / queued-offline).
+  - Legacy `cancelBranchTransfer` import + call removed from BOTH pages. `AdminTransferPage` keeps `editBranchTransfer` (and its internal `cancelBranchTransfer` step is untouched in `transferCrud.ts`).
+
+### Timestamp handling (known limitation)
+
+`observedDocumentUpdatedAt` is threaded WHEN the transfer doc has a convertible `updatedAt`, omitted otherwise. `confirmBranchTransfer` may not reliably stamp `updatedAt` at creation yet, so full stale-client protection for transfers is NOT claimed — that is the future **H6-E** hardening slice.
+
+### Files changed (code)
+
+```
+src/lib/inventory/reversalCoordinator.ts        (route flip + whitespace tightening + stale-note removal + comment refresh)
+src/lib/inventory/reversalCoordinator.test.ts   (route/validation tests + H6-D2 source-level mutual-exclusion tests)
+src/pages/inventory/TransferHistoryPage.tsx     (queue-first migration; cancelBranchTransfer retired)
+src/pages/admin/AdminTransferPage.tsx           (queue-first migration; cancelBranchTransfer retired, editBranchTransfer preserved)
+```
+
+### Evidence (post blocker fix)
+
+- `npx vitest run reversalCoordinator` → 76 passed; full web `npx vitest run` → 328 passed (24 files); `npx tsc -b` → clean.
+- `npm --prefix functions run test:unit -- resolveReversal` → 43 passed (server resolver unchanged — regression green).
+- `git diff --check` clean; `stash@{0}` untouched; no forbidden areas touched.
+
+### Out of scope (unchanged)
+
+Server resolver, offline-queue schema, Firestore rules, receiving/POS/checkout/returns/RTV, `transferCrud.ts` (`cancelBranchTransfer`/`editBranchTransfer` behavior), transfer header evidence/checksum snapshot, `updatedAt` stamping at transfer completion, `sent→received` lifecycle refactor.
+
+### Hidden risk
+
+Page-component guarantees are proven by source-level import/call inspection (the pages carry a heavy Firebase/router/auth/modal harness), so a future refactor that re-introduces a legacy `cancelBranchTransfer` call through an alias or indirection could evade the regex guards without failing the suite.
 
 ---
 
@@ -21,7 +69,7 @@
 
 - Latent `executeTransferReversal` in `reversalCoordinator.ts` mirroring `executeReceivingReversal`: fail-closed validation (`assertTransferReversalInput` + `TransferReversalEvidenceError`), dual-branch `buildTransferReversalEffects`, `observedDocumentUpdatedAt` threading, queue-first create + sync.
 - Intent uses `sourceType:'transfer'`, `sourceId: transferId`, `branchId: fromBranchId` (origin — matches server authority). No offline-queue schema change.
-- **Not wired into any UI.** `decideReversalRoute('transfer')` still returns `transfer_legacy_executor`; the two transfer pages and `cancelBranchTransfer`/`editBranchTransfer` are untouched — capability is dead-but-tested until H6-D2.
+- **Not wired into any UI (as of H6-D1; superseded by H6-D2).** At D1, `decideReversalRoute('transfer')` still returned the legacy route and the two transfer pages were untouched — capability was dead-but-tested. **H6-D2 has since flipped the route to `transfer_queue_first` and migrated both pages.**
 
 ### Dual-branch math (proven)
 
@@ -90,14 +138,16 @@ H6-C flips the server gate so a `completed` transfer is now reversible server-si
 **Status:** **IN PROGRESS — docs-only, not yet committed.**
 **Authorization:** CEO Option A — APPROVED. Docs-only architecture decision recording. No TypeScript implementation in H6-B.
 
-### H6 Environment Audit Findings (read-only)
+### H6 Environment Audit Findings (read-only — point-in-time at the H6-B audit, SINCE SUPERSEDED by H6-C/H6-D1/H6-D2)
+
+> These findings describe the state at the H6-B audit. **H6-C (committed `68f46e2`) activated the resolver for `completed` transfers under strict guards; H6-D1 (`4aa8065`) added the latent queue-first executor; H6-D2 wired the targeted UI surfaces.** The "dormant"/"cannot fire" rows below are historical, not current.
 
 | Finding | Detail |
 |---------|--------|
 | Current Transfer state model | Two states only: `completed` \| `cancelled` |
 | Live transfer creation | Transfers are created directly as `completed` (no intermediate `sent`/`received` steps in the current production path) |
-| Existing server resolver transfer branch | Dormant — `resolveTransferReversal` currently gates on `sent`/`received` status; no live transfer doc currently carries those states |
-| Impact | The existing resolver transfer path cannot fire end-to-end until the gate is updated or the state model changes |
+| Existing server resolver transfer branch | Was dormant at the audit — gated on `sent`/`received` (states no live transfer carries). **H6-C has since activated it for `completed` transfers under strict guards.** |
+| Impact | At the audit, the resolver transfer path could not fire end-to-end until the gate was updated. **H6-C updated the gate to admit `completed`; the path is now live server-side and wired in H6-D2.** |
 
 ### CEO Architecture Decision (Option A)
 
@@ -206,7 +256,7 @@ src/lib/inventory/reversalCoordinator.test.ts      (8 new H5 tests)
 
 ### Out of scope (unchanged by H5)
 
-- Transfer reversal wiring (routes to the legacy executor; resolver transfer path dormant).
+- Transfer reversal wiring (out of scope for H5; at that time it routed to the legacy executor and the resolver transfer path was dormant — since changed by H6-C activation, H6-D1 executor, and H6-D2 UI wiring).
 - Manual-review resolution (local-only; never calls the server).
 - Global Admin UI; multi-device/server-broadcast propagation.
 - POS/cart/checkout/returns/RTV; Firestore rules; server resolver logic.

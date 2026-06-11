@@ -2,7 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getBranchLabel } from '../../lib/branches';
 import { useAuth } from '../../lib/hooks/useAuth';
-import { cancelBranchTransfer } from '../../lib/inventory/transferCrud';
+import {
+  canBranchReverseTransfer,
+  createDefaultReversalCoordinatorDeps,
+  executeTransferReversal,
+  toObservedDocumentUpdatedAtIso,
+} from '../../lib/inventory/reversalCoordinator';
 import {
   fetchTransferItems,
   useInventoryTransfers,
@@ -26,6 +31,13 @@ import {
 import '../ReceivingHistoryPage.css';
 
 type StatusFilter = 'all' | 'completed' | 'cancelled';
+
+// Phase 7B-H6-D2 (Codex blocker fix): only the ORIGIN/source branch may reverse a
+// transfer from this branch-scoped feed (the queue-first executor applies a local
+// correction + queue write before server sync). Shown when a destination-branch user
+// attempts to cancel an incoming transfer.
+const TRANSFER_REVERSAL_ORIGIN_ONLY_MESSAGE =
+  'เฉพาะสาขาต้นทางเท่านั้นที่สามารถยกเลิกการโอนย้ายนี้ได้';
 
 function fmtDate(ts: InventoryTransfer['createdAt']): string {
   const d = ts?.toDate?.();
@@ -93,26 +105,53 @@ export default function TransferHistoryPage({ onCreateNew, onBack }: Props = {})
     setDetailItems([]);
   }, []);
 
-  // Transfer cancel keeps the LEGACY `cancelBranchTransfer` executor behind the
-  // DestructiveConfirmModal gate. Completed transfers are intentionally NOT routed
-  // through the Phase 7B-3D-3 offline reversal queue / 7B-3D-2 resolver, because the
-  // resolver only reverses `sent`/`received` transfers (see
-  // TRANSFER_REVERSAL_DEFERRED_NOTE in lib/inventory/reversalCoordinator.ts).
+  // Phase 7B-H6-D2: the confirmed cancel routes through the QUEUE-FIRST transfer
+  // reversal executor (immediate dual-branch local IndexedDB correction + durable
+  // queue, synced to the H6-C server resolver when online), retiring the legacy
+  // direct `cancelBranchTransfer` from this UI surface. Items are fetched fresh so
+  // the executor always has complete dual-branch evidence at cancel time. A Staff
+  // actor is rejected before any write (the thrown error surfaces in the modal).
   const handleCancel = useCallback(
     async (reason: string, note?: string) => {
       if (!cancelTarget || !user) return;
-      const fullReason = note?.trim() ? `${reason} — ${note.trim()}` : reason;
+      // Hard origin-branch preflight (defense-in-depth — the modal entry point is also
+      // gated below). A destination-only branch user must NEVER reach the queue-first
+      // executor, because its local correction + queue write happen BEFORE server sync.
+      if (!canBranchReverseTransfer(branchId, cancelTarget.fromBranchId)) {
+        setCancelTarget(null);
+        setToast(TRANSFER_REVERSAL_ORIGIN_ONLY_MESSAGE);
+        return;
+      }
       setBusy(true);
       try {
-        await cancelBranchTransfer({
+        const items = await fetchTransferItems(cancelTarget.id);
+        const outcome = await executeTransferReversal(createDefaultReversalCoordinatorDeps(), {
           transferId: cancelTarget.id,
+          fromBranchId: cancelTarget.fromBranchId,
+          toBranchId: cancelTarget.toBranchId,
+          actorRole: user.role,
           staffId: user.id,
-          staffName: `${user.firstName} ${user.lastName}`.trim(),
-          reason: fullReason,
+          reason,
+          note,
+          items: items.map((it) => ({
+            productId: it.productId,
+            transferQty: it.transferQty,
+            sourceLotDetails: it.sourceLotDetails,
+          })),
+          // Phase 7B-H5/H6: observed transfer `updatedAt` for the server stale-client
+          // guard — omitted automatically when the loaded doc has no convertible value
+          // (confirmBranchTransfer may not stamp it yet; full coverage lands in H6-E).
+          observedDocumentUpdatedAt: toObservedDocumentUpdatedAtIso(cancelTarget.updatedAt),
         });
         setCancelTarget(null);
         closeDetail();
-        setToast('ยกเลิกการโอนย้ายเรียบร้อย');
+        setToast(
+          outcome.manualReviewRequired
+            ? 'ยกเลิกในเครื่องแล้ว — รอผู้จัดการตรวจสอบ (manual review)'
+            : outcome.synced && outcome.status === 'server_accepted'
+              ? 'ยกเลิกการโอนย้ายเรียบร้อย'
+              : 'บันทึกการยกเลิกลงเครื่องแล้ว ระบบจะซิงก์เมื่อออนไลน์',
+        );
         void reload();
       } catch (err) {
         setToast(err instanceof Error ? err.message : 'ยกเลิกไม่สำเร็จ');
@@ -120,7 +159,7 @@ export default function TransferHistoryPage({ onCreateNew, onBack }: Props = {})
         setBusy(false);
       }
     },
-    [cancelTarget, user, closeDetail, reload],
+    [cancelTarget, user, branchId, closeDetail, reload],
   );
 
   const branchLabel = useCallback((id: string) => getBranchLabel(id), []);
@@ -239,7 +278,14 @@ export default function TransferHistoryPage({ onCreateNew, onBack }: Props = {})
         loading={itemsLoading}
         branchLabel={branchLabel}
         onClose={closeDetail}
-        onCancelTransfer={detail ? () => setCancelTarget(detail) : undefined}
+        // Origin-branch gate (Phase 7B-H6-D2): the cancel action is only offered when
+        // the active branch IS the transfer's source branch — a destination-branch user
+        // viewing an incoming transfer never gets a reversal entry point.
+        onCancelTransfer={
+          detail && canBranchReverseTransfer(branchId, detail.fromBranchId)
+            ? () => setCancelTarget(detail)
+            : undefined
+        }
         busy={busy}
       />
 
