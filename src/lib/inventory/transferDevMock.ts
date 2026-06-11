@@ -7,6 +7,11 @@ import {
   type InventoryTransfer,
   type InventoryTransferItem,
 } from './transferTypes';
+import {
+  buildTransferReversalEvidence,
+  assertTransferReversalEvidenceCoversCompletion,
+  type TransferReversalEvidenceInput,
+} from './transferReversalEvidence';
 
 function ts(d = new Date()): InventoryTransfer['createdAt'] {
   return { toDate: () => d } as InventoryTransfer['createdAt'];
@@ -118,6 +123,26 @@ export function devConfirmBranchTransfer(
     });
   }
 
+  // ── Phase 7B-H6-E2-B: build reversal evidence from savedItems ──────────────
+  const devEvidenceInput: TransferReversalEvidenceInput = {
+    fromBranchId: form.fromBranchId,
+    toBranchId: form.toBranchId,
+    items: savedItems.map((item) => ({
+      productId: item.productId,
+      transferQty: item.transferQty,
+      sourceLotDetails: item.sourceLotDetails.map((d) => ({
+        lotId: d.lotId,
+        qty: d.qty,
+        receivedAtMs: d.receivedAtMs ?? null,
+        costPerUnit: d.costPerUnit,
+      })),
+    })),
+    createdAt: now.toISOString(),
+    createdBy: form.staffId,
+  };
+  const reversalEvidence = buildTransferReversalEvidence(devEvidenceInput);
+  assertTransferReversalEvidenceCoversCompletion(devEvidenceInput, reversalEvidence);
+
   const doc: InventoryTransfer = {
     id: transferId,
     transferDate: form.transferDate,
@@ -132,6 +157,7 @@ export function devConfirmBranchTransfer(
     // Phase 7B-H6-E1: mirror the production timestamp shape so dev/mock-created
     // transfers also carry `updatedAt` at completion (=== createdAt at inception).
     updatedAt: ts(now),
+    reversalEvidence,
   };
 
   devTransfers.unshift(doc);

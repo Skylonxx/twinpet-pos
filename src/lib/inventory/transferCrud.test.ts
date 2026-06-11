@@ -6,6 +6,11 @@ import {
 } from './transferCrud';
 import { devConfirmBranchTransfer, devGetAllTransfers } from './transferDevMock';
 import type { BranchTransferForm } from './transferTypes';
+import {
+  assertTransferReversalEvidenceCoversCompletion,
+  type TransferReversalEvidence,
+  type TransferReversalEvidenceInput,
+} from './transferReversalEvidence';
 
 // vi.hoisted runs before the (hoisted) vi.mock factories
 const fb = vi.hoisted(() => {
@@ -655,5 +660,204 @@ describe('H6-E1: transfer completion stamps updatedAt', () => {
     expect(doc!.createdAt).toBeDefined(); // createdAt intact
     expect(doc!.updatedAt).toBeDefined(); // H6-E1 updatedAt present
     expect(isTimestampLike(doc!.updatedAt)).toBe(true);
+  });
+});
+
+// ─── Phase 7B-H6-E2-B: reversalEvidence written at transfer completion ─────────
+// Verifies that confirmBranchTransfer and devConfirmBranchTransfer both persist a
+// valid TransferReversalEvidence snapshot on the transfer header, atomically with
+// the rest of the write. The evidence must: be schema-valid; carry correct branch
+// IDs, itemCount, and totalQtyBase; produce no undefined values (Firestore safety);
+// and pass the completeness invariant against the input that produced it.
+describe('H6-E2-B: write reversalEvidence at transfer completion', () => {
+  /** Returns true if no value in the object tree is strictly undefined. */
+  function containsNoUndefined(obj: unknown): boolean {
+    if (obj === undefined) return false;
+    if (obj === null || typeof obj !== 'object') return true;
+    for (const v of Object.values(obj as Record<string, unknown>)) {
+      if (!containsNoUndefined(v)) return false;
+    }
+    return true;
+  }
+
+  const FORM_BASE: BranchTransferForm = {
+    fromBranchId: BRANCH_SRC,
+    toBranchId: BRANCH_DEST,
+    transferDate: '2026-06-11',
+    note: 'evidence test',
+    staffId: 'staff-ev',
+    staffName: 'Evidence Tester',
+  };
+
+  test('1. production confirmBranchTransfer writes reversalEvidence to the transfer header', async () => {
+    seedProduct('EV1', 10);
+    seedStock('EV1', BRANCH_SRC, 20);
+    seedStock('EV1', BRANCH_DEST, 0);
+    seedLot('EV1', BRANCH_SRC, 20, 10, 1000);
+
+    const transferId = await confirmBranchTransfer(FORM_BASE, [
+      { productId: 'EV1', name: 'EV1', sku: 'SKU-EV1', sourceStock: 20, transferQty: 7 },
+    ]);
+
+    const header = fb.get(`inventoryTransfers/${transferId}`) as Record<string, unknown> | undefined;
+    expect(header).toBeDefined();
+    expect(header!.reversalEvidence).toBeDefined();
+  });
+
+  test('2. evidence has correct schema fields (version, source, branches, itemCount, totalQtyBase, effects, createdAt, createdBy)', async () => {
+    seedProduct('EV2', 10);
+    seedStock('EV2', BRANCH_SRC, 30);
+    seedStock('EV2', BRANCH_DEST, 0);
+    seedLot('EV2', BRANCH_SRC, 30, 10, 1000);
+
+    const transferId = await confirmBranchTransfer(FORM_BASE, [
+      { productId: 'EV2', name: 'EV2', sku: 'SKU-EV2', sourceStock: 30, transferQty: 9 },
+    ]);
+
+    const ev = (fb.get(`inventoryTransfers/${transferId}`) as Record<string, unknown>)
+      .reversalEvidence as TransferReversalEvidence;
+
+    expect(ev.version).toBe(1);
+    expect(ev.source).toBe('transfer_completion');
+    expect(ev.fromBranchId).toBe(BRANCH_SRC);
+    expect(ev.toBranchId).toBe(BRANCH_DEST);
+    expect(ev.itemCount).toBe(1);
+    expect(ev.totalQtyBase).toBe(9);
+    expect(Array.isArray(ev.effects)).toBe(true);
+    expect(ev.effects.length).toBe(2); // one dest_gain + one source_loss
+    expect(typeof ev.createdAt).toBe('string');
+    expect(ev.createdBy).toBe('staff-ev');
+  });
+
+  test('3. evidence effects carry correct branch IDs and directions', async () => {
+    seedProduct('EV3', 10);
+    seedStock('EV3', BRANCH_SRC, 25);
+    seedStock('EV3', BRANCH_DEST, 0);
+    seedLot('EV3', BRANCH_SRC, 25, 10, 1000);
+
+    const transferId = await confirmBranchTransfer(FORM_BASE, [
+      { productId: 'EV3', name: 'EV3', sku: 'SKU-EV3', sourceStock: 25, transferQty: 6 },
+    ]);
+
+    const ev = (fb.get(`inventoryTransfers/${transferId}`) as Record<string, unknown>)
+      .reversalEvidence as TransferReversalEvidence;
+
+    const destGain = ev.effects.find((e) => e.direction === 'dest_gain');
+    const sourceLoss = ev.effects.find((e) => e.direction === 'source_loss');
+
+    expect(destGain).toBeDefined();
+    expect(sourceLoss).toBeDefined();
+    expect(destGain!.branchId).toBe(BRANCH_DEST);
+    expect(sourceLoss!.branchId).toBe(BRANCH_SRC);
+    expect(destGain!.qtyBase).toBe(6);
+    expect(sourceLoss!.qtyBase).toBe(6);
+    expect(destGain!.productId).toBe('EV3');
+    expect(sourceLoss!.productId).toBe('EV3');
+  });
+
+  test('4. evidence passes assertTransferReversalEvidenceCoversCompletion', async () => {
+    seedProduct('EV4', 10);
+    seedStock('EV4', BRANCH_SRC, 20);
+    seedStock('EV4', BRANCH_DEST, 0);
+    seedLot('EV4', BRANCH_SRC, 20, 10, 1000);
+
+    const transferId = await confirmBranchTransfer(FORM_BASE, [
+      { productId: 'EV4', name: 'EV4', sku: 'SKU-EV4', sourceStock: 20, transferQty: 4 },
+    ]);
+
+    const ev = (fb.get(`inventoryTransfers/${transferId}`) as Record<string, unknown>)
+      .reversalEvidence as TransferReversalEvidence;
+
+    // Reconstruct a compatible input from the persisted evidence to re-run the invariant.
+    const assertInput: TransferReversalEvidenceInput = {
+      fromBranchId: ev.fromBranchId,
+      toBranchId: ev.toBranchId,
+      items: [{ productId: 'EV4', transferQty: 4 }],
+      createdAt: ev.createdAt,
+      createdBy: ev.createdBy,
+    };
+    expect(() => assertTransferReversalEvidenceCoversCompletion(assertInput, ev)).not.toThrow();
+  });
+
+  test('5. evidence contains no undefined values (Firestore serialization safety)', async () => {
+    seedProduct('EV5', 10);
+    seedStock('EV5', BRANCH_SRC, 20);
+    seedStock('EV5', BRANCH_DEST, 0);
+    seedLot('EV5', BRANCH_SRC, 20, 10, 1000);
+
+    const transferId = await confirmBranchTransfer(FORM_BASE, [
+      { productId: 'EV5', name: 'EV5', sku: 'SKU-EV5', sourceStock: 20, transferQty: 3 },
+    ]);
+
+    const ev = (fb.get(`inventoryTransfers/${transferId}`) as Record<string, unknown>)
+      .reversalEvidence as TransferReversalEvidence;
+
+    expect(containsNoUndefined(ev)).toBe(true);
+  });
+
+  test('6. multi-item transfer produces itemCount and totalQtyBase covering all lines', async () => {
+    seedProduct('EV6A', 10);
+    seedProduct('EV6B', 10);
+    seedStock('EV6A', BRANCH_SRC, 20);
+    seedStock('EV6B', BRANCH_SRC, 20);
+    seedStock('EV6A', BRANCH_DEST, 0);
+    seedStock('EV6B', BRANCH_DEST, 0);
+    seedLot('EV6A', BRANCH_SRC, 20, 10, 1000);
+    seedLot('EV6B', BRANCH_SRC, 20, 10, 2000);
+
+    const transferId = await confirmBranchTransfer(FORM_BASE, [
+      { productId: 'EV6A', name: 'EV6A', sku: 'SKU-EV6A', sourceStock: 20, transferQty: 5 },
+      { productId: 'EV6B', name: 'EV6B', sku: 'SKU-EV6B', sourceStock: 20, transferQty: 8 },
+    ]);
+
+    const ev = (fb.get(`inventoryTransfers/${transferId}`) as Record<string, unknown>)
+      .reversalEvidence as TransferReversalEvidence;
+
+    expect(ev.itemCount).toBe(2);
+    expect(ev.totalQtyBase).toBe(13); // 5 + 8
+    expect(ev.effects.length).toBe(4); // 2 products × 2 directions
+  });
+
+  test('7. dev mock devConfirmBranchTransfer writes equivalent reversalEvidence', () => {
+    const id = devConfirmBranchTransfer(
+      { fromBranchId: 'DEV-SRC', toBranchId: 'DEV-DST', transferDate: '2026-06-11',
+        note: 'dev ev', staffId: 'dev-staff', staffName: 'Dev Staff' },
+      [{ productId: '1', name: 'Dev P1', sku: 'SKU001', sourceStock: 98, transferQty: 10 }],
+    );
+
+    const transfer = devGetAllTransfers().find((t) => t.id === id)!;
+    const ev = transfer.reversalEvidence!;
+
+    expect(ev).toBeDefined();
+    expect(ev.version).toBe(1);
+    expect(ev.source).toBe('transfer_completion');
+    expect(ev.fromBranchId).toBe('DEV-SRC');
+    expect(ev.toBranchId).toBe('DEV-DST');
+    expect(ev.itemCount).toBe(1);
+    expect(ev.totalQtyBase).toBe(10);
+    expect(ev.effects.length).toBe(2);
+    expect(typeof ev.createdAt).toBe('string');
+    expect(ev.createdBy).toBe('dev-staff');
+    expect(containsNoUndefined(ev)).toBe(true);
+  });
+
+  test('8. existing createdAt and updatedAt behaviour is not disturbed by evidence write', async () => {
+    seedProduct('EV8', 10);
+    seedStock('EV8', BRANCH_SRC, 20);
+    seedStock('EV8', BRANCH_DEST, 0);
+    seedLot('EV8', BRANCH_SRC, 20, 10, 1000);
+
+    const transferId = await confirmBranchTransfer(FORM_BASE, [
+      { productId: 'EV8', name: 'EV8', sku: 'SKU-EV8', sourceStock: 20, transferQty: 2 },
+    ]);
+
+    const header = fb.get(`inventoryTransfers/${transferId}`) as Record<string, unknown>;
+    // H6-E1 timestamps remain present and well-formed.
+    expect(header.createdAt).toBeDefined();
+    expect(header.updatedAt).toBeDefined();
+    expect(header.status).toBe('completed');
+    // Evidence is additional — createdAt in evidence is a string, not a timestamp.
+    const ev = header.reversalEvidence as TransferReversalEvidence;
+    expect(typeof ev.createdAt).toBe('string');
   });
 });

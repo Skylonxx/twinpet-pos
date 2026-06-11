@@ -1,6 +1,7 @@
 import type { ProductPickerItem } from '../../components/products/productPickerTypes';
 import type { Timestamp } from '../types';
 import type { AdjustmentReason } from './types';
+import type { TransferReversalEvidence } from './transferReversalEvidence';
 
 /** Form state line (before confirm) */
 export type TransferLine = {
@@ -65,6 +66,8 @@ export type InventoryTransfer = {
   cancelledAt?: Timestamp;
   cancelReason?: string;
   updatedAt?: Timestamp;
+  /** Phase 7B-H6-E2-B: dual-branch reversal evidence written at completion. Absent on legacy docs. */
+  reversalEvidence?: TransferReversalEvidence;
 };
 
 export type CancelBranchTransferInput = {

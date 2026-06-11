@@ -35,6 +35,11 @@ import {
   type TransferDiscrepancyLine,
   type TransferLotDetail,
 } from './transferTypes';
+import {
+  buildTransferReversalEvidence,
+  assertTransferReversalEvidenceCoversCompletion,
+  type TransferReversalEvidenceInput,
+} from './transferReversalEvidence';
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -261,6 +266,29 @@ export async function confirmBranchTransfer(
       linePlans.push({ line, blendedUnitCost: round2(blendedUnitCost), sourceLotDetails, destLots });
     }
 
+    // ── Phase 7B-H6-E2-B: build reversal evidence from finalized linePlans ──────
+    // createdAt is a client ISO string (audit metadata only); the header's
+    // createdAt/updatedAt remain server timestamps. Assertion runs fail-closed
+    // before any write — an invalid plan can never produce a persisted snapshot.
+    const evidenceInput: TransferReversalEvidenceInput = {
+      fromBranchId: form.fromBranchId,
+      toBranchId: form.toBranchId,
+      items: linePlans.map((plan) => ({
+        productId: plan.line.productId,
+        transferQty: plan.line.transferQty,
+        sourceLotDetails: plan.sourceLotDetails.map((d) => ({
+          lotId: d.lotId,
+          qty: d.qty,
+          receivedAtMs: d.receivedAtMs ?? null,
+          costPerUnit: d.costPerUnit,
+        })),
+      })),
+      createdAt: new Date().toISOString(),
+      createdBy: form.staffId,
+    };
+    const reversalEvidence = buildTransferReversalEvidence(evidenceInput);
+    assertTransferReversalEvidenceCoversCompletion(evidenceInput, reversalEvidence);
+
     // ── Phase 3: WRITES ONLY ─────────────────────────────────────────────
     tx.set(transferRef, {
       id: transferId,
@@ -279,6 +307,7 @@ export async function confirmBranchTransfer(
       // newly created transfers. `updatedAt === createdAt` at inception is expected;
       // cancel/edit already advance `updatedAt` on later mutations.
       updatedAt: now,
+      reversalEvidence,
     });
 
     // Per-line: transfer item (with exact cuts) + paired out/in movements.

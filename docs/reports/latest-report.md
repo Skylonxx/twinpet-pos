@@ -1,9 +1,11 @@
 # Latest Report
 
 > Rolling "latest report" for the stock-write security workstream. Updated at each phase boundary.
-> **Current state:** **Phase 7B-H6-E2-A — Pure Transfer Evidence Builder + Dual-Branch Invariant** (latent; implemented, awaiting Codex review; uncommitted). New pure file `src/lib/inventory/transferReversalEvidence.ts` + 41-test suite (36 original + 5 branch-direction invariant tests added in blocker fix). `buildTransferReversalEvidence` models dest_gain + source_loss for each transfer item; `assertTransferReversalEvidenceCoversCompletion` proves dual-branch balance and checksum consistency. No runtime wiring, no header write, no coordinator validation. Web suite 371 passed (25 files); `tsc -b` clean; `resolveReversal` 43 passed. Stacked on H6-E1 (also uncommitted). **Next:** H6-E2-B (header write at completion) and H6-E2-C (coordinator validation) — future slices, not yet authorized.
+> **Current state:** **Phase 7B-H6-E2-B — Write Transfer Evidence Header at Completion** (implemented, awaiting Codex review; uncommitted). `reversalEvidence?: TransferReversalEvidence` added to `InventoryTransfer`; `confirmBranchTransfer` builds + asserts + persists evidence atomically in the Phase-3 `tx.set`; `devConfirmBranchTransfer` mirrors this. Evidence `createdAt` is a client ISO string; header timestamps remain server-authoritative. 8 new H6-E2-B tests (18 transferCrud total; 379 web total). No coordinator validation. H6-E2-C (coordinator validation) remains a future slice.
 >
-> **Prior state:** **Phase 7B-H6-E1 — Transfer `updatedAt` Stamping** (timestamp-only; implemented, awaiting Codex review; uncommitted). Clean baseline before H6-E1: `bb30881 feat(pos): wire ui to queue-first transfer reversal and retire legacy path`. H6-E1 stamps `updatedAt` at transfer completion in `confirmBranchTransfer` (production) and `devConfirmBranchTransfer` (dev/mock), alongside the existing `createdAt`. This gives the H4/H6-C server stale-client guard an authoritative baseline and reliably populates the H6-D2 client capture (`observedDocumentUpdatedAt`) for new transfers — activating the transfer stale-client guard end-to-end with NO page/coordinator/resolver change (H6-D2 was forward-compatible). Timestamp-only: no evidence/checksum snapshot, no resolver/offline-queue change, no legacy backfill. Web suite 330 passed; `tsc -b` clean; functions `resolveReversal` 43 passed (resolver unchanged; the transfer stale-guard regression already exists at `resolveReversal.test.ts` 454–468).
+> **Prior state:** **Phase 7B-H6-E2-A — Pure Transfer Evidence Builder + Dual-Branch Invariant** (CLOSED / COMMITTED — `53a2123`). New pure file `src/lib/inventory/transferReversalEvidence.ts` + 41-test suite. `buildTransferReversalEvidence` models dest_gain + source_loss; `assertTransferReversalEvidenceCoversCompletion` proves dual-branch balance, checksum consistency, and branch-direction binding. No runtime wiring; stacked on H6-E1.
+>
+> **Prior state:** **Phase 7B-H6-E1 — Transfer `updatedAt` Stamping** (CLOSED / COMMITTED — `8a3d03f`). `confirmBranchTransfer` and `devConfirmBranchTransfer` stamp `updatedAt` at transfer completion alongside `createdAt`, activating the transfer stale-client guard end-to-end for new transfers. Timestamp-only: no evidence/checksum snapshot, no resolver/offline-queue change, no legacy backfill.
 >
 > **Prior state:** **Phase 7B-H6-D2 — UI Route Wiring & Legacy Path Retirement** (CLOSED / COMMITTED — `bb30881`; CEO Option B — APPROVED WITH NOTES). Flipped `decideReversalRoute('transfer')` to `transfer_queue_first`, migrated `TransferHistoryPage`/`AdminTransferPage` to the queue-first `executeTransferReversal`, retired the legacy direct `cancelBranchTransfer` from both pages, and added the `canBranchReverseTransfer` origin-branch gate (destination-only users blocked in the branch-scoped page; admin surface ungated). `transferCrud.ts` untouched.
 >
@@ -11,9 +13,46 @@
 >
 > **Prior state:** **Phase 7B-D4 — Docs/Context Sync After H5 Closure** (docs-only; not yet committed). H5 CLOSED / COMMITTED (`4762d97` — `feat(pos): wire client observation timestamp for reversals`; CEO Option B — APPROVED WITH NOTES). Post-commit working tree was **clean**. `stash@{0}` present and untouched. No forbidden areas touched. **End-to-End Receiving Reversal Hardening is functionally complete** (H4 server-side stale-client guard + H5 client/offline timestamp payload wiring). D3 closed and committed (`fb4c3b0`). H4 closed and committed (`4da7757`). H3 closed and committed (`4d69143`). D1 closed and committed (`dacccd1`). H2 closed and committed (`8b48513`). **Next after D4:** Phase 7B-H6 — Transfer Reversal Planning / Environment Audit (read-only planning only; no code changes; no implementation until Tech Lead approves).
 
-## Phase 7B-H6-E2-A: Pure Transfer Evidence Builder + Dual-Branch Invariant (IMPLEMENTED — AWAITING CODEX REVIEW)
+## Phase 7B-H6-E2-B: Write Transfer Evidence Header at Completion (IMPLEMENTED — AWAITING CODEX REVIEW)
 
-**Status:** implemented; not committed; not closed. Authorization: CEO Option A — APPROVED. Clean baseline: `8a3d03f` (H6-E1, which is itself stacked on `bb30881`).
+**Status:** implemented; not committed; not closed. Authorization: CEO Option A — APPROVED. Clean baseline: `53a2123` (H6-E2-A).
+
+### What was added
+
+- **`src/lib/inventory/transferTypes.ts`** — `import type { TransferReversalEvidence }` from `./transferReversalEvidence`; `reversalEvidence?: TransferReversalEvidence` added as optional field on `InventoryTransfer` (absent on legacy docs — no backfill).
+- **`src/lib/inventory/transferCrud.ts`** — in `confirmBranchTransfer`, after `linePlans` finalization (end of Phase 2) and before Phase-3 writes: builds `TransferReversalEvidenceInput` from `linePlans` (with FIFO `sourceLotDetails`, `receivedAtMs ?? null`, `costPerUnit`), calls `buildTransferReversalEvidence` then `assertTransferReversalEvidenceCoversCompletion` fail-closed, then writes `reversalEvidence` on the `tx.set(transferRef, {...})` atomically. Evidence `createdAt: new Date().toISOString()` (client ISO string, audit-only); `createdBy: form.staffId`. Header `createdAt`/`updatedAt` remain `serverTimestamp()`.
+- **`src/lib/inventory/transferDevMock.ts`** — `devConfirmBranchTransfer` mirrors production: builds evidence input from `savedItems`, calls builder + assertion, writes `reversalEvidence` on the in-memory `InventoryTransfer` doc (`now.toISOString()` for `createdAt`).
+
+### What is NOT in this slice
+
+No coordinator validation of the persisted evidence at reversal time. `reversalCoordinator.ts`, `TransferHistoryPage`, `AdminTransferPage`, server resolver, offline queue, Firestore rules — all UNCHANGED. H6-E2-C (coordinator validation) remains a future slice.
+
+### Files changed (code)
+
+```
+src/lib/inventory/transferTypes.ts       (+ reversalEvidence?: TransferReversalEvidence field)
+src/lib/inventory/transferCrud.ts        (evidence build + tx.set update)
+src/lib/inventory/transferDevMock.ts     (evidence build + doc update)
+src/lib/inventory/transferCrud.test.ts   (+8 H6-E2-B tests; 18 transferCrud total)
+```
+
+### Evidence
+
+- `npx vitest run transferCrud` → **18 passed** (+8 H6-E2-B)
+- `npx vitest run transferReversalEvidence` → **41 passed** (regression green)
+- Full web `npx vitest run` → **379 passed** (25 files); `npx tsc -b` → clean
+- `npm --prefix functions run test:unit -- resolveReversal` — resolver UNCHANGED; prior run **43 passed**
+- `git diff --check` clean; `stash@{0}` untouched; no diff in any forbidden file.
+
+### Hidden risk
+
+H6-E2-B persists the evidence snapshot but does not yet validate it at reversal time — until H6-E2-C wires the coordinator to read and verify the header evidence before accepting a transfer reversal, the snapshot is audit-only (not fail-closed on the reversal path for transfers).
+
+---
+
+## Phase 7B-H6-E2-A: Pure Transfer Evidence Builder + Dual-Branch Invariant (CLOSED / COMMITTED — `53a2123`)
+
+**Status:** closed and committed. **Commit:** `53a2123 feat(pos): implement dual-branch transfer reversal evidence builder and invariants`. Authorization: CEO Option A — APPROVED. Clean baseline: `8a3d03f` (H6-E1, which is itself stacked on `bb30881`).
 
 ### What was added
 
@@ -65,7 +104,7 @@ Audit-only. Builder uses `null` for multi-lot source transfers. The invariant do
 
 No runtime wiring. No header write at completion. No coordinator read/validation. No evidence persistence. No Firestore rule change. `transferCrud.ts`, `reversalCoordinator.ts`, `transferDevMock.ts`, UI pages, server resolver, offline queue — all UNCHANGED.
 
-**H6-E2-B (header write at transfer completion) and H6-E2-C (coordinator validation) are future slices — not yet authorized.**
+**H6-E2-B (header write at transfer completion) is now delivered (see section above). H6-E2-C (coordinator validation) remains a future slice.**
 
 ### Files changed (code)
 
@@ -89,9 +128,9 @@ H6-E2-A proves the evidence math but remains latent; it does not yet protect liv
 
 ---
 
-## Phase 7B-H6-E1: Transfer `updatedAt` Stamping (IMPLEMENTED — AWAITING CODEX REVIEW)
+## Phase 7B-H6-E1: Transfer `updatedAt` Stamping (CLOSED / COMMITTED — `8a3d03f`)
 
-**Status:** implemented; not committed; not closed. Authorization: CEO Option A — APPROVED (timestamp-only). Clean baseline before H6-E1: `bb30881`.
+**Status:** closed and committed. **Commit:** `8a3d03f feat(pos): stamp updatedAt on transfer completion for stale-client protection`. Authorization: CEO Option A — APPROVED (timestamp-only). Clean baseline before H6-E1: `bb30881`.
 
 ### Problem closed
 

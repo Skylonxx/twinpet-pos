@@ -89,11 +89,14 @@ Phase 7B delivers a complete offline reversal lifecycle for Goods-Receiving and 
 
 - **7B-H6-D2** — UI Route Wiring & Legacy Path Retirement (CLOSED / COMMITTED — `bb30881`): `decideReversalRoute('transfer')` returns `transfer_queue_first`; `TransferHistoryPage` + `AdminTransferPage` route the confirmed cancel through `executeTransferReversal` queue-first and the legacy direct `cancelBranchTransfer` is RETIRED from both pages (a `canBranchReverseTransfer` origin-branch gate blocks destination-only users in the branch-scoped page). `cancelBranchTransfer`/`editBranchTransfer` in `transferCrud.ts` untouched. D2-α removed the stale `TRANSFER_REVERSAL_DEFERRED_NOTE` and tightened whitespace validation.
 
-**Current baseline before H6-E1:** `bb30881 feat(pos): wire ui to queue-first transfer reversal and retire legacy path`
+- **7B-H6-E1** — Transfer `updatedAt` Stamping (CLOSED / COMMITTED — `8a3d03f`): `confirmBranchTransfer` and `devConfirmBranchTransfer` stamp `updatedAt` at transfer completion alongside `createdAt`, activating the transfer stale-client guard end-to-end for new transfers. Timestamp-only: no evidence/checksum snapshot, no resolver/offline-queue change, no legacy backfill.
 
-**Active slices (both uncommitted, awaiting Codex review):**
-- **Phase 7B-H6-E1 — Transfer `updatedAt` Stamping** (timestamp-only): `confirmBranchTransfer` and `devConfirmBranchTransfer` stamp `updatedAt` at transfer completion (alongside `createdAt`), activating the transfer stale-client guard end-to-end. Timestamp-only: no evidence/checksum snapshot, no resolver/offline-queue change, no legacy backfill.
-- **Phase 7B-H6-E2-A — Pure Transfer Evidence Builder + Dual-Branch Invariant** (latent): new pure file `src/lib/inventory/transferReversalEvidence.ts` with `buildTransferReversalEvidence` builder and `assertTransferReversalEvidenceCoversCompletion` invariant. Models both destination gain and source loss; derives `itemCount`/`totalQtyBase` from input; deterministic effect ordering; source lot identity audit-only (no multi-lot over-rejection). 41 tests prove the evidence math and dual-branch balance (including branch-direction binding). **No runtime wiring, no header write, no coordinator validation.** H6-E2-B (header write) and H6-E2-C (coordinator validation) are future slices.
+- **7B-H6-E2-A** — Pure Transfer Evidence Builder + Dual-Branch Invariant (CLOSED / COMMITTED — `53a2123`): new pure file `src/lib/inventory/transferReversalEvidence.ts` with `buildTransferReversalEvidence` builder and `assertTransferReversalEvidenceCoversCompletion` invariant. 41 tests covering evidence math, dual-branch balance, and branch-direction binding. No runtime wiring, no header write, no coordinator validation.
+
+**Current baseline before H6-E2-B:** `53a2123 feat(pos): implement dual-branch transfer reversal evidence builder and invariants`
+
+**Active slice (not committed, awaiting Codex review):**
+- **Phase 7B-H6-E2-B — Write Transfer Evidence Header at Completion** (write-path wiring): `reversalEvidence?: TransferReversalEvidence` added to `InventoryTransfer` in `transferTypes.ts`; `confirmBranchTransfer` builds + asserts + persists evidence atomically in the Phase-3 `tx.set`; `devConfirmBranchTransfer` mirrors this. 8 new H6-E2-B tests (18 transferCrud total; 379 full web). **No coordinator validation.** H6-E2-C (coordinator validation) remains a future slice.
 
 ### H6 Transfer State Model — Architecture Decision (CEO Option A)
 
@@ -118,7 +121,7 @@ Current production Transfer state model is two-state: `completed` | `cancelled`.
 - Firestore reconciliation of stock is always an **external manual admin process** — no part of the Phase 7B client UI automates it.
 - The H3 UI is **per-device and per-branch local only** — a global ops dashboard across devices or branches does not exist.
 - Staff cannot resolve `manual_review_required` intents — Manager/Admin only.
-- The H4 stale-client guard is fully active end-to-end for the **receiving** path (H5 committed). For transfers, **H6-C activated the server resolver for `completed` transfers under strict guards (committed `68f46e2`), H6-D1 added the latent queue-first executor (`4aa8065`), and H6-D2 wires the targeted UI surfaces to queue-first reversal and retires direct legacy cancel from them**; the transfer stale-client guard is threaded when `observedDocumentUpdatedAt` is present, but reliable `updatedAt` stamping at transfer completion (and optional evidence/checksum hardening) remains pending in **H6-E**.
+- The H4 stale-client guard is fully active end-to-end for the **receiving** path (H5 committed). For transfers, **H6-C activated the server resolver for `completed` transfers under strict guards (committed `68f46e2`), H6-D1 added the latent queue-first executor (`4aa8065`), H6-D2 wired the targeted UI surfaces to queue-first reversal (legacy direct cancel retired), H6-E1 stamps `updatedAt` at completion, H6-E2-A built the pure evidence builder + dual-branch invariant, and H6-E2-B now persists `reversalEvidence` atomically on the transfer header at completion**; H6-E2-C (coordinator validation of the persisted evidence) remains the next hardening slice.
 
 ---
 
