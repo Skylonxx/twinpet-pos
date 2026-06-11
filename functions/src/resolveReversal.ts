@@ -20,10 +20,12 @@
  *     `pinVerificationId`/`pinVerifiedAt` are stored as audit evidence ONLY.
  *   • The raw `pin` is transient — used only for verification, never persisted.
  *
- * Transfer reversible states are STRICTLY `sent` | `received` (CEO 3.4). The
- * current transfer schema only emits `completed`/`cancelled`, so `completed` is
- * REJECTED here (no schema-specific mapping was approved) — meaning transfer
- * reversal is dormant until the transfer lifecycle emits `sent`/`received`.
+ * Transfer reversible state (Phase 7B-H6-B, CEO Option A): for the CURRENT live
+ * two-state model (`completed` | `cancelled`), `completed` is the reversible state —
+ * meaning "ELIGIBLE for reversal under the strict downstream guards", NOT "always
+ * reversible". `cancelled` is never reversible (caught earlier as `already_reversed`).
+ * A future `sent`/`received` lifecycle can be added in ONE place (the eligibility set
+ * below). Eligibility is centralized in {@link isTransferStatusReversible}.
  *
  * FIFO reuses the single canonical server helper `./fifo` (no third FIFO source).
  */
@@ -56,8 +58,19 @@ const C = {
   reversalIntents: 'reversalIntents',
 } as const;
 
-/** Transfer states eligible for reversal (CEO 3.4) — strict, no `completed` mapping. */
-const REVERSIBLE_TRANSFER_STATES: ReadonlySet<string> = new Set(['sent', 'received']);
+/**
+ * Transfer states eligible for reversal. Phase 7B-H6-B (CEO Option A): the live
+ * model is `completed` | `cancelled`, and `completed` is the reversible state.
+ * This is the SINGLE source of truth — a future `sent`/`received` lifecycle adds
+ * its states here only. Eligibility is "may proceed INTO the downstream guards",
+ * never "always reversible" (stock/lot/stale/already-reversed guards still apply).
+ */
+const REVERSIBLE_TRANSFER_STATES: ReadonlySet<string> = new Set(['completed']);
+
+/** Centralized transfer reversible-state policy — the one place the gate consults. */
+function isTransferStatusReversible(status: unknown): boolean {
+  return typeof status === 'string' && REVERSIBLE_TRANSFER_STATES.has(status);
+}
 
 type AuthLike = { uid?: string; token?: Record<string, unknown> } | null | undefined;
 
@@ -545,9 +558,12 @@ async function resolveTransferReversal(
   if (transfer.status === 'cancelled' || transfer.reversedBy) {
     return reject(ctx.idempotencyKey, 'already_reversed', 'เอกสารโอนย้ายนี้ถูกยกเลิก/รีเวิร์สแล้ว');
   }
-  // Blocker 1: STRICT state gate — only `sent`/`received` (CEO 3.4). `completed`
-  // is rejected (no approved schema mapping).
-  if (!REVERSIBLE_TRANSFER_STATES.has(transfer.status as string)) {
+  // State eligibility gate (Phase 7B-H6-C / H6-B Option A). Centralized policy —
+  // `completed` is the live reversible state; anything else (incl. speculative
+  // `sent`/`received`) is rejected here. This only admits the doc INTO the strict
+  // downstream stock/lot/idempotency guards; it never makes `completed` reversible
+  // unconditionally. `cancelled` is already handled above as `already_reversed`.
+  if (!isTransferStatusReversible(transfer.status)) {
     return reject(ctx.idempotencyKey, 'source_document_not_reversible', `สถานะโอนย้าย "${transfer.status}" ไม่สามารถรีเวิร์สได้`);
   }
 

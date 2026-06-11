@@ -99,7 +99,7 @@ function seedReceiving(over: { stock?: number; lotRemaining?: number; status?: s
 function seedTransfer(over: { status?: string; destStock?: number; destLotRemaining?: number; updatedAt?: unknown } = {}) {
   return makeDb({
     ...USER_SEED,
-    'inventoryTransfers/T1': { id: 'T1', fromBranchId: 'B1', toBranchId: 'B2', status: over.status ?? 'sent', updatedAt: over.updatedAt },
+    'inventoryTransfers/T1': { id: 'T1', fromBranchId: 'B1', toBranchId: 'B2', status: over.status ?? 'completed', updatedAt: over.updatedAt },
     'inventoryTransfers/T1/transferItems/I1': { productId: 'P1', productName: 'P1', sku: 'P1', transferQty: 5, unitCost: 10, sourceLotDetails: [{ lotId: 'L1', costPerUnit: 10, qty: 5, receivedAtMs: 1000 }] },
     'products/P1/productStocks/B2': { branchId: 'B2', totalStockBase: over.destStock ?? 5 },
     'stockLots/D1': { id: 'D1', productId: 'P1', branchId: 'B2', qtyRemaining: over.destLotRemaining ?? 5, qtyReceived: 5, isDepleted: false, receivedAt: { seconds: 1 }, costPerUnit: 10 },
@@ -267,37 +267,51 @@ describe('resolveReversal — receiving', () => {
 
 // ── Transfer reversal (Blockers 1, 5) ──
 describe('resolveReversal — transfer state gate & lot coverage', () => {
-  test("Blocker 1: 'sent' is reversible", async () => {
-    const res = await performResolveReversal(seedTransfer({ status: 'sent' }) as never, trReq(), mgrB1);
-    expect(res.status).toBe('confirmed');
-  });
-  test("Blocker 1: 'received' is reversible", async () => {
-    const res = await performResolveReversal(seedTransfer({ status: 'received' }) as never, trReq(), mgrB1);
-    expect(res.status).toBe('confirmed');
-  });
-  test("Blocker 1: 'completed' is REJECTED (no schema mapping)", async () => {
+  // ── H6-B (CEO Option A): `completed` is the live reversible state ──
+  test("H6-C: 'completed' is the live reversible state → confirmed", async () => {
     const res = await performResolveReversal(seedTransfer({ status: 'completed' }) as never, trReq(), mgrB1);
-    expect(res.rejectCode).toBe('source_document_not_reversible');
+    expect(res.status).toBe('confirmed');
   });
-  test('Blocker 1: other state rejected; cancelled → already_reversed', async () => {
+  test("H6-C: speculative 'sent'/'received' are NOT live-eligible → source_document_not_reversible", async () => {
+    const sent = await performResolveReversal(seedTransfer({ status: 'sent' }) as never, trReq(), mgrB1);
+    expect(sent.rejectCode).toBe('source_document_not_reversible');
+    const received = await performResolveReversal(seedTransfer({ status: 'received' }) as never, trReq(), mgrB1);
+    expect(received.rejectCode).toBe('source_document_not_reversible');
+  });
+  test('other state rejected; cancelled → already_reversed (before eligibility gate), zero mutation', async () => {
     const draft = await performResolveReversal(seedTransfer({ status: 'draft' }) as never, trReq(), mgrB1);
     expect(draft.rejectCode).toBe('source_document_not_reversible');
-    const cancelled = await performResolveReversal(seedTransfer({ status: 'cancelled' }) as never, trReq(), mgrB1);
+    const db = seedTransfer({ status: 'cancelled' });
+    const cancelled = await performResolveReversal(db as never, trReq(), mgrB1);
     expect(cancelled.rejectCode).toBe('already_reversed');
+    expect(db.__store.get('products/P1/productStocks/B2')!.totalStockBase).toBe(5); // dest untouched
+    expect(db.__store.get('products/P1/productStocks/B1')).toBeUndefined(); // source not created
+    expect(auditDocs(db)).toHaveLength(0); // no misleading audit
   });
   test('missing transfer doc → source_document_not_found', async () => {
     const res = await performResolveReversal(seedTransfer() as never, trReq({ sourceDocumentId: 'NOPE', idempotencyKey: 'kx' }), mgrB1);
     expect(res.rejectCode).toBe('source_document_not_found');
   });
-  test('Blocker 5: dest stock counter sufficient but active lots insufficient → lot_conflict (no mutation)', async () => {
-    const db = seedTransfer({ status: 'sent', destStock: 5, destLotRemaining: 3 }); // counter 5 ok, lots only 3
+  // ── `completed` is eligible but NOT unconditionally reversible ──
+  test('H6-C: completed + dest stock counter insufficient → stock_conflict (zero mutation)', async () => {
+    const db = seedTransfer({ status: 'completed', destStock: 3, destLotRemaining: 5 }); // counter 3 < transferQty 5
+    const res = await performResolveReversal(db as never, trReq(), mgrB1);
+    expect(res.rejectCode).toBe('stock_conflict');
+    expect(db.__store.get('products/P1/productStocks/B2')!.totalStockBase).toBe(3); // dest untouched
+    expect(db.__store.get('products/P1/productStocks/B1')).toBeUndefined(); // source not created
+    expect(db.__store.get('stockLots/D1')!.qtyRemaining).toBe(5); // dest lot untouched
+    expect(auditDocs(db)).toHaveLength(0);
+  });
+  test('H6-C: completed + dest counter ok but active lots insufficient → lot_conflict (zero mutation)', async () => {
+    const db = seedTransfer({ status: 'completed', destStock: 5, destLotRemaining: 3 }); // counter 5 ok, lots only 3
     const res = await performResolveReversal(db as never, trReq(), mgrB1);
     expect(res.rejectCode).toBe('lot_conflict');
     expect(db.__store.get('products/P1/productStocks/B2')!.totalStockBase).toBe(5); // dest untouched
     expect(db.__store.get('products/P1/productStocks/B1')).toBeUndefined(); // source not created
+    expect(auditDocs(db)).toHaveLength(0);
   });
-  test('valid transfer reversal: dest removed, source restored, FIFO cost + receivedAt preserved, audit created', async () => {
-    const db = seedTransfer({ status: 'received' });
+  test('valid completed transfer reversal: dest removed, source restored, FIFO cost + receivedAt preserved, audit created', async () => {
+    const db = seedTransfer({ status: 'completed' });
     const res = await performResolveReversal(db as never, trReq(), mgrB1);
     expect(res.status).toBe('confirmed');
     expect(db.__store.get('products/P1/productStocks/B2')!.totalStockBase).toBe(0);
@@ -305,10 +319,55 @@ describe('resolveReversal — transfer state gate & lot coverage', () => {
     expect(db.__store.get('stockLots/D1')!.qtyRemaining).toBe(0);
     const restored = [...db.__store.entries()].filter(([p]) => p.startsWith('stockLots/') && db.__store.get(p)!.receivingId === res.serverReversalId).map(([, l]) => l);
     expect(restored).toHaveLength(1);
-    expect(restored[0].costPerUnit).toBe(10);
+    expect(restored[0].costPerUnit).toBe(10); // original source costPerUnit preserved
     expect((restored[0].receivedAt as { seconds: number }).seconds).toBe(1); // original receivedAtMs 1000 preserved
     expect(db.__store.get(`reversalDocuments/${res.serverReversalId}`)!.actionType).toBe('transfer_reversal');
+    // Source document marked cancelled/reversed only after the successful mutation.
+    expect(db.__store.get('inventoryTransfers/T1')!.status).toBe('cancelled');
     expect(db.__store.get('inventoryTransfers/T1')!.reversedBy).toBe(res.serverReversalId);
+    // Dual stock movements recorded (transfer_in at source, transfer_out at dest).
+    const moves = [...db.__store.entries()].filter(([p]) => p.startsWith('stockMovements/')).map(([, m]) => m);
+    expect(moves.some((m) => m.type === 'transfer_in' && m.branchId === 'B1')).toBe(true);
+    expect(moves.some((m) => m.type === 'transfer_out' && m.branchId === 'B2')).toBe(true);
+  });
+  test('H6-C: oversell-remainder source lot detail is restored as a real source lot', async () => {
+    const db = makeDb({
+      ...USER_SEED,
+      'inventoryTransfers/T1': { id: 'T1', fromBranchId: 'B1', toBranchId: 'B2', status: 'completed' },
+      'inventoryTransfers/T1/transferItems/I1': { productId: 'P1', productName: 'P1', sku: 'P1', transferQty: 5, unitCost: 10, sourceLotDetails: [{ lotId: 'oversell', costPerUnit: 10, qty: 5, receivedAtMs: 1000 }] },
+      'products/P1/productStocks/B2': { branchId: 'B2', totalStockBase: 5 },
+      'stockLots/D1': { id: 'D1', productId: 'P1', branchId: 'B2', qtyRemaining: 5, qtyReceived: 5, isDepleted: false, receivedAt: { seconds: 1 }, costPerUnit: 10 },
+    });
+    const res = await performResolveReversal(db as never, trReq(), mgrB1);
+    expect(res.status).toBe('confirmed');
+    expect(db.__store.get('products/P1/productStocks/B1')!.totalStockBase).toBe(5);
+    const restored = [...db.__store.entries()].filter(([p]) => p.startsWith('stockLots/') && db.__store.get(p)!.receivingId === res.serverReversalId).map(([, l]) => l);
+    expect(restored).toHaveLength(1);
+    expect(restored[0].qtyRemaining).toBe(5);
+    expect(restored[0].costPerUnit).toBe(10);
+  });
+  // ── Idempotency / authority parity for the transfer path ──
+  test('H6-C: duplicate same key + payload → duplicate_confirmed, no second mutation/audit', async () => {
+    const db = seedTransfer({ status: 'completed' });
+    const r1 = await performResolveReversal(db as never, trReq(), mgrB1);
+    const r2 = await performResolveReversal(db as never, trReq(), mgrB1);
+    expect(r2.status).toBe('duplicate_confirmed');
+    expect(r2.serverReversalId).toBe(r1.serverReversalId);
+    expect(db.__store.get('products/P1/productStocks/B1')!.totalStockBase).toBe(5); // not restored twice
+    expect(auditDocs(db)).toHaveLength(1);
+  });
+  test('H6-C: already reversed by DIFFERENT key → already_reversed (status now cancelled)', async () => {
+    const db = seedTransfer({ status: 'completed' });
+    await performResolveReversal(db as never, trReq(), mgrB1);
+    const res = await performResolveReversal(db as never, trReq({ idempotencyKey: 'other-key', localIntentId: 'LI9' }), mgrB1);
+    expect(res.rejectCode).toBe('already_reversed');
+  });
+  test('H6-C: Staff WRONG pin on completed transfer → invalid_pin (zero mutation)', async () => {
+    const db = seedTransfer({ status: 'completed' });
+    const res = await performResolveReversal(db as never, trReq({ pin: '9999' }), staffB1);
+    expect(res.rejectCode).toBe('invalid_pin');
+    expect(db.__store.get('products/P1/productStocks/B2')!.totalStockBase).toBe(5);
+    expect(db.__store.get('products/P1/productStocks/B1')).toBeUndefined();
   });
 });
 
@@ -393,17 +452,17 @@ describe('resolveReversal — H4 stale client guard', () => {
   });
 
   test('transfer reversal: stale observation → rejected, dest stock untouched', async () => {
-    const db = seedTransfer({ status: 'sent', updatedAt: SERVER_UPDATED });
+    const db = seedTransfer({ status: 'completed', updatedAt: SERVER_UPDATED });
     const res = await performResolveReversal(db as never, trReq({ clientObservedDocumentUpdatedAt: STALE_OBS }), mgrB1);
     expect(res.rejectCode).toBe('stale_client_observation');
     expect(res.status).toBe('rejected');
     expect(db.__store.get('products/P1/productStocks/B2')!.totalStockBase).toBe(5); // dest untouched
     expect(db.__store.get('products/P1/productStocks/B1')).toBeUndefined(); // source not created
-    expect(db.__store.get('inventoryTransfers/T1')!.status).toBe('sent'); // state not advanced
+    expect(db.__store.get('inventoryTransfers/T1')!.status).toBe('completed'); // state not advanced
   });
 
   test('transfer reversal: fresh observation → confirmed', async () => {
-    const db = seedTransfer({ status: 'sent', updatedAt: SERVER_UPDATED });
+    const db = seedTransfer({ status: 'completed', updatedAt: SERVER_UPDATED });
     const res = await performResolveReversal(db as never, trReq({ clientObservedDocumentUpdatedAt: FRESH_OBS }), mgrB1);
     expect(res.status).toBe('confirmed');
   });

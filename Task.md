@@ -1,13 +1,49 @@
-# Current Task Tracker — Phase 7B-H6-B (architecture decision — docs only)
+# Current Task Tracker — Phase 7B-H6-C (server resolver activation + tests)
 
 > Living checkpoint doc for agents. Detailed history: `docs/reports/latest-report.md` (do not duplicate long-form evidence here).
 
 ## Current active phase
 
-**Phase 7B-H6-B: Transfer Reversal Architecture Decision — Docs Recording**
-**Status:** **IN PROGRESS — docs-only, not yet committed.** Architecture direction approved by CEO (Option A). No source code or tests modified. H6-C (Server Resolver Activation + Tests) is queued as planning-only next — no implementation until Tech Lead approves the execution plan.
+**Phase 7B-H6-C: Server Resolver Activation + Tests**
+**Status:** **ACTIVE / IN PROGRESS — implemented, awaiting Codex review (not committed, not closed).**
+**Scope:** server resolver + tests ONLY. No client routing, no UI wiring, no offline-queue integration, no legacy `cancelBranchTransfer` retirement, no transfer lifecycle refactor.
 
-**Clean baseline:** `f61e94e docs: sync phase 7b tracker after h5 receiving hardening closure`
+**Clean baseline before H6-C:** `7bd74c1 docs: record transfer reversal state model architecture decision`
+
+---
+
+## Phase 7B-H6-C — Server Resolver Activation + Tests
+
+**Status:** **IMPLEMENTED — AWAITING CODEX REVIEW** (not committed; not closed; H6-C implementation has started).
+**Authorization:** CEO Option A — APPROVED (server resolver + tests only).
+
+### What was delivered
+
+- Activated the (previously dormant) transfer reversal resolver for the live model: `completed` is now the reversible state (H6-B Option A). Eligibility is **centralized** in `isTransferStatusReversible(status)` backed by the single-source-of-truth set `REVERSIBLE_TRANSFER_STATES = {'completed'}`; the resolver gate calls only that helper (no scattered `status === 'completed'` checks).
+- `completed` is **eligible only to proceed into the existing strict downstream guards** — it is never unconditionally reversible. Guard ordering preserved: `source_document_not_found` → authority/PIN → H4 stale-client guard → `already_reversed` (cancelled/reversedBy) → eligibility gate → dest stock/lot sufficiency → dual-branch writes → intent/audit.
+- No client/UI/offline-queue change. Resolver activation is **latent in production** until the future H6-D client wiring (no caller currently queues a `transfer_reversal`).
+
+### Files changed (code)
+
+```
+functions/src/resolveReversal.ts        (centralized policy helper + gate + header comment)
+functions/src/resolveReversal.test.ts   (transfer tests updated to live model + new coverage)
+```
+
+### Evidence
+
+- `npm --prefix functions run build` → clean.
+- `npx vitest run resolveReversal` → 43 passed; full functions suite `npx vitest run` → 112 passed (8 files).
+- Receiving + H4 stale-guard tests remain green.
+- `git diff --check` clean; `stash@{0}` untouched; no forbidden areas touched.
+
+### Out of scope (unchanged by H6-C)
+
+Client queue-first transfer reversal, `executeTransferReversal`, transfer UI/Admin routing, legacy `cancelBranchTransfer` retirement, transfer evidence/checksum snapshot, `updatedAt` stamping at completion, `sent→received` lifecycle refactor, Firestore rules, receiving paths.
+
+### Hidden risk
+
+H6-C flips the server gate so a `completed` transfer is now reversible server-side, but no client path queues a transfer reversal yet — so the activation is inert in production until H6-D, and any premature direct callable invocation would now execute a real dual-branch reversal under the guards.
 
 ---
 

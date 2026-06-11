@@ -1,7 +1,40 @@
 # Latest Report
 
 > Rolling "latest report" for the stock-write security workstream. Updated at each phase boundary.
-> **Current state:** **Phase 7B-D4 — Docs/Context Sync After H5 Closure** (docs-only; not yet committed). H5 CLOSED / COMMITTED (`4762d97` — `feat(pos): wire client observation timestamp for reversals`; CEO Option B — APPROVED WITH NOTES). Post-commit working tree was **clean**. `stash@{0}` present and untouched. No forbidden areas touched. **End-to-End Receiving Reversal Hardening is functionally complete** (H4 server-side stale-client guard + H5 client/offline timestamp payload wiring). D3 closed and committed (`fb4c3b0`). H4 closed and committed (`4da7757`). H3 closed and committed (`4d69143`). D1 closed and committed (`dacccd1`). H2 closed and committed (`8b48513`). **Next after D4:** Phase 7B-H6 — Transfer Reversal Planning / Environment Audit (read-only planning only; no code changes; no implementation until Tech Lead approves).
+> **Current state:** **Phase 7B-H6-C — Server Resolver Activation + Tests** (implemented, awaiting Codex review; uncommitted). Clean baseline before H6-C: `7bd74c1 docs: record transfer reversal state model architecture decision`. H6-C activates the dormant transfer reversal resolver for the live model — `completed` is the reversible state (H6-B Option A), eligibility centralized in `isTransferStatusReversible`, admitted only into the existing strict guards. Server resolver + tests only; no client/UI/offline-queue change (latent until future H6-D). Functions suite 112 passed; build clean.
+>
+> **Prior state:** **Phase 7B-D4 — Docs/Context Sync After H5 Closure** (docs-only; not yet committed). H5 CLOSED / COMMITTED (`4762d97` — `feat(pos): wire client observation timestamp for reversals`; CEO Option B — APPROVED WITH NOTES). Post-commit working tree was **clean**. `stash@{0}` present and untouched. No forbidden areas touched. **End-to-End Receiving Reversal Hardening is functionally complete** (H4 server-side stale-client guard + H5 client/offline timestamp payload wiring). D3 closed and committed (`fb4c3b0`). H4 closed and committed (`4da7757`). H3 closed and committed (`4d69143`). D1 closed and committed (`dacccd1`). H2 closed and committed (`8b48513`). **Next after D4:** Phase 7B-H6 — Transfer Reversal Planning / Environment Audit (read-only planning only; no code changes; no implementation until Tech Lead approves).
+
+## Phase 7B-H6-C: Server Resolver Activation + Tests (IMPLEMENTED — AWAITING CODEX REVIEW)
+
+**Status:** implemented; not committed; not closed. Authorization: CEO Option A — APPROVED (server resolver + tests only). Clean baseline before H6-C: `7bd74c1`.
+
+### What was added
+
+- **Centralized transfer reversible-state policy** in `functions/src/resolveReversal.ts`: `REVERSIBLE_TRANSFER_STATES = {'completed'}` (single source of truth) + `isTransferStatusReversible(status)` predicate, consulted at the one resolver gate. `completed` is the live reversible state (H6-B Option A) — "eligible under the strict guards," **not** unconditionally reversible. No scattered `status === 'completed'` checks.
+- **Guard ordering preserved:** `source_document_not_found` → authority/PIN → H4 stale-client guard → `already_reversed` (cancelled/reversedBy, before the eligibility gate) → eligibility gate → dest stock-counter + active-lot sufficiency → dual-branch writes → intent/audit. Header doc-comment updated to Option A.
+- **No client/UI/offline-queue change.** Activation is latent in production (no caller currently queues a `transfer_reversal`).
+
+### Tests (`functions/src/resolveReversal.test.ts`)
+
+- Existing transfer/H4-transfer assertions updated to the live model (`seedTransfer` default `completed`; the old `sent`/`received`-reversible assertions intentionally inverted per Option A).
+- New coverage: `completed` confirmed; `sent`/`received` not live-eligible → `source_document_not_reversible`; `cancelled` → `already_reversed` (zero mutation, before gate); `completed` + dest stock insufficient → `stock_conflict` (zero mutation); + dest lot insufficient → `lot_conflict` (zero mutation); stale-client guard fires for `completed`; valid reversal restores source lots at original `costPerUnit`+`receivedAt` and writes dual `stockMovements`, marking the transfer reversed only after mutation; oversell-remainder restoration; idempotency (duplicate → `duplicate_confirmed`, single audit) + already-reversed-by-different-key; Staff wrong-PIN → `invalid_pin` zero mutation.
+
+### Evidence
+
+- `npm --prefix functions run build` → clean.
+- `npx vitest run resolveReversal` → **43 passed**; full functions `npx vitest run` → **112 passed** (8 files). Receiving + H4 tests green.
+- `git diff --check` clean; `stash@{0}` untouched; no forbidden areas touched.
+
+### Out of scope (unchanged)
+
+Client queue-first transfer reversal / `executeTransferReversal`, transfer UI/Admin routing, legacy `cancelBranchTransfer` retirement, transfer evidence/checksum snapshot, `updatedAt` stamping at completion, `sent→received` lifecycle refactor, Firestore rules, receiving paths.
+
+### Hidden risk
+
+The server gate now reverses `completed` transfers, but no client queues a transfer reversal yet — so the capability is inert in production until H6-D; a premature direct callable invocation would now execute a real dual-branch reversal (still under all guards).
+
+---
 
 ## Phase 7B-D4: Docs/Context Sync After H5 Closure (IN PROGRESS — not yet committed)
 

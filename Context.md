@@ -83,11 +83,9 @@ Phase 7B delivers a complete offline reversal lifecycle for Goods-Receiving and 
 
 - **7B-H5** — Wire Client Observation Timestamp Payload (receiving-only, CLOSED / COMMITTED — `4762d97`): the live receiving void path now captures the loaded receiving doc's `updatedAt`, converts it defensively to ISO 8601 (`toObservedDocumentUpdatedAtIso`), persists it on the durable offline intent as the internal field `observedDocumentUpdatedAt`, and `toResolveRequest` forwards it to the resolver as `clientObservedDocumentUpdatedAt` — so the H4 guard is active end-to-end for receiving reversals. Backward compatible (legacy intents omit the field; H4 stays inert/fresh), idempotency unchanged (observation excluded from id derivation), local stock correction unchanged. **No server resolver change.** Transfer wiring, manual-review server calls, global Admin UI, and multi-device propagation remain out of scope. **Milestone: End-to-End Receiving Reversal Hardening is functionally complete** (H4 server-side guard + H5 client payload wiring together).
 
-**Current baseline (post-D4):** `f61e94e docs: sync phase 7b tracker after h5 receiving hardening closure`
+**Current baseline before H6-C:** `7bd74c1 docs: record transfer reversal state model architecture decision`
 
-**Active slice:** Phase 7B-H6-B — Transfer Reversal Architecture Decision (docs-only, not yet committed). CEO Option A approved: `completed` is the reversible state for the current Transfer model. No source code or tests modified.
-
-**Next queued slice after H6-B:** Phase 7B-H6-C: Server Resolver Activation + Tests — **planning only**. No code implementation until Tech Lead approves the execution plan.
+**Active slice:** Phase 7B-H6-C — Server Resolver Activation + Tests (server resolver + tests only; implemented, awaiting Codex review; not committed). The transfer reversal resolver is activated for the live model: eligibility is centralized in `isTransferStatusReversible(status)` with `REVERSIBLE_TRANSFER_STATES = {'completed'}`, so a `completed` transfer is admitted into the existing strict guards (authority, stale-client, already-reversed, dest stock/lot sufficiency, idempotency/audit) — never unconditionally reversible. **No client routing, UI, offline-queue, or legacy `cancelBranchTransfer` change** — activation is latent in production until the future H6-D client wiring.
 
 ### H6 Transfer State Model — Architecture Decision (CEO Option A)
 
