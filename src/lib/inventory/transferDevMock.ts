@@ -129,6 +129,9 @@ export function devConfirmBranchTransfer(
     itemCount: savedItems.length,
     status: 'completed',
     createdAt: ts(now),
+    // Phase 7B-H6-E1: mirror the production timestamp shape so dev/mock-created
+    // transfers also carry `updatedAt` at completion (=== createdAt at inception).
+    updatedAt: ts(now),
   };
 
   devTransfers.unshift(doc);

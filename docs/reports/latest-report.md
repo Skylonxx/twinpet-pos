@@ -1,13 +1,56 @@
 # Latest Report
 
 > Rolling "latest report" for the stock-write security workstream. Updated at each phase boundary.
-> **Current state:** **Phase 7B-H6-D2 — UI Route Wiring & Legacy Path Retirement** (implemented + Codex blocker FIXED; awaiting Codex re-review; uncommitted). Clean baseline before H6-D2: `4aa8065 feat(pos): implement latent queue-first transfer reversal executor`. H6-D2 flips `decideReversalRoute('transfer')` to `transfer_queue_first` and migrates the two transfer cancellation UI surfaces (`TransferHistoryPage`, `AdminTransferPage`) from the legacy direct `cancelBranchTransfer` to the queue-first `executeTransferReversal`; D2-α removed the stale `TRANSFER_REVERSAL_DEFERRED_NOTE` and tightened whitespace validation. **Codex blocker fix:** a pure fail-closed `canBranchReverseTransfer` origin-branch preflight gates both the modal entry point and `handleCancel` in the branch-scoped `TransferHistoryPage`, so a destination-only branch user can never queue/local-correct a source-authoritative reversal; `AdminTransferPage` (global-admin) is intentionally ungated. `transferCrud.ts` untouched (`cancelBranchTransfer` stays internal to `editBranchTransfer`). Server resolver unchanged. Web suite 328 passed; `tsc -b` clean; functions `resolveReversal` 43 passed. **Known limitation:** transfer `observedDocumentUpdatedAt` is threaded when present but not required (full stale-client coverage deferred to H6-E).
+> **Current state:** **Phase 7B-H6-E1 — Transfer `updatedAt` Stamping** (timestamp-only; implemented, awaiting Codex review; uncommitted). Clean baseline before H6-E1: `bb30881 feat(pos): wire ui to queue-first transfer reversal and retire legacy path`. H6-E1 stamps `updatedAt` at transfer completion in `confirmBranchTransfer` (production) and `devConfirmBranchTransfer` (dev/mock), alongside the existing `createdAt`. This gives the H4/H6-C server stale-client guard an authoritative baseline and reliably populates the H6-D2 client capture (`observedDocumentUpdatedAt`) for new transfers — activating the transfer stale-client guard end-to-end with NO page/coordinator/resolver change (H6-D2 was forward-compatible). Timestamp-only: no evidence/checksum snapshot, no resolver/offline-queue change, no legacy backfill. Web suite 330 passed; `tsc -b` clean; functions `resolveReversal` 43 passed (resolver unchanged; the transfer stale-guard regression already exists at `resolveReversal.test.ts` 454–468). **Next:** H6-E2 transfer header evidence/checksum hardening (separately scoped).
+>
+> **Prior state:** **Phase 7B-H6-D2 — UI Route Wiring & Legacy Path Retirement** (CLOSED / COMMITTED — `bb30881`; CEO Option B — APPROVED WITH NOTES). Flipped `decideReversalRoute('transfer')` to `transfer_queue_first`, migrated `TransferHistoryPage`/`AdminTransferPage` to the queue-first `executeTransferReversal`, retired the legacy direct `cancelBranchTransfer` from both pages, and added the `canBranchReverseTransfer` origin-branch gate (destination-only users blocked in the branch-scoped page; admin surface ungated). `transferCrud.ts` untouched.
 >
 > **Prior state:** **Phase 7B-H6-C — Server Resolver Activation + Tests** (CLOSED / COMMITTED — `68f46e2`) then **H6-D1 — latent queue-first transfer executor** (COMMITTED — `4aa8065`). H6-C activated the dormant transfer reversal resolver for the live model — `completed` is the reversible state (H6-B Option A), eligibility centralized in `isTransferStatusReversible`, admitted only into the existing strict guards. H6-D1 added the latent `executeTransferReversal` (dual-branch, queue-first) but did NOT wire it into any UI — superseded by H6-D2.
 >
 > **Prior state:** **Phase 7B-D4 — Docs/Context Sync After H5 Closure** (docs-only; not yet committed). H5 CLOSED / COMMITTED (`4762d97` — `feat(pos): wire client observation timestamp for reversals`; CEO Option B — APPROVED WITH NOTES). Post-commit working tree was **clean**. `stash@{0}` present and untouched. No forbidden areas touched. **End-to-End Receiving Reversal Hardening is functionally complete** (H4 server-side stale-client guard + H5 client/offline timestamp payload wiring). D3 closed and committed (`fb4c3b0`). H4 closed and committed (`4da7757`). H3 closed and committed (`4d69143`). D1 closed and committed (`dacccd1`). H2 closed and committed (`8b48513`). **Next after D4:** Phase 7B-H6 — Transfer Reversal Planning / Environment Audit (read-only planning only; no code changes; no implementation until Tech Lead approves).
 
-## Phase 7B-H6-D2: UI Route Wiring & Legacy Path Retirement (IMPLEMENTED + BLOCKER FIXED — AWAITING CODEX RE-REVIEW)
+## Phase 7B-H6-E1: Transfer `updatedAt` Stamping (IMPLEMENTED — AWAITING CODEX REVIEW)
+
+**Status:** implemented; not committed; not closed. Authorization: CEO Option A — APPROVED (timestamp-only). Clean baseline before H6-E1: `bb30881`.
+
+### Problem closed
+
+Pre-E1, a freshly `completed` transfer carried `createdAt` but **no** `updatedAt` (neither `confirmBranchTransfer` nor `devConfirmBranchTransfer` wrote it; only `cancelBranchTransfer` did). The server H4/H6-C stale-client guard `isClientObservationStale` reads `serverDoc.updatedAt`; with it absent the guard returned "not stale" (doubly inert alongside the omitted client observation). So the transfer stale-client protection was fail-open / fresh-by-default for new transfers.
+
+### What was added / changed
+
+- `src/lib/inventory/transferCrud.ts` — `confirmBranchTransfer` Phase-3 header `tx.set` now writes `updatedAt: now` next to `createdAt: now` (both `serverTimestamp()`). `updatedAt === createdAt` at inception is expected.
+- `src/lib/inventory/transferDevMock.ts` — `devConfirmBranchTransfer` writes `updatedAt: ts(now)` on the created doc, mirroring the production shape.
+- No other write path changed: `cancelBranchTransfer` already stamped `updatedAt`; `editBranchTransfer` creates the new transfer via `confirmBranchTransfer` so edit-created docs inherit the stamp. `InventoryTransfer.updatedAt` was already optional (no type change).
+- **No** page/coordinator/resolver/offline-queue change — H6-D2's `toObservedDocumentUpdatedAtIso(cancelTarget.updatedAt)` capture now simply starts receiving a real value, so the guard activates end-to-end.
+
+### Tests (`src/lib/inventory/transferCrud.test.ts`)
+
+- Production: `confirmBranchTransfer` created header includes a timestamp-compatible `updatedAt` and `createdAt` remains present (`status: 'completed'`).
+- Dev/mock: `devConfirmBranchTransfer` created doc includes a timestamp-compatible `updatedAt` and `createdAt`.
+- The transfer stale-client server regression already exists in `functions/src/resolveReversal.test.ts` (lines 454–468: stale → `stale_client_observation` mutation-free; fresh → confirmed) and remains green — no resolver-test edit needed.
+
+### Evidence
+
+- `npx vitest run transferCrud` → **10 passed**; `npx vitest run reversalCoordinator` → **76 passed**; full web `npx vitest run` → **330 passed** (24 files); `npx tsc -b` → clean.
+- `npm --prefix functions run test:unit -- resolveReversal` → **43 passed** (resolver unchanged).
+- `git diff --check` clean; `stash@{0}` untouched; no UI / coordinator / resolver / offline-queue diff.
+
+### Legacy docs policy (accepted)
+
+No backfill. Existing transfers without `updatedAt` stay fresh-by-default (guard inert for them); the server reversal mutation remains authoritative through the existing guards. New transfers get reliable `updatedAt`.
+
+### Out of scope (unchanged)
+
+Transfer header evidence/checksum snapshot (future **H6-E2**), server resolver implementation, offline queue schema, Firestore rules, receiving behavior, H6-D2 UI route wiring/coordinator, `cancelBranchTransfer`/`editBranchTransfer` behavior, `sent→received` lifecycle refactor.
+
+### Hidden risk
+
+Legacy transfer docs without `updatedAt` remain fresh-by-default (stale-client guard inert for them), but new transfers now activate the guard end-to-end; separately, a metadata-only `reportTransferDiscrepancy` writes a subcollection without advancing the header `updatedAt`, so a discrepancy report is not seen as a state advance by the guard (acceptable — it mutates no stock).
+
+---
+
+## Phase 7B-H6-D2: UI Route Wiring & Legacy Path Retirement (CLOSED / COMMITTED — `bb30881`)
 
 **Status:** implemented + Codex blocker fixed; not committed; not closed. Authorization: CEO Option A — APPROVED. Clean baseline before H6-D2: `4aa8065`.
 

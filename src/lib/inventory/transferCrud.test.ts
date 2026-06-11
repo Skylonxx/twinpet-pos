@@ -4,6 +4,7 @@ import {
   cancelBranchTransfer,
   reportTransferDiscrepancy,
 } from './transferCrud';
+import { devConfirmBranchTransfer, devGetAllTransfers } from './transferDevMock';
 import type { BranchTransferForm } from './transferTypes';
 
 // vi.hoisted runs before the (hoisted) vi.mock factories
@@ -591,4 +592,68 @@ describe('Origin-Controlled Discrepancy Handling (7B-2)', () => {
   // functions/src/resolveTransferDiscrepancy.test.ts; the thin client→CF caller by
   // ./resolveTransferDiscrepancy.test.ts; and the Firestore-rules denial of any
   // client-side resolution by rules-tests/transfer-discrepancy-phase7b2.spec.ts.
+});
+
+// ─── Phase 7B-H6-E1: transfer creation stamps `updatedAt` ─────────────────────
+// Closes the stale-client timestamp gap: a freshly completed transfer must carry an
+// `updatedAt` so (a) the H4/H6-C server stale-client guard has an authoritative
+// baseline to compare against, and (b) the H6-D2 client capture
+// (`observedDocumentUpdatedAt`) is reliably populated for new transfers.
+describe('H6-E1: transfer completion stamps updatedAt', () => {
+  /** A Firestore Timestamp-compatible value exposes `toDate()` or numeric `seconds`. */
+  function isTimestampLike(v: unknown): boolean {
+    if (!v || typeof v !== 'object') return false;
+    const o = v as { toDate?: unknown; seconds?: unknown };
+    return typeof o.toDate === 'function' || typeof o.seconds === 'number';
+  }
+
+  test('production confirmBranchTransfer stamps updatedAt alongside (and without disturbing) createdAt', async () => {
+    seedProduct('PE', 10);
+    seedStock('PE', BRANCH_SRC, 20);
+    seedStock('PE', BRANCH_DEST, 0);
+    seedLot('PE', BRANCH_SRC, 20, 10, 1000);
+
+    const form: BranchTransferForm = {
+      fromBranchId: BRANCH_SRC,
+      toBranchId: BRANCH_DEST,
+      transferDate: '2026-06-09',
+      note: 'ts test',
+      staffId: 's1',
+      staffName: 'Staff',
+    };
+    const transferId = await confirmBranchTransfer(form, [
+      { productId: 'PE', name: 'PE', sku: 'SKU-PE', sourceStock: 20, transferQty: 5 },
+    ]);
+
+    const header = fb.get(`inventoryTransfers/${transferId}`) as Record<string, unknown> | undefined;
+    expect(header).toBeDefined();
+    expect(header!.status).toBe('completed');
+    // createdAt behavior remains intact …
+    expect(header!.createdAt).toBeDefined();
+    expect(isTimestampLike(header!.createdAt)).toBe(true);
+    // … and H6-E1 now stamps a timestamp-compatible updatedAt at completion.
+    expect(header!.updatedAt).toBeDefined();
+    expect(isTimestampLike(header!.updatedAt)).toBe(true);
+  });
+
+  test('dev/mock devConfirmBranchTransfer mirrors the production updatedAt shape', () => {
+    const form: BranchTransferForm = {
+      fromBranchId: 'DEV-A',
+      toBranchId: 'DEV-B',
+      transferDate: '2026-06-09',
+      note: 'dev ts',
+      staffId: 's1',
+      staffName: 'Staff',
+    };
+    const id = devConfirmBranchTransfer(form, [
+      { productId: '1', name: 'Dev P1', sku: 'SKU001', sourceStock: 98, transferQty: 5 },
+    ]);
+
+    const doc = devGetAllTransfers().find((t) => t.id === id);
+    expect(doc).toBeDefined();
+    expect(doc!.status).toBe('completed');
+    expect(doc!.createdAt).toBeDefined(); // createdAt intact
+    expect(doc!.updatedAt).toBeDefined(); // H6-E1 updatedAt present
+    expect(isTimestampLike(doc!.updatedAt)).toBe(true);
+  });
 });

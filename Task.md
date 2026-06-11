@@ -1,20 +1,63 @@
-# Current Task Tracker — Phase 7B-H6-D2 (transfer UI route wiring & legacy path retirement)
+# Current Task Tracker — Phase 7B-H6-E1 (transfer updatedAt stamping)
 
 > Living checkpoint doc for agents. Detailed history: `docs/reports/latest-report.md` (do not duplicate long-form evidence here).
 
 ## Current active phase
 
-**Phase 7B-H6-D2: UI Route Wiring & Legacy Path Retirement**
+**Phase 7B-H6-E1: Transfer `updatedAt` Stamping (timestamp-only)**
 **Status:** **ACTIVE / IN PROGRESS — implemented, awaiting Codex review (not committed, not closed).**
-**Scope:** flip `decideReversalRoute('transfer')` to queue-first; migrate the two transfer cancellation UI surfaces (`TransferHistoryPage`, `AdminTransferPage`) from the legacy direct `cancelBranchTransfer` to `executeTransferReversal`; D2-α prerequisite cleanup (stale deferred note + whitespace validation). `editBranchTransfer` and `cancelBranchTransfer` in `transferCrud.ts` are UNTOUCHED — `cancelBranchTransfer` stays internal to `editBranchTransfer`.
+**Scope:** stamp `updatedAt` at transfer completion in `confirmBranchTransfer` (production) and `devConfirmBranchTransfer` (dev/mock) so the H4/H6-C server stale-client guard has an authoritative baseline and the H6-D2 client capture (`observedDocumentUpdatedAt`) is reliably populated for new transfers. Timestamp-only — NO evidence/checksum snapshot, NO server resolver change, NO UI/coordinator change, NO legacy backfill. `cancelBranchTransfer`/`editBranchTransfer` behavior unchanged (cancel already stamped `updatedAt`; edit creates via `confirmBranchTransfer`).
 
-**Clean baseline before H6-D2:** `4aa8065 feat(pos): implement latent queue-first transfer reversal executor` (H6-D1 — awaiting Codex but on mainline).
+**Clean baseline before H6-E1:** `bb30881 feat(pos): wire ui to queue-first transfer reversal and retire legacy path` (H6-D2 — CLOSED / COMMITTED).
+
+---
+
+## Phase 7B-H6-E1 — Transfer `updatedAt` Stamping
+
+**Status:** **IMPLEMENTED — AWAITING CODEX REVIEW** (not committed; not closed).
+**Authorization:** CEO Option A — APPROVED (timestamp-only).
+
+### What was delivered
+
+- `confirmBranchTransfer` (`transferCrud.ts`) Phase-3 header `tx.set` now writes `updatedAt: now` alongside the existing `createdAt: now` (both `serverTimestamp()`); `updatedAt === createdAt` at inception is expected/acceptable.
+- `devConfirmBranchTransfer` (`transferDevMock.ts`) mirrors the shape, writing `updatedAt: ts(now)` on the created doc.
+- No other write path changed: `cancelBranchTransfer` already stamped `updatedAt`; `editBranchTransfer` creates a fresh transfer via `confirmBranchTransfer` (so edit-created docs inherit the stamp). `InventoryTransfer.updatedAt` was already optional — no type change.
+
+### Why this closes the gap
+
+Pre-E1, a freshly `completed` transfer had `createdAt` but no `updatedAt`, so the server `isClientObservationStale` saw `serverDoc.updatedAt == null` → not stale (doubly inert with the omitted client observation). With E1, new transfers carry `updatedAt`, so the H6-D2 capture `toObservedDocumentUpdatedAtIso(cancelTarget.updatedAt)` is populated AND the server has a baseline — activating the stale-client guard end-to-end. No page/coordinator/resolver edit was needed (H6-D2 was built forward-compatible).
+
+### Legacy docs policy (accepted)
+
+No backfill. Existing transfers without `updatedAt` stay fresh-by-default (guard fail-open); the server reversal mutation remains authoritative through the existing guards. New transfers get reliable `updatedAt`.
+
+### Files changed (code)
+
+```
+src/lib/inventory/transferCrud.ts        (confirmBranchTransfer header: + updatedAt: now)
+src/lib/inventory/transferDevMock.ts     (devConfirmBranchTransfer doc: + updatedAt: ts(now))
+src/lib/inventory/transferCrud.test.ts   (+2 H6-E1 tests: production + dev/mock stamping)
+```
+
+### Evidence
+
+- `npx vitest run transferCrud` → 10 passed; `npx vitest run reversalCoordinator` → 76 passed; full web `npx vitest run` → 330 passed (24 files); `npx tsc -b` → clean.
+- `npm --prefix functions run test:unit -- resolveReversal` → 43 passed (server resolver UNCHANGED; the transfer stale-guard regression already exists at `resolveReversal.test.ts` lines 454–468 and stays green).
+- `git diff --check` clean; `stash@{0}` untouched; no forbidden areas touched (no UI, coordinator, resolver, or offline-queue diff).
+
+### Out of scope (unchanged)
+
+Transfer header evidence/checksum snapshot (future H6-E2), server resolver implementation, offline queue schema, Firestore rules, receiving behavior, H6-D2 UI route wiring/coordinator, `cancelBranchTransfer`/`editBranchTransfer` behavior, `sent→received` lifecycle refactor, legacy-doc backfill.
+
+### Hidden risk
+
+Legacy transfer docs without `updatedAt` remain fresh-by-default (stale-client guard inert for them), but new transfers now activate the guard end-to-end; additionally, a metadata-only `reportTransferDiscrepancy` writes a subcollection without advancing the header `updatedAt`, so a discrepancy report is not seen as a state advance by the guard (acceptable — it mutates no stock).
 
 ---
 
 ## Phase 7B-H6-D2 — UI Route Wiring & Legacy Path Retirement
 
-**Status:** **IMPLEMENTED + CODEX BLOCKER FIXED — AWAITING CODEX RE-REVIEW** (not committed; not closed).
+**Status:** **CLOSED / COMMITTED** — `bb30881` `feat(pos): wire ui to queue-first transfer reversal and retire legacy path` (CEO Option B — APPROVED WITH NOTES).
 **Authorization:** CEO Option A — APPROVED.
 
 ### Codex blocker fix (origin-branch authority gate)

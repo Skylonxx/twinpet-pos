@@ -273,6 +273,12 @@ export async function confirmBranchTransfer(
       itemCount: activeLines.length,
       status: 'completed',
       createdAt: now,
+      // Phase 7B-H6-E1: stamp `updatedAt` at completion so the server stale-client
+      // guard (H4/H6-C) has an authoritative baseline to compare against and the
+      // H6-D2 client capture (`observedDocumentUpdatedAt`) is reliably populated for
+      // newly created transfers. `updatedAt === createdAt` at inception is expected;
+      // cancel/edit already advance `updatedAt` on later mutations.
+      updatedAt: now,
     });
 
     // Per-line: transfer item (with exact cuts) + paired out/in movements.
