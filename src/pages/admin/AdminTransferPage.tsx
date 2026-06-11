@@ -160,6 +160,10 @@ export default function AdminTransferPage() {
           // guard — omitted automatically when the loaded doc has no convertible value
           // (confirmBranchTransfer may not stamp it yet; full coverage lands in H6-E).
           observedDocumentUpdatedAt: toObservedDocumentUpdatedAtIso(cancelTarget.updatedAt),
+          // Phase 7B-H6-E2-C: prefer the header `reversalEvidence` snapshot (untrusted —
+          // validated fail-closed in the coordinator) for the queue-first local correction;
+          // absent (legacy/pre-E2-B doc) ⇒ coordinator falls back to the fetched items.
+          transferHeaderEvidence: cancelTarget.reversalEvidence,
         });
         setCancelTarget(null);
         closeDetail();

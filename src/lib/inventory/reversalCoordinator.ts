@@ -45,6 +45,7 @@ import type {
   ReversalSourceType,
 } from '../pos/offline/offlineReversalTypes';
 import { REVERSAL_EVIDENCE_VERSION } from '../receiving/reversalEvidence';
+import { TRANSFER_REVERSAL_EVIDENCE_VERSION } from './transferReversalEvidence';
 
 /** Which execution path a confirmed destructive action takes. */
 export type ReversalRoute = 'receiving_queue_first' | 'transfer_queue_first';
@@ -523,6 +524,14 @@ export type TransferReversalInput = {
   items: readonly TransferReversalItem[];
   /** Phase 7B-H5/H6: observed transfer `updatedAt` (ISO) for the H4 stale-client guard. */
   observedDocumentUpdatedAt?: string | null;
+  /**
+   * Phase 7B-H6-E2-C: the transfer header's `reversalEvidence` snapshot, passed straight
+   * from the loaded Firestore doc (UNTRUSTED — typed `unknown` at this boundary). When
+   * present it is PREFERRED over `items` and must validate or the reversal fails closed
+   * (no fallback). When `null`/`undefined` (legacy/pre-E2-B record) the strict `items`
+   * fallback is used. Mirrors the receiving header-evidence precedence (Phase 7B-H1).
+   */
+  transferHeaderEvidence?: unknown;
   /** Defaults to `reverse`. */
   action?: ReversalAction;
 };
@@ -535,10 +544,13 @@ export type TransferReversalOutcome = {
   manualReviewRequired: boolean;
   /** True if an online sync to the resolver was attempted this call. */
   synced: boolean;
+  /** Phase 7B-H6-E2-C: which evidence the reversal effects were proven from. */
+  evidenceSource: ReversalEvidenceSource;
 };
 
 /** Structured codes for an incomplete/malformed transfer reversal rejection. */
 export type TransferReversalEvidenceCode =
+  // ── Legacy item-subcollection evidence (fallback path) ──
   | 'missing_transfer_id'
   | 'missing_from_branch'
   | 'missing_to_branch'
@@ -549,7 +561,23 @@ export type TransferReversalEvidenceCode =
   | 'empty_items'
   | 'missing_product_id'
   | 'non_finite_qty'
-  | 'non_positive_qty';
+  | 'non_positive_qty'
+  // ── Header `reversalEvidence` snapshot (Phase 7B-H6-E2-C, preferred path) ──
+  | 'header_not_object'
+  | 'header_unsupported_version'
+  | 'header_wrong_source'
+  | 'header_branch_mismatch'
+  | 'header_empty_effects'
+  | 'header_malformed_effect'
+  | 'header_missing_product_id'
+  | 'header_invalid_direction'
+  | 'header_invalid_branch'
+  | 'header_invalid_lot_id'
+  | 'header_non_finite_qty'
+  | 'header_non_positive_qty'
+  | 'header_item_count_mismatch'
+  | 'header_total_qty_mismatch'
+  | 'header_balance_mismatch';
 
 /** Honest user-facing message: an incomplete-evidence transfer reversal is refused, not faked. */
 export const TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE =
@@ -570,13 +598,13 @@ export class TransferReversalEvidenceError extends Error {
 }
 
 /**
- * Fail-closed completeness gate. Rejects (throws) BEFORE any effects are built — and
- * therefore before `createOfflineReversal` does any local correction or queue write —
- * when required transfer data is missing/malformed. No invalid line is silently dropped.
+ * Fail-closed gate for the transfer HEADER fields (transferId, branches, staff, reason).
+ * Runs on BOTH the header-evidence and legacy-item paths (Phase 7B-H6-E2-C): a reversal
+ * always needs a valid origin/destination, actor, and reason regardless of where the
+ * stock effects are proven from. Does NOT touch `items` — the header-evidence path is
+ * intended to succeed even when the fetched item subcollection is empty or partial.
  */
-export function assertTransferReversalInput(
-  input: TransferReversalInput,
-): asserts input is TransferReversalInput {
+export function assertTransferReversalHeaderFields(input: TransferReversalInput): void {
   if (typeof input.transferId !== 'string' || input.transferId.trim().length === 0) {
     throw new TransferReversalEvidenceError('missing_transfer_id', TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
   }
@@ -595,13 +623,23 @@ export function assertTransferReversalInput(
   if (typeof input.reason !== 'string' || input.reason.trim().length === 0) {
     throw new TransferReversalEvidenceError('missing_reason', TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
   }
-  if (input.items == null) {
+}
+
+/**
+ * Fail-closed gate for the legacy item-subcollection evidence. Used ONLY when no header
+ * `reversalEvidence` snapshot is present. No invalid line is silently dropped; a missing
+ * or empty subcollection rejects (so a partial Firestore load can never under-correct).
+ */
+export function assertTransferReversalItems(
+  items: readonly TransferReversalItem[] | null | undefined,
+): asserts items is readonly TransferReversalItem[] {
+  if (items == null) {
     throw new TransferReversalEvidenceError('missing_items', TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
   }
-  if (!Array.isArray(input.items) || input.items.length === 0) {
+  if (!Array.isArray(items) || items.length === 0) {
     throw new TransferReversalEvidenceError('empty_items', TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
   }
-  for (const it of input.items) {
+  for (const it of items) {
     if (!it || typeof it.productId !== 'string' || it.productId.trim().length === 0) {
       throw new TransferReversalEvidenceError('missing_product_id', TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
     }
@@ -612,6 +650,20 @@ export function assertTransferReversalInput(
       throw new TransferReversalEvidenceError('non_positive_qty', TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
     }
   }
+}
+
+/**
+ * Fail-closed completeness gate (legacy/full input). Rejects (throws) BEFORE any effects
+ * are built — and therefore before `createOfflineReversal` does any local correction or
+ * queue write — when required transfer data is missing/malformed. Composed of the header-
+ * field and item gates; retained as the single-call validator for the legacy item path
+ * and existing callers.
+ */
+export function assertTransferReversalInput(
+  input: TransferReversalInput,
+): asserts input is TransferReversalInput {
+  assertTransferReversalHeaderFields(input);
+  assertTransferReversalItems(input.items);
 }
 
 /**
@@ -643,11 +695,188 @@ export function buildTransferReversalEffects(
   return effects;
 }
 
+// ─── Header transfer-evidence gate (Phase 7B-H6-E2-C — preferred over legacy items) ──
+
+/** Float tolerance for the header qty checksums (base units may be fractional). */
+const TRANSFER_HEADER_QTY_EPSILON = 1e-9;
+
+/**
+ * Validate the transfer header's `reversalEvidence` snapshot (Phase 7B-H6-E2-B write) and
+ * project it into the reversal's original DUAL-BRANCH stock effects. FAIL-CLOSED: a
+ * present-but-malformed snapshot (wrong shape/version/source, branch mismatch, empty/invalid
+ * effects, a swapped direction→branch binding, or a failed `itemCount`/`totalQtyBase`/
+ * per-product balance checksum) THROWS — it must never silently fall back to the item
+ * subcollection, because a corrupt/partial header write is itself a danger signal.
+ *
+ * `raw` is treated as fully UNTRUSTED (it crosses the Firestore boundary), so every field is
+ * type-checked HERE before any structural assertion is trusted. Self-consistent by design:
+ * the snapshot is validated against its OWN checksums and dual-branch balance WITHOUT
+ * consulting the live item subcollection — that independence is exactly what hardens the
+ * optimistic local correction against a partial/empty subcollection load. The server resolver
+ * remains the ultimate authority (it re-reads items and ignores client evidence).
+ *
+ * Mapping (mirrors {@link buildTransferReversalEffects} for the same transfer):
+ *   dest_gain   → { locationId: toBranchId,   lotId: null,            quantity: +qtyBase }
+ *   source_loss → { locationId: fromBranchId, lotId: e.lotId ?? null, quantity: -qtyBase }
+ */
+export function validateTransferHeaderEvidence(
+  raw: unknown,
+  fromBranchId: string,
+  toBranchId: string,
+): OriginalStockEffect[] {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new TransferReversalEvidenceError('header_not_object', TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
+  }
+  const ev = raw as Record<string, unknown>;
+  if (ev.version !== TRANSFER_REVERSAL_EVIDENCE_VERSION) {
+    throw new TransferReversalEvidenceError('header_unsupported_version', TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
+  }
+  if (ev.source !== 'transfer_completion') {
+    throw new TransferReversalEvidenceError('header_wrong_source', TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
+  }
+  // Header branches must match the transfer input — prevents a tampered/mismatched snapshot
+  // from silently re-pointing which branch is origin vs destination.
+  if (ev.fromBranchId !== fromBranchId || ev.toBranchId !== toBranchId) {
+    throw new TransferReversalEvidenceError('header_branch_mismatch', TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
+  }
+  const rawEffects = ev.effects;
+  if (!Array.isArray(rawEffects) || rawEffects.length === 0) {
+    throw new TransferReversalEvidenceError('header_empty_effects', TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
+  }
+
+  const effects: OriginalStockEffect[] = [];
+  const destByProduct = new Map<string, number>();
+  const sourceByProduct = new Map<string, number>();
+  let destRows = 0;
+  let sourceRows = 0;
+  let sourceTotal = 0; // Σ source_loss qty — equals evidence.totalQtyBase by builder construction.
+
+  for (const entry of rawEffects) {
+    if (!entry || typeof entry !== 'object') {
+      throw new TransferReversalEvidenceError('header_malformed_effect', TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
+    }
+    const e = entry as Record<string, unknown>;
+    if (typeof e.productId !== 'string' || e.productId.length === 0) {
+      throw new TransferReversalEvidenceError('header_missing_product_id', TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
+    }
+    if (e.direction !== 'dest_gain' && e.direction !== 'source_loss') {
+      throw new TransferReversalEvidenceError('header_invalid_direction', TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
+    }
+    if (typeof e.branchId !== 'string' || e.branchId.length === 0) {
+      throw new TransferReversalEvidenceError('header_invalid_branch', TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
+    }
+    // Direction-bound branch: dest_gain MUST use toBranchId, source_loss MUST use fromBranchId.
+    // Membership in {from,to} is not enough — a swapped valid-but-wrong branch must reject.
+    if (
+      (e.direction === 'dest_gain' && e.branchId !== toBranchId) ||
+      (e.direction === 'source_loss' && e.branchId !== fromBranchId)
+    ) {
+      throw new TransferReversalEvidenceError('header_invalid_branch', TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
+    }
+    if (typeof e.qtyBase !== 'number' || !Number.isFinite(e.qtyBase)) {
+      throw new TransferReversalEvidenceError('header_non_finite_qty', TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
+    }
+    if (e.qtyBase <= 0) {
+      throw new TransferReversalEvidenceError('header_non_positive_qty', TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
+    }
+    // lotId is audit-only: a string, or null/absent. Any other type is a malformed snapshot.
+    if (e.lotId !== undefined && e.lotId !== null && typeof e.lotId !== 'string') {
+      throw new TransferReversalEvidenceError('header_invalid_lot_id', TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
+    }
+
+    if (e.direction === 'dest_gain') {
+      destRows += 1;
+      destByProduct.set(e.productId, (destByProduct.get(e.productId) ?? 0) + e.qtyBase);
+      effects.push({ productId: e.productId, locationId: toBranchId, lotId: null, quantity: e.qtyBase });
+    } else {
+      sourceRows += 1;
+      sourceTotal += e.qtyBase;
+      sourceByProduct.set(e.productId, (sourceByProduct.get(e.productId) ?? 0) + e.qtyBase);
+      const lotId = typeof e.lotId === 'string' && e.lotId.length > 0 ? e.lotId : null;
+      effects.push({ productId: e.productId, locationId: fromBranchId, lotId, quantity: -e.qtyBase });
+    }
+  }
+
+  // Integrity checksums verified against the RAW persisted entries: `itemCount` is the
+  // number of source items (= one source_loss row per item) and `totalQtyBase` is the
+  // summed source quantity (builder semantics). A tampered count/total fails closed here.
+  if (typeof ev.itemCount !== 'number' || ev.itemCount !== sourceRows) {
+    throw new TransferReversalEvidenceError('header_item_count_mismatch', TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
+  }
+  // `Number.isFinite` guard is REQUIRED: `typeof NaN === 'number'` and `Math.abs(NaN) > EPSILON`
+  // is `false`, so a `NaN`/±Infinity `totalQtyBase` would otherwise slip through the checksum.
+  if (
+    typeof ev.totalQtyBase !== 'number' ||
+    !Number.isFinite(ev.totalQtyBase) ||
+    Math.abs(ev.totalQtyBase - sourceTotal) > TRANSFER_HEADER_QTY_EPSILON
+  ) {
+    throw new TransferReversalEvidenceError('header_total_qty_mismatch', TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
+  }
+
+  // Dual-branch balance: every product's summed dest_gain must equal its summed source_loss,
+  // the product sets must match exactly, and the row counts must agree (one pair per item).
+  if (destRows !== sourceRows || destByProduct.size !== sourceByProduct.size) {
+    throw new TransferReversalEvidenceError('header_balance_mismatch', TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
+  }
+  for (const [productId, destQty] of destByProduct) {
+    const sourceQty = sourceByProduct.get(productId);
+    if (sourceQty === undefined || Math.abs(destQty - sourceQty) > TRANSFER_HEADER_QTY_EPSILON) {
+      throw new TransferReversalEvidenceError('header_balance_mismatch', TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
+    }
+  }
+
+  return effects;
+}
+
+/**
+ * Resolve the transfer reversal's original stock effects + the evidence source they came
+ * from, applying the Phase 7B-H6-E2-C precedence (all gates run BEFORE any queue write /
+ * local mutation, so every rejection is fail-closed):
+ *
+ *   Case 1 — header evidence present & valid  → use header effects; `header_snapshot`.
+ *   Case 2 — header evidence present & invalid → THROW (no fallback — a corrupt/partial
+ *            header write is a danger signal that must not be silently ignored).
+ *   Case 3 — header evidence absent           → strict legacy item-subcollection gate;
+ *            `legacy_subcollection`.
+ *   Case 4 — header absent AND legacy invalid → THROW (legacy gate fails closed).
+ *
+ * "Present" means `transferHeaderEvidence != null`; an empty/partial object is
+ * present-but-invalid. Header-field validation (transferId/branches/staff/reason) is the
+ * CALLER's responsibility ({@link assertTransferReversalHeaderFields}) and runs on both paths.
+ */
+export function resolveTransferReversalEffects(
+  input: TransferReversalInput,
+): { originalEffects: OriginalStockEffect[]; evidenceSource: ReversalEvidenceSource } {
+  if (input.transferHeaderEvidence != null) {
+    // Case 1/2 — header present: must validate or fail closed. NEVER falls back to items.
+    return {
+      originalEffects: validateTransferHeaderEvidence(
+        input.transferHeaderEvidence,
+        input.fromBranchId,
+        input.toBranchId,
+      ),
+      evidenceSource: 'header_snapshot',
+    };
+  }
+
+  // Case 3/4 — no header snapshot (legacy record): strict item-subcollection fallback.
+  assertTransferReversalItems(input.items);
+  const originalEffects = buildTransferReversalEffects(input.items, input.fromBranchId, input.toBranchId);
+  if (originalEffects.length === 0) {
+    // Defense-in-depth: every line was validated positive above, so this should be
+    // unreachable, but it guarantees we never queue an empty correction.
+    throw new TransferReversalEvidenceError('empty_items', TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
+  }
+  return { originalEffects, evidenceSource: 'legacy_subcollection' };
+}
+
 /**
  * Execute a confirmed (completed) TRANSFER reversal, queue-first — the latent H6-D1
  * counterpart of {@link executeReceivingReversal}:
- *   1. Fail-closed validation of the transfer input — BEFORE any write.
- *   2. Build the dual-branch original effects (dest `+qty`, source `-qty`).
+ *   1. Fail-closed validation of the transfer header fields — BEFORE any write.
+ *   2. Resolve the dual-branch original effects (dest `+qty`, source `-qty`) via the
+ *      Phase 7B-H6-E2-C precedence: prefer the header `reversalEvidence` snapshot, strict
+ *      legacy item fallback only when absent; a present-but-invalid header fails closed.
  *   3. `createOfflineReversal` — asserts authority (Staff → throws BEFORE any write),
  *      applies the immediate local IndexedDB correction (dest `-qty`, source `+qty`),
  *      and durably queues the intent (`sourceType: 'transfer'`, `branchId: fromBranchId`).
@@ -663,13 +892,14 @@ export async function executeTransferReversal(
 ): Promise<TransferReversalOutcome> {
   const queueDeps: QueueDeps | undefined = deps.now ? { now: deps.now } : undefined;
 
-  // Fail-closed gate — nothing is queued or corrected on incomplete/malformed input.
-  assertTransferReversalInput(input);
-  const originalEffects = buildTransferReversalEffects(input.items, input.fromBranchId, input.toBranchId);
-  if (originalEffects.length === 0) {
-    // Defense-in-depth: every line was validated positive above, so unreachable.
-    throw new TransferReversalEvidenceError('empty_items', TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
-  }
+  // Fail-closed header-field gate (transferId/branches/staff/reason) — runs on BOTH the
+  // header-evidence and legacy paths, before any write.
+  assertTransferReversalHeaderFields(input);
+
+  // Phase 7B-H6-E2-C evidence precedence: prefer the header `reversalEvidence` snapshot,
+  // strict legacy item fallback only when no header is present; a present-but-invalid
+  // header rejects (no fallback). All gates run before any queue write / local mutation.
+  const { originalEffects, evidenceSource } = resolveTransferReversalEffects(input);
 
   const createInput: CreateReversalInput = {
     // Origin branch scopes the idempotency key and matches the server's origin authority.
@@ -683,6 +913,7 @@ export async function executeTransferReversal(
     reasonCode: input.reason,
     reasonNote: input.note,
     originalEffects,
+    evidenceSource,
     // Phase 7B-H5/H6: thread the observed transfer `updatedAt` for the H4 stale guard.
     observedDocumentUpdatedAt: input.observedDocumentUpdatedAt ?? null,
   };
@@ -704,5 +935,6 @@ export async function executeTransferReversal(
     status: current.status,
     manualReviewRequired: current.status === 'manual_review_required',
     synced,
+    evidenceSource,
   };
 }

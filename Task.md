@@ -1,17 +1,64 @@
-# Current Task Tracker — Phase 7B-H6-E2-B (transfer evidence header write)
+# Current Task Tracker — Phase 7B-H6-E2-C (transfer evidence coordinator validation)
 
 > Living checkpoint doc for agents. Detailed history: `docs/reports/latest-report.md` (do not duplicate long-form evidence here).
 
 ## Current active phase
 
-**Phase 7B-H6-E2-B: Write Transfer Evidence Header at Completion**
+**Phase 7B-H6-E2-C: Transfer Evidence Coordinator Validation**
 **Status:** **IMPLEMENTED — AWAITING CODEX REVIEW** (not committed; not closed).
-**Scope:** add `reversalEvidence?: TransferReversalEvidence` to `InventoryTransfer` in `transferTypes.ts`; wire `buildTransferReversalEvidence` + `assertTransferReversalEvidenceCoversCompletion` into `confirmBranchTransfer` (`transferCrud.ts`) and `devConfirmBranchTransfer` (`transferDevMock.ts`); persist evidence atomically on the transfer header at completion. No coordinator validation. H6-E2-C (coordinator validation) remains a future slice.
+**Scope:** make the client-side transfer reversal coordinator PREFER and validate the header `reversalEvidence` snapshot when present, with strict legacy item-subcollection fallback when absent. Adds `transferHeaderEvidence?: unknown` (untrusted) to `TransferReversalInput`, `validateTransferHeaderEvidence` (fail-closed projection → `OriginalStockEffect[]`), `resolveTransferReversalEffects` (precedence), splits `assertTransferReversalInput` into header-field + item gates, tags `evidenceSource` (`header_snapshot`/`legacy_subcollection`), and activates both cancel pages to pass `cancelTarget.reversalEvidence`. **No transfer write-path change, no server resolver change, no offline queue schema change.**
 
+**Policy:** valid header → use header / `header_snapshot`; present-but-invalid header → reject, **no fallback**; header absent → legacy items / `legacy_subcollection`.
+
+**Stacked on H6-E2-B** (CLOSED / COMMITTED — `82d3352`): header evidence write at completion.
 **Stacked on H6-E2-A** (CLOSED / COMMITTED — `53a2123`): pure evidence builder + dual-branch invariant.
-**Stacked on H6-E1** (CLOSED / COMMITTED — `8a3d03f`): `updatedAt` stamping at transfer completion.
 
-**Clean baseline before H6-E2-B:** `53a2123 feat(pos): implement dual-branch transfer reversal evidence builder and invariants` (H6-E2-A — CLOSED / COMMITTED).
+**Clean baseline before H6-E2-C:** `82d3352 feat(pos): write transfer reversal evidence header on completion` (H6-E2-B — CLOSED / COMMITTED).
+
+---
+
+## Phase 7B-H6-E2-C — Transfer Evidence Coordinator Validation
+
+**Status:** **IMPLEMENTED — AWAITING CODEX REVIEW** (not committed; not closed).
+**Authorization:** CEO Option A — APPROVED (Opus 4.8 / high). Codex GPT-5.5 High review mandatory before closure.
+
+### What was delivered
+
+- `src/lib/inventory/reversalCoordinator.ts`:
+  - `TransferReversalInput` gains `transferHeaderEvidence?: unknown` (UNTRUSTED at the boundary — never typed as `TransferReversalEvidence`).
+  - `TransferReversalOutcome` gains `evidenceSource: ReversalEvidenceSource` (mirrors receiving).
+  - `TransferReversalEvidenceCode` extended with 15 `header_*` codes.
+  - `assertTransferReversalInput` split into `assertTransferReversalHeaderFields` (transferId/branches/staff/reason — runs on BOTH paths) + `assertTransferReversalItems` (legacy path only); the original retained as a composed wrapper.
+  - new `validateTransferHeaderEvidence(raw, fromBranchId, toBranchId): OriginalStockEffect[]` — untrusted-boundary type-guards → version/source/branch checks → per-effect validity + direction-bound branch → checksums (`itemCount`/`totalQtyBase`, the latter with an explicit `Number.isFinite` guard) + dual-branch balance, all against the RAW entries; projects dest_gain→`+qty@to` and source_loss→`-qty@from` (lotId audit-only). Self-consistent; does NOT consult the item subcollection.
+  - **Codex blocker fix:** `totalQtyBase` checksum now rejects non-finite values (`NaN`/±Infinity) — previously `typeof NaN === 'number'` + `Math.abs(NaN) > EPSILON === false` let a `NaN` total slip through. +3 regression tests.
+  - new `resolveTransferReversalEffects(input)` — Case 1/2 header present (validate-or-throw, no fallback) → `header_snapshot`; Case 3/4 header absent → legacy item gate → `legacy_subcollection`.
+  - `executeTransferReversal` now runs header-field gate → `resolveTransferReversalEffects` → sets `evidenceSource` on `CreateReversalInput` and the outcome.
+- `src/pages/inventory/TransferHistoryPage.tsx` & `src/pages/admin/AdminTransferPage.tsx`: pass `transferHeaderEvidence: cancelTarget.reversalEvidence` (data argument only — no route/gating/modal change).
+- `src/lib/inventory/reversalCoordinator.test.ts`: new `describe('H6-E2-C: …')` — 24 tests (valid preferred incl. empty-items, absent-falls-back, legacy-reversible, full invalid-header matrix with no-fallback/no-write proof, mapping equivalence, single/multi-lot lotId, E2-B round-trip, source tagging, Staff rejected on header path, header-field validation on header path).
+
+### What is NOT in this slice
+
+No transfer write-path change (`transferCrud.ts`/`transferDevMock.ts`/`transferTypes.ts` untouched). No server resolver change (`functions/` untouched — it re-reads items and remains authoritative). No offline queue schema change (`evidenceSource` already existed, optional). No receiving/manual-review/POS change. No new enum value; no new files.
+
+### Files changed (code)
+
+```
+src/lib/inventory/reversalCoordinator.ts       (+transferHeaderEvidence, validateTransferHeaderEvidence, resolveTransferReversalEffects, gate split, evidenceSource)
+src/lib/inventory/reversalCoordinator.test.ts  (+27 H6-E2-C tests; 103 file total)
+src/pages/inventory/TransferHistoryPage.tsx     (+transferHeaderEvidence arg)
+src/pages/admin/AdminTransferPage.tsx           (+transferHeaderEvidence arg)
+```
+
+### Evidence
+
+- `npx vitest run reversalCoordinator` → **103 passed**; `transferCrud` → **18 passed**; `transferReversalEvidence` → **41 passed**
+- Full web `npx vitest run` → **406 passed** (25 files); `npx tsc -b` → clean
+- `functions` `resolveReversal` → **43 passed** (server unchanged)
+- `git diff --check` clean; `stash@{0}` untouched; forbidden-path diff EMPTY (write-path/server/offline schema).
+
+### Hidden risk
+
+H6-E2-C activates fail-closed header evidence preference, so malformed post-E2-B evidence will BLOCK local queue-first reversal (→ manual review) rather than silently falling back; this is intentional, and server authority remains unchanged.
 
 ---
 

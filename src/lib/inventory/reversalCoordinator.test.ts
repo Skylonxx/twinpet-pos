@@ -12,14 +12,17 @@ import {
   executeReceivingReversal,
   executeTransferReversal,
   ReceivingReversalEvidenceError,
+  resolveTransferReversalEffects,
   toObservedDocumentUpdatedAtIso,
   TransferReversalEvidenceError,
   validateReceivingHeaderEvidence,
+  validateTransferHeaderEvidence,
   type ReceivingReversalInput,
   type ReceivingReversalItem,
   type ReversalCoordinatorDeps,
   type TransferReversalInput,
 } from './reversalCoordinator';
+import { buildTransferReversalEvidence } from './transferReversalEvidence';
 import { OfflineReversalRejectedError, type ServerReversalResponse } from '../pos/offline/offlineReversalLogic';
 import { listQueue, readLocalStock } from '../pos/offline/offlineReversalQueue';
 import { createInMemoryReversalStore } from '../pos/offline/reversalLocalStore';
@@ -826,6 +829,297 @@ describe('H6-D1: assertTransferReversalInput is pure (throws, no side effects)',
   test('valid input passes; invalid throws TransferReversalEvidenceError', () => {
     expect(() => assertTransferReversalInput(transferInput)).not.toThrow();
     expect(() => assertTransferReversalInput({ ...transferInput, fromBranchId: '' })).toThrow(TransferReversalEvidenceError);
+  });
+});
+
+// ─── Phase 7B-H6-E2-C: transfer header evidence coordinator validation ─────────
+// The coordinator now PREFERS a present transfer header `reversalEvidence` snapshot over
+// the (possibly partial) fetched item subcollection, validating it fail-closed, and only
+// falls back to items when no header is present. `header_snapshot` vs `legacy_subcollection`
+// is tagged on the outcome. Server authority is unchanged (it re-reads items, ignores this).
+describe('H6-E2-C: transfer header evidence is preferred + validated', () => {
+  /** A real E2-B-shaped snapshot built by the SAME builder the write path uses (round-trip). */
+  function validHeaderEvidence(
+    over: Partial<Parameters<typeof buildTransferReversalEvidence>[0]> = {},
+  ) {
+    return buildTransferReversalEvidence({
+      fromBranchId: 'b1',
+      toBranchId: 'b2',
+      items: [
+        { productId: 'p1', transferQty: 5, sourceLotDetails: [{ lotId: 'lot-1' }] },
+        { productId: 'p2', transferQty: 3 },
+      ],
+      createdAt: '2026-06-11T00:00:00.000Z',
+      createdBy: 'mgr-1',
+      ...over,
+    });
+  }
+
+  async function seedDualBranch() {
+    await store.transact(['stock'], 'readwrite', async (txn) => {
+      await txn.put('stock', 'p1::b1', { productId: 'p1', locationId: 'b1', quantity: 10 }); // source
+      await txn.put('stock', 'p1::b2', { productId: 'p1', locationId: 'b2', quantity: 10 }); // dest
+      await txn.put('stock', 'p2::b1', { productId: 'p2', locationId: 'b1', quantity: 4 });
+      await txn.put('stock', 'p2::b2', { productId: 'p2', locationId: 'b2', quantity: 4 });
+    });
+  }
+
+  test('valid header evidence is PREFERRED and applied even when items is empty/partial', async () => {
+    await seedDualBranch();
+    const out = await executeTransferReversal(makeDeps({ isOnline: () => false }), {
+      ...transferInput,
+      items: [], // simulate a partial/empty subcollection fetch — must NOT matter on header path
+      transferHeaderEvidence: validHeaderEvidence(),
+    });
+    expect(out.evidenceSource).toBe('header_snapshot');
+    expect(out.status).toBe('queued');
+    // Dual-branch local correction proven from the header, not the (empty) items:
+    expect(await readLocalStock(store, 'p1', 'b1')).toBe(15); // source restored +5
+    expect(await readLocalStock(store, 'p1', 'b2')).toBe(5); // dest removed -5
+    expect(await readLocalStock(store, 'p2', 'b1')).toBe(7); // source restored +3
+    expect(await readLocalStock(store, 'p2', 'b2')).toBe(1); // dest removed -3
+    expect(await listQueue(store)).toHaveLength(1);
+  });
+
+  test('absent header evidence FALLS BACK to the legacy item-subcollection path', async () => {
+    await seedDualBranch();
+    const out = await executeTransferReversal(makeDeps({ isOnline: () => false }), transferInput);
+    expect(out.evidenceSource).toBe('legacy_subcollection');
+    expect(out.status).toBe('queued');
+    // Legacy item-derived correction still applies the same dual-branch math.
+    expect(await readLocalStock(store, 'p1', 'b1')).toBe(15);
+    expect(await readLocalStock(store, 'p1', 'b2')).toBe(5);
+    expect(await readLocalStock(store, 'p2', 'b1')).toBe(7);
+    expect(await readLocalStock(store, 'p2', 'b2')).toBe(1);
+    expect(await listQueue(store)).toHaveLength(1);
+  });
+
+  test('legacy no-evidence transfer remains reversible (explicit, single product)', async () => {
+    await store.transact(['stock'], 'readwrite', async (txn) => {
+      await txn.put('stock', 'p1::b1', { productId: 'p1', locationId: 'b1', quantity: 0 });
+      await txn.put('stock', 'p1::b2', { productId: 'p1', locationId: 'b2', quantity: 10 });
+    });
+    const out = await executeTransferReversal(makeDeps({ isOnline: () => false }), {
+      ...transferInput,
+      items: [{ productId: 'p1', transferQty: 5, sourceLotDetails: [{ lotId: 'lot-1' }] }],
+      // no transferHeaderEvidence → legacy
+    });
+    expect(out.evidenceSource).toBe('legacy_subcollection');
+    expect(await readLocalStock(store, 'p1', 'b1')).toBe(5); // +5 source
+    expect(await readLocalStock(store, 'p1', 'b2')).toBe(5); // -5 dest
+  });
+
+  // ── Present-but-invalid header rejects, NO fallback, NO write ──────────────────
+  async function expectHeaderRejectedNoFallback(
+    headerEvidence: unknown,
+  ): Promise<TransferReversalEvidenceError> {
+    await store.transact(['stock'], 'readwrite', async (txn) => {
+      await txn.put('stock', 'p1::b1', { productId: 'p1', locationId: 'b1', quantity: 10 });
+      await txn.put('stock', 'p1::b2', { productId: 'p1', locationId: 'b2', quantity: 10 });
+    });
+    const call = vi.fn<CallResolveReversal>();
+    let caught: unknown;
+    try {
+      await executeTransferReversal(makeDeps({ isOnline: () => true, call }), {
+        ...transferInput,
+        items: transferInput.items, // VALID items present — must STILL not be consulted (no fallback)
+        transferHeaderEvidence: headerEvidence,
+      });
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(TransferReversalEvidenceError);
+    expect(call).not.toHaveBeenCalled(); // resolver never reached
+    expect(await listQueue(store)).toHaveLength(0); // no durable queue item
+    expect(await readLocalStock(store, 'p1', 'b1')).toBe(10); // source untouched
+    expect(await readLocalStock(store, 'p1', 'b2')).toBe(10); // dest untouched
+    return caught as TransferReversalEvidenceError;
+  }
+
+  test('not an object → header_not_object', async () => {
+    expect((await expectHeaderRejectedNoFallback('nope')).code).toBe('header_not_object');
+    expect((await expectHeaderRejectedNoFallback([])).code).toBe('header_not_object');
+  });
+  test('bad version → header_unsupported_version', async () => {
+    expect((await expectHeaderRejectedNoFallback({ ...validHeaderEvidence(), version: 2 })).code).toBe(
+      'header_unsupported_version',
+    );
+  });
+  test('wrong source → header_wrong_source', async () => {
+    expect(
+      (await expectHeaderRejectedNoFallback({ ...validHeaderEvidence(), source: 'receiving_completion' })).code,
+    ).toBe('header_wrong_source');
+  });
+  test('branch mismatch → header_branch_mismatch', async () => {
+    expect((await expectHeaderRejectedNoFallback({ ...validHeaderEvidence(), fromBranchId: 'bX' })).code).toBe(
+      'header_branch_mismatch',
+    );
+  });
+  test('swapped branch direction (dest_gain pointed at source branch) → header_invalid_branch', async () => {
+    const ev = validHeaderEvidence();
+    const tampered = {
+      ...ev,
+      effects: ev.effects.map((e) => (e.direction === 'dest_gain' ? { ...e, branchId: 'b1' } : e)),
+    };
+    expect((await expectHeaderRejectedNoFallback(tampered)).code).toBe('header_invalid_branch');
+  });
+  test('itemCount checksum mismatch → header_item_count_mismatch', async () => {
+    expect((await expectHeaderRejectedNoFallback({ ...validHeaderEvidence(), itemCount: 99 })).code).toBe(
+      'header_item_count_mismatch',
+    );
+  });
+  test('totalQtyBase checksum mismatch → header_total_qty_mismatch', async () => {
+    const ev = validHeaderEvidence();
+    expect((await expectHeaderRejectedNoFallback({ ...ev, totalQtyBase: ev.totalQtyBase + 1 })).code).toBe(
+      'header_total_qty_mismatch',
+    );
+  });
+  // Codex blocker: `typeof NaN === 'number'` + `Math.abs(NaN) > EPSILON === false` must NOT slip
+  // a non-finite checksum through. Every non-finite `totalQtyBase` must fail closed.
+  test('NaN totalQtyBase → header_total_qty_mismatch (non-finite guard)', async () => {
+    expect((await expectHeaderRejectedNoFallback({ ...validHeaderEvidence(), totalQtyBase: Number.NaN })).code).toBe(
+      'header_total_qty_mismatch',
+    );
+  });
+  test('Infinity totalQtyBase → header_total_qty_mismatch (non-finite guard)', async () => {
+    expect(
+      (await expectHeaderRejectedNoFallback({ ...validHeaderEvidence(), totalQtyBase: Number.POSITIVE_INFINITY })).code,
+    ).toBe('header_total_qty_mismatch');
+  });
+  test('-Infinity totalQtyBase → header_total_qty_mismatch (non-finite guard)', async () => {
+    expect(
+      (await expectHeaderRejectedNoFallback({ ...validHeaderEvidence(), totalQtyBase: Number.NEGATIVE_INFINITY })).code,
+    ).toBe('header_total_qty_mismatch');
+  });
+  test('dual-branch imbalance (dest qty ≠ source qty for a product) → header_balance_mismatch', async () => {
+    const ev = validHeaderEvidence();
+    const tampered = {
+      ...ev,
+      effects: ev.effects.map((e) =>
+        e.direction === 'dest_gain' && e.productId === 'p1' ? { ...e, qtyBase: 6 } : e,
+      ),
+    };
+    expect((await expectHeaderRejectedNoFallback(tampered)).code).toBe('header_balance_mismatch');
+  });
+  test('non-positive effect qty → header_non_positive_qty', async () => {
+    const ev = validHeaderEvidence();
+    const tampered = { ...ev, effects: ev.effects.map((e) => ({ ...e, qtyBase: 0 })) };
+    expect((await expectHeaderRejectedNoFallback(tampered)).code).toBe('header_non_positive_qty');
+  });
+  test('non-finite effect qty → header_non_finite_qty', async () => {
+    const ev = validHeaderEvidence();
+    const tampered = { ...ev, effects: ev.effects.map((e) => ({ ...e, qtyBase: Number.NaN })) };
+    expect((await expectHeaderRejectedNoFallback(tampered)).code).toBe('header_non_finite_qty');
+  });
+  test('malformed (null) effect entry → header_malformed_effect', async () => {
+    const ev = validHeaderEvidence();
+    expect((await expectHeaderRejectedNoFallback({ ...ev, effects: [...ev.effects, null] })).code).toBe(
+      'header_malformed_effect',
+    );
+  });
+  test('empty effects → header_empty_effects', async () => {
+    expect((await expectHeaderRejectedNoFallback({ ...validHeaderEvidence(), effects: [] })).code).toBe(
+      'header_empty_effects',
+    );
+  });
+  test('effect missing productId → header_missing_product_id', async () => {
+    const ev = validHeaderEvidence();
+    const tampered = { ...ev, effects: ev.effects.map((e) => ({ ...e, productId: '' })) };
+    expect((await expectHeaderRejectedNoFallback(tampered)).code).toBe('header_missing_product_id');
+  });
+  test('effect invalid direction → header_invalid_direction', async () => {
+    const ev = validHeaderEvidence();
+    const tampered = { ...ev, effects: ev.effects.map((e) => ({ ...e, direction: 'sideways' })) };
+    expect((await expectHeaderRejectedNoFallback(tampered)).code).toBe('header_invalid_direction');
+  });
+  test('effect non-string lotId → header_invalid_lot_id', async () => {
+    const ev = validHeaderEvidence();
+    const tampered = {
+      ...ev,
+      effects: ev.effects.map((e) => (e.direction === 'source_loss' ? { ...e, lotId: 123 } : e)),
+    };
+    expect((await expectHeaderRejectedNoFallback(tampered)).code).toBe('header_invalid_lot_id');
+  });
+
+  // ── Mapping fidelity ──────────────────────────────────────────────────────────
+  function sortEffects<T extends { productId: string; locationId: string; quantity: number }>(rows: readonly T[]): T[] {
+    return [...rows].sort((a, b) => {
+      const ka = `${a.productId}|${a.locationId}|${a.quantity}`;
+      const kb = `${b.productId}|${b.locationId}|${b.quantity}`;
+      return ka < kb ? -1 : ka > kb ? 1 : 0;
+    });
+  }
+
+  test('header path and legacy path produce EQUIVALENT OriginalStockEffect[] for the same transfer', () => {
+    const fromHeader = validateTransferHeaderEvidence(validHeaderEvidence(), 'b1', 'b2');
+    const fromItems = buildTransferReversalEffects(transferInput.items, 'b1', 'b2');
+    expect(sortEffects(fromHeader)).toEqual(sortEffects(fromItems));
+  });
+
+  test('single-lot source carries lotId on source_loss; multi-lot/no-lot → null', () => {
+    const effects = validateTransferHeaderEvidence(
+      validHeaderEvidence({
+        items: [
+          { productId: 'p1', transferQty: 5, sourceLotDetails: [{ lotId: 'lot-1' }] }, // single lot
+          { productId: 'p2', transferQty: 4, sourceLotDetails: [{ lotId: 'a' }, { lotId: 'b' }] }, // multi → null
+          { productId: 'p3', transferQty: 2 }, // no details → null
+        ],
+      }),
+      'b1',
+      'b2',
+    );
+    const sourceOf = (pid: string) =>
+      effects.find((e) => e.productId === pid && e.locationId === 'b1' && e.quantity < 0);
+    expect(sourceOf('p1')?.lotId).toBe('lot-1');
+    expect(sourceOf('p2')?.lotId).toBeNull();
+    expect(sourceOf('p3')?.lotId).toBeNull();
+  });
+
+  test('E2-B-shaped header (real builder output) validates cleanly through the consume path', () => {
+    const effects = validateTransferHeaderEvidence(validHeaderEvidence(), 'b1', 'b2');
+    expect(effects).toHaveLength(4); // 2 items × (dest + source)
+  });
+
+  test('resolveTransferReversalEffects tags header_snapshot vs legacy_subcollection', () => {
+    expect(
+      resolveTransferReversalEffects({ ...transferInput, transferHeaderEvidence: validHeaderEvidence() })
+        .evidenceSource,
+    ).toBe('header_snapshot');
+    expect(resolveTransferReversalEffects(transferInput).evidenceSource).toBe('legacy_subcollection');
+  });
+
+  // ── Authority + header-field validation still enforced on the header path ──────
+  test('Staff actor is rejected BEFORE any write even on the header-evidence path', async () => {
+    await seedDualBranch();
+    const call = vi.fn<CallResolveReversal>();
+    await expect(
+      executeTransferReversal(makeDeps({ isOnline: () => true, call }), {
+        ...transferInput,
+        items: [],
+        transferHeaderEvidence: validHeaderEvidence(),
+        actorRole: 'staff',
+      }),
+    ).rejects.toBeInstanceOf(OfflineReversalRejectedError);
+    expect(call).not.toHaveBeenCalled();
+    expect(await listQueue(store)).toHaveLength(0);
+    expect(await readLocalStock(store, 'p1', 'b1')).toBe(10);
+    expect(await readLocalStock(store, 'p1', 'b2')).toBe(10);
+  });
+
+  test('header-field validation still runs on the header path (missing reason rejects)', async () => {
+    let caught: unknown;
+    try {
+      await executeTransferReversal(makeDeps({ isOnline: () => false }), {
+        ...transferInput,
+        reason: '   ',
+        items: [],
+        transferHeaderEvidence: validHeaderEvidence(),
+      });
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(TransferReversalEvidenceError);
+    expect((caught as TransferReversalEvidenceError).code).toBe('missing_reason');
   });
 });
 
