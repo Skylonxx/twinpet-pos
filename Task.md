@@ -1,32 +1,53 @@
-# Current Task Tracker — Phase 7B-D2 (active)
+# Current Task Tracker — Phase 7B-D3 (active)
 
 > Living checkpoint doc for agents. Detailed history: `docs/reports/latest-report.md` (do not duplicate long-form evidence here).
 
 ## Current active phase
 
-**Phase 7B-D2: Docs Cleanup & Phase Tracker Hygiene**
+**Phase 7B-D3: Docs/Context Sync After H4 Closure**
 **Status:** **ACTIVE**
+
+### Scope
+
+Docs-only sync pass after Phase 7B-H4 was closed and committed (`4da7757`). No source code or tests modified.
 
 ### Scope checklist
 
-- [ ] Clean stale H3 workflow wording from Task.md.
-- [ ] Update Task.md current phase state.
-- [ ] Queue Phase 7B-H4 Resolver Hardening as immediate next step.
-- [ ] Update Context.md with completed offline reversal lifecycle.
-- [ ] Update docs/reports/latest-report.md with current Phase 7B state.
+- [ ] Update Task.md: record H4 as CLOSED / COMMITTED with commit `4da7757`.
+- [ ] Update Context.md: advance baseline to H4 commit; queue H5.
+- [ ] Update docs/reports/latest-report.md: record H4 closure, accepted hidden risk, H5 direction.
 - [ ] Ensure markdown-only change set.
 - [ ] Ensure git diff --check clean.
 
-### Next step after D2
+### Next step after D3
 
-**Phase 7B-H4: Resolver Hardening / Stale Client Guard** — implemented, awaiting Codex review.
+**Phase 7B-H5: Wire Client Observation Timestamp Payload** — queued; not yet started.
+
+---
+
+## Phase 7B-H5 — Wire Client Observation Timestamp Payload
+
+**Status:** **QUEUED — NOT STARTED**
+
+### Goal
+
+Wire `clientObservedDocumentUpdatedAt` into the offline/client resolver payload so Phase 7B-H4's server-side stale-client guard becomes fully active end-to-end. The H4 guard currently rejects stale attempts correctly when the field is present, but production protection remains partially inert until all caller paths consistently populate it.
+
+### Why this is H5's primary requirement
+
+H4's hidden risk (accepted by CEO, Option B): the guard is conservative — absent observation is treated as fresh — so legacy callers are unaffected, but real-world staleness in offline/client paths is not yet detected end-to-end.
+
+### Not started
+
+No H5 implementation has begun. Authorization required before any source changes.
 
 ---
 
 ## Phase 7B-H4 — Resolver Hardening / Stale Client Guard
 
-**Status:** **IMPLEMENTED — AWAITING CODEX REVIEW** (not closed; Codex GPT-5.5 review + CEO approval required before closure)
-**Authorization:** Option A — APPROVED (Gemini / Tech Lead / CEO)
+**Status:** **CLOSED / COMMITTED**
+**Commit:** `4da7757` — `feat(pos): harden resolver against stale client observations`
+**Authorization:** Option B — APPROVED WITH NOTES (CEO)
 
 ### What was delivered
 
@@ -47,11 +68,11 @@ functions/src/resolveReversal.test.ts   (11 new H4 tests)
 - `npx vitest run resolveReversal` → 39 passed.
 - Full functions suite `npx vitest run` → 108 passed (8 files).
 - `npm run build` (tsc) → clean.
-- `git diff --check` → clean; the diff is limited to the 5 authorized H4 files (the two code files above plus the docs updates to `Task.md`, `Context.md`, `docs/reports/latest-report.md`); `stash@{0}` untouched.
+- `git diff --check` → clean; post-commit working tree **clean**; `stash@{0}` untouched.
 
-### Hidden risk
+### Hidden risk (accepted — primary H5 requirement)
 
-The guard only fires when the client actually sends `clientObservedDocumentUpdatedAt`; until the offline-queue client is wired to populate it (out of this slice's scope), real-world staleness is not yet detected end-to-end.
+The guard only fires when the client actually sends `clientObservedDocumentUpdatedAt`; until the offline-queue client is wired to populate it (out of this slice's scope), real-world staleness is not yet detected end-to-end. **Accepted by CEO (Option B) as a non-blocking known risk.** Wiring `clientObservedDocumentUpdatedAt` into the client/offline resolver payload is the primary Phase 7B-H5 requirement.
 
 ---
 

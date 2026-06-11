@@ -1,11 +1,11 @@
 # Latest Report
 
 > Rolling "latest report" for the stock-write security workstream. Updated at each phase boundary.
-> **Current state:** **Phase 7B-H4 — Resolver Hardening / Stale Client Guard** (implemented, awaiting Codex review). H3 closed and committed (`4d69143` — `feat(pos): add manual review ops UI`). D1 closed and committed (`dacccd1` — `docs: add project context and task tracker`). H2 closed and committed (`8b48513` — `feat(pos): add manual review resolution state`). H4 adds a server-authoritative stale-client guard to `functions/src/resolveReversal.ts` (uncommitted; Codex GPT-5.5 review + CEO approval pending before closure).
+> **Current state:** **Phase 7B-D3 — Docs/Context Sync After H4 Closure** (active; docs-only). H4 closed and committed (`4da7757` — `feat(pos): harden resolver against stale client observations`). H3 closed and committed (`4d69143` — `feat(pos): add manual review ops UI`). D1 closed and committed (`dacccd1` — `docs: add project context and task tracker`). H2 closed and committed (`8b48513` — `feat(pos): add manual review resolution state`). Phase 7B-H5 (Wire Client Observation Timestamp Payload) queued next — not yet started.
 
-## Phase 7B-H4: Resolver Hardening / Stale Client Guard (IMPLEMENTED — AWAITING CODEX REVIEW)
+## Phase 7B-H4: Resolver Hardening / Stale Client Guard (CLOSED / COMMITTED)
 
-**Status:** implemented; not committed; not closed. Authorization: Option A — APPROVED.
+**Status:** closed and committed. **Commit:** `4da7757` — `feat(pos): harden resolver against stale client observations)`. Authorization: Option B — APPROVED WITH NOTES (CEO). Post-commit working tree **clean**. `stash@{0}` present and untouched. No forbidden areas touched.
 
 ### What was added
 
@@ -29,15 +29,39 @@
 - `npx vitest run resolveReversal` → **39 passed**.
 - Full functions suite `npx vitest run` → **108 passed** (8 files).
 - `npm run build` (tsc) → **clean**.
-- `git diff --check` clean; the diff is limited to the 5 authorized H4 files (the two code files above plus the docs updates to `Task.md`, `Context.md`, `docs/reports/latest-report.md`); `stash@{0}` untouched; no forbidden areas touched.
+- `git diff --check` clean; post-commit working tree **clean**; `stash@{0}` untouched; no forbidden areas touched.
 
-### Hidden risk
+### Hidden risk (accepted — primary H5 requirement)
 
-The guard is inert until the offline-queue client populates `clientObservedDocumentUpdatedAt` (deliberately out of this slice's scope), so end-to-end staleness is not yet detected in production traffic.
+The guard is inert until the offline-queue client populates `clientObservedDocumentUpdatedAt` (deliberately out of this slice's scope), so end-to-end staleness is not yet detected in production traffic. **Accepted by CEO (Option B) as a non-blocking known risk.** Wiring `clientObservedDocumentUpdatedAt` into the client/offline resolver payload is the primary Phase 7B-H5 requirement.
 
-## Phase 7B-D2: Docs Cleanup & Phase Tracker Hygiene (ACTIVE)
+## Phase 7B-D3: Docs/Context Sync After H4 Closure (ACTIVE)
 
-**Status:** active.
+**Status:** active; docs-only. No source code or tests modified.
+
+### Authorization
+
+CEO Option A approved. D3 executed immediately after H4 closure.
+
+### Verification baseline (post-H4 commit)
+
+- H4 commit: `4da7757` — `feat(pos): harden resolver against stale client observations`.
+- Post-H4-commit working tree was **clean** — confirmed by `git status --short` before D3 edits.
+- `stash@{0}` present and untouched throughout.
+
+### What D3 updates
+
+- `Task.md` — H4 marked CLOSED/COMMITTED; commit recorded; hidden risk carried; H5 queued.
+- `Context.md` — H4 moved to closed tracks; H5 added to queued next; key boundaries updated.
+- `docs/reports/latest-report.md` — this section; H4 section updated to CLOSED/COMMITTED; H5 queued.
+
+### Next step after D3
+
+**Phase 7B-H5: Wire Client Observation Timestamp Payload** — queued; not yet started.
+
+## Phase 7B-D2: Docs Cleanup & Phase Tracker Hygiene (CLOSED)
+
+**Status:** superseded by D3; closed.
 
 ### Verification baseline (post-H3 commit)
 
@@ -55,9 +79,9 @@ The guard is inert until the offline-queue client populates `clientObservedDocum
 - No server resolver changes.
 - Firestore reconciliation remains an external manual admin process.
 
-### Next step after D2
+### Next step (was D2)
 
-**Phase 7B-H4: Resolver Hardening / Stale Client Guard** — queued, not yet started.
+Phase 7B-H4 — implemented and committed as `4da7757` (see H4 section above).
 
 ---
 
