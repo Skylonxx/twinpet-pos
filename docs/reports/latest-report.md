@@ -1,11 +1,37 @@
 # Latest Report
 
 > Rolling "latest report" for the stock-write security workstream. Updated at each phase boundary.
-> **Current state:** **Phase 7B-H5 — Wire Client Observation Timestamp Payload** (implemented, awaiting Codex re-review; uncommitted). Clean baseline before H5: `fb4c3b0 docs: sync phase 7b tracker after h4 closure` (Phase 7B-D3 CLOSED/COMMITTED). H4 closed and committed (`4da7757` — `feat(pos): harden resolver against stale client observations`). H3 closed and committed (`4d69143` — `feat(pos): add manual review ops UI`). D1 closed and committed (`dacccd1` — `docs: add project context and task tracker`). H2 closed and committed (`8b48513` — `feat(pos): add manual review resolution state`). H5 threads `clientObservedDocumentUpdatedAt` through the live **receiving** reversal payload so the H4 server guard becomes active end-to-end (Codex GPT-5.5 review + CEO approval pending before closure).
+> **Current state:** **Phase 7B-D4 — Docs/Context Sync After H5 Closure** (docs-only; not yet committed). H5 CLOSED / COMMITTED (`4762d97` — `feat(pos): wire client observation timestamp for reversals`; CEO Option B — APPROVED WITH NOTES). Post-commit working tree was **clean**. `stash@{0}` present and untouched. No forbidden areas touched. **End-to-End Receiving Reversal Hardening is functionally complete** (H4 server-side stale-client guard + H5 client/offline timestamp payload wiring). D3 closed and committed (`fb4c3b0`). H4 closed and committed (`4da7757`). H3 closed and committed (`4d69143`). D1 closed and committed (`dacccd1`). H2 closed and committed (`8b48513`). **Next after D4:** Phase 7B-H6 — Transfer Reversal Planning / Environment Audit (read-only planning only; no code changes; no implementation until Tech Lead approves).
 
-## Phase 7B-H5: Wire Client Observation Timestamp Payload (IMPLEMENTED — AWAITING CODEX RE-REVIEW)
+## Phase 7B-D4: Docs/Context Sync After H5 Closure (IN PROGRESS — not yet committed)
 
-**Status:** implemented; not committed; not closed. Authorization: Option A — APPROVED (receiving-only). No server resolver change. **Clean baseline before H5:** `fb4c3b0 docs: sync phase 7b tracker after h4 closure`. **Codex prior pass:** REJECTED for stale docs/tracker wording only (code/tests/scope confirmed correct); this docs correction resolves that blocker.
+**Status:** docs-only; not committed; not closed. H5 commit: `4762d97`. No source code or tests modified. D4 updates `Task.md`, `Context.md`, and this report to reflect H5 closure, record End-to-End Receiving Reversal Hardening as functionally complete, and queue H6 as read-only planning only.
+
+### Authorization
+
+CEO Option A approved. D4 executing immediately after H5 closure.
+
+### H5 closure baseline
+
+- H5 commit: `4762d97` — `feat(pos): wire client observation timestamp for reversals`.
+- Post-H5-commit working tree was **clean** — confirmed by `git status --short` before D4 edits.
+- `stash@{0}` present and untouched throughout.
+
+### What D4 updated
+
+- `Task.md` — H5 marked CLOSED/COMMITTED; commit recorded; milestone recorded; D4 section added; H6 queued as read-only planning.
+- `Context.md` — H5 moved to closed tracks; End-to-End Receiving Reversal Hardening recorded as complete; H6 queued as read-only planning; key boundaries updated.
+- `docs/reports/latest-report.md` — this section; H5 section updated to CLOSED/COMMITTED.
+
+### Next step after D4
+
+**Phase 7B-H6: Transfer Reversal Planning / Environment Audit** — read-only planning only. Inspect transfer lifecycle, Sent/Received/Completed states, existing transfer reversal resolver branch, and map how Transfer can safely join the queue-first pattern. **No code changes.** No implementation until Tech Lead approves a small proposal.
+
+---
+
+## Phase 7B-H5: Wire Client Observation Timestamp Payload (CLOSED / COMMITTED)
+
+**Status:** closed and committed. **Commit:** `4762d97` — `feat(pos): wire client observation timestamp for reversals`. Authorization: Option A — APPROVED (receiving-only). CEO Option B — APPROVED WITH NOTES (closure). Post-commit working tree **clean**. `stash@{0}` present and untouched. No forbidden areas touched. **Milestone: End-to-End Receiving Reversal Hardening functionally complete** (H4 server guard + H5 client payload wiring).
 
 ### What was added (receiving-only client/offline payload wiring)
 
@@ -94,7 +120,7 @@ CEO Option A approved. D3 executed immediately after H4 closure and is committed
 
 ### Next step after D3
 
-**Phase 7B-H5: Wire Client Observation Timestamp Payload** — now **IMPLEMENTED / AWAITING CODEX RE-REVIEW** (uncommitted). See the H5 section near the top of this report for the package and evidence.
+**Phase 7B-H5: Wire Client Observation Timestamp Payload** — **CLOSED / COMMITTED** (`4762d97`). See the H5 section near the top of this report.
 
 ## Phase 7B-D2: Docs Cleanup & Phase Tracker Hygiene (CLOSED)
 

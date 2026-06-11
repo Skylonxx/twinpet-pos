@@ -1,13 +1,22 @@
-# Current Task Tracker — Phase 7B-H5 (implemented, awaiting Codex re-review)
+# Current Task Tracker — Phase 7B-D4 (docs/context sync after H5 closure)
 
 > Living checkpoint doc for agents. Detailed history: `docs/reports/latest-report.md` (do not duplicate long-form evidence here).
 
 ## Current active phase
 
-**Phase 7B-H5: Wire Client Observation Timestamp Payload**
-**Status:** **IMPLEMENTED — AWAITING CODEX RE-REVIEW** (not committed; not closed). See the H5 section below for the full package.
+**Phase 7B-D4: Docs/Context Sync After H5 Closure**
+**Status:** **IN PROGRESS — docs-only update, not yet committed.** H5 is CLOSED / COMMITTED (`4762d97`). End-to-End Receiving Reversal Hardening is functionally complete. H6 is queued next (read-only Transfer Reversal Planning / Environment Audit — no code changes).
 
-**Clean baseline before H5:** `fb4c3b0 docs: sync phase 7b tracker after h4 closure`.
+**Clean baseline before D4:** `4762d97 feat(pos): wire client observation timestamp for reversals`.
+
+---
+
+## Phase 7B-D4 — Docs/Context Sync After H5 Closure
+
+**Status:** **IN PROGRESS — not yet committed.**
+Docs-only sync pass after Phase 7B-H5 was closed and committed (`4762d97`). Records H5 as CLOSED/COMMITTED, advances the baseline to the H5 commit, records End-to-End Receiving Reversal Hardening as functionally complete, and queues H6. No source code or tests modified.
+
+**Next queued slice:** Phase 7B-H6: Transfer Reversal Planning / Environment Audit (read-only planning only — no code changes until Tech Lead approves a proposal).
 
 ---
 
@@ -22,15 +31,16 @@ Docs-only sync pass after Phase 7B-H4 was closed and committed (`4da7757`). Reco
 
 ## Phase 7B-H5 — Wire Client Observation Timestamp Payload
 
-**Status:** **IMPLEMENTED — AWAITING CODEX RE-REVIEW** (not committed; not closed. Codex GPT-5.5 re-review + CEO approval required before closure)
-**Authorization:** Option A — APPROVED (receiving-only)
-**Codex (prior pass):** REJECTED for stale docs/tracker wording only — code/tests/scope confirmed correct; this docs/tracker correction resolves that blocker.
+**Status:** **CLOSED / COMMITTED**
+**Commit:** `4762d97` — `feat(pos): wire client observation timestamp for reversals`
+**Authorization:** Option A — APPROVED (receiving-only). CEO Option B — APPROVED WITH NOTES (closure).
+**Milestone:** End-to-End Receiving Reversal Hardening is functionally complete. H4 (server-side stale-client guard) and H5 (client/offline timestamp payload wiring) together protect the Receiving reversal flow end-to-end.
 
-### Goal
+### What was delivered summary
 
-Wire `clientObservedDocumentUpdatedAt` into the offline/client resolver payload so Phase 7B-H4's server-side stale-client guard becomes active end-to-end for the **live receiving reversal flow**.
+Wired `clientObservedDocumentUpdatedAt` into the offline/client resolver payload so Phase 7B-H4's server-side stale-client guard is active end-to-end for the **live receiving reversal flow**.
 
-### What was delivered (receiving-only payload wiring)
+### What was delivered (receiving-only payload wiring — committed)
 
 - The receiving void page (`ReceivingEditPage.handleVoid`) captures the loaded receiving doc's `updatedAt`, converts it defensively to an ISO 8601 string (`toObservedDocumentUpdatedAtIso`), and passes it through `ReceivingReversalInput`.
 - The value is persisted on the durable offline intent as the optional **internal** field `observedDocumentUpdatedAt` (ISO 8601), so a later sync forwards the same observation.
