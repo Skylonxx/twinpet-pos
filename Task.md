@@ -19,7 +19,39 @@
 
 ### Next step after D2
 
-**Phase 7B-H4: Resolver Hardening / Stale Client Guard** — queued, not yet started.
+**Phase 7B-H4: Resolver Hardening / Stale Client Guard** — implemented, awaiting Codex review.
+
+---
+
+## Phase 7B-H4 — Resolver Hardening / Stale Client Guard
+
+**Status:** **IMPLEMENTED — AWAITING CODEX REVIEW** (not closed; Codex GPT-5.5 review + CEO approval required before closure)
+**Authorization:** Option A — APPROVED (Gemini / Tech Lead / CEO)
+
+### What was delivered
+
+- Server-authoritative stale-client guard in `functions/src/resolveReversal.ts`. The resolver now rejects a reversal whose client-observed document version (`clientObservedDocumentUpdatedAt`) is older than the live server document `updatedAt`.
+- New structured reject code `stale_client_observation` (status `rejected`). Mutation-free: zero stock, zero lot, no reversal/manual-review state advance, no audit/intent-ledger write.
+- Guard placed AFTER authority (branch + Staff PIN) and BEFORE every status check and write in both `resolveReceivingReversal` and `resolveTransferReversal`.
+- Conservative & deterministic: absent observation ⇒ not stale (legacy callers unaffected); no comparable server `updatedAt` ⇒ not stale; strict `server > observed` ⇒ stale (equal instants are fresh, so retries are safe).
+
+### Files changed
+
+```
+functions/src/resolveReversal.ts        (guard + helpers + reject code)
+functions/src/resolveReversal.test.ts   (11 new H4 tests)
+```
+
+### Evidence
+
+- `npx vitest run resolveReversal` → 39 passed.
+- Full functions suite `npx vitest run` → 108 passed (8 files).
+- `npm run build` (tsc) → clean.
+- `git diff --check` → clean; the diff is limited to the 5 authorized H4 files (the two code files above plus the docs updates to `Task.md`, `Context.md`, `docs/reports/latest-report.md`); `stash@{0}` untouched.
+
+### Hidden risk
+
+The guard only fires when the client actually sends `clientObservedDocumentUpdatedAt`; until the offline-queue client is wired to populate it (out of this slice's scope), real-world staleness is not yet detected end-to-end.
 
 ---
 

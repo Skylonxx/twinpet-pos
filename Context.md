@@ -33,7 +33,7 @@ Twinpet is a **multi-branch pet retail ERP/POS** (2–3 branches). Single React 
 
 - **Single React codebase** — no React Native rewrite; Capacitor for native shell when ready.
 - **Offline durability:** browser IndexedDB + Firestore persistence today; native durable storage (e.g. Capacitor SQLite) planned for critical queues.
-- **Server-authoritative settlement:** `reconcileOrder`, `resolveReversal`, `retryReconcile` own reconcile/reversal fields clients must not spoof.
+- **Server-authoritative settlement:** `reconcileOrder`, `resolveReversal`, `retryReconcile` own reconcile/reversal fields clients must not spoof. The reversal resolver additionally enforces a **stale-client guard** (Phase 7B-H4): a reversal whose client-observed document version is older than the live server `updatedAt` is rejected (`stale_client_observation`) before any mutation.
 - **Hardware later:** printer/scanner integrations behind adapter interfaces — no web-only assumptions baked into core logic.
 
 See `docs/skills/SKILL-GLOBAL-ARCHITECTURE.md` and `docs/skills/SKILL-OFFLINE-FIRST-POS.md`.

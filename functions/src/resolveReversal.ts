@@ -70,6 +70,7 @@ export type ReversalRejectCode =
   | 'source_document_not_reversible'
   | 'already_reversed'
   | 'stale_document'
+  | 'stale_client_observation'
   | 'stock_conflict'
   | 'lot_conflict'
   | 'unsupported_action_type'
@@ -94,6 +95,13 @@ export type ResolveReversalRequest = {
   pinVerificationId?: string;
   pinVerifiedAt?: string;
   clientCreatedAt?: string;
+  /**
+   * H4: the source document's `updatedAt` as the client observed it when it
+   * captured this reversal intent. Compared against the live server `updatedAt`
+   * by {@link isClientObservationStale}; a server value newer than this is proof
+   * the client acted on a stale view and the request is rejected
+   * (`stale_client_observation`). Optional — absent ⇒ no staleness can be proven.
+   */
   clientObservedDocumentUpdatedAt?: string;
 };
 
@@ -161,6 +169,58 @@ const intentIdOf = (idempotencyKey: string): string =>
 const serverReversalIdOf = (idempotencyKey: string): string => `REV-${intentIdOf(idempotencyKey)}`;
 
 const isoNow = (): string => new Date().toISOString();
+
+/**
+ * Normalize any timestamp shape the resolver may meet — ISO string (client
+ * `clientObservedDocumentUpdatedAt`), epoch millis number, a Firestore
+ * `Timestamp` (via `toMillis()`), or a plain `{ seconds, nanoseconds }` —
+ * to epoch milliseconds. Returns `null` for anything uncomparable (absent,
+ * malformed, or an unresolved server sentinel), so callers can SKIP rather
+ * than guess.
+ */
+function toEpochMs(v: unknown): number | null {
+  if (v == null) return null;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  if (typeof v === 'string') {
+    const t = Date.parse(v);
+    return Number.isNaN(t) ? null : t;
+  }
+  if (typeof v === 'object') {
+    const o = v as { toMillis?: () => number; seconds?: number; nanoseconds?: number; _seconds?: number };
+    if (typeof o.toMillis === 'function') {
+      const ms = o.toMillis();
+      return Number.isFinite(ms) ? ms : null;
+    }
+    if (typeof o.seconds === 'number') return o.seconds * 1000 + Math.floor((o.nanoseconds ?? 0) / 1e6);
+    if (typeof o._seconds === 'number') return o._seconds * 1000;
+  }
+  return null;
+}
+
+/**
+ * H4 stale-client guard. The client records the source document's observed
+ * `updatedAt` (`clientObservedDocumentUpdatedAt`) at the instant it captured the
+ * reversal intent. The server is the sole authority: if the LIVE document's
+ * `updatedAt` has advanced PAST the client's observation, the client decided to
+ * reverse against an outdated view of server state (a concurrent edit, a prior
+ * reversal, or a manual-review resolution moved the document forward) and the
+ * request must NOT be trusted.
+ *
+ * Deterministic and conservative:
+ *   • No observation supplied        → NOT stale (absence is not proof; preserves
+ *                                       legacy callers that never sent the field).
+ *   • No comparable server `updatedAt`→ NOT stale (nothing authoritative to beat).
+ *   • server.updatedAt  >  observed   → STALE (strict — equal instants are fresh,
+ *                                       so a retry of the same observation is safe).
+ * Pure read of an already-loaded document — performs zero I/O and zero mutation.
+ */
+function isClientObservationStale(req: ResolveReversalRequest, serverDoc: DocumentData): boolean {
+  const observedMs = toEpochMs(req.clientObservedDocumentUpdatedAt);
+  if (observedMs === null) return false;
+  const serverMs = toEpochMs(serverDoc.updatedAt);
+  if (serverMs === null) return false;
+  return serverMs > observedMs;
+}
 
 /**
  * Server-authoritative actor check. Manager/Admin pass on verified claims; Staff
@@ -345,6 +405,13 @@ async function resolveReceivingReversal(
   const authz = await checkActorAuthority(database, tx, ctx.auth, ctx.req, branchId);
   if (authz.rejectCode) return reject(ctx.idempotencyKey, authz.rejectCode, 'ไม่มีสิทธิ์/ยืนยัน PIN ไม่ผ่าน');
 
+  // H4 stale-client guard — reject (mutation-free) if the client's observation of
+  // this document is older than the live server state. Placed before every status
+  // check and write so a stale view cannot drive any irreversible path.
+  if (isClientObservationStale(ctx.req, receiving)) {
+    return reject(ctx.idempotencyKey, 'stale_client_observation', 'ข้อมูลเอกสารฝั่งผู้ใช้เก่ากว่าสถานะปัจจุบันของเซิร์ฟเวอร์ — ปฏิเสธเพื่อความปลอดภัย');
+  }
+
   if (receiving.status === 'cancelled' || receiving.reversedBy) {
     return reject(ctx.idempotencyKey, 'already_reversed', 'เอกสารนี้ถูกยกเลิก/รีเวิร์สแล้ว');
   }
@@ -467,6 +534,13 @@ async function resolveTransferReversal(
   // Origin-branch authority (+ Staff server PIN re-auth).
   const authz = await checkActorAuthority(database, tx, ctx.auth, ctx.req, fromBranchId);
   if (authz.rejectCode) return reject(ctx.idempotencyKey, authz.rejectCode, 'ไม่มีสิทธิ์/ยืนยัน PIN ไม่ผ่าน');
+
+  // H4 stale-client guard — reject (mutation-free) if the client's observation of
+  // this document is older than the live server state. Placed before every status
+  // check and write so a stale view cannot drive any irreversible path.
+  if (isClientObservationStale(ctx.req, transfer)) {
+    return reject(ctx.idempotencyKey, 'stale_client_observation', 'ข้อมูลเอกสารฝั่งผู้ใช้เก่ากว่าสถานะปัจจุบันของเซิร์ฟเวอร์ — ปฏิเสธเพื่อความปลอดภัย');
+  }
 
   if (transfer.status === 'cancelled' || transfer.reversedBy) {
     return reject(ctx.idempotencyKey, 'already_reversed', 'เอกสารโอนย้ายนี้ถูกยกเลิก/รีเวิร์สแล้ว');

@@ -86,20 +86,20 @@ const otherBranch = { uid: 'u4', token: { role: 'staff', staffId: 's-x', branchI
 
 const USER_SEED = { 'users/s-staff': { pin: '1234', role: 'staff' } };
 
-function seedReceiving(over: { stock?: number; lotRemaining?: number; status?: string } = {}) {
+function seedReceiving(over: { stock?: number; lotRemaining?: number; status?: string; updatedAt?: unknown } = {}) {
   return makeDb({
     ...USER_SEED,
-    'receivings/R1': { id: 'R1', branchId: 'B1', status: over.status ?? 'completed', total: 100 },
+    'receivings/R1': { id: 'R1', branchId: 'B1', status: over.status ?? 'completed', total: 100, updatedAt: over.updatedAt },
     'receivings/R1/receivingItems/I1': { productId: 'P1', qtyBase: 10, lotId: 'L1', costBase: 5 },
     'products/P1/productStocks/B1': { branchId: 'B1', totalStockBase: over.stock ?? 10 },
     'stockLots/L1': { id: 'L1', productId: 'P1', branchId: 'B1', qtyRemaining: over.lotRemaining ?? 10, qtyReceived: 10, isDepleted: false, receivedAt: { seconds: 1 }, costPerUnit: 5 },
   });
 }
 
-function seedTransfer(over: { status?: string; destStock?: number; destLotRemaining?: number } = {}) {
+function seedTransfer(over: { status?: string; destStock?: number; destLotRemaining?: number; updatedAt?: unknown } = {}) {
   return makeDb({
     ...USER_SEED,
-    'inventoryTransfers/T1': { id: 'T1', fromBranchId: 'B1', toBranchId: 'B2', status: over.status ?? 'sent' },
+    'inventoryTransfers/T1': { id: 'T1', fromBranchId: 'B1', toBranchId: 'B2', status: over.status ?? 'sent', updatedAt: over.updatedAt },
     'inventoryTransfers/T1/transferItems/I1': { productId: 'P1', productName: 'P1', sku: 'P1', transferQty: 5, unitCost: 10, sourceLotDetails: [{ lotId: 'L1', costPerUnit: 10, qty: 5, receivedAtMs: 1000 }] },
     'products/P1/productStocks/B2': { branchId: 'B2', totalStockBase: over.destStock ?? 5 },
     'stockLots/D1': { id: 'D1', productId: 'P1', branchId: 'B2', qtyRemaining: over.destLotRemaining ?? 5, qtyReceived: 5, isDepleted: false, receivedAt: { seconds: 1 }, costPerUnit: 10 },
@@ -309,6 +309,103 @@ describe('resolveReversal — transfer state gate & lot coverage', () => {
     expect((restored[0].receivedAt as { seconds: number }).seconds).toBe(1); // original receivedAtMs 1000 preserved
     expect(db.__store.get(`reversalDocuments/${res.serverReversalId}`)!.actionType).toBe('transfer_reversal');
     expect(db.__store.get('inventoryTransfers/T1')!.reversedBy).toBe(res.serverReversalId);
+  });
+});
+
+// ── H4: stale-client guard (server-authoritative staleness rejection) ──
+describe('resolveReversal — H4 stale client guard', () => {
+  // Server doc's updatedAt = 2,000,000 ms; observations bracket it.
+  const SERVER_UPDATED = { seconds: 2000 };
+  const STALE_OBS = new Date(1_000_000).toISOString(); // older than server → stale
+  const FRESH_OBS = new Date(2_000_000).toISOString(); // equal instant → fresh (strict >)
+  const NEWER_OBS = new Date(3_000_000).toISOString(); // newer than server → fresh
+  const intentDocs = (db: ReturnType<typeof makeDb>) =>
+    [...db.__store.entries()].filter(([p]) => /^reversalIntents\/[^/]+$/.test(p));
+  const lot = (db: ReturnType<typeof makeDb>) => db.__store.get('stockLots/L1')!;
+
+  test('absent observation → guard skipped, fresh reversal still confirms (no regression)', async () => {
+    const db = seedReceiving({ updatedAt: SERVER_UPDATED });
+    const res = await performResolveReversal(db as never, recReq(), mgrB1);
+    expect(res.status).toBe('confirmed');
+    expect(recStock(db)).toBe(0);
+  });
+
+  test('observation at/after server updatedAt → fresh → confirmed', async () => {
+    const equal = seedReceiving({ updatedAt: SERVER_UPDATED });
+    const r1 = await performResolveReversal(equal as never, recReq({ clientObservedDocumentUpdatedAt: FRESH_OBS }), mgrB1);
+    expect(r1.status).toBe('confirmed');
+
+    const newer = seedReceiving({ updatedAt: SERVER_UPDATED });
+    const r2 = await performResolveReversal(newer as never, recReq({ clientObservedDocumentUpdatedAt: NEWER_OBS }), mgrB1);
+    expect(r2.status).toBe('confirmed');
+  });
+
+  test('stale observation → rejected with structured stale_client_observation', async () => {
+    const db = seedReceiving({ updatedAt: SERVER_UPDATED });
+    const res = await performResolveReversal(db as never, recReq({ clientObservedDocumentUpdatedAt: STALE_OBS }), mgrB1);
+    expect(res.ok).toBe(false);
+    expect(res.status).toBe('rejected');
+    expect(res.rejectCode).toBe('stale_client_observation');
+    expect(typeof res.message).toBe('string');
+    expect(res.serverReversalId).toBeUndefined();
+  });
+
+  test('stale rejection is deterministic (same inputs → identical result)', async () => {
+    const a = await performResolveReversal(seedReceiving({ updatedAt: SERVER_UPDATED }) as never, recReq({ clientObservedDocumentUpdatedAt: STALE_OBS }), mgrB1);
+    const b = await performResolveReversal(seedReceiving({ updatedAt: SERVER_UPDATED }) as never, recReq({ clientObservedDocumentUpdatedAt: STALE_OBS }), mgrB1);
+    expect(a).toEqual(b);
+  });
+
+  test('stale rejection mutates ZERO stock and ZERO lots', async () => {
+    const db = seedReceiving({ updatedAt: SERVER_UPDATED });
+    await performResolveReversal(db as never, recReq({ clientObservedDocumentUpdatedAt: STALE_OBS }), mgrB1);
+    expect(recStock(db)).toBe(10); // stock untouched
+    expect(lot(db).qtyRemaining).toBe(10); // lot untouched
+    expect(lot(db).isDepleted).toBe(false);
+  });
+
+  test('stale rejection does NOT advance reversal/manual-review state', async () => {
+    const db = seedReceiving({ updatedAt: SERVER_UPDATED });
+    await performResolveReversal(db as never, recReq({ clientObservedDocumentUpdatedAt: STALE_OBS }), mgrB1);
+    const rec = db.__store.get('receivings/R1')!;
+    expect(rec.status).toBe('completed'); // not cancelled
+    expect(rec.reversedBy).toBeUndefined(); // not resolved
+  });
+
+  test('stale rejection writes NO audit doc and NO intent ledger entry', async () => {
+    const db = seedReceiving({ updatedAt: SERVER_UPDATED });
+    await performResolveReversal(db as never, recReq({ clientObservedDocumentUpdatedAt: STALE_OBS }), mgrB1);
+    expect(auditDocs(db)).toHaveLength(0);
+    expect(intentDocs(db)).toHaveLength(0);
+  });
+
+  test('repeated stale attempts remain idempotent and safe (no cumulative effect)', async () => {
+    const db = seedReceiving({ updatedAt: SERVER_UPDATED });
+    for (let i = 0; i < 3; i++) {
+      const res = await performResolveReversal(db as never, recReq({ clientObservedDocumentUpdatedAt: STALE_OBS }), mgrB1);
+      expect(res.rejectCode).toBe('stale_client_observation');
+    }
+    expect(recStock(db)).toBe(10);
+    expect(lot(db).qtyRemaining).toBe(10);
+    expect(db.__store.get('receivings/R1')!.status).toBe('completed');
+    expect(auditDocs(db)).toHaveLength(0);
+    expect(intentDocs(db)).toHaveLength(0);
+  });
+
+  test('transfer reversal: stale observation → rejected, dest stock untouched', async () => {
+    const db = seedTransfer({ status: 'sent', updatedAt: SERVER_UPDATED });
+    const res = await performResolveReversal(db as never, trReq({ clientObservedDocumentUpdatedAt: STALE_OBS }), mgrB1);
+    expect(res.rejectCode).toBe('stale_client_observation');
+    expect(res.status).toBe('rejected');
+    expect(db.__store.get('products/P1/productStocks/B2')!.totalStockBase).toBe(5); // dest untouched
+    expect(db.__store.get('products/P1/productStocks/B1')).toBeUndefined(); // source not created
+    expect(db.__store.get('inventoryTransfers/T1')!.status).toBe('sent'); // state not advanced
+  });
+
+  test('transfer reversal: fresh observation → confirmed', async () => {
+    const db = seedTransfer({ status: 'sent', updatedAt: SERVER_UPDATED });
+    const res = await performResolveReversal(db as never, trReq({ clientObservedDocumentUpdatedAt: FRESH_OBS }), mgrB1);
+    expect(res.status).toBe('confirmed');
   });
 });
 

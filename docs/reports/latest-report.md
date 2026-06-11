@@ -1,7 +1,39 @@
 # Latest Report
 
 > Rolling "latest report" for the stock-write security workstream. Updated at each phase boundary.
-> **Current state:** **Phase 7B-D2 — Docs Cleanup & Phase Tracker Hygiene** (active). H3 closed and committed (`4d69143` — `feat(pos): add manual review ops UI`). D1 closed and committed (`dacccd1` — `docs: add project context and task tracker`). H2 closed and committed (`8b48513` — `feat(pos): add manual review resolution state`). Server resolver (Phase 7B-3D-2, `functions/src/resolveReversal.ts`) is **unchanged**. Phase 7B-H4 (Resolver Hardening / Stale Client Guard) is **queued next**.
+> **Current state:** **Phase 7B-H4 — Resolver Hardening / Stale Client Guard** (implemented, awaiting Codex review). H3 closed and committed (`4d69143` — `feat(pos): add manual review ops UI`). D1 closed and committed (`dacccd1` — `docs: add project context and task tracker`). H2 closed and committed (`8b48513` — `feat(pos): add manual review resolution state`). H4 adds a server-authoritative stale-client guard to `functions/src/resolveReversal.ts` (uncommitted; Codex GPT-5.5 review + CEO approval pending before closure).
+
+## Phase 7B-H4: Resolver Hardening / Stale Client Guard (IMPLEMENTED — AWAITING CODEX REVIEW)
+
+**Status:** implemented; not committed; not closed. Authorization: Option A — APPROVED.
+
+### What was added
+
+- A **server-authoritative stale-client guard** in `functions/src/resolveReversal.ts`. When a reversal request carries the client-observed source-document version (`clientObservedDocumentUpdatedAt`) and the **live** server document `updatedAt` is strictly newer, the resolver rejects with the structured reject code **`stale_client_observation`** (status `rejected`). The client's outdated view is never trusted to drive a destructive path.
+- Helpers `toEpochMs` (normalizes ISO string / epoch millis / Firestore `Timestamp` / `{seconds,nanoseconds}` to epoch ms) and `isClientObservationStale` (pure, read-only comparison of an already-loaded document).
+- Guard is evaluated **after** authority (branch access + Staff PIN re-auth) and **before** every status check and write, in both `resolveReceivingReversal` and `resolveTransferReversal`.
+
+### Behavior guarantees (proven by tests)
+
+- Rejected stale attempts mutate **zero stock**, **zero lots**, do **not** advance reversal/manual-review state (source stays `completed`/`sent`, no `reversedBy`), and write **no audit doc and no intent-ledger entry**.
+- **Deterministic & idempotent:** identical inputs → identical result; repeated stale attempts have no cumulative effect.
+- **Conservative:** absent observation ⇒ not stale (legacy callers unchanged); no comparable server `updatedAt` ⇒ not stale; equal instants ⇒ fresh (safe retries).
+
+### Files changed
+
+- `functions/src/resolveReversal.ts` — guard, helpers, new reject code.
+- `functions/src/resolveReversal.test.ts` — 11 new H4 tests.
+
+### Evidence
+
+- `npx vitest run resolveReversal` → **39 passed**.
+- Full functions suite `npx vitest run` → **108 passed** (8 files).
+- `npm run build` (tsc) → **clean**.
+- `git diff --check` clean; the diff is limited to the 5 authorized H4 files (the two code files above plus the docs updates to `Task.md`, `Context.md`, `docs/reports/latest-report.md`); `stash@{0}` untouched; no forbidden areas touched.
+
+### Hidden risk
+
+The guard is inert until the offline-queue client populates `clientObservedDocumentUpdatedAt` (deliberately out of this slice's scope), so end-to-end staleness is not yet detected in production traffic.
 
 ## Phase 7B-D2: Docs Cleanup & Phase Tracker Hygiene (ACTIVE)
 
