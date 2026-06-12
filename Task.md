@@ -1,4 +1,4 @@
-# Current Task Tracker — Phase 7B-H6-F1 (Transfer Reversal Evidence Rejection Visibility)
+# Current Task Tracker — Phase 7B-H6-F1 (Transfer Reversal Evidence Rejection Visibility — CLOSED)
 
 > Living checkpoint doc for agents. Detailed history: `docs/reports/latest-report.md` (do not duplicate long-form evidence here).
 
@@ -10,20 +10,22 @@
 - **H6-E2-B** — Write Transfer Evidence Header at Completion — CLOSED / COMMITTED — `82d3352 feat(pos): write transfer reversal evidence header on completion`
 - **H6-E2-C** — Transfer Evidence Coordinator Validation — CLOSED / COMMITTED — `fe3ff44 feat(pos): validate transfer reversal header evidence`
 
-**Current clean baseline:** `fe3ff44 feat(pos): validate transfer reversal header evidence`
+**Current clean baseline:** `3a3d202 feat(pos): surface transfer reversal evidence rejection reasons`
 
-**Server resolver remains authoritative** (re-reads transfer items; ignores client evidence). H6-E2-C is client-side local-correction hardening, not a server trust boundary. Invalid present header evidence fails closed (no fallback, no write); absent header evidence falls back to legacy item-subcollection behavior.
+**H6-F1** — Transfer Reversal Evidence Rejection Visibility — CLOSED / COMMITTED — `3a3d202 feat(pos): surface transfer reversal evidence rejection reasons`
+
+**Server resolver remains authoritative** (re-reads transfer items; ignores client evidence). Offline queue schema unchanged. `src/lib/pos/offline` has no H6-F1 diff. Durable local rejection logging deferred to future separately-authorized slice.
 
 **`stash@{0}` remains present and untouched.**
 
-**Active slice (not committed; awaiting Codex review):** Phase 7B-H6-F1 — Transfer Reversal Evidence Rejection Visibility (UI display-only; see section below).
+**Next step:** H6-G1 audit-first receiving visibility implementation.
 
 ---
 
 ## Phase 7B-H6-F1 — Transfer Reversal Evidence Rejection Visibility
 
-**Status:** **IMPLEMENTED — AWAITING CODEX REVIEW** (not committed; not closed).
-**Authorization:** Gemini / Tech Lead / CEO — Option A APPROVED (Opus 4.8 / high). Codex GPT-5.5 High review mandatory before closure.
+**Status:** **CLOSED / COMMITTED** — `3a3d202 feat(pos): surface transfer reversal evidence rejection reasons`.
+**Authorization:** Gemini / Tech Lead / CEO — Option A APPROVED.
 **Scope:** UI/display-only visibility for the H6-E2-C fail-closed rejections. **No validation, fail-closed policy, offline queue schema/behavior, IndexedDB store, server resolver, or transfer write-path change.** The thrown `TransferReversalEvidenceError` (type, `code`, generic `message`) is UNCHANGED — F1 only makes the already-computed reason legible.
 
 ### What was delivered
