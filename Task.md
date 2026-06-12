@@ -1,4 +1,4 @@
-# Current Task Tracker — Phase 7B-H7-C (Durable Rejection Log Store Wiring — IMPLEMENTED / AWAITING CODEX REVIEW)
+# Current Task Tracker — Phase 7B-H7-C (Durable Rejection Log Store Wiring — CLOSED)
 
 > Living checkpoint doc for agents. Detailed history: `docs/reports/latest-report.md` (do not duplicate long-form evidence here).
 
@@ -10,26 +10,26 @@
 - **H6-E2-B** — Write Transfer Evidence Header at Completion — CLOSED / COMMITTED — `82d3352 feat(pos): write transfer reversal evidence header on completion`
 - **H6-E2-C** — Transfer Evidence Coordinator Validation — CLOSED / COMMITTED — `fe3ff44 feat(pos): validate transfer reversal header evidence`
 
-**Current clean baseline:** `749e6e6 feat(pos): add latent reversal rejection record model`
+**Current clean baseline:** `76b7451 feat(pos): add latent durable reversal rejection log store`
 
 **H6-F1** — Transfer Reversal Evidence Rejection Visibility — CLOSED / COMMITTED — `3a3d202 feat(pos): surface transfer reversal evidence rejection reasons`
 **H6-G1** — Receiving Evidence Rejection Visibility & Void Error Handling — CLOSED / COMMITTED — `e80b2a3 feat(pos): surface receiving reversal evidence rejection reasons`
 **H7-A** — Pure Latent Reversal Rejection Record — CLOSED / COMMITTED — `749e6e6 feat(pos): add latent reversal rejection record model`
+**H7-B** — Storage Design Audit (read-only design artifact; Codex PASS WITH NOTES). No code/doc changes.
+**H7-C** — Durable Rejection Log Store Wiring — CLOSED / COMMITTED — `76b7451 feat(pos): add latent durable reversal rejection log store`
 
-**Transfer and Receiving fail-closed visibility paths are both closed.** H7-A reversal rejection record model is pure latent only — no persistence wiring, no catch-site/UI/offline/server/rules change. Catch-site integration and Admin/Ops UI surfacing remain future separately-authorized slices.
-
-**H7-B** — Storage Design Audit (read-only, design artifact delivered; PASS WITH NOTES from Codex). **H7-C** — Durable Rejection Log Store Wiring — **IMPLEMENTED / AWAITING CODEX REVIEW** (not committed). Baseline unchanged: `749e6e6`.
+**Transfer and Receiving fail-closed visibility paths are both closed.** H7-C is latent local store/API only — `DB_VERSION` 1→2, `rejections` IndexedDB store additive, `recordReversalRejection` best-effort never-throwing, `listReversalRejections` read-only. No production caller, no catch-site integration, no UI/Manual Review Ops surfacing, no server/rules/validation/write-path change.
 
 **`stash@{0}` remains present and untouched.**
 
-**Next step:** Codex GPT-5.5 High review of H7-C; commit + closure only after PASS.
+**Next step:** read-only strategic planning for the next phase options.
 
 ---
 
 ## Phase 7B-H7-C — Durable Rejection Log Store Wiring (latent)
 
-**Status:** **IMPLEMENTED — AWAITING CODEX REVIEW** (not committed; not closed). Baseline unchanged: `749e6e6`.
-**Authorization:** Gemini / Tech Lead / CEO — Option A APPROVED (pure local store wiring; Claude Opus 4.8 / High). H7-B design reviewed by Codex: PASS WITH NOTES.
+**Status:** **CLOSED / COMMITTED** — `76b7451 feat(pos): add latent durable reversal rejection log store`.
+**Authorization:** Gemini / Tech Lead / CEO — Option A APPROVED. H7-B design reviewed by Codex: PASS WITH NOTES.
 **Goal:** Implement the latent durable rejection-log substrate per the H7-B design — IndexedDB store + in-memory parity + write/list APIs + tests. **No production caller; 100% latent.**
 
 ### What was delivered
