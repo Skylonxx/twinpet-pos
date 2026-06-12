@@ -1,4 +1,4 @@
-# Current Task Tracker — Phase 7B-H6-G1 (Receiving Evidence Rejection Visibility — CLOSED)
+# Current Task Tracker — Phase 7B-H7-A (Pure Latent Reversal Rejection Record — IMPLEMENTED / AWAITING CODEX REVIEW)
 
 > Living checkpoint doc for agents. Detailed history: `docs/reports/latest-report.md` (do not duplicate long-form evidence here).
 
@@ -19,7 +19,57 @@
 
 **`stash@{0}` remains present and untouched.**
 
-**Next step:** read-only strategic planning for the next major initiative.
+**Next step:** Codex GPT-5.5 High review of the H7-A pure latent rejection-record model; commit + closure only after PASS.
+
+---
+
+## Phase 7B-H7-A — Pure Latent Reversal Rejection Record
+
+**Status:** **IMPLEMENTED — AWAITING CODEX REVIEW** (not committed; not closed). Baseline unchanged: `e4afe1b`.
+**Authorization:** Gemini / Tech Lead / CEO — Option A APPROVED (pure latent model slice; Claude Opus 4.8 / High).
+**Goal:** Define + test the record model ONLY for a future durable local rejection log. F1/G1 made fail-closed transfer/receiving evidence rejections *visible*, but they are thrown BEFORE any offline intent is created, so they leave no durable forensic trail. **No live runtime behavior changes; 100% latent.**
+
+### Audit findings (gate before implementation)
+
+- Rejection catch sites (untouched): `TransferHistoryPage.tsx:166`, `AdminTransferPage.tsx:184`, `ReceivingEditPage.tsx:229`. At each, the data on hand at the throw is: source doc id, branch (transfer origin / receiving branch), `staffId` (`user.id`), `observedDocumentUpdatedAt` (already ISO via `toObservedDocumentUpdatedAtIso`), and `err.code`. `evidenceSource` is generally NOT resolved at throw time → modeled optional.
+- Error types: `ReceivingReversalEvidenceError` (17 codes), `TransferReversalEvidenceError` (26 codes), each with `.code`. Message helpers `get{Transfer,Receiving}ReversalEvidenceMessage(code)` are pure/display-only.
+- A pure inventory-domain file is sufficient; **`src/lib/pos/offline` does NOT need touching** (no scope expansion requested). Model lives outside the offline layer and imports nothing from it.
+
+### What was delivered (pure latent only)
+
+- `src/lib/inventory/reversalRejectionRecord.ts` (NEW) — self-contained, no I/O, no offline imports:
+  - Types `ReversalRejectionSourceType` (`'transfer' | 'receiving'`), `ReversalRejectionRecord`, `ReversalRejectionRecordInput`, error `ReversalRejectionRecordError`.
+  - `buildReversalRejectionRecord(input)` — normalizes/validates required identity fields fail-closed, omits absent optionals, derives a deterministic content-addressed `recordId`.
+  - `createReversalRejectionRecordId(input)` — deterministic `rej_<16hex>` id (FNV-1a-style, dependency-free); matches the builder's embedded id.
+  - `serializeReversalRejectionRecord(record)` — canonical, key-ordered, stable JSON; omits absent optionals.
+- `src/lib/inventory/reversalRejectionRecord.test.ts` (NEW) — 20 tests (construction both source types, required-field validation, optional omission, no over-collection, unknown-code safety, deterministic id, stable serialization, sourceType separation, JSON round-trip).
+
+### Record fields (minimal; no over-collection)
+
+`recordId`, `sourceType`, `sourceId`, `branchId`, `evidenceCode` (raw string — unknown-code safe), `evidenceMessage` (caller passes the already-computed friendly message → no coupling to the code unions), `evidenceSource?`, `staffId?`, `observedDocumentUpdatedAt?`, `createdAt` (input, so the helpers stay pure/deterministic). **Excluded:** raw evidence payloads, item/lot/qty/cost lines, reason/note free-text, actor role, device fingerprint.
+
+### What is NOT in this slice
+
+No persistence wiring, no IndexedDB/localStorage/Firestore/network/queue write, no catch-site/UI change, no `src/lib/pos/offline` change, no server resolver/rules change, no transfer/receiving write-path change, no validation/fail-closed/thrown-error change.
+
+### Files changed (code)
+
+```
+src/lib/inventory/reversalRejectionRecord.ts        (NEW — pure builder + serializer + id + types)
+src/lib/inventory/reversalRejectionRecord.test.ts   (NEW — 20 tests)
+```
+
+### Evidence
+
+- `npx vitest run reversalRejectionRecord` → **20 passed**
+- `npx vitest run reversalCoordinator` → **111 passed** (regression green)
+- Full web `npx vitest run` → **434 passed** (26 files); `npx tsc -b` → clean
+- `npx vitest run transferCrud` → **18 passed**; `transferReversalEvidence` → **41 passed**; `functions resolveReversal` → **43 passed** (server UNCHANGED)
+- `git diff --check` clean; only the two new untracked files; `stash@{0}` untouched; no diff under `src/lib/pos/offline`, server resolver, Firestore rules, transfer write-path, or UI pages/components.
+
+### Hidden risk
+
+H7-A defines the durable rejection record model, but actual persistence wiring remains a future separately authorized slice; wiring it too early would risk coupling a new write path to the protected offline/IndexedDB layer.
 
 ---
 
