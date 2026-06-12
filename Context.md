@@ -95,10 +95,15 @@ Phase 7B delivers a complete offline reversal lifecycle for Goods-Receiving and 
 
 - **7B-H6-E2-B** — Write Transfer Evidence Header at Completion (CLOSED / COMMITTED — `82d3352`): `reversalEvidence?: TransferReversalEvidence` added to `InventoryTransfer` in `transferTypes.ts`; `confirmBranchTransfer` builds + asserts + persists evidence atomically in the Phase-3 `tx.set`; `devConfirmBranchTransfer` mirrors this. Evidence `createdAt` is a client ISO string; header timestamps remain server-authoritative. No coordinator validation.
 
-**Current baseline before H6-E2-C:** `82d3352 feat(pos): write transfer reversal evidence header on completion`
+**Transfer Reversal Evidence sequence: FULLY CLOSED / COMMITTED**
 
-**Active slice (not committed, awaiting Codex review):**
-- **Phase 7B-H6-E2-C — Transfer Evidence Coordinator Validation** (consume-side wiring): the coordinator now PREFERS the header `reversalEvidence` snapshot and validates it fail-closed, with strict legacy item fallback when absent. `TransferReversalInput` gains `transferHeaderEvidence?: unknown` (untrusted); new `validateTransferHeaderEvidence` projects a validated snapshot → `OriginalStockEffect[]` (self-consistent checksums + dual-branch balance, no subcollection dependency); new `resolveTransferReversalEffects` applies header-preferred / legacy-fallback precedence and tags `evidenceSource` (`header_snapshot`/`legacy_subcollection`); `assertTransferReversalInput` split into header-field + item gates. Both cancel pages pass `cancelTarget.reversalEvidence`. 27 new H6-E2-C tests (103 reversalCoordinator total; 406 full web), including the Codex blocker-fix regression: `validateTransferHeaderEvidence` now rejects a non-finite `totalQtyBase` (`NaN`/±Infinity) via an explicit `Number.isFinite` guard → `header_total_qty_mismatch`. **No transfer write-path change, no server resolver change, no offline queue schema change.** Present-but-invalid header fails closed (no fallback); server remains authoritative via item re-read.
+- **H6-E2-A** — Pure Transfer Evidence Builder + Dual-Branch Invariant — CLOSED / COMMITTED — `53a2123`
+- **H6-E2-B** — Write Transfer Evidence Header at Completion — CLOSED / COMMITTED — `82d3352`
+- **H6-E2-C** — Transfer Evidence Coordinator Validation — CLOSED / COMMITTED — `fe3ff44`
+
+**Current clean baseline:** `fe3ff44 feat(pos): validate transfer reversal header evidence`
+
+Server resolver remains authoritative (re-reads transfer items; ignores client evidence). H6-E2-C is client-side local-correction hardening, not a server trust boundary. Invalid present header evidence fails closed; absent header evidence falls back to legacy item-subcollection behavior.
 
 ### H6 Transfer State Model — Architecture Decision (CEO Option A)
 
@@ -123,7 +128,7 @@ Current production Transfer state model is two-state: `completed` | `cancelled`.
 - Firestore reconciliation of stock is always an **external manual admin process** — no part of the Phase 7B client UI automates it.
 - The H3 UI is **per-device and per-branch local only** — a global ops dashboard across devices or branches does not exist.
 - Staff cannot resolve `manual_review_required` intents — Manager/Admin only.
-- The H4 stale-client guard is fully active end-to-end for the **receiving** path (H5 committed). For transfers, **H6-C activated the server resolver for `completed` transfers under strict guards (committed `68f46e2`), H6-D1 added the latent queue-first executor (`4aa8065`), H6-D2 wired the targeted UI surfaces to queue-first reversal (legacy direct cancel retired), H6-E1 stamps `updatedAt` at completion, H6-E2-A built the pure evidence builder + dual-branch invariant, H6-E2-B persists `reversalEvidence` atomically on the transfer header at completion (`82d3352`), and H6-E2-C (active, awaiting Codex review) makes the coordinator PREFER and fail-closed-validate that header evidence at reversal time (legacy item fallback when absent)** — server resolver remains unchanged and authoritative (re-reads items). No offline queue schema change; no transfer write-path change in E2-C.
+- The H4 stale-client guard is fully active end-to-end for the **receiving** path (H5 committed). For transfers, **H6-C activated the server resolver for `completed` transfers under strict guards (committed `68f46e2`), H6-D1 added the latent queue-first executor (`4aa8065`), H6-D2 wired the targeted UI surfaces to queue-first reversal (legacy direct cancel retired), H6-E1 stamps `updatedAt` at completion, H6-E2-A built the pure evidence builder + dual-branch invariant (committed `53a2123`), H6-E2-B persists `reversalEvidence` atomically on the transfer header at completion (committed `82d3352`), and H6-E2-C makes the coordinator PREFER and fail-closed-validate that header evidence at reversal time — invalid present header fails closed, absent header falls back to legacy item-subcollection (committed `fe3ff44`)** — server resolver remains unchanged and authoritative (re-reads items). No offline queue schema change; no transfer write-path change in E2-C. **Transfer Reversal Evidence sequence is fully closed.**
 
 ---
 

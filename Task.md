@@ -1,26 +1,29 @@
-# Current Task Tracker — Phase 7B-H6-E2-C (transfer evidence coordinator validation)
+# Current Task Tracker — Phase 7B (Transfer Reversal Evidence sequence — H6-E2-C CLOSED)
 
 > Living checkpoint doc for agents. Detailed history: `docs/reports/latest-report.md` (do not duplicate long-form evidence here).
 
-## Current active phase
+## Current baseline
 
-**Phase 7B-H6-E2-C: Transfer Evidence Coordinator Validation**
-**Status:** **IMPLEMENTED — AWAITING CODEX REVIEW** (not committed; not closed).
-**Scope:** make the client-side transfer reversal coordinator PREFER and validate the header `reversalEvidence` snapshot when present, with strict legacy item-subcollection fallback when absent. Adds `transferHeaderEvidence?: unknown` (untrusted) to `TransferReversalInput`, `validateTransferHeaderEvidence` (fail-closed projection → `OriginalStockEffect[]`), `resolveTransferReversalEffects` (precedence), splits `assertTransferReversalInput` into header-field + item gates, tags `evidenceSource` (`header_snapshot`/`legacy_subcollection`), and activates both cancel pages to pass `cancelTarget.reversalEvidence`. **No transfer write-path change, no server resolver change, no offline queue schema change.**
+**Transfer Reversal Evidence sequence: FULLY CLOSED / COMMITTED**
 
-**Policy:** valid header → use header / `header_snapshot`; present-but-invalid header → reject, **no fallback**; header absent → legacy items / `legacy_subcollection`.
+- **H6-E2-A** — Pure Transfer Evidence Builder + Dual-Branch Invariant — CLOSED / COMMITTED — `53a2123 feat(pos): implement dual-branch transfer reversal evidence builder and invariants`
+- **H6-E2-B** — Write Transfer Evidence Header at Completion — CLOSED / COMMITTED — `82d3352 feat(pos): write transfer reversal evidence header on completion`
+- **H6-E2-C** — Transfer Evidence Coordinator Validation — CLOSED / COMMITTED — `fe3ff44 feat(pos): validate transfer reversal header evidence`
 
-**Stacked on H6-E2-B** (CLOSED / COMMITTED — `82d3352`): header evidence write at completion.
-**Stacked on H6-E2-A** (CLOSED / COMMITTED — `53a2123`): pure evidence builder + dual-branch invariant.
+**Current clean baseline:** `fe3ff44 feat(pos): validate transfer reversal header evidence`
 
-**Clean baseline before H6-E2-C:** `82d3352 feat(pos): write transfer reversal evidence header on completion` (H6-E2-B — CLOSED / COMMITTED).
+**Server resolver remains authoritative** (re-reads transfer items; ignores client evidence). H6-E2-C is client-side local-correction hardening, not a server trust boundary. Invalid present header evidence fails closed (no fallback, no write); absent header evidence falls back to legacy item-subcollection behavior.
+
+**`stash@{0}` remains present and untouched.**
+
+**Next step:** read-only planning for Transfer Evidence Operational Reporting / Rejection Visibility. No code changes until separately authorized.
 
 ---
 
 ## Phase 7B-H6-E2-C — Transfer Evidence Coordinator Validation
 
-**Status:** **IMPLEMENTED — AWAITING CODEX REVIEW** (not committed; not closed).
-**Authorization:** CEO Option A — APPROVED (Opus 4.8 / high). Codex GPT-5.5 High review mandatory before closure.
+**Status:** **CLOSED / COMMITTED** — `fe3ff44 feat(pos): validate transfer reversal header evidence`.
+**Authorization:** CEO Option A — APPROVED.
 
 ### What was delivered
 
@@ -64,7 +67,7 @@ H6-E2-C activates fail-closed header evidence preference, so malformed post-E2-B
 
 ## Phase 7B-H6-E2-B — Write Transfer Evidence Header at Completion
 
-**Status:** **IMPLEMENTED — AWAITING CODEX REVIEW** (not committed; not closed).
+**Status:** **CLOSED / COMMITTED** — `82d3352 feat(pos): write transfer reversal evidence header on completion`.
 **Authorization:** CEO Option A — APPROVED.
 
 ### What was delivered
@@ -76,7 +79,7 @@ H6-E2-C activates fail-closed header evidence preference, so malformed post-E2-B
 
 ### What is NOT in this slice
 
-No coordinator validation against the persisted evidence. `reversalCoordinator.ts`, UI pages, server resolver, offline queue, Firestore rules — all UNCHANGED. H6-E2-C (coordinator validation) remains a future slice.
+No coordinator validation against the persisted evidence in this slice. `reversalCoordinator.ts`, UI pages, server resolver, offline queue, Firestore rules — all UNCHANGED in this slice. H6-E2-C (coordinator validation) is now also CLOSED / COMMITTED — `fe3ff44`.
 
 ### Files changed (code)
 
