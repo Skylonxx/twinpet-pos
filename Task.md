@@ -1,4 +1,4 @@
-# Current Task Tracker — Phase 7B-H7-C (Durable Rejection Log Store Wiring — CLOSED)
+# Current Task Tracker — Phase 7B-H7-E (Receiving-only Catch-site Integration — IMPLEMENTED / AWAITING CODEX REVIEW)
 
 > Living checkpoint doc for agents. Detailed history: `docs/reports/latest-report.md` (do not duplicate long-form evidence here).
 
@@ -17,12 +17,56 @@
 **H7-A** — Pure Latent Reversal Rejection Record — CLOSED / COMMITTED — `749e6e6 feat(pos): add latent reversal rejection record model`
 **H7-B** — Storage Design Audit (read-only design artifact; Codex PASS WITH NOTES). No code/doc changes.
 **H7-C** — Durable Rejection Log Store Wiring — CLOSED / COMMITTED — `76b7451 feat(pos): add latent durable reversal rejection log store`
+**H7-D** — Catch-site Integration Design Audit (read-only design artifact; receiving-first recommended). No code/doc changes.
+**H7-E** — Receiving-only Catch-site Integration — **IMPLEMENTED / AWAITING CODEX REVIEW** (not committed). Baseline unchanged: `76b7451`.
 
-**Transfer and Receiving fail-closed visibility paths are both closed.** H7-C is latent local store/API only — `DB_VERSION` 1→2, `rejections` IndexedDB store additive, `recordReversalRejection` best-effort never-throwing, `listReversalRejections` read-only. No production caller, no catch-site integration, no UI/Manual Review Ops surfacing, no server/rules/validation/write-path change.
+**Transfer and Receiving fail-closed visibility paths are both closed.** H7-E activates the durable rejection log for **Receiving only**: the `ReceivingReversalEvidenceError` branch now builds the H7-A record and best-effort fire-and-forgets the H7-C log via the new `recordEvidenceRejection` bridge — receiving operator message + throw-to-banner behavior unchanged. No transfer-page integration, no UI/Ops surfacing, no server/rules/validation/offline-schema change.
 
 **`stash@{0}` remains present and untouched.**
 
-**Next step:** read-only strategic planning for the next phase options.
+**Next step:** Codex GPT-5.5 High review of H7-E; commit + closure only after PASS. Transfer catch-site integration follows as a separate slice.
+
+---
+
+## Phase 7B-H7-E — Receiving-only Catch-site Integration
+
+**Status:** **IMPLEMENTED — AWAITING CODEX REVIEW** (not committed; not closed). Baseline unchanged: `76b7451`.
+**Authorization:** Gemini / Tech Lead / CEO — Option A APPROVED (receiving-only; Claude Opus 4.8 / High). H7-D design audit recommended receiving-first.
+**Goal:** Wire ONLY the receiving fail-closed evidence rejection catch site to the durable local rejection log — the first production caller of the H7-A/H7-C substrate. The current throw-to-banner UX is unchanged.
+
+### What was delivered
+
+- `src/lib/pos/offline/recordEvidenceRejection.ts` (NEW) — bridge helper `recordEvidenceRejection(store, input): void`. Returns `void` (not a Promise); builds via H7-A `buildReversalRejectionRecord`, dispatches via H7-C `recordReversalRejection`; **both** the build (which can throw fail-closed) and the async dispatch are guarded, and the async promise carries `.catch(() => {})` — never throws into the caller, no unhandled rejection. `evidenceSource` omitted (not resolved at the throw). Touches only the `rejections` store via the log API.
+- `src/lib/pos/offline/recordEvidenceRejection.test.ts` (NEW, 13 tests) — record construction (receiving + transfer-shaped), persistence, `evidenceSource` omitted, returns void, async-failure swallowed, build-failure swallowed, no unhandled rejection, simulated receiving caller still throws the F1/G1 message on logging failure, and source-level `?raw` assertions on `ReceivingEditPage`.
+- `src/pages/ReceivingEditPage.tsx` (MOD) — imports `createIndexedDbReversalStore` + `recordEvidenceRejection`; one `const rejectionLogStore = useMemo(() => createIndexedDbReversalStore(), [])`; in the `ReceivingReversalEvidenceError` branch only, computes the existing message, dispatches `recordEvidenceRejection({ sourceType:'receiving', sourceId: id, branchId, evidenceCode: err.code, evidenceMessage, staffId: user.id, observedDocumentUpdatedAt })`, then `throw new Error(message)` exactly as before. Non-evidence errors still `throw err` unchanged.
+
+### Execution order (enforced)
+
+Detect `ReceivingReversalEvidenceError` → compute operator message → dispatch fire-and-forget log → throw `new Error(message)`. The helper is synchronous/void/fully-guarded, so it cannot block, delay, swallow, or alter the throw-to-banner behavior.
+
+### What is NOT in this slice
+
+No transfer catch-site integration (`TransferHistoryPage`/`AdminTransferPage` untouched), no Admin/Ops surfacing, no Manual Review Ops UI, no offline store schema change (`reversalLocalStore.ts`/`reversalRejectionLog.ts` untouched), no server resolver/Firestore-rules change, no validation/fail-closed/thrown-error change, no F1/G1 message-text change, no receiving/transfer write-path change.
+
+### Files changed (code)
+
+```
+src/lib/pos/offline/recordEvidenceRejection.ts        (NEW — void bridge helper)
+src/lib/pos/offline/recordEvidenceRejection.test.ts   (NEW — 13 tests incl. source-level)
+src/pages/ReceivingEditPage.tsx                        (MOD — useMemo store + 1 helper call in the evidence-error branch)
+```
+
+### Evidence
+
+- `npx vitest run recordEvidenceRejection` → **13 passed**
+- `npx vitest run reversalRejectionRecord reversalRejectionLog reversalLocalStore offlineReversalQueue manualReviewOps` → **80 passed** (regression green)
+- Full web `npx vitest run` → **466 passed** (29 files); `npx tsc -b` → clean
+- `npm --prefix functions run test:unit -- resolveReversal` → **43 passed** (server UNCHANGED)
+- `git diff --check` clean; forbidden-area diff EMPTY (transfer pages, offline store/log, server resolver, Firestore rules, transfer write-path); `stash@{0}` untouched.
+
+### Hidden risk
+
+H7-E is the first production caller of the durable rejection log; if the helper could throw, returned a dropped Promise, or were placed before message determination, the forensic log could disrupt the receiving fail-closed banner path it is meant to observe — the `void`/synchronous/fully-guarded contract and the after-message placement are what prevent that.
 
 ---
 

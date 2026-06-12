@@ -12,6 +12,8 @@ import {
   ReceivingReversalEvidenceError,
   toObservedDocumentUpdatedAtIso,
 } from '../lib/inventory/reversalCoordinator';
+import { createIndexedDbReversalStore } from '../lib/pos/offline/reversalLocalStore';
+import { recordEvidenceRejection } from '../lib/pos/offline/recordEvidenceRejection';
 import {
   formLinesToDraftLines,
   formLinesToEditLines,
@@ -73,6 +75,10 @@ export default function ReceivingEditPage() {
 
   const { user, branchId } = useAuth();
   const { loadItems, loadReceiving } = useReceivingHistory(branchId);
+
+  // Phase 7B-H7-E: one device-local store instance for best-effort durable rejection
+  // logging (forensic only — see recordEvidenceRejection). Constructed once per mount.
+  const rejectionLogStore = useMemo(() => createIndexedDbReversalStore(), []);
 
   const [receiving, setReceiving] = useState<Receiving | null>(null);
   const [items, setItems] = useState<ReceivingItem[]>([]);
@@ -227,7 +233,22 @@ export default function ReceivingEditPage() {
       // fallback. Re-throwing (not swallowing) preserves the dialog-stays-open UX, and no
       // success/navigation path runs on failure.
       if (err instanceof ReceivingReversalEvidenceError) {
-        throw new Error(`${getReceivingReversalEvidenceMessage(err.code)} (รหัส: ${err.code})`);
+        const evidenceMessage = getReceivingReversalEvidenceMessage(err.code);
+        const message = `${evidenceMessage} (รหัส: ${err.code})`;
+        // Phase 7B-H7-E: best-effort durable forensic log of the fail-closed rejection.
+        // Dispatched AFTER the operator message is determined and BEFORE the re-throw;
+        // synchronous, returns void, and fully guarded — it cannot block, delay, or
+        // swallow the throw-to-banner behavior below.
+        recordEvidenceRejection(rejectionLogStore, {
+          sourceType: 'receiving',
+          sourceId: id,
+          branchId,
+          evidenceCode: err.code,
+          evidenceMessage,
+          staffId: user.id,
+          observedDocumentUpdatedAt: toObservedDocumentUpdatedAtIso(receiving?.updatedAt),
+        });
+        throw new Error(message);
       }
       throw err;
     }

@@ -1,7 +1,9 @@
 # Latest Report
 
 > Rolling "latest report" for the stock-write security workstream. Updated at each phase boundary.
-> **Current state:** **Phase 7B-H7-C — Durable Rejection Log Store Wiring** — **CLOSED / COMMITTED — `76b7451 feat(pos): add latent durable reversal rejection log store`**. Latent wiring of the H7-A model into a durable local store, per the Codex-reviewed (PASS WITH NOTES) H7-B design. `src/lib/pos/offline/reversalLocalStore.ts` gains a `rejections` IndexedDB store (additive: `'rejections'` in `ReversalStoreName`/`REVERSAL_STORES`, **`DB_VERSION` 1 → 2**, in-memory `rejections` map); the `onupgradeneeded` loop creates only missing stores, so the v1→v2 upgrade preserves `intents`/`stock`/`ledger`/`markers` + data. New `src/lib/pos/offline/reversalRejectionLog.ts` exposes best-effort, **never-throwing** `recordReversalRejection(store, record) → 'recorded'|'duplicate'|'unavailable'|'failed'` (out-of-line key = content-addressed `recordId`; idempotent overwrite; distinct `createdAt` → distinct row) and read-only `listReversalRejections(store, filter?)` (newest-first by `createdAt`; optional `sourceType`/`branchId`). Touches ONLY the `rejections` store — no stock/ledger/intents/markers mutation, no queue-state control reads. **100% latent: no production caller, no catch-site/UI/Manual-Review-Ops surfacing, no server/rules/validation/write-path change.** A logging failure is best-effort and never blocks or alters the fail-closed F1/G1 UX. 16 reversalRejectionLog tests + 3 migration tests (real `openDb`/`onupgradeneeded` via an injected compact fake IndexedDB), 61 regression (model/queue/manualReviewOps), 453 web (28 files), `tsc -b` clean, 43 functions resolveReversal (server unchanged). Forbidden-area diff EMPTY; `stash@{0}` untouched. Catch-site integration and Admin/Ops UI surfacing remain future separately-authorized slices.
+> **Current state:** **Phase 7B-H7-E — Receiving-only Catch-site Integration** — **IMPLEMENTED / AWAITING CODEX REVIEW** (not committed; not closed; baseline unchanged at `76b7451`). The FIRST production caller of the durable rejection log, per the H7-D design audit (receiving-first). New bridge `src/lib/pos/offline/recordEvidenceRejection.ts` — `recordEvidenceRejection(store, input): void`: builds the H7-A record via `buildReversalRejectionRecord` and fire-and-forgets the H7-C `recordReversalRejection`; **both the (fail-closed) build and the async dispatch are guarded, the async promise carries `.catch(() => {})`, and it returns `void`** — so it never throws into the caller and leaves no unhandled rejection. `evidenceSource` omitted (unresolved at the throw). `src/pages/ReceivingEditPage.tsx` constructs one `useMemo(() => createIndexedDbReversalStore(), [])` and, in the `ReceivingReversalEvidenceError` branch only, computes the existing operator message, dispatches `recordEvidenceRejection({ sourceType:'receiving', sourceId: id, branchId, evidenceCode: err.code, evidenceMessage, staffId: user.id, observedDocumentUpdatedAt })`, then `throw new Error(message)` exactly as before — **operator message + throw-to-banner UX unchanged**; non-evidence errors still `throw err`. Receiving-only: no transfer-page integration, no Admin/Ops surfacing, no offline-schema (`reversalLocalStore.ts`/`reversalRejectionLog.ts` untouched)/server/rules/validation/write-path change. 13 recordEvidenceRejection tests (incl. source-level `?raw` page assertions), 80 regression (model/log/store/queue/manualReviewOps), 466 web (29 files), `tsc -b` clean, 43 functions resolveReversal (server unchanged). Forbidden-area diff EMPTY; `stash@{0}` untouched. Transfer catch-site integration and Admin/Ops surfacing remain future separately-authorized slices.
+>
+> **Prior state:** **Phase 7B-H7-C — Durable Rejection Log Store Wiring** — **CLOSED / COMMITTED — `76b7451 feat(pos): add latent durable reversal rejection log store`**. Latent wiring of the H7-A model into a durable local store, per the Codex-reviewed (PASS WITH NOTES) H7-B design. `src/lib/pos/offline/reversalLocalStore.ts` gains a `rejections` IndexedDB store (additive: `'rejections'` in `ReversalStoreName`/`REVERSAL_STORES`, **`DB_VERSION` 1 → 2**, in-memory `rejections` map); the `onupgradeneeded` loop creates only missing stores, so the v1→v2 upgrade preserves `intents`/`stock`/`ledger`/`markers` + data. New `src/lib/pos/offline/reversalRejectionLog.ts` exposes best-effort, **never-throwing** `recordReversalRejection(store, record) → 'recorded'|'duplicate'|'unavailable'|'failed'` (out-of-line key = content-addressed `recordId`; idempotent overwrite; distinct `createdAt` → distinct row) and read-only `listReversalRejections(store, filter?)` (newest-first by `createdAt`; optional `sourceType`/`branchId`). Touches ONLY the `rejections` store — no stock/ledger/intents/markers mutation, no queue-state control reads. **100% latent: no production caller, no catch-site/UI/Manual-Review-Ops surfacing, no server/rules/validation/write-path change.** A logging failure is best-effort and never blocks or alters the fail-closed F1/G1 UX. 16 reversalRejectionLog tests + 3 migration tests (real `openDb`/`onupgradeneeded` via an injected compact fake IndexedDB), 61 regression (model/queue/manualReviewOps), 453 web (28 files), `tsc -b` clean, 43 functions resolveReversal (server unchanged). Forbidden-area diff EMPTY; `stash@{0}` untouched. Catch-site integration and Admin/Ops UI surfacing remain future separately-authorized slices.
 >
 > **Prior state:** **Phase 7B-H7-A — Pure Latent Reversal Rejection Record** — CLOSED / COMMITTED — `749e6e6 feat(pos): add latent reversal rejection record model`. New pure file `src/lib/inventory/reversalRejectionRecord.ts` + 20-test suite defines the record model for a FUTURE durable local rejection log: a fail-closed transfer/receiving evidence rejection (F1/G1 made it momentarily *visible*) is thrown BEFORE any offline intent, so it leaves no durable forensic trail. The model captures the minimal forensic identity (sourceType transfer/receiving, sourceId, branchId, evidenceCode, already-computed friendly evidenceMessage, optional evidenceSource/staffId/observedDocumentUpdatedAt, caller-supplied createdAt) with `buildReversalRejectionRecord` / `createReversalRejectionRecordId` (deterministic `rej_<16hex>`) / `serializeReversalRejectionRecord` (canonical stable JSON) — all pure, no I/O, no `src/lib/pos/offline` import. **100% latent: no persistence wiring, no catch-site/UI/offline-queue/server/rules/write-path change; thrown errors + fail-closed semantics unchanged.** 20 reversalRejectionRecord tests, 111 reversalCoordinator, 434 web (26 files), `tsc -b` clean, 18 transferCrud, 41 transferReversalEvidence, 43 functions resolveReversal (server unchanged). `stash@{0}` untouched. Durable storage wiring, catch-site integration, and Admin/Ops UI surfacing remain future separately-authorized slices.
 >
@@ -22,6 +24,57 @@
 > **Prior state:** **Phase 7B-H6-C — Server Resolver Activation + Tests** (CLOSED / COMMITTED — `68f46e2`) then **H6-D1 — latent queue-first transfer executor** (COMMITTED — `4aa8065`). H6-C activated the dormant transfer reversal resolver for the live model — `completed` is the reversible state (H6-B Option A), eligibility centralized in `isTransferStatusReversible`, admitted only into the existing strict guards. H6-D1 added the latent `executeTransferReversal` (dual-branch, queue-first) but did NOT wire it into any UI — superseded by H6-D2.
 >
 > **Prior state:** **Phase 7B-D4 — Docs/Context Sync After H5 Closure** (docs-only; not yet committed). H5 CLOSED / COMMITTED (`4762d97` — `feat(pos): wire client observation timestamp for reversals`; CEO Option B — APPROVED WITH NOTES). Post-commit working tree was **clean**. `stash@{0}` present and untouched. No forbidden areas touched. **End-to-End Receiving Reversal Hardening is functionally complete** (H4 server-side stale-client guard + H5 client/offline timestamp payload wiring). D3 closed and committed (`fb4c3b0`). H4 closed and committed (`4da7757`). H3 closed and committed (`4d69143`). D1 closed and committed (`dacccd1`). H2 closed and committed (`8b48513`). **Next after D4:** Phase 7B-H6 — Transfer Reversal Planning / Environment Audit (read-only planning only; no code changes; no implementation until Tech Lead approves).
+
+## Phase 7B-H7-E: Receiving-only Catch-site Integration (IMPLEMENTED — AWAITING CODEX REVIEW)
+
+**Status:** IMPLEMENTED; not committed; not closed. Authorization: Gemini / Tech Lead / CEO — Option A APPROVED (receiving-only; Claude Opus 4.8 / High). Per the H7-D design audit (receiving-first). Baseline unchanged: `76b7451`. Codex GPT-5.5 High review mandatory before closure.
+
+### What this activates
+
+The first production caller of the H7-A model + H7-C durable log. A fail-closed receiving evidence rejection (`ReceivingReversalEvidenceError`), previously only made *visible* by G1, is now also durably recorded — best-effort, without changing the throw-to-banner UX.
+
+### What was added
+
+- **`src/lib/pos/offline/recordEvidenceRejection.ts`** (NEW) — bridge `recordEvidenceRejection(store, input): void`:
+  - Builds the record via H7-A `buildReversalRejectionRecord`; dispatches via H7-C `recordReversalRejection`.
+  - Returns `void` (no Promise to drop). **Both** the build (fail-closed; can throw) and the async dispatch are wrapped in try/catch, and the async promise carries `.catch(() => {})` — never throws into the caller; no unhandled rejection.
+  - Omits `evidenceSource` (not resolved at the throw). Touches only the `rejections` store via the log API; no stock/ledger/intents/markers mutation, no schema change.
+  - `EvidenceRejectionInput`: `sourceType`/`sourceId`/`branchId`/`evidenceCode`/`evidenceMessage` + optional `staffId`/`observedDocumentUpdatedAt`/`now` (injectable clock).
+- **`src/pages/ReceivingEditPage.tsx`** (MOD) — imports `createIndexedDbReversalStore` + `recordEvidenceRejection`; `const rejectionLogStore = useMemo(() => createIndexedDbReversalStore(), [])` (one per mount, mirroring `ManualReviewOpsPage`); in the `ReceivingReversalEvidenceError` branch only: compute `evidenceMessage`/`message` (unchanged), `recordEvidenceRejection(rejectionLogStore, { sourceType:'receiving', sourceId: id, branchId, evidenceCode: err.code, evidenceMessage, staffId: user.id, observedDocumentUpdatedAt: toObservedDocumentUpdatedAtIso(receiving?.updatedAt) })`, then `throw new Error(message)`. Non-evidence errors still `throw err`.
+
+### Execution order (enforced)
+
+detect `ReceivingReversalEvidenceError` → compute operator message → dispatch fire-and-forget log → `throw new Error(message)`. Helper is synchronous/void/fully-guarded → cannot block, delay, swallow, or alter the throw-to-banner behavior.
+
+### What is NOT in this slice
+
+No transfer catch-site integration (`TransferHistoryPage`/`AdminTransferPage` untouched), no Admin/Ops surfacing, no Manual Review Ops UI, no offline store schema change (`reversalLocalStore.ts`/`reversalRejectionLog.ts` untouched), no server resolver/Firestore-rules change, no validation/fail-closed/thrown-error change, no F1/G1 message-text change, no receiving/transfer write-path change.
+
+### Files changed (code)
+
+```
+src/lib/pos/offline/recordEvidenceRejection.ts        (NEW — void bridge helper)
+src/lib/pos/offline/recordEvidenceRejection.test.ts   (NEW — 13 tests incl. source-level ?raw assertions)
+src/pages/ReceivingEditPage.tsx                        (MOD — useMemo store + 1 helper call in the evidence-error branch)
+```
+
+### Tests
+
+Helper: builds valid receiving + transfer-shaped records; persists via in-memory store; omits `evidenceSource`; returns `void`; swallows async storage failure (no throw); swallows synchronous build failure (no throw, no row); no unhandled rejection on async failure; simulated receiving caller still throws the original F1/G1 message when logging fails. Source-level `?raw` assertions on `ReceivingEditPage`: memoized store constructed; `recordEvidenceRejection` called in the receiving evidence branch; the call is **not** awaited; the branch still `throw new Error(message)`; non-evidence path still `throw err`.
+
+### Evidence
+
+- `npx vitest run recordEvidenceRejection` → **13 passed**
+- `npx vitest run reversalRejectionRecord reversalRejectionLog reversalLocalStore offlineReversalQueue manualReviewOps` → **80 passed** (regression green)
+- Full web `npx vitest run` → **466 passed** (29 files); `npx tsc -b` → clean
+- `npm --prefix functions run test:unit -- resolveReversal` → **43 passed** (server UNCHANGED)
+- `git diff --check` clean; forbidden-area diff EMPTY (transfer pages, offline store/log, server resolver, Firestore rules, transfer write-path); `stash@{0}` untouched.
+
+### Hidden risk
+
+H7-E is the first production caller of the durable rejection log; if the helper could throw, returned a dropped Promise, or were placed before message determination, the forensic log could disrupt the receiving fail-closed banner path it is meant to observe — the `void`/synchronous/fully-guarded contract and the after-message placement prevent that.
+
+---
 
 ## Phase 7B-H7-C: Durable Rejection Log Store Wiring (CLOSED / COMMITTED — 76b7451)
 
