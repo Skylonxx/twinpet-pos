@@ -8,6 +8,8 @@ import type { ReceivingFormSubmitPayload, ReceivingFormValues } from '../lib/rec
 import {
   createDefaultReversalCoordinatorDeps,
   executeReceivingReversal,
+  getReceivingReversalEvidenceMessage,
+  ReceivingReversalEvidenceError,
   toObservedDocumentUpdatedAtIso,
 } from '../lib/inventory/reversalCoordinator';
 import {
@@ -194,27 +196,41 @@ export default function ReceivingEditPage() {
   // UI-standardization pass replaces ReceivingVoidDialog with DestructiveConfirmModal.
   const handleVoid = async (reason: string, note: string) => {
     if (!id || !branchId || !user) return;
-    const outcome = await executeReceivingReversal(createDefaultReversalCoordinatorDeps(), {
-      receivingId: id,
-      branchId,
-      actorRole: user.role,
-      staffId: user.id,
-      reason,
-      note,
-      // Phase 7B-H1: prefer the header reversal-evidence snapshot when present; the
-      // coordinator falls back to these items only for legacy/pre-H1 records.
-      headerEvidence: receiving?.reversalEvidence ?? null,
-      items: items.map((it) => ({ productId: it.productId, qtyBase: it.qtyBase, lotId: it.lotId })),
-      // Phase 7B-H5: observed receiving `updatedAt` for the server stale-client guard.
-      // Omitted automatically when the loaded doc has no convertible `updatedAt`.
-      observedDocumentUpdatedAt: toObservedDocumentUpdatedAtIso(receiving?.updatedAt),
-    });
-    const toast = outcome.manualReviewRequired
-      ? 'ยกเลิกในเครื่องแล้ว — รอผู้จัดการตรวจสอบ (manual review)'
-      : outcome.synced && outcome.status === 'server_accepted'
-        ? 'ยกเลิกเอกสารรับเข้าเรียบร้อย'
-        : 'บันทึกการยกเลิกลงเครื่องแล้ว ระบบจะซิงก์เมื่อออนไลน์';
-    navigate('/receiving/history', { state: { toast } });
+    try {
+      const outcome = await executeReceivingReversal(createDefaultReversalCoordinatorDeps(), {
+        receivingId: id,
+        branchId,
+        actorRole: user.role,
+        staffId: user.id,
+        reason,
+        note,
+        // Phase 7B-H1: prefer the header reversal-evidence snapshot when present; the
+        // coordinator falls back to these items only for legacy/pre-H1 records.
+        headerEvidence: receiving?.reversalEvidence ?? null,
+        items: items.map((it) => ({ productId: it.productId, qtyBase: it.qtyBase, lotId: it.lotId })),
+        // Phase 7B-H5: observed receiving `updatedAt` for the server stale-client guard.
+        // Omitted automatically when the loaded doc has no convertible `updatedAt`.
+        observedDocumentUpdatedAt: toObservedDocumentUpdatedAtIso(receiving?.updatedAt),
+      });
+      const toast = outcome.manualReviewRequired
+        ? 'ยกเลิกในเครื่องแล้ว — รอผู้จัดการตรวจสอบ (manual review)'
+        : outcome.synced && outcome.status === 'server_accepted'
+          ? 'ยกเลิกเอกสารรับเข้าเรียบร้อย'
+          : 'บันทึกการยกเลิกลงเครื่องแล้ว ระบบจะซิงก์เมื่อออนไลน์';
+      navigate('/receiving/history', { state: { toast } });
+    } catch (err) {
+      // Phase 7B-H6-G1 (display-only): a fail-closed receiving evidence rejection carries
+      // a structured code — re-throw a friendly Thai reason (with the raw code as secondary
+      // detail) so the ReceivingForm void dialog's existing error banner shows WHY it was
+      // refused, instead of the single generic message for all 17 codes. Non-evidence errors
+      // (staff-authority, network, …) re-throw unchanged so the dialog keeps its existing
+      // fallback. Re-throwing (not swallowing) preserves the dialog-stays-open UX, and no
+      // success/navigation path runs on failure.
+      if (err instanceof ReceivingReversalEvidenceError) {
+        throw new Error(`${getReceivingReversalEvidenceMessage(err.code)} (รหัส: ${err.code})`);
+      }
+      throw err;
+    }
   };
 
   if (!branchId) {

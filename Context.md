@@ -107,9 +107,10 @@ Server resolver remains authoritative (re-reads transfer items; ignores client e
 
 - **7B-H6-F1** — Transfer Reversal Evidence Rejection Visibility (CLOSED / COMMITTED — `3a3d202`): UI/display-only — `getTransferReversalEvidenceMessage(code)` maps each `TransferReversalEvidenceCode` → friendly Thai message; transfer cancel pages surface the message + raw code when a `TransferReversalEvidenceError` is caught; Manual Review Ops shows a read-only `evidenceSource` column via a page-local label helper. No validation/fail-closed/offline-queue-schema/`src/lib/pos/offline`-runtime/server-resolver/transfer-write-path change. Durable local rejection logging deferred to a future separately-authorized slice.
 
-**Current clean baseline:** `3a3d202 feat(pos): surface transfer reversal evidence rejection reasons`
+**Current clean baseline:** `6b6a5fd docs: sync transfer visibility tracker after closure` (on `3a3d202`).
 
-**Next step:** H6-G1 audit-first receiving visibility implementation.
+**Active slice (not committed; awaiting Codex review):**
+- **Phase 7B-H6-G1 — Receiving Evidence Rejection Visibility & Void Error Handling** (UI/error-visibility only; receiving counterpart of F1): a pure exhaustive `getReceivingReversalEvidenceMessage(code)` maps each `ReceivingReversalEvidenceCode` → friendly Thai message (unknown code → `RECEIVING_EVIDENCE_INCOMPLETE_MESSAGE`); `ReceivingEditPage.handleVoid` is wrapped in try/catch that, for a `ReceivingReversalEvidenceError`, re-throws the friendly message + raw code to `ReceivingForm`'s existing void-dialog error banner (non-evidence errors re-thrown unchanged; not swallowed). Audit confirmed the rejection was already caught + shown generically by `ReceivingForm` (not a true unhandled rejection) and that `AdminReceivingPage` uses the legacy `cancelReceiving` path (no parity needed). **No validation/fail-closed/receiving-validator/offline-queue/IndexedDB/`src/lib/pos/offline`/server-resolver/transfer-behavior change** — the thrown error (type, code, message) is unchanged. No durable rejection log (future separately-authorized slice). 414 web tests (25 files), `tsc -b` clean, `functions resolveReversal` 43 unchanged.
 
 ### H6 Transfer State Model — Architecture Decision (CEO Option A)
 

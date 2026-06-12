@@ -11,7 +11,9 @@ import {
   decideReversalRoute,
   executeReceivingReversal,
   executeTransferReversal,
+  getReceivingReversalEvidenceMessage,
   getTransferReversalEvidenceMessage,
+  RECEIVING_EVIDENCE_INCOMPLETE_MESSAGE,
   ReceivingReversalEvidenceError,
   resolveTransferReversalEffects,
   toObservedDocumentUpdatedAtIso,
@@ -19,6 +21,7 @@ import {
   TransferReversalEvidenceError,
   validateReceivingHeaderEvidence,
   validateTransferHeaderEvidence,
+  type ReceivingReversalEvidenceCode,
   type ReceivingReversalInput,
   type ReceivingReversalItem,
   type ReversalCoordinatorDeps,
@@ -1300,6 +1303,59 @@ describe('H6-F1: getTransferReversalEvidenceMessage (display-only, no behavior c
     // fail-closed validation path was not altered by H6-F1.
     const err = new TransferReversalEvidenceError('header_total_qty_mismatch', TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
     expect(err.message).toBe(TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
+    expect(err.code).toBe('header_total_qty_mismatch');
+  });
+});
+
+describe('H6-G1: getReceivingReversalEvidenceMessage (display-only, no behavior change)', () => {
+  // The full union of receiving structured rejection codes (kept in lockstep with
+  // ReceivingReversalEvidenceCode in reversalCoordinator.ts).
+  const ALL_CODES: ReceivingReversalEvidenceCode[] = [
+    'missing_items',
+    'empty_items',
+    'missing_product_id',
+    'missing_lot_id',
+    'non_finite_qty',
+    'non_positive_qty',
+    'no_effects',
+    'header_not_object',
+    'header_unsupported_version',
+    'header_empty_effects',
+    'header_malformed_effect',
+    'header_missing_product_id',
+    'header_missing_lot_id',
+    'header_non_finite_qty',
+    'header_non_positive_qty',
+    'header_item_count_mismatch',
+    'header_total_qty_mismatch',
+  ];
+
+  test('every known receiving code maps to a non-empty Thai message', () => {
+    for (const code of ALL_CODES) {
+      const msg = getReceivingReversalEvidenceMessage(code);
+      expect(typeof msg).toBe('string');
+      expect(msg.trim().length).toBeGreaterThan(0);
+      // Contains Thai characters (range U+0E00–U+0E7F).
+      expect(msg).toMatch(/[฀-๿]/);
+    }
+  });
+
+  test('an unknown/unexpected code falls back to the generic incomplete message', () => {
+    const msg = getReceivingReversalEvidenceMessage('totally_unknown_code' as ReceivingReversalEvidenceCode);
+    expect(msg).toBe(RECEIVING_EVIDENCE_INCOMPLETE_MESSAGE);
+  });
+
+  test('header_total_qty_mismatch returns a specific message, not the generic fallback', () => {
+    const msg = getReceivingReversalEvidenceMessage('header_total_qty_mismatch');
+    expect(msg).not.toBe(RECEIVING_EVIDENCE_INCOMPLETE_MESSAGE);
+    expect(msg).toContain('ยอดรวม');
+  });
+
+  test('the thrown ReceivingReversalEvidenceError still carries the SAME generic message (validation unchanged)', () => {
+    // Display mapping is additive: the error message itself is unchanged — proving the
+    // fail-closed validation path was not altered by H6-G1.
+    const err = new ReceivingReversalEvidenceError('header_total_qty_mismatch', RECEIVING_EVIDENCE_INCOMPLETE_MESSAGE);
+    expect(err.message).toBe(RECEIVING_EVIDENCE_INCOMPLETE_MESSAGE);
     expect(err.code).toBe('header_total_qty_mismatch');
   });
 });

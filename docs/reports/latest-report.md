@@ -1,7 +1,9 @@
 # Latest Report
 
 > Rolling "latest report" for the stock-write security workstream. Updated at each phase boundary.
-> **Current state:** **Phase 7B-H6-F1 — Transfer Reversal Evidence Rejection Visibility** — CLOSED / COMMITTED — `3a3d202 feat(pos): surface transfer reversal evidence rejection reasons`. UI/display-only: a pure exhaustive `getTransferReversalEvidenceMessage(code)` maps each `TransferReversalEvidenceCode` → friendly Thai message (unknown code → existing generic fallback); the two transfer cancel pages' `catch` surfaces that message + raw code only when a `TransferReversalEvidenceError` is caught (non-evidence errors keep the existing fallback; control flow / `finally` / branch gating / success flow unchanged); Manual Review Ops gains a read-only `evidenceSource` label column via a **page-local** `getEvidenceSourceLabel`. The thrown error (type, `code`, generic `message`) and the fail-closed validation are UNCHANGED. **No validation/fail-closed/offline-queue-schema/IndexedDB-store/`src/lib/pos/offline`-runtime/server-resolver/transfer-write-path change.** 107 reversalCoordinator tests, 18 transferCrud, 41 transferReversalEvidence, 410 web tests (25 files), `tsc -b` clean, `functions resolveReversal` 43 unchanged. No durable rejection log (future separately-authorized slice). `stash@{0}` present and untouched.
+> **Current state:** **Phase 7B-H6-G1 — Receiving Evidence Rejection Visibility & Void Error Handling** (IMPLEMENTED — AWAITING CODEX REVIEW; uncommitted). UI/error-visibility only — the receiving symmetric counterpart of F1. A pure exhaustive `getReceivingReversalEvidenceMessage(code)` maps each `ReceivingReversalEvidenceCode` → friendly Thai message (unknown code → existing `RECEIVING_EVIDENCE_INCOMPLETE_MESSAGE`); `ReceivingEditPage.handleVoid` is wrapped in try/catch that, for a `ReceivingReversalEvidenceError`, re-throws the friendly message + raw code to `ReceivingForm`'s existing void-dialog error banner (non-evidence errors re-thrown unchanged; not swallowed). Audit confirmed the rejection was already caught + shown generically by `ReceivingForm` (not a true unhandled rejection) and that `AdminReceivingPage` uses the legacy `cancelReceiving` path (no parity needed; no scope expansion). The thrown error (type, `code`, generic `message`) and the fail-closed validation are UNCHANGED. **No validation/fail-closed/receiving-validator/offline-queue-schema/IndexedDB/`src/lib/pos/offline`/server-resolver/transfer-behavior change.** 111 reversalCoordinator tests, 18 transferCrud, 41 transferReversalEvidence, 414 web (25 files), `tsc -b` clean, `functions resolveReversal` 43 unchanged. No durable rejection log (future separately-authorized slice). `stash@{0}` present and untouched.
+>
+> **Prior state:** **Phase 7B-H6-F1 — Transfer Reversal Evidence Rejection Visibility** — CLOSED / COMMITTED — `3a3d202 feat(pos): surface transfer reversal evidence rejection reasons`. UI/display-only: a pure exhaustive `getTransferReversalEvidenceMessage(code)` maps each `TransferReversalEvidenceCode` → friendly Thai message (unknown code → existing generic fallback); the two transfer cancel pages' `catch` surfaces that message + raw code only when a `TransferReversalEvidenceError` is caught (non-evidence errors keep the existing fallback; control flow / `finally` / branch gating / success flow unchanged); Manual Review Ops gains a read-only `evidenceSource` label column via a **page-local** `getEvidenceSourceLabel`. The thrown error (type, `code`, generic `message`) and the fail-closed validation are UNCHANGED. **No validation/fail-closed/offline-queue-schema/IndexedDB-store/`src/lib/pos/offline`-runtime/server-resolver/transfer-write-path change.** 107 reversalCoordinator tests, 18 transferCrud, 41 transferReversalEvidence, 410 web tests (25 files), `tsc -b` clean, `functions resolveReversal` 43 unchanged. No durable rejection log (future separately-authorized slice). `stash@{0}` present and untouched.
 >
 > **Prior state:** **Transfer Reversal Evidence sequence fully closed.** H6-E2-C — Transfer Evidence Coordinator Validation — CLOSED / COMMITTED — `fe3ff44 feat(pos): validate transfer reversal header evidence`. The client coordinator now PREFERS the transfer header `reversalEvidence` snapshot and validates it fail-closed (`validateTransferHeaderEvidence` → `OriginalStockEffect[]`), with strict legacy item-subcollection fallback when absent (`resolveTransferReversalEffects`; `evidenceSource` = `header_snapshot`/`legacy_subcollection`). `TransferReversalInput` gains untrusted `transferHeaderEvidence?: unknown`; `assertTransferReversalInput` split into header-field + item gates; both cancel pages pass `cancelTarget.reversalEvidence`. Present-but-invalid header fails closed (no fallback, no write). 27 new H6-E2-C tests (103 reversalCoordinator; 406 web total), incl. the Codex blocker-fix regression (non-finite `totalQtyBase` rejection). **No transfer write-path change, no server resolver change, no offline queue schema change.** Server resolver remains authoritative (re-reads items); H6-E2-C is client-side local-correction hardening, not a server trust boundary. `stash@{0}` present and untouched.
 >
@@ -16,6 +18,47 @@
 > **Prior state:** **Phase 7B-H6-C — Server Resolver Activation + Tests** (CLOSED / COMMITTED — `68f46e2`) then **H6-D1 — latent queue-first transfer executor** (COMMITTED — `4aa8065`). H6-C activated the dormant transfer reversal resolver for the live model — `completed` is the reversible state (H6-B Option A), eligibility centralized in `isTransferStatusReversible`, admitted only into the existing strict guards. H6-D1 added the latent `executeTransferReversal` (dual-branch, queue-first) but did NOT wire it into any UI — superseded by H6-D2.
 >
 > **Prior state:** **Phase 7B-D4 — Docs/Context Sync After H5 Closure** (docs-only; not yet committed). H5 CLOSED / COMMITTED (`4762d97` — `feat(pos): wire client observation timestamp for reversals`; CEO Option B — APPROVED WITH NOTES). Post-commit working tree was **clean**. `stash@{0}` present and untouched. No forbidden areas touched. **End-to-End Receiving Reversal Hardening is functionally complete** (H4 server-side stale-client guard + H5 client/offline timestamp payload wiring). D3 closed and committed (`fb4c3b0`). H4 closed and committed (`4da7757`). H3 closed and committed (`4d69143`). D1 closed and committed (`dacccd1`). H2 closed and committed (`8b48513`). **Next after D4:** Phase 7B-H6 — Transfer Reversal Planning / Environment Audit (read-only planning only; no code changes; no implementation until Tech Lead approves).
+
+## Phase 7B-H6-G1: Receiving Evidence Rejection Visibility & Void Error Handling (IMPLEMENTED — AWAITING CODEX REVIEW)
+
+**Status:** implemented (audit-first); not committed; not closed. Authorization: Gemini / Tech Lead / CEO — Option A APPROVED (audit-first → small UI-only implementation; Codex GPT-5.5 High review mandatory before closure). Clean baseline: `6b6a5fd` (D6 docs sync, on `3a3d202`).
+
+### Audit findings (gate before implementation)
+
+- `ReceivingEditPage.handleVoid` (`src/pages/ReceivingEditPage.tsx`) calls `executeReceivingReversal` and previously had **no try/catch** — but its caller `ReceivingForm.handleVoidConfirm` already wraps `onVoid` in try/catch and renders `err.message` in the `rcv-error-banner` (the void dialog stays open). So a fail-closed receiving rejection was **caught and shown, but only via the single generic `RECEIVING_EVIDENCE_INCOMPLETE_MESSAGE`** shared by all 17 codes — the specific code was discarded. This is the same message-granularity gap F1 closed for transfers, **not** a true unhandled-promise rejection (the roadmap's worst-case framing was over-stated; corrected here).
+- `AdminReceivingPage` voids through the **legacy `cancelReceiving`** path (no `executeReceivingReversal`, no `ReceivingReversalEvidenceError`), so it needs no parity. The authorized file list (`reversalCoordinator.ts(.test)`, `ReceivingEditPage.tsx`) was therefore sufficient — **no scope expansion requested**.
+- The fix stays entirely in `ReceivingEditPage.tsx`: catch `ReceivingReversalEvidenceError` and re-throw a friendly message to `ReceivingForm`'s existing banner. `ReceivingForm.tsx` is NOT edited.
+
+### What was added (display-only)
+
+- **`src/lib/inventory/reversalCoordinator.ts`** — `RECEIVING_REVERSAL_EVIDENCE_MESSAGES: Record<ReceivingReversalEvidenceCode, string>` (exhaustive — TS build fails on an unmapped code) + pure `getReceivingReversalEvidenceMessage(code): string`; unknown/unexpected code falls back to `RECEIVING_EVIDENCE_INCOMPLETE_MESSAGE`. Mirrors the F1 transfer helper. The thrown error type/`code`/`message` and all receiving validation are unchanged.
+- **`src/pages/ReceivingEditPage.tsx`** — `handleVoid` wrapped in try/catch. On `ReceivingReversalEvidenceError`, re-throws `new Error(getReceivingReversalEvidenceMessage(err.code) + " (รหัส: <code>)")` so the existing void-dialog banner shows the specific reason; any other error is re-thrown unchanged (not swallowed → dialog keeps its prior generic fallback). Success toast / navigation / manual-review wording, validation order, authority gating, and the form's busy/`finally` cleanup are all unchanged; no success/navigation path runs on failure.
+
+### What is NOT in this slice
+
+No change to `resolveReceivingReversalEffects` / `validateReceivingHeaderEvidence` / `executeReceivingReversal` control flow, the thrown error, the fail-closed policy, `createOfflineReversal`, the offline queue schema / IndexedDB stores / `src/lib/pos/offline`, the server resolver, transfer behavior, `transferCrud`/`transferDevMock`/`transferTypes`, `ReceivingForm.tsx`, `AdminReceivingPage`, `cancelReceiving`. **No durable local rejection log** (a future separately-authorized slice).
+
+### Files changed (code)
+
+```
+src/lib/inventory/reversalCoordinator.ts        (+ receiving message map + getReceivingReversalEvidenceMessage)
+src/lib/inventory/reversalCoordinator.test.ts   (+4 H6-G1 tests; 111 file total)
+src/pages/ReceivingEditPage.tsx                 (handleVoid try/catch: evidence-error display only)
+```
+
+### Evidence
+
+- `npx vitest run reversalCoordinator` → **111 passed** (+4 H6-G1)
+- `npx vitest run transferCrud` → **18 passed**; `transferReversalEvidence` → **41 passed** (regression green)
+- Full web `npx vitest run` → **414 passed** (25 files); `npx tsc -b` → clean
+- `npm --prefix functions run test:unit -- resolveReversal` → **43 passed** (server UNCHANGED)
+- `git diff --check` clean; `stash@{0}` untouched; **no diff under `src/lib/pos/offline`**, no server resolver diff, no transfer write-path diff.
+
+### Hidden risk
+
+G1 improves receiving void rejection visibility, but it does not create a durable rejection log; durable local rejection logging remains a future separately authorized slice.
+
+---
 
 ## Phase 7B-H6-F1: Transfer Reversal Evidence Rejection Visibility (CLOSED / COMMITTED — `3a3d202`)
 

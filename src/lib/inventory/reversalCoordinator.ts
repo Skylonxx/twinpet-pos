@@ -142,6 +142,50 @@ export const RECEIVING_EVIDENCE_INCOMPLETE_MESSAGE =
   'ไม่สามารถยกเลิกเอกสารรับเข้าได้ เนื่องจากข้อมูลสินค้า/ล็อตไม่สมบูรณ์ — กรุณาโหลดใหม่หรือติดต่อผู้ดูแลระบบ';
 
 /**
+ * Phase 7B-H6-G1 — operator-facing Thai messages, one per receiving evidence rejection
+ * code. Mirrors the transfer-side map (Phase 7B-H6-F1).
+ *
+ * DISPLAY-ONLY. This map does NOT alter the thrown `ReceivingReversalEvidenceError`, the
+ * validation, or the fail-closed policy — every gate still throws the SAME code with the
+ * SAME generic `message`. It only makes the already-computed code legible to staff (the UI
+ * shows the friendly message with the raw `code` as secondary detail). Typed as an
+ * exhaustive `Record<ReceivingReversalEvidenceCode, string>`, so adding a new code without
+ * a message fails the TypeScript build.
+ */
+const RECEIVING_REVERSAL_EVIDENCE_MESSAGES: Record<ReceivingReversalEvidenceCode, string> = {
+  // ── Legacy item-subcollection evidence (fallback path) ──
+  missing_items: 'ไม่สามารถยกเลิกรับเข้าได้: ไม่พบรายการสินค้าในเอกสารรับเข้า',
+  empty_items: 'ไม่สามารถยกเลิกรับเข้าได้: ไม่มีรายการสินค้าให้ยกเลิก',
+  missing_product_id: 'ไม่สามารถยกเลิกรับเข้าได้: มีรายการสินค้าที่ไม่มีรหัสสินค้า',
+  missing_lot_id: 'ไม่สามารถยกเลิกรับเข้าได้: มีรายการสินค้าที่ไม่มีรหัสล็อต',
+  non_finite_qty: 'ไม่สามารถยกเลิกรับเข้าได้: จำนวนสินค้าไม่ถูกต้อง',
+  non_positive_qty: 'ไม่สามารถยกเลิกรับเข้าได้: จำนวนสินค้าต้องมากกว่าศูนย์',
+  no_effects: 'ไม่สามารถยกเลิกรับเข้าได้: ไม่พบผลกระทบสต็อกที่จะยกเลิก',
+  // ── Header `reversalEvidence` snapshot (preferred path) ──
+  header_not_object: 'ไม่สามารถยกเลิกรับเข้าได้: หลักฐานการรับเข้าในหัวเอกสารเสียหายหรือไม่ถูกต้อง',
+  header_unsupported_version: 'ไม่สามารถยกเลิกรับเข้าได้: เวอร์ชันหลักฐานการรับเข้าไม่รองรับ',
+  header_empty_effects: 'ไม่สามารถยกเลิกรับเข้าได้: หลักฐานการรับเข้าไม่มีรายการผลกระทบสต็อก',
+  header_malformed_effect: 'ไม่สามารถยกเลิกรับเข้าได้: รายการในหลักฐานการรับเข้ามีรูปแบบไม่ถูกต้อง',
+  header_missing_product_id: 'ไม่สามารถยกเลิกรับเข้าได้: หลักฐานการรับเข้ามีรายการที่ไม่มีรหัสสินค้า',
+  header_missing_lot_id: 'ไม่สามารถยกเลิกรับเข้าได้: หลักฐานการรับเข้ามีรายการที่ไม่มีรหัสล็อต',
+  header_non_finite_qty: 'ไม่สามารถยกเลิกรับเข้าได้: จำนวนในหลักฐานการรับเข้าไม่ถูกต้อง',
+  header_non_positive_qty: 'ไม่สามารถยกเลิกรับเข้าได้: จำนวนในหลักฐานการรับเข้าต้องมากกว่าศูนย์',
+  header_item_count_mismatch: 'ไม่สามารถยกเลิกรับเข้าได้: จำนวนรายการในหลักฐานการรับเข้าไม่ตรงกัน',
+  header_total_qty_mismatch: 'ไม่สามารถยกเลิกรับเข้าได้: หลักฐานรับเข้าไม่ตรงกับยอดรวม',
+};
+
+/**
+ * Phase 7B-H6-G1 — friendly Thai message for a receiving evidence rejection `code`. Pure
+ * and display-only (no behavior change). Returns the mapped message for any known code; an
+ * unexpected/unknown code (e.g. one introduced in a newer build) falls back to the existing
+ * generic `RECEIVING_EVIDENCE_INCOMPLETE_MESSAGE`, so the UI is never left with a blank
+ * reason. Callers append the raw `code` as secondary detail.
+ */
+export function getReceivingReversalEvidenceMessage(code: ReceivingReversalEvidenceCode): string {
+  return RECEIVING_REVERSAL_EVIDENCE_MESSAGES[code] ?? RECEIVING_EVIDENCE_INCOMPLETE_MESSAGE;
+}
+
+/**
  * Fail-closed completeness gate. Rejects (throws) BEFORE any effects are built —
  * and therefore before `createOfflineReversal` does any local correction or queue
  * write — when the receiving item evidence is missing, empty, or contains ANY
