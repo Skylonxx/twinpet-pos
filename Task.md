@@ -1,4 +1,4 @@
-# Current Task Tracker — Phase 7B-H7-A (Pure Latent Reversal Rejection Record — CLOSED)
+# Current Task Tracker — Phase 7B-H7-C (Durable Rejection Log Store Wiring — IMPLEMENTED / AWAITING CODEX REVIEW)
 
 > Living checkpoint doc for agents. Detailed history: `docs/reports/latest-report.md` (do not duplicate long-form evidence here).
 
@@ -16,11 +16,58 @@
 **H6-G1** — Receiving Evidence Rejection Visibility & Void Error Handling — CLOSED / COMMITTED — `e80b2a3 feat(pos): surface receiving reversal evidence rejection reasons`
 **H7-A** — Pure Latent Reversal Rejection Record — CLOSED / COMMITTED — `749e6e6 feat(pos): add latent reversal rejection record model`
 
-**Transfer and Receiving fail-closed visibility paths are both closed.** H7-A reversal rejection record model is pure latent only — no persistence wiring, no catch-site/UI/offline/server/rules change. Durable storage wiring, catch-site integration, and Admin/Ops UI surfacing remain future separately-authorized slices.
+**Transfer and Receiving fail-closed visibility paths are both closed.** H7-A reversal rejection record model is pure latent only — no persistence wiring, no catch-site/UI/offline/server/rules change. Catch-site integration and Admin/Ops UI surfacing remain future separately-authorized slices.
+
+**H7-B** — Storage Design Audit (read-only, design artifact delivered; PASS WITH NOTES from Codex). **H7-C** — Durable Rejection Log Store Wiring — **IMPLEMENTED / AWAITING CODEX REVIEW** (not committed). Baseline unchanged: `749e6e6`.
 
 **`stash@{0}` remains present and untouched.**
 
-**Next step:** read-only strategic planning for H7-B options.
+**Next step:** Codex GPT-5.5 High review of H7-C; commit + closure only after PASS.
+
+---
+
+## Phase 7B-H7-C — Durable Rejection Log Store Wiring (latent)
+
+**Status:** **IMPLEMENTED — AWAITING CODEX REVIEW** (not committed; not closed). Baseline unchanged: `749e6e6`.
+**Authorization:** Gemini / Tech Lead / CEO — Option A APPROVED (pure local store wiring; Claude Opus 4.8 / High). H7-B design reviewed by Codex: PASS WITH NOTES.
+**Goal:** Implement the latent durable rejection-log substrate per the H7-B design — IndexedDB store + in-memory parity + write/list APIs + tests. **No production caller; 100% latent.**
+
+### What was delivered
+
+- `src/lib/pos/offline/reversalLocalStore.ts` (MOD) — additive only: `'rejections'` added to `ReversalStoreName` + `REVERSAL_STORES`; **`DB_VERSION` 1 → 2**; in-memory `data` gains `rejections: new Map()`. `transact`/`openDb`/`onupgradeneeded`/`dump`/abort logic and the four existing stores (`intents`/`stock`/`ledger`/`markers`) are otherwise unchanged. The `onupgradeneeded` loop creates only missing stores, so the v1→v2 upgrade is data-preserving.
+- `src/lib/pos/offline/reversalRejectionLog.ts` (NEW) — focused, latent, no UI imports. `recordReversalRejection(store, record)` → `'recorded' | 'duplicate' | 'unavailable' | 'failed'`, **best-effort and NEVER throws**; keys the H7-A `ReversalRejectionRecord` out-of-line by `recordId` (content-addressed → idempotent overwrite; distinct `createdAt` → distinct row). `listReversalRejections(store, filter?)` → newest-first by `createdAt`, optional `sourceType`/`branchId` filters, read-only. Touches ONLY the `rejections` store — no stock/ledger/intents/markers mutation, no queue-state control reads.
+- `src/lib/pos/offline/reversalRejectionLog.test.ts` (NEW, 15 tests) + `src/lib/pos/offline/reversalLocalStore.migration.test.ts` (NEW, 3 tests).
+
+### Codex H7-B notes carried forward
+
+- `duplicate` vs `recorded` not over-specified for cross-tab races (content-addressed key → identical record re-`put`s over itself either way).
+- `unavailable` vs `failed` is a best-effort hint only; callers must treat any non-`recorded`/`duplicate` identically.
+- The "caller still completes F1/G1 on logging failure" case is a small wrapper unit test — **no real catch-site wiring**.
+
+### What is NOT in this slice
+
+No catch-site integration, no UI/Manual Review Ops surfacing, no server resolver/Firestore-rules change, no validation/fail-closed/thrown-error change, no transfer/receiving write-path change. No production caller imports the new API.
+
+### Files changed (code)
+
+```
+src/lib/pos/offline/reversalLocalStore.ts                 (MOD — rejections store + DB_VERSION 1→2 + in-memory parity)
+src/lib/pos/offline/reversalRejectionLog.ts               (NEW — recordReversalRejection + listReversalRejections)
+src/lib/pos/offline/reversalRejectionLog.test.ts          (NEW — 15 tests)
+src/lib/pos/offline/reversalLocalStore.migration.test.ts  (NEW — 3 migration tests)
+```
+
+### Evidence
+
+- `npx vitest run reversalRejectionLog reversalLocalStore` → **19 passed** (2 files)
+- `npx vitest run reversalRejectionRecord offlineReversalQueue manualReviewOps` → **61 passed** (regression green)
+- Full web `npx vitest run` → **453 passed** (28 files); `npx tsc -b` → clean
+- `npm --prefix functions run test:unit -- resolveReversal` → **43 passed** (server UNCHANGED)
+- `git diff --check` clean (benign CRLF only); forbidden-area diff EMPTY (UI pages/components, server resolver, Firestore rules, transfer write-path); `stash@{0}` untouched.
+
+### Hidden risk
+
+H7-C is the first edit to the protected offline/IndexedDB layer and the first DB schema-version bump; even with additive migration and best-effort logging, any accidental throw or coupling to stock/ledger/intent transactions could disturb the live reversal queue.
 
 ---
 

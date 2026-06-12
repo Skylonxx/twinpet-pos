@@ -28,10 +28,15 @@
  * a partial create/rollback can never be observed.
  */
 
-/** The four object stores. */
-export type ReversalStoreName = 'intents' | 'stock' | 'ledger' | 'markers';
+/**
+ * The object stores. `rejections` (Phase 7B-H7-C) is a forensic, append-style log of
+ * pre-queue fail-closed reversal-evidence rejections — independent of the four
+ * stock-correction stores and never part of an `intents`/`stock`/`ledger`/`markers`
+ * transaction, so it cannot affect reversal-queue atomicity.
+ */
+export type ReversalStoreName = 'intents' | 'stock' | 'ledger' | 'markers' | 'rejections';
 
-export const REVERSAL_STORES: ReversalStoreName[] = ['intents', 'stock', 'ledger', 'markers'];
+export const REVERSAL_STORES: ReversalStoreName[] = ['intents', 'stock', 'ledger', 'markers', 'rejections'];
 
 /** Per-transaction handle exposed to orchestration code. All ops are out-of-line keyed. */
 export interface ReversalTxn {
@@ -51,7 +56,10 @@ export interface ReversalLocalStore {
 }
 
 const DB_NAME = 'twinpet-offline-reversal';
-const DB_VERSION = 1;
+// v2 (Phase 7B-H7-C): adds the `rejections` store. The upgrade is additive — the
+// `onupgradeneeded` loop only creates stores not already present, so existing
+// `intents`/`stock`/`ledger`/`markers` data is preserved across the bump.
+const DB_VERSION = 2;
 
 function openDb(): Promise<IDBDatabase | null> {
   return new Promise((resolve) => {
@@ -171,6 +179,7 @@ export function createInMemoryReversalStore(): ReversalLocalStore & {
     stock: new Map(),
     ledger: new Map(),
     markers: new Map(),
+    rejections: new Map(),
   };
 
   const clone = <T>(v: T): T => (v === undefined ? v : (JSON.parse(JSON.stringify(v)) as T));

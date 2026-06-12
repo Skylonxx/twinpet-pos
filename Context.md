@@ -107,11 +107,15 @@ Phase 7B delivers a complete offline reversal lifecycle for Goods-Receiving and 
 
 **Transfer and Receiving fail-closed visibility paths are both closed.**
 
-- **7B-H7-A** — Pure Latent Reversal Rejection Record (CLOSED / COMMITTED — `749e6e6`): new pure file `src/lib/inventory/reversalRejectionRecord.ts` + 20-test suite defining the record model for a FUTURE durable local rejection log. `buildReversalRejectionRecord` / `createReversalRejectionRecordId` / `serializeReversalRejectionRecord` are pure, deterministic, dependency-free (no I/O, no `src/lib/pos/offline` import). Records a pre-queue fail-closed evidence rejection (sourceType transfer/receiving, sourceId, branchId, evidenceCode/message, optional evidenceSource/staffId/observedDocumentUpdatedAt, createdAt) — minimal, no raw payloads. **100% latent: no persistence, no catch-site/UI/offline/server/rules change.** Durable storage wiring, catch-site integration, and Admin/Ops UI surfacing remain future separately-authorized slices.
+- **7B-H7-A** — Pure Latent Reversal Rejection Record (CLOSED / COMMITTED — `749e6e6`): new pure file `src/lib/inventory/reversalRejectionRecord.ts` + 20-test suite defining the record model for a FUTURE durable local rejection log. `buildReversalRejectionRecord` / `createReversalRejectionRecordId` / `serializeReversalRejectionRecord` are pure, deterministic, dependency-free (no I/O, no `src/lib/pos/offline` import). Records a pre-queue fail-closed evidence rejection (sourceType transfer/receiving, sourceId, branchId, evidenceCode/message, optional evidenceSource/staffId/observedDocumentUpdatedAt, createdAt) — minimal, no raw payloads. **100% latent: no persistence, no catch-site/UI/offline/server/rules change.**
 
-**Current clean baseline:** `749e6e6 feat(pos): add latent reversal rejection record model`
+- **7B-H7-B** — Storage Design Audit for the durable rejection log (read-only; design artifact delivered; Codex PASS WITH NOTES). No code/doc changes.
 
-**Next step:** read-only strategic planning for H7-B options.
+- **7B-H7-C** — Durable Rejection Log Store Wiring (**IMPLEMENTED — AWAITING CODEX REVIEW**; not committed): additive wiring of a `rejections` IndexedDB store in `src/lib/pos/offline/reversalLocalStore.ts` (**`DB_VERSION` 1 → 2**, additive `onupgradeneeded` preserves `intents`/`stock`/`ledger`/`markers`, in-memory parity added) plus a new latent `reversalRejectionLog.ts` exposing best-effort, **never-throwing** `recordReversalRejection` (content-addressed by `recordId`; idempotent) and `listReversalRejections` (newest-first; `sourceType`/`branchId` filters). Touches only the `rejections` store — no stock/ledger/intents/markers mutation. **100% latent: no production caller, no catch-site/UI surfacing, no server/rules/validation/write-path change.** A logging failure is best-effort and never blocks or alters the fail-closed F1/G1 UX. Catch-site integration and Admin/Ops UI surfacing remain future separately-authorized slices.
+
+**Current clean baseline:** `749e6e6 feat(pos): add latent reversal rejection record model` (H7-C implemented, not yet committed).
+
+**Next step:** Codex GPT-5.5 High review of H7-C; commit + closure only after PASS.
 
 ### H6 Transfer State Model — Architecture Decision (CEO Option A)
 
