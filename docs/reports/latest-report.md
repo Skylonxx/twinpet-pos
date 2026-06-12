@@ -1,7 +1,9 @@
 # Latest Report
 
 > Rolling "latest report" for the stock-write security workstream. Updated at each phase boundary.
-> **Current state:** **Transfer Reversal Evidence sequence fully closed.** H6-E2-C — Transfer Evidence Coordinator Validation — CLOSED / COMMITTED — `fe3ff44 feat(pos): validate transfer reversal header evidence`. The client coordinator now PREFERS the transfer header `reversalEvidence` snapshot and validates it fail-closed (`validateTransferHeaderEvidence` → `OriginalStockEffect[]`), with strict legacy item-subcollection fallback when absent (`resolveTransferReversalEffects`; `evidenceSource` = `header_snapshot`/`legacy_subcollection`). `TransferReversalInput` gains untrusted `transferHeaderEvidence?: unknown`; `assertTransferReversalInput` split into header-field + item gates; both cancel pages pass `cancelTarget.reversalEvidence`. Present-but-invalid header fails closed (no fallback, no write). 27 new H6-E2-C tests (103 reversalCoordinator; 406 web total), incl. the Codex blocker-fix regression (non-finite `totalQtyBase` rejection). **No transfer write-path change, no server resolver change, no offline queue schema change.** Server resolver remains authoritative (re-reads items); H6-E2-C is client-side local-correction hardening, not a server trust boundary. `stash@{0}` present and untouched.
+> **Current state:** **Phase 7B-H6-F1 — Transfer Reversal Evidence Rejection Visibility** (IMPLEMENTED — AWAITING CODEX RE-REVIEW; uncommitted; Codex blocker fixed). UI/display-only: a pure exhaustive `getTransferReversalEvidenceMessage(code)` maps each `TransferReversalEvidenceCode` → friendly Thai message (unknown code → existing generic fallback); the two transfer cancel pages' `catch` surfaces that message + raw code only when a `TransferReversalEvidenceError` is caught (non-evidence errors keep the existing fallback; control flow / `finally` / branch gating / success flow unchanged); Manual Review Ops gains a read-only `evidenceSource` label column via a **page-local** `getEvidenceSourceLabel`. The thrown error (type, `code`, generic `message`) and the fail-closed validation are UNCHANGED. **No validation/fail-closed/offline-queue-schema/IndexedDB-store/`src/lib/pos/offline`-runtime/server-resolver/transfer-write-path change.** Codex blocker fixed: the label helper was reverted out of `src/lib/pos/offline/manualReviewOps.ts(.test.ts)` (both now no-diff) and inlined into the page; full web count is 410 after dropping the 3 offline-helper tests. No durable rejection log (future separately-authorized slice). 410 web tests pass (25 files), `tsc -b` clean, `functions resolveReversal` 43 unchanged. `stash@{0}` present and untouched.
+>
+> **Prior state:** **Transfer Reversal Evidence sequence fully closed.** H6-E2-C — Transfer Evidence Coordinator Validation — CLOSED / COMMITTED — `fe3ff44 feat(pos): validate transfer reversal header evidence`. The client coordinator now PREFERS the transfer header `reversalEvidence` snapshot and validates it fail-closed (`validateTransferHeaderEvidence` → `OriginalStockEffect[]`), with strict legacy item-subcollection fallback when absent (`resolveTransferReversalEffects`; `evidenceSource` = `header_snapshot`/`legacy_subcollection`). `TransferReversalInput` gains untrusted `transferHeaderEvidence?: unknown`; `assertTransferReversalInput` split into header-field + item gates; both cancel pages pass `cancelTarget.reversalEvidence`. Present-but-invalid header fails closed (no fallback, no write). 27 new H6-E2-C tests (103 reversalCoordinator; 406 web total), incl. the Codex blocker-fix regression (non-finite `totalQtyBase` rejection). **No transfer write-path change, no server resolver change, no offline queue schema change.** Server resolver remains authoritative (re-reads items); H6-E2-C is client-side local-correction hardening, not a server trust boundary. `stash@{0}` present and untouched.
 >
 > **Prior state:** **Phase 7B-H6-E2-B — Write Transfer Evidence Header at Completion** (CLOSED / COMMITTED — `82d3352`). `reversalEvidence?: TransferReversalEvidence` added to `InventoryTransfer`; `confirmBranchTransfer` builds + asserts + persists evidence atomically in the Phase-3 `tx.set`; `devConfirmBranchTransfer` mirrors this. Evidence `createdAt` is a client ISO string; header timestamps remain server-authoritative.
 >
@@ -14,6 +16,52 @@
 > **Prior state:** **Phase 7B-H6-C — Server Resolver Activation + Tests** (CLOSED / COMMITTED — `68f46e2`) then **H6-D1 — latent queue-first transfer executor** (COMMITTED — `4aa8065`). H6-C activated the dormant transfer reversal resolver for the live model — `completed` is the reversible state (H6-B Option A), eligibility centralized in `isTransferStatusReversible`, admitted only into the existing strict guards. H6-D1 added the latent `executeTransferReversal` (dual-branch, queue-first) but did NOT wire it into any UI — superseded by H6-D2.
 >
 > **Prior state:** **Phase 7B-D4 — Docs/Context Sync After H5 Closure** (docs-only; not yet committed). H5 CLOSED / COMMITTED (`4762d97` — `feat(pos): wire client observation timestamp for reversals`; CEO Option B — APPROVED WITH NOTES). Post-commit working tree was **clean**. `stash@{0}` present and untouched. No forbidden areas touched. **End-to-End Receiving Reversal Hardening is functionally complete** (H4 server-side stale-client guard + H5 client/offline timestamp payload wiring). D3 closed and committed (`fb4c3b0`). H4 closed and committed (`4da7757`). H3 closed and committed (`4d69143`). D1 closed and committed (`dacccd1`). H2 closed and committed (`8b48513`). **Next after D4:** Phase 7B-H6 — Transfer Reversal Planning / Environment Audit (read-only planning only; no code changes; no implementation until Tech Lead approves).
+
+## Phase 7B-H6-F1: Transfer Reversal Evidence Rejection Visibility (IMPLEMENTED — AWAITING CODEX REVIEW)
+
+**Status:** implemented; Codex blocker FIXED; not committed; not closed. Authorization: Gemini / Tech Lead / CEO — Option A APPROVED (Opus 4.8 / high; Codex GPT-5.5 High re-review mandatory before closure). Clean baseline: `638e3a0` (docs sync after H6-E2-C closure, on `fe3ff44`).
+
+### Problem
+
+When H6-E2-C rejects malformed transfer header evidence, it throws `TransferReversalEvidenceError` BEFORE `createOfflineReversal` — so no intent, no local correction, no server call, no durable record. The operator previously saw only one generic Thai message for all 26 distinct codes, and the specific code was discarded. F1 makes the already-computed reason legible **without changing the fail-closed behavior**.
+
+### What was added (display-only)
+
+- **`src/lib/inventory/reversalCoordinator.ts`** — `TRANSFER_REVERSAL_EVIDENCE_MESSAGES: Record<TransferReversalEvidenceCode, string>` (exhaustive — TS build fails on an unmapped code) + pure `getTransferReversalEvidenceMessage(code): string`. Unknown/unexpected code falls back to `TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE`. The thrown error type/`code`/`message` and all validation are unchanged.
+- **`src/pages/inventory/TransferHistoryPage.tsx`** & **`src/pages/admin/AdminTransferPage.tsx`** — the cancel-handler `catch` adds an `instanceof TransferReversalEvidenceError` branch that toasts `getTransferReversalEvidenceMessage(err.code)` + `(รหัส: <code>)`. The `else` keeps the prior generic fallback. No change to validation call order, executor input, branch-permission logic, cancellation/success flow, or `finally` busy-cleanup. Admin's separate `editBranchTransfer` catch is untouched.
+- **`src/pages/ManualReviewOpsPage.tsx`** — a **page-local** `getEvidenceSourceLabel(source): string` (`header_snapshot`→หลักฐานจากหัวเอกสาร; `legacy_subcollection`→รายการย่อยเดิม; absent/unknown→ไม่ระบุ) and a read-only "แหล่งหลักฐาน" column rendering it over the existing `it.evidenceSource` intent field. The helper is defined inside the page module — **no runtime helper added to `src/lib/pos/offline`**. No query/schema/store/mutation change.
+
+### Codex blocker fix (offline runtime scope violation)
+
+Codex returned FAIL: the first cut added a runtime helper `getEvidenceSourceLabel` (+ test) to `src/lib/pos/offline/manualReviewOps.ts(.test.ts)`, but `src/lib/pos/offline` runtime code was strictly out of scope. Fix: both offline files reverted to **no diff** (`git checkout`); the label mapping inlined page-local in `ManualReviewOpsPage.tsx`. The 3 removed offline-helper tests dropped the full web count 413 → **410**. No other behavior changed.
+
+### What is NOT in this slice
+
+No change to `validateTransferHeaderEvidence` / `resolveTransferReversalEffects` / `executeTransferReversal` control flow, the thrown error, the fail-closed policy, `createOfflineReversal`, the offline queue schema / IndexedDB stores, **any `src/lib/pos/offline` runtime code**, the server resolver, the H6-E2-B write path, transfer creation, receiving, `cancelBranchTransfer`/`editBranchTransfer`. **No durable local rejection log** (a future separately-authorized slice).
+
+### Files changed (code)
+
+```
+src/lib/inventory/reversalCoordinator.ts        (+ message map + getTransferReversalEvidenceMessage)
+src/lib/inventory/reversalCoordinator.test.ts   (+4 H6-F1 message-map tests; 107 file total)
+src/pages/inventory/TransferHistoryPage.tsx     (catch: evidence-error display only)
+src/pages/admin/AdminTransferPage.tsx           (cancel catch: evidence-error display only)
+src/pages/ManualReviewOpsPage.tsx               (+ page-local getEvidenceSourceLabel + read-only evidenceSource column)
+```
+
+### Evidence
+
+- `npx vitest run reversalCoordinator` → **107 passed** (+4 H6-F1)
+- `npx vitest run transferCrud` → **18 passed**; `transferReversalEvidence` → **41 passed** (regression green)
+- Full web `npx vitest run` → **410 passed** (25 files); `npx tsc -b` → clean
+- `npm --prefix functions run test:unit -- resolveReversal` → **43 passed** (server UNCHANGED)
+- `git diff --check` clean; `stash@{0}` untouched; **no diff under `src/lib/pos/offline`**, no server resolver diff, no transfer write-path diff.
+
+### Hidden risk
+
+H6-F1 improves operator visibility for local pre-queue rejection reasons, but it does not create a durable rejection log; durable local rejection logging remains a future separately authorized slice.
+
+---
 
 ## Phase 7B-H6-E2-C: Transfer Evidence Coordinator Validation (CLOSED / COMMITTED — `fe3ff44`)
 

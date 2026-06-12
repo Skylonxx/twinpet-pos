@@ -29,6 +29,18 @@ import { createIndexedDbReversalStore } from '../lib/pos/offline/reversalLocalSt
 import type { OfflineReversalIntent } from '../lib/pos/offline/offlineReversalTypes';
 
 /**
+ * Phase 7B-H6-F1 — read-only, display-only Thai label for an intent's `evidenceSource`
+ * (how the reversal's stock effects were proven). Kept LOCAL to this page so it adds no
+ * runtime helper to `src/lib/pos/offline`. It reads the existing intent field only and
+ * changes no query, schema, or mutation behavior.
+ */
+function getEvidenceSourceLabel(source: unknown): string {
+  if (source === 'header_snapshot') return 'หลักฐานจากหัวเอกสาร';
+  if (source === 'legacy_subcollection') return 'รายการย่อยเดิม';
+  return 'ไม่ระบุ';
+}
+
+/**
  * Phase 7B-H3 — Manual Review Operations (LOCAL / device only).
  *
  * Route-only Manager/Admin surface to view this DEVICE's `manual_review_required`
@@ -179,6 +191,7 @@ export default function ManualReviewOpsPage() {
                 <TableHeadCell>เอกสารอ้างอิง</TableHeadCell>
                 <TableHeadCell>สาขา</TableHeadCell>
                 <TableHeadCell>เหตุผลเดิม</TableHeadCell>
+                <TableHeadCell>แหล่งหลักฐาน</TableHeadCell>
                 <TableHeadCell>สร้างเมื่อ</TableHeadCell>
                 <TableHeadCell>
                   <span className="sr-only">การกระทำ</span>
@@ -196,6 +209,9 @@ export default function ManualReviewOpsPage() {
                     <TableCell className="whitespace-nowrap">{it.branchId}</TableCell>
                     <TableCell className="max-w-xs truncate" title={it.rejectionCode ?? it.reasonCode}>
                       {it.rejectionCode ?? it.reasonCode}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-gray-500 dark:text-gray-400">
+                      {getEvidenceSourceLabel(it.evidenceSource)}
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-gray-500 dark:text-gray-400">
                       {it.createdAt}

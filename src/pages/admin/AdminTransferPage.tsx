@@ -7,7 +7,9 @@ import { editBranchTransfer } from '../../lib/inventory/transferCrud';
 import {
   createDefaultReversalCoordinatorDeps,
   executeTransferReversal,
+  getTransferReversalEvidenceMessage,
   toObservedDocumentUpdatedAtIso,
+  TransferReversalEvidenceError,
 } from '../../lib/inventory/reversalCoordinator';
 import {
   fetchAllTransfers,
@@ -176,7 +178,14 @@ export default function AdminTransferPage() {
         );
         void load();
       } catch (err) {
-        setToast(err instanceof Error ? err.message : 'ยกเลิกไม่สำเร็จ');
+        // Phase 7B-H6-F1 (display-only): a fail-closed evidence rejection carries a
+        // structured code — surface the friendly Thai reason with the raw code as
+        // secondary detail. Non-evidence errors keep the existing generic fallback.
+        if (err instanceof TransferReversalEvidenceError) {
+          setToast(`${getTransferReversalEvidenceMessage(err.code)} (รหัส: ${err.code})`);
+        } else {
+          setToast(err instanceof Error ? err.message : 'ยกเลิกไม่สำเร็จ');
+        }
       } finally {
         setBusy(false);
       }

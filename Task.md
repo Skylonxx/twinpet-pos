@@ -1,4 +1,4 @@
-# Current Task Tracker — Phase 7B (Transfer Reversal Evidence sequence — H6-E2-C CLOSED)
+# Current Task Tracker — Phase 7B-H6-F1 (Transfer Reversal Evidence Rejection Visibility)
 
 > Living checkpoint doc for agents. Detailed history: `docs/reports/latest-report.md` (do not duplicate long-form evidence here).
 
@@ -16,7 +16,53 @@
 
 **`stash@{0}` remains present and untouched.**
 
-**Next step:** read-only planning for Transfer Evidence Operational Reporting / Rejection Visibility. No code changes until separately authorized.
+**Active slice (not committed; awaiting Codex review):** Phase 7B-H6-F1 — Transfer Reversal Evidence Rejection Visibility (UI display-only; see section below).
+
+---
+
+## Phase 7B-H6-F1 — Transfer Reversal Evidence Rejection Visibility
+
+**Status:** **IMPLEMENTED — AWAITING CODEX REVIEW** (not committed; not closed).
+**Authorization:** Gemini / Tech Lead / CEO — Option A APPROVED (Opus 4.8 / high). Codex GPT-5.5 High review mandatory before closure.
+**Scope:** UI/display-only visibility for the H6-E2-C fail-closed rejections. **No validation, fail-closed policy, offline queue schema/behavior, IndexedDB store, server resolver, or transfer write-path change.** The thrown `TransferReversalEvidenceError` (type, `code`, generic `message`) is UNCHANGED — F1 only makes the already-computed reason legible.
+
+### What was delivered
+
+- `src/lib/inventory/reversalCoordinator.ts`:
+  - New exhaustive `Record<TransferReversalEvidenceCode, string>` (`TRANSFER_REVERSAL_EVIDENCE_MESSAGES`) — one friendly Thai message per code (TS build fails if a code is unmapped).
+  - New pure `getTransferReversalEvidenceMessage(code): string` — returns the mapped message; an unknown/unexpected code falls back to the existing `TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE`.
+- `src/pages/inventory/TransferHistoryPage.tsx` & `src/pages/admin/AdminTransferPage.tsx`: the cancel-handler `catch` now, **only when** the caught error `instanceof TransferReversalEvidenceError`, surfaces `getTransferReversalEvidenceMessage(err.code)` with the raw code as secondary detail (`(รหัส: <code>)`). All other errors keep the existing generic fallback. Control flow, `finally` busy-cleanup, branch gating, modal/route behavior, success flow all unchanged. (Admin's separate `editBranchTransfer` catch is untouched.)
+- `src/pages/ManualReviewOpsPage.tsx`: new read-only "แหล่งหลักฐาน" column rendering a **page-local** `getEvidenceSourceLabel(source)` (`header_snapshot`→หลักฐานจากหัวเอกสาร, `legacy_subcollection`→รายการย่อยเดิม, absent/unknown→ไม่ระบุ) over the existing `it.evidenceSource` intent field. The label helper is defined inside the page module — **no runtime helper added to `src/lib/pos/offline`** (Codex blocker fix). No query/schema/store/mutation change.
+
+### What is NOT in this slice
+
+No change to `validateTransferHeaderEvidence` / `resolveTransferReversalEffects` / `executeTransferReversal` control flow, the thrown error, the fail-closed policy, `createOfflineReversal`, the offline queue schema or IndexedDB stores, **any `src/lib/pos/offline` runtime code**, the server resolver, the H6-E2-B write path, transfer creation, receiving, `cancelBranchTransfer`/`editBranchTransfer`. No durable local rejection log (a future, separately-authorized slice).
+
+### Files changed (code)
+
+```
+src/lib/inventory/reversalCoordinator.ts        (+ message map + getTransferReversalEvidenceMessage)
+src/lib/inventory/reversalCoordinator.test.ts   (+4 H6-F1 message-map tests; 107 file total)
+src/pages/inventory/TransferHistoryPage.tsx     (catch: evidence-error display only)
+src/pages/admin/AdminTransferPage.tsx           (cancel catch: evidence-error display only)
+src/pages/ManualReviewOpsPage.tsx               (+ page-local getEvidenceSourceLabel + read-only evidenceSource column)
+```
+
+### Codex blocker fix
+
+Codex returned FAIL: the first cut added a runtime helper (`getEvidenceSourceLabel`) + a test to `src/lib/pos/offline/manualReviewOps.ts(.test.ts)`, which was strictly out of scope (`src/lib/pos/offline` runtime). Fix: both offline files reverted to **no diff**; the label mapping now lives **page-local** in `ManualReviewOpsPage.tsx`. Removing the 3 offline-helper tests dropped the full web count 413 → **410**.
+
+### Evidence
+
+- `npx vitest run reversalCoordinator` → **107 passed** (+4 H6-F1)
+- `npx vitest run transferCrud` → **18 passed**; `transferReversalEvidence` → **41 passed** (regression green)
+- Full web `npx vitest run` → **410 passed** (25 files); `npx tsc -b` → clean
+- `functions resolveReversal` → **43 passed** (server UNCHANGED)
+- `git diff --check` clean; `stash@{0}` untouched; **no diff under `src/lib/pos/offline`**, no server resolver diff, no transfer write-path diff.
+
+### Hidden risk
+
+H6-F1 improves operator visibility for local pre-queue rejection reasons, but it does not create a durable rejection log; durable local rejection logging remains a future separately authorized slice.
 
 ---
 

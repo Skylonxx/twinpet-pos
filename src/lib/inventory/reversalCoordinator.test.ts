@@ -11,15 +11,18 @@ import {
   decideReversalRoute,
   executeReceivingReversal,
   executeTransferReversal,
+  getTransferReversalEvidenceMessage,
   ReceivingReversalEvidenceError,
   resolveTransferReversalEffects,
   toObservedDocumentUpdatedAtIso,
+  TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE,
   TransferReversalEvidenceError,
   validateReceivingHeaderEvidence,
   validateTransferHeaderEvidence,
   type ReceivingReversalInput,
   type ReceivingReversalItem,
   type ReversalCoordinatorDeps,
+  type TransferReversalEvidenceCode,
   type TransferReversalInput,
 } from './reversalCoordinator';
 import { buildTransferReversalEvidence } from './transferReversalEvidence';
@@ -1236,5 +1239,67 @@ describe('H6-D2 blocker fix: TransferHistoryPage gates the reversal on origin-br
     // HQ surface must remain able to reverse any branch transfer.
     expect(adminTransferSrc).not.toMatch(/canBranchReverseTransfer/);
     expect(adminTransferSrc).toMatch(/executeTransferReversal\(/);
+  });
+});
+
+describe('H6-F1: getTransferReversalEvidenceMessage (display-only, no behavior change)', () => {
+  // The full union of structured rejection codes (kept in lockstep with
+  // TransferReversalEvidenceCode in reversalCoordinator.ts).
+  const ALL_CODES: TransferReversalEvidenceCode[] = [
+    'missing_transfer_id',
+    'missing_from_branch',
+    'missing_to_branch',
+    'same_branch',
+    'missing_staff',
+    'missing_reason',
+    'missing_items',
+    'empty_items',
+    'missing_product_id',
+    'non_finite_qty',
+    'non_positive_qty',
+    'header_not_object',
+    'header_unsupported_version',
+    'header_wrong_source',
+    'header_branch_mismatch',
+    'header_empty_effects',
+    'header_malformed_effect',
+    'header_missing_product_id',
+    'header_invalid_direction',
+    'header_invalid_branch',
+    'header_invalid_lot_id',
+    'header_non_finite_qty',
+    'header_non_positive_qty',
+    'header_item_count_mismatch',
+    'header_total_qty_mismatch',
+    'header_balance_mismatch',
+  ];
+
+  test('every known code maps to a non-empty Thai message', () => {
+    for (const code of ALL_CODES) {
+      const msg = getTransferReversalEvidenceMessage(code);
+      expect(typeof msg).toBe('string');
+      expect(msg.trim().length).toBeGreaterThan(0);
+      // Contains Thai characters (range U+0E00–U+0E7F).
+      expect(msg).toMatch(/[฀-๿]/);
+    }
+  });
+
+  test('an unknown/unexpected code falls back to the generic incomplete message', () => {
+    const msg = getTransferReversalEvidenceMessage('totally_unknown_code' as TransferReversalEvidenceCode);
+    expect(msg).toBe(TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
+  });
+
+  test('header_total_qty_mismatch returns a specific message, not the generic fallback', () => {
+    const msg = getTransferReversalEvidenceMessage('header_total_qty_mismatch');
+    expect(msg).not.toBe(TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
+    expect(msg).toContain('ยอดรวม');
+  });
+
+  test('the thrown TransferReversalEvidenceError still carries the SAME generic message (validation unchanged)', () => {
+    // Display mapping is additive: the error message itself is unchanged — proving the
+    // fail-closed validation path was not altered by H6-F1.
+    const err = new TransferReversalEvidenceError('header_total_qty_mismatch', TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
+    expect(err.message).toBe(TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE);
+    expect(err.code).toBe('header_total_qty_mismatch');
   });
 });

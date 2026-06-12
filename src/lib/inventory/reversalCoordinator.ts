@@ -598,6 +598,58 @@ export class TransferReversalEvidenceError extends Error {
 }
 
 /**
+ * Phase 7B-H6-F1 — operator-facing Thai messages, one per evidence rejection code.
+ *
+ * DISPLAY-ONLY. This map does NOT alter the thrown `TransferReversalEvidenceError`,
+ * the validation, or the fail-closed policy — every gate above still throws the SAME
+ * code with the SAME generic `message`. This map only makes the already-computed code
+ * legible to staff (the UI shows the friendly message with the raw `code` as secondary
+ * detail). Typed as an exhaustive `Record<TransferReversalEvidenceCode, string>`, so
+ * adding a new code without a message fails the TypeScript build.
+ */
+const TRANSFER_REVERSAL_EVIDENCE_MESSAGES: Record<TransferReversalEvidenceCode, string> = {
+  // ── Legacy item-subcollection evidence (fallback path) ──
+  missing_transfer_id: 'ไม่สามารถยกเลิกโอนได้: ไม่พบรหัสเอกสารโอน',
+  missing_from_branch: 'ไม่สามารถยกเลิกโอนได้: ไม่พบสาขาต้นทาง',
+  missing_to_branch: 'ไม่สามารถยกเลิกโอนได้: ไม่พบสาขาปลายทาง',
+  same_branch: 'ไม่สามารถยกเลิกโอนได้: สาขาต้นทางและปลายทางซ้ำกัน',
+  missing_staff: 'ไม่สามารถยกเลิกโอนได้: ไม่พบข้อมูลผู้ทำรายการ',
+  missing_reason: 'ไม่สามารถยกเลิกโอนได้: กรุณาระบุเหตุผลในการยกเลิก',
+  missing_items: 'ไม่สามารถยกเลิกโอนได้: ไม่พบรายการสินค้าในเอกสารโอน',
+  empty_items: 'ไม่สามารถยกเลิกโอนได้: ไม่มีรายการสินค้าให้ยกเลิก',
+  missing_product_id: 'ไม่สามารถยกเลิกโอนได้: มีรายการสินค้าที่ไม่มีรหัสสินค้า',
+  non_finite_qty: 'ไม่สามารถยกเลิกโอนได้: จำนวนสินค้าไม่ถูกต้อง',
+  non_positive_qty: 'ไม่สามารถยกเลิกโอนได้: จำนวนสินค้าต้องมากกว่าศูนย์',
+  // ── Header `reversalEvidence` snapshot (preferred path) ──
+  header_not_object: 'ไม่สามารถยกเลิกโอนได้: หลักฐานการโอนในหัวเอกสารเสียหายหรือไม่ถูกต้อง',
+  header_unsupported_version: 'ไม่สามารถยกเลิกโอนได้: เวอร์ชันหลักฐานการโอนไม่รองรับ',
+  header_wrong_source: 'ไม่สามารถยกเลิกโอนได้: ประเภทหลักฐานการโอนไม่ถูกต้อง',
+  header_branch_mismatch: 'ไม่สามารถยกเลิกโอนได้: สาขาในหลักฐานการโอนไม่ตรงกับเอกสาร',
+  header_empty_effects: 'ไม่สามารถยกเลิกโอนได้: หลักฐานการโอนไม่มีรายการผลกระทบสต็อก',
+  header_malformed_effect: 'ไม่สามารถยกเลิกโอนได้: รายการในหลักฐานการโอนมีรูปแบบไม่ถูกต้อง',
+  header_missing_product_id: 'ไม่สามารถยกเลิกโอนได้: หลักฐานการโอนมีรายการที่ไม่มีรหัสสินค้า',
+  header_invalid_direction: 'ไม่สามารถยกเลิกโอนได้: ทิศทางการเคลื่อนไหวสต็อกในหลักฐานไม่ถูกต้อง',
+  header_invalid_branch: 'ไม่สามารถยกเลิกโอนได้: สาขาในรายการหลักฐานไม่ถูกต้อง',
+  header_invalid_lot_id: 'ไม่สามารถยกเลิกโอนได้: รหัสล็อตในหลักฐานการโอนไม่ถูกต้อง',
+  header_non_finite_qty: 'ไม่สามารถยกเลิกโอนได้: จำนวนในหลักฐานการโอนไม่ถูกต้อง',
+  header_non_positive_qty: 'ไม่สามารถยกเลิกโอนได้: จำนวนในหลักฐานการโอนต้องมากกว่าศูนย์',
+  header_item_count_mismatch: 'ไม่สามารถยกเลิกโอนได้: จำนวนรายการในหลักฐานการโอนไม่ตรงกัน',
+  header_total_qty_mismatch: 'ไม่สามารถยกเลิกโอนได้: หลักฐานโอนสินค้าไม่ตรงกับยอดรวม',
+  header_balance_mismatch: 'ไม่สามารถยกเลิกโอนได้: ยอดสต็อกสองสาขาในหลักฐานการโอนไม่สมดุล',
+};
+
+/**
+ * Phase 7B-H6-F1 — friendly Thai message for an evidence rejection `code`. Pure and
+ * display-only (no behavior change). Returns the mapped message for any known code; an
+ * unexpected/unknown code (e.g. one introduced in a newer build) falls back to the
+ * existing generic incomplete-evidence message, so the UI is never left with a blank
+ * reason. Callers append the raw `code` as secondary detail.
+ */
+export function getTransferReversalEvidenceMessage(code: TransferReversalEvidenceCode): string {
+  return TRANSFER_REVERSAL_EVIDENCE_MESSAGES[code] ?? TRANSFER_EVIDENCE_INCOMPLETE_MESSAGE;
+}
+
+/**
  * Fail-closed gate for the transfer HEADER fields (transferId, branches, staff, reason).
  * Runs on BOTH the header-evidence and legacy-item paths (Phase 7B-H6-E2-C): a reversal
  * always needs a valid origin/destination, actor, and reason regardless of where the
