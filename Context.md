@@ -107,11 +107,11 @@ Phase 7B delivers a complete offline reversal lifecycle for Goods-Receiving and 
 
 **Transfer and Receiving fail-closed visibility paths are both closed.**
 
-- **7B-H7-A** — Pure Latent Reversal Rejection Record (**IMPLEMENTED — AWAITING CODEX REVIEW**; not committed): new pure file `src/lib/inventory/reversalRejectionRecord.ts` + 20-test suite defining the record model for a FUTURE durable local rejection log. `buildReversalRejectionRecord` / `createReversalRejectionRecordId` / `serializeReversalRejectionRecord` are pure, deterministic, dependency-free (no I/O, no `src/lib/pos/offline` import). Records a pre-queue fail-closed evidence rejection (sourceType transfer/receiving, sourceId, branchId, evidenceCode/message, optional evidenceSource/staffId/observedDocumentUpdatedAt, createdAt) — minimal, no raw payloads. **100% latent: no persistence, no catch-site/UI/offline/server/rules change.** Persistence wiring deferred to a future separately-authorized slice.
+- **7B-H7-A** — Pure Latent Reversal Rejection Record (CLOSED / COMMITTED — `749e6e6`): new pure file `src/lib/inventory/reversalRejectionRecord.ts` + 20-test suite defining the record model for a FUTURE durable local rejection log. `buildReversalRejectionRecord` / `createReversalRejectionRecordId` / `serializeReversalRejectionRecord` are pure, deterministic, dependency-free (no I/O, no `src/lib/pos/offline` import). Records a pre-queue fail-closed evidence rejection (sourceType transfer/receiving, sourceId, branchId, evidenceCode/message, optional evidenceSource/staffId/observedDocumentUpdatedAt, createdAt) — minimal, no raw payloads. **100% latent: no persistence, no catch-site/UI/offline/server/rules change.** Durable storage wiring, catch-site integration, and Admin/Ops UI surfacing remain future separately-authorized slices.
 
-**Current clean baseline:** `e80b2a3 feat(pos): surface receiving reversal evidence rejection reasons` (top commit `e4afe1b` docs sync; H7-A not yet committed).
+**Current clean baseline:** `749e6e6 feat(pos): add latent reversal rejection record model`
 
-**Next step:** Codex GPT-5.5 High review of H7-A; commit + closure only after PASS.
+**Next step:** read-only strategic planning for H7-B options.
 
 ### H6 Transfer State Model — Architecture Decision (CEO Option A)
 
