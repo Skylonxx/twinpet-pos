@@ -1,4 +1,4 @@
-# Current Task Tracker — Phase 7B-H7-E (Receiving-only Catch-site Integration — IMPLEMENTED / AWAITING CODEX REVIEW)
+# Current Task Tracker — Phase 7B-H7-E (Receiving-only Catch-site Integration — CLOSED)
 
 > Living checkpoint doc for agents. Detailed history: `docs/reports/latest-report.md` (do not duplicate long-form evidence here).
 
@@ -10,7 +10,7 @@
 - **H6-E2-B** — Write Transfer Evidence Header at Completion — CLOSED / COMMITTED — `82d3352 feat(pos): write transfer reversal evidence header on completion`
 - **H6-E2-C** — Transfer Evidence Coordinator Validation — CLOSED / COMMITTED — `fe3ff44 feat(pos): validate transfer reversal header evidence`
 
-**Current clean baseline:** `76b7451 feat(pos): add latent durable reversal rejection log store`
+**Current clean baseline:** `ad1ff61 feat(pos): log receiving reversal evidence rejections`
 
 **H6-F1** — Transfer Reversal Evidence Rejection Visibility — CLOSED / COMMITTED — `3a3d202 feat(pos): surface transfer reversal evidence rejection reasons`
 **H6-G1** — Receiving Evidence Rejection Visibility & Void Error Handling — CLOSED / COMMITTED — `e80b2a3 feat(pos): surface receiving reversal evidence rejection reasons`
@@ -18,19 +18,19 @@
 **H7-B** — Storage Design Audit (read-only design artifact; Codex PASS WITH NOTES). No code/doc changes.
 **H7-C** — Durable Rejection Log Store Wiring — CLOSED / COMMITTED — `76b7451 feat(pos): add latent durable reversal rejection log store`
 **H7-D** — Catch-site Integration Design Audit (read-only design artifact; receiving-first recommended). No code/doc changes.
-**H7-E** — Receiving-only Catch-site Integration — **IMPLEMENTED / AWAITING CODEX REVIEW** (not committed). Baseline unchanged: `76b7451`.
+**H7-E** — Receiving-only Catch-site Integration — CLOSED / COMMITTED — `ad1ff61 feat(pos): log receiving reversal evidence rejections`
 
 **Transfer and Receiving fail-closed visibility paths are both closed.** H7-E activates the durable rejection log for **Receiving only**: the `ReceivingReversalEvidenceError` branch now builds the H7-A record and best-effort fire-and-forgets the H7-C log via the new `recordEvidenceRejection` bridge — receiving operator message + throw-to-banner behavior unchanged. No transfer-page integration, no UI/Ops surfacing, no server/rules/validation/offline-schema change.
 
 **`stash@{0}` remains present and untouched.**
 
-**Next step:** Codex GPT-5.5 High review of H7-E; commit + closure only after PASS. Transfer catch-site integration follows as a separate slice.
+**Next step:** read-only strategic planning for Transfer catch-site integration.
 
 ---
 
 ## Phase 7B-H7-E — Receiving-only Catch-site Integration
 
-**Status:** **IMPLEMENTED — AWAITING CODEX REVIEW** (not committed; not closed). Baseline unchanged: `76b7451`.
+**Status:** CLOSED / COMMITTED — `ad1ff61 feat(pos): log receiving reversal evidence rejections`
 **Authorization:** Gemini / Tech Lead / CEO — Option A APPROVED (receiving-only; Claude Opus 4.8 / High). H7-D design audit recommended receiving-first.
 **Goal:** Wire ONLY the receiving fail-closed evidence rejection catch site to the durable local rejection log — the first production caller of the H7-A/H7-C substrate. The current throw-to-banner UX is unchanged.
 
