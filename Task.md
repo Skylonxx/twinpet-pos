@@ -1,4 +1,4 @@
-# Current Task Tracker — Phase 7C-B1 (Manual Review Ops UI Polish — CLOSED / COMMITTED)
+# Current Task Tracker — Phase 7C-C2 + 7C-C1-0 (Admin Polish + CSS Namespace Audit — IN PROGRESS / AWAITING CODEX REVIEW)
 
 > Living checkpoint doc for agents. Detailed history: `docs/reports/latest-report.md` (do not duplicate long-form evidence here).
 
@@ -10,7 +10,16 @@
 - **H6-E2-B** — Write Transfer Evidence Header at Completion — CLOSED / COMMITTED — `82d3352 feat(pos): write transfer reversal evidence header on completion`
 - **H6-E2-C** — Transfer Evidence Coordinator Validation — CLOSED / COMMITTED — `fe3ff44 feat(pos): validate transfer reversal header evidence`
 
-**Current clean baseline:** `f4d9e7a style(pos): polish manual review ops durable rejection panel` (7C-B1 impl; prior doc-sync `1599dc2`; stabilization impl `9ad2c51` below). **7C-B1 (Manual Review Ops UI Polish) is CLOSED / COMMITTED.**
+**Current clean baseline:** `99836c1 docs: sync manual review ops polish tracker after closure` (7C-B1 doc-sync; 7C-B1 impl `f4d9e7a` directly below). **7C-B1 (Manual Review Ops UI Polish) is CLOSED / COMMITTED.** 7C-C2 + 7C-C1-0 are implemented/audited on top of this baseline and NOT yet committed.
+
+**Phase 7C-C2 + 7C-C1-0 — Admin Polish + CSS Namespace Audit (Option C APPROVED; Tech Lead / CEO) — IN PROGRESS / AWAITING CODEX REVIEW:**
+
+- **7C-C1-0** — Read-only CSS Namespace Isolation Audit — **DELIVERED (read-only); REVISED after Codex NEEDS REVISION (re-review pending)** — report `docs/reports/phase-7c-c1-0-css-namespace-audit.md`. Maps namespace ownership/coupling across Admin/Inventory/Report screens. Key finding: coupling is driven by **shared stylesheet imports** (admin pages import sibling page CSS), not just prefix collisions; `inv-adj-` is shared by 3 write-path pages and `ReceivingHistoryPage.css` is imported by both protected H7-F pages (`AdminTransferPage`, `TransferHistoryPage`). **Codex revision applied:** (A) reclassified `sh-` / `SalesHistoryPage.css` from "isolated/safe" → protected-**adjacent**, because `ReceivingHistoryPage.css` `@import`s it and reaches both protected H7-F pages; (B) added the POS-embedded consumer `src/components/pos/SortingSettingsModal.tsx` to the `ss-` map with a POS-impact warning. No CSS/selector/class edits; no implementation from findings.
+- **7C-C2** — TSX-only Admin dashboard/report visual polish — **NO SOURCE EDITS MADE (deferred, evidence-based).** Under the strict TSX-only / Tailwind-utility-only / no-`.css` / no-`dash-`-`sr-`-`asr-` constraints, the three authorized files present no safe, non-regressive polish surface: `AdminDashboardPage` is 100% `dash-` (shared) + inline styles + chart.js; `AdminStockReportPage` is a thin `asr-` wrapper delegating to children; `AllBranchesStockOverview`'s only Tailwind-governed region (the low-stock table) is already consistent. Per the C1-0 audit, meaningful consistency for these pages requires a namespace-isolation pass (fork `adash-`/`absr-`) first. Authorized files: `src/pages/admin/AdminDashboardPage.tsx`, `src/pages/admin/AllBranchesStockOverview.tsx`, `src/pages/admin/AdminStockReportPage.tsx` — all left unchanged.
+
+**Forbidden boundaries honored:** no `.css` edits; no global/shared CSS; no `dash-`/`sr-`/`asr-` class add/rename/restyle; no protected H7-F files touched; no write-path/route/nav/server/rules/offline-schema/POS changes; `stash@{0}` untouched (read-only `git stash list` only).
+
+**Next step:** Codex GPT-5.5 High **re-review** of the revised C1-0 audit (the `sh-` and `ss-` corrections) — Codex already accepted the C2 no-edit deferral as justified — then Tech Lead decision on whether to authorize a namespace-isolation pass before any Admin/Inventory CSS-level polish.
 
 **H6-F1** — Transfer Reversal Evidence Rejection Visibility — CLOSED / COMMITTED — `3a3d202 feat(pos): surface transfer reversal evidence rejection reasons`
 **H6-G1** — Receiving Evidence Rejection Visibility & Void Error Handling — CLOSED / COMMITTED — `e80b2a3 feat(pos): surface receiving reversal evidence rejection reasons`
