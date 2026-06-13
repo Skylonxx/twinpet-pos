@@ -1,7 +1,7 @@
 # Latest Report
 
 > Rolling "latest report" for the stock-write security workstream. Updated at each phase boundary.
-> **Current state:** **Phase 7B-H7-F — Transfer Pair Catch-site Integration** — **IMPLEMENTED / AWAITING CODEX REVIEW (not committed)**. Wires the proven H7-E `recordEvidenceRejection` helper into BOTH transfer evidence-rejection catch sites. `src/pages/inventory/TransferHistoryPage.tsx` and `src/pages/admin/AdminTransferPage.tsx` each construct one `useMemo(() => createIndexedDbReversalStore(), [])` and, in the `TransferReversalEvidenceError` branch only, compute the existing operator message, `setToast(message)` exactly as before, then dispatch (un-awaited, fully guarded) `recordEvidenceRejection({ sourceType:'transfer', sourceId: cancelTarget.id, branchId: cancelTarget.fromBranchId, evidenceCode: err.code, evidenceMessage, staffId: user.id, observedDocumentUpdatedAt: toObservedDocumentUpdatedAtIso(cancelTarget.updatedAt) })`; the `finally { setBusy(false) }` cleanup is unchanged and non-evidence errors are NOT logged. `evidenceSource` omitted. Origin branch (`cancelTarget.fromBranchId`, not the auth branch) is the record's branch context, identical across both pages. The durable rejection log now covers **Receiving + both Transfer surfaces** (pending review/commit). No helper/model/log/store/schema change, no `ReceivingEditPage` change, no server/rules/validation/write-path change, no Admin/Ops surfacing. 25 recordEvidenceRejection tests (13 H7-E + 12 new H7-F: simulated transfer caller + source-level `?raw` assertions for both pages), 80 regression (model/log/store/queue/manualReviewOps), 478 web (29 files), `tsc -b` clean, 43 functions resolveReversal (server unchanged). Forbidden-area diff EMPTY; `stash@{0}` untouched. **Not closed until Codex GPT-5.5 High + Tech Lead approval.**
+> **Current state:** **Phase 7B-H7-F — Transfer Pair Catch-site Integration** — **CLOSED / COMMITTED — `872575a feat(pos): log transfer reversal evidence rejections`**. Wires the proven H7-E `recordEvidenceRejection` helper into BOTH transfer evidence-rejection catch sites. `src/pages/inventory/TransferHistoryPage.tsx` and `src/pages/admin/AdminTransferPage.tsx` each construct one `useMemo(() => createIndexedDbReversalStore(), [])` and, in the `TransferReversalEvidenceError` branch only, compute the existing operator message, `setToast(message)` exactly as before, then dispatch (un-awaited, fully guarded) `recordEvidenceRejection({ sourceType:'transfer', sourceId: cancelTarget.id, branchId: cancelTarget.fromBranchId, evidenceCode: err.code, evidenceMessage, staffId: user.id, observedDocumentUpdatedAt: toObservedDocumentUpdatedAtIso(cancelTarget.updatedAt) })`; the `finally { setBusy(false) }` cleanup is unchanged and non-evidence errors are NOT logged. `evidenceSource` omitted. Origin branch (`cancelTarget.fromBranchId`, not the auth branch) is the record's branch context, identical across both pages. **The durable rejection log now covers Receiving + both Transfer surfaces.** No helper/model/log/store/schema change, no `ReceivingEditPage` change, no server/rules/validation/write-path change, no Admin/Ops surfacing. 25 recordEvidenceRejection tests (13 H7-E + 12 H7-F: simulated transfer caller + source-level `?raw` assertions for both pages), 80 regression (model/log/store/queue/manualReviewOps), 478 web (29 files), `tsc -b` clean, 43 functions resolveReversal (server unchanged). Forbidden-area diff EMPTY; `stash@{0}` untouched. Approved: Gemini / Tech Lead / CEO Option B APPROVED WITH NOTES. **Admin/Ops surfacing remains future work. Next step: read-only strategic planning for Admin/Ops Surfacing.**
 >
 > **Prior state:** **Phase 7B-H7-E — Receiving-only Catch-site Integration** — **CLOSED / COMMITTED — `ad1ff61 feat(pos): log receiving reversal evidence rejections`**. The FIRST production caller of the durable rejection log, per the H7-D design audit (receiving-first). New bridge `src/lib/pos/offline/recordEvidenceRejection.ts` — `recordEvidenceRejection(store, input): void`: builds the H7-A record via `buildReversalRejectionRecord` and fire-and-forgets the H7-C `recordReversalRejection`; **both the (fail-closed) build and the async dispatch are guarded, the async promise carries `.catch(() => {})`, and it returns `void`** — so it never throws into the caller and leaves no unhandled rejection. `evidenceSource` omitted (unresolved at the throw). `src/pages/ReceivingEditPage.tsx` constructs one `useMemo(() => createIndexedDbReversalStore(), [])` and, in the `ReceivingReversalEvidenceError` branch only, computes the existing operator message, dispatches `recordEvidenceRejection({ sourceType:'receiving', sourceId: id, branchId, evidenceCode: err.code, evidenceMessage, staffId: user.id, observedDocumentUpdatedAt })`, then `throw new Error(message)` exactly as before — **operator message + throw-to-banner UX unchanged**; non-evidence errors still `throw err`. Receiving-only: no transfer-page integration, no Admin/Ops surfacing, no offline-schema (`reversalLocalStore.ts`/`reversalRejectionLog.ts` untouched)/server/rules/validation/write-path change. 13 recordEvidenceRejection tests (incl. source-level `?raw` page assertions), 80 regression (model/log/store/queue/manualReviewOps), 466 web (29 files), `tsc -b` clean, 43 functions resolveReversal (server unchanged). Forbidden-area diff EMPTY; `stash@{0}` untouched. Transfer catch-site integration and Admin/Ops surfacing remain future separately-authorized slices.
 >
@@ -27,9 +27,9 @@
 >
 > **Prior state:** **Phase 7B-D4 — Docs/Context Sync After H5 Closure** (docs-only; not yet committed). H5 CLOSED / COMMITTED (`4762d97` — `feat(pos): wire client observation timestamp for reversals`; CEO Option B — APPROVED WITH NOTES). Post-commit working tree was **clean**. `stash@{0}` present and untouched. No forbidden areas touched. **End-to-End Receiving Reversal Hardening is functionally complete** (H4 server-side stale-client guard + H5 client/offline timestamp payload wiring). D3 closed and committed (`fb4c3b0`). H4 closed and committed (`4da7757`). H3 closed and committed (`4d69143`). D1 closed and committed (`dacccd1`). H2 closed and committed (`8b48513`). **Next after D4:** Phase 7B-H6 — Transfer Reversal Planning / Environment Audit (read-only planning only; no code changes; no implementation until Tech Lead approves).
 
-## Phase 7B-H7-F: Transfer Pair Catch-site Integration (IMPLEMENTED / AWAITING CODEX REVIEW)
+## Phase 7B-H7-F: Transfer Pair Catch-site Integration (CLOSED / COMMITTED — 872575a)
 
-**Status:** IMPLEMENTED — AWAITING CODEX GPT-5.5 HIGH REVIEW (not committed; not closed). Authorization: Gemini / Tech Lead / CEO — Option A APPROVED (Transfer pair together; Claude Opus 4.8 / High). Clean baseline: `97f33e1 docs: sync receiving rejection logging tracker after closure` (H7-E impl `ad1ff61` directly below).
+**Status:** CLOSED / COMMITTED — `872575a feat(pos): log transfer reversal evidence rejections`. Authorization: Gemini / Tech Lead / CEO — Option B APPROVED WITH NOTES. Clean baseline at commit: `97f33e1 docs: sync receiving rejection logging tracker after closure` (H7-E impl `ad1ff61` directly below).
 
 ### What this activates
 
@@ -71,7 +71,21 @@ Unlike Receiving (which re-throws), both Transfer catch sites surface the reject
 
 ### Closure
 
-H7-F is **not closed** until Codex GPT-5.5 High review and Tech Lead approval. No commit made by the developer.
+H7-F is **CLOSED / COMMITTED** — `872575a feat(pos): log transfer reversal evidence rejections`. Approved: Gemini / Tech Lead / CEO Option B APPROVED WITH NOTES. The durable rejection log is now active for both Receiving and Transfer. Admin/Ops surfacing remains future work. Next step: read-only strategic planning for Admin/Ops Surfacing.
+
+### Final test evidence (H7-F commit)
+
+```
+recordEvidenceRejection: 25 passed
+reversalRejectionRecord: 20 passed
+reversalRejectionLog: 16 passed
+reversalLocalStore: 3 passed
+offlineReversalQueue: 31 passed
+manualReviewOps: 10 passed
+Full web vitest: 478 passed (29 files)
+functions resolveReversal: 43 passed
+npx.cmd tsc -b: PASS
+```
 
 ---
 

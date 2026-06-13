@@ -1,4 +1,4 @@
-# Current Task Tracker — Phase 7B-H7-F (Transfer Pair Catch-site Integration — IMPLEMENTED / AWAITING CODEX REVIEW)
+# Current Task Tracker — Phase 7B-H7-F (Transfer Pair Catch-site Integration — CLOSED / COMMITTED)
 
 > Living checkpoint doc for agents. Detailed history: `docs/reports/latest-report.md` (do not duplicate long-form evidence here).
 
@@ -10,7 +10,7 @@
 - **H6-E2-B** — Write Transfer Evidence Header at Completion — CLOSED / COMMITTED — `82d3352 feat(pos): write transfer reversal evidence header on completion`
 - **H6-E2-C** — Transfer Evidence Coordinator Validation — CLOSED / COMMITTED — `fe3ff44 feat(pos): validate transfer reversal header evidence`
 
-**Current clean baseline:** `97f33e1 docs: sync receiving rejection logging tracker after closure` (H7-E impl `ad1ff61` directly below).
+**Current clean baseline:** `872575a feat(pos): log transfer reversal evidence rejections` (H7-F impl; H7-E impl `ad1ff61` directly below).
 
 **H6-F1** — Transfer Reversal Evidence Rejection Visibility — CLOSED / COMMITTED — `3a3d202 feat(pos): surface transfer reversal evidence rejection reasons`
 **H6-G1** — Receiving Evidence Rejection Visibility & Void Error Handling — CLOSED / COMMITTED — `e80b2a3 feat(pos): surface receiving reversal evidence rejection reasons`
@@ -19,20 +19,22 @@
 **H7-C** — Durable Rejection Log Store Wiring — CLOSED / COMMITTED — `76b7451 feat(pos): add latent durable reversal rejection log store`
 **H7-D** — Catch-site Integration Design Audit (read-only design artifact; receiving-first recommended). No code/doc changes.
 **H7-E** — Receiving-only Catch-site Integration — CLOSED / COMMITTED — `ad1ff61 feat(pos): log receiving reversal evidence rejections`
-**H7-F** — Transfer Pair Catch-site Integration — **IMPLEMENTED / AWAITING CODEX REVIEW** (not committed; not closed).
+**H7-F** — Transfer Pair Catch-site Integration — **CLOSED / COMMITTED** — `872575a feat(pos): log transfer reversal evidence rejections`
 
-**Transfer and Receiving fail-closed visibility paths are both closed.** H7-E activated the durable rejection log for Receiving; **H7-F (pending review) extends it to BOTH transfer surfaces** — `TransferHistoryPage` and `AdminTransferPage` now build the H7-A record and best-effort fire-and-forget the H7-C log via `recordEvidenceRejection` in their `TransferReversalEvidenceError` branch only, AFTER the existing `setToast(message)` and without altering the `finally { setBusy(false) }` cleanup. No `ReceivingEditPage` change, no helper/model/log/store/schema change, no UI/Ops surfacing, no server/rules/validation/write-path change.
+**Transfer and Receiving fail-closed visibility paths are both closed.** H7-E activated the durable rejection log for Receiving; **H7-F extends it to BOTH transfer surfaces** — `TransferHistoryPage` and `AdminTransferPage` now build the H7-A record and best-effort fire-and-forget the H7-C log via `recordEvidenceRejection` in their `TransferReversalEvidenceError` branch only, AFTER the existing `setToast(message)` and without altering the `finally { setBusy(false) }` cleanup. No `ReceivingEditPage` change, no helper/model/log/store/schema change, no UI/Ops surfacing, no server/rules/validation/write-path change.
+
+**The durable rejection log is now active for both Receiving and Transfer. Admin/Ops surfacing remains future work.**
 
 **`stash@{0}` remains present and untouched.**
 
-**Next step:** Codex GPT-5.5 High review of H7-F, then Tech Lead closure/commit authorization. H7-F is NOT closed until both approve.
+**Next step:** Read-only strategic planning for Admin/Ops Surfacing.
 
 ---
 
 ## Phase 7B-H7-F — Transfer Pair Catch-site Integration
 
-**Status:** IMPLEMENTED — AWAITING CODEX GPT-5.5 HIGH REVIEW (not committed; not closed).
-**Authorization:** Gemini / Tech Lead / CEO — Option A APPROVED (Transfer pair together; Claude Opus 4.8 / High).
+**Status:** CLOSED / COMMITTED — `872575a feat(pos): log transfer reversal evidence rejections`
+**Authorization:** Gemini / Tech Lead / CEO — Option B APPROVED WITH NOTES.
 **Goal:** Wire BOTH transfer fail-closed evidence rejection catch sites to the durable local rejection log, reusing the proven H7-E `recordEvidenceRejection` helper. The current `setToast` operator feedback and `busy`-cleanup behavior are unchanged.
 
 ### What was delivered
@@ -75,7 +77,7 @@ Unlike Receiving (which re-throws), both Transfer catch sites surface the reject
 
 ### Closure
 
-H7-F is **not closed** until Codex GPT-5.5 High review and Tech Lead approval. No commit made.
+H7-F is **CLOSED / COMMITTED** — `872575a feat(pos): log transfer reversal evidence rejections`. Approved: Gemini / Tech Lead / CEO Option B APPROVED WITH NOTES. The durable rejection log is now active for both Receiving and Transfer. Admin/Ops surfacing remains future work. Next step: read-only strategic planning for Admin/Ops Surfacing.
 
 ---
 
