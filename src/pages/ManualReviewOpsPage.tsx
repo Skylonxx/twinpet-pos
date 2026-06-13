@@ -248,7 +248,7 @@ export default function ManualReviewOpsPage() {
                     <TableCell className="whitespace-nowrap text-gray-500 dark:text-gray-400">
                       {getEvidenceSourceLabel(it.evidenceSource)}
                     </TableCell>
-                    <TableCell className="whitespace-nowrap text-gray-500 dark:text-gray-400">
+                    <TableCell className="whitespace-nowrap font-mono text-xs text-gray-500 dark:text-gray-400">
                       {it.createdAt}
                     </TableCell>
                     <TableCell className="text-right">
@@ -271,13 +271,18 @@ export default function ManualReviewOpsPage() {
         resolve/delete/retry/sync/export action — it reads `listReversalRejections` and nothing
         else. Behind the same Manager/Admin gate as the queue above.
       */}
-      <div className="mt-6 flex flex-col gap-4 border-t border-gray-200 pt-6 dark:border-gray-700">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="mt-8 flex flex-col gap-4 border-t-2 border-gray-200 pt-8 dark:border-gray-700">
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
           <div>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-              บันทึกการปฏิเสธหลักฐาน (อุปกรณ์นี้)
-            </h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                บันทึกการปฏิเสธหลักฐาน (อุปกรณ์นี้)
+              </h2>
+              <Badge color="gray" size="sm" className="w-fit">
+                อ่านอย่างเดียว
+              </Badge>
+            </div>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
               บันทึกหลักฐานการปฏิเสธการยกเลิก (รับเข้า/โอน) ที่ถูกปฏิเสธแบบ fail-closed
             </p>
           </div>
@@ -300,7 +305,9 @@ export default function ManualReviewOpsPage() {
             <Spinner size="xl" aria-label="Loading rejection log" />
           </div>
         ) : rejections.length === 0 ? (
-          <Alert color="gray">ยังไม่มีบันทึกการปฏิเสธหลักฐานบนอุปกรณ์นี้</Alert>
+          <div className="rounded-lg border border-dashed border-gray-200 p-8 text-center text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">
+            ยังไม่มีบันทึกการปฏิเสธหลักฐานบนอุปกรณ์นี้
+          </div>
         ) : (
           <Card className="overflow-hidden p-0">
             <div className="overflow-x-auto">
@@ -320,7 +327,7 @@ export default function ManualReviewOpsPage() {
                       key={r.recordId}
                       className="bg-white dark:border-gray-700 dark:bg-gray-800"
                     >
-                      <TableCell className="whitespace-nowrap text-gray-500 dark:text-gray-400">
+                      <TableCell className="whitespace-nowrap font-mono text-xs text-gray-500 dark:text-gray-400">
                         {r.createdAt}
                       </TableCell>
                       <TableCell className="whitespace-nowrap">

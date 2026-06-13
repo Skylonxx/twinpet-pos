@@ -1,4 +1,4 @@
-# Current Task Tracker — Phase 7C-A + 7C-D1 (Regression Stabilization + Operator Runbook — CLOSED / COMMITTED)
+# Current Task Tracker — Phase 7C-B1 (Manual Review Ops UI Polish — IMPLEMENTED / AWAITING CODEX REVIEW)
 
 > Living checkpoint doc for agents. Detailed history: `docs/reports/latest-report.md` (do not duplicate long-form evidence here).
 
@@ -10,7 +10,7 @@
 - **H6-E2-B** — Write Transfer Evidence Header at Completion — CLOSED / COMMITTED — `82d3352 feat(pos): write transfer reversal evidence header on completion`
 - **H6-E2-C** — Transfer Evidence Coordinator Validation — CLOSED / COMMITTED — `fe3ff44 feat(pos): validate transfer reversal header evidence`
 
-**Current clean baseline:** `9ad2c51 test(pos): stabilize durable rejection tests and add operator runbook` (7C-A + 7C-D1 impl; H7-G impl `86a628e` below).
+**Current clean baseline:** `1599dc2 docs: sync stabilization tracker after closure` (7C-A + 7C-D1 doc-sync; impl `9ad2c51` below). **7C-B1 (Manual Review Ops UI Polish) is implemented on top of this baseline and NOT yet committed.**
 
 **H6-F1** — Transfer Reversal Evidence Rejection Visibility — CLOSED / COMMITTED — `3a3d202 feat(pos): surface transfer reversal evidence rejection reasons`
 **H6-G1** — Receiving Evidence Rejection Visibility & Void Error Handling — CLOSED / COMMITTED — `e80b2a3 feat(pos): surface receiving reversal evidence rejection reasons`
@@ -40,9 +40,42 @@
 
 7C-A de-brittled the H7-G source-level assertions (no production code touched); 7C-D1 added a plain-Thai operator runbook (`docs/operator-runbook-durable-rejection-panel.md`). **No production behavior changed, no UI behavior/layout/polish change, no POS cashier UX work, no source/write-path/schema/server/rules change.** Codex: PASS WITH NOTES (accepted: remaining source-level tests rely on stable semantic markers; materially better than exact whole-page button counts; CRLF warnings accepted; zero production code mutated). 492 web tests (29 files); `tsc -b` clean; forbidden diff EMPTY.
 
-**Baseline is hardened for visual/UI polish planning.** No POS cashier UX work has started. No UI polish implementation has started.
+**Baseline is hardened for visual/UI polish planning.** No POS cashier UX work has started.
 
-**Next step:** Readiness status / planning for visual/UI polish slices — (A) Manual Review Ops UI polish; (C) Admin/Inventory visual consistency; (B) POS cashier UX polish as a separately authorized, write-path-bounded effort. No UI polish implementation without separate authorization.
+**7C-B1** — Manual Review Ops UI Polish — **IMPLEMENTED / AWAITING CODEX REVIEW (NOT COMMITTED, NOT CLOSED)** — Option A APPROVED (Zero Behavioral Change). Presentation-only polish of `src/pages/ManualReviewOpsPage.tsx`: a stronger visual boundary between the actionable Manual Review Queue and the read-only Durable Rejection Forensic Log (thicker top divider `border-t-2` + increased `mt-8`/`pt-8` spacing), an "อ่านอย่างเดียว" (read-only) badge on the forensic-log header to reinforce its non-actionable nature, a softer dashed-border empty state for the forensic log, and monospace timestamps for scannability in both tables. **No behavior/state/query/lifecycle change, no gate change, durable panel still read-only with no action buttons, Thai disclaimer meaning preserved, `recordId` still internal-only (sole `key={r.recordId}` use), no route/nav/global-CSS/schema/server/rules/write-path change.** The 24 stabilized 7C-A assertions still pass unchanged (no test update needed). Codex GPT-5.5 High review required before closure.
+
+**Next step:** Codex GPT-5.5 High review of 7C-B1; not closed until Codex + Tech Lead approval, then doc-sync/commit. Candidates (C) Admin/Inventory visual consistency and (B) POS cashier UX remain future, separately-authorized slices.
+
+---
+
+## Phase 7C-B1 — Manual Review Ops UI Polish (presentation-only)
+
+**Status:** IMPLEMENTED / AWAITING CODEX REVIEW — NOT COMMITTED, NOT CLOSED.
+**Authorization:** Gemini / Tech Lead / CEO — Option A APPROVED. Golden rule: **Zero Behavioral Change** (strictly cosmetic/layout).
+**Goal:** Improve readability/operator clarity of the Manual Review Ops page, especially the visual distinction between the actionable Manual Review Queue and the read-only Durable Rejection Forensic Log.
+
+### What was delivered (all presentation-only, single file)
+
+- `src/pages/ManualReviewOpsPage.tsx` (MOD, +16/−9):
+  - Forensic-log section boundary strengthened: `mt-6 … border-t … pt-6` → `mt-8 … border-t-2 … pt-8`.
+  - Forensic-log header gains a read-only badge (`<Badge>อ่านอย่างเดียว</Badge>`) beside the existing `<h2>` (heading text unchanged), with the heading row wrapped in a flex container; subtitle gets `mt-1`.
+  - Forensic-log empty state restyled from `<Alert color="gray">` to a dashed-border centered muted `<div>` (same Thai text/meaning).
+  - Timestamp cells in BOTH tables (`it.createdAt`, `r.createdAt`) gain `font-mono text-xs` for scannability.
+  - No logic, state, handler, data-flow, gate, import-behavior, or marker change; `Badge` was already imported; `Alert` still used elsewhere.
+
+### What is NOT in this slice
+
+No business-logic/state/query/`useEffect`/`useMemo` change; no change to `listQueue`/`listReversalRejections`/`resolveManualReview`/`buildManualReviewResolvePayload`; no Manager/Admin gate or unauthorized-behavior change; no queue resolve-flow change; durable panel remains read-only (no resolve/delete/retry/sync/export/action button); Thai local-device disclaimer meaning preserved; no `recordId` display (still the sole `key={r.recordId}`); no route/nav change; no global/shared CSS, no inline styles, no cross-page Flowbite migration; no offline-schema/`DB_VERSION`/helper/model/log/store change; no Receiving/Transfer catch-site, server-resolver, or Firestore-rules change; no POS/cart/checkout/stock-mutation/write-path change; no test changes (stabilized assertions still pass); `stash@{0}` untouched.
+
+### Verification
+
+- Focused `manualReviewOps` 24 passed (stabilized assertions unchanged); `recordEvidenceRejection`/`reversalRejectionLog`/`reversalLocalStore`/`offlineReversalQueue` 75 passed.
+- Full web `npx vitest run` → **492 passed (29 files)**; `npx tsc -b` clean; `functions resolveReversal` 43 passed (server unchanged).
+- `git diff --check` clean; forbidden-area diff EMPTY; `git diff --stat` = 1 file (`ManualReviewOpsPage.tsx`); `stash@{0}` present and untouched.
+
+### Not closed
+
+7C-B1 is NOT closed until Codex GPT-5.5 High + Tech Lead approval. No commit made.
 
 ---
 
