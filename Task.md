@@ -1,4 +1,4 @@
-# Current Task Tracker — Phase 7C-C3 (Admin Dashboard / Report Namespace Isolation — IN PROGRESS / AWAITING CODEX REVIEW)
+# Current Task Tracker — Phase 7C-C3 (Admin Dashboard / Report Namespace Isolation — CLOSED / COMMITTED)
 
 > Living checkpoint doc for agents. Detailed history: `docs/reports/latest-report.md` (do not duplicate long-form evidence here).
 
@@ -10,22 +10,24 @@
 - **H6-E2-B** — Write Transfer Evidence Header at Completion — CLOSED / COMMITTED — `82d3352 feat(pos): write transfer reversal evidence header on completion`
 - **H6-E2-C** — Transfer Evidence Coordinator Validation — CLOSED / COMMITTED — `fe3ff44 feat(pos): validate transfer reversal header evidence`
 
-**Current clean baseline:** `b757c65 docs: add admin inventory css namespace audit` (7C-C1-0 audit + 7C-C2 no-edit deferral — CLOSED / COMMITTED). 7C-C3 is implemented on top of this baseline and NOT yet committed.
+**Current clean baseline:** `4262a25 refactor(style): isolate admin dashboard and report css namespaces` (7C-C3 impl; prior audit baseline `b757c65`). **7C-C3 (Admin Dashboard / Report Namespace Isolation) is CLOSED / COMMITTED.**
 
 **7C-C1-0 (CSS Namespace Audit) and 7C-C2 (TSX-only Admin polish — evidence-based no-op/deferral) are CLOSED / COMMITTED at `b757c65`.** The C1-0 audit concluded that meaningful Admin/Inventory consistency requires namespace isolation first.
 
-**Phase 7C-C3 — Admin Dashboard / Report Namespace Isolation (Tech Lead / CEO authorized) — IN PROGRESS / AWAITING CODEX REVIEW:**
+**Phase 7C-C3 — Admin Dashboard / Report Namespace Isolation (Tech Lead / CEO authorized) — CLOSED / COMMITTED — `4262a25 refactor(style): isolate admin dashboard and report css namespaces`:**
 
-C3 scope is **namespace isolation only — NOT broad visual polish, NOT redesign, NOT business logic.** It breaks two shared-CSS couplings flagged by the C1-0 audit by forking admin-specific namespaces (rules copied 1:1; no visual change intended):
+C3 scope was **namespace isolation only — NOT broad visual polish, NOT redesign, NOT business logic.** Breaks two shared-CSS couplings flagged by the C1-0 audit by forking admin-specific namespaces (rules copied 1:1; no visual change intended):
 
 - **Admin Dashboard:** forked `dash-*` (+ shared `.dashboard-page`) → **`adash-*`** (+ `.adash-page`). New `src/pages/admin/AdminDashboardPage.css` defines the `adash-*` rules AdminDashboard consumes (footer rules not copied — unused); `AdminDashboardPage.tsx` now imports the local CSS instead of `../DashboardPage.css` and uses `adash-*`. Shared `DashboardPage.css` UNMODIFIED.
 - **All Branches Stock Overview:** forked `sr-*` → **`absr-*`**. `AllBranchesStockOverview.css` now defines the `absr-*` rules it consumes (incl. the donut-legend scroll tweak); `AllBranchesStockOverview.tsx` drops `import '../StockReportPage.css'` and uses `absr-*`. Shared `StockReportPage.css` UNMODIFIED.
 
 After the fork: `AdminDashboardPage.tsx` consumes no `dash-*`/`dashboard-page`; `AllBranchesStockOverview.tsx` consumes no `sr-*` (only a doc-comment references the old prefix). `AdminStockReportPage.tsx`/`.css` untouched.
 
-**Forbidden boundaries honored:** no edit to shared `DashboardPage.css` / `StockReportPage.css`; no `index.css`/`variables.css`/global token change; no protected H7-F file touched; no deferred namespace (`sh-`/`inv-adj-`/`ss-`/`qm-`/`asr-`/`asr-bsel-`/`asup-`/`sup-`) implementation; no behavior/state/query/lifecycle/CSV-export change; no route/nav/server/rules/offline/POS change; `stash@{0}` untouched (read-only `git stash list` only).
+**Forbidden boundaries honored:** no edit to shared `DashboardPage.css` / `StockReportPage.css`; no `index.css`/`variables.css`/global token change; no protected H7-F file touched; no deferred namespace (`sh-`/`inv-adj-`/`ss-`/`qm-`/`asr-`/`asr-bsel-`/`asup-`/`sup-`) implementation; no behavior/state/query/lifecycle/CSV-export change; no route/nav/server/rules/offline/POS change; `stash@{0}` untouched.
 
-**Next step:** Codex GPT-5.5 High review of the C3 namespace-isolation package (mapping fidelity + visual-preservation) before Tech Lead closure/commit.
+**Codex:** PASS WITH NOTES. **Verification:** structural CSS/DOM verification used as fallback for live seeded visual UAT (blocked by admin auth / seeded Firebase data requirements); 0 drift in forked rules after reverse mapping and full rendered-class coverage; no fake screenshots produced. Live seeded visual UAT is optional future confidence work, not a C3 closure blocker. Full web `npx vitest run` → **492 passed (29 files)**; `npx tsc -b` clean; forbidden-area diff EMPTY; `stash@{0}` untouched. Tech Lead accepted structural verification fallback and authorized closure.
+
+**Next step:** Strategic next-slice decision — Admin UI polish leveraging isolated `adash-*` / `absr-*`; POS Cashier UX Boundary Audit; or optional seeded admin visual UAT confidence check. No implementation without separate authorization.
 
 **H6-F1** — Transfer Reversal Evidence Rejection Visibility — CLOSED / COMMITTED — `3a3d202 feat(pos): surface transfer reversal evidence rejection reasons`
 **H6-G1** — Receiving Evidence Rejection Visibility & Void Error Handling — CLOSED / COMMITTED — `e80b2a3 feat(pos): surface receiving reversal evidence rejection reasons`
