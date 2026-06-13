@@ -1,4 +1,4 @@
-# Current Task Tracker — Phase 7C-C3 (Admin Dashboard / Report Namespace Isolation — CLOSED / COMMITTED)
+# Current Task Tracker — Phase 7C-C4 (Admin UI Polish on Isolated Namespaces — IN PROGRESS / AWAITING CODEX REVIEW)
 
 > Living checkpoint doc for agents. Detailed history: `docs/reports/latest-report.md` (do not duplicate long-form evidence here).
 
@@ -10,7 +10,17 @@
 - **H6-E2-B** — Write Transfer Evidence Header at Completion — CLOSED / COMMITTED — `82d3352 feat(pos): write transfer reversal evidence header on completion`
 - **H6-E2-C** — Transfer Evidence Coordinator Validation — CLOSED / COMMITTED — `fe3ff44 feat(pos): validate transfer reversal header evidence`
 
-**Current clean baseline:** `4262a25 refactor(style): isolate admin dashboard and report css namespaces` (7C-C3 impl; prior audit baseline `b757c65`). **7C-C3 (Admin Dashboard / Report Namespace Isolation) is CLOSED / COMMITTED.**
+**Current clean baseline:** `de9d0c9 docs: sync admin css namespace isolation closure` (7C-C3 doc-sync; 7C-C3 impl `4262a25` directly below). **7C-C3 (Admin Dashboard / Report Namespace Isolation) is CLOSED / COMMITTED.** 7C-C4 is implemented on top of this baseline and NOT yet committed.
+
+**Phase 7C-C4 — Admin UI Polish on Isolated Namespaces (Tech Lead / CEO authorized) — IN PROGRESS / AWAITING CODEX REVIEW:**
+
+Presentation-only polish building on the C3 isolation. **Scope: visual consistency only — NOT redesign, NOT business logic, NOT POS cashier, NOT broad Admin/Inventory polish.** Delivered a single coherent **card-elevation consistency pass**: a unified subtle resting `box-shadow: 0 1px 2px 0 rgba(16, 24, 40, 0.05)` added to all card surfaces on both isolated admin screens — `adash-kpi-card`/`adash-chart-box`/`adash-pay-section`/`adash-table-card` (in `AdminDashboardPage.css`) and `absr-metric-card`/`absr-chart-box`/`absr-card` (in `AllBranchesStockOverview.css`). **CSS-only, confined to the isolated `adash-*` / `absr-*` namespaces** (box-shadow does not affect layout flow). No TSX changes; behavior/state/query/lifecycle/chart-config/CSV-export/conditional-rendering unchanged.
+
+**Target files (only):** `src/pages/admin/AdminDashboardPage.css`, `src/pages/admin/AllBranchesStockOverview.css` (the two `.tsx` files were in authorized scope but required no change). Tracker: `Task.md`.
+
+**Forbidden boundaries honored:** no shared `DashboardPage.css`/`StockReportPage.css` edit; no `index.css`/`variables.css`/global-token change; no legacy `dash-`/`sr-` or deferred-namespace (`sh-`/`inv-adj-`/`ss-`/`qm-`/`asr-`/`asr-bsel-`/`asup-`/`sup-`) edits; no H7-F or write-path page touched; no route/nav/rules/Functions/offline/POS/Android/`.claude` change; `stash@{0}` untouched (read-only `git stash list` only).
+
+**Next step:** Codex GPT-5.5 High review of the C4 presentation-only package before Tech Lead closure/commit.
 
 **7C-C1-0 (CSS Namespace Audit) and 7C-C2 (TSX-only Admin polish — evidence-based no-op/deferral) are CLOSED / COMMITTED at `b757c65`.** The C1-0 audit concluded that meaningful Admin/Inventory consistency requires namespace isolation first.
 

@@ -147,6 +147,8 @@
   padding: 16px 18px;
   position: relative;
   overflow: hidden;
+  /* 7C-C4: unified subtle card elevation across admin dashboard surfaces. */
+  box-shadow: 0 1px 2px 0 rgba(16, 24, 40, 0.05);
 }
 
 .adash-kpi-card::before {
@@ -275,6 +277,7 @@
   border-radius: var(--radius-lg);
   border: 1px solid var(--border);
   padding: 16px 18px;
+  box-shadow: 0 1px 2px 0 rgba(16, 24, 40, 0.05);
 }
 
 .adash-chart-head {
@@ -385,6 +388,7 @@
   border-radius: var(--radius-lg);
   border: 1px solid var(--border);
   padding: 16px 18px;
+  box-shadow: 0 1px 2px 0 rgba(16, 24, 40, 0.05);
 }
 
 .adash-pay-scroll {
@@ -494,6 +498,7 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  box-shadow: 0 1px 2px 0 rgba(16, 24, 40, 0.05);
 }
 
 .adash-tc-head {
