@@ -31,7 +31,7 @@ import {
   TableRow,
   TableCell,
 } from '../../components/ui';
-import '../DashboardPage.css';
+import './AdminDashboardPage.css';
 
 ChartJS.register(
   CategoryScale,
@@ -83,15 +83,15 @@ const PAY_META: Record<
   },
 };
 
-const RANK_CLASSES = ['dash-rb-1', 'dash-rb-2', 'dash-rb-3', 'dash-rb-n', 'dash-rb-n'];
+const RANK_CLASSES = ['adash-rb-1', 'adash-rb-2', 'adash-rb-3', 'adash-rb-n', 'adash-rb-n'];
 
 function CompareBadge({ pct }: { pct: number }) {
   if (Math.abs(pct) < 0.5) {
-    return <span className="dash-kpi-badge dash-badge-flat">— ทรงตัว</span>;
+    return <span className="adash-kpi-badge adash-badge-flat">— ทรงตัว</span>;
   }
   const up = pct > 0;
   return (
-    <span className={`dash-kpi-badge ${up ? 'dash-badge-up' : 'dash-badge-dn'}`}>
+    <span className={`adash-kpi-badge ${up ? 'adash-badge-up' : 'adash-badge-dn'}`}>
       <i className={`ti ti-arrow-${up ? 'up' : 'down'}`} aria-hidden="true" />
       {Math.abs(pct).toFixed(1)}%
     </span>
@@ -231,15 +231,15 @@ export default function AdminDashboardPage() {
       : activeBranches.find((b) => b.id === selectedBranch)?.name?.trim() || selectedBranch;
 
   return (
-    <div className="dashboard-page">
-      <header className="dash-toolbar">
+    <div className="adash-page">
+      <header className="adash-toolbar">
         <div>
-          <div className="dash-toolbar-title">Admin Dashboard</div>
-          <div className="dash-toolbar-sub">ภาพรวมธุรกิจ TwinPet — {scopeLabel}</div>
+          <div className="adash-toolbar-title">Admin Dashboard</div>
+          <div className="adash-toolbar-sub">ภาพรวมธุรกิจ TwinPet — {scopeLabel}</div>
         </div>
-        <div className="dash-toolbar-center" />
+        <div className="adash-toolbar-center" />
         <select
-          className="dash-branch-select"
+          className="adash-branch-select"
           value={selectedBranch}
           onChange={(e) => setSelectedBranch(e.target.value)}
           aria-label="เลือกสาขา"
@@ -251,88 +251,88 @@ export default function AdminDashboardPage() {
             </option>
           ))}
         </select>
-        <div className="dash-period-tabs" role="tablist">
+        <div className="adash-period-tabs" role="tablist">
           {(['today', 'week', 'month'] as DashboardPeriod[]).map((p) => (
             <button
               key={p}
               type="button"
               role="tab"
               aria-selected={period === p}
-              className={`dash-period-tab${period === p ? ' active' : ''}`}
+              className={`adash-period-tab${period === p ? ' active' : ''}`}
               onClick={() => setPeriod(p)}
             >
               {PERIOD_LABELS[p]}
             </button>
           ))}
         </div>
-        <div className="dash-live-dot" title="Live data" />
+        <div className="adash-live-dot" title="Live data" />
       </header>
 
-      <div className="dash-content">
-        {loading && <div className="dash-loading">กำลังโหลดข้อมูล...</div>}
+      <div className="adash-content">
+        {loading && <div className="adash-loading">กำลังโหลดข้อมูล...</div>}
         {error && (
-          <div className="dash-loading" style={{ color: 'var(--danger)' }}>
+          <div className="adash-loading" style={{ color: 'var(--danger)' }}>
             {error.message}
           </div>
         )}
 
         {!loading && !error && (
           <>
-            <div className="dash-kpi-grid">
-              <div className="dash-kpi-card dash-kc-rev">
-                <i className="dash-kpi-icon-bg ti ti-coin" aria-hidden="true" />
-                <div className="dash-kpi-label">
+            <div className="adash-kpi-grid">
+              <div className="adash-kpi-card adash-kc-rev">
+                <i className="adash-kpi-icon-bg ti ti-coin" aria-hidden="true" />
+                <div className="adash-kpi-label">
                   <i className="ti ti-coin" style={{ fontSize: 12 }} aria-hidden="true" />
                   ยอดขายรวม
                 </div>
-                <div className="dash-kpi-num">{fmtBaht(kpi.revenue)}</div>
-                <div className="dash-kpi-compare">
+                <div className="adash-kpi-num">{fmtBaht(kpi.revenue)}</div>
+                <div className="adash-kpi-compare">
                   <CompareBadge pct={revPct} />
-                  <span className="dash-kpi-vs">{vsLabel}</span>
+                  <span className="adash-kpi-vs">{vsLabel}</span>
                 </div>
               </div>
 
-              <div className="dash-kpi-card dash-kc-profit">
-                <i className="dash-kpi-icon-bg ti ti-trending-up" aria-hidden="true" />
-                <div className="dash-kpi-label">
+              <div className="adash-kpi-card adash-kc-profit">
+                <i className="adash-kpi-icon-bg ti ti-trending-up" aria-hidden="true" />
+                <div className="adash-kpi-label">
                   <i className="ti ti-trending-up" style={{ fontSize: 12 }} aria-hidden="true" />
                   กำไรขั้นต้น
                 </div>
-                <div className="dash-kpi-num">{fmtBaht(kpi.profit)}</div>
-                <div className="dash-kpi-compare">
+                <div className="adash-kpi-num">{fmtBaht(kpi.profit)}</div>
+                <div className="adash-kpi-compare">
                   <CompareBadge pct={profPct} />
-                  <span className="dash-kpi-vs">{vsLabel}</span>
+                  <span className="adash-kpi-vs">{vsLabel}</span>
                 </div>
               </div>
 
-              <div className="dash-kpi-card dash-kc-orders">
-                <i className="dash-kpi-icon-bg ti ti-receipt" aria-hidden="true" />
-                <div className="dash-kpi-label">
+              <div className="adash-kpi-card adash-kc-orders">
+                <i className="adash-kpi-icon-bg ti ti-receipt" aria-hidden="true" />
+                <div className="adash-kpi-label">
                   <i className="ti ti-receipt" style={{ fontSize: 12 }} aria-hidden="true" />
                   จำนวนบิล
                 </div>
-                <div className="dash-kpi-num">{fmtNumber(kpi.bills)}</div>
-                <div className="dash-kpi-compare">
+                <div className="adash-kpi-num">{fmtNumber(kpi.bills)}</div>
+                <div className="adash-kpi-compare">
                   <CompareBadge pct={billPct} />
-                  <span className="dash-kpi-vs">{vsLabel}</span>
+                  <span className="adash-kpi-vs">{vsLabel}</span>
                 </div>
               </div>
 
-              <div className="dash-kpi-card dash-kc-stock">
-                <i className="dash-kpi-icon-bg ti ti-percentage" aria-hidden="true" />
-                <div className="dash-kpi-label">
+              <div className="adash-kpi-card adash-kc-stock">
+                <i className="adash-kpi-icon-bg ti ti-percentage" aria-hidden="true" />
+                <div className="adash-kpi-label">
                   <i className="ti ti-percentage" style={{ fontSize: 12 }} aria-hidden="true" />
                   Gross Margin
                 </div>
-                <div className="dash-kpi-num">{fmtPct(kpi.margin)}</div>
-                <div className="dash-kpi-compare">
+                <div className="adash-kpi-num">{fmtPct(kpi.margin)}</div>
+                <div className="adash-kpi-compare">
                   <span
-                    className={`dash-kpi-badge ${
+                    className={`adash-kpi-badge ${
                       kpi.margin >= 20
-                        ? 'dash-badge-up'
+                        ? 'adash-badge-up'
                         : kpi.margin >= 10
-                          ? 'dash-badge-flat'
-                          : 'dash-badge-dn'
+                          ? 'adash-badge-flat'
+                          : 'adash-badge-dn'
                     }`}
                   >
                     {kpi.margin >= 20 ? '✓ ดี' : kpi.margin >= 10 ? '⚠ ปานกลาง' : '✗ ต่ำ'}
@@ -341,48 +341,48 @@ export default function AdminDashboardPage() {
               </div>
             </div>
 
-            <div className="dash-chart-row">
-              <div className="dash-chart-box">
-                <div className="dash-chart-head">
-                  <div className="dash-chart-title">
+            <div className="adash-chart-row">
+              <div className="adash-chart-box">
+                <div className="adash-chart-head">
+                  <div className="adash-chart-title">
                     <i className="ti ti-chart-bar" aria-hidden="true" />
                     {data.trendTitle}
                   </div>
-                  <div className="dash-chart-legend">
-                    <div className="dash-legend-item">
-                      <div className="dash-legend-dot" style={{ background: 'var(--p600)' }} />
+                  <div className="adash-chart-legend">
+                    <div className="adash-legend-item">
+                      <div className="adash-legend-dot" style={{ background: 'var(--p600)' }} />
                       ยอดขาย
                     </div>
-                    <div className="dash-legend-item">
-                      <div className="dash-legend-dot" style={{ background: 'var(--success)' }} />
+                    <div className="adash-legend-item">
+                      <div className="adash-legend-dot" style={{ background: 'var(--success)' }} />
                       กำไร
                     </div>
                   </div>
                 </div>
-                <div className="dash-chart-canvas-wrap">
+                <div className="adash-chart-canvas-wrap">
                   <Bar data={trendChartData} options={chartOptions} />
                 </div>
               </div>
 
-              <div className="dash-chart-box">
-                <div className="dash-chart-head">
-                  <div className="dash-chart-title">
+              <div className="adash-chart-box">
+                <div className="adash-chart-head">
+                  <div className="adash-chart-title">
                     <i className="ti ti-chart-donut" aria-hidden="true" />
                     ยอดขายตามหมวดหมู่
                   </div>
                 </div>
                 {data.categories.length > 0 ? (
-                  <div className="dash-donut-wrap">
-                    <div className="dash-donut-canvas">
+                  <div className="adash-donut-wrap">
+                    <div className="adash-donut-canvas">
                       <Doughnut data={donutChartData} options={donutOptions} />
                     </div>
-                    <div className="dash-donut-legend">
+                    <div className="adash-donut-legend">
                       {data.categories.map((c) => (
-                        <div key={c.category} className="dash-dl-row">
-                          <div className="dash-dl-dot" style={{ background: c.color }} />
-                          <span className="dash-dl-lbl">{c.category}</span>
-                          <span className="dash-dl-val">{fmtBaht(c.revenue)}</span>
-                          <span className="dash-dl-pct">
+                        <div key={c.category} className="adash-dl-row">
+                          <div className="adash-dl-dot" style={{ background: c.color }} />
+                          <span className="adash-dl-lbl">{c.category}</span>
+                          <span className="adash-dl-val">{fmtBaht(c.revenue)}</span>
+                          <span className="adash-dl-pct">
                             {categoryTotal > 0
                               ? fmtPct((c.revenue / categoryTotal) * 100)
                               : '-'}
@@ -399,9 +399,9 @@ export default function AdminDashboardPage() {
               </div>
             </div>
 
-            <section className="dash-pay-section">
-              <div className="dash-chart-head" style={{ marginBottom: 0 }}>
-                <div className="dash-chart-title">
+            <section className="adash-pay-section">
+              <div className="adash-chart-head" style={{ marginBottom: 0 }}>
+                <div className="adash-chart-title">
                   <i className="ti ti-credit-card" aria-hidden="true" />
                   ช่องทางการชำระเงิน
                 </div>
@@ -409,35 +409,35 @@ export default function AdminDashboardPage() {
                   {PERIOD_LABELS[period]}
                 </span>
               </div>
-              <div className="dash-pay-scroll">
-                <div className="dash-pay-grid">
+              <div className="adash-pay-scroll">
+                <div className="adash-pay-grid">
                   {data.payments.map((row) => {
                     const m = PAY_META[row.method];
                     return (
-                      <div key={row.method} className="dash-pay-card">
+                      <div key={row.method} className="adash-pay-card">
                         <div
-                          className="dash-pay-icon"
+                          className="adash-pay-icon"
                           style={{ background: m.iconBg, color: m.clr }}
                         >
                           <i className={`ti ${m.icon}`} aria-hidden="true" />
                         </div>
-                        <div className="dash-pay-info">
-                          <div className="dash-pay-name">{m.label}</div>
-                          <div className="dash-pay-rev" style={{ color: m.clr }}>
+                        <div className="adash-pay-info">
+                          <div className="adash-pay-name">{m.label}</div>
+                          <div className="adash-pay-rev" style={{ color: m.clr }}>
                             {fmtBaht(row.revenue)}
                           </div>
-                          <div className="dash-pay-meta">
-                            <span className="dash-pay-bills">{row.bills} บิล</span>
+                          <div className="adash-pay-meta">
+                            <span className="adash-pay-bills">{row.bills} บิล</span>
                             <span
-                              className="dash-pay-pct-pill"
+                              className="adash-pay-pct-pill"
                               style={{ background: m.iconBg, color: m.clr }}
                             >
                               {row.pct.toFixed(1)}%
                             </span>
                           </div>
-                          <div className="dash-pay-bar-bg">
+                          <div className="adash-pay-bar-bg">
                             <div
-                              className="dash-pay-bar-fill"
+                              className="adash-pay-bar-fill"
                               style={{ width: `${row.barWidth}%`, background: m.barClr }}
                             />
                           </div>
@@ -449,14 +449,14 @@ export default function AdminDashboardPage() {
               </div>
             </section>
 
-            <div className="dash-bottom-row">
-              <div className="dash-table-card">
-                <div className="dash-tc-head">
+            <div className="adash-bottom-row">
+              <div className="adash-table-card">
+                <div className="adash-tc-head">
                   <i className="ti ti-medal" aria-hidden="true" />
                   Top สินค้าขายดี
-                  <span className="dash-badge-count">{data.topProducts.length}</span>
+                  <span className="adash-badge-count">{data.topProducts.length}</span>
                 </div>
-                <div className="dash-tc-body">
+                <div className="adash-tc-body">
                   <Table>
                     <TableHead>
                       <TableRow>
@@ -472,7 +472,7 @@ export default function AdminDashboardPage() {
                         return (
                           <TableRow key={row.productId}>
                             <TableCell>
-                              <span className={`dash-rank-ball ${RANK_CLASSES[i]}`}>
+                              <span className={`adash-rank-ball ${RANK_CLASSES[i]}`}>
                                 {i + 1}
                               </span>
                             </TableCell>
@@ -480,9 +480,9 @@ export default function AdminDashboardPage() {
                               <div style={{ fontSize: 12, fontWeight: 500, lineHeight: 1.2 }}>
                                 {truncate(row.name, 22)}
                               </div>
-                              <div className="dash-bar-inline" style={{ width: 70 }}>
+                              <div className="adash-bar-inline" style={{ width: 70 }}>
                                 <div
-                                  className="dash-bar-fill-p"
+                                  className="adash-bar-fill-p"
                                   style={{ width: `${pct}%` }}
                                 />
                               </div>
@@ -501,13 +501,13 @@ export default function AdminDashboardPage() {
                 </div>
               </div>
 
-              <div className="dash-table-card">
-                <div className="dash-tc-head">
+              <div className="adash-table-card">
+                <div className="adash-tc-head">
                   <i className="ti ti-crown" aria-hidden="true" />
                   Top ลูกค้า
-                  <span className="dash-badge-count">{data.topCustomers.length}</span>
+                  <span className="adash-badge-count">{data.topCustomers.length}</span>
                 </div>
-                <div className="dash-tc-body">
+                <div className="adash-tc-body">
                   <Table>
                     <TableHead>
                       <TableRow>
@@ -523,7 +523,7 @@ export default function AdminDashboardPage() {
                         return (
                           <TableRow key={row.name}>
                             <TableCell>
-                              <span className={`dash-rank-ball ${RANK_CLASSES[i]}`}>
+                              <span className={`adash-rank-ball ${RANK_CLASSES[i]}`}>
                                 {i + 1}
                               </span>
                             </TableCell>
@@ -531,9 +531,9 @@ export default function AdminDashboardPage() {
                               <div style={{ fontSize: 12, fontWeight: 500 }}>
                                 {truncate(row.name, 16)}
                               </div>
-                              <div className="dash-bar-inline" style={{ width: 80 }}>
+                              <div className="adash-bar-inline" style={{ width: 80 }}>
                                 <div
-                                  className="dash-bar-fill-g"
+                                  className="adash-bar-fill-g"
                                   style={{ width: `${pct}%` }}
                                 />
                               </div>
@@ -552,13 +552,13 @@ export default function AdminDashboardPage() {
                 </div>
               </div>
 
-              <div className="dash-table-card">
-                <div className="dash-tc-head">
+              <div className="adash-table-card">
+                <div className="adash-tc-head">
                   <i className="ti ti-alert-triangle" aria-hidden="true" />
                   แจ้งเตือนสต็อก
-                  <span className="dash-badge-count">{data.stockAlerts.length}</span>
+                  <span className="adash-badge-count">{data.stockAlerts.length}</span>
                 </div>
-                <div className="dash-tc-body">
+                <div className="adash-tc-body">
                   <Table>
                     <TableHead>
                       <TableRow>
@@ -584,8 +584,8 @@ export default function AdminDashboardPage() {
                               <span
                                 className={
                                   row.qty === 0 || row.critical
-                                    ? 'dash-stock-num-crit'
-                                    : 'dash-stock-num-low'
+                                    ? 'adash-stock-num-crit'
+                                    : 'adash-stock-num-low'
                                 }
                               >
                                 {row.qty === 0 ? 'หมด' : row.qty}

@@ -26,7 +26,6 @@ import {
   TableRow,
   TableCell,
 } from '../../components/ui';
-import '../StockReportPage.css';
 import './AllBranchesStockOverview.css';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Tooltip, Legend);
@@ -42,10 +41,11 @@ function compactBahtAxis(value: number | string): string {
 /**
  * Executive, cross-branch stock dashboard rendered when the Admin picks
  * "รวมทุกสาขา" (ALL). It mirrors the single-branch report's Overview tab
- * (metric cards → donut/bar charts → low-stock table)
- * by reusing the exact `sr-*` styles and chart.js components — but is fully
- * self-contained via {@link useAllBranchesStock}, never touching the
- * single-branch report.
+ * (metric cards → donut/bar charts → low-stock table). Phase 7C-C3 forked its
+ * styles into a self-contained `absr-*` namespace (copied 1:1 from the report's
+ * `sr-*` styles) so the rollup and the single-branch report no longer share a
+ * CSS namespace. It remains fully self-contained via {@link useAllBranchesStock},
+ * never touching the single-branch report.
  */
 export default function AllBranchesStockOverview() {
   const {
@@ -84,7 +84,7 @@ export default function AllBranchesStockOverview() {
   };
 
   if (loading) {
-    return <div className="sr-page sr-loading">กำลังโหลดภาพรวมสต็อกทุกสาขา...</div>;
+    return <div className="absr-page absr-loading">กำลังโหลดภาพรวมสต็อกทุกสาขา...</div>;
   }
 
   const metrics = [
@@ -139,18 +139,18 @@ export default function AllBranchesStockOverview() {
   ];
 
   return (
-    <div className="sr-page">
-      <header className="sr-topbar">
-        <div className="sr-topbar-icon">
+    <div className="absr-page">
+      <header className="absr-topbar">
+        <div className="absr-topbar-icon">
           <i className="ti ti-building-warehouse" aria-hidden="true" />
         </div>
-        <div className="sr-topbar-center">
-          <div className="sr-topbar-title">ภาพรวมสต็อกบริษัท</div>
-          <div className="sr-topbar-sub">Consolidated Stock — รวมทุกสาขา</div>
+        <div className="absr-topbar-center">
+          <div className="absr-topbar-title">ภาพรวมสต็อกบริษัท</div>
+          <div className="absr-topbar-sub">Consolidated Stock — รวมทุกสาขา</div>
         </div>
         <button
           type="button"
-          className="sr-btn sr-btn-ghost sr-btn-sm"
+          className="absr-btn absr-btn-ghost absr-btn-sm"
           onClick={exportCsv}
           disabled={rows.length === 0}
         >
@@ -158,28 +158,28 @@ export default function AllBranchesStockOverview() {
         </button>
       </header>
 
-      <div className="sr-content">
-        <div className="sr-panel active">
+      <div className="absr-content">
+        <div className="absr-panel active">
           {error ? (
-            <div className="sr-alert-bar sr-alert-danger">
+            <div className="absr-alert-bar absr-alert-danger">
               <i className="ti ti-alert-circle" aria-hidden="true" style={{ fontSize: 16 }} />
               <span>{error}</span>
             </div>
           ) : null}
 
-          <div className="sr-metrics-grid">
+          <div className="absr-metrics-grid">
             {metrics.map((m) => (
-              <div key={m.label} className="sr-metric-card">
-                <div className="sr-metric-label">
+              <div key={m.label} className="absr-metric-card">
+                <div className="absr-metric-label">
                   <i className={`ti ${m.icon}`} style={{ color: m.clr, fontSize: 14 }} aria-hidden="true" />
                   {m.label}
                 </div>
-                <div className="sr-metric-num" style={{ color: m.clr }}>
+                <div className="absr-metric-num" style={{ color: m.clr }}>
                   {m.val}
                 </div>
-                <div className="sr-metric-sub">{m.sub}</div>
+                <div className="absr-metric-sub">{m.sub}</div>
                 {m.chip && (
-                  <span className="sr-metric-chip sr-chip-warn">
+                  <span className="absr-metric-chip absr-chip-warn">
                     <i className="ti ti-alert-triangle" aria-hidden="true" /> {m.chip}
                   </span>
                 )}
@@ -187,20 +187,20 @@ export default function AllBranchesStockOverview() {
             ))}
           </div>
 
-          <div className="sr-chart-grid">
-            <div className="sr-chart-box">
-              <div className="sr-chart-title">
+          <div className="absr-chart-grid">
+            <div className="absr-chart-box">
+              <div className="absr-chart-title">
                 <i className="ti ti-chart-donut" style={{ color: 'var(--p600)' }} aria-hidden="true" />{' '}
                 สัดส่วนมูลค่าสต็อก (แยกตามสาขา)
               </div>
               {totalValue === 0 ? (
-                <div className="sr-chart-empty">
+                <div className="absr-chart-empty">
                   <i className="ti ti-chart-donut" aria-hidden="true" />
                   <span>ไม่มีข้อมูลมูลค่าสต็อก</span>
                 </div>
               ) : (
                 <>
-                  <div className="sr-chart-wrap">
+                  <div className="absr-chart-wrap">
                     <Doughnut
                       data={{
                         labels: branchValues.map((b) => b.branchName),
@@ -220,17 +220,17 @@ export default function AllBranchesStockOverview() {
                       }}
                     />
                   </div>
-                  <div className="sr-donut-legend">
+                  <div className="absr-donut-legend">
                     {branchValues.map((b, i) => {
                       const pct = totalValue > 0 ? Math.round((b.value / totalValue) * 100) : 0;
                       return (
-                        <div key={b.branchId} className="sr-legend-item">
+                        <div key={b.branchId} className="absr-legend-item">
                           <div
-                            className="sr-legend-dot"
+                            className="absr-legend-dot"
                             style={{ background: CAT_COLORS[i % CAT_COLORS.length] }}
                           />
-                          <span className="sr-legend-lbl">{b.branchName}</span>
-                          <span className="sr-legend-val">
+                          <span className="absr-legend-lbl">{b.branchName}</span>
+                          <span className="absr-legend-val">
                             {fmtBaht(b.value)} · {pct}%
                           </span>
                         </div>
@@ -241,18 +241,18 @@ export default function AllBranchesStockOverview() {
               )}
             </div>
 
-            <div className="sr-chart-box">
-              <div className="sr-chart-title">
+            <div className="absr-chart-box">
+              <div className="absr-chart-title">
                 <i className="ti ti-chart-bar" style={{ color: 'var(--p600)' }} aria-hidden="true" />{' '}
                 Top 8 สินค้า — มูลค่าสต็อกรวมสูงสุด
               </div>
               {totalValue === 0 ? (
-                <div className="sr-chart-empty">
+                <div className="absr-chart-empty">
                   <i className="ti ti-chart-bar" aria-hidden="true" />
                   <span>ไม่มีข้อมูลมูลค่าสต็อก</span>
                 </div>
               ) : (
-                <div className="sr-chart-wrap">
+                <div className="absr-chart-wrap">
                   <Bar
                     data={{
                       labels: topProducts.map((p) =>
@@ -287,8 +287,8 @@ export default function AllBranchesStockOverview() {
             </div>
           </div>
 
-          <div className="sr-card">
-            <div className="sr-card-head">
+          <div className="absr-card">
+            <div className="absr-card-head">
               <i className="ti ti-alert-triangle" style={{ color: 'var(--warn)' }} aria-hidden="true" />
               สินค้าที่ต้องเติม (ต่ำกว่า Reorder — รวมทุกสาขา)
               <Badge color="warning" className="ml-1 w-fit">

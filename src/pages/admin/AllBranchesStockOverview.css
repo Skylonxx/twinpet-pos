@@ -1,10 +1,282 @@
-/* The consolidated overview reuses the single-branch report's `sr-*` styles
-   (imported from StockReportPage.css) for full visual parity. Only a few
-   cross-branch-specific tweaks live here. */
+/* Phase 7C-C3 — Namespace isolation fork.
+   AllBranchesStockOverview previously reused the single-branch report's shared
+   `sr-*` styles (imported from StockReportPage.css). To decouple it so future
+   report polish never ripples between the admin rollup and the single-branch
+   report, the exact rules it consumes are forked here under an `absr-*`
+   namespace (copied 1:1 from StockReportPage.css — no visual change intended).
+   The shared StockReportPage.css is NOT modified. Only the selectors actually
+   used by AllBranchesStockOverview.tsx are forked. */
+
+.absr-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  font-family: 'Prompt', 'Sarabun', sans-serif;
+  background: var(--g50, #f8f8fc);
+  color: var(--text-primary, #1a1a2e);
+  font-size: 14px;
+}
+
+.absr-topbar {
+  height: 56px;
+  background: var(--white, #fff);
+  border-bottom: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.absr-topbar-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-md, 8px);
+  background: var(--p50, #eeedfe);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--p600, #534ab7);
+  font-size: 18px;
+}
+
+.absr-topbar-center {
+  flex: 1;
+}
+
+.absr-topbar-title {
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.absr-topbar-sub {
+  font-size: 12px;
+  color: var(--text-secondary, #6b7280);
+  margin-top: 1px;
+}
+
+.absr-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  border-radius: var(--radius-md, 8px);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.absr-btn-ghost {
+  background: transparent;
+  color: var(--text-secondary, #6b7280);
+  border-color: var(--border-md, rgba(0, 0, 0, 0.13));
+}
+
+.absr-btn-ghost:hover {
+  background: var(--g50, #f8f8fc);
+  color: var(--text-primary, #1a1a2e);
+}
+
+.absr-btn-sm {
+  padding: 5px 12px;
+  font-size: 12px;
+}
+
+.absr-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+}
+
+.absr-panel {
+  display: none;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.absr-panel.active {
+  display: flex;
+}
+
+.absr-card {
+  background: var(--white, #fff);
+  border-radius: var(--radius-lg, 12px);
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+  overflow: hidden;
+}
+
+.absr-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.absr-metric-card {
+  background: var(--white, #fff);
+  border-radius: var(--radius-lg, 12px);
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+  padding: 16px 18px;
+}
+
+.absr-metric-label {
+  font-size: 11px;
+  color: var(--text-muted, #9ca3af);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.absr-metric-num {
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.absr-metric-sub {
+  font-size: 11px;
+  color: var(--text-muted, #9ca3af);
+  margin-top: 4px;
+}
+
+.absr-metric-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 20px;
+  margin-top: 4px;
+}
+
+.absr-chip-warn {
+  background: #faeeda;
+  color: #854f0b;
+}
+
+.absr-alert-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-radius: var(--radius-md, 8px);
+  font-size: 13px;
+}
+
+.absr-alert-danger {
+  background: #fcebeb;
+  color: #4a1b0c;
+  border: 1px solid #f7c1c1;
+}
+
+.absr-chart-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 900px) {
+  .absr-chart-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.absr-chart-box {
+  background: var(--white, #fff);
+  border-radius: var(--radius-lg, 12px);
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+  padding: 16px 20px;
+}
+
+.absr-chart-title {
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 14px;
+}
+
+.absr-chart-wrap {
+  position: relative;
+  height: 200px;
+}
+
+.absr-donut-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
 
 /* A company can have many branches — let the donut legend scroll instead of
-   stretching the chart card. */
-.sr-page .sr-donut-legend {
+   stretching the chart card. (Forked from the prior `.sr-page .sr-donut-legend`
+   tweak.) */
+.absr-page .absr-donut-legend {
   max-height: 168px;
   overflow-y: auto;
+}
+
+.absr-legend-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.absr-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.absr-legend-lbl {
+  flex: 1;
+  color: var(--text-secondary, #6b7280);
+}
+
+.absr-legend-val {
+  font-weight: 500;
+}
+
+/* Placeholder shown in a chart card when there is no valuation data to plot. */
+.absr-chart-empty {
+  height: 200px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-muted, #9ca3af);
+  font-size: 13px;
+}
+
+.absr-chart-empty i {
+  font-size: 32px;
+  opacity: 0.5;
+}
+
+.absr-card-head {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.absr-loading {
+  padding: 24px;
+  text-align: center;
+  color: var(--text-muted, #9ca3af);
 }

@@ -1,0 +1,586 @@
+/* Phase 7C-C3 — Namespace isolation fork.
+   AdminDashboardPage previously imported the shared non-admin DashboardPage.css
+   and consumed its `dash-*` (and `.dashboard-page`) namespace. To decouple the
+   two dashboards so future polish never ripples between them, the exact rules
+   AdminDashboardPage.tsx consumes are forked here under an `adash-*` namespace
+   (copied 1:1 from DashboardPage.css — no visual change intended). The shared
+   DashboardPage.css is NOT modified. The unused footer rules are not copied. */
+
+.adash-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--g50);
+  font-family: 'Prompt', 'Sarabun', sans-serif;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.adash-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  background: var(--white);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.adash-toolbar-title {
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.adash-toolbar-sub {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 1px;
+}
+
+.adash-toolbar-center {
+  flex: 1;
+}
+
+.adash-branch-select {
+  height: 32px;
+  padding: 0 30px 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.adash-branch-select:hover {
+  border-color: var(--p400, #7f77dd);
+}
+
+.adash-branch-select:focus {
+  border-color: var(--p600, #534ab7);
+  box-shadow: 0 0 0 3px rgba(83, 74, 183, 0.08);
+}
+
+.adash-period-tabs {
+  display: flex;
+  background: var(--g50);
+  border-radius: var(--radius-md);
+  padding: 3px;
+  gap: 2px;
+  border: 1px solid var(--border);
+}
+
+.adash-period-tab {
+  padding: 5px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-family: inherit;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.adash-period-tab.active {
+  background: var(--white);
+  color: var(--p600);
+  font-weight: 500;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.adash-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #1d9e75;
+  box-shadow: 0 0 0 2px rgba(29, 158, 117, 0.25);
+  animation: adash-pulse 2s infinite;
+}
+
+@keyframes adash-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 2px rgba(29, 158, 117, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(29, 158, 117, 0.1);
+  }
+}
+
+.adash-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.adash-loading {
+  padding: 48px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.adash-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 1100px) {
+  .adash-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.adash-kpi-card {
+  background: var(--white);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  padding: 16px 18px;
+  position: relative;
+  overflow: hidden;
+}
+
+.adash-kpi-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+.adash-kc-rev::before {
+  background: var(--p600);
+}
+.adash-kc-profit::before {
+  background: var(--success);
+}
+.adash-kc-orders::before {
+  background: var(--info);
+}
+.adash-kc-stock::before {
+  background: var(--warn);
+}
+
+.adash-kpi-icon-bg {
+  position: absolute;
+  right: 14px;
+  top: 14px;
+  font-size: 24px;
+  opacity: 0.1;
+}
+
+.adash-kc-rev .adash-kpi-icon-bg {
+  color: var(--p600);
+}
+.adash-kc-profit .adash-kpi-icon-bg {
+  color: var(--success);
+}
+.adash-kc-orders .adash-kpi-icon-bg {
+  color: var(--info);
+}
+.adash-kc-stock .adash-kpi-icon-bg {
+  color: var(--warn);
+}
+
+.adash-kpi-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.adash-kpi-num {
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1.2;
+  margin-bottom: 6px;
+}
+
+.adash-kc-rev .adash-kpi-num {
+  color: var(--p600);
+}
+.adash-kc-profit .adash-kpi-num {
+  color: var(--success);
+}
+.adash-kc-orders .adash-kpi-num {
+  color: var(--info);
+}
+.adash-kc-stock .adash-kpi-num {
+  color: var(--warn);
+}
+
+.adash-kpi-compare {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.adash-kpi-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 20px;
+}
+
+.adash-badge-up {
+  background: var(--success-bg);
+  color: var(--success);
+}
+.adash-badge-dn {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+.adash-badge-flat {
+  background: var(--g100);
+  color: var(--text-muted);
+}
+
+.adash-kpi-vs {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.adash-chart-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 14px;
+}
+
+@media (max-width: 1000px) {
+  .adash-chart-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.adash-chart-box {
+  background: var(--white);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  padding: 16px 18px;
+}
+
+.adash-chart-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.adash-chart-title {
+  font-size: 13px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.adash-chart-title i {
+  color: var(--p600);
+  font-size: 15px;
+}
+
+.adash-chart-legend {
+  display: flex;
+  gap: 12px;
+}
+
+.adash-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.adash-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.adash-chart-canvas-wrap {
+  position: relative;
+  height: 190px;
+}
+
+.adash-donut-wrap {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.adash-donut-canvas {
+  position: relative;
+  width: 140px;
+  height: 140px;
+  flex-shrink: 0;
+}
+
+.adash-donut-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  padding-top: 4px;
+  min-width: 0;
+}
+
+.adash-dl-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+}
+
+.adash-dl-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.adash-dl-lbl {
+  flex: 1;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adash-dl-val {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.adash-dl-pct {
+  font-size: 10px;
+  color: var(--text-muted);
+  min-width: 28px;
+  text-align: right;
+}
+
+.adash-pay-section {
+  background: var(--white);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  padding: 16px 18px;
+}
+
+.adash-pay-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin-top: 14px;
+  padding-bottom: 4px;
+}
+
+.adash-pay-scroll::-webkit-scrollbar {
+  height: 4px;
+}
+
+.adash-pay-grid {
+  display: flex;
+  gap: 10px;
+  min-width: max-content;
+}
+
+.adash-pay-card {
+  flex: 0 0 200px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.adash-pay-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.adash-pay-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.adash-pay-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.adash-pay-rev {
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.adash-pay-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+}
+
+.adash-pay-bills {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.adash-pay-pct-pill {
+  font-size: 10px;
+  padding: 1px 7px;
+  border-radius: 20px;
+  font-weight: 500;
+}
+
+.adash-pay-bar-bg {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--g100);
+  overflow: hidden;
+  margin-top: 8px;
+}
+
+.adash-pay-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.4s ease;
+}
+
+.adash-bottom-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 14px;
+}
+
+@media (max-width: 1100px) {
+  .adash-bottom-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.adash-table-card {
+  background: var(--white);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.adash-tc-head {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.adash-tc-head i {
+  color: var(--p600);
+  font-size: 15px;
+}
+
+.adash-badge-count {
+  margin-left: auto;
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 20px;
+  background: var(--p50);
+  color: var(--p600);
+}
+
+.adash-tc-body {
+  overflow-y: auto;
+  flex: 1;
+  max-height: 280px;
+}
+
+.adash-rank-ball {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.adash-rb-1 {
+  background: var(--p600);
+  color: #fff;
+}
+.adash-rb-2 {
+  background: var(--p500);
+  color: #fff;
+}
+.adash-rb-3 {
+  background: var(--p100);
+  color: var(--p600);
+}
+.adash-rb-n {
+  background: var(--g100);
+  color: var(--text-muted);
+}
+
+.adash-bar-inline {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--g100);
+  overflow: hidden;
+  margin-top: 3px;
+}
+
+.adash-bar-fill-p {
+  height: 100%;
+  background: var(--p600);
+  border-radius: 2px;
+}
+
+.adash-bar-fill-g {
+  height: 100%;
+  background: var(--success);
+  border-radius: 2px;
+}
+
+.adash-stock-num-low {
+  color: var(--warn);
+  font-weight: 500;
+}
+
+.adash-stock-num-crit {
+  color: var(--danger);
+  font-weight: 500;
+}
