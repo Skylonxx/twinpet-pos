@@ -342,6 +342,12 @@ export default function POSPage() {
   const handleSearchKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (e.key !== 'Enter') return;
+      // IME/composition guard (Phase 7C-D4-C-1): a Thai-IME Enter that commits an
+      // in-progress composition must not be treated as a barcode/SKU scan. Hardware
+      // scanners emit no composition events, so `isComposing`/keyCode 229 are always
+      // false for them — this synchronous early-return adds zero latency to scanning
+      // (no timers, no delay) and only suppresses the scan during an active composition.
+      if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
       const trimmed = search.trim();
       if (!trimmed) return;
 

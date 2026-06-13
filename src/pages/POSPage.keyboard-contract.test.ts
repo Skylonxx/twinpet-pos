@@ -83,13 +83,34 @@ describe('7C-D4-A · Scan match / miss contract (POSPage.tsx)', () => {
     expect(h).toMatch(/else \{\s*showToast\('ไม่พบสินค้านี้'\);\s*\}/);
   });
 
-  test('GAP (locked): scan input has NO IME/composition guard today', () => {
-    // Documented in D3-B as the sharpest real risk (Thai-IME Enter can fire a premature
-    // scan). This asserts the CURRENT absence so adding a guard under D4-C is intentional.
+  test('IME/composition guard is present and runs BEFORE the scan lookup (D4-C-1 fix)', () => {
+    // D4-C-1 intentional behavior fix: the prior D4-A "no IME guard" GAP is now closed.
+    // A Thai-IME Enter that commits composition must NOT trigger findByScanCode/addToCart.
     const h = region(posSource, 'const handleSearchKeyDown', 'const clearPosCart');
-    expect(h).not.toContain('isComposing');
-    expect(h).not.toContain('compositionstart');
-    expect(h).not.toContain('compositionend');
+    // Guard exists and checks composition state (isComposing and/or legacy keyCode 229).
+    expect(h).toMatch(/isComposing/);
+    expect(h).toMatch(/keyCode === 229/);
+    // The guard short-circuits with `return` before the scan lookup runs.
+    expect(h).toMatch(/if \(e\.nativeEvent\.isComposing \|\| e\.nativeEvent\.keyCode === 229\) return;/);
+    const guardIdx = h.indexOf('isComposing');
+    const scanIdx = h.indexOf('findByScanCode(products, trimmed)');
+    const trimIdx = h.indexOf('const trimmed = search.trim();');
+    expect(guardIdx).toBeGreaterThan(-1);
+    expect(scanIdx).toBeGreaterThan(-1);
+    // Guard precedes both the trim and the scan lookup, so composition Enter never scans.
+    expect(guardIdx).toBeLessThan(trimIdx);
+    expect(guardIdx).toBeLessThan(scanIdx);
+  });
+
+  test('IME guard introduces NO debounce / timer / delayed scan (scanner speed preserved)', () => {
+    // The fix must be a synchronous early-return only — no artificial latency on scanning.
+    const h = region(posSource, 'const handleSearchKeyDown', 'const clearPosCart');
+    expect(h).not.toContain('setTimeout');
+    expect(h).not.toContain('setInterval');
+    expect(h).not.toContain('requestAnimationFrame');
+    expect(h).not.toContain('debounce');
+    // Non-composing Enter still reaches the scan lookup unchanged.
+    expect(h).toContain('findByScanCode(products, trimmed)');
   });
 });
 

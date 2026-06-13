@@ -1,4 +1,4 @@
-# Current Task Tracker — Phase 7C-D4-C (Modal Focus & IME Fix Planning — READ-ONLY / AWAITING CODEX REVIEW)
+# Current Task Tracker — Phase 7C-D4-C-1 (POS IME / Composition Guard — IMPLEMENTATION / AWAITING CODEX REVIEW)
 
 > Living checkpoint doc for agents. Detailed history: `docs/reports/latest-report.md` (do not duplicate long-form evidence here).
 
@@ -10,15 +10,23 @@
 - **H6-E2-B** — Write Transfer Evidence Header at Completion — CLOSED / COMMITTED — `82d3352 feat(pos): write transfer reversal evidence header on completion`
 - **H6-E2-C** — Transfer Evidence Coordinator Validation — CLOSED / COMMITTED — `fe3ff44 feat(pos): validate transfer reversal header evidence`
 
-**Current clean baseline:** `74371db test(pos): add keyboard contract coverage` (7C-D4-A). **7C-C3, 7C-C4, 7C-D2, 7C-D3-A, 7C-D3-B, and 7C-D4-A are CLOSED / COMMITTED.** 7C-D4-C is a read-only planning slice on top of this baseline and NOT yet committed.
+**Current clean baseline:** `dc8a08b docs: add modal focus ime fix plan` (7C-D4-C). **7C-C3, 7C-C4, 7C-D2, 7C-D3-A, 7C-D3-B, 7C-D4-A, and 7C-D4-C are CLOSED / COMMITTED.** 7C-D4-C-1 is an implementation slice on top of this baseline and NOT yet committed.
 
-**Phase 7C-D4-C — Modal Focus & IME Fix Planning (Tech Lead / CEO authorized after D4-A commit) — READ-ONLY PLANNING / AWAITING CODEX REVIEW:**
+**Phase 7C-D4-C-1 — POS IME / Composition Guard (Tech Lead / CEO authorized after D4-C commit) — IMPLEMENTATION / AWAITING CODEX REVIEW:**
+
+First implementation slice off the D4-C plan. **Scope: the IME/composition guard ONLY.** Added a single synchronous early-return in `handleSearchKeyDown` (`src/pages/POSPage.tsx`): after the `Enter` check, `if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;` so a Thai-IME `Enter` that commits an in-progress composition no longer fires `findByScanCode`/`addToCart`/clear/miss-toast. **Scanner speed preserved** — hardware scanners emit no composition events, so the guard is always false for them; **no debounce, no timers, no delay, no new listener; `findByScanCode` algorithm unchanged.** Test `src/pages/POSPage.keyboard-contract.test.ts`: flipped the prior D4-A "no IME guard" CURRENT GAP into a present-and-ordered-before-scan assertion (checks `isComposing` + `keyCode === 229`, guard precedes trim/`findByScanCode`), plus a new "NO debounce/timer/delayed scan" assertion (`not.toContain` setTimeout/setInterval/requestAnimationFrame/debounce). All other contracts (scan match/miss, F12 parity, focus-return present + UOM/ItemDiscount/Numpad GAPS, PaymentModal Red path) left unchanged. Validation: targeted spec **23 passed**; `vitest run` **515 passed** (was 514; +1 net); `tsc -b` clean.
+
+**Forbidden boundaries honored (D4-C-1):** no CSS change; no `PaymentModal`/`NumpadDialog`/`components/pos/*`/`lib/*` change; no checkout/cart/payment/`confirmSale`/`submitAsyncOrder`/offline/IndexedDB/manual-review change; no Firebase rules/Functions; no H7-F/Android/Capacitor/`.claude/`; no F12-suppression / focus-return / Escape work (those are later slices); only `Task.md`, `Context.md`, `src/pages/POSPage.tsx`, and `src/pages/POSPage.keyboard-contract.test.ts` changed; `stash@{0}` untouched (read-only `git stash list` only).
+
+**Next step (D4-C-1):** Codex GPT-5.5 High review of the IME guard implementation before Tech Lead closure / commit. Do NOT mark D4-C-1 closed. Do NOT authorize D4-C-2 (focus-return) / D4-C-3 (F12) / D4-C-4 (Escape).
+
+**Phase 7C-D4-C — Modal Focus & IME Fix Planning — CLOSED / COMMITTED — `dc8a08b docs: add modal focus ime fix plan` (Tech Lead Option B — APPROVED WITH NOTES; Codex PASS WITH NOTES after two wording revisions):**
 
 Read-only technical blueprint for the four D3-B follow-up fixes — **no implementation, no runtime/keyboard/focus/test change.** Deliverable `docs/reports/phase-7c-d4-c-modal-focus-ime-fix-plan.md` plans: (1) **IME/composition guard** on `handleSearchKeyDown` (`isComposing`/`keyCode===229` to suppress Thai-IME premature scan; scanner-speed preserved because scanners emit no composition events); (2) **F12 modal suppression** (gate the global F12 listener on a "no POS modal open" predicate to stop PaymentModal stacking; keep `preventDefault` + open-gate parity); (3) **focus-return consistency** (route UOM / ItemDiscount / NumpadDialog / category-overlay closes through `focusSearch()`); (4) **Escape behavior matrix** per modal — corrects the record that Escape is NOT globally absent (CustomerPicker input-level Escape `:102–104`; DestructiveConfirm overlay-level Escape `!loading` `:88–93`), with the cross-cutting rule that Escape may only cancel/close and must NEVER confirm a Red action (Payment/Shift/Cash/Hold). Recommends ordered slices D4-C-1 (IME) → D4-C-2 (focus-return) → D4-C-3 (F12) → D4-C-4 (Escape), each tests-first + separately authorized + Codex-reviewed + keyboard-UAT. Verified current source (read-only): PaymentModal `pay-modal-bg` has NO backdrop dismissal (X-button only), correcting the D3-B prose.
 
 **Forbidden boundaries honored (D4-C):** no runtime POS source / keyboard / focus / handler / state / query change; no `POSPage.tsx`/`POSPage.css`/`PaymentModal`/`NumpadDialog`/`components/pos/*`/`lib/*` edit; no test edit (incl. `POSPage.keyboard-contract.test.ts`); no checkout/cart/payment/offline/IndexedDB/manual-review change; no Firebase rules/Functions; no H7-F/Android/Capacitor/`.claude/`; only `Task.md`, `Context.md`, and the new D4-C report changed; `stash@{0}` untouched (read-only `git stash list` only).
 
-**Next step (D4-C):** Codex GPT-5.5 High review of the D4-C planning report before Tech Lead closure or ANY D4-C implementation authorization. Do NOT mark D4-C closed; no implementation self-authorized.
+**D4-C next step (DONE):** Codex PASS WITH NOTES → Tech Lead Option B closure → committed `dc8a08b`. First slice D4-C-1 (IME guard) now in implementation (above).
 
 **Phase 7C-D4-A — POS Keyboard Contract Tests — CLOSED / COMMITTED — `74371db test(pos): add keyboard contract coverage` (Tech Lead Option B — APPROVED WITH NOTES; revised after Codex NEEDS REVISION, then Codex re-review PASS):**
 
