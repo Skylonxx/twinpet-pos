@@ -1,4 +1,4 @@
-# Current Task Tracker — Phase 7C-D3-A (POS Read-only Visual Shell Polish — IN PROGRESS / AWAITING CODEX REVIEW)
+# Current Task Tracker — Phase 7C-D3-B (POS Keyboard UX / Focus Audit — READ-ONLY / AWAITING CODEX REVIEW)
 
 > Living checkpoint doc for agents. Detailed history: `docs/reports/latest-report.md` (do not duplicate long-form evidence here).
 
@@ -10,15 +10,15 @@
 - **H6-E2-B** — Write Transfer Evidence Header at Completion — CLOSED / COMMITTED — `82d3352 feat(pos): write transfer reversal evidence header on completion`
 - **H6-E2-C** — Transfer Evidence Coordinator Validation — CLOSED / COMMITTED — `fe3ff44 feat(pos): validate transfer reversal header evidence`
 
-**Current clean baseline:** `ba850e8 docs: add pos cashier ux boundary audit` (7C-D2 audit). **7C-C3 (namespace isolation), 7C-C4 (admin card-elevation polish), and 7C-D2 (POS Cashier UX Boundary Audit) are CLOSED / COMMITTED.** 7C-D3-A is implemented on top of this baseline and NOT yet committed.
+**Current clean baseline:** `71d5dac style(pos): improve green-zone cashier readability` (7C-D3-A polish). **7C-C3, 7C-C4, 7C-D2, and 7C-D3-A (POS green-zone readability) are CLOSED / COMMITTED.** 7C-D3-B is a read-only audit on top of this baseline and NOT yet committed.
 
-**Phase 7C-D3-A — POS Read-only Visual Shell Polish / Green Zone Only (Tech Lead / CEO authorized) — IN PROGRESS / AWAITING CODEX REVIEW:**
+**Phase 7C-D3-B — POS Keyboard UX / Focus Audit (Tech Lead / CEO authorized after D3-A closure) — READ-ONLY / AWAITING CODEX REVIEW:**
 
-Narrow, presentation-only POS polish strictly within the D2 audit's Green Zone, **CSS-only in the page-exclusive `src/pages/POSPage.css`** (no TSX → no keyboard/focus/handler/DOM risk). Two objective readability fixes: (1) `.pos-cart-empty` body text was a border-tone gray (`--g200`, ~1.5:1 on white) → standard muted token `--g400` + 11px→12px (empty-only context); (2) `.pos-prod-stock` 9px→10px for at-a-glance stock legibility (price at 11px sets the bottom-row height → no tile/grid reflow). The intentional flat/dense product-grid aesthetic, all Yellow (focus/F12/Enter-scan/modal/disabled) and Red (checkout/cart/payment/offline/IndexedDB/manual-review) surfaces are untouched.
+Strictly read-only/test-only audit of POS keyboard & focus behavior — **no implementation, no behavior change.** Deliverable `docs/reports/phase-7c-d3-b-pos-keyboard-focus-audit.md` maps: focus bootstrap (search `autoFocus` + RAF `focusSearch`), the Enter-scan contract (`findByScanCode`), the single global **F12** listener (gated `cart>0 && activeShift`, active during modals → stacking risk), the absence of a global **Escape**, per-modal Enter/autoFocus (Numpad touch-only; Payment click-only; Shift/Hold/Cash have their own), inconsistent focus-return after UOM/Numpad/ItemDiscount close, and a **missing IME/composition guard** on the scan input (Thai-input premature-scan risk). Classifies surfaces Green (focus-ring/label CSS only), Yellow (focus/scan/F12/modal/parity), Red (keyboard-triggered checkout/cart/shift/offline). Recommends future slices D4-A (keyboard contract tests, test-only), D4-B (focus-ring/label CSS), D4-C (IME/focus-return/Escape/F12-during-modal — read-only planning, separate authorization required).
 
-**Forbidden boundaries honored:** no TSX/handler/state/query/keyboard/focus/disabled change; no checkout/cart/payment/offline/IndexedDB/manual-review/inventory-sync/billId change; no shared/global CSS (`index.css`/`variables.css`); no `SortingSettingsModal`/`ss-*`; no H7-F/write-path/Functions/rules; `stash@{0}` untouched (read-only `git stash list` only).
+**Forbidden boundaries honored:** no POS source / keyboard / focus / handler / state / query change; no checkout/cart/payment/offline/IndexedDB/manual-review change; no shared/global CSS; no `SortingSettingsModal`/`ss-*`; no H7-F/Functions/rules; no test files added (report-only); `stash@{0}` untouched (read-only `git stash list` only).
 
-**Next step:** Codex GPT-5.5 High review of the D3-A presentation-only package before Tech Lead closure/commit.
+**Next step:** Codex GPT-5.5 High review of the D3-B audit before Tech Lead closure / any interaction-level POS implementation authorization (D4-*).
 
 **Phase 7C-D2 — POS Cashier UX Boundary Audit (Tech Lead / CEO authorized Option B) — CLOSED / COMMITTED:**
 
