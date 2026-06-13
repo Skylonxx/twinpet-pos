@@ -186,20 +186,42 @@ describe('7C-D4-A · Focus-return contract (POSPage.tsx)', () => {
     expect(countOccurrences(confirm, 'focusSearch();')).toBe(2);
   });
 
-  test('CURRENT GAP (locked): the NumpadDialog (qty) path provides NO focus-return contract', () => {
-    // Documented in D3-B — not desired UX. Locked so a future fix under D4-C is deliberate.
+  test('focus returns after the NumpadDialog (qty) confirm AND close (D4-C-2 fix)', () => {
+    // D4-C-2 intentional fix: the prior D4-A "no focus-return" GAP for the qty numpad is
+    // now closed. Both the confirm (after a successful qty apply) and the close path
+    // restore focus to the scan box. NumpadDialog itself stays touch-only (not modified).
     const numpad = region(posSource, '<NumpadDialog', '<SortingSettingsModal');
-    expect(numpad).not.toContain('focusSearch');
+    expect(numpad).toContain('focusSearch();');
+    // confirm restores focus only after the line-qty mutation succeeds and the dialog clears
+    expect(numpad).toMatch(/setQtyNumpadLineKey\(null\);[\s\S]{0,40}focusSearch\(\)/);
   });
 
-  test('GAP (locked): no focus-return after the UOM modal closes', () => {
+  test('focus returns after the UOM modal select AND close (D4-C-2 fix)', () => {
+    // D4-C-2 intentional fix: both onSelect (add the unit) and onClose (cancel) return focus.
     const uom = region(posSource, '<UomModal', '<ItemDiscountModal');
-    expect(uom).not.toContain('focusSearch');
+    expect(countOccurrences(uom, 'focusSearch();')).toBe(2);
   });
 
-  test('GAP (locked): no focus-return after the Item Discount modal closes', () => {
+  test('focus returns after the Item Discount modal close/save (D4-C-2 fix)', () => {
+    // D4-C-2 intentional fix: the modal funnels both save and cancel through onClose, so a
+    // single focusSearch() in onClose covers both routes. Discount math is untouched.
     const disc = region(posSource, '<ItemDiscountModal', '<ProductPickerDialog');
-    expect(disc).not.toContain('focusSearch');
+    expect(disc).toContain('focusSearch();');
+    expect(disc).toMatch(/setDiscountLineKey\(null\);[\s\S]{0,40}focusSearch\(\)/);
+  });
+
+  test('focus returns after the category overlay closes (D4-C-2 fix)', () => {
+    // D4-C-2 intentional fix: all category-overlay close routes (backdrop, close button,
+    // "all" reset, category select) go through closeCatModal, which clears the modal and
+    // returns focus. Category filtering (setActiveCategory) is unchanged.
+    const helper = region(posSource, 'const closeCatModal', '}, [focusSearch]);');
+    expect(helper).toContain('setCatModalOpen(false);');
+    expect(helper).toContain('focusSearch();');
+    const overlay = region(posSource, 'className="pos-category-overlay"', 'pos-toast');
+    expect(overlay).toContain('closeCatModal');
+    // The category cells still drive the filter; closing no longer leaves a bare
+    // setCatModalOpen(false) un-refocused inside the overlay.
+    expect(overlay).not.toContain('setCatModalOpen(false)');
   });
 });
 

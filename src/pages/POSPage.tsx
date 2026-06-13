@@ -328,6 +328,14 @@ export default function POSPage() {
     window.requestAnimationFrame(() => searchInputRef.current?.focus());
   }, []);
 
+  // Focus-return consistency (Phase 7C-D4-C-2): every category-overlay close route funnels
+  // through here so focus returns to the scan box. Category filtering (setActiveCategory)
+  // stays at the call sites and is unchanged.
+  const closeCatModal = useCallback(() => {
+    setCatModalOpen(false);
+    focusSearch();
+  }, [focusSearch]);
+
   const onProductClick = useCallback(
     (product: PosProduct) => {
       if (product.uomOptions.length > 1) {
@@ -945,8 +953,12 @@ export default function POSPage() {
         onSelect={(opt) => {
           if (uomProduct) cart.addToCart(uomProduct, opt);
           setUomProduct(null);
+          focusSearch();
         }}
-        onClose={() => setUomProduct(null)}
+        onClose={() => {
+          setUomProduct(null);
+          focusSearch();
+        }}
       />
 
       <ItemDiscountModal
@@ -955,7 +967,10 @@ export default function POSPage() {
           if (!discountLineKey) return;
           cart.setLineDiscount(discountLineKey, type, val);
         }}
-        onClose={() => setDiscountLineKey(null)}
+        onClose={() => {
+          setDiscountLineKey(null);
+          focusSearch();
+        }}
       />
 
       <ProductPickerDialog
@@ -1054,7 +1069,7 @@ export default function POSPage() {
           className="pos-category-overlay"
           role="dialog"
           aria-modal="true"
-          onClick={() => setCatModalOpen(false)}
+          onClick={closeCatModal}
         >
           <div className="pos-category-modal" onClick={(e) => e.stopPropagation()}>
             <div className="pos-category-modal-hd">
@@ -1062,7 +1077,7 @@ export default function POSPage() {
               <button
                 type="button"
                 className="pos-category-close"
-                onClick={() => setCatModalOpen(false)}
+                onClick={closeCatModal}
               >
                 ปิด
               </button>
@@ -1082,7 +1097,7 @@ export default function POSPage() {
                   className={`pos-category-cell${!activeCategory ? ' active' : ''}`}
                   onClick={() => {
                     setActiveCategory('');
-                    setCatModalOpen(false);
+                    closeCatModal();
                   }}
                 >
                   ทั้งหมด
@@ -1099,7 +1114,7 @@ export default function POSPage() {
                     className={`pos-category-cell${activeCategory === cat.id ? ' active' : ''}`}
                     onClick={() => {
                       setActiveCategory(cat.id);
-                      setCatModalOpen(false);
+                      closeCatModal();
                     }}
                   >
                     {cat.name}
@@ -1114,10 +1129,14 @@ export default function POSPage() {
         open={qtyNumpadLineKey !== null}
         title={qtyNumpadLineKey ? cart.cart[qtyNumpadLineKey]?.productName : undefined}
         initialValue={qtyNumpadLineKey ? (cart.cart[qtyNumpadLineKey]?.qty ?? 1) : 1}
-        onClose={() => setQtyNumpadLineKey(null)}
+        onClose={() => {
+          setQtyNumpadLineKey(null);
+          focusSearch();
+        }}
         onConfirm={(qty) => {
           if (qtyNumpadLineKey && cart.setLineQty(qtyNumpadLineKey, qty)) {
             setQtyNumpadLineKey(null);
+            focusSearch();
           }
         }}
       />

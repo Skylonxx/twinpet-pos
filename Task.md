@@ -1,4 +1,4 @@
-# Current Task Tracker — Phase 7C-D4-C-1 (POS IME / Composition Guard — IMPLEMENTATION / AWAITING CODEX REVIEW)
+# Current Task Tracker — Phase 7C-D4-C-2 (POS Focus-return Consistency — IMPLEMENTATION / AWAITING CODEX REVIEW)
 
 > Living checkpoint doc for agents. Detailed history: `docs/reports/latest-report.md` (do not duplicate long-form evidence here).
 
@@ -10,15 +10,23 @@
 - **H6-E2-B** — Write Transfer Evidence Header at Completion — CLOSED / COMMITTED — `82d3352 feat(pos): write transfer reversal evidence header on completion`
 - **H6-E2-C** — Transfer Evidence Coordinator Validation — CLOSED / COMMITTED — `fe3ff44 feat(pos): validate transfer reversal header evidence`
 
-**Current clean baseline:** `dc8a08b docs: add modal focus ime fix plan` (7C-D4-C). **7C-C3, 7C-C4, 7C-D2, 7C-D3-A, 7C-D3-B, 7C-D4-A, and 7C-D4-C are CLOSED / COMMITTED.** 7C-D4-C-1 is an implementation slice on top of this baseline and NOT yet committed.
+**Current clean baseline:** `97a6bb2 fix(pos): guard scan input during IME composition` (7C-D4-C-1). **7C-C3, 7C-C4, 7C-D2, 7C-D3-A, 7C-D3-B, 7C-D4-A, 7C-D4-C, and 7C-D4-C-1 are CLOSED / COMMITTED.** 7C-D4-C-2 is an implementation slice on top of this baseline and NOT yet committed.
 
-**Phase 7C-D4-C-1 — POS IME / Composition Guard (Tech Lead / CEO authorized after D4-C commit) — IMPLEMENTATION / AWAITING CODEX REVIEW:**
+**Phase 7C-D4-C-2 — POS Focus-return Consistency (Tech Lead / CEO authorized after D4-C-1 commit) — IMPLEMENTATION / AWAITING CODEX REVIEW:**
+
+Second implementation slice off the D4-C plan. **Scope: focus-return consistency ONLY** — restore focus to `#pos-search` after the four audited focus-drop modals close. Tests updated FIRST (flipped the three D4-A `CURRENT GAP` locks + added a category test), then runtime. Changes in `src/pages/POSPage.tsx`, all via the existing `focusSearch()` helper: **UomModal** `onSelect` + `onClose` → `focusSearch()`; **ItemDiscountModal** `onClose` → `focusSearch()` (the modal funnels both save and cancel through `onClose`); **NumpadDialog** `onClose` + `onConfirm` (only after a successful `setLineQty`) → `focusSearch()`; **category overlay** — new `closeCatModal = () => { setCatModalOpen(false); focusSearch(); }` helper now backs all four close routes (backdrop, close button, "ทั้งหมด" reset, category select), with `setActiveCategory` left in place. **No cart/discount/UOM/quantity/category-filter calculation changed; NumpadDialog stays touch-only (component not modified); no hardware-key/Enter added; no F12/Escape/IME/scanner change; no PaymentModal/CSS change.** Validation: targeted spec **24 passed**; `vitest run` **516 passed** (was 515; +1); `tsc -b` clean.
+
+**Forbidden boundaries honored (D4-C-2):** no CSS change; no `PaymentModal`/`NumpadDialog`/`components/pos/*`/`lib/*` change; no checkout/cart/payment/`confirmSale`/`submitAsyncOrder`/offline/IndexedDB/manual-review change; no cart/discount/UOM/quantity formula change; no F12-listener or Escape change; no scanner/IME-guard change; no Firebase rules/Functions; no H7-F/Android/Capacitor/`.claude/`; only `Task.md`, `Context.md`, `src/pages/POSPage.tsx`, and `src/pages/POSPage.keyboard-contract.test.ts` changed; `stash@{0}` untouched (read-only `git stash list` only).
+
+**Next step (D4-C-2):** Codex GPT-5.5 High review of the focus-return implementation before Tech Lead closure / commit. Do NOT mark D4-C-2 closed. Do NOT authorize D4-C-3 (F12 suppression) / D4-C-4 (Escape).
+
+**Phase 7C-D4-C-1 — POS IME / Composition Guard — CLOSED / COMMITTED — `97a6bb2 fix(pos): guard scan input during IME composition` (Tech Lead Option B — APPROVED WITH NOTES; Codex PASS WITH NOTES):**
 
 First implementation slice off the D4-C plan. **Scope: the IME/composition guard ONLY.** Added a single synchronous early-return in `handleSearchKeyDown` (`src/pages/POSPage.tsx`): after the `Enter` check, `if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;` so a Thai-IME `Enter` that commits an in-progress composition no longer fires `findByScanCode`/`addToCart`/clear/miss-toast. **Scanner speed preserved** — hardware scanners emit no composition events, so the guard is always false for them; **no debounce, no timers, no delay, no new listener; `findByScanCode` algorithm unchanged.** Test `src/pages/POSPage.keyboard-contract.test.ts`: flipped the prior D4-A "no IME guard" CURRENT GAP into a present-and-ordered-before-scan assertion (checks `isComposing` + `keyCode === 229`, guard precedes trim/`findByScanCode`), plus a new "NO debounce/timer/delayed scan" assertion (`not.toContain` setTimeout/setInterval/requestAnimationFrame/debounce). All other contracts (scan match/miss, F12 parity, focus-return present + UOM/ItemDiscount/Numpad GAPS, PaymentModal Red path) left unchanged. Validation: targeted spec **23 passed**; `vitest run` **515 passed** (was 514; +1 net); `tsc -b` clean.
 
 **Forbidden boundaries honored (D4-C-1):** no CSS change; no `PaymentModal`/`NumpadDialog`/`components/pos/*`/`lib/*` change; no checkout/cart/payment/`confirmSale`/`submitAsyncOrder`/offline/IndexedDB/manual-review change; no Firebase rules/Functions; no H7-F/Android/Capacitor/`.claude/`; no F12-suppression / focus-return / Escape work (those are later slices); only `Task.md`, `Context.md`, `src/pages/POSPage.tsx`, and `src/pages/POSPage.keyboard-contract.test.ts` changed; `stash@{0}` untouched (read-only `git stash list` only).
 
-**Next step (D4-C-1):** Codex GPT-5.5 High review of the IME guard implementation before Tech Lead closure / commit. Do NOT mark D4-C-1 closed. Do NOT authorize D4-C-2 (focus-return) / D4-C-3 (F12) / D4-C-4 (Escape).
+**D4-C-1 next step (DONE):** Codex PASS WITH NOTES → Tech Lead Option B closure → committed `97a6bb2`. Second slice D4-C-2 (focus-return) now in implementation (above).
 
 **Phase 7C-D4-C — Modal Focus & IME Fix Planning — CLOSED / COMMITTED — `dc8a08b docs: add modal focus ime fix plan` (Tech Lead Option B — APPROVED WITH NOTES; Codex PASS WITH NOTES after two wording revisions):**
 
