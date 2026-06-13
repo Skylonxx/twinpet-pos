@@ -20,6 +20,8 @@ import type {
   InventoryTransfer,
   InventoryTransferItem,
 } from '../../lib/inventory/transferTypes';
+import { createIndexedDbReversalStore } from '../../lib/pos/offline/reversalLocalStore';
+import { recordEvidenceRejection } from '../../lib/pos/offline/recordEvidenceRejection';
 import TransferDetailModal, {
   TransferStatusBadge,
 } from '../../components/inventory/TransferDetailModal';
@@ -52,6 +54,10 @@ function todayIso(): string {
 export default function AdminTransferPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+
+  // Phase 7B-H7-F: one device-local store instance for best-effort durable rejection
+  // logging (forensic only — see recordEvidenceRejection). Constructed once per mount.
+  const rejectionLogStore = useMemo(() => createIndexedDbReversalStore(), []);
 
   const [records, setRecords] = useState<InventoryTransfer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -182,7 +188,23 @@ export default function AdminTransferPage() {
         // structured code — surface the friendly Thai reason with the raw code as
         // secondary detail. Non-evidence errors keep the existing generic fallback.
         if (err instanceof TransferReversalEvidenceError) {
-          setToast(`${getTransferReversalEvidenceMessage(err.code)} (รหัส: ${err.code})`);
+          const evidenceMessage = getTransferReversalEvidenceMessage(err.code);
+          const message = `${evidenceMessage} (รหัส: ${err.code})`;
+          setToast(message);
+          // Phase 7B-H7-F: best-effort durable forensic log of the fail-closed rejection.
+          // Dispatched AFTER the operator toast is set; synchronous, returns void, and
+          // fully guarded — it cannot block, delay, or alter the toast/busy-cleanup UX.
+          // Origin branch (`fromBranchId`) is the record's branch context; non-evidence
+          // errors below are NOT logged.
+          recordEvidenceRejection(rejectionLogStore, {
+            sourceType: 'transfer',
+            sourceId: cancelTarget.id,
+            branchId: cancelTarget.fromBranchId,
+            evidenceCode: err.code,
+            evidenceMessage,
+            staffId: user.id,
+            observedDocumentUpdatedAt: toObservedDocumentUpdatedAtIso(cancelTarget.updatedAt),
+          });
         } else {
           setToast(err instanceof Error ? err.message : 'ยกเลิกไม่สำเร็จ');
         }
@@ -190,7 +212,7 @@ export default function AdminTransferPage() {
         setBusy(false);
       }
     },
-    [cancelTarget, user, closeDetail, load],
+    [cancelTarget, user, closeDetail, load, rejectionLogStore],
   );
 
   const handleEditSave = useCallback(

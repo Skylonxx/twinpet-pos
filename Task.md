@@ -1,4 +1,4 @@
-# Current Task Tracker — Phase 7B-H7-E (Receiving-only Catch-site Integration — CLOSED)
+# Current Task Tracker — Phase 7B-H7-F (Transfer Pair Catch-site Integration — IMPLEMENTED / AWAITING CODEX REVIEW)
 
 > Living checkpoint doc for agents. Detailed history: `docs/reports/latest-report.md` (do not duplicate long-form evidence here).
 
@@ -10,7 +10,7 @@
 - **H6-E2-B** — Write Transfer Evidence Header at Completion — CLOSED / COMMITTED — `82d3352 feat(pos): write transfer reversal evidence header on completion`
 - **H6-E2-C** — Transfer Evidence Coordinator Validation — CLOSED / COMMITTED — `fe3ff44 feat(pos): validate transfer reversal header evidence`
 
-**Current clean baseline:** `ad1ff61 feat(pos): log receiving reversal evidence rejections`
+**Current clean baseline:** `97f33e1 docs: sync receiving rejection logging tracker after closure` (H7-E impl `ad1ff61` directly below).
 
 **H6-F1** — Transfer Reversal Evidence Rejection Visibility — CLOSED / COMMITTED — `3a3d202 feat(pos): surface transfer reversal evidence rejection reasons`
 **H6-G1** — Receiving Evidence Rejection Visibility & Void Error Handling — CLOSED / COMMITTED — `e80b2a3 feat(pos): surface receiving reversal evidence rejection reasons`
@@ -19,12 +19,63 @@
 **H7-C** — Durable Rejection Log Store Wiring — CLOSED / COMMITTED — `76b7451 feat(pos): add latent durable reversal rejection log store`
 **H7-D** — Catch-site Integration Design Audit (read-only design artifact; receiving-first recommended). No code/doc changes.
 **H7-E** — Receiving-only Catch-site Integration — CLOSED / COMMITTED — `ad1ff61 feat(pos): log receiving reversal evidence rejections`
+**H7-F** — Transfer Pair Catch-site Integration — **IMPLEMENTED / AWAITING CODEX REVIEW** (not committed; not closed).
 
-**Transfer and Receiving fail-closed visibility paths are both closed.** H7-E activates the durable rejection log for **Receiving only**: the `ReceivingReversalEvidenceError` branch now builds the H7-A record and best-effort fire-and-forgets the H7-C log via the new `recordEvidenceRejection` bridge — receiving operator message + throw-to-banner behavior unchanged. No transfer-page integration, no UI/Ops surfacing, no server/rules/validation/offline-schema change.
+**Transfer and Receiving fail-closed visibility paths are both closed.** H7-E activated the durable rejection log for Receiving; **H7-F (pending review) extends it to BOTH transfer surfaces** — `TransferHistoryPage` and `AdminTransferPage` now build the H7-A record and best-effort fire-and-forget the H7-C log via `recordEvidenceRejection` in their `TransferReversalEvidenceError` branch only, AFTER the existing `setToast(message)` and without altering the `finally { setBusy(false) }` cleanup. No `ReceivingEditPage` change, no helper/model/log/store/schema change, no UI/Ops surfacing, no server/rules/validation/write-path change.
 
 **`stash@{0}` remains present and untouched.**
 
-**Next step:** read-only strategic planning for Transfer catch-site integration.
+**Next step:** Codex GPT-5.5 High review of H7-F, then Tech Lead closure/commit authorization. H7-F is NOT closed until both approve.
+
+---
+
+## Phase 7B-H7-F — Transfer Pair Catch-site Integration
+
+**Status:** IMPLEMENTED — AWAITING CODEX GPT-5.5 HIGH REVIEW (not committed; not closed).
+**Authorization:** Gemini / Tech Lead / CEO — Option A APPROVED (Transfer pair together; Claude Opus 4.8 / High).
+**Goal:** Wire BOTH transfer fail-closed evidence rejection catch sites to the durable local rejection log, reusing the proven H7-E `recordEvidenceRejection` helper. The current `setToast` operator feedback and `busy`-cleanup behavior are unchanged.
+
+### What was delivered
+
+- `src/pages/inventory/TransferHistoryPage.tsx` (MOD) — imports `createIndexedDbReversalStore` + `recordEvidenceRejection`; one `const rejectionLogStore = useMemo(() => createIndexedDbReversalStore(), [])`; in `handleCancel`'s `TransferReversalEvidenceError` branch only, computes `evidenceMessage`/`message` (toast text unchanged), `setToast(message)`, then dispatches un-awaited `recordEvidenceRejection(rejectionLogStore, { sourceType:'transfer', sourceId: cancelTarget.id, branchId: cancelTarget.fromBranchId, evidenceCode: err.code, evidenceMessage, staffId: user.id, observedDocumentUpdatedAt: toObservedDocumentUpdatedAtIso(cancelTarget.updatedAt) })`; `rejectionLogStore` added to the `useCallback` deps. Non-evidence `else` branch and `finally { setBusy(false) }` unchanged.
+- `src/pages/admin/AdminTransferPage.tsx` (MOD) — identical wiring in its `handleCancel` `TransferReversalEvidenceError` branch; `rejectionLogStore` added to that `useCallback`'s deps. `editBranchTransfer` catch untouched.
+- `src/lib/pos/offline/recordEvidenceRejection.test.ts` (MOD, +12 tests → 25 total) — `H7-F: simulated transfer caller path` (toast still set to the original message when logging fails; never throws) + parametric `describeTransferCatchSiteSource` source-level `?raw` assertions for BOTH pages (one memoized store; `recordEvidenceRejection(` called exactly once ⇒ non-evidence branch does not log; `sourceType: 'transfer'`; `branchId: cancelTarget.fromBranchId`; not awaited; `setToast(message)` preserved).
+
+### Execution order (enforced, both pages)
+
+Detect `TransferReversalEvidenceError` → compute operator message → `setToast(message)` → dispatch fire-and-forget log → existing `finally { setBusy(false) }` runs unchanged. The helper is synchronous/void/fully-guarded, so it cannot block, delay, swallow, or alter the toast/busy-cleanup behavior. Non-evidence errors are NOT logged.
+
+### Field mapping (identical both pages)
+
+`sourceType:'transfer'`, `sourceId: cancelTarget.id`, `branchId: cancelTarget.fromBranchId` (transfer ORIGIN — not the auth branch; identical on both surfaces), `evidenceCode: err.code`, `evidenceMessage` (the already-computed friendly toast message), `staffId: user.id`, `observedDocumentUpdatedAt: toObservedDocumentUpdatedAtIso(cancelTarget.updatedAt)`. `evidenceSource` omitted (unresolved at the catch site).
+
+### What is NOT in this slice
+
+No `ReceivingEditPage.tsx` change; no helper/model/log/store/schema change (`recordEvidenceRejection.ts`/`reversalRejectionRecord.ts`/`reversalRejectionLog.ts`/`reversalLocalStore.ts` untouched; no `DB_VERSION` bump); no Admin/Ops surfacing; no Manual Review Ops UI; no server resolver/Firestore-rules change; no validation/fail-closed/thrown-error change; no F1/G1/transfer evidence message-text change; no transfer/receiving write-path change.
+
+### Files changed (code)
+
+```
+src/pages/inventory/TransferHistoryPage.tsx          (MOD — useMemo store + 1 helper call in the evidence-error branch)
+src/pages/admin/AdminTransferPage.tsx                (MOD — useMemo store + 1 helper call in the evidence-error branch)
+src/lib/pos/offline/recordEvidenceRejection.test.ts  (MOD — +12 H7-F tests; 25 file total)
+```
+
+### Evidence
+
+- `npx vitest run recordEvidenceRejection` → **25 passed** (13 H7-E + 12 H7-F)
+- `npx vitest run reversalRejectionRecord reversalRejectionLog reversalLocalStore offlineReversalQueue manualReviewOps` → **80 passed** (regression green)
+- Full web `npx vitest run` → **478 passed** (29 files); `npx tsc -b` → clean
+- `npm --prefix functions run test:unit -- resolveReversal` → **43 passed** (server UNCHANGED)
+- `git diff --check` clean (benign CRLF only); forbidden-area diff EMPTY (`ReceivingEditPage`, helper/model/log/store, server resolver, Firestore rules, transfer write-path); `stash@{0}` untouched.
+
+### Hidden risk
+
+Unlike Receiving (which re-throws), both Transfer catch sites surface the rejection via `setToast(...)` and continue into `finally { setBusy(false) }`; logging stays an un-awaited, fully-guarded side effect inside the `TransferReversalEvidenceError` branch only — placing it elsewhere, awaiting it, logging the non-evidence branch, or using the auth branch id instead of `cancelTarget.fromBranchId` could corrupt forensic records or subtly alter operator feedback.
+
+### Closure
+
+H7-F is **not closed** until Codex GPT-5.5 High review and Tech Lead approval. No commit made.
 
 ---
 

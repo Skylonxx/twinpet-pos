@@ -168,3 +168,95 @@ describe('H7-E: ReceivingEditPage.tsx evidence-error branch (source-level)', () 
     expect(source).toMatch(/\n\s*throw err;/);
   });
 });
+
+describe('H7-F: simulated transfer caller path', () => {
+  // Mirrors TransferHistoryPage/AdminTransferPage handleCancel's evidence-error branch —
+  // the message is computed first, the toast is SET, then the helper is dispatched. Unlike
+  // receiving, the transfer path surfaces via setToast and does NOT re-throw. NOT a mount.
+  function simulatedTransferCatch(store: ReversalLocalStore, code: string): string {
+    const evidenceMessage = `friendly(${code})`;
+    const message = `${evidenceMessage} (รหัส: ${code})`;
+    let toast = '';
+    const setToast = (m: string) => {
+      toast = m;
+    };
+    setToast(message);
+    recordEvidenceRejection(store, {
+      sourceType: 'transfer',
+      sourceId: 'TR-1001',
+      branchId: 'branch-origin',
+      evidenceCode: code,
+      evidenceMessage,
+      staffId: 'mgr-2',
+      observedDocumentUpdatedAt: '2026-06-12T08:45:00.000Z',
+    });
+    return toast;
+  }
+
+  it('still sets the original toast message when logging fails', () => {
+    expect(simulatedTransferCatch(alwaysFailingStore(), 'header_total_qty_mismatch')).toBe(
+      'friendly(header_total_qty_mismatch) (รหัส: header_total_qty_mismatch)',
+    );
+  });
+
+  it('does not throw out of the transfer catch path when logging fails', () => {
+    expect(() =>
+      simulatedTransferCatch(alwaysFailingStore(), 'header_total_qty_mismatch'),
+    ).not.toThrow();
+  });
+});
+
+// ─── Source-level assertions for the two transfer catch sites (H7-F) ───────────
+// (Page components carry a heavy Firebase/router/auth/modal harness — proven by source
+// inspection rather than mounting, per the H6-D2 / H7-E precedent. Each page is loaded
+// via a static `?raw` import so Vite can resolve it.)
+function countOccurrences(haystack: string, needle: string): number {
+  return haystack.split(needle).length - 1;
+}
+
+function describeTransferCatchSiteSource(
+  label: string,
+  loadSource: () => Promise<{ default: string }>,
+) {
+  describe(`H7-F: ${label} evidence-error branch (source-level)`, () => {
+    let source: string;
+    beforeEach(async () => {
+      source = (await loadSource()).default;
+    });
+    afterEach(() => {
+      source = '';
+    });
+
+    it('constructs one memoized rejection-log store', () => {
+      expect(source).toMatch(/useMemo\(\(\)\s*=>\s*createIndexedDbReversalStore\(\)\s*,\s*\[\]\)/);
+    });
+
+    it('calls recordEvidenceRejection exactly once, in the transfer evidence-error branch', () => {
+      // Exactly one call site (the import line has no `(`) ⇒ the non-evidence else branch
+      // does NOT log.
+      expect(countOccurrences(source, 'recordEvidenceRejection(')).toBe(1);
+      expect(source).toContain("sourceType: 'transfer'");
+    });
+
+    it('uses the transfer origin branch (cancelTarget.fromBranchId) as the record branch', () => {
+      expect(source).toContain('branchId: cancelTarget.fromBranchId');
+    });
+
+    it('does not await the log call', () => {
+      expect(source).not.toMatch(/await\s+recordEvidenceRejection\(/);
+    });
+
+    it('still sets the existing operator toast in the evidence branch', () => {
+      expect(source).toContain('setToast(message)');
+    });
+  });
+}
+
+describeTransferCatchSiteSource(
+  'TransferHistoryPage.tsx',
+  () => import('../../../pages/inventory/TransferHistoryPage.tsx?raw'),
+);
+describeTransferCatchSiteSource(
+  'AdminTransferPage.tsx',
+  () => import('../../../pages/admin/AdminTransferPage.tsx?raw'),
+);

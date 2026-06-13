@@ -18,6 +18,8 @@ import type {
   InventoryTransfer,
   InventoryTransferItem,
 } from '../../lib/inventory/transferTypes';
+import { createIndexedDbReversalStore } from '../../lib/pos/offline/reversalLocalStore';
+import { recordEvidenceRejection } from '../../lib/pos/offline/recordEvidenceRejection';
 import TransferDetailModal, {
   TransferStatusBadge,
 } from '../../components/inventory/TransferDetailModal';
@@ -61,6 +63,10 @@ export default function TransferHistoryPage({ onCreateNew, onBack }: Props = {})
   const goBack = onBack ?? (() => navigate('/inventory'));
   const goCreate = onCreateNew ?? (() => navigate('/inventory/transfer'));
   const { transfers, loading, reload } = useInventoryTransfers(branchId);
+
+  // Phase 7B-H7-F: one device-local store instance for best-effort durable rejection
+  // logging (forensic only — see recordEvidenceRejection). Constructed once per mount.
+  const rejectionLogStore = useMemo(() => createIndexedDbReversalStore(), []);
 
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [search, setSearch] = useState('');
@@ -164,7 +170,23 @@ export default function TransferHistoryPage({ onCreateNew, onBack }: Props = {})
         // structured code — surface the friendly Thai reason with the raw code as
         // secondary detail. Non-evidence errors keep the existing generic fallback.
         if (err instanceof TransferReversalEvidenceError) {
-          setToast(`${getTransferReversalEvidenceMessage(err.code)} (รหัส: ${err.code})`);
+          const evidenceMessage = getTransferReversalEvidenceMessage(err.code);
+          const message = `${evidenceMessage} (รหัส: ${err.code})`;
+          setToast(message);
+          // Phase 7B-H7-F: best-effort durable forensic log of the fail-closed rejection.
+          // Dispatched AFTER the operator toast is set; synchronous, returns void, and
+          // fully guarded — it cannot block, delay, or alter the toast/busy-cleanup UX.
+          // Origin branch (`fromBranchId`) is the record's branch context; non-evidence
+          // errors below are NOT logged.
+          recordEvidenceRejection(rejectionLogStore, {
+            sourceType: 'transfer',
+            sourceId: cancelTarget.id,
+            branchId: cancelTarget.fromBranchId,
+            evidenceCode: err.code,
+            evidenceMessage,
+            staffId: user.id,
+            observedDocumentUpdatedAt: toObservedDocumentUpdatedAtIso(cancelTarget.updatedAt),
+          });
         } else {
           setToast(err instanceof Error ? err.message : 'ยกเลิกไม่สำเร็จ');
         }
@@ -172,7 +194,7 @@ export default function TransferHistoryPage({ onCreateNew, onBack }: Props = {})
         setBusy(false);
       }
     },
-    [cancelTarget, user, branchId, closeDetail, reload],
+    [cancelTarget, user, branchId, closeDetail, reload, rejectionLogStore],
   );
 
   const branchLabel = useCallback((id: string) => getBranchLabel(id), []);

@@ -117,9 +117,11 @@ Phase 7B delivers a complete offline reversal lifecycle for Goods-Receiving and 
 
 - **7B-H7-E** — Receiving-only Catch-site Integration (CLOSED / COMMITTED — `ad1ff61`): the FIRST production caller of the durable rejection log. New bridge `src/lib/pos/offline/recordEvidenceRejection.ts` — `recordEvidenceRejection(store, input): void`, builds via the H7-A builder and fire-and-forgets `recordReversalRejection`; **both build and dispatch are guarded and it never throws** (no unhandled rejection); `evidenceSource` omitted. `ReceivingEditPage.handleVoid`'s `ReceivingReversalEvidenceError` branch constructs one `useMemo(() => createIndexedDbReversalStore(), [])` and, AFTER computing the operator message and BEFORE the re-throw, dispatches the log — **receiving operator message + throw-to-banner behavior unchanged**. **The durable rejection log is now active for Receiving only.** No transfer-page integration, no Admin/Ops surfacing, no offline-schema/server/rules/validation/write-path change. Transfer catch-site integration remains a future separately-authorized slice.
 
-**Current clean baseline:** `ad1ff61 feat(pos): log receiving reversal evidence rejections`
+- **7B-H7-F** — Transfer Pair Catch-site Integration (**IMPLEMENTED / AWAITING CODEX REVIEW** — not committed): reuses the proven H7-E `recordEvidenceRejection` bridge for the SECOND + THIRD production callers. `TransferHistoryPage.tsx` and `AdminTransferPage.tsx` each construct one `useMemo(() => createIndexedDbReversalStore(), [])` and, in `handleCancel`'s `TransferReversalEvidenceError` branch only, compute the existing operator message, `setToast(message)` exactly as before, then dispatch the un-awaited, fully-guarded log with `sourceType:'transfer'`, `sourceId: cancelTarget.id`, `branchId: cancelTarget.fromBranchId` (transfer origin — not the auth branch), `evidenceCode: err.code`, `evidenceMessage`, `staffId: user.id`, `observedDocumentUpdatedAt`; `evidenceSource` omitted. The `finally { setBusy(false) }` cleanup is unchanged and the non-evidence `else` branch is NOT logged. **The durable rejection log now covers Receiving + both Transfer surfaces (pending review/commit).** No `ReceivingEditPage` change, no helper/model/log/store/schema change, no Admin/Ops surfacing, no server/rules/validation/write-path change. **Not closed until Codex GPT-5.5 High + Tech Lead approval.**
 
-**Next step:** read-only strategic planning for Transfer catch-site integration.
+**Current clean baseline:** `97f33e1 docs: sync receiving rejection logging tracker after closure` (H7-E impl `ad1ff61` directly below).
+
+**Next step:** Codex GPT-5.5 High review of H7-F, then Tech Lead closure/commit authorization.
 
 ### H6 Transfer State Model — Architecture Decision (CEO Option A)
 
