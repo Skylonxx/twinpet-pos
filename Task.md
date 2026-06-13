@@ -1,4 +1,4 @@
-# Current Task Tracker — Phase 7C-A + 7C-D1 (Regression Stabilization + Operator Runbook — IMPLEMENTED / AWAITING CODEX REVIEW)
+# Current Task Tracker — Phase 7C-A + 7C-D1 (Regression Stabilization + Operator Runbook — CLOSED / COMMITTED)
 
 > Living checkpoint doc for agents. Detailed history: `docs/reports/latest-report.md` (do not duplicate long-form evidence here).
 
@@ -10,7 +10,7 @@
 - **H6-E2-B** — Write Transfer Evidence Header at Completion — CLOSED / COMMITTED — `82d3352 feat(pos): write transfer reversal evidence header on completion`
 - **H6-E2-C** — Transfer Evidence Coordinator Validation — CLOSED / COMMITTED — `fe3ff44 feat(pos): validate transfer reversal header evidence`
 
-**Current clean baseline:** `86a628e feat(pos): add read-only manual review ops durable rejection panel` (H7-G impl; H7-F doc-sync `5061111` directly below).
+**Current clean baseline:** `9ad2c51 test(pos): stabilize durable rejection tests and add operator runbook` (7C-A + 7C-D1 impl; H7-G impl `86a628e` below).
 
 **H6-F1** — Transfer Reversal Evidence Rejection Visibility — CLOSED / COMMITTED — `3a3d202 feat(pos): surface transfer reversal evidence rejection reasons`
 **H6-G1** — Receiving Evidence Rejection Visibility & Void Error Handling — CLOSED / COMMITTED — `e80b2a3 feat(pos): surface receiving reversal evidence rejection reasons`
@@ -29,25 +29,27 @@
 2. Transfer capture — H7-F (`872575a`)
 3. Admin/Ops local read-only surfacing — H7-G (`86a628e`)
 
-**H7-G is visibility-only:** NO resolve/delete/retry/sync/export/queue/stock/server action button is added (`<Button` count unchanged at 3 = queue resolve + 2 modal); `recordId` used only as internal React row key (not displayed); no write API (`recordEvidenceRejection`/`recordReversalRejection`) is introduced into the page. The existing manual-review queue load/resolve/toast/gate/route behavior is unchanged. **No catch-site change; no helper/model/log/store/schema change (no `DB_VERSION` bump); no server/rules change; no validation/fail-closed change; no transfer/receiving write-path change; no new route/nav; no separate Admin page; no server-sync/central-audit architecture.**
+**H7-G is visibility-only:** NO resolve/delete/retry/sync/export/queue/stock/server action button is added; `recordId` used only as internal React row key (not displayed); no write API introduced. Existing manual-review queue behavior unchanged. No catch-site/helper/model/log/store/schema/server/rules/write-path change.
 
 **`stash@{0}` remains present and untouched.**
 
-**Phase 7C (Stabilization & UI Polish) — opened with a test/docs-only slice:**
+**Phase 7C (Stabilization & UI Polish) — 7C-A + 7C-D1 CLOSED / COMMITTED:**
 
-**7C-A** — Regression Stabilization Pass — **IMPLEMENTED / AWAITING CODEX REVIEW (NOT COMMITTED, NOT CLOSED)**
-**7C-D1** — Operator Runbook for Durable Rejection Panel — **IMPLEMENTED / AWAITING CODEX REVIEW (NOT COMMITTED, NOT CLOSED)**
+**7C-A** — Regression Stabilization Pass — **CLOSED / COMMITTED** — `9ad2c51 test(pos): stabilize durable rejection tests and add operator runbook`
+**7C-D1** — Operator Runbook for Durable Rejection Panel — **CLOSED / COMMITTED** — `9ad2c51 test(pos): stabilize durable rejection tests and add operator runbook`
 
-7C-A de-brittled the H7-G source-level assertions in `src/lib/pos/offline/manualReviewOps.test.ts` (no production code touched) and 7C-D1 added a plain-Thai operator runbook. **No production behavior changed, no UI behavior/layout/polish change, no POS cashier UX work, no source/write-path/schema/server/rules change, no `ManualReviewOpsPage.tsx` production diff.** Codex GPT-5.5 High review required before closure.
+7C-A de-brittled the H7-G source-level assertions (no production code touched); 7C-D1 added a plain-Thai operator runbook (`docs/operator-runbook-durable-rejection-panel.md`). **No production behavior changed, no UI behavior/layout/polish change, no POS cashier UX work, no source/write-path/schema/server/rules change.** Codex: PASS WITH NOTES (accepted: remaining source-level tests rely on stable semantic markers; materially better than exact whole-page button counts; CRLF warnings accepted; zero production code mutated). 492 web tests (29 files); `tsc -b` clean; forbidden diff EMPTY.
 
-**Next step:** Codex GPT-5.5 High review of 7C-A + 7C-D1; not closed until Codex + Tech Lead approval, then doc-sync/commit. UI polish and POS cashier UX remain future separately-authorized slices.
+**Baseline is hardened for visual/UI polish planning.** No POS cashier UX work has started. No UI polish implementation has started.
+
+**Next step:** Readiness status / planning for visual/UI polish slices — (A) Manual Review Ops UI polish; (C) Admin/Inventory visual consistency; (B) POS cashier UX polish as a separately authorized, write-path-bounded effort. No UI polish implementation without separate authorization.
 
 ---
 
 ## Phase 7C-A — Regression Stabilization Pass (+ 7C-D1 Operator Runbook)
 
-**Status:** IMPLEMENTED / AWAITING CODEX REVIEW — NOT COMMITTED, NOT CLOSED.
-**Authorization:** Gemini / Tech Lead / CEO — Option B APPROVED (bundled 7C-A + 7C-D1; test/docs-only stabilization, no production behavior change).
+**Status:** CLOSED / COMMITTED — `9ad2c51 test(pos): stabilize durable rejection tests and add operator runbook`
+**Authorization:** Gemini / Tech Lead / CEO — Option B APPROVED (bundled 7C-A + 7C-D1; test/docs-only stabilization, no production behavior change). Codex: PASS WITH NOTES.
 **Goal:** Harden the H7 source-level tests against brittle/formatting-sensitive assertions (preserving or strengthening safety coverage), document/guard the in-memory-store concurrent-write ordering artifact, and add an operator-facing runbook for the durable rejection panel.
 
 ### What was delivered
@@ -69,9 +71,19 @@ No production source change (`ManualReviewOpsPage.tsx` and all offline/runtime/s
 - Full web `npx vitest run` → **492 passed (29 files)** (was 489; +3); `npx tsc -b` → clean; `functions resolveReversal` → 43 passed (server unchanged).
 - `git diff --check` clean; forbidden-area diff EMPTY (incl. `ManualReviewOpsPage.tsx`); `git diff --stat` = 1 modified test file + 1 new docs file; `stash@{0}` present and untouched.
 
-### Not closed
+### Closure
 
-7C-A + 7C-D1 are NOT closed until Codex GPT-5.5 High + Tech Lead approval. No commit made.
+7C-A + 7C-D1 are **CLOSED / COMMITTED** — `9ad2c51 test(pos): stabilize durable rejection tests and add operator runbook`. Codex: PASS WITH NOTES. Accepted notes: remaining source-level tests still rely on stable semantic markers (acceptable; materially better than exact whole-page button counts); CRLF warnings accepted; zero production code mutated.
+
+### Final test evidence
+
+```
+npx.cmd vitest run manualReviewOps → PASS, 24 tests
+npx.cmd vitest run → PASS, 492 tests / 29 files
+npx.cmd tsc -b → PASS
+Forbidden diff → EMPTY (incl. ManualReviewOpsPage.tsx)
+stash@{0} → present and untouched
+```
 
 ---
 
