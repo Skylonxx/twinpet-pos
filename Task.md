@@ -1,4 +1,4 @@
-# Current Task Tracker — Phase 7C-B1 (Manual Review Ops UI Polish — IMPLEMENTED / AWAITING CODEX REVIEW)
+# Current Task Tracker — Phase 7C-B1 (Manual Review Ops UI Polish — CLOSED / COMMITTED)
 
 > Living checkpoint doc for agents. Detailed history: `docs/reports/latest-report.md` (do not duplicate long-form evidence here).
 
@@ -10,7 +10,7 @@
 - **H6-E2-B** — Write Transfer Evidence Header at Completion — CLOSED / COMMITTED — `82d3352 feat(pos): write transfer reversal evidence header on completion`
 - **H6-E2-C** — Transfer Evidence Coordinator Validation — CLOSED / COMMITTED — `fe3ff44 feat(pos): validate transfer reversal header evidence`
 
-**Current clean baseline:** `1599dc2 docs: sync stabilization tracker after closure` (7C-A + 7C-D1 doc-sync; impl `9ad2c51` below). **7C-B1 (Manual Review Ops UI Polish) is implemented on top of this baseline and NOT yet committed.**
+**Current clean baseline:** `f4d9e7a style(pos): polish manual review ops durable rejection panel` (7C-B1 impl; prior doc-sync `1599dc2`; stabilization impl `9ad2c51` below). **7C-B1 (Manual Review Ops UI Polish) is CLOSED / COMMITTED.**
 
 **H6-F1** — Transfer Reversal Evidence Rejection Visibility — CLOSED / COMMITTED — `3a3d202 feat(pos): surface transfer reversal evidence rejection reasons`
 **H6-G1** — Receiving Evidence Rejection Visibility & Void Error Handling — CLOSED / COMMITTED — `e80b2a3 feat(pos): surface receiving reversal evidence rejection reasons`
@@ -42,16 +42,16 @@
 
 **Baseline is hardened for visual/UI polish planning.** No POS cashier UX work has started.
 
-**7C-B1** — Manual Review Ops UI Polish — **IMPLEMENTED / AWAITING CODEX REVIEW (NOT COMMITTED, NOT CLOSED)** — Option A APPROVED (Zero Behavioral Change). Presentation-only polish of `src/pages/ManualReviewOpsPage.tsx`: a stronger visual boundary between the actionable Manual Review Queue and the read-only Durable Rejection Forensic Log (thicker top divider `border-t-2` + increased `mt-8`/`pt-8` spacing), an "อ่านอย่างเดียว" (read-only) badge on the forensic-log header to reinforce its non-actionable nature, a softer dashed-border empty state for the forensic log, and monospace timestamps for scannability in both tables. **No behavior/state/query/lifecycle change, no gate change, durable panel still read-only with no action buttons, Thai disclaimer meaning preserved, `recordId` still internal-only (sole `key={r.recordId}` use), no route/nav/global-CSS/schema/server/rules/write-path change.** The 24 stabilized 7C-A assertions still pass unchanged (no test update needed). Codex GPT-5.5 High review required before closure.
+**7C-B1** — Manual Review Ops UI Polish — **CLOSED / COMMITTED** — `f4d9e7a style(pos): polish manual review ops durable rejection panel`. Option A APPROVED (Zero Behavioral Change). Presentation-only polish of `src/pages/ManualReviewOpsPage.tsx`: a stronger visual boundary between the actionable Manual Review Queue and the read-only Durable Rejection Forensic Log (thicker top divider `border-t-2` + increased `mt-8`/`pt-8` spacing), an "อ่านอย่างเดียว" (read-only) badge on the forensic-log header to reinforce its non-actionable nature, a softer dashed-border empty state for the forensic log, and monospace timestamps for scannability in both tables. **No behavior/state/query/lifecycle change, no gate change, durable panel still read-only with no action buttons, Thai disclaimer meaning preserved, `recordId` still internal-only (sole `key={r.recordId}` use), no route/nav/global-CSS/schema/server/rules/write-path change.** The 24 stabilized 7C-A assertions pass unchanged. Codex: PASS WITH NOTES (accepted: tracker wording precision about "one file" meant one production source file; zero business logic or state changes occurred; source-level tests still rely on semantic source markers, accepted as test-maintenance risk). `stash@{0}` remained untouched.
 
-**Next step:** Codex GPT-5.5 High review of 7C-B1; not closed until Codex + Tech Lead approval, then doc-sync/commit. Candidates (C) Admin/Inventory visual consistency and (B) POS cashier UX remain future, separately-authorized slices.
+**Next step:** Strategic option selection for next Phase 7C slice — (C) Admin/Inventory visual consistency (batched, namespace-collision-aware); (B) POS cashier UX polish (highest value, requires read-only boundary audit first); or another separately authorized planning step. No Admin/Inventory or POS cashier UI work without separate authorization.
 
 ---
 
 ## Phase 7C-B1 — Manual Review Ops UI Polish (presentation-only)
 
-**Status:** IMPLEMENTED / AWAITING CODEX REVIEW — NOT COMMITTED, NOT CLOSED.
-**Authorization:** Gemini / Tech Lead / CEO — Option A APPROVED. Golden rule: **Zero Behavioral Change** (strictly cosmetic/layout).
+**Status:** CLOSED / COMMITTED — `f4d9e7a style(pos): polish manual review ops durable rejection panel`
+**Authorization:** Gemini / Tech Lead / CEO — Option A APPROVED. Golden rule: **Zero Behavioral Change** (strictly cosmetic/layout). Codex: PASS WITH NOTES.
 **Goal:** Improve readability/operator clarity of the Manual Review Ops page, especially the visual distinction between the actionable Manual Review Queue and the read-only Durable Rejection Forensic Log.
 
 ### What was delivered (all presentation-only, single file)
@@ -73,9 +73,19 @@ No business-logic/state/query/`useEffect`/`useMemo` change; no change to `listQu
 - Full web `npx vitest run` → **492 passed (29 files)**; `npx tsc -b` clean; `functions resolveReversal` 43 passed (server unchanged).
 - `git diff --check` clean; forbidden-area diff EMPTY; `git diff --stat` = 1 file (`ManualReviewOpsPage.tsx`); `stash@{0}` present and untouched.
 
-### Not closed
+### Closure
 
-7C-B1 is NOT closed until Codex GPT-5.5 High + Tech Lead approval. No commit made.
+7C-B1 is **CLOSED / COMMITTED** — `f4d9e7a style(pos): polish manual review ops durable rejection panel`. Codex: PASS WITH NOTES. Accepted notes: tracker wording precision about "one file" meant one production source file; zero business logic or state changes occurred; source-level tests still rely on semantic source markers, accepted as test-maintenance risk.
+
+### Final test evidence
+
+```
+npx.cmd vitest run manualReviewOps → PASS, 24 tests
+npx.cmd vitest run → PASS, 492 tests / 29 files
+npx.cmd tsc -b → PASS
+forbidden diff → EMPTY
+stash@{0} → present and untouched
+```
 
 ---
 
