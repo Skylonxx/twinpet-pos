@@ -1,4 +1,4 @@
-# Current Task Tracker — Phase 7B-H7-F (Transfer Pair Catch-site Integration — CLOSED / COMMITTED)
+# Current Task Tracker — Phase 7B-H7-G (Manual Review Ops Durable Rejection Panel — IMPLEMENTED / AWAITING CODEX REVIEW)
 
 > Living checkpoint doc for agents. Detailed history: `docs/reports/latest-report.md` (do not duplicate long-form evidence here).
 
@@ -10,7 +10,7 @@
 - **H6-E2-B** — Write Transfer Evidence Header at Completion — CLOSED / COMMITTED — `82d3352 feat(pos): write transfer reversal evidence header on completion`
 - **H6-E2-C** — Transfer Evidence Coordinator Validation — CLOSED / COMMITTED — `fe3ff44 feat(pos): validate transfer reversal header evidence`
 
-**Current clean baseline:** `872575a feat(pos): log transfer reversal evidence rejections` (H7-F impl; H7-E impl `ad1ff61` directly below).
+**Current clean baseline:** `5061111 docs: sync transfer rejection logging tracker after closure` (H7-F doc-sync; H7-F impl `872575a` directly below). H7-G is implemented on top of this baseline and NOT yet committed.
 
 **H6-F1** — Transfer Reversal Evidence Rejection Visibility — CLOSED / COMMITTED — `3a3d202 feat(pos): surface transfer reversal evidence rejection reasons`
 **H6-G1** — Receiving Evidence Rejection Visibility & Void Error Handling — CLOSED / COMMITTED — `e80b2a3 feat(pos): surface receiving reversal evidence rejection reasons`
@@ -20,14 +20,46 @@
 **H7-D** — Catch-site Integration Design Audit (read-only design artifact; receiving-first recommended). No code/doc changes.
 **H7-E** — Receiving-only Catch-site Integration — CLOSED / COMMITTED — `ad1ff61 feat(pos): log receiving reversal evidence rejections`
 **H7-F** — Transfer Pair Catch-site Integration — **CLOSED / COMMITTED** — `872575a feat(pos): log transfer reversal evidence rejections`
+**H7-G** — Manual Review Ops Durable Rejection Panel — **IMPLEMENTED / AWAITING CODEX REVIEW (NOT COMMITTED, NOT CLOSED)**
 
-**Transfer and Receiving fail-closed visibility paths are both closed.** H7-E activated the durable rejection log for Receiving; **H7-F extends it to BOTH transfer surfaces** — `TransferHistoryPage` and `AdminTransferPage` now build the H7-A record and best-effort fire-and-forget the H7-C log via `recordEvidenceRejection` in their `TransferReversalEvidenceError` branch only, AFTER the existing `setToast(message)` and without altering the `finally { setBusy(false) }` cleanup. No `ReceivingEditPage` change, no helper/model/log/store/schema change, no UI/Ops surfacing, no server/rules/validation/write-path change.
+**Transfer and Receiving fail-closed visibility paths are both closed.** H7-E activated the durable rejection log for Receiving; **H7-F extended it to BOTH transfer surfaces**; **H7-G now SURFACES those durable logs read-only in the existing Manual Review Ops page.** `ManualReviewOpsPage.tsx` gains a local read-only forensic panel ("บันทึกการปฏิเสธหลักฐาน (อุปกรณ์นี้)") below the existing manual-review queue. It is gated by the existing page-level Manager/Admin gate (`canViewManualReviewOps`), reuses the existing memoized `createIndexedDbReversalStore`, and reads ONLY via `listReversalRejections(store)` (newest-first). It displays only the safe H7-A fields (createdAt, sourceType, sourceId, branchId, evidenceCode, evidenceMessage, optional staffId), with loading/error/empty states matching the page pattern and a clear Thai disclaimer that records are local-device forensic logs only — not server-synced, not a central audit log, not requiring resolution.
 
-**The durable rejection log is now active for both Receiving and Transfer. Admin/Ops surfacing remains future work.**
+**H7-G is visibility-only:** NO resolve/delete/retry/sync/export/queue/stock/server action button is added (`<Button` count unchanged at 3 = queue resolve + 2 modal); `recordId`/hashes/raw payloads/qty-cost/`observedDocumentUpdatedAt` are NOT exposed; no write API (`recordEvidenceRejection`/`recordReversalRejection`) is introduced into the page. The existing manual-review queue load/resolve/toast/gate/route behavior is unchanged. **No catch-site change; no helper/model/log/store/schema change (`recordEvidenceRejection.ts`/`reversalRejectionRecord.ts`/`reversalRejectionLog.ts`/`reversalLocalStore.ts` untouched; no `DB_VERSION` bump); no server/rules change; no validation/fail-closed change; no transfer/receiving write-path change; no new route/nav; no separate Admin page; no server-sync/central-audit architecture.**
 
 **`stash@{0}` remains present and untouched.**
 
-**Next step:** Read-only strategic planning for Admin/Ops Surfacing.
+**Next step:** Codex GPT-5.5 High review of H7-G; H7-G is NOT closed until Codex + Tech Lead approval, then a doc-sync/commit.
+
+---
+
+## Phase 7B-H7-G — Manual Review Ops Durable Rejection Panel
+
+**Status:** IMPLEMENTED / AWAITING CODEX REVIEW — NOT COMMITTED, NOT CLOSED.
+**Authorization:** Gemini / Tech Lead / CEO — Option A APPROVED (Claude Opus 4.8, High reasoning).
+**Goal:** Surface the durable rejection logs (H7-A model, H7-C store, written by H7-E/H7-F) in the existing Manual Review Ops page as a LOCAL READ-ONLY forensic panel. It must not become an action queue; the existing manual-review queue behavior is unchanged.
+
+### What was delivered
+
+- `src/pages/ManualReviewOpsPage.tsx` (MOD) — adds a read-only durable-rejection panel below the existing manual-review queue:
+  - Imports `listReversalRejections` (read API) and the `ReversalRejectionRecord` type. NO write API (`recordEvidenceRejection`/`recordReversalRejection`) imported or called.
+  - Independent panel state (`rejections`/`rejectionsLoading`/`rejectionsError`) + a `refreshRejections` `useCallback` that is gated on the SAME `canResolve` flag (`if (!canResolve) → setRejections([])`) and reads ONLY `listReversalRejections(store)` against the EXISTING memoized `createIndexedDbReversalStore`. The existing `refresh`/queue state is untouched.
+  - New section titled `บันทึกการปฏิเสธหลักฐาน (อุปกรณ์นี้)` with a count badge, an `info` Alert disclaimer (`...เฉพาะเครื่องนี้เท่านั้น ไม่ได้ซิงก์ขึ้นเซิร์ฟเวอร์ ไม่ใช่ audit log กลาง และไม่ต้องปิดงานจากรายการนี้ (อ่านอย่างเดียว)`), and loading/error/empty states matching the queue pattern.
+  - Read-only table columns: เวลา (`r.createdAt`), ประเภท (`r.sourceType` badge), เอกสาร (`r.sourceId`), สาขา (`r.branchId`), รหัส (`r.evidenceCode`), เหตุผล (`r.evidenceMessage`), ผู้ทำรายการ (`r.staffId ?? '—'`). Row key is a composite `sourceType:sourceId:createdAt` (NOT `recordId`). `recordId`/hashes/raw payloads/qty-cost/`observedDocumentUpdatedAt` are NOT rendered. NO action column / NO buttons in the panel.
+- `src/lib/pos/offline/manualReviewOps.test.ts` (MOD, +11 tests → 21 total) — `H7-G: ... read path` (records via `recordEvidenceRejection`, reads back newest-first through the shared store; empty store → empty list) + `H7-G: ManualReviewOpsPage.tsx ... (source-level)` `?raw` assertions (reads only `listReversalRejections(store)` + `refreshRejections`; introduces NO `recordEvidenceRejection`/`recordReversalRejection`; reuses the `canViewManualReviewOps` gate + early not-authorized return; loader gated + clears data for non-authorized; `<Button` count unchanged at 3; only the safe H7-A fields displayed; `recordId`/`serializeReversalRejectionRecord`/`observedDocumentUpdatedAt` NOT exposed; local-device disclaimer present; existing queue `listQueue`/`resolveManualReview`/`buildManualReviewResolvePayload` path intact).
+
+### What is NOT in this slice
+
+No catch-site change (`ReceivingEditPage.tsx`/`TransferHistoryPage.tsx`/`AdminTransferPage.tsx` untouched); no helper/model/log/store/schema change (`recordEvidenceRejection.ts`/`reversalRejectionRecord.ts`/`reversalRejectionLog.ts`/`reversalLocalStore.ts` untouched; no `DB_VERSION` bump; no index added); no display-label helper added to the offline layer; no resolve/delete/retry/sync/export/queue/stock/server action; no new route/nav; no separate Admin page; no server resolver/Firestore-rules change; no validation/fail-closed change; no transfer/receiving write-path change; no server-sync/central-audit architecture.
+
+### Verification
+
+- Focused: `manualReviewOps` 21 passed; `reversalRejectionLog`/`recordEvidenceRejection`/`reversalLocalStore`/`offlineReversalQueue` 75 passed.
+- Full web `npx vitest run` → **489 passed (29 files)** (was 478 at H7-F; +11 H7-G tests); `npx tsc -b` → clean; `functions resolveReversal` → 43 passed (server unchanged).
+- Forbidden-area diff EMPTY; `git diff --stat` = 2 code files (`ManualReviewOpsPage.tsx`, `manualReviewOps.test.ts`); `stash@{0}` present and untouched.
+
+### Not closed
+
+H7-G is NOT closed until Codex GPT-5.5 High + Tech Lead approval. No commit made.
 
 ---
 

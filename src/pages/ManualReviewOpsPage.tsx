@@ -26,7 +26,9 @@ import {
 } from '../lib/pos/offline/manualReviewOps';
 import { listQueue, resolveManualReview } from '../lib/pos/offline/offlineReversalQueue';
 import { createIndexedDbReversalStore } from '../lib/pos/offline/reversalLocalStore';
+import { listReversalRejections } from '../lib/pos/offline/reversalRejectionLog';
 import type { OfflineReversalIntent } from '../lib/pos/offline/offlineReversalTypes';
+import type { ReversalRejectionRecord } from '../lib/inventory/reversalRejectionRecord';
 
 /**
  * Phase 7B-H6-F1 — read-only, display-only Thai label for an intent's `evidenceSource`
@@ -67,6 +69,13 @@ export default function ManualReviewOpsPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'failure' } | null>(null);
 
+  // Phase 7B-H7-G — durable rejection log panel state (READ-ONLY, device-local forensic).
+  // Independent from the manual-review queue state above so the existing queue load/resolve
+  // behavior is left entirely unchanged. Shares the same memoized `store`.
+  const [rejections, setRejections] = useState<ReversalRejectionRecord[]>([]);
+  const [rejectionsLoading, setRejectionsLoading] = useState(canResolve);
+  const [rejectionsError, setRejectionsError] = useState<string | null>(null);
+
   const refresh = useCallback(async () => {
     if (!canResolve) {
       setIntents([]);
@@ -89,6 +98,32 @@ export default function ManualReviewOpsPage() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // Phase 7B-H7-G — read-only load of THIS device's durable rejection log. Uses the shared
+  // store and ONLY `listReversalRejections` (a read API): no write/resolve/delete is reachable
+  // from this panel. Behind the same Manager/Admin gate as the queue.
+  const refreshRejections = useCallback(async () => {
+    if (!canResolve) {
+      setRejections([]);
+      setRejectionsLoading(false);
+      return;
+    }
+    setRejectionsLoading(true);
+    try {
+      const rows = await listReversalRejections(store);
+      setRejections(rows);
+      setRejectionsError(null);
+    } catch (err) {
+      setRejectionsError(err instanceof Error ? err.message : String(err));
+      setRejections([]);
+    } finally {
+      setRejectionsLoading(false);
+    }
+  }, [canResolve, store]);
+
+  useEffect(() => {
+    void refreshRejections();
+  }, [refreshRejections]);
 
   useEffect(() => {
     if (!toast) return;
@@ -228,6 +263,88 @@ export default function ManualReviewOpsPage() {
           </div>
         </Card>
       )}
+
+      {/*
+        Phase 7B-H7-G — Durable rejection log (LOCAL / device only, READ-ONLY forensic).
+        A visibility-only panel of pre-queue fail-closed evidence rejections recorded on THIS
+        device. It is NOT a manual-review queue, NOT a central audit log, and carries NO
+        resolve/delete/retry/sync/export action — it reads `listReversalRejections` and nothing
+        else. Behind the same Manager/Admin gate as the queue above.
+      */}
+      <div className="mt-6 flex flex-col gap-4 border-t border-gray-200 pt-6 dark:border-gray-700">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+              บันทึกการปฏิเสธหลักฐาน (อุปกรณ์นี้)
+            </h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              บันทึกหลักฐานการปฏิเสธการยกเลิก (รับเข้า/โอน) ที่ถูกปฏิเสธแบบ fail-closed
+            </p>
+          </div>
+          <Badge color="gray" size="sm" className="w-fit">
+            {rejectionsLoading ? <Spinner size="sm" /> : `${rejections.length} รายการ`}
+          </Badge>
+        </div>
+
+        <Alert color="info">
+          รายการนี้เป็นบันทึกหลักฐานเฉพาะเครื่องนี้เท่านั้น ไม่ได้ซิงก์ขึ้นเซิร์ฟเวอร์ ไม่ใช่ audit log
+          กลาง และไม่ต้องปิดงานจากรายการนี้ (อ่านอย่างเดียว)
+        </Alert>
+
+        {rejectionsError ? (
+          <Alert color="failure">
+            <span className="font-medium">โหลดบันทึกไม่สำเร็จ:</span> {rejectionsError}
+          </Alert>
+        ) : rejectionsLoading ? (
+          <div className="flex justify-center p-8">
+            <Spinner size="xl" aria-label="Loading rejection log" />
+          </div>
+        ) : rejections.length === 0 ? (
+          <Alert color="gray">ยังไม่มีบันทึกการปฏิเสธหลักฐานบนอุปกรณ์นี้</Alert>
+        ) : (
+          <Card className="overflow-hidden p-0">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHead>
+                  <TableHeadCell>เวลา</TableHeadCell>
+                  <TableHeadCell>ประเภท</TableHeadCell>
+                  <TableHeadCell>เอกสาร</TableHeadCell>
+                  <TableHeadCell>สาขา</TableHeadCell>
+                  <TableHeadCell>รหัส</TableHeadCell>
+                  <TableHeadCell>เหตุผล</TableHeadCell>
+                  <TableHeadCell>ผู้ทำรายการ</TableHeadCell>
+                </TableHead>
+                <TableBody className="divide-y">
+                  {rejections.map((r) => (
+                    <TableRow
+                      key={r.recordId}
+                      className="bg-white dark:border-gray-700 dark:bg-gray-800"
+                    >
+                      <TableCell className="whitespace-nowrap text-gray-500 dark:text-gray-400">
+                        {r.createdAt}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        <Badge color={r.sourceType === 'receiving' ? 'info' : 'purple'} className="w-fit">
+                          {r.sourceType}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="font-mono text-xs whitespace-nowrap">{r.sourceId}</TableCell>
+                      <TableCell className="whitespace-nowrap">{r.branchId}</TableCell>
+                      <TableCell className="font-mono text-xs whitespace-nowrap">{r.evidenceCode}</TableCell>
+                      <TableCell className="max-w-xs truncate" title={r.evidenceMessage}>
+                        {r.evidenceMessage}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-gray-500 dark:text-gray-400">
+                        {r.staffId ?? '—'}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </Card>
+        )}
+      </div>
 
       <Modal show={target !== null} onClose={closeResolve} size="md">
         <ModalHeader>ปิดงานตรวจสอบด้วยตนเอง</ModalHeader>
