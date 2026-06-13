@@ -230,11 +230,54 @@ describe('H7-G: Manual Review Ops durable rejection panel — read path', () => 
     const s = createInMemoryReversalStore();
     expect(await listReversalRejections(s)).toEqual([]);
   });
+
+  // GUARD — in-memory store concurrent-write ordering artifact (documented in 7C-A).
+  // The in-memory store double commits a readwrite transaction by REPLACING the whole store
+  // map with its working copy. Two transactions started concurrently snapshot the same
+  // baseline, so the last to commit overwrites the other's distinct-key write (last-commit-
+  // wins). This is a property of the TEST DOUBLE only — real IndexedDB serializes readwrite
+  // transactions per object store, so production code is unaffected. The consequence for
+  // tests: fire-and-forget writes (as in the newest-first read-path test above) MUST be
+  // serialized (await/flush between), or a write is silently lost. This guard pins the safe
+  // sequential contract so a future "simplification" that drops the serialization is caught.
+  test('GUARD: serialized readwrite txns to distinct keys both persist (in-memory double)', async () => {
+    const s = createInMemoryReversalStore();
+    await s.transact(['rejections'], 'readwrite', async (txn) => {
+      await txn.put('rejections', 'k1', { id: 1 });
+    });
+    await s.transact(['rejections'], 'readwrite', async (txn) => {
+      await txn.put('rejections', 'k2', { id: 2 });
+    });
+    const all = await s.transact(['rejections'], 'readonly', (txn) => txn.getAll('rejections'));
+    expect(all).toHaveLength(2);
+  });
 });
 
 // ─── H7-G: ManualReviewOpsPage.tsx panel (source-level, per H6-D2/H7-E precedent) ──
 // The page carries a heavy Firebase/router/auth/modal harness, so panel guarantees are
-// proven by static `?raw` source inspection rather than mounting. Assertions are narrow.
+// proven by static `?raw` source inspection rather than mounting. Assertions target
+// structural/safety INTENT (presence, region-scoped absence, single-use) rather than
+// brittle whole-page formatting details or exact element counts (stabilized in 7C-A).
+
+/** Count non-overlapping occurrences of `needle` in `haystack`. */
+function countOccurrences(haystack: string, needle: string): number {
+  return haystack.split(needle).length - 1;
+}
+
+/**
+ * Narrow the page source to JUST the durable-rejection panel region — from its marker
+ * comment to the start of the resolve `Modal` — so structural assertions ("no action
+ * affordance inside the panel") target the panel itself and are immune to harmless changes
+ * elsewhere on the page (and to the page's total button count).
+ */
+function rejectionPanelRegion(source: string): string {
+  const start = source.indexOf('Phase 7B-H7-G — Durable rejection log');
+  const end = source.indexOf('<Modal show={target');
+  expect(start).toBeGreaterThan(-1);
+  expect(end).toBeGreaterThan(start);
+  return source.slice(start, end);
+}
+
 describe('H7-G: ManualReviewOpsPage.tsx durable rejection panel (source-level)', () => {
   let source: string;
   beforeEach(async () => {
@@ -264,9 +307,22 @@ describe('H7-G: ManualReviewOpsPage.tsx durable rejection panel (source-level)',
     expect(source).toMatch(/refreshRejections[\s\S]*?if \(!canResolve\)[\s\S]*?setRejections\(\[\]\)/);
   });
 
-  test('adds NO action affordance — button count is unchanged (queue resolve + 2 modal)', () => {
-    // The panel is visibility-only: no resolve/delete/retry/sync/export button is added.
-    expect(source.split('<Button').length - 1).toBe(3);
+  test('the durable rejection panel is read-only — NO button or action affordance inside it', () => {
+    // Intent over count: scope to the panel region and assert it carries no <Button> and no
+    // action/mutation wiring (resolve/delete/retry/sync/export), instead of pinning a brittle
+    // whole-page `<Button>` total that any unrelated layout change would break.
+    const panel = rejectionPanelRegion(source);
+    expect(panel).not.toContain('<Button');
+    for (const affordance of ['onClick', 'openResolve', 'submitResolve', 'resolveManualReview']) {
+      expect(panel).not.toContain(affordance);
+    }
+  });
+
+  test('the existing manual-review QUEUE retains its resolve action (outside the panel)', () => {
+    // Stabilization must not silently drop the queue's resolve affordance: assert it still
+    // exists (the row resolve button wiring + the modal confirm), independent of any count.
+    expect(source).toContain('onClick={() => openResolve(it)}');
+    expect(source).toContain('void submitResolve()');
   });
 
   test('displays only the safe H7-A record fields', () => {
@@ -283,11 +339,15 @@ describe('H7-G: ManualReviewOpsPage.tsx durable rejection panel (source-level)',
     }
   });
 
-  test('does NOT expose recordId or hash/serialized internals', () => {
-    // recordId is permitted ONLY as an internal React row key, never rendered to the user.
+  test('recordId is internal-only — used exactly once, as the React row key, never rendered', () => {
+    // Robust over spacing/layout: `r.recordId` must appear EXACTLY ONCE, and that single use
+    // is the row `key` (an internal React concern), so it can never reach a visible cell or
+    // a `title`. Adding any displayed recordId cell would push the count to 2 and fail here.
+    expect(countOccurrences(source, 'r.recordId')).toBe(1);
     expect(source).toContain('key={r.recordId}');
-    expect(source).not.toContain('>{r.recordId}');
-    expect(source).not.toContain('title={r.recordId}');
+  });
+
+  test('does NOT expose hashes or other non-display record internals', () => {
     expect(source).not.toContain('serializeReversalRejectionRecord');
     expect(source).not.toContain('observedDocumentUpdatedAt');
   });

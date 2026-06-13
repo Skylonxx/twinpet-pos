@@ -1,4 +1,4 @@
-# Current Task Tracker — Phase 7B-H7-G (Manual Review Ops Durable Rejection Panel — CLOSED / COMMITTED)
+# Current Task Tracker — Phase 7C-A + 7C-D1 (Regression Stabilization + Operator Runbook — IMPLEMENTED / AWAITING CODEX REVIEW)
 
 > Living checkpoint doc for agents. Detailed history: `docs/reports/latest-report.md` (do not duplicate long-form evidence here).
 
@@ -33,7 +33,45 @@
 
 **`stash@{0}` remains present and untouched.**
 
-**Next step:** Phase 7B-H is closed. Next strategic step is Phase 7 completion summary and transition planning into Stabilization & UI Polish Phase.
+**Phase 7C (Stabilization & UI Polish) — opened with a test/docs-only slice:**
+
+**7C-A** — Regression Stabilization Pass — **IMPLEMENTED / AWAITING CODEX REVIEW (NOT COMMITTED, NOT CLOSED)**
+**7C-D1** — Operator Runbook for Durable Rejection Panel — **IMPLEMENTED / AWAITING CODEX REVIEW (NOT COMMITTED, NOT CLOSED)**
+
+7C-A de-brittled the H7-G source-level assertions in `src/lib/pos/offline/manualReviewOps.test.ts` (no production code touched) and 7C-D1 added a plain-Thai operator runbook. **No production behavior changed, no UI behavior/layout/polish change, no POS cashier UX work, no source/write-path/schema/server/rules change, no `ManualReviewOpsPage.tsx` production diff.** Codex GPT-5.5 High review required before closure.
+
+**Next step:** Codex GPT-5.5 High review of 7C-A + 7C-D1; not closed until Codex + Tech Lead approval, then doc-sync/commit. UI polish and POS cashier UX remain future separately-authorized slices.
+
+---
+
+## Phase 7C-A — Regression Stabilization Pass (+ 7C-D1 Operator Runbook)
+
+**Status:** IMPLEMENTED / AWAITING CODEX REVIEW — NOT COMMITTED, NOT CLOSED.
+**Authorization:** Gemini / Tech Lead / CEO — Option B APPROVED (bundled 7C-A + 7C-D1; test/docs-only stabilization, no production behavior change).
+**Goal:** Harden the H7 source-level tests against brittle/formatting-sensitive assertions (preserving or strengthening safety coverage), document/guard the in-memory-store concurrent-write ordering artifact, and add an operator-facing runbook for the durable rejection panel.
+
+### What was delivered
+
+- `src/lib/pos/offline/manualReviewOps.test.ts` (MOD, 21 → 24 tests) — stabilized the H7-G `?raw` source-level assertions:
+  - Replaced the brittle whole-page `expect(source.split('<Button').length - 1).toBe(3)` count with two intent-based tests: (a) a region-scoped check (`rejectionPanelRegion` helper slices the page from the panel's marker comment to the resolve `<Modal`) asserting the panel contains NO `<Button` and NO action wiring (`onClick`/`openResolve`/`submitResolve`/`resolveManualReview`); (b) a positive check that the existing manual-review QUEUE retains its resolve affordance (`onClick={() => openResolve(it)}` + `void submitResolve()`), so stabilization cannot silently drop it.
+  - Replaced the spacing-sensitive `recordId` negatives (`>{r.recordId}`/`title={r.recordId}`) with a robust single-use check: `r.recordId` appears EXACTLY ONCE and that use is `key={r.recordId}` — proving recordId stays an internal React key and never reaches a visible cell/title. Hash/serialized internals (`serializeReversalRejectionRecord`/`observedDocumentUpdatedAt`) remain asserted absent.
+  - Added a `GUARD` test + documentation comment for the in-memory store concurrent-write artifact: the in-memory double commits a readwrite txn by REPLACING the whole store map, so concurrently-started txns lose distinct-key writes (last-commit-wins) — a property of the TEST DOUBLE only (real IndexedDB serializes readwrite txns per store; production unaffected). The guard pins the safe sequential contract (serialized writes to distinct keys both persist) that the newest-first read-path test depends on.
+  - All other existing assertions (gate reuse, loader gating, read-only via `listReversalRejections`, no write API, Thai disclaimer, queue path intact) preserved unchanged.
+- `docs/operator-runbook-durable-rejection-panel.md` (NEW) — plain-Thai, operator-friendly runbook for Manager/Admin: what the panel is; where it appears (Manual Review Ops, Manager/Admin only); what a row means; what "local-device only" means; what it is NOT (not central audit, not server-synced, not stock truth, not a queue item needing resolution); what operators should do (read the reason, watch repeats, report to admin/owner, do not "close" rows); what not to do; and the known limitation that clearing local browser/PWA storage can remove historical records.
+
+### What is NOT in this slice
+
+No production source change (`ManualReviewOpsPage.tsx` and all offline/runtime/store/catch-site files untouched — forbidden-area diff EMPTY); no in-memory/IndexedDB store behavior or schema change (no `DB_VERSION` bump); no UI behavior/layout/polish change; no POS cashier UX / cart / checkout / stock-mutation change; no server resolver / Firestore-rules change; no route/nav change; no new feature; safety coverage preserved or strengthened (net +3 tests).
+
+### Verification
+
+- Focused: `manualReviewOps` 24 passed; `recordEvidenceRejection`/`reversalRejectionLog`/`reversalLocalStore`/`offlineReversalQueue` 75 passed.
+- Full web `npx vitest run` → **492 passed (29 files)** (was 489; +3); `npx tsc -b` → clean; `functions resolveReversal` → 43 passed (server unchanged).
+- `git diff --check` clean; forbidden-area diff EMPTY (incl. `ManualReviewOpsPage.tsx`); `git diff --stat` = 1 modified test file + 1 new docs file; `stash@{0}` present and untouched.
+
+### Not closed
+
+7C-A + 7C-D1 are NOT closed until Codex GPT-5.5 High + Tech Lead approval. No commit made.
 
 ---
 
