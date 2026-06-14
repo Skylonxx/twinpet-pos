@@ -96,6 +96,26 @@ export function useCart({ products, customer, showToast }: UseCartArgs) {
   const cart = rawCart;
   const cartLines = useMemo(() => Object.values(cart), [cart]);
 
+  // Phase 7C-L2 (money correctness): bill-level state — discount value, discount MODE, and
+  // fee — must never outlive the cart. `clearCart` wipes all three, but the item-removal paths
+  // (removeLine / changeQty→0 / setLineQty→0) only delete lines, so a lingering discount/mode/
+  // fee could silently apply to the NEXT customer's sale. The shared `resetBillLevel` helper is
+  // the single source of truth for that cleanup — used by BOTH the empty-cart effect below and
+  // `clearCart`, so they can never drift apart. The effect resets centrally whenever the cart
+  // becomes empty (one place; no per-handler resets); its guard fires only when some bill-level
+  // field is actually non-default, so it never loops or disturbs a fresh, already-empty cart.
+  const resetBillLevel = useCallback(() => {
+    setBillDiscValue(0);
+    setBillDiscPercent(false);
+    setFeeRate(0);
+  }, []);
+
+  useEffect(() => {
+    if (cartLines.length === 0 && (billDiscValue !== 0 || billDiscPercent || feeRate !== 0)) {
+      resetBillLevel();
+    }
+  }, [cartLines.length, billDiscValue, billDiscPercent, feeRate, resetBillLevel]);
+
   const totals = useMemo(
     () => calcCartTotals(cartLines, billDiscValue, billDiscPercent, feeRate),
     [cartLines, billDiscValue, billDiscPercent, feeRate],
@@ -237,10 +257,8 @@ export function useCart({ products, customer, showToast }: UseCartArgs) {
 
   const clearCart = useCallback(() => {
     setRawCart({});
-    setBillDiscValue(0);
-    setBillDiscPercent(false);
-    setFeeRate(0);
-  }, []);
+    resetBillLevel();
+  }, [resetBillLevel]);
 
   const restoreCart = useCallback((bill: SuspendedBill) => {
     setRawCart(cartLinesToRecord(bill.cartItems));
