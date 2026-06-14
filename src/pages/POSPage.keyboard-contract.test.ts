@@ -469,6 +469,67 @@ describe('7C-D4-D · Bill-discount numpad integration (POSPage.tsx / NumpadDialo
   });
 });
 
+// ─── G. Bill-discount numpad Clear affordance (D4-D1 UAT follow-up) ──────────────────
+describe('7C-D4-D1 · Bill-discount numpad Clear affordance (POSPage.tsx / NumpadDialog.tsx)', () => {
+  /** Region of the bill-discount NumpadDialog element (title → its closing `/>`). */
+  function discNumpadRegion(): string {
+    return region(posSource, 'title="ส่วนลดท้ายบิล"', '/>');
+  }
+
+  test('the bill-discount NumpadDialog opts into the Clear affordance (alongside decimal/zero)', () => {
+    const disc = discNumpadRegion();
+    expect(disc).toContain('allowClear');
+    // Clear sits next to decimal/zero entry — it does not replace them.
+    expect(disc).toContain('allowDecimal');
+    expect(disc).toContain('allowZero');
+  });
+
+  test('Clear is opt-in: the QTY NumpadDialog receives none of the discount-only flags', () => {
+    const qty = region(posSource, '<NumpadDialog', '<SortingSettingsModal');
+    expect(qty).toContain('setLineQty');
+    expect(qty).not.toContain('allowClear');
+    expect(qty).not.toContain('allowDecimal');
+    expect(qty).not.toContain('allowZero');
+  });
+
+  test('NumpadDialog gates the Clear key behind allowClear and defaults it OFF', () => {
+    // Opt-in + backwards-compatible: default off, so no existing caller (incl. quantity) changes.
+    expect(numpadSource).toContain('allowClear = false');
+    expect(numpadSource).toContain('NUMPAD_KEYS_DECIMAL_CLEAR');
+    // Decimal mode picks the Clear layout only when allowClear is set.
+    expect(numpadSource).toMatch(/allowClear[\s\S]{0,30}NUMPAD_KEYS_DECIMAL_CLEAR/);
+  });
+
+  test('Clear empties the display and a free-numeric confirm resolves a cleared discount to 0', () => {
+    // Pressing Clear (C) empties the input (existing handler); the free-numeric confirm then yields
+    // 0, so confirming a cleared discount writes 0 through the existing bill setter.
+    expect(numpadSource).toMatch(/if \(key === 'C'\) \{\s*setInput\(''\);/);
+    expect(numpadSource).toContain('parseFloat(input) || 0');
+    expect(discNumpadRegion()).toContain('cart.setBillDiscValue(');
+  });
+
+  test('decimal + zero support remain intact alongside Clear', () => {
+    // The Clear layout is the decimal pad PLUS a trailing 'C' (so '.' and Clear coexist), and the
+    // free-numeric seed/confirm path is unchanged — 0 and decimals stay enterable, no flooring.
+    expect(numpadSource).toContain("'.', '0', '⌫', 'C'");
+    expect(numpadSource).toContain('allowDecimal ? Math.max(0, initialValue)');
+    expect(numpadSource).toContain('parseFloat(input)');
+  });
+
+  test('quantity numpad integer contract is untouched by the Clear follow-up', () => {
+    expect(numpadSource).toContain('parseInt(input, 10)');
+    expect(numpadSource).toContain('กรุณาระบุจำนวนที่มากกว่า 0');
+    expect(numpadSource).toContain('Math.floor(initialValue)');
+  });
+
+  test('F12 + Escape contracts still include the discount numpad (D4-C/D4-D unchanged)', () => {
+    const pred = region(posSource, 'const hasBlockingModalOpen = Boolean(', ');');
+    expect(pred).toContain('discNumpadOpen');
+    const body = region(posSource, 'const closeTopModalOnEscape = useCallback', '}, [');
+    expect(body).toContain('setDiscNumpadOpen(false);');
+  });
+});
+
 // ─── D. Native keyboard payment-confirm = strict RED path ──────────────────────────
 describe('7C-D4-A · Payment confirm is a guarded RED path (PaymentModal.tsx / NumpadDialog.tsx)', () => {
   test('confirm is a native button (keyboard-activatable on focus) — never silent', () => {

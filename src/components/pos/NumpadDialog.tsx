@@ -7,7 +7,14 @@ const NUMPAD_KEYS = ['7', '8', '9', '4', '5', '6', '1', '2', '3', 'C', '0', '⌫
 // numpad can enter fractional amounts. Backspace (⌫) still covers correction. Same 12-key 3×4
 // grid → no CSS / layout change.
 const NUMPAD_KEYS_DECIMAL = ['7', '8', '9', '4', '5', '6', '1', '2', '3', '.', '0', '⌫'] as const;
-type NumpadKey = (typeof NUMPAD_KEYS)[number] | (typeof NUMPAD_KEYS_DECIMAL)[number];
+// Phase 7C-D4-D1: decimal + Clear layout for the bill-discount numpad (opt-in `allowClear`).
+// Appends a 13th Clear (C) key that empties the display → a free-numeric confirm then yields 0
+// (clears the discount). It auto-flows to a 5th row of the 3-column grid → no CSS / layout change.
+const NUMPAD_KEYS_DECIMAL_CLEAR = ['7', '8', '9', '4', '5', '6', '1', '2', '3', '.', '0', '⌫', 'C'] as const;
+type NumpadKey =
+  | (typeof NUMPAD_KEYS)[number]
+  | (typeof NUMPAD_KEYS_DECIMAL)[number]
+  | (typeof NUMPAD_KEYS_DECIMAL_CLEAR)[number];
 
 type NumpadDialogProps = {
   open: boolean;
@@ -23,6 +30,12 @@ type NumpadDialogProps = {
    */
   allowDecimal?: boolean;
   allowZero?: boolean;
+  /**
+   * Show a Clear (C) key in decimal mode (Phase 7C-D4-D1). Opt-in for the bill-discount numpad
+   * only; Clear empties the display so a free-numeric confirm resolves to 0. No effect outside
+   * decimal mode (quantity already has its own Clear key).
+   */
+  allowClear?: boolean;
   /** Max characters the display accepts (default 4 — the quantity contract). */
   maxLength?: number;
 };
@@ -35,6 +48,7 @@ export default function NumpadDialog({
   onConfirm,
   allowDecimal = false,
   allowZero = false,
+  allowClear = false,
   maxLength = 4,
 }: NumpadDialogProps) {
   const [input, setInput] = useState('');
@@ -98,7 +112,11 @@ export default function NumpadDialog({
 
   if (!open) return null;
 
-  const keys = allowDecimal ? NUMPAD_KEYS_DECIMAL : NUMPAD_KEYS;
+  const keys = allowDecimal
+    ? allowClear
+      ? NUMPAD_KEYS_DECIMAL_CLEAR
+      : NUMPAD_KEYS_DECIMAL
+    : NUMPAD_KEYS;
 
   return createPortal(
     <div

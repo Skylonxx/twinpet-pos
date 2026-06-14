@@ -1,4 +1,4 @@
-# Current Task Tracker — Phase 7C-D4-D POS Logic & Interaction Bugfixes (IMPLEMENTATION / AWAITING CODEX RE-REVIEW — revision applied)
+# Current Task Tracker — Phase 7C-D4-D1 Discount Numpad Clear Button (IMPLEMENTATION / AWAITING CODEX REVIEW)
 
 > Living checkpoint doc for agents. Detailed history: `docs/reports/latest-report.md` (do not duplicate long-form evidence here).
 
@@ -10,11 +10,23 @@
 - **H6-E2-B** — Write Transfer Evidence Header at Completion — CLOSED / COMMITTED — `82d3352 feat(pos): write transfer reversal evidence header on completion`
 - **H6-E2-C** — Transfer Evidence Coordinator Validation — CLOSED / COMMITTED — `fe3ff44 feat(pos): validate transfer reversal header evidence`
 
-**Current clean baseline:** `0c7e924 chore(dev): support LAN emulator testing` (7C-E1 LAN setup, on top of UAT-pause sync `0c0a624` and 7C-D4-C-4 `6f0f4c7`). **7C-C3, 7C-C4, 7C-D2, 7C-D3-A, 7C-D3-B, 7C-D4-A, 7C-D4-C, 7C-D4-C-1..4, and 7C-E1 are CLOSED / COMMITTED.** 7C-D4-D is an implementation slice on top of this baseline and NOT yet committed.
+**Current clean baseline:** `1a239b4 fix(pos): resolve UOM scans and discount numpad` (7C-D4-D, on top of 7C-E1 `0c7e924`). **7C-C3, 7C-C4, 7C-D2, 7C-D3-A, 7C-D3-B, 7C-D4-A, 7C-D4-C, 7C-D4-C-1..4, 7C-E1, and 7C-D4-D are CLOSED / COMMITTED.** 7C-D4-D1 is an implementation slice on top of this baseline and NOT yet committed.
 
-**✅ MANUAL UAT DONE → STRATEGIC PIVOT.** CEO ran the 7C-D4-C keyboard UX suite through Manual UAT on the physical POS terminal via the E1 LAN setup. Outcome: **web-based iOS/iPad Safari focus workarounds are DROPPED.** The iPad/iOS Safari hardware-scanner focus workaround is **strategically deferred to the Native App / Capacitor wrapper phase** (native HID listener or scanner-SDK approach) — no DOM focus hacks. UAT surfaced two cross-platform POS logic/interaction bugs, now addressed in 7C-D4-D (below). The component-level Escape pass for OpenShift / CloseShift / CashTransaction remains DEFERRED; no UI polish authorized.
+**✅ MANUAL UAT ROUND 2 DONE → ONE NARROW FOLLOW-UP.** CEO re-ran Manual UAT on the physical POS terminal (LAN setup) after D4-D. Everything passed; the only request: the bill-discount touch numpad needs a Clear button (`"numpad ของส่วนลดอยากได้ปุ่ม Clear ด้วยครับ"`). Addressed in 7C-D4-D1 below. The strategic pivot stands (iOS/iPad Safari focus workarounds DROPPED; hardware-scanner focus deferred to the Native App / Capacitor wrapper phase). No component-level Escape follow-up and no UI polish authorized.
 
-**Phase 7C-D4-D — POS Logic & Interaction Bugfixes (Tech Lead / CEO authorized) — IMPLEMENTATION / AWAITING CODEX RE-REVIEW — NOT COMMITTED (Codex round 1 = NEEDS REVISION; revision applied):**
+**Phase 7C-D4-D1 — Discount Numpad Clear Button (Tech Lead / CEO authorized) — IMPLEMENTATION / AWAITING CODEX REVIEW — NOT COMMITTED:**
+
+Narrow UAT Round 2 follow-up: add a Clear affordance to the **bill-discount touch numpad only** (it had none after D4-D swapped the Clear key for the decimal point). **Scope: opt-in `NumpadDialog` prop + the discount caller + tests; NO UOM scan change, NO checkout/payment/write-path change, NO CSS, NO iOS focus hack.** `NumpadDialog` gains an **opt-in, backwards-compatible** `allowClear` prop (default false). In decimal mode (`allowDecimal`), `allowClear` selects a 13-key `NUMPAD_KEYS_DECIMAL_CLEAR` layout = the decimal pad **plus** a trailing Clear (`C`) key, which auto-flows to a 5th row of the existing 3-column grid → **no CSS / layout change**. Clear reuses the existing `if (key === 'C') setInput('')` handler (empties the display); a free-numeric confirm then resolves `parseFloat('') || 0 = 0`, writing `cart.setBillDiscValue(0)` — so touch users can clear the discount to 0. The bill-discount `<NumpadDialog>` opts in (`allowClear`); the qty `<NumpadDialog>` passes none of the opt-in flags → unchanged (it already has its own Clear key, with its own integer/≤0-reject semantics). **Decimal + zero support intact** (`.` and `C` coexist in the layout; seed not floored; `parseFloat||0` confirm). **F12 (`hasBlockingModalOpen`) and Escape (`closeTopModalOnEscape`) still include `discNumpadOpen` — unchanged.** NumpadDialog stays touch-only (no `onKeyDown`/`isComposing`/`Escape`).
+
+**Test updates (`src/pages/POSPage.keyboard-contract.test.ts`, +7 D4-D1 tests):** the discount `<NumpadDialog>` opts into `allowClear`; the qty instance gets none of the opt-in flags; `allowClear` defaults off and gates `NUMPAD_KEYS_DECIMAL_CLEAR`; Clear empties input (`if (key === 'C') setInput('')`) and a free-numeric confirm (`parseFloat(input) || 0`) yields 0 via `cart.setBillDiscValue`; decimal + zero remain (`'.', '0', '⌫', 'C'` layout, no-floor seed, `parseFloat`); qty integer contract untouched; F12/Escape still include `discNumpadOpen`. All prior D4-A/C/D contracts green.
+
+**Forbidden boundaries honored (D4-D1):** no CSS change; no `PaymentModal`/`components/pos/*` (besides the authorized opt-in `NumpadDialog` `allowClear` prop)/`lib/*` change; no UOM scan-routing change; no checkout/payment/order-creation/offline/IndexedDB/manual-review change; no cart/discount/UOM/quantity calculation change; no F12/Escape behavior change (only re-asserted in tests); no LAN/emulator config; no Firebase rules/Functions; no Android/Capacitor/`.claude/`; changed files = `Task.md`, `Context.md`, `src/components/pos/NumpadDialog.tsx`, `src/pages/POSPage.tsx`, `src/pages/POSPage.keyboard-contract.test.ts`; `stash@{0}` untouched (read-only `git stash list` only). Validation: targeted spec **46 passed**; `vitest run` **538 passed**; `tsc -b` clean.
+
+**Next step (D4-D1):** Codex GPT-5.5 High review of the Clear-button follow-up before Tech Lead closure / commit. Do NOT mark D4-D1 closed. Do NOT authorize the next phase. Hardware-scanner focus stays deferred to the Native App / Capacitor wrapper phase.
+
+---
+
+**Phase 7C-D4-D — POS Logic & Interaction Bugfixes — CLOSED / COMMITTED — `1a239b4 fix(pos): resolve UOM scans and discount numpad` (Tech Lead Option B — APPROVED WITH NOTES; Codex round 1 NEEDS REVISION → revision → PASS WITH NOTES):**
 
 Two cross-platform bugfixes from Manual UAT. **Absolute rule honored: NO iOS/iPad Safari DOM focus workaround** — no `element.focus`/`setTimeout`/`requestAnimationFrame`/hidden-input traps/`isTrusted`/synthetic `KeyboardEvent`/viewport/CSS touch hacks. Hardware-scanner focus is deferred to the Native App / Capacitor wrapper phase.
 
@@ -27,7 +39,7 @@ Two cross-platform bugfixes from Manual UAT. **Absolute rule honored: NO iOS/iPa
 
 **Forbidden boundaries honored (D4-D):** no CSS change; no `PaymentModal`/`components/pos/*` (besides the authorized opt-in `NumpadDialog` props)/`lib/*` change; no checkout/payment/order-creation/`confirmSale`/`submitAsyncOrder`/offline/IndexedDB/manual-review change; no cart/discount/UOM/quantity calculation change (only Fix 1's scan→unit routing + Fix 2 enabling the discount values the input already accepts); no LAN/emulator config change; no Firebase rules/Functions; no Android/Capacitor/`.claude/`; changed files = `Task.md`, `Context.md`, `src/pages/POSPage.tsx`, `src/components/pos/NumpadDialog.tsx`, `src/pages/POSPage.keyboard-contract.test.ts`; `stash@{0}` untouched (read-only `git stash list` only). Validation: targeted spec **39 passed**; `vitest run` **531 passed**; `tsc -b` clean.
 
-**Next step (D4-D):** Codex GPT-5.5 High **re-review** of the revised package before Tech Lead closure / commit. Do NOT mark D4-D closed. Do NOT authorize the next phase. Hardware-scanner focus is handled later in the Native App / Capacitor wrapper phase.
+**D4-D next step (DONE):** Codex round 1 NEEDS REVISION → revision applied → Codex PASS WITH NOTES → Tech Lead Option B closure → committed `1a239b4`. CEO Manual UAT Round 2 then requested the discount-numpad Clear button, now in 7C-D4-D1 (top of this tracker).
 
 ---
 

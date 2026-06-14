@@ -1308,6 +1308,7 @@ export default function POSPage() {
         initialValue={cart.billDiscValue}
         allowDecimal
         allowZero
+        allowClear
         maxLength={7}
         onClose={() => {
           setDiscNumpadOpen(false);
