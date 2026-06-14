@@ -1,4 +1,4 @@
-# Current Task Tracker — Phase 7C-D4-C-2 (POS Focus-return Consistency — IMPLEMENTATION / AWAITING CODEX REVIEW)
+# Current Task Tracker — Phase 7C-D4-C-3 (POS F12 Modal Suppression — IMPLEMENTATION / AWAITING CODEX REVIEW)
 
 > Living checkpoint doc for agents. Detailed history: `docs/reports/latest-report.md` (do not duplicate long-form evidence here).
 
@@ -10,15 +10,23 @@
 - **H6-E2-B** — Write Transfer Evidence Header at Completion — CLOSED / COMMITTED — `82d3352 feat(pos): write transfer reversal evidence header on completion`
 - **H6-E2-C** — Transfer Evidence Coordinator Validation — CLOSED / COMMITTED — `fe3ff44 feat(pos): validate transfer reversal header evidence`
 
-**Current clean baseline:** `97a6bb2 fix(pos): guard scan input during IME composition` (7C-D4-C-1). **7C-C3, 7C-C4, 7C-D2, 7C-D3-A, 7C-D3-B, 7C-D4-A, 7C-D4-C, and 7C-D4-C-1 are CLOSED / COMMITTED.** 7C-D4-C-2 is an implementation slice on top of this baseline and NOT yet committed.
+**Current clean baseline:** `d4261f5 fix(pos): restore search focus after POS dialogs` (7C-D4-C-2). **7C-C3, 7C-C4, 7C-D2, 7C-D3-A, 7C-D3-B, 7C-D4-A, 7C-D4-C, 7C-D4-C-1, and 7C-D4-C-2 are CLOSED / COMMITTED.** 7C-D4-C-3 is an implementation slice on top of this baseline and NOT yet committed.
 
-**Phase 7C-D4-C-2 — POS Focus-return Consistency (Tech Lead / CEO authorized after D4-C-1 commit) — IMPLEMENTATION / AWAITING CODEX REVIEW:**
+**Phase 7C-D4-C-3 — POS F12 Modal Suppression (Tech Lead / CEO authorized after D4-C-2 commit) — IMPLEMENTATION / AWAITING CODEX REVIEW:**
+
+Third implementation slice off the D4-C plan. **Scope: F12 modal suppression ONLY** — stop the F12 checkout shortcut from stacking `PaymentModal` over an already-open blocking dialog. Tests updated FIRST (added a suppression test + a no-new-listener/no-F12-in-PaymentModal test; preserved all existing F12 parity tests), then runtime. In `src/pages/POSPage.tsx`: new derived `const hasBlockingModalOpen = Boolean(uomProduct || pickerOpen || discountLineKey || qtyNumpadLineKey || showCloseShift || holdNoteOpen || suspendedListOpen || showCashTx || catModalOpen || isSortingModalOpen || confirmModalState.open || checkout.customerModalOpen)`; the F12 `onKey` now does `e.preventDefault()` (unconditional, devtools stays suppressed) then `if (hasBlockingModalOpen) return;` **before** the existing `if (cartLines.length > 0 && activeShift) setPaymentOpen(true)`; effect deps extended to `[cartLines.length, activeShift, hasBlockingModalOpen]`. **OpenShiftModal intentionally excluded** — F12 already requires `activeShift` (null while OpenShift shows). **Checkout-disabled parity preserved (`disabled={cartLines.length===0 || !activeShift}` unchanged); single global keydown listener + cleanup unchanged; no checkout/payment/processing/write-path/cart/UOM/discount/quantity change; no Escape/IME/focus-return/scanner change; no PaymentModal/CSS change.** Validation: targeted spec **26 passed**; `vitest run` **518 passed** (was 516; +2); `tsc -b` clean.
+
+**Forbidden boundaries honored (D4-C-3):** no CSS change; no `PaymentModal`/`NumpadDialog`/`components/pos/*`/`lib/*` change; no checkout/cart/payment/`confirmSale`/`submitAsyncOrder`/offline/IndexedDB/manual-review change; no cart/discount/UOM/quantity formula change; no Escape implementation; no new/duplicate global listener; no Firebase rules/Functions; no H7-F/Android/Capacitor/`.claude/`; only `Task.md`, `Context.md`, `src/pages/POSPage.tsx`, and `src/pages/POSPage.keyboard-contract.test.ts` changed; `stash@{0}` untouched (read-only `git stash list` only).
+
+**Next step (D4-C-3):** Codex GPT-5.5 High review of the F12 suppression implementation before Tech Lead closure / commit. Do NOT mark D4-C-3 closed. Do NOT authorize D4-C-4 (Escape).
+
+**Phase 7C-D4-C-2 — POS Focus-return Consistency — CLOSED / COMMITTED — `d4261f5 fix(pos): restore search focus after POS dialogs` (Tech Lead Option B — APPROVED WITH NOTES; Codex PASS WITH NOTES):**
 
 Second implementation slice off the D4-C plan. **Scope: focus-return consistency ONLY** — restore focus to `#pos-search` after the four audited focus-drop modals close. Tests updated FIRST (flipped the three D4-A `CURRENT GAP` locks + added a category test), then runtime. Changes in `src/pages/POSPage.tsx`, all via the existing `focusSearch()` helper: **UomModal** `onSelect` + `onClose` → `focusSearch()`; **ItemDiscountModal** `onClose` → `focusSearch()` (the modal funnels both save and cancel through `onClose`); **NumpadDialog** `onClose` + `onConfirm` (only after a successful `setLineQty`) → `focusSearch()`; **category overlay** — new `closeCatModal = () => { setCatModalOpen(false); focusSearch(); }` helper now backs all four close routes (backdrop, close button, "ทั้งหมด" reset, category select), with `setActiveCategory` left in place. **No cart/discount/UOM/quantity/category-filter calculation changed; NumpadDialog stays touch-only (component not modified); no hardware-key/Enter added; no F12/Escape/IME/scanner change; no PaymentModal/CSS change.** Validation: targeted spec **24 passed**; `vitest run` **516 passed** (was 515; +1); `tsc -b` clean.
 
 **Forbidden boundaries honored (D4-C-2):** no CSS change; no `PaymentModal`/`NumpadDialog`/`components/pos/*`/`lib/*` change; no checkout/cart/payment/`confirmSale`/`submitAsyncOrder`/offline/IndexedDB/manual-review change; no cart/discount/UOM/quantity formula change; no F12-listener or Escape change; no scanner/IME-guard change; no Firebase rules/Functions; no H7-F/Android/Capacitor/`.claude/`; only `Task.md`, `Context.md`, `src/pages/POSPage.tsx`, and `src/pages/POSPage.keyboard-contract.test.ts` changed; `stash@{0}` untouched (read-only `git stash list` only).
 
-**Next step (D4-C-2):** Codex GPT-5.5 High review of the focus-return implementation before Tech Lead closure / commit. Do NOT mark D4-C-2 closed. Do NOT authorize D4-C-3 (F12 suppression) / D4-C-4 (Escape).
+**D4-C-2 next step (DONE):** Codex PASS WITH NOTES → Tech Lead Option B closure → committed `d4261f5`. Third slice D4-C-3 (F12 suppression) now in implementation (above).
 
 **Phase 7C-D4-C-1 — POS IME / Composition Guard — CLOSED / COMMITTED — `97a6bb2 fix(pos): guard scan input during IME composition` (Tech Lead Option B — APPROVED WITH NOTES; Codex PASS WITH NOTES):**
 

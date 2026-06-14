@@ -478,16 +478,37 @@ export default function POSPage() {
     };
   }, [user, branchId]);
 
+  // F12 modal suppression (Phase 7C-D4-C-3): true when any blocking POS modal/overlay is
+  // open, so the checkout shortcut won't stack PaymentModal over another dialog. (OpenShift
+  // is not listed: F12 already requires `activeShift`, which is null while it shows.)
+  const hasBlockingModalOpen = Boolean(
+    uomProduct ||
+      pickerOpen ||
+      discountLineKey ||
+      qtyNumpadLineKey ||
+      showCloseShift ||
+      holdNoteOpen ||
+      suspendedListOpen ||
+      showCashTx ||
+      catModalOpen ||
+      isSortingModalOpen ||
+      confirmModalState.open ||
+      checkout.customerModalOpen,
+  );
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'F12') {
         e.preventDefault();
+        // Suppress while a blocking modal is open; otherwise keep the existing open-gate
+        // parity with the checkout button (cart non-empty AND an active shift).
+        if (hasBlockingModalOpen) return;
         if (cartLines.length > 0 && activeShift) setPaymentOpen(true);
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [cartLines.length, activeShift]);
+  }, [cartLines.length, activeShift, hasBlockingModalOpen]);
 
   return (
     <div className="pos-page">

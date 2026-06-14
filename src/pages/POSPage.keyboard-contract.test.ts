@@ -137,6 +137,50 @@ describe('7C-D4-A · F12 / checkout-disabled gate parity (POSPage.tsx)', () => {
     expect(eff).toContain('cartLines.length > 0');
     expect(eff).toContain('activeShift');
   });
+
+  test('F12 is suppressed while any blocking POS modal is open (D4-C-3 fix)', () => {
+    // D4-C-3 intentional fix: F12 must not stack PaymentModal over an already-open dialog.
+    // A blocking-modal predicate gates the shortcut before payment opens. Checkout-disabled
+    // parity (cart>0 && activeShift) is unchanged.
+    const pred = region(posSource, 'const hasBlockingModalOpen = Boolean(', ');');
+    // Predicate enumerates the current blocking modal/overlay states.
+    for (const state of [
+      'uomProduct',
+      'pickerOpen',
+      'discountLineKey',
+      'qtyNumpadLineKey',
+      'showCloseShift',
+      'holdNoteOpen',
+      'suspendedListOpen',
+      'showCashTx',
+      'catModalOpen',
+      'isSortingModalOpen',
+      'confirmModalState.open',
+      'checkout.customerModalOpen',
+    ]) {
+      expect(pred).toContain(state);
+    }
+    // The F12 handler consults the predicate and returns BEFORE opening payment.
+    const eff = region(posSource, 'const onKey = (e: KeyboardEvent)', "window.removeEventListener('keydown'");
+    expect(eff).toContain('if (hasBlockingModalOpen) return;');
+    const suppressIdx = eff.indexOf('if (hasBlockingModalOpen) return;');
+    const openIdx = eff.indexOf('setPaymentOpen(true)');
+    expect(suppressIdx).toBeGreaterThan(-1);
+    expect(openIdx).toBeGreaterThan(-1);
+    expect(suppressIdx).toBeLessThan(openIdx);
+    // preventDefault still fires unconditionally (devtools never opens on the terminal).
+    expect(eff.indexOf('e.preventDefault();')).toBeLessThan(suppressIdx);
+    // The effect closure stays current by depending on the predicate.
+    const effDeps = region(posSource, "window.removeEventListener('keydown', onKey);", ']);');
+    expect(effDeps).toContain('hasBlockingModalOpen');
+  });
+
+  test('F12 suppression added no new/duplicate listener and no F12 code in PaymentModal', () => {
+    // Still exactly one global keydown listener (re-asserted alongside the suppression change).
+    expect(countOccurrences(posSource, "window.addEventListener('keydown'")).toBe(1);
+    // F12 handling stays in the page; it was not moved into the payment modal.
+    expect(paymentSource).not.toContain('F12');
+  });
 });
 
 // ─── C. Focus-return expectations ──────────────────────────────────────────────────
