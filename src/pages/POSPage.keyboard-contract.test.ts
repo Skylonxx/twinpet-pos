@@ -601,3 +601,81 @@ describe('7C-D4-A · Payment confirm is a guarded RED path (PaymentModal.tsx / N
     expect(numpadSource).not.toContain('isComposing');
   });
 });
+
+// ─── H. Product Picker multi-UOM selection queue (Phase 7C-L1 / LOGIC-01) ─────────────
+describe('7C-L1 · Product Picker multi-UOM selection queue (POSPage.tsx)', () => {
+  test('a pending-UOM queue exists, separate from the single display slot', () => {
+    // LOGIC-01 root cause: `uomProduct` is one slot, so a batch of multi-UOM products overwrote
+    // it (only the last survived). The queue holds the rest; the display slot stays a single
+    // product (its existing F12/Escape contract is unchanged).
+    expect(posSource).toContain('const [uomQueue, setUomQueue] = useState<PosProduct[]>([]);');
+    expect(posSource).toContain('const [uomProduct, setUomProduct] = useState<PosProduct | null>(null);');
+  });
+
+  test('onProductClick ENQUEUES multi-UOM products instead of overwriting uomProduct', () => {
+    const fn = region(posSource, 'const onProductClick = useCallback', '[cart],');
+    expect(fn).toContain('product.uomOptions.length > 1');
+    // The fix: append to the queue (functional updater → no stale read during the batch loop).
+    expect(fn).toContain('setUomQueue((q) => [...q, product]);');
+    // The overwrite is gone — onProductClick no longer writes the single slot directly.
+    expect(fn).not.toContain('setUomProduct(product)');
+    // Single-UOM behavior is unchanged: still an immediate direct add.
+    expect(fn).toContain('cart.addToCart(product, product.uomOptions[0]!);');
+  });
+
+  test('the drain effect promotes the next queued product only when idle, in selection order', () => {
+    const eff = region(
+      posSource,
+      'if (uomProduct === null && uomQueue.length > 0)',
+      '}, [uomProduct, uomQueue]);',
+    );
+    // Promote the head (FIFO order) and remove it from the queue. Runs only when no modal shows,
+    // so confirm/cancel (which null the slot) deterministically advance to the next product.
+    expect(eff).toContain('setUomProduct(uomQueue[0]!);');
+    expect(eff).toContain('setUomQueue((q) => q.slice(1));');
+  });
+
+  test('the picker confirm routes EVERY selected product through onProductClick (no overwrite)', () => {
+    const pick = region(posSource, '<ProductPickerDialog', 'onClose={() => setPickerOpen(false)}');
+    expect(pick).toContain('for (const item of selected)');
+    expect(pick).toContain('onProductClick(product);');
+  });
+
+  test('the pending batch keeps F12 suppressed across items (uomQueue in the blocking predicate)', () => {
+    // F12 must not stack PaymentModal mid-batch, including the brief slot-null moment between
+    // queued items. Both the display slot and the queue gate the shortcut.
+    const pred = region(posSource, 'const hasBlockingModalOpen = Boolean(', ');');
+    expect(pred).toContain('uomProduct');
+    expect(pred).toContain('uomQueue.length > 0');
+  });
+
+  test('UOM confirm adds the CURRENT product then nulls the slot so the queue advances', () => {
+    const uom = region(posSource, '<UomModal', '<ItemDiscountModal');
+    expect(uom).toMatch(
+      /if \(uomProduct\) cart\.addToCart\(uomProduct, opt\);[\s\S]{0,40}setUomProduct\(null\);/,
+    );
+  });
+
+  test('UOM cancel/close NEVER adds to cart (no silent add of an unchosen unit)', () => {
+    // Cancel semantics (Phase 7C-L1): closing the current UOM modal skips ONLY that product and
+    // advances to the next pending one — it must never add a product whose unit was not chosen.
+    const uom = region(posSource, '<UomModal', '<ItemDiscountModal');
+    const close = region(uom, 'onClose={', '}}');
+    expect(close).toContain('setUomProduct(null);');
+    expect(close).not.toContain('addToCart');
+  });
+
+  test('Escape still cancels the UOM modal via setUomProduct(null), no cart write (D4-C-4 intact)', () => {
+    const body = region(posSource, 'const closeTopModalOnEscape = useCallback', '}, [');
+    expect(body).toMatch(/if \(uomProduct\) \{\s*setUomProduct\(null\);[\s\S]{0,40}return true;/);
+    const uomBranch = region(body, '// 4. UOM', '// 5. Item discount');
+    expect(uomBranch).not.toContain('addToCart');
+    expect(uomBranch).not.toContain('cart.');
+  });
+
+  test('scan-to-UOM direct-add path (D4-D Fix 1) is unchanged by the queue', () => {
+    const h = region(posSource, 'const handleSearchKeyDown', 'const clearPosCart');
+    expect(h).toContain('cart.addToCart(match.product, match.option);');
+    expect(h).toContain('onProductClick(match.product);');
+  });
+});

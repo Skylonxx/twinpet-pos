@@ -110,6 +110,11 @@ export default function POSPage() {
   const [showExtraOptions, setShowExtraOptions] = useState(false);
 
   const [uomProduct, setUomProduct] = useState<PosProduct | null>(null);
+  // Pending multi-UOM products waiting for unit selection AFTER the one currently shown
+  // (Phase 7C-L1 / LOGIC-01). `uomProduct` is a single display slot, so a batch selection of
+  // several multi-UOM products used to overwrite it (only the last survived). They are now
+  // enqueued here in selection order and drained one-at-a-time into `uomProduct`.
+  const [uomQueue, setUomQueue] = useState<PosProduct[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [discountLineKey, setDiscountLineKey] = useState<string | null>(null);
   const [qtyNumpadLineKey, setQtyNumpadLineKey] = useState<string | null>(null);
@@ -351,13 +356,29 @@ export default function POSPage() {
   const onProductClick = useCallback(
     (product: PosProduct) => {
       if (product.uomOptions.length > 1) {
-        setUomProduct(product);
+        // Enqueue rather than overwrite the single `uomProduct` slot (Phase 7C-L1 / LOGIC-01):
+        // a batch confirm calls this once per selected product, so multiple multi-UOM products
+        // must all be remembered — the drain effect below promotes them one at a time. The
+        // functional updater avoids any stale-closure read of the queue during the loop.
+        setUomQueue((q) => [...q, product]);
       } else {
         cart.addToCart(product, product.uomOptions[0]!);
       }
     },
     [cart],
   );
+
+  // Drain the pending-UOM queue (Phase 7C-L1 / LOGIC-01): whenever no UOM modal is showing and
+  // products are still queued, promote the next one (in selection order) into the display slot.
+  // Confirm (onSelect) and cancel (onClose / Escape) both clear `uomProduct` to null, so this
+  // advances to the next pending product automatically — without dropping any selection and
+  // without silently adding a product whose unit was never chosen.
+  useEffect(() => {
+    if (uomProduct === null && uomQueue.length > 0) {
+      setUomProduct(uomQueue[0]!);
+      setUomQueue((q) => q.slice(1));
+    }
+  }, [uomProduct, uomQueue]);
 
   const handleSearchKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -495,6 +516,7 @@ export default function POSPage() {
   // is not listed: F12 already requires `activeShift`, which is null while it shows.)
   const hasBlockingModalOpen = Boolean(
     uomProduct ||
+      uomQueue.length > 0 || // pending multi-UOM batch (Phase 7C-L1) — stay blocked between items
       pickerOpen ||
       discountLineKey ||
       qtyNumpadLineKey ||
