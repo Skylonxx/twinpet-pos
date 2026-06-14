@@ -149,6 +149,7 @@ describe('7C-D4-A · F12 / checkout-disabled gate parity (POSPage.tsx)', () => {
       'pickerOpen',
       'discountLineKey',
       'qtyNumpadLineKey',
+      'discNumpadOpen',
       'showCloseShift',
       'holdNoteOpen',
       'suspendedListOpen',
@@ -314,6 +315,7 @@ describe('7C-D4-C-4 · Escape close/cancel/dismiss contract (POSPage.tsx)', () =
       'setUomProduct(null);', // UOM — cancel
       'setDiscountLineKey(null);', // Item discount — cancel
       'setQtyNumpadLineKey(null);', // Qty numpad — cancel
+      'setDiscNumpadOpen(false);', // Bill-discount numpad — cancel (D4-D)
       'setHoldNoteOpen(false);', // Hold-bill note — cancel
       'setSuspendedListOpen(false);', // Suspended list
       'closeCatModal();', // Category overlay
@@ -343,6 +345,7 @@ describe('7C-D4-C-4 · Escape close/cancel/dismiss contract (POSPage.tsx)', () =
       'setUomProduct(null);',
       'setDiscountLineKey(null);',
       'setQtyNumpadLineKey(null);',
+      'setDiscNumpadOpen(false);',
       'setHoldNoteOpen(false);',
       'setSuspendedListOpen(false);',
       'closeCatModal();',
@@ -402,6 +405,67 @@ describe('7C-D4-C-4 · Escape close/cancel/dismiss contract (POSPage.tsx)', () =
     expect(paymentSource).not.toContain('onKeyDown');
     expect(numpadSource).not.toContain('Escape');
     expect(numpadSource).not.toContain('onKeyDown');
+  });
+});
+
+// ─── F. Bill-discount numpad keyboard-contract integration (D4-D revision) ───────────
+describe('7C-D4-D · Bill-discount numpad integration (POSPage.tsx / NumpadDialog.tsx)', () => {
+  /** Region of the bill-discount NumpadDialog element (title → its closing `/>`). */
+  function discNumpadRegion(): string {
+    return region(posSource, 'title="ส่วนลดท้ายบิล"', '/>');
+  }
+
+  test('discNumpadOpen is included in the F12 blocking predicate (no PaymentModal stacking)', () => {
+    // D4-D Blocker 1: the discount numpad is a blocking modal, so F12 must be suppressed while it
+    // is open. The predicate enumerates it; the F12 handler already returns on hasBlockingModalOpen.
+    const pred = region(posSource, 'const hasBlockingModalOpen = Boolean(', ');');
+    expect(pred).toContain('discNumpadOpen');
+  });
+
+  test('Escape closes the discount numpad (close-only) and returns true', () => {
+    // D4-D Blocker 1: closeTopModalOnEscape gains a discount-numpad branch that only flips the
+    // open-state (cancel) and returns true so exactly one modal still closes per keypress.
+    const body = region(posSource, 'const closeTopModalOnEscape = useCallback', '}, [');
+    expect(body).toMatch(/if \(discNumpadOpen\) \{\s*setDiscNumpadOpen\(false\);[\s\S]{0,40}return true;/);
+    // Closing the discount numpad is not a write/confirm path.
+    expect(body).not.toContain('setBillDiscValue');
+  });
+
+  test('the discount NumpadDialog opts into decimal/zero entry and writes via the bill setter', () => {
+    // D4-D Blocker 2: the bill-discount numpad must accept the same values as the discount input
+    // (0 and decimals). It opts into the new NumpadDialog modes and confirms via setBillDiscValue.
+    const disc = discNumpadRegion();
+    expect(disc).toContain('allowDecimal');
+    expect(disc).toContain('allowZero');
+    expect(disc).toContain('initialValue={cart.billDiscValue}');
+    expect(disc).toContain('cart.setBillDiscValue(');
+    expect(disc).toContain('setDiscNumpadOpen(false)');
+  });
+
+  test('the QTY NumpadDialog keeps the default integer contract (no decimal/zero opt-in)', () => {
+    // Regression guard: only the bill-discount instance opts in; the qty numpad is untouched.
+    const qty = region(posSource, '<NumpadDialog', '<SortingSettingsModal');
+    expect(qty).toContain('setLineQty');
+    expect(qty).not.toContain('allowDecimal');
+    expect(qty).not.toContain('allowZero');
+  });
+
+  test('NumpadDialog decimal/zero support is OPT-IN and backwards-compatible (qty unchanged)', () => {
+    // The new props default OFF, so every existing caller keeps the integer-≥1 contract.
+    expect(numpadSource).toContain('allowDecimal = false');
+    expect(numpadSource).toContain('allowZero = false');
+    // Quantity contract preserved by default: integer parse, ≤0 rejected, initialValue floored.
+    expect(numpadSource).toContain('parseInt(input, 10)');
+    expect(numpadSource).toContain('กรุณาระบุจำนวนที่มากกว่า 0');
+    expect(numpadSource).toContain('Math.floor(initialValue)');
+    // Decimal/zero mode: no flooring of the seed, parseFloat confirm (0 + decimals, no truncation),
+    // and a decimal-point key layout — all gated behind the opt-in flags.
+    expect(numpadSource).toContain('allowDecimal ? Math.max(0, initialValue)');
+    expect(numpadSource).toContain('parseFloat(input)');
+    expect(numpadSource).toContain('NUMPAD_KEYS_DECIMAL');
+    // Still touch-only — no hardware-key / IME / Escape path introduced by the new modes.
+    expect(numpadSource).not.toContain('onKeyDown');
+    expect(numpadSource).not.toContain('isComposing');
   });
 });
 

@@ -3,7 +3,11 @@ import { createPortal } from 'react-dom';
 import './NumpadDialog.css';
 
 const NUMPAD_KEYS = ['7', '8', '9', '4', '5', '6', '1', '2', '3', 'C', '0', '⌫'] as const;
-type NumpadKey = (typeof NUMPAD_KEYS)[number];
+// Phase 7C-D4-D: the decimal layout swaps the Clear key for a decimal point so the bill-discount
+// numpad can enter fractional amounts. Backspace (⌫) still covers correction. Same 12-key 3×4
+// grid → no CSS / layout change.
+const NUMPAD_KEYS_DECIMAL = ['7', '8', '9', '4', '5', '6', '1', '2', '3', '.', '0', '⌫'] as const;
+type NumpadKey = (typeof NUMPAD_KEYS)[number] | (typeof NUMPAD_KEYS_DECIMAL)[number];
 
 type NumpadDialogProps = {
   open: boolean;
@@ -11,6 +15,16 @@ type NumpadDialogProps = {
   initialValue: number;
   onClose: () => void;
   onConfirm: (value: number) => void;
+  /**
+   * Opt-in numeric mode (Phase 7C-D4-D). Defaults preserve the original quantity contract
+   * (integer ≥ 1, floored `initialValue`, ≤ 0 rejected with the existing error). The bill-discount
+   * numpad opts into `allowDecimal` + `allowZero` so it can enter exactly the values the discount
+   * input accepts (0 and decimals, mirroring its `parseFloat(...) || 0`).
+   */
+  allowDecimal?: boolean;
+  allowZero?: boolean;
+  /** Max characters the display accepts (default 4 — the quantity contract). */
+  maxLength?: number;
 };
 
 export default function NumpadDialog({
@@ -19,43 +33,72 @@ export default function NumpadDialog({
   initialValue,
   onClose,
   onConfirm,
+  allowDecimal = false,
+  allowZero = false,
+  maxLength = 4,
 }: NumpadDialogProps) {
   const [input, setInput] = useState('');
   const [error, setError] = useState<string | null>(null);
 
+  // Free-numeric mode (bill discount): 0 and decimals are valid, mirroring the discount input.
+  // Quantity mode (default): integer ≥ 1, exactly as before.
+  const freeNumeric = allowDecimal || allowZero;
+
   useEffect(() => {
     if (!open) return;
-    setInput(String(Math.max(0, Math.floor(initialValue))));
+    // Quantity mode floors; decimal mode keeps the fractional initial value intact (no truncation).
+    const seed = allowDecimal ? Math.max(0, initialValue) : Math.max(0, Math.floor(initialValue));
+    setInput(String(seed));
     setError(null);
-  }, [open, initialValue]);
+  }, [open, initialValue, allowDecimal]);
 
-  const handleKey = useCallback((key: NumpadKey) => {
-    setError(null);
-    if (key === 'C') {
-      setInput('');
-      return;
-    }
-    if (key === '⌫') {
-      setInput((prev) => prev.slice(0, -1));
-      return;
-    }
-    setInput((prev) => {
-      const next = prev === '0' ? key : prev + key;
-      if (next.length > 4) return prev;
-      return next;
-    });
-  }, []);
+  const handleKey = useCallback(
+    (key: NumpadKey) => {
+      setError(null);
+      if (key === 'C') {
+        setInput('');
+        return;
+      }
+      if (key === '⌫') {
+        setInput((prev) => prev.slice(0, -1));
+        return;
+      }
+      if (key === '.') {
+        // Decimal mode only: at most one point; a leading "." seeds "0.".
+        setInput((prev) => {
+          if (prev.includes('.')) return prev;
+          const next = prev === '' ? '0.' : prev + '.';
+          return next.length > maxLength ? prev : next;
+        });
+        return;
+      }
+      setInput((prev) => {
+        const next = prev === '0' ? key : prev + key;
+        if (next.length > maxLength) return prev;
+        return next;
+      });
+    },
+    [maxLength],
+  );
 
   const handleConfirm = useCallback(() => {
+    if (freeNumeric) {
+      // Mirror the discount field's `parseFloat(...) || 0`: 0 and decimals are valid, and an
+      // unchanged existing decimal confirms without truncation.
+      onConfirm(parseFloat(input) || 0);
+      return;
+    }
     const parsed = parseInt(input, 10);
     if (!input || Number.isNaN(parsed) || parsed <= 0) {
       setError('กรุณาระบุจำนวนที่มากกว่า 0');
       return;
     }
     onConfirm(parsed);
-  }, [input, onConfirm]);
+  }, [input, onConfirm, freeNumeric]);
 
   if (!open) return null;
+
+  const keys = allowDecimal ? NUMPAD_KEYS_DECIMAL : NUMPAD_KEYS;
 
   return createPortal(
     <div
@@ -81,7 +124,7 @@ export default function NumpadDialog({
         {error && <p className="npd-error">{error}</p>}
 
         <div className="npd-grid">
-          {NUMPAD_KEYS.map((key) => (
+          {keys.map((key) => (
             <button
               key={key}
               type="button"

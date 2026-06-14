@@ -53,16 +53,25 @@ function findByScanCode(products: PosProduct[], code: string): ScanMatch | undef
   if (!trimmed) return undefined;
 
   for (const p of products) {
-    // Top-level barcode or SKU — keep existing UomModal behaviour
-    if (p.sku === trimmed || (p.barcode != null && p.barcode === trimmed)) {
+    // SKU is a product-level identifier (never a packaging-unit barcode) — keep the existing
+    // UomModal behaviour so a multi-UOM product still prompts for the unit on an SKU scan.
+    if (p.sku === trimmed) {
       return { product: p, option: null };
     }
-    // UOM-specific barcode — auto-select that unit, bypass UomModal
+    // A specific packaging-unit / UOM barcode wins next: resolve that exact unit and BYPASS the
+    // UomModal (Phase 7C-D4-D Fix 1). The base unit's barcode mirrors the product's top-level
+    // `barcode` (see posProductMapper.buildUomOptions), so a scanned product/base barcode now
+    // lands here and adds the base unit directly instead of re-opening the unit picker.
     const matchedOption = p.uomOptions.find(
       (o) => o.barcode != null && o.barcode === trimmed,
     );
     if (matchedOption) {
       return { product: p, option: matchedOption };
+    }
+    // A product-level barcode not tied to any unit (e.g. no UOM barcodes configured) — fall
+    // back to the existing UomModal behaviour.
+    if (p.barcode != null && p.barcode === trimmed) {
+      return { product: p, option: null };
     }
   }
 
@@ -115,6 +124,9 @@ export default function POSPage() {
   const [catModalOpen, setCatModalOpen] = useState(false);
   const [catSearch, setCatSearch] = useState('');
   const [isSortingModalOpen, setIsSortingModalOpen] = useState(false);
+  // Bill-discount numpad (Phase 7C-D4-D Fix 2): drives the custom on-screen numpad opened by
+  // tapping the bill-discount field, so touch terminals don't fall back to the native keyboard.
+  const [discNumpadOpen, setDiscNumpadOpen] = useState(false);
 
   type ConfirmModalPayload = { type: 'clearCart' } | { type: 'cancelParkedOrder'; bill: SuspendedBill };
   const [confirmModalState, setConfirmModalState] = useState<{ open: boolean; payload?: ConfirmModalPayload }>({ open: false });
@@ -486,6 +498,7 @@ export default function POSPage() {
       pickerOpen ||
       discountLineKey ||
       qtyNumpadLineKey ||
+      discNumpadOpen ||
       showCloseShift ||
       holdNoteOpen ||
       suspendedListOpen ||
@@ -542,30 +555,36 @@ export default function POSPage() {
       focusSearch();
       return true;
     }
-    // 7. Hold-bill note — cancel (never confirms the hold)
+    // 7. Bill-discount numpad — cancel (never applies the discount; Phase 7C-D4-D)
+    if (discNumpadOpen) {
+      setDiscNumpadOpen(false);
+      focusSearch();
+      return true;
+    }
+    // 8. Hold-bill note — cancel (never confirms the hold)
     if (holdNoteOpen) {
       setHoldNoteOpen(false);
       focusSearch();
       return true;
     }
-    // 8. Suspended bills list
+    // 9. Suspended bills list
     if (suspendedListOpen) {
       setSuspendedListOpen(false);
       focusSearch();
       return true;
     }
-    // 9. Category overlay (existing close helper already returns focus)
+    // 10. Category overlay (existing close helper already returns focus)
     if (catModalOpen) {
       closeCatModal();
       return true;
     }
-    // 10. Sorting settings
+    // 11. Sorting settings
     if (isSortingModalOpen) {
       setIsSortingModalOpen(false);
       focusSearch();
       return true;
     }
-    // 11. Product picker
+    // 12. Product picker
     if (pickerOpen) {
       setPickerOpen(false);
       focusSearch();
@@ -579,6 +598,7 @@ export default function POSPage() {
     uomProduct,
     discountLineKey,
     qtyNumpadLineKey,
+    discNumpadOpen,
     holdNoteOpen,
     suspendedListOpen,
     catModalOpen,
@@ -994,6 +1014,15 @@ export default function POSPage() {
                       min={0}
                       value={cart.billDiscValue}
                       onChange={(e) => cart.setBillDiscValue(parseFloat(e.target.value) || 0)}
+                      onPointerDown={(e) => {
+                        // Touch/click opens the custom POS numpad (Phase 7C-D4-D Fix 2) instead
+                        // of the native mobile keyboard. preventDefault stops the native focus so
+                        // the dialog isn't fighting an on-screen keyboard; this is NOT an iOS
+                        // focus hack — it suppresses (not forces) focus. Keyboard (Tab) editing of
+                        // the field still works, so decimals / 0 remain enterable.
+                        e.preventDefault();
+                        setDiscNumpadOpen(true);
+                      }}
                     />
                     <button
                       type="button"
@@ -1264,6 +1293,31 @@ export default function POSPage() {
         isOpen={isSortingModalOpen}
         onClose={() => setIsSortingModalOpen(false)}
         defaultBranchId={posBranchId}
+      />
+
+      {/* Bill-discount numpad (Phase 7C-D4-D Fix 2): tapping the discount field opens this custom
+          on-screen numpad instead of the native mobile keyboard. It reuses the touch-only
+          NumpadDialog in its opt-in decimal mode (`allowDecimal`/`allowZero`), so it accepts the
+          same values as the discount input — 0 and decimals (mirroring `parseFloat(...) || 0`),
+          no flooring. It is wired into both `hasBlockingModalOpen` (F12 cannot stack PaymentModal
+          over it) and `closeTopModalOnEscape` (Escape closes it), matching the D4-C-3/D4-C-4
+          keyboard-modal contracts. */}
+      <NumpadDialog
+        open={discNumpadOpen}
+        title="ส่วนลดท้ายบิล"
+        initialValue={cart.billDiscValue}
+        allowDecimal
+        allowZero
+        maxLength={7}
+        onClose={() => {
+          setDiscNumpadOpen(false);
+          focusSearch();
+        }}
+        onConfirm={(val) => {
+          cart.setBillDiscValue(val);
+          setDiscNumpadOpen(false);
+          focusSearch();
+        }}
       />
 
       <DestructiveConfirmModal
