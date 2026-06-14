@@ -297,6 +297,23 @@ export default function POSPage() {
     activeQuickMenus,
   ]);
 
+  // Phase 7C-L3 (cashier confidence): when the current query EXACTLY matches a UOM-specific
+  // barcode, surface the matched product + unit so the cashier can SEE which unit Enter will
+  // add. The grid card only ever shows base-unit info (`uomOptions[0]`), which made a larger
+  // unit (e.g. ลัง) barcode look like the base unit even though the direct add (D4-D) is correct.
+  // Pure derivation over the SAME `findByScanCode` the scan handler uses — it NEVER adds to cart
+  // and NEVER changes scan/Enter behaviour. Null for text searches, SKU / product-level matches
+  // (`option === null`), and misses, so those display paths stay exactly as before.
+  const scanUomHint = useMemo(() => {
+    const trimmed = search.trim();
+    if (!trimmed) return null;
+    const match = findByScanCode(products, trimmed);
+    if (match?.option) {
+      return { productName: match.product.name, unit: match.option.unit };
+    }
+    return null;
+  }, [search, products]);
+
   // Enrich the product-derived category strings with admin metadata (branch
   // order/visibility/background) from the categories collection, then keep only
   // the categories visible for THIS branch, in this branch's display order.
@@ -677,6 +694,20 @@ export default function POSPage() {
               onKeyDown={handleSearchKeyDown}
             />
           </div>
+          {/* Phase 7C-L3: matched-UOM hint. Plain text (existing Tailwind utilities, no new CSS),
+              shown only when the query matched a UOM-specific barcode, so the cashier sees the
+              exact unit Enter will add. Display-only — does not touch the scan/add path. */}
+          {scanUomHint && (
+            <span
+              className="ml-2 inline-flex items-center gap-1 whitespace-nowrap text-xs font-medium text-[var(--p800)]"
+              role="status"
+              aria-live="polite"
+              title="หน่วยที่ตรงกับบาร์โค้ดที่สแกน"
+            >
+              <i className="ti ti-barcode" aria-hidden="true" />
+              {scanUomHint.productName} — หน่วย: {scanUomHint.unit}
+            </span>
+          )}
           <button
             type="button"
             className="pos-add-prod-btn"

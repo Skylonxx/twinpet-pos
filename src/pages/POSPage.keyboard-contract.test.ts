@@ -679,3 +679,62 @@ describe('7C-L1 · Product Picker multi-UOM selection queue (POSPage.tsx)', () =
     expect(h).toContain('onProductClick(match.product);');
   });
 });
+
+// ─── I. UOM barcode matched-unit display hint (Phase 7C-L3) ───────────────────────────
+describe('7C-L3 · UOM barcode matched-unit display hint (POSPage.tsx)', () => {
+  /** Body of the derived hint memo (its `useMemo(` → dep array). */
+  function hintMemo(): string {
+    return region(posSource, 'const scanUomHint = useMemo', '[search, products]);');
+  }
+
+  test('a derived scanUomHint surfaces the matched product + unit ONLY for a UOM-barcode match', () => {
+    const fn = hintMemo();
+    // Derived from the SAME findByScanCode the scan handler uses (no separate matcher).
+    expect(fn).toContain('findByScanCode(products, trimmed)');
+    // Surfaces only when a UOM-specific option matched (match.option set); SKU / product-level
+    // (option === null), text searches, and misses all yield null → those displays unchanged.
+    expect(fn).toContain('match?.option');
+    expect(fn).toContain('match.option.unit');
+    expect(fn).toContain('match.product.name');
+    expect(fn).toContain('return null;');
+  });
+
+  test('the hint memo is pure/read-only — it never adds to cart or mutates scan/search state', () => {
+    const fn = hintMemo();
+    expect(fn).not.toContain('addToCart');
+    expect(fn).not.toContain('setSearch');
+    expect(fn).not.toContain('setUom');
+  });
+
+  test('the matched-UOM hint renders the product name + unit label as plain text (no new CSS)', () => {
+    const hint = region(posSource, '{scanUomHint &&', '</span>');
+    expect(hint).toContain('scanUomHint.productName');
+    expect(hint).toContain('scanUomHint.unit');
+    // Thai unit terminology already used app-wide; rendered as an accessible status, not a button.
+    expect(hint).toContain('หน่วย');
+    expect(hint).toContain('role="status"');
+  });
+
+  test('the Enter direct-UOM add path (D4-D Fix 1) is unchanged by the display hint', () => {
+    const h = region(posSource, 'const handleSearchKeyDown', 'const clearPosCart');
+    expect(h).toContain('const match = findByScanCode(products, trimmed);');
+    expect(h).toContain('cart.addToCart(match.product, match.option);');
+    expect(h).toContain('onProductClick(match.product);');
+  });
+
+  test('product-level / SKU matches and scan MISS behaviour are unchanged by L3', () => {
+    // findByScanCode priority is intact (SKU before UOM barcode → product-level still option null).
+    const fn = region(posSource, 'function findByScanCode', '\n}');
+    expect(fn.indexOf('p.sku === trimmed')).toBeLessThan(fn.indexOf('p.uomOptions.find('));
+    // Miss is still toast-only (no setSearch('') / focus reset on a miss).
+    const h = region(posSource, 'const handleSearchKeyDown', 'const clearPosCart');
+    expect(h).toMatch(/else \{\s*showToast\('ไม่พบสินค้านี้'\);\s*\}/);
+  });
+
+  test('the hint is derived state only — no new cart/checkout/write path introduced by L3', () => {
+    const fn = hintMemo();
+    expect(fn).not.toContain('confirmSale');
+    expect(fn).not.toContain('setBillDiscValue');
+    expect(fn).not.toContain('setRawCart');
+  });
+});
