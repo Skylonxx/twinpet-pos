@@ -5,7 +5,7 @@ import {
   httpsCallableFromURL,
   connectFunctionsEmulator,
 } from 'firebase/functions';
-import { auth, app, isFirebaseConfigured, USE_EMULATOR } from '../firebase';
+import { auth, app, isFirebaseConfigured, USE_EMULATOR, getEmulatorHost } from '../firebase';
 import { ensureFirebaseAuth } from '../firebaseAuth';
 import type { User } from '../types';
 
@@ -32,7 +32,9 @@ function getVerifyPinLoginCallable() {
   const functions = getFunctions(app, import.meta.env.VITE_FUNCTIONS_REGION);
 
   if (USE_EMULATOR && !emulatorConnected) {
-    connectFunctionsEmulator(functions, '127.0.0.1', 5001);
+    // LAN-aware host (Phase 7C-E1): same resolution as the other emulator SDKs so
+    // PIN login works from a POS terminal hitting the dev machine's LAN IP.
+    connectFunctionsEmulator(functions, getEmulatorHost(), 5001);
     emulatorConnected = true;
   }
 

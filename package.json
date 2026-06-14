@@ -12,6 +12,7 @@
     "snapshot:dump": "node scripts/pos-db-snapshot.mjs dump",
     "snapshot:restore": "node scripts/pos-db-snapshot.mjs restore",
     "dev:web": "vite",
+    "dev:lan": "vite --host",
     "seed:emulator": "node scripts/seed-emulator.mjs",
     "prebuild": "npm run gen-config",
     "build": "tsc -b && vite build",

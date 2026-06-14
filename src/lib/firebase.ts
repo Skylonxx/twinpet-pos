@@ -23,6 +23,23 @@ import { connectStorageEmulator, getStorage, type FirebaseStorage } from 'fireba
 export const USE_EMULATOR =
   import.meta.env.DEV && import.meta.env.VITE_USE_EMULATOR === 'true';
 
+/**
+ * LAN-aware emulator host (Phase 7C-E1). In a browser, resolve the host from the
+ * page's own origin (`window.location.hostname`) so a device that opened the app
+ * at the dev machine's LAN IP (e.g. http://192.168.1.50:5173) points its emulator
+ * SDKs at that SAME LAN IP — not the device's own loopback. Falls back to
+ * 'localhost' off the browser (SSR/Node). This is consulted ONLY inside the
+ * `USE_EMULATOR` guard (here and in verifyPinLogin.ts), so production cloud
+ * connections are never affected — `localhost`/`127.0.0.1` browsers keep working
+ * exactly as before (hostname resolves to itself).
+ */
+export const getEmulatorHost = (): string => {
+  if (typeof window !== 'undefined' && window.location.hostname) {
+    return window.location.hostname;
+  }
+  return 'localhost';
+};
+
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -107,13 +124,16 @@ if (isFirebaseConfigured) {
 
   if (USE_EMULATOR) {
     // Must run before any read/write. Ports match firebase.json → emulators.
+    // Host is LAN-aware (getEmulatorHost): a POS terminal opening the app at the
+    // dev machine's LAN IP routes its emulator traffic back to that machine.
+    const emulatorHost = getEmulatorHost();
     try {
-      connectFirestoreEmulator(db, '127.0.0.1', 8080);
-      connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
-      connectStorageEmulator(storage, '127.0.0.1', 9199);
-      // Functions callables connect to :5001 in verifyPinLogin.ts (same flag).
+      connectFirestoreEmulator(db, emulatorHost, 8080);
+      connectAuthEmulator(auth, `http://${emulatorHost}:9099`, { disableWarnings: true });
+      connectStorageEmulator(storage, emulatorHost, 9199);
+      // Functions callables connect to :5001 in verifyPinLogin.ts (same flag + host).
       console.info(
-        `[firebase] 🔌 LOCAL EMULATORS — Firestore:8080 Auth:9099 Storage:9199 Functions:5001 (db="${FIRESTORE_DATABASE_ID}")`,
+        `[firebase] 🔌 LOCAL EMULATORS @ ${emulatorHost} — Firestore:8080 Auth:9099 Storage:9199 Functions:5001 (db="${FIRESTORE_DATABASE_ID}")`,
       );
     } catch (err) {
       console.error('[firebase] failed to connect to local emulators', err);
