@@ -496,6 +496,98 @@ export default function POSPage() {
       checkout.customerModalOpen,
   );
 
+  // Escape behavior (Phase 7C-D4-C-4): close/cancel/dismiss exactly ONE open POS modal per
+  // keypress, top-most first. CLOSE-ONLY — it never confirms, saves, submits, applies a qty,
+  // clears the cart, removes a bill, or touches any write path; it only flips the page-owned
+  // open-state setters (and returns focus to the scan box, per D4-C-2). Returns true when a
+  // modal was closed so the caller can preventDefault. Red modals: PaymentModal closes only
+  // when NOT processing (mirrors its own onClose guard) and never reaches confirmSale.
+  // OpenShift / CloseShift / CashTransaction are intentionally NOT dismissed here — their
+  // submit / Z-report state lives inside the component and isn't observable from the page, so a
+  // page-level Escape can't prove it wouldn't drop a Z-report or race an in-flight drawer write.
+  const closeTopModalOnEscape = useCallback((): boolean => {
+    // 1. Destructive confirm — cancel only (never the destructive confirm action)
+    if (confirmModalState.open) {
+      setConfirmModalState({ open: false });
+      return true;
+    }
+    // 2. Payment — close only while not processing; never confirms payment
+    if (paymentOpen) {
+      if (checkout.processing) return false;
+      setPaymentOpen(false);
+      focusSearch();
+      return true;
+    }
+    // 3. Customer picker
+    if (checkout.customerModalOpen) {
+      checkout.closeCustomerModal();
+      focusSearch();
+      return true;
+    }
+    // 4. UOM — cancel (never onSelect)
+    if (uomProduct) {
+      setUomProduct(null);
+      focusSearch();
+      return true;
+    }
+    // 5. Item discount — cancel (never onSave)
+    if (discountLineKey) {
+      setDiscountLineKey(null);
+      focusSearch();
+      return true;
+    }
+    // 6. Qty numpad — cancel (never applies the qty)
+    if (qtyNumpadLineKey) {
+      setQtyNumpadLineKey(null);
+      focusSearch();
+      return true;
+    }
+    // 7. Hold-bill note — cancel (never confirms the hold)
+    if (holdNoteOpen) {
+      setHoldNoteOpen(false);
+      focusSearch();
+      return true;
+    }
+    // 8. Suspended bills list
+    if (suspendedListOpen) {
+      setSuspendedListOpen(false);
+      focusSearch();
+      return true;
+    }
+    // 9. Category overlay (existing close helper already returns focus)
+    if (catModalOpen) {
+      closeCatModal();
+      return true;
+    }
+    // 10. Sorting settings
+    if (isSortingModalOpen) {
+      setIsSortingModalOpen(false);
+      focusSearch();
+      return true;
+    }
+    // 11. Product picker
+    if (pickerOpen) {
+      setPickerOpen(false);
+      focusSearch();
+      return true;
+    }
+    return false;
+  }, [
+    confirmModalState.open,
+    paymentOpen,
+    checkout,
+    uomProduct,
+    discountLineKey,
+    qtyNumpadLineKey,
+    holdNoteOpen,
+    suspendedListOpen,
+    catModalOpen,
+    isSortingModalOpen,
+    pickerOpen,
+    focusSearch,
+    closeCatModal,
+  ]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'F12') {
@@ -504,11 +596,17 @@ export default function POSPage() {
         // parity with the checkout button (cart non-empty AND an active shift).
         if (hasBlockingModalOpen) return;
         if (cartLines.length > 0 && activeShift) setPaymentOpen(true);
+        return;
+      }
+      // Escape closes/cancels/dismisses exactly one open POS modal (close-only, never confirm).
+      // preventDefault only when something actually closed, so a bare Escape stays inert.
+      if (e.key === 'Escape') {
+        if (closeTopModalOnEscape()) e.preventDefault();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [cartLines.length, activeShift, hasBlockingModalOpen]);
+  }, [cartLines.length, activeShift, hasBlockingModalOpen, closeTopModalOnEscape]);
 
   return (
     <div className="pos-page">

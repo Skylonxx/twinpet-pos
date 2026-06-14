@@ -269,6 +269,142 @@ describe('7C-D4-A · Focus-return contract (POSPage.tsx)', () => {
   });
 });
 
+// ─── E. Escape close/cancel/dismiss contract (D4-C-4 fix) ───────────────────────────
+describe('7C-D4-C-4 · Escape close/cancel/dismiss contract (POSPage.tsx)', () => {
+  /** Body of the central Escape helper (between its `useCallback(` and the dep array `}, [`). */
+  function escapeBody(): string {
+    return region(posSource, 'const closeTopModalOnEscape = useCallback', '}, [');
+  }
+
+  test('Escape is wired into the SINGLE existing global keydown listener (no new listener)', () => {
+    // D4-C-4 must not add a second window listener — it extends the same `onKey` effect that
+    // already owns F12, so the single-listener + cleanup invariant is preserved.
+    expect(countOccurrences(posSource, "window.addEventListener('keydown'")).toBe(1);
+    expect(posSource).toContain("window.removeEventListener('keydown', onKey)");
+    const eff = region(posSource, 'const onKey = (e: KeyboardEvent)', "window.removeEventListener('keydown'");
+    // Escape branch delegates to the close-only helper and only preventDefaults when it closed
+    // something (a bare Escape outside any modal must stay inert).
+    expect(eff).toContain("e.key === 'Escape'");
+    expect(eff).toContain('if (closeTopModalOnEscape()) e.preventDefault();');
+    // The effect closure stays current by depending on the helper.
+    const effDeps = region(posSource, "window.removeEventListener('keydown', onKey);", ']);');
+    expect(effDeps).toContain('closeTopModalOnEscape');
+  });
+
+  test('F12 behavior is unchanged by the Escape wiring (open-gate + suppression intact)', () => {
+    // Escape was appended AFTER the F12 branch; the F12 open-gate and D4-C-3 suppression survive.
+    const eff = region(posSource, 'const onKey = (e: KeyboardEvent)', "window.removeEventListener('keydown'");
+    expect(eff).toContain("e.key === 'F12'");
+    expect(eff).toContain('if (hasBlockingModalOpen) return;');
+    expect(eff).toContain('if (cartLines.length > 0 && activeShift) setPaymentOpen(true);');
+    // F12's preventDefault still precedes the suppression gate (devtools stays suppressed).
+    const pdIdx = eff.indexOf('e.preventDefault();');
+    const suppressIdx = eff.indexOf('if (hasBlockingModalOpen) return;');
+    expect(pdIdx).toBeGreaterThan(-1);
+    expect(pdIdx).toBeLessThan(suppressIdx);
+  });
+
+  test('Escape closes/cancels each page-owned modal via its existing close setter/helper', () => {
+    const body = escapeBody();
+    // Each handled modal flips ONLY its page-owned open-state (cancel/close), never a confirm.
+    for (const closer of [
+      'setConfirmModalState({ open: false });', // DestructiveConfirm — cancel branch only
+      'setPaymentOpen(false);', // Payment — guarded close (see processing test below)
+      'checkout.closeCustomerModal();', // Customer picker
+      'setUomProduct(null);', // UOM — cancel
+      'setDiscountLineKey(null);', // Item discount — cancel
+      'setQtyNumpadLineKey(null);', // Qty numpad — cancel
+      'setHoldNoteOpen(false);', // Hold-bill note — cancel
+      'setSuspendedListOpen(false);', // Suspended list
+      'closeCatModal();', // Category overlay
+      'setIsSortingModalOpen(false);', // Sorting settings
+      'setPickerOpen(false);', // Product picker
+    ]) {
+      expect(body).toContain(closer);
+    }
+  });
+
+  test('Red shift/cash modals are intentionally NOT dismissed by the central Escape', () => {
+    // Their submit / Z-report state is internal to the component and not observable from the
+    // page, so the page-level Escape deliberately leaves them to their own close affordances.
+    const body = escapeBody();
+    expect(body).not.toContain('setShowCloseShift(false)');
+    expect(body).not.toContain('setShowCashTx(false)');
+    // OpenShiftModal has no page-level close setter at all (shift must be opened or page left).
+    expect(body).not.toContain('OpenShift');
+  });
+
+  test('Escape closes the top-most modal first — deterministic single-close priority', () => {
+    const body = escapeBody();
+    const order = [
+      'setConfirmModalState({ open: false });',
+      'setPaymentOpen(false);',
+      'checkout.closeCustomerModal();',
+      'setUomProduct(null);',
+      'setDiscountLineKey(null);',
+      'setQtyNumpadLineKey(null);',
+      'setHoldNoteOpen(false);',
+      'setSuspendedListOpen(false);',
+      'closeCatModal();',
+      'setIsSortingModalOpen(false);',
+      'setPickerOpen(false);',
+    ];
+    const indices = order.map((s) => body.indexOf(s));
+    for (const i of indices) expect(i).toBeGreaterThan(-1);
+    // Strictly increasing source order == a fixed priority chain; each branch returns so only
+    // one modal closes per keypress (one `return true;` per handled modal, +1 final fall-through).
+    for (let i = 1; i < indices.length; i++) {
+      expect(indices[i]).toBeGreaterThan(indices[i - 1]);
+    }
+    expect(countOccurrences(body, 'return true;')).toBe(order.length);
+    expect(body).toContain('return false;');
+  });
+
+  test('Escape on PaymentModal is processing-guarded and never confirms payment', () => {
+    const body = escapeBody();
+    // The processing guard mirrors PaymentModal.onClose and bails BEFORE the close runs.
+    const guardIdx = body.indexOf('if (checkout.processing) return false;');
+    const closeIdx = body.indexOf('setPaymentOpen(false);');
+    expect(guardIdx).toBeGreaterThan(-1);
+    expect(closeIdx).toBeGreaterThan(-1);
+    expect(guardIdx).toBeLessThan(closeIdx);
+    // Escape never reaches the Red payment-confirm path.
+    expect(body).not.toContain('confirmSale');
+    expect(body).not.toContain('onConfirm');
+    expect(body).not.toContain('handleConfirm');
+  });
+
+  test('Escape handler contains NO write-path / confirm / cart-mutation calls (RED-path safe)', () => {
+    const body = escapeBody();
+    for (const forbidden of [
+      'confirmSale',
+      'submitAsyncOrder',
+      'buildAsyncOrder',
+      'setDoc',
+      'clearCart',
+      'cart.clear',
+      'cart.addToCart',
+      'addToCart',
+      'setLineQty',
+      'setLineDiscount',
+      'restoreCart',
+      'addBill',
+      'removeBill',
+      'onConfirm',
+    ]) {
+      expect(body).not.toContain(forbidden);
+    }
+  });
+
+  test('Escape handling lives in the page, NOT inside the PaymentModal / NumpadDialog components', () => {
+    // No Escape (or any key handler) was added to the Red/touch-only modal components.
+    expect(paymentSource).not.toContain('Escape');
+    expect(paymentSource).not.toContain('onKeyDown');
+    expect(numpadSource).not.toContain('Escape');
+    expect(numpadSource).not.toContain('onKeyDown');
+  });
+});
+
 // ─── D. Native keyboard payment-confirm = strict RED path ──────────────────────────
 describe('7C-D4-A · Payment confirm is a guarded RED path (PaymentModal.tsx / NumpadDialog.tsx)', () => {
   test('confirm is a native button (keyboard-activatable on focus) — never silent', () => {
