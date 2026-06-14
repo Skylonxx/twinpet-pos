@@ -1301,15 +1301,23 @@ export default function POSPage() {
           same values as the discount input — 0 and decimals (mirroring `parseFloat(...) || 0`),
           no flooring. It is wired into both `hasBlockingModalOpen` (F12 cannot stack PaymentModal
           over it) and `closeTopModalOnEscape` (Escape closes it), matching the D4-C-3/D4-C-4
-          keyboard-modal contracts. */}
+          keyboard-modal contracts. Phase 7C-D4-D2: an existing discount is wiped via a footer
+          `ล้างส่วนลด` action (`showClearAction`/`onClear`), shown only when a discount is present —
+          replacing the D4-D1 in-grid Clear key. */}
       <NumpadDialog
         open={discNumpadOpen}
         title="ส่วนลดท้ายบิล"
         initialValue={cart.billDiscValue}
         allowDecimal
         allowZero
-        allowClear
         maxLength={7}
+        showClearAction={cart.billDiscValue > 0}
+        clearLabel="ล้างส่วนลด"
+        onClear={() => {
+          cart.setBillDiscValue(0);
+          setDiscNumpadOpen(false);
+          focusSearch();
+        }}
         onClose={() => {
           setDiscNumpadOpen(false);
           focusSearch();

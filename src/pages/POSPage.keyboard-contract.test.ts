@@ -469,57 +469,90 @@ describe('7C-D4-D · Bill-discount numpad integration (POSPage.tsx / NumpadDialo
   });
 });
 
-// ─── G. Bill-discount numpad Clear affordance (D4-D1 UAT follow-up) ──────────────────
-describe('7C-D4-D1 · Bill-discount numpad Clear affordance (POSPage.tsx / NumpadDialog.tsx)', () => {
+// ─── G. Bill-discount numpad Clear ACTION, not in-grid key (D4-D2 UAT follow-up) ──────
+describe('7C-D4-D2 · Bill-discount numpad Clear action (POSPage.tsx / NumpadDialog.tsx)', () => {
   /** Region of the bill-discount NumpadDialog element (title → its closing `/>`). */
   function discNumpadRegion(): string {
     return region(posSource, 'title="ส่วนลดท้ายบิล"', '/>');
   }
 
-  test('the bill-discount NumpadDialog opts into the Clear affordance (alongside decimal/zero)', () => {
-    const disc = discNumpadRegion();
-    expect(disc).toContain('allowClear');
-    // Clear sits next to decimal/zero entry — it does not replace them.
-    expect(disc).toContain('allowDecimal');
-    expect(disc).toContain('allowZero');
+  test('the D4-D1 in-grid Clear key / 13-key Clear layout is fully removed (no 5th grid row)', () => {
+    // UAT rejected the in-grid Clear because it auto-flowed to a 5th row and read as a layout bug.
+    // The 13-key layout constant and its opt-in prop are gone; only the clean 3×4 layouts remain.
+    expect(numpadSource).not.toContain('NUMPAD_KEYS_DECIMAL_CLEAR');
+    expect(numpadSource).not.toContain('allowClear');
+    expect(numpadSource).not.toContain("'.', '0', '⌫', 'C'");
+    // The bill-discount caller no longer opts into the removed in-grid Clear.
+    expect(discNumpadRegion()).not.toContain('allowClear');
   });
 
-  test('Clear is opt-in: the QTY NumpadDialog receives none of the discount-only flags', () => {
+  test('the bill-discount numpad exposes a separate ล้างส่วนลด action, shown only when present', () => {
+    const disc = discNumpadRegion();
+    // A discount-only Clear ACTION (not an in-grid key), with the agreed unambiguous label.
+    expect(disc).toContain('clearLabel="ล้างส่วนลด"');
+    expect(disc).toContain('onClear={');
+    // Visible only when a bill discount actually exists (non-zero) — hidden otherwise.
+    expect(disc).toContain('showClearAction={cart.billDiscValue > 0}');
+  });
+
+  test('the ล้างส่วนลด action sets the bill discount to 0 via the existing setter and closes', () => {
+    const disc = discNumpadRegion();
+    // Reuses the existing bill-discount setter (no new cart write path) and follows the dialog
+    // action pattern: set 0 → close → return focus to scan.
+    expect(disc).toMatch(
+      /onClear=\{\(\) => \{\s*cart\.setBillDiscValue\(0\);\s*setDiscNumpadOpen\(false\);\s*focusSearch\(\);/,
+    );
+  });
+
+  test('the Clear action is opt-in for the bill-discount path only (QTY numpad excluded)', () => {
     const qty = region(posSource, '<NumpadDialog', '<SortingSettingsModal');
     expect(qty).toContain('setLineQty');
-    expect(qty).not.toContain('allowClear');
+    // The quantity numpad receives none of the discount-only flags (clear action OR decimal/zero).
+    expect(qty).not.toContain('showClearAction');
+    expect(qty).not.toContain('clearLabel');
+    expect(qty).not.toContain('onClear');
     expect(qty).not.toContain('allowDecimal');
     expect(qty).not.toContain('allowZero');
   });
 
-  test('NumpadDialog gates the Clear key behind allowClear and defaults it OFF', () => {
+  test('NumpadDialog renders the Clear action below the keypad, gated + defaulted OFF', () => {
     // Opt-in + backwards-compatible: default off, so no existing caller (incl. quantity) changes.
-    expect(numpadSource).toContain('allowClear = false');
-    expect(numpadSource).toContain('NUMPAD_KEYS_DECIMAL_CLEAR');
-    // Decimal mode picks the Clear layout only when allowClear is set.
-    expect(numpadSource).toMatch(/allowClear[\s\S]{0,30}NUMPAD_KEYS_DECIMAL_CLEAR/);
+    expect(numpadSource).toContain('showClearAction = false');
+    expect(numpadSource).toContain('clearLabel');
+    expect(numpadSource).toContain('onClear');
+    // The action is a footer button gated behind all three props — never an extra grid key.
+    expect(numpadSource).toMatch(
+      /showClearAction && onClear && clearLabel[\s\S]{0,80}className="npd-clear"/,
+    );
+    // It is rendered AFTER the keypad grid and BEFORE confirm (separate footer action).
+    const gridIdx = numpadSource.indexOf('className="npd-grid"');
+    const clearIdx = numpadSource.indexOf('className="npd-clear"');
+    const confirmIdx = numpadSource.indexOf('className="npd-confirm"');
+    expect(gridIdx).toBeGreaterThan(-1);
+    expect(clearIdx).toBeGreaterThan(gridIdx);
+    expect(confirmIdx).toBeGreaterThan(clearIdx);
   });
 
-  test('Clear empties the display and a free-numeric confirm resolves a cleared discount to 0', () => {
-    // Pressing Clear (C) empties the input (existing handler); the free-numeric confirm then yields
-    // 0, so confirming a cleared discount writes 0 through the existing bill setter.
-    expect(numpadSource).toMatch(/if \(key === 'C'\) \{\s*setInput\(''\);/);
-    expect(numpadSource).toContain('parseFloat(input) || 0');
-    expect(discNumpadRegion()).toContain('cart.setBillDiscValue(');
-  });
-
-  test('decimal + zero support remain intact alongside Clear', () => {
-    // The Clear layout is the decimal pad PLUS a trailing 'C' (so '.' and Clear coexist), and the
-    // free-numeric seed/confirm path is unchanged — 0 and decimals stay enterable, no flooring.
-    expect(numpadSource).toContain("'.', '0', '⌫', 'C'");
+  test('decimal + zero support remain intact after the in-grid Clear removal', () => {
+    const disc = discNumpadRegion();
+    expect(disc).toContain('allowDecimal');
+    expect(disc).toContain('allowZero');
+    // Free-numeric seed/confirm path unchanged — 0 and decimals stay enterable, no flooring.
+    expect(numpadSource).toContain('NUMPAD_KEYS_DECIMAL');
     expect(numpadSource).toContain('allowDecimal ? Math.max(0, initialValue)');
-    expect(numpadSource).toContain('parseFloat(input)');
+    expect(numpadSource).toContain('parseFloat(input) || 0');
   });
 
-  test('quantity numpad integer contract is untouched by the Clear follow-up', () => {
+  test('quantity numpad integer contract is untouched by the Clear-action refactor', () => {
     expect(numpadSource).toContain('parseInt(input, 10)');
     expect(numpadSource).toContain('กรุณาระบุจำนวนที่มากกว่า 0');
     expect(numpadSource).toContain('Math.floor(initialValue)');
+  });
+
+  test('NumpadDialog stays touch-only (no hardware-key / IME / Escape path) post-refactor', () => {
+    expect(numpadSource).not.toContain('onKeyDown');
+    expect(numpadSource).not.toContain('isComposing');
+    expect(numpadSource).not.toContain('Escape');
   });
 
   test('F12 + Escape contracts still include the discount numpad (D4-C/D4-D unchanged)', () => {
@@ -527,6 +560,15 @@ describe('7C-D4-D1 · Bill-discount numpad Clear affordance (POSPage.tsx / Numpa
     expect(pred).toContain('discNumpadOpen');
     const body = region(posSource, 'const closeTopModalOnEscape = useCallback', '}, [');
     expect(body).toContain('setDiscNumpadOpen(false);');
+  });
+
+  test('UOM barcode scan routing is unchanged by D4-D2 (SKU before UOM barcode)', () => {
+    const fn = region(posSource, 'function findByScanCode', '\n}');
+    const topLevelIdx = fn.indexOf('p.sku === trimmed');
+    const uomIdx = fn.indexOf('p.uomOptions.find(');
+    expect(topLevelIdx).toBeGreaterThan(-1);
+    expect(uomIdx).toBeGreaterThan(-1);
+    expect(topLevelIdx).toBeLessThan(uomIdx);
   });
 });
 

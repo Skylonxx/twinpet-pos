@@ -7,14 +7,10 @@ const NUMPAD_KEYS = ['7', '8', '9', '4', '5', '6', '1', '2', '3', 'C', '0', '⌫
 // numpad can enter fractional amounts. Backspace (⌫) still covers correction. Same 12-key 3×4
 // grid → no CSS / layout change.
 const NUMPAD_KEYS_DECIMAL = ['7', '8', '9', '4', '5', '6', '1', '2', '3', '.', '0', '⌫'] as const;
-// Phase 7C-D4-D1: decimal + Clear layout for the bill-discount numpad (opt-in `allowClear`).
-// Appends a 13th Clear (C) key that empties the display → a free-numeric confirm then yields 0
-// (clears the discount). It auto-flows to a 5th row of the 3-column grid → no CSS / layout change.
-const NUMPAD_KEYS_DECIMAL_CLEAR = ['7', '8', '9', '4', '5', '6', '1', '2', '3', '.', '0', '⌫', 'C'] as const;
-type NumpadKey =
-  | (typeof NUMPAD_KEYS)[number]
-  | (typeof NUMPAD_KEYS_DECIMAL)[number]
-  | (typeof NUMPAD_KEYS_DECIMAL_CLEAR)[number];
+// Phase 7C-D4-D2: the D4-D1 in-grid Clear (13th 'C' key) is removed — it auto-flowed to a 5th
+// grid row and read as a layout bug in UAT. Clearing an existing discount is now a separate
+// footer ACTION (see `clearLabel`/`onClear`/`showClearAction`), so the keypad stays a clean 3×4.
+type NumpadKey = (typeof NUMPAD_KEYS)[number] | (typeof NUMPAD_KEYS_DECIMAL)[number];
 
 type NumpadDialogProps = {
   open: boolean;
@@ -30,14 +26,17 @@ type NumpadDialogProps = {
    */
   allowDecimal?: boolean;
   allowZero?: boolean;
-  /**
-   * Show a Clear (C) key in decimal mode (Phase 7C-D4-D1). Opt-in for the bill-discount numpad
-   * only; Clear empties the display so a free-numeric confirm resolves to 0. No effect outside
-   * decimal mode (quantity already has its own Clear key).
-   */
-  allowClear?: boolean;
   /** Max characters the display accepts (default 4 — the quantity contract). */
   maxLength?: number;
+  /**
+   * Opt-in footer Clear ACTION (Phase 7C-D4-D2, replaces the D4-D1 in-grid Clear key). Renders a
+   * labelled button BELOW the keypad (no extra grid row) that calls `onClear`. The bill-discount
+   * numpad uses it to wipe an existing discount (`ล้างส่วนลด` → set 0 + close). The caller gates
+   * visibility via `showClearAction`, so it never appears for the quantity numpad.
+   */
+  clearLabel?: string;
+  onClear?: () => void;
+  showClearAction?: boolean;
 };
 
 export default function NumpadDialog({
@@ -48,8 +47,10 @@ export default function NumpadDialog({
   onConfirm,
   allowDecimal = false,
   allowZero = false,
-  allowClear = false,
   maxLength = 4,
+  clearLabel,
+  onClear,
+  showClearAction = false,
 }: NumpadDialogProps) {
   const [input, setInput] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -112,11 +113,7 @@ export default function NumpadDialog({
 
   if (!open) return null;
 
-  const keys = allowDecimal
-    ? allowClear
-      ? NUMPAD_KEYS_DECIMAL_CLEAR
-      : NUMPAD_KEYS_DECIMAL
-    : NUMPAD_KEYS;
+  const keys = allowDecimal ? NUMPAD_KEYS_DECIMAL : NUMPAD_KEYS;
 
   return createPortal(
     <div
@@ -153,6 +150,12 @@ export default function NumpadDialog({
             </button>
           ))}
         </div>
+
+        {showClearAction && onClear && clearLabel && (
+          <button type="button" className="npd-clear" onClick={onClear}>
+            {clearLabel}
+          </button>
+        )}
 
         <button type="button" className="npd-confirm" onClick={handleConfirm}>
           ยืนยัน

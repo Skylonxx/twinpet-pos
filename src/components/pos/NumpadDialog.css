@@ -124,3 +124,25 @@
 .npd-confirm:active {
   background: var(--p500, #6b62c9);
 }
+
+/* Phase 7C-D4-D2: opt-in footer Clear action (e.g. "ล้างส่วนลด"). A secondary, danger-tinted
+   button below the keypad — visually distinct from the primary Confirm, and NOT an in-grid key
+   (so the 3×4 keypad never gains a 5th row). */
+.npd-clear {
+  width: 100%;
+  margin-top: 12px;
+  min-height: 52px;
+  border: 0.5px solid var(--danger, #a32d2d);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--danger, #a32d2d);
+  font-size: 16px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.npd-clear:active {
+  background: var(--g100, #ededf5);
+}
