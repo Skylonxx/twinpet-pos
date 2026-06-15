@@ -103,7 +103,10 @@ export default function POSPage() {
   const pickerProducts = useMemo(() => products.map(posProductToPickerItem), [products]);
 
   const [search, setSearch] = useState('');
-  const [activeCategory, setActiveCategory] = useState('');
+  // UI-10: the ⭐ best-sellers tab is the first/default active tab. The legacy All
+  // tab — previously the empty-string sentinel — is removed, so `BEST_SELLERS_KEY`
+  // is the canonical default here instead of ''.
+  const [activeCategory, setActiveCategory] = useState<string>(BEST_SELLERS_KEY);
   // Selected Quick Menu (virtual category). Mutually exclusive with a physical
   // category tab — selecting one clears the other.
   const [activeQuickMenuId, setActiveQuickMenuId] = useState<string | null>(null);
@@ -230,7 +233,9 @@ export default function POSPage() {
   }, []);
 
   const selectQuickMenu = useCallback((id: string) => {
-    setActiveCategory('');
+    // Park the physical-category selection on the best-sellers default (never '' —
+    // the All tab is gone) so deselecting the quick menu lands back on ⭐ สินค้าขายดี.
+    setActiveCategory(BEST_SELLERS_KEY);
     setActiveQuickMenuId(id);
   }, []);
 
@@ -268,6 +273,15 @@ export default function POSPage() {
         // best-sellers tab unless explicitly summoned by exact SKU/name/barcode.
         return isExactCodeMatch(p);
       }
+      // UI-10: the ⭐ สินค้าขายดี tab filters to best-seller MEMBERSHIP only
+      // (`PosProduct.isBestSeller === true`, projected from the global product flag).
+      // `sorting['best-sellers']` stays ORDERING-only and is applied below. While the
+      // cashier is actively typing (q non-empty), search transcends the tab so ANY
+      // product is still findable from the default tab (matches the old All-tab reach);
+      // idle shows only the curated best-sellers.
+      if (activeCategory === BEST_SELLERS_KEY) {
+        return q ? matchesSearch(p) : p.isBestSeller === true;
+      }
       const matchCat = !activeCategory || p.category === activeCategory;
       return matchesSearch(p) && matchCat;
     });
@@ -281,10 +295,11 @@ export default function POSPage() {
     // `category` field, which may be a legacy *name* — so resolve it back to the
     // canonical id before the lookup, or specific-category order is missed and
     // we wrongly fall back to alphabetical.
-    const sortKey = activeCategory
-      ? richCategories.find((c) => c.id === activeCategory || c.name === activeCategory)?.id ??
-        activeCategory
-      : BEST_SELLERS_KEY;
+    const sortKey =
+      activeCategory && activeCategory !== BEST_SELLERS_KEY
+        ? richCategories.find((c) => c.id === activeCategory || c.name === activeCategory)?.id ??
+          activeCategory
+        : BEST_SELLERS_KEY;
     return sortProductsByCustomOrder(filtered, sorting[sortKey]);
   }, [
     products,
@@ -356,9 +371,13 @@ export default function POSPage() {
     return sortCategories(getVisibleCategories(enriched, posBranchId), posBranchId);
   }, [categories, richCategories, posBranchId]);
 
-  // Ghost-active fallback: if the selected category gets hidden, reset to "all".
+  // Ghost-active fallback: if the selected category gets hidden, reset to the
+  // best-sellers default (NOT the removed All tab). The best-sellers sentinel is
+  // virtual (never in visibleCategories), so it must be preserved explicitly and
+  // never treated as a missing category — otherwise the fallback would reset it.
   useEffect(() => {
-    const safe = resolveActiveCategory(activeCategory, visibleCategories, '');
+    if (activeCategory === BEST_SELLERS_KEY) return;
+    const safe = resolveActiveCategory(activeCategory, visibleCategories, BEST_SELLERS_KEY);
     if (safe !== activeCategory) setActiveCategory(safe);
   }, [activeCategory, visibleCategories]);
 
@@ -389,6 +408,18 @@ export default function POSPage() {
     setCatModalOpen(false);
     focusSearch();
   }, [focusSearch]);
+
+  // UI-10-B revision: overlay category cells must use the SAME semantic path as the
+  // pill bar (`selectCategory` clears `activeQuickMenuId`), then close the overlay.
+  // Selecting directly via `setActiveCategory` let a previously-active Quick Menu
+  // survive, so the grid stayed filtered by the old Quick Menu after an overlay pick.
+  const selectCategoryFromOverlay = useCallback(
+    (catId: string) => {
+      selectCategory(catId);
+      closeCatModal();
+    },
+    [selectCategory, closeCatModal],
+  );
 
   const onProductClick = useCallback(
     (product: PosProduct) => {
@@ -825,14 +856,15 @@ export default function POSPage() {
             >
               ค้นหาหมวดหมู่ ▾
             </button>
-            {/* Tab order is fixed: (1) All/Best-Sellers default, (2) Quick Menus
-                in their admin `order`, (3) physical categories. */}
+            {/* Tab order is fixed: (1) ⭐ best-sellers default, (2) Quick Menus in their
+                admin `order`, (3) physical categories. The legacy All tab is removed
+                (UI-10) — best-sellers is now first/default. */}
             <button
               type="button"
-              className={`pos-cat-pill${!activeCategory && !activeQuickMenuId ? ' on' : ''}`}
-              onClick={() => selectCategory('')}
+              className={`pos-cat-pill${activeCategory === BEST_SELLERS_KEY && !activeQuickMenuId ? ' on' : ''}`}
+              onClick={() => selectCategory(BEST_SELLERS_KEY)}
             >
-              ทั้งหมด
+              ⭐ สินค้าขายดี
             </button>
             {activeQuickMenus.map((qm) => (
               <button
@@ -888,6 +920,19 @@ export default function POSPage() {
                   ข้อผิดพลาดของระบบ: {error.message}
                 </div>
               )}
+              {/* UI-10: best-sellers empty state. Shown only when the ⭐ tab is active,
+                  the cashier is NOT searching, and no product is flagged as a best-seller —
+                  the grid is never blank and search/scan stay fully available. */}
+              {activeCategory === BEST_SELLERS_KEY &&
+                !search.trim() &&
+                !error &&
+                products.length > 0 &&
+                filteredProducts.length === 0 && (
+                  <div className="col-span-full mb-4 rounded bg-amber-50 p-3 text-sm text-amber-800 border border-amber-200 flex items-center justify-center">
+                    <i className="ti ti-star mr-2" aria-hidden="true" />
+                    ยังไม่มีสินค้าขายดี — เลือกหมวดหมู่อื่น หรือค้นหา/สแกนสินค้า
+                  </div>
+                )}
               {filteredProducts.map((p) => {
                 const qty = cart.cartQtyByProduct.get(p.id) ?? 0;
                 const baseOption = p.uomOptions[0];
@@ -1321,13 +1366,10 @@ export default function POSPage() {
               {!catSearch.trim() && (
                 <button
                   type="button"
-                  className={`pos-category-cell${!activeCategory ? ' active' : ''}`}
-                  onClick={() => {
-                    setActiveCategory('');
-                    closeCatModal();
-                  }}
+                  className={`pos-category-cell${activeCategory === BEST_SELLERS_KEY && !activeQuickMenuId ? ' active' : ''}`}
+                  onClick={() => selectCategoryFromOverlay(BEST_SELLERS_KEY)}
                 >
-                  ทั้งหมด
+                  ⭐ สินค้าขายดี
                 </button>
               )}
               {visibleCategories
@@ -1338,11 +1380,8 @@ export default function POSPage() {
                   <button
                     key={cat.id}
                     type="button"
-                    className={`pos-category-cell${activeCategory === cat.id ? ' active' : ''}`}
-                    onClick={() => {
-                      setActiveCategory(cat.id);
-                      closeCatModal();
-                    }}
+                    className={`pos-category-cell${activeCategory === cat.id && !activeQuickMenuId ? ' active' : ''}`}
+                    onClick={() => selectCategoryFromOverlay(cat.id)}
                   >
                     {cat.name}
                   </button>

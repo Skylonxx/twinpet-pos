@@ -162,6 +162,15 @@ export type Product = SoftDelete & {
   hasVat?: boolean;
   /** อนุญาตขายเมื่อสต็อกหมด (overselling) — ต่อสินค้า */
   allowNegativeStock?: boolean;
+  /**
+   * ⭐ สินค้าขายดี — when true, the product appears in the POS "best sellers" tab
+   * (UI-10 Option A). Global membership flag. Absent/legacy products are treated
+   * as `false`. Distinct from `branchSettings[branchId].sortOrders['best-sellers']`
+   * / the sharded `sorting['best-sellers']` doc, which is the per-branch ORDERING
+   * of that tab — membership and ordering stay separate (Product CRUD never writes
+   * the per-branch sorting docs).
+   */
+  isBestSeller?: boolean;
   /** Branch-scoped POS ordering / visibility. Keyed by branchId. */
   branchSettings?: Record<string, ProductBranchSetting>;
   /** นโยบายแจ้งเตือนวันหมดอายุ — ใช้ค่าเริ่มต้นเมื่อไม่ระบุ */

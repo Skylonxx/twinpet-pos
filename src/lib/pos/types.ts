@@ -37,6 +37,9 @@ export type PosProduct = {
   stock: number;
   baseUnit: string;
   allowNegativeStock?: boolean;
+  /** ⭐ สินค้าขายดี membership (UI-10). Projected from `Product.isBestSeller`;
+      absent/legacy is normalized to `false` by the mapper. POS ⭐ tab filters on this. */
+  isBestSeller?: boolean;
   tierPrices?: Record<string, number>;
   /** Branch-level tier price overrides — takes precedence over tierPrices when non-empty */
   overrideTierPrices?: Record<string, number>;

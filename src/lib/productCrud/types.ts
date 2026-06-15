@@ -61,6 +61,8 @@ export type ProductFormData = {
   baseUnit: string;
   hasUom: boolean;
   isActive: boolean;
+  /** ⭐ สินค้าขายดี — when true, shows in the POS best-sellers tab (UI-10 Option A) */
+  isBestSeller: boolean;
   /** ปิดการแจ้งเตือนสต็อกต่ำ/หมด สำหรับสินค้านี้ */
   muteAlerts: boolean;
   reorderPoint: number;
@@ -277,6 +279,7 @@ export function emptyForm(): ProductFormData {
     baseUnit: 'ชิ้น',
     hasUom: false,
     isActive: true,
+    isBestSeller: false,
     muteAlerts: false,
     reorderPoint: 10,
     cost: 0,
@@ -350,6 +353,7 @@ export function productToForm(product: Product & { overrideTierPrices?: Record<s
     baseUnit: product.baseUnit,
     hasUom,
     isActive: product.isActive,
+    isBestSeller: product.isBestSeller ?? false,
     muteAlerts: product.muteAlerts ?? false,
     reorderPoint: product.reorderPoint,
     cost: product.cost ?? product.avgCost ?? 0,
@@ -414,6 +418,7 @@ export function formToProduct(form: ProductFormData, id: string): Omit<Product, 
     basePrice: Number.isFinite(form.basePrice) && form.basePrice > 0 ? form.basePrice : undefined,
     availableBranches: form.availableBranches,
     isActive: form.isActive,
+    isBestSeller: form.isBestSeller,
     muteAlerts: form.muteAlerts,
   };
 

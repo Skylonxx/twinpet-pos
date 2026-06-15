@@ -814,6 +814,19 @@ export default function ProductDrawer({
                   <Toggle checked={form.isActive} onChange={(v) => set('isActive', v)} />
                 </div>
 
+                {/* UI-10 Option A: global Best Seller membership flag. Drives the POS
+                    ⭐ สินค้าขายดี tab. Membership only — per-branch ORDERING stays in the
+                    Sorting admin's sharded order doc, which this form never writes. */}
+                <div className="pc-tog-row">
+                  <div className="pc-tog-lbl-col">
+                    <span className="pc-tog-lbl">⭐ สินค้าขายดี</span>
+                    <span className="pc-tog-desc">
+                      ติ๊กเพื่อให้สินค้านี้แสดงในแท็บ ⭐ สินค้าขายดี ของหน้า POS
+                    </span>
+                  </div>
+                  <Toggle checked={form.isBestSeller} onChange={(v) => set('isBestSeller', v)} />
+                </div>
+
                 <div className="pc-tog-row">
                   <div className="pc-tog-lbl-col">
                     <span className="pc-tog-lbl">ปิดการแจ้งเตือนสต็อก (Mute Alerts)</span>

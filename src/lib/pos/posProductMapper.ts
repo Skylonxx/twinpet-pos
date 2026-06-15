@@ -69,6 +69,9 @@ export function toPosProduct(product: Product, entry: StockEntry): PosProduct {
     stock: entry.stock,
     baseUnit: product.baseUnit,
     allowNegativeStock: product.allowNegativeStock ?? false,
+    // UI-10: project the global best-seller membership flag into the POS view.
+    // Normalize legacy/absent to `false` so the POS ⭐ tab filter is a clean boolean.
+    isBestSeller: product.isBestSeller ?? false,
     tierPrices: product.tierPrices,
     overrideTierPrices: entry.overrideTierPrices,
     branchSettings: product.branchSettings,

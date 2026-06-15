@@ -17,11 +17,22 @@ import { describe, test, expect, beforeAll } from 'vitest';
 let posSource: string;
 let paymentSource: string;
 let numpadSource: string;
+// UI-10-B: sources for the Best Seller data pipeline (schema → form → drawer → mapper).
+let productTypesSource: string;
+let productCrudTypesSource: string;
+let productDrawerSource: string;
+let posTypesSource: string;
+let posMapperSource: string;
 
 beforeAll(async () => {
   posSource = (await import('./POSPage.tsx?raw')).default;
   paymentSource = (await import('../components/PaymentModal.tsx?raw')).default;
   numpadSource = (await import('../components/pos/NumpadDialog.tsx?raw')).default;
+  productTypesSource = (await import('../lib/types.ts?raw')).default;
+  productCrudTypesSource = (await import('../lib/productCrud/types.ts?raw')).default;
+  productDrawerSource = (await import('../components/products/ProductDrawer.tsx?raw')).default;
+  posTypesSource = (await import('../lib/pos/types.ts?raw')).default;
+  posMapperSource = (await import('../lib/pos/posProductMapper.ts?raw')).default;
 });
 
 /** Count non-overlapping occurrences of `needle` in `haystack`. */
@@ -909,5 +920,242 @@ describe('7C-L3 Revision 2 · Permanent System Status & Alert Bar (POSPage.tsx)'
     ]) {
       expect(surfaces).not.toContain(forbidden);
     }
+  });
+});
+
+// ─── J. Best Seller system + All-tab removal (Phase 7C-UI-10-B / Option A) ─────────────
+// Restores the ⭐ สินค้าขายดี tab as the first/default POS tab and removes the legacy
+// "ทั้งหมด" (All) tab. Membership is the new global `Product.isBestSeller` flag, projected
+// into `PosProduct` by the mapper; the POS ⭐ tab filters on it while keeping the existing
+// per-branch `sorting['best-sellers']` order for sorting only (membership ≠ ordering).
+describe('7C-UI-10-B · Best Seller system + All-tab removal (POSPage.tsx)', () => {
+  /** The POS category pill bar (tabs): its open → the loading/grid switch. */
+  function catBar(): string {
+    return region(posSource, 'className="pos-cat-bar"', '{loading ?');
+  }
+  /** The product-filter memo: its `useMemo(` → its dep array. */
+  function filterMemo(): string {
+    return region(posSource, 'const filteredProducts = useMemo', '}, [');
+  }
+
+  test('the "ทั้งหมด" (All) tab is fully removed from POS — pill bar AND category overlay', () => {
+    // The legacy All label is gone from the runtime category tabs and the overlay grid
+    // (the only remaining "ทั้งหมด" in the page is the unrelated clear-cart confirmation copy).
+    expect(catBar()).not.toContain('ทั้งหมด');
+    const overlay = region(posSource, 'className="pos-category-grid"', '</button>');
+    expect(overlay).not.toContain('ทั้งหมด');
+    // The legacy All sentinel handlers (`selectCategory('')` / `setActiveCategory('')`) are
+    // gone everywhere, so All cannot reappear via either entry point.
+    expect(posSource).not.toContain("selectCategory('')");
+    expect(posSource).not.toContain("setActiveCategory('')");
+  });
+
+  test('the ⭐ สินค้าขายดี tab exists and is the FIRST tab in the pill bar', () => {
+    const bar = catBar();
+    expect(bar).toContain('⭐ สินค้าขายดี');
+    expect(bar).toContain('selectCategory(BEST_SELLERS_KEY)');
+    // First: the best-sellers pill precedes both the quick-menu list and the category list.
+    const bestIdx = bar.indexOf('⭐ สินค้าขายดี');
+    const quickIdx = bar.indexOf('activeQuickMenus.map');
+    const catIdx = bar.indexOf('visibleCategories.map');
+    expect(bestIdx).toBeGreaterThan(-1);
+    expect(quickIdx).toBeGreaterThan(bestIdx);
+    expect(catIdx).toBeGreaterThan(bestIdx);
+  });
+
+  test('the ⭐ สินค้าขายดี tab is the DEFAULT active tab on load', () => {
+    // activeCategory initializes to the best-sellers sentinel (not the removed '' / All).
+    expect(posSource).toContain('const [activeCategory, setActiveCategory] = useState<string>(BEST_SELLERS_KEY);');
+    // The pill highlights when the sentinel is active and no quick menu is selected.
+    expect(catBar()).toContain("activeCategory === BEST_SELLERS_KEY && !activeQuickMenuId ? ' on' : ''");
+  });
+
+  test('the category overlay offers ⭐ สินค้าขายดี (not All) and routes through the shared helper', () => {
+    const overlay = region(posSource, 'className="pos-category-grid"', '</button>');
+    expect(overlay).toContain('⭐ สินค้าขายดี');
+    // Revision: overlay selection goes through selectCategoryFromOverlay (which clears the
+    // Quick Menu via selectCategory) — NOT a bare setActiveCategory that left the Quick Menu live.
+    expect(overlay).toContain('selectCategoryFromOverlay(BEST_SELLERS_KEY)');
+    expect(overlay).not.toContain('setActiveCategory(BEST_SELLERS_KEY)');
+  });
+
+  test('the best-seller grid filters on the mapped PosProduct.isBestSeller === true', () => {
+    const fn = filterMemo();
+    expect(fn).toContain('activeCategory === BEST_SELLERS_KEY');
+    expect(fn).toContain('p.isBestSeller === true');
+  });
+
+  test('best-seller results still order via the existing sorting["best-sellers"] (ordering only)', () => {
+    const fn = filterMemo();
+    // sortKey collapses to BEST_SELLERS_KEY for the ⭐ tab; the self-healing reader is reused.
+    expect(fn).toContain('BEST_SELLERS_KEY');
+    expect(fn).toContain('sortProductsByCustomOrder(filtered, sorting[sortKey])');
+    // Membership is NOT derived from the ordering array (Option B rejected).
+    expect(fn).not.toContain("sorting['best-sellers'].");
+    expect(fn).not.toContain('sorting[BEST_SELLERS_KEY].includes');
+  });
+
+  test('search transcends the ⭐ tab so ANY product stays findable (not limited to the tab)', () => {
+    const fn = filterMemo();
+    // While typing (q non-empty) the best-seller branch falls through to a global search;
+    // idle (no query) shows only best-sellers.
+    expect(fn).toContain('q ? matchesSearch(p) : p.isBestSeller === true');
+  });
+
+  test('the no-best-sellers empty state text is present (grid never blank, can still search/scan)', () => {
+    expect(posSource).toContain('ยังไม่มีสินค้าขายดี — เลือกหมวดหมู่อื่น หรือค้นหา/สแกนสินค้า');
+  });
+
+  test('the best-sellers virtual tab is preserved by the ghost-reset (never treated as missing)', () => {
+    const eff = region(posSource, '// Ghost-active fallback', '}, [activeCategory, visibleCategories]);');
+    // The sentinel short-circuits the reset, and the fallback default is best-sellers (NOT '').
+    expect(eff).toContain('if (activeCategory === BEST_SELLERS_KEY) return;');
+    expect(eff).toContain('resolveActiveCategory(activeCategory, visibleCategories, BEST_SELLERS_KEY)');
+    expect(eff).not.toContain(", '');");
+  });
+
+  // ── Scanner / search / L1 / L3 regression guards (must stay byte-identical in intent) ──
+  test('hardware scan + UOM direct-add + SKU priority + scan-miss are UNCHANGED by UI-10', () => {
+    const fn = region(posSource, 'function findByScanCode', '\n}');
+    expect(fn.indexOf('p.sku === trimmed')).toBeLessThan(fn.indexOf('p.uomOptions.find('));
+    const h = region(posSource, 'const handleSearchKeyDown', 'const clearPosCart');
+    expect(h).toContain('const match = findByScanCode(products, trimmed);');
+    expect(h).toContain('cart.addToCart(match.product, match.option);');
+    expect(h).toContain('onProductClick(match.product);');
+    // Scan miss stays toast-only.
+    expect(h).toMatch(/else \{\s*showToast\('ไม่พบสินค้านี้'\);\s*\}/);
+  });
+
+  test('L3 permanent status bar block remains present/unchanged', () => {
+    expect(posSource).toContain('data-status-tone={posStatusBar.tone}');
+    expect(posSource).toContain('{posStatusBar.text}');
+  });
+
+  test('L1 multi-UOM queue enqueue logic is untouched by UI-10', () => {
+    const fn = region(posSource, 'const onProductClick = useCallback', '[cart],');
+    expect(fn).toContain('setUomQueue((q) => [...q, product]);');
+    expect(fn).toContain('cart.addToCart(product, product.uomOptions[0]!);');
+  });
+});
+
+// ─── K. Best Seller data pipeline: schema → form → drawer → POS mapper (UI-10-B) ───────
+describe('7C-UI-10-B · Best Seller data pipeline (Option A)', () => {
+  test('the central Product type gains an optional isBestSeller flag (legacy-safe)', () => {
+    expect(productTypesSource).toContain('isBestSeller?: boolean;');
+    // It is a sibling of the other product attributes, NOT inside the per-branch settings type.
+    const settings = region(productTypesSource, 'interface ProductBranchSetting', '}');
+    expect(settings).not.toContain('isBestSeller');
+  });
+
+  test('PosProduct gains an optional isBestSeller flag for POS filtering', () => {
+    const t = region(posTypesSource, 'export type PosProduct = {', '};');
+    expect(t).toContain('isBestSeller?: boolean;');
+  });
+
+  test('the POS mapper projects raw product.isBestSeller, normalizing legacy/absent to false', () => {
+    const fn = region(posMapperSource, 'export function toPosProduct', '\n}');
+    expect(fn).toContain('isBestSeller: product.isBestSeller ?? false');
+  });
+
+  test('ProductFormData includes isBestSeller; emptyForm defaults it false', () => {
+    expect(productCrudTypesSource).toContain('isBestSeller: boolean;');
+    const empty = region(productCrudTypesSource, 'export function emptyForm', '\n}');
+    expect(empty).toContain('isBestSeller: false,');
+  });
+
+  test('productToForm hydrates from product.isBestSeller ?? false (edit reflects stored value)', () => {
+    const fn = region(productCrudTypesSource, 'export function productToForm', '\n}');
+    expect(fn).toContain('isBestSeller: product.isBestSeller ?? false,');
+  });
+
+  test('formToProduct persists isBestSeller on the save payload', () => {
+    const fn = region(productCrudTypesSource, 'export function formToProduct', '\n}');
+    expect(fn).toContain('isBestSeller: form.isBestSeller,');
+  });
+
+  test('ProductDrawer renders the ⭐ สินค้าขายดี toggle + help text, bound to form.isBestSeller', () => {
+    expect(productDrawerSource).toContain('⭐ สินค้าขายดี');
+    expect(productDrawerSource).toContain('ติ๊กเพื่อให้สินค้านี้แสดงในแท็บ ⭐ สินค้าขายดี ของหน้า POS');
+    expect(productDrawerSource).toContain('checked={form.isBestSeller}');
+    expect(productDrawerSource).toContain("set('isBestSeller', v)");
+  });
+
+  test('Product CRUD never writes/mutates the per-branch best-seller SORTING docs', () => {
+    // Membership-only boundary: the form/drawer must not call into the sharded ordering
+    // store (write APIs / its doc path). Asserting the mutation surface specifically — the
+    // word "best-sellers" may legitimately appear in copy/comments.
+    const surfaces = productCrudTypesSource + productDrawerSource;
+    for (const forbidden of [
+      'saveProductSortOrder',
+      'productSortingDocRef',
+      'productSortingCollectionRef',
+      'sorting/categories',
+    ]) {
+      expect(surfaces).not.toContain(forbidden);
+    }
+  });
+});
+
+// ─── L. Overlay category-selection parity (Phase 7C-UI-10-B Revision) ──────────────────
+// Codex NEEDS REVISION: overlay category buttons called `setActiveCategory(...)` directly +
+// `closeCatModal()`, bypassing `selectCategory(...)` which clears `activeQuickMenuId`. So a
+// previously-active Quick Menu survived an overlay category pick and the grid stayed filtered
+// by the old Quick Menu. Fix: both the pill bar AND the overlay must clear the Quick Menu.
+describe('7C-UI-10-B Revision · Overlay category selection clears the Quick Menu (POSPage.tsx)', () => {
+  test('selectCategory (the shared path) clears activeQuickMenuId then sets the category', () => {
+    const fn = region(posSource, 'const selectCategory = useCallback', '}, []);');
+    expect(fn).toContain('setActiveQuickMenuId(null);');
+    expect(fn).toContain('setActiveCategory(catId);');
+  });
+
+  test('an overlay wrapper routes overlay picks through selectCategory AND closes the overlay', () => {
+    // Single source of truth: the wrapper delegates to selectCategory (clears Quick Menu) and
+    // then closes the modal — no duplicated state logic in the buttons.
+    const fn = region(posSource, 'const selectCategoryFromOverlay = useCallback', '[selectCategory, closeCatModal]');
+    expect(fn).toContain('selectCategory(catId);');
+    expect(fn).toContain('closeCatModal();');
+  });
+
+  test('BOTH overlay cells (Best Seller + physical category) go through the shared wrapper', () => {
+    const overlay = region(posSource, 'className="pos-category-grid"', '<NumpadDialog');
+    // Best-seller cell and category-map cell both call the wrapper...
+    expect(overlay).toContain('selectCategoryFromOverlay(BEST_SELLERS_KEY)');
+    expect(overlay).toContain('selectCategoryFromOverlay(cat.id)');
+    // ...and neither flips activeCategory directly anymore (the bug path is gone).
+    expect(overlay).not.toContain('setActiveCategory(');
+  });
+
+  test('overlay category selection cannot leave a Quick Menu active (no bare setActiveCategory + close)', () => {
+    // The exact bug shape — a direct setActiveCategory paired with closeCatModal in a button — is gone.
+    const overlay = region(posSource, 'className="pos-category-grid"', '<NumpadDialog');
+    expect(overlay).not.toMatch(/setActiveCategory\([^)]*\);\s*closeCatModal\(\);/);
+  });
+
+  test('pill-bar category + best-seller selection still use selectCategory (unchanged)', () => {
+    const bar = region(posSource, 'className="pos-cat-bar"', '{loading ?');
+    expect(bar).toContain('selectCategory(BEST_SELLERS_KEY)');
+    expect(bar).toContain('selectCategory(cat.id)');
+  });
+
+  test('Quick Menu still takes precedence WHEN intentionally selected (behavior unchanged)', () => {
+    // selectQuickMenu still sets the Quick Menu id; the filter still short-circuits to the
+    // Quick Menu branch first. Only category SELECTION now reliably clears it.
+    const sel = region(posSource, 'const selectQuickMenu = useCallback', '}, []);');
+    expect(sel).toContain('setActiveQuickMenuId(id);');
+    const fn = region(posSource, 'const filteredProducts = useMemo', '}, [');
+    const quickIdx = fn.indexOf('if (activeQuickMenuId)');
+    const bestIdx = fn.indexOf('activeCategory === BEST_SELLERS_KEY');
+    expect(quickIdx).toBeGreaterThan(-1);
+    // Quick Menu branch is evaluated before the best-seller/category branch (precedence intact).
+    expect(quickIdx).toBeLessThan(bestIdx);
+  });
+
+  test('no regression: scanner / UOM-add / scan-miss / L3 status bar intact after the revision', () => {
+    const fn = region(posSource, 'function findByScanCode', '\n}');
+    expect(fn.indexOf('p.sku === trimmed')).toBeLessThan(fn.indexOf('p.uomOptions.find('));
+    const h = region(posSource, 'const handleSearchKeyDown', 'const clearPosCart');
+    expect(h).toContain('cart.addToCart(match.product, match.option);');
+    expect(h).toMatch(/else \{\s*showToast\('ไม่พบสินค้านี้'\);\s*\}/);
+    expect(posSource).toContain('data-status-tone={posStatusBar.tone}');
   });
 });
