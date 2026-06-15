@@ -1,4 +1,4 @@
-# Current Task Tracker — Phase 7C-UI-10-B Restore Best Seller System / Remove All Tab (IMPLEMENTATION / AWAITING CODEX REVIEW)
+# Current Task Tracker — Phase 7C-UI-10-C Strict Local Search + Sorting-Modal Best-Seller Scope (IMPLEMENTATION / AWAITING CODEX REVIEW)
 
 > Living checkpoint doc for agents. Detailed history: `docs/reports/latest-report.md` (do not duplicate long-form evidence here).
 
@@ -10,7 +10,7 @@
 - **H6-E2-B** — Write Transfer Evidence Header at Completion — CLOSED / COMMITTED — `82d3352 feat(pos): write transfer reversal evidence header on completion`
 - **H6-E2-C** — Transfer Evidence Coordinator Validation — CLOSED / COMMITTED — `fe3ff44 feat(pos): validate transfer reversal header evidence`
 
-**Current clean baseline:** `70b1698 fix(pos): add permanent status bar for uom scans` (7C-L3-Rev2, on top of 7C-L3 `f8ce9ea` / 7C-L2 `654c704` / 7C-L1 `203f636` / 7C-P1 `d87110c` / 7C-D4-D2 `ca0d5d8` / 7C-D4-D `1a239b4` / 7C-E1 `0c7e924`). **7C-C3, 7C-C4, 7C-D2, 7C-D3-A, 7C-D3-B, 7C-D4-A, 7C-D4-C, 7C-D4-C-1..4, 7C-E1, 7C-D4-D, 7C-D4-D1, 7C-D4-D2, 7C-P1, 7C-L1, 7C-L2, 7C-L3, and 7C-L3-Rev2 are CLOSED / COMMITTED.** 7C-UI-10-B is an implementation slice on top of this baseline and NOT yet committed.
+**Current clean baseline:** `324bdf0 feat(pos): restore best seller tab and product flag` (7C-UI-10-B, on top of 7C-L3-Rev2 `70b1698` / 7C-L3 `f8ce9ea` / 7C-L2 `654c704` / 7C-L1 `203f636` / 7C-P1 `d87110c` / 7C-D4-D2 `ca0d5d8` / 7C-D4-D `1a239b4` / 7C-E1 `0c7e924`). **7C-C3, 7C-C4, 7C-D2, 7C-D3-A, 7C-D3-B, 7C-D4-A, 7C-D4-C, 7C-D4-C-1..4, 7C-E1, 7C-D4-D, 7C-D4-D1, 7C-D4-D2, 7C-P1, 7C-L1, 7C-L2, 7C-L3, 7C-L3-Rev2, and 7C-UI-10-B are CLOSED / COMMITTED.** 7C-UI-10-C is an implementation slice on top of this baseline and NOT yet committed.
 
 **✅ 7C-L2 PHYSICAL UAT PASSED / ACCEPTED → 7C-L3 AUTHORIZED.** CEO accepted the L2 empty-cart bill-level reset on the physical terminal. Tech Lead / CEO authorized **Phase 7C-L3 — UOM Barcode Search Result Display Alignment (APPROVED Option A)** — Medium severity / cashier confidence / search visibility. UAT finding: scanning a larger-unit (e.g. ลัง/carton) UOM barcode adds the correct unit on Enter (D4-D direct add works) but the visible result looks like only the base/small unit — reducing cashier confidence. **The D4-D direct UOM add-to-cart logic must remain intact.** UI-01 through UI-09 remain deferred; no visual UI polish, CSS, or checkout/payment/write-path change is authorized.
 
@@ -32,7 +32,7 @@
 
 **Scope-expansion history (two clean BLOCKs):** (1) first attempt blocked — the product form UI lives in `ProductDrawer.tsx`, not the authorized `ProductCRUDPage.tsx` → ProductDrawer authorized; (2) second attempt blocked — POS reads mapped `PosProduct`, not raw `Product`, so `isBestSeller` was dropped by the mapper → `src/lib/pos/types.ts` + `src/lib/pos/posProductMapper.ts` authorized.
 
-**Phase 7C-UI-10-B — Restore Best Seller System / Remove All Tab (Tech Lead / CEO authorized, Option A) — IMPLEMENTATION / AWAITING CODEX REVIEW — NOT COMMITTED:**
+**Phase 7C-UI-10-B — Restore Best Seller System / Remove All Tab (Tech Lead / CEO authorized, Option A) — CLOSED / COMMITTED — `324bdf0 feat(pos): restore best seller tab and product flag`:**
 
 **Architecture (Option A):** additive optional `Product.isBestSeller?: boolean` and `PosProduct.isBestSeller?: boolean` (legacy/absent → `false`). `posProductMapper.toPosProduct` projects `product.isBestSeller ?? false`. Membership (the global flag) is kept **separate from ordering** — `sorting['best-sellers']` stays ordering-only; Product CRUD never writes the per-branch sorting docs. Option B not used.
 
@@ -46,7 +46,35 @@
 
 **UI-10-B Revision 1 (Codex NEEDS REVISION → FIXED, narrow blocker-fix):** Codex flagged that overlay category buttons called `setActiveCategory(...)` + `closeCatModal()` directly, bypassing `selectCategory(...)` (which clears `activeQuickMenuId`) — so a previously-active Quick Menu survived an overlay category pick and the grid stayed filtered by the old Quick Menu (category-selection inconsistency). **Fix (POSPage only):** added a `selectCategoryFromOverlay(catId)` wrapper that delegates to `selectCategory(catId)` (clears the Quick Menu) then `closeCatModal()`; both overlay cells (⭐ best-seller + physical-category map) now route through it, and the overlay highlights gained `&& !activeQuickMenuId`. **Unchanged:** pill-bar `selectCategory` path, `selectQuickMenu`, Quick Menu precedence (filter still short-circuits on `activeQuickMenuId` first), scanner/search/UOM/L1/L2/L3, Product CRUD, mapper, membership & ordering logic. Tests: +7 section-L contracts (selectCategory clears Quick Menu; wrapper delegates + closes; both overlay cells route through the wrapper and no longer flip `setActiveCategory` directly; the exact bug shape `setActiveCategory(...)+closeCatModal()` is gone; pill bar unchanged; Quick Menu precedence intact when intentionally selected; scanner/UOM/miss/L3 no regression). Changed files: `src/pages/POSPage.tsx`, `src/pages/POSPage.keyboard-contract.test.ts`, `Context.md`, `Task.md`. `tsc -b` clean; `vitest run` **604 passed** (31 files); targeted spec **104 passed**. `stash@{0}` untouched.
 
-**Next step (UI-10-B):** Codex GPT-5.5 High re-review (mandatory) of the overlay parity revision before Tech Lead closure / commit — no commit before Codex PASS / PASS WITH NOTES. Then CEO physical UAT (best-seller first/default, All gone incl. overlay, overlay category pick clears Quick Menu, membership toggle in product edit, ordering preserved, search/scan global, no layout shift). UI-10-B not closed, not committed. UI-01 through UI-09 remain deferred.
+**UI-10-B — CLOSED / COMMITTED (`324bdf0`).** Codex PASS, Tech Lead approved closure, committed; physical UAT then drove UI-10-C below.
+
+---
+
+## Phase 7C-UI-10-C — Strict Local Search + Sorting-Modal Best-Seller Scope
+
+**7C-UI-10-C — UAT polish (Tech Lead / CEO authorized) — IMPLEMENTATION / AWAITING CODEX REVIEW — NOT COMMITTED:**
+
+**UAT feedback (on committed UI-10-B `324bdf0`):** (1) the POS grid search **escaped the active tab** — global search devalued category navigation and caused context loss; (2) the SortingSettingsModal `best-sellers` group **leaked the whole inventory** into the ranking list, because the modal's `SortableProduct` shape carried no `isBestSeller` membership flag.
+
+**Initial slice blocked cleanly:** Fix 2 required the membership flag on the sorting data path (`SortableProduct` lacked `isBestSeller`); the authorized set covered only the modal. **Tech Lead approved scope expansion** for `src/lib/pos/categoryService.ts` + `src/lib/admin/sortingStore.ts` and corrected the modal path to `src/components/pos/SortingSettingsModal.tsx`.
+
+**Fix 1 — POS search is a STRICT LOCAL / intersection filter (`POSPage.tsx`):**
+- ⭐ สินค้าขายดี tab: `p.isBestSeller === true && matchesSearch(p)` — the old escape (`q ? matchesSearch(p) : p.isBestSeller === true`) is removed, so a matching non-best-seller can never surface in the ⭐ grid.
+- Physical category tab: `matchCat && matchesSearch(p)` — a match from another category cannot leak in.
+- Quick Menu: stays local (`idSet.has(p.id) && matchesSearch(p)`); precedence intact (its branch evaluated first).
+- **Unchanged:** the branch-hidden exact-code reveal (`isExactCodeMatch`), `findByScanCode` (SKU-before-UOM), the Enter direct-UOM add path, scan-miss (toast-only). This slice targets **text-based grid filtering only** — scanner / direct-add behavior is byte-identical.
+
+**Fix 2 — Sorting-modal best-seller membership scope (data path):**
+- `SortableProduct` (`categoryService.ts`) gains `isBestSeller?: boolean` (membership; distinct from `sorting['best-sellers']` ordering).
+- `sortingStore` projects `Product.isBestSeller ?? false` in BOTH `devSortableProducts()` and the live `useSortableProducts()` map.
+- `SortingSettingsModal` scopes the `best-sellers` group to `products.filter((p) => p.isBestSeller === true)` — no full-inventory leak; the visible flagged subset is what gets ranked/saved.
+- `sorting['best-sellers']` stays ORDERING-only (never membership); physical-category scope (`matchesCategoryFilter`) and the sort write API (`saveProductSortOrder`) unchanged.
+
+**Tests (`src/pages/POSPage.keyboard-contract.test.ts`):** the old "search transcends the ⭐ tab" test is rewritten to assert the strict-local intersection contract; new section M adds POS local-search coverage (⭐ intersection / escape removed / physical-category intersection / Quick-Menu local / scanner-direct-add independence / hidden-product reveal preserved) and sorting-modal data-path coverage (`SortableProduct` carries `isBestSeller`; store maps `Product.isBestSeller ?? false` in both mappers; modal scopes best-sellers to `isBestSeller === true`; physical scope unchanged; `sorting['best-sellers']` not used as membership). `tsc -b` clean; `vitest run` **615 passed** (31 files); targeted spec **115 passed**.
+
+**Forbidden boundaries honored (UI-10-C):** no CSS change; no `useCart.ts` / `useCart.contract.test.ts` (L2); no `PaymentModal`/`App.tsx`; no Product CRUD toggle/persistence pipeline change; no POS mapper change; no checkout/payment/cart-mutation; no Firebase rules/Functions/backend; no offline/manual-review; no Android/Capacitor/`.claude/`; no L1/L2/L3 regression; `sorting['best-sellers']` stays ordering-only. Changed files = `src/pages/POSPage.tsx`, `src/components/pos/SortingSettingsModal.tsx`, `src/lib/pos/categoryService.ts`, `src/lib/admin/sortingStore.ts`, `src/pages/POSPage.keyboard-contract.test.ts`, `Context.md`, `Task.md`; `stash@{0}` untouched (read-only `git stash list` only).
+
+**Next step (UI-10-C):** Codex GPT-5.5 High review (mandatory) before Tech Lead closure / commit — no commit before Codex PASS / PASS WITH NOTES. Then CEO physical UAT (⭐ tab search shows only flagged matches, physical category search stays in-category, Quick Menu search stays local, scanner/UOM direct-add unchanged, sorting modal best-sellers lists only flagged products). UI-10-C not closed, not committed. UI-01 through UI-09 remain deferred.
 
 ---
 

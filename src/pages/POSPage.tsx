@@ -273,17 +273,19 @@ export default function POSPage() {
         // best-sellers tab unless explicitly summoned by exact SKU/name/barcode.
         return isExactCodeMatch(p);
       }
-      // UI-10: the ⭐ สินค้าขายดี tab filters to best-seller MEMBERSHIP only
+      // UI-10-C: the ⭐ สินค้าขายดี tab filters to best-seller MEMBERSHIP only
       // (`PosProduct.isBestSeller === true`, projected from the global product flag).
-      // `sorting['best-sellers']` stays ORDERING-only and is applied below. While the
-      // cashier is actively typing (q non-empty), search transcends the tab so ANY
-      // product is still findable from the default tab (matches the old All-tab reach);
-      // idle shows only the curated best-sellers.
+      // `sorting['best-sellers']` stays ORDERING-only and is applied below. Search is a
+      // STRICT LOCAL filter — it intersects with the active tab and never escapes it, so
+      // typing inside the best-seller tab can only narrow the curated set, never reveal a
+      // non-best-seller (UAT: global search devalued category navigation / lost context).
       if (activeCategory === BEST_SELLERS_KEY) {
-        return q ? matchesSearch(p) : p.isBestSeller === true;
+        return p.isBestSeller === true && matchesSearch(p);
       }
+      // Physical category tab: also a strict intersection of category membership and
+      // search — a match from another category never leaks in.
       const matchCat = !activeCategory || p.category === activeCategory;
-      return matchesSearch(p) && matchCat;
+      return matchCat && matchesSearch(p);
     });
     // Apply this branch's custom ranking for the active group ('' shows the
     // branch "best sellers" master order) from the sharded sorting array. The

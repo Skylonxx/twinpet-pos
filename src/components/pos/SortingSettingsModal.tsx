@@ -151,9 +151,13 @@ export function SortingSettingsContent({ defaultBranchId = '' }: { defaultBranch
       return;
     }
     let cancelled = false;
+    // UI-10-C: the best-sellers group is scoped to MEMBERSHIP (`isBestSeller === true`),
+    // not the whole inventory — otherwise the modal leaks every product into the
+    // best-seller ranking list. `sorting['best-sellers']` stays ORDERING-only and is
+    // applied by getProductSortOrder below over this flagged subset.
     const scoped =
       selectedKey === BEST_SELLERS_KEY
-        ? products
+        ? products.filter((p) => p.isBestSeller === true)
         : products.filter((p) => matchesCategoryFilter(p.category, selectedKey, categories));
     void getProductSortOrder(selectedBranchId, selectedKey)
       .then(({ order, rev }) => {

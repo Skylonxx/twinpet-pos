@@ -44,6 +44,7 @@ function devSortableProducts(): SortableProduct[] {
     id: p.id,
     name: p.name,
     category: p.category,
+    isBestSeller: p.isBestSeller ?? false,
     branchSettings: store[p.id] ?? p.branchSettings,
   }));
 }
@@ -72,6 +73,7 @@ export function useSortableProducts(): { products: SortableProduct[]; loading: b
             id: p.id,
             name: p.name,
             category: p.category,
+            isBestSeller: p.isBestSeller ?? false,
             branchSettings: p.branchSettings,
           }));
         setProducts(list);

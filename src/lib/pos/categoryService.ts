@@ -24,6 +24,12 @@ export interface SortableProduct {
   id: string;
   name: string;
   category: string;
+  /**
+   * UI-10 best-seller MEMBERSHIP (global product flag), threaded down so the
+   * sorting modal's `best-sellers` group can scope to flagged products only.
+   * Distinct from `sorting['best-sellers']`, which is per-branch ORDERING.
+   */
+  isBestSeller?: boolean;
   branchSettings?: Record<string, ProductBranchSetting>;
 }
 

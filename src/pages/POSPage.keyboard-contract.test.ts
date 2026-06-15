@@ -23,6 +23,10 @@ let productCrudTypesSource: string;
 let productDrawerSource: string;
 let posTypesSource: string;
 let posMapperSource: string;
+// UI-10-C: sources for the sorting-modal best-seller data path (interface → store → modal).
+let categoryServiceSource: string;
+let sortingStoreSource: string;
+let sortingModalSource: string;
 
 beforeAll(async () => {
   posSource = (await import('./POSPage.tsx?raw')).default;
@@ -33,6 +37,9 @@ beforeAll(async () => {
   productDrawerSource = (await import('../components/products/ProductDrawer.tsx?raw')).default;
   posTypesSource = (await import('../lib/pos/types.ts?raw')).default;
   posMapperSource = (await import('../lib/pos/posProductMapper.ts?raw')).default;
+  categoryServiceSource = (await import('../lib/pos/categoryService.ts?raw')).default;
+  sortingStoreSource = (await import('../lib/admin/sortingStore.ts?raw')).default;
+  sortingModalSource = (await import('../components/pos/SortingSettingsModal.tsx?raw')).default;
 });
 
 /** Count non-overlapping occurrences of `needle` in `haystack`. */
@@ -995,11 +1002,13 @@ describe('7C-UI-10-B · Best Seller system + All-tab removal (POSPage.tsx)', () 
     expect(fn).not.toContain('sorting[BEST_SELLERS_KEY].includes');
   });
 
-  test('search transcends the ⭐ tab so ANY product stays findable (not limited to the tab)', () => {
+  test('UI-10-C: search is a STRICT LOCAL filter inside the ⭐ tab (intersection, no escape)', () => {
     const fn = filterMemo();
-    // While typing (q non-empty) the best-seller branch falls through to a global search;
-    // idle (no query) shows only best-sellers.
-    expect(fn).toContain('q ? matchesSearch(p) : p.isBestSeller === true');
+    // UAT reversed the old global-search escape: typing now narrows the best-seller set only.
+    // Membership AND search must both hold; a matching non-best-seller can never surface here.
+    expect(fn).toContain('p.isBestSeller === true && matchesSearch(p)');
+    // The old escape (`q ? matchesSearch(p) : ...`) is gone — search never transcends the tab.
+    expect(fn).not.toContain('q ? matchesSearch(p) : p.isBestSeller === true');
   });
 
   test('the no-best-sellers empty state text is present (grid never blank, can still search/scan)', () => {
@@ -1157,5 +1166,103 @@ describe('7C-UI-10-B Revision · Overlay category selection clears the Quick Men
     expect(h).toContain('cart.addToCart(match.product, match.option);');
     expect(h).toMatch(/else \{\s*showToast\('ไม่พบสินค้านี้'\);\s*\}/);
     expect(posSource).toContain('data-status-tone={posStatusBar.tone}');
+  });
+});
+
+// ─── M. UAT polish: strict local search + sorting-modal membership scope (Phase 7C-UI-10-C) ──
+// Physical UAT: (1) the POS grid search escaped the active tab (global search devalued category
+// navigation / lost context); (2) the sorting modal's best-sellers group leaked the WHOLE
+// inventory because `SortableProduct` lacked `isBestSeller`. Fix: POS search becomes a strict
+// intersection inside the active context, and the membership flag is threaded down the sorting
+// data path (interface → store projection → modal scope) so the modal ranks flagged products only.
+describe('7C-UI-10-C · POS local search is a strict intersection filter (POSPage.tsx)', () => {
+  /** The product-filter memo: its `useMemo(` → its dep array. */
+  function filterMemo(): string {
+    return region(posSource, 'const filteredProducts = useMemo', '}, [');
+  }
+
+  test('Best Seller tab search intersects membership AND search (no escape to non-best-sellers)', () => {
+    const fn = filterMemo();
+    expect(fn).toContain('activeCategory === BEST_SELLERS_KEY');
+    // Both conditions must hold — a matching non-best-seller can never surface in the ⭐ grid.
+    expect(fn).toContain('p.isBestSeller === true && matchesSearch(p)');
+  });
+
+  test('the old global-search escape is GONE from the Best Seller branch', () => {
+    const fn = filterMemo();
+    expect(fn).not.toContain('q ? matchesSearch(p) : p.isBestSeller === true');
+    // Search no longer acts as a global inventory escape for grid display in the ⭐ tab.
+    expect(fn).not.toContain('q ? matchesSearch(p)');
+  });
+
+  test('physical category tab search intersects category membership AND search', () => {
+    const fn = filterMemo();
+    expect(fn).toContain('const matchCat = !activeCategory || p.category === activeCategory;');
+    // Intersection — a matching product from ANOTHER category cannot leak into this grid.
+    expect(fn).toContain('return matchCat && matchesSearch(p);');
+  });
+
+  test('Quick Menu search stays LOCAL to the Quick Menu set (intersection, unchanged)', () => {
+    const fn = filterMemo();
+    // The Quick Menu branch filters within its hand-picked ids AND the search — never escapes.
+    expect(fn).toContain('idSet.has(p.id) && matchesSearch(p)');
+    // Quick Menu precedence is intact (its branch is evaluated before category/best-seller).
+    const quickIdx = fn.indexOf('if (activeQuickMenuId)');
+    const bestIdx = fn.indexOf('activeCategory === BEST_SELLERS_KEY');
+    expect(quickIdx).toBeGreaterThan(-1);
+    expect(quickIdx).toBeLessThan(bestIdx);
+  });
+
+  test('scanner / direct-add stays INDEPENDENT of the visible grid filter (unchanged by UI-10-C)', () => {
+    // findByScanCode keeps SKU-before-UOM priority and is not coupled to the grid memo.
+    const fn = region(posSource, 'function findByScanCode', '\n}');
+    expect(fn.indexOf('p.sku === trimmed')).toBeLessThan(fn.indexOf('p.uomOptions.find('));
+    // Enter direct-UOM add + product-click routing unchanged.
+    const h = region(posSource, 'const handleSearchKeyDown', 'const clearPosCart');
+    expect(h).toContain('const match = findByScanCode(products, trimmed);');
+    expect(h).toContain('cart.addToCart(match.product, match.option);');
+    expect(h).toContain('onProductClick(match.product);');
+    // Scan miss stays toast-only (a mistyped code is correctable).
+    expect(h).toMatch(/else \{\s*showToast\('ไม่พบสินค้านี้'\);\s*\}/);
+  });
+
+  test('hidden-product exact-code reveal is preserved (not collapsed by the local-search change)', () => {
+    // The branch-hidden escape hatch (type an EXACT SKU/name/barcode to summon a hidden product)
+    // is a separate, intentional behavior and is untouched by the tab-local search change.
+    const fn = filterMemo();
+    expect(fn).toContain('return isExactCodeMatch(p);');
+  });
+});
+
+describe('7C-UI-10-C · Sorting modal best-seller membership scope (data path)', () => {
+  test('SortableProduct carries the isBestSeller membership flag', () => {
+    const iface = region(categoryServiceSource, 'export interface SortableProduct', '}');
+    expect(iface).toContain('isBestSeller?: boolean;');
+  });
+
+  test('sortingStore projects Product.isBestSeller ?? false in BOTH the live and dev mappers', () => {
+    // Two projections (devSortableProducts + the live useSortableProducts onSnapshot map).
+    expect(countOccurrences(sortingStoreSource, 'isBestSeller: p.isBestSeller ?? false,')).toBe(2);
+  });
+
+  test('the modal scopes the best-sellers group to isBestSeller === true (no full-inventory leak)', () => {
+    const scoped = region(sortingModalSource, 'const scoped =', 'void getProductSortOrder');
+    expect(scoped).toContain('selectedKey === BEST_SELLERS_KEY');
+    // Membership scope — the leak (`? products`) is replaced by a flagged filter.
+    expect(scoped).toContain('products.filter((p) => p.isBestSeller === true)');
+  });
+
+  test('physical category sorting scope is UNCHANGED (still matchesCategoryFilter)', () => {
+    const scoped = region(sortingModalSource, 'const scoped =', 'void getProductSortOrder');
+    expect(scoped).toContain('matchesCategoryFilter(p.category, selectedKey, categories)');
+  });
+
+  test('membership is NOT derived from the ordering array (sorting["best-sellers"] stays ordering-only)', () => {
+    const scoped = region(sortingModalSource, 'const scoped =', 'void getProductSortOrder');
+    expect(scoped).not.toContain("sorting['best-sellers']");
+    expect(scoped).not.toContain('sorting[BEST_SELLERS_KEY]');
+    // The ordering is still applied by the sharded sort reader (write API unchanged).
+    expect(sortingModalSource).toContain('sortProductsByCustomOrder(scoped, order)');
+    expect(sortingModalSource).toContain('saveProductSortOrder(branchId, key, ids, expectedRev)');
   });
 });
