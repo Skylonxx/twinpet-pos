@@ -706,13 +706,16 @@ describe('7C-L3 · UOM barcode matched-unit display hint (POSPage.tsx)', () => {
     expect(fn).not.toContain('setUom');
   });
 
-  test('the matched-UOM hint renders the product name + unit label as plain text (no new CSS)', () => {
-    const hint = region(posSource, '{scanUomHint &&', '</span>');
-    expect(hint).toContain('scanUomHint.productName');
-    expect(hint).toContain('scanUomHint.unit');
-    // Thai unit terminology already used app-wide; rendered as an accessible status, not a button.
-    expect(hint).toContain('หน่วย');
-    expect(hint).toContain('role="status"');
+  test('the matched-UOM hint surfaces the product name + unit label as plain text (no new CSS)', () => {
+    // L3 Revision 2: the matched-UOM text now lives in the permanent status-bar projection
+    // (`posStatusBar`) rather than a conditional element, but it still surfaces the same derived
+    // product name + unit with the app-wide Thai unit terminology, rendered as an accessible status.
+    const proj = region(posSource, 'const posStatusBar = useMemo', '[scanUomHint]);');
+    expect(proj).toContain('scanUomHint.productName');
+    expect(proj).toContain('scanUomHint.unit');
+    expect(proj).toContain('หน่วย');
+    const bar = region(posSource, 'py-1.5 text-xs font-medium ${', '</span>');
+    expect(bar).toContain('role="status"');
   });
 
   test('the Enter direct-UOM add path (D4-D Fix 1) is unchanged by the display hint', () => {
@@ -736,5 +739,175 @@ describe('7C-L3 · UOM barcode matched-unit display hint (POSPage.tsx)', () => {
     expect(fn).not.toContain('confirmSale');
     expect(fn).not.toContain('setBillDiscValue');
     expect(fn).not.toContain('setRawCart');
+  });
+});
+
+// ─── I-Rev2. Permanent System Status & Alert Bar (Phase 7C-L3 Revision 2) ─────────────
+// Physical UAT rejected Revision 1: relocating the hint below the search bar fixed input
+// crowding, but the hint still mounted/unmounted conditionally, so the product grid below
+// shifted every time a UOM barcode matched. Revision 2 makes the space a PERMANENTLY mounted
+// `System Status & Alert Bar`: always present (no layout shift), showing a default idle hint
+// and overriding it with the UOM-match text. `posStatusBar` is a pure projection of the
+// existing `scanUomHint` — no new matcher, no backend/promo/remote-config logic this slice.
+describe('7C-L3 Revision 2 · Permanent System Status & Alert Bar (POSPage.tsx)', () => {
+  /** The search-input row (search bar container): its open → the header close. */
+  function searchRow(): string {
+    return region(posSource, 'className="pos-search-group"', '</header>');
+  }
+  /** The status-bar projection memo: its `useMemo(` → dep array. CRLF/LF agnostic markers. */
+  function projection(): string {
+    return region(posSource, 'const posStatusBar = useMemo', '[scanUomHint]);');
+  }
+  /** The rendered status-bar element. Anchored on the template-literal className `${` (unique to
+      the bar element — the comment phrase also appears in the memo comment) → its text span close.
+      Newline-free markers, so CRLF/LF agnostic. Captures className + a11y attrs + the text span. */
+  function statusBar(): string {
+    return region(posSource, 'py-1.5 text-xs font-medium ${', '</span>');
+  }
+  /** Everything between the search header and the product/cart content row. */
+  function belowHeader(): string {
+    return region(posSource, '</header>', 'className="pos-content-row"');
+  }
+
+  test('the status bar is ALWAYS mounted — not wrapped in any conditional render', () => {
+    // Layout-shift fix: the bar must render unconditionally so the content row below never moves.
+    const below = belowHeader();
+    expect(below).toContain('role="status"');
+    expect(below).toContain('data-status-tone={posStatusBar.tone}');
+    // No `{scanUomHint && (` / `&& (` conditional mount wrapper around the bar (text changes only).
+    expect(below).not.toContain('{scanUomHint &&');
+    expect(below).not.toContain('&& (');
+    // The bar renders the single projected text node — one source of truth for both states.
+    expect(below).toContain('{posStatusBar.text}');
+  });
+
+  test('the default state shows the idle scan/search hint (no dead space)', () => {
+    // When no UOM barcode matches, the bar is the default tone with the 💡 idle hint — the
+    // reserved space is never blank.
+    const proj = projection();
+    expect(proj).toContain("tone: 'default' as const");
+    expect(proj).toContain('💡 สแกนบาร์โค้ด หรือพิมพ์ชื่อสินค้า, รหัส (SKU) เพื่อค้นหา');
+    // The default is the fall-through return (the UOM branch is checked first, then default).
+    const uomIdx = proj.indexOf("tone: 'uom'");
+    const defaultIdx = proj.indexOf("tone: 'default'");
+    expect(uomIdx).toBeGreaterThan(-1);
+    expect(defaultIdx).toBeGreaterThan(uomIdx);
+  });
+
+  test('the UOM-match state overrides the default with the matched product + unit + Enter cue', () => {
+    const proj = projection();
+    // Gated on the existing derived hint — a pure projection, NOT a second matcher.
+    expect(proj).toContain('if (scanUomHint)');
+    expect(proj).toContain("tone: 'uom' as const");
+    expect(proj).toContain('พบสินค้า');
+    expect(proj).toContain('${scanUomHint.productName}');
+    expect(proj).toContain('หน่วย');
+    expect(proj).toContain('${scanUomHint.unit}');
+    expect(proj).toContain('กด Enter เพื่อเพิ่ม');
+  });
+
+  test('the status bar lives BELOW the search/header area and BEFORE the product content row', () => {
+    const headerEnd = posSource.indexOf('</header>');
+    const barIdx = posSource.indexOf('data-status-tone={posStatusBar.tone}');
+    const contentIdx = posSource.indexOf('className="pos-content-row"');
+    expect(headerEnd).toBeGreaterThan(-1);
+    expect(barIdx).toBeGreaterThan(headerEnd);
+    expect(contentIdx).toBeGreaterThan(barIdx);
+  });
+
+  test('the status bar does NOT live inside the pos-search-group / search input row', () => {
+    const row = searchRow();
+    expect(row).not.toContain('posStatusBar');
+    expect(row).not.toContain('data-status-tone');
+    // The search input element itself is untouched (still autoFocus + ref + scan handler wired).
+    expect(row).toContain('id="pos-search"');
+    expect(row).toContain('ref={searchInputRef}');
+    expect(row).toContain('onKeyDown={handleSearchKeyDown}');
+  });
+
+  test('the status bar can wrap long names — no width-compressing utilities', () => {
+    const bar = statusBar();
+    expect(bar).not.toContain('whitespace-nowrap');
+    expect(bar).not.toContain('truncate');
+    expect(bar).not.toContain('w-[');
+    expect(bar).not.toContain('max-w-');
+    // Announced politely as an accessible status region.
+    expect(bar).toContain('role="status"');
+    expect(bar).toContain('aria-live="polite"');
+  });
+
+  test('the status bar introduced NO new CSS file/import and NO new pos- CSS class', () => {
+    expect(countOccurrences(posSource, "import './POSPage.css';")).toBe(1);
+    expect(countOccurrences(posSource, ".css'")).toBe(1);
+    expect(statusBar()).not.toContain('className="pos-');
+  });
+
+  test('the status bar carries NO backend / promo / Firebase / remote-config logic this slice', () => {
+    // Future-ready model only: the two authorized states are pure local text — no data hooks.
+    const surfaces = projection() + statusBar();
+    for (const forbidden of [
+      'firebase',
+      'firestore',
+      'getDoc',
+      'getDocs',
+      'onSnapshot',
+      'remoteConfig',
+      'httpsCallable',
+      'fetch(',
+      'useEffect',
+    ]) {
+      expect(surfaces).not.toContain(forbidden);
+    }
+  });
+
+  test('posStatusBar is a pure projection of scanUomHint — no second matcher, derived-only', () => {
+    const proj = projection();
+    // Derives from the already-computed hint, never re-runs the scan lookup.
+    expect(proj).not.toContain('findByScanCode');
+    expect(proj).not.toContain('addToCart');
+    expect(proj).not.toContain('setSearch');
+    // The memo depends ONLY on the derived hint.
+    expect(proj).toContain('scanUomHint');
+  });
+
+  test('scanUomHint stays a pure/read-only derivation after the status-bar refactor', () => {
+    const fn = region(posSource, 'const scanUomHint = useMemo', '[search, products]);');
+    expect(fn).toContain('findByScanCode(products, trimmed)');
+    expect(fn).toContain('match?.option');
+    expect(fn).not.toContain('addToCart');
+    expect(fn).not.toContain('setSearch');
+    expect(fn).not.toContain('setUom');
+  });
+
+  test('the Enter direct-UOM add path is UNCHANGED by the status bar', () => {
+    const h = region(posSource, 'const handleSearchKeyDown', 'const clearPosCart');
+    expect(h).toContain('const match = findByScanCode(products, trimmed);');
+    expect(h).toContain('cart.addToCart(match.product, match.option);');
+    expect(h).toContain('onProductClick(match.product);');
+    expect(h).toContain("setSearch('')");
+    expect(h).toContain('focusSearch();');
+  });
+
+  test('product-level / SKU priority and scan MISS behaviour are UNCHANGED by the revision', () => {
+    const fn = region(posSource, 'function findByScanCode', '\n}');
+    expect(fn.indexOf('p.sku === trimmed')).toBeLessThan(fn.indexOf('p.uomOptions.find('));
+    const h = region(posSource, 'const handleSearchKeyDown', 'const clearPosCart');
+    // Miss stays toast-only (no setSearch('') / focus reset), so a mistyped code is correctable.
+    expect(h).toMatch(/else \{\s*showToast\('ไม่พบสินค้านี้'\);\s*\}/);
+  });
+
+  test('the status bar introduces NO checkout/payment/cart-mutation/write path', () => {
+    const surfaces = projection() + statusBar();
+    for (const forbidden of [
+      'addToCart',
+      'setSearch',
+      'confirmSale',
+      'setBillDiscValue',
+      'setRawCart',
+      'setPaymentOpen',
+      'onClick',
+    ]) {
+      expect(surfaces).not.toContain(forbidden);
+    }
   });
 });

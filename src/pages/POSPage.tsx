@@ -314,6 +314,26 @@ export default function POSPage() {
     return null;
   }, [search, products]);
 
+  // Phase 7C-L3 Revision 2 (permanent System Status & Alert Bar): a single always-mounted bar
+  // lives directly below the search header so the product grid below NEVER shifts (the previous
+  // revision conditionally mounted/unmounted the hint, which pushed the content row up/down).
+  // `posStatusBar` is a pure projection of `scanUomHint` into the bar's two authorized states —
+  // it adds NO matcher and NEVER touches the scan/Enter/add path. Future high-priority alert /
+  // promo / staff-notice states will extend this `tone`/`text` model; for THIS slice only the
+  // default (idle hint) and UOM-match states exist — no backend/promo/remote-config logic.
+  const posStatusBar = useMemo(() => {
+    if (scanUomHint) {
+      return {
+        tone: 'uom' as const,
+        text: `✅ พบสินค้า: ${scanUomHint.productName} — หน่วย: ${scanUomHint.unit} (กด Enter เพื่อเพิ่ม)`,
+      };
+    }
+    return {
+      tone: 'default' as const,
+      text: '💡 สแกนบาร์โค้ด หรือพิมพ์ชื่อสินค้า, รหัส (SKU) เพื่อค้นหา',
+    };
+  }, [scanUomHint]);
+
   // Enrich the product-derived category strings with admin metadata (branch
   // order/visibility/background) from the categories collection, then keep only
   // the categories visible for THIS branch, in this branch's display order.
@@ -694,20 +714,6 @@ export default function POSPage() {
               onKeyDown={handleSearchKeyDown}
             />
           </div>
-          {/* Phase 7C-L3: matched-UOM hint. Plain text (existing Tailwind utilities, no new CSS),
-              shown only when the query matched a UOM-specific barcode, so the cashier sees the
-              exact unit Enter will add. Display-only — does not touch the scan/add path. */}
-          {scanUomHint && (
-            <span
-              className="ml-2 inline-flex items-center gap-1 whitespace-nowrap text-xs font-medium text-[var(--p800)]"
-              role="status"
-              aria-live="polite"
-              title="หน่วยที่ตรงกับบาร์โค้ดที่สแกน"
-            >
-              <i className="ti ti-barcode" aria-hidden="true" />
-              {scanUomHint.productName} — หน่วย: {scanUomHint.unit}
-            </span>
-          )}
           <button
             type="button"
             className="pos-add-prod-btn"
@@ -785,6 +791,26 @@ export default function POSPage() {
           </div>
         )}
       </header>
+
+      {/* Phase 7C-L3 Revision 2: permanent System Status & Alert Bar. ALWAYS mounted directly
+          below the search header (NEVER inside the search input / pos-search-group row), so the
+          product grid below it stays anchored and never shifts — the prior revision's conditional
+          mount/unmount was the layout-shift UAT reject. Only the TEXT/tone inside the reserved bar
+          changes between the default idle hint and the UOM-match state (both from `posStatusBar`).
+          Plain text via existing Tailwind utilities (no new CSS file/class). Display-only: it does
+          NOT touch the scan / Enter / add path and carries NO backend/promo/remote-config logic. */}
+      <div
+        className={`flex items-start gap-1.5 border-b border-[var(--g200)] px-[14px] py-1.5 text-xs font-medium ${
+          posStatusBar.tone === 'uom'
+            ? 'bg-[var(--g50)] text-[var(--p800)]'
+            : 'bg-white text-[var(--g500)]'
+        }`}
+        role="status"
+        aria-live="polite"
+        data-status-tone={posStatusBar.tone}
+      >
+        <span>{posStatusBar.text}</span>
+      </div>
 
       <div className="pos-content-row">
         <div className="pos-product-area">
