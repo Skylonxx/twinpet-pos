@@ -1,4 +1,4 @@
-# Current Task Tracker — Phase 7C-UI-13-TOAST-TYPOGRAPHY (IMPLEMENTATION / AWAITING CODEX REVIEW)
+# Current Task Tracker — Phase 7C-UI-01 (MAIN POS LAYOUT / IMPLEMENTATION — AWAITING CODEX REVIEW)
 
 > Living checkpoint doc for agents. Detailed history: `docs/reports/latest-report.md` (do not duplicate long-form evidence here).
 
@@ -168,6 +168,46 @@ CEO rejection reasons:
 **Validation:** `tsc -b` clean; full vitest **681 passed** (31 files); `useCart.contract.test.ts` 68; `POSPage.keyboard-contract.test.ts` 121.
 
 **Files changed in the UI-13 step:** `src/components/ui/toast.tsx`, `src/hooks/pos/useCart.ts`, `src/hooks/pos/useCart.contract.test.ts`, `Context.md`, `Task.md`.
+
+> NOTE: The combined UI-12 + UI-13 toast package was committed as `f9d11ec fix(pos): polish toast feedback and typography` (Tech Lead/CEO Option B closure with notes).
+
+---
+
+## Phase 7C-UI-01 — Main POS Layout & Core UX Preferences (ACTIVE / IMPLEMENTATION — AWAITING CODEX REVIEW — NOT COMMITTED)
+
+**Context:** Tech Lead/CEO authorized resumption of the POS UI overhaul, starting with UI-01 — the main POS layout foundation, cart newest-on-top, a localStorage POS-preferences foundation, sticky search/cart regions, and Flowbite-style visual separation. Scoped strictly to `src/pages/POSPage.tsx`, `src/pages/POSPage.css`, a new `src/hooks/pos/usePOSPreferences.ts`, and the trackers. Local seed UAT data (`mock-products.json`) is **not** part of UI-01 and was not touched.
+
+- **Directive A — Cart newest-on-top (display-only):** POSPage renders a `displayCartLines = useMemo(() => cartLines.slice().reverse(), [cartLines])` reversed copy; `cartLines` (and the checkout/receipt/hold payloads derived from it) keep original insertion order. Row identity stays the stable `line.lineKey` (never an index), so every cart action targets the correct original line. No cart math / quantity / discount / FIFO / stock-matrix change; `useCart.ts` untouched.
+- **Directive B — POS preferences foundation:** new `usePOSPreferences()` hook — `gridColumns: 4|5|6` (default 5) + `fontSize: small|normal|large` (default normal), localStorage-backed (`twinpet_pos_prefs`). Storage access is SSR/private-mode/quota safe; parsed values validated against the unions with recovery to defaults; validating setters exported for the future Settings page. POSPage consumes the values only — **no toggle UI on POS**.
+- **Directive C — Dynamic grid + font scale:** product grid columns via `--pos-grid-cols` set by `pos-grid-cols-{4,5,6}` class (responsive media caps preserved after the preference classes); product-card text scales via `--pos-font-scale` set by `pos-fontsize-{small,normal,large}` on `.pos-page`. Class mapping, no inline styles, no Tailwind-purge risk (static class names).
+- **Directive D — Independent scrolling / sticky:** product search lives in the always-visible top bar (never scrolls away) above the category bar; only `.pos-product-grid` scrolls (added `min-height:0` to product area + grid). Cart card: customer bar pinned top, `.pos-cart-items` is the only scroll region (`min-height:0`), totals + F12 checkout footer pinned bottom (`flex-shrink:0`). F12 / modal-suppression / focus-return / scan-input behavior unchanged.
+- **Directive E — Flowbite visual separation:** app surface stays gray-50; cart is now a raised white card (`border-radius`, `box-shadow`, margin) floating on it. No broad redesign of unrelated components.
+- **UI-12/UI-13 toast system untouched:** no toast files modified, `MAX_VISIBLE_TOASTS=1` unchanged, top-center single toast preserved.
+- No stock-matrix / cart-math / Global-Toast / checkout-hard-stop / schema / mapper / Firebase / Android changes. `stash@{0}` untouched; no staging/commit.
+
+**Files changed in the UI-01 step:** `src/pages/POSPage.tsx`, `src/pages/POSPage.css`, `src/hooks/pos/usePOSPreferences.ts` (new), `Context.md`, `Task.md`.
+
+**Closure gate:** Codex GPT-5.5 High review is MANDATORY before Tech Lead closure; no staging/commit until Codex PASS / PASS WITH NOTES + Tech Lead authorization. UI-01 is NOT closed.
+
+---
+
+## Phase 7C-LOCAL-SEED-INJECTION — Permanent Local/Emulator UI-Stress Seed Data (ACTIVE / data-seeding only)
+
+**Context:** CEO authorized **permanent** local/emulator mock products (NOT transient frontend state, NOT production data) for consistent high-load visual UAT across UI-01..09.
+
+**Seed source:** `src/lib/mocks/mock-products.json` — the dev/UAT mock array read by `src/lib/seedData.ts` (`seedMockData()`), which batch-writes the mock JSON into the Firestore **emulator** (`scripts/seed-emulator.mjs`, emulator host `127.0.0.1:8080`). Development/emulator-only; not a production data path.
+
+- **Appended exactly 50** new products (`PROD-011`..`PROD-060`); original 10 (`PROD-001`..`PROD-010`) untouched.
+- **Category coverage:** 30 × `ยาสัตว์` (long pharmaceutical names) + 20 × `อาหารไก่` (feed formula/package names).
+- **Schema fidelity:** every record mirrors the existing `RawSeedProduct` shape exactly — `id, sku, barcode, name, category, description, imageUrl, baseUnit, cost, basePrice, stock, prices[], tierPrices{}, uomConversions[], allowNegativeStock, reorderPoint, isActive, muteAlerts`. No invented fields (the seed schema has no `warnOnOversell`, so none added).
+- **Local-test namespace:** `sku` = `UISTRESS-01..50`; `barcode` = `990000000001..990000000050` (12-digit, distinct from existing `885*` / `PLU*`). All ids/skus/barcodes verified unique across the full 60.
+- **Stress naming:** names 112–162 chars, each ending `(Index: 01..50)`; realistic Thai (medicine names for ยาสัตว์, feed formula/stage/package for อาหารไก่). `cost < basePrice`; `stock` 20–199; `allowNegativeStock: true` (matches existing seed default).
+- No UI layout / cart / validation / Global-Toast / stock-matrix / schema / mapper / Firebase-rules / Functions / Android changes; no production data path touched.
+- `stash@{0}` untouched; no staging/commit.
+
+**Validation:** `tsc -b` clean; full vitest **681 passed**; JSON parses; counts/uniqueness verified (60 total, 30 ยาสัตว์ + 20 อาหารไก่ appended).
+
+**Files changed in the seed step:** `src/lib/mocks/mock-products.json`, `Context.md`, `Task.md`.
 
 ---
 

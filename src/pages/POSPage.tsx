@@ -25,6 +25,7 @@ import { useSuspendedBills } from '../lib/pos/useSuspendedBills';
 import ProductImageThumb from '../components/products/ProductImageThumb';
 import { usePosInventory } from '../hooks/pos/usePosInventory';
 import { usePosSyncSignal } from '../hooks/pos/usePosSyncSignal';
+import { usePOSPreferences } from '../hooks/pos/usePOSPreferences';
 import SyncIndicator from '../components/pos/SyncIndicator';
 import { refreshReceiptConfigCache } from '../lib/pos/billId';
 import {
@@ -167,6 +168,18 @@ export default function POSPage() {
 
   const cart = useCart({ products, customer, showToast });
   const { cartLines, totals } = cart;
+
+  // UI-01: cashier-facing display preferences (grid density + text scale). POSPage
+  // only CONSUMES them — no toggle UI here; a future Settings page owns the controls.
+  const { gridColumns, fontSize } = usePOSPreferences();
+
+  // UI-01 Directive A: render the cart newest-on-top so the just-scanned item is
+  // immediately visible without scrolling. DISPLAY-ONLY — `cartLines` (and the
+  // checkout/receipt/hold payloads derived from it) keep their original insertion
+  // order; this reversed copy is used solely for rendering and never mutates the
+  // underlying array. Row identity stays the stable `line.lineKey` (never an index),
+  // so every cart action still targets the correct original line after reversal.
+  const displayCartLines = useMemo(() => cartLines.slice().reverse(), [cartLines]);
 
   // Drawer single-writer: the terminal owns its shift totals by folding its own
   // local ledger of `asyncOrders`. The stored shift doc's `expected*` fields are
@@ -728,7 +741,7 @@ export default function POSPage() {
   }, [cartLines.length, activeShift, hasBlockingModalOpen, closeTopModalOnEscape]);
 
   return (
-    <div className="pos-page">
+    <div className={`pos-page pos-fontsize-${fontSize}`}>
       {updateBanner && (
         <button
           type="button"
@@ -916,7 +929,7 @@ export default function POSPage() {
           {loading ? (
             <div className="pos-loading-overlay">กำลังโหลดสินค้า...</div>
           ) : (
-            <div className="pos-product-grid">
+            <div className={`pos-product-grid pos-grid-cols-${gridColumns}`}>
               {fromCache && products.length === 0 && !error && (
                 <div className="col-span-full mb-4 rounded bg-red-50 p-3 text-sm text-red-800 border border-red-200 flex items-center justify-center">
                   <i className="ti ti-alert-circle mr-2" aria-hidden="true" />
@@ -1022,7 +1035,7 @@ export default function POSPage() {
             {cartLines.length === 0 ? (
               <div className="pos-cart-empty">ยังไม่มีสินค้า</div>
             ) : (
-              cartLines.map((line) => {
+              displayCartLines.map((line) => {
                 const finalPrice = getLineTotal(line);
                 const hasDisc = line.discount.type !== 'none';
                 const hasTierDisc =

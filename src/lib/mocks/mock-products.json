@@ -12,9 +12,18 @@
     "basePrice": 540,
     "stock": 60,
     "prices": [
-      { "priceLevelId": "retail", "unit": "กระสอบ", "price": 540 }
+      {
+        "priceLevelId": "retail",
+        "unit": "กระสอบ",
+        "price": 540
+      }
     ],
-    "tierPrices": { "wholesale": 530, "vip": 520, "agent1": 510, "farm_large": 500 },
+    "tierPrices": {
+      "wholesale": 530,
+      "vip": 520,
+      "agent1": 510,
+      "farm_large": 500
+    },
     "uomConversions": [],
     "allowNegativeStock": true,
     "reorderPoint": 10,
@@ -34,23 +43,50 @@
     "basePrice": 80,
     "stock": 45,
     "prices": [
-      { "priceLevelId": "retail", "unit": "ขวด", "price": 80 },
-      { "priceLevelId": "retail", "unit": "แพ็ค", "price": 450 },
-      { "priceLevelId": "retail", "unit": "ลัง", "price": 1680 }
+      {
+        "priceLevelId": "retail",
+        "unit": "ขวด",
+        "price": 80
+      },
+      {
+        "priceLevelId": "retail",
+        "unit": "แพ็ค",
+        "price": 450
+      },
+      {
+        "priceLevelId": "retail",
+        "unit": "ลัง",
+        "price": 1680
+      }
     ],
-    "tierPrices": { "wholesale": 75, "vip": 70, "agent1": 68, "farm_large": 65 },
+    "tierPrices": {
+      "wholesale": 75,
+      "vip": 70,
+      "agent1": 68,
+      "farm_large": 65
+    },
     "uomConversions": [
       {
         "unit": "แพ็ค",
         "factor": 6,
         "barcode": "PLU3014112782-P6",
-        "tierPrices": { "wholesale": 432, "vip": 420, "agent1": 408, "farm_large": 390 }
+        "tierPrices": {
+          "wholesale": 432,
+          "vip": 420,
+          "agent1": 408,
+          "farm_large": 390
+        }
       },
       {
         "unit": "ลัง",
         "factor": 24,
         "barcode": "PLU3014112782-C24",
-        "tierPrices": { "wholesale": 1620, "vip": 1560, "agent1": 1512, "farm_large": 1440 }
+        "tierPrices": {
+          "wholesale": 1620,
+          "vip": 1560,
+          "agent1": 1512,
+          "farm_large": 1440
+        }
       }
     ],
     "allowNegativeStock": true,
@@ -71,16 +107,34 @@
     "basePrice": 60,
     "stock": 300,
     "prices": [
-      { "priceLevelId": "retail", "unit": "อัน", "price": 60 },
-      { "priceLevelId": "retail", "unit": "ถุง", "price": 2500 }
+      {
+        "priceLevelId": "retail",
+        "unit": "อัน",
+        "price": 60
+      },
+      {
+        "priceLevelId": "retail",
+        "unit": "ถุง",
+        "price": 2500
+      }
     ],
-    "tierPrices": { "wholesale": 55, "vip": 52, "agent1": 50, "farm_large": 48 },
+    "tierPrices": {
+      "wholesale": 55,
+      "vip": 52,
+      "agent1": 50,
+      "farm_large": 48
+    },
     "uomConversions": [
       {
         "unit": "ถุง",
         "factor": 50,
         "barcode": "PLU4017786800-B50",
-        "tierPrices": { "wholesale": 2400, "vip": 2350, "agent1": 2300, "farm_large": 2250 }
+        "tierPrices": {
+          "wholesale": 2400,
+          "vip": 2350,
+          "agent1": 2300,
+          "farm_large": 2250
+        }
       }
     ],
     "allowNegativeStock": true,
@@ -101,16 +155,34 @@
     "basePrice": 150,
     "stock": 60,
     "prices": [
-      { "priceLevelId": "retail", "unit": "ขวด", "price": 150 },
-      { "priceLevelId": "retail", "unit": "กล่อง", "price": 1400 }
+      {
+        "priceLevelId": "retail",
+        "unit": "ขวด",
+        "price": 150
+      },
+      {
+        "priceLevelId": "retail",
+        "unit": "กล่อง",
+        "price": 1400
+      }
     ],
-    "tierPrices": { "wholesale": 140, "vip": 135, "agent1": 130, "farm_large": 125 },
+    "tierPrices": {
+      "wholesale": 140,
+      "vip": 135,
+      "agent1": 130,
+      "farm_large": 125
+    },
     "uomConversions": [
       {
         "unit": "กล่อง",
         "factor": 12,
         "barcode": "885M001-B12",
-        "tierPrices": { "wholesale": 1350, "vip": 1320, "agent1": 1300, "farm_large": 1280 }
+        "tierPrices": {
+          "wholesale": 1350,
+          "vip": 1320,
+          "agent1": 1300,
+          "farm_large": 1280
+        }
       }
     ],
     "allowNegativeStock": true,
@@ -131,15 +203,29 @@
     "basePrice": 750,
     "stock": 25,
     "prices": [
-      { "priceLevelId": "retail", "unit": "ถุง", "price": 750 }
+      {
+        "priceLevelId": "retail",
+        "unit": "ถุง",
+        "price": 750
+      }
     ],
-    "tierPrices": { "wholesale": 720, "vip": 700, "agent1": 690, "farm_large": 680 },
+    "tierPrices": {
+      "wholesale": 720,
+      "vip": 700,
+      "agent1": 690,
+      "farm_large": 680
+    },
     "uomConversions": [
       {
         "unit": "กระสอบ",
         "factor": 5,
         "barcode": "885C001-S5",
-        "tierPrices": { "wholesale": 3500, "vip": 3450, "agent1": 3400, "farm_large": 3350 }
+        "tierPrices": {
+          "wholesale": 3500,
+          "vip": 3450,
+          "agent1": 3400,
+          "farm_large": 3350
+        }
       }
     ],
     "allowNegativeStock": true,
@@ -160,9 +246,18 @@
     "basePrice": 690,
     "stock": 50,
     "prices": [
-      { "priceLevelId": "retail", "unit": "กระสอบ", "price": 690 }
+      {
+        "priceLevelId": "retail",
+        "unit": "กระสอบ",
+        "price": 690
+      }
     ],
-    "tierPrices": { "wholesale": 680, "vip": 670, "agent1": 660, "farm_large": 650 },
+    "tierPrices": {
+      "wholesale": 680,
+      "vip": 670,
+      "agent1": 660,
+      "farm_large": 650
+    },
     "uomConversions": [],
     "allowNegativeStock": true,
     "reorderPoint": 10,
@@ -182,9 +277,18 @@
     "basePrice": 600,
     "stock": 45,
     "prices": [
-      { "priceLevelId": "retail", "unit": "กระสอบ", "price": 600 }
+      {
+        "priceLevelId": "retail",
+        "unit": "กระสอบ",
+        "price": 600
+      }
     ],
-    "tierPrices": { "wholesale": 590, "vip": 580, "agent1": 570, "farm_large": 560 },
+    "tierPrices": {
+      "wholesale": 590,
+      "vip": 580,
+      "agent1": 570,
+      "farm_large": 560
+    },
     "uomConversions": [],
     "allowNegativeStock": true,
     "reorderPoint": 10,
@@ -204,9 +308,18 @@
     "basePrice": 500,
     "stock": 40,
     "prices": [
-      { "priceLevelId": "retail", "unit": "กระสอบ", "price": 500 }
+      {
+        "priceLevelId": "retail",
+        "unit": "กระสอบ",
+        "price": 500
+      }
     ],
-    "tierPrices": { "wholesale": 490, "vip": 480, "agent1": 470, "farm_large": 460 },
+    "tierPrices": {
+      "wholesale": 490,
+      "vip": 480,
+      "agent1": 470,
+      "farm_large": 460
+    },
     "uomConversions": [],
     "allowNegativeStock": true,
     "reorderPoint": 8,
@@ -226,16 +339,34 @@
     "basePrice": 45,
     "stock": 150,
     "prices": [
-      { "priceLevelId": "retail", "unit": "ซอง", "price": 45 },
-      { "priceLevelId": "retail", "unit": "กล่อง", "price": 800 }
+      {
+        "priceLevelId": "retail",
+        "unit": "ซอง",
+        "price": 45
+      },
+      {
+        "priceLevelId": "retail",
+        "unit": "กล่อง",
+        "price": 800
+      }
     ],
-    "tierPrices": { "wholesale": 43, "vip": 42, "agent1": 41, "farm_large": 40 },
+    "tierPrices": {
+      "wholesale": 43,
+      "vip": 42,
+      "agent1": 41,
+      "farm_large": 40
+    },
     "uomConversions": [
       {
         "unit": "กล่อง",
         "factor": 20,
         "barcode": "885000000009-B20",
-        "tierPrices": { "wholesale": 780, "vip": 770, "agent1": 760, "farm_large": 750 }
+        "tierPrices": {
+          "wholesale": 780,
+          "vip": 770,
+          "agent1": 760,
+          "farm_large": 750
+        }
       }
     ],
     "allowNegativeStock": true,
@@ -256,18 +387,1586 @@
     "basePrice": 220,
     "stock": 35,
     "prices": [
-      { "priceLevelId": "retail", "unit": "ใบ", "price": 220 },
-      { "priceLevelId": "retail", "unit": "แพ็ค", "price": 2000 }
+      {
+        "priceLevelId": "retail",
+        "unit": "ใบ",
+        "price": 220
+      },
+      {
+        "priceLevelId": "retail",
+        "unit": "แพ็ค",
+        "price": 2000
+      }
     ],
-    "tierPrices": { "wholesale": 210, "vip": 205, "agent1": 200, "farm_large": 195 },
+    "tierPrices": {
+      "wholesale": 210,
+      "vip": 205,
+      "agent1": 200,
+      "farm_large": 195
+    },
     "uomConversions": [
       {
         "unit": "แพ็ค",
         "factor": 10,
         "barcode": "885000000010-P10",
-        "tierPrices": { "wholesale": 1950, "vip": 1920, "agent1": 1900, "farm_large": 1880 }
+        "tierPrices": {
+          "wholesale": 1950,
+          "vip": 1920,
+          "agent1": 1900,
+          "farm_large": 1880
+        }
       }
     ],
+    "allowNegativeStock": true,
+    "reorderPoint": 10,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-011",
+    "sku": "UISTRESS-01",
+    "barcode": "990000000001",
+    "name": "อะม็อกซี่เคล 15% LA ยาฉีดปฏิชีวนะออกฤทธิ์นาน ขวด 100 มล.",
+    "category": "ยาสัตว์",
+    "description": "อะม็อกซีซิลลิน 15% ชนิดฉีดออกฤทธิ์นาน แก้ติดเชื้อในสุกรและโค ขวด 100 มล.",
+    "imageUrl": null,
+    "baseUnit": "ซอง",
+    "cost": 42,
+    "basePrice": 67,
+    "stock": 33,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "ซอง",
+        "price": 67
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 64,
+      "vip": 62,
+      "agent1": 60,
+      "farm_large": 59
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 11,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-012",
+    "sku": "UISTRESS-02",
+    "barcode": "990000000002",
+    "name": "เอนโรเฟล็อกซ์ 10% ยาน้ำละลายน้ำ สำหรับสัตว์ปีก ขวด 1 ลิตร",
+    "category": "ยาสัตว์",
+    "description": "เอนโรฟลอกซาซิน 10% ชนิดน้ำละลายน้ำให้สัตว์ปีก แก้ติดเชื้อทางเดินหายใจ ขวด 1 ลิตร",
+    "imageUrl": null,
+    "baseUnit": "ถุง",
+    "cost": 49,
+    "basePrice": 78,
+    "stock": 46,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "ถุง",
+        "price": 78
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 74,
+      "vip": 72,
+      "agent1": 70,
+      "farm_large": 69
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 12,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-013",
+    "sku": "UISTRESS-03",
+    "barcode": "990000000003",
+    "name": "ออกซี่เตตร้า LA ยาฉีดปฏิชีวนะ แก้หวัดติดเชื้อ ขวด 100 มล.",
+    "category": "ยาสัตว์",
+    "description": "อ็อกซี่เตตราซัยคลินชนิดฉีดออกฤทธิ์นาน สำหรับโคเนื้อและสุกร ขวด 100 มล.",
+    "imageUrl": null,
+    "baseUnit": "กล่อง",
+    "cost": 56,
+    "basePrice": 90,
+    "stock": 59,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "กล่อง",
+        "price": 90
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 86,
+      "vip": 83,
+      "agent1": 81,
+      "farm_large": 79
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 13,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-014",
+    "sku": "UISTRESS-04",
+    "barcode": "990000000004",
+    "name": "ไทโลซิน 20% ผงละลายน้ำ แก้หวัดสัตว์ปีก ซอง 100 กรัม",
+    "category": "ยาสัตว์",
+    "description": "ไทโลซิน 20% ผงละลายน้ำ รักษาโรคหวัดและซีอาร์ดีในไก่ ซอง 100 กรัม",
+    "imageUrl": null,
+    "baseUnit": "ขวด",
+    "cost": 63,
+    "basePrice": 101,
+    "stock": 72,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "ขวด",
+        "price": 101
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 96,
+      "vip": 93,
+      "agent1": 91,
+      "farm_large": 89
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 14,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-015",
+    "sku": "UISTRESS-05",
+    "barcode": "990000000005",
+    "name": "ด็อกซี่ซอล 50% ผงละลายน้ำ สำหรับสัตว์ปีก ซอง 100 กรัม",
+    "category": "ยาสัตว์",
+    "description": "ด็อกซีไซคลิน 50% ผงละลายน้ำ ป้องกันและรักษาโรคติดเชื้อในไก่ ซอง 100 กรัม",
+    "imageUrl": null,
+    "baseUnit": "ซอง",
+    "cost": 70,
+    "basePrice": 112,
+    "stock": 85,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "ซอง",
+        "price": 112
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 106,
+      "vip": 103,
+      "agent1": 101,
+      "farm_large": 99
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 15,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-016",
+    "sku": "UISTRESS-06",
+    "barcode": "990000000006",
+    "name": "ซัลฟาไดอะซีน พลัส ทีเอ็มพี ผงผสมอาหาร ถุง 1 กก.",
+    "category": "ยาสัตว์",
+    "description": "ซัลฟาไดอะซีนผสมไตรเมโทพริม ชนิดผงผสมอาหาร แก้บิดและท้องเสีย ถุง 1 กก.",
+    "imageUrl": null,
+    "baseUnit": "ถุง",
+    "cost": 77,
+    "basePrice": 123,
+    "stock": 98,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "ถุง",
+        "price": 123
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 117,
+      "vip": 113,
+      "agent1": 111,
+      "farm_large": 108
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 16,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-017",
+    "sku": "UISTRESS-07",
+    "barcode": "990000000007",
+    "name": "โคลิสติน ซัลเฟต ผงละลายน้ำ แก้ท้องเสีย ซอง 100 กรัม",
+    "category": "ยาสัตว์",
+    "description": "โคลิสติน ซัลเฟต ชนิดผงละลายน้ำ ควบคุมเชื้ออีโคไลในลูกสุกรและไก่ ซอง 100 กรัม",
+    "imageUrl": null,
+    "baseUnit": "กล่อง",
+    "cost": 84,
+    "basePrice": 134,
+    "stock": 111,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "กล่อง",
+        "price": 134
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 127,
+      "vip": 123,
+      "agent1": 121,
+      "farm_large": 118
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 17,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-018",
+    "sku": "UISTRESS-08",
+    "barcode": "990000000008",
+    "name": "นีโอมัยซิน ซัลเฟต ผงละลายน้ำ ถุง 1 กิโลกรัม",
+    "category": "ยาสัตว์",
+    "description": "นีโอมัยซิน ซัลเฟต ชนิดผงละลายน้ำ แก้ท้องเสียติดเชื้อในสัตว์ปีกและสุกร ถุง 1 กก.",
+    "imageUrl": null,
+    "baseUnit": "ขวด",
+    "cost": 91,
+    "basePrice": 146,
+    "stock": 124,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "ขวด",
+        "price": 146
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 139,
+      "vip": 134,
+      "agent1": 131,
+      "farm_large": 128
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 18,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-019",
+    "sku": "UISTRESS-09",
+    "barcode": "990000000009",
+    "name": "ฟรอนท์การ์ด พลัส ยาหยดหลังกำจัดเห็บหมัด กล่อง 3 หลอด",
+    "category": "ยาสัตว์",
+    "description": "ผลิตภัณฑ์หยดหลังกำจัดเห็บหมัดและไข่หมัด สำหรับสุนัขและแมว กล่อง 3 หลอด",
+    "imageUrl": null,
+    "baseUnit": "ซอง",
+    "cost": 98,
+    "basePrice": 157,
+    "stock": 137,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "ซอง",
+        "price": 157
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 149,
+      "vip": 144,
+      "agent1": 141,
+      "farm_large": 138
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 19,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-020",
+    "sku": "UISTRESS-10",
+    "barcode": "990000000010",
+    "name": "ไอโวเมค ยาถ่ายพยาธิชนิดฉีด สำหรับโคและสุกร ขวด 50 มล.",
+    "category": "ยาสัตว์",
+    "description": "ไอเวอร์เมกตินชนิดฉีด ถ่ายพยาธิภายในและภายนอกในโคและสุกร ขวด 50 มล.",
+    "imageUrl": null,
+    "baseUnit": "ถุง",
+    "cost": 105,
+    "basePrice": 168,
+    "stock": 150,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "ถุง",
+        "price": 168
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 160,
+      "vip": 155,
+      "agent1": 151,
+      "farm_large": 148
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 10,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-021",
+    "sku": "UISTRESS-11",
+    "barcode": "990000000011",
+    "name": "วิตามินบีรวม ยาฉีดบำรุงร่างกาย ขวด 100 มล.",
+    "category": "ยาสัตว์",
+    "description": "วิตามินบีคอมเพล็กซ์ชนิดฉีด บำรุงร่างกายและกระตุ้นการกินอาหาร ขวด 100 มล.",
+    "imageUrl": null,
+    "baseUnit": "กล่อง",
+    "cost": 112,
+    "basePrice": 179,
+    "stock": 163,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "กล่อง",
+        "price": 179
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 170,
+      "vip": 165,
+      "agent1": 161,
+      "farm_large": 158
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 11,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-022",
+    "sku": "UISTRESS-12",
+    "barcode": "990000000012",
+    "name": "คาโตซาล บี12 ยาฉีดบำรุงและแก้อ่อนเพลีย ขวด 100 มล.",
+    "category": "ยาสัตว์",
+    "description": "บูทาฟอสฟานผสมวิตามินบี12 ชนิดฉีด บำรุงและฟื้นกำลังสัตว์ ขวด 100 มล.",
+    "imageUrl": null,
+    "baseUnit": "ขวด",
+    "cost": 119,
+    "basePrice": 190,
+    "stock": 176,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "ขวด",
+        "price": 190
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 181,
+      "vip": 175,
+      "agent1": 171,
+      "farm_large": 167
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 12,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-023",
+    "sku": "UISTRESS-13",
+    "barcode": "990000000013",
+    "name": "ทิงเจอร์ไอโอดีน 7% น้ำยาใส่แผลสัตว์ ขวด 450 มล.",
+    "category": "ยาสัตว์",
+    "description": "ทิงเจอร์ไอโอดีน 7% สำหรับใส่แผลและฆ่าเชื้อบริเวณบาดแผลสัตว์ ขวด 450 มล.",
+    "imageUrl": null,
+    "baseUnit": "ซอง",
+    "cost": 126,
+    "basePrice": 202,
+    "stock": 189,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "ซอง",
+        "price": 202
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 192,
+      "vip": 186,
+      "agent1": 182,
+      "farm_large": 178
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 13,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-024",
+    "sku": "UISTRESS-14",
+    "barcode": "990000000014",
+    "name": "เจอร์มิไซด์ น้ำยาฆ่าเชื้อโรคในฟาร์ม ขวด 1 ลิตร",
+    "category": "ยาสัตว์",
+    "description": "น้ำยาฆ่าเชื้อชนิดเข้มข้น สำหรับพ่นฆ่าเชื้อโรงเรือนและอุปกรณ์ฟาร์ม ขวด 1 ลิตร",
+    "imageUrl": null,
+    "baseUnit": "ถุง",
+    "cost": 133,
+    "basePrice": 213,
+    "stock": 22,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "ถุง",
+        "price": 213
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 202,
+      "vip": 196,
+      "agent1": 192,
+      "farm_large": 187
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 14,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-025",
+    "sku": "UISTRESS-15",
+    "barcode": "990000000015",
+    "name": "ไซเปอร์เมทริน 25% อีซี ยาฆ่าแมลงและยุง ขวด 100 มล.",
+    "category": "ยาสัตว์",
+    "description": "ไซเปอร์เมทริน 25% ชนิดเข้มข้น กำจัดยุงและแมลงในโรงเรือนปศุสัตว์ ขวด 100 มล.",
+    "imageUrl": null,
+    "baseUnit": "กล่อง",
+    "cost": 140,
+    "basePrice": 224,
+    "stock": 35,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "กล่อง",
+        "price": 224
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 213,
+      "vip": 206,
+      "agent1": 202,
+      "farm_large": 197
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 15,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-026",
+    "sku": "UISTRESS-16",
+    "barcode": "990000000016",
+    "name": "เบต้ามัยซิน ผงโรยแผล แก้แผลหนอนแมลงวัน ซอง 20 กรัม",
+    "category": "ยาสัตว์",
+    "description": "ผงโรยแผลผสมยาปฏิชีวนะ ป้องกันหนอนแมลงวันและช่วยให้แผลแห้ง ซอง 20 กรัม",
+    "imageUrl": null,
+    "baseUnit": "ขวด",
+    "cost": 147,
+    "basePrice": 235,
+    "stock": 48,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "ขวด",
+        "price": 235
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 223,
+      "vip": 216,
+      "agent1": 212,
+      "farm_large": 207
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 16,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-027",
+    "sku": "UISTRESS-17",
+    "barcode": "990000000017",
+    "name": "แป้งทิคทอคซ์ ปราบเห็บหมัด สำหรับสุนัขและแมว กระปุก 180 กรัม",
+    "category": "ยาสัตว์",
+    "description": "แป้งกำจัดเห็บหมัดและบรรเทาอาการคัน สำหรับสุนัขและแมว กระปุก 180 กรัม",
+    "imageUrl": null,
+    "baseUnit": "ซอง",
+    "cost": 154,
+    "basePrice": 246,
+    "stock": 61,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "ซอง",
+        "price": 246
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 234,
+      "vip": 226,
+      "agent1": 221,
+      "farm_large": 216
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 17,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-028",
+    "sku": "UISTRESS-18",
+    "barcode": "990000000018",
+    "name": "เปเปอร์ซิน ยาถ่ายพยาธิภายในชนิดผง ซอง 100 กรัม",
+    "category": "ยาสัตว์",
+    "description": "ยาถ่ายพยาธิตัวกลมและพยาธิเส้นด้ายชนิดผงผสมอาหาร สำหรับสุกรและสัตว์ปีก ซอง 100 กรัม",
+    "imageUrl": null,
+    "baseUnit": "ถุง",
+    "cost": 161,
+    "basePrice": 258,
+    "stock": 74,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "ถุง",
+        "price": 258
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 245,
+      "vip": 237,
+      "agent1": 232,
+      "farm_large": 227
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 18,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-029",
+    "sku": "UISTRESS-19",
+    "barcode": "990000000019",
+    "name": "ไดนาไซด์ 10% น้ำยาฆ่าเชื้อฟาร์มปศุสัตว์ ถุง 1 กิโลกรัม",
+    "category": "ยาสัตว์",
+    "description": "สารฆ่าเชื้อชนิดผง 10% สำหรับฆ่าเชื้อในน้ำดื่มและโรงเรือนสัตว์ ถุง 1 กก.",
+    "imageUrl": null,
+    "baseUnit": "กล่อง",
+    "cost": 168,
+    "basePrice": 269,
+    "stock": 87,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "กล่อง",
+        "price": 269
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 256,
+      "vip": 247,
+      "agent1": 242,
+      "farm_large": 237
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 19,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-030",
+    "sku": "UISTRESS-20",
+    "barcode": "990000000020",
+    "name": "ออกตามิกซ์ พรีมิกซ์วิตามินผสมอาหาร ถุง 1 กิโลกรัม",
+    "category": "ยาสัตว์",
+    "description": "พรีมิกซ์วิตามินและแร่ธาตุรวมชนิดผสมอาหาร เสริมการเจริญเติบโต ถุง 1 กก.",
+    "imageUrl": null,
+    "baseUnit": "ขวด",
+    "cost": 175,
+    "basePrice": 280,
+    "stock": 100,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "ขวด",
+        "price": 280
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 266,
+      "vip": 258,
+      "agent1": 252,
+      "farm_large": 246
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 10,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-031",
+    "sku": "UISTRESS-21",
+    "barcode": "990000000021",
+    "name": "นูตริเม็ค อาหารเสริมแร่ธาตุละลายน้ำ ขวด 1 ลิตร",
+    "category": "ยาสัตว์",
+    "description": "อาหารเสริมเกลือแร่และวิตามินชนิดน้ำละลายน้ำ ลดความเครียดในสัตว์ปีก ขวด 1 ลิตร",
+    "imageUrl": null,
+    "baseUnit": "ซอง",
+    "cost": 182,
+    "basePrice": 291,
+    "stock": 113,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "ซอง",
+        "price": 291
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 276,
+      "vip": 268,
+      "agent1": 262,
+      "farm_large": 256
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 11,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-032",
+    "sku": "UISTRESS-22",
+    "barcode": "990000000022",
+    "name": "เพนดิสเตรป LA ยาฉีดเพนนิซิลลินผสมสเตรปโต ขวด 100 มล.",
+    "category": "ยาสัตว์",
+    "description": "เพนนิซิลลินผสมสเตรปโตมัยซินชนิดฉีดออกฤทธิ์นาน สำหรับโคและสุกร ขวด 100 มล.",
+    "imageUrl": null,
+    "baseUnit": "ถุง",
+    "cost": 189,
+    "basePrice": 302,
+    "stock": 126,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "ถุง",
+        "price": 302
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 287,
+      "vip": 278,
+      "agent1": 272,
+      "farm_large": 266
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 12,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-033",
+    "sku": "UISTRESS-23",
+    "barcode": "990000000023",
+    "name": "ยูซีเซฟ เซฟติโอเฟอร์ ยาฉีดปฏิชีวนะ ขวด 1 ลิตร",
+    "category": "ยาสัตว์",
+    "description": "เซฟติโอเฟอร์ชนิดฉีด รักษาโรคติดเชื้อทางเดินหายใจในโคและสุกร ขวด 1 ลิตร",
+    "imageUrl": null,
+    "baseUnit": "กล่อง",
+    "cost": 196,
+    "basePrice": 314,
+    "stock": 139,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "กล่อง",
+        "price": 314
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 298,
+      "vip": 289,
+      "agent1": 283,
+      "farm_large": 276
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 13,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-034",
+    "sku": "UISTRESS-24",
+    "barcode": "990000000024",
+    "name": "K-1 ผงโรยกำจัดหนอนแมลงวันในแผล กระปุก 40 กรัม",
+    "category": "ยาสัตว์",
+    "description": "ผงโรยแผลกำจัดหนอนแมลงวันและฆ่าเชื้อ ใช้กับสัตว์ใหญ่และสัตว์เลี้ยง กระปุก 40 กรัม",
+    "imageUrl": null,
+    "baseUnit": "ขวด",
+    "cost": 203,
+    "basePrice": 325,
+    "stock": 152,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "ขวด",
+        "price": 325
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 309,
+      "vip": 299,
+      "agent1": 293,
+      "farm_large": 286
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 14,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-035",
+    "sku": "UISTRESS-25",
+    "barcode": "990000000025",
+    "name": "โซมิน วิตามินรวมชนิดเม็ด บำรุงสัตว์เลี้ยง กระปุก 100 เม็ด",
+    "category": "ยาสัตว์",
+    "description": "วิตามินรวมและแร่ธาตุชนิดเม็ด บำรุงสุขภาพและขนสำหรับสุนัขและแมว กระปุก 100 เม็ด",
+    "imageUrl": null,
+    "baseUnit": "ซอง",
+    "cost": 210,
+    "basePrice": 336,
+    "stock": 165,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "ซอง",
+        "price": 336
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 319,
+      "vip": 309,
+      "agent1": 302,
+      "farm_large": 296
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 15,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-036",
+    "sku": "UISTRESS-26",
+    "barcode": "990000000026",
+    "name": "วีโว่ไลท์ เกลือแร่ละลายน้ำลดเครียด ซอง 100 กรัม",
+    "category": "ยาสัตว์",
+    "description": "เกลือแร่และอิเล็กโทรไลต์ละลายน้ำ ลดความเครียดจากความร้อนในสัตว์ปีก ซอง 100 กรัม",
+    "imageUrl": null,
+    "baseUnit": "ถุง",
+    "cost": 217,
+    "basePrice": 347,
+    "stock": 178,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "ถุง",
+        "price": 347
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 330,
+      "vip": 319,
+      "agent1": 312,
+      "farm_large": 305
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 16,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-037",
+    "sku": "UISTRESS-27",
+    "barcode": "990000000027",
+    "name": "ยาธาตุเหล็กเด็กซ์แทรน ยาฉีดบำรุงเลือดลูกสุกร ขวด 100 มล.",
+    "category": "ยาสัตว์",
+    "description": "ไอรอนเด็กซ์แทรนชนิดฉีด ป้องกันภาวะโลหิตจางในลูกสุกรแรกเกิด ขวด 100 มล.",
+    "imageUrl": null,
+    "baseUnit": "กล่อง",
+    "cost": 224,
+    "basePrice": 358,
+    "stock": 191,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "กล่อง",
+        "price": 358
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 340,
+      "vip": 329,
+      "agent1": 322,
+      "farm_large": 315
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 17,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-038",
+    "sku": "UISTRESS-28",
+    "barcode": "990000000028",
+    "name": "อาร์เมคไซด์ ยาถ่ายพยาธิชนิดเม็ด กล่อง 100 เม็ด",
+    "category": "ยาสัตว์",
+    "description": "ยาถ่ายพยาธิตัวกลมและตัวตืดชนิดเม็ด สำหรับสุนัขและแมว กล่อง 100 เม็ด",
+    "imageUrl": null,
+    "baseUnit": "ขวด",
+    "cost": 231,
+    "basePrice": 370,
+    "stock": 24,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "ขวด",
+        "price": 370
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 352,
+      "vip": 340,
+      "agent1": 333,
+      "farm_large": 326
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 18,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-039",
+    "sku": "UISTRESS-29",
+    "barcode": "990000000029",
+    "name": "เดอม่า สเปรย์รักษาแผลและโรคผิวหนัง ขวด 500 มล.",
+    "category": "ยาสัตว์",
+    "description": "สเปรย์ฆ่าเชื้อและสมานแผลผิวหนัง บรรเทาอาการคันในสัตว์เลี้ยง ขวด 500 มล.",
+    "imageUrl": null,
+    "baseUnit": "ซอง",
+    "cost": 238,
+    "basePrice": 381,
+    "stock": 37,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "ซอง",
+        "price": 381
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 362,
+      "vip": 351,
+      "agent1": 343,
+      "farm_large": 335
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 19,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-040",
+    "sku": "UISTRESS-30",
+    "barcode": "990000000030",
+    "name": "ลมเบ่ง ยาขับลมช่วยคลอดสำหรับสัตว์ใหญ่ ขวด 100 มล.",
+    "category": "ยาสัตว์",
+    "description": "ยาช่วยขับลมและกระตุ้นการคลอดในโคและสุกร ชนิดน้ำ ขวด 100 มล.",
+    "imageUrl": null,
+    "baseUnit": "ถุง",
+    "cost": 245,
+    "basePrice": 392,
+    "stock": 50,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "ถุง",
+        "price": 392
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 372,
+      "vip": 361,
+      "agent1": 353,
+      "farm_large": 345
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 10,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-041",
+    "sku": "UISTRESS-31",
+    "barcode": "990000000031",
+    "name": "อาหารไก่ไข่ ซีพี 311 ระยะให้ไข่ โปรตีน 17% กระสอบ 30 กก.",
+    "category": "อาหารไก่",
+    "description": "อาหารไก่ไข่สำเร็จรูป ซีพี 311 ระยะให้ไข่ ชนิดเม็ด กระสอบ 30 กก.",
+    "imageUrl": null,
+    "baseUnit": "ถุง",
+    "cost": 641,
+    "basePrice": 801,
+    "stock": 63,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "ถุง",
+        "price": 801
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 761,
+      "vip": 737,
+      "agent1": 721,
+      "farm_large": 705
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 11,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-042",
+    "sku": "UISTRESS-32",
+    "barcode": "990000000032",
+    "name": "อาหารไก่เนื้อ ซีพี 158 ระยะเล็ก ชนิดเม็ด กระสอบ 30 กก.",
+    "category": "อาหารไก่",
+    "description": "อาหารไก่เนื้อสำเร็จรูป ซีพี 158 สำหรับลูกไก่เนื้อระยะเล็ก กระสอบ 30 กก.",
+    "imageUrl": null,
+    "baseUnit": "กิโลกรัม",
+    "cost": 652,
+    "basePrice": 815,
+    "stock": 76,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "กิโลกรัม",
+        "price": 815
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 774,
+      "vip": 750,
+      "agent1": 734,
+      "farm_large": 717
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 12,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-043",
+    "sku": "UISTRESS-33",
+    "barcode": "990000000033",
+    "name": "อาหารไก่เล็ก เบทาโกร 411 ชนิดเม็ดสำเร็จรูป กระสอบ 30 กก.",
+    "category": "อาหารไก่",
+    "description": "อาหารไก่เล็กสำเร็จรูป เบทาโกร 411 ระยะแรกเกิดถึงรุ่น กระสอบ 30 กก.",
+    "imageUrl": null,
+    "baseUnit": "กระสอบ",
+    "cost": 663,
+    "basePrice": 829,
+    "stock": 89,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "กระสอบ",
+        "price": 829
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 788,
+      "vip": 763,
+      "agent1": 746,
+      "farm_large": 730
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 13,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-044",
+    "sku": "UISTRESS-34",
+    "barcode": "990000000034",
+    "name": "อาหารไก่รุ่น เบทาโกร 412 ระยะรุ่น ชนิดเม็ด กระสอบ 30 กก.",
+    "category": "อาหารไก่",
+    "description": "อาหารไก่รุ่นสำเร็จรูป เบทาโกร 412 สำหรับไก่ไข่ระยะรุ่น กระสอบ 30 กก.",
+    "imageUrl": null,
+    "baseUnit": "ถุง",
+    "cost": 674,
+    "basePrice": 843,
+    "stock": 102,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "ถุง",
+        "price": 843
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 801,
+      "vip": 776,
+      "agent1": 759,
+      "farm_large": 742
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 14,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-045",
+    "sku": "UISTRESS-35",
+    "barcode": "990000000035",
+    "name": "อาหารไก่ไข่ แหลมทอง LT-21 โปรตีน 21% กระสอบ 30 กก.",
+    "category": "อาหารไก่",
+    "description": "อาหารไก่ไข่โปรตีนสูง แหลมทองสหการ LT-21 ระยะให้ไข่ กระสอบ 30 กก.",
+    "imageUrl": null,
+    "baseUnit": "กิโลกรัม",
+    "cost": 305,
+    "basePrice": 381,
+    "stock": 115,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "กิโลกรัม",
+        "price": 381
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 362,
+      "vip": 351,
+      "agent1": 343,
+      "farm_large": 335
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 15,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-046",
+    "sku": "UISTRESS-36",
+    "barcode": "990000000036",
+    "name": "อาหารไก่ไข่สาว ลีพัฒนา 190B ระยะก่อนไข่ กระสอบ 30 กก.",
+    "category": "อาหารไก่",
+    "description": "อาหารไก่ไข่สาว ลีพัฒนา 190B ระยะก่อนเริ่มให้ไข่ ชนิดเม็ด กระสอบ 30 กก.",
+    "imageUrl": null,
+    "baseUnit": "กระสอบ",
+    "cost": 316,
+    "basePrice": 395,
+    "stock": 128,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "กระสอบ",
+        "price": 395
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 375,
+      "vip": 363,
+      "agent1": 356,
+      "farm_large": 348
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 16,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-047",
+    "sku": "UISTRESS-37",
+    "barcode": "990000000037",
+    "name": "อาหารไก่พื้นเมือง กาญจนาฟีด K30 ชนิดเม็ด กระสอบ 30 กก.",
+    "category": "อาหารไก่",
+    "description": "อาหารไก่พื้นเมืองสำเร็จรูป กาญจนาฟีด K30 ทุกช่วงวัย กระสอบ 30 กก.",
+    "imageUrl": null,
+    "baseUnit": "ถุง",
+    "cost": 327,
+    "basePrice": 409,
+    "stock": 141,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "ถุง",
+        "price": 409
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 389,
+      "vip": 376,
+      "agent1": 368,
+      "farm_large": 360
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 17,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-048",
+    "sku": "UISTRESS-38",
+    "barcode": "990000000038",
+    "name": "อาหารไก่ชน เอราวัณ 14 สูตรเสริมกล้ามเนื้อ กระสอบ 30 กก.",
+    "category": "อาหารไก่",
+    "description": "อาหารไก่ชนสูตรพิเศษ ตราเอราวัณ 14 เสริมความแข็งแรงของกล้ามเนื้อ กระสอบ 30 กก.",
+    "imageUrl": null,
+    "baseUnit": "กิโลกรัม",
+    "cost": 338,
+    "basePrice": 423,
+    "stock": 154,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "กิโลกรัม",
+        "price": 423
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 402,
+      "vip": 389,
+      "agent1": 381,
+      "farm_large": 372
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 18,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-049",
+    "sku": "UISTRESS-39",
+    "barcode": "990000000039",
+    "name": "อาหารไก่เนื้อ ไฮเกรด 9006T ชนิดเม็ด ถุง 2 กิโลกรัม",
+    "category": "อาหารไก่",
+    "description": "อาหารไก่เนื้อสำเร็จรูป ไฮเกรด 9006T ชนิดเม็ดถุงเล็ก ถุง 2 กก.",
+    "imageUrl": null,
+    "baseUnit": "กระสอบ",
+    "cost": 349,
+    "basePrice": 436,
+    "stock": 167,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "กระสอบ",
+        "price": 436
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 414,
+      "vip": 401,
+      "agent1": 392,
+      "farm_large": 384
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 19,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-050",
+    "sku": "UISTRESS-40",
+    "barcode": "990000000040",
+    "name": "หัวอาหารไก่ไข่ ซีพี เข้มข้น โปรตีน 40% กระสอบ 30 กก.",
+    "category": "อาหารไก่",
+    "description": "หัวอาหารไก่ไข่เข้มข้น ซีพี สำหรับผสมรำและปลายข้าว กระสอบ 30 กก.",
+    "imageUrl": null,
+    "baseUnit": "ถุง",
+    "cost": 360,
+    "basePrice": 450,
+    "stock": 180,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "ถุง",
+        "price": 450
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 428,
+      "vip": 414,
+      "agent1": 405,
+      "farm_large": 396
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 10,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-051",
+    "sku": "UISTRESS-41",
+    "barcode": "990000000041",
+    "name": "อาหารไก่ไข่ เบทาโกร 312 ระยะไข่ปลาย กระสอบ 30 กก.",
+    "category": "อาหารไก่",
+    "description": "อาหารไก่ไข่สำเร็จรูป เบทาโกร 312 สำหรับไก่ไข่ระยะปลาย กระสอบ 30 กก.",
+    "imageUrl": null,
+    "baseUnit": "กิโลกรัม",
+    "cost": 371,
+    "basePrice": 464,
+    "stock": 193,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "กิโลกรัม",
+        "price": 464
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 441,
+      "vip": 427,
+      "agent1": 418,
+      "farm_large": 408
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 11,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-052",
+    "sku": "UISTRESS-42",
+    "barcode": "990000000042",
+    "name": "อาหารไก่เล็ก ซีพี 159 ชนิดเม็ดป่น กระสอบ 30 กก.",
+    "category": "อาหารไก่",
+    "description": "อาหารไก่เล็กชนิดเม็ดป่น ซีพี 159 สำหรับลูกไก่แรกเกิด กระสอบ 30 กก.",
+    "imageUrl": null,
+    "baseUnit": "กระสอบ",
+    "cost": 382,
+    "basePrice": 478,
+    "stock": 26,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "กระสอบ",
+        "price": 478
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 454,
+      "vip": 440,
+      "agent1": 430,
+      "farm_large": 421
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 12,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-053",
+    "sku": "UISTRESS-43",
+    "barcode": "990000000043",
+    "name": "อาหารลูกไก่ แหลมทอง LT-100 ชนิดผง ถุง 5 กิโลกรัม",
+    "category": "อาหารไก่",
+    "description": "อาหารลูกไก่แรกเกิดชนิดผง แหลมทองสหการ LT-100 ถุงเล็ก ถุง 5 กก.",
+    "imageUrl": null,
+    "baseUnit": "ถุง",
+    "cost": 393,
+    "basePrice": 491,
+    "stock": 39,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "ถุง",
+        "price": 491
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 466,
+      "vip": 452,
+      "agent1": 442,
+      "farm_large": 432
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 13,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-054",
+    "sku": "UISTRESS-44",
+    "barcode": "990000000044",
+    "name": "อาหารไก่ไข่ กาญจนาฟีด K40 ระยะให้ไข่ กระสอบ 30 กก.",
+    "category": "อาหารไก่",
+    "description": "อาหารไก่ไข่สำเร็จรูป กาญจนาฟีด K40 ระยะให้ไข่ ชนิดเม็ด กระสอบ 30 กก.",
+    "imageUrl": null,
+    "baseUnit": "กิโลกรัม",
+    "cost": 404,
+    "basePrice": 505,
+    "stock": 52,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "กิโลกรัม",
+        "price": 505
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 480,
+      "vip": 465,
+      "agent1": 455,
+      "farm_large": 444
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 14,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-055",
+    "sku": "UISTRESS-45",
+    "barcode": "990000000045",
+    "name": "อาหารไก่ไข่ ลีพัฒนา 293A ชนิดเม็ดสำเร็จรูป กระสอบ 30 กก.",
+    "category": "อาหารไก่",
+    "description": "อาหารไก่ไข่สำเร็จรูป ลีพัฒนา 293A ระยะให้ไข่ กระสอบ 30 กก.",
+    "imageUrl": null,
+    "baseUnit": "กระสอบ",
+    "cost": 415,
+    "basePrice": 519,
+    "stock": 65,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "กระสอบ",
+        "price": 519
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 493,
+      "vip": 477,
+      "agent1": 467,
+      "farm_large": 457
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 15,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-056",
+    "sku": "UISTRESS-46",
+    "barcode": "990000000046",
+    "name": "อาหารไก่เนื้อ เบทาโกร 413 ระยะขุน ชนิดเม็ด กระสอบ 30 กก.",
+    "category": "อาหารไก่",
+    "description": "อาหารไก่เนื้อสำเร็จรูป เบทาโกร 413 สำหรับไก่เนื้อระยะขุน กระสอบ 30 กก.",
+    "imageUrl": null,
+    "baseUnit": "ถุง",
+    "cost": 426,
+    "basePrice": 533,
+    "stock": 78,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "ถุง",
+        "price": 533
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 506,
+      "vip": 490,
+      "agent1": 480,
+      "farm_large": 469
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 16,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-057",
+    "sku": "UISTRESS-47",
+    "barcode": "990000000047",
+    "name": "อาหารไก่ชน ตราเอราวัณ 1182 สูตรพิเศษ กระสอบ 30 กก.",
+    "category": "อาหารไก่",
+    "description": "อาหารไก่ชนสูตรพิเศษ ตราเอราวัณ 1182 บำรุงกำลังและขน กระสอบ 30 กก.",
+    "imageUrl": null,
+    "baseUnit": "กิโลกรัม",
+    "cost": 437,
+    "basePrice": 546,
+    "stock": 91,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "กิโลกรัม",
+        "price": 546
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 519,
+      "vip": 502,
+      "agent1": 491,
+      "farm_large": 480
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 17,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-058",
+    "sku": "UISTRESS-48",
+    "barcode": "990000000048",
+    "name": "อาหารไก่กระทง ซีพี ระยะรุ่นถึงขุน ชนิดเม็ด กระสอบ 30 กก.",
+    "category": "อาหารไก่",
+    "description": "อาหารไก่กระทงสำเร็จรูป ซีพี สำหรับระยะรุ่นถึงขุน กระสอบ 30 กก.",
+    "imageUrl": null,
+    "baseUnit": "กระสอบ",
+    "cost": 448,
+    "basePrice": 560,
+    "stock": 104,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "กระสอบ",
+        "price": 560
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 532,
+      "vip": 515,
+      "agent1": 504,
+      "farm_large": 493
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 18,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-059",
+    "sku": "UISTRESS-49",
+    "barcode": "990000000049",
+    "name": "อาหารไก่ไข่ ไฮเกรด ชนิดเม็ดสำเร็จรูป กระสอบ 30 กก.",
+    "category": "อาหารไก่",
+    "description": "อาหารไก่ไข่สำเร็จรูป ไฮเกรด ระยะให้ไข่ ชนิดเม็ด กระสอบ 30 กก.",
+    "imageUrl": null,
+    "baseUnit": "ถุง",
+    "cost": 459,
+    "basePrice": 574,
+    "stock": 117,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "ถุง",
+        "price": 574
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 545,
+      "vip": 528,
+      "agent1": 517,
+      "farm_large": 505
+    },
+    "uomConversions": [],
+    "allowNegativeStock": true,
+    "reorderPoint": 19,
+    "isActive": true,
+    "muteAlerts": false
+  },
+  {
+    "id": "PROD-060",
+    "sku": "UISTRESS-50",
+    "barcode": "990000000050",
+    "name": "หัวอาหารไก่เนื้อ กาญจนาฟีด KLAC เข้มข้น กระสอบ 30 กก.",
+    "category": "อาหารไก่",
+    "description": "หัวอาหารไก่เนื้อเข้มข้น กาญจนาฟีด KLAC สำหรับผสมอาหารฟาร์ม กระสอบ 30 กก.",
+    "imageUrl": null,
+    "baseUnit": "กิโลกรัม",
+    "cost": 470,
+    "basePrice": 588,
+    "stock": 130,
+    "prices": [
+      {
+        "priceLevelId": "retail",
+        "unit": "กิโลกรัม",
+        "price": 588
+      }
+    ],
+    "tierPrices": {
+      "wholesale": 559,
+      "vip": 541,
+      "agent1": 529,
+      "farm_large": 517
+    },
+    "uomConversions": [],
     "allowNegativeStock": true,
     "reorderPoint": 10,
     "isActive": true,
