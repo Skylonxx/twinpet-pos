@@ -163,6 +163,12 @@ export type Product = SoftDelete & {
   /** อนุญาตขายเมื่อสต็อกหมด (overselling) — ต่อสินค้า */
   allowNegativeStock?: boolean;
   /**
+   * แจ้งเตือนเมื่อขายเกินสต็อก (Warn on Oversell) — มีผลเฉพาะเมื่อ `allowNegativeStock === true`.
+   * Tier 2 ของ Stock Matrix: ยอมให้ขายติดลบแต่แสดงป้ายเตือนสีเหลืองที่หน้า POS.
+   * `false` = ขายติดลบแบบเงียบ (Tier 3). Absent/legacy products default to `true` (warn) for safety.
+   */
+  warnOnOversell?: boolean;
+  /**
    * ⭐ สินค้าขายดี — when true, the product appears in the POS "best sellers" tab
    * (UI-10 Option A). Global membership flag. Absent/legacy products are treated
    * as `false`. Distinct from `branchSettings[branchId].sortOrders['best-sellers']`

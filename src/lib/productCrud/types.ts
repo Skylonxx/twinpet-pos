@@ -78,6 +78,8 @@ export type ProductFormData = {
   /** Branches carrying this product — empty = all branches */
   availableBranches: string[];
   allowNegativeStock: boolean;
+  /** แจ้งเตือนเมื่อขายเกินสต็อก (Stock Matrix Tier 2) — ใช้ได้เมื่อ allowNegativeStock = true */
+  warnOnOversell: boolean;
   /** Expiry alert policy id — empty uses system default */
   expiryPolicyId: string;
   uomRows: ProductUomFormRow[];
@@ -289,6 +291,7 @@ export function emptyForm(): ProductFormData {
     overrideTierPrices: {},
     availableBranches: [],
     allowNegativeStock: false,
+    warnOnOversell: true,
     expiryPolicyId: '',
     uomRows: [
       {
@@ -363,6 +366,7 @@ export function productToForm(product: Product & { overrideTierPrices?: Record<s
     overrideTierPrices: { ...(product.overrideTierPrices ?? {}) },
     availableBranches: product.availableBranches ?? [],
     allowNegativeStock: product.allowNegativeStock ?? false,
+    warnOnOversell: product.warnOnOversell ?? true,
     expiryPolicyId: product.expiryPolicyId ?? '',
     uomRows,
   };
@@ -413,6 +417,7 @@ export function formToProduct(form: ProductFormData, id: string): Omit<Product, 
     uomConversions,
     prices,
     allowNegativeStock: form.allowNegativeStock,
+    warnOnOversell: form.warnOnOversell,
     reorderPoint: form.reorderPoint,
     cost: Number.isFinite(form.cost) ? Math.max(0, form.cost) : 0,
     basePrice: Number.isFinite(form.basePrice) && form.basePrice > 0 ? form.basePrice : undefined,

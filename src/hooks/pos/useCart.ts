@@ -2,10 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { PaymentReceiptLine } from '../../components/PaymentModal';
 import type { PosCustomerPick } from '../../components/customers/CustomerPickerModal';
 import {
+  applyAddToCart,
+  applyChangeQty,
+  applySetLineQty,
   calcCartTotals,
   cartLineKey,
   getLineTotal,
-  validateAddToCartStock,
 } from '../../lib/pos/cartUtils';
 import { cartLinesToRecord, type SuspendedBill } from '../../lib/pos/suspendedBills';
 import { resolvePosUnitPrice } from '../../lib/pos/tierPricing';
@@ -96,6 +98,20 @@ export function useCart({ products, customer, showToast }: UseCartArgs) {
   const cart = rawCart;
   const cartLines = useMemo(() => Object.values(cart), [cart]);
 
+  // Phase 7C-POS-Stock-Matrix (same-tick correctness): every mutation validates AND writes
+  // against the LATEST committed cart through this ref — never the render-time `rawCart`
+  // closure. Two same-tick increases would otherwise both read stale state and could jointly
+  // cross a strict-block boundary (Codex blocker). `commit` updates the ref synchronously with
+  // the state set; this effect re-syncs the ref for any other writer (reprice / clear / restore).
+  const cartRef = useRef<Record<string, CartLine>>(rawCart);
+  useEffect(() => {
+    cartRef.current = rawCart;
+  }, [rawCart]);
+  const commit = useCallback((next: Record<string, CartLine>) => {
+    cartRef.current = next;
+    setRawCart(next);
+  }, []);
+
   // Phase 7C-L2 (money correctness): bill-level state — discount value, discount MODE, and
   // fee — must never outlive the cart. `clearCart` wipes all three, but the item-removal paths
   // (removeLine / changeQty→0 / setLineQty→0) only delete lines, so a lingering discount/mode/
@@ -141,127 +157,92 @@ export function useCart({ products, customer, showToast }: UseCartArgs) {
     return map;
   }, [cartLines]);
 
+  // Build a fresh, price-frozen cart line for a product+UOM (only used for a NEW line).
+  const buildCartLine = useCallback(
+    (product: PosProduct, option: UomOption): CartLine => {
+      const { unitPrice, originalPrice } = getActivePriceForCustomer(product, option, customer);
+      return {
+        lineKey: cartLineKey(product.id, option.unit),
+        productId: product.id,
+        productName: product.name,
+        category: product.category,
+        sku: product.sku,
+        barcode: option.barcode ?? null,
+        unit: option.unit,
+        unitFactor: option.factor,
+        unitPrice,
+        originalPrice,
+        qty: 1,
+        discount: { type: 'none', val: 0 },
+      };
+    },
+    [customer],
+  );
+
   const addToCart = useCallback(
     (product: PosProduct, option: UomOption) => {
-      const stockErr = validateAddToCartStock(product, option, 1, rawCart);
-      if (stockErr) {
-        showToast(`⚠️ คำเตือนสต๊อก: ${stockErr}`);
-      }
-      const key = cartLineKey(product.id, option.unit);
-      const { unitPrice, originalPrice } = getActivePriceForCustomer(product, option, customer);
-      setRawCart((prev) => {
-        const existing = prev[key];
-        if (existing) {
-          return {
-            ...prev,
-            [key]: { ...existing, qty: existing.qty + 1 },
-          };
-        }
-        return {
-          ...prev,
-          [key]: {
-            lineKey: key,
-            productId: product.id,
-            productName: product.name,
-            category: product.category,
-            sku: product.sku,
-            barcode: option.barcode ?? null,
-            unit: option.unit,
-            unitFactor: option.factor,
-            unitPrice,
-            originalPrice,
-            qty: 1,
-            discount: { type: 'none', val: 0 },
-          },
-        };
-      });
+      // 3-Tier Stock Matrix, evaluated against the LATEST cart (cartRef): surface the toast
+      // (Tier 1 red / Tier 2 yellow) and, on a Tier 1 strict block, do NOT apply the add.
+      const result = applyAddToCart(cartRef.current, product, option, () =>
+        buildCartLine(product, option),
+      );
+      if (result.toast) showToast(result.toast);
+      if (result.blocked) return;
+      commit(result.cart);
     },
-    [customer, rawCart, showToast],
+    [buildCartLine, commit, showToast],
   );
 
   const changeQty = useCallback(
     (lineKey: string, delta: number) => {
-      setRawCart((prev) => {
-        const line = prev[lineKey];
-        if (!line) return prev;
-        const qty = line.qty + delta;
-        if (qty <= 0) {
-          const next = { ...prev };
-          delete next[lineKey];
-          return next;
-        }
-        if (delta > 0) {
-          const product = products.find((p) => p.id === line.productId);
-          const option = product?.uomOptions.find((o) => o.unit === line.unit);
-          if (product && option) {
-            const stockErr = validateAddToCartStock(product, option, delta, prev);
-            if (stockErr) {
-              showToast(`⚠️ คำเตือนสต๊อก: ${stockErr}`);
-            }
-          }
-        }
-        return { ...prev, [lineKey]: { ...line, qty } };
-      });
+      // Increase routes through the matrix vs. the LATEST cart; decrement/zero-out is never
+      // blocked. cartRef makes repeated same-tick increases see each other (no stale bypass).
+      const result = applyChangeQty(cartRef.current, lineKey, delta, products);
+      if (result.toast) showToast(result.toast);
+      if (result.blocked) return;
+      commit(result.cart);
     },
-    [products, showToast],
+    [commit, products, showToast],
   );
 
   const removeLine = useCallback((lineKey: string) => {
-    setRawCart((prev) => {
-      const next = { ...prev };
-      delete next[lineKey];
-      return next;
-    });
+    const next = { ...cartRef.current };
+    delete next[lineKey];
+    cartRef.current = next;
+    setRawCart(next);
   }, []);
 
   const setLineQty = useCallback(
     (lineKey: string, newQty: number): boolean => {
-      const line = rawCart[lineKey];
-      if (!line) return false;
-      if (newQty <= 0) {
-        removeLine(lineKey);
-        return true;
-      }
-      if (newQty === line.qty) return true;
-      const delta = newQty - line.qty;
-      if (delta > 0) {
-        const product = products.find((p) => p.id === line.productId);
-        const option = product?.uomOptions.find((o) => o.unit === line.unit);
-        if (product && option) {
-          const stockErr = validateAddToCartStock(product, option, delta, rawCart);
-          if (stockErr) {
-            showToast(`⚠️ คำเตือนสต๊อก: ${stockErr}`);
-          }
-        }
-      }
-      setRawCart((prev) => {
-        const current = prev[lineKey];
-        if (!current) return prev;
-        return { ...prev, [lineKey]: { ...current, qty: newQty } };
-      });
-      return true;
+      // On a Tier 1 strict block this returns false WITHOUT applying, so the numpad dialog stays
+      // open for cashier correction. Removal / no-op / warn / silent all apply and return true.
+      const result = applySetLineQty(cartRef.current, lineKey, newQty, products);
+      if (result.toast) showToast(result.toast);
+      if (result.ok) commit(result.cart);
+      return result.ok;
     },
-    [rawCart, products, removeLine, showToast],
+    [commit, products, showToast],
   );
 
   const setLineDiscount = useCallback(
     (lineKey: string, type: ItemDiscountType, val: number) => {
-      setRawCart((prev) => {
-        const line = prev[lineKey];
-        if (!line) return prev;
-        return { ...prev, [lineKey]: { ...line, discount: { type, val } } };
-      });
+      const line = cartRef.current[lineKey];
+      if (!line) return;
+      commit({ ...cartRef.current, [lineKey]: { ...line, discount: { type, val } } });
     },
-    [],
+    [commit],
   );
 
   const clearCart = useCallback(() => {
+    cartRef.current = {};
     setRawCart({});
     resetBillLevel();
   }, [resetBillLevel]);
 
   const restoreCart = useCallback((bill: SuspendedBill) => {
-    setRawCart(cartLinesToRecord(bill.cartItems));
+    const restored = cartLinesToRecord(bill.cartItems);
+    cartRef.current = restored;
+    setRawCart(restored);
     setBillDiscValue(bill.discount);
     setBillDiscPercent(bill.discountPercent);
     setFeeRate(bill.feeRate);

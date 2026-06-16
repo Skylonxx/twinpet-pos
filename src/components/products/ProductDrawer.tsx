@@ -1084,6 +1084,20 @@ export default function ProductDrawer({
                 />
               </div>
 
+              <div className="pc-tog-row">
+                <div className="pc-tog-lbl-col">
+                  <span className="pc-tog-lbl">แจ้งเตือนเมื่อสต็อกติดลบ (Warn on Oversell)</span>
+                  <span className="pc-tog-desc">
+                    แสดงป้ายเตือนที่หน้า POS หากขายสินค้าเกินจำนวนสต็อกที่มีอยู่ (ใช้ได้ต่อเมื่อเปิดระบบอนุญาตให้สต็อกติดลบแล้ว)
+                  </span>
+                </div>
+                <Toggle
+                  checked={form.warnOnOversell}
+                  onChange={(v) => set('warnOnOversell', v)}
+                  disabled={!form.allowNegativeStock}
+                />
+              </div>
+
               {product ? (
                 <>
               <div className="pc-sec-label">ปรับสต็อก (สาขานี้เท่านั้น)</div>

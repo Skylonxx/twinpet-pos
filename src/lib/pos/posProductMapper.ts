@@ -69,6 +69,9 @@ export function toPosProduct(product: Product, entry: StockEntry): PosProduct {
     stock: entry.stock,
     baseUnit: product.baseUnit,
     allowNegativeStock: product.allowNegativeStock ?? false,
+    // Stock Matrix Tier 2: default ABSENT/legacy to `true` (warn) so oversell is never
+    // silenced by accident — silence (Tier 3) requires an explicit `warnOnOversell === false`.
+    warnOnOversell: product.warnOnOversell ?? true,
     // UI-10: project the global best-seller membership flag into the POS view.
     // Normalize legacy/absent to `false` so the POS ⭐ tab filter is a clean boolean.
     isBestSeller: product.isBestSeller ?? false,

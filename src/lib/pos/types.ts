@@ -37,6 +37,9 @@ export type PosProduct = {
   stock: number;
   baseUnit: string;
   allowNegativeStock?: boolean;
+  /** Stock Matrix Tier 2 — warn (yellow toast) on oversell when overselling is allowed.
+      Projected from `Product.warnOnOversell`; absent/legacy normalized to `true` by the mapper. */
+  warnOnOversell?: boolean;
   /** ⭐ สินค้าขายดี membership (UI-10). Projected from `Product.isBestSeller`;
       absent/legacy is normalized to `false` by the mapper. POS ⭐ tab filters on this. */
   isBestSeller?: boolean;

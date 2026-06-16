@@ -1,4 +1,4 @@
-# Current Task Tracker — Phase 7C-UI-10-C Strict Local Search + Sorting-Modal Best-Seller Scope (IMPLEMENTATION / AWAITING CODEX REVIEW)
+# Current Task Tracker — Phase 7C-POS-Stock-Matrix 3-Tier Oversell Control (IMPLEMENTATION / AWAITING CODEX REVIEW)
 
 > Living checkpoint doc for agents. Detailed history: `docs/reports/latest-report.md` (do not duplicate long-form evidence here).
 
@@ -10,7 +10,7 @@
 - **H6-E2-B** — Write Transfer Evidence Header at Completion — CLOSED / COMMITTED — `82d3352 feat(pos): write transfer reversal evidence header on completion`
 - **H6-E2-C** — Transfer Evidence Coordinator Validation — CLOSED / COMMITTED — `fe3ff44 feat(pos): validate transfer reversal header evidence`
 
-**Current clean baseline:** `324bdf0 feat(pos): restore best seller tab and product flag` (7C-UI-10-B, on top of 7C-L3-Rev2 `70b1698` / 7C-L3 `f8ce9ea` / 7C-L2 `654c704` / 7C-L1 `203f636` / 7C-P1 `d87110c` / 7C-D4-D2 `ca0d5d8` / 7C-D4-D `1a239b4` / 7C-E1 `0c7e924`). **7C-C3, 7C-C4, 7C-D2, 7C-D3-A, 7C-D3-B, 7C-D4-A, 7C-D4-C, 7C-D4-C-1..4, 7C-E1, 7C-D4-D, 7C-D4-D1, 7C-D4-D2, 7C-P1, 7C-L1, 7C-L2, 7C-L3, 7C-L3-Rev2, and 7C-UI-10-B are CLOSED / COMMITTED.** 7C-UI-10-C is an implementation slice on top of this baseline and NOT yet committed.
+**Current clean baseline:** `07ed7c8 fix(pos): keep search local to active product context` (7C-UI-10-C, on top of 7C-UI-10-B `324bdf0` / 7C-L3-Rev2 `70b1698` / 7C-L3 `f8ce9ea` / 7C-L2 `654c704` / 7C-L1 `203f636` / 7C-P1 `d87110c` / 7C-D4-D2 `ca0d5d8` / 7C-D4-D `1a239b4` / 7C-E1 `0c7e924`). **7C-C3, 7C-C4, 7C-D2, 7C-D3-A, 7C-D3-B, 7C-D4-A, 7C-D4-C, 7C-D4-C-1..4, 7C-E1, 7C-D4-D, 7C-D4-D1, 7C-D4-D2, 7C-P1, 7C-L1, 7C-L2, 7C-L3, 7C-L3-Rev2, 7C-UI-10-B, and 7C-UI-10-C are CLOSED / COMMITTED.** 7C-POS-Stock-Matrix is an implementation slice on top of this baseline and NOT yet committed.
 
 **✅ 7C-L2 PHYSICAL UAT PASSED / ACCEPTED → 7C-L3 AUTHORIZED.** CEO accepted the L2 empty-cart bill-level reset on the physical terminal. Tech Lead / CEO authorized **Phase 7C-L3 — UOM Barcode Search Result Display Alignment (APPROVED Option A)** — Medium severity / cashier confidence / search visibility. UAT finding: scanning a larger-unit (e.g. ลัง/carton) UOM barcode adds the correct unit on Enter (D4-D direct add works) but the visible result looks like only the base/small unit — reducing cashier confidence. **The D4-D direct UOM add-to-cart logic must remain intact.** UI-01 through UI-09 remain deferred; no visual UI polish, CSS, or checkout/payment/write-path change is authorized.
 
@@ -52,7 +52,7 @@
 
 ## Phase 7C-UI-10-C — Strict Local Search + Sorting-Modal Best-Seller Scope
 
-**7C-UI-10-C — UAT polish (Tech Lead / CEO authorized) — IMPLEMENTATION / AWAITING CODEX REVIEW — NOT COMMITTED:**
+**7C-UI-10-C — UAT polish (Tech Lead / CEO authorized) — CLOSED / COMMITTED — `07ed7c8 fix(pos): keep search local to active product context`:**
 
 **UAT feedback (on committed UI-10-B `324bdf0`):** (1) the POS grid search **escaped the active tab** — global search devalued category navigation and caused context loss; (2) the SortingSettingsModal `best-sellers` group **leaked the whole inventory** into the ranking list, because the modal's `SortableProduct` shape carried no `isBestSeller` membership flag.
 
@@ -74,7 +74,36 @@
 
 **Forbidden boundaries honored (UI-10-C):** no CSS change; no `useCart.ts` / `useCart.contract.test.ts` (L2); no `PaymentModal`/`App.tsx`; no Product CRUD toggle/persistence pipeline change; no POS mapper change; no checkout/payment/cart-mutation; no Firebase rules/Functions/backend; no offline/manual-review; no Android/Capacitor/`.claude/`; no L1/L2/L3 regression; `sorting['best-sellers']` stays ordering-only. Changed files = `src/pages/POSPage.tsx`, `src/components/pos/SortingSettingsModal.tsx`, `src/lib/pos/categoryService.ts`, `src/lib/admin/sortingStore.ts`, `src/pages/POSPage.keyboard-contract.test.ts`, `Context.md`, `Task.md`; `stash@{0}` untouched (read-only `git stash list` only).
 
-**Next step (UI-10-C):** Codex GPT-5.5 High review (mandatory) before Tech Lead closure / commit — no commit before Codex PASS / PASS WITH NOTES. Then CEO physical UAT (⭐ tab search shows only flagged matches, physical category search stays in-category, Quick Menu search stays local, scanner/UOM direct-add unchanged, sorting modal best-sellers lists only flagged products). UI-10-C not closed, not committed. UI-01 through UI-09 remain deferred.
+**UI-10-C — CLOSED / COMMITTED (`07ed7c8`).** Codex PASS WITH NOTES, Tech Lead approved closure, committed; physical UAT on the stock toggle then drove 7C-POS-Stock-Matrix below.
+
+---
+
+## Phase 7C-POS-Stock-Matrix — 3-Tier Oversell Control
+
+**7C-POS-Stock-Matrix — Full-pipeline re-implementation (Tech Lead / CEO authorized) — IMPLEMENTATION / AWAITING CODEX REVIEW — NOT COMMITTED:**
+
+**Context:** Tech Lead/CEO rejected the read-only discovery report and authorized a full-pipeline implementation. Confirmed root cause: stock validation existed and was wired to all add/update paths but was **advisory-only (toast, never blocked)**; the "ghost toast" was the validation branch being skipped entirely whenever `allowNegativeStock === true` (no secondary warn flag existed — it had been removed historically).
+
+**The 3-Tier Stock Matrix (keyed on two product flags):**
+- **Tier 1 — Strict Block** (`allowNegativeStock === false`): prevent the quantity increase, show a red 🚫 toast (`สต็อกไม่พอ …` / `สต็อกหมด …`) immediately.
+- **Tier 2 — Warning Pass** (`allowNegativeStock === true && warnOnOversell !== false`): allow the oversell, show a yellow ⚠️ toast containing `สินค้าเกินสต็อกที่มีอยู่!`.
+- **Tier 3 — Silent Pass** (`allowNegativeStock === true && warnOnOversell === false`): allow, no toast, no block.
+
+**Schema & mapping:** added `warnOnOversell?: boolean` to `Product` (`src/lib/types.ts`); `ProductFormData` (`src/lib/productCrud/types.ts`) — field + `emptyForm` default `true` + `productToForm` `?? true` + `formToProduct` persists; `PosProduct` (`src/lib/pos/types.ts`); `posProductMapper` projects `product.warnOnOversell ?? true` (default-warn for safety). The save passthrough `sanitizeProductDocForFirestore` spreads the field automatically (no out-of-scope edit needed); legacy docs read back as warn via the mapper default.
+
+**Product Admin UI:** restored the `แจ้งเตือนเมื่อสต็อกติดลบ (Warn on Oversell)` toggle in `ProductDrawer.tsx` (help text per directive), gated `disabled={!form.allowNegativeStock}` so it only applies when overselling is enabled.
+
+**Cart enforcement (`cartUtils.ts` + `useCart.ts`):** pure `evaluateAddToCartStock(product, option, addQty, cart) → { mode, block, toast }`, plus `resolveStockMode` and `committedBaseUnits`. Validation **aggregates every UOM line of the product in BASE units** (`committed + addQty × option.factor`) before the boundary check, so multi-UOM and mixed-unit carts can't collectively slip past stock. `useCart.addToCart` / `changeQty` / `setLineQty` route every INCREASE through it: surface the toast, and on a Tier 1 block **return without mutating** (`setLineQty` returns `false` so the qty numpad stays open). **Decrements/removals are never blocked; NO checkout-level hard stop** (offline-first preserved — enforcement lives only at the cart-entry/mutation layer). Removed the old advisory `validateAddToCartStock`/`validateCartStock` and the `คำเตือนสต๊อก` copy.
+
+**Revision 1 (Codex NEEDS REVISION → fixed):** **Blocker 1 — stale `rawCart` closure:** mutators validated against the render-time `rawCart` closure, so two same-tick increases could both read stale state and jointly cross a Tier 1 boundary. **Fix:** extracted the cart mutation into PURE appliers (`applyAddToCart`/`applyChangeQty`/`applySetLineQty` in `cartUtils.ts`, each `current cart → { cart, toast, block/ok }`); the hook threads the LATEST cart via a synchronously-updated `cartRef` + shared `commit(next)` (ref + state together), with a `useEffect` re-syncing the ref for reprice/clear/restore. **Blocker 2 — missing executable hook-level tests:** added a behavior harness around the SAME appliers + a `vi.fn()` `showToast` spy mirroring the hook's wrapper, proving real add/change/set behavior, toast Rule 1/2/3 (spy called/not-called/with-warning), same-tick guards, and aggregate multi-UOM. **Blocker 3 (tracker):** corrected the stale UI-10-C "not closed" wording in `Context.md` (UI-10-C is CLOSED/COMMITTED `07ed7c8`; active phase is 7C-POS-Stock-Matrix, NEEDS REVISION → revision active).
+
+**Tests (`useCart.contract.test.ts`, 8 → 55):** pure-evaluator suites (`resolveStockMode` all 3 tiers + default-warn; Tier 1/2/3 incl. CEO 58→59, UOM multiplier, empty-stock; aggregate cross-UOM) PLUS executable hook-behavior suites via the harness (addToCart/changeQty/setLineQty qty applied-or-not, same-tick cannot bypass strict, decrement/zero-out never blocked, numpad-correction flow, toast spy Rule 1/2/3) PLUS source-level wiring (`cartRef.current` + appliers + `commit` + `return result.ok`). Existing L2 suite untouched.
+
+**Validation:** `tsc -b` clean; `vitest run` **662 passed** (31 files); targeted `useCart.contract.test.ts` **55 passed**; POSPage spec **115 passed**. `stash@{0}` untouched (read-only `git stash list` only).
+
+**Forbidden boundaries honored:** no checkout-level block (`useCheckout` untouched); no CSS/global styling; no `App.tsx`/`PaymentModal`; no Firebase rules/Functions/backend; no offline/manual-review; no Android/Capacitor/`.claude/`; no UI-01..09; no `POSPage.tsx`/`POSPage.keyboard-contract.test.ts` change; L1 multi-UOM queue + L2 bill reset + L3 status bar untouched. Changed files = `src/lib/types.ts`, `src/lib/productCrud/types.ts`, `src/lib/pos/types.ts`, `src/lib/pos/posProductMapper.ts`, `src/components/products/ProductDrawer.tsx`, `src/hooks/pos/useCart.ts`, `src/hooks/pos/useCart.contract.test.ts`, `src/lib/pos/cartUtils.ts`, `Context.md`, `Task.md`.
+
+**Next step (7C-POS-Stock-Matrix):** Codex GPT-5.5 High **re-review** of Revision 1 (mandatory) before Tech Lead closure / commit — no commit before Codex PASS / PASS WITH NOTES. Then CEO physical UAT across all 3 tiers (strict block 58→59 with red toast incl. rapid same-tick taps; warn-pass with yellow toast; silent-pass) including multi-UOM packs and aggregate cross-UOM carts, plus numpad-stays-open-on-block. UI-01 through UI-09 remain deferred.
 
 ---
 
