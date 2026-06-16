@@ -1356,21 +1356,4 @@
   padding: 24px;
   text-align: center;
   color: var(--text-muted, #9ca3af);
-  font-size: 12px;
-}
-
-.pos-toast {
-  position: fixed;
-  bottom: 20px;
-  left: 80px;
-  z-index: 700;
-  max-width: min(360px, calc(100vw - 80px - 240px));
-  padding: 10px 16px;
-  border-radius: 8px;
-  background: var(--p600, #534ab7);
-  color: #fff;
-  font-size: 13px;
-  line-height: 1.4;
-  box-shadow: 0 4px 16px rgba(83, 74, 183, 0.25);
-  pointer-events: none;
 }

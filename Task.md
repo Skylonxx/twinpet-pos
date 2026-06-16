@@ -1,4 +1,4 @@
-# Current Task Tracker — Phase 7C-POS-Stock-Matrix 3-Tier Oversell Control (IMPLEMENTATION / AWAITING CODEX REVIEW)
+# Current Task Tracker — Phase 7C-UI-13-TOAST-TYPOGRAPHY (IMPLEMENTATION / AWAITING CODEX REVIEW)
 
 > Living checkpoint doc for agents. Detailed history: `docs/reports/latest-report.md` (do not duplicate long-form evidence here).
 
@@ -103,7 +103,71 @@
 
 **Forbidden boundaries honored:** no checkout-level block (`useCheckout` untouched); no CSS/global styling; no `App.tsx`/`PaymentModal`; no Firebase rules/Functions/backend; no offline/manual-review; no Android/Capacitor/`.claude/`; no UI-01..09; no `POSPage.tsx`/`POSPage.keyboard-contract.test.ts` change; L1 multi-UOM queue + L2 bill reset + L3 status bar untouched. Changed files = `src/lib/types.ts`, `src/lib/productCrud/types.ts`, `src/lib/pos/types.ts`, `src/lib/pos/posProductMapper.ts`, `src/components/products/ProductDrawer.tsx`, `src/hooks/pos/useCart.ts`, `src/hooks/pos/useCart.contract.test.ts`, `src/lib/pos/cartUtils.ts`, `Context.md`, `Task.md`.
 
-**Next step (7C-POS-Stock-Matrix):** Codex GPT-5.5 High **re-review** of Revision 1 (mandatory) before Tech Lead closure / commit — no commit before Codex PASS / PASS WITH NOTES. Then CEO physical UAT across all 3 tiers (strict block 58→59 with red toast incl. rapid same-tick taps; warn-pass with yellow toast; silent-pass) including multi-UOM packs and aggregate cross-UOM carts, plus numpad-stays-open-on-block. UI-01 through UI-09 remain deferred.
+**Next step (7C-POS-Stock-Matrix):** CLOSED / COMMITTED at 29995ea.
+
+---
+
+## Phase 7C-UI-11-TOAST-UX — Global Toast Provider Refactor (REJECTED BY CEO PHYSICAL UAT → superseded by UI-12)
+
+**Context:** Tech Lead rejected local POS toast expansion and authorized a Global Toast Provider Refactor; it was implemented but **CEO Physical UAT rejected it** for four critical reasons. The package is NOT committed and is being revised in-place by UI-12.
+
+CEO rejection reasons:
+- **Performance/flicker** — POSPage re-rendered entirely whenever a toast appeared (fatal for POS).
+- **Stacking** — toasts piled vertically and could block the screen.
+- **Double icons** — messages showed redundant emojis (e.g. ⚠️ ⚠️).
+- **Ugly styling** — muddy, dark, unprofessional colors.
+
+---
+
+## Phase 7C-UI-12-FLOWBITE-TOAST — Toast Performance / Stacking / Icon / Visual Fix (ACTIVE)
+
+**Goal:** Fix toast performance, stacking, double icons, and visual quality. In-place revision of the rejected UI-11 package.
+
+- **No POSPage toast subscription:** added non-subscribing `useToastDispatcher()` in `use-toast.ts` (returns only the stable module-level `toast()`); `POSPage` uses it instead of `useToast()` → no read of the `toasts` array, no re-render/flicker on toast changes. Only `<Toaster />` subscribes.
+- **Max 1 visible toast:** `MAX_VISIBLE_TOASTS = 1` in `use-toast.ts`; identical toast (same title/description/variant) refreshes the dismiss timer (dedupe), different toast replaces the current one. No vertical stacking; rapid scanner errors cannot pile boxes.
+- **No hardcoded emojis in stock messages:** `useCart.dispatchStockToast` strips the leading glyph (`🚫`/`⚠️`) from the title and maps to variants (Tier 1 → `destructive`, Tier 2 → `warning`, Tier 3 → no toast). Icon comes only from the toast component's inline SVG. `cartUtils.ts` unchanged.
+- **Flowbite-style soft variants:** `toast.tsx` rebuilt — default `bg-white`, destructive `bg-red-50`/`border-l-red-500`, warning `bg-yellow-50`/`border-l-yellow-400`, success `bg-green-50`/`border-l-green-500`, all `rounded-lg shadow-md`, clean inline SVG icons (no emoji). `toaster.tsx` top-center, `pointer-events-none` container with `pointer-events-auto` on the toast only; no full-screen overlay, no layout shift.
+- stock matrix logic unchanged
+- cart math / behavior unchanged
+- L1/L2/L3 unchanged
+- POS grid / search / category / Quick Menu / Best Seller unchanged
+- no checkout hard stop
+- `cartUtils.ts` / schema / mapper / Firebase / offline / Android / `.claude/` untouched
+- `App.tsx` (Toaster injection unbroken), `POSPage.css`, and test files left as-is from UI-11
+- UI-01 through UI-09 remain unauthorized
+- Codex GPT-5.5 review mandatory before closure
+- no staging/commit until Codex PASS / PASS WITH NOTES and Tech Lead authorization
+- `stash@{0}` untouched
+
+**Files changed in the UI-12 step:** `src/components/ui/toast.tsx`, `src/components/ui/toaster.tsx`, `src/components/ui/use-toast.ts`, `src/hooks/pos/useCart.ts`, `src/pages/POSPage.tsx`, `Context.md`, `Task.md`.
+
+---
+
+## Phase 7C-UI-13-TOAST-TYPOGRAPHY — Toast Typography / Layout Refinement (ACTIVE)
+
+**Context:** CEO Physical UAT accepted UI-12 performance but **rejected typography/layout for "information clumping"** — product name + remaining quantity were merged into one long title with identical styling, width looked fluid/unstandardized, and the red Strict Block / yellow Warning Pass were not a single unified structured pattern. Layered on the uncommitted UI-11/UI-12 package.
+
+**Goal:** Strict Block and Warning Pass share the EXACT same structured layout — differing only in semantic color + icon.
+
+- **Standardized width:** `toast.tsx` root is now `w-full max-w-[400px]` (no content-driven stretch); `toaster.tsx` top-center container kept at `w-[min(92vw,420px)]` (width owned by the inner toast, so `toaster.tsx` is unchanged). Top-center placement, pointer-events safety, no overlay, no layout shift preserved.
+- **Static titles:** `useCart.dispatchStockToast` no longer derives the title from `msg`. Strict Block title = static `สต็อกไม่พอ!`; Warning Pass title = static `สินค้าเกินสต็อก`. No product name, no remaining quantity, no emoji in the title; icon comes only from the toast component's SVG.
+- **Structured description:** dynamic detail moved into a shared `\n`-joined string built by `buildStockDescription(ctx, includeDetail)` from product context already in the hook — Line 1 `[Product Name]`, Line 2 `คงเหลือ: [Stock] [Unit]`, Line 3 (strict only) `ไม่สามารถเพิ่มสินค้าเกินจำนวนสต็อกที่มีอยู่ได้`. Context resolved from `product` directly (`addToCart`) or via `resolveStockToastContext` over `products` + the cart line (`changeQty`/`setLineQty`); stock/unit are `product.stock` / `product.baseUnit`. No `cartUtils.ts` change; no stock-calc change.
+- **Typography hierarchy / distinct remaining line:** `toast.tsx` `ToastDescription` splits on `\n` — the `คงเหลือ:` line renders `font-semibold` (visually distinct), Line 1 normal, the strict-only line smaller/lighter. Both variants share order + spacing; only color/icon differ.
+- **`use-toast.ts` NOT modified** — description stays a string (React-node route avoided), so the store/type file out of scope was respected.
+- **Contract test aligned (`useCart.contract.test.ts` newly authorized for UI-13):** harness `dispatchStockToast` mirrors the static-title + structured-description impl (threads `ctx`); source-contract assertions drop the old `title: msg.replace(/^🚫|^⚠️/)` patterns, reject any dynamic-title relapse, and pin the exact static titles + `buildStockDescription` usage; executable spy tests assert title equals the static copy (glyph-free, no product name/quantity) while the description carries name + distinct `คงเหลือ:` + stock/unit (+ strict-only third line; warning omits it). Stock-matrix behavior tests, same-tick stale-cart, and aggregate multi-UOM tests preserved unchanged.
+- MAX_VISIBLE_TOASTS=1 / dedupe / replace / timer cleanup unchanged
+- POSPage non-subscription unchanged; SVG icons + Flowbite semantic colors preserved; no double icons
+- stock matrix logic unchanged; cart math / behavior unchanged; L1/L2/L3 unchanged; no checkout hard stop
+- POS grid / search / category / Quick Menu / Best Seller unchanged
+- `POSPage.tsx` / `POSPage.css` / `use-toast.ts` / `App.tsx` / `cartUtils.ts` / schema / mapper / Firebase / offline / Android / `.claude/` untouched
+- UI-01 through UI-09 remain unauthorized
+- Codex GPT-5.5 review mandatory before closure
+- no staging/commit until Codex PASS / PASS WITH NOTES and Tech Lead authorization
+- `stash@{0}` untouched
+
+**Validation:** `tsc -b` clean; full vitest **681 passed** (31 files); `useCart.contract.test.ts` 68; `POSPage.keyboard-contract.test.ts` 121.
+
+**Files changed in the UI-13 step:** `src/components/ui/toast.tsx`, `src/hooks/pos/useCart.ts`, `src/hooks/pos/useCart.contract.test.ts`, `Context.md`, `Task.md`.
 
 ---
 

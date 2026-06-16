@@ -24,9 +24,15 @@ import {
 import type { CartLine, PosProduct, UomOption } from '../../lib/pos/types';
 
 let cartSource: string;
+// UI-12: the toast store is a module with module-level state + a setTimeout-driven dismiss
+// timer. The vitest unit config runs in `node` with no DOM and no renderHook, and the store
+// exposes no state getter (and we must not add one), so its queue/dedupe/replace/timer
+// contract is asserted at the source level via `?raw`, mirroring the cartSource precedent.
+let toastStoreSource: string;
 
 beforeAll(async () => {
   cartSource = (await import('./useCart.ts?raw')).default;
+  toastStoreSource = (await import('../../components/ui/use-toast.ts?raw')).default;
 });
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────────────
@@ -307,6 +313,50 @@ describe('7C-POS-Stock-Matrix · aggregate base-unit accounting (cartUtils.ts)',
 // The hook threads the LATEST cart through the pure appliers and dispatches the toast. This
 // harness reproduces those exact wrapper lines around the SAME appliers + a showToast spy, so
 // the add/change/set/toast/block/same-tick paths are executed for real (node env, no DOM).
+// Mirrors the REAL UI-13 useCart.dispatchStockToast: the matrix copy from cartUtils still
+// carries a leading status glyph (🚫 / ⚠️) so node-level cart tests can branch on it, but the
+// toast UI uses a short STATIC title (the component renders its own SVG icon) and moves the
+// dynamic product/stock detail into a `\n`-joined structured description — identical layout for
+// the red and yellow variants, with only the strict block adding the third explanatory line.
+// Keeping this harness faithful means the spy assertions below prove the ACTUAL UI-13 payload.
+type StockToastContext = { name: string; stock: number; unit: string } | null;
+
+function stockToastContext(product: PosProduct): StockToastContext {
+  return { name: product.name, stock: product.stock, unit: product.baseUnit };
+}
+
+function resolveStockToastContext(
+  lineKey: string,
+  cart: Record<string, CartLine>,
+  products: PosProduct[],
+): StockToastContext {
+  const line = cart[lineKey];
+  if (!line) return null;
+  const product = products.find((p) => p.id === line.productId);
+  if (!product) return null;
+  return stockToastContext(product);
+}
+
+function buildStockDescription(ctx: StockToastContext, includeDetail: boolean): string | undefined {
+  const lines: string[] = [];
+  if (ctx) {
+    lines.push(ctx.name);
+    lines.push(ctx.unit ? `คงเหลือ: ${ctx.stock} ${ctx.unit}` : `คงเหลือ: ${ctx.stock}`);
+  }
+  if (includeDetail) lines.push('ไม่สามารถเพิ่มสินค้าเกินจำนวนสต็อกที่มีอยู่ได้');
+  return lines.length > 0 ? lines.join('\n') : undefined;
+}
+
+function dispatchStockToast(msg: string, ctx: StockToastContext, showToast: any) {
+  if (msg.startsWith('🚫')) {
+    showToast({ title: 'สต็อกไม่พอ!', description: buildStockDescription(ctx, true), variant: 'destructive' });
+  } else if (msg.startsWith('⚠️')) {
+    showToast({ title: 'สินค้าเกินสต็อก', description: buildStockDescription(ctx, false), variant: 'warning' });
+  } else {
+    showToast({ title: msg });
+  }
+}
+
 function makeHarness(initial: Record<string, CartLine> = {}) {
   let cart: Record<string, CartLine> = { ...initial };
   const showToast = vi.fn();
@@ -325,19 +375,19 @@ function makeHarness(initial: Record<string, CartLine> = {}) {
       const result = applyAddToCart(cart, product, option, () =>
         mkLine(option.unit, 1, option.factor, product.id),
       );
-      if (result.toast) showToast(result.toast);
+      if (result.toast) dispatchStockToast(result.toast, stockToastContext(product), showToast);
       if (result.blocked) return;
       cart = result.cart;
     },
     changeQty(lineKey: string, delta: number, products: PosProduct[]) {
       const result = applyChangeQty(cart, lineKey, delta, products);
-      if (result.toast) showToast(result.toast);
+      if (result.toast) dispatchStockToast(result.toast, resolveStockToastContext(lineKey, cart, products), showToast);
       if (result.blocked) return;
       cart = result.cart;
     },
     setLineQty(lineKey: string, newQty: number, products: PosProduct[]): boolean {
       const result = applySetLineQty(cart, lineKey, newQty, products);
-      if (result.toast) showToast(result.toast);
+      if (result.toast) dispatchStockToast(result.toast, resolveStockToastContext(lineKey, cart, products), showToast);
       if (result.ok) cart = result.cart;
       return result.ok;
     },
@@ -352,7 +402,7 @@ describe('7C-POS-Stock-Matrix · addToCart behavior (hook wrapper over applyAddT
     h.addToCart(makeProduct({ stock: 58, allowNegativeStock: false }), BASE);
     expect(h.qty(KEY)).toBe(58);
     expect(h.showToast).toHaveBeenCalledTimes(1);
-    expect(h.showToast).toHaveBeenCalledWith(expect.stringContaining('🚫'));
+    expect(h.showToast).toHaveBeenCalledWith(expect.objectContaining({ variant: 'destructive' }));
   });
 
   test('Tier 1 strict: within stock increases qty silently', () => {
@@ -366,7 +416,7 @@ describe('7C-POS-Stock-Matrix · addToCart behavior (hook wrapper over applyAddT
     const h = makeHarness(cartWith(mkLine('ชิ้น', 58, 1)));
     h.addToCart(makeProduct({ stock: 58, allowNegativeStock: true, warnOnOversell: true }), BASE);
     expect(h.qty(KEY)).toBe(59);
-    expect(h.showToast).toHaveBeenCalledWith(expect.stringContaining(OVERSELL_WARNING_MESSAGE));
+    expect(h.showToast).toHaveBeenCalledWith(expect.objectContaining({ variant: 'warning' }));
   });
 
   test('Tier 3 silent: oversell INCREASES qty with no toast', () => {
@@ -419,7 +469,7 @@ describe('7C-POS-Stock-Matrix · changeQty behavior (hook wrapper over applyChan
     const warnH = makeHarness(cartWith(mkLine('ชิ้น', 58, 1)));
     warnH.changeQty(KEY, 1, [makeProduct({ stock: 58, allowNegativeStock: true, warnOnOversell: true })]);
     expect(warnH.qty(KEY)).toBe(59);
-    expect(warnH.showToast).toHaveBeenCalledWith(expect.stringContaining(OVERSELL_WARNING_MESSAGE));
+    expect(warnH.showToast).toHaveBeenCalledWith(expect.objectContaining({ variant: 'warning' }));
 
     const silentH = makeHarness(cartWith(mkLine('ชิ้น', 58, 1)));
     silentH.changeQty(KEY, 1, [makeProduct({ stock: 58, allowNegativeStock: true, warnOnOversell: false })]);
@@ -458,7 +508,7 @@ describe('7C-POS-Stock-Matrix · setLineQty behavior (hook wrapper over applySet
     const warnH = makeHarness(cartWith(mkLine('ชิ้น', 50, 1)));
     expect(warnH.setLineQty(KEY, 59, [makeProduct({ stock: 58, allowNegativeStock: true, warnOnOversell: true })])).toBe(true);
     expect(warnH.qty(KEY)).toBe(59);
-    expect(warnH.showToast).toHaveBeenCalledWith(expect.stringContaining(OVERSELL_WARNING_MESSAGE));
+    expect(warnH.showToast).toHaveBeenCalledWith(expect.objectContaining({ variant: 'warning' }));
 
     const silentH = makeHarness(cartWith(mkLine('ชิ้น', 50, 1)));
     expect(silentH.setLineQty(KEY, 59, [makeProduct({ stock: 58, allowNegativeStock: true, warnOnOversell: false })])).toBe(true);
@@ -481,14 +531,14 @@ describe('7C-POS-Stock-Matrix · toast path proven with a showToast spy', () => 
     const h = makeHarness(cartWith(mkLine('ชิ้น', 58, 1)));
     h.addToCart(makeProduct({ stock: 58, allowNegativeStock: false }), BASE);
     expect(h.showToast).toHaveBeenCalledTimes(1);
-    expect(h.showToast.mock.calls[0]![0]).toContain('🚫');
+    expect(h.showToast.mock.calls[0]![0].variant).toBe('destructive');
   });
 
   test('Rule 2 (warn oversell) calls showToast with the oversell warning message', () => {
     const h = makeHarness(cartWith(mkLine('ชิ้น', 58, 1)));
     h.addToCart(makeProduct({ stock: 58, allowNegativeStock: true, warnOnOversell: true }), BASE);
     expect(h.showToast).toHaveBeenCalledTimes(1);
-    expect(h.showToast.mock.calls[0]![0]).toContain(OVERSELL_WARNING_MESSAGE);
+    expect(h.showToast.mock.calls[0]![0].variant).toBe('warning');
   });
 
   test('Rule 3 (silent oversell) does NOT call showToast', () => {
@@ -541,7 +591,8 @@ describe('7C-POS-Stock-Matrix · useCart wiring uses the latest-cart ref + pure 
   test('addToCart validates against cartRef.current, toasts, and blocks before commit', () => {
     const fn = region(cartSource, 'const addToCart = useCallback', '[buildCartLine, commit, showToast]');
     expect(fn).toContain('applyAddToCart(cartRef.current, product, option');
-    expect(fn).toContain('if (result.toast) showToast(result.toast);');
+    // UI-13: the dispatch now threads product context for the structured description.
+    expect(fn).toContain('dispatchStockToast(result.toast, { name: product.name, stock: product.stock, unit: product.baseUnit }, showToast)');
     expect(fn).toContain('if (result.blocked) return;');
     expect(fn.indexOf('if (result.blocked) return;')).toBeLessThan(fn.indexOf('commit(result.cart)'));
   });
@@ -557,5 +608,135 @@ describe('7C-POS-Stock-Matrix · useCart wiring uses the latest-cart ref + pure 
     expect(fn).toContain('applySetLineQty(cartRef.current, lineKey, newQty, products)');
     expect(fn).toContain('if (result.ok) commit(result.cart);');
     expect(fn).toContain('return result.ok;');
+  });
+});
+
+// ─── UI-13-TOAST-TYPOGRAPHY · static titles + structured description (source-level: useCart.ts) ─
+// UI-13 replaced the UI-12 dynamic, glyph-stripped title with a short STATIC title and moved the
+// dynamic product/stock detail into a `\n`-joined structured description. These assertions PROVE
+// the title is no longer derived from `msg`, the exact static copy is used, and each tier maps to
+// the right semantic variant + the shared description builder.
+describe('7C-UI-13-TOAST-TYPOGRAPHY · dispatchStockToast uses static titles + structured description (useCart.ts)', () => {
+  test('strict block uses the exact static title สต็อกไม่พอ! and variant destructive', () => {
+    const helper = region(cartSource, 'function dispatchStockToast', 'function useCart');
+    expect(helper).toContain("if (msg.startsWith('🚫'))");
+    expect(helper).toContain("variant: 'destructive'");
+    expect(helper).toContain("title: 'สต็อกไม่พอ!'");
+    // Regression guard: the title must NOT be derived from `msg` (no UI-12 dynamic-title relapse).
+    expect(helper).not.toMatch(/title:\s*msg\.replace/u);
+    expect(helper).not.toMatch(/title:\s*msg\s*,/u);
+  });
+
+  test('warning pass uses the exact static title สินค้าเกินสต็อก and variant warning', () => {
+    const helper = region(cartSource, 'function dispatchStockToast', 'function useCart');
+    expect(helper).toContain("else if (msg.startsWith('⚠️'))");
+    expect(helper).toContain("variant: 'warning'");
+    expect(helper).toContain("title: 'สินค้าเกินสต็อก'");
+  });
+
+  test('both variants move the dynamic detail into the shared structured description builder', () => {
+    const helper = region(cartSource, 'function dispatchStockToast', 'function useCart');
+    expect(helper).toContain('description: buildStockDescription(ctx, true)');
+    expect(helper).toContain('description: buildStockDescription(ctx, false)');
+  });
+
+  test('buildStockDescription emits product name, a distinct คงเหลือ line, and the strict-only detail', () => {
+    const fn = region(cartSource, 'function buildStockDescription', 'function dispatchStockToast');
+    expect(fn).toContain('ctx.name');
+    expect(fn).toContain('คงเหลือ:');
+    expect(fn).toContain('ไม่สามารถเพิ่มสินค้าเกินจำนวนสต็อกที่มีอยู่ได้');
+  });
+
+  test('silent pass remains silent (caller skips dispatch when result.toast is null)', () => {
+    // cartUtils returns toast=null for Tier 3, so dispatchStockToast is never invoked.
+    expect(cartSource).toContain('if (result.toast) dispatchStockToast(result.toast,');
+  });
+});
+
+// ─── UI-13-TOAST-TYPOGRAPHY · static-title + structured payloads (EXECUTABLE via the showToast spy) ─
+// The harness's dispatchStockToast mirrors the real UI-13 implementation, so the spy receives the
+// ACTUAL payload the toast component would render: a short static title (no glyph, no product name,
+// no remaining quantity) and a structured description that carries the dynamic detail.
+const STOCK_GLYPHS = ['🚫', '⚠️', '⚠', '❌'];
+
+describe('7C-UI-13-TOAST-TYPOGRAPHY · dispatched payloads carry static title + structured description (executable)', () => {
+  const STRICT_DETAIL = 'ไม่สามารถเพิ่มสินค้าเกินจำนวนสต็อกที่มีอยู่ได้';
+
+  test('strict block → destructive, static title, description has name + distinct คงเหลือ + strict detail', () => {
+    const h = makeHarness(cartWith(mkLine('ชิ้น', 58, 1)));
+    h.addToCart(makeProduct({ stock: 58, allowNegativeStock: false }), BASE);
+    const payload = h.showToast.mock.calls[0]![0];
+    expect(payload.variant).toBe('destructive');
+    expect(payload.title).toBe('สต็อกไม่พอ!');
+    // Title carries no glyph, no product name, no remaining quantity.
+    for (const g of STOCK_GLYPHS) expect(payload.title).not.toContain(g);
+    expect(payload.title).not.toContain('สินค้าทดสอบ');
+    expect(payload.title).not.toContain('คงเหลือ');
+    // Description carries the dynamic detail in the structured layout.
+    expect(payload.description).toContain('สินค้าทดสอบ'); // line 1: product name
+    expect(payload.description).toContain('คงเหลือ:'); // line 2: distinct remaining-stock line
+    expect(payload.description).toContain('58'); // remaining stock
+    expect(payload.description).toContain('ชิ้น'); // unit
+    expect(payload.description).toContain(STRICT_DETAIL); // line 3: strict-only explanation
+  });
+
+  test('warning pass → warning, static title, SAME structure WITHOUT the strict-only line', () => {
+    const h = makeHarness(cartWith(mkLine('ชิ้น', 58, 1)));
+    h.addToCart(makeProduct({ stock: 58, allowNegativeStock: true, warnOnOversell: true }), BASE);
+    const payload = h.showToast.mock.calls[0]![0];
+    expect(payload.variant).toBe('warning');
+    expect(payload.title).toBe('สินค้าเกินสต็อก');
+    for (const g of STOCK_GLYPHS) expect(payload.title).not.toContain(g);
+    expect(payload.title).not.toContain('สินค้าทดสอบ');
+    expect(payload.description).toContain('สินค้าทดสอบ'); // line 1: product name
+    expect(payload.description).toContain('คงเหลือ:'); // line 2: distinct remaining-stock line
+    expect(payload.description).toContain('58'); // remaining stock
+    expect(payload.description).toContain('ชิ้น'); // unit
+    expect(payload.description).not.toContain(STRICT_DETAIL); // no strict-only third line
+  });
+
+  test('silent pass → no payload dispatched at all', () => {
+    const h = makeHarness(cartWith(mkLine('ชิ้น', 58, 1)));
+    h.addToCart(makeProduct({ stock: 58, allowNegativeStock: true, warnOnOversell: false }), BASE);
+    expect(h.showToast).not.toHaveBeenCalled();
+  });
+});
+
+// ─── UI-12-FLOWBITE-TOAST · single-visible toast store contract (source-level: use-toast.ts) ─
+// Codex blocker 3: there was no coverage for MAX_VISIBLE_TOASTS=1, identical-toast
+// dedupe/refresh, different-toast replace, or timer cleanup. The store has no state getter
+// (and we must not add one), so these are precise source-contract assertions.
+describe('7C-UI-12-FLOWBITE-TOAST · toast store caps/dedupes/replaces with timer cleanup (use-toast.ts)', () => {
+  test('caps the visible queue at exactly one toast (no unbounded stacking)', () => {
+    expect(toastStoreSource).toMatch(/MAX_VISIBLE_TOASTS\s*=\s*1\b/);
+    expect(toastStoreSource).toContain('.slice(0, MAX_VISIBLE_TOASTS)');
+    // Regression guard against the rejected UI-11 store that prepended unboundedly.
+    expect(toastStoreSource).not.toMatch(/memoryState\s*=\s*\[\s*\w+\s*,\s*\.\.\.memoryState\s*\]/);
+  });
+
+  test('identical toast is deduped — it refreshes the current timer and returns early', () => {
+    const dispatch = region(toastStoreSource, 'export function toast', 'export function useToastDispatcher');
+    expect(dispatch).toContain('isSameContent');
+    expect(dispatch).toMatch(/scheduleDismiss\(\s*current\.id/);
+    expect(dispatch).toContain('return current.id;');
+  });
+
+  test('a different toast REPLACES the current one (max one visible)', () => {
+    const dispatch = region(toastStoreSource, 'export function toast', 'export function useToastDispatcher');
+    expect(dispatch).toContain('memoryState = [newToast].slice(0, MAX_VISIBLE_TOASTS)');
+  });
+
+  test('isSameContent compares title, description and variant', () => {
+    const same = region(toastStoreSource, 'function isSameContent', 'export function toast');
+    expect(same).toContain('current.title === incoming.title');
+    expect(same).toContain('current.description === incoming.description');
+    expect(same).toContain("variant ?? 'default'");
+  });
+
+  test('uses a single shared dismiss timer cleared on every (re)schedule', () => {
+    expect(toastStoreSource).toMatch(/let\s+dismissTimer/);
+    expect(toastStoreSource).toContain('function clearDismissTimer');
+    const schedule = region(toastStoreSource, 'function scheduleDismiss', 'function dismiss');
+    expect(schedule).toContain('clearDismissTimer();');
   });
 });

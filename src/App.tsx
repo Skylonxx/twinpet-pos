@@ -4,6 +4,7 @@ import { twinpetTheme } from './components/ui';
 import GuestRoute from './components/GuestRoute';
 import ProtectedRoute from './components/ProtectedRoute';
 import PosShellRoute from './components/PosShellRoute';
+import { Toaster } from './components/ui/toaster';
 import CustomerPage from './pages/CustomerPage';
 import DashboardPage from './pages/DashboardPage';
 import ExportReportPage from './pages/ExportReportPage';
@@ -49,6 +50,7 @@ import SupplierPage from './pages/SupplierPage';
 export default function App() {
   return (
     <ThemeProvider theme={twinpetTheme}>
+      <Toaster />
     <BrowserRouter>
       <Routes>
         <Route element={<GuestRoute />}>

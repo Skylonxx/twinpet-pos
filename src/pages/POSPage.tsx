@@ -42,7 +42,9 @@ import { useLocalLedger } from '../lib/hooks/useLocalLedger';
 import { deriveShiftDrawer } from '../lib/pos/shiftLedger';
 import { isFirebaseConfigured } from '../lib/firebase';
 import { getActivePriceForCustomer, useCart } from '../hooks/pos/useCart';
+import type { ToastPayload } from '../hooks/pos/useCart';
 import { useCheckout } from '../hooks/pos/useCheckout';
+import { useToastDispatcher } from '../components/ui/use-toast';
 import './POSPage.css';
 
 
@@ -122,7 +124,9 @@ export default function POSPage() {
   const [discountLineKey, setDiscountLineKey] = useState<string | null>(null);
   const [qtyNumpadLineKey, setQtyNumpadLineKey] = useState<string | null>(null);
   const [paymentOpen, setPaymentOpen] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
+  // Non-subscribing dispatcher: POSPage must NOT read the toast array (that would re-render
+  // the whole POS surface on every toast add/dismiss → flicker). Only <Toaster /> subscribes.
+  const globalToast = useToastDispatcher();
   const [activeShift, setActiveShift] = useState<Shift | null>(null);
   const [shiftReady, setShiftReady] = useState(false);
   const [showCloseShift, setShowCloseShift] = useState(false);
@@ -141,10 +145,13 @@ export default function POSPage() {
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const showToast = useCallback((msg: string) => {
-    setToast(msg);
-    window.setTimeout(() => setToast(null), 2600);
-  }, []);
+  const showToast = useCallback((payload: ToastPayload) => {
+    if (typeof payload === 'string') {
+      globalToast({ title: payload });
+    } else {
+      globalToast(payload);
+    }
+  }, [globalToast]);
 
   // Checkout owns the customer; the cart re-prices against it. Checkout is set
   // up first so the cart can read `checkout.customer` (no circular dependency —
@@ -1472,12 +1479,6 @@ export default function POSPage() {
         }}
         onCancel={() => setConfirmModalState({ open: false })}
       />
-
-      {toast && (
-        <div className="pos-toast" role="status" aria-live="polite">
-          {toast}
-        </div>
-      )}
     </div>
   );
 }

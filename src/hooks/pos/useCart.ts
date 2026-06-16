@@ -57,11 +57,62 @@ function repriceCartLines(
   return changed ? next : cart;
 }
 
+export type ToastPayload = string | { title: string; description?: string; variant?: 'default' | 'destructive' | 'warning' | 'success' };
+
 export type UseCartArgs = {
   products: PosProduct[];
   customer: PosCustomer | null;
-  showToast: (msg: string) => void;
+  showToast: (payload: ToastPayload) => void;
 };
+
+/** Product context used to compose the structured toast description (UI-13). */
+type StockToastContext = { name: string; stock: number; unit: string } | null;
+
+/** Resolve the toast context for a cart line (used by changeQty / setLineQty). */
+function resolveStockToastContext(
+  lineKey: string,
+  cart: Record<string, CartLine>,
+  products: PosProduct[],
+): StockToastContext {
+  const line = cart[lineKey];
+  if (!line) return null;
+  const product = products.find((p) => p.id === line.productId);
+  if (!product) return null;
+  return { name: product.name, stock: product.stock, unit: product.baseUnit };
+}
+
+// UI-13: build the structured, multi-line description shared by Strict Block (red) and
+// Warning Pass (yellow). Both variants use the SAME line order/hierarchy — product name on
+// line 1, the remaining-stock line (prefixed `คงเหลือ:` so toast.tsx can render it visually
+// distinct) on line 2 — and ONLY the strict block appends the third explanatory line. The
+// description is a `\n`-joined string because the toast store types `description` as a string
+// (use-toast.ts is out of scope); toast.tsx splits the lines for the typography hierarchy.
+function buildStockDescription(ctx: StockToastContext, includeDetail: boolean): string | undefined {
+  const lines: string[] = [];
+  if (ctx) {
+    lines.push(ctx.name);
+    lines.push(ctx.unit ? `คงเหลือ: ${ctx.stock} ${ctx.unit}` : `คงเหลือ: ${ctx.stock}`);
+  }
+  if (includeDetail) lines.push('ไม่สามารถเพิ่มสินค้าเกินจำนวนสต็อกที่มีอยู่ได้');
+  return lines.length > 0 ? lines.join('\n') : undefined;
+}
+
+function dispatchStockToast(
+  msg: string,
+  ctx: StockToastContext,
+  showToast: (payload: ToastPayload) => void,
+) {
+  // Variant still derives from the matrix glyph prefix cartUtils emits (🚫 strict / ⚠️ warn);
+  // the glyph itself never reaches the UI — the Toast renders its own SVG icon. UI-13 uses
+  // short static titles and moves the dynamic product/stock detail into the description.
+  if (msg.startsWith('🚫')) {
+    showToast({ title: 'สต็อกไม่พอ!', description: buildStockDescription(ctx, true), variant: 'destructive' });
+  } else if (msg.startsWith('⚠️')) {
+    showToast({ title: 'สินค้าเกินสต็อก', description: buildStockDescription(ctx, false), variant: 'warning' });
+  } else {
+    showToast({ title: msg });
+  }
+}
 
 /**
  * Owns the POS cart: line items, bill-level discount, and fee — plus the
@@ -186,7 +237,7 @@ export function useCart({ products, customer, showToast }: UseCartArgs) {
       const result = applyAddToCart(cartRef.current, product, option, () =>
         buildCartLine(product, option),
       );
-      if (result.toast) showToast(result.toast);
+      if (result.toast) dispatchStockToast(result.toast, { name: product.name, stock: product.stock, unit: product.baseUnit }, showToast);
       if (result.blocked) return;
       commit(result.cart);
     },
@@ -198,7 +249,7 @@ export function useCart({ products, customer, showToast }: UseCartArgs) {
       // Increase routes through the matrix vs. the LATEST cart; decrement/zero-out is never
       // blocked. cartRef makes repeated same-tick increases see each other (no stale bypass).
       const result = applyChangeQty(cartRef.current, lineKey, delta, products);
-      if (result.toast) showToast(result.toast);
+      if (result.toast) dispatchStockToast(result.toast, resolveStockToastContext(lineKey, cartRef.current, products), showToast);
       if (result.blocked) return;
       commit(result.cart);
     },
@@ -217,7 +268,7 @@ export function useCart({ products, customer, showToast }: UseCartArgs) {
       // On a Tier 1 strict block this returns false WITHOUT applying, so the numpad dialog stays
       // open for cashier correction. Removal / no-op / warn / silent all apply and return true.
       const result = applySetLineQty(cartRef.current, lineKey, newQty, products);
-      if (result.toast) showToast(result.toast);
+      if (result.toast) dispatchStockToast(result.toast, resolveStockToastContext(lineKey, cartRef.current, products), showToast);
       if (result.ok) commit(result.cart);
       return result.ok;
     },

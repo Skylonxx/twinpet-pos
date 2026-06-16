@@ -280,7 +280,7 @@ describe('7C-D4-A · Focus-return contract (POSPage.tsx)', () => {
     const helper = region(posSource, 'const closeCatModal', '}, [focusSearch]);');
     expect(helper).toContain('setCatModalOpen(false);');
     expect(helper).toContain('focusSearch();');
-    const overlay = region(posSource, 'className="pos-category-overlay"', 'pos-toast');
+    const overlay = region(posSource, 'className="pos-category-overlay"', 'SortingSettingsModal');
     expect(overlay).toContain('closeCatModal');
     // The category cells still drive the filter; closing no longer leaves a bare
     // setCatModalOpen(false) un-refocused inside the overlay.
@@ -1264,5 +1264,49 @@ describe('7C-UI-10-C · Sorting modal best-seller membership scope (data path)',
     // The ordering is still applied by the sharded sort reader (write API unchanged).
     expect(sortingModalSource).toContain('sortProductsByCustomOrder(scoped, order)');
     expect(sortingModalSource).toContain('saveProductSortOrder(branchId, key, ids, expectedRev)');
+  });
+});
+
+// ─── N. UI-12-FLOWBITE-TOAST · POSPage non-subscribing toast contract (POSPage.tsx) ───────
+// Codex blocker 1: the old `toContain('useToast')` was a false green — it matched the
+// substring inside `useToastDispatcher`, not a proof that POSPage avoids a subscribing
+// `useToast()`. These assertions prove POSPage uses the STABLE dispatcher and never reads
+// the toast array or wires a state setter/listener into the store (the flicker root cause).
+describe('7C-UI-12-FLOWBITE-TOAST · POSPage uses a non-subscribing toast dispatcher (POSPage.tsx)', () => {
+  test('POSPage imports + uses the stable useToastDispatcher from the toast store', () => {
+    expect(posSource).toContain('useToastDispatcher');
+    expect(posSource).toMatch(/import\s*\{[^}]*\buseToastDispatcher\b[^}]*\}\s*from\s*['"][^'"]*use-toast['"]/);
+    // The dispatcher is actually invoked (the hook call), not merely imported.
+    expect(posSource).toMatch(/useToastDispatcher\s*\(\s*\)/);
+  });
+
+  test('POSPage does NOT call the subscribing useToast() hook', () => {
+    // `useToastDispatcher(` must NOT trip this; `\s*\(` only matches a bare `useToast(` call.
+    expect(posSource).not.toMatch(/\buseToast\s*\(/);
+  });
+
+  test('POSPage does NOT read the toast array or wire a store listener (no re-render churn)', () => {
+    expect(posSource).not.toContain('toasts');           // no `const { toasts }` / `toasts.map`
+    expect(posSource).not.toContain('const { toast, toasts');
+    expect(posSource).not.toContain('setToasts');         // no state setter pushed into the store
+    expect(posSource).not.toContain('addToastListener');
+  });
+
+  test('POSPage no longer renders local pos-toast', () => {
+    expect(posSource).not.toContain('className="pos-toast"');
+  });
+
+  test('POSPage no longer holds local toast state', () => {
+    expect(posSource).not.toContain('const [toast, setToast] = useState<string | null>(null)');
+    expect(posSource).not.toMatch(/\bsetToast\s*\(/);
+  });
+
+  test('POSPage still provides a stable toast dispatcher to cart + checkout', () => {
+    const checkoutBlock = region(posSource, 'const checkout = useCheckout', '});');
+    expect(checkoutBlock).toContain('showToast');
+    expect(posSource).toContain('const cart = useCart({ products, customer, showToast });');
+    // showToast wraps the stable dispatcher (globalToast), not a local setState.
+    const showToastDef = region(posSource, 'const showToast = useCallback', '[globalToast]);');
+    expect(showToastDef).toContain('globalToast');
   });
 });
