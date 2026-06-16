@@ -357,6 +357,22 @@ function dispatchStockToast(msg: string, ctx: StockToastContext, showToast: any)
   }
 }
 
+// UI-01-HOTFIX-BUMP-TO-TOP: mirrors the source `bumpLineToEnd` in useCart.ts — returns a NEW
+// record with `key` moved to the LAST insertion slot, other lines keeping their order. Pure.
+function bumpLineToEnd(
+  cart: Record<string, CartLine>,
+  key: string,
+): Record<string, CartLine> {
+  const bumped = cart[key];
+  if (!bumped) return cart;
+  const next: Record<string, CartLine> = {};
+  for (const [k, line] of Object.entries(cart)) {
+    if (k !== key) next[k] = line;
+  }
+  next[key] = bumped;
+  return next;
+}
+
 function makeHarness(initial: Record<string, CartLine> = {}) {
   let cart: Record<string, CartLine> = { ...initial };
   const showToast = vi.fn();
@@ -372,12 +388,15 @@ function makeHarness(initial: Record<string, CartLine> = {}) {
       return cart[lineKey] !== undefined;
     },
     addToCart(product: PosProduct, option: UomOption) {
+      // Mirror the hook's add path INCLUDING the UI-01-HOTFIX bump-to-top reorder.
+      const key = `${product.id}::${option.unit}`;
+      const existed = cart[key] !== undefined;
       const result = applyAddToCart(cart, product, option, () =>
         mkLine(option.unit, 1, option.factor, product.id),
       );
       if (result.toast) dispatchStockToast(result.toast, stockToastContext(product), showToast);
       if (result.blocked) return;
-      cart = result.cart;
+      cart = existed ? bumpLineToEnd(result.cart, key) : result.cart;
     },
     changeQty(lineKey: string, delta: number, products: PosProduct[]) {
       const result = applyChangeQty(cart, lineKey, delta, products);
@@ -433,6 +452,76 @@ describe('7C-POS-Stock-Matrix · addToCart behavior (hook wrapper over applyAddT
     h.addToCart(p, BASE); // 58 → would be 59 → BLOCKED against the LATEST cart
     expect(h.qty(KEY)).toBe(58);
     expect(h.showToast).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ─── UI-01-HOTFIX-BUMP-TO-TOP · existing-item add reorders cart state (executable) ──────
+// CEO Physical UAT: re-scanning an item that already exists incremented it in place, leaving it
+// buried (no visible feedback → double-scan risk). The add path now bumps the updated line to the
+// END of the cart record; POSPage renders `cartLines.slice().reverse()`, so it surfaces at the
+// TOP. These run the SAME applier + the bump reorder the hook uses (mirrored in makeHarness).
+describe('7C-UI-01-HOTFIX-BUMP-TO-TOP · existing-item add bumps the line to the end of cart state', () => {
+  // Distinct single-line products A, B, C inserted in order → state order [A, B, C].
+  const silent = (id: string) =>
+    makeProduct({ id, stock: 999, allowNegativeStock: true, warnOnOversell: false });
+
+  test('re-adding existing B reorders state [A,B,C] → [A,C,B] (renders [B,C,A] under reverse)', () => {
+    const h = makeHarness(
+      cartWith(mkLine('ชิ้น', 1, 1, 'A'), mkLine('ชิ้น', 1, 1, 'B'), mkLine('ชิ้น', 1, 1, 'C')),
+    );
+    expect(Object.keys(h.cart)).toEqual(['A::ชิ้น', 'B::ชิ้น', 'C::ชิ้น']);
+    h.addToCart(silent('B'), BASE);
+    // B moved to the end; A and C keep their relative order.
+    expect(Object.keys(h.cart)).toEqual(['A::ชิ้น', 'C::ชิ้น', 'B::ชิ้น']);
+    // Visual reverse (what POSPage renders): newest (B) on top.
+    expect(Object.keys(h.cart).slice().reverse()).toEqual(['B::ชิ้น', 'C::ชิ้น', 'A::ชิ้น']);
+  });
+
+  test('the bumped line keeps the correctly incremented quantity', () => {
+    const h = makeHarness(cartWith(mkLine('ชิ้น', 1, 1, 'A'), mkLine('ชิ้น', 2, 1, 'B')));
+    h.addToCart(silent('B'), BASE);
+    expect(h.qty('B::ชิ้น')).toBe(3); // 2 → 3
+    expect(Object.keys(h.cart)).toEqual(['A::ชิ้น', 'B::ชิ้น']); // already last, stays last
+  });
+
+  test('adding a NEW item appends to the end (existing lines keep their order)', () => {
+    const h = makeHarness(cartWith(mkLine('ชิ้น', 1, 1, 'A'), mkLine('ชิ้น', 1, 1, 'B')));
+    h.addToCart(silent('C'), BASE);
+    expect(Object.keys(h.cart)).toEqual(['A::ชิ้น', 'B::ชิ้น', 'C::ชิ้น']);
+    expect(h.qty('C::ชิ้น')).toBe(1);
+  });
+
+  test('a Tier 1 strict block does NOT reorder or change qty (blocked add is inert)', () => {
+    const h = makeHarness(
+      cartWith(mkLine('ชิ้น', 1, 1, 'A'), mkLine('ชิ้น', 58, 1, 'B'), mkLine('ชิ้น', 1, 1, 'C')),
+    );
+    h.addToCart(makeProduct({ id: 'B', stock: 58, allowNegativeStock: false }), BASE); // blocked
+    expect(Object.keys(h.cart)).toEqual(['A::ชิ้น', 'B::ชิ้น', 'C::ชิ้น']); // order untouched
+    expect(h.qty('B::ชิ้น')).toBe(58); // qty untouched
+  });
+
+  test('a different UOM of an existing product is a NEW line → appends last (no in-place bump)', () => {
+    // P1 base line already present; adding the PACK unit creates P1::ลัง as a new last line.
+    const h = makeHarness(cartWith(mkLine('ชิ้น', 1, 1, 'P1')));
+    h.addToCart(makeProduct({ id: 'P1', stock: 999, allowNegativeStock: true, warnOnOversell: false }), PACK);
+    expect(Object.keys(h.cart)).toEqual(['P1::ชิ้น', 'P1::ลัง']);
+  });
+});
+
+// ─── UI-01-HOTFIX-BUMP-TO-TOP · bumpLineToEnd helper contract (source-level: useCart.ts) ─
+describe('7C-UI-01-HOTFIX-BUMP-TO-TOP · bumpLineToEnd is a pure, order-preserving re-key (useCart.ts)', () => {
+  test('builds a NEW record, preserves other lines, appends the target last (no mutation)', () => {
+    const fn = region(cartSource, 'function bumpLineToEnd', 'export function useCart');
+    expect(fn).toContain('const next: Record<string, CartLine> = {}');
+    expect(fn).toContain('if (k !== key) next[k] = line;');
+    expect(fn).toContain('next[key] = bumped;');
+    expect(fn).toContain('return next;');
+  });
+
+  test('addToCart only bumps an EXISTING line; a new line keeps applyAddToCart’s natural append', () => {
+    const fn = region(cartSource, 'const addToCart = useCallback', '[buildCartLine, commit, showToast]');
+    expect(fn).toContain('const existed = cartRef.current[key] !== undefined;');
+    expect(fn).toContain('existed ? bumpLineToEnd(result.cart, key) : result.cart');
   });
 });
 
@@ -594,7 +683,11 @@ describe('7C-POS-Stock-Matrix · useCart wiring uses the latest-cart ref + pure 
     // UI-13: the dispatch now threads product context for the structured description.
     expect(fn).toContain('dispatchStockToast(result.toast, { name: product.name, stock: product.stock, unit: product.baseUnit }, showToast)');
     expect(fn).toContain('if (result.blocked) return;');
-    expect(fn.indexOf('if (result.blocked) return;')).toBeLessThan(fn.indexOf('commit(result.cart)'));
+    // UI-01-HOTFIX-BUMP-TO-TOP: an existing-line add re-keys the updated line to the end of the
+    // record (commit still runs only after the blocked-return). New lines append naturally.
+    expect(fn).toContain('bumpLineToEnd');
+    expect(fn).toContain('commit(existed ? bumpLineToEnd(result.cart, key) : result.cart)');
+    expect(fn.indexOf('if (result.blocked) return;')).toBeLessThan(fn.indexOf('commit('));
   });
 
   test('changeQty routes through applyChangeQty(cartRef.current, ...)', () => {

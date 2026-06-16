@@ -115,6 +115,32 @@ function dispatchStockToast(
 }
 
 /**
+ * UI-01-HOTFIX (bump-to-top): return a NEW cart record with `key` moved to the LAST insertion
+ * slot, every other line keeping its relative order. `applyAddToCart` increments an existing
+ * line IN PLACE (it re-assigns the same key), so the line keeps its original position and
+ * `Object.values(cart)` leaves it buried — invisible feedback for a re-scan. Re-keying it last
+ * makes POSPage's reversed render (`cartLines.slice().reverse()`) surface it at the TOP, so the
+ * cashier sees the just-scanned item immediately (no double-scan risk).
+ *
+ * Pure: never mutates the input record or any line object; only the key ORDER changes — the line
+ * value (already incremented by the matrix applier) is preserved verbatim. Identity stays the
+ * stable `lineKey` (never an array index). Caller invokes this only for an already-existing line.
+ */
+function bumpLineToEnd(
+  cart: Record<string, CartLine>,
+  key: string,
+): Record<string, CartLine> {
+  const bumped = cart[key];
+  if (!bumped) return cart;
+  const next: Record<string, CartLine> = {};
+  for (const [k, line] of Object.entries(cart)) {
+    if (k !== key) next[k] = line;
+  }
+  next[key] = bumped;
+  return next;
+}
+
+/**
  * Owns the POS cart: line items, bill-level discount, and fee — plus the
  * derived totals/receipt lines.
  *
@@ -234,12 +260,20 @@ export function useCart({ products, customer, showToast }: UseCartArgs) {
     (product: PosProduct, option: UomOption) => {
       // 3-Tier Stock Matrix, evaluated against the LATEST cart (cartRef): surface the toast
       // (Tier 1 red / Tier 2 yellow) and, on a Tier 1 strict block, do NOT apply the add.
+      // Capture existence BEFORE the add so we can tell an increment from a brand-new line.
+      const key = cartLineKey(product.id, option.unit);
+      const existed = cartRef.current[key] !== undefined;
       const result = applyAddToCart(cartRef.current, product, option, () =>
         buildCartLine(product, option),
       );
       if (result.toast) dispatchStockToast(result.toast, { name: product.name, stock: product.stock, unit: product.baseUnit }, showToast);
       if (result.blocked) return;
-      commit(result.cart);
+      // UI-01-HOTFIX (bump-to-top): an EXISTING line was incremented in place by applyAddToCart
+      // and would stay buried at its old position; re-key it last so POSPage's reversed render
+      // floats it to the top (immediate re-scan feedback). A NEW line is already appended last by
+      // applyAddToCart, so it needs no reorder. Validation/qty/matrix/toast are all unchanged —
+      // this only changes the key ORDER of an already-decided successful add.
+      commit(existed ? bumpLineToEnd(result.cart, key) : result.cart);
     },
     [buildCartLine, commit, showToast],
   );

@@ -1,4 +1,4 @@
-# Current Task Tracker — Phase 7C-UI-01-HOTFIX (SCROLLBAR LAYOUT SHIFT & OPTICAL BALANCE / IMPLEMENTATION — AWAITING CLOSURE REVIEW)
+# Current Task Tracker — Phase 7C-UI-01-HOTFIX-BUMP-TO-TOP (EXISTING CART ITEM BUMPS TO TOP / IMPLEMENTATION — AWAITING CODEX REVIEW)
 
 > Living checkpoint doc for agents. Detailed history: `docs/reports/latest-report.md` (do not duplicate long-form evidence here).
 
@@ -173,7 +173,23 @@ CEO rejection reasons:
 
 ---
 
-## Phase 7C-UI-01-HOTFIX — Scrollbar Layout Shift & Optical Balance (ACTIVE / IMPLEMENTATION — AWAITING CLOSURE REVIEW — NOT COMMITTED)
+## Phase 7C-UI-01-HOTFIX-BUMP-TO-TOP — Existing Cart Item Increment Bumps To Top (ACTIVE / IMPLEMENTATION — AWAITING CODEX REVIEW — NOT COMMITTED)
+
+**Context:** CEO Physical UAT found that scanning/adding an item already in the cart incremented its quantity **in place** — `applyAddToCart` (cartUtils, forbidden) re-assigns the same record key, so the line kept its original slot and stayed buried (often scrolled out of view). No immediate "scan worked" feedback → double-scan risk.
+
+- **Fix (useCart.ts only):** new pure module-level helper `bumpLineToEnd(cart, key)` returns a NEW record with the target key re-keyed to the LAST insertion slot (other lines keep their relative order; no in-place mutation of the record or any line object; identity stays the stable `lineKey`, never an index). `addToCart` captures `existed = cartRef.current[key] !== undefined` BEFORE the add, then commits `existed ? bumpLineToEnd(result.cart, key) : result.cart` after a non-blocked add. An existing line moves to the end of `cartLines` state; POSPage renders `cartLines.slice().reverse()`, so it visually bumps to the TOP. A brand-new line is already appended last by `applyAddToCart`, so no reorder is applied to it.
+- **State examples:** `[A,B,C]` + re-add B → state `[A,C,B]` → visual reverse `[B,C,A]` (B on top). New item: `[A,B]` + add C → `[A,B,C]` → visual `[C,B,A]`.
+- **Unchanged:** stock matrix validation, oversell block/warn/silent branches, qty math, totals/discount/tax, FIFO/cost, toast dispatch — only the key ORDER of an already-decided successful add changes. `changeQty` / `setLineQty` / `removeLine` / `setLineDiscount` / `restoreCart` / `clearCart` / checkout are NOT reordered (intentional).
+- **Tests (`useCart.contract.test.ts`):** harness `addToCart` mirrors the bump (+ local `bumpLineToEnd`); new executable suite asserts `[A,B,C]`→`[A,C,B]` reorder, correct incremented qty on the bumped line, new-item append-last, blocked-add leaves order+qty inert, and a different UOM of an existing product is a NEW last line; new source-level assertions pin `bumpLineToEnd` purity/order and the `addToCart` existence-check + commit expression; the prior `addToCart` source-contract test updated for the new commit call (blocked-return still precedes commit).
+- No POSPage layout/CSS, Global-Toast/`MAX_VISIBLE_TOASTS=1`, checkout-hard-stop, preferences-hook, local-seed, Firebase, or Android changes. `stash@{0}` untouched; no staging/commit. UI-02 through UI-09 remain unauthorized.
+
+**Files changed in this step:** `src/hooks/pos/useCart.ts`, `src/hooks/pos/useCart.contract.test.ts`, `Context.md`, `Task.md`.
+
+**Closure gate:** Codex GPT-5.5 High review mandatory before Tech Lead closure/commit. The prior scrollbar-gutter hotfix is COMMITTED at `1e83473`.
+
+---
+
+## Phase 7C-UI-01-HOTFIX — Scrollbar Layout Shift & Optical Balance (COMMITTED — `1e83473 fix(pos): stabilize product grid scrollbar gutter`)
 
 **Context:** CEO Physical UAT on the committed UI-01 (`667093e`) found the product grid jumps horizontally when navigating between categories with different product counts — a short category shows no vertical scrollbar, a tall one shows it, and the appearing/disappearing scrollbar shifts the grid. CEO also required the cards to stay visually centered (a one-sided right gutter would look off-center).
 
