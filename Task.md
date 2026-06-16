@@ -1,4 +1,4 @@
-# Current Task Tracker — Phase 7C-UI-01 (MAIN POS LAYOUT / IMPLEMENTATION — AWAITING CODEX REVIEW)
+# Current Task Tracker — Phase 7C-UI-01-HOTFIX (SCROLLBAR LAYOUT SHIFT & OPTICAL BALANCE / IMPLEMENTATION — AWAITING CLOSURE REVIEW)
 
 > Living checkpoint doc for agents. Detailed history: `docs/reports/latest-report.md` (do not duplicate long-form evidence here).
 
@@ -173,7 +173,23 @@ CEO rejection reasons:
 
 ---
 
-## Phase 7C-UI-01 — Main POS Layout & Core UX Preferences (ACTIVE / IMPLEMENTATION — AWAITING CODEX REVIEW — NOT COMMITTED)
+## Phase 7C-UI-01-HOTFIX — Scrollbar Layout Shift & Optical Balance (ACTIVE / IMPLEMENTATION — AWAITING CLOSURE REVIEW — NOT COMMITTED)
+
+**Context:** CEO Physical UAT on the committed UI-01 (`667093e`) found the product grid jumps horizontally when navigating between categories with different product counts — a short category shows no vertical scrollbar, a tall one shows it, and the appearing/disappearing scrollbar shifts the grid. CEO also required the cards to stay visually centered (a one-sided right gutter would look off-center).
+
+- **Fix (CSS-only):** on the actual vertical scroll container `.pos-product-grid` — `overflow-y: scroll` (track permanently reserved; strong cross-browser baseline, removes the auto on/off toggle) **and** `scrollbar-gutter: stable both-edges` (reserves a matching empty gutter on the opposite/left inline edge using the browser's real scrollbar width). Cards stay dead-center; no hardcoded 15px compensation needed because `both-edges` mirrors the actual scrollbar width on both sides.
+- POSPage.tsx not modified — the grid class wiring already exists; CSS-only.
+- No layout restructuring; search bar, cart shell, cart footer, product-card content, grid-column + font-size preference behavior, category behavior, scanner/search, keyboard/F12, and toast behavior are all unchanged.
+- No cart logic / cart math / stock validation / stock-matrix / checkout-hard-stop / Global-Toast / `MAX_VISIBLE_TOASTS` / POS-preferences-hook / local-seed / Firebase / Android changes.
+- `stash@{0}` untouched; no staging/commit. UI-02 through UI-09 remain unauthorized.
+
+**Files changed in the hotfix step:** `src/pages/POSPage.css`, `Context.md`, `Task.md`.
+
+**Closure gate:** hotfix closure review required before any commit. UI-01 itself remains COMMITTED at `667093e`.
+
+---
+
+## Phase 7C-UI-01 — Main POS Layout & Core UX Preferences (COMMITTED — `667093e` [combined with local-seed, Option A])
 
 **Context:** Tech Lead/CEO authorized resumption of the POS UI overhaul, starting with UI-01 — the main POS layout foundation, cart newest-on-top, a localStorage POS-preferences foundation, sticky search/cart regions, and Flowbite-style visual separation. Scoped strictly to `src/pages/POSPage.tsx`, `src/pages/POSPage.css`, a new `src/hooks/pos/usePOSPreferences.ts`, and the trackers. Local seed UAT data (`mock-products.json`) is **not** part of UI-01 and was not touched.
 

@@ -398,7 +398,17 @@
 
 .pos-product-grid {
   flex: 1;
-  overflow-y: auto;
+  /* UI-01-HOTFIX (scrollbar layout shift + optical balance): always reserve the
+     vertical scrollbar track so switching between a short category (no scrollbar)
+     and a tall one (scrollbar) never shifts the grid horizontally. `overflow-y:
+     scroll` keeps the track permanently present (strong cross-browser baseline),
+     and `scrollbar-gutter: stable both-edges` reserves a MATCHING empty gutter on
+     the opposite (left) inline edge — using the browser's real scrollbar width —
+     so the product cards stay optically centered instead of being nudged right by
+     a one-sided right gutter. No hardcoded compensation: both-edges mirrors the
+     actual gutter width exactly. */
+  overflow-y: scroll;
+  scrollbar-gutter: stable both-edges;
   padding: 12px;
   display: grid;
   /* UI-01: column count is preference-driven via --pos-grid-cols (set by the
