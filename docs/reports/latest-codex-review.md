@@ -2,52 +2,75 @@
 
 ## Phase
 
-7C-UI-05-MACRO-LAYOUT-PERFECTION
+7C-UI-06-FIX-ICON-RESTORE-AND-BUTTON-PURGE
 
 ## Verdict
 
-PASS
+FAIL
 
 ## Summary
 
-The UI-05 Seamless Split implementation passes code, scope, and keyboard-contract review. The app change is CSS-only and limited to `.pos-cart`, with AGY already recording visual PASS for the macro-layout result.
+The emergency UI-06 app implementation passes code, behavior, and scope review, but the package cannot pass because `git diff --check` currently fails on trailing whitespace in `docs/reports/latest-agy-review.md` line 10.
 
-No required fixes found.
+No app-code blocker was found. The required fix is report hygiene only.
 
-## Seamless Split Review
+## Finding
 
-- PASS: `.pos-cart` no longer has the UI-04 margin, box shadow, border radius, or four-side border.
-- PASS: `.pos-cart` now uses a single `border-left: 1px solid var(--g200, #d3d1c7)` divider.
-- PASS: The cart remains a full-height flush right zone through the removed margin and unchanged flex layout.
-- PASS: No competing product-area divider was added; no double seam found.
-- PASS: Select Customer dashed border styling is untouched; no `.pos-cust-pick` diff exists.
+### 1. `git diff --check` fails on AGY report trailing whitespace
+
+Severity: Blocker
+
+Current output includes:
+
+```text
+docs/reports/latest-agy-review.md:10: trailing whitespace.
+```
+
+This must be cleaned before commit.
+
+## Code Review
+
+- PASS: Header icons are restored in `ShiftModals.tsx`: Open Shift clock, Z-Report report/clipboard, and Close Shift lock.
+- PASS: Header icon is restored in `CashTransactionModal.tsx`: Cash In/Out swap.
+- PASS: `ShiftModals.css` and `CashTransactionModal.css` have no net diff, so the restored header icon styling matches HEAD.
+- PASS: Net app diff is only two modal TSX files.
+- PASS: Net source changes are only decorative inline button emoji removals:
+  - Cash In/Out save: `✅ บันทึก` to `บันทึก`
+  - Open Shift submit: `✅ เปิดกะ` to `เปิดกะ`
+  - Z-Report print: `🖨️ พิมพ์ใบสรุปกะ` to `พิมพ์ใบสรุปกะ`
+  - Z-Report done: `✅ ตกลง` to `ตกลง`
+  - Close Shift submit: `🔒 ปิดกะ` to `ปิดกะ`
+- PASS: Click handlers, disabled props, loading labels, button classes/variants, and modal open/close/focus/submit logic are unchanged.
 
 ## Preservation Review
 
-- PASS: `POSPage.tsx` has no UI-05 diff, so UI-04 category sync, update detection, refresh behavior, scanner paths, Ctrl+F, F12, UOM modal, Payment modal, ProductPicker, and numpad ownership are preserved at source level.
-- PASS: `POSPage.keyboard-contract.test.ts` has no UI-05 diff; the focused keyboard contract suite remains green at 145 tests.
-- PASS: `.pos-cat-bar` UI-04 horizontal scroll CSS remains intact.
-- PASS: UI-03 refresh glow remains intact.
-- PASS: Option 2 was not introduced.
+- PASS: `POSPage.tsx`, `POSPage.css`, and `POSPage.keyboard-contract.test.ts` have no diff.
+- PASS: Scanner logic, Ctrl+F, F12, UOM, Payment, numpad, category sync, refresh glow, focus recovery, and UI-05 macro layout are preserved at source level.
+- PASS: Functional nav/category/product/grid icons are untouched.
+- PASS: Select Customer is untouched.
 
 ## Scope Verification
 
-App code changed only in:
+App files changed:
 
-- `src/pages/POSPage.css`
+- `src/components/pos/ShiftModals.tsx`
+- `src/components/pos/CashTransactionModal.tsx`
 
 Workflow/report docs changed as expected:
 
 - `docs/agent-workflow/CURRENT_PACKET.md`
 - `docs/agent-workflow/NEXT_ACTION.md`
 - `docs/agent-workflow/STATE.md`
-- `docs/reports/latest-agy-review.md`
 - `docs/reports/latest-developer-report.md`
+- `docs/reports/latest-agy-review.md`
 - `docs/reports/latest-codex-review.md`
 
 Forbidden areas verified untouched:
 
+- `src/components/pos/ShiftModals.css`
+- `src/components/pos/CashTransactionModal.css`
 - `src/pages/POSPage.tsx`
+- `src/pages/POSPage.css`
 - `src/pages/POSPage.keyboard-contract.test.ts`
 - `src/hooks/pos/useCart.ts`
 - `src/hooks/pos/useCart.contract.test.ts`
@@ -64,46 +87,49 @@ Forbidden areas verified untouched:
 
 | Check | Result |
 |---|---|
-| `git status --short` | UI-05 CSS file plus workflow/report docs modified |
-| `git diff --name-only` | Expected UI-05 file set |
-| `git diff --stat` | 6 files changed before this report update |
-| `git diff --check` | PASS |
+| `git status --short` | Two modal TSX files plus workflow/report docs modified |
+| `git diff --name-only` | Expected emergency UI-06 file set |
+| `git diff --stat` | 8 files changed before this report update |
+| `git diff --check` | FAIL: trailing whitespace in `docs/reports/latest-agy-review.md:10` |
 | `git diff --cached --name-only` | Empty; no staging |
 | `npx.cmd tsc -b` | PASS |
 | `npx.cmd vitest run src/pages/POSPage.keyboard-contract.test.ts` | PASS, 145 tests |
 | `npx.cmd vitest run` | PASS, 31 files / 712 tests |
 | `git stash list` | `stash@{0}` present and untouched |
-| `git rev-parse --short HEAD` | `b04f303`; no UI-05 commit performed |
+| `git rev-parse --short HEAD` | `521961f`; no commit performed |
 
 Git emitted non-blocking warnings about inaccessible global ignore config and LF-to-CRLF conversion notices.
 
 ## Hidden Risk / Note
 
-The CSS-only approach means this review can confirm selectors and contract preservation, but final judgment on whether the flush white cart plus gray product zone feels like the intended unified surface remains visual and physical-UAT driven. AGY has already passed that visual gate.
+The prior UI-06 header-icon purge is superseded and must not be committed. The current net app diff correctly reflects the emergency direction: restored header icons plus text-only action buttons.
 
 ## Required Fixes
 
-None.
+1. Remove trailing whitespace from `docs/reports/latest-agy-review.md` line 10.
+2. Re-run `git diff --check`.
+
+No app code changes are required based on this review.
 
 ## Next Owner
 
-Principal Engineer Reviewer / Workflow Coordinator
+Developer Agent
 
 ## Next Action
 
-Proceed to Tech Lead / CEO closure decision for UI-05. Do not stage or commit until exact commands are authorized.
+Perform whitespace-only cleanup in `docs/reports/latest-agy-review.md`, rerun `git diff --check`, then return to Codex for a narrow package-hygiene re-check.
 
 ---
 
 STATE CARD
-Phase: 7C-UI-05-MACRO-LAYOUT-PERFECTION
+Phase: 7C-UI-06-FIX-ICON-RESTORE-AND-BUTTON-PURGE
 Current owner: Codex Reviewer
-Verdict: PASS
-Files changed: src/pages/POSPage.css; docs/agent-workflow/STATE.md; docs/agent-workflow/CURRENT_PACKET.md; docs/agent-workflow/NEXT_ACTION.md; docs/reports/latest-developer-report.md; docs/reports/latest-agy-review.md; docs/reports/latest-codex-review.md
-Tests/checks: git status --short reviewed; git diff --name-only reviewed; git diff --stat reviewed; git diff --check PASS; git diff --cached --name-only empty; npx.cmd tsc -b PASS; POSPage.keyboard-contract 145 passed; full vitest 712 passed; stash@{0} present; HEAD b04f303
+Verdict: FAIL
+Files changed: src/components/pos/ShiftModals.tsx; src/components/pos/CashTransactionModal.tsx; docs/agent-workflow/STATE.md; docs/agent-workflow/CURRENT_PACKET.md; docs/agent-workflow/NEXT_ACTION.md; docs/reports/latest-developer-report.md; docs/reports/latest-agy-review.md; docs/reports/latest-codex-review.md
+Tests/checks: git status --short reviewed; git diff --name-only reviewed; git diff --stat reviewed; git diff --check FAIL due trailing whitespace in docs/reports/latest-agy-review.md:10; git diff --cached --name-only empty; npx.cmd tsc -b PASS; POSPage.keyboard-contract 145 passed; full vitest 712 passed; stash@{0} present; HEAD 521961f
 Staged: None
-Committed: None for UI-05
-Required fixes: None
-Next owner: Principal Engineer Reviewer / Workflow Coordinator
-Next action: Proceed to Tech Lead / CEO closure decision; no staging or commit until exact commands are authorized
-Stop condition: No staging; no commit; do not start UI-06
+Committed: None
+Required fixes: Remove trailing whitespace in docs/reports/latest-agy-review.md line 10 and rerun git diff --check
+Next owner: Developer Agent
+Next action: Whitespace-only cleanup, then return to Codex for narrow re-check
+Stop condition: No staging; no commit; do not start UI-07

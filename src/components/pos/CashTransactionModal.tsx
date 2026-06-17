@@ -144,7 +144,7 @@ export default function CashTransactionModal({
             disabled={submitting}
             onClick={() => void handleSubmit()}
           >
-            {submitting ? 'กำลังบันทึก...' : '✅ บันทึก'}
+            {submitting ? 'กำลังบันทึก...' : 'บันทึก'}
           </button>
         </div>
       </div>

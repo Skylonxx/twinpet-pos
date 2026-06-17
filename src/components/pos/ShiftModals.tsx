@@ -86,7 +86,7 @@ export function OpenShiftModal({
             disabled={submitting}
             onClick={() => void handleOpen()}
           >
-            {submitting ? 'กำลังเปิดกะ...' : '✅ เปิดกะ'}
+            {submitting ? 'กำลังเปิดกะ...' : 'เปิดกะ'}
           </button>
         </div>
       </div>
@@ -226,10 +226,10 @@ function ZReportView({
 
       <div className="shift-modal-actions">
         <button type="button" className="shift-modal-btn shift-modal-btn--ghost" onClick={onPrint}>
-          🖨️ พิมพ์ใบสรุปกะ
+          พิมพ์ใบสรุปกะ
         </button>
         <button type="button" className="shift-modal-btn shift-modal-btn--primary" onClick={onDone}>
-          ✅ ตกลง
+          ตกลง
         </button>
       </div>
     </div>
@@ -355,7 +355,7 @@ export function CloseShiftModal({ shift, onClose, onSuccess }: CloseShiftModalPr
                 disabled={submitting}
                 onClick={() => void handleClose()}
               >
-                {submitting ? 'กำลังปิดกะ...' : '🔒 ปิดกะ'}
+                {submitting ? 'กำลังปิดกะ...' : 'ปิดกะ'}
               </button>
             </div>
           </>

@@ -2,33 +2,31 @@
 
 ## Phase
 
-**7C-UI-05-MACRO-LAYOUT-PERFECTION** — Seamless Split Macro Layout Perfection (Option 1 trial)
+**7C-UI-06-FIX-ICON-RESTORE-AND-BUTTON-PURGE** — Restore Modal Header Icons and Purge Decorative Button Icons (emergency patch)
 
 ## Goal
 
-Implement **Option 1: The Seamless Split** to remove the remaining visual tension between the Product Grid and the Cart Panel — by unifying the main surface, removing the awkward gray gap, flattening competing inner shadows, and using one clean 1px vertical divider. Preserve UI-04 category sync + horizontal scroll and UI-03/UI-04 focus recovery; do NOT touch the Select Customer button. **AGY visual review is required before Codex.**
+Restore Modal Header Icons for contextual communication while removing decorative icons inside buttons so buttons become minimal, clean, and text-centered. **This emergency patch supersedes the prior UI-06 closure/commit path** (the old header-icon-purge package must NOT be committed). **AGY visual review is required before Codex.**
 
-## CEO Physical UAT Issue Summary
+## CEO Emergency Directive
 
-After UI-04, the CEO identified remaining visual tension caused by: (1) the narrow gray gap between the Product Grid and the Cart Panel, and (2) competing shadows between the left product area and the right cart panel — the panels still read as two cards floating on gray rather than one designed surface. **Decision: trial Option 1 (The Seamless Split).** If Option 1 fails CEO Physical UAT, the team may later pivot to Option 2, but **Option 2 is NOT authorized in this phase.**
+Prior UI-06 removed modal header icons; Codex passed app-level review, but before commit the CEO changed direction after Physical UAT. New decision: **(A) restore modal header icons** (clipboard on Z-Report, swap on Cash In/Out, lock on Close Shift, and any similar removed glyph) — they aid contextual communication; **(B) remove decorative icons inside buttons** (e.g. ✅ on บันทึก / ตกลง / เปิดกะ, 🔒 on ปิดกะ, 🖨️ on print) so button labels are text only.
 
-## Implementation Directives (Seamless Split — A / B / C / D)
+## Implementation Directives (A / B / C)
 
-**A — Remove the Gap.** Remove/neutralize the gray background gap between the left and right panels — not by random margins; the spacing must feel intentional.
+**A — Restore Modal Header Icons.** Restore all modal header icons to the prior working visual design (don't over-style, don't redesign the header).
 
-**B — Unify the Background.** The main content area should feel like a single unified surface — Product Grid and Cart as two zones inside one designed system, not two unrelated cards floating on gray.
+**B — Purge Decorative Button Icons.** Remove decorative symbols/icons inside buttons; leave button labels as text only — minimal, clean, intentional, premium.
 
-**C — Flatten the Inner Edge.** Remove the cart's floating drop-shadow (or at minimum the shadow casting into the left grid); prevent shadow overlap / muddy edge between the sections. The cart can keep premium presence, but the inner seam must be clean.
+**C — Alignment After Button Icon Removal.** Button text stays centered; clean proportions; no awkward left gap / missing-icon spacing / lopsided padding / broken flex; buttons still look clickable and balanced.
 
-**D — Add a Subtle Divider.** One clean 1px vertical divider exactly between grid and cart (`border-l border-gray-200` or CSS equivalent). Subtle, straight, premium — no double borders, no heavy contrast, no clutter.
+## Strict Protection Rules
 
-## Strict Non-Goals
-
-Do not touch Select Customer button styling; do not alter category-sync behavior except to preserve UI-04; do not alter focus-recovery behavior except to preserve UI-03/UI-04; do not redesign the POS shell broadly; **do not introduce Option 2.**
+Do NOT touch functional icons in Navigation, Category Tabs, Product Cards, Product Grid, or Main Navigation. Do NOT alter the Select Customer button, UI-05 macro layout, category sync, or focus recovery. Preserve button click handlers, disabled/loading states, variants, and keyboard behavior. No broad redesign.
 
 ## AGY Review Requirement (MANDATORY before Codex)
 
-AGY must verify: the Seamless Split looks distinctly premium; the gray gap is removed/visually neutralized; Product Grid + Cart feel like one unified architectural surface; the cart inner edge no longer casts messy shadow into the grid; one subtle 1px vertical divider separates the zones without noise; category horizontal scroll (UI-04) remains intact; focus recovery (UI-03/UI-04) remains intact; and no broad redesign or cheap visual effect was introduced.
+AGY must verify: header icons are restored and aid contextual communication (not noisy); button decorative icons are removed; button labels remain centered; buttons look minimal/clean/premium with no awkward empty spacing; the modals feel more usable/balanced than the prior icon-purged-header version; nav / category-tab / product-card / product-grid functional icons are untouched; and there is no focus / modal / scanner / keyboard / checkout regression and no broad redesign.
 
 ## Status
 
@@ -38,11 +36,11 @@ AGY must verify: the Seamless Split looks distinctly premium; the gray gap is re
 
 ## Scope
 
-### Authorized implementation files
+### Authorized implementation files (app)
 
-- `src/pages/POSPage.css`
-- `src/pages/POSPage.tsx` — only if a className wrapper/divider hook is genuinely needed (it was NOT — CSS-only)
-- `src/pages/POSPage.keyboard-contract.test.ts` — only if a stable class/hook assertion is required
+- `src/components/pos/ShiftModals.tsx` + `ShiftModals.css` (Open/Close-Shift + Z-Report headers & buttons)
+- `src/components/pos/CashTransactionModal.tsx` + `CashTransactionModal.css` (Cash In/Out header & buttons)
+- Only the four prior-UI-06 modal component files / related modal CSS — do NOT broaden. (`POSPage.tsx/.css` NOT touched — these modals do not live there. No button-alignment CSS change was needed.)
 
 ### Authorized workflow / report files
 
@@ -53,20 +51,18 @@ AGY must verify: the Seamless Split looks distinctly premium; the gray gap is re
 
 ### Forbidden Files / Areas
 
-- **Select Customer button styling / dashed border** (acceptable as-is — do NOT touch)
-- `useCart.ts` (default forbidden), `useCart.contract.test.ts`, `cartUtils.ts`, cart math
+- **Functional icons** in Navigation, Category Tabs, Product Cards, Product Grid, Main Navigation — do NOT touch
+- **Select Customer button styling / dashed border** — do NOT touch
+- `useCart.ts`, `useCart.contract.test.ts`, `cartUtils.ts`, cart math
 - Checkout / payment business logic, stock matrix, seed data
-- Toast files (unless directly proven necessary for update detection — default: do not touch)
-- Firebase / functions / rules
-- Android / Capacitor artifacts
-- `.claude/`
-- No new scripts, no new dependencies
-- No UI-06+ work; do not break UI-03/UI-04 focus recovery, category sync, or horizontal scroll
-- **Option 2 is NOT authorized** — implement Option 1 (Seamless Split) only
+- Toast files; Firebase / functions / rules; Android / Capacitor; `.claude/`
+- Modal open/close, focus-trap, submit/cancel/disabled/loading behavior; button click handlers
+- UI-05 macro layout; category sync; focus recovery
+- No new scripts, no new dependencies; no UI-07 work; do not commit the old UI-06 header-purge package
 
 ### Preservation note
 
-UI-04 (category sync + horizontal scroll) and UI-03/UI-04 focus recovery must remain intact. The Seamless Split is CSS-only on `.pos-cart`, so the category listener (`usePosSyncSignal`), `visibleCategories` render-merge, `.pos-cat-bar` scroll, and every focus-recovery handler are untouched.
+Header icons were RESTORED to the prior working design (the 4 modal files were reverted to HEAD, so the headers are byte-identical to the committed UI-05 baseline). Only decorative button emoji were removed (✅ / 🔒 / 🖨️ → text). Button handlers, disabled/loading states, variants, and keyboard behavior are unchanged. The category listener, `visibleCategories`, `.pos-cat-bar` scroll, focus-recovery handlers, the Seamless Split (`.pos-cart`), and all functional icons remain untouched.
 
 ---
 

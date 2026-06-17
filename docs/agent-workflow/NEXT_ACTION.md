@@ -2,14 +2,14 @@
 
 ## Current State
 
-UI-04 was committed (authorized) at `b04f303 feat(pos): sync categories and refine cashier macro layout`. Developer Agent then completed the **7C-UI-05-MACRO-LAYOUT-PERFECTION** implementation (Option 1: The Seamless Split) on a clean tree: `.pos-cart` is now a flush, full-height right-hand zone with no gray gap, no drop-shadow, no rounded card border — just one clean 1px `border-left` divider between the grid and the cart. **CSS-only.** UI-05 changes are **not staged and not committed**. Because this phase is visual macro-layout polish, **AGY review is REQUIRED before Codex** — the work routes to **Senior QA & UX Lead / AGY first**.
+**Emergency patch** `7C-UI-06-FIX-ICON-RESTORE-AND-BUTTON-PURGE` — Developer Agent has (A) restored the modal header icons (Cash In/Out swap, Close-Shift padlock, Z-Report clipboard, Open-Shift clock — by reverting the 4 modal files to the UI-05 HEAD) and (B) removed the decorative button icons (✅ on บันทึก / เปิดกะ / ตกลง, 🔒 on ปิดกะ, 🖨️ on print) so button labels are text-only and centered. This **supersedes** the prior UI-06 header-purge package (which must NOT be committed). Changes are **not staged and not committed**. **AGY review is REQUIRED before Codex** — route to **Senior QA & UX Lead / AGY first**.
 
 ## What Happens Next
 
 1. **Human operator** reads the Developer report at `docs/reports/latest-developer-report.md`.
-2. **Human operator** sends **AGY** the current packet (`docs/agent-workflow/CURRENT_PACKET.md`), the Developer report, and the **current diff** for visual/UX validation of the Seamless Split.
-3. **AGY** validates premium feel, removed gap, clean inner edge, the single divider, unified surface, and no regression.
-4. If **AGY FAIL** → return to Developer / Principal Engineer Reviewer for remediation (Option 2 still NOT authorized).
+2. **Human operator** sends **AGY** the current packet (`docs/agent-workflow/CURRENT_PACKET.md`), the Developer report, and the **current diff** for visual/UX validation.
+3. **AGY** validates restored header icons + text-only buttons + preserved functional icons.
+4. If **AGY FAIL** → return to Developer / Principal Engineer Reviewer for remediation.
 5. If **AGY PASS / PASS WITH NOTES** → route to **Codex Reviewer** for code/scope/keyboard review.
 6. After Codex PASS → Principal Engineer Reviewer / Tech Lead for closure memo + exact staging/commit commands.
 
@@ -29,35 +29,38 @@ MODEL: Gemini / best available UX review model for this run
 REASONING: High
 ROLE: Senior QA & UX Lead
 ROLE FILE: docs/ai-roles/ux-lead.md
-MODE: Visual UX validation, Seamless Split macro layout review, Impeccable Style review, no app edits, no staging, no commit
+MODE: Visual UX validation, emergency modal header/button icon review, no app edits, no staging, no commit
 
-PHASE: 7C-UI-05-MACRO-LAYOUT-PERFECTION
+PHASE: 7C-UI-06-FIX-ICON-RESTORE-AND-BUTTON-PURGE
 SCOPE: visual / UX validation (before Codex)
 
 Inputs:
-- docs/agent-workflow/CURRENT_PACKET.md (active packet — Seamless Split directive)
+- docs/agent-workflow/CURRENT_PACKET.md (active packet)
 - docs/reports/latest-developer-report.md (developer report)
 - the current working-tree diff (git diff)
 
 AGY review MUST verify:
-- The Seamless Split feels premium and intentional.
-- The gray gap no longer creates visual tension (it is removed/neutralized).
-- The inner cart edge no longer has messy shadow overlap into the grid.
-- One clean 1px divider separates grid and cart (subtle, straight, no double border).
-- Product/Grid and Cart feel architecturally unified (two zones in one designed system).
-- Category horizontal scroll (UI-04) remains clean.
-- Focus recovery behavior (UI-03/UI-04) is not visually or functionally regressed.
-- The Select Customer button styling was NOT touched.
-- No broad redesign / no cheap visual effect.
+- Modal Header Icons are restored and help contextual communication.
+- Header icons do not feel noisy or decorative in a bad way.
+- Button decorative icons are removed.
+- Button labels remain centered.
+- Buttons look minimal, clean, intentional, and premium.
+- No awkward empty spacing remains inside buttons.
+- Modal screens feel more usable and balanced than the prior icon-purged-header version.
+- Navigation icons are untouched.
+- Category Tab icons are untouched.
+- Product Card / Product Grid functional icons are untouched.
+- No focus, modal behavior, scanner, keyboard, or checkout regression is visible.
+- No broad redesign was introduced.
 
-Note: the change is CSS-only on `.pos-cart` (removed margin/shadow/radius/4-side border;
-added `border-left: 1px solid var(--g200)`), so it is best judged on screen. Option 2 is NOT
-in scope — review Option 1 (the Seamless Split) only.
+Note: the net app diff is only the button-emoji removals — the header icons were restored by
+reverting the 4 modal files to the UI-05 HEAD, so the headers are byte-identical to the prior
+working design. Button handlers / disabled / loading states are unchanged.
 
 Produce verdict in docs/reports/latest-agy-review.md.
 
 Do not stage or commit.
-Do not start UI-06.
+Do not start UI-07.
 Do not route to Codex yourself — return the verdict to the human operator.
 ```
 
@@ -71,16 +74,19 @@ ROLE: Reviewer Agent
 ROLE FILE: docs/ai-roles/reviewer.md
 MODE: Review only, no edits, no staging, no commit
 
-PHASE: 7C-UI-05-MACRO-LAYOUT-PERFECTION
+PHASE: 7C-UI-06-FIX-ICON-RESTORE-AND-BUTTON-PURGE
 SCOPE: code / scope / keyboard-contract review
 
 Verify:
-- `.pos-cart` Seamless Split: no margin/shadow/radius/4-side border; single `border-left`
-  divider; full-height flush zone; no competing border on the product area (no double seam).
-- CSS-only — no TSX change; UI-04 category sync + `.pos-cat-bar` horizontal scroll intact;
-  UI-03/UI-04 focus recovery + glow intact; Select Customer dashed border untouched.
-- Only `src/pages/POSPage.css` changed (+ workflow/report docs); no cart math / useCart.ts /
-  cartUtils.ts / checkout / stock / Toast / Firebase change.
+- Header icons restored (ShiftModals: clock/report/lock; CashTransactionModal: swap) — the modal
+  files match the UI-05 HEAD for the headers (no net diff there).
+- Net app diff = ONLY decorative button-emoji removals (✅ บันทึก/เปิดกะ/ตกลง, 🔒 ปิดกะ, 🖨️ print →
+  text-only); button text stays centered (no icon slot, inline emoji removed).
+- Button click handlers, disabled/loading states, variants, keyboard behavior unchanged; modal
+  open/close/focus unchanged.
+- Only the 2 modal TSX files changed (+ workflow/report docs); CSS files match HEAD; no cart math /
+  useCart.ts / cartUtils.ts / checkout / stock / Toast / Firebase / POSPage change; functional
+  nav/category/product icons untouched.
 - tsc clean; POSPage.keyboard-contract.test.ts (145) + full vitest (712) green.
 
 Produce verdict in docs/reports/latest-codex-review.md.
@@ -95,10 +101,10 @@ After AGY PASS → Codex PASS, paste both verdicts to the Principal Engineer Rev
 ## Important Reminders
 
 - **AGY first** (ROLE FILE: `docs/ai-roles/ux-lead.md`) — do NOT send to Codex until AGY returns PASS / PASS WITH NOTES.
-- **Option 2 is NOT authorized** — Option 1 (Seamless Split) only.
-- Do **not** touch the Select Customer button / dashed border.
-- Do **not** stage or commit UI-05 until Tech Lead / CEO authorizes exact commands.
-- Do **not** start UI-06; do **not** break UI-03/UI-04 focus recovery, category sync, or scroll.
+- **Do NOT commit the old UI-06 header-purge package** — it is superseded by this patch.
+- Do **not** touch functional icons (nav / category tabs / product cards / product grid) or the Select Customer button.
+- Do **not** stage or commit until Tech Lead / CEO authorizes exact commands.
+- Do **not** start UI-07.
 - `stash@{0}` is pre-existing unrelated WIP — do not touch.
 - Old manual workflow remains available as fallback.
 
