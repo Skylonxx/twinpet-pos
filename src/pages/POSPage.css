@@ -348,6 +348,13 @@
   display: none;
 }
 
+/* UI-03: wrapper that keeps the trigger sized like a pill in the cat-bar flex row and owns the
+   outside-click ref. The dropdown itself is `position: fixed`, so it does not affect this box. */
+.pos-cat-trigger-wrap {
+  flex-shrink: 0;
+  display: flex;
+}
+
 .pos-cat-trigger-btn {
   width: 120px;
   height: 48px;
@@ -368,6 +375,13 @@
   text-align: center;
   max-height: 48px;
   overflow: hidden;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+/* Active (dropdown open) — a calm on-brand tint so the trigger reads as the open anchor. */
+.pos-cat-trigger-btn.on {
+  background: var(--p50, #eeedfe);
+  border-color: var(--p600, #534ab7);
 }
 
 .pos-cat-pill {
@@ -631,88 +645,82 @@
 }
 
 /* Category selection modal */
-.pos-category-overlay {
+/* UI-03 category DROPDOWN (replaced the full-screen `.pos-category-*` modal overlay). A clean,
+   minimal Flowbite-style popover anchored under the trigger — soft border, 10px radius, subtle
+   shadow, inline search header, and a scrollable item list. No dimmed backdrop, no modal chrome. */
+.pos-cat-dd {
   position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.45);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 800;
-  padding: 16px;
-}
-
-.pos-category-modal {
-  background: white;
-  border-radius: 14px;
-  width: 640px;
-  max-width: calc(100vw - 32px);
-  max-height: 75vh;
+  z-index: 700;
+  width: 280px;
+  max-width: calc(100vw - 24px);
+  max-height: 60vh;
   display: flex;
   flex-direction: column;
+  background: white;
+  border: 1px solid var(--g200, #d3d1c7);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(38, 33, 92, 0.12), 0 2px 6px rgba(0, 0, 0, 0.06);
   overflow: hidden;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.22);
 }
 
-.pos-category-modal-hd {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 18px;
-  border-bottom: 0.5px solid var(--g200, #d3d1c7);
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--p900, #26215c);
+.pos-cat-dd-search {
+  padding: 8px;
+  border-bottom: 1px solid var(--g100, #f1efe8);
   flex-shrink: 0;
 }
 
-.pos-category-close {
-  padding: 6px 14px;
-  border-radius: 6px;
-  border: 0.5px solid var(--g200, #d3d1c7);
+.pos-cat-dd-search input {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--g200, #d3d1c7);
+  border-radius: 8px;
   background: var(--g50, #f8f8fc);
-  color: var(--g600, #5f5e5a);
-  font-size: 13px;
+  font-size: 12px;
   font-family: inherit;
-  cursor: pointer;
+  outline: none;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.pos-category-close:hover {
-  background: white;
-  border-color: var(--p200, #afa9ec);
+.pos-cat-dd-search input:focus {
+  background: #fff;
+  border-color: var(--p400, #7f77dd);
+  box-shadow: 0 0 0 3px rgba(83, 74, 183, 0.12);
 }
 
-.pos-category-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
-  padding: 16px;
+.pos-cat-dd-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
   overflow-y: auto;
 }
 
-.pos-category-cell {
-  padding: 14px 10px;
-  border-radius: 8px;
-  border: 0.5px solid var(--g200, #d3d1c7);
-  background: var(--g50, #f8f8fc);
+.pos-cat-dd-item {
+  display: block;
+  width: 100%;
+  padding: 9px 10px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
   color: var(--p900, #26215c);
   font-size: 13px;
   font-family: inherit;
-  text-align: center;
+  text-align: left;
   cursor: pointer;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  transition: background 0.12s ease, color 0.12s ease;
 }
 
-.pos-category-cell:hover {
-  border-color: var(--p400, #7f77dd);
+.pos-cat-dd-item:hover {
+  background: var(--p50, #eeedfe);
 }
 
-.pos-category-cell.active {
+.pos-cat-dd-item.active {
   background: var(--p600, #534ab7);
   color: white;
-  border-color: transparent;
 }
 
 .pos-cust-icon {

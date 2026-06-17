@@ -2,117 +2,119 @@
 
 ## Phase
 
-**7C-UI-06-FIX-ICON-RESTORE-AND-BUTTON-PURGE** — Restore Modal Header Icons and Purge Decorative Button Icons (emergency patch)
+**7C-UI-03-CATEGORY-DROPDOWN** — Categories & Quick Menu Dropdown Conversion (Master Plan item 3)
 
 ## 1. Summary
 
-Emergency patch that **supersedes** the prior UI-06 header-icon purge (which was NOT committed). Per the CEO's revised direction: **(A)** the modal header icons were **restored** (they aid contextual communication), and **(B)** the decorative icons **inside buttons** were **removed** so button labels are minimal, clean, text-only and centered. Implementation was done by reverting the four prior-UI-06 modal files to the UI-05 HEAD (restoring the exact prior header design), then removing the button emoji — so the **net app diff vs HEAD is only the button-emoji removals**. All functional icons (nav, category tabs, product cards/grid, close ×, payment state, alert/offline) are preserved; modal/button behavior is unchanged. **AGY visual review required before Codex.**
+Realigned with the 9-point Phase 7C UI Master Plan: created `docs/agent-workflow/UI_MASTER_PLAN.md` as the source of truth, set the workflow to UI-03, and converted the category selection experience from a **full-screen modal overlay** to a clean, minimalist **anchored dropdown** under the "ค้นหาหมวดหมู่ ▾" button. The modal is fully removed; the dropdown preserves the inline category search and all existing category filtering/sync behavior, closes on selection / outside-click / Escape, and refocuses the scan box. CSS + state are scoped to POSPage; no cart/checkout/stock/icon changes. **AGY visual review required before Codex.**
 
 ## 2. Preflight Status and HEAD Confirmation
 
-- `git status --short` showed only the uncommitted prior-UI-06 package (4 modal files + workflow/report docs) — acceptable; this patch supersedes it. **No unrelated dirty files.**
-- HEAD: `521961f style(pos): refine seamless split cart layout` (UI-05).
-- `stash@{0}` present and untouched.
-- The old UI-06 header-purge package was NOT committed.
+- `git status --short` before start: **clean** ✅
+- `git log --oneline -5` top: `d13a9a1 style(pos): restore modal header icons and simplify buttons` ✅
+- `stash@{0}` present and untouched ✅
+- Did not start UI-03 on top of uncommitted work.
 
-## 3. Files Changed
+## 3. UI_MASTER_PLAN.md Creation Confirmation
+
+Created **`docs/agent-workflow/UI_MASTER_PLAN.md`** with the exact 9-point Phase 7C plan (UI-01 DONE, UI-02 DONE, UI-03 CURRENT, UI-04 PENDING, UI-05 DONE, UI-06–09 PENDING) and the Rules block (align future work; no skip/rename/broaden without Tech Lead/CEO; AGY before Codex for UI; no work beyond the current item). ✅
+
+## 4. Files Changed
 
 | File | Action | Description |
 |---|---|---|
-| `src/components/pos/ShiftModals.tsx` | Modified | Header icons restored (= HEAD); button emoji removed: `✅ เปิดกะ`→`เปิดกะ`, `🖨️ พิมพ์ใบสรุปกะ`→`พิมพ์ใบสรุปกะ`, `✅ ตกลง`→`ตกลง`, `🔒 ปิดกะ`→`ปิดกะ`. |
-| `src/components/pos/CashTransactionModal.tsx` | Modified | Header icon restored (= HEAD); button emoji removed: `✅ บันทึก`→`บันทึก`. |
-| `src/components/pos/ShiftModals.css` | Restored to HEAD | `.shift-modal-icon` rule + original `.shift-zreport-title` margin back (header icons need them). No net diff vs HEAD. |
-| `src/components/pos/CashTransactionModal.css` | Restored to HEAD | `.cash-tx-modal-icon` rule back. No net diff vs HEAD. |
+| `docs/agent-workflow/UI_MASTER_PLAN.md` | **NEW** | Phase 7C source of truth (9-point plan + rules). |
+| `src/pages/POSPage.tsx` | Modified | Removed the category modal overlay; added anchored dropdown (state/handlers renamed modal→dropdown; new `openCatDropdown` measured anchor + outside-click effect); Escape + blocking-modal wiring updated. |
+| `src/pages/POSPage.css` | Modified | Removed `.pos-category-overlay/modal/modal-hd/close/grid/cell`; added `.pos-cat-trigger-wrap` + `.pos-cat-dd*` dropdown rules + trigger `.on` state. |
+| `src/pages/POSPage.keyboard-contract.test.ts` | Modified | Category-picker tests updated (modal→dropdown names/classes/markers) + a "modal overlay fully removed" assertion. |
+| `docs/agent-workflow/STATE.md`, `CURRENT_PACKET.md`, `NEXT_ACTION.md`, `docs/reports/latest-developer-report.md` | Modified | Workflow + report. |
 
-`POSPage.tsx` / `POSPage.css` / tests / `useCart.ts` / `cartUtils.ts` / checkout / stock / Toast / Firebase / Android / `.claude/` — untouched. No button-alignment CSS change was needed.
+`useCart.ts` / `cartUtils.ts` / checkout / stock / Toast / Firebase / Android / `.claude/` and all cart-row/summary/action/checkout UI — untouched.
 
-## 4. CURRENT_PACKET.md Update Confirmation
+## 5. CURRENT_PACKET.md Update Confirmation
 
-`docs/agent-workflow/CURRENT_PACKET.md` updated to `7C-UI-06-FIX-ICON-RESTORE-AND-BUTTON-PURGE` with the emergency context (supersedes prior UI-06; do not commit old package), directives A (restore headers) / B (purge button icons) / C (alignment), strict protection rules (functional nav/category/product icons + Select Customer + behavior preserved), the AGY-before-Codex requirement, role sequence, and role files. ✅
+`docs/agent-workflow/CURRENT_PACKET.md` updated to `7C-UI-03-CATEGORY-DROPDOWN` with: the master-plan reference, the goal (modal→dropdown), directives A (destroy modal) / B (implement dropdown) / C (style), strict non-goals (reserved UI-06..09, no overlay reintroduction, functional icons + Select Customer untouched), the AGY-before-Codex requirement, role sequence, and role files. ✅
 
-## 5. Modal Header Icons Restored
+## 6. Category Modal Removal Summary
 
-| Modal header | Restored icon |
-|---|---|
-| Cash In / Cash Out (`นำเงินเข้า / นำเงินออก`) | `ti ti-arrows-exchange` (swap) |
-| Close Shift (`ปิดกะขาย`) | `ti ti-lock` (padlock) |
-| Z-Report (`ปิดกะสำเร็จ — Z-Report`) | `ti ti-report-analytics` (clipboard/report) |
-| Open Shift (`เปิดกะขาย`) | `ti ti-clock-play` (clock) |
+The `{catModalOpen && (<div className="pos-category-overlay" role="dialog" aria-modal="true">…)}` block (centered modal with dimmed backdrop, header, search, and a 4-col `.pos-category-grid` of cells) was deleted from the JSX, and its CSS (`.pos-category-overlay/modal/modal-hd/close/grid/cell`) removed. The page no longer renders any category overlay. (`grep` confirms the only remaining mentions are the test's negative assertions.)
 
-All four `.shift-modal-icon` / `.cash-tx-modal-icon` badges and their CSS rules are restored to the prior working design (byte-identical to HEAD; verified by `grep`). No over-styling, no header redesign.
+## 7. Dropdown Implementation Summary
 
-## 6. Button Icons Removed
+- **State:** `catModalOpen`→`catDropdownOpen`; new `catDropdownPos {top,left}` + `catTriggerRef` + `catDropdownWrapRef`. `catSearch` preserved.
+- **Anchor:** `openCatDropdown()` measures the trigger via `getBoundingClientRect()` and sets a fixed anchor (`top: bottom+4, left`). The dropdown is `position: fixed`, so the `.pos-cat-bar` `overflow-x: auto` (which clips vertically) does **not** clip it.
+- **Trigger:** the "ค้นหาหมวดหมู่ ▾" button toggles open/close (`catDropdownOpen ? closeCatDropdown() : openCatDropdown()`), with `aria-haspopup="listbox"` / `aria-expanded`, and an `.on` tint while open.
+- **Selection:** items call `selectCategoryFromDropdown(id)` → `selectCategory(id)` (clears `activeQuickMenuId`, sets category, refocuses) → `closeCatDropdown()` (closes + refocuses). The UI-10-B "route through selectCategory" contract is preserved.
+- **Dismissal:** outside-click (`document` mousedown vs the wrap ref) closes it; Escape closes it via the central `closeTopModalOnEscape` (slot 10, now `catDropdownOpen`→`closeCatDropdown`); it stays in `hasBlockingModalOpen` so F12 doesn't stack PaymentModal over an open dropdown.
 
-| Button | Before | After |
-|---|---|---|
-| Cash In/Out — Save | `✅ บันทึก` | `บันทึก` |
-| Open Shift — submit | `✅ เปิดกะ` | `เปิดกะ` |
-| Z-Report — print | `🖨️ พิมพ์ใบสรุปกะ` | `พิมพ์ใบสรุปกะ` |
-| Z-Report — done | `✅ ตกลง` | `ตกลง` |
-| Close Shift — submit | `🔒 ปิดกะ` | `ปิดกะ` |
+## 8. Inline Search Behavior
 
-Only the decorative leading emoji (+ its space) was removed; the label text is unchanged. The loading labels (`กำลังบันทึก...` / `กำลังเปิดกะ...` / `กำลังปิดกะ...`) carried no icon and are unchanged. `grep` confirms no decorative button emoji (✅/🔒/🖨️/📦) remain in these two modals.
+The dropdown keeps the inline search input (`catSearch`): it filters `visibleCategories` by name (case-insensitive `includes`), and the ⭐ best-sellers item shows only when the search is empty — identical to the prior modal's search semantics. The input `autoFocus`es on open for fast keyboard filtering; `openCatDropdown` resets `catSearch` to empty each open.
 
-## 7. Button Alignment / Centering Confirmation
+## 9. Style / Impeccable Notes
 
-`.shift-modal-btn` and `.cash-tx-btn` are simple buttons (`flex: 1; padding: 11px 16px;` no `display:flex`, no `text-align` override) → default centered button text. The removed emoji were **inline text prefixes** (e.g. `✅ บันทึก`), not separate flex children or icon slots, so removing them simply shortens the centered text. No left gap, no lopsided padding, no broken flex, no CSS change required. Buttons remain centered, balanced, and clickable.
+`.pos-cat-dd` is a 280px fixed popover: white background, `1px var(--g200)` border, `10px` radius, soft layered shadow (`0 8px 24px rgba(38,33,92,.12)` + a faint ambient), `max-height: 60vh` with a scrollable list. The header holds the search (g50 input with an on-brand focus ring); items are left-aligned ghost rows with a calm `var(--p50)` hover and a `var(--p600)` active state. No dimmed backdrop, no modal chrome — minimal, premium, on-brand.
 
-## 8. Functional Icons Preserved Confirmation
+## 10. Preservation Notes
 
-Untouched (carry navigation / recognition / action meaning):
-- **Navigation / top bar** icons (search, +เลือกสินค้า, sort, refresh, sync) — POSPage, not touched.
-- **Category Tab** icons (⭐ / quick-menu / category glyphs) — not touched.
-- **Product Card / Product Grid** icons (image thumbs, in-cart badge) — not touched.
-- **Functional modal icons** kept: close **×** (`ti-x`), payment success/state (`ti-circle-check`/`ti-cloud-upload`), DestructiveConfirm alert/offline glyphs, loader/ban button icons.
-- **Restored** modal **header** icons (swap / lock / report / clock) as above.
+- **Cart items** — untouched (reserved UI-06).
+- **Cart summary** — untouched (reserved UI-07).
+- **Action buttons** — untouched (reserved UI-08).
+- **Checkout / F12** — untouched (reserved UI-09); F12 still suppressed while the dropdown is open (predicate updated to `catDropdownOpen`).
+- **Category / product / main-navigation functional icons** — untouched (⭐ pill, quick-menu glyphs, category pills, product cards, top-bar icons all unchanged).
+- **Category filtering / sync** — `visibleCategories`, `usePosSyncSignal`, the catalog-wide refresh, and `.pos-cat-bar` horizontal scroll are unchanged.
 
-## 9. Tests / Checks Run
+## 11. Tests / Checks Run
 
 | Check | Result |
 |---|---|
-| `git status --short` | the 2 modal TSX files (+ workflow/report docs); CSS files match HEAD |
-| `git diff --name-only -- src/` | `CashTransactionModal.tsx`, `ShiftModals.tsx` |
-| `git diff --stat -- src/` | `CashTransactionModal.tsx | 2`, `ShiftModals.tsx | 8` (5 insertions, 5 deletions) |
+| `git status --short` | POSPage.tsx/.css/test + new UI_MASTER_PLAN.md + workflow/report docs |
+| `git diff --name-only` | the 3 app files (+ docs) |
+| `git diff --stat` | `POSPage.tsx | 188`, `POSPage.keyboard-contract.test.ts | 92`, `POSPage.css | 110` |
 | `git diff --check` | clean |
 | `npx.cmd tsc -b` | PASS |
-| `npx.cmd vitest run src/pages/POSPage.keyboard-contract.test.ts` | **145 passed** (unchanged) |
+| `npx.cmd vitest run src/pages/POSPage.keyboard-contract.test.ts` | **145 passed** |
 | `npx.cmd vitest run` | **712 passed (31 files)** |
 
-No new tests added (decorative restore/remove; no behavioral surface). Modal open/close/focus/submit and button handlers unchanged.
+### Test updates
+The category-picker contract tests were migrated from modal→dropdown: the blocking-modal predicate (`catModalOpen`→`catDropdownOpen`), the Escape order/closer set (`closeCatModal`→`closeCatDropdown`), the "All tab removed" + "offers ⭐ / routes through shared helper" + UI-10-B parity tests (`pos-category-grid`→`pos-cat-dd-list`, `selectCategoryFromOverlay`→`selectCategoryFromDropdown`), and the focus-return test now asserts the dropdown close-helper **and** that `pos-category-overlay`/`pos-category-modal` are fully removed. Intent preserved; no contract weakened.
 
-## 10. Boundary Confirmation
+## 12. Markdown Hygiene Confirmation
 
-- [x] Emergency packet supersedes prior UI-06 closure path; old UI-06 package NOT committed
-- [x] Modal header icons restored (= HEAD); decorative button icons removed; button text centered
-- [x] Button handlers / disabled / loading states / variants / keyboard behavior unchanged
-- [x] Navigation, Category Tab, Product Card/Grid functional icons preserved; Select Customer untouched
-- [x] No modal behavior / focus recovery / category sync / macro layout / cart math change
-- [x] `useCart.ts` / `useCart.contract.test.ts` / `cartUtils.ts` / checkout / stock / seed / Toast / Firebase / Android / `.claude/` untouched
-- [x] No scripts; no new dependencies; no UI-07 work
+Trailing whitespace stripped from touched Markdown. **Note:** the suggested PowerShell `Get-Content`/`Set-Content -Encoding utf8` cleanup (PS 5.1) corrupted the UTF-8 Thai/em-dash characters in the 4 tracked report/workflow docs; this was detected immediately and the files were **rewritten via the editor (clean UTF-8)** to restore the Thai text. The authored content carries no trailing whitespace, so `git diff --check` → **clean** without re-running the lossy PowerShell step.
+
+## 13. Boundary Confirmation
+
+- [x] UI_MASTER_PLAN.md created; STATE.md phase = 7C-UI-03-CATEGORY-DROPDOWN; CURRENT_PACKET reflects master plan + UI-03; AGY required before Codex
+- [x] Category modal overlay removed; dropdown implemented below the trigger; category selection + sync preserved
+- [x] Cart item rows / summary / action buttons / checkout / F12 untouched; category/product/main-nav functional icons preserved; Select Customer untouched
+- [x] No cart math change; `useCart.ts` / `useCart.contract.test.ts` / `cartUtils.ts` / checkout / stock / seed / Toast / Firebase / Android / `.claude/` untouched
+- [x] No scripts; no new dependencies; no UI-04/06/07/08/09 work; no modal overlay reintroduced
 - [x] No staging, no commit; `stash@{0}` untouched (only `git stash list` used)
 
-## 11. Hidden Risks / Notes
+## 14. Hidden Risks / Notes
 
-- **Header restore = byte-identical to HEAD** (achieved via `git checkout HEAD -- <4 modal files>` then button edits), so there is zero risk the restored headers differ from the prior working design; the only app diff is the 5 button-emoji removals.
-- **🖨️ print button included in the purge:** the directive's examples are ✅/🔒, but the goal is uniformly text-only buttons; the printer emoji is decorative (the label already says "พิมพ์"). It is not a protected functional icon (not nav/category/product). Flagged for AGY in case they want the print affordance kept.
-- **Prior UI-06 review files** (`latest-agy-review.md`, `latest-codex-review.md`) remain in the tree from the superseded cycle; they were not edited by this patch (not in scope) and reflect the old direction.
-- No DOM/runtime assertion for the visual change — relies on AGY + the unchanged behavioral suite (145 / 712 green).
+- **Fixed-position anchor measured on open:** if the window is resized while the dropdown is open the anchor could drift; the dropdown is transient (closes on outside-click / Escape / select) and the POS layout is fixed-height (no page scroll), so this is low-risk. A resize/scroll-close listener is an easy follow-up if AGY wants it.
+- **Dead CSS:** `.pos-picker-search` (formerly used only by the removed category modal) is now unused; left in place to keep the change narrow (harmless). Flagged for optional cleanup.
+- **`catBar()` test region now includes the dropdown JSX** (it lives inside `.pos-cat-bar`); the ordering assertions still hold because the dropdown uses `selectCategoryFromDropdown` / `visibleCategories.filter(...).map` (distinct from the pill bar's `selectCategory` / `visibleCategories.map`).
+- **Markdown encoding:** the lossy PS 5.1 hygiene one-liner should not be used on files containing Thai/UTF-8; editor-based writes are safe. (Documented above; files restored.)
+- **CSS-driven visual** — the premium feel is a visual judgment for AGY (node tests can't assert pixels/shadows).
 
-## 12. Next Owner and Next Action
+## 15. Next Owner and Next Action
 
-**Next owner: Senior QA & UX Lead / AGY** (ROLE FILE: `docs/ai-roles/ux-lead.md`). Human operator sends AGY the current packet, this report, and the current `git diff`. **Codex only after AGY PASS / PASS WITH NOTES.** Do not stage or commit. Do not commit the old UI-06 package. Do not start UI-07.
+**Next owner: Senior QA & UX Lead / AGY** (ROLE FILE: `docs/ai-roles/ux-lead.md`). Human operator sends AGY the master plan, current packet, this report, and the current `git diff` for visual validation of the dropdown. **Codex only after AGY PASS / PASS WITH NOTES.** Do not stage or commit. Do not start UI-04 or any later master-plan item.
 
 ---
 
 STATE CARD
-Phase: 7C-UI-06-FIX-ICON-RESTORE-AND-BUTTON-PURGE
+Phase: 7C-UI-03-CATEGORY-DROPDOWN
 Current owner: Developer (complete) → Senior QA & UX Lead / AGY
 Verdict: In Progress — Developer implementation complete, awaiting AGY visual/UX review (before Codex)
-Files changed: src/components/pos/ShiftModals.tsx; src/components/pos/CashTransactionModal.tsx (CSS files restored to HEAD, no net diff); docs/agent-workflow/STATE.md; docs/agent-workflow/CURRENT_PACKET.md; docs/agent-workflow/NEXT_ACTION.md; docs/reports/latest-developer-report.md
+Files changed: docs/agent-workflow/UI_MASTER_PLAN.md (new); src/pages/POSPage.tsx; src/pages/POSPage.css; src/pages/POSPage.keyboard-contract.test.ts; docs/agent-workflow/STATE.md; docs/agent-workflow/CURRENT_PACKET.md; docs/agent-workflow/NEXT_ACTION.md; docs/reports/latest-developer-report.md
 Tests/checks: git diff --check clean; tsc -b PASS; POSPage.keyboard-contract 145 passed; full vitest 712 passed
 Staged: None
 Committed: None
 Required fixes: None
 Next owner: Senior QA & UX Lead / AGY (ROLE FILE: docs/ai-roles/ux-lead.md)
-Next action: Human operator sends AGY the current packet + this report + current diff for emergency header-restore/button-purge validation; Codex only after AGY PASS / PASS WITH NOTES
-Stop condition: No staging, no commit (incl. NOT committing the old UI-06 package), no Codex until AGY passes, no UI-07; functional icons + Select Customer untouched; stash@{0} untouched; wait for AGY visual validation
+Next action: Human operator sends AGY the master plan + packet + this report + current diff for category-dropdown visual validation; Codex only after AGY PASS / PASS WITH NOTES
+Stop condition: No staging, no commit, no Codex until AGY passes, no UI-04/06/07/08/09; no modal overlay reintroduced; functional icons + Select Customer untouched; stash@{0} untouched; wait for AGY visual validation

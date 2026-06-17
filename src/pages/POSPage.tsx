@@ -138,7 +138,14 @@ export default function POSPage() {
   const [holdNoteOpen, setHoldNoteOpen] = useState(false);
   const [suspendedListOpen, setSuspendedListOpen] = useState(false);
   const [showCashTx, setShowCashTx] = useState(false);
-  const [catModalOpen, setCatModalOpen] = useState(false);
+  // UI-03 (master plan): category selection is an anchored DROPDOWN (the full-screen modal
+  // overlay was removed). `catDropdownOpen` toggles the dropdown; `catDropdownPos` is the
+  // fixed-position anchor measured from the trigger button on open (the dropdown is
+  // `position: fixed` so the `.pos-cat-bar` horizontal-scroll overflow never clips it).
+  const [catDropdownOpen, setCatDropdownOpen] = useState(false);
+  const [catDropdownPos, setCatDropdownPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+  const catTriggerRef = useRef<HTMLButtonElement>(null);
+  const catDropdownWrapRef = useRef<HTMLDivElement>(null);
   const [catSearch, setCatSearch] = useState('');
   const [isSortingModalOpen, setIsSortingModalOpen] = useState(false);
   // Bill-discount numpad (Phase 7C-D4-D Fix 2): drives the custom on-screen numpad opened by
@@ -544,25 +551,48 @@ export default function POSPage() {
 
   const discountLine = discountLineKey ? cart.cart[discountLineKey] ?? null : null;
 
-  // Focus-return consistency (Phase 7C-D4-C-2): every category-overlay close route funnels
+  // Focus-return consistency (Phase 7C-D4-C-2): every category-dropdown close route funnels
   // through here so focus returns to the scan box. Category filtering (setActiveCategory)
   // stays at the call sites and is unchanged.
-  const closeCatModal = useCallback(() => {
-    setCatModalOpen(false);
+  const closeCatDropdown = useCallback(() => {
+    setCatDropdownOpen(false);
     focusSearch();
   }, [focusSearch]);
 
-  // UI-10-B revision: overlay category cells must use the SAME semantic path as the
-  // pill bar (`selectCategory` clears `activeQuickMenuId`), then close the overlay.
-  // Selecting directly via `setActiveCategory` let a previously-active Quick Menu
-  // survive, so the grid stayed filtered by the old Quick Menu after an overlay pick.
-  const selectCategoryFromOverlay = useCallback(
+  // UI-03: open the category dropdown anchored under the "ค้นหาหมวดหมู่ ▾" trigger. The anchor
+  // is measured from the trigger's bounding box (the dropdown is `position: fixed`, so it escapes
+  // the cat-bar's horizontal-scroll overflow clip). Clears any prior inline search on open.
+  const openCatDropdown = useCallback(() => {
+    const rect = catTriggerRef.current?.getBoundingClientRect();
+    if (rect) setCatDropdownPos({ top: Math.round(rect.bottom + 4), left: Math.round(rect.left) });
+    setCatSearch('');
+    setCatDropdownOpen(true);
+  }, []);
+
+  // UI-10-B revision (preserved): dropdown category items use the SAME semantic path as the
+  // pill bar (`selectCategory` clears `activeQuickMenuId`), then close the dropdown.
+  // Selecting directly via `setActiveCategory` let a previously-active Quick Menu survive,
+  // so the grid stayed filtered by the old Quick Menu after a pick.
+  const selectCategoryFromDropdown = useCallback(
     (catId: string) => {
       selectCategory(catId);
-      closeCatModal();
+      closeCatDropdown();
     },
-    [selectCategory, closeCatModal],
+    [selectCategory, closeCatDropdown],
   );
+
+  // UI-03: outside-click dismissal — while the dropdown is open, a mousedown outside its wrapper
+  // (trigger + panel) closes it. Escape is handled by the central close-top-modal helper below.
+  useEffect(() => {
+    if (!catDropdownOpen) return;
+    const onDocMouseDown = (e: MouseEvent) => {
+      if (catDropdownWrapRef.current && !catDropdownWrapRef.current.contains(e.target as Node)) {
+        closeCatDropdown();
+      }
+    };
+    document.addEventListener('mousedown', onDocMouseDown);
+    return () => document.removeEventListener('mousedown', onDocMouseDown);
+  }, [catDropdownOpen, closeCatDropdown]);
 
   const onProductClick = useCallback(
     // `skipFocus` (7C-UI-02-HOTFIX-FOCUS): the Select-picker batch passes this true when the
@@ -748,7 +778,7 @@ export default function POSPage() {
       holdNoteOpen ||
       suspendedListOpen ||
       showCashTx ||
-      catModalOpen ||
+      catDropdownOpen ||
       isSortingModalOpen ||
       confirmModalState.open ||
       checkout.customerModalOpen,
@@ -818,9 +848,9 @@ export default function POSPage() {
       focusSearch();
       return true;
     }
-    // 10. Category overlay (existing close helper already returns focus)
-    if (catModalOpen) {
-      closeCatModal();
+    // 10. Category dropdown (existing close helper already returns focus)
+    if (catDropdownOpen) {
+      closeCatDropdown();
       return true;
     }
     // 11. Sorting settings
@@ -846,11 +876,11 @@ export default function POSPage() {
     discNumpadOpen,
     holdNoteOpen,
     suspendedListOpen,
-    catModalOpen,
+    catDropdownOpen,
     isSortingModalOpen,
     pickerOpen,
     focusSearch,
-    closeCatModal,
+    closeCatDropdown,
   ]);
 
   useEffect(() => {
@@ -998,16 +1028,65 @@ export default function POSPage() {
       <div className="pos-content-row">
         <div className="pos-product-area">
           <div className="pos-cat-bar">
-            <button
-              type="button"
-              className="pos-cat-trigger-btn"
-              onClick={() => {
-                setCatSearch('');
-                setCatModalOpen(true);
-              }}
-            >
-              ค้นหาหมวดหมู่ ▾
-            </button>
+            <div className="pos-cat-trigger-wrap" ref={catDropdownWrapRef}>
+              <button
+                type="button"
+                ref={catTriggerRef}
+                className={`pos-cat-trigger-btn${catDropdownOpen ? ' on' : ''}`}
+                aria-haspopup="listbox"
+                aria-expanded={catDropdownOpen}
+                onClick={() => (catDropdownOpen ? closeCatDropdown() : openCatDropdown())}
+              >
+                ค้นหาหมวดหมู่ ▾
+              </button>
+              {/* UI-03: anchored category DROPDOWN (replaced the full-screen modal overlay). It is
+                  `position: fixed` (CSS) at the measured trigger anchor, so the cat-bar's
+                  horizontal-scroll overflow never clips it. Inline search preserves the prior
+                  category-search behaviour; selecting routes through selectCategoryFromDropdown
+                  (clears Quick Menu via selectCategory) and closes the dropdown. */}
+              {catDropdownOpen && (
+                <div
+                  className="pos-cat-dd"
+                  role="listbox"
+                  aria-label="เลือกหมวดหมู่"
+                  style={{ top: catDropdownPos.top, left: catDropdownPos.left }}
+                >
+                  <div className="pos-cat-dd-search">
+                    <input
+                      placeholder="พิมพ์เพื่อค้นหาหมวดหมู่..."
+                      value={catSearch}
+                      onChange={(e) => setCatSearch(e.target.value)}
+                      autoFocus
+                    />
+                  </div>
+                  <div className="pos-cat-dd-list">
+                    {!catSearch.trim() && (
+                      <button
+                        type="button"
+                        className={`pos-cat-dd-item${activeCategory === BEST_SELLERS_KEY && !activeQuickMenuId ? ' active' : ''}`}
+                        onClick={() => selectCategoryFromDropdown(BEST_SELLERS_KEY)}
+                      >
+                        ⭐ สินค้าขายดี
+                      </button>
+                    )}
+                    {visibleCategories
+                      .filter((cat) =>
+                        cat.name.toLowerCase().includes(catSearch.trim().toLowerCase()),
+                      )
+                      .map((cat) => (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          className={`pos-cat-dd-item${activeCategory === cat.id && !activeQuickMenuId ? ' active' : ''}`}
+                          onClick={() => selectCategoryFromDropdown(cat.id)}
+                        >
+                          {cat.name}
+                        </button>
+                      ))}
+                  </div>
+                </div>
+              )}
+            </div>
             {/* Tab order is fixed: (1) ⭐ best-sellers default, (2) Quick Menus in their
                 admin `order`, (3) physical categories. The legacy All tab is removed
                 (UI-10) — best-sellers is now first/default. */}
@@ -1528,61 +1607,6 @@ export default function POSPage() {
         onRestore={handleRestoreBill}
         onRemove={handleCancelParkedOrderClick}
       />
-
-      {catModalOpen && (
-        <div
-          className="pos-category-overlay"
-          role="dialog"
-          aria-modal="true"
-          onClick={closeCatModal}
-        >
-          <div className="pos-category-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="pos-category-modal-hd">
-              <span>เลือกหมวดหมู่</span>
-              <button
-                type="button"
-                className="pos-category-close"
-                onClick={closeCatModal}
-              >
-                ปิด
-              </button>
-            </div>
-            <div className="pos-picker-search">
-              <input
-                placeholder="พิมพ์เพื่อค้นหาหมวดหมู่..."
-                value={catSearch}
-                onChange={(e) => setCatSearch(e.target.value)}
-                autoFocus
-              />
-            </div>
-            <div className="pos-category-grid">
-              {!catSearch.trim() && (
-                <button
-                  type="button"
-                  className={`pos-category-cell${activeCategory === BEST_SELLERS_KEY && !activeQuickMenuId ? ' active' : ''}`}
-                  onClick={() => selectCategoryFromOverlay(BEST_SELLERS_KEY)}
-                >
-                  ⭐ สินค้าขายดี
-                </button>
-              )}
-              {visibleCategories
-                .filter((cat) =>
-                  cat.name.toLowerCase().includes(catSearch.trim().toLowerCase()),
-                )
-                .map((cat) => (
-                  <button
-                    key={cat.id}
-                    type="button"
-                    className={`pos-category-cell${activeCategory === cat.id && !activeQuickMenuId ? ' active' : ''}`}
-                    onClick={() => selectCategoryFromOverlay(cat.id)}
-                  >
-                    {cat.name}
-                  </button>
-                ))}
-            </div>
-          </div>
-        </div>
-      )}
 
       <NumpadDialog
         open={qtyNumpadLineKey !== null}

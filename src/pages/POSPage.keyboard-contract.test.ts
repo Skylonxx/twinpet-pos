@@ -172,7 +172,7 @@ describe('7C-D4-A · F12 / checkout-disabled gate parity (POSPage.tsx)', () => {
       'holdNoteOpen',
       'suspendedListOpen',
       'showCashTx',
-      'catModalOpen',
+      'catDropdownOpen',
       'isSortingModalOpen',
       'confirmModalState.open',
       'checkout.customerModalOpen',
@@ -273,18 +273,20 @@ describe('7C-D4-A · Focus-return contract (POSPage.tsx)', () => {
     expect(disc).toMatch(/setDiscountLineKey\(null\);[\s\S]{0,40}focusSearch\(\)/);
   });
 
-  test('focus returns after the category overlay closes (D4-C-2 fix)', () => {
-    // D4-C-2 intentional fix: all category-overlay close routes (backdrop, close button,
-    // "all" reset, category select) go through closeCatModal, which clears the modal and
-    // returns focus. Category filtering (setActiveCategory) is unchanged.
-    const helper = region(posSource, 'const closeCatModal', '}, [focusSearch]);');
-    expect(helper).toContain('setCatModalOpen(false);');
+  test('focus returns after the category dropdown closes (UI-03)', () => {
+    // UI-03: the category modal overlay is gone — selection is an anchored dropdown. All close
+    // routes (Escape, outside-click, trigger toggle, category select) go through closeCatDropdown,
+    // which clears the dropdown and returns focus. Category filtering (setActiveCategory) is unchanged.
+    const helper = region(posSource, 'const closeCatDropdown', '}, [focusSearch]);');
+    expect(helper).toContain('setCatDropdownOpen(false);');
     expect(helper).toContain('focusSearch();');
-    const overlay = region(posSource, 'className="pos-category-overlay"', 'SortingSettingsModal');
-    expect(overlay).toContain('closeCatModal');
-    // The category cells still drive the filter; closing no longer leaves a bare
-    // setCatModalOpen(false) un-refocused inside the overlay.
-    expect(overlay).not.toContain('setCatModalOpen(false)');
+    // The dropdown's category items route through the shared close-helper (no bare un-refocused close).
+    const dd = region(posSource, 'className="pos-cat-dd"', 'pos-product-grid');
+    expect(dd).toContain('selectCategoryFromDropdown');
+    expect(dd).not.toContain('setCatDropdownOpen(false)');
+    // The old full-screen modal overlay is fully removed from the page.
+    expect(posSource).not.toContain('pos-category-overlay');
+    expect(posSource).not.toContain('pos-category-modal');
   });
 });
 
@@ -555,7 +557,7 @@ describe('7C-D4-C-4 · Escape close/cancel/dismiss contract (POSPage.tsx)', () =
       'setDiscNumpadOpen(false);', // Bill-discount numpad — cancel (D4-D)
       'setHoldNoteOpen(false);', // Hold-bill note — cancel
       'setSuspendedListOpen(false);', // Suspended list
-      'closeCatModal();', // Category overlay
+      'closeCatDropdown();', // Category dropdown
       'setIsSortingModalOpen(false);', // Sorting settings
       'setPickerOpen(false);', // Product picker
     ]) {
@@ -585,7 +587,7 @@ describe('7C-D4-C-4 · Escape close/cancel/dismiss contract (POSPage.tsx)', () =
       'setDiscNumpadOpen(false);',
       'setHoldNoteOpen(false);',
       'setSuspendedListOpen(false);',
-      'closeCatModal();',
+      'closeCatDropdown();',
       'setIsSortingModalOpen(false);',
       'setPickerOpen(false);',
     ];
@@ -1166,12 +1168,12 @@ describe('7C-UI-10-B · Best Seller system + All-tab removal (POSPage.tsx)', () 
     return region(posSource, 'const filteredProducts = useMemo', '}, [');
   }
 
-  test('the "ทั้งหมด" (All) tab is fully removed from POS — pill bar AND category overlay', () => {
-    // The legacy All label is gone from the runtime category tabs and the overlay grid
+  test('the "ทั้งหมด" (All) tab is fully removed from POS — pill bar AND category dropdown', () => {
+    // The legacy All label is gone from the runtime category tabs and the dropdown list
     // (the only remaining "ทั้งหมด" in the page is the unrelated clear-cart confirmation copy).
     expect(catBar()).not.toContain('ทั้งหมด');
-    const overlay = region(posSource, 'className="pos-category-grid"', '</button>');
-    expect(overlay).not.toContain('ทั้งหมด');
+    const dropdown = region(posSource, 'className="pos-cat-dd-list"', '</button>');
+    expect(dropdown).not.toContain('ทั้งหมด');
     // The legacy All sentinel handlers (`selectCategory('')` / `setActiveCategory('')`) are
     // gone everywhere, so All cannot reappear via either entry point.
     expect(posSource).not.toContain("selectCategory('')");
@@ -1198,13 +1200,13 @@ describe('7C-UI-10-B · Best Seller system + All-tab removal (POSPage.tsx)', () 
     expect(catBar()).toContain("activeCategory === BEST_SELLERS_KEY && !activeQuickMenuId ? ' on' : ''");
   });
 
-  test('the category overlay offers ⭐ สินค้าขายดี (not All) and routes through the shared helper', () => {
-    const overlay = region(posSource, 'className="pos-category-grid"', '</button>');
-    expect(overlay).toContain('⭐ สินค้าขายดี');
-    // Revision: overlay selection goes through selectCategoryFromOverlay (which clears the
-    // Quick Menu via selectCategory) — NOT a bare setActiveCategory that left the Quick Menu live.
-    expect(overlay).toContain('selectCategoryFromOverlay(BEST_SELLERS_KEY)');
-    expect(overlay).not.toContain('setActiveCategory(BEST_SELLERS_KEY)');
+  test('the category dropdown offers ⭐ สินค้าขายดี (not All) and routes through the shared helper', () => {
+    const dropdown = region(posSource, 'className="pos-cat-dd-list"', '</button>');
+    expect(dropdown).toContain('⭐ สินค้าขายดี');
+    // Dropdown selection goes through selectCategoryFromDropdown (which clears the Quick Menu via
+    // selectCategory) — NOT a bare setActiveCategory that left the Quick Menu live.
+    expect(dropdown).toContain('selectCategoryFromDropdown(BEST_SELLERS_KEY)');
+    expect(dropdown).not.toContain('setActiveCategory(BEST_SELLERS_KEY)');
   });
 
   test('the best-seller grid filters on the mapped PosProduct.isBestSeller === true', () => {
@@ -1326,39 +1328,39 @@ describe('7C-UI-10-B · Best Seller data pipeline (Option A)', () => {
   });
 });
 
-// ─── L. Overlay category-selection parity (Phase 7C-UI-10-B Revision) ──────────────────
-// Codex NEEDS REVISION: overlay category buttons called `setActiveCategory(...)` directly +
-// `closeCatModal()`, bypassing `selectCategory(...)` which clears `activeQuickMenuId`. So a
-// previously-active Quick Menu survived an overlay category pick and the grid stayed filtered
-// by the old Quick Menu. Fix: both the pill bar AND the overlay must clear the Quick Menu.
-describe('7C-UI-10-B Revision · Overlay category selection clears the Quick Menu (POSPage.tsx)', () => {
+// ─── L. Category-selection parity (Phase 7C-UI-10-B Revision, preserved through UI-03) ──────
+// The category picker buttons must route through `selectCategory(...)` (which clears
+// `activeQuickMenuId`), not a bare `setActiveCategory(...)`, so a previously-active Quick Menu
+// never survives a category pick. UI-03 converted the picker from a modal overlay to a dropdown;
+// the shared-wrapper contract is unchanged (now `selectCategoryFromDropdown`).
+describe('7C-UI-10-B Revision · Category selection clears the Quick Menu (POSPage.tsx)', () => {
   test('selectCategory (the shared path) clears activeQuickMenuId then sets the category', () => {
     const fn = region(posSource, 'const selectCategory = useCallback', '}, [focusSearch]);');
     expect(fn).toContain('setActiveQuickMenuId(null);');
     expect(fn).toContain('setActiveCategory(catId);');
   });
 
-  test('an overlay wrapper routes overlay picks through selectCategory AND closes the overlay', () => {
+  test('a dropdown wrapper routes category picks through selectCategory AND closes the dropdown', () => {
     // Single source of truth: the wrapper delegates to selectCategory (clears Quick Menu) and
-    // then closes the modal — no duplicated state logic in the buttons.
-    const fn = region(posSource, 'const selectCategoryFromOverlay = useCallback', '[selectCategory, closeCatModal]');
+    // then closes the dropdown — no duplicated state logic in the buttons.
+    const fn = region(posSource, 'const selectCategoryFromDropdown = useCallback', '[selectCategory, closeCatDropdown]');
     expect(fn).toContain('selectCategory(catId);');
-    expect(fn).toContain('closeCatModal();');
+    expect(fn).toContain('closeCatDropdown();');
   });
 
-  test('BOTH overlay cells (Best Seller + physical category) go through the shared wrapper', () => {
-    const overlay = region(posSource, 'className="pos-category-grid"', '<NumpadDialog');
-    // Best-seller cell and category-map cell both call the wrapper...
-    expect(overlay).toContain('selectCategoryFromOverlay(BEST_SELLERS_KEY)');
-    expect(overlay).toContain('selectCategoryFromOverlay(cat.id)');
+  test('BOTH dropdown items (Best Seller + physical category) go through the shared wrapper', () => {
+    const dropdown = region(posSource, 'className="pos-cat-dd-list"', 'pos-cat-pill');
+    // Best-seller item and category-map item both call the wrapper...
+    expect(dropdown).toContain('selectCategoryFromDropdown(BEST_SELLERS_KEY)');
+    expect(dropdown).toContain('selectCategoryFromDropdown(cat.id)');
     // ...and neither flips activeCategory directly anymore (the bug path is gone).
-    expect(overlay).not.toContain('setActiveCategory(');
+    expect(dropdown).not.toContain('setActiveCategory(');
   });
 
-  test('overlay category selection cannot leave a Quick Menu active (no bare setActiveCategory + close)', () => {
-    // The exact bug shape — a direct setActiveCategory paired with closeCatModal in a button — is gone.
-    const overlay = region(posSource, 'className="pos-category-grid"', '<NumpadDialog');
-    expect(overlay).not.toMatch(/setActiveCategory\([^)]*\);\s*closeCatModal\(\);/);
+  test('category selection cannot leave a Quick Menu active (no bare setActiveCategory + close)', () => {
+    // The exact bug shape — a direct setActiveCategory paired with closeCatDropdown in a button — is gone.
+    const dropdown = region(posSource, 'className="pos-cat-dd-list"', 'pos-cat-pill');
+    expect(dropdown).not.toMatch(/setActiveCategory\([^)]*\);\s*closeCatDropdown\(\);/);
   });
 
   test('pill-bar category + best-seller selection still use selectCategory (unchanged)', () => {

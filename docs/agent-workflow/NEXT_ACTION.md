@@ -2,13 +2,13 @@
 
 ## Current State
 
-**Emergency patch** `7C-UI-06-FIX-ICON-RESTORE-AND-BUTTON-PURGE` — Developer Agent has (A) restored the modal header icons (Cash In/Out swap, Close-Shift padlock, Z-Report clipboard, Open-Shift clock — by reverting the 4 modal files to the UI-05 HEAD) and (B) removed the decorative button icons (✅ on บันทึก / เปิดกะ / ตกลง, 🔒 on ปิดกะ, 🖨️ on print) so button labels are text-only and centered. This **supersedes** the prior UI-06 header-purge package (which must NOT be committed). Changes are **not staged and not committed**. **AGY review is REQUIRED before Codex** — route to **Senior QA & UX Lead / AGY first**.
+Developer Agent has (Part 1) created the Phase 7C source of truth `docs/agent-workflow/UI_MASTER_PLAN.md`, and (Part 3) completed **7C-UI-03-CATEGORY-DROPDOWN**: the full-screen category **modal overlay was removed** and replaced with a clean anchored **dropdown** under the "ค้นหาหมวดหมู่ ▾" trigger (inline search preserved; selection routes through the shared `selectCategory` and closes the dropdown; outside-click + Escape dismiss; scan-box refocus on close). Changes are **not staged and not committed**. Because this is a UI-facing change, **AGY review is REQUIRED before Codex** — route to **Senior QA & UX Lead / AGY first**.
 
 ## What Happens Next
 
-1. **Human operator** reads the Developer report at `docs/reports/latest-developer-report.md`.
-2. **Human operator** sends **AGY** the current packet (`docs/agent-workflow/CURRENT_PACKET.md`), the Developer report, and the **current diff** for visual/UX validation.
-3. **AGY** validates restored header icons + text-only buttons + preserved functional icons.
+1. **Human operator** reads the Developer report at `docs/reports/latest-developer-report.md` (and the master plan `UI_MASTER_PLAN.md`).
+2. **Human operator** sends **AGY** the current packet (`docs/agent-workflow/CURRENT_PACKET.md`), the Developer report, and the **current diff** for visual/UX validation of the dropdown.
+3. **AGY** validates the dropdown (no modal remains, premium/minimal, usable, functional icons preserved, no regression).
 4. If **AGY FAIL** → return to Developer / Principal Engineer Reviewer for remediation.
 5. If **AGY PASS / PASS WITH NOTES** → route to **Codex Reviewer** for code/scope/keyboard review.
 6. After Codex PASS → Principal Engineer Reviewer / Tech Lead for closure memo + exact staging/commit commands.
@@ -29,38 +29,36 @@ MODEL: Gemini / best available UX review model for this run
 REASONING: High
 ROLE: Senior QA & UX Lead
 ROLE FILE: docs/ai-roles/ux-lead.md
-MODE: Visual UX validation, emergency modal header/button icon review, no app edits, no staging, no commit
+MODE: Visual UX validation, category dropdown review, Impeccable Style review, no app edits, no staging, no commit
 
-PHASE: 7C-UI-06-FIX-ICON-RESTORE-AND-BUTTON-PURGE
+PHASE: 7C-UI-03-CATEGORY-DROPDOWN
 SCOPE: visual / UX validation (before Codex)
 
 Inputs:
+- docs/agent-workflow/UI_MASTER_PLAN.md (Phase 7C source of truth)
 - docs/agent-workflow/CURRENT_PACKET.md (active packet)
 - docs/reports/latest-developer-report.md (developer report)
 - the current working-tree diff (git diff)
 
 AGY review MUST verify:
-- Modal Header Icons are restored and help contextual communication.
-- Header icons do not feel noisy or decorative in a bad way.
-- Button decorative icons are removed.
-- Button labels remain centered.
-- Buttons look minimal, clean, intentional, and premium.
-- No awkward empty spacing remains inside buttons.
-- Modal screens feel more usable and balanced than the prior icon-purged-header version.
-- Navigation icons are untouched.
-- Category Tab icons are untouched.
-- Product Card / Product Grid functional icons are untouched.
-- No focus, modal behavior, scanner, keyboard, or checkout regression is visible.
-- No broad redesign was introduced.
+- Category modal overlay is gone.
+- Category dropdown appears directly below the "ค้นหาหมวดหมู่ ▾" trigger button.
+- Dropdown is clean, minimalist, and premium.
+- Dropdown list is usable with many categories (scrolls, doesn't obstruct the cart).
+- Inline search, if present, is compact and useful.
+- Category / product / main-navigation functional icons are preserved.
+- Cart items, summary, action buttons, checkout/F12 are untouched.
+- Scanner / focus behavior does not feel regressed.
+- No broad redesign or scope creep.
 
-Note: the net app diff is only the button-emoji removals — the header icons were restored by
-reverting the 4 modal files to the UI-05 HEAD, so the headers are byte-identical to the prior
-working design. Button handlers / disabled / loading states are unchanged.
+Note: the dropdown is `position: fixed`, anchored to the trigger's measured box (so the cat-bar's
+horizontal-scroll overflow never clips it); outside-click + Escape close it; selection refocuses
+the scan box. Category filtering/sync from prior phases is unchanged.
 
 Produce verdict in docs/reports/latest-agy-review.md.
 
 Do not stage or commit.
-Do not start UI-07.
+Do not start UI-04 (or any later master-plan item).
 Do not route to Codex yourself — return the verdict to the human operator.
 ```
 
@@ -74,19 +72,21 @@ ROLE: Reviewer Agent
 ROLE FILE: docs/ai-roles/reviewer.md
 MODE: Review only, no edits, no staging, no commit
 
-PHASE: 7C-UI-06-FIX-ICON-RESTORE-AND-BUTTON-PURGE
+PHASE: 7C-UI-03-CATEGORY-DROPDOWN
 SCOPE: code / scope / keyboard-contract review
 
 Verify:
-- Header icons restored (ShiftModals: clock/report/lock; CashTransactionModal: swap) — the modal
-  files match the UI-05 HEAD for the headers (no net diff there).
-- Net app diff = ONLY decorative button-emoji removals (✅ บันทึก/เปิดกะ/ตกลง, 🔒 ปิดกะ, 🖨️ print →
-  text-only); button text stays centered (no icon slot, inline emoji removed).
-- Button click handlers, disabled/loading states, variants, keyboard behavior unchanged; modal
-  open/close/focus unchanged.
-- Only the 2 modal TSX files changed (+ workflow/report docs); CSS files match HEAD; no cart math /
-  useCart.ts / cartUtils.ts / checkout / stock / Toast / Firebase / POSPage change; functional
-  nav/category/product icons untouched.
+- The full-screen category modal overlay (`.pos-category-overlay/modal/grid/cell`) is fully
+  removed; replaced by an anchored `.pos-cat-dd` dropdown (fixed-position, measured anchor,
+  inline search, scrollable list).
+- Selection routes through selectCategoryFromDropdown → selectCategory (clears Quick Menu) →
+  closeCatDropdown (refocus); Escape + outside-click dismiss; F12/blocking-modal + Escape wiring
+  updated (catModalOpen→catDropdownOpen, closeCatModal→closeCatDropdown).
+- Category filtering/sync, `.pos-cat-bar` horizontal scroll, and focus recovery preserved; cart
+  rows/summary/action buttons/checkout/F12 untouched; functional icons untouched.
+- Only POSPage.tsx / POSPage.css / POSPage.keyboard-contract.test.ts changed (+ workflow/report
+  docs + new UI_MASTER_PLAN.md); no cart math / useCart.ts / cartUtils.ts / checkout / stock /
+  Toast / Firebase change.
 - tsc clean; POSPage.keyboard-contract.test.ts (145) + full vitest (712) green.
 
 Produce verdict in docs/reports/latest-codex-review.md.
@@ -101,10 +101,9 @@ After AGY PASS → Codex PASS, paste both verdicts to the Principal Engineer Rev
 ## Important Reminders
 
 - **AGY first** (ROLE FILE: `docs/ai-roles/ux-lead.md`) — do NOT send to Codex until AGY returns PASS / PASS WITH NOTES.
-- **Do NOT commit the old UI-06 header-purge package** — it is superseded by this patch.
-- Do **not** touch functional icons (nav / category tabs / product cards / product grid) or the Select Customer button.
+- **`UI_MASTER_PLAN.md` is the Phase 7C source of truth** — no work beyond UI-03 is authorized.
+- Do **not** reintroduce a category modal overlay; do **not** touch cart rows/summary/action buttons/checkout/F12 or functional icons / Select Customer button.
 - Do **not** stage or commit until Tech Lead / CEO authorizes exact commands.
-- Do **not** start UI-07.
 - `stash@{0}` is pre-existing unrelated WIP — do not touch.
 - Old manual workflow remains available as fallback.
 

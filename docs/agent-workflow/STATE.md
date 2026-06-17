@@ -5,9 +5,13 @@ Updated by whichever agent or human currently owns the task.
 
 ---
 
+## Master Plan
+
+**`docs/agent-workflow/UI_MASTER_PLAN.md`** is now the explicit Phase 7C POS UI source of truth (9-point plan). UI-03 = Categories & Quick Menu = CURRENT.
+
 ## Current Phase
 
-**7C-UI-06-FIX-ICON-RESTORE-AND-BUTTON-PURGE** — emergency patch: restore modal header icons, purge decorative button icons.
+**7C-UI-03-CATEGORY-DROPDOWN** — convert the category selection from a full-screen modal overlay to an anchored dropdown.
 
 ## Current Owner
 
@@ -19,32 +23,24 @@ Updated by whichever agent or human currently owns the task.
 
 ---
 
-## Emergency context
-
-This patch **supersedes** the prior UI-06 (`7C-UI-06-ICON-PURGE`) closure/commit path. The prior UI-06 work (which removed modal header icons) was reviewed at app level by Codex but, before commit, the CEO changed the visual direction after Physical UAT. **The old UI-06 package is NOT committed.** New direction: header icons RESTORED (contextual communication); decorative BUTTON icons REMOVED (minimal clean buttons).
-
 ## Preflight
 
-- Working tree contained only the uncommitted UI-06 package (4 modal files + workflow/report docs) — acceptable, this patch supersedes it. No unrelated dirty files.
-- HEAD: `521961f style(pos): refine seamless split cart layout` (UI-05).
+- Working tree was **clean** before start.
+- HEAD at start: `d13a9a1 style(pos): restore modal header icons and simplify buttons`.
 - `stash@{0}` present and untouched.
 
 ## Scope
 
 ### Files changed (app)
 
-- `src/components/pos/ShiftModals.tsx` — header icons restored (= HEAD); button emoji removed (✅ เปิดกะ → เปิดกะ, 🖨️ พิมพ์ใบสรุปกะ → พิมพ์ใบสรุปกะ, ✅ ตกลง → ตกลง, 🔒 ปิดกะ → ปิดกะ).
-- `src/components/pos/CashTransactionModal.tsx` — header icon restored (= HEAD); button emoji removed (✅ บันทึก → บันทึก).
-- `ShiftModals.css` / `CashTransactionModal.css` — restored to HEAD (header-icon rules back); **no net change vs HEAD** (not in the app diff).
+- `src/pages/POSPage.tsx` — category modal overlay removed; anchored dropdown (state rename `catModalOpen`→`catDropdownOpen`, `closeCatModal`→`closeCatDropdown`, `selectCategoryFromOverlay`→`selectCategoryFromDropdown`; new `openCatDropdown` + measured fixed-anchor + outside-click effect); Escape/blocking-modal wiring updated.
+- `src/pages/POSPage.css` — removed `.pos-category-overlay/modal/grid/cell` modal rules; added `.pos-cat-trigger-wrap`, `.pos-cat-dd*` dropdown rules + trigger `.on` state.
+- `src/pages/POSPage.keyboard-contract.test.ts` — updated category-picker tests (modal→dropdown names/classes) + added a "modal overlay fully removed" assertion.
 
-### How it was done
+### Files created / updated (workflow + report)
 
-The 4 modal files were first reverted to HEAD (`git checkout HEAD -- …`) to restore the prior working header design exactly, then the decorative button emoji were removed. **Net app diff vs HEAD = only the 5 button-emoji removals**; the restored header icons are identical to HEAD so they carry no diff.
-
-### Workflow / report files
-
-- `docs/agent-workflow/STATE.md`, `CURRENT_PACKET.md`, `NEXT_ACTION.md`, `docs/reports/latest-developer-report.md` (this patch).
-- `latest-agy-review.md` / `latest-codex-review.md` remain from the prior UI-06 cycle (superseded; not edited by this patch).
+- **NEW** `docs/agent-workflow/UI_MASTER_PLAN.md`
+- `docs/agent-workflow/STATE.md`, `CURRENT_PACKET.md`, `NEXT_ACTION.md`, `docs/reports/latest-developer-report.md`
 
 No staging. No commit.
 
@@ -52,7 +48,7 @@ No staging. No commit.
 
 - `git diff --check` — clean
 - `npx.cmd tsc -b` — PASS
-- `npx.cmd vitest run src/pages/POSPage.keyboard-contract.test.ts` — **145 passed** (unchanged)
+- `npx.cmd vitest run src/pages/POSPage.keyboard-contract.test.ts` — **145 passed**
 - `npx.cmd vitest run` — **712 passed (31 files)**
 
 ### Staging / Commit status
@@ -61,15 +57,19 @@ Nothing staged. Nothing committed. No authorization yet.
 
 ---
 
-## Pipeline Status
+## Pipeline Status (per UI_MASTER_PLAN.md)
 
 | Item | Status |
 |---|---|
-| UI-01 … UI-05 | Closed / committed (latest `521961f`) |
-| UI-06 Icon Purge (header) | **Superseded** — not committed (CEO changed direction) |
-| UI-06 FIX (restore headers + button purge) | **In Progress** — Developer done, **awaiting AGY visual review** |
-| UI-07+ | **Unauthorized** — do not start |
-| Old manual workflow | Available as fallback at any time |
+| UI-01 Main POS Layout | DONE |
+| UI-02 Search & Scanner Input | DONE |
+| UI-03 Categories & Quick Menu | **CURRENT** — Developer done (dropdown), awaiting AGY |
+| UI-04 Product Grid Cards | PENDING |
+| UI-05 Cart Container | DONE |
+| UI-06 Cart Item Rows | PENDING |
+| UI-07 Cart Summary | PENDING |
+| UI-08 Action Buttons | PENDING |
+| UI-09 Checkout Button (F12) | PENDING |
 
 ## Next Owner
 
@@ -90,16 +90,16 @@ Human operator routes the current packet, `docs/reports/latest-developer-report.
 
 ## Stop Condition
 
-Developer stops after implementation + report. No staging, no commit, **no Codex until AGY review passes**, no UI-07. Wait for AGY visual validation.
+Developer stops after implementation + report. No staging, no commit, **no Codex until AGY review passes**, no UI-04/06/07/08/09. Wait for AGY visual validation.
 
 ---
 
 ## Latest Commit Baseline
 
 ```
+d13a9a1 style(pos): restore modal header icons and simplify buttons
 521961f style(pos): refine seamless split cart layout
 b04f303 feat(pos): sync categories and refine cashier macro layout
-ce49a82 style(pos): polish refresh update state and focus recovery
 ```
 
 ## Stash

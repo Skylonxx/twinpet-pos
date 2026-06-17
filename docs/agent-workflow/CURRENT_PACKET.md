@@ -2,31 +2,31 @@
 
 ## Phase
 
-**7C-UI-06-FIX-ICON-RESTORE-AND-BUTTON-PURGE** — Restore Modal Header Icons and Purge Decorative Button Icons (emergency patch)
+**7C-UI-03-CATEGORY-DROPDOWN** — Categories & Quick Menu Dropdown Conversion
+
+## Master Plan
+
+Source of truth: **`docs/agent-workflow/UI_MASTER_PLAN.md`**. This packet is item **3 (UI-03: หมวดหมู่สินค้าและเมนูด่วน — CURRENT)**. No work beyond UI-03 is authorized by this packet.
 
 ## Goal
 
-Restore Modal Header Icons for contextual communication while removing decorative icons inside buttons so buttons become minimal, clean, and text-centered. **This emergency patch supersedes the prior UI-06 closure/commit path** (the old header-icon-purge package must NOT be committed). **AGY visual review is required before Codex.**
-
-## CEO Emergency Directive
-
-Prior UI-06 removed modal header icons; Codex passed app-level review, but before commit the CEO changed direction after Physical UAT. New decision: **(A) restore modal header icons** (clipboard on Z-Report, swap on Cash In/Out, lock on Close Shift, and any similar removed glyph) — they aid contextual communication; **(B) remove decorative icons inside buttons** (e.g. ✅ on บันทึก / ตกลง / เปิดกะ, 🔒 on ปิดกะ, 🖨️ on print) so button labels are text only.
+Replace the category selection **modal overlay** with a clean, minimalist **dropdown** anchored to the "ค้นหาหมวดหมู่ ▾" button — preserving existing category filtering/sync behavior and not blocking the cashier flow with an overlay. **AGY visual review is required before Codex.**
 
 ## Implementation Directives (A / B / C)
 
-**A — Restore Modal Header Icons.** Restore all modal header icons to the prior working visual design (don't over-style, don't redesign the header).
+**A — Destroy the Modal.** Completely remove the full-screen/centered category-selection modal overlay. No overlay for category selection; it must not block cashier flow.
 
-**B — Purge Decorative Button Icons.** Remove decorative symbols/icons inside buttons; leave button labels as text only — minimal, clean, intentional, premium.
+**B — Implement Dropdown.** Convert the "ค้นหาหมวดหมู่ ▾" button into a dropdown shown directly below it, containing the category options. Include a small inline search inside the dropdown (preserve existing category-search behavior). Close cleanly after selection; don't disrupt scanner focus more than necessary; preserve category filtering/sync.
 
-**C — Alignment After Button Icon Removal.** Button text stays centered; clean proportions; no awkward left gap / missing-icon spacing / lopsided padding / broken flex; buttons still look clickable and balanced.
+**C — Style.** Match the Flowbite / Clean / Impeccable POS aesthetic — premium, subtle background/border/hover/spacing/radius/shadow. Avoid heavy modal-like styling, broad redesign, and clutter.
 
-## Strict Protection Rules
+## Strict Non-Goals
 
-Do NOT touch functional icons in Navigation, Category Tabs, Product Cards, Product Grid, or Main Navigation. Do NOT alter the Select Customer button, UI-05 macro layout, category sync, or focus recovery. Preserve button click handlers, disabled/loading states, variants, and keyboard behavior. No broad redesign.
+Do NOT touch: Cart item rows (UI-06), Cart Summary (UI-07), Action Buttons (UI-08), Checkout/F12 (UI-09), checkout/payment logic, cart math, stock logic. Do NOT alter product-card layout beyond what's strictly required to keep the dropdown placement. Do NOT touch category/product/main-navigation functional icons. Do NOT reintroduce a modal overlay for categories.
 
 ## AGY Review Requirement (MANDATORY before Codex)
 
-AGY must verify: header icons are restored and aid contextual communication (not noisy); button decorative icons are removed; button labels remain centered; buttons look minimal/clean/premium with no awkward empty spacing; the modals feel more usable/balanced than the prior icon-purged-header version; nav / category-tab / product-card / product-grid functional icons are untouched; and there is no focus / modal / scanner / keyboard / checkout regression and no broad redesign.
+AGY must verify: no category modal overlay remains; the dropdown appears directly below the "ค้นหาหมวดหมู่ ▾" trigger; it feels minimalist/clean/premium (spacing, border, hover, background polished); inline search (if present) is compact/useful; category/product/main-navigation functional icons are preserved; cart items/summary/action buttons/checkout were not visually altered; scanner/focus flow is not regressed; and no broad redesign.
 
 ## Status
 
@@ -38,12 +38,14 @@ AGY must verify: header icons are restored and aid contextual communication (not
 
 ### Authorized implementation files (app)
 
-- `src/components/pos/ShiftModals.tsx` + `ShiftModals.css` (Open/Close-Shift + Z-Report headers & buttons)
-- `src/components/pos/CashTransactionModal.tsx` + `CashTransactionModal.css` (Cash In/Out header & buttons)
-- Only the four prior-UI-06 modal component files / related modal CSS — do NOT broaden. (`POSPage.tsx/.css` NOT touched — these modals do not live there. No button-alignment CSS change was needed.)
+- `src/pages/POSPage.tsx` — category dropdown state + UI (modal removed)
+- `src/pages/POSPage.css` — dropdown styling (modal overlay CSS removed)
+- `src/pages/POSPage.keyboard-contract.test.ts` — category-picker contract tests updated (modal→dropdown)
+- Do NOT broaden beyond the category dropdown conversion.
 
 ### Authorized workflow / report files
 
+- `docs/agent-workflow/UI_MASTER_PLAN.md`
 - `docs/agent-workflow/STATE.md`
 - `docs/agent-workflow/CURRENT_PACKET.md`
 - `docs/agent-workflow/NEXT_ACTION.md`
@@ -51,18 +53,17 @@ AGY must verify: header icons are restored and aid contextual communication (not
 
 ### Forbidden Files / Areas
 
-- **Functional icons** in Navigation, Category Tabs, Product Cards, Product Grid, Main Navigation — do NOT touch
-- **Select Customer button styling / dashed border** — do NOT touch
+- **Cart item rows (UI-06), Cart Summary (UI-07), Action Buttons (UI-08), Checkout/F12 (UI-09)** — reserved; do NOT touch
+- **Functional icons** in Category Tabs, Product Cards, Product Grid, Main Navigation — do NOT touch
+- **Select Customer button styling / dashed border** — do NOT touch; do NOT reintroduce a category modal overlay
 - `useCart.ts`, `useCart.contract.test.ts`, `cartUtils.ts`, cart math
 - Checkout / payment business logic, stock matrix, seed data
 - Toast files; Firebase / functions / rules; Android / Capacitor; `.claude/`
-- Modal open/close, focus-trap, submit/cancel/disabled/loading behavior; button click handlers
-- UI-05 macro layout; category sync; focus recovery
-- No new scripts, no new dependencies; no UI-07 work; do not commit the old UI-06 header-purge package
+- No new scripts, no new dependencies; no UI-04/06/07/08/09 work
 
 ### Preservation note
 
-Header icons were RESTORED to the prior working design (the 4 modal files were reverted to HEAD, so the headers are byte-identical to the committed UI-05 baseline). Only decorative button emoji were removed (✅ / 🔒 / 🖨️ → text). Button handlers, disabled/loading states, variants, and keyboard behavior are unchanged. The category listener, `visibleCategories`, `.pos-cat-bar` scroll, focus-recovery handlers, the Seamless Split (`.pos-cart`), and all functional icons remain untouched.
+The category selection UI changed from modal overlay → anchored dropdown only. Category filtering/sync (`visibleCategories`, `usePosSyncSignal`, the catalog-wide refresh), the `.pos-cat-bar` horizontal scroll, and all focus-recovery handlers are preserved; the dropdown still routes selection through `selectCategory` (clears the Quick Menu) and refocuses the scan box on close. Cart rows, summary, action buttons, checkout/F12, and the macro layout are untouched.
 
 ---
 
@@ -97,7 +98,7 @@ MODE:
 2. **Developer** updates `docs/agent-workflow/NEXT_ACTION.md` to route to **AGY first** (visual review), not Codex.
 3. **If unauthorized files are changed** → STOP and report.
 4. **If tests fail** → STOP and report.
-5. **AGY reviews UX/visuals first** (Impeccable Style + zero layout shift + no visual regression).
+5. **AGY reviews UX/visuals first** (Impeccable Style + no visual regression).
 6. **If AGY FAIL** → return to Developer / Principal Engineer Reviewer for remediation.
 7. **If AGY PASS / PASS WITH NOTES** → route to **Codex Reviewer** for code/scope/keyboard review.
 8. **If Codex FAIL** → return to Principal Engineer Reviewer / Workflow Coordinator.

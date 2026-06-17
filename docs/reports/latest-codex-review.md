@@ -2,62 +2,40 @@
 
 ## Phase
 
-7C-UI-06-FIX-ICON-RESTORE-AND-BUTTON-PURGE
+7C-UI-03-CATEGORY-DROPDOWN
 
 ## Verdict
 
-FAIL
+PASS WITH NOTES
 
 ## Summary
 
-The emergency UI-06 app implementation passes code, behavior, and scope review, but the package cannot pass because `git diff --check` currently fails on trailing whitespace in `docs/reports/latest-agy-review.md` line 10.
+The UI-03 category picker conversion passes code, scope, and keyboard-contract review. The full-screen category modal overlay is removed from runtime TSX/CSS and replaced with an anchored fixed-position dropdown under the category trigger. Category selection still routes through the shared category path, focus recovery is preserved, and the requested validation is green.
 
-No app-code blocker was found. The required fix is report hygiene only.
-
-## Finding
-
-### 1. `git diff --check` fails on AGY report trailing whitespace
-
-Severity: Blocker
-
-Current output includes:
-
-```text
-docs/reports/latest-agy-review.md:10: trailing whitespace.
-```
-
-This must be cleaned before commit.
+No required fixes found.
 
 ## Code Review
 
-- PASS: Header icons are restored in `ShiftModals.tsx`: Open Shift clock, Z-Report report/clipboard, and Close Shift lock.
-- PASS: Header icon is restored in `CashTransactionModal.tsx`: Cash In/Out swap.
-- PASS: `ShiftModals.css` and `CashTransactionModal.css` have no net diff, so the restored header icon styling matches HEAD.
-- PASS: Net app diff is only two modal TSX files.
-- PASS: Net source changes are only decorative inline button emoji removals:
-  - Cash In/Out save: `✅ บันทึก` to `บันทึก`
-  - Open Shift submit: `✅ เปิดกะ` to `เปิดกะ`
-  - Z-Report print: `🖨️ พิมพ์ใบสรุปกะ` to `พิมพ์ใบสรุปกะ`
-  - Z-Report done: `✅ ตกลง` to `ตกลง`
-  - Close Shift submit: `🔒 ปิดกะ` to `ปิดกะ`
-- PASS: Click handlers, disabled props, loading labels, button classes/variants, and modal open/close/focus/submit logic are unchanged.
-
-## Preservation Review
-
-- PASS: `POSPage.tsx`, `POSPage.css`, and `POSPage.keyboard-contract.test.ts` have no diff.
-- PASS: Scanner logic, Ctrl+F, F12, UOM, Payment, numpad, category sync, refresh glow, focus recovery, and UI-05 macro layout are preserved at source level.
-- PASS: Functional nav/category/product/grid icons are untouched.
-- PASS: Select Customer is untouched.
+- PASS: Runtime `.pos-category-overlay`, `.pos-category-modal`, `.pos-category-grid`, and `.pos-category-cell` usage is removed from `POSPage.tsx` and `POSPage.css`.
+- PASS: New `.pos-cat-dd` dropdown is fixed-position, anchored from the trigger's measured `getBoundingClientRect()`, with inline search and a scrollable `.pos-cat-dd-list`.
+- PASS: Category selection routes through `selectCategoryFromDropdown(catId)` to `selectCategory(catId)` and then `closeCatDropdown()`, preserving Quick Menu clearing and scan-box refocus.
+- PASS: Escape close wiring is updated from `catModalOpen` / `closeCatModal()` to `catDropdownOpen` / `closeCatDropdown()`.
+- PASS: Outside-click dismissal is implemented through a document `mousedown` listener scoped to the trigger/dropdown wrapper.
+- PASS: F12 blocking predicate now includes `catDropdownOpen`.
+- PASS: `.pos-cat-bar` horizontal scroll CSS remains intact.
+- PASS: `visibleCategories`, catalog sync, refresh glow, scanner paths, Ctrl+F, F12, UOM, Payment, numpad, and focus recovery remain preserved at source level.
 
 ## Scope Verification
 
 App files changed:
 
-- `src/components/pos/ShiftModals.tsx`
-- `src/components/pos/CashTransactionModal.tsx`
+- `src/pages/POSPage.tsx`
+- `src/pages/POSPage.css`
+- `src/pages/POSPage.keyboard-contract.test.ts`
 
 Workflow/report docs changed as expected:
 
+- `docs/agent-workflow/UI_MASTER_PLAN.md` (new / untracked)
 - `docs/agent-workflow/CURRENT_PACKET.md`
 - `docs/agent-workflow/NEXT_ACTION.md`
 - `docs/agent-workflow/STATE.md`
@@ -67,11 +45,6 @@ Workflow/report docs changed as expected:
 
 Forbidden areas verified untouched:
 
-- `src/components/pos/ShiftModals.css`
-- `src/components/pos/CashTransactionModal.css`
-- `src/pages/POSPage.tsx`
-- `src/pages/POSPage.css`
-- `src/pages/POSPage.keyboard-contract.test.ts`
 - `src/hooks/pos/useCart.ts`
 - `src/hooks/pos/useCart.contract.test.ts`
 - `cartUtils.ts`
@@ -81,55 +54,57 @@ Forbidden areas verified untouched:
 - Firebase/functions/rules
 - Android/Capacitor
 - `.claude/`
-- Scripts/dependencies
+- Cart rows, cart summary, action buttons, and checkout/F12 UI
+- Functional nav/category/product icons
 
 ## Tests / Checks
 
 | Check | Result |
 |---|---|
-| `git status --short` | Two modal TSX files plus workflow/report docs modified |
-| `git diff --name-only` | Expected emergency UI-06 file set |
-| `git diff --stat` | 8 files changed before this report update |
-| `git diff --check` | FAIL: trailing whitespace in `docs/reports/latest-agy-review.md:10` |
+| `git status --short` | Expected UI-03 files plus new `UI_MASTER_PLAN.md` |
+| `git diff --name-only` | Expected tracked UI-03 files; note untracked files are not listed by this command |
+| `git ls-files --others --exclude-standard` | `docs/agent-workflow/UI_MASTER_PLAN.md` |
+| `git diff --stat` | Tracked UI-03 package reviewed |
+| `git diff --check` | PASS |
+| Manual trailing-whitespace check on `UI_MASTER_PLAN.md` | PASS |
 | `git diff --cached --name-only` | Empty; no staging |
 | `npx.cmd tsc -b` | PASS |
 | `npx.cmd vitest run src/pages/POSPage.keyboard-contract.test.ts` | PASS, 145 tests |
 | `npx.cmd vitest run` | PASS, 31 files / 712 tests |
 | `git stash list` | `stash@{0}` present and untouched |
-| `git rev-parse --short HEAD` | `521961f`; no commit performed |
+| `git rev-parse --short HEAD` | `d13a9a1`; no commit performed |
 
 Git emitted non-blocking warnings about inaccessible global ignore config and LF-to-CRLF conversion notices.
 
-## Hidden Risk / Note
+## Notes
 
-The prior UI-06 header-icon purge is superseded and must not be committed. The current net app diff correctly reflects the emergency direction: restored header icons plus text-only action buttons.
+- `git diff --check` does not inspect untracked files, so I separately checked `docs/agent-workflow/UI_MASTER_PLAN.md` for trailing whitespace.
+- The fixed-position dropdown anchor is measured on open. If the viewport is resized while the dropdown is open, the anchor may not reposition until reopened. Given the transient POS dropdown flow, this is acceptable as a non-blocking residual risk.
+- `.pos-picker-search` appears to remain as unused legacy CSS from the old category modal search. It is harmless, but it can be cleaned in a future CSS hygiene pass if desired.
 
 ## Required Fixes
 
-1. Remove trailing whitespace from `docs/reports/latest-agy-review.md` line 10.
-2. Re-run `git diff --check`.
-
-No app code changes are required based on this review.
+None.
 
 ## Next Owner
 
-Developer Agent
+Principal Engineer Reviewer / Workflow Coordinator
 
 ## Next Action
 
-Perform whitespace-only cleanup in `docs/reports/latest-agy-review.md`, rerun `git diff --check`, then return to Codex for a narrow package-hygiene re-check.
+Proceed to Tech Lead / CEO closure decision. Do not stage or commit until exact commands are authorized.
 
 ---
 
 STATE CARD
-Phase: 7C-UI-06-FIX-ICON-RESTORE-AND-BUTTON-PURGE
+Phase: 7C-UI-03-CATEGORY-DROPDOWN
 Current owner: Codex Reviewer
-Verdict: FAIL
-Files changed: src/components/pos/ShiftModals.tsx; src/components/pos/CashTransactionModal.tsx; docs/agent-workflow/STATE.md; docs/agent-workflow/CURRENT_PACKET.md; docs/agent-workflow/NEXT_ACTION.md; docs/reports/latest-developer-report.md; docs/reports/latest-agy-review.md; docs/reports/latest-codex-review.md
-Tests/checks: git status --short reviewed; git diff --name-only reviewed; git diff --stat reviewed; git diff --check FAIL due trailing whitespace in docs/reports/latest-agy-review.md:10; git diff --cached --name-only empty; npx.cmd tsc -b PASS; POSPage.keyboard-contract 145 passed; full vitest 712 passed; stash@{0} present; HEAD 521961f
+Verdict: PASS WITH NOTES
+Files changed: docs/agent-workflow/UI_MASTER_PLAN.md; src/pages/POSPage.tsx; src/pages/POSPage.css; src/pages/POSPage.keyboard-contract.test.ts; docs/agent-workflow/STATE.md; docs/agent-workflow/CURRENT_PACKET.md; docs/agent-workflow/NEXT_ACTION.md; docs/reports/latest-developer-report.md; docs/reports/latest-agy-review.md; docs/reports/latest-codex-review.md
+Tests/checks: git status --short reviewed; git diff --name-only reviewed; git diff --stat reviewed; git diff --check PASS; UI_MASTER_PLAN trailing whitespace check PASS; git diff --cached --name-only empty; npx.cmd tsc -b PASS; POSPage.keyboard-contract 145 passed; full vitest 712 passed; stash@{0} present; HEAD d13a9a1
 Staged: None
 Committed: None
-Required fixes: Remove trailing whitespace in docs/reports/latest-agy-review.md line 10 and rerun git diff --check
-Next owner: Developer Agent
-Next action: Whitespace-only cleanup, then return to Codex for narrow re-check
-Stop condition: No staging; no commit; do not start UI-07
+Required fixes: None
+Next owner: Principal Engineer Reviewer / Workflow Coordinator
+Next action: Proceed to Tech Lead / CEO closure decision; no staging or commit until exact commands are authorized
+Stop condition: No staging; no commit; do not start UI-04/06/07/08/09
