@@ -2,72 +2,85 @@
 
 ## Current State
 
-Developer Agent has completed the **7C-UI-02-SEARCH-BARCODE** implementation. Changes are **not staged and not committed**. The work is now routed to **AGY / Senior QA & UX Lead** for UX review (visual/UI polish is reviewed by AGY first).
+Codex returned **FAIL** on the first pass (`docs/reports/latest-codex-review.md`): confirming a multi-UOM product via the Select picker could refocus the scan box behind the opening UomModal. Developer Agent has applied the **targeted focus-sequencing fix** and added the missing combined-path contract test. Changes are **not staged and not committed**. The work is routed **back to Codex Reviewer for re-review**. **AGY is bypassed** for this phase (behavioral focus hotfix, not visual polish).
 
 ## What Happens Next
 
-1. **Human operator** reads the Developer report at `docs/reports/latest-developer-report.md`.
-2. **Human operator** sends AGY the current packet (`docs/agent-workflow/CURRENT_PACKET.md`), the Developer report, and the **current diff**.
-3. **AGY / Senior QA & UX Lead** reviews the UX (Impeccable Style, calm/consistent toolbar, scanner-first flow, no clutter, no regression).
-4. If **AGY FAIL** → return to Principal Engineer Reviewer / Workflow Coordinator for remediation.
-5. If **AGY PASS / PASS WITH NOTES** → route to **Codex Reviewer** for code/scope/keyboard-contract review.
-6. If **Codex FAIL** → return to Principal Engineer Reviewer / Workflow Coordinator.
-7. If **Codex PASS / PASS WITH NOTES** → route to **Tech Lead / CEO** for closure + exact staging/commit commands.
+1. **Human operator** reads the updated Developer report at `docs/reports/latest-developer-report.md` and the prior Codex FAIL at `docs/reports/latest-codex-review.md`.
+2. **Human operator** sends Codex the current packet (`docs/agent-workflow/CURRENT_PACKET.md`), the Developer report, the prior Codex review, and the **current diff** for re-review.
+3. **Codex Reviewer** re-reviews the focus-sequencing fix, scope, and keyboard-contract preservation.
+4. If **Codex FAIL** → return to Principal Engineer Reviewer / Workflow Coordinator for remediation.
+5. If **Codex PASS / PASS WITH NOTES** → route to Principal Engineer Reviewer / Workflow Coordinator for Tech Lead closure memo + exact staging/commit commands.
 
 ---
 
 ## Copy-Paste Instructions for Human Operator
 
-### Step 1 — Send to AGY / Senior QA & UX Lead (DO THIS NEXT)
+### Step 1 — Send to Codex Reviewer for RE-REVIEW (DO THIS NEXT)
 
-Paste the following to AGY:
+Paste the following to Codex:
 
 ```
-ROLE: AGY / Senior QA & UX Lead
-PHASE: 7C-UI-02-SEARCH-BARCODE
-INPUT: Developer implementation complete (CSS-only top-bar / search & action-bar refactor).
+TO: Codex Reviewer
+MODEL: GPT-5.5 / best available Codex reviewer model for this run
+REASONING: High
+ROLE: Reviewer Agent
+ROLE FILE: docs/ai-roles/reviewer.md
+MODE: Review only, no edits, no staging, no commit
 
-Please review the UX first (this is visual/UI polish):
+PHASE: 7C-UI-02-HOTFIX-FOCUS (RE-REVIEW after FAIL)
+SCOPE: behavior / code / keyboard-contract review
+
+Inputs:
 - docs/agent-workflow/CURRENT_PACKET.md (active packet)
-- docs/reports/latest-developer-report.md (developer report)
+- docs/reports/latest-developer-report.md (updated developer report)
+- docs/reports/latest-codex-review.md (your prior FAIL)
 - the current working-tree diff (git diff)
 
-Confirm:
-- Impeccable Style achieved (calm, rounded, soft focus ring, consistent Sort/Refresh/Select)
-- No cramped/overwhelming button cluster, no harsh colors, no clutter
-- Search input remains obvious, fast, keyboard-first; critical cashier controls still discoverable
-- No UI-01 bump-flash regression; no layout shift
-- Scope respected (top-bar / search & POSPage.css only)
+Confirm the prior FAIL blocker is resolved:
+- ProductPicker confirm of a multi-UOM product no longer refocuses the scan box behind
+  UomModal: onConfirm computes `willOpenUom`, threads `skipFocus` into each onProductClick,
+  and records `pickerWillOpenUomRef`; onClose refocuses ONLY when the flag is false.
+- A single-UOM add inside a UOM-opening picker batch is also suppressed (skipFocus).
+- A plain cancel / standard (no-UOM) confirm STILL refocuses the scan box.
+- UomModal owns focus until its own select/close.
 
-Verdict: PASS / PASS WITH NOTES / FAIL, written to docs/reports/latest-agy-review.md.
-```
+Also re-confirm the unchanged guarantees:
+- Standard card add, category tabs, Refresh, Sort-modal close still refocus.
+- Direct multi-UOM card click never refocuses.
+- Payment modal, Ctrl+F, auto-focus, F12, scanner logic all preserved.
+- Only authorized files changed; POSPage.css untouched; no cart/checkout/stock change.
+- tsc clean; POSPage.keyboard-contract.test.ts (128) + full vitest (695) green.
+- New contract test covers the combined ProductPicker-confirm + multi-UOM path.
 
-### Step 2 — Send to Codex (ONLY after AGY returns PASS / PASS WITH NOTES)
-
-Do **not** send to Codex until AGY confirms the UX.
-
-```
-ROLE: Codex Reviewer
-PHASE: 7C-UI-02-SEARCH-BARCODE
-SCOPE: code / scope / keyboard-contract review
-
-Review src/pages/POSPage.css (and confirm POSPage.tsx top-bar unchanged), verify:
-- Only authorized files changed; no forbidden areas touched
-- Search / barcode / Ctrl+F / auto-focus / F12 / modal-focus contracts preserved
-- tsc clean; POSPage.keyboard-contract.test.ts + full vitest green
 Produce verdict in docs/reports/latest-codex-review.md.
+
+Do not stage or commit.
+Do not start UI-03.
+Do not route to AGY unless explicitly requested.
 ```
 
-### Step 3 — Route Codex result back to Tech Lead / CEO
+### Step 2 — Route Codex result back to Principal Engineer Reviewer / Tech Lead
 
-Paste the Codex verdict to Tech Lead / CEO for a closure memo and exact staging/commit commands.
+Paste the Codex verdict to the Principal Engineer Reviewer / Workflow Coordinator for a Tech Lead closure memo and exact staging/commit commands.
 
 ---
 
 ## Important Reminders
 
+- Send to **Codex Reviewer** (GPT-5.5 / best available) with **ROLE FILE: docs/ai-roles/reviewer.md** for re-review of the FAIL fix.
+- Do **not** route to AGY unless Tech Lead/CEO or Principal Engineer explicitly requests it.
 - Do **not** stage or commit until Tech Lead / CEO authorizes exact commands.
-- Do **not** send to Codex yet — AGY UX review comes first.
 - Do **not** start UI-03 or any other phase.
+- Do **not** change `POSPage.css` or any cart/checkout/stock code.
 - `stash@{0}` is pre-existing unrelated WIP — do not touch.
 - Old manual workflow remains available as fallback.
+
+## Role File Reference
+
+| Role | Role File |
+|---|---|
+| Developer Agent | `docs/ai-roles/developer.md` |
+| Codex Reviewer | `docs/ai-roles/reviewer.md` |
+| Tech Lead / CEO | `docs/ai-roles/tech-lead.md` |
+| Senior QA & UX Lead / AGY | `docs/ai-roles/ux-lead.md` |

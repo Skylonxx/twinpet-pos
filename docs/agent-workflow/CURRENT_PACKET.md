@@ -2,15 +2,15 @@
 
 ## Phase
 
-**7C-UI-02-SEARCH-BARCODE** — Search & Barcode UI Refactor
+**7C-UI-02-HOTFIX-FOCUS** — Aggressive Scanner Focus Hotfix
 
 ## Goal
 
-Refactor the Product Search and Action Bar to meet the **Impeccable Style** standard while preserving all barcode/search keyboard behavior. Standardize the buttons next to the search box (Sort, Refresh, Select) so they are visually consistent, calm, and uncluttered, and give the scan box a soft on-brand focus ring.
+Ensure the barcode/search input regains focus immediately after any standard grid / top-bar / category / action interaction that should preserve scanner-first cashier flow — without disturbing modal-owned focus (UOM / Payment) or any cart/business behavior.
 
 ## Status
 
-**In Progress** — Developer implementation complete; awaiting AGY / Senior QA & UX Lead review.
+**In Progress** — Developer implementation complete; awaiting Codex Reviewer.
 
 ---
 
@@ -18,8 +18,8 @@ Refactor the Product Search and Action Bar to meet the **Impeccable Style** stan
 
 ### Authorized implementation files
 
-- `src/pages/POSPage.tsx` — **top bar / Search section only**
-- `src/pages/POSPage.css`
+- `src/pages/POSPage.tsx`
+- `src/pages/POSPage.keyboard-contract.test.ts` (focus-contract tests)
 
 ### Authorized workflow / report files
 
@@ -30,37 +30,51 @@ Refactor the Product Search and Action Bar to meet the **Impeccable Style** stan
 
 ### Forbidden Files / Areas
 
-- `useCart.ts`, `useCart.contract.test.ts`, `cartUtils.ts`
+- `src/pages/POSPage.css` (no style change this phase — CSS untouched)
+- `useCart.ts`, `useCart.contract.test.ts`, `cartUtils.ts`, cart math
 - Checkout / payment logic, stock matrix, seed data
 - Toast files
-- UI-01 components (must not regress the committed bump-flash behavior)
 - Firebase / functions / rules
 - Android / Capacitor artifacts
 - `.claude/`
 - No new scripts, no new dependencies
-- No cart refactor, no UI-03+ work
+- No UI-03+ work
 
 ---
 
 ## Role Sequence
 
 ```
-Developer
-  → AGY / Senior QA & UX Lead
-    → Codex Reviewer
-      → Tech Lead / CEO
+Developer Agent          — ROLE FILE: docs/ai-roles/developer.md
+  → Codex Reviewer       — ROLE FILE: docs/ai-roles/reviewer.md
+    → Tech Lead / CEO    — ROLE FILE: docs/ai-roles/tech-lead.md
+```
+
+**AGY:** Bypassed for this phase — this is a behavioral focus hotfix, not visual UI polish. (May be requested explicitly by Tech Lead/CEO or Principal Engineer.)
+AGY ROLE FILE (if needed): `docs/ai-roles/ux-lead.md`
+
+### Required Handoff Header Format
+
+Every handoff prompt must include these exact lines:
+
+```
+TO:
+MODEL:
+REASONING:
+ROLE:
+ROLE FILE:
+MODE:
 ```
 
 ## Decision Rules
 
 1. **Developer** completes implementation and writes `docs/reports/latest-developer-report.md`.
-2. **Developer** updates `docs/agent-workflow/NEXT_ACTION.md` to route to AGY.
-3. **If unauthorized files are changed** → STOP and report (return to Principal Engineer Reviewer / Workflow Coordinator).
-4. **AGY reviews UX first** because this is visual/UI polish.
-5. **If AGY FAIL** → return to Principal Engineer Reviewer / Workflow Coordinator.
-6. **If AGY PASS / PASS WITH NOTES** → route to Codex for code/scope/keyboard review.
-7. **If Codex FAIL** → return to Principal Engineer Reviewer / Workflow Coordinator.
-8. **No commit** until Tech Lead / CEO authorizes the exact staging and commit commands.
+2. **Developer** updates `docs/agent-workflow/NEXT_ACTION.md` to route to Codex.
+3. **If unauthorized files are changed** → STOP and report.
+4. **If tests fail** → STOP and report.
+5. **If Codex FAIL** → return to Principal Engineer Reviewer / Workflow Coordinator.
+6. **If Codex PASS / PASS WITH NOTES** → route to Principal Engineer Reviewer / Workflow Coordinator for Tech Lead closure memo.
+7. **No commit** until Tech Lead / CEO authorizes the exact staging and commit commands.
 
 ---
 

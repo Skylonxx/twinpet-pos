@@ -150,6 +150,24 @@ export default function POSPage() {
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
+  // Aggressive Scanner Focus (7C-UI-02-HOTFIX-FOCUS): the single helper every "scanning
+  // continues" path uses to return focus to the barcode/search box. Deferred via rAF so it
+  // runs AFTER the click/state-update settles focus on the just-clicked element (card, tab,
+  // action button) — otherwise the browser would leave focus trapped there. Declared up here
+  // (right after the ref) so the early handlers below — selectCategory, selectQuickMenu,
+  // handleManualRefresh — can reuse it without a TDZ on the dependency array.
+  const focusSearch = useCallback(() => {
+    window.requestAnimationFrame(() => searchInputRef.current?.focus());
+  }, []);
+
+  // 7C-UI-02-HOTFIX-FOCUS (Codex blocker): set true by the Select picker's onConfirm when the
+  // confirmed selection includes a multi-UOM product (which the uomQueue drain will open in
+  // UomModal). ProductPickerDialog fires onConfirm then onClose synchronously, so onClose reads
+  // this ref to SKIP the scan-box refocus — leaving focus to UomModal, which owns it until
+  // select/close. A ref (not state) is required because the synchronous onConfirm→onClose pair
+  // runs before any state update is observable. Reset to false on every close.
+  const pickerWillOpenUomRef = useRef(false);
+
   const showToast = useCallback((payload: ToastPayload) => {
     if (typeof payload === 'string') {
       globalToast({ title: payload });
@@ -283,7 +301,10 @@ export default function POSPage() {
     syncedStampRef.current = lastForceUpdate;
     setUpdateBanner(false);
     void refreshInventory();
-  }, [lastForceUpdate, refreshInventory]);
+    // Aggressive Scanner Focus: the Refresh button / sync banner opens no modal, so focus
+    // would stay trapped on the clicked control — return it to the scan box immediately.
+    focusSearch();
+  }, [lastForceUpdate, refreshInventory, focusSearch]);
 
   useEffect(() => {
     if (!syncInitialized) return;
@@ -322,14 +343,19 @@ export default function POSPage() {
   const selectCategory = useCallback((catId: string) => {
     setActiveQuickMenuId(null);
     setActiveCategory(catId);
-  }, []);
+    // Aggressive Scanner Focus: a category-tab click leaves focus on the tab button; return
+    // it to the scan box so scanning continues without a manual click.
+    focusSearch();
+  }, [focusSearch]);
 
   const selectQuickMenu = useCallback((id: string) => {
     // Park the physical-category selection on the best-sellers default (never '' —
     // the All tab is gone) so deselecting the quick menu lands back on ⭐ สินค้าขายดี.
     setActiveCategory(BEST_SELLERS_KEY);
     setActiveQuickMenuId(id);
-  }, []);
+    // Aggressive Scanner Focus: same as selectCategory — keep the cashier on the scan box.
+    focusSearch();
+  }, [focusSearch]);
 
   const filteredProducts = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -491,10 +517,6 @@ export default function POSPage() {
 
   const discountLine = discountLineKey ? cart.cart[discountLineKey] ?? null : null;
 
-  const focusSearch = useCallback(() => {
-    window.requestAnimationFrame(() => searchInputRef.current?.focus());
-  }, []);
-
   // Focus-return consistency (Phase 7C-D4-C-2): every category-overlay close route funnels
   // through here so focus returns to the scan box. Category filtering (setActiveCategory)
   // stays at the call sites and is unchanged.
@@ -516,7 +538,11 @@ export default function POSPage() {
   );
 
   const onProductClick = useCallback(
-    (product: PosProduct) => {
+    // `skipFocus` (7C-UI-02-HOTFIX-FOCUS): the Select-picker batch passes this true when the
+    // confirmed selection ALSO opens a UomModal, so a single-UOM add in the same batch must not
+    // refocus the scan box behind that modal. A direct grid card click omits it (refocuses as
+    // normal). The multi-UOM branch never refocuses regardless.
+    (product: PosProduct, opts?: { skipFocus?: boolean }) => {
       if (product.uomOptions.length > 1) {
         // Enqueue rather than overwrite the single `uomProduct` slot (Phase 7C-L1 / LOGIC-01):
         // a batch confirm calls this once per selected product, so multiple multi-UOM products
@@ -525,9 +551,15 @@ export default function POSPage() {
         setUomQueue((q) => [...q, product]);
       } else {
         cart.addToCart(product, product.uomOptions[0]!);
+        // Aggressive Scanner Focus: a STANDARD single-UOM card add opens no modal, so nothing
+        // else restores focus — return it to the scan box to keep the cashier scanning. The
+        // multi-UOM branch above is intentionally excluded: UomModal owns focus until it
+        // closes (its onSelect/onClose already call focusSearch). `skipFocus` also excludes the
+        // single-UOM add when its picker batch will open UomModal for another selected product.
+        if (!opts?.skipFocus) focusSearch();
       }
     },
-    [cart],
+    [cart, focusSearch],
   );
 
   // Drain the pending-UOM queue (Phase 7C-L1 / LOGIC-01): whenever no UOM modal is showing and
@@ -1348,12 +1380,29 @@ export default function POSPage() {
         open={pickerOpen}
         products={pickerProducts}
         onConfirm={(selected) => {
-          for (const item of selected) {
-            const product = products.find((p) => p.id === item.id);
-            if (product) onProductClick(product);
+          // Two passes: resolve the selection, decide up-front whether ANY confirmed product is
+          // multi-UOM (so the uomQueue drain will open UomModal), THEN add. `willOpenUom` gates
+          // BOTH the per-item single-UOM refocus and the picker-close refocus, so focus is never
+          // left on the scan box behind the UOM modal (Codex 7C-UI-02-HOTFIX-FOCUS blocker).
+          const resolved = selected
+            .map((item) => products.find((p) => p.id === item.id))
+            .filter((p): p is PosProduct => Boolean(p));
+          const willOpenUom = resolved.some((p) => p.uomOptions.length > 1);
+          for (const product of resolved) {
+            onProductClick(product, { skipFocus: willOpenUom });
           }
+          pickerWillOpenUomRef.current = willOpenUom;
         }}
-        onClose={() => setPickerOpen(false)}
+        onClose={() => {
+          // Aggressive Scanner Focus: the Select (เลือกสินค้า) action opens this picker; when it
+          // closes, scanning should continue — return focus to the scan box. EXCEPTION: when the
+          // confirm queued a multi-UOM product, UomModal is about to open and owns focus until
+          // its own select/close restores it, so skip the refocus here. A plain cancel/close
+          // (ref stays false) still refocuses. Reset the flag so the next open starts clean.
+          setPickerOpen(false);
+          if (!pickerWillOpenUomRef.current) focusSearch();
+          pickerWillOpenUomRef.current = false;
+        }}
       />
 
       <CustomerPickerModal
@@ -1508,7 +1557,12 @@ export default function POSPage() {
 
       <SortingSettingsModal
         isOpen={isSortingModalOpen}
-        onClose={() => setIsSortingModalOpen(false)}
+        onClose={() => {
+          // Aggressive Scanner Focus: the Sort (จัดเรียง) action opens this modal; on close,
+          // return focus to the scan box so the cashier keeps scanning.
+          setIsSortingModalOpen(false);
+          focusSearch();
+        }}
         defaultBranchId={posBranchId}
       />
 

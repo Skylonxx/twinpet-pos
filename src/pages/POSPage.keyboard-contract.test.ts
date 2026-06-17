@@ -288,6 +288,80 @@ describe('7C-D4-A · Focus-return contract (POSPage.tsx)', () => {
   });
 });
 
+// ─── C2. Aggressive Scanner Focus hotfix (7C-UI-02-HOTFIX-FOCUS) ────────────────────────
+// Physical UAT: clicking a STANDARD product card (no UOM modal), a category tab, or a top-bar
+// action (Refresh / Sort / Select) left focus trapped on the clicked element, breaking the
+// scanner-first flow. These tests pin that each of those paths now returns focus to the scan
+// box via the shared rAF-deferred `focusSearch()` helper — and that the multi-UOM card path is
+// deliberately NOT refocused (UomModal owns focus until it closes).
+describe('7C-UI-02-HOTFIX-FOCUS · Aggressive Scanner Focus (POSPage.tsx)', () => {
+  test('focusSearch is declared early (before the early handlers) and stays rAF-deferred', () => {
+    const f = region(posSource, 'const focusSearch = useCallback', '[]);');
+    expect(f).toContain('window.requestAnimationFrame(() => searchInputRef.current?.focus());');
+    // Declared before the handlers that depend on it (no TDZ on their dep arrays).
+    expect(posSource.indexOf('const focusSearch = useCallback')).toBeLessThan(
+      posSource.indexOf('const selectCategory = useCallback'),
+    );
+    expect(posSource.indexOf('const focusSearch = useCallback')).toBeLessThan(
+      posSource.indexOf('const handleManualRefresh = useCallback'),
+    );
+  });
+
+  test('a STANDARD (single-UOM) card add returns focus; the multi-UOM path does NOT', () => {
+    const fn = region(posSource, 'const onProductClick = useCallback', '[cart, focusSearch],');
+    // The single-UOM add is followed by a (guarded) focus restore...
+    expect(fn).toMatch(/cart\.addToCart\(product, product\.uomOptions\[0\]!\);[\s\S]{0,800}focusSearch\(\)/);
+    // ...gated by skipFocus so a picker batch that opens UomModal can suppress it...
+    expect(fn).toContain('if (!opts?.skipFocus) focusSearch();');
+    // ...and there is exactly ONE focusSearch() — the multi-UOM enqueue branch is excluded.
+    expect(countOccurrences(fn, 'focusSearch();')).toBe(1);
+    // The multi-UOM enqueue is NOT immediately followed by a focus restore.
+    expect(fn).not.toMatch(/setUomQueue\(\(q\) => \[\.\.\.q, product\]\);[\s\S]{0,40}focusSearch/);
+  });
+
+  test('category-tab selection returns focus (selectCategory + selectQuickMenu)', () => {
+    const cat = region(posSource, 'const selectCategory = useCallback', '}, [focusSearch]);');
+    expect(cat).toContain('setActiveCategory(catId);');
+    expect(cat).toContain('focusSearch();');
+    const quick = region(posSource, 'const selectQuickMenu = useCallback', '}, [focusSearch]);');
+    expect(quick).toContain('setActiveQuickMenuId(id);');
+    expect(quick).toContain('focusSearch();');
+  });
+
+  test('the Refresh action (handleManualRefresh — button + sync banner) returns focus', () => {
+    const fn = region(posSource, 'const handleManualRefresh = useCallback', '[lastForceUpdate, refreshInventory, focusSearch]');
+    expect(fn).toContain('void refreshInventory();');
+    expect(fn).toContain('focusSearch();');
+  });
+
+  test('the Select picker refocuses on close ONLY when no multi-UOM modal is pending', () => {
+    const pick = region(posSource, '<ProductPickerDialog', '<CustomerPickerModal');
+    // Close still refocuses, but GUARDED by the pending-UOM flag (not an unconditional call) —
+    // so a plain cancel/standard confirm refocuses while a multi-UOM confirm does not.
+    expect(pick).toContain('if (!pickerWillOpenUomRef.current) focusSearch();');
+    // The flag is reset on every close so the next open starts clean.
+    expect(pick).toContain('pickerWillOpenUomRef.current = false;');
+    // The OLD unconditional refocus is gone.
+    expect(pick).not.toMatch(/setPickerOpen\(false\);\s*focusSearch\(\);/);
+  });
+
+  test('the Select picker confirm + multi-UOM selection does NOT refocus behind UomModal (Codex blocker)', () => {
+    const pick = region(posSource, '<ProductPickerDialog', '<CustomerPickerModal');
+    // onConfirm decides up-front whether the confirmed batch will open UomModal...
+    expect(pick).toContain('const willOpenUom = resolved.some((p) => p.uomOptions.length > 1);');
+    // ...threads skipFocus into every add so a single-UOM item in the SAME batch won't refocus
+    // the scan box behind the modal...
+    expect(pick).toContain('onProductClick(product, { skipFocus: willOpenUom });');
+    // ...and records the decision so onClose skips the scan-box refocus.
+    expect(pick).toContain('pickerWillOpenUomRef.current = willOpenUom;');
+  });
+
+  test('the Sort modal (SortingSettingsModal) returns focus on close', () => {
+    const sort = region(posSource, '<SortingSettingsModal', 'defaultBranchId={posBranchId}');
+    expect(sort).toMatch(/setIsSortingModalOpen\(false\);[\s\S]{0,80}focusSearch\(\)/);
+  });
+});
+
 // ─── E. Escape close/cancel/dismiss contract (D4-C-4 fix) ───────────────────────────
 describe('7C-D4-C-4 · Escape close/cancel/dismiss contract (POSPage.tsx)', () => {
   /** Body of the central Escape helper (between its `useCallback(` and the dep array `}, [`). */
@@ -631,7 +705,7 @@ describe('7C-L1 · Product Picker multi-UOM selection queue (POSPage.tsx)', () =
   });
 
   test('onProductClick ENQUEUES multi-UOM products instead of overwriting uomProduct', () => {
-    const fn = region(posSource, 'const onProductClick = useCallback', '[cart],');
+    const fn = region(posSource, 'const onProductClick = useCallback', '[cart, focusSearch],');
     expect(fn).toContain('product.uomOptions.length > 1');
     // The fix: append to the queue (functional updater → no stale read during the batch loop).
     expect(fn).toContain('setUomQueue((q) => [...q, product]);');
@@ -654,9 +728,11 @@ describe('7C-L1 · Product Picker multi-UOM selection queue (POSPage.tsx)', () =
   });
 
   test('the picker confirm routes EVERY selected product through onProductClick (no overwrite)', () => {
-    const pick = region(posSource, '<ProductPickerDialog', 'onClose={() => setPickerOpen(false)}');
-    expect(pick).toContain('for (const item of selected)');
-    expect(pick).toContain('onProductClick(product);');
+    const pick = region(posSource, '<ProductPickerDialog', 'onClose=');
+    // Resolves the selection then routes every resolved product through onProductClick (with the
+    // batch-wide skipFocus decision). No direct slot overwrite.
+    expect(pick).toContain('for (const product of resolved)');
+    expect(pick).toContain('onProductClick(product, { skipFocus: willOpenUom });');
   });
 
   test('the pending batch keeps F12 suppressed across items (uomQueue in the blocking predicate)', () => {
@@ -1041,7 +1117,7 @@ describe('7C-UI-10-B · Best Seller system + All-tab removal (POSPage.tsx)', () 
   });
 
   test('L1 multi-UOM queue enqueue logic is untouched by UI-10', () => {
-    const fn = region(posSource, 'const onProductClick = useCallback', '[cart],');
+    const fn = region(posSource, 'const onProductClick = useCallback', '[cart, focusSearch],');
     expect(fn).toContain('setUomQueue((q) => [...q, product]);');
     expect(fn).toContain('cart.addToCart(product, product.uomOptions[0]!);');
   });
@@ -1112,7 +1188,7 @@ describe('7C-UI-10-B · Best Seller data pipeline (Option A)', () => {
 // by the old Quick Menu. Fix: both the pill bar AND the overlay must clear the Quick Menu.
 describe('7C-UI-10-B Revision · Overlay category selection clears the Quick Menu (POSPage.tsx)', () => {
   test('selectCategory (the shared path) clears activeQuickMenuId then sets the category', () => {
-    const fn = region(posSource, 'const selectCategory = useCallback', '}, []);');
+    const fn = region(posSource, 'const selectCategory = useCallback', '}, [focusSearch]);');
     expect(fn).toContain('setActiveQuickMenuId(null);');
     expect(fn).toContain('setActiveCategory(catId);');
   });
