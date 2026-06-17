@@ -1,18 +1,16 @@
-# AGY / Senior QA & UX Lead Review
+﻿# AGY / Senior QA & UX Lead Review
 
 ## Phase
-**7C-UI-03-POLISH** — Glowing Refresh Button, Cancel-Path Focus Recovery, and Border Polish
+**7C-UI-04-SYNC-AND-MACRO-LAYOUT** โ€” Category Sync and Product/Gridโ€“Cart Macro Layout Polish
 
-## UX Review Summary
-The implementation for UI-03 has been reviewed against the **Impeccable Style** standard and the UI-03 directives.
+## UX & Macro-Layout Review Summary
+The implementation for UI-04 has been reviewed against the **Impeccable Style** standard and the UI-04 directives.
 
-- **Impeccable Style & Visual Feedback (Glowing Refresh Button)**: The replacement of the intrusive notification banner with the `pos-action-link--update` class is highly effective. The soft amber tint (`#fff8e6`) with a subtle `box-shadow` pulse (1.9s) correctly conveys manager-update urgency without being visually disruptive, blinding, or "cheap".
-- **Zero Layout Shift**: By removing the conditionally mounted `pos-sync-banner` element and replacing it with a `box-shadow` and color class-toggle on the existing Refresh button, the implementation completely eliminates the layout reflow that plagued the Physical UAT.
-- **Border Refinements**:
-  - **Category Tabs**: Upgrading to a `1px` border with `box-sizing: border-box` alongside matching the `border-color` to the active fill cleanly resolves the overlap/double-border look without altering the row footprint.
-  - **Select Customer Button**: The change to a `1px dashed` border (with `box-sizing: border-box`) ensures the dash renders crisply on all displays, elevating the element to a more premium state while preserving its layout dimensions.
-- **Focus Recovery on Cancel Paths**: The injection of `focusSearch()` within the `onClose` handlers for the Hold-Bill and Suspended-Bills modals correctly restores scanner focus when the cashier cancels or dismisses the modals, smoothly closing the remaining interaction gap.
-- **Regressions**: There are no visual regressions to the UI-02 layout constraints. The top bar, search box, action links, and cart remain perfectly preserved.
+- **Macro Layout & Gap Alignment**: Adjusting the cart margin from `margin: 8px 8px 8px 0` to `margin: 0 8px 8px 8px` flawlessly resolves the layout alignment problem. The Cart top edge perfectly aligns with the Category bar (both 64px), eliminating the jagged UI. The unified 8px left/right/bottom margin establishes a deliberate and premium gutter, connecting the two panels architecturally instead of appearing disjointed. The Cart correctly retains its `box-shadow` elevation.
+- **Select Customer Button**: Verified that the `.pos-cust-pick` class and its dashed border styling remain completely untouched, strictly following the amended directive.
+- **Category Sync & Render**: The expansion of the `visibleCategories` array to include the backend `richCategories` collection correctly surfaces newly created categories post-refresh. The system elegantly relies on the existing catalog-wide update bell, preserving the glowing refresh behavior (UI-03) without redundant logic.
+- **Horizontal Scroll for Tabs**: The addition of `flex-wrap: nowrap` and `scrollbar-width: none` (pairing with `overflow-x: auto`) properly constrains the category tabs, forcing horizontal scrolling rather than wrapping. This ensures the layout doesn't break vertically when a large number of categories exist.
+- **Regressions**: Zero layout regressions to the UI-03 search bar, refresh glow, or cancel-path focus behaviors. All interactions remain intact.
 
 ## Verdict
 **PASS**
@@ -20,11 +18,11 @@ The implementation for UI-03 has been reviewed against the **Impeccable Style** 
 ---
 
 STATE CARD
-Phase: 7C-UI-03-POLISH
-Current owner: AGY / Senior QA & UX Lead (complete) → Codex Reviewer
+Phase: 7C-UI-04-SYNC-AND-MACRO-LAYOUT
+Current owner: AGY / Senior QA & UX Lead (complete) โ’ Codex Reviewer
 Verdict: PASS
 Files changed: docs/reports/latest-agy-review.md
-Tests/checks: Visual/UX code review of POSPage.css and POSPage.tsx
+Tests/checks: Visual/macro-layout review of POSPage.css and POSPage.tsx
 Staged: None
 Committed: None
 Required fixes: None

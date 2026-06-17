@@ -7,7 +7,7 @@ Updated by whichever agent or human currently owns the task.
 
 ## Current Phase
 
-**7C-UI-03-POLISH** — Glowing Refresh Button, Cancel-Path Focus Recovery, and Border Polish.
+**7C-UI-04-SYNC-AND-MACRO-LAYOUT** — Category Sync and Product/Grid–Cart Macro Layout Polish.
 
 ## Current Owner
 
@@ -22,7 +22,7 @@ Updated by whichever agent or human currently owns the task.
 ## Preflight
 
 - Working tree was **clean** before start.
-- HEAD at start: `023cc8d fix(pos): recover scanner focus across cashier actions` (the committed 7C-UI-02-HOTFIX-FOCUS-EDGE).
+- HEAD at start: `ce49a82 style(pos): polish refresh update state and focus recovery`.
 - `stash@{0}` present and untouched.
 
 ## Scope
@@ -46,17 +46,17 @@ No staging. No commit.
 
 ### What changed (directives A / B / C)
 
-- **A — Glowing Refresh button (replaces banner):** removed the standalone `.pos-sync-banner` (it mounted above the topbar and shifted the layout). The pending-update urgency now toggles `pos-action-link--update` on the always-present Refresh button — a soft amber tint + a glow that pulses via `box-shadow` only (zero layout shift); it clears when the refresh resolves. Update detection/refresh behavior unchanged.
-- **B — Cancel-path focus:** `HoldBillNoteModal.onClose` and `SuspendedBillsListModal.onClose` now `focusSearch()` (confirm/restore paths already refocus). Modal-owned focus is never stolen while open.
-- **C — Border polish (CSS only):** category pills use a crisp 1px edge with `box-sizing:border-box` (active pill border matches its fill instead of `transparent`); the Select Customer dashed border refined to an even 1px dash. No size/layout change.
+- **A — Macro layout (CSS):** `.pos-cart` top margin set to `0` so its top edge + the 64px customer/Select bar align perfectly with the 64px category bar on the left (no jagged top); left/right/bottom 8px form one consistent intentional gutter on the g50 surface; border + shadow keep the premium floating feel. **Select Customer dashed border NOT touched.**
+- **B — Category sync (TSX):** the category tab list is now sourced from BOTH product categories AND the categories collection (`richCategories`), deduped + branch-gated — so a newly-added category renders after a Refresh (the old tabs derived from products only). The update bell (`lastForceUpdate`) is catalog-wide and already glows/refreshes for category broadcasts; `refreshInventory()` already re-fetches categories. (Admin-side broadcast-on-category-edit is the backend trigger, outside POS scope.)
+- **C — Horizontal scroll (CSS):** `.pos-cat-bar` made robustly scrollable (`flex-wrap: nowrap` + `overflow-x: auto` + `scrollbar-width: none`, webkit scrollbar already hidden); parent `min-width: 0` means many tabs scroll instead of pushing the cart.
 
 ### Tests / checks run
 
 - `git diff --check` — clean
-- `git diff -- src/pages/POSPage.css` — scoped to UI-03 (banner removal + glow + border polish)
+- `git diff -- src/pages/POSPage.css | grep cust-pick` — **empty (Select Customer untouched)**
 - `npx.cmd tsc -b` — PASS
-- `npx.cmd vitest run src/pages/POSPage.keyboard-contract.test.ts` — **142 passed** (was 137; +5 UI-03 tests)
-- `npx.cmd vitest run` — **709 passed (31 files)**
+- `npx.cmd vitest run src/pages/POSPage.keyboard-contract.test.ts` — **145 passed** (was 142; +3 UI-04 tests)
+- `npx.cmd vitest run` — **712 passed (31 files)**
 
 ### Staging / Commit status
 
@@ -70,15 +70,15 @@ Nothing staged. Nothing committed. No authorization yet.
 |---|---|
 | UI-01 Animation | Closed / committed (`3b6b8ed`) |
 | UI-02 Search & Barcode styling | Closed / committed (`bb9b1ad`) |
-| UI-02 Focus Hotfix | Closed / committed (`42ff3ed`) |
-| UI-02 Focus Hotfix EDGE | Closed / committed (`023cc8d`) |
-| UI-03 Polish | **In Progress** — Developer done, **awaiting AGY visual review** |
-| UI-04+ | **Unauthorized** — do not start |
+| UI-02 Focus Hotfix + EDGE | Closed / committed (`42ff3ed`, `023cc8d`) |
+| UI-03 Polish | Closed / committed (`ce49a82`) |
+| UI-04 Sync & Macro Layout | **In Progress** — Developer done, **awaiting AGY visual review** |
+| UI-05+ | **Unauthorized** — do not start |
 | Old manual workflow | Available as fallback at any time |
 
 ## Next Owner
 
-**Senior QA & UX Lead / AGY** (ROLE FILE: `docs/ai-roles/ux-lead.md`) — mandatory visual/UX review BEFORE Codex (this phase has visual polish).
+**Senior QA & UX Lead / AGY** (ROLE FILE: `docs/ai-roles/ux-lead.md`) — mandatory visual/UX review BEFORE Codex (macro layout alignment + Impeccable Style).
 
 ## Next Action
 
@@ -95,16 +95,16 @@ Human operator routes the current packet, `docs/reports/latest-developer-report.
 
 ## Stop Condition
 
-Developer stops after implementation + report. No staging, no commit, **no Codex until AGY review passes**, no UI-04. Wait for AGY visual validation.
+Developer stops after implementation + report. No staging, no commit, **no Codex until AGY review passes**, no UI-05. Wait for AGY visual validation.
 
 ---
 
 ## Latest Commit Baseline
 
 ```
+ce49a82 style(pos): polish refresh update state and focus recovery
 023cc8d fix(pos): recover scanner focus across cashier actions
 42ff3ed fix(pos): restore scanner focus after cashier actions
-bb9b1ad style(pos): refine search and barcode action bar
 ```
 
 ## Stash

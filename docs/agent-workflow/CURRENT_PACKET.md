@@ -2,27 +2,27 @@
 
 ## Phase
 
-**7C-UI-03-POLISH** — Glowing Refresh Button, Cancel-Path Focus Recovery, and Border Polish
+**7C-UI-04-SYNC-AND-MACRO-LAYOUT** — Category Sync and Product/Grid–Cart Macro Layout Polish
 
 ## Goal
 
-Eliminate layout shift from the update notification, restore focus on cancel paths, and polish visual border edges — while preserving all cashier keyboard/scanner contracts. This phase is UI-03 polish + behavioral focus refinement; **AGY visual review is required before Codex.**
+Fix the macro layout relationship between the left product/category area and the right cart panel, add category update sync detection/render, and make category tabs horizontally scrollable — while preserving UI-03 focus recovery and the Select Customer button styling (dashed border NOT to be touched). **AGY visual review is required before Codex.**
 
 ## CEO Physical UAT Issue Summary
 
-Ongoing Physical UAT found: (1) the standalone yellow Manager-Update banner violently shifts the layout when it appears/disappears; (2) focus loss on the Hold-Bill and Suspended-Bills cancel/close paths; (3) border overlap / unrefined edges on the Select Customer button and the Category Tabs.
+The prior UAT interpretation is cancelled — **the Select Customer dashed border is acceptable and must NOT be touched.** The actual issues are: (1) macro layout alignment + gap between the left Product/Grid area and the right Cart panel (jagged top edges; the gap exposes an ugly light-gray background, making the panels feel disconnected); (2) category sync blindspot — the update listener detects product changes but category changes don't render; (3) category tabs must scroll horizontally so new categories don't break/wrap the layout.
 
 ## Implementation Directives (A / B / C)
 
-**A — Glowing Button replaces the Notification Banner.** Remove the standalone yellow Manager-Update banner completely; reserve no layout space. When an update is detected, transform the existing Refresh / อัปเดตข้อมูลหน้าจอ button (top action bar) to be visually urgent but premium — soft amber/yellow (or soft red) with a subtle pulse/glow via existing CSS conventions. Once clicked/refreshed or the update state resolves, the button returns to standard styling. **The update-state toggle must produce ZERO layout shift.**
+**A — Macro Layout: Grid vs Cart Alignment & Gap.** Align the top boundaries of the left Category/Product-Grid area and the right Cart container perfectly. Make the gap between the two panels look intentional, seamless, and premium (no exposed-gray sliver); the cart may keep a subtle floating/elevated feel but spacing must make architectural sense. Scoped to POS macro layout. **Do NOT touch or restyle the Select Customer button dashed border.**
 
-**B — Focus Recovery on Cancel Paths.** Bind the existing scanner-focus helper to the Hold-Bill (พักบิล) and Suspended-Bills (บิลที่พักไว้) modal `onClose` / cancel paths so focus returns to `searchInputRef` on close/cancel. Never steal focus while the modal is open. Preserve scanner, Ctrl+F, F12, UOM, Payment, ProductPicker, discount/numpad focus ownership.
+**B — Category Sync Blindspot.** Ensure POS update detection covers category updates: when a category is added/modified in admin state, the Refresh button must glow like with product changes, and clicking Refresh must fetch and render the new/updated categories. Preserve existing product update detection and the UI-03 glowing-refresh behavior.
 
-**C — Border Overlap & Unrefined Edges.** Fix the active Category Tab double-bottom border / overlap (`-mb-px` or equivalent if appropriate) and refine the Select Customer dashed border so both look balanced and premium. Keep changes local and scoped — no broad redesign.
+**C — Horizontal Scroll for Category Tabs.** Ensure the category tab container scrolls horizontally when many categories exist (`overflow-x-auto` + scrollbar-hide or equivalent), so added categories never wrap/break the layout. Keep tab interactions + active state intact.
 
 ## AGY Review Requirement (MANDATORY before Codex)
 
-AGY must enforce Impeccable Style and verify: the glowing Refresh button is noticeable but premium (not cheap/blinding/distracting); toggling the update state causes ZERO layout shift; the Select Customer button and Category Tabs look balanced/refined; and there are no cashier-flow visual regressions.
+AGY must verify: the Category/Product-Grid top edge aligns with the Cart top edge; the left/right panel gap looks intentional and premium (no ugly/disconnected exposed background); cart elevation/shadow still feels premium; the Select Customer button was NOT altered; category horizontal scroll feels clean (not broken/cheap); no visual regression from UI-03; and no focus-recovery regression is visible in cashier flow.
 
 ## Status
 
@@ -47,14 +47,19 @@ AGY must enforce Impeccable Style and verify: the glowing Refresh button is noti
 
 ### Forbidden Files / Areas
 
-- `useCart.ts`, `useCart.contract.test.ts`, `cartUtils.ts`, cart math
+- **Select Customer button styling / dashed border** (acceptable as-is — do NOT touch)
+- `useCart.ts` (default forbidden), `useCart.contract.test.ts`, `cartUtils.ts`, cart math
 - Checkout / payment business logic, stock matrix, seed data
-- Toast files (unless directly part of existing update-banner logic and absolutely required — default: do not touch)
+- Toast files (unless directly proven necessary for update detection — default: do not touch)
 - Firebase / functions / rules
 - Android / Capacitor artifacts
 - `.claude/`
 - No new scripts, no new dependencies
-- No UI-04+ work
+- No UI-05+ work; do not break UI-03 focus recovery
+
+### Authorized data/subscription helper note
+
+The packet authorizes a POS data/subscription helper file responsible for the product/category update listener if POSPage does not own it. In practice **no such file needed changing**: the listener (`usePosSyncSignal`) reads the branch's catalog-wide `sync_state.lastForceUpdate` bell, which already fires for category broadcasts; `refreshInventory` (`usePosInventory` → `getInventorySnapshot`) already re-fetches categories. The POS-side gap was the category *render* (tabs derived from product categories only) — fixed in `POSPage.tsx`.
 
 ---
 

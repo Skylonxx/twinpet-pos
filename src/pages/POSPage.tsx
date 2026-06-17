@@ -491,16 +491,30 @@ export default function POSPage() {
       metaByKey.set(c.id, c);
       metaByKey.set(c.name, c);
     }
-    const enriched: ProductCategory[] = categories
-      .filter((c) => c !== '')
-      .map((catStr) => {
-        const meta = metaByKey.get(catStr);
-        return {
-          id: catStr, // the value used to filter products (p.category)
-          name: meta?.name ?? catStr,
-          branchSettings: meta?.branchSettings,
-        };
+    // UI-04 category-sync: build the tab list from BOTH the products' category strings AND the
+    // categories collection (`richCategories`), deduped by the canonical filter key. Previously
+    // the tabs were derived from product categories only, so a category ADDED in admin (and
+    // broadcast via the catalog-wide sync bell) never appeared after a refresh until a product
+    // referenced it — the category-update blindspot. Branch visibility/order are still applied
+    // below by getVisibleCategories/sortCategories, so a hidden category stays hidden.
+    const seen = new Set<string>();
+    const enriched: ProductCategory[] = [];
+    for (const catStr of categories) {
+      if (catStr === '' || seen.has(catStr)) continue;
+      seen.add(catStr);
+      const meta = metaByKey.get(catStr);
+      enriched.push({
+        id: catStr, // the value used to filter products (p.category)
+        name: meta?.name ?? catStr,
+        branchSettings: meta?.branchSettings,
       });
+    }
+    // Collection-only categories (no product references them yet) — render them too, keyed by id.
+    for (const c of richCategories) {
+      if (seen.has(c.id) || seen.has(c.name)) continue;
+      seen.add(c.id);
+      enriched.push({ id: c.id, name: c.name, branchSettings: c.branchSettings });
+    }
     return sortCategories(getVisibleCategories(enriched, posBranchId), posBranchId);
   }, [categories, richCategories, posBranchId]);
 

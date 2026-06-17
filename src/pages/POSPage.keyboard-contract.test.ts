@@ -470,6 +470,43 @@ describe('7C-UI-03-POLISH · Update glow + cancel-path focus (POSPage.tsx)', () 
   });
 });
 
+// ─── C5. UI-04 category sync + macro layout ─────────────────────────────────────────────
+// Physical UAT (corrected): (A) the left product/grid area and the right cart panel had a jagged
+// top edge and an awkward exposed gutter — fixed in POSPage.css (cart top aligns with the category
+// bar; a single consistent gutter). (B) the catalog-wide update bell already glows for any admin
+// broadcast, but the category TABS were derived from product categories only, so a newly-added
+// category never rendered after a refresh — now sourced from the categories collection too.
+// (C) the category bar scrolls horizontally (POSPage.css). A and C are CSS-only and validated by
+// AGY; the testable parts (the B render-merge + catalog-wide refresh) are pinned here.
+describe('7C-UI-04-SYNC-AND-MACRO-LAYOUT · Category sync + macro layout (POSPage.tsx)', () => {
+  test('B — category tabs are sourced from the categories collection too (new categories render)', () => {
+    const memo = region(posSource, 'const visibleCategories = useMemo', '}, [categories, richCategories, posBranchId]);');
+    // Product-derived strings AND collection-only categories both feed the tab list...
+    expect(memo).toContain('for (const catStr of categories)');
+    expect(memo).toContain('for (const c of richCategories)');
+    expect(memo).toContain('enriched.push({ id: c.id, name: c.name, branchSettings: c.branchSettings });');
+    // ...deduped, and still gated by branch visibility + order.
+    expect(memo).toContain('getVisibleCategories(enriched, posBranchId)');
+    expect(memo).toContain('sortCategories(');
+  });
+
+  test('B — the update bell is catalog-wide: glow + refresh fire for category OR product changes', () => {
+    // The POS reacts to the generic sync timestamp (not a product-only field), so a category
+    // broadcast defers a banner / auto-refreshes exactly like a product one.
+    const eff = region(posSource, 'if (!syncInitialized) return;', '}, [syncInitialized, lastForceUpdate, cartLines.length, refreshInventory]);');
+    expect(eff).toContain('lastForceUpdate');
+    expect(eff).toContain('setUpdateBanner(true);');
+    // Acknowledging the update pulls a fresh snapshot — which includes the updated categories.
+    const refresh = region(posSource, 'const handleManualRefresh = useCallback', '[lastForceUpdate, refreshInventory, focusSearch]');
+    expect(refresh).toContain('void refreshInventory();');
+  });
+
+  test('C — the category bar still renders every visible category (horizontal-scroll container)', () => {
+    const bar = region(posSource, 'className="pos-cat-bar"', '{loading ?');
+    expect(bar).toContain('visibleCategories.map');
+  });
+});
+
 // ─── E. Escape close/cancel/dismiss contract (D4-C-4 fix) ───────────────────────────
 describe('7C-D4-C-4 · Escape close/cancel/dismiss contract (POSPage.tsx)', () => {
   /** Body of the central Escape helper (between its `useCallback(` and the dep array `}, [`). */

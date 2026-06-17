@@ -2,121 +2,123 @@
 
 ## Phase
 
-**7C-UI-03-POLISH**
+7C-UI-04-SYNC-AND-MACRO-LAYOUT
 
 ## Verdict
 
-**FAIL**
+FAIL
 
 ## Summary
 
-The app implementation is correct at code/contract level, but the package cannot pass because `git diff --check` fails on trailing whitespace in `docs/reports/latest-agy-review.md`.
+The UI-04 app implementation passes the code, behavior, scope, and keyboard-contract review. The package still cannot pass because `git diff --check` currently fails on trailing whitespace in `docs/reports/latest-agy-review.md` line 11.
 
-App behavior reviewed:
-
-- The standalone `pos-sync-banner` render block is removed from `POSPage.tsx`.
-- Pending manager update now toggles `pos-action-link--update` on the always-present Refresh button.
-- Update detection and refresh behavior remain driven by `updateBanner`, `setUpdateBanner(false)`, and `refreshInventory()`.
-- Hold-Bill and Suspended-Bills `onClose` handlers now close and call `focusSearch()`.
-- Border polish is scoped to `POSPage.css` category pills and Select Customer button.
-- No cart math, checkout/payment business logic, stock, Toast, Firebase, Android, or `.claude/` changes were found.
+No app-code blocker was found. The required fix is report hygiene only.
 
 ## Findings
 
 ### 1. `git diff --check` fails on AGY report trailing whitespace
 
-Severity: **Blocker**
+Severity: Blocker
 
-`git diff --check` reports trailing whitespace in `docs/reports/latest-agy-review.md`:
+Current output includes:
 
-- line 9
-- line 11
-- line 12
-- line 27
+```text
+docs/reports/latest-agy-review.md:11: trailing whitespace.
+```
 
-This is not an app-code bug, but it fails the repository hygiene gate and must be fixed before commit.
+This is outside the app implementation, but it is a repository hygiene gate failure and must be fixed before commit.
 
-## Code / Behavior Review
+## A. Macro Layout Review
 
-- **Banner removal / zero layout shift:** PASS — the conditional `{updateBanner && (...)}` banner mount is gone. The update state changes only the Refresh button class/title, not the DOM structure.
-- **Refresh behavior:** PASS — `handleManualRefresh` still clears `updateBanner`, calls `refreshInventory()`, and refocuses the scan box.
-- **Hold-Bill close focus:** PASS — `HoldBillNoteModal.onClose` now calls `focusSearch()` after closing.
-- **Suspended-Bills close focus:** PASS — `SuspendedBillsListModal.onClose` now calls `focusSearch()` after closing.
-- **Modal-owned focus:** PASS — UOM, Payment, ProductPicker multi-UOM sequencing, bill-discount numpad, Ctrl+F, auto-focus, F12, and scanner paths remain intact at source-contract level.
-- **Border polish:** PASS at code scope — CSS changes are local to update glow, category pill border, and Select Customer border. AGY recorded PASS for visual validation.
+PASS. `.pos-cart` changed from `margin: 8px 8px 8px 0` to `margin: 0 8px 8px 8px`, aligning the cart top with the category bar and creating a consistent left/right/bottom gutter. The cart structure and cart math were not changed.
+
+PASS. The Select Customer dashed border is untouched. No `.pos-cust-pick` CSS hunk is present.
+
+## B. Category Sync Review
+
+PASS. `visibleCategories` now merges product-derived category strings with the categories collection (`richCategories`). The merged list is deduped through `seen`, carries collection metadata where available, and still runs through `getVisibleCategories(enriched, posBranchId)` plus `sortCategories(...)`, preserving branch visibility and ordering.
+
+PASS. Update bell and manual refresh behavior remain catalog-wide through the existing `lastForceUpdate` / `refreshInventory()` path. Product detection paths were not changed.
+
+## C. Category Bar Scroll Review
+
+PASS. `.pos-cat-bar` now uses `flex-wrap: nowrap` with existing horizontal overflow and hidden scrollbar handling, so category pills scroll horizontally instead of wrapping or pushing the cart.
+
+## Keyboard / Focus Contract Review
+
+PASS. UI-03 focus recovery and refresh glow remain intact at source level. Ctrl+F, F12, scanner paths, UOM modal, Payment modal, ProductPicker, and bill-discount numpad behavior are not touched by the UI-04 implementation diff.
 
 ## Files Reviewed
 
+- `docs/agent-workflow/CURRENT_PACKET.md`
+- `docs/reports/latest-developer-report.md`
+- `docs/reports/latest-agy-review.md`
 - `src/pages/POSPage.tsx`
 - `src/pages/POSPage.css`
 - `src/pages/POSPage.keyboard-contract.test.ts`
-- `docs/agent-workflow/STATE.md`
-- `docs/agent-workflow/CURRENT_PACKET.md`
-- `docs/agent-workflow/NEXT_ACTION.md`
-- `docs/reports/latest-developer-report.md`
-- `docs/reports/latest-agy-review.md`
-- `docs/reports/latest-codex-review.md` (this report)
 
 ## Tests / Checks And Results
 
 | Check | Result |
 |---|---|
-| `git status --short` | Dirty files are UI-03 app files plus workflow/review docs |
-| `git diff --name-only` | `POSPage.tsx`, `POSPage.css`, `POSPage.keyboard-contract.test.ts`, workflow docs, developer report, AGY report |
-| `git diff --stat` | 8 files, 314 insertions, 250 deletions before this Codex report rewrite |
-| `git diff --check` | **FAIL** — trailing whitespace in `docs/reports/latest-agy-review.md` |
+| `git status --short` | Dirty working tree contains UI-04 app files plus workflow/report docs |
+| `git diff --name-only` | `POSPage.tsx`, `POSPage.css`, `POSPage.keyboard-contract.test.ts`, workflow docs, developer report, AGY report, Codex report |
+| `git diff --stat` | 9 files changed before this report rewrite |
+| `git diff --check` | FAIL: trailing whitespace in `docs/reports/latest-agy-review.md:11` |
+| `git diff --cached --name-only` | Empty; no staging |
 | `npx.cmd tsc -b` | PASS |
-| `npx.cmd vitest run src/pages/POSPage.keyboard-contract.test.ts` | PASS, 142 tests |
-| `npx.cmd vitest run` | PASS, 31 files / 709 tests |
+| `npx.cmd vitest run src/pages/POSPage.keyboard-contract.test.ts` | PASS, 145 tests |
+| `npx.cmd vitest run` | PASS, 31 files / 712 tests |
+| `git stash list` | `stash@{0}` present and untouched |
+| `git rev-parse --short HEAD` | `ce49a82`; no commit performed |
+
+Note: Git emitted warnings about inaccessible global ignore config and LF to CRLF conversion warnings. These did not block the commands; the blocking failure is the AGY report trailing whitespace.
 
 ## Boundary Confirmation
 
-- [x] App changes are limited to `POSPage.tsx`, `POSPage.css`, and `POSPage.keyboard-contract.test.ts`.
-- [x] `useCart.ts` untouched.
-- [x] `cartUtils.ts` untouched.
-- [x] No cart math changed.
-- [x] Checkout/payment business logic untouched.
-- [x] Stock matrix untouched.
-- [x] Seed data untouched.
-- [x] Toast files untouched.
-- [x] Firebase/functions/rules untouched.
-- [x] Android/Capacitor untouched.
-- [x] `.claude/` untouched.
-- [x] No scripts created.
-- [x] No UI-04 work.
-- [x] No staging.
-- [x] No commit.
-- [x] `stash@{0}` remains present and untouched.
+- Authorized app files changed: `src/pages/POSPage.tsx`, `src/pages/POSPage.css`, `src/pages/POSPage.keyboard-contract.test.ts`.
+- Workflow/report docs changed as expected for the current handoff flow.
+- `useCart.ts` untouched.
+- `useCart.contract.test.ts` untouched.
+- `cartUtils.ts` untouched.
+- No cart math changed.
+- Checkout/payment business logic untouched.
+- Stock matrix untouched.
+- Toast untouched.
+- Firebase/functions/rules untouched.
+- Android/Capacitor untouched.
+- `.claude/` untouched.
+- No scripts created.
+- No UI-05 work found.
+- No staging.
+- No commit.
 
 ## Required Fixes
 
-1. Remove trailing whitespace in `docs/reports/latest-agy-review.md` so `git diff --check` passes.
-2. Re-run `git diff --check`. TypeScript and Vitest do not need code changes based on this review, but re-running the standard validation after cleanup is recommended.
+1. Remove trailing whitespace from `docs/reports/latest-agy-review.md` line 11.
+2. Re-run `git diff --check`.
 
-## Notes
-
-- I found no blocker in the app implementation itself.
-- The modified `docs/reports/latest-agy-review.md` is expected by the packet’s AGY-before-Codex gate, although the packet’s “Authorized workflow/report files” list does not explicitly include AGY/Codex report files. Tech Lead may want to clarify report-file scope in future packets.
+No app code changes are required based on this review.
 
 ## Next Owner
 
-**Developer Agent**
+Developer Agent
 
 ## Next Action
 
-Clean the trailing whitespace in the AGY report, rerun `git diff --check`, and return to Codex for a narrow re-check.
+Perform whitespace-only cleanup in `docs/reports/latest-agy-review.md`, rerun `git diff --check`, then return to Codex for a narrow package-hygiene re-check.
 
 ---
 
 STATE CARD
-Phase: 7C-UI-03-POLISH
+Phase: 7C-UI-04-SYNC-AND-MACRO-LAYOUT
 Current owner: Codex Reviewer
 Verdict: FAIL
-Files changed: src/pages/POSPage.tsx; src/pages/POSPage.css; src/pages/POSPage.keyboard-contract.test.ts; docs/agent-workflow/STATE.md; docs/agent-workflow/CURRENT_PACKET.md; docs/agent-workflow/NEXT_ACTION.md; docs/reports/latest-developer-report.md; docs/reports/latest-agy-review.md; docs/reports/latest-codex-review.md
-Tests/checks: git status/diff/diff-stat reviewed; git diff --check FAIL due trailing whitespace in latest-agy-review.md; npx.cmd tsc -b PASS; POSPage.keyboard-contract 142 passed; full vitest 709 passed
+Files changed: docs/agent-workflow/CURRENT_PACKET.md; docs/agent-workflow/NEXT_ACTION.md; docs/agent-workflow/STATE.md; docs/reports/latest-agy-review.md; docs/reports/latest-codex-review.md; docs/reports/latest-developer-report.md; src/pages/POSPage.css; src/pages/POSPage.keyboard-contract.test.ts; src/pages/POSPage.tsx
+Tests/checks: git status --short reviewed; git diff --name-only reviewed; git diff --stat reviewed; git diff --check FAIL due trailing whitespace in docs/reports/latest-agy-review.md:11; git diff --cached --name-only empty; npx.cmd tsc -b PASS; POSPage.keyboard-contract 145 passed; full vitest 712 passed; stash@{0} present; HEAD ce49a82
 Staged: None
 Committed: None
-Required fixes: Remove trailing whitespace in docs/reports/latest-agy-review.md and rerun git diff --check
+Required fixes: Remove trailing whitespace in docs/reports/latest-agy-review.md line 11 and rerun git diff --check
 Next owner: Developer Agent
-Next action: Fix whitespace-only report hygiene issue, then return to Codex for narrow re-check
-Stop condition: No staging; no commit; do not start UI-04
+Next action: Whitespace-only cleanup, then return to Codex for narrow re-check
+Stop condition: No staging; no commit; do not start UI-05
