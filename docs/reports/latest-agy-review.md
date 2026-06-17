@@ -1,16 +1,18 @@
 # AGY / Senior QA & UX Lead Review
 
 ## Phase
-**7C-UI-02-SEARCH-BARCODE**
+**7C-UI-03-POLISH** — Glowing Refresh Button, Cancel-Path Focus Recovery, and Border Polish
 
 ## UX Review Summary
-The CSS-only refactor of the POS top bar search and action buttons has been reviewed against the **Impeccable Style** standard.
+The implementation for UI-03 has been reviewed against the **Impeccable Style** standard and the UI-03 directives.
 
-- **Impeccable Style**: The updated top bar successfully implements a calm, rounded aesthetic. The search input focus ring is soft and on-brand, avoiding any harsh or distracting colors. The standardization of the Sort, Refresh, and Select buttons into a single cohesive height (36px) with an 8px radius creates a highly polished, professional Flowbite-like appearance.
-- **Clutter & Cognitive Load**: The primary action (Select) remains distinct while the secondary actions (Sort, Refresh) correctly adopt a "ghost" styling. This prevents a cramped or visually overwhelming cluster, directly reducing cashier cognitive load while keeping critical controls discoverable.
-- **Keyboard-First Design**: The search input remains the dominant element, and its new focus ring strongly supports fast, keyboard-first cashier workflows.
-- **Stability**: Because focus rings are applied via `box-shadow` and button geometries are unified to fixed dimensions, there are zero layout shifts on hover or focus.
-- **Scope & Regressions**: The UI-01 bump-flash keyframes and classes remain fully intact. Scope was strictly respected (CSS-only).
+- **Impeccable Style & Visual Feedback (Glowing Refresh Button)**: The replacement of the intrusive notification banner with the `pos-action-link--update` class is highly effective. The soft amber tint (`#fff8e6`) with a subtle `box-shadow` pulse (1.9s) correctly conveys manager-update urgency without being visually disruptive, blinding, or "cheap".
+- **Zero Layout Shift**: By removing the conditionally mounted `pos-sync-banner` element and replacing it with a `box-shadow` and color class-toggle on the existing Refresh button, the implementation completely eliminates the layout reflow that plagued the Physical UAT.
+- **Border Refinements**:
+  - **Category Tabs**: Upgrading to a `1px` border with `box-sizing: border-box` alongside matching the `border-color` to the active fill cleanly resolves the overlap/double-border look without altering the row footprint.
+  - **Select Customer Button**: The change to a `1px dashed` border (with `box-sizing: border-box`) ensures the dash renders crisply on all displays, elevating the element to a more premium state while preserving its layout dimensions.
+- **Focus Recovery on Cancel Paths**: The injection of `focusSearch()` within the `onClose` handlers for the Hold-Bill and Suspended-Bills modals correctly restores scanner focus when the cashier cancels or dismisses the modals, smoothly closing the remaining interaction gap.
+- **Regressions**: There are no visual regressions to the UI-02 layout constraints. The top bar, search box, action links, and cart remain perfectly preserved.
 
 ## Verdict
 **PASS**
@@ -18,11 +20,11 @@ The CSS-only refactor of the POS top bar search and action buttons has been revi
 ---
 
 STATE CARD
-Phase: 7C-UI-02-SEARCH-BARCODE
+Phase: 7C-UI-03-POLISH
 Current owner: AGY / Senior QA & UX Lead (complete) → Codex Reviewer
 Verdict: PASS
 Files changed: docs/reports/latest-agy-review.md
-Tests/checks: Visual/UX code review of POSPage.css
+Tests/checks: Visual/UX code review of POSPage.css and POSPage.tsx
 Staged: None
 Committed: None
 Required fixes: None

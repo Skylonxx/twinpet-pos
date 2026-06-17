@@ -2,23 +2,64 @@
 
 ## Current State
 
-Developer Agent has completed the **7C-UI-02-HOTFIX-FOCUS-EDGE** implementation: comprehensive focus recovery across all 9 CEO-flagged POS controls (Cash In/Out, Close Shift, Clear Cart, remove line, qty ＋/−, fee, discount ฿/%). Changes are **not staged and not committed**. The work is routed to **Codex Reviewer** for behavior/code/keyboard-contract review. **AGY is bypassed** for this phase (behavioral focus recovery, not visual polish).
+Developer Agent has completed the **7C-UI-03-POLISH** implementation: (A) removed the layout-shifting Manager-Update banner and moved its urgency onto a premium glow on the existing Refresh button; (B) added focus recovery on the Hold-Bill and Suspended-Bills cancel/close paths; (C) refined the Category Tab and Select Customer button border edges. Changes are **not staged and not committed**. Because this phase includes **visual UI polish, AGY review is REQUIRED before Codex** — the work routes to **Senior QA & UX Lead / AGY first**.
 
 ## What Happens Next
 
 1. **Human operator** reads the Developer report at `docs/reports/latest-developer-report.md`.
-2. **Human operator** sends Codex the current packet (`docs/agent-workflow/CURRENT_PACKET.md`), the Developer report, and the **current diff**.
-3. **Codex Reviewer** reviews focus recovery (all 9 targets), scope, and keyboard-contract preservation.
-4. If **Codex FAIL** → return to Principal Engineer Reviewer / Workflow Coordinator for remediation.
-5. If **Codex PASS / PASS WITH NOTES** → route to Principal Engineer Reviewer / Workflow Coordinator for Tech Lead closure memo + exact staging/commit commands.
+2. **Human operator** sends **AGY** the current packet (`docs/agent-workflow/CURRENT_PACKET.md`), the Developer report, and the **current diff** for visual/UX validation.
+3. **AGY** validates Impeccable Style + zero layout shift + no visual regression.
+4. If **AGY FAIL** → return to Developer / Principal Engineer Reviewer for remediation.
+5. If **AGY PASS / PASS WITH NOTES** → route to **Codex Reviewer** for code/scope/keyboard review.
+6. After Codex PASS → Principal Engineer Reviewer / Tech Lead for closure memo + exact staging/commit commands.
+
+**Do NOT send to Codex until AGY returns PASS / PASS WITH NOTES.**
 
 ---
 
 ## Copy-Paste Instructions for Human Operator
 
-### Step 1 — Send to Codex Reviewer (DO THIS NEXT)
+### Step 1 — Send to Senior QA & UX Lead / AGY (DO THIS NEXT)
 
-Paste the following to Codex:
+Paste the following to AGY:
+
+```
+TO: Senior QA & UX Lead / AGY
+MODEL: Gemini / best available UX review model for this run
+REASONING: High
+ROLE: Senior QA & UX Lead
+ROLE FILE: docs/ai-roles/ux-lead.md
+MODE: Visual UX validation, Impeccable Style review, no app edits, no staging, no commit
+
+PHASE: 7C-UI-03-POLISH
+SCOPE: visual / UX validation (before Codex)
+
+Inputs:
+- docs/agent-workflow/CURRENT_PACKET.md (active packet — directives A/B/C)
+- docs/reports/latest-developer-report.md (developer report)
+- the current working-tree diff (git diff)
+
+AGY review MUST verify:
+- Glowing Refresh button is premium, noticeable, and NOT cheap / blinding / distracting.
+- Update-state toggle causes ZERO layout shift (the glow pulses via box-shadow only; no element
+  is mounted/unmounted; the button label/icon/footprint are unchanged).
+- No standalone yellow Manager-Update banner remains.
+- Select Customer button dashed border looks balanced and premium.
+- Category Tabs do not show a double-border / overlap; active tab edge is clean.
+- Hold Bill and Suspended Bills cancel/close focus recovery feels correct in cashier flow.
+- No visual regression to the UI-02 layout (search/action bar, cart, footer).
+
+Note: border polish is visual-only and best judged on screen — the contract tests assert the
+behavioral parts (banner removed, glow class toggles, cancel-path refocus) but not pixel edges.
+
+Produce verdict in docs/reports/latest-agy-review.md.
+
+Do not stage or commit.
+Do not start UI-04.
+Do not route to Codex yourself — return the verdict to the human operator.
+```
+
+### Step 2 — Send to Codex Reviewer (ONLY after AGY PASS / PASS WITH NOTES)
 
 ```
 TO: Codex Reviewer
@@ -28,58 +69,31 @@ ROLE: Reviewer Agent
 ROLE FILE: docs/ai-roles/reviewer.md
 MODE: Review only, no edits, no staging, no commit
 
-PHASE: 7C-UI-02-HOTFIX-FOCUS-EDGE
-SCOPE: behavior / code / keyboard-contract review
+PHASE: 7C-UI-03-POLISH
+SCOPE: code / scope / keyboard-contract review
 
-Inputs:
-- docs/agent-workflow/CURRENT_PACKET.md (active packet — all 9 focus targets)
-- docs/reports/latest-developer-report.md (developer report)
-- the current working-tree diff (git diff)
-
-Confirm ALL 9 focus-recovery targets return focus to the scan box (searchInputRef):
-1. Cash In/Out — CashTransactionModal onClose + handleCashTxRecorded (success).
-2. Close Shift — CloseShiftModal onClose (success via handleNewSale).
-3. Clear Cart — DestructiveConfirmModal onConfirm (existing) AND onCancel (new).
-4. Remove line — runAndRefocus(() => cart.removeLine(...)).
-5. Qty + — runAndRefocus(() => cart.changeQty(..., 1)).
-6. Qty - — runAndRefocus(() => cart.changeQty(..., -1)).
-7. Fee chips — runAndRefocus(() => cart.setFeeRate(rate)).
-8. Discount Baht (฿) — runAndRefocus(() => cart.setBillDiscPercent(false)).
-9. Discount Percent (%) — runAndRefocus(() => cart.setBillDiscPercent(true)).
-
-Confirm the shared rAF-deferred runAndRefocus(action) helper mutates THEN refocuses, and that
-modal-owned focus is NOT stolen:
-- UomModal still owns focus until select/close (unchanged; 2 focusSearch in its region).
-- Payment modal focus behavior preserved.
-- ProductPicker multi-UOM sequencing fix from 42ff3ed preserved.
-- Scanner source paths, Ctrl+F, auto-focus, F12 preserved.
-- No focus stolen from the bill-discount numpad while it is open (numpad keeps its own close/confirm refocus).
-
-Scope / boundaries:
-- Only authorized files changed (POSPage.tsx + POSPage.keyboard-contract.test.ts + workflow/report docs).
-- POSPage.css UNTOUCHED; no cart math / useCart.ts / cartUtils.ts / checkout / stock / toast change.
-- tsc clean; POSPage.keyboard-contract.test.ts (137) + full vitest (704) green.
+Verify:
+- Banner removed; pending update toggles `pos-action-link--update` on the existing Refresh button
+  (no element insertion → zero layout shift); update detection/refresh behavior unchanged.
+- Hold-Bill + Suspended-Bills onClose refocus the scan box; modal-owned focus not stolen.
+- Border polish scoped to POSPage.css (category pills + Select Customer); no size/layout change.
+- Only authorized files changed; no cart math / useCart.ts / cartUtils.ts / checkout / stock / Toast change.
+- tsc clean; POSPage.keyboard-contract.test.ts (142) + full vitest (709) green.
 
 Produce verdict in docs/reports/latest-codex-review.md.
-
-Do not stage or commit.
-Do not start UI-03.
-Do not route to AGY unless explicitly requested.
 ```
 
-### Step 2 — Route Codex result back to Principal Engineer Reviewer / Tech Lead
+### Step 3 — Route results to Principal Engineer Reviewer / Tech Lead
 
-Paste the Codex verdict to the Principal Engineer Reviewer / Workflow Coordinator for a Tech Lead closure memo and exact staging/commit commands.
+After AGY PASS → Codex PASS, paste both verdicts to the Principal Engineer Reviewer / Tech Lead for a closure memo and exact staging/commit commands.
 
 ---
 
 ## Important Reminders
 
-- Send to **Codex Reviewer** (GPT-5.5 / best available) with **ROLE FILE: docs/ai-roles/reviewer.md**.
-- Do **not** route to AGY unless Tech Lead/CEO or Principal Engineer explicitly requests it.
+- **AGY first** (ROLE FILE: `docs/ai-roles/ux-lead.md`) — do NOT send to Codex until AGY returns PASS / PASS WITH NOTES.
 - Do **not** stage or commit until Tech Lead / CEO authorizes exact commands.
-- Do **not** start UI-03 or any other phase.
-- Do **not** change `POSPage.css` or any cart/checkout/stock code.
+- Do **not** start UI-04 or any unrelated phase.
 - `stash@{0}` is pre-existing unrelated WIP — do not touch.
 - Old manual workflow remains available as fallback.
 
@@ -88,6 +102,6 @@ Paste the Codex verdict to the Principal Engineer Reviewer / Workflow Coordinato
 | Role | Role File |
 |---|---|
 | Developer Agent | `docs/ai-roles/developer.md` |
+| Senior QA & UX Lead / AGY | `docs/ai-roles/ux-lead.md` |
 | Codex Reviewer | `docs/ai-roles/reviewer.md` |
 | Tech Lead / CEO | `docs/ai-roles/tech-lead.md` |
-| Senior QA & UX Lead / AGY | `docs/ai-roles/ux-lead.md` |

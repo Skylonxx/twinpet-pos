@@ -2,33 +2,31 @@
 
 ## Phase
 
-**7C-UI-02-HOTFIX-FOCUS-EDGE** — Comprehensive POS Focus Recovery Edge Hotfix
+**7C-UI-03-POLISH** — Glowing Refresh Button, Cancel-Path Focus Recovery, and Border Polish
 
 ## Goal
 
-**ZERO focus drops.** No matter what the cashier clicks on the POS interface, once the action resolves the cursor must return to the barcode/search input (`searchInputRef`) — UNLESS a modal/dialog/popover must temporarily own focus, in which case focus returns when it closes/resolves. Behavioral cashier-flow hotfix only; **not** UI-03, **not** visual polish.
+Eliminate layout shift from the update notification, restore focus on cancel paths, and polish visual border edges — while preserving all cashier keyboard/scanner contracts. This phase is UI-03 polish + behavioral focus refinement; **AGY visual review is required before Codex.**
 
 ## CEO Physical UAT Issue Summary
 
-Comprehensive Physical UAT found additional interactive POS controls that steal browser focus and fail to return it to the scanner input after the action resolves — breaking continuous scanning. This is a continuation of the scanner focus-recovery hotfix line (`42ff3ed`), extending coverage to the cart-line and bill-level controls plus the cash/shift/clear-cart modals.
+Ongoing Physical UAT found: (1) the standalone yellow Manager-Update banner violently shifts the layout when it appears/disappears; (2) focus loss on the Hold-Bill and Suspended-Bills cancel/close paths; (3) border overlap / unrefined edges on the Select Customer button and the Category Tabs.
 
-## Focus Recovery Targets (all 9 mandatory)
+## Implementation Directives (A / B / C)
 
-1. **Cash In / Cash Out** — focus recovery on modal close / action resolution.
-2. **Close Shift** — focus recovery on modal close / action resolution.
-3. **Clear Cart** — focus recovery after post-action / confirm close (confirm AND cancel).
-4. **Remove Line Item** — focus recovery after the trash button action and line unmount.
-5. **Quantity Increment (＋)** — cart-line plus button; focus recovery immediately after the state update (rAF / `setTimeout(…,0)` to survive re-render).
-6. **Quantity Decrement (−)** — cart-line minus button; focus recovery immediately after the state update (rAF / `setTimeout(…,0)` to survive re-render).
-7. **Add/Edit Fee** — focus recovery on submit / action resolution or modal/popover close.
-8. **Discount Baht** — focus recovery on submit / action resolution or modal/popover close.
-9. **Discount Percent** — focus recovery on submit / action resolution or modal/popover close.
+**A — Glowing Button replaces the Notification Banner.** Remove the standalone yellow Manager-Update banner completely; reserve no layout space. When an update is detected, transform the existing Refresh / อัปเดตข้อมูลหน้าจอ button (top action bar) to be visually urgent but premium — soft amber/yellow (or soft red) with a subtle pulse/glow via existing CSS conventions. Once clicked/refreshed or the update state resolves, the button returns to standard styling. **The update-state toggle must produce ZERO layout shift.**
 
-**Critical rules:** for state-updating buttons (＋/−, fee, ฿/%), refocus after the state change via the shared rAF-deferred helper. For dialog/popover actions, refocus only when the dialog/popover closes or the submit is confirmed — never steal focus while a modal owns it. Preserve UOM modal focus ownership until close/select, Payment modal focus, the ProductPicker multi-UOM sequencing fix (`42ff3ed`), scanner source paths, Ctrl+F, auto-focus, and F12.
+**B — Focus Recovery on Cancel Paths.** Bind the existing scanner-focus helper to the Hold-Bill (พักบิล) and Suspended-Bills (บิลที่พักไว้) modal `onClose` / cancel paths so focus returns to `searchInputRef` on close/cancel. Never steal focus while the modal is open. Preserve scanner, Ctrl+F, F12, UOM, Payment, ProductPicker, discount/numpad focus ownership.
+
+**C — Border Overlap & Unrefined Edges.** Fix the active Category Tab double-bottom border / overlap (`-mb-px` or equivalent if appropriate) and refine the Select Customer dashed border so both look balanced and premium. Keep changes local and scoped — no broad redesign.
+
+## AGY Review Requirement (MANDATORY before Codex)
+
+AGY must enforce Impeccable Style and verify: the glowing Refresh button is noticeable but premium (not cheap/blinding/distracting); toggling the update state causes ZERO layout shift; the Select Customer button and Category Tabs look balanced/refined; and there are no cashier-flow visual regressions.
 
 ## Status
 
-**In Progress** — Developer implementation complete; awaiting Codex Reviewer.
+**In Progress** — Developer implementation complete; **awaiting AGY visual/UX review (before Codex)**.
 
 ---
 
@@ -37,7 +35,8 @@ Comprehensive Physical UAT found additional interactive POS controls that steal 
 ### Authorized implementation files
 
 - `src/pages/POSPage.tsx`
-- `src/pages/POSPage.keyboard-contract.test.ts` (focus-contract tests)
+- `src/pages/POSPage.css`
+- `src/pages/POSPage.keyboard-contract.test.ts` (focus/keyboard tests if needed)
 
 ### Authorized workflow / report files
 
@@ -48,28 +47,28 @@ Comprehensive Physical UAT found additional interactive POS controls that steal 
 
 ### Forbidden Files / Areas
 
-- `src/pages/POSPage.css` (no style change this phase — CSS untouched)
 - `useCart.ts`, `useCart.contract.test.ts`, `cartUtils.ts`, cart math
-- Checkout / payment logic, stock matrix, seed data
-- Toast files
+- Checkout / payment business logic, stock matrix, seed data
+- Toast files (unless directly part of existing update-banner logic and absolutely required — default: do not touch)
 - Firebase / functions / rules
 - Android / Capacitor artifacts
 - `.claude/`
 - No new scripts, no new dependencies
-- No UI-03+ work
+- No UI-04+ work
 
 ---
 
 ## Role Sequence
 
 ```
-Developer Agent          — ROLE FILE: docs/ai-roles/developer.md
-  → Codex Reviewer       — ROLE FILE: docs/ai-roles/reviewer.md
-    → Tech Lead / CEO    — ROLE FILE: docs/ai-roles/tech-lead.md
+Developer Agent              — ROLE FILE: docs/ai-roles/developer.md
+  → Senior QA & UX Lead/AGY  — ROLE FILE: docs/ai-roles/ux-lead.md
+    → Codex Reviewer         — ROLE FILE: docs/ai-roles/reviewer.md
+      → Tech Lead / CEO      — ROLE FILE: docs/ai-roles/tech-lead.md
 ```
 
-**AGY:** Bypassed for this phase — this is a behavioral focus hotfix, not visual UI polish. (May be requested explicitly by Tech Lead/CEO or Principal Engineer.)
-AGY ROLE FILE (if needed): `docs/ai-roles/ux-lead.md`
+**AGY:** **REQUIRED for this phase (before Codex)** — this phase includes visual UI polish, so AGY visual/UX validation gates the handoff to Codex.
+AGY ROLE FILE: `docs/ai-roles/ux-lead.md`
 
 ### Required Handoff Header Format
 
@@ -87,12 +86,15 @@ MODE:
 ## Decision Rules
 
 1. **Developer** completes implementation and writes `docs/reports/latest-developer-report.md`.
-2. **Developer** updates `docs/agent-workflow/NEXT_ACTION.md` to route to Codex.
+2. **Developer** updates `docs/agent-workflow/NEXT_ACTION.md` to route to **AGY first** (visual review), not Codex.
 3. **If unauthorized files are changed** → STOP and report.
 4. **If tests fail** → STOP and report.
-5. **If Codex FAIL** → return to Principal Engineer Reviewer / Workflow Coordinator.
-6. **If Codex PASS / PASS WITH NOTES** → route to Principal Engineer Reviewer / Workflow Coordinator for Tech Lead closure memo.
-7. **No commit** until Tech Lead / CEO authorizes the exact staging and commit commands.
+5. **AGY reviews UX/visuals first** (Impeccable Style + zero layout shift + no visual regression).
+6. **If AGY FAIL** → return to Developer / Principal Engineer Reviewer for remediation.
+7. **If AGY PASS / PASS WITH NOTES** → route to **Codex Reviewer** for code/scope/keyboard review.
+8. **If Codex FAIL** → return to Principal Engineer Reviewer / Workflow Coordinator.
+9. **If Codex PASS / PASS WITH NOTES** → route to Principal Engineer Reviewer / Workflow Coordinator for Tech Lead closure memo.
+10. **No commit** until Tech Lead / CEO authorizes the exact staging and commit commands.
 
 ---
 

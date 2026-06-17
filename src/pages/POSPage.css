@@ -158,45 +158,50 @@
   color: var(--g400, #888780);
 }
 
+/* UI-03 Impeccable Style — pending-update urgency on the Refresh button (replaces the removed
+   standalone banner). A calm amber tint plus a soft glow that pulses via box-shadow ONLY (no
+   size/border-width change), so the button keeps the exact same box and the topbar never shifts
+   when the update state toggles. Premium, noticeable, not blinding; it clears the moment the
+   refresh resolves (the class is dropped). */
+.pos-action-link--update {
+  border-color: #f0b429;
+  background: #fff8e6;
+  color: #7a4b00;
+  animation: pos-update-glow 1.9s ease-in-out infinite;
+}
+
+.pos-action-link--update:hover:not(:disabled) {
+  background: #fff1cc;
+  border-color: #e0a020;
+  color: #5c3a00;
+}
+
+.pos-action-link--update:disabled {
+  animation: none;
+}
+
+@keyframes pos-update-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(240, 180, 41, 0);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(240, 180, 41, 0.28);
+  }
+}
+
 @keyframes pos-spin {
   to {
     transform: rotate(360deg);
   }
 }
 
-.pos-sync-banner {
-  position: sticky;
-  top: 0;
-  z-index: 50;
-  display: block;
-  width: 100%;
-  padding: 10px 16px;
-  border: none;
-  border-bottom: 1px solid #d98a00;
-  background: #fff4d6;
-  color: #7a4b00;
-  font-family: inherit;
-  font-size: 14px;
-  font-weight: 600;
-  text-align: center;
-  cursor: pointer;
-  animation: pos-sync-pulse 1.4s ease-in-out infinite;
-}
-
-.pos-sync-banner:hover:not(:disabled) {
-  background: #ffe9ad;
-}
-
-.pos-sync-banner:disabled {
-  opacity: 0.7;
-  cursor: default;
-  animation: none;
-}
-
-.pos-sync-banner-cta {
-  text-decoration: underline;
-}
-
+/* UI-03: the standalone Manager-Update banner (`.pos-sync-banner`) was removed — it shifted the
+   whole layout when it mounted/unmounted. Its urgency moved onto the always-present Refresh
+   button via `.pos-action-link--update` (defined with the toolbar actions above): a soft amber
+   tint plus a gentle glow that pulses via box-shadow ONLY (outside layout), so toggling the
+   update state never moves anything. `@keyframes pos-sync-pulse` is kept below — it is still used
+   by the SyncIndicator's pending chip (`.pos-sync-indicator--pending`). */
 @keyframes pos-sync-pulse {
   50% {
     background: #ffe2a1;
@@ -377,7 +382,10 @@
   max-height: 48px;
   overflow: hidden;
   position: relative;
-  border: 0.5px solid var(--g200, #d3d1c7);
+  /* UI-03: crisp 1px edge (was sub-pixel 0.5px, which renders as a doubled/uneven hairline on
+     HiDPI). box-sizing:border-box keeps the 120×48 footprint identical, so no row shift. */
+  box-sizing: border-box;
+  border: 1px solid var(--g200, #d3d1c7);
   background: var(--g50, #f8f8fc);
   color: var(--g600, #5f5e5a);
 }
@@ -385,7 +393,9 @@
 .pos-cat-pill.on {
   background: var(--p600, #534ab7);
   color: white;
-  border-color: transparent;
+  /* UI-03: a defined edge that matches the fill (was `transparent`, which let the bar/background
+     bleed at the active pill's border and read as an overlap). Same 1px box — no size change. */
+  border-color: var(--p600, #534ab7);
 }
 
 /* Quick Menu (virtual category) — visually distinct amber pill at the front. */
@@ -712,7 +722,10 @@
   justify-content: center;
   gap: 6px;
   padding: 8px 12px;
-  border: 0.5px dashed var(--p200, #afa9ec);
+  /* UI-03: refined dashed border — a crisp, evenly-rendered 1px dash (the prior 0.5px dash broke
+     up unevenly and looked unfinished). box-sizing keeps the 36px min-height footprint. */
+  box-sizing: border-box;
+  border: 1px dashed var(--p200, #afa9ec);
   border-radius: 8px;
   background: white;
   font-size: 12px;
@@ -722,6 +735,7 @@
   cursor: pointer;
   text-align: center;
   min-height: 36px;
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .pos-cust-pick:hover {

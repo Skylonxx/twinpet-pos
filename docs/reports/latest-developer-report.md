@@ -2,116 +2,111 @@
 
 ## Phase
 
-**7C-UI-02-HOTFIX-FOCUS-EDGE** — Comprehensive POS Focus Recovery Edge Hotfix
+**7C-UI-03-POLISH** — Glowing Refresh Button, Cancel-Path Focus Recovery, and Border Polish
 
 ## 1. Summary
 
-Extended the scanner focus-recovery line (`42ff3ed`) to the remaining POS controls that Physical UAT found stealing focus and never returning it to the scan box. Goal: **zero focus drops** — every non-modal cart/bill control returns focus to `searchInputRef` after its action resolves, and the cash/shift/clear-cart modals return focus on close/resolution — without ever stealing focus from a modal that should own it (UOM / Payment / bill-discount numpad). Implemented with a single shared rAF-deferred helper `runAndRefocus(action)` for the inline controls, plus direct `focusSearch()` calls on the modal close/resolution handlers. **No CSS change; no cart math change.**
+Three scoped UI-03 changes from ongoing Physical UAT: (A) removed the standalone yellow Manager-Update banner that violently shifted the layout and moved its urgency onto a premium amber glow on the always-present Refresh button (zero layout shift); (B) added scanner-focus recovery to the Hold-Bill and Suspended-Bills cancel/close paths; (C) refined the Category Tab and Select Customer button border edges. All cashier keyboard/scanner contracts preserved. **AGY visual review is required before Codex.**
 
-## 2. Files Changed
+## 2. Preflight Status and HEAD Confirmation
+
+- `git status --short` before start: **clean** ✅
+- `git log --oneline -5` top commit: `023cc8d fix(pos): recover scanner focus across cashier actions` — the committed **7C-UI-02-HOTFIX-FOCUS-EDGE** ✅
+- `stash@{0}` present and untouched ✅
+- Did not start UI-03 on top of an uncommitted previous phase.
+
+## 3. Files Changed
 
 | File | Action | Description |
 |---|---|---|
-| `src/pages/POSPage.tsx` | Modified | Added shared `runAndRefocus(action)` helper; wired it into qty ＋/−, remove-line, fee chips, and bill-discount ฿/% toggles; added `focusSearch()` to `handleCashTxRecorded`, `CashTransactionModal.onClose`, `CloseShiftModal.onClose`, and `DestructiveConfirmModal.onCancel`. |
-| `src/pages/POSPage.keyboard-contract.test.ts` | Modified | Added `7C-UI-02-HOTFIX-FOCUS-EDGE` describe block (9 tests) covering all targets + a modal-ownership regression guard. |
+| `src/pages/POSPage.tsx` | Modified | Removed the `pos-sync-banner` block; Refresh button gets conditional `pos-action-link--update` class + contextual title; Hold-Bill & Suspended-Bills `onClose` refocus. |
+| `src/pages/POSPage.css` | Modified | Removed dead `.pos-sync-banner*` rules (kept `@keyframes pos-sync-pulse` — used by SyncIndicator); added `.pos-action-link--update` amber glow + `@keyframes pos-update-glow`; refined category-pill and Select-Customer borders. |
+| `src/pages/POSPage.keyboard-contract.test.ts` | Modified | Added `7C-UI-03-POLISH` describe block (5 tests); renamed a stale test that mentioned the removed banner. |
 
-`src/pages/POSPage.css` — **not modified.** `useCart.ts`, `cartUtils.ts`, checkout/payment, stock matrix, toast, seed, Firebase, Android, `.claude/` — untouched.
+`useCart.ts`, `useCart.contract.test.ts`, `cartUtils.ts`, checkout/payment, stock matrix, seed, Toast, Firebase, Android, `.claude/` — untouched.
 
-## 3. CURRENT_PACKET.md Update Confirmation — all 9 targets
+## 4. CURRENT_PACKET.md Update Confirmation
 
-`docs/agent-workflow/CURRENT_PACKET.md` updated for phase `7C-UI-02-HOTFIX-FOCUS-EDGE` with the CEO UAT issue summary and **all 9 mandatory focus-recovery targets** (Cash In/Out, Close Shift, Clear Cart, Remove Line, Qty ＋, Qty −, Add/Edit Fee, Discount Baht, Discount Percent), the critical focus rules, the role sequence (Developer → Codex → Tech Lead/CEO), the AGY bypass note, and explicit role files for each role. ✅
+`docs/agent-workflow/CURRENT_PACKET.md` updated for `7C-UI-03-POLISH` with the goal, CEO UAT issue summary, **all three directives A/B/C**, the AGY review requirement (mandatory before Codex), the role sequence (Developer → AGY → Codex → Tech Lead/CEO), and explicit role files. ✅
 
-## 4. Implementation Details
+## 5. Implementation Details (A / B / C)
 
-All runtime changes are in `src/pages/POSPage.tsx`:
+### A — Glowing button replaces the banner
+- **POSPage.tsx:** deleted the `{updateBanner && (<button className="pos-sync-banner">…)}` block (it mounted above `<header>`, pushing the whole page down/up on toggle). The Refresh button's `className` is now `` `pos-action-link${updateBanner ? ' pos-action-link--update' : ''}` `` and its `title` switches to the manager-update message when pending. The **label, icon, and DOM structure are unchanged**, so nothing reflows — only a class + tooltip toggle.
+- **POSPage.css:** removed `.pos-sync-banner`, `:hover`, `:disabled`, `.pos-sync-banner-cta`. Added `.pos-action-link--update` (soft amber tint `#fff8e6` / border `#f0b429` / text `#7a4b00`) with a `pos-update-glow` animation that pulses **`box-shadow` only** (`0 0 0 4px rgba(240,180,41,0.28)` at the midpoint) — outside layout, so zero shift. A matching amber hover and `:disabled { animation: none }` are included. `@keyframes pos-sync-pulse` was **kept** (still used by `.pos-sync-indicator--pending`). The glow clears automatically when `updateBanner` flips to false (on refresh).
+- **Update detection/refresh behavior unchanged** — `handleManualRefresh` still acknowledges the signal (`setUpdateBanner(false)` → `refreshInventory()`), and the auto-sync `useEffect` is untouched.
 
-- **Shared helper `runAndRefocus(action)`** — declared right after `focusSearch` (`deps: [focusSearch]`): runs the mutation, then calls the existing rAF-deferred `focusSearch()`. Because the refocus is deferred to the next animation frame, it lands **after** React commits the re-render — so it survives state-driven re-renders and the removed line unmounting. It only appends a focus call; mutation semantics are untouched.
-- **Non-modal controls** now call `runAndRefocus(() => cart.<mutation>(…))`:
-  - qty − `cart.changeQty(line.lineKey, -1)`, qty ＋ `cart.changeQty(line.lineKey, 1)`
-  - remove `cart.removeLine(line.lineKey)`
-  - fee chips `cart.setFeeRate(rate)`
-  - bill-discount toggles `cart.setBillDiscPercent(false)` (฿) and `cart.setBillDiscPercent(true)` (%)
-- **Modal close/resolution handlers** call `focusSearch()` directly (consistent with the file's other modal-close handlers):
-  - `handleCashTxRecorded` (Cash In/Out success) — refocus after `setShowCashTx(false)` (dep `[focusSearch]`).
-  - `CashTransactionModal.onClose` — refocus after `setShowCashTx(false)`.
-  - `CloseShiftModal.onClose` — refocus after `setShowCloseShift(false)`; the success path already routes through `handleNewSale`, which refocuses.
-  - `DestructiveConfirmModal.onCancel` — refocus after dismissing (the confirm originates from a cart/topbar button); the `onConfirm` branches already refocus.
+### B — Focus recovery on cancel paths
+- `HoldBillNoteModal.onClose` and `SuspendedBillsListModal.onClose` now call `focusSearch()` after closing. The confirm/restore paths (`handleHoldConfirm`, `handleRestoreBill`) already refocus, and the Escape handler already covers both — this closes the remaining backdrop/×/cancel gap. Focus is only restored **on close**, never while the modal is open.
 
-### What was deliberately NOT changed (to avoid stealing modal-owned focus)
+### C — Border overlap & unrefined edges (CSS only)
+- **Category Tabs:** `.pos-cat-pill` border `0.5px → 1px` with `box-sizing: border-box` (crisp edge; sub-pixel `0.5px` renders as a doubled/uneven hairline on HiDPI). `.pos-cat-pill.on` border-color `transparent → var(--p600)` so the active pill has a defined edge matching its fill instead of letting the background bleed at the border (the "overlap" look). Footprint (120×48) is identical → no row shift.
+- **Select Customer:** `.pos-cust-pick` dashed border `0.5px → 1px` with `box-sizing: border-box` (even, premium dash) + a calm color transition; hover still goes solid. `min-height` unchanged.
 
-- The bill-discount **numpad** (`NumpadDialog`) keeps its own `onConfirm`/`onClose`/`onClear` refocus — the ฿/% toggles only switch mode and refocus; the value entry stays modal-owned until the numpad closes.
-- The bill-discount number `<input>` `onChange` is **not** refocused (would break typing); entry is primarily via the numpad, which refocuses on close.
-- UOM modal, Payment modal, ItemDiscount modal, qty numpad — all retain their existing focus behavior.
+## 6. Focus Recovery Notes
 
-## 5. Focus Recovery Target-by-Target Checklist
+- Hold-Bill and Suspended-Bills now refocus `searchInputRef` on close/cancel (via the existing rAF-deferred `focusSearch()`), matching every other modal-close path.
+- No focus is taken while a modal is open. UOM modal ownership (2 `focusSearch()` in its region), Payment modal, ProductPicker multi-UOM sequencing (`42ff3ed`), discount/bill numpad, Ctrl+F, auto-focus, F12, and scanner paths are all unchanged (full suite green).
 
-| # | Target | Mechanism | Status |
-|---|---|---|---|
-| 1 | Cash In / Cash Out | `CashTransactionModal.onClose` + `handleCashTxRecorded` → `focusSearch()` | ✅ |
-| 2 | Close Shift | `CloseShiftModal.onClose` → `focusSearch()`; success via `handleNewSale` (already refocuses) | ✅ |
-| 3 | Clear Cart | confirm `onConfirm` (existing) + `onCancel` (new) → `focusSearch()` | ✅ |
-| 4 | Remove Line Item | `runAndRefocus(() => cart.removeLine(line.lineKey))` (rAF survives unmount) | ✅ |
-| 5 | Quantity Increment (＋) | `runAndRefocus(() => cart.changeQty(line.lineKey, 1))` | ✅ |
-| 6 | Quantity Decrement (−) | `runAndRefocus(() => cart.changeQty(line.lineKey, -1))` | ✅ |
-| 7 | Add/Edit Fee | `runAndRefocus(() => cart.setFeeRate(rate))` | ✅ |
-| 8 | Discount Baht (฿) | `runAndRefocus(() => cart.setBillDiscPercent(false))` | ✅ |
-| 9 | Discount Percent (%) | `runAndRefocus(() => cart.setBillDiscPercent(true))` | ✅ |
+## 7. Layout-Shift Prevention Notes
 
-## 6. Tests / Checks Run
+- The only update indicator is now a **class toggle** on an element that is always rendered — no conditional mount/unmount, no reserved space.
+- The glow animates **`box-shadow`** (paints outside the box, no reflow) and the amber tint is a color change only. Button height/width/border-width/label are constant → **zero layout shift** on update-state toggle.
+- The category/customer border refinements use `box-sizing: border-box`, so bumping `0.5px → 1px` does not change element footprints.
+
+## 8. Visual Polish Notes (for AGY)
+
+- Amber glow is intentionally soft (single eased pulse, ~1.9s, low-alpha box-shadow) — premium, noticeable, not blinding/blinking. AGY to confirm the amber reads as "manager update" urgency without alarm.
+- Category active-tab edge and the Select Customer dashed border are best judged on screen; the border directives ("double-bottom border", exact dash weight) are interpreted conservatively here and **explicitly deferred to AGY visual validation** per the packet. If AGY wants a different active-tab treatment (e.g. a true `-mb-px` connected-tab look), that is a quick follow-up.
+
+## 9. Tests / Checks Run
 
 | Check | Result |
 |---|---|
-| `git status --short` | `M src/pages/POSPage.tsx`, `M src/pages/POSPage.keyboard-contract.test.ts` (+ workflow/report docs) |
-| `git diff --name-only` | `POSPage.tsx`, `POSPage.keyboard-contract.test.ts` (+ workflow/report docs) |
-| `git diff --stat` | `POSPage.tsx | 49`, `POSPage.keyboard-contract.test.ts | 68` |
+| `git status --short` | `M POSPage.tsx`, `M POSPage.css`, `M POSPage.keyboard-contract.test.ts` (+ workflow/report docs) |
+| `git diff --name-only` | the three app files (+ workflow/report docs) |
+| `git diff --stat` | `POSPage.css | 78`, `POSPage.keyboard-contract.test.ts | 42`, `POSPage.tsx | 37` |
 | `git diff --check` | clean |
-| `git diff -- src/pages/POSPage.css` | empty (untouched) |
 | `npx.cmd tsc -b` | PASS |
-| `npx.cmd vitest run src/pages/POSPage.keyboard-contract.test.ts` | **137 passed** (was 128; +9 edge tests) |
-| `npx.cmd vitest run` | **704 passed (31 files)** |
+| `npx.cmd vitest run src/pages/POSPage.keyboard-contract.test.ts` | **142 passed** (was 137; +5 UI-03 tests) |
+| `npx.cmd vitest run` | **709 passed (31 files)** |
 
-### New tests (describe `7C-UI-02-HOTFIX-FOCUS-EDGE`, 9 tests)
+### New tests (describe `7C-UI-03-POLISH`, 5 tests)
+A: banner element/class gone + no `{updateBanner && (` mount; pending update toggles the `pos-action-link--update` class on the existing button; refresh clears the flag. B: Hold-Bill and Suspended-Bills `onClose` refocus the scan box. (Border polish is visual-only → deferred to AGY, not asserted.)
 
-`runAndRefocus` order (mutate→refocus); qty ＋/−; remove line; fee chips; ฿/% toggles; Cash In/Out (close + success); Close Shift (close + `handleNewSale`); Clear Cart confirm AND cancel; and a regression guard that UOM still owns focus (2 `focusSearch()` in its region) and the ProductPicker multi-UOM fix (`if (!pickerWillOpenUomRef.current) focusSearch();`) is intact.
+## 10. Boundary Confirmation
 
-### Test limitation note
-
-The suite runs in a `node` environment with source-level `?raw` assertions (POSPage cannot be mounted here — heavy Firebase/router/cart harness). These tests pin structural intent (the mutation is followed by a refocus via the shared helper / modal handler) rather than live DOM focus. The highest-risk paths (qty ＋/−, remove, fee, discount, cash/shift/clear modals) are all covered; physical UAT remains the behavioral confirmation.
-
-## 7. Boundary Confirmation
-
-- [x] `POSPage.css` untouched (no UI style change)
-- [x] No cart math change (helper only appends a focus call after the existing mutation)
-- [x] `useCart.ts` / `useCart.contract.test.ts` / `cartUtils.ts` untouched
-- [x] Checkout / payment business logic untouched
-- [x] Stock matrix untouched; seed data untouched; Toast untouched
+- [x] No cart math change; `useCart.ts` / `useCart.contract.test.ts` / `cartUtils.ts` untouched
+- [x] Checkout / payment business logic untouched; stock matrix untouched; seed data untouched
+- [x] Toast files untouched (the banner was POSPage-local, not a Toast file)
 - [x] Firebase / functions / rules untouched; Android / Capacitor untouched; `.claude/` untouched
-- [x] No scripts created; no new dependencies
-- [x] Only authorized files changed; no UI-03 work
+- [x] `POSPage.css` changes scoped to UI-03 polish only (banner removal + glow + border edges)
+- [x] No scripts created; no new dependencies; no UI-04 work
+- [x] Only authorized files changed
 - [x] No staging, no commit; `stash@{0}` untouched (only `git stash list` used)
 
-## 8. Hidden Risks / Notes
+## 11. Hidden Risks / Notes
 
-- **Multiple rAF refocuses can coexist.** Rapid clicking (e.g. ＋＋＋) schedules several `requestAnimationFrame` focus calls on the same stable input — harmless (last one wins; no modal in the way).
-- **Modal-owned focus respected.** The ฿/% toggles refocus the scan box, but the discount *value* numpad keeps its own modal-close refocus, so switching mode does not yank focus out of an open numpad (the toggles live in the footer row, not inside the numpad).
-- **rAF (not setTimeout).** Reused the proven rAF helper rather than `setTimeout(…,0)`; the directive allowed either. rAF fires after commit and before paint, which is sufficient for the re-render and the remove-line unmount. If physical UAT shows a specific control still dropping focus, a layered rAF+timeout is the next lever — flagged for Codex.
-- **No DOM/runtime test** for live focus (node env, by design) — structural-intent coverage + physical UAT.
+- **Glow on a disabled button:** during an in-flight refresh `updateBanner` is already false (acknowledged), so the glow is gone; `.pos-action-link--update:disabled { animation: none }` is added as a belt-and-braces guard.
+- **`@keyframes pos-sync-pulse` retained** because `.pos-sync-indicator--pending` (SyncIndicator) still uses it — only the banner's own rules were removed.
+- **Category-tab "double border" is interpreted, not pixel-verified** (no screenshot). The change is conservative (crisp 1px + defined active edge, no size change); AGY visual validation is the gate.
+- Node-env source-level tests cover the behavioral parts (banner removed, class toggles, refocus); pixel/edge polish relies on AGY.
 
-## 9. Next Owner and Next Action
+## 12. Next Owner and Next Action
 
-**Next owner: Codex Reviewer** (ROLE FILE: `docs/ai-roles/reviewer.md`). Human operator sends Codex the current packet, this report, and the current `git diff` for behavior/code/keyboard-contract review (AGY bypassed — behavioral hotfix). On Codex PASS / PASS WITH NOTES, route to Principal Engineer Reviewer / Tech Lead for closure memo and exact staging/commit commands. Do not stage or commit. Do not start UI-03.
+**Next owner: Senior QA & UX Lead / AGY** (ROLE FILE: `docs/ai-roles/ux-lead.md`). Human operator sends AGY the current packet, this report, and the current `git diff` for visual/UX validation (Impeccable Style + zero layout shift + no regression). **Codex only after AGY PASS / PASS WITH NOTES.** Do not stage or commit. Do not start UI-04.
 
 ---
 
 STATE CARD
-Phase: 7C-UI-02-HOTFIX-FOCUS-EDGE
-Current owner: Developer (complete) → Codex Reviewer
-Verdict: In Progress — Developer implementation complete, awaiting Codex review
-Files changed: src/pages/POSPage.tsx; src/pages/POSPage.keyboard-contract.test.ts; docs/agent-workflow/STATE.md; docs/agent-workflow/CURRENT_PACKET.md; docs/agent-workflow/NEXT_ACTION.md; docs/reports/latest-developer-report.md (POSPage.css NOT modified)
-Tests/checks: git diff --check clean; POSPage.css diff empty; tsc -b PASS; POSPage.keyboard-contract 137 passed; full vitest 704 passed
+Phase: 7C-UI-03-POLISH
+Current owner: Developer (complete) → Senior QA & UX Lead / AGY
+Verdict: In Progress — Developer implementation complete, awaiting AGY visual/UX review (before Codex)
+Files changed: src/pages/POSPage.tsx; src/pages/POSPage.css; src/pages/POSPage.keyboard-contract.test.ts; docs/agent-workflow/STATE.md; docs/agent-workflow/CURRENT_PACKET.md; docs/agent-workflow/NEXT_ACTION.md; docs/reports/latest-developer-report.md
+Tests/checks: git diff --check clean; tsc -b PASS; POSPage.keyboard-contract 142 passed; full vitest 709 passed
 Staged: None
 Committed: None
 Required fixes: None
-Next owner: Codex Reviewer (ROLE FILE: docs/ai-roles/reviewer.md)
-Next action: Human operator sends Codex the current packet + this report + current diff using ROLE FILE: docs/ai-roles/reviewer.md; AGY bypassed unless explicitly requested
-Stop condition: No staging, no commit, no UI-03+, no CSS change, no cart/checkout/stock work; stash@{0} untouched; wait for Codex review
+Next owner: Senior QA & UX Lead / AGY (ROLE FILE: docs/ai-roles/ux-lead.md)
+Next action: Human operator sends AGY the current packet + this report + current diff for visual validation; Codex only after AGY PASS / PASS WITH NOTES
+Stop condition: No staging, no commit, no Codex until AGY passes, no UI-04; stash@{0} untouched; wait for AGY visual validation

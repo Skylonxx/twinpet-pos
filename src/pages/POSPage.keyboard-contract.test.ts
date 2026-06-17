@@ -328,7 +328,7 @@ describe('7C-UI-02-HOTFIX-FOCUS · Aggressive Scanner Focus (POSPage.tsx)', () =
     expect(quick).toContain('focusSearch();');
   });
 
-  test('the Refresh action (handleManualRefresh — button + sync banner) returns focus', () => {
+  test('the Refresh action (handleManualRefresh — Refresh button) returns focus', () => {
     const fn = region(posSource, 'const handleManualRefresh = useCallback', '[lastForceUpdate, refreshInventory, focusSearch]');
     expect(fn).toContain('void refreshInventory();');
     expect(fn).toContain('focusSearch();');
@@ -427,6 +427,46 @@ describe('7C-UI-02-HOTFIX-FOCUS-EDGE · Comprehensive focus recovery (POSPage.ts
     // The ProductPicker multi-UOM sequencing fix (42ff3ed) is intact.
     const pick = region(posSource, '<ProductPickerDialog', '<CustomerPickerModal');
     expect(pick).toContain('if (!pickerWillOpenUomRef.current) focusSearch();');
+  });
+});
+
+// ─── C4. UI-03 polish: glowing Refresh button + cancel-path focus recovery ──────────────
+// Physical UAT: (A) the standalone yellow Manager-Update banner mounted above the topbar and
+// shifted the whole layout — it is removed; the pending-update urgency now toggles a class on
+// the always-present Refresh button (zero layout shift). (B) Hold-Bill and Suspended-Bills
+// cancel/close left focus trapped — both now refocus the scan box on close. (Border polish in
+// POSPage.css is visual-only and validated by AGY, not asserted here.)
+describe('7C-UI-03-POLISH · Update glow + cancel-path focus (POSPage.tsx)', () => {
+  test('A — the standalone layout-shifting Manager-Update banner is GONE', () => {
+    // No banner element/class remains in the render tree (it lived above <header>).
+    expect(posSource).not.toContain('className="pos-sync-banner"');
+    expect(posSource).not.toContain('pos-sync-banner-cta');
+    // No conditional `{updateBanner && (` block mounts/unmounts an element (which caused the shift).
+    expect(posSource).not.toContain('{updateBanner && (');
+  });
+
+  test('A — pending update toggles a CLASS on the existing Refresh button (no element insertion)', () => {
+    // The urgency rides the existing toolbar button via a conditional modifier class only.
+    expect(posSource).toContain("pos-action-link${updateBanner ? ' pos-action-link--update' : ''}");
+    // The state is still owned by updateBanner (detection/refresh behavior unchanged).
+    expect(posSource).toContain('const [updateBanner, setUpdateBanner] = useState(false);');
+  });
+
+  test('A — refreshing resolves the button back to normal (clears the pending flag)', () => {
+    const fn = region(posSource, 'const handleManualRefresh = useCallback', '[lastForceUpdate, refreshInventory, focusSearch]');
+    // Acknowledging the signal drops updateBanner → the glow class is removed.
+    expect(fn).toContain('setUpdateBanner(false);');
+    expect(fn).toContain('void refreshInventory();');
+  });
+
+  test('B — Hold-Bill modal cancel/close returns focus to the scan box', () => {
+    const modal = region(posSource, '<HoldBillNoteModal', 'onConfirm={handleHoldConfirm}');
+    expect(modal).toMatch(/setHoldNoteOpen\(false\);[\s\S]{0,200}focusSearch\(\)/);
+  });
+
+  test('B — Suspended-Bills modal cancel/close returns focus to the scan box', () => {
+    const modal = region(posSource, '<SuspendedBillsListModal', 'onRestore=');
+    expect(modal).toMatch(/setSuspendedListOpen\(false\);[\s\S]{0,200}focusSearch\(\)/);
   });
 });
 

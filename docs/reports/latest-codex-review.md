@@ -2,69 +2,79 @@
 
 ## Phase
 
-**7C-UI-02-HOTFIX-FOCUS-EDGE**
+**7C-UI-03-POLISH**
 
 ## Verdict
 
-**PASS WITH NOTES**
+**FAIL**
 
 ## Summary
 
-The EDGE focus recovery implementation is scoped and correct at code/contract level. All 9 requested focus-recovery targets are wired to return focus to the scan box after the action resolves, while modal-owned focus paths remain protected. `POSPage.css` is untouched, cart math is not changed, and the existing ProductPicker multi-UOM sequencing fix from `42ff3ed` is preserved.
+The app implementation is correct at code/contract level, but the package cannot pass because `git diff --check` fails on trailing whitespace in `docs/reports/latest-agy-review.md`.
 
-The implementation uses a shared `runAndRefocus(action)` helper for non-modal inline cart/bill controls. It runs the mutation first, then calls the existing rAF-deferred `focusSearch()`, so the refocus lands after React state updates/re-render.
+App behavior reviewed:
 
-## Focus Target Review
+- The standalone `pos-sync-banner` render block is removed from `POSPage.tsx`.
+- Pending manager update now toggles `pos-action-link--update` on the always-present Refresh button.
+- Update detection and refresh behavior remain driven by `updateBanner`, `setUpdateBanner(false)`, and `refreshInventory()`.
+- Hold-Bill and Suspended-Bills `onClose` handlers now close and call `focusSearch()`.
+- Border polish is scoped to `POSPage.css` category pills and Select Customer button.
+- No cart math, checkout/payment business logic, stock, Toast, Firebase, Android, or `.claude/` changes were found.
 
-1. **Cash In/Out:** PASS — `CashTransactionModal.onClose` and `handleCashTxRecorded` both close the modal and call `focusSearch()`.
-2. **Close Shift:** PASS — `CloseShiftModal.onClose` calls `focusSearch()`; success still routes through `handleNewSale()`, which already refocuses.
-3. **Clear Cart:** PASS — confirm path already refocuses; `onCancel` now closes and refocuses.
-4. **Remove line:** PASS — uses `runAndRefocus(() => cart.removeLine(line.lineKey))`.
-5. **Qty +:** PASS — uses `runAndRefocus(() => cart.changeQty(line.lineKey, 1))`.
-6. **Qty -:** PASS — uses `runAndRefocus(() => cart.changeQty(line.lineKey, -1))`.
-7. **Fee chips:** PASS — uses `runAndRefocus(() => cart.setFeeRate(rate))`.
-8. **Discount Baht:** PASS — uses `runAndRefocus(() => cart.setBillDiscPercent(false))`.
-9. **Discount Percent:** PASS — uses `runAndRefocus(() => cart.setBillDiscPercent(true))`.
+## Findings
 
-## Modal / Keyboard Preservation
+### 1. `git diff --check` fails on AGY report trailing whitespace
 
-- UOM modal: PASS — unchanged ownership; region still has only its select/close `focusSearch()` calls.
-- Payment modal: PASS — processing guard and close refocus preserved.
-- ProductPicker multi-UOM sequencing: PASS — `pickerWillOpenUomRef` guarded close refocus from `42ff3ed` is intact.
-- Scanner source paths: PASS — `findByScanCode` and `handleSearchKeyDown` source behavior preserved.
-- Ctrl+F / auto-focus / F12: PASS — source wiring and keyboard-contract tests remain green.
-- Bill-discount numpad: PASS — value-entry numpad keeps its own `onClear`/`onClose`/`onConfirm` refocus; the new `฿/%` toggle refocus does not alter numpad close/confirm ownership.
+Severity: **Blocker**
+
+`git diff --check` reports trailing whitespace in `docs/reports/latest-agy-review.md`:
+
+- line 9
+- line 11
+- line 12
+- line 27
+
+This is not an app-code bug, but it fails the repository hygiene gate and must be fixed before commit.
+
+## Code / Behavior Review
+
+- **Banner removal / zero layout shift:** PASS — the conditional `{updateBanner && (...)}` banner mount is gone. The update state changes only the Refresh button class/title, not the DOM structure.
+- **Refresh behavior:** PASS — `handleManualRefresh` still clears `updateBanner`, calls `refreshInventory()`, and refocuses the scan box.
+- **Hold-Bill close focus:** PASS — `HoldBillNoteModal.onClose` now calls `focusSearch()` after closing.
+- **Suspended-Bills close focus:** PASS — `SuspendedBillsListModal.onClose` now calls `focusSearch()` after closing.
+- **Modal-owned focus:** PASS — UOM, Payment, ProductPicker multi-UOM sequencing, bill-discount numpad, Ctrl+F, auto-focus, F12, and scanner paths remain intact at source-contract level.
+- **Border polish:** PASS at code scope — CSS changes are local to update glow, category pill border, and Select Customer border. AGY recorded PASS for visual validation.
 
 ## Files Reviewed
 
 - `src/pages/POSPage.tsx`
+- `src/pages/POSPage.css`
 - `src/pages/POSPage.keyboard-contract.test.ts`
 - `docs/agent-workflow/STATE.md`
 - `docs/agent-workflow/CURRENT_PACKET.md`
 - `docs/agent-workflow/NEXT_ACTION.md`
 - `docs/reports/latest-developer-report.md`
+- `docs/reports/latest-agy-review.md`
 - `docs/reports/latest-codex-review.md` (this report)
 
 ## Tests / Checks And Results
 
 | Check | Result |
 |---|---|
-| `git status --short` | Dirty files limited to `POSPage.tsx`, keyboard-contract test, workflow docs, developer report before this Codex report update |
-| `git diff --name-only` | Authorized files only before this Codex report update |
-| `git diff --stat` | 6 files, 254 insertions, 158 deletions before this Codex report update |
-| `git diff --check` | PASS |
-| `git diff -- src/pages/POSPage.css` | Empty / untouched |
+| `git status --short` | Dirty files are UI-03 app files plus workflow/review docs |
+| `git diff --name-only` | `POSPage.tsx`, `POSPage.css`, `POSPage.keyboard-contract.test.ts`, workflow docs, developer report, AGY report |
+| `git diff --stat` | 8 files, 314 insertions, 250 deletions before this Codex report rewrite |
+| `git diff --check` | **FAIL** — trailing whitespace in `docs/reports/latest-agy-review.md` |
 | `npx.cmd tsc -b` | PASS |
-| `npx.cmd vitest run src/pages/POSPage.keyboard-contract.test.ts` | PASS, 137 tests |
-| `npx.cmd vitest run` | PASS, 31 files / 704 tests |
+| `npx.cmd vitest run src/pages/POSPage.keyboard-contract.test.ts` | PASS, 142 tests |
+| `npx.cmd vitest run` | PASS, 31 files / 709 tests |
 
 ## Boundary Confirmation
 
-- [x] Only authorized files changed.
-- [x] `POSPage.css` untouched.
-- [x] No cart math changed.
+- [x] App changes are limited to `POSPage.tsx`, `POSPage.css`, and `POSPage.keyboard-contract.test.ts`.
 - [x] `useCart.ts` untouched.
 - [x] `cartUtils.ts` untouched.
+- [x] No cart math changed.
 - [x] Checkout/payment business logic untouched.
 - [x] Stock matrix untouched.
 - [x] Seed data untouched.
@@ -73,39 +83,40 @@ The implementation uses a shared `runAndRefocus(action)` helper for non-modal in
 - [x] Android/Capacitor untouched.
 - [x] `.claude/` untouched.
 - [x] No scripts created.
-- [x] No UI-03 work.
+- [x] No UI-04 work.
 - [x] No staging.
 - [x] No commit.
 - [x] `stash@{0}` remains present and untouched.
 
-## Notes
-
-- This is a code/source-contract review. The keyboard-contract suite uses source-level assertions, not live browser focus assertions. Physical cashier UAT should still confirm the 9 controls on the target POS hardware.
-- Multiple rapid inline clicks can schedule multiple rAF focus calls against the same scan input. That is acceptable for these non-modal controls; the last focus call wins and no modal ownership is involved.
-
 ## Required Fixes
 
-None.
+1. Remove trailing whitespace in `docs/reports/latest-agy-review.md` so `git diff --check` passes.
+2. Re-run `git diff --check`. TypeScript and Vitest do not need code changes based on this review, but re-running the standard validation after cleanup is recommended.
+
+## Notes
+
+- I found no blocker in the app implementation itself.
+- The modified `docs/reports/latest-agy-review.md` is expected by the packet’s AGY-before-Codex gate, although the packet’s “Authorized workflow/report files” list does not explicitly include AGY/Codex report files. Tech Lead may want to clarify report-file scope in future packets.
 
 ## Next Owner
 
-**Principal Engineer Reviewer / Workflow Coordinator**
+**Developer Agent**
 
 ## Next Action
 
-Prepare Tech Lead / CEO closure handoff and exact commit authorization request. Do not stage or commit until exact commands are approved.
+Clean the trailing whitespace in the AGY report, rerun `git diff --check`, and return to Codex for a narrow re-check.
 
 ---
 
 STATE CARD
-Phase: 7C-UI-02-HOTFIX-FOCUS-EDGE
+Phase: 7C-UI-03-POLISH
 Current owner: Codex Reviewer
-Verdict: PASS WITH NOTES
-Files changed: src/pages/POSPage.tsx; src/pages/POSPage.keyboard-contract.test.ts; docs/agent-workflow/STATE.md; docs/agent-workflow/CURRENT_PACKET.md; docs/agent-workflow/NEXT_ACTION.md; docs/reports/latest-developer-report.md; docs/reports/latest-codex-review.md
-Tests/checks: git status/diff/diff-stat/diff-check reviewed; POSPage.css diff empty; npx.cmd tsc -b PASS; POSPage.keyboard-contract 137 passed; full vitest 704 passed
+Verdict: FAIL
+Files changed: src/pages/POSPage.tsx; src/pages/POSPage.css; src/pages/POSPage.keyboard-contract.test.ts; docs/agent-workflow/STATE.md; docs/agent-workflow/CURRENT_PACKET.md; docs/agent-workflow/NEXT_ACTION.md; docs/reports/latest-developer-report.md; docs/reports/latest-agy-review.md; docs/reports/latest-codex-review.md
+Tests/checks: git status/diff/diff-stat reviewed; git diff --check FAIL due trailing whitespace in latest-agy-review.md; npx.cmd tsc -b PASS; POSPage.keyboard-contract 142 passed; full vitest 709 passed
 Staged: None
 Committed: None
-Required fixes: None
-Next owner: Principal Engineer Reviewer / Workflow Coordinator
-Next action: Prepare Tech Lead / CEO closure handoff and exact commit authorization request
-Stop condition: Stop after review; no staging; no commit; wait for human operator
+Required fixes: Remove trailing whitespace in docs/reports/latest-agy-review.md and rerun git diff --check
+Next owner: Developer Agent
+Next action: Fix whitespace-only report hygiene issue, then return to Codex for narrow re-check
+Stop condition: No staging; no commit; do not start UI-04

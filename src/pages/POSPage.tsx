@@ -861,17 +861,10 @@ export default function POSPage() {
 
   return (
     <div className={`pos-page pos-fontsize-${fontSize}`}>
-      {updateBanner && (
-        <button
-          type="button"
-          className="pos-sync-banner"
-          onClick={handleManualRefresh}
-          disabled={refreshing}
-        >
-          ⚠️ มีการอัปเดตข้อมูลจากผู้จัดการ{' '}
-          <span className="pos-sync-banner-cta">[คลิกเพื่อโหลดข้อมูลใหม่]</span>
-        </button>
-      )}
+      {/* UI-03: the standalone Manager-Update banner was removed — it mounted/unmounted above the
+          topbar and violently shifted the whole layout. The pending-update urgency now lives on
+          the always-present Refresh button below (the `pos-action-link--update` glow), so toggling
+          the update state changes only a class — zero layout shift. */}
       <header className="pos-topbar">
         <div className="pos-search-group">
           <div className="pos-topbar-search">
@@ -902,10 +895,14 @@ export default function POSPage() {
           </button>
           <button
             type="button"
-            className="pos-action-link"
+            className={`pos-action-link${updateBanner ? ' pos-action-link--update' : ''}`}
             onClick={handleManualRefresh}
             disabled={refreshing}
-            title="ดึงข้อมูลสินค้า/ราคา/การจัดเรียงล่าสุดจากเซิร์ฟเวอร์"
+            title={
+              updateBanner
+                ? 'มีการอัปเดตข้อมูลจากผู้จัดการ — คลิกเพื่อโหลดข้อมูลใหม่'
+                : 'ดึงข้อมูลสินค้า/ราคา/การจัดเรียงล่าสุดจากเซิร์ฟเวอร์'
+            }
           >
             <i
               className={`ti ti-refresh${refreshing ? ' pos-spin' : ''}`}
@@ -1496,14 +1493,24 @@ export default function POSPage() {
 
       <HoldBillNoteModal
         open={holdNoteOpen}
-        onClose={() => setHoldNoteOpen(false)}
+        onClose={() => {
+          // UI-03: Hold-Bill note cancelled/closed — return focus to the scan box (the confirm
+          // path already refocuses via handleHoldConfirm). Never steals focus while the modal is open.
+          setHoldNoteOpen(false);
+          focusSearch();
+        }}
         onConfirm={handleHoldConfirm}
       />
 
       <SuspendedBillsListModal
         open={suspendedListOpen}
         bills={suspendedBills}
-        onClose={() => setSuspendedListOpen(false)}
+        onClose={() => {
+          // UI-03: Suspended-Bills list cancelled/closed — return focus to the scan box (restore
+          // routes through handleRestoreBill, which already refocuses).
+          setSuspendedListOpen(false);
+          focusSearch();
+        }}
         onRestore={handleRestoreBill}
         onRemove={handleCancelParkedOrderClick}
       />
