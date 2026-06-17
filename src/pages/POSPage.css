@@ -49,13 +49,23 @@
   flex: 1;
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   background: var(--g50, #f8f8fc);
-  border: 0.5px solid var(--g200, #d3d1c7);
+  border: 1px solid var(--g200, #d3d1c7);
   border-radius: 8px;
   padding: 0 12px;
   height: 36px;
   min-width: 0;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+/* UI-02 Impeccable Style: a calm, on-brand soft focus ring when the cashier focuses the
+   scan box — the search field is the dominant, keyboard-first element. Color only; no
+   geometry change, so the toolbar row never shifts. */
+.pos-topbar-search:focus-within {
+  background: #fff;
+  border-color: var(--p400, #7f77dd);
+  box-shadow: 0 0 0 3px rgba(83, 74, 183, 0.14);
 }
 
 .pos-topbar-search i {
@@ -72,53 +82,80 @@
   width: 100%;
 }
 
+/* UI-02 Impeccable Style — primary toolbar action (เลือกสินค้า / open product picker).
+   The single emphasized control in the bar: a calm brand-purple fill, harmonized with the
+   secondary buttons below (same 36px height, 8px radius, padding rhythm) so it reads as the
+   primary without overwhelming the row. */
 .pos-add-prod-btn {
-  display: flex;
+  flex-shrink: 0;
+  display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 0 12px;
-  height: 32px;
+  gap: 6px;
+  padding: 0 14px;
+  height: 36px;
   background: var(--p600, #534ab7);
-  border: none;
+  border: 1px solid var(--p600, #534ab7);
   border-radius: 8px;
   color: white;
-  font-size: 11px;
+  font-size: 12px;
   font-family: inherit;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .pos-add-prod-btn:hover {
   background: var(--p800, #3c3489);
+  border-color: var(--p800, #3c3489);
 }
 
-/* Action link in the topbar (opens the sorting/visibility modal). */
+.pos-add-prod-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(83, 74, 183, 0.3);
+}
+
+/* UI-02 Impeccable Style — secondary toolbar actions (จัดเรียง / Sort, อัปเดตข้อมูลหน้าจอ /
+   Refresh). Standardized to a single quiet, bordered "ghost" treatment so the cluster next
+   to the search box is visually consistent and uncluttered: neutral text, soft 8px-rounded
+   border, calm on-brand hover, no harsh colors. Replaces the old bare underline-on-hover
+   links that sat at a different height and weight than the filled primary. */
 .pos-action-link {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 0 10px;
-  height: 32px;
-  border: none;
-  background: none;
-  color: var(--p600, #534ab7);
+  gap: 6px;
+  padding: 0 12px;
+  height: 36px;
+  border: 1px solid var(--g200, #d3d1c7);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--g500, #6f6e67);
   font-size: 12px;
   font-family: inherit;
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
-.pos-action-link:hover {
-  text-decoration: underline;
+.pos-action-link:hover:not(:disabled) {
+  background: var(--p50, #eeedfe);
+  border-color: var(--p200, #afa9ec);
+  color: var(--p800, #3c3489);
+}
+
+.pos-action-link:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(83, 74, 183, 0.18);
 }
 
 .pos-action-link:disabled {
-  opacity: 0.6;
+  opacity: 0.55;
   cursor: default;
-  text-decoration: none;
+  background: var(--g50, #f8f8fc);
+  color: var(--g400, #888780);
 }
 
 @keyframes pos-spin {

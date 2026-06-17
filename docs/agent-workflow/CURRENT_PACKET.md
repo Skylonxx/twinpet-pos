@@ -2,64 +2,65 @@
 
 ## Phase
 
-**WORKFLOW-FILE-HANDOFF-INIT** — Initialize file-based agent handoff workflow
+**7C-UI-02-SEARCH-BARCODE** — Search & Barcode UI Refactor
 
 ## Goal
 
-Create standardized docs-only files so agents can coordinate through the repo while preserving all quality gates. This is structured human handoff, not automation.
+Refactor the Product Search and Action Bar to meet the **Impeccable Style** standard while preserving all barcode/search keyboard behavior. Standardize the buttons next to the search box (Sort, Refresh, Select) so they are visually consistent, calm, and uncluttered, and give the scan box a soft on-brand focus ring.
 
 ## Status
 
-Active — Developer Agent completing setup.
+**In Progress** — Developer implementation complete; awaiting AGY / Senior QA & UX Lead review.
 
 ---
 
-## Authorized Files
+## Scope
 
-Only these files may be created or modified:
+### Authorized implementation files
+
+- `src/pages/POSPage.tsx` — **top bar / Search section only**
+- `src/pages/POSPage.css`
+
+### Authorized workflow / report files
 
 - `docs/agent-workflow/STATE.md`
 - `docs/agent-workflow/CURRENT_PACKET.md`
 - `docs/agent-workflow/NEXT_ACTION.md`
 - `docs/reports/latest-developer-report.md`
-- `docs/reports/latest-codex-review.md`
-- `docs/reports/latest-agy-review.md`
-- `docs/reports/latest-techlead-decision.md`
 
-## Forbidden Files / Areas
+### Forbidden Files / Areas
 
-All app code, tests, config, and infrastructure are off-limits. This includes but is not limited to:
-
-- `src/` (all files)
-- `useCart.ts`, `cartUtils.ts`, toast files, checkout/payment
+- `useCart.ts`, `useCart.contract.test.ts`, `cartUtils.ts`
+- Checkout / payment logic, stock matrix, seed data
+- Toast files
+- UI-01 components (must not regress the committed bump-flash behavior)
 - Firebase / functions / rules
 - Android / Capacitor artifacts
 - `.claude/`
-- Seed data, stock matrix
-- No automation or deploy scripts
+- No new scripts, no new dependencies
+- No cart refactor, no UI-03+ work
 
 ---
 
 ## Role Sequence
 
 ```
-Tech Lead / CEO
-  → Principal Engineer Reviewer / Workflow Coordinator
-    → Developer Agent
-      → Codex Reviewer
-        → Principal Engineer Reviewer
-          → Tech Lead / CEO
-            → Commit Agent
+Developer
+  → AGY / Senior QA & UX Lead
+    → Codex Reviewer
+      → Tech Lead / CEO
 ```
 
 ## Decision Rules
 
-1. **Developer changes unauthorized files** → STOP. Return to Principal Engineer Reviewer immediately.
-2. **Diff is docs-only and clean** → Proceed to Codex review.
-3. **Codex verdict: FAIL** → Return to Principal Engineer Reviewer for remediation.
-4. **Codex verdict: PASS or PASS WITH NOTES** → Return to Principal Engineer Reviewer for Tech Lead closure memo.
-5. **AGY review** → Not required for this phase (docs only, no UI). Tech Lead may request if desired.
-6. **Commit** → Not authorized until Tech Lead / CEO provides exact staging and commit commands.
+1. **Developer** completes implementation and writes `docs/reports/latest-developer-report.md`.
+2. **Developer** updates `docs/agent-workflow/NEXT_ACTION.md` to route to AGY.
+3. **If unauthorized files are changed** → STOP and report (return to Principal Engineer Reviewer / Workflow Coordinator).
+4. **AGY reviews UX first** because this is visual/UI polish.
+5. **If AGY FAIL** → return to Principal Engineer Reviewer / Workflow Coordinator.
+6. **If AGY PASS / PASS WITH NOTES** → route to Codex for code/scope/keyboard review.
+7. **If Codex FAIL** → return to Principal Engineer Reviewer / Workflow Coordinator.
+8. **No commit** until Tech Lead / CEO authorizes the exact staging and commit commands.
 
 ---
 
