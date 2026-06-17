@@ -7,7 +7,7 @@ Updated by whichever agent or human currently owns the task.
 
 ## Current Phase
 
-**7C-UI-04-SYNC-AND-MACRO-LAYOUT** — Category Sync and Product/Grid–Cart Macro Layout Polish.
+**7C-UI-05-MACRO-LAYOUT-PERFECTION** — Seamless Split Macro Layout Perfection (Option 1 trial).
 
 ## Current Owner
 
@@ -21,46 +21,44 @@ Updated by whichever agent or human currently owns the task.
 
 ## Preflight
 
-- Working tree was **clean** before start.
-- HEAD at start: `ce49a82 style(pos): polish refresh update state and focus recovery`.
+- UI-04 was **committed first** (authorized): `b04f303 feat(pos): sync categories and refine cashier macro layout`.
+- Working tree was **clean** after the UI-04 commit, before UI-05 started.
 - `stash@{0}` present and untouched.
 
 ## Scope
 
 ### Files in scope (this phase)
 
-- `src/pages/POSPage.tsx`
 - `src/pages/POSPage.css`
-- `src/pages/POSPage.keyboard-contract.test.ts`
+- `src/pages/POSPage.tsx` (only if a divider hook were needed — NOT needed; unchanged)
+- `src/pages/POSPage.keyboard-contract.test.ts` (only if a stable assertion were needed — not changed; CSS-only)
 - `docs/agent-workflow/STATE.md`
 - `docs/agent-workflow/CURRENT_PACKET.md`
 - `docs/agent-workflow/NEXT_ACTION.md`
 - `docs/reports/latest-developer-report.md`
 
-### Files changed so far
+### Files changed so far (UI-05)
 
-- `src/pages/POSPage.tsx`, `src/pages/POSPage.css`, `src/pages/POSPage.keyboard-contract.test.ts` (modified, unstaged)
+- `src/pages/POSPage.css` (modified, unstaged) — `.pos-cart` Seamless Split only
 - Workflow/report files above (modified, unstaged)
 
 No staging. No commit.
 
-### What changed (directives A / B / C)
+### What changed (Seamless Split — CSS only)
 
-- **A — Macro layout (CSS):** `.pos-cart` top margin set to `0` so its top edge + the 64px customer/Select bar align perfectly with the 64px category bar on the left (no jagged top); left/right/bottom 8px form one consistent intentional gutter on the g50 surface; border + shadow keep the premium floating feel. **Select Customer dashed border NOT touched.**
-- **B — Category sync (TSX):** the category tab list is now sourced from BOTH product categories AND the categories collection (`richCategories`), deduped + branch-gated — so a newly-added category renders after a Refresh (the old tabs derived from products only). The update bell (`lastForceUpdate`) is catalog-wide and already glows/refreshes for category broadcasts; `refreshInventory()` already re-fetches categories. (Admin-side broadcast-on-category-edit is the backend trigger, outside POS scope.)
-- **C — Horizontal scroll (CSS):** `.pos-cat-bar` made robustly scrollable (`flex-wrap: nowrap` + `overflow-x: auto` + `scrollbar-width: none`, webkit scrollbar already hidden); parent `min-width: 0` means many tabs scroll instead of pushing the cart.
+`.pos-cart`: removed the UI-04 gray gutter (`margin`), the drop-shadow (`box-shadow`), the rounded corners (`border-radius`), and the 4-side `border`; added a single `border-left: 1px solid var(--g200)` as the only seam. `margin: 0` makes the cart a full-height flush right-hand zone that aligns top/bottom with the product area. Result: no exposed gray gap, no competing shadow into the grid, one clean 1px vertical divider, unified surface. Category horizontal scroll, category sync, and all focus-recovery logic are untouched.
 
 ### Tests / checks run
 
 - `git diff --check` — clean
 - `git diff -- src/pages/POSPage.css | grep cust-pick` — **empty (Select Customer untouched)**
 - `npx.cmd tsc -b` — PASS
-- `npx.cmd vitest run src/pages/POSPage.keyboard-contract.test.ts` — **145 passed** (was 142; +3 UI-04 tests)
+- `npx.cmd vitest run src/pages/POSPage.keyboard-contract.test.ts` — **145 passed** (unchanged — CSS-only)
 - `npx.cmd vitest run` — **712 passed (31 files)**
 
 ### Staging / Commit status
 
-Nothing staged. Nothing committed. No authorization yet.
+UI-05: nothing staged, nothing committed. (UI-04 was committed at `b04f303` under explicit authorization.)
 
 ---
 
@@ -72,13 +70,14 @@ Nothing staged. Nothing committed. No authorization yet.
 | UI-02 Search & Barcode styling | Closed / committed (`bb9b1ad`) |
 | UI-02 Focus Hotfix + EDGE | Closed / committed (`42ff3ed`, `023cc8d`) |
 | UI-03 Polish | Closed / committed (`ce49a82`) |
-| UI-04 Sync & Macro Layout | **In Progress** — Developer done, **awaiting AGY visual review** |
-| UI-05+ | **Unauthorized** — do not start |
+| UI-04 Sync & Macro Layout | Closed / committed (`b04f303`) |
+| UI-05 Seamless Split | **In Progress** — Developer done, **awaiting AGY visual review** |
+| UI-06+ | **Unauthorized** — do not start |
 | Old manual workflow | Available as fallback at any time |
 
 ## Next Owner
 
-**Senior QA & UX Lead / AGY** (ROLE FILE: `docs/ai-roles/ux-lead.md`) — mandatory visual/UX review BEFORE Codex (macro layout alignment + Impeccable Style).
+**Senior QA & UX Lead / AGY** (ROLE FILE: `docs/ai-roles/ux-lead.md`) — mandatory visual/UX review BEFORE Codex (Seamless Split + Impeccable Style).
 
 ## Next Action
 
@@ -95,16 +94,16 @@ Human operator routes the current packet, `docs/reports/latest-developer-report.
 
 ## Stop Condition
 
-Developer stops after implementation + report. No staging, no commit, **no Codex until AGY review passes**, no UI-05. Wait for AGY visual validation.
+Developer stops after implementation + report. No staging of UI-05, no commit of UI-05, **no Codex until AGY review passes**, no UI-06. Wait for AGY visual validation.
 
 ---
 
 ## Latest Commit Baseline
 
 ```
+b04f303 feat(pos): sync categories and refine cashier macro layout
 ce49a82 style(pos): polish refresh update state and focus recovery
 023cc8d fix(pos): recover scanner focus across cashier actions
-42ff3ed fix(pos): restore scanner focus after cashier actions
 ```
 
 ## Stash
@@ -115,4 +114,4 @@ ce49a82 style(pos): polish refresh update state and focus recovery
 
 ## Fallback
 
-If this file-based workflow causes friction or confusion, revert to the previous manual routing workflow. The old process remains valid and available at all times.
+If this file-based workflow causes friction or confusion, revert to the previous manual routing workflow. The old process remains valid and available at all times. Option 2 (alternative to the Seamless Split) is NOT authorized in this phase.

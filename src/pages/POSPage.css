@@ -590,23 +590,18 @@
   font-weight: 600;
 }
 
-/* Cart — UI-01: a raised white Flowbite card (shadow + rounded) floating on the
-   gray-50 app surface, replacing the flat left-border panel for clear visual
-   separation. `overflow: hidden` clips the inner regions to the rounded corners;
-   `min-height: 0` lets the middle items list scroll while the customer bar (top)
-   and totals/checkout footer (bottom) stay pinned. */
+/* Cart — UI-05 "Seamless Split": the cart is now a FLUSH right-hand zone of one unified content
+   surface, not a card floating on gray. The UI-04 gray gutter (margins), the drop-shadow, the
+   rounded corners, and the 4-side border are all removed — so there is no exposed gray sliver and
+   no competing shadow casting into the product grid. A SINGLE clean 1px vertical divider
+   (`border-left`) is the only seam between the grid zone and the cart zone. `margin: 0` makes the
+   cart full-height, so its top/bottom align with the product area (top still lines up with the
+   64px category bar). `overflow: hidden` clips the inner regions; `min-height: 0` keeps the items
+   list scrolling between the pinned customer bar (top) and totals/checkout footer (bottom). */
 .pos-cart {
   width: 220px;
   background: white;
-  border: 1px solid var(--g200, #d3d1c7);
-  border-radius: 0.5rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
-  /* UI-04 macro layout: top margin is 0 so the cart's top edge — and its 64px customer/Select
-     bar — aligns PERFECTLY with the 64px category-tab bar on the left (no more jagged top). The
-     left/right/bottom 8px form a single, consistent gutter on the g50 surface, so the gap reads
-     as an intentional seam between two architectural zones rather than an exposed sliver — while
-     the border + shadow keep the cart's premium floating feel. */
-  margin: 0 8px 8px 8px;
+  border-left: 1px solid var(--g200, #d3d1c7);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;

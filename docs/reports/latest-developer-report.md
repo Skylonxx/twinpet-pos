@@ -2,112 +2,124 @@
 
 ## Phase
 
-**7C-UI-04-SYNC-AND-MACRO-LAYOUT** — Category Sync and Product/Grid–Cart Macro Layout Polish
+**7C-UI-05-MACRO-LAYOUT-PERFECTION** — Seamless Split Macro Layout Perfection (Option 1 trial)
 
-## 1. Summary
+## 1. UI-04 Commit Summary and Commit Hash
 
-Three scoped changes per the corrected directive: (A) aligned the left product/grid area's top edge with the right cart panel and turned the inter-panel gap into one intentional, premium gutter (CSS); (B) closed the category-sync render blindspot — category tabs are now sourced from the categories collection too, so a newly-added category renders after a Refresh (the update bell already glows catalog-wide); (C) made the category tab bar robustly horizontally scrollable. The **Select Customer dashed border was NOT touched** (now explicitly acceptable). UI-03 focus recovery and all keyboard/scanner contracts preserved. **AGY visual review required before Codex.**
+UI-04 (`7C-UI-04-SYNC-AND-MACRO-LAYOUT`) was closed and committed under explicit Tech Lead/CEO authorization, using the exact authorized staging + commit commands (the 9-file package):
 
-## 2. Preflight Status and HEAD Confirmation
+- **Commit:** `b04f303 feat(pos): sync categories and refine cashier macro layout`
+- 9 files changed, 269 insertions(+), 194 deletions(-).
+- Working tree **clean** after commit; `stash@{0}` untouched.
 
-- `git status --short` before start: **clean** ✅
-- `git log --oneline -5` top commit: `ce49a82 style(pos): polish refresh update state and focus recovery` ✅ (matches expected baseline)
+## 2. UI-05 Summary
+
+Implemented **Option 1: The Seamless Split** — CSS-only on `.pos-cart`. The cart is no longer a card floating on gray with margins + drop-shadow + rounded border; it is now a flush, full-height right-hand zone of one unified content surface, separated from the product grid by a single clean 1px vertical divider. This removes the narrow gray gap and the competing inner shadow the CEO flagged after UI-04. UI-04 category sync + horizontal scroll and UI-03/UI-04 focus recovery are untouched. **Option 2 was not introduced.** AGY visual review required before Codex.
+
+## 3. Preflight Status After UI-04 Commit
+
+- `git status --short` after the UI-04 commit: **clean** ✅
+- `git log --oneline -5` top: `b04f303 feat(pos): sync categories and refine cashier macro layout` ✅
 - `stash@{0}` present and untouched ✅
-- Did not start UI-04 on top of uncommitted work.
+- UI-05 started only after UI-04 was committed and the tree was clean (gate satisfied).
 
-## 3. Files Changed
+## 4. Files Changed for UI-05
 
 | File | Action | Description |
 |---|---|---|
-| `src/pages/POSPage.tsx` | Modified | `visibleCategories` memo now merges product categories + the categories collection (`richCategories`), deduped + branch-gated (B). |
-| `src/pages/POSPage.css` | Modified | `.pos-cart` top margin → 0 (aligns with category bar) + consistent gutter (A); `.pos-cat-bar` robust horizontal scroll (`flex-wrap: nowrap` + `scrollbar-width: none`) (C). |
-| `src/pages/POSPage.keyboard-contract.test.ts` | Modified | Added `7C-UI-04-SYNC-AND-MACRO-LAYOUT` describe block (3 tests). |
+| `src/pages/POSPage.css` | Modified | `.pos-cart` Seamless Split: removed `margin` / `box-shadow` / `border-radius` / 4-side `border`; added `border-left: 1px solid var(--g200)`. |
 
-`useCart.ts`, `useCart.contract.test.ts`, `cartUtils.ts`, checkout/payment, stock matrix, seed, Toast, Firebase, Android, `.claude/` — untouched. **Select Customer button (`.pos-cust-pick`) untouched** (verified `git diff` has no `cust-pick` hunk).
+No TSX change (no divider hook needed — the divider rides the existing `.pos-cart`). `POSPage.tsx`, `POSPage.keyboard-contract.test.ts`, `useCart.ts`, `cartUtils.ts`, checkout/payment, stock matrix, seed, Toast, Firebase, Android, `.claude/` — untouched. **Select Customer button (`.pos-cust-pick`) untouched** (verified — no `cust-pick` hunk in the diff).
 
-## 4. CURRENT_PACKET.md Update Confirmation
+## 5. CURRENT_PACKET.md Update Confirmation
 
-`docs/agent-workflow/CURRENT_PACKET.md` updated for `7C-UI-04-SYNC-AND-MACRO-LAYOUT` with the goal, corrected CEO UAT summary (Select Customer border NOT to be touched), **all three directives A/B/C**, the AGY review requirement (mandatory before Codex), role sequence (Developer → AGY → Codex → Tech Lead/CEO), explicit role files, and a note on the authorized data/subscription helper (none needed changing). ✅
+`docs/agent-workflow/CURRENT_PACKET.md` updated for `7C-UI-05-MACRO-LAYOUT-PERFECTION` with the Seamless Split goal, CEO UAT summary, the A/B/C/D execution directives (remove gap, unify background, flatten inner edge, add divider), strict non-goals (incl. "Option 2 NOT authorized" and "do not touch Select Customer"), the AGY-before-Codex requirement, role sequence, and explicit role files. ✅
 
-## 5. Implementation Details (A / B / C)
+## 6. Seamless Split Implementation Details
 
-### A — Macro layout: Grid vs Cart alignment & gap (CSS)
-The cart (`.pos-cart`) had `margin: 8px 8px 8px 0` → its top sat 8px below the left category bar (jagged top) and the left edge touched the product area (no clean seam). Changed to `margin: 0 8px 8px 8px`:
-- **Top = 0** → the cart's top edge (and its 64px `.pos-cust-bar` / Select-Customer header) aligns **exactly** with the 64px `.pos-cat-bar` on the left. Top boundaries now line up; because both header bars are 64px, their bottoms align too.
-- **Left/right/bottom = 8px** → one consistent gutter of the g50 surface frames the cart, so the gap reads as an intentional seam between two architectural zones (not an exposed sliver). The cart keeps its `border` + `box-shadow` + `border-radius`, so the premium floating feel is intact.
+Before (UI-04) `.pos-cart`:
+```
+border: 1px solid var(--g200); border-radius: 0.5rem;
+box-shadow: 0 1px 3px rgba(0,0,0,.1), 0 1px 2px rgba(0,0,0,.06);
+margin: 0 8px 8px 8px;
+```
+After (UI-05) `.pos-cart`:
+```
+border-left: 1px solid var(--g200);
+/* (no margin, no box-shadow, no border-radius, no 4-side border) */
+```
+Everything else (`width: 220px`, `background: white`, `display/flex-direction/flex-shrink/min-height: 0/overflow: hidden`) is unchanged, so the internal cart layout (pinned customer bar, scrolling items, pinned footer) is preserved.
 
-### B — Category sync blindspot (TSX)
-- **Detection (already correct, documented):** `usePosSyncSignal` reads the branch's catalog-wide `sync_state.lastForceUpdate` bell. This is generic — it fires for ANY admin broadcast (product OR category), so the Refresh glow / auto-refresh already covers category changes. `handleManualRefresh` → `refreshInventory()` → `getInventorySnapshot()` already re-fetches the categories collection. No listener change was needed (changing a correct generic listener would be redundant/risky).
-- **Render (the actual POS-side gap — fixed):** `visibleCategories` was derived from product categories only, so a category **added** in admin (with no products yet) never appeared as a tab even after a refresh. The memo now builds the tab list from **both** the product category strings **and** `richCategories` (the categories collection), deduped by the canonical filter key, then still applies `getVisibleCategories` (branch visibility) + `sortCategories` (branch order). So new/modified categories render after a Refresh; hidden categories stay hidden.
-- **Out of POS scope (documented):** if the admin category editor does not call `broadcastInventoryUpdate` after a category edit, that admin-side write is the backend trigger and is outside this packet's authorized files.
+## 7. Gap / Background Unification Notes (A + B)
 
-### C — Horizontal scroll for category tabs (CSS)
-`.pos-cat-bar` already had `overflow-x: auto` + a hidden webkit scrollbar. Hardened it: added `flex-wrap: nowrap` (tabs never wrap), `scrollbar-width: none` (Firefox parity). Combined with each pill's `flex-shrink: 0` and the parent `.pos-product-area { min-width: 0 }`, many categories scroll **inside the bar** and never push or break the cart panel. Tab interactions + active state unchanged.
+- **Gap removed:** dropping the `margin` makes the cart flush against the product area (no left gray gutter) and flush to the content-row right/bottom edges — the narrow gray sliver is gone. `margin: 0` is intentional (full-height docked panel), not a random margin hack.
+- **Unified surface:** the cart and product area now meet directly at the divider as two zones of one surface. At the top, the white 64px category bar (left) and the white 64px customer/Select bar (right) form a continuous header strip split only by the 1px divider; their tops AND bottoms align (cart is full-height). The product grid keeps its own zone background; the panels read as "two zones in one designed system," not two floating cards.
 
-## 6. Macro Layout Alignment Notes
+## 8. Cart Inner-Edge / Shadow Notes (C)
 
-Top edges now align by construction (cart `margin-top: 0` against the product area's top). The 64px category bar (left) and the 64px customer/Select bar (right) share the same top and bottom Y. The remaining 8px gutter is uniform on left/right/bottom; the floating bottom (cart 8px short of the row bottom) is the intended elevated feel. Visual judgment of "premium gutter" is deferred to AGY.
+The cart's `box-shadow` (and the rounded `border-radius`) were removed, so there is no floating drop-shadow casting into the left product grid and no muddy/overlapping edge at the seam. The cart retains a clean premium presence via the flush white panel + the crisp divider, without competing elevation against the grid.
 
-## 7. Category Sync Listener Notes
+## 9. Divider Notes (D)
 
-The POS uses one catalog-wide bell (`lastForceUpdate`) — it does not (and need not) distinguish product vs category. The glow + refresh already react to category broadcasts. The fix was on the render side (tabs now include collection categories). No duplicate listeners introduced; no new subscriptions; no memory-leak surface added (the single existing `onSnapshot` in `usePosSyncSignal` is unchanged).
+A single `border-left: 1px solid var(--g200)` on `.pos-cart` is the only seam between grid and cart — subtle, straight, full-height, on-brand gray. The product area carries no right border (verified), so there is **no double border** and no heavy contrast; one clean 1px line, exactly between the zones.
 
-## 8. Category Tab Horizontal-Scroll Notes
+## 10. Category Scroll Preservation Notes
 
-`flex-wrap: nowrap` + `overflow-x: auto` + `scrollbar-width: none` (+ existing webkit hide) on `.pos-cat-bar`, with `flex-shrink: 0` pills and a `min-width: 0` parent, guarantee horizontal scrolling without wrapping or layout break as categories grow.
+`.pos-cat-bar` (UI-04: `flex-wrap: nowrap` + `overflow-x: auto` + `scrollbar-width: none`) is untouched, as is the `visibleCategories` render-merge and `usePosSyncSignal` listener. Horizontal scroll and category sync behave exactly as in UI-04 (the keyboard-contract category/scroll/sync tests still pass).
 
-## 9. Focus Recovery Preservation Notes
+## 11. Focus Recovery Preservation Notes
 
-No focus logic touched. The UI-03 Hold-Bill / Suspended-Bills `onClose` refocus, the cart-control `runAndRefocus` paths, UOM/Payment/ProductPicker/numpad focus ownership, Ctrl+F, auto-focus, F12, and scanner paths are all unchanged — the full keyboard-contract suite (145) is green.
+No focus or TSX logic touched. UI-03/UI-04 focus recovery (Hold-Bill / Suspended-Bills onClose, cart-control `runAndRefocus`, modal close paths, UOM/Payment/ProductPicker/numpad ownership, Ctrl+F, auto-focus, F12, scanner paths) is unchanged — the full keyboard-contract suite (145) is green.
 
-## 10. Tests / Checks Run
+## 12. Tests / Checks Run (UI-05)
 
 | Check | Result |
 |---|---|
-| `git status --short` | the 3 app files (+ workflow/report docs) |
-| `git diff --name-only` | `POSPage.tsx`, `POSPage.css`, `POSPage.keyboard-contract.test.ts` (+ docs) |
-| `git diff --stat` | `POSPage.css | 13`, `POSPage.keyboard-contract.test.ts | 37`, `POSPage.tsx | 32` |
+| `git status --short` | `M src/pages/POSPage.css` (+ workflow/report docs) |
+| `git diff --name-only` | `src/pages/POSPage.css` (+ workflow/report docs) |
+| `git diff --stat` | `POSPage.css | 9 insertions(+), 14 deletions(-)` |
 | `git diff --check` | clean |
 | `git diff -- POSPage.css \| grep cust-pick` | empty (Select Customer untouched) |
 | `npx.cmd tsc -b` | PASS |
-| `npx.cmd vitest run src/pages/POSPage.keyboard-contract.test.ts` | **145 passed** (was 142; +3 UI-04 tests) |
+| `npx.cmd vitest run src/pages/POSPage.keyboard-contract.test.ts` | **145 passed** (unchanged — CSS-only) |
 | `npx.cmd vitest run` | **712 passed (31 files)** |
 
-### New tests (describe `7C-UI-04-SYNC-AND-MACRO-LAYOUT`, 3 tests)
-B: the `visibleCategories` memo merges product categories + `richCategories` (deduped, branch-gated); the update bell is catalog-wide (glow + refresh fire for category or product changes). C: the category bar still renders `visibleCategories.map` (usable with many categories). A and C are CSS-only → visual validation deferred to AGY.
+No new tests were added: UI-05 is a pure CSS macro-layout change (no stable behavioral hook to assert without overfitting brittle DOM tests). Visual validation is deferred to AGY, per the packet. Existing category-scroll/sync + focus-recovery contracts remain green.
 
-## 11. Boundary Confirmation
+## 13. Boundary Confirmation
 
+- [x] UI-04 committed first (`b04f303`); tree clean before UI-05 started
 - [x] Select Customer button styling / dashed border **NOT touched**
+- [x] Category sync behavior preserved (untouched); horizontal scroll preserved (untouched)
+- [x] Focus recovery (UI-03/UI-04) preserved (untouched)
 - [x] No cart math change; `useCart.ts` / `useCart.contract.test.ts` / `cartUtils.ts` untouched
-- [x] Checkout / payment business logic untouched; stock matrix untouched; seed data untouched
-- [x] Toast files untouched; Firebase / functions / rules untouched; Android / Capacitor untouched; `.claude/` untouched
-- [x] No scripts created; no new dependencies; no UI-05 work
-- [x] UI-03 focus recovery preserved (full suite green)
-- [x] Only authorized files changed
-- [x] No staging, no commit; `stash@{0}` untouched (only `git stash list` used)
+- [x] Checkout / payment / stock matrix / seed / Toast / Firebase / Android / `.claude/` untouched
+- [x] No scripts; no new dependencies; no UI-06 work; Option 2 NOT introduced
+- [x] Only `src/pages/POSPage.css` changed (app); no TSX/test change needed
+- [x] No staging of UI-05, no commit of UI-05; `stash@{0}` untouched
 
-## 12. Hidden Risks / Notes
+## 14. Hidden Risks / Notes
 
-- **B render-merge surfaces collection categories:** categories that exist in the collection and are branch-visible now appear as tabs even with zero products (intended — so new categories show). They are still gated by `getVisibleCategories` (branch `isVisibleInPos`), so hidden categories stay hidden. If admin has stale/branch-visible empty categories, they would now appear — AGY/Tech Lead to confirm this is desired (it is the directive's "render new categories").
-- **Admin broadcast on category edit is out of scope:** the POS glows only when the admin rings the bell. If the admin category editor doesn't call `broadcastInventoryUpdate`, that backend trigger is a separate (non-POS) fix — flagged for Tech Lead.
-- **A is a one-line margin change** — low risk, but the "premium gutter" look is a visual judgment for AGY (node tests can't assert pixels).
+- **Grid zone background:** the product grid keeps its existing (gray-50) zone background while the cart zone is white — this is the intended "split," not a gap. If AGY prefers a fully single-color surface, that would be a follow-up (out of this CSS-only scope); flagged for AGY visual judgment.
+- **Full-height cart:** `margin: 0` makes the cart extend to the bottom of the content row (it previously floated 8px above). This is intentional (unified, aligned bottoms) and does not affect the internal scroll regions.
+- **CSS-only** → no behavioral/test surface changed; the macro-layout look is a visual judgment for AGY (node tests can't assert pixels/shadows).
+- Option 2 remains available as a later pivot **only if** Option 1 fails CEO Physical UAT — it is not implemented here.
 
-## 13. Next Owner and Next Action
+## 15. Next Owner and Next Action
 
-**Next owner: Senior QA & UX Lead / AGY** (ROLE FILE: `docs/ai-roles/ux-lead.md`). Human operator sends AGY the current packet, this report, and the current `git diff` for visual/macro-layout validation. **Codex only after AGY PASS / PASS WITH NOTES.** Do not stage or commit. Do not start UI-05.
+**Next owner: Senior QA & UX Lead / AGY** (ROLE FILE: `docs/ai-roles/ux-lead.md`). Human operator sends AGY the current packet, this report, and the current `git diff` for visual validation of the Seamless Split. **Codex only after AGY PASS / PASS WITH NOTES.** Do not stage or commit UI-05. Do not start UI-06.
 
 ---
 
 STATE CARD
-Phase: 7C-UI-04-SYNC-AND-MACRO-LAYOUT
+Phase: 7C-UI-05-MACRO-LAYOUT-PERFECTION
 Current owner: Developer (complete) → Senior QA & UX Lead / AGY
 Verdict: In Progress — Developer implementation complete, awaiting AGY visual/UX review (before Codex)
-Files changed: src/pages/POSPage.tsx; src/pages/POSPage.css; src/pages/POSPage.keyboard-contract.test.ts; docs/agent-workflow/STATE.md; docs/agent-workflow/CURRENT_PACKET.md; docs/agent-workflow/NEXT_ACTION.md; docs/reports/latest-developer-report.md
+Files changed: src/pages/POSPage.css (UI-05 app); docs/agent-workflow/STATE.md; docs/agent-workflow/CURRENT_PACKET.md; docs/agent-workflow/NEXT_ACTION.md; docs/reports/latest-developer-report.md. (UI-04 separately committed at b04f303.)
 Tests/checks: git diff --check clean; Select Customer untouched; tsc -b PASS; POSPage.keyboard-contract 145 passed; full vitest 712 passed
-Staged: None
-Committed: None
+Staged: None (UI-05)
+Committed: None for UI-05 (UI-04 committed at b04f303 under authorization)
 Required fixes: None
 Next owner: Senior QA & UX Lead / AGY (ROLE FILE: docs/ai-roles/ux-lead.md)
-Next action: Human operator sends AGY the current packet + this report + current diff for visual/macro-layout validation; Codex only after AGY PASS / PASS WITH NOTES
-Stop condition: No staging, no commit, no Codex until AGY passes, no UI-05; Select Customer border untouched; stash@{0} untouched; wait for AGY visual validation
+Next action: Human operator sends AGY the current packet + this report + current diff for Seamless Split visual validation; Codex only after AGY PASS / PASS WITH NOTES
+Stop condition: No staging of UI-05, no commit of UI-05, no Codex until AGY passes, no UI-06, Option 2 not authorized; Select Customer untouched; stash@{0} untouched; wait for AGY visual validation

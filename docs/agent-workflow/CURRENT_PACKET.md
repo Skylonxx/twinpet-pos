@@ -2,27 +2,33 @@
 
 ## Phase
 
-**7C-UI-04-SYNC-AND-MACRO-LAYOUT** — Category Sync and Product/Grid–Cart Macro Layout Polish
+**7C-UI-05-MACRO-LAYOUT-PERFECTION** — Seamless Split Macro Layout Perfection (Option 1 trial)
 
 ## Goal
 
-Fix the macro layout relationship between the left product/category area and the right cart panel, add category update sync detection/render, and make category tabs horizontally scrollable — while preserving UI-03 focus recovery and the Select Customer button styling (dashed border NOT to be touched). **AGY visual review is required before Codex.**
+Implement **Option 1: The Seamless Split** to remove the remaining visual tension between the Product Grid and the Cart Panel — by unifying the main surface, removing the awkward gray gap, flattening competing inner shadows, and using one clean 1px vertical divider. Preserve UI-04 category sync + horizontal scroll and UI-03/UI-04 focus recovery; do NOT touch the Select Customer button. **AGY visual review is required before Codex.**
 
 ## CEO Physical UAT Issue Summary
 
-The prior UAT interpretation is cancelled — **the Select Customer dashed border is acceptable and must NOT be touched.** The actual issues are: (1) macro layout alignment + gap between the left Product/Grid area and the right Cart panel (jagged top edges; the gap exposes an ugly light-gray background, making the panels feel disconnected); (2) category sync blindspot — the update listener detects product changes but category changes don't render; (3) category tabs must scroll horizontally so new categories don't break/wrap the layout.
+After UI-04, the CEO identified remaining visual tension caused by: (1) the narrow gray gap between the Product Grid and the Cart Panel, and (2) competing shadows between the left product area and the right cart panel — the panels still read as two cards floating on gray rather than one designed surface. **Decision: trial Option 1 (The Seamless Split).** If Option 1 fails CEO Physical UAT, the team may later pivot to Option 2, but **Option 2 is NOT authorized in this phase.**
 
-## Implementation Directives (A / B / C)
+## Implementation Directives (Seamless Split — A / B / C / D)
 
-**A — Macro Layout: Grid vs Cart Alignment & Gap.** Align the top boundaries of the left Category/Product-Grid area and the right Cart container perfectly. Make the gap between the two panels look intentional, seamless, and premium (no exposed-gray sliver); the cart may keep a subtle floating/elevated feel but spacing must make architectural sense. Scoped to POS macro layout. **Do NOT touch or restyle the Select Customer button dashed border.**
+**A — Remove the Gap.** Remove/neutralize the gray background gap between the left and right panels — not by random margins; the spacing must feel intentional.
 
-**B — Category Sync Blindspot.** Ensure POS update detection covers category updates: when a category is added/modified in admin state, the Refresh button must glow like with product changes, and clicking Refresh must fetch and render the new/updated categories. Preserve existing product update detection and the UI-03 glowing-refresh behavior.
+**B — Unify the Background.** The main content area should feel like a single unified surface — Product Grid and Cart as two zones inside one designed system, not two unrelated cards floating on gray.
 
-**C — Horizontal Scroll for Category Tabs.** Ensure the category tab container scrolls horizontally when many categories exist (`overflow-x-auto` + scrollbar-hide or equivalent), so added categories never wrap/break the layout. Keep tab interactions + active state intact.
+**C — Flatten the Inner Edge.** Remove the cart's floating drop-shadow (or at minimum the shadow casting into the left grid); prevent shadow overlap / muddy edge between the sections. The cart can keep premium presence, but the inner seam must be clean.
+
+**D — Add a Subtle Divider.** One clean 1px vertical divider exactly between grid and cart (`border-l border-gray-200` or CSS equivalent). Subtle, straight, premium — no double borders, no heavy contrast, no clutter.
+
+## Strict Non-Goals
+
+Do not touch Select Customer button styling; do not alter category-sync behavior except to preserve UI-04; do not alter focus-recovery behavior except to preserve UI-03/UI-04; do not redesign the POS shell broadly; **do not introduce Option 2.**
 
 ## AGY Review Requirement (MANDATORY before Codex)
 
-AGY must verify: the Category/Product-Grid top edge aligns with the Cart top edge; the left/right panel gap looks intentional and premium (no ugly/disconnected exposed background); cart elevation/shadow still feels premium; the Select Customer button was NOT altered; category horizontal scroll feels clean (not broken/cheap); no visual regression from UI-03; and no focus-recovery regression is visible in cashier flow.
+AGY must verify: the Seamless Split looks distinctly premium; the gray gap is removed/visually neutralized; Product Grid + Cart feel like one unified architectural surface; the cart inner edge no longer casts messy shadow into the grid; one subtle 1px vertical divider separates the zones without noise; category horizontal scroll (UI-04) remains intact; focus recovery (UI-03/UI-04) remains intact; and no broad redesign or cheap visual effect was introduced.
 
 ## Status
 
@@ -34,9 +40,9 @@ AGY must verify: the Category/Product-Grid top edge aligns with the Cart top edg
 
 ### Authorized implementation files
 
-- `src/pages/POSPage.tsx`
 - `src/pages/POSPage.css`
-- `src/pages/POSPage.keyboard-contract.test.ts` (focus/keyboard tests if needed)
+- `src/pages/POSPage.tsx` — only if a className wrapper/divider hook is genuinely needed (it was NOT — CSS-only)
+- `src/pages/POSPage.keyboard-contract.test.ts` — only if a stable class/hook assertion is required
 
 ### Authorized workflow / report files
 
@@ -55,11 +61,12 @@ AGY must verify: the Category/Product-Grid top edge aligns with the Cart top edg
 - Android / Capacitor artifacts
 - `.claude/`
 - No new scripts, no new dependencies
-- No UI-05+ work; do not break UI-03 focus recovery
+- No UI-06+ work; do not break UI-03/UI-04 focus recovery, category sync, or horizontal scroll
+- **Option 2 is NOT authorized** — implement Option 1 (Seamless Split) only
 
-### Authorized data/subscription helper note
+### Preservation note
 
-The packet authorizes a POS data/subscription helper file responsible for the product/category update listener if POSPage does not own it. In practice **no such file needed changing**: the listener (`usePosSyncSignal`) reads the branch's catalog-wide `sync_state.lastForceUpdate` bell, which already fires for category broadcasts; `refreshInventory` (`usePosInventory` → `getInventorySnapshot`) already re-fetches categories. The POS-side gap was the category *render* (tabs derived from product categories only) — fixed in `POSPage.tsx`.
+UI-04 (category sync + horizontal scroll) and UI-03/UI-04 focus recovery must remain intact. The Seamless Split is CSS-only on `.pos-cart`, so the category listener (`usePosSyncSignal`), `visibleCategories` render-merge, `.pos-cat-bar` scroll, and every focus-recovery handler are untouched.
 
 ---
 
