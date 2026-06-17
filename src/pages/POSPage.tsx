@@ -160,6 +160,19 @@ export default function POSPage() {
     window.requestAnimationFrame(() => searchInputRef.current?.focus());
   }, []);
 
+  // 7C-UI-02-HOTFIX-FOCUS-EDGE: run an inline cart/bill-level mutation, then return focus to the
+  // scan box. Used by the non-modal cart controls — qty +/-, remove line, fee chips, and the
+  // bill-discount ฿/% toggles — which otherwise leave focus on the clicked button. `focusSearch`
+  // is rAF-deferred, so the refocus lands AFTER React commits the re-render (and survives the
+  // removed line unmounting). Mutation semantics are untouched — this only appends a focus call.
+  const runAndRefocus = useCallback(
+    (action: () => void) => {
+      action();
+      focusSearch();
+    },
+    [focusSearch],
+  );
+
   // 7C-UI-02-HOTFIX-FOCUS (Codex blocker): set true by the Select picker's onConfirm when the
   // confirmed selection includes a multi-UOM product (which the uomQueue drain will open in
   // UomModal). ProductPickerDialog fires onConfirm then onClose synchronously, so onClose reads
@@ -683,7 +696,9 @@ export default function POSPage() {
       prev ? { ...prev, cashEntries: [...(prev.cashEntries ?? []), entry] } : prev,
     );
     setShowCashTx(false);
-  }, []);
+    // 7C-UI-02-HOTFIX-FOCUS-EDGE: Cash In/Out resolved and the modal closed — return to scanning.
+    focusSearch();
+  }, [focusSearch]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1199,7 +1214,7 @@ export default function POSPage() {
                         <button
                           type="button"
                           className="pos-ci-qty-seg"
-                          onClick={() => cart.changeQty(line.lineKey, -1)}
+                          onClick={() => runAndRefocus(() => cart.changeQty(line.lineKey, -1))}
                           aria-label="ลดจำนวน"
                         >
                           <i className="ti ti-minus" aria-hidden="true" />
@@ -1215,7 +1230,7 @@ export default function POSPage() {
                         <button
                           type="button"
                           className="pos-ci-qty-seg"
-                          onClick={() => cart.changeQty(line.lineKey, 1)}
+                          onClick={() => runAndRefocus(() => cart.changeQty(line.lineKey, 1))}
                           aria-label="เพิ่มจำนวน"
                         >
                           <i className="ti ti-plus" aria-hidden="true" />
@@ -1232,7 +1247,7 @@ export default function POSPage() {
                       <button
                         type="button"
                         className="pos-ci-icon-btn pos-ci-icon-btn--danger"
-                        onClick={() => cart.removeLine(line.lineKey)}
+                        onClick={() => runAndRefocus(() => cart.removeLine(line.lineKey))}
                         aria-label="ลบ"
                       >
                         <i className="ti ti-trash" aria-hidden="true" />
@@ -1282,14 +1297,14 @@ export default function POSPage() {
                     <button
                       type="button"
                       className={`pos-disc-tog${!cart.billDiscPercent ? ' on' : ''}`}
-                      onClick={() => cart.setBillDiscPercent(false)}
+                      onClick={() => runAndRefocus(() => cart.setBillDiscPercent(false))}
                     >
                       ฿
                     </button>
                     <button
                       type="button"
                       className={`pos-disc-tog${cart.billDiscPercent ? ' on' : ''}`}
-                      onClick={() => cart.setBillDiscPercent(true)}
+                      onClick={() => runAndRefocus(() => cart.setBillDiscPercent(true))}
                     >
                       %
                     </button>
@@ -1303,7 +1318,7 @@ export default function POSPage() {
                         key={rate}
                         type="button"
                         className={`pos-fee-chip${cart.feeRate === rate ? ' on' : ''}`}
-                        onClick={() => cart.setFeeRate(rate)}
+                        onClick={() => runAndRefocus(() => cart.setFeeRate(rate))}
                       >
                         {rate === 0 ? 'ไม่มี' : `${rate}%`}
                       </button>
@@ -1453,7 +1468,11 @@ export default function POSPage() {
       {showCashTx && activeShift && (
         <CashTransactionModal
           shift={activeShift}
-          onClose={() => setShowCashTx(false)}
+          onClose={() => {
+            // 7C-UI-02-HOTFIX-FOCUS-EDGE: Cash In/Out cancelled/closed — return to scanning.
+            setShowCashTx(false);
+            focusSearch();
+          }}
           onSuccess={handleCashTxRecorded}
         />
       )}
@@ -1461,7 +1480,12 @@ export default function POSPage() {
       {showCloseShift && drawerShift && (
         <CloseShiftModal
           shift={drawerShift}
-          onClose={() => setShowCloseShift(false)}
+          onClose={() => {
+            // 7C-UI-02-HOTFIX-FOCUS-EDGE: Close-Shift cancelled/closed — return to scanning.
+            // (The success path resolves via handleNewSale, which already refocuses.)
+            setShowCloseShift(false);
+            focusSearch();
+          }}
           onSuccess={() => {
             setActiveShift(null);
             setShowCloseShift(false);
@@ -1621,7 +1645,12 @@ export default function POSPage() {
           }
           setConfirmModalState({ open: false });
         }}
-        onCancel={() => setConfirmModalState({ open: false })}
+        onCancel={() => {
+          // 7C-UI-02-HOTFIX-FOCUS-EDGE: Clear-Cart / cancel-parked confirm dismissed — the
+          // confirm originated from a cart/topbar button, so return focus to the scan box.
+          setConfirmModalState({ open: false });
+          focusSearch();
+        }}
       />
     </div>
   );

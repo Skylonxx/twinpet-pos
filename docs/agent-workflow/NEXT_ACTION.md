@@ -2,13 +2,13 @@
 
 ## Current State
 
-Codex returned **FAIL** on the first pass (`docs/reports/latest-codex-review.md`): confirming a multi-UOM product via the Select picker could refocus the scan box behind the opening UomModal. Developer Agent has applied the **targeted focus-sequencing fix** and added the missing combined-path contract test. Changes are **not staged and not committed**. The work is routed **back to Codex Reviewer for re-review**. **AGY is bypassed** for this phase (behavioral focus hotfix, not visual polish).
+Developer Agent has completed the **7C-UI-02-HOTFIX-FOCUS-EDGE** implementation: comprehensive focus recovery across all 9 CEO-flagged POS controls (Cash In/Out, Close Shift, Clear Cart, remove line, qty ＋/−, fee, discount ฿/%). Changes are **not staged and not committed**. The work is routed to **Codex Reviewer** for behavior/code/keyboard-contract review. **AGY is bypassed** for this phase (behavioral focus recovery, not visual polish).
 
 ## What Happens Next
 
-1. **Human operator** reads the updated Developer report at `docs/reports/latest-developer-report.md` and the prior Codex FAIL at `docs/reports/latest-codex-review.md`.
-2. **Human operator** sends Codex the current packet (`docs/agent-workflow/CURRENT_PACKET.md`), the Developer report, the prior Codex review, and the **current diff** for re-review.
-3. **Codex Reviewer** re-reviews the focus-sequencing fix, scope, and keyboard-contract preservation.
+1. **Human operator** reads the Developer report at `docs/reports/latest-developer-report.md`.
+2. **Human operator** sends Codex the current packet (`docs/agent-workflow/CURRENT_PACKET.md`), the Developer report, and the **current diff**.
+3. **Codex Reviewer** reviews focus recovery (all 9 targets), scope, and keyboard-contract preservation.
 4. If **Codex FAIL** → return to Principal Engineer Reviewer / Workflow Coordinator for remediation.
 5. If **Codex PASS / PASS WITH NOTES** → route to Principal Engineer Reviewer / Workflow Coordinator for Tech Lead closure memo + exact staging/commit commands.
 
@@ -16,7 +16,7 @@ Codex returned **FAIL** on the first pass (`docs/reports/latest-codex-review.md`
 
 ## Copy-Paste Instructions for Human Operator
 
-### Step 1 — Send to Codex Reviewer for RE-REVIEW (DO THIS NEXT)
+### Step 1 — Send to Codex Reviewer (DO THIS NEXT)
 
 Paste the following to Codex:
 
@@ -28,30 +28,37 @@ ROLE: Reviewer Agent
 ROLE FILE: docs/ai-roles/reviewer.md
 MODE: Review only, no edits, no staging, no commit
 
-PHASE: 7C-UI-02-HOTFIX-FOCUS (RE-REVIEW after FAIL)
+PHASE: 7C-UI-02-HOTFIX-FOCUS-EDGE
 SCOPE: behavior / code / keyboard-contract review
 
 Inputs:
-- docs/agent-workflow/CURRENT_PACKET.md (active packet)
-- docs/reports/latest-developer-report.md (updated developer report)
-- docs/reports/latest-codex-review.md (your prior FAIL)
+- docs/agent-workflow/CURRENT_PACKET.md (active packet — all 9 focus targets)
+- docs/reports/latest-developer-report.md (developer report)
 - the current working-tree diff (git diff)
 
-Confirm the prior FAIL blocker is resolved:
-- ProductPicker confirm of a multi-UOM product no longer refocuses the scan box behind
-  UomModal: onConfirm computes `willOpenUom`, threads `skipFocus` into each onProductClick,
-  and records `pickerWillOpenUomRef`; onClose refocuses ONLY when the flag is false.
-- A single-UOM add inside a UOM-opening picker batch is also suppressed (skipFocus).
-- A plain cancel / standard (no-UOM) confirm STILL refocuses the scan box.
-- UomModal owns focus until its own select/close.
+Confirm ALL 9 focus-recovery targets return focus to the scan box (searchInputRef):
+1. Cash In/Out — CashTransactionModal onClose + handleCashTxRecorded (success).
+2. Close Shift — CloseShiftModal onClose (success via handleNewSale).
+3. Clear Cart — DestructiveConfirmModal onConfirm (existing) AND onCancel (new).
+4. Remove line — runAndRefocus(() => cart.removeLine(...)).
+5. Qty + — runAndRefocus(() => cart.changeQty(..., 1)).
+6. Qty - — runAndRefocus(() => cart.changeQty(..., -1)).
+7. Fee chips — runAndRefocus(() => cart.setFeeRate(rate)).
+8. Discount Baht (฿) — runAndRefocus(() => cart.setBillDiscPercent(false)).
+9. Discount Percent (%) — runAndRefocus(() => cart.setBillDiscPercent(true)).
 
-Also re-confirm the unchanged guarantees:
-- Standard card add, category tabs, Refresh, Sort-modal close still refocus.
-- Direct multi-UOM card click never refocuses.
-- Payment modal, Ctrl+F, auto-focus, F12, scanner logic all preserved.
-- Only authorized files changed; POSPage.css untouched; no cart/checkout/stock change.
-- tsc clean; POSPage.keyboard-contract.test.ts (128) + full vitest (695) green.
-- New contract test covers the combined ProductPicker-confirm + multi-UOM path.
+Confirm the shared rAF-deferred runAndRefocus(action) helper mutates THEN refocuses, and that
+modal-owned focus is NOT stolen:
+- UomModal still owns focus until select/close (unchanged; 2 focusSearch in its region).
+- Payment modal focus behavior preserved.
+- ProductPicker multi-UOM sequencing fix from 42ff3ed preserved.
+- Scanner source paths, Ctrl+F, auto-focus, F12 preserved.
+- No focus stolen from the bill-discount numpad while it is open (numpad keeps its own close/confirm refocus).
+
+Scope / boundaries:
+- Only authorized files changed (POSPage.tsx + POSPage.keyboard-contract.test.ts + workflow/report docs).
+- POSPage.css UNTOUCHED; no cart math / useCart.ts / cartUtils.ts / checkout / stock / toast change.
+- tsc clean; POSPage.keyboard-contract.test.ts (137) + full vitest (704) green.
 
 Produce verdict in docs/reports/latest-codex-review.md.
 
@@ -68,7 +75,7 @@ Paste the Codex verdict to the Principal Engineer Reviewer / Workflow Coordinato
 
 ## Important Reminders
 
-- Send to **Codex Reviewer** (GPT-5.5 / best available) with **ROLE FILE: docs/ai-roles/reviewer.md** for re-review of the FAIL fix.
+- Send to **Codex Reviewer** (GPT-5.5 / best available) with **ROLE FILE: docs/ai-roles/reviewer.md**.
 - Do **not** route to AGY unless Tech Lead/CEO or Principal Engineer explicitly requests it.
 - Do **not** stage or commit until Tech Lead / CEO authorizes exact commands.
 - Do **not** start UI-03 or any other phase.

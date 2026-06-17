@@ -362,6 +362,74 @@ describe('7C-UI-02-HOTFIX-FOCUS · Aggressive Scanner Focus (POSPage.tsx)', () =
   });
 });
 
+// ─── C3. Comprehensive Focus Recovery Edge hotfix (7C-UI-02-HOTFIX-FOCUS-EDGE) ──────────
+// Physical UAT found more POS controls that steal focus and never return it to the scanner:
+// the cart-line qty +/-, remove-line, the bill-level fee chips + discount ฿/% toggles, and the
+// Cash In/Out, Close-Shift, and Clear-Cart (confirm cancel) modal close/resolve paths. These
+// tests pin that each returns focus to the scan box — the non-modal cart controls through the
+// shared rAF-deferred `runAndRefocus(...)` wrapper, the modals on close/resolution — while NOT
+// stealing focus from a modal that should own it (UOM/Payment unchanged).
+describe('7C-UI-02-HOTFIX-FOCUS-EDGE · Comprehensive focus recovery (POSPage.tsx)', () => {
+  test('runAndRefocus runs the mutation THEN refocuses the scan box (shared rAF helper)', () => {
+    const fn = region(posSource, 'const runAndRefocus = useCallback', '[focusSearch],');
+    expect(fn).toContain('action();');
+    expect(fn).toContain('focusSearch();');
+    // Order matters: mutate first, refocus after.
+    expect(fn.indexOf('action();')).toBeLessThan(fn.indexOf('focusSearch();'));
+  });
+
+  test('targets 5 & 6 — cart-line qty + and qty - return focus (runAndRefocus)', () => {
+    expect(posSource).toContain('runAndRefocus(() => cart.changeQty(line.lineKey, 1))');
+    expect(posSource).toContain('runAndRefocus(() => cart.changeQty(line.lineKey, -1))');
+  });
+
+  test('target 4 — remove line item returns focus (survives the line unmount via rAF)', () => {
+    expect(posSource).toContain('runAndRefocus(() => cart.removeLine(line.lineKey))');
+  });
+
+  test('target 7 — fee chips return focus (runAndRefocus)', () => {
+    expect(posSource).toContain('runAndRefocus(() => cart.setFeeRate(rate))');
+  });
+
+  test('targets 8 & 9 — bill-discount ฿ (baht) and % (percent) toggles return focus', () => {
+    expect(posSource).toContain('runAndRefocus(() => cart.setBillDiscPercent(false))');
+    expect(posSource).toContain('runAndRefocus(() => cart.setBillDiscPercent(true))');
+  });
+
+  test('target 1 — Cash In/Out (CashTransactionModal) returns focus on close AND on success', () => {
+    const modal = region(posSource, '<CashTransactionModal', 'onSuccess={handleCashTxRecorded}');
+    expect(modal).toMatch(/setShowCashTx\(false\);[\s\S]{0,120}focusSearch\(\)/);
+    const success = region(posSource, 'const handleCashTxRecorded = useCallback', '[focusSearch]);');
+    expect(success).toContain('setShowCashTx(false);');
+    expect(success).toContain('focusSearch();');
+  });
+
+  test('target 2 — Close Shift (CloseShiftModal) returns focus on close (success via handleNewSale)', () => {
+    const modal = region(posSource, '<CloseShiftModal', 'onSuccess=');
+    expect(modal).toMatch(/setShowCloseShift\(false\);[\s\S]{0,120}focusSearch\(\)/);
+    // handleNewSale (the success path) already refocuses — unchanged contract.
+    const newSale = region(posSource, 'const handleNewSale', 'const handleClearCartClick');
+    expect(newSale).toContain('focusSearch();');
+  });
+
+  test('target 3 — Clear Cart / cancel-parked confirm returns focus on BOTH confirm and cancel', () => {
+    const modal = region(posSource, '<DestructiveConfirmModal', '</div>');
+    // Confirm branches (existing) refocus...
+    expect(modal).toMatch(/cart\.clearCart\(\);[\s\S]{0,80}focusSearch\(\)/);
+    // ...and the cancel path now refocuses too (the confirm came from a cart/topbar button).
+    expect(modal).toMatch(/onCancel=\{\(\) => \{[\s\S]{0,400}focusSearch\(\)/);
+  });
+
+  test('modal-owned focus is NOT stolen — UOM still owns focus until select/close (unchanged)', () => {
+    // Regression guard: the edge hotfix must not refocus behind a modal that owns focus.
+    const uom = region(posSource, '<UomModal', '<ItemDiscountModal');
+    expect(countOccurrences(uom, 'focusSearch();')).toBe(2);
+    // The ProductPicker multi-UOM sequencing fix (42ff3ed) is intact.
+    const pick = region(posSource, '<ProductPickerDialog', '<CustomerPickerModal');
+    expect(pick).toContain('if (!pickerWillOpenUomRef.current) focusSearch();');
+  });
+});
+
 // ─── E. Escape close/cancel/dismiss contract (D4-C-4 fix) ───────────────────────────
 describe('7C-D4-C-4 · Escape close/cancel/dismiss contract (POSPage.tsx)', () => {
   /** Body of the central Escape helper (between its `useCallback(` and the dep array `}, [`). */
