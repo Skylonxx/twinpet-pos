@@ -772,6 +772,38 @@
   border-bottom: 0.5px solid var(--g100, #f1efe8);
 }
 
+/* UI-01 Animation: premium "bump flash" for a rescanned cart line. A calm, soft
+   blue-50 pulse with a faint inset ring that fades back to transparent — no yellow/red
+   alarm tint, no blink. Only `background` and `box-shadow` animate (both compositor-cheap
+   and outside layout), so the row never shifts size or position. The class is added by
+   POSPage when a line's qty increases and removed after the animation; see BUMP_FLASH_MS. */
+@keyframes posCartBumpFlash {
+  0% {
+    background: rgba(239, 246, 255, 0.95);
+    box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.16);
+  }
+  55% {
+    background: rgba(239, 246, 255, 0.58);
+    box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.08);
+  }
+  100% {
+    background: transparent;
+    box-shadow: none;
+  }
+}
+
+.pos-cart-line--bump-flash {
+  animation: posCartBumpFlash 900ms ease-out;
+}
+
+/* Accessibility: collapse the pulse to an imperceptible tick for users who prefer
+   reduced motion — the bump-to-top reorder alone still signals the increment. */
+@media (prefers-reduced-motion: reduce) {
+  .pos-cart-line--bump-flash {
+    animation-duration: 1ms;
+  }
+}
+
 .pos-ci-name {
   font-size: 10px;
   font-weight: 500;

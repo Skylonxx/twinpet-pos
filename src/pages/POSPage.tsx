@@ -51,6 +51,10 @@ import './POSPage.css';
 
 type ScanMatch = { product: PosProduct; option: UomOption | null };
 
+// UI-01 Animation: duration of the "bump flash" pulse on a rescanned cart line.
+// Kept in sync with the `posCartBumpFlash` keyframes in POSPage.css (900ms).
+const BUMP_FLASH_MS = 900;
+
 function findByScanCode(products: PosProduct[], code: string): ScanMatch | undefined {
   const trimmed = code.trim();
   if (!trimmed) return undefined;
@@ -180,6 +184,74 @@ export default function POSPage() {
   // underlying array. Row identity stays the stable `line.lineKey` (never an index),
   // so every cart action still targets the correct original line after reversal.
   const displayCartLines = useMemo(() => cartLines.slice().reverse(), [cartLines]);
+
+  // UI-01 Animation: premium "bump flash" feedback when an EXISTING cart line is
+  // rescanned/re-added (useCart increments its qty and bumps it to the top). This is
+  // DISPLAY-ONLY — it observes `cartLines` and toggles a CSS class on the affected row;
+  // it never mutates the cart, its order, or any math. Identity is the stable
+  // `line.lineKey` (never an array index), so the correct row flashes even after the
+  // bump-to-top reorder. Last-seen qty per lineKey, the active flash set, and the pending
+  // removal timers are all keyed by lineKey.
+  const previousQtyByLineKeyRef = useRef<Record<string, number>>({});
+  const flashTimeoutsRef = useRef<Record<string, number>>({});
+  const [flashingLineKeys, setFlashingLineKeys] = useState<Set<string>>(() => new Set());
+
+  // Re-applies the flash class so the animation RESTARTS even on rapid repeat scans of the
+  // same line: drop the key for one frame (React removes the class), then re-add it on the
+  // next frame (React re-applies it → the keyframes run again). A single pending removal
+  // timer per line clears the class once the animation has finished.
+  const triggerBumpFlash = useCallback((lineKey: string) => {
+    const pending = flashTimeoutsRef.current[lineKey];
+    if (pending !== undefined) window.clearTimeout(pending);
+    setFlashingLineKeys((prev) => {
+      if (!prev.has(lineKey)) return prev;
+      const next = new Set(prev);
+      next.delete(lineKey);
+      return next;
+    });
+    window.requestAnimationFrame(() => {
+      setFlashingLineKeys((prev) => {
+        const next = new Set(prev);
+        next.add(lineKey);
+        return next;
+      });
+    });
+    flashTimeoutsRef.current[lineKey] = window.setTimeout(() => {
+      delete flashTimeoutsRef.current[lineKey];
+      setFlashingLineKeys((prev) => {
+        if (!prev.has(lineKey)) return prev;
+        const next = new Set(prev);
+        next.delete(lineKey);
+        return next;
+      });
+    }, BUMP_FLASH_MS);
+  }, []);
+
+  // Detect qty increases per line. On the FIRST run (and after a cart clear/hold) the
+  // previous-qty map is empty, so initial hydration and brand-new lines have no prior qty
+  // and never flash — only a line that EXISTED with a lower qty flashes. Decrements and
+  // re-priced (customer/tier) lines keep the same qty and are ignored. Removed lines drop
+  // out of the map, so a later re-add counts as new (no flash).
+  useEffect(() => {
+    const prevMap = previousQtyByLineKeyRef.current;
+    const nextMap: Record<string, number> = {};
+    for (const line of cartLines) {
+      nextMap[line.lineKey] = line.qty;
+      const prevQty = prevMap[line.lineKey];
+      if (prevQty !== undefined && line.qty > prevQty) {
+        triggerBumpFlash(line.lineKey);
+      }
+    }
+    previousQtyByLineKeyRef.current = nextMap;
+  }, [cartLines, triggerBumpFlash]);
+
+  // Clear any pending flash timers on unmount so no setState fires after teardown.
+  useEffect(() => {
+    const timers = flashTimeoutsRef.current;
+    return () => {
+      for (const id of Object.values(timers)) window.clearTimeout(id);
+    };
+  }, []);
 
   // Drawer single-writer: the terminal owns its shift totals by folding its own
   // local ledger of `asyncOrders`. The stored shift doc's `expected*` fields are
@@ -1046,8 +1118,13 @@ export default function POSPage() {
                 const neededBase = line.qty * line.unitFactor;
                 const isOversold = product && !product.allowNegativeStock && product.stock < neededBase;
 
+                const isBumpFlashing = flashingLineKeys.has(line.lineKey);
+
                 return (
-                  <div key={line.lineKey} className={`pos-ci ${isOversold ? 'bg-yellow-50/50 border-yellow-200' : ''}`}>
+                  <div
+                    key={line.lineKey}
+                    className={`pos-ci ${isOversold ? 'bg-yellow-50/50 border-yellow-200' : ''}${isBumpFlashing ? ' pos-cart-line--bump-flash' : ''}`}
+                  >
                     <div className="pos-ci-name">
                       {line.productName}
                       {line.unit !== 'ชิ้น' && (

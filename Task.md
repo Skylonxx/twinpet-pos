@@ -1,4 +1,4 @@
-# Current Task Tracker — Phase 7C-UI-01-HOTFIX-BUMP-TO-TOP (EXISTING CART ITEM BUMPS TO TOP / IMPLEMENTATION — AWAITING CODEX REVIEW)
+# Current Task Tracker — Phase 7C-UI-01-ANIMATION (IMPECCABLE STYLE BUMP FLASH FOR RESCANNED CART ITEM / IMPLEMENTATION — AWAITING CODEX + AGY REVIEW)
 
 > Living checkpoint doc for agents. Detailed history: `docs/reports/latest-report.md` (do not duplicate long-form evidence here).
 
@@ -170,6 +170,24 @@ CEO rejection reasons:
 **Files changed in the UI-13 step:** `src/components/ui/toast.tsx`, `src/hooks/pos/useCart.ts`, `src/hooks/pos/useCart.contract.test.ts`, `Context.md`, `Task.md`.
 
 > NOTE: The combined UI-12 + UI-13 toast package was committed as `f9d11ec fix(pos): polish toast feedback and typography` (Tech Lead/CEO Option B closure with notes).
+
+---
+
+## Phase 7C-UI-01-ANIMATION — Impeccable Style Bump Flash for Rescanned Cart Item (ACTIVE / IMPLEMENTATION — AWAITING CODEX + AGY REVIEW — NOT COMMITTED)
+
+**Context:** CEO Physical UAT confirms the bump-to-top cart logic (`c3f7193`) works flawlessly. This slice adds the missing premium visual feedback so the cashier immediately notices that a rescanned EXISTING line incremented — calm, elegant, no harsh flash / eye strain. **UI-only; `useCart.ts` stays locked.**
+
+- **Trigger (POSPage.tsx only):** `previousQtyByLineKeyRef` (`Record<lineKey, qty>`) + `flashingLineKeys` `Set<string>` state + per-line `flashTimeoutsRef`. An effect over `cartLines` records each line's current `qty` and, when a line that **existed before** has an INCREASED qty, calls `triggerBumpFlash(line.lineKey)`. The prev-qty map starts empty, so first render / post-clear hydration and brand-new lines have no prior qty and never flash; decrements and customer/tier re-prices keep the same qty and are ignored; removed lines drop from the map so a later re-add counts as new (no flash). Identity is the stable `line.lineKey` (never an index) — the correct row flashes through the bump-to-top reorder.
+- **Retrigger:** `triggerBumpFlash` clears any pending removal timer, drops the key for one frame, then re-adds it on `requestAnimationFrame` so the CSS animation RESTARTS on rapid repeat scans of the same line; a single `setTimeout(BUMP_FLASH_MS = 900)` per line removes the class after the pulse; an unmount effect clears all pending timers.
+- **Render:** the cart row (`.pos-ci`) gains `pos-cart-line--bump-flash` while flashing — no structural / key / layout change, cart actions intact.
+- **CSS (POSPage.css):** new `@keyframes posCartBumpFlash` — soft Flowbite blue-50 (`rgba(239,246,255,…)`) background pulse + faint inset blue ring fading to transparent over `900ms ease-out`. **Only `background`/`box-shadow` animate (no transform/size/position) → zero layout shift.** No yellow/red alarm tint, no blink. A `prefers-reduced-motion: reduce` block collapses the pulse to `1ms`.
+- **Unchanged / locked:** cart logic, cart array-order logic, stock validation, stock-matrix rules, cart math, discount/tax/totals, checkout hard stop, checkout/payment flow, Global Toast UX/provider, `MAX_VISIBLE_TOASTS = 1`, POS-preferences behavior, product-grid/scrollbar hotfix, local seed data, Firebase rules/Functions, Android/Capacitor, `.claude/`, stash.
+
+**Files changed in this step:** `src/pages/POSPage.tsx`, `src/pages/POSPage.css`, `Context.md`, `Task.md`.
+
+**Visual UAT (physical, still required):** open POS → add A, B, C → re-scan B → B bumps to top and shows a soft ~0.8–1.0s premium pulse (no yellow/red, no layout shift) → cart total + F12 footer stay stable → Toast behavior unchanged → repeat quick B scans retrigger the pulse consistently.
+
+**Closure gate:** Codex GPT-5.5 High + AGY QA/UX review mandatory before Tech Lead closure/commit. UI-02 through UI-09 remain unauthorized. `stash@{0}` untouched; no staging/commit.
 
 ---
 
