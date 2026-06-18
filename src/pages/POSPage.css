@@ -926,12 +926,18 @@
 }
 
 .pos-ci-disc-tag {
+  display: inline-block;
   font-size: 10px;
+  font-weight: 500;
   color: #e24b4a;
   background: #fcebeb;
-  padding: 1px 5px;
+  padding: 2px 6px;
   border-radius: 4px;
   margin-left: 4px;
+  /* UI-06 hotfix: the badge now carries the formatted discount amount (e.g. "ลด ฿1,234.00").
+     inline-block + nowrap keep the amount on one line so it never breaks mid-number or reads as
+     cramped; it wraps to the next line as a whole unit when the row is narrow. */
+  white-space: nowrap;
 }
 
 .pos-ci-row,

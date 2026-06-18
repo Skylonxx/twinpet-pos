@@ -2,96 +2,72 @@
 
 ## Phase
 
-**7C-UI-06-CART-ITEM-ROWS-IMPLEMENTATION** -- authorized visual / interaction polish for cart item rows. Implementation complete, pending AGY review. No staging, no commit.
+**7C-UI-06-HOTFIX-DISCOUNT-UI** -- authorized hotfix after CEO Physical UAT failed on the UI-06 commit (`630b742`). Three targeted fixes. Implementation complete, pending AGY review. No staging, no commit.
 
-## Implementation objective
+## UAT failed issues (origin of this hotfix)
 
-Improve POS cart item row readability and cashier usability while preserving all existing behavior. Visual / interaction polish only.
+1. Cart item row discount badge -- text cramped, overflows, and does not show the actual discount amount.
+2. Item discount modal -- the value input does not trigger the custom on-screen numpad.
+3. Bill discount numpad on iPad / touch -- tapping the input makes the numpad flash and instantly disappear (touch/focus race).
+
+## Authorized scope
+
+Visual / interaction hotfix only, for the three issues above. Permission explicitly extends to the bill-discount trigger area strictly to fix the numpad race -- this is NOT permission to implement UI-07.
 
 ## Implementation result (this packet)
 
-- CSS-only change in `src/pages/POSPage.css` (`.pos-ci*`). `POSPage.tsx` was not modified -- the markup structure already supported the polish, so no JSX, handler, or data-flow change was needed.
-- No optional test file was touched: because the JSX/markup is unchanged, the `?raw` source-contract assertions on `POSPage.tsx` are unaffected, so no test edit was justified.
-- `UI_MASTER_PLAN.md` markers corrected per Tech Lead / CEO Option B (UI-04 `[DONE]`, UI-05 `[DONE]`, `[CURRENT]` moved to UI-06; order unchanged).
-- TypeScript build passed (`tsc -b`, exit 0). Targeted POS tests passed (235).
+- Fix 1 (discount badge): `src/pages/POSPage.tsx` cart row now renders the formatted discount amount (`ลด ฿X`), derived from values already computed in the row (base minus `getLineTotal`). `src/pages/POSPage.css` `.pos-ci-disc-tag` made `inline-block` + `nowrap` with a touch more padding so it never breaks mid-number or reads as cramped. No new discount math.
+- Fix 2 (item discount modal numpad): `src/components/pos/ItemDiscountModal.tsx` value input now opens the existing touch-only `NumpadDialog` (decimal/zero mode) on pointerdown, mirroring the bill-discount field. The numpad writes back into the field value only; the existing Save button still applies the discount. No discount math, no auto-submit.
+- Fix 3 (numpad touch race): `src/components/pos/NumpadDialog.tsx` backdrop now dismisses on `onPointerDown` instead of `onClick`, so the same tap that opens the dialog (from an input's onPointerDown) can no longer close it via the ghost compatibility click.
+
+## Allowed files (this hotfix)
+
+- `src/pages/POSPage.tsx` (modified -- discount badge display)
+- `src/pages/POSPage.css` (modified -- discount badge readability)
+- `src/components/pos/ItemDiscountModal.tsx` (modified -- numpad wiring)
+- `src/components/pos/NumpadDialog.tsx` (modified -- backdrop dismiss race fix; this is the existing numpad component)
+- workflow/report docs: `STATE.md`, `CURRENT_PACKET.md`, `NEXT_ACTION.md`, `latest-developer-report.md`
+
+Conditionally allowed test files were NOT needed: the `?raw` contract assertions remain green unchanged (no asserted substring/region was removed), so no test edit was justified.
 
 ## App-code boundary (preserved)
 
-- No cart math, pricing, discount, tax, checkout/payment, or stock/inventory change.
-- `useCart.ts`, `useCart.contract.test.ts`, and `cartUtils.ts` untouched.
-- Handlers, data flow, keyboard behavior, bump-flash behavior, and the remove/edit/quantity controls are all unchanged.
+- No cart math, pricing, discount-calculation, tax, total, checkout/payment, stock/inventory, or FIFO change.
+- `src/hooks/pos/useCart.ts`, `src/hooks/pos/useCart.contract.test.ts`, and `src/lib/pos/cartUtils.ts` untouched.
+- Existing modal behavior, keyboard contracts, bump-flash, qty numpad, F12/payment flow all unchanged.
 
-## Current cart item row location (read-only finding)
+## Forbidden scope (this hotfix)
 
-- **Rendering:** `src/pages/POSPage.tsx`, the `displayCartLines.map(...)` block (approx. lines 1250-1357). Each row is a `.pos-ci` container with three regions: `.pos-ci-name` (product name + UOM tag + discount/tier tags + oversell warning), `.pos-ci-price-bar` (`.pos-ci-price-row` with original/unit price and `.pos-ci-line-total`), and `.pos-ci-toolbar` (`.pos-ci-qty-group` minus/value/plus, plus `.pos-ci-icon-btn` edit and danger remove buttons).
-- **Styling:** `src/pages/POSPage.css`, the `.pos-ci*` class block (approx. lines 865-1124), including the `posCartBumpFlash` keyframes and `prefers-reduced-motion` guard.
-- **Math/data (NOT row UI):** line totals and money formatting come from `getLineTotal` and `formatMoney` in `src/lib/pos/cartUtils.ts`; cart mutations (`changeQty`, `removeLine`, `setLineQty`) come from the `useCart` hook (`src/hooks/pos/useCart.ts`). `displayCartLines` is a `useMemo` reverse of `cartLines` in POSPage.
+- cart math, pricing, discount calculation, tax, total calculation, checkout/payment calculation, stock/inventory, FIFO, `useCart` rules, `cartUtils` calculations
+- restructuring Cart Summary beyond the numpad trigger fix
+- UI-07 / UI-08 / UI-09
+- PaymentModal redesign, checkout/order-submit/stock-mutation changes
+- Firebase / functions / rules, Android / Capacitor, `.claude/`, scripts, tooling
+- staging, commit, `git add .`
 
-## Proposed implementation scope (later phase, NOT now)
+## Test / check plan
 
-UI-06 is **visual / interaction polish for cart item rows only**, preserving all existing behavior:
+- `git diff --check` (PASS).
+- TypeScript build (`tsc -b`).
+- Targeted POS tests (keyboard-contract, product-card, useCart.contract).
+- Full Vitest unit suite (shared `NumpadDialog` touched).
 
-- cart item row spacing and padding
-- cart item row visual hierarchy (name vs price vs total)
-- product name readability (size, weight, truncation/wrap)
-- quantity / price display layout
-- row hover / focus states where already structurally compatible
-- removing or reducing visual clutter
-- responsive cart row layout
-- readability improvements for cashier speed
+## Review protocol
 
-No behavior, math, data, or business-logic change.
-
-## Proposed file list
-
-Likely required:
-- `src/pages/POSPage.tsx` -- cart row JSX markup only (class names, element grouping, presentational structure). No handler logic, no math, no data flow change.
-- `src/pages/POSPage.css` -- `.pos-ci*` styling only.
-
-Optional (only if implementation truly needs it, separately justified):
-- `src/pages/POSPage.keyboard-contract.test.ts` -- only if a row structure change must be re-locked by an existing `?raw` contract test.
-- `src/pages/POSPage.product-card.test.ts` -- only if a shared POS preference/wiring assertion is affected.
-
-Forbidden unless separately authorized:
-- `src/hooks/pos/useCart.ts`
-- `src/hooks/pos/useCart.contract.test.ts`
-- `src/lib/pos/cartUtils.ts`
-- `src/hooks/pos/useCheckout.ts`, `src/lib/pos/asyncCheckout.ts`
-- `src/hooks/pos/usePosInventory.ts`, `src/lib/pos/inventoryRepository.ts`
-- any Firebase / functions / rules, Android / Capacitor, `.claude/`, scripts, tooling configs
-
-## Forbidden file / scope list (this and the future implementation phase)
-
-- cart math, quantity calculation, pricing calculation
-- discount logic, tax logic
-- checkout / payment logic
-- `useCart` business logic
-- stock / inventory logic
-- Firebase / functions / rules
-- Android / Capacitor
-- `.claude/`
-- scripts / tooling
-- `UI_MASTER_PLAN.md` ordering changes
-- UI-07 Cart Summary, UI-08 Action Buttons, UI-09 Checkout / F12
-
-## AGY / Codex review plan
-
-For the future implementation phase, in order:
-
-1. Developer implements the authorized visual/interaction scope and self-reviews.
-2. AGY (Senior QA & UX Lead) performs visual / UX review FIRST (required for UI-facing changes unless CEO waives).
-3. Codex Reviewer reviews code, tests, scope, hygiene, and package after AGY passes.
-4. Principal Engineer Reviewer / Workflow Coordinator coordinates and runs abnormality checks.
-5. Tech Lead / CEO authorizes scope closure and the commit (commit-only prompt).
+1. Developer implements and self-reviews (this packet).
+2. AGY (Senior QA & UX Lead) performs visual / UX review FIRST.
+3. Codex Reviewer reviews code, tests, scope, hygiene, package after AGY passes.
+4. Principal Engineer Reviewer / Workflow Coordinator coordinates + abnormality checks.
+5. Tech Lead / CEO authorizes scope closure and commit (commit-only prompt).
 6. CEO performs Physical UAT.
 
 ## Stop condition
 
-After this implementation packet and the developer report, stop. No staging, no commit, no `git add .`, no scripts, no installs. Do not route to Codex before AGY. Wait for AGY visual / UX review.
+After this hotfix packet and the developer report, stop. No staging, no commit, no `git add .`. Do not route to Codex before AGY. Wait for AGY visual / UX review.
 
 ---
 
-## Role Sequence (for the future UI-06 implementation)
+## Role Sequence (this hotfix)
 
 ```
 Developer Agent                         -- ROLE FILE: docs/ai-roles/developer.md

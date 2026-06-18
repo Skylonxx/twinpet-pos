@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { CartLine, ItemDiscountType } from '../../lib/pos/types';
 import { formatMoney, IDP_LABELS } from '../../lib/pos/cartUtils';
+import NumpadDialog from './NumpadDialog';
 
 type ItemDiscountModalProps = {
   line: CartLine | null;
@@ -17,6 +18,9 @@ export default function ItemDiscountModal({
 }: ItemDiscountModalProps) {
   const [mode, setMode] = useState<IdpMode>('disc_thb');
   const [value, setValue] = useState('');
+  // UI-06 hotfix Fix 2: the value field opens the custom on-screen numpad on touch (like the
+  // bill-discount field) instead of falling back to the native mobile keyboard.
+  const [numpadOpen, setNumpadOpen] = useState(false);
 
   useEffect(() => {
     if (!line) return;
@@ -68,6 +72,15 @@ export default function ItemDiscountModal({
             min={0}
             value={value}
             onChange={(e) => setValue(e.target.value)}
+            onPointerDown={(e) => {
+              // Touch/click opens the custom POS numpad instead of the native mobile keyboard,
+              // mirroring the bill-discount field. preventDefault suppresses (does not force)
+              // native focus so the dialog isn't fighting an on-screen keyboard; physical keyboard
+              // (Tab) editing of the field still works for desktop. Discount math is unchanged --
+              // the numpad only writes back into `value`, which onSave already parses.
+              e.preventDefault();
+              setNumpadOpen(true);
+            }}
           />
         </div>
         <div className="pos-idp-result">
@@ -90,6 +103,24 @@ export default function ItemDiscountModal({
           </button>
         </div>
       </div>
+
+      {/* UI-06 hotfix Fix 2: custom on-screen numpad for the value field. Reuses the touch-only
+          NumpadDialog in decimal/zero mode so it accepts the same values the field parses
+          (`parseFloat(...) || 0`). It portals above this modal and writes back into `value` only --
+          no discount math, no auto-submit (the existing Save button still applies the discount). */}
+      <NumpadDialog
+        open={numpadOpen}
+        title={IDP_LABELS[mode]}
+        initialValue={num}
+        allowDecimal
+        allowZero
+        maxLength={7}
+        onClose={() => setNumpadOpen(false)}
+        onConfirm={(v) => {
+          setValue(String(v));
+          setNumpadOpen(false);
+        }}
+      />
     </div>
   );
 }

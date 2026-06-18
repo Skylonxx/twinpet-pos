@@ -1254,6 +1254,10 @@ export default function POSPage() {
               displayCartLines.map((line) => {
                 const finalPrice = getLineTotal(line);
                 const hasDisc = line.discount.type !== 'none';
+                // UI-06 hotfix (display-only): the amount actually taken off this line, derived
+                // from values already computed above (base price minus the discounted line total
+                // from getLineTotal). No new discount math -- purely for the cart-row badge label.
+                const discAmount = line.unitPrice * line.qty - finalPrice;
                 const hasTierDisc =
                   line.originalPrice != null && line.originalPrice > line.unitPrice;
                 
@@ -1274,7 +1278,11 @@ export default function POSPage() {
                       {line.unit !== 'ชิ้น' && (
                         <span className="pos-ci-uom">{line.unit}</span>
                       )}
-                      {hasDisc && <span className="pos-ci-disc-tag">มีส่วนลด</span>}
+                      {hasDisc && discAmount > 0 && (
+                        <span className="pos-ci-disc-tag">
+                          ลด {fmtBaht(discAmount, { decimals: 2 })}
+                        </span>
+                      )}
                       {hasTierDisc && !hasDisc && (
                         <span className="pos-ci-tier-tag">ราคาสมาชิก</span>
                       )}

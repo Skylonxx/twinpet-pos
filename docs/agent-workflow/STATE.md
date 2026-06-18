@@ -7,13 +7,11 @@ Updated by whichever agent or human currently owns the task.
 
 ## Master Plan
 
-**`docs/agent-workflow/UI_MASTER_PLAN.md`** is the explicit Phase 7C POS UI source of truth (9-point plan). UI-04 = Product Grid Cards is **closed, committed (`06bc831`), and passed CEO Physical UAT**. UI-05 = Cart Container is **DONE**. UI-06 = Cart Item Rows is **in implementation** (visual / interaction polish).
-
-Marker correction (Tech Lead / CEO Option B, authorized this phase): UI-04 marker set to `[DONE]`, UI-05 remains `[DONE]`, and the `[CURRENT]` marker moved to UI-06. Order and UI-07/UI-08/UI-09 scope unchanged.
+**`docs/agent-workflow/UI_MASTER_PLAN.md`** is the explicit Phase 7C POS UI source of truth (9-point plan). UI-04 = Product Grid Cards is **DONE** (committed `06bc831`, CEO Physical UAT PASS). UI-05 = Cart Container is **DONE**. UI-06 = Cart Item Rows was committed at **`630b742`**, but **CEO Physical UAT FAILED** on three discount/numpad UI issues -- now addressed by this hotfix.
 
 ## Current Phase
 
-**7C-UI-06-CART-ITEM-ROWS-IMPLEMENTATION** -- authorized visual / interaction polish for cart item rows. No staging, no commit.
+**7C-UI-06-HOTFIX-DISCOUNT-UI** -- authorized hotfix for three UAT-failed issues (discount badge display, item-discount modal numpad wiring, bill-discount numpad touch/focus race). No staging, no commit.
 
 ## Current Owner
 
@@ -21,30 +19,30 @@ Marker correction (Tech Lead / CEO Option B, authorized this phase): UI-04 marke
 
 ## Latest Verdict
 
-**CODEX REQUEST CHANGES (docs/hygiene blockers)** -- app implementation confirmed safe by Codex (CSS-only in `src/pages/POSPage.css`). AGY review: PASS. Codex found four docs/hygiene blockers: trailing whitespace in AGY report, stale NEXT_ACTION routing, AGY verdict text mismatch, unaccounted AGY report file. Developer is applying fixes. No app code changed during fix cycle.
+**CODEX REQUEST CHANGES (docs/hygiene blockers)** -- AGY review: PASS. Codex confirmed app hotfix scope is safe but found docs/hygiene blockers: trailing whitespace in AGY report, documentation evidence mismatch (git diff --check claim vs actual), stale handoff routing. Developer is applying fixes. No app code changed during fix cycle.
+
+## UAT failed origin
+
+CEO Physical UAT on `630b742` failed on: (1) cramped/overflowing discount badge that omitted the amount, (2) item discount modal input not opening the custom numpad, (3) bill discount numpad flashing and closing instantly on iPad/touch.
 
 ## Scope
 
-**Cart item row visual / interaction polish only**, behavior preserved. Cart math, pricing, discount, tax, checkout/payment, stock/inventory, `useCart`, and `cartUtils` are unchanged. `UI_MASTER_PLAN.md` ordering unchanged (markers corrected only per Option B). UI-07/UI-08/UI-09 not started.
+Three discount/numpad UI hotfixes only. Permission extends to the bill-discount trigger area strictly for the numpad race fix (NOT UI-07). Forbidden: cart/discount/total math, checkout/payment, stock/inventory, FIFO, `useCart`, `cartUtils`, Cart Summary restructure, UI-07/UI-08/UI-09, PaymentModal redesign, Firebase/Android/`.claude/`/scripts/tooling.
 
-### Files allowed (this implementation)
+### Files changed (this hotfix)
 
-- `src/pages/POSPage.tsx` (allowed; NOT modified -- CSS-only change sufficed)
-- `src/pages/POSPage.css` (modified)
-- `src/pages/POSPage.keyboard-contract.test.ts` (conditional; NOT modified -- no markup change)
-- `src/pages/POSPage.product-card.test.ts` (conditional; NOT modified -- no markup change)
-- `docs/agent-workflow/STATE.md`
-- `docs/agent-workflow/CURRENT_PACKET.md`
-- `docs/agent-workflow/NEXT_ACTION.md`
-- `docs/reports/latest-developer-report.md`
-- `docs/agent-workflow/UI_MASTER_PLAN.md` (marker correction only, Option B)
+- `src/pages/POSPage.tsx` (discount badge display)
+- `src/pages/POSPage.css` (discount badge readability)
+- `src/components/pos/ItemDiscountModal.tsx` (numpad wiring)
+- `src/components/pos/NumpadDialog.tsx` (backdrop dismiss race fix)
+- `docs/agent-workflow/STATE.md`, `docs/agent-workflow/CURRENT_PACKET.md`, `docs/agent-workflow/NEXT_ACTION.md`, `docs/reports/latest-developer-report.md`
 
 ### Files forbidden (this phase)
 
 - `src/hooks/pos/useCart.ts`, `src/hooks/pos/useCart.contract.test.ts`
 - `src/lib/pos/cartUtils.ts`
 - checkout / payment logic files
-- stock / inventory logic files
+- stock / inventory / FIFO logic files
 - Firebase / functions / rules
 - Android / Capacitor
 - `.claude/`
@@ -54,8 +52,8 @@ Marker correction (Tech Lead / CEO Option B, authorized this phase): UI-04 marke
 
 ## Preflight
 
-- Working tree was **clean** before this discovery started.
-- HEAD at start: `cddc6b4 docs(workflow): close local coordinator pilot-2 simulation`.
+- Working tree was **clean** before this hotfix started.
+- HEAD at start: `630b742 style(pos): polish cart item row readability`.
 - Staging area was **empty**.
 - `stash@{0}` present and untouched.
 
@@ -63,17 +61,17 @@ Marker correction (Tech Lead / CEO Option B, authorized this phase): UI-04 marke
 
 - **7C-UI-04-PRODUCT-GRID-CARDS** -- closed, committed at `06bc831`, **CEO Physical UAT: PASS**.
 - **7C-UI-05-CART-CONTAINER** -- DONE per prior work.
-- **7C-LOCAL-COORDINATOR-PILOT-0/1A/2** -- pilot contract and simulations closed (`e5f3254`, `58eeb19`, `cddc6b4`).
+- **7C-UI-06-CART-ITEM-ROWS-IMPLEMENTATION** -- committed `630b742`, CEO Physical UAT FAILED (this hotfix addresses it).
 
 ## Staging / Commit status
 
 - Staged: **no**.
 - Committed: **no**.
-- Modified: `src/pages/POSPage.css` plus six docs (`STATE.md`, `CURRENT_PACKET.md`, `NEXT_ACTION.md`, `latest-developer-report.md`, `UI_MASTER_PLAN.md`, `latest-agy-review.md`).
+- Modified: four app files plus five docs (including `docs/reports/latest-agy-review.md` from the AGY review step).
 
 ---
 
-## Pipeline Status (per UI_MASTER_PLAN.md -- markers corrected per Option B)
+## Pipeline Status (per UI_MASTER_PLAN.md)
 
 | Item | Status |
 |---|---|
@@ -82,7 +80,7 @@ Marker correction (Tech Lead / CEO Option B, authorized this phase): UI-04 marke
 | UI-03 Categories & Quick Menu | DONE |
 | UI-04 Product Grid Cards | DONE -- committed `06bc831`, CEO Physical UAT PASS |
 | UI-05 Cart Container | DONE |
-| UI-06 Cart Item Rows | IMPLEMENTATION complete, AGY PASS, Codex REQUEST CHANGES (fixing docs blockers) |
+| UI-06 Cart Item Rows | COMMITTED `630b742`; UAT FAILED -> HOTFIX implemented, AGY PASS, Codex REQUEST CHANGES (fixing docs blockers) |
 | UI-07 Cart Summary | PENDING (NOT started -- not authorized) |
 | UI-08 Action Buttons | PENDING (NOT started -- not authorized) |
 | UI-09 Checkout Button (F12) | PENDING (NOT started -- not authorized) |

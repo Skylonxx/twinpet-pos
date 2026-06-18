@@ -121,7 +121,15 @@ export default function NumpadDialog({
       role="dialog"
       aria-modal="true"
       aria-label={title ?? 'ระบุจำนวน'}
-      onClick={(e) => {
+      onPointerDown={(e) => {
+        // Phase 7C-UI-06-HOTFIX (touch flash-and-close fix): dismiss the backdrop on pointerdown,
+        // NOT click. This dialog is opened from an input's own onPointerDown (bill discount and
+        // item-discount). On a touch tap that opener pointerdown lands on the input BEFORE this
+        // overlay exists; the same tap then emits compatibility mouse + click events that land on
+        // the freshly rendered overlay. The old backdrop onClick caught that ghost click and closed
+        // the dialog instantly (flash-and-close). Pointerdown does not fire for those ghost mouse
+        // events, so the opening tap can no longer dismiss; a genuine separate outside press still
+        // closes. Desktop mouse and the qty numpad (opened on a button click) are unaffected.
         if (e.target === e.currentTarget) onClose();
       }}
     >

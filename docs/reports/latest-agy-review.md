@@ -1,34 +1,39 @@
-# AGY UX & Visual Review — 7C-UI-06-CART-ITEM-ROWS-IMPLEMENTATION
+# AGY UX & Visual Review — 7C-UI-06-HOTFIX-DISCOUNT-UI
 
-## 1. Visual & UX Verification
+## 1. UX & Hotfix Verification
 
-I have rigorously reviewed the cart item row visual polish based on the "Impeccable Style" mandate and cashier-efficiency requirements.
+I have rigorously reviewed the three targeted hotfixes applied by the Developer in response to the physical UAT failure.
 
-*   **Readability & Visual Hierarchy:** The typography adjustments represent a significant improvement for cashier speed. The product name (`13px`, weight `600`, `--text-primary`) and line total (`15px`, weight `700`) now correctly act as the primary visual anchors. The meta tags and unit prices are appropriately scaled (`10px` and `12px` respectively) to maintain secondary prominence without creating clutter.
-*   **Hover Affordance:** The `.pos-ci:hover` inset box-shadow (`inset 2px 0 0 0 var(--p200)`) is an excellent, non-destructive pattern. Because it uses an inset shadow instead of a border, it causes exactly zero layout shifts. Because it avoids `background-color`, it will not override or conflict with the yellow oversell tint. It also correctly yields to the bump-flash animation.
-*   **Layout Stability:** Flexbox properties, structural padding (outside of a slight vertical relaxation from `7px` to `9px`), and grid rules remain completely untouched. The horizontal tag paddings (`1px 5px`) and sizes ensure that long product names and multiple tags (UOM, discount, tier) will wrap or truncate cleanly as they did before, just with improved legibility.
-*   **Preserved Behavior:** No handler, DOM structure, or business logic was altered. Action buttons, delete controls, and cart math remain entirely decoupled from this visual polish.
+*   **Cart Row Discount Badge (`POSPage.tsx` & `POSPage.css`):**
+    *   **Verification:** The generic "มีส่วนลด" text has been replaced with the calculated, formatted discount amount (e.g., "ลด 120.00").
+    *   **Style Assessment:** The addition of `white-space: nowrap` and `display: inline-block` is excellent. It guarantees that the discount value won't awkwardly break across lines when the item name forces wrapping. The badge remains clean and readable.
+*   **Item Discount Numpad Wiring (`ItemDiscountModal.tsx`):**
+    *   **Verification:** The modal's input field now intercepts `onPointerDown`, calls `preventDefault()`, and summons the custom `NumpadDialog`. This perfectly bypasses the native mobile keyboard on touch devices (a critical win for cashier speed) while preserving hardware keyboard usability.
+    *   **Behavior:** The numpad correctly writes back to the `value` state without auto-submitting the form, allowing the existing Save button to maintain its expected behavior.
+*   **Touch Dismiss Race Condition (`NumpadDialog.tsx`):**
+    *   **Verification:** Changing the backdrop dismissal from `onClick` to `onPointerDown` is the exact correct fix for the "flash-and-close" touch bug. It elegantly ignores the delayed emulated ghost `click` event fired by the native browser after tapping the input, ensuring the numpad stays open.
 
-## 2. Impeccable Style Assessment
+## 2. Regression Check
+*   The fixes do not affect the `quantity` numpad, which opens on a button click (immune to the `pointerdown` input ghost-click race).
+*   Desktop users can still type normally.
+*   No modifications were made to `cartUtils.ts`, checkout flows, or the overarching `POSPage` DOM structure.
 
-The adjustments bring the cart row UI out of the "too small/cramped" territory into a comfortable, modern POS density. The use of `--text-primary` for the name and bolder weights for the line total creates clear contrast. The hover state adds a premium micro-interaction for mouse/trackpad users without compromising touch targets for tablet cashiers.
+## 3. Verdict
+**Verdict:** PASS. The hotfixes directly resolve the physical UAT failures while strictly adhering to the "Impeccable Style" and interaction design mandates.
 
-**Verdict:** PASS.
-
-## 3. Next Owner and Action
-
+## 4. Next Owner and Action
 **Next owner:** Codex Reviewer (`docs/ai-roles/reviewer.md`)
-**Next action:** The human operator should route this packet to Codex for final code and scope review.
+**Next action:** The human operator should route this packet to Codex for final code and scope review, using the Codex prompt in `NEXT_ACTION.md`.
 
 ---
 
 ```
 STATE CARD
-Phase: 7C-UI-06-CART-ITEM-ROWS-IMPLEMENTATION
+Phase: 7C-UI-06-HOTFIX-DISCOUNT-UI
 Current owner: Senior QA & UX Lead / AGY
 Verdict: PASS
-Files changed: src/pages/POSPage.css
-Tests/checks: Visual UX verification passed; Impeccable Style verified
+Files changed: src/pages/POSPage.tsx, src/pages/POSPage.css, src/components/pos/ItemDiscountModal.tsx, src/components/pos/NumpadDialog.tsx
+Tests/checks: Visual UX verification passed; Touch interaction bugs confirmed resolved
 Staged: No
 Committed: No
 Required fixes: None

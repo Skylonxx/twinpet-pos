@@ -2,25 +2,29 @@
 
 ## Current State
 
-Phase **7C-UI-06-CART-ITEM-ROWS-IMPLEMENTATION** is in **Codex blocker fix** cycle. The Developer is fixing docs/hygiene issues identified by Codex REQUEST CHANGES. The app implementation (CSS-only in `src/pages/POSPage.css`) is confirmed safe by Codex and is not being changed.
+Phase **7C-UI-06-HOTFIX-DISCOUNT-UI** is in **Codex blocker fix** cycle. The Developer is fixing docs/hygiene issues identified by Codex REQUEST CHANGES. The app hotfix implementation is confirmed safe by Codex and is not being changed.
 
 Review progress:
 
 - AGY review: **PASS** (see `docs/reports/latest-agy-review.md`).
-- Codex review: **REQUEST CHANGES** -- app scope confirmed safe, but docs/hygiene blockers found (trailing whitespace in AGY report, stale NEXT_ACTION routing, AGY verdict text mismatch, unaccounted AGY report file).
+- Codex review: **REQUEST CHANGES** -- app hotfix scope confirmed safe, but docs/hygiene blockers found (trailing whitespace in AGY report, documentation evidence mismatch on git diff --check claim, stale handoff routing).
 - Developer: fixing the docs/hygiene blockers (this cycle).
 
 Checks (from implementation phase, unchanged):
 
 - TypeScript build: `tsc -b` exit 0.
 - Targeted POS tests: 235 passed (keyboard-contract, product-card, useCart.contract).
+- Full Vitest unit suite: 727 passed (32 files).
+- `git diff --check`: PASS (after trailing whitespace fix).
 - Staged: none. Committed: none.
+
+Files changed (app): `src/pages/POSPage.tsx`, `src/pages/POSPage.css`, `src/components/pos/ItemDiscountModal.tsx`, `src/components/pos/NumpadDialog.tsx`.
 
 ## What Happens Next
 
 **Current owner: Developer Agent** -- fixing Codex REQUEST CHANGES blockers (docs/hygiene only).
 
-**After fix, next owner: Codex Reviewer** -- re-review the package with the docs/hygiene fixes applied.
+**After fix, next owner: Codex Reviewer** -- focused re-review of the docs/hygiene fixes.
 
 Do not route to Principal Engineer until Codex returns PASS or PASS WITH NOTES.
 
@@ -28,7 +32,7 @@ Do not route to Principal Engineer until Codex returns PASS or PASS WITH NOTES.
 
 ```
 Developer Agent (now -- fixing Codex blockers)
-  -> Codex Reviewer (re-review)
+  -> Codex Reviewer (focused re-review)
     -> Principal Engineer Reviewer / Workflow Coordinator (coordination + abnormality checks)
       -> Tech Lead / CEO authorizes scope closure and commit
         -> CEO Physical UAT
@@ -36,7 +40,7 @@ Developer Agent (now -- fixing Codex blockers)
 
 ---
 
-## Codex Re-Review Prompt (use after Developer fix is complete)
+## Codex Focused Re-Review Prompt (use after Developer fix is complete)
 
 ```
 TO: Codex Reviewer
@@ -44,30 +48,33 @@ MODEL: best available reviewer model for this run
 REASONING: Medium
 ROLE: Codex Reviewer
 ROLE FILE: docs/ai-roles/reviewer.md
-MODE: Re-review after REQUEST CHANGES fix, read-only, no staging, no commit
+MODE: Focused re-review after REQUEST CHANGES fix, read-only, no staging, no commit
 
-PHASE: 7C-UI-06-CART-ITEM-ROWS-IMPLEMENTATION (Codex re-review)
+PHASE: 7C-UI-06-HOTFIX-DISCOUNT-UI (Codex focused re-review)
 
 PRIOR CODEX VERDICT: REQUEST CHANGES
 
 FIXES APPLIED BY DEVELOPER:
-1. Trailing whitespace removed from docs/reports/latest-agy-review.md line 9.
-2. NEXT_ACTION.md updated to reflect AGY PASS, Codex REQUEST CHANGES, and correct routing.
-3. AGY verdict reconciled: the AGY report says PASS, all references now say PASS consistently.
-4. docs/reports/latest-agy-review.md accounted for as AGY-generated review artifact in developer report and workflow docs.
+1. Trailing whitespace removed from docs/reports/latest-agy-review.md line 11.
+2. Documentation evidence updated: developer report now notes Codex found the
+   trailing whitespace, Developer fixed it, and rerun git diff --check PASS.
+3. STATE.md and NEXT_ACTION.md updated to reflect AGY PASS, Codex REQUEST CHANGES,
+   Developer fix cycle, and correct routing to Codex re-review.
 
-APP IMPLEMENTATION UNCHANGED:
-- src/pages/POSPage.css: CSS-only cart item row polish (unchanged from prior review).
-- POSPage.tsx: not modified.
+APP HOTFIX IMPLEMENTATION UNCHANGED:
+- src/pages/POSPage.tsx: discount badge display (unchanged from prior review).
+- src/pages/POSPage.css: discount badge readability (unchanged from prior review).
+- src/components/pos/ItemDiscountModal.tsx: numpad wiring (unchanged from prior review).
+- src/components/pos/NumpadDialog.tsx: backdrop dismiss race fix (unchanged from prior review).
 - useCart.ts, useCart.contract.test.ts, cartUtils.ts: untouched.
-- No checkout/payment/stock/inventory/Firebase/Android/.claude/scripts/tooling.
+- No checkout/payment/stock/inventory/FIFO/Firebase/Android/.claude/scripts/tooling.
 
 VERIFY:
 1. git diff --check passes (trailing whitespace fixed).
-2. NEXT_ACTION.md routing is current and correct.
-3. AGY verdict is consistently PASS across all docs.
-4. docs/reports/latest-agy-review.md is accounted for in the package.
-5. All prior app-scope confirmations still hold.
+2. STATE.md and NEXT_ACTION.md routing is current and correct.
+3. Documentation evidence in latest-developer-report.md is accurate.
+4. All prior app-scope confirmations still hold.
+5. docs/reports/latest-agy-review.md is accounted for in the package.
 
 RUN AND REPORT:
 git status --short
@@ -78,6 +85,7 @@ git diff --cached --name-only
 
 Produce a verdict (PASS / PASS WITH NOTES / REQUEST CHANGES).
 Do not stage or commit.
+If PASS / PASS WITH NOTES, route to Principal Engineer Reviewer / Workflow Coordinator.
 ```
 
 ---
@@ -85,7 +93,6 @@ Do not stage or commit.
 ## Important Reminders
 
 - AGY verdict is PASS (confirmed from docs/reports/latest-agy-review.md).
-- `UI_MASTER_PLAN.md` order is unchanged; only the stale markers were corrected per Option B.
 - The existing governance chain remains the absolute source of truth.
 - Do not stage or commit until Tech Lead / CEO authorizes exact commands.
 - `stash@{0}` is pre-existing unrelated WIP -- do not touch.
@@ -93,13 +100,15 @@ Do not stage or commit.
 
 ## Modified Files in Package (complete list)
 
-- src/pages/POSPage.css -- app implementation (CSS-only cart item row polish).
-- docs/agent-workflow/UI_MASTER_PLAN.md -- marker correction only (Option B).
+- src/pages/POSPage.tsx -- discount badge display.
+- src/pages/POSPage.css -- discount badge readability.
+- src/components/pos/ItemDiscountModal.tsx -- numpad wiring.
+- src/components/pos/NumpadDialog.tsx -- backdrop dismiss race fix.
 - docs/agent-workflow/STATE.md -- phase / owner / status tracking.
-- docs/agent-workflow/CURRENT_PACKET.md -- phase packet.
+- docs/agent-workflow/CURRENT_PACKET.md -- hotfix packet.
 - docs/agent-workflow/NEXT_ACTION.md -- handoff routing (this file).
 - docs/reports/latest-developer-report.md -- developer report.
-- docs/reports/latest-agy-review.md -- AGY-generated review artifact (modified during AGY review step).
+- docs/reports/latest-agy-review.md -- AGY-generated review artifact.
 
 ## Role File Reference
 
