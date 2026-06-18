@@ -1,40 +1,34 @@
-# AGY UX & Visual Review — 7C-UI-04-PRODUCT-GRID-CARDS (UAT Re-Validation)
+# AGY UX & Visual Review — 7C-UI-06-CART-ITEM-ROWS-IMPLEMENTATION
 
-## 1. UAT Bug Fix Verification (PRIMARY)
+## 1. Visual & UX Verification
 
-I have re-validated the "การแสดงผลสินค้า (POS)" feature to confirm the UAT bug fix.
+I have rigorously reviewed the cart item row visual polish based on the "Impeccable Style" mandate and cashier-efficiency requirements.
 
-*   **Dynamic Reactivity:** The previous UAT failure (controls not updating the POS grid) has been successfully resolved. `usePOSPreferences` now correctly uses a single module-level reactive store via `useSyncExternalStore`. This ensures a single source of truth across the application. When a control is changed in the Settings page, the setters (`setProductNameFontSize`, `setShowStock`, etc.) update the shared `currentState` and notify all listeners immediately. This guarantees that an open POS page will re-render instantly without needing a manual reload.
-*   **Cross-Tab Synchronization:** The addition of the `storage` event listener ensures that if Settings and POS are open in completely different tabs/windows, changes still propagate instantly.
+*   **Readability & Visual Hierarchy:** The typography adjustments represent a significant improvement for cashier speed. The product name (`13px`, weight `600`, `--text-primary`) and line total (`15px`, weight `700`) now correctly act as the primary visual anchors. The meta tags and unit prices are appropriately scaled (`10px` and `12px` respectively) to maintain secondary prominence without creating clutter.
+*   **Hover Affordance:** The `.pos-ci:hover` inset box-shadow (`inset 2px 0 0 0 var(--p200)`) is an excellent, non-destructive pattern. Because it uses an inset shadow instead of a border, it causes exactly zero layout shifts. Because it avoids `background-color`, it will not override or conflict with the yellow oversell tint. It also correctly yields to the bump-flash animation.
+*   **Layout Stability:** Flexbox properties, structural padding (outside of a slight vertical relaxation from `7px` to `9px`), and grid rules remain completely untouched. The horizontal tag paddings (`1px 5px`) and sizes ensure that long product names and multiple tags (UOM, discount, tier) will wrap or truncate cleanly as they did before, just with improved legibility.
+*   **Preserved Behavior:** No handler, DOM structure, or business logic was altered. Action buttons, delete controls, and cart math remain entirely decoupled from this visual polish.
 
-## 2. Visual & UX Verification (Carried Over)
+## 2. Impeccable Style Assessment
 
-The visual validation rules remain intact:
-*   **Settings Controls:** The UI remains understandable and clean, utilizing the `Toggle` and `stg-notif-chip` components consistent with the Impeccable Style mandate.
-*   **Font Scaling:** The independent CSS scaling using `--pos-name-scale` and `--pos-price-scale` continues to work cleanly and preserves grid stability.
-*   **Stock Visibility Toggle:** The conditional DOM rendering prevents empty badge gaps when stock visibility is toggled off.
-*   **Preserved Components:** Category dropdown, cart items, summary, and action buttons are unaffected. No scope creep detected.
+The adjustments bring the cart row UI out of the "too small/cramped" territory into a comfortable, modern POS density. The use of `--text-primary` for the name and bolder weights for the line total creates clear contrast. The hover state adds a premium micro-interaction for mouse/trackpad users without compromising touch targets for tablet cashiers.
 
-## 3. Impeccable Style Assessment
+**Verdict:** PASS.
 
-The bug fix maintains the premium feel and immediate visual feedback required by the UX guidelines. The engineering approach is sound, avoiding complex React Contexts in favor of an elegant `useSyncExternalStore` module singleton.
-
-**Verdict:** PASS. The UAT bug is resolved and the implementation meets the "Impeccable Style" standard.
-
-## 4. Next Owner and Action
+## 3. Next Owner and Action
 
 **Next owner:** Codex Reviewer (`docs/ai-roles/reviewer.md`)
-**Next action:** The human operator should route to Codex for final code, scope, and keyboard review.
+**Next action:** The human operator should route this packet to Codex for final code and scope review.
 
 ---
 
 ```
 STATE CARD
-Phase: 7C-UI-04-PRODUCT-GRID-CARDS
+Phase: 7C-UI-06-CART-ITEM-ROWS-IMPLEMENTATION
 Current owner: Senior QA & UX Lead / AGY
 Verdict: PASS
-Files changed: src/hooks/pos/usePOSPreferences.ts, src/pages/POSPage.product-card.test.ts (and carried over UI files)
-Tests/checks: Functional UAT bug fix verified; Visual UX verification passed; Impeccable Style verified
+Files changed: src/pages/POSPage.css
+Tests/checks: Visual UX verification passed; Impeccable Style verified
 Staged: No
 Committed: No
 Required fixes: None

@@ -1,109 +1,147 @@
-# Developer Report — 7C-UI-04-PRODUCT-GRID-CARDS (UAT Bug Fix)
+# Latest Developer Report
+
+## Phase
+
+7C-UI-06-CART-ITEM-ROWS-IMPLEMENTATION -- authorized cart item row visual / interaction polish.
 
 ## 1. Summary
 
-This is a **UAT bug fix intervention** on the re-opened Phase 7C-UI-04. The prior package wired up a "การแสดงผลสินค้า (POS)" Settings section (stock visibility + independent product-name / price size pickers) backed by `usePOSPreferences`, but physical UAT failed: the controls were visible yet did not dynamically update the Product Grid Cards. The defect was in the preferences **state wiring** — not in the Settings UI, the CSS, or the card markup, all of which were already correct. The fix converts `usePOSPreferences` from a per-instance `useState` hook into a **single module-level reactive store** consumed via `useSyncExternalStore`, so an edit on the Settings page updates the one shared value and re-renders the POS product cards immediately. Scope was strictly limited to the state wiring; no features, persistence, or architecture were added.
+UI-06 cart item row polish is implemented. The change is CSS-only in `src/pages/POSPage.css` (`.pos-ci*` selectors); `POSPage.tsx` was not modified because the existing markup already supported the polish, so no JSX, handler, or data-flow change was needed. The polish raises product-name size and weight (the primary readability win), increases line-total prominence, enlarges meta tags and unit/tier prices for legibility, adds a touch more row padding, and adds a subtle non-destructive hover affordance. All existing behavior is preserved.
 
-## 2. UAT failure acknowledgement
+Preflight matched expectations: HEAD at `cddc6b4`, staging empty, `stash@{0}` present and untouched. The only dirty files at start were the four authorized discovery/workflow docs from the prior phase.
 
-Physical UAT **FAILED** and is acknowledged. The prior UI-04 commit authorization is **HELD / superseded** until this fix passes AGY and Codex again. Nothing has been staged or committed. Reported symptoms, all reproduced by the root-cause analysis below:
+TypeScript build passed (`tsc -b`, exit 0). Targeted POS tests passed (235 passed). `git diff --check` PASS. Nothing staged, nothing committed.
 
-- Product Name font size control did not dynamically update Product Grid Cards.
-- Price font size control did not dynamically update Product Grid Cards.
-- Stock visibility toggle did not dynamically show/hide stock on Product Grid Cards.
+## 2. Files changed
 
-## 3. Root cause found
+- src/pages/POSPage.css -- cart item row styling polish (`.pos-ci*`).
+- docs/agent-workflow/UI_MASTER_PLAN.md -- marker correction only (Option B).
+- docs/agent-workflow/STATE.md -- phase / owner / status / pipeline / stop condition.
+- docs/agent-workflow/CURRENT_PACKET.md -- phase and implementation result.
+- docs/agent-workflow/NEXT_ACTION.md -- route to AGY with AGY review prompt.
+- docs/reports/latest-developer-report.md -- this report.
 
-`usePOSPreferences` backed **every** call with its own `useState` set and read `localStorage` only **once**, in a mount-time `useEffect` (the old lines 110–130). The Settings page and the POS page each call the hook, so they mounted **independent copies** of the state with no shared source of truth and no cross-instance notification:
+Not changed (allowed but unnecessary):
+- src/pages/POSPage.tsx -- allowed to edit, but no markup change was required.
+- src/pages/POSPage.keyboard-contract.test.ts -- conditional; not touched (no markup change to re-lock).
+- src/pages/POSPage.product-card.test.ts -- conditional; not touched (no shared wiring change).
 
-1. The Settings editor's instance updated its own `useState` and persisted to `localStorage`.
-2. The POS page's instance had already hydrated from `localStorage` at its own mount and **never re-read it**, and nothing told it to re-render.
+## 3. Files inspected
 
-So a setting change persisted but never reached the already-mounted POS product cards — exactly the "controls visible but non-functional / non-reactive source" failure. The card consumption (`POSPage.tsx` class composition + conditional stock span) and the CSS scales were already correct; they simply never received a new value.
+- src/pages/POSPage.tsx (cart row block, read-only; confirmed no markup change needed).
+- src/pages/POSPage.css (.pos-ci* block, edited).
+- src/styles/variables.css (confirmed `--text-primary` and `--p200` tokens are defined).
+- src/lib/pos/cartUtils.ts and src/hooks/pos/useCart.ts (interface only; not modified).
+- package.json (build/test commands).
 
-## 4. Files changed
+## 4. Implementation details
 
-App:
+All edits are in src/pages/POSPage.css:
 
-- `src/hooks/pos/usePOSPreferences.ts` — **the fix.** Replaced the per-instance `useState` + mount-hydrate + persist effects with a single module-level store (`currentState` + a `listeners` set) consumed via `useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)`. Added a `storage` event listener for cross-tab sync, a no-op guard so identical writes don't notify, and an exported internal `posPreferencesStore` (subscribe / getSnapshot / setters) used only by the node-env reactivity test. **Unchanged:** the public `POSPreferences` return shape, the `twinpet_pos_prefs` localStorage key, all validators (`isGridColumns` / `isFontSize` / `isBoolean`), `readStoredPreferences`, and the defaults (`showStock` `true`, `productNameFontSize` / `priceFontSize` `'normal'`).
-- `src/pages/POSPage.product-card.test.ts` — added runtime reactivity tests against the shared store and a structural guard for the single-source-of-truth fix (details in §7).
+- `.pos-ci` -- vertical padding 7px raised to 9px for row breathing room.
+- `.pos-ci:hover` (new) -- subtle inset left accent via `box-shadow: inset 2px 0 0 0 var(--p200)`. Box-shadow only: it does not override the Tailwind yellow oversell background and does not shift layout. During a bump flash the existing animation drives box-shadow for its 900ms, then the hover accent resumes, so bump-flash behavior is unchanged.
+- `.pos-ci-name` -- font-size 10px raised to 13px, weight 500 raised to 600, line-height 1.3 raised to 1.35, explicit color `var(--text-primary, #1a1a2e)`, margin-bottom 5px raised to 6px. This is the primary cashier-readability improvement.
+- `.pos-ci-line-total` -- font-size 12px raised to 15px, weight 600 raised to 700 for line-total prominence.
+- `.pos-ci-unit-at` -- font-size 11px raised to 12px.
+- `.pos-ci-tier-unit` -- font-size 11px raised to 12px.
+- `.pos-ci-orig-price` -- font-size 10px raised to 11px (struck original price stays secondary but legible).
+- `.pos-ci-uom`, `.pos-ci-disc-tag`, `.pos-ci-tier-tag` -- font-size 9px raised to 10px; UOM and discount tag padding 1px 4px raised to 1px 5px.
 
-Carried over from the prior package (unchanged by this intervention, still in the working tree): `src/lib/settings/settingsNav.ts`, `src/lib/settings/types.ts`, `src/pages/SettingsPage.tsx`, `src/pages/POSPage.tsx`, `src/pages/POSPage.css`.
+No inline styles added. New class name is scoped under the existing `.pos-ci` namespace (a `:hover` on the row). No Flowbite, modal, or Toast changes. No business functions created. `getLineTotal`, `formatMoney`, `cartLines`, `displayCartLines`, checkout, and payment logic are untouched.
 
-Workflow / report:
+## 5. UI_MASTER_PLAN marker correction details
 
-- `docs/agent-workflow/STATE.md`, `docs/agent-workflow/CURRENT_PACKET.md`, `docs/agent-workflow/NEXT_ACTION.md`, `docs/agent-workflow/UI_MASTER_PLAN.md`, `docs/reports/latest-developer-report.md` (and the carried-over `docs/reports/latest-agy-review.md`, `docs/reports/latest-codex-review.md`).
+Per Tech Lead / CEO Option B (order unchanged):
+- UI-04 marker changed from `[CURRENT]` to `[DONE]`.
+- UI-05 already `[DONE]` -- unchanged.
+- UI-06 marker changed from `[PENDING]` to `[CURRENT]`.
+- UI-07 / UI-08 / UI-09 markers and scope unchanged.
 
-## 5. State wiring fix summary
+Thai text in the file was preserved; edits were UTF-8-safe exact-string replacements (no Get-Content / Set-Content round-trip).
 
-- The preferences are now ONE module-level value. `subscribe` registers a listener; `getSnapshot` returns the current value (reference changes only on a real update, so it stays cached as `useSyncExternalStore` requires); `getServerSnapshot` returns the deterministic defaults for SSR safety.
-- Each validated setter (`setShowStock`, `setProductNameFontSize`, `setPriceFontSize`, plus the existing `setGridColumns` / `setFontSize`) calls a private `setState` that merges the patch, **persists to the same localStorage key**, and notifies all listeners. The setters are module-level, so their references are stable across renders.
-- Effect: editing a control on the Settings page updates the single shared value → every `usePOSPreferences()` consumer (the POS grid included) re-renders with the new value. A `storage` event re-hydrates and notifies in other tabs.
+## 6. Tests / checks run and results
 
-## 6. Product card consumption fix summary
+- `npx tsc -b` -- exit 0 (TypeScript build PASS).
+- `npx vitest run src/pages/POSPage.keyboard-contract.test.ts src/pages/POSPage.product-card.test.ts src/hooks/pos/useCart.contract.test.ts` -- 3 files passed, 235 tests passed, 0 failed.
+- `git diff --check` -- PASS (no whitespace / conflict-marker errors).
 
-No card markup changes were needed — the consumption was already correct and now receives live values:
+Note: these POS suites are source-level `?raw` assertions in a node env with no DOM. Since POSPage.tsx markup is unchanged, they remain green; the CSS-only change is not asserted by them. A full Vitest run and a vite build were not required for a CSS-only change and were not run to avoid unrelated script side effects (the `prebuild`/`predev` steps run gen-config and a functions build).
 
-- `.pos-page` carries `pos-name-${productNameFontSize}` and `pos-price-${priceFontSize}` (alongside `pos-fontsize-${fontSize}`); these classes now change as the store updates, so `--pos-name-scale` / `--pos-price-scale` re-apply and `.pos-prod-name` / `.pos-prod-price` resize independently.
-- The stock indicator still renders only via `{showStock && <span className="pos-prod-stock">{p.stock}</span>}`; `showStock` now flips live, so the stock count shows/hides immediately with no empty gap (the price left-aligns in `.pos-prod-bottom`).
-- `onProductClick` add-to-cart, scanner/focus behavior, the UI-03 category dropdown, and grid density are all untouched.
+## 7. Scope boundary confirmation
 
-## 7. Tests added/updated
+- no cart math changed: confirmed
+- no pricing logic changed: confirmed
+- no discount/tax logic changed: confirmed
+- no checkout/payment changed: confirmed
+- no stock/inventory changed: confirmed
+- no useCart changed: confirmed
+- no cartUtils changed: confirmed
+- no Firebase/functions/rules: confirmed
+- no Android/Capacitor: confirmed
+- no .claude: confirmed
+- no scripts/tooling: confirmed
+- no UI-07/UI-08/UI-09: confirmed
 
-`src/pages/POSPage.product-card.test.ts` (existing `?raw` source-contract tests preserved) gained:
+## 8. AGY Review Result
 
-- A structural guard: the prefs source uses `useSyncExternalStore` and a module-level `listeners` set, and contains **no** per-instance `useState<...>` (locks the regression).
-- A new runtime suite exercising the exported `posPreferencesStore` directly (valid in the node env — no DOM/React render needed):
-  - every consumer reads ONE shared snapshot (a setter moves the value all readers see);
-  - a setter notifies subscribers (what triggers the card re-render) and unsubscribe stops notifications;
-  - `showStock` toggles both directions;
-  - product-name and price scales update independently;
-  - invalid input is rejected (store keeps the last valid value);
-  - a no-op set does not notify (no needless re-render).
-  - State is restored to defaults in `afterEach` so the module singleton can't leak across tests.
+- AGY verdict: **PASS** (confirmed from `docs/reports/latest-agy-review.md`).
+- AGY confirmed: readability improved, hover affordance acceptable, layout stable, behavior preserved.
+- `docs/reports/latest-agy-review.md` was modified during the AGY review step as an AGY-generated review artifact. It is now included in the package file list.
 
-## 8. Tests/checks run with results
+## 9. Codex Review Result
 
-- `git status --short` / `git diff --name-only` / `git diff --stat` — only authorized files (prefs hook + product-card test + settings/POS files from the prior package + workflow/report docs).
-- `git diff --check` — **clean** (only benign "LF will be replaced by CRLF" notices; no whitespace errors).
-- `git diff --cached --name-only` — **empty** (nothing staged).
-- `npx.cmd tsc -b` — **PASS** (exit 0).
-- `npx.cmd vitest run src/pages/POSPage.keyboard-contract.test.ts` — **145 passed** (keyboard/focus contract intact).
-- `npx.cmd vitest run src/pages/POSPage.product-card.test.ts` — **15 passed** (incl. the new reactivity cases).
-- `npx.cmd vitest run` — **727 passed (32 files)**.
+- Codex verdict: **REQUEST CHANGES**.
+- App scope: **confirmed safe by Codex** (CSS-only, no business logic, no forbidden files).
+- Codex blockers (docs/hygiene only):
+  1. Trailing whitespace in `docs/reports/latest-agy-review.md` line 9 -- FIXED (removed trailing space).
+  2. NEXT_ACTION.md stale routing (still pointed to AGY) -- FIXED (updated to reflect AGY PASS, Codex REQUEST CHANGES, Developer fix, then Codex re-review).
+  3. AGY verdict mismatch (some text said "PASS WITH NOTES", AGY report says "PASS") -- FIXED (reconciled to PASS consistently).
+  4. `docs/reports/latest-agy-review.md` not listed in authorized package -- FIXED (accounted for as AGY-generated review artifact in docs and this report).
+- No app code changed during this fix cycle.
+- STATE.md updated to reflect current owner (Developer fixing blockers) and next owner (Codex re-review). This was necessary because STATE.md still showed AGY as next owner, which would be a stale handoff state (Rule 3 violation).
 
-## 9. Boundary confirmation
+## 10. Git status (after Codex blocker fix)
 
-Only authorized files changed. The fix itself is confined to `src/hooks/pos/usePOSPreferences.ts` + its test. **Not touched:** `useCart.ts`, `useCart.contract.test.ts`, `cartUtils.ts`, cart math, checkout/payment logic, stock/inventory logic, Cart Item Rows (UI-06), Cart Summary (UI-07), Action Buttons (UI-08), Checkout/F12 (UI-09), Toast, Firebase / functions / rules, Android / Capacitor, `.claude/`. No new scripts, dependencies, settings architecture, or persistence layer. Nothing staged, nothing committed. `stash@{0}` untouched (only `git stash list` used).
+- git status --short:
+  - M src/pages/POSPage.css
+  - M docs/agent-workflow/UI_MASTER_PLAN.md
+  - M docs/agent-workflow/STATE.md
+  - M docs/agent-workflow/CURRENT_PACKET.md
+  - M docs/agent-workflow/NEXT_ACTION.md
+  - M docs/reports/latest-developer-report.md
+  - M docs/reports/latest-agy-review.md
+- git diff --name-only: the seven files above.
+- git diff --stat: 7 files changed (POSPage.css plus six docs).
+- git diff --check: PASS.
+- git diff --cached --name-only: empty (nothing staged).
 
-## 10. Markdown hygiene confirmation
+## 11. Staging / commit confirmation
 
-Touched `docs/` Markdown was edited via UTF-8-preserving surgical edits (no PowerShell `Get-Content`/`Set-Content` round-trip on Thai text). No trailing whitespace introduced; Thai content intact with no mojibake/replacement characters; `git diff --check` passes.
+- staged: no
+- committed: no
 
-## 11. Remaining risks
+## 12. Next owner
 
-- **Mount lifecycle, not just navigation:** the fix makes the prefs reactive for any mounted consumer (live update), which also covers the navigate-away-and-back case. No remaining staleness path identified.
-- **Module-singleton in tests:** state is reset in `afterEach`; the only shared global is intentional (it is the source of truth).
-- **Device-local scope unchanged:** preferences remain per-device (localStorage), not branch-synced — appropriate for cashier-terminal display tuning, consistent with the existing `gridColumns` / `fontSize` prefs.
-- **`storage` event listener** is registered once at module load behind a `typeof window !== 'undefined'` guard (SSR/node-safe) and is not removable, which is fine for an app-lifetime singleton store.
+Codex Reviewer (re-review after docs/hygiene fix).
 
-## 12. Next owner and next action
+## 13. Stop condition
 
-**Next owner:** Senior QA & UX Lead / AGY (`docs/ai-roles/ux-lead.md`). **Next action:** human operator routes this report + `CURRENT_PACKET.md` + the current diff to **AGY first** for visual/functional UAT re-validation (prompt in `NEXT_ACTION.md`) — primarily to confirm the controls now actually drive the cards. Codex only after AGY PASS / PASS WITH NOTES. No staging/commit until Tech Lead / CEO authorizes.
+Stop after this report. No staging, no commit. Waiting for Codex re-review. Do not route to Principal Engineer until Codex returns PASS or PASS WITH NOTES.
 
----
+## STATE CARD
 
 ```
 STATE CARD
-Phase: 7C-UI-04-PRODUCT-GRID-CARDS (re-opened — UAT bug fix)
-Current owner: Developer Agent (bug fix complete) → Senior QA & UX Lead / AGY
-Verdict: UAT Failed / Bug Fix In Progress — settings→product-card wiring fixed and re-verified; awaiting AGY re-validation
-Files changed: src/hooks/pos/usePOSPreferences.ts, src/pages/POSPage.product-card.test.ts (+ carried-over src/lib/settings/settingsNav.ts, src/lib/settings/types.ts, src/pages/SettingsPage.tsx, src/pages/POSPage.tsx, src/pages/POSPage.css; + docs/agent-workflow/STATE.md, CURRENT_PACKET.md, NEXT_ACTION.md, UI_MASTER_PLAN.md, docs/reports/latest-developer-report.md)
-Tests/checks: tsc -b PASS; keyboard-contract 145 passed; product-card 15 passed; full vitest 727 passed (32 files); git diff --check clean; staging empty
-Staged: No
-Committed: No
-Required fixes: Settings controls visible but product cards did not dynamically update — FIXED (single useSyncExternalStore store; pending AGY re-validation)
-Next owner: Senior QA & UX Lead / AGY
-Next action: Human routes report + packet + diff to AGY first (prompt in NEXT_ACTION.md); Codex only after AGY PASS
-Stop condition: No staging, no commit, no Codex until AGY review passes; prior commit authorization HELD/superseded; no UI-05/06/07/08/09; stash@{0} untouched
+Phase: 7C-UI-06-CART-ITEM-ROWS-IMPLEMENTATION
+Current owner: Developer (fixing Codex REQUEST CHANGES blockers)
+Verdict: Codex REQUEST CHANGES (docs/hygiene blockers); AGY PASS; app scope confirmed safe
+Files changed: src/pages/POSPage.css; docs/agent-workflow/UI_MASTER_PLAN.md; docs/agent-workflow/STATE.md; docs/agent-workflow/CURRENT_PACKET.md; docs/agent-workflow/NEXT_ACTION.md; docs/reports/latest-developer-report.md; docs/reports/latest-agy-review.md
+Files inspected: src/pages/POSPage.tsx; src/styles/variables.css; src/lib/pos/cartUtils.ts; src/hooks/pos/useCart.ts; package.json
+Tests/checks: tsc -b exit 0; vitest 235 passed (3 files); git diff --check PASS (after fix)
+Staged: no
+Committed: no
+Required fixes: trailing whitespace, stale routing, verdict mismatch, unaccounted file (all fixed)
+Next owner: Codex Reviewer
+Next action: Codex re-review of full package with docs/hygiene fixes applied
+Stop condition: No staging, no commit; wait for Codex re-review
 ```

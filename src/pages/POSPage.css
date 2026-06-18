@@ -863,8 +863,17 @@
 }
 
 .pos-ci {
-  padding: 7px 12px;
+  padding: 9px 12px;
   border-bottom: 0.5px solid var(--g100, #f1efe8);
+}
+
+/* UI-06: subtle hover affordance for mouse/trackpad operators. Uses an inset
+   left accent (box-shadow only) so it never overrides the yellow oversell tint
+   (a Tailwind background on the row) and never shifts layout. During a bump
+   flash the existing animation drives box-shadow for its 900ms, so this accent
+   simply resumes afterward — the flash behavior is unchanged. */
+.pos-ci:hover {
+  box-shadow: inset 2px 0 0 0 var(--p200, #afa9ec);
 }
 
 /* UI-01 Animation: premium "bump flash" for a rescanned cart line. A calm, soft
@@ -900,26 +909,27 @@
 }
 
 .pos-ci-name {
-  font-size: 10px;
-  font-weight: 500;
-  line-height: 1.3;
-  margin-bottom: 5px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text-primary, #1a1a2e);
+  margin-bottom: 6px;
 }
 
 .pos-ci-uom {
-  font-size: 9px;
+  font-size: 10px;
   color: var(--p400, #7f77dd);
   background: var(--p50, #eeedfe);
-  padding: 1px 4px;
+  padding: 1px 5px;
   border-radius: 4px;
   margin-left: 4px;
 }
 
 .pos-ci-disc-tag {
-  font-size: 9px;
+  font-size: 10px;
   color: #e24b4a;
   background: #fcebeb;
-  padding: 1px 4px;
+  padding: 1px 5px;
   border-radius: 4px;
   margin-left: 4px;
 }
@@ -1008,7 +1018,7 @@
 }
 
 .pos-ci-unit-at {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--g600, #5f5e5a);
   font-family: 'Prompt', sans-serif;
   line-height: 1.2;
@@ -1051,8 +1061,8 @@
 }
 
 .pos-ci-line-total {
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 700;
   color: var(--p800, #3c3489);
   font-family: 'Prompt', sans-serif;
   line-height: 1.2;
@@ -1087,14 +1097,14 @@
 }
 
 .pos-ci-orig-price {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--g400, #888780);
   text-decoration: line-through;
   flex-shrink: 0;
 }
 
 .pos-ci-tier-unit {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: #1d9e75;
   font-family: 'Prompt', sans-serif;
@@ -1102,7 +1112,7 @@
 }
 
 .pos-ci-tier-tag {
-  font-size: 9px;
+  font-size: 10px;
   padding: 1px 5px;
   border-radius: 4px;
   background: #e8f8f0;

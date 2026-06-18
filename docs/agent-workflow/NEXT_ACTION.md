@@ -2,47 +2,104 @@
 
 ## Current State
 
-Phase **7C-LOCAL-COORDINATOR-PILOT-2** is now **closed**. The manual readiness simulation for a hypothetical UI-06 phase was completed successfully. The Local Coordinator correctly assessed repository readiness and governance requirements, confirming that:
+Phase **7C-UI-06-CART-ITEM-ROWS-IMPLEMENTATION** is in **Codex blocker fix** cycle. The Developer is fixing docs/hygiene issues identified by Codex REQUEST CHANGES. The app implementation (CSS-only in `src/pages/POSPage.css`) is confirmed safe by Codex and is not being changed.
 
-- UI-06 cannot start without explicit Tech Lead / CEO authorization.
-- Workflow docs must be formally closed before a new phase opens.
-- The existing governance chain (Developer, AGY, Codex, Principal Engineer, Tech Lead / CEO, CEO Physical UAT) must be followed.
-- The Local Coordinator remains advisory-only and does not authorize, stage, commit, or override any role.
+Review progress:
 
-Principal Engineer review: **PASS WITH NOTES**.
-Local Coordinator status: **advisory-only, no tooling integration**.
-App code: **untouched throughout all pilot phases**.
+- AGY review: **PASS** (see `docs/reports/latest-agy-review.md`).
+- Codex review: **REQUEST CHANGES** -- app scope confirmed safe, but docs/hygiene blockers found (trailing whitespace in AGY report, stale NEXT_ACTION routing, AGY verdict text mismatch, unaccounted AGY report file).
+- Developer: fixing the docs/hygiene blockers (this cycle).
 
-## Completed Local Coordinator Pilot Phases
+Checks (from implementation phase, unchanged):
 
-- **PILOT-0** -- initial contract and pilot docs drafted, committed at `e5f3254`.
-- **PILOT-1** -- manual dry-run simulation over historical UI-04 scenarios (read-only, not committed separately).
-- **PILOT-1A** -- 5 dry-run safety rules formalized in contract docs, committed at `58eeb19`.
-- **PILOT-2** -- manual readiness simulation for hypothetical UI-06, completed and closed (this commit).
+- TypeScript build: `tsc -b` exit 0.
+- Targeted POS tests: 235 passed (keyboard-contract, product-card, useCart.contract).
+- Staged: none. Committed: none.
 
 ## What Happens Next
 
-**Next owner: CEO / Tech Lead.**
+**Current owner: Developer Agent** -- fixing Codex REQUEST CHANGES blockers (docs/hygiene only).
 
-No Developer, AGY, or Codex implementation route is active. A separate explicit authorization from Tech Lead / CEO is required before any of the following can begin:
+**After fix, next owner: Codex Reviewer** -- re-review the package with the docs/hygiene fixes applied.
 
-1. **Resume UI Master Plan** -- open UI-06 (Cart Item Rows) planning/discovery as a new authorized phase. This would follow the normal governance chain: Developer implements, AGY reviews UI/UX, Codex reviews code, Principal Engineer coordinates, Tech Lead / CEO authorizes scope and commits, CEO performs Physical UAT.
+Do not route to Principal Engineer until Codex returns PASS or PASS WITH NOTES.
 
-2. **Run another simulation** -- test the Local Coordinator contract against a different scenario or with additional complexity.
+## Review Chain (remaining after Developer fix)
 
-3. **Prepare a limited tooling exploration plan** -- if the CEO decides the Local Coordinator should move beyond docs-only advisory toward lightweight tooling, a scoped exploration plan would need to be drafted and authorized separately.
+```
+Developer Agent (now -- fixing Codex blockers)
+  -> Codex Reviewer (re-review)
+    -> Principal Engineer Reviewer / Workflow Coordinator (coordination + abnormality checks)
+      -> Tech Lead / CEO authorizes scope closure and commit
+        -> CEO Physical UAT
+```
 
-No work begins until the CEO / Tech Lead issues a new authorization specifying which path to take.
+---
+
+## Codex Re-Review Prompt (use after Developer fix is complete)
+
+```
+TO: Codex Reviewer
+MODEL: best available reviewer model for this run
+REASONING: Medium
+ROLE: Codex Reviewer
+ROLE FILE: docs/ai-roles/reviewer.md
+MODE: Re-review after REQUEST CHANGES fix, read-only, no staging, no commit
+
+PHASE: 7C-UI-06-CART-ITEM-ROWS-IMPLEMENTATION (Codex re-review)
+
+PRIOR CODEX VERDICT: REQUEST CHANGES
+
+FIXES APPLIED BY DEVELOPER:
+1. Trailing whitespace removed from docs/reports/latest-agy-review.md line 9.
+2. NEXT_ACTION.md updated to reflect AGY PASS, Codex REQUEST CHANGES, and correct routing.
+3. AGY verdict reconciled: the AGY report says PASS, all references now say PASS consistently.
+4. docs/reports/latest-agy-review.md accounted for as AGY-generated review artifact in developer report and workflow docs.
+
+APP IMPLEMENTATION UNCHANGED:
+- src/pages/POSPage.css: CSS-only cart item row polish (unchanged from prior review).
+- POSPage.tsx: not modified.
+- useCart.ts, useCart.contract.test.ts, cartUtils.ts: untouched.
+- No checkout/payment/stock/inventory/Firebase/Android/.claude/scripts/tooling.
+
+VERIFY:
+1. git diff --check passes (trailing whitespace fixed).
+2. NEXT_ACTION.md routing is current and correct.
+3. AGY verdict is consistently PASS across all docs.
+4. docs/reports/latest-agy-review.md is accounted for in the package.
+5. All prior app-scope confirmations still hold.
+
+RUN AND REPORT:
+git status --short
+git diff --name-only
+git diff --stat
+git diff --check
+git diff --cached --name-only
+
+Produce a verdict (PASS / PASS WITH NOTES / REQUEST CHANGES).
+Do not stage or commit.
+```
 
 ---
 
 ## Important Reminders
 
-- UI_MASTER_PLAN.md is the Phase 7C source of truth and is untouched -- no UI master-plan work (UI-06/07/08/09) is authorized.
-- The existing governance chain remains the absolute source of truth; the Local Coordinator is advisory-only and overrides nothing.
-- Do not stage or commit until Tech Lead / CEO authorizes exact commands for a new phase.
-- stash@{0} is pre-existing unrelated WIP -- do not touch.
+- AGY verdict is PASS (confirmed from docs/reports/latest-agy-review.md).
+- `UI_MASTER_PLAN.md` order is unchanged; only the stale markers were corrected per Option B.
+- The existing governance chain remains the absolute source of truth.
+- Do not stage or commit until Tech Lead / CEO authorizes exact commands.
+- `stash@{0}` is pre-existing unrelated WIP -- do not touch.
 - Old manual workflow remains available as fallback.
+
+## Modified Files in Package (complete list)
+
+- src/pages/POSPage.css -- app implementation (CSS-only cart item row polish).
+- docs/agent-workflow/UI_MASTER_PLAN.md -- marker correction only (Option B).
+- docs/agent-workflow/STATE.md -- phase / owner / status tracking.
+- docs/agent-workflow/CURRENT_PACKET.md -- phase packet.
+- docs/agent-workflow/NEXT_ACTION.md -- handoff routing (this file).
+- docs/reports/latest-developer-report.md -- developer report.
+- docs/reports/latest-agy-review.md -- AGY-generated review artifact (modified during AGY review step).
 
 ## Role File Reference
 

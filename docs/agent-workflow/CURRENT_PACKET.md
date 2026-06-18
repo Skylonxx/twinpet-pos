@@ -2,104 +2,106 @@
 
 ## Phase
 
-**7C-LOCAL-COORDINATOR-PILOT-1A** — Local Coordinator helper layer, **docs-only contract refinement**.
+**7C-UI-06-CART-ITEM-ROWS-IMPLEMENTATION** -- authorized visual / interaction polish for cart item rows. Implementation complete, pending AGY review. No staging, no commit.
 
-## What this packet is
+## Implementation objective
 
-A docs-only refinement of the Local Coordinator pilot that **formally captures the 5 dry-run safety rules** identified during the PILOT-1 manual dry-run simulation. The rules are added to `LOCAL_COORDINATOR_CONTRACT.md` (section 9) and `LOCAL_COORDINATOR_PILOT.md` (section 7).
+Improve POS cart item row readability and cashier usability while preserving all existing behavior. Visual / interaction polish only.
 
-- This is a **docs-only contract refinement.** No app code, no tests, no scripts, no installs, no tooling.
-- **The old workflow remains the source of truth.** This pilot is an addition, not a replacement.
-- **Local Coordinator is helper-only / advisory-only.** It **cannot** authorize scope, stage, commit, approve, or override any role.
-- The 5 rules constrain advisory behavior only; they grant no new authority.
-- No production integration yet. No UI work. `UI_MASTER_PLAN.md` is untouched. UI-05 is already DONE; UI-06/07/08/09 are not started and not authorized.
+## Implementation result (this packet)
 
-## The 5 dry-run safety rules captured by this packet
+- CSS-only change in `src/pages/POSPage.css` (`.pos-ci*`). `POSPage.tsx` was not modified -- the markup structure already supported the polish, so no JSX, handler, or data-flow change was needed.
+- No optional test file was touched: because the JSX/markup is unchanged, the `?raw` source-contract assertions on `POSPage.tsx` are unaffected, so no test edit was justified.
+- `UI_MASTER_PLAN.md` markers corrected per Tech Lead / CEO Option B (UI-04 `[DONE]`, UI-05 `[DONE]`, `[CURRENT]` moved to UI-06; order unchanged).
+- TypeScript build passed (`tsc -b`, exit 0). Targeted POS tests passed (235).
 
-1. Tool output beats report claims (flag contradictions; never trust a report claim over actual tool output; route evidence conflicts to Developer + Codex narrow re-check, governance conflicts to Principal Engineer; do not resolve by authority).
-2. Untracked files require explicit authorization (flag as package risk unless explicitly listed; always warn against git add .; never recommend broad staging).
-3. Stale handoff state blocks routing (if NEXT_ACTION.md / STATE.md contradicts current owner/verdict/review state, flag and stop routing until corrected).
-4. Codex PASS is not commit authorization (review verdict only; only Tech Lead / CEO authorizes staging/commit; flag any attempt to treat a Codex PASS as commit permission).
-5. ASCII-only reporting (Local Coordinator and terminal-style reports must be ASCII-only to avoid mojibake; not a ban on existing Thai documentation).
+## App-code boundary (preserved)
 
-## Existing workflow that MUST NOT be replaced
+- No cart math, pricing, discount, tax, checkout/payment, or stock/inventory change.
+- `useCart.ts`, `useCart.contract.test.ts`, and `cartUtils.ts` untouched.
+- Handlers, data flow, keyboard behavior, bump-flash behavior, and the remove/edit/quantity controls are all unchanged.
 
-```
-Developer Agent implements
-  → AGY / Senior QA & UX Lead reviews UI/UX
-    → Codex Reviewer reviews code, tests, scope, hygiene, package
-      → Principal Engineer Reviewer / Workflow Coordinator: final coordination + abnormality checks
-        → Tech Lead / CEO authorizes scope closure and commits
-          → CEO performs Physical UAT
-```
+## Current cart item row location (read-only finding)
 
-- No commit without Tech Lead / CEO authorization.
-- No new scope without Tech Lead / CEO authorization.
-- The Local Coordinator sits **beside** this chain as an advisory pre-check; it never sits above it.
+- **Rendering:** `src/pages/POSPage.tsx`, the `displayCartLines.map(...)` block (approx. lines 1250-1357). Each row is a `.pos-ci` container with three regions: `.pos-ci-name` (product name + UOM tag + discount/tier tags + oversell warning), `.pos-ci-price-bar` (`.pos-ci-price-row` with original/unit price and `.pos-ci-line-total`), and `.pos-ci-toolbar` (`.pos-ci-qty-group` minus/value/plus, plus `.pos-ci-icon-btn` edit and danger remove buttons).
+- **Styling:** `src/pages/POSPage.css`, the `.pos-ci*` class block (approx. lines 865-1124), including the `posCartBumpFlash` keyframes and `prefers-reduced-motion` guard.
+- **Math/data (NOT row UI):** line totals and money formatting come from `getLineTotal` and `formatMoney` in `src/lib/pos/cartUtils.ts`; cart mutations (`changeQty`, `removeLine`, `setLineQty`) come from the `useCart` hook (`src/hooks/pos/useCart.ts`). `displayCartLines` is a `useMemo` reverse of `cartLines` in POSPage.
 
-## Goal of the pilot design
+## Proposed implementation scope (later phase, NOT now)
 
-Design a small, low-risk helper that can flag:
+UI-06 is **visual / interaction polish for cart item rows only**, preserving all existing behavior:
 
-1. report hygiene problems
-2. trailing whitespace
-3. path typos
-4. file / package mismatches
-5. unexpected staged files
-6. missing handoff fields (STATE CARD)
-7. wrong next-owner routing
-8. commit-authorization mistakes
+- cart item row spacing and padding
+- cart item row visual hierarchy (name vs price vs total)
+- product name readability (size, weight, truncation/wrap)
+- quantity / price display layout
+- row hover / focus states where already structurally compatible
+- removing or reducing visual clutter
+- responsive cart row layout
+- readability improvements for cashier speed
 
-…and route each flag to the correct existing role (AGY for UI/UX & Physical-UAT concerns; Codex for code/test/hygiene re-checks; Principal Engineer for governance/abnormality; Tech Lead / CEO — through Principal Engineer — for scope/commit authorization).
+No behavior, math, data, or business-logic change.
 
-## Authorized files (this packet)
+## Proposed file list
 
-- `docs/agent-workflow/STATE.md`
-- `docs/agent-workflow/CURRENT_PACKET.md`
-- `docs/agent-workflow/NEXT_ACTION.md`
-- `docs/agent-workflow/LOCAL_COORDINATOR_PILOT.md`
-- `docs/agent-workflow/LOCAL_COORDINATOR_CONTRACT.md`
+Likely required:
+- `src/pages/POSPage.tsx` -- cart row JSX markup only (class names, element grouping, presentational structure). No handler logic, no math, no data flow change.
+- `src/pages/POSPage.css` -- `.pos-ci*` styling only.
 
-## Strictly forbidden (this packet)
+Optional (only if implementation truly needs it, separately justified):
+- `src/pages/POSPage.keyboard-contract.test.ts` -- only if a row structure change must be re-locked by an existing `?raw` contract test.
+- `src/pages/POSPage.product-card.test.ts` -- only if a shared POS preference/wiring assertion is affected.
 
-- No app code, no UI components, no tests.
-- No Firebase / functions / rules; no Android / Capacitor; no `.claude/`.
-- No scripts; no external tool installs; no `agentchattr`; no Codex CLI integration; no tool runs.
-- No edits to `UI_MASTER_PLAN.md`.
-- No `docs/reports/*` edits (report back in chat instead).
-- No UI-05 / UI-06 / UI-07 / UI-08 / UI-09 work.
-- No staging, no commit, no `git add .`.
-- No replacing the existing workflow.
+Forbidden unless separately authorized:
+- `src/hooks/pos/useCart.ts`
+- `src/hooks/pos/useCart.contract.test.ts`
+- `src/lib/pos/cartUtils.ts`
+- `src/hooks/pos/useCheckout.ts`, `src/lib/pos/asyncCheckout.ts`
+- `src/hooks/pos/usePosInventory.ts`, `src/lib/pos/inventoryRepository.ts`
+- any Firebase / functions / rules, Android / Capacitor, `.claude/`, scripts, tooling configs
 
-## Status
+## Forbidden file / scope list (this and the future implementation phase)
 
-**Docs-only contract refinement in progress** — the 5 dry-run safety rules added to `LOCAL_COORDINATOR_CONTRACT.md` (section 9) and `LOCAL_COORDINATOR_PILOT.md` (section 7); awaiting **Principal Engineer Reviewer / Workflow Coordinator** review.
+- cart math, quantity calculation, pricing calculation
+- discount logic, tax logic
+- checkout / payment logic
+- `useCart` business logic
+- stock / inventory logic
+- Firebase / functions / rules
+- Android / Capacitor
+- `.claude/`
+- scripts / tooling
+- `UI_MASTER_PLAN.md` ordering changes
+- UI-07 Cart Summary, UI-08 Action Buttons, UI-09 Checkout / F12
 
----
+## AGY / Codex review plan
 
-## Role Sequence (for this pilot)
+For the future implementation phase, in order:
 
-```
-Developer Agent                         — ROLE FILE: docs/ai-roles/developer.md
-  → Principal Engineer Reviewer /       — ROLE FILE: docs/ai-roles/tech-lead.md
-    Workflow Coordinator (governance review of the pilot)
-      → Tech Lead / CEO (only if the pilot needs scope/keep/revise/discard decision)
-```
+1. Developer implements the authorized visual/interaction scope and self-reviews.
+2. AGY (Senior QA & UX Lead) performs visual / UX review FIRST (required for UI-facing changes unless CEO waives).
+3. Codex Reviewer reviews code, tests, scope, hygiene, and package after AGY passes.
+4. Principal Engineer Reviewer / Workflow Coordinator coordinates and runs abnormality checks.
+5. Tech Lead / CEO authorizes scope closure and the commit (commit-only prompt).
+6. CEO performs Physical UAT.
 
-**Note:** AGY and Codex are not in this pilot's drafting loop because this phase changes **no UI and no code** — it only drafts governance docs. Governance review by the Principal Engineer is the required next gate.
+## Stop condition
 
-## Decision Rules
-
-1. **Developer** drafts the pilot docs and reports in chat.
-2. **Developer** updates `NEXT_ACTION.md` to route to the **Principal Engineer Reviewer / Workflow Coordinator** for governance-risk review.
-3. **If any unauthorized file is touched** → STOP and report.
-4. **If the working tree was dirty / HEAD wrong / unexpected files appeared at preflight** → STOP and report.
-5. **Principal Engineer** reviews governance risk (overlap, authority boundaries, multi-writer risk, accidental staging/commit, scenario sufficiency, source-of-truth integrity).
-6. **If Principal Engineer flags risk** → return to Developer for doc revision.
-7. **If Principal Engineer PASS** → route to **Tech Lead / CEO** (through Principal Engineer) for keep / revise / discard decision on the pilot.
-8. **No commit, no integration, no scope expansion** until Tech Lead / CEO authorizes exact next steps.
+After this implementation packet and the developer report, stop. No staging, no commit, no `git add .`, no scripts, no installs. Do not route to Codex before AGY. Wait for AGY visual / UX review.
 
 ---
+
+## Role Sequence (for the future UI-06 implementation)
+
+```
+Developer Agent                         -- ROLE FILE: docs/ai-roles/developer.md
+  -> AGY / Senior QA & UX Lead          -- ROLE FILE: docs/ai-roles/ux-lead.md
+    -> Codex Reviewer                   -- ROLE FILE: docs/ai-roles/reviewer.md
+      -> Principal Engineer Reviewer /  -- ROLE FILE: docs/ai-roles/tech-lead.md
+         Workflow Coordinator
+        -> Tech Lead / CEO authorizes scope closure and commit
+          -> CEO Physical UAT
+```
 
 ## STATE CARD Requirement
 
@@ -111,6 +113,7 @@ Phase:
 Current owner:
 Verdict:
 Files changed:
+Files inspected:
 Tests/checks:
 Staged:
 Committed:
@@ -120,8 +123,6 @@ Next action:
 Stop condition:
 ```
 
----
-
 ## Fallback
 
-If this workflow creates friction, revert to the previous manual routing process. The old workflow remains valid. The Local Coordinator pilot never overrides it.
+If this workflow creates friction, revert to the previous manual routing process. The old workflow remains valid.
