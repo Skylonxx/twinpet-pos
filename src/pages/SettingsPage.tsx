@@ -11,6 +11,7 @@ import {
   type SettingsSection,
 } from '../lib/settings/types';
 import { useSettings } from '../lib/settings/useSettings';
+import { usePOSPreferences, type POSFontSize } from '../hooks/pos/usePOSPreferences';
 import {
   Table,
   TableHead,
@@ -47,6 +48,40 @@ function Toggle({
       <div className="stg-toggle-track" />
       <div className="stg-toggle-thumb" />
     </label>
+  );
+}
+
+/**
+ * UI-04: a compact small/normal/large preset picker, built from the existing
+ * `stg-notif-chip` chip style so it stays visually consistent with the rest of
+ * Settings. Used for the independent product-name and price text-size controls.
+ */
+const SIZE_PRESETS: ReadonlyArray<{ value: POSFontSize; label: string }> = [
+  { value: 'small', label: 'เล็ก' },
+  { value: 'normal', label: 'ปกติ' },
+  { value: 'large', label: 'ใหญ่' },
+];
+
+function SizePicker({
+  value,
+  onChange,
+}: {
+  value: POSFontSize;
+  onChange: (v: POSFontSize) => void;
+}) {
+  return (
+    <div className="stg-notif-channels">
+      {SIZE_PRESETS.map((p) => (
+        <button
+          key={p.value}
+          type="button"
+          className={`stg-notif-chip${value === p.value ? ' on' : ''}`}
+          onClick={() => onChange(p.value)}
+        >
+          {p.label}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -170,6 +205,18 @@ export default function SettingsPage() {
     cancel: cancelUom,
   } = useUomUnits();
 
+  // UI-04: POS product-card display preferences (device-local, localStorage-backed
+  // via usePOSPreferences). These persist immediately on change — independent of the
+  // branch/Firebase Save footer below — mirroring the void-password toggle pattern.
+  const {
+    showStock,
+    productNameFontSize,
+    priceFontSize,
+    setShowStock,
+    setProductNameFontSize,
+    setPriceFontSize,
+  } = usePOSPreferences();
+
   // Active section is driven by the URL (unified Settings sidebar), not local state.
   const location = useLocation();
   const slug = location.pathname.split('/').pop() ?? '';
@@ -291,6 +338,46 @@ export default function SettingsPage() {
     <div className="stg-page">
       <div className="stg-body">
         <div className="stg-main">
+          {/* ── การแสดงผลสินค้า (POS) — UI-04 ── */}
+          {section === 'posDisplay' ? (
+            <>
+              <div className="stg-section-title">การแสดงผลสินค้า (POS)</div>
+              <div className="stg-section-sub">
+                ปรับการแสดงผลการ์ดสินค้าบนหน้าขาย — ตั้งค่าเฉพาะเครื่องนี้ และมีผลทันที
+              </div>
+              <div className="stg-card">
+                <div className="stg-card-head">
+                  <i className="ti ti-layout-grid" aria-hidden="true" /> การ์ดสินค้า
+                </div>
+                <div className="stg-card-body">
+                  <div className="stg-toggle-row">
+                    <div className="stg-toggle-info">
+                      <div className="stg-toggle-label">แสดงจำนวนสต็อกบนการ์ดสินค้า</div>
+                      <div className="stg-toggle-desc">
+                        เปิด = แสดงจำนวนคงเหลือมุมขวาล่างของการ์ด, ปิด = ซ่อนตัวเลขสต็อก
+                      </div>
+                    </div>
+                    <Toggle checked={showStock} onChange={setShowStock} />
+                  </div>
+                  <div className="stg-toggle-row">
+                    <div className="stg-toggle-info">
+                      <div className="stg-toggle-label">ขนาดตัวอักษรชื่อสินค้า</div>
+                      <div className="stg-toggle-desc">ปรับขนาดชื่อสินค้าบนการ์ด</div>
+                    </div>
+                    <SizePicker value={productNameFontSize} onChange={setProductNameFontSize} />
+                  </div>
+                  <div className="stg-toggle-row">
+                    <div className="stg-toggle-info">
+                      <div className="stg-toggle-label">ขนาดตัวอักษรราคา</div>
+                      <div className="stg-toggle-desc">ปรับขนาดราคาบนการ์ด (แยกจากชื่อสินค้า)</div>
+                    </div>
+                    <SizePicker value={priceFontSize} onChange={setPriceFontSize} />
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : null}
+
           {/* ── ข้อมูลสาขา ── */}
           {section === 'branch' ? (
             <>

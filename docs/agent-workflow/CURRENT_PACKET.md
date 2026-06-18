@@ -1,36 +1,53 @@
 # Current Work Packet
 
+## ⚠️ UAT Bug Fix Intervention (re-opened)
+
+This packet is a **UAT bug fix intervention**, not new feature work. Physical UAT of the prior UI-04 package **FAILED**: the Settings controls were visible but non-functional — Product Name font size, Price font size, and Stock visibility did not dynamically update the Product Grid Cards.
+
+- **Goal: fix the settings → product-card state wiring ONLY.** No new features, no new settings/persistence architecture, no scope expansion.
+- The **prior UI-04 commit authorization is HELD / superseded** until this fix passes AGY and Codex again.
+- **No cart/checkout scope** is authorized: no Cart Item Rows (UI-06), Cart Summary (UI-07), Action Buttons (UI-08), Checkout/F12 (UI-09), no cart math, no stock/inventory logic, no checkout/payment logic, no Firebase/functions/rules.
+- **Root cause + fix:** `usePOSPreferences` gave each consumer its own `useState` copy (read from localStorage once on mount), so the Settings editor and POS grid held independent states and edits never reached the mounted cards. It is now a single module-level reactive store consumed via `useSyncExternalStore` — one source of truth, every consumer re-renders on change. Public API, localStorage key, validation, and defaults are unchanged.
+
 ## Phase
 
-**7C-UI-03-CATEGORY-DROPDOWN** — Categories & Quick Menu Dropdown Conversion
+**7C-UI-04-PRODUCT-GRID-CARDS** — Product Grid Cards with existing Settings integration (RE-OPENED for UAT bug fix)
 
 ## Master Plan
 
-Source of truth: **`docs/agent-workflow/UI_MASTER_PLAN.md`**. This packet is item **3 (UI-03: หมวดหมู่สินค้าและเมนูด่วน — CURRENT)**. No work beyond UI-03 is authorized by this packet.
+Source of truth: **`docs/agent-workflow/UI_MASTER_PLAN.md`**. This packet is item **4 (UI-04: การ์ดสินค้า — CURRENT)**. No work beyond UI-04 is authorized by this packet.
 
 ## Goal
 
-Replace the category selection **modal overlay** with a clean, minimalist **dropdown** anchored to the "ค้นหาหมวดหมู่ ▾" button — preserving existing category filtering/sync behavior and not blocking the cashier flow with an overlay. **AGY visual review is required before Codex.**
+Integrate the existing POS display preferences with the Product Grid Cards so cashier/admin can control, from the existing Settings module:
 
-## Implementation Directives (A / B / C)
+1. **Stock visibility** on product cards
+2. **Product name font size**
+3. **Price font size**
 
-**A — Destroy the Modal.** Completely remove the full-screen/centered category-selection modal overlay. No overlay for category selection; it must not block cashier flow.
+Reuse the existing global-state pattern (`usePOSPreferences`, localStorage) and the existing Settings UI — no new settings architecture, no new persistence layer, no Firebase/backend writes. **AGY visual review is required before Codex.**
 
-**B — Implement Dropdown.** Convert the "ค้นหาหมวดหมู่ ▾" button into a dropdown shown directly below it, containing the category options. Include a small inline search inside the dropdown (preserve existing category-search behavior). Close cleanly after selection; don't disrupt scanner focus more than necessary; preserve category filtering/sync.
+## Implementation Directives (summary)
 
-**C — Style.** Match the Flowbite / Clean / Impeccable POS aesthetic — premium, subtle background/border/hover/spacing/radius/shadow. Avoid heavy modal-like styling, broad redesign, and clutter.
+**A — Settings integration.** Add a "การแสดงผลสินค้า (POS)" section to the existing unified Settings (new `pos-display` nav item → `SettingsPage` `posDisplay` section): a stock-visibility toggle and two independent small/normal/large size pickers. Built from existing Settings components (`Toggle`, `stg-notif-chip` chips).
+
+**B — Global state wiring.** Extend the existing `usePOSPreferences` store (localStorage) with `showStock`, `productNameFontSize`, `priceFontSize` (validated, persisted, default-safe). The Settings controls call its setters; POSPage consumes the values. Defaults preserve the current visual style exactly.
+
+**C — Product card consumption.** Product cards consume `productNameFontSize`, `priceFontSize`, `showStock`: name/price sizes change via independent CSS scales; the stock indicator renders only when `showStock` is on (no empty gap when off). Click / add-to-cart behavior unchanged.
+
+**D — Layout / Style.** Image + placeholder (existing `ProductImageThumb`), name, price, conditional stock. Grid integrity, category dropdown (UI-03), cat-bar horizontal scroll, and the UI-05 cart seam are preserved. Flowbite / Clean / Impeccable aesthetic.
 
 ## Strict Non-Goals
 
-Do NOT touch: Cart item rows (UI-06), Cart Summary (UI-07), Action Buttons (UI-08), Checkout/F12 (UI-09), checkout/payment logic, cart math, stock logic. Do NOT alter product-card layout beyond what's strictly required to keep the dropdown placement. Do NOT touch category/product/main-navigation functional icons. Do NOT reintroduce a modal overlay for categories.
+Do NOT touch: Cart item rows (UI-06), Cart Summary (UI-07), Action Buttons (UI-08), Checkout/F12 (UI-09), checkout/payment logic, cart math, stock logic, scanner/focus behavior, category dropdown behavior (only preserve layout compatibility), Toast, Firebase/functions/rules, Android/Capacitor, `.claude/`. No new scripts. No staging. No commit.
 
 ## AGY Review Requirement (MANDATORY before Codex)
 
-AGY must verify: no category modal overlay remains; the dropdown appears directly below the "ค้นหาหมวดหมู่ ▾" trigger; it feels minimalist/clean/premium (spacing, border, hover, background polished); inline search (if present) is compact/useful; category/product/main-navigation functional icons are preserved; cart items/summary/action buttons/checkout were not visually altered; scanner/focus flow is not regressed; and no broad redesign.
+AGY must verify: Settings controls are clean/understandable; product-name size visibly affects cards; price size visibly affects cards (independent of name); stock toggle hides/shows stock cleanly with no awkward gap; cards show image/placeholder, name, price, conditional stock cleanly; grid stays stable/responsive; UI-03 category dropdown intact; cart items/summary/action buttons/checkout-F12 untouched; no broad redesign or scope creep.
 
 ## Status
 
-**In Progress** — Developer implementation complete; **awaiting AGY visual/UX review (before Codex)**.
+**UAT Failed / Bug Fix In Progress** — settings→product-card wiring fixed and re-verified (tsc + full vitest green); **awaiting AGY visual/functional re-validation (before Codex)**. Prior commit authorization HELD / superseded.
 
 ---
 
@@ -38,10 +55,14 @@ AGY must verify: no category modal overlay remains; the dropdown appears directl
 
 ### Authorized implementation files (app)
 
-- `src/pages/POSPage.tsx` — category dropdown state + UI (modal removed)
-- `src/pages/POSPage.css` — dropdown styling (modal overlay CSS removed)
-- `src/pages/POSPage.keyboard-contract.test.ts` — category-picker contract tests updated (modal→dropdown)
-- Do NOT broaden beyond the category dropdown conversion.
+- `src/hooks/pos/usePOSPreferences.ts` — extend the existing POS display store (new fields + setters)
+- `src/lib/settings/settingsNav.ts` — add the `pos-display` nav item
+- `src/lib/settings/types.ts` — add `'posDisplay'` to `SettingsSection`
+- `src/pages/SettingsPage.tsx` — new POS-display settings section
+- `src/pages/POSPage.tsx` — consume preferences + conditional stock
+- `src/pages/POSPage.css` — scoped product-card scale styling
+- `src/pages/POSPage.product-card.test.ts` — new source-contract test
+- Do NOT broaden beyond product-card display + its Settings controls.
 
 ### Authorized workflow / report files
 
@@ -54,16 +75,14 @@ AGY must verify: no category modal overlay remains; the dropdown appears directl
 ### Forbidden Files / Areas
 
 - **Cart item rows (UI-06), Cart Summary (UI-07), Action Buttons (UI-08), Checkout/F12 (UI-09)** — reserved; do NOT touch
-- **Functional icons** in Category Tabs, Product Cards, Product Grid, Main Navigation — do NOT touch
-- **Select Customer button styling / dashed border** — do NOT touch; do NOT reintroduce a category modal overlay
 - `useCart.ts`, `useCart.contract.test.ts`, `cartUtils.ts`, cart math
-- Checkout / payment business logic, stock matrix, seed data
+- Checkout / payment business logic, stock matrix / inventory logic, seed data
 - Toast files; Firebase / functions / rules; Android / Capacitor; `.claude/`
-- No new scripts, no new dependencies; no UI-04/06/07/08/09 work
+- No new scripts, no new dependencies; no UI-06/07/08/09 work
 
 ### Preservation note
 
-The category selection UI changed from modal overlay → anchored dropdown only. Category filtering/sync (`visibleCategories`, `usePosSyncSignal`, the catalog-wide refresh), the `.pos-cat-bar` horizontal scroll, and all focus-recovery handlers are preserved; the dropdown still routes selection through `selectCategory` (clears the Quick Menu) and refocuses the scan box on close. Cart rows, summary, action buttons, checkout/F12, and the macro layout are untouched.
+The product cards keep their existing structure (image/placeholder, name, price, stock) and existing `onProductClick` add-to-cart behavior. New presentation is purely additive and driven by `usePOSPreferences` with visual-preserving defaults. The UI-03 category dropdown, `.pos-cat-bar` horizontal scroll, the UI-05 cart seam, and scanner/focus handlers are all untouched.
 
 ---
 
@@ -76,7 +95,7 @@ Developer Agent              — ROLE FILE: docs/ai-roles/developer.md
       → Tech Lead / CEO      — ROLE FILE: docs/ai-roles/tech-lead.md
 ```
 
-**AGY:** **REQUIRED for this phase (before Codex)** — this phase includes visual UI polish, so AGY visual/UX validation gates the handoff to Codex.
+**AGY:** **REQUIRED for this phase (before Codex)** — this phase includes visual UI changes, so AGY visual/UX validation gates the handoff to Codex.
 AGY ROLE FILE: `docs/ai-roles/ux-lead.md`
 
 ### Required Handoff Header Format

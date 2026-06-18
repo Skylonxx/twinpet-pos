@@ -13,6 +13,12 @@
   /* UI-01: product-card text scale, driven by the `pos-fontsize-*` class below
      (set from usePOSPreferences). Default keeps the existing sizing (×1). */
   --pos-font-scale: 1;
+  /* UI-04: independent product-name / price text scales, driven by the
+     `pos-name-*` / `pos-price-*` classes below (set from usePOSPreferences).
+     They multiply on top of --pos-font-scale, so defaults of ×1 preserve the
+     exact current sizing while each control adjusts one element independently. */
+  --pos-name-scale: 1;
+  --pos-price-scale: 1;
 }
 
 /* UI-01 font-scale preference (consumed by usePOSPreferences; no toggle UI on POS). */
@@ -24,6 +30,28 @@
 }
 .pos-page.pos-fontsize-large {
   --pos-font-scale: 1.15;
+}
+
+/* UI-04 product-name scale preference (Settings → การแสดงผลสินค้า). */
+.pos-page.pos-name-small {
+  --pos-name-scale: 0.9;
+}
+.pos-page.pos-name-normal {
+  --pos-name-scale: 1;
+}
+.pos-page.pos-name-large {
+  --pos-name-scale: 1.15;
+}
+
+/* UI-04 price scale preference (independent of product-name scale). */
+.pos-page.pos-price-small {
+  --pos-price-scale: 0.9;
+}
+.pos-page.pos-price-normal {
+  --pos-price-scale: 1;
+}
+.pos-page.pos-price-large {
+  --pos-price-scale: 1.15;
 }
 
 .pos-topbar {
@@ -551,8 +579,9 @@
 
 .pos-prod-name {
   /* UI-01: scales with the font-size preference (em-based line-clamp height below
-     follows automatically, so rows stay uniform at every scale). */
-  font-size: calc(10px * var(--pos-font-scale, 1));
+     follows automatically, so rows stay uniform at every scale).
+     UI-04: also multiplied by the independent product-name scale. */
+  font-size: calc(10px * var(--pos-font-scale, 1) * var(--pos-name-scale, 1));
   font-weight: 500;
   color: var(--p900, #26215c);
   line-height: 1.35;
@@ -574,7 +603,8 @@
 }
 
 .pos-prod-price {
-  font-size: calc(11px * var(--pos-font-scale, 1));
+  /* UI-04: multiplied by the independent price scale on top of the global scale. */
+  font-size: calc(11px * var(--pos-font-scale, 1) * var(--pos-price-scale, 1));
   font-weight: 600;
   color: var(--p600, #534ab7);
   font-family: 'Prompt', sans-serif;

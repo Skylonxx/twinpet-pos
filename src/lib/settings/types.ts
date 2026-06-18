@@ -8,6 +8,7 @@ import type {
 } from '../types';
 
 export type SettingsSection =
+  | 'posDisplay'
   | 'branch'
   | 'vat'
   | 'pricelevel'

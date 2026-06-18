@@ -49,6 +49,7 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
   {
     header: 'ตั้งค่าสาขา & POS',
     items: [
+      { slug: 'pos-display', label: 'การแสดงผลสินค้า (POS)', icon: 'ti-layout-grid', scope: 'branch', section: 'posDisplay' },
       { slug: 'branch-info', label: 'ข้อมูลสาขา', icon: 'ti-building-store', scope: 'branch', section: 'branch' },
       { slug: 'vat-tax', label: 'VAT & ภาษี', icon: 'ti-receipt-tax', scope: 'branch', section: 'vat' },
       { slug: 'price-levels', label: 'ระดับราคา', icon: 'ti-layers-difference', scope: 'branch', section: 'pricelevel' },

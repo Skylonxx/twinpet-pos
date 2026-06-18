@@ -1,120 +1,109 @@
-# Developer Report
-
-## Phase
-
-**7C-UI-03-CATEGORY-DROPDOWN** — Categories & Quick Menu Dropdown Conversion (Master Plan item 3)
+# Developer Report — 7C-UI-04-PRODUCT-GRID-CARDS (UAT Bug Fix)
 
 ## 1. Summary
 
-Realigned with the 9-point Phase 7C UI Master Plan: created `docs/agent-workflow/UI_MASTER_PLAN.md` as the source of truth, set the workflow to UI-03, and converted the category selection experience from a **full-screen modal overlay** to a clean, minimalist **anchored dropdown** under the "ค้นหาหมวดหมู่ ▾" button. The modal is fully removed; the dropdown preserves the inline category search and all existing category filtering/sync behavior, closes on selection / outside-click / Escape, and refocuses the scan box. CSS + state are scoped to POSPage; no cart/checkout/stock/icon changes. **AGY visual review required before Codex.**
+This is a **UAT bug fix intervention** on the re-opened Phase 7C-UI-04. The prior package wired up a "การแสดงผลสินค้า (POS)" Settings section (stock visibility + independent product-name / price size pickers) backed by `usePOSPreferences`, but physical UAT failed: the controls were visible yet did not dynamically update the Product Grid Cards. The defect was in the preferences **state wiring** — not in the Settings UI, the CSS, or the card markup, all of which were already correct. The fix converts `usePOSPreferences` from a per-instance `useState` hook into a **single module-level reactive store** consumed via `useSyncExternalStore`, so an edit on the Settings page updates the one shared value and re-renders the POS product cards immediately. Scope was strictly limited to the state wiring; no features, persistence, or architecture were added.
 
-## 2. Preflight Status and HEAD Confirmation
+## 2. UAT failure acknowledgement
 
-- `git status --short` before start: **clean** ✅
-- `git log --oneline -5` top: `d13a9a1 style(pos): restore modal header icons and simplify buttons` ✅
-- `stash@{0}` present and untouched ✅
-- Did not start UI-03 on top of uncommitted work.
+Physical UAT **FAILED** and is acknowledged. The prior UI-04 commit authorization is **HELD / superseded** until this fix passes AGY and Codex again. Nothing has been staged or committed. Reported symptoms, all reproduced by the root-cause analysis below:
 
-## 3. UI_MASTER_PLAN.md Creation Confirmation
+- Product Name font size control did not dynamically update Product Grid Cards.
+- Price font size control did not dynamically update Product Grid Cards.
+- Stock visibility toggle did not dynamically show/hide stock on Product Grid Cards.
 
-Created **`docs/agent-workflow/UI_MASTER_PLAN.md`** with the exact 9-point Phase 7C plan (UI-01 DONE, UI-02 DONE, UI-03 CURRENT, UI-04 PENDING, UI-05 DONE, UI-06–09 PENDING) and the Rules block (align future work; no skip/rename/broaden without Tech Lead/CEO; AGY before Codex for UI; no work beyond the current item). ✅
+## 3. Root cause found
 
-## 4. Files Changed
+`usePOSPreferences` backed **every** call with its own `useState` set and read `localStorage` only **once**, in a mount-time `useEffect` (the old lines 110–130). The Settings page and the POS page each call the hook, so they mounted **independent copies** of the state with no shared source of truth and no cross-instance notification:
 
-| File | Action | Description |
-|---|---|---|
-| `docs/agent-workflow/UI_MASTER_PLAN.md` | **NEW** | Phase 7C source of truth (9-point plan + rules). |
-| `src/pages/POSPage.tsx` | Modified | Removed the category modal overlay; added anchored dropdown (state/handlers renamed modal→dropdown; new `openCatDropdown` measured anchor + outside-click effect); Escape + blocking-modal wiring updated. |
-| `src/pages/POSPage.css` | Modified | Removed `.pos-category-overlay/modal/modal-hd/close/grid/cell`; added `.pos-cat-trigger-wrap` + `.pos-cat-dd*` dropdown rules + trigger `.on` state. |
-| `src/pages/POSPage.keyboard-contract.test.ts` | Modified | Category-picker tests updated (modal→dropdown names/classes/markers) + a "modal overlay fully removed" assertion. |
-| `docs/agent-workflow/STATE.md`, `CURRENT_PACKET.md`, `NEXT_ACTION.md`, `docs/reports/latest-developer-report.md` | Modified | Workflow + report. |
+1. The Settings editor's instance updated its own `useState` and persisted to `localStorage`.
+2. The POS page's instance had already hydrated from `localStorage` at its own mount and **never re-read it**, and nothing told it to re-render.
 
-`useCart.ts` / `cartUtils.ts` / checkout / stock / Toast / Firebase / Android / `.claude/` and all cart-row/summary/action/checkout UI — untouched.
+So a setting change persisted but never reached the already-mounted POS product cards — exactly the "controls visible but non-functional / non-reactive source" failure. The card consumption (`POSPage.tsx` class composition + conditional stock span) and the CSS scales were already correct; they simply never received a new value.
 
-## 5. CURRENT_PACKET.md Update Confirmation
+## 4. Files changed
 
-`docs/agent-workflow/CURRENT_PACKET.md` updated to `7C-UI-03-CATEGORY-DROPDOWN` with: the master-plan reference, the goal (modal→dropdown), directives A (destroy modal) / B (implement dropdown) / C (style), strict non-goals (reserved UI-06..09, no overlay reintroduction, functional icons + Select Customer untouched), the AGY-before-Codex requirement, role sequence, and role files. ✅
+App:
 
-## 6. Category Modal Removal Summary
+- `src/hooks/pos/usePOSPreferences.ts` — **the fix.** Replaced the per-instance `useState` + mount-hydrate + persist effects with a single module-level store (`currentState` + a `listeners` set) consumed via `useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)`. Added a `storage` event listener for cross-tab sync, a no-op guard so identical writes don't notify, and an exported internal `posPreferencesStore` (subscribe / getSnapshot / setters) used only by the node-env reactivity test. **Unchanged:** the public `POSPreferences` return shape, the `twinpet_pos_prefs` localStorage key, all validators (`isGridColumns` / `isFontSize` / `isBoolean`), `readStoredPreferences`, and the defaults (`showStock` `true`, `productNameFontSize` / `priceFontSize` `'normal'`).
+- `src/pages/POSPage.product-card.test.ts` — added runtime reactivity tests against the shared store and a structural guard for the single-source-of-truth fix (details in §7).
 
-The `{catModalOpen && (<div className="pos-category-overlay" role="dialog" aria-modal="true">…)}` block (centered modal with dimmed backdrop, header, search, and a 4-col `.pos-category-grid` of cells) was deleted from the JSX, and its CSS (`.pos-category-overlay/modal/modal-hd/close/grid/cell`) removed. The page no longer renders any category overlay. (`grep` confirms the only remaining mentions are the test's negative assertions.)
+Carried over from the prior package (unchanged by this intervention, still in the working tree): `src/lib/settings/settingsNav.ts`, `src/lib/settings/types.ts`, `src/pages/SettingsPage.tsx`, `src/pages/POSPage.tsx`, `src/pages/POSPage.css`.
 
-## 7. Dropdown Implementation Summary
+Workflow / report:
 
-- **State:** `catModalOpen`→`catDropdownOpen`; new `catDropdownPos {top,left}` + `catTriggerRef` + `catDropdownWrapRef`. `catSearch` preserved.
-- **Anchor:** `openCatDropdown()` measures the trigger via `getBoundingClientRect()` and sets a fixed anchor (`top: bottom+4, left`). The dropdown is `position: fixed`, so the `.pos-cat-bar` `overflow-x: auto` (which clips vertically) does **not** clip it.
-- **Trigger:** the "ค้นหาหมวดหมู่ ▾" button toggles open/close (`catDropdownOpen ? closeCatDropdown() : openCatDropdown()`), with `aria-haspopup="listbox"` / `aria-expanded`, and an `.on` tint while open.
-- **Selection:** items call `selectCategoryFromDropdown(id)` → `selectCategory(id)` (clears `activeQuickMenuId`, sets category, refocuses) → `closeCatDropdown()` (closes + refocuses). The UI-10-B "route through selectCategory" contract is preserved.
-- **Dismissal:** outside-click (`document` mousedown vs the wrap ref) closes it; Escape closes it via the central `closeTopModalOnEscape` (slot 10, now `catDropdownOpen`→`closeCatDropdown`); it stays in `hasBlockingModalOpen` so F12 doesn't stack PaymentModal over an open dropdown.
+- `docs/agent-workflow/STATE.md`, `docs/agent-workflow/CURRENT_PACKET.md`, `docs/agent-workflow/NEXT_ACTION.md`, `docs/agent-workflow/UI_MASTER_PLAN.md`, `docs/reports/latest-developer-report.md` (and the carried-over `docs/reports/latest-agy-review.md`, `docs/reports/latest-codex-review.md`).
 
-## 8. Inline Search Behavior
+## 5. State wiring fix summary
 
-The dropdown keeps the inline search input (`catSearch`): it filters `visibleCategories` by name (case-insensitive `includes`), and the ⭐ best-sellers item shows only when the search is empty — identical to the prior modal's search semantics. The input `autoFocus`es on open for fast keyboard filtering; `openCatDropdown` resets `catSearch` to empty each open.
+- The preferences are now ONE module-level value. `subscribe` registers a listener; `getSnapshot` returns the current value (reference changes only on a real update, so it stays cached as `useSyncExternalStore` requires); `getServerSnapshot` returns the deterministic defaults for SSR safety.
+- Each validated setter (`setShowStock`, `setProductNameFontSize`, `setPriceFontSize`, plus the existing `setGridColumns` / `setFontSize`) calls a private `setState` that merges the patch, **persists to the same localStorage key**, and notifies all listeners. The setters are module-level, so their references are stable across renders.
+- Effect: editing a control on the Settings page updates the single shared value → every `usePOSPreferences()` consumer (the POS grid included) re-renders with the new value. A `storage` event re-hydrates and notifies in other tabs.
 
-## 9. Style / Impeccable Notes
+## 6. Product card consumption fix summary
 
-`.pos-cat-dd` is a 280px fixed popover: white background, `1px var(--g200)` border, `10px` radius, soft layered shadow (`0 8px 24px rgba(38,33,92,.12)` + a faint ambient), `max-height: 60vh` with a scrollable list. The header holds the search (g50 input with an on-brand focus ring); items are left-aligned ghost rows with a calm `var(--p50)` hover and a `var(--p600)` active state. No dimmed backdrop, no modal chrome — minimal, premium, on-brand.
+No card markup changes were needed — the consumption was already correct and now receives live values:
 
-## 10. Preservation Notes
+- `.pos-page` carries `pos-name-${productNameFontSize}` and `pos-price-${priceFontSize}` (alongside `pos-fontsize-${fontSize}`); these classes now change as the store updates, so `--pos-name-scale` / `--pos-price-scale` re-apply and `.pos-prod-name` / `.pos-prod-price` resize independently.
+- The stock indicator still renders only via `{showStock && <span className="pos-prod-stock">{p.stock}</span>}`; `showStock` now flips live, so the stock count shows/hides immediately with no empty gap (the price left-aligns in `.pos-prod-bottom`).
+- `onProductClick` add-to-cart, scanner/focus behavior, the UI-03 category dropdown, and grid density are all untouched.
 
-- **Cart items** — untouched (reserved UI-06).
-- **Cart summary** — untouched (reserved UI-07).
-- **Action buttons** — untouched (reserved UI-08).
-- **Checkout / F12** — untouched (reserved UI-09); F12 still suppressed while the dropdown is open (predicate updated to `catDropdownOpen`).
-- **Category / product / main-navigation functional icons** — untouched (⭐ pill, quick-menu glyphs, category pills, product cards, top-bar icons all unchanged).
-- **Category filtering / sync** — `visibleCategories`, `usePosSyncSignal`, the catalog-wide refresh, and `.pos-cat-bar` horizontal scroll are unchanged.
+## 7. Tests added/updated
 
-## 11. Tests / Checks Run
+`src/pages/POSPage.product-card.test.ts` (existing `?raw` source-contract tests preserved) gained:
 
-| Check | Result |
-|---|---|
-| `git status --short` | POSPage.tsx/.css/test + new UI_MASTER_PLAN.md + workflow/report docs |
-| `git diff --name-only` | the 3 app files (+ docs) |
-| `git diff --stat` | `POSPage.tsx | 188`, `POSPage.keyboard-contract.test.ts | 92`, `POSPage.css | 110` |
-| `git diff --check` | clean |
-| `npx.cmd tsc -b` | PASS |
-| `npx.cmd vitest run src/pages/POSPage.keyboard-contract.test.ts` | **145 passed** |
-| `npx.cmd vitest run` | **712 passed (31 files)** |
+- A structural guard: the prefs source uses `useSyncExternalStore` and a module-level `listeners` set, and contains **no** per-instance `useState<...>` (locks the regression).
+- A new runtime suite exercising the exported `posPreferencesStore` directly (valid in the node env — no DOM/React render needed):
+  - every consumer reads ONE shared snapshot (a setter moves the value all readers see);
+  - a setter notifies subscribers (what triggers the card re-render) and unsubscribe stops notifications;
+  - `showStock` toggles both directions;
+  - product-name and price scales update independently;
+  - invalid input is rejected (store keeps the last valid value);
+  - a no-op set does not notify (no needless re-render).
+  - State is restored to defaults in `afterEach` so the module singleton can't leak across tests.
 
-### Test updates
-The category-picker contract tests were migrated from modal→dropdown: the blocking-modal predicate (`catModalOpen`→`catDropdownOpen`), the Escape order/closer set (`closeCatModal`→`closeCatDropdown`), the "All tab removed" + "offers ⭐ / routes through shared helper" + UI-10-B parity tests (`pos-category-grid`→`pos-cat-dd-list`, `selectCategoryFromOverlay`→`selectCategoryFromDropdown`), and the focus-return test now asserts the dropdown close-helper **and** that `pos-category-overlay`/`pos-category-modal` are fully removed. Intent preserved; no contract weakened.
+## 8. Tests/checks run with results
 
-## 12. Markdown Hygiene Confirmation
+- `git status --short` / `git diff --name-only` / `git diff --stat` — only authorized files (prefs hook + product-card test + settings/POS files from the prior package + workflow/report docs).
+- `git diff --check` — **clean** (only benign "LF will be replaced by CRLF" notices; no whitespace errors).
+- `git diff --cached --name-only` — **empty** (nothing staged).
+- `npx.cmd tsc -b` — **PASS** (exit 0).
+- `npx.cmd vitest run src/pages/POSPage.keyboard-contract.test.ts` — **145 passed** (keyboard/focus contract intact).
+- `npx.cmd vitest run src/pages/POSPage.product-card.test.ts` — **15 passed** (incl. the new reactivity cases).
+- `npx.cmd vitest run` — **727 passed (32 files)**.
 
-Trailing whitespace stripped from touched Markdown. **Note:** the suggested PowerShell `Get-Content`/`Set-Content -Encoding utf8` cleanup (PS 5.1) corrupted the UTF-8 Thai/em-dash characters in the 4 tracked report/workflow docs; this was detected immediately and the files were **rewritten via the editor (clean UTF-8)** to restore the Thai text. The authored content carries no trailing whitespace, so `git diff --check` → **clean** without re-running the lossy PowerShell step.
+## 9. Boundary confirmation
 
-## 13. Boundary Confirmation
+Only authorized files changed. The fix itself is confined to `src/hooks/pos/usePOSPreferences.ts` + its test. **Not touched:** `useCart.ts`, `useCart.contract.test.ts`, `cartUtils.ts`, cart math, checkout/payment logic, stock/inventory logic, Cart Item Rows (UI-06), Cart Summary (UI-07), Action Buttons (UI-08), Checkout/F12 (UI-09), Toast, Firebase / functions / rules, Android / Capacitor, `.claude/`. No new scripts, dependencies, settings architecture, or persistence layer. Nothing staged, nothing committed. `stash@{0}` untouched (only `git stash list` used).
 
-- [x] UI_MASTER_PLAN.md created; STATE.md phase = 7C-UI-03-CATEGORY-DROPDOWN; CURRENT_PACKET reflects master plan + UI-03; AGY required before Codex
-- [x] Category modal overlay removed; dropdown implemented below the trigger; category selection + sync preserved
-- [x] Cart item rows / summary / action buttons / checkout / F12 untouched; category/product/main-nav functional icons preserved; Select Customer untouched
-- [x] No cart math change; `useCart.ts` / `useCart.contract.test.ts` / `cartUtils.ts` / checkout / stock / seed / Toast / Firebase / Android / `.claude/` untouched
-- [x] No scripts; no new dependencies; no UI-04/06/07/08/09 work; no modal overlay reintroduced
-- [x] No staging, no commit; `stash@{0}` untouched (only `git stash list` used)
+## 10. Markdown hygiene confirmation
 
-## 14. Hidden Risks / Notes
+Touched `docs/` Markdown was edited via UTF-8-preserving surgical edits (no PowerShell `Get-Content`/`Set-Content` round-trip on Thai text). No trailing whitespace introduced; Thai content intact with no mojibake/replacement characters; `git diff --check` passes.
 
-- **Fixed-position anchor measured on open:** if the window is resized while the dropdown is open the anchor could drift; the dropdown is transient (closes on outside-click / Escape / select) and the POS layout is fixed-height (no page scroll), so this is low-risk. A resize/scroll-close listener is an easy follow-up if AGY wants it.
-- **Dead CSS:** `.pos-picker-search` (formerly used only by the removed category modal) is now unused; left in place to keep the change narrow (harmless). Flagged for optional cleanup.
-- **`catBar()` test region now includes the dropdown JSX** (it lives inside `.pos-cat-bar`); the ordering assertions still hold because the dropdown uses `selectCategoryFromDropdown` / `visibleCategories.filter(...).map` (distinct from the pill bar's `selectCategory` / `visibleCategories.map`).
-- **Markdown encoding:** the lossy PS 5.1 hygiene one-liner should not be used on files containing Thai/UTF-8; editor-based writes are safe. (Documented above; files restored.)
-- **CSS-driven visual** — the premium feel is a visual judgment for AGY (node tests can't assert pixels/shadows).
+## 11. Remaining risks
 
-## 15. Next Owner and Next Action
+- **Mount lifecycle, not just navigation:** the fix makes the prefs reactive for any mounted consumer (live update), which also covers the navigate-away-and-back case. No remaining staleness path identified.
+- **Module-singleton in tests:** state is reset in `afterEach`; the only shared global is intentional (it is the source of truth).
+- **Device-local scope unchanged:** preferences remain per-device (localStorage), not branch-synced — appropriate for cashier-terminal display tuning, consistent with the existing `gridColumns` / `fontSize` prefs.
+- **`storage` event listener** is registered once at module load behind a `typeof window !== 'undefined'` guard (SSR/node-safe) and is not removable, which is fine for an app-lifetime singleton store.
 
-**Next owner: Senior QA & UX Lead / AGY** (ROLE FILE: `docs/ai-roles/ux-lead.md`). Human operator sends AGY the master plan, current packet, this report, and the current `git diff` for visual validation of the dropdown. **Codex only after AGY PASS / PASS WITH NOTES.** Do not stage or commit. Do not start UI-04 or any later master-plan item.
+## 12. Next owner and next action
+
+**Next owner:** Senior QA & UX Lead / AGY (`docs/ai-roles/ux-lead.md`). **Next action:** human operator routes this report + `CURRENT_PACKET.md` + the current diff to **AGY first** for visual/functional UAT re-validation (prompt in `NEXT_ACTION.md`) — primarily to confirm the controls now actually drive the cards. Codex only after AGY PASS / PASS WITH NOTES. No staging/commit until Tech Lead / CEO authorizes.
 
 ---
 
+```
 STATE CARD
-Phase: 7C-UI-03-CATEGORY-DROPDOWN
-Current owner: Developer (complete) → Senior QA & UX Lead / AGY
-Verdict: In Progress — Developer implementation complete, awaiting AGY visual/UX review (before Codex)
-Files changed: docs/agent-workflow/UI_MASTER_PLAN.md (new); src/pages/POSPage.tsx; src/pages/POSPage.css; src/pages/POSPage.keyboard-contract.test.ts; docs/agent-workflow/STATE.md; docs/agent-workflow/CURRENT_PACKET.md; docs/agent-workflow/NEXT_ACTION.md; docs/reports/latest-developer-report.md
-Tests/checks: git diff --check clean; tsc -b PASS; POSPage.keyboard-contract 145 passed; full vitest 712 passed
-Staged: None
-Committed: None
-Required fixes: None
-Next owner: Senior QA & UX Lead / AGY (ROLE FILE: docs/ai-roles/ux-lead.md)
-Next action: Human operator sends AGY the master plan + packet + this report + current diff for category-dropdown visual validation; Codex only after AGY PASS / PASS WITH NOTES
-Stop condition: No staging, no commit, no Codex until AGY passes, no UI-04/06/07/08/09; no modal overlay reintroduced; functional icons + Select Customer untouched; stash@{0} untouched; wait for AGY visual validation
+Phase: 7C-UI-04-PRODUCT-GRID-CARDS (re-opened — UAT bug fix)
+Current owner: Developer Agent (bug fix complete) → Senior QA & UX Lead / AGY
+Verdict: UAT Failed / Bug Fix In Progress — settings→product-card wiring fixed and re-verified; awaiting AGY re-validation
+Files changed: src/hooks/pos/usePOSPreferences.ts, src/pages/POSPage.product-card.test.ts (+ carried-over src/lib/settings/settingsNav.ts, src/lib/settings/types.ts, src/pages/SettingsPage.tsx, src/pages/POSPage.tsx, src/pages/POSPage.css; + docs/agent-workflow/STATE.md, CURRENT_PACKET.md, NEXT_ACTION.md, UI_MASTER_PLAN.md, docs/reports/latest-developer-report.md)
+Tests/checks: tsc -b PASS; keyboard-contract 145 passed; product-card 15 passed; full vitest 727 passed (32 files); git diff --check clean; staging empty
+Staged: No
+Committed: No
+Required fixes: Settings controls visible but product cards did not dynamically update — FIXED (single useSyncExternalStore store; pending AGY re-validation)
+Next owner: Senior QA & UX Lead / AGY
+Next action: Human routes report + packet + diff to AGY first (prompt in NEXT_ACTION.md); Codex only after AGY PASS
+Stop condition: No staging, no commit, no Codex until AGY review passes; prior commit authorization HELD/superseded; no UI-05/06/07/08/09; stash@{0} untouched
+```

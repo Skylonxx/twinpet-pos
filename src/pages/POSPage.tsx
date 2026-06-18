@@ -211,9 +211,11 @@ export default function POSPage() {
   const cart = useCart({ products, customer, showToast });
   const { cartLines, totals } = cart;
 
-  // UI-01: cashier-facing display preferences (grid density + text scale). POSPage
-  // only CONSUMES them — no toggle UI here; a future Settings page owns the controls.
-  const { gridColumns, fontSize } = usePOSPreferences();
+  // UI-01/UI-04: cashier-facing display preferences (grid density, text scale,
+  // stock visibility, and independent product-name / price text scales). POSPage
+  // only CONSUMES them — the Settings → "การแสดงผลสินค้า (POS)" page owns the controls.
+  const { gridColumns, fontSize, showStock, productNameFontSize, priceFontSize } =
+    usePOSPreferences();
 
   // UI-01 Directive A: render the cart newest-on-top so the just-scanned item is
   // immediately visible without scrolling. DISPLAY-ONLY — `cartLines` (and the
@@ -904,7 +906,9 @@ export default function POSPage() {
   }, [cartLines.length, activeShift, hasBlockingModalOpen, closeTopModalOnEscape]);
 
   return (
-    <div className={`pos-page pos-fontsize-${fontSize}`}>
+    <div
+      className={`pos-page pos-fontsize-${fontSize} pos-name-${productNameFontSize} pos-price-${priceFontSize}`}
+    >
       {/* UI-03: the standalone Manager-Update banner was removed — it mounted/unmounted above the
           topbar and violently shifted the whole layout. The pending-update urgency now lives on
           the always-present Refresh button below (the `pos-action-link--update` glow), so toggling
@@ -1182,7 +1186,10 @@ export default function POSPage() {
                         <div className="pos-prod-name">{p.name}</div>
                         <div className="pos-prod-bottom">
                           <span className="pos-prod-price">฿{formatMoney(displayPrice)}</span>
-                          <span className="pos-prod-stock">{p.stock}</span>
+                          {/* UI-04: stock indicator is shown only when the preference is on.
+                              When hidden it is not rendered at all, so no empty badge gap
+                              remains (the price simply left-aligns in the bottom row). */}
+                          {showStock && <span className="pos-prod-stock">{p.stock}</span>}
                         </div>
                       </div>
                     </button>

@@ -4,8 +4,8 @@ This file is the source of truth for Phase 7C POS UI refactoring scope and seque
 
 1. UI-01: โครงสร้างเลย์เอาต์หลัก (Main POS Layout) - [DONE]
 2. UI-02: ช่องค้นหาและบาร์โค้ด (Search & Scanner Input) - [DONE]
-3. UI-03: หมวดหมู่สินค้าและเมนูด่วน (Categories & Quick Menu) - [CURRENT]
-4. UI-04: การ์ดสินค้า (Product Grid Cards) - [PENDING]
+3. UI-03: หมวดหมู่สินค้าและเมนูด่วน (Categories & Quick Menu) - [DONE]
+4. UI-04: การ์ดสินค้า (Product Grid Cards) - [CURRENT]
 5. UI-05: แผงตะกร้าสินค้า (Cart Container) - [DONE]
 6. UI-06: รายการสินค้าในตะกร้า (Cart Item Rows) - [PENDING]
 7. UI-07: ส่วนสรุปยอดและส่วนลด (Cart Summary) - [PENDING]
