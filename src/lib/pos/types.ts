@@ -1,6 +1,9 @@
 import type { PaymentMethod, ProductBranchSetting } from '../types';
 
-export type ItemDiscountType = 'none' | 'disc_thb' | 'disc_pct' | 'override';
+// 7C-UI-06-ENHANCEMENT: `disc_per_unit` is a per-unit baht discount -- the row discount is the
+// entered amount multiplied by the line quantity (see getLineTotal in cartUtils). Modes stay
+// explicit (no implicit inference) so each path is type-checked exhaustively.
+export type ItemDiscountType = 'none' | 'disc_thb' | 'disc_pct' | 'disc_per_unit' | 'override';
 
 export type CartLine = {
   lineKey: string;

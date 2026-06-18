@@ -14,6 +14,10 @@ export function getLineTotal(line: CartLine): number {
   const { type, val } = line.discount;
   if (type === 'disc_thb') return roundMoney(Math.max(0, base - val));
   if (type === 'disc_pct') return roundMoney(Math.max(0, base * (1 - val / 100)));
+  // 7C-UI-06-ENHANCEMENT: per-unit baht discount -- the entered amount is taken off EACH unit, so
+  // the row discount is `val * qty` and the line total is `base - val * qty` (clamped at 0). This
+  // mirrors the disc_thb guard (clamp, roundMoney) and the override per-unit shape.
+  if (type === 'disc_per_unit') return roundMoney(Math.max(0, base - val * line.qty));
   if (type === 'override') return roundMoney(Math.max(0, val * line.qty));
   return roundMoney(base);
 }
@@ -48,6 +52,7 @@ export function calcCartTotals(
 export const IDP_LABELS: Record<Exclude<ItemDiscountType, 'none'>, string> = {
   disc_thb: 'ส่วนลด (฿)',
   disc_pct: 'ส่วนลด (%)',
+  disc_per_unit: 'ส่วนลดต่อหน่วย (฿)',
   override: 'ราคาขายใหม่ (ต่อหน่วย)',
 };
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { CartLine, ItemDiscountType } from '../../lib/pos/types';
-import { formatMoney, IDP_LABELS } from '../../lib/pos/cartUtils';
+import { formatMoney, getLineTotal, IDP_LABELS } from '../../lib/pos/cartUtils';
 import NumpadDialog from './NumpadDialog';
 
 type ItemDiscountModalProps = {
@@ -10,6 +10,15 @@ type ItemDiscountModalProps = {
 };
 
 type IdpMode = Exclude<ItemDiscountType, 'none'>;
+
+// Compact tab captions (the full field label lives in IDP_LABELS, shown above the input).
+// 7C-UI-06-ENHANCEMENT: `disc_per_unit` adds the "ลด/หน่วย" (discount per unit) tab.
+const TAB_LABELS: Record<IdpMode, string> = {
+  disc_thb: 'ลด ฿',
+  disc_pct: 'ลด %',
+  disc_per_unit: 'ลด/หน่วย',
+  override: 'แก้ราคา',
+};
 
 export default function ItemDiscountModal({
   line,
@@ -35,12 +44,14 @@ export default function ItemDiscountModal({
 
   if (!line) return null;
 
-  const base = line.unitPrice * line.qty;
   const num = parseFloat(value) || 0;
-  let preview = base;
-  if (mode === 'disc_thb') preview = Math.max(0, base - num);
-  else if (mode === 'disc_pct') preview = Math.max(0, base * (1 - num / 100));
-  else if (mode === 'override') preview = Math.max(0, num * line.qty);
+  // 7C-UI-06-ENHANCEMENT (Codex fix): compute the preview total through the SHARED getLineTotal
+  // path -- the same pure function that produces the real cart line total -- instead of a local
+  // re-implementation of the discount arithmetic. We build a candidate line carrying the in-progress
+  // discount type/value and ask getLineTotal for its total, so the preview and the committed line
+  // total cannot drift: identical per-mode formula, identical clamp, identical roundMoney.
+  const previewLine: CartLine = { ...line, discount: { type: mode, val: num } };
+  const preview = getLineTotal(previewLine);
 
   return (
     <div className="pos-modal-bg" role="dialog" aria-modal="true">
@@ -50,7 +61,7 @@ export default function ItemDiscountModal({
           <div className="pos-idp-prod">{line.productName}</div>
         </div>
         <div className="pos-idp-tabs">
-          {(['disc_thb', 'disc_pct', 'override'] as IdpMode[]).map((m) => (
+          {(['disc_thb', 'disc_pct', 'disc_per_unit', 'override'] as IdpMode[]).map((m) => (
             <button
               key={m}
               type="button"
@@ -60,7 +71,7 @@ export default function ItemDiscountModal({
                 setValue('');
               }}
             >
-              {m === 'disc_thb' ? 'ลด ฿' : m === 'disc_pct' ? 'ลด %' : 'แก้ราคา'}
+              {TAB_LABELS[m]}
             </button>
           ))}
         </div>

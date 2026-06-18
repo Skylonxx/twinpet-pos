@@ -2,79 +2,59 @@
 
 ## Current State
 
-Phase **7C-UI-06-HOTFIX-DISCOUNT-UI** is in **Codex blocker fix** cycle. The Developer is fixing docs/hygiene issues identified by Codex REQUEST CHANGES. The app hotfix implementation is confirmed safe by Codex and is not being changed.
+Phase **7C-UI-06-ENHANCEMENT-DISCOUNT-MODAL** is in the **Codex blocker fix** cycle (built on the Part A hotfix commit `1a68983`). AGY review was **PASS**; Codex returned **REQUEST CHANGES** with two blockers, both now fixed by the Developer:
 
-Review progress:
+- Blocker 1 (hygiene): trailing whitespace on `docs/reports/latest-agy-review.md:8` removed; `git diff --check` PASS.
+- Blocker 2 (app logic): `ItemDiscountModal` preview now computes via the shared `getLineTotal` path (no divergent second implementation of the discount arithmetic).
 
-- AGY review: **PASS** (see `docs/reports/latest-agy-review.md`).
-- Codex review: **REQUEST CHANGES** -- app hotfix scope confirmed safe, but docs/hygiene blockers found (trailing whitespace in AGY report, documentation evidence mismatch on git diff --check claim, stale handoff routing).
-- Developer: fixing the docs/hygiene blockers (this cycle).
+Codex already confirmed the cart math, type coverage, tests, and that forbidden areas were untouched. This fix changed no cart math, no `getLineTotal`, no `useCart.ts`, no `POSPage.tsx`.
 
-Checks (from implementation phase, unchanged):
-
-- TypeScript build: `tsc -b` exit 0.
-- Targeted POS tests: 235 passed (keyboard-contract, product-card, useCart.contract).
-- Full Vitest unit suite: 727 passed (32 files).
-- `git diff --check`: PASS (after trailing whitespace fix).
+Checks (rerun after the fix):
+- `tsc -b`: exit 0.
+- `vitest run src/hooks/pos/useCart.contract.test.ts`: 82 passed.
+- `vitest run` (full): 734 passed (32 files).
+- `git diff --check`: PASS.
 - Staged: none. Committed: none.
-
-Files changed (app): `src/pages/POSPage.tsx`, `src/pages/POSPage.css`, `src/components/pos/ItemDiscountModal.tsx`, `src/components/pos/NumpadDialog.tsx`.
 
 ## What Happens Next
 
-**Current owner: Developer Agent** -- fixing Codex REQUEST CHANGES blockers (docs/hygiene only).
+**Next owner: Codex Reviewer (focused re-review).**
 
-**After fix, next owner: Codex Reviewer** -- focused re-review of the docs/hygiene fixes.
-
-Do not route to Principal Engineer until Codex returns PASS or PASS WITH NOTES.
-
-## Review Chain (remaining after Developer fix)
-
-```
-Developer Agent (now -- fixing Codex blockers)
-  -> Codex Reviewer (focused re-review)
-    -> Principal Engineer Reviewer / Workflow Coordinator (coordination + abnormality checks)
-      -> Tech Lead / CEO authorizes scope closure and commit
-        -> CEO Physical UAT
-```
+Do not route to Principal Engineer until Codex returns PASS or PASS WITH NOTES. If Codex finds further blockers, route back to the Developer.
 
 ---
 
-## Codex Focused Re-Review Prompt (use after Developer fix is complete)
+## Codex Focused Re-Review Prompt (ready to copy)
 
 ```
 TO: Codex Reviewer
-MODEL: best available reviewer model for this run
-REASONING: Medium
-ROLE: Codex Reviewer
 ROLE FILE: docs/ai-roles/reviewer.md
 MODE: Focused re-review after REQUEST CHANGES fix, read-only, no staging, no commit
 
-PHASE: 7C-UI-06-HOTFIX-DISCOUNT-UI (Codex focused re-review)
+PHASE: 7C-UI-06-ENHANCEMENT-DISCOUNT-MODAL (Codex focused re-review)
 
-PRIOR CODEX VERDICT: REQUEST CHANGES
+PRIOR CODEX VERDICT: REQUEST CHANGES (two blockers).
 
 FIXES APPLIED BY DEVELOPER:
-1. Trailing whitespace removed from docs/reports/latest-agy-review.md line 11.
-2. Documentation evidence updated: developer report now notes Codex found the
-   trailing whitespace, Developer fixed it, and rerun git diff --check PASS.
-3. STATE.md and NEXT_ACTION.md updated to reflect AGY PASS, Codex REQUEST CHANGES,
-   Developer fix cycle, and correct routing to Codex re-review.
+1. Blocker 1 (hygiene): removed trailing whitespace on docs/reports/latest-agy-review.md line 8.
+   git diff --check now PASS.
+2. Blocker 2 (app logic): src/components/pos/ItemDiscountModal.tsx no longer re-implements the
+   discount arithmetic for the preview. It now builds a candidate line
+   `{ ...line, discount: { type: mode, val: num } }` and computes the preview via the shared
+   getLineTotal(previewLine). The local `base` variable and per-mode if/else were removed.
 
-APP HOTFIX IMPLEMENTATION UNCHANGED:
-- src/pages/POSPage.tsx: discount badge display (unchanged from prior review).
-- src/pages/POSPage.css: discount badge readability (unchanged from prior review).
-- src/components/pos/ItemDiscountModal.tsx: numpad wiring (unchanged from prior review).
-- src/components/pos/NumpadDialog.tsx: backdrop dismiss race fix (unchanged from prior review).
-- useCart.ts, useCart.contract.test.ts, cartUtils.ts: untouched.
-- No checkout/payment/stock/inventory/FIFO/Firebase/Android/.claude/scripts/tooling.
+UNCHANGED (accepted previously):
+- src/lib/pos/cartUtils.ts getLineTotal math (base - val*qty, clamp, roundMoney).
+- src/lib/pos/types.ts disc_per_unit type; IDP_LABELS / TAB_LABELS coverage.
+- src/hooks/pos/useCart.contract.test.ts per-unit tests (still pass, 82 total).
+- src/hooks/pos/useCart.ts and src/pages/POSPage.tsx untouched.
 
 VERIFY:
-1. git diff --check passes (trailing whitespace fixed).
-2. STATE.md and NEXT_ACTION.md routing is current and correct.
-3. Documentation evidence in latest-developer-report.md is accurate.
-4. All prior app-scope confirmations still hold.
-5. docs/reports/latest-agy-review.md is accounted for in the package.
+1. git diff --check passes.
+2. ItemDiscountModal preview uses the shared getLineTotal; no divergent discount arithmetic remains
+   and no second roundMoney path.
+3. Preview results are numerically identical to before for all four modes (regression safe).
+4. All prior app-scope confirmations still hold; no forbidden files; nothing staged.
 
 RUN AND REPORT:
 git status --short
@@ -83,32 +63,41 @@ git diff --stat
 git diff --check
 git diff --cached --name-only
 
-Produce a verdict (PASS / PASS WITH NOTES / REQUEST CHANGES).
-Do not stage or commit.
+OUTPUT: PASS / PASS WITH NOTES / REQUEST CHANGES. Do not stage or commit.
 If PASS / PASS WITH NOTES, route to Principal Engineer Reviewer / Workflow Coordinator.
+If REQUEST CHANGES, route back to the Developer.
 ```
 
 ---
 
+## Review Chain (remaining)
+
+```
+Developer Agent (just fixed Codex blockers)
+  -> Codex Reviewer (focused re-review -- now)
+    -> Principal Engineer Reviewer / Workflow Coordinator (coordination + abnormality checks)
+      -> Tech Lead / CEO authorizes scope closure and commit
+        -> CEO Physical UAT
+```
+
 ## Important Reminders
 
-- AGY verdict is PASS (confirmed from docs/reports/latest-agy-review.md).
-- The existing governance chain remains the absolute source of truth.
-- Do not stage or commit until Tech Lead / CEO authorizes exact commands.
+- Logic exception is narrow: cart math unlocked ONLY for the per-unit discount.
+- Do not stage or commit the enhancement until Tech Lead / CEO authorizes exact commands.
 - `stash@{0}` is pre-existing unrelated WIP -- do not touch.
 - Old manual workflow remains available as fallback.
 
-## Modified Files in Package (complete list)
+## Modified Files in Package (enhancement, unstaged)
 
-- src/pages/POSPage.tsx -- discount badge display.
-- src/pages/POSPage.css -- discount badge readability.
-- src/components/pos/ItemDiscountModal.tsx -- numpad wiring.
-- src/components/pos/NumpadDialog.tsx -- backdrop dismiss race fix.
-- docs/agent-workflow/STATE.md -- phase / owner / status tracking.
-- docs/agent-workflow/CURRENT_PACKET.md -- hotfix packet.
-- docs/agent-workflow/NEXT_ACTION.md -- handoff routing (this file).
-- docs/reports/latest-developer-report.md -- developer report.
-- docs/reports/latest-agy-review.md -- AGY-generated review artifact.
+- src/lib/pos/types.ts
+- src/lib/pos/cartUtils.ts
+- src/components/pos/ItemDiscountModal.tsx
+- src/pages/POSPage.css
+- src/hooks/pos/useCart.contract.test.ts
+- docs/agent-workflow/STATE.md
+- docs/agent-workflow/CURRENT_PACKET.md
+- docs/agent-workflow/NEXT_ACTION.md
+- docs/reports/latest-developer-report.md
 
 ## Role File Reference
 

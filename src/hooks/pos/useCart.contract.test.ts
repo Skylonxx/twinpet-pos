@@ -18,9 +18,11 @@ import {
   applySetLineQty,
   committedBaseUnits,
   evaluateAddToCartStock,
+  getLineTotal,
   OVERSELL_WARNING_MESSAGE,
   resolveStockMode,
 } from '../../lib/pos/cartUtils';
+import type { ItemDiscountType } from '../../lib/pos/types';
 import type { CartLine, PosProduct, UomOption } from '../../lib/pos/types';
 
 let cartSource: string;
@@ -831,5 +833,51 @@ describe('7C-UI-12-FLOWBITE-TOAST · toast store caps/dedupes/replaces with time
     expect(toastStoreSource).toContain('function clearDismissTimer');
     const schedule = region(toastStoreSource, 'function scheduleDismiss', 'function dismiss');
     expect(schedule).toContain('clearDismissTimer();');
+  });
+});
+
+// ─── 7C-UI-06-ENHANCEMENT · Per-unit item discount math (getLineTotal, pure) ──────────────
+// `getLineTotal` is the single source of truth for a cart line's discounted total (the cart-row
+// badge derives its amount from base - getLineTotal). The new `disc_per_unit` mode takes the
+// entered baht off EACH unit, so the row discount must be `val * qty`. These execute the PURE
+// util directly (node env, no DOM) and lock both the new mode and the existing modes.
+describe('7C-UI-06-ENHANCEMENT · per-unit item discount (getLineTotal)', () => {
+  function lineWith(qty: number, type: ItemDiscountType, val: number): CartLine {
+    // unitPrice is 10 in mkLine, so base = 10 * qty.
+    return { ...mkLine('ชิ้น', qty, 1), discount: { type, val } };
+  }
+
+  test('per-unit discount with qty > 1: 5 baht/unit x 3 = 15 off (base 30 -> 15)', () => {
+    const line = lineWith(3, 'disc_per_unit', 5);
+    expect(getLineTotal(line)).toBe(15);
+    // The cart-row badge amount is base - total; it must equal val * qty.
+    expect(line.unitPrice * line.qty - getLineTotal(line)).toBe(15);
+  });
+
+  test('per-unit discount with qty = 1: 5 baht/unit x 1 = 5 off (base 10 -> 5)', () => {
+    const line = lineWith(1, 'disc_per_unit', 5);
+    expect(getLineTotal(line)).toBe(5);
+    expect(line.unitPrice * line.qty - getLineTotal(line)).toBe(5);
+  });
+
+  test('per-unit discount never drives the line total below 0 (clamped)', () => {
+    // 20 baht/unit x 3 = 60 off a 30 base -> clamps to 0 (same guard as disc_thb).
+    expect(getLineTotal(lineWith(3, 'disc_per_unit', 20))).toBe(0);
+  });
+
+  test('existing fixed-baht discount (disc_thb) is unchanged: 5 off base 30 -> 25', () => {
+    expect(getLineTotal(lineWith(3, 'disc_thb', 5))).toBe(25);
+  });
+
+  test('existing percent discount (disc_pct) is unchanged: 10% off base 30 -> 27', () => {
+    expect(getLineTotal(lineWith(3, 'disc_pct', 10))).toBe(27);
+  });
+
+  test('existing override (per-unit new price) is unchanged: 8 x 3 -> 24', () => {
+    expect(getLineTotal(lineWith(3, 'override', 8))).toBe(24);
+  });
+
+  test('no discount returns the untouched base (10 x 3 -> 30)', () => {
+    expect(getLineTotal(lineWith(3, 'none', 0))).toBe(30);
   });
 });

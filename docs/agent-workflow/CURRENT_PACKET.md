@@ -2,82 +2,73 @@
 
 ## Phase
 
-**7C-UI-06-HOTFIX-DISCOUNT-UI** -- authorized hotfix after CEO Physical UAT failed on the UI-06 commit (`630b742`). Three targeted fixes. Implementation complete, pending AGY review. No staging, no commit.
+**7C-UI-06-ENHANCEMENT-DISCOUNT-MODAL** -- item discount modal scaling plus a new "Discount per unit" (ส่วนลดต่อหน่วย) discount option and its math. Built on the Part A hotfix commit `1a68983`. Implementation complete, pending AGY review. No staging, no commit.
 
-## UAT failed issues (origin of this hotfix)
+## Enhancement goals
 
-1. Cart item row discount badge -- text cramped, overflows, and does not show the actual discount amount.
-2. Item discount modal -- the value input does not trigger the custom on-screen numpad.
-3. Bill discount numpad on iPad / touch -- tapping the input makes the numpad flash and instantly disappear (touch/focus race).
+1. UI scaling -- make `ItemDiscountModal` feel balanced and comfortable next to the large numpad overlay.
+2. New feature -- add a "Discount per unit" discount option (Thai: ส่วนลดต่อหน่วย).
+3. Logic -- per-unit discount: row total discount = per-unit amount x item quantity.
 
-## Authorized scope
+## Logic exception (narrow)
 
-Visual / interaction hotfix only, for the three issues above. Permission explicitly extends to the bill-discount trigger area strictly to fix the numpad race -- this is NOT permission to implement UI-07.
+Tech Lead / CEO authorized modifying cart math/logic strictly to implement Discount per unit. Exercised in:
+- `src/lib/pos/types.ts` -- add `disc_per_unit` to `ItemDiscountType`.
+- `src/lib/pos/cartUtils.ts` -- `getLineTotal` per-unit branch (`base - val * qty`, clamped at 0) and the `IDP_LABELS` entry.
 
-## Implementation result (this packet)
+`src/hooks/pos/useCart.ts` was inspected and left unchanged: its `setLineDiscount` stores `{ type, val }` generically, so the new mode needs no hook change. This narrow permission is not a license for unrelated cart-math edits.
 
-- Fix 1 (discount badge): `src/pages/POSPage.tsx` cart row now renders the formatted discount amount (`ลด ฿X`), derived from values already computed in the row (base minus `getLineTotal`). `src/pages/POSPage.css` `.pos-ci-disc-tag` made `inline-block` + `nowrap` with a touch more padding so it never breaks mid-number or reads as cramped. No new discount math.
-- Fix 2 (item discount modal numpad): `src/components/pos/ItemDiscountModal.tsx` value input now opens the existing touch-only `NumpadDialog` (decimal/zero mode) on pointerdown, mirroring the bill-discount field. The numpad writes back into the field value only; the existing Save button still applies the discount. No discount math, no auto-submit.
-- Fix 3 (numpad touch race): `src/components/pos/NumpadDialog.tsx` backdrop now dismisses on `onPointerDown` instead of `onClick`, so the same tap that opens the dialog (from an input's onPointerDown) can no longer close it via the ghost compatibility click.
+## Implementation summary
 
-## Allowed files (this hotfix)
+- Modal scaling (POSPage.css, idp-scoped only; UomModal shared rules untouched): `.pos-item-disc-popup` width 280px -> 360px, padding 18px -> 22px, gap 10px -> 14px; tabs padding/font enlarged (9px / 12px, nowrap); input 16px; result 13px; actions/buttons enlarged; title/prod/cancel idp overrides added.
+- New tab (ItemDiscountModal.tsx): the tab list now includes `disc_per_unit` rendered as "ลด/หน่วย"; a `TAB_LABELS` map replaces the old inline ternary so each mode caption is explicit. The full field label "ส่วนลดต่อหน่วย (฿)" shows above the input via `IDP_LABELS`.
+- Preview (ItemDiscountModal.tsx): per-unit preview mirrors `getLineTotal` (`base - num * qty`).
+- Math (cartUtils.ts): `getLineTotal` returns `max(0, base - val * qty)` for `disc_per_unit`. The existing cart-row badge already derives its displayed amount from `base - getLineTotal`, so it shows the per-unit row discount with no POSPage change.
+- Save/apply flow unchanged: the existing Save button calls `onSave(mode, val)` -> `setLineDiscount`; no auto-submit; numpad confirm only writes the field value.
 
-- `src/pages/POSPage.tsx` (modified -- discount badge display)
-- `src/pages/POSPage.css` (modified -- discount badge readability)
-- `src/components/pos/ItemDiscountModal.tsx` (modified -- numpad wiring)
-- `src/components/pos/NumpadDialog.tsx` (modified -- backdrop dismiss race fix; this is the existing numpad component)
-- workflow/report docs: `STATE.md`, `CURRENT_PACKET.md`, `NEXT_ACTION.md`, `latest-developer-report.md`
+## Authorized files
 
-Conditionally allowed test files were NOT needed: the `?raw` contract assertions remain green unchanged (no asserted substring/region was removed), so no test edit was justified.
+- `src/lib/pos/types.ts`
+- `src/lib/pos/cartUtils.ts`
+- `src/components/pos/ItemDiscountModal.tsx`
+- `src/pages/POSPage.css`
+- `src/hooks/pos/useCart.contract.test.ts`
+- (allowed but not needed: `src/hooks/pos/useCart.ts`, `src/pages/POSPage.tsx`, `src/components/pos/NumpadDialog.tsx`)
+- docs: `STATE.md`, `CURRENT_PACKET.md`, `NEXT_ACTION.md`, `latest-developer-report.md`
 
-## App-code boundary (preserved)
+`src/lib/pos/types.ts` is outside the "likely allowed" list but was directly required to declare the new discount mode (the canonical type location); justified here and in the developer report.
 
-- No cart math, pricing, discount-calculation, tax, total, checkout/payment, stock/inventory, or FIFO change.
-- `src/hooks/pos/useCart.ts`, `src/hooks/pos/useCart.contract.test.ts`, and `src/lib/pos/cartUtils.ts` untouched.
-- Existing modal behavior, keyboard contracts, bump-flash, qty numpad, F12/payment flow all unchanged.
+## Forbidden files / scope
 
-## Forbidden scope (this hotfix)
-
-- cart math, pricing, discount calculation, tax, total calculation, checkout/payment calculation, stock/inventory, FIFO, `useCart` rules, `cartUtils` calculations
-- restructuring Cart Summary beyond the numpad trigger fix
-- UI-07 / UI-08 / UI-09
-- PaymentModal redesign, checkout/order-submit/stock-mutation changes
+- checkout / payment flow (beyond the existing computed line-discount display path)
+- stock / inventory / FIFO logic
 - Firebase / functions / rules, Android / Capacitor, `.claude/`, scripts, tooling
-- staging, commit, `git add .`
+- UI-07 Cart Summary redesign, UI-08 Action Buttons, UI-09 Checkout / F12
+- staging, commit, `git add`
 
-## Test / check plan
+## Tests / checks
 
 - `git diff --check` (PASS).
-- TypeScript build (`tsc -b`).
-- Targeted POS tests (keyboard-contract, product-card, useCart.contract).
-- Full Vitest unit suite (shared `NumpadDialog` touched).
+- `npx tsc -b` (exit 0).
+- `npx vitest run` targeted (useCart.contract, keyboard-contract, product-card) -- 242 passed (7 new per-unit tests).
+- `npx vitest run` full suite -- 734 passed (32 files).
 
-## Review protocol
+New per-unit math tests (useCart.contract.test.ts): per-unit qty>1 (5x3=15 off), qty=1 (5 off), clamp-at-0, and regression locks for disc_thb / disc_pct / override / none.
+
+## Review protocol (AGY first, then Codex)
 
 1. Developer implements and self-reviews (this packet).
-2. AGY (Senior QA & UX Lead) performs visual / UX review FIRST.
-3. Codex Reviewer reviews code, tests, scope, hygiene, package after AGY passes.
+2. AGY (Senior QA & UX Lead) reviews modal proportions and the new tab/option FIRST.
+3. Codex Reviewer reviews code, types, cart math, and test coverage (heavily) after AGY passes.
 4. Principal Engineer Reviewer / Workflow Coordinator coordinates + abnormality checks.
-5. Tech Lead / CEO authorizes scope closure and commit (commit-only prompt).
+5. Tech Lead / CEO authorizes scope closure and commit.
 6. CEO performs Physical UAT.
 
 ## Stop condition
 
-After this hotfix packet and the developer report, stop. No staging, no commit, no `git add .`. Do not route to Codex before AGY. Wait for AGY visual / UX review.
+After this packet and the developer report, stop. Do not stage or commit the enhancement. Do not route to Codex before AGY. Wait for AGY visual / UX review.
 
 ---
-
-## Role Sequence (this hotfix)
-
-```
-Developer Agent                         -- ROLE FILE: docs/ai-roles/developer.md
-  -> AGY / Senior QA & UX Lead          -- ROLE FILE: docs/ai-roles/ux-lead.md
-    -> Codex Reviewer                   -- ROLE FILE: docs/ai-roles/reviewer.md
-      -> Principal Engineer Reviewer /  -- ROLE FILE: docs/ai-roles/tech-lead.md
-         Workflow Coordinator
-        -> Tech Lead / CEO authorizes scope closure and commit
-          -> CEO Physical UAT
-```
 
 ## STATE CARD Requirement
 
