@@ -2,6 +2,7 @@
 
 **Status:** docs-only design (advisory role contract). Not yet integrated; no executable component.
 This contract defines what the Local Coordinator *may* and *may not* do if/when the pilot is approved.
+Refined in phase 7C-LOCAL-COORDINATOR-PILOT-1A to formally add the 5 dry-run safety rules (see section 9).
 
 ---
 
@@ -122,3 +123,42 @@ The Local Coordinator **reads but does not own** these documents. It never edits
 ## 8. Safety invariant
 
 **If the Local Coordinator and any existing governance document conflict, the existing governance chain and the Tech Lead / CEO decision wins.** The Local Coordinator is advisory-only; it can be ignored, overruled, or discarded at any time without affecting the validity of the existing workflow.
+
+## 9. Dry-run safety rules (added in PILOT-1A)
+
+These five rules were identified during the manual dry-run simulation (PILOT-1) and are now binding parts of this contract. They constrain the advisory behavior only; they grant no new authority. Written in ASCII per Rule 5.
+
+Rule 1 - Tool output beats report claims
+
+- If a report claims git diff, git diff --check, test, or git status results, but actual tool output or reviewer output contradicts the claim, the Local Coordinator must flag the contradiction.
+- The Local Coordinator must not trust report claims over tool output.
+- Routing: an evidence-hygiene conflict goes to the Developer for correction plus a Codex narrow re-check; a governance conflict goes to the Principal Engineer review.
+- The Local Coordinator must not resolve the contradiction by its own authority.
+
+Rule 2 - Untracked files require explicit authorization
+
+- Any untracked file must be explicitly named and authorized before staging or commit.
+- The Local Coordinator must flag untracked files as a package risk unless they are explicitly listed.
+- The Local Coordinator must always warn against git add . (broad staging).
+- The Local Coordinator must never recommend broad staging.
+
+Rule 3 - Stale handoff state blocks routing
+
+- If NEXT_ACTION.md or STATE.md contradicts the current owner, verdict, or completed review state, the Local Coordinator must flag stale handoff state.
+- Routing must stop until the handoff docs are corrected.
+- The Local Coordinator must not route work based on a stale owner or stale action state.
+
+Rule 4 - Codex PASS is not commit authorization
+
+- A Codex PASS or PASS WITH NOTES is a review verdict only.
+- It is not commit authorization.
+- Only the Tech Lead / CEO can authorize staging and commit.
+- The Local Coordinator must flag any attempt to treat a Codex PASS as commit permission.
+
+Rule 5 - ASCII-only reporting
+
+- Local Coordinator terminal and chat reports must be ASCII-only.
+- This is required to avoid Claude CLI / terminal copy-paste mojibake.
+- Prohibited in these reports: emojis, arrows, smart quotes, em dash, box drawing, decorative symbols, checkmark symbols, and any non-ASCII symbol in terminal-style reports.
+- Required in these reports: plain English, simple hyphen lists, simple labels, and no decorative formatting.
+- Scope note: this rule governs generated Local Coordinator reports and terminal-style agent reports. It is not a ban on existing Thai content in project documentation; existing Thai docs must not be corrupted or removed.

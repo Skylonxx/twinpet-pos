@@ -11,19 +11,19 @@ Updated by whichever agent or human currently owns the task.
 
 ## Current Phase
 
-**7C-LOCAL-COORDINATOR-PILOT-0** — a supplemental, docs-only workflow pilot to design a Local Coordinator / Deputy Workflow Helper layer that catches repetitive workflow-hygiene errors (report hygiene, trailing whitespace, path typos, file/package mismatches, unexpected staged files, missing handoff fields, wrong next-owner routing, commit-authorization mistakes). This is an **addition, not a replacement** for the existing governance chain.
+**7C-LOCAL-COORDINATOR-PILOT-1A** — a supplemental, docs-only refinement that formally adds the 5 dry-run safety rules (from the PILOT-1 simulation) to the Local Coordinator pilot docs. This is an **addition, not a replacement** for the existing governance chain.
 
 ## Current Owner
 
-**Developer Agent** — docs-only handoff correction after Principal Engineer governance review.
+**Developer Agent** — docs-only contract refinement.
 
 ## Latest Verdict
 
-**Principal Engineer governance review: PASS WITH NOTES.** Developer corrected stale NEXT_ACTION.md/STATE.md handoff routing. Awaiting Codex Reviewer narrow docs hygiene re-check.
+**Docs-only contract refinement in progress** — added the 5 dry-run safety rules to `LOCAL_COORDINATOR_CONTRACT.md` (section 9) and `LOCAL_COORDINATOR_PILOT.md` (section 7). Awaiting Principal Engineer Reviewer / Workflow Coordinator review. Local Coordinator remains advisory-only; existing governance chain remains the absolute source of truth.
 
 ## Scope
 
-Local Coordinator helper layer **planning only** (docs-only).
+Add the 5 dry-run safety rules to the Local Coordinator docs. **Docs-only** (planning only); no app code, no scripts, no installs, no tooling.
 
 ### Files allowed (this phase)
 
@@ -50,12 +50,13 @@ Local Coordinator helper layer **planning only** (docs-only).
 ## Preflight
 
 - Working tree was **clean** before start.
-- HEAD at start: `06bc831 feat(pos): add product card display preferences` (post-UI-04, Physical UAT PASS).
+- HEAD at start: `e5f3254 docs(workflow): add local coordinator pilot contract` (post-PILOT-0 contract commit).
 - `stash@{0}` present and untouched.
 
 ## Baseline (closed work)
 
 - **7C-UI-04-PRODUCT-GRID-CARDS** — closed, committed at `06bc831`, **CEO Physical UAT: PASS**, post-commit working tree clean.
+- **7C-LOCAL-COORDINATOR-PILOT-0** — pilot contract docs committed at `e5f3254`.
 
 ## Staging / Commit status
 
@@ -81,11 +82,11 @@ Nothing staged. Nothing committed. No authorization sought (docs-only pilot).
 
 ## Next Owner
 
-**Codex Reviewer** (ROLE FILE: `docs/ai-roles/reviewer.md`) — narrow docs/package/governance hygiene re-check after handoff correction.
+**Principal Engineer Reviewer / Workflow Coordinator** (ROLE FILE: `docs/ai-roles/tech-lead.md`) — review the 5 added safety rules for authority creep, Tech Lead bypass, staging/commit/tooling permissions, ASCII-rule enforceability, and source-of-truth integrity.
 
 ## Next Action
 
-Human operator routes `NEXT_ACTION.md` Codex prompt to **Codex Reviewer** for narrow docs handoff re-check. Principal Engineer governance review already passed (PASS WITH NOTES). No commit, no scope expansion until Codex verdict.
+Human operator routes the `NEXT_ACTION.md` Principal Engineer prompt, the two refined Local Coordinator docs, and the current diff to the **Principal Engineer Reviewer / Workflow Coordinator** for review. No commit, no scope expansion, no Codex until that review passes.
 
 ## Role File Reference
 
@@ -98,7 +99,7 @@ Human operator routes `NEXT_ACTION.md` Codex prompt to **Codex Reviewer** for na
 
 ## Stop Condition
 
-Developer stops after handoff correction. **No staging, no commit, no `git add .`**, no scripts, no installs, no tool integration. UI_MASTER_PLAN.md untouched. UI-06/07/08/09 not started. Wait for Codex Reviewer narrow docs hygiene re-check.
+Developer stops after the contract refinement + report. **No staging, no commit, no `git add .`**, no scripts, no installs, no tool integration. UI_MASTER_PLAN.md untouched. UI-05/06/07/08/09 not started. Wait for Principal Engineer Reviewer / Workflow Coordinator review.
 
 ---
 

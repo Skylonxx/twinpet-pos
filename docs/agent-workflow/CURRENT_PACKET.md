@@ -2,17 +2,25 @@
 
 ## Phase
 
-**7C-LOCAL-COORDINATOR-PILOT-0** — Local Coordinator helper layer, **docs-only planning phase**.
+**7C-LOCAL-COORDINATOR-PILOT-1A** — Local Coordinator helper layer, **docs-only contract refinement**.
 
 ## What this packet is
 
-A supplemental workflow pilot to **design** (not build, not integrate) a Local Coordinator / Deputy Workflow Helper layer that can help catch repetitive workflow-hygiene errors before they reach a commit prompt.
+A docs-only refinement of the Local Coordinator pilot that **formally captures the 5 dry-run safety rules** identified during the PILOT-1 manual dry-run simulation. The rules are added to `LOCAL_COORDINATOR_CONTRACT.md` (section 9) and `LOCAL_COORDINATOR_PILOT.md` (section 7).
 
-- This is a **docs-only planning phase.** No app code, no tests, no scripts, no installs, no tool integration.
+- This is a **docs-only contract refinement.** No app code, no tests, no scripts, no installs, no tooling.
 - **The old workflow remains the source of truth.** This pilot is an addition, not a replacement.
 - **Local Coordinator is helper-only / advisory-only.** It **cannot** authorize scope, stage, commit, approve, or override any role.
-- No production integration yet — only the contract and test scenarios are designed in this phase.
-- No UI work. `UI_MASTER_PLAN.md` is untouched. UI-05 is already DONE; UI-06/07/08/09 are not started and not authorized.
+- The 5 rules constrain advisory behavior only; they grant no new authority.
+- No production integration yet. No UI work. `UI_MASTER_PLAN.md` is untouched. UI-05 is already DONE; UI-06/07/08/09 are not started and not authorized.
+
+## The 5 dry-run safety rules captured by this packet
+
+1. Tool output beats report claims (flag contradictions; never trust a report claim over actual tool output; route evidence conflicts to Developer + Codex narrow re-check, governance conflicts to Principal Engineer; do not resolve by authority).
+2. Untracked files require explicit authorization (flag as package risk unless explicitly listed; always warn against git add .; never recommend broad staging).
+3. Stale handoff state blocks routing (if NEXT_ACTION.md / STATE.md contradicts current owner/verdict/review state, flag and stop routing until corrected).
+4. Codex PASS is not commit authorization (review verdict only; only Tech Lead / CEO authorizes staging/commit; flag any attempt to treat a Codex PASS as commit permission).
+5. ASCII-only reporting (Local Coordinator and terminal-style reports must be ASCII-only to avoid mojibake; not a ban on existing Thai documentation).
 
 ## Existing workflow that MUST NOT be replaced
 
@@ -65,7 +73,7 @@ Design a small, low-risk helper that can flag:
 
 ## Status
 
-**Docs-only pilot drafting in progress** — contract + pilot scenarios drafted; awaiting **Principal Engineer Reviewer / Workflow Coordinator** governance-risk review.
+**Docs-only contract refinement in progress** — the 5 dry-run safety rules added to `LOCAL_COORDINATOR_CONTRACT.md` (section 9) and `LOCAL_COORDINATOR_PILOT.md` (section 7); awaiting **Principal Engineer Reviewer / Workflow Coordinator** review.
 
 ---
 

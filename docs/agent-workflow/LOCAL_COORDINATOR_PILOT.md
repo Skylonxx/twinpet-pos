@@ -2,6 +2,7 @@
 
 **Status:** docs-only design pilot. No tool integration, no installs, no app code.
 **Authority:** advisory-only. The existing governance chain remains the absolute source of truth.
+**PILOT-1A refinement:** the 5 dry-run safety rules from the PILOT-1 simulation are now formalized (see section 7 here and section 9 of `LOCAL_COORDINATOR_CONTRACT.md`).
 
 ---
 
@@ -89,6 +90,16 @@ A simulated, **read-only** dry run using existing report files only — no scrip
 6. **Do not** write app files. **Do not** stage. **Do not** commit.
 
 The dry-run output is advisory text only. It is handed to the human operator / the relevant existing role, which retains all authority.
+
+## 7. Dry-run safety rules (PILOT-1A)
+
+The PILOT-1 manual dry-run produced five safety rules. They are now binding in `LOCAL_COORDINATOR_CONTRACT.md` section 9 and summarized here. Each maps back to a historical scenario in section 4. Written in ASCII per Rule 5.
+
+- Rule 1 - Tool output beats report claims. A report claim about git diff, git diff --check, test, or git status must never be trusted over actual tool or reviewer output; on contradiction, flag it. Route an evidence-hygiene conflict to the Developer plus a Codex narrow re-check, and a governance conflict to the Principal Engineer. Do not resolve by authority. (Maps to scenario 2.)
+- Rule 2 - Untracked files require explicit authorization. Untracked files must be explicitly named and authorized before staging or commit; flag them as package risk unless listed; always warn against git add .; never recommend broad staging. (Maps to scenario 5.)
+- Rule 3 - Stale handoff state blocks routing. If NEXT_ACTION.md or STATE.md contradicts the current owner, verdict, or completed review state, flag stale handoff state and stop routing until the docs are corrected. (Maps to the stale-handoff finding.)
+- Rule 4 - Codex PASS is not commit authorization. A Codex PASS or PASS WITH NOTES is a review verdict only; only the Tech Lead / CEO authorizes staging and commit; flag any attempt to treat a Codex PASS as commit permission. (Maps to scenarios 6 and 8.)
+- Rule 5 - ASCII-only reporting. Local Coordinator terminal and chat reports must be ASCII-only to avoid CLI / terminal copy-paste mojibake; prohibit emojis, arrows, smart quotes, em dash, box drawing, decorative symbols, checkmark symbols, and non-ASCII terminal symbols; require plain English, hyphen lists, and simple labels. This governs generated reports only and is not a ban on existing Thai documentation.
 
 ---
 
