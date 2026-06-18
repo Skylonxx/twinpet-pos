@@ -1,4 +1,4 @@
-# Agent Workflow — State Board
+# Agent Workflow -- State Board
 
 This file is the single source of truth for the current state of the multi-agent handoff workflow.
 Updated by whichever agent or human currently owns the task.
@@ -11,27 +11,24 @@ Updated by whichever agent or human currently owns the task.
 
 ## Current Phase
 
-**7C-LOCAL-COORDINATOR-PILOT-1A** — a supplemental, docs-only refinement that formally adds the 5 dry-run safety rules (from the PILOT-1 simulation) to the Local Coordinator pilot docs. This is an **addition, not a replacement** for the existing governance chain.
+**7C-LOCAL-COORDINATOR-PILOT-2** -- Local Coordinator manual readiness simulation, now closed.
 
 ## Current Owner
 
-**Developer Agent** — docs-only contract refinement.
+**CEO / Tech Lead** -- decision pending on next steps (resume UI Master Plan, run another simulation, or prepare limited tooling exploration).
 
 ## Latest Verdict
 
-**Docs-only contract refinement in progress** — added the 5 dry-run safety rules to `LOCAL_COORDINATOR_CONTRACT.md` (section 9) and `LOCAL_COORDINATOR_PILOT.md` (section 7). Awaiting Principal Engineer Reviewer / Workflow Coordinator review. Local Coordinator remains advisory-only; existing governance chain remains the absolute source of truth.
+**CLOSED / SIMULATION COMPLETED / PRINCIPAL ENGINEER PASS WITH NOTES** -- the PILOT-2 manual simulation for UI-06 readiness was completed successfully. The Local Coordinator correctly identified that UI-06 cannot start without explicit Tech Lead / CEO authorization, that workflow docs must be closed before a new phase opens, and that the existing governance chain must be followed. Principal Engineer reviewed and passed with notes. Local Coordinator remains advisory-only. No tooling integration authorized.
 
 ## Scope
 
-Add the 5 dry-run safety rules to the Local Coordinator docs. **Docs-only** (planning only); no app code, no scripts, no installs, no tooling.
+Local Coordinator manual readiness simulation (PILOT-2) completed. **Docs-only** (no app code, no scripts, no installs, no tooling). The simulation validated the Local Coordinator contract against a hypothetical UI-06 phase without starting any implementation.
 
-### Files allowed (this phase)
+### Files allowed (this closure update)
 
 - `docs/agent-workflow/STATE.md`
-- `docs/agent-workflow/CURRENT_PACKET.md`
 - `docs/agent-workflow/NEXT_ACTION.md`
-- `docs/agent-workflow/LOCAL_COORDINATOR_PILOT.md`
-- `docs/agent-workflow/LOCAL_COORDINATOR_CONTRACT.md`
 
 ### Files forbidden (this phase)
 
@@ -43,50 +40,57 @@ Add the 5 dry-run safety rules to the Local Coordinator docs. **Docs-only** (pla
 - `.claude/`
 - scripts (no creation), external tools / installs
 - `docs/agent-workflow/UI_MASTER_PLAN.md`
-- `docs/reports/*` (not authorized this phase)
+- `docs/reports/*`
 
 ---
 
 ## Preflight
 
-- Working tree was **clean** before start.
-- HEAD at start: `e5f3254 docs(workflow): add local coordinator pilot contract` (post-PILOT-0 contract commit).
+- Working tree was **clean** before this closure update.
+- HEAD at start: `58eeb19 docs(workflow): refine local coordinator safety contract`.
 - `stash@{0}` present and untouched.
 
 ## Baseline (closed work)
 
-- **7C-UI-04-PRODUCT-GRID-CARDS** — closed, committed at `06bc831`, **CEO Physical UAT: PASS**, post-commit working tree clean.
-- **7C-LOCAL-COORDINATOR-PILOT-0** — pilot contract docs committed at `e5f3254`.
+- **7C-UI-04-PRODUCT-GRID-CARDS** -- closed, committed at `06bc831`, **CEO Physical UAT: PASS**, post-commit working tree clean.
+- **7C-LOCAL-COORDINATOR-PILOT-0** -- pilot contract docs committed at `e5f3254`.
+- **7C-LOCAL-COORDINATOR-PILOT-1A** -- safety contract refinement committed at `58eeb19`.
+- **7C-LOCAL-COORDINATOR-PILOT-2** -- manual readiness simulation completed (this closure).
 
 ## Staging / Commit status
 
-Nothing staged. Nothing committed. No authorization sought (docs-only pilot).
+Closure update staged and committed. Only `STATE.md` and `NEXT_ACTION.md` modified.
 
 ---
 
-## Pipeline Status (per UI_MASTER_PLAN.md — untouched this phase)
+## Pipeline Status (per UI_MASTER_PLAN.md -- untouched this phase)
 
 | Item | Status |
 |---|---|
 | UI-01 Main POS Layout | DONE |
 | UI-02 Search & Scanner Input | DONE |
 | UI-03 Categories & Quick Menu | DONE |
-| UI-04 Product Grid Cards | DONE — committed `06bc831`, CEO Physical UAT PASS |
+| UI-04 Product Grid Cards | DONE -- committed `06bc831`, CEO Physical UAT PASS |
 | UI-05 Cart Container | DONE |
-| UI-06 Cart Item Rows | PENDING (NOT started — not authorized) |
-| UI-07 Cart Summary | PENDING (NOT started — not authorized) |
-| UI-08 Action Buttons | PENDING (NOT started — not authorized) |
-| UI-09 Checkout Button (F12) | PENDING (NOT started — not authorized) |
+| UI-06 Cart Item Rows | PENDING (NOT started -- not authorized) |
+| UI-07 Cart Summary | PENDING (NOT started -- not authorized) |
+| UI-08 Action Buttons | PENDING (NOT started -- not authorized) |
+| UI-09 Checkout Button (F12) | PENDING (NOT started -- not authorized) |
 
-> This pilot does **not** advance any UI master-plan item. UI-05 is already DONE per prior work; UI-06/07/08/09 remain unstarted and unauthorized.
+> No UI master-plan item was advanced by the Local Coordinator pilot phases. UI-05 is already DONE per prior work; UI-06/07/08/09 remain unstarted and unauthorized.
 
 ## Next Owner
 
-**Principal Engineer Reviewer / Workflow Coordinator** (ROLE FILE: `docs/ai-roles/tech-lead.md`) — review the 5 added safety rules for authority creep, Tech Lead bypass, staging/commit/tooling permissions, ASCII-rule enforceability, and source-of-truth integrity.
+**CEO / Tech Lead** -- next decision required before any implementation or planning work resumes.
 
 ## Next Action
 
-Human operator routes the `NEXT_ACTION.md` Principal Engineer prompt, the two refined Local Coordinator docs, and the current diff to the **Principal Engineer Reviewer / Workflow Coordinator** for review. No commit, no scope expansion, no Codex until that review passes.
+See `NEXT_ACTION.md` for details. CEO / Tech Lead must issue a separate explicit authorization before any of the following can begin:
+- Resuming the UI Master Plan (UI-06 planning/discovery)
+- Running another Local Coordinator simulation
+- Preparing a limited tooling exploration plan
+
+No Developer/AGY/Codex implementation route is active until Tech Lead / CEO issues a new authorization.
 
 ## Role File Reference
 
@@ -99,13 +103,13 @@ Human operator routes the `NEXT_ACTION.md` Principal Engineer prompt, the two re
 
 ## Stop Condition
 
-Developer stops after the contract refinement + report. **No staging, no commit, no `git add .`**, no scripts, no installs, no tool integration. UI_MASTER_PLAN.md untouched. UI-05/06/07/08/09 not started. Wait for Principal Engineer Reviewer / Workflow Coordinator review.
+All work stopped. Awaiting CEO / Tech Lead next decision. No staging, no commit, no `git add .`, no scripts, no installs, no tool integration. UI_MASTER_PLAN.md untouched. UI-06/07/08/09 not started.
 
 ---
 
 ## Stash
 
-`stash@{0}` — pre-existing unrelated WIP stash. **Do not touch.** (Only `git stash list` used; untouched.)
+`stash@{0}` -- pre-existing unrelated WIP stash. **Do not touch.** (Only `git stash list` used; untouched.)
 
 ---
 

@@ -2,85 +2,46 @@
 
 ## Current State
 
-Developer Agent has completed the **7C-LOCAL-COORDINATOR-PILOT-1A** docs-only contract refinement: the 5 dry-run safety rules from the PILOT-1 simulation are now formalized in `LOCAL_COORDINATOR_CONTRACT.md` (section 9) and `LOCAL_COORDINATOR_PILOT.md` (section 7), with `STATE.md` and `CURRENT_PACKET.md` updated to track the phase. No app code, tests, scripts, installs, or tool integration. `UI_MASTER_PLAN.md` is untouched. Nothing is staged or committed. The Local Coordinator remains advisory-only; the existing governance chain remains the absolute source of truth.
+Phase **7C-LOCAL-COORDINATOR-PILOT-2** is now **closed**. The manual readiness simulation for a hypothetical UI-06 phase was completed successfully. The Local Coordinator correctly assessed repository readiness and governance requirements, confirming that:
 
-**Next owner: Principal Engineer Reviewer / Workflow Coordinator** — review the 5 added safety rules for authority creep and governance integrity.
+- UI-06 cannot start without explicit Tech Lead / CEO authorization.
+- Workflow docs must be formally closed before a new phase opens.
+- The existing governance chain (Developer, AGY, Codex, Principal Engineer, Tech Lead / CEO, CEO Physical UAT) must be followed.
+- The Local Coordinator remains advisory-only and does not authorize, stage, commit, or override any role.
+
+Principal Engineer review: **PASS WITH NOTES**.
+Local Coordinator status: **advisory-only, no tooling integration**.
+App code: **untouched throughout all pilot phases**.
+
+## Completed Local Coordinator Pilot Phases
+
+- **PILOT-0** -- initial contract and pilot docs drafted, committed at `e5f3254`.
+- **PILOT-1** -- manual dry-run simulation over historical UI-04 scenarios (read-only, not committed separately).
+- **PILOT-1A** -- 5 dry-run safety rules formalized in contract docs, committed at `58eeb19`.
+- **PILOT-2** -- manual readiness simulation for hypothetical UI-06, completed and closed (this commit).
 
 ## What Happens Next
 
-1. Human operator reads this file, `CURRENT_PACKET.md`, the two refined Local Coordinator docs, and the current diff.
-2. Human operator sends the Principal Engineer Reviewer / Workflow Coordinator the review prompt below.
-3. Principal Engineer returns a verdict (PASS / PASS WITH NOTES / FAIL).
-4. If FAIL or PASS WITH NOTES requiring changes, return to Developer for doc revision.
-5. If PASS, route to Tech Lead / CEO (through Principal Engineer) for a keep / revise / discard decision on the pilot. No integration, no commit, no scope expansion until then.
+**Next owner: CEO / Tech Lead.**
 
-Do NOT route to Codex, stage, commit, or integrate any tool until the Principal Engineer review passes.
+No Developer, AGY, or Codex implementation route is active. A separate explicit authorization from Tech Lead / CEO is required before any of the following can begin:
 
----
+1. **Resume UI Master Plan** -- open UI-06 (Cart Item Rows) planning/discovery as a new authorized phase. This would follow the normal governance chain: Developer implements, AGY reviews UI/UX, Codex reviews code, Principal Engineer coordinates, Tech Lead / CEO authorizes scope and commits, CEO performs Physical UAT.
 
-## Copy-Paste Prompt - Principal Engineer Reviewer / Workflow Coordinator (DO THIS NEXT)
+2. **Run another simulation** -- test the Local Coordinator contract against a different scenario or with additional complexity.
 
-```
-TO: Principal Engineer Reviewer / Workflow Coordinator
-MODEL: best available reviewer model for this run
-REASONING: Medium
-ROLE: Principal Engineer Reviewer / Workflow Coordinator
-ROLE FILE: docs/ai-roles/tech-lead.md
-MODE: Docs-only governance review of the Local Coordinator safety-rule refinement, no edits, no staging, no commit
+3. **Prepare a limited tooling exploration plan** -- if the CEO decides the Local Coordinator should move beyond docs-only advisory toward lightweight tooling, a scoped exploration plan would need to be drafted and authorized separately.
 
-PHASE: 7C-LOCAL-COORDINATOR-PILOT-1A
-SCOPE: verify the 5 dry-run safety rules added to the Local Coordinator pilot docs
-
-Inputs:
-- docs/agent-workflow/LOCAL_COORDINATOR_CONTRACT.md (section 9 - the 5 rules)
-- docs/agent-workflow/LOCAL_COORDINATOR_PILOT.md (section 7 - the 5 rules summary)
-- docs/agent-workflow/CURRENT_PACKET.md (active packet)
-- docs/agent-workflow/STATE.md (state board)
-- the current working-tree diff (git diff)
-
-REVIEW MUST VERIFY:
-1. All 5 rules are present and correctly stated:
-   - Rule 1 - Tool output beats report claims.
-   - Rule 2 - Untracked files require explicit authorization.
-   - Rule 3 - Stale handoff state blocks routing.
-   - Rule 4 - Codex PASS is not commit authorization.
-   - Rule 5 - ASCII-only reporting.
-2. The Local Coordinator remains advisory only (owns no decision, artifact, or authorization).
-3. No authority creep was introduced by the new rules.
-4. No direct Tech Lead bypass was introduced (escalation to Tech Lead / CEO still flows only
-   through the Principal Engineer).
-5. No staging, commit, or tooling permissions were introduced anywhere in the rules.
-6. The ASCII-only reporting rule is present and enforceable, and is scoped to generated
-   reports only (not a ban on existing Thai documentation).
-7. The existing governance chain remains the absolute source of truth, with the safety
-   invariant intact (existing chain + Tech Lead / CEO wins on any conflict).
-
-Also verify boundary hygiene:
-- Only the 5 authorized docs changed; no app code/tests/scripts/installs; UI_MASTER_PLAN.md
-  untouched; docs/reports untouched; nothing staged; nothing committed; stash@{0} untouched.
-
-RUN AND REPORT:
-git status --short
-git diff --name-only
-git diff --stat
-git diff --check
-git diff --cached --name-only
-
-Produce a verdict (PASS / PASS WITH NOTES / FAIL) with specific findings.
-Do not stage or commit. Do not integrate any tool. Do not start any UI master-plan item.
-If the pilot needs a keep / revise / discard decision, escalate to Tech Lead / CEO - do not decide scope yourself.
-```
+No work begins until the CEO / Tech Lead issues a new authorization specifying which path to take.
 
 ---
 
 ## Important Reminders
 
-- Principal Engineer first - do NOT route to Codex, stage, commit, or integrate any tool until this review passes.
-- UI_MASTER_PLAN.md is the Phase 7C source of truth and is untouched - no UI master-plan work (UI-05/06/07/08/09) is authorized.
-- This phase is docs-only: no app code, no tests, no scripts, no installs, no tool integration.
+- UI_MASTER_PLAN.md is the Phase 7C source of truth and is untouched -- no UI master-plan work (UI-06/07/08/09) is authorized.
 - The existing governance chain remains the absolute source of truth; the Local Coordinator is advisory-only and overrides nothing.
-- Do not stage or commit until Tech Lead / CEO authorizes exact commands.
-- stash@{0} is pre-existing unrelated WIP - do not touch.
+- Do not stage or commit until Tech Lead / CEO authorizes exact commands for a new phase.
+- stash@{0} is pre-existing unrelated WIP -- do not touch.
 - Old manual workflow remains available as fallback.
 
 ## Role File Reference
