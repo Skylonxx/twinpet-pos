@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { CartLine, ItemDiscountType } from '../../lib/pos/types';
 import { formatMoney, getLineTotal, IDP_LABELS } from '../../lib/pos/cartUtils';
+import { useAuth } from '../../lib/hooks/useAuth';
 import NumpadDialog from './NumpadDialog';
 
 type ItemDiscountModalProps = {
@@ -20,38 +21,104 @@ const TAB_LABELS: Record<IdpMode, string> = {
   override: 'แก้ราคา',
 };
 
+// Safe default mode any user may always use (no RBAC restriction).
+const DEFAULT_MODE: IdpMode = 'disc_thb';
+
+// 7C-UI-06-HOTFIX-MODAL-STATE-REVISION: each tab keeps its OWN draft input value so switching tabs
+// never destroys what was typed in another tab. A fresh object per call avoids shared mutable state.
+const emptyDraftValues = (): Record<IdpMode, string> => ({
+  disc_thb: '',
+  disc_pct: '',
+  disc_per_unit: '',
+  override: '',
+});
+
 export default function ItemDiscountModal({
   line,
   onSave,
   onClose,
 }: ItemDiscountModalProps) {
-  const [mode, setMode] = useState<IdpMode>('disc_thb');
-  const [value, setValue] = useState('');
+  // 7C-UI-06-HOTFIX-MODAL-UX-RBAC Fix 3: Price Override is a manager/admin-only action. The role
+  // is read from the existing auth context (useAuth -> user.role: UserRole). No parallel auth
+  // source, no session change. Default-deny: a null user (should not occur inside POS) is treated
+  // as not allowed.
+  const { user } = useAuth();
+  const canOverridePrice = user?.role === 'manager' || user?.role === 'admin';
+
+  // The override tab is hidden for staff; the modal only offers the discount modes everyone may use.
+  const availableModes: IdpMode[] = canOverridePrice
+    ? ['disc_thb', 'disc_pct', 'disc_per_unit', 'override']
+    : ['disc_thb', 'disc_pct', 'disc_per_unit'];
+
+  const [mode, setMode] = useState<IdpMode>(DEFAULT_MODE);
+  // Per-tab draft: one input string per mode. `mode` is the active tab; `draftValues[mode]` is the
+  // field shown/edited. Only Save commits; switching tabs and Clear never mutate the cart line.
+  const [draftValues, setDraftValues] = useState<Record<IdpMode, string>>(emptyDraftValues);
   // UI-06 hotfix Fix 2: the value field opens the custom on-screen numpad on touch (like the
   // bill-discount field) instead of falling back to the native mobile keyboard.
   const [numpadOpen, setNumpadOpen] = useState(false);
 
   useEffect(() => {
     if (!line) return;
+    // Any newly (re)opened modal starts with the numpad closed and ALL tab drafts empty, then seeds
+    // only the saved mode's own tab with the saved value -- so re-opening shows exactly what was
+    // committed, and the other tabs start blank.
+    setNumpadOpen(false);
+    const drafts = emptyDraftValues();
     if (line.discount.type !== 'none') {
-      setMode(line.discount.type as IdpMode);
-      setValue(String(line.discount.val || ''));
+      const persisted = line.discount.type as IdpMode;
+      // RBAC state guard: never open in (or seed) price-override mode for a non-manager, even if the
+      // line already carries an override (set earlier by a manager). Fall back to a safe discount
+      // mode so override can be neither shown nor applied through internal state.
+      if (persisted === 'override' && !canOverridePrice) {
+        setMode(DEFAULT_MODE);
+      } else {
+        drafts[persisted] = String(line.discount.val || '');
+        setMode(persisted);
+      }
     } else {
-      setMode('disc_thb');
-      setValue('');
+      setMode(DEFAULT_MODE);
     }
-  }, [line]);
+    setDraftValues(drafts);
+  }, [line, canOverridePrice]);
 
   if (!line) return null;
 
-  const num = parseFloat(value) || 0;
-  // 7C-UI-06-ENHANCEMENT (Codex fix): compute the preview total through the SHARED getLineTotal
-  // path -- the same pure function that produces the real cart line total -- instead of a local
-  // re-implementation of the discount arithmetic. We build a candidate line carrying the in-progress
-  // discount type/value and ask getLineTotal for its total, so the preview and the committed line
-  // total cannot drift: identical per-mode formula, identical clamp, identical roundMoney.
-  const previewLine: CartLine = { ...line, discount: { type: mode, val: num } };
+  // ── Draft vs saved state (per-tab memory; 7C-UI-06-HOTFIX-MODAL-STATE-REVISION) ────────────
+  // `mode` + `draftValues` are the LOCAL DRAFT only. The committed cart line (line.discount) is never
+  // mutated here -- the parent's onSave is the ONLY write path, called solely by Save (handleSave).
+  // Switching tabs and Clear edit the draft only; Cancel (onClose) discards the draft and leaves the
+  // saved line untouched.
+  const num = parseFloat(draftValues[mode]) || 0;
+
+  // Empty/zero override safety: an empty or non-positive draft is treated as NO discount for BOTH the
+  // preview and Save. So an empty override previews the original base price (never THB 0.00) and never
+  // commits override-0. For every mode, `num <= 0` => effective type 'none' (getLineTotal returns base).
+  const effectiveType: ItemDiscountType = num > 0 ? mode : 'none';
+
+  // 7C-UI-06-ENHANCEMENT (Codex fix): the preview total is computed through the SHARED getLineTotal
+  // path -- the same pure function that produces the real cart line total -- not a local re-impl of
+  // the discount arithmetic. previewLine uses `effectiveType`, so empty/zero never yields a 0 price.
+  const previewLine: CartLine = { ...line, discount: { type: effectiveType, val: num } };
   const preview = getLineTotal(previewLine);
+
+  // Save COMMITS only the active mode + its draft value. Empty/zero => onSave('none', 0) (the project
+  // convention for "no discount"), so override-0 can never be committed. The RBAC guard additionally
+  // ensures a non-manager can never submit an override even via stale internal state.
+  const handleSave = () => {
+    const safeMode: IdpMode = mode === 'override' && !canOverridePrice ? DEFAULT_MODE : mode;
+    onSave(num > 0 ? safeMode : 'none', num);
+    onClose();
+  };
+
+  // Clear edits the DRAFT ONLY: reset the active mode to the safe default and blank every tab's draft,
+  // so the preview returns to the base price. It does NOT call onSave -- the saved cart line stays
+  // intact until Save (Clear then Cancel keeps the original discount; Clear then Save removes it).
+  const handleClear = () => {
+    setMode(DEFAULT_MODE);
+    setDraftValues(emptyDraftValues());
+    setNumpadOpen(false);
+  };
 
   return (
     <div className="pos-modal-bg" role="dialog" aria-modal="true">
@@ -61,14 +128,17 @@ export default function ItemDiscountModal({
           <div className="pos-idp-prod">{line.productName}</div>
         </div>
         <div className="pos-idp-tabs">
-          {(['disc_thb', 'disc_pct', 'disc_per_unit', 'override'] as IdpMode[]).map((m) => (
+          {availableModes.map((m) => (
             <button
               key={m}
               type="button"
               className={`pos-idp-tab${mode === m ? ' on' : ''}`}
               onClick={() => {
+                // Per-tab memory: switch the ACTIVE tab only. Each tab keeps its own draft value, so
+                // switching away and back preserves what was typed. Close the numpad so it reseeds
+                // from the newly active tab's value on next open. No onSave, no auto-apply.
                 setMode(m);
-                setValue('');
+                setNumpadOpen(false);
               }}
             >
               {TAB_LABELS[m]}
@@ -81,8 +151,8 @@ export default function ItemDiscountModal({
             className="pos-idp-input"
             type="number"
             min={0}
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
+            value={draftValues[mode]}
+            onChange={(e) => setDraftValues((d) => ({ ...d, [mode]: e.target.value }))}
             onPointerDown={(e) => {
               // Touch/click opens the custom POS numpad instead of the native mobile keyboard,
               // mirroring the bill-discount field. preventDefault suppresses (does not force)
@@ -98,20 +168,20 @@ export default function ItemDiscountModal({
           <span className="pos-idp-result-lbl">ราคาหลังปรับ</span>
           <span className="pos-idp-result-val">฿{formatMoney(preview)}</span>
         </div>
-        <div className="pos-idp-actions">
-          <button type="button" className="pos-idp-cancel" onClick={onClose}>
-            ยกเลิก
+        {/* Standard dialog footer (7C-UI-06-HOTFIX-MODAL-REDESIGN): subtle ghost Clear on the left,
+            Cancel (outline) + Save (primary) grouped on the right with clean spacing. */}
+        <div className="pos-idp-footer">
+          <button type="button" className="pos-idp-clear" onClick={handleClear}>
+            ล้างส่วนลด
           </button>
-          <button
-            type="button"
-            className="pos-idp-save"
-            onClick={() => {
-              onSave(num > 0 ? mode : 'none', num);
-              onClose();
-            }}
-          >
-            บันทึก
-          </button>
+          <div className="pos-idp-footer-actions">
+            <button type="button" className="pos-idp-btn pos-idp-btn-cancel" onClick={onClose}>
+              ยกเลิก
+            </button>
+            <button type="button" className="pos-idp-btn pos-idp-btn-save" onClick={handleSave}>
+              บันทึก
+            </button>
+          </div>
         </div>
       </div>
 
@@ -128,7 +198,8 @@ export default function ItemDiscountModal({
         maxLength={7}
         onClose={() => setNumpadOpen(false)}
         onConfirm={(v) => {
-          setValue(String(v));
+          // The numpad edits only the ACTIVE tab's draft value.
+          setDraftValues((d) => ({ ...d, [mode]: String(v) }));
           setNumpadOpen(false);
         }}
       />

@@ -1473,6 +1473,57 @@
   cursor: pointer;
 }
 
+/* 7C-UI-06-HOTFIX-MODAL-REDESIGN: standard dialog footer. A subtle ghost "ล้างส่วนลด" sits on the
+   left; Cancel (outline) + Save (primary) are grouped on the right. Replaces the prior full-width
+   Clear block + awkwardly-proportioned actions row. */
+.pos-idp-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 2px;
+}
+
+.pos-idp-clear {
+  border: none;
+  background: transparent;
+  color: var(--danger, #a32d2d);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 8px 2px;
+}
+
+.pos-idp-clear:hover {
+  text-decoration: underline;
+}
+
+.pos-idp-footer-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.pos-idp-btn {
+  padding: 9px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.pos-idp-btn-cancel {
+  border: 0.5px solid var(--g200, #d3d1c7);
+  background: white;
+  color: var(--g600, #5f5e5a);
+}
+
+.pos-idp-btn-save {
+  border: none;
+  background: var(--p600, #534ab7);
+  color: white;
+  font-weight: 500;
+}
+
 /* Product picker */
 .pos-picker-dialog {
   background: white;

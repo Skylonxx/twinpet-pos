@@ -11,56 +11,57 @@ Updated by whichever agent or human currently owns the task.
 
 ## Current Phase
 
-**7C-UI-06-ENHANCEMENT-DISCOUNT-MODAL** -- item discount modal UI scaling plus a new "Discount per unit" (ส่วนลดต่อหน่วย) option. Tech Lead / CEO granted a narrow logic exception to add the per-unit discount calculation. No staging, no commit of the enhancement.
+**7C-UI-06-HOTFIX-MODAL-REDESIGN** -- ItemDiscountModal draft-vs-saved state contract and footer UX redesign, after CEO UAT failed again on the modal's state behavior and footer proportions. No staging, no commit.
 
 ## Current Owner
 
-**Developer Agent** -- fixing Codex REQUEST CHANGES blockers (one app-logic, one hygiene). After fix, next owner is Codex Reviewer for focused re-review.
+**Developer Agent** -- redesign implementation complete, handing off to AGY.
 
 ## Latest Verdict
 
-**CODEX REQUEST CHANGES -- both blockers fixed (pending Codex re-review)**. Codex confirmed the cart math, type coverage, tests, AGY precondition, and untouched forbidden areas, then raised two blockers, now resolved:
-- Blocker 1 (hygiene): trailing whitespace on `docs/reports/latest-agy-review.md:8` removed; `git diff --check` PASS.
-- Blocker 2 (app logic): `ItemDiscountModal` preview no longer re-implements discount arithmetic -- it now computes via the shared `getLineTotal` path, so preview and the real cart line total cannot drift (same formula, clamp, and roundMoney).
+**REDESIGN IMPLEMENTATION COMPLETED (pending AGY review)** -- in `src/components/pos/ItemDiscountModal.tsx` + footer CSS in `src/pages/POSPage.css`:
+- Draft vs saved contract: `mode`/`value` are a local draft; the cart line is mutated ONLY by Save (`onSave` via `handleSave`). Tab switch and Clear edit the draft only; Cancel discards it; saved state is unchanged unless Save is pressed.
+- Clear ("ล้างส่วนลด") is now a DRAFT edit -- the prior immediate `onSave('none', 0)` mutation was removed; preview returns to base. Clear then Cancel keeps the original; Clear then Save removes it.
+- Tab switch clears draft input + closes numpad; no auto-apply; saved state untouched.
+- Footer redesign: standard dialog footer -- subtle ghost Clear (left) + Cancel (outline) and Save (primary) grouped (right), balanced proportions.
+- Price Override RBAC preserved (manager/admin only; default-deny; open-effect + save guard). Preview still via shared `getLineTotal`.
 
-No cart math / `getLineTotal` / `useCart.ts` / `POSPage.tsx` change in this fix cycle. TypeScript build PASS (`tsc -b`, exit 0). Contract tests PASS (82). Full Vitest suite PASS (734, 32 files). `git diff --check` PASS. Staging empty. No commit.
+No cart math / `getLineTotal` / `useCart.ts` / `cartUtils.ts` / `types.ts` / `POSPage.tsx` change. No Manager PIN (future backlog UI-10). TypeScript build PASS (`tsc -b`, exit 0). Targeted tests PASS (242: useCart.contract + keyboard-contract + product-card). Full Vitest suite PASS (734, 32 files). `git diff --check` PASS. Staging empty. No commit.
 
-Enhancement baseline (unchanged): modal scaling (280px -> 360px) + the "Discount per unit" tab (ลด/หน่วย; field label ส่วนลดต่อหน่วย) + per-unit math in `getLineTotal` (row discount = amount x quantity, clamped at 0).
+## Supersession
+
+The prior `7C-UI-06-HOTFIX-MODAL-UX-RBAC` package reached Codex PASS but was NOT committed; it is superseded by the new CEO UAT failure and these redesign fixes (layered on the same uncommitted working tree). `docs/reports/latest-agy-review.md` is marked superseded; a fresh AGY review is pending.
 
 ## Baseline
 
-- Part A hotfix committed at **`1a68983`** (`fix(pos): repair discount badge and numpad touch behavior`); working tree was clean immediately after.
-- Part B enhancement built on top of `1a68983`, unstaged.
+- HEAD `77837ca` (manager PIN backlog). Working tree already carried the prior uncommitted RBAC package; preflight matched, staging empty, `stash@{0}` untouched.
 
 ## Scope
 
-Item discount modal scaling + "Discount per unit" option and its math only. **Logic exception (narrow):** cart math/logic may be modified strictly for the per-unit discount -- exercised in `src/lib/pos/cartUtils.ts` (`getLineTotal`, `IDP_LABELS`) and `src/lib/pos/types.ts` (the new `disc_per_unit` type). `useCart.ts` needed no change (its `setLineDiscount` stores `{type, val}` generically). No unrelated cart math.
+ItemDiscountModal draft-vs-saved state + Clear (draft-only) + tab reset + footer redesign; Price Override RBAC preserved. Role source: existing `useAuth` (`user.role: UserRole`); no parallel auth source, no session/login change. App files touched: `ItemDiscountModal.tsx` and `POSPage.css` (minimal footer classes, strictly necessary for layout).
 
-### Files changed (this enhancement, unstaged)
+### Files changed (this phase, unstaged)
 
-- `src/lib/pos/types.ts` -- add `disc_per_unit` to `ItemDiscountType`.
-- `src/lib/pos/cartUtils.ts` -- per-unit branch in `getLineTotal`; `IDP_LABELS` entry.
-- `src/components/pos/ItemDiscountModal.tsx` -- new tab, preview calc, compact tab labels.
-- `src/pages/POSPage.css` -- item discount modal scaling (idp-scoped selectors only).
-- `src/hooks/pos/useCart.contract.test.ts` -- per-unit discount math coverage.
-- docs: `STATE.md`, `CURRENT_PACKET.md`, `NEXT_ACTION.md`, `latest-developer-report.md`.
+- `src/components/pos/ItemDiscountModal.tsx` -- draft-vs-saved state, draft-only Clear, tab reset, footer redesign (RBAC preserved).
+- `src/pages/POSPage.css` -- new standard dialog footer classes (`.pos-idp-footer`, `.pos-idp-clear`, `.pos-idp-btn*`).
+- docs: `STATE.md`, `CURRENT_PACKET.md`, `NEXT_ACTION.md`, `latest-developer-report.md`, `latest-agy-review.md` (superseded marker).
 
 ### Files forbidden (this phase)
 
-- checkout / payment flow (beyond the existing computed line-discount display path)
-- stock / inventory / FIFO logic
+- `src/hooks/pos/useCart.ts`, `src/lib/pos/cartUtils.ts`, `src/hooks/pos/useCart.contract.test.ts`, `src/lib/pos/types.ts`, `src/pages/POSPage.tsx`
+- checkout / payment, stock / inventory, FIFO
 - Firebase / functions / rules
 - Android / Capacitor
-- `.claude/`
-- scripts, tooling configs
+- `.claude/`, scripts, tooling configs
+- `UI_MASTER_PLAN.md`, Manager PIN Overlay (future backlog UI-10)
 - UI-07 / UI-08 / UI-09
 
 ---
 
 ## Staging / Commit status
 
-- Hotfix (Part A): **committed** at `1a68983`.
-- Enhancement (Part B): **Staged: no. Committed: no.**
+- Prior work committed: per-unit enhancement at `85b3a31` (and earlier `1a68983`, `630b742`).
+- This hotfix: **Staged: no. Committed: no.**
 
 ---
 
@@ -73,18 +74,19 @@ Item discount modal scaling + "Discount per unit" option and its math only. **Lo
 | UI-03 Categories & Quick Menu | DONE |
 | UI-04 Product Grid Cards | DONE -- `06bc831`, CEO Physical UAT PASS |
 | UI-05 Cart Container | DONE |
-| UI-06 Cart Item Rows | Committed `630b742`; hotfix `1a68983`; ENHANCEMENT (discount modal) -- AGY PASS, Codex REQUEST CHANGES (both blockers fixed, pending Codex re-review) |
+| UI-06 Cart Item Rows | Committed `630b742`; hotfix `1a68983`; per-unit enhancement `85b3a31`; MODAL REDESIGN hotfix in progress (draft-state + footer; RBAC preserved; pending AGY review) |
 | UI-07 Cart Summary | PENDING (NOT started -- not authorized) |
 | UI-08 Action Buttons | PENDING (NOT started -- not authorized) |
 | UI-09 Checkout Button (F12) | PENDING (NOT started -- not authorized) |
+| UI-10 Manager PIN Authorization Overlay | FUTURE BACKLOG (not authorized) |
 
 ## Next Owner
 
-**Codex Reviewer** -- focused re-review of the two blocker fixes. Do not route to Principal Engineer until Codex returns PASS or PASS WITH NOTES.
+**AGY / Senior QA & UX Lead** -- heavily re-review footer proportions/spacing/hierarchy, tab UX, saved-state preservation, and RBAC visibility. AGY review must occur before Codex.
 
 ## Next Action
 
-See `NEXT_ACTION.md`. Codex re-reviews: (1) `git diff --check` PASS, (2) `ItemDiscountModal` preview now uses the shared `getLineTotal` with no divergent arithmetic, (3) all prior app-scope confirmations still hold.
+See `NEXT_ACTION.md`. AGY verifies the redesigned footer, tab-switch draft clearing, that switching tabs + Cancel preserves the saved discount, and that staff cannot access Price Override (manager/admin can); on PASS / PASS WITH NOTES, route to Codex.
 
 ## Role File Reference
 
@@ -97,7 +99,7 @@ See `NEXT_ACTION.md`. Codex re-reviews: (1) `git diff --check` PASS, (2) `ItemDi
 
 ## Stop Condition
 
-Codex blockers fixed. Do not stage or commit. No `git add`. Do not route to Principal Engineer until Codex re-review passes. Forbidden files untouched. UI-07/UI-08/UI-09 not started. Wait for Codex focused re-review.
+Redesign implementation complete. Do not stage or commit. No `git add`. Do not route to Codex before AGY. Prior RBAC package's Codex PASS is superseded and must not be committed. Forbidden files untouched. No Manager PIN implementation. UI-07/UI-08/UI-09 not started. Wait for AGY visual / UX review.
 
 ---
 
