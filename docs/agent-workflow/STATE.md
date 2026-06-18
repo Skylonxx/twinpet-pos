@@ -11,25 +11,90 @@ Updated by whichever agent or human currently owns the task.
 
 ## Current Phase
 
-**TOOLING-AGENTCHATTR-PILOT-2** -- external scratch single-agent connection test. Controlled test of agentchattr with one Claude agent in an external scratch workspace (C:\tools\agentchattr-scratch). No Twinpet repo access from the agent. No unsafe launchers.
+**TOOLING-AGENTCHATTR-PILOT-3B-RESULT-RECORD + TOOLING-AGENTCHATTR-WORKFLOW-RULES-0** -- record CEO-confirmed Pilot-3B manual test results and codify agentchattr Rules of Engagement.
 
 ## Current Owner
 
-**Developer Agent** -- running external connection test and reporting results.
+**Developer Agent** -- recording results and codifying rules (docs-only).
 
 ## Latest Verdict
 
-**PILOT-1 PASS WITH NOTES (closed)** -- server smoke test passed. Server starts on localhost:8300, MCP on 8200/8201, API responds. No agent was connected in PILOT-1. PILOT-2 authorized for a controlled single-agent connection test.
+**PILOT-3B PASS (CEO manual test)** -- CEO manually verified the interactive wrapper path (start_claude.bat) in an external workspace. Basic TUI/Web UI communication confirmed. No unsafe launchers used. Twinpet repo untouched.
+
+## Agentchattr Pilot History
+
+| Pilot | Method | Result | Notes |
+|---|---|---|---|
+| PILOT-0 | Discovery report | PASS | Committed at c3dbc46 |
+| PILOT-1 | Server smoke test | PASS WITH NOTES | Terminal report only |
+| PILOT-2 | API registration + message | PASS WITH NOTES | Committed at 050a452 |
+| PILOT-3 (AI-run) | Aborted | CORRECT ABORT | Non-interactive env cannot run TUI |
+| PILOT-3B (CEO manual) | Interactive wrapper | PASS | CEO-verified, safe launcher only |
+
+---
+
+## Agentchattr Rules of Engagement (Official)
+
+### 1. Role
+
+- agentchattr is an advisory communication hub and transport layer only.
+- agentchattr is not a decision maker.
+- agentchattr does not replace workflow docs.
+- agentchattr does not authorize commits or implementation.
+
+### 2. Source of Truth
+
+- STATE.md, CURRENT_PACKET.md, and NEXT_ACTION.md remain the ultimate source of truth.
+- Chat messages are advisory and secondary.
+- If chat and docs disagree, docs win until Tech Lead / CEO decides otherwise.
+
+### 3. Authorization
+
+- Tech Lead / CEO authorization through standard workflow is required for all implementation, staging, and commits.
+- No autonomous commits.
+- No autonomous staging.
+- No bypass of AGY, Codex, Principal Engineer, or Tech Lead gates.
+
+### 4. Role Separation
+
+| Role | Assignment |
+|---|---|
+| Tech Lead / CEO | Decision owner |
+| Claude | Developer Agent (unless explicitly reassigned) |
+| ChatGPT | Principal Engineer Reviewer / Workflow Coordinator |
+| AGY | Senior QA / UX Lead |
+| Codex | Reviewer Agent |
+| Local Coordinator | Advisory helper only |
+| agentchattr | Communication transport (not a role with authority) |
+
+### 5. Safety Prohibitions
+
+- No start_claude_skip-permissions.bat.
+- No skip-permissions mode.
+- No bypass mode.
+- No yolo mode.
+- No auto-approve wrapper.
+- No stash access.
+- No package/lockfile/tooling config changes without explicit phase authorization.
+- No app code changes without explicit phase authorization.
+
+### 6. UI-07 Separation
+
+- UI-07 must begin only after separate Tech Lead / CEO authorization.
+- This commit does not authorize UI-07.
+
+---
 
 ## Scope
 
-External scratch single-agent connection test only. The agent must use C:\tools\agentchattr-scratch as its workspace, not the Twinpet repo. No unsafe launchers (no skip-permissions, no bypass, no yolo, no auto-approve). No file edits requested. No real workflow routing. Harmless test messages only.
+Docs-only governance update. Record Pilot-3B results and codify agentchattr rules. No app code. No tooling execution.
 
 ### Files allowed (this phase)
 
 - `docs/agent-workflow/STATE.md`
 - `docs/agent-workflow/CURRENT_PACKET.md`
 - `docs/agent-workflow/NEXT_ACTION.md`
+- `docs/reports/latest-developer-report.md`
 
 ### Files forbidden (this phase)
 
@@ -39,7 +104,6 @@ External scratch single-agent connection test only. The agent must use C:\tools\
 - functions/*, firestore rules
 - Android / Capacitor
 - .claude/
-- docs/reports/*
 - docs/ai-roles/*
 - docs/agent-workflow/UI_MASTER_PLAN.md
 - UI-07 / UI-08 / UI-09 implementation
@@ -48,8 +112,8 @@ External scratch single-agent connection test only. The agent must use C:\tools\
 
 ## Preflight
 
-- Working tree was **clean** before this phase started.
-- HEAD at start: `c3dbc46 docs(workflow): add agentchattr discovery report`.
+- Working tree had 3 modified docs from aborted Pilot-3 (authorized, expected).
+- HEAD at start: `050a452 docs(workflow): record agentchattr pilot-2 api test results`.
 - Staging area was **empty**.
 - `stash@{0}` present and untouched.
 
@@ -57,12 +121,12 @@ External scratch single-agent connection test only. The agent must use C:\tools\
 
 - **UI-01 through UI-06** -- DONE. Final UI-06 commit: `ab7eceb`.
 - **TOOLING-AGENTCHATTR-PILOT-0** -- discovery report committed at `c3dbc46`.
-- **TOOLING-AGENTCHATTR-PILOT-1** -- server smoke test PASS WITH NOTES (terminal report only, not committed separately).
+- **TOOLING-AGENTCHATTR-PILOT-2** -- API test results committed at `050a452`.
 
 ## Staging / Commit status
 
-- Staged: **no**.
-- Committed: **no**. No commit authorized for PILOT-2.
+- Staged: **yes** (4 authorized files).
+- Committed: **yes**.
 
 ---
 
@@ -83,11 +147,11 @@ External scratch single-agent connection test only. The agent must use C:\tools\
 
 ## Next Owner
 
-**Principal Engineer Reviewer / Workflow Coordinator** -- review the PILOT-2 terminal report for safety and governance.
+**Tech Lead / CEO** -- decide next steps (UI-07 authorization or other direction).
 
 ## Next Action
 
-See `NEXT_ACTION.md`. Principal Engineer reviews, then Tech Lead / CEO decides next steps.
+See `NEXT_ACTION.md`. Waiting for separate Tech Lead / CEO authorization for UI-07.
 
 ## Role File Reference
 
@@ -100,7 +164,7 @@ See `NEXT_ACTION.md`. Principal Engineer reviews, then Tech Lead / CEO decides n
 
 ## Stop Condition
 
-After PILOT-2 terminal report, stop. No staging, no commit, no `git add`. No app code. No package/lockfile changes. No scripts. No UI-07/UI-08/UI-09. Wait for Principal Engineer review and Tech Lead / CEO decision.
+Stopped after commit. Do not initiate UI-07 without separate Tech Lead / CEO authorization.
 
 ---
 

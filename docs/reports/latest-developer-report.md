@@ -2,63 +2,75 @@
 
 ## Phase
 
-TOOLING-AGENTCHATTR-PILOT-2 -- external scratch API-based registration test (closure record).
+TOOLING-AGENTCHATTR-PILOT-3B-RESULT-RECORD + TOOLING-AGENTCHATTR-WORKFLOW-RULES-0
 
 ## 1. Summary
 
-PILOT-2 tested agentchattr's server/API path with a programmatic agent registration and message post, entirely outside the Twinpet repo. Result: PASS WITH NOTES. The server was launched externally from `C:\tools\agentchattr\repo`; the scratch workspace `C:\tools\agentchattr-scratch` was used. API-based agent registration and a message post succeeded; the server stopped cleanly. The Twinpet repo remained untouched except the authorized workflow docs. No auto-approve, bypass, yolo, unsafe launcher, or skip-permissions launcher was used. The `start_claude.bat` interactive wrapper was NOT exercised in PILOT-2 -- that path is deferred to PILOT-3.
+This report records two items:
 
-## 2. What PILOT-2 validated
+1. CEO-confirmed manual Pilot-3B test results (interactive wrapper path).
+2. Codification of agentchattr Rules of Engagement in workflow docs.
 
-- Server launched externally from `C:\tools\agentchattr\repo` (not inside Twinpet).
-- Scratch workspace used: `C:\tools\agentchattr-scratch`.
-- API-based agent registration succeeded.
-- API-based message post succeeded.
-- Server stopped cleanly after the test.
-- Twinpet repo remained untouched except the three authorized workflow docs (STATE.md, CURRENT_PACKET.md, NEXT_ACTION.md) and this report.
+Pilot-3B was executed manually by the CEO after the earlier AI-run Pilot-3 was correctly aborted because the non-interactive automation environment cannot run interactive TUI sessions. The CEO manually performed the interactive wrapper test, confirming the full agentchattr TUI/Web UI connection path works.
 
-## 3. Safety posture during PILOT-2
+## 2. Pilot-3B Manual Test Evidence (CEO-confirmed)
 
-- No auto-approve mode used.
-- No bypass mode used.
-- No yolo mode used.
-- No skip-permissions launcher used.
-- No unsafe launcher used.
-- No real Twinpet workflow routed through agentchattr.
-- `stash@{0}` untouched.
+- CEO manually executed Pilot-3B successfully.
+- CEO navigated to the external agentchattr windows directory.
+- CEO used the safe start_claude.bat launcher.
+- CEO successfully connected to agentchattr TUI/Web UI.
+- Basic communication was verified.
+- No start_claude_skip-permissions.bat was used.
+- No skip-permissions mode was used.
+- No bypass mode was used.
+- No yolo mode was used.
+- No auto-approve mode was used.
+- Twinpet repository remained untouched and pristine.
 
-## 4. Scope NOT covered by PILOT-2
+## 3. Relationship to Earlier AI-run Pilot-3 Abort
 
-- The `start_claude.bat` interactive wrapper path was NOT tested.
-- Live interactive agent connection, keystroke injection, and in-room message visibility were NOT validated.
+- The earlier AI-run Pilot-3 abort remains valid as a safety finding.
+- Non-interactive automation should not fabricate interactive TUI results.
+- The abort was the correct behavior: the Developer Agent recognized the limitation and stopped rather than producing false evidence.
+- This manual CEO test supersedes the earlier AI-run Pilot-3 abort limitation by providing real human-verified evidence of the interactive path.
 
-## 5. Principal Engineer note
+## 4. Agentchattr Pilot Summary (All Phases)
 
-PILOT-2 validated the server/API path only, NOT the full interactive wrapper path. The interactive `start_claude.bat` launcher remains unverified.
+- PILOT-0: Discovery report. PASS. Committed at c3dbc46.
+- PILOT-1: Server smoke test. PASS WITH NOTES. Server starts, API responds. Terminal report only.
+- PILOT-2: API-based agent registration and message post. PASS WITH NOTES. Committed at 050a452.
+- PILOT-3 (AI-run): Aborted correctly. Non-interactive environment cannot run interactive TUI.
+- PILOT-3B (CEO manual): PASS. CEO manually verified interactive wrapper path with safe launcher.
 
-## 6. Recommendation
+## 5. Agentchattr Rules of Engagement (Codified)
 
-Proceed to PILOT-3 (interactive wrapper smoke test) ONLY under strict rules: external scratch workspace only, safe launcher only (`start_claude.bat`, never a skip-permissions / bypass / yolo / auto-approve variant), no Twinpet repo access from the agent, no file edits, no git commands, no real workflow routing.
+See STATE.md for the full rules. Summary:
 
-## 7. Verdict
+1. agentchattr is an advisory communication hub and transport layer only.
+2. STATE.md, CURRENT_PACKET.md, and NEXT_ACTION.md remain the ultimate source of truth.
+3. Tech Lead / CEO authorization through standard workflow is required for all implementation, staging, and commits.
+4. Role separation is maintained (Tech Lead/CEO = decision owner, Claude = Developer, ChatGPT = Principal Engineer, AGY = QA/UX, Codex = Reviewer, Local Coordinator = advisory, agentchattr = transport).
+5. All safety prohibitions remain in effect (no skip-permissions, no bypass, no yolo, no auto-approve, no stash access, no unauthorized changes).
 
-PASS WITH NOTES.
+## 6. Verdict
+
+PASS. Pilot-3B manual test succeeded. Rules of Engagement codified.
 
 ## STATE CARD
 
 ```
 STATE CARD
-Phase: TOOLING-AGENTCHATTR-PILOT-2
+Phase: TOOLING-AGENTCHATTR-PILOT-3B-RESULT-RECORD + TOOLING-AGENTCHATTR-WORKFLOW-RULES-0
 Current owner: Developer Agent
-Verdict: PASS WITH NOTES
+Verdict: PASS
 Files changed: docs/agent-workflow/STATE.md; docs/agent-workflow/CURRENT_PACKET.md; docs/agent-workflow/NEXT_ACTION.md; docs/reports/latest-developer-report.md
-Files inspected: agentchattr server/API (external, C:\tools\agentchattr\repo); scratch workspace (C:\tools\agentchattr-scratch)
-Research/test performed: external API-based agent registration and message post (server/API path only)
-Tests/checks: server launch external; API registration PASS; API message post PASS; server stopped cleanly; Twinpet untouched except authorized docs
-Staged: no (until the authorized PILOT-2 staging/commit step)
-Committed: no (until the authorized PILOT-2 commit)
+Files inspected: existing workflow docs (STATE.md, CURRENT_PACKET.md, NEXT_ACTION.md, latest-developer-report.md)
+Evidence recorded: CEO-confirmed Pilot-3B manual test results; agentchattr Rules of Engagement
+Tests/checks: preflight git status PASS; git diff --check PASS; staging verification; post-commit verification
+Staged: yes (4 authorized files)
+Committed: yes (docs-only governance update)
 Required fixes: none
-Next owner: Principal Engineer Reviewer / Workflow Coordinator
-Next action: commit the PILOT-2 4-file record, then initialize PILOT-3 (interactive wrapper smoke test)
-Stop condition: interactive wrapper path (start_claude.bat) remains unverified; PILOT-3 must run under strict external-scratch + safe-launcher rules
+Next owner: Tech Lead / CEO
+Next action: separate authorization required for UI-07
+Stop condition: stopped after commit; do not initiate UI-07 without separate Tech Lead / CEO authorization
 ```

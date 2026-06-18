@@ -2,65 +2,41 @@
 
 ## Current State
 
-Phase **TOOLING-AGENTCHATTR-PILOT-2** external scratch single-agent connection test is in progress. The Developer is running a controlled test with one Claude agent in an external scratch workspace (C:\tools\agentchattr-scratch). No Twinpet repo access from the agent. No unsafe launchers.
+Phase **TOOLING-AGENTCHATTR-PILOT-3B-RESULT-RECORD + TOOLING-AGENTCHATTR-WORKFLOW-RULES-0** is complete. Pilot-3B manual test results recorded. Agentchattr Rules of Engagement codified in STATE.md. Committed.
 
 ## What Happens Next
 
-**After Developer terminal report, next owner: Principal Engineer Reviewer / Workflow Coordinator.**
+**Current stop condition: waiting for separate Tech Lead / CEO authorization for UI-07.**
 
-No commit is authorized for PILOT-2. The terminal report is the deliverable.
+No further action is authorized after the commit. Do not start UI-07. Do not start UI-08. Do not start UI-09. Do not run agentchattr.
 
-Post-test Twinpet repo verification should show only these 3 authorized workflow docs modified:
-- docs/agent-workflow/STATE.md
-- docs/agent-workflow/CURRENT_PACKET.md
-- docs/agent-workflow/NEXT_ACTION.md
+## Agentchattr Tooling Status
 
-No other files should be modified. Staging area must be empty.
+All agentchattr pilots are complete:
 
----
+| Pilot | Result |
+|---|---|
+| PILOT-0 (discovery) | PASS |
+| PILOT-1 (server smoke) | PASS WITH NOTES |
+| PILOT-2 (API test) | PASS WITH NOTES |
+| PILOT-3 (AI-run interactive) | CORRECT ABORT |
+| PILOT-3B (CEO manual interactive) | PASS |
 
-## Principal Engineer Review Prompt (ready to copy)
+Rules of Engagement are codified in STATE.md. agentchattr is ready for use as a communication transport layer if/when the Tech Lead / CEO authorizes it.
 
-```
-TO: Principal Engineer Reviewer / Workflow Coordinator
-MODEL: best available reviewer model for this run
-REASONING: Medium
-ROLE: Principal Engineer Reviewer / Workflow Coordinator
-ROLE FILE: docs/ai-roles/tech-lead.md
-MODE: Governance review of PILOT-2 terminal report, no edits, no staging, no commit
+## Next Decision Points for Tech Lead / CEO
 
-PHASE: TOOLING-AGENTCHATTR-PILOT-2
-
-REVIEW MUST VERIFY:
-1. The test used only the safe launcher (start_claude.bat), not skip-permissions/bypass/yolo.
-2. The agent workspace was external scratch (C:\tools\agentchattr-scratch), not Twinpet.
-3. Only harmless test messages were sent.
-4. No file edits were requested or performed.
-5. No real Twinpet workflow routing occurred.
-6. Post-test Twinpet repo verification shows only the 3 authorized docs modified.
-7. No app code, package.json, lockfile, scripts, src, functions, Firebase, Android, .claude,
-   or UI-07/08/09 files were touched.
-8. stash@{0} remains untouched.
-9. No staging, no commit occurred.
-
-RUN AND VERIFY:
-git status --short
-git diff --name-only
-git diff --cached --name-only
-git log --oneline -5
-git stash list
-
-Produce a verdict (PASS / PASS WITH NOTES / FAIL) with specific findings.
-Do not stage or commit.
-```
+1. Authorize UI-07 (Cart Summary) as a new phase.
+2. Decide whether agentchattr should be used as the communication transport for UI-07 or future phases.
+3. Any other direction.
 
 ---
 
 ## Important Reminders
 
-- No commit is authorized for PILOT-2.
 - The existing governance chain remains the absolute source of truth.
-- agentchattr is not authorized for real Twinpet workflow routing.
+- agentchattr is advisory communication transport only, not a decision maker.
+- Workflow docs (STATE.md, CURRENT_PACKET.md, NEXT_ACTION.md) always win over chat messages.
 - `stash@{0}` is pre-existing unrelated WIP -- do not touch.
 - Old manual workflow remains available as fallback.
 
