@@ -7,61 +7,63 @@ Updated by whichever agent or human currently owns the task.
 
 ## Master Plan
 
-**`docs/agent-workflow/UI_MASTER_PLAN.md`** is the explicit Phase 7C POS UI source of truth (9-point plan). UI-04 = Product Grid Cards is **DONE** (`06bc831`, CEO Physical UAT PASS). UI-05 = Cart Container is **DONE**. UI-06 = Cart Item Rows was committed at `630b742`; its UAT-failed discount/numpad issues were fixed and committed at **`1a68983`**. This enhancement extends the UI-06 item discount modal.
+**`docs/agent-workflow/UI_MASTER_PLAN.md`** is the explicit Phase 7C POS UI source of truth (9-point plan + future backlog). UI-01 through UI-06 are **DONE**. UI-06 final commit: `ab7eceb fix(pos): stabilize discount modal draft state`, CEO Physical UAT PASS.
 
 ## Current Phase
 
-**7C-UI-06-HOTFIX-MODAL-REDESIGN** -- ItemDiscountModal draft-vs-saved state contract and footer UX redesign, after CEO UAT failed again on the modal's state behavior and footer proportions. No staging, no commit.
+**TOOLING-AGENTCHATTR-PILOT-0** -- docs-only tooling discovery. Evaluate agentchattr for potential use as a Local Coordinator tool in the Twinpet multi-agent workflow. No install, no execution, no app code.
 
 ## Current Owner
 
-**Developer Agent** -- redesign implementation complete, handing off to AGY.
+**Developer Agent** -- docs-only discovery research and report.
 
 ## Latest Verdict
 
-**REDESIGN IMPLEMENTATION COMPLETED (pending AGY review)** -- in `src/components/pos/ItemDiscountModal.tsx` + footer CSS in `src/pages/POSPage.css`:
-- Draft vs saved contract: `mode`/`value` are a local draft; the cart line is mutated ONLY by Save (`onSave` via `handleSave`). Tab switch and Clear edit the draft only; Cancel discards it; saved state is unchanged unless Save is pressed.
-- Clear ("ล้างส่วนลด") is now a DRAFT edit -- the prior immediate `onSave('none', 0)` mutation was removed; preview returns to base. Clear then Cancel keeps the original; Clear then Save removes it.
-- Tab switch clears draft input + closes numpad; no auto-apply; saved state untouched.
-- Footer redesign: standard dialog footer -- subtle ghost Clear (left) + Cancel (outline) and Save (primary) grouped (right), balanced proportions.
-- Price Override RBAC preserved (manager/admin only; default-deny; open-effect + save guard). Preview still via shared `getLineTotal`.
-
-No cart math / `getLineTotal` / `useCart.ts` / `cartUtils.ts` / `types.ts` / `POSPage.tsx` change. No Manager PIN (future backlog UI-10). TypeScript build PASS (`tsc -b`, exit 0). Targeted tests PASS (242: useCart.contract + keyboard-contract + product-card). Full Vitest suite PASS (734, 32 files). `git diff --check` PASS. Staging empty. No commit.
-
-## Supersession
-
-The prior `7C-UI-06-HOTFIX-MODAL-UX-RBAC` package reached Codex PASS but was NOT committed; it is superseded by the new CEO UAT failure and these redesign fixes (layered on the same uncommitted working tree). `docs/reports/latest-agy-review.md` is marked superseded; a fresh AGY review is pending.
-
-## Baseline
-
-- HEAD `77837ca` (manager PIN backlog). Working tree already carried the prior uncommitted RBAC package; preflight matched, staging empty, `stash@{0}` untouched.
+**DISCOVERY IN PROGRESS** -- read-only research on agentchattr (public GitHub repo, web search). No tool installed, no tool executed, no package.json or lockfile modified.
 
 ## Scope
 
-ItemDiscountModal draft-vs-saved state + Clear (draft-only) + tab reset + footer redesign; Price Override RBAC preserved. Role source: existing `useAuth` (`user.role: UserRole`); no parallel auth source, no session/login change. App files touched: `ItemDiscountModal.tsx` and `POSPage.css` (minimal footer classes, strictly necessary for layout).
+Docs-only discovery of agentchattr. Produce a discovery report answering: what is it, what problem would it solve, how it fits the workflow, safe pilot model, risks, and recommendation. No install, no execution, no app code, no tests, no scripts, no tooling configs.
 
-### Files changed (this phase, unstaged)
+### Files allowed (this phase)
 
-- `src/components/pos/ItemDiscountModal.tsx` -- draft-vs-saved state, draft-only Clear, tab reset, footer redesign (RBAC preserved).
-- `src/pages/POSPage.css` -- new standard dialog footer classes (`.pos-idp-footer`, `.pos-idp-clear`, `.pos-idp-btn*`).
-- docs: `STATE.md`, `CURRENT_PACKET.md`, `NEXT_ACTION.md`, `latest-developer-report.md`, `latest-agy-review.md` (superseded marker).
+- `docs/agent-workflow/UI_MASTER_PLAN.md` (UI-06 closure marker only)
+- `docs/agent-workflow/STATE.md`
+- `docs/agent-workflow/CURRENT_PACKET.md`
+- `docs/agent-workflow/NEXT_ACTION.md`
+- `docs/reports/latest-developer-report.md`
 
 ### Files forbidden (this phase)
 
-- `src/hooks/pos/useCart.ts`, `src/lib/pos/cartUtils.ts`, `src/hooks/pos/useCart.contract.test.ts`, `src/lib/pos/types.ts`, `src/pages/POSPage.tsx`
-- checkout / payment, stock / inventory, FIFO
-- Firebase / functions / rules
+- package.json, package-lock.json, pnpm-lock.yaml, yarn.lock
+- scripts/*, tooling configs
+- src/* (all app code)
+- functions/*, firestore rules
 - Android / Capacitor
-- `.claude/`, scripts, tooling configs
-- `UI_MASTER_PLAN.md`, Manager PIN Overlay (future backlog UI-10)
-- UI-07 / UI-08 / UI-09
+- .claude/
+- docs/ai-roles/*
+- tests
+- UI-07 / UI-08 / UI-09 implementation
 
 ---
 
+## Preflight
+
+- Working tree was **clean** before this phase started.
+- HEAD at start: `ab7eceb fix(pos): stabilize discount modal draft state`.
+- Staging area was **empty**.
+- `stash@{0}` present and untouched.
+
+## Baseline (closed work)
+
+- **UI-01 through UI-05** -- DONE.
+- **UI-06 Cart Item Rows** -- DONE. Commits: `630b742` (initial), `1a68983` (hotfix), `85b3a31` (per-unit enhancement), `77837ca` (manager PIN backlog), `ab7eceb` (modal state revision). CEO Physical UAT: PASS.
+- **Local Coordinator Pilot 0/1A/2** -- closed (`e5f3254`, `58eeb19`, `cddc6b4`).
+
 ## Staging / Commit status
 
-- Prior work committed: per-unit enhancement at `85b3a31` (and earlier `1a68983`, `630b742`).
-- This hotfix: **Staged: no. Committed: no.**
+- Staged: **no**.
+- Committed: **no**.
 
 ---
 
@@ -74,7 +76,7 @@ ItemDiscountModal draft-vs-saved state + Clear (draft-only) + tab reset + footer
 | UI-03 Categories & Quick Menu | DONE |
 | UI-04 Product Grid Cards | DONE -- `06bc831`, CEO Physical UAT PASS |
 | UI-05 Cart Container | DONE |
-| UI-06 Cart Item Rows | Committed `630b742`; hotfix `1a68983`; per-unit enhancement `85b3a31`; MODAL REDESIGN hotfix in progress (draft-state + footer; RBAC preserved; pending AGY review) |
+| UI-06 Cart Item Rows | DONE -- final `ab7eceb`, CEO Physical UAT PASS |
 | UI-07 Cart Summary | PENDING (NOT started -- not authorized) |
 | UI-08 Action Buttons | PENDING (NOT started -- not authorized) |
 | UI-09 Checkout Button (F12) | PENDING (NOT started -- not authorized) |
@@ -82,11 +84,11 @@ ItemDiscountModal draft-vs-saved state + Clear (draft-only) + tab reset + footer
 
 ## Next Owner
 
-**AGY / Senior QA & UX Lead** -- heavily re-review footer proportions/spacing/hierarchy, tab UX, saved-state preservation, and RBAC visibility. AGY review must occur before Codex.
+**Principal Engineer Reviewer / Workflow Coordinator** -- review the agentchattr discovery report for governance risk, fit assessment, and pilot safety.
 
 ## Next Action
 
-See `NEXT_ACTION.md`. AGY verifies the redesigned footer, tab-switch draft clearing, that switching tabs + Cancel preserves the saved discount, and that staff cannot access Price Override (manager/admin can); on PASS / PASS WITH NOTES, route to Codex.
+See `NEXT_ACTION.md`. Principal Engineer reviews the discovery report, then Tech Lead / CEO decides whether to authorize a pilot phase (TOOLING-AGENTCHATTR-PILOT-1).
 
 ## Role File Reference
 
@@ -99,7 +101,7 @@ See `NEXT_ACTION.md`. AGY verifies the redesigned footer, tab-switch draft clear
 
 ## Stop Condition
 
-Redesign implementation complete. Do not stage or commit. No `git add`. Do not route to Codex before AGY. Prior RBAC package's Codex PASS is superseded and must not be committed. Forbidden files untouched. No Manager PIN implementation. UI-07/UI-08/UI-09 not started. Wait for AGY visual / UX review.
+Discovery report complete. No install, no execution, no staging, no commit, no `git add`. No app code. No package/lockfile changes. No scripts. No UI-07/UI-08/UI-09. Wait for Principal Engineer review and Tech Lead / CEO decision.
 
 ---
 

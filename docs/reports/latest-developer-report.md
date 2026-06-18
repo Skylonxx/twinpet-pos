@@ -2,128 +2,217 @@
 
 ## Phase
 
-7C-UI-06-HOTFIX-MODAL-REDESIGN -- ItemDiscountModal draft-vs-saved state contract and footer UX redesign.
+TOOLING-AGENTCHATTR-PILOT-0 -- docs-only agentchattr discovery and evaluation.
 
-## 1. UAT failure summary
+## 1. Summary
 
-CEO UAT failed again on ItemDiscountModal:
-1. State destruction -- switching tabs and then Saving could erase/overwrite the saved discount; the modal must not mutate cart data merely because a tab changed.
-2. Poor footer UI -- the Clear button was too heavy/obtrusive; Cancel and Save proportions looked awkward/broken.
-3. AGY must heavily re-review proportions, spacing, hierarchy, and the standard dialog pattern.
+This report evaluates agentchattr as a potential Local Coordinator tool for the Twinpet multi-agent workflow. The evaluation is based on read-only research (public GitHub repository and web search). No tool was installed or executed. UI-06 is marked DONE in the master plan (CEO Physical UAT PASS on `ab7eceb`).
 
-The prior RBAC hotfix package had reached Codex PASS but was NOT committed; it is superseded by this failure. Preflight matched the expected state: HEAD `77837ca`; the working tree carried only the prior uncommitted RBAC package (6 files); staging empty; `stash@{0}` untouched.
+## 2. What is agentchattr?
 
-## 2. Files changed
+Source: https://github.com/bcurts/agentchattr
 
-- src/components/pos/ItemDiscountModal.tsx -- draft-vs-saved separation, draft-only Clear, tab reset, footer markup (RBAC preserved).
-- src/pages/POSPage.css -- new standard dialog footer classes (`.pos-idp-footer`, `.pos-idp-clear`, `.pos-idp-footer-actions`, `.pos-idp-btn`, `.pos-idp-btn-cancel`, `.pos-idp-btn-save`). Strictly necessary: the prior footer's `.pos-idp-cancel { width: 100% }` was the root cause of the awkward proportions.
-- docs/agent-workflow/CURRENT_PACKET.md, docs/agent-workflow/NEXT_ACTION.md, docs/agent-workflow/STATE.md -- workflow docs for the new phase.
+agentchattr is a free, local chat platform where AI coding agents can tag each other, communicate, and coordinate with a human operator. It is not an npm package -- it is a standalone Python-based application with a web UI.
+
+Key characteristics:
+
+- Multi-agent chat: multiple AI agent instances (Claude, Codex, Gemini, Copilot, etc.) can be connected to a shared chat room where they tag each other with @mentions.
+- Local only: runs entirely on the local machine. No cloud service, no external API beyond what the agents themselves use.
+- Agent routing via @mentions: messages addressed to @claude or @codex are routed to the appropriate agent instance. The system uses queue files for triggers.
+- Auto-registration: each agent instance auto-registers with its own identity, color, and status pill. Multiple instances of the same provider get sequential names (claude, claude-2, claude-3).
+- Renameable instances: status pills can be renamed (e.g. "claude-2" to "code-review") and all existing messages update to reflect the new name.
+- Cross-platform: Windows uses Win32 WriteConsoleInput for keystroke injection; Mac/Linux uses tmux send-keys. The chat server and web UI are Python + browser.
+- Python stack: FastAPI + uvicorn for the server, with MCP support. Dependencies listed in requirements.txt. Auto-creates a virtual environment on first launch.
+- Not an npm package: standalone Python app, not integrated into Node.js toolchains.
+
+## 3. What problem would it solve for Twinpet?
+
+The Twinpet workflow currently uses a manual file-based handoff system:
+
+- Developer writes code and updates STATE.md, CURRENT_PACKET.md, NEXT_ACTION.md.
+- Human operator copy-pastes prompts to route work to AGY, Codex, Principal Engineer, or Tech Lead.
+- Each handoff requires the human to read NEXT_ACTION.md, copy the prompt, switch to the correct agent context, and paste.
+- Common errors: stale NEXT_ACTION routing (Rule 3), package file mismatches, forgotten AGY-before-Codex ordering, git diff --check failures carried across reviews.
+
+agentchattr could potentially help with:
+
+- Structured agent-to-agent routing: instead of copy-paste, the human types @agy or @codex in the chat to route the next review prompt.
+- Reducing stale handoff state: if the routing is visible in a shared chat log, stale state is easier to spot.
+- Preserving the review chain: the @mention routing could enforce Developer -> AGY -> Codex -> Principal Engineer -> Tech Lead ordering.
+- Audit trail: chat history provides a natural log of who received what prompt and when.
+- Reducing context-switch friction: the human operator stays in one interface instead of switching between agent sessions.
+
+## 4. How it could fit into the current workflow
+
+Current chain: Developer -> AGY -> Codex -> Principal Engineer -> Tech Lead / CEO
+
+Potential agentchattr roles:
+
+- As a LOCAL COORDINATOR chat room: the human operator and all agent instances share a chat. The Local Coordinator contract (docs/agent-workflow/LOCAL_COORDINATOR_CONTRACT.md) defines an advisory-only helper. agentchattr could serve as the communication medium for that helper -- flagging issues in the chat, suggesting routing, and letting the human decide.
+
+- As a HANDOFF QUEUE: instead of the human reading NEXT_ACTION.md and copy-pasting, the Developer agent posts a handoff message (@agy please review...) in the chat, and the human confirms or redirects.
+
+- As a STATE ROUTER: the system could display the current workflow state (phase, owner, verdict) as a persistent status, reducing the chance of stale routing.
+
+- As a REVIEW PROMPT CARRIER: pre-formatted review prompts (currently in NEXT_ACTION.md) could be posted as chat messages, ready for the human to forward with @mention.
+
+- As an AUDIT TRAIL HELPER: the chat log captures the full sequence of handoffs, reviews, and decisions in one place.
+
+What it would NOT replace:
+
+- The file-based workflow docs (STATE.md, CURRENT_PACKET.md, NEXT_ACTION.md) remain the source of truth.
+- Tech Lead / CEO authorization still flows through the existing governance chain.
+- The Local Coordinator contract's advisory-only status is unchanged.
+- agentchattr would not have commit, staging, or scope authority.
+
+## 5. Safe pilot model
+
+Proposed TOOLING-AGENTCHATTR-PILOT-1 (if authorized):
+
+Isolation constraints:
+- Install in a separate directory or virtual environment, not inside the twinpet-pos project tree.
+- No modifications to package.json, lockfiles, or node_modules.
+- No app code access from agentchattr.
+- No automatic commits or staging from agentchattr.
+- No agent instance can bypass Tech Lead / CEO approval.
+- No tool can touch stash@{0}.
+- agentchattr cannot write to docs/agent-workflow/* or docs/reports/*.
+- The .gitignore and .claude ignore policies remain unchanged.
+
+Reversibility:
+- The Python virtual environment can be deleted to fully remove agentchattr.
+- No project files are modified by the install.
+- If the pilot fails, the manual file-based workflow continues unchanged.
+
+Pilot scope:
+- Install agentchattr in an isolated location.
+- Launch a single Claude agent instance.
+- Verify it works on Windows 11 with the existing Claude Code CLI.
+- Send a test message and confirm routing works.
+- Report results.
+- Do not use it for real workflow routing until Tech Lead / CEO authorizes production use.
+
+## 6. Risk analysis
+
+Package/lockfile contamination:
+- MEDIUM risk if installed inside the project directory. agentchattr is Python-based, so it would not directly modify package.json or node lockfiles. However, if installed carelessly inside the project tree, its Python venv, __pycache__, and config files could pollute the Git working tree.
+- MITIGATION: install outside the project directory.
+
+Config sprawl:
+- LOW risk. agentchattr auto-creates config on first launch. If installed outside the project tree, no project config is affected.
+- MITIGATION: install in a dedicated directory (e.g. ~/tools/agentchattr).
+
+Role confusion:
+- MEDIUM risk. If agent instances are renamed (e.g. "claude-2" to "coordinator"), users might mistake the tool's chat for authoritative governance decisions.
+- MITIGATION: the Local Coordinator contract explicitly states advisory-only. Chat messages are suggestions, not approvals.
+
+Stale state:
+- LOW risk. agentchattr is a live chat -- messages are current. However, if the chat is used alongside the file-based workflow, the two could diverge.
+- MITIGATION: the file-based workflow docs remain the source of truth. Chat is advisory only.
+
+Accidental auto-execution:
+- MEDIUM-HIGH risk. agentchattr can inject keystrokes into agent consoles (Win32 WriteConsoleInput on Windows). If misconfigured, it could send unintended commands to a running Claude Code session.
+- MITIGATION: do not use auto-approve variants during the pilot. Require human confirmation for all agent interactions.
+
+Security/token/privacy:
+- LOW risk for local-only operation. agentchattr runs locally and does not send data to external services beyond what the agents themselves use. However, chat logs stored on disk could contain sensitive project context.
+- MITIGATION: do not store chat logs in the Git repository. Review what data agentchattr persists locally.
+
+Windows shell/path:
+- LOW-MEDIUM risk. The Windows wrapper uses Win32 WriteConsoleInput, which is platform-specific. Path handling differences (backslashes, spaces in paths) could cause issues.
+- MITIGATION: test on the actual Windows 11 environment during the pilot before any production use.
+
+Thai/UTF-8 Markdown corruption:
+- LOW risk. agentchattr itself does not edit Markdown files. However, if chat messages containing Thai text are copy-pasted into docs, encoding issues could occur.
+- MITIGATION: the existing Rule 5 (ASCII-only reporting) applies to any Local Coordinator output. Thai content in project docs is handled by existing UTF-8-preserving edit practices.
+
+Interaction with existing .claude ignore policy:
+- LOW risk. agentchattr is a separate Python application and does not interact with .claude/ configuration.
+- MITIGATION: verify during the pilot that agentchattr does not create files inside .claude/.
+
+## 7. Recommendation
+
+**RECOMMEND PILOT WITH CONDITIONS**
+
+agentchattr appears to be a reasonable fit for the Local Coordinator use case: it provides a structured multi-agent chat with @mention routing, local-only operation, and cross-platform support. It would not replace the existing governance chain or file-based workflow -- it would serve as an advisory communication layer.
+
+Conditions for pilot authorization:
+
+1. Install outside the twinpet-pos project directory (e.g. ~/tools/agentchattr or C:/tools/agentchattr).
+2. Do not use auto-approve agent wrappers during the pilot.
+3. Do not grant agentchattr write access to project files.
+4. Do not use agentchattr for real workflow routing until a successful controlled test is completed and Tech Lead / CEO authorizes production use.
+5. The file-based workflow (STATE.md, CURRENT_PACKET.md, NEXT_ACTION.md) remains the source of truth throughout.
+6. The Local Coordinator contract (advisory-only, no authority) remains binding.
+7. If any risk materializes during the pilot, stop and revert to the manual workflow.
+
+## 8. Proposed next phase if approved
+
+**TOOLING-AGENTCHATTR-PILOT-1** -- controlled install and isolated test.
+
+Scope:
+- Install agentchattr in an isolated directory outside the project tree.
+- Launch the chat server and a single Claude agent instance.
+- Verify Windows 11 compatibility.
+- Send a test handoff message and confirm routing.
+- Report results (no real workflow routing yet).
+- Reversible: delete the install directory to fully remove.
+
+Do not start this phase until Tech Lead / CEO authorization is issued.
+
+## 9. Files changed by this task
+
+- docs/agent-workflow/UI_MASTER_PLAN.md -- UI-06 marker changed from [CURRENT] to [DONE].
+- docs/agent-workflow/STATE.md -- phase, owner, scope, pipeline updated for TOOLING-AGENTCHATTR-PILOT-0.
+- docs/agent-workflow/CURRENT_PACKET.md -- new packet for discovery phase.
+- docs/agent-workflow/NEXT_ACTION.md -- routes to Principal Engineer, then Tech Lead / CEO.
 - docs/reports/latest-developer-report.md -- this report.
-- docs/reports/latest-agy-review.md -- prepended a SUPERSEDED banner so the prior PASS is not mistaken for the current verdict (prevents stale routing).
 
-## 3. Files inspected
+## 10. Files inspected
 
-- src/components/pos/ItemDiscountModal.tsx (draft state, open-effect, tab handler, save/apply, RBAC).
-- src/pages/POSPage.tsx (how the modal is wired: `line={discountLine}` from `cart.cart[discountLineKey]`, `onSave`/`onClose`; confirmed `line` reference is stable during editing so the open-effect does not re-fire and clobber the draft -- not modified).
-- src/pages/POSPage.css (existing `.pos-idp-*` rules and the `.pos-idp-cancel` width:100% problem).
-- src/lib/hooks/useAuth.ts, src/lib/types.ts (RBAC source, unchanged).
-- src/lib/pos/cartUtils.ts (getLineTotal signature for the shared preview; not modified).
+- docs/agent-workflow/LOCAL_COORDINATOR_CONTRACT.md (the advisory-only contract).
+- docs/agent-workflow/LOCAL_COORDINATOR_PILOT.md (pilot design and safety rules).
+- docs/agent-workflow/UI_MASTER_PLAN.md (to update UI-06 marker).
+- docs/agent-workflow/STATE.md, CURRENT_PACKET.md, NEXT_ACTION.md (prior state).
 
-## 4. Draft vs saved state fix details
+## 11. Research performed
 
-- `mode` + `value` are the LOCAL DRAFT; `numpadOpen` is local UI. The committed cart line (`line.discount`) is mutated ONLY by the parent `onSave`, which is now called from exactly one place: `handleSave` (the Save button).
-- The open-effect seeds the draft from the saved line on open (`line.discount.type`/`val`), RBAC-guarded (a persisted override for a non-manager falls back to the safe default).
-- `handleSave` commits the draft: `onSave(num > 0 ? safeMode : 'none', num)` then `onClose()`.
-- Cancel (`onClose`) discards the draft; the saved cart line is untouched.
-- Because `line` (from `cart.cart[key]`) keeps a stable reference while the modal is open and only the cart write changes it, the open-effect does not re-run during editing, so in-progress drafts are not clobbered.
-- Result: switching tabs/typing/Clear never touch the cart; only an explicit Save commits. Switch tabs then Cancel -> the item keeps its original discount.
+- Web search: "agentchattr CLI tool multi-agent workflow 2025 2026"
+- Web search: "agentchattr npm package github agent chat routing"
+- Web search: "site:github.com/bcurts/agentchattr features install setup requirements"
+- Source: https://github.com/bcurts/agentchattr (public GitHub repository, read-only)
 
-## 5. Clear action behavior details
+## 12. Boundary confirmation
 
-- `handleClear` now edits the DRAFT ONLY: `setMode(DEFAULT_MODE)`, `setValue('')`, `setNumpadOpen(false)`. It NO LONGER calls `onSave` (the prior immediate `onSave('none', 0)` was removed).
-- Effect: preview returns to the base price (DEFAULT_MODE = `disc_thb` with empty value => getLineTotal returns base; this also avoids the override-with-empty-value = 0 pitfall).
-- Clear then Cancel -> the original saved discount is preserved (no mutation occurred).
-- Clear then Save -> `num` is 0, so `onSave('none', 0)` removes the discount/override.
-
-## 6. Tab switch behavior details
-
-- Tab `onClick` sets the new draft mode, clears the draft input (`setValue('')`), and closes the numpad (`setNumpadOpen(false)`). No `onSave`, no auto-apply. Saved cart state is untouched. Switching from baht to percent, or override to per-unit, clears the draft input but not the saved discount.
-
-## 7. Footer UI redesign details
-
-- New `.pos-idp-footer`: a standard flex row, `justify-content: space-between`, `align-items: center`, gap 12px.
-- Left: subtle ghost `.pos-idp-clear` -- transparent background, danger-red text, small size, underline on hover; it does not visually compete with Save and is not a heavy full-width block.
-- Right: `.pos-idp-footer-actions` group with Cancel (`.pos-idp-btn .pos-idp-btn-cancel`, outline/white) and Save (`.pos-idp-btn .pos-idp-btn-save`, primary solid), even padding and an 8px gap.
-- Replaces the prior full-width Clear button and the awkward actions row (where `.pos-idp-cancel` was width:100% next to a flex:1 Save). The old `.pos-idp-actions`/`.pos-idp-cancel`/`.pos-idp-save` rules are left in place (still used by the shared `.pos-uom-*` selectors and harmless otherwise); no shared UomModal rule was altered.
-
-## 8. RBAC preservation details
-
-- Unchanged from the prior hotfix and fully intact: `useAuth().user.role`; `canOverridePrice = role === 'manager' || role === 'admin'` (default-deny on null user).
-- `availableModes` excludes `override` for non-managers (tab hidden).
-- Open-effect forces a safe mode when a line already carries an override for a non-manager.
-- `handleSave` keeps the final guard: `mode === 'override' && !canOverridePrice ? DEFAULT_MODE : mode`, so override can never be applied through stale internal state.
-- No Manager PIN; no session/auth change.
-
-## 9. Tests / checks run and results
-
-- npx tsc -b: exit 0 (TypeScript build PASS).
-- npx vitest run src/hooks/pos/useCart.contract.test.ts src/pages/POSPage.keyboard-contract.test.ts src/pages/POSPage.product-card.test.ts: 3 files passed, 242 tests passed, 0 failed.
-- npx vitest run (full suite, run because a shared POS component and shared CSS changed): 32 files passed, 734 tests passed, 0 failed.
-- git diff --check: PASS.
-- ItemDiscountModal tests: no existing ItemDiscountModal test file was found (not overclaiming). No test added -- the changes are UI/state-interaction behavior; the forbidden list bars touching useCart.contract.test.ts, and the shared preview math (getLineTotal) is unchanged and already covered.
-
-## 10. Scope boundary confirmation
-
-- no cart math changed: confirmed
-- no useCart.ts changed: confirmed
-- no cartUtils.ts changed: confirmed
-- no checkout/payment changed: confirmed
-- no stock/inventory changed: confirmed
-- no FIFO changed: confirmed
+- no install: confirmed
+- no agentchattr run: confirmed
+- no package.json: confirmed
+- no lockfile: confirmed
+- no scripts: confirmed
+- no app code: confirmed
+- no tests: confirmed
 - no Firebase/functions/rules: confirmed
 - no Android/Capacitor: confirmed
 - no .claude: confirmed
-- no scripts/tooling: confirmed
-- no Manager PIN implementation: confirmed
 - no UI-07/UI-08/UI-09: confirmed
-
-## 11. Git status
-
-- git status --short: M src/components/pos/ItemDiscountModal.tsx; M src/pages/POSPage.css; M docs/agent-workflow/CURRENT_PACKET.md; M docs/agent-workflow/NEXT_ACTION.md; M docs/agent-workflow/STATE.md; M docs/reports/latest-agy-review.md; M docs/reports/latest-developer-report.md.
-- git diff --name-only: the seven files above.
-- git diff --stat: two app files (ItemDiscountModal.tsx, POSPage.css) plus five docs.
-- git diff --check: PASS.
-- git diff --cached --name-only: empty (nothing staged).
-- git log --oneline -5: `77837ca`, `85b3a31`, `1a68983`, `630b742`, `cddc6b4`.
-- git stash list: `stash@{0}` present and untouched.
-
-## 12. Staging / commit confirmation
-
-- staged: no
-- committed: no
-
-## 13. Next owner
-
-AGY / Senior QA & UX Lead (AGY prompt in NEXT_ACTION.md; a ready-to-copy Codex prompt is included for the post-AGY handoff).
-
-## 14. Stop condition
-
-Stop after this report. Do not stage or commit. Do not route to Codex before AGY. Waiting for AGY visual / UX review.
+- no staging: confirmed
+- no commit: confirmed
 
 ## STATE CARD
 
 ```
 STATE CARD
-Phase: 7C-UI-06-HOTFIX-MODAL-REDESIGN
-Current owner: Developer (handing off to AGY)
-Verdict: Redesign implementation complete (pending AGY review)
-Files changed: src/components/pos/ItemDiscountModal.tsx; src/pages/POSPage.css; docs/agent-workflow/CURRENT_PACKET.md; docs/agent-workflow/NEXT_ACTION.md; docs/agent-workflow/STATE.md; docs/reports/latest-agy-review.md; docs/reports/latest-developer-report.md
-Files inspected: src/components/pos/ItemDiscountModal.tsx; src/pages/POSPage.tsx; src/pages/POSPage.css; src/lib/hooks/useAuth.ts; src/lib/types.ts; src/lib/pos/cartUtils.ts
-Tests/checks: tsc -b exit 0; vitest targeted 242 passed; vitest full 734 passed (32 files); git diff --check PASS
+Phase: TOOLING-AGENTCHATTR-PILOT-0
+Current owner: Developer Agent
+Verdict: Discovery complete (pending Principal Engineer review)
+Files changed: UI_MASTER_PLAN.md (UI-06 marker); STATE.md; CURRENT_PACKET.md; NEXT_ACTION.md; latest-developer-report.md
+Files inspected: LOCAL_COORDINATOR_CONTRACT.md; LOCAL_COORDINATOR_PILOT.md; UI_MASTER_PLAN.md; STATE.md; CURRENT_PACKET.md; NEXT_ACTION.md
+Research performed: web search (3 queries); GitHub repo review (bcurts/agentchattr)
+Tests/checks: git diff --check (pending after edits)
 Staged: no
 Committed: no
 Required fixes: none
-Next owner: AGY / Senior QA & UX Lead
-Next action: AGY heavy re-review of footer proportions, tab UX, saved-state preservation, and RBAC before Codex
-Stop condition: Do not stage/commit; do not route to Codex before AGY; prior RBAC Codex PASS superseded (do not commit); wait for AGY review
+Next owner: Principal Engineer Reviewer / Workflow Coordinator
+Next action: Governance review of discovery report; then Tech Lead / CEO install/pilot decision
+Stop condition: No install, no execution, no staging, no commit; wait for Principal Engineer review and Tech Lead / CEO decision
 ```

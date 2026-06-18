@@ -2,135 +2,105 @@
 
 ## Current State
 
-Phase **7C-UI-06-HOTFIX-MODAL-REDESIGN** is **implemented** and awaiting review (HEAD `77837ca`; uncommitted, superseding the prior RBAC package which is NOT committed).
-
-Delivered (in `src/components/pos/ItemDiscountModal.tsx` + footer CSS in `src/pages/POSPage.css`):
-- Draft-vs-saved state contract: tab switches and Clear edit a local draft only; the cart line is mutated solely by Save; Cancel discards the draft.
-- Clear ("ล้างส่วนลด") is now a DRAFT edit (no `onSave` until Save); preview returns to base price.
-- Tab switch clears draft input + closes the numpad; no auto-apply; saved state untouched.
-- Footer redesign: subtle ghost Clear (left) + Cancel (outline) and Save (primary) grouped (right), standard dialog proportions.
-- Price Override RBAC preserved (manager/admin only; default-deny; open-effect + save guard).
-
-Checks:
-- `tsc -b`: exit 0.
-- `vitest run` targeted (useCart.contract + keyboard-contract + product-card): 242 passed.
-- `vitest run` full: 734 passed (32 files).
-- `git diff --check`: PASS.
-- Staged: none. Committed: none.
+Phase **TOOLING-AGENTCHATTR-PILOT-0** is **complete** (docs-only discovery). The Developer produced a discovery report on agentchattr covering: what it is, problem fit, workflow integration, safe pilot model, risk analysis, and recommendation. No tool was installed or executed. UI-06 is marked DONE in the master plan.
 
 ## What Happens Next
 
-**Next owner: AGY / Senior QA & UX Lead.**
+**Next owner: Principal Engineer Reviewer / Workflow Coordinator.**
 
-AGY visual / UX review must occur BEFORE Codex. After AGY PASS / PASS WITH NOTES, route to Codex with the prompt below. If AGY returns REQUEST CHANGES, route back to the Developer.
-
----
-
-## AGY Review Prompt (ready to copy)
-
-```
-TO: AGY / Senior QA & UX Lead
-ROLE FILE: docs/ai-roles/ux-lead.md
-MODE: Visual / UX review, read-only, no staging, no commit
-
-PHASE: 7C-UI-06-HOTFIX-MODAL-REDESIGN (AGY review)
-
-CONTEXT: ItemDiscountModal redesign after CEO UAT failed on state behavior and footer proportions.
-App files: src/components/pos/ItemDiscountModal.tsx and src/pages/POSPage.css (footer classes).
-
-VERIFY (read-only; ideally on an iPad / touch emulation):
-1. Footer proportions and pattern:
-   - Standard dialog footer: subtle "ล้างส่วนลด" (ghost/red text) on the LEFT; Cancel (outline) and
-     Save (primary solid) grouped on the RIGHT with clean, balanced spacing.
-   - Clear is subtle and does NOT visually compete with Save; no heavy full-width block.
-   - Cancel/Save alignment and spacing look professional; no awkward/broken proportions.
-2. Modal comfort: the modal stays comfortable and legible with the on-screen numpad open.
-3. Tab switching UX: switching tabs clears the draft input smoothly; no stale value carries over.
-4. Saved-state preservation (UX perspective):
-   - Open an item that has a saved discount, switch tabs, then Cancel -> the item keeps its original
-     discount (nothing destroyed).
-   - Clear then Cancel -> original discount preserved; Clear then Save -> discount removed.
-5. RBAC: staff/cashier cannot see or use Price Override ("แก้ราคา"); manager/admin can (if testable).
-
-CONSTRAINTS: Do not modify code. Do not stage. Do not commit. ASCII-only reporting.
-
-OUTPUT: PASS / PASS WITH NOTES / RETURN TO DEVELOPER, with any visual fixes required.
-On PASS / PASS WITH NOTES, hand off to Codex using the Codex prompt in NEXT_ACTION.md.
-On REQUEST CHANGES, route back to the Developer.
-```
+Principal Engineer reviews the discovery report for governance risk, fit assessment, and pilot safety. After Principal Engineer review, route to Tech Lead / CEO for the install/pilot decision.
 
 ---
 
-## Codex Review Prompt (ready to copy -- use ONLY after AGY PASS / PASS WITH NOTES)
+## Principal Engineer Review Prompt (ready to copy)
 
 ```
-TO: Codex Reviewer
-ROLE FILE: docs/ai-roles/reviewer.md
-MODE: Code / state-contract / RBAC / hygiene review, read-only, no staging, no commit
+TO: Principal Engineer Reviewer / Workflow Coordinator
+MODEL: best available reviewer model for this run
+REASONING: Medium
+ROLE: Principal Engineer Reviewer / Workflow Coordinator
+ROLE FILE: docs/ai-roles/tech-lead.md
+MODE: Governance review of tooling discovery report, no edits, no staging, no commit
 
-PHASE: 7C-UI-06-HOTFIX-MODAL-REDESIGN (Codex review)
+PHASE: TOOLING-AGENTCHATTR-PILOT-0
 
-PRECONDITION: AGY verdict is PASS or PASS WITH NOTES (see docs/reports/latest-agy-review.md).
+Inputs:
+- docs/reports/latest-developer-report.md (agentchattr discovery report)
+- docs/agent-workflow/CURRENT_PACKET.md
+- docs/agent-workflow/STATE.md
 
-REVIEW: src/components/pos/ItemDiscountModal.tsx and src/pages/POSPage.css (footer classes).
+REVIEW MUST VERIFY:
+1. The discovery report accurately describes agentchattr capabilities and limitations.
+2. The proposed pilot model does not grant agentchattr any authority beyond advisory.
+3. No install or execution occurred during discovery.
+4. Risk analysis covers: package contamination, config sprawl, role confusion, stale state,
+   accidental auto-execution, security/token/privacy, Windows path, Thai/UTF-8, and .claude policy.
+5. The recommendation is well-reasoned and conservative.
+6. The pilot proposal (if recommended) preserves the existing governance chain:
+   Developer -> AGY -> Codex -> Principal Engineer -> Tech Lead / CEO.
+7. No app code, tests, scripts, tooling configs, Firebase, Android, or .claude files were touched.
 
-VERIFY:
-1. Draft vs saved separation: `mode` + `value` are local draft only; the cart line is mutated ONLY
-   by onSave, called solely by Save (handleSave). The open-effect seeds the draft from the saved line.
-2. Clear does NOT mutate the cart: handleClear resets draft state only (no onSave); the cart line is
-   removed only when the cashier presses Save afterward.
-3. Tab switch does not erase saved cart state: tab onClick only sets local draft (setMode/setValue/
-   setNumpadOpen); no onSave; no auto-apply.
-4. Cancel discards the draft (onClose, no save); Save commits the draft (onSave then onClose).
-5. RBAC cannot be bypassed via stale internal state: availableModes excludes override for non-managers;
-   open-effect forces a safe mode when a line carries an override for a non-manager; handleSave has the
-   final non-manager override guard (mode === 'override' && !canOverridePrice -> safe mode).
-6. Preview still uses the shared getLineTotal (no local duplicate discount math).
-7. No cart math / useCart.ts / cartUtils.ts / types.ts / POSPage.tsx change; no checkout/payment/
-   stock/inventory/FIFO/Firebase/Android/.claude/scripts/tooling; no Manager PIN; no UI-07/08/09.
-8. TypeScript safety and git hygiene (diff --check passes; nothing staged).
-
-RUN AND REPORT:
-git status --short
-git diff --name-only
-git diff --stat
-git diff --check
-git diff --cached --name-only
-
-OUTPUT: PASS / PASS WITH NOTES / REQUEST CHANGES. Do not stage or commit.
-If PASS / PASS WITH NOTES, route to Principal Engineer Reviewer / Workflow Coordinator.
-If REQUEST CHANGES, route back to the Developer.
+Produce a verdict (PASS / PASS WITH NOTES / FAIL) with specific findings.
+Do not install or execute agentchattr. Do not stage or commit.
 ```
 
 ---
 
-## Review Chain (remaining)
+## Tech Lead / CEO Decision Prompt (use ONLY after Principal Engineer PASS / PASS WITH NOTES)
 
 ```
-AGY / Senior QA & UX Lead (now)
-  -> Codex Reviewer (state contract / RBAC / hygiene)
-    -> Principal Engineer Reviewer / Workflow Coordinator (coordination + abnormality checks)
-      -> Tech Lead / CEO authorizes scope closure and commit
-        -> CEO Physical UAT
+TO: Tech Lead / CEO
+MODEL: best available model for this run
+REASONING: Medium
+ROLE: Tech Lead / CEO
+ROLE FILE: docs/ai-roles/tech-lead.md
+MODE: Decision on tooling pilot authorization
+
+PHASE: TOOLING-AGENTCHATTR-PILOT-0 (closure decision)
+
+PRECONDITION: Principal Engineer review PASS or PASS WITH NOTES.
+
+INPUTS:
+- docs/reports/latest-developer-report.md (agentchattr discovery report)
+- Principal Engineer review verdict and findings
+
+DECISION REQUIRED:
+Choose one:
+
+Option A -- Authorize TOOLING-AGENTCHATTR-PILOT-1 (controlled install + isolated test).
+  Scope: install agentchattr in a dev-only context, run a controlled single-agent test,
+  verify it works on Windows with the existing Claude Code setup, and report results.
+  No production use. No app code access. No automatic commits. Reversible.
+
+Option B -- Authorize TOOLING-AGENTCHATTR-PILOT-1 with conditions.
+  Specify additional constraints or a narrower scope.
+
+Option C -- Do not pilot yet.
+  Park the discovery report and resume UI-07 or another priority.
+
+Option D -- Discard.
+  The tooling does not fit. Archive the report and move on.
+
+Do not install or execute agentchattr until this decision is made.
+```
+
+---
+
+## Review Chain
+
+```
+Developer Agent (discovery complete)
+  -> Principal Engineer Reviewer / Workflow Coordinator (governance review)
+    -> Tech Lead / CEO (install/pilot authorization decision)
 ```
 
 ## Important Reminders
 
-- The prior RBAC package's Codex PASS is SUPERSEDED by this CEO UAT failure; do not commit it.
-- Manager PIN Overlay is FUTURE backlog (UI-10) -- not implemented here.
-- Do not stage or commit until Tech Lead / CEO authorizes exact commands.
+- No tool was installed or executed during discovery.
+- The existing governance chain remains the absolute source of truth.
+- Do not install agentchattr until Tech Lead / CEO authorizes.
 - `stash@{0}` is pre-existing unrelated WIP -- do not touch.
 - Old manual workflow remains available as fallback.
-
-## Modified Files in Package (this phase, unstaged)
-
-- src/components/pos/ItemDiscountModal.tsx
-- src/pages/POSPage.css
-- docs/agent-workflow/CURRENT_PACKET.md
-- docs/agent-workflow/NEXT_ACTION.md
-- docs/agent-workflow/STATE.md
-- docs/reports/latest-developer-report.md
-- docs/reports/latest-agy-review.md (marked superseded; fresh AGY review pending)
 
 ## Role File Reference
 
