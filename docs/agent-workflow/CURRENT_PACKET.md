@@ -1,138 +1,101 @@
 # Current Work Packet
 
-## ⚠️ UAT Bug Fix Intervention (re-opened)
-
-This packet is a **UAT bug fix intervention**, not new feature work. Physical UAT of the prior UI-04 package **FAILED**: the Settings controls were visible but non-functional — Product Name font size, Price font size, and Stock visibility did not dynamically update the Product Grid Cards.
-
-- **Goal: fix the settings → product-card state wiring ONLY.** No new features, no new settings/persistence architecture, no scope expansion.
-- The **prior UI-04 commit authorization is HELD / superseded** until this fix passes AGY and Codex again.
-- **No cart/checkout scope** is authorized: no Cart Item Rows (UI-06), Cart Summary (UI-07), Action Buttons (UI-08), Checkout/F12 (UI-09), no cart math, no stock/inventory logic, no checkout/payment logic, no Firebase/functions/rules.
-- **Root cause + fix:** `usePOSPreferences` gave each consumer its own `useState` copy (read from localStorage once on mount), so the Settings editor and POS grid held independent states and edits never reached the mounted cards. It is now a single module-level reactive store consumed via `useSyncExternalStore` — one source of truth, every consumer re-renders on change. Public API, localStorage key, validation, and defaults are unchanged.
-
 ## Phase
 
-**7C-UI-04-PRODUCT-GRID-CARDS** — Product Grid Cards with existing Settings integration (RE-OPENED for UAT bug fix)
+**7C-LOCAL-COORDINATOR-PILOT-0** — Local Coordinator helper layer, **docs-only planning phase**.
 
-## Master Plan
+## What this packet is
 
-Source of truth: **`docs/agent-workflow/UI_MASTER_PLAN.md`**. This packet is item **4 (UI-04: การ์ดสินค้า — CURRENT)**. No work beyond UI-04 is authorized by this packet.
+A supplemental workflow pilot to **design** (not build, not integrate) a Local Coordinator / Deputy Workflow Helper layer that can help catch repetitive workflow-hygiene errors before they reach a commit prompt.
 
-## Goal
+- This is a **docs-only planning phase.** No app code, no tests, no scripts, no installs, no tool integration.
+- **The old workflow remains the source of truth.** This pilot is an addition, not a replacement.
+- **Local Coordinator is helper-only / advisory-only.** It **cannot** authorize scope, stage, commit, approve, or override any role.
+- No production integration yet — only the contract and test scenarios are designed in this phase.
+- No UI work. `UI_MASTER_PLAN.md` is untouched. UI-05 is already DONE; UI-06/07/08/09 are not started and not authorized.
 
-Integrate the existing POS display preferences with the Product Grid Cards so cashier/admin can control, from the existing Settings module:
+## Existing workflow that MUST NOT be replaced
 
-1. **Stock visibility** on product cards
-2. **Product name font size**
-3. **Price font size**
+```
+Developer Agent implements
+  → AGY / Senior QA & UX Lead reviews UI/UX
+    → Codex Reviewer reviews code, tests, scope, hygiene, package
+      → Principal Engineer Reviewer / Workflow Coordinator: final coordination + abnormality checks
+        → Tech Lead / CEO authorizes scope closure and commits
+          → CEO performs Physical UAT
+```
 
-Reuse the existing global-state pattern (`usePOSPreferences`, localStorage) and the existing Settings UI — no new settings architecture, no new persistence layer, no Firebase/backend writes. **AGY visual review is required before Codex.**
+- No commit without Tech Lead / CEO authorization.
+- No new scope without Tech Lead / CEO authorization.
+- The Local Coordinator sits **beside** this chain as an advisory pre-check; it never sits above it.
 
-## Implementation Directives (summary)
+## Goal of the pilot design
 
-**A — Settings integration.** Add a "การแสดงผลสินค้า (POS)" section to the existing unified Settings (new `pos-display` nav item → `SettingsPage` `posDisplay` section): a stock-visibility toggle and two independent small/normal/large size pickers. Built from existing Settings components (`Toggle`, `stg-notif-chip` chips).
+Design a small, low-risk helper that can flag:
 
-**B — Global state wiring.** Extend the existing `usePOSPreferences` store (localStorage) with `showStock`, `productNameFontSize`, `priceFontSize` (validated, persisted, default-safe). The Settings controls call its setters; POSPage consumes the values. Defaults preserve the current visual style exactly.
+1. report hygiene problems
+2. trailing whitespace
+3. path typos
+4. file / package mismatches
+5. unexpected staged files
+6. missing handoff fields (STATE CARD)
+7. wrong next-owner routing
+8. commit-authorization mistakes
 
-**C — Product card consumption.** Product cards consume `productNameFontSize`, `priceFontSize`, `showStock`: name/price sizes change via independent CSS scales; the stock indicator renders only when `showStock` is on (no empty gap when off). Click / add-to-cart behavior unchanged.
+…and route each flag to the correct existing role (AGY for UI/UX & Physical-UAT concerns; Codex for code/test/hygiene re-checks; Principal Engineer for governance/abnormality; Tech Lead / CEO — through Principal Engineer — for scope/commit authorization).
 
-**D — Layout / Style.** Image + placeholder (existing `ProductImageThumb`), name, price, conditional stock. Grid integrity, category dropdown (UI-03), cat-bar horizontal scroll, and the UI-05 cart seam are preserved. Flowbite / Clean / Impeccable aesthetic.
+## Authorized files (this packet)
 
-## Strict Non-Goals
-
-Do NOT touch: Cart item rows (UI-06), Cart Summary (UI-07), Action Buttons (UI-08), Checkout/F12 (UI-09), checkout/payment logic, cart math, stock logic, scanner/focus behavior, category dropdown behavior (only preserve layout compatibility), Toast, Firebase/functions/rules, Android/Capacitor, `.claude/`. No new scripts. No staging. No commit.
-
-## AGY Review Requirement (MANDATORY before Codex)
-
-AGY must verify: Settings controls are clean/understandable; product-name size visibly affects cards; price size visibly affects cards (independent of name); stock toggle hides/shows stock cleanly with no awkward gap; cards show image/placeholder, name, price, conditional stock cleanly; grid stays stable/responsive; UI-03 category dropdown intact; cart items/summary/action buttons/checkout-F12 untouched; no broad redesign or scope creep.
-
-## Status
-
-**UAT Failed / Bug Fix In Progress** — settings→product-card wiring fixed and re-verified (tsc + full vitest green); **awaiting AGY visual/functional re-validation (before Codex)**. Prior commit authorization HELD / superseded.
-
----
-
-## Scope
-
-### Authorized implementation files (app)
-
-- `src/hooks/pos/usePOSPreferences.ts` — extend the existing POS display store (new fields + setters)
-- `src/lib/settings/settingsNav.ts` — add the `pos-display` nav item
-- `src/lib/settings/types.ts` — add `'posDisplay'` to `SettingsSection`
-- `src/pages/SettingsPage.tsx` — new POS-display settings section
-- `src/pages/POSPage.tsx` — consume preferences + conditional stock
-- `src/pages/POSPage.css` — scoped product-card scale styling
-- `src/pages/POSPage.product-card.test.ts` — new source-contract test
-- Do NOT broaden beyond product-card display + its Settings controls.
-
-### Authorized workflow / report files
-
-- `docs/agent-workflow/UI_MASTER_PLAN.md`
 - `docs/agent-workflow/STATE.md`
 - `docs/agent-workflow/CURRENT_PACKET.md`
 - `docs/agent-workflow/NEXT_ACTION.md`
-- `docs/reports/latest-developer-report.md`
+- `docs/agent-workflow/LOCAL_COORDINATOR_PILOT.md`
+- `docs/agent-workflow/LOCAL_COORDINATOR_CONTRACT.md`
 
-### Forbidden Files / Areas
+## Strictly forbidden (this packet)
 
-- **Cart item rows (UI-06), Cart Summary (UI-07), Action Buttons (UI-08), Checkout/F12 (UI-09)** — reserved; do NOT touch
-- `useCart.ts`, `useCart.contract.test.ts`, `cartUtils.ts`, cart math
-- Checkout / payment business logic, stock matrix / inventory logic, seed data
-- Toast files; Firebase / functions / rules; Android / Capacitor; `.claude/`
-- No new scripts, no new dependencies; no UI-06/07/08/09 work
+- No app code, no UI components, no tests.
+- No Firebase / functions / rules; no Android / Capacitor; no `.claude/`.
+- No scripts; no external tool installs; no `agentchattr`; no Codex CLI integration; no tool runs.
+- No edits to `UI_MASTER_PLAN.md`.
+- No `docs/reports/*` edits (report back in chat instead).
+- No UI-05 / UI-06 / UI-07 / UI-08 / UI-09 work.
+- No staging, no commit, no `git add .`.
+- No replacing the existing workflow.
 
-### Preservation note
+## Status
 
-The product cards keep their existing structure (image/placeholder, name, price, stock) and existing `onProductClick` add-to-cart behavior. New presentation is purely additive and driven by `usePOSPreferences` with visual-preserving defaults. The UI-03 category dropdown, `.pos-cat-bar` horizontal scroll, the UI-05 cart seam, and scanner/focus handlers are all untouched.
+**Docs-only pilot drafting in progress** — contract + pilot scenarios drafted; awaiting **Principal Engineer Reviewer / Workflow Coordinator** governance-risk review.
 
 ---
 
-## Role Sequence
+## Role Sequence (for this pilot)
 
 ```
-Developer Agent              — ROLE FILE: docs/ai-roles/developer.md
-  → Senior QA & UX Lead/AGY  — ROLE FILE: docs/ai-roles/ux-lead.md
-    → Codex Reviewer         — ROLE FILE: docs/ai-roles/reviewer.md
-      → Tech Lead / CEO      — ROLE FILE: docs/ai-roles/tech-lead.md
+Developer Agent                         — ROLE FILE: docs/ai-roles/developer.md
+  → Principal Engineer Reviewer /       — ROLE FILE: docs/ai-roles/tech-lead.md
+    Workflow Coordinator (governance review of the pilot)
+      → Tech Lead / CEO (only if the pilot needs scope/keep/revise/discard decision)
 ```
 
-**AGY:** **REQUIRED for this phase (before Codex)** — this phase includes visual UI changes, so AGY visual/UX validation gates the handoff to Codex.
-AGY ROLE FILE: `docs/ai-roles/ux-lead.md`
-
-### Required Handoff Header Format
-
-Every handoff prompt must include these exact lines:
-
-```
-TO:
-MODEL:
-REASONING:
-ROLE:
-ROLE FILE:
-MODE:
-```
+**Note:** AGY and Codex are not in this pilot's drafting loop because this phase changes **no UI and no code** — it only drafts governance docs. Governance review by the Principal Engineer is the required next gate.
 
 ## Decision Rules
 
-1. **Developer** completes implementation and writes `docs/reports/latest-developer-report.md`.
-2. **Developer** updates `docs/agent-workflow/NEXT_ACTION.md` to route to **AGY first** (visual review), not Codex.
-3. **If unauthorized files are changed** → STOP and report.
-4. **If tests fail** → STOP and report.
-5. **AGY reviews UX/visuals first** (Impeccable Style + no visual regression).
-6. **If AGY FAIL** → return to Developer / Principal Engineer Reviewer for remediation.
-7. **If AGY PASS / PASS WITH NOTES** → route to **Codex Reviewer** for code/scope/keyboard review.
-8. **If Codex FAIL** → return to Principal Engineer Reviewer / Workflow Coordinator.
-9. **If Codex PASS / PASS WITH NOTES** → route to Principal Engineer Reviewer / Workflow Coordinator for Tech Lead closure memo.
-10. **No commit** until Tech Lead / CEO authorizes the exact staging and commit commands.
+1. **Developer** drafts the pilot docs and reports in chat.
+2. **Developer** updates `NEXT_ACTION.md` to route to the **Principal Engineer Reviewer / Workflow Coordinator** for governance-risk review.
+3. **If any unauthorized file is touched** → STOP and report.
+4. **If the working tree was dirty / HEAD wrong / unexpected files appeared at preflight** → STOP and report.
+5. **Principal Engineer** reviews governance risk (overlap, authority boundaries, multi-writer risk, accidental staging/commit, scenario sufficiency, source-of-truth integrity).
+6. **If Principal Engineer flags risk** → return to Developer for doc revision.
+7. **If Principal Engineer PASS** → route to **Tech Lead / CEO** (through Principal Engineer) for keep / revise / discard decision on the pilot.
+8. **No commit, no integration, no scope expansion** until Tech Lead / CEO authorizes exact next steps.
 
 ---
 
-## Report Requirements
-
-Every agent must produce a report in its corresponding `docs/reports/latest-*-report.md` file. Every report must end with a STATE CARD block.
-
 ## STATE CARD Requirement
 
-Every report must end with this exact block, filled in:
+Every report for this phase must end with a filled STATE CARD block:
 
 ```
 STATE CARD
@@ -153,4 +116,4 @@ Stop condition:
 
 ## Fallback
 
-If this workflow creates friction, revert to the previous manual routing process. The old workflow remains valid.
+If this workflow creates friction, revert to the previous manual routing process. The old workflow remains valid. The Local Coordinator pilot never overrides it.
