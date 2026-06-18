@@ -2,67 +2,62 @@
 
 ## Phase
 
-**TOOLING-AGENTCHATTR-PILOT-3B-RESULT-RECORD + TOOLING-AGENTCHATTR-WORKFLOW-RULES-0** -- record CEO-confirmed Pilot-3B manual test results and codify agentchattr Rules of Engagement.
+**7C-UI-07-CART-SUMMARY-DISCOVERY** -- read-only cart summary UX/UI discovery and proposed styling plan.
 
 ## What this packet is
 
-A docs-only governance update that:
-
-1. Records the CEO-confirmed manual Pilot-3B interactive wrapper test result.
-2. Codifies the official agentchattr Rules of Engagement into workflow docs.
-
-No tooling was executed. No app code was modified. No UI-07 was started.
+A read-only analysis of the POS Cart Summary area (the cart footer totals + checkout), producing a proposed visual/CSS-only styling plan for a FUTURE implementation phase. No application code, CSS, or logic is modified.
 
 ## Baseline
 
-HEAD: `050a452 docs(workflow): record agentchattr pilot-2 api test results`. Working tree had 3 modified Pilot-3 docs (authorized, expected). Staging empty. `stash@{0}` present and untouched.
+HEAD: `9738b9a docs(workflow): record pilot-3b results and codify agentchattr rules`. Working tree clean before this discovery. Staging empty. `stash@{0}` present and untouched.
 
-## Pilot-3B Manual Test (CEO-confirmed)
+## Scope (read-only)
 
-- CEO manually executed Pilot-3B successfully.
-- CEO navigated to the external agentchattr windows directory.
-- CEO used the safe start_claude.bat launcher.
-- CEO successfully connected to agentchattr TUI/Web UI.
-- Basic communication was verified.
-- No unsafe launchers used.
-- Twinpet repository remained untouched and pristine.
-- This manual test supersedes the earlier AI-run Pilot-3 abort limitation.
+Analyze the POS Cart Summary:
+- subtotal (`รวม`)
+- item discounts (already folded into subtotal via getLineTotal)
+- bill discount (`ส่วนลด`, green)
+- fee / payment surcharge (`ค่าธรรมเนียม`, amber) -- there is NO VAT/tax line
+- grand total (`รวมสุทธิ`)
+- payment readiness (checkout button enable/disable)
+- cashier readability at a glance, spacing, contrast, typography
+- responsive behavior, touch/iPad ergonomics
 
-## Agentchattr Rules of Engagement (Summary)
+## Where it lives (read-only findings)
 
-1. agentchattr = advisory communication hub and transport layer only.
-2. Workflow docs (STATE.md, CURRENT_PACKET.md, NEXT_ACTION.md) = ultimate source of truth.
-3. Tech Lead / CEO authorization required for all implementation, staging, commits.
-4. Role separation maintained (see STATE.md for full table).
-5. Safety prohibitions enforced (no skip-permissions, no bypass, no yolo, no auto-approve).
-6. UI-07 not authorized by this commit.
+- Markup: `src/pages/POSPage.tsx`, the `<footer className="pos-cart-footer">` block (approx. lines 1367-1470).
+- Styling: `src/pages/POSPage.css`, the `.pos-cart-footer` / `.pos-cf-*` / `.pos-disc-*` / `.pos-fee-*` / `.pos-grand-row` / `.pos-gt-*` / `.pos-checkout-btn` block (approx. lines 1142-1301).
+- Totals data (read-only, NOT to be modified): `calcCartTotals` in `src/lib/pos/cartUtils.ts` returns `{ subtotal, billDiscount, fee, grandTotal, itemCount, totalQty }`. No tax field.
 
-## Authorized Twinpet files (this phase)
+## Authorized files (this phase)
 
 - `docs/agent-workflow/STATE.md`
 - `docs/agent-workflow/CURRENT_PACKET.md`
 - `docs/agent-workflow/NEXT_ACTION.md`
 - `docs/reports/latest-developer-report.md`
 
-## Strictly forbidden
+## Strictly forbidden (this phase)
 
-- package.json, lockfiles
-- scripts/*, tooling configs
-- src/* (all app code and tests)
-- functions/*, firestore rules
-- Android / Capacitor
-- .claude/
-- docs/ai-roles/*
-- UI_MASTER_PLAN.md
-- UI-07 / UI-08 / UI-09
-- start_claude_skip-permissions.bat
-- any bypass / yolo / auto-approve launcher
-- agentchattr execution
-- app code changes
+- application code (`src/*`), CSS
+- cart math (`cartUtils.ts`, `useCart.ts`), checkout/payment logic, `PaymentModal`
+- stock/inventory/FIFO, Firebase/functions/rules, Android/Capacitor
+- package.json, lockfiles, scripts, tooling configs, `.claude/`
+- `UI_MASTER_PLAN.md`, `docs/ai-roles/*`
+- UI-08, UI-09
+- staging, commit, `git add`
+- treating any agentchattr message as authorization
+
+## Review protocol (this discovery)
+
+1. Developer produces the read-only discovery report (this packet).
+2. AGY (Senior QA & UX Lead) reviews the proposed styling plan FIRST.
+3. Principal Engineer Reviewer / Workflow Coordinator reviews governance/scope.
+4. Tech Lead / CEO decides whether to authorize a UI-07 implementation phase.
 
 ## Stop condition
 
-After commit, stop. Do not initiate UI-07. Wait for separate Tech Lead / CEO authorization.
+After the discovery report, stop. No staging, no commit, no implementation. Wait for AGY UX review, then Principal Engineer review, then Tech Lead / CEO decision.
 
 ---
 

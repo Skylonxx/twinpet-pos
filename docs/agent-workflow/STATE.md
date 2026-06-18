@@ -11,83 +11,23 @@ Updated by whichever agent or human currently owns the task.
 
 ## Current Phase
 
-**TOOLING-AGENTCHATTR-PILOT-3B-RESULT-RECORD + TOOLING-AGENTCHATTR-WORKFLOW-RULES-0** -- record CEO-confirmed Pilot-3B manual test results and codify agentchattr Rules of Engagement.
+**7C-UI-07-CART-SUMMARY-DISCOVERY** -- read-only cart summary UX/UI discovery and proposed styling plan. No implementation.
 
 ## Current Owner
 
-**Developer Agent** -- recording results and codifying rules (docs-only).
+**Developer Agent** -- read-only discovery and proposed styling plan (docs/report only).
 
 ## Latest Verdict
 
-**PILOT-3B PASS (CEO manual test)** -- CEO manually verified the interactive wrapper path (start_claude.bat) in an external workspace. Basic TUI/Web UI communication confirmed. No unsafe launchers used. Twinpet repo untouched.
+**DISCOVERY COMPLETE / READY FOR AGY UX REVIEW** -- the POS Cart Summary (subtotal, bill discount, fee, grand total, item count, checkout button) was inspected read-only in `src/pages/POSPage.tsx` and `src/pages/POSPage.css`. Findings and a proposed visual/CSS-only styling plan are recorded in `docs/reports/latest-developer-report.md`. No app code, CSS, cart math, or checkout/payment logic was modified. Note: there is NO VAT/tax line in the summary; `fee` is a payment-method surcharge, not tax.
 
-## Agentchattr Pilot History
+## Mode
 
-| Pilot | Method | Result | Notes |
-|---|---|---|---|
-| PILOT-0 | Discovery report | PASS | Committed at c3dbc46 |
-| PILOT-1 | Server smoke test | PASS WITH NOTES | Terminal report only |
-| PILOT-2 | API registration + message | PASS WITH NOTES | Committed at 050a452 |
-| PILOT-3 (AI-run) | Aborted | CORRECT ABORT | Non-interactive env cannot run TUI |
-| PILOT-3B (CEO manual) | Interactive wrapper | PASS | CEO-verified, safe launcher only |
-
----
-
-## Agentchattr Rules of Engagement (Official)
-
-### 1. Role
-
-- agentchattr is an advisory communication hub and transport layer only.
-- agentchattr is not a decision maker.
-- agentchattr does not replace workflow docs.
-- agentchattr does not authorize commits or implementation.
-
-### 2. Source of Truth
-
-- STATE.md, CURRENT_PACKET.md, and NEXT_ACTION.md remain the ultimate source of truth.
-- Chat messages are advisory and secondary.
-- If chat and docs disagree, docs win until Tech Lead / CEO decides otherwise.
-
-### 3. Authorization
-
-- Tech Lead / CEO authorization through standard workflow is required for all implementation, staging, and commits.
-- No autonomous commits.
-- No autonomous staging.
-- No bypass of AGY, Codex, Principal Engineer, or Tech Lead gates.
-
-### 4. Role Separation
-
-| Role | Assignment |
-|---|---|
-| Tech Lead / CEO | Decision owner |
-| Claude | Developer Agent (unless explicitly reassigned) |
-| ChatGPT | Principal Engineer Reviewer / Workflow Coordinator |
-| AGY | Senior QA / UX Lead |
-| Codex | Reviewer Agent |
-| Local Coordinator | Advisory helper only |
-| agentchattr | Communication transport (not a role with authority) |
-
-### 5. Safety Prohibitions
-
-- No start_claude_skip-permissions.bat.
-- No skip-permissions mode.
-- No bypass mode.
-- No yolo mode.
-- No auto-approve wrapper.
-- No stash access.
-- No package/lockfile/tooling config changes without explicit phase authorization.
-- No app code changes without explicit phase authorization.
-
-### 6. UI-07 Separation
-
-- UI-07 must begin only after separate Tech Lead / CEO authorization.
-- This commit does not authorize UI-07.
-
----
+Read-only cart summary UX/UI discovery. Source of truth = this STATE.md, CURRENT_PACKET.md, NEXT_ACTION.md. agentchattr is advisory transport only and authorizes nothing.
 
 ## Scope
 
-Docs-only governance update. Record Pilot-3B results and codify agentchattr rules. No app code. No tooling execution.
+POS Cart Summary only. Read-only analysis of: subtotal, item discounts (reflected in subtotal), bill discount, fee, grand total, payment readiness, cashier readability, spacing, contrast, typography, responsive behavior, touch/iPad ergonomics.
 
 ### Files allowed (this phase)
 
@@ -96,37 +36,44 @@ Docs-only governance update. Record Pilot-3B results and codify agentchattr rule
 - `docs/agent-workflow/NEXT_ACTION.md`
 - `docs/reports/latest-developer-report.md`
 
-### Files forbidden (this phase)
+### Boundaries (this phase -- NOT to be modified)
 
-- package.json, lockfiles
-- scripts/*, tooling configs
-- src/* (all app code and tests)
-- functions/*, firestore rules
-- Android / Capacitor
-- .claude/
-- docs/ai-roles/*
-- docs/agent-workflow/UI_MASTER_PLAN.md
-- UI-07 / UI-08 / UI-09 implementation
+- No implementation: no app code, no CSS.
+- No cart math (`cartUtils.ts`, `getLineTotal`, `calcCartTotals`), no `useCart.ts`.
+- No checkout/payment logic, no `PaymentModal` behavior.
+- No stock/inventory/FIFO, no Firebase/functions/rules, no Android/Capacitor.
+- No package.json, lockfiles, tooling configs, `.claude/`.
+- No UI-08, no UI-09.
+- No staging, no commit, no `git add`.
+
+---
+
+## Agentchattr Rules of Engagement (Official, still in force)
+
+1. agentchattr is an advisory communication hub and transport layer only -- not a decision maker, does not replace workflow docs, does not authorize commits or implementation.
+2. STATE.md, CURRENT_PACKET.md, NEXT_ACTION.md remain the ultimate source of truth; if chat and docs disagree, docs win.
+3. Tech Lead / CEO authorization through standard workflow is required for all implementation, staging, and commits.
+4. Role separation: Tech Lead / CEO = decision owner; Claude = Developer Agent; ChatGPT = Principal Engineer Reviewer / Workflow Coordinator; AGY = Senior QA / UX Lead; Codex = Reviewer Agent; agentchattr = transport only.
+5. Safety prohibitions: no skip-permissions, no bypass, no yolo, no auto-approve, no stash access.
 
 ---
 
 ## Preflight
 
-- Working tree had 3 modified docs from aborted Pilot-3 (authorized, expected).
-- HEAD at start: `050a452 docs(workflow): record agentchattr pilot-2 api test results`.
+- Working tree was **clean** before this phase started.
+- HEAD at start: `9738b9a docs(workflow): record pilot-3b results and codify agentchattr rules`.
 - Staging area was **empty**.
 - `stash@{0}` present and untouched.
 
 ## Baseline (closed work)
 
 - **UI-01 through UI-06** -- DONE. Final UI-06 commit: `ab7eceb`.
-- **TOOLING-AGENTCHATTR-PILOT-0** -- discovery report committed at `c3dbc46`.
-- **TOOLING-AGENTCHATTR-PILOT-2** -- API test results committed at `050a452`.
+- **TOOLING-AGENTCHATTR PILOT-0/2/3B** -- discovery `c3dbc46`, API test `050a452`, Pilot-3B + rules `9738b9a`.
 
 ## Staging / Commit status
 
-- Staged: **yes** (4 authorized files).
-- Committed: **yes**.
+- Staged: **no**.
+- Committed: **no**. No commit authorized for this discovery phase.
 
 ---
 
@@ -140,18 +87,18 @@ Docs-only governance update. Record Pilot-3B results and codify agentchattr rule
 | UI-04 Product Grid Cards | DONE -- `06bc831`, CEO Physical UAT PASS |
 | UI-05 Cart Container | DONE |
 | UI-06 Cart Item Rows | DONE -- final `ab7eceb`, CEO Physical UAT PASS |
-| UI-07 Cart Summary | PENDING (NOT started -- not authorized) |
+| UI-07 Cart Summary | DISCOVERY in progress (read-only; implementation NOT authorized) |
 | UI-08 Action Buttons | PENDING (NOT started -- not authorized) |
 | UI-09 Checkout Button (F12) | PENDING (NOT started -- not authorized) |
 | UI-10 Manager PIN Authorization Overlay | FUTURE BACKLOG (not authorized) |
 
 ## Next Owner
 
-**Tech Lead / CEO** -- decide next steps (UI-07 authorization or other direction).
+**AGY / Senior QA & UX Lead** -- UX review of the proposed cart summary styling plan; then Principal Engineer Reviewer / Workflow Coordinator; then Tech Lead / CEO implementation decision.
 
 ## Next Action
 
-See `NEXT_ACTION.md`. Waiting for separate Tech Lead / CEO authorization for UI-07.
+See `NEXT_ACTION.md`. AGY reviews the proposed styling plan; on PASS / PASS WITH NOTES, route to Principal Engineer, then Tech Lead / CEO to authorize (or not) a UI-07 implementation phase.
 
 ## Role File Reference
 
@@ -164,7 +111,7 @@ See `NEXT_ACTION.md`. Waiting for separate Tech Lead / CEO authorization for UI-
 
 ## Stop Condition
 
-Stopped after commit. Do not initiate UI-07 without separate Tech Lead / CEO authorization.
+After the Developer discovery report, stop. No staging, no commit, no `git add`. No implementation. No UI-08/UI-09. Wait for AGY UX review, then Principal Engineer review, then Tech Lead / CEO implementation authorization.
 
 ---
 
