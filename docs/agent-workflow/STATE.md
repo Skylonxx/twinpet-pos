@@ -11,38 +11,37 @@ Updated by whichever agent or human currently owns the task.
 
 ## Current Phase
 
-**TOOLING-AGENTCHATTR-PILOT-0** -- docs-only tooling discovery. Evaluate agentchattr for potential use as a Local Coordinator tool in the Twinpet multi-agent workflow. No install, no execution, no app code.
+**TOOLING-AGENTCHATTR-PILOT-2** -- external scratch single-agent connection test. Controlled test of agentchattr with one Claude agent in an external scratch workspace (C:\tools\agentchattr-scratch). No Twinpet repo access from the agent. No unsafe launchers.
 
 ## Current Owner
 
-**Developer Agent** -- docs-only discovery research and report.
+**Developer Agent** -- running external connection test and reporting results.
 
 ## Latest Verdict
 
-**DISCOVERY IN PROGRESS** -- read-only research on agentchattr (public GitHub repo, web search). No tool installed, no tool executed, no package.json or lockfile modified.
+**PILOT-1 PASS WITH NOTES (closed)** -- server smoke test passed. Server starts on localhost:8300, MCP on 8200/8201, API responds. No agent was connected in PILOT-1. PILOT-2 authorized for a controlled single-agent connection test.
 
 ## Scope
 
-Docs-only discovery of agentchattr. Produce a discovery report answering: what is it, what problem would it solve, how it fits the workflow, safe pilot model, risks, and recommendation. No install, no execution, no app code, no tests, no scripts, no tooling configs.
+External scratch single-agent connection test only. The agent must use C:\tools\agentchattr-scratch as its workspace, not the Twinpet repo. No unsafe launchers (no skip-permissions, no bypass, no yolo, no auto-approve). No file edits requested. No real workflow routing. Harmless test messages only.
 
 ### Files allowed (this phase)
 
-- `docs/agent-workflow/UI_MASTER_PLAN.md` (UI-06 closure marker only)
 - `docs/agent-workflow/STATE.md`
 - `docs/agent-workflow/CURRENT_PACKET.md`
 - `docs/agent-workflow/NEXT_ACTION.md`
-- `docs/reports/latest-developer-report.md`
 
 ### Files forbidden (this phase)
 
-- package.json, package-lock.json, pnpm-lock.yaml, yarn.lock
+- package.json, lockfiles
 - scripts/*, tooling configs
-- src/* (all app code)
+- src/* (all app code and tests)
 - functions/*, firestore rules
 - Android / Capacitor
 - .claude/
+- docs/reports/*
 - docs/ai-roles/*
-- tests
+- docs/agent-workflow/UI_MASTER_PLAN.md
 - UI-07 / UI-08 / UI-09 implementation
 
 ---
@@ -50,20 +49,20 @@ Docs-only discovery of agentchattr. Produce a discovery report answering: what i
 ## Preflight
 
 - Working tree was **clean** before this phase started.
-- HEAD at start: `ab7eceb fix(pos): stabilize discount modal draft state`.
+- HEAD at start: `c3dbc46 docs(workflow): add agentchattr discovery report`.
 - Staging area was **empty**.
 - `stash@{0}` present and untouched.
 
 ## Baseline (closed work)
 
-- **UI-01 through UI-05** -- DONE.
-- **UI-06 Cart Item Rows** -- DONE. Commits: `630b742` (initial), `1a68983` (hotfix), `85b3a31` (per-unit enhancement), `77837ca` (manager PIN backlog), `ab7eceb` (modal state revision). CEO Physical UAT: PASS.
-- **Local Coordinator Pilot 0/1A/2** -- closed (`e5f3254`, `58eeb19`, `cddc6b4`).
+- **UI-01 through UI-06** -- DONE. Final UI-06 commit: `ab7eceb`.
+- **TOOLING-AGENTCHATTR-PILOT-0** -- discovery report committed at `c3dbc46`.
+- **TOOLING-AGENTCHATTR-PILOT-1** -- server smoke test PASS WITH NOTES (terminal report only, not committed separately).
 
 ## Staging / Commit status
 
 - Staged: **no**.
-- Committed: **no**.
+- Committed: **no**. No commit authorized for PILOT-2.
 
 ---
 
@@ -84,11 +83,11 @@ Docs-only discovery of agentchattr. Produce a discovery report answering: what i
 
 ## Next Owner
 
-**Principal Engineer Reviewer / Workflow Coordinator** -- review the agentchattr discovery report for governance risk, fit assessment, and pilot safety.
+**Principal Engineer Reviewer / Workflow Coordinator** -- review the PILOT-2 terminal report for safety and governance.
 
 ## Next Action
 
-See `NEXT_ACTION.md`. Principal Engineer reviews the discovery report, then Tech Lead / CEO decides whether to authorize a pilot phase (TOOLING-AGENTCHATTR-PILOT-1).
+See `NEXT_ACTION.md`. Principal Engineer reviews, then Tech Lead / CEO decides next steps.
 
 ## Role File Reference
 
@@ -101,7 +100,7 @@ See `NEXT_ACTION.md`. Principal Engineer reviews the discovery report, then Tech
 
 ## Stop Condition
 
-Discovery report complete. No install, no execution, no staging, no commit, no `git add`. No app code. No package/lockfile changes. No scripts. No UI-07/UI-08/UI-09. Wait for Principal Engineer review and Tech Lead / CEO decision.
+After PILOT-2 terminal report, stop. No staging, no commit, no `git add`. No app code. No package/lockfile changes. No scripts. No UI-07/UI-08/UI-09. Wait for Principal Engineer review and Tech Lead / CEO decision.
 
 ---
 

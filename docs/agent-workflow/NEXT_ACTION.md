@@ -2,13 +2,20 @@
 
 ## Current State
 
-Phase **TOOLING-AGENTCHATTR-PILOT-0** is **complete** (docs-only discovery). The Developer produced a discovery report on agentchattr covering: what it is, problem fit, workflow integration, safe pilot model, risk analysis, and recommendation. No tool was installed or executed. UI-06 is marked DONE in the master plan.
+Phase **TOOLING-AGENTCHATTR-PILOT-2** external scratch single-agent connection test is in progress. The Developer is running a controlled test with one Claude agent in an external scratch workspace (C:\tools\agentchattr-scratch). No Twinpet repo access from the agent. No unsafe launchers.
 
 ## What Happens Next
 
-**Next owner: Principal Engineer Reviewer / Workflow Coordinator.**
+**After Developer terminal report, next owner: Principal Engineer Reviewer / Workflow Coordinator.**
 
-Principal Engineer reviews the discovery report for governance risk, fit assessment, and pilot safety. After Principal Engineer review, route to Tech Lead / CEO for the install/pilot decision.
+No commit is authorized for PILOT-2. The terminal report is the deliverable.
+
+Post-test Twinpet repo verification should show only these 3 authorized workflow docs modified:
+- docs/agent-workflow/STATE.md
+- docs/agent-workflow/CURRENT_PACKET.md
+- docs/agent-workflow/NEXT_ACTION.md
+
+No other files should be modified. Staging area must be empty.
 
 ---
 
@@ -20,85 +27,40 @@ MODEL: best available reviewer model for this run
 REASONING: Medium
 ROLE: Principal Engineer Reviewer / Workflow Coordinator
 ROLE FILE: docs/ai-roles/tech-lead.md
-MODE: Governance review of tooling discovery report, no edits, no staging, no commit
+MODE: Governance review of PILOT-2 terminal report, no edits, no staging, no commit
 
-PHASE: TOOLING-AGENTCHATTR-PILOT-0
-
-Inputs:
-- docs/reports/latest-developer-report.md (agentchattr discovery report)
-- docs/agent-workflow/CURRENT_PACKET.md
-- docs/agent-workflow/STATE.md
+PHASE: TOOLING-AGENTCHATTR-PILOT-2
 
 REVIEW MUST VERIFY:
-1. The discovery report accurately describes agentchattr capabilities and limitations.
-2. The proposed pilot model does not grant agentchattr any authority beyond advisory.
-3. No install or execution occurred during discovery.
-4. Risk analysis covers: package contamination, config sprawl, role confusion, stale state,
-   accidental auto-execution, security/token/privacy, Windows path, Thai/UTF-8, and .claude policy.
-5. The recommendation is well-reasoned and conservative.
-6. The pilot proposal (if recommended) preserves the existing governance chain:
-   Developer -> AGY -> Codex -> Principal Engineer -> Tech Lead / CEO.
-7. No app code, tests, scripts, tooling configs, Firebase, Android, or .claude files were touched.
+1. The test used only the safe launcher (start_claude.bat), not skip-permissions/bypass/yolo.
+2. The agent workspace was external scratch (C:\tools\agentchattr-scratch), not Twinpet.
+3. Only harmless test messages were sent.
+4. No file edits were requested or performed.
+5. No real Twinpet workflow routing occurred.
+6. Post-test Twinpet repo verification shows only the 3 authorized docs modified.
+7. No app code, package.json, lockfile, scripts, src, functions, Firebase, Android, .claude,
+   or UI-07/08/09 files were touched.
+8. stash@{0} remains untouched.
+9. No staging, no commit occurred.
+
+RUN AND VERIFY:
+git status --short
+git diff --name-only
+git diff --cached --name-only
+git log --oneline -5
+git stash list
 
 Produce a verdict (PASS / PASS WITH NOTES / FAIL) with specific findings.
-Do not install or execute agentchattr. Do not stage or commit.
+Do not stage or commit.
 ```
 
 ---
-
-## Tech Lead / CEO Decision Prompt (use ONLY after Principal Engineer PASS / PASS WITH NOTES)
-
-```
-TO: Tech Lead / CEO
-MODEL: best available model for this run
-REASONING: Medium
-ROLE: Tech Lead / CEO
-ROLE FILE: docs/ai-roles/tech-lead.md
-MODE: Decision on tooling pilot authorization
-
-PHASE: TOOLING-AGENTCHATTR-PILOT-0 (closure decision)
-
-PRECONDITION: Principal Engineer review PASS or PASS WITH NOTES.
-
-INPUTS:
-- docs/reports/latest-developer-report.md (agentchattr discovery report)
-- Principal Engineer review verdict and findings
-
-DECISION REQUIRED:
-Choose one:
-
-Option A -- Authorize TOOLING-AGENTCHATTR-PILOT-1 (controlled install + isolated test).
-  Scope: install agentchattr in a dev-only context, run a controlled single-agent test,
-  verify it works on Windows with the existing Claude Code setup, and report results.
-  No production use. No app code access. No automatic commits. Reversible.
-
-Option B -- Authorize TOOLING-AGENTCHATTR-PILOT-1 with conditions.
-  Specify additional constraints or a narrower scope.
-
-Option C -- Do not pilot yet.
-  Park the discovery report and resume UI-07 or another priority.
-
-Option D -- Discard.
-  The tooling does not fit. Archive the report and move on.
-
-Do not install or execute agentchattr until this decision is made.
-```
-
----
-
-## Review Chain
-
-```
-Developer Agent (discovery complete)
-  -> Principal Engineer Reviewer / Workflow Coordinator (governance review)
-    -> Tech Lead / CEO (install/pilot authorization decision)
-```
 
 ## Important Reminders
 
-- No tool was installed or executed during discovery.
+- No commit is authorized for PILOT-2.
 - The existing governance chain remains the absolute source of truth.
-- Do not install agentchattr until Tech Lead / CEO authorizes.
+- agentchattr is not authorized for real Twinpet workflow routing.
 - `stash@{0}` is pre-existing unrelated WIP -- do not touch.
 - Old manual workflow remains available as fallback.
 
