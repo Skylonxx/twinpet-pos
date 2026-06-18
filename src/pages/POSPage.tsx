@@ -1439,7 +1439,7 @@ export default function POSPage() {
             {totals.billDiscount > 0 && (
               <div className="pos-cf-row">
                 <span className="pos-cf-lbl">ส่วนลด</span>
-                <span className="pos-cf-val" style={{ color: '#1d9e75' }}>
+                <span className="pos-cf-val pos-cf-val--green">
                   -฿{formatMoney(totals.billDiscount)}
                 </span>
               </div>
@@ -1447,8 +1447,8 @@ export default function POSPage() {
             {totals.fee > 0 && (
               <div className="pos-cf-row">
                 <span className="pos-cf-lbl">ค่าธรรมเนียม</span>
-                <span className="pos-cf-val" style={{ color: '#ba7517' }}>
-                  ฿{formatMoney(totals.fee)}
+                <span className="pos-cf-val pos-cf-val--amber">
+                  +฿{formatMoney(totals.fee)}
                 </span>
               </div>
             )}
@@ -1456,7 +1456,7 @@ export default function POSPage() {
               <span className="pos-gt-lbl">รวมสุทธิ</span>
               <span className="pos-gt-val">฿{formatMoney(totals.grandTotal)}</span>
             </div>
-            <div style={{ fontSize: 10, color: 'var(--g400)', textAlign: 'right' }}>
+            <div className="pos-cf-count">
               {totals.itemCount} รายการ | {totals.totalQty} ชิ้น
             </div>
             <button

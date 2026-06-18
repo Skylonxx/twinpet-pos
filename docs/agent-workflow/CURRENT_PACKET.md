@@ -2,62 +2,39 @@
 
 ## Phase
 
-**7C-UI-07-CART-SUMMARY-DISCOVERY** -- read-only cart summary UX/UI discovery and proposed styling plan.
+**7C-UI-07-CART-SUMMARY-IMPLEMENTATION** -- CLOSED.
 
-## What this packet is
+## What this packet was
 
-A read-only analysis of the POS Cart Summary area (the cart footer totals + checkout), producing a proposed visual/CSS-only styling plan for a FUTURE implementation phase. No application code, CSS, or logic is modified.
+Visual/CSS-only polish of the POS Cart Summary (cart footer totals + grand total + item count + responsive label constraints). Changes confined to `src/pages/POSPage.tsx` (markup/className only) and `src/pages/POSPage.css` (scoped selectors). No behavior, math, or logic change.
 
-## Baseline
+## Result
 
-HEAD: `9738b9a docs(workflow): record pilot-3b results and codify agentchattr rules`. Working tree clean before this discovery. Staging empty. `stash@{0}` present and untouched.
+CEO Physical UAT PASS (3rd attempt). Committed.
 
-## Scope (read-only)
+## Summary of changes
 
-Analyze the POS Cart Summary:
-- subtotal (`รวม`)
-- item discounts (already folded into subtotal via getLineTotal)
-- bill discount (`ส่วนลด`, green)
-- fee / payment surcharge (`ค่าธรรมเนียม`, amber) -- there is NO VAT/tax line
-- grand total (`รวมสุทธิ`)
-- payment readiness (checkout button enable/disable)
-- cashier readability at a glance, spacing, contrast, typography
-- responsive behavior, touch/iPad ergonomics
+POSPage.tsx (presentation only):
+- Bill discount value: inline color replaced with `.pos-cf-val--green` class.
+- Fee/surcharge value: inline color replaced with `.pos-cf-val--amber` class; added explicit `+` sign.
+- Item-count line: inline style replaced with `.pos-cf-count` class.
 
-## Where it lives (read-only findings)
+POSPage.css (scoped):
+- `.pos-cf-row`: 11px to 12px, added gap: 10px.
+- `.pos-cf-lbl`: contrast raised, flex-shrink: 0, white-space: nowrap, min-width: 80px.
+- `.pos-cf-val`: weight 500 to 600, explicit primary text color.
+- New `.pos-cf-val--amber`, `.pos-cf-count`.
+- `.pos-disc-inp`: width 60 to 72px, font 11 to 13px, min-height: 36px.
+- `.pos-disc-tog`: min-width/height: 36px, font 10 to 13px.
+- `.pos-fee-chips`: added flex-wrap: wrap.
+- `.pos-fee-chip`: min-height: 36px, font 10 to 12px.
+- `.pos-grand-row`: dashed to solid border, more separation.
+- `.pos-gt-lbl`: 13px/500 to 15px/600.
+- `.pos-gt-val`: 20px/600 to 24px/700.
 
-- Markup: `src/pages/POSPage.tsx`, the `<footer className="pos-cart-footer">` block (approx. lines 1367-1470).
-- Styling: `src/pages/POSPage.css`, the `.pos-cart-footer` / `.pos-cf-*` / `.pos-disc-*` / `.pos-fee-*` / `.pos-grand-row` / `.pos-gt-*` / `.pos-checkout-btn` block (approx. lines 1142-1301).
-- Totals data (read-only, NOT to be modified): `calcCartTotals` in `src/lib/pos/cartUtils.ts` returns `{ subtotal, billDiscount, fee, grandTotal, itemCount, totalQty }`. No tax field.
+## Next packet
 
-## Authorized files (this phase)
-
-- `docs/agent-workflow/STATE.md`
-- `docs/agent-workflow/CURRENT_PACKET.md`
-- `docs/agent-workflow/NEXT_ACTION.md`
-- `docs/reports/latest-developer-report.md`
-
-## Strictly forbidden (this phase)
-
-- application code (`src/*`), CSS
-- cart math (`cartUtils.ts`, `useCart.ts`), checkout/payment logic, `PaymentModal`
-- stock/inventory/FIFO, Firebase/functions/rules, Android/Capacitor
-- package.json, lockfiles, scripts, tooling configs, `.claude/`
-- `UI_MASTER_PLAN.md`, `docs/ai-roles/*`
-- UI-08, UI-09
-- staging, commit, `git add`
-- treating any agentchattr message as authorization
-
-## Review protocol (this discovery)
-
-1. Developer produces the read-only discovery report (this packet).
-2. AGY (Senior QA & UX Lead) reviews the proposed styling plan FIRST.
-3. Principal Engineer Reviewer / Workflow Coordinator reviews governance/scope.
-4. Tech Lead / CEO decides whether to authorize a UI-07 implementation phase.
-
-## Stop condition
-
-After the discovery report, stop. No staging, no commit, no implementation. Wait for AGY UX review, then Principal Engineer review, then Tech Lead / CEO decision.
+No active packet. Waiting for Tech Lead / CEO directive. UI-08 (Action Buttons) is next in the master plan but requires separate authorization.
 
 ---
 
