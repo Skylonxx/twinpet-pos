@@ -32,7 +32,7 @@ Idle. No active implementation. Waiting for CEO directive.
 1. agentchattr is an advisory communication hub and transport layer only -- not a decision maker, does not replace workflow docs, does not authorize commits or implementation.
 2. STATE.md, CURRENT_PACKET.md, NEXT_ACTION.md remain the ultimate source of truth; if chat and docs disagree, docs win.
 3. Tech Lead / CEO authorization through standard workflow is required for all implementation, staging, and commits.
-4. Role separation: Tech Lead / CEO = decision owner; Claude = Developer Agent; ChatGPT = Principal Engineer Reviewer / Workflow Coordinator; AGY = Senior QA / UX Lead; Codex = Reviewer Agent; agentchattr = transport only.
+4. Role separation (see `AUTHORITY_MATRIX.md`): Khun Chat = CEO / Product Owner / Final Decision Owner; Gemini = Tech Lead / CEO decision owner; ChatGPT = System Architect / Principal Workflow Architect (outside agentchattr); Codex = Principal Engineer Reviewer / Workflow Coordinator (inside agentchattr); Claude = Developer / Implementer; CodexSafe = Safety Reviewer / Boundary Reviewer; AGY = UI Lead / UX Reviewer (Senior QA); agentchattr = transport only.
 5. Safety prohibitions: no skip-permissions, no bypass, no yolo, no auto-approve, no stash access.
 
 ---
@@ -74,12 +74,17 @@ See `NEXT_ACTION.md`. Waiting for CEO directive. UI-08 (Action Buttons) is the n
 
 ## Role File Reference
 
-| Role | Role File |
-|---|---|
-| Developer Agent | `docs/ai-roles/developer.md` |
-| Senior QA & UX Lead / AGY | `docs/ai-roles/ux-lead.md` |
-| Codex Reviewer | `docs/ai-roles/reviewer.md` |
-| Principal Engineer Reviewer / Tech Lead / CEO | `docs/ai-roles/tech-lead.md` |
+Each role is listed separately — no blended cells. Full authority table: `docs/agent-workflow/AUTHORITY_MATRIX.md`.
+
+| Agent | Role | Role File |
+|---|---|---|
+| Khun Chat | CEO / Product Owner / Final Decision Owner | — (human; top of chain) |
+| Gemini | Tech Lead / CEO decision owner | `docs/ai-roles/tech-lead.md` |
+| ChatGPT | System Architect / Principal Workflow Architect (outside agentchattr) | `docs/ai-roles/system-architect.md` |
+| Codex | Principal Engineer Reviewer / Workflow Coordinator (inside agentchattr) | `docs/ai-roles/workflow-coordinator.md` (review facet: `reviewer.md`) |
+| Claude | Developer / Implementer | `docs/ai-roles/developer.md` |
+| CodexSafe | Safety Reviewer / Boundary Reviewer | `docs/ai-roles/safety-reviewer.md` |
+| AGY | UI Lead / UX Reviewer (Senior QA) | `docs/ai-roles/ux-lead.md` |
 
 ## Stop Condition
 

@@ -14,14 +14,22 @@ agentchattr is the local multi-agent communication hub for the Twinpet POS proje
 
 | Name in agentchattr | Role | Base |
 |---|---|---|
-| user | Tech Lead / CEO (human) | web UI sender |
-| claude | Claude Developer Agent | claude |
+| user | Khun Chat — CEO / Product Owner (human) | web UI sender |
+| claude | Claude — Developer / Implementer | claude |
 | claude-2 (or claude-N) | Additional Claude instances if needed | claude |
-| chatgpt | ChatGPT Principal Engineer / Workflow Coordinator | manual relay or future integration |
-| agy | AGY Senior QA / UX Lead | manual relay or future integration |
-| codex | Codex Reviewer Agent | manual relay or future integration |
+| codex | Codex — Principal Engineer Reviewer / Workflow Coordinator (inside) | manual relay or future integration |
+| codexsafe | CodexSafe — Safety Reviewer / Boundary Reviewer | manual relay or future integration |
+| agy | AGY — UI Lead / UX Reviewer (Senior QA) | store-relay exec or manual relay |
+| chatgpt | ChatGPT — System Architect (outside agentchattr) | manual relay (directs Codex) |
 
-The "user" sender represents the CEO/Tech Lead typing directly in the agentchattr web UI. Non-Claude agents (ChatGPT, AGY, Codex) are relayed manually by the CEO until direct integrations exist.
+The "user" sender represents Khun Chat (CEO / Product Owner) typing directly in the agentchattr web UI. ChatGPT operates **outside** agentchattr and is relayed manually. Gemini (Tech Lead) sits **above/outside** agentchattr as the decision gate and is not a routine swarm participant. See `docs/agent-workflow/AUTHORITY_MATRIX.md` and `docs/ai-roles/` for full role detail.
+
+### Hierarchy and direction (inside vs outside)
+
+- **Gemini (Tech Lead)** — above/outside agentchattr; the decision gate for architecture, phase, commit, and risk. Reports to Khun Chat.
+- **ChatGPT (System Architect)** — outside agentchattr; controls outer architecture, prompts, and workflow. Directs Codex; escalates to Gemini when a decision or approval is needed.
+- **Codex (Workflow Coordinator)** — inside agentchattr; controls in-swarm coordination of Claude, CodexSafe, and AGY. Reports swarm results to ChatGPT. Cannot authorize commits or product decisions.
+- **Claude / CodexSafe / AGY** — inside agentchattr; implement, safety-check, and UI-review respectively.
 
 ## 3. Authority Rules
 
