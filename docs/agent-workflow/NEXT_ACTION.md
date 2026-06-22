@@ -38,9 +38,19 @@ UI-08 requires separate Tech Lead / CEO authorization before any discovery, impl
 
 ## Role File Reference
 
+### Outside agentchattr
+
 | Role | Role File |
 |---|---|
-| Developer Agent | `docs/ai-roles/developer.md` |
-| Senior QA & UX Lead / AGY | `docs/ai-roles/ux-lead.md` |
-| Codex Reviewer | `docs/ai-roles/reviewer.md` |
-| Principal Engineer Reviewer / Tech Lead / CEO | `docs/ai-roles/tech-lead.md` |
+| Gemini — Tech Lead / CEO decision owner | `docs/ai-roles/tech-lead.md` |
+| ChatGPT — Architecture Engineer | `docs/ai-roles/system-architect.md` |
+
+### Inside agentchattr
+
+| Identity | Role | Role File |
+|---|---|---|
+| codex_coordinator (Codex #1) | Workflow Coordinator | `docs/ai-roles/workflow-coordinator.md` |
+| claude_developer (Claude) | Developer / Implementer | `docs/ai-roles/developer.md` |
+| codex_reviewer (Codex #2) | Independent Reviewer | `docs/ai-roles/reviewer.md` |
+| codex_safe | Internal Safety Gate | `docs/ai-roles/safety-reviewer.md` |
+| agy_ui_lead (AGY) | UI Lead / UX QA Lead (UI/UX-only) | `docs/ai-roles/ux-lead.md` |

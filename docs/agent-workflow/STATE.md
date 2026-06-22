@@ -32,7 +32,11 @@ Idle. No active implementation. Waiting for CEO directive.
 1. agentchattr is an advisory communication hub and transport layer only -- not a decision maker, does not replace workflow docs, does not authorize commits or implementation.
 2. STATE.md, CURRENT_PACKET.md, NEXT_ACTION.md remain the ultimate source of truth; if chat and docs disagree, docs win.
 3. Tech Lead / CEO authorization through standard workflow is required for all implementation, staging, and commits.
-4. Role separation (see `AUTHORITY_MATRIX.md`): Khun Chat = CEO / Product Owner / Final Decision Owner; Gemini = Tech Lead / CEO decision owner; ChatGPT = System Architect / Principal Workflow Architect (outside agentchattr); Codex = Principal Engineer Reviewer / Workflow Coordinator (inside agentchattr); Claude = Developer / Implementer; CodexSafe = Safety Reviewer / Boundary Reviewer; AGY = UI Lead / UX Reviewer (Senior QA); agentchattr = transport only.
+4. Role separation (see `AUTHORITY_MATRIX.md`):
+   - **Outside agentchattr:** Khun Chat = Human Operator / Product Owner (not a runtime identity); Gemini = Tech Lead / CEO decision owner; ChatGPT = Architecture Engineer.
+   - **Inside agentchattr:** codex_coordinator (Codex #1) = Workflow Coordinator; claude_developer = Developer / Implementer; codex_reviewer (Codex #2) = Independent Reviewer; agy_ui_lead = UI Lead / UX QA Lead (UI/UX-only).
+   - **Internal safety gate:** codex_safe = Internal Safety Gate / Boundary Guard (NOT a workflow persona).
+   - codex_coordinator and codex_reviewer MUST be separate identities. agentchattr = transport only.
 5. Safety prohibitions: no skip-permissions, no bypass, no yolo, no auto-approve, no stash access.
 
 ---
@@ -76,15 +80,28 @@ See `NEXT_ACTION.md`. Waiting for CEO directive. UI-08 (Action Buttons) is the n
 
 Each role is listed separately — no blended cells. Full authority table: `docs/agent-workflow/AUTHORITY_MATRIX.md`.
 
+### Outside agentchattr (upstream, manually controlled by user)
+
 | Agent | Role | Role File |
 |---|---|---|
-| Khun Chat | CEO / Product Owner / Final Decision Owner | — (human; top of chain) |
+| Khun Chat | Human Operator / Product Owner (not a runtime identity) | — (human; top of chain) |
 | Gemini | Tech Lead / CEO decision owner | `docs/ai-roles/tech-lead.md` |
-| ChatGPT | System Architect / Principal Workflow Architect (outside agentchattr) | `docs/ai-roles/system-architect.md` |
-| Codex | Principal Engineer Reviewer / Workflow Coordinator (inside agentchattr) | `docs/ai-roles/workflow-coordinator.md` (review facet: `reviewer.md`) |
-| Claude | Developer / Implementer | `docs/ai-roles/developer.md` |
-| CodexSafe | Safety Reviewer / Boundary Reviewer | `docs/ai-roles/safety-reviewer.md` |
-| AGY | UI Lead / UX Reviewer (Senior QA) | `docs/ai-roles/ux-lead.md` |
+| ChatGPT | Architecture Engineer | `docs/ai-roles/system-architect.md` |
+
+### Inside agentchattr (internal workflow agents)
+
+| Identity | Role | Role File |
+|---|---|---|
+| codex_coordinator (Codex #1) | Principal Engineer Reviewer / Workflow Coordinator | `docs/ai-roles/workflow-coordinator.md` |
+| claude_developer (Claude) | Developer / Implementer | `docs/ai-roles/developer.md` |
+| codex_reviewer (Codex #2) | Reviewer / Principal Engineer Reviewer | `docs/ai-roles/reviewer.md` |
+| agy_ui_lead (AGY) | UI Lead / UX QA Lead (UI/UX-only) | `docs/ai-roles/ux-lead.md` |
+
+### Internal safety gate
+
+| Identity | Role | Role File |
+|---|---|---|
+| codex_safe | Internal Safety Gate / Boundary Guard (NOT a workflow persona) | `docs/ai-roles/safety-reviewer.md` |
 
 ## Stop Condition
 

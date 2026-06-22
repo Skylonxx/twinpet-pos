@@ -25,9 +25,9 @@ Refined in phase 7C-LOCAL-COORDINATOR-PILOT-1A to formally add the 5 dry-run saf
 - Detect **untracked files** that need explicit authorization before inclusion.
 - Detect **staging / commit attempts** made without authorization, and flag them.
 - Prepare **draft** next-action prompts (for a human or owning role to accept, edit, or reject).
-- Suggest **escalation to the Principal Engineer** when governance risk appears.
-- Suggest a **Codex narrow re-check** when evidence hygiene fails (report claim vs tool output).
-- Suggest **AGY review** for UI/UX changes and Physical-UAT-related changes (AGY before Codex).
+- Suggest **escalation to codex_coordinator** (Codex #1, Workflow Coordinator) when governance risk appears.
+- Suggest a **codex_reviewer narrow re-check** (Codex #2, Independent Reviewer) when evidence hygiene fails (report claim vs tool output).
+- Suggest **agy_ui_lead review** for UI/UX changes and Physical-UAT-related changes (agy_ui_lead before codex_reviewer).
 - **Remind** standing hygiene rules (whitespace, mojibake, empty staging area, UTF-8-preserving edits, no `git add .`).
 
 ## 4. Strict prohibitions
@@ -46,15 +46,15 @@ The Local Coordinator must **never**:
 - install anything;
 - integrate or run any tool / CLI (no `agentchattr`, no Codex CLI, no automation runner);
 - replace or override a **Tech Lead / CEO** decision;
-- replace the **Principal Engineer** final workflow gate;
-- replace **Codex** review;
-- replace **AGY** review;
+- replace **codex_coordinator** (Codex #1) final workflow gate;
+- replace **codex_reviewer** (Codex #2) independent review;
+- replace **agy_ui_lead** (AGY) UI/UX review;
 - perform any automatic merge / commit;
 - operate as a concurrent multi-writer swarm (single-writer discipline is mandatory).
 
 ## 5. Escalation rules
 
-**Escalate to the Principal Engineer Reviewer / Workflow Coordinator** if any of these appear:
+**Escalate to codex_coordinator (Codex #1, Workflow Coordinator)** if any of these appear:
 
 - path mismatch;
 - an unexpected app file;
@@ -66,7 +66,7 @@ The Local Coordinator must **never**:
 - an ambiguous owner;
 - anything that could change scope.
 
-**Escalate to Tech Lead / CEO — only through the Principal Engineer** — when:
+**Escalate to Tech Lead / CEO — only through codex_coordinator** — when:
 
 - new scope is needed;
 - commit authorization is needed;
@@ -74,7 +74,7 @@ The Local Coordinator must **never**:
 - the workflow contract changes;
 - a decision is needed on whether the pilot should be kept, revised, or discarded.
 
-The Local Coordinator never contacts the Tech Lead / CEO to *obtain* authorization directly; it routes the need upward through the Principal Engineer.
+The Local Coordinator never contacts the Tech Lead / CEO to *obtain* authorization directly; it routes the need upward through codex_coordinator.
 
 ## 6. Handoff format
 
@@ -115,10 +115,10 @@ The Local Coordinator **reads but does not own** these documents. It never edits
 - `docs/agent-workflow/CURRENT_PACKET.md` — owned by the packet author / Tech Lead.
 - `docs/agent-workflow/NEXT_ACTION.md` — owned by the current owner during handoff.
 - `docs/agent-workflow/UI_MASTER_PLAN.md` — the Phase 7C source of truth (read-only to the Local Coordinator).
-- `docs/reports/latest-developer-report.md` — owned by the Developer.
-- `docs/reports/latest-agy-review.md` — owned by AGY.
-- `docs/reports/latest-codex-review.md` — owned by Codex.
-- `docs/reports/latest-techlead-decision.md` — owned by the Tech Lead / CEO.
+- `docs/reports/latest-developer-report.md` — owned by claude_developer (Developer).
+- `docs/reports/latest-agy-review.md` — owned by agy_ui_lead (AGY).
+- `docs/reports/latest-codex-review.md` — owned by codex_reviewer (Codex #2).
+- `docs/reports/latest-techlead-decision.md` — owned by the Tech Lead / CEO (Gemini).
 
 ## 8. Safety invariant
 
@@ -132,7 +132,7 @@ Rule 1 - Tool output beats report claims
 
 - If a report claims git diff, git diff --check, test, or git status results, but actual tool output or reviewer output contradicts the claim, the Local Coordinator must flag the contradiction.
 - The Local Coordinator must not trust report claims over tool output.
-- Routing: an evidence-hygiene conflict goes to the Developer for correction plus a Codex narrow re-check; a governance conflict goes to the Principal Engineer review.
+- Routing: an evidence-hygiene conflict goes to claude_developer for correction plus a codex_reviewer narrow re-check; a governance conflict goes to codex_coordinator review.
 - The Local Coordinator must not resolve the contradiction by its own authority.
 
 Rule 2 - Untracked files require explicit authorization
@@ -148,12 +148,12 @@ Rule 3 - Stale handoff state blocks routing
 - Routing must stop until the handoff docs are corrected.
 - The Local Coordinator must not route work based on a stale owner or stale action state.
 
-Rule 4 - Codex PASS is not commit authorization
+Rule 4 - codex_reviewer PASS is not commit authorization
 
-- A Codex PASS or PASS WITH NOTES is a review verdict only.
+- A codex_reviewer PASS or PASS WITH NOTES is a review verdict only.
 - It is not commit authorization.
-- Only the Tech Lead / CEO can authorize staging and commit.
-- The Local Coordinator must flag any attempt to treat a Codex PASS as commit permission.
+- Only the Tech Lead / CEO (Gemini / Khun Chat) can authorize staging and commit.
+- The Local Coordinator must flag any attempt to treat a codex_reviewer PASS as commit permission.
 
 Rule 5 - ASCII-only reporting
 

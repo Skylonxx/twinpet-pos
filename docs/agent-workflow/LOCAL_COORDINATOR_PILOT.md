@@ -12,17 +12,17 @@ This is a small test system to evaluate whether a **Local Coordinator** helper l
 
 Recent phases repeatedly lost time to mechanical, catchable mistakes: trailing whitespace in reports, a report claiming "`git diff --check` clean" while a reviewer found otherwise, a path typo, a modified-but-unlisted file, an untracked test file that needed explicit inclusion, and a commit authorization that had to be held after a Physical UAT failure. None of these are judgment calls — they are checklist items. The pilot asks: can a thin advisory helper run that checklist over the workflow docs and reported tool output, and route each flag to the correct existing role, so the human and the senior reviewers spend their attention on real risk instead?
 
-The Local Coordinator **never decides**. It reads, summarizes, flags, and recommends. Every recommendation lands on an existing role (Developer, AGY, Codex, Principal Engineer, Tech Lead / CEO) that retains full authority.
+The Local Coordinator **never decides**. It reads, summarizes, flags, and recommends. Every recommendation lands on an existing role (claude_developer, agy_ui_lead, codex_reviewer, codex_coordinator, Tech Lead / CEO) that retains full authority.
 
 ## 2. Non-goals
 
 The Local Coordinator does **NOT**:
 
-- replace the **Principal Engineer Reviewer / Workflow Coordinator** (final workflow gate + abnormality checks);
+- replace **codex_coordinator** (Codex #1, Workflow Coordinator — final workflow gate + abnormality checks);
 - replace the **Tech Lead / CEO** (scope closure, commit authorization, Physical UAT);
-- replace **Codex** (code / tests / scope / hygiene / package review);
-- replace **AGY / Senior QA & UX Lead** (UI/UX review, Physical-UAT-related visual validation);
-- replace the **Developer** (implementation);
+- replace **codex_reviewer** (Codex #2, Independent Reviewer — code / tests / scope / hygiene / package review);
+- replace **agy_ui_lead** (AGY, UI Lead / UX QA Lead — UI/UX review, Physical-UAT-related visual validation);
+- replace **claude_developer** (Developer / Implementer);
 - authorize commits or scope;
 - stage or commit anything;
 - install tools or integrate any CLI (no `agentchattr`, no Codex CLI, no automation runners);
@@ -45,12 +45,12 @@ These are real events from the recent UI-04 work, used to validate the Local Coo
 | # | Historical event | Checklist item exercised | Expected Local Coordinator behavior |
 |---|---|---|---|
 | 1 | Trailing whitespace in `docs/reports/latest-agy-review.md` | Report hygiene / trailing whitespace | Flag "trailing whitespace in a touched report"; recommend Developer fix via UTF-8-preserving edit + re-run `git diff --check` before handoff. |
-| 2 | Developer/report claimed `git diff --check` clean while Codex later found a failure | Evidence hygiene mismatch (report vs tool output) | Flag "report claim conflicts with tool output"; recommend Codex narrow re-check + escalate evidence mismatch to Principal Engineer. |
+| 2 | Developer/report claimed `git diff --check` clean while Codex later found a failure | Evidence hygiene mismatch (report vs tool output) | Flag "report claim conflicts with tool output"; recommend codex_reviewer narrow re-check + escalate evidence mismatch to codex_coordinator. |
 | 3 | Path typo: `src/lib/settingsings/types.ts` vs correct `src/lib/settings/types.ts` | Suspicious / typo path | Flag "path not found / likely typo"; recommend Developer correct the path before any handoff or commit prompt. |
 | 4 | Modified-but-unlisted `src/lib/settings/settingsNav.ts` | File / package mismatch (changed but not in declared package) | Flag "changed file missing from declared package"; recommend Developer reconcile the file list or justify the change. |
 | 5 | Untracked `src/pages/POSPage.product-card.test.ts` needing explicit inclusion | Untracked file needs explicit authorization | Flag "untracked file present; confirm it belongs to this package and is explicitly listed" before commit prompt. |
 | 6 | Prior Tech Lead commit authorization superseded after Physical UAT failed | Commit-authorization correctness | Flag "prior commit authorization is HELD/superseded after UAT failure"; remind no commit until fresh Tech Lead / CEO authorization. |
-| 7 | UI review must go to AGY before Codex | Next-owner routing (UI changes) | For UI/visual changes, recommend AGY review **before** Codex; flag if routing skips AGY. |
+| 7 | UI review must go to AGY before Codex | Next-owner routing (UI changes) | For UI/visual changes, recommend agy_ui_lead review **before** codex_reviewer; flag if routing skips agy_ui_lead. |
 | 8 | No commit until Tech Lead authorization | Commit-authorization gate | Remind that no commit happens without explicit Tech Lead / CEO authorization; flag any premature commit prompt. |
 | 9 | Stop-after-commit before CEO UAT | Handoff completeness / stop condition | Confirm the stop condition includes "stop and hand to CEO for Physical UAT after commit"; flag if missing. |
 
@@ -63,7 +63,7 @@ These are real events from the recent UI-04 work, used to validate the Local Coo
 - Local Coordinator identifies a file / package mismatch **before** a commit prompt reaches the Developer.
 - Local Coordinator flags a missing or suspicious path.
 - Local Coordinator flags staged files when the staging area should be empty.
-- Local Coordinator routes a UI functional/visual check to **AGY before Codex**.
+- Local Coordinator routes a UI functional/visual check to **agy_ui_lead before codex_reviewer**.
 - Local Coordinator reminds that **Tech Lead / CEO commit authorization is required** before any commit.
 - Local Coordinator detects a missing STATE CARD field or wrong next-owner and recommends the correction to the owning role.
 
@@ -72,7 +72,7 @@ These are real events from the recent UI-04 work, used to validate the Local Coo
 - Local Coordinator **gives commit authorization**.
 - Local Coordinator **stages files** (or runs `git add` / `git commit`).
 - Local Coordinator **changes app code** (or tests/scripts).
-- Local Coordinator **overrides** the Principal Engineer or Tech Lead.
+- Local Coordinator **overrides** codex_coordinator or Tech Lead.
 - Local Coordinator **starts UI-06** (or any UI master-plan item).
 - Local Coordinator **creates scripts or installs tools**.
 
@@ -85,7 +85,7 @@ A simulated, **read-only** dry run using existing report files only — no scrip
 1. Read `docs/agent-workflow/STATE.md`.
 2. Read `docs/agent-workflow/CURRENT_PACKET.md`.
 3. Read `docs/agent-workflow/NEXT_ACTION.md`.
-4. Read the latest developer / AGY / Codex reports **if available** (`docs/reports/latest-developer-report.md`, `latest-agy-review.md`, `latest-codex-review.md`).
+4. Read the latest claude_developer / agy_ui_lead / codex_reviewer reports **if available** (`docs/reports/latest-developer-report.md`, `latest-agy-review.md`, `latest-codex-review.md`).
 5. Produce a single **"Local Coordinator Observation"** text output (the handoff format defined in `LOCAL_COORDINATOR_CONTRACT.md` §6) summarizing state, package status, hygiene status, authority status, risk flags, and recommended routing.
 6. **Do not** write app files. **Do not** stage. **Do not** commit.
 
@@ -95,14 +95,14 @@ The dry-run output is advisory text only. It is handed to the human operator / t
 
 The PILOT-1 manual dry-run produced five safety rules. They are now binding in `LOCAL_COORDINATOR_CONTRACT.md` section 9 and summarized here. Each maps back to a historical scenario in section 4. Written in ASCII per Rule 5.
 
-- Rule 1 - Tool output beats report claims. A report claim about git diff, git diff --check, test, or git status must never be trusted over actual tool or reviewer output; on contradiction, flag it. Route an evidence-hygiene conflict to the Developer plus a Codex narrow re-check, and a governance conflict to the Principal Engineer. Do not resolve by authority. (Maps to scenario 2.)
+- Rule 1 - Tool output beats report claims. A report claim about git diff, git diff --check, test, or git status must never be trusted over actual tool or reviewer output; on contradiction, flag it. Route an evidence-hygiene conflict to claude_developer plus a codex_reviewer narrow re-check, and a governance conflict to codex_coordinator. Do not resolve by authority. (Maps to scenario 2.)
 - Rule 2 - Untracked files require explicit authorization. Untracked files must be explicitly named and authorized before staging or commit; flag them as package risk unless listed; always warn against git add .; never recommend broad staging. (Maps to scenario 5.)
 - Rule 3 - Stale handoff state blocks routing. If NEXT_ACTION.md or STATE.md contradicts the current owner, verdict, or completed review state, flag stale handoff state and stop routing until the docs are corrected. (Maps to the stale-handoff finding.)
-- Rule 4 - Codex PASS is not commit authorization. A Codex PASS or PASS WITH NOTES is a review verdict only; only the Tech Lead / CEO authorizes staging and commit; flag any attempt to treat a Codex PASS as commit permission. (Maps to scenarios 6 and 8.)
+- Rule 4 - codex_reviewer PASS is not commit authorization. A codex_reviewer PASS or PASS WITH NOTES is a review verdict only; only the Tech Lead / CEO (Gemini / Khun Chat) authorizes staging and commit; flag any attempt to treat a codex_reviewer PASS as commit permission. (Maps to scenarios 6 and 8.)
 - Rule 5 - ASCII-only reporting. Local Coordinator terminal and chat reports must be ASCII-only to avoid CLI / terminal copy-paste mojibake; prohibit emojis, arrows, smart quotes, em dash, box drawing, decorative symbols, checkmark symbols, and non-ASCII terminal symbols; require plain English, hyphen lists, and simple labels. This governs generated reports only and is not a ban on existing Thai documentation.
 
 ---
 
 ## Relationship to existing governance
 
-The existing chain — Developer → AGY → Codex → Principal Engineer / Workflow Coordinator → Tech Lead / CEO → CEO Physical UAT — is unchanged and remains the source of truth. The Local Coordinator is a thin advisory pre-check that sits beside this chain and feeds it cleaner inputs. See `LOCAL_COORDINATOR_CONTRACT.md` for the binding role contract and the safety invariant.
+The existing chain — claude_developer → agy_ui_lead (for UI scope) → codex_reviewer → codex_coordinator → ChatGPT (Architecture Engineer) → Gemini (Tech Lead) → Khun Chat (Physical UAT) — is unchanged and remains the source of truth. The Local Coordinator is a thin advisory pre-check that sits beside this chain and feeds it cleaner inputs. See `LOCAL_COORDINATOR_CONTRACT.md` for the binding role contract and the safety invariant.

@@ -12,24 +12,35 @@ agentchattr is the local multi-agent communication hub for the Twinpet POS proje
 
 ## 2. Participant Names
 
+### Outside agentchattr (upstream, manually controlled by user)
+
+| Name | Role | Notes |
+|---|---|---|
+| user | Khun Chat — Human Operator / Product Owner (human) | web UI sender; not an agentchattr runtime identity |
+| — | Gemini — Tech Lead / CEO decision owner | above/outside agentchattr; not a routine swarm participant |
+| chatgpt | ChatGPT — Architecture Engineer | outside agentchattr; manually relayed by user |
+
+### Inside agentchattr (internal workflow agents + safety gate)
+
 | Name in agentchattr | Role | Base |
 |---|---|---|
-| user | Khun Chat — CEO / Product Owner (human) | web UI sender |
-| claude | Claude — Developer / Implementer | claude |
+| codex_coordinator | Codex #1 — Principal Engineer Reviewer / Workflow Coordinator | manual relay or future integration |
+| claude_developer | Claude — Developer / Implementer | claude |
 | claude-2 (or claude-N) | Additional Claude instances if needed | claude |
-| codex | Codex — Principal Engineer Reviewer / Workflow Coordinator (inside) | manual relay or future integration |
-| codexsafe | CodexSafe — Safety Reviewer / Boundary Reviewer | manual relay or future integration |
-| agy | AGY — UI Lead / UX Reviewer (Senior QA) | store-relay exec or manual relay |
-| chatgpt | ChatGPT — System Architect (outside agentchattr) | manual relay (directs Codex) |
+| codex_reviewer | Codex #2 — Reviewer / Principal Engineer Reviewer | manual relay or future integration; MUST be separate from codex_coordinator |
+| codex_safe | Internal Safety Gate / Boundary Guard | manual relay or future integration; NOT a workflow persona |
+| agy_ui_lead | AGY — UI Lead / UX QA Lead (UI/UX-only) | store-relay exec or manual relay |
 
-The "user" sender represents Khun Chat (CEO / Product Owner) typing directly in the agentchattr web UI. ChatGPT operates **outside** agentchattr and is relayed manually. Gemini (Tech Lead) sits **above/outside** agentchattr as the decision gate and is not a routine swarm participant. See `docs/agent-workflow/AUTHORITY_MATRIX.md` and `docs/ai-roles/` for full role detail.
+The "user" sender represents Khun Chat (Human Operator / Product Owner) typing directly in the agentchattr web UI. ChatGPT operates **outside** agentchattr and is relayed manually. Gemini (Tech Lead) sits **above/outside** agentchattr as the decision gate and is not a routine swarm participant. See `docs/agent-workflow/AUTHORITY_MATRIX.md` and `docs/ai-roles/` for full role detail.
 
 ### Hierarchy and direction (inside vs outside)
 
-- **Gemini (Tech Lead)** — above/outside agentchattr; the decision gate for architecture, phase, commit, and risk. Reports to Khun Chat.
-- **ChatGPT (System Architect)** — outside agentchattr; controls outer architecture, prompts, and workflow. Directs Codex; escalates to Gemini when a decision or approval is needed.
-- **Codex (Workflow Coordinator)** — inside agentchattr; controls in-swarm coordination of Claude, CodexSafe, and AGY. Reports swarm results to ChatGPT. Cannot authorize commits or product decisions.
-- **Claude / CodexSafe / AGY** — inside agentchattr; implement, safety-check, and UI-review respectively.
+- **Khun Chat (Human Operator / Product Owner)** — the user; not an agentchattr runtime identity.
+- **Gemini (Tech Lead)** — above/outside agentchattr; the decision gate for architecture, phase, commit, risk, merge, production, and live-execution. Reports to Khun Chat.
+- **ChatGPT (Architecture Engineer)** — outside agentchattr; analyzes architecture, produces plans/constraints/task briefs. The user manually passes ChatGPT output into agentchattr. Escalates to Gemini when a decision or approval is needed.
+- **codex_coordinator (Codex #1)** — inside agentchattr; receives briefs through the user, coordinates `claude_developer`, `codex_reviewer`, `codex_safe`, and `agy_ui_lead`. Reports swarm results for upstream relay. Cannot authorize commits or product decisions.
+- **codex_reviewer (Codex #2)** — inside agentchattr; independently reviews diffs, tests, safety, evidence, and scope. MUST be a separate identity from codex_coordinator.
+- **claude_developer / codex_safe / agy_ui_lead** — inside agentchattr; implement, safety-gate, and UI-review respectively.
 
 ## 3. Authority Rules
 
@@ -153,6 +164,7 @@ Read-Only packets that only inspect the Twinpet repo must also cd into it first.
 - Modifying package.json or lockfiles without explicit phase authorization is FORBIDDEN.
 - Modifying agentchattr code, config, or settings from within a Twinpet task is FORBIDDEN.
 - Real Twinpet workflow routing through agentchattr without this protocol is FORBIDDEN.
+- Promoting or merging dry-run identities (e.g. claude_dryrun) to main is FORBIDDEN. Production Claude remains relay-ineligible unless a separate Gemini-approved production activation gate explicitly authorizes it.
 
 ### Required verifications
 
