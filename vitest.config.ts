@@ -5,7 +5,7 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     environment: 'node',
-    // Co-located *.test.ts unit specs only — Playwright specs live in /tests.
-    include: ['src/**/*.test.ts'],
+    // Co-located unit specs — Playwright specs live in /tests.
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
   },
 });

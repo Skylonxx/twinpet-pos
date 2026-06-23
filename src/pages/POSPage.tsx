@@ -1606,8 +1606,6 @@ export default function POSPage() {
       <HoldBillNoteModal
         open={holdNoteOpen}
         onClose={() => {
-          // UI-03: Hold-Bill note cancelled/closed — return focus to the scan box (the confirm
-          // path already refocuses via handleHoldConfirm). Never steals focus while the modal is open.
           setHoldNoteOpen(false);
           focusSearch();
         }}

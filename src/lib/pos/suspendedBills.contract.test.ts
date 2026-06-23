@@ -118,9 +118,7 @@ describe('Hold Bill · customer persist (POSPage.tsx)', () => {
       'const handleHoldConfirm',
       '[addBill,',
     );
-    // The ternary handles null: `customer ? { ...customer } : null`
     expect(fn).toContain('customer ? { ...customer } : null');
-    // customerId uses optional chaining: `customer?.id ?? null`
     expect(fn).toContain("customer?.id ?? null");
   });
 });
