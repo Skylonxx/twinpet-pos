@@ -1,6 +1,92 @@
 # Latest Report
 
 > Rolling "latest report" for the stock-write security workstream. Updated at each phase boundary.
+
+---
+
+## TRACKER RECONCILIATION — 2026-06-23
+
+> This reconciliation section supersedes the stale "Current state" note below. That note reflects Phase 7C-C3; the physical repo has advanced significantly since then (~35 commits).
+
+**Current physical state (verified 2026-06-23):**
+- HEAD: `889e23a fix(pos): make suspended bill ids LAN-safe`
+- origin/main: `889e23a`
+- Ahead/behind: `0 / 0`
+- Working tree: clean before reconciliation
+- Staging: empty before reconciliation
+- stash@{0}: present and untouched — `On main: WIP: Batches 1-3 UI/settings/UOM/transfer-UI (unrelated to stock-security Phase 1)`
+- Phase: `TWINPET-POS-TRACKER-RECONCILIATION-AFTER-REENTRY` (DOCS-ONLY / OPTION A)
+
+**Docs-only reconciliation in progress — no implementation performed.**
+
+### Recent commit ledger (physically verified, newest first)
+
+| Hash | Message |
+|------|---------|
+| `889e23a` | fix(pos): make suspended bill ids LAN-safe |
+| `602acea` | fix(pos): restore hold bill modal flow with DOM coverage |
+| `287955e` | test(pos): add suspended bill hold/restore contract tests |
+| `873997e` | style(pos): polish action button hierarchy |
+| `8a4ce19` | style(pos): polish cart summary layout and resolve responsive constraints |
+| `ab7eceb` | fix(pos): stabilize discount modal draft state |
+| `85b3a31` | feat(pos): add per-unit item discount option |
+| `1a68983` | fix(pos): repair discount badge and numpad touch behavior |
+| `630b742` | style(pos): polish cart item row readability |
+| `06bc831` | feat(pos): add product card display preferences |
+| `3b3b909` | feat(pos): replace category modal with dropdown |
+| `d13a9a1` | style(pos): restore modal header icons and simplify buttons |
+| `521961f` | style(pos): refine seamless split cart layout |
+| `b04f303` | feat(pos): sync categories and refine cashier macro layout |
+| `ce49a82` | style(pos): polish refresh update state and focus recovery |
+| `023cc8d` | fix(pos): recover scanner focus across cashier actions |
+| `42ff3ed` | fix(pos): restore scanner focus after cashier actions |
+| `bb9b1ad` | style(pos): refine search and barcode action bar |
+| `3b6b8ed` | style(pos): add bump flash feedback for rescanned cart items |
+| `c3f7193` | fix(pos): bump rescanned cart line to top |
+| `1e83473` | fix(pos): stabilize product grid scrollbar gutter |
+| `667093e` | feat(pos): add ui layout preferences and realistic local seed |
+| `f9d11ec` | fix(pos): polish toast feedback and typography |
+| `29995ea` | fix(pos): enforce stock oversell matrix |
+
+### Tracker drift summary
+
+- **Context.md**: "Current clean baseline" referenced `654c704` (7C-L2); actual HEAD is `889e23a` (~35 commits ahead). Multiple phases listed as "ACTIVE / NOT COMMITTED" are physically committed.
+- **Task.md**: Header referenced "Phase 7C-UI-01-ANIMATION / AWAITING CODEX + AGY REVIEW"; all prior phases are committed.
+- **latest-report.md**: "Current state" referenced "Phase 7C-C3" (`4262a25`); ~35 more commits exist.
+- **docs/UI_MASTER_PLAN.md**: Missing — created by this reconciliation.
+- **docs/STATE.md**: Missing — created by this reconciliation.
+
+### UI-08 Status
+
+**AMBIGUOUS / NEEDS SCOPE + PHYSICAL UAT RECONCILIATION** — CEO clarification pending on AppShell-header location and "Sync" control identity. No physical planning evidence or implementation exists.
+
+### UI-09 Status
+
+**NOT READY FOR PLANNING** — No physical planning evidence exists. Blocked until tracker reconciliation is accepted and UI-08 scope is clarified.
+
+### Stash Warning
+
+    stash@{0}: On main: WIP: Batches 1-3 UI/settings/UOM/transfer-UI (unrelated to stock-security Phase 1)
+
+**Do NOT touch stash@{0}.**
+
+### Confirmations
+
+- No implementation performed
+- No source code changes
+- No test changes
+- No package changes
+- No checkout/payment/cart/stock logic changes
+- No Firebase/functions/rules changes
+- No Android artifact changes
+- No .claude changes
+- No staging, no commit, no push
+- stash@{0} untouched
+- agentchattr repo not touched
+
+---
+
+> **STALE "Current state" note below (historical — see reconciliation above):**
 > **Current state:** **Phase 7C-C3 — Admin Dashboard / Report Namespace Isolation** — **CLOSED / COMMITTED — `4262a25 refactor(style): isolate admin dashboard and report css namespaces`** (Tech Lead / CEO authorized; Codex PASS WITH NOTES; structural CSS/DOM verification fallback accepted in place of live seeded UAT). Namespace-isolation-only refactor breaking two shared-CSS couplings from the C1-0 audit. **Admin Dashboard:** `dash-*` / `.dashboard-page` forked → `adash-*` / `.adash-page` (new `src/pages/admin/AdminDashboardPage.css`); `AdminDashboardPage.tsx` imports the local CSS; shared `DashboardPage.css` UNMODIFIED. **All Branches Stock Overview:** `sr-*` forked → `absr-*` (`AllBranchesStockOverview.css`); `AllBranchesStockOverview.tsx` drops the shared import; shared `StockReportPage.css` UNMODIFIED. No business logic/state/query/lifecycle/data/CSV-export behavior changed. No H7-F/write-path/forbidden contamination. Structural verification: 0 drift in forked rules after reverse mapping and full rendered-class coverage; live seeded visual UAT blocked by admin auth — structural fallback authorized by Tech Lead as closure-equivalent; no fake screenshots. Full web `npx vitest run` → **492 passed (29 files)**; `tsc -b` clean; forbidden-area diff EMPTY; `stash@{0}` untouched. **C1-0 (CSS namespace audit) and C2 (evidence-based no-op deferral) closed at `b757c65`.** **Next strategic decision pending: Admin UI polish leveraging `adash-*` / `absr-*`; POS Cashier UX Boundary Audit; or optional seeded admin visual UAT confidence check. No implementation without separate authorization.**
 >
 > **Prior state:** **Phase 7C-B1 — Manual Review Ops UI Polish** — **CLOSED / COMMITTED — `f4d9e7a style(pos): polish manual review ops durable rejection panel`** (Gemini / Tech Lead / CEO — Option A APPROVED; golden rule: Zero Behavioral Change; Codex PASS WITH NOTES). Presentation-only polish of `src/pages/ManualReviewOpsPage.tsx` (single production source file, +16/−9) improving the visual distinction between the actionable Manual Review Queue and the read-only Durable Rejection Forensic Log: the forensic section boundary is strengthened (`mt-6 … border-t … pt-6` → `mt-8 … border-t-2 … pt-8`); the forensic-log header gains a read-only badge (`<Badge>อ่านอย่างเดียว</Badge>`) beside the unchanged `<h2>บันทึกการปฏิเสธหลักฐาน (อุปกรณ์นี้)</h2>`; the forensic empty state is restyled from `<Alert color="gray">` to a dashed-border centered muted `<div>` (same Thai text/meaning); and timestamp cells in BOTH tables (`it.createdAt`, `r.createdAt`) gain `font-mono text-xs` for scannability. Tracker docs were also updated in the implementation commit. **Strictly cosmetic — no business-logic/state/query/`useEffect`/`useMemo` change; no change to `listQueue`/`listReversalRejections`/`resolveManualReview`/`buildManualReviewResolvePayload`; Manager/Admin gate and unauthorized behavior unchanged; queue resolve flow unchanged; durable panel remains read-only with NO resolve/delete/retry/sync/export/action button; Thai local-device disclaimer meaning preserved; `recordId` still internal-only (sole `key={r.recordId}`); no route/nav, no global/shared CSS, no inline styles, no cross-page Flowbite migration; no offline-schema/`DB_VERSION`/helper/model/log/store change; no Receiving/Transfer catch-site, server-resolver, or Firestore-rules change; no POS/cart/checkout/stock-mutation/write-path change.** No test changes — the 24 stabilized 7C-A assertions still pass unchanged. Focused `manualReviewOps` 24 passed; `recordEvidenceRejection`/`reversalRejectionLog`/`reversalLocalStore`/`offlineReversalQueue` 75 passed; **492 web (29 files)**, `tsc -b` clean, 43 functions resolveReversal (server unchanged). `git diff --stat` = 1 file (`ManualReviewOpsPage.tsx`); forbidden-area diff EMPTY; `stash@{0}` untouched. Codex accepted notes: tracker wording precision about "one file" meant one production source file; zero business logic or state changes occurred; source-level tests still rely on semantic source markers, accepted as test-maintenance risk. **No POS cashier UX or UI polish beyond 7C-B1 has started. Next step: strategic option selection for next Phase 7C slice — (C) Admin/Inventory visual consistency (batched, namespace-collision-aware); (B) POS cashier UX polish (highest value, requires read-only boundary audit first); or another separately authorized planning step. No Admin/Inventory or POS cashier UI work without separate authorization.**

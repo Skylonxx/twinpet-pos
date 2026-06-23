@@ -1,6 +1,74 @@
-# Current Task Tracker — Phase 7C-UI-01-ANIMATION (IMPECCABLE STYLE BUMP FLASH FOR RESCANNED CART ITEM / IMPLEMENTATION — AWAITING CODEX + AGY REVIEW)
+# Current Task Tracker — TWINPET-POS-TRACKER-RECONCILIATION-AFTER-REENTRY (DOCS-ONLY / OPTION A / UNSTAGED REVIEW / NO COMMIT YET)
 
 > Living checkpoint doc for agents. Detailed history: `docs/reports/latest-report.md` (do not duplicate long-form evidence here).
+
+---
+
+## TRACKER RECONCILIATION (2026-06-23)
+
+> This reconciliation supersedes stale phase references below. See `docs/STATE.md` for the authoritative operational state.
+
+**Current physical baseline:**
+- Branch: `main`
+- HEAD: `889e23a fix(pos): make suspended bill ids LAN-safe`
+- origin/main: `889e23a` | Ahead/behind: `0 / 0`
+- Working tree: clean | Staging: empty (before reconciliation edits)
+- stash@{0}: `On main: WIP: Batches 1-3 UI/settings/UOM/transfer-UI` — **DO NOT TOUCH**
+
+**Current phase:** `TWINPET-POS-TRACKER-RECONCILIATION-AFTER-REENTRY`
+**Mode:** DOCS-ONLY / OPTION A / UNSTAGED REVIEW / NO COMMIT YET
+
+**All implementation is BLOCKED until tracker reconciliation review is accepted.**
+
+### Reconciled commit ledger (recent completed work, newest first)
+
+| Hash | Message | Prior Tracker Status |
+|------|---------|---------------------|
+| `889e23a` | fix(pos): make suspended bill ids LAN-safe | Not in trackers |
+| `602acea` | fix(pos): restore hold bill modal flow with DOM coverage | Not in trackers |
+| `287955e` | test(pos): add suspended bill hold/restore contract tests | Not in trackers |
+| `873997e` | style(pos): polish action button hierarchy | Not in trackers |
+| `8a4ce19` | style(pos): polish cart summary layout | Not in trackers |
+| `ab7eceb` | fix(pos): stabilize discount modal draft state | Not in trackers |
+| `85b3a31` | feat(pos): add per-unit item discount option | Not in trackers |
+| `1a68983` | fix(pos): repair discount badge and numpad touch | Not in trackers |
+| `630b742` | style(pos): polish cart item row readability | Not in trackers |
+| `06bc831` | feat(pos): add product card display preferences | Not in trackers |
+| `3b3b909` | feat(pos): replace category modal with dropdown | Not in trackers |
+| `d13a9a1` | style(pos): restore modal header icons | Not in trackers |
+| `521961f` | style(pos): refine seamless split cart layout | Not in trackers |
+| `b04f303` | feat(pos): sync categories and refine cashier macro | Not in trackers |
+| `ce49a82` | style(pos): polish refresh update state | Not in trackers |
+| `023cc8d` | fix(pos): recover scanner focus across cashier actions | Not in trackers |
+| `42ff3ed` | fix(pos): restore scanner focus after cashier actions | Not in trackers |
+| `bb9b1ad` | style(pos): refine search and barcode action bar | Not in trackers |
+| `3b6b8ed` | style(pos): add bump flash for rescanned cart items | Was "AWAITING CODEX + AGY REVIEW / NOT COMMITTED" |
+| `c3f7193` | fix(pos): bump rescanned cart line to top | Was "AWAITING CODEX REVIEW / NOT COMMITTED" |
+| `1e83473` | fix(pos): stabilize product grid scrollbar gutter | Was in trackers as COMMITTED |
+| `667093e` | feat(pos): add ui layout preferences and seed | Was in trackers as COMMITTED |
+| `f9d11ec` | fix(pos): polish toast feedback and typography | Was "AWAITING CODEX REVIEW / NOT COMMITTED" |
+| `29995ea` | fix(pos): enforce stock oversell matrix | Was "AWAITING CODEX REVIEW" then noted COMMITTED |
+
+Plus 14 docs/workflow commits (`c314911`, `c8c48fe`, `ea33424`, `886340b`, `84c2e22`, `9738b9a`, `050a452`, `c3dbc46`, `77837ca`, `cddc6b4`, `58eeb19`, `e5f3254`, `08946cc`, `85773df`).
+
+### UI-08 / UI-09 Status
+
+**UI-08:** AMBIGUOUS / NEEDS SCOPE + PHYSICAL UAT RECONCILIATION
+- CEO clarification pending on AppShell-header location and "Sync" control identity
+- No implementation authorized
+
+**UI-09:** NOT READY FOR PLANNING UNTIL TRACKER RECONCILIATION IS ACCEPTED
+- No physical planning evidence exists
+- Not authorized for any work
+
+### Boundaries (unchanged)
+
+- No implementation authorized
+- No checkout/payment/cart/stock logic changes authorized
+- stash@{0} must remain untouched
+- No staging, commit, or push without explicit authorization
+
+---
 
 ## Current baseline
 

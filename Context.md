@@ -4,6 +4,64 @@
 
 ---
 
+## TRACKER RECONCILIATION (2026-06-23)
+
+> This reconciliation block supersedes any stale phase status markers in the history below.
+> Historical phase entries may say "NOT COMMITTED" for work that has since been committed.
+> See `docs/STATE.md` for the authoritative current operational state.
+> See `docs/UI_MASTER_PLAN.md` for the reconciled UI work summary.
+
+**Current physical baseline (verified 2026-06-23):**
+- Branch: `main`
+- HEAD: `889e23a fix(pos): make suspended bill ids LAN-safe`
+- origin/main: `889e23a`
+- Ahead/behind: `0 / 0`
+- Tracked working tree: clean (before reconciliation edits)
+- Staging: empty (before reconciliation edits)
+
+**stash@{0}: PRESENT AND UNTOUCHED**
+
+    stash@{0}: On main: WIP: Batches 1-3 UI/settings/UOM/transfer-UI (unrelated to stock-security Phase 1)
+
+**Do NOT touch stash@{0}** — apply/pop/drop/clear/modify is PROHIBITED.
+
+**Current phase:** `TWINPET-POS-TRACKER-RECONCILIATION-AFTER-REENTRY` (DOCS-ONLY / OPTION A / UNSTAGED REVIEW / NO COMMIT YET)
+
+**All implementation is BLOCKED until tracker reconciliation review is accepted.**
+
+**Phases confirmed COMMITTED since last tracker sync (physically verified in `git log`):**
+
+| Phase / Description | Hash | Status |
+|---------------------|------|--------|
+| 7C-POS-Stock-Matrix (3-tier oversell) | `29995ea` | CLOSED / COMMITTED |
+| 7C-UI-12 + UI-13 (toast system) | `f9d11ec` | CLOSED / COMMITTED |
+| 7C-UI-01 (layout + preferences + seed) | `667093e` | CLOSED / COMMITTED |
+| 7C-UI-01-HOTFIX (scrollbar gutter) | `1e83473` | CLOSED / COMMITTED |
+| 7C-UI-01-HOTFIX-BUMP-TO-TOP | `c3f7193` | CLOSED / COMMITTED |
+| 7C-UI-01-ANIMATION (bump flash) | `3b6b8ed` | CLOSED / COMMITTED |
+| Search and barcode action bar | `bb9b1ad` | COMMITTED |
+| Scanner focus restoration | `42ff3ed`, `023cc8d` | COMMITTED |
+| Refresh/update state polish | `ce49a82` | COMMITTED |
+| Category sync + cashier macro | `b04f303` | COMMITTED |
+| Seamless split cart layout | `521961f` | COMMITTED |
+| Modal header icons | `d13a9a1` | COMMITTED |
+| Category dropdown (replace modal) | `3b3b909` | COMMITTED |
+| Product card display preferences | `06bc831` | COMMITTED |
+| Cart item row readability | `630b742` | COMMITTED |
+| Discount badge/numpad fix | `1a68983` | COMMITTED |
+| Per-unit item discount | `85b3a31` | COMMITTED |
+| Discount modal draft state | `ab7eceb` | COMMITTED |
+| Cart summary polish | `8a4ce19` | COMMITTED |
+| Action button hierarchy | `873997e` | COMMITTED |
+| Suspended bill hold/restore tests | `287955e` | COMMITTED |
+| Hold bill modal flow + DOM coverage | `602acea` | COMMITTED |
+| LAN-safe suspended bill IDs | `889e23a` | COMMITTED |
+
+**UI-08:** AMBIGUOUS / NEEDS SCOPE + PHYSICAL UAT RECONCILIATION
+**UI-09:** NOT READY FOR PLANNING UNTIL TRACKER RECONCILIATION IS ACCEPTED
+
+---
+
 ## What this is
 
 Twinpet is a **multi-branch pet retail ERP/POS** (2–3 branches). Single React codebase targeting web now and Capacitor native later.
