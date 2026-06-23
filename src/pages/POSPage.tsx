@@ -967,13 +967,14 @@ export default function POSPage() {
         </div>
         {activeShift && (
           <div className="pos-topbar-actions">
+            {/* UI-08: safe/routine actions */}
             <button
               type="button"
               className="pos-topbar-btn pos-topbar-btn--secondary"
               onClick={() => setSuspendedListOpen(true)}
               disabled={suspendedCount === 0}
             >
-              บิลที่พักไว้ ({suspendedCount})
+              <i className="ti ti-clipboard-list" aria-hidden="true" /> บิลที่พักไว้ ({suspendedCount})
             </button>
             <button
               type="button"
@@ -981,25 +982,28 @@ export default function POSPage() {
               onClick={handleHoldClick}
               disabled={cartLines.length === 0}
             >
-              พักบิล
+              <i className="ti ti-player-pause" aria-hidden="true" /> พักบิล
             </button>
             <button
               type="button"
               className="pos-topbar-btn pos-topbar-btn--secondary"
               onClick={() => setShowCashTx(true)}
             >
-              นำเงินเข้า/ออก
+              <i className="ti ti-cash" aria-hidden="true" /> นำเงินเข้า/ออก
             </button>
+            {/* UI-08: visual divider separating safe from destructive actions */}
+            <div className="pos-topbar-divider" aria-hidden="true" />
+            {/* UI-08: destructive actions */}
             <button
               type="button"
-              className="pos-topbar-btn pos-topbar-btn--close"
+              className="pos-topbar-btn pos-topbar-btn--danger"
               onClick={() => setShowCloseShift(true)}
             >
-              ปิดกะ
+              <i className="ti ti-door-exit" aria-hidden="true" /> ปิดกะ
             </button>
             <button
               type="button"
-              className="pos-topbar-btn pos-topbar-btn--clear"
+              className="pos-topbar-btn pos-topbar-btn--danger"
               onClick={handleClearCartClick}
               disabled={cartLines.length === 0}
             >

@@ -266,70 +266,83 @@
   border: 1px solid #54b87f;
 }
 
+/* UI-08: action buttons area — flex row with safe/destructive grouping via a visual divider. */
 .pos-topbar-actions {
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
+/* UI-08: thin vertical divider separating safe actions from destructive actions. */
+.pos-topbar-divider {
+  width: 1px;
+  height: 24px;
+  background: var(--g200, #d3d1c7);
+  flex-shrink: 0;
+  margin: 0 2px;
+}
+
+/* UI-08: harmonized base — 36px height, 12px font, 8px radius matching UI-02/03 toolbar. */
 .pos-topbar-btn {
-  padding: 8px 16px;
-  border-radius: 6px;
-  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 12px;
+  height: 36px;
+  border-radius: 8px;
+  font-size: 12px;
   font-family: inherit;
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
-  line-height: 1.2;
+  line-height: 1;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
+/* UI-08: secondary/safe action — calm ghost treatment matching pos-action-link. */
 .pos-topbar-btn--secondary {
-  border: 0.5px solid var(--g200, #d3d1c7);
-  background: white;
+  border: 1px solid var(--g200, #d3d1c7);
+  background: #fff;
   color: var(--p800, #3c3489);
 }
 
-.pos-topbar-btn--secondary:hover {
-  background: var(--g50, #f8f8fc);
+.pos-topbar-btn--secondary:hover:not(:disabled) {
+  background: var(--p50, #eeedfe);
   border-color: var(--p200, #afa9ec);
+  color: var(--p800, #3c3489);
 }
 
-.pos-topbar-btn--close {
-  border: 0.5px solid #e8b4b0;
+.pos-topbar-btn--secondary:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(83, 74, 183, 0.18);
+}
+
+/* UI-08: danger action — subtle red tint, not noisy. Reduces accidental clicks by visual cue. */
+.pos-topbar-btn--danger {
+  border: 1px solid #e8b4b0;
   background: #fff5f4;
   color: #a93226;
 }
 
-.pos-topbar-btn--close:hover {
+.pos-topbar-btn--danger:hover:not(:disabled) {
   background: #fdecea;
   border-color: #c0392b;
+  color: #8b1a10;
 }
 
+.pos-topbar-btn--danger:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(169, 50, 38, 0.18);
+}
+
+/* UI-08: unified disabled state — consistent across all action buttons. */
 .pos-topbar-btn:disabled {
   opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.pos-topbar-btn--clear {
-  border: 0.5px solid #e8b4b0;
-  background: #fff5f4;
-  color: #a93226;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.pos-topbar-btn--clear:hover:not(:disabled) {
-  background: #fdecea;
-  border-color: #c0392b;
-}
-
-/* Blur & disable effect when cart is empty */
-.pos-topbar-btn--clear:disabled {
-  opacity: 0.35;
-  filter: blur(0.4px);
   cursor: not-allowed;
   background: var(--g50, #f8f8fc);
   border-color: var(--g200, #d3d1c7);
