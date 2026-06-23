@@ -90,6 +90,16 @@ describe('Hold Bill · button wiring (POSPage.tsx)', () => {
     expect(fn).toContain('clearPosCart()');
     expect(fn).toContain('setHoldNoteOpen(false)');
   });
+
+  test('handleHoldConfirm uses createSafeId for suspended bill ids (LAN HTTP safe)', () => {
+    const fn = region(
+      posPageSource,
+      'const handleHoldConfirm',
+      '[addBill,',
+    );
+    expect(fn).toContain("createSafeId('suspended-bill')");
+    expect(fn).not.toContain('crypto.randomUUID');
+  });
 });
 
 // ─── Goal 2: Customer persist on hold ─────────────────────────────────────────────────

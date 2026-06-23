@@ -16,6 +16,7 @@ import SortingSettingsModal from '../components/pos/SortingSettingsModal';
 import DestructiveConfirmModal from '../components/common/DestructiveConfirmModal';
 import { getBranchLabel } from '../lib/branches';
 import { fmtBaht } from '../lib/dashboard/format';
+import { createSafeId } from '../lib/safeId';
 import { formatMoney, getLineTotal } from '../lib/pos/cartUtils';
 import { getActiveShift } from '../lib/pos/shiftService';
 import { priceLevelLabel, usePriceLevels } from '../lib/pricing/priceLevels';
@@ -691,7 +692,7 @@ export default function POSPage() {
   const handleHoldConfirm = useCallback(
     (note: string) => {
       const bill: SuspendedBill = {
-        id: crypto.randomUUID(),
+        id: createSafeId('suspended-bill'),
         note,
         cartItems: cartLines.map((line) => ({ ...line, discount: { ...line.discount } })),
         customerId: customer?.id ?? null,
