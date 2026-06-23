@@ -4,20 +4,19 @@
 
 ---
 
-## TRACKER RECONCILIATION (2026-06-23)
+## UI-08 CLOSURE (2026-06-23)
 
-> This reconciliation block supersedes any stale phase status markers in the history below.
-> Historical phase entries may say "NOT COMMITTED" for work that has since been committed.
+> This closure block supersedes any stale UI-08 ambiguity markers in the history below.
 > See `docs/STATE.md` for the authoritative current operational state.
 > See `docs/UI_MASTER_PLAN.md` for the reconciled UI work summary.
 
 **Current physical baseline (verified 2026-06-23):**
 - Branch: `main`
-- HEAD: `889e23a fix(pos): make suspended bill ids LAN-safe`
-- origin/main: `889e23a`
+- HEAD: `81b7e8c docs: reconcile twinpet trackers after tooling pause`
+- origin/main: `81b7e8c`
 - Ahead/behind: `0 / 0`
-- Tracked working tree: clean (before reconciliation edits)
-- Staging: empty (before reconciliation edits)
+- Tracked working tree: clean (before closure doc edits)
+- Staging: empty (before closure doc edits)
 
 **stash@{0}: PRESENT AND UNTOUCHED**
 
@@ -25,9 +24,15 @@
 
 **Do NOT touch stash@{0}** — apply/pop/drop/clear/modify is PROHIBITED.
 
-**Current phase:** `TWINPET-POS-TRACKER-RECONCILIATION-AFTER-REENTRY` (DOCS-ONLY / OPTION A / UNSTAGED REVIEW / NO COMMIT YET)
+**Current phase:** `TWINPET-POS-UI-08-PHYSICAL-UAT-CLOSURE` (DOCS-ONLY / UNSTAGED REVIEW / NO COMMIT YET)
 
-**All implementation is BLOCKED until tracker reconciliation review is accepted.**
+**UI-08 — CLOSED / PASSED UAT**
+- Formal scope: **Action Buttons / แผงปุ่มจัดการบิล** (`.pos-topbar-actions` shift controls)
+- Implementation: `873997e style(pos): polish action button hierarchy` — implementation-complete
+- Physical UAT: **PASSED** — Owner feedback: **ใช้ได้ดี**
+- Older P1 triage "Offline/Sync relocation" item is a **separate deferred backlog item**, not UI-08
+
+**UI-09:** Next candidate planning block — **not started**; planning coordinator handoff pending; **not authorized for implementation**
 
 **Phases confirmed COMMITTED since last tracker sync (physically verified in `git log`):**
 
@@ -52,13 +57,11 @@
 | Per-unit item discount | `85b3a31` | COMMITTED |
 | Discount modal draft state | `ab7eceb` | COMMITTED |
 | Cart summary polish | `8a4ce19` | COMMITTED |
-| Action button hierarchy | `873997e` | COMMITTED |
+| UI-08 Action Buttons (action button hierarchy) | `873997e` | CLOSED / COMMITTED / PASSED UAT |
 | Suspended bill hold/restore tests | `287955e` | COMMITTED |
 | Hold bill modal flow + DOM coverage | `602acea` | COMMITTED |
 | LAN-safe suspended bill IDs | `889e23a` | COMMITTED |
 
-**UI-08:** AMBIGUOUS / NEEDS SCOPE + PHYSICAL UAT RECONCILIATION
-**UI-09:** NOT READY FOR PLANNING UNTIL TRACKER RECONCILIATION IS ACCEPTED
 
 ---
 

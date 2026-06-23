@@ -1,24 +1,22 @@
-# Current Task Tracker — TWINPET-POS-TRACKER-RECONCILIATION-AFTER-REENTRY (DOCS-ONLY / OPTION A / UNSTAGED REVIEW / NO COMMIT YET)
+# Current Task Tracker — TWINPET-POS-UI-08-PHYSICAL-UAT-CLOSURE (DOCS-ONLY / UNSTAGED REVIEW / NO COMMIT YET)
 
 > Living checkpoint doc for agents. Detailed history: `docs/reports/latest-report.md` (do not duplicate long-form evidence here).
 
 ---
 
-## TRACKER RECONCILIATION (2026-06-23)
+## UI-08 CLOSURE (2026-06-23)
 
-> This reconciliation supersedes stale phase references below. See `docs/STATE.md` for the authoritative operational state.
+> This closure supersedes stale UI-08 ambiguity references below. See `docs/STATE.md` for the authoritative operational state.
 
 **Current physical baseline:**
 - Branch: `main`
-- HEAD: `889e23a fix(pos): make suspended bill ids LAN-safe`
-- origin/main: `889e23a` | Ahead/behind: `0 / 0`
-- Working tree: clean | Staging: empty (before reconciliation edits)
+- HEAD: `81b7e8c docs: reconcile twinpet trackers after tooling pause`
+- origin/main: `81b7e8c` | Ahead/behind: `0 / 0`
+- Working tree: clean | Staging: empty (before closure doc edits)
 - stash@{0}: `On main: WIP: Batches 1-3 UI/settings/UOM/transfer-UI` — **DO NOT TOUCH**
 
-**Current phase:** `TWINPET-POS-TRACKER-RECONCILIATION-AFTER-REENTRY`
-**Mode:** DOCS-ONLY / OPTION A / UNSTAGED REVIEW / NO COMMIT YET
-
-**All implementation is BLOCKED until tracker reconciliation review is accepted.**
+**Current phase:** `TWINPET-POS-UI-08-PHYSICAL-UAT-CLOSURE`
+**Mode:** DOCS-ONLY / UNSTAGED REVIEW / NO COMMIT YET
 
 ### Reconciled commit ledger (recent completed work, newest first)
 
@@ -27,7 +25,7 @@
 | `889e23a` | fix(pos): make suspended bill ids LAN-safe | Not in trackers |
 | `602acea` | fix(pos): restore hold bill modal flow with DOM coverage | Not in trackers |
 | `287955e` | test(pos): add suspended bill hold/restore contract tests | Not in trackers |
-| `873997e` | style(pos): polish action button hierarchy | Not in trackers |
+| `873997e` | style(pos): polish action button hierarchy | UI-08 Action Buttons — CLOSED / PASSED UAT |
 | `8a4ce19` | style(pos): polish cart summary layout | Not in trackers |
 | `ab7eceb` | fix(pos): stabilize discount modal draft state | Not in trackers |
 | `85b3a31` | feat(pos): add per-unit item discount option | Not in trackers |
@@ -53,17 +51,17 @@ Plus 14 docs/workflow commits (`c314911`, `c8c48fe`, `ea33424`, `886340b`, `84c2
 
 ### UI-08 / UI-09 Status
 
-**UI-08:** AMBIGUOUS / NEEDS SCOPE + PHYSICAL UAT RECONCILIATION
-- CEO clarification pending on AppShell-header location and "Sync" control identity
-- No implementation authorized
+**UI-08 — CLOSED / PASSED UAT**
+- Formal scope: Action Buttons / แผงปุ่มจัดการบิล (`.pos-topbar-actions`)
+- Implementation: `873997e` — implementation-complete
+- Physical UAT: **PASSED** — Owner feedback: **ใช้ได้ดี**
+- Older P1 triage Offline/Sync relocation: **separate deferred backlog item**, not UI-08
 
-**UI-09:** NOT READY FOR PLANNING UNTIL TRACKER RECONCILIATION IS ACCEPTED
-- No physical planning evidence exists
-- Not authorized for any work
+**UI-09:** Next candidate planning block — **not started**; planning coordinator handoff pending; **not authorized for implementation**
 
 ### Boundaries (unchanged)
 
-- No implementation authorized
+- No UI-09 implementation or planning started in this task
 - No checkout/payment/cart/stock logic changes authorized
 - stash@{0} must remain untouched
 - No staging, commit, or push without explicit authorization

@@ -4,20 +4,48 @@
 
 ---
 
-## TRACKER RECONCILIATION — 2026-06-23
+## UI-08 PHYSICAL UAT CLOSURE — 2026-06-23
 
-> This reconciliation section supersedes the stale "Current state" note below. That note reflects Phase 7C-C3; the physical repo has advanced significantly since then (~35 commits).
+> This closure section supersedes stale UI-08 ambiguity markers below.
 
 **Current physical state (verified 2026-06-23):**
-- HEAD: `889e23a fix(pos): make suspended bill ids LAN-safe`
-- origin/main: `889e23a`
+- HEAD: `81b7e8c docs: reconcile twinpet trackers after tooling pause`
+- origin/main: `81b7e8c`
 - Ahead/behind: `0 / 0`
-- Working tree: clean before reconciliation
-- Staging: empty before reconciliation
+- Working tree: clean before closure doc edits
+- Staging: empty before closure doc edits
 - stash@{0}: present and untouched — `On main: WIP: Batches 1-3 UI/settings/UOM/transfer-UI (unrelated to stock-security Phase 1)`
+- Phase: `TWINPET-POS-UI-08-PHYSICAL-UAT-CLOSURE` (DOCS-ONLY / UNSTAGED REVIEW)
+
+**Docs-only UI-08 closure in progress — no implementation performed.**
+
+### UI-08 Closure Record
+
+| Field | Value |
+|-------|-------|
+| Scope | Action Buttons / แผงปุ่มจัดการบิล (`.pos-topbar-actions`) |
+| Implementation | `873997e style(pos): polish action button hierarchy` |
+| Physical UAT | **PASSED** |
+| Owner feedback | **ใช้ได้ดี** |
+| Status | **CLOSED / PASSED UAT** |
+
+**Scope clarification:** Older P1 triage "Offline/Sync relocation" (`phase-7c-p1-ui-polish-backlog-triage.md`) is a **separate deferred backlog item**, not UI-08.
+
+**UI-09:** Next candidate planning block — not started; planning coordinator handoff pending; not authorized for implementation.
+
+**Prior scope/UAT clarification report:** `C:\Users\Narachat\OneDrive\Ai-Report\claude\twinpet-pos-ui-08-scope-uat-clarification-report.md`
+
+---
+
+## TRACKER RECONCILIATION — 2026-06-23 (historical)
+
+> Historical reconciliation at `81b7e8c`. Superseded by UI-08 closure section above for current UI status.
+
+**Physical state at reconciliation:**
+- HEAD: `81b7e8c docs: reconcile twinpet trackers after tooling pause`
 - Phase: `TWINPET-POS-TRACKER-RECONCILIATION-AFTER-REENTRY` (DOCS-ONLY / OPTION A)
 
-**Docs-only reconciliation in progress — no implementation performed.**
+**Docs-only reconciliation completed at `81b7e8c` — no implementation performed.**
 
 ### Recent commit ledger (physically verified, newest first)
 
@@ -56,13 +84,13 @@
 - **docs/UI_MASTER_PLAN.md**: Missing — created by this reconciliation.
 - **docs/STATE.md**: Missing — created by this reconciliation.
 
-### UI-08 Status
+### UI-08 Status (superseded — see closure section above)
 
-**AMBIGUOUS / NEEDS SCOPE + PHYSICAL UAT RECONCILIATION** — CEO clarification pending on AppShell-header location and "Sync" control identity. No physical planning evidence or implementation exists.
+**CLOSED / PASSED UAT** — Action Buttons scope; `873997e`; Owner feedback: ใช้ได้ดี.
 
-### UI-09 Status
+### UI-09 Status (superseded — see closure section above)
 
-**NOT READY FOR PLANNING** — No physical planning evidence exists. Blocked until tracker reconciliation is accepted and UI-08 scope is clarified.
+**NOT STARTED** — Next candidate planning block; planning coordinator handoff pending.
 
 ### Stash Warning
 

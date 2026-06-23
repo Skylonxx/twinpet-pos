@@ -6,22 +6,22 @@
 |-------|-------|
 | Repo root | `C:/Users/Narachat/twinpet-pos` |
 | Branch | `main` |
-| HEAD | `889e23a fix(pos): make suspended bill ids LAN-safe` |
-| origin/main | `889e23a` |
+| HEAD | `81b7e8c docs: reconcile twinpet trackers after tooling pause` |
+| origin/main | `81b7e8c` |
 | Ahead/behind | `0 / 0` |
 
 ## Current Phase
 
-    TWINPET-POS-TRACKER-RECONCILIATION-AFTER-REENTRY
-    DOCS-ONLY / OPTION A / UNSTAGED REVIEW / NO COMMIT YET
+    TWINPET-POS-UI-08-PHYSICAL-UAT-CLOSURE
+    DOCS-ONLY / UNSTAGED REVIEW / NO COMMIT YET
 
-All implementation is BLOCKED until tracker reconciliation review is accepted.
+UI-08 Action Buttons closed after Owner physical UAT pass. No UI-09 work started in this task.
 
 ## Working Tree
 
-- Tracked working tree: **clean** (before reconciliation edits)
-- Staging: **empty** (before reconciliation edits)
-- Reconciliation edits are docs-only and left UNSTAGED for review
+- Tracked working tree: **clean** (before closure doc edits)
+- Staging: **empty** (before closure doc edits)
+- Closure edits are docs-only and left UNSTAGED for review
 
 ## Stash
 
@@ -29,9 +29,27 @@ All implementation is BLOCKED until tracker reconciliation review is accepted.
 
 **Do NOT touch stash@{0}** — apply/pop/drop/clear/modify is PROHIBITED.
 
+## UI-08 Closure
+
+| Field | Value |
+|-------|-------|
+| Scope | Action Buttons / แผงปุ่มจัดการบิล (`.pos-topbar-actions`) |
+| Implementation | `873997e style(pos): polish action button hierarchy` |
+| Physical UAT | **PASSED** |
+| Owner feedback | **ใช้ได้ดี** |
+| Status | **CLOSED / PASSED UAT** |
+
+Older P1 triage "Offline/Sync relocation" is a **separate deferred backlog item**, not UI-08.
+
+## UI-09 Status
+
+- Next candidate planning block — **not started**
+- Planning coordinator handoff pending
+- **Not authorized for implementation**
+
 ## Recent Completed Work
 
-All commits below are physically verified in `git log --oneline -n 40` at HEAD `889e23a`:
+All commits below are physically verified in `git log --oneline -n 40` at HEAD `81b7e8c`:
 
 ### POS Implementation Commits (newest first)
 
@@ -40,7 +58,7 @@ All commits below are physically verified in `git log --oneline -n 40` at HEAD `
 | `889e23a` | fix(pos): make suspended bill ids LAN-safe |
 | `602acea` | fix(pos): restore hold bill modal flow with DOM coverage |
 | `287955e` | test(pos): add suspended bill hold/restore contract tests |
-| `873997e` | style(pos): polish action button hierarchy |
+| `873997e` | style(pos): polish action button hierarchy — **UI-08 CLOSED / PASSED UAT** |
 | `8a4ce19` | style(pos): polish cart summary layout and resolve responsive constraints |
 | `ab7eceb` | fix(pos): stabilize discount modal draft state |
 | `85b3a31` | feat(pos): add per-unit item discount option |
@@ -66,39 +84,24 @@ All commits below are physically verified in `git log --oneline -n 40` at HEAD `
 
 | Hash | Message |
 |------|---------|
+| `81b7e8c` | docs: reconcile twinpet trackers after tooling pause |
 | `c314911` | docs(roles): align multi-agent topology and boundaries |
 | `c8c48fe` | docs(agent-workflow): define swarm roles skills and authority matrix |
 | `ea33424` | docs(tooling): add MCP multi-agent routing skill |
 | `886340b` | docs(workflow): add agentchattr operating protocol |
 | `84c2e22` | docs(workflow): record ui-07 cart summary discovery |
-| `9738b9a` | docs(workflow): record pilot-3b results and codify agentchattr rules |
-| `050a452` | docs(workflow): record agentchattr pilot-2 api test results |
-| `c3dbc46` | docs(workflow): add agentchattr discovery report |
-| `77837ca` | docs(workflow): add manager PIN override to master plan backlog |
-| `cddc6b4` | docs(workflow): close local coordinator pilot-2 simulation |
-| `58eeb19` | docs(workflow): refine local coordinator safety contract |
-| `e5f3254` | docs(workflow): add local coordinator pilot contract |
-| `08946cc` | docs(workflow): initialize file-based agent handoff |
-| `85773df` | docs(roles): initialize senior qa ux lead role |
 
 ### Prior Committed Work (at or before `07ed7c8`)
 
 All Phase 7B-H series, 7C keyboard/focus/IME suite (D4-C-1..4), 7C-E1 LAN setup, 7C-L1/L2/L3, 7C-UI-10-B/C — see Context.md for full history.
 
-## Current Blockers / Ambiguities
-
-- **UI-08**: AMBIGUOUS / NEEDS SCOPE + PHYSICAL UAT RECONCILIATION — CEO clarification pending on AppShell-header location and "Sync" control identity
-- **UI-09**: NOT READY FOR PLANNING — no physical planning evidence exists; blocked until tracker reconciliation is accepted
-- **Tracker drift**: Context.md, Task.md, and docs/reports/latest-report.md had significant drift from physical git state; this reconciliation addresses the drift
-
 ## Next Recommended Block
 
-    REVIEW_RECONCILED_TRACKERS_BEFORE_IMPLEMENTATION
+    READY_FOR_UI_08_CLOSURE_REVIEW
 
-No implementation work is authorized until:
-1. Reconciled tracker changes are reviewed and accepted
-2. Changes are committed (explicit authorization required)
-3. Next implementation phase is explicitly authorized by Tech Lead / CEO
+After closure doc review is accepted and committed (explicit authorization required):
+1. Planning coordinator may hand off UI-09 (Checkout Button / F12) as next candidate
+2. No UI-09 implementation without separate Tech Lead / CEO authorization
 
 ## Hard Boundaries
 
@@ -111,5 +114,5 @@ Do NOT:
 - Touch POS cart math or stock math
 - Touch stash@{0}
 - Stage, commit, or push without explicit authorization
-- Authorize UI-08 or UI-09 implementation
+- Authorize UI-09 implementation in this task
 - Touch agentchattr repo

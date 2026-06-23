@@ -4,14 +4,14 @@
 
 | Field | Value |
 |-------|-------|
-| HEAD | `889e23a fix(pos): make suspended bill ids LAN-safe` |
-| origin/main | `889e23a` |
+| HEAD | `81b7e8c docs: reconcile twinpet trackers after tooling pause` |
+| origin/main | `81b7e8c` |
 | Ahead/behind | `0 / 0` |
-| Reconciliation | DOCS-ONLY / OPTION A — in progress (2026-06-23) |
+| Closure | UI-08 Physical UAT closure docs — in progress (2026-06-23) |
 
 ## Recently Completed / Committed UI Work
 
-All commits below are physically verified in `git log --oneline -n 40` at HEAD `889e23a`.
+All commits below are physically verified in `git log --oneline -n 40` at HEAD `81b7e8c`.
 
 ### POS Cashier UX & Cart
 
@@ -20,7 +20,7 @@ All commits below are physically verified in `git log --oneline -n 40` at HEAD `
 | `889e23a` | Make suspended bill IDs LAN-safe |
 | `602acea` | Restore hold bill modal flow with DOM coverage |
 | `287955e` | Add suspended bill hold/restore contract tests |
-| `873997e` | Polish action button hierarchy |
+| `873997e` | **UI-08** — Polish action button hierarchy — CLOSED / PASSED UAT |
 | `8a4ce19` | Polish cart summary layout and resolve responsive constraints |
 | `630b742` | Polish cart item row readability |
 | `521961f` | Refine seamless split cart layout |
@@ -80,30 +80,33 @@ See Context.md for the full Phase 7B/7C history including:
 
 ## UI-08 Status
 
-**AMBIGUOUS / NEEDS SCOPE + PHYSICAL UAT RECONCILIATION**
+**CLOSED / PASSED UAT**
 
-UI-08 was referenced in the 7C-P1 triage plan (`d87110c`) as blocked on CEO clarification regarding:
-1. The AppShell-header location (where it should live in the layout)
-2. The "Sync" control identity (what it does and how it should behave)
+| Field | Value |
+|-------|-------|
+| Formal scope | Action Buttons / แผงปุ่มจัดการบิล (`.pos-topbar-actions` shift controls) |
+| Implementation | `873997e style(pos): polish action button hierarchy` |
+| Physical UAT | **PASSED** — Owner feedback: **ใช้ได้ดี** |
+| Closure phase | `TWINPET-POS-UI-08-PHYSICAL-UAT-CLOSURE` |
 
-No physical planning evidence or implementation exists for UI-08. Scope has not been defined. Cannot be authorized until the above clarifications are provided.
+**Scope note:** The older P1 triage item "Offline/Sync relocation to AppShell header" (`docs/reports/phase-7c-p1-ui-polish-backlog-triage.md`) is **not** UI-08. It remains a separate deferred backlog item.
 
 ## UI-09 Status
 
-**NOT READY FOR PLANNING**
+**NEXT CANDIDATE — NOT STARTED**
 
-No physical planning evidence exists for UI-09. It is not authorized and not ready for any work until:
-1. Tracker reconciliation review is accepted
-2. UI-08 scope is clarified
-3. Explicit CEO / Tech Lead authorization is provided
+- Scope: Checkout Button / F12 (ปุ่มชำระเงิน)
+- Planning coordinator handoff pending
+- **Not authorized for implementation** in the UI-08 closure task
 
 ## Deferred / Ambiguous Work
 
 | Item | Status | Notes |
 |------|--------|-------|
-| UI-08 | AMBIGUOUS | Blocked on CEO clarification (see above) |
-| UI-09 | NOT READY | No planning evidence, not authorized |
-| Hardware scanner (iOS/iPad Safari) | DEFERRED | Strategically deferred to Native App / Capacitor wrapper phase |
+| UI-08 | **CLOSED / PASSED UAT** | Action Buttons — `873997e` + Owner UAT |
+| UI-09 | NOT STARTED | Next planning candidate; not authorized |
+| P1 Offline/Sync relocation | DEFERRED | Separate from UI-08; was P1 triage UI-08 numbering |
+| Hardware scanner (iOS/iPad Safari) | DEFERRED | Native App / Capacitor wrapper phase |
 | Flowbite migration (tables + modals) | DEFERRED | Batches 2+ deferred; stash@{0} holds WIP |
 | Server sync / central audit (rejection logs) | FUTURE | Out of scope; local forensic panel (H7-G) is complete |
 
@@ -113,13 +116,11 @@ No physical planning evidence exists for UI-09. It is not authorized and not rea
 - No checkout/payment/cart math/stock math changes
 - No Firebase/functions/rules changes
 - stash@{0} must not be touched
-- UI-01 through UI-09 traditional numbering is superseded by the physical commit history above
 
 ## Next Decision Gate
 
-    REVIEW_RECONCILED_TRACKERS_BEFORE_IMPLEMENTATION
+    READY_FOR_UI_08_CLOSURE_REVIEW
 
-After tracker reconciliation review is accepted:
-1. CEO / Tech Lead decides next implementation priority
-2. UI-08 scope must be clarified before UI-08 work can begin
-3. UI-09 cannot start until UI-08 is resolved
+After UI-08 closure docs are reviewed and committed:
+1. Planning coordinator may initiate UI-09 planning handoff
+2. UI-09 implementation requires separate Tech Lead / CEO authorization
