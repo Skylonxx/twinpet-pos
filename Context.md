@@ -4,16 +4,16 @@
 
 ---
 
-## UI-08 CLOSURE (2026-06-23)
+## UI-09-B CLOSURE (2026-06-24)
 
-> This closure block supersedes any stale UI-08 ambiguity markers in the history below.
+> This closure block supersedes any stale UI-09 ambiguity markers in the history below.
 > See `docs/STATE.md` for the authoritative current operational state.
 > See `docs/UI_MASTER_PLAN.md` for the reconciled UI work summary.
 
-**Current physical baseline (verified 2026-06-23):**
+**Current physical baseline (verified 2026-06-24):**
 - Branch: `main`
-- HEAD: `81b7e8c docs: reconcile twinpet trackers after tooling pause`
-- origin/main: `81b7e8c`
+- HEAD: `baca4fe style(pos): polish checkout button hierarchy`
+- origin/main: `baca4fe`
 - Ahead/behind: `0 / 0`
 - Tracked working tree: clean (before closure doc edits)
 - Staging: empty (before closure doc edits)
@@ -24,15 +24,31 @@
 
 **Do NOT touch stash@{0}** — apply/pop/drop/clear/modify is PROHIBITED.
 
-**Current phase:** `TWINPET-POS-UI-08-PHYSICAL-UAT-CLOSURE` (DOCS-ONLY / UNSTAGED REVIEW / NO COMMIT YET)
+**Current phase:** `TWINPET-POS-UI-09-B-PHYSICAL-UAT-CLOSURE` (DOCS-ONLY / UNSTAGED REVIEW / NO COMMIT YET)
 
-**UI-08 — CLOSED / PASSED UAT**
+**UI-09-B — CLOSED / PASSED UAT**
+- Formal scope: **Checkout Button Visual Polish** (`VISUAL_ONLY`)
+- Implementation: `baca4fe style(pos): polish checkout button hierarchy` — implementation-complete
+- Source impact: `src/pages/POSPage.css` only
+- Behavior impact: **none**
+- Physical UAT: **PASSED** — Owner feedback: **เทสแล้วผ่านครับ**
+- Physical terminal: checkout button visual hierarchy confirmed solid
+- Validation: Codex review **PASS WITH NOTES / READY**; keyboard contract test **145 passed**
+
+**Untouched by UI-09-B:** `src/pages/POSPage.tsx`, PaymentModal, confirmSale, submitAsyncOrder, cart math, F12 keyboard behavior, checkout disabled gate, checkout click behavior, payment/order write path, stock/FIFO, hold/suspended bill, shift/cash drawer, scanner flow.
+
+**UI-09-A — CLOSED (read-only audit)**
+- Checkout boundary audit completed at HEAD `2e24389` (2026-06-23)
+- Report: `C:\Users\Narachat\OneDrive\Ai-Report\claude\twinpet-pos-ui-09-a-checkout-boundary-audit-report.md`
+- No implementation performed in UI-09-A
+
+**UI-08 — CLOSED / PASSED UAT** (prior)
 - Formal scope: **Action Buttons / แผงปุ่มจัดการบิล** (`.pos-topbar-actions` shift controls)
-- Implementation: `873997e style(pos): polish action button hierarchy` — implementation-complete
+- Implementation: `873997e style(pos): polish action button hierarchy`
 - Physical UAT: **PASSED** — Owner feedback: **ใช้ได้ดี**
 - Older P1 triage "Offline/Sync relocation" item is a **separate deferred backlog item**, not UI-08
 
-**UI-09:** Next candidate planning block — **not started**; planning coordinator handoff pending; **not authorized for implementation**
+**Next candidate:** UI-09-C Payment Modal / Payment Flow planning — **NOT STARTED**. Requires separate audit, Codex review, Gemini authorization, and strict payment write-path boundaries. **Not authorized for implementation.**
 
 **Phases confirmed COMMITTED since last tracker sync (physically verified in `git log`):**
 
@@ -58,6 +74,7 @@
 | Discount modal draft state | `ab7eceb` | COMMITTED |
 | Cart summary polish | `8a4ce19` | COMMITTED |
 | UI-08 Action Buttons (action button hierarchy) | `873997e` | CLOSED / COMMITTED / PASSED UAT |
+| UI-09-B Checkout Button Visual Polish | `baca4fe` | CLOSED / COMMITTED / PASSED UAT |
 | Suspended bill hold/restore tests | `287955e` | COMMITTED |
 | Hold bill modal flow + DOM coverage | `602acea` | COMMITTED |
 | LAN-safe suspended bill IDs | `889e23a` | COMMITTED |

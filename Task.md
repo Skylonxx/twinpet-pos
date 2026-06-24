@@ -1,27 +1,48 @@
-# Current Task Tracker — TWINPET-POS-UI-08-PHYSICAL-UAT-CLOSURE (DOCS-ONLY / UNSTAGED REVIEW / NO COMMIT YET)
+# Current Task Tracker — TWINPET-POS-UI-09-B-PHYSICAL-UAT-CLOSURE (DOCS-ONLY / UNSTAGED REVIEW / NO COMMIT YET)
 
 > Living checkpoint doc for agents. Detailed history: `docs/reports/latest-report.md` (do not duplicate long-form evidence here).
 
 ---
 
-## UI-08 CLOSURE (2026-06-23)
+## UI-09-B CLOSURE (2026-06-24)
 
-> This closure supersedes stale UI-08 ambiguity references below. See `docs/STATE.md` for the authoritative operational state.
+> This closure supersedes stale UI-09 ambiguity references below. See `docs/STATE.md` for the authoritative operational state.
 
 **Current physical baseline:**
 - Branch: `main`
-- HEAD: `81b7e8c docs: reconcile twinpet trackers after tooling pause`
-- origin/main: `81b7e8c` | Ahead/behind: `0 / 0`
+- HEAD: `baca4fe style(pos): polish checkout button hierarchy`
+- origin/main: `baca4fe` | Ahead/behind: `0 / 0`
 - Working tree: clean | Staging: empty (before closure doc edits)
 - stash@{0}: `On main: WIP: Batches 1-3 UI/settings/UOM/transfer-UI` — **DO NOT TOUCH**
 
-**Current phase:** `TWINPET-POS-UI-08-PHYSICAL-UAT-CLOSURE`
+**Current phase:** `TWINPET-POS-UI-09-B-PHYSICAL-UAT-CLOSURE`
 **Mode:** DOCS-ONLY / UNSTAGED REVIEW / NO COMMIT YET
+
+### UI-09-B Closure Record
+
+| Field | Value |
+|-------|-------|
+| Scope | Checkout Button Visual Polish / `VISUAL_ONLY` |
+| Implementation | `baca4fe style(pos): polish checkout button hierarchy` |
+| Source impact | `src/pages/POSPage.css` only |
+| Behavior impact | none |
+| Physical UAT | **PASSED** |
+| Owner feedback | **เทสแล้วผ่านครับ** |
+| Codex review | PASS WITH NOTES / READY |
+| Keyboard contract test | 145 passed |
+
+**Untouched:** `src/pages/POSPage.tsx`, PaymentModal, confirmSale, submitAsyncOrder, cart math, F12 keyboard behavior, checkout disabled gate, checkout click behavior, payment/order write path, stock/FIFO, hold/suspended bill, shift/cash drawer, scanner flow.
+
+**UI-09-A (prior):** Checkout boundary read-only audit — CLOSED at `2e24389`; report at `C:\Users\Narachat\OneDrive\Ai-Report\claude\twinpet-pos-ui-09-a-checkout-boundary-audit-report.md`.
+
+**Next candidate:** UI-09-C Payment Modal / Payment Flow planning — **NOT STARTED**. Requires separate audit, Codex review, Gemini authorization, and strict payment write-path boundaries. **Not authorized for implementation.**
 
 ### Reconciled commit ledger (recent completed work, newest first)
 
 | Hash | Message | Prior Tracker Status |
 |------|---------|---------------------|
+| `baca4fe` | style(pos): polish checkout button hierarchy | UI-09-B — CLOSED / PASSED UAT |
+| `2e24389` | docs: close ui-08 action buttons uat | UI-08 docs closure |
 | `889e23a` | fix(pos): make suspended bill ids LAN-safe | Not in trackers |
 | `602acea` | fix(pos): restore hold bill modal flow with DOM coverage | Not in trackers |
 | `287955e` | test(pos): add suspended bill hold/restore contract tests | Not in trackers |
@@ -51,17 +72,25 @@ Plus 14 docs/workflow commits (`c314911`, `c8c48fe`, `ea33424`, `886340b`, `84c2
 
 ### UI-08 / UI-09 Status
 
-**UI-08 — CLOSED / PASSED UAT**
+**UI-09-B — CLOSED / PASSED UAT**
+- Scope: Checkout Button Visual Polish / `VISUAL_ONLY`
+- Implementation: `baca4fe` — `src/pages/POSPage.css` only; behavior unchanged
+- Physical UAT: **PASSED** — Owner feedback: **เทสแล้วผ่านครับ**
+
+**UI-09-A — CLOSED (read-only audit)**
+- Checkout boundary audit at `2e24389`; no implementation
+
+**UI-08 — CLOSED / PASSED UAT** (prior)
 - Formal scope: Action Buttons / แผงปุ่มจัดการบิล (`.pos-topbar-actions`)
 - Implementation: `873997e` — implementation-complete
 - Physical UAT: **PASSED** — Owner feedback: **ใช้ได้ดี**
 - Older P1 triage Offline/Sync relocation: **separate deferred backlog item**, not UI-08
 
-**UI-09:** Next candidate planning block — **not started**; planning coordinator handoff pending; **not authorized for implementation**
+**Next candidate:** UI-09-C Payment Modal / Payment Flow planning — **NOT STARTED**; requires separate audit, Codex review, Gemini authorization, and strict payment write-path boundaries; **not authorized for implementation**
 
 ### Boundaries (unchanged)
 
-- No UI-09 implementation or planning started in this task
+- No UI-09-C implementation or planning started in this task
 - No checkout/payment/cart/stock logic changes authorized
 - stash@{0} must remain untouched
 - No staging, commit, or push without explicit authorization
