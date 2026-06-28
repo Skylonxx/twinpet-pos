@@ -6,22 +6,21 @@
 |-------|-------|
 | Repo root | `C:/Users/Narachat/twinpet-pos` |
 | Branch | `main` |
-| HEAD | `baca4fe style(pos): polish checkout button hierarchy` |
-| origin/main | `baca4fe` |
+| HEAD | `f0c783c docs: close ui-09-b checkout button uat` |
+| origin/main | `f0c783c` |
 | Ahead/behind | `0 / 0` |
 
 ## Current Phase
 
-    TWINPET-POS-UI-09-B-PHYSICAL-UAT-CLOSURE
-    DOCS-ONLY / UNSTAGED REVIEW / NO COMMIT YET
+    TWINPET-POS-UI-09-C-PAYMENT-MODAL-PLANNING-GATE
+    PLANNING / AUDIT ONLY — NOT AUTHORIZED FOR IMPLEMENTATION
 
-UI-09-B Checkout Button Visual Polish closed after Owner physical UAT pass. No UI-09-C work started in this task.
+UI-09-B Checkout Button Visual Polish is **CLOSED / PASSED UAT** (implementation `baca4fe`, closure docs `f0c783c`). UI-09-C is the next candidate for planning/audit only.
 
 ## Working Tree
 
-- Tracked working tree: **clean** (before closure doc edits)
-- Staging: **empty** (before closure doc edits)
-- Closure edits are docs-only and left UNSTAGED for review
+- Tracked working tree: **clean**
+- Staging: **empty**
 
 ## Stash
 
@@ -35,6 +34,7 @@ UI-09-B Checkout Button Visual Polish closed after Owner physical UAT pass. No U
 |-------|-------|
 | Scope | Checkout Button Visual Polish / `VISUAL_ONLY` |
 | Implementation | `baca4fe style(pos): polish checkout button hierarchy` |
+| Closure docs | `f0c783c docs: close ui-09-b checkout button uat` |
 | Source impact | `src/pages/POSPage.css` only |
 | Behavior impact | none |
 | Physical UAT | **PASSED** |
@@ -65,19 +65,33 @@ Older P1 triage "Offline/Sync relocation" is a **separate deferred backlog item*
 
 ## UI-09-C Status
 
-- Next candidate: **Payment Modal / Payment Flow planning**
+- Next candidate: **Payment Modal / Payment Flow planning/audit**
 - Status: **NOT STARTED**
-- Requires separate audit, Codex review, Gemini authorization, and strict payment write-path boundaries
+- Requires separate read-only audit, Codex review, Gemini authorization, and strict payment write-path boundaries
 - **Not authorized for implementation**
+- **Red zones until separate authorization:** PaymentModal, payment calculation, checkout/order write paths (`confirmSale`, `submitAsyncOrder`), global Enter-confirm behavior
+
+## Agent Workflow Authority
+
+- **Owner / Narachat (Khun Chat):** final human authority and physical UAT
+- **Gemini:** Tech Lead / CEO decision authority
+- **ChatGPT:** workflow coordinator / principal engineer (outside agentchattr)
+- **Claude / Cursor Agent:** developer / docs executor within authorized scope
+- **Codex:** independent reviewer
+- **AGY:** UI/UX lead for UI-facing work
+- **CodexSafe:** safety gate when used (strict PASS/BLOCK)
+- **agentchattr:** transport/orchestration only — not a decision authority
+- Naming a role file alone is **not** permission; prompts must explicitly address the role (`TO:` header)
 
 ## Recent Completed Work
 
-All commits below are physically verified in `git log --oneline -n 40` at HEAD `baca4fe`:
+All commits below are physically verified in `git log --oneline -n 40` at HEAD `f0c783c`:
 
 ### POS Implementation Commits (newest first)
 
 | Hash | Message |
 |------|---------|
+| `f0c783c` | docs: close ui-09-b checkout button uat — **UI-09-B closure docs COMMITTED** |
 | `baca4fe` | style(pos): polish checkout button hierarchy — **UI-09-B CLOSED / PASSED UAT** |
 | `2e24389` | docs: close ui-08 action buttons uat |
 | `889e23a` | fix(pos): make suspended bill ids LAN-safe |
@@ -122,22 +136,24 @@ All Phase 7B-H series, 7C keyboard/focus/IME suite (D4-C-1..4), 7C-E1 LAN setup,
 
 ## Next Recommended Block
 
-    READY_FOR_UI_09_B_CLOSURE_REVIEW
+    READY_FOR_UI_09_C_PLANNING_AUTHORIZATION
 
-After closure doc review is accepted and committed (explicit authorization required):
-1. Planning coordinator may evaluate UI-09-C (Payment Modal / Payment Flow) as next candidate
-2. No UI-09-C implementation without separate Tech Lead / CEO authorization
+1. Gemini / Owner may authorize **UI-09-C read-only planning/audit** (Payment Modal / Payment Flow)
+2. **No UI-09-C implementation** without separate Tech Lead / CEO authorization after planning, Codex review, and safety review
+3. PaymentModal and payment/checkout write paths remain hard red zones until then
 
 ## Hard Boundaries
 
 Do NOT:
-- Edit source code, tests, or package files
+- Edit source code, tests, CSS, or package files without authorization
+- Edit PaymentModal or payment calculation paths without authorization
+- Change checkout/order write paths (`confirmSale`, `submitAsyncOrder`) without authorization
+- Change global Enter-confirm behavior for PaymentModal without authorization
 - Edit Firebase/functions/rules
-- Edit Android artifacts
-- Edit .claude/
-- Touch checkout/payment write paths
-- Touch POS cart math or stock math
-- Touch stash@{0}
+- Edit Android artifacts or `.claude/`
+- Touch checkout/payment write paths without authorization
+- Touch POS cart math or stock math without authorization
+- Touch stash@{0} (apply/pop/drop/modify prohibited; list-only OK)
 - Stage, commit, or push without explicit authorization
-- Authorize UI-09-C implementation in this task
-- Touch agentchattr repo
+- Authorize UI-09-C implementation in tracker docs alone
+- Touch agentchattr repo for Twinpet decisions (transport only)

@@ -2,39 +2,45 @@
 
 ## Current State
 
-Phase **7C-UI-07-CART-SUMMARY-IMPLEMENTATION** is CLOSED. CEO Physical UAT PASS. Committed.
-
-UI-01 through UI-07 are now DONE.
+- HEAD: `f0c783c docs: close ui-09-b checkout button uat`
+- **UI-09-B** — CLOSED / PASSED UAT (implementation `baca4fe`, closure docs `f0c783c`)
+- **UI-08** — CLOSED / PASSED UAT
+- **UI-09-A** — CLOSED read-only checkout boundary audit
+- UI-01 through UI-09-B are **DONE**
 
 ## What Happens Next
 
-**Current stop condition: HARD STOP. Waiting for CEO directive.**
+**Current gate: UI-09-C planning authorization — NOT implementation.**
 
-No further action is authorized. Do not start UI-08. Do not start UI-09. Do not run agentchattr for real workflow routing.
+No UI-09-C implementation is authorized. No PaymentModal, payment calculation, or checkout/order write-path work is authorized.
+
+Gemini / Owner may authorize **UI-09-C read-only planning/audit** (Payment Modal / Payment Flow) as a separate prompt phase.
 
 ## Ready for planning (not authorized to start)
 
-The next item in UI_MASTER_PLAN.md is:
-
-- **UI-08 Action Buttons** -- PENDING, not started, not authorized.
-
-UI-08 requires separate Tech Lead / CEO authorization before any discovery, implementation, or file changes begin.
+- **UI-09-C Payment Modal / Payment Flow planning/audit** — NOT STARTED
+- Requires separate read-only audit, Codex review, Gemini authorization
+- PaymentModal and payment/checkout write paths remain **hard red zones** until separate authorization after planning
 
 ## Decision points for Tech Lead / CEO
 
-1. Authorize UI-08 (Action Buttons) as a new phase.
-2. Authorize UI-09 (Checkout Button F12) as a new phase.
-3. Any other direction (tooling, backlog, pause).
+1. Authorize UI-09-C **read-only planning/audit** only.
+2. Defer UI-09-C and choose another backlog direction.
+3. Any tooling or docs-only follow-up (explicit authorization required).
 
 ---
 
 ## Important Reminders
 
-- The existing governance chain remains the absolute source of truth.
-- agentchattr is advisory communication transport only, not a decision maker.
-- Workflow docs (STATE.md, CURRENT_PACKET.md, NEXT_ACTION.md) always win over chat messages.
-- `stash@{0}` is pre-existing unrelated WIP -- do not touch.
-- Old manual workflow remains available as fallback.
+- Owner / Narachat = final human authority and physical UAT.
+- Gemini = Tech Lead / CEO decision authority.
+- ChatGPT = workflow coordinator outside agentchattr.
+- Claude / Cursor Agent = developer/docs executor within authorized scope only.
+- Codex = reviewer; AGY = UI/UX lead; CodexSafe = safety gate when used.
+- agentchattr is transport/orchestration only — not a decision authority.
+- Workflow docs win over chat messages.
+- `stash@{0}` is pre-existing unrelated WIP — do not touch (list-only OK).
+- Naming a role file alone is not permission; use explicit `TO:` headers.
 
 ## Role File Reference
 

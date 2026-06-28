@@ -4,19 +4,20 @@
 
 | Field | Value |
 |-------|-------|
-| HEAD | `baca4fe style(pos): polish checkout button hierarchy` |
-| origin/main | `baca4fe` |
+| HEAD | `f0c783c docs: close ui-09-b checkout button uat` |
+| origin/main | `f0c783c` |
 | Ahead/behind | `0 / 0` |
-| Closure | UI-09-B Physical UAT closure docs — in progress (2026-06-24) |
+| Closure | UI-09-B closure docs **COMMITTED** at `f0c783c` |
 
 ## Recently Completed / Committed UI Work
 
-All commits below are physically verified in `git log --oneline -n 40` at HEAD `baca4fe`.
+All commits below are physically verified in `git log --oneline -n 40` at HEAD `f0c783c`.
 
 ### POS Cashier UX & Cart
 
 | Hash | Description |
 |------|-------------|
+| `f0c783c` | **UI-09-B closure docs** — committed |
 | `baca4fe` | **UI-09-B** — Polish checkout button hierarchy — CLOSED / PASSED UAT |
 | `889e23a` | Make suspended bill IDs LAN-safe |
 | `602acea` | Restore hold bill modal flow with DOM coverage |
@@ -87,12 +88,13 @@ See Context.md for the full Phase 7B/7C history including:
 |-------|-------|
 | Formal scope | Checkout Button Visual Polish / `VISUAL_ONLY` |
 | Implementation | `baca4fe style(pos): polish checkout button hierarchy` |
+| Closure docs | `f0c783c docs: close ui-09-b checkout button uat` |
 | Source impact | `src/pages/POSPage.css` only |
 | Behavior impact | none |
 | Physical UAT | **PASSED** — Owner feedback: **เทสแล้วผ่านครับ** |
 | Codex review | PASS WITH NOTES / READY |
 | Keyboard contract test | 145 passed |
-| Closure phase | `TWINPET-POS-UI-09-B-PHYSICAL-UAT-CLOSURE` |
+| Closure phase | **COMMITTED** at `f0c783c` |
 
 **Untouched:** `src/pages/POSPage.tsx`, PaymentModal, confirmSale, submitAsyncOrder, cart math, F12 keyboard behavior, checkout disabled gate, checkout click behavior, payment/order write path, stock/FIFO, hold/suspended bill, shift/cash drawer, scanner flow.
 
@@ -118,11 +120,12 @@ See Context.md for the full Phase 7B/7C history including:
 
 ## UI-09-C Status
 
-**NEXT CANDIDATE — NOT STARTED**
+**NEXT CANDIDATE — NOT STARTED (planning/audit only)**
 
-- Scope: Payment Modal / Payment Flow planning
-- Requires separate audit, Codex review, Gemini authorization, and strict payment write-path boundaries
-- **Not authorized for implementation** in the UI-09-B closure task
+- Scope: Payment Modal / Payment Flow planning/audit
+- Requires separate read-only audit, Codex review, Gemini authorization, and strict payment write-path boundaries
+- **Not authorized for implementation**
+- Red zones: PaymentModal, payment calculation, checkout/order write paths, global Enter-confirm behavior
 
 ## Deferred / Ambiguous Work
 
@@ -146,8 +149,8 @@ See Context.md for the full Phase 7B/7C history including:
 
 ## Next Decision Gate
 
-    READY_FOR_UI_09_B_CLOSURE_REVIEW
+    READY_FOR_UI_09_C_PLANNING_AUTHORIZATION
 
-After UI-09-B closure docs are reviewed and committed:
-1. Planning coordinator may evaluate UI-09-C (Payment Modal / Payment Flow) as next candidate
-2. UI-09-C implementation requires separate Tech Lead / CEO authorization
+1. Gemini / Owner may authorize **UI-09-C read-only planning/audit** (Payment Modal / Payment Flow)
+2. **No UI-09-C implementation** without separate Tech Lead / CEO authorization after planning and review
+3. PaymentModal and payment/checkout write paths remain hard red zones until then

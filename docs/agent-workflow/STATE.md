@@ -7,49 +7,59 @@ Updated by whichever agent or human currently owns the task.
 
 ## Master Plan
 
-**`docs/agent-workflow/UI_MASTER_PLAN.md`** is the explicit Phase 7C POS UI source of truth (9-point plan + future backlog). UI-01 through UI-07 are **DONE**. UI-07 final commit: `style(pos): polish cart summary layout and resolve responsive constraints`, CEO Physical UAT PASS.
+**`docs/agent-workflow/UI_MASTER_PLAN.md`** and **`docs/UI_MASTER_PLAN.md`** track Phase 7C POS UI scope. UI-01 through UI-09-B are **DONE**. UI-09-C is the next candidate (planning/audit only).
+
+## Repository Baseline
+
+| Field | Value |
+|-------|-------|
+| HEAD | `f0c783c docs: close ui-09-b checkout button uat` |
+| UI-09-B implementation | `baca4fe style(pos): polish checkout button hierarchy` |
+| Branch | `main` aligned with `origin/main` |
 
 ## Current Phase
 
-**7C-UI-07-CART-SUMMARY-IMPLEMENTATION** -- CLOSED. CEO Physical UAT PASS (3rd attempt). Committed.
+**TWINPET-POS-UI-09-C-PAYMENT-MODAL-PLANNING-GATE** — planning/audit only. **NOT authorized for implementation.**
 
 ## Current Owner
 
-**Tech Lead / CEO** -- decide next steps (UI-08 authorization or other direction).
+**Tech Lead / CEO (Gemini)** — authorize UI-09-C read-only planning/audit when ready.
 
 ## Latest Verdict
 
-**UI-07 CEO Physical UAT PASS** -- cart summary visual polish committed. Label/value contrast improved, touch targets enlarged, explicit +/- cues for discount/fee, grand total prominence increased, responsive label constraints resolved (flex-shrink: 0, min-width: 80px, nowrap on labels; gap: 10px between label and controls; fee chips flex-wrap). All controls visible, no overflow, no awkward wrapping.
+**UI-09-B CLOSED / PASSED UAT** — checkout button visual polish (`baca4fe`); closure docs committed (`f0c783c`). Owner physical UAT: **เทสแล้วผ่านครับ**.
 
 ## Mode
 
-Idle. No active implementation. Waiting for CEO directive.
+Idle. No active implementation. Waiting for UI-09-C planning authorization.
 
 ---
 
 ## Agentchattr Rules of Engagement (Official, still in force)
 
-1. agentchattr is an advisory communication hub and transport layer only -- not a decision maker, does not replace workflow docs, does not authorize commits or implementation.
-2. STATE.md, CURRENT_PACKET.md, NEXT_ACTION.md remain the ultimate source of truth; if chat and docs disagree, docs win.
-3. Tech Lead / CEO authorization through standard workflow is required for all implementation, staging, and commits.
+1. agentchattr is an advisory communication hub and transport layer only — not a decision maker, does not replace workflow docs, does not authorize commits or implementation.
+2. `docs/STATE.md`, `docs/agent-workflow/STATE.md`, `CURRENT_PACKET.md`, and `NEXT_ACTION.md` remain authoritative; if chat and docs disagree, docs win.
+3. Tech Lead / CEO (Gemini) and Owner (Narachat) authorization through standard workflow is required for all implementation, staging, and commits.
 4. Role separation (see `AUTHORITY_MATRIX.md`):
-   - **Outside agentchattr:** Khun Chat = Human Operator / Product Owner (not a runtime identity); Gemini = Tech Lead / CEO decision owner; ChatGPT = Architecture Engineer.
-   - **Inside agentchattr:** codex_coordinator (Codex #1) = Workflow Coordinator; claude_developer = Developer / Implementer; codex_reviewer (Codex #2) = Independent Reviewer; agy_ui_lead = UI Lead / UX QA Lead (UI/UX-only).
-   - **Internal safety gate:** codex_safe = Internal Safety Gate / Boundary Guard (NOT a workflow persona).
+   - **Outside agentchattr:** Khun Chat / Owner = Human Operator / Product Owner; Gemini = Tech Lead / CEO decision owner; ChatGPT = Architecture Engineer / workflow coordinator.
+   - **Inside agentchattr:** codex_coordinator = Workflow Coordinator; claude_developer = Developer; codex_reviewer = Independent Reviewer; agy_ui_lead = UI/UX-only; codex_safe = Safety Gate (not a workflow persona).
    - codex_coordinator and codex_reviewer MUST be separate identities. agentchattr = transport only.
-5. Safety prohibitions: no skip-permissions, no bypass, no yolo, no auto-approve, no stash access.
+5. Naming a role file alone is **not** permission; prompts must explicitly address the role (`TO:` header).
+6. Safety prohibitions: no skip-permissions, no bypass, no yolo, no auto-approve, no stash apply/pop/drop.
 
 ---
 
 ## Baseline (closed work)
 
-- **UI-01 through UI-07** -- DONE.
-- **UI-07** -- discovery committed at `84c2e22`; implementation + CEO UAT revision committed in this package.
-- **TOOLING-AGENTCHATTR PILOT-0/2/3B** -- discovery `c3dbc46`, API test `050a452`, Pilot-3B + rules `9738b9a`.
+- **UI-01 through UI-09-B** — DONE (UI-09-B visual-only checkout button polish).
+- **UI-08** — CLOSED / PASSED UAT (`873997e`).
+- **UI-09-A** — CLOSED read-only checkout boundary audit.
+- **agentchattr coordinator_loop tooling** — pushed separately; transport only for Twinpet.
 
 ## Staging / Commit status
 
-- UI-07: **committed** (7-file package: 3 workflow docs, 2 reports, POSPage.tsx, POSPage.css).
+- UI-09-B closure docs: **committed** at `f0c783c`.
+- Tracker reconcile (this phase): docs-only, unstaged until authorized.
 
 ---
 
@@ -60,21 +70,23 @@ Idle. No active implementation. Waiting for CEO directive.
 | UI-01 Main POS Layout | DONE |
 | UI-02 Search & Scanner Input | DONE |
 | UI-03 Categories & Quick Menu | DONE |
-| UI-04 Product Grid Cards | DONE -- `06bc831`, CEO Physical UAT PASS |
+| UI-04 Product Grid Cards | DONE |
 | UI-05 Cart Container | DONE |
-| UI-06 Cart Item Rows | DONE -- final `ab7eceb`, CEO Physical UAT PASS |
-| UI-07 Cart Summary | DONE -- CEO Physical UAT PASS |
-| UI-08 Action Buttons | PENDING (NOT started -- not authorized) |
-| UI-09 Checkout Button (F12) | PENDING (NOT started -- not authorized) |
-| UI-10 Manager PIN Authorization Overlay | FUTURE BACKLOG (not authorized) |
+| UI-06 Cart Item Rows | DONE |
+| UI-07 Cart Summary | DONE |
+| UI-08 Action Buttons | DONE — CLOSED / PASSED UAT (`873997e`) |
+| UI-09-A Checkout boundary audit | DONE — read-only, closed |
+| UI-09-B Checkout Button Visual Polish | DONE — CLOSED / PASSED UAT (`baca4fe`, closure `f0c783c`) |
+| UI-09-C Payment Modal / Payment Flow | NEXT CANDIDATE — planning/audit only; **NOT authorized for implementation** |
+| UI-10 Manager PIN Authorization Overlay | FUTURE BACKLOG |
 
 ## Next Owner
 
-**Tech Lead / CEO** -- decide next steps.
+**Tech Lead / CEO (Gemini)** — UI-09-C planning authorization.
 
 ## Next Action
 
-See `NEXT_ACTION.md`. Waiting for CEO directive. UI-08 (Action Buttons) is the next item in the master plan but requires separate authorization.
+See `NEXT_ACTION.md`. UI-09-C read-only planning/audit is the next gate; no implementation authorized.
 
 ## Role File Reference
 
@@ -84,34 +96,34 @@ Each role is listed separately — no blended cells. Full authority table: `docs
 
 | Agent | Role | Role File |
 |---|---|---|
-| Khun Chat | Human Operator / Product Owner (not a runtime identity) | — (human; top of chain) |
+| Khun Chat / Owner (Narachat) | Human Operator / Product Owner | — (human; top of chain) |
 | Gemini | Tech Lead / CEO decision owner | `docs/ai-roles/tech-lead.md` |
-| ChatGPT | Architecture Engineer | `docs/ai-roles/system-architect.md` |
+| ChatGPT | Architecture Engineer / workflow coordinator | `docs/ai-roles/system-architect.md` |
 
 ### Inside agentchattr (internal workflow agents)
 
 | Identity | Role | Role File |
 |---|---|---|
-| codex_coordinator (Codex #1) | Principal Engineer Reviewer / Workflow Coordinator | `docs/ai-roles/workflow-coordinator.md` |
+| codex_coordinator (Codex #1) | Workflow Coordinator | `docs/ai-roles/workflow-coordinator.md` |
 | claude_developer (Claude) | Developer / Implementer | `docs/ai-roles/developer.md` |
-| codex_reviewer (Codex #2) | Reviewer / Principal Engineer Reviewer | `docs/ai-roles/reviewer.md` |
+| codex_reviewer (Codex #2) | Independent Reviewer | `docs/ai-roles/reviewer.md` |
 | agy_ui_lead (AGY) | UI Lead / UX QA Lead (UI/UX-only) | `docs/ai-roles/ux-lead.md` |
 
 ### Internal safety gate
 
 | Identity | Role | Role File |
 |---|---|---|
-| codex_safe | Internal Safety Gate / Boundary Guard (NOT a workflow persona) | `docs/ai-roles/safety-reviewer.md` |
+| codex_safe | Internal Safety Gate / Boundary Guard | `docs/ai-roles/safety-reviewer.md` |
 
 ## Stop Condition
 
-HARD STOP. UI-07 committed. Do not implement UI-08 or UI-09 without separate Tech Lead / CEO authorization.
+**Planning gate only.** UI-09-B is closed. Do **not** implement UI-09-C without separate Gemini authorization. PaymentModal and payment/checkout write paths are hard red zones.
 
 ---
 
 ## Stash
 
-`stash@{0}` -- pre-existing unrelated WIP stash. **Do not touch.** (Only `git stash list` used; untouched.)
+`stash@{0}` — pre-existing unrelated WIP stash. **Do not touch.** (Only `git stash list` read-only is allowed.)
 
 ---
 

@@ -1,29 +1,30 @@
-# Current Task Tracker — TWINPET-POS-UI-09-B-PHYSICAL-UAT-CLOSURE (DOCS-ONLY / UNSTAGED REVIEW / NO COMMIT YET)
+# Current Task Tracker — TWINPET-POS-UI-09-C-PAYMENT-MODAL-PLANNING-GATE
 
 > Living checkpoint doc for agents. Detailed history: `docs/reports/latest-report.md` (do not duplicate long-form evidence here).
 
 ---
 
-## UI-09-B CLOSURE (2026-06-24)
+## TRACKER RECONCILE (post–agentchattr reentry)
 
-> This closure supersedes stale UI-09 ambiguity references below. See `docs/STATE.md` for the authoritative operational state.
+> Supersedes stale UI-09-B closure-in-progress markers below. See `docs/STATE.md` for operational state.
 
 **Current physical baseline:**
 - Branch: `main`
-- HEAD: `baca4fe style(pos): polish checkout button hierarchy`
-- origin/main: `baca4fe` | Ahead/behind: `0 / 0`
-- Working tree: clean | Staging: empty (before closure doc edits)
+- HEAD: `f0c783c docs: close ui-09-b checkout button uat`
+- origin/main: `f0c783c` | Ahead/behind: `0 / 0`
+- Working tree: clean | Staging: empty
 - stash@{0}: `On main: WIP: Batches 1-3 UI/settings/UOM/transfer-UI` — **DO NOT TOUCH**
 
-**Current phase:** `TWINPET-POS-UI-09-B-PHYSICAL-UAT-CLOSURE`
-**Mode:** DOCS-ONLY / UNSTAGED REVIEW / NO COMMIT YET
+**Current phase:** `TWINPET-POS-UI-09-C-PAYMENT-MODAL-PLANNING-GATE`
+**Mode:** Planning/audit gate only — **NO UI-09-C implementation authorized**
 
-### UI-09-B Closure Record
+### UI-09-B Closure Record (committed)
 
 | Field | Value |
 |-------|-------|
 | Scope | Checkout Button Visual Polish / `VISUAL_ONLY` |
 | Implementation | `baca4fe style(pos): polish checkout button hierarchy` |
+| Closure docs | `f0c783c docs: close ui-09-b checkout button uat` |
 | Source impact | `src/pages/POSPage.css` only |
 | Behavior impact | none |
 | Physical UAT | **PASSED** |
@@ -41,6 +42,7 @@
 
 | Hash | Message | Prior Tracker Status |
 |------|---------|---------------------|
+| `f0c783c` | docs: close ui-09-b checkout button uat | UI-09-B closure docs — COMMITTED |
 | `baca4fe` | style(pos): polish checkout button hierarchy | UI-09-B — CLOSED / PASSED UAT |
 | `2e24389` | docs: close ui-08 action buttons uat | UI-08 docs closure |
 | `889e23a` | fix(pos): make suspended bill ids LAN-safe | Not in trackers |
@@ -86,13 +88,16 @@ Plus 14 docs/workflow commits (`c314911`, `c8c48fe`, `ea33424`, `886340b`, `84c2
 - Physical UAT: **PASSED** — Owner feedback: **ใช้ได้ดี**
 - Older P1 triage Offline/Sync relocation: **separate deferred backlog item**, not UI-08
 
-**Next candidate:** UI-09-C Payment Modal / Payment Flow planning — **NOT STARTED**; requires separate audit, Codex review, Gemini authorization, and strict payment write-path boundaries; **not authorized for implementation**
+**Next candidate:** UI-09-C Payment Modal / Payment Flow **planning/audit** — **NOT STARTED**; requires separate read-only audit, Codex review, Gemini authorization; **not authorized for implementation**. PaymentModal/payment/checkout write paths remain red zones.
 
 ### Boundaries (unchanged)
 
-- No UI-09-C implementation or planning started in this task
+- No UI-09-C implementation authorized
+- No PaymentModal / payment calculation / checkout-order write-path changes
+- No global Enter-confirm behavior changes for PaymentModal
 - No checkout/payment/cart/stock logic changes authorized
 - stash@{0} must remain untouched
+- agentchattr is transport only; Twinpet workflow docs and Gemini/Owner authority govern
 - No staging, commit, or push without explicit authorization
 
 ---

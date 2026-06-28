@@ -4,20 +4,20 @@
 
 ---
 
-## UI-09-B PHYSICAL UAT CLOSURE — 2026-06-24
+## UI-09-B PHYSICAL UAT CLOSURE — COMMITTED (`f0c783c`)
 
 > This closure section supersedes stale UI-09 ambiguity markers below.
 
-**Current physical state (verified 2026-06-24):**
-- HEAD: `baca4fe style(pos): polish checkout button hierarchy`
-- origin/main: `baca4fe`
+**Current physical state (verified post–tracker reconcile):**
+- HEAD: `f0c783c docs: close ui-09-b checkout button uat`
+- origin/main: `f0c783c`
 - Ahead/behind: `0 / 0`
-- Working tree: clean before closure doc edits
-- Staging: empty before closure doc edits
+- Working tree: clean
+- Staging: empty
 - stash@{0}: present and untouched — `On main: WIP: Batches 1-3 UI/settings/UOM/transfer-UI (unrelated to stock-security Phase 1)`
-- Phase: `TWINPET-POS-UI-09-B-PHYSICAL-UAT-CLOSURE` (DOCS-ONLY / UNSTAGED REVIEW)
+- Phase: `TWINPET-POS-UI-09-C-PAYMENT-MODAL-PLANNING-GATE` — planning/audit only; **NOT authorized for implementation**
 
-**Docs-only UI-09-B closure in progress — no implementation performed.**
+**UI-09-B closure docs committed at `f0c783c` — no further UI-09-B closure work pending.**
 
 ### UI-09-B Closure Record
 
@@ -25,6 +25,7 @@
 |-------|-------|
 | Scope | Checkout Button Visual Polish / `VISUAL_ONLY` |
 | Implementation | `baca4fe style(pos): polish checkout button hierarchy` |
+| Closure docs | `f0c783c docs: close ui-09-b checkout button uat` |
 | Source impact | `src/pages/POSPage.css` only |
 | Behavior impact | none |
 | Physical UAT | **PASSED** |
@@ -38,9 +39,21 @@
 
 **UI-09-A (prior):** Checkout boundary read-only audit — CLOSED at `2e24389`; report at `C:\Users\Narachat\OneDrive\Ai-Report\claude\twinpet-pos-ui-09-a-checkout-boundary-audit-report.md`.
 
-**Next candidate:** UI-09-C Payment Modal / Payment Flow planning — **NOT STARTED**. Requires separate audit, Codex review, Gemini authorization, and strict payment write-path boundaries. **Not authorized for implementation.**
+**Next candidate:** UI-09-C Payment Modal / Payment Flow **planning/audit** — **NOT STARTED**. Requires separate read-only audit, Codex review, Gemini authorization. **Not authorized for implementation.** PaymentModal/payment/checkout write paths remain red zones.
 
 **Prior implementation report:** `C:\Users\Narachat\OneDrive\Ai-Report\claude\twinpet-pos-ui-09-b-checkout-button-visual-polish-implementation-report.md`
+
+---
+
+## DOCS TRACKER RECONCILE — post–agentchattr reentry
+
+**Purpose:** Align stale trackers to HEAD `f0c783c`, UI-09-B closed, UI-09-C planning gate.
+
+**Mode:** Docs-only reconciliation — no source/test/CSS changes; no stage/commit/push in reconcile step.
+
+**Files reconciled:** `Context.md`, `Task.md`, `docs/STATE.md`, `docs/UI_MASTER_PLAN.md`, `docs/agent-workflow/STATE.md`, `docs/agent-workflow/CURRENT_PACKET.md`, `docs/agent-workflow/NEXT_ACTION.md`, `docs/agent-workflow/UI_MASTER_PLAN.md`, `docs/reports/latest-report.md`.
+
+**Next gate:** `READY_FOR_UI_09_C_PLANNING_AUTHORIZATION` — Codex docs review before staging/commit or UI-09-C planning prompt.
 
 ### UI-08 Closure Record (prior)
 

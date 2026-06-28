@@ -4,19 +4,18 @@
 
 ---
 
-## UI-09-B CLOSURE (2026-06-24)
+## UI-09-B CLOSURE (2026-06-24) — COMMITTED
 
 > This closure block supersedes any stale UI-09 ambiguity markers in the history below.
 > See `docs/STATE.md` for the authoritative current operational state.
 > See `docs/UI_MASTER_PLAN.md` for the reconciled UI work summary.
 
-**Current physical baseline (verified 2026-06-24):**
+**Current physical baseline (verified post–tracker reconcile):**
 - Branch: `main`
-- HEAD: `baca4fe style(pos): polish checkout button hierarchy`
-- origin/main: `baca4fe`
+- HEAD: `f0c783c docs: close ui-09-b checkout button uat`
+- origin/main: `f0c783c`
 - Ahead/behind: `0 / 0`
-- Tracked working tree: clean (before closure doc edits)
-- Staging: empty (before closure doc edits)
+- Tracked working tree: clean
 
 **stash@{0}: PRESENT AND UNTOUCHED**
 
@@ -24,11 +23,12 @@
 
 **Do NOT touch stash@{0}** — apply/pop/drop/clear/modify is PROHIBITED.
 
-**Current phase:** `TWINPET-POS-UI-09-B-PHYSICAL-UAT-CLOSURE` (DOCS-ONLY / UNSTAGED REVIEW / NO COMMIT YET)
+**Current phase:** `TWINPET-POS-UI-09-C-PAYMENT-MODAL-PLANNING-GATE` — planning/audit only; **NOT authorized for implementation**.
 
 **UI-09-B — CLOSED / PASSED UAT**
 - Formal scope: **Checkout Button Visual Polish** (`VISUAL_ONLY`)
-- Implementation: `baca4fe style(pos): polish checkout button hierarchy` — implementation-complete
+- Implementation: `baca4fe style(pos): polish checkout button hierarchy`
+- Closure docs: `f0c783c docs: close ui-09-b checkout button uat`
 - Source impact: `src/pages/POSPage.css` only
 - Behavior impact: **none**
 - Physical UAT: **PASSED** — Owner feedback: **เทสแล้วผ่านครับ**
@@ -48,7 +48,7 @@
 - Physical UAT: **PASSED** — Owner feedback: **ใช้ได้ดี**
 - Older P1 triage "Offline/Sync relocation" item is a **separate deferred backlog item**, not UI-08
 
-**Next candidate:** UI-09-C Payment Modal / Payment Flow planning — **NOT STARTED**. Requires separate audit, Codex review, Gemini authorization, and strict payment write-path boundaries. **Not authorized for implementation.**
+**Next candidate:** UI-09-C Payment Modal / Payment Flow **planning/audit** — **NOT STARTED**. Requires separate read-only audit, Codex review, and Gemini authorization. **Not authorized for implementation.** PaymentModal, payment calculation, checkout/order write paths (`confirmSale`, `submitAsyncOrder`), and global Enter-confirm behavior remain hard red zones until separate Gemini authorization after planning.
 
 **Phases confirmed COMMITTED since last tracker sync (physically verified in `git log`):**
 
