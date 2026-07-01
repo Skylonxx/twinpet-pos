@@ -2,7 +2,7 @@
 
 This file is the source of truth for Phase 7C POS UI refactoring scope and sequence.
 
-**Current HEAD:** `f0c783c docs: close ui-09-b checkout button uat`
+**Current HEAD:** `752ed1317a5e0b83b872d563cda451c7621ed22e` (verified; UI-09-C implementation + docs reconciliation uncommitted)
 
 1. UI-01: โครงสร้างเลย์เอาต์หลัก (Main POS Layout) - [DONE]
 2. UI-02: ช่องค้นหาและบาร์โค้ด (Search & Scanner Input) - [DONE]
@@ -14,7 +14,7 @@ This file is the source of truth for Phase 7C POS UI refactoring scope and seque
 8. UI-08: แผงปุ่มจัดการบิล (Action Buttons) - [DONE] — CLOSED / PASSED UAT (`873997e`)
 9. UI-09-A: Checkout boundary read-only audit - [DONE]
 10. UI-09-B: ปุ่มชำระเงิน visual polish (Checkout Button) - [DONE] — CLOSED / PASSED UAT (`baca4fe`, closure `f0c783c`)
-11. UI-09-C: Payment Modal / Payment Flow planning - [NEXT CANDIDATE — NOT STARTED; planning/audit only; **NOT authorized for implementation**]
+11. UI-09-C: Payment Modal UX Hardening - [DONE] — **COMPLETED (PASS WITH NOTES)**; Codex review PASS WITH NOTES; focus trap deferred as technical debt (see backlog below)
 
 ---
 
@@ -41,13 +41,25 @@ Status: Future backlog. Not current. Requires separate Tech Lead / CEO authoriza
 
 ---
 
-## UI-09-C Gate (current)
+## UI-09-C Gate (closed)
 
-- **Next candidate:** Payment Modal / Payment Flow planning/audit
-- **NOT STARTED**
-- **NOT authorized for implementation**
-- Red zones: PaymentModal, payment calculation, checkout/order write paths, global Enter-confirm behavior
-- Requires Gemini authorization for read-only planning phase first
+- **Status:** COMPLETED (PASS WITH NOTES)
+- Implementation scoped to `src/components/PaymentModal.tsx` and `src/components/PaymentModal.css` only
+- Codex review verdict: PASS WITH NOTES
+- Manual workflow used (ChatGPT memo → Gemini approval → Claude/Cursor implementation → Codex review → Gemini closure/docs sync); agentchattr bypassed as executor
+- Focus trap not implemented — see `[TECHNICAL DEBT & ACCESSIBILITY BACKLOG]` below
+
+---
+
+## [TECHNICAL DEBT & ACCESSIBILITY BACKLOG]
+
+- Item: Missing PaymentModal Focus Trap
+- Context: Denied during UI-09-C pass due to strict constraints within the pre-existing global keyboard contract tests.
+- Impact: Minor accessibility gap. Tab navigation can leak outside the active modal container.
+- Remediation Strategy: Requires a future dedicated ticket to modify keyboard ownership globally at the POSPage or core modal-manager level rather than mutating PaymentModal.tsx locally.
+- Status: Open / Deferred Follow-up
+- Source Phase: UI-09-C PaymentModal UX Hardening
+- Closure Note: UI-09-C closed as PASS WITH NOTES without local PaymentModal focus trap.
 
 ---
 

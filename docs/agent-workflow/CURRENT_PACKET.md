@@ -2,30 +2,25 @@
 
 ## Phase
 
-**No active implementation packet.**
+**No active implementation packet — code frozen.**
 
-Last closed: **UI-09-B Checkout Button Visual Polish** — CLOSED / PASSED UAT (`baca4fe`, closure docs `f0c783c`).
+Last packet: **UI-09-C PaymentModal UX Hardening** — **COMPLETED (PASS WITH NOTES)**, awaiting final docs-state validation / commit decision.
 
 ## What the last packet was
 
-Visual-only checkout button hierarchy polish. Changes confined to `src/pages/POSPage.css`. No behavior, math, PaymentModal, or payment write-path change.
+PaymentModal UX hardening: initial focus management, manual/physical keyboard cash input, responsive `PaymentModal.css`, `aria-pressed`/`aria-label` on payment method buttons, non-blocking print notice replacing `window.alert`. Changes confined to `src/components/PaymentModal.tsx` and `src/components/PaymentModal.css`. Focus trap not implemented — documented technical debt. No payment/checkout write-path change.
 
 ## Result
 
-Owner physical UAT **PASSED** (**เทสแล้วผ่านครับ**). Closure docs committed at `f0c783c`.
+Codex implementation review: **PASS WITH NOTES**. Docs reconciliation completed. Manual workflow path: Gemini approval → Claude/Cursor implementation → Codex review → docs reconciliation → Codex final docs-state review → Gemini commit decision. `agentchattr` was bypassed as executor.
 
 ## Next packet (not authorized)
 
-**UI-09-C Payment Modal / Payment Flow planning/audit** — next candidate only.
-
-- Status: **NOT STARTED**
-- Mode: read-only planning/audit when Gemini authorizes
-- **NOT authorized for implementation**
-- Red zones until separate authorization: PaymentModal, payment calculation, checkout/order write paths (`confirmSale`, `submitAsyncOrder`), global Enter-confirm behavior
+No further source changes are authorized. Next step is Codex final docs-state validation, then Gemini's commit decision on the current uncommitted working tree.
 
 ## Current HEAD
 
-`f0c783c docs: close ui-09-b checkout button uat`
+`752ed1317a5e0b83b872d563cda451c7621ed22e` (verified)
 
 ---
 

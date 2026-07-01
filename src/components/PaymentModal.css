@@ -308,6 +308,10 @@
   text-align: right;
 }
 
+.pay-cash-manual-input {
+  margin-bottom: 10px;
+}
+
 .pay-summary {
   width: 185px;
   flex-shrink: 0;
@@ -557,6 +561,50 @@
 .pay-success-btn--primary:hover {
   background: var(--p800, #3c3489);
   border-color: var(--p800, #3c3489);
+}
+
+.pay-print-notice {
+  margin: 4px auto 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--info-bg, #e6f1fb);
+  color: var(--info, #185fa5);
+  font-size: 12px;
+  max-width: 260px;
+}
+
+/* Narrow-screen layout */
+@media (max-width: 640px) {
+  .pay-modal-bg {
+    padding: 8px;
+  }
+
+  .pay-modal {
+    flex-direction: column;
+    width: min(420px, calc(100vw - 16px));
+    min-height: 0;
+    max-height: min(94vh, 640px);
+  }
+
+  .pay-sidebar {
+    width: 100%;
+    flex-direction: row;
+    overflow-x: auto;
+    padding: 8px 10px;
+    border-right: none;
+    border-bottom: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+  }
+
+  .pay-summary {
+    width: 100%;
+    border-left: none;
+    border-top: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+  }
+
+  .pay-modal--success {
+    width: min(360px, calc(100vw - 16px));
+    max-height: min(94vh, 560px);
+  }
 }
 
 /* Thermal print area — hidden on screen, ready for @media print */

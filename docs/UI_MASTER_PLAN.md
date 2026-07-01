@@ -4,14 +4,14 @@
 
 | Field | Value |
 |-------|-------|
-| HEAD | `f0c783c docs: close ui-09-b checkout button uat` |
-| origin/main | `f0c783c` |
+| HEAD (verified) | `752ed1317a5e0b83b872d563cda451c7621ed22e` |
+| origin/main | aligned with HEAD |
 | Ahead/behind | `0 / 0` |
-| Closure | UI-09-B closure docs **COMMITTED** at `f0c783c` |
+| Closure | UI-09-B closure docs **COMMITTED** at `f0c783c`; UI-09-C implementation + docs reconciliation **uncommitted** on top of `752ed13`, commit HOLD pending Codex final docs-state validation and Gemini decision |
 
 ## Recently Completed / Committed UI Work
 
-All commits below are physically verified in `git log --oneline -n 40` at HEAD `f0c783c`.
+All commits below are physically verified in `git log --oneline -n 40` at HEAD `752ed13`.
 
 ### POS Cashier UX & Cart
 
@@ -120,12 +120,17 @@ See Context.md for the full Phase 7B/7C history including:
 
 ## UI-09-C Status
 
-**NEXT CANDIDATE — NOT STARTED (planning/audit only)**
+**COMPLETED (PASS WITH NOTES)**
 
-- Scope: Payment Modal / Payment Flow planning/audit
-- Requires separate read-only audit, Codex review, Gemini authorization, and strict payment write-path boundaries
-- **Not authorized for implementation**
-- Red zones: PaymentModal, payment calculation, checkout/order write paths, global Enter-confirm behavior
+| Field | Value |
+|-------|-------|
+| Formal scope | PaymentModal UX Hardening — focus management, cash keyboard input, responsive CSS, ARIA, print notice |
+| Source impact | `src/components/PaymentModal.tsx`, `src/components/PaymentModal.css` only |
+| Codex review | PASS WITH NOTES |
+| Focus trap | **Not implemented** — deferred as technical debt (see backlog below) |
+| Workflow | Manual (ChatGPT memo → Gemini approval → Claude/Cursor implementation → Codex review → Gemini closure/docs sync); agentchattr bypassed as executor |
+
+**Untouched:** `src/pages/POSPage.tsx`, `useCheckout.ts`, `asyncCheckout.ts`, `cartUtils.ts` — payment/checkout semantics preserved.
 
 ## Deferred / Ambiguous Work
 
@@ -134,7 +139,7 @@ See Context.md for the full Phase 7B/7C history including:
 | UI-09-B | **CLOSED / PASSED UAT** | Checkout Button Visual Polish — `baca4fe` + Owner UAT |
 | UI-09-A | **CLOSED** | Read-only checkout boundary audit |
 | UI-08 | **CLOSED / PASSED UAT** | Action Buttons — `873997e` + Owner UAT |
-| UI-09-C | NOT STARTED | Payment Modal / Payment Flow — next candidate; not authorized |
+| UI-09-C | **COMPLETED (PASS WITH NOTES)** | PaymentModal UX Hardening — focus trap deferred as technical debt |
 | P1 Offline/Sync relocation | DEFERRED | Separate from UI-08; was P1 triage UI-08 numbering |
 | Hardware scanner (iOS/iPad Safari) | DEFERRED | Native App / Capacitor wrapper phase |
 | Flowbite migration (tables + modals) | DEFERRED | Batches 2+ deferred; stash@{0} holds WIP |
@@ -147,10 +152,20 @@ See Context.md for the full Phase 7B/7C history including:
 - No Firebase/functions/rules changes
 - stash@{0} must not be touched
 
+## [TECHNICAL DEBT & ACCESSIBILITY BACKLOG]
+
+- Item: Missing PaymentModal Focus Trap
+- Context: Denied during UI-09-C pass due to strict constraints within the pre-existing global keyboard contract tests.
+- Impact: Minor accessibility gap. Tab navigation can leak outside the active modal container.
+- Remediation Strategy: Requires a future dedicated ticket to modify keyboard ownership globally at the POSPage or core modal-manager level rather than mutating PaymentModal.tsx locally.
+- Status: Open / Deferred Follow-up
+- Source Phase: UI-09-C PaymentModal UX Hardening
+- Closure Note: UI-09-C closed as PASS WITH NOTES without local PaymentModal focus trap.
+
 ## Next Decision Gate
 
-    READY_FOR_UI_09_C_PLANNING_AUTHORIZATION
+    UI_09_C_DOCS_RECONCILIATION_COMPLETE
 
-1. Gemini / Owner may authorize **UI-09-C read-only planning/audit** (Payment Modal / Payment Flow)
-2. **No UI-09-C implementation** without separate Tech Lead / CEO authorization after planning and review
-3. PaymentModal and payment/checkout write paths remain hard red zones until then
+1. UI-09-C is closed (PASS WITH NOTES); no further implementation authorized in this docs-only turn
+2. Gemini / Tech Lead may authorize commit of the current working tree or request a further closure step
+3. PaymentModal and payment/checkout write paths remain hard red zones for any future phase

@@ -2,31 +2,26 @@
 
 ## Current State
 
-- HEAD: `f0c783c docs: close ui-09-b checkout button uat`
+- HEAD (verified): `752ed1317a5e0b83b872d563cda451c7621ed22e`
+- **UI-09-C PaymentModal UX Hardening** — **COMPLETED (PASS WITH NOTES)**, uncommitted (implementation in `src/components/PaymentModal.tsx`, `src/components/PaymentModal.css`)
 - **UI-09-B** — CLOSED / PASSED UAT (implementation `baca4fe`, closure docs `f0c783c`)
 - **UI-08** — CLOSED / PASSED UAT
 - **UI-09-A** — CLOSED read-only checkout boundary audit
-- UI-01 through UI-09-B are **DONE**
+- UI-01 through UI-09-C are **DONE**
 
 ## What Happens Next
 
-**Current gate: UI-09-C planning authorization — NOT implementation.**
+**Current gate: Codex final docs-state validation, then Gemini commit decision.**
 
-No UI-09-C implementation is authorized. No PaymentModal, payment calculation, or checkout/order write-path work is authorized.
+No further source changes are authorized. Source code is frozen. Focus trap remains a future technical-debt follow-up, not a current action.
 
-Gemini / Owner may authorize **UI-09-C read-only planning/audit** (Payment Modal / Payment Flow) as a separate prompt phase.
-
-## Ready for planning (not authorized to start)
-
-- **UI-09-C Payment Modal / Payment Flow planning/audit** — NOT STARTED
-- Requires separate read-only audit, Codex review, Gemini authorization
-- PaymentModal and payment/checkout write paths remain **hard red zones** until separate authorization after planning
+If Codex final docs-state review passes, Gemini may authorize staging/commit of the current uncommitted working tree (PaymentModal implementation + docs reconciliation).
 
 ## Decision points for Tech Lead / CEO
 
-1. Authorize UI-09-C **read-only planning/audit** only.
-2. Defer UI-09-C and choose another backlog direction.
-3. Any tooling or docs-only follow-up (explicit authorization required).
+1. After Codex final docs-state validation passes, authorize staging/commit.
+2. Request further docs or review changes if Codex final validation raises issues.
+3. Any new implementation phase (e.g. focus trap remediation) requires a separate, explicit authorization.
 
 ---
 

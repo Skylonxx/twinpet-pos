@@ -7,31 +7,31 @@ Updated by whichever agent or human currently owns the task.
 
 ## Master Plan
 
-**`docs/agent-workflow/UI_MASTER_PLAN.md`** and **`docs/UI_MASTER_PLAN.md`** track Phase 7C POS UI scope. UI-01 through UI-09-B are **DONE**. UI-09-C is the next candidate (planning/audit only).
+**`docs/agent-workflow/UI_MASTER_PLAN.md`** and **`docs/UI_MASTER_PLAN.md`** track Phase 7C POS UI scope. UI-01 through UI-09-C are **DONE**. UI-09-C is **COMPLETED (PASS WITH NOTES)**.
 
 ## Repository Baseline
 
 | Field | Value |
 |-------|-------|
-| HEAD | `f0c783c docs: close ui-09-b checkout button uat` |
-| UI-09-B implementation | `baca4fe style(pos): polish checkout button hierarchy` |
-| Branch | `main` aligned with `origin/main` |
+| HEAD (verified) | `752ed1317a5e0b83b872d563cda451c7621ed22e` |
+| UI-09-C implementation (uncommitted) | `src/components/PaymentModal.tsx`, `src/components/PaymentModal.css` |
+| Branch | `main` |
 
 ## Current Phase
 
-**TWINPET-POS-UI-09-C-PAYMENT-MODAL-PLANNING-GATE** — planning/audit only. **NOT authorized for implementation.**
+**UI-09-C PaymentModal UX Hardening — COMPLETED (PASS WITH NOTES).** Source code is frozen; working tree contains reviewed, uncommitted UI-09-C implementation and docs-reconciliation diffs. Final commit authorization is pending Codex final docs-state validation and Gemini's commit gate.
 
 ## Current Owner
 
-**Tech Lead / CEO (Gemini)** — authorize UI-09-C read-only planning/audit when ready.
+**Tech Lead / CEO (Gemini)** — final docs-state validation via Codex, then commit decision.
 
 ## Latest Verdict
 
-**UI-09-B CLOSED / PASSED UAT** — checkout button visual polish (`baca4fe`); closure docs committed (`f0c783c`). Owner physical UAT: **เทสแล้วผ่านครับ**.
+**UI-09-C COMPLETED (PASS WITH NOTES)** — PaymentModal UX hardening (focus management, manual cash keyboard input, responsive CSS, ARIA attributes, non-blocking print notice). Codex implementation review: PASS WITH NOTES. Focus trap not implemented — documented technical debt. Prior: **UI-09-B CLOSED / PASSED UAT** — checkout button visual polish (`baca4fe`); closure docs committed (`f0c783c`). Owner physical UAT: **เทสแล้วผ่านครับ**.
 
 ## Mode
 
-Idle. No active implementation. Waiting for UI-09-C planning authorization.
+Docs-only. Source code frozen. Awaiting Codex final docs-state validation, then Gemini commit decision.
 
 ---
 
@@ -59,7 +59,7 @@ Idle. No active implementation. Waiting for UI-09-C planning authorization.
 ## Staging / Commit status
 
 - UI-09-B closure docs: **committed** at `f0c783c`.
-- Tracker reconcile (this phase): docs-only, unstaged until authorized.
+- UI-09-C implementation + docs reconciliation: **uncommitted**, unstaged. Commit authorization HOLD pending Codex final docs-state validation and Gemini commit decision.
 
 ---
 
@@ -77,16 +77,16 @@ Idle. No active implementation. Waiting for UI-09-C planning authorization.
 | UI-08 Action Buttons | DONE — CLOSED / PASSED UAT (`873997e`) |
 | UI-09-A Checkout boundary audit | DONE — read-only, closed |
 | UI-09-B Checkout Button Visual Polish | DONE — CLOSED / PASSED UAT (`baca4fe`, closure `f0c783c`) |
-| UI-09-C Payment Modal / Payment Flow | NEXT CANDIDATE — planning/audit only; **NOT authorized for implementation** |
+| UI-09-C PaymentModal UX Hardening | DONE — **COMPLETED (PASS WITH NOTES)**; focus trap deferred as technical debt |
 | UI-10 Manager PIN Authorization Overlay | FUTURE BACKLOG |
 
 ## Next Owner
 
-**Tech Lead / CEO (Gemini)** — UI-09-C planning authorization.
+**Tech Lead / CEO (Gemini)** — commit decision after Codex final docs-state validation.
 
 ## Next Action
 
-See `NEXT_ACTION.md`. UI-09-C read-only planning/audit is the next gate; no implementation authorized.
+See `NEXT_ACTION.md`. Codex final docs-state validation, then Gemini commit decision. No further source changes authorized.
 
 ## Role File Reference
 
@@ -117,7 +117,7 @@ Each role is listed separately — no blended cells. Full authority table: `docs
 
 ## Stop Condition
 
-**Planning gate only.** UI-09-B is closed. Do **not** implement UI-09-C without separate Gemini authorization. PaymentModal and payment/checkout write paths are hard red zones.
+**Code freeze.** UI-09-C is COMPLETED (PASS WITH NOTES); source code is frozen pending Codex final docs-state validation and Gemini commit decision. Do **not** make further source changes. PaymentModal and payment/checkout write paths remain hard red zones for any future phase.
 
 ---
 

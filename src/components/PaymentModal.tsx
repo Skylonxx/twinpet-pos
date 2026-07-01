@@ -102,8 +102,12 @@ export default function PaymentModal({
   const [savedReceiptTime, setSavedReceiptTime] = useState<Date | null>(null);
   const [printType, setPrintType] = useState<'receipt' | 'prep' | null>(null);
   const [confirmError, setConfirmError] = useState<string | null>(null);
+  const [printNotice, setPrintNotice] = useState<string | null>(null);
 
   const autoPrintedRef = useRef(false);
+  const closeBtnRef = useRef<HTMLButtonElement | null>(null);
+  const newSaleBtnRef = useRef<HTMLButtonElement | null>(null);
+  const printNoticeTimeoutRef = useRef<number | null>(null);
 
   const resetModal = useCallback(() => {
     setAmounts(emptyAmounts());
@@ -116,10 +120,35 @@ export default function PaymentModal({
     setSavedReceiptTime(null);
     setPrintType(null);
     setConfirmError(null);
+    setPrintNotice(null);
+    if (printNoticeTimeoutRef.current) {
+      window.clearTimeout(printNoticeTimeoutRef.current);
+      printNoticeTimeoutRef.current = null;
+    }
     autoPrintedRef.current = false;
     const first = enabledMethods[0] ?? 'cash';
     setActiveMethod(first);
   }, [enabledMethods]);
+
+  useEffect(() => {
+    return () => {
+      if (printNoticeTimeoutRef.current) {
+        window.clearTimeout(printNoticeTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const raf = requestAnimationFrame(() => {
+      if (isSuccess) {
+        newSaleBtnRef.current?.focus();
+      } else {
+        closeBtnRef.current?.focus();
+      }
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [open, isSuccess]);
 
   useEffect(() => {
     if (!open) return;
@@ -220,10 +249,26 @@ export default function PaymentModal({
 
   const handlePrint = useCallback((type: 'receipt' | 'prep') => {
     setPrintType(type);
-    window.alert(
+    setPrintNotice(
       `จำลองการสั่งพิมพ์ ${type === 'receipt' ? 'ใบเสร็จ' : 'ใบจัดของ'} (โหมดทดสอบจะไม่ดึงหน้าต่าง Print จริง)`,
     );
+    if (printNoticeTimeoutRef.current) {
+      window.clearTimeout(printNoticeTimeoutRef.current);
+    }
+    printNoticeTimeoutRef.current = window.setTimeout(() => {
+      setPrintNotice(null);
+      printNoticeTimeoutRef.current = null;
+    }, 3200);
   }, []);
+
+  const handleCashInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const raw = e.target.value.replace(/[^0-9.]/g, '');
+      const parsed = raw ? parseFloat(raw) : 0;
+      setMethodAmount('cash', Number.isFinite(parsed) ? parsed : 0);
+    },
+    [setMethodAmount],
+  );
 
   const handleConfirm = async () => {
     if (!canConfirm || confirming || processing) return;
@@ -371,7 +416,12 @@ export default function PaymentModal({
     return (
       <>
         {thermalPortal}
-        <div className="pay-modal-bg pay-modal-bg--success" role="dialog" aria-modal="true" aria-label="รับรายการขายแล้ว">
+        <div
+          className="pay-modal-bg pay-modal-bg--success"
+          role="dialog"
+          aria-modal="true"
+          aria-label="รับรายการขายแล้ว"
+        >
           <div className="pay-modal pay-modal--success">
             <div className="pay-success-view">
               <div className="pay-success-icon">
@@ -387,6 +437,11 @@ export default function PaymentModal({
               <div className="pay-success-change">
                 เงินทอน: <strong>฿{formatMoney(savedChange)}</strong>
               </div>
+              {printNotice && (
+                <div className="pay-print-notice" role="status" aria-live="polite">
+                  {printNotice}
+                </div>
+              )}
               <div className="pay-success-actions">
                 <button type="button" className="pay-success-btn" onClick={() => handlePrint('receipt')}>
                   🖨️ พิมพ์ใบเสร็จ
@@ -394,7 +449,12 @@ export default function PaymentModal({
                 <button type="button" className="pay-success-btn" onClick={() => handlePrint('prep')}>
                   📦 พิมพ์ใบจัดของ
                 </button>
-                <button type="button" className="pay-success-btn pay-success-btn--primary" onClick={handleNewSale}>
+                <button
+                  type="button"
+                  className="pay-success-btn pay-success-btn--primary"
+                  onClick={handleNewSale}
+                  ref={newSaleBtnRef}
+                >
                   ✅ ตกลง (บิลใหม่)
                 </button>
               </div>
@@ -408,7 +468,12 @@ export default function PaymentModal({
   return (
     <>
       {thermalPortal}
-      <div className="pay-modal-bg" role="dialog" aria-modal="true" aria-label="ชำระเงิน">
+      <div
+        className="pay-modal-bg"
+        role="dialog"
+        aria-modal="true"
+        aria-label="ชำระเงิน"
+      >
         <div className="pay-modal">
           <aside className="pay-sidebar" aria-label="ช่องทางชำระเงิน">
             {enabledMethods.map((m) => {
@@ -420,6 +485,8 @@ export default function PaymentModal({
                   className={`pay-side-btn${activeMethod === m ? ' on' : ''}`}
                   onClick={() => setActiveMethod(m)}
                   title={METHOD_META[m].label}
+                  aria-pressed={activeMethod === m}
+                  aria-label={METHOD_META[m].label}
                 >
                   <i className={`ti ${METHOD_META[m].icon}`} aria-hidden="true" />
                   {paid && <span className="pay-paid-dot" aria-hidden="true" />}
@@ -437,6 +504,7 @@ export default function PaymentModal({
                 onClick={onClose}
                 disabled={busy}
                 aria-label="ปิด"
+                ref={closeBtnRef}
               >
                 <i className="ti ti-x" aria-hidden="true" />
               </button>
@@ -465,6 +533,15 @@ export default function PaymentModal({
                 <div className="pay-amount-display" aria-live="polite">
                   ฿{formatMoney(amounts.cash)}
                 </div>
+                <input
+                  className="pay-amount-input pay-cash-manual-input"
+                  type="text"
+                  inputMode="decimal"
+                  value={cashInput}
+                  onChange={handleCashInputChange}
+                  placeholder="พิมพ์จำนวนเงิน"
+                  aria-label="กรอกจำนวนเงินสด"
+                />
                 <div className="pay-numpad">
                   {NUMPAD_KEYS.map((key) => (
                     <button
