@@ -32,7 +32,11 @@ import {
 // so the autosave (not the racy final dump) is the real persistence guarantee.
 // Worst-case data loss on a hard exit is one interval.
 const AUTOSAVE_MS = 5_000;
+// Let restore + any function triggers settle before the first autosave read storm.
+const AUTOSAVE_BOOT_DELAY_MS = 15_000;
+const MAX_AUTOSAVE_FAILURES = 3;
 let autosaveTimer;
+let autosaveFailures = 0;
 let dumping = false;
 let finalized = false;
 
@@ -69,11 +73,23 @@ async function snapshot(label) {
       console.warn(
         "[snapshot] 🛡️  pos-db ไม่มีสินค้าแต่ snapshot เดิมมี → งดเขียนทับ (กันข้อมูลหาย)",
       );
-    } else if (label) {
-      console.log(`[snapshot] 💾 ${label}: บันทึก ${n} เอกสาร → pos-db-snapshot.json`);
+    } else {
+      autosaveFailures = 0;
+      if (label) {
+        console.log(`[snapshot] 💾 ${label}: บันทึก ${n} เอกสาร → pos-db-snapshot.json`);
+      }
     }
   } catch (err) {
-    console.warn(`[snapshot] ⚠️  บันทึกไม่สำเร็จ: ${err instanceof Error ? err.message : err}`);
+    autosaveFailures++;
+    const msg = err instanceof Error ? err.message : String(err);
+    if (autosaveFailures === 1) {
+      console.warn(`[snapshot] ⚠️  บันทึกไม่สำเร็จ: ${msg}`);
+    } else if (autosaveFailures >= MAX_AUTOSAVE_FAILURES) {
+      clearInterval(autosaveTimer);
+      console.warn(
+        "[snapshot] ⚠️  emulator น่าจะปิดแล้ว — หยุด autosave (ถ้ายัง dev อยู่ รัน npm run dev:emulator ใหม่)",
+      );
+    }
   } finally {
     dumping = false;
   }
@@ -137,10 +153,14 @@ async function boot() {
   // hard-kill leaves a valid snapshot on disk.
   if (seeded || restored === 0) await snapshot("initial");
 
-  // 3. Periodic autosave.
-  autosaveTimer = setInterval(() => void snapshot(), AUTOSAVE_MS);
-  autosaveTimer.unref?.();
-  console.log(`[snapshot] ⏱️  autosave ทุก ${AUTOSAVE_MS / 1000}s → ${DEFAULT_SNAPSHOT_PATH}`);
+  // 3. Periodic autosave (deferred so boot restore does not race the first dump).
+  setTimeout(() => {
+    autosaveTimer = setInterval(() => void snapshot(), AUTOSAVE_MS);
+    autosaveTimer.unref?.();
+  }, AUTOSAVE_BOOT_DELAY_MS).unref?.();
+  console.log(
+    `[snapshot] ⏱️  autosave ทุก ${AUTOSAVE_MS / 1000}s (เริ่มหลัง boot ${AUTOSAVE_BOOT_DELAY_MS / 1000}s) → ${DEFAULT_SNAPSHOT_PATH}`,
+  );
 }
 
 function startVite() {

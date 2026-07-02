@@ -130,6 +130,7 @@
 - **Firestore `pos-db`** ทนทานต่อการปิดแบบ hard kill เพราะ autosave เก็บไว้นอกโฟลเดอร์ที่โดนลบ
 - **Auth & Storage** ใช้ native export ที่ทำงาน **เฉพาะตอนปิดสะอาด (clean exit)** เท่านั้น → ถ้าปิดหน้าต่างดื้อๆ บัญชีผู้ใช้/รหัสผ่านใหม่ที่เพิ่งสร้างอาจหาย
 - ⚠️ **หมายเหตุ Windows:** ตอน Ctrl+C ระบบส่งสัญญาณไปปิด Firestore JVM ด้วย ทำให้ **final dump ตอนปิดมักล้มเหลว** (`fetch failed`) — แต่ **ไม่เป็นไร** เพราะ autosave 5 วินาทีเก็บข้อมูลไว้ก่อนหน้านั้นแล้ว
+- ℹ️ **log `reconcileOrder` ตอน boot:** ถ้าเห็น `Beginning execution of reconcileOrder` หลายครั้งหลัง restore — ปกติ (trigger จาก `asyncOrders` ที่ยัง `pending_reconcile` / `exception`); settled orders ถูกข้ามตอน restore แล้วเพื่อลด noise
 - 👉 **สรุป:** ใช้ **Ctrl+C แล้วรอจนเห็นข้อความปิด emulator ครบ** เป็นนิสัยที่ดีที่สุด เพื่อให้ทั้ง Firestore และ Auth/Storage ตรงกัน (parity)
 
 ### 🔴 ทำไม named database `pos-db` ถึงต้องใช้ทางแก้พิเศษนี้

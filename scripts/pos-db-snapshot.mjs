@@ -162,12 +162,32 @@ export async function dumpPosDb(outPath = DEFAULT_SNAPSHOT_PATH, { guard = false
   return entries.length;
 }
 
+/**
+ * Skip settled offline orders on restore — they already live in `orders` and
+ * only spam the reconcileOrder trigger on every boot.
+ */
+export function shouldRestoreEntry(entry) {
+  if (!entry.path.startsWith("asyncOrders/")) return true;
+  const fields = entry.fields ?? {};
+  if (fields.voidRequested?.booleanValue === true) return true;
+  const status = fields.reconcileStatus?.stringValue;
+  return status === "pending_reconcile" || status === "exception";
+}
+
 /** Restore pos-db from `inPath` via batched commits. Returns docs restored. */
 export async function restorePosDb(inPath = DEFAULT_SNAPSHOT_PATH) {
   if (!existsSync(inPath)) return 0;
   const snap = JSON.parse(readFileSync(inPath, "utf8"));
   const entries = Array.isArray(snap.docs) ? snap.docs : [];
   if (entries.length === 0) return 0;
+
+  const toRestore = entries.filter(shouldRestoreEntry);
+  const skipped = entries.length - toRestore.length;
+  if (skipped > 0) {
+    console.log(
+      `[snapshot] ข้าม settled asyncOrders ${skipped} รายการ (ลด trigger reconcileOrder ตอน boot)`,
+    );
+  }
 
   const host = emulatorHost();
   const dbId = databaseId();
@@ -176,8 +196,8 @@ export async function restorePosDb(inPath = DEFAULT_SNAPSHOT_PATH) {
 
   const BATCH = 200;
   let restored = 0;
-  for (let i = 0; i < entries.length; i += BATCH) {
-    const writes = entries.slice(i, i + BATCH).map((e) => ({
+  for (let i = 0; i < toRestore.length; i += BATCH) {
+    const writes = toRestore.slice(i, i + BATCH).map((e) => ({
       update: { name: `${prefix}/${e.path}`, fields: e.fields ?? {} },
     }));
     await jsonFetch(commitUrl, { method: "POST", body: { writes }, timeoutMs: 15000 });
