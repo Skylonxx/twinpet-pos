@@ -97,7 +97,7 @@
 
 เคลียร์พอร์ต emulator ที่ค้างด้วยมือ — ใช้เมื่อเจอ error `Port 8080 is not open` / `port taken` หรือมี process ค้างหลังปิดไม่สะอาด
 
-- อ่านพอร์ตจาก `firebase.json` โดยตรง (auth `9099`, functions `5001`, firestore `8080`, storage `9199`) บวกพอร์ต UI/hub (`4000/4400/4500`) และ websocket (`9150`)
+- อ่านพอร์ตจาก `firebase.json` โดยตรง (auth `9099`, functions `5001`, firestore `8080`, storage `9201`) บวกพอร์ต UI/hub (`4000/4400/4500`) และ websocket (`9150`)
 - ทำงานข้ามแพลตฟอร์ม (Windows `netstat`/`taskkill`, macOS/Linux `lsof`/`kill`)
 - ปกติ **ไม่ต้องเรียกเอง** เพราะ `dev:emulator` เรียกให้อยู่แล้วทุกครั้ง
 

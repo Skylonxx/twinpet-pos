@@ -130,10 +130,10 @@ if (isFirebaseConfigured) {
     try {
       connectFirestoreEmulator(db, emulatorHost, 8080);
       connectAuthEmulator(auth, `http://${emulatorHost}:9099`, { disableWarnings: true });
-      connectStorageEmulator(storage, emulatorHost, 9199);
+      connectStorageEmulator(storage, emulatorHost, 9201);
       // Functions callables connect to :5001 in verifyPinLogin.ts (same flag + host).
       console.info(
-        `[firebase] 🔌 LOCAL EMULATORS @ ${emulatorHost} — Firestore:8080 Auth:9099 Storage:9199 Functions:5001 (db="${FIRESTORE_DATABASE_ID}")`,
+        `[firebase] 🔌 LOCAL EMULATORS @ ${emulatorHost} — Firestore:8080 Auth:9099 Storage:9201 Functions:5001 (db="${FIRESTORE_DATABASE_ID}")`,
       );
     } catch (err) {
       console.error('[firebase] failed to connect to local emulators', err);
