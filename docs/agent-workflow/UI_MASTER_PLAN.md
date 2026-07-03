@@ -2,7 +2,7 @@
 
 This file is the source of truth for Phase 7C POS UI refactoring scope and sequence.
 
-**Current HEAD:** `9573abbef6a50bfe78bde33cac2d466c71dc2fc5` (verified; UI-09-M pushed; docs reconciliation separate pass)
+**Current HEAD:** `62cb3d21f53aa01e255d9420f75fb10a1dc75c20` (verified; UI-09-M implementation + docs closure pushed)
 
 1. UI-01: โครงสร้างเลย์เอาต์หลัก (Main POS Layout) - [DONE]
 2. UI-02: ช่องค้นหาและบาร์โค้ด (Search & Scanner Input) - [DONE]

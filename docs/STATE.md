@@ -6,20 +6,21 @@
 |-------|-------|
 | Repo root | `C:/Users/Narachat/twinpet-pos` |
 | Branch | `main` |
-| HEAD | `9573abbef6a50bfe78bde33cac2d466c71dc2fc5` |
-| origin/main | `9573abbef6a50bfe78bde33cac2d466c71dc2fc5` |
+| HEAD | `62cb3d21f53aa01e255d9420f75fb10a1dc75c20` |
+| origin/main | `62cb3d21f53aa01e255d9420f75fb10a1dc75c20` |
 | Ahead/behind | `0 / 0` |
 
 ## Current Phase
 
-    TWINPET-POS-UI-09-M-DOCS-RECONCILIATION
-    DOCS-ONLY — UI-09 PaymentModal corrective pass CLOSED through UI-09-M
+    TWINPET-POS-UI-09-FINAL-CLOSURE
+    UI-09 PaymentModal corrective pass FINAL CLOSED on origin/main
 
-UI-09 PaymentModal work is **CLOSED (PASS WITH NOTES)** through UI-09-M (`9573abb`). Implementation commits pushed; docs reconciliation for UI-09-M performed separately in this pass.
+UI-09 implementation (`9573abb`) and docs closure (`62cb3d2`) are both pushed on origin/main. A **final closure + build-debt cleanup packet** (10 files) sits uncommitted on top of `62cb3d2` in the working tree — TS6133 unused `within` removed; `npm run build` now passes.
 
 ## Working Tree
 
-- Tracked working tree: **clean** (pre-reconciliation); docs edits in progress this pass only
+- **Pushed baseline:** `62cb3d21f53aa01e255d9420f75fb10a1dc75c20` (`docs: reconcile ui-09-m payment modal closure`)
+- **Uncommitted packet:** final UI-09 closure bookkeeping + TS6133 micro-fix (10 modified files; not staged)
 - Staging: **empty**
 
 ## Stash
@@ -37,13 +38,24 @@ UI-09 PaymentModal work is **CLOSED (PASS WITH NOTES)** through UI-09-M (`9573ab
 | Source impact | `src/components/PaymentModal.tsx`, `src/components/PaymentModal.css` only |
 | Behavior impact | none (layout/CSS only) |
 | Codex commit audit | PASS WITH NOTES |
-| Keyboard contract test | 145/145 passed |
-| Build | `npm build` still fails only on known pre-existing unrelated TS6133 in `src/pages/POSPage.hold-bill-interaction.test.tsx(3,35)` |
-| Status | **CLOSED (PASS WITH NOTES)** — pushed to origin/main |
+| Keyboard contract test | 145/145 passed (at UI-09-M closure) |
+| Build (at UI-09-M push) | passed except known TS6133 — **fixed in uncommitted final cleanup packet** |
+| Status | **CLOSED (PASS WITH NOTES)** — implementation pushed at `9573abb` |
 
 **Delivered:** summary sidebar capped 290px desktop; mobile summary full-width fix; ledger flush-right; receipt typography; active breakdown card; full-width confirm in sidebar; center panel/numpad absorbs freed width.
 
 **Untouched:** `POSPage.tsx`, checkout hooks, async checkout, cart utils, payment/order write path, stock/FIFO, Firebase/functions/rules, keyboard/listener contract.
+
+## Final Closure + Build Debt Packet (uncommitted)
+
+| Field | Value |
+|-------|-------|
+| Pushed parent | `62cb3d2 docs: reconcile ui-09-m payment modal closure` |
+| Packet scope | 9 tracker docs + remove unused `within` in `POSPage.hold-bill-interaction.test.tsx` |
+| TS6133 | **fixed** — unused `within` import removed |
+| `npm run build` | **PASS** (validated after fix) |
+| Focused tests | **148/148** (hold-bill interaction + keyboard-contract) |
+| Status | **uncommitted** — awaiting Codex re-review and commit/push authorization |
 
 ## UI-09-C Status
 
@@ -81,11 +93,12 @@ UI-09 PaymentModal work is **CLOSED (PASS WITH NOTES)** through UI-09-M (`9573ab
 
 ## Recent Completed Work
 
-Verified in `git log --oneline -8` at HEAD `9573abb`:
+Verified in `git log --oneline -8` at pushed baseline `62cb3d2`:
 
 | Hash | Message |
 |------|---------|
-| `9573abb` | fix(pos): refine payment modal layout balance — **UI-09-M CLOSED** |
+| `62cb3d2` | docs: reconcile ui-09-m payment modal closure — **UI-09 docs closure PUSHED** |
+| `9573abb` | fix(pos): refine payment modal layout balance — **UI-09-M implementation PUSHED** |
 | `c05c92a` | chore(firebase): synchronize local emulator guides and snapshot configurations |
 | `28553e5` | fix(firebase): update storage emulator port from 9199 to 9201 |
 | `de2de43` | feat(pos): harden payment modal ux — **UI-09-C COMPLETED** |
@@ -95,13 +108,12 @@ Verified in `git log --oneline -8` at HEAD `9573abb`:
 
 ## Next Recommended Block
 
-    READY_FOR_CODEX_DOCS_REVIEW_THEN_DOCS_COMMIT
+    READY_FOR_CODEX_RE_REVIEW_THEN_COMMIT
 
-1. Codex docs-only review of UI-09-M docs reconciliation
-2. Gemini / Tech Lead docs commit authorization
-3. Docs local commit; push if authorized
-4. Final UI-09 closure bookkeeping
-5. Next blueprint planning
+1. UI-09 conceptually closed on origin/main (`9573abb` + `62cb3d2` pushed)
+2. Final cleanup packet (TS6133 fix + closure docs) validated — `npm run build` PASS, focused tests 148/148
+3. Awaiting Codex re-review, then commit/push authorization for the 10-file packet
+4. Next blueprint planning (UI-10 not started)
 
 ## Hard Boundaries
 

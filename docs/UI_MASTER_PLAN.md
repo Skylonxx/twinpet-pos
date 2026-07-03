@@ -4,20 +4,22 @@
 
 | Field | Value |
 |-------|-------|
-| HEAD (verified) | `9573abbef6a50bfe78bde33cac2d466c71dc2fc5` |
-| origin/main | `9573abbef6a50bfe78bde33cac2d466c71dc2fc5` |
+| HEAD (verified) | `62cb3d21f53aa01e255d9420f75fb10a1dc75c20` |
+| origin/main | `62cb3d21f53aa01e255d9420f75fb10a1dc75c20` |
 | Ahead/behind | `0 / 0` |
-| Closure | UI-09 PaymentModal corrective pass **CLOSED through UI-09-M** at `9573abb`; UI-09-M docs reconciliation performed separately (this pass) |
+| Closure | UI-09 **conceptually final closed** on origin/main (`9573abb` + `62cb3d2` pushed); final cleanup packet uncommitted on top |
+| Working tree | 10-file final closure + build-debt packet (not staged, not committed) |
 
 ## Recently Completed / Committed UI Work
 
-All commits below are physically verified in `git log --oneline -n 40` at HEAD `9573abb`.
+All commits below are physically verified in `git log --oneline -n 40` at pushed baseline `62cb3d2` (`62cb3d21f53aa01e255d9420f75fb10a1dc75c20`).
 
 ### POS Cashier UX & Cart
 
 | Hash | Description |
 |------|-------------|
-| `9573abb` | **UI-09-M** — PaymentModal layout balance corrective — CLOSED (PASS WITH NOTES) |
+| `62cb3d2` | **UI-09 docs closure** — reconcile ui-09-m payment modal closure — PUSHED |
+| `9573abb` | **UI-09-M** — PaymentModal layout balance corrective — PUSHED (PASS WITH NOTES) |
 | `de2de43` | **UI-09-C** — PaymentModal UX Hardening — COMPLETED (PASS WITH NOTES) |
 | `f0c783c` | **UI-09-B closure docs** — committed |
 | `baca4fe` | **UI-09-B** — Polish checkout button hierarchy — CLOSED / PASSED UAT |
@@ -130,12 +132,22 @@ See Context.md for the full Phase 7B/7C history including:
 | Implementation | `9573abb fix(pos): refine payment modal layout balance` |
 | Source impact | `src/components/PaymentModal.tsx`, `src/components/PaymentModal.css` only |
 | Codex commit audit | PASS WITH NOTES |
-| Keyboard contract test | 145/145 passed |
-| Build | `npm build` still fails only on known pre-existing unrelated TS6133 in `src/pages/POSPage.hold-bill-interaction.test.tsx(3,35)` |
+| Keyboard contract test | 145/145 passed (at UI-09-M closure) |
+| Build | Known TS6133 unused `within` **fixed in uncommitted final cleanup packet**; `npm run build` now **PASS** |
 
 **Delivered:** summary sidebar capped 290px desktop; mobile summary full-width fix; ledger flush-right; receipt typography; active breakdown card; full-width confirm in sidebar; center panel/numpad absorbs freed width.
 
 **Untouched:** `POSPage.tsx`, checkout hooks, async checkout, cart utils, payment/checkout write paths, Firebase/functions/rules, keyboard/listener contract.
+
+## Final Closure + Build Debt Packet (uncommitted)
+
+| Field | Value |
+|-------|-------|
+| Pushed parent | `62cb3d2` on origin/main |
+| Packet | 9 tracker docs + TS6133 micro-fix (`within` import removed) |
+| `npm run build` | **PASS** |
+| Focused tests | **148/148** (hold-bill interaction + keyboard-contract) |
+| Status | Uncommitted — awaiting Codex re-review and commit/push authorization |
 
 ## UI-09-C Status
 
@@ -183,8 +195,9 @@ See Context.md for the full Phase 7B/7C history including:
 
 ## Next Decision Gate
 
-    UI_09_M_DOCS_RECONCILIATION_COMPLETE
+    UI_09_FINAL_CLOSURE_PACKET_PENDING_COMMIT
 
-1. UI-09 PaymentModal corrective pass is closed through UI-09-M (`9573abb`); no further UI-09 implementation authorized
-2. Codex docs-only review of this reconciliation pass, then Gemini / Tech Lead docs commit authorization
-3. PaymentModal and payment/checkout write paths remain hard red zones for any future phase
+1. UI-09 conceptually final closed on origin/main — implementation `9573abb`, docs `62cb3d2` (both pushed)
+2. Final cleanup packet (TS6133 fix + closure docs) is **uncommitted** — `npm run build` PASS, focused tests 148/148
+3. Awaiting Codex re-review, then commit/push authorization for the 10-file packet
+4. UI-10 not started; PaymentModal/checkout write paths remain hard red zones

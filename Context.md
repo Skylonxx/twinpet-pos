@@ -1,8 +1,8 @@
 # Twinpet POS — Project Context
 
 > Last reconciled: 2026-07-03
-> HEAD: `9573abbef6a50bfe78bde33cac2d466c71dc2fc5`
-> origin/main: `9573abbef6a50bfe78bde33cac2d466c71dc2fc5`
+> HEAD: `62cb3d21f53aa01e255d9420f75fb10a1dc75c20`
+> origin/main: `62cb3d21f53aa01e255d9420f75fb10a1dc75c20`
 
 ---
 
@@ -18,6 +18,7 @@ Manual workflow remains active (ChatGPT memo → Gemini approval → Claude/Curs
 |------|---------|-------|
 | `de2de43` | feat(pos): harden payment modal ux | UI-09-C |
 | `9573abb` | fix(pos): refine payment modal layout balance | UI-09-M (corrective) |
+| `62cb3d2` | docs: reconcile ui-09-m payment modal closure | UI-09-M docs closure |
 
 ### UI-09-M scope (layout corrective)
 
@@ -46,14 +47,15 @@ Source impact: `src/components/PaymentModal.tsx`, `src/components/PaymentModal.c
 ### Known technical debt
 
 - **PaymentModal focus trap is not implemented.** Tab can still leave the modal. Existing keyboard-contract tests forbid adding `onKeyDown` to `PaymentModal.tsx`. Proper fix requires a future decision on keyboard ownership at the `POSPage` or modal-manager level. Tracked in `docs/agent-workflow/UI_MASTER_PLAN.md` and `docs/UI_MASTER_PLAN.md` under `[TECHNICAL DEBT & ACCESSIBILITY BACKLOG]`.
-- **Unrelated build debt:** `npm build` still fails only on known pre-existing unrelated TS6133 unused `within` in `src/pages/POSPage.hold-bill-interaction.test.tsx(3,35)`. Separate micro-fix; not part of UI-09.
+- **Unrelated build debt (resolved in separate packet):** TS6133 unused `within` in `src/pages/POSPage.hold-bill-interaction.test.tsx` — micro-fix authorized separately from UI-09.
 
 ### Validation evidence (UI-09-M)
 
 - Codex commit audit: PASS WITH NOTES
 - Keyboard-contract tests: 145/145 passed
 - Working tree clean after push; staged files clean; stash untouched
-- Docs reconciliation for UI-09-M was **not** part of pushed commit `9573abb`; performed separately in this docs-only pass
+- Docs reconciliation pushed at `62cb3d2`; UI-09 fully closed on origin/main
+- Unrelated TS6133 (`within` in hold-bill interaction test) — separate micro-fix packet in progress
 
 ### Payment/checkout semantics
 

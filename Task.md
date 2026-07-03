@@ -1,8 +1,8 @@
 # Twinpet POS — Task Tracker
 
 > Last reconciled: 2026-07-03
-> HEAD: `9573abbef6a50bfe78bde33cac2d466c71dc2fc5`
-> origin/main: `9573abbef6a50bfe78bde33cac2d466c71dc2fc5`
+> HEAD: `62cb3d21f53aa01e255d9420f75fb10a1dc75c20`
+> origin/main: `62cb3d21f53aa01e255d9420f75fb10a1dc75c20`
 
 ---
 
@@ -22,13 +22,9 @@
 - [x] Pushed to `origin/main` at `9573abbef6a50bfe78bde33cac2d466c71dc2fc5`
 - [x] Codex commit audit — PASS WITH NOTES
 - [x] Keyboard-contract tests — 145/145 passed
-- [x] Docs reconciliation (this pass) — authorized, in progress
+- [x] Docs reconciliation committed and pushed (`62cb3d2`)
 
-**UI-09-M delivered:**
-- Layout balance refined; summary sidebar capped 290px desktop
-- Mobile summary override fixed for full-width stacked layout
-- Bottom ledger flush-right, receipt typography, active breakdown card preserved
-- Confirm button full-width in sidebar; center panel/numpad absorbs freed width
+**UI-09 final closure:** complete on origin/main (implementation `9573abb` + docs `62cb3d2`).
 
 **Untouched:** `POSPage.tsx`, checkout hooks, async checkout, cart utils, payment/checkout write paths, Firebase/functions/rules.
 
@@ -36,8 +32,6 @@ No further UI-09 implementation authorized.
 
 ### Next step
 
-1. Codex docs-only review of this reconciliation pass
-2. Docs commit authorization (Gemini / Tech Lead)
-3. Docs local commit and push if authorized
-4. Final UI-09 closure bookkeeping
-5. Next blueprint planning
+1. Codex review of TS6133 build-debt micro-fix (separate from UI-09)
+2. Commit/push authorization for build-debt fix if approved
+3. Next blueprint planning (UI-10 not started)

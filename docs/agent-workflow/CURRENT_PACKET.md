@@ -2,31 +2,22 @@
 
 ## Phase
 
-**Docs-only — UI-09-M docs reconciliation (TWINPET-UI-09-M-DOCS-RECONCILIATION-001).**
+**UI-09 final closure complete.** Active packet: TS6133 build-debt micro-fix (TWINPET-UI-09-FINAL-CLOSURE-PLUS-BUILD-DEBT-001).
 
-No active implementation packet. Source frozen at `9573abb`.
+## UI-09 closure (complete)
 
-## Last closed packet
+- Implementation: `9573abb` — pushed
+- Docs closure: `62cb3d2` — pushed
+- origin/main: `62cb3d21f53aa01e255d9420f75fb10a1dc75c20`
 
-**UI-09-M PaymentModal layout corrective pass** — **CLOSED (PASS WITH NOTES)** at `9573abbef6a50bfe78bde33cac2d466c71dc2fc5`.
+## Active packet
 
-Layout balance refined: summary sidebar capped 290px desktop; mobile summary full-width fix; ledger flush-right; receipt typography; active breakdown card; full-width confirm in sidebar; center panel/numpad absorbs freed width. Scoped to `PaymentModal.tsx` / `PaymentModal.css` only. No payment/checkout write-path change.
-
-## Prior packet
-
-**UI-09-C PaymentModal UX Hardening** — COMPLETED (PASS WITH NOTES) at `de2de43`. Focus trap deferred as technical debt.
-
-## Result
-
-- Codex commit audit (UI-09-M): PASS WITH NOTES
-- Keyboard-contract tests: 145/145
-- Pushed to origin/main; working tree clean after push
-- UI-09-M docs reconciliation: separate pass (not in `9573abb`)
+Remove unused `within` import in `src/pages/POSPage.hold-bill-interaction.test.tsx` (TS6133). No test behavior change.
 
 ## Next packet (not authorized)
 
-Codex docs-only review → docs commit authorization → docs commit/push if authorized → final UI-09 closure bookkeeping → next blueprint planning.
+UI-10 or any PaymentModal/checkout changes require separate authorization.
 
 ## Current HEAD
 
-`9573abbef6a50bfe78bde33cac2d466c71dc2fc5` (verified)
+`62cb3d21f53aa01e255d9420f75fb10a1dc75c20` (verified)
