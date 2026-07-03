@@ -4,19 +4,21 @@
 
 | Field | Value |
 |-------|-------|
-| HEAD (verified) | `752ed1317a5e0b83b872d563cda451c7621ed22e` |
-| origin/main | aligned with HEAD |
+| HEAD (verified) | `9573abbef6a50bfe78bde33cac2d466c71dc2fc5` |
+| origin/main | `9573abbef6a50bfe78bde33cac2d466c71dc2fc5` |
 | Ahead/behind | `0 / 0` |
-| Closure | UI-09-B closure docs **COMMITTED** at `f0c783c`; UI-09-C implementation + docs reconciliation **uncommitted** on top of `752ed13`, commit HOLD pending Codex final docs-state validation and Gemini decision |
+| Closure | UI-09 PaymentModal corrective pass **CLOSED through UI-09-M** at `9573abb`; UI-09-M docs reconciliation performed separately (this pass) |
 
 ## Recently Completed / Committed UI Work
 
-All commits below are physically verified in `git log --oneline -n 40` at HEAD `752ed13`.
+All commits below are physically verified in `git log --oneline -n 40` at HEAD `9573abb`.
 
 ### POS Cashier UX & Cart
 
 | Hash | Description |
 |------|-------------|
+| `9573abb` | **UI-09-M** — PaymentModal layout balance corrective — CLOSED (PASS WITH NOTES) |
+| `de2de43` | **UI-09-C** — PaymentModal UX Hardening — COMPLETED (PASS WITH NOTES) |
 | `f0c783c` | **UI-09-B closure docs** — committed |
 | `baca4fe` | **UI-09-B** — Polish checkout button hierarchy — CLOSED / PASSED UAT |
 | `889e23a` | Make suspended bill IDs LAN-safe |
@@ -118,9 +120,26 @@ See Context.md for the full Phase 7B/7C history including:
 
 **Scope note:** The older P1 triage item "Offline/Sync relocation to AppShell header" (`docs/reports/phase-7c-p1-ui-polish-backlog-triage.md`) is **not** UI-08. It remains a separate deferred backlog item.
 
+## UI-09-M Status
+
+**CLOSED (PASS WITH NOTES)**
+
+| Field | Value |
+|-------|-------|
+| Formal scope | PaymentModal layout balance corrective pass |
+| Implementation | `9573abb fix(pos): refine payment modal layout balance` |
+| Source impact | `src/components/PaymentModal.tsx`, `src/components/PaymentModal.css` only |
+| Codex commit audit | PASS WITH NOTES |
+| Keyboard contract test | 145/145 passed |
+| Build | `npm build` still fails only on known pre-existing unrelated TS6133 in `src/pages/POSPage.hold-bill-interaction.test.tsx(3,35)` |
+
+**Delivered:** summary sidebar capped 290px desktop; mobile summary full-width fix; ledger flush-right; receipt typography; active breakdown card; full-width confirm in sidebar; center panel/numpad absorbs freed width.
+
+**Untouched:** `POSPage.tsx`, checkout hooks, async checkout, cart utils, payment/checkout write paths, Firebase/functions/rules, keyboard/listener contract.
+
 ## UI-09-C Status
 
-**COMPLETED (PASS WITH NOTES)**
+**COMPLETED (PASS WITH NOTES)** — committed `de2de43`
 
 | Field | Value |
 |-------|-------|
@@ -128,7 +147,6 @@ See Context.md for the full Phase 7B/7C history including:
 | Source impact | `src/components/PaymentModal.tsx`, `src/components/PaymentModal.css` only |
 | Codex review | PASS WITH NOTES |
 | Focus trap | **Not implemented** — deferred as technical debt (see backlog below) |
-| Workflow | Manual (ChatGPT memo → Gemini approval → Claude/Cursor implementation → Codex review → Gemini closure/docs sync); agentchattr bypassed as executor |
 
 **Untouched:** `src/pages/POSPage.tsx`, `useCheckout.ts`, `asyncCheckout.ts`, `cartUtils.ts` — payment/checkout semantics preserved.
 
@@ -139,7 +157,8 @@ See Context.md for the full Phase 7B/7C history including:
 | UI-09-B | **CLOSED / PASSED UAT** | Checkout Button Visual Polish — `baca4fe` + Owner UAT |
 | UI-09-A | **CLOSED** | Read-only checkout boundary audit |
 | UI-08 | **CLOSED / PASSED UAT** | Action Buttons — `873997e` + Owner UAT |
-| UI-09-C | **COMPLETED (PASS WITH NOTES)** | PaymentModal UX Hardening — focus trap deferred as technical debt |
+| UI-09-C | **COMPLETED (PASS WITH NOTES)** | PaymentModal UX Hardening — `de2de43`; focus trap deferred |
+| UI-09-M | **CLOSED (PASS WITH NOTES)** | PaymentModal layout corrective — `9573abb` |
 | P1 Offline/Sync relocation | DEFERRED | Separate from UI-08; was P1 triage UI-08 numbering |
 | Hardware scanner (iOS/iPad Safari) | DEFERRED | Native App / Capacitor wrapper phase |
 | Flowbite migration (tables + modals) | DEFERRED | Batches 2+ deferred; stash@{0} holds WIP |
@@ -164,8 +183,8 @@ See Context.md for the full Phase 7B/7C history including:
 
 ## Next Decision Gate
 
-    UI_09_C_DOCS_RECONCILIATION_COMPLETE
+    UI_09_M_DOCS_RECONCILIATION_COMPLETE
 
-1. UI-09-C is closed (PASS WITH NOTES); no further implementation authorized in this docs-only turn
-2. Gemini / Tech Lead may authorize commit of the current working tree or request a further closure step
+1. UI-09 PaymentModal corrective pass is closed through UI-09-M (`9573abb`); no further UI-09 implementation authorized
+2. Codex docs-only review of this reconciliation pass, then Gemini / Tech Lead docs commit authorization
 3. PaymentModal and payment/checkout write paths remain hard red zones for any future phase

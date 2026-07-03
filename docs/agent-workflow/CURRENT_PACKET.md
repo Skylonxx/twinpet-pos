@@ -2,28 +2,31 @@
 
 ## Phase
 
-**No active implementation packet — code frozen.**
+**Docs-only — UI-09-M docs reconciliation (TWINPET-UI-09-M-DOCS-RECONCILIATION-001).**
 
-Last packet: **UI-09-C PaymentModal UX Hardening** — **COMPLETED (PASS WITH NOTES)**, awaiting final docs-state validation / commit decision.
+No active implementation packet. Source frozen at `9573abb`.
 
-## What the last packet was
+## Last closed packet
 
-PaymentModal UX hardening: initial focus management, manual/physical keyboard cash input, responsive `PaymentModal.css`, `aria-pressed`/`aria-label` on payment method buttons, non-blocking print notice replacing `window.alert`. Changes confined to `src/components/PaymentModal.tsx` and `src/components/PaymentModal.css`. Focus trap not implemented — documented technical debt. No payment/checkout write-path change.
+**UI-09-M PaymentModal layout corrective pass** — **CLOSED (PASS WITH NOTES)** at `9573abbef6a50bfe78bde33cac2d466c71dc2fc5`.
+
+Layout balance refined: summary sidebar capped 290px desktop; mobile summary full-width fix; ledger flush-right; receipt typography; active breakdown card; full-width confirm in sidebar; center panel/numpad absorbs freed width. Scoped to `PaymentModal.tsx` / `PaymentModal.css` only. No payment/checkout write-path change.
+
+## Prior packet
+
+**UI-09-C PaymentModal UX Hardening** — COMPLETED (PASS WITH NOTES) at `de2de43`. Focus trap deferred as technical debt.
 
 ## Result
 
-Codex implementation review: **PASS WITH NOTES**. Docs reconciliation completed. Manual workflow path: Gemini approval → Claude/Cursor implementation → Codex review → docs reconciliation → Codex final docs-state review → Gemini commit decision. `agentchattr` was bypassed as executor.
+- Codex commit audit (UI-09-M): PASS WITH NOTES
+- Keyboard-contract tests: 145/145
+- Pushed to origin/main; working tree clean after push
+- UI-09-M docs reconciliation: separate pass (not in `9573abb`)
 
 ## Next packet (not authorized)
 
-No further source changes are authorized. Next step is Codex final docs-state validation, then Gemini's commit decision on the current uncommitted working tree.
+Codex docs-only review → docs commit authorization → docs commit/push if authorized → final UI-09 closure bookkeeping → next blueprint planning.
 
 ## Current HEAD
 
-`752ed1317a5e0b83b872d563cda451c7621ed22e` (verified)
-
----
-
-## Fallback
-
-If this workflow creates friction, revert to the previous manual routing process. The old workflow remains valid.
+`9573abbef6a50bfe78bde33cac2d466c71dc2fc5` (verified)

@@ -1,45 +1,64 @@
-# Latest Report — UI-09-C PaymentModal UX Hardening
+# Latest Report — UI-09-M PaymentModal Layout Corrective Pass
 
-> Date: 2026-07-01
-> HEAD: `752ed1317a5e0b83b872d563cda451c7621ed22e`
-> Status: **COMPLETED (PASS WITH NOTES)**
+> Date: 2026-07-03
+> HEAD: `9573abbef6a50bfe78bde33cac2d466c71dc2fc5`
+> origin/main: `9573abbef6a50bfe78bde33cac2d466c71dc2fc5`
+> Status: **CLOSED (PASS WITH NOTES)**
 
 ---
 
 ## Summary
 
-Developer implemented the UI-09-C PaymentModal UX hardening pass, scoped to two files:
+UI-09 PaymentModal corrective pass is **closed through UI-09-M**. Final pushed implementation commit:
 
-- `src/components/PaymentModal.tsx`
-- `src/components/PaymentModal.css`
+- `9573abb fix(pos): refine payment modal layout balance`
 
-Delivered features:
-- Initial focus management on modal open
-- Physical keyboard support for manual cash amount entry
-- Responsive narrow-screen CSS adjustments
-- `aria-pressed` / `aria-label` on payment method sidebar buttons
-- Non-blocking, auto-dismissing print notice (`role="status"`) replacing `window.alert`
+Prior UI-09-C implementation (`de2de43 feat(pos): harden payment modal ux`) remains committed on `main`.
 
-## Codex Review Verdict: PASS WITH NOTES
+Source impact for UI-09-M: `src/components/PaymentModal.tsx`, `src/components/PaymentModal.css` only.
 
-- Payment semantics: safe, unchanged
-- Checkout write path: untouched
-- Keyboard contract: preserved (no `onKeyDown` added to `PaymentModal.tsx`)
-- Cash input: PASS
-- ARIA/accessibility: PASS WITH NOTES
-- Responsive CSS: PASS WITH NOTES
-- Print notice: PASS
-- Focus trap: **not implemented**
-- Developer's temporary stash use during the pass: noted as a non-blocking governance concern for Gemini; current repo state has no unauthorized file changes
-- No unauthorized file changes detected
+## UI-09-M Scope Delivered
 
-## Known Notes
+- PaymentModal layout balance refined
+- Right summary sidebar capped to 290px on desktop
+- Mobile summary override fixed so stacked summary can fill full width
+- Bottom ledger flush-right behavior preserved
+- Clean receipt typography preserved
+- Active payment breakdown card preserved
+- Confirm button remains full-width inside sidebar
+- Center panel/numpad absorbs freed width
 
-- Focus trap remains outstanding — logged as technical debt in `docs/agent-workflow/UI_MASTER_PLAN.md` and `docs/UI_MASTER_PLAN.md` under `[TECHNICAL DEBT & ACCESSIBILITY BACKLOG]`
-- No payment/checkout semantics were changed
-- No tests were added in this phase
-- No unauthorized file changes
+## Unchanged
 
-## Current Gate
+- No checkout/payment persistence semantics changed
+- No `POSPage`, checkout hooks, async checkout, or cart utils changes
+- No Firebase/functions/rules changes
+- Keyboard/listener contract preserved
 
-Docs reconciliation (this report) complete. Next: Tech Lead / Gemini may authorize commit or a further closure step. No commit has been made as part of this turn.
+## Validation Evidence
+
+| Check | Result |
+|-------|--------|
+| Codex commit audit | PASS WITH NOTES |
+| Keyboard-contract tests | 145/145 passed |
+| Working tree after push | clean |
+| Staged files after push | clean |
+| stash@{0} | untouched |
+| `npm build` | still fails only on known pre-existing unrelated TS6133 unused `within` in `src/pages/POSPage.hold-bill-interaction.test.tsx(3,35)` |
+
+## Known Debt
+
+- PaymentModal focus trap — deferred technical debt from UI-09-C (unchanged)
+- TS6133 in hold-bill interaction test — unrelated; separate micro-fix required
+
+## Docs Reconciliation Note
+
+Docs reconciliation for UI-09-M was **not** part of pushed commit `9573abb`. This report and tracker updates are performed in a separate docs-only pass (TWINPET-UI-09-M-DOCS-RECONCILIATION-001).
+
+## Next Route
+
+1. Codex docs-only review
+2. Docs commit authorization (Gemini / Tech Lead)
+3. Docs local commit; push if authorized
+4. Final UI-09 closure bookkeeping
+5. Next blueprint planning

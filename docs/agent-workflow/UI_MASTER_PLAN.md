@@ -2,7 +2,7 @@
 
 This file is the source of truth for Phase 7C POS UI refactoring scope and sequence.
 
-**Current HEAD:** `752ed1317a5e0b83b872d563cda451c7621ed22e` (verified; UI-09-C implementation + docs reconciliation uncommitted)
+**Current HEAD:** `9573abbef6a50bfe78bde33cac2d466c71dc2fc5` (verified; UI-09-M pushed; docs reconciliation separate pass)
 
 1. UI-01: โครงสร้างเลย์เอาต์หลัก (Main POS Layout) - [DONE]
 2. UI-02: ช่องค้นหาและบาร์โค้ด (Search & Scanner Input) - [DONE]
@@ -14,13 +14,14 @@ This file is the source of truth for Phase 7C POS UI refactoring scope and seque
 8. UI-08: แผงปุ่มจัดการบิล (Action Buttons) - [DONE] — CLOSED / PASSED UAT (`873997e`)
 9. UI-09-A: Checkout boundary read-only audit - [DONE]
 10. UI-09-B: ปุ่มชำระเงิน visual polish (Checkout Button) - [DONE] — CLOSED / PASSED UAT (`baca4fe`, closure `f0c783c`)
-11. UI-09-C: Payment Modal UX Hardening - [DONE] — **COMPLETED (PASS WITH NOTES)**; Codex review PASS WITH NOTES; focus trap deferred as technical debt (see backlog below)
+11. UI-09-C: Payment Modal UX Hardening - [DONE] — **COMPLETED (PASS WITH NOTES)** at `de2de43`; focus trap deferred as technical debt
+12. UI-09-M: Payment Modal layout corrective pass - [DONE] — **CLOSED (PASS WITH NOTES)** at `9573abb`
 
 ---
 
 ## Future Backlog
 
-12. UI-10: Security and RBAC: Manager PIN Authorization Overlay - [FUTURE BACKLOG]
+13. UI-10: Security and RBAC: Manager PIN Authorization Overlay - [FUTURE BACKLOG]
 
 Scope:
 - Numeric PIN pad modal for restricted actions (e.g. Price Override).
@@ -38,6 +39,16 @@ Non-goals (this backlog entry only records the requirement):
 - No PIN storage design until a future security phase defines it.
 
 Status: Future backlog. Not current. Requires separate Tech Lead / CEO authorization before implementation begins.
+
+---
+
+## UI-09-M Gate (closed)
+
+- **Status:** CLOSED (PASS WITH NOTES)
+- Implementation: `9573abb fix(pos): refine payment modal layout balance`
+- Scoped to `src/components/PaymentModal.tsx` and `src/components/PaymentModal.css` only
+- Codex commit audit: PASS WITH NOTES; keyboard-contract tests 145/145
+- Layout-only corrective; no payment/checkout write-path change
 
 ---
 

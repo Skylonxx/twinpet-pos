@@ -7,59 +7,39 @@ Updated by whichever agent or human currently owns the task.
 
 ## Master Plan
 
-**`docs/agent-workflow/UI_MASTER_PLAN.md`** and **`docs/UI_MASTER_PLAN.md`** track Phase 7C POS UI scope. UI-01 through UI-09-C are **DONE**. UI-09-C is **COMPLETED (PASS WITH NOTES)**.
+**`docs/agent-workflow/UI_MASTER_PLAN.md`** and **`docs/UI_MASTER_PLAN.md`** track Phase 7C POS UI scope. UI-01 through UI-09-M are **DONE**. UI-09 PaymentModal corrective pass is **CLOSED (PASS WITH NOTES)** through UI-09-M.
 
 ## Repository Baseline
 
 | Field | Value |
 |-------|-------|
-| HEAD (verified) | `752ed1317a5e0b83b872d563cda451c7621ed22e` |
-| UI-09-C implementation (uncommitted) | `src/components/PaymentModal.tsx`, `src/components/PaymentModal.css` |
+| HEAD (verified) | `9573abbef6a50bfe78bde33cac2d466c71dc2fc5` |
+| origin/main | `9573abbef6a50bfe78bde33cac2d466c71dc2fc5` |
 | Branch | `main` |
 
 ## Current Phase
 
-**UI-09-C PaymentModal UX Hardening — COMPLETED (PASS WITH NOTES).** Source code is frozen; working tree contains reviewed, uncommitted UI-09-C implementation and docs-reconciliation diffs. Final commit authorization is pending Codex final docs-state validation and Gemini's commit gate.
+**UI-09-M docs reconciliation** — docs-only pass after implementation pushed at `9573abb`. No source changes authorized in this turn.
 
 ## Current Owner
 
-**Tech Lead / CEO (Gemini)** — final docs-state validation via Codex, then commit decision.
+**Tech Lead / CEO (Gemini)** — Codex docs-only review, then docs commit authorization.
 
 ## Latest Verdict
 
-**UI-09-C COMPLETED (PASS WITH NOTES)** — PaymentModal UX hardening (focus management, manual cash keyboard input, responsive CSS, ARIA attributes, non-blocking print notice). Codex implementation review: PASS WITH NOTES. Focus trap not implemented — documented technical debt. Prior: **UI-09-B CLOSED / PASSED UAT** — checkout button visual polish (`baca4fe`); closure docs committed (`f0c783c`). Owner physical UAT: **เทสแล้วผ่านครับ**.
+**UI-09-M CLOSED (PASS WITH NOTES)** — PaymentModal layout corrective (`9573abb`). Codex commit audit: PASS WITH NOTES. Keyboard-contract tests: 145/145. Prior **UI-09-C** at `de2de43` (PASS WITH NOTES; focus trap deferred). **UI-09-B CLOSED / PASSED UAT** (`baca4fe`).
 
 ## Mode
 
-Docs-only. Source code frozen. Awaiting Codex final docs-state validation, then Gemini commit decision.
+Docs-only. Source code frozen at `9573abb`. UI-09-M docs reconciliation in progress.
 
 ---
-
-## Agentchattr Rules of Engagement (Official, still in force)
-
-1. agentchattr is an advisory communication hub and transport layer only — not a decision maker, does not replace workflow docs, does not authorize commits or implementation.
-2. `docs/STATE.md`, `docs/agent-workflow/STATE.md`, `CURRENT_PACKET.md`, and `NEXT_ACTION.md` remain authoritative; if chat and docs disagree, docs win.
-3. Tech Lead / CEO (Gemini) and Owner (Narachat) authorization through standard workflow is required for all implementation, staging, and commits.
-4. Role separation (see `AUTHORITY_MATRIX.md`):
-   - **Outside agentchattr:** Khun Chat / Owner = Human Operator / Product Owner; Gemini = Tech Lead / CEO decision owner; ChatGPT = Architecture Engineer / workflow coordinator.
-   - **Inside agentchattr:** codex_coordinator = Workflow Coordinator; claude_developer = Developer; codex_reviewer = Independent Reviewer; agy_ui_lead = UI/UX-only; codex_safe = Safety Gate (not a workflow persona).
-   - codex_coordinator and codex_reviewer MUST be separate identities. agentchattr = transport only.
-5. Naming a role file alone is **not** permission; prompts must explicitly address the role (`TO:` header).
-6. Safety prohibitions: no skip-permissions, no bypass, no yolo, no auto-approve, no stash apply/pop/drop.
-
----
-
-## Baseline (closed work)
-
-- **UI-01 through UI-09-B** — DONE (UI-09-B visual-only checkout button polish).
-- **UI-08** — CLOSED / PASSED UAT (`873997e`).
-- **UI-09-A** — CLOSED read-only checkout boundary audit.
-- **agentchattr coordinator_loop tooling** — pushed separately; transport only for Twinpet.
 
 ## Staging / Commit status
 
-- UI-09-B closure docs: **committed** at `f0c783c`.
-- UI-09-C implementation + docs reconciliation: **uncommitted**, unstaged. Commit authorization HOLD pending Codex final docs-state validation and Gemini commit decision.
+- UI-09-C implementation: **committed** at `de2de43`
+- UI-09-M implementation: **committed and pushed** at `9573abb`
+- UI-09-M docs reconciliation: **in progress** (this pass); not yet committed
 
 ---
 
@@ -77,56 +57,30 @@ Docs-only. Source code frozen. Awaiting Codex final docs-state validation, then 
 | UI-08 Action Buttons | DONE — CLOSED / PASSED UAT (`873997e`) |
 | UI-09-A Checkout boundary audit | DONE — read-only, closed |
 | UI-09-B Checkout Button Visual Polish | DONE — CLOSED / PASSED UAT (`baca4fe`, closure `f0c783c`) |
-| UI-09-C PaymentModal UX Hardening | DONE — **COMPLETED (PASS WITH NOTES)**; focus trap deferred as technical debt |
+| UI-09-C PaymentModal UX Hardening | DONE — COMPLETED (PASS WITH NOTES) at `de2de43` |
+| UI-09-M PaymentModal layout corrective | DONE — CLOSED (PASS WITH NOTES) at `9573abb` |
 | UI-10 Manager PIN Authorization Overlay | FUTURE BACKLOG |
 
 ## Next Owner
 
-**Tech Lead / CEO (Gemini)** — commit decision after Codex final docs-state validation.
+**Codex** — docs-only review of UI-09-M reconciliation, then **Gemini** for docs commit decision.
 
 ## Next Action
 
-See `NEXT_ACTION.md`. Codex final docs-state validation, then Gemini commit decision. No further source changes authorized.
-
-## Role File Reference
-
-Each role is listed separately — no blended cells. Full authority table: `docs/agent-workflow/AUTHORITY_MATRIX.md`.
-
-### Outside agentchattr (upstream, manually controlled by user)
-
-| Agent | Role | Role File |
-|---|---|---|
-| Khun Chat / Owner (Narachat) | Human Operator / Product Owner | — (human; top of chain) |
-| Gemini | Tech Lead / CEO decision owner | `docs/ai-roles/tech-lead.md` |
-| ChatGPT | Architecture Engineer / workflow coordinator | `docs/ai-roles/system-architect.md` |
-
-### Inside agentchattr (internal workflow agents)
-
-| Identity | Role | Role File |
-|---|---|---|
-| codex_coordinator (Codex #1) | Workflow Coordinator | `docs/ai-roles/workflow-coordinator.md` |
-| claude_developer (Claude) | Developer / Implementer | `docs/ai-roles/developer.md` |
-| codex_reviewer (Codex #2) | Independent Reviewer | `docs/ai-roles/reviewer.md` |
-| agy_ui_lead (AGY) | UI Lead / UX QA Lead (UI/UX-only) | `docs/ai-roles/ux-lead.md` |
-
-### Internal safety gate
-
-| Identity | Role | Role File |
-|---|---|---|
-| codex_safe | Internal Safety Gate / Boundary Guard | `docs/ai-roles/safety-reviewer.md` |
+See `NEXT_ACTION.md`. Codex docs-only review → docs commit authorization → docs commit/push if authorized.
 
 ## Stop Condition
 
-**Code freeze.** UI-09-C is COMPLETED (PASS WITH NOTES); source code is frozen pending Codex final docs-state validation and Gemini commit decision. Do **not** make further source changes. PaymentModal and payment/checkout write paths remain hard red zones for any future phase.
+**Code freeze at `9573abb`.** No further source changes. PaymentModal and payment/checkout write paths remain hard red zones.
 
 ---
 
 ## Stash
 
-`stash@{0}` — pre-existing unrelated WIP stash. **Do not touch.** (Only `git stash list` read-only is allowed.)
+`stash@{0}` — pre-existing unrelated WIP stash. **Do not touch.**
 
 ---
 
 ## Fallback
 
-If this file-based workflow causes friction or confusion, revert to the previous manual routing workflow. The old process remains valid and available at all times.
+If this file-based workflow causes friction or confusion, revert to the previous manual routing workflow.

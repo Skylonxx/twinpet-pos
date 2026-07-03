@@ -1,27 +1,43 @@
 # Twinpet POS — Task Tracker
 
-> Last reconciled: 2026-07-01
-> HEAD: `752ed1317a5e0b83b872d563cda451c7621ed22e`
+> Last reconciled: 2026-07-03
+> HEAD: `9573abbef6a50bfe78bde33cac2d466c71dc2fc5`
+> origin/main: `9573abbef6a50bfe78bde33cac2d466c71dc2fc5`
 
 ---
 
-## UI-09-C — PaymentModal UX Hardening
+## UI-09 PaymentModal — CLOSED through UI-09-M
 
-**Status: COMPLETED (PASS WITH NOTES)**
+**Status: CLOSED (PASS WITH NOTES)**
 
-- [x] Developer implementation complete (`src/components/PaymentModal.tsx`, `src/components/PaymentModal.css` only)
-  - Initial focus management on open
-  - Physical keyboard cash input
-  - Responsive narrow-screen CSS
-  - `aria-pressed` / `aria-label` on payment method buttons
-  - Non-blocking print notice replacing `window.alert`
-  - `POSPage.tsx` untouched (parent focus-return preserved)
-- [x] Codex review complete — **PASS WITH NOTES**
-- [ ] Focus trap — **deferred as technical debt** (blocked by existing keyboard-contract tests forbidding `onKeyDown` in `PaymentModal.tsx`; needs a future dedicated decision on keyboard ownership at the `POSPage` / modal-manager level)
-- [x] Docs reconciliation authorized and completed (this turn)
+### UI-09-C — PaymentModal UX Hardening
 
-No further implementation is authorized in this docs-only turn.
+- [x] Developer implementation complete (`de2de43`) — `src/components/PaymentModal.tsx`, `src/components/PaymentModal.css` only
+- [x] Codex review — PASS WITH NOTES
+- [ ] Focus trap — **deferred as technical debt**
+
+### UI-09-M — PaymentModal layout corrective pass
+
+- [x] Developer implementation complete (`9573abb`) — `src/components/PaymentModal.tsx`, `src/components/PaymentModal.css` only
+- [x] Pushed to `origin/main` at `9573abbef6a50bfe78bde33cac2d466c71dc2fc5`
+- [x] Codex commit audit — PASS WITH NOTES
+- [x] Keyboard-contract tests — 145/145 passed
+- [x] Docs reconciliation (this pass) — authorized, in progress
+
+**UI-09-M delivered:**
+- Layout balance refined; summary sidebar capped 290px desktop
+- Mobile summary override fixed for full-width stacked layout
+- Bottom ledger flush-right, receipt typography, active breakdown card preserved
+- Confirm button full-width in sidebar; center panel/numpad absorbs freed width
+
+**Untouched:** `POSPage.tsx`, checkout hooks, async checkout, cart utils, payment/checkout write paths, Firebase/functions/rules.
+
+No further UI-09 implementation authorized.
 
 ### Next step
 
-Gemini / Tech Lead decision on whether to commit the current working tree (Context.md, Task.md, docs/reports/latest-report.md, docs/agent-workflow/UI_MASTER_PLAN.md, docs/UI_MASTER_PLAN.md, PaymentModal.tsx, PaymentModal.css), or request further review before closure.
+1. Codex docs-only review of this reconciliation pass
+2. Docs commit authorization (Gemini / Tech Lead)
+3. Docs local commit and push if authorized
+4. Final UI-09 closure bookkeeping
+5. Next blueprint planning
