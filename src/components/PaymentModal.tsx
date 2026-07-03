@@ -6,6 +6,7 @@ import { creditAvailable } from '../lib/customers/creditService';
 import { allocateDevReceiptNumber } from '../lib/pos/billId';
 import type { PaymentSplit } from '../lib/pos/types';
 import type { PaymentMethod } from '../lib/types';
+import { toast } from './ui/use-toast';
 import './PaymentModal.css';
 
 const ALL_METHODS: PaymentMethod[] = ['cash', 'qr', 'kbank', 'card', 'credit'];
@@ -21,11 +22,43 @@ const METHOD_META: Record<
   credit: { label: 'เงินเชื่อ', icon: 'ti-clock-dollar', shortLabel: 'เชื่อ' },
 };
 
-const QUICK_BILLS = [100, 500, 1000] as const;
-const NUMPAD_KEYS = ['7', '8', '9', '4', '5', '6', '1', '2', '3', 'C', '0', '⌫'] as const;
+// Amount shortcut buttons occupying keypad column 4. Interpreted as generic
+// active-method amount shortcuts (not physical-cash-only), per UI-09-H.
+const BANKNOTES = [1000, 500, 100, 50, 20] as const;
+type NumpadKey = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '.' | 'C' | '⌫';
+
+type KeypadCell = {
+  id: string;
+  label: string;
+  row: number;
+  col: number;
+  colSpan?: number;
+  kind: 'digit' | 'action' | 'banknote' | 'fill';
+  ariaLabel?: string;
+  disabled?: boolean;
+  onClick: () => void;
+};
 
 function emptyAmounts(): Record<PaymentMethod, number> {
   return { cash: 0, qr: 0, kbank: 0, card: 0, credit: 0 };
+}
+
+/**
+ * Display-only comma formatter. The raw entry buffer stays comma-free and is
+ * the only thing any mutation path edits; this simply renders it with
+ * thousands separators while preserving a trailing dot and trailing zeros so
+ * decimals survive mid-typing. Never used to derive numeric state.
+ */
+function formatEntry(raw: string): string {
+  if (!raw) return '';
+  const dotIdx = raw.indexOf('.');
+  if (dotIdx === -1) {
+    return raw === '' ? '' : Number(raw).toLocaleString('en-US');
+  }
+  const intPart = raw.slice(0, dotIdx);
+  const fracPart = raw.slice(dotIdx + 1);
+  const intDisplay = intPart === '' ? '0' : Number(intPart).toLocaleString('en-US');
+  return `${intDisplay}.${fracPart}`;
 }
 
 function formatReceiptDate(d: Date): string {
@@ -92,8 +125,9 @@ export default function PaymentModal({
 
   const [activeMethod, setActiveMethod] = useState<PaymentMethod>('cash');
   const [amounts, setAmounts] = useState(emptyAmounts);
-  const [cashInput, setCashInput] = useState('');
-  const [autoPrint, setAutoPrint] = useState(true);
+  // Raw, comma-free in-progress buffer for the *active* method's amount entry.
+  const [entry, setEntry] = useState('');
+  const autoPrint = true;
   const [isSuccess, setIsSuccess] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [savedOrderId, setSavedOrderId] = useState('');
@@ -102,16 +136,14 @@ export default function PaymentModal({
   const [savedReceiptTime, setSavedReceiptTime] = useState<Date | null>(null);
   const [printType, setPrintType] = useState<'receipt' | 'prep' | null>(null);
   const [confirmError, setConfirmError] = useState<string | null>(null);
-  const [printNotice, setPrintNotice] = useState<string | null>(null);
 
   const autoPrintedRef = useRef(false);
   const closeBtnRef = useRef<HTMLButtonElement | null>(null);
   const newSaleBtnRef = useRef<HTMLButtonElement | null>(null);
-  const printNoticeTimeoutRef = useRef<number | null>(null);
 
   const resetModal = useCallback(() => {
     setAmounts(emptyAmounts());
-    setCashInput('');
+    setEntry('');
     setIsSuccess(false);
     setConfirming(false);
     setSavedOrderId('');
@@ -120,23 +152,10 @@ export default function PaymentModal({
     setSavedReceiptTime(null);
     setPrintType(null);
     setConfirmError(null);
-    setPrintNotice(null);
-    if (printNoticeTimeoutRef.current) {
-      window.clearTimeout(printNoticeTimeoutRef.current);
-      printNoticeTimeoutRef.current = null;
-    }
     autoPrintedRef.current = false;
     const first = enabledMethods[0] ?? 'cash';
     setActiveMethod(first);
   }, [enabledMethods]);
-
-  useEffect(() => {
-    return () => {
-      if (printNoticeTimeoutRef.current) {
-        window.clearTimeout(printNoticeTimeoutRef.current);
-      }
-    };
-  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -155,13 +174,34 @@ export default function PaymentModal({
     resetModal();
   }, [open, resetModal]);
 
-  const setMethodAmount = useCallback((method: PaymentMethod, value: number) => {
-    const safe = Math.max(0, value);
-    setAmounts((prev) => ({ ...prev, [method]: safe }));
-    if (method === 'cash') {
-      setCashInput(safe > 0 ? String(safe) : '');
-    }
-  }, []);
+  /**
+   * Single write path for any method amount. When the target is the active
+   * method, the raw display buffer is kept in sync. `rawOverride` lets typing
+   * paths preserve exactly what was typed (trailing dot / trailing zeros)
+   * instead of a lossy String(number) round-trip.
+   */
+  const setMethodAmount = useCallback(
+    (method: PaymentMethod, value: number, rawOverride?: string) => {
+      const safe = Math.max(0, value);
+      setAmounts((prev) => ({ ...prev, [method]: safe }));
+      if (method === activeMethod) {
+        setEntry(rawOverride !== undefined ? rawOverride : safe > 0 ? String(safe) : '');
+      }
+    },
+    [activeMethod],
+  );
+
+  // Switch method and seed the raw buffer from that method's committed amount so
+  // each method shows its own value; one method's in-progress typing never leaks
+  // into another.
+  const selectMethod = useCallback(
+    (method: PaymentMethod) => {
+      setActiveMethod(method);
+      const val = amounts[method];
+      setEntry(val > 0 ? String(val) : '');
+    },
+    [amounts],
+  );
 
   const paidTotal = useMemo(
     () => Object.values(amounts).reduce((s, v) => s + v, 0),
@@ -174,14 +214,17 @@ export default function PaymentModal({
   const creditRemain = creditAvailable(customerCreditLimit, customerOutstandingBalance);
   const creditOverLimit = creditAmt > 0 && customerCreditLimit > 0 && creditAmt > creditRemain;
 
+  // Credit requires a selected customer before any amount entry is allowed.
+  const entryEnabled = !(activeMethod === 'credit' && !customerId);
+
   const summaryStatus = useMemo(() => {
     if (remaining > 0 && creditAmt === 0) {
       return { label: 'ขาดอีก', value: remaining, tone: 'warn' as const };
     }
     if (change > 0) {
-      return { label: 'ทอน', value: change, tone: 'ok' as const };
+      return { label: 'เงินทอน', value: change, tone: 'ok' as const };
     }
-    return { label: 'ครบ', value: 0, tone: 'ok' as const };
+    return { label: 'ครบพอดี', value: 0, tone: 'ok' as const };
   }, [remaining, creditAmt, change]);
 
   const canConfirm =
@@ -199,76 +242,140 @@ export default function PaymentModal({
     [amounts],
   );
 
+  // Fill the remaining balance into the active method.
   const applyRemaining = useCallback(
     (method: PaymentMethod) => {
       if (remaining <= 0) return;
-      setAmounts((prev) => {
-        const nextVal = prev[method] + remaining;
-        if (method === 'cash') {
-          setCashInput(String(nextVal));
-        }
-        return { ...prev, [method]: nextVal };
-      });
+      const next = amounts[method] + remaining;
+      setMethodAmount(method, next, method === activeMethod ? String(next) : undefined);
     },
-    [remaining],
+    [remaining, amounts, activeMethod, setMethodAmount],
   );
 
-  const addQuickBill = useCallback((bill: number) => {
-    setAmounts((prev) => {
-      const next = prev.cash + bill;
-      setCashInput(String(next));
-      return { ...prev, cash: next };
-    });
-  }, []);
+  // Amount shortcut (formerly banknote) — additive against the ACTIVE method,
+  // routed through the single setMethodAmount write path.
+  const addShortcut = useCallback(
+    (amount: number) => {
+      if (!entryEnabled) return;
+      const next = amounts[activeMethod] + amount;
+      setMethodAmount(activeMethod, next, String(next));
+    },
+    [entryEnabled, amounts, activeMethod, setMethodAmount],
+  );
 
   const handleNumpad = useCallback(
-    (key: (typeof NUMPAD_KEYS)[number]) => {
-      if (activeMethod !== 'cash') return;
+    (key: NumpadKey) => {
+      if (!entryEnabled) return;
 
       if (key === 'C') {
-        setMethodAmount('cash', 0);
+        setMethodAmount(activeMethod, 0);
         return;
       }
 
       if (key === '⌫') {
-        const trimmed = cashInput.slice(0, -1);
+        const trimmed = entry.slice(0, -1);
         const parsed = trimmed ? parseFloat(trimmed) : 0;
-        setMethodAmount('cash', Number.isFinite(parsed) ? parsed : 0);
-        setCashInput(trimmed);
+        setMethodAmount(activeMethod, Number.isFinite(parsed) ? parsed : 0, trimmed);
         return;
       }
 
-      const nextStr = cashInput === '0' ? key : cashInput + key;
-      const parsed = parseFloat(nextStr);
+      if (key === '.') {
+        if (entry.includes('.')) return;
+        const nextRaw = entry === '' || entry === '0' ? '0.' : entry + '.';
+        const parsed = parseFloat(nextRaw);
+        setMethodAmount(activeMethod, Number.isFinite(parsed) ? parsed : 0, nextRaw);
+        return;
+      }
+
+      const nextRaw = entry === '0' ? key : entry + key;
+      const parsed = parseFloat(nextRaw);
       if (!Number.isFinite(parsed)) return;
-      setCashInput(nextStr);
-      setMethodAmount('cash', parsed);
+      setMethodAmount(activeMethod, parsed, nextRaw);
     },
-    [activeMethod, cashInput, setMethodAmount],
+    [entryEnabled, activeMethod, entry, setMethodAmount],
   );
 
   const handlePrint = useCallback((type: 'receipt' | 'prep') => {
     setPrintType(type);
-    setPrintNotice(
-      `จำลองการสั่งพิมพ์ ${type === 'receipt' ? 'ใบเสร็จ' : 'ใบจัดของ'} (โหมดทดสอบจะไม่ดึงหน้าต่าง Print จริง)`,
-    );
-    if (printNoticeTimeoutRef.current) {
-      window.clearTimeout(printNoticeTimeoutRef.current);
-    }
-    printNoticeTimeoutRef.current = window.setTimeout(() => {
-      setPrintNotice(null);
-      printNoticeTimeoutRef.current = null;
-    }, 3200);
+    toast({
+      title: `จำลองการสั่งพิมพ์${type === 'receipt' ? 'ใบเสร็จ' : 'ใบจัดของ'}`,
+      description: 'โหมดทดสอบจะไม่ดึงหน้าต่าง Print จริง',
+      variant: 'default',
+    });
   }, []);
 
-  const handleCashInputChange = useCallback(
+  const handleEntryChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      const raw = e.target.value.replace(/[^0-9.]/g, '');
+      if (!entryEnabled) return;
+      let raw = e.target.value.replace(/[^0-9.]/g, '');
+      // Collapse to a single decimal point (keep the first).
+      const firstDot = raw.indexOf('.');
+      if (firstDot !== -1) {
+        raw = raw.slice(0, firstDot + 1) + raw.slice(firstDot + 1).replace(/\./g, '');
+      }
       const parsed = raw ? parseFloat(raw) : 0;
-      setMethodAmount('cash', Number.isFinite(parsed) ? parsed : 0);
+      setMethodAmount(activeMethod, Number.isFinite(parsed) ? parsed : 0, raw);
     },
-    [setMethodAmount],
+    [entryEnabled, activeMethod, setMethodAmount],
   );
+
+  const keypadCells: KeypadCell[] = useMemo(() => {
+    const digitsAndActions: KeypadCell[] = [
+      { id: '1', label: '1', row: 1, col: 1, kind: 'digit', disabled: !entryEnabled, onClick: () => handleNumpad('1') },
+      { id: '2', label: '2', row: 1, col: 2, kind: 'digit', disabled: !entryEnabled, onClick: () => handleNumpad('2') },
+      { id: '3', label: '3', row: 1, col: 3, kind: 'digit', disabled: !entryEnabled, onClick: () => handleNumpad('3') },
+      { id: '4', label: '4', row: 2, col: 1, kind: 'digit', disabled: !entryEnabled, onClick: () => handleNumpad('4') },
+      { id: '5', label: '5', row: 2, col: 2, kind: 'digit', disabled: !entryEnabled, onClick: () => handleNumpad('5') },
+      { id: '6', label: '6', row: 2, col: 3, kind: 'digit', disabled: !entryEnabled, onClick: () => handleNumpad('6') },
+      { id: '7', label: '7', row: 3, col: 1, kind: 'digit', disabled: !entryEnabled, onClick: () => handleNumpad('7') },
+      { id: '8', label: '8', row: 3, col: 2, kind: 'digit', disabled: !entryEnabled, onClick: () => handleNumpad('8') },
+      { id: '9', label: '9', row: 3, col: 3, kind: 'digit', disabled: !entryEnabled, onClick: () => handleNumpad('9') },
+      { id: 'dot', label: '.', row: 4, col: 1, kind: 'digit', disabled: !entryEnabled, onClick: () => handleNumpad('.') },
+      { id: '0', label: '0', row: 4, col: 2, kind: 'digit', disabled: !entryEnabled, onClick: () => handleNumpad('0') },
+      {
+        id: 'backspace',
+        label: '⌫',
+        row: 4,
+        col: 3,
+        kind: 'action',
+        ariaLabel: 'ลบตัวเลขล่าสุด',
+        disabled: !entryEnabled,
+        onClick: () => handleNumpad('⌫'),
+      },
+      {
+        id: 'fill-remaining',
+        label: remaining > 0 ? `ใส่ยอดที่เหลือ (฿${formatMoney(remaining)})` : 'ใส่ยอดที่เหลือ',
+        row: 5,
+        col: 1,
+        colSpan: 2,
+        kind: 'fill',
+        disabled: remaining <= 0 || !entryEnabled,
+        ariaLabel: 'ใส่ยอดที่เหลือทั้งหมด',
+        onClick: () => applyRemaining(activeMethod),
+      },
+      {
+        id: 'clear',
+        label: 'C',
+        row: 5,
+        col: 3,
+        kind: 'action',
+        ariaLabel: 'ล้างจำนวนเงิน',
+        disabled: !entryEnabled,
+        onClick: () => handleNumpad('C'),
+      },
+    ];
+    const shortcuts: KeypadCell[] = BANKNOTES.map((bill, i) => ({
+      id: `bn-${bill}`,
+      label: `฿${bill.toLocaleString()}`,
+      row: i + 1,
+      col: 4,
+      kind: 'banknote',
+      ariaLabel: `เพิ่มยอด ${bill} บาท`,
+      disabled: !entryEnabled,
+      onClick: () => addShortcut(bill),
+    }));
+    return [...digitsAndActions, ...shortcuts];
+  }, [handleNumpad, addShortcut, applyRemaining, remaining, entryEnabled, activeMethod]);
 
   const handleConfirm = async () => {
     if (!canConfirm || confirming || processing) return;
@@ -437,11 +544,6 @@ export default function PaymentModal({
               <div className="pay-success-change">
                 เงินทอน: <strong>฿{formatMoney(savedChange)}</strong>
               </div>
-              {printNotice && (
-                <div className="pay-print-notice" role="status" aria-live="polite">
-                  {printNotice}
-                </div>
-              )}
               <div className="pay-success-actions">
                 <button type="button" className="pay-success-btn" onClick={() => handlePrint('receipt')}>
                   🖨️ พิมพ์ใบเสร็จ
@@ -475,6 +577,21 @@ export default function PaymentModal({
         aria-label="ชำระเงิน"
       >
         <div className="pay-modal">
+          <div className="pay-modal-header" data-gesture="swipe-down-close-zone">
+            <span className="pay-drag-handle" aria-hidden="true" />
+            <h3>ชำระเงิน</h3>
+            <button
+              type="button"
+              className="pay-close-btn"
+              onClick={onClose}
+              disabled={busy}
+              aria-label="ปิด"
+              ref={closeBtnRef}
+            >
+              <i className="ti ti-x" aria-hidden="true" />
+            </button>
+          </div>
+
           <aside className="pay-sidebar" aria-label="ช่องทางชำระเงิน">
             {enabledMethods.map((m) => {
               const paid = amounts[m] > 0;
@@ -483,12 +600,13 @@ export default function PaymentModal({
                   key={m}
                   type="button"
                   className={`pay-side-btn${activeMethod === m ? ' on' : ''}`}
-                  onClick={() => setActiveMethod(m)}
+                  onClick={() => selectMethod(m)}
                   title={METHOD_META[m].label}
                   aria-pressed={activeMethod === m}
                   aria-label={METHOD_META[m].label}
                 >
                   <i className={`ti ${METHOD_META[m].icon}`} aria-hidden="true" />
+                  <span className="pay-side-label">{METHOD_META[m].shortLabel}</span>
                   {paid && <span className="pay-paid-dot" aria-hidden="true" />}
                 </button>
               );
@@ -496,259 +614,170 @@ export default function PaymentModal({
           </aside>
 
           <main className="pay-main">
-            <div className="pay-main-head">
-              <h3>ชำระเงิน</h3>
-              <button
-                type="button"
-                className="pay-close-btn"
-                onClick={onClose}
-                disabled={busy}
-                aria-label="ปิด"
-                ref={closeBtnRef}
-              >
-                <i className="ti ti-x" aria-hidden="true" />
-              </button>
-            </div>
-
-            <label className="pay-auto-print">
-              <input
-                type="checkbox"
-                checked={autoPrint}
-                onChange={(e) => setAutoPrint(e.target.checked)}
-              />
-              <span>พิมพ์ใบเสร็จอัตโนมัติ</span>
-            </label>
-
-            <p className="pay-method-title">{METHOD_META[activeMethod].label}</p>
-
-            {activeMethod === 'cash' && (
-              <>
-                <div className="pay-quick-bills">
-                  {QUICK_BILLS.map((b) => (
-                    <button key={b} type="button" onClick={() => addQuickBill(b)}>
-                      +{b}
-                    </button>
-                  ))}
-                </div>
-                <div className="pay-amount-display" aria-live="polite">
-                  ฿{formatMoney(amounts.cash)}
-                </div>
-                <input
-                  className="pay-amount-input pay-cash-manual-input"
-                  type="text"
-                  inputMode="decimal"
-                  value={cashInput}
-                  onChange={handleCashInputChange}
-                  placeholder="พิมพ์จำนวนเงิน"
-                  aria-label="กรอกจำนวนเงินสด"
-                />
-                <div className="pay-numpad">
-                  {NUMPAD_KEYS.map((key) => (
-                    <button
-                      key={key}
-                      type="button"
-                      className={key === 'C' || key === '⌫' ? 'pay-numpad-action' : undefined}
-                      onClick={() => handleNumpad(key)}
-                    >
-                      {key}
-                    </button>
-                  ))}
-                </div>
-                {remaining > 0 && (
-                  <button
-                    type="button"
-                    className="pay-fill-btn"
-                    onClick={() => applyRemaining('cash')}
-                  >
-                    ใส่ยอดที่เหลือ (฿{formatMoney(remaining)})
-                  </button>
-                )}
-              </>
-            )}
-
-            {activeMethod === 'qr' && (
-              <div className="pay-qr-panel">
-                <div className="pay-qr-box">
-                  <i className="ti ti-qrcode" aria-hidden="true" />
-                  <span>PromptPay QR</span>
-                  <span style={{ fontSize: 10 }}>placeholder</span>
-                </div>
-                <input
-                  className="pay-amount-input"
-                  type="number"
-                  min={0}
-                  step="any"
-                  value={amounts.qr || ''}
-                  onChange={(e) => setMethodAmount('qr', parseFloat(e.target.value) || 0)}
-                  placeholder="จำนวนเงิน"
-                />
-                <button
-                  type="button"
-                  className="pay-fill-btn"
-                  disabled={remaining <= 0}
-                  onClick={() => applyRemaining('qr')}
-                >
-                  ใส่ยอดที่เหลือ (฿{formatMoney(remaining)})
-                </button>
-              </div>
-            )}
-
-            {activeMethod === 'kbank' && (
-              <div className="pay-qr-panel">
-                <div className="pay-qr-box kbank">
-                  <i className="ti ti-building-bank" aria-hidden="true" />
-                  <span>KBank QR</span>
-                  <span style={{ fontSize: 10 }}>placeholder</span>
-                </div>
-                <input
-                  className="pay-amount-input"
-                  type="number"
-                  min={0}
-                  step="any"
-                  value={amounts.kbank || ''}
-                  onChange={(e) => setMethodAmount('kbank', parseFloat(e.target.value) || 0)}
-                  placeholder="จำนวนเงิน"
-                />
-                <button
-                  type="button"
-                  className="pay-fill-btn"
-                  disabled={remaining <= 0}
-                  onClick={() => applyRemaining('kbank')}
-                >
-                  ใส่ยอดที่เหลือ (฿{formatMoney(remaining)})
-                </button>
-              </div>
-            )}
-
-            {activeMethod === 'card' && (
-              <div className="pay-edc-panel">
-                <div className="pay-edc-status">
-                  <i className="ti ti-credit-card" aria-hidden="true" />
-                  รอรูดบัตรที่เครื่อง EDC
-                </div>
-                <input
-                  className="pay-amount-input"
-                  type="number"
-                  min={0}
-                  step="any"
-                  value={amounts.card || ''}
-                  onChange={(e) => setMethodAmount('card', parseFloat(e.target.value) || 0)}
-                  placeholder="จำนวนเงิน"
-                />
-                <button
-                  type="button"
-                  className="pay-fill-btn"
-                  disabled={remaining <= 0}
-                  onClick={() => applyRemaining('card')}
-                >
-                  ใส่ยอดที่เหลือ (฿{formatMoney(remaining)})
-                </button>
-              </div>
-            )}
-
-            {activeMethod === 'credit' && (
-              <div className="pay-credit-panel">
-                {customerId ? (
+            {/* 1. Compact method context — fixed height so the numpad never shifts.
+                 Category subtitle upscaled to a professional text-base header. */}
+            <div className="pay-method-context" aria-live="polite">
+              {activeMethod === 'cash' && (
+                <>
+                  <span className="pay-context-title">
+                    <i className="ti ti-cash" aria-hidden="true" /> รับเงินสด
+                  </span>
+                  <span className="pay-context-sub">กดจำนวนหรือปุ่มลัดยอด</span>
+                </>
+              )}
+              {activeMethod === 'qr' && (
+                <>
+                  <span className="pay-context-title">
+                    <i className="ti ti-qrcode" aria-hidden="true" /> PromptPay QR
+                  </span>
+                  <span className="pay-context-sub">สแกนจ่ายผ่านแอปธนาคาร</span>
+                </>
+              )}
+              {activeMethod === 'kbank' && (
+                <>
+                  <span className="pay-context-title pay-context-title--kbank">
+                    <i className="ti ti-building-bank" aria-hidden="true" /> KBank QR
+                  </span>
+                  <span className="pay-context-sub">สแกนจ่ายผ่าน K PLUS</span>
+                </>
+              )}
+              {activeMethod === 'card' && (
+                <>
+                  <span className="pay-context-title pay-context-title--edc">
+                    <i className="ti ti-credit-card" aria-hidden="true" /> EDC บัตร
+                  </span>
+                  <span className="pay-context-sub">รอรูดบัตรที่เครื่อง EDC</span>
+                </>
+              )}
+              {activeMethod === 'credit' &&
+                (customerId ? (
                   <>
-                    <div className="pay-credit-note">
-                      ลูกค้า: <strong>{customerName ?? customerId}</strong>
-                      <br />
-                      ชำระบางส่วนด้วยช่องทางอื่น แล้วบันทึกยอดค้างเป็นเชื่อได้
-                    </div>
-                    {customerCreditLimit > 0 ? (
-                      <div className="pay-credit-stats">
-                        <div className="pay-credit-stat">
-                          <span className="pay-credit-stat-lbl">หนี้ค้างชำระ</span>
-                          <strong className="pay-credit-stat-val debt">
-                            ฿{formatMoney(customerOutstandingBalance)}
-                          </strong>
-                        </div>
-                        <div className="pay-credit-stat">
-                          <span className="pay-credit-stat-lbl">วงเงินคงเหลือ</span>
-                          <strong className="pay-credit-stat-val ok">
-                            ฿{formatMoney(creditRemain)}
-                          </strong>
-                        </div>
-                      </div>
-                    ) : null}
-                    {creditOverLimit ? (
-                      <div className="pay-credit-note warn">
+                    <span className="pay-context-title">
+                      <i className="ti ti-clock-dollar" aria-hidden="true" /> เงินเชื่อ · {customerName ?? customerId}
+                    </span>
+                    {customerCreditLimit > 0 && (
+                      <span className="pay-context-sub pay-context-credit-stats">
+                        <span>
+                          ค้าง <strong className="debt">฿{formatMoney(customerOutstandingBalance)}</strong>
+                        </span>
+                        <span>
+                          วงเงิน <strong className="ok">฿{formatMoney(creditRemain)}</strong>
+                        </span>
+                      </span>
+                    )}
+                    {creditOverLimit && (
+                      <span className="pay-context-warn">
                         ยอดเชื่อเกินวงเงินคงเหลือ (เหลือ ฿{formatMoney(creditRemain)})
-                      </div>
-                    ) : null}
+                      </span>
+                    )}
                   </>
                 ) : (
-                  <div className="pay-credit-note warn">
-                    ต้องเลือกลูกค้าก่อนบันทึกเชื่อ
-                  </div>
-                )}
-                <input
-                  className="pay-amount-input"
-                  type="number"
-                  min={0}
-                  step="any"
-                  value={amounts.credit || ''}
-                  disabled={!customerId}
-                  onChange={(e) => setMethodAmount('credit', parseFloat(e.target.value) || 0)}
-                  placeholder="ยอดเชื่อ"
-                />
+                  <>
+                    <span className="pay-context-title">
+                      <i className="ti ti-clock-dollar" aria-hidden="true" /> เงินเชื่อ
+                    </span>
+                    <span className="pay-context-warn">ต้องเลือกลูกค้าก่อนบันทึกเชื่อ</span>
+                  </>
+                ))}
+            </div>
+
+            {/* 2. Active-method amount display (live comma formatting). */}
+            <input
+              className="pay-cash-currency-input"
+              type="text"
+              inputMode="decimal"
+              value={formatEntry(entry)}
+              onChange={handleEntryChange}
+              disabled={!entryEnabled}
+              placeholder="0"
+              aria-label={`จำนวนเงิน (${METHOD_META[activeMethod].label})`}
+            />
+
+            {/* 3. Static 4×5 keypad grid — always mounted for every method. */}
+            <div className="pay-keypad-grid">
+              {keypadCells.map((cell) => (
                 <button
+                  key={cell.id}
                   type="button"
-                  className="pay-fill-btn"
-                  disabled={!customerId || remaining <= 0}
-                  onClick={() => applyRemaining('credit')}
+                  className={`pay-keypad-btn${cell.kind === 'action' ? ' pay-keypad-btn--action' : ''}${cell.kind === 'banknote' ? ' pay-keypad-btn--banknote' : ''}${cell.kind === 'fill' ? ' pay-keypad-btn--fill' : ''}`}
+                  style={{
+                    gridRow: cell.row,
+                    gridColumn: cell.colSpan ? `${cell.col} / span ${cell.colSpan}` : cell.col,
+                  }}
+                  onClick={cell.onClick}
+                  disabled={cell.disabled}
+                  aria-label={cell.ariaLabel}
                 >
-                  บันทึกยอดค้างชำระ (฿{formatMoney(remaining)})
+                  {cell.label}
                 </button>
-              </div>
-            )}
+              ))}
+            </div>
           </main>
 
           <aside className="pay-summary" aria-label="สรุปยอดชำระ">
-            <div className="pay-sum-row">
-              <span>ยอดสุทธิ</span>
-              <strong>฿{formatMoney(grandTotal)}</strong>
-            </div>
-            <div className="pay-sum-row">
-              <span>ชำระแล้ว</span>
-              <span>฿{formatMoney(paidTotal)}</span>
+            {/* TOP: active payment breakdown lines (touch-friendly, stable heights). */}
+            <div className="pay-breakdown">
+              {activeSplits.length > 0 ? (
+                activeSplits.map((s) => (
+                  <div key={s.method} className="pay-sum-line pay-sum-line--split">
+                    <span className="pay-sum-label">{s.label}</span>
+                    <span className="pay-sum-amount">฿{formatMoney(s.amount)}</span>
+                    <button
+                      type="button"
+                      className="pay-split-dismiss"
+                      aria-label={`ล้างยอดชำระ ${s.label}`}
+                      onClick={() => setMethodAmount(s.method, 0)}
+                    >
+                      <i className="ti ti-x" aria-hidden="true" />
+                    </button>
+                  </div>
+                ))
+              ) : (
+                <div className="pay-breakdown-empty">ยังไม่มีการชำระ</div>
+              )}
             </div>
 
-            {activeSplits.length > 0 && (
-              <>
-                <div className="pay-sum-divider" />
-                <div className="pay-split-list">
-                  {activeSplits.map((s) => (
-                    <div key={s.method} className="pay-split-item">
-                      <span>{s.label}</span>
-                      <span>฿{formatMoney(s.amount)}</span>
-                    </div>
-                  ))}
+            {/* CENTER: flexible spacer keeps the ledger anchored to the bottom. */}
+            <div className="pay-summary-spacer" />
+
+            {/* BOTTOM: ledger totals + confirm. Totals live in a frame whose box
+                model (12px padding + 1px border) matches the breakdown card's
+                horizontal insets for balanced receipt-style padding. Ledger
+                rows use a flush-right 2-column layout (label / amount) — they
+                are intentionally released from the breakdown card's 40px
+                dismiss-action track, so amounts are not vertically locked to
+                the breakdown card's amount column. */}
+            <div className="pay-ledger">
+              <div className="pay-ledger-totals">
+                <div className="pay-ledger-line pay-ledger-line--gross">
+                  <span className="pay-ledger-label">ยอดสุทธิ</span>
+                  <strong className="pay-ledger-amount">฿{formatMoney(grandTotal)}</strong>
                 </div>
-              </>
-            )}
-
-            <div className="pay-sum-divider" />
-
-            <div className={`pay-sum-row ${summaryStatus.tone}`}>
-              <span>{summaryStatus.label}</span>
-              <strong>฿{formatMoney(summaryStatus.value)}</strong>
-            </div>
-
-            {confirmError && (
-              <div className="pay-confirm-error" role="alert">
-                <i className="ti ti-alert-triangle" aria-hidden="true" /> {confirmError}
+                <div className="pay-ledger-line pay-ledger-line--paid">
+                  <span className="pay-ledger-label">ชำระแล้ว</span>
+                  <span className="pay-ledger-amount">฿{formatMoney(paidTotal)}</span>
+                </div>
+                <div className={`pay-ledger-line pay-ledger-line--status ${summaryStatus.tone}`}>
+                  <span className="pay-ledger-label">{summaryStatus.label}</span>
+                  <strong className="pay-ledger-amount">฿{formatMoney(summaryStatus.value)}</strong>
+                </div>
               </div>
-            )}
 
-            <button
-              type="button"
-              className="pay-confirm"
-              disabled={!canConfirm || busy}
-              onClick={() => void handleConfirm()}
-            >
-              {busy ? 'กำลังบันทึกคำสั่งซื้อ...' : 'ยืนยันชำระเงิน'}
-            </button>
+              {confirmError && (
+                <div className="pay-confirm-error" role="alert">
+                  <i className="ti ti-alert-triangle" aria-hidden="true" /> {confirmError}
+                </div>
+              )}
+
+              <button
+                type="button"
+                className="pay-confirm"
+                disabled={!canConfirm || busy}
+                onClick={() => void handleConfirm()}
+              >
+                {busy ? 'กำลังบันทึกคำสั่งซื้อ...' : 'ยืนยันชำระเงิน'}
+              </button>
+            </div>
           </aside>
         </div>
       </div>

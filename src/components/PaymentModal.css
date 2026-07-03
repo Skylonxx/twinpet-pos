@@ -9,19 +9,51 @@
 }
 
 .pay-modal {
+  position: relative;
   display: flex;
   background: white;
   border-radius: 14px;
   overflow: hidden;
-  width: min(720px, calc(100vw - 24px));
+  width: min(780px, calc(100vw - 24px));
   min-height: min(560px, 90vh);
   max-height: min(560px, 90vh);
   box-shadow: 0 20px 60px rgba(38, 33, 92, 0.18);
 }
 
+/* Modal-level header, absolutely pinned across the full modal width so the
+   close button sits at the true top-right corner of the whole dialog, not
+   just the content column. Sidebar/main/summary get a 64px margin-top below
+   to clear this bar (Flowbite h-16 equivalent). */
+.pay-modal-header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 64px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 8px 0 24px;
+  background: white;
+  border-bottom: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+  z-index: 10;
+  touch-action: pan-y;
+}
+
+.pay-modal-header h3 {
+  margin: 0;
+  font-size: 20px;
+  font-family: 'Prompt', sans-serif;
+  font-weight: 600;
+  color: var(--text-primary, #111827);
+}
+
 .pay-sidebar {
-  width: 86px;
+  width: 96px;
   flex-shrink: 0;
+  margin-top: 64px;
   background: var(--g50, #f8f8fc);
   border-right: 1px solid var(--border, rgba(0, 0, 0, 0.08));
   display: flex;
@@ -32,16 +64,28 @@
 }
 
 .pay-side-btn {
-  width: 52px;
-  height: 52px;
+  width: 76px;
+  height: 58px;
   border-radius: 10px;
   border: 1px solid transparent;
   background: white;
   cursor: pointer;
   position: relative;
-  font-size: 22px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  font-size: 20px;
   color: var(--p600, #534ab7);
   transition: all 0.13s;
+}
+
+.pay-side-label {
+  font-family: 'Prompt', sans-serif;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1;
 }
 
 .pay-side-btn:hover {
@@ -65,312 +109,429 @@
 
 .pay-main {
   flex: 1;
+  margin-top: 64px;
   padding: 16px;
   display: flex;
   flex-direction: column;
   min-width: 0;
-  overflow: auto;
+  min-height: 0;
+  overflow: hidden;
 }
 
-.pay-main-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
-
-.pay-main-head h3 {
-  margin: 0;
-  font-size: 15px;
-  font-family: 'Prompt', sans-serif;
-  font-weight: 600;
-  color: var(--text-primary, #1a1a2e);
+/* Structural hook only: visual affordance for a future swipe-down-to-close
+   gesture on the header. No gesture handler is wired up yet (deferred). */
+.pay-drag-handle {
+  display: none;
 }
 
 .pay-close-btn {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
   border: none;
   background: transparent;
   cursor: pointer;
   font-size: 18px;
   color: var(--text-muted, #9ca3af);
-  padding: 4px;
-  border-radius: 6px;
+  border-radius: 10px;
+  transition: color 0.13s, background 0.13s;
 }
 
 .pay-close-btn:hover {
   background: var(--g100, #ededf5);
+  color: var(--text-primary, #111827);
 }
 
-.pay-method-title {
+/* Compact, fixed-height method context strip. Fixed height guarantees the
+   numpad below never shifts when switching payment methods. */
+.pay-method-context {
+  height: 84px;
+  flex-shrink: 0;
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  overflow: hidden;
+}
+
+/* Professional, readable category subtitle above the input/keypad. */
+.pay-context-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-bottom: 2px;
+  font-family: 'Prompt', sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary, #111827);
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pay-context-title i {
+  font-size: 20px;
+  color: var(--p600, #534ab7);
+  flex-shrink: 0;
+}
+
+.pay-context-title--kbank i {
+  color: #1f6e00;
+}
+
+.pay-context-title--edc i {
+  color: var(--info, #185fa5);
+}
+
+.pay-context-sub {
   font-size: 13px;
-  font-weight: 500;
-  margin: 0 0 12px;
   color: var(--text-secondary, #6b7280);
+  line-height: 1.3;
 }
 
-.pay-amount-display {
+.pay-context-credit-stats {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+}
+
+.pay-context-credit-stats strong {
+  font-family: 'Prompt', sans-serif;
+  font-size: 13px;
+}
+
+.pay-context-credit-stats strong.debt {
+  color: var(--red, #c0392b);
+}
+
+.pay-context-credit-stats strong.ok {
+  color: var(--green, #1d9e75);
+}
+
+.pay-context-warn {
+  align-self: flex-start;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: var(--danger-bg, #fcebeb);
+  color: var(--danger, #a32d2d);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.pay-cash-currency-input {
   width: 100%;
-  padding: 12px 14px;
+  padding: 10px 14px;
   border-radius: 8px;
   border: 1px solid var(--border-md, rgba(0, 0, 0, 0.13));
-  font-size: 22px;
+  font-size: 24px;
   font-family: 'Prompt', sans-serif;
+  font-variant-numeric: tabular-nums;
   text-align: right;
   background: var(--g50, #f8f8fc);
   color: var(--text-primary, #1a1a2e);
-  margin-bottom: 10px;
+  margin-bottom: 8px;
+  flex-shrink: 0;
 }
 
-.pay-quick-bills {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 10px;
+.pay-cash-currency-input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
-.pay-quick-bills button {
+.pay-keypad-grid {
   flex: 1;
-  padding: 10px;
-  border-radius: 8px;
-  border: 1px solid var(--border-md, rgba(0, 0, 0, 0.13));
-  background: white;
-  cursor: pointer;
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--p600, #534ab7);
-}
-
-.pay-quick-bills button:hover {
-  background: var(--p50, #eeedfe);
-}
-
-.pay-numpad {
+  min-height: 0;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(5, 1fr);
   gap: 6px;
 }
 
-.pay-numpad button {
-  padding: 12px;
+.pay-keypad-btn {
   border-radius: 8px;
   border: 1px solid var(--border, rgba(0, 0, 0, 0.08));
   background: white;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-family: 'Prompt', sans-serif;
   font-size: 16px;
   font-weight: 500;
   color: var(--text-primary, #1a1a2e);
 }
 
-.pay-numpad button:hover {
+.pay-keypad-btn:hover:not(:disabled) {
   background: var(--g50, #f8f8fc);
 }
 
-.pay-numpad .pay-numpad-action {
-  font-size: 13px;
-  color: var(--text-secondary, #6b7280);
-}
-
-.pay-fill-btn {
-  margin-top: 10px;
-  width: 100%;
-  padding: 8px;
-  border-radius: 8px;
-  border: 1px dashed var(--p400, #8279d3);
-  background: var(--p50, #eeedfe);
-  color: var(--p600, #534ab7);
-  cursor: pointer;
-  font-family: inherit;
-  font-size: 12px;
-}
-
-.pay-fill-btn:disabled {
+.pay-keypad-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
 
-.pay-qr-panel {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
+.pay-keypad-btn--action {
+  font-size: 13px;
+  color: var(--text-secondary, #6b7280);
 }
 
-.pay-qr-box {
-  width: 160px;
-  height: 160px;
-  border-radius: 12px;
-  border: 1px dashed var(--border-md, rgba(0, 0, 0, 0.13));
-  background: var(--g50, #f8f8fc);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  color: var(--text-muted, #9ca3af);
-  font-size: 12px;
-}
-
-.pay-qr-box i {
-  font-size: 48px;
-  color: var(--p400, #8279d3);
-}
-
-.pay-qr-box.kbank i {
-  color: #1f6e00;
-}
-
-.pay-edc-panel {
-  text-align: center;
-  padding: 20px 0;
-}
-
-.pay-edc-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
-  border-radius: 999px;
-  background: var(--info-bg, #e6f1fb);
-  color: var(--info, #185fa5);
-  font-size: 12px;
-  margin-bottom: 14px;
-}
-
-.pay-edc-status i {
-  font-size: 16px;
-}
-
-.pay-credit-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.pay-credit-note {
-  padding: 10px 12px;
-  border-radius: 8px;
-  background: var(--warn-bg, #faeeda);
-  color: var(--warn, #854f0b);
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-.pay-credit-note.warn {
-  background: var(--danger-bg, #fcebeb);
-  color: var(--danger, #a32d2d);
-}
-
-.pay-credit-stats {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
-.pay-credit-stat {
-  padding: 10px 12px;
-  border-radius: 8px;
-  background: var(--g50, #f8f8fc);
-  border: 0.5px solid var(--g200, #d3d1c7);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.pay-credit-stat-lbl {
-  font-size: 10px;
-  color: var(--g500, #6f6e69);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-.pay-credit-stat-val {
-  font-family: 'Prompt', sans-serif;
-  font-size: 15px;
+.pay-keypad-btn--banknote {
+  border: 1px dashed var(--p400, #8279d3);
+  background: var(--p50, #eeedfe);
+  color: var(--p600, #534ab7);
+  font-size: 13px;
   font-weight: 600;
 }
 
-.pay-credit-stat-val.debt {
-  color: var(--red, #c0392b);
+.pay-keypad-btn--banknote:hover:not(:disabled) {
+  background: var(--p100, #e0ddf9);
 }
 
-.pay-credit-stat-val.ok {
-  color: var(--green, #1d9e75);
+.pay-keypad-btn--fill {
+  border: 1px dashed var(--p400, #8279d3);
+  background: var(--p50, #eeedfe);
+  color: var(--p600, #534ab7);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
+  padding: 2px 6px;
+  text-align: center;
 }
 
-.pay-amount-input {
-  width: 100%;
-  padding: 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border-md, rgba(0, 0, 0, 0.13));
-  font-size: 18px;
-  font-family: 'Prompt', sans-serif;
-  text-align: right;
+.pay-keypad-btn--fill:hover:not(:disabled) {
+  background: var(--p100, #e0ddf9);
 }
 
-.pay-cash-manual-input {
-  margin-bottom: 10px;
-}
+/* ── Right summary ─────────────────────────────────────────────────────── */
 
 .pay-summary {
-  width: 185px;
-  flex-shrink: 0;
+  width: 290px;
+  max-width: 290px;
+  flex: 0 0 290px;
+  margin-top: 64px;
   border-left: 1px solid var(--border, rgba(0, 0, 0, 0.08));
   padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
   background: var(--g50, #f8f8fc);
 }
 
-.pay-sum-row {
+/* Top workspace: active payment breakdown list, anchored in a card so it no
+   longer reads as floating against the summary panel. */
+.pay-breakdown {
   display: flex;
-  justify-content: space-between;
-  align-items: baseline;
+  flex-direction: column;
+  gap: 6px;
+  background: #fff;
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 16px;
+}
+
+.pay-breakdown-empty {
+  padding: 10px 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted, #9ca3af);
+}
+
+/* Center workspace: flexible spacer pins the ledger to the bottom. */
+.pay-summary-spacer {
+  flex: 1;
+  min-height: 12px;
+}
+
+/* Bottom workspace: ledger totals + confirm. */
+.pay-ledger {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Divider frame above the ledger totals (UI-09-L: no horizontal padding here
+   — bottom ledger rows are full-width so their flush-right amounts land on
+   the exact same right margin as the confirm button below, both inheriting
+   only .pay-summary's own symmetrical 16px inset). */
+.pay-ledger-totals {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 0 4px;
+  border: 1px solid transparent;
+  border-top-color: var(--border, rgba(0, 0, 0, 0.08));
+}
+
+/* Unified 3-column grid shared by EVERY summary row (breakdown + totals).
+   Column 2 is a strict fixed 120px amount track and column 3 is a locked
+   40px action track, so the amount column's right edge (right-aligned) has
+   an identical X-coordinate on every row — whether or not the row carries a
+   dismiss button. */
+.pay-sum-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px 40px;
+  column-gap: 12px;
+  align-items: center;
+  min-height: 36px;
+}
+
+.pay-sum-label {
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 12px;
   color: var(--text-secondary, #6b7280);
 }
 
-.pay-sum-row strong {
+.pay-sum-amount {
+  width: 120px;
+  min-width: 120px;
+  max-width: 120px;
+  text-align: right;
+  white-space: nowrap;
   font-family: 'Prompt', sans-serif;
+  font-variant-numeric: tabular-nums;
   font-size: 14px;
   color: var(--text-primary, #1a1a2e);
 }
 
-.pay-sum-row.warn strong {
-  color: var(--warn, #854f0b);
+/* Breakdown rows read larger and are touch-friendly. */
+.pay-sum-line--split {
+  min-height: 44px;
 }
 
-.pay-sum-row.ok strong {
-  color: var(--success, #0f6e56);
+.pay-sum-line--split .pay-sum-label {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-secondary, #374151);
 }
 
-.pay-sum-divider {
-  height: 1px;
-  background: var(--border, rgba(0, 0, 0, 0.08));
-  margin: 2px 0;
+.pay-sum-line--split .pay-sum-amount {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-primary, #111827);
 }
 
-.pay-split-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.pay-split-item {
+/* Bottom ledger rows (ยอดสุทธิ / ชำระแล้ว / final balance). Released from the
+   breakdown card's 40px dismiss-action track by design (UI-09-L): these rows
+   use a flush-right 2-column layout — label left, amount pushed to the true
+   right edge of the ledger content box — instead of sharing the breakdown
+   card's 3-column amount/action grid. They are intentionally not locked to
+   the breakdown card's amount X-coordinate. */
+.pay-ledger-line {
   display: flex;
   justify-content: space-between;
-  font-size: 11px;
-  color: var(--text-muted, #9ca3af);
+  align-items: center;
+  gap: 12px;
 }
 
-.pay-split-item span:last-child {
-  color: var(--text-secondary, #6b7280);
-  font-weight: 500;
+.pay-ledger-label {
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pay-ledger-amount {
+  margin-left: auto;
+  text-align: right;
+  white-space: nowrap;
+  font-family: 'Prompt', sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Gross total row — the ledger's anchor line, upscaled above the default
+   breakdown-row scale so the totals block reads as intentional, not sparse. */
+.pay-ledger-line--gross {
+  min-height: 40px;
+}
+
+.pay-ledger-line--gross .pay-ledger-label {
+  font-size: 16px;
+  font-weight: 400;
+  color: #4b5563;
+}
+
+.pay-ledger-line--gross .pay-ledger-amount {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary, #111827);
+}
+
+/* Paid total row. */
+.pay-ledger-line--paid {
+  min-height: 40px;
+}
+
+.pay-ledger-line--paid .pay-ledger-label {
+  font-size: 16px;
+  font-weight: 400;
+  color: #4b5563;
+}
+
+.pay-ledger-line--paid .pay-ledger-amount {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary, #111827);
+}
+
+/* Final balance row — the loudest line in the ledger; carries the
+   settled/outstanding verdict, so it gets the largest, boldest treatment. */
+.pay-ledger-line--status {
+  min-height: 44px;
+}
+
+.pay-ledger-line--status .pay-ledger-label {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary, #111827);
+}
+
+.pay-ledger-line--status .pay-ledger-amount {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.pay-ledger-line--status.warn .pay-ledger-amount {
+  color: #dc2626;
+}
+
+.pay-ledger-line--status.ok .pay-ledger-amount {
+  color: #16a34a;
+}
+
+/* Dismiss button fully occupies the 40px action track. */
+.pay-split-dismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  justify-self: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--danger, #a32d2d);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background 0.13s, color 0.13s;
+}
+
+.pay-split-dismiss:hover {
+  background: var(--danger-bg, #fcebeb);
+  color: var(--danger, #a32d2d);
 }
 
 .pay-confirm-error {
-  margin-top: 8px;
   padding: 8px;
   border-radius: 6px;
   background: var(--danger-bg, #fcebeb);
@@ -387,17 +548,20 @@
 }
 
 .pay-confirm {
-  margin-top: auto;
-  padding: 12px;
+  width: 100%;
+  min-height: 68px;
+  padding: 16px;
   border: none;
-  border-radius: 9px;
+  border-radius: 14px;
   background: var(--p600, #534ab7);
   color: white;
   font-family: inherit;
-  font-weight: 500;
-  font-size: 13px;
+  font-weight: 600;
+  font-size: 16px;
   cursor: pointer;
-  transition: opacity 0.13s;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  transition: opacity 0.13s, background 0.13s;
 }
 
 .pay-confirm:hover:not(:disabled) {
@@ -407,29 +571,6 @@
 .pay-confirm:disabled {
   opacity: 0.45;
   cursor: not-allowed;
-}
-
-/* Auto-print toggle */
-.pay-auto-print {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0 0 12px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: var(--g50, #f8f8fc);
-  border: 0.5px solid var(--border, rgba(0, 0, 0, 0.08));
-  font-size: 12px;
-  color: var(--text-secondary, #6b7280);
-  cursor: pointer;
-  user-select: none;
-}
-
-.pay-auto-print input {
-  width: 15px;
-  height: 15px;
-  accent-color: var(--p600, #534ab7);
-  cursor: pointer;
 }
 
 /* Success state */
@@ -563,16 +704,6 @@
   border-color: var(--p800, #3c3489);
 }
 
-.pay-print-notice {
-  margin: 4px auto 0;
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: var(--info-bg, #e6f1fb);
-  color: var(--info, #185fa5);
-  font-size: 12px;
-  max-width: 260px;
-}
-
 /* Narrow-screen layout */
 @media (max-width: 640px) {
   .pay-modal-bg {
@@ -595,10 +726,23 @@
     border-bottom: 1px solid var(--border, rgba(0, 0, 0, 0.08));
   }
 
+  /* In the stacked mobile layout only the first column (sidebar) needs to
+     clear the absolute header; main/summary stack below it in normal flow. */
+  .pay-main {
+    margin-top: 0;
+  }
+
   .pay-summary {
+    margin-top: 0;
     width: 100%;
+    max-width: 100%;
+    flex: 1 1 auto;
     border-left: none;
     border-top: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+  }
+
+  .pay-summary-spacer {
+    min-height: 8px;
   }
 
   .pay-modal--success {
