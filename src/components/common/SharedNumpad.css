@@ -1,0 +1,78 @@
+/* UI-10-A · SharedNumpad primitive styles.
+   Namespaced `snp-*` only. Imported EXCLUSIVELY from SharedNumpad.tsx — never
+   imported globally, so it cannot collide with page/component CSS bundles. */
+
+.snp-grid {
+  display: grid;
+  gap: 6px;
+  min-height: 0;
+}
+
+.snp-grid--grid-3x4 {
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(4, 1fr);
+}
+
+.snp-grid--grid-4x5-payment {
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(5, 1fr);
+}
+
+.snp-btn {
+  border-radius: 8px;
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+  background: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Prompt', sans-serif;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-primary, #1a1a2e);
+  touch-action: manipulation;
+}
+
+.snp-btn:hover:not(:disabled) {
+  background: var(--g50, #f8f8fc);
+}
+
+.snp-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Clear / backspace keys read as secondary controls. */
+.snp-btn--action {
+  font-size: 13px;
+  color: var(--text-secondary, #6b7280);
+}
+
+/* Currency-shortcut accessory (e.g. banknote column). */
+.snp-btn--banknote {
+  border: 1px dashed var(--p400, #8279d3);
+  background: var(--p50, #eeedfe);
+  color: var(--p600, #534ab7);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.snp-btn--banknote:hover:not(:disabled) {
+  background: var(--p100, #e0ddf9);
+}
+
+/* Fill-remaining accessory (spanning row). */
+.snp-btn--fill {
+  border: 1px dashed var(--p400, #8279d3);
+  background: var(--p50, #eeedfe);
+  color: var(--p600, #534ab7);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
+  padding: 2px 6px;
+  text-align: center;
+}
+
+.snp-btn--fill:hover:not(:disabled) {
+  background: var(--p100, #e0ddf9);
+}
