@@ -1,58 +1,69 @@
-# Latest Report — UI-10-B PaymentModal SharedNumpad Migration
+# Latest Report — UI-10-C Cart/Inventory Numpad Adapters (Test-Only Hardening)
 
 > Date: 2026-07-06
-> HEAD: `fac83d2898606f101b966d8c51e1cab3f133a801`
-> origin/main: `fac83d2898606f101b966d8c51e1cab3f133a801`
-> Status: **UI-10-B CLOSED / PUSHED**
+> HEAD: `8449e98ebb34ea1eff14854aa3e71980c68cbfbf`
+> origin/main: `8449e98ebb34ea1eff14854aa3e71980c68cbfbf`
+> Status: **UI-10-C CLOSED / PUSHED**
 
 ---
 
 ## Summary
 
-UI-10-B PaymentModal SharedNumpad migration is **closed and pushed** at `fac83d2 feat(pos): migrate payment keypad to shared numpad`.
+UI-10-C is **closed and pushed** at `8449e98 test(pos): harden numpad dialog keyboard contract`. This phase was test-only hardening, not a runtime migration.
 
 ## Scope Delivered
 
-- PaymentModal keypad rendering migrated to `SharedNumpad`
-- Props: `layout="grid-4x5-payment"`, `classPrefix="pay-keypad"`, `onKey={handleNumpad}`, `disabled={!entryEnabled}`, `accessories={keypadAccessories}`
-- PaymentModal retains payment state/logic ownership
-- Contract and keyboard-contract test updates
+- Modified exactly one file: `src/pages/POSPage.keyboard-contract.test.ts`
+- Added source-level contract hardening for `NumpadDialog` keyboard behavior
+- No runtime files changed
 
-**Untouched:** `PaymentModal.css`, `SharedNumpad.tsx`, `SharedNumpad.css`, `POSPage.tsx`.
+**Untouched:** `SharedNumpad.tsx/css`, `SharedNumpad.contract.test.ts`, `NumpadDialog.tsx/css`, `ItemDiscountModal`, `POSPage.tsx`, `PaymentModal`, checkout/cart/Firebase/package/config/platform, printer/thermal.
+
+## Architecture Decision — Route C + D
+
+- **Route C:** leave `NumpadDialog` runtime unchanged; add test-only contract hardening
+- **Route D:** defer inventory-side numpad usage — no inventory numpad exists in inspected scope
+
+## Migration Blockers
+
+Why `NumpadDialog` was not migrated to `SharedNumpad` in this phase:
+
+- `SharedNumpad` lacks a `grid-3x4-decimal` layout
+- `NumpadDialog` decimal layout requires a `. 0 ⌫` row
+- `NumpadDialog` uses the Tabler `ti-backspace` icon; `SharedNumpad` renders a literal `⌫` character
+- Fixing parity would require `SharedNumpad` primitive changes and risks regressing `PaymentModal` (the UI-10-B consumer)
 
 ## Validation
 
 | Check | Result |
 |-------|--------|
-| Codex blueprint | PASS WITH NOTES |
-| Codex implementation | PASS WITH NOTES |
+| Codex implementation review | PASS WITH NOTES |
 | `npm run build` | PASS |
-| SharedNumpad contract tests | PASS |
-| POSPage keyboard contract (impl review) | 159/159 |
-| Combined pre-commit | 178/178 |
+| `POSPage.keyboard-contract.test.ts` + `SharedNumpad.contract.test.ts` combined | 187/187 |
+| POSPage keyboard contract | 168/168 |
+| SharedNumpad contract | 19/19 (unchanged) |
 | Working tree after push | clean |
 | stash@{0} | untouched |
 
-## Accepted Deltas
+## Boundaries
 
-- Clear `C` aria-label parity — accepted
-- Tab/accessory DOM-order — accepted if observed
-- Exact aria parity later = separate SharedNumpad packet (not active blocker)
-
-## Architecture Lock
-
-SharedNumpad stateless; PaymentModal owns `activeMethod`, amounts, entry, confirm, routing, formatting, shortcuts.
-
-## Cancelled / Deferred
-
-Printer/Thermal — not active.
+- `SharedNumpad.tsx/css` untouched
+- `SharedNumpad.contract.test.ts` untouched
+- `NumpadDialog.tsx/css` untouched
+- `ItemDiscountModal` untouched
+- `POSPage.tsx` untouched
+- `PaymentModal` untouched
+- checkout/cart/Firebase/package/config untouched
+- Printer/Thermal not revived
+- stash@{0} untouched
+- UI-10-D not started
 
 ## Docs Reconciliation
 
-Separate docs-only pass (TWINPET-UI-10-B-DOCS-RECONCILIATION-001). Not part of pushed commit `fac83d2`.
+Separate docs-only pass (TWINPET-UI-10-C-DOCS-RECONCILIATION-001). Not part of pushed commit `8449e98`.
 
 ## Next Route
 
 1. Codex docs-only review
 2. Docs commit/push authorization
-3. UI-10-C only after Gemini explicit authorization
+3. UI-10-D only after Gemini explicit authorization

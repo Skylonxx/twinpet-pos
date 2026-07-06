@@ -4,19 +4,21 @@
 
 | Field | Value |
 |-------|-------|
-| HEAD (verified) | `fac83d2898606f101b966d8c51e1cab3f133a801` |
-| origin/main | `fac83d2898606f101b966d8c51e1cab3f133a801` |
+| HEAD (verified) | `8449e98ebb34ea1eff14854aa3e71980c68cbfbf` |
+| origin/main | `8449e98ebb34ea1eff14854aa3e71980c68cbfbf` |
 | Ahead/behind | `0 / 0` |
-| Closure | UI-10-B PaymentModal SharedNumpad migration **CLOSED / PUSHED** at `fac83d2`; UI-10-B docs reconciliation separate pass |
+| Closure | UI-10-C Cart/Inventory Numpad Adapters (test-only hardening) **CLOSED / PUSHED** at `8449e98`; UI-10-C docs reconciliation separate pass |
 
 ## Recently Completed / Committed UI Work
 
-All commits below verified in `git log --oneline -n 40` at HEAD `fac83d2`.
+All commits below verified in `git log --oneline -n 40` at HEAD `8449e98`.
 
 ### POS Cashier UX & Cart
 
 | Hash | Description |
 |------|-------------|
+| `8449e98` | **UI-10-C** — Cart/Inventory Numpad Adapters (test-only hardening) — CLOSED / PUSHED |
+| `8bc2875` | **UI-10-B docs closure** — reconcile ui-10-b payment numpad migration |
 | `fac83d2` | **UI-10-B** — PaymentModal SharedNumpad migration — CLOSED / PUSHED |
 | `df5fd87` | **UI-10-A docs closure** — reconcile ui-10-a shared numpad closure |
 | `bc76e1e` | **UI-10-A** — SharedNumpad primitive — CLOSED / PUSHED |
@@ -163,7 +165,33 @@ See Context.md for the full Phase 7B/7C history including:
 
 **Architecture B:** stateless primitive + caller-side adapters. PaymentModal retains `activeMethod`, `amounts`, `entry`, `setMethodAmount`, `paidTotal`, `remaining`, credit gating, `canConfirm`, `handleConfirm`.
 
-## UI-10-C Status (not started)
+## UI-10-C Status
+
+**CLOSED / PUSHED (PASS WITH NOTES)**
+
+| Field | Value |
+|-------|-------|
+| Scope | Test-only contract hardening for `NumpadDialog` keyboard behavior (not a runtime migration) |
+| Implementation | `8449e98 test(pos): harden numpad dialog keyboard contract` |
+| Source impact | `src/pages/POSPage.keyboard-contract.test.ts` only |
+| Untouched | `SharedNumpad.tsx/css`, `NumpadDialog.tsx/css`, `ItemDiscountModal`, `POSPage.tsx`, `PaymentModal` |
+| Codex implementation | PASS WITH NOTES |
+| `npm run build` | PASS |
+| Tests | 187/187 combined pre-commit; POSPage keyboard contract 168/168; SharedNumpad contract 19/19 (unchanged) |
+
+**Architecture decision — Route C + D:**
+
+- Route C: leave `NumpadDialog` runtime unchanged; add test-only contract hardening only
+- Route D: defer inventory-side numpad adoption — no inventory numpad exists in inspected scope
+
+**Migration blockers (why NumpadDialog was not migrated to SharedNumpad):**
+
+- `SharedNumpad` lacks a `grid-3x4-decimal` layout
+- `NumpadDialog` decimal layout requires a `. 0 ⌫` row
+- `NumpadDialog` uses the Tabler `ti-backspace` icon; `SharedNumpad` renders a literal `⌫` character
+- Fixing parity requires `SharedNumpad` primitive changes and risks regressing `PaymentModal` (UI-10-B consumer)
+
+## UI-10-D Status (not started)
 
 No implementation authorized. Requires Gemini explicit authorization.
 
@@ -218,8 +246,9 @@ No implementation authorized. Requires Gemini explicit authorization.
 | UI-09 final closure | **CLOSED / PUSHED** | `a573a29` — docs + TS6133 hold-bill fix |
 | UI-09-C | **COMPLETED (PASS WITH NOTES)** | PaymentModal UX Hardening — `de2de43`; focus trap deferred |
 | UI-09-M | **CLOSED (PASS WITH NOTES)** | PaymentModal layout corrective — `9573abb` |
+| UI-10-C | **CLOSED / PUSHED** | Cart/Inventory Numpad Adapters (test-only hardening) — `8449e98` |
 | UI-10-B | **CLOSED / PUSHED** | PaymentModal SharedNumpad migration — `fac83d2` |
-| UI-10-C | **NOT STARTED** | Requires Gemini explicit authorization |
+| UI-10-D | **NOT STARTED** | Requires Gemini explicit authorization |
 | UI-10-A | **CLOSED / PUSHED** | SharedNumpad primitive — `bc76e1e` + docs `df5fd87` |
 | Printer / Thermal | **CANCELLED/DEFERRED** | Not active unless Owner revives with Gemini |
 | P1 Offline/Sync relocation | DEFERRED | Separate from UI-08; was P1 triage UI-08 numbering |
@@ -246,9 +275,9 @@ No implementation authorized. Requires Gemini explicit authorization.
 
 ## Next Decision Gate
 
-    UI_10_B_DOCS_RECONCILIATION
+    UI_10_C_DOCS_RECONCILIATION
 
-1. UI-10-B closed/pushed at `fac83d2`; docs reconciliation in separate pass
+1. UI-10-C closed/pushed at `8449e98`; docs reconciliation in separate pass
 2. Codex docs-only review → docs commit/push authorization
-3. UI-10-C only after Gemini explicit authorization
+3. UI-10-D only after Gemini explicit authorization
 4. Printer/Thermal not active; PaymentModal checkout write paths unchanged
