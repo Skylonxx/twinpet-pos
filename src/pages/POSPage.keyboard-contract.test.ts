@@ -1642,3 +1642,100 @@ describe('7C-UI-10-B · PaymentModal keypad → SharedNumpad migration (PaymentM
     expect(paymentSource).not.toContain('keypadCells');
   });
 });
+
+// ─── P. UI-10-C · NumpadDialog remains touch-only and SharedNumpad-independent ────────
+// Route C + D (blueprint TWINPET-UI-10-C-…-BLUEPRINT-001, Codex PASS WITH NOTES):
+// NumpadDialog was deliberately NOT migrated onto SharedNumpad in UI-10-C. The primitive
+// lacks a 3×4 decimal layout (its `.` lives only in grid-4x5-payment) and renders a literal
+// `⌫` glyph rather than NumpadDialog's `ti-backspace` icon — closing either gap would mean
+// editing the frozen SharedNumpad.tsx and risking the shipped PaymentModal contract. This
+// block PINS that decision: NumpadDialog stays its own touch keypad with caller-owned apply,
+// no keyboard handlers, and no SharedNumpad coupling; the qty / bill-discount / item-discount
+// flows keep routing through their existing cart/parent write paths. These assertions are
+// additive — they weaken no existing RED-path / keyboard-ownership contract.
+describe('7C-UI-10-C · NumpadDialog stays touch-only + SharedNumpad-independent', () => {
+  // ── 1. Independence from SharedNumpad (no runtime migration) ──
+  test('NumpadDialog does NOT import or reference SharedNumpad', () => {
+    // Real-import guard (not a naive substring) plus a total-absence guard: the file
+    // never mentions SharedNumpad at all, so no adapter/migration slipped in.
+    expect(numpadSource).not.toMatch(/from\s+['"][^'"]*\/SharedNumpad['"]/);
+    expect(numpadSource).not.toContain('SharedNumpad');
+    // It remains its own surface, importing only its own namespaced CSS.
+    expect(numpadSource).toContain("import './NumpadDialog.css'");
+  });
+
+  // ── 2. npd class shape is stable (no class-prefix reshuffle) ──
+  test('the npd-* class shape is preserved (grid / key / action / confirm / clear)', () => {
+    expect(numpadSource).toContain('className="npd-grid"');
+    expect(numpadSource).toContain('npd-key');
+    expect(numpadSource).toContain('npd-key--action');
+    expect(numpadSource).toContain('className="npd-confirm"');
+    expect(numpadSource).toContain('className="npd-clear"');
+  });
+
+  // ── 3. Key behavior is stable (buffer/parse owned by NumpadDialog) ──
+  test('digit append, decimal layout, single-dot guard, clear, and backspace are preserved', () => {
+    // Digit append into the local buffer.
+    expect(numpadSource).toContain("const next = prev === '0' ? key : prev + key;");
+    // Decimal layout + single-dot guard (bill-discount / item-discount decimal mode).
+    expect(numpadSource).toContain('NUMPAD_KEYS_DECIMAL');
+    expect(numpadSource).toContain("if (prev.includes('.')) return prev;");
+    // Clear key wipes the buffer.
+    expect(numpadSource).toContain("if (key === 'C')");
+    expect(numpadSource).toContain("setInput('')");
+    // Literal `⌫` handled in source logic + rendered as the Tabler backspace icon.
+    expect(numpadSource).toContain("if (key === '⌫')");
+    expect(numpadSource).toContain('prev.slice(0, -1)');
+    expect(numpadSource).toContain('ti-backspace');
+  });
+
+  // ── 4. Modal lifecycle stays NumpadDialog-owned ──
+  test('NumpadDialog returns null when closed and owns its own portal lifecycle', () => {
+    expect(numpadSource).toContain('if (!open) return null;');
+    expect(numpadSource).toContain('createPortal(');
+    expect(numpadSource).toContain('document.body');
+  });
+
+  // ── 5. Confirm/apply ownership boundary is unchanged ──
+  test('confirm stays a click-driven button whose apply boundary is the caller onConfirm', () => {
+    expect(numpadSource).toContain('onClick={handleConfirm}');
+    // The number leaves the component only via the caller callback — the effect is caller-owned.
+    expect(numpadSource).toContain('onConfirm(');
+    // Parse/validation live here (buffer only); no form-submit ownership.
+    expect(numpadSource).toContain('parseInt(input, 10)');
+    expect(numpadSource).toContain('parseFloat(input)');
+    expect(numpadSource).not.toContain('onSubmit');
+    expect(numpadSource).not.toContain('type="submit"');
+  });
+
+  // ── 6. Quantity + discount routing stays caller-owned (POSPage) ──
+  test('qty flow still routes to cart.setLineQty and bill-discount to cart.setBillDiscValue', () => {
+    expect(posSource).toContain('cart.setLineQty(');
+    expect(posSource).toContain('cart.setBillDiscValue(');
+    // The numpad itself never calls the cart write paths (they stay in the page).
+    expect(numpadSource).not.toContain('setLineQty');
+    expect(numpadSource).not.toContain('setBillDiscValue');
+  });
+
+  // ── 7. Keyboard ownership is unchanged (NumpadDialog touch-only; POSPage owns keys) ──
+  test('NumpadDialog adds no keyboard handler / global listener (touch-only surface)', () => {
+    expect(numpadSource).not.toContain('onKeyDown');
+    expect(numpadSource).not.toContain('isComposing');
+    expect(numpadSource).not.toContain('Escape');
+    expect(numpadSource).not.toContain('addEventListener');
+  });
+
+  test('POSPage remains the single global keyboard owner (unchanged by UI-10-C)', () => {
+    expect(countOccurrences(posSource, "window.addEventListener('keydown'")).toBe(1);
+    expect(posSource).toContain("window.removeEventListener('keydown', onKey)");
+  });
+
+  // ── 8. PaymentModal SharedNumpad regression stays green (no cross-contamination) ──
+  test('PaymentModal remains the SharedNumpad consumer (UI-10-B migration intact)', () => {
+    expect(paymentSource).toMatch(/from\s+['"]\.\/common\/SharedNumpad['"]/);
+    expect(paymentSource).toContain('layout="grid-4x5-payment"');
+    expect(paymentSource).toContain('classPrefix="pay-keypad"');
+    // UI-10-C touched no runtime — NumpadDialog is NOT a SharedNumpad importer.
+    expect(numpadSource).not.toContain('SharedNumpad');
+  });
+});
