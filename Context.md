@@ -1,18 +1,60 @@
 # Twinpet POS — Project Context
 
 > Last reconciled: 2026-07-06
-> HEAD: `8449e98ebb34ea1eff14854aa3e71980c68cbfbf`
-> origin/main: `8449e98ebb34ea1eff14854aa3e71980c68cbfbf`
+> HEAD: `ffa433ccdf8fb570632658ab93dac0b737dc7a11`
+> origin/main: `ffa433ccdf8fb570632658ab93dac0b737dc7a11`
 
 ---
 
 ## Current Phase
 
-**UI-10-C — Cart / Inventory Numpad Adapters (test-only hardening): CLOSED / PUSHED**
+**UI-11 — Manager Approval Modal Primitive / Packet 1: CLOSED / PUSHED**
 
 Manual workflow remains active. `agentchattr` was not used as the executor for this phase.
 
-### UI-10-C pushed commit
+### UI-11 Packet 1 pushed commit
+
+| Hash | Message |
+|------|---------|
+| `ffa433c` | feat(ui): add manager approval modal primitive |
+
+### UI-11 Packet 1 scope
+
+- Created exactly 3 new files: `src/components/pos/ManagerPinModal.tsx`, `src/components/pos/ManagerPinModal.css`, `src/components/pos/ManagerPinModal.test.ts`
+- No tracked file modified; no wiring into any consumer
+
+### UI-11 Packet 1 architecture
+
+- `ManagerPinModal` is an isolated presentational shell — a **Manager Approval Modal Primitive / Manager Action Confirmation Shell**
+- Callback-driven: `onSubmitPin(pin)` forwards entered digits to a caller-owned verifier
+- Collects touch-entered digits into a local, transient, masked buffer
+- Performs **no** PIN verification, stores **no** PIN source, executes **no** protected action
+- Is **not** a security boundary; does not authorize, authenticate, verify, or secure actions by itself
+- Is **not** wired into `POSPage`
+- Preserves the zero-virtual-keyboard touch standard: no editable `<input>`/`<textarea>` in the PIN entry path — non-editable masked dot display plus button keypad only, avoiding the iPad/iOS virtual keyboard trigger pattern
+
+### UI-11 Packet 1 hard stops / deferred scope
+
+- Real PIN verification — unimplemented
+- Protected-action execution — unimplemented
+- `POSPage` wiring — unimplemented
+- Packet 2 — separate and **not authorized**
+- Backend/Security verifier (Cloud Function, Firestore lookup, stored/hashed PIN, security rules, Firebase/functions/rules/config changes) — separate Gemini authorization gate; hard stop
+- No checkout/cart/payment/inventory change
+- No `SharedNumpad`/`NumpadDialog`/`PaymentModal`/`ItemDiscountModal`/`useAuth` change
+- UI-10-D remains excluded
+- Printer/Thermal remains cancelled/deferred
+
+### Validation (UI-11 Packet 1)
+
+- Codex re-review (post build-fix): PASS
+- `npm run build`: PASS
+- `ManagerPinModal.test.ts`: 26/26
+- `POSPage.keyboard-contract.test.ts`: 168/168 (unchanged)
+- `SharedNumpad.contract.test.ts`: 19/19 (unchanged)
+- Working tree clean after push; staged files clean; stash untouched
+
+### Prior phase — UI-10-C pushed commit
 
 | Hash | Message |
 |------|---------|
@@ -92,6 +134,7 @@ Test-only hardening, not a runtime migration.
 
 | Phase | Commit | Status |
 |-------|--------|--------|
+| UI-10-C numpad hardening | `8449e98` + docs `62be589` | CLOSED / PUSHED |
 | UI-10-B PaymentModal migration | `fac83d2` + docs `8bc2875` | CLOSED / PUSHED |
 | UI-10-A primitive | `bc76e1e` + docs `df5fd87` | CLOSED / PUSHED |
 | UI-09 PaymentModal | `9573abb` + docs chain | CLOSED |
@@ -100,6 +143,7 @@ Test-only hardening, not a runtime migration.
 
 - **Printer / Thermal Receipt / Print Polish** — cancelled/deferred; legacy thermal/print code untouched
 - **UI-10-D** — NOT STARTED; no implementation authorized
+- **UI-11 Packet 2** (real PIN verification, `POSPage` wiring, backend/security verifier) — NOT STARTED; requires separate Gemini authorization
 
 ### Known technical debt (unchanged)
 

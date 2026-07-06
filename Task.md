@@ -1,28 +1,32 @@
 # Twinpet POS — Task Tracker
 
 > Last reconciled: 2026-07-06
-> HEAD: `8449e98ebb34ea1eff14854aa3e71980c68cbfbf`
-> origin/main: `8449e98ebb34ea1eff14854aa3e71980c68cbfbf`
+> HEAD: `ffa433ccdf8fb570632658ab93dac0b737dc7a11`
+> origin/main: `ffa433ccdf8fb570632658ab93dac0b737dc7a11`
 
 ---
 
-## UI-10-C — Cart / Inventory Numpad Adapters (test-only hardening)
+## UI-11 — Manager Approval Modal Primitive / Packet 1
 
 **Status: CLOSED / PUSHED**
 
-- [x] Implementation pushed (`8449e98`) — `POSPage.keyboard-contract.test.ts` only
-- [x] Codex implementation review — PASS WITH NOTES
+- [x] Implementation pushed (`ffa433c`) — `ManagerPinModal.tsx`, `ManagerPinModal.css`, `ManagerPinModal.test.ts` (all new files)
+- [x] Codex re-review (post build-fix) — PASS
 - [x] `npm run build` — PASS
-- [x] POSPage keyboard contract — 168/168
+- [x] `ManagerPinModal.test.ts` — 26/26
+- [x] POSPage keyboard contract — 168/168 (unchanged)
 - [x] SharedNumpad contract — 19/19 (unchanged)
-- [x] Combined pre-commit — 187/187
 - [ ] Docs reconciliation (this pass) — in progress
 
-**Delivered:** Test-only contract hardening for `NumpadDialog` keyboard behavior. Route C (leave `NumpadDialog` runtime unchanged) + Route D (defer inventory-side numpad — none exists in inspected scope).
+**Delivered:** Isolated, presentational Manager Approval Modal Primitive (`ManagerPinModal`). Callback-driven (`onSubmitPin(pin)`); local transient masked buffer; no PIN verification; no protected-action execution; not a security boundary; not wired into `POSPage`. Preserves zero-virtual-keyboard touch standard (no editable input/textarea; button keypad + masked dot display only).
 
-**Untouched:** `SharedNumpad.tsx/css`, `NumpadDialog.tsx/css`, `ItemDiscountModal`, `POSPage.tsx`, `PaymentModal`.
+**Untouched:** all tracked files — `POSPage.tsx`, `SharedNumpad`, `NumpadDialog`, `PaymentModal`, `ItemDiscountModal`, `useAuth`/RBAC, checkout/cart/payment/inventory, Firebase/functions/rules/config, printer/thermal.
 
-**Migration blocker:** `SharedNumpad` lacks `grid-3x4-decimal`; `NumpadDialog` decimal layout needs `. 0 ⌫` and Tabler `ti-backspace` icon vs. `SharedNumpad`'s literal `⌫` — parity fix deferred to a future SharedNumpad primitive packet.
+**Hard stops / deferred:** real PIN verification, protected-action execution, `POSPage` wiring, Packet 2, and the backend/security verifier all remain unimplemented and require separate Gemini authorization.
+
+### UI-10-C — CLOSED / PUSHED
+
+Numpad dialog keyboard contract hardening `8449e98` + docs `62be589`.
 
 ### UI-10-B — CLOSED / PUSHED
 
@@ -36,10 +40,14 @@ Primitive `bc76e1e` + docs `df5fd87`.
 
 No implementation authorized.
 
+### UI-11 Packet 2 — NOT STARTED
+
+Real PIN verification / `POSPage` wiring / backend-security verifier — requires separate Gemini explicit authorization.
+
 ### Next step
 
 1. Codex docs-only review of this reconciliation pass
-2. Docs commit/push authorization
-3. UI-10-D or next UI-10 phase only after Gemini explicit authorization
+2. Gemini decision on whether this docs reconciliation should be committed
+3. UI-11 Packet 2, UI-10-D, or any subsequent phase only after separate Gemini explicit authorization
 
-**Not active:** Printer/Thermal (cancelled/deferred).
+**Not active:** Printer/Thermal (cancelled/deferred), UI-10-D, UI-11 Packet 2.

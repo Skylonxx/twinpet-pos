@@ -6,14 +6,14 @@
 |-------|-------|
 | Repo root | `C:/Users/Narachat/twinpet-pos` |
 | Branch | `main` |
-| HEAD | `8449e98ebb34ea1eff14854aa3e71980c68cbfbf` |
-| origin/main | `8449e98ebb34ea1eff14854aa3e71980c68cbfbf` |
+| HEAD | `ffa433ccdf8fb570632658ab93dac0b737dc7a11` |
+| origin/main | `ffa433ccdf8fb570632658ab93dac0b737dc7a11` |
 | Ahead/behind | `0 / 0` |
 
 ## Current Phase
 
-    TWINPET-POS-UI-10-C-DOCS-RECONCILIATION
-    UI-10-C Cart/Inventory Numpad Adapters (test-only hardening) CLOSED / PUSHED — docs reconciliation in progress
+    TWINPET-UI-11-PACKET-1-DOCS-RECONCILIATION
+    UI-11 Manager Approval Modal Primitive / Packet 1 CLOSED / PUSHED — docs reconciliation in progress
 
 ## Working Tree
 
@@ -25,6 +25,24 @@
     stash@{0}: On main: WIP: Batches 1-3 UI/settings/UOM/transfer-UI (unrelated to stock-security Phase 1)
 
 **Do NOT touch stash@{0}.**
+
+## UI-11 Packet 1 Closure
+
+| Field | Value |
+|-------|-------|
+| Scope | Manager Approval Modal Primitive (isolated presentational shell, no wiring) |
+| Implementation | `ffa433c feat(ui): add manager approval modal primitive` |
+| Source impact | `src/components/pos/ManagerPinModal.tsx`, `src/components/pos/ManagerPinModal.css`, `src/components/pos/ManagerPinModal.test.ts` (all new files) |
+| Untouched | `POSPage.tsx`, `SharedNumpad`, `NumpadDialog`, `PaymentModal`, `ItemDiscountModal`, `useAuth`/RBAC, checkout/cart/payment/inventory, Firebase/functions/rules/config, printer/thermal |
+| Architecture | Callback-driven (`onSubmitPin(pin)`); local transient masked buffer; no PIN verification; no protected-action execution; not a security boundary; not wired into `POSPage` |
+| OS keyboard standard | No editable `<input>`/`<textarea>` in PIN entry path; non-editable masked dot display + button keypad only; avoids iPad/iOS virtual keyboard trigger |
+| Hard stops / deferred | Real PIN verification, protected-action execution, `POSPage` wiring, Packet 2, backend/security verifier — all unimplemented; separate Gemini authorization gate |
+| Codex re-review (post build-fix) | PASS |
+| `npm run build` | PASS |
+| `ManagerPinModal.test.ts` | 26/26 |
+| POSPage keyboard contract | 168/168 (unchanged) |
+| SharedNumpad contract | 19/19 (unchanged) |
+| Status | **CLOSED / PUSHED** |
 
 ## UI-10-C Closure
 
@@ -70,6 +88,10 @@ PaymentModal retains all payment state, routing, confirm, formatting, and keyboa
 
 **NOT STARTED** — no implementation authorized.
 
+## UI-11 Packet 2 Status
+
+**NOT STARTED** — real PIN verification / `POSPage` wiring / backend-security verifier require separate Gemini explicit authorization.
+
 ## Cancelled / Deferred
 
 Printer / Thermal Receipt / Print Polish — cancelled/deferred; legacy code untouched.
@@ -78,22 +100,23 @@ Printer / Thermal Receipt / Print Polish — cancelled/deferred; legacy code unt
 
 | Hash | Message |
 |------|---------|
+| `ffa433c` | feat(ui): add manager approval modal primitive — **UI-11 PACKET 1 CLOSED / PUSHED** |
+| `62be589` | docs: reconcile ui-10-c numpad hardening closure |
 | `8449e98` | test(pos): harden numpad dialog keyboard contract — **UI-10-C CLOSED / PUSHED** |
 | `8bc2875` | docs: reconcile ui-10-b payment numpad migration |
 | `fac83d2` | feat(pos): migrate payment keypad to shared numpad — **UI-10-B CLOSED / PUSHED** |
-| `df5fd87` | docs: reconcile ui-10-a shared numpad closure |
-| `bc76e1e` | feat(ui): add shared numpad primitive — **UI-10-A** |
 
 ## Next Recommended Block
 
     READY_FOR_CODEX_DOCS_REVIEW
 
-1. Codex docs-only review of UI-10-C reconciliation
-2. Docs commit/push authorization
-3. UI-10-D only after Gemini explicit authorization
+1. Codex docs-only review of UI-11 Packet 1 reconciliation
+2. Gemini decision on whether this docs reconciliation should be committed
+3. UI-11 Packet 2 / UI-10-D only after separate Gemini explicit authorization
 
 ## Hard Boundaries
 
+- UI-11 Packet 2 not started
 - UI-10-D not started
 - No commit/push in this docs-only pass
 - PaymentModal checkout write paths unchanged

@@ -4,19 +4,21 @@
 
 | Field | Value |
 |-------|-------|
-| HEAD (verified) | `8449e98ebb34ea1eff14854aa3e71980c68cbfbf` |
-| origin/main | `8449e98ebb34ea1eff14854aa3e71980c68cbfbf` |
+| HEAD (verified) | `ffa433ccdf8fb570632658ab93dac0b737dc7a11` |
+| origin/main | `ffa433ccdf8fb570632658ab93dac0b737dc7a11` |
 | Ahead/behind | `0 / 0` |
-| Closure | UI-10-C Cart/Inventory Numpad Adapters (test-only hardening) **CLOSED / PUSHED** at `8449e98`; UI-10-C docs reconciliation separate pass |
+| Closure | UI-11 Manager Approval Modal Primitive / Packet 1 **CLOSED / PUSHED** at `ffa433c`; UI-11 Packet 1 docs reconciliation separate pass |
 
 ## Recently Completed / Committed UI Work
 
-All commits below verified in `git log --oneline -n 40` at HEAD `8449e98`.
+All commits below verified in `git log --oneline -n 40` at HEAD `ffa433c`.
 
 ### POS Cashier UX & Cart
 
 | Hash | Description |
 |------|-------------|
+| `ffa433c` | **UI-11 Packet 1** — Manager Approval Modal Primitive (`ManagerPinModal`) — CLOSED / PUSHED |
+| `62be589` | **UI-10-C docs closure** — reconcile ui-10-c numpad hardening closure |
 | `8449e98` | **UI-10-C** — Cart/Inventory Numpad Adapters (test-only hardening) — CLOSED / PUSHED |
 | `8bc2875` | **UI-10-B docs closure** — reconcile ui-10-b payment numpad migration |
 | `fac83d2` | **UI-10-B** — PaymentModal SharedNumpad migration — CLOSED / PUSHED |
@@ -165,6 +167,36 @@ See Context.md for the full Phase 7B/7C history including:
 
 **Architecture B:** stateless primitive + caller-side adapters. PaymentModal retains `activeMethod`, `amounts`, `entry`, `setMethodAmount`, `paidTotal`, `remaining`, credit gating, `canConfirm`, `handleConfirm`.
 
+## UI-11 Packet 1 Status
+
+**CLOSED / PUSHED (PASS)**
+
+| Field | Value |
+|-------|-------|
+| Scope | Manager Approval Modal Primitive — isolated presentational shell, not wired into any consumer |
+| Implementation | `ffa433c feat(ui): add manager approval modal primitive` |
+| Source impact | `src/components/pos/ManagerPinModal.tsx`, `src/components/pos/ManagerPinModal.css`, `src/components/pos/ManagerPinModal.test.ts` (all new files) |
+| Untouched | `POSPage.tsx`, `SharedNumpad`, `NumpadDialog`, `PaymentModal`, `ItemDiscountModal`, `useAuth`/RBAC, checkout/cart/payment/inventory, Firebase/functions/rules/config, printer/thermal |
+| Codex re-review (post build-fix) | PASS |
+| `npm run build` | PASS |
+| Tests | `ManagerPinModal.test.ts` 26/26; POSPage keyboard contract 168/168 (unchanged); SharedNumpad contract 19/19 (unchanged) |
+
+**Architecture:** `ManagerPinModal` is a Manager Approval Modal Primitive / Manager Action Confirmation Shell. Callback-driven via `onSubmitPin(pin)`, which forwards entered digits to a caller-owned verifier. Collects digits into a local, transient, masked buffer. Performs no PIN verification, holds no PIN source, executes no protected action, and is not a security boundary — it does not authorize, authenticate, verify, or secure actions by itself.
+
+**OS virtual keyboard standard:** preserves the zero-virtual-keyboard touch standard — no editable `<input>`/`<textarea>` anywhere in the PIN entry path; entry is via non-editable masked dot display plus button keypad only, avoiding the iPad/iOS virtual keyboard trigger pattern.
+
+**Hard stops / deferred scope:**
+
+- Real PIN verification — unimplemented
+- Protected-action execution — unimplemented
+- `POSPage` wiring — unimplemented
+- Packet 2 — separate, **not authorized**
+- Backend/Security verifier (Cloud Function, Firestore lookup, stored/hashed PIN, security rules, Firebase/functions/rules/config) — separate Gemini authorization gate; hard stop
+- No checkout/cart/payment/inventory change
+- No `SharedNumpad`/`NumpadDialog`/`PaymentModal`/`ItemDiscountModal`/`useAuth` change
+- UI-10-D remains excluded
+- Printer/Thermal remains cancelled/deferred
+
 ## UI-10-C Status
 
 **CLOSED / PUSHED (PASS WITH NOTES)**
@@ -246,6 +278,8 @@ No implementation authorized. Requires Gemini explicit authorization.
 | UI-09 final closure | **CLOSED / PUSHED** | `a573a29` — docs + TS6133 hold-bill fix |
 | UI-09-C | **COMPLETED (PASS WITH NOTES)** | PaymentModal UX Hardening — `de2de43`; focus trap deferred |
 | UI-09-M | **CLOSED (PASS WITH NOTES)** | PaymentModal layout corrective — `9573abb` |
+| UI-11 Packet 1 | **CLOSED / PUSHED** | Manager Approval Modal Primitive (`ManagerPinModal`) — `ffa433c` |
+| UI-11 Packet 2 | **NOT STARTED** | Real PIN verification / `POSPage` wiring / backend-security verifier — requires separate Gemini authorization |
 | UI-10-C | **CLOSED / PUSHED** | Cart/Inventory Numpad Adapters (test-only hardening) — `8449e98` |
 | UI-10-B | **CLOSED / PUSHED** | PaymentModal SharedNumpad migration — `fac83d2` |
 | UI-10-D | **NOT STARTED** | Requires Gemini explicit authorization |
@@ -275,9 +309,9 @@ No implementation authorized. Requires Gemini explicit authorization.
 
 ## Next Decision Gate
 
-    UI_10_C_DOCS_RECONCILIATION
+    UI_11_PACKET_1_DOCS_RECONCILIATION
 
-1. UI-10-C closed/pushed at `8449e98`; docs reconciliation in separate pass
-2. Codex docs-only review → docs commit/push authorization
-3. UI-10-D only after Gemini explicit authorization
+1. UI-11 Packet 1 closed/pushed at `ffa433c`; docs reconciliation in separate pass
+2. Codex docs-only review → Gemini decision on whether this docs reconciliation should be committed
+3. UI-11 Packet 2 (real PIN verification, `POSPage` wiring, backend/security verifier), UI-10-D, or any subsequent phase only after separate Gemini explicit authorization
 4. Printer/Thermal not active; PaymentModal checkout write paths unchanged

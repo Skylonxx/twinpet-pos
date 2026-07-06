@@ -1,69 +1,67 @@
-# Latest Report — UI-10-C Cart/Inventory Numpad Adapters (Test-Only Hardening)
+# Latest Report — UI-11 Manager Approval Modal Primitive / Packet 1
 
 > Date: 2026-07-06
-> HEAD: `8449e98ebb34ea1eff14854aa3e71980c68cbfbf`
-> origin/main: `8449e98ebb34ea1eff14854aa3e71980c68cbfbf`
-> Status: **UI-10-C CLOSED / PUSHED**
+> HEAD: `ffa433ccdf8fb570632658ab93dac0b737dc7a11`
+> origin/main: `ffa433ccdf8fb570632658ab93dac0b737dc7a11`
+> Status: **UI-11 PACKET 1 CLOSED / PUSHED**
 
 ---
 
 ## Summary
 
-UI-10-C is **closed and pushed** at `8449e98 test(pos): harden numpad dialog keyboard contract`. This phase was test-only hardening, not a runtime migration.
+UI-11 Packet 1 is **closed and pushed** at `ffa433c feat(ui): add manager approval modal primitive`. This packet delivers an isolated, presentational Manager Approval Modal Primitive with zero production consumers — no wiring, no verifier, no backend.
 
 ## Scope Delivered
 
-- Modified exactly one file: `src/pages/POSPage.keyboard-contract.test.ts`
-- Added source-level contract hardening for `NumpadDialog` keyboard behavior
-- No runtime files changed
+- Created exactly 3 new files: `src/components/pos/ManagerPinModal.tsx`, `src/components/pos/ManagerPinModal.css`, `src/components/pos/ManagerPinModal.test.ts`
+- No tracked file modified
 
-**Untouched:** `SharedNumpad.tsx/css`, `SharedNumpad.contract.test.ts`, `NumpadDialog.tsx/css`, `ItemDiscountModal`, `POSPage.tsx`, `PaymentModal`, checkout/cart/Firebase/package/config/platform, printer/thermal.
+**Untouched:** `POSPage.tsx`, `SharedNumpad`, `NumpadDialog`, `PaymentModal`, `ItemDiscountModal`, `useAuth`/RBAC, checkout/cart/payment/inventory, Firebase/functions/rules/config, printer/thermal.
 
-## Architecture Decision — Route C + D
+## Architecture
 
-- **Route C:** leave `NumpadDialog` runtime unchanged; add test-only contract hardening
-- **Route D:** defer inventory-side numpad usage — no inventory numpad exists in inspected scope
+`ManagerPinModal` is a **Manager Approval Modal Primitive / Manager Action Confirmation Shell**:
 
-## Migration Blockers
+- Callback-driven via `onSubmitPin(pin)`, forwarding entered digits to a caller-owned verifier
+- Collects digits into a local, transient, masked buffer
+- Performs no PIN verification, holds no PIN source, executes no protected action
+- Is not a security boundary — does not authorize, authenticate, verify, or secure actions by itself
+- Is not wired into `POSPage`
 
-Why `NumpadDialog` was not migrated to `SharedNumpad` in this phase:
+## OS Virtual Keyboard Standard
 
-- `SharedNumpad` lacks a `grid-3x4-decimal` layout
-- `NumpadDialog` decimal layout requires a `. 0 ⌫` row
-- `NumpadDialog` uses the Tabler `ti-backspace` icon; `SharedNumpad` renders a literal `⌫` character
-- Fixing parity would require `SharedNumpad` primitive changes and risks regressing `PaymentModal` (the UI-10-B consumer)
+Preserves the zero-virtual-keyboard touch standard: no editable `<input>`/`<textarea>` anywhere in the PIN entry path. Entry is via non-editable masked dot display plus button keypad only, avoiding the iPad/iOS virtual keyboard trigger pattern.
+
+## Hard Stops / Deferred Scope
+
+- Real PIN verification — unimplemented
+- Protected-action execution — unimplemented
+- `POSPage` wiring — unimplemented
+- Packet 2 — separate, **not authorized**
+- Backend/Security verifier (Cloud Function, Firestore lookup, stored/hashed PIN, security rules, Firebase/functions/rules/config changes) — separate Gemini authorization gate; hard stop
+- No checkout/cart/payment/inventory change
+- No `SharedNumpad`/`NumpadDialog`/`PaymentModal`/`ItemDiscountModal`/`useAuth` change
+- UI-10-D remains excluded
+- Printer/Thermal remains cancelled/deferred
 
 ## Validation
 
 | Check | Result |
 |-------|--------|
-| Codex implementation review | PASS WITH NOTES |
+| Codex re-review (post build-fix) | PASS |
 | `npm run build` | PASS |
-| `POSPage.keyboard-contract.test.ts` + `SharedNumpad.contract.test.ts` combined | 187/187 |
-| POSPage keyboard contract | 168/168 |
+| `ManagerPinModal.test.ts` | 26/26 |
+| POSPage keyboard contract | 168/168 (unchanged) |
 | SharedNumpad contract | 19/19 (unchanged) |
 | Working tree after push | clean |
 | stash@{0} | untouched |
 
-## Boundaries
-
-- `SharedNumpad.tsx/css` untouched
-- `SharedNumpad.contract.test.ts` untouched
-- `NumpadDialog.tsx/css` untouched
-- `ItemDiscountModal` untouched
-- `POSPage.tsx` untouched
-- `PaymentModal` untouched
-- checkout/cart/Firebase/package/config untouched
-- Printer/Thermal not revived
-- stash@{0} untouched
-- UI-10-D not started
-
 ## Docs Reconciliation
 
-Separate docs-only pass (TWINPET-UI-10-C-DOCS-RECONCILIATION-001). Not part of pushed commit `8449e98`.
+Separate docs-only pass (TWINPET-UI-11-PACKET-1-DOCS-RECONCILIATION-CLAUDE-001). Not part of pushed commit `ffa433c`.
 
 ## Next Route
 
 1. Codex docs-only review
-2. Docs commit/push authorization
-3. UI-10-D only after Gemini explicit authorization
+2. Gemini decision on whether this docs reconciliation should be committed
+3. UI-11 Packet 2 (real PIN verification, `POSPage` wiring, backend/security verifier) only after separate Gemini explicit authorization

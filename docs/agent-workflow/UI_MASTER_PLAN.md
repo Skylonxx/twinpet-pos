@@ -1,11 +1,29 @@
 # Phase 7C POS UI Master Plan
 
-**Current HEAD:** `8449e98ebb34ea1eff14854aa3e71980c68cbfbf` (verified; UI-10-C pushed; docs reconciliation separate pass)
+**Current HEAD:** `ffa433ccdf8fb570632658ab93dac0b737dc7a11` (verified; UI-11 Packet 1 pushed; docs reconciliation separate pass)
 
 1. UI-01 through UI-09-M — [DONE]
 2. UI-10-A: SharedNumpad primitive - [DONE] — CLOSED / PUSHED at `bc76e1e` + docs `df5fd87`
 3. UI-10-B: PaymentModal SharedNumpad migration - [DONE] — CLOSED / PUSHED at `fac83d2` + docs `8bc2875` (PASS WITH NOTES)
-4. UI-10-C: Cart/Inventory Numpad Adapters (test-only hardening) - [DONE] — **CLOSED / PUSHED** at `8449e98` (PASS WITH NOTES)
+4. UI-10-C: Cart/Inventory Numpad Adapters (test-only hardening) - [DONE] — CLOSED / PUSHED at `8449e98` + docs `62be589` (PASS WITH NOTES)
+5. UI-11 Packet 1: Manager Approval Modal Primitive (`ManagerPinModal`) - [DONE] — **CLOSED / PUSHED** at `ffa433c` (PASS)
+
+---
+
+## UI-11 Packet 1 Gate (closed)
+
+- **Status:** CLOSED / PUSHED (PASS)
+- Implementation: `ffa433c feat(ui): add manager approval modal primitive`
+- Scope: isolated presentational Manager Approval Modal Primitive; source impact `ManagerPinModal.tsx/.css/.test.ts` only (all new files)
+- Architecture: callback-driven (`onSubmitPin(pin)`) forwarding digits to a caller-owned verifier; local transient masked buffer; not a security boundary; no PIN verification; no protected-action execution; not wired into `POSPage`
+- OS keyboard standard: no editable input/textarea in PIN entry path; non-editable masked dot display + button keypad only
+- Untouched: `POSPage.tsx`, `SharedNumpad`, `NumpadDialog`, `PaymentModal`, `ItemDiscountModal`, `useAuth`/RBAC, checkout/cart/payment/inventory, Firebase/functions/rules/config
+- Hard stops: real PIN verification, protected-action execution, `POSPage` wiring, Packet 2, backend/security verifier — all separate Gemini authorization gates
+- Tests: `ManagerPinModal.test.ts` 26/26; POSPage keyboard contract 168/168 (unchanged); SharedNumpad contract 19/19 (unchanged)
+
+## UI-11 Packet 2 (not started)
+
+Real PIN verification, `POSPage` wiring, backend/security verifier. Requires separate Gemini explicit authorization. Not automatically next after Packet 1.
 
 ---
 
@@ -29,7 +47,7 @@ No implementation authorized. Requires Gemini explicit authorization.
 
 ## Future Backlog (deferred)
 
-- Manager PIN Authorization Overlay — separate from UI-10 track; requires Tech Lead authorization
+- Manager PIN Authorization Overlay — Packet 1 primitive (`ManagerPinModal`) CLOSED / PUSHED at `ffa433c`; Packet 2 (real verification + `POSPage` wiring) separate from UI-10 track, requires Tech Lead authorization
 - Printer / Thermal Receipt / Print Polish — **cancelled/deferred** unless Owner revives with Gemini
 
 ---
@@ -64,3 +82,4 @@ PaymentModal: owns `activeMethod`, amounts, entry, confirm, routing, formatting,
 
 - `stash@{0}` must not be touched.
 - UI-10-D requires separate Gemini authorization.
+- UI-11 Packet 2 (real PIN verification, `POSPage` wiring, backend/security verifier) requires separate Gemini authorization; not automatically next after Packet 1.
