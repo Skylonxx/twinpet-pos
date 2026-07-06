@@ -1,37 +1,44 @@
 # Twinpet POS — Task Tracker
 
-> Last reconciled: 2026-07-03
-> HEAD: `62cb3d21f53aa01e255d9420f75fb10a1dc75c20`
-> origin/main: `62cb3d21f53aa01e255d9420f75fb10a1dc75c20`
+> Last reconciled: 2026-07-04
+> HEAD: `bc76e1ea20614ead114c7446aea4bf10b0f27deb`
+> origin/main: `bc76e1ea20614ead114c7446aea4bf10b0f27deb`
 
 ---
 
-## UI-09 PaymentModal — CLOSED through UI-09-M
+## UI-10-A — SharedNumpad Primitive
 
-**Status: CLOSED (PASS WITH NOTES)**
+**Status: CLOSED / PUSHED**
 
-### UI-09-C — PaymentModal UX Hardening
+- [x] Implementation pushed (`bc76e1e`) — `SharedNumpad.tsx`, `SharedNumpad.css`, `SharedNumpad.contract.test.ts`
+- [x] Codex implementation review — PASS WITH NOTES
+- [x] `npm run build` — PASS
+- [x] SharedNumpad contract tests — 19/19
+- [x] POSPage keyboard contract — 145/145
+- [ ] Docs reconciliation (this pass) — in progress
 
-- [x] Developer implementation complete (`de2de43`) — `src/components/PaymentModal.tsx`, `src/components/PaymentModal.css` only
-- [x] Codex review — PASS WITH NOTES
-- [ ] Focus trap — **deferred as technical debt**
+**Delivered:** stateless primitive; namespaced CSS; contract tests; no production import; no barrel export.
 
-### UI-09-M — PaymentModal layout corrective pass
+**Untouched:** PaymentModal, NumpadDialog, POSPage, checkout/payment/stock/Firebase.
 
-- [x] Developer implementation complete (`9573abb`) — `src/components/PaymentModal.tsx`, `src/components/PaymentModal.css` only
-- [x] Pushed to `origin/main` at `9573abbef6a50bfe78bde33cac2d466c71dc2fc5`
-- [x] Codex commit audit — PASS WITH NOTES
-- [x] Keyboard-contract tests — 145/145 passed
-- [x] Docs reconciliation committed and pushed (`62cb3d2`)
+**Architecture B lock:** primitive stays stateless; callers own adapters/state/routing/confirm.
 
-**UI-09 final closure:** complete on origin/main (implementation `9573abb` + docs `62cb3d2`).
+### UI-10-B — NOT STARTED
 
-**Untouched:** `POSPage.tsx`, checkout hooks, async checkout, cart utils, payment/checkout write paths, Firebase/functions/rules.
+Likely topic: PaymentModal keypad migration onto SharedNumpad.
 
-No further UI-09 implementation authorized.
+- No implementation authorized
+- Must preserve PaymentModal-owned state/routing/confirm/keyboard contract
+- Codex notes to carry forward: `classPrefix` `pay-keypad` regression coverage; do not weaken keyboard-contract tests; future inventory usage remains parent-owned
+
+### UI-09 — CLOSED
+
+Final closed on origin/main (`9573abb` + `62cb3d2` + `a573a29`).
 
 ### Next step
 
-1. Codex review of TS6133 build-debt micro-fix (separate from UI-09)
-2. Commit/push authorization for build-debt fix if approved
-3. Next blueprint planning (UI-10 not started)
+1. Codex docs-only review of this reconciliation pass
+2. Docs commit/push authorization
+3. UI-10-B read-only planning or implementation authorization only after Gemini confirms
+
+**Not active:** Printer/Thermal (cancelled/deferred).

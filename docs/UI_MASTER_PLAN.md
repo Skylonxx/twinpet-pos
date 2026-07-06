@@ -4,21 +4,22 @@
 
 | Field | Value |
 |-------|-------|
-| HEAD (verified) | `62cb3d21f53aa01e255d9420f75fb10a1dc75c20` |
-| origin/main | `62cb3d21f53aa01e255d9420f75fb10a1dc75c20` |
+| HEAD (verified) | `bc76e1ea20614ead114c7446aea4bf10b0f27deb` |
+| origin/main | `bc76e1ea20614ead114c7446aea4bf10b0f27deb` |
 | Ahead/behind | `0 / 0` |
-| Closure | UI-09 **conceptually final closed** on origin/main (`9573abb` + `62cb3d2` pushed); final cleanup packet uncommitted on top |
-| Working tree | 10-file final closure + build-debt packet (not staged, not committed) |
+| Closure | UI-10-A SharedNumpad primitive **CLOSED / PUSHED** at `bc76e1e`; UI-10-A docs reconciliation separate pass |
 
 ## Recently Completed / Committed UI Work
 
-All commits below are physically verified in `git log --oneline -n 40` at pushed baseline `62cb3d2` (`62cb3d21f53aa01e255d9420f75fb10a1dc75c20`).
+All commits below verified in `git log --oneline -n 40` at HEAD `bc76e1e`.
 
 ### POS Cashier UX & Cart
 
 | Hash | Description |
 |------|-------------|
-| `62cb3d2` | **UI-09 docs closure** — reconcile ui-09-m payment modal closure — PUSHED |
+| `bc76e1e` | **UI-10-A** — SharedNumpad primitive — CLOSED / PUSHED |
+| `a573a29` | **UI-09 final closure** — docs close ui-09 + hold-bill TS6133 fix — CLOSED / PUSHED |
+| `62cb3d2` | **UI-09 docs closure** — reconcile ui-09-m payment modal closure |
 | `9573abb` | **UI-09-M** — PaymentModal layout balance corrective — PUSHED (PASS WITH NOTES) |
 | `de2de43` | **UI-09-C** — PaymentModal UX Hardening — COMPLETED (PASS WITH NOTES) |
 | `f0c783c` | **UI-09-B closure docs** — committed |
@@ -122,6 +123,29 @@ See Context.md for the full Phase 7B/7C history including:
 
 **Scope note:** The older P1 triage item "Offline/Sync relocation to AppShell header" (`docs/reports/phase-7c-p1-ui-polish-backlog-triage.md`) is **not** UI-08. It remains a separate deferred backlog item.
 
+## UI-10-A Status
+
+**CLOSED / PUSHED (PASS WITH NOTES)**
+
+| Field | Value |
+|-------|-------|
+| Scope | Stateless SharedNumpad primitive |
+| Implementation | `bc76e1e feat(ui): add shared numpad primitive` |
+| Source impact | `SharedNumpad.tsx`, `SharedNumpad.css`, `SharedNumpad.contract.test.ts` |
+| Production usage | none — no import, no barrel export |
+| Codex review | PASS WITH NOTES |
+| `npm run build` | PASS |
+| Contract tests | 19/19 |
+| Keyboard contract | 145/145 |
+
+**Untouched:** PaymentModal, NumpadDialog, POSPage.
+
+**Architecture B:** stateless primitive + caller-side adapters. PaymentModal retains `activeMethod`, `amounts`, `entry`, `setMethodAmount`, `paidTotal`, `remaining`, credit gating, `canConfirm`, `handleConfirm`.
+
+## UI-10-B Status (not started)
+
+Likely: PaymentModal keypad migration onto SharedNumpad. No implementation authorized. Codex carry-forward: `pay-keypad` classPrefix regression; preserve keyboard-contract tests; inventory usage parent-owned.
+
 ## UI-09-M Status
 
 **CLOSED (PASS WITH NOTES)**
@@ -133,21 +157,22 @@ See Context.md for the full Phase 7B/7C history including:
 | Source impact | `src/components/PaymentModal.tsx`, `src/components/PaymentModal.css` only |
 | Codex commit audit | PASS WITH NOTES |
 | Keyboard contract test | 145/145 passed (at UI-09-M closure) |
-| Build | Known TS6133 unused `within` **fixed in uncommitted final cleanup packet**; `npm run build` now **PASS** |
+| Build | TS6133 unused `within` fixed in pushed cleanup commit `a573a29`; `npm run build` **PASS** |
 
 **Delivered:** summary sidebar capped 290px desktop; mobile summary full-width fix; ledger flush-right; receipt typography; active breakdown card; full-width confirm in sidebar; center panel/numpad absorbs freed width.
 
 **Untouched:** `POSPage.tsx`, checkout hooks, async checkout, cart utils, payment/checkout write paths, Firebase/functions/rules, keyboard/listener contract.
 
-## Final Closure + Build Debt Packet (uncommitted)
+## UI-09 Final Closure + Build Debt (pushed)
 
 | Field | Value |
 |-------|-------|
-| Pushed parent | `62cb3d2` on origin/main |
-| Packet | 9 tracker docs + TS6133 micro-fix (`within` import removed) |
+| Implementation | `a573a29 docs: close ui-09 and fix hold-bill build debt` |
+| Scope | 9 tracker docs + remove unused `within` in `POSPage.hold-bill-interaction.test.tsx` |
+| TS6133 | **fixed** — unused `within` import removed |
 | `npm run build` | **PASS** |
 | Focused tests | **148/148** (hold-bill interaction + keyboard-contract) |
-| Status | Uncommitted — awaiting Codex re-review and commit/push authorization |
+| Status | **CLOSED / PUSHED** on origin/main |
 
 ## UI-09-C Status
 
@@ -169,8 +194,12 @@ See Context.md for the full Phase 7B/7C history including:
 | UI-09-B | **CLOSED / PASSED UAT** | Checkout Button Visual Polish — `baca4fe` + Owner UAT |
 | UI-09-A | **CLOSED** | Read-only checkout boundary audit |
 | UI-08 | **CLOSED / PASSED UAT** | Action Buttons — `873997e` + Owner UAT |
+| UI-09 final closure | **CLOSED / PUSHED** | `a573a29` — docs + TS6133 hold-bill fix |
 | UI-09-C | **COMPLETED (PASS WITH NOTES)** | PaymentModal UX Hardening — `de2de43`; focus trap deferred |
 | UI-09-M | **CLOSED (PASS WITH NOTES)** | PaymentModal layout corrective — `9573abb` |
+| UI-10-A | **CLOSED / PUSHED** | SharedNumpad primitive — `bc76e1e` |
+| UI-10-B | **NOT STARTED** | PaymentModal keypad migration (likely); needs Gemini authorization |
+| Printer / Thermal | **CANCELLED/DEFERRED** | Not active unless Owner revives with Gemini |
 | P1 Offline/Sync relocation | DEFERRED | Separate from UI-08; was P1 triage UI-08 numbering |
 | Hardware scanner (iOS/iPad Safari) | DEFERRED | Native App / Capacitor wrapper phase |
 | Flowbite migration (tables + modals) | DEFERRED | Batches 2+ deferred; stash@{0} holds WIP |
@@ -195,9 +224,9 @@ See Context.md for the full Phase 7B/7C history including:
 
 ## Next Decision Gate
 
-    UI_09_FINAL_CLOSURE_PACKET_PENDING_COMMIT
+    UI_10_A_DOCS_RECONCILIATION
 
-1. UI-09 conceptually final closed on origin/main — implementation `9573abb`, docs `62cb3d2` (both pushed)
-2. Final cleanup packet (TS6133 fix + closure docs) is **uncommitted** — `npm run build` PASS, focused tests 148/148
-3. Awaiting Codex re-review, then commit/push authorization for the 10-file packet
-4. UI-10 not started; PaymentModal/checkout write paths remain hard red zones
+1. UI-10-A closed/pushed at `bc76e1e`; docs reconciliation in separate pass
+2. Codex docs-only review → docs commit/push authorization
+3. UI-10-B planning/implementation only after Gemini confirms
+4. Printer/Thermal not active; PaymentModal/checkout red zones unchanged

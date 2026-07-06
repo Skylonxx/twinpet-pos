@@ -1,55 +1,32 @@
 # Agent Workflow -- State Board
 
-This file is the single source of truth for the current state of the multi-agent handoff workflow.
-Updated by whichever agent or human currently owns the task.
-
----
-
 ## Master Plan
 
-**`docs/agent-workflow/UI_MASTER_PLAN.md`** and **`docs/UI_MASTER_PLAN.md`** track Phase 7C POS UI scope. UI-01 through UI-09-M are **DONE**. UI-09 PaymentModal corrective pass is **FINAL CLOSED** on origin/main.
+UI-01 through **UI-10-A** are **DONE**. UI-10-A SharedNumpad primitive **CLOSED / PUSHED** at `bc76e1e`. UI-10-B **NOT STARTED**.
 
 ## Repository Baseline
 
 | Field | Value |
 |-------|-------|
-| HEAD (verified) | `62cb3d21f53aa01e255d9420f75fb10a1dc75c20` |
-| origin/main | `62cb3d21f53aa01e255d9420f75fb10a1dc75c20` |
-| Branch | `main` |
+| HEAD | `bc76e1ea20614ead114c7446aea4bf10b0f27deb` |
+| origin/main | `bc76e1ea20614ead114c7446aea4bf10b0f27deb` |
 
 ## Current Phase
 
-**UI-09 final closure complete.** Separate TS6133 build-debt micro-fix in progress (not part of UI-09).
+UI-10-A docs reconciliation — docs-only pass after implementation pushed.
 
 ## Latest Verdict
 
-**UI-09 FINAL CLOSED (PASS WITH NOTES)** — implementation `9573abb`, docs `62cb3d2`, both pushed. Focus trap remains deferred technical debt.
+**UI-10-A CLOSED / PUSHED (PASS WITH NOTES)** — SharedNumpad primitive at `bc76e1e`. Build PASS; contract tests 19/19; keyboard contract 145/145.
 
 ## Mode
 
-Narrow build-debt cleanup only. No UI-09 or UI-10 implementation authorized.
-
----
-
-## Staging / Commit status
-
-- UI-09-C: **committed** at `de2de43`
-- UI-09-M implementation: **committed and pushed** at `9573abb`
-- UI-09-M docs closure: **committed and pushed** at `62cb3d2`
-- TS6133 micro-fix: **uncommitted** (this packet)
-
----
+Docs-only. No UI-10-B implementation authorized.
 
 ## Next Action
 
-See `NEXT_ACTION.md`. Codex review of build-debt fix → commit authorization if approved.
-
-## Stop Condition
-
-PaymentModal and payment/checkout write paths remain hard red zones. UI-10 not started.
-
----
+Codex docs-only review → docs commit/push authorization → UI-10-B authorization after Gemini confirms.
 
 ## Stash
 
-`stash@{0}` — pre-existing unrelated WIP stash. **Do not touch.**
+`stash@{0}` — do not touch.

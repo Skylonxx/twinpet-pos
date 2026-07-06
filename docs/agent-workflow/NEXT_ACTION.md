@@ -2,18 +2,21 @@
 
 ## Current State
 
-- HEAD (verified): `62cb3d21f53aa01e255d9420f75fb10a1dc75c20`
-- origin/main: `62cb3d21f53aa01e255d9420f75fb10a1dc75c20`
-- **UI-09 PaymentModal corrective pass** — **FINAL CLOSED** (`9573abb` + docs `62cb3d2`, both pushed)
-- UI-01 through UI-09-M are **DONE**
+- HEAD: `bc76e1ea20614ead114c7446aea4bf10b0f27deb`
+- **UI-10-A SharedNumpad primitive** — **CLOSED / PUSHED** (`bc76e1e`)
+- **UI-10-B** — **NOT STARTED** (likely PaymentModal keypad migration)
+- UI-09 — final closed
 
 ## What Happens Next
 
-1. Codex review of TS6133 build-debt micro-fix (separate from UI-09)
-2. Commit/push authorization for build-debt fix if approved
-3. Next blueprint planning — **UI-10 not started**
+1. Codex docs-only review of UI-10-A reconciliation
+2. Docs commit/push authorization
+3. UI-10-B read-only planning or implementation authorization only after Gemini confirms
 
-## Important Reminders
+**Not active:** Printer/Thermal (cancelled/deferred).
 
-- `stash@{0}` is pre-existing unrelated WIP — do not touch.
-- Workflow docs win over chat messages.
+## Reminders
+
+- `stash@{0}` — do not touch
+- PaymentModal/checkout red zones unchanged
+- UI-10-B must preserve PaymentModal-owned state/confirm/keyboard contract

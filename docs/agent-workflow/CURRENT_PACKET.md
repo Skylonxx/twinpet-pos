@@ -2,22 +2,18 @@
 
 ## Phase
 
-**UI-09 final closure complete.** Active packet: TS6133 build-debt micro-fix (TWINPET-UI-09-FINAL-CLOSURE-PLUS-BUILD-DEBT-001).
+**Docs-only — UI-10-A docs reconciliation (TWINPET-UI-10-A-DOCS-RECONCILIATION-001).**
 
-## UI-09 closure (complete)
+## Last closed packet
 
-- Implementation: `9573abb` — pushed
-- Docs closure: `62cb3d2` — pushed
-- origin/main: `62cb3d21f53aa01e255d9420f75fb10a1dc75c20`
+**UI-10-A SharedNumpad primitive** — CLOSED / PUSHED at `bc76e1ea20614ead114c7446aea4bf10b0f27deb`.
 
-## Active packet
-
-Remove unused `within` import in `src/pages/POSPage.hold-bill-interaction.test.tsx` (TS6133). No test behavior change.
+Stateless primitive + CSS + contract tests. No production usage. PaymentModal, NumpadDialog, POSPage untouched.
 
 ## Next packet (not authorized)
 
-UI-10 or any PaymentModal/checkout changes require separate authorization.
+**UI-10-B** — likely PaymentModal keypad migration onto SharedNumpad. Requires Gemini authorization.
 
 ## Current HEAD
 
-`62cb3d21f53aa01e255d9420f75fb10a1dc75c20` (verified)
+`bc76e1ea20614ead114c7446aea4bf10b0f27deb` (verified)
