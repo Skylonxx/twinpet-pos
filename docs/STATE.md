@@ -6,14 +6,14 @@
 |-------|-------|
 | Repo root | `C:/Users/Narachat/twinpet-pos` |
 | Branch | `main` |
-| HEAD | `bc76e1ea20614ead114c7446aea4bf10b0f27deb` |
-| origin/main | `bc76e1ea20614ead114c7446aea4bf10b0f27deb` |
+| HEAD | `fac83d2898606f101b966d8c51e1cab3f133a801` |
+| origin/main | `fac83d2898606f101b966d8c51e1cab3f133a801` |
 | Ahead/behind | `0 / 0` |
 
 ## Current Phase
 
-    TWINPET-POS-UI-10-A-DOCS-RECONCILIATION
-    UI-10-A SharedNumpad primitive CLOSED / PUSHED — docs reconciliation in progress
+    TWINPET-POS-UI-10-B-DOCS-RECONCILIATION
+    UI-10-B PaymentModal SharedNumpad Migration CLOSED / PUSHED — docs reconciliation in progress
 
 ## Working Tree
 
@@ -26,55 +26,55 @@
 
 **Do NOT touch stash@{0}.**
 
+## UI-10-B Closure
+
+| Field | Value |
+|-------|-------|
+| Scope | PaymentModal keypad migration to SharedNumpad |
+| Implementation | `fac83d2 feat(pos): migrate payment keypad to shared numpad` |
+| Source impact | `PaymentModal.tsx`, `SharedNumpad.contract.test.ts`, `POSPage.keyboard-contract.test.ts` |
+| Untouched | `PaymentModal.css`, `SharedNumpad.tsx`, `SharedNumpad.css`, `POSPage.tsx` |
+| Codex blueprint | PASS WITH NOTES |
+| Codex implementation | PASS WITH NOTES |
+| `npm run build` | PASS |
+| Contract + keyboard tests | 178/178 combined pre-commit |
+| Status | **CLOSED / PUSHED** |
+
+PaymentModal retains all payment state, routing, confirm, formatting, and keyboard contract ownership.
+
 ## UI-10-A Closure
 
 | Field | Value |
 |-------|-------|
-| Scope | SharedNumpad stateless primitive |
-| Implementation | `bc76e1e feat(ui): add shared numpad primitive` |
-| Source impact | `SharedNumpad.tsx`, `SharedNumpad.css`, `SharedNumpad.contract.test.ts` |
-| Production usage | none — no import, no barrel export |
-| Codex review | PASS WITH NOTES |
-| `npm run build` | PASS |
-| SharedNumpad contract tests | 19/19 |
-| POSPage keyboard contract | 145/145 |
-| Status | **CLOSED / PUSHED** |
+| Primitive | `bc76e1e` — CLOSED / PUSHED |
+| Docs | `df5fd87` — CLOSED / PUSHED |
 
-**Untouched:** PaymentModal, NumpadDialog, POSPage, checkout/payment/stock/Firebase.
+## UI-10-C Status
 
-## UI-10-B Status
+**NOT STARTED** — no implementation authorized.
 
-- Topic (likely): PaymentModal keypad migration onto SharedNumpad
-- Status: **NOT STARTED** — no implementation authorized
-- Must preserve PaymentModal-owned: `activeMethod`, `amounts`, `entry`, `setMethodAmount`, `paidTotal`, `remaining`, credit gating, `canConfirm`, `handleConfirm`
+## Cancelled / Deferred
 
-## Architecture Lock
-
-Architecture B approved: stateless primitive + caller-side adapters. SharedNumpad must not own value state, parse/format, confirm/submit, portal/modal, keyboard/global listeners, or business logic.
-
-## Cancelled / Deferred (not active)
-
-- Printer / Thermal Receipt / Print Polish — cancelled/deferred unless Owner explicitly revives with Gemini
+Printer / Thermal Receipt / Print Polish — cancelled/deferred; legacy code untouched.
 
 ## Recent Completed Work
 
 | Hash | Message |
 |------|---------|
-| `bc76e1e` | feat(ui): add shared numpad primitive — **UI-10-A CLOSED / PUSHED** |
-| `a573a29` | docs: close ui-09 and fix hold-bill build debt |
-| `62cb3d2` | docs: reconcile ui-09-m payment modal closure |
-| `9573abb` | fix(pos): refine payment modal layout balance |
+| `fac83d2` | feat(pos): migrate payment keypad to shared numpad — **UI-10-B CLOSED / PUSHED** |
+| `df5fd87` | docs: reconcile ui-10-a shared numpad closure |
+| `bc76e1e` | feat(ui): add shared numpad primitive — **UI-10-A** |
 
 ## Next Recommended Block
 
     READY_FOR_CODEX_DOCS_REVIEW
 
-1. Codex docs-only review of UI-10-A reconciliation
+1. Codex docs-only review of UI-10-B reconciliation
 2. Docs commit/push authorization
-3. UI-10-B planning/implementation authorization only after Gemini confirms
+3. UI-10-C only after Gemini explicit authorization
 
 ## Hard Boundaries
 
-- UI-10-B not started without authorization
-- PaymentModal/checkout write paths remain red zones for unauthorized changes
+- UI-10-C not started
 - No commit/push in this docs-only pass
+- PaymentModal checkout write paths unchanged

@@ -2,30 +2,30 @@
 
 ## Master Plan
 
-UI-01 through **UI-10-A** are **DONE**. UI-10-A SharedNumpad primitive **CLOSED / PUSHED** at `bc76e1e`. UI-10-B **NOT STARTED**.
+UI-01 through **UI-10-B** are **DONE**. UI-10-B PaymentModal SharedNumpad migration **CLOSED / PUSHED** at `fac83d2`. UI-10-C **NOT STARTED**.
 
 ## Repository Baseline
 
 | Field | Value |
 |-------|-------|
-| HEAD | `bc76e1ea20614ead114c7446aea4bf10b0f27deb` |
-| origin/main | `bc76e1ea20614ead114c7446aea4bf10b0f27deb` |
+| HEAD | `fac83d2898606f101b966d8c51e1cab3f133a801` |
+| origin/main | `fac83d2898606f101b966d8c51e1cab3f133a801` |
 
 ## Current Phase
 
-UI-10-A docs reconciliation — docs-only pass after implementation pushed.
+UI-10-B docs reconciliation — docs-only pass after implementation pushed.
 
 ## Latest Verdict
 
-**UI-10-A CLOSED / PUSHED (PASS WITH NOTES)** — SharedNumpad primitive at `bc76e1e`. Build PASS; contract tests 19/19; keyboard contract 145/145.
+**UI-10-B CLOSED / PUSHED (PASS WITH NOTES)** — `fac83d2`. Build PASS; 178/178 combined pre-commit tests.
 
 ## Mode
 
-Docs-only. No UI-10-B implementation authorized.
+Docs-only. No UI-10-C implementation authorized.
 
 ## Next Action
 
-Codex docs-only review → docs commit/push authorization → UI-10-B authorization after Gemini confirms.
+Codex docs-only review → docs commit/push authorization → UI-10-C only after Gemini explicit authorization.
 
 ## Stash
 

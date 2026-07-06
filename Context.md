@@ -1,57 +1,68 @@
 # Twinpet POS — Project Context
 
-> Last reconciled: 2026-07-04
-> HEAD: `bc76e1ea20614ead114c7446aea4bf10b0f27deb`
-> origin/main: `bc76e1ea20614ead114c7446aea4bf10b0f27deb`
+> Last reconciled: 2026-07-06
+> HEAD: `fac83d2898606f101b966d8c51e1cab3f133a801`
+> origin/main: `fac83d2898606f101b966d8c51e1cab3f133a801`
 
 ---
 
 ## Current Phase
 
-**UI-10-A — SharedNumpad Primitive: CLOSED / PUSHED**
+**UI-10-B — PaymentModal SharedNumpad Migration: CLOSED / PUSHED**
 
 Manual workflow remains active. `agentchattr` was not used as the executor for this phase.
 
-### UI-10-A pushed commit
+### UI-10-B pushed commit
 
 | Hash | Message |
 |------|---------|
-| `bc76e1e` | feat(ui): add shared numpad primitive |
+| `fac83d2` | feat(pos): migrate payment keypad to shared numpad |
 
-### UI-10-A scope
+### UI-10-B scope
 
-- Created stateless `SharedNumpad` primitive (`src/components/common/SharedNumpad.tsx`)
-- Created namespaced `SharedNumpad.css`
-- Created contract tests (`SharedNumpad.contract.test.ts`)
-- Component is **unused by production surfaces** — no production import, no barrel export
-- No PaymentModal migration, no NumpadDialog migration, no POSPage changes
+- Migrated PaymentModal keypad rendering to `SharedNumpad`
+- `SharedNumpad` props: `layout="grid-4x5-payment"`, `classPrefix="pay-keypad"`, `onKey={handleNumpad}`, `disabled={!entryEnabled}`, `accessories={keypadAccessories}`
+- PaymentModal remains owner of payment state and logic
+- Updated `SharedNumpad.contract.test.ts` importer contract
+- Updated `POSPage.keyboard-contract.test.ts` source assertions
 
-**Untouched:** PaymentModal, NumpadDialog, POSPage, checkout/payment/stock/Firebase paths.
+**Modified:** `PaymentModal.tsx`, `SharedNumpad.contract.test.ts`, `POSPage.keyboard-contract.test.ts`
 
-### Architecture lock (approved for planning)
+**Untouched:** `PaymentModal.css`, `SharedNumpad.tsx`, `SharedNumpad.css`, `POSPage.tsx`, checkout/cart/Firebase paths.
 
-**Architecture B:** stateless primitive + caller-side adapters.
+### Architecture lock (unchanged)
 
-`SharedNumpad` must remain: no value state, no parse/format, no confirm/submit ownership, no portal/modal ownership, no keyboard/global listeners, no payment/checkout/stock/Firebase/business logic.
+`SharedNumpad` remains stateless/presentational — no payment state, parse/format, confirm/submit, keyboard/global listeners, or checkout/cart/Firebase logic.
 
-`PaymentModal` must retain ownership of: `activeMethod`, `amounts`, `entry`, `setMethodAmount`, `paidTotal`, `remaining`, credit gating, `canConfirm`, `handleConfirm`.
+`PaymentModal` retains: `activeMethod`, `amounts`, `entry`, `setMethodAmount`, `paidTotal`, `remaining`/`change`, credit gating/`entryEnabled`, `canConfirm`, `handleConfirm`, double-submit guard, confirm button, `paymentSource`/`onConfirm` routing, formatting/parsing, method routing, `addShortcut`, `applyRemaining`.
 
-### Validation (UI-10-A)
+### Accepted UI-10-B deltas
 
+- Clear `C` aria-label parity delta — accepted
+- Native tab/accessory DOM-order delta — accepted if observed
+- Exact aria parity, if desired later, must be a separate SharedNumpad primitive packet — not an active blocker
+
+### Validation (UI-10-B)
+
+- Codex blueprint review: PASS WITH NOTES
 - Codex implementation review: PASS WITH NOTES
 - `npm run build`: PASS
-- SharedNumpad contract tests: 19/19
-- POSPage keyboard contract: 145/145
+- SharedNumpad contract tests: PASS
+- POSPage keyboard contract (implementation review): 159/159
+- Final combined pre-commit tests: 178/178
 - Working tree clean after push; staged files clean; stash untouched
 
-### Prior phase (closed)
+### Prior phases (closed)
 
-**UI-09 PaymentModal** — final closed through UI-09-M + docs (`9573abb`, `62cb3d2`, `a573a29`).
+| Phase | Commit | Status |
+|-------|--------|--------|
+| UI-10-A primitive | `bc76e1e` + docs `df5fd87` | CLOSED / PUSHED |
+| UI-09 PaymentModal | `9573abb` + docs chain | CLOSED |
 
 ### Deferred / cancelled (not active)
 
-- **Printer / Thermal Receipt / Print Polish** — cancelled/deferred; not active scope unless Owner explicitly revives with Gemini
-- **UI-10-B** — PaymentModal keypad migration onto SharedNumpad — **NOT STARTED**, no implementation authorized
+- **Printer / Thermal Receipt / Print Polish** — cancelled/deferred; legacy thermal/print code untouched
+- **UI-10-C** — NOT STARTED; no implementation authorized
 
 ### Known technical debt (unchanged)
 

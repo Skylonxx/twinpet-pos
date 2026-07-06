@@ -4,21 +4,22 @@
 
 | Field | Value |
 |-------|-------|
-| HEAD (verified) | `bc76e1ea20614ead114c7446aea4bf10b0f27deb` |
-| origin/main | `bc76e1ea20614ead114c7446aea4bf10b0f27deb` |
+| HEAD (verified) | `fac83d2898606f101b966d8c51e1cab3f133a801` |
+| origin/main | `fac83d2898606f101b966d8c51e1cab3f133a801` |
 | Ahead/behind | `0 / 0` |
-| Closure | UI-10-A SharedNumpad primitive **CLOSED / PUSHED** at `bc76e1e`; UI-10-A docs reconciliation separate pass |
+| Closure | UI-10-B PaymentModal SharedNumpad migration **CLOSED / PUSHED** at `fac83d2`; UI-10-B docs reconciliation separate pass |
 
 ## Recently Completed / Committed UI Work
 
-All commits below verified in `git log --oneline -n 40` at HEAD `bc76e1e`.
+All commits below verified in `git log --oneline -n 40` at HEAD `fac83d2`.
 
 ### POS Cashier UX & Cart
 
 | Hash | Description |
 |------|-------------|
+| `fac83d2` | **UI-10-B** — PaymentModal SharedNumpad migration — CLOSED / PUSHED |
+| `df5fd87` | **UI-10-A docs closure** — reconcile ui-10-a shared numpad closure |
 | `bc76e1e` | **UI-10-A** — SharedNumpad primitive — CLOSED / PUSHED |
-| `a573a29` | **UI-09 final closure** — docs close ui-09 + hold-bill TS6133 fix — CLOSED / PUSHED |
 | `62cb3d2` | **UI-09 docs closure** — reconcile ui-09-m payment modal closure |
 | `9573abb` | **UI-09-M** — PaymentModal layout balance corrective — PUSHED (PASS WITH NOTES) |
 | `de2de43` | **UI-09-C** — PaymentModal UX Hardening — COMPLETED (PASS WITH NOTES) |
@@ -123,6 +124,26 @@ See Context.md for the full Phase 7B/7C history including:
 
 **Scope note:** The older P1 triage item "Offline/Sync relocation to AppShell header" (`docs/reports/phase-7c-p1-ui-polish-backlog-triage.md`) is **not** UI-08. It remains a separate deferred backlog item.
 
+## UI-10-B Status
+
+**CLOSED / PUSHED (PASS WITH NOTES)**
+
+| Field | Value |
+|-------|-------|
+| Scope | PaymentModal keypad migration to SharedNumpad |
+| Implementation | `fac83d2 feat(pos): migrate payment keypad to shared numpad` |
+| SharedNumpad usage | `layout="grid-4x5-payment"`, `classPrefix="pay-keypad"`, `onKey={handleNumpad}`, `disabled={!entryEnabled}`, `accessories={keypadAccessories}` |
+| Source impact | `PaymentModal.tsx`, `SharedNumpad.contract.test.ts`, `POSPage.keyboard-contract.test.ts` |
+| Untouched | `PaymentModal.css`, `SharedNumpad.tsx`, `SharedNumpad.css`, `POSPage.tsx` |
+| Codex blueprint | PASS WITH NOTES |
+| Codex implementation | PASS WITH NOTES |
+| `npm run build` | PASS |
+| Tests | 178/178 combined pre-commit; keyboard contract 159/159 at impl review |
+
+**PaymentModal retains:** `activeMethod`, `amounts`, `entry`, `setMethodAmount`, `paidTotal`, `remaining`/`change`, credit gating/`entryEnabled`, `canConfirm`, `handleConfirm`, double-submit guard, confirm button, `paymentSource`/`onConfirm`, formatting/parsing, method routing, `addShortcut`, `applyRemaining`.
+
+**Accepted deltas:** clear `C` aria-label parity; tab/accessory DOM-order if observed — not active blockers.
+
 ## UI-10-A Status
 
 **CLOSED / PUSHED (PASS WITH NOTES)**
@@ -132,19 +153,19 @@ See Context.md for the full Phase 7B/7C history including:
 | Scope | Stateless SharedNumpad primitive |
 | Implementation | `bc76e1e feat(ui): add shared numpad primitive` |
 | Source impact | `SharedNumpad.tsx`, `SharedNumpad.css`, `SharedNumpad.contract.test.ts` |
-| Production usage | none — no import, no barrel export |
+| Production usage | first production use in PaymentModal (`fac83d2`) |
 | Codex review | PASS WITH NOTES |
 | `npm run build` | PASS |
 | Contract tests | 19/19 |
 | Keyboard contract | 145/145 |
 
-**Untouched:** PaymentModal, NumpadDialog, POSPage.
+**Untouched at UI-10-A:** NumpadDialog, POSPage (primitive phase). PaymentModal adopted SharedNumpad in UI-10-B (`fac83d2`).
 
 **Architecture B:** stateless primitive + caller-side adapters. PaymentModal retains `activeMethod`, `amounts`, `entry`, `setMethodAmount`, `paidTotal`, `remaining`, credit gating, `canConfirm`, `handleConfirm`.
 
-## UI-10-B Status (not started)
+## UI-10-C Status (not started)
 
-Likely: PaymentModal keypad migration onto SharedNumpad. No implementation authorized. Codex carry-forward: `pay-keypad` classPrefix regression; preserve keyboard-contract tests; inventory usage parent-owned.
+No implementation authorized. Requires Gemini explicit authorization.
 
 ## UI-09-M Status
 
@@ -197,8 +218,9 @@ Likely: PaymentModal keypad migration onto SharedNumpad. No implementation autho
 | UI-09 final closure | **CLOSED / PUSHED** | `a573a29` — docs + TS6133 hold-bill fix |
 | UI-09-C | **COMPLETED (PASS WITH NOTES)** | PaymentModal UX Hardening — `de2de43`; focus trap deferred |
 | UI-09-M | **CLOSED (PASS WITH NOTES)** | PaymentModal layout corrective — `9573abb` |
-| UI-10-A | **CLOSED / PUSHED** | SharedNumpad primitive — `bc76e1e` |
-| UI-10-B | **NOT STARTED** | PaymentModal keypad migration (likely); needs Gemini authorization |
+| UI-10-B | **CLOSED / PUSHED** | PaymentModal SharedNumpad migration — `fac83d2` |
+| UI-10-C | **NOT STARTED** | Requires Gemini explicit authorization |
+| UI-10-A | **CLOSED / PUSHED** | SharedNumpad primitive — `bc76e1e` + docs `df5fd87` |
 | Printer / Thermal | **CANCELLED/DEFERRED** | Not active unless Owner revives with Gemini |
 | P1 Offline/Sync relocation | DEFERRED | Separate from UI-08; was P1 triage UI-08 numbering |
 | Hardware scanner (iOS/iPad Safari) | DEFERRED | Native App / Capacitor wrapper phase |
@@ -224,9 +246,9 @@ Likely: PaymentModal keypad migration onto SharedNumpad. No implementation autho
 
 ## Next Decision Gate
 
-    UI_10_A_DOCS_RECONCILIATION
+    UI_10_B_DOCS_RECONCILIATION
 
-1. UI-10-A closed/pushed at `bc76e1e`; docs reconciliation in separate pass
+1. UI-10-B closed/pushed at `fac83d2`; docs reconciliation in separate pass
 2. Codex docs-only review → docs commit/push authorization
-3. UI-10-B planning/implementation only after Gemini confirms
-4. Printer/Thermal not active; PaymentModal/checkout red zones unchanged
+3. UI-10-C only after Gemini explicit authorization
+4. Printer/Thermal not active; PaymentModal checkout write paths unchanged
