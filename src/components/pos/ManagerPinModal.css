@@ -1,0 +1,220 @@
+/* UI-11 · Manager Approval Modal Primitive styles.
+   Namespaced `mpin-*` only. Imported EXCLUSIVELY from ManagerPinModal.tsx so it
+   cannot collide with other component CSS bundles (no pay-/npd-/snp-/pos-idp-/dc-
+   reuse, no global resets, no unrelated selectors). */
+
+.mpin-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(26, 26, 46, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 680;
+  padding: 16px;
+}
+
+.mpin-dialog {
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 16px 48px rgba(38, 33, 92, 0.2);
+  width: 100%;
+  max-width: 340px;
+  padding: 20px;
+  font-family: inherit;
+  outline: none;
+}
+
+.mpin-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.mpin-title {
+  margin: 0;
+  font-size: 17px;
+  font-family: 'Prompt', sans-serif;
+  font-weight: 600;
+  color: var(--text-primary, #1a1a2e);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mpin-close {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-muted, #9ca3af);
+  cursor: pointer;
+  border-radius: 10px;
+  font-size: 18px;
+  transition: background 0.13s, color 0.13s;
+}
+
+.mpin-close:hover:not(:disabled) {
+  background: var(--g100, #ededf5);
+  color: var(--text-primary, #111827);
+}
+
+.mpin-close:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.mpin-desc {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--text-secondary, #6b7280);
+  line-height: 1.4;
+}
+
+.mpin-session {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--text-secondary, #6b7280);
+}
+
+.mpin-session i {
+  color: var(--p600, #534ab7);
+}
+
+/* Non-editable masked display: a row of dots. No text input element. */
+.mpin-display {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  min-height: 52px;
+  border: 0.5px solid var(--g200, #d3d1c7);
+  border-radius: 10px;
+  background: var(--g50, #f8f8fc);
+  margin-bottom: 10px;
+  padding: 0 12px;
+}
+
+.mpin-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--p400, #8279d3);
+  background: transparent;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.mpin-dot--filled {
+  background: var(--p600, #534ab7);
+  border-color: var(--p600, #534ab7);
+}
+
+.mpin-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--danger-bg, #fcebeb);
+  color: var(--danger, #a32d2d);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.mpin-keypad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.mpin-key {
+  min-height: 56px;
+  border-radius: 10px;
+  border: 0.5px solid var(--g200, #d3d1c7);
+  background: #fff;
+  font-family: 'Prompt', sans-serif;
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--text-primary, #1a1a2e);
+  cursor: pointer;
+  touch-action: manipulation;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s;
+}
+
+.mpin-key:hover:not(:disabled) {
+  background: var(--g50, #f8f8fc);
+}
+
+.mpin-key:active:not(:disabled) {
+  background: var(--g100, #ededf5);
+}
+
+.mpin-key:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.mpin-key--action {
+  font-size: 15px;
+  color: var(--text-secondary, #6b7280);
+}
+
+.mpin-key--action .ti {
+  font-size: 20px;
+}
+
+.mpin-footer {
+  display: flex;
+  gap: 10px;
+}
+
+.mpin-btn {
+  flex: 1;
+  min-height: 52px;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background 0.13s, opacity 0.13s;
+}
+
+.mpin-btn--cancel {
+  border: 0.5px solid var(--border-md, rgba(0, 0, 0, 0.13));
+  background: #fff;
+  color: var(--text-primary, #1a1a2e);
+}
+
+.mpin-btn--cancel:hover:not(:disabled) {
+  background: var(--g50, #f8f8fc);
+}
+
+.mpin-btn--submit {
+  border: none;
+  background: var(--p600, #534ab7);
+  color: #fff;
+}
+
+.mpin-btn--submit:hover:not(:disabled) {
+  background: var(--p800, #3c3489);
+}
+
+.mpin-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
