@@ -7,6 +7,8 @@ import { allocateDevReceiptNumber } from '../lib/pos/billId';
 import type { PaymentSplit } from '../lib/pos/types';
 import type { PaymentMethod } from '../lib/types';
 import { toast } from './ui/use-toast';
+import SharedNumpad from './common/SharedNumpad';
+import type { NumpadAccessory, NumpadKey } from './common/SharedNumpad';
 import './PaymentModal.css';
 
 const ALL_METHODS: PaymentMethod[] = ['cash', 'qr', 'kbank', 'card', 'credit'];
@@ -25,19 +27,10 @@ const METHOD_META: Record<
 // Amount shortcut buttons occupying keypad column 4. Interpreted as generic
 // active-method amount shortcuts (not physical-cash-only), per UI-09-H.
 const BANKNOTES = [1000, 500, 100, 50, 20] as const;
-type NumpadKey = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '.' | 'C' | '⌫';
 
-type KeypadCell = {
-  id: string;
-  label: string;
-  row: number;
-  col: number;
-  colSpan?: number;
-  kind: 'digit' | 'action' | 'banknote' | 'fill';
-  ariaLabel?: string;
-  disabled?: boolean;
-  onClick: () => void;
-};
+// The numeric key union (0-9, ".", "C", "⌫") is now owned by the SharedNumpad
+// primitive (UI-10-B); PaymentModal consumes its exported NumpadKey type so the
+// two can never drift.
 
 function emptyAmounts(): Record<PaymentMethod, number> {
   return { cash: 0, qr: 0, kbank: 0, card: 0, credit: 0 };
@@ -319,63 +312,35 @@ export default function PaymentModal({
     [entryEnabled, activeMethod, setMethodAmount],
   );
 
-  const keypadCells: KeypadCell[] = useMemo(() => {
-    const digitsAndActions: KeypadCell[] = [
-      { id: '1', label: '1', row: 1, col: 1, kind: 'digit', disabled: !entryEnabled, onClick: () => handleNumpad('1') },
-      { id: '2', label: '2', row: 1, col: 2, kind: 'digit', disabled: !entryEnabled, onClick: () => handleNumpad('2') },
-      { id: '3', label: '3', row: 1, col: 3, kind: 'digit', disabled: !entryEnabled, onClick: () => handleNumpad('3') },
-      { id: '4', label: '4', row: 2, col: 1, kind: 'digit', disabled: !entryEnabled, onClick: () => handleNumpad('4') },
-      { id: '5', label: '5', row: 2, col: 2, kind: 'digit', disabled: !entryEnabled, onClick: () => handleNumpad('5') },
-      { id: '6', label: '6', row: 2, col: 3, kind: 'digit', disabled: !entryEnabled, onClick: () => handleNumpad('6') },
-      { id: '7', label: '7', row: 3, col: 1, kind: 'digit', disabled: !entryEnabled, onClick: () => handleNumpad('7') },
-      { id: '8', label: '8', row: 3, col: 2, kind: 'digit', disabled: !entryEnabled, onClick: () => handleNumpad('8') },
-      { id: '9', label: '9', row: 3, col: 3, kind: 'digit', disabled: !entryEnabled, onClick: () => handleNumpad('9') },
-      { id: 'dot', label: '.', row: 4, col: 1, kind: 'digit', disabled: !entryEnabled, onClick: () => handleNumpad('.') },
-      { id: '0', label: '0', row: 4, col: 2, kind: 'digit', disabled: !entryEnabled, onClick: () => handleNumpad('0') },
-      {
-        id: 'backspace',
-        label: '⌫',
-        row: 4,
-        col: 3,
-        kind: 'action',
-        ariaLabel: 'ลบตัวเลขล่าสุด',
-        disabled: !entryEnabled,
-        onClick: () => handleNumpad('⌫'),
-      },
-      {
-        id: 'fill-remaining',
-        label: remaining > 0 ? `ใส่ยอดที่เหลือ (฿${formatMoney(remaining)})` : 'ใส่ยอดที่เหลือ',
-        row: 5,
-        col: 1,
-        colSpan: 2,
-        kind: 'fill',
-        disabled: remaining <= 0 || !entryEnabled,
-        ariaLabel: 'ใส่ยอดที่เหลือทั้งหมด',
-        onClick: () => applyRemaining(activeMethod),
-      },
-      {
-        id: 'clear',
-        label: 'C',
-        row: 5,
-        col: 3,
-        kind: 'action',
-        ariaLabel: 'ล้างจำนวนเงิน',
-        disabled: !entryEnabled,
-        onClick: () => handleNumpad('C'),
-      },
-    ];
-    const shortcuts: KeypadCell[] = BANKNOTES.map((bill, i) => ({
+  // Caller-owned accessory cells laid into the SharedNumpad grid: the banknote
+  // shortcut column (col 4, rows 1-5) and the fill-remaining span (row 5, cols
+  // 1-2). Digits / `.` / `0` / `⌫` / `C` are the primitive's own layout keys.
+  // All behavior stays parent-owned — addShortcut and applyRemaining are
+  // PaymentModal closures; SharedNumpad only forwards the press.
+  const keypadAccessories: NumpadAccessory[] = useMemo(() => {
+    const banknotes: NumpadAccessory[] = BANKNOTES.map((bill, i) => ({
       id: `bn-${bill}`,
       label: `฿${bill.toLocaleString()}`,
-      row: i + 1,
-      col: 4,
-      kind: 'banknote',
+      gridRow: i + 1,
+      gridColumn: '4',
+      variant: 'banknote',
       ariaLabel: `เพิ่มยอด ${bill} บาท`,
       disabled: !entryEnabled,
-      onClick: () => addShortcut(bill),
+      onPress: () => addShortcut(bill),
     }));
-    return [...digitsAndActions, ...shortcuts];
-  }, [handleNumpad, addShortcut, applyRemaining, remaining, entryEnabled, activeMethod]);
+    const fill: NumpadAccessory = {
+      id: 'fill-remaining',
+      label: remaining > 0 ? `ใส่ยอดที่เหลือ (฿${formatMoney(remaining)})` : 'ใส่ยอดที่เหลือ',
+      gridRow: 5,
+      gridColumn: '1 / span 2',
+      variant: 'fill',
+      ariaLabel: 'ใส่ยอดที่เหลือทั้งหมด',
+      // Whole-pad `disabled` is not enough: fill must also gate on remaining<=0.
+      disabled: remaining <= 0 || !entryEnabled,
+      onPress: () => applyRemaining(activeMethod),
+    };
+    return [...banknotes, fill];
+  }, [addShortcut, applyRemaining, remaining, entryEnabled, activeMethod]);
 
   const handleConfirm = async () => {
     if (!canConfirm || confirming || processing) return;
@@ -693,25 +658,17 @@ export default function PaymentModal({
               aria-label={`จำนวนเงิน (${METHOD_META[activeMethod].label})`}
             />
 
-            {/* 3. Static 4×5 keypad grid — always mounted for every method. */}
-            <div className="pay-keypad-grid">
-              {keypadCells.map((cell) => (
-                <button
-                  key={cell.id}
-                  type="button"
-                  className={`pay-keypad-btn${cell.kind === 'action' ? ' pay-keypad-btn--action' : ''}${cell.kind === 'banknote' ? ' pay-keypad-btn--banknote' : ''}${cell.kind === 'fill' ? ' pay-keypad-btn--fill' : ''}`}
-                  style={{
-                    gridRow: cell.row,
-                    gridColumn: cell.colSpan ? `${cell.col} / span ${cell.colSpan}` : cell.col,
-                  }}
-                  onClick={cell.onClick}
-                  disabled={cell.disabled}
-                  aria-label={cell.ariaLabel}
-                >
-                  {cell.label}
-                </button>
-              ))}
-            </div>
+            {/* 3. Static 4×5 keypad — rendered by the SharedNumpad primitive
+                 (UI-10-B). classPrefix="pay-keypad" keeps the existing class
+                 shape so PaymentModal.css continues to style it unchanged; all
+                 amount/parse/confirm logic stays PaymentModal-owned. */}
+            <SharedNumpad
+              layout="grid-4x5-payment"
+              classPrefix="pay-keypad"
+              onKey={handleNumpad}
+              disabled={!entryEnabled}
+              accessories={keypadAccessories}
+            />
           </main>
 
           <aside className="pay-summary" aria-label="สรุปยอดชำระ">

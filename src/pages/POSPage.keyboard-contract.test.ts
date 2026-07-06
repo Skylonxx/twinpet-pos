@@ -1533,3 +1533,112 @@ describe('7C-UI-12-FLOWBITE-TOAST · POSPage uses a non-subscribing toast dispat
     expect(showToastDef).toContain('globalToast');
   });
 });
+
+// ─── O. UI-10-B · PaymentModal keypad migrated onto SharedNumpad (PaymentModal.tsx) ───
+// The inline 4×5 keypad-cell renderer is replaced by the stateless SharedNumpad
+// primitive (classPrefix="pay-keypad" preserves the CSS class shape). This block
+// proves the migration wired correctly AND that every RED-path / keyboard-ownership
+// invariant survives it: all amount/parse/confirm logic stays PaymentModal-owned,
+// no keyboard handler is introduced, and POSPage remains the sole keyboard owner.
+describe('7C-UI-10-B · PaymentModal keypad → SharedNumpad migration (PaymentModal.tsx)', () => {
+  /** The rendered SharedNumpad element (open tag → its self-closing `/>`). */
+  function numpadEl(): string {
+    return region(paymentSource, '<SharedNumpad', '/>');
+  }
+  /** The keypad-accessories memo body (its declaration → dep array). */
+  function accessories(): string {
+    return region(paymentSource, 'const keypadAccessories', '[addShortcut, applyRemaining, remaining, entryEnabled, activeMethod]);');
+  }
+  /** The numeric-key handler body. */
+  function handler(): string {
+    return region(paymentSource, 'const handleNumpad = useCallback', '[entryEnabled, activeMethod, entry, setMethodAmount],');
+  }
+
+  // ── Migration wiring ──
+  test('PaymentModal imports the SharedNumpad primitive (default + type-only NumpadAccessory)', () => {
+    expect(paymentSource).toContain('import SharedNumpad');
+    expect(paymentSource).toMatch(/from\s+['"]\.\/common\/SharedNumpad['"]/);
+    expect(paymentSource).toContain('NumpadAccessory');
+  });
+
+  test('the keypad is rendered by SharedNumpad with the payment layout + preserved class prefix', () => {
+    const el = numpadEl();
+    expect(el).toContain('layout="grid-4x5-payment"');
+    expect(el).toContain('classPrefix="pay-keypad"'); // preserves pay-keypad-* CSS shape
+  });
+
+  test('key presses route to the existing handleNumpad (no new adapter/state)', () => {
+    expect(numpadEl()).toContain('onKey={handleNumpad}');
+  });
+
+  test('the whole-pad disable gate is the existing credit-entry gate (!entryEnabled)', () => {
+    expect(numpadEl()).toContain('disabled={!entryEnabled}');
+  });
+
+  test('banknote + fill accessories are passed as caller-owned cells', () => {
+    expect(numpadEl()).toContain('accessories={keypadAccessories}');
+    const acc = accessories();
+    expect(acc).toContain("variant: 'banknote'");
+    expect(acc).toContain("variant: 'fill'");
+  });
+
+  test('banknote onPress stays wired to addShortcut (parent-owned amount routing)', () => {
+    expect(accessories()).toContain('onPress: () => addShortcut(bill)');
+  });
+
+  test('fill onPress stays wired to applyRemaining(activeMethod), keeping its own remaining<=0 gate', () => {
+    const acc = accessories();
+    expect(acc).toContain('onPress: () => applyRemaining(activeMethod)');
+    // Whole-pad disabled is NOT enough — fill keeps its independent remaining gate.
+    expect(acc).toContain('remaining <= 0 || !entryEnabled');
+  });
+
+  test('the fill accessory preserves its span (row 5, cols 1-2) and banknote column (col 4)', () => {
+    const acc = accessories();
+    expect(acc).toContain("gridColumn: '1 / span 2'");
+    expect(acc).toContain("gridColumn: '4'");
+  });
+
+  // ── Behavior preservation (handleNumpad unchanged) ──
+  test('literal backspace ⌫, clear C, and decimal . remain handled by handleNumpad', () => {
+    const h = handler();
+    expect(h).toContain("if (key === '⌫')");
+    expect(h).toContain("if (key === 'C')");
+    expect(h).toContain("if (key === '.')");
+  });
+
+  // ── RED-path / ownership preservation ──
+  test('the double-submit confirm guard is unchanged', () => {
+    expect(paymentSource).toContain('if (!canConfirm || confirming || processing) return;');
+  });
+
+  test('the confirm button stays a PaymentModal-owned native button (unchanged markup)', () => {
+    expect(paymentSource).toMatch(
+      /<button\s+type="button"\s+className="pay-confirm"\s+disabled=\{!canConfirm \|\| busy\}\s+onClick=\{\(\) => void handleConfirm\(\)\}/,
+    );
+  });
+
+  test('the migration introduces NO keyboard handler / global listener into PaymentModal', () => {
+    expect(paymentSource).not.toContain('onKeyDown');
+    expect(paymentSource).not.toContain('addEventListener');
+    expect(paymentSource).not.toContain('isComposing');
+  });
+
+  test('PaymentModal still owns NO F12 / Escape behavior (page keeps keyboard ownership)', () => {
+    expect(paymentSource).not.toContain('F12');
+    expect(paymentSource).not.toContain('Escape');
+    // POSPage remains the single global keydown owner (unchanged by UI-10-B).
+    expect(countOccurrences(posSource, "window.addEventListener('keydown'")).toBe(1);
+    expect(posSource).toContain("window.removeEventListener('keydown', onKey)");
+  });
+
+  test('SharedNumpad stays stateless from PaymentModal’s side — no payment state was pushed down', () => {
+    // The primitive receives only callbacks + presentational data; the write path,
+    // buffer, and totals remain PaymentModal-owned.
+    expect(paymentSource).toContain('const setMethodAmount = useCallback');
+    expect(paymentSource).toContain('const [amounts, setAmounts] = useState');
+    expect(paymentSource).toContain("const [entry, setEntry] = useState('');");
+    // The old inline keypad-cell renderer is gone (no bare pay-keypad-btn map left).
+    expect(paymentSource).not.toContain('keypadCells');
+  });
+});

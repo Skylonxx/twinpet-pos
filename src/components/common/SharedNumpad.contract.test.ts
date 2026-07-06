@@ -213,18 +213,26 @@ describe('SharedNumpad · stateless source contract', () => {
   });
 });
 
-// ─── Not yet wired into production ───────────────────────────────────────────
+// ─── Production import boundary (UI-10-B) ────────────────────────────────────
 describe('SharedNumpad · isolation', () => {
-  test('no production module imports SharedNumpad yet', () => {
+  test('PaymentModal is the sole authorized production importer of SharedNumpad', () => {
     const sources = import.meta.glob('/src/**/*.{ts,tsx}', {
       query: '?raw',
       import: 'default',
       eager: true,
     }) as Record<string, string>;
+    // Match ACTUAL import statements only (`from '…/SharedNumpad'`), not raw-source
+    // assertion strings that merely mention SharedNumpad — otherwise the
+    // POSPage.keyboard-contract spec's `paymentSource` assertions would read as a
+    // false importer. Also exclude the primitive itself and any *.test.* spec.
+    const importsSharedNumpad = /from\s+['"][^'"]*\/SharedNumpad['"]/;
     const importers = Object.entries(sources)
       .filter(([path]) => !path.includes('SharedNumpad'))
-      .filter(([, src]) => src.includes('SharedNumpad'))
-      .map(([path]) => path);
-    expect(importers).toEqual([]);
+      .filter(([path]) => !path.includes('.test.'))
+      .filter(([, src]) => importsSharedNumpad.test(src))
+      .map(([path]) => path)
+      .sort();
+    // UI-10-B wired the primitive into exactly one production surface.
+    expect(importers).toEqual(['/src/components/PaymentModal.tsx']);
   });
 });
