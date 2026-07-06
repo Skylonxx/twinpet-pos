@@ -1,40 +1,48 @@
 # Twinpet POS — Task Tracker
 
 > Last reconciled: 2026-07-06
-> HEAD: `ffa433ccdf8fb570632658ab93dac0b737dc7a11`
-> origin/main: `ffa433ccdf8fb570632658ab93dac0b737dc7a11`
+> HEAD: `3fe056e6162115a9593c8e58a9d8eb79fb15513e`
+> origin/main: `3fe056e6162115a9593c8e58a9d8eb79fb15513e`
 
 ---
 
-## UI-11 — Manager Approval Modal Primitive / Packet 1
+## P1 Offline / Sync Resiliency — Packet 1 Sale Intent Journal
 
 **Status: CLOSED / PUSHED**
 
-- [x] Implementation pushed (`ffa433c`) — `ManagerPinModal.tsx`, `ManagerPinModal.css`, `ManagerPinModal.test.ts` (all new files)
-- [x] Codex re-review (post build-fix) — PASS
+- [x] Implementation pushed (`3fe056e`) — 7 new files under `src/lib/pos/offline/`
+- [x] Codex implementation review — REQUEST CHANGES → fix pass → PASS
+- [x] Codex post-commit review — PASS WITH NOTES
 - [x] `npm run build` — PASS
-- [x] `ManagerPinModal.test.ts` — 26/26
-- [x] POSPage keyboard contract — 168/168 (unchanged)
-- [x] SharedNumpad contract — 19/19 (unchanged)
+- [x] Journal test suites — 32/32 + 18/18 + 5/5
+- [x] Adjacent reversal tests — 3/3 + 31/31
 - [ ] Docs reconciliation (this pass) — in progress
 
-**Delivered:** Isolated, presentational Manager Approval Modal Primitive (`ManagerPinModal`). Callback-driven (`onSubmitPin(pin)`); local transient masked buffer; no PIN verification; no protected-action execution; not a security boundary; not wired into `POSPage`. Preserves zero-virtual-keyboard touch standard (no editable input/textarea; button keypad + masked dot display only).
+**Delivered:** Isolated IndexedDB Sale Intent Journal sidecar — storage primitives, pure logic, tests only. Sidecar durability/observability layer; mirrors `asyncOrderId`; no production importers; no runtime checkout wiring.
 
-**Untouched:** all tracked files — `POSPage.tsx`, `SharedNumpad`, `NumpadDialog`, `PaymentModal`, `ItemDiscountModal`, `useAuth`/RBAC, checkout/cart/payment/inventory, Firebase/functions/rules/config, printer/thermal.
+**Untouched:** `POSPage.tsx`, `asyncCheckout`/`submitAsyncOrder`, `useCheckout`, `PaymentModal`, checkout/cart/payment math, Firebase/functions/rules, package/config, UI/CSS, printer/thermal, platform.
 
-**Hard stops / deferred:** real PIN verification, protected-action execution, `POSPage` wiring, Packet 2, and the backend/security verifier all remain unimplemented and require separate Gemini authorization.
+**Hard stops / deferred:** Packet 2 checkout wiring, sequence hardening, rejected-write reproduction/UAT — all require separate authorization/evidence gates.
+
+### P1 Packet 2 — NOT STARTED
+
+Checkout wiring requires separate Gemini authorization and Codex review.
+
+### UI-11 Packet 1 — CLOSED / PUSHED
+
+`ffa433c` + docs `cfc644c`. Manager Approval Modal Primitive.
 
 ### UI-10-C — CLOSED / PUSHED
 
-Numpad dialog keyboard contract hardening `8449e98` + docs `62be589`.
+`8449e98` + docs `62be589`.
 
 ### UI-10-B — CLOSED / PUSHED
 
-PaymentModal SharedNumpad migration `fac83d2` + docs `8bc2875`.
+`fac83d2` + docs `8bc2875`.
 
 ### UI-10-A — CLOSED / PUSHED
 
-Primitive `bc76e1e` + docs `df5fd87`.
+`bc76e1e` + docs `df5fd87`.
 
 ### UI-10-D — NOT STARTED
 
@@ -42,12 +50,12 @@ No implementation authorized.
 
 ### UI-11 Packet 2 — NOT STARTED
 
-Real PIN verification / `POSPage` wiring / backend-security verifier — requires separate Gemini explicit authorization.
+Requires separate Gemini explicit authorization.
 
 ### Next step
 
-1. Codex docs-only review of this reconciliation pass
-2. Gemini decision on whether this docs reconciliation should be committed
-3. UI-11 Packet 2, UI-10-D, or any subsequent phase only after separate Gemini explicit authorization
+1. Formal Packet 1 closure / decide next phase
+2. Codex docs review (optional) after this docs commit/push
+3. P1 Packet 2 only after separate Gemini authorization + rejected-write evidence reviewed
 
-**Not active:** Printer/Thermal (cancelled/deferred), UI-10-D, UI-11 Packet 2.
+**Not active:** Printer/Thermal (cancelled/deferred), UI-10-D, UI-11 Packet 2, P1 Packet 2.

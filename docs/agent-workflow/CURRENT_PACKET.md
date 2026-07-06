@@ -2,18 +2,22 @@
 
 ## Phase
 
-**Docs-only — UI-11 Packet 1 docs reconciliation (TWINPET-UI-11-PACKET-1-DOCS-RECONCILIATION-CLAUDE-001).**
+**Docs-only — P1 Offline / Sync Packet 1 docs reconciliation (TWINPET-P1-OFFLINE-SYNC-PACKET-1-DOCS-CLOSURE-CLAUDE-001).**
 
 ## Last closed packet
 
-**UI-11 Manager Approval Modal Primitive / Packet 1** — CLOSED / PUSHED at `ffa433ccdf8fb570632658ab93dac0b737dc7a11`.
+**P1 Offline / Sync Resiliency — Packet 1 Sale Intent Journal** — CLOSED / PUSHED at `3fe056e6162115a9593c8e58a9d8eb79fb15513e`.
 
-Isolated presentational Manager Approval Modal Primitive (`ManagerPinModal`) — `src/components/pos/ManagerPinModal.tsx/.css/.test.ts` only (all new files). Callback-driven (`onSubmitPin(pin)`); local transient masked buffer; no PIN verification; no protected-action execution; not a security boundary; not wired into `POSPage`. `SharedNumpad`, `NumpadDialog`, `PaymentModal`, `ItemDiscountModal`, `useAuth`/RBAC, `POSPage.tsx` untouched.
+Isolated IndexedDB Sale Intent Journal sidecar — 7 new files under `src/lib/pos/offline/saleIntentJournal*`. Storage primitives, pure logic, and tests only. Sidecar durability/observability layer; mirrors `asyncOrderId`; no production importers; no runtime checkout wiring. `POSPage`, `asyncCheckout`, `useCheckout`, `PaymentModal`, backend/functions/rules, package/config untouched.
+
+## Prior closed packet
+
+**UI-11 Manager Approval Modal Primitive / Packet 1** — CLOSED / PUSHED at `ffa433c` + docs `cfc644c`.
 
 ## Next packet (not authorized)
 
-**UI-11 Packet 2** (real PIN verification, `POSPage` wiring, backend/security verifier) and **UI-10-D** — both require separate Gemini explicit authorization.
+**P1 Packet 2** (checkout wiring), **sequence hardening**, **UI-11 Packet 2**, and **UI-10-D** — all require separate Gemini explicit authorization. Rejected-write reproduction/UAT is a parallel/future evidence gate before Packet 2 finalization.
 
 ## Current HEAD
 
-`ffa433ccdf8fb570632658ab93dac0b737dc7a11` (verified)
+`3fe056e6162115a9593c8e58a9d8eb79fb15513e` (verified)

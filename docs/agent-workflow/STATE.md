@@ -2,30 +2,30 @@
 
 ## Master Plan
 
-UI-01 through **UI-10-C** are **DONE**. UI-11 Packet 1 (Manager Approval Modal Primitive) **CLOSED / PUSHED** at `ffa433c`. UI-11 Packet 2 and UI-10-D **NOT STARTED**.
+UI-01 through **UI-10-C** are **DONE**. UI-11 Packet 1 **CLOSED / PUSHED** at `ffa433c` + docs `cfc644c`. **P1 Offline / Sync Packet 1** (Sale Intent Journal) **CLOSED / PUSHED** at `3fe056e`. P1 Packet 2, sequence hardening, UI-11 Packet 2, and UI-10-D **NOT STARTED**.
 
 ## Repository Baseline
 
 | Field | Value |
 |-------|-------|
-| HEAD | `ffa433ccdf8fb570632658ab93dac0b737dc7a11` |
-| origin/main | `ffa433ccdf8fb570632658ab93dac0b737dc7a11` |
+| HEAD | `3fe056e6162115a9593c8e58a9d8eb79fb15513e` |
+| origin/main | `3fe056e6162115a9593c8e58a9d8eb79fb15513e` |
 
 ## Current Phase
 
-UI-11 Packet 1 docs reconciliation — docs-only pass after implementation pushed.
+P1 Packet 1 docs reconciliation — docs-only pass after implementation pushed.
 
 ## Latest Verdict
 
-**UI-11 PACKET 1 CLOSED / PUSHED (PASS)** — `ffa433c`. Isolated presentational Manager Approval Modal Primitive (`ManagerPinModal`); no wiring, no verifier, no backend; build PASS; `ManagerPinModal.test.ts` 26/26; POSPage keyboard contract 168/168; SharedNumpad contract 19/19 (both unchanged).
+**P1 PACKET 1 CLOSED / PUSHED (PASS WITH NOTES)** — `3fe056e`. Isolated IndexedDB Sale Intent Journal sidecar; 7 new offline files; no production importers; no runtime checkout wiring; build PASS; journal tests 55/55; adjacent reversal tests 34/34.
 
 ## Mode
 
-Docs-only. No UI-11 Packet 2 or UI-10-D implementation authorized.
+Docs-only. No P1 Packet 2, sequence hardening, UI-11 Packet 2, or UI-10-D implementation authorized.
 
 ## Next Action
 
-Codex docs-only review → Gemini decision on whether this docs reconciliation should be committed → UI-11 Packet 2 / UI-10-D only after separate Gemini explicit authorization.
+Formal Packet 1 closure → optional Codex docs review → P1 Packet 2 only after separate Gemini authorization + evidence review.
 
 ## Stash
 
