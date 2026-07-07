@@ -1,26 +1,29 @@
 # Twinpet POS — Task Tracker
 
 > Last reconciled: 2026-07-07
-> HEAD: `cde82264f3c54bb7819f5bcd2beb9e8669f5cc60`
-> origin/main: `cde82264f3c54bb7819f5bcd2beb9e8669f5cc60`
+> HEAD: `30c32cd2f927a080b9729567bfa2f9f6f0832c16`
+> origin/main: `30c32cd2f927a080b9729567bfa2f9f6f0832c16`
 
 ---
 
-## P1 Offline / Sync Resiliency — Packet 3A-2B Startup Sweep Boot Wiring
+## P1 Offline / Sync Resiliency — Packet 3B-2 Atomic Device Sequence Allocator
 
 **Status: CLOSED / PUSHED**
 
-- [x] Implementation pushed (`cde8226`) — AppShell mount + `saleIntentSweepBoot` (3 files)
-- [x] Physical UAT — PASS (Gemini authorized commit after UAT)
-- [x] Codex implementation review — PASS WITH NOTES (no source blockers)
+- [x] Implementation pushed (`30c32cd`) — `allocateLocalSeq()` + `deviceSeqAllocator.test.ts` (2 files)
+- [x] Codex implementation review — PASS WITH NOTES (no blocking findings)
 - [x] `npm run build` — PASS
-- [x] `saleIntentSweepBoot.test.ts` — 22/22
-- [x] Adjacent offline tests — 150/150 Vitest subtotal, rules 119/119
+- [x] `deviceSeqAllocator.test.ts` — 18/18
+- [x] Regression suites — 150/150 Vitest subtotal, rules 119/119
 - [ ] Docs reconciliation (this pass) — in progress
 
-**Delivered:** AppShell-mounted startup sweep boot; 10s delayed fire-and-forget; fail-open; once-per-tab; Web Locks single-flight; composes 3A-2A/3A-1/Packet 1 APIs only. Codex N1 resolved via AppShell mount.
+**Delivered:** Unwired atomic local sequence allocator primitive via IndexedDB readwrite transaction; bounded fail-open fallback to legacy `nextLocalSeq()`; existing public APIs compatible. `allocateOrderIdentity()` deferred to 3B-3. No checkout integration.
 
-**Deferred (not fixed):** Pre-existing old offline queue UI state bugs.
+**Explicit non-scope:** No `useCheckout` / `asyncCheckout` changes; no asyncOrder ID/receipt format change; no Sale Intent Journal change; no 3B-3 work.
+
+### P1 Packet 3A-2B — CLOSED / PUSHED
+
+`cde8226` + docs `8ce68d3`. AppShell-mounted startup sweep boot wiring.
 
 ### P1 Packet 3A-2A — CLOSED / PUSHED
 
@@ -30,9 +33,9 @@
 
 `421d368` + docs `09cace8`. Sweep primitives.
 
-### Next Packet Decision Gate — NOT STARTED
+### 3B-3 Decision Gate — NOT STARTED
 
-Gemini may choose: 3A-2C closure hardening, 3B sequence hardening, 3C `rejected_by_rules` policy, or hold.
+Gemini may choose: authorize 3B-3 checkout preallocation integration, additional 3B-2 degraded-mode tightening, or hold.
 
 ### P1 Packet 2 / Packet 1 — CLOSED / PUSHED
 
@@ -42,8 +45,8 @@ Gemini may choose: 3A-2C closure hardening, 3B sequence hardening, 3C `rejected_
 
 ### Next step
 
-1. Formal Packet 3A-2B closure (this docs pass)
+1. Formal Packet 3B-2 closure (this docs pass)
 2. Optional Codex docs review after docs commit/push
-3. Next Packet Decision Gate — Gemini authorization only
+3. 3B-3 Decision Gate — Gemini authorization only
 
-**Not active:** Printer/Thermal (cancelled/deferred), UI-10-D, UI-11 Packet 2, 3A-2C/3B/3C.
+**Not active:** Printer/Thermal (cancelled/deferred), UI-10-D, UI-11 Packet 2, 3B-3 checkout integration.

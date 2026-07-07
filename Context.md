@@ -1,81 +1,87 @@
 # Twinpet POS — Project Context
 
 > Last reconciled: 2026-07-07
-> HEAD: `cde82264f3c54bb7819f5bcd2beb9e8669f5cc60`
-> origin/main: `cde82264f3c54bb7819f5bcd2beb9e8669f5cc60`
+> HEAD: `30c32cd2f927a080b9729567bfa2f9f6f0832c16`
+> origin/main: `30c32cd2f927a080b9729567bfa2f9f6f0832c16`
 
 ---
 
 ## Current Phase
 
-**P1 Offline / Sync Resiliency — Packet 3A-2B Startup Sweep Boot Wiring: CLOSED / PUSHED**
+**P1 Offline / Sync Resiliency — Packet 3B-2 Atomic Device Sequence Allocator: CLOSED / PUSHED**
 
 Manual workflow remains active. `agentchattr` was not used as the executor for this phase.
 
-### P1 Packet 3A-2B pushed commit
+### P1 Packet 3B-2 pushed commit
+
+| Hash | Message |
+|------|---------|
+| `30c32cd` | feat(pos): add atomic device sequence allocator |
+
+Previous HEAD: `8ce68d3` — docs: reconcile p1 offline sync packet 3a-2b closure
+
+### P1 Packet 3B-2 scope (2 files)
+
+- `src/lib/pos/deviceId.ts` — `allocateLocalSeq()` primitive
+- `src/lib/pos/deviceSeqAllocator.test.ts` — allocator tests
+
+### P1 Packet 3B-2 behavior
+
+- Added `allocateLocalSeq(): Promise<number>` — unwired atomic local sequence allocator primitive
+- IndexedDB readwrite transaction is the correctness primitive
+- IndexedDB database: `twinpet-device`; object store: `kv`; key: `deviceSeq`
+- `get` + `put` performed inside one readwrite transaction
+- Next sequence: `max(sanitizedIdbSeq, sanitizedLocalStorageSeq, 0) + 1`
+- Invalid sequence bases sanitized: missing / non-numeric / NaN / negative / non-finite
+- localStorage mirror updates only after successful IDB commit
+- Bounded fail-open fallback to legacy `nextLocalSeq()` — covers IDB unavailable, open error, blocked/hung/never-settling open, and transaction failure; fallback does not throw to callers
+- Legacy `nextLocalSeq()` remains available and behavior-compatible
+- Existing public APIs remain compatible: `getDeviceId()`, `nextLocalSeq()`, `peekLocalSeq()`, `setDeviceIdentity()`, `initDeviceIdentity()`, `makeAsyncOrderId()`, `getReceiptDeviceSegment()`
+- `allocateOrderIdentity()` deferred to 3B-3 due boundary concern with `billId.ts` / Firebase import chain
+- No production checkout call-site yet
+
+### Explicit non-scope (3B-2)
+
+- No checkout integration; no `useCheckout` / `asyncCheckout` changes
+- No asyncOrders runtime behavior change; no receipt format change; no asyncOrder ID shape change
+- No Sale Intent Journal behavior change
+- No Web Locks; no BroadcastChannel; no Firestore reads/writes
+- No rules/functions/package/config changes; no docs tracker changes in implementation commit
+- No 3B-3 work
+
+### Prior — Packet 3A-2B Startup Sweep Boot Wiring
 
 | Hash | Message |
 |------|---------|
 | `cde8226` | feat(pos): add startup sale intent sweep wiring |
+| `8ce68d3` | docs: reconcile p1 offline sync packet 3a-2b closure |
 
-### P1 Packet 3A-2B scope (3 files)
-
-- `src/components/AppShell.tsx` — mount `useSaleIntentSweepBoot()`
-- `src/lib/pos/offline/saleIntentSweepBoot.ts` — boot wiring module
-- `src/lib/pos/offline/saleIntentSweepBoot.test.ts`
-
-### P1 Packet 3A-2B behavior
-
-- AppShell-mounted startup Sale Intent sweep boot wiring (resolves Codex N1 via AppShell mount)
-- 10-second fixed delayed background attempt after AppShell mount
-- Fire-and-forget execution; silent no-op on skip paths; fail-open on errors
-- Once-per-tab guard; Web Locks `ifAvailable` single-flight; unsupported Web Locks falls back to idempotent runner
-- Composes existing public APIs only: `createAsyncOrderServerLookup`, `createSaleIntentJournal`, `runSaleIntentSweep`, cached `getIdTokenResult`
-- Cached `getIdTokenResult` `staffId` gate
-- No UI state / toast / loader / layout / route / sidebar / style change
-- No checkout / payment / stock / drawer mutation; no direct Firestore write; no asyncOrder payload read; no `snap.data()`; no transition matrix change
-
-### Physical UAT
-
-Gemini confirmed Physical UAT passed before commit authorization:
-
-- Safe background execution verified
-- Silent failure verified
-- Pre-existing UI state bugs in old offline queue acknowledged and **deferred — not fixed**
-
-### Prior — Packet 3A-2A Lookup Adapter
-
-| Hash | Message |
-|------|---------|
-| `535073e` | feat(pos): add async order server lookup adapter |
-| `944acfc` | docs: reconcile p1 offline sync packet 3a-2a closure |
-
-### Validation (P1 Packet 3A-2B)
+### Validation (P1 Packet 3B-2)
 
 | Check | Result |
 |-------|--------|
 | `npm run build` | PASS |
-| `saleIntentSweepBoot.test.ts` | 22/22 |
-| `asyncOrderLookup.test.ts` | 13/13 |
-| `saleIntentSweepLogic.test.ts` | 29/29 |
-| `saleIntentSweep.test.ts` | 15/15 |
-| `asyncCheckout.w01.test.ts` | 12/12 |
-| `saleIntentObserver.test.ts` | 9/9 |
-| `saleIntentJournalLogic.test.ts` | 32/32 |
-| `saleIntentJournalStore.test.ts` | 18/18 |
+| `deviceSeqAllocator.test.ts` | 18/18 |
 | Vitest subtotal | 150/150 |
 | `npm run test:rules` | 119/119 |
 | `git diff --check` | PASS (CRLF advisory only) |
-| Codex implementation review | PASS WITH NOTES (no source blockers; UAT gate cleared by Gemini) |
-| Push | PASS — HEAD == origin/main == `cde8226` |
+| Codex implementation review | PASS WITH NOTES (no blocking findings; commit-ready confirmed) |
+| Push | PASS — HEAD == origin/main == `30c32cd` |
+
+### Codex non-blocking notes (carried forward)
+
+1. 3B-2 is intentionally unwired; current checkout still uses `nextLocalSeq()` until 3B-3.
+2. Late IDB callbacks after timeout/fallback can advance the IDB mirror and create harmless gaps; no duplicate/regression risk identified.
+3. IDB degraded fallback and mixed old/new tab bundles can still carry the legacy race after future integration; carry into UAT/release guidance.
+4. `allocateOrderIdentity()` appropriately deferred to 3B-3.
+5. `git diff --check` had only CRLF advisory.
 
 ### Deferred / next gate
 
-**Next Packet Decision Gate** — Gemini may choose among:
+**3B-3 Decision Gate** — Gemini may choose:
 
-- Packet 3A-2C / closure hardening (if still needed)
-- Packet 3B sequence hardening
-- Packet 3C `rejected_by_rules` operational policy
+- Authorize 3B-3 checkout preallocation integration planning/implementation gate
+- Authorize additional 3B-2 degraded-mode tightening if desired
 - hold
 
 **Deferred (not fixed):** Pre-existing old offline queue UI state bugs.
