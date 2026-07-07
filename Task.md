@@ -1,32 +1,37 @@
 # Twinpet POS — Task Tracker
 
-> Last reconciled: 2026-07-06
-> HEAD: `3fe056e6162115a9593c8e58a9d8eb79fb15513e`
-> origin/main: `3fe056e6162115a9593c8e58a9d8eb79fb15513e`
+> Last reconciled: 2026-07-07
+> HEAD: `d500bf99282f8edd8322ecc6f2b5e81e2b451a3d`
+> origin/main: `d500bf99282f8edd8322ecc6f2b5e81e2b451a3d`
 
 ---
 
-## P1 Offline / Sync Resiliency — Packet 1 Sale Intent Journal
+## P1 Offline / Sync Resiliency — Packet 2 Runtime Observer
 
 **Status: CLOSED / PUSHED**
 
-- [x] Implementation pushed (`3fe056e`) — 7 new files under `src/lib/pos/offline/`
-- [x] Codex implementation review — REQUEST CHANGES → fix pass → PASS
-- [x] Codex post-commit review — PASS WITH NOTES
+- [x] W-01 rejected-write evidence harness pushed (`e3155ad`) — `asyncCheckout.w01.test.ts`
+- [x] Runtime observer implementation pushed (`d500bf9`) — 5 files (3 modified, 2 new)
+- [x] Codex review — PASS WITH NOTES (no blockers)
 - [x] `npm run build` — PASS
-- [x] Journal test suites — 32/32 + 18/18 + 5/5
-- [x] Adjacent reversal tests — 3/3 + 31/31
+- [x] `asyncCheckout.w01.test.ts` — 12/12
+- [x] `saleIntentObserver.test.ts` — 9/9
+- [x] `saleIntentJournalLogic.test.ts` — 32/32
+- [x] `saleIntentJournalStore.test.ts` — 18/18
+- [x] `npm run test:rules` — 119/119
 - [ ] Docs reconciliation (this pass) — in progress
 
-**Delivered:** Isolated IndexedDB Sale Intent Journal sidecar — storage primitives, pure logic, tests only. Sidecar durability/observability layer; mirrors `asyncOrderId`; no production importers; no runtime checkout wiring.
+**Delivered:** Runtime observer wiring — raw Firestore promise captured before catch, passed to `saleIntentObserver`; lifecycle events (`rejected_by_rules`, `server_acknowledged`, `exception_observed`) recorded in Sale Intent Journal sidecar. Cashier flow non-blocking. Observer does not retry writes.
 
-**Untouched:** `POSPage.tsx`, `asyncCheckout`/`submitAsyncOrder`, `useCheckout`, `PaymentModal`, checkout/cart/payment math, Firebase/functions/rules, package/config, UI/CSS, printer/thermal, platform.
+**Untouched:** `POSPage.tsx`, `PaymentModal.tsx`, checkout/cart/payment math, Firebase/functions/rules, package/config, UI/CSS, printer/thermal, platform.
 
-**Hard stops / deferred:** Packet 2 checkout wiring, sequence hardening, rejected-write reproduction/UAT — all require separate authorization/evidence gates.
+### P1 Packet 1 — CLOSED / PUSHED
 
-### P1 Packet 2 — NOT STARTED
+`3fe056e` + docs `644dc85`. Isolated IndexedDB Sale Intent Journal sidecar — 7 new offline files.
 
-Checkout wiring requires separate Gemini authorization and Codex review.
+### P1 Packet 3 — NOT STARTED
+
+Requires separate Gemini authorization. Suggested scope: startup/lifecycle reconcile sweep; tab-close/reload recovery; sequence hardening; manual review policy for `rejected_by_rules` (if chosen).
 
 ### UI-11 Packet 1 — CLOSED / PUSHED
 
@@ -54,8 +59,8 @@ Requires separate Gemini explicit authorization.
 
 ### Next step
 
-1. Formal Packet 1 closure / decide next phase
-2. Codex docs review (optional) after this docs commit/push
-3. P1 Packet 2 only after separate Gemini authorization + rejected-write evidence reviewed
+1. Formal Packet 2 closure (this docs pass)
+2. Optional Codex docs review after docs commit/push
+3. P1 Packet 3 only after separate Gemini authorization
 
-**Not active:** Printer/Thermal (cancelled/deferred), UI-10-D, UI-11 Packet 2, P1 Packet 2.
+**Not active:** Printer/Thermal (cancelled/deferred), UI-10-D, UI-11 Packet 2, P1 Packet 3.

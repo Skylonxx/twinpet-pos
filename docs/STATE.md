@@ -6,14 +6,14 @@
 |-------|-------|
 | Repo root | `C:/Users/Narachat/twinpet-pos` |
 | Branch | `main` |
-| HEAD | `3fe056e6162115a9593c8e58a9d8eb79fb15513e` |
-| origin/main | `3fe056e6162115a9593c8e58a9d8eb79fb15513e` |
+| HEAD | `d500bf99282f8edd8322ecc6f2b5e81e2b451a3d` |
+| origin/main | `d500bf99282f8edd8322ecc6f2b5e81e2b451a3d` |
 | Ahead/behind | `0 / 0` |
 
 ## Current Phase
 
-    TWINPET-P1-OFFLINE-SYNC-PACKET-1-DOCS-RECONCILIATION
-    P1 Offline / Sync Packet 1 Sale Intent Journal CLOSED / PUSHED — docs reconciliation in progress
+    TWINPET-P1-OFFLINE-SYNC-PACKET-2-DOCS-RECONCILIATION
+    P1 Offline / Sync Packet 2 Runtime Observer CLOSED / PUSHED — docs reconciliation in progress
 
 ## Working Tree
 
@@ -26,37 +26,38 @@
 
 **Do NOT touch stash@{0}.**
 
+## P1 Packet 2 Closure
+
+| Field | Value |
+|-------|-------|
+| Scope | Runtime observer wiring for Sale Intent Journal sidecar |
+| W-01 harness | `e3155ad test(pos): add w01 rejected write evidence harness` |
+| Implementation | `d500bf9 feat(pos): add sale intent observer wiring` |
+| Source impact | 3 modified + 2 new files (`asyncCheckout`, `useCheckout`, `asyncCheckout.w01.test`, `saleIntentObserver`, `saleIntentObserver.test`) |
+| Untouched | `POSPage.tsx`, `PaymentModal.tsx`, checkout/cart/payment, Firebase/functions/rules, package/config, UI/CSS, printer/thermal, platform |
+| Runtime behavior | Raw `setDoc` promise captured before catch; passed to observer; `rejected_by_rules` / `server_acknowledged` / `exception_observed` lifecycle events; journal sidecar-only; non-blocking cashier flow; no observer retries |
+| Codex review | PASS WITH NOTES (no blockers; 9 vs 10 test count note non-blocking) |
+| `npm run build` | PASS |
+| W-01 tests | 12/12 |
+| Observer tests | 9/9 |
+| Journal logic tests | 32/32 |
+| Journal store tests | 18/18 |
+| Rules tests | 119/119 |
+| Push | PASS — HEAD == origin/main == `d500bf9` |
+| Status | **CLOSED / PUSHED** |
+
 ## P1 Packet 1 Closure
 
 | Field | Value |
 |-------|-------|
 | Scope | Isolated IndexedDB Sale Intent Journal sidecar (storage, pure logic, tests) |
 | Implementation | `3fe056e feat(pos): add sale intent journal sidecar` |
-| Source impact | 7 new files under `src/lib/pos/offline/saleIntentJournal*` |
-| Untouched | `POSPage.tsx`, `asyncCheckout`/`submitAsyncOrder`, `useCheckout`, `PaymentModal`, checkout/cart/payment, Firebase/functions/rules, package/config, UI/CSS, printer/thermal, platform |
-| Architecture | Sidecar durability/observability only; mirrors `asyncOrderId`; no production importers; no runtime checkout wiring |
-| Privacy | Event details sanitized; `redacted` payload policy; full payload only while unresolved |
-| Codex implementation (fix pass) | PASS |
-| Codex post-commit review | PASS WITH NOTES |
-| `npm run build` | PASS |
-| Logic tests | 32/32 |
-| Store tests | 18/18 |
-| Migration tests | 5/5 |
-| Adjacent reversal tests | 3/3 + 31/31 |
-| Push | PASS — HEAD == origin/main == `3fe056e` |
+| Docs | `644dc85 docs: reconcile p1 offline sync packet 1 closure` |
 | Status | **CLOSED / PUSHED** |
 
-## P1 Packet 2 Status
+## P1 Packet 3 Status
 
-**NOT STARTED** — checkout wiring requires separate Gemini authorization, Codex review, and rejected-write reproduction evidence.
-
-## Sequence Hardening
-
-**NOT STARTED** — separate future packet/gate.
-
-## Rejected-Write Reproduction / UAT
-
-**FUTURE / PARALLEL** — evidence gate before Packet 2 behavior finalization.
+**NOT STARTED** — requires separate Gemini authorization. Suggested topics: startup/lifecycle reconcile sweep; tab-close/reload recovery; sequence hardening / `nextLocalSeq` race; manual review / `rejected_by_rules` policy (if chosen).
 
 ## UI-11 Packet 1 Closure
 
@@ -101,25 +102,27 @@ Printer / Thermal Receipt / Print Polish — cancelled/deferred; legacy code unt
 
 | Hash | Message |
 |------|---------|
+| `d500bf9` | feat(pos): add sale intent observer wiring — **P1 PACKET 2 CLOSED / PUSHED** |
+| `e3155ad` | test(pos): add w01 rejected write evidence harness |
+| `644dc85` | docs: reconcile p1 offline sync packet 1 closure |
 | `3fe056e` | feat(pos): add sale intent journal sidecar — **P1 PACKET 1 CLOSED / PUSHED** |
 | `cfc644c` | docs: reconcile ui-11 packet 1 closure |
-| `ffa433c` | feat(ui): add manager approval modal primitive — **UI-11 PACKET 1 CLOSED / PUSHED** |
-| `62be589` | docs: reconcile ui-10-c numpad hardening closure |
-| `8449e98` | test(pos): harden numpad dialog keyboard contract — **UI-10-C CLOSED / PUSHED** |
 
 ## Next Recommended Block
 
-    READY_FOR_PACKET_1_FORMAL_CLOSURE
+    READY_FOR_PACKET_3_PLANNING_AUTHORIZATION
 
-1. Formal Packet 1 closure / decide next phase
-2. Optional Codex docs review after this docs commit/push
-3. P1 Packet 2 only after separate Gemini authorization + evidence review
+1. Formal Packet 2 closure (this docs pass)
+2. Optional Codex docs review after docs commit/push
+3. P1 Packet 3 only after separate Gemini authorization
 
 ## Hard Boundaries
 
-- P1 Packet 2 not started
-- Sequence hardening not started
-- No runtime checkout wiring
+- P1 Packet 3 not started
+- No startup reconcile sweep implemented
+- No manual review UI for `rejected_by_rules`
+- Sale Intent Journal is sidecar-only — not source of truth
+- Observer does not retry or resend writes
 - UI-11 Packet 2 not started
 - UI-10-D not started
-- PaymentModal checkout write paths unchanged
+- `POSPage.tsx` / `PaymentModal.tsx` unchanged
