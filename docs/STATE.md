@@ -6,14 +6,14 @@
 |-------|-------|
 | Repo root | `C:/Users/Narachat/twinpet-pos` |
 | Branch | `main` |
-| HEAD | `30c32cd2f927a080b9729567bfa2f9f6f0832c16` |
-| origin/main | `30c32cd2f927a080b9729567bfa2f9f6f0832c16` |
+| HEAD | `72354026046011f71db856a8ad9574676b034bcd` |
+| origin/main | `72354026046011f71db856a8ad9574676b034bcd` |
 | Ahead/behind | `0 / 0` |
 
 ## Current Phase
 
-    TWINPET-P1-OFFLINE-SYNC-PACKET-3B-2-DOCS-RECONCILIATION
-    P1 Offline / Sync Packet 3B-2 Atomic Device Sequence Allocator CLOSED / PUSHED — docs reconciliation in progress
+    TWINPET-P1-OFFLINE-SYNC-PACKET-3B-3-DOCS-RECONCILIATION
+    P1 Offline / Sync Packet 3B-3 Checkout Identity Preallocation CLOSED / PUSHED — docs reconciliation in progress (unstaged)
 
 ## Working Tree
 
@@ -26,38 +26,38 @@
 
 **Do NOT touch stash@{0}.**
 
+## P1 Packet 3B-3 Closure
+
+| Field | Value |
+|-------|-------|
+| Scope | Checkout identity preallocation via `allocateOrderIdentity()` |
+| Implementation | `7235402 feat(pos): preallocate checkout identity atomically` |
+| Previous HEAD | `c103112 docs: reconcile p1 offline sync packet 3b-2 closure` |
+| Source impact | 3 modified (`useCheckout.ts`, `asyncCheckout.ts`, `asyncCheckout.w01.test.ts`) |
+| Behavior | `confirmSale` awaits `allocateOrderIdentity()` after guard; injected identity verbatim; legacy path compatible; receipt/ID shape unchanged |
+| UAT | Accepted by Gemini — owner-reported; Scenario 9 PASS WITH NOTES / UI-blocked |
+| Operational | Hard refresh every open POS tab after deploy before claiming atomicity guarantee |
+| Codex review | PASS WITH NOTES |
+| Tests | `asyncCheckout.w01.test.ts` 26/26 |
+| Push | PASS — HEAD == origin/main == `7235402` |
+| Status | **CLOSED / PUSHED** |
+
+### Report references
+
+- Implementation: `...\Developer\twinpet-p1-offline-sync-packet-3b-3-implementation-report.md`
+- Codex review: `...\reviewer\twinpet-p1-offline-sync-packet-3b-3-implementation-codex-review-report.md`
+- Commit/push: `...\Developer\twinpet-p1-offline-sync-packet-3b-3-commit-push-report.md`
+
 ## P1 Packet 3B-2 Closure
 
 | Field | Value |
 |-------|-------|
-| Scope | Atomic device sequence allocator primitive (`allocateLocalSeq`) |
-| Implementation | `30c32cd feat(pos): add atomic device sequence allocator` |
-| Previous HEAD | `8ce68d3 docs: reconcile p1 offline sync packet 3a-2b closure` |
-| Source impact | 1 modified + 1 new (`deviceId.ts`, `deviceSeqAllocator.test.ts`) |
-| Behavior | IndexedDB readwrite transaction (`twinpet-device` / `kv` / `deviceSeq`); max(sanitizedIdb, sanitizedLocalStorage, 0)+1; localStorage mirror after IDB commit; bounded fail-open fallback to `nextLocalSeq()`; unwired — no checkout call-site |
-| Deferred | `allocateOrderIdentity()` → 3B-3; checkout integration → 3B-3 |
-| Codex review | PASS WITH NOTES (no blocking findings; commit-ready confirmed) |
-| `npm run build` | PASS |
-| Allocator tests | 18/18 |
-| Vitest subtotal | 150/150 |
-| Rules tests | 119/119 |
-| Push | PASS — HEAD == origin/main == `30c32cd` |
+| Implementation | `30c32cd` + docs `c103112` |
 | Status | **CLOSED / PUSHED** |
 
-## P1 Packet 3A-2B Closure
-
-| Field | Value |
-|-------|-------|
-| Implementation | `cde8226` + docs `8ce68d3` |
-| Status | **CLOSED / PUSHED** |
-
-## P1 Packet 3A-2A / 3A-1 / Packet 2 / Packet 1
+## P1 Packet 3A-2B / 3A-2A / 3A-1 / Packet 2 / Packet 1
 
 All **CLOSED / PUSHED**.
-
-## 3B-3 Decision Gate
-
-**NOT STARTED** — Gemini may choose: authorize 3B-3 checkout preallocation integration, additional 3B-2 degraded-mode tightening, or hold.
 
 ## UI-11 Packet 1 / UI-10-C / UI-10-B / UI-10-A
 
@@ -67,32 +67,27 @@ All **CLOSED / PUSHED**.
 
 **NOT STARTED**
 
-## Cancelled / Deferred
-
-Printer / Thermal — cancelled/deferred. Old offline queue UI bugs — deferred (not fixed at 3A-2B).
-
 ## Recent Completed Work
 
 | Hash | Message |
 |------|---------|
+| `7235402` | feat(pos): preallocate checkout identity atomically — **P1 PACKET 3B-3 CLOSED / PUSHED** |
+| `c103112` | docs: reconcile p1 offline sync packet 3b-2 closure |
 | `30c32cd` | feat(pos): add atomic device sequence allocator — **P1 PACKET 3B-2 CLOSED / PUSHED** |
 | `8ce68d3` | docs: reconcile p1 offline sync packet 3a-2b closure |
 | `cde8226` | feat(pos): add startup sale intent sweep wiring — **P1 PACKET 3A-2B CLOSED / PUSHED** |
-| `944acfc` | docs: reconcile p1 offline sync packet 3a-2a closure |
-| `535073e` | feat(pos): add async order server lookup adapter — **P1 PACKET 3A-2A CLOSED / PUSHED** |
 
 ## Next Recommended Block
 
-    READY_FOR_3B_3_DECISION_GATE
+    READY_FOR_DOCS_COMMIT_AUTHORIZATION
 
-1. Formal Packet 3B-2 closure (this docs pass)
-2. Optional Codex docs review after docs commit/push
-3. 3B-3 Decision Gate — Gemini authorization only
+1. Formal Packet 3B-3 docs closure (this pass — unstaged)
+2. Codex docs review
+3. Gemini docs commit authorization
 
 ## Hard Boundaries
 
-- 3B-3 checkout integration not started
-- `useCheckout` / `asyncCheckout` unchanged at 3B-2
+- Docs changes not yet committed/pushed
 - Old offline queue UI bugs not fixed
 - Sale Intent Journal is sidecar-only — not source of truth
-- `POSPage.tsx` / `PaymentModal.tsx` unchanged at 3B-2
+- Mixed old/new tab bundles — residual risk until hard refresh
