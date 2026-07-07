@@ -16,6 +16,7 @@ import {
 import { getBranchLabel } from '../lib/branches';
 import { useAuth } from '../lib/hooks/useAuth';
 import { useBranch } from '../lib/hooks/useBranch';
+import { useSaleIntentSweepBoot } from '../lib/pos/offline/saleIntentSweepBoot';
 import type { UserRole } from '../lib/types';
 
 const ROLE_LABELS: Record<UserRole, string> = {
@@ -61,6 +62,10 @@ export default function AppShell() {
   const { user, logout, branchId } = useAuth();
   const { branch } = useBranch();
   const location = useLocation();
+
+  // Fail-open, once-per-tab startup Sale Intent sweep. Mounts here (structurally
+  // past ProtectedRoute + PosShellRoute guards); silent no-op on every skip path.
+  useSaleIntentSweepBoot();
 
   // Click-to-expand sidebar (no hover). Collapsed = icon rail. Default closed.
   const [open, setOpen] = useState(false);
