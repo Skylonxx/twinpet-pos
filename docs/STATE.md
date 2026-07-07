@@ -6,14 +6,14 @@
 |-------|-------|
 | Repo root | `C:/Users/Narachat/twinpet-pos` |
 | Branch | `main` |
-| HEAD | `535073e2431350d924825733c1ebafd803cf889a` |
-| origin/main | `535073e2431350d924825733c1ebafd803cf889a` |
+| HEAD | `cde82264f3c54bb7819f5bcd2beb9e8669f5cc60` |
+| origin/main | `cde82264f3c54bb7819f5bcd2beb9e8669f5cc60` |
 | Ahead/behind | `0 / 0` |
 
 ## Current Phase
 
-    TWINPET-P1-OFFLINE-SYNC-PACKET-3A-2A-DOCS-RECONCILIATION
-    P1 Offline / Sync Packet 3A-2A asyncOrders Lookup Adapter CLOSED / PUSHED — docs reconciliation in progress
+    TWINPET-P1-OFFLINE-SYNC-PACKET-3A-2B-DOCS-RECONCILIATION
+    P1 Offline / Sync Packet 3A-2B Startup Sweep Boot Wiring CLOSED / PUSHED — docs reconciliation in progress
 
 ## Working Tree
 
@@ -26,40 +26,38 @@
 
 **Do NOT touch stash@{0}.**
 
+## P1 Packet 3A-2B Closure
+
+| Field | Value |
+|-------|-------|
+| Scope | AppShell-mounted startup Sale Intent sweep boot wiring |
+| Implementation | `cde8226 feat(pos): add startup sale intent sweep wiring` |
+| Source impact | 1 modified + 2 new (`AppShell`, `saleIntentSweepBoot`, `saleIntentSweepBoot.test`) |
+| Behavior | 10s delayed fire-and-forget; fail-open; once-per-tab; Web Locks; composes existing APIs; Codex N1 resolved via AppShell |
+| Physical UAT | PASS — Gemini authorized commit after safe background + silent failure verified |
+| Deferred | Old offline queue UI state bugs — acknowledged, not fixed |
+| Codex review | PASS WITH NOTES (no source blockers; UAT cleared by Gemini) |
+| `npm run build` | PASS |
+| Boot tests | 22/22 |
+| Vitest subtotal | 150/150 |
+| Rules tests | 119/119 |
+| Push | PASS — HEAD == origin/main == `cde8226` |
+| Status | **CLOSED / PUSHED** |
+
 ## P1 Packet 3A-2A Closure
 
 | Field | Value |
 |-------|-------|
-| Scope | Unwired asyncOrders server lookup adapter |
-| Implementation | `535073e feat(pos): add async order server lookup adapter` |
-| Source impact | 2 new files only (`asyncOrderLookup`, `asyncOrderLookup.test`) |
-| Behavior | `createAsyncOrderServerLookup`; `getDocFromServer`-only; existence-only; raw error propagation; returns null when unconfigured |
-| Non-scope | No boot wiring, no startup execution, no imports from existing files, no Firestore writes |
-| Codex review | PASS (no blockers) |
-| `npm run build` | PASS |
-| Lookup tests | 13/13 |
-| Adjacent tests | sweep 44/44, W-01 12/12, observer 9/9, journal 50/50, rules 119/119 |
-| Push | PASS — HEAD == origin/main == `535073e` |
+| Implementation | `535073e` + docs `944acfc` |
 | Status | **CLOSED / PUSHED** |
 
-## P1 Packet 3A-1 Closure
+## P1 Packet 3A-1 / Packet 2 / Packet 1
 
-| Field | Value |
-|-------|-------|
-| Implementation | `421d368` + docs `09cace8` |
-| Status | **CLOSED / PUSHED** |
+All **CLOSED / PUSHED**.
 
-## P1 Packet 2 / Packet 1 Closure
+## Next Packet Decision Gate
 
-Both **CLOSED / PUSHED** (`d500bf9` + `371b537`; `3fe056e` + `644dc85`).
-
-## P1 Packet 3A-2B Status
-
-**NOT STARTED** — requires separate Gemini authorization. Boot trigger/mount (Codex N1), claims readiness, offline skip, Web Locks, 10-second scheduling, batch bounds, physical UAT.
-
-### Codex N1 (carry forward for 3A-2B)
-
-Rules-of-hooks weakens PosShellRoute structural branch guarantee if hook called above early returns. Gemini must decide: mount in AppShell, or PosShellRoute with internal branch-validity gate.
+**NOT STARTED** — Gemini may choose: 3A-2C closure hardening, 3B sequence hardening, 3C `rejected_by_rules` policy, or hold.
 
 ## UI-11 Packet 1 / UI-10-C / UI-10-B / UI-10-A
 
@@ -71,31 +69,29 @@ All **CLOSED / PUSHED**.
 
 ## Cancelled / Deferred
 
-Printer / Thermal — cancelled/deferred.
+Printer / Thermal — cancelled/deferred. Old offline queue UI bugs — deferred (not fixed at 3A-2B).
 
 ## Recent Completed Work
 
 | Hash | Message |
 |------|---------|
+| `cde8226` | feat(pos): add startup sale intent sweep wiring — **P1 PACKET 3A-2B CLOSED / PUSHED** |
+| `944acfc` | docs: reconcile p1 offline sync packet 3a-2a closure |
 | `535073e` | feat(pos): add async order server lookup adapter — **P1 PACKET 3A-2A CLOSED / PUSHED** |
 | `09cace8` | docs: reconcile p1 offline sync packet 3a-1 closure |
 | `421d368` | feat(pos): add sale intent lifecycle sweep primitives — **P1 PACKET 3A-1 CLOSED / PUSHED** |
-| `371b537` | docs: reconcile p1 offline sync packet 2 closure |
-| `d500bf9` | feat(pos): add sale intent observer wiring — **P1 PACKET 2 CLOSED / PUSHED** |
 
 ## Next Recommended Block
 
-    READY_FOR_PACKET_3A_2B_DECISION_GATE
+    READY_FOR_NEXT_PACKET_DECISION_GATE
 
-1. Formal Packet 3A-2A closure (this docs pass)
+1. Formal Packet 3A-2B closure (this docs pass)
 2. Optional Codex docs review after docs commit/push
-3. P1 Packet 3A-2B only after separate Gemini authorization
+3. Next Packet Decision Gate — Gemini authorization only
 
 ## Hard Boundaries
 
-- P1 Packet 3A-2B not started
-- No boot wiring or startup sweep execution
-- `asyncOrderLookup` not imported from any existing runtime file
-- Missing server doc ≠ failure; lookup permission-denied ≠ `rejected_by_rules` in sweep
+- 3A-2C / 3B / 3C not started
+- Old offline queue UI bugs not fixed
 - Sale Intent Journal is sidecar-only — not source of truth
-- `POSPage.tsx` / `PaymentModal.tsx` / `useCheckout.ts` unchanged
+- `POSPage.tsx` / `PaymentModal.tsx` / `useCheckout.ts` / `asyncCheckout.ts` unchanged at 3A-2B

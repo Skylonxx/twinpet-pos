@@ -1,43 +1,45 @@
-# Latest Report — P1 Offline / Sync Packet 3A-2A asyncOrders Lookup Adapter
+# Latest Report — P1 Offline / Sync Packet 3A-2B Startup Sweep Boot Wiring
 
 > Date: 2026-07-07
-> HEAD: `535073e2431350d924825733c1ebafd803cf889a`
-> origin/main: `535073e2431350d924825733c1ebafd803cf889a`
-> Status: **P1 PACKET 3A-2A CLOSED / PUSHED**
+> HEAD: `cde82264f3c54bb7819f5bcd2beb9e8669f5cc60`
+> origin/main: `cde82264f3c54bb7819f5bcd2beb9e8669f5cc60`
+> Status: **P1 PACKET 3A-2B CLOSED / PUSHED**
 
 ---
 
 ## Summary
 
-P1 Offline / Sync Packet 3A-2A is **closed and pushed** at `535073e feat(pos): add async order server lookup adapter`. Delivers an unwired `createAsyncOrderServerLookup` factory as an isolated read-only adapter — no boot wiring, no startup execution, no existing file modifications.
+P1 Offline / Sync Packet 3A-2B is **closed and pushed** at `cde8226 feat(pos): add startup sale intent sweep wiring`. AppShell-mounted startup sweep boot composes existing 3A-2A/3A-1/Packet 1 APIs. Physical UAT passed per Gemini authorization.
 
-## Scope Delivered (2 new files)
+## Scope Delivered (3 files)
 
-- `src/lib/pos/offline/asyncOrderLookup.ts`
-- `src/lib/pos/offline/asyncOrderLookup.test.ts`
+- `src/components/AppShell.tsx` — `useSaleIntentSweepBoot()` mount
+- `src/lib/pos/offline/saleIntentSweepBoot.ts`
+- `src/lib/pos/offline/saleIntentSweepBoot.test.ts`
 
-## Adapter Behavior
+## Boot Wiring Behavior
 
-- `createAsyncOrderServerLookup` factory — returns `null` when Firebase unconfigured or `db` unavailable
-- `getDocFromServer`-only — no `getDoc`, no `getDocFromCache`
-- Existence-only via `snap.exists()` — no `snap.data()`, no asyncOrder payload/body field reads
-- Raw Firebase errors propagate to existing 3A-1 `normalizeLookupError`
-- Staff missing-doc under branch-scoped rules may surface as `permission-denied`
-- `exists=false` is clean admin-token path
-- Sidecar-safe and read-only; no Firestore writes; no retry/resend
+- AppShell-mounted (resolves Codex N1)
+- 10-second fixed delayed background attempt; fire-and-forget
+- Silent no-op on skip paths; fail-open on errors
+- Once-per-tab guard; Web Locks `ifAvailable` single-flight
+- Composes: `createAsyncOrderServerLookup`, `createSaleIntentJournal`, `runSaleIntentSweep`, cached `getIdTokenResult`
+- Cached `staffId` claims gate
+- No UI/checkout/payment/stock/drawer change; no Firestore writes; no payload read; no `snap.data()`
 
-## Explicit Non-Scope
+## Physical UAT
 
-- No boot wiring; no `saleIntentSweepBoot`; no startup sweep execution
-- No `main.tsx` / App / AuthProvider / AppShell / PosShellRoute / POSPage / PaymentModal / useCheckout changes
-- No Packet 1 / Packet 2 / Packet 3A-1 / `saleIntentObserver` mutation
-- No transition-matrix extension; no production runtime behavior change
-- `asyncOrderLookup` not imported from any existing file
+Gemini confirmed before commit authorization:
+
+- Safe background execution verified
+- Silent failure verified
+- Pre-existing old offline queue UI bugs — **deferred, not fixed**
 
 ## Prior Phases
 
 | Packet | Commit | Status |
 |--------|--------|--------|
+| Packet 3A-2A Lookup Adapter | `535073e` + docs `944acfc` | CLOSED / PUSHED |
 | Packet 3A-1 Sweep Primitives | `421d368` + docs `09cace8` | CLOSED / PUSHED |
 | Packet 2 Runtime Observer | `d500bf9` + docs `371b537` | CLOSED / PUSHED |
 | Packet 1 Sale Intent Journal | `3fe056e` + docs `644dc85` | CLOSED / PUSHED |
@@ -47,6 +49,7 @@ P1 Offline / Sync Packet 3A-2A is **closed and pushed** at `535073e feat(pos): a
 | Check | Result |
 |-------|--------|
 | `npm run build` | PASS |
+| `saleIntentSweepBoot.test.ts` | 22/22 |
 | `asyncOrderLookup.test.ts` | 13/13 |
 | `saleIntentSweepLogic.test.ts` | 29/29 |
 | `saleIntentSweep.test.ts` | 15/15 |
@@ -54,25 +57,22 @@ P1 Offline / Sync Packet 3A-2A is **closed and pushed** at `535073e feat(pos): a
 | `saleIntentObserver.test.ts` | 9/9 |
 | `saleIntentJournalLogic.test.ts` | 32/32 |
 | `saleIntentJournalStore.test.ts` | 18/18 |
+| Vitest subtotal | 150/150 |
 | `npm run test:rules` | 119/119 |
-| `git diff --check` | PASS |
-| Codex implementation review | PASS (no blockers) |
+| `git diff --check` | PASS (CRLF advisory only) |
+| Codex review | PASS WITH NOTES (UAT cleared by Gemini) |
 | Push | PASS |
 | stash@{0} | untouched |
 
-## Deferred / Next Gate — Packet 3A-2B
+## Deferred / Next Gate
 
-**NOT STARTED.** Requires separate Gemini authorization. Must decide:
+**Next Packet Decision Gate — NOT STARTED.** Gemini may choose:
 
-- Auth-ready boot trigger and mount point (Codex N1)
-- Claims readiness gate; offline skip policy
-- Web Locks / once-per-tab behavior; 10-second scheduling; batch bounds
-- Physical UAT
-
-**Codex N1:** Rules-of-hooks weakens PosShellRoute structural branch guarantee if hook called above early returns. Gemini must decide AppShell mount vs PosShellRoute with internal branch-validity gate. Did not block 3A-2A.
-
-No boot wiring, startup sweep execution, or production lookup composition exists yet.
+- Packet 3A-2C / closure hardening
+- Packet 3B sequence hardening
+- Packet 3C `rejected_by_rules` operational policy
+- hold
 
 ## Docs Reconciliation
 
-Separate docs-only pass (TWINPET-P1-OFFLINE-SYNC-PACKET-3A-2A-DOCS-RECONCILIATION-CLAUDE-001). Not part of pushed commit `535073e`.
+Separate docs-only pass (TWINPET-P1-OFFLINE-SYNC-DOCS-RECONCILIATION-3A-2B-CLAUDE-001). Not part of pushed commit `cde8226`.

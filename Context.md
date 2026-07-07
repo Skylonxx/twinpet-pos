@@ -1,62 +1,61 @@
 # Twinpet POS — Project Context
 
 > Last reconciled: 2026-07-07
-> HEAD: `535073e2431350d924825733c1ebafd803cf889a`
-> origin/main: `535073e2431350d924825733c1ebafd803cf889a`
+> HEAD: `cde82264f3c54bb7819f5bcd2beb9e8669f5cc60`
+> origin/main: `cde82264f3c54bb7819f5bcd2beb9e8669f5cc60`
 
 ---
 
 ## Current Phase
 
-**P1 Offline / Sync Resiliency — Packet 3A-2A asyncOrders Lookup Adapter: CLOSED / PUSHED**
+**P1 Offline / Sync Resiliency — Packet 3A-2B Startup Sweep Boot Wiring: CLOSED / PUSHED**
 
 Manual workflow remains active. `agentchattr` was not used as the executor for this phase.
 
-### P1 Packet 3A-2A pushed commit
+### P1 Packet 3A-2B pushed commit
+
+| Hash | Message |
+|------|---------|
+| `cde8226` | feat(pos): add startup sale intent sweep wiring |
+
+### P1 Packet 3A-2B scope (3 files)
+
+- `src/components/AppShell.tsx` — mount `useSaleIntentSweepBoot()`
+- `src/lib/pos/offline/saleIntentSweepBoot.ts` — boot wiring module
+- `src/lib/pos/offline/saleIntentSweepBoot.test.ts`
+
+### P1 Packet 3A-2B behavior
+
+- AppShell-mounted startup Sale Intent sweep boot wiring (resolves Codex N1 via AppShell mount)
+- 10-second fixed delayed background attempt after AppShell mount
+- Fire-and-forget execution; silent no-op on skip paths; fail-open on errors
+- Once-per-tab guard; Web Locks `ifAvailable` single-flight; unsupported Web Locks falls back to idempotent runner
+- Composes existing public APIs only: `createAsyncOrderServerLookup`, `createSaleIntentJournal`, `runSaleIntentSweep`, cached `getIdTokenResult`
+- Cached `getIdTokenResult` `staffId` gate
+- No UI state / toast / loader / layout / route / sidebar / style change
+- No checkout / payment / stock / drawer mutation; no direct Firestore write; no asyncOrder payload read; no `snap.data()`; no transition matrix change
+
+### Physical UAT
+
+Gemini confirmed Physical UAT passed before commit authorization:
+
+- Safe background execution verified
+- Silent failure verified
+- Pre-existing UI state bugs in old offline queue acknowledged and **deferred — not fixed**
+
+### Prior — Packet 3A-2A Lookup Adapter
 
 | Hash | Message |
 |------|---------|
 | `535073e` | feat(pos): add async order server lookup adapter |
+| `944acfc` | docs: reconcile p1 offline sync packet 3a-2a closure |
 
-### P1 Packet 3A-2A scope (2 new files only)
-
-- `src/lib/pos/offline/asyncOrderLookup.ts`
-- `src/lib/pos/offline/asyncOrderLookup.test.ts`
-
-No existing tracked files modified. Not imported from any runtime path.
-
-### P1 Packet 3A-2A behavior
-
-- Unwired `asyncOrders` lookup adapter
-- `createAsyncOrderServerLookup` factory
-- Returns `null` when Firebase is unconfigured or `db` unavailable
-- `getDocFromServer`-only — no `getDoc`, no `getDocFromCache`
-- Existence-only via `snap.exists()` — no `snap.data()`, no payload/body field reads
-- Raw Firebase errors propagate to existing 3A-1 `normalizeLookupError`
-- Staff missing-doc under branch-scoped rules may surface as `permission-denied`
-- `exists=false` is clean admin-token path
-- Sidecar-safe and read-only; no Firestore writes; no retry/resend
-
-### P1 Packet 3A-2A explicit non-scope
-
-- No boot wiring; no startup sweep execution; no `saleIntentSweepBoot`
-- No `main.tsx` / App / AuthProvider / AppShell / PosShellRoute / POSPage / PaymentModal / useCheckout changes
-- No Packet 1 / Packet 2 / Packet 3A-1 / `saleIntentObserver` mutation
-- No transition-matrix extension; no production runtime behavior change
-- `asyncOrderLookup` not imported from any existing file
-
-### Prior — Packet 3A-1 Lifecycle Sweep Primitives
-
-| Hash | Message |
-|------|---------|
-| `421d368` | feat(pos): add sale intent lifecycle sweep primitives |
-| `09cace8` | docs: reconcile p1 offline sync packet 3a-1 closure |
-
-### Validation (P1 Packet 3A-2A)
+### Validation (P1 Packet 3A-2B)
 
 | Check | Result |
 |-------|--------|
 | `npm run build` | PASS |
+| `saleIntentSweepBoot.test.ts` | 22/22 |
 | `asyncOrderLookup.test.ts` | 13/13 |
 | `saleIntentSweepLogic.test.ts` | 29/29 |
 | `saleIntentSweep.test.ts` | 15/15 |
@@ -64,21 +63,22 @@ No existing tracked files modified. Not imported from any runtime path.
 | `saleIntentObserver.test.ts` | 9/9 |
 | `saleIntentJournalLogic.test.ts` | 32/32 |
 | `saleIntentJournalStore.test.ts` | 18/18 |
+| Vitest subtotal | 150/150 |
 | `npm run test:rules` | 119/119 |
-| `git diff --check` | PASS |
-| Codex implementation review | PASS (no blockers) |
-| Push | PASS — HEAD == origin/main == `535073e` |
+| `git diff --check` | PASS (CRLF advisory only) |
+| Codex implementation review | PASS WITH NOTES (no source blockers; UAT gate cleared by Gemini) |
+| Push | PASS — HEAD == origin/main == `cde8226` |
 
-### Deferred / next gate — Packet 3A-2B
+### Deferred / next gate
 
-**NOT STARTED** — requires separate Gemini authorization. Must decide:
+**Next Packet Decision Gate** — Gemini may choose among:
 
-- Auth-ready boot trigger and mount point (see Codex N1 below)
-- Claims readiness gate; offline skip policy
-- Web Locks / once-per-tab behavior; 10-second scheduling; batch bounds
-- Physical UAT
+- Packet 3A-2C / closure hardening (if still needed)
+- Packet 3B sequence hardening
+- Packet 3C `rejected_by_rules` operational policy
+- hold
 
-**Codex N1 (3A-2B-scoped, did not block 3A-2A):** Rules-of-hooks weakens the PosShellRoute structural branch guarantee if the hook is called above early returns. Before 3A-2B boot wiring, Gemini must decide either mount in AppShell (structurally past PosShellRoute guards), or keep PosShellRoute but add an internal branch-validity gate so admin/invalid-branch redirects do not rely solely on mount structure.
+**Deferred (not fixed):** Pre-existing old offline queue UI state bugs.
 
 ### Other deferred
 
@@ -89,3 +89,4 @@ No existing tracked files modified. Not imported from any runtime path.
 ### Known technical debt (unchanged)
 
 - PaymentModal focus trap — deferred; see UI_MASTER_PLAN backlog
+- Old offline queue UI state bugs — deferred (acknowledged at 3A-2B UAT)

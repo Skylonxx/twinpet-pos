@@ -1,54 +1,49 @@
 # Twinpet POS — Task Tracker
 
 > Last reconciled: 2026-07-07
-> HEAD: `535073e2431350d924825733c1ebafd803cf889a`
-> origin/main: `535073e2431350d924825733c1ebafd803cf889a`
+> HEAD: `cde82264f3c54bb7819f5bcd2beb9e8669f5cc60`
+> origin/main: `cde82264f3c54bb7819f5bcd2beb9e8669f5cc60`
 
 ---
 
-## P1 Offline / Sync Resiliency — Packet 3A-2A asyncOrders Lookup Adapter
+## P1 Offline / Sync Resiliency — Packet 3A-2B Startup Sweep Boot Wiring
 
 **Status: CLOSED / PUSHED**
 
-- [x] Implementation pushed (`535073e`) — 2 new files under `src/lib/pos/offline/asyncOrderLookup*`
-- [x] Codex implementation review — PASS (no blockers)
+- [x] Implementation pushed (`cde8226`) — AppShell mount + `saleIntentSweepBoot` (3 files)
+- [x] Physical UAT — PASS (Gemini authorized commit after UAT)
+- [x] Codex implementation review — PASS WITH NOTES (no source blockers)
 - [x] `npm run build` — PASS
-- [x] `asyncOrderLookup.test.ts` — 13/13
-- [x] Adjacent offline tests — sweep 44/44, W-01 12/12, observer 9/9, journal 50/50, rules 119/119
+- [x] `saleIntentSweepBoot.test.ts` — 22/22
+- [x] Adjacent offline tests — 150/150 Vitest subtotal, rules 119/119
 - [ ] Docs reconciliation (this pass) — in progress
 
-**Delivered:** Unwired `createAsyncOrderServerLookup` factory; `getDocFromServer`-only; existence-only; raw error propagation; sidecar-safe read-only adapter. Not imported from any runtime path.
+**Delivered:** AppShell-mounted startup sweep boot; 10s delayed fire-and-forget; fail-open; once-per-tab; Web Locks single-flight; composes 3A-2A/3A-1/Packet 1 APIs only. Codex N1 resolved via AppShell mount.
 
-**Non-scope:** No boot wiring, no startup sweep execution, no existing file modifications, no Firestore writes.
+**Deferred (not fixed):** Pre-existing old offline queue UI state bugs.
+
+### P1 Packet 3A-2A — CLOSED / PUSHED
+
+`535073e` + docs `944acfc`. asyncOrders lookup adapter.
 
 ### P1 Packet 3A-1 — CLOSED / PUSHED
 
-`421d368` + docs `09cace8`. Lifecycle sweep primitives.
+`421d368` + docs `09cace8`. Sweep primitives.
 
-### P1 Packet 3A-2B — NOT STARTED
+### Next Packet Decision Gate — NOT STARTED
 
-Requires separate Gemini authorization. Boot trigger/mount (Codex N1), claims readiness, offline skip, Web Locks, scheduling, batch bounds, physical UAT.
+Gemini may choose: 3A-2C closure hardening, 3B sequence hardening, 3C `rejected_by_rules` policy, or hold.
 
-### P1 Packet 2 — CLOSED / PUSHED
+### P1 Packet 2 / Packet 1 — CLOSED / PUSHED
 
-`d500bf9` + docs `371b537`.
-
-### P1 Packet 1 — CLOSED / PUSHED
-
-`3fe056e` + docs `644dc85`.
-
-### UI-11 Packet 1 — CLOSED / PUSHED
-
-`ffa433c` + docs `cfc644c`.
-
-### UI-10-C / UI-10-B / UI-10-A — CLOSED / PUSHED
+### UI-11 Packet 1 / UI-10-C / UI-10-B / UI-10-A — CLOSED / PUSHED
 
 ### UI-10-D / UI-11 Packet 2 — NOT STARTED
 
 ### Next step
 
-1. Formal Packet 3A-2A closure (this docs pass)
+1. Formal Packet 3A-2B closure (this docs pass)
 2. Optional Codex docs review after docs commit/push
-3. P1 Packet 3A-2B only after separate Gemini authorization
+3. Next Packet Decision Gate — Gemini authorization only
 
-**Not active:** Printer/Thermal (cancelled/deferred), UI-10-D, UI-11 Packet 2, P1 Packet 3A-2B.
+**Not active:** Printer/Thermal (cancelled/deferred), UI-10-D, UI-11 Packet 2, 3A-2C/3B/3C.
