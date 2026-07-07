@@ -196,6 +196,152 @@ export function peekLocalSeq(): number {
   return Number.isFinite(current) ? current : 0;
 }
 
+// ── Atomic cross-tab sequence allocator (Packet 3B-2, UNWIRED) ──────────────
+//
+// `nextLocalSeq()` above is a synchronous localStorage read→parse→+1→write: two
+// same-origin tabs can both read seq N and both write N+1, minting a DUPLICATE
+// per-device sequence — and therefore a duplicate receipt number AND a colliding
+// asyncOrder id / reconciler idempotency key (one of the two sales is then lost or
+// misattributed server-side). `allocateLocalSeq()` closes that race by performing
+// the read+increment+write inside ONE IndexedDB `readwrite` transaction on the
+// `deviceSeq` key: the IndexedDB spec serializes overlapping readwrite
+// transactions across every connection to a database, so two tabs can never
+// observe the same base value. localStorage is kept only as a write-through mirror
+// (updated AFTER the IDB commit) so `peekLocalSeq()`, the Claim-Device flow, and
+// the legacy fallback keep a synchronously-readable value.
+//
+// This primitive is UNWIRED in 3B-2 — production checkout still calls
+// `nextLocalSeq()`. Caller-side preallocation is Packet 3B-3.
+
+/** Bound a hung/blocked IndexedDB open so a degraded store can never stall checkout. */
+const IDB_ALLOCATE_TIMEOUT_MS = 2000;
+
+/**
+ * Coerce a stored sequence (from IDB or localStorage) into a safe, non-negative
+ * integer base. Missing / non-numeric / NaN / negative / non-finite → 0.
+ */
+function sanitizeSeqBase(value: unknown): number {
+  let n: number;
+  if (typeof value === 'number') n = value;
+  else if (typeof value === 'string') n = Number.parseInt(value, 10);
+  else return 0;
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.floor(n);
+}
+
+/**
+ * Allocate the next sequence inside a SINGLE IDB readwrite transaction, seeded by
+ * `max(idbSeq, localStorageSeq, 0)` so historical mirror drift in either direction
+ * is absorbed (this max() is also the migration rule). Resolves the allocated
+ * number, or `null` on any bounded failure (no IndexedDB / open error / blocked /
+ * never-settling open guarded by a timeout / transaction error or abort) so the
+ * caller can fall back. Never throws, never hangs.
+ */
+function idbAllocateSeq(lsBase: number): Promise<number | null> {
+  return new Promise((resolve) => {
+    if (typeof indexedDB === 'undefined') {
+      resolve(null);
+      return;
+    }
+    let settled = false;
+    const finish = (v: number | null): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(v);
+    };
+    // Fail open if the open/transaction never settles (blocked, hung upgrade, …).
+    const timer = setTimeout(() => finish(null), IDB_ALLOCATE_TIMEOUT_MS);
+
+    let req: IDBOpenDBRequest;
+    try {
+      req = indexedDB.open(IDB_DB_NAME, 1);
+    } catch {
+      finish(null);
+      return;
+    }
+    req.onupgradeneeded = () => {
+      try {
+        req.result.createObjectStore(IDB_STORE);
+      } catch {
+        // store may already exist under a concurrent upgrade — ignore
+      }
+    };
+    req.onblocked = () => finish(null);
+    req.onerror = () => finish(null);
+    req.onsuccess = () => {
+      const dbi = req.result;
+      let allocated: number | null = null;
+      try {
+        const tx = dbi.transaction(IDB_STORE, 'readwrite');
+        const store = tx.objectStore(IDB_STORE);
+        const getReq = store.get(IDB_KEYS.seq);
+        getReq.onsuccess = () => {
+          const next = Math.max(sanitizeSeqBase(getReq.result), lsBase, 0) + 1;
+          allocated = next;
+          store.put(next, IDB_KEYS.seq); // commit inside the same readwrite txn
+        };
+        // A getReq.onerror surfaces as tx.onerror/onabort below → bounded fallback.
+        tx.oncomplete = () => {
+          try {
+            dbi.close();
+          } catch {
+            /* noop */
+          }
+          finish(allocated);
+        };
+        tx.onerror = () => {
+          try {
+            dbi.close();
+          } catch {
+            /* noop */
+          }
+          finish(null);
+        };
+        tx.onabort = () => {
+          try {
+            dbi.close();
+          } catch {
+            /* noop */
+          }
+          finish(null);
+        };
+      } catch {
+        try {
+          dbi.close();
+        } catch {
+          /* noop */
+        }
+        finish(null);
+      }
+    };
+  });
+}
+
+/**
+ * Atomic, cross-tab-safe next per-device sequence. Uses a single IndexedDB
+ * `readwrite` transaction as the correctness primitive; on any bounded IDB failure
+ * it fails open to the legacy synchronous `nextLocalSeq()` so a sale is never
+ * blocked (accepting today's degraded-mode duplicate risk rather than blocking the
+ * customer). The localStorage mirror is updated ONLY after a successful IDB commit,
+ * never before. UNWIRED in 3B-2 — checkout still uses `nextLocalSeq()`.
+ */
+export async function allocateLocalSeq(): Promise<number> {
+  const lsBase = hasLocalStorage()
+    ? sanitizeSeqBase(localStorage.getItem(DEVICE_SEQ_KEY))
+    : 0;
+
+  const allocated = await idbAllocateSeq(lsBase);
+  if (allocated != null) {
+    // Write-through mirror — AFTER the IDB commit, never before.
+    if (hasLocalStorage()) localStorage.setItem(DEVICE_SEQ_KEY, String(allocated));
+    return allocated;
+  }
+
+  // Bounded fail-open: legacy synchronous allocator. Never throws.
+  return nextLocalSeq();
+}
+
 /**
  * Deterministic, idempotent order id = `${deviceId}-${seq}`. Used as both the
  * Firestore doc id and the reconciler idempotency key: a client retry re-writes
