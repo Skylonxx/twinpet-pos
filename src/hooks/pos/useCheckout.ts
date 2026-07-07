@@ -3,7 +3,7 @@ import { applyCrmSaleLocally } from '../../lib/customers/crmService';
 import { devApplyCreditCharge, devApplyCrmAfterSale } from '../../lib/customers/devMock';
 import { isFirebaseConfigured } from '../../lib/firebase';
 import { roundMoney } from '../../lib/money';
-import { submitAsyncOrder } from '../../lib/pos/asyncCheckout';
+import { allocateOrderIdentity, submitAsyncOrder } from '../../lib/pos/asyncCheckout';
 import { createSaleIntentJournal } from '../../lib/pos/offline/saleIntentJournal';
 import {
   createNoopSaleIntentObserver,
@@ -90,6 +90,13 @@ export function useCheckout({
           payments.filter((p) => p.method === 'credit').reduce((s, p) => s + p.amount, 0),
         );
 
+        // Pre-allocate the order identity (3B-3) via the atomic cross-tab
+        // allocator before the write, so two same-device tabs can never mint
+        // the same sequence/receipt number. allocateOrderIdentity() is
+        // non-throwing by construction (allocateLocalSeq() is bounded
+        // fail-open), so no fallback catch is added here.
+        const identity = await allocateOrderIdentity();
+
         // Write the sale intent and return immediately (durably queued by
         // persistentLocalCache; settled later by the reconcileOrder function).
         const { billId } = submitAsyncOrder(
@@ -107,7 +114,7 @@ export function useCheckout({
             customerName: customer?.name ?? null,
             priceLevelId: RETAIL_PRICE_LEVEL_ID,
           },
-          { observer: getSaleIntentObserver() },
+          { observer: getSaleIntentObserver(), identity },
         );
 
         // Drawer single-writer: with Firebase, the shift drawer is DERIVED live

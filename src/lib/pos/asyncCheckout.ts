@@ -6,6 +6,7 @@ import { RETAIL_PRICE_LEVEL_ID } from '../types';
 import { formatOfflineReceiptNumber } from './billId';
 import { getLineTotal } from './cartUtils';
 import {
+  allocateLocalSeq,
   getDeviceId,
   getDeviceLabel,
   getReceiptDeviceSegment,
@@ -44,6 +45,8 @@ export type SubmitAsyncOrderResult = { orderId: string; billId: string };
 /** Optional injected sidecar; absent = current fallback (log-only) behavior. */
 export type SubmitAsyncOrderDeps = {
   observer?: SaleIntentObserver;
+  /** Pre-allocated identity (3B-3). Absent = legacy inline allocation, unchanged. */
+  identity?: OrderIdentity;
 };
 
 function buildLine(line: CartLine): AsyncOrderLine {
@@ -133,6 +136,23 @@ export function buildAsyncOrder(
 }
 
 /**
+ * Pre-allocate the full order identity via the atomic cross-tab allocator
+ * (Packet 3B-3). Composition is identical to the legacy inline path — same
+ * formatter, same segment, same shape — so billId/orderId are unaffected.
+ * Sync fields are read before the async allocation so a failure there can
+ * never consume a sequence. `allocateLocalSeq()` is bounded fail-open, so this
+ * never throws beyond what the legacy inline composition already could.
+ */
+export async function allocateOrderIdentity(): Promise<OrderIdentity> {
+  const deviceId = getDeviceId();
+  const deviceLabel = getDeviceLabel();
+  const deviceSegment = getReceiptDeviceSegment();
+  const seq = await allocateLocalSeq();
+  const billId = formatOfflineReceiptNumber(deviceSegment, seq);
+  return { deviceId, deviceLabel, seq, billId };
+}
+
+/**
  * Submit a sale. Returns SYNCHRONOUSLY with the (client-authoritative) receipt
  * number. The Firestore write is fire-and-forget: its promise resolves on server
  * ack when online and stays pending — but durably queued — when offline, so we
@@ -142,17 +162,19 @@ export function submitAsyncOrder(
   input: SubmitAsyncOrderInput,
   deps?: SubmitAsyncOrderDeps,
 ): SubmitAsyncOrderResult {
-  const deviceId = getDeviceId();
-  const seq = nextLocalSeq();
-  // Receipt segment prefers the admin label ("iPad-01" → "IPAD01"); the doc id
-  // still uses the raw device id, so uniqueness holds even if labels clash.
-  const billId = formatOfflineReceiptNumber(getReceiptDeviceSegment(), seq);
-  const order = buildAsyncOrder(input, {
-    deviceId,
-    deviceLabel: getDeviceLabel(),
-    seq,
-    billId,
-  });
+  // Pre-allocated identity (3B-3) is used verbatim — never re-allocate a
+  // sequence here. Absent = legacy inline allocation, unchanged.
+  const ident: OrderIdentity =
+    deps?.identity ??
+    (() => {
+      const deviceId = getDeviceId();
+      const seq = nextLocalSeq();
+      // Receipt segment prefers the admin label ("iPad-01" → "IPAD01"); the doc id
+      // still uses the raw device id, so uniqueness holds even if labels clash.
+      const billId = formatOfflineReceiptNumber(getReceiptDeviceSegment(), seq);
+      return { deviceId, deviceLabel: getDeviceLabel(), seq, billId };
+    })();
+  const order = buildAsyncOrder(input, ident);
 
   if (isFirebaseConfigured && db) {
     // RAW promise — captured before any .catch so an injected observer can still

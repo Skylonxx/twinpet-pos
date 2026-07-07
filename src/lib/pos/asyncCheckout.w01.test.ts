@@ -21,6 +21,7 @@
 // BEFORE the observer/fallback branch, so the anti-pattern cannot silently regress.
 
 import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest';
+import { formatOfflineReceiptNumber } from './billId';
 import { createInMemorySaleIntentJournal } from './offline/saleIntentJournal';
 import { createSaleIntentObserver } from './offline/saleIntentObserver';
 import type { CartLine, CartTotals, PaymentSplit } from './types';
@@ -53,8 +54,31 @@ vi.mock('firebase/firestore', async (importOriginal) => {
   };
 });
 
+// Partial mock of deviceId.ts: every export stays the REAL implementation
+// (wrapped in vi.fn so calls can be counted), keeping this jsdom environment's
+// real localStorage-backed behavior (indexedDB is undefined in jsdom, so
+// allocateLocalSeq() exercises its own real bounded fail-open to the real
+// nextLocalSeq() — this is the "no-IDB environment" case, not a fake).
+vi.mock('./deviceId', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./deviceId')>();
+  return {
+    ...actual,
+    getDeviceId: vi.fn(actual.getDeviceId),
+    getDeviceLabel: vi.fn(actual.getDeviceLabel),
+    getReceiptDeviceSegment: vi.fn(actual.getReceiptDeviceSegment),
+    nextLocalSeq: vi.fn(actual.nextLocalSeq),
+    allocateLocalSeq: vi.fn(actual.allocateLocalSeq),
+  };
+});
+
 // Imported AFTER the mocks are declared (vi.mock is hoisted, so this is safe).
-import { submitAsyncOrder, type SubmitAsyncOrderInput } from './asyncCheckout';
+import {
+  allocateOrderIdentity,
+  submitAsyncOrder,
+  type OrderIdentity,
+  type SubmitAsyncOrderInput,
+} from './asyncCheckout';
+import * as deviceIdModule from './deviceId';
 
 const line = {
   lineKey: 'lk1',
@@ -100,6 +124,11 @@ let warnSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
   setDocMock.mockClear();
+  vi.mocked(deviceIdModule.getDeviceId).mockClear();
+  vi.mocked(deviceIdModule.getDeviceLabel).mockClear();
+  vi.mocked(deviceIdModule.getReceiptDeviceSegment).mockClear();
+  vi.mocked(deviceIdModule.nextLocalSeq).mockClear();
+  vi.mocked(deviceIdModule.allocateLocalSeq).mockClear();
   warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 });
 
@@ -216,5 +245,132 @@ describe('W-01 · asyncCheckout source contract', () => {
     for (const token of ['createSaleIntentJournal', 'enqueueSaleIntent', "from './offline/saleIntentJournal'"]) {
       expect(source).not.toContain(token);
     }
+  });
+});
+
+// ─── W-01/3B-3 · injected identity path (Checkout Identity Preallocation) ────
+describe('3B-3 · submitAsyncOrder with a pre-allocated identity', () => {
+  const identity: OrderIdentity = {
+    deviceId: 'DEV1234',
+    deviceLabel: 'iPad-01',
+    seq: 42,
+    billId: 'OFF-260707-IPAD01-000042',
+  };
+
+  test('T1 · uses the injected identity verbatim for orderId/billId and the order handed to the observer', async () => {
+    const journal = createInMemorySaleIntentJournal();
+    const observer = createSaleIntentObserver({ journal });
+    const result = submitAsyncOrder(input, { observer, identity });
+
+    expect(result.orderId).toBe(`${identity.deviceId}-${identity.seq}`);
+    expect(result.billId).toBe(identity.billId);
+
+    await flush();
+    const entry = await journal.getSaleIntent(result.orderId);
+    expect(entry.ok).toBe(true);
+    if (entry.ok) {
+      expect(entry.value?.billId).toBe(identity.billId);
+    }
+  });
+
+  test('T2 · performs no second allocation: nextLocalSeq/allocateLocalSeq are not called', () => {
+    submitAsyncOrder(input, { identity });
+    expect(deviceIdModule.nextLocalSeq).not.toHaveBeenCalled();
+    expect(deviceIdModule.allocateLocalSeq).not.toHaveBeenCalled();
+  });
+
+  test('T2b · performs no re-composition: getDeviceId/getDeviceLabel/getReceiptDeviceSegment are not called', () => {
+    submitAsyncOrder(input, { identity });
+    expect(deviceIdModule.getDeviceId).not.toHaveBeenCalled();
+    expect(deviceIdModule.getDeviceLabel).not.toHaveBeenCalled();
+    expect(deviceIdModule.getReceiptDeviceSegment).not.toHaveBeenCalled();
+  });
+
+  test('T3 · legacy no-identity path still allocates exactly once via nextLocalSeq', () => {
+    submitAsyncOrder(input);
+    expect(deviceIdModule.nextLocalSeq).toHaveBeenCalledTimes(1);
+  });
+
+  test('T3b · legacy no-identity path still formats billId with formatOfflineReceiptNumber(getReceiptDeviceSegment(), seq)', () => {
+    const result = submitAsyncOrder(input);
+    const seq = vi.mocked(deviceIdModule.nextLocalSeq).mock.results[0]?.value as number;
+    const expectedBillId = formatOfflineReceiptNumber(deviceIdModule.getReceiptDeviceSegment(), seq);
+    expect(result.billId).toBe(expectedBillId);
+  });
+
+  test('T4 · submitAsyncOrder remains a non-async, synchronous export (source pin)', async () => {
+    const source = (await import('./asyncCheckout.ts?raw')).default;
+    expect(source).toContain('export function submitAsyncOrder(');
+    expect(source).not.toContain('export async function submitAsyncOrder');
+  });
+});
+
+describe('3B-3 · allocateOrderIdentity()', () => {
+  test('T5 · composition matches the legacy formatter/orderId shape for an equal seq', async () => {
+    const identity = await allocateOrderIdentity();
+    expect(identity.billId).toBe(
+      formatOfflineReceiptNumber(deviceIdModule.getReceiptDeviceSegment(), identity.seq),
+    );
+    expect(deviceIdModule.makeAsyncOrderId(identity.deviceId, identity.seq)).toBe(
+      `${identity.deviceId}-${identity.seq}`,
+    );
+  });
+
+  test('T6 · resolves via the allocator fail-open in this no-IndexedDB (jsdom) environment', async () => {
+    expect(typeof indexedDB).toBe('undefined');
+    const identity = await allocateOrderIdentity();
+    expect(typeof identity.seq).toBe('number');
+    expect(Number.isFinite(identity.seq)).toBe(true);
+    expect(identity.billId.length).toBeGreaterThan(0);
+  });
+
+  test('T7 · calls allocateLocalSeq exactly once and never nextLocalSeq directly', async () => {
+    await allocateOrderIdentity();
+    expect(deviceIdModule.allocateLocalSeq).toHaveBeenCalledTimes(1);
+  });
+
+  test('T7b · journal correlation with a preallocated identity keys off order.id', async () => {
+    const journal = createInMemorySaleIntentJournal();
+    const observer = createSaleIntentObserver({ journal });
+    const identity = await allocateOrderIdentity();
+    const result = submitAsyncOrder(input, { observer, identity });
+    await flush();
+    const entry = await journal.getSaleIntent(`${identity.deviceId}-${identity.seq}`);
+    expect(entry.ok).toBe(true);
+    if (entry.ok) {
+      expect(entry.value?.status).toBe('rejected_by_rules');
+    }
+    expect(result.orderId).toBe(`${identity.deviceId}-${identity.seq}`);
+  });
+});
+
+// ─── T8 · useCheckout source-contract pins (placement: after guard, before submit) ─
+describe('3B-3 · useCheckout source contract', () => {
+  let hookSource: string;
+  beforeEach(async () => {
+    hookSource = (await import('../../hooks/pos/useCheckout.ts?raw')).default;
+  });
+
+  test('imports allocateOrderIdentity from asyncCheckout', () => {
+    expect(hookSource).toContain('allocateOrderIdentity');
+    expect(hookSource).toContain("from '../../lib/pos/asyncCheckout'");
+  });
+
+  test('awaits allocateOrderIdentity() after the guard clause and before submitAsyncOrder(', () => {
+    const guardIdx = hookSource.indexOf('throw new Error(');
+    const allocIdx = hookSource.indexOf('await allocateOrderIdentity()');
+    const submitIdx = hookSource.indexOf('submitAsyncOrder(');
+    expect(guardIdx).toBeGreaterThan(-1);
+    expect(allocIdx).toBeGreaterThan(guardIdx);
+    expect(submitIdx).toBeGreaterThan(allocIdx);
+  });
+
+  test('passes identity through the existing deps object', () => {
+    expect(hookSource).toContain('{ observer: getSaleIntentObserver(), identity }');
+  });
+
+  test('does not add a broad fallback catch around allocateOrderIdentity()', () => {
+    expect(hookSource).not.toContain('catch { identity = undefined');
+    expect(hookSource).not.toContain('allocateOrderIdentity().catch(');
   });
 });
