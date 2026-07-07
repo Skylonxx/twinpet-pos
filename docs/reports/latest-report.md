@@ -1,76 +1,79 @@
-# Latest Report — P1 Offline / Sync Packet 2 Runtime Observer
+# Latest Report — P1 Offline / Sync Packet 3A-1 Lifecycle Sweep Primitives
 
 > Date: 2026-07-07
-> HEAD: `d500bf99282f8edd8322ecc6f2b5e81e2b451a3d`
-> origin/main: `d500bf99282f8edd8322ecc6f2b5e81e2b451a3d`
-> Status: **P1 PACKET 2 CLOSED / PUSHED**
+> HEAD: `421d3683fa319d801c148557ebd004e5edf50346`
+> origin/main: `421d3683fa319d801c148557ebd004e5edf50346`
+> Status: **P1 PACKET 3A-1 CLOSED / PUSHED**
 
 ---
 
 ## Summary
 
-P1 Offline / Sync Packet 2 is **closed and pushed** at `d500bf9 feat(pos): add sale intent observer wiring`. W-01 deterministic rejected-write evidence harness at `e3155ad`. Runtime observer wires raw Firestore `setDoc` promise into Sale Intent Journal sidecar for lifecycle observation.
+P1 Offline / Sync Packet 3A-1 is **closed and pushed** at `421d368 feat(pos): add sale intent lifecycle sweep primitives`. Delivers pure sweep decision logic and a dependency-injected runner as isolated primitives — no boot wiring, no startup execution, no existing file modifications.
 
-## Scope Delivered
+## Scope Delivered (4 new files)
 
-**Modified (3):**
+- `src/lib/pos/offline/saleIntentSweepLogic.ts`
+- `src/lib/pos/offline/saleIntentSweepLogic.test.ts`
+- `src/lib/pos/offline/saleIntentSweep.ts`
+- `src/lib/pos/offline/saleIntentSweep.test.ts`
 
-- `src/lib/pos/asyncCheckout.ts`
-- `src/hooks/pos/useCheckout.ts`
-- `src/lib/pos/asyncCheckout.w01.test.ts`
+## Sweep Behavior
 
-**New (2):**
+- Pure sweep decision logic + dependency-injected runner
+- 10-minute stale threshold
+- Candidate statuses: `queued`, `flushed_to_cache`, `exception_observed`
+- `rejected_by_rules` and `manual_review` remain parked/report-only
+- Missing server docs → ambiguous no-transition skip
+- Lookup errors (`permission-denied`, `unauthenticated`, `unavailable`, unknown) → ambiguous no-transition skip
+- `exception_observed` + server exists → event-only / no illegal transition
+- No retry / resend; bounded and fail-open; sidecar-only
 
-- `src/lib/pos/offline/saleIntentObserver.ts`
-- `src/lib/pos/offline/saleIntentObserver.test.ts`
+## Explicit Non-Scope
 
-**Untouched:** `POSPage.tsx`, `PaymentModal.tsx`, checkout/cart/payment math, Firebase/functions/rules, package/config, UI/CSS, printer/thermal, platform.
+- No boot wiring; no `main.tsx` / App / AuthProvider / POSPage / PaymentModal / useCheckout changes
+- No Packet 1 / Packet 2 / `saleIntentObserver` mutation
+- No transition-matrix extension; no concrete Firestore production lookup wiring
+- No sequence hardening; no manual review UI; no production runtime behavior change
 
-## Runtime Behavior
+## Prior Phases
 
-- Raw Firestore `setDoc` promise captured before catch transformation
-- Raw promise passed to `saleIntentObserver`
-- `permission-denied` / terminal rule rejection → `rejected_by_rules`
-- Server resolution → `server_acknowledged`
-- Non-rule write/observer exception → `exception_observed`
-- Sale Intent Journal remains sidecar-only (not source of truth)
-- Cashier-visible `submitAsyncOrder` return flow remains non-blocking
-- Observer does not retry or resend writes
-- `server_acknowledged` records server resolution — does not imply checkout accepted before raw promise resolves
-
-## Prerequisite — Packet 1
-
-`3fe056e feat(pos): add sale intent journal sidecar` — 7 new offline journal files; sidecar durability/observability only.
+| Packet | Commit | Status |
+|--------|--------|--------|
+| Packet 2 Runtime Observer | `d500bf9` + docs `371b537` | CLOSED / PUSHED |
+| Packet 1 Sale Intent Journal | `3fe056e` + docs `644dc85` | CLOSED / PUSHED |
 
 ## Validation
 
 | Check | Result |
 |-------|--------|
 | `npm run build` | PASS |
+| `saleIntentSweepLogic.test.ts` | 29/29 |
+| `saleIntentSweep.test.ts` | 15/15 |
 | `asyncCheckout.w01.test.ts` | 12/12 |
 | `saleIntentObserver.test.ts` | 9/9 |
 | `saleIntentJournalLogic.test.ts` | 32/32 |
 | `saleIntentJournalStore.test.ts` | 18/18 |
 | `npm run test:rules` | 119/119 |
 | `git diff --check` | PASS |
-| Codex review | PASS WITH NOTES (no blockers) |
+| Codex implementation review | PASS WITH NOTES (no blockers) |
 | Push | PASS |
-| Working tree after push | clean |
 | stash@{0} | untouched |
 
-**Codex non-blocking note:** Developer report cited 10 observer tests; Codex observed 9 — coverage accepted.
+**Codex non-blocking note:** `decideSweepAction()` assumes candidate pre-filtering; current runner enforces invariant correctly; future changes should preserve or make helper defensive.
 
 ## Deferred / Next Gate
 
-**P1 Packet 3 — NOT STARTED.** Requires separate Gemini authorization. Suggested topics:
+**P1 Packet 3A-2 — NOT STARTED.** Requires separate Gemini authorization. Must decide:
 
-- Startup / lifecycle reconcile sweep
-- Tab-close / reload recovery for incomplete journal lifecycle
-- Sequence hardening / `nextLocalSeq` race
-- Manual review / `rejected_by_rules` operational policy (if Gemini chooses)
+- Boot trigger point
+- Auth/user/custom-claims readiness
+- Concrete Firestore lookup implementation
+- Online/offline behavior
+- Startup execution safety
 
-No startup sweep, manual review UI, or sequence hardening implemented.
+No boot wiring, startup sweep execution, or concrete Firestore production lookup exists yet.
 
 ## Docs Reconciliation
 
-Separate docs-only pass (TWINPET-P1-OFFLINE-SYNC-PACKET-2-COMBINED-DOCS-CLOSURE-CLAUDE-001). Not part of pushed commit `d500bf9`.
+Separate docs-only pass (TWINPET-P1-OFFLINE-SYNC-PACKET-3A-1-DOCS-RECONCILIATION-CLAUDE-001). Not part of pushed commit `421d368`.

@@ -6,14 +6,14 @@
 |-------|-------|
 | Repo root | `C:/Users/Narachat/twinpet-pos` |
 | Branch | `main` |
-| HEAD | `d500bf99282f8edd8322ecc6f2b5e81e2b451a3d` |
-| origin/main | `d500bf99282f8edd8322ecc6f2b5e81e2b451a3d` |
+| HEAD | `421d3683fa319d801c148557ebd004e5edf50346` |
+| origin/main | `421d3683fa319d801c148557ebd004e5edf50346` |
 | Ahead/behind | `0 / 0` |
 
 ## Current Phase
 
-    TWINPET-P1-OFFLINE-SYNC-PACKET-2-DOCS-RECONCILIATION
-    P1 Offline / Sync Packet 2 Runtime Observer CLOSED / PUSHED — docs reconciliation in progress
+    TWINPET-P1-OFFLINE-SYNC-PACKET-3A-1-DOCS-RECONCILIATION
+    P1 Offline / Sync Packet 3A-1 Lifecycle Sweep Primitives CLOSED / PUSHED — docs reconciliation in progress
 
 ## Working Tree
 
@@ -26,38 +26,40 @@
 
 **Do NOT touch stash@{0}.**
 
+## P1 Packet 3A-1 Closure
+
+| Field | Value |
+|-------|-------|
+| Scope | Lifecycle sweep primitives (pure logic + dependency-injected runner) |
+| Implementation | `421d368 feat(pos): add sale intent lifecycle sweep primitives` |
+| Source impact | 4 new files only (`saleIntentSweepLogic`, `saleIntentSweepLogic.test`, `saleIntentSweep`, `saleIntentSweep.test`) |
+| Behavior | 10-min stale threshold; candidates `queued`/`flushed_to_cache`/`exception_observed`; ambiguous no-transition skips; fail-open sidecar-only; no retry/resend |
+| Non-scope | No boot wiring, no startup execution, no concrete Firestore lookup, no existing file changes |
+| Codex review | PASS WITH NOTES (no blockers; pre-filtering invariant note non-blocking) |
+| `npm run build` | PASS |
+| Sweep logic tests | 29/29 |
+| Sweep runner tests | 15/15 |
+| Adjacent tests | W-01 12/12, observer 9/9, journal 50/50, rules 119/119 |
+| Push | PASS — HEAD == origin/main == `421d368` |
+| Status | **CLOSED / PUSHED** |
+
 ## P1 Packet 2 Closure
 
 | Field | Value |
 |-------|-------|
-| Scope | Runtime observer wiring for Sale Intent Journal sidecar |
-| W-01 harness | `e3155ad test(pos): add w01 rejected write evidence harness` |
-| Implementation | `d500bf9 feat(pos): add sale intent observer wiring` |
-| Source impact | 3 modified + 2 new files (`asyncCheckout`, `useCheckout`, `asyncCheckout.w01.test`, `saleIntentObserver`, `saleIntentObserver.test`) |
-| Untouched | `POSPage.tsx`, `PaymentModal.tsx`, checkout/cart/payment, Firebase/functions/rules, package/config, UI/CSS, printer/thermal, platform |
-| Runtime behavior | Raw `setDoc` promise captured before catch; passed to observer; `rejected_by_rules` / `server_acknowledged` / `exception_observed` lifecycle events; journal sidecar-only; non-blocking cashier flow; no observer retries |
-| Codex review | PASS WITH NOTES (no blockers; 9 vs 10 test count note non-blocking) |
-| `npm run build` | PASS |
-| W-01 tests | 12/12 |
-| Observer tests | 9/9 |
-| Journal logic tests | 32/32 |
-| Journal store tests | 18/18 |
-| Rules tests | 119/119 |
-| Push | PASS — HEAD == origin/main == `d500bf9` |
+| Implementation | `d500bf9` + docs `371b537` |
 | Status | **CLOSED / PUSHED** |
 
 ## P1 Packet 1 Closure
 
 | Field | Value |
 |-------|-------|
-| Scope | Isolated IndexedDB Sale Intent Journal sidecar (storage, pure logic, tests) |
-| Implementation | `3fe056e feat(pos): add sale intent journal sidecar` |
-| Docs | `644dc85 docs: reconcile p1 offline sync packet 1 closure` |
+| Implementation | `3fe056e` + docs `644dc85` |
 | Status | **CLOSED / PUSHED** |
 
-## P1 Packet 3 Status
+## P1 Packet 3A-2 Status
 
-**NOT STARTED** — requires separate Gemini authorization. Suggested topics: startup/lifecycle reconcile sweep; tab-close/reload recovery; sequence hardening / `nextLocalSeq` race; manual review / `rejected_by_rules` policy (if chosen).
+**NOT STARTED** — requires separate Gemini authorization. Must decide boot trigger, auth/custom-claims readiness, concrete Firestore lookup, online/offline behavior, startup execution safety.
 
 ## UI-11 Packet 1 Closure
 
@@ -66,63 +68,43 @@
 | Implementation | `ffa433c` + docs `cfc644c` |
 | Status | **CLOSED / PUSHED** |
 
-## UI-10-C Closure
+## UI-10-C / UI-10-B / UI-10-A
 
-| Field | Value |
-|-------|-------|
-| Implementation | `8449e98` + docs `62be589` |
-| Status | **CLOSED / PUSHED** |
+All **CLOSED / PUSHED**.
 
-## UI-10-B Closure
+## UI-10-D / UI-11 Packet 2
 
-| Field | Value |
-|-------|-------|
-| Implementation | `fac83d2` + docs `8bc2875` |
-| Status | **CLOSED / PUSHED** |
-
-## UI-10-A Closure
-
-| Field | Value |
-|-------|-------|
-| Primitive | `bc76e1e` + docs `df5fd87` — CLOSED / PUSHED |
-
-## UI-10-D Status
-
-**NOT STARTED** — no implementation authorized.
-
-## UI-11 Packet 2 Status
-
-**NOT STARTED** — requires separate Gemini explicit authorization.
+**NOT STARTED**
 
 ## Cancelled / Deferred
 
-Printer / Thermal Receipt / Print Polish — cancelled/deferred; legacy code untouched.
+Printer / Thermal — cancelled/deferred.
 
 ## Recent Completed Work
 
 | Hash | Message |
 |------|---------|
+| `421d368` | feat(pos): add sale intent lifecycle sweep primitives — **P1 PACKET 3A-1 CLOSED / PUSHED** |
+| `371b537` | docs: reconcile p1 offline sync packet 2 closure |
 | `d500bf9` | feat(pos): add sale intent observer wiring — **P1 PACKET 2 CLOSED / PUSHED** |
 | `e3155ad` | test(pos): add w01 rejected write evidence harness |
-| `644dc85` | docs: reconcile p1 offline sync packet 1 closure |
 | `3fe056e` | feat(pos): add sale intent journal sidecar — **P1 PACKET 1 CLOSED / PUSHED** |
-| `cfc644c` | docs: reconcile ui-11 packet 1 closure |
 
 ## Next Recommended Block
 
-    READY_FOR_PACKET_3_PLANNING_AUTHORIZATION
+    READY_FOR_PACKET_3A_2_PLANNING_AUTHORIZATION
 
-1. Formal Packet 2 closure (this docs pass)
+1. Formal Packet 3A-1 closure (this docs pass)
 2. Optional Codex docs review after docs commit/push
-3. P1 Packet 3 only after separate Gemini authorization
+3. P1 Packet 3A-2 only after separate Gemini authorization
 
 ## Hard Boundaries
 
-- P1 Packet 3 not started
-- No startup reconcile sweep implemented
-- No manual review UI for `rejected_by_rules`
+- P1 Packet 3A-2 not started
+- No boot wiring or startup sweep execution
+- No concrete Firestore production lookup wired
+- Missing server doc does not prove failure; lookup permission-denied does not mean `rejected_by_rules` in sweep
+- `exception_observed` cannot transition to `server_acknowledged` via sweep
 - Sale Intent Journal is sidecar-only — not source of truth
 - Observer does not retry or resend writes
-- UI-11 Packet 2 not started
-- UI-10-D not started
-- `POSPage.tsx` / `PaymentModal.tsx` unchanged
+- `POSPage.tsx` / `PaymentModal.tsx` / `useCheckout.ts` unchanged
