@@ -1,70 +1,63 @@
 # Twinpet POS — Project Context
 
 > Last reconciled: 2026-07-07
-> HEAD: `421d3683fa319d801c148557ebd004e5edf50346`
-> origin/main: `421d3683fa319d801c148557ebd004e5edf50346`
+> HEAD: `535073e2431350d924825733c1ebafd803cf889a`
+> origin/main: `535073e2431350d924825733c1ebafd803cf889a`
 
 ---
 
 ## Current Phase
 
-**P1 Offline / Sync Resiliency — Packet 3A-1 Lifecycle Sweep Primitives: CLOSED / PUSHED**
+**P1 Offline / Sync Resiliency — Packet 3A-2A asyncOrders Lookup Adapter: CLOSED / PUSHED**
 
 Manual workflow remains active. `agentchattr` was not used as the executor for this phase.
 
-### P1 Packet 3A-1 pushed commit
+### P1 Packet 3A-2A pushed commit
+
+| Hash | Message |
+|------|---------|
+| `535073e` | feat(pos): add async order server lookup adapter |
+
+### P1 Packet 3A-2A scope (2 new files only)
+
+- `src/lib/pos/offline/asyncOrderLookup.ts`
+- `src/lib/pos/offline/asyncOrderLookup.test.ts`
+
+No existing tracked files modified. Not imported from any runtime path.
+
+### P1 Packet 3A-2A behavior
+
+- Unwired `asyncOrders` lookup adapter
+- `createAsyncOrderServerLookup` factory
+- Returns `null` when Firebase is unconfigured or `db` unavailable
+- `getDocFromServer`-only — no `getDoc`, no `getDocFromCache`
+- Existence-only via `snap.exists()` — no `snap.data()`, no payload/body field reads
+- Raw Firebase errors propagate to existing 3A-1 `normalizeLookupError`
+- Staff missing-doc under branch-scoped rules may surface as `permission-denied`
+- `exists=false` is clean admin-token path
+- Sidecar-safe and read-only; no Firestore writes; no retry/resend
+
+### P1 Packet 3A-2A explicit non-scope
+
+- No boot wiring; no startup sweep execution; no `saleIntentSweepBoot`
+- No `main.tsx` / App / AuthProvider / AppShell / PosShellRoute / POSPage / PaymentModal / useCheckout changes
+- No Packet 1 / Packet 2 / Packet 3A-1 / `saleIntentObserver` mutation
+- No transition-matrix extension; no production runtime behavior change
+- `asyncOrderLookup` not imported from any existing file
+
+### Prior — Packet 3A-1 Lifecycle Sweep Primitives
 
 | Hash | Message |
 |------|---------|
 | `421d368` | feat(pos): add sale intent lifecycle sweep primitives |
+| `09cace8` | docs: reconcile p1 offline sync packet 3a-1 closure |
 
-### P1 Packet 3A-1 scope (4 new files only)
-
-- `src/lib/pos/offline/saleIntentSweepLogic.ts` — pure sweep decision logic
-- `src/lib/pos/offline/saleIntentSweepLogic.test.ts`
-- `src/lib/pos/offline/saleIntentSweep.ts` — dependency-injected runner
-- `src/lib/pos/offline/saleIntentSweep.test.ts`
-
-No existing tracked files modified.
-
-### P1 Packet 3A-1 behavior
-
-- Pure sweep decision logic + dependency-injected runner
-- 10-minute stale threshold
-- Candidate statuses: `queued`, `flushed_to_cache`, `exception_observed`
-- `rejected_by_rules` and `manual_review` remain parked/report-only
-- Missing server docs → ambiguous no-transition skip
-- Lookup errors (`permission-denied`, `unauthenticated`, `unavailable`, unknown) → ambiguous no-transition skip
-- `exception_observed` + server exists → event-only / no illegal transition
-- No retry / resend behavior; bounded and fail-open; sidecar-only
-- Sale Intent Journal is not source of truth
-
-### P1 Packet 3A-1 explicit non-scope
-
-- No boot wiring; no startup sweep execution
-- No `main.tsx`, `App.tsx`, AuthProvider, `POSPage.tsx`, `PaymentModal.tsx`, `useCheckout.ts` changes
-- No Packet 1 / Packet 2 / `saleIntentObserver` mutation
-- No transition-matrix extension; no concrete Firestore production lookup wiring
-- No sequence hardening; no manual review UI; no production runtime behavior change
-
-### Prior — Packet 2 Runtime Observer
-
-| Hash | Message |
-|------|---------|
-| `d500bf9` | feat(pos): add sale intent observer wiring |
-| `371b537` | docs: reconcile p1 offline sync packet 2 closure |
-
-### Prior — Packet 1 Sale Intent Journal
-
-| Hash | Message |
-|------|---------|
-| `3fe056e` | feat(pos): add sale intent journal sidecar |
-
-### Validation (P1 Packet 3A-1)
+### Validation (P1 Packet 3A-2A)
 
 | Check | Result |
 |-------|--------|
 | `npm run build` | PASS |
+| `asyncOrderLookup.test.ts` | 13/13 |
 | `saleIntentSweepLogic.test.ts` | 29/29 |
 | `saleIntentSweep.test.ts` | 15/15 |
 | `asyncCheckout.w01.test.ts` | 12/12 |
@@ -73,18 +66,25 @@ No existing tracked files modified.
 | `saleIntentJournalStore.test.ts` | 18/18 |
 | `npm run test:rules` | 119/119 |
 | `git diff --check` | PASS |
-| Codex implementation review | PASS WITH NOTES (no blockers) |
-| Push | PASS — HEAD == origin/main == `421d368` |
+| Codex implementation review | PASS (no blockers) |
+| Push | PASS — HEAD == origin/main == `535073e` |
 
-**Codex non-blocking note:** `decideSweepAction()` assumes candidate pre-filtering; current runner enforces this invariant correctly; future changes should preserve it or make helper defensive.
+### Deferred / next gate — Packet 3A-2B
 
-### Deferred / next gate
+**NOT STARTED** — requires separate Gemini authorization. Must decide:
 
-- **P1 Packet 3A-2** — NOT STARTED; requires separate Gemini authorization
-  - Must decide: boot trigger point, auth/user/custom-claims readiness, concrete Firestore lookup implementation, online/offline behavior, startup execution safety
+- Auth-ready boot trigger and mount point (see Codex N1 below)
+- Claims readiness gate; offline skip policy
+- Web Locks / once-per-tab behavior; 10-second scheduling; batch bounds
+- Physical UAT
+
+**Codex N1 (3A-2B-scoped, did not block 3A-2A):** Rules-of-hooks weakens the PosShellRoute structural branch guarantee if the hook is called above early returns. Before 3A-2B boot wiring, Gemini must decide either mount in AppShell (structurally past PosShellRoute guards), or keep PosShellRoute but add an internal branch-validity gate so admin/invalid-branch redirects do not rely solely on mount structure.
+
+### Other deferred
+
 - **UI-11 Packet 2** — NOT STARTED
 - **UI-10-D** — NOT STARTED
-- **Printer / Thermal Receipt / Print Polish** — cancelled/deferred
+- **Printer / Thermal** — cancelled/deferred
 
 ### Known technical debt (unchanged)
 
