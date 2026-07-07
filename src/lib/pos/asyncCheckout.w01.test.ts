@@ -1,25 +1,28 @@
 // @vitest-environment jsdom
 //
-// W-01 evidence (client side) — the CURRENT "before" behavior of submitAsyncOrder
-// when the Firestore `asyncOrders` write is rejected by rules (permission-denied).
+// W-01 evidence (client side): submitAsyncOrder behavior when the Firestore
+// `asyncOrders` write is rejected by rules (permission-denied).
 //
-// This is BEFORE-STATE evidence only. It changes NO production code and wires NO
-// observer. It proves the W-01 risk exactly:
+// BEFORE-state (no observer injected — the default/fallback path, unchanged):
 //   1. submitAsyncOrder still returns a cashier-visible orderId + billId even though
 //      the setDoc promise rejects (fire-and-forget; success returns before settle).
 //   2. The rejection is swallowed and only logged via console.warn — no throw to caller.
-//   3. The current catch does NOT inspect err.code — a terminal `permission-denied`
-//      is misclassified identically to a transient offline-pending "queued, will retry".
-//   4. The current execution path writes NO durable Sale Intent Journal evidence
-//      (Packet 1 journal is not imported/wired by asyncCheckout).
 //
-// Packet 2 (future) MUST capture the RAW setDoc promise before any `.catch`, so its
-// observer can classify permission-denied. The forbidden future shape is:
+// AFTER-state (Packet 2 observer wired via injected deps):
+//   3. The observer receives the RAW setDoc promise (captured before any `.catch`) and
+//      classifies a permission-denied rejection as `rejected_by_rules` in the journal —
+//      the rejection is no longer silently lost when an observer is present.
+//   4. When an observer is present, the fallback console.warn is skipped entirely (the
+//      observer owns classification instead of a duplicate/competing log path).
+//
+// The forbidden anti-pattern remains:
 //     const p = setDoc(...).catch(console.warn); observer.observe(p)  // ← swallows the reject
-// A source assertion below pins that the current code chains `.catch` directly, so the
-// wiring packet has to change this exact line rather than layer on top of it.
+// Source-level assertions below pin that the raw promise is captured in a variable
+// BEFORE the observer/fallback branch, so the anti-pattern cannot silently regress.
 
 import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest';
+import { createInMemorySaleIntentJournal } from './offline/saleIntentJournal';
+import { createSaleIntentObserver } from './offline/saleIntentObserver';
 import type { CartLine, CartTotals, PaymentSplit } from './types';
 
 // Force the Firebase branch of submitAsyncOrder (`if (isFirebaseConfigured && db)`)
@@ -141,42 +144,77 @@ describe('W-01 · submitAsyncOrder BEFORE-state (setDoc rejected by rules)', () 
   });
 });
 
-// ─── Source-level "before" contract (durable-evidence gap + anti-pattern pin) ─────
-describe('W-01 · asyncCheckout current source contract', () => {
+describe('W-01 · submitAsyncOrder AFTER-state (observer injected)', () => {
+  test('permission-denied rejection is observed as rejected_by_rules (no longer silently lost)', async () => {
+    const journal = createInMemorySaleIntentJournal();
+    const observer = createSaleIntentObserver({ journal });
+    const result = submitAsyncOrder(input, { observer });
+    await flush();
+    await flush();
+
+    const entry = await journal.getSaleIntent(result.orderId);
+    expect(entry.ok).toBe(true);
+    if (entry.ok) {
+      expect(entry.value?.status).toBe('rejected_by_rules');
+      expect(entry.value?.lastErrorCode).toBe('permission-denied');
+    }
+  });
+
+  test('return shape/timing is unchanged with an observer injected', () => {
+    const journal = createInMemorySaleIntentJournal();
+    const observer = createSaleIntentObserver({ journal });
+    const result = submitAsyncOrder(input, { observer });
+    expect(typeof result.orderId).toBe('string');
+    expect(result.orderId.length).toBeGreaterThan(0);
+    expect(typeof result.billId).toBe('string');
+    expect(result.billId.length).toBeGreaterThan(0);
+  });
+
+  test('does NOT throw to the caller when an observer is injected', () => {
+    const journal = createInMemorySaleIntentJournal();
+    const observer = createSaleIntentObserver({ journal });
+    expect(() => submitAsyncOrder(input, { observer })).not.toThrow();
+  });
+
+  test('fallback console.warn is skipped when an observer is present (observer owns classification)', async () => {
+    const journal = createInMemorySaleIntentJournal();
+    const observer = createSaleIntentObserver({ journal });
+    submitAsyncOrder(input, { observer });
+    await flush();
+    await flush();
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+});
+
+// ─── Source-level contract (raw-promise interception + anti-pattern pin) ─────
+describe('W-01 · asyncCheckout source contract', () => {
   let source: string;
   beforeEach(async () => {
     source = (await import('./asyncCheckout.ts?raw')).default;
   });
 
-  test('writes NO durable Sale Intent Journal evidence (journal not imported/wired)', () => {
-    // Packet 1's journal is not referenced by the checkout write path today.
-    for (const token of [
-      'saleIntentJournal',
-      'createSaleIntentJournal',
-      'enqueueSaleIntent',
-      'markRejectedByRules',
-      'SaleIntentJournal',
-    ]) {
+  test('captures the RAW setDoc promise in a variable before any .catch/observer branch', () => {
+    expect(source).toContain('const writePromise = setDoc(');
+    // The forbidden anti-pattern: `.catch` chained directly onto setDoc's result,
+    // which would resolve a permission-denied rejection before the observer sees it.
+    expect(source).not.toContain('order).catch(');
+    expect(source).not.toContain('setDoc(doc(db, \'asyncOrders\', order.id), order).catch(');
+  });
+
+  test('passes the raw writePromise (not a pre-caught derivative) to the observer', () => {
+    expect(source).toContain('deps.observer.observe(order, writePromise)');
+    expect(source).not.toContain('observer.observe(order, writePromise.catch(');
+    expect(source).not.toContain('observer.observe(order, writePromise.then(');
+  });
+
+  test('fallback console.warn only runs on the no-observer branch', () => {
+    expect(source).toContain('void writePromise.catch(');
+    expect(source).toContain('console.warn');
+  });
+
+  test('asyncCheckout.ts does not import the Sale Intent Journal directly (observer is injected)', () => {
+    for (const token of ['createSaleIntentJournal', 'enqueueSaleIntent', "from './offline/saleIntentJournal'"]) {
       expect(source).not.toContain(token);
     }
-  });
-
-  test('the catch is a direct-chained log that does NOT classify permission-denied', () => {
-    // Direct `.catch(...)` chained onto the setDoc(...) call (the swallow), console.warn inside.
-    expect(source).toContain('void setDoc(');
-    expect(source).toContain('order).catch('); // `.catch` chained directly onto setDoc's result
-    expect(source).toContain('console.warn');
-    // The current catch never inspects err.code / permission-denied → offline vs terminal
-    // rejection are conflated. (Packet 2 must add this classification on the RAW promise.)
-    expect(source).not.toContain('permission-denied');
-    expect(source).not.toContain('err.code');
-  });
-
-  test('FUTURE GUARD (documented): the observer must not receive an already-caught promise', () => {
-    // The current code chains `.catch(console.warn)` directly, so today there is NO
-    // `observer.observe(...)` and NO pre-caught promise handed anywhere. Packet 2 must
-    // capture `const writePromise = setDoc(...)` (raw) BEFORE any `.catch`.
-    expect(source).not.toContain('observer.observe');
-    expect(source).not.toContain('.catch(console.warn));');
   });
 });

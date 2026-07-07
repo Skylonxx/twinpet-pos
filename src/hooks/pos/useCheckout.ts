@@ -4,12 +4,37 @@ import { devApplyCreditCharge, devApplyCrmAfterSale } from '../../lib/customers/
 import { isFirebaseConfigured } from '../../lib/firebase';
 import { roundMoney } from '../../lib/money';
 import { submitAsyncOrder } from '../../lib/pos/asyncCheckout';
+import { createSaleIntentJournal } from '../../lib/pos/offline/saleIntentJournal';
+import {
+  createNoopSaleIntentObserver,
+  createSaleIntentObserver,
+  type SaleIntentObserver,
+} from '../../lib/pos/offline/saleIntentObserver';
 import { applyShiftPaymentTotals, calcShiftPaymentTotals } from '../../lib/pos/shiftService';
 import { devIncrementShiftTotals } from '../../lib/pos/shiftDevMock';
 import type { CartLine, CartTotals, PaymentSplit } from '../../lib/pos/types';
 import type { Shift, User } from '../../lib/types';
 import { RETAIL_PRICE_LEVEL_ID } from '../../lib/types';
 import type { PosCustomer } from './useCart';
+
+// Lazy module-level singleton: dev / no-Firebase stays OFF (no-op) so no
+// permanent "queued" entry is ever created without a real Firestore write;
+// construction failure also fails open to the no-op observer.
+let saleIntentObserver: SaleIntentObserver | null = null;
+
+function getSaleIntentObserver(): SaleIntentObserver {
+  if (saleIntentObserver) return saleIntentObserver;
+  if (!isFirebaseConfigured) {
+    saleIntentObserver = createNoopSaleIntentObserver();
+    return saleIntentObserver;
+  }
+  try {
+    saleIntentObserver = createSaleIntentObserver({ journal: createSaleIntentJournal() });
+  } catch {
+    saleIntentObserver = createNoopSaleIntentObserver();
+  }
+  return saleIntentObserver;
+}
 
 export type UseCheckoutArgs = {
   user: User | null;
@@ -67,20 +92,23 @@ export function useCheckout({
 
         // Write the sale intent and return immediately (durably queued by
         // persistentLocalCache; settled later by the reconcileOrder function).
-        const { billId } = submitAsyncOrder({
-          branchId,
-          staffId: user.id,
-          staffName: `${user.firstName} ${user.lastName}`,
-          shiftId: activeShift.id,
-          lines: cartLines,
-          totals,
-          billDiscount: totals.billDiscount,
-          fee: totals.fee,
-          payments,
-          customerId: customer?.id ?? null,
-          customerName: customer?.name ?? null,
-          priceLevelId: RETAIL_PRICE_LEVEL_ID,
-        });
+        const { billId } = submitAsyncOrder(
+          {
+            branchId,
+            staffId: user.id,
+            staffName: `${user.firstName} ${user.lastName}`,
+            shiftId: activeShift.id,
+            lines: cartLines,
+            totals,
+            billDiscount: totals.billDiscount,
+            fee: totals.fee,
+            payments,
+            customerId: customer?.id ?? null,
+            customerName: customer?.name ?? null,
+            priceLevelId: RETAIL_PRICE_LEVEL_ID,
+          },
+          { observer: getSaleIntentObserver() },
+        );
 
         // Drawer single-writer: with Firebase, the shift drawer is DERIVED live
         // from the local ledger (`useLocalLedger` → `deriveShiftDrawer`), which

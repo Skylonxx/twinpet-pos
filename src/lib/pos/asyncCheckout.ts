@@ -12,6 +12,7 @@ import {
   makeAsyncOrderId,
   nextLocalSeq,
 } from './deviceId';
+import type { SaleIntentObserver } from './offline/saleIntentObserver';
 import type { CartLine, CartTotals, PaymentSplit } from './types';
 
 /**
@@ -39,6 +40,11 @@ export type SubmitAsyncOrderInput = {
 };
 
 export type SubmitAsyncOrderResult = { orderId: string; billId: string };
+
+/** Optional injected sidecar; absent = current fallback (log-only) behavior. */
+export type SubmitAsyncOrderDeps = {
+  observer?: SaleIntentObserver;
+};
 
 function buildLine(line: CartLine): AsyncOrderLine {
   const qtyBase = line.qty * line.unitFactor;
@@ -132,7 +138,10 @@ export function buildAsyncOrder(
  * ack when online and stays pending — but durably queued — when offline, so we
  * must NOT await it or the cashier would be blocked during an outage.
  */
-export function submitAsyncOrder(input: SubmitAsyncOrderInput): SubmitAsyncOrderResult {
+export function submitAsyncOrder(
+  input: SubmitAsyncOrderInput,
+  deps?: SubmitAsyncOrderDeps,
+): SubmitAsyncOrderResult {
   const deviceId = getDeviceId();
   const seq = nextLocalSeq();
   // Receipt segment prefers the admin label ("iPad-01" → "IPAD01"); the doc id
@@ -146,10 +155,18 @@ export function submitAsyncOrder(input: SubmitAsyncOrderInput): SubmitAsyncOrder
   });
 
   if (isFirebaseConfigured && db) {
-    void setDoc(doc(db, 'asyncOrders', order.id), order).catch((err) => {
-      // Offline → resolves later on reconnect; this only logs a transient/late ack.
-      console.warn('[asyncCheckout] order write not yet acked (queued, will retry)', err);
-    });
+    // RAW promise — captured before any .catch so an injected observer can still
+    // classify a terminal rules rejection (permission-denied) vs offline-pending.
+    const writePromise = setDoc(doc(db, 'asyncOrders', order.id), order);
+    if (deps?.observer) {
+      deps.observer.observe(order, writePromise);
+    } else {
+      // Fallback ONLY when no observer is present — current behavior, unchanged.
+      void writePromise.catch((err) => {
+        // Offline → resolves later on reconnect; this only logs a transient/late ack.
+        console.warn('[asyncCheckout] order write not yet acked (queued, will retry)', err);
+      });
+    }
   }
 
   return { orderId: order.id, billId: order.billId };
