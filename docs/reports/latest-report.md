@@ -1,79 +1,65 @@
-# Latest Report — P1 Offline / Sync Packet 3B-4 Boot-Time Device Sequence Watermark Reconciliation
+# Latest Report — P1 Offline / Sync Packet 6 POS Offline/Sync UI Surfaces + UX Fix
 
 > Date: 2026-07-08
-> HEAD: `50416fe8487652234f1cc04851397cd717558651`
-> origin/main: `50416fe8487652234f1cc04851397cd717558651`
-> Status: **P1 PACKET 3B-4 CLOSED / PUSHED**
+> HEAD: `2a98f335bf17c7d89bb0da492e2ef1ec5e9f54cb`
+> origin/main: `2a98f335bf17c7d89bb0da492e2ef1ec5e9f54cb`
+> Status: **P1 PACKET 6 CLOSED / PUSHED / OWNER VISUAL UAT PASS WITH NOTES**
 
 ---
 
 ## Summary
 
-P1 Offline / Sync Packet 3B-4 is **closed and pushed** at `50416fe feat(pos): reconcile device sequence watermark at boot`. Boot-time `reconcileLocalSeqWithServer()` mitigates the online boot/server-watermark recovery path. Frontend-only; fail-open; no backend/rules/checkout changes.
+Packet 6 surfaces offline/sync status to cashiers (`81d8a20`) with a follow-up UX fix (`2a98f33`) after Owner feedback. Frontend/UI only. Owner visual UAT PASS WITH NOTES on desktop and iPad viewports.
 
-Previous HEAD: `11e668a docs: close p1 offline sync packet 3b-3`
+## Commits
 
-Push: fast-forward `11e668a..50416fe` → `main`. No force push. No docs/tracker files in source commit.
+| Hash | Message |
+|------|---------|
+| `81d8a20` | feat(pos): surface offline sync status to cashiers |
+| `2a98f33` | fix(pos): refine offline sync status ux |
 
-## Scope Delivered (7 files)
+## Surfaces Delivered
 
-- `src/lib/pos/offline/deviceSeqReconcileBoot.ts` (new)
-- `src/lib/pos/offline/deviceSeqReconcileBoot.test.ts` (new)
-- `src/lib/pos/posDeviceRegistry.seqReconcile.test.ts` (new)
-- `src/lib/pos/posDeviceRegistry.ts` (modified)
-- `src/lib/pos/deviceId.ts` (modified)
-- `src/lib/pos/deviceSeqAllocator.test.ts` (modified)
-- `src/components/AppShell.tsx` (modified)
+- Connectivity chip (online/offline)
+- Device-local pending sync count
+- Failure/attention badge and read-only list
+- Compact icon/badge + popover (UX fix)
 
-## Behavior
+## UX Fix (Owner-reported issues resolved)
 
-- AppShell mounts `useDeviceSeqReconcileBoot()` — fire-and-forget on boot
-- `reconcileLocalSeqWithServer()` reads `posDevices/{deviceId}.lastSeq`, calls `fastForwardLocalSeqTo()` when server watermark is higher
-- Fail-open on errors — does not block app boot
-- Mitigates online boot/server-watermark recovery — **not** a full offline sequence solution
-- Cold offline boot / offline refresh not supported by current app architecture
+- iPad toolbar overflow/collision
+- Confusing `ซิงก์แล้ว` + local pending conflict
+- Wide pending chip → compact `ค้างซิงก์` badge + popover
+- Popover open and click-away close verified by Owner
 
-## Non-Overclaim / Residual
+## Owner Visual UAT (PASS WITH NOTES)
 
-- Do not claim full offline cold boot support
-- Do not claim hard guarantee before reconciliation completes
-- Do not claim exhaustive deep journal audit or every stale-local boot permutation exercised
-- First-sale-before-reconcile remains fail-open design residual
-- Emulator sparse `posDevices` docs may need app-level device registration for client read visibility
-
-## Report References
-
-- Implementation: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Developer\twinpet-p1-offline-sync-packet-3b-4-implementation-report.md`
-- Codex review: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\reviewer\twinpet-p1-offline-sync-packet-3b-4-implementation-codex-review-report.md`
-- Commit/push: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Developer\twinpet-p1-offline-sync-packet-3b-4-commit-push-report.md`
-- UAT triage: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Developer\twinpet-p1-offline-sync-packet-3b-4-uat-lastseq-blocker-triage-report.md`
-- Physical UAT: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\UAT\twinpet-p1-offline-sync-packet-3b-4-physical-uat-report.md`
+1. Desktop online — chip visible; compact pending `ค้างซิงก์ 18`; no toolbar overflow; no sync conflict — PASS
+2. iPad offline — `ออฟไลน์` chip; compact badge; POS usable — PASS
+3. iPad return online — `ออนไลน์`; no conflict; usable — PASS
+4. Popover — badge opens popover; tap outside closes — PASS
 
 ## Validation
 
 | Check | Result |
 |-------|--------|
-| Developer implementation report | PASS |
-| Codex review | PASS WITH NOTES |
-| UAT blocker triage | PASS WITH NOTES — data-source mismatch; correct UAT DB: emulator `pos-db` |
-| Physical/emulator UAT | PASS WITH NOTES — device `7M05VGQZ`; `lastSeq` 32→33; no visible console/rules error |
-| Push | PASS WITH NOTES — plain `git push origin main`; Co-authored-by trailer from hook |
-| stash@{0} | untouched |
+| Implementation Codex | PASS WITH NOTES |
+| UX fix Codex | PASS WITH NOTES |
+| Unit suite | 1101 PASS |
+| TypeScript | PASS |
+| Owner visual UAT | PASS WITH NOTES |
 
-## Prior Phases
+## Residuals
 
-| Packet | Commit | Status |
-|--------|--------|--------|
-| Packet 3B-3 Identity Preallocation | `7235402` + docs `11e668a` | CLOSED / PUSHED |
-| Packet 3B-2 Allocator | `30c32cd` + docs `c103112` | CLOSED / PUSHED |
-| Packet 3A-2B Startup Sweep Boot | `cde8226` + docs `8ce68d3` | CLOSED / PUSHED |
+- PaymentModal success-screen note — deferred
+- Packet 8 broader offline drill — NOT RUN
+- Deep rejected/orphaned/manual_review UAT — future unless required
+- No full offline cold-boot or guaranteed settlement claims
 
 ## Docs Reconciliation
 
-Separate docs-only pass (TWINPET-P1-OFFLINE-SYNC-PACKET-3B-4-DOCS-RECONCILIATION-CLAUDE-RETRY-001). Unstaged; not yet committed.
-
-Prior docs commit/push gate returned HOLD — trackers were not dirty; this pass applies missing reconciliation.
+This pass (TWINPET-P1-OFFLINE-SYNC-PACKET-6-DOCS-RECONCILIATION-CLAUDE-001). Unstaged.
 
 ## Next Gate
 
-Codex docs review → Gemini docs commit authorization → continue per workflow coordinator.
+Codex docs review → Gemini docs commit authorization.

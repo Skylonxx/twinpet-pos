@@ -6,14 +6,14 @@
 |-------|-------|
 | Repo root | `C:/Users/Narachat/twinpet-pos` |
 | Branch | `main` |
-| HEAD | `50416fe8487652234f1cc04851397cd717558651` |
-| origin/main | `50416fe8487652234f1cc04851397cd717558651` |
+| HEAD | `2a98f335bf17c7d89bb0da492e2ef1ec5e9f54cb` |
+| origin/main | `2a98f335bf17c7d89bb0da492e2ef1ec5e9f54cb` |
 | Ahead/behind | `0 / 0` |
 
 ## Current Phase
 
-    TWINPET-P1-OFFLINE-SYNC-PACKET-3B-4-DOCS-RECONCILIATION
-    P1 Offline / Sync Packet 3B-4 Boot-Time Device Sequence Watermark Reconciliation CLOSED / PUSHED — docs reconciliation in progress (unstaged)
+    TWINPET-P1-OFFLINE-SYNC-PACKET-6-DOCS-RECONCILIATION
+    P1 Offline / Sync Packet 6 UI Surfaces + UX Fix CLOSED / PUSHED — docs reconciliation in progress (unstaged)
 
 ## Working Tree
 
@@ -26,49 +26,35 @@
 
 **Do NOT touch stash@{0}.**
 
-## P1 Packet 3B-4 Closure
+## P1 Packet 6 Closure
 
 | Field | Value |
 |-------|-------|
-| Scope | Boot-time device sequence watermark reconciliation (W-04 mitigation) |
-| Implementation | `50416fe feat(pos): reconcile device sequence watermark at boot` |
-| Previous HEAD | `11e668a docs: close p1 offline sync packet 3b-3` |
-| Push | fast-forward `11e668a..50416fe` → `main` |
-| Source impact | 7 files (4 modified, 3 added) — see Context.md |
-| Behavior | Mitigates online boot/server-watermark recovery; fail-open; frontend only |
-| Developer report | PASS |
-| Codex review | PASS WITH NOTES |
-| UAT blocker triage | PASS WITH NOTES — data-source mismatch; emulator `pos-db` |
-| Physical UAT | PASS WITH NOTES — device `7M05VGQZ`; `lastSeq` 32→33; offline cold boot not practical |
-| Residual | First-sale-before-reconcile fail-open; cold offline boot unsupported; no exhaustive stale-local boot permutation coverage |
-| Push | PASS WITH NOTES — Co-authored-by trailer from hook |
-| Status | **CLOSED / PUSHED** |
+| Scope | POS offline/sync UI surfaces + UAT UX fix |
+| Source | `81d8a20 feat(pos): surface offline sync status to cashiers` |
+| UX fix | `2a98f33 fix(pos): refine offline sync status ux` |
+| Surfaces | Connectivity chip; device-local pending; failure/attention badge/list; read-only journal UI |
+| UX fix items | Toolbar overflow; `ซิงก์แล้ว`/pending conflict; compact badge + popover |
+| Implementation Codex | PASS WITH NOTES |
+| UX fix Codex | PASS WITH NOTES — commit readiness YES |
+| Tests | 1101 unit PASS; affected tests PASS; tsc PASS |
+| Owner visual UAT | PASS WITH NOTES |
+| Backend/checkout/journal writes | **Not changed** |
+| PaymentModal success note | **Deferred** |
+| Status | **CLOSED / PUSHED / OWNER VISUAL UAT PASS WITH NOTES** |
 
 ### Report references
 
-- Implementation: `...\Developer\twinpet-p1-offline-sync-packet-3b-4-implementation-report.md`
-- Codex review: `...\reviewer\twinpet-p1-offline-sync-packet-3b-4-implementation-codex-review-report.md`
-- Commit/push: `...\Developer\twinpet-p1-offline-sync-packet-3b-4-commit-push-report.md`
-- UAT triage: `...\Developer\twinpet-p1-offline-sync-packet-3b-4-uat-lastseq-blocker-triage-report.md`
-- Physical UAT: `...\UAT\twinpet-p1-offline-sync-packet-3b-4-physical-uat-report.md`
+- `...\Developer\twinpet-p1-offline-sync-packet-6-ui-surfaces-implementation-report.md`
+- `...\reviewer\twinpet-p1-offline-sync-packet-6-ui-surfaces-implementation-codex-review-report.md`
+- `...\Developer\twinpet-p1-offline-sync-packet-6-ui-surfaces-commit-push-report.md`
+- `...\Developer\twinpet-p1-offline-sync-packet-6-uat-ux-fix-implementation-report.md`
+- `...\reviewer\twinpet-p1-offline-sync-packet-6-uat-ux-fix-codex-review-report.md`
+- `...\Developer\twinpet-p1-offline-sync-packet-6-uat-ux-fix-commit-push-report.md`
 
-## P1 Packet 3B-3 Closure
+## P1 Packet 3B-4 / 3B-3 / 3B-2 / 3A-* / Packet 2 / Packet 1
 
-| Field | Value |
-|-------|-------|
-| Implementation | `7235402` + docs `11e668a` |
-| Status | **CLOSED / PUSHED** |
-
-## P1 Packet 3B-2 Closure
-
-| Field | Value |
-|-------|-------|
-| Implementation | `30c32cd` + docs `c103112` |
-| Status | **CLOSED / PUSHED** |
-
-## P1 Packet 3A-2B / 3A-2A / 3A-1 / Packet 2 / Packet 1
-
-All **CLOSED / PUSHED**.
+All **CLOSED / PUSHED** (3B-4 docs `f3fc961`).
 
 ## UI-11 Packet 1 / UI-10-C / UI-10-B / UI-10-A
 
@@ -78,28 +64,31 @@ All **CLOSED / PUSHED**.
 
 **NOT STARTED**
 
+## Packet 8 Physical Offline Drill
+
+**NOT RUN** — schedule later.
+
 ## Recent Completed Work
 
 | Hash | Message |
 |------|---------|
-| `50416fe` | feat(pos): reconcile device sequence watermark at boot — **P1 PACKET 3B-4 CLOSED / PUSHED** |
+| `2a98f33` | fix(pos): refine offline sync status ux — **P1 PACKET 6 UX FIX** |
+| `81d8a20` | feat(pos): surface offline sync status to cashiers — **P1 PACKET 6 CLOSED / PUSHED** |
+| `f3fc961` | docs: close p1 offline sync packet 3b-4 |
+| `50416fe` | feat(pos): reconcile device sequence watermark at boot |
 | `11e668a` | docs: close p1 offline sync packet 3b-3 |
-| `7235402` | feat(pos): preallocate checkout identity atomically — **P1 PACKET 3B-3 CLOSED / PUSHED** |
-| `c103112` | docs: reconcile p1 offline sync packet 3b-2 closure |
-| `30c32cd` | feat(pos): add atomic device sequence allocator — **P1 PACKET 3B-2 CLOSED / PUSHED** |
 
 ## Next Recommended Block
 
     READY_FOR_DOCS_COMMIT_AUTHORIZATION
 
-1. Formal Packet 3B-4 docs closure (this pass — unstaged)
+1. Formal Packet 6 docs closure (this pass — unstaged)
 2. Codex docs review
 3. Gemini docs commit authorization
 
 ## Hard Boundaries
 
 - Docs changes not yet committed/pushed
-- Old offline queue UI bugs not fixed
-- Sale Intent Journal is sidecar-only — not source of truth
-- Mixed old/new tab bundles — residual risk until hard refresh
-- 3B-4 does not claim full offline cold boot support or hard guarantee before reconciliation completes
+- No new implementation until docs closure or Tech Lead authorization
+- Packet 8 drill not run
+- No full offline cold-boot or guaranteed settlement claims
