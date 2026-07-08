@@ -10,7 +10,13 @@ import {
 } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from '../firebase';
 import type { PosDeviceType } from '../types';
-import { getDeviceId, setDeviceIdentity, setDeviceLabel } from './deviceId';
+import {
+  fastForwardLocalSeqTo,
+  getDeviceId,
+  peekLocalSeq,
+  setDeviceIdentity,
+  setDeviceLabel,
+} from './deviceId';
 
 /**
  * Registry sync for the hybrid Device ID. The device's identity + admin label
@@ -108,7 +114,7 @@ export async function loadBranchDevices(branchId: string): Promise<BranchDevice[
  * instant even with hundreds of thousands of historical orders. Legacy devices
  * (no `lastSeq`) fall back to 0.
  */
-async function getDeviceLastSeq(deviceId: string): Promise<number> {
+export async function getDeviceLastSeq(deviceId: string): Promise<number> {
   if (!isFirebaseConfigured || !db) return 0;
   try {
     const snap = await getDoc(doc(db, POS_DEVICES, deviceId));
@@ -138,4 +144,40 @@ export async function claimDevice(
   setDeviceIdentity(deviceId, lastSeq);
   setDeviceLabel(label);
   await registerThisDevice(branchId, label, userId);
+}
+
+/** Injectable composition seam for {@link reconcileLocalSeqWithServer} tests. */
+export type SeqReconcileDeps = {
+  getDeviceId?: typeof getDeviceId;
+  getDeviceLastSeq?: typeof getDeviceLastSeq;
+  peekLocalSeq?: typeof peekLocalSeq;
+  fastForwardLocalSeqTo?: typeof fastForwardLocalSeqTo;
+};
+
+/**
+ * Boot-time, read-only reconciliation (Packet 3B-4 — mitigates W-04 stale local
+ * sequence recovery after a localStorage wipe / stale IndexedDB mirror). Reads
+ * this device's server watermark (`posDevices/{deviceId}.lastSeq`, the same O(1)
+ * seam `claimDevice` uses) and — ONLY when it is strictly higher than the local
+ * sequence — fast-forwards the local base upward via `fastForwardLocalSeqTo()`.
+ * Never writes `posDevices`. Fail-open on every path: Firebase off, offline,
+ * missing doc, missing/zero `lastSeq`, or a read rejection all resolve to a
+ * silent no-op — a reconciliation failure must never surface to the cashier.
+ */
+export async function reconcileLocalSeqWithServer(deps?: SeqReconcileDeps): Promise<void> {
+  const getId = deps?.getDeviceId ?? getDeviceId;
+  const getLastSeq = deps?.getDeviceLastSeq ?? getDeviceLastSeq;
+  const peekLocal = deps?.peekLocalSeq ?? peekLocalSeq;
+  const fastForward = deps?.fastForwardLocalSeqTo ?? fastForwardLocalSeqTo;
+
+  try {
+    if (!isFirebaseConfigured || !db) return;
+    const id = getId();
+    const serverLastSeq = await getLastSeq(id);
+    if (serverLastSeq > peekLocal()) {
+      await fastForward(serverLastSeq);
+    }
+  } catch {
+    // Fail-open — never let a reconciliation failure surface to the cashier.
+  }
 }

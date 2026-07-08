@@ -343,6 +343,33 @@ export async function allocateLocalSeq(): Promise<number> {
 }
 
 /**
+ * Boot-time upward-only fast-forward of the local sequence base to at least
+ * `minSeq` (Packet 3B-4 — recovers a wiped/stale local sequence from the server
+ * `posDevices.lastSeq` watermark, mitigating W-04). Writes both the
+ * localStorage seq AND the IndexedDB `deviceSeq` mirror — the SAME mirror
+ * `allocateLocalSeq()` seeds from via `max(idb, localStorage)` — so a
+ * subsequent `allocateLocalSeq()` / `nextLocalSeq()` resumes at `minSeq + 1`.
+ * Compares `minSeq` against the HIGHER of the two current stores so a write
+ * can never lower either one; any invalid input (non-finite, negative,
+ * non-number) or a watermark at/below the current base is a silent no-op.
+ * Stateful (unlike the pure allocator helpers above) — never throws.
+ */
+export async function fastForwardLocalSeqTo(minSeq: number): Promise<void> {
+  if (typeof minSeq !== 'number' || !Number.isFinite(minSeq) || minSeq < 0) return;
+  const target = Math.floor(minSeq);
+
+  const lsCurrent = hasLocalStorage()
+    ? sanitizeSeqBase(localStorage.getItem(DEVICE_SEQ_KEY))
+    : 0;
+  const idbCurrent = sanitizeSeqBase(await idbGet(IDB_KEYS.seq));
+  const base = Math.max(lsCurrent, idbCurrent);
+  if (target <= base) return;
+
+  if (hasLocalStorage()) localStorage.setItem(DEVICE_SEQ_KEY, String(target));
+  await idbSet(IDB_KEYS.seq, target);
+}
+
+/**
  * Deterministic, idempotent order id = `${deviceId}-${seq}`. Used as both the
  * Firestore doc id and the reconciler idempotency key: a client retry re-writes
  * the SAME doc instead of creating a duplicate sale.

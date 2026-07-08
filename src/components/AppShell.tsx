@@ -16,6 +16,7 @@ import {
 import { getBranchLabel } from '../lib/branches';
 import { useAuth } from '../lib/hooks/useAuth';
 import { useBranch } from '../lib/hooks/useBranch';
+import { useDeviceSeqReconcileBoot } from '../lib/pos/offline/deviceSeqReconcileBoot';
 import { useSaleIntentSweepBoot } from '../lib/pos/offline/saleIntentSweepBoot';
 import type { UserRole } from '../lib/types';
 
@@ -66,6 +67,9 @@ export default function AppShell() {
   // Fail-open, once-per-tab startup Sale Intent sweep. Mounts here (structurally
   // past ProtectedRoute + PosShellRoute guards); silent no-op on every skip path.
   useSaleIntentSweepBoot();
+  // Fail-open, once-per-tab boot-time device-sequence watermark reconciliation
+  // (Packet 3B-4). Fire-and-forget — never blocks render or checkout.
+  useDeviceSeqReconcileBoot();
 
   // Click-to-expand sidebar (no hover). Collapsed = icon rail. Default closed.
   const [open, setOpen] = useState(false);

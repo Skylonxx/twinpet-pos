@@ -15,6 +15,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import {
   allocateLocalSeq,
+  fastForwardLocalSeqTo,
   nextLocalSeq,
   peekLocalSeq,
   getDeviceId,
@@ -352,5 +353,89 @@ describe('deviceId legacy & compatibility (unchanged by 3B-2)', () => {
     setDeviceIdentity('CLAIMED2', 100);
     // localStorage seq is 100; IDB mirror unseeded → max(0, 100) + 1.
     expect(await allocateLocalSeq()).toBe(101);
+  });
+});
+
+// ── fastForwardLocalSeqTo (Packet 3B-4 boot-time watermark reconciliation) ────
+describe('fastForwardLocalSeqTo · upward-only fast-forward', () => {
+  test('server watermark higher than local seq raises the base', async () => {
+    localStorage.setItem(DEVICE_SEQ_KEY, '5');
+    await fastForwardLocalSeqTo(50);
+    expect(peekLocalSeq()).toBe(50);
+    expect(fakeIdb.data.get('deviceSeq')).toBe(50);
+  });
+
+  test('equal watermark is a no-op', async () => {
+    localStorage.setItem(DEVICE_SEQ_KEY, '50');
+    fakeIdb.seed('deviceSeq', 50);
+    await fastForwardLocalSeqTo(50);
+    expect(peekLocalSeq()).toBe(50);
+    expect(fakeIdb.data.get('deviceSeq')).toBe(50);
+  });
+
+  test('lower watermark than local seq is a no-op', async () => {
+    localStorage.setItem(DEVICE_SEQ_KEY, '50');
+    fakeIdb.seed('deviceSeq', 50);
+    await fastForwardLocalSeqTo(10);
+    expect(peekLocalSeq()).toBe(50);
+    expect(fakeIdb.data.get('deviceSeq')).toBe(50);
+  });
+
+  test('never lowers localStorage even when IDB mirror is already higher than the watermark', async () => {
+    localStorage.setItem(DEVICE_SEQ_KEY, '5');
+    fakeIdb.seed('deviceSeq', 80); // out-of-sync mirror higher than the incoming watermark
+    await fastForwardLocalSeqTo(20);
+    // 20 <= max(5, 80) → no-op; must not lower IDB down to 20, and must not
+    // raise localStorage to a value below the true (IDB) high-water mark either.
+    expect(fakeIdb.data.get('deviceSeq')).toBe(80);
+    expect(localStorage.getItem(DEVICE_SEQ_KEY)).toBe('5');
+  });
+
+  test('never lowers the IndexedDB mirror even when localStorage is already higher', async () => {
+    localStorage.setItem(DEVICE_SEQ_KEY, '80');
+    fakeIdb.seed('deviceSeq', 5);
+    await fastForwardLocalSeqTo(20);
+    // 20 <= max(80, 5) → no-op.
+    expect(fakeIdb.data.get('deviceSeq')).toBe(5);
+    expect(localStorage.getItem(DEVICE_SEQ_KEY)).toBe('80');
+  });
+
+  test.each([
+    ['NaN', Number.NaN],
+    ['negative', -5],
+    ['+Infinity', Number.POSITIVE_INFINITY],
+    ['-Infinity', Number.NEGATIVE_INFINITY],
+    ['non-number string', '50' as unknown as number],
+    ['null', null as unknown as number],
+    ['undefined', undefined as unknown as number],
+  ])('invalid input (%s) is a safe no-op', async (_label, value) => {
+    localStorage.setItem(DEVICE_SEQ_KEY, '5');
+    await fastForwardLocalSeqTo(value);
+    expect(peekLocalSeq()).toBe(5);
+    expect(fakeIdb.data.has('deviceSeq')).toBe(false);
+  });
+
+  test('fractional watermark is floored to a safe integer', async () => {
+    localStorage.setItem(DEVICE_SEQ_KEY, '5');
+    await fastForwardLocalSeqTo(10.9);
+    expect(peekLocalSeq()).toBe(10);
+    expect(fakeIdb.data.get('deviceSeq')).toBe(10);
+  });
+
+  test('updates the same LS/IDB mirror that allocateLocalSeq() reads', async () => {
+    await fastForwardLocalSeqTo(200);
+    expect(await allocateLocalSeq()).toBe(201); // serverLastSeq + 1
+  });
+
+  test('allocateLocalSeq() after fast-forward returns serverLastSeq + 1 even with prior lower local state', async () => {
+    localStorage.setItem(DEVICE_SEQ_KEY, '3');
+    fakeIdb.seed('deviceSeq', 3);
+    await fastForwardLocalSeqTo(999);
+    expect(await allocateLocalSeq()).toBe(1000);
+  });
+
+  test('never throws on IDB failure (bounded fail path still applies to idbGet/idbSet)', async () => {
+    fakeIdb.setFailMode('open-error');
+    await expect(fastForwardLocalSeqTo(50)).resolves.toBeUndefined();
   });
 });
