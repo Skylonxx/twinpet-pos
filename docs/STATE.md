@@ -6,14 +6,14 @@
 |-------|-------|
 | Repo root | `C:/Users/Narachat/twinpet-pos` |
 | Branch | `main` |
-| HEAD | `72354026046011f71db856a8ad9574676b034bcd` |
-| origin/main | `72354026046011f71db856a8ad9574676b034bcd` |
+| HEAD | `50416fe8487652234f1cc04851397cd717558651` |
+| origin/main | `50416fe8487652234f1cc04851397cd717558651` |
 | Ahead/behind | `0 / 0` |
 
 ## Current Phase
 
-    TWINPET-P1-OFFLINE-SYNC-PACKET-3B-3-DOCS-RECONCILIATION
-    P1 Offline / Sync Packet 3B-3 Checkout Identity Preallocation CLOSED / PUSHED — docs reconciliation in progress (unstaged)
+    TWINPET-P1-OFFLINE-SYNC-PACKET-3B-4-DOCS-RECONCILIATION
+    P1 Offline / Sync Packet 3B-4 Boot-Time Device Sequence Watermark Reconciliation CLOSED / PUSHED — docs reconciliation in progress (unstaged)
 
 ## Working Tree
 
@@ -26,27 +26,38 @@
 
 **Do NOT touch stash@{0}.**
 
-## P1 Packet 3B-3 Closure
+## P1 Packet 3B-4 Closure
 
 | Field | Value |
 |-------|-------|
-| Scope | Checkout identity preallocation via `allocateOrderIdentity()` |
-| Implementation | `7235402 feat(pos): preallocate checkout identity atomically` |
-| Previous HEAD | `c103112 docs: reconcile p1 offline sync packet 3b-2 closure` |
-| Source impact | 3 modified (`useCheckout.ts`, `asyncCheckout.ts`, `asyncCheckout.w01.test.ts`) |
-| Behavior | `confirmSale` awaits `allocateOrderIdentity()` after guard; injected identity verbatim; legacy path compatible; receipt/ID shape unchanged |
-| UAT | Accepted by Gemini — owner-reported; Scenario 9 PASS WITH NOTES / UI-blocked |
-| Operational | Hard refresh every open POS tab after deploy before claiming atomicity guarantee |
+| Scope | Boot-time device sequence watermark reconciliation (W-04 mitigation) |
+| Implementation | `50416fe feat(pos): reconcile device sequence watermark at boot` |
+| Previous HEAD | `11e668a docs: close p1 offline sync packet 3b-3` |
+| Push | fast-forward `11e668a..50416fe` → `main` |
+| Source impact | 7 files (4 modified, 3 added) — see Context.md |
+| Behavior | Mitigates online boot/server-watermark recovery; fail-open; frontend only |
+| Developer report | PASS |
 | Codex review | PASS WITH NOTES |
-| Tests | `asyncCheckout.w01.test.ts` 26/26 |
-| Push | PASS — HEAD == origin/main == `7235402` |
+| UAT blocker triage | PASS WITH NOTES — data-source mismatch; emulator `pos-db` |
+| Physical UAT | PASS WITH NOTES — device `7M05VGQZ`; `lastSeq` 32→33; offline cold boot not practical |
+| Residual | First-sale-before-reconcile fail-open; cold offline boot unsupported; no exhaustive stale-local boot permutation coverage |
+| Push | PASS WITH NOTES — Co-authored-by trailer from hook |
 | Status | **CLOSED / PUSHED** |
 
 ### Report references
 
-- Implementation: `...\Developer\twinpet-p1-offline-sync-packet-3b-3-implementation-report.md`
-- Codex review: `...\reviewer\twinpet-p1-offline-sync-packet-3b-3-implementation-codex-review-report.md`
-- Commit/push: `...\Developer\twinpet-p1-offline-sync-packet-3b-3-commit-push-report.md`
+- Implementation: `...\Developer\twinpet-p1-offline-sync-packet-3b-4-implementation-report.md`
+- Codex review: `...\reviewer\twinpet-p1-offline-sync-packet-3b-4-implementation-codex-review-report.md`
+- Commit/push: `...\Developer\twinpet-p1-offline-sync-packet-3b-4-commit-push-report.md`
+- UAT triage: `...\Developer\twinpet-p1-offline-sync-packet-3b-4-uat-lastseq-blocker-triage-report.md`
+- Physical UAT: `...\UAT\twinpet-p1-offline-sync-packet-3b-4-physical-uat-report.md`
+
+## P1 Packet 3B-3 Closure
+
+| Field | Value |
+|-------|-------|
+| Implementation | `7235402` + docs `11e668a` |
+| Status | **CLOSED / PUSHED** |
 
 ## P1 Packet 3B-2 Closure
 
@@ -71,17 +82,17 @@ All **CLOSED / PUSHED**.
 
 | Hash | Message |
 |------|---------|
+| `50416fe` | feat(pos): reconcile device sequence watermark at boot — **P1 PACKET 3B-4 CLOSED / PUSHED** |
+| `11e668a` | docs: close p1 offline sync packet 3b-3 |
 | `7235402` | feat(pos): preallocate checkout identity atomically — **P1 PACKET 3B-3 CLOSED / PUSHED** |
 | `c103112` | docs: reconcile p1 offline sync packet 3b-2 closure |
 | `30c32cd` | feat(pos): add atomic device sequence allocator — **P1 PACKET 3B-2 CLOSED / PUSHED** |
-| `8ce68d3` | docs: reconcile p1 offline sync packet 3a-2b closure |
-| `cde8226` | feat(pos): add startup sale intent sweep wiring — **P1 PACKET 3A-2B CLOSED / PUSHED** |
 
 ## Next Recommended Block
 
     READY_FOR_DOCS_COMMIT_AUTHORIZATION
 
-1. Formal Packet 3B-3 docs closure (this pass — unstaged)
+1. Formal Packet 3B-4 docs closure (this pass — unstaged)
 2. Codex docs review
 3. Gemini docs commit authorization
 
@@ -91,3 +102,4 @@ All **CLOSED / PUSHED**.
 - Old offline queue UI bugs not fixed
 - Sale Intent Journal is sidecar-only — not source of truth
 - Mixed old/new tab bundles — residual risk until hard refresh
+- 3B-4 does not claim full offline cold boot support or hard guarantee before reconciliation completes
