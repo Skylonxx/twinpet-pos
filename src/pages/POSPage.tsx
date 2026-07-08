@@ -28,6 +28,8 @@ import { usePosInventory } from '../hooks/pos/usePosInventory';
 import { usePosSyncSignal } from '../hooks/pos/usePosSyncSignal';
 import { usePOSPreferences } from '../hooks/pos/usePOSPreferences';
 import SyncIndicator from '../components/pos/SyncIndicator';
+import ConnectivityChip from '../components/pos/ConnectivityChip';
+import SaleIntentSyncPanel from '../components/pos/SaleIntentSyncPanel';
 import { refreshReceiptConfigCache } from '../lib/pos/billId';
 import {
   BEST_SELLERS_KEY,
@@ -960,6 +962,8 @@ export default function POSPage() {
             {refreshing ? 'กำลังอัปเดต...' : 'อัปเดตข้อมูลหน้าจอ'}
           </button>
           <SyncIndicator branchId={branchId} />
+          <ConnectivityChip />
+          <SaleIntentSyncPanel />
           {fromCache && products.length > 0 && (
             <Badge color="gray" icon={() => <i className="ti ti-wifi-off mr-1" aria-hidden="true" />} className="ml-2 whitespace-nowrap">
               ออฟไลน์ (ใช้ข้อมูลในเครื่อง)

@@ -1,0 +1,28 @@
+/* Packet 6 · ConnectivityChip — namespaced `p6cc-` (unique to this component;
+   never share a prefix with another page/component's CSS — see
+   POSPage.css's `pos-` styles for the pre-existing SyncIndicator, which this
+   chip intentionally does not reuse). */
+
+.p6cc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border-radius: 14px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.p6cc-chip--online {
+  background: #e6f7ec;
+  color: #1c7d4d;
+  border: 1px solid #54b87f;
+}
+
+.p6cc-chip--offline {
+  background: #fff4d6;
+  color: #7a4b00;
+  border: 1px solid #f0b429;
+}

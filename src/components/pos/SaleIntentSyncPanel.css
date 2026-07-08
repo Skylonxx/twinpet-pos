@@ -1,0 +1,125 @@
+/* Packet 6 · SaleIntentSyncPanel — namespaced `p6ss-` (unique to this
+   component; do not reuse for any other page/component's CSS). */
+
+.p6ss-panel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  position: relative;
+}
+
+.p6ss-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border-radius: 14px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  border: 1px solid transparent;
+  font-family: inherit;
+  cursor: default;
+}
+
+button.p6ss-chip {
+  cursor: pointer;
+}
+
+.p6ss-chip--pending {
+  background: #fff4d6;
+  color: #7a4b00;
+  border-color: #f0b429;
+}
+
+.p6ss-chip--stale {
+  background: #ffe4d6;
+  color: #8a3b00;
+  border-color: #f07829;
+}
+
+.p6ss-chip--attention {
+  background: #fde8e8;
+  color: #9b1c1c;
+  border-color: #f28b8b;
+}
+
+.p6ss-attention-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  width: 320px;
+  max-width: 90vw;
+  max-height: 360px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #e2ded1;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  padding: 8px;
+}
+
+.p6ss-attention-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #444;
+  padding: 2px 4px 8px;
+  border-bottom: 1px solid #eee;
+  margin-bottom: 6px;
+}
+
+.p6ss-attention-close {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: #888;
+  padding: 2px;
+  line-height: 1;
+}
+
+.p6ss-attention-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.p6ss-attention-row {
+  border: 1px solid #f0e8e8;
+  background: #fffaf9;
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+.p6ss-attention-row-top,
+.p6ss-attention-row-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.p6ss-attention-bill {
+  font-weight: 700;
+}
+
+.p6ss-attention-time,
+.p6ss-attention-status {
+  color: #777;
+  font-size: 11px;
+}
+
+.p6ss-attention-reason {
+  margin-top: 4px;
+  color: #9b1c1c;
+  font-size: 11px;
+}
