@@ -1,88 +1,97 @@
 # Twinpet POS — Project Context
 
-> Last reconciled: 2026-07-08
-> HEAD: `8197d649a395d583ed62320e5acf76f96a3c302e`
-> origin/main: `8197d649a395d583ed62320e5acf76f96a3c302e`
+> Last reconciled: 2026-07-09
+> HEAD: `cb2e9ef32521f5e1c82a2379a617fbb65dac3c37`
+> origin/main: `cb2e9ef32521f5e1c82a2379a617fbb65dac3c37`
 
 ---
 
 ## Current Phase
 
-**P1 Offline / Sync Resiliency — Packet 8 Dev-Emulator Offline Drill: PASS WITH NOTES**
+**P1 Offline / Sync Resiliency — Packet 7A Shift Close Warning: PUSHED / UAT PASS WITH NOTES**
 
 Manual workflow remains active. `agentchattr` was not used as the executor for this phase.
 
-### P1 Packet 8 dev-emulator offline drill
+### P1 Packet 7A shift close warning
 
-**Status:** PASS WITH NOTES — Gemini authorized docs update (TWINPET-P1-OFFLINE-SYNC-GEMINI-PACKET-8-EVIDENCE-REVIEW-NEXT-GATE-001).
+**Status:** PUSHED / UAT PASS WITH NOTES — Gemini authorized docs reconciliation (TWINPET-P1-OFFLINE-SYNC-GEMINI-PACKET-7A-UAT-EVIDENCE-REVIEW-NEXT-GATE-001).
 
-**Commit tested:** `8197d649a395d583ed62320e5acf76f96a3c302e` — `docs: close p1 offline sync packet 6`
+**Implementation commit:** `cb2e9ef32521f5e1c82a2379a617fbb65dac3c37` — `feat(pos): warn on pending sync before closing shift`
 
-**Evidence environment (caveat):** local dev/emulator — Firebase emulators + Vite dev server, headless Chromium / Playwright, DevTools Protocol offline toggle. **Not** true hand-operated physical iPad/POS hardware. **Not** staging/production. No production Firestore touched. Physical/hardware pass remains optional/future unless Tech Lead requires.
+**Delivered:**
+- Non-blocking close-shift warning before close when this terminal has pending local sync bills
+- Warning copy is this-terminal/device-local — no global/cross-terminal coverage claim
+- Close/confirm remains enabled — not a hard gate
+- No warning in Z-report view
+- No shift math, closeShift write-path, drawer totals, variance, or Z-report math changes
+- No PaymentModal / checkout / journal write / backend / rules / functions changes
 
-**Report:** `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\UAT\twinpet-p1-offline-sync-packet-8-physical-offline-uat-drill-report.md`
+**UAT report:** `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\UAT\twinpet-p1-offline-sync-packet-7a-shift-close-warning-uat-report.md`
 
-### Scenario outcomes (Packet 8)
+**UAT environment:** local dev/emulator — Firebase emulators + Vite + headless Chromium / Playwright CDP offline toggle. **Not** physical hardware. **Not** production. No production Firestore touched.
+
+### Scenario outcomes (Packet 7A UAT)
 
 | Scenario | Result |
 |----------|--------|
-| S1 Baseline online POS | PASS |
-| S2 Offline mode transition | PASS |
-| S3 Offline sale / local pending | PASS |
-| S4 Reload while pending/offline | NOT PRACTICAL — known architecture constraint |
-| S5 Reconnect and settle | PASS |
-| S6 Multi-sale offline burst | PASS |
-| S7 Kill tab / close after payment | NOT PRACTICAL — same architecture constraint |
-| S8 Void/return while pending | NOT RUN |
-| S9 Failure/attention visibility | NOT RUN — no safe method |
-| S10 Storage pressure / persistence degraded | NOT RUN |
+| S1 Zero pending: no warning | PASS |
+| S2 Pending-sync warning with this-terminal count | PASS WITH NOTES |
+| S3 Non-blocking close behavior | PASS WITH NOTES |
+| S4 Stale variant | NOT RUN |
+| S5 Warning absent after close / Z-report view | PASS |
+| S6 No overclaim / wording audit | PASS |
 
-### Key positive evidence
+### Key UAT evidence
 
-- Online/offline chip/status visible and understandable
-- Offline sale worked in dev/emulator; cached catalog/pricing allowed sale flow
-- Local receipts issued offline: `RCP-260708-4W7WACJM-0001`, `-0002`, `-0003`
-- Offline success copy did not overclaim server acceptance (`บันทึกรายการลงเครื่องแล้ว` / `ระบบกำลังรอซิงก์`)
-- Pending badge incremented correctly: 0 → 1 → 2 → 3 → 0 on reconnect
-- Multi-sale offline burst worked; no new cashier-blocking regression
+- Zero pending → no warning
+- Pending → warning with correct count; copy: `มีบิลรอซิงก์จากเครื่องนี้ 1 บิล` / `บิลเหล่านี้บันทึกในเครื่องแล้ว แต่อาจยังไม่ซิงก์ขึ้นระบบ กรุณาตรวจสอบก่อนปิดกะ`
+- Close button remains enabled; warning is non-blocking
+- Warning absent from Z-report; no global/cross-terminal or guaranteed-settlement overclaim
 
-### Known architecture constraint
+### Poll cadence note
 
-Hard reload / cold reopen while fully offline fails with browser `net::ERR_INTERNET_DISCONNECTED`. Root cause: no service worker / app-shell precache. Pre-existing, known from earlier UAT, not introduced by Packet 6. Data survived and settled after reconnect. **Do not claim full offline cold-boot support.**
+Warning uses existing `SaleIntentSyncPanel` polling cadence. Count can lag up to ~5-second poll interval. Opening close shift immediately after offline sale may transiently show no warning until next poll. Acceptable — feature is non-blocking warning, not authoritative gate.
 
-### P1 Packet 6 (prior — CLOSED / PUSHED)
+### Out-of-scope defect (future Packet 7C candidate)
 
-| Hash | Message |
-|------|---------|
-| `81d8a20` | feat(pos): surface offline sync status to cashiers |
-| `2a98f33` | fix(pos): refine offline sync status ux |
-| `8197d64` | docs: close p1 offline sync packet 6 |
+`shiftService.closeShift()` offline hang while fully offline — click close shift while fully offline can enter `กำลังปิดกะ...` and not resolve during observation window. Reconnect before confirm allows close to complete. No evidence Packet 7A caused this; Packet 7A did not change `shiftService.ts`, `handleClose`, `closeShift`, shift math, write path, or confirm disabled logic. Track as **Packet 7C: Offline-Safe Shift Close** — Medium-High UX dead-end risk; no data-corruption evidence observed.
 
-Owner visual UAT PASS WITH NOTES. Frontend/UI only; no backend, rules, checkout, or journal write changes.
+### Report references
+
+- Implementation: `...\Developer\twinpet-p1-offline-sync-packet-7a-shift-close-warning-implementation-report.md` — PASS
+- Codex review: `...\reviewer\twinpet-p1-offline-sync-packet-7a-shift-close-warning-codex-review-report.md` — PASS WITH NOTES
+- Commit/push: `...\Developer\twinpet-p1-offline-sync-packet-7a-shift-close-warning-commit-push-report.md` — PASS
 
 ### No-overclaim boundaries
 
+- No global/cross-terminal coverage claim
 - No guaranteed settlement claim
-- No full offline cold-boot support claim
-- No true hardware validation claim
-- No production validation claim
-- No backend/rules/checkout/journal write change claim
-- PaymentModal completion claim not made
+- No true hardware or production validation claim
+- No full offline cold-boot claim
+- Packet 7A did not fix offline close hang
+- Packet 7A is not a hard close-shift gate
+- Pending count is not authoritative for all terminals
 
-### Residuals / future (not Packet 8 blockers)
+### P1 Packet 8 (prior — DOCS CLOSED)
 
-- True hand-operated physical iPad/POS terminal validation — optional/future unless Tech Lead requires
-- Failure/attention visibility deep drill — not run (no safe rejected/orphaned/manual_review method)
-- Void/return while pending — not run
-- Storage pressure/persistence degraded smoke — not run
-- PaymentModal success-screen note — deferred unless explicitly selected
-- Packet 5 backend/deep sync and Packet 7 shift-close — future candidates
+Dev-emulator offline drill PASS WITH NOTES. Docs `6526970`. **Not** true physical hardware validation.
+
+### P1 Packet 6 (prior — CLOSED / PUSHED / DOCS CLOSED)
+
+`81d8a20` + `2a98f33` + docs `8197d64`. Owner visual UAT PASS WITH NOTES.
+
+### Residuals / future
+
+- Packet 7C offline-safe shift close triage
+- Packet 7B admin reconciliation report (after Packet 5/backend clarity)
+- Packet 5 backend/deep sync planning
+- PaymentModal W-12 note
+- Optional true hardware UAT supplement
+- Stale variant live UAT not run
 
 ### Deferred / next gate
 
-**Packet 8 docs reconciliation** — this pass (unstaged). Then Codex docs review / Gemini docs commit authorization.
-
-Do not start new implementation until docs closure committed/pushed or Tech Lead authorizes otherwise.
+**Packet 7A docs reconciliation** — this pass (unstaged). Then Codex docs review / Gemini docs commit authorization.
 
 ### Other deferred
 

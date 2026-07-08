@@ -1,40 +1,46 @@
 # Twinpet POS — Task Tracker
 
-> Last reconciled: 2026-07-08
-> HEAD: `8197d649a395d583ed62320e5acf76f96a3c302e`
-> origin/main: `8197d649a395d583ed62320e5acf76f96a3c302e`
+> Last reconciled: 2026-07-09
+> HEAD: `cb2e9ef32521f5e1c82a2379a617fbb65dac3c37`
+> origin/main: `cb2e9ef32521f5e1c82a2379a617fbb65dac3c37`
 
 ---
 
-## P1 Offline / Sync Resiliency — Packet 8 Dev-Emulator Offline Drill
+## P1 Offline / Sync Resiliency — Packet 7A Shift Close Warning
 
-**Status: PASS WITH NOTES — docs reconciliation in progress (unstaged)**
+**Status: PUSHED / UAT PASS WITH NOTES — docs reconciliation in progress (unstaged)**
 
-- [x] Dev-emulator offline drill executed — PASS WITH NOTES
-- [x] Gemini evidence review — ACCEPT; authorize docs update
+- [x] Implementation pushed (`cb2e9ef`) — 4 files
+- [x] Codex review — PASS WITH NOTES
+- [x] UAT — PASS WITH NOTES (dev/emulator)
+- [x] Gemini UAT evidence review — ACCEPT; authorize docs reconciliation
 - [ ] Docs reconciliation (this pass) — in progress, unstaged
 
-**Commit tested:** `8197d649a395d583ed62320e5acf76f96a3c302e`
+**Commit:** `cb2e9ef32521f5e1c82a2379a617fbb65dac3c37`
 
-**Caveat:** dev/emulator + headless Chromium — **not** true physical iPad/POS hardware; not staging/production.
+**Delivered:** Non-blocking close-shift warning for this-terminal pending sync; close remains enabled; no Z-report warning; no shift math/write-path changes.
 
-**Report:** `...\UAT\twinpet-p1-offline-sync-packet-8-physical-offline-uat-drill-report.md`
+**UAT:** `...\UAT\twinpet-p1-offline-sync-packet-7a-shift-close-warning-uat-report.md`
 
-### Scenario summary
+### UAT scenario summary
 
 | Scenario | Result |
 |----------|--------|
-| S1–S3, S5–S6 | PASS |
-| S4, S7 | NOT PRACTICAL (no service worker / cold-boot constraint) |
-| S8–S10 | NOT RUN |
+| S1 Zero pending | PASS |
+| S2 Pending warning | PASS WITH NOTES |
+| S3 Non-blocking close | PASS WITH NOTES |
+| S4 Stale variant | NOT RUN |
+| S5 Z-report absent | PASS |
+| S6 Wording audit | PASS |
 
-**Key evidence:** offline sales, local receipts (`RCP-260708-4W7WACJM-0001`–`0003`), pending 0→3→0 on reconnect, accurate offline copy.
+**Out-of-scope:** `closeShift()` offline hang — future Packet 7C candidate; not Packet 7A blocker.
+
+### P1 Packet 8 — DOCS CLOSED
+
+- [x] Dev-emulator drill PASS WITH NOTES
+- [x] Docs closure (`6526970`)
 
 ### P1 Packet 6 — CLOSED / PUSHED / DOCS CLOSED
-
-- [x] Source + UX fix pushed (`81d8a20`, `2a98f33`)
-- [x] Owner visual UAT PASS WITH NOTES
-- [x] Docs closure (`8197d64`)
 
 ### P1 Packet 3B-4 / 3B-3 / 3B-2 / 3A-* / Packet 2 / Packet 1 — CLOSED / PUSHED
 
@@ -44,10 +50,10 @@
 
 ### Next step
 
-1. Formal Packet 8 docs closure (this pass — unstaged)
+1. Formal Packet 7A docs closure (this pass — unstaged)
 2. Codex docs review
 3. Gemini docs commit authorization
 
-**Not active:** New P1 implementation, PaymentModal follow-up, Printer/Thermal, UI-10-D, UI-11 Packet 2.
+**Not active:** Packet 7C fix, Packet 7B, Packet 5, PaymentModal follow-up, Printer/Thermal, UI-10-D, UI-11 Packet 2.
 
-**Future candidates:** Packet 5 backend/deep sync, Packet 7 shift-close, true physical hardware drill (optional).
+**Future candidates:** Packet 7C offline-safe shift close, Packet 7B admin reconciliation, Packet 5 backend/deep sync, true physical hardware drill (optional).

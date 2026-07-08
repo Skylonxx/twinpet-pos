@@ -6,14 +6,14 @@
 |-------|-------|
 | Repo root | `C:/Users/Narachat/twinpet-pos` |
 | Branch | `main` |
-| HEAD | `8197d649a395d583ed62320e5acf76f96a3c302e` |
-| origin/main | `8197d649a395d583ed62320e5acf76f96a3c302e` |
+| HEAD | `cb2e9ef32521f5e1c82a2379a617fbb65dac3c37` |
+| origin/main | `cb2e9ef32521f5e1c82a2379a617fbb65dac3c37` |
 | Ahead/behind | `0 / 0` |
 
 ## Current Phase
 
-    TWINPET-P1-OFFLINE-SYNC-PACKET-8-DOCS-RECONCILIATION
-    P1 Offline / Sync Packet 8 Dev-Emulator Offline Drill PASS WITH NOTES — docs reconciliation in progress (unstaged)
+    TWINPET-P1-OFFLINE-SYNC-PACKET-7A-DOCS-RECONCILIATION
+    P1 Offline / Sync Packet 7A Shift Close Warning PUSHED / UAT PASS WITH NOTES — docs reconciliation in progress (unstaged)
 
 ## Working Tree
 
@@ -26,39 +26,42 @@
 
 **Do NOT touch stash@{0}.**
 
+## P1 Packet 7A Shift Close Warning
+
+| Field | Value |
+|-------|-------|
+| Status | **PUSHED / UAT PASS WITH NOTES** |
+| Commit | `cb2e9ef32521f5e1c82a2379a617fbb65dac3c37` |
+| Scope | Non-blocking close-shift warning for this-terminal pending sync |
+| UAT environment | Dev/emulator + headless Chromium — **not** physical hardware |
+| UAT report | `...\UAT\twinpet-p1-offline-sync-packet-7a-shift-close-warning-uat-report.md` |
+| S1, S5, S6 | PASS |
+| S2, S3 | PASS WITH NOTES |
+| S4 | NOT RUN |
+| Shift math / closeShift write path | **Not changed** |
+| PaymentModal / checkout / journal / backend | **Not changed** |
+
+### Poll cadence
+
+Uses existing `SaleIntentSyncPanel` ~5s poll; transient no-warning possible immediately after offline sale. Non-blocking; acceptable.
+
+### Out-of-scope defect (Packet 7C candidate)
+
+`shiftService.closeShift()` offline hang — Medium-High UX dead-end risk. Not caused by Packet 7A. Track separately.
+
 ## P1 Packet 8 Dev-Emulator Offline Drill
 
 | Field | Value |
 |-------|-------|
-| Status | **PASS WITH NOTES** |
-| Commit tested | `8197d649a395d583ed62320e5acf76f96a3c302e` |
-| Environment | Dev/emulator + headless Chromium — **not** true physical hardware |
-| Report | `...\UAT\twinpet-p1-offline-sync-packet-8-physical-offline-uat-drill-report.md` |
-| S1–S3, S5–S6 | PASS |
-| S4, S7 | NOT PRACTICAL — no service worker / cold-boot constraint |
-| S8–S10 | NOT RUN |
-| Backend/checkout/journal writes | **Not changed** |
-| Production Firestore | **Not touched** |
-
-### Key evidence
-
-- Offline sales + local receipts: `RCP-260708-4W7WACJM-0001`–`0003`
-- Pending count: 0 → 1 → 2 → 3 → 0 on reconnect
-- Offline copy accurate (`บันทึกรายการลงเครื่องแล้ว` / `ระบบกำลังรอซิงก์`)
-- No new cashier-blocking regression
-
-### Architecture constraint (pre-existing)
-
-Hard reload while fully offline → `net::ERR_INTERNET_DISCONNECTED`. No full offline cold-boot support claim.
+| Status | **PASS WITH NOTES / DOCS CLOSED** |
+| Docs | `6526970 docs: record p1 packet 8 offline drill evidence` |
+| Environment | Dev/emulator — **not** true physical hardware |
 
 ## P1 Packet 6 Closure
 
 | Field | Value |
 |-------|-------|
-| Scope | POS offline/sync UI surfaces + UAT UX fix |
-| Source | `81d8a20` + `2a98f33` |
-| Docs | `8197d64 docs: close p1 offline sync packet 6` |
-| Status | **CLOSED / PUSHED / DOCS CLOSED** |
+| Status | **CLOSED / PUSHED / DOCS CLOSED** (`8197d64`) |
 
 ## P1 Packet 3B-4 / 3B-3 / 3B-2 / 3A-* / Packet 2 / Packet 1
 
@@ -76,25 +79,24 @@ All **CLOSED / PUSHED**.
 
 | Hash | Message |
 |------|---------|
+| `cb2e9ef` | feat(pos): warn on pending sync before closing shift — **P1 PACKET 7A** |
+| `6526970` | docs: record p1 packet 8 offline drill evidence |
 | `8197d64` | docs: close p1 offline sync packet 6 |
-| `2a98f33` | fix(pos): refine offline sync status ux — **P1 PACKET 6 UX FIX** |
-| `81d8a20` | feat(pos): surface offline sync status to cashiers — **P1 PACKET 6** |
-| `f3fc961` | docs: close p1 offline sync packet 3b-4 |
-| `50416fe` | feat(pos): reconcile device sequence watermark at boot |
+| `2a98f33` | fix(pos): refine offline sync status ux |
+| `81d8a20` | feat(pos): surface offline sync status to cashiers |
 
 ## Next Recommended Block
 
-    READY_FOR_PACKET_8_DOCS_COMMIT_AUTHORIZATION
+    READY_FOR_PACKET_7A_DOCS_COMMIT_AUTHORIZATION
 
-1. Formal Packet 8 docs closure (this pass — unstaged)
+1. Formal Packet 7A docs closure (this pass — unstaged)
 2. Codex docs review
 3. Gemini docs commit authorization
 
 ## Hard Boundaries
 
 - Docs changes not yet committed/pushed
-- No new implementation until docs closure or Tech Lead authorization
-- No full offline cold-boot or guaranteed settlement claims
-- No true hardware or production validation claims
-- PaymentModal success note deferred
-- Packet 5 / Packet 7 remain future candidates
+- No Packet 7C offline-close fix in this pass
+- No global/cross-terminal, guaranteed settlement, hardware, or production claims
+- PaymentModal W-12 note deferred
+- Packet 5 / Packet 7B remain future candidates
