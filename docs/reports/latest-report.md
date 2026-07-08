@@ -1,64 +1,62 @@
-# Latest Report — P1 Offline / Sync Packet 6 POS Offline/Sync UI Surfaces + UX Fix
+# Latest Report — P1 Offline / Sync Packet 8 Dev-Emulator Offline Drill
 
 > Date: 2026-07-08
-> HEAD: `2a98f335bf17c7d89bb0da492e2ef1ec5e9f54cb`
-> origin/main: `2a98f335bf17c7d89bb0da492e2ef1ec5e9f54cb`
-> Status: **P1 PACKET 6 CLOSED / PUSHED / OWNER VISUAL UAT PASS WITH NOTES**
+> HEAD: `8197d649a395d583ed62320e5acf76f96a3c302e`
+> origin/main: `8197d649a395d583ed62320e5acf76f96a3c302e`
+> Status: **PACKET 8 DEV-EMULATOR OFFLINE DRILL PASS WITH NOTES**
 
 ---
 
 ## Summary
 
-Packet 6 surfaces offline/sync status to cashiers (`81d8a20`) with a follow-up UX fix (`2a98f33`) after Owner feedback. Frontend/UI only. Owner visual UAT PASS WITH NOTES on desktop and iPad viewports.
+Packet 8 dev-emulator offline drill executed against commit `8197d64`. Offline sale flow, pending sync behavior, multi-sale burst, and reconnect settlement verified in local dev/emulator (Firebase emulators + Vite + headless Chromium / Playwright CDP offline toggle). **Not** true hand-operated physical iPad/POS hardware validation. **Not** staging/production.
 
-## Commits
+**Report:** `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\UAT\twinpet-p1-offline-sync-packet-8-physical-offline-uat-drill-report.md`
 
-| Hash | Message |
-|------|---------|
-| `81d8a20` | feat(pos): surface offline sync status to cashiers |
-| `2a98f33` | fix(pos): refine offline sync status ux |
+**Gemini decision:** ACCEPT PACKET 8 DEV-EMULATOR DRILL AS PASS WITH NOTES AND AUTHORIZE DOCS UPDATE.
 
-## Surfaces Delivered
+## Scenario Outcomes
 
-- Connectivity chip (online/offline)
-- Device-local pending sync count
-- Failure/attention badge and read-only list
-- Compact icon/badge + popover (UX fix)
+| Scenario | Result |
+|----------|--------|
+| S1 Baseline online POS | PASS |
+| S2 Offline mode transition | PASS |
+| S3 Offline sale / local pending | PASS |
+| S4 Reload while pending/offline | NOT PRACTICAL — no service worker / cold-boot |
+| S5 Reconnect and settle | PASS |
+| S6 Multi-sale offline burst | PASS |
+| S7 Kill tab / close after payment | NOT PRACTICAL — same constraint |
+| S8 Void/return while pending | NOT RUN |
+| S9 Failure/attention visibility | NOT RUN |
+| S10 Storage pressure smoke | NOT RUN |
 
-## UX Fix (Owner-reported issues resolved)
+## Key Evidence
 
-- iPad toolbar overflow/collision
-- Confusing `ซิงก์แล้ว` + local pending conflict
-- Wide pending chip → compact `ค้างซิงก์` badge + popover
-- Popover open and click-away close verified by Owner
+- Online/offline chip visible and understandable
+- Offline sale succeeded; cached catalog/pricing usable
+- Local receipts: `RCP-260708-4W7WACJM-0001`, `-0002`, `-0003`
+- Offline copy: `บันทึกรายการลงเครื่องแล้ว` / `ระบบกำลังรอซิงก์` — no server-acceptance overclaim
+- Pending badge: 0 → 1 → 2 → 3 → 0 on reconnect
+- No new cashier-blocking regression; repo clean; `stash@{0}` untouched
 
-## Owner Visual UAT (PASS WITH NOTES)
+## Architecture Constraint
 
-1. Desktop online — chip visible; compact pending `ค้างซิงก์ 18`; no toolbar overflow; no sync conflict — PASS
-2. iPad offline — `ออฟไลน์` chip; compact badge; POS usable — PASS
-3. iPad return online — `ออนไลน์`; no conflict; usable — PASS
-4. Popover — badge opens popover; tap outside closes — PASS
+Hard reload while fully offline → `net::ERR_INTERNET_DISCONNECTED`. Pre-existing; not introduced by Packet 6. Data survived and settled after reconnect. No full offline cold-boot support claim.
 
-## Validation
+## No-Overclaim
 
-| Check | Result |
-|-------|--------|
-| Implementation Codex | PASS WITH NOTES |
-| UX fix Codex | PASS WITH NOTES |
-| Unit suite | 1101 PASS |
-| TypeScript | PASS |
-| Owner visual UAT | PASS WITH NOTES |
+No guaranteed settlement, cold-boot, hardware, production, backend/checkout/journal, or PaymentModal completion claims.
 
 ## Residuals
 
+- True physical iPad/POS drill — optional/future
+- S8–S10 scenarios — not run
 - PaymentModal success-screen note — deferred
-- Packet 8 broader offline drill — NOT RUN
-- Deep rejected/orphaned/manual_review UAT — future unless required
-- No full offline cold-boot or guaranteed settlement claims
+- Packet 5 backend/deep sync, Packet 7 shift-close — future candidates
 
 ## Docs Reconciliation
 
-This pass (TWINPET-P1-OFFLINE-SYNC-PACKET-6-DOCS-RECONCILIATION-CLAUDE-001). Unstaged.
+This pass (TWINPET-P1-OFFLINE-SYNC-PACKET-8-DOCS-RECONCILIATION-CLAUDE-001). Unstaged.
 
 ## Next Gate
 

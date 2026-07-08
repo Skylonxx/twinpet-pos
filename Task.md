@@ -1,26 +1,40 @@
 # Twinpet POS — Task Tracker
 
 > Last reconciled: 2026-07-08
-> HEAD: `2a98f335bf17c7d89bb0da492e2ef1ec5e9f54cb`
-> origin/main: `2a98f335bf17c7d89bb0da492e2ef1ec5e9f54cb`
+> HEAD: `8197d649a395d583ed62320e5acf76f96a3c302e`
+> origin/main: `8197d649a395d583ed62320e5acf76f96a3c302e`
 
 ---
 
-## P1 Offline / Sync Resiliency — Packet 6 POS Offline/Sync UI Surfaces + UX Fix
+## P1 Offline / Sync Resiliency — Packet 8 Dev-Emulator Offline Drill
 
-**Status: CLOSED / PUSHED / OWNER VISUAL UAT PASS WITH NOTES**
+**Status: PASS WITH NOTES — docs reconciliation in progress (unstaged)**
 
-- [x] Source implementation pushed (`81d8a20`) — 9 files
-- [x] UX fix pushed (`2a98f33`) — 10 files
-- [x] Implementation Codex review — PASS WITH NOTES
-- [x] UX fix Codex review — PASS WITH NOTES
-- [x] UX fix tests — 1101 PASS; TypeScript PASS
-- [x] Owner visual UAT — PASS WITH NOTES (desktop + iPad + popover)
+- [x] Dev-emulator offline drill executed — PASS WITH NOTES
+- [x] Gemini evidence review — ACCEPT; authorize docs update
 - [ ] Docs reconciliation (this pass) — in progress, unstaged
 
-**Delivered:** Connectivity chip, device-local pending sync, failure/attention badge/list; UX fix for toolbar overflow and `ซิงก์แล้ว`/pending conflict; compact badge + popover.
+**Commit tested:** `8197d649a395d583ed62320e5acf76f96a3c302e`
 
-**Deferred:** PaymentModal success-screen note — not Packet 6 closure.
+**Caveat:** dev/emulator + headless Chromium — **not** true physical iPad/POS hardware; not staging/production.
+
+**Report:** `...\UAT\twinpet-p1-offline-sync-packet-8-physical-offline-uat-drill-report.md`
+
+### Scenario summary
+
+| Scenario | Result |
+|----------|--------|
+| S1–S3, S5–S6 | PASS |
+| S4, S7 | NOT PRACTICAL (no service worker / cold-boot constraint) |
+| S8–S10 | NOT RUN |
+
+**Key evidence:** offline sales, local receipts (`RCP-260708-4W7WACJM-0001`–`0003`), pending 0→3→0 on reconnect, accurate offline copy.
+
+### P1 Packet 6 — CLOSED / PUSHED / DOCS CLOSED
+
+- [x] Source + UX fix pushed (`81d8a20`, `2a98f33`)
+- [x] Owner visual UAT PASS WITH NOTES
+- [x] Docs closure (`8197d64`)
 
 ### P1 Packet 3B-4 / 3B-3 / 3B-2 / 3A-* / Packet 2 / Packet 1 — CLOSED / PUSHED
 
@@ -28,12 +42,12 @@
 
 ### UI-10-D / UI-11 Packet 2 — NOT STARTED
 
-### Packet 8 broader offline drill — NOT RUN
-
 ### Next step
 
-1. Formal Packet 6 docs closure (this pass — unstaged)
+1. Formal Packet 8 docs closure (this pass — unstaged)
 2. Codex docs review
 3. Gemini docs commit authorization
 
-**Not active:** New P1 implementation, Printer/Thermal, UI-10-D, UI-11 Packet 2.
+**Not active:** New P1 implementation, PaymentModal follow-up, Printer/Thermal, UI-10-D, UI-11 Packet 2.
+
+**Future candidates:** Packet 5 backend/deep sync, Packet 7 shift-close, true physical hardware drill (optional).

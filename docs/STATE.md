@@ -6,14 +6,14 @@
 |-------|-------|
 | Repo root | `C:/Users/Narachat/twinpet-pos` |
 | Branch | `main` |
-| HEAD | `2a98f335bf17c7d89bb0da492e2ef1ec5e9f54cb` |
-| origin/main | `2a98f335bf17c7d89bb0da492e2ef1ec5e9f54cb` |
+| HEAD | `8197d649a395d583ed62320e5acf76f96a3c302e` |
+| origin/main | `8197d649a395d583ed62320e5acf76f96a3c302e` |
 | Ahead/behind | `0 / 0` |
 
 ## Current Phase
 
-    TWINPET-P1-OFFLINE-SYNC-PACKET-6-DOCS-RECONCILIATION
-    P1 Offline / Sync Packet 6 UI Surfaces + UX Fix CLOSED / PUSHED — docs reconciliation in progress (unstaged)
+    TWINPET-P1-OFFLINE-SYNC-PACKET-8-DOCS-RECONCILIATION
+    P1 Offline / Sync Packet 8 Dev-Emulator Offline Drill PASS WITH NOTES — docs reconciliation in progress (unstaged)
 
 ## Working Tree
 
@@ -26,35 +26,43 @@
 
 **Do NOT touch stash@{0}.**
 
+## P1 Packet 8 Dev-Emulator Offline Drill
+
+| Field | Value |
+|-------|-------|
+| Status | **PASS WITH NOTES** |
+| Commit tested | `8197d649a395d583ed62320e5acf76f96a3c302e` |
+| Environment | Dev/emulator + headless Chromium — **not** true physical hardware |
+| Report | `...\UAT\twinpet-p1-offline-sync-packet-8-physical-offline-uat-drill-report.md` |
+| S1–S3, S5–S6 | PASS |
+| S4, S7 | NOT PRACTICAL — no service worker / cold-boot constraint |
+| S8–S10 | NOT RUN |
+| Backend/checkout/journal writes | **Not changed** |
+| Production Firestore | **Not touched** |
+
+### Key evidence
+
+- Offline sales + local receipts: `RCP-260708-4W7WACJM-0001`–`0003`
+- Pending count: 0 → 1 → 2 → 3 → 0 on reconnect
+- Offline copy accurate (`บันทึกรายการลงเครื่องแล้ว` / `ระบบกำลังรอซิงก์`)
+- No new cashier-blocking regression
+
+### Architecture constraint (pre-existing)
+
+Hard reload while fully offline → `net::ERR_INTERNET_DISCONNECTED`. No full offline cold-boot support claim.
+
 ## P1 Packet 6 Closure
 
 | Field | Value |
 |-------|-------|
 | Scope | POS offline/sync UI surfaces + UAT UX fix |
-| Source | `81d8a20 feat(pos): surface offline sync status to cashiers` |
-| UX fix | `2a98f33 fix(pos): refine offline sync status ux` |
-| Surfaces | Connectivity chip; device-local pending; failure/attention badge/list; read-only journal UI |
-| UX fix items | Toolbar overflow; `ซิงก์แล้ว`/pending conflict; compact badge + popover |
-| Implementation Codex | PASS WITH NOTES |
-| UX fix Codex | PASS WITH NOTES — commit readiness YES |
-| Tests | 1101 unit PASS; affected tests PASS; tsc PASS |
-| Owner visual UAT | PASS WITH NOTES |
-| Backend/checkout/journal writes | **Not changed** |
-| PaymentModal success note | **Deferred** |
-| Status | **CLOSED / PUSHED / OWNER VISUAL UAT PASS WITH NOTES** |
-
-### Report references
-
-- `...\Developer\twinpet-p1-offline-sync-packet-6-ui-surfaces-implementation-report.md`
-- `...\reviewer\twinpet-p1-offline-sync-packet-6-ui-surfaces-implementation-codex-review-report.md`
-- `...\Developer\twinpet-p1-offline-sync-packet-6-ui-surfaces-commit-push-report.md`
-- `...\Developer\twinpet-p1-offline-sync-packet-6-uat-ux-fix-implementation-report.md`
-- `...\reviewer\twinpet-p1-offline-sync-packet-6-uat-ux-fix-codex-review-report.md`
-- `...\Developer\twinpet-p1-offline-sync-packet-6-uat-ux-fix-commit-push-report.md`
+| Source | `81d8a20` + `2a98f33` |
+| Docs | `8197d64 docs: close p1 offline sync packet 6` |
+| Status | **CLOSED / PUSHED / DOCS CLOSED** |
 
 ## P1 Packet 3B-4 / 3B-3 / 3B-2 / 3A-* / Packet 2 / Packet 1
 
-All **CLOSED / PUSHED** (3B-4 docs `f3fc961`).
+All **CLOSED / PUSHED**.
 
 ## UI-11 Packet 1 / UI-10-C / UI-10-B / UI-10-A
 
@@ -64,25 +72,21 @@ All **CLOSED / PUSHED**.
 
 **NOT STARTED**
 
-## Packet 8 Physical Offline Drill
-
-**NOT RUN** — schedule later.
-
 ## Recent Completed Work
 
 | Hash | Message |
 |------|---------|
+| `8197d64` | docs: close p1 offline sync packet 6 |
 | `2a98f33` | fix(pos): refine offline sync status ux — **P1 PACKET 6 UX FIX** |
-| `81d8a20` | feat(pos): surface offline sync status to cashiers — **P1 PACKET 6 CLOSED / PUSHED** |
+| `81d8a20` | feat(pos): surface offline sync status to cashiers — **P1 PACKET 6** |
 | `f3fc961` | docs: close p1 offline sync packet 3b-4 |
 | `50416fe` | feat(pos): reconcile device sequence watermark at boot |
-| `11e668a` | docs: close p1 offline sync packet 3b-3 |
 
 ## Next Recommended Block
 
-    READY_FOR_DOCS_COMMIT_AUTHORIZATION
+    READY_FOR_PACKET_8_DOCS_COMMIT_AUTHORIZATION
 
-1. Formal Packet 6 docs closure (this pass — unstaged)
+1. Formal Packet 8 docs closure (this pass — unstaged)
 2. Codex docs review
 3. Gemini docs commit authorization
 
@@ -90,5 +94,7 @@ All **CLOSED / PUSHED**.
 
 - Docs changes not yet committed/pushed
 - No new implementation until docs closure or Tech Lead authorization
-- Packet 8 drill not run
 - No full offline cold-boot or guaranteed settlement claims
+- No true hardware or production validation claims
+- PaymentModal success note deferred
+- Packet 5 / Packet 7 remain future candidates
