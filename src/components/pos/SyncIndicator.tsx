@@ -13,8 +13,22 @@ import { getDeviceId } from '../../lib/pos/deviceId';
  *
  * One tiny, bounded listener (pending-only) — the sanctioned exception to the
  * POS's otherwise listener-free "Light Path".
+ *
+ * `suppressSyncedNotice` (Packet 6 UX fix): SyncIndicator reports the SERVER /
+ * Firestore sync channel, which is distinct from the current device's LOCAL
+ * journal (surfaced by SaleIntentSyncPanel). When the device is offline OR the
+ * local journal still has bills pending, showing this channel's transient
+ * "✓ ซิงก์แล้ว" success note alongside a local "N บิลรอซิงก์" reads as a
+ * contradiction. The POS page passes this flag in that case to suppress ONLY the
+ * success note — the honest "pending" chip below is never suppressed.
  */
-export default function SyncIndicator({ branchId }: { branchId: string | null }) {
+export default function SyncIndicator({
+  branchId,
+  suppressSyncedNotice = false,
+}: {
+  branchId: string | null;
+  suppressSyncedNotice?: boolean;
+}) {
   const [pending, setPending] = useState(0);
   const [justSynced, setJustSynced] = useState(false);
   const prevPending = useRef(0);
@@ -66,7 +80,7 @@ export default function SyncIndicator({ branchId }: { branchId: string | null })
     );
   }
 
-  if (justSynced) {
+  if (justSynced && !suppressSyncedNotice) {
     return (
       <div
         className="pos-sync-indicator pos-sync-indicator--synced"

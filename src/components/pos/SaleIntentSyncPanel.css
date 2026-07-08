@@ -1,58 +1,81 @@
 /* Packet 6 · SaleIntentSyncPanel — namespaced `p6ss-` (unique to this
-   component; do not reuse for any other page/component's CSS). */
+   component; do not reuse for any other page/component's CSS).
+
+   Packet 6 UX fix: the old wide inline text chips are replaced by ONE compact
+   icon + numeric badge trigger; the detail lives in a tap-to-open popover. This
+   keeps the POS header narrow so it no longer collides with the action toolbar
+   on tablet widths. */
 
 .p6ss-panel {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
   position: relative;
 }
 
-.p6ss-chip {
+/* Compact trigger: icon + short label + count badge. Tap to open the popover. */
+.p6ss-trigger {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   flex-shrink: 0;
-  padding: 4px 10px;
+  padding: 4px 8px;
   border-radius: 14px;
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
   border: 1px solid transparent;
   font-family: inherit;
-  cursor: default;
-}
-
-button.p6ss-chip {
   cursor: pointer;
+  line-height: 1;
 }
 
-.p6ss-chip--pending {
+.p6ss-trigger--pending {
   background: #fff4d6;
   color: #7a4b00;
   border-color: #f0b429;
 }
 
-.p6ss-chip--stale {
+.p6ss-trigger--stale {
   background: #ffe4d6;
   color: #8a3b00;
   border-color: #f07829;
 }
 
-.p6ss-chip--attention {
+.p6ss-trigger--attention {
   background: #fde8e8;
   color: #9b1c1c;
   border-color: #f28b8b;
 }
 
-.p6ss-attention-list {
+.p6ss-trigger:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(240, 180, 41, 0.28);
+}
+
+.p6ss-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.14);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* Popover: read-only detail surface. Anchored to the trigger, never a full-screen
+   overlay/backdrop, so it never traps the cashier or blocks POS operations. */
+.p6ss-popover {
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
   z-index: 40;
   width: 320px;
   max-width: 90vw;
-  max-height: 360px;
+  max-height: 380px;
   overflow-y: auto;
   background: #fff;
   border: 1px solid #e2ded1;
@@ -61,26 +84,57 @@ button.p6ss-chip {
   padding: 8px;
 }
 
-.p6ss-attention-header {
+.p6ss-popover-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   color: #444;
   padding: 2px 4px 8px;
   border-bottom: 1px solid #eee;
   margin-bottom: 6px;
 }
 
-.p6ss-attention-close {
+.p6ss-popover-close {
   border: none;
   background: transparent;
   cursor: pointer;
   color: #888;
-  padding: 2px;
+  padding: 4px;
   line-height: 1;
+  font-size: 14px;
+}
+
+.p6ss-pending-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #7a4b00;
+  background: #fff8e6;
+  border: 1px solid #f3d488;
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+
+.p6ss-pending-line--stale {
+  color: #8a3b00;
+  background: #fff0e6;
+  border-color: #f0b48f;
+}
+
+.p6ss-attention-block {
+  margin-top: 8px;
+}
+
+.p6ss-attention-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #9b1c1c;
+  padding: 0 2px 6px;
 }
 
 .p6ss-attention-rows {
@@ -122,4 +176,12 @@ button.p6ss-chip {
   margin-top: 4px;
   color: #9b1c1c;
   font-size: 11px;
+}
+
+/* Tablet/narrow widths: drop the trigger label to icon + badge only, so the POS
+   header status cluster never pushes into the action toolbar. */
+@media (max-width: 1180px) {
+  .p6ss-trigger-label {
+    display: none;
+  }
 }

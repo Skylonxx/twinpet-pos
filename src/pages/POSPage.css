@@ -266,6 +266,19 @@
   border: 1px solid #54b87f;
 }
 
+/* Packet 6 UX fix: compact header status cluster. Holds the SyncIndicator (server
+   sync channel), ConnectivityChip, and SaleIntentSyncPanel (this device's local
+   journal channel). Relocated here from `pos-search-group` so the offline/pending
+   surfaces sit in a narrow right-aligned header area and never overflow into the
+   action toolbar on tablet widths. `flex-shrink: 0` keeps the compact icons/badges
+   intact; the search group (`flex: 1`) absorbs the remaining width. */
+.pos-status-cluster {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 /* UI-08: action buttons area — flex row with safe/destructive grouping via a visual divider. */
 .pos-topbar-actions {
   margin-left: auto;

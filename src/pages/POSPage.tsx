@@ -29,7 +29,9 @@ import { usePosSyncSignal } from '../hooks/pos/usePosSyncSignal';
 import { usePOSPreferences } from '../hooks/pos/usePOSPreferences';
 import SyncIndicator from '../components/pos/SyncIndicator';
 import ConnectivityChip from '../components/pos/ConnectivityChip';
-import SaleIntentSyncPanel from '../components/pos/SaleIntentSyncPanel';
+import SaleIntentSyncPanel, {
+  type SaleIntentPanelStatus,
+} from '../components/pos/SaleIntentSyncPanel';
 import { refreshReceiptConfigCache } from '../lib/pos/billId';
 import {
   BEST_SELLERS_KEY,
@@ -154,6 +156,33 @@ export default function POSPage() {
   // Bill-discount numpad (Phase 7C-D4-D Fix 2): drives the custom on-screen numpad opened by
   // tapping the bill-discount field, so touch terminals don't fall back to the native keyboard.
   const [discNumpadOpen, setDiscNumpadOpen] = useState(false);
+
+  // Packet 6 UX fix — cross-channel status for the header status cluster.
+  // `saleIntentStatus` is lifted from SaleIntentSyncPanel (this device's LOCAL
+  // journal channel); `isOffline` mirrors navigator.onLine. Together they decide
+  // whether the SERVER-channel SyncIndicator may show its "ซิงก์แล้ว" success
+  // note — it is suppressed while offline or while local bills are still pending,
+  // so the two distinct channels never contradict each other on screen. This is a
+  // read-only status boundary: no journal handle, no mutation, no write path.
+  const [saleIntentStatus, setSaleIntentStatus] = useState<SaleIntentPanelStatus>({
+    pendingCount: 0,
+    attentionCount: 0,
+    isStale: false,
+  });
+  const [isOffline, setIsOffline] = useState(
+    () => typeof navigator !== 'undefined' && navigator.onLine === false,
+  );
+
+  useEffect(() => {
+    const goOnline = () => setIsOffline(false);
+    const goOffline = () => setIsOffline(true);
+    window.addEventListener('online', goOnline);
+    window.addEventListener('offline', goOffline);
+    return () => {
+      window.removeEventListener('online', goOnline);
+      window.removeEventListener('offline', goOffline);
+    };
+  }, []);
 
   type ConfirmModalPayload = { type: 'clearCart' } | { type: 'cancelParkedOrder'; bill: SuspendedBill };
   const [confirmModalState, setConfirmModalState] = useState<{ open: boolean; payload?: ConfirmModalPayload }>({ open: false });
@@ -908,6 +937,11 @@ export default function POSPage() {
     return () => window.removeEventListener('keydown', onKey);
   }, [cartLines.length, activeShift, hasBlockingModalOpen, closeTopModalOnEscape]);
 
+  // Packet 6 UX fix — suppress the SERVER-channel "ซิงก์แล้ว" success note while
+  // this device is offline OR its local journal still has bills pending, so the
+  // header never shows "synced" and "N บิลรอซิงก์" at the same time.
+  const suppressSyncedNotice = isOffline || saleIntentStatus.pendingCount > 0;
+
   return (
     <div
       className={`pos-page pos-fontsize-${fontSize} pos-name-${productNameFontSize} pos-price-${priceFontSize}`}
@@ -961,14 +995,21 @@ export default function POSPage() {
             />{' '}
             {refreshing ? 'กำลังอัปเดต...' : 'อัปเดตข้อมูลหน้าจอ'}
           </button>
-          <SyncIndicator branchId={branchId} />
-          <ConnectivityChip />
-          <SaleIntentSyncPanel />
           {fromCache && products.length > 0 && (
             <Badge color="gray" icon={() => <i className="ti ti-wifi-off mr-1" aria-hidden="true" />} className="ml-2 whitespace-nowrap">
               ออฟไลน์ (ใช้ข้อมูลในเครื่อง)
             </Badge>
           )}
+        </div>
+        {/* Packet 6 UX fix — compact header status cluster. Relocated OUT of the
+            action toolbar (`pos-search-group`) into this narrow right-aligned
+            header area so the offline/pending/attention surfaces never collide
+            with the action buttons on tablet widths. SyncIndicator = server sync
+            channel; SaleIntentSyncPanel = this device's local journal channel. */}
+        <div className="pos-status-cluster">
+          <SyncIndicator branchId={branchId} suppressSyncedNotice={suppressSyncedNotice} />
+          <ConnectivityChip />
+          <SaleIntentSyncPanel onStatusChange={setSaleIntentStatus} />
         </div>
         {activeShift && (
           <div className="pos-topbar-actions">

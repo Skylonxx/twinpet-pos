@@ -28,10 +28,14 @@ describe('ConnectivityChip', () => {
     expect(screen.getByText(/ออฟไลน์/)).toBeTruthy();
   });
 
-  test('never implies selling is blocked while offline', () => {
+  test('never implies selling is blocked while offline (compact copy + full reassurance in title)', () => {
     setOnline(false);
     render(createElement(ConnectivityChip));
-    expect(screen.getByText(/ขายต่อได้ตามปกติ/)).toBeTruthy();
+    // Packet 6 UX fix: the visible copy is compacted to keep the header narrow,
+    // but the "can still sell" reassurance is preserved — inline ("ขายต่อได้") and
+    // in full in the chip's title tooltip.
+    expect(screen.getByText(/ขายต่อได้/)).toBeTruthy();
+    expect(screen.getByTestId('p6cc-chip').getAttribute('title')).toContain('ยังขายต่อได้ตามปกติ');
   });
 
   test('flips to offline on a window "offline" event', () => {

@@ -47,7 +47,12 @@ export default function ConnectivityChip() {
       title="ไม่มีอินเทอร์เน็ต — ยังขายต่อได้ตามปกติในเครื่องนี้"
     >
       <i className="ti ti-wifi-off" aria-hidden="true" />
-      <span>ออฟไลน์ — ขายต่อได้ตามปกติ</span>
+      {/* Packet 6 UX fix: keep the "can still sell" reassurance but compact it so
+          the header status cluster no longer overflows on tablet widths. The
+          reassurance drops to icon + "ออฟไลน์" on narrow screens (full copy stays
+          in the title tooltip and the aria label below for confidence). */}
+      <span>ออฟไลน์</span>
+      <span className="p6cc-note"> · ขายต่อได้</span>
     </div>
   );
 }

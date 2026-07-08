@@ -26,3 +26,16 @@
   color: #7a4b00;
   border: 1px solid #f0b429;
 }
+
+/* Secondary "still sellable" reassurance — shown inline on roomy screens, hidden
+   on tablet/narrow widths (the full copy stays in the chip's title tooltip) so
+   the header status cluster never collides with the action toolbar. */
+.p6cc-note {
+  font-weight: 500;
+}
+
+@media (max-width: 1180px) {
+  .p6cc-note {
+    display: none;
+  }
+}
