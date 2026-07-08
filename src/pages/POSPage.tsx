@@ -1635,6 +1635,8 @@ export default function POSPage() {
       {showCloseShift && drawerShift && (
         <CloseShiftModal
           shift={drawerShift}
+          pendingSyncCount={saleIntentStatus.pendingCount}
+          pendingSyncStale={saleIntentStatus.isStale}
           onClose={() => {
             // 7C-UI-02-HOTFIX-FOCUS-EDGE: Close-Shift cancelled/closed — return to scanning.
             // (The success path resolves via handleNewSale, which already refocuses.)

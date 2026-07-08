@@ -122,6 +122,42 @@
   margin: 0;
 }
 
+/* Packet 7A — this-terminal pending-sync warning (pre-close view only). */
+.shift-close-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 9px;
+  background: #fff8e6;
+  border: 0.5px solid #f0d590;
+  color: #8a6300;
+  font-size: 12px;
+}
+
+.shift-close-warning i {
+  font-size: 16px;
+  margin-top: 1px;
+  flex-shrink: 0;
+}
+
+.shift-close-warning strong {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.shift-close-warning p {
+  margin: 2px 0 0;
+  line-height: 1.5;
+}
+
+.shift-close-warning--stale {
+  background: #fdeceb;
+  border-color: #f1b4ad;
+  color: #a13327;
+}
+
 /* Z-Report success */
 .shift-zreport {
   display: flex;

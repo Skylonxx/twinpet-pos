@@ -99,6 +99,14 @@ type CloseShiftModalProps = {
   shift: Shift;
   onClose: () => void;
   onSuccess: () => void;
+  /**
+   * Read-only, THIS-terminal count of local sale-intents still waiting to sync
+   * (Packet 7A). Presentation only — never gates `handleClose`/the confirm
+   * button, and never touches shift totals, variance, or the close payload.
+   */
+  pendingSyncCount?: number;
+  /** True when the oldest pending entry has aged past the sync-panel's stale threshold. */
+  pendingSyncStale?: boolean;
 };
 
 function formatShiftTime(ts: Shift['openedAt']): string {
@@ -236,7 +244,13 @@ function ZReportView({
   );
 }
 
-export function CloseShiftModal({ shift, onClose, onSuccess }: CloseShiftModalProps) {
+export function CloseShiftModal({
+  shift,
+  onClose,
+  onSuccess,
+  pendingSyncCount = 0,
+  pendingSyncStale = false,
+}: CloseShiftModalProps) {
   const [actualCash, setActualCash] = useState('');
   const [note, setNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -311,6 +325,28 @@ export function CloseShiftModal({ shift, onClose, onSuccess }: CloseShiftModalPr
                 {fmtBaht(calcShiftDrawerExpected(shift), { decimals: 2 })}
               </p>
             </div>
+            {pendingSyncCount > 0 && (
+              <div
+                className={`shift-close-warning${pendingSyncStale ? ' shift-close-warning--stale' : ''}`}
+                role="status"
+                data-testid="shift-close-pending-warning"
+              >
+                <i className="ti ti-device-desktop-cog" aria-hidden="true" />
+                <div>
+                  {pendingSyncStale ? (
+                    <>
+                      <strong>มีบิลรอซิงก์นานผิดปกติจากเครื่องนี้ {pendingSyncCount} บิล</strong>
+                      <p>กรุณาตรวจสอบสถานะซิงก์ก่อนปิดกะ</p>
+                    </>
+                  ) : (
+                    <>
+                      <strong>มีบิลรอซิงก์จากเครื่องนี้ {pendingSyncCount} บิล</strong>
+                      <p>บิลเหล่านี้บันทึกในเครื่องแล้ว แต่อาจยังไม่ซิงก์ขึ้นระบบ กรุณาตรวจสอบก่อนปิดกะ</p>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
             <div className="shift-modal-field">
               <label className="shift-modal-label" htmlFor="shift-actual-cash">
                 นับเงินสดในลิ้นชัก (Actual Cash in Drawer)
