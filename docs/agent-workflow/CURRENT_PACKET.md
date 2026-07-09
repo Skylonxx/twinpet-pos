@@ -2,30 +2,34 @@
 
 ## Phase
 
-**Docs-only — P1 Offline / Sync Packet 7A docs reconciliation (TWINPET-P1-OFFLINE-SYNC-PACKET-7A-DOCS-RECONCILIATION-CLAUDE-001). Unstaged.**
+**Docs-only — P1 Offline / Sync Packet 7C-A/7C-B docs reconciliation (TWINPET-P1-OFFLINE-SYNC-PACKET-7C-A-7C-B-DOCS-RECONCILIATION-CLAUDE-001). Unstaged.**
 
-## Last pushed implementation packet
+## Last closed implementation packet
 
-**P1 Offline / Sync Resiliency — Packet 7A Shift Close Warning** — PUSHED / UAT PASS WITH NOTES.
+**P1 Offline / Sync Resiliency — Packet 7C-A Offline-Safe Close-Shift UX Guard** — CLOSED / COMMITTED / PUSHED.
 
 | Field | Value |
 |-------|-------|
-| Commit | `cb2e9ef32521f5e1c82a2379a617fbb65dac3c37` |
-| UAT | Dev/emulator + headless Chromium — **not** physical hardware |
-| Report | `...\UAT\twinpet-p1-offline-sync-packet-7a-shift-close-warning-uat-report.md` |
+| Commit | `34a3d24de69751d3bdf9c9ace0cc8cf491845265` |
+| Message | `fix(pos): guard offline shift close ux` |
+| Delivery | Fail-fast offline guard + 10s timeout backstop + roadmap update |
+| Limitation | UX stopgap only — not true offline close |
 
-Non-blocking this-terminal pending sync warning; close enabled; no Z-report warning; no shift math/write-path changes. Offline close hang → future Packet 7C candidate.
+## Next packet (architecture ready — implementation not authorized)
+
+**Packet 7C-B1 Local Optimistic Offline Close (Option 2)** — durable local pending close only.
+
+- Architecture: Codex re-review PASS WITH NOTES
+- Reliable post-reload ACK/rejection → **7C-B2** (deferred)
+- Packet 5 backend authority → required later, **not implemented**
 
 ## Prior closed packets
 
-- **Packet 8** — dev-emulator drill PASS WITH NOTES; docs `6526970`
+- **Packet 7A** — `cb2e9ef` + docs `74a84c3`
+- **Packet 8** — dev-emulator drill; docs `6526970`
 - **Packet 6** — `81d8a20` + `2a98f33` + docs `8197d64`
 - **Packet 3B-4 / 3B-3 / 3B-2 / 3A-* / Packet 2 / Packet 1** — closed
 
-## Next packet (not authorized)
-
-Packet 7C offline-safe shift close. Packet 7B admin reconciliation. Packet 5 backend/deep sync. PaymentModal W-12 note. True physical hardware drill (optional). **UI-11 Packet 2** and **UI-10-D**. No new implementation until docs closure or Tech Lead authorization.
-
 ## Current HEAD
 
-`cb2e9ef32521f5e1c82a2379a617fbb65dac3c37` (verified)
+`34a3d24de69751d3bdf9c9ace0cc8cf491845265` (verified)
