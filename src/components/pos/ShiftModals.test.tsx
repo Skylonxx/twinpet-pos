@@ -2,9 +2,32 @@
 
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { createElement } from 'react';
-import { cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { CloseShiftModal } from './ShiftModals';
 import type { Shift } from '../../lib/types';
+
+// Packet 7C-A — offline-safe close-shift UX guard. `closeShift` is mocked so
+// these tests can control resolve/reject/hang timing without touching
+// Firestore; every other export of shiftService (e.g. calcShiftDrawerExpected,
+// used for the drawer-expected display copy) stays real via importActual.
+const mocks = vi.hoisted(() => ({
+  closeShift: vi.fn(),
+}));
+
+vi.mock('../../lib/pos/shiftService', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../lib/pos/shiftService')>();
+  return {
+    ...actual,
+    closeShift: mocks.closeShift,
+  };
+});
+
+function setOnline(online: boolean) {
+  Object.defineProperty(window.navigator, 'onLine', {
+    configurable: true,
+    value: online,
+  });
+}
 
 // Packet 7A — this-terminal pending-sync warning in the pre-close view.
 // These tests exercise only the read-only warning prop surface: they never
@@ -155,5 +178,134 @@ describe('CloseShiftModal — Packet 7A pending-sync warning', () => {
     expect(screen.getByLabelText('นับเงินสดในลิ้นชัก (Actual Cash in Drawer)')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'ปิดกะ' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'ยกเลิก' })).toBeTruthy();
+  });
+});
+
+describe('CloseShiftModal — Packet 7C-A offline-safe close guard', () => {
+  afterEach(() => {
+    cleanup();
+    mocks.closeShift.mockReset();
+    setOnline(true);
+    vi.useRealTimers();
+  });
+
+  function renderModal(onSuccess = vi.fn()) {
+    render(
+      createElement(CloseShiftModal, {
+        shift: makeShift(),
+        onClose: vi.fn(),
+        onSuccess,
+      }),
+    );
+    fireEvent.change(screen.getByLabelText('นับเงินสดในลิ้นชัก (Actual Cash in Drawer)'), {
+      target: { value: '1000' },
+    });
+    return screen.getByRole('button', { name: 'ปิดกะ' });
+  }
+
+  test('offline guard shows honest Thai error and does not call closeShift', () => {
+    setOnline(false);
+    const confirmBtn = renderModal();
+
+    fireEvent.click(confirmBtn);
+
+    expect(screen.getByText(
+      'ไม่สามารถปิดกะขณะออฟไลน์ กรุณาเชื่อมต่ออินเทอร์เน็ตแล้วลองอีกครั้ง',
+    )).toBeTruthy();
+    expect(mocks.closeShift).not.toHaveBeenCalled();
+  });
+
+  test('offline guard does not render Z-report', () => {
+    setOnline(false);
+    const confirmBtn = renderModal();
+
+    fireEvent.click(confirmBtn);
+
+    expect(screen.queryByText('ปิดกะสำเร็จ — Z-Report')).toBeNull();
+  });
+
+  test('online happy path still calls closeShift and renders Z-report', async () => {
+    setOnline(true);
+    mocks.closeShift.mockResolvedValue(makeShift({ status: 'closed', actualCashCount: 1000 }));
+    const confirmBtn = renderModal();
+
+    await act(async () => {
+      fireEvent.click(confirmBtn);
+    });
+
+    expect(mocks.closeShift).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText('ปิดกะสำเร็จ — Z-Report')).toBeTruthy();
+  });
+
+  test('timeout backstop releases submitting and shows honest connectivity error when closeShift never resolves', async () => {
+    vi.useFakeTimers();
+    setOnline(true);
+    mocks.closeShift.mockImplementation(() => new Promise(() => {}));
+    const confirmBtn = renderModal();
+
+    await act(async () => {
+      fireEvent.click(confirmBtn);
+    });
+    expect(screen.getByRole('button', { name: 'กำลังปิดกะ...' })).toBeTruthy();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+
+    expect(screen.getByText(
+      'ปิดกะยังไม่สำเร็จ ระบบเชื่อมต่อมีปัญหา กรุณาตรวจสอบการเชื่อมต่อแล้วลองอีกครั้ง',
+    )).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'ปิดกะ' })).toBeTruthy();
+    expect(screen.queryByText('ปิดกะสำเร็จ — Z-Report')).toBeNull();
+  });
+
+  test('retry after timeout remains possible and can still succeed', async () => {
+    vi.useFakeTimers();
+    setOnline(true);
+    mocks.closeShift.mockImplementationOnce(() => new Promise(() => {}));
+    const confirmBtn = renderModal();
+
+    await act(async () => {
+      fireEvent.click(confirmBtn);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    vi.useRealTimers();
+
+    mocks.closeShift.mockResolvedValueOnce(makeShift({ status: 'closed', actualCashCount: 1000 }));
+    const retryBtn = screen.getByRole('button', { name: 'ปิดกะ' });
+    await act(async () => {
+      fireEvent.click(retryBtn);
+    });
+
+    expect(await screen.findByText('ปิดกะสำเร็จ — Z-Report')).toBeTruthy();
+  });
+
+  test('copy audit: offline and timeout errors do not claim synced/settled/server-accepted/guaranteed/global coverage', () => {
+    setOnline(false);
+    const confirmBtn = renderModal();
+    fireEvent.click(confirmBtn);
+    const offlineText = screen.getByText(
+      'ไม่สามารถปิดกะขณะออฟไลน์ กรุณาเชื่อมต่ออินเทอร์เน็ตแล้วลองอีกครั้ง',
+    ).textContent;
+
+    const forbidden = [
+      'ปิดกะแล้ว',
+      'ซิงก์แล้ว',
+      'บันทึกขึ้นระบบแล้ว',
+      'ยืนยันจากเซิร์ฟเวอร์แล้ว',
+      'ทุกเครื่อง',
+      'ทุกอุปกรณ์',
+    ];
+    for (const word of forbidden) {
+      expect(offlineText).not.toContain(word);
+    }
+
+    const timeoutMessage =
+      'ปิดกะยังไม่สำเร็จ ระบบเชื่อมต่อมีปัญหา กรุณาตรวจสอบการเชื่อมต่อแล้วลองอีกครั้ง';
+    for (const word of forbidden) {
+      expect(timeoutMessage).not.toContain(word);
+    }
   });
 });

@@ -1,22 +1,47 @@
 # Twinpet POS — Project Context
 
 > Last reconciled: 2026-07-09
-> HEAD: `cb2e9ef32521f5e1c82a2379a617fbb65dac3c37`
-> origin/main: `cb2e9ef32521f5e1c82a2379a617fbb65dac3c37`
+> HEAD: `74a84c3432cac16a8effb3c8317725e6671dad1f`
+> origin/main: `74a84c3432cac16a8effb3c8317725e6671dad1f`
 
 ---
 
 ## Current Phase
 
-**P1 Offline / Sync Resiliency — Packet 7A Shift Close Warning: PUSHED / UAT PASS WITH NOTES**
+**P1 Offline / Sync Resiliency — Packet 7C-A Offline-Safe Close-Shift UX Guard: IMPLEMENTED (UNCOMMITTED) — pending Codex re-review / Gemini commit authorization**
 
 Manual workflow remains active. `agentchattr` was not used as the executor for this phase.
 
-### P1 Packet 7A shift close warning
+### P1 Packet 7C-A Offline-Safe Close-Shift UX Guard
 
-**Status:** PUSHED / UAT PASS WITH NOTES — Gemini authorized docs reconciliation (TWINPET-P1-OFFLINE-SYNC-GEMINI-PACKET-7A-UAT-EVIDENCE-REVIEW-NEXT-GATE-001).
+**Status:** IMPLEMENTED (UNCOMMITTED) — Gemini authorized (`TWINPET-P1-OFFLINE-SYNC-GEMINI-PACKET-7C-A-IMPLEMENT-AND-ROADMAP-UPDATE-001`); Codex initial review REQUEST CHANGES (stale tracker only); remediation complete, pending re-review.
+
+**Scope (temporary UX stopgap only):**
+- Fail-fast pre-close offline guard: if `navigator.onLine === false`, `CloseShiftModal.handleClose` shows a localized Thai error and never calls `closeShift`, never enters indefinite `กำลังปิดกะ...`, never renders Z-report, never claims queued/synced/settled/guaranteed success.
+- Bounded 10s timeout backstop around the awaited `closeShift(...)` call: if it doesn't settle in time, submitting is released, an honest localized connectivity error is shown, and retry remains possible. A late resolution/rejection from the original attempt is ignored once a retry has started (attempt-id guard), so a stale response can never silently flip the UI to Z-report after the user has already retried.
+- Online happy path and Packet 7A this-terminal pending-sync warning are unchanged.
+- `shiftService.ts`, `closeShift`, shift math, drawer totals, variance, and Z-report totals are **not modified**.
+
+**This is not true offline close.** It only prevents a cashier-facing dead end; see roadmap directive below.
+
+### Roadmap directive — Packet 7C-B / Packet 5 priority
+
+Per Owner/Tech Lead strategic directive (via Gemini authorization `TWINPET-P1-OFFLINE-SYNC-GEMINI-PACKET-7C-A-IMPLEMENT-AND-ROADMAP-UPDATE-001`):
+
+> To strictly adhere to the Offline-First philosophy, after Packet 7C-A is closed, the absolute next priority must be the architectural design and implementation of True Optimistic Offline Close (Packet 7C-B) and Backend Deep Sync (Packet 5).
+
+- Packet 7C-A is only a temporary UX stopgap, not true offline close.
+- **Packet 7C-B** must design and implement true optimistic, local-first close-shift behavior.
+- **Packet 5** (backend deep sync / reconciliation architecture) remains needed alongside 7C-B.
+- Neither Packet 7C-B nor Packet 5 is implemented in this pass — design/implementation work is future scope, not started.
+
+### P1 Packet 7A shift close warning (prior — CLOSED / PUSHED / DOCS CLOSED)
+
+**Status:** CLOSED / PUSHED / UAT PASS WITH NOTES / DOCS CLOSED.
 
 **Implementation commit:** `cb2e9ef32521f5e1c82a2379a617fbb65dac3c37` — `feat(pos): warn on pending sync before closing shift`
+
+**Docs commit:** `74a84c3432cac16a8effb3c8317725e6671dad1f` — `docs: close p1 packet 7a shift warning`
 
 **Delivered:**
 - Non-blocking close-shift warning before close when this terminal has pending local sync bills
@@ -52,9 +77,9 @@ Manual workflow remains active. `agentchattr` was not used as the executor for t
 
 Warning uses existing `SaleIntentSyncPanel` polling cadence. Count can lag up to ~5-second poll interval. Opening close shift immediately after offline sale may transiently show no warning until next poll. Acceptable — feature is non-blocking warning, not authoritative gate.
 
-### Out-of-scope defect (future Packet 7C candidate)
+### Out-of-scope defect (addressed by 7C-A stopgap; permanent fix is Packet 7C-B)
 
-`shiftService.closeShift()` offline hang while fully offline — click close shift while fully offline can enter `กำลังปิดกะ...` and not resolve during observation window. Reconnect before confirm allows close to complete. No evidence Packet 7A caused this; Packet 7A did not change `shiftService.ts`, `handleClose`, `closeShift`, shift math, write path, or confirm disabled logic. Track as **Packet 7C: Offline-Safe Shift Close** — Medium-High UX dead-end risk; no data-corruption evidence observed.
+`shiftService.closeShift()` offline hang while fully offline — Packet 7A did not cause this. Packet 7C-A adds UX guard only; does not permanently fix `closeShift` offline behavior. Permanent fix requires Packet 7C-B.
 
 ### Report references
 
@@ -68,8 +93,9 @@ Warning uses existing `SaleIntentSyncPanel` polling cadence. Count can lag up to
 - No guaranteed settlement claim
 - No true hardware or production validation claim
 - No full offline cold-boot claim
-- Packet 7A did not fix offline close hang
+- Packet 7C-A did not permanently fix offline close hang — 7C-B required
 - Packet 7A is not a hard close-shift gate
+- Packet 7C-A is not true offline close
 - Pending count is not authoritative for all terminals
 
 ### P1 Packet 8 (prior — DOCS CLOSED)
@@ -82,7 +108,7 @@ Dev-emulator offline drill PASS WITH NOTES. Docs `6526970`. **Not** true physica
 
 ### Residuals / future
 
-- Packet 7C offline-safe shift close triage
+- Packet 7C-B true optimistic offline close (absolute next priority after 7C-A closes)
 - Packet 7B admin reconciliation report (after Packet 5/backend clarity)
 - Packet 5 backend/deep sync planning
 - PaymentModal W-12 note
@@ -91,7 +117,7 @@ Dev-emulator offline drill PASS WITH NOTES. Docs `6526970`. **Not** true physica
 
 ### Deferred / next gate
 
-**Packet 7A docs reconciliation** — this pass (unstaged). Then Codex docs review / Gemini docs commit authorization.
+**Packet 7C-A Codex re-review** — after stale-tracker remediation. Then Gemini commit authorization for 7C-A implementation + roadmap update.
 
 ### Other deferred
 

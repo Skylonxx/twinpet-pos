@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { fmtBaht } from '../../lib/dashboard/format';
 import { calcShiftDrawerExpected, closeShift, getActiveShift, openShift } from '../../lib/pos/shiftService';
@@ -108,6 +108,19 @@ type CloseShiftModalProps = {
   /** True when the oldest pending entry has aged past the sync-panel's stale threshold. */
   pendingSyncStale?: boolean;
 };
+
+/**
+ * Packet 7C-A UX guard. While fully offline, Firestore can queue
+ * `updateDoc` locally without ever resolving the returned promise until
+ * reconnect — so `handleClose` needs a fail-fast pre-check plus a bounded
+ * timeout backstop rather than waiting indefinitely on `closeShift`.
+ */
+const CLOSE_SHIFT_OFFLINE_MESSAGE =
+  'ไม่สามารถปิดกะขณะออฟไลน์ กรุณาเชื่อมต่ออินเทอร์เน็ตแล้วลองอีกครั้ง';
+const CLOSE_SHIFT_TIMEOUT_MESSAGE =
+  'ปิดกะยังไม่สำเร็จ ระบบเชื่อมต่อมีปัญหา กรุณาตรวจสอบการเชื่อมต่อแล้วลองอีกครั้ง';
+const CLOSE_SHIFT_TIMEOUT_MS = 10_000;
+const CLOSE_SHIFT_TIMEOUT_MARKER = 'shift-close-timeout';
 
 function formatShiftTime(ts: Shift['openedAt']): string {
   if (!ts || typeof ts !== 'object' || !('toDate' in ts)) return '—';
@@ -256,6 +269,7 @@ export function CloseShiftModal({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [closedShift, setClosedShift] = useState<Shift | null>(null);
+  const closeAttemptRef = useRef(0);
 
   const handleClose = useCallback(async () => {
     const count = parseFloat(actualCash);
@@ -264,15 +278,39 @@ export function CloseShiftModal({
       return;
     }
 
+    // Packet 7C-A: fail fast when this terminal is clearly offline instead of
+    // letting `closeShift` hang indefinitely on an unresolved write.
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      setError(CLOSE_SHIFT_OFFLINE_MESSAGE);
+      return;
+    }
+
+    const attemptId = ++closeAttemptRef.current;
     setSubmitting(true);
     setError(null);
+
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const timeoutGuard = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(
+        () => reject(new Error(CLOSE_SHIFT_TIMEOUT_MARKER)),
+        CLOSE_SHIFT_TIMEOUT_MS,
+      );
+    });
+
     try {
-      const result = await closeShift(shift, count, note.trim());
+      const result = await Promise.race([closeShift(shift, count, note.trim()), timeoutGuard]);
+      if (closeAttemptRef.current !== attemptId) return;
       setClosedShift(result);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'ปิดกะไม่สำเร็จ');
+      if (closeAttemptRef.current !== attemptId) return;
+      if (err instanceof Error && err.message === CLOSE_SHIFT_TIMEOUT_MARKER) {
+        setError(CLOSE_SHIFT_TIMEOUT_MESSAGE);
+      } else {
+        setError(err instanceof Error ? err.message : 'ปิดกะไม่สำเร็จ');
+      }
     } finally {
-      setSubmitting(false);
+      clearTimeout(timeoutId);
+      if (closeAttemptRef.current === attemptId) setSubmitting(false);
     }
   }, [shift, actualCash, note]);
 

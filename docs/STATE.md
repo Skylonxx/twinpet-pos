@@ -6,18 +6,18 @@
 |-------|-------|
 | Repo root | `C:/Users/Narachat/twinpet-pos` |
 | Branch | `main` |
-| HEAD | `cb2e9ef32521f5e1c82a2379a617fbb65dac3c37` |
-| origin/main | `cb2e9ef32521f5e1c82a2379a617fbb65dac3c37` |
+| HEAD | `74a84c3432cac16a8effb3c8317725e6671dad1f` |
+| origin/main | `74a84c3432cac16a8effb3c8317725e6671dad1f` |
 | Ahead/behind | `0 / 0` |
 
 ## Current Phase
 
-    TWINPET-P1-OFFLINE-SYNC-PACKET-7A-DOCS-RECONCILIATION
-    P1 Offline / Sync Packet 7A Shift Close Warning PUSHED / UAT PASS WITH NOTES — docs reconciliation in progress (unstaged)
+    TWINPET-P1-OFFLINE-SYNC-PACKET-7C-A-OFFLINE-SAFE-CLOSE-SHIFT-UX-GUARD
+    P1 Offline / Sync Packet 7C-A IMPLEMENTED (UNCOMMITTED) — pending Codex re-review / Gemini commit authorization
 
 ## Working Tree
 
-- Tracked working tree: **clean** (pre-reconciliation); docs edits this pass only
+- Packet 7C-A implementation + roadmap docs: **dirty, unstaged** (6 authorized files)
 - Staging: **empty**
 
 ## Stash
@@ -30,8 +30,9 @@
 
 | Field | Value |
 |-------|-------|
-| Status | **PUSHED / UAT PASS WITH NOTES** |
-| Commit | `cb2e9ef32521f5e1c82a2379a617fbb65dac3c37` |
+| Status | **CLOSED / PUSHED / UAT PASS WITH NOTES / DOCS CLOSED** |
+| Implementation | `cb2e9ef32521f5e1c82a2379a617fbb65dac3c37` |
+| Docs | `74a84c3432cac16a8effb3c8317725e6671dad1f` |
 | Scope | Non-blocking close-shift warning for this-terminal pending sync |
 | UAT environment | Dev/emulator + headless Chromium — **not** physical hardware |
 | UAT report | `...\UAT\twinpet-p1-offline-sync-packet-7a-shift-close-warning-uat-report.md` |
@@ -45,9 +46,27 @@
 
 Uses existing `SaleIntentSyncPanel` ~5s poll; transient no-warning possible immediately after offline sale. Non-blocking; acceptable.
 
-### Out-of-scope defect (Packet 7C candidate)
+### Out-of-scope defect (7C-A stopgap; permanent fix is 7C-B)
 
-`shiftService.closeShift()` offline hang — Medium-High UX dead-end risk. Not caused by Packet 7A. Track separately.
+`shiftService.closeShift()` offline hang — Packet 7C-A adds UX guard only; permanent fix requires Packet 7C-B.
+
+## P1 Packet 7C-A Offline-Safe Close-Shift UX Guard
+
+| Field | Value |
+|-------|-------|
+| Status | **IMPLEMENTED (UNCOMMITTED) — pending Codex re-review** |
+| Authorization | `TWINPET-P1-OFFLINE-SYNC-GEMINI-PACKET-7C-A-IMPLEMENT-AND-ROADMAP-UPDATE-001` |
+| Codex initial review | REQUEST CHANGES (stale tracker only); remediation complete |
+| Scope | Fail-fast offline pre-close guard + bounded 10s timeout backstop in `CloseShiftModal.handleClose` |
+| `shiftService.ts` / shift math / write path | **Not changed** |
+| Packet 7A warning | **Not changed** |
+| Tests | `ShiftModals.test.tsx` — offline guard, online happy path, timeout backstop, retry-after-timeout, copy audit |
+| Nature | Temporary UX stopgap — does **not** implement true offline close |
+| Working tree | Modified, unstaged/uncommitted this pass |
+
+### Roadmap directive (next priority after 7C-A closes)
+
+Owner/Tech Lead directive: **Packet 7C-B (True Optimistic Offline Close)** architectural design + implementation, and **Packet 5 (Backend Deep Sync)**, are the absolute next priority after Packet 7C-A closes, to strictly adhere to the Offline-First philosophy. Neither is implemented in this pass.
 
 ## P1 Packet 8 Dev-Emulator Offline Drill
 
@@ -79,6 +98,7 @@ All **CLOSED / PUSHED**.
 
 | Hash | Message |
 |------|---------|
+| `74a84c3` | docs: close p1 packet 7a shift warning — **P1 PACKET 7A DOCS CLOSED** |
 | `cb2e9ef` | feat(pos): warn on pending sync before closing shift — **P1 PACKET 7A** |
 | `6526970` | docs: record p1 packet 8 offline drill evidence |
 | `8197d64` | docs: close p1 offline sync packet 6 |
@@ -87,16 +107,17 @@ All **CLOSED / PUSHED**.
 
 ## Next Recommended Block
 
-    READY_FOR_PACKET_7A_DOCS_COMMIT_AUTHORIZATION
+    READY_FOR_PACKET_7C_A_CODEX_RE_REVIEW
 
-1. Formal Packet 7A docs closure (this pass — unstaged)
-2. Codex docs review
-3. Gemini docs commit authorization
+1. Codex re-review of Packet 7C-A implementation + roadmap update
+2. Gemini commit authorization for 7C-A staging / commit / push
 
 ## Hard Boundaries
 
 - Docs changes not yet committed/pushed
-- No Packet 7C offline-close fix in this pass
+- Packet 7C-A implementation changes not yet committed/pushed
+- No true offline close (Packet 7C-B) implemented in this pass
+- No Packet 5 backend deep sync implemented in this pass
 - No global/cross-terminal, guaranteed settlement, hardware, or production claims
 - PaymentModal W-12 note deferred
 - Packet 5 / Packet 7B remain future candidates
