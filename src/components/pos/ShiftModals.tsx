@@ -110,13 +110,12 @@ type CloseShiftModalProps = {
 };
 
 /**
- * Packet 7C-A UX guard. While fully offline, Firestore can queue
- * `updateDoc` locally without ever resolving the returned promise until
- * reconnect — so `handleClose` needs a fail-fast pre-check plus a bounded
- * timeout backstop rather than waiting indefinitely on `closeShift`.
+ * Packet 7C-B1 replaces the 7C-A hard offline block with the optimistic local
+ * close path: `closeShift` now verifies from the local cache only and never
+ * awaits the network, so it resolves quickly even while offline. The timeout
+ * backstop is kept only as a defensive guard for the online-but-unreachable
+ * edge (e.g. a hung IndexedDB open) — not as the primary offline path.
  */
-const CLOSE_SHIFT_OFFLINE_MESSAGE =
-  'ไม่สามารถปิดกะขณะออฟไลน์ กรุณาเชื่อมต่ออินเทอร์เน็ตแล้วลองอีกครั้ง';
 const CLOSE_SHIFT_TIMEOUT_MESSAGE =
   'ปิดกะยังไม่สำเร็จ ระบบเชื่อมต่อมีปัญหา กรุณาตรวจสอบการเชื่อมต่อแล้วลองอีกครั้ง';
 const CLOSE_SHIFT_TIMEOUT_MS = 10_000;
@@ -131,6 +130,31 @@ function formatShiftTime(ts: Shift['openedAt']): string {
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+function formatDeviceTime(ms: number): string {
+  return new Date(ms).toLocaleString('th-TH', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+/**
+ * Packet 7C-B1: `closeShift` never awaits the shift-doc write, so the Z-report
+ * always renders from a frozen local snapshot. While `closedOffline &&
+ * syncState === 'pending'`, `closedAt` is honestly still queued (never
+ * back-filled with a fake server time) — show the device-clock
+ * `closedAtLocal` instead, clearly labeled as device time.
+ */
+function getClosedTimeLabel(shift: Shift): string {
+  const isSyncPending = shift.closedOffline === true && shift.syncState === 'pending';
+  if (isSyncPending && typeof shift.closedAtLocal === 'number') {
+    return `${formatDeviceTime(shift.closedAtLocal)} (เวลาเครื่อง)`;
+  }
+  return formatShiftTime(shift.closedAt);
 }
 
 function getVarianceDisplay(variance: number): {
@@ -172,6 +196,7 @@ function ZReportView({
   const totalExpected = calcShiftDrawerExpected(shift);
   const varianceDisplay = getVarianceDisplay(shift.variance);
   const fmt = (n: number) => fmtBaht(n, { decimals: 2 });
+  const isSyncPending = shift.closedOffline === true && shift.syncState === 'pending';
 
   return (
     <div className="shift-zreport">
@@ -181,8 +206,19 @@ function ZReportView({
         </div>
         <h2 className="shift-zreport-title">ปิดกะสำเร็จ — Z-Report</h2>
         <p className="shift-zreport-meta">
-          {shift.staffName} · เปิดกะ {formatShiftTime(shift.openedAt)}
+          {shift.staffName} · เปิดกะ {formatShiftTime(shift.openedAt)} · ปิดกะ{' '}
+          {getClosedTimeLabel(shift)}
         </p>
+        {isSyncPending && (
+          <div
+            className="shift-zreport-sync-badge"
+            role="status"
+            data-testid="shift-zreport-sync-pending"
+          >
+            <i className="ti ti-cloud-off" aria-hidden="true" />
+            <span>ปิดกะแล้ว (รอซิงก์) — บันทึกในเครื่องนี้แล้ว ยังไม่ได้รับการยืนยันจากเซิร์ฟเวอร์</span>
+          </div>
+        )}
       </div>
 
       <div className="shift-zreport-grid">
@@ -275,13 +311,6 @@ export function CloseShiftModal({
     const count = parseFloat(actualCash);
     if (Number.isNaN(count) || count < 0) {
       setError('กรุณาระบุจำนวนเงินสดที่นับได้');
-      return;
-    }
-
-    // Packet 7C-A: fail fast when this terminal is clearly offline instead of
-    // letting `closeShift` hang indefinitely on an unresolved write.
-    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-      setError(CLOSE_SHIFT_OFFLINE_MESSAGE);
       return;
     }
 

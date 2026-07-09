@@ -183,6 +183,27 @@
   color: var(--g400, #888780);
 }
 
+/* Packet 7C-B1 — honest pending-sync badge on the local-optimistic Z-report. */
+.shift-zreport-sync-badge {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: #fff8e6;
+  border: 0.5px solid #f0d590;
+  color: #8a6300;
+  font-size: 11px;
+  text-align: left;
+}
+
+.shift-zreport-sync-badge i {
+  font-size: 14px;
+  margin-top: 1px;
+  flex-shrink: 0;
+}
+
 .shift-zreport-grid {
   display: flex;
   flex-direction: column;

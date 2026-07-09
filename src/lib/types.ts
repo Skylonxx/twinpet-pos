@@ -852,6 +852,12 @@ export type Shift = {
   /** Authoritative server time once the open/close write flushes (null while queued). */
   openedAtServer?: Timestamp | null;
   closedAtServer?: Timestamp | null;
+  /**
+   * Device clock at close time (Packet 7C-B1). Display-only honest fallback
+   * while `closedOffline && syncState === 'pending'` — never a substitute for
+   * a server-confirmed `closedAt`/`closedAtServer`.
+   */
+  closedAtLocal?: number;
   /** Embedded cash movements so the Z-report renders offline. */
   cashEntries?: ShiftCashEntry[];
   /** Orders folded into the locally-computed summary (incl. not-yet-synced). */

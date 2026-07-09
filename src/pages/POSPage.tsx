@@ -19,6 +19,7 @@ import { fmtBaht } from '../lib/dashboard/format';
 import { createSafeId } from '../lib/safeId';
 import { formatMoney, getLineTotal } from '../lib/pos/cartUtils';
 import { getActiveShift } from '../lib/pos/shiftService';
+import { createShiftCloseIntentJournal } from '../lib/pos/offline/shiftCloseIntentStore';
 import { priceLevelLabel, usePriceLevels } from '../lib/pricing/priceLevels';
 import { POS_FEATURES } from '../lib/config/features';
 import type { SuspendedBill } from '../lib/pos/suspendedBills';
@@ -139,6 +140,10 @@ export default function POSPage() {
   const globalToast = useToastDispatcher();
   const [activeShift, setActiveShift] = useState<Shift | null>(null);
   const [shiftReady, setShiftReady] = useState(false);
+  // Packet 7C-B1: durable local close-intent journal, consulted at boot so a
+  // shift this device already closed (offline, pending sync) is never
+  // re-opened / re-folded into a live drawer after reload/restart.
+  const shiftCloseIntentJournalRef = useRef(createShiftCloseIntentJournal());
   const [showCloseShift, setShowCloseShift] = useState(false);
   const [holdNoteOpen, setHoldNoteOpen] = useState(false);
   const [suspendedListOpen, setSuspendedListOpen] = useState(false);
@@ -787,7 +792,22 @@ export default function POSPage() {
       }
       try {
         const shift = await getActiveShift(branchId, user.id);
-        if (!cancelled) setActiveShift(shift);
+        if (cancelled) return;
+        if (shift) {
+          // Cross-check the durable local close-intent store: if THIS device
+          // already closed this shift (even while offline/pending sync), it
+          // must stay closed locally — never re-opened, never re-folded into
+          // a live drawer — regardless of what the shift doc currently shows.
+          const intentResult = await shiftCloseIntentJournalRef.current.getCloseIntent(shift.id);
+          if (cancelled) return;
+          if (intentResult.ok && intentResult.value) {
+            setActiveShift(null);
+          } else {
+            setActiveShift(shift);
+          }
+        } else {
+          setActiveShift(null);
+        }
       } finally {
         if (!cancelled) setShiftReady(true);
       }

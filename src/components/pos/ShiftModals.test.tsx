@@ -181,7 +181,7 @@ describe('CloseShiftModal — Packet 7A pending-sync warning', () => {
   });
 });
 
-describe('CloseShiftModal — Packet 7C-A offline-safe close guard', () => {
+describe('CloseShiftModal — Packet 7C-B1 optimistic close + defensive timeout backstop', () => {
   afterEach(() => {
     cleanup();
     mocks.closeShift.mockReset();
@@ -203,25 +203,25 @@ describe('CloseShiftModal — Packet 7C-A offline-safe close guard', () => {
     return screen.getByRole('button', { name: 'ปิดกะ' });
   }
 
-  test('offline guard shows honest Thai error and does not call closeShift', () => {
+  test('Packet 7C-B1: offline no longer hard-blocks — closeShift is called optimistically', async () => {
     setOnline(false);
+    mocks.closeShift.mockResolvedValue(
+      makeShift({
+        status: 'closed',
+        actualCashCount: 1000,
+        closedOffline: true,
+        syncState: 'pending',
+        closedAtLocal: Date.now(),
+      }),
+    );
     const confirmBtn = renderModal();
 
-    fireEvent.click(confirmBtn);
+    await act(async () => {
+      fireEvent.click(confirmBtn);
+    });
 
-    expect(screen.getByText(
-      'ไม่สามารถปิดกะขณะออฟไลน์ กรุณาเชื่อมต่ออินเทอร์เน็ตแล้วลองอีกครั้ง',
-    )).toBeTruthy();
-    expect(mocks.closeShift).not.toHaveBeenCalled();
-  });
-
-  test('offline guard does not render Z-report', () => {
-    setOnline(false);
-    const confirmBtn = renderModal();
-
-    fireEvent.click(confirmBtn);
-
-    expect(screen.queryByText('ปิดกะสำเร็จ — Z-Report')).toBeNull();
+    expect(mocks.closeShift).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText('ปิดกะสำเร็จ — Z-Report')).toBeTruthy();
   });
 
   test('online happy path still calls closeShift and renders Z-report', async () => {
@@ -282,14 +282,7 @@ describe('CloseShiftModal — Packet 7C-A offline-safe close guard', () => {
     expect(await screen.findByText('ปิดกะสำเร็จ — Z-Report')).toBeTruthy();
   });
 
-  test('copy audit: offline and timeout errors do not claim synced/settled/server-accepted/guaranteed/global coverage', () => {
-    setOnline(false);
-    const confirmBtn = renderModal();
-    fireEvent.click(confirmBtn);
-    const offlineText = screen.getByText(
-      'ไม่สามารถปิดกะขณะออฟไลน์ กรุณาเชื่อมต่ออินเทอร์เน็ตแล้วลองอีกครั้ง',
-    ).textContent;
-
+  test('copy audit: timeout backstop error does not claim synced/settled/server-accepted/guaranteed/global coverage', () => {
     const forbidden = [
       'ปิดกะแล้ว',
       'ซิงก์แล้ว',
@@ -298,14 +291,87 @@ describe('CloseShiftModal — Packet 7C-A offline-safe close guard', () => {
       'ทุกเครื่อง',
       'ทุกอุปกรณ์',
     ];
-    for (const word of forbidden) {
-      expect(offlineText).not.toContain(word);
-    }
-
     const timeoutMessage =
       'ปิดกะยังไม่สำเร็จ ระบบเชื่อมต่อมีปัญหา กรุณาตรวจสอบการเชื่อมต่อแล้วลองอีกครั้ง';
     for (const word of forbidden) {
       expect(timeoutMessage).not.toContain(word);
     }
+  });
+});
+
+describe('CloseShiftModal — Z-Report / ZReportView — Packet 7C-B1 pending-sync badge', () => {
+  afterEach(() => {
+    cleanup();
+    mocks.closeShift.mockReset();
+  });
+
+  async function renderClosedZReport(closedShiftOverrides: Partial<Shift>) {
+    mocks.closeShift.mockResolvedValue(makeShift(closedShiftOverrides));
+    render(
+      createElement(CloseShiftModal, {
+        shift: makeShift(),
+        onClose: vi.fn(),
+        onSuccess: vi.fn(),
+      }),
+    );
+    fireEvent.change(screen.getByLabelText('นับเงินสดในลิ้นชัก (Actual Cash in Drawer)'), {
+      target: { value: '1000' },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'ปิดกะ' }));
+    });
+  }
+
+  test('renders the pending-sync badge when closedOffline && syncState is pending', async () => {
+    await renderClosedZReport({
+      status: 'closed',
+      actualCashCount: 1000,
+      closedOffline: true,
+      syncState: 'pending',
+      closedAtLocal: Date.now(),
+    });
+
+    expect(screen.getByTestId('shift-zreport-sync-pending')).toBeTruthy();
+  });
+
+  test('pending badge does not overclaim server acceptance/settlement', async () => {
+    await renderClosedZReport({
+      status: 'closed',
+      actualCashCount: 1000,
+      closedOffline: true,
+      syncState: 'pending',
+      closedAtLocal: Date.now(),
+    });
+
+    const badge = screen.getByTestId('shift-zreport-sync-pending');
+    for (const forbidden of [
+      'ซิงก์แล้ว',
+      'ยืนยันจากเซิร์ฟเวอร์แล้ว',
+      'settled',
+      'guaranteed',
+      'ทุกเครื่อง',
+      'ทุกอุปกรณ์',
+    ]) {
+      expect(badge.textContent).not.toContain(forbidden);
+    }
+  });
+
+  test('no pending badge for a normal (non-offline, non-pending) closed shift', async () => {
+    await renderClosedZReport({ status: 'closed', actualCashCount: 1000 });
+
+    expect(screen.queryByTestId('shift-zreport-sync-pending')).toBeNull();
+  });
+
+  test('shows device-time label (with the honest device-time qualifier) while pending', async () => {
+    const closedAtLocal = new Date('2026-07-09T10:15:00.000Z').getTime();
+    await renderClosedZReport({
+      status: 'closed',
+      actualCashCount: 1000,
+      closedOffline: true,
+      syncState: 'pending',
+      closedAtLocal,
+    });
+
+    expect(screen.getByText(/\(เวลาเครื่อง\)/)).toBeTruthy();
   });
 });
