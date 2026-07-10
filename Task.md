@@ -1,14 +1,14 @@
 # Twinpet POS — Task Tracker
 
 > Last reconciled: 2026-07-10
-> HEAD: `1e41b0eb0871e5788a553e579f8087171ba38077` (Packet 7C-B1 closed/committed/pushed; Packet 7C-B2 implementation this pass is unstaged, on top of this HEAD)
-> origin/main: `1e41b0eb0871e5788a553e579f8087171ba38077`
+> HEAD: `3ef5fedef2b815592b26120ee6d4d5144a4c6955` (Packet 7C-B2 closed/committed/pushed; post-push UAT PASS WITH NOTES; docs closure this pass)
+> origin/main: `3ef5fedef2b815592b26120ee6d4d5144a4c6955`
 
 ---
 
 ## P1 Offline / Sync Resiliency — Packet 7C-B2 Close-Intent Reconciliation
 
-**Status: REVIEWED / AUTHORIZED FOR COMMIT AND FAST-FORWARD PUSH** — first Codex review FAIL; remediation PASS; Codex re-review PASS WITH NOTES; Gemini commit/push AUTHORIZED
+**Status: CLOSED / COMMITTED / PUSHED** (`3ef5fed` — `feat(pos): reconcile offline shift close intents`) — first Codex review FAIL; remediation PASS; Codex re-review PASS WITH NOTES; Gemini commit/push AUTHORIZED; committed/pushed; post-push UAT **PASS WITH NOTES**
 
 - [x] Packet 7C-B2 architecture report (read-only planning) completed — PASS
 - [x] Codex architecture review — PASS WITH NOTES (implementation-ready)
@@ -18,7 +18,9 @@
 - [x] Remediation (`TWINPET-P1-OFFLINE-SYNC-PACKET-7C-B2-CODEX-FAIL-REMEDIATION-CLAUDE-001`) — Blocker 1 (nullable `closedAt` type), Blocker 2 (wrong type import), Medium (unmount guard), Low (journal transition `ok` handling); build path now green; +4 regression tests
 - [x] Codex implementation re-review — PASS WITH NOTES / implementation-ready-for-commit: YES
 - [x] Gemini commit authorization — AUTHORIZED (`TWINPET-P1-OFFLINE-SYNC-GEMINI-PACKET-7C-B2-COMMIT-PUSH-AUTHORIZATION-001`)
-- [ ] Exact-file validation, staging, commit, fast-forward push (this execution)
+- [x] Exact-file validation, staging, commit, fast-forward push — `3ef5fed`
+- [x] Post-push UAT — **PASS WITH NOTES** (`...\QA\twinpet-p1-offline-sync-packet-7c-b2-post-push-uat-report.md`): device-observed online same-runtime confirm, offline→reconnect, reload/boot sweep, regression all PASS; boot fail-closed + stale/attention + Variant C failure-path AUTOMATED-EVIDENCE-ONLY; no false confirmation, no unsafe reopen, no duplicate close
+- [x] Docs-only closure (this execution)
 
 **7C-B2 scope — delivered:** Variant C hybrid (local-journal-authoritative + one best-effort, device-scoped, single-field `syncState:'synced'` doc normalization per confirmed close). Confirmation-grade reads only (`getDocFromServer`, never cache/estimate). Full frozen-identity match before confirming. Fixes the RC-3 boot-guard fail-open gap (non-ok close-intent store read now blocks both live-drawer reopen and `OpenShiftModal`). Same-runtime Z-report reacts to real confirmation via `whenServerConfirmed` without ever delaying `closeShift`'s return; a mounted-ref guard prevents late confirmation from updating an unmounted Z-report. A failed local journal transition write is reported as retryable (`unreachable`), never as a completed transition.
 
@@ -78,10 +80,9 @@
 
 ### Next step
 
-1. Packet 7C-B2 implementation + Codex-FAIL remediation — done, unstaged; build path green
-2. Codex 7C-B2 implementation re-review
-3. Gemini commit authorization
-4. Next roadmap priority after 7C-B2: Packet 5 (backend validation/audit/settlement/cross-device authority)
+1. Packet 7C-B2 — **CLOSED / COMMITTED / PUSHED** (`3ef5fed`); post-push UAT PASS WITH NOTES; docs closed this pass
+2. Next roadmap priority after 7C-B2: Packet 5 (backend validation/audit/settlement/cross-device authority) — **deferred / not implemented**
+3. Awaiting Gemini / Tech Lead decision for the next packet
 
 **Not active:** Packet 5, Packet 7B, PaymentModal W-12, Printer/Thermal, UI-10-D, UI-11 Packet 2.
 

@@ -1,15 +1,23 @@
-# Latest Report — P1 Offline / Sync Packet 7C-B2 Close-Intent Reconciliation (Implementation + Codex-FAIL Remediation)
+# Latest Report — P1 Offline / Sync Packet 7C-B2 Close-Intent Reconciliation (CLOSED / COMMITTED / PUSHED)
 
 > Date: 2026-07-10
-> HEAD: `1e41b0eb0871e5788a553e579f8087171ba38077`
-> origin/main: `1e41b0eb0871e5788a553e579f8087171ba38077`
-> Status: **PACKET 7C-B2 REVIEWED / AUTHORIZED FOR COMMIT AND FAST-FORWARD PUSH** — first Codex FAIL; remediation PASS; Codex re-review PASS WITH NOTES; Gemini AUTHORIZED; commit execution in progress
+> HEAD: `3ef5fedef2b815592b26120ee6d4d5144a4c6955`
+> origin/main: `3ef5fedef2b815592b26120ee6d4d5144a4c6955`
+> Status: **PACKET 7C-B2 CLOSED / COMMITTED / PUSHED** (`3ef5fed` — `feat(pos): reconcile offline shift close intents`) — first Codex FAIL; remediation PASS; Codex re-review PASS WITH NOTES; Gemini AUTHORIZED; committed/pushed; post-push UAT **PASS WITH NOTES**
+
+---
+
+## Closure / Post-Push UAT
+
+Committed and pushed at `3ef5fedef2b815592b26120ee6d4d5144a4c6955` (fast-forward `1e41b0e..3ef5fed`). Post-push UAT verdict **PASS WITH NOTES** → recommendation **CLOSE**. UAT report: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\QA\twinpet-p1-offline-sync-packet-7c-b2-post-push-uat-report.md`.
+
+Device-observed (local emulator, non-production) evidence: **S1 online same-runtime close** — journal `local_closed_pending`→`synced` in-runtime, Z-report `pending`→`confirmed` with server-recorded close time, remote `syncState` pending→synced (`closedOffline` retained as provenance); **S2 offline close→reconnect** — pending offline (no false confirm), reconnect reconciled to `synced`, mounted Z-report flipped to confirmed, remote `closed` with resolved server `closedAt`; **S3 reload/boot sweep** — locally-closed shift not reopened, boot sweep reconciled to `synced`; **S7 regression** — no crashes, 0 ERROR-level console messages. **S4 boot fail-closed** and **S5 stale/attention copy** + Variant C **failure-path** are AUTOMATED-EVIDENCE-ONLY (unsafe/impractical to force physically). No false confirmation, no unsafe reopen, no duplicate close, no data-integrity issue. Accepted non-blocking notes: pre-existing POSPage ESLint findings (392/584/591/678); duplicate overlapping identical normalization writes remain possible (Variant C best-effort / no guaranteed retry / no exact-once claim); Vite chunk/dynamic-import warnings; pre-commit `Co-authored-by: Cursor` trailer. Packet 5 remains deferred / not implemented. Next gate: Gemini / Tech Lead next-packet decision.
 
 ---
 
 ## Summary
 
-Packet 7C-B2 Close-Intent Reconciliation implemented per Gemini authorization (`TWINPET-P1-OFFLINE-SYNC-GEMINI-PACKET-7C-B2-IMPLEMENTATION-AUTHORIZATION-001`) following Codex's PASS WITH NOTES architecture review. Fixes 7C-B1's "perpetual pending" gap (every close, online or offline, stayed `closedOffline:true`/`syncState:'pending'` forever, per the 7C-B1 post-commit UAT) without crossing into Packet 5. Variant C hybrid: the local close-intent journal remains authoritative for the cashier UI; a single best-effort, device-scoped `syncState:'synced'` Firestore write normalizes data-at-rest once confirmed. Not staged, not committed, not pushed.
+Packet 7C-B2 Close-Intent Reconciliation implemented per Gemini authorization (`TWINPET-P1-OFFLINE-SYNC-GEMINI-PACKET-7C-B2-IMPLEMENTATION-AUTHORIZATION-001`) following Codex's PASS WITH NOTES architecture review. Fixes 7C-B1's "perpetual pending" gap (every close, online or offline, stayed `closedOffline:true`/`syncState:'pending'` forever, per the 7C-B1 post-commit UAT) without crossing into Packet 5. Variant C hybrid: the local close-intent journal remains authoritative for the cashier UI; a single best-effort, device-scoped `syncState:'synced'` Firestore write normalizes data-at-rest once confirmed. Committed/pushed at `3ef5fed`; post-push UAT PASS WITH NOTES (see Closure section above).
 
 ## Codex-FAIL Remediation (`TWINPET-P1-OFFLINE-SYNC-PACKET-7C-B2-CODEX-FAIL-REMEDIATION-CLAUDE-001`)
 
@@ -66,4 +74,4 @@ Untouched: `shiftLedger.ts`, `localLedger.ts`, `useLocalLedger.ts`, `calcShiftDr
 
 ## Next Gate
 
-Codex 7C-B2 implementation re-review (build path now green) → Gemini commit authorization → Packet 5 roadmap.
+Packet 7C-B2 **CLOSED / COMMITTED / PUSHED** (`3ef5fed`); post-push UAT PASS WITH NOTES; docs closed. Awaiting Gemini / Tech Lead next-packet decision (roadmap priority: Packet 5 — deferred / not implemented).
