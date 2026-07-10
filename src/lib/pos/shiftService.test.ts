@@ -15,8 +15,9 @@ vi.mock('../firebase', () => ({
   collections: { shifts: 'shifts', cashTransactions: 'cashTransactions' },
 }));
 
-const { getDocFromCacheMock, updateDocMock, docMock } = vi.hoisted(() => ({
+const { getDocFromCacheMock, getDocFromServerMock, updateDocMock, docMock } = vi.hoisted(() => ({
   getDocFromCacheMock: vi.fn(),
+  getDocFromServerMock: vi.fn(),
   updateDocMock: vi.fn(),
   docMock: vi.fn(() => ({ id: 'shift-1' }) as never),
 }));
@@ -27,6 +28,7 @@ vi.mock('firebase/firestore', async (importOriginal) => {
     ...actual,
     doc: docMock,
     getDocFromCache: getDocFromCacheMock,
+    getDocFromServer: getDocFromServerMock,
     updateDoc: updateDocMock,
   };
 });
@@ -103,6 +105,12 @@ beforeEach(() => {
   getDocFromCacheMock.mockReset();
   updateDocMock.mockReset();
   updateDocMock.mockResolvedValue(undefined);
+  getDocFromServerMock.mockReset();
+  // Packet 7C-B2 default: "not found" — the same-runtime confirmation chain
+  // (triggered fire-and-forget off the write ACK) resolves to `still_pending`
+  // by default so existing tests that don't care about confirmation stay
+  // deterministic and never touch a real network/Firestore instance.
+  getDocFromServerMock.mockResolvedValue({ exists: () => false, data: () => undefined });
 });
 
 afterEach(() => {
@@ -280,4 +288,128 @@ describe('closeShift — Packet 7C-B1 local optimistic offline close', () => {
       },
     );
   });
+});
+
+// Packet 7C-B2 — same-runtime confirmation reconciliation (`whenServerConfirmed`).
+describe('closeShift — Packet 7C-B2 whenServerConfirmed reconciliation', () => {
+  function makeConfirmedSnap(overrides: Record<string, unknown> = {}) {
+    return {
+      exists: () => true,
+      data: () => ({
+        status: 'closed',
+        closedAt: { toDate: () => new Date('2026-07-09T10:00:00.000Z') },
+        closedOffline: true,
+        syncState: 'pending',
+        deviceId: 'DEV1',
+        branchId: 'LDP-001',
+        staffId: 'staff-1',
+        startingCash: 500,
+        actualCashCount: 1000,
+        variance: -500,
+        expectedCash: 1000,
+        expectedQr: 0,
+        expectedKbank: 0,
+        expectedCard: 0,
+        expectedCredit: 0,
+        payInTotal: 0,
+        payOutTotal: 0,
+        totalBills: 3,
+        note: 'note',
+        ...overrides,
+      }),
+    };
+  }
+
+  test('ACK alone (default mock: doc not found on server) resolves whenServerConfirmed to still_pending and never marks the journal synced', async () => {
+    getDocFromCacheMock.mockResolvedValue(makeOpenSnap());
+    updateDocMock.mockResolvedValue(undefined);
+    const journal = createInMemoryShiftCloseIntentJournal();
+
+    const result = await closeShift(makeShift(), 1000, 'note', { journal });
+    const outcome = await result.whenServerConfirmed;
+
+    expect(outcome.outcome).toBe('still_pending');
+    const stored = await journal.getCloseIntent('shift-1');
+    expect(stored.ok && stored.value?.status).toBe('local_closed_pending');
+  });
+
+  test('confirmation-grade server read proving the close resolves whenServerConfirmed to confirmed with the resolved server closedAt', async () => {
+    getDocFromCacheMock.mockResolvedValue(makeOpenSnap());
+    updateDocMock.mockResolvedValue(undefined);
+    getDocFromServerMock.mockResolvedValue(makeConfirmedSnap());
+    const journal = createInMemoryShiftCloseIntentJournal();
+
+    const result = await closeShift(makeShift(), 1000, 'note', { journal });
+    const outcome = await result.whenServerConfirmed;
+
+    expect(outcome.outcome).toBe('confirmed');
+    if (outcome.outcome === 'confirmed') {
+      expect(outcome.closedAt).toEqual(new Date('2026-07-09T10:00:00.000Z'));
+    }
+    const stored = await journal.getCloseIntent('shift-1');
+    expect(stored.ok && stored.value?.status).toBe('synced');
+  });
+
+  test('a genuine write rejection resolves whenServerConfirmed to rejected and marks the journal rejected_manual_attention', async () => {
+    getDocFromCacheMock.mockResolvedValue(makeOpenSnap());
+    updateDocMock.mockRejectedValue(new Error('permission-denied'));
+    const journal = createInMemoryShiftCloseIntentJournal();
+
+    const result = await closeShift(makeShift(), 1000, 'note', { journal });
+    const outcome = await result.whenServerConfirmed;
+
+    expect(outcome.outcome).toBe('rejected');
+    const stored = await journal.getCloseIntent('shift-1');
+    expect(stored.ok && stored.value?.status).toBe('rejected_manual_attention');
+  });
+
+  test('identity mismatch on the confirmed remote doc resolves to identity_mismatch and never rewrites the frozen local totals', async () => {
+    getDocFromCacheMock.mockResolvedValue(makeOpenSnap());
+    updateDocMock.mockResolvedValue(undefined);
+    getDocFromServerMock.mockResolvedValue(makeConfirmedSnap({ actualCashCount: 999 }));
+    const journal = createInMemoryShiftCloseIntentJournal();
+
+    const result = await closeShift(makeShift(), 1000, 'note', { journal });
+    const outcome = await result.whenServerConfirmed;
+
+    expect(outcome.outcome).toBe('identity_mismatch');
+    const stored = await journal.getCloseIntent('shift-1');
+    expect(stored.ok && stored.value?.status).toBe('rejected_manual_attention');
+    expect(stored.ok && stored.value?.actualCashCount).toBe(1000); // frozen local snapshot untouched
+  });
+
+  test('Variant C: a confirmed close whose doc still reads syncState "pending" triggers exactly one syncState-only normalization write', async () => {
+    getDocFromCacheMock.mockResolvedValue(makeOpenSnap());
+    updateDocMock.mockResolvedValue(undefined);
+    getDocFromServerMock.mockResolvedValue(makeConfirmedSnap({ syncState: 'pending' }));
+    const journal = createInMemoryShiftCloseIntentJournal();
+
+    const result = await closeShift(makeShift(), 1000, 'note', { journal });
+    await result.whenServerConfirmed;
+
+    // Call 1 = the close write itself; call 2 = the Variant C normalization.
+    expect(updateDocMock).toHaveBeenCalledTimes(2);
+    const [, normalizePatch] = updateDocMock.mock.calls[1] as [unknown, Record<string, unknown>];
+    expect(normalizePatch).toEqual({ syncState: 'synced' });
+  });
+
+  test('Variant C: a doc that already reads syncState "synced" is never re-normalized', async () => {
+    getDocFromCacheMock.mockResolvedValue(makeOpenSnap());
+    updateDocMock.mockResolvedValue(undefined);
+    getDocFromServerMock.mockResolvedValue(makeConfirmedSnap({ syncState: 'synced' }));
+    const journal = createInMemoryShiftCloseIntentJournal();
+
+    const result = await closeShift(makeShift(), 1000, 'note', { journal });
+    const outcome = await result.whenServerConfirmed;
+
+    expect(outcome.outcome).toBe('confirmed');
+    expect(updateDocMock).toHaveBeenCalledTimes(1); // only the original close write
+  });
+
+  // NOTE: `closeShift`'s dev-mode branch (Firebase unconfigured) is not
+  // exercised by this file — `isFirebaseConfigured: true` is fixed at the
+  // top-level module mock for the whole suite. The dev-mode branch is a thin,
+  // low-risk wrapper (`devCloseShift(...)` + `Promise.resolve({outcome:'confirmed',...})`)
+  // with no offline/reconciliation logic of its own; deferring a dedicated
+  // dev-mode test file rather than overclaiming coverage here.
 });

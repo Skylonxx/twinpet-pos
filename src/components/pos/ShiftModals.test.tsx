@@ -3,7 +3,7 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { createElement } from 'react';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { CloseShiftModal } from './ShiftModals';
+import { CloseShiftModal, ShiftBootBlockedModal } from './ShiftModals';
 import type { Shift } from '../../lib/types';
 
 // Packet 7C-A — offline-safe close-shift UX guard. `closeShift` is mocked so
@@ -373,5 +373,244 @@ describe('CloseShiftModal — Z-Report / ZReportView — Packet 7C-B1 pending-sy
     });
 
     expect(screen.getByText(/\(เวลาเครื่อง\)/)).toBeTruthy();
+  });
+
+  test('a closeShift mock without whenServerConfirmed (legacy/plain shape) never crashes and stays on the pending badge', async () => {
+    // makeShift(...) never sets whenServerConfirmed — this exercises the
+    // guard in handleClose (`if (result.whenServerConfirmed) {...}`).
+    await renderClosedZReport({
+      status: 'closed',
+      actualCashCount: 1000,
+      closedOffline: true,
+      syncState: 'pending',
+      closedAtLocal: Date.now(),
+    });
+
+    expect(screen.getByTestId('shift-zreport-sync-pending')).toBeTruthy();
+  });
+});
+
+describe('CloseShiftModal — Z-Report — Packet 7C-B2 same-runtime confirmation reconciliation', () => {
+  afterEach(() => {
+    cleanup();
+    mocks.closeShift.mockReset();
+    vi.useRealTimers();
+  });
+
+  async function renderWithConfirmation(whenServerConfirmed: Promise<unknown>) {
+    // `closedAtLocal` is deliberately "now" (not a fixed past date) — the
+    // Z-report's stale-badge threshold is age-based, and a fixed historical
+    // timestamp would spuriously read as already-stale depending on when
+    // this suite runs.
+    mocks.closeShift.mockResolvedValue({
+      ...makeShift({
+        status: 'closed',
+        actualCashCount: 1000,
+        closedOffline: true,
+        syncState: 'pending',
+        closedAtLocal: Date.now(),
+      }),
+      whenServerConfirmed,
+    });
+    render(
+      createElement(CloseShiftModal, {
+        shift: makeShift(),
+        onClose: vi.fn(),
+        onSuccess: vi.fn(),
+      }),
+    );
+    fireEvent.change(screen.getByLabelText('นับเงินสดในลิ้นชัก (Actual Cash in Drawer)'), {
+      target: { value: '1000' },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'ปิดกะ' }));
+    });
+  }
+
+  test('flips from pending to confirmed once whenServerConfirmed resolves, showing the resolved server time', async () => {
+    await renderWithConfirmation(
+      Promise.resolve({ outcome: 'confirmed', closedAt: new Date('2026-07-09T10:20:00.000Z') }),
+    );
+
+    expect(await screen.findByTestId('shift-zreport-sync-confirmed')).toBeTruthy();
+    expect(screen.queryByTestId('shift-zreport-sync-pending')).toBeNull();
+    // Server time replaces the device-time label once confirmed.
+    expect(screen.queryByText(/\(เวลาเครื่อง\)/)).toBeNull();
+  });
+
+  test('confirmed copy never overclaims settlement/backend/cross-device authority', async () => {
+    await renderWithConfirmation(
+      Promise.resolve({ outcome: 'confirmed', closedAt: new Date('2026-07-09T10:20:00.000Z') }),
+    );
+
+    const badge = await screen.findByTestId('shift-zreport-sync-confirmed');
+    for (const forbidden of ['settled', 'guaranteed', 'ทุกเครื่อง', 'ทุกอุปกรณ์', 'Packet 5']) {
+      expect(badge.textContent).not.toContain(forbidden);
+    }
+  });
+
+  test('identity mismatch flips to the attention badge, never claims success', async () => {
+    await renderWithConfirmation(Promise.resolve({ outcome: 'identity_mismatch' }));
+
+    const badge = await screen.findByTestId('shift-zreport-sync-attention');
+    expect(badge.textContent).toContain('ต้องตรวจสอบ');
+    expect(screen.queryByTestId('shift-zreport-sync-confirmed')).toBeNull();
+  });
+
+  test('a genuine write rejection flips to the attention badge', async () => {
+    await renderWithConfirmation(
+      Promise.resolve({ outcome: 'rejected', message: 'permission-denied' }),
+    );
+
+    expect(await screen.findByTestId('shift-zreport-sync-attention')).toBeTruthy();
+  });
+
+  test('a still_pending confirmation outcome leaves the pending badge as-is (no false confirm)', async () => {
+    await renderWithConfirmation(Promise.resolve({ outcome: 'still_pending' }));
+
+    // Allow the resolved promise's .then() to flush.
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(screen.getByTestId('shift-zreport-sync-pending')).toBeTruthy();
+  });
+
+  test('stale badge appears once the pending close ages past the stale threshold, while still unconfirmed', async () => {
+    vi.useFakeTimers();
+    const closedAtLocal = Date.now();
+    mocks.closeShift.mockResolvedValue({
+      ...makeShift({
+        status: 'closed',
+        actualCashCount: 1000,
+        closedOffline: true,
+        syncState: 'pending',
+        closedAtLocal,
+      }),
+      whenServerConfirmed: new Promise(() => {}), // never resolves — stays unconfirmed
+    });
+    render(
+      createElement(CloseShiftModal, {
+        shift: makeShift(),
+        onClose: vi.fn(),
+        onSuccess: vi.fn(),
+      }),
+    );
+    fireEvent.change(screen.getByLabelText('นับเงินสดในลิ้นชัก (Actual Cash in Drawer)'), {
+      target: { value: '1000' },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'ปิดกะ' }));
+    });
+
+    expect(screen.getByTestId('shift-zreport-sync-pending')).toBeTruthy();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(11 * 60 * 1000); // past the 10-minute stale threshold
+    });
+
+    expect(screen.getByTestId('shift-zreport-sync-stale')).toBeTruthy();
+    expect(screen.queryByTestId('shift-zreport-sync-pending')).toBeNull();
+  });
+
+  // Codex Blocker 1 (semantic) — a closed shift with a null/unresolved
+  // `closedAt` that is NOT sync-pending and has no confirmation must render the
+  // em-dash fallback via `formatShiftTime`, never crash. (The type fix widened
+  // `formatShiftTime` to accept `Timestamp | null`; this locks the behavior.)
+  test('null/absent closedAt renders the em-dash fallback (no crash) when not sync-pending and unconfirmed', async () => {
+    mocks.closeShift.mockResolvedValue({
+      ...makeShift({ status: 'closed', actualCashCount: 1000, closedAt: null }),
+      whenServerConfirmed: new Promise(() => {}), // never resolves — stays unconfirmed
+    });
+    render(
+      createElement(CloseShiftModal, {
+        shift: makeShift(),
+        onClose: vi.fn(),
+        onSuccess: vi.fn(),
+      }),
+    );
+    fireEvent.change(screen.getByLabelText('นับเงินสดในลิ้นชัก (Actual Cash in Drawer)'), {
+      target: { value: '1000' },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'ปิดกะ' }));
+    });
+
+    expect(await screen.findByText('ปิดกะสำเร็จ — Z-Report')).toBeTruthy();
+    // Not offline/pending → no device-time label; null closedAt → em-dash fallback.
+    expect(screen.queryByTestId('shift-zreport-sync-pending')).toBeNull();
+    const meta = document.querySelector('.shift-zreport-meta');
+    expect(meta?.textContent).toContain('ปิดกะ —');
+  });
+
+  // Codex Finding 3 — a late `whenServerConfirmed` that resolves AFTER the modal
+  // unmounts (cashier dismissed the Z-report) must not update state. The
+  // positive companion — a current mounted report DOES flip to confirmed — is
+  // proven by 'flips from pending to confirmed ...' above.
+  test('late confirmation after unmount does not update state or warn (mounted guard)', async () => {
+    let resolveConfirm!: (o: unknown) => void;
+    const deferred = new Promise<unknown>((res) => {
+      resolveConfirm = res;
+    });
+    mocks.closeShift.mockResolvedValue({
+      ...makeShift({
+        status: 'closed',
+        actualCashCount: 1000,
+        closedOffline: true,
+        syncState: 'pending',
+        closedAtLocal: Date.now(),
+      }),
+      whenServerConfirmed: deferred,
+    });
+    const { unmount } = render(
+      createElement(CloseShiftModal, {
+        shift: makeShift(),
+        onClose: vi.fn(),
+        onSuccess: vi.fn(),
+      }),
+    );
+    fireEvent.change(screen.getByLabelText('นับเงินสดในลิ้นชัก (Actual Cash in Drawer)'), {
+      target: { value: '1000' },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'ปิดกะ' }));
+    });
+    expect(screen.getByTestId('shift-zreport-sync-pending')).toBeTruthy();
+
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    unmount();
+    // Resolve AFTER unmount — the mounted guard must swallow the state update.
+    await act(async () => {
+      resolveConfirm({ outcome: 'confirmed', closedAt: new Date() });
+      await deferred;
+      await Promise.resolve();
+    });
+
+    // No React "state update on an unmounted component" warning, and no throw
+    // (act() would have rejected on an unhandled error).
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+});
+
+describe('ShiftBootBlockedModal — Packet 7C-B2 boot fail-closed / attention state', () => {
+  afterEach(() => cleanup());
+
+  test('renders honest unverifiable copy and a retry action; never claims the shift is safely open', () => {
+    const onRetry = vi.fn();
+    render(createElement(ShiftBootBlockedModal, { onRetry }));
+
+    expect(screen.getByText('ไม่สามารถยืนยันสถานะกะได้')).toBeTruthy();
+    const dialog = screen.getByRole('dialog', { name: 'ไม่สามารถยืนยันสถานะกะได้' });
+    for (const forbidden of ['เปิดกะแล้ว', 'ซิงก์แล้ว', 'ยืนยันจากเซิร์ฟเวอร์แล้ว', 'ทุกเครื่อง']) {
+      expect(dialog.textContent).not.toContain(forbidden);
+    }
+  });
+
+  test('retry button invokes onRetry', () => {
+    const onRetry = vi.fn();
+    render(createElement(ShiftBootBlockedModal, { onRetry }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'ลองตรวจสอบอีกครั้ง' }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
   });
 });

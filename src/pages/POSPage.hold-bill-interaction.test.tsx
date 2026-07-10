@@ -112,6 +112,26 @@ vi.mock('../lib/pos/shiftService', () => ({
     initialCash: 1000, expectedCash: 1000, expectedTransfer: 0, expectedCredit: 0,
     totalSales: 0, totalOrders: 0,
   }),
+  // Packet 7C-B2 — POSPage's boot/reconnect sweep imports these; not exercised
+  // by this hold-bill suite, so they're inert stand-ins.
+  readShiftCloseConfirmation: vi.fn().mockResolvedValue({ ok: false }),
+  normalizeShiftCloseSyncState: vi.fn().mockResolvedValue(undefined),
+}));
+// Packet 7C-B2 — jsdom has no real IndexedDB, so the unmocked journal would
+// fail every read and (correctly) trip the RC-3 fail-closed boot guard,
+// blocking `activeShift` for this entire suite. Stand in with an always-ok,
+// no-local-intent journal so the boot effect proceeds to load `activeShift`.
+vi.mock('../lib/pos/offline/shiftCloseIntentStore', () => ({
+  createShiftCloseIntentJournal: () => ({
+    getCloseIntent: vi.fn().mockResolvedValue({ ok: true, value: undefined }),
+    listCloseIntents: vi.fn().mockResolvedValue({ ok: true, value: [] }),
+    upsertCloseIntent: vi.fn(),
+    markSynced: vi.fn(),
+    markRejectedManualAttention: vi.fn(),
+  }),
+}));
+vi.mock('../lib/pos/offline/shiftCloseReconciler', () => ({
+  runShiftCloseReconciliationSweep: vi.fn().mockResolvedValue([]),
 }));
 vi.mock('../lib/firebase', () => ({ isFirebaseConfigured: false }));
 vi.mock('../lib/pos/billId', () => ({ refreshReceiptConfigCache: vi.fn() }));
@@ -152,6 +172,7 @@ vi.mock('../components/pos/CashTransactionModal', () => ({ default: () => null }
 vi.mock('../components/pos/ShiftModals', () => ({
   CloseShiftModal: () => null,
   OpenShiftModal: () => null,
+  ShiftBootBlockedModal: () => null,
 }));
 vi.mock('../components/pos/NumpadDialog', () => ({ default: () => null }));
 vi.mock('../components/pos/UomModal', () => ({ default: () => null }));

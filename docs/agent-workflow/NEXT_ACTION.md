@@ -2,9 +2,10 @@
 
 ## Current State
 
-- HEAD: `9d4b811a1622fdefacbf76a2e5800b194b6161d9`
-- Working tree: **7C-B1 implementation this pass — unstaged** (clean at HEAD before this pass)
-- **P1 Packet 7C-B1 Local Optimistic Offline Close** — **IMPLEMENTED + REMEDIATED (uncommitted)**; Codex implementation review returned REQUEST CHANGES (queued write omitted `closedAt: serverTimestamp()`, risking a permanently-null persisted close time), remediated; pending Codex re-review → Gemini commit authorization
+- HEAD: `1e41b0eb0871e5788a553e579f8087171ba38077`
+- Working tree: **7C-B2 implementation + Codex-FAIL remediation — unstaged** (clean at this HEAD before this pass)
+- **P1 Packet 7C-B2 Close-Intent Reconciliation** — **REVIEWED / AUTHORIZED FOR COMMIT AND FAST-FORWARD PUSH**; Gemini commit/push AUTHORIZED; commit execution in progress
+- **P1 Packet 7C-B1** — CLOSED / COMMITTED / PUSHED (`1e41b0e`); post-commit UAT PASS WITH NOTES (perpetual-pending gap — now addressed by 7C-B2)
 - **P1 Packet 7C-A** — CLOSED / COMMITTED / PUSHED (`34a3d24`); hard offline block superseded by 7C-B1's optimistic path
 - **P1 Packet 7A** — CLOSED / DOCS CLOSED (`cb2e9ef` + `74a84c3`)
 - **P1 Packet 8** — DOCS CLOSED (`6526970`)
@@ -15,18 +16,21 @@
 
 ## What Happens Next
 
-1. Codex 7C-B1 implementation re-review (fix: queued write now includes `closedAt: serverTimestamp()`)
-2. Gemini commit authorization
-3. Next roadmap priority after 7C-B1: **Packet 7C-B2** (reliable boot/reconnect ACK/rejection reconciliation) + **Packet 5** (backend validation/audit/settlement/cross-device authority)
+1. Exact-file validation, staging, commit (`feat(pos): reconcile offline shift close intents`), fast-forward push (authorized execution)
+2. Post-push UAT / closure decision
+3. Next roadmap priority after 7C-B2 closure: **Packet 5** (backend validation/audit/settlement/cross-device authority) — **deferred / not implemented**
 
-**Not active:** 7C-B2, Packet 5, Packet 7B, PaymentModal W-12, Printer/Thermal, UI-10-D, UI-11 Packet 2.
+**Not active:** Packet 5, Packet 7B, PaymentModal W-12, Printer/Thermal, UI-10-D, UI-11 Packet 2.
 
 ## Reminders
 
 - `stash@{0}` — do not touch
-- 7C-B1 delivered: durable close-intent store, optimistic `closeShift`, pending-sync UI, boot re-open guard — durable pending close only; reliable ACK/rejection reconciliation → 7C-B2 (not implemented)
-- Queued shift-doc write includes `closedAt: serverTimestamp()` (persisted canonical close time, fixed per Codex REQUEST CHANGES); RETURNED local snapshot's `closedAt` still stays honest (never faked with device time) — `closedAtLocal` is the display-only device-time field
+- Validate this packet with the BUILD path (`npx tsc -b` + `npm run build`), not just `tsc --noEmit` — the first Codex FAIL was a `tsc -b`-only build error that `tsc --noEmit -p tsconfig.json` did not catch (the solution tsconfig type-checks via project references)
+- 7C-B2 delivered: pure reconciler (`shiftCloseReconciler.ts`), confirmation-grade reader (`getDocFromServer`) + Variant C normalizer in `shiftService.ts`, `closeShift`'s `whenServerConfirmed` handle, reactive Z-report badge states (`pending`/`stale`/`confirmed`/`attention`) with a mounted-ref unmount guard, `POSPage` boot + reconnect sweeps, and the RC-3 boot-guard fail-closed fix (`shiftBootBlocked` + `ShiftBootBlockedModal`)
+- A failed local journal transition write (`markSynced`/`markRejectedManualAttention` returning `ok:false`) is reported as retryable `unreachable` — never as a completed transition
+- Confirmation NEVER comes from cache/estimate — only `getDocFromServer` + a resolved server `closedAt` + full frozen-identity match (branch/staff/device/every drawer total)
+- Variant C normalization writes ONLY `syncState:'synced'`, is device-scoped, and is best-effort/no-guaranteed-retry — do not overclaim eventual consistency
+- 7C-B2 only flags an identity mismatch (`rejected_manual_attention`) — it never adjudicates; that is Packet 5's role
 - Packet 5 required for backend authority — not implemented; not required before honest local pending close
 - Do not claim backend accepted/settled/synced while pending
-- Do not claim reliable post-reload ack/rejection — that is 7C-B2
 - Sale Intent Journal is sidecar-only — not source of truth

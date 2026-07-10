@@ -5,7 +5,7 @@ import CustomerPickerModal from '../components/customers/CustomerPickerModal';
 import PaymentModal from '../components/PaymentModal';
 import ProductPickerDialog, { posProductToPickerItem } from '../components/products/ProductPickerDialog';
 import CashTransactionModal from '../components/pos/CashTransactionModal';
-import { CloseShiftModal, OpenShiftModal } from '../components/pos/ShiftModals';
+import { CloseShiftModal, OpenShiftModal, ShiftBootBlockedModal } from '../components/pos/ShiftModals';
 import {
   HoldBillNoteModal,
   SuspendedBillsListModal,
@@ -18,8 +18,10 @@ import { getBranchLabel } from '../lib/branches';
 import { fmtBaht } from '../lib/dashboard/format';
 import { createSafeId } from '../lib/safeId';
 import { formatMoney, getLineTotal } from '../lib/pos/cartUtils';
-import { getActiveShift } from '../lib/pos/shiftService';
+import { getActiveShift, normalizeShiftCloseSyncState, readShiftCloseConfirmation } from '../lib/pos/shiftService';
 import { createShiftCloseIntentJournal } from '../lib/pos/offline/shiftCloseIntentStore';
+import { runShiftCloseReconciliationSweep } from '../lib/pos/offline/shiftCloseReconciler';
+import { getDeviceId } from '../lib/pos/deviceId';
 import { priceLevelLabel, usePriceLevels } from '../lib/pricing/priceLevels';
 import { POS_FEATURES } from '../lib/config/features';
 import type { SuspendedBill } from '../lib/pos/suspendedBills';
@@ -140,10 +142,18 @@ export default function POSPage() {
   const globalToast = useToastDispatcher();
   const [activeShift, setActiveShift] = useState<Shift | null>(null);
   const [shiftReady, setShiftReady] = useState(false);
+  // Packet 7C-B2 (RC-3 fix): true when the local close-intent store could not
+  // be read at boot — the app cannot safely prove whether the cached shift is
+  // already closed on this device, so it fails CLOSED: neither the live
+  // drawer nor OpenShiftModal (a replacement-open) may render while blocked.
+  const [shiftBootBlocked, setShiftBootBlocked] = useState(false);
+  // Bumped by the boot-blocked retry button to re-run the boot check below.
+  const [bootCheckAttempt, setBootCheckAttempt] = useState(0);
   // Packet 7C-B1: durable local close-intent journal, consulted at boot so a
   // shift this device already closed (offline, pending sync) is never
   // re-opened / re-folded into a live drawer after reload/restart.
   const shiftCloseIntentJournalRef = useRef(createShiftCloseIntentJournal());
+  const deviceIdRef = useRef(getDeviceId());
   const [showCloseShift, setShowCloseShift] = useState(false);
   const [holdNoteOpen, setHoldNoteOpen] = useState(false);
   const [suspendedListOpen, setSuspendedListOpen] = useState(false);
@@ -787,7 +797,10 @@ export default function POSPage() {
     let cancelled = false;
     void (async () => {
       if (!user || !branchId) {
-        if (!cancelled) setShiftReady(true);
+        if (!cancelled) {
+          setShiftBootBlocked(false);
+          setShiftReady(true);
+        }
         return;
       }
       try {
@@ -800,13 +813,24 @@ export default function POSPage() {
           // a live drawer — regardless of what the shift doc currently shows.
           const intentResult = await shiftCloseIntentJournalRef.current.getCloseIntent(shift.id);
           if (cancelled) return;
-          if (intentResult.ok && intentResult.value) {
+          if (!intentResult.ok) {
+            // Packet 7C-B2 (RC-3 fix): the store could not be read — fail
+            // CLOSED. Never re-open this possibly-already-closed shift into a
+            // live drawer, and never fall through to `activeShift === null`
+            // either (that would render OpenShiftModal and invite a
+            // duplicate open). `shiftBootBlocked` suppresses both.
             setActiveShift(null);
+            setShiftBootBlocked(true);
+          } else if (intentResult.value) {
+            setActiveShift(null);
+            setShiftBootBlocked(false);
           } else {
             setActiveShift(shift);
+            setShiftBootBlocked(false);
           }
         } else {
           setActiveShift(null);
+          setShiftBootBlocked(false);
         }
       } finally {
         if (!cancelled) setShiftReady(true);
@@ -816,7 +840,42 @@ export default function POSPage() {
     return () => {
       cancelled = true;
     };
-  }, [user, branchId]);
+  }, [user, branchId, bootCheckAttempt]);
+
+  // Packet 7C-B2 — reconciliation sweeps. Same pure reconciler used by
+  // `closeShift`'s same-runtime confirmation; only the trigger differs here:
+  // once at boot (behind `shiftReady`, non-blocking) and again on every
+  // browser `online` event. Never claims Firestore confirmation from the
+  // `online` signal itself — it only re-runs the confirmation-grade sweep.
+  useEffect(() => {
+    if (!shiftReady) return;
+    let cancelled = false;
+    const sweepDeps = {
+      journal: shiftCloseIntentJournalRef.current,
+      readConfirmation: readShiftCloseConfirmation,
+      normalizeSyncState: normalizeShiftCloseSyncState,
+      deviceId: deviceIdRef.current,
+    };
+
+    const runSweep = () => {
+      void runShiftCloseReconciliationSweep(sweepDeps).catch(() => {
+        // Best-effort — a failed sweep just leaves entries pending for the next trigger.
+      });
+    };
+
+    runSweep();
+
+    const handleOnline = () => {
+      if (cancelled) return;
+      runSweep();
+    };
+    window.addEventListener('online', handleOnline);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [shiftReady]);
 
   // F12 modal suppression (Phase 7C-D4-C-3): true when any blocking POS modal/overlay is
   // open, so the checkout shortcut won't stack PaymentModal over another dialog. (OpenShift
@@ -1631,7 +1690,11 @@ export default function POSPage() {
         onNewSale={handleNewSale}
       />
 
-      {shiftReady && !activeShift && user && branchId && (
+      {shiftReady && shiftBootBlocked && (
+        <ShiftBootBlockedModal onRetry={() => setBootCheckAttempt((n) => n + 1)} />
+      )}
+
+      {shiftReady && !shiftBootBlocked && !activeShift && user && branchId && (
         <OpenShiftModal
           branchId={branchId}
           staffId={user.id}

@@ -204,6 +204,25 @@
   flex-shrink: 0;
 }
 
+/* Packet 7C-B2 — reconciled sync badge states. */
+.shift-zreport-sync-badge--stale {
+  background: #fdeceb;
+  border-color: #f1b4ad;
+  color: #a13327;
+}
+
+.shift-zreport-sync-badge--confirmed {
+  background: #eafaf3;
+  border-color: #a9e6c9;
+  color: #1d7a52;
+}
+
+.shift-zreport-sync-badge--attention {
+  background: #fdeceb;
+  border-color: #f1b4ad;
+  color: #a13327;
+}
+
 .shift-zreport-grid {
   display: flex;
   flex-direction: column;

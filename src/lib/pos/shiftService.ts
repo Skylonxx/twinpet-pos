@@ -3,6 +3,7 @@ import {
   collection,
   doc,
   getDocFromCache,
+  getDocFromServer,
   getDocs,
   increment,
   limit,
@@ -21,6 +22,13 @@ import {
   type ShiftCloseIntentJournal,
 } from './offline/shiftCloseIntentStore';
 import type { ShiftCloseIntentSnapshot } from './offline/shiftCloseIntentTypes';
+import {
+  reconcileShiftCloseIntent,
+  type ShiftCloseConfirmationDoc,
+  type ShiftCloseConfirmationRead,
+  type ShiftCloseConfirmationReader,
+  type ShiftCloseNormalizer,
+} from './offline/shiftCloseReconciler';
 import {
   devCloseShift,
   devGetActiveShift,
@@ -192,13 +200,101 @@ function getDefaultShiftCloseIntentJournal(): ShiftCloseIntentJournal {
   return defaultShiftCloseIntentJournal;
 }
 
-export type CloseShiftDeps = {
-  /** Injectable for tests; production uses the lazily-created IndexedDB-backed journal. */
-  journal?: ShiftCloseIntentJournal;
+/**
+ * Packet 7C-B2 — confirmation-grade shift-doc reader. `getDocFromServer`
+ * bypasses `persistentLocalCache` entirely (same rationale as
+ * `asyncOrderLookup.ts`'s `createAsyncOrderServerLookup`): a cache-first read
+ * could return this device's own queued, unflushed write and falsely report a
+ * confirmed close before the server has ever seen it. Never throws — an
+ * offline/unreachable/errored read is reported as `{ ok: false }` so the
+ * reconciler treats it as "stay pending", never as a rejection.
+ */
+export const readShiftCloseConfirmation: ShiftCloseConfirmationReader = async (
+  shiftId,
+): Promise<ShiftCloseConfirmationRead> => {
+  if (!isFirebaseConfigured || !db) return { ok: false };
+  try {
+    const snap = await getDocFromServer(doc(db, collections.shifts, shiftId));
+    if (!snap.exists()) return { ok: true, doc: { exists: false } };
+    const data = snap.data() as Record<string, unknown>;
+    const confirmationDoc: ShiftCloseConfirmationDoc = {
+      exists: true,
+      status: data.status as string | undefined,
+      closedAt: data.closedAt,
+      closedOffline: data.closedOffline as boolean | undefined,
+      syncState: data.syncState as ShiftCloseConfirmationDoc['syncState'],
+      deviceId: (data.deviceId as string | null | undefined) ?? null,
+      branchId: data.branchId as string | undefined,
+      staffId: data.staffId as string | undefined,
+      startingCash: data.startingCash as number | undefined,
+      actualCashCount: data.actualCashCount as number | undefined,
+      variance: data.variance as number | undefined,
+      expectedCash: data.expectedCash as number | undefined,
+      expectedQr: data.expectedQr as number | undefined,
+      expectedKbank: data.expectedKbank as number | undefined,
+      expectedCard: data.expectedCard as number | undefined,
+      expectedCredit: data.expectedCredit as number | undefined,
+      payInTotal: data.payInTotal as number | undefined,
+      payOutTotal: data.payOutTotal as number | undefined,
+      totalBills: data.totalBills as number | undefined,
+      note: data.note as string | undefined,
+    };
+    return { ok: true, doc: confirmationDoc };
+  } catch {
+    return { ok: false };
+  }
 };
 
 /**
- * Close a shift — Packet 7C-B1 (Option 2): local optimistic offline close.
+ * Packet 7C-B2 Variant C — the ONE field this packet ever normalizes on an
+ * already-closed doc. Guardrails (confirmed identity, `syncState === 'pending'`,
+ * device match) are enforced by the caller (`reconcileShiftCloseIntent`); this
+ * function is intentionally a "dumb", single-field writer.
+ */
+export const normalizeShiftCloseSyncState: ShiftCloseNormalizer = async (shiftId) => {
+  if (!isFirebaseConfigured || !db) return;
+  await updateDoc(doc(db, collections.shifts, shiftId), { syncState: 'synced' });
+};
+
+/**
+ * Same-runtime confirmation outcome surfaced to the UI (Packet 7C-B2). Distinct
+ * from {@link ReconcileShiftCloseIntentResult} (the sweep-facing shape) — this is
+ * the narrower, UI-facing contract `closeShift`'s `whenServerConfirmed` resolves to.
+ * Resolves exactly once; a `still_pending`/`unreachable` outcome here means the
+ * boot/reconnect sweep (a later trigger) will pick the intent back up, not this
+ * mounted component.
+ */
+export type ShiftCloseConfirmation =
+  | { outcome: 'confirmed'; closedAt: Date }
+  | { outcome: 'still_pending' }
+  | { outcome: 'identity_mismatch' }
+  | { outcome: 'unreachable' }
+  | { outcome: 'rejected'; message: string };
+
+export type CloseShiftResult = Shift & {
+  /**
+   * Resolves once the SAME-RUNTIME write settles AND (only on ACK) a
+   * confirmation-grade server read proves the close — never from the ACK
+   * promise alone (SERVER-CONFIRMATION CONTRACT). The journal transition
+   * (`local_closed_pending -> synced`/`rejected_manual_attention`) happens via
+   * the same underlying reconciliation regardless of whether any caller ever
+   * awaits this handle — see the fire-and-forget wiring in `closeShift`.
+   */
+  whenServerConfirmed: Promise<ShiftCloseConfirmation>;
+};
+
+export type CloseShiftDeps = {
+  /** Injectable for tests; production uses the lazily-created IndexedDB-backed journal. */
+  journal?: ShiftCloseIntentJournal;
+  /** Injectable for tests; production uses {@link readShiftCloseConfirmation}. */
+  readConfirmation?: ShiftCloseConfirmationReader;
+  /** Injectable for tests; production uses {@link normalizeShiftCloseSyncState}. */
+  normalizeSyncState?: ShiftCloseNormalizer;
+};
+
+/**
+ * Close a shift — Packet 7C-B1 (Option 2) local optimistic offline close,
+ * extended by Packet 7C-B2 with same-runtime confirmation reconciliation.
  * Under the drawer single-writer model the terminal is the sole authority for
  * the shift's sale totals, so the caller passes the shift it has already
  * DERIVED from its local ledger ({@link deriveShiftDrawer}); we never re-read
@@ -215,28 +311,40 @@ export type CloseShiftDeps = {
  *     `closedAt: serverTimestamp()` — the persisted shift document must keep
  *     an authoritative server close time (matching the pre-7C-B1 baseline);
  *     omitting it would leave a synced closed shift with `closedAt: null`
- *     forever, since 7C-B1 has no boot/reconnect worker to back-fill it later.
- *     Firestore's `persistentLocalCache` applies this mutation to the local
- *     cache instantly and flushes on reconnect. Same-runtime observation of
- *     the write promise (below) is best-effort only — it is NEVER observable
- *     after reload. Reliable post-reload ack/rejection reconciliation is
- *     Packet 7C-B2, not this function.
- *  4. Returns a client-built FROZEN closed snapshot immediately. The
- *     RETURNED object's `closedAt` is never back-filled with a fake local/
- *     device timestamp — `serverTimestamp()` is a write-only sentinel that
- *     only resolves once read back from Firestore, so the immediate return
- *     keeps whatever `closedAt` the caller's shift already carried (typically
- *     `null`). `closedAtLocal` carries the honest device time for display
- *     until the real server value is later read back (e.g. on next fetch).
+ *     forever. Firestore's `persistentLocalCache` applies this mutation to
+ *     the local cache instantly and flushes on reconnect.
+ *  4. Returns a client-built FROZEN closed snapshot immediately, PLUS
+ *     `whenServerConfirmed` (Packet 7C-B2): once the queued write ACKs, a
+ *     confirmation-grade read (never the ACK promise alone) reconciles the
+ *     local journal (`local_closed_pending -> synced`/`rejected_manual_attention`)
+ *     via the SAME {@link reconcileShiftCloseIntent} the boot/reconnect sweeps
+ *     use. This fire-and-forget reconciliation always runs, whether or not any
+ *     caller awaits `whenServerConfirmed` — a mounted Z-report only OBSERVES it
+ *     to flip pending -> confirmed/attention; it never gates or delays this
+ *     function's return. The RETURNED object's `closedAt` is never back-filled
+ *     with a fake local/device timestamp — `serverTimestamp()` is a write-only
+ *     sentinel that only resolves once read back from Firestore, so the
+ *     immediate return keeps whatever `closedAt` the caller's shift already
+ *     carried (typically `null`). `closedAtLocal` carries the honest device
+ *     time for display until `whenServerConfirmed` (or a later boot/reconnect
+ *     sweep) resolves the real server value.
  */
 export async function closeShift(
   shift: Shift,
   actualCashCount: number,
   note: string,
   deps?: CloseShiftDeps,
-): Promise<Shift> {
+): Promise<CloseShiftResult> {
   if (!isFirebaseConfigured || !db) {
-    return devCloseShift(shift.id, actualCashCount, note);
+    const closed = devCloseShift(shift.id, actualCashCount, note);
+    const closedAtServer =
+      closed.closedAt != null && typeof (closed.closedAt as { toDate?: unknown }).toDate === 'function'
+        ? (closed.closedAt as { toDate: () => Date }).toDate()
+        : new Date();
+    return {
+      ...closed,
+      whenServerConfirmed: Promise.resolve({ outcome: 'confirmed', closedAt: closedAtServer }),
+    };
   }
 
   const ref = doc(db, collections.shifts, shift.id);
@@ -289,14 +397,12 @@ export async function closeShift(
     throw new Error(CLOSE_SHIFT_STORE_UNAVAILABLE_MESSAGE);
   }
 
-  void updateDoc(ref, {
+  const writeAck = updateDoc(ref, {
     status: 'closed',
-    // Authoritative server close time on the persisted doc — restores the
-    // pre-7C-B1 baseline guarantee. 7C-B1 has no worker to back-fill this
-    // later, so it MUST be enqueued here even though the write is queued and
-    // never awaited; there is no separate `closedAtServer` mirror field to
-    // keep in sync, so none is written here (avoids an unread, unresolved,
-    // permanently-null field).
+    // Authoritative server close time on the persisted doc. Omitting it would
+    // leave a synced closed shift with `closedAt: null` forever; there is no
+    // separate `closedAtServer` mirror field to keep in sync, so none is
+    // written here (avoids an unread, unresolved, permanently-null field).
     closedAt: serverTimestamp(),
     actualCashCount,
     variance,
@@ -313,17 +419,54 @@ export async function closeShift(
     closedOffline: true,
     syncState: 'pending',
     deviceId,
-  })
-    .then(() => {
-      void journal.markSynced(shift.id);
-    })
-    .catch((err) => {
+  });
+
+  const readConfirmation = deps?.readConfirmation ?? readShiftCloseConfirmation;
+  const normalizeSyncState = deps?.normalizeSyncState ?? normalizeShiftCloseSyncState;
+  const pendingEntry = intentResult.value;
+
+  // Packet 7C-B2: the ACK promise alone must NEVER mark the journal `synced`
+  // or drive confirmed copy (SAME-RUNTIME ACK RULE) — on ACK it triggers a
+  // confirmation-grade reconciliation (the same one boot/reconnect use) which
+  // performs the actual journal transition. This chain ALWAYS runs, whether
+  // or not `whenServerConfirmed` is ever awaited by a caller. It NEVER
+  // rejects — any unexpected failure resolves to a safe non-overclaiming
+  // outcome so callers never need a defensive `.catch()`.
+  const whenServerConfirmed: Promise<ShiftCloseConfirmation> = (async (): Promise<ShiftCloseConfirmation> => {
+    try {
+      await writeAck;
+    } catch (err) {
       console.warn('[shiftService] closeShift write not yet acked (queued, will retry)', err);
-      void journal.markRejectedManualAttention(
-        shift.id,
-        err instanceof Error ? err.message : String(err),
-      );
-    });
+      const message = err instanceof Error ? err.message : String(err);
+      try {
+        await journal.markRejectedManualAttention(shift.id, message);
+      } catch {
+        // Best-effort local journal write; the write rejection itself is the
+        // authoritative signal reported below regardless.
+      }
+      return { outcome: 'rejected', message };
+    }
+
+    try {
+      const result = await reconcileShiftCloseIntent(pendingEntry, {
+        journal,
+        readConfirmation,
+        normalizeSyncState,
+        deviceId,
+      });
+      if (result.outcome === 'confirmed' && result.closedAtServer) {
+        return { outcome: 'confirmed', closedAt: result.closedAtServer };
+      }
+      if (result.outcome === 'identity_mismatch') return { outcome: 'identity_mismatch' };
+      if (result.outcome === 'unreachable') return { outcome: 'unreachable' };
+      return { outcome: 'still_pending' };
+    } catch {
+      // Reconciliation itself failed unexpectedly (e.g. a journal write
+      // error) — never fabricate confirmation/rejection; the next boot/
+      // reconnect sweep will retry.
+      return { outcome: 'unreachable' };
+    }
+  })();
 
   return {
     // `closedAt` is inherited from `shift` as-is (typically `null`) — never
@@ -338,6 +481,7 @@ export async function closeShift(
     syncState: 'pending',
     deviceId,
     closedAtLocal,
+    whenServerConfirmed,
   };
 }
 

@@ -2,33 +2,31 @@
 
 ## Master Plan
 
-UI-01 through **UI-10-C** are **DONE**. UI-11 Packet 1 **CLOSED / PUSHED**. **P1 Packet 1–2**, **3A-***, **3B-***, **Packet 6**, **Packet 8**, **Packet 7A**, and **Packet 7C-A** are **CLOSED / PUSHED** (`3fe056e` → `34a3d24`). **Packet 7C-B1** **IMPLEMENTED (uncommitted)** — pending Codex implementation review. UI-11 Packet 2 and UI-10-D **NOT STARTED**.
+UI-01 through **UI-10-C** are **DONE**. UI-11 Packet 1 **CLOSED / PUSHED**. **P1 Packet 1–2**, **3A-***, **3B-***, **Packet 6**, **Packet 8**, **Packet 7A**, **Packet 7C-A**, and **Packet 7C-B1** are **CLOSED / PUSHED** (`3fe056e` → `1e41b0e`). **Packet 7C-B2** **REVIEWED / AUTHORIZED FOR COMMIT AND FAST-FORWARD PUSH** — Codex re-review PASS WITH NOTES; Gemini AUTHORIZED; commit execution in progress. UI-11 Packet 2 and UI-10-D **NOT STARTED**.
 
 ## Repository Baseline
 
 | Field | Value |
 |-------|-------|
-| HEAD | `9d4b811a1622fdefacbf76a2e5800b194b6161d9` |
-| origin/main | `9d4b811a1622fdefacbf76a2e5800b194b6161d9` |
-| Working tree | **7C-B1 implementation this pass — unstaged** (clean at this HEAD before this pass) |
+| HEAD | `1e41b0eb0871e5788a553e579f8087171ba38077` |
+| origin/main | `1e41b0eb0871e5788a553e579f8087171ba38077` |
+| Working tree | **7C-B2 implementation + Codex-FAIL remediation — unstaged** (clean at this HEAD before this pass) |
 
 ## Current Phase
 
-P1 Packet 7C-B1 Local Optimistic Offline Close — implementation pass (unstaged, not committed).
+P1 Packet 7C-B2 Close-Intent Reconciliation — commit execution authorized (unstaged, not yet committed/pushed).
 
 ## Latest Verdict
 
-**P1 PACKET 7C-A CLOSED** — `34a3d24`. Fail-fast offline guard + 10s timeout backstop. UX stopgap only; hard offline block now superseded by 7C-B1.
-
-**P1 PACKET 7C-B1 IMPLEMENTED + REMEDIATED (uncommitted)** — durable close-intent store, optimistic `closeShift`, pending-sync UI, boot re-open guard, tests all passing, `tsc --noEmit` clean. Codex implementation review returned REQUEST CHANGES (queued write omitted `closedAt: serverTimestamp()`); remediated — queued `updateDoc` now includes `closedAt: serverTimestamp()`, unused `closedAtServer:null` write removed, 2 new regression tests added. Next: Codex implementation re-review.
+**P1 PACKET 7C-B2 — REVIEWED / AUTHORIZED FOR COMMIT AND FAST-FORWARD PUSH** — first Codex FAIL; remediation PASS; Codex re-review PASS WITH NOTES (`implementation-ready-for-commit: YES`); Gemini AUTHORIZED (`TWINPET-P1-OFFLINE-SYNC-GEMINI-PACKET-7C-B2-COMMIT-PUSH-AUTHORIZATION-001`).
 
 ## Mode
 
-Implementation delivered under Gemini's 7C-B1 authorization. No commit/push/stage performed by the implementer.
+Commit execution authorized under Gemini. No commit/push yet in this execution pass.
 
 ## Next Action
 
-Codex 7C-B1 implementation re-review → Gemini commit authorization → Packet 7C-B2 / Packet 5 roadmap.
+Exact-file validation → staging → commit → fast-forward push → post-push UAT / closure decision.
 
 ## Stash
 
