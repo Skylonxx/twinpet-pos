@@ -2,8 +2,8 @@
 
 ## Current State
 
-- HEAD: `3ef5fedef2b815592b26120ee6d4d5144a4c6955`
-- Working tree: **clean** (Packet 7C-B2 committed/pushed; docs closed this pass)
+- HEAD: `8e6b2e6676eb055b7073287d8b2a0585899c3428` (docs closure); Packet 7C-B2 impl `3ef5fed`
+- Working tree: **dirty** (TRUE-STANDALONE roadmap docs update — unstaged; not committed per authorization)
 - **P1 Packet 7C-B2 Close-Intent Reconciliation** — **CLOSED / COMMITTED / PUSHED** (`3ef5fed` — `feat(pos): reconcile offline shift close intents`); post-push UAT **PASS WITH NOTES** (`...\QA\twinpet-p1-offline-sync-packet-7c-b2-post-push-uat-report.md`)
 - **P1 Packet 7C-B1** — CLOSED / COMMITTED / PUSHED (`1e41b0e`); post-commit UAT PASS WITH NOTES (perpetual-pending gap — now fixed by 7C-B2)
 - **P1 Packet 7C-A** — CLOSED / COMMITTED / PUSHED (`34a3d24`); hard offline block superseded by 7C-B1's optimistic path
@@ -16,11 +16,24 @@
 
 ## What Happens Next
 
-1. Packet 7C-B2 committed/pushed (`3ef5fed`), post-push UAT PASS WITH NOTES, docs closed — **DONE**
-2. Awaiting Gemini / Tech Lead decision for the next packet
-3. Next roadmap priority after 7C-B2 closure: **Packet 5** (backend validation/audit/settlement/cross-device authority) — **deferred / not implemented**
+1. Packet 7C-B2 CLOSED (impl `3ef5fed`, docs `8e6b2e6`); post-push UAT PASS WITH NOTES — **DONE**
+2. **Packet 5** — next roadmap planning priority (backend validation/audit/settlement/cross-device authority) — **deferred / not implemented**
+3. **Future Phase TRUE-STANDALONE** — documented; FUTURE / NOT STARTED / NOT AUTHORIZED
+4. Gemini Packet 5 read-only architecture/planning authorization or execution decision
 
-**Not active:** Packet 5, Packet 7B, PaymentModal W-12, Printer/Thermal, UI-10-D, UI-11 Packet 2.
+**Not active:** Packet 5 implementation, Packet 7B, TRUE-STANDALONE implementation, PaymentModal W-12, Printer/Thermal, UI-10-D, UI-11 Packet 2.
+
+## Future Phase — True Standalone (Desktop & Native Mobile) (`TRUE-STANDALONE`)
+
+**Status: FUTURE / NOT STARTED / NOT AUTHORIZED FOR IMPLEMENTATION**
+
+Positioned after P1 Offline/Sync stabilization (Packet 5; Packet 7B where documented). Does not displace Packet 5 as next planning priority. Requires future Gemini gate — no automatic activation after 7C-B2.
+
+| Pillar | Scope (planning only) |
+|--------|----------------------|
+| Desktop App Upgrade | Package web POS for PC; Tauri or Electron candidates — technology not decided; no implementation authorized |
+| Native Mobile App Upgrade | iPad/Android tablets; Capacitor or reviewed shell; web foundation exists; no native/store work authorized |
+| Native Local Storage Migration | SQLite candidate to supplement/replace IndexedDB; durable app-controlled persistence; 100% data safety is architectural goal not guarantee; IndexedDB retained until reviewed migration/rollback |
 
 ## Reminders
 

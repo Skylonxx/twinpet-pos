@@ -6,19 +6,19 @@
 |-------|-------|
 | Repo root | `C:/Users/Narachat/twinpet-pos` |
 | Branch | `main` |
-| HEAD | `3ef5fedef2b815592b26120ee6d4d5144a4c6955` |
-| origin/main | `3ef5fedef2b815592b26120ee6d4d5144a4c6955` |
+| HEAD | `8e6b2e6676eb055b7073287d8b2a0585899c3428` |
+| origin/main | `8e6b2e6676eb055b7073287d8b2a0585899c3428` |
 | Ahead/behind | `0 / 0` |
 
 ## Current Phase
 
-    TWINPET-P1-OFFLINE-SYNC-PACKET-7C-B2-POST-PUSH-UAT-CONDITIONAL-CLOSURE-EXECUTION-001
-    Packet 7C-B2 CLOSED / COMMITTED / PUSHED (3ef5fed) — post-push UAT PASS WITH NOTES — docs closed
+    ROADMAP_UPDATE_TRUE_STANDALONE_V2
+    Packet 7C-B2 CLOSED (impl 3ef5fed, docs 8e6b2e6) — Packet 5 next planning priority; TRUE-STANDALONE future phase documented
 
 ## Working Tree
 
-- HEAD `3ef5fed` (Packet 7C-B2 committed/pushed); post-push UAT PASS WITH NOTES
-- Working tree **clean** before this docs-only closure pass
+- HEAD `8e6b2e6` (docs closure); Packet 7C-B2 impl `3ef5fed`; post-push UAT PASS WITH NOTES
+- Working tree **dirty** — TRUE-STANDALONE roadmap docs update (4 tracker files; unstaged; not committed per authorization)
 - Staging: **empty**
 
 ## Stash
@@ -86,6 +86,16 @@ All **CLOSED / PUSHED**.
 
 All **CLOSED / PUSHED**.
 
+## Future Phase — True Standalone (`TRUE-STANDALONE`)
+
+| Field | Value |
+|-------|-------|
+| Status | **FUTURE / NOT STARTED / NOT AUTHORIZED FOR IMPLEMENTATION** |
+| Position | After P1 Offline/Sync stabilization (Packet 5; Packet 7B where documented) |
+| Pillars | (1) Desktop app (Tauri/Electron — TBD), (2) Native mobile iPad/Android (Capacitor or reviewed shell), (3) Native local storage migration (SQLite candidate; IndexedDB until migration/rollback reviewed) |
+| Data safety | Architectural goal toward durable persistence — not an absolute guarantee before architecture/validation |
+| Gate | Future Gemini selection/authorization required |
+
 ## UI-10-D / UI-11 Packet 2
 
 **NOT STARTED**
@@ -105,11 +115,12 @@ All **CLOSED / PUSHED**.
 
 ## Next Recommended Block
 
-    PACKET_7C_B2_CLOSED_AWAITING_TECH_LEAD_NEXT_PACKET_DECISION
+    PACKET_5_PLANNING_NEXT_TRUE_STANDALONE_FUTURE
 
-1. Packet 7C-B2 CLOSED / COMMITTED / PUSHED (`3ef5fed`); post-push UAT PASS WITH NOTES; docs closed
-2. Roadmap priority after 7C-B2: Packet 5 (backend validation/audit/settlement/cross-device authority) — deferred / not implemented
-3. Awaiting Gemini / Tech Lead decision for the next packet
+1. Packet 7C-B2 CLOSED (impl `3ef5fed`, docs `8e6b2e6`); post-push UAT PASS WITH NOTES
+2. Packet 5 — next roadmap planning priority (deferred / not implemented)
+3. Future Phase TRUE-STANDALONE documented — not authorized for implementation
+4. Gemini Packet 5 read-only architecture/planning decision
 
 ## Hard Boundaries
 

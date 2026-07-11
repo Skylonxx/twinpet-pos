@@ -1,8 +1,9 @@
 # Twinpet POS — Task Tracker
 
-> Last reconciled: 2026-07-10
-> HEAD: `3ef5fedef2b815592b26120ee6d4d5144a4c6955` (Packet 7C-B2 closed/committed/pushed; post-push UAT PASS WITH NOTES; docs closure this pass)
-> origin/main: `3ef5fedef2b815592b26120ee6d4d5144a4c6955`
+> Last reconciled: 2026-07-11
+> HEAD: `8e6b2e6676eb055b7073287d8b2a0585899c3428` (docs: close packet 7c-b2 reconciliation)
+> origin/main: `8e6b2e6676eb055b7073287d8b2a0585899c3428`
+> Implementation: `3ef5fedef2b815592b26120ee6d4d5144a4c6955` (Packet 7C-B2)
 
 ---
 
@@ -76,14 +77,26 @@
 
 ## UI-11 Packet 1 / UI-10-C / UI-10-B / UI-10-A — CLOSED / PUSHED
 
+## Future Phase — True Standalone (Desktop & Native Mobile) (`TRUE-STANDALONE`)
+
+**Status: FUTURE / NOT STARTED / NOT AUTHORIZED**
+
+- [ ] Desktop app packaging (Tauri/Electron — technology not decided)
+- [ ] Native mobile packaging (iPad/Android — Capacitor or reviewed alternative)
+- [ ] Native local storage migration (SQLite candidate — IndexedDB remains until reviewed migration/rollback)
+
+**Position:** After P1 stabilization (Packet 5 + Packet 7B as documented). Does not interrupt Packet 5 read-only planning. Future Gemini gate required.
+
+**Not authorized:** implementation, dependencies, native projects, storage migration, or absolute data-loss guarantees.
+
 ## UI-10-D / UI-11 Packet 2 — NOT STARTED
 
 ### Next step
 
-1. Packet 7C-B2 — **CLOSED / COMMITTED / PUSHED** (`3ef5fed`); post-push UAT PASS WITH NOTES; docs closed this pass
-2. Next roadmap priority after 7C-B2: Packet 5 (backend validation/audit/settlement/cross-device authority) — **deferred / not implemented**
-3. Awaiting Gemini / Tech Lead decision for the next packet
+1. Packet 7C-B2 — **CLOSED** (impl `3ef5fed`, docs `8e6b2e6`); post-push UAT PASS WITH NOTES
+2. Next roadmap planning priority: **Packet 5** — deferred / not implemented
+3. Gemini Packet 5 read-only architecture/planning decision
 
-**Not active:** Packet 5, Packet 7B, PaymentModal W-12, Printer/Thermal, UI-10-D, UI-11 Packet 2.
+**Not active:** Packet 5 implementation, Packet 7B, TRUE-STANDALONE implementation, PaymentModal W-12, Printer/Thermal, UI-10-D, UI-11 Packet 2.
 
-**Roadmap priority after 7C-B2:** Packet 5 Backend Deep Sync.
+**Roadmap priority:** Packet 5 Backend Deep Sync (planning). TRUE-STANDALONE is a later architectural phase.

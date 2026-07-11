@@ -1,8 +1,9 @@
 # Twinpet POS — Project Context
 
-> Last reconciled: 2026-07-10
-> HEAD: `3ef5fedef2b815592b26120ee6d4d5144a4c6955` (Packet 7C-B2 closed/committed/pushed; post-push UAT PASS WITH NOTES; docs closure this pass)
-> origin/main: `3ef5fedef2b815592b26120ee6d4d5144a4c6955`
+> Last reconciled: 2026-07-11
+> HEAD: `8e6b2e6676eb055b7073287d8b2a0585899c3428` (docs: close packet 7c-b2 reconciliation)
+> origin/main: `8e6b2e6676eb055b7073287d8b2a0585899c3428`
+> Implementation: `3ef5fedef2b815592b26120ee6d4d5144a4c6955` (Packet 7C-B2)
 
 ---
 
@@ -110,9 +111,23 @@ Non-blocking this-terminal pending-sync warning; close remains enabled.
 
 ### Deferred / next gate
 
-1. **Packet 7C-B2 CLOSED** — committed/pushed at `3ef5fed`; post-push UAT PASS WITH NOTES; docs closed this pass
-2. Next roadmap priority after 7C-B2: **Packet 5** (backend validation/audit/settlement/cross-device authority) — **deferred / not implemented**
-3. Awaiting Gemini / Tech Lead decision for the next packet
+1. **Packet 7C-B2 CLOSED** — implementation `3ef5fed`; docs closure `8e6b2e6`; post-push UAT PASS WITH NOTES
+2. Next roadmap planning priority: **Packet 5** (backend validation/audit/settlement/cross-device authority) — **deferred / not implemented**; read-only architecture/planning unless Gemini authorizes
+3. Awaiting Gemini / Tech Lead decision for Packet 5 planning flow
+
+### Future Phase — True Standalone (Desktop & Native Mobile) (`TRUE-STANDALONE`)
+
+**Status: FUTURE / NOT STARTED / NOT AUTHORIZED FOR IMPLEMENTATION**
+
+High-value long-term architectural goal positioned **after** P1 Offline / Sync Resiliency stabilization (including Packet 5 and dependent work such as Packet 7B where documented). Does not displace Packet 5 planning. Requires a future Gemini selection/authorization gate — no automatic activation after 7C-B2.
+
+**Why:** Browser-hosted POS limits durable offline persistence (storage eviction), native device integration, and installable desktop/tablet delivery. This phase explores packaging and storage upgrades without claiming current readiness.
+
+**Three pillars (architecture only — no implementation authorized):**
+
+1. **Desktop App Upgrade** — Package the web POS for PC deployment. Candidate technologies include Tauri or Electron; **technology choice not decided**. Future architecture decision must compare security, update strategy, packaging, printing/device access, performance, installer size, and maintenance burden.
+2. **Native Mobile App Upgrade** — Package for iPad and Android tablets via Capacitor or another reviewed native shell. The project has a web foundation; native packaging must be separately architected and authorized. No native code, iOS/Android project files, Capacitor config, or store distribution work authorized now.
+3. **Native Local Storage Migration** — Replace or supplement browser IndexedDB with an application-controlled local database (e.g. SQLite candidate) to reduce dependence on browser storage-eviction behavior. Goal: durable local persistence for prolonged offline operation. **100% data safety is an architectural goal, not an absolute guarantee** — future design must define backup, restore, encryption, schema migration, corruption recovery, and cross-platform consistency. Migration must preserve offline-first integrity, FIFO/business invariants, idempotency, conflict handling, audit evidence, and safe upgrades. IndexedDB must not be removed until a reviewed migration/rollback strategy exists.
 
 ### Other deferred
 
