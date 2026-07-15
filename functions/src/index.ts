@@ -28,6 +28,12 @@ export { resolveTransferDiscrepancy } from './resolveTransferDiscrepancy';
 // rejection codes; the single path that may reverse stock for these document types.
 export { resolveReversal } from './resolveReversal';
 
+// P1 offline-sync Packet 5 / P5-C-1: captures immutable evidence for the first
+// server-visible transition of a `shifts/{shiftId}` doc to closed. Never
+// mutates `shifts`. Activation (deploy) is gated behind P5-C-2 rules being
+// verified live in the target project/database — see functions/package.json.
+export { shiftCloseEvidenceCapture } from './shiftCloseEvidenceCapture';
+
 type UserRole = 'admin' | 'manager' | 'staff';
 
 // Fallback mirror of the client DEFAULT_ROLE_PERMS (src/lib/staffManagement/types.ts).
