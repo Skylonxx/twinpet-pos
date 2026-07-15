@@ -149,6 +149,190 @@ service cloud.firestore {
         || ('refDiscrepancyId' in request.resource.data);
     }
 
+    // ── Packet 5 / D4 shift lifecycle helpers (P5-C-2 rules hardening) ──
+    // Mirror the frozen P5-C capture-core constants so the rules bound and the
+    // future capture-core bound never drift apart (P5-A R2/R3 + P5-C R2/R3).
+    function shiftMaxEntryBaht() { return 10000000; }
+    function shiftMaxTotalBills() { return 100000; }
+
+    // Aggregate money envelope (frozen P5-A MAX_TOTAL_BAHT = 10,000,000,000). A
+    // one-sided `is number && >= 0` check is NOT sufficient: Firestore Rules
+    // treats NaN and ±Infinity as `number`. The TWO-SIDED bound below rejects
+    // NaN and both infinities (each fails at least one comparison — `NaN >= 0` is
+    // false, `+Infinity <= MAX` is false, `-Infinity >= 0`/`>= -MAX` is false),
+    // enforcing the frozen finite-money contract before a malformed close can
+    // reach the future P5-C-1 capture core (which would structurally refuse it,
+    // producing no evidence/case — the exact loss P5-C-2 must prevent).
+    function shiftMaxTotalBaht() { return 10000000000; }
+    function isFiniteNonNegAggregate(v) {
+      return v is number && v >= 0 && v <= shiftMaxTotalBaht();
+    }
+    function isFiniteSignedAggregate(v) {
+      return v is number && v >= -shiftMaxTotalBaht() && v <= shiftMaxTotalBaht();
+    }
+
+    // W0 — exact current openShift() create (19 fields, shiftService.ts:161-181).
+    function isW0ShiftOpen(shiftId) {
+      return request.resource.data.keys().hasOnly([
+          'id','branchId','staffId','staffName','status','openedAt','closedAt',
+          'startingCash','actualCashCount','expectedCash','expectedQr','expectedKbank',
+          'expectedCard','expectedCredit','totalBills','payInTotal','payOutTotal','variance','note'
+        ])
+        && request.resource.data.keys().hasAll([
+          'id','branchId','staffId','staffName','status','openedAt','closedAt',
+          'startingCash','actualCashCount','expectedCash','expectedQr','expectedKbank',
+          'expectedCard','expectedCredit','totalBills','payInTotal','payOutTotal','variance','note'
+        ])
+        && request.resource.data.status == 'open'
+        && request.resource.data.closedAt == null
+        && request.resource.data.openedAt == request.time
+        && request.resource.data.staffId == staffId()
+        && request.resource.data.staffName is string
+        && isFiniteNonNegAggregate(request.resource.data.startingCash)
+        && request.resource.data.actualCashCount == 0
+        && request.resource.data.expectedCash == 0 && request.resource.data.expectedQr == 0
+        && request.resource.data.expectedKbank == 0 && request.resource.data.expectedCard == 0
+        && request.resource.data.expectedCredit == 0 && request.resource.data.totalBills == 0
+        && request.resource.data.payInTotal == 0 && request.resource.data.payOutTotal == 0
+        && request.resource.data.variance == 0
+        && request.resource.data.note is string
+        && request.resource.data.id == shiftId;
+    }
+
+    // W1 — open-shift cash append. Missing `cashEntries` treated as empty (W0
+    // creates none), so the FIRST recordCashTransaction() append passes exactly
+    // like every later one. Actor binding uses the existing staffId() claim.
+    function shiftOldCashEntriesSize() {
+      return resource.data.get('cashEntries', []).size();
+    }
+
+    // Null-safe "last element of the new cashEntries list" accessor. Every
+    // access goes through `.get(key, default)` (never bare dot-notation) so a
+    // genuinely absent/empty `cashEntries` (e.g. this same `||` branch being
+    // reached while evaluating an unrelated W2/W3/W4 update) can never hard-
+    // error — it cleanly resolves to `null` instead.
+    function shiftNewCashEntry() {
+      let entries = request.resource.data.get('cashEntries', []);
+      return entries.size() > 0 ? entries[entries.size() - 1] : null;
+    }
+
+    function isValidNewShiftCashEntry() {
+      let e = shiftNewCashEntry();
+      return e != null
+          && e.keys().hasAll(['id','type','amount','note','staffId','staffName','at'])
+          && e.keys().hasOnly(['id','type','amount','note','staffId','staffName','at'])
+          && e.type in ['pay_in','pay_out']
+          && e.amount is number && e.amount > 0 && e.amount <= shiftMaxEntryBaht()
+          && e.note is string && e.note.size() > 0
+          && e.id is string && e.id.size() > 0
+          && e.staffId == staffId()
+          && e.staffName is string
+          && e.at is int && e.at > 0;
+    }
+
+    function isW1CashAppend() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['cashEntries','updatedAt'])
+          && resource.data.status == 'open'
+          && request.resource.data.get('updatedAt', null) == request.time
+          && request.resource.data.get('cashEntries', null) is list
+          && request.resource.data.get('cashEntries', []).size() == shiftOldCashEntriesSize() + 1
+          && isValidNewShiftCashEntry();
+    }
+
+    // W2 — open-shift credit-debt receipt. Accepted residual (frozen, P5-A R2
+    // §11.3): single-field, increment-only; cannot bind the increment to a
+    // specific creditPayments doc. Detected — not prevented — by the Packet 5
+    // credit-debt audit dimension. Do not broaden beyond this exact shape.
+    function isW2CreditDebtReceipt() {
+      return resource.data.status == 'open'
+        && (
+          (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['expectedCash'])
+            && isFiniteNonNegAggregate(request.resource.data.expectedCash)
+            && request.resource.data.expectedCash >= resource.data.expectedCash)
+          || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['expectedKbank'])
+            && isFiniteNonNegAggregate(request.resource.data.expectedKbank)
+            && request.resource.data.expectedKbank >= resource.data.expectedKbank)
+        );
+    }
+
+    // W3 — exact one-way open→closed transition (closeShift()'s exact 16-field
+    // write, shiftService.ts:400-422). `closedAtLocal` is denied by construction
+    // (not in the allowlist); identity/open-time fields are immutable.
+    //
+    // What this rule PROVES vs. what it can NOT (corrected wording):
+    //  • `diff().affectedKeys().hasOnly([16])` constrains WHICH stored fields may
+    //    change to AT MOST the 16 close-write keys. It is NOT `hasAll`, and it
+    //    does NOT prove the client re-submitted all 16 in the update write mask.
+    //  • `request.resource.data.keys().hasAll([22 required final fields])` — on
+    //    the FINAL merged document, NOT on affectedKeys — proves the closed
+    //    document CONTAINS every required field, so a close that deletes/omits a
+    //    required field from the final doc is denied. (`hasAll` on the plain
+    //    `.keys()` map is safe; only `hasAll` on a `diff().affectedKeys()` result
+    //    triggers the spurious emulator evaluation error, so it is avoided.)
+    //  • The per-field predicates below validate the final closed-document values
+    //    (finite money envelope, int/bounded totalBills, exact closedAt/offline/
+    //    sync/deviceId, identity/open-time immutability).
+    //  • UNAVOIDABLE update-mask residual: a pre-existing, already-valid close
+    //    total (e.g. an `expectedCash` set earlier by W2) may be OMITTED from the
+    //    update and the close still passes, because the final stored value stays
+    //    present and valid. Rules see only the final document, never the update
+    //    write mask; proving "all 16 were re-submitted" would require a separately
+    //    authorized writer/schema marker, NOT `hasAll(affectedKeys)` (which is
+    //    semantically wrong here — unchanged submitted values are not affected
+    //    keys — and emulator-problematic).
+    function isW3ShiftClose() {
+      return resource.data.status == 'open'
+        && request.resource.data.status == 'closed'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status','closedAt','actualCashCount','variance','note',
+          'expectedCash','expectedQr','expectedKbank','expectedCard','expectedCredit',
+          'totalBills','payInTotal','payOutTotal','closedOffline','syncState','deviceId'
+        ])
+        && request.resource.data.closedAt == request.time
+        && request.resource.data.closedOffline == true
+        && request.resource.data.syncState == 'pending'
+        && isFiniteNonNegAggregate(request.resource.data.actualCashCount)
+        && isFiniteSignedAggregate(request.resource.data.variance)
+        && request.resource.data.note is string
+        && isFiniteNonNegAggregate(request.resource.data.expectedCash)
+        && isFiniteNonNegAggregate(request.resource.data.expectedQr)
+        && isFiniteNonNegAggregate(request.resource.data.expectedKbank)
+        && isFiniteNonNegAggregate(request.resource.data.expectedCard)
+        && isFiniteNonNegAggregate(request.resource.data.expectedCredit)
+        && isFiniteNonNegAggregate(request.resource.data.payInTotal)
+        && isFiniteNonNegAggregate(request.resource.data.payOutTotal)
+        && request.resource.data.totalBills is int
+        && request.resource.data.totalBills >= 0
+        && request.resource.data.totalBills <= shiftMaxTotalBills()
+        && request.resource.data.deviceId is string
+        // Final-state finite check on startingCash (in ADDITION to the
+        // immutability check below), so a malformed legacy/open doc cannot close
+        // into the P5-C-1 structural-refusal blind spot.
+        && isFiniteNonNegAggregate(request.resource.data.startingCash)
+        // Final-schema presence: the closed document must CONTAIN every required
+        // field (plain `.keys()`, not affectedKeys). Denies a close that deletes
+        // a required field. Extra fields (e.g. cashEntries/updatedAt from W1) are
+        // permitted — hasAll is a minimum-presence, not an exact-set, check.
+        && request.resource.data.keys().hasAll([
+          'id','branchId','staffId','staffName','status','openedAt','closedAt',
+          'startingCash','actualCashCount','expectedCash','expectedQr','expectedKbank',
+          'expectedCard','expectedCredit','totalBills','payInTotal','payOutTotal','variance','note',
+          'closedOffline','syncState','deviceId'
+        ])
+        && request.resource.data.branchId == resource.data.branchId
+        && request.resource.data.staffId == resource.data.staffId
+        && request.resource.data.startingCash == resource.data.startingCash
+        && request.resource.data.openedAt == resource.data.openedAt;
+    }
+
+    // W4 — Variant C: the sole post-close mutation (normalizeShiftCloseSyncState()).
+    function isW4SyncStateNormalization() {
+      return resource.data.status == 'closed'
+        && resource.data.syncState == 'pending'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['syncState'])
+        && request.resource.data.syncState == 'synced';
+    }
+
     function isGlobalSettingsId(settingId) {
       return settingId in ['system', 'expiryPolicies', '_rolePermissions'];
     }
@@ -517,10 +701,23 @@ service cloud.firestore {
     // ── Shifts & cash ──
     match /shifts/{shiftId} {
       allow read: if isStaff() && hasBranchAccess(resource.data.branchId);
+
+      // W0 — exact current openShift() create (Packet 5 / D4 hardening, P5-C-2).
       allow create: if isStaff()
-        && hasBranchAccess(request.resource.data.branchId);
+        && hasBranchAccess(request.resource.data.branchId)
+        && isW0ShiftOpen(shiftId);
+
+      // D4 W1–W4 — field-constrained open-shift accrual, one-way close, and the
+      // sole Variant C post-close sync-state normalization. Every other update
+      // shape (incl. closed→open and any broad post-close update) is denied.
       allow update: if isStaff()
-        && hasBranchAccess(resource.data.branchId);
+        && hasBranchAccess(resource.data.branchId)
+        && (
+          isW1CashAppend()
+          || isW2CreditDebtReceipt()
+          || isW3ShiftClose()
+          || isW4SyncStateNormalization()
+        );
       // Admin-only — used by the Danger Zone UAT reset to wipe shift history
       allow delete: if isAdmin();
     }
@@ -531,6 +728,41 @@ service cloud.firestore {
         && hasBranchAccess(request.resource.data.branchId);
       // Admin-only — used by the Danger Zone UAT reset to wipe cash history
       allow delete: if isAdmin();
+    }
+
+    // ── Packet 5 server-owned collections (P5-C-2 rules hardening) ──
+    // Atomic evidence/case/audit/alert capture (P5-C) and validation runs
+    // (P5-D) are Admin-SDK-only — the Admin SDK bypasses these rules, so no
+    // client `create`/`update`/`delete` path exists on any of the five. Reads
+    // are manager/admin, branch-scoped only (evidence/case carry sensitive
+    // drawer numbers — actualCashCount, variance, note — no cashier read),
+    // per the frozen P5-C plan §10.1, using only the existing
+    // isManagerOrAdmin()/hasBranchAccess() helpers.
+    match /shiftCloseEvidence/{evidenceId} {
+      allow read: if isManagerOrAdmin() && hasBranchAccess(resource.data.branchId);
+      allow create, update, delete: if false;
+    }
+
+    match /shiftCloseCases/{caseShiftId} {
+      allow read: if isManagerOrAdmin() && hasBranchAccess(resource.data.branchId);
+      allow create, update, delete: if false;
+    }
+
+    match /shiftCloseAuditEvents/{eventId} {
+      allow read: if isManagerOrAdmin() && hasBranchAccess(resource.data.branchId);
+      allow create, update, delete: if false;
+    }
+
+    match /shiftCloseAlerts/{alertShiftId} {
+      allow read: if isManagerOrAdmin() && hasBranchAccess(resource.data.branchId);
+      allow create, update, delete: if false;
+    }
+
+    // Not written by P5-C (P5-D worker territory) — shipped proactively so
+    // P5-D needs no separate rules change (frozen P5-C plan §10.1).
+    match /shiftCloseValidationRuns/{runId} {
+      allow read: if isManagerOrAdmin() && hasBranchAccess(resource.data.branchId);
+      allow create, update, delete: if false;
     }
 
     match /posDevices/{deviceId} {
