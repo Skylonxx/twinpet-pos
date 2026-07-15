@@ -1,19 +1,31 @@
-﻿# Twinpet POS โ€” Project Context
+# Twinpet POS โ€” Project Context
 
-> Last reconciled: 2026-07-14
-> HEAD: `798b3448afe6f87ac2e9d047c1f2a7757cad40f4` (feat(pos): add shift close validation pure core)
-> origin/main: `798b3448afe6f87ac2e9d047c1f2a7757cad40f4`
-> Implementation: `798b3448afe6f87ac2e9d047c1f2a7757cad40f4` (Packet 5 / P5-B Pure Core)
+> Last reconciled: 2026-07-15
+> HEAD: `eda82dc826022313eda8ca98fcfb84b350841cc6` (test(rules): harden shift close packet 5 rules)
+> origin/main: `eda82dc826022313eda8ca98fcfb84b350841cc6`
+> Implementation: `eda82dc826022313eda8ca98fcfb84b350841cc6` (Packet 5 / P5-C-2 Rules Hardening)
 
 ---
 
 ## Current Phase
 
-**P1 Offline / Sync Resiliency โ€” Packet 5 / P5-B Pure Core: CLOSED / COMMITTED / PUSHED** โ€” Codex R3 evidence re-review PASS; Gemini commit authorization; committed/pushed at `798b344`; docs closure this pass.
+**P1 Offline / Sync Resiliency — Packet 5 / P5-C-2 Rules Hardening: CLOSED / COMMITTED / PUSHED** — Codex remediation re-review PASS WITH NOTES; Gemini commit/push AUTHORIZED; committed/pushed at `eda82dc`; docs closure this pass.
 
 Manual workflow remains active. `agentchattr` was not used as the executor for this phase.
 
-**Repository baseline:** branch `main`, HEAD/origin `798b344`, working tree **clean**, staged **empty**, `stash@{0}` present and untouched.
+**Repository baseline:** branch `main`, HEAD/origin `eda82dc`, working tree **clean**, staged **empty**, `stash@{0}` present and untouched.
+
+### P1 Packet 5 / P5-C-2 Rules Hardening (CLOSED — COMMITTED — PUSHED)
+
+**Status:** **CLOSED / COMMITTED / PUSHED** at `eda82dc826022313eda8ca98fcfb84b350841cc6` (`test(rules): harden shift close packet 5 rules`). Finite-money envelope helpers for W0/W2/W3 shift-close rules; focused rules test suite. Codex remediation re-review PASS WITH NOTES; Gemini commit/push AUTHORIZED.
+
+**Delivered:** `firestore.rules`, `rules-tests/shift-close-p5c.spec.ts`
+
+**Test evidence:** `npm run test:rules` 277/277 PASS; `git diff --check` clean.
+
+**Boundaries:** no live rules deployment; no runtime activation; no P5-C-1; no P5-D/P5-E; no recapture callable; no `shifts.expected*` mutation beyond frozen residual/close semantics.
+
+**Commit report:** `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Developer\twinpet-p1-offline-sync-packet-5-p5-c-2-rules-commit-push-report.md`
 
 ### P1 Packet 5 / P5-B Pure Core (CLOSED โ€” COMMITTED โ€” PUSHED)
 
@@ -119,7 +131,8 @@ Non-blocking this-terminal pending-sync warning; close remains enabled.
 
 ### Prior closed packets
 
-- **Packet 5 / P5-B Pure Core** โ€” `798b344` (CLOSED โ€” pure server-owned validation core)
+- **Packet 5 / P5-C-2 Rules Hardening** — `eda82dc` (CLOSED — rules committed/pushed; live deployment NOT performed)
+- **Packet 5 / P5-B Pure Core** — `798b344` (CLOSED — pure server-owned validation core)
 - **Packet 7C-B2** โ€” `3ef5fed` (CLOSED โ€” post-push UAT PASS WITH NOTES)
 - **Packet 7C-B1** โ€” `1e41b0e` (CLOSED; superseded for reliability by 7C-B2 `3ef5fed`)
 - **Packet 7C-A** โ€” `34a3d24` (superseded by 7C-B1's optimistic close path)
@@ -128,10 +141,11 @@ Non-blocking this-terminal pending-sync warning; close remains enabled.
 
 ### Deferred / next gate
 
-1. **Packet 5 / P5-B Pure Core CLOSED** โ€” implementation `798b344`; docs closure this pass
-2. **P5-C** โ€” strict read-only architecture/planning only after docs closure; **no implementation** until separate Gemini authorization
-3. **P5-D / P5-E** โ€” not authorized
-4. Awaiting Codex review of P5-C plan or Gemini P5-C implementation authorization after review
+1. **Packet 5 / P5-C-2 Rules Hardening CLOSED** — code `eda82dc`; docs closure this pass
+2. **Live rules deployment** — NOT performed; NOT authorized; prerequisite before P5-C-1 trigger activation
+3. **P5-C-1 functions** — NOT authorized until rules-live sequencing decision
+4. **P5-D / P5-E / recapture callable** — not authorized
+5. Next gate: Gemini/Owner authorization for **P5-C-2 live rules deployment verification gate**
 
 ### Future Phase โ€” True Standalone (Desktop & Native Mobile) (`TRUE-STANDALONE`)
 

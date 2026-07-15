@@ -1,57 +1,47 @@
-# Latest Report — P1 Offline / Sync Packet 5 / P5-B Pure Core (CLOSED / COMMITTED / PUSHED)
+# Latest Report — P1 Offline / Sync Packet 5 / P5-C-2 Rules Hardening (CLOSED / COMMITTED / PUSHED)
 
-> Date: 2026-07-14
-> HEAD: `798b3448afe6f87ac2e9d047c1f2a7757cad40f4`
-> origin/main: `798b3448afe6f87ac2e9d047c1f2a7757cad40f4`
-> Status: **PACKET 5 / P5-B PURE CORE CLOSED / COMMITTED / PUSHED** (`798b344` — `feat(pos): add shift close validation pure core`) — Codex R3 evidence PASS; Gemini AUTHORIZED; committed/pushed; docs closure this pass
+> Date: 2026-07-15
+> HEAD: `eda82dc826022313eda8ca98fcfb84b350841cc6`
+> origin/main: `eda82dc826022313eda8ca98fcfb84b350841cc6`
+> Status: **PACKET 5 / P5-C-2 RULES HARDENING CLOSED / COMMITTED / PUSHED** (`eda82dc` — `test(rules): harden shift close packet 5 rules`) — Codex PASS WITH NOTES; Gemini AUTHORIZED; committed/pushed; docs closure this pass
 
 ---
 
 ## Closure
 
-Committed and pushed at `798b3448afe6f87ac2e9d047c1f2a7757cad40f4` (fast-forward `12ab80b..798b344`). Commit report: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Developer\twinpet-p1-offline-sync-packet-5-p5-b-pure-core-commit-report.md`.
+Committed and pushed at `eda82dc826022313eda8ca98fcfb84b350841cc6` (fast-forward `4113133..eda82dc`). Commit report: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Developer\twinpet-p1-offline-sync-packet-5-p5-c-2-rules-commit-push-report.md`.
 
 ---
 
 ## Summary
 
-Packet 5 / P5-B Pure Core delivers a pure server-owned shift close validation core in `functions/src/*` — exactly 11 files. Canonical manifest encoding, deterministic hash, state machine, and cash-pair validation. No Firestore reads/writes, no Cloud Function triggers, no `functions/src/index.ts` wiring. Codex R3 evidence re-review PASS; Gemini commit/push AUTHORIZED.
+Packet 5 / P5-C-2 Rules Hardening delivers finite-money envelope helpers and W0/W2/W3 shift-close rules hardening in `firestore.rules`, plus focused tests in `rules-tests/shift-close-p5c.spec.ts`. Codex remediation re-review PASS WITH NOTES; Gemini commit/push AUTHORIZED.
 
 ## Implementation
 
 | Field | Value |
 |-------|-------|
-| Package | 11 exact `functions/src/*` files |
-| Modules | `shiftCloseValidationTypes`, `Core`, `Hash`, `State`, `CashPairs`, `Manifest` + 5 test files |
-| Runtime | **None** — pure functions only |
-| Client | **Not touched** — no `src/*`, no `src/lib/pos/offline/*` |
-| Rules/Indexes | **Not touched** — `firestore.rules`, `firestore.indexes.json` unchanged |
-| Wiring | **Not touched** — `functions/src/index.ts` unchanged |
-| `shifts.expected*` | **No mutation path** |
+| Files | `firestore.rules`, `rules-tests/shift-close-p5c.spec.ts` |
+| Scope | Finite-money W0/W2/W3; W3 final-schema presence; malicious-value tests |
+| Live deployment | **NOT performed / NOT authorized** |
+| Runtime activation | **NOT performed / NOT authorized** |
+| P5-C-1 | **NOT authorized** |
 
 ## Tests
 
 | Suite | Result |
 |---|---|
-| `shiftCloseValidationManifest.test.ts` | 49/49 passing |
-| functions full vitest | 258/258 passing |
-| functions `tsc --noEmit` | clean |
-| root vitest `--config vitest.config.ts` | 1187/1187 passing |
+| `npm run test:rules` | 277/277 passing (8 files) |
 | `git diff --check` | clean |
-| explicit whitespace/conflict scan (11 files) | clean — 0 issues |
 
 ## Boundaries
 
-No client POS bundle. No `src/lib/pos/offline/*`. No `firestore.rules` / `firestore.indexes.json`. No `functions/src/index.ts`. No runtime triggers/workers/writes. No `shifts.expected*` mutation.
-
-## Unauthorized (remaining)
-
-P5-C atomic capture runtime, P5-D sweep worker, P5-E adjudication UI, broad Packet 5 runtime, rules/index changes, runtime wiring.
+No live rules deployment. No runtime trigger activation. No P5-C-1 functions. No P5-D/P5-E. No recapture callable. No `shifts.expected*` mutation beyond frozen residual/close semantics.
 
 ## Red Zones
 
-Untouched: `src/**`, `src/lib/pos/offline/**`, `firestore.rules`, `firestore.indexes.json`, `functions/src/index.ts`, `PaymentModal.*`, checkout/Sale Intent Journal write paths. `stash@{0}` present and untouched.
+Untouched in docs closure: `functions/src/**`, `src/**`, `firestore.indexes.json`, `package.json`. `stash@{0}` present and untouched.
 
 ## Next Gate
 
-Packet 5 / P5-B **CLOSED / COMMITTED / PUSHED** (`798b344`); docs closed this pass. P5-C strict read-only architecture/planning — conditional after docs closure. Codex review of P5-C plan or Gemini P5-C implementation authorization after review.
+P5-C-2 rules **code-closed and docs-closed**. Gemini/Owner authorization for **P5-C-2 live rules deployment verification gate**. P5-C-1 functions remain unauthorized until rules-live sequencing is handled. Runtime trigger activation must not occur before P5-C-2 rules are verified live.
