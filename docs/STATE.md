@@ -6,19 +6,19 @@
 |-------|-------|
 | Repo root | `C:/Users/Narachat/twinpet-pos` |
 | Branch | `main` |
-| HEAD | `eda82dc826022313eda8ca98fcfb84b350841cc6` |
-| origin/main | `eda82dc826022313eda8ca98fcfb84b350841cc6` |
-| Ahead/behind | `0 / 0` |
+| HEAD | `f5b697a58dd57aae547c7cf24abe551321349cc5` |
+| origin/main | `f5b697a58dd57aae547c7cf24abe551321349cc5` |
+| Ahead/behind | `0 / 0` (pre-docs-closure commit) |
 
 ## Current Phase
 
-    PACKET_5_P5_C_2_RULES_HARDENING_CLOSED
-    Packet 5 / P5-C-2 Rules Hardening CLOSED (impl eda82dc) — live deployment NOT performed; P5-C-1 unauthorized
+    PACKET_5_P5_C_ATOMIC_CAPTURE_CLOSED
+    P5-C Atomic Evidence + Case Capture CLOSED — P5-C-1 live + P5-C-2 rules live; docs closure this pass
 
 ## Working Tree
 
-- HEAD `eda82dc` (P5-C-2 rules); docs closure this pass
-- Working tree **clean**
+- HEAD `f5b697a` (P5-C-1 Functions); docs closure this pass
+- Working tree **clean** (pre-edit)
 - Staging: **empty**
 
 ## Stash
@@ -27,62 +27,55 @@
 
 **Do NOT touch stash@{0}.**
 
-## P1 Packet 5 / P5-C-2 Rules Hardening
+## P1 Packet 5 / P5-C Atomic Evidence + Case Capture
 
 | Field | Value |
 |-------|-------|
-| Status | **CLOSED / COMMITTED / PUSHED** (`eda82dc` — `test(rules): harden shift close packet 5 rules`) — Codex PASS WITH NOTES; Gemini AUTHORIZED; committed/pushed; docs closure this pass |
-| Scope | `firestore.rules` + `rules-tests/shift-close-p5c.spec.ts` |
-| Tests | `npm run test:rules` 277/277 PASS |
-| Live deployment | **NOT performed / NOT authorized** |
-| Runtime activation | **NOT performed / NOT authorized** |
-| Unauthorized | P5-C-1 functions, P5-D/P5-E, recapture callable, `shifts.expected*` mutation |
+| Status | **CLOSED / COMMITTED / PUSHED / LIVE** |
+| P5-C-1 commit | `f5b697a` — `feat(pos): add atomic shift close evidence capture` |
+| P5-C-1 live function | `shiftCloseEvidenceCapture` — ACTIVE, `asia-southeast1`, `pos-db`, `shifts/{shiftId}`, `retry: true` |
+| P5-C-1 deploy command | `firebase deploy --only functions:shiftCloseEvidenceCapture --project twinpet-pos --force` |
+| P5-C-2 rules | `eda82dc` committed/pushed; live rules verification PASS (`twinpet-pos` / `pos-db`) |
+| Codex | PASS WITH NOTES; 0 blocking findings |
+| Production mutation | **None** — no synthetic shift-close event |
+| Unauthorized | P5-D, P5-E, recapture callable, `shifts.expected*` mutation |
 
 ## P1 Packet 5 / P5-B Pure Core
 
 | Field | Value |
 |-------|-------|
-| Status | **CLOSED / COMMITTED / PUSHED** (`798b344`) |
+| Status | **CLOSED** (`798b344`) |
 
-## P1 Packet 7C-B2 / 7C-B1 / 7C-A / 7A / Packet 8 / Packet 6 / 3B-* / 3A-*
+## P1 Packet 5 / P5-C-2 Rules Hardening
+
+| Field | Value |
+|-------|-------|
+| Status | **CLOSED / LIVE** (`eda82dc`) |
+
+## P1 Packet 7C-B2 / prior packets
 
 All **CLOSED / PUSHED**.
-
-## UI-11 Packet 1 / UI-10-C / UI-10-B / UI-10-A
-
-All **CLOSED / PUSHED**.
-
-## Future Phase — True Standalone (`TRUE-STANDALONE`)
-
-**FUTURE / NOT STARTED / NOT AUTHORIZED**
-
-## UI-10-D / UI-11 Packet 2
-
-**NOT STARTED**
 
 ## Recent Completed Work
 
 | Hash | Message |
 |------|---------|
-| `eda82dc` | test(rules): harden shift close packet 5 rules — **P1 PACKET 5 / P5-C-2 RULES HARDENING CLOSED** |
-| `4113133` | docs: close packet 5 p5-b pure core |
-| `798b344` | feat(pos): add shift close validation pure core — **P5-B PURE CORE** |
-| `3ef5fed` | feat(pos): reconcile offline shift close intents — **P1 PACKET 7C-B2** |
+| `f5b697a` | feat(pos): add atomic shift close evidence capture — **P5-C-1 LIVE** |
+| `eda82dc` | test(rules): harden shift close packet 5 rules — **P5-C-2 LIVE** |
+| `62bcdad` | docs: close packet 5 p5-c-2 rules hardening |
+| `798b344` | feat(pos): add shift close validation pure core — **P5-B** |
 
 ## Next Recommended Block
 
-    P5_C_2_LIVE_RULES_DEPLOYMENT_VERIFICATION_NEXT
+    OWNER_GEMINI_ROADMAP_OR_PACKET_DECISION
 
-1. Packet 5 / P5-C-2 Rules Hardening CLOSED (impl `eda82dc`, docs closure this pass)
-2. Live rules deployment — NOT performed; NOT authorized; prerequisite before P5-C-1
-3. Gemini/Owner authorization for P5-C-2 live rules deployment verification gate
-4. P5-C-1 functions — NOT authorized until rules-live sequencing decision
+1. P5-C CLOSED (P5-C-1 live + P5-C-2 rules live; docs closure this pass)
+2. P5-D/P5-E — NOT authorized
+3. Separate Owner/Gemini roadmap or packet authorization required — do not auto-start
 
 ## Hard Boundaries
 
-- P5-C-2 rules committed/pushed at `eda82dc`; no live deployment in this gate
-- No runtime trigger activation
-- No P5-C-1 implementation
-- No P5-D/P5-E / recapture callable
-- No `shifts.expected*` mutation/recompute/write-back beyond frozen residual/close semantics
-- PaymentModal W-12 note deferred
+- No production test mutation performed during deployment verification
+- No `shifts.expected*` mutation
+- P5-D/P5-E/recapture callable NOT authorized
+- PaymentModal W-12 deferred

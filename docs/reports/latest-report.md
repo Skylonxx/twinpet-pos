@@ -1,47 +1,57 @@
-# Latest Report — P1 Offline / Sync Packet 5 / P5-C-2 Rules Hardening (CLOSED / COMMITTED / PUSHED)
+# Latest Report — P1 Offline / Sync Packet 5 / P5-C Atomic Evidence + Case Capture (CLOSED / LIVE)
 
 > Date: 2026-07-15
-> HEAD: `eda82dc826022313eda8ca98fcfb84b350841cc6`
-> origin/main: `eda82dc826022313eda8ca98fcfb84b350841cc6`
-> Status: **PACKET 5 / P5-C-2 RULES HARDENING CLOSED / COMMITTED / PUSHED** (`eda82dc` — `test(rules): harden shift close packet 5 rules`) — Codex PASS WITH NOTES; Gemini AUTHORIZED; committed/pushed; docs closure this pass
+> HEAD (code): `f5b697a58dd57aae547c7cf24abe551321349cc5`
+> Status: **PACKET 5 / P5-C CLOSED / COMMITTED / PUSHED / LIVE**
 
 ---
 
 ## Closure
 
-Committed and pushed at `eda82dc826022313eda8ca98fcfb84b350841cc6` (fast-forward `4113133..eda82dc`). Commit report: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Developer\twinpet-p1-offline-sync-packet-5-p5-c-2-rules-commit-push-report.md`.
+P5-C Atomic Evidence + Case Capture is closed because both components are verified live:
+
+- **P5-C-1 Functions** — commit `f5b697a`; function `shiftCloseEvidenceCapture` deployed and ACTIVE
+- **P5-C-2 Rules** — commit `eda82dc`; live Firestore rules verification PASS
 
 ---
 
-## Summary
-
-Packet 5 / P5-C-2 Rules Hardening delivers finite-money envelope helpers and W0/W2/W3 shift-close rules hardening in `firestore.rules`, plus focused tests in `rules-tests/shift-close-p5c.spec.ts`. Codex remediation re-review PASS WITH NOTES; Gemini commit/push AUTHORIZED.
-
-## Implementation
+## P5-C-1 Code
 
 | Field | Value |
 |-------|-------|
-| Files | `firestore.rules`, `rules-tests/shift-close-p5c.spec.ts` |
-| Scope | Finite-money W0/W2/W3; W3 final-schema presence; malicious-value tests |
-| Live deployment | **NOT performed / NOT authorized** |
-| Runtime activation | **NOT performed / NOT authorized** |
-| P5-C-1 | **NOT authorized** |
+| Commit | `f5b697a58dd57aae547c7cf24abe551321349cc5` |
+| Message | `feat(pos): add atomic shift close evidence capture` |
+| Codex | PASS WITH NOTES; 0 blocking findings |
 
-## Tests
+## P5-C-1 Live Deployment
 
-| Suite | Result |
-|---|---|
-| `npm run test:rules` | 277/277 passing (8 files) |
-| `git diff --check` | clean |
+| Field | Value |
+|-------|-------|
+| Project | `twinpet-pos` |
+| Function | `shiftCloseEvidenceCapture` |
+| Region | `asia-southeast1` |
+| Database | `pos-db` |
+| Trigger | `shifts/{shiftId}` |
+| Retry | `true` (verified) |
+| State | `ACTIVE` |
+| Command | `firebase deploy --only functions:shiftCloseEvidenceCapture --project twinpet-pos --force` |
+| Result | Deploy complete — Successful create operation |
+
+## P5-C-2 Rules
+
+| Field | Value |
+|-------|-------|
+| Commit | `eda82dc` |
+| Live rules verification | PASS (`twinpet-pos` / `pos-db`) |
 
 ## Boundaries
 
-No live rules deployment. No runtime trigger activation. No P5-C-1 functions. No P5-D/P5-E. No recapture callable. No `shifts.expected*` mutation beyond frozen residual/close semantics.
+No production test mutation. No synthetic shift-close event. No `shifts.expected*` mutation. Only `shiftCloseEvidenceCapture` was deployed in this gate.
 
-## Red Zones
+## Unauthorized (remaining)
 
-Untouched in docs closure: `functions/src/**`, `src/**`, `firestore.indexes.json`, `package.json`. `stash@{0}` present and untouched.
+P5-D sweep worker, P5-E adjudication UI, recapture callable — all NOT authorized.
 
 ## Next Gate
 
-P5-C-2 rules **code-closed and docs-closed**. Gemini/Owner authorization for **P5-C-2 live rules deployment verification gate**. P5-C-1 functions remain unauthorized until rules-live sequencing is handled. Runtime trigger activation must not occur before P5-C-2 rules are verified live.
+Separate Owner/Gemini roadmap or packet authorization decision. Do not automatically start P5-D/P5-E.

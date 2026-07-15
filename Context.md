@@ -1,31 +1,31 @@
 # Twinpet POS โ€” Project Context
 
 > Last reconciled: 2026-07-15
-> HEAD: `eda82dc826022313eda8ca98fcfb84b350841cc6` (test(rules): harden shift close packet 5 rules)
-> origin/main: `eda82dc826022313eda8ca98fcfb84b350841cc6`
-> Implementation: `eda82dc826022313eda8ca98fcfb84b350841cc6` (Packet 5 / P5-C-2 Rules Hardening)
+> HEAD: `f5b697a58dd57aae547c7cf24abe551321349cc5` (feat(pos): add atomic shift close evidence capture)
+> origin/main: `f5b697a58dd57aae547c7cf24abe551321349cc5`
+> Implementation: `f5b697a58dd57aae547c7cf24abe551321349cc5` (Packet 5 / P5-C Atomic Capture)
 
 ---
 
 ## Current Phase
 
-**P1 Offline / Sync Resiliency — Packet 5 / P5-C-2 Rules Hardening: CLOSED / COMMITTED / PUSHED** — Codex remediation re-review PASS WITH NOTES; Gemini commit/push AUTHORIZED; committed/pushed at `eda82dc`; docs closure this pass.
+**P1 Offline / Sync Resiliency — Packet 5 / P5-C Atomic Evidence + Case Capture: CLOSED / COMMITTED / PUSHED / LIVE** — P5-C-1 Functions live + P5-C-2 Rules live; docs closure this pass.
 
 Manual workflow remains active. `agentchattr` was not used as the executor for this phase.
 
-**Repository baseline:** branch `main`, HEAD/origin `eda82dc`, working tree **clean**, staged **empty**, `stash@{0}` present and untouched.
+**Repository baseline:** branch `main`, HEAD/origin `f5b697a`, working tree **clean**, staged **empty**, `stash@{0}` present and untouched.
 
-### P1 Packet 5 / P5-C-2 Rules Hardening (CLOSED — COMMITTED — PUSHED)
+### P1 Packet 5 / P5-C Atomic Evidence + Case Capture (CLOSED — LIVE)
 
-**Status:** **CLOSED / COMMITTED / PUSHED** at `eda82dc826022313eda8ca98fcfb84b350841cc6` (`test(rules): harden shift close packet 5 rules`). Finite-money envelope helpers for W0/W2/W3 shift-close rules; focused rules test suite. Codex remediation re-review PASS WITH NOTES; Gemini commit/push AUTHORIZED.
+**Status:** **CLOSED** — both P5-C-1 (Functions) and P5-C-2 (Rules) verified live.
 
-**Delivered:** `firestore.rules`, `rules-tests/shift-close-p5c.spec.ts`
+**P5-C-1 Functions** — commit `f5b697a` (`feat(pos): add atomic shift close evidence capture`); Codex PASS WITH NOTES (0 blocking). Live: `shiftCloseEvidenceCapture` ACTIVE on `twinpet-pos`, region `asia-southeast1`, database `pos-db`, trigger `shifts/{shiftId}`, retry enabled. Deploy: `firebase deploy --only functions:shiftCloseEvidenceCapture --project twinpet-pos --force`.
 
-**Test evidence:** `npm run test:rules` 277/277 PASS; `git diff --check` clean.
+**P5-C-2 Rules** — commit `eda82dc`; live Firestore rules verification PASS (`twinpet-pos` / `pos-db`).
 
-**Boundaries:** no live rules deployment; no runtime activation; no P5-C-1; no P5-D/P5-E; no recapture callable; no `shifts.expected*` mutation beyond frozen residual/close semantics.
+**Boundaries:** no production test mutation; no synthetic shift-close event; no `shifts.expected*` mutation; P5-D/P5-E unauthorized; recapture callable unauthorized.
 
-**Commit report:** `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Developer\twinpet-p1-offline-sync-packet-5-p5-c-2-rules-commit-push-report.md`
+**Deployment report:** `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Developer\twinpet-p1-offline-sync-packet-5-p5-c-1-functions-deployment-verification-report.md`
 
 ### P1 Packet 5 / P5-B Pure Core (CLOSED โ€” COMMITTED โ€” PUSHED)
 
@@ -131,6 +131,7 @@ Non-blocking this-terminal pending-sync warning; close remains enabled.
 
 ### Prior closed packets
 
+- **Packet 5 / P5-C Atomic Capture** — `f5b697a` + `eda82dc` (CLOSED — P5-C-1 live + P5-C-2 rules live)
 - **Packet 5 / P5-C-2 Rules Hardening** — `eda82dc` (CLOSED — rules committed/pushed; live deployment NOT performed)
 - **Packet 5 / P5-B Pure Core** — `798b344` (CLOSED — pure server-owned validation core)
 - **Packet 7C-B2** โ€” `3ef5fed` (CLOSED โ€” post-push UAT PASS WITH NOTES)
@@ -141,11 +142,10 @@ Non-blocking this-terminal pending-sync warning; close remains enabled.
 
 ### Deferred / next gate
 
-1. **Packet 5 / P5-C-2 Rules Hardening CLOSED** — code `eda82dc`; docs closure this pass
-2. **Live rules deployment** — NOT performed; NOT authorized; prerequisite before P5-C-1 trigger activation
-3. **P5-C-1 functions** — NOT authorized until rules-live sequencing decision
-4. **P5-D / P5-E / recapture callable** — not authorized
-5. Next gate: Gemini/Owner authorization for **P5-C-2 live rules deployment verification gate**
+1. **Packet 5 / P5-C Atomic Capture CLOSED** — P5-C-1 live + P5-C-2 rules live; docs closure this pass
+2. **P5-D / P5-E** — NOT authorized; requires separate Owner/Gemini roadmap or packet authorization
+3. **Recapture callable** — NOT authorized
+4. Do not automatically start another packet
 
 ### Future Phase โ€” True Standalone (Desktop & Native Mobile) (`TRUE-STANDALONE`)
 

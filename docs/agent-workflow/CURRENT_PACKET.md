@@ -2,41 +2,43 @@
 
 ## Phase
 
-**Docs closure — P1 Offline / Sync Packet 5 / P5-C-2 Rules Hardening (TWINPET-P1-OFFLINE-SYNC-PACKET-5-P5-C-2-DOCS-CLOSURE-COMMIT-PUSH-CLAUDE-001). Committed/pushed at `eda82dc`; docs closed this pass.**
+**Docs closure — P1 Offline / Sync Packet 5 / P5-C Atomic Evidence + Case Capture. P5-C-1 live at `f5b697a`; docs closed this pass.**
 
-## This packet — Packet 5 / P5-C-2 Rules Hardening
+## This packet — Packet 5 / P5-C Atomic Evidence + Case Capture
 
-**Status: CLOSED / COMMITTED / PUSHED** (`eda82dc` — `test(rules): harden shift close packet 5 rules`) — Codex remediation re-review PASS WITH NOTES; Gemini commit/push AUTHORIZED; committed/pushed; docs closure this pass.
+**Status: CLOSED / COMMITTED / PUSHED / LIVE**
 
-- `firestore.rules` — finite-money envelope helpers; W0/W2/W3 hardening; W3 final-schema presence
-- `rules-tests/shift-close-p5c.spec.ts` — focused rules tests (malicious values, arrayUnion, update-mask residual)
-- Validation: `npm run test:rules` 277/277 PASS; `git diff --check` clean
-- **Live rules deployment: NOT performed / NOT authorized**
-- **Runtime activation: NOT performed / NOT authorized**
-- P5-C-1 functions — **NOT authorized**
+### P5-C-1 Functions (`f5b697a`)
+
+- `shiftCloseEvidenceCapture` deployed live to `twinpet-pos`
+- Region: `asia-southeast1`; database: `pos-db`; trigger: `shifts/{shiftId}`; retry: true; state: ACTIVE
+- Deploy: `firebase deploy --only functions:shiftCloseEvidenceCapture --project twinpet-pos --force`
+- Codex: PASS WITH NOTES; 0 blocking findings
+- No production test mutation; no synthetic shift-close event
+
+### P5-C-2 Rules (`eda82dc`)
+
+- Rules committed/pushed; live Firestore rules verification PASS (`twinpet-pos` / `pos-db`)
 
 ## Last closed implementation packet
 
-**P1 Offline / Sync Resiliency — Packet 5 / P5-C-2 Rules Hardening** — CLOSED / COMMITTED / PUSHED.
+**P1 Packet 5 / P5-C Atomic Evidence + Case Capture** — CLOSED because both P5-C-1 (live) and P5-C-2 (live rules) are verified.
 
 | Field | Value |
 |-------|-------|
-| Commit | `eda82dc826022313eda8ca98fcfb84b350841cc6` |
-| Message | `test(rules): harden shift close packet 5 rules` |
-| Report | `...\Developer\twinpet-p1-offline-sync-packet-5-p5-c-2-rules-commit-push-report.md` |
+| P5-C-1 commit | `f5b697a58dd57aae547c7cf24abe551321349cc5` |
+| Deployment report | `...\Developer\twinpet-p1-offline-sync-packet-5-p5-c-1-functions-deployment-verification-report.md` |
 
 ## Prior closed packets
 
-- **Packet 5 / P5-B Pure Core** — `798b344`
+- **P5-B Pure Core** — `798b344`
+- **P5-C-2 Rules** — `eda82dc` (live)
 - **Packet 7C-B2** — `3ef5fed`
-- **Packet 7C-B1** — `1e41b0e`
-- **Packet 7C-A** — `34a3d24`
-- **Packet 7A** — `cb2e9ef` + docs `74a84c3`
 
-## Current HEAD
+## Current HEAD (code)
 
-`eda82dc826022313eda8ca98fcfb84b350841cc6` (verified; P5-C-2 rules committed/pushed; docs closed this pass)
+`f5b697a58dd57aae547c7cf24abe551321349cc5`
 
 ## Next gate
 
-Gemini/Owner authorization for **P5-C-2 live rules deployment verification gate**. P5-C-1 remains unauthorized until rules-live sequencing is handled.
+Separate Owner/Gemini roadmap or packet authorization decision. P5-D/P5-E NOT authorized. Do not auto-start another packet.
