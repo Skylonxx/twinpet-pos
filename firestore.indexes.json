@@ -130,6 +130,54 @@
         { "fieldPath": "deletedAt", "order": "ASCENDING" },
         { "fieldPath": "name", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "asyncOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "branchId", "order": "ASCENDING" },
+        { "fieldPath": "shiftId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "orders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "branchId", "order": "ASCENDING" },
+        { "fieldPath": "shiftId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "cashTransactions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "branchId", "order": "ASCENDING" },
+        { "fieldPath": "shiftId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "shiftCloseCases",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "pendingRevalidation", "order": "ASCENDING" },
+        { "fieldPath": "nextEligibleAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "shiftCloseCases",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sweepEligible", "order": "ASCENDING" },
+        { "fieldPath": "nextEligibleAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "shiftCloseCases",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "processingState", "order": "ASCENDING" },
+        { "fieldPath": "leaseExpiry", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": [

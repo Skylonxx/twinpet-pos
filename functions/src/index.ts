@@ -34,6 +34,15 @@ export { resolveReversal } from './resolveReversal';
 // verified live in the target project/database — see functions/package.json.
 export { shiftCloseEvidenceCapture } from './shiftCloseEvidenceCapture';
 
+// P1 offline-sync Packet 5 / P5-D-1: scheduled validation worker + routine
+// sweep. Converts captured shiftCloseCases into provisional validation
+// verdicts (shiftCloseValidationRuns), owns the selected*/processingState/
+// settlementState/alertState case projections. Never reads or writes
+// `shifts`. Activation (deploy) is gated behind the six P5-D-1 composite
+// indexes being live in the target project/database — see
+// functions/package.json / firestore.indexes.json.
+export { shiftCloseValidationSweep } from './shiftCloseValidationWorker';
+
 type UserRole = 'admin' | 'manager' | 'staff';
 
 // Fallback mirror of the client DEFAULT_ROLE_PERMS (src/lib/staffManagement/types.ts).
