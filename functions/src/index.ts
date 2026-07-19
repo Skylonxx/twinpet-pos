@@ -56,6 +56,14 @@ export {
   shiftCloseSourceEventCreditPayments,
 } from './shiftCloseSourceEvents';
 
+// P1 offline-sync Packet 5 / P5-E: manager/admin ADJUDICATION callable for an
+// existing shift-close alert (open->acknowledged, open|acknowledged->resolved).
+// Server-authoritative: verified claim + branch access + case-version CAS +
+// idempotent commandId; refuses on a live P5-D worker lease (Gemini Lease
+// Option 1); D5 Option C — optional transient `pin`, never verified/stored
+// this packet. Never reads/writes `shifts`.
+export { resolveShiftCloseAlert } from './resolveShiftCloseAlert';
+
 type UserRole = 'admin' | 'manager' | 'staff';
 
 // Fallback mirror of the client DEFAULT_ROLE_PERMS (src/lib/staffManagement/types.ts).
