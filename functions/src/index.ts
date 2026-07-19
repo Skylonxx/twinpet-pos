@@ -43,6 +43,19 @@ export { shiftCloseEvidenceCapture } from './shiftCloseEvidenceCapture';
 // functions/package.json / firestore.indexes.json.
 export { shiftCloseValidationSweep } from './shiftCloseValidationWorker';
 
+// P1 offline-sync Packet 5 / P5-D-2: four low-latency source-event routing
+// triggers (asyncOrders/orders/cashTransactions/creditPayments) that mark
+// shiftCloseCases as pendingRevalidation/queued so the P5-D-1 sweep picks
+// them up sooner. Never validates inline, never writes evidence/run/audit/
+// alert/cursor docs, never reads or writes `shifts`. Activation (deploy) is
+// gated behind Codex implementation review — see functions/package.json.
+export {
+  shiftCloseSourceEventAsyncOrders,
+  shiftCloseSourceEventOrders,
+  shiftCloseSourceEventCashTransactions,
+  shiftCloseSourceEventCreditPayments,
+} from './shiftCloseSourceEvents';
+
 type UserRole = 'admin' | 'manager' | 'staff';
 
 // Fallback mirror of the client DEFAULT_ROLE_PERMS (src/lib/staffManagement/types.ts).
