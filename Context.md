@@ -1,19 +1,19 @@
 # Twinpet POS โ€” Project Context
 
-> Last reconciled: 2026-07-15
-> HEAD: `f5b697a58dd57aae547c7cf24abe551321349cc5` (feat(pos): add atomic shift close evidence capture)
-> origin/main: `f5b697a58dd57aae547c7cf24abe551321349cc5`
-> Implementation: `f5b697a58dd57aae547c7cf24abe551321349cc5` (Packet 5 / P5-C Atomic Capture)
+> Last reconciled: 2026-07-19
+> HEAD: `7976e3eea64623961f1189b4f1acb91e9efce486` (feat(pos): add shift close source event routing)
+> origin/main: `7976e3eea64623961f1189b4f1acb91e9efce486`
+> Implementation: `7976e3eea64623961f1189b4f1acb91e9efce486` (Packet 5 / P5-D Deployment — P5-D-1 sweep + P5-D-2 routing live)
 
 ---
 
 ## Current Phase
 
-**P1 Offline / Sync Resiliency — Packet 5 / P5-C Atomic Evidence + Case Capture: CLOSED / COMMITTED / PUSHED / LIVE** — P5-C-1 Functions live + P5-C-2 Rules live; docs closure this pass.
+**P1 Offline / Sync Resiliency — Packet 5 / P5-D Deployment: `PACKET_5_P5_D_CLOSED`** — P5-D = P5-D-1 (validation worker sweep) + P5-D-2 (source event routing) only; no P5-D-3. Both subpackets committed, pushed, and live on `twinpet-pos` / `asia-southeast1` / `pos-db`. P5-C-1 Functions, P5-C-2 Rules, P5-D-1 sweep, and P5-D-2 routing are all live. Docs closure this pass reconciles the trackers to production.
 
 Manual workflow remains active. `agentchattr` was not used as the executor for this phase.
 
-**Repository baseline:** branch `main`, HEAD/origin `f5b697a`, working tree **clean**, staged **empty**, `stash@{0}` present and untouched.
+**Repository baseline:** branch `main`, HEAD/origin `7976e3e`, working tree **clean**, staged **empty**, `stash@{0}` present and untouched (`7d03cfec7ba52ff7e25b7e175ca190efc258d874`).
 
 ### P1 Packet 5 / P5-C Atomic Evidence + Case Capture (CLOSED — LIVE)
 
@@ -26,6 +26,27 @@ Manual workflow remains active. `agentchattr` was not used as the executor for t
 **Boundaries:** no production test mutation; no synthetic shift-close event; no `shifts.expected*` mutation; P5-D/P5-E unauthorized; recapture callable unauthorized.
 
 **Deployment report:** `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Developer\twinpet-p1-offline-sync-packet-5-p5-c-1-functions-deployment-verification-report.md`
+
+### P1 Packet 5 / P5-D Deployment (CLOSED — COMMITTED — PUSHED — LIVE)
+
+**Status:** **`PACKET_5_P5_D_CLOSED`** — P5-D = P5-D-1 + P5-D-2 only; **no P5-D-3**. Both subpackets committed, pushed, and live.
+
+**P5-D-1 Validation Worker Sweep** — commit `4adb1d599e1d89f74cd581b77011e6f2f53b4220` (`feat(pos): add shift close validation worker sweep`). Live function `shiftCloseValidationSweep` on `twinpet-pos`, region `asia-southeast1`, database `pos-db`, schedule `every 60 minutes`. Composite indexes: **6/6 READY** on `pos-db`. Observation: a natural no-work invocation was observed with `casesProcessed: 0`. **Note:** a non-empty sweep has not yet been observed.
+
+**P5-D-2 Source Event Routing** — commit `7976e3eea64623961f1189b4f1acb91e9efce486` (`feat(pos): add shift close source event routing`). Live functions on `twinpet-pos`, region `asia-southeast1`, database `pos-db`, all v2 `onDocumentWritten` with `retry: true`:
+
+- `shiftCloseSourceEventAsyncOrders` — trigger `asyncOrders/{orderId}`
+- `shiftCloseSourceEventOrders` — trigger `orders/{orderId}`
+- `shiftCloseSourceEventCashTransactions` — trigger `cashTransactions/{txId}`
+- `shiftCloseSourceEventCreditPayments` — trigger `creditPayments/{paymentId}`
+
+Write surface: only `shiftCloseCases/{shiftId}` via CAS `tx.update`; no case creation; no `shifts` access. Observation: deploy-time metadata/startup only; **no live source-document traffic observed yet**; one transient Cloud Logging retrieval error for `shiftCloseSourceEventCreditPayments` (not a blocker — `functions:list` confirms all four ACTIVE).
+
+**Boundaries:** no production/emulator data mutation; no synthetic source events; no manual invocation; no index/rules deployment in the docs-closure gate; no `shifts.expected*` mutation; `stash@{0}` untouched.
+
+**Carried notes:** (1) bounded ledger degradation — >24 retained ledger entries may allow one harmless extra revalidation (accepted, non-blocking); (2) `JSON.stringify` object/array equality may false-positive (extra Firestore cost) but never under-routes supported values; (3) stale runtime code comments in shipped `functions/src` files are runtime-inert — fold into a future code gate when those files are touched, not this docs-closure pass; (4) the full P5-C/P5-D pipeline has never processed a real shift close end-to-end (no live full-pipeline data yet).
+
+**Reports:** commit/push `Implementer\twinpet-p1-offline-sync-packet-5-p5-d-2-commit-push-execution-report.md`; deployment readiness `reviewer\twinpet-p1-offline-sync-packet-5-p5-d-2-post-commit-deployment-readiness-audit-report.md`; deploy/observation `Implementer\twinpet-p1-offline-sync-packet-5-p5-d-2-deploy-observation-report.md`; roadmap audit `Architect\twinpet-p1-offline-sync-packet-5-post-p5-d-2-next-phase-roadmap-audit-report.md`.
 
 ### P1 Packet 5 / P5-B Pure Core (CLOSED โ€” COMMITTED โ€” PUSHED)
 
@@ -131,8 +152,9 @@ Non-blocking this-terminal pending-sync warning; close remains enabled.
 
 ### Prior closed packets
 
+- **Packet 5 / P5-D Deployment** — `4adb1d5` (P5-D-1 sweep + 6 READY indexes live) + `7976e3e` (P5-D-2 4 routing triggers live) (CLOSED — LIVE)
 - **Packet 5 / P5-C Atomic Capture** — `f5b697a` + `eda82dc` (CLOSED — P5-C-1 live + P5-C-2 rules live)
-- **Packet 5 / P5-C-2 Rules Hardening** — `eda82dc` (CLOSED — rules committed/pushed; live deployment NOT performed)
+- **Packet 5 / P5-C-2 Rules Hardening** — `eda82dc` (CLOSED — rules committed/pushed **and live/verified** on `twinpet-pos` / `pos-db`)
 - **Packet 5 / P5-B Pure Core** — `798b344` (CLOSED — pure server-owned validation core)
 - **Packet 7C-B2** โ€” `3ef5fed` (CLOSED โ€” post-push UAT PASS WITH NOTES)
 - **Packet 7C-B1** โ€” `1e41b0e` (CLOSED; superseded for reliability by 7C-B2 `3ef5fed`)
@@ -142,10 +164,22 @@ Non-blocking this-terminal pending-sync warning; close remains enabled.
 
 ### Deferred / next gate
 
-1. **Packet 5 / P5-C Atomic Capture CLOSED** — P5-C-1 live + P5-C-2 rules live; docs closure this pass
-2. **P5-D / P5-E** — NOT authorized; requires separate Owner/Gemini roadmap or packet authorization
-3. **Recapture callable** — NOT authorized
-4. Do not automatically start another packet
+1. **Packet 5 / P5-D Deployment CLOSED** — P5-D-1 sweep (`4adb1d5`) + P5-D-2 routing (`7976e3e`) live; docs closure this pass reconciled trackers to production.
+2. **Next: P5-E read-only architecture planning** — authorized read-only planning only (alerts + manager adjudication callable). **P5-E implementation: NOT AUTHORIZED.**
+3. **D5 disposition** — `D5 Option 2 — explicitly defer into P5-E read-only planning`: the P5-E planner must include **D5 (PIN / recent re-auth for manager adjudication)** as a bracketed product/security decision and must **not** implement it.
+4. **Standing boundaries (carried forward):**
+   - P5-E implementation — **NOT AUTHORIZED**
+   - P5-F (historical backfill) — **NOT AUTHORIZED** (D6 default: no auto-backfill)
+   - recapture callable — **NOT AUTHORIZED**
+   - manual invocation of deployed functions — **NOT AUTHORIZED**
+   - production/emulator data mutation — **NOT AUTHORIZED**
+   - synthetic source events — **NOT AUTHORIZED**
+   - Firestore index/rules deployment — **NOT AUTHORIZED** unless separately authorized
+   - deploy/runtime activation — **NOT AUTHORIZED**
+   - no `shifts.expected*` mutation; no FIFO/stock/credit/settlement writes; `stash@{0}` untouched
+5. **Passive observation** — read-only observation on **natural traffic only** is authorized in parallel (no manual invocation, no synthetic events, no data mutation).
+6. **Open decisions/risks carried forward:** D5 (deferred into P5-E planning, above); **G3** — monitoring ownership for structural refusal logs (`capture_refused_*` / `enqueue_refused_branch_mismatch`) remains unresolved (no Cloud Monitoring alert policy exists); no real shift close has been observed through the full P5-C/P5-D pipeline yet.
+7. Do not automatically start another packet.
 
 ### Future Phase โ€” True Standalone (Desktop & Native Mobile) (`TRUE-STANDALONE`)
 
