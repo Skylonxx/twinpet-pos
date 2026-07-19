@@ -6,19 +6,20 @@
 |-------|-------|
 | Repo root | `C:/Users/Narachat/twinpet-pos` |
 | Branch | `main` |
-| HEAD | `7976e3eea64623961f1189b4f1acb91e9efce486` |
-| origin/main | `7976e3eea64623961f1189b4f1acb91e9efce486` |
+| HEAD | `afacd3ba8bbb7b9b7973b70a334cde957ddf6750` |
+| origin/main | `afacd3ba8bbb7b9b7973b70a334cde957ddf6750` |
 | Ahead/behind | `0 / 0` (pre-docs-closure commit) |
 
 ## Current Phase
 
-    PACKET_5_P5_D_CLOSED
-    P5-D Deployment CLOSED — P5-D = P5-D-1 (sweep) + P5-D-2 (routing) only; no P5-D-3.
-    P5-C-1 Functions + P5-C-2 Rules + P5-D-1 sweep + P5-D-2 routing all live. Docs closure this pass.
+    PACKET_5_P5_E_CLOSED
+    P5-E Adjudication Callable CLOSED — resolveShiftCloseAlert committed, pushed, deployed live.
+    P5-C-1 Functions + P5-C-2 Rules + P5-D-1 sweep + P5-D-2 routing + P5-E adjudication callable all live. Docs closure this pass.
+    Next gate: post-P5-E read-only roadmap audit.
 
 ## Working Tree
 
-- HEAD `7976e3e` (P5-D-2 source event routing); docs closure this pass
+- HEAD `afacd3b` (P5-E adjudication callable); docs closure this pass
 - Working tree **clean** (pre-edit)
 - Staging: **empty**
 
@@ -27,6 +28,20 @@
     stash@{0}: On main: WIP: Batches 1-3 UI/settings/UOM/transfer-UI (unrelated to stock-security Phase 1)
 
 **Do NOT touch stash@{0}.**
+
+## P1 Packet 5 / P5-E Adjudication Callable
+
+| Field | Value |
+|-------|-------|
+| Status | **`PACKET_5_P5_E_CLOSED` / COMMITTED / PUSHED / LIVE** |
+| Commit | `afacd3ba8bbb7b9b7973b70a334cde957ddf6750` — `feat(pos): add shift close alert adjudication callable` |
+| Live function | `resolveShiftCloseAlert` — ACTIVE, `asia-southeast1`, `pos-db`, callable / Functions v2, `nodejs22` |
+| Observation | ACTIVE Gen 2 callable; startup TCP probe succeeded; no package-load/startup error; no callable request sent |
+| D5 disposition | Option C — optional transient PIN, never required/stored day one, future-compatible with step-up auth |
+| Worker lease | Option 1 — refuse on live lease; zero writes on conflict |
+| Write scope | `shiftCloseCases`, `shiftCloseAlerts`, `shiftCloseAuditEvents`, `shiftCloseAdjudicationCommands` only |
+| Production mutation | **None** — no manual invocation; no business-path execution; no rules/index deploy |
+| Unauthorized | P5-F, recapture, client/UI (pending roadmap audit + Gemini authorization), deploy/runtime activation beyond this callable, `shifts.expected*` mutation |
 
 ## P1 Packet 5 / P5-D Deployment
 
@@ -78,6 +93,8 @@ All **CLOSED / PUSHED**.
 
 | Hash | Message |
 |------|---------|
+| `afacd3b` | feat(pos): add shift close alert adjudication callable — **P5-E LIVE** |
+| `e2dbcbd` | docs(pos): close packet 5 p5-d deployment state |
 | `7976e3e` | feat(pos): add shift close source event routing — **P5-D-2 LIVE** |
 | `4adb1d5` | feat(pos): add shift close validation worker sweep — **P5-D-1 LIVE** |
 | `4f3e8d3` | docs: close packet 5 p5-c atomic capture |
@@ -86,20 +103,21 @@ All **CLOSED / PUSHED**.
 
 ## Next Recommended Block
 
-    P5-E_READONLY_ARCHITECTURE_PLANNING
+    POST_P5_E_READONLY_ROADMAP_AUDIT
 
-1. P5-D CLOSED (P5-D-1 sweep + P5-D-2 routing live; docs closure this pass reconciled trackers to production)
-2. **Next: P5-E read-only architecture planning** — read-only planning authorized; **P5-E implementation NOT authorized**
-3. D5 = Option 2 — deferred into P5-E planning as a bracketed decision (planner includes it; does not implement it)
+1. P5-E CLOSED (`resolveShiftCloseAlert` live; docs closure this pass reconciled trackers to production)
+2. **Next: post-P5-E read-only roadmap audit** — strict read-only assessment of passive observation / P5-F / recapture / client-UI / monitoring ownership / docs cleanup; no implementation planning beyond roadmap level
+3. D5 resolved as Option C in the shipped contract (optional transient PIN, never required/stored day one)
 4. Passive read-only observation on natural traffic only is authorized in parallel
-5. Do not auto-start P5-E implementation, P5-F, or recapture
+5. Do not auto-start P5-F, recapture, or client/UI implementation or planning
 
 ## Hard Boundaries
 
 - No production/emulator data mutation; no synthetic source events; no manual invocation
 - No `shifts.expected*` mutation; no FIFO/stock/credit/settlement writes
-- P5-E implementation / P5-F / recapture callable — NOT AUTHORIZED
-- Firestore index/rules deploy, deploy/runtime activation — NOT AUTHORIZED unless separately authorized
+- P5-F / recapture / client-UI planning — NOT AUTHORIZED until roadmap audit recommends and Gemini authorizes
+- P5-F / recapture / client-UI implementation — NOT AUTHORIZED
+- Firestore index/rules deploy, deploy/runtime activation — NOT AUTHORIZED
 - `stash@{0}` untouched (`7d03cfec7ba52ff7e25b7e175ca190efc258d874`)
 - PaymentModal W-12 deferred
 - G3 monitoring ownership for structural refusal logs — unresolved Owner decision

@@ -1,19 +1,19 @@
 # Twinpet POS โ€” Project Context
 
 > Last reconciled: 2026-07-19
-> HEAD: `7976e3eea64623961f1189b4f1acb91e9efce486` (feat(pos): add shift close source event routing)
-> origin/main: `7976e3eea64623961f1189b4f1acb91e9efce486`
-> Implementation: `7976e3eea64623961f1189b4f1acb91e9efce486` (Packet 5 / P5-D Deployment — P5-D-1 sweep + P5-D-2 routing live)
+> HEAD: `afacd3ba8bbb7b9b7973b70a334cde957ddf6750` (feat(pos): add shift close alert adjudication callable)
+> origin/main: `afacd3ba8bbb7b9b7973b70a334cde957ddf6750`
+> Implementation: `afacd3ba8bbb7b9b7973b70a334cde957ddf6750` (Packet 5 / P5-E Adjudication Callable — deployed live)
 
 ---
 
 ## Current Phase
 
-**P1 Offline / Sync Resiliency — Packet 5 / P5-D Deployment: `PACKET_5_P5_D_CLOSED`** — P5-D = P5-D-1 (validation worker sweep) + P5-D-2 (source event routing) only; no P5-D-3. Both subpackets committed, pushed, and live on `twinpet-pos` / `asia-southeast1` / `pos-db`. P5-C-1 Functions, P5-C-2 Rules, P5-D-1 sweep, and P5-D-2 routing are all live. Docs closure this pass reconciles the trackers to production.
+**P1 Offline / Sync Resiliency — Packet 5 / P5-E Adjudication Callable: `PACKET_5_P5_E_CLOSED`** — `resolveShiftCloseAlert` committed, pushed, and deployed live on `twinpet-pos` / `asia-southeast1` / `pos-db`. P5-C-1 Functions, P5-C-2 Rules, P5-D-1 sweep, P5-D-2 routing, and P5-E adjudication callable are all live. Docs closure this pass reconciles the trackers to production. Next gate is a read-only post-P5-E roadmap audit — not P5-F, recapture, or client/UI implementation.
 
 Manual workflow remains active. `agentchattr` was not used as the executor for this phase.
 
-**Repository baseline:** branch `main`, HEAD/origin `7976e3e`, working tree **clean**, staged **empty**, `stash@{0}` present and untouched (`7d03cfec7ba52ff7e25b7e175ca190efc258d874`).
+**Repository baseline:** branch `main`, HEAD/origin `afacd3b`, working tree **clean**, staged **empty**, `stash@{0}` present and untouched (`7d03cfec7ba52ff7e25b7e175ca190efc258d874`).
 
 ### P1 Packet 5 / P5-C Atomic Evidence + Case Capture (CLOSED — LIVE)
 
@@ -47,6 +47,28 @@ Write surface: only `shiftCloseCases/{shiftId}` via CAS `tx.update`; no case cre
 **Carried notes:** (1) bounded ledger degradation — >24 retained ledger entries may allow one harmless extra revalidation (accepted, non-blocking); (2) `JSON.stringify` object/array equality may false-positive (extra Firestore cost) but never under-routes supported values; (3) stale runtime code comments in shipped `functions/src` files are runtime-inert — fold into a future code gate when those files are touched, not this docs-closure pass; (4) the full P5-C/P5-D pipeline has never processed a real shift close end-to-end (no live full-pipeline data yet).
 
 **Reports:** commit/push `Implementer\twinpet-p1-offline-sync-packet-5-p5-d-2-commit-push-execution-report.md`; deployment readiness `reviewer\twinpet-p1-offline-sync-packet-5-p5-d-2-post-commit-deployment-readiness-audit-report.md`; deploy/observation `Implementer\twinpet-p1-offline-sync-packet-5-p5-d-2-deploy-observation-report.md`; roadmap audit `Architect\twinpet-p1-offline-sync-packet-5-post-p5-d-2-next-phase-roadmap-audit-report.md`.
+
+### P1 Packet 5 / P5-E Adjudication Callable (CLOSED — COMMITTED — PUSHED — LIVE)
+
+**Status:** **`PACKET_5_P5_E_CLOSED`** — commit `afacd3ba8bbb7b9b7973b70a334cde957ddf6750` (`feat(pos): add shift close alert adjudication callable`); Codex-persona review PASS WITH NOTES (0 blocking); deployed live.
+
+**Commit payload (6 files only):** `functions/package.json`, `functions/src/index.ts`, `functions/src/resolveShiftCloseAlert.ts`, `functions/src/resolveShiftCloseAlertCore.ts`, `functions/src/__tests__/resolveShiftCloseAlert.test.ts`, `functions/src/__tests__/resolveShiftCloseAlertCore.test.ts`.
+
+**Live deployment:** function `resolveShiftCloseAlert` — project `twinpet-pos`, region `asia-southeast1`, database `pos-db`, runtime `nodejs22`, trigger HTTPS callable / Firebase Functions v2. Deploy: `firebase deploy --only functions:resolveShiftCloseAlert --project twinpet-pos` — successful create operation. Observation: ACTIVE Gen 2 callable; startup TCP probe succeeded; no package-load/startup error; no crash loop. No manual invocation; no business-path execution; no Firestore rules/indexes deployed; no other functions deployed.
+
+**Behavior summary:**
+- D5: Option C — optional transient PIN accepted on the request, never verified, never stored/persisted; `pinVerifiedAtServer: null` written unconditionally on every audit event (reserved slot for a future step-up gate). Compatible with future UI step-up.
+- Worker lease: Option 1 — refuse on a live (non-expired) `leaseOwner`; returns `conflict_requires_manual_review` with zero writes.
+- Auth: manager/admin with branch access only; `staff` always `unauthorized`; no PIN-bypass-to-staff path.
+- CAS: `expectedCaseVersion` vs. live `caseVersion`, checked inside the transaction before any write.
+- Idempotency: deterministic `shiftCloseAdjudicationCommands/{sha256(commandId).slice(0,40)}` ledger; same-payload retry → `duplicate_confirmed` (zero re-mutation); different-payload reuse → `conflict_requires_manual_review` / `invalid_payload` (zero mutation).
+- Audit: immutable `shiftCloseAuditEvents/{eventId}` via `tx.create`, deterministic id via the shared P5-D `computeP5DAuditEventId` helper. Rejected/business-failure attempts write no audit event.
+- Transaction write scope: `shiftCloseCases`, `shiftCloseAlerts`, `shiftCloseAuditEvents`, `shiftCloseAdjudicationCommands` only.
+- Red zone: no `shifts` / `shifts.expected*` reads or writes; no FIFO/stock/inventory/credit/final-settlement writes; no drawer math; no auto-adjudication path.
+
+**Carried notes:** (1) Firebase CLI warned `firebase-functions` is outdated — non-blocking, no dependency upgrade authorized here; (2) business path not exercised — no callable request sent; observation proves deployment metadata/startup only, not business-path execution; (3) live-lease conflict reuses the `stale_case_version` reject code under `conflict_requires_manual_review` (no dedicated lease-conflict code exists in the frozen 8-value enum — accepted judgment call, earmarked for a future contract revision); (4) manager request `reasonCode` accepts the full frozen `AlertReasonCode` enum, including system-only values — left to a future UI layer to curate, not a backend defect; (5) `duplicate_confirmed` shell test has a low-risk assertion gap (does not explicitly assert round-tripped `newAlertState`/`newSettlementState`) — accepted, low risk, trivial passthrough; (6) the full P5-C/P5-D/P5-E pipeline has not been exercised end-to-end on natural production data in the evidence set yet.
+
+**Reports:** implementation `Implementer\twinpet-p1-offline-sync-packet-5-p5-e-implementation-report.md`; review `reviewer\twinpet-p1-offline-sync-packet-5-p5-e-implementation-codex-review-report.md`; commit/push `Implementer\twinpet-p1-offline-sync-packet-5-p5-e-commit-push-execution-report.md`; deployment-readiness audit `reviewer\twinpet-p1-offline-sync-packet-5-p5-e-post-commit-deployment-readiness-audit-report.md`; deploy/observation `Implementer\twinpet-p1-offline-sync-packet-5-p5-e-deploy-observation-report.md`.
 
 ### P1 Packet 5 / P5-B Pure Core (CLOSED โ€” COMMITTED โ€” PUSHED)
 
@@ -152,6 +174,7 @@ Non-blocking this-terminal pending-sync warning; close remains enabled.
 
 ### Prior closed packets
 
+- **Packet 5 / P5-E Adjudication Callable** — `afacd3b` (`resolveShiftCloseAlert` live) (CLOSED — LIVE)
 - **Packet 5 / P5-D Deployment** — `4adb1d5` (P5-D-1 sweep + 6 READY indexes live) + `7976e3e` (P5-D-2 4 routing triggers live) (CLOSED — LIVE)
 - **Packet 5 / P5-C Atomic Capture** — `f5b697a` + `eda82dc` (CLOSED — P5-C-1 live + P5-C-2 rules live)
 - **Packet 5 / P5-C-2 Rules Hardening** — `eda82dc` (CLOSED — rules committed/pushed **and live/verified** on `twinpet-pos` / `pos-db`)
@@ -164,22 +187,24 @@ Non-blocking this-terminal pending-sync warning; close remains enabled.
 
 ### Deferred / next gate
 
-1. **Packet 5 / P5-D Deployment CLOSED** — P5-D-1 sweep (`4adb1d5`) + P5-D-2 routing (`7976e3e`) live; docs closure this pass reconciled trackers to production.
-2. **Next: P5-E read-only architecture planning** — authorized read-only planning only (alerts + manager adjudication callable). **P5-E implementation: NOT AUTHORIZED.**
-3. **D5 disposition** — `D5 Option 2 — explicitly defer into P5-E read-only planning`: the P5-E planner must include **D5 (PIN / recent re-auth for manager adjudication)** as a bracketed product/security decision and must **not** implement it.
+1. **Packet 5 / P5-E Adjudication Callable CLOSED** — `resolveShiftCloseAlert` (`afacd3b`) committed, pushed, and deployed live; docs closure this pass reconciled trackers to production.
+2. **Next: post-P5-E read-only roadmap audit** — strict read-only assessment of the next safest, highest-value phase (passive observation / P5-F / recapture / client-UI / monitoring ownership / docs cleanup). **No implementation planning beyond roadmap-level assessment.**
+3. **D5 disposition** — resolved as Option C in the shipped P5-E contract (optional transient PIN, never required/stored day one, future-compatible with step-up auth). Any future step-up enforcement is a separate, not-yet-authorized decision.
 4. **Standing boundaries (carried forward):**
-   - P5-E implementation — **NOT AUTHORIZED**
-   - P5-F (historical backfill) — **NOT AUTHORIZED** (D6 default: no auto-backfill)
-   - recapture callable — **NOT AUTHORIZED**
+   - P5-F (historical backfill) read-only planning — **NOT AUTHORIZED until the roadmap audit recommends and Gemini authorizes**
+   - P5-F implementation — **NOT AUTHORIZED**
+   - recapture planning — **NOT AUTHORIZED until the roadmap audit recommends and Gemini authorizes**
+   - recapture implementation/data mutation — **NOT AUTHORIZED**
+   - client/UI planning — **NOT AUTHORIZED until the roadmap audit recommends and Gemini authorizes**
+   - client/UI implementation — **NOT AUTHORIZED**
    - manual invocation of deployed functions — **NOT AUTHORIZED**
    - production/emulator data mutation — **NOT AUTHORIZED**
-   - synthetic source events — **NOT AUTHORIZED**
-   - Firestore index/rules deployment — **NOT AUTHORIZED** unless separately authorized
+   - Firestore rules/index deployment — **NOT AUTHORIZED**
    - deploy/runtime activation — **NOT AUTHORIZED**
    - no `shifts.expected*` mutation; no FIFO/stock/credit/settlement writes; `stash@{0}` untouched
 5. **Passive observation** — read-only observation on **natural traffic only** is authorized in parallel (no manual invocation, no synthetic events, no data mutation).
-6. **Open decisions/risks carried forward:** D5 (deferred into P5-E planning, above); **G3** — monitoring ownership for structural refusal logs (`capture_refused_*` / `enqueue_refused_branch_mismatch`) remains unresolved (no Cloud Monitoring alert policy exists); no real shift close has been observed through the full P5-C/P5-D pipeline yet.
-7. Do not automatically start another packet.
+6. **Open decisions/risks carried forward:** live-lease conflict reject-code reuse (`stale_case_version`); manager `reasonCode` accepts the full frozen enum; optional PIN not enforced day one; **G3** — monitoring ownership for structural refusal logs (`capture_refused_*` / `enqueue_refused_branch_mismatch`) remains unresolved (no Cloud Monitoring alert policy exists); no real shift close has been observed through the full P5-C/P5-D/P5-E pipeline yet.
+7. Do not automatically start another packet, P5-F, recapture, or client/UI work.
 
 ### Future Phase โ€” True Standalone (Desktop & Native Mobile) (`TRUE-STANDALONE`)
 

@@ -1,11 +1,27 @@
 # Twinpet POS — Task Tracker
 
 > Last reconciled: 2026-07-19
-> HEAD: `7976e3eea64623961f1189b4f1acb91e9efce486` (feat(pos): add shift close source event routing)
-> origin/main: `7976e3eea64623961f1189b4f1acb91e9efce486`
-> Implementation: `7976e3eea64623961f1189b4f1acb91e9efce486` (Packet 5 / P5-D Deployment — sweep + routing live)
+> HEAD: `afacd3ba8bbb7b9b7973b70a334cde957ddf6750` (feat(pos): add shift close alert adjudication callable)
+> origin/main: `afacd3ba8bbb7b9b7973b70a334cde957ddf6750`
+> Implementation: `afacd3ba8bbb7b9b7973b70a334cde957ddf6750` (Packet 5 / P5-E Adjudication Callable — deployed live)
 
 ---
+
+## P1 Offline / Sync Resiliency — Packet 5 / P5-E Adjudication Callable
+
+**Status: `PACKET_5_P5_E_CLOSED` — COMMITTED / PUSHED / LIVE**
+
+- [x] Implementation — `resolveShiftCloseAlertCore.ts`, `resolveShiftCloseAlert.ts`, tests, `index.ts`, `package.json`
+- [x] Review (Codex-persona) — PASS WITH NOTES (0 blocking)
+- [x] Commit/push — `afacd3b` (`feat(pos): add shift close alert adjudication callable`)
+- [x] Live deployment — `resolveShiftCloseAlert` ACTIVE, `asia-southeast1`, `pos-db`, callable / Functions v2, `nodejs22`
+- [x] Observation — deploy-time metadata/startup only; ACTIVE, startup probe succeeded; no callable request sent
+
+**Behavior:** D5 = Option C (optional transient PIN, never verified/stored); worker lease = Option 1 (refuse on live lease, zero writes); manager/admin-only auth; CAS via `expectedCaseVersion`; idempotent via `commandId` ledger; immutable audit event. Write scope: `shiftCloseCases`, `shiftCloseAlerts`, `shiftCloseAuditEvents`, `shiftCloseAdjudicationCommands` only. No `shifts`/`shifts.expected*` access; no FIFO/stock/credit/settlement writes.
+
+**Boundaries:** no production/emulator data mutation; no manual invocation; no business-path execution; no rules/index deploy; `stash@{0}` untouched.
+
+**Next:** post-P5-E read-only roadmap audit (passive observation / P5-F / recapture / client-UI / monitoring ownership / docs cleanup assessed at roadmap level only). P5-F, recapture, and client/UI planning remain unauthorized until the audit recommends and Gemini authorizes.
 
 ## P1 Offline / Sync Resiliency — Packet 5 / P5-D Deployment
 
@@ -32,7 +48,7 @@
 
 **Boundaries:** no production/emulator data mutation; no synthetic source events; no manual invocation; no index/rules deploy in docs-closure; no `shifts.expected*` mutation; `stash@{0}` untouched.
 
-**Next:** P5-E read-only architecture planning (implementation NOT authorized). D5 = Option 2 (deferred into P5-E planning as a bracketed decision).
+**Next:** P5-E adjudication callable — CLOSED / LIVE (see section above).
 
 ## P1 Offline / Sync Resiliency — Packet 5 / P5-C Atomic Evidence + Case Capture
 
@@ -69,10 +85,10 @@
 
 ### Next step
 
-1. Packet 5 / P5-D Deployment — **`PACKET_5_P5_D_CLOSED`** (P5-D-1 sweep `4adb1d5` + P5-D-2 routing `7976e3e` live; docs closure this pass)
-2. **Next: P5-E read-only architecture planning** — authorized read-only planning only; **P5-E implementation NOT authorized**. D5 = Option 2 (deferred into P5-E planning as a bracketed decision).
-3. **NOT authorized:** P5-E implementation, P5-F/backfill, recapture callable, manual invocation, production/emulator data mutation, synthetic source events, Firestore index/rules deploy (unless separately authorized), deploy/runtime activation. No `shifts.expected*` mutation; no FIFO/stock/credit/settlement writes; `stash@{0}` untouched.
+1. Packet 5 / P5-E Adjudication Callable — **`PACKET_5_P5_E_CLOSED`** (`afacd3b`; `resolveShiftCloseAlert` live; docs closure this pass)
+2. **Next: post-P5-E read-only roadmap audit** — strict read-only assessment of the next safest, highest-value phase; no implementation planning beyond roadmap level.
+3. **NOT authorized:** P5-F planning/implementation, recapture planning/implementation, client/UI planning/implementation (all pending roadmap-audit recommendation + Gemini authorization), manual invocation, production/emulator data mutation, synthetic source events, Firestore index/rules deploy, deploy/runtime activation. No `shifts.expected*` mutation; no FIFO/stock/credit/settlement writes; `stash@{0}` untouched.
 4. **Passive observation** — read-only on natural traffic only is authorized in parallel.
 5. Do not automatically start another packet.
 
-**Not active:** P5-E adjudication callable/UI, recapture callable, P5-F backfill, broad Packet 5 runtime beyond P5-D closure.
+**Not active:** P5-F backfill, recapture callable, client/UI adjudication surface, broad Packet 5 runtime beyond P5-E closure.
