@@ -18,15 +18,17 @@ P1 Packet 5 / P5-E Adjudication Callable — **`PACKET_5_P5_E_CLOSED`** / LIVE. 
 
 ## Latest Verdict
 
-**P1 PACKET 5 / P5-E — CLOSED** — `resolveShiftCloseAlert` (`afacd3b`) committed/pushed and live on `twinpet-pos` / `asia-southeast1` / `pos-db`. Deploy-time observation only; no callable request sent; no live full-pipeline traffic yet. No production/emulator data mutation.
+**P1 PACKET 5 / G3 MONITORING — docs/runbook CLOSED** — Cloud Monitoring resources (1 email notification channel, 2 log-based metrics, 8 alert policies A1–A8) created (Scope 1, `POLICY CREATION COMPLETE`) and independently verified (Scope 2, separate reviewer, `PASS WITH NOTES`, no blockers). `docs/ops/packet-5-monitoring-runbook.md` created this pass; trackers reconciled. No code/config/runtime changed; no monitoring resource created/modified/deleted in this pass; no deploy/manual invocation/test-fire/synthetic event/data mutation. Alert firing and email delivery not tested by design.
+
+Prior: **P1 PACKET 5 / P5-E — CLOSED** — `resolveShiftCloseAlert` (`afacd3b`) committed/pushed and live on `twinpet-pos` / `asia-southeast1` / `pos-db`. Deploy-time observation only; no callable request sent; no live full-pipeline traffic yet. No production/emulator data mutation.
 
 ## Mode
 
-Docs-only closure under Gemini authorization (`AUTHORIZE OPTION B`). No deployment / code / functions / rules / index changes in this gate. Next: post-P5-E read-only roadmap audit.
+Docs-only closure. No deployment / code / functions / rules / index / monitoring-resource changes in this gate. Next: free-trial upgrade decision (owner) and continuation of the post-P5-E read-only roadmap audit.
 
 ## Next Action
 
-Post-P5-E read-only roadmap audit — strict read-only assessment of the next safest, highest-value phase (passive observation / P5-F / recapture / client-UI / monitoring ownership / docs cleanup), roadmap level only. P5-F, recapture, client/UI planning and implementation, manual invocation, data mutation, index/rules deploy, deploy/runtime activation — NOT authorized. Passive read-only observation on natural traffic only authorized in parallel.
+**Free-trial upgrade decision (owner, ≈2026-08-27)** — separate from G3 monitoring; governs Packet 5 runtime continuity. In parallel, continue the post-P5-E read-only roadmap audit — strict read-only assessment of the next safest, highest-value phase (passive observation / P5-F / recapture / client-UI / docs cleanup — monitoring ownership now resolved), roadmap level only. P5-F, recapture, client/UI planning and implementation, manual invocation, data mutation, index/rules deploy, deploy/runtime activation, alert test-fire, monitoring resource changes — NOT authorized. Passive read-only observation on natural traffic only authorized in parallel.
 
 ## Stash
 

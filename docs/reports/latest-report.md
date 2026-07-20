@@ -1,4 +1,30 @@
-# Latest Report — P1 Offline / Sync Packet 5 / P5-E Adjudication Callable (`PACKET_5_P5_E_CLOSED`)
+# Latest Report — P1 Offline / Sync Packet 5 / G3 Monitoring (`G3_MONITORING_DOCS_CLOSED`)
+
+> Date: 2026-07-20
+> HEAD (code): `afacd3ba8bbb7b9b7973b70a334cde957ddf6750` (unchanged — this pass is docs/runbook only)
+> Status: **PACKET 5 / G3 MONITORING — DOCS/RUNBOOK CLOSED**
+
+---
+
+## G3 Monitoring closure (this pass)
+
+Cloud Monitoring resources for the Packet 5 pipeline were created and independently verified across three scopes:
+
+- **Scope 1 — creation:** `POLICY CREATION COMPLETE`. Created exactly 1 email notification channel (`Twinpet P5 G3 Owner Email`, `projects/twinpet-pos/notificationChannels/1890505988171137697`, recipient `narachat.damg@gmail.com`), 2 log-based metrics (`twinpet_p5_g3_sweep_heartbeat`, `twinpet_p5_g3_crash_startup_failure`), and 8 alert policies A1–A8 (all enabled, each with exactly 1 channel attached). All Gemini-authorized caps respected (≤2 metrics, ≤8 policies, exactly 1 email channel). No test-fire, no synthetic events, no deploy, no repo changes in Scope 1.
+- **Scope 2 — independent verification:** `PASS WITH NOTES`. Reviewer session separate from the Scope 1 operator. No blockers; no required remediation. Non-blocking notes: (1) alert opening/email delivery untested by explicit design; (2) A5's service-scoped `unexpected error` token is safe today but should be re-reviewed if `resolveShiftCloseAlert`'s logging surface expands; (3) absolute historical absence of direct Firestore data-plane writes partly relies on operator attestation where Data Access audit logs may be unavailable — available audit/runtime evidence is clean; (4) the repo's prior rolling report said no monitoring existed for Packet 5 — this pass reconciles that.
+- **Scope 3 — docs/runbook (this pass):** new file `docs/ops/packet-5-monitoring-runbook.md` documents the full resource inventory, exact filters/thresholds/grouping, per-alert (A1–A8) response procedures, safe read-only command examples, limitations, cost/free-trial note, and prohibited response actions. `Context.md`, `Task.md`, `docs/STATE.md`, `docs/agent-workflow/CURRENT_PACKET.md`, `docs/agent-workflow/NEXT_ACTION.md`, `docs/agent-workflow/STATE.md` reconciled to record this closure.
+
+**Explicit statements:** no code/config/runtime file changed; no monitoring resource (channel/metric/policy/dashboard) created, modified, or deleted in Scope 3; no deploy, manual invocation, test-fire, synthetic event, or data mutation occurred in any scope.
+
+**Cost:** negligible — USD 0.00/month while Cloud Monitoring alerting remains unbilled (no sooner than 2026-09-01), then an estimated USD 1.05–1.50/month (≈THB 39–49) thereafter, against ≈THB 9,751.22 free-trial credit as of 2026-07-20.
+
+**Owner decision (separate, not resolved here):** free-trial credit expiry ≈2026-08-27 threatens continuity of the entire live Packet 5 pipeline (all 7 functions), not just monitoring — track as its own gate.
+
+**Reports:** Scope 1 `Operator\twinpet-p1-offline-sync-packet-5-g3-monitoring-policy-creation-report.md`; Scope 2 `reviewer\twinpet-p1-offline-sync-packet-5-g3-monitoring-policy-verification-report.md`; cost exactification `Architect\twinpet-p1-offline-sync-packet-5-g3-monitoring-cost-exactification-report.md`; this closure `Developer\twinpet-p1-offline-sync-packet-5-g3-monitoring-runbook-docs-closure-report.md`.
+
+---
+
+# Prior — P1 Offline / Sync Packet 5 / P5-E Adjudication Callable (`PACKET_5_P5_E_CLOSED`)
 
 > Date: 2026-07-19
 > HEAD (code): `afacd3ba8bbb7b9b7973b70a334cde957ddf6750`

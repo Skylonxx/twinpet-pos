@@ -29,6 +29,19 @@
 
 **Do NOT touch stash@{0}.**
 
+## P1 Packet 5 / G3 Monitoring
+
+| Field | Value |
+|-------|-------|
+| Status | **docs/runbook CLOSED** |
+| Scope 1 | `POLICY CREATION COMPLETE` — 1 email channel, 2 log-based metrics, 8 alert policies (A1–A8), all enabled, caps respected |
+| Scope 2 | `PASS WITH NOTES` — independent reviewer, no blockers, no required remediation |
+| Scope 3 | this pass — `docs/ops/packet-5-monitoring-runbook.md` created; trackers reconciled |
+| Monitoring resources changed in Scope 3 | **None** |
+| Code/config/runtime changed | **None** |
+| Deploy/manual invocation/test-fire/synthetic event/data mutation | **None** |
+| Next | free-trial upgrade decision (owner, ≈2026-08-27) — tracked separately |
+
 ## P1 Packet 5 / P5-E Adjudication Callable
 
 | Field | Value |
@@ -103,13 +116,14 @@ All **CLOSED / PUSHED**.
 
 ## Next Recommended Block
 
-    POST_P5_E_READONLY_ROADMAP_AUDIT
+    G3_MONITORING_DOCS_CLOSED / FREE_TRIAL_UPGRADE_DECISION_PENDING
 
-1. P5-E CLOSED (`resolveShiftCloseAlert` live; docs closure this pass reconciled trackers to production)
-2. **Next: post-P5-E read-only roadmap audit** — strict read-only assessment of passive observation / P5-F / recapture / client-UI / monitoring ownership / docs cleanup; no implementation planning beyond roadmap level
-3. D5 resolved as Option C in the shipped contract (optional transient PIN, never required/stored day one)
-4. Passive read-only observation on natural traffic only is authorized in parallel
-5. Do not auto-start P5-F, recapture, or client/UI implementation or planning
+1. P5-E CLOSED (`resolveShiftCloseAlert` live; docs closure reconciled trackers to production)
+2. G3 monitoring CLOSED (docs/runbook) — 8 alert policies + 2 log-based metrics + 1 email channel live and independently verified `PASS WITH NOTES`; runbook at `docs/ops/packet-5-monitoring-runbook.md`
+3. **Next: free-trial upgrade decision (owner, ≈2026-08-27)** — separate from monitoring; governs Packet 5 runtime continuity. Also continue post-P5-E read-only roadmap audit; no implementation planning beyond roadmap level
+4. D5 resolved as Option C in the shipped contract (optional transient PIN, never required/stored day one)
+5. Passive read-only observation on natural traffic only is authorized in parallel
+6. Do not auto-start P5-F, recapture, or client/UI implementation or planning
 
 ## Hard Boundaries
 
@@ -118,6 +132,7 @@ All **CLOSED / PUSHED**.
 - P5-F / recapture / client-UI planning — NOT AUTHORIZED until roadmap audit recommends and Gemini authorizes
 - P5-F / recapture / client-UI implementation — NOT AUTHORIZED
 - Firestore index/rules deploy, deploy/runtime activation — NOT AUTHORIZED
+- Alert test-fire, synthetic log/event/document, monitoring resource changes — NOT AUTHORIZED without separate authorization
 - `stash@{0}` untouched (`7d03cfec7ba52ff7e25b7e175ca190efc258d874`)
 - PaymentModal W-12 deferred
-- G3 monitoring ownership for structural refusal logs — unresolved Owner decision
+- G3 monitoring ownership — **RESOLVED**, see G3 Monitoring section above; free-trial upgrade decision remains a separate open owner item

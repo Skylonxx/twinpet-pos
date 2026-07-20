@@ -7,6 +7,18 @@
 
 ---
 
+## P1 Offline / Sync Resiliency — Packet 5 / G3 Monitoring
+
+**Status: docs/runbook CLOSED** — Cloud Monitoring resources created (Scope 1) and independently verified (Scope 2 `PASS WITH NOTES`, no blockers).
+
+- [x] Scope 1 — creation: 1 email channel, 2 log-based metrics, 8 alert policies (A1–A8), all enabled, caps respected
+- [x] Scope 2 — independent verification (separate reviewer): `PASS WITH NOTES`, no blockers, no required remediation
+- [x] Scope 3 — docs/runbook: `docs/ops/packet-5-monitoring-runbook.md` created; trackers reconciled
+
+**No code/config/runtime changed. No monitoring resource created/modified/deleted in Scope 3. No deploy/manual invocation/test-fire/synthetic event/data mutation.**
+
+**Next:** free-trial upgrade decision (owner, ≈2026-08-27) — tracked separately from monitoring docs closure.
+
 ## P1 Offline / Sync Resiliency — Packet 5 / P5-E Adjudication Callable
 
 **Status: `PACKET_5_P5_E_CLOSED` — COMMITTED / PUSHED / LIVE**
@@ -86,9 +98,10 @@
 ### Next step
 
 1. Packet 5 / P5-E Adjudication Callable — **`PACKET_5_P5_E_CLOSED`** (`afacd3b`; `resolveShiftCloseAlert` live; docs closure this pass)
-2. **Next: post-P5-E read-only roadmap audit** — strict read-only assessment of the next safest, highest-value phase; no implementation planning beyond roadmap level.
-3. **NOT authorized:** P5-F planning/implementation, recapture planning/implementation, client/UI planning/implementation (all pending roadmap-audit recommendation + Gemini authorization), manual invocation, production/emulator data mutation, synthetic source events, Firestore index/rules deploy, deploy/runtime activation. No `shifts.expected*` mutation; no FIFO/stock/credit/settlement writes; `stash@{0}` untouched.
-4. **Passive observation** — read-only on natural traffic only is authorized in parallel.
-5. Do not automatically start another packet.
+2. Packet 5 / G3 Monitoring — **docs/runbook CLOSED** this pass (8 alert policies + 2 log-based metrics + 1 email channel, live and independently verified `PASS WITH NOTES`; runbook at `docs/ops/packet-5-monitoring-runbook.md`)
+3. **Next: free-trial upgrade decision (owner, ≈2026-08-27)** — separate from monitoring; governs whether the entire Packet 5 runtime keeps running past trial expiry. Also continue the post-P5-E read-only roadmap audit; no implementation planning beyond roadmap level.
+4. **NOT authorized:** P5-F planning/implementation, recapture planning/implementation, client/UI planning/implementation (all pending roadmap-audit recommendation + Gemini authorization), manual invocation, production/emulator data mutation, synthetic source events, Firestore index/rules deploy, deploy/runtime activation, alert test-fire. No `shifts.expected*` mutation; no FIFO/stock/credit/settlement writes; `stash@{0}` untouched.
+5. **Passive observation** — read-only on natural traffic only is authorized in parallel.
+6. Do not automatically start another packet.
 
 **Not active:** P5-F backfill, recapture callable, client/UI adjudication surface, broad Packet 5 runtime beyond P5-E closure.

@@ -9,11 +9,23 @@
 
 ## Current Phase
 
-**P1 Offline / Sync Resiliency — Packet 5 / P5-E Adjudication Callable: `PACKET_5_P5_E_CLOSED`** — `resolveShiftCloseAlert` committed, pushed, and deployed live on `twinpet-pos` / `asia-southeast1` / `pos-db`. P5-C-1 Functions, P5-C-2 Rules, P5-D-1 sweep, P5-D-2 routing, and P5-E adjudication callable are all live. Docs closure this pass reconciles the trackers to production. Next gate is a read-only post-P5-E roadmap audit — not P5-F, recapture, or client/UI implementation.
+**P1 Offline / Sync Resiliency — Packet 5 / G3 Monitoring: docs/runbook CLOSED** — Cloud Monitoring resources for Packet 5 (1 email notification channel, 2 log-based metrics, 8 alert policies A1–A8) were created (Scope 1, `POLICY CREATION COMPLETE`) and independently verified (Scope 2, `PASS WITH NOTES`, no blockers). This pass reconciles docs/trackers and adds `docs/ops/packet-5-monitoring-runbook.md`. No code/config/runtime changed; no monitoring resources were modified in this pass. Alert firing and email delivery were **not** tested by design. Next gate: free-trial upgrade decision (owner) and continuation of the post-P5-E roadmap audit — not P5-F, recapture, or client/UI implementation.
 
 Manual workflow remains active. `agentchattr` was not used as the executor for this phase.
 
-**Repository baseline:** branch `main`, HEAD/origin `afacd3b`, working tree **clean**, staged **empty**, `stash@{0}` present and untouched (`7d03cfec7ba52ff7e25b7e175ca190efc258d874`).
+**Repository baseline:** branch `main`, HEAD/origin `946cb89` (code HEAD unchanged at `afacd3b` — this pass is docs/runbook only), working tree **clean** pre-edit, staged **empty** pre-edit, `stash@{0}` present and untouched (`7d03cfec7ba52ff7e25b7e175ca190efc258d874`).
+
+### P1 Packet 5 / G3 Monitoring (docs/runbook CLOSED)
+
+**Status:** Cloud Monitoring resources created and independently verified; docs/runbook closure complete this pass.
+
+- **Scope 1 creation** — `POLICY CREATION COMPLETE`. Created exactly 1 email notification channel (`Twinpet P5 G3 Owner Email`, `narachat.damg@gmail.com`), 2 log-based metrics (`twinpet_p5_g3_sweep_heartbeat`, `twinpet_p5_g3_crash_startup_failure`), 8 alert policies (A1–A8, all enabled). All caps respected. No test-fire, no synthetic events, no deploy, no repo changes in Scope 1.
+- **Scope 2 independent verification** — `PASS WITH NOTES`, reviewer separate from the Scope 1 operator. No blockers. Non-blocking notes: (1) alert opening/email delivery untested by design; (2) A5's generic `unexpected error` token is service-scoped-safe today but should be re-reviewed if `resolveShiftCloseAlert`'s logging surface expands; (3) absolute historical absence of direct Firestore data-plane writes partly relies on operator attestation where Data Access audit logs may be unavailable; (4) the repo's prior rolling report said no monitoring existed — this pass reconciles that.
+- **Scope 3 docs/runbook** — this pass. New file `docs/ops/packet-5-monitoring-runbook.md` documents the full resource inventory, exact filters/thresholds, per-alert response procedures (A1–A8), read-only command examples, limitations, and prohibited response actions. No monitoring resource was created/modified/deleted in this pass.
+- **Cost** — negligible: USD 0.00/month while Cloud Monitoring alerting remains unbilled (no sooner than 2026-09-01), then ≈USD 1.05–1.50/month (≈THB 39–49) thereafter, against ≈THB 9,751.22 free-trial credit as of 2026-07-20.
+- **Owner decision (separate, not resolved here):** free-trial credit expiry ≈2026-08-27 — Packet 5 runtime continuity (all 7 live functions) may depend on a paid-account upgrade before then.
+
+**Reports:** Scope 1 `Operator\twinpet-p1-offline-sync-packet-5-g3-monitoring-policy-creation-report.md`; Scope 2 `reviewer\twinpet-p1-offline-sync-packet-5-g3-monitoring-policy-verification-report.md`; cost exactification `Architect\twinpet-p1-offline-sync-packet-5-g3-monitoring-cost-exactification-report.md`; this closure `Developer\twinpet-p1-offline-sync-packet-5-g3-monitoring-runbook-docs-closure-report.md`.
 
 ### P1 Packet 5 / P5-C Atomic Evidence + Case Capture (CLOSED — LIVE)
 
@@ -203,7 +215,7 @@ Non-blocking this-terminal pending-sync warning; close remains enabled.
    - deploy/runtime activation — **NOT AUTHORIZED**
    - no `shifts.expected*` mutation; no FIFO/stock/credit/settlement writes; `stash@{0}` untouched
 5. **Passive observation** — read-only observation on **natural traffic only** is authorized in parallel (no manual invocation, no synthetic events, no data mutation).
-6. **Open decisions/risks carried forward:** live-lease conflict reject-code reuse (`stale_case_version`); manager `reasonCode` accepts the full frozen enum; optional PIN not enforced day one; **G3** — monitoring ownership for structural refusal logs (`capture_refused_*` / `enqueue_refused_branch_mismatch`) remains unresolved (no Cloud Monitoring alert policy exists); no real shift close has been observed through the full P5-C/P5-D/P5-E pipeline yet.
+6. **Open decisions/risks carried forward:** live-lease conflict reject-code reuse (`stale_case_version`); manager `reasonCode` accepts the full frozen enum; optional PIN not enforced day one; **G3 monitoring — RESOLVED**, 8 alert policies (A1–A8) + 2 log-based metrics + 1 email channel created and independently verified live (see G3 Monitoring section above; runbook at `docs/ops/packet-5-monitoring-runbook.md`); no real shift close has been observed through the full P5-C/P5-D/P5-E pipeline yet; **free-trial upgrade decision (owner, ≈2026-08-27) remains open and separate from G3 monitoring.**
 7. Do not automatically start another packet, P5-F, recapture, or client/UI work.
 
 ### Future Phase โ€” True Standalone (Desktop & Native Mobile) (`TRUE-STANDALONE`)
