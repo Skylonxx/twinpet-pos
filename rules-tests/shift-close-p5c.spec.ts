@@ -31,6 +31,10 @@ import {
   updateDoc,
   deleteDoc,
   getDoc,
+  collection,
+  query,
+  where,
+  getDocs,
   serverTimestamp,
   arrayUnion,
   deleteField,
@@ -48,6 +52,7 @@ const staff = (staffId = 'staff1', branchId = BRANCH) => ({
 });
 const manager = (branchId = BRANCH) => ({ staffId: 'm1', role: 'manager', branchIds: [branchId], permissions: [] });
 const admin = (branchId = BRANCH) => ({ staffId: 'a1', role: 'admin', branchIds: [branchId], permissions: [] });
+const globalAdmin = () => ({ staffId: 'ga1', role: 'admin', branchIds: ['ALL'], permissions: [] });
 
 let testEnv: RulesTestEnvironment;
 
@@ -176,6 +181,76 @@ for (const collectionName of PACKET5_COLLECTIONS) {
     });
   });
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// shiftCloseAlerts — LIST queries (Packet 5 Client/UI-A, read-only review
+// queue). The `allow read` grant covers both `get` and `list`; for `list`,
+// Firestore evaluates the per-branch rule against every doc the query would
+// return, so an unconstrained (no `where`) list across branches is denied as
+// a whole the moment any returned doc fails `hasBranchAccess` — matching the
+// UI-A hook's mandatory `where('branchId', '==', activeBranchId)` predicate.
+// ─────────────────────────────────────────────────────────────────────────
+
+describe('shiftCloseAlerts — list queries (UI-A alert queue)', () => {
+  const seedAlert = async (id: string, branchId: string) => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'shiftCloseAlerts', id), {
+        shiftId: id,
+        branchId,
+        alertState: 'open',
+        schemaVersion: 1,
+      });
+    });
+  };
+
+  it('ALLOWED: same-branch manager list with the branch predicate succeeds', async () => {
+    await seedAlert('sca1', BRANCH);
+    await seedAlert('sca2', BRANCH);
+    const db = testEnv.authenticatedContext('m1', manager(BRANCH)).firestore();
+    await assertSucceeds(
+      getDocs(query(collection(db, 'shiftCloseAlerts'), where('branchId', '==', BRANCH))),
+    );
+  });
+
+  it('DENIED: branch-restricted manager unconstrained collection list (no branch predicate)', async () => {
+    await seedAlert('sca3', BRANCH);
+    await seedAlert('sca4', OTHER_BRANCH);
+    const db = testEnv.authenticatedContext('m1', manager(BRANCH)).firestore();
+    await assertFails(getDocs(collection(db, 'shiftCloseAlerts')));
+  });
+
+  it('DENIED: manager querying with the OTHER branch predicate (no access to that branch)', async () => {
+    await seedAlert('sca5', OTHER_BRANCH);
+    const db = testEnv.authenticatedContext('m1', manager(BRANCH)).firestore();
+    await assertFails(
+      getDocs(query(collection(db, 'shiftCloseAlerts'), where('branchId', '==', OTHER_BRANCH))),
+    );
+  });
+
+  it('DENIED: cashier/staff list with the correct branch predicate (no read grant for staff role)', async () => {
+    await seedAlert('sca6', BRANCH);
+    const db = testEnv.authenticatedContext('staff1', staff()).firestore();
+    await assertFails(
+      getDocs(query(collection(db, 'shiftCloseAlerts'), where('branchId', '==', BRANCH))),
+    );
+  });
+
+  it("ALLOWED: global admin (branchIds: ['ALL']) list with a branch predicate succeeds", async () => {
+    await seedAlert('sca7', BRANCH);
+    const db = testEnv.authenticatedContext('ga1', globalAdmin()).firestore();
+    await assertSucceeds(
+      getDocs(query(collection(db, 'shiftCloseAlerts'), where('branchId', '==', BRANCH))),
+    );
+  });
+
+  it('DENIED: unauthenticated list (with or without a branch predicate)', async () => {
+    await seedAlert('sca8', BRANCH);
+    const db = testEnv.unauthenticatedContext().firestore();
+    await assertFails(
+      getDocs(query(collection(db, 'shiftCloseAlerts'), where('branchId', '==', BRANCH))),
+    );
+  });
+});
 
 // ─────────────────────────────────────────────────────────────────────────
 // shifts D4 — W0–W4 lifecycle hardening

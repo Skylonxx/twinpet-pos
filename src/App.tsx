@@ -46,6 +46,7 @@ import StaffManagementPage from './pages/StaffManagementPage';
 import ManualReviewOpsPage from './pages/ManualReviewOpsPage';
 import StockReportPage from './pages/StockReportPage';
 import SupplierPage from './pages/SupplierPage';
+import ShiftCloseReviewPage from './pages/ShiftCloseReviewPage';
 
 export default function App() {
   return (
@@ -83,6 +84,8 @@ export default function App() {
             <Route path="/profit-report" element={<ProfitReportPage />} />
             <Route path="/staff" element={<StaffManagementPage />} />
             <Route path="/manual-review" element={<ManualReviewOpsPage />} />
+            {/* Route-only (direct URL); no nav entry by design — Packet 5 UI-A. */}
+            <Route path="/shift-close-review" element={<ShiftCloseReviewPage />} />
             <Route path="/export" element={<ExportReportPage />} />
             <Route path="/settings" element={<SettingsLayout />}>
               <Route index element={<Navigate to={FIRST_SETTINGS_SLUG} replace />} />
