@@ -1,4 +1,5 @@
 import { Alert, Badge, Card, Spinner, Table, TableBody, TableCell, TableHead, TableHeadCell, TableRow } from 'flowbite-react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../lib/hooks/useAuth';
 import { useBranch } from '../lib/hooks/useBranch';
 import { isFirebaseConfigured } from '../lib/firebase';
@@ -117,7 +118,7 @@ export default function ShiftCloseReviewPage() {
                     <TableHeadCell>สาเหตุ</TableHeadCell>
                     <TableHeadCell>เปิดเมื่อ</TableHeadCell>
                     <TableHeadCell>อัปเดตเมื่อ</TableHeadCell>
-                    <TableHeadCell className="text-gray-400">รายละเอียด</TableHeadCell>
+                    <TableHeadCell>รายละเอียด</TableHeadCell>
                   </TableHead>
                   <TableBody className="divide-y">
                     {actionableRows.map((row) => (
@@ -150,14 +151,22 @@ function ReviewRow({ row }: { row: ShiftCloseReviewRow }) {
       <TableCell className="whitespace-nowrap text-gray-500 dark:text-gray-400">
         {formatRelative(row.updatedAtMs)}
       </TableCell>
-      <TableCell className="whitespace-nowrap text-xs text-gray-400">
-        <span>v{row.caseVersion ?? '—'}</span>
-        {row.acknowledgedByActor?.kind === 'manager' && (
-          <span className="ml-2">รับทราบโดย {row.acknowledgedByActor.managerUid}</span>
-        )}
-        {row.resolvedByActor?.kind === 'manager' && (
-          <span className="ml-2">แก้ไขโดย {row.resolvedByActor.managerUid}</span>
-        )}
+      <TableCell className="whitespace-nowrap text-xs">
+        <Link
+          to={`/shift-close-review/${encodeURIComponent(row.id)}`}
+          className="inline-flex min-h-11 items-center py-2 font-medium text-blue-600 hover:underline dark:text-blue-400"
+        >
+          ดูรายละเอียด
+        </Link>
+        <div className="mt-1 text-gray-400">
+          <span>v{row.caseVersion ?? '—'}</span>
+          {row.acknowledgedByActor?.kind === 'manager' && (
+            <span className="ml-2">รับทราบโดย {row.acknowledgedByActor.managerUid}</span>
+          )}
+          {row.resolvedByActor?.kind === 'manager' && (
+            <span className="ml-2">แก้ไขโดย {row.resolvedByActor.managerUid}</span>
+          )}
+        </div>
       </TableCell>
     </TableRow>
   );

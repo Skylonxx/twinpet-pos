@@ -34,6 +34,8 @@ import {
   collection,
   query,
   where,
+  documentId,
+  limit,
   getDocs,
   serverTimestamp,
   arrayUnion,
@@ -249,6 +251,214 @@ describe('shiftCloseAlerts — list queries (UI-A alert queue)', () => {
     await assertFails(
       getDocs(query(collection(db, 'shiftCloseAlerts'), where('branchId', '==', BRANCH))),
     );
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// shiftCloseCases — LIST queries (Packet 5 Client/UI-B core, read-only alert
+// DETAIL view). Mirrors the shiftCloseAlerts list-query coverage above.
+// The UI-B hook's mandatory query shape is
+// `where('branchId', '==', activeBranchId) + where(documentId(), '==', canonicalRouteShiftId) + limit(1)`
+// — no whole-branch fallback exists in the client.
+// ─────────────────────────────────────────────────────────────────────────
+
+describe('shiftCloseCases — list queries (UI-B alert detail)', () => {
+  const seedCase = async (id: string, branchId: string) => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'shiftCloseCases', id), {
+        shiftId: id,
+        branchId,
+        processingState: 'validated',
+        settlementState: 'unsettled',
+        caseVersion: 1,
+        schemaVersion: 1,
+      });
+    });
+  };
+
+  it('ALLOWED: same-branch manager list with the branch predicate succeeds', async () => {
+    await seedCase('scc1', BRANCH);
+    const db = testEnv.authenticatedContext('m1', manager(BRANCH)).firestore();
+    await assertSucceeds(
+      getDocs(query(collection(db, 'shiftCloseCases'), where('branchId', '==', BRANCH))),
+    );
+  });
+
+  it('DENIED: branch-restricted manager unconstrained collection list (no branch predicate)', async () => {
+    await seedCase('scc2', BRANCH);
+    await seedCase('scc3', OTHER_BRANCH);
+    const db = testEnv.authenticatedContext('m1', manager(BRANCH)).firestore();
+    await assertFails(getDocs(collection(db, 'shiftCloseCases')));
+  });
+
+  it('DENIED: manager querying with the OTHER branch predicate (no access to that branch)', async () => {
+    await seedCase('scc4', OTHER_BRANCH);
+    const db = testEnv.authenticatedContext('m1', manager(BRANCH)).firestore();
+    await assertFails(
+      getDocs(query(collection(db, 'shiftCloseCases'), where('branchId', '==', OTHER_BRANCH))),
+    );
+  });
+
+  it('DENIED: cashier/staff list with the correct branch predicate (no read grant for staff role)', async () => {
+    await seedCase('scc5', BRANCH);
+    const db = testEnv.authenticatedContext('staff1', staff()).firestore();
+    await assertFails(
+      getDocs(query(collection(db, 'shiftCloseCases'), where('branchId', '==', BRANCH))),
+    );
+  });
+
+  it("ALLOWED: global admin (branchIds: ['ALL']) list with a branch predicate succeeds", async () => {
+    await seedCase('scc6', BRANCH);
+    const db = testEnv.authenticatedContext('ga1', globalAdmin()).firestore();
+    await assertSucceeds(
+      getDocs(query(collection(db, 'shiftCloseCases'), where('branchId', '==', BRANCH))),
+    );
+  });
+
+  it('DENIED: unauthenticated list (with or without a branch predicate)', async () => {
+    await seedCase('scc7', BRANCH);
+    const db = testEnv.unauthenticatedContext().firestore();
+    await assertFails(
+      getDocs(query(collection(db, 'shiftCloseCases'), where('branchId', '==', BRANCH))),
+    );
+  });
+
+  // ── DOCUMENTED NON-VIABLE APPROACH (regression evidence, kept intentionally):
+  // the originally-planned UI-B query shape (branchId equality + documentId()
+  // equality + limit(1)). Emulator evidence below proves this shape CANNOT be
+  // used as the primary access pattern: firestore.rules'
+  // `allow read: if isManagerOrAdmin() && hasBranchAccess(resource.data.branchId)`
+  // dereferences `resource.data` on a null `resource` for ANY read of a
+  // nonexistent document, which Firestore evaluates as a rule error and
+  // DENIES — not a graceful empty result. Since most shifts close with no
+  // alert/case doc at all, this shape would deny the overwhelmingly common
+  // "nothing to see here" case exactly like a real permission problem. This
+  // is why the shipped hook (useShiftCloseAlertDetail) uses Fallback A
+  // (direct single-document listeners) instead — see the next describe
+  // block for the shape actually implemented. These tests stay as a
+  // regression guard so nobody reintroduces the list+documentId() shape
+  // believing it degrades gracefully.
+  it('DENIED (documented rules limitation, NOT silently empty): branch predicate + documentId() that does not exist anywhere', async () => {
+    const db = testEnv.authenticatedContext('m1', manager(BRANCH)).firestore();
+    await assertFails(
+      getDocs(
+        query(
+          collection(db, 'shiftCloseCases'),
+          where('branchId', '==', BRANCH),
+          where(documentId(), '==', 'no-such-shift-id'),
+          limit(1),
+        ),
+      ),
+    );
+  });
+
+  it('DENIED (fail-closed, not silently empty): branch predicate + documentId() resolving to a REAL doc in a DIFFERENT branch', async () => {
+    await seedCase('other-branch-case', OTHER_BRANCH);
+    const db = testEnv.authenticatedContext('m1', manager(BRANCH)).firestore();
+    await assertFails(
+      getDocs(
+        query(
+          collection(db, 'shiftCloseCases'),
+          where('branchId', '==', BRANCH),
+          where(documentId(), '==', 'other-branch-case'),
+          limit(1),
+        ),
+      ),
+    );
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// shiftCloseAlerts / shiftCloseCases — Fallback A (frozen plan §8), the
+// SHAPE ACTUALLY SHIPPED by useShiftCloseAlertDetail (Packet 5 / UI-B core):
+// a direct single-document listener per collection (`doc(db, collection,
+// shiftId)`), no `where()` predicate at all. The client performs its own
+// branch veto AFTER a successful read (never rendering a doc whose stored
+// `branchId` differs from the active branch) — these rules tests prove the
+// SERVER side of that contract: same-branch reads are allowed, cross-branch
+// and nonexistent-doc reads are denied (missing-vs-denied intentionally
+// indistinguishable, per §8's fallback contract), non-manager/unauthenticated
+// reads are denied, and global admin retains cross-branch read access (the
+// client-side veto is what keeps a global admin's currently-selected-branch
+// view honest, not the rules).
+// ─────────────────────────────────────────────────────────────────────────
+
+describe('shiftCloseAlerts / shiftCloseCases — direct doc reads (UI-B Fallback A shape)', () => {
+  const seedAlertDoc = async (id: string, branchId: string) => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'shiftCloseAlerts', id), {
+        shiftId: id,
+        branchId,
+        alertState: 'open',
+      });
+    });
+  };
+  const seedCaseDoc = async (id: string, branchId: string) => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'shiftCloseCases', id), {
+        shiftId: id,
+        branchId,
+        processingState: 'validated',
+        settlementState: 'unsettled',
+        caseVersion: 1,
+      });
+    });
+  };
+
+  it('ALLOWED: manager direct-doc read of a same-branch shiftCloseAlerts doc', async () => {
+    await seedAlertDoc('fb-a1', BRANCH);
+    const db = testEnv.authenticatedContext('m1', manager(BRANCH)).firestore();
+    await assertSucceeds(getDoc(doc(db, 'shiftCloseAlerts', 'fb-a1')));
+  });
+
+  it('ALLOWED: manager direct-doc read of a same-branch shiftCloseCases doc', async () => {
+    await seedCaseDoc('fb-c1', BRANCH);
+    const db = testEnv.authenticatedContext('m1', manager(BRANCH)).firestore();
+    await assertSucceeds(getDoc(doc(db, 'shiftCloseCases', 'fb-c1')));
+  });
+
+  it('DENIED: manager direct-doc read of a DIFFERENT-branch shiftCloseAlerts doc', async () => {
+    await seedAlertDoc('fb-a2', OTHER_BRANCH);
+    const db = testEnv.authenticatedContext('m1', manager(BRANCH)).firestore();
+    await assertFails(getDoc(doc(db, 'shiftCloseAlerts', 'fb-a2')));
+  });
+
+  it('DENIED: manager direct-doc read of a DIFFERENT-branch shiftCloseCases doc', async () => {
+    await seedCaseDoc('fb-c2', OTHER_BRANCH);
+    const db = testEnv.authenticatedContext('m1', manager(BRANCH)).firestore();
+    await assertFails(getDoc(doc(db, 'shiftCloseCases', 'fb-c2')));
+  });
+
+  it('DENIED (documented rules limitation, missing-vs-denied intentionally dropped): manager direct-doc read of a nonexistent shiftCloseAlerts doc', async () => {
+    const db = testEnv.authenticatedContext('m1', manager(BRANCH)).firestore();
+    await assertFails(getDoc(doc(db, 'shiftCloseAlerts', 'fb-nonexistent-1')));
+  });
+
+  it('DENIED (documented rules limitation, missing-vs-denied intentionally dropped): manager direct-doc read of a nonexistent shiftCloseCases doc', async () => {
+    const db = testEnv.authenticatedContext('m1', manager(BRANCH)).firestore();
+    await assertFails(getDoc(doc(db, 'shiftCloseCases', 'fb-nonexistent-2')));
+  });
+
+  it('DENIED: cashier/staff direct-doc read (no read grant for staff role)', async () => {
+    await seedAlertDoc('fb-a3', BRANCH);
+    await seedCaseDoc('fb-c3', BRANCH);
+    const db = testEnv.authenticatedContext('staff1', staff()).firestore();
+    await assertFails(getDoc(doc(db, 'shiftCloseAlerts', 'fb-a3')));
+    await assertFails(getDoc(doc(db, 'shiftCloseCases', 'fb-c3')));
+  });
+
+  it('DENIED: unauthenticated direct-doc read', async () => {
+    await seedAlertDoc('fb-a4', BRANCH);
+    const db = testEnv.unauthenticatedContext().firestore();
+    await assertFails(getDoc(doc(db, 'shiftCloseAlerts', 'fb-a4')));
+  });
+
+  it("ALLOWED: global admin (branchIds: ['ALL']) direct-doc read of an existing doc in a specific branch", async () => {
+    await seedAlertDoc('fb-a5', BRANCH);
+    await seedCaseDoc('fb-c5', BRANCH);
+    const db = testEnv.authenticatedContext('ga1', globalAdmin()).firestore();
+    await assertSucceeds(getDoc(doc(db, 'shiftCloseAlerts', 'fb-a5')));
+    await assertSucceeds(getDoc(doc(db, 'shiftCloseCases', 'fb-c5')));
   });
 });
 
