@@ -1,11 +1,32 @@
 # Twinpet POS — Task Tracker
 
-> Last reconciled: 2026-07-19
-> HEAD: `afacd3ba8bbb7b9b7973b70a334cde957ddf6750` (feat(pos): add shift close alert adjudication callable)
-> origin/main: `afacd3ba8bbb7b9b7973b70a334cde957ddf6750`
-> Implementation: `afacd3ba8bbb7b9b7973b70a334cde957ddf6750` (Packet 5 / P5-E Adjudication Callable — deployed live)
+> Last reconciled: 2026-07-23
+> HEAD: `490f4cf47a579241fcf10b1feba7edd6fcc09d44` (feat(pos): add shift close alert review detail)
+> origin/main: `490f4cf47a579241fcf10b1feba7edd6fcc09d44`
+> Implementation: `490f4cf47a579241fcf10b1feba7edd6fcc09d44` (Packet 5 / Client-UI-B — CLOSED AS COMMITTED AND PUSHED)
 
 ---
+
+## P1 Offline / Sync Resiliency — Packet 5 / Client-UI-B
+
+**Status: CLOSED AS COMMITTED AND PUSHED**
+
+- [x] Implementation — read-only `/shift-close-review/:shiftId` detail view; two direct-doc listeners; safe projection; queue-to-detail navigation
+- [x] Codex implementation review — REQUEST CHANGES (0 blockers, 4 RCs)
+- [x] Gemini bounded remediation — RC-1/RC-2/RC-3; historical stash incident waived for that incident only
+- [x] Codex re-review — PASS WITH NOTES (0 blockers, 0 RCs, 4 notes)
+- [x] AGY UX review — PASS (0 blockers; viewport 320/768/1080)
+- [x] Commit/push — `490f4cf` (`feat(pos): add shift close alert review detail`); fast-forward push; 12 files; `2115 insertions(+), 15 deletions(-)`
+- [x] Gemini closure — Option A; process deviation accepted as nonblocking
+- [ ] Docs reconciliation — **active** (this pass; unstaged, uncommitted)
+
+**Boundaries:** no acknowledge/resolve; no UI-B2; no write path/callable/production mutation/deploy. Fallback A missing-vs-denied ambiguity unresolved.
+
+**Next:** Codex strict read-only docs review → Gemini separate docs commit/push authorization consideration.
+
+## P1 Offline / Sync Resiliency — Packet 5 / Client-UI-A
+
+**Status: CLOSED AS COMMITTED AND PUSHED** (`4614e70` — shift close review queue)
 
 ## P1 Offline / Sync Resiliency — Packet 5 / G3 Monitoring
 
@@ -97,11 +118,11 @@
 
 ### Next step
 
-1. Packet 5 / P5-E Adjudication Callable — **`PACKET_5_P5_E_CLOSED`** (`afacd3b`; `resolveShiftCloseAlert` live; docs closure this pass)
-2. Packet 5 / G3 Monitoring — **docs/runbook CLOSED** this pass (8 alert policies + 2 log-based metrics + 1 email channel, live and independently verified `PASS WITH NOTES`; runbook at `docs/ops/packet-5-monitoring-runbook.md`)
-3. **Next: free-trial upgrade decision (owner, ≈2026-08-27)** — separate from monitoring; governs whether the entire Packet 5 runtime keeps running past trial expiry. Also continue the post-P5-E read-only roadmap audit; no implementation planning beyond roadmap level.
-4. **NOT authorized:** P5-F planning/implementation, recapture planning/implementation, client/UI planning/implementation (all pending roadmap-audit recommendation + Gemini authorization), manual invocation, production/emulator data mutation, synthetic source events, Firestore index/rules deploy, deploy/runtime activation, alert test-fire. No `shifts.expected*` mutation; no FIFO/stock/credit/settlement writes; `stash@{0}` untouched.
-5. **Passive observation** — read-only on natural traffic only is authorized in parallel.
+1. Packet 5 / Client-UI-B — **CLOSED AS COMMITTED AND PUSHED** (`490f4cf`)
+2. **Active: UI-B docs reconciliation** — seven tracker documents updated (unstaged); next gate Codex strict read-only docs review
+3. **After Codex docs review:** Gemini separate docs commit/push authorization consideration
+4. **NOT authorized:** UI-B.1, UI-B2, UI-C, P5-F, recapture, new implementation, deploy, runtime activation, production access, stash operations, POSPage/PaymentModal/checkout/navigation/global-keyboard changes
+5. **Next implementation/roadmap direction** — later Gemini decision after docs closure; no active implementation packet
 6. Do not automatically start another packet.
 
-**Not active:** P5-F backfill, recapture callable, client/UI adjudication surface, broad Packet 5 runtime beyond P5-E closure.
+**Not active:** UI-B.1, UI-B2, UI-C, P5-F, recapture, or any new feature packet.
