@@ -1,29 +1,49 @@
 # Twinpet POS โ€” Project Context
 
-> Last reconciled: 2026-07-23
-> HEAD: `490f4cf47a579241fcf10b1feba7edd6fcc09d44` (feat(pos): add shift close alert review detail)
-> origin/main: `490f4cf47a579241fcf10b1feba7edd6fcc09d44`
-> Implementation: `490f4cf47a579241fcf10b1feba7edd6fcc09d44` (Packet 5 / Client-UI-B — CLOSED AS COMMITTED AND PUSHED)
+> Last reconciled: 2026-07-24
+> HEAD: `3ef4d016eeb288bcdf7d76c959e4a748b97964c6` (feat(pos): add shift close manager adjudication surface)
+> origin/main: `3ef4d016eeb288bcdf7d76c959e4a748b97964c6`
+> Implementation: `3ef4d016eeb288bcdf7d76c959e4a748b97964c6` (Packet 5 / UI-C Manager Adjudication Action Surface — CLOSED AS COMMITTED AND PUSHED)
+> Self-reference lag: this file is edited inside the UI-C docs pass; the docs commit carrying it is not yet created and its hash is not recorded here. Treat actual Git HEAD as authoritative.
 
 ---
 
 ## Current Phase
 
-**P1 Offline / Sync Resiliency — Packet 5 / Client/UI Manager Adjudication Surface / UI-B: CLOSED AS COMMITTED AND PUSHED** — read-only shift-close alert detail view committed and fast-forward pushed. Docs reconciliation is **active** (authorized, unstaged, uncommitted). Next gate: **Codex strict read-only documentation review**; after that, Gemini separate docs commit/push authorization consideration. No new implementation packet is active.
+**P1 Offline / Sync Resiliency — Packet 5 / UI-C Manager Adjudication Action Surface: CLOSED AS COMMITTED AND PUSHED** — manager Acknowledge/Resolve adjudication action surface over the read-only shift-close alert detail page; exact ten-file implementation committed and fast-forward pushed at `3ef4d01`. Docs reconciliation is **active** (authorized, unstaged, pending commit this pass). Next gate: **strict read-only post-UI-C roadmap audit**. No new implementation packet is active and no next candidate is selected.
 
 Manual workflow remains active. `agentchattr` was not used as the executor for this phase.
 
-**Repository baseline:** branch `main`, HEAD/origin `490f4cf47a579241fcf10b1feba7edd6fcc09d44`, working tree was **clean** immediately after UI-B push; this pass leaves **seven authorized unstaged docs changes only**, staged **empty**, `stash@{0}` present and untouched (`7d03cfec7ba52ff7e25b7e175ca190efc258d874`).
+**Repository baseline:** branch `main`, HEAD/origin `3ef4d016eeb288bcdf7d76c959e4a748b97964c6`, working tree was **clean** immediately after the UI-C push; this pass leaves **seven authorized unstaged docs changes only**, staged **empty**, `stash@{0}` present and untouched (`7d03cfec7ba52ff7e25b7e175ca190efc258d874`).
 
-### P1 Packet 5 / Client-UI-B (CLOSED AS COMMITTED AND PUSHED)
+### P1 Packet 5 / UI-C Manager Adjudication Action Surface (CLOSED AS COMMITTED AND PUSHED)
+
+**Status:** **CLOSED AS COMMITTED AND PUSHED**
+
+- **Commit** — `3ef4d016eeb288bcdf7d76c959e4a748b97964c6` (`feat(pos): add shift close manager adjudication surface`); parent `70a23f92b8fb787803e1576cbb5ea9442d3c0dce`; exactly 10 files; `3616 insertions(+), 12 deletions(-)`
+- **Push** — fast-forward `70a23f9..3ef4d01 main -> main`; final `HEAD == origin/main == 3ef4d016eeb288bcdf7d76c959e4a748b97964c6`
+- **Surface** — manager Acknowledge/Resolve adjudication **action** on the read-only `/shift-close-review/:shiftId` detail page (UI-B delivered the read-only view; UI-C adds the guarded action surface over it)
+- **Modules** — new `ShiftCloseAdjudicationPanel` (+ test), `shiftCloseAdjudicationMachine` (+ test), `resolveShiftCloseAlertAdapter` (+ test); modified `shiftCloseDetailProjection` (+ test), `ShiftCloseAlertDetailPage` (+ test); hook `useShiftCloseAlertDetail.ts` unchanged and excluded from the commit
+- **Mutation boundary** — the already-live `resolveShiftCloseAlert` callable (P5-E) is the only mutation path; manager/admin branch authority enforced server-side in a Firestore transaction; **no callable invocation performed** in UI-C
+- **Scope guards** — machine-owned retry authority (requires `retryable` + current structured-scope equality + current source-binding); scope-change abandons the retry chain; no auto-retry; same-scope exact-command retry preserves command ID and payload; extended allowlist detail projection still excludes sensitive cash/evidence/lease/note
+- **Not implemented** — no new deployment; no runtime activation; no callable invocation; no rules/index/functions change; no hook change; no App/route/nav/CSS/POS/payment/keyboard/PIN change; A-1 global Flowbite fix deferred
+- **Review chain** — Codex implementation closure re-review `PASS WITH NOTES` (0 blockers, 0 request changes, 4 notes); AGY final rendered UX re-review `PASS` (0 blockers, 0 request changes, 1 note; viewports 320/768/1080); Gemini implementation-closure + commit/push authorization (A-1 accepted as deferred note)
+- **Finding dispositions** — V-1 CLOSED in rendered UI (`color="yellow"` hierarchy; Resolve stronger than Acknowledge); L-1 CLOSED in rendered UI (warning directly after checkbox, both visible on load, warning exactly once); A-1 accepted deferred global/library Flowbite modal focus-containment NOTE (not worsened)
+- **Verification** — targeted UI-C 5 files / 260 tests; full root 69 files / 1540 tests; rules 8 files / 300 tests; POS three-suite 3 files / 178 tests; build passed; typecheck exit 0; targeted ten-file ESLint exit 0; `git diff --check` exit 0; staged diff exactly 10 authorized files (an interim Codex closure re-review recorded 251/1531 before the rendered-UX remediation added tests; final committed state is 260/1540)
+- **Do not overclaim** — no backend settlement; no production end-to-end validation; the callable was already deployed at P5-E (UI-C deployed nothing) and was never invoked here
+
+**Reports:** implementation, Codex implementation review + closure re-review, remediation (RC + RC-4 + retry-scope + rendered-UX), AGY UX + final rendered-UX re-review, render-harness rerun, and commit/push reports under `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\`.
+
+### P1 Packet 5 / Client-UI-B (prior — CLOSED AS COMMITTED AND PUSHED)
 
 **Status:** **CLOSED AS COMMITTED AND PUSHED**
 
 - **Commit** — `490f4cf47a579241fcf10b1feba7edd6fcc09d44` (`feat(pos): add shift close alert review detail`); parent `4614e703724070fce42d9d477380a48aa1351cc0`; 12 files; `2115 insertions(+), 15 deletions(-)`
-- **Push** — fast-forward `4614e70..490f4cf main -> main`; final `HEAD == origin/main == 490f4cf47a579241fcf10b1feba7edd6fcc09d44`
-- **Route** — protected read-only `/shift-close-review/:shiftId` (route-only; no nav entry); queue-to-detail navigation via canonical encoded document ID from UI-A review queue
+- **Docs closure** — `70a23f92b8fb787803e1576cbb5ea9442d3c0dce` (`docs(pos): close client ui-b reconciliation`; seven-doc payload; parent of UI-C)
+- **Push** — fast-forward `4614e70..490f4cf main -> main`
+- **Route** — protected read-only `/shift-close-review/:shiftId` (route-only; no nav entry); queue-to-detail navigation via canonical encoded document ID from UI-A review queue — extended by UI-C's action surface
 - **Gates** — manager/admin, Firebase, branch, database, and route validation; exactly two direct-document Firestore listeners; independent alert/case state and cache provenance; safe explicit projection excluding sensitive figures; truthful cache-derived empty wording; Flowbite copy control with handled async rejection; accessible/touch-sized detail link; long shiftId truncation without horizontal overflow
-- **Not implemented** — no acknowledge/resolve action; no UI-B2 sensitive-figure implementation; no write path, callable invocation, production mutation, or deployment in UI-B
+- **Not implemented (in UI-B)** — no acknowledge/resolve action (delivered later by UI-C); no UI-B2 sensitive-figure implementation; no write path, callable invocation, production mutation, or deployment in UI-B
 - **Fallback A** — primary list+`documentId()` shape proved non-viable under current rules; shipped direct-doc listeners with neutral missing-vs-denied wording; ambiguity **not** resolved at rules level; no automatic recovery after terminal permission-denied listener
 - **Review chain** — Codex implementation review `REQUEST CHANGES` (0 blockers, 4 RCs); Gemini bounded remediation (RC-1/RC-2/RC-3; historical transient stash incident waived for that incident only; future stash operations forbidden); Codex re-review `PASS WITH NOTES` (0 blockers, 0 RCs, 4 notes; RC-1/RC-2/RC-3 resolved, RC-4 verified); AGY UX review `PASS` (0 blockers, 0 RCs, 0 notes; viewport 320/768/1080); Gemini closure Option A (`PROCESS NOTE ACCEPTED / NONBLOCKING` for commit/push executor read-all-reports deviation)
 - **Verification** — targeted UI-B tests 77/77; full unit 1325/1325; typecheck passed; build passed; rules 300/300; POS regressions 178/178; targeted ESLint passed; repository-wide lint `205 problems (202 errors, 3 warnings)` — known unrelated debt; `git diff --check` clean before commit; staged diff exactly 12 authorized files
@@ -196,14 +216,15 @@ Non-blocking this-terminal pending-sync warning; close remains enabled.
 
 - Do not claim backend accepted/settled/synced while pending
 - Do not claim reliable post-reload ack/rejection outside the honest confirmation-grade conjunction (`getDocFromServer` + resolved `closedAt` + full identity match) 7C-B2 implements
-- P5-C/P5-D/P5-E backend components (evidence capture, validation sweep worker, source event routing, adjudication callable) are implemented and deployed/live per their recorded closure evidence — P5-B pure core was the historical starting point, since superseded by those live deployments; do not claim the full P5-C/D/E pipeline has been naturally exercised end-to-end on production data, that UI-B/UI-A prove backend settlement, or that any new deployment/invocation/production validation occurred in UI-B
+- P5-C/P5-D/P5-E backend components (evidence capture, validation sweep worker, source event routing, adjudication callable) are implemented and deployed/live per their recorded closure evidence — P5-B pure core was the historical starting point, since superseded by those live deployments; do not claim the full P5-C/D/E pipeline has been naturally exercised end-to-end on production data, that UI-A/UI-B/UI-C prove backend settlement, or that any new deployment/invocation/production validation occurred in UI-B or UI-C (UI-C's `resolveShiftCloseAlert` mutation boundary was already deployed at P5-E and was never invoked in UI-C)
 - Do not claim cross-device/global correctness
 - 7C-A is superseded by 7C-B1 for the close path โ€” no longer the active offline-close guard
 - 7C-B2 only *flags* an identity mismatch โ€” it never adjudicates which side is correct (Packet 5's role)
 
 ### Prior closed packets
 
-- **Packet 5 / Client-UI-B** — `490f4cf` (shift-close alert review detail; CLOSED AS COMMITTED AND PUSHED)
+- **Packet 5 / UI-C Manager Adjudication Action Surface** — `3ef4d01` (manager Acknowledge/Resolve action surface; CLOSED AS COMMITTED AND PUSHED; docs closure this pass)
+- **Packet 5 / Client-UI-B** — `490f4cf` (shift-close alert review detail; CLOSED AS COMMITTED AND PUSHED; docs closure `70a23f9`)
 - **Packet 5 / Client-UI-A** — `4614e70` (shift close review queue; CLOSED AS COMMITTED AND PUSHED)
 - **Packet 5 / P5-E Adjudication Callable** — `afacd3b` (`resolveShiftCloseAlert` live) (CLOSED — LIVE)
 - **Packet 5 / P5-D Deployment** — `4adb1d5` (P5-D-1 sweep + 6 READY indexes live) + `7976e3e` (P5-D-2 4 routing triggers live) (CLOSED — LIVE)
@@ -218,21 +239,23 @@ Non-blocking this-terminal pending-sync warning; close remains enabled.
 
 ### Deferred / next gate
 
-1. **Packet 5 / Client-UI-B CLOSED AS COMMITTED AND PUSHED** — `490f4cf` on `main`; implementation/remediation/review/commit/push gates closed.
-2. **Active: UI-B docs reconciliation** — seven authorized tracker documents updated (unstaged, uncommitted); next gate **Codex strict read-only documentation review**; after Codex, **Gemini separate docs commit/push authorization consideration**.
-3. **Next implementation/roadmap direction** — later Gemini decision after docs closure; do not select or authorize UI-B.1, UI-B2, UI-C, P5-F, recapture, or another feature packet.
+1. **Packet 5 / UI-C Manager Adjudication Action Surface CLOSED AS COMMITTED AND PUSHED** — `3ef4d01` on `main`; implementation/remediation/review/commit/push gates closed.
+2. **Active: UI-C docs reconciliation** — seven authorized tracker documents updated (unstaged, pending commit this pass); next gate **strict read-only post-UI-C roadmap audit** (Gemini already authorized this pass's docs commit/push).
+3. **Next implementation/roadmap direction** — later Gemini decision after the post-UI-C roadmap audit; no next candidate is selected; do not select or authorize UI-B.1, UI-B2, P5-F, recapture, or another feature packet.
 4. **Standing boundaries (carried forward):**
-   - UI-B.1 / UI-B2 / UI-C — **NOT AUTHORIZED**
+   - UI-B.1 / UI-B2 — **NOT AUTHORIZED**
    - P5-F planning/implementation — **NOT AUTHORIZED**
    - recapture planning/implementation — **NOT AUTHORIZED**
-   - manual invocation of deployed functions — **NOT AUTHORIZED**
+   - manual invocation of deployed functions (including `resolveShiftCloseAlert`) — **NOT AUTHORIZED**
    - production/emulator data mutation — **NOT AUTHORIZED**
    - Firestore rules/index/functions deployment — **NOT AUTHORIZED**
    - deploy/runtime activation — **NOT AUTHORIZED**
+   - global Flowbite focus fix (A-1) — **NOT AUTHORIZED** (accepted deferred note)
+   - next implementation (any candidate) — **NOT AUTHORIZED** by this pass
    - POSPage / PaymentModal / checkout/payment / navigation-menu / global keyboard changes — **NOT AUTHORIZED**
    - no `shifts.expected*` mutation; no FIFO/stock/credit/settlement writes; `stash@{0}` untouched
 5. **Passive observation** — read-only observation on **natural traffic only** remains authorized in parallel.
-6. **Open decisions/risks carried forward:** live-lease conflict reject-code reuse; manager `reasonCode` accepts full frozen enum; optional PIN not enforced day one; G3 monitoring resolved (runbook at `docs/ops/packet-5-monitoring-runbook.md`); no real shift close through full P5-C/P5-D/P5-E pipeline yet; free-trial upgrade decision (owner, ≈2026-08-27) open; UI-B Fallback A missing-vs-denied ambiguity and terminal permission-denied listener behavior remain unresolved.
+6. **Open decisions/risks carried forward:** live-lease conflict reject-code reuse; manager `reasonCode` accepts full frozen enum; optional PIN not enforced day one; A-1 global Flowbite modal focus-containment deferred; G3 monitoring resolved (runbook at `docs/ops/packet-5-monitoring-runbook.md`); no real shift close through full P5-C/P5-D/P5-E pipeline yet; free-trial upgrade decision (owner, ≈2026-08-27) open; UI-B Fallback A missing-vs-denied ambiguity and terminal permission-denied listener behavior remain unresolved.
 7. Do not automatically start another packet.
 
 ### Future Phase โ€” True Standalone (Desktop & Native Mobile) (`TRUE-STANDALONE`)

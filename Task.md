@@ -1,28 +1,42 @@
 # Twinpet POS — Task Tracker
 
-> Last reconciled: 2026-07-23
-> HEAD: `490f4cf47a579241fcf10b1feba7edd6fcc09d44` (feat(pos): add shift close alert review detail)
-> origin/main: `490f4cf47a579241fcf10b1feba7edd6fcc09d44`
-> Implementation: `490f4cf47a579241fcf10b1feba7edd6fcc09d44` (Packet 5 / Client-UI-B — CLOSED AS COMMITTED AND PUSHED)
+> Last reconciled: 2026-07-24
+> HEAD: `3ef4d016eeb288bcdf7d76c959e4a748b97964c6` (feat(pos): add shift close manager adjudication surface)
+> origin/main: `3ef4d016eeb288bcdf7d76c959e4a748b97964c6`
+> Implementation: `3ef4d016eeb288bcdf7d76c959e4a748b97964c6` (Packet 5 / UI-C Manager Adjudication Action Surface — CLOSED AS COMMITTED AND PUSHED)
+> Self-reference lag: edited inside the UI-C docs pass; the docs commit carrying it is not yet created. Treat actual Git HEAD as authoritative.
 
 ---
 
-## P1 Offline / Sync Resiliency — Packet 5 / Client-UI-B
+## P1 Offline / Sync Resiliency — Packet 5 / UI-C Manager Adjudication Action Surface
 
 **Status: CLOSED AS COMMITTED AND PUSHED**
 
+- [x] Implementation — manager Acknowledge/Resolve action surface over read-only `/shift-close-review/:shiftId`; adjudication state machine; non-throwing callable adapter; extended allowlist projection
+- [x] Codex implementation review + closure re-review — PASS WITH NOTES (0 blockers, 0 request changes, 4 notes)
+- [x] Remediation chain — RC + RC-4 + retry-scope + rendered-UX remediations completed
+- [x] AGY final rendered UX re-review — PASS (0 blockers, 0 request changes, 1 note; viewport 320/768/1080); V-1 CLOSED; L-1 CLOSED; A-1 accepted deferred note
+- [x] Gemini implementation-closure + commit/push authorization — AUTHORIZED (A-1 deferred note accepted)
+- [x] Commit/push — `3ef4d01` (`feat(pos): add shift close manager adjudication surface`); fast-forward `70a23f9..3ef4d01`; exactly 10 files; `3616 insertions(+), 12 deletions(-)`
+- [ ] Docs reconciliation — **active** (this pass; unstaged, pending commit)
+
+**Verification:** targeted UI-C 5 files/260; full root 69 files/1540; rules 8 files/300; POS three-suite 3 files/178; build/typecheck/targeted-lint/diff-check PASS.
+
+**Boundaries:** mutation only via already-live `resolveShiftCloseAlert` callable (P5-E) — **no callable invocation performed**; no new deploy/runtime activation; no rules/index/functions change; no hook change; A-1 global Flowbite fix deferred; `stash@{0}` untouched.
+
+**Next:** strict read-only post-UI-C roadmap audit (this pass's docs commit/push already Gemini-authorized).
+
+## P1 Offline / Sync Resiliency — Packet 5 / Client-UI-B
+
+**Status: CLOSED AS COMMITTED AND PUSHED** (`490f4cf` — read-only shift-close alert detail; docs closed at `70a23f9`)
+
 - [x] Implementation — read-only `/shift-close-review/:shiftId` detail view; two direct-doc listeners; safe projection; queue-to-detail navigation
-- [x] Codex implementation review — REQUEST CHANGES (0 blockers, 4 RCs)
-- [x] Gemini bounded remediation — RC-1/RC-2/RC-3; historical stash incident waived for that incident only
-- [x] Codex re-review — PASS WITH NOTES (0 blockers, 0 RCs, 4 notes)
+- [x] Codex review chain — REQUEST CHANGES (4 RCs) → remediation → PASS WITH NOTES
 - [x] AGY UX review — PASS (0 blockers; viewport 320/768/1080)
-- [x] Commit/push — `490f4cf` (`feat(pos): add shift close alert review detail`); fast-forward push; 12 files; `2115 insertions(+), 15 deletions(-)`
-- [x] Gemini closure — Option A; process deviation accepted as nonblocking
-- [ ] Docs reconciliation — **active** (this pass; unstaged, uncommitted)
+- [x] Commit/push — `490f4cf`; fast-forward; 12 files; `2115 insertions(+), 15 deletions(-)`
+- [x] Docs reconciliation — CLOSED at `70a23f9` (`docs(pos): close client ui-b reconciliation`)
 
-**Boundaries:** no acknowledge/resolve; no UI-B2; no write path/callable/production mutation/deploy. Fallback A missing-vs-denied ambiguity unresolved.
-
-**Next:** Codex strict read-only docs review → Gemini separate docs commit/push authorization consideration.
+**Boundaries:** read-only in UI-B (acknowledge/resolve delivered later by UI-C); no UI-B2; Fallback A missing-vs-denied ambiguity unresolved.
 
 ## P1 Offline / Sync Resiliency — Packet 5 / Client-UI-A
 
@@ -118,11 +132,11 @@
 
 ### Next step
 
-1. Packet 5 / Client-UI-B — **CLOSED AS COMMITTED AND PUSHED** (`490f4cf`)
-2. **Active: UI-B docs reconciliation** — seven tracker documents updated (unstaged); next gate Codex strict read-only docs review
-3. **After Codex docs review:** Gemini separate docs commit/push authorization consideration
-4. **NOT authorized:** UI-B.1, UI-B2, UI-C, P5-F, recapture, new implementation, deploy, runtime activation, production access, stash operations, POSPage/PaymentModal/checkout/navigation/global-keyboard changes
-5. **Next implementation/roadmap direction** — later Gemini decision after docs closure; no active implementation packet
+1. Packet 5 / UI-C Manager Adjudication Action Surface — **CLOSED AS COMMITTED AND PUSHED** (`3ef4d01`)
+2. **Active: UI-C docs reconciliation** — seven tracker documents updated (unstaged, pending commit this pass)
+3. **Next gate: strict read-only post-UI-C roadmap audit** (this pass's docs commit/push already Gemini-authorized)
+4. **NOT authorized:** UI-B.1, UI-B2, P5-F, recapture, new implementation (any candidate), deploy, runtime activation, callable invocation, production access, global Flowbite (A-1) fix, stash operations, POSPage/PaymentModal/checkout/navigation/global-keyboard changes
+5. **Next implementation/roadmap direction** — later Gemini decision after the roadmap audit; no active implementation packet and no next candidate selected
 6. Do not automatically start another packet.
 
-**Not active:** UI-B.1, UI-B2, UI-C, P5-F, recapture, or any new feature packet.
+**Not active:** UI-B.1, UI-B2, P5-F, recapture, or any new feature packet.

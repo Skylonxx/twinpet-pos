@@ -2,30 +2,32 @@
 
 ## Current State
 
-- HEAD (code): `490f4cf47a579241fcf10b1feba7edd6fcc09d44` (`feat(pos): add shift close alert review detail`)
-- origin/main: `490f4cf47a579241fcf10b1feba7edd6fcc09d44` — `HEAD == origin/main`
-- **P1 Packet 5 / Client-UI-B** — **CLOSED AS COMMITTED AND PUSHED**
-- **Docs reconciliation** — **ACTIVE** (authorized, unstaged, uncommitted; seven tracker files)
-- Working tree was clean immediately after UI-B push; this pass leaves only the seven authorized unstaged docs changes
+- HEAD (code): `3ef4d016eeb288bcdf7d76c959e4a748b97964c6` (`feat(pos): add shift close manager adjudication surface`)
+- origin/main: `3ef4d016eeb288bcdf7d76c959e4a748b97964c6` — `HEAD == origin/main`
+- **P1 Packet 5 / UI-C Manager Adjudication Action Surface** — **CLOSED AS COMMITTED AND PUSHED** (exact ten-file implementation commit/push COMPLETE)
+- **Docs reconciliation** — **ACTIVE** (authorized, unstaged, pending commit; seven tracker files)
+- Working tree was clean immediately after the UI-C push; this pass leaves only the seven authorized unstaged docs changes
 - Staged area: **empty**
 - stash@{0}: `7d03cfec7ba52ff7e25b7e175ca190efc258d874` (unchanged)
 
+> **Self-reference lag:** the docs commit that carries this reconciliation is not yet created; its hash is unknown here. Treat actual Git HEAD as authoritative.
+
 ## What Happens Next
 
-1. Client-UI-B implementation/remediation/review/commit/push — **DONE (closed)**
-2. UI-B docs reconciliation — **ACTIVE this pass** (unstaged edits to seven trackers)
-3. **Next gate: Codex strict read-only documentation review**
-4. **After Codex docs review:** Gemini separate docs commit/push authorization consideration
-5. **NOT authorized at this gate:** docs commit/push, new implementation, UI-B.1, UI-B2, UI-C, P5-F, recapture, deploy, runtime activation, production access, stash operations, POSPage/PaymentModal/checkout/navigation/global-keyboard changes
-6. **Next implementation/roadmap direction** — later Gemini decision after docs closure; no active implementation packet
+1. UI-C implementation/remediation/review/commit/push — **DONE (closed at `3ef4d01`)**
+2. UI-C docs reconciliation — **ACTIVE this pass** (unstaged edits to seven trackers, pending commit)
+3. **Next gate: strict read-only post-UI-C roadmap audit**
+4. **NOT authorized:** new implementation (any candidate), UI-B.1, UI-B2, P5-F, recapture, deploy, runtime activation, callable invocation, production access, global Flowbite (A-1) fix, stash operations, POSPage/PaymentModal/checkout/navigation/global-keyboard changes
+5. **Next implementation/roadmap direction** — later Gemini decision after the post-UI-C roadmap audit; no active implementation packet and no next candidate selected
 
-**Not active:** UI-B.1, UI-B2, UI-C, P5-F, recapture, or any new feature packet.
+**Not active:** UI-B.1, UI-B2, P5-F, recapture, or any new feature packet.
 
 ## Reminders
 
 - `stash@{0}` — do not touch (`7d03cfec7ba52ff7e25b7e175ca190efc258d874`)
-- UI-B is read-only; no acknowledge/resolve; no UI-B2 sensitive figures; no write/callable/deploy in UI-B
-- Fallback A missing-vs-denied ambiguity and terminal permission-denied listener behavior remain unresolved — do not overclaim
-- Repository-wide lint remains `205 problems (202 errors, 3 warnings)` — known unrelated debt, not a clean lint pass
-- Process note: commit/push executor read-all-reports deviation accepted as nonblocking for this closed packet only
+- UI-C adds the manager Acknowledge/Resolve **action** surface; the `resolveShiftCloseAlert` callable (P5-E, already live) is the only mutation boundary — **no callable invocation was performed** in UI-C
+- Retry authority is machine-owned; same-scope + current-source-binding required; scope-change abandons retry chains; no auto-retry
+- A-1 remains an accepted deferred global/library Flowbite modal focus-containment NOTE — not worsened by UI-C, not fixed here
+- Repository-wide lint remains known unrelated debt; targeted ten-file ESLint passed — not a clean repo-wide lint pass
+- No real shift close has been exercised end-to-end through the full P5-C/P5-D/P5-E pipeline on natural production data; UI-C does not prove backend settlement
 - Free-trial credit expiry ≈2026-08-27 remains a separate owner decision
