@@ -14,7 +14,7 @@
 
 export type { ShiftCloseReviewRow } from './shiftCloseReviewRows';
 export { mapShiftCloseReviewRow } from './shiftCloseReviewRows';
-import type { ShiftCloseReviewRow } from './shiftCloseReviewRows';
+import { ALERT_STATES, UNKNOWN_ALERT_STATE, type AlertState, type ShiftCloseReviewRow } from './shiftCloseReviewRows';
 
 // ---------------------------------------------------------------------------
 // shiftCloseCases projection (allowlist only — mirrors
@@ -79,6 +79,16 @@ export type ShiftCloseCaseProjection = {
   settlementState: SettlementState | typeof UNKNOWN_CASE_ENUM;
   settlementStateLabel: string;
   settlementStateUnknown: boolean;
+  /**
+   * UI-C addition: the case's own view of the alert lifecycle state (the
+   * SAME frozen `AlertState` enum as `shiftCloseReviewRows.ts`). Used ONLY
+   * for the `baseAvailability` cross-source agreement check
+   * (`shiftCloseAdjudicationMachine.ts`) and the `case_alert_state_*`
+   * integrity cautions below — never rendered as a standalone badge, never a
+   * substitute for the alert doc's own `alertState`.
+   */
+  caseAlertState: AlertState | typeof UNKNOWN_CASE_ENUM;
+  caseAlertStateUnknown: boolean;
   updatedAtMs: number | null;
   /** Presence-only — the real run ID is never exposed to this UI packet. */
   hasSelectedRun: boolean;
@@ -94,6 +104,10 @@ function isValidProcessingState(value: unknown): value is ProcessingState {
 
 function isValidSettlementState(value: unknown): value is SettlementState {
   return typeof value === 'string' && (SETTLEMENT_STATES as readonly string[]).includes(value);
+}
+
+function isValidCaseAlertState(value: unknown): value is AlertState {
+  return typeof value === 'string' && (ALERT_STATES as readonly string[]).includes(value);
 }
 
 function tsToMs(v: unknown): number | null {
@@ -123,6 +137,8 @@ export function mapShiftCloseCaseProjection(id: string, data: Record<string, unk
   const settlementStateLabel =
     settlementState === UNKNOWN_CASE_ENUM ? UNKNOWN_SETTLEMENT_STATE_LABEL : SETTLEMENT_STATE_LABELS[settlementState];
 
+  const caseAlertState = isValidCaseAlertState(data.alertState) ? data.alertState : UNKNOWN_CASE_ENUM;
+
   const storedShiftId = data.shiftId;
   const storedIdMismatch = typeof storedShiftId === 'string' && storedShiftId !== '' && storedShiftId !== id;
 
@@ -138,6 +154,8 @@ export function mapShiftCloseCaseProjection(id: string, data: Record<string, unk
     settlementState,
     settlementStateLabel,
     settlementStateUnknown: settlementState === UNKNOWN_CASE_ENUM,
+    caseAlertState,
+    caseAlertStateUnknown: caseAlertState === UNKNOWN_CASE_ENUM,
     updatedAtMs: tsToMs(data.updatedAt),
     hasSelectedRun,
     caseVersion: typeof data.caseVersion === 'number' && Number.isFinite(data.caseVersion) ? data.caseVersion : null,
@@ -158,7 +176,9 @@ export type IntegrityCaution =
   | 'processing_state_unknown'
   | 'settlement_state_unknown'
   | 'case_missing_for_alert'
-  | 'alert_missing_for_case';
+  | 'alert_missing_for_case'
+  | 'case_alert_state_unknown'
+  | 'case_alert_state_disagreement';
 
 export type ComputeIntegrityCautionsInput = {
   alert: ShiftCloseReviewRow | null;
@@ -195,6 +215,20 @@ export function computeIntegrityCautions(input: ComputeIntegrityCautionsInput): 
   if (alert && alert.reasonUnknown) cautions.push('alert_reason_unknown');
   if (kase && kase.processingStateUnknown) cautions.push('processing_state_unknown');
   if (kase && kase.settlementStateUnknown) cautions.push('settlement_state_unknown');
+  if (kase && kase.caseAlertStateUnknown) cautions.push('case_alert_state_unknown');
+
+  // Disagreement is meaningful only when BOTH sides are recognized values —
+  // an unknown case alert state is already covered by case_alert_state_unknown
+  // above, and an unknown alert.alertState by alert_state_unknown.
+  if (
+    alert &&
+    kase &&
+    alert.alertState !== UNKNOWN_ALERT_STATE &&
+    !kase.caseAlertStateUnknown &&
+    alert.alertState !== kase.caseAlertState
+  ) {
+    cautions.push('case_alert_state_disagreement');
+  }
 
   if (alert && caseConfirmedEmpty && !kase) cautions.push('case_missing_for_alert');
   if (kase && alertConfirmedEmpty && !alert) cautions.push('alert_missing_for_case');

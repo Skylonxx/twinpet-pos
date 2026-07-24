@@ -11,15 +11,21 @@ import {
   type ShiftCloseCaseSourceState,
 } from '../lib/pos/shiftClose/useShiftCloseAlertDetail';
 import type { IntegrityCaution } from '../lib/pos/shiftClose/shiftCloseDetailProjection';
+import ShiftCloseAdjudicationPanel from '../components/pos/ShiftCloseAdjudicationPanel';
 
 /**
- * Packet 5 / Client-UI-B core — read-only shift-close alert DETAIL view.
- * Sibling route to `/shift-close-review` (UI-A), direct URL access only
- * (`/shift-close-review/:shiftId`); no nav entry by design. Reads
- * `shiftCloseAlerts` + `shiftCloseCases` (both single-document, branch- and
- * ID-scoped) — no evidence/validation-run detail, no acknowledge/resolve
- * actions, no callable invocation, no writes. Sensitive drawer/expected
- * figures are deliberately deferred to UI-B2 (not implemented here).
+ * Packet 5 / Client-UI-B core (read-only detail) + Client-UI-C (manager
+ * adjudication action surface). Sibling route to `/shift-close-review`
+ * (UI-A), direct URL access only (`/shift-close-review/:shiftId`); no nav
+ * entry by design. Reads `shiftCloseAlerts` + `shiftCloseCases` (both
+ * single-document, branch- and ID-scoped). UI-C adds a bounded
+ * acknowledge/resolve action surface via `resolveShiftCloseAlert` (the ONLY
+ * write path — this page and its hook never write Firestore directly); see
+ * `ShiftCloseAdjudicationPanel.tsx` + `shiftCloseAdjudicationMachine.ts` for
+ * the fail-closed availability/idempotency contract. Sensitive drawer/
+ * expected figures remain deliberately deferred to UI-B2 (not implemented
+ * here) — the adjudication dialogs explicitly warn that figures are not
+ * displayed.
  */
 export default function ShiftCloseAlertDetailPage() {
   const { shiftId: rawShiftId } = useParams<{ shiftId: string }>();
@@ -105,6 +111,9 @@ export default function ShiftCloseAlertDetailPage() {
           kase={kase}
           integrityCautions={integrityCautions}
           offline={offline}
+          role={user?.role}
+          branchId={branchId}
+          routeShiftId={routeValidation.shiftId}
         />
       )}
       <BackToQueueLink />
@@ -117,11 +126,17 @@ function DetailBody({
   kase,
   integrityCautions,
   offline,
+  role,
+  branchId,
+  routeShiftId,
 }: {
   alert: ShiftCloseAlertSourceState;
   kase: ShiftCloseCaseSourceState;
   integrityCautions: IntegrityCaution[];
   offline: boolean;
+  role: string | null | undefined;
+  branchId: string;
+  routeShiftId: string;
 }) {
   return (
     <div className="flex flex-col gap-4">
@@ -190,6 +205,15 @@ function DetailBody({
       ) : (
         <Alert color="warning">ไม่พบข้อมูลกรณีการตรวจสอบของรายการนี้ในสาขานี้ (พบเฉพาะข้อมูลการแจ้งเตือน)</Alert>
       )}
+
+      <ShiftCloseAdjudicationPanel
+        role={role}
+        branchId={branchId}
+        routeShiftId={routeShiftId}
+        alertSource={alert}
+        caseSource={kase}
+        integrityCautions={integrityCautions}
+      />
     </div>
   );
 }
@@ -284,6 +308,8 @@ const INTEGRITY_CAUTION_LABELS: Record<IntegrityCaution, string> = {
   settlement_state_unknown: 'สถานะการยืนยันยอดไม่ทราบ (ข้อมูลผิดปกติ)',
   case_missing_for_alert: 'ไม่พบข้อมูลกรณีตรวจสอบที่คู่กับการแจ้งเตือนนี้',
   alert_missing_for_case: 'ไม่พบข้อมูลการแจ้งเตือนที่คู่กับกรณีตรวจสอบนี้',
+  case_alert_state_unknown: 'สถานะการแจ้งเตือนในข้อมูลกรณีตรวจสอบไม่ทราบ (ข้อมูลผิดปกติ)',
+  case_alert_state_disagreement: 'สถานะการแจ้งเตือนไม่ตรงกันระหว่างข้อมูลแจ้งเตือนกับข้อมูลกรณีตรวจสอบ',
 };
 
 function formatDateTime(ms: number | null): string {

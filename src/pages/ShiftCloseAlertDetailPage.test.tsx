@@ -3,7 +3,9 @@
 import { afterEach, beforeAll, describe, expect, test, vi } from 'vitest';
 import { createElement } from 'react';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import type { ResolveShiftCloseAlertAdapterRequest } from '../lib/pos/shiftClose/resolveShiftCloseAlertAdapter';
 import type { ShiftCloseAlertDetailState } from '../lib/pos/shiftClose/useShiftCloseAlertDetail';
 import { mapShiftCloseReviewRow } from '../lib/pos/shiftClose/shiftCloseReviewRows';
 import { mapShiftCloseCaseProjection } from '../lib/pos/shiftClose/shiftCloseDetailProjection';
@@ -44,6 +46,27 @@ vi.mock('../lib/pos/shiftClose/useShiftCloseAlertDetail', async () => {
   };
 });
 
+// Final RC-4: the page renders the production panel WITHOUT a transport
+// injection point, so the transport boundary is observed by mocking the
+// adapter module itself — `resolveAlertMock` records the exact request the
+// panel hands to `callResolveShiftCloseAlert` and echoes a validated
+// confirmed response. Only the call function is mocked; everything else
+// (types are erased anyway) passes through.
+const resolveAlertMock = vi.fn(async (req: ResolveShiftCloseAlertAdapterRequest) => ({
+  kind: 'response' as const,
+  raw: {},
+  response: { ok: true, commandId: req.commandId, shiftId: req.shiftId, status: 'confirmed' as const },
+}));
+vi.mock('../lib/pos/shiftClose/resolveShiftCloseAlertAdapter', async () => {
+  const actual = await vi.importActual<typeof import('../lib/pos/shiftClose/resolveShiftCloseAlertAdapter')>(
+    '../lib/pos/shiftClose/resolveShiftCloseAlertAdapter',
+  );
+  return {
+    ...actual,
+    callResolveShiftCloseAlert: (req: ResolveShiftCloseAlertAdapterRequest) => resolveAlertMock(req),
+  };
+});
+
 let ShiftCloseAlertDetailPage: typeof import('./ShiftCloseAlertDetailPage').default;
 
 beforeAll(async () => {
@@ -56,6 +79,7 @@ afterEach(() => {
   mockBranchId = 'BR-001';
   mockFirebaseConfigured = true;
   capturedHookArgs = null;
+  resolveAlertMock.mockClear();
 });
 
 function baseState(overrides: Partial<ShiftCloseAlertDetailState> = {}): ShiftCloseAlertDetailState {
@@ -96,6 +120,21 @@ const caseProjection = mapShiftCloseCaseProjection('SHIFT-001', {
   settlementState: 'manual_review_required',
   caseVersion: 2,
   selectedRunId: 'run-1',
+});
+
+// UI-C: baseAvailability requires the case's OWN alertState projection to
+// agree with the alert doc's alertState — this fixture omits `alertState`
+// entirely (unknown), which is what keeps the pre-existing UI-B "read-only"
+// test below true without any change: the adjudication panel stays hidden
+// for every fixture in this file UNLESS a test explicitly opts in via
+// `caseProjectionEligible` below.
+const caseProjectionEligible = mapShiftCloseCaseProjection('SHIFT-001', {
+  shiftId: 'SHIFT-001',
+  branchId: 'BR-001',
+  alertState: 'open',
+  processingState: 'validated',
+  settlementState: 'manual_review_required',
+  caseVersion: 2,
 });
 
 describe('ShiftCloseAlertDetailPage — gate states', () => {
@@ -373,14 +412,100 @@ describe('ShiftCloseAlertDetailPage — ready detail rendering', () => {
     expect(link?.getAttribute('href')).toBe('/shift-close-review');
   });
 
-  test('no action buttons or acknowledge/resolve affordance are rendered (read-only)', () => {
+  // UI-C: the case fixture's caseAlertState is unknown (never set), so
+  // baseAvailability is false and the adjudication panel stays hidden — this
+  // proves the panel does not silently activate for a case doc that has no
+  // recognized alertState projection.
+  test('no action buttons or acknowledge/resolve affordance are rendered when the case has no recognized caseAlertState', () => {
     detailState = baseState({
       alert: { status: 'ready', fromCache: false, empty: false, errorType: null, row: alertRow },
       case: { status: 'ready', fromCache: false, empty: false, errorType: null, projection: caseProjection },
     });
     renderAtRoute('SHIFT-001');
     expect(screen.queryByText(/รับทราบ/)).toBeNull();
-    expect(screen.queryByText(/^แก้ไข$/)).toBeNull();
+    expect(screen.queryByText(/^ยืนยันแก้ไข$/)).toBeNull();
+  });
+});
+
+describe('ShiftCloseAlertDetailPage — UI-C adjudication panel integration', () => {
+  test('panel is hidden for every non-eligible fixture used above (cache-derived, cautioned, mixed states)', () => {
+    detailState = baseState({
+      alert: { status: 'ready', fromCache: true, empty: true, errorType: null, row: null },
+      case: { status: 'ready', fromCache: true, empty: true, errorType: null, projection: null },
+    });
+    renderAtRoute('SHIFT-001');
+    expect(screen.queryByRole('button', { name: 'รับทราบ' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'ยืนยันแก้ไข' })).toBeNull();
+  });
+
+  test('panel is hidden when an integrity caution is present', () => {
+    detailState = baseState({
+      alert: { status: 'ready', fromCache: false, empty: false, errorType: null, row: alertRow },
+      case: { status: 'ready', fromCache: false, empty: false, errorType: null, projection: caseProjectionEligible },
+      integrityCautions: ['case_version_drift'],
+    });
+    renderAtRoute('SHIFT-001');
+    expect(screen.queryByRole('button', { name: 'รับทราบ' })).toBeNull();
+  });
+
+  test('panel is present with both actions for an eligible open alert', () => {
+    detailState = baseState({
+      alert: { status: 'ready', fromCache: false, empty: false, errorType: null, row: alertRow },
+      case: { status: 'ready', fromCache: false, empty: false, errorType: null, projection: caseProjectionEligible },
+    });
+    renderAtRoute('SHIFT-001');
+    expect(screen.getByRole('button', { name: 'รับทราบ' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'ยืนยันแก้ไข' })).toBeTruthy();
+  });
+
+  test('panel is present with resolve-only for an eligible acknowledged alert', () => {
+    const ackAlert = mapShiftCloseReviewRow('SHIFT-001', {
+      shiftId: 'SHIFT-001',
+      branchId: 'BR-001',
+      alertState: 'acknowledged',
+      reasonCode: 'drawer_discrepancy',
+      caseVersion: 2,
+    });
+    const ackCase = mapShiftCloseCaseProjection('SHIFT-001', {
+      shiftId: 'SHIFT-001',
+      branchId: 'BR-001',
+      alertState: 'acknowledged',
+      processingState: 'validated',
+      settlementState: 'manual_review_required',
+      caseVersion: 2,
+    });
+    detailState = baseState({
+      alert: { status: 'ready', fromCache: false, empty: false, errorType: null, row: ackAlert },
+      case: { status: 'ready', fromCache: false, empty: false, errorType: null, projection: ackCase },
+    });
+    renderAtRoute('SHIFT-001');
+    expect(screen.queryByRole('button', { name: 'รับทราบ' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'ยืนยันแก้ไข' })).toBeTruthy();
+  });
+
+  test('panel is absent for a resolved (non-actionable) alert even with an otherwise-agreeing case', () => {
+    const resolvedAlert = mapShiftCloseReviewRow('SHIFT-001', {
+      shiftId: 'SHIFT-001',
+      branchId: 'BR-001',
+      alertState: 'resolved',
+      reasonCode: 'drawer_discrepancy',
+      caseVersion: 2,
+    });
+    const resolvedCase = mapShiftCloseCaseProjection('SHIFT-001', {
+      shiftId: 'SHIFT-001',
+      branchId: 'BR-001',
+      alertState: 'resolved',
+      processingState: 'validated',
+      settlementState: 'manually_resolved',
+      caseVersion: 2,
+    });
+    detailState = baseState({
+      alert: { status: 'ready', fromCache: false, empty: false, errorType: null, row: resolvedAlert },
+      case: { status: 'ready', fromCache: false, empty: false, errorType: null, projection: resolvedCase },
+    });
+    renderAtRoute('SHIFT-001');
+    expect(screen.queryByRole('button', { name: 'รับทราบ' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'ยืนยันแก้ไข' })).toBeNull();
   });
 });
 
@@ -403,5 +528,81 @@ describe('ShiftCloseAlertDetailPage — full-chain percent-ID integration', () =
 
     expect(capturedHookArgs?.[2]).toBe(legalId);
     expect(screen.getByText(`กะ: ${legalId}`)).toBeTruthy();
+  });
+});
+
+// Final RC-4: canonical route request authority + fail-closed stale-scope
+// rejection, proven END-TO-END through the page — the encodeURIComponent
+// link, React Router's single useParams() decode, the page's validated
+// routeShiftId, the panel's token capture, and the adapter transport call.
+describe('ShiftCloseAlertDetailPage — final RC-4 canonical route authority at the transport boundary', () => {
+  function eligibleRows(docId: string, branchId: string) {
+    const row = mapShiftCloseReviewRow(docId, {
+      shiftId: docId,
+      branchId,
+      alertState: 'open',
+      reasonCode: 'drawer_discrepancy',
+      caseVersion: 2,
+    });
+    const projection = mapShiftCloseCaseProjection(docId, {
+      shiftId: docId,
+      branchId,
+      alertState: 'open',
+      processingState: 'validated',
+      settlementState: 'manual_review_required',
+      caseVersion: 2,
+    });
+    return baseState({
+      alert: { status: 'ready', fromCache: false, empty: false, errorType: null, row },
+      case: { status: 'ready', fromCache: false, empty: false, errorType: null, projection },
+    });
+  }
+
+  test('a percent-containing canonical route reaches the transport request decoded exactly once — no alert-ID substitution, no double decode', async () => {
+    const user = userEvent.setup();
+    // '%2520' double-decoded would collapse to '%20'/' ' — exact equality on
+    // the transport request proves the single-decode convention end-to-end.
+    const legalId = 'SHIFT-2026%2520weird';
+    detailState = eligibleRows(legalId, 'BR-001');
+    renderAtRoute(legalId);
+
+    await user.click(screen.getByRole('button', { name: 'รับทราบ' }));
+    const confirmButtons = screen.getAllByRole('button', { name: 'รับทราบ' });
+    await user.click(confirmButtons[confirmButtons.length - 1]);
+    await waitFor(() => expect(screen.getByText('ทำรายการสำเร็จ')).toBeTruthy());
+
+    expect(resolveAlertMock).toHaveBeenCalledTimes(1);
+    const sent = resolveAlertMock.mock.calls[0][0];
+    expect(sent.shiftId).toBe(legalId);
+    expect(sent.branchId).toBe('BR-001');
+  });
+
+  test('delimiter collision: stale prior-scope rows (branch "A::B", doc "C") under scope (branch "A", route "B::C") offer no panel and reach no transport', () => {
+    // The hook's `::`-joined reset key collides for these two scopes, so the
+    // prior scope's rows can survive one render — this simulates exactly that
+    // window (the hook is mocked; it is NOT edited). The adjudication surface
+    // must stay fully absent: no offer, no dialog, no mint, no call.
+    mockBranchId = 'A';
+    detailState = eligibleRows('C', 'A::B');
+    renderAtRoute('B::C');
+
+    expect(screen.queryByRole('button', { name: 'รับทราบ' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'ยืนยันแก้ไข' })).toBeNull();
+    expect(resolveAlertMock).not.toHaveBeenCalled();
+  });
+
+  test('positive control: agreeing route/alert/case/branch offers the panel and the same-scope success receipt renders after submit', async () => {
+    const user = userEvent.setup();
+    detailState = eligibleRows('SHIFT-001', 'BR-001');
+    renderAtRoute('SHIFT-001');
+
+    expect(screen.getByRole('button', { name: 'ยืนยันแก้ไข' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'รับทราบ' }));
+    const confirmButtons = screen.getAllByRole('button', { name: 'รับทราบ' });
+    await user.click(confirmButtons[confirmButtons.length - 1]);
+    await waitFor(() => expect(screen.getByText('ทำรายการสำเร็จ')).toBeTruthy());
+    const sent = resolveAlertMock.mock.calls[0][0];
+    expect(sent.shiftId).toBe('SHIFT-001');
+    expect(sent.branchId).toBe('BR-001');
   });
 });

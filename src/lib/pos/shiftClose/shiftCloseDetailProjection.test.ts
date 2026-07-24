@@ -24,6 +24,24 @@ describe('mapShiftCloseCaseProjection — safe field projection', () => {
     expect(p.caseVersion).toBe(3);
   });
 
+  it('maps each recognized caseAlertState value correctly (UI-C)', () => {
+    for (const state of ['none', 'open', 'acknowledged', 'resolved'] as const) {
+      const p = mapShiftCloseCaseProjection('s1', { alertState: state });
+      expect(p.caseAlertState).toBe(state);
+      expect(p.caseAlertStateUnknown).toBe(false);
+    }
+  });
+
+  it('unknown/missing caseAlertState maps to the sentinel + unknown flag, never a frozen value (UI-C)', () => {
+    const missing = mapShiftCloseCaseProjection('s1', {});
+    expect(missing.caseAlertState).toBe(UNKNOWN_CASE_ENUM);
+    expect(missing.caseAlertStateUnknown).toBe(true);
+
+    const malformed = mapShiftCloseCaseProjection('s1', { alertState: 'totally-bogus-state' });
+    expect(malformed.caseAlertState).toBe(UNKNOWN_CASE_ENUM);
+    expect(malformed.caseAlertStateUnknown).toBe(true);
+  });
+
   it('never exposes sensitive keys structurally (actualCashCount, variance, note, evidence, leaseOwner, leaseExpiry, validation run IDs)', () => {
     const p = mapShiftCloseCaseProjection('s1', {
       branchId: 'BR-001',
@@ -114,6 +132,7 @@ describe('mapShiftCloseCaseProjection — safe field projection', () => {
     const p = mapShiftCloseCaseProjection('s1', {});
     expect(p.processingStateUnknown).toBe(true);
     expect(p.settlementStateUnknown).toBe(true);
+    expect(p.caseAlertStateUnknown).toBe(true);
     expect(p.hasSelectedRun).toBe(false);
     expect(p.updatedAtMs).toBeNull();
   });
@@ -124,7 +143,14 @@ describe('computeIntegrityCautions', () => {
     mapShiftCloseReviewRow('S1', { shiftId: 'S1', branchId: 'BR-001', alertState: 'open', caseVersion: 2, ...overrides });
 
   const caseProjection = (overrides: Record<string, unknown> = {}) =>
-    mapShiftCloseCaseProjection('S1', { shiftId: 'S1', processingState: 'validated', settlementState: 'unsettled', caseVersion: 2, ...overrides });
+    mapShiftCloseCaseProjection('S1', {
+      shiftId: 'S1',
+      alertState: 'open',
+      processingState: 'validated',
+      settlementState: 'unsettled',
+      caseVersion: 2,
+      ...overrides,
+    });
 
   it('returns empty for a clean, matching pair', () => {
     const cautions = computeIntegrityCautions({
@@ -226,5 +252,58 @@ describe('computeIntegrityCautions', () => {
       caseConfirmedEmpty: false,
     });
     expect(cautions).toEqual([]);
+  });
+
+  it('flags case_alert_state_unknown when the case doc has no recognized alertState (UI-C)', () => {
+    const cautions = computeIntegrityCautions({
+      alert: alertRow(),
+      alertConfirmedEmpty: false,
+      kase: caseProjection({ alertState: 'totally-bogus-state' }),
+      caseConfirmedEmpty: false,
+    });
+    expect(cautions).toContain('case_alert_state_unknown');
+    expect(cautions).not.toContain('case_alert_state_disagreement');
+  });
+
+  it('flags case_alert_state_disagreement only when BOTH sides are recognized and differ (UI-C)', () => {
+    const cautions = computeIntegrityCautions({
+      alert: alertRow({ alertState: 'open' }),
+      alertConfirmedEmpty: false,
+      kase: caseProjection({ alertState: 'acknowledged' }),
+      caseConfirmedEmpty: false,
+    });
+    expect(cautions).toContain('case_alert_state_disagreement');
+    expect(cautions).not.toContain('case_alert_state_unknown');
+    expect(cautions).not.toContain('alert_state_unknown');
+  });
+
+  it('does NOT flag disagreement when the states agree (UI-C)', () => {
+    const cautions = computeIntegrityCautions({
+      alert: alertRow({ alertState: 'acknowledged' }),
+      alertConfirmedEmpty: false,
+      kase: caseProjection({ alertState: 'acknowledged' }),
+      caseConfirmedEmpty: false,
+    });
+    expect(cautions).not.toContain('case_alert_state_disagreement');
+  });
+
+  it('does NOT flag disagreement when either side is unknown — the dedicated unknown caution covers it instead (UI-C)', () => {
+    const alertUnknown = computeIntegrityCautions({
+      alert: alertRow({ alertState: 'bogus' }),
+      alertConfirmedEmpty: false,
+      kase: caseProjection({ alertState: 'open' }),
+      caseConfirmedEmpty: false,
+    });
+    expect(alertUnknown).not.toContain('case_alert_state_disagreement');
+    expect(alertUnknown).toContain('alert_state_unknown');
+
+    const caseUnknown = computeIntegrityCautions({
+      alert: alertRow({ alertState: 'open' }),
+      alertConfirmedEmpty: false,
+      kase: caseProjection({ alertState: 'bogus' }),
+      caseConfirmedEmpty: false,
+    });
+    expect(caseUnknown).not.toContain('case_alert_state_disagreement');
+    expect(caseUnknown).toContain('case_alert_state_unknown');
   });
 });
