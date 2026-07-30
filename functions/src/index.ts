@@ -64,6 +64,12 @@ export {
 // this packet. Never reads/writes `shifts`.
 export { resolveShiftCloseAlert } from './resolveShiftCloseAlert';
 
+// P1 offline-sync Packet 5 / UI-B2 / Packet S: read-only manager/admin
+// callable that resolves the sensitive drawer figures (client-reported and
+// server-computed) for a shift-close case through its selected validation
+// run only — no query, no index, no latest-evidence fallback, zero writes.
+export { getShiftCloseCaseFigures } from './getShiftCloseCaseFigures';
+
 type UserRole = 'admin' | 'manager' | 'staff';
 
 // Fallback mirror of the client DEFAULT_ROLE_PERMS (src/lib/staffManagement/types.ts).
