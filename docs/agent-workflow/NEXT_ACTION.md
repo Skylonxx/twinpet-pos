@@ -2,29 +2,29 @@
 
 ## Current State
 
-- HEAD (code): `3ef4d016eeb288bcdf7d76c959e4a748b97964c6` (`feat(pos): add shift close manager adjudication surface`)
-- origin/main: `3ef4d016eeb288bcdf7d76c959e4a748b97964c6` — `HEAD == origin/main`
-- **P1 Packet 5 / UI-C Manager Adjudication Action Surface** — **CLOSED AS COMMITTED AND PUSHED** (exact ten-file implementation commit/push COMPLETE)
-- **Docs reconciliation** — **ACTIVE** (authorized, unstaged, pending commit; seven tracker files)
-- Working tree was clean immediately after the UI-C push; this pass leaves only the seven authorized unstaged docs changes
+- HEAD (code): `e9363e35f5a79f8e21d5dafe1e70d8ff3f82559c` (`feat(pos): add shift close case figures callable`)
+- origin/main: `e9363e35f5a79f8e21d5dafe1e70d8ff3f82559c` — `HEAD == origin/main`
+- **P1 Packet 5 / UI-B2 / Packet S — getShiftCloseCaseFigures** — **TECHNICALLY CLOSED WITH NONBLOCKING NOTES** (exact six-file implementation commit/push/deploy COMPLETE)
+- **P1 Packet 5 / UI-C Manager Adjudication Action Surface** — CLOSED AS COMMITTED AND PUSHED; docs reconciliation CLOSED at `5654362`
+- **Docs/tracker reconciliation (Packet S)** — **ACTIVE** (authorized, unstaged, pending Codex docs review then conditional commit; seven tracker files)
+- Working tree is clean at this baseline; this pass leaves only the seven authorized unstaged docs changes
 - Staged area: **empty**
 - stash@{0}: `7d03cfec7ba52ff7e25b7e175ca190efc258d874` (unchanged)
 
-> **Self-reference lag:** the docs commit that carries this reconciliation is not yet created; its hash is unknown here. Treat actual Git HEAD as authoritative.
-
 ## What Happens Next
 
-1. UI-C implementation/remediation/review/commit/push — **DONE (closed at `3ef4d01`)**
-2. UI-C docs reconciliation — **ACTIVE this pass** (unstaged edits to seven trackers, pending commit)
-3. **Next gate: strict read-only post-UI-C roadmap audit**
-4. **NOT authorized:** new implementation (any candidate), UI-B.1, UI-B2, P5-F, recapture, deploy, runtime activation, callable invocation, production access, global Flowbite (A-1) fix, stash operations, POSPage/PaymentModal/checkout/navigation/global-keyboard changes
-5. **Next implementation/roadmap direction** — later Gemini decision after the post-UI-C roadmap audit; no active implementation packet and no next candidate selected
+1. Packet S implementation/review/commit/push/deploy — **DONE (technically closed with nonblocking notes at `e9363e3`, deployed live)**
+2. Packet S docs/tracker reconciliation — **ACTIVE this pass** (unstaged edits to seven trackers, pending Codex docs review then conditional commit)
+3. **Next gate: Codex docs review, then conditional docs commit/push only**
+4. **NOT authorized:** new implementation (any candidate), UI-B.1, UI-B2, P5-F, recapture, deploy, runtime activation, callable invocation, production access, global Flowbite (A-1) fix, stash operations, POSPage/PaymentModal/checkout/navigation/global-keyboard changes, Packet R/C/U
+5. **Next implementation/roadmap direction** — later Gemini decision; no active implementation packet and no next candidate selected
 
 **Not active:** UI-B.1, UI-B2, P5-F, recapture, or any new feature packet.
 
 ## Reminders
 
 - `stash@{0}` — do not touch (`7d03cfec7ba52ff7e25b7e175ca190efc258d874`)
+- `getShiftCloseCaseFigures` (Packet S) is deployed live but **no callable invocation was performed**; N-FINAL-01: selected-run figures are not final settlement truth — future UI/copy must not present them as reconciled or final without a separate backend contract
 - UI-C adds the manager Acknowledge/Resolve **action** surface; the `resolveShiftCloseAlert` callable (P5-E, already live) is the only mutation boundary — **no callable invocation was performed** in UI-C
 - Retry authority is machine-owned; same-scope + current-source-binding required; scope-change abandons retry chains; no auto-retry
 - A-1 remains an accepted deferred global/library Flowbite modal focus-containment NOTE — not worsened by UI-C, not fixed here

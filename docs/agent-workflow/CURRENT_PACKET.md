@@ -2,9 +2,21 @@
 
 ## Phase
 
-**Docs reconciliation — P1 Offline / Sync Packet 5 / UI-C Manager Adjudication Action Surface closure.** UI-C implementation is **CLOSED AS COMMITTED AND PUSHED** at `3ef4d016eeb288bcdf7d76c959e4a748b97964c6`. This pass reconciles the seven authoritative tracker documents only. State: `UI_C_DOCS_RECONCILIATION_ACTIVE`.
+**Docs/tracker reconciliation — P1 Offline / Sync Packet 5 / UI-B2 / Packet S — getShiftCloseCaseFigures closure.** Packet S implementation is **TECHNICALLY CLOSED WITH NONBLOCKING NOTES** at `e9363e35f5a79f8e21d5dafe1e70d8ff3f82559c` (deployed live). This pass reconciles the seven authoritative tracker documents only. State: `PACKET_S_TECHNICALLY_CLOSED_WITH_NONBLOCKING_NOTES`.
 
-> **Self-reference lag:** the docs commit carrying this reconciliation is not yet created; its hash is unknown here. Code baseline is `3ef4d01`. Treat actual Git HEAD as authoritative.
+## This packet — Packet 5 / UI-B2 / Packet S — getShiftCloseCaseFigures
+
+**Status: TECHNICALLY CLOSED WITH NONBLOCKING NOTES**
+
+- Commit: `e9363e35f5a79f8e21d5dafe1e70d8ff3f82559c` (`feat(pos): add shift close case figures callable`); parent `5654362`
+- Push: fast-forward `5654362..e9363e3 main -> main`; `HEAD == origin/main`
+- Payload: exactly 6 files
+- Surface: new read-only server-side callable `getShiftCloseCaseFigures` returning selected shift-close case figures
+- Review: Codex final C12 benign-presence exactness re-review — PASS WITH NOTES (0 blockers, 0 request changes, 2 carried nonblocking notes)
+- Deployment: `getShiftCloseCaseFigures` deployed live — `twinpet-pos`, `asia-southeast1`, `pos-db`, `nodejs22` v2/2nd Gen; successful create; no `--force`
+- Verification: targeted core 448 / targeted shell 135 / full Functions unit suite 24 files / 1353 tests; typecheck PASS; build PASS; `git diff --check` PASS
+- Not implemented / not claimed: no callable invocation performed; no production business-data UAT performed; no broader Packet 5 closure claimed; Packet R/C/U not authorized or claimed
+- N-FINAL-01 (active): selected-run figures returned by `getShiftCloseCaseFigures` are not final settlement truth; future UI/copy must not present them as reconciled or final without a separate backend contract
 
 ## This packet — Packet 5 / UI-C Manager Adjudication Action Surface
 
@@ -23,9 +35,9 @@
 - V-1 CLOSED (rendered yellow hierarchy); L-1 CLOSED (rendered warning/checkbox adjacency); A-1 accepted deferred global/library Flowbite focus NOTE
 - Verification: targeted UI-C 5 files / 260 tests; full root 69 files / 1540 tests; rules 8 files / 300 tests; POS three-suite 3 files / 178 tests; build/typecheck/targeted-lint/diff-check PASS
 
-## This pass — Docs reconciliation
+## This pass — Docs/tracker reconciliation (Packet S)
 
-**Status: ACTIVE (unstaged, pending commit)**
+**Status: ACTIVE (unstaged, pending Codex docs review then conditional commit)**
 
 - Authorized files: `Context.md`, `Task.md`, `docs/STATE.md`, `docs/agent-workflow/CURRENT_PACKET.md`, `docs/agent-workflow/NEXT_ACTION.md`, `docs/agent-workflow/STATE.md`, `docs/reports/latest-report.md`
 - No source/test/config/rules/index/functions changes
@@ -33,6 +45,7 @@
 
 ## Prior closed packets
 
+- **UI-C Manager Adjudication Action Surface** — `3ef4d01` (manager Acknowledge/Resolve action surface; docs closed at `5654362`)
 - **Client-UI-B** — `490f4cf` (read-only shift-close alert detail; docs closed at `70a23f9`)
 - **Client-UI-A** — `4614e70` (shift close review queue, alert-only)
 - **P5-E Adjudication Callable** — `afacd3b` (`resolveShiftCloseAlert` live; UI-C's mutation boundary)
@@ -41,8 +54,8 @@
 
 ## Current HEAD (code)
 
-`3ef4d016eeb288bcdf7d76c959e4a748b97964c6`
+`e9363e35f5a79f8e21d5dafe1e70d8ff3f82559c`
 
 ## Next gate
 
-**Strict read-only post-UI-C roadmap audit** — after this seven-tracker reconciliation is committed/pushed this pass. No new implementation packet is active; no next candidate is selected. UI-B.1, UI-B2, P5-F, recapture, deploy, runtime activation, callable invocation, production access, global Flowbite fix, stash operations — NOT authorized. Any implementation requires a later Gemini authorization.
+**Codex docs review, then conditional docs commit/push only** — per this pass's own authorization boundary. No new implementation packet is active; no next candidate is selected. UI-B.1, UI-B2, P5-F, recapture, deploy, runtime activation, callable invocation, production access, global Flowbite fix, stash operations, Packet R/C/U — NOT authorized. Any implementation requires a later Gemini authorization.

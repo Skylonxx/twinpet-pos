@@ -1,20 +1,34 @@
 # Twinpet POS โ€” Project Context
 
-> Last reconciled: 2026-07-24
-> HEAD: `3ef4d016eeb288bcdf7d76c959e4a748b97964c6` (feat(pos): add shift close manager adjudication surface)
-> origin/main: `3ef4d016eeb288bcdf7d76c959e4a748b97964c6`
-> Implementation: `3ef4d016eeb288bcdf7d76c959e4a748b97964c6` (Packet 5 / UI-C Manager Adjudication Action Surface — CLOSED AS COMMITTED AND PUSHED)
-> Self-reference lag: this file is edited inside the UI-C docs pass; the docs commit carrying it is not yet created and its hash is not recorded here. Treat actual Git HEAD as authoritative.
+> Last reconciled: 2026-07-30
+> HEAD: `e9363e35f5a79f8e21d5dafe1e70d8ff3f82559c` (feat(pos): add shift close case figures callable)
+> origin/main: `e9363e35f5a79f8e21d5dafe1e70d8ff3f82559c`
+> Implementation: `e9363e35f5a79f8e21d5dafe1e70d8ff3f82559c` (Packet 5 / UI-B2 / Packet S — getShiftCloseCaseFigures — TECHNICALLY CLOSED WITH NONBLOCKING NOTES)
 
 ---
 
 ## Current Phase
 
-**P1 Offline / Sync Resiliency — Packet 5 / UI-C Manager Adjudication Action Surface: CLOSED AS COMMITTED AND PUSHED** — manager Acknowledge/Resolve adjudication action surface over the read-only shift-close alert detail page; exact ten-file implementation committed and fast-forward pushed at `3ef4d01`. Docs reconciliation is **active** (authorized, unstaged, pending commit this pass). Next gate: **strict read-only post-UI-C roadmap audit**. No new implementation packet is active and no next candidate is selected.
+**P1 Offline / Sync Resiliency — Packet 5 / UI-B2 / Packet S — getShiftCloseCaseFigures: TECHNICALLY CLOSED WITH NONBLOCKING NOTES** — server-side shift-close case figures callable committed and fast-forward pushed at `e9363e3`; deployed live. UI-C docs reconciliation is **CLOSED** (committed at `5654362`). Next gate: Codex docs review, then conditional docs commit/push only (per this pass's own authorization boundary). No new implementation packet is active and no next candidate is selected.
 
 Manual workflow remains active. `agentchattr` was not used as the executor for this phase.
 
-**Repository baseline:** branch `main`, HEAD/origin `3ef4d016eeb288bcdf7d76c959e4a748b97964c6`, working tree was **clean** immediately after the UI-C push; this pass leaves **seven authorized unstaged docs changes only**, staged **empty**, `stash@{0}` present and untouched (`7d03cfec7ba52ff7e25b7e175ca190efc258d874`).
+**Repository baseline:** branch `main`, HEAD/origin `e9363e35f5a79f8e21d5dafe1e70d8ff3f82559c`, working tree is **clean** at this baseline; this pass leaves **seven authorized unstaged docs changes only** (this reconciliation), staged **empty**, `stash@{0}` present and untouched (`7d03cfec7ba52ff7e25b7e175ca190efc258d874`).
+
+### P1 Packet 5 / UI-B2 / Packet S — getShiftCloseCaseFigures (TECHNICALLY CLOSED WITH NONBLOCKING NOTES)
+
+**Status:** **TECHNICALLY CLOSED WITH NONBLOCKING NOTES**
+
+- **Commit** — `e9363e35f5a79f8e21d5dafe1e70d8ff3f82559c` (`feat(pos): add shift close case figures callable`); parent `5654362688350bf4f7e050318a8c71624d8b87f9`; exactly 6 files
+- **Push** — fast-forward `5654362..e9363e3 main -> main`; final `HEAD == origin/main == e9363e35f5a79f8e21d5dafe1e70d8ff3f82559c`
+- **Surface** — new read-only server-side callable `getShiftCloseCaseFigures` returning selected shift-close case figures
+- **Review** — Codex final C12 benign-presence exactness re-review: `PASS WITH NOTES` (0 blockers, 0 request changes, 2 carried nonblocking notes)
+- **Deployment** — function `getShiftCloseCaseFigures` deployed live: project `twinpet-pos`, region `asia-southeast1`, database `pos-db`, runtime `nodejs22` (v2 / 2nd Gen); successful create operation; no `--force` used
+- **Verification** — targeted core 448 tests; targeted shell 135 tests; full Functions unit suite 24 files / 1353 tests; typecheck PASS; build PASS; `git diff --check` PASS
+- **Not implemented / not claimed** — no callable invocation performed; no production business-data UAT performed; no broader Packet 5 closure claimed by this packet alone; Packet R/C/U not authorized or claimed
+- **N-FINAL-01 (active downstream constraint)** — selected-run figures returned by `getShiftCloseCaseFigures` are not final settlement truth; future UI/copy consuming this callable must not present them as reconciled or final without a separate backend contract
+
+**Reports:** commit/push, deploy, and Codex final C12 benign-presence exactness re-review reports under `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\`.
 
 ### P1 Packet 5 / UI-C Manager Adjudication Action Surface (CLOSED AS COMMITTED AND PUSHED)
 
@@ -223,7 +237,8 @@ Non-blocking this-terminal pending-sync warning; close remains enabled.
 
 ### Prior closed packets
 
-- **Packet 5 / UI-C Manager Adjudication Action Surface** — `3ef4d01` (manager Acknowledge/Resolve action surface; CLOSED AS COMMITTED AND PUSHED; docs closure this pass)
+- **Packet 5 / UI-B2 / Packet S — getShiftCloseCaseFigures** — `e9363e3` (read-only shift-close case figures callable; TECHNICALLY CLOSED WITH NONBLOCKING NOTES; docs reconciliation this pass)
+- **Packet 5 / UI-C Manager Adjudication Action Surface** — `3ef4d01` (manager Acknowledge/Resolve action surface; CLOSED AS COMMITTED AND PUSHED; docs closure `5654362`)
 - **Packet 5 / Client-UI-B** — `490f4cf` (shift-close alert review detail; CLOSED AS COMMITTED AND PUSHED; docs closure `70a23f9`)
 - **Packet 5 / Client-UI-A** — `4614e70` (shift close review queue; CLOSED AS COMMITTED AND PUSHED)
 - **Packet 5 / P5-E Adjudication Callable** — `afacd3b` (`resolveShiftCloseAlert` live) (CLOSED — LIVE)
@@ -239,10 +254,11 @@ Non-blocking this-terminal pending-sync warning; close remains enabled.
 
 ### Deferred / next gate
 
-1. **Packet 5 / UI-C Manager Adjudication Action Surface CLOSED AS COMMITTED AND PUSHED** — `3ef4d01` on `main`; implementation/remediation/review/commit/push gates closed.
-2. **Active: UI-C docs reconciliation** — seven authorized tracker documents updated (unstaged, pending commit this pass); next gate **strict read-only post-UI-C roadmap audit** (Gemini already authorized this pass's docs commit/push).
-3. **Next implementation/roadmap direction** — later Gemini decision after the post-UI-C roadmap audit; no next candidate is selected; do not select or authorize UI-B.1, UI-B2, P5-F, recapture, or another feature packet.
-4. **Standing boundaries (carried forward):**
+1. **Packet 5 / UI-B2 / Packet S — getShiftCloseCaseFigures TECHNICALLY CLOSED WITH NONBLOCKING NOTES** — `e9363e3` on `main`; commit/push/deploy/Codex-review gates closed; docs/tracker reconciliation this pass.
+2. **Packet 5 / UI-C Manager Adjudication Action Surface CLOSED AS COMMITTED AND PUSHED** — `3ef4d01` on `main`; docs reconciliation CLOSED at `5654362`.
+3. **This pass: Packet S docs/tracker reconciliation** — seven authorized tracker documents updated; next gate is Codex docs review, then conditional docs commit/push only (per this pass's own authorization boundary).
+4. **Next implementation/roadmap direction** — later Gemini decision; no next candidate is selected; do not select or authorize UI-B.1, UI-B2, P5-F, recapture, or another feature packet.
+5. **Standing boundaries (carried forward):**
    - UI-B.1 / UI-B2 — **NOT AUTHORIZED**
    - P5-F planning/implementation — **NOT AUTHORIZED**
    - recapture planning/implementation — **NOT AUTHORIZED**
@@ -254,9 +270,9 @@ Non-blocking this-terminal pending-sync warning; close remains enabled.
    - next implementation (any candidate) — **NOT AUTHORIZED** by this pass
    - POSPage / PaymentModal / checkout/payment / navigation-menu / global keyboard changes — **NOT AUTHORIZED**
    - no `shifts.expected*` mutation; no FIFO/stock/credit/settlement writes; `stash@{0}` untouched
-5. **Passive observation** — read-only observation on **natural traffic only** remains authorized in parallel.
-6. **Open decisions/risks carried forward:** live-lease conflict reject-code reuse; manager `reasonCode` accepts full frozen enum; optional PIN not enforced day one; A-1 global Flowbite modal focus-containment deferred; G3 monitoring resolved (runbook at `docs/ops/packet-5-monitoring-runbook.md`); no real shift close through full P5-C/P5-D/P5-E pipeline yet; free-trial upgrade decision (owner, ≈2026-08-27) open; UI-B Fallback A missing-vs-denied ambiguity and terminal permission-denied listener behavior remain unresolved.
-7. Do not automatically start another packet.
+6. **Passive observation** — read-only observation on **natural traffic only** remains authorized in parallel.
+7. **Open decisions/risks carried forward:** live-lease conflict reject-code reuse; manager `reasonCode` accepts full frozen enum; optional PIN not enforced day one; A-1 global Flowbite modal focus-containment deferred; G3 monitoring resolved (runbook at `docs/ops/packet-5-monitoring-runbook.md`); no real shift close through full P5-C/P5-D/P5-E pipeline yet; free-trial upgrade decision (owner, ≈2026-08-27) open; UI-B Fallback A missing-vs-denied ambiguity and terminal permission-denied listener behavior remain unresolved; N-FINAL-01 (Packet S selected-run figures are not final settlement truth) remains a standing downstream UI/copy constraint.
+8. Do not automatically start another packet.
 
 ### Future Phase โ€” True Standalone (Desktop & Native Mobile) (`TRUE-STANDALONE`)
 

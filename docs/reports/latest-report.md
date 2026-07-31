@@ -1,140 +1,112 @@
-# Latest Report — P1 Offline / Sync Packet 5 / UI-C Manager Adjudication Action Surface (`PACKET_5_UI_C_CLOSED`)
+# Latest Report — P1 Offline / Sync Packet 5 / UI-B2 / Packet S — getShiftCloseCaseFigures (`PACKET_S_TECHNICALLY_CLOSED_WITH_NONBLOCKING_NOTES`)
 
-> Date: 2026-07-24
-> HEAD (code): `3ef4d016eeb288bcdf7d76c959e4a748b97964c6`
-> Status: **PACKET 5 / UI-C — CLOSED AS COMMITTED AND PUSHED**
-> Active gate: **UI-C docs reconciliation** (unstaged, pending commit this pass)
-
-> **Self-reference lag:** this report is edited inside the UI-C docs pass; the docs commit carrying it is not yet created and its hash is not recorded here. Treat actual Git HEAD as authoritative.
+> Date: 2026-07-30
+> HEAD (code): `e9363e35f5a79f8e21d5dafe1e70d8ff3f82559c`
+> Status: **PACKET 5 / UI-B2 / PACKET S — TECHNICALLY CLOSED WITH NONBLOCKING NOTES**
+> Active gate: **Packet S docs/tracker reconciliation** (unstaged, pending Codex docs review then conditional commit this pass)
 
 ---
 
-## Closure
-
-UI-C is closed because the manager Acknowledge/Resolve adjudication **action** surface on the read-only shift-close alert detail page is committed and fast-forward pushed. UI-B delivered the read-only detail view; UI-C adds the guarded action surface over it.
+## 1. Packet identity and status
 
 | Field | Value |
 |-------|-------|
-| Phase | P1 Offline / Sync Resiliency — Packet 5 / UI-C Manager Adjudication Action Surface |
-| Commit | `3ef4d016eeb288bcdf7d76c959e4a748b97964c6` |
-| Parent | `70a23f92b8fb787803e1576cbb5ea9442d3c0dce` |
-| Message | `feat(pos): add shift close manager adjudication surface` |
-| Payload | exactly 10 files |
-| Stat | `3616 insertions(+), 12 deletions(-)` |
-| Push | fast-forward `70a23f9..3ef4d01 main -> main` |
-| Final state | `HEAD == origin/main == 3ef4d016eeb288bcdf7d76c959e4a748b97964c6` |
+| Phase | P1 Offline / Sync Resiliency — Packet 5 / UI-B2 / Packet S |
+| Callable | `getShiftCloseCaseFigures` |
+| Status | **TECHNICALLY CLOSED WITH NONBLOCKING NOTES** |
 
-Working tree was clean immediately after the UI-C push. Staged area was empty. `stash@{0}` remained `7d03cfec7ba52ff7e25b7e175ca190efc258d874`. Hook `useShiftCloseAlertDetail.ts` unmodified and excluded from the commit. No external harness/report/screenshot/measurement/log artifact was committed.
+Packet S adds a new read-only server-side callable, `getShiftCloseCaseFigures`, returning selected shift-close case figures. It is committed, pushed, Codex-reviewed, and deployed live.
 
----
+## 2. Commit/push evidence
 
-## Implemented scope (UI-C)
+| Field | Value |
+|-------|-------|
+| Commit | `e9363e35f5a79f8e21d5dafe1e70d8ff3f82559c` |
+| Parent | `5654362688350bf4f7e050318a8c71624d8b87f9` |
+| Message | `feat(pos): add shift close case figures callable` |
+| Push | fast-forward `5654362..e9363e3 main -> main` |
+| Final state | `HEAD == origin/main == e9363e35f5a79f8e21d5dafe1e70d8ff3f82559c` |
 
-Exact ten-file payload:
+Working tree was clean immediately after the push. Staged area was empty. `stash@{0}` remained `7d03cfec7ba52ff7e25b7e175ca190efc258d874` throughout. No `--force` was used at any stage.
 
-1. `src/lib/pos/shiftClose/shiftCloseDetailProjection.ts` (modified)
-2. `src/lib/pos/shiftClose/shiftCloseDetailProjection.test.ts` (modified)
-3. `src/pages/ShiftCloseAlertDetailPage.tsx` (modified)
-4. `src/pages/ShiftCloseAlertDetailPage.test.tsx` (modified)
-5. `src/components/pos/ShiftCloseAdjudicationPanel.tsx` (new)
-6. `src/components/pos/ShiftCloseAdjudicationPanel.test.tsx` (new)
-7. `src/lib/pos/shiftClose/resolveShiftCloseAlertAdapter.ts` (new)
-8. `src/lib/pos/shiftClose/resolveShiftCloseAlertAdapter.test.ts` (new)
-9. `src/lib/pos/shiftClose/shiftCloseAdjudicationMachine.ts` (new)
-10. `src/lib/pos/shiftClose/shiftCloseAdjudicationMachine.test.ts` (new)
+## 3. Exact six-file implementation scope
 
-- Manager Acknowledge/Resolve adjudication action surface (`ShiftCloseAdjudicationPanel`) on the read-only `/shift-close-review/:shiftId` detail page
-- Pure adjudication state machine (`shiftCloseAdjudicationMachine`) owning offer/open/mint/submit/result/retry/terminal/abandon transitions
-- Non-throwing adapter (`resolveShiftCloseAlertAdapter`) to the already-live `resolveShiftCloseAlert` callable with response echo validation
-- Machine-owned retry authority: requires `retryable` state, current structured-scope equality, and current source-binding; scope-change abandons the retry chain; no auto-retry; same-scope exact-command retry preserves command ID and payload
-- Extended allowlist detail projection — still excludes sensitive cash/evidence/lease/note details
-- Manager/admin branch authority enforced server-side by the deployed callable inside a Firestore transaction (the callable is the only mutation boundary)
-- **Not implemented:** no new deployment; no runtime activation; **no callable invocation** in this work; no rules/index/functions change; no hook change; no App/route/nav/CSS/POS/payment/keyboard/PIN change; A-1 global Flowbite fix deferred
+1. `functions/src/getShiftCloseCaseFiguresCore.ts`
+2. `functions/src/getShiftCloseCaseFigures.ts`
+3. `functions/src/__tests__/getShiftCloseCaseFiguresCore.test.ts`
+4. `functions/src/__tests__/getShiftCloseCaseFigures.test.ts`
+5. `functions/src/index.ts` (modified — export added)
+6. `functions/package.json` (modified — deploy-script allowlist entry added)
 
-### Do not overclaim
+No other file was part of this commit.
 
-- No backend settlement; UI-C does not prove the P5-C/P5-D/P5-E pipeline has been exercised end-to-end on natural production data
-- No production end-to-end validation; no callable was actually invoked
-- The mutation boundary (`resolveShiftCloseAlert`) was already deployed at P5-E — UI-C deployed nothing
-- A-1 global Flowbite modal focus-containment remains an unresolved deferred note (accepted, not worsened)
+## 4. Codex verdict
 
----
+Codex final C12 benign-presence exactness re-review: **PASS WITH NOTES** — 0 blockers, 0 request changes, 2 carried nonblocking notes (N-EVIDENCE-01, N-FINAL-01). The review independently re-verified all six committed-file hashes against live bytes, the full C12 closed-world admission set (34 admitted governed candidates: 31 C12 + 3 benign-presence, zero unaccounted missing/extra/duplicate), and the decision-table/zero-write/query/log/index sweeps.
 
-## Review chain
-
-| Gate | Verdict | Detail |
-|------|---------|--------|
-| Codex implementation closure re-review | PASS WITH NOTES | 0 blockers; 0 request changes; 4 notes |
-| AGY final rendered UX re-review | PASS | 0 blockers; 0 request changes; 1 note (A-1); viewports 320/768/1080 |
-| Gemini implementation-closure + commit/push authorization | AUTHORIZED | exact ten-file commit/push authorized; A-1 accepted as deferred note |
-
-### Finding dispositions
-
-- **V-1** — CLOSED in rendered UI: all Button `color="warning"` replaced with `color="yellow"`; visual hierarchy restored (Resolve stronger than Acknowledge; Resolve/Retry not weaker than Cancel/Abandon).
-- **L-1** — CLOSED in rendered UI: modal body reordered so the warning sits directly after the checkbox; both fully visible on initial load without scroll; warning appears exactly once.
-- **A-1** — accepted deferred global/library Flowbite modal focus-containment NOTE; not worsened by UI-C; initial focus and focus-return remain correct.
-
----
-
-## Verification evidence
+## 5. Verification evidence
 
 | Suite | Result |
 |-------|--------|
-| Targeted UI-C tests | 5 files / 260 tests passed |
-| Full root unit suite | 69 files / 1540 tests passed |
-| Rules tests | 8 files / 300 tests passed |
-| POS three-suite (keyboard/F12 regressions) | 3 files / 178 tests passed |
-| Build (`npm run build`) | passed (pre-existing chunk-size / dynamic-import warnings only) |
-| TypeScript typecheck (`tsc -b --noEmit`) | exit 0 |
-| Targeted ESLint (ten authorized files) | exit 0 |
-| `git diff --check` (pre-commit) | exit 0 |
-| Staged diff | exactly 10 authorized files |
+| Targeted core (`getShiftCloseCaseFiguresCore.test.ts`) | 448 tests passed |
+| Targeted shell (`getShiftCloseCaseFigures.test.ts`) | 135 tests passed |
+| Full Functions unit suite | 24 files / 1353 tests passed |
+| TypeScript typecheck (`tsc --noEmit`) | exit 0 |
+| Build (`npm run build`) | PASS — `gen-deploy-config` selected `pos-db` / `asia-southeast1` |
+| `git diff --check` | PASS |
 
-> Note: an interim Codex closure re-review recorded 251/1531 before the rendered-UX remediation; the final committed state is 260/1540 after that remediation added tests. Repository-wide lint remains known unrelated debt — not a clean repo-wide pass.
+## 6. Deployment evidence
 
----
+| Field | Value |
+|-------|-------|
+| Command | `firebase deploy --only functions:getShiftCloseCaseFigures --project twinpet-pos` (no `--force`) |
+| Project | `twinpet-pos` |
+| Function | `getShiftCloseCaseFigures` |
+| Region | `asia-southeast1` |
+| Database | `pos-db` |
+| Runtime | `nodejs22` (v2 / 2nd Gen) |
+| Result | successful create operation |
+| Deploy-time warning | `firebase-functions` package indicated an outdated version (pre-existing, unrelated to Packet S; no remediation performed — see §9 N-DEPLOY-WARN-01) |
 
-## Docs reconciliation (this pass)
+Read-only `firebase functions:list` confirmed `getShiftCloseCaseFigures │ v2 │ callable │ asia-southeast1 │ nodejs22`. Exactly one function was resolved and created; no other function was touched, deleted, or warned as unintentionally targeted.
 
-Authorized tracker updates only. Seven files modified (unstaged, pending commit):
+## 7. Safety boundaries
 
-1. `Context.md`
-2. `Task.md`
-3. `docs/STATE.md`
-4. `docs/agent-workflow/CURRENT_PACKET.md`
-5. `docs/agent-workflow/NEXT_ACTION.md`
-6. `docs/agent-workflow/STATE.md`
-7. `docs/reports/latest-report.md`
+- No `--force` used.
+- No callable invocation performed — the callable was not called with any payload.
+- No production business documents or collections were read or written; only deploy tooling output and `firebase functions:list` read-only metadata were consulted.
+- No broader Packet 5 closure is claimed by this packet alone.
+- Packet R, Packet C, and Packet U are not authorized or claimed by this packet.
+- No `shifts` / `shifts.expected*` access; no FIFO/stock/inventory/credit/final-settlement writes (the callable is a read-only query).
 
-No source, test, config, rules, index, or functions files changed.
+## 8. N-FINAL-01 (active downstream constraint)
 
----
+Selected-run figures returned by `getShiftCloseCaseFigures` are **not** final settlement truth. Future UI/copy consuming this callable must not present them as reconciled or final without a separate backend contract that independently proves that state. This is a standing constraint, not a defect requiring immediate backend remediation.
 
-## Next gate
+## 9. External-only notes (nonblocking)
 
-1. **Strict read-only post-UI-C roadmap audit** (after this seven-tracker reconciliation is committed/pushed this pass)
-2. **After the audit:** later Gemini decision on the next implementation/roadmap direction
+- **N-EVIDENCE-01** — an earlier evidence report claimed a six-hash census was printed by a still-earlier report when that report did not actually print it. The final Codex re-review independently re-verified every current hash directly, so this unsupported historical cross-reference does not invalidate current evidence. No repository action required.
+- **N-REVIEW-SCHEMA-01** — a Codex reviewer-report field-name typo only; the underlying semantic governed-kind count (31) was independently verified. No repository remediation required.
+- **N-DEPLOY-WARN-01** — the Firebase CLI emitted a pre-existing outdated-`firebase-functions`-version warning during deploy. Deployment succeeded. No package update was authorized or performed in this packet; this is tracked only as an external, non-blocking observation.
 
-No new implementation packet is active; no next candidate is selected. UI-B.1, UI-B2, P5-F, recapture — NOT AUTHORIZED.
+## 10. Current repository state
 
----
+`HEAD == origin/main == e9363e35f5a79f8e21d5dafe1e70d8ff3f82559c`. Working tree is clean at this baseline. This reconciliation pass (Packet S docs/tracker closure) leaves exactly seven authorized unstaged docs changes: `Context.md`, `Task.md`, `docs/STATE.md`, `docs/agent-workflow/CURRENT_PACKET.md`, `docs/agent-workflow/NEXT_ACTION.md`, `docs/agent-workflow/STATE.md`, this file. Staged area empty. `stash@{0}` present and untouched (`7d03cfec7ba52ff7e25b7e175ca190efc258d874`).
 
-## Still unauthorized
+The prior packet, **UI-C Manager Adjudication Action Surface** (`3ef4d01`), remains CLOSED AS COMMITTED AND PUSHED; its own docs reconciliation is CLOSED at `5654362` (`docs(pos): close packet 5 ui-c manager adjudication`), which is the direct parent of the Packet S commit.
 
-Deploy; runtime activation; production access/read/write/mutation; manual function invocation (including `resolveShiftCloseAlert`); alert test-fire; synthetic production event/log/document; Firestore rules/index/functions changes or deployment; UI-B.1; UI-B2; P5-F; recapture; global Flowbite (A-1) focus fix; POSPage/PaymentModal/checkout/payment/navigation/global-keyboard changes; stash operations; new implementation (any candidate).
+## 11. Next gate
 
----
+Codex docs review of this seven-file reconciliation, then conditional docs commit/push only — per this pass's own authorization boundary. No next implementation candidate is selected. UI-B.1, UI-B2 (further), P5-F, recapture, and any new feature packet remain unauthorized until a later Gemini decision.
 
-## External reports
+## 12. Still unauthorized
 
-- `Implementer\twinpet-p1-offline-sync-packet-5-ui-c-implementation-report.md`
-- `Codex\twinpet-p1-offline-sync-packet-5-ui-c-implementation-codex-review-report.md`
-- `Implementer\twinpet-p1-offline-sync-packet-5-ui-c-implementation-remediation-after-codex-rc-report.md`
-- `Codex\twinpet-p1-offline-sync-packet-5-ui-c-implementation-closure-codex-rereview-report.md`
-- `Implementer\twinpet-p1-offline-sync-packet-5-ui-c-final-rc4-remediation-report.md`
-- `Implementer\twinpet-p1-offline-sync-packet-5-ui-c-final-retry-scope-remediation-report.md`
-- `AGY\twinpet-p1-offline-sync-packet-5-ui-c-implementation-ux-review-report.md`
-- `Implementer\twinpet-p1-offline-sync-packet-5-ui-c-rendered-ux-remediation-report.md`
-- `AGY\twinpet-p1-offline-sync-packet-5-ui-c-implementation-final-rendered-ux-rereview-report.md`
-- `RenderHarness\...\twinpet-p1-offline-sync-packet-5-ui-c-rendered-ux-remediation-harness-rerun-report.md`
-- `Implementer\twinpet-p1-offline-sync-packet-5-ui-c-commit-push-report.md`
+Deploy of any further function; runtime activation; production access/read/write/mutation; manual function invocation (including `getShiftCloseCaseFigures` and `resolveShiftCloseAlert`); Firestore rules/index/functions changes or deployment beyond what is already live; UI-B.1; UI-B2 (further scope); P5-F; recapture; global Flowbite (A-1) focus fix; POSPage/PaymentModal/checkout/payment/navigation/global-keyboard changes; stash operations; Packet R; Packet C; Packet U; new implementation (any candidate); package/dependency updates (including the `firebase-functions` version behind N-DEPLOY-WARN-01).
+
+## 13. External reports
+
+- `Claude\twinpet-p1-offline-sync-packet-5-ui-b2-packet-s-commit-push-report.md`
+- `Claude\twinpet-p1-offline-sync-packet-5-ui-b2-packet-s-deploy-report.md`
+- `Codex\twinpet-p1-offline-sync-packet-5-ui-b2-packet-s-c12-benign-presence-exactness-final-codex-rereview-report.md`
+- `Claude\twinpet-p1-offline-sync-packet-5-ui-b2-packet-s-post-deploy-docs-tracker-readonly-reconciliation-report.md`
+- Prior UI-C reports (implementation, Codex review chain, remediation, AGY UX, render-harness, commit/push) remain listed under `Implementer\`, `Codex\`, and `AGY\` in `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\`.

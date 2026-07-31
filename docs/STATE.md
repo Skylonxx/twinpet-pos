@@ -6,23 +6,22 @@
 |-------|-------|
 | Repo root | `C:/Users/Narachat/twinpet-pos` |
 | Branch | `main` |
-| HEAD (code) | `3ef4d016eeb288bcdf7d76c959e4a748b97964c6` |
-| origin/main | `3ef4d016eeb288bcdf7d76c959e4a748b97964c6` |
-| Ahead/behind | `0 / 0` (at start of this docs pass) |
-
-> **Self-reference lag:** this file is edited during the UI-C docs reconciliation pass. The code baseline is `3ef4d01`. The docs commit that carries these edits has **not** been created yet, so its hash is not recorded here. Any reader (including the post-UI-C roadmap audit) must treat the **actual Git HEAD** as authoritative, not this self-referential snapshot.
+| HEAD (code) | `e9363e35f5a79f8e21d5dafe1e70d8ff3f82559c` |
+| origin/main | `e9363e35f5a79f8e21d5dafe1e70d8ff3f82559c` |
+| Ahead/behind | `0 / 0` |
 
 ## Current Phase
 
-    PACKET_5_UI_C_CLOSED
-    UI-C Manager Adjudication Action Surface CLOSED AS COMMITTED AND PUSHED — shift-close manager
-    adjudication surface at 3ef4d01 (exact ten-file implementation commit/push COMPLETE).
-    Docs reconciliation active (authorized, unstaged, pending commit this pass).
-    Next gate: strict read-only post-UI-C roadmap audit.
+    PACKET_S_TECHNICALLY_CLOSED_WITH_NONBLOCKING_NOTES
+    P1 Packet 5 / UI-B2 / Packet S — getShiftCloseCaseFigures TECHNICALLY CLOSED WITH NONBLOCKING
+    NOTES — read-only shift-close case figures callable at e9363e3 (exact six-file commit/push
+    COMPLETE; deployed live). UI-C docs reconciliation CLOSED at 5654362.
+    Docs/tracker reconciliation for Packet S active this pass.
+    Next gate: Codex docs review, then conditional docs commit/push only.
 
 ## Working Tree
 
-- HEAD `3ef4d01` (UI-C manager adjudication surface)
+- HEAD `e9363e3` (Packet 5 / UI-B2 / Packet S — getShiftCloseCaseFigures)
 - Working tree **dirty** — exactly seven authorized unstaged docs changes from this reconciliation pass
 - Staging: **empty**
 
@@ -32,6 +31,22 @@
     Object: 7d03cfec7ba52ff7e25b7e175ca190efc258d874
 
 **Do NOT touch stash@{0}.**
+
+## P1 Packet 5 / UI-B2 / Packet S — getShiftCloseCaseFigures
+
+| Field | Value |
+|-------|-------|
+| Status | **TECHNICALLY CLOSED WITH NONBLOCKING NOTES** |
+| Commit | `e9363e35f5a79f8e21d5dafe1e70d8ff3f82559c` — `feat(pos): add shift close case figures callable` |
+| Parent | `5654362688350bf4f7e050318a8c71624d8b87f9` |
+| Payload | exactly 6 files |
+| Push | fast-forward `5654362..e9363e3 main -> main` |
+| Review | Codex final C12 benign-presence exactness re-review — PASS WITH NOTES (0 blockers, 0 request changes, 2 carried nonblocking notes) |
+| Deployment | `getShiftCloseCaseFigures` — ACTIVE, `twinpet-pos`, `asia-southeast1`, `pos-db`, `nodejs22` v2/2nd Gen; successful create; no `--force` |
+| Verification | targeted core 448 / targeted shell 135 / full Functions unit suite 24 files / 1353 tests; typecheck PASS; build PASS; `git diff --check` PASS |
+| Not implemented / not claimed | no callable invocation performed; no production business-data UAT performed; no broader Packet 5 closure claimed; Packet R/C/U not authorized or claimed |
+| N-FINAL-01 (active) | selected-run figures returned by `getShiftCloseCaseFigures` are not final settlement truth; future UI/copy must not present them as reconciled or final without a separate backend contract |
+| Docs/tracker reconciliation | **this pass** (unstaged, pending Codex docs review then conditional commit) |
 
 ## P1 Packet 5 / UI-C Manager Adjudication Action Surface
 
@@ -52,7 +67,7 @@
 | L-1 | CLOSED (rendered — warning adjacent to checkbox, both visible on load) |
 | A-1 | accepted deferred global/library Flowbite focus-containment NOTE (not worsened) |
 | Not implemented | no new deploy/runtime activation/callable invocation; no rules/index/functions change; no hook change; A-1 global Flowbite fix |
-| Docs reconciliation | **active** this pass (pending commit) |
+| Docs reconciliation | CLOSED at `5654362` (`docs(pos): close packet 5 ui-c manager adjudication`) |
 
 ## P1 Packet 5 / Client-UI-B (prior — CLOSED AS COMMITTED AND PUSHED)
 
@@ -90,6 +105,8 @@ All **CLOSED** where applicable.
 
 | Hash | Message |
 |------|---------|
+| `e9363e3` | feat(pos): add shift close case figures callable — **PACKET S TECHNICALLY CLOSED WITH NONBLOCKING NOTES** |
+| `5654362` | docs(pos): close packet 5 ui-c manager adjudication — **UI-C docs CLOSED** |
 | `3ef4d01` | feat(pos): add shift close manager adjudication surface — **UI-C CLOSED** |
 | `70a23f9` | docs(pos): close client ui-b reconciliation — **UI-B docs CLOSED** |
 | `490f4cf` | feat(pos): add shift close alert review detail — **Client-UI-B CLOSED** |
@@ -98,11 +115,11 @@ All **CLOSED** where applicable.
 
 ## Next Recommended Block
 
-    UI_C_DOCS_RECONCILIATION_ACTIVE → POST_UI_C_READ_ONLY_ROADMAP_AUDIT
+    PACKET_S_DOCS_TRACKER_RECONCILIATION_ACTIVE → CODEX_DOCS_REVIEW → CONDITIONAL_DOCS_COMMIT_PUSH
 
-1. UI-C implementation/remediation/review/commit/push gates — **closed**
-2. Docs reconciliation — **active this pass** (unstaged, pending commit)
-3. **Next gate:** strict read-only post-UI-C roadmap audit
+1. Packet S implementation/commit/push/deploy/Codex-review gates — **closed**
+2. Docs/tracker reconciliation — **active this pass** (unstaged, pending Codex docs review then conditional commit)
+3. **Next gate:** Codex docs review, then conditional docs commit/push only
 4. No next implementation candidate selected; any implementation requires a later Gemini authorization
 
 ## Hard Boundaries
