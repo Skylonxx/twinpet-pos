@@ -1,9 +1,9 @@
 # Latest Report — P1 Offline / Sync Packet 5 / UI-B2 / Packet S — getShiftCloseCaseFigures (`PACKET_S_TECHNICALLY_CLOSED_WITH_NONBLOCKING_NOTES`)
 
-> Date: 2026-07-30
-> HEAD (code): `e9363e35f5a79f8e21d5dafe1e70d8ff3f82559c`
-> Status: **PACKET 5 / UI-B2 / PACKET S — TECHNICALLY CLOSED WITH NONBLOCKING NOTES**
-> Active gate: **Packet S docs/tracker reconciliation** (unstaged, pending Codex docs review then conditional commit this pass)
+> Date: 2026-07-31 (docs/tracker reconciliation last reconciled; implementation events below dated 2026-07-30)
+> Current repository HEAD: determined from live Git — run `git rev-parse HEAD`
+> Verified baseline entering this reconciliation: `c6bdbd00d01541201dbc53236b06080db1a148e4` (`docs(pos): reconcile packet s closure`)
+> Status: **PACKET 5 / UI-B2 / PACKET S — TECHNICALLY CLOSED WITH NONBLOCKING NOTES**; docs/tracker reconciliation **CLOSED** at `c6bdbd0`. Broader Packet 5 **NOT CLOSED**. No active implementation packet; passive natural-traffic observation remains authorized in parallel, read-only only, when a natural event exists.
 
 ---
 
@@ -83,21 +83,27 @@ Read-only `firebase functions:list` confirmed `getShiftCloseCaseFigures │ v2 �
 
 Selected-run figures returned by `getShiftCloseCaseFigures` are **not** final settlement truth. Future UI/copy consuming this callable must not present them as reconciled or final without a separate backend contract that independently proves that state. This is a standing constraint, not a defect requiring immediate backend remediation.
 
+## 8a. Billing (O-15) reconciliation — carried, completed with notes (2026-07-20)
+
+Owner completed the paid-account upgrade with a THB 25 Owner-accepted / Owner-managed budget. Billing account open, project linkage verified, `billingEnabled` verified, relevant IAM/linkage verified. The specific paid-upgrade status remains Owner-attested because the CLI cannot independently distinguish a free-trial state from the specific paid-upgrade state. No engineering action is currently pending on this item.
+
 ## 9. External-only notes (nonblocking)
 
 - **N-EVIDENCE-01** — an earlier evidence report claimed a six-hash census was printed by a still-earlier report when that report did not actually print it. The final Codex re-review independently re-verified every current hash directly, so this unsupported historical cross-reference does not invalidate current evidence. No repository action required.
 - **N-REVIEW-SCHEMA-01** — a Codex reviewer-report field-name typo only; the underlying semantic governed-kind count (31) was independently verified. No repository remediation required.
 - **N-DEPLOY-WARN-01** — the Firebase CLI emitted a pre-existing outdated-`firebase-functions`-version warning during deploy. Deployment succeeded. No package update was authorized or performed in this packet; this is tracked only as an external, non-blocking observation.
 
-## 10. Current repository state
+## 10. Current repository state (as of the Packet S docs/tracker closure)
 
-`HEAD == origin/main == e9363e35f5a79f8e21d5dafe1e70d8ff3f82559c`. Working tree is clean at this baseline. This reconciliation pass (Packet S docs/tracker closure) leaves exactly seven authorized unstaged docs changes: `Context.md`, `Task.md`, `docs/STATE.md`, `docs/agent-workflow/CURRENT_PACKET.md`, `docs/agent-workflow/NEXT_ACTION.md`, `docs/agent-workflow/STATE.md`, this file. Staged area empty. `stash@{0}` present and untouched (`7d03cfec7ba52ff7e25b7e175ca190efc258d874`).
+At the Packet S docs/tracker closure commit `c6bdbd00d01541201dbc53236b06080db1a148e4`, `HEAD == origin/main == c6bdbd0`; the commit payload was exactly the seven authorized docs files: `Context.md`, `Task.md`, `docs/STATE.md`, `docs/agent-workflow/CURRENT_PACKET.md`, `docs/agent-workflow/NEXT_ACTION.md`, `docs/agent-workflow/STATE.md`, this file. Staged area was empty at commit time. `stash@{0}` present and untouched (`7d03cfec7ba52ff7e25b7e175ca190efc258d874`).
 
-The prior packet, **UI-C Manager Adjudication Action Surface** (`3ef4d01`), remains CLOSED AS COMMITTED AND PUSHED; its own docs reconciliation is CLOSED at `5654362` (`docs(pos): close packet 5 ui-c manager adjudication`), which is the direct parent of the Packet S commit.
+For current repository state, use live Git: `git rev-parse HEAD`, `git status --short --untracked-files=all`, `git rev-parse "stash@{0}"`.
+
+The prior packet, **UI-C Manager Adjudication Action Surface** (`3ef4d01`), remains CLOSED AS COMMITTED AND PUSHED; its own docs reconciliation is CLOSED at `5654362` (`docs(pos): close packet 5 ui-c manager adjudication`), which is the direct parent of the Packet S implementation commit `e9363e3`.
 
 ## 11. Next gate
 
-Codex docs review of this seven-file reconciliation, then conditional docs commit/push only — per this pass's own authorization boundary. No next implementation candidate is selected. UI-B.1, UI-B2 (further), P5-F, recapture, and any new feature packet remain unauthorized until a later Gemini decision.
+The Packet S docs/tracker reconciliation gate is **CLOSED** (committed at `c6bdbd0`). **No active implementation packet is selected.** Passive read-only observation may occur only when natural production traffic provides a real event; no agent-triggered activity is authorized. Await Gemini selection before any new planning or implementation gate. UI-B.1, UI-B2 (further), P5-F, recapture, and any new feature packet remain unauthorized until a later Gemini decision.
 
 ## 12. Still unauthorized
 

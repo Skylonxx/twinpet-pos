@@ -6,9 +6,10 @@
 |-------|-------|
 | Repo root | `C:/Users/Narachat/twinpet-pos` |
 | Branch | `main` |
-| HEAD (code) | `e9363e35f5a79f8e21d5dafe1e70d8ff3f82559c` |
-| origin/main | `e9363e35f5a79f8e21d5dafe1e70d8ff3f82559c` |
-| Ahead/behind | `0 / 0` |
+| HEAD (code) | determined from live Git — run `git rev-parse HEAD` |
+| origin/main | determined from live Git — run `git rev-parse origin/main` |
+| Verified baseline entering this reconciliation | `c6bdbd00d01541201dbc53236b06080db1a148e4` (`docs(pos): reconcile packet s closure`) |
+| Ahead/behind | determined from live Git — run `git status -sb` |
 
 ## Current Phase
 
@@ -16,14 +17,16 @@
     P1 Packet 5 / UI-B2 / Packet S — getShiftCloseCaseFigures TECHNICALLY CLOSED WITH NONBLOCKING
     NOTES — read-only shift-close case figures callable at e9363e3 (exact six-file commit/push
     COMPLETE; deployed live). UI-C docs reconciliation CLOSED at 5654362.
-    Docs/tracker reconciliation for Packet S active this pass.
-    Next gate: Codex docs review, then conditional docs commit/push only.
+    Packet S docs/tracker reconciliation CLOSED at c6bdbd0.
+    Broader Packet 5 NOT CLOSED. No active implementation packet. Passive natural-traffic
+    observation remains authorized in parallel, read-only only, when a natural event exists.
 
 ## Working Tree
 
-- HEAD `e9363e3` (Packet 5 / UI-B2 / Packet S — getShiftCloseCaseFigures)
-- Working tree **dirty** — exactly seven authorized unstaged docs changes from this reconciliation pass
-- Staging: **empty**
+- Packet S implementation commit (historical): `e9363e3` (Packet 5 / UI-B2 / Packet S — getShiftCloseCaseFigures)
+- Packet S docs/tracker closure commit (historical): `c6bdbd0`
+- For current working-tree state, use live Git: `git status --short --untracked-files=all`
+- The Packet S docs/tracker closure gate settled with a clean working tree and empty staged area at the verified baseline above
 
 ## Stash
 
@@ -46,7 +49,7 @@
 | Verification | targeted core 448 / targeted shell 135 / full Functions unit suite 24 files / 1353 tests; typecheck PASS; build PASS; `git diff --check` PASS |
 | Not implemented / not claimed | no callable invocation performed; no production business-data UAT performed; no broader Packet 5 closure claimed; Packet R/C/U not authorized or claimed |
 | N-FINAL-01 (active) | selected-run figures returned by `getShiftCloseCaseFigures` are not final settlement truth; future UI/copy must not present them as reconciled or final without a separate backend contract |
-| Docs/tracker reconciliation | **this pass** (unstaged, pending Codex docs review then conditional commit) |
+| Docs/tracker reconciliation | **CLOSED** at `c6bdbd0` (`docs(pos): reconcile packet s closure`) |
 
 ## P1 Packet 5 / UI-C Manager Adjudication Action Surface
 
@@ -105,6 +108,7 @@ All **CLOSED** where applicable.
 
 | Hash | Message |
 |------|---------|
+| `c6bdbd0` | docs(pos): reconcile packet s closure — **PACKET S DOCS/TRACKER RECONCILIATION CLOSED** |
 | `e9363e3` | feat(pos): add shift close case figures callable — **PACKET S TECHNICALLY CLOSED WITH NONBLOCKING NOTES** |
 | `5654362` | docs(pos): close packet 5 ui-c manager adjudication — **UI-C docs CLOSED** |
 | `3ef4d01` | feat(pos): add shift close manager adjudication surface — **UI-C CLOSED** |
@@ -115,11 +119,11 @@ All **CLOSED** where applicable.
 
 ## Next Recommended Block
 
-    PACKET_S_DOCS_TRACKER_RECONCILIATION_ACTIVE → CODEX_DOCS_REVIEW → CONDITIONAL_DOCS_COMMIT_PUSH
+    NO_ACTIVE_IMPLEMENTATION_PACKET → PASSIVE_NATURAL_TRAFFIC_OBSERVATION_ONLY → AWAIT_GEMINI_SELECTION
 
 1. Packet S implementation/commit/push/deploy/Codex-review gates — **closed**
-2. Docs/tracker reconciliation — **active this pass** (unstaged, pending Codex docs review then conditional commit)
-3. **Next gate:** Codex docs review, then conditional docs commit/push only
+2. Docs/tracker reconciliation — **CLOSED** at `c6bdbd0`
+3. **Next action:** no active implementation packet is selected. Passive read-only observation may occur only when natural production traffic provides a real event; no agent-triggered activity is authorized. Await Gemini selection before any new planning or implementation gate.
 4. No next implementation candidate selected; any implementation requires a later Gemini authorization
 
 ## Hard Boundaries

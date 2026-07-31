@@ -2,7 +2,7 @@
 
 ## Phase
 
-**Docs/tracker reconciliation — P1 Offline / Sync Packet 5 / UI-B2 / Packet S — getShiftCloseCaseFigures closure.** Packet S implementation is **TECHNICALLY CLOSED WITH NONBLOCKING NOTES** at `e9363e35f5a79f8e21d5dafe1e70d8ff3f82559c` (deployed live). This pass reconciles the seven authoritative tracker documents only. State: `PACKET_S_TECHNICALLY_CLOSED_WITH_NONBLOCKING_NOTES`.
+**No active implementation packet.** Packet S implementation (`getShiftCloseCaseFigures`) is **TECHNICALLY CLOSED WITH NONBLOCKING NOTES** at `e9363e35f5a79f8e21d5dafe1e70d8ff3f82559c` (deployed live); its docs/tracker reconciliation is **CLOSED** at `c6bdbd00d01541201dbc53236b06080db1a148e4` (`docs(pos): reconcile packet s closure`). **Broader Packet 5 is NOT CLOSED.** State: `PACKET_S_TECHNICALLY_CLOSED_WITH_NONBLOCKING_NOTES`; docs/tracker reconciliation `CLOSED`. Passive natural-traffic observation remains authorized in parallel, read-only only, when a natural event exists; no agent-triggered activity is authorized.
 
 ## This packet — Packet 5 / UI-B2 / Packet S — getShiftCloseCaseFigures
 
@@ -37,7 +37,7 @@
 
 ## This pass — Docs/tracker reconciliation (Packet S)
 
-**Status: ACTIVE (unstaged, pending Codex docs review then conditional commit)**
+**Status: CLOSED** — committed at `c6bdbd00d01541201dbc53236b06080db1a148e4` (`docs(pos): reconcile packet s closure`)
 
 - Authorized files: `Context.md`, `Task.md`, `docs/STATE.md`, `docs/agent-workflow/CURRENT_PACKET.md`, `docs/agent-workflow/NEXT_ACTION.md`, `docs/agent-workflow/STATE.md`, `docs/reports/latest-report.md`
 - No source/test/config/rules/index/functions changes
@@ -52,10 +52,14 @@
 - **G3 Monitoring** — docs/runbook closed
 - **P5-D / P5-C / P5-B** — closed/live as documented
 
-## Current HEAD (code)
+## Current repository HEAD
 
-`e9363e35f5a79f8e21d5dafe1e70d8ff3f82559c`
+Determined from live Git — run `git rev-parse HEAD`.
+
+Historical closure anchors (unchanged):
+- Packet S implementation: `e9363e35f5a79f8e21d5dafe1e70d8ff3f82559c`
+- Packet S docs/tracker closure: `c6bdbd00d01541201dbc53236b06080db1a148e4`
 
 ## Next gate
 
-**Codex docs review, then conditional docs commit/push only** — per this pass's own authorization boundary. No new implementation packet is active; no next candidate is selected. UI-B.1, UI-B2, P5-F, recapture, deploy, runtime activation, callable invocation, production access, global Flowbite fix, stash operations, Packet R/C/U — NOT authorized. Any implementation requires a later Gemini authorization.
+**No active implementation packet is selected.** Passive read-only observation may occur only when natural production traffic provides a real event; no agent-triggered activity is authorized. Await Gemini selection before any new planning or implementation gate. UI-B.1, UI-B2, P5-F, recapture, deploy, runtime activation, callable invocation, production access, global Flowbite fix, stash operations, Packet R/C/U — NOT authorized.

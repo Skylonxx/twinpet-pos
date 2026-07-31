@@ -1,9 +1,10 @@
 # Twinpet POS — Task Tracker
 
-> Last reconciled: 2026-07-30
-> HEAD: `e9363e35f5a79f8e21d5dafe1e70d8ff3f82559c` (feat(pos): add shift close case figures callable)
-> origin/main: `e9363e35f5a79f8e21d5dafe1e70d8ff3f82559c`
-> Implementation: `e9363e35f5a79f8e21d5dafe1e70d8ff3f82559c` (Packet 5 / UI-B2 / Packet S — getShiftCloseCaseFigures — TECHNICALLY CLOSED WITH NONBLOCKING NOTES)
+> Last reconciled: 2026-07-31
+> Current repository HEAD: determined from live Git — run `git rev-parse HEAD`
+> Verified baseline entering this reconciliation: `c6bdbd00d01541201dbc53236b06080db1a148e4` (`docs(pos): reconcile packet s closure`)
+> Packet S implementation commit (historical, unchanged): `e9363e35f5a79f8e21d5dafe1e70d8ff3f82559c` (`feat(pos): add shift close case figures callable`)
+> Packet S docs/tracker closure commit: `c6bdbd00d01541201dbc53236b06080db1a148e4`
 
 ---
 
@@ -16,7 +17,7 @@
 - [x] Commit/push — `e9363e3` (`feat(pos): add shift close case figures callable`); fast-forward `5654362..e9363e3`; exactly 6 files
 - [x] Deployment — `getShiftCloseCaseFigures` deployed live: `twinpet-pos`, `asia-southeast1`, `pos-db`, `nodejs22` v2/2nd Gen; successful create; no `--force`
 - [x] Verification — targeted core 448 / targeted shell 135 / full Functions unit suite 24 files / 1353 tests; typecheck PASS; build PASS; `git diff --check` PASS
-- [ ] Docs/tracker reconciliation — **this pass**; next gate Codex docs review, then conditional docs commit/push only
+- [x] Docs/tracker reconciliation — CLOSED at `c6bdbd0` (`docs(pos): reconcile packet s closure`)
 
 **Boundaries:** no callable invocation performed; no production business-data UAT performed; no broader Packet 5 closure claimed; Packet R/C/U not authorized or claimed; `stash@{0}` untouched.
 
@@ -66,7 +67,7 @@
 
 **No code/config/runtime changed. No monitoring resource created/modified/deleted in Scope 3. No deploy/manual invocation/test-fire/synthetic event/data mutation.**
 
-**Next:** free-trial upgrade decision (owner, ≈2026-08-27) — tracked separately from monitoring docs closure.
+**Billing (O-15) — Completed with notes, 2026-07-20:** Owner completed the paid-account upgrade with a THB 25 Owner-accepted / Owner-managed budget. Billing account open, project linkage verified, `billingEnabled` verified, relevant IAM/linkage verified. The specific paid-upgrade status remains Owner-attested because the CLI cannot independently distinguish a free-trial state from the specific paid-upgrade state. No engineering action is currently pending.
 
 ## P1 Offline / Sync Resiliency — Packet 5 / P5-E Adjudication Callable
 
@@ -148,8 +149,8 @@
 
 1. Packet 5 / UI-B2 / Packet S — getShiftCloseCaseFigures — **TECHNICALLY CLOSED WITH NONBLOCKING NOTES** (`e9363e3`, deployed live)
 2. Packet 5 / UI-C Manager Adjudication Action Surface — **CLOSED AS COMMITTED AND PUSHED** (`3ef4d01`); docs reconciliation CLOSED at `5654362`
-3. **This pass: Packet S docs/tracker reconciliation** — seven tracker documents updated
-4. **Next gate: Codex docs review, then conditional docs commit/push only** (per this pass's own authorization boundary)
+3. **Packet S docs/tracker reconciliation — CLOSED** at `c6bdbd0` (`docs(pos): reconcile packet s closure`)
+4. **Active implementation packet: NONE.** Passive natural-traffic observation may occur only when a real natural business event exists, read-only only; no agent-triggered activity is authorized. Await a later Gemini selection before any new planning or implementation gate.
 5. **NOT authorized:** UI-B.1, UI-B2, P5-F, recapture, new implementation (any candidate), deploy, runtime activation, callable invocation, production access, global Flowbite (A-1) fix, stash operations, POSPage/PaymentModal/checkout/navigation/global-keyboard changes, Packet R/C/U
 6. **Next implementation/roadmap direction** — later Gemini decision; no active implementation packet and no next candidate selected
 7. Do not automatically start another packet.
