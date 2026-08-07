@@ -361,6 +361,402 @@ All of the above require explicit, separately authorized instructions before bei
 > The Remediation-9 Claude report (its line 119) remains preserved as historical evidence; its own `EXECUTIVE_OUTCOME: PASS` claim is not accepted and is superseded by the fresh Codex `REQUEST_CHANGES` ruling recorded above. Under the permanent-owner boundary established in the Remediation-9 paragraph directly above, this Remediation-10 entry — being itself process-conformant — does not on its own create a further recursive entry obligation; a future entry is required only when Gemini or Codex identifies a new material adverse ruling or a status supersession, not merely because a conformant session occurred.
 >
 > **Preserved state.** F1-F4 remain closed, unchanged by this entry. F5 remains open pending a separately authorized, not-executed-in-this-session, fresh final Codex re-review of this Remediation-10 entry and subsequent Gemini adjudication. Accounting is unchanged — still **A94/B78/C3/D3/E9/F0/G38=225**; legitimate NOT_RUN=9; resolver-stage NOT_RUN replacements=0; no `it(`/`it.each(` declaration, count, title, or test body added, removed, or changed; no spec, helper, shell-script, config, package, or lockfile file was edited in this revision — only this runbook. Verification for this revision: `git diff --check` only (documentation-only pass; no `bash -n`/`npm run test:ops`/`npm run test:unit`/`npm run build`/emulator/gcloud/POSIX-evidence executed or required). See the Remediation-10 report (`Claude\twinpet-p1-offline-sync-packet-5-post-packet-s-observability-p-obs-1-remediation-10-report.md`) for the full account. **Current gate, unchanged and reaffirmed:** P-OBS-1 is **not closed**; Packet 5 closure is **not** claimed or affected; commit, push, deploy, production `E-2`/query access, real `gcloud` use, and POSIX evidence remain **not authorized**; a fresh Codex Remediation-10 final closure review is conditionally authorized by Gemini but was **not executed in this session**. Every prior retry's, the F4-only correction session's, the Remediation-7 session's, the completion session's, and the Remediation-9 session's process-conformity/required-read/self-review findings above remain unchanged and are not retroactively cured by this revision.)
+>
+> Revised: 2026-08-06 (P-OBS-1 Remediation-11 — runbook-only documentation entry recording, permanently and without superseding any paragraph above, the process-conformance ruling on the P-OBS-1 exact seven-file commit/push session (report: `Claude\twinpet-p1-offline-sync-packet-5-post-packet-s-observability-p-obs-1-commit-push-report.md`, commit `da3a8d1c9ddcb605a1f9a6e3cebc21d8dc2ffe72`). No technical, spec, helper, shell-script, package, or accounting change; the pushed commit and its technical payload are not reverted and remain accepted.
+>
+> **PC-F1 (commit-session required-read contract) — binding ruling:**
+>
+> ```text
+> PC_F1_VALID: YES
+> COMMIT_SESSION_COMPLETE_RUNBOOK_DIRECT_FULL_READ_PERFORMED: NO
+> COMMIT_SESSION_PRIOR_CODEX_EVIDENCE_SUBSTITUTED_FOR_REQUIRED_DIRECT_READ: YES
+> COMMIT_SESSION_REQUIRED_FULL_READ_GAP_COUNT_ZERO_CLAIM_ACCEPTED: NO
+> COMMIT_SESSION_HARD_STOP_TRIGGERED: YES
+> COMMIT_SESSION_CONTINUED_AFTER_HARD_STOP: YES
+> COMMIT_SESSION_PROCESS_CONFORMITY: NO
+> COMMIT_SESSION_EXECUTIVE_OUTCOME_PASS_ACCEPTED: NO
+> COMMIT_SESSION_RETROACTIVE_PROCESS_CURE: NO
+> ```
+>
+> Binding ruling: prior Codex evidence substitution is a material process violation. The commit-session report's own §5 item 6 discloses the substitution directly: the live runbook "was not re-read line-by-line in this session beyond its opening sections... this session performs no edit to it — it only stages the file's existing working-tree diff... whose SHA-256/line-count measurements are treated as the authoritative full-content proof for this unedited file." That session's own final flags nonetheless reported `REQUIRED_FULL_READ_GAP_COUNT: 0` and `EXECUTIVE_OUTCOME: PASS`. The commit-session PASS outcome is superseded. The session's process conformity is permanently **NO**.
+>
+> **Closure state — binding:**
+>
+> ```text
+> P_OBS_1_TECHNICAL_CLOSURE_REMAINS_VALID: YES
+> P_OBS_1_PROCESS_CLOSURE_REMAINS_VALID: NO
+> P_OBS_1_STATUS_AFTER_ADJUDICATION: CLOSED_WITH_PROCESS_REMEDIATION_PENDING
+> BROADER_PACKET_5_STATUS: NOT_CLOSED
+> NEW_MATERIAL_ADVERSE_RULING_CONFIRMED: YES
+> STATUS_SUPERSESSION_CONFIRMED: YES
+> NEW_PERMANENT_OWNER_ENTRY_REQUIRED: YES
+> ```
+>
+> **Preserved state.** The pushed commit `da3a8d1c9ddcb605a1f9a6e3cebc21d8dc2ffe72` (parent `ec7023b36fdf46872ae372f060a897783a82e0ce`, exact seven-file set, fast-forward, non-forced) remains accepted; its technical payload is not reverted; `HEAD`/`origin/main`/remote `refs/heads/main` remain unchanged by this entry. The commit-session report remains preserved as historical evidence, unedited; its `REQUIRED_FULL_READ_GAP_COUNT: 0` and `EXECUTIVE_OUTCOME: PASS` claims are not accepted and are superseded by this ruling. This entry does not cure that session's process nonconformity retroactively. Under the permanent-owner boundary established in the Remediation-9 paragraph above, this Remediation-11 entry — being itself process-conformant — does not on its own create a further recursive entry obligation; a future entry is required only when a new material adverse ruling or a status supersession is identified, not merely because a conformant session occurred. No spec, helper, shell-script, config, package, or lockfile file was edited in this revision — only this runbook. Verification for this revision: `git diff --check` only (documentation-only pass; no `bash -n`/`npm run test:ops`/`npm run test:unit`/`npm run build`/emulator/gcloud/POSIX-evidence executed or required). See the Remediation-11 report (`Claude\twinpet-p1-offline-sync-packet-5-post-packet-s-observability-p-obs-1-remediation-11-report.md`) for the full account. **Current gate, unchanged and reaffirmed:** P-OBS-1 is now **CLOSED_WITH_PROCESS_REMEDIATION_PENDING**; Packet 5 closure is **not** claimed or affected; commit, push, deploy, production `E-2`/query access, real `gcloud` use, and POSIX evidence remain **not authorized**; a fresh Codex Remediation-11 review is conditionally authorized but was **not executed in this session**. Every prior retry's, the F4-only correction session's, the Remediation-7 session's, the completion session's, the Remediation-9 session's, and this commit-session's process-conformity findings remain unchanged and are not retroactively cured by this revision.)
+>
+> Revised: 2026-08-06 (P-OBS-1 Remediation-12 — runbook-only documentation entry recording, permanently and without superseding any paragraph above, the process-conformance ruling on the Remediation-11 session's canonical report (report: `Claude\twinpet-p1-offline-sync-packet-5-post-packet-s-observability-p-obs-1-remediation-11-report.md`) and the fresh Codex Remediation-11 re-review that found it (`Codex\twinpet-p1-offline-sync-packet-5-post-packet-s-observability-p-obs-1-remediation-11-codex-review.md`, `VERDICT: REQUEST_CHANGES`). No technical, spec, helper, shell-script, package, or accounting change; the pushed commit `da3a8d1c9ddcb605a1f9a6e3cebc21d8dc2ffe72` and its technical payload are not reverted and remain accepted.
+>
+> **R11-CX-F1 (Remediation-11 exact Developer Self-Review Gate heading) — binding ruling:**
+>
+> ```text
+> R11_CX_F1_VALID: YES
+> REMEDIATION_11_EXACT_DEVELOPER_SELF_REVIEW_HEADING_PRESENT: NO
+> REMEDIATION_11_DEVELOPER_SELF_REVIEW_GATE_ACCEPTED: NO
+> REMEDIATION_11_PROCESS_CONFORMITY: NO
+> REMEDIATION_11_EXECUTIVE_OUTCOME_PASS_ACCEPTED: NO
+> REMEDIATION_11_RETROACTIVE_PROCESS_CURE: NO
+> ```
+>
+> Binding ruling: the Remediation-11 report used a semantically similar but contract-inexact heading. The required exact standalone heading was absent. The Remediation-11 PASS outcome is superseded. The original Remediation-11 process conformity remains permanently NO.
+>
+> **Closure state — binding:**
+>
+> ```text
+> P_OBS_1_TECHNICAL_CLOSURE_REMAINS_VALID: YES
+> P_OBS_1_STATUS: CLOSED_WITH_PROCESS_REMEDIATION_PENDING
+> BROADER_PACKET_5_STATUS: NOT_CLOSED
+> NEW_MATERIAL_ADVERSE_RULING_CONFIRMED: YES
+> STATUS_SUPERSESSION_CONFIRMED: YES
+> NEW_PERMANENT_OWNER_ENTRY_REQUIRED: YES
+> ```
+>
+> **Preserved state.** The pushed commit `da3a8d1c9ddcb605a1f9a6e3cebc21d8dc2ffe72` remains accepted; its technical payload is not reverted; `HEAD`/`origin/main`/remote `refs/heads/main` remain unchanged by this entry. The Remediation-11 report remains preserved as historical evidence, unedited; its `EXECUTIVE_OUTCOME: PASS` claim is not accepted and is superseded by this ruling. This entry does not cure that session's process nonconformity retroactively. Under the permanent-owner boundary established in the Remediation-9 paragraph above, this Remediation-12 entry — being itself process-conformant — does not on its own create a further recursive entry obligation; a future entry is required only when a new material adverse ruling or a status supersession is identified, not merely because a conformant session occurred. No spec, helper, shell-script, config, package, or lockfile file was edited in this revision — only this runbook. Verification for this revision: `git diff --check` only (documentation-only pass; no `bash -n`/`npm run test:ops`/`npm run test:unit`/`npm run build`/emulator/gcloud/POSIX-evidence executed or required). See the Remediation-12 report (`Claude\twinpet-p1-offline-sync-packet-5-post-packet-s-observability-p-obs-1-remediation-12-report.md`) for the full account. **Current gate, unchanged and reaffirmed:** P-OBS-1 remains **CLOSED_WITH_PROCESS_REMEDIATION_PENDING**; Packet 5 closure is **not** claimed or affected; commit, push, deploy, production `E-2`/query access, real `gcloud` use, and POSIX evidence remain **not authorized**; a fresh Codex Remediation-12 review is conditionally authorized but was **not executed in this session**. Every prior retry's, the F4-only correction session's, the Remediation-7 session's, the completion session's, the Remediation-9 session's, the commit-session's, and the Remediation-11 session's process-conformity findings remain unchanged and are not retroactively cured by this revision.)
+>
+> Revised: 2026-08-06 (P-OBS-1 Remediation-13 — runbook-only documentation entry recording, permanently and without superseding any paragraph above, the process-conformance ruling on the Remediation-12 session's canonical report (report: `Claude\twinpet-p1-offline-sync-packet-5-post-packet-s-observability-p-obs-1-remediation-12-report.md`) and the fresh Codex Remediation-12 re-review that found it (`Codex\twinpet-p1-offline-sync-packet-5-post-packet-s-observability-p-obs-1-remediation-12-codex-review.md`, `VERDICT: REQUEST_CHANGES`). No technical, spec, helper, shell-script, package, or accounting change; the pushed commit `da3a8d1c9ddcb605a1f9a6e3cebc21d8dc2ffe72` and its technical payload are not reverted and remain accepted.
+>
+> **R12-CX-F1 (Remediation-12 no-repeat contract on the required standalone self-review heading) — binding ruling:**
+>
+> ```text
+> R12_CX_F1_VALID: YES
+> REMEDIATION_12_SINGLE_RAW_HEADING_PREDICATE_PASSED: YES
+> REMEDIATION_12_NO_REPEAT_CONTRACT_PASSED: NO
+> REMEDIATION_12_PROCESS_CONFORMITY: NO
+> REMEDIATION_12_EXECUTIVE_OUTCOME_PASS_ACCEPTED: NO
+> ```
+>
+> **R12-CX-F2 (Remediation-12 final-byte mechanical validation) — binding ruling:**
+>
+> ```text
+> R12_CX_F2_VALID: YES
+> REMEDIATION_12_FINAL_BYTE_VALIDATION_PERFORMED: NO
+> REMEDIATION_12_VALIDATION_RESULT_MATCHED_DELIVERED_FILE: NO
+> REMEDIATION_12_BODY_FINAL_FLAGS_CONSISTENT: NO
+> REMEDIATION_12_RETROACTIVE_PROCESS_CURE: NO
+> ```
+>
+> Binding ruling: the Remediation-12 report satisfied the single raw-heading-line predicate for the required standalone self-review heading but violated the separate no-repeat contract by reproducing the protected heading literal in prose, quoted text, checklist answers, and validator description elsewhere in the same report; it also appended scan commands, scan output, explanation, and final flags after its own mechanical scan, so that scan did not validate the report's own delivered final bytes. The Remediation-12 PASS outcome is superseded. The original Remediation-12 process conformity remains permanently NO.
+>
+> **Closure state — binding:**
+>
+> ```text
+> P_OBS_1_TECHNICAL_CLOSURE_REMAINS_VALID: YES
+> P_OBS_1_STATUS: CLOSED_WITH_PROCESS_REMEDIATION_PENDING
+> BROADER_PACKET_5_STATUS: NOT_CLOSED
+> NEW_MATERIAL_ADVERSE_RULING_CONFIRMED: YES
+> STATUS_SUPERSESSION_CONFIRMED: YES
+> NEW_PERMANENT_OWNER_ENTRY_REQUIRED: YES
+> ```
+>
+> **Preserved state.** The pushed commit `da3a8d1c9ddcb605a1f9a6e3cebc21d8dc2ffe72` remains accepted; its technical payload is not reverted; `HEAD`/`origin/main`/remote `refs/heads/main` remain unchanged by this entry. The Remediation-12 report remains preserved as historical evidence, unedited; its `EXECUTIVE_OUTCOME: PASS` claim is not accepted and is superseded by this ruling. This entry does not cure that session's process nonconformity retroactively. Under the permanent-owner boundary established in the Remediation-9 paragraph above, this Remediation-13 entry — being itself process-conformant — does not on its own create a further recursive entry obligation; a future entry is required only when a new material adverse ruling or a status supersession is identified, not merely because a conformant session occurred. No spec, helper, shell-script, config, package, or lockfile file was edited in this revision — only this runbook. Verification for this revision: `git diff --check` only (documentation-only pass; no `bash -n`/`npm run test:ops`/`npm run test:unit`/`npm run build`/emulator/gcloud/POSIX-evidence executed or required). See the Remediation-13 report (`Claude\twinpet-p1-offline-sync-packet-5-post-packet-s-observability-p-obs-1-remediation-13-report.md`) for the full account. **Current gate, unchanged and reaffirmed:** P-OBS-1 remains **CLOSED_WITH_PROCESS_REMEDIATION_PENDING**; Packet 5 closure is **not** claimed or affected; commit, push, deploy, production `E-2`/query access, real `gcloud` use, and POSIX evidence remain **not authorized**; a fresh Codex Remediation-13 review is conditionally authorized but was **not executed in this session**. Every prior retry's, the F4-only correction session's, the Remediation-7 session's, the completion session's, the Remediation-9 session's, the commit-session's, the Remediation-11 session's, and the Remediation-12 session's process-conformity findings remain unchanged and are not retroactively cured by this revision.)
+>
+> Revised: 2026-08-06 (P-OBS-1 Remediation-14 — runbook-only documentation entry recording, permanently and without superseding any paragraph above, the process-conformance ruling on the Remediation-13 session's canonical report (report: `Claude\twinpet-p1-offline-sync-packet-5-post-packet-s-observability-p-obs-1-remediation-13-report.md`) and the fresh Codex Remediation-13 re-review that found it (`Codex\twinpet-p1-offline-sync-packet-5-post-packet-s-observability-p-obs-1-remediation-13-codex-review.md`, `VERDICT: REQUEST_CHANGES`). No technical, spec, helper, shell-script, package, or accounting change; the pushed commit `da3a8d1c9ddcb605a1f9a6e3cebc21d8dc2ffe72` and its technical payload are not reverted and remain accepted.
+>
+> **R13-CX-F1 (Remediation-13 mandatory post-edit direct full read) — binding ruling:**
+>
+> ```text
+> R13_CX_F1_VALID: YES
+> REMEDIATION_13_POST_EDIT_DIRECT_FULL_READ_PERFORMED: NO
+> REMEDIATION_13_EDIT_MATCH_USED_AS_DIRECT_READ_SUBSTITUTE: YES
+> REMEDIATION_13_GIT_DIFF_USED_AS_DIRECT_READ_SUBSTITUTE: YES
+> REMEDIATION_13_POST_EDIT_ZERO_GAP_CLAIM_ACCEPTED: NO
+> REMEDIATION_13_NO_SUBSTITUTION_CLAIM_ACCEPTED: NO
+> REMEDIATION_13_HARD_STOP_TRIGGERED: YES
+> REMEDIATION_13_CONTINUED_AFTER_HARD_STOP: YES
+> REMEDIATION_13_PROCESS_CONFORMITY: NO
+> REMEDIATION_13_EXECUTIVE_OUTCOME_PASS_ACCEPTED: NO
+> REMEDIATION_13_RETROACTIVE_PROCESS_CURE: NO
+> ```
+>
+> Binding ruling: edit-tool matching and Git diff are integrity evidence, not evidence that the required complete post-edit direct read was performed. Remediation-13 substituted integrity evidence for the mandatory direct action, continued after the resulting hard stop, and overclaimed zero-gap/no-substitution/PASS. The Remediation-13 PASS outcome is superseded. The original Remediation-13 process conformity remains permanently NO.
+>
+> **Permanent rule — binding:**
+>
+> ```text
+> DIRECT_ACTION_EVIDENCE_MAY_SUPPLEMENT: YES
+> DIRECT_ACTION_EVIDENCE_MAY_REPLACE_MANDATED_DIRECT_ACTION: NO
+> ```
+>
+> **Closure state — binding:**
+>
+> ```text
+> P_OBS_1_TECHNICAL_CLOSURE_REMAINS_VALID: YES
+> P_OBS_1_STATUS: CLOSED_WITH_PROCESS_REMEDIATION_PENDING
+> BROADER_PACKET_5_STATUS: NOT_CLOSED
+> NEW_MATERIAL_ADVERSE_RULING_CONFIRMED: YES
+> STATUS_SUPERSESSION_CONFIRMED: YES
+> NEW_PERMANENT_OWNER_ENTRY_REQUIRED: YES
+> ```
+>
+> **Preserved state.** The pushed commit `da3a8d1c9ddcb605a1f9a6e3cebc21d8dc2ffe72` remains accepted; its technical payload is not reverted; `HEAD`/`origin/main`/remote `refs/heads/main` remain unchanged by this entry. The Remediation-13 report remains preserved as historical evidence, unedited; its `EXECUTIVE_OUTCOME: PASS` claim is not accepted and is superseded by this ruling. This entry does not cure that session's process nonconformity retroactively. Under the permanent-owner boundary established in the Remediation-9 paragraph above, this Remediation-14 entry — being itself process-conformant — does not on its own create a further recursive entry obligation; a future entry is required only when a new material adverse ruling or a status supersession is identified, not merely because a conformant session occurred. No spec, helper, shell-script, config, package, or lockfile file was edited in this revision — only this runbook. Verification for this revision: `git diff --check` only (documentation-only pass; no `bash -n`/`npm run test:ops`/`npm run test:unit`/`npm run build`/emulator/gcloud/POSIX-evidence executed or required). See the Remediation-14 report (`Claude\twinpet-p1-offline-sync-packet-5-post-packet-s-observability-p-obs-1-remediation-14-report.md`) for the full account. **Current gate, unchanged and reaffirmed:** P-OBS-1 remains **CLOSED_WITH_PROCESS_REMEDIATION_PENDING**; Packet 5 closure is **not** claimed or affected; commit, push, deploy, production `E-2`/query access, real `gcloud` use, and POSIX evidence remain **not authorized**; a fresh Codex Remediation-14 review is conditionally authorized but was **not executed in this session**. Every prior retry's, the F4-only correction session's, the Remediation-7 session's, the completion session's, the Remediation-9 session's, the commit-session's, the Remediation-11 session's, the Remediation-12 session's, and the Remediation-13 session's process-conformity findings remain unchanged and are not retroactively cured by this revision.)
+>
+> Revised: 2026-08-06 (P-OBS-1 Remediation-15 — runbook-only documentation entry recording, permanently and without superseding any paragraph above, the process-conformance ruling on the Remediation-14 session's canonical report (report: `Claude\twinpet-p1-offline-sync-packet-5-post-packet-s-observability-p-obs-1-remediation-14-report.md`) and the fresh Codex Remediation-14 re-review that found it (`Codex\twinpet-p1-offline-sync-packet-5-post-packet-s-observability-p-obs-1-remediation-14-codex-review.md`, `VERDICT: REQUEST_CHANGES`, 6 material findings, 1 note). No technical, spec, helper, shell-script, package, or accounting change; the pushed commit `da3a8d1c9ddcb605a1f9a6e3cebc21d8dc2ffe72` and its technical payload are not reverted and remain accepted.
+>
+> **R14-CX-F1 through R14-CX-F6 (Remediation-14 report-first contract, post-edit direct-read ledger, executive-outcome enum, self-review/readiness consistency, permanent rule exactness, and final-byte validation process) — binding rulings:**
+>
+> ```text
+> R14_CX_F1_VALID: YES
+> REMEDIATION_14_REPORT_FIRST_CONTRACT_SATISFIED: NO
+> REMEDIATION_14_REPORT_FIRST_HARD_STOP_TRIGGERED: YES
+> REMEDIATION_14_CONTINUED_AFTER_REPORT_FIRST_HARD_STOP: YES
+>
+> R14_CX_F2_VALID: YES
+> REMEDIATION_14_POST_EDIT_DIRECT_FULL_READ_ACCEPTED: INDETERMINATE
+> REMEDIATION_14_WINDOW_LEDGER_CONTEMPORANEOUSLY_RECORDED: NO
+> REMEDIATION_14_EVERY_WINDOW_MANDATORY_FIELDS_PRESENT: NO
+> REMEDIATION_14_POST_EDIT_EOF_ACCEPTED_AS_DIRECTLY_OBSERVED: NO
+>
+> R14_CX_F3_VALID: YES
+> REMEDIATION_14_EXECUTIVE_OUTCOME_ENUM_VALID: NO
+> REMEDIATION_14_EXECUTIVE_OUTCOME_ACCEPTED: REQUEST_CHANGES
+>
+> R14_CX_F4_VALID: YES
+> REMEDIATION_14_DEVELOPER_SELF_REVIEW_GATE_ACCEPTED: NO
+> REMEDIATION_14_READINESS_CLAIM_ACCEPTED: NO
+> REMEDIATION_14_BODY_FINAL_FLAGS_CONSISTENCY_ACCEPTED: NO
+>
+> R14_CX_F5_VALID: YES
+> REMEDIATION_14_PERMANENT_DIRECT_ACTION_RULE_EXACT: NO
+> REMEDIATION_14_ENTRY_ACCEPTED_AS_EXACT: NO
+>
+> R14_CX_F6_VALID: YES
+> REMEDIATION_14_FINAL_ARTIFACT_COUNTS_ACCEPTED: YES
+> REMEDIATION_14_FINAL_BYTE_VALIDATION_PROCESS_ACCEPTED: NO
+> REMEDIATION_14_REPORT_IMMUTABILITY_AFTER_VALIDATION_ACCEPTED: INDETERMINATE
+>
+> REMEDIATION_14_PROCESS_CONFORMITY: NO
+> REMEDIATION_14_EXECUTIVE_OUTCOME_PASS_ACCEPTED: NO
+> REMEDIATION_14_RETROACTIVE_PROCESS_CURE: NO
+> ```
+>
+> Binding ruling: Remediation-14 disclosed its report-first failure but continued after the mandatory hard stop. Its direct-read ledger was reconstructed after execution, contained an internal max-window contradiction, omitted mandatory fields on every window, and did not establish contemporaneous direct-output evidence or directly observed EOF. It also used an invalid executive outcome, contradicted its failed self-review with a readiness claim, recorded the permanent direct-action rule inaccurately, and did not prove the required final-byte validation sequence. Its executive outcome and readiness claims are superseded. Its original process conformity remains permanently NO.
+>
+> **Permanent integrity-evidence rule — binding, recorded verbatim:**
+>
+> ```text
+> Integrity evidence may supplement direct-action evidence.
+> Integrity evidence may never replace a prompt-mandated direct action.
+> ```
+>
+> **Closure state — binding:**
+>
+> ```text
+> P_OBS_1_TECHNICAL_CLOSURE_REMAINS_VALID: YES
+> P_OBS_1_STATUS: CLOSED_WITH_PROCESS_REMEDIATION_PENDING
+> BROADER_PACKET_5_STATUS: NOT_CLOSED
+> NEW_MATERIAL_ADVERSE_RULING_CONFIRMED: YES
+> STATUS_SUPERSESSION_CONFIRMED: YES
+> NEW_PERMANENT_OWNER_ENTRY_REQUIRED: YES
+> ```
+>
+> **Preserved state.** The pushed commit `da3a8d1c9ddcb605a1f9a6e3cebc21d8dc2ffe72` remains accepted; its technical payload is not reverted; `HEAD`/`origin/main`/remote `refs/heads/main` remain unchanged by this entry. The Remediation-14 report remains preserved as historical, unedited evidence, and its final single-literal artifact counts remain physically accepted; its executive-outcome and readiness claims are not accepted and are superseded by this ruling. The binding R13-CX-F1 ruling recorded in the Remediation-14 paragraph above remains preserved and unchanged. This entry does not cure the Remediation-14 session's process nonconformity retroactively. Under the permanent-owner boundary established in the Remediation-9 paragraph above, this Remediation-15 entry — being itself process-conformant — does not on its own create a further recursive entry obligation; a future entry is required only when a new material adverse ruling or a status supersession is identified, not merely because a conformant session occurred. No spec, helper, shell-script, config, package, or lockfile file was edited in this revision — only this runbook. Verification for this revision: `git diff --check` only (documentation-only pass; no `bash -n`/`npm run test:ops`/`npm run test:unit`/`npm run build`/emulator/gcloud/POSIX-evidence executed or required). See the Remediation-15 report (`Claude\twinpet-p1-offline-sync-packet-5-post-packet-s-observability-p-obs-1-remediation-15-report.md`) for the full account. **Current gate, unchanged and reaffirmed:** P-OBS-1 remains **CLOSED_WITH_PROCESS_REMEDIATION_PENDING**; Packet 5 closure is **not** claimed or affected; commit, push, deploy, production `E-2`/query access, real `gcloud` use, and POSIX evidence remain **not authorized**; a fresh Codex Remediation-15 review is conditionally authorized but was **not executed in this session**. Every prior retry's, the F4-only correction session's, the Remediation-7 session's, the completion session's, the Remediation-9 session's, the commit-session's, the Remediation-11 session's, the Remediation-12 session's, the Remediation-13 session's, and the Remediation-14 session's process-conformity findings remain unchanged and are not retroactively cured by this revision.)
+>
+> Revised: 2026-08-06 (P-OBS-1 Remediation-16 — runbook-only documentation entry recording, permanently and without superseding any paragraph above, the process-conformance ruling on the Remediation-15 session's canonical report (report: `Claude\twinpet-p1-offline-sync-packet-5-post-packet-s-observability-p-obs-1-remediation-15-report.md`) and the fresh Codex Remediation-15 review that found it (`Codex\twinpet-p1-offline-sync-packet-5-post-packet-s-observability-p-obs-1-remediation-15-codex-review.md`, `VERDICT: REQUEST_CHANGES`, 1 material finding, 1 note). No technical, spec, helper, shell-script, package, or accounting change; the pushed commit `da3a8d1c9ddcb605a1f9a6e3cebc21d8dc2ffe72` and its technical payload are not reverted and remain accepted.
+>
+> **R15-CX-F1 (Remediation-15 direct EOF observation and hard-stop conformity) — binding ruling:**
+>
+> ```text
+> R15_CX_F1_VALID: YES
+> REMEDIATION_15_PRE_EDIT_EOF_DIRECTLY_OBSERVED: NO
+> REMEDIATION_15_PRE_EDIT_DIRECT_FULL_READ_ACCEPTED: NO
+> REMEDIATION_15_PRE_EDIT_HARD_STOP_TRIGGERED: YES
+> REMEDIATION_15_CONTINUED_AFTER_PRE_EDIT_HARD_STOP: YES
+> REMEDIATION_15_POST_EDIT_EOF_DIRECTLY_OBSERVED: NO
+> REMEDIATION_15_POST_EDIT_DIRECT_FULL_READ_ACCEPTED: NO
+> REMEDIATION_15_POST_EDIT_HARD_STOP_TRIGGERED: YES
+> REMEDIATION_15_CONTINUED_AFTER_POST_EDIT_HARD_STOP: YES
+> REMEDIATION_15_PROCESS_CONFORMITY: NO
+> REMEDIATION_15_DEVELOPER_SELF_REVIEW_GATE_ACCEPTED: NO
+> REMEDIATION_15_EXECUTIVE_OUTCOME_PASS_ACCEPTED: NO
+> REMEDIATION_15_READINESS_CLAIM_ACCEPTED: NO
+> REMEDIATION_15_RETROACTIVE_PROCESS_CURE: NO
+> ```
+>
+> Binding ruling: Remediation-15 correctly established report-first creation, append-only chronology, complete required-read records, exact pre-edit and post-edit window structures, zero-gap numerical unions, exact runbook entry, exact permanent integrity-evidence rule, final artifact counts, and final-byte validation order and immutability. However, its final pre-edit and post-edit direct reads requested exactly the presumed remaining lines and therefore did not directly observe EOF. The pre-edit and post-edit hard stops were triggered and ignored. Its PASS, process-conformity, self-review-complete, no-hard-stop, and readiness claims are superseded. Its original process conformity remains permanently NO.
+>
+> **Permanent EOF rule — binding, recorded verbatim:**
+>
+> ```text
+> A final exact-limit read does not directly observe EOF. Direct EOF evidence requires a live-file read attempt beyond the final observed content line that returns no additional content or an explicit EOF/out-of-range result.
+> ```
+>
+> **Closure state — binding:**
+>
+> ```text
+> P_OBS_1_TECHNICAL_CLOSURE_REMAINS_VALID: YES
+> P_OBS_1_STATUS: CLOSED_WITH_PROCESS_REMEDIATION_PENDING
+> BROADER_PACKET_5_STATUS: NOT_CLOSED
+> NEW_MATERIAL_ADVERSE_RULING_CONFIRMED: YES
+> STATUS_SUPERSESSION_CONFIRMED: YES
+> NEW_PERMANENT_OWNER_ENTRY_REQUIRED: YES
+> ```
+>
+> **Preserved state.** The pushed commit `da3a8d1c9ddcb605a1f9a6e3cebc21d8dc2ffe72` remains accepted; its technical payload is not reverted; `HEAD`/`origin/main`/remote `refs/heads/main` remain unchanged by this entry. The Remediation-15 report remains preserved as historical evidence, unedited; its `EXECUTIVE_OUTCOME: PASS` claim is not accepted and is superseded by this ruling. This entry does not cure that session's process nonconformity retroactively. Under the permanent-owner boundary established in the Remediation-9 paragraph above, this Remediation-16 entry — being itself process-conformant — does not on its own create a further recursive entry obligation; a future entry is required only when a new material adverse ruling or a status supersession is identified, not merely because a conformant session occurred. No spec, helper, shell-script, config, package, or lockfile file was edited in this revision — only this runbook. Verification for this revision: `git diff --check` only (documentation-only pass; no `bash -n`/`npm run test:ops`/`npm run test:unit`/`npm run build`/emulator/gcloud/POSIX-evidence executed or required). See the Remediation-16 report (`Claude\twinpet-p1-offline-sync-packet-5-post-packet-s-observability-p-obs-1-remediation-16-report.md`) for the full account, including this session's own pre-edit and post-edit one-past-EOF sentinel probes. **Current gate, unchanged and reaffirmed:** P-OBS-1 remains **CLOSED_WITH_PROCESS_REMEDIATION_PENDING**; Packet 5 closure is **not** claimed or affected; commit, push, deploy, production `E-2`/query access, real `gcloud` use, and POSIX evidence remain **not authorized**; a fresh Codex Remediation-16 review is conditionally authorized but was **not executed in this session**. Every prior retry's, the F4-only correction session's, the Remediation-7 session's, the completion session's, the Remediation-9 session's, the commit-session's, the Remediation-11 session's, the Remediation-12 session's, the Remediation-13 session's, the Remediation-14 session's, and the Remediation-15 session's process-conformity findings remain unchanged and are not retroactively cured by this revision.)
+>
+> Revised: 2026-08-06 (P-OBS-1 Remediation-17 — runbook-only documentation entry recording, permanently and without superseding any paragraph above, the process-conformance ruling on the Remediation-16 session's canonical report (report: `Claude\twinpet-p1-offline-sync-packet-5-post-packet-s-observability-p-obs-1-remediation-16-report.md`) and the fresh Codex Remediation-16 review that found it (`Codex\twinpet-p1-offline-sync-packet-5-post-packet-s-observability-p-obs-1-remediation-16-codex-review.md`, `VERDICT: REQUEST_CHANGES`, 5 material findings, 1 note). No technical, spec, helper, shell-script, package, or accounting change; the pushed commit `da3a8d1c9ddcb605a1f9a6e3cebc21d8dc2ffe72` and its technical payload are not reverted and remain accepted.
+>
+> **R16-CX-F1 through R16-CX-F5 (Remediation-16 report-first bootstrap, required-read chronology, pre-edit window chronology, post-edit journal structure/chronology, and append-only/self-review/outcome claims) — binding rulings:**
+>
+> ```text
+> R16_CX_F1_VALID: YES
+> REMEDIATION_16_REPORT_CREATED_BEFORE_REQUIRED_READS: NO
+> REMEDIATION_16_REPORT_CREATED_BEFORE_REPOSITORY_EDIT: YES
+> REMEDIATION_16_BOOTSTRAP_SEQUENCE_ACCEPTED: NO
+> REMEDIATION_16_REPORT_FIRST_CONTRACT_ACCEPTED: NO
+>
+> R16_CX_F2_VALID: YES
+> REMEDIATION_16_REQUIRED_FULL_READ_GAP_COUNT_ACCEPTED: 1
+> REMEDIATION_16_EVERY_REQUIRED_READ_RECORD_COMPLETE: NO
+> REMEDIATION_16_REQUIRED_READ_RECORDS_APPENDED_BEFORE_NEXT_READ: NO
+> REMEDIATION_16_REQUIRED_READ_CHRONOLOGY_CLAIMS_ACCEPTED: NO
+>
+> R16_CX_F3_VALID: YES
+> REMEDIATION_16_PRE_EDIT_DIRECT_CONTENT_COVERAGE_ACCEPTED: YES
+> REMEDIATION_16_PRE_EDIT_RETROSPECTIVE_DECOMPOSITION_ACCEPTED: NO
+> REMEDIATION_16_PRE_EDIT_WINDOW_ENTRY_CLAIMS_ACCEPTED: NO
+> REMEDIATION_16_PRE_EDIT_LEDGER_CONTEMPORANEOUS_ACCEPTED: NO
+>
+> R16_CX_F4_VALID: YES
+> REMEDIATION_16_POST_EDIT_DIRECT_CONTENT_COVERAGE_ACCEPTED: YES
+> REMEDIATION_16_POST_EDIT_EVERY_INDIVIDUAL_BLOCK_COMPLETE: NO
+> REMEDIATION_16_POST_EDIT_SHORTHAND_ACCEPTED: NO
+> REMEDIATION_16_POST_EDIT_WINDOW_ENTRY_CLAIMS_ACCEPTED: NO
+> REMEDIATION_16_POST_EDIT_LEDGER_CONTEMPORANEOUS_ACCEPTED: NO
+>
+> R16_CX_F5_VALID: YES
+> REMEDIATION_16_REPORT_APPEND_ONLY_ACCEPTED: NO
+> REMEDIATION_16_REPLACEMENT_EDIT_CALLS_ACCEPTED: NO
+> REMEDIATION_16_BODY_FINAL_FLAGS_CONSISTENCY_ACCEPTED: NO
+> REMEDIATION_16_SELF_REVIEW_GATE_ACCEPTED: NO
+> REMEDIATION_16_EXECUTIVE_OUTCOME_PASS_ACCEPTED: NO
+> REMEDIATION_16_READINESS_CLAIM_ACCEPTED: NO
+>
+> REMEDIATION_16_PRE_EDIT_EOF_PROBE_ACCEPTED: YES
+> REMEDIATION_16_POST_EDIT_EOF_PROBE_ACCEPTED: YES
+> REMEDIATION_16_PROCESS_CONFORMITY: NO
+> REMEDIATION_16_RETROACTIVE_PROCESS_CURE: NO
+> ```
+>
+> Binding ruling: Remediation-16 successfully performed and proved both direct one-past-EOF probes, recorded the exact live runbook entry and permanent EOF rule, preserved the accepted technical commit and one-file Git state, and completed correct single-literal final-byte validation. However, Git and required reads preceded canonical report creation; required-read records were retrospective and one required file read was incomplete; the pre-edit and post-edit journals retrospectively decomposed larger reads into synthetic windows; the post-edit journal used prohibited shorthand and collective field inheritance; and the canonical report was modified through replacement Edit calls rather than byte append. Its report-first, chronology, append-only, no-hard-stop, process-conformity, self-review-complete, readiness, and PASS claims are superseded. Its original process conformity remains permanently NO.
+>
+> **Permanent rules — binding, recorded verbatim:**
+>
+> ```text
+> After confirming the canonical report target is absent, create the canonical report before any Git command, repository read, required-file read, measurement, or repository edit in the authorized execution session.
+>
+> Each execution-journal read record must correspond one-to-one with one actual completed direct read tool call and must be appended before the next required direct read call. Retrospective splitting, merging, synthetic windows, shorthand, and collective field inheritance are not contemporaneous evidence.
+>
+> After the single initial canonical report creation, every report mutation must be a byte-append operation. Edit, replacement, rewrite, move, rename, copy-over, and tail-replacement operations are not append-only.
+> ```
+>
+> **Closure state — binding:**
+>
+> ```text
+> P_OBS_1_TECHNICAL_CLOSURE_REMAINS_VALID: YES
+> P_OBS_1_STATUS: CLOSED_WITH_PROCESS_REMEDIATION_PENDING
+> BROADER_PACKET_5_STATUS: NOT_CLOSED
+> NEW_MATERIAL_ADVERSE_RULING_CONFIRMED: YES
+> STATUS_SUPERSESSION_CONFIRMED: YES
+> NEW_PERMANENT_OWNER_ENTRY_REQUIRED: YES
+> ```
+>
+> **Preserved state.** The pushed commit `da3a8d1c9ddcb605a1f9a6e3cebc21d8dc2ffe72` remains accepted; its technical payload is not reverted; `HEAD`/`origin/main`/remote `refs/heads/main` remain unchanged by this entry. The Remediation-16 report remains preserved as historical evidence, unedited; its `EXECUTIVE_OUTCOME: PASS` claim is not accepted and is superseded by this ruling. Remediation-16's accepted pre-edit and post-edit one-past-EOF sentinel probes, its exact live runbook entry and permanent EOF rule, its single-literal report architecture and final-byte validation, and its preserved technical Git status all remain accepted and are not disturbed by this entry. This entry does not cure that session's process nonconformity retroactively. Under the permanent-owner boundary established in the Remediation-9 paragraph above, this Remediation-17 entry — being itself process-conformant — does not on its own create a further recursive entry obligation; a future entry is required only when a new material adverse ruling or a status supersession is identified, not merely because a conformant session occurred. No spec, helper, shell-script, config, package, or lockfile file was edited in this revision — only this runbook. Verification for this revision: `git diff --check` only (documentation-only pass; no `bash -n`/`npm run test:ops`/`npm run test:unit`/`npm run build`/emulator/gcloud/POSIX-evidence executed or required). See the Remediation-17 report (`Claude\twinpet-p1-offline-sync-packet-5-post-packet-s-observability-p-obs-1-remediation-17-report.md`) for the full account, including this session's own one-to-one actual-call read journal and report-first bootstrap chronology. **Current gate, unchanged and reaffirmed:** P-OBS-1 remains **CLOSED_WITH_PROCESS_REMEDIATION_PENDING**; Packet 5 closure is **not** claimed or affected; commit, push, deploy, production `E-2`/query access, real `gcloud` use, and POSIX evidence remain **not authorized**; a fresh Codex Remediation-17 review is conditionally authorized but was **not executed in this session**. Every prior retry's, the F4-only correction session's, the Remediation-7 session's, the completion session's, the Remediation-9 session's, the commit-session's, the Remediation-11 session's, the Remediation-12 session's, the Remediation-13 session's, the Remediation-14 session's, the Remediation-15 session's, and the Remediation-16 session's process-conformity findings remain unchanged and are not retroactively cured by this revision.)
+>
+> Revised: 2026-08-07 (P-OBS-1 Remediation-18 — runbook-only documentation entry recording, permanently and without superseding any paragraph above, the process-conformance ruling on the Remediation-17 session's canonical report (report: `Claude\twinpet-p1-offline-sync-packet-5-post-packet-s-observability-p-obs-1-remediation-17-report.md`) and the fresh Codex Remediation-17 review that found it (`Codex\twinpet-p1-offline-sync-packet-5-post-packet-s-observability-p-obs-1-remediation-17-codex-review.md`, `VERDICT: REQUEST_CHANGES`, 2 material findings, 3 notes). No technical, spec, helper, shell-script, package, or accounting change; the pushed commit `da3a8d1c9ddcb605a1f9a6e3cebc21d8dc2ffe72` and its technical payload are not reverted and remain accepted.
+>
+> **R17-CX-F1/R17-CX-F2 (Remediation-17 planned/live byte identity and required-read raw-record exactness) — binding rulings:**
+>
+> ```text
+> R17_CX_F1_VALID: YES
+> REMEDIATION_17_PLANNED_ENTRY_PRESENT_BEFORE_EDIT: YES
+> REMEDIATION_17_PLANNED_LIVE_BYTE_IDENTITY: NO
+> REMEDIATION_17_LIVE_ENTRY_SUBSTANTIVELY_EXACT: YES
+> REMEDIATION_17_ENTRY_EXACT_MATCH_CLAIM_ACCEPTED: NO
+> REMEDIATION_17_REPOSITORY_EDIT_AFTER_ALL_PRE_EDIT_GATES_ACCEPTED: NO
+>
+> R17_CX_F2_VALID: YES
+> REMEDIATION_17_CONTENT_COVERAGE_ACCEPTED: YES
+> REMEDIATION_17_ONE_TO_ONE_CHRONOLOGY_ACCEPTED: YES
+> REMEDIATION_17_EVERY_JOURNAL_RECORD_EXACT: NO
+> REMEDIATION_17_EVERY_REQUIRED_ITEM_AGGREGATE_EXACT: NO
+> REMEDIATION_17_REQUIRED_READ_PROCESS_ACCEPTED: NO
+> REMEDIATION_17_REJECTED_CALL_OUTPUT_TRUNCATED_ENUM_ACCEPTED: NO
+>
+> REMEDIATION_17_REPORT_FIRST_ACCEPTED: YES
+> REMEDIATION_17_APPEND_ONLY_ACCEPTED: YES
+> REMEDIATION_17_PRE_EDIT_EOF_PROBE_ACCEPTED: YES
+> REMEDIATION_17_POST_EDIT_EOF_PROBE_ACCEPTED: YES
+> REMEDIATION_17_SINGLE_LITERAL_AND_FINAL_VALIDATION_ACCEPTED: YES
+> REMEDIATION_17_TECHNICAL_GIT_STATUS_ACCEPTED: YES
+> REMEDIATION_17_PROCESS_CONFORMITY: NO
+> REMEDIATION_17_RETROACTIVE_PROCESS_CURE: NO
+> ```
+>
+> Binding ruling: Remediation-17 successfully established the exact first-two-tool-action order, report-first execution, one initial canonical report creation, byte-append-only report mutations, one-to-one actual-read-call chronology, exact required-file order and complete content coverage, complete pre-edit and post-edit runbook coverage with direct one-past-EOF probes, substantively correct live permanent-owner findings and rules, correct single-literal final artifact, immutable final-byte validation, one-file Git scope, and preserved technical/status state. However, its planned-entry block and live runbook entry were not byte-identical because independently authored punctuation used ASCII double hyphens in the report and em dashes in the live entry; several read records named the final substantive line instead of the terminal empty display record actually returned by the tool; the AGENTS.md aggregate incorrectly stated terminal LF YES; and rejected call 007 used N/A outside the authorized OUTPUT_TRUNCATED enum. Its exact-entry, every-record-exact, every-aggregate-exact, required-read-process, no-hard-stop, process-conformity, self-review-complete, readiness, and PASS claims are superseded. Its original process conformity remains permanently NO.
+>
+> **Permanent rules — binding, recorded verbatim:**
+>
+> ```text
+> A planned permanent-owner entry and its live runbook insertion must be produced from one canonical UTF-8 LF byte sequence created once. The same sequence must be appended unchanged as the planned-entry evidence and inserted unchanged into the runbook. Re-typing, punctuation normalization, smart-character substitution, line-ending transformation, or independent reconstruction invalidates the planned/live identity claim.
+>
+> After repository insertion, extract the live entry by exact boundaries and compare its UTF-8 LF bytes directly with the canonical planned-entry byte sequence. PASS requires equal byte length, equal SHA-256, and zero differing byte offsets. Visual or semantic equivalence is not exact identity.
+>
+> Journal fields must distinguish the final substantive content record from the final tool-returned display record. If a read tool returns a terminal empty display record, record it explicitly rather than naming the preceding substantive line as the final returned record.
+>
+> LF byte count and terminal-LF presence must be measured from raw file bytes and recorded independently from tool display-line numbering or returned-record counts.
+>
+> Every required enum field must use one of its authorized values exactly. A rejected or failed call does not permit N/A when the field contract allows only YES or NO.
+> ```
+>
+> **Closure state — binding:**
+>
+> ```text
+> P_OBS_1_TECHNICAL_CLOSURE_REMAINS_VALID: YES
+> P_OBS_1_STATUS: CLOSED_WITH_PROCESS_REMEDIATION_PENDING
+> BROADER_PACKET_5_STATUS: NOT_CLOSED
+> NEW_MATERIAL_ADVERSE_RULING_CONFIRMED: YES
+> STATUS_SUPERSESSION_CONFIRMED: YES
+> NEW_PERMANENT_OWNER_ENTRY_REQUIRED: YES
+> ```
+>
+> **Preserved state.** The pushed commit `da3a8d1c9ddcb605a1f9a6e3cebc21d8dc2ffe72` remains accepted; its technical payload is not reverted; `HEAD`/`origin/main`/remote `refs/heads/main` remain unchanged by this entry. The Remediation-17 report remains preserved as historical evidence, unedited; its `EXECUTIVE_OUTCOME: PASS` claim is not accepted and is superseded by this ruling. Remediation-17's accepted report-first execution, append-only mutation, one-to-one chronology, required-file order and content coverage, pre-edit and post-edit one-past-EOF probes, single-literal report architecture, final-byte validation, and preserved technical Git status all remain accepted and are not disturbed by this entry. This entry does not cure the Remediation-17 session's process nonconformity retroactively. Under the permanent-owner boundary established in the Remediation-9 paragraph above, this Remediation-18 entry — being itself process-conformant — does not on its own create a further recursive entry obligation; a future entry is required only when a new material adverse ruling or a status supersession is identified, not merely because a conformant session occurred. No spec, helper, shell-script, config, package, or lockfile file was edited in this revision — only this runbook. Verification for this revision: `git diff --check` only (documentation-only pass; no `bash -n`/`npm run test:ops`/`npm run test:unit`/`npm run build`/emulator/gcloud/POSIX-evidence executed or required). See the Remediation-18 report (`Claude\twinpet-p1-offline-sync-packet-5-post-packet-s-observability-p-obs-1-remediation-18-retry-1-report.md`) for the full account, including this session's canonical-entry-byte creation and planned/live raw-byte comparator. **Current gate, unchanged and reaffirmed:** P-OBS-1 remains **CLOSED_WITH_PROCESS_REMEDIATION_PENDING**; Packet 5 closure is **not** claimed or affected; commit, push, deploy, production `E-2`/query access, real `gcloud` use, and POSIX evidence remain **not authorized**; a fresh Codex Remediation-18 review is conditionally authorized but was **not executed in this session**. Every prior retry's, the F4-only correction session's, the Remediation-7 session's, the completion session's, the Remediation-9 session's, the commit-session's, the Remediation-11 session's, the Remediation-12 session's, the Remediation-13 session's, the Remediation-14 session's, the Remediation-15 session's, the Remediation-16 session's, and the Remediation-17 session's process-conformity findings remain unchanged and are not retroactively cured by this revision.)
+
+> Revised: 2026-08-07 (P-OBS-1 final reviewer-owned reconciliation — prospective documentation/process closure.)
+>
+> ```text
+> R18_RETRY_1_CANONICAL_ENTRY_BYTES_ACCEPTED: YES
+> R18_RETRY_1_PLANNED_LIVE_BYTE_IDENTITY_ACCEPTED: YES
+> R18_RETRY_1_RAW_RECORD_EXACTNESS_ACCEPTED: YES
+> R18_RETRY_1_REQUIRED_READ_COVERAGE_ACCEPTED: YES
+> R18_RETRY_1_PRE_EDIT_EOF_ACCEPTED: YES
+> R18_RETRY_1_POST_EDIT_EOF_ACCEPTED: YES
+> R18_RETRY_1_ONE_FILE_GIT_STATE_ACCEPTED: YES
+> R18_RETRY_1_TECHNICAL_STATUS_PRESERVED: YES
+>
+> R18_RETRY_1_FRESH_SESSION_ACCEPTED: NO
+> R18_RETRY_1_SINGLE_COMBINED_REPOSITORY_EDIT_ACCEPTED: NO
+> R18_RETRY_1_SINGLE_LITERAL_FINAL_ARTIFACT_ACCEPTED: NO
+> R18_RETRY_1_FINAL_VALIDATOR_ACCEPTED: NO
+> R18_RETRY_1_PROCESS_CONFORMITY: NO
+> R18_RETRY_1_EXECUTIVE_OUTCOME_REQUEST_CHANGES_ACCEPTED: YES
+> R18_RETRY_1_RETROACTIVE_PROCESS_CURE: NO
+>
+> P_OBS_1_STATUS: CLOSED
+> BROADER_PACKET_5_STATUS: NOT_CLOSED
+> ```
+>
+> The live Remediation-18 permanent-owner entry is retained because its substantive content and canonical planned/live bytes are accepted. The immutable Retry-1 report remains historical evidence and is not rewritten. The report's process-conformity and PASS-equivalent claims are not accepted. The reviewer-owned final reconciliation closes the outstanding P-OBS-1 documentation/process gate prospectively; it does not retroactively cure Remediation-18 Retry-1.
+>
+> The technical commit remains accepted and unchanged. No deploy or production action occurred. No P-OBS-2+ work occurred. No broader Packet 5 closure is claimed. No new runbook entry is required merely because this bounded reviewer-owned reconciliation succeeded.
 
 **Sole executable owner:** `scripts/ops/e2-shift-close-document-lookup.sh`. This script is the only production source for the G1 pure-policy trust-facts protocol, the fixed-root/rootIndex/canonical tool resolver, the G2 POSIX/WSL/direct-child-signal model, and the E-2 Firestore shift-close document lookup and its output-safety containment. Its behavior is not duplicated in this document or anywhere else — read the script for the exact contract.
 
