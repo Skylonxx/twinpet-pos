@@ -21,7 +21,10 @@ import {
   createShiftCloseIntentJournal,
   type ShiftCloseIntentJournal,
 } from './offline/shiftCloseIntentStore';
-import type { ShiftCloseIntentBusinessSnapshot } from './offline/shiftCloseIntentTypes';
+import type {
+  PointerRepairObserver,
+  ShiftCloseIntentBusinessSnapshot,
+} from './offline/shiftCloseIntentTypes';
 import {
   reconcileShiftCloseIntent,
   type ShiftCloseConfirmationDoc,
@@ -290,6 +293,11 @@ export type CloseShiftDeps = {
   readConfirmation?: ShiftCloseConfirmationReader;
   /** Injectable for tests; production uses {@link normalizeShiftCloseSyncState}. */
   normalizeSyncState?: ShiftCloseNormalizer;
+  /**
+   * OBS-B2 Mechanism-B observer — optional per-call pointer-repair diagnostic.
+   * Failure is isolated; never alters the close business result.
+   */
+  observePointerRepair?: PointerRepairObserver;
 };
 
 /**
@@ -389,7 +397,10 @@ export async function closeShift(
   };
 
   const journal = deps?.journal ?? getDefaultShiftCloseIntentJournal();
-  const intentResult = await journal.upsertCloseIntent(businessSnapshot);
+  const intentResult = await journal.upsertCloseIntent(
+    businessSnapshot,
+    deps?.observePointerRepair,
+  );
   if (!intentResult.ok) {
     if (intentResult.code === 'conflict') {
       throw new Error(CLOSE_SHIFT_CONFLICT_MESSAGE);

@@ -469,3 +469,85 @@ describe('OBS-B1B reconciler compatibility (test-only; production source unchang
     expect(result.outcome).toBe('confirmed');
   });
 });
+
+describe('OBS-B2 reconciler pointer-repair forwarding', () => {
+  test('synced path forwards pointerRepair and preserves confirmed business outcome', async () => {
+    const { journal, entry } = await makeEntry();
+    const result = await reconcileShiftCloseIntent(entry, {
+      journal,
+      readConfirmation: reader({ ok: true, doc: makeConfirmedDoc() }),
+      deviceId: DEVICE,
+    });
+    expect(result.outcome).toBe('confirmed');
+    expect(result.pointerRepair).toEqual({ status: 'ok', changed: false });
+    const stored = await journal.getCloseIntent(entry.shiftId);
+    expect(stored.ok && stored.value?.status).toBe('synced');
+    expect(stored.ok && stored.value?.closeCorrelationId).toBe(FIXED_CORR);
+  });
+
+  test('manual-attention path forwards pointerRepair', async () => {
+    const { journal, entry } = await makeEntry();
+    const result = await reconcileShiftCloseIntent(entry, {
+      journal,
+      readConfirmation: reader({
+        ok: true,
+        doc: makeConfirmedDoc({ actualCashCount: 999 }),
+      }),
+      deviceId: DEVICE,
+    });
+    expect(result.outcome).toBe('identity_mismatch');
+    expect(result.pointerRepair).toEqual({ status: 'ok', changed: false });
+  });
+
+  test('pointer failure visible but does not corrupt reconciliation business result', async () => {
+    const base = createInMemoryShiftCloseIntentJournal();
+    const seeded = await base.upsertCloseIntent(makeSnapshot());
+    if (!seeded.ok) throw new Error('setup failed');
+    const entry = seeded.value;
+
+    const markSynced = vi.fn(
+      async (
+        shiftId: string,
+        observe?: (o: { status: string; changed?: boolean; reason?: string }) => void,
+      ) => {
+        observe?.({ status: 'degraded', reason: 'pointer_write_failed' });
+        return base.markSynced(shiftId);
+      },
+    );
+
+    const result = await reconcileShiftCloseIntent(entry, {
+      journal: {
+        upsertCloseIntent: base.upsertCloseIntent,
+        getCloseIntent: base.getCloseIntent,
+        listCloseIntents: base.listCloseIntents,
+        markSynced: markSynced as typeof base.markSynced,
+        markRejectedManualAttention: base.markRejectedManualAttention,
+      },
+      readConfirmation: reader({ ok: true, doc: makeConfirmedDoc() }),
+      deviceId: DEVICE,
+    });
+
+    expect(result.outcome).toBe('confirmed');
+    expect(result.pointerRepair).toEqual({
+      status: 'degraded',
+      reason: 'pointer_write_failed',
+    });
+  });
+
+  test('historical null correlation remains compatible through synced path', async () => {
+    const journal = createInMemoryShiftCloseIntentJournal({
+      generateCloseCorrelationId: () => null,
+    });
+    const seeded = await journal.upsertCloseIntent(makeSnapshot());
+    if (!seeded.ok) throw new Error('setup failed');
+    const result = await reconcileShiftCloseIntent(seeded.value, {
+      journal,
+      readConfirmation: reader({ ok: true, doc: makeConfirmedDoc() }),
+      deviceId: DEVICE,
+    });
+    expect(result.outcome).toBe('confirmed');
+    expect(result.pointerRepair?.status).toBe('ok');
+    const stored = await journal.getCloseIntent('shift-1');
+    expect(stored.ok && stored.value?.closeCorrelationId).toBeNull();
+  });
+});

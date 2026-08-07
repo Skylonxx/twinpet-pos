@@ -485,3 +485,60 @@ describe('closeShift — OBS-B1B correlation writer', () => {
     expect(patch.closeCorrelationId).toBe(FIXED_CORR);
   });
 });
+
+describe('OBS-B2 closeShift Mechanism-B observer wiring', () => {
+  const FIXED_CORR = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+  const FIXED_NOW = Date.parse('2026-07-09T12:00:00.000Z');
+
+  test('observer sees ok/changed after successful close; business result unchanged', async () => {
+    getDocFromCacheMock.mockResolvedValue(makeOpenSnap());
+    updateDocMock.mockResolvedValue(undefined);
+    const journal = createInMemoryShiftCloseIntentJournal({
+      now: () => FIXED_NOW,
+      generateCloseCorrelationId: () => FIXED_CORR,
+    });
+    const outcomes: unknown[] = [];
+    const result = await closeShift(makeShift(), 1000, 'note', {
+      journal,
+      observePointerRepair: (o) => outcomes.push(o),
+    });
+    expect(result.status).toBe('closed');
+    expect(result.closedAtLocal).toBe(FIXED_NOW);
+    expect(outcomes).toEqual([{ status: 'ok', changed: true }]);
+    expect(updateDocMock).toHaveBeenCalledTimes(1);
+  });
+
+  test('throwing observer does not fail the close', async () => {
+    getDocFromCacheMock.mockResolvedValue(makeOpenSnap());
+    updateDocMock.mockResolvedValue(undefined);
+    const journal = createInMemoryShiftCloseIntentJournal({
+      now: () => FIXED_NOW,
+      generateCloseCorrelationId: () => FIXED_CORR,
+    });
+    const result = await closeShift(makeShift(), 1000, 'note', {
+      journal,
+      observePointerRepair: () => {
+        throw new Error('observer boom');
+      },
+    });
+    expect(result.status).toBe('closed');
+    expect(result.closedAtLocal).toBe(FIXED_NOW);
+  });
+
+  test('B1B correlation field behavior unchanged with observer present', async () => {
+    getDocFromCacheMock.mockResolvedValue(makeOpenSnap());
+    updateDocMock.mockResolvedValue(undefined);
+    const journal = createInMemoryShiftCloseIntentJournal({
+      now: () => FIXED_NOW,
+      generateCloseCorrelationId: () => FIXED_CORR,
+    });
+    await closeShift(makeShift(), 1000, 'note', {
+      journal,
+      observePointerRepair: () => undefined,
+    });
+    const [, patch] = updateDocMock.mock.calls[0] as [unknown, Record<string, unknown>];
+    expect(patch.closeCorrelationId).toBe(FIXED_CORR);
+    expect(patch.deviceId).toBe('DEV1');
+    expect(patch.syncState).toBe('pending');
+  });
+});

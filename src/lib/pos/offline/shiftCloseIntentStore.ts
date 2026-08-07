@@ -1,11 +1,20 @@
 import type {
   CloseIntentErrorCode,
   CloseIntentResult,
+  PointerRepairObserver,
+  PointerRepairOutcome,
   ShiftCloseIntentBusinessSnapshot,
   ShiftCloseIntentEntry,
+  ShiftCloseIntentObservabilityEvent,
   ShiftCloseIntentStatus,
 } from './shiftCloseIntentTypes';
 import { SHIFT_CLOSE_INTENT_STALE_AGE_MS } from './shiftCloseIntentTypes';
+
+export type {
+  PointerRepairObserver,
+  PointerRepairOutcome,
+  ShiftCloseIntentObservabilityEvent,
+} from './shiftCloseIntentTypes';
 
 // ── OBS-B0 compatibility floor marker (reader floor only; does not enable writes) ──
 
@@ -564,18 +573,307 @@ export async function getLatestCloseIntentForDevice(
   }
 }
 
+// ── OBS-B2 notifier registry (local + gated BroadcastChannel) ────────────
+
+const SHIFT_CLOSE_INTENT_NOTIFIER_SYMBOL = Symbol.for('twinpet.shiftCloseIntentNotifier.v1');
+const SHIFT_CLOSE_INTENT_BROADCAST_CHANNEL_NAME = 'twinpet-shift-close-intent';
+
+type ShiftCloseIntentNotifierSubscriber = (
+  event: ShiftCloseIntentObservabilityEvent,
+) => void;
+
+type ShiftCloseIntentNotifierRegistry = {
+  subscribers: Set<ShiftCloseIntentNotifierSubscriber>;
+  channel: BroadcastChannel | null;
+  channelStatus: 'unset' | 'ready' | 'unsupported' | 'failed';
+};
+
+function getNotifierRegistry(): ShiftCloseIntentNotifierRegistry {
+  const g = globalThis as typeof globalThis & {
+    [SHIFT_CLOSE_INTENT_NOTIFIER_SYMBOL]?: ShiftCloseIntentNotifierRegistry;
+  };
+  let registry = g[SHIFT_CLOSE_INTENT_NOTIFIER_SYMBOL];
+  if (!registry) {
+    registry = {
+      subscribers: new Set(),
+      channel: null,
+      channelStatus: 'unset',
+    };
+    g[SHIFT_CLOSE_INTENT_NOTIFIER_SYMBOL] = registry;
+  }
+  return registry;
+}
+
+function ensureBroadcastChannel(
+  registry: ShiftCloseIntentNotifierRegistry,
+): BroadcastChannel | null {
+  if (registry.channelStatus === 'ready') return registry.channel;
+  if (registry.channelStatus === 'unsupported' || registry.channelStatus === 'failed') {
+    return null;
+  }
+  if (typeof BroadcastChannel !== 'function') {
+    registry.channelStatus = 'unsupported';
+    registry.channel = null;
+    return null;
+  }
+  try {
+    const channel = new BroadcastChannel(SHIFT_CLOSE_INTENT_BROADCAST_CHANNEL_NAME);
+    channel.onmessage = (ev: MessageEvent) => {
+      try {
+        const data = ev.data;
+        if (!isPlainRecord(data)) return;
+        if (data.version !== 1) return;
+        if (data.type !== 'shiftCloseIntentPointerChanged') return;
+        if (typeof data.shiftId !== 'string' || data.shiftId.length === 0) return;
+        if (!(typeof data.deviceId === 'string' || data.deviceId === null)) return;
+        // Receive path: never repost, never mutate storage. Cross-context receive
+        // is for other documents; same-document delivery is local-dispatch only.
+      } catch {
+        /* contained */
+      }
+    };
+    channel.onmessageerror = () => {
+      try {
+        channel.close();
+      } catch {
+        /* contained */
+      }
+      registry.channel = null;
+      registry.channelStatus = 'failed';
+    };
+    registry.channel = channel;
+    registry.channelStatus = 'ready';
+    return channel;
+  } catch {
+    registry.channel = null;
+    registry.channelStatus = 'failed';
+    return null;
+  }
+}
+
+function dispatchLocalNotifier(event: ShiftCloseIntentObservabilityEvent): void {
+  const registry = getNotifierRegistry();
+  const ordered = [...registry.subscribers];
+  for (const subscriber of ordered) {
+    if (!registry.subscribers.has(subscriber)) continue;
+    try {
+      subscriber(event);
+    } catch {
+      /* per-subscriber isolation — never alters business result */
+    }
+  }
+}
+
+function postPointerBroadcast(entry: ShiftCloseIntentEntry): void {
+  const registry = getNotifierRegistry();
+  const channel = ensureBroadcastChannel(registry);
+  if (!channel) return;
+  try {
+    channel.postMessage({
+      version: 1,
+      type: 'shiftCloseIntentPointerChanged',
+      deviceId: entry.deviceId,
+      shiftId: entry.shiftId,
+      closedAtLocal: entry.closedAtLocal,
+    });
+  } catch {
+    try {
+      channel.close();
+    } catch {
+      /* contained */
+    }
+    registry.channel = null;
+    registry.channelStatus = 'failed';
+  }
+}
+
+/**
+ * Subscribe to local OBS-B2 observability events.
+ * Returns an unsubscribe function (suppresses not-yet-invoked callbacks).
+ */
+export function subscribeShiftCloseIntentNotifier(
+  subscriber: ShiftCloseIntentNotifierSubscriber,
+): () => void {
+  const registry = getNotifierRegistry();
+  registry.subscribers.add(subscriber);
+  ensureBroadcastChannel(registry);
+  return () => {
+    registry.subscribers.delete(subscriber);
+  };
+}
+
+/** Test-only reset — never called from production. */
+export function resetShiftCloseIntentNotifierForTests(): void {
+  const g = globalThis as typeof globalThis & {
+    [SHIFT_CLOSE_INTENT_NOTIFIER_SYMBOL]?: ShiftCloseIntentNotifierRegistry;
+  };
+  const registry = g[SHIFT_CLOSE_INTENT_NOTIFIER_SYMBOL];
+  if (!registry) return;
+  if (registry.channel) {
+    try {
+      registry.channel.close();
+    } catch {
+      /* contained */
+    }
+  }
+  registry.subscribers.clear();
+  registry.channel = null;
+  registry.channelStatus = 'unset';
+  delete g[SHIFT_CLOSE_INTENT_NOTIFIER_SYMBOL];
+}
+
+function invokePointerObserver(
+  observe: PointerRepairObserver | undefined,
+  outcome: PointerRepairOutcome,
+): void {
+  if (!observe) return;
+  try {
+    observe(outcome);
+  } catch {
+    /* isolated; never rethrown */
+  }
+}
+
+function emitObservabilityAfterPointerRepair(
+  entry: ShiftCloseIntentEntry,
+  outcome: PointerRepairOutcome,
+  observe: PointerRepairObserver | undefined,
+): void {
+  invokePointerObserver(observe, outcome);
+  dispatchLocalNotifier({ entry, pointerRepair: outcome });
+  if (outcome.status === 'ok' && outcome.changed === true) {
+    postPointerBroadcast(entry);
+  }
+}
+
+// ── OBS-B2 pointer write / repair (post-commit, contained) ───────────────
+
+function buildPointerForEntry(entry: ShiftCloseIntentEntry): LatestCloseIntentPointer {
+  return {
+    kind: 'latestCloseIntentByDevice',
+    version: 1,
+    deviceId: entry.deviceId as string,
+    shiftId: entry.shiftId,
+    closedAtLocal: entry.closedAtLocal,
+  };
+}
+
+/** Comparator: higher closedAtLocal wins; on tie, lexicographically greater shiftId wins. */
+function pointerCandidateOutranks(
+  candidate: Pick<LatestCloseIntentPointer, 'closedAtLocal' | 'shiftId'>,
+  existing: Pick<LatestCloseIntentPointer, 'closedAtLocal' | 'shiftId'>,
+): boolean {
+  if (candidate.closedAtLocal !== existing.closedAtLocal) {
+    return candidate.closedAtLocal > existing.closedAtLocal;
+  }
+  return candidate.shiftId > existing.shiftId;
+}
+
+function pointersEqual(
+  a: LatestCloseIntentPointer,
+  b: LatestCloseIntentPointer,
+): boolean {
+  return (
+    a.kind === b.kind &&
+    a.version === b.version &&
+    a.deviceId === b.deviceId &&
+    a.shiftId === b.shiftId &&
+    a.closedAtLocal === b.closedAtLocal
+  );
+}
+
+/**
+ * Separate contained pointer transaction after mandatory journal commit.
+ * Never throws; never mutates the frozen business result.
+ */
+async function repairLatestCloseIntentPointer(
+  store: ShiftCloseIntentKvStore,
+  entry: ShiftCloseIntentEntry,
+): Promise<PointerRepairOutcome> {
+  if (!usableDeviceId(entry.deviceId)) {
+    return { status: 'skipped', reason: 'device_id_unusable' };
+  }
+
+  const desired = buildPointerForEntry(entry);
+  const pointerKey = latestByDevicePointerKey(entry.deviceId);
+
+  try {
+    return await store.transact(['shiftCloseIntents'], 'readwrite', async (txn) => {
+      let existingRaw: unknown;
+      try {
+        existingRaw = await txn.get<unknown>('shiftCloseIntents', pointerKey);
+      } catch {
+        return { status: 'degraded', reason: 'pointer_read_failed' } satisfies PointerRepairOutcome;
+      }
+
+      if (existingRaw !== undefined) {
+        if (!isPointerShaped(existingRaw) || !isPlainRecord(existingRaw)) {
+          // Unusable routing metadata — overwrite with the committed entry's pointer.
+        } else {
+          const version = existingRaw.version;
+          if (typeof version !== 'number' || !Number.isSafeInteger(version) || version !== 1) {
+            // Unsupported/invalid — repair by overwrite.
+          } else if (!isValidV1Pointer(existingRaw)) {
+            // Malformed v1 — repair by overwrite.
+          } else if (existingRaw.deviceId !== entry.deviceId) {
+            // Device-scoped key with mismatched payload — fail closed, do not write.
+            return { status: 'degraded', reason: 'pointer_invalid' } satisfies PointerRepairOutcome;
+          } else if (pointersEqual(existingRaw, desired)) {
+            return { status: 'ok', changed: false } satisfies PointerRepairOutcome;
+          } else if (!pointerCandidateOutranks(desired, existingRaw)) {
+            // An older close must never outrank a newer pointer target.
+            return { status: 'ok', changed: false } satisfies PointerRepairOutcome;
+          }
+        }
+      }
+
+      try {
+        await txn.put('shiftCloseIntents', pointerKey, desired);
+      } catch {
+        return { status: 'degraded', reason: 'pointer_write_failed' } satisfies PointerRepairOutcome;
+      }
+      return { status: 'ok', changed: true } satisfies PointerRepairOutcome;
+    });
+  } catch {
+    return { status: 'degraded', reason: 'pointer_write_failed' };
+  }
+}
+
+async function afterSuccessfulJournalCommit(
+  store: ShiftCloseIntentKvStore,
+  entry: ShiftCloseIntentEntry,
+  observePointerRepair: PointerRepairObserver | undefined,
+): Promise<void> {
+  let outcome: PointerRepairOutcome;
+  try {
+    outcome = await repairLatestCloseIntentPointer(store, entry);
+  } catch {
+    outcome = { status: 'degraded', reason: 'pointer_write_failed' };
+  }
+  try {
+    emitObservabilityAfterPointerRepair(entry, outcome, observePointerRepair);
+  } catch {
+    /* observability side-effect failure must not alter business result */
+  }
+}
+
 // ── Public journal API ──────────────────────────────────────────────────
 
 export type ShiftCloseIntentJournal = {
   upsertCloseIntent: (
     snapshot: ShiftCloseIntentBusinessSnapshot,
+    observePointerRepair?: PointerRepairObserver,
   ) => Promise<CloseIntentResult<ShiftCloseIntentEntry>>;
   getCloseIntent: (shiftId: string) => Promise<CloseIntentResult<ShiftCloseIntentEntry | undefined>>;
   listCloseIntents: () => Promise<ListCloseIntentsResult>;
-  markSynced: (shiftId: string) => Promise<CloseIntentResult<ShiftCloseIntentEntry>>;
+  markSynced: (
+    shiftId: string,
+    observePointerRepair?: PointerRepairObserver,
+  ) => Promise<CloseIntentResult<ShiftCloseIntentEntry>>;
   markRejectedManualAttention: (
     shiftId: string,
     reason: string,
+    observePointerRepair?: PointerRepairObserver,
   ) => Promise<CloseIntentResult<ShiftCloseIntentEntry>>;
 };
 
@@ -649,9 +947,10 @@ function buildJournalApi(
     shiftId: string,
     status: ShiftCloseIntentStatus,
     lastErrorMessage: string | null,
+    observePointerRepair?: PointerRepairObserver,
   ): Promise<CloseIntentResult<ShiftCloseIntentEntry>> =>
-    runStore(store, async (s) =>
-      s.transact(['shiftCloseIntents'], 'readwrite', async (txn) => {
+    runStore(store, async (s) => {
+      const businessResult = await s.transact(['shiftCloseIntents'], 'readwrite', async (txn) => {
         const existingRaw = await txn.get<Record<string, unknown>>('shiftCloseIntents', shiftId);
         if (!existingRaw) return notFound<ShiftCloseIntentEntry>();
         // Fail closed on malformed-present correlation (and any other invalid entry).
@@ -672,16 +971,21 @@ function buildJournalApi(
         };
         await txn.put('shiftCloseIntents', shiftId, next);
         return {
-          ok: true,
+          ok: true as const,
           value: normalizeCloseIntentEntry(next),
         };
-      }),
-    );
+      });
+      // Pointer repair / notifier only AFTER mandatory journal commit.
+      if (businessResult.ok) {
+        await afterSuccessfulJournalCommit(s, businessResult.value, observePointerRepair);
+      }
+      return businessResult;
+    });
 
   return {
-    upsertCloseIntent: (snapshot) =>
-      runStore(store, async (s) =>
-        s.transact(['shiftCloseIntents'], 'readwrite', async (txn) => {
+    upsertCloseIntent: (snapshot, observePointerRepair) =>
+      runStore(store, async (s) => {
+        const businessResult = await s.transact(['shiftCloseIntents'], 'readwrite', async (txn) => {
           const existingRaw = await txn.get<Record<string, unknown>>(
             'shiftCloseIntents',
             snapshot.shiftId,
@@ -690,7 +994,7 @@ function buildJournalApi(
             const existing = normalizeCloseIntentEntry(existingRaw);
             if (snapshotsEqual(existing, snapshot)) {
               // Idempotent equal-retry: reuse persisted generated metadata; no put.
-              return { ok: true, value: existing };
+              return { ok: true as const, value: existing };
             }
             return conflict<ShiftCloseIntentEntry>(
               `A different close-intent already exists locally for shift "${snapshot.shiftId}" — not overwritten.`,
@@ -717,9 +1021,15 @@ function buildJournalApi(
             lastErrorMessage: null,
           };
           await txn.put('shiftCloseIntents', snapshot.shiftId, entry);
-          return { ok: true, value: entry };
-        }),
-      ),
+          return { ok: true as const, value: entry };
+        });
+        // Pointer repair / notifier only AFTER mandatory journal commit.
+        // Conflict / failure paths never repair or notify.
+        if (businessResult.ok) {
+          await afterSuccessfulJournalCommit(s, businessResult.value, observePointerRepair);
+        }
+        return businessResult;
+      }),
 
     getCloseIntent: (shiftId) =>
       runStore(store, async (s) => {
@@ -748,10 +1058,11 @@ function buildJournalApi(
         return classifyListRecords(raw);
       }),
 
-    markSynced: (shiftId) => markStatus(shiftId, 'synced', null),
+    markSynced: (shiftId, observePointerRepair) =>
+      markStatus(shiftId, 'synced', null, observePointerRepair),
 
-    markRejectedManualAttention: (shiftId, reason) =>
-      markStatus(shiftId, 'rejected_manual_attention', reason),
+    markRejectedManualAttention: (shiftId, reason, observePointerRepair) =>
+      markStatus(shiftId, 'rejected_manual_attention', reason, observePointerRepair),
   };
 }
 

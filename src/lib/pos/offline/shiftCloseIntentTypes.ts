@@ -64,5 +64,26 @@ export type CloseIntentResult<T> =
   | { ok: true; value: T }
   | { ok: false; code: CloseIntentErrorCode; message?: string };
 
+/**
+ * OBS-B2 — safe parallel caller-visible pointer-repair diagnostic.
+ * Routing metadata only; never widens {@link CloseIntentResult}.
+ */
+export type PointerRepairOutcome =
+  | { status: 'ok'; changed: boolean }
+  | { status: 'skipped'; reason: 'device_id_unusable' }
+  | {
+      status: 'degraded';
+      reason: 'pointer_read_failed' | 'pointer_write_failed' | 'pointer_invalid';
+    };
+
+/** Per-call Mechanism-B observer — void, never awaited, failure-isolated. */
+export type PointerRepairObserver = (outcome: PointerRepairOutcome) => void;
+
+/** Local notifier event after mandatory journal commit + pointer repair. */
+export type ShiftCloseIntentObservabilityEvent = {
+  entry: ShiftCloseIntentEntry;
+  pointerRepair: PointerRepairOutcome;
+};
+
 /** Aligns with the existing `OLD_PENDING_AGE_MS` convention used by `selectDevicePendingSummary`. */
 export const SHIFT_CLOSE_INTENT_STALE_AGE_MS = 10 * 60 * 1000;

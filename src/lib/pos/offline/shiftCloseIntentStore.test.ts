@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { describe, expect, test, vi } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import {
   SHIFT_CLOSE_INTENT_STORAGE_COMPAT_FLOOR,
   createInMemoryShiftCloseIntentJournal,
@@ -11,7 +11,9 @@ import {
   isStaleClosePending,
   isValidLowercaseUuidV4,
   latestByDevicePointerKey,
+  resetShiftCloseIntentNotifierForTests,
   snapshotsEqual,
+  subscribeShiftCloseIntentNotifier,
 } from './shiftCloseIntentStore';
 import type { ShiftCloseIntentBusinessSnapshot } from './shiftCloseIntentTypes';
 import { SHIFT_CLOSE_INTENT_STALE_AGE_MS } from './shiftCloseIntentTypes';
@@ -423,9 +425,18 @@ describe('OBS-B0 listCloseIntents metadata filtering / corruption fail-closed', 
 
 describe('OBS-B0 bounded reader substrate', () => {
   test('pointer absent -> none', async () => {
+    // Seed an entry without going through upsert's post-commit pointer repair,
+    // so the bounded reader can still observe a true pointer-absent `none`.
     const store = createInMemoryShiftCloseIntentStore();
-    const journal = createInMemoryShiftCloseIntentJournal({ store, now: fixedNow });
-    await journal.upsertCloseIntent(makeSnapshot());
+    await seedRawRecord(store, 'shift-1', {
+      ...makeSnapshot(),
+      closedAtLocal: fixedNow(),
+      closeCorrelationId: FIXED_CORR_ID,
+      status: 'local_closed_pending',
+      createdAtLocal: fixedNow(),
+      updatedAtLocal: fixedNow(),
+      lastErrorMessage: null,
+    });
     const result = await getLatestCloseIntentForDevice('dev-1', { store });
     expect(result).toEqual({ status: 'none' });
   });
@@ -1021,5 +1032,362 @@ describe('OBS-B1B Remediation-1 F-01 — keyed get / status fail-closed', () => 
       'shift-preserve-rejected'
     ] as Record<string, unknown>;
     expect(dumpRejected.closeCorrelationId).toBe(FIXED_CORR_ID);
+  });
+});
+
+describe('OBS-B2 pointer repair + notifier', () => {
+  afterEach(() => {
+    resetShiftCloseIntentNotifierForTests();
+    vi.restoreAllMocks();
+  });
+
+  test('P-01: initial create commits entry before pointer repair', async () => {
+    const store = createInstrumentedStore();
+    const journal = makeJournal({ store });
+    const outcomes: unknown[] = [];
+    const res = await journal.upsertCloseIntent(makeSnapshot(), (o) => outcomes.push(o));
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    // Entry put happens in mandatory txn; pointer put is a separate later put.
+    expect(store.putCount).toBeGreaterThanOrEqual(2);
+    expect(store.dump().shiftCloseIntents['shift-1']).toMatchObject({
+      shiftId: 'shift-1',
+      status: 'local_closed_pending',
+    });
+    expect(outcomes[0]).toEqual({ status: 'ok', changed: true });
+  });
+
+  test('P-02: pointer create outcome ok/changed true when needed', async () => {
+    const store = createInMemoryShiftCloseIntentStore();
+    const journal = makeJournal({ store });
+    let outcome: unknown;
+    const res = await journal.upsertCloseIntent(makeSnapshot(), (o) => {
+      outcome = o;
+    });
+    expect(res.ok).toBe(true);
+    expect(outcome).toEqual({ status: 'ok', changed: true });
+    const dump = store.dump().shiftCloseIntents;
+    const pointerEntry = Object.entries(dump).find(
+      ([, v]) =>
+        v != null &&
+        typeof v === 'object' &&
+        (v as { kind?: string }).kind === 'latestCloseIntentByDevice',
+    );
+    expect(pointerEntry?.[1]).toEqual(makeValidPointer());
+  });
+
+  test('P-03: equal retry can return changed false', async () => {
+    const journal = makeJournal();
+    const snap = makeSnapshot();
+    await journal.upsertCloseIntent(snap);
+    let outcome: unknown;
+    const second = await journal.upsertCloseIntent(snap, (o) => {
+      outcome = o;
+    });
+    expect(second.ok).toBe(true);
+    expect(outcome).toEqual({ status: 'ok', changed: false });
+  });
+
+  test('P-04: pointer repair failure does not change business success', async () => {
+    const base = createInMemoryShiftCloseIntentStore();
+    let pointerPuts = 0;
+    const store: typeof base = {
+      dump: () => base.dump(),
+      async transact(stores, mode, fn) {
+        return base.transact(stores, mode, async (txn) =>
+          fn({
+            get: (s, k) => txn.get(s, k),
+            getAll: (s) => txn.getAll(s),
+            put: async (s, k, v) => {
+              if (Array.isArray(k)) {
+                pointerPuts += 1;
+                throw new Error('pointer put boom');
+              }
+              return txn.put(s, k, v);
+            },
+          }),
+        );
+      },
+    };
+    const journal = makeJournal({ store });
+    let outcome: unknown;
+    const res = await journal.upsertCloseIntent(makeSnapshot(), (o) => {
+      outcome = o;
+    });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.value.shiftId).toBe('shift-1');
+    expect(outcome).toEqual({ status: 'degraded', reason: 'pointer_write_failed' });
+    expect(pointerPuts).toBeGreaterThanOrEqual(1);
+  });
+
+  test('P-05: markSynced pointer repair path', async () => {
+    const journal = makeJournal();
+    await journal.upsertCloseIntent(makeSnapshot());
+    let outcome: unknown;
+    const res = await journal.markSynced('shift-1', (o) => {
+      outcome = o;
+    });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.value.status).toBe('synced');
+    expect(outcome).toEqual({ status: 'ok', changed: false });
+  });
+
+  test('P-06: markRejectedManualAttention pointer repair path', async () => {
+    const journal = makeJournal();
+    await journal.upsertCloseIntent(makeSnapshot());
+    let outcome: unknown;
+    const res = await journal.markRejectedManualAttention('shift-1', 'denied', (o) => {
+      outcome = o;
+    });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.value.status).toBe('rejected_manual_attention');
+    expect(outcome).toEqual({ status: 'ok', changed: false });
+  });
+
+  test('P-07: malformed pointer is repaired (overwrite) without failing business', async () => {
+    const store = createInMemoryShiftCloseIntentStore();
+    const journal = makeJournal({ store });
+    await seedPointer(store, 'dev-1', makeValidPointer({ shiftId: '' }));
+    let outcome: unknown;
+    const res = await journal.upsertCloseIntent(makeSnapshot(), (o) => {
+      outcome = o;
+    });
+    expect(res.ok).toBe(true);
+    expect(outcome).toEqual({ status: 'ok', changed: true });
+  });
+
+  test('P-08: target missing/mismatch remains distinct from none on bounded reader', async () => {
+    const store = createInMemoryShiftCloseIntentStore();
+    await seedPointer(store, 'dev-1', makeValidPointer({ shiftId: 'missing' }));
+    const missing = await getLatestCloseIntentForDevice('dev-1', { store });
+    expect(missing).toEqual({ status: 'unreadable', reason: 'pointer_target_missing' });
+    expect(missing).not.toEqual({ status: 'none' });
+  });
+
+  test('P-09: unsupported pointer version reachable on bounded reader', async () => {
+    const store = createInMemoryShiftCloseIntentStore();
+    await seedPointer(store, 'dev-1', makeValidPointer({ version: 2 }));
+    const result = await getLatestCloseIntentForDevice('dev-1', { store });
+    expect(result).toEqual({ status: 'unreadable', reason: 'pointer_version_unsupported' });
+  });
+
+  test('P-10: bounded reader max two conceptual gets', async () => {
+    const store = createInstrumentedStore();
+    const journal = makeJournal({ store });
+    await journal.upsertCloseIntent(makeSnapshot());
+    store.getCount = 0;
+    store.getAllCount = 0;
+    const result = await getLatestCloseIntentForDevice('dev-1', { store });
+    expect(result.status).toBe('ok');
+    expect(store.getCount).toBe(2);
+    expect(store.getAllCount).toBe(0);
+  });
+
+  test('P-11: historical absence compatible / no correlation backfill on status+pointer', async () => {
+    const store = createInMemoryShiftCloseIntentStore();
+    const journal = makeJournal({ store });
+    const historical = {
+      ...makeSnapshot({ shiftId: 'shift-hist' }),
+      closedAtLocal: fixedNow(),
+      status: 'local_closed_pending' as const,
+      createdAtLocal: fixedNow(),
+      updatedAtLocal: fixedNow(),
+      lastErrorMessage: null,
+    };
+    expect('closeCorrelationId' in historical).toBe(false);
+    await seedRawRecord(store, 'shift-hist', historical);
+    const synced = await journal.markSynced('shift-hist');
+    expect(synced.ok).toBe(true);
+    if (!synced.ok) return;
+    expect(synced.value.closeCorrelationId).toBeNull();
+    const physical = store.dump().shiftCloseIntents['shift-hist'] as Record<string, unknown>;
+    expect('closeCorrelationId' in physical).toBe(false);
+  });
+
+  test('P-12: local notifier deterministic dispatch', async () => {
+    const seen: unknown[] = [];
+    subscribeShiftCloseIntentNotifier((ev) => {
+      seen.push(ev.pointerRepair);
+    });
+    const journal = makeJournal();
+    await journal.upsertCloseIntent(makeSnapshot());
+    expect(seen).toEqual([{ status: 'ok', changed: true }]);
+  });
+
+  test('P-13: subscriber failure isolated', async () => {
+    const second: unknown[] = [];
+    subscribeShiftCloseIntentNotifier(() => {
+      throw new Error('subscriber boom');
+    });
+    subscribeShiftCloseIntentNotifier((ev) => {
+      second.push(ev.pointerRepair);
+    });
+    const journal = makeJournal();
+    const res = await journal.upsertCloseIntent(makeSnapshot());
+    expect(res.ok).toBe(true);
+    expect(second).toEqual([{ status: 'ok', changed: true }]);
+  });
+
+  test('P-14: no duplicate local dispatch for same document path', async () => {
+    let calls = 0;
+    subscribeShiftCloseIntentNotifier(() => {
+      calls += 1;
+    });
+    const journal = makeJournal();
+    await journal.upsertCloseIntent(makeSnapshot());
+    expect(calls).toBe(1);
+  });
+
+  test('P-15: BroadcastChannel on ok+changed only', async () => {
+    const posts: unknown[] = [];
+    const FakeBC = vi.fn().mockImplementation(function (this: {
+      postMessage: (d: unknown) => void;
+      close: () => void;
+      onmessage: null;
+      onmessageerror: null;
+    }) {
+      this.postMessage = (d: unknown) => {
+        posts.push(d);
+      };
+      this.close = () => undefined;
+      this.onmessage = null;
+      this.onmessageerror = null;
+    });
+    vi.stubGlobal('BroadcastChannel', FakeBC);
+    resetShiftCloseIntentNotifierForTests();
+    const journal = makeJournal();
+    await journal.upsertCloseIntent(makeSnapshot());
+    expect(posts.length).toBe(1);
+    expect(posts[0]).toMatchObject({
+      version: 1,
+      type: 'shiftCloseIntentPointerChanged',
+      shiftId: 'shift-1',
+      deviceId: 'dev-1',
+    });
+  });
+
+  test('P-16: no broadcast on changed false', async () => {
+    const posts: unknown[] = [];
+    const FakeBC = vi.fn().mockImplementation(function (this: {
+      postMessage: (d: unknown) => void;
+      close: () => void;
+      onmessage: null;
+      onmessageerror: null;
+    }) {
+      this.postMessage = (d: unknown) => {
+        posts.push(d);
+      };
+      this.close = () => undefined;
+      this.onmessage = null;
+      this.onmessageerror = null;
+    });
+    vi.stubGlobal('BroadcastChannel', FakeBC);
+    resetShiftCloseIntentNotifierForTests();
+    const journal = makeJournal();
+    const snap = makeSnapshot();
+    await journal.upsertCloseIntent(snap);
+    posts.length = 0;
+    await journal.upsertCloseIntent(snap);
+    expect(posts.length).toBe(0);
+  });
+
+  test('P-17: no broadcast on pointer error', async () => {
+    const posts: unknown[] = [];
+    const FakeBC = vi.fn().mockImplementation(function (this: {
+      postMessage: (d: unknown) => void;
+      close: () => void;
+      onmessage: null;
+      onmessageerror: null;
+    }) {
+      this.postMessage = (d: unknown) => {
+        posts.push(d);
+      };
+      this.close = () => undefined;
+      this.onmessage = null;
+      this.onmessageerror = null;
+    });
+    vi.stubGlobal('BroadcastChannel', FakeBC);
+    resetShiftCloseIntentNotifierForTests();
+
+    const base = createInMemoryShiftCloseIntentStore();
+    const store: typeof base = {
+      dump: () => base.dump(),
+      async transact(stores, mode, fn) {
+        return base.transact(stores, mode, async (txn) =>
+          fn({
+            get: (s, k) => txn.get(s, k),
+            getAll: (s) => txn.getAll(s),
+            put: async (s, k, v) => {
+              if (Array.isArray(k)) throw new Error('pointer put boom');
+              return txn.put(s, k, v);
+            },
+          }),
+        );
+      },
+    };
+    const journal = makeJournal({ store });
+    const res = await journal.upsertCloseIntent(makeSnapshot());
+    expect(res.ok).toBe(true);
+    expect(posts.length).toBe(0);
+  });
+
+  test('P-18: no background/read repair on getLatestCloseIntentForDevice', async () => {
+    const store = createInstrumentedStore();
+    await seedRawRecord(store, 'shift-1', {
+      ...makeSnapshot(),
+      closedAtLocal: fixedNow(),
+      closeCorrelationId: FIXED_CORR_ID,
+      status: 'local_closed_pending',
+      createdAtLocal: fixedNow(),
+      updatedAtLocal: fixedNow(),
+      lastErrorMessage: null,
+    });
+    await seedPointer(store, 'dev-1', makeValidPointer({ shiftId: 'gone' }));
+    store.putCount = 0;
+    const result = await getLatestCloseIntentForDevice('dev-1', { store });
+    expect(result.status).toBe('unreadable');
+    expect(store.putCount).toBe(0);
+  });
+
+  test('device_id_unusable skips pointer repair', async () => {
+    let outcome: unknown;
+    const journal = makeJournal();
+    const res = await journal.upsertCloseIntent(makeSnapshot({ deviceId: null }), (o) => {
+      outcome = o;
+    });
+    expect(res.ok).toBe(true);
+    expect(outcome).toEqual({ status: 'skipped', reason: 'device_id_unusable' });
+  });
+
+  test('pointer_invalid when device-scoped pointer payload mismatches device', async () => {
+    const store = createInMemoryShiftCloseIntentStore();
+    const journal = makeJournal({ store });
+    await seedPointer(store, 'dev-1', makeValidPointer({ deviceId: 'other-device' }));
+    let outcome: unknown;
+    const res = await journal.upsertCloseIntent(makeSnapshot(), (o) => {
+      outcome = o;
+    });
+    expect(res.ok).toBe(true);
+    expect(outcome).toEqual({ status: 'degraded', reason: 'pointer_invalid' });
+  });
+
+  test('conflict path performs no pointer repair / no notifier', async () => {
+    let notifierCalls = 0;
+    subscribeShiftCloseIntentNotifier(() => {
+      notifierCalls += 1;
+    });
+    const journal = makeJournal();
+    await journal.upsertCloseIntent(makeSnapshot());
+    notifierCalls = 0;
+    let observed = false;
+    const conflict = await journal.upsertCloseIntent(makeSnapshot({ actualCashCount: 1 }), () => {
+      observed = true;
+    });
+    expect(conflict.ok).toBe(false);
+    expect(observed).toBe(false);
+    expect(notifierCalls).toBe(0);
   });
 });

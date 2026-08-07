@@ -15,7 +15,7 @@
 // module (the store only imports it internally, never re-exports it) — so each
 // is imported from its true source to satisfy build-mode TypeScript (TS2459).
 import type { ShiftCloseIntentJournal } from './shiftCloseIntentStore';
-import type { ShiftCloseIntentEntry } from './shiftCloseIntentTypes';
+import type { PointerRepairOutcome, ShiftCloseIntentEntry } from './shiftCloseIntentTypes';
 import type { ShiftSyncState } from '../../types';
 
 /** Read-only, confirmation-grade shape of the fields this packet reconciles against. */
@@ -77,6 +77,12 @@ export type ReconcileShiftCloseIntentResult = {
   closedAtServer?: Date;
   /** Whether the Variant C normalization write was attempted and succeeded. */
   normalized?: boolean;
+  /**
+   * OBS-B2 pointer-repair outcome from the status-transition path, when a
+   * journal markSynced / markRejectedManualAttention ran. Observability only —
+   * never settlement truth; absence means no status transition wrote.
+   */
+  pointerRepair?: PointerRepairOutcome;
 };
 
 function isResolvedServerTimestamp(value: unknown): value is { toDate: () => Date } {
@@ -157,14 +163,18 @@ export async function reconcileShiftCloseIntent(
     // transition as completed — the server proof of mismatch is real, but the
     // local journal is still pending, so classify as retryable `unreachable`
     // (the next sweep re-detects the mismatch and re-attempts the write).
+    let pointerRepair: PointerRepairOutcome | undefined;
     const rejectResult = await deps.journal.markRejectedManualAttention(
       entry.shiftId,
       'Confirmed remote shift identity does not match the frozen local close snapshot.',
+      (outcome) => {
+        pointerRepair = outcome;
+      },
     );
     if (!rejectResult.ok) {
-      return { shiftId: entry.shiftId, outcome: 'unreachable' };
+      return { shiftId: entry.shiftId, outcome: 'unreachable', pointerRepair };
     }
-    return { shiftId: entry.shiftId, outcome: 'identity_mismatch' };
+    return { shiftId: entry.shiftId, outcome: 'identity_mismatch', pointerRepair };
   }
 
   // Server proof is confirmation-grade, but the cashier-facing "confirmed"
@@ -174,9 +184,12 @@ export async function reconcileShiftCloseIntent(
   // to Firestore while the local journal is still `local_closed_pending` — the
   // exact local/remote inconsistency Codex Finding 5 warns against). Classify
   // as retryable `unreachable` instead.
-  const syncedResult = await deps.journal.markSynced(entry.shiftId);
+  let pointerRepair: PointerRepairOutcome | undefined;
+  const syncedResult = await deps.journal.markSynced(entry.shiftId, (outcome) => {
+    pointerRepair = outcome;
+  });
   if (!syncedResult.ok) {
-    return { shiftId: entry.shiftId, outcome: 'unreachable' };
+    return { shiftId: entry.shiftId, outcome: 'unreachable', pointerRepair };
   }
 
   let normalized: boolean | undefined;
@@ -197,6 +210,7 @@ export async function reconcileShiftCloseIntent(
     outcome: 'confirmed',
     closedAtServer: doc.closedAt.toDate(),
     normalized,
+    pointerRepair,
   };
 }
 
