@@ -2,7 +2,12 @@
 
 ## Phase
 
-**No active implementation packet.** Packet S implementation (`getShiftCloseCaseFigures`) is **TECHNICALLY CLOSED WITH NONBLOCKING NOTES** at `e9363e35f5a79f8e21d5dafe1e70d8ff3f82559c` (deployed live); its docs/tracker reconciliation is **CLOSED** at `c6bdbd00d01541201dbc53236b06080db1a148e4` (`docs(pos): reconcile packet s closure`). **Broader Packet 5 is NOT CLOSED.** State: `PACKET_S_TECHNICALLY_CLOSED_WITH_NONBLOCKING_NOTES`; docs/tracker reconciliation `CLOSED`. Passive natural-traffic observation remains authorized in parallel, read-only only, when a natural event exists; no agent-triggered activity is authorized.
+**Post-R6 Seven-File Tracker Reconciliation**
+
+STATUS:
+IMPLEMENTED_PENDING_CODEX_REVIEW
+
+`P_OBS_1_STATUS: CLOSED` — permanent process/status owner is `docs/ops/packet-5-monitoring-runbook.md` §9 (pointer only). P-OBS-1 implementation commit `da3a8d1c9ddcb605a1f9a6e3cebc21d8dc2ffe72`; closure docs commit `78f7ffe5c5b69f47af5c20ed8efd54410f35ee09`. R6 Codex current-head re-review is `PASS_WITH_NOTES` (0 material findings, 2 notes); `COMPOSITE_R6_ARCHITECTURE_STATUS: COMPLETE`; `CURRENT_HEAD_COMPATIBILITY_STATUS: COMPATIBLE`; all thirteen R5 findings closed; R6-G14 accepted. The current E2/P-OBS-1 implementation supersedes historical E2 implementation detail (N-R6-01) — do not replay or overwrite. `PROV` is the first remaining implementation stage and is **not authorized**. `E-2` real POSIX evidence is `IDENTIFIED_BUT_HELD`, **not authorized**. **Broader Packet 5 is NOT CLOSED.** No active implementation packet is selected. Passive natural-traffic observation remains authorized in parallel, read-only only, when a natural event exists; no agent-triggered activity is authorized. This reconciliation has not been committed or pushed.
 
 ## This packet — Packet 5 / UI-B2 / Packet S — getShiftCloseCaseFigures
 

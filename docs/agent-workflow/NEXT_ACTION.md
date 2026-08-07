@@ -3,27 +3,32 @@
 ## Current State
 
 - Current repository HEAD: determined from live Git — run `git rev-parse HEAD`
-- Verified baseline entering this reconciliation: `c6bdbd00d01541201dbc53236b06080db1a148e4` (`docs(pos): reconcile packet s closure`)
-- **P1 Packet 5 / UI-B2 / Packet S — getShiftCloseCaseFigures** — **TECHNICALLY CLOSED WITH NONBLOCKING NOTES** (exact six-file implementation commit/push/deploy COMPLETE at `e9363e3`)
-- **P1 Packet 5 / UI-C Manager Adjudication Action Surface** — CLOSED AS COMMITTED AND PUSHED; docs reconciliation CLOSED at `5654362`
-- **Docs/tracker reconciliation (Packet S)** — **CLOSED** at `c6bdbd0`
+- Verified baseline entering this reconciliation: `78f7ffe5c5b69f47af5c20ed8efd54410f35ee09` (`docs(pos): close p-obs-1 process reconciliation`)
+- **P-OBS-1** — `P_OBS_1_STATUS: CLOSED`. Permanent owner `docs/ops/packet-5-monitoring-runbook.md` §9 (pointer only). Implementation commit `da3a8d1c9ddcb605a1f9a6e3cebc21d8dc2ffe72`; closure docs commit `78f7ffe5c5b69f47af5c20ed8efd54410f35ee09`.
+- **R6 Codex current-head re-review** — `PASS_WITH_NOTES` (0 material findings, 2 notes); architecture `COMPLETE`; current-head `COMPATIBLE`; all thirteen R5 findings closed; R6-G14 accepted.
+- **PROV** — first remaining implementation stage; **not authorized**.
+- **E-2 POSIX evidence** — `IDENTIFIED_BUT_HELD`; **not authorized**.
+- **Post-R6 Seven-File Tracker Reconciliation (this pass)** — implementation-complete, docs-only, pending Codex review; not committed/pushed.
 - **Broader Packet 5 — NOT CLOSED**
-- For current working-tree/stage/stash state, use live Git: `git status --short --untracked-files=all`, `git diff --cached --name-status`, `git rev-parse "stash@{0}"`. The Packet S docs/tracker closure gate settled with a clean working tree, empty staged area, and unchanged stash (`stash@{0}` = `7d03cfec7ba52ff7e25b7e175ca190efc258d874` as of the verified baseline above).
+- For current working-tree/stage/stash state, use live Git: `git status --short --untracked-files=all`, `git diff --cached --name-status`, `git rev-parse "stash@{0}"`. This reconciliation entered with a clean working tree, empty staged area, and unchanged stash (`stash@{0}` = `7d03cfec7ba52ff7e25b7e175ca190efc258d874` as of the verified baseline above).
 
 ## What Happens Next
+
+**Immediate next action:** Fresh Codex strict read-only seven-file tracker reconciliation implementation review.
 
 No active implementation packet is selected.
 
 Passive read-only observation may occur only when natural production traffic provides a real event. No agent-triggered activity is authorized.
 
-Await Gemini selection before any new planning or implementation gate.
+Await Gemini selection before any new planning or implementation gate. PROV implementation is **not** the immediate next action.
 
-1. Packet S implementation/review/commit/push/deploy — **DONE (technically closed with nonblocking notes at `e9363e3`, deployed live)**
-2. Packet S docs/tracker reconciliation — **CLOSED** at `c6bdbd0`
-3. **NOT authorized:** new implementation (any candidate), UI-B.1, UI-B2, P5-F, recapture, deploy, runtime activation, callable invocation, production access, global Flowbite (A-1) fix, stash operations, POSPage/PaymentModal/checkout/navigation/global-keyboard changes, Packet R/C/U
-4. **Next implementation/roadmap direction** — later Gemini decision; no active implementation packet and no next candidate selected
+1. P-OBS-1 — **CLOSED** (implementation `da3a8d1`, closure docs `78f7ffe`); permanent owner runbook §9
+2. R6 Codex current-head re-review — **PASS_WITH_NOTES**, complete, current-head compatible
+3. Post-R6 seven-file tracker reconciliation — **implementation-complete**, pending fresh Codex review
+4. **NOT authorized:** PROV implementation, E-2 real POSIX evidence, new implementation (any candidate), UI-B.1, UI-B2, P5-F, recapture, deploy, runtime activation, callable invocation, production access, global Flowbite (A-1) fix, stash operations, POSPage/PaymentModal/checkout/navigation/global-keyboard changes, Packet R/C/U, broader Packet 5 closure
+5. **Next implementation/roadmap direction** — later Gemini decision on PROV; no active implementation packet and no next candidate selected
 
-**Not active:** UI-B.1, UI-B2, P5-F, recapture, or any new feature packet.
+**Not active:** PROV, UI-B.1, UI-B2, P5-F, recapture, or any new feature packet.
 
 ## Reminders
 

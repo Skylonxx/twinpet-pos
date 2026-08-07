@@ -1,12 +1,29 @@
 # Twinpet POS — Task Tracker
 
-> Last reconciled: 2026-07-31
+> Last reconciled: 2026-08-07
 > Current repository HEAD: determined from live Git — run `git rev-parse HEAD`
-> Verified baseline entering this reconciliation: `c6bdbd00d01541201dbc53236b06080db1a148e4` (`docs(pos): reconcile packet s closure`)
+> Verified baseline entering this reconciliation: `78f7ffe5c5b69f47af5c20ed8efd54410f35ee09` (`docs(pos): close p-obs-1 process reconciliation`)
 > Packet S implementation commit (historical, unchanged): `e9363e35f5a79f8e21d5dafe1e70d8ff3f82559c` (`feat(pos): add shift close case figures callable`)
-> Packet S docs/tracker closure commit: `c6bdbd00d01541201dbc53236b06080db1a148e4`
+> Packet S docs/tracker closure commit (historical, unchanged): `c6bdbd00d01541201dbc53236b06080db1a148e4`
+> P-OBS-1 implementation commit (historical, unchanged): `da3a8d1c9ddcb605a1f9a6e3cebc21d8dc2ffe72`
+> P-OBS-1 closure docs commit (historical, unchanged): `78f7ffe5c5b69f47af5c20ed8efd54410f35ee09`
 
 ---
+
+## P1 Offline / Sync Resiliency — Packet 5 / Post P-OBS-1 Closure — Post-R6 Seven-File Tracker Reconciliation (this pass)
+
+**Status: IMPLEMENTATION-COMPLETE, PENDING CODEX REVIEW** — docs-only, Docs-Only Exception applies; not yet committed/pushed.
+
+- [x] `P_OBS_1_STATUS: CLOSED` — permanent owner `docs/ops/packet-5-monitoring-runbook.md` §9 (pointer only, not paraphrased/duplicated here)
+- [x] Explicit accepted P-OBS-1/E2 owner list used (not "four artifacts" shorthand): `scripts/ops/e2-shift-close-document-lookup.sh`, `ops-tests/e2-shift-close-document-lookup.spec.ts`, `ops-tests/helpers/e2StubServer.ts`, `ops-tests/helpers/runE2Script.ts`, `vitest.ops.config.ts`, `package.json` (isolated `test:ops` entry), `docs/ops/packet-5-monitoring-runbook.md` (permanent owner)
+- [x] `npm run test:ops` isolation recorded — not part of `test:unit` or `test:rules`; tests not run this session
+- [x] R6 final result recorded — `PASS_WITH_NOTES`, 0 material findings, 2 notes, `COMPOSITE_R6_ARCHITECTURE_STATUS: COMPLETE`, `CURRENT_HEAD_COMPATIBILITY_STATUS: COMPATIBLE`, all thirteen R5 findings closed, R6-G14 accepted
+- [x] Current E2 supersession recorded (N-R6-01) — do not replay/overwrite the current E2 stage
+- [x] `PROV` recorded as first remaining implementation stage — **not authorized**
+- [x] `E-2` POSIX evidence recorded as `IDENTIFIED_BUT_HELD` — **not authorized**
+- [x] Broader Packet 5 recorded as **NOT CLOSED**
+
+**Next decision gate:** after successful Codex review and commit/push closure of this reconciliation, the next decision gate is Gemini consideration of a bounded PROV implementation. PROV is not currently authorized. E-2 POSIX evidence remains held. All prior prohibitions (deploy, runtime activation, callable invocation, production access, POSIX evidence, physical UAT, stash operations, broader Packet 5 closure) are preserved.
 
 ## P1 Offline / Sync Resiliency — Packet 5 / UI-B2 / Packet S — getShiftCloseCaseFigures
 

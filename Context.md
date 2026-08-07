@@ -1,20 +1,34 @@
 # Twinpet POS โ€” Project Context
 
-> Last reconciled: 2026-07-31
+> Last reconciled: 2026-08-07
 > Current repository HEAD: determined from live Git — run `git rev-parse HEAD`
-> Verified baseline entering this reconciliation: `c6bdbd00d01541201dbc53236b06080db1a148e4` (`docs(pos): reconcile packet s closure`)
+> Verified baseline entering this reconciliation: `78f7ffe5c5b69f47af5c20ed8efd54410f35ee09` (`docs(pos): close p-obs-1 process reconciliation`)
 > Packet S implementation commit (historical, unchanged): `e9363e35f5a79f8e21d5dafe1e70d8ff3f82559c` (`feat(pos): add shift close case figures callable`)
-> Packet S docs/tracker closure commit: `c6bdbd00d01541201dbc53236b06080db1a148e4`
+> Packet S docs/tracker closure commit (historical, unchanged): `c6bdbd00d01541201dbc53236b06080db1a148e4`
+> P-OBS-1 implementation commit (historical, unchanged): `da3a8d1c9ddcb605a1f9a6e3cebc21d8dc2ffe72`
+> P-OBS-1 closure docs commit (historical, unchanged): `78f7ffe5c5b69f47af5c20ed8efd54410f35ee09`
 
 ---
 
 ## Current Phase
 
-**P1 Offline / Sync Resiliency — Packet 5 / UI-B2 / Packet S — getShiftCloseCaseFigures: TECHNICALLY CLOSED WITH NONBLOCKING NOTES** — server-side shift-close case figures callable committed and fast-forward pushed at `e9363e3`; deployed live. UI-C docs reconciliation is **CLOSED** (committed at `5654362`). Packet S docs/tracker reconciliation is **CLOSED** (committed at `c6bdbd0`). **Broader Packet 5 is NOT CLOSED.** No active implementation packet is selected; passive natural-traffic observation remains authorized in parallel, read-only only, when a natural event exists. No agent-triggered activity is authorized. Await a later Gemini selection before any new planning or implementation gate.
+**P1 Offline / Sync Resiliency — Packet 5 / Post P-OBS-1 Closure / Post R6 Part C Review — Post-R6 Seven-File Tracker Reconciliation.** `P_OBS_1_STATUS: CLOSED` — permanent process/status owner is `docs/ops/packet-5-monitoring-runbook.md` §9 (pointer only; this file does not copy, paraphrase, or duplicate the runbook's process rulings). R6 Codex current-head re-review verdict: `PASS_WITH_NOTES` (0 material findings, 2 notes); `COMPOSITE_R6_ARCHITECTURE_STATUS: COMPLETE`; `CURRENT_HEAD_COMPATIBILITY_STATUS: COMPATIBLE`; all thirteen R5 findings closed; R6-G14 accepted. The accepted current E2/P-OBS-1 implementation supersedes historical E2 implementation detail (N-R6-01) — do not replay or overwrite the current E2 stage. `PROV` is the first remaining implementation stage and is **not authorized**. `E-2` real POSIX evidence is `IDENTIFIED_BUT_HELD`, **not authorized**. **Broader Packet 5 is NOT CLOSED.** No active implementation packet is selected; passive natural-traffic observation remains authorized in parallel, read-only only, when a natural event exists. No agent-triggered activity is authorized. Await a later Gemini selection before any new planning or implementation gate.
 
 Manual workflow remains active. `agentchattr` was not used as the executor for this phase.
 
-**Repository baseline:** branch `main`. For current repository state, use live Git: `git status --short --untracked-files=all`, `git diff --cached --name-status`, `git rev-parse "stash@{0}"`. The Packet S docs/tracker closure gate settled with a clean working tree, empty staged area, and unchanged stash (`stash@{0}` = `7d03cfec7ba52ff7e25b7e175ca190efc258d874` as of the verified baseline above).
+**Repository baseline:** branch `main`. For current repository state, use live Git: `git status --short --untracked-files=all`, `git diff --cached --name-status`, `git rev-parse "stash@{0}"`. This tracker reconciliation entered with a clean working tree, empty staged area, and unchanged stash (`stash@{0}` = `7d03cfec7ba52ff7e25b7e175ca190efc258d874` as of the verified baseline above).
+
+### P1 Packet 5 — Post-R6 Seven-File Tracker Reconciliation (this pass)
+
+- **Status:** docs-only, Docs-Only Exception applies; implementation-complete pending Codex review; not yet committed/pushed.
+- **P-OBS-1** — `P_OBS_1_STATUS: CLOSED`. Implementation commit `da3a8d1c9ddcb605a1f9a6e3cebc21d8dc2ffe72`; closure docs commit `78f7ffe5c5b69f47af5c20ed8efd54410f35ee09`. Permanent owner: `docs/ops/packet-5-monitoring-runbook.md` §9 — pointer only.
+- **Accepted P-OBS-1/E2 owners (explicit list):** `scripts/ops/e2-shift-close-document-lookup.sh`; `ops-tests/e2-shift-close-document-lookup.spec.ts`; `ops-tests/helpers/e2StubServer.ts`; `ops-tests/helpers/runE2Script.ts`; `vitest.ops.config.ts`; `package.json` (isolated `test:ops` entry); `docs/ops/packet-5-monitoring-runbook.md` (permanent process/status owner). `npm run test:ops` is isolated — not part of `test:unit` or `test:rules`. Tests were not run in this session.
+- **R6 final result:** `PASS_WITH_NOTES`; 0 material findings; 2 notes (N-R6-01 current E2 supersession, N-R6-02 unverified historical model metadata); `IMPLEMENTATION_ALLOWLIST_STATUS: READY_FOR_GEMINI_DECISION`; `IMPLEMENTATION_READY: YES` (architecture readiness only — not implementation authority).
+- **Current stage disposition:** `E2_VERIFY: IMPLEMENTED_AND_CLOSED_AT_CURRENT_HEAD`; `PROV: FIRST_REMAINING_IMPLEMENTATION_STAGE`, `PROV_IMPLEMENTATION_AUTHORIZED: NO`; `ACTIVE_IMPLEMENTATION_PACKET: NONE`.
+- **E-2 POSIX evidence gate:** `IDENTIFIED_BUT_HELD`, `AUTHORIZED: NO`. Blockers: real Linux/Darwin host; real `gcloud` authentication; production Firestore read access; separate Gemini/Owner authorization.
+- **Preserved holds:** PROV, other implementation, tests/builds/scripts, deploy, runtime activation, production access, POSIX evidence, physical UAT, stash operations, and broader Packet 5 closure all remain **NOT AUTHORIZED**.
+- **Carried notes (unresolved, not invented a resolution):** Fallback A missing-vs-denied ambiguity (A-1); live-lease reject-code reuse; manager `reasonCode` accepts the full frozen enum; the full P5-C/P5-D/P5-E pipeline has never processed a real shift close end-to-end; no final-settlement truth claim.
+- **Reports:** implementation report and conditional Codex review under `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\` — see `docs/reports/latest-report.md`.
 
 ### P1 Packet 5 / UI-B2 / Packet S — getShiftCloseCaseFigures (TECHNICALLY CLOSED WITH NONBLOCKING NOTES)
 
