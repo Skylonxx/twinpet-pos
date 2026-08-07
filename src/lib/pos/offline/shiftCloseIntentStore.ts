@@ -1,4 +1,5 @@
 import type {
+  CloseIntentErrorCode,
   CloseIntentResult,
   ShiftCloseIntentEntry,
   ShiftCloseIntentSnapshot,
@@ -6,15 +7,22 @@ import type {
 } from './shiftCloseIntentTypes';
 import { SHIFT_CLOSE_INTENT_STALE_AGE_MS } from './shiftCloseIntentTypes';
 
+// ── OBS-B0 compatibility floor marker (reader floor only; does not enable writes) ──
+
+export const SHIFT_CLOSE_INTENT_STORAGE_COMPAT_FLOOR = 1 as const;
+
 // ── Low-level KV store (modeled on saleIntentJournalStore.ts) ──────────────
 
 type ShiftCloseIntentStoreName = 'shiftCloseIntents';
 const SHIFT_CLOSE_INTENT_STORES: ShiftCloseIntentStoreName[] = ['shiftCloseIntents'];
 
+/** Object-store key: string shiftId entries, or array keys for pointer metadata. */
+type ShiftCloseIntentStoreKey = IDBValidKey;
+
 interface ShiftCloseIntentTxn {
-  get<T>(store: ShiftCloseIntentStoreName, key: string): Promise<T | undefined>;
+  get<T>(store: ShiftCloseIntentStoreName, key: ShiftCloseIntentStoreKey): Promise<T | undefined>;
   getAll<T>(store: ShiftCloseIntentStoreName): Promise<T[]>;
-  put(store: ShiftCloseIntentStoreName, key: string, value: unknown): Promise<void>;
+  put(store: ShiftCloseIntentStoreName, key: ShiftCloseIntentStoreKey, value: unknown): Promise<void>;
 }
 
 interface ShiftCloseIntentKvStore {
@@ -122,6 +130,18 @@ function createIndexedDbShiftCloseIntentStore(): ShiftCloseIntentKvStore {
   };
 }
 
+/** Encode IDBValidKey for Map storage while preserving string-before-array getAll order. */
+function encodeStoreKey(key: ShiftCloseIntentStoreKey): string {
+  if (typeof key === 'string') return `s:${key}`;
+  if (Array.isArray(key)) return `a:${JSON.stringify(key)}`;
+  throw new Error('unsupported shift-close-intent store key');
+}
+
+function decodeDumpKey(encoded: string): string {
+  if (encoded.startsWith('s:')) return encoded.slice(2);
+  return encoded;
+}
+
 export function createInMemoryShiftCloseIntentStore(): ShiftCloseIntentKvStore & {
   dump(): Record<ShiftCloseIntentStoreName, Record<string, unknown>>;
 } {
@@ -150,15 +170,22 @@ export function createInMemoryShiftCloseIntentStore(): ShiftCloseIntentKvStore &
       };
 
       const txn: ShiftCloseIntentTxn = {
-        async get<R>(store: ShiftCloseIntentStoreName, key: string): Promise<R | undefined> {
-          return clone(ensure(store).get(key)) as R | undefined;
+        async get<R>(store: ShiftCloseIntentStoreName, key: ShiftCloseIntentStoreKey): Promise<R | undefined> {
+          return clone(ensure(store).get(encodeStoreKey(key))) as R | undefined;
         },
         async getAll<R>(store: ShiftCloseIntentStoreName): Promise<R[]> {
-          return [...ensure(store).values()].map((v) => clone(v)) as R[];
+          // IndexedDB orders string keys before array keys; mirror that for parity.
+          const entries: unknown[] = [];
+          const pointers: unknown[] = [];
+          for (const [k, v] of ensure(store)) {
+            if (k.startsWith('s:')) entries.push(clone(v));
+            else pointers.push(clone(v));
+          }
+          return [...entries, ...pointers] as R[];
         },
         async put(store, key, value) {
           if (mode !== 'readwrite') throw new Error('put in readonly transaction');
-          ensure(store).set(key, clone(value));
+          ensure(store).set(encodeStoreKey(key), clone(value));
         },
       };
 
@@ -171,7 +198,10 @@ export function createInMemoryShiftCloseIntentStore(): ShiftCloseIntentKvStore &
 
     dump() {
       const out = {} as Record<ShiftCloseIntentStoreName, Record<string, unknown>>;
-      for (const s of SHIFT_CLOSE_INTENT_STORES) out[s] = Object.fromEntries(data[s]);
+      for (const s of SHIFT_CLOSE_INTENT_STORES) {
+        out[s] = {};
+        for (const [k, v] of data[s]) out[s][decodeDumpKey(k)] = v;
+      }
       return out;
     },
   };
@@ -206,6 +236,21 @@ const SNAPSHOT_FIELDS: (keyof ShiftCloseIntentSnapshot)[] = [
   'deviceId',
 ];
 
+const SNAPSHOT_STRING_FIELDS = ['shiftId', 'branchId', 'staffId', 'staffName', 'note'] as const;
+const SNAPSHOT_NUMBER_FIELDS = [
+  'startingCash',
+  'expectedCash',
+  'expectedQr',
+  'expectedKbank',
+  'expectedCard',
+  'expectedCredit',
+  'payInTotal',
+  'payOutTotal',
+  'totalBills',
+  'actualCashCount',
+  'variance',
+] as const;
+
 /** Field-wise equality over the frozen snapshot only (never status/timestamps). */
 export function snapshotsEqual(
   a: ShiftCloseIntentSnapshot,
@@ -227,6 +272,231 @@ export function isStaleClosePending(
   return nowMs - entry.closedAtLocal >= SHIFT_CLOSE_INTENT_STALE_AGE_MS;
 }
 
+// ── OBS-B0 classification / pointer / bounded-reader substrate ───────────
+
+export type LatestCloseIntentPointer = {
+  kind: 'latestCloseIntentByDevice';
+  version: 1;
+  deviceId: string;
+  shiftId: string;
+  closedAtLocal: number;
+};
+
+export type ListCloseIntentsCorruptionReason =
+  | 'unknown_record'
+  | 'malformed_pointer'
+  | 'malformed_entry';
+
+export type ExistingStorageFailure = {
+  ok: false;
+  code: CloseIntentErrorCode;
+  message?: string;
+};
+
+export type ListCloseIntentsResult =
+  | { ok: true; value: ShiftCloseIntentEntry[] }
+  | {
+      ok: false;
+      code: 'unreadable_record';
+      reason: ListCloseIntentsCorruptionReason;
+      unknownRecordCount: number;
+    }
+  | ExistingStorageFailure;
+
+export type BoundedCloseIntentUnreadableReason =
+  | 'pointer_invalid'
+  | 'pointer_version_unsupported'
+  | 'pointer_target_missing'
+  | 'pointer_device_mismatch'
+  | 'pointer_target_invalid'
+  | 'pointer_timestamp_invalid'
+  | 'storage_unavailable'
+  | 'device_identity_unavailable';
+
+export type LatestCloseIntentForDeviceResult =
+  | { status: 'ok'; entry: ShiftCloseIntentEntry }
+  | { status: 'none' }
+  | { status: 'unreadable'; reason: BoundedCloseIntentUnreadableReason };
+
+export function latestByDevicePointerKey(deviceId: string): IDBValidKey {
+  return ['__twinpet_meta__', 'latestCloseIntentByDevice', deviceId];
+}
+
+function isPlainRecord(v: unknown): v is Record<string, unknown> {
+  if (v === null || typeof v !== 'object' || Array.isArray(v)) return false;
+  const p = Object.getPrototypeOf(v);
+  return p === Object.prototype || p === null;
+}
+
+function isValidLocalTimestamp(v: unknown): v is number {
+  return Number.isSafeInteger(v) && (v as number) >= 0;
+}
+
+function isFiniteNumber(v: unknown): v is number {
+  return typeof v === 'number' && Number.isFinite(v);
+}
+
+/** Structural discriminator only — never sufficient to treat as valid metadata. */
+export function isPointerShaped(v: unknown): boolean {
+  return isPlainRecord(v) && v.kind === 'latestCloseIntentByDevice';
+}
+
+function isValidV1Pointer(v: unknown): v is LatestCloseIntentPointer {
+  if (!isPointerShaped(v)) return false;
+  const r = v as Record<string, unknown>;
+  return (
+    r.version === 1 &&
+    typeof r.deviceId === 'string' &&
+    r.deviceId.length > 0 &&
+    typeof r.shiftId === 'string' &&
+    r.shiftId.length > 0 &&
+    isValidLocalTimestamp(r.closedAtLocal)
+  );
+}
+
+function isCloseIntentEntry(v: unknown): v is ShiftCloseIntentEntry {
+  if (!isPlainRecord(v)) return false;
+  if ('kind' in v) return false;
+
+  for (const field of SNAPSHOT_STRING_FIELDS) {
+    if (typeof v[field] !== 'string') return false;
+  }
+  if ((v.shiftId as string).length === 0) return false;
+
+  for (const field of SNAPSHOT_NUMBER_FIELDS) {
+    if (!isFiniteNumber(v[field])) return false;
+  }
+
+  if (!(typeof v.deviceId === 'string' || v.deviceId === null)) return false;
+  if (!isValidLocalTimestamp(v.closedAtLocal)) return false;
+
+  if (
+    v.status !== 'local_closed_pending' &&
+    v.status !== 'synced' &&
+    v.status !== 'rejected_manual_attention'
+  ) {
+    return false;
+  }
+  if (!isValidLocalTimestamp(v.createdAtLocal)) return false;
+  if (!isValidLocalTimestamp(v.updatedAtLocal)) return false;
+  if (!(typeof v.lastErrorMessage === 'string' || v.lastErrorMessage === null)) return false;
+
+  return true;
+}
+
+function classifyListRecords(records: unknown[]): ListCloseIntentsResult {
+  const entries: ShiftCloseIntentEntry[] = [];
+  let unknownRecordCount = 0;
+  let reason: ListCloseIntentsCorruptionReason | null = null;
+
+  const markCorrupt = (next: ListCloseIntentsCorruptionReason) => {
+    unknownRecordCount += 1;
+    if (!reason) reason = next;
+  };
+
+  for (const raw of records) {
+    if (isPointerShaped(raw)) {
+      if (isValidV1Pointer(raw)) continue;
+      markCorrupt('malformed_pointer');
+      continue;
+    }
+    if (isPlainRecord(raw) && !('kind' in raw)) {
+      if (isCloseIntentEntry(raw)) {
+        entries.push(raw);
+        continue;
+      }
+      markCorrupt('malformed_entry');
+      continue;
+    }
+    markCorrupt('unknown_record');
+  }
+
+  if (reason) {
+    return {
+      ok: false,
+      code: 'unreadable_record',
+      reason,
+      unknownRecordCount,
+    };
+  }
+  return { ok: true, value: entries };
+}
+
+function usableDeviceId(deviceId: unknown): deviceId is string {
+  return typeof deviceId === 'string' && deviceId.length > 0;
+}
+
+async function readLatestCloseIntentForDeviceInTxn(
+  txn: ShiftCloseIntentTxn,
+  deviceId: string,
+): Promise<LatestCloseIntentForDeviceResult> {
+  const pointerRaw = await txn.get<unknown>(
+    'shiftCloseIntents',
+    latestByDevicePointerKey(deviceId),
+  );
+
+  if (pointerRaw === undefined) return { status: 'none' };
+
+  if (!isPointerShaped(pointerRaw) || !isPlainRecord(pointerRaw)) {
+    return { status: 'unreadable', reason: 'pointer_invalid' };
+  }
+
+  const version = pointerRaw.version;
+  if (typeof version !== 'number' || !Number.isSafeInteger(version)) {
+    return { status: 'unreadable', reason: 'pointer_invalid' };
+  }
+  if (version !== 1) {
+    return { status: 'unreadable', reason: 'pointer_version_unsupported' };
+  }
+
+  if (!isValidV1Pointer(pointerRaw)) {
+    return { status: 'unreadable', reason: 'pointer_invalid' };
+  }
+
+  if (pointerRaw.deviceId !== deviceId) {
+    return { status: 'unreadable', reason: 'pointer_device_mismatch' };
+  }
+
+  const targetRaw = await txn.get<unknown>('shiftCloseIntents', pointerRaw.shiftId);
+  if (targetRaw === undefined) {
+    return { status: 'unreadable', reason: 'pointer_target_missing' };
+  }
+  if (!isCloseIntentEntry(targetRaw)) {
+    return { status: 'unreadable', reason: 'pointer_target_invalid' };
+  }
+
+  if (pointerRaw.shiftId !== targetRaw.shiftId || pointerRaw.deviceId !== targetRaw.deviceId) {
+    return { status: 'unreadable', reason: 'pointer_device_mismatch' };
+  }
+  if (pointerRaw.closedAtLocal !== targetRaw.closedAtLocal) {
+    return { status: 'unreadable', reason: 'pointer_timestamp_invalid' };
+  }
+
+  return { status: 'ok', entry: targetRaw };
+}
+
+/**
+ * OBS-B0 bounded reader substrate — max two record reads, no enumeration,
+ * no write/read-repair, and not wired into production callers in this stage.
+ */
+export async function getLatestCloseIntentForDevice(
+  deviceId: string,
+  deps?: ShiftCloseIntentJournalDeps,
+): Promise<LatestCloseIntentForDeviceResult> {
+  if (!usableDeviceId(deviceId)) {
+    return { status: 'unreadable', reason: 'device_identity_unavailable' };
+  }
+
+  const store = deps?.store ?? createIndexedDbShiftCloseIntentStore();
+  try {
+    return await store.transact(['shiftCloseIntents'], 'readonly', (txn) =>
+      readLatestCloseIntentForDeviceInTxn(txn, deviceId),
+    );
+  } catch {
+    return { status: 'unreadable', reason: 'storage_unavailable' };
+  }
+}
+
 // ── Public journal API ──────────────────────────────────────────────────
 
 export type ShiftCloseIntentJournal = {
@@ -234,7 +504,7 @@ export type ShiftCloseIntentJournal = {
     snapshot: ShiftCloseIntentSnapshot,
   ) => Promise<CloseIntentResult<ShiftCloseIntentEntry>>;
   getCloseIntent: (shiftId: string) => Promise<CloseIntentResult<ShiftCloseIntentEntry | undefined>>;
-  listCloseIntents: () => Promise<CloseIntentResult<ShiftCloseIntentEntry[]>>;
+  listCloseIntents: () => Promise<ListCloseIntentsResult>;
   markSynced: (shiftId: string) => Promise<CloseIntentResult<ShiftCloseIntentEntry>>;
   markRejectedManualAttention: (
     shiftId: string,
@@ -282,6 +552,22 @@ async function runStore<T>(
     if (isQuotaError(err)) return quota<T>();
     if (err instanceof Error && err.message === 'IndexedDB unavailable') return unavailable<T>();
     return txFailed<T>(err instanceof Error ? err.message : String(err));
+  }
+}
+
+async function runListStore(
+  store: ShiftCloseIntentKvStore | undefined,
+  fn: (store: ShiftCloseIntentKvStore) => Promise<ListCloseIntentsResult>,
+): Promise<ListCloseIntentsResult> {
+  if (!store) return unavailable<ShiftCloseIntentEntry[]>();
+  try {
+    return await fn(store);
+  } catch (err) {
+    if (isQuotaError(err)) return quota<ShiftCloseIntentEntry[]>();
+    if (err instanceof Error && err.message === 'IndexedDB unavailable') {
+      return unavailable<ShiftCloseIntentEntry[]>();
+    }
+    return txFailed<ShiftCloseIntentEntry[]>(err instanceof Error ? err.message : String(err));
   }
 }
 
@@ -343,11 +629,11 @@ function buildJournalApi(store: ShiftCloseIntentKvStore, now: () => number): Shi
       }),
 
     listCloseIntents: () =>
-      runStore(store, async (s) => {
-        const value = await s.transact(['shiftCloseIntents'], 'readonly', async (txn) =>
-          txn.getAll<ShiftCloseIntentEntry>('shiftCloseIntents'),
+      runListStore(store, async (s) => {
+        const raw = await s.transact(['shiftCloseIntents'], 'readonly', async (txn) =>
+          txn.getAll<unknown>('shiftCloseIntents'),
         );
-        return { ok: true, value };
+        return classifyListRecords(raw);
       }),
 
     markSynced: (shiftId) => markStatus(shiftId, 'synced', null),
