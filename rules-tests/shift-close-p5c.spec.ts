@@ -1168,6 +1168,150 @@ describe('shifts W3 — exact one-way open→closed transition', () => {
   });
 });
 
+// ─────────────────────────────────────────────────────────────────────────
+// OBS-B1A — optional closeCorrelationId on W3 only
+// Truth table: absent→ALLOW, valid lowercase UUID v4→ALLOW,
+// present-null→DENY, malformed→DENY. Required-key set unchanged.
+// R-1..R-7 + W0/W1/W2/W4 immutability regressions.
+// ─────────────────────────────────────────────────────────────────────────
+
+const VALID_CLOSE_CORRELATION_ID = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+
+describe('OBS-B1A — optional closeCorrelationId (W3 compatibility gate)', () => {
+  // R-1: absent optional key → ALLOW (existing historical close shape).
+  it('R-1 ALLOWED: close omits closeCorrelationId entirely (absent → ALLOW)', async () => {
+    await seedOpenShift('obs-r1');
+    const db = testEnv.authenticatedContext('staff1', staff()).firestore();
+    await assertSucceeds(updateDoc(doc(db, 'shifts', 'obs-r1'), closePayload()));
+  });
+
+  // R-2: valid lowercase RFC-4122 UUID v4 → ALLOW.
+  it('R-2 ALLOWED: close with valid lowercase UUID v4 closeCorrelationId', async () => {
+    await seedOpenShift('obs-r2');
+    const db = testEnv.authenticatedContext('staff1', staff()).firestore();
+    await assertSucceeds(
+      updateDoc(doc(db, 'shifts', 'obs-r2'), closePayload({ closeCorrelationId: VALID_CLOSE_CORRELATION_ID })),
+    );
+  });
+
+  // R-3: present null → DENY (must NOT be treated as absence).
+  it('R-3 DENIED: close with present-null closeCorrelationId', async () => {
+    await seedOpenShift('obs-r3');
+    const db = testEnv.authenticatedContext('staff1', staff()).firestore();
+    await assertFails(updateDoc(doc(db, 'shifts', 'obs-r3'), closePayload({ closeCorrelationId: null })));
+  });
+
+  // R-4: malformed matrix → DENY.
+  describe('R-4 DENIED: malformed closeCorrelationId', () => {
+    it('wrong length', async () => {
+      await seedOpenShift('obs-r4a');
+      const db = testEnv.authenticatedContext('staff1', staff()).firestore();
+      await assertFails(
+        updateDoc(doc(db, 'shifts', 'obs-r4a'), closePayload({ closeCorrelationId: 'aaaaaaaa-bbbb-4ccc-8ddd' })),
+      );
+    });
+
+    it('uppercase (near-match reject — regex accept/reject proven)', async () => {
+      await seedOpenShift('obs-r4b');
+      const db = testEnv.authenticatedContext('staff1', staff()).firestore();
+      await assertFails(
+        updateDoc(
+          doc(db, 'shifts', 'obs-r4b'),
+          closePayload({ closeCorrelationId: 'AAAAAAAA-BBBB-4CCC-8DDD-EEEEEEEEEEEE' }),
+        ),
+      );
+    });
+
+    it('wrong version nibble (not 4)', async () => {
+      await seedOpenShift('obs-r4c');
+      const db = testEnv.authenticatedContext('staff1', staff()).firestore();
+      await assertFails(
+        updateDoc(
+          doc(db, 'shifts', 'obs-r4c'),
+          closePayload({ closeCorrelationId: 'aaaaaaaa-bbbb-5ccc-8ddd-eeeeeeeeeeee' }),
+        ),
+      );
+    });
+
+    it('wrong variant nibble (not [89ab])', async () => {
+      await seedOpenShift('obs-r4d');
+      const db = testEnv.authenticatedContext('staff1', staff()).firestore();
+      await assertFails(
+        updateDoc(
+          doc(db, 'shifts', 'obs-r4d'),
+          closePayload({ closeCorrelationId: 'aaaaaaaa-bbbb-4ccc-cddd-eeeeeeeeeeee' }),
+        ),
+      );
+    });
+
+    it('empty string', async () => {
+      await seedOpenShift('obs-r4e');
+      const db = testEnv.authenticatedContext('staff1', staff()).firestore();
+      await assertFails(updateDoc(doc(db, 'shifts', 'obs-r4e'), closePayload({ closeCorrelationId: '' })));
+    });
+
+    it('non-string (number)', async () => {
+      await seedOpenShift('obs-r4f');
+      const db = testEnv.authenticatedContext('staff1', staff()).firestore();
+      await assertFails(updateDoc(doc(db, 'shifts', 'obs-r4f'), closePayload({ closeCorrelationId: 123 })));
+    });
+  });
+
+  // R-5: historical open shift (never had closeCorrelationId) can still close.
+  it('R-5 ALLOWED: historical open shift without closeCorrelationId still closes', async () => {
+    await seedOpenShift('obs-r5'); // seed has no closeCorrelationId field
+    const db = testEnv.authenticatedContext('staff1', staff()).firestore();
+    const payload = closePayload();
+    if ('closeCorrelationId' in payload) {
+      throw new Error('R-5 fixture must omit closeCorrelationId');
+    }
+    await assertSucceeds(updateDoc(doc(db, 'shifts', 'obs-r5'), payload));
+  });
+
+  // R-6: adding closeCorrelationId does not relax unrelated W3 fields.
+  it('R-6 DENIED: valid closeCorrelationId PLUS unrelated extra affected key still denied', async () => {
+    await seedOpenShift('obs-r6');
+    const db = testEnv.authenticatedContext('staff1', staff()).firestore();
+    await assertFails(
+      updateDoc(
+        doc(db, 'shifts', 'obs-r6'),
+        closePayload({ closeCorrelationId: VALID_CLOSE_CORRELATION_ID, extraField: 'x' }),
+      ),
+    );
+  });
+
+  // W0/W1/W2 must not introduce closeCorrelationId.
+  it('DENIED (W0): open create cannot include closeCorrelationId', async () => {
+    const db = testEnv.authenticatedContext('staff1', staff()).firestore();
+    await assertFails(
+      setDoc(doc(db, 'shifts', 'obs-w0'), w0Payload('obs-w0', { closeCorrelationId: VALID_CLOSE_CORRELATION_ID })),
+    );
+  });
+
+  it('DENIED (W1): cash append cannot add closeCorrelationId', async () => {
+    await seedOpenShift('obs-w1');
+    const db = testEnv.authenticatedContext('staff1', staff()).firestore();
+    await assertFails(
+      updateDoc(doc(db, 'shifts', 'obs-w1'), {
+        cashEntries: [cashEntry()],
+        updatedAt: serverTimestamp(),
+        closeCorrelationId: VALID_CLOSE_CORRELATION_ID,
+      }),
+    );
+  });
+
+  it('DENIED (W2): credit-debt receipt cannot add closeCorrelationId', async () => {
+    await seedOpenShift('obs-w2');
+    const db = testEnv.authenticatedContext('staff1', staff()).firestore();
+    await assertFails(
+      updateDoc(doc(db, 'shifts', 'obs-w2'), {
+        expectedCash: 500,
+        closeCorrelationId: VALID_CLOSE_CORRELATION_ID,
+      }),
+    );
+  });
+});
+
 describe('shifts W4 — Variant C sole post-close mutation', () => {
   it('ALLOWED: exact single-field syncState pending → synced', async () => {
     await seedClosedShift('s1');
@@ -1191,6 +1335,44 @@ describe('shifts W4 — Variant C sole post-close mutation', () => {
     await seedOpenShift('s4');
     const db = testEnv.authenticatedContext('staff1', staff()).firestore();
     await assertFails(updateDoc(doc(db, 'shifts', 's4'), { syncState: 'pending' }));
+  });
+
+  // R-7: W4 immutability — cannot add or change closeCorrelationId after close;
+  // existing syncState-only behavior preserved (closeHash semantics unchanged —
+  // no Rules path mutates closeHash; W4 remains syncState-only).
+  it('R-7 DENIED: W4 cannot ADD closeCorrelationId alongside syncState', async () => {
+    await seedClosedShift('obs-r7a');
+    const db = testEnv.authenticatedContext('staff1', staff()).firestore();
+    await assertFails(
+      updateDoc(doc(db, 'shifts', 'obs-r7a'), {
+        syncState: 'synced',
+        closeCorrelationId: VALID_CLOSE_CORRELATION_ID,
+      }),
+    );
+  });
+
+  it('R-7 DENIED: W4 cannot ADD closeCorrelationId alone after close', async () => {
+    await seedClosedShift('obs-r7b');
+    const db = testEnv.authenticatedContext('staff1', staff()).firestore();
+    await assertFails(
+      updateDoc(doc(db, 'shifts', 'obs-r7b'), { closeCorrelationId: VALID_CLOSE_CORRELATION_ID }),
+    );
+  });
+
+  it('R-7 DENIED: W4 cannot CHANGE an existing closeCorrelationId after close', async () => {
+    await seedClosedShift('obs-r7c', { closeCorrelationId: VALID_CLOSE_CORRELATION_ID });
+    const db = testEnv.authenticatedContext('staff1', staff()).firestore();
+    await assertFails(
+      updateDoc(doc(db, 'shifts', 'obs-r7c'), {
+        closeCorrelationId: 'bbbbbbbb-cccc-4ddd-8eee-ffffffffffff',
+      }),
+    );
+  });
+
+  it('R-7 ALLOWED: W4 syncState pending→synced still works when closed doc already has closeCorrelationId', async () => {
+    await seedClosedShift('obs-r7d', { closeCorrelationId: VALID_CLOSE_CORRELATION_ID });
+    const db = testEnv.authenticatedContext('staff1', staff()).firestore();
+    await assertSucceeds(updateDoc(doc(db, 'shifts', 'obs-r7d'), { syncState: 'synced' }));
   });
 });
 

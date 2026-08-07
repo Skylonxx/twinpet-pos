@@ -256,22 +256,29 @@ service cloud.firestore {
     }
 
     // W3 — exact one-way open→closed transition (closeShift()'s exact 16-field
-    // write, shiftService.ts:400-422). `closedAtLocal` is denied by construction
-    // (not in the allowlist); identity/open-time fields are immutable.
+    // write, shiftService.ts:400-422), plus OBS-B1A optional closeCorrelationId.
+    // `closedAtLocal` is denied by construction (not in the allowlist);
+    // identity/open-time fields are immutable.
     //
     // What this rule PROVES vs. what it can NOT (corrected wording):
-    //  • `diff().affectedKeys().hasOnly([16])` constrains WHICH stored fields may
-    //    change to AT MOST the 16 close-write keys. It is NOT `hasAll`, and it
-    //    does NOT prove the client re-submitted all 16 in the update write mask.
+    //  • `diff().affectedKeys().hasOnly([16 + optional closeCorrelationId])`
+    //    constrains WHICH stored fields may change to AT MOST the close-write
+    //    keys. It is NOT `hasAll`, and it does NOT prove the client re-submitted
+    //    all 16 in the update write mask.
     //  • `request.resource.data.keys().hasAll([22 required final fields])` — on
     //    the FINAL merged document, NOT on affectedKeys — proves the closed
     //    document CONTAINS every required field, so a close that deletes/omits a
     //    required field from the final doc is denied. (`hasAll` on the plain
     //    `.keys()` map is safe; only `hasAll` on a `diff().affectedKeys()` result
     //    triggers the spurious emulator evaluation error, so it is avoided.)
+    //    closeCorrelationId is intentionally NOT in this required set (absent
+    //    remains valid for historical clients and UUID-less future clients).
     //  • The per-field predicates below validate the final closed-document values
     //    (finite money envelope, int/bounded totalBills, exact closedAt/offline/
     //    sync/deviceId, identity/open-time immutability).
+    //  • Optional closeCorrelationId: absent → ALLOW; valid lowercase RFC-4122
+    //    UUID v4 → ALLOW; present null / malformed → DENY. Presence uses `in`
+    //    (not `.get(_, null) == null`) so absent and present-null differ.
     //  • UNAVOIDABLE update-mask residual: a pre-existing, already-valid close
     //    total (e.g. an `expectedCash` set earlier by W2) may be OMITTED from the
     //    update and the close still passes, because the final stored value stays
@@ -280,13 +287,24 @@ service cloud.firestore {
     //    authorized writer/schema marker, NOT `hasAll(affectedKeys)` (which is
     //    semantically wrong here — unchanged submitted values are not affected
     //    keys — and emulator-problematic).
+    function isValidOptionalCloseCorrelationId() {
+      return !('closeCorrelationId' in request.resource.data)
+        || (
+          request.resource.data.closeCorrelationId is string
+          && request.resource.data.closeCorrelationId.size() == 36
+          && request.resource.data.closeCorrelationId
+               .matches('^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
+        );
+    }
+
     function isW3ShiftClose() {
       return resource.data.status == 'open'
         && request.resource.data.status == 'closed'
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'status','closedAt','actualCashCount','variance','note',
           'expectedCash','expectedQr','expectedKbank','expectedCard','expectedCredit',
-          'totalBills','payInTotal','payOutTotal','closedOffline','syncState','deviceId'
+          'totalBills','payInTotal','payOutTotal','closedOffline','syncState','deviceId',
+          'closeCorrelationId'
         ])
         && request.resource.data.closedAt == request.time
         && request.resource.data.closedOffline == true
@@ -305,6 +323,7 @@ service cloud.firestore {
         && request.resource.data.totalBills >= 0
         && request.resource.data.totalBills <= shiftMaxTotalBills()
         && request.resource.data.deviceId is string
+        && isValidOptionalCloseCorrelationId()
         // Final-state finite check on startingCash (in ADDITION to the
         // immutability check below), so a malformed legacy/open doc cannot close
         // into the P5-C-1 structural-refusal blind spot.
@@ -313,6 +332,7 @@ service cloud.firestore {
         // field (plain `.keys()`, not affectedKeys). Denies a close that deletes
         // a required field. Extra fields (e.g. cashEntries/updatedAt from W1) are
         // permitted — hasAll is a minimum-presence, not an exact-set, check.
+        // closeCorrelationId is NOT required (OBS-B1A optional compatibility).
         && request.resource.data.keys().hasAll([
           'id','branchId','staffId','staffName','status','openedAt','closedAt',
           'startingCash','actualCashCount','expectedCash','expectedQr','expectedKbank',
