@@ -1,8 +1,8 @@
 import type {
   CloseIntentErrorCode,
   CloseIntentResult,
+  ShiftCloseIntentBusinessSnapshot,
   ShiftCloseIntentEntry,
-  ShiftCloseIntentSnapshot,
   ShiftCloseIntentStatus,
 } from './shiftCloseIntentTypes';
 import { SHIFT_CLOSE_INTENT_STALE_AGE_MS } from './shiftCloseIntentTypes';
@@ -210,12 +210,14 @@ export function createInMemoryShiftCloseIntentStore(): ShiftCloseIntentKvStore &
 // ── Pure helpers ─────────────────────────────────────────────────────────
 
 /**
- * Explicit snapshot field list — deliberately NOT `Object.keys(a)`, because
- * callers may pass a `ShiftCloseIntentEntry` (a snapshot plus `status`/
- * timestamp fields) as `a`; comparing by the full object's own keys would
- * spuriously fail on those extra fields.
+ * Explicit caller-owned business field list (OBS-B1B: exactly 17).
+ * Deliberately NOT `Object.keys(a)`, because callers may pass a
+ * `ShiftCloseIntentEntry` (business fields plus generated/status/timestamp
+ * fields) as `a`; comparing by the full object's own keys would spuriously
+ * fail on those extra fields. Generated metadata (`closedAtLocal`,
+ * `closeCorrelationId`) is excluded from business equality.
  */
-const SNAPSHOT_FIELDS: (keyof ShiftCloseIntentSnapshot)[] = [
+const BUSINESS_SNAPSHOT_FIELDS: (keyof ShiftCloseIntentBusinessSnapshot)[] = [
   'shiftId',
   'branchId',
   'staffId',
@@ -232,7 +234,6 @@ const SNAPSHOT_FIELDS: (keyof ShiftCloseIntentSnapshot)[] = [
   'actualCashCount',
   'variance',
   'note',
-  'closedAtLocal',
   'deviceId',
 ];
 
@@ -251,12 +252,57 @@ const SNAPSHOT_NUMBER_FIELDS = [
   'variance',
 ] as const;
 
-/** Field-wise equality over the frozen snapshot only (never status/timestamps). */
+/** Lowercase RFC-4122 version-4 UUID (variant 8/9/a/b). */
+const LOWERCASE_UUID_V4_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+export function isValidLowercaseUuidV4(value: unknown): value is string {
+  return typeof value === 'string' && LOWERCASE_UUID_V4_RE.test(value);
+}
+
+function uuidV4FromSecureRandomBytes(bytes: Uint8Array): string {
+  bytes[6] = (bytes[6]! & 0x0f) | 0x40;
+  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+  const hex: string[] = [];
+  for (let i = 0; i < 16; i += 1) {
+    hex.push(bytes[i]!.toString(16).padStart(2, '0'));
+  }
+  return (
+    `${hex[0]}${hex[1]}${hex[2]}${hex[3]}-` +
+    `${hex[4]}${hex[5]}-` +
+    `${hex[6]}${hex[7]}-` +
+    `${hex[8]}${hex[9]}-` +
+    `${hex[10]}${hex[11]}${hex[12]}${hex[13]}${hex[14]}${hex[15]}`
+  );
+}
+
+/**
+ * OBS-B1B UUID contract: randomUUID → getRandomValues → null.
+ * Never uses Math.random; never throws solely because crypto is unavailable.
+ */
+export function generateShiftCloseCorrelationId(): string | null {
+  const cryptoObj = globalThis.crypto as Crypto | undefined;
+  if (typeof cryptoObj?.randomUUID === 'function') {
+    const id = cryptoObj.randomUUID();
+    return typeof id === 'string' ? id.toLowerCase() : null;
+  }
+  if (typeof cryptoObj?.getRandomValues === 'function') {
+    const bytes = new Uint8Array(16);
+    cryptoObj.getRandomValues(bytes);
+    return uuidV4FromSecureRandomBytes(bytes);
+  }
+  return null;
+}
+
+/**
+ * Field-wise equality over the 17 caller-owned business fields only
+ * (never status/timestamps/generated metadata).
+ */
 export function snapshotsEqual(
-  a: ShiftCloseIntentSnapshot,
-  b: ShiftCloseIntentSnapshot,
+  a: ShiftCloseIntentBusinessSnapshot,
+  b: ShiftCloseIntentBusinessSnapshot,
 ): boolean {
-  return SNAPSHOT_FIELDS.every((k) => a[k] === b[k]);
+  return BUSINESS_SNAPSHOT_FIELDS.every((k) => a[k] === b[k]);
 }
 
 /**
@@ -370,6 +416,13 @@ function isCloseIntentEntry(v: unknown): v is ShiftCloseIntentEntry {
   if (!(typeof v.deviceId === 'string' || v.deviceId === null)) return false;
   if (!isValidLocalTimestamp(v.closedAtLocal)) return false;
 
+  // Historical physical absence of closeCorrelationId is valid (read-normalizes to null).
+  // Present null is valid. Present non-null must be a lowercase v4 UUID — never coerced.
+  if ('closeCorrelationId' in v) {
+    const corr = v.closeCorrelationId;
+    if (!(corr === null || isValidLowercaseUuidV4(corr))) return false;
+  }
+
   if (
     v.status !== 'local_closed_pending' &&
     v.status !== 'synced' &&
@@ -382,6 +435,18 @@ function isCloseIntentEntry(v: unknown): v is ShiftCloseIntentEntry {
   if (!(typeof v.lastErrorMessage === 'string' || v.lastErrorMessage === null)) return false;
 
   return true;
+}
+
+/**
+ * Read-view normalization only: historical physical absence of
+ * `closeCorrelationId` becomes `null`. Never write this back.
+ */
+function normalizeCloseIntentEntry(entry: Record<string, unknown>): ShiftCloseIntentEntry {
+  const closeCorrelationId =
+    'closeCorrelationId' in entry
+      ? (entry.closeCorrelationId as string | null)
+      : null;
+  return { ...(entry as unknown as ShiftCloseIntentEntry), closeCorrelationId };
 }
 
 function classifyListRecords(records: unknown[]): ListCloseIntentsResult {
@@ -402,7 +467,7 @@ function classifyListRecords(records: unknown[]): ListCloseIntentsResult {
     }
     if (isPlainRecord(raw) && !('kind' in raw)) {
       if (isCloseIntentEntry(raw)) {
-        entries.push(raw);
+        entries.push(normalizeCloseIntentEntry(raw));
         continue;
       }
       markCorrupt('malformed_entry');
@@ -465,14 +530,16 @@ async function readLatestCloseIntentForDeviceInTxn(
     return { status: 'unreadable', reason: 'pointer_target_invalid' };
   }
 
-  if (pointerRaw.shiftId !== targetRaw.shiftId || pointerRaw.deviceId !== targetRaw.deviceId) {
+  const target = normalizeCloseIntentEntry(targetRaw as unknown as Record<string, unknown>);
+
+  if (pointerRaw.shiftId !== target.shiftId || pointerRaw.deviceId !== target.deviceId) {
     return { status: 'unreadable', reason: 'pointer_device_mismatch' };
   }
-  if (pointerRaw.closedAtLocal !== targetRaw.closedAtLocal) {
+  if (pointerRaw.closedAtLocal !== target.closedAtLocal) {
     return { status: 'unreadable', reason: 'pointer_timestamp_invalid' };
   }
 
-  return { status: 'ok', entry: targetRaw };
+  return { status: 'ok', entry: target };
 }
 
 /**
@@ -501,7 +568,7 @@ export async function getLatestCloseIntentForDevice(
 
 export type ShiftCloseIntentJournal = {
   upsertCloseIntent: (
-    snapshot: ShiftCloseIntentSnapshot,
+    snapshot: ShiftCloseIntentBusinessSnapshot,
   ) => Promise<CloseIntentResult<ShiftCloseIntentEntry>>;
   getCloseIntent: (shiftId: string) => Promise<CloseIntentResult<ShiftCloseIntentEntry | undefined>>;
   listCloseIntents: () => Promise<ListCloseIntentsResult>;
@@ -515,6 +582,8 @@ export type ShiftCloseIntentJournal = {
 export type ShiftCloseIntentJournalDeps = {
   store?: ShiftCloseIntentKvStore;
   now?: () => number;
+  /** Injectable for deterministic tests; production uses {@link generateShiftCloseCorrelationId}. */
+  generateCloseCorrelationId?: () => string | null;
 };
 
 function defaultNow(): number {
@@ -571,7 +640,11 @@ async function runListStore(
   }
 }
 
-function buildJournalApi(store: ShiftCloseIntentKvStore, now: () => number): ShiftCloseIntentJournal {
+function buildJournalApi(
+  store: ShiftCloseIntentKvStore,
+  now: () => number,
+  generateCloseCorrelationId: () => string | null,
+): ShiftCloseIntentJournal {
   const markStatus = (
     shiftId: string,
     status: ShiftCloseIntentStatus,
@@ -579,17 +652,29 @@ function buildJournalApi(store: ShiftCloseIntentKvStore, now: () => number): Shi
   ): Promise<CloseIntentResult<ShiftCloseIntentEntry>> =>
     runStore(store, async (s) =>
       s.transact(['shiftCloseIntents'], 'readwrite', async (txn) => {
-        const existing = await txn.get<ShiftCloseIntentEntry>('shiftCloseIntents', shiftId);
-        if (!existing) return notFound<ShiftCloseIntentEntry>();
+        const existingRaw = await txn.get<Record<string, unknown>>('shiftCloseIntents', shiftId);
+        if (!existingRaw) return notFound<ShiftCloseIntentEntry>();
+        // Fail closed on malformed-present correlation (and any other invalid entry).
+        // Historical physical absence of closeCorrelationId remains valid and is not backfilled.
+        if (!isCloseIntentEntry(existingRaw)) {
+          return conflict<ShiftCloseIntentEntry>(
+            `Stored close-intent for shift "${shiftId}" is unreadable — status not updated.`,
+          );
+        }
         const nowMs = now();
-        const next: ShiftCloseIntentEntry = {
-          ...existing,
+        // Preserve physical generated metadata as stored — do not mint, backfill,
+        // clear, or write a read-normalized null solely because the key was absent.
+        const next = {
+          ...existingRaw,
           status,
           lastErrorMessage,
           updatedAtLocal: nowMs,
         };
         await txn.put('shiftCloseIntents', shiftId, next);
-        return { ok: true, value: next };
+        return {
+          ok: true,
+          value: normalizeCloseIntentEntry(next),
+        };
       }),
     );
 
@@ -597,19 +682,35 @@ function buildJournalApi(store: ShiftCloseIntentKvStore, now: () => number): Shi
     upsertCloseIntent: (snapshot) =>
       runStore(store, async (s) =>
         s.transact(['shiftCloseIntents'], 'readwrite', async (txn) => {
-          const existing = await txn.get<ShiftCloseIntentEntry>('shiftCloseIntents', snapshot.shiftId);
-          if (existing) {
+          const existingRaw = await txn.get<Record<string, unknown>>(
+            'shiftCloseIntents',
+            snapshot.shiftId,
+          );
+          if (existingRaw && isCloseIntentEntry(existingRaw)) {
+            const existing = normalizeCloseIntentEntry(existingRaw);
             if (snapshotsEqual(existing, snapshot)) {
-              // Idempotent: identical retry (e.g. double-click) is a no-op success.
+              // Idempotent equal-retry: reuse persisted generated metadata; no put.
               return { ok: true, value: existing };
             }
             return conflict<ShiftCloseIntentEntry>(
               `A different close-intent already exists locally for shift "${snapshot.shiftId}" — not overwritten.`,
             );
           }
+          if (existingRaw) {
+            // Unreadable/malformed existing record — do not overwrite.
+            return conflict<ShiftCloseIntentEntry>(
+              `A different close-intent already exists locally for shift "${snapshot.shiftId}" — not overwritten.`,
+            );
+          }
+          // Generate metadata only on the successful initial-create branch,
+          // inside this existing IndexedDB readwrite transaction.
           const nowMs = now();
+          const closedAtLocal = nowMs;
+          const closeCorrelationId = generateCloseCorrelationId();
           const entry: ShiftCloseIntentEntry = {
             ...snapshot,
+            closedAtLocal,
+            closeCorrelationId,
             status: 'local_closed_pending',
             createdAtLocal: nowMs,
             updatedAtLocal: nowMs,
@@ -623,9 +724,20 @@ function buildJournalApi(store: ShiftCloseIntentKvStore, now: () => number): Shi
     getCloseIntent: (shiftId) =>
       runStore(store, async (s) => {
         const value = await s.transact(['shiftCloseIntents'], 'readonly', async (txn) =>
-          txn.get<ShiftCloseIntentEntry>('shiftCloseIntents', shiftId),
+          txn.get<unknown>('shiftCloseIntents', shiftId),
         );
-        return { ok: true, value };
+        if (value === undefined) return { ok: true, value: undefined };
+        if (isCloseIntentEntry(value)) {
+          return {
+            ok: true,
+            value: normalizeCloseIntentEntry(value as unknown as Record<string, unknown>),
+          };
+        }
+        // Malformed-present correlation (and other invalid shapes) fail closed —
+        // never unsafe-cast raw storage into a successful runtime entry.
+        return conflict<ShiftCloseIntentEntry | undefined>(
+          `Stored close-intent for shift "${shiftId}" is unreadable.`,
+        );
       }),
 
     listCloseIntents: () =>
@@ -648,7 +760,9 @@ export function createShiftCloseIntentJournal(
 ): ShiftCloseIntentJournal {
   const store = deps?.store ?? createIndexedDbShiftCloseIntentStore();
   const now = deps?.now ?? defaultNow;
-  return buildJournalApi(store, now);
+  const generateCloseCorrelationId =
+    deps?.generateCloseCorrelationId ?? generateShiftCloseCorrelationId;
+  return buildJournalApi(store, now, generateCloseCorrelationId);
 }
 
 export function createInMemoryShiftCloseIntentJournal(
@@ -658,7 +772,9 @@ export function createInMemoryShiftCloseIntentJournal(
     (deps?.store as ReturnType<typeof createInMemoryShiftCloseIntentStore> | undefined) ??
     createInMemoryShiftCloseIntentStore();
   const now = deps?.now ?? defaultNow;
-  const api = buildJournalApi(memory, now);
+  const generateCloseCorrelationId =
+    deps?.generateCloseCorrelationId ?? generateShiftCloseCorrelationId;
+  const api = buildJournalApi(memory, now, generateCloseCorrelationId);
   return {
     ...api,
     dump: () => memory.dump(),

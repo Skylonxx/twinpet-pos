@@ -21,7 +21,7 @@ import {
   createShiftCloseIntentJournal,
   type ShiftCloseIntentJournal,
 } from './offline/shiftCloseIntentStore';
-import type { ShiftCloseIntentSnapshot } from './offline/shiftCloseIntentTypes';
+import type { ShiftCloseIntentBusinessSnapshot } from './offline/shiftCloseIntentTypes';
 import {
   reconcileShiftCloseIntent,
   type ShiftCloseConfirmationDoc,
@@ -364,10 +364,11 @@ export async function closeShift(
 
   const totalExpected = calcShiftDrawerExpected(shift);
   const variance = actualCashCount - totalExpected;
-  const closedAtLocal = Date.now();
   const deviceId = getDeviceId();
 
-  const snapshot: ShiftCloseIntentSnapshot = {
+  // OBS-B1B: caller passes only the 17-field business snapshot. The journal store
+  // owns closedAtLocal + closeCorrelationId generation on initial create.
+  const businessSnapshot: ShiftCloseIntentBusinessSnapshot = {
     shiftId: shift.id,
     branchId: shift.branchId,
     staffId: shift.staffId,
@@ -384,18 +385,20 @@ export async function closeShift(
     actualCashCount,
     variance,
     note,
-    closedAtLocal,
     deviceId,
   };
 
   const journal = deps?.journal ?? getDefaultShiftCloseIntentJournal();
-  const intentResult = await journal.upsertCloseIntent(snapshot);
+  const intentResult = await journal.upsertCloseIntent(businessSnapshot);
   if (!intentResult.ok) {
     if (intentResult.code === 'conflict') {
       throw new Error(CLOSE_SHIFT_CONFLICT_MESSAGE);
     }
     throw new Error(CLOSE_SHIFT_STORE_UNAVAILABLE_MESSAGE);
   }
+
+  const pendingEntry = intentResult.value;
+  const closedAtLocal = pendingEntry.closedAtLocal;
 
   const writeAck = updateDoc(ref, {
     status: 'closed',
@@ -419,11 +422,14 @@ export async function closeShift(
     closedOffline: true,
     syncState: 'pending',
     deviceId,
+    // OBS-B1B / deployed Rules: non-null UUID writes the field; null omits the key.
+    ...(pendingEntry.closeCorrelationId !== null
+      ? { closeCorrelationId: pendingEntry.closeCorrelationId }
+      : {}),
   });
 
   const readConfirmation = deps?.readConfirmation ?? readShiftCloseConfirmation;
   const normalizeSyncState = deps?.normalizeSyncState ?? normalizeShiftCloseSyncState;
-  const pendingEntry = intentResult.value;
 
   // Packet 7C-B2: the ACK promise alone must NEVER mark the journal `synced`
   // or drive confirmed copy (SAME-RUNTIME ACK RULE) — on ACK it triggers a

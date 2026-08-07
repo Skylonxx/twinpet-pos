@@ -12,11 +12,17 @@ import {
   type ShiftCloseConfirmationRead,
 } from './shiftCloseReconciler';
 import { createInMemoryShiftCloseIntentJournal } from './shiftCloseIntentStore';
-import type { ShiftCloseIntentEntry, ShiftCloseIntentSnapshot } from './shiftCloseIntentTypes';
+import type {
+  ShiftCloseIntentBusinessSnapshot,
+  ShiftCloseIntentEntry,
+} from './shiftCloseIntentTypes';
 
 const DEVICE = 'DEV1';
+const FIXED_CORR = '11111111-1111-4111-8111-111111111111';
 
-function makeSnapshot(overrides: Partial<ShiftCloseIntentSnapshot> = {}): ShiftCloseIntentSnapshot {
+function makeSnapshot(
+  overrides: Partial<ShiftCloseIntentBusinessSnapshot> = {},
+): ShiftCloseIntentBusinessSnapshot {
   return {
     shiftId: 'shift-1',
     branchId: 'LDP-001',
@@ -34,17 +40,18 @@ function makeSnapshot(overrides: Partial<ShiftCloseIntentSnapshot> = {}): ShiftC
     actualCashCount: 1500,
     variance: 0,
     note: '',
-    closedAtLocal: Date.now(),
     deviceId: DEVICE,
     ...overrides,
   };
 }
 
-async function makeEntry(overrides: Partial<ShiftCloseIntentSnapshot> = {}): Promise<{
+async function makeEntry(overrides: Partial<ShiftCloseIntentBusinessSnapshot> = {}): Promise<{
   journal: ReturnType<typeof createInMemoryShiftCloseIntentJournal>;
   entry: ShiftCloseIntentEntry;
 }> {
-  const journal = createInMemoryShiftCloseIntentJournal();
+  const journal = createInMemoryShiftCloseIntentJournal({
+    generateCloseCorrelationId: () => FIXED_CORR,
+  });
   const res = await journal.upsertCloseIntent(makeSnapshot(overrides));
   if (!res.ok) throw new Error('setup failed');
   return { journal, entry: res.value };
@@ -410,5 +417,55 @@ describe('runShiftCloseReconciliationSweep', () => {
     });
 
     expect(results).toEqual([]);
+  });
+});
+
+describe('OBS-B1B reconciler compatibility (test-only; production source unchanged)', () => {
+  test('B1B-T15a: reconciler accepts new entry shape with closeCorrelationId', async () => {
+    const { journal, entry } = await makeEntry();
+    expect(entry.closeCorrelationId).toBe(FIXED_CORR);
+    const result = await reconcileShiftCloseIntent(entry, {
+      journal,
+      readConfirmation: reader({ ok: true, doc: makeConfirmedDoc() }),
+      deviceId: DEVICE,
+    });
+    expect(result.outcome).toBe('confirmed');
+    const stored = await journal.getCloseIntent('shift-1');
+    expect(stored.ok && stored.value?.status).toBe('synced');
+    expect(stored.ok && stored.value?.closeCorrelationId).toBe(FIXED_CORR);
+  });
+
+  test('B1B-T15b: historical entry with correlation absence remains reconcilable', async () => {
+    const journal = createInMemoryShiftCloseIntentJournal({
+      generateCloseCorrelationId: () => null,
+    });
+    const seeded = await journal.upsertCloseIntent(makeSnapshot());
+    if (!seeded.ok) throw new Error('setup failed');
+    expect(seeded.value.closeCorrelationId).toBeNull();
+
+    const result = await reconcileShiftCloseIntent(seeded.value, {
+      journal,
+      readConfirmation: reader({ ok: true, doc: makeConfirmedDoc() }),
+      deviceId: DEVICE,
+    });
+    expect(result.outcome).toBe('confirmed');
+    const stored = await journal.getCloseIntent('shift-1');
+    expect(stored.ok && stored.value?.status).toBe('synced');
+    expect(stored.ok && stored.value?.closeCorrelationId).toBeNull();
+  });
+
+  test('B1B-T15c: generated metadata does not cause identity misclassification', async () => {
+    const { journal, entry } = await makeEntry();
+    const withDifferentCorr: ShiftCloseIntentEntry = {
+      ...entry,
+      closeCorrelationId: '22222222-2222-4222-8222-222222222222',
+    };
+    const result = await reconcileShiftCloseIntent(withDifferentCorr, {
+      journal,
+      readConfirmation: reader({ ok: true, doc: makeConfirmedDoc() }),
+      deviceId: DEVICE,
+    });
+    // Correlation is not part of identityMatches — still confirmed.
+    expect(result.outcome).toBe('confirmed');
   });
 });

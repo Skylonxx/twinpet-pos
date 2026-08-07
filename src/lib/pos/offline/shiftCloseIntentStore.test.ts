@@ -1,22 +1,27 @@
 // @vitest-environment jsdom
 
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import {
   SHIFT_CLOSE_INTENT_STORAGE_COMPAT_FLOOR,
   createInMemoryShiftCloseIntentJournal,
   createInMemoryShiftCloseIntentStore,
   createShiftCloseIntentJournal,
+  generateShiftCloseCorrelationId,
   getLatestCloseIntentForDevice,
   isStaleClosePending,
+  isValidLowercaseUuidV4,
   latestByDevicePointerKey,
   snapshotsEqual,
 } from './shiftCloseIntentStore';
-import type { ShiftCloseIntentSnapshot } from './shiftCloseIntentTypes';
+import type { ShiftCloseIntentBusinessSnapshot } from './shiftCloseIntentTypes';
 import { SHIFT_CLOSE_INTENT_STALE_AGE_MS } from './shiftCloseIntentTypes';
 
 const fixedNow = () => Date.parse('2026-07-09T12:00:00.000Z');
+const FIXED_CORR_ID = '11111111-1111-4111-8111-111111111111';
 
-function makeSnapshot(overrides: Partial<ShiftCloseIntentSnapshot> = {}): ShiftCloseIntentSnapshot {
+function makeSnapshot(
+  overrides: Partial<ShiftCloseIntentBusinessSnapshot> = {},
+): ShiftCloseIntentBusinessSnapshot {
   return {
     shiftId: 'shift-1',
     branchId: 'LDP-001',
@@ -34,14 +39,24 @@ function makeSnapshot(overrides: Partial<ShiftCloseIntentSnapshot> = {}): ShiftC
     actualCashCount: 1500,
     variance: 0,
     note: '',
-    closedAtLocal: fixedNow(),
     deviceId: 'dev-1',
     ...overrides,
   };
 }
 
-function makeJournal() {
-  return createInMemoryShiftCloseIntentJournal({ now: fixedNow });
+function makeJournal(
+  overrides: {
+    now?: () => number;
+    generateCloseCorrelationId?: () => string | null;
+    store?: ReturnType<typeof createInMemoryShiftCloseIntentStore>;
+  } = {},
+) {
+  return createInMemoryShiftCloseIntentJournal({
+    now: overrides.now ?? fixedNow,
+    generateCloseCorrelationId:
+      overrides.generateCloseCorrelationId ?? (() => FIXED_CORR_ID),
+    store: overrides.store,
+  });
 }
 
 function makeValidPointer(
@@ -250,7 +265,7 @@ describe('OBS-B0 listCloseIntents metadata filtering / corruption fail-closed', 
   test('all-valid historical entries still list successfully', async () => {
     const journal = makeJournal();
     await journal.upsertCloseIntent(makeSnapshot({ shiftId: 'shift-1' }));
-    await journal.upsertCloseIntent(makeSnapshot({ shiftId: 'shift-2', closedAtLocal: fixedNow() + 1 }));
+    await journal.upsertCloseIntent(makeSnapshot({ shiftId: 'shift-2' }));
     const listed = await journal.listCloseIntents();
     expect(listed.ok).toBe(true);
     if (!listed.ok) return;
@@ -494,7 +509,7 @@ describe('OBS-B0 bounded reader substrate', () => {
   test('invalid timestamp/coherence -> unreadable pointer_timestamp_invalid', async () => {
     const store = createInMemoryShiftCloseIntentStore();
     const journal = createInMemoryShiftCloseIntentJournal({ store, now: fixedNow });
-    await journal.upsertCloseIntent(makeSnapshot({ closedAtLocal: fixedNow() }));
+    await journal.upsertCloseIntent(makeSnapshot());
     await seedPointer(
       store,
       'dev-1',
@@ -556,5 +571,455 @@ describe('OBS-B0 bounded reader substrate', () => {
 
     const empty = await getLatestCloseIntentForDevice('no-pointer-device', { store });
     expect(empty).toEqual({ status: 'none' });
+  });
+});
+
+describe('OBS-B1B client-writer / generated metadata', () => {
+  test('B1B-T1: initial create captures closedAtLocal and mints one lowercase v4 correlation id', async () => {
+    let mintCount = 0;
+    const journal = makeJournal({
+      generateCloseCorrelationId: () => {
+        mintCount += 1;
+        return FIXED_CORR_ID;
+      },
+    });
+    const res = await journal.upsertCloseIntent(makeSnapshot());
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.value.closedAtLocal).toBe(fixedNow());
+    expect(res.value.closeCorrelationId).toBe(FIXED_CORR_ID);
+    expect(isValidLowercaseUuidV4(res.value.closeCorrelationId)).toBe(true);
+    expect(mintCount).toBe(1);
+
+    const dump = journal.dump().shiftCloseIntents['shift-1'] as Record<string, unknown>;
+    expect(dump.closedAtLocal).toBe(fixedNow());
+    expect(dump.closeCorrelationId).toBe(FIXED_CORR_ID);
+  });
+
+  test('B1B-T2: getRandomValues fallback returns lowercase v4 without Math.random', () => {
+    const originalCrypto = globalThis.crypto;
+    const mathSpy = vi.spyOn(Math, 'random');
+    const bytes = new Uint8Array(16);
+    for (let i = 0; i < 16; i += 1) bytes[i] = i;
+    Object.defineProperty(globalThis, 'crypto', {
+      configurable: true,
+      value: {
+        getRandomValues: (arr: Uint8Array) => {
+          arr.set(bytes.subarray(0, arr.length));
+          return arr;
+        },
+      },
+    });
+    try {
+      const id = generateShiftCloseCorrelationId();
+      expect(id).not.toBeNull();
+      expect(isValidLowercaseUuidV4(id)).toBe(true);
+      expect(mathSpy).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(globalThis, 'crypto', {
+        configurable: true,
+        value: originalCrypto,
+      });
+      mathSpy.mockRestore();
+    }
+  });
+
+  test('B1B-T3: no secure UUID source returns null and journal create still succeeds', async () => {
+    const journal = makeJournal({ generateCloseCorrelationId: () => null });
+    const res = await journal.upsertCloseIntent(makeSnapshot());
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.value.closeCorrelationId).toBeNull();
+    expect(res.value.status).toBe('local_closed_pending');
+  });
+
+  test('B1B-T4: equal retry reuses generated metadata without remint or put', async () => {
+    const store = createInstrumentedStore();
+    let mintCount = 0;
+    let clock = fixedNow();
+    const journal = makeJournal({
+      store,
+      now: () => clock,
+      generateCloseCorrelationId: () => {
+        mintCount += 1;
+        return FIXED_CORR_ID;
+      },
+    });
+    const first = await journal.upsertCloseIntent(makeSnapshot());
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    const putsAfterCreate = store.putCount;
+    clock = fixedNow() + 60_000;
+    const second = await journal.upsertCloseIntent(makeSnapshot());
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+    expect(second.value.closedAtLocal).toBe(first.value.closedAtLocal);
+    expect(second.value.closeCorrelationId).toBe(first.value.closeCorrelationId);
+    expect(mintCount).toBe(1);
+    expect(store.putCount).toBe(putsAfterCreate);
+  });
+
+  test('B1B-T5: unequal retry still conflicts and does not overwrite', async () => {
+    const journal = makeJournal();
+    await journal.upsertCloseIntent(makeSnapshot());
+    const conflicting = await journal.upsertCloseIntent(makeSnapshot({ actualCashCount: 999 }));
+    expect(conflicting.ok).toBe(false);
+    if (conflicting.ok) return;
+    expect(conflicting.code).toBe('conflict');
+    const stored = await journal.getCloseIntent('shift-1');
+    expect(stored.ok && stored.value?.actualCashCount).toBe(1500);
+    expect(stored.ok && stored.value?.closeCorrelationId).toBe(FIXED_CORR_ID);
+  });
+
+  test('B1B-T6: business equality is exactly 17 caller fields; generated metadata excluded', () => {
+    const a = makeSnapshot();
+    const b = makeSnapshot();
+    expect(Object.keys(a)).toHaveLength(17);
+    expect(snapshotsEqual(a, b)).toBe(true);
+    // Same business fields with different generated metadata on entry-shaped objects still equal.
+    const entryLikeA = {
+      ...a,
+      closedAtLocal: 1,
+      closeCorrelationId: FIXED_CORR_ID,
+      status: 'local_closed_pending' as const,
+      createdAtLocal: 1,
+      updatedAtLocal: 1,
+      lastErrorMessage: null,
+    };
+    const entryLikeB = {
+      ...b,
+      closedAtLocal: 999,
+      closeCorrelationId: '22222222-2222-4222-8222-222222222222',
+      status: 'synced' as const,
+      createdAtLocal: 2,
+      updatedAtLocal: 2,
+      lastErrorMessage: 'x',
+    };
+    expect(snapshotsEqual(entryLikeA, entryLikeB)).toBe(true);
+    expect(snapshotsEqual(a, makeSnapshot({ note: 'different' }))).toBe(false);
+  });
+
+  test('B1B-T7: historical physical absence reads as null with no writeback/backfill', async () => {
+    const store = createInstrumentedStore();
+    const journal = makeJournal({ store });
+    const historical: Record<string, unknown> = {
+      ...makeSnapshot(),
+      closedAtLocal: fixedNow(),
+      status: 'local_closed_pending',
+      createdAtLocal: fixedNow(),
+      updatedAtLocal: fixedNow(),
+      lastErrorMessage: null,
+    };
+    expect('closeCorrelationId' in historical).toBe(false);
+    await seedRawRecord(store, 'shift-1', historical);
+    const putsBefore = store.putCount;
+
+    const got = await journal.getCloseIntent('shift-1');
+    expect(got.ok).toBe(true);
+    if (!got.ok) return;
+    expect(got.value?.closeCorrelationId).toBeNull();
+
+    const listed = await journal.listCloseIntents();
+    expect(listed.ok).toBe(true);
+    if (!listed.ok) return;
+    expect(listed.value[0]?.closeCorrelationId).toBeNull();
+
+    const physical = store.dump().shiftCloseIntents['shift-1'] as Record<string, unknown>;
+    expect('closeCorrelationId' in physical).toBe(false);
+    expect(store.putCount).toBe(putsBefore);
+  });
+
+  test('B1B-T8: markSynced / rejected path preserves generated metadata and does not backfill absence', async () => {
+    const store = createInstrumentedStore();
+    const journal = makeJournal({ store });
+    await journal.upsertCloseIntent(makeSnapshot());
+    const before = await journal.getCloseIntent('shift-1');
+    expect(before.ok && before.value?.closeCorrelationId).toBe(FIXED_CORR_ID);
+    expect(before.ok && before.value?.closedAtLocal).toBe(fixedNow());
+
+    const synced = await journal.markSynced('shift-1');
+    expect(synced.ok).toBe(true);
+    if (!synced.ok) return;
+    expect(synced.value.closeCorrelationId).toBe(FIXED_CORR_ID);
+    expect(synced.value.closedAtLocal).toBe(fixedNow());
+
+    // Historical absence path
+    const store2 = createInstrumentedStore();
+    const journal2 = makeJournal({ store: store2 });
+    const historical: Record<string, unknown> = {
+      ...makeSnapshot({ shiftId: 'shift-hist' }),
+      closedAtLocal: fixedNow(),
+      status: 'local_closed_pending',
+      createdAtLocal: fixedNow(),
+      updatedAtLocal: fixedNow(),
+      lastErrorMessage: null,
+    };
+    await seedRawRecord(store2, 'shift-hist', historical);
+    const rejected = await journal2.markRejectedManualAttention('shift-hist', 'x');
+    expect(rejected.ok).toBe(true);
+    if (!rejected.ok) return;
+    expect(rejected.value.closeCorrelationId).toBeNull();
+    expect(rejected.value.closedAtLocal).toBe(fixedNow());
+    const physical = store2.dump().shiftCloseIntents['shift-hist'] as Record<string, unknown>;
+    expect('closeCorrelationId' in physical).toBe(false);
+  });
+
+  test('B1B-T9: malformed present correlation fails closed and is never coerced to null', async () => {
+    const store = createInMemoryShiftCloseIntentStore();
+    const journal = makeJournal({ store });
+    await seedRawRecord(store, 'shift-bad-corr', {
+      ...makeSnapshot({ shiftId: 'shift-bad-corr' }),
+      closedAtLocal: fixedNow(),
+      closeCorrelationId: 'NOT-A-UUID',
+      status: 'local_closed_pending',
+      createdAtLocal: fixedNow(),
+      updatedAtLocal: fixedNow(),
+      lastErrorMessage: null,
+    });
+    const listed = await journal.listCloseIntents();
+    expect(listed.ok).toBe(false);
+    if (listed.ok) return;
+    expect(listed.code).toBe('unreadable_record');
+    if (listed.code !== 'unreadable_record') return;
+    expect(listed.reason).toBe('malformed_entry');
+  });
+
+  test('B1B-T10: unknown/malformed fail-closed behavior remains (OBS-B0)', async () => {
+    const store = createInMemoryShiftCloseIntentStore();
+    const journal = makeJournal({ store });
+    await journal.upsertCloseIntent(makeSnapshot());
+    await seedRawRecord(store, 'weird-key', { kind: 'foreignMetadata', hello: 'world' });
+    const listed = await journal.listCloseIntents();
+    expect(listed.ok).toBe(false);
+    if (listed.ok) return;
+    expect(listed.code).toBe('unreadable_record');
+    if (listed.code !== 'unreadable_record') return;
+    expect(listed.reason).toBe('unknown_record');
+  });
+
+  test('default generateShiftCloseCorrelationId prefers randomUUID when available', () => {
+    const originalCrypto = globalThis.crypto;
+    Object.defineProperty(globalThis, 'crypto', {
+      configurable: true,
+      value: {
+        randomUUID: () => 'AAAAAAAA-BBBB-4CCC-8DDD-EEEEEEEEEEEE',
+        getRandomValues: () => {
+          throw new Error('should not call getRandomValues when randomUUID exists');
+        },
+      },
+    });
+    try {
+      expect(generateShiftCloseCorrelationId()).toBe('aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee');
+    } finally {
+      Object.defineProperty(globalThis, 'crypto', {
+        configurable: true,
+        value: originalCrypto,
+      });
+    }
+  });
+
+  test('default generateShiftCloseCorrelationId returns null when crypto is unavailable', () => {
+    const originalCrypto = globalThis.crypto;
+    Object.defineProperty(globalThis, 'crypto', {
+      configurable: true,
+      value: undefined,
+    });
+    try {
+      expect(generateShiftCloseCorrelationId()).toBeNull();
+    } finally {
+      Object.defineProperty(globalThis, 'crypto', {
+        configurable: true,
+        value: originalCrypto,
+      });
+    }
+  });
+});
+
+describe('OBS-B1B Remediation-1 F-01 — keyed get / status fail-closed', () => {
+  const MALFORMED_CORRELATION_CASES: { label: string; value: unknown }[] = [
+    { label: 'uppercase UUID', value: 'AAAAAAAA-BBBB-4CCC-8DDD-EEEEEEEEEEEE' },
+    { label: 'wrong version nibble', value: '11111111-1111-5111-8111-111111111111' },
+    { label: 'wrong variant nibble', value: '11111111-1111-4111-c111-111111111111' },
+    { label: 'wrong length', value: '11111111-1111-4111-8111-11111111111' },
+    { label: 'empty string', value: '' },
+    { label: 'non-string', value: 42 },
+  ];
+
+  function makeValidEntryFields(
+    overrides: Partial<ShiftCloseIntentBusinessSnapshot> & { shiftId?: string } = {},
+  ): Record<string, unknown> {
+    return {
+      ...makeSnapshot(overrides),
+      closedAtLocal: fixedNow(),
+      status: 'local_closed_pending',
+      createdAtLocal: fixedNow(),
+      updatedAtLocal: fixedNow(),
+      lastErrorMessage: null,
+    };
+  }
+
+  test('F01-T1: keyed get valid current non-null v4 -> success', async () => {
+    const journal = makeJournal();
+    await journal.upsertCloseIntent(makeSnapshot());
+    const got = await journal.getCloseIntent('shift-1');
+    expect(got.ok).toBe(true);
+    if (!got.ok) return;
+    expect(got.value?.closeCorrelationId).toBe(FIXED_CORR_ID);
+    expect(isValidLowercaseUuidV4(got.value?.closeCorrelationId)).toBe(true);
+  });
+
+  test('F01-T2: keyed get historical physical absence -> success / null / raw still absent', async () => {
+    const store = createInstrumentedStore();
+    const journal = makeJournal({ store });
+    const historical = makeValidEntryFields();
+    expect('closeCorrelationId' in historical).toBe(false);
+    await seedRawRecord(store, 'shift-1', historical);
+    const putsBefore = store.putCount;
+
+    const got = await journal.getCloseIntent('shift-1');
+    expect(got.ok).toBe(true);
+    if (!got.ok) return;
+    expect(got.value?.closeCorrelationId).toBeNull();
+
+    const physical = store.dump().shiftCloseIntents['shift-1'] as Record<string, unknown>;
+    expect('closeCorrelationId' in physical).toBe(false);
+    expect(store.putCount).toBe(putsBefore);
+  });
+
+  test.each(MALFORMED_CORRELATION_CASES)(
+    'F01-T3..T8: keyed get $label -> fail closed',
+    async ({ value }) => {
+      const store = createInstrumentedStore();
+      const journal = makeJournal({ store });
+      const shiftId = 'shift-malformed-get';
+      const raw = {
+        ...makeValidEntryFields({ shiftId }),
+        closeCorrelationId: value,
+      };
+      await seedRawRecord(store, shiftId, raw);
+      const before = JSON.stringify(store.dump().shiftCloseIntents[shiftId]);
+      const putsBefore = store.putCount;
+
+      const got = await journal.getCloseIntent(shiftId);
+      expect(got.ok).toBe(false);
+      if (got.ok) return;
+      expect(got.code).toBe('conflict');
+      expect(store.putCount).toBe(putsBefore);
+      expect(JSON.stringify(store.dump().shiftCloseIntents[shiftId])).toBe(before);
+    },
+  );
+
+  test.each(MALFORMED_CORRELATION_CASES)(
+    'F01-T9: markSynced $label -> fail closed, put 0, raw unchanged',
+    async ({ value }) => {
+      const store = createInstrumentedStore();
+      const journal = makeJournal({ store });
+      const shiftId = 'shift-malformed-synced';
+      const raw = {
+        ...makeValidEntryFields({ shiftId }),
+        closeCorrelationId: value,
+      };
+      await seedRawRecord(store, shiftId, raw);
+      const before = JSON.stringify(store.dump().shiftCloseIntents[shiftId]);
+      store.putCount = 0;
+
+      const res = await journal.markSynced(shiftId);
+      expect(res.ok).toBe(false);
+      if (res.ok) return;
+      expect(res.code).toBe('conflict');
+      expect(store.putCount).toBe(0);
+      expect(JSON.stringify(store.dump().shiftCloseIntents[shiftId])).toBe(before);
+    },
+  );
+
+  test.each(MALFORMED_CORRELATION_CASES)(
+    'F01-T10: markRejectedManualAttention $label -> fail closed, put 0, raw unchanged',
+    async ({ value }) => {
+      const store = createInstrumentedStore();
+      const journal = makeJournal({ store });
+      const shiftId = 'shift-malformed-rejected';
+      const raw = {
+        ...makeValidEntryFields({ shiftId }),
+        closeCorrelationId: value,
+      };
+      await seedRawRecord(store, shiftId, raw);
+      const before = JSON.stringify(store.dump().shiftCloseIntents[shiftId]);
+      store.putCount = 0;
+
+      const res = await journal.markRejectedManualAttention(shiftId, 'manual');
+      expect(res.ok).toBe(false);
+      if (res.ok) return;
+      expect(res.code).toBe('conflict');
+      expect(store.putCount).toBe(0);
+      expect(JSON.stringify(store.dump().shiftCloseIntents[shiftId])).toBe(before);
+    },
+  );
+
+  test('F01-T11: markSynced historical physical absence allowed; physical key stays absent', async () => {
+    const store = createInstrumentedStore();
+    const journal = makeJournal({ store });
+    const historical = makeValidEntryFields({ shiftId: 'shift-hist-synced' });
+    expect('closeCorrelationId' in historical).toBe(false);
+    await seedRawRecord(store, 'shift-hist-synced', historical);
+
+    const synced = await journal.markSynced('shift-hist-synced');
+    expect(synced.ok).toBe(true);
+    if (!synced.ok) return;
+    expect(synced.value.status).toBe('synced');
+    expect(synced.value.closeCorrelationId).toBeNull();
+    expect(synced.value.closedAtLocal).toBe(fixedNow());
+
+    const physical = store.dump().shiftCloseIntents['shift-hist-synced'] as Record<string, unknown>;
+    expect('closeCorrelationId' in physical).toBe(false);
+    expect(physical.status).toBe('synced');
+  });
+
+  test('F01-T12: markRejectedManualAttention historical physical absence allowed; physical key stays absent', async () => {
+    const store = createInstrumentedStore();
+    const journal = makeJournal({ store });
+    const historical = makeValidEntryFields({ shiftId: 'shift-hist-rejected' });
+    expect('closeCorrelationId' in historical).toBe(false);
+    await seedRawRecord(store, 'shift-hist-rejected', historical);
+
+    const rejected = await journal.markRejectedManualAttention('shift-hist-rejected', 'x');
+    expect(rejected.ok).toBe(true);
+    if (!rejected.ok) return;
+    expect(rejected.value.status).toBe('rejected_manual_attention');
+    expect(rejected.value.closeCorrelationId).toBeNull();
+    expect(rejected.value.closedAtLocal).toBe(fixedNow());
+
+    const physical = store.dump().shiftCloseIntents['shift-hist-rejected'] as Record<string, unknown>;
+    expect('closeCorrelationId' in physical).toBe(false);
+    expect(physical.status).toBe('rejected_manual_attention');
+    expect(physical.lastErrorMessage).toBe('x');
+  });
+
+  test('F01-T13: both status paths preserve exact valid non-null correlation', async () => {
+    const journalSynced = makeJournal();
+    await journalSynced.upsertCloseIntent(makeSnapshot({ shiftId: 'shift-preserve-synced' }));
+    const synced = await journalSynced.markSynced('shift-preserve-synced');
+    expect(synced.ok).toBe(true);
+    if (!synced.ok) return;
+    expect(synced.value.closeCorrelationId).toBe(FIXED_CORR_ID);
+    expect(synced.value.closedAtLocal).toBe(fixedNow());
+    const dumpSynced = journalSynced.dump().shiftCloseIntents[
+      'shift-preserve-synced'
+    ] as Record<string, unknown>;
+    expect(dumpSynced.closeCorrelationId).toBe(FIXED_CORR_ID);
+
+    const journalRejected = makeJournal();
+    await journalRejected.upsertCloseIntent(makeSnapshot({ shiftId: 'shift-preserve-rejected' }));
+    const rejected = await journalRejected.markRejectedManualAttention(
+      'shift-preserve-rejected',
+      'denied',
+    );
+    expect(rejected.ok).toBe(true);
+    if (!rejected.ok) return;
+    expect(rejected.value.closeCorrelationId).toBe(FIXED_CORR_ID);
+    expect(rejected.value.closedAtLocal).toBe(fixedNow());
+    const dumpRejected = journalRejected.dump().shiftCloseIntents[
+      'shift-preserve-rejected'
+    ] as Record<string, unknown>;
+    expect(dumpRejected.closeCorrelationId).toBe(FIXED_CORR_ID);
   });
 });

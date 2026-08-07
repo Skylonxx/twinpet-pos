@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { serverTimestamp } from 'firebase/firestore';
 import type { Shift } from '../types';
 import { createInMemoryShiftCloseIntentJournal } from './offline/shiftCloseIntentStore';
-import type { ShiftCloseIntentSnapshot } from './offline/shiftCloseIntentTypes';
+import type { ShiftCloseIntentBusinessSnapshot } from './offline/shiftCloseIntentTypes';
 
 vi.mock('../firebase', () => ({
   isFirebaseConfigured: true,
@@ -77,7 +77,9 @@ function makeShift(overrides: Partial<Shift> = {}): Shift {
   };
 }
 
-function makeSnapshot(overrides: Partial<ShiftCloseIntentSnapshot> = {}): ShiftCloseIntentSnapshot {
+function makeSnapshot(
+  overrides: Partial<ShiftCloseIntentBusinessSnapshot> = {},
+): ShiftCloseIntentBusinessSnapshot {
   return {
     shiftId: 'shift-1',
     branchId: 'LDP-001',
@@ -95,7 +97,6 @@ function makeSnapshot(overrides: Partial<ShiftCloseIntentSnapshot> = {}): ShiftC
     actualCashCount: 999,
     variance: 0,
     note: '',
-    closedAtLocal: Date.now(),
     deviceId: 'DEV1',
     ...overrides,
   };
@@ -412,4 +413,75 @@ describe('closeShift — Packet 7C-B2 whenServerConfirmed reconciliation', () =>
   // low-risk wrapper (`devCloseShift(...)` + `Promise.resolve({outcome:'confirmed',...})`)
   // with no offline/reconciliation logic of its own; deferring a dedicated
   // dev-mode test file rather than overclaiming coverage here.
+});
+
+describe('closeShift — OBS-B1B correlation writer', () => {
+  const FIXED_CORR = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+  const FIXED_NOW = Date.parse('2026-07-09T12:00:00.000Z');
+
+  test('B1B-T11: persisted non-null correlation id appears in W3 update payload', async () => {
+    getDocFromCacheMock.mockResolvedValue(makeOpenSnap());
+    const journal = createInMemoryShiftCloseIntentJournal({
+      now: () => FIXED_NOW,
+      generateCloseCorrelationId: () => FIXED_CORR,
+    });
+
+    await closeShift(makeShift(), 1000, 'note', { journal });
+
+    expect(updateDocMock).toHaveBeenCalledTimes(1);
+    const [, patch] = updateDocMock.mock.calls[0] as [unknown, Record<string, unknown>];
+    expect(patch.closeCorrelationId).toBe(FIXED_CORR);
+  });
+
+  test('B1B-T12: persisted null correlation omits closeCorrelationId key from W3 payload', async () => {
+    getDocFromCacheMock.mockResolvedValue(makeOpenSnap());
+    const journal = createInMemoryShiftCloseIntentJournal({
+      now: () => FIXED_NOW,
+      generateCloseCorrelationId: () => null,
+    });
+
+    await closeShift(makeShift(), 1000, 'note', { journal });
+
+    expect(updateDocMock).toHaveBeenCalledTimes(1);
+    const [, patch] = updateDocMock.mock.calls[0] as [unknown, Record<string, unknown>];
+    expect(Object.prototype.hasOwnProperty.call(patch, 'closeCorrelationId')).toBe(false);
+    expect(patch.closeCorrelationId).toBeUndefined();
+  });
+
+  test('B1B-T13: returned closedAtLocal equals persisted journal entry value', async () => {
+    getDocFromCacheMock.mockResolvedValue(makeOpenSnap());
+    const journal = createInMemoryShiftCloseIntentJournal({
+      now: () => FIXED_NOW,
+      generateCloseCorrelationId: () => FIXED_CORR,
+    });
+
+    const result = await closeShift(makeShift(), 1000, 'note', { journal });
+    const stored = await journal.getCloseIntent('shift-1');
+    expect(stored.ok).toBe(true);
+    if (!stored.ok || !stored.value) return;
+    expect(result.closedAtLocal).toBe(stored.value.closedAtLocal);
+    expect(result.closedAtLocal).toBe(FIXED_NOW);
+  });
+
+  test('B1B-T14: unrelated W3 payload fields remain unchanged aside from optional correlation key', async () => {
+    getDocFromCacheMock.mockResolvedValue(makeOpenSnap());
+    const journal = createInMemoryShiftCloseIntentJournal({
+      now: () => FIXED_NOW,
+      generateCloseCorrelationId: () => FIXED_CORR,
+    });
+
+    await closeShift(makeShift(), 1000, 'note-x', { journal });
+
+    const [, patch] = updateDocMock.mock.calls[0] as [unknown, Record<string, unknown>];
+    expect(patch.status).toBe('closed');
+    expect(patch.closedAt).toEqual(serverTimestamp());
+    expect(patch.actualCashCount).toBe(1000);
+    expect(patch.note).toBe('note-x');
+    expect(patch.closedOffline).toBe(true);
+    expect(patch.syncState).toBe('pending');
+    expect(patch.deviceId).toBe('DEV1');
+    expect(patch.expectedCash).toBe(1000);
+    expect(patch.totalBills).toBe(3);
+    expect(patch.closeCorrelationId).toBe(FIXED_CORR);
+  });
 });

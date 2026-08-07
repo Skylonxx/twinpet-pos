@@ -11,11 +11,15 @@
  * Reliable post-reload ack/rejection reconciliation is Packet 7C-B2 (not implemented here).
  * Staleness (age-based "needs attention") is a pure, computed display concern
  * (see `isStaleClosePending`), not a stored transition.
+ *
+ * OBS-B1B — caller-owned business snapshot (17 fields) vs store-owned generated metadata
+ * (`closedAtLocal`, `closeCorrelationId`). Logical entry field count is 23; historical
+ * physical records may omit `closeCorrelationId` and are read-normalized to null only.
  */
 export type ShiftCloseIntentStatus = 'local_closed_pending' | 'synced' | 'rejected_manual_attention';
 
-/** The frozen terminal-authoritative close snapshot, keyed by `shiftId`. */
-export type ShiftCloseIntentSnapshot = {
+/** Caller-owned business fields only — never includes store-generated metadata. */
+export type ShiftCloseIntentBusinessSnapshot = {
   shiftId: string;
   branchId: string;
   staffId: string;
@@ -32,9 +36,19 @@ export type ShiftCloseIntentSnapshot = {
   actualCashCount: number;
   variance: number;
   note: string;
-  /** Device clock at close time — the only time this record can honestly claim. */
-  closedAtLocal: number;
   deviceId: string | null;
+};
+
+/**
+ * Frozen close snapshot including store-owned generated metadata.
+ * `closeCorrelationId` is `string | null` on the runtime/read view; historical physical
+ * records may lack the key entirely (normalized to null on read only).
+ */
+export type ShiftCloseIntentSnapshot = ShiftCloseIntentBusinessSnapshot & {
+  /** Device clock at close time — owned by the intent store on initial create. */
+  closedAtLocal: number;
+  /** Store-owned correlation id; null when secure UUID generation is unavailable. */
+  closeCorrelationId: string | null;
 };
 
 export type ShiftCloseIntentEntry = ShiftCloseIntentSnapshot & {
