@@ -3,6 +3,7 @@
  * No Firestore import — reader / optional reissue are injected for unit tests.
  */
 import type { ShiftOpenIntentJournal } from './shiftOpenIntentStore';
+import { normalizeRemoteCreateState } from './shiftOpenIntentStore';
 import type { ShiftOpenIntentEntry } from './shiftOpenIntentTypes';
 
 export type ShiftOpenConfirmationDoc = {
@@ -22,8 +23,14 @@ export type ShiftOpenConfirmationRead =
 
 export type ShiftOpenConfirmationReader = (shiftId: string) => Promise<ShiftOpenConfirmationRead>;
 
-/** Re-queue W0 create only when confirmation-grade read proves the doc is absent. */
-export type ShiftOpenWriteReissuer = (entry: ShiftOpenIntentEntry) => Promise<void>;
+/**
+ * Re-queue W0 create only when the safe-reissue predicate permits it.
+ * Implementations must still CAS-claim before issuing setDoc.
+ * Returns whether a new create write was actually enqueued.
+ */
+export type ShiftOpenWriteReissuer = (
+  entry: ShiftOpenIntentEntry,
+) => Promise<'issued' | 'skipped'>;
 
 export type ReconcileOpenOutcome =
   | 'confirmed'
@@ -35,7 +42,7 @@ export type ReconcileShiftOpenIntentDeps = {
   journal: ShiftOpenIntentJournal;
   readConfirmation: ShiftOpenConfirmationReader;
   deviceId: string;
-  /** Optional — used by boot/reconnect when the create never reached the server. */
+  /** Optional — used by boot/reconnect when a create was never claimed/issued. */
   reissueOpenWrite?: ShiftOpenWriteReissuer;
 };
 
@@ -45,6 +52,9 @@ export type ReconcileShiftOpenIntentResult = {
   openedAtServer?: Date;
   reissued?: boolean;
 };
+
+/** In-process single-flight — complements durable CAS for concurrent sweeps. */
+const reconcileInflight = new Map<string, Promise<ReconcileShiftOpenIntentResult>>();
 
 function isResolvedServerTimestamp(value: unknown): value is { toDate: () => Date } {
   return (
@@ -64,9 +74,40 @@ function identityMatches(entry: ShiftOpenIntentEntry, doc: ShiftOpenConfirmation
 }
 
 /**
+ * Exact safe-reissue predicate (M1):
+ * - intent still `local_open_pending`
+ * - confirmation-grade read proves server doc absent
+ * - durable `remoteCreateState === 'none'` (no outstanding create claim)
+ *
+ * Server absence alone is NOT sufficient — Firestore may still own a queued mutation.
+ */
+export function canSafelyReissueShiftOpenCreate(entry: ShiftOpenIntentEntry): boolean {
+  return (
+    entry.status === 'local_open_pending' &&
+    normalizeRemoteCreateState(entry.remoteCreateState) === 'none'
+  );
+}
+
+/**
  * Reconcile ONE `local_open_pending` journal entry. Idempotent and safe to call repeatedly.
  */
 export async function reconcileShiftOpenIntent(
+  entry: ShiftOpenIntentEntry,
+  deps: ReconcileShiftOpenIntentDeps,
+): Promise<ReconcileShiftOpenIntentResult> {
+  const existing = reconcileInflight.get(entry.shiftId);
+  if (existing) return existing;
+
+  const run = reconcileShiftOpenIntentUnsynchronized(entry, deps).finally(() => {
+    if (reconcileInflight.get(entry.shiftId) === run) {
+      reconcileInflight.delete(entry.shiftId);
+    }
+  });
+  reconcileInflight.set(entry.shiftId, run);
+  return run;
+}
+
+async function reconcileShiftOpenIntentUnsynchronized(
   entry: ShiftOpenIntentEntry,
   deps: ReconcileShiftOpenIntentDeps,
 ): Promise<ReconcileShiftOpenIntentResult> {
@@ -95,10 +136,16 @@ export async function reconcileShiftOpenIntent(
   const { doc } = read;
   if (!doc.exists) {
     let reissued = false;
-    if (deps.reissueOpenWrite) {
+    // Refresh durable create state before deciding — entry snapshot may be stale.
+    const latest = await deps.journal.getOpenIntent(entry.shiftId);
+    const liveEntry =
+      latest.ok && latest.value ? latest.value : { ...entry, remoteCreateState: entry.remoteCreateState };
+
+    if (deps.reissueOpenWrite && canSafelyReissueShiftOpenCreate(liveEntry)) {
       try {
-        await deps.reissueOpenWrite(entry);
-        reissued = true;
+        const issueResult = await deps.reissueOpenWrite(liveEntry);
+        // Only an explicit `issued` counts — `skipped`/void must not claim a write storm.
+        reissued = issueResult === 'issued';
       } catch {
         // Best-effort reissue — stay pending for the next sweep.
       }

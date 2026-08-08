@@ -118,6 +118,18 @@ describe('shiftOpenIntentStore — PK-1', () => {
     expect(again.code).toBe('conflict');
   });
 
+  test('claimRemoteCreateAttempt CAS: none→outstanding once; second claim is already_outstanding', async () => {
+    const journal = createInMemoryShiftOpenIntentJournal();
+    await journal.upsertOpenIntent(snap());
+    const first = await journal.claimRemoteCreateAttempt('shift-open-1');
+    expect(first.ok && first.value).toBe('claimed');
+    const second = await journal.claimRemoteCreateAttempt('shift-open-1');
+    expect(second.ok && second.value).toBe('already_outstanding');
+    const stored = await journal.getOpenIntent('shift-open-1');
+    expect(stored.ok && stored.value?.remoteCreateState).toBe('outstanding');
+    expect(stored.ok && stored.value?.status).toBe('local_open_pending');
+  });
+
   test('isStaleOpenPending uses shared age threshold', () => {
     const now = Date.now();
     expect(
@@ -126,6 +138,7 @@ describe('shiftOpenIntentStore — PK-1', () => {
           ...snap(),
           openedAtLocal: now - SHIFT_OPEN_INTENT_STALE_AGE_MS - 1,
           status: 'local_open_pending',
+          remoteCreateState: 'none',
           createdAtLocal: now,
           updatedAtLocal: now,
           lastErrorMessage: null,

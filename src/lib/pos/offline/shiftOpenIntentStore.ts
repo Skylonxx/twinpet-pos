@@ -3,11 +3,13 @@
  * Modeled on `shiftCloseIntentStore.ts` but intentionally narrower (no OBS-B2 pointer repair).
  */
 import type {
+  ClaimRemoteCreateAttemptResult,
   OpenIntentErrorCode,
   OpenIntentResult,
   ShiftOpenIntentBusinessSnapshot,
   ShiftOpenIntentEntry,
   ShiftOpenIntentStatus,
+  ShiftOpenRemoteCreateState,
 } from './shiftOpenIntentTypes';
 import { SHIFT_OPEN_INTENT_STALE_AGE_MS } from './shiftOpenIntentTypes';
 
@@ -213,6 +215,14 @@ function businessEquals(
   return BUSINESS_SNAPSHOT_FIELDS.every((f) => a[f] === b[f]);
 }
 
+/**
+ * Normalize durable create-attempt state. Legacy records without the field are
+ * treated as `outstanding` (fail closed — do not reissue a W0 create).
+ */
+export function normalizeRemoteCreateState(raw: unknown): ShiftOpenRemoteCreateState {
+  return raw === 'none' ? 'none' : 'outstanding';
+}
+
 function isOpenIntentEntry(v: unknown): v is ShiftOpenIntentEntry {
   if (!isPlainRecord(v)) return false;
   if (typeof v.shiftId !== 'string' || v.shiftId.length === 0) return false;
@@ -229,10 +239,25 @@ function isOpenIntentEntry(v: unknown): v is ShiftOpenIntentEntry {
   ) {
     return false;
   }
+  // Absent remoteCreateState is allowed (legacy) and normalized on read.
+  if (
+    v.remoteCreateState !== undefined &&
+    v.remoteCreateState !== 'none' &&
+    v.remoteCreateState !== 'outstanding'
+  ) {
+    return false;
+  }
   if (!isValidLocalTimestamp(v.createdAtLocal)) return false;
   if (!isValidLocalTimestamp(v.updatedAtLocal)) return false;
   if (!(typeof v.lastErrorMessage === 'string' || v.lastErrorMessage === null)) return false;
   return true;
+}
+
+function coerceOpenIntentEntry(raw: ShiftOpenIntentEntry): ShiftOpenIntentEntry {
+  return {
+    ...raw,
+    remoteCreateState: normalizeRemoteCreateState(raw.remoteCreateState),
+  };
 }
 
 export type ListOpenIntentsResult =
@@ -253,6 +278,13 @@ export type ShiftOpenIntentJournal = {
   findRejectedOpenForDevice: (
     deviceId: string | null,
   ) => Promise<OpenIntentResult<ShiftOpenIntentEntry | undefined>>;
+  /**
+   * CAS: `none` → `outstanding`. Only the winner may enqueue a W0 create.
+   * Idempotent observe of `outstanding` returns `already_outstanding`.
+   */
+  claimRemoteCreateAttempt: (
+    shiftId: string,
+  ) => Promise<OpenIntentResult<ClaimRemoteCreateAttemptResult>>;
   markSynced: (shiftId: string) => Promise<OpenIntentResult<ShiftOpenIntentEntry>>;
   markRejectedManualAttention: (
     shiftId: string,
@@ -334,16 +366,17 @@ function buildJournalApi(store: ShiftOpenIntentKvStore, now: () => number): Shif
             `Stored open-intent for shift "${shiftId}" is unreadable — status not updated.`,
           );
         }
-        if (existingRaw.status === status) {
-          return { ok: true as const, value: existingRaw };
+        const existing = coerceOpenIntentEntry(existingRaw);
+        if (existing.status === status) {
+          return { ok: true as const, value: existing };
         }
-        if (existingRaw.status !== 'local_open_pending' && status !== existingRaw.status) {
+        if (existing.status !== 'local_open_pending' && status !== existing.status) {
           return conflict<ShiftOpenIntentEntry>(
-            `Cannot transition open-intent "${shiftId}" from ${existingRaw.status} to ${status}.`,
+            `Cannot transition open-intent "${shiftId}" from ${existing.status} to ${status}.`,
           );
         }
         const next: ShiftOpenIntentEntry = {
-          ...existingRaw,
+          ...existing,
           status,
           lastErrorMessage,
           updatedAtLocal: now(),
@@ -367,19 +400,20 @@ function buildJournalApi(store: ShiftOpenIntentKvStore, now: () => number): Shif
                 `Stored open-intent for shift "${snapshot.shiftId}" is unreadable.`,
               );
             }
-            if (existingRaw.status === 'rejected_manual_attention') {
+            const existing = coerceOpenIntentEntry(existingRaw);
+            if (existing.status === 'rejected_manual_attention') {
               return conflict<ShiftOpenIntentEntry>(
                 'Open intent for this shift requires manual attention and cannot be retried silently.',
               );
             }
-            if (!businessEquals(existingRaw, snapshot)) {
+            if (!businessEquals(existing, snapshot)) {
               return conflict<ShiftOpenIntentEntry>(
                 'A different open intent already exists for this shift id.',
               );
             }
-            // Idempotent resume — preserve openedAtLocal / createdAtLocal.
-            if (existingRaw.status === 'local_open_pending' || existingRaw.status === 'synced') {
-              return { ok: true as const, value: existingRaw };
+            // Idempotent resume — preserve openedAtLocal / createdAtLocal / remoteCreateState.
+            if (existing.status === 'local_open_pending' || existing.status === 'synced') {
+              return { ok: true as const, value: existing };
             }
           }
 
@@ -387,6 +421,7 @@ function buildJournalApi(store: ShiftOpenIntentKvStore, now: () => number): Shif
             ...snapshot,
             openedAtLocal: nowMs,
             status: 'local_open_pending',
+            remoteCreateState: 'none',
             createdAtLocal: nowMs,
             updatedAtLocal: nowMs,
             lastErrorMessage: null,
@@ -408,7 +443,7 @@ function buildJournalApi(store: ShiftOpenIntentKvStore, now: () => number): Shif
             `Stored open-intent for shift "${shiftId}" is unreadable.`,
           );
         }
-        return { ok: true, value: raw };
+        return { ok: true, value: coerceOpenIntentEntry(raw) };
       }),
 
     listOpenIntents: () =>
@@ -425,7 +460,7 @@ function buildJournalApi(store: ShiftOpenIntentKvStore, now: () => number): Shif
               message: 'Unreadable open-intent record in store',
             };
           }
-          entries.push(raw);
+          entries.push(coerceOpenIntentEntry(raw));
         }
         return { ok: true, value: entries };
       }),
@@ -437,13 +472,14 @@ function buildJournalApi(store: ShiftOpenIntentKvStore, now: () => number): Shif
         );
         for (const raw of listed) {
           if (!isOpenIntentEntry(raw)) continue;
+          const entry = coerceOpenIntentEntry(raw);
           if (
-            raw.status === 'local_open_pending' &&
-            raw.branchId === branchId &&
-            raw.staffId === staffId &&
-            raw.deviceId === deviceId
+            entry.status === 'local_open_pending' &&
+            entry.branchId === branchId &&
+            entry.staffId === staffId &&
+            entry.deviceId === deviceId
           ) {
-            return { ok: true, value: raw };
+            return { ok: true, value: entry };
           }
         }
         return { ok: true, value: undefined };
@@ -456,11 +492,42 @@ function buildJournalApi(store: ShiftOpenIntentKvStore, now: () => number): Shif
         );
         for (const raw of listed) {
           if (!isOpenIntentEntry(raw)) continue;
-          if (raw.status === 'rejected_manual_attention' && raw.deviceId === deviceId) {
-            return { ok: true, value: raw };
+          const entry = coerceOpenIntentEntry(raw);
+          if (entry.status === 'rejected_manual_attention' && entry.deviceId === deviceId) {
+            return { ok: true, value: entry };
           }
         }
         return { ok: true, value: undefined };
+      }),
+
+    claimRemoteCreateAttempt: (shiftId) =>
+      runStore(store, async (s) => {
+        const result = await s.transact(['shiftOpenIntents'], 'readwrite', async (txn) => {
+          const existingRaw = await txn.get<unknown>('shiftOpenIntents', shiftId);
+          if (!existingRaw) return notFound<ClaimRemoteCreateAttemptResult>();
+          if (!isOpenIntentEntry(existingRaw)) {
+            return conflict<ClaimRemoteCreateAttemptResult>(
+              `Stored open-intent for shift "${shiftId}" is unreadable — create claim denied.`,
+            );
+          }
+          const existing = coerceOpenIntentEntry(existingRaw);
+          if (existing.status !== 'local_open_pending') {
+            return conflict<ClaimRemoteCreateAttemptResult>(
+              `Cannot claim create attempt for open-intent "${shiftId}" in status ${existing.status}.`,
+            );
+          }
+          if (existing.remoteCreateState === 'outstanding') {
+            return { ok: true as const, value: 'already_outstanding' as const };
+          }
+          const next: ShiftOpenIntentEntry = {
+            ...existing,
+            remoteCreateState: 'outstanding',
+            updatedAtLocal: now(),
+          };
+          await txn.put('shiftOpenIntents', shiftId, next);
+          return { ok: true as const, value: 'claimed' as const };
+        });
+        return result;
       }),
 
     markSynced: (shiftId) => markStatus(shiftId, 'synced', null),

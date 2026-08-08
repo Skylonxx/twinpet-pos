@@ -8,9 +8,18 @@
  *
  * Remote create must remain exact W0 rules shape — offline metadata lives here / on the
  * client-built Shift snapshot only, never on the queued setDoc payload.
+ *
+ * remoteCreateState (M1):
+ *   none        — no create attempt claimed; sole state that may start a W0 create
+ *   outstanding — a create attempt was claimed; never start another for this intent
+ * Outstanding is never cleared back to none based on server absence alone (Firestore may
+ * still own a queued mutation). Terminal synced/rejected statuses end the lifecycle.
  */
 
 export type ShiftOpenIntentStatus = 'local_open_pending' | 'synced' | 'rejected_manual_attention';
+
+/** Durable create-attempt lease for AT_MOST_ONE_OUTSTANDING_CREATE_ATTEMPT_PER_SHIFT_OPEN_INTENT. */
+export type ShiftOpenRemoteCreateState = 'none' | 'outstanding';
 
 /** Caller-owned business fields only — never includes store-generated metadata. */
 export type ShiftOpenIntentBusinessSnapshot = {
@@ -30,10 +39,17 @@ export type ShiftOpenIntentSnapshot = ShiftOpenIntentBusinessSnapshot & {
 
 export type ShiftOpenIntentEntry = ShiftOpenIntentSnapshot & {
   status: ShiftOpenIntentStatus;
+  /**
+   * Create-attempt serialization. Missing on legacy records — readers MUST treat
+   * missing as `outstanding` (fail closed: do not reissue).
+   */
+  remoteCreateState: ShiftOpenRemoteCreateState;
   createdAtLocal: number;
   updatedAtLocal: number;
   lastErrorMessage: string | null;
 };
+
+export type ClaimRemoteCreateAttemptResult = 'claimed' | 'already_outstanding';
 
 export type OpenIntentErrorCode = 'unavailable' | 'quota' | 'conflict' | 'not_found' | 'tx_failed';
 

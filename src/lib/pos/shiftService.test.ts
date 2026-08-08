@@ -54,7 +54,10 @@ vi.mock('./deviceId', async (importOriginal) => {
 
 // Imported AFTER the mocks are declared (vi.mock is hoisted, so this is safe).
 import { closeShift, openShift } from './shiftService';
-import { createInMemoryShiftOpenIntentJournal } from './offline/shiftOpenIntentStore';
+import {
+  createInMemoryShiftOpenIntentJournal,
+  type ShiftOpenIntentJournal,
+} from './offline/shiftOpenIntentStore';
 
 function makeOpenSnap(status: string = 'open') {
   return { exists: () => true, data: () => ({ status }) };
@@ -813,5 +816,146 @@ describe('openShift — PK-1 local optimistic offline open', () => {
     });
     expect(result.status).toBe('open');
     expect(setDocMock).toHaveBeenCalledTimes(1);
+  });
+
+  test('unavailable remote write error remains pending — intent not erased', async () => {
+    setDocMock.mockRejectedValue(Object.assign(new Error('offline'), { code: 'unavailable' }));
+    const openJournal = createInMemoryShiftOpenIntentJournal();
+    const closeJournal = createInMemoryShiftCloseIntentJournal();
+
+    const result = await openShift('LDP-001', 'staff-1', 'ทดสอบ ระบบ', 500, {
+      journal: openJournal,
+      closeJournal,
+    });
+    const outcome = await result.whenServerConfirmed;
+    expect(outcome.outcome).toBe('still_pending');
+
+    const stored = await openJournal.getOpenIntent(result.id);
+    expect(stored.ok && stored.value?.status).toBe('local_open_pending');
+    expect(stored.ok && stored.value?.remoteCreateState).toBe('outstanding');
+    expect(stored.ok && stored.value?.shiftId).toBe(result.id);
+  });
+
+  test('ambiguous transport error remains pending — no false rejection', async () => {
+    setDocMock.mockRejectedValue(Object.assign(new Error('network'), { code: 'deadline-exceeded' }));
+    const openJournal = createInMemoryShiftOpenIntentJournal();
+    const closeJournal = createInMemoryShiftCloseIntentJournal();
+
+    const result = await openShift('LDP-001', 'staff-1', 'ทดสอบ ระบบ', 500, {
+      journal: openJournal,
+      closeJournal,
+    });
+    const outcome = await result.whenServerConfirmed;
+    expect(outcome.outcome).toBe('still_pending');
+    const stored = await openJournal.getOpenIntent(result.id);
+    expect(stored.ok && stored.value?.status).toBe('local_open_pending');
+  });
+
+  test('permission-denied remote write becomes rejected_manual_attention', async () => {
+    setDocMock.mockRejectedValue(
+      Object.assign(new Error('denied'), { code: 'permission-denied' }),
+    );
+    const openJournal = createInMemoryShiftOpenIntentJournal();
+    const closeJournal = createInMemoryShiftCloseIntentJournal();
+
+    const result = await openShift('LDP-001', 'staff-1', 'ทดสอบ ระบบ', 500, {
+      journal: openJournal,
+      closeJournal,
+    });
+    const outcome = await result.whenServerConfirmed;
+    expect(outcome).toEqual({ outcome: 'rejected', message: 'denied' });
+
+    const stored = await openJournal.getOpenIntent(result.id);
+    expect(stored.ok && stored.value?.status).toBe('rejected_manual_attention');
+    expect(stored.ok && stored.value?.lastErrorMessage).toBe('denied');
+  });
+
+  test('permission-denied + markRejectedManualAttention {ok:false} remains still_pending — no false manual attention', async () => {
+    setDocMock.mockRejectedValue(
+      Object.assign(new Error('denied'), { code: 'permission-denied' }),
+    );
+    const baseJournal = createInMemoryShiftOpenIntentJournal();
+    const markRejectedManualAttention = vi.fn(async () => ({
+      ok: false as const,
+      code: 'unavailable' as const,
+      message: 'IndexedDB unavailable',
+    }));
+    const openJournal: ShiftOpenIntentJournal = {
+      ...baseJournal,
+      markRejectedManualAttention,
+    };
+    const closeJournal = createInMemoryShiftCloseIntentJournal();
+
+    const result = await openShift('LDP-001', 'staff-1', 'ทดสอบ ระบบ', 500, {
+      journal: openJournal,
+      closeJournal,
+    });
+    const outcome = await result.whenServerConfirmed;
+    expect(outcome.outcome).toBe('still_pending');
+    expect(markRejectedManualAttention).toHaveBeenCalledTimes(1);
+
+    // Read durable state via the real base journal — stub only blocked the transition.
+    const stored = await baseJournal.getOpenIntent(result.id);
+    expect(stored.ok && stored.value?.status).toBe('local_open_pending');
+    expect(stored.ok && stored.value?.remoteCreateState).toBe('outstanding');
+    expect(stored.ok && stored.value?.shiftId).toBe(result.id);
+    expect(stored.ok && stored.value?.status).not.toBe('rejected_manual_attention');
+  });
+
+  test('after unavailable failure, later reconciliation can still confirm same pending intent', async () => {
+    setDocMock.mockRejectedValue(Object.assign(new Error('offline'), { code: 'unavailable' }));
+    const openJournal = createInMemoryShiftOpenIntentJournal();
+    const closeJournal = createInMemoryShiftCloseIntentJournal();
+
+    const result = await openShift('LDP-001', 'staff-1', 'ทดสอบ ระบบ', 500, {
+      journal: openJournal,
+      closeJournal,
+    });
+    expect((await result.whenServerConfirmed).outcome).toBe('still_pending');
+
+    const stored = await openJournal.getOpenIntent(result.id);
+    expect(stored.ok && stored.value).toBeTruthy();
+    if (!stored.ok || !stored.value) return;
+
+    const { reconcileShiftOpenIntent } = await import('./offline/shiftOpenReconciler');
+    const confirmed = await reconcileShiftOpenIntent(stored.value, {
+      journal: openJournal,
+      deviceId: 'DEV1',
+      readConfirmation: async () => ({
+        ok: true,
+        doc: {
+          exists: true,
+          status: 'open',
+          openedAt: { toDate: () => new Date('2026-08-08T12:00:00.000Z') },
+          branchId: 'LDP-001',
+          staffId: 'staff-1',
+          staffName: 'ทดสอบ ระบบ',
+          startingCash: 500,
+        },
+      }),
+    });
+    expect(confirmed.outcome).toBe('confirmed');
+    const after = await openJournal.getOpenIntent(result.id);
+    expect(after.ok && after.value?.status).toBe('synced');
+    expect(after.ok && after.value?.shiftId).toBe(result.id);
+  });
+
+  test('openShift claims create attempt before setDoc — resume does not allocate new id', async () => {
+    const openJournal = createInMemoryShiftOpenIntentJournal();
+    const closeJournal = createInMemoryShiftCloseIntentJournal();
+    const first = await openShift('LDP-001', 'staff-1', 'ทดสอบ ระบบ', 500, {
+      journal: openJournal,
+      closeJournal,
+    });
+    const afterFirst = await openJournal.getOpenIntent(first.id);
+    expect(afterFirst.ok && afterFirst.value?.remoteCreateState).toBe('outstanding');
+
+    setDocMock.mockClear();
+    const second = await openShift('LDP-001', 'staff-1', 'ทดสอบ ระบบ', 500, {
+      journal: openJournal,
+      closeJournal,
+    });
+    expect(second.id).toBe(first.id);
+    expect(setDocMock).not.toHaveBeenCalled();
   });
 });

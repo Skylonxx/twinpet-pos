@@ -284,6 +284,29 @@ export type ShiftOpenConfirmation =
   | { outcome: 'unreachable' }
   | { outcome: 'rejected'; message: string };
 
+/** Narrow definitive remote-rejection codes for open W0 writes (M2). */
+const DEFINITIVE_SHIFT_OPEN_REMOTE_REJECTION_CODES = new Set([
+  'permission-denied',
+  'firestore/permission-denied',
+]);
+
+function extractFirebaseErrorCode(err: unknown): string | null {
+  if (err && typeof err === 'object' && 'code' in err) {
+    const code = (err as { code?: unknown }).code;
+    if (typeof code === 'string' && code.length > 0) return code;
+  }
+  return null;
+}
+
+/**
+ * Only proven rules/permission (and similarly definitive) failures may become
+ * `rejected_manual_attention`. Ambiguous/unavailable/network errors must remain pending.
+ */
+export function isDefinitiveShiftOpenRemoteRejection(err: unknown): boolean {
+  const code = extractFirebaseErrorCode(err);
+  return code != null && DEFINITIVE_SHIFT_OPEN_REMOTE_REJECTION_CODES.has(code);
+}
+
 export type OpenShiftResult = Shift & {
   /**
    * Resolves once the SAME-RUNTIME write settles AND (only on ACK) a
@@ -443,9 +466,17 @@ export async function openShift(
     pendingEntry.startingCash,
   );
 
-  const writeAck: Promise<void> = issueRemoteWrite
-    ? setDoc(shiftRef, w0Payload)
-    : Promise.resolve();
+  let writeAck: Promise<void> = Promise.resolve();
+  if (issueRemoteWrite) {
+    const claim = await journal.claimRemoteCreateAttempt(pendingEntry.shiftId);
+    if (!claim.ok) {
+      throw new Error(OPEN_SHIFT_STORE_UNAVAILABLE_MESSAGE);
+    }
+    if (claim.value === 'claimed') {
+      writeAck = setDoc(shiftRef, w0Payload);
+    }
+    // already_outstanding → do not enqueue another W0 create
+  }
 
   const whenServerConfirmed: Promise<ShiftOpenConfirmation> = (async (): Promise<ShiftOpenConfirmation> => {
     try {
@@ -453,12 +484,24 @@ export async function openShift(
     } catch (err) {
       console.warn('[shiftService] openShift write not yet acked (queued, will retry)', err);
       const message = err instanceof Error ? err.message : String(err);
-      try {
-        await journal.markRejectedManualAttention(pendingEntry.shiftId, message);
-      } catch {
-        // Best-effort local journal write.
+      if (isDefinitiveShiftOpenRemoteRejection(err)) {
+        try {
+          const attention = await journal.markRejectedManualAttention(
+            pendingEntry.shiftId,
+            message,
+          );
+          // Terminal rejected/manual-attention only after durable journal transition.
+          if (!attention.ok) {
+            return { outcome: 'still_pending' };
+          }
+          return { outcome: 'rejected', message };
+        } catch {
+          // Durable attention persistence unknown — remain honest pending.
+          return { outcome: 'still_pending' };
+        }
       }
-      return { outcome: 'rejected', message };
+      // Ambiguous/transient — keep intent pending + create claim outstanding.
+      return { outcome: 'still_pending' };
     }
 
     // Resume path with no new write: still run confirmation-grade reconciliation.
@@ -485,11 +528,23 @@ export async function openShift(
   };
 }
 
-/** Re-issue W0 create for a pending open whose server doc is confirmed absent. */
-export function reissueShiftOpenWrite(entry: ShiftOpenIntentEntry): Promise<void> {
-  if (!isFirebaseConfigured || !db) return Promise.resolve();
+/**
+ * Re-issue W0 create for a pending open whose durable create claim is still `none`
+ * and whose server doc is confirmed absent. CAS-claims before setDoc so concurrent
+ * sweeps cannot enqueue duplicate creates.
+ */
+export async function reissueShiftOpenWrite(
+  entry: ShiftOpenIntentEntry,
+  deps?: { journal?: ShiftOpenIntentJournal },
+): Promise<'issued' | 'skipped'> {
+  if (!isFirebaseConfigured || !db) return 'skipped';
+  const journal = deps?.journal ?? getDefaultShiftOpenIntentJournal();
+  const claim = await journal.claimRemoteCreateAttempt(entry.shiftId);
+  if (!claim.ok) return 'skipped';
+  if (claim.value === 'already_outstanding') return 'skipped';
+
   const ref = doc(db, collections.shifts, entry.shiftId);
-  return setDoc(
+  await setDoc(
     ref,
     buildW0ShiftOpenPayload(
       entry.shiftId,
@@ -499,6 +554,7 @@ export function reissueShiftOpenWrite(entry: ShiftOpenIntentEntry): Promise<void
       entry.startingCash,
     ),
   );
+  return 'issued';
 }
 
 // Packet 7C-B1 (Option 2) — local optimistic offline close. Honest error copy;
