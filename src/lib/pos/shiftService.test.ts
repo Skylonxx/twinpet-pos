@@ -15,11 +15,20 @@ vi.mock('../firebase', () => ({
   collections: { shifts: 'shifts', cashTransactions: 'cashTransactions' },
 }));
 
-const { getDocFromCacheMock, getDocFromServerMock, updateDocMock, docMock } = vi.hoisted(() => ({
+const {
+  getDocFromCacheMock,
+  getDocFromServerMock,
+  updateDocMock,
+  setDocMock,
+  docMock,
+  collectionMock,
+} = vi.hoisted(() => ({
   getDocFromCacheMock: vi.fn(),
   getDocFromServerMock: vi.fn(),
   updateDocMock: vi.fn(),
+  setDocMock: vi.fn(),
   docMock: vi.fn(() => ({ id: 'shift-1' }) as never),
+  collectionMock: vi.fn(() => ({ path: 'shifts' }) as never),
 }));
 
 vi.mock('firebase/firestore', async (importOriginal) => {
@@ -27,9 +36,11 @@ vi.mock('firebase/firestore', async (importOriginal) => {
   return {
     ...actual,
     doc: docMock,
+    collection: collectionMock,
     getDocFromCache: getDocFromCacheMock,
     getDocFromServer: getDocFromServerMock,
     updateDoc: updateDocMock,
+    setDoc: setDocMock,
   };
 });
 
@@ -42,7 +53,8 @@ vi.mock('./deviceId', async (importOriginal) => {
 });
 
 // Imported AFTER the mocks are declared (vi.mock is hoisted, so this is safe).
-import { closeShift } from './shiftService';
+import { closeShift, openShift } from './shiftService';
+import { createInMemoryShiftOpenIntentJournal } from './offline/shiftOpenIntentStore';
 
 function makeOpenSnap(status: string = 'open') {
   return { exists: () => true, data: () => ({ status }) };
@@ -106,12 +118,24 @@ beforeEach(() => {
   getDocFromCacheMock.mockReset();
   updateDocMock.mockReset();
   updateDocMock.mockResolvedValue(undefined);
+  setDocMock.mockReset();
+  setDocMock.mockResolvedValue(undefined);
   getDocFromServerMock.mockReset();
   // Packet 7C-B2 default: "not found" — the same-runtime confirmation chain
   // (triggered fire-and-forget off the write ACK) resolves to `still_pending`
   // by default so existing tests that don't care about confirmation stay
   // deterministic and never touch a real network/Firestore instance.
   getDocFromServerMock.mockResolvedValue({ exists: () => false, data: () => undefined });
+  docMock.mockReset();
+  docMock.mockImplementation((...args: unknown[]) => {
+    // doc(collection) → new id; doc(db, 'shifts', id) → existing id
+    if (args.length >= 3 && typeof args[2] === 'string') {
+      return { id: args[2] } as never;
+    }
+    return { id: 'shift-1' } as never;
+  });
+  collectionMock.mockReset();
+  collectionMock.mockReturnValue({ path: 'shifts' } as never);
 });
 
 afterEach(() => {
@@ -540,5 +564,254 @@ describe('OBS-B2 closeShift Mechanism-B observer wiring', () => {
     expect(patch.closeCorrelationId).toBe(FIXED_CORR);
     expect(patch.deviceId).toBe('DEV1');
     expect(patch.syncState).toBe('pending');
+  });
+});
+
+describe('openShift — PK-1 local optimistic offline open', () => {
+  test('persists open intent before issuing remote setDoc', async () => {
+    const openJournal = createInMemoryShiftOpenIntentJournal();
+    const closeJournal = createInMemoryShiftCloseIntentJournal();
+    let intentVisibleBeforeSetDoc = false;
+    let resolveSetDoc!: () => void;
+    const setDocGate = new Promise<void>((resolve) => {
+      resolveSetDoc = resolve;
+    });
+    setDocMock.mockImplementation(async () => {
+      const stored = await openJournal.getOpenIntent('shift-1');
+      intentVisibleBeforeSetDoc = !!(stored.ok && stored.value?.status === 'local_open_pending');
+      resolveSetDoc();
+    });
+
+    const resultPromise = openShift('LDP-001', 'staff-1', 'ทดสอบ ระบบ', 500, {
+      journal: openJournal,
+      closeJournal,
+    });
+    await setDocGate;
+    const result = await resultPromise;
+
+    expect(intentVisibleBeforeSetDoc).toBe(true);
+    expect(setDocMock).toHaveBeenCalledTimes(1);
+    expect(result.id).toBe('shift-1');
+  });
+
+  test('local persistence failure prevents remote write', async () => {
+    const openJournal = createInMemoryShiftOpenIntentJournal();
+    const closeJournal = createInMemoryShiftCloseIntentJournal();
+    vi.spyOn(openJournal, 'upsertOpenIntent').mockResolvedValue({
+      ok: false,
+      code: 'unavailable',
+    });
+    vi.spyOn(openJournal, 'findPendingOpenForStaff').mockResolvedValue({
+      ok: true,
+      value: undefined,
+    });
+    vi.spyOn(openJournal, 'findRejectedOpenForDevice').mockResolvedValue({
+      ok: true,
+      value: undefined,
+    });
+
+    await expect(
+      openShift('LDP-001', 'staff-1', 'ทดสอบ ระบบ', 500, {
+        journal: openJournal,
+        closeJournal,
+      }),
+    ).rejects.toThrow(/ออฟไลน์ไม่สำเร็จ|ไม่พร้อม/);
+    expect(setDocMock).not.toHaveBeenCalled();
+  });
+
+  test('returns usable local Shift without awaiting unresolved remote write', async () => {
+    setDocMock.mockImplementation(() => new Promise(() => {})); // never resolves
+    const openJournal = createInMemoryShiftOpenIntentJournal();
+    const closeJournal = createInMemoryShiftCloseIntentJournal();
+
+    const result = await openShift('LDP-001', 'staff-1', 'ทดสอบ ระบบ', 500, {
+      journal: openJournal,
+      closeJournal,
+    });
+
+    expect(result.id).toBe('shift-1');
+    expect(result.status).toBe('open');
+    expect(result.openedOffline).toBe(true);
+    expect(result.syncState).toBe('pending');
+    expect(result.startingCash).toBe(500);
+    expect(result.deviceId).toBe('DEV1');
+  });
+
+  test('remote create payload is exact W0 shape (no offline extras)', async () => {
+    const openJournal = createInMemoryShiftOpenIntentJournal();
+    const closeJournal = createInMemoryShiftCloseIntentJournal();
+    await openShift('LDP-001', 'staff-1', 'ทดสอบ ระบบ', 500, {
+      journal: openJournal,
+      closeJournal,
+    });
+
+    const [, payload] = setDocMock.mock.calls[0] as [unknown, Record<string, unknown>];
+    expect(Object.keys(payload).sort()).toEqual(
+      [
+        'id',
+        'branchId',
+        'staffId',
+        'staffName',
+        'status',
+        'openedAt',
+        'closedAt',
+        'startingCash',
+        'actualCashCount',
+        'expectedCash',
+        'expectedQr',
+        'expectedKbank',
+        'expectedCard',
+        'expectedCredit',
+        'totalBills',
+        'payInTotal',
+        'payOutTotal',
+        'variance',
+        'note',
+      ].sort(),
+    );
+    expect(payload.status).toBe('open');
+    expect(payload.closedAt).toBeNull();
+    expect(payload.openedAt).toEqual(serverTimestamp());
+    expect(payload).not.toHaveProperty('deviceId');
+    expect(payload).not.toHaveProperty('openedOffline');
+    expect(payload).not.toHaveProperty('syncState');
+  });
+
+  test('retry/resume of same pending open reuses shift identity and does not re-setDoc', async () => {
+    const openJournal = createInMemoryShiftOpenIntentJournal();
+    const closeJournal = createInMemoryShiftCloseIntentJournal();
+
+    const first = await openShift('LDP-001', 'staff-1', 'ทดสอบ ระบบ', 500, {
+      journal: openJournal,
+      closeJournal,
+    });
+    expect(setDocMock).toHaveBeenCalledTimes(1);
+
+    const second = await openShift('LDP-001', 'staff-1', 'ทดสอบ ระบบ', 500, {
+      journal: openJournal,
+      closeJournal,
+    });
+    expect(second.id).toBe(first.id);
+    expect(setDocMock).toHaveBeenCalledTimes(1);
+  });
+
+  test('rejected open blocks duplicate new open', async () => {
+    const openJournal = createInMemoryShiftOpenIntentJournal();
+    const closeJournal = createInMemoryShiftCloseIntentJournal();
+    await openJournal.upsertOpenIntent({
+      shiftId: 'old-open',
+      branchId: 'LDP-001',
+      staffId: 'staff-1',
+      staffName: 'ทดสอบ ระบบ',
+      startingCash: 100,
+      deviceId: 'DEV1',
+    });
+    await openJournal.markRejectedManualAttention('old-open', 'denied');
+
+    await expect(
+      openShift('LDP-001', 'staff-1', 'ทดสอบ ระบบ', 500, {
+        journal: openJournal,
+        closeJournal,
+      }),
+    ).rejects.toThrow(/ถูกปฏิเสธ/);
+    expect(setDocMock).not.toHaveBeenCalled();
+  });
+
+  test('rejected close blocks new open', async () => {
+    const openJournal = createInMemoryShiftOpenIntentJournal();
+    const closeJournal = createInMemoryShiftCloseIntentJournal();
+    await closeJournal.upsertCloseIntent({
+      shiftId: 'closed-1',
+      branchId: 'LDP-001',
+      staffId: 'staff-1',
+      staffName: 'ทดสอบ ระบบ',
+      startingCash: 500,
+      expectedCash: 0,
+      expectedQr: 0,
+      expectedKbank: 0,
+      expectedCard: 0,
+      expectedCredit: 0,
+      payInTotal: 0,
+      payOutTotal: 0,
+      totalBills: 0,
+      actualCashCount: 500,
+      variance: 0,
+      note: '',
+      deviceId: 'DEV1',
+    });
+    await closeJournal.markRejectedManualAttention('closed-1', 'close denied');
+
+    await expect(
+      openShift('LDP-001', 'staff-1', 'ทดสอบ ระบบ', 500, {
+        journal: openJournal,
+        closeJournal,
+      }),
+    ).rejects.toThrow(/ปิดกะก่อนหน้านี้ต้องตรวจสอบ/);
+    expect(setDocMock).not.toHaveBeenCalled();
+  });
+
+  test('unresolved pending close against still-open cached shift blocks new open', async () => {
+    const openJournal = createInMemoryShiftOpenIntentJournal();
+    const closeJournal = createInMemoryShiftCloseIntentJournal();
+    await closeJournal.upsertCloseIntent({
+      shiftId: 'still-open-close',
+      branchId: 'LDP-001',
+      staffId: 'staff-1',
+      staffName: 'ทดสอบ ระบบ',
+      startingCash: 500,
+      expectedCash: 0,
+      expectedQr: 0,
+      expectedKbank: 0,
+      expectedCard: 0,
+      expectedCredit: 0,
+      payInTotal: 0,
+      payOutTotal: 0,
+      totalBills: 0,
+      actualCashCount: 500,
+      variance: 0,
+      note: '',
+      deviceId: 'DEV1',
+    });
+    getDocFromCacheMock.mockResolvedValue(makeOpenSnap('open'));
+
+    await expect(
+      openShift('LDP-001', 'staff-1', 'ทดสอบ ระบบ', 500, {
+        journal: openJournal,
+        closeJournal,
+      }),
+    ).rejects.toThrow(/ปิดค้าง/);
+    expect(setDocMock).not.toHaveBeenCalled();
+  });
+
+  test('pending close for already-closed shift still allows a new open (multi-shift)', async () => {
+    const openJournal = createInMemoryShiftOpenIntentJournal();
+    const closeJournal = createInMemoryShiftCloseIntentJournal();
+    await closeJournal.upsertCloseIntent({
+      shiftId: 'already-closed',
+      branchId: 'LDP-001',
+      staffId: 'staff-1',
+      staffName: 'ทดสอบ ระบบ',
+      startingCash: 500,
+      expectedCash: 0,
+      expectedQr: 0,
+      expectedKbank: 0,
+      expectedCard: 0,
+      expectedCredit: 0,
+      payInTotal: 0,
+      payOutTotal: 0,
+      totalBills: 0,
+      actualCashCount: 500,
+      variance: 0,
+      note: '',
+      deviceId: 'DEV1',
+    });
+    getDocFromCacheMock.mockResolvedValue(makeOpenSnap('closed'));
+
+    const result = await openShift('LDP-001', 'staff-1', 'ทดสอบ ระบบ', 500, {
+      journal: openJournal,
+      closeJournal,
+    });
+    expect(result.status).toBe('open');
+    expect(setDocMock).toHaveBeenCalledTimes(1);
   });
 });

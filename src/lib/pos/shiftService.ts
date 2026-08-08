@@ -33,6 +33,17 @@ import {
   type ShiftCloseNormalizer,
 } from './offline/shiftCloseReconciler';
 import {
+  createShiftOpenIntentJournal,
+  type ShiftOpenIntentJournal,
+} from './offline/shiftOpenIntentStore';
+import type { ShiftOpenIntentBusinessSnapshot, ShiftOpenIntentEntry } from './offline/shiftOpenIntentTypes';
+import {
+  reconcileShiftOpenIntent,
+  type ShiftOpenConfirmationDoc,
+  type ShiftOpenConfirmationRead,
+  type ShiftOpenConfirmationReader,
+} from './offline/shiftOpenReconciler';
+import {
   devCloseShift,
   devGetActiveShift,
   devOpenShift,
@@ -150,19 +161,37 @@ export async function getActiveShift(branchId: string, staffId: string): Promise
   return mapShift(docSnap.id, docSnap.data());
 }
 
-export async function openShift(
+// PK-1 — local optimistic offline open. Honest error copy; no claim of server
+// acceptance while pending. Remote create payload MUST remain exact W0 rules shape.
+const OPEN_SHIFT_STORE_UNAVAILABLE_MESSAGE =
+  'บันทึกการเปิดกะแบบออฟไลน์ไม่สำเร็จ (พื้นที่จัดเก็บในเครื่องไม่พร้อมใช้งานหรือเต็ม) กรุณาลองใหม่ หรือเชื่อมต่ออินเทอร์เน็ตแล้วลองอีกครั้ง';
+const OPEN_SHIFT_CONFLICT_MESSAGE =
+  'พบข้อมูลเปิดกะอื่นสำหรับเครื่องนี้ที่ยังไม่เคลียร์ กรุณาตรวจสอบก่อนดำเนินการต่อ';
+const OPEN_SHIFT_REJECTED_OPEN_MESSAGE =
+  'การเปิดกะก่อนหน้านี้ถูกปฏิเสธและต้องตรวจสอบ — ไม่สามารถเปิดกะใหม่ได้จนกว่าจะเคลียร์รายการนี้';
+const OPEN_SHIFT_REJECTED_CLOSE_MESSAGE =
+  'การปิดกะก่อนหน้านี้ต้องตรวจสอบ — ไม่สามารถเปิดกะใหม่ได้จนกว่าจะเคลียร์รายการนี้';
+const OPEN_SHIFT_UNRESOLVED_CLOSE_MESSAGE =
+  'มีกะที่ปิดค้างอยู่ในเครื่องนี้และยังยืนยันสถานะไม่ได้ — ไม่สามารถเปิดกะใหม่ได้ในขณะนี้';
+
+let defaultShiftOpenIntentJournal: ShiftOpenIntentJournal | undefined;
+function getDefaultShiftOpenIntentJournal(): ShiftOpenIntentJournal {
+  if (!defaultShiftOpenIntentJournal) {
+    defaultShiftOpenIntentJournal = createShiftOpenIntentJournal();
+  }
+  return defaultShiftOpenIntentJournal;
+}
+
+/** Exact W0 create payload — must stay allowlist-identical to `isW0ShiftOpen`. */
+function buildW0ShiftOpenPayload(
+  shiftId: string,
   branchId: string,
   staffId: string,
   staffName: string,
   startingCash: number,
-): Promise<string> {
-  if (!isFirebaseConfigured || !db) {
-    return devOpenShift(branchId, staffId, staffName, startingCash);
-  }
-
-  const ref = doc(collection(db, collections.shifts));
-  await setDoc(ref, {
-    id: ref.id,
+): Record<string, unknown> {
+  return {
+    id: shiftId,
     branchId,
     staffId,
     staffName,
@@ -181,8 +210,295 @@ export async function openShift(
     payOutTotal: 0,
     variance: 0,
     note: '',
-  });
-  return ref.id;
+  };
+}
+
+/**
+ * Client-built local open snapshot. `openedAt` carries device time for display only
+ * while `openedOffline && syncState === 'pending'` — never proof of server acceptance.
+ */
+export function buildLocalOpenShiftSnapshot(entry: ShiftOpenIntentEntry): Shift {
+  const openedAt = {
+    toDate: () => new Date(entry.openedAtLocal),
+    toMillis: () => entry.openedAtLocal,
+  } as Shift['openedAt'];
+
+  return {
+    id: entry.shiftId,
+    branchId: entry.branchId,
+    staffId: entry.staffId,
+    staffName: entry.staffName,
+    status: 'open',
+    openedAt,
+    closedAt: null,
+    startingCash: entry.startingCash,
+    actualCashCount: 0,
+    expectedCash: 0,
+    expectedQr: 0,
+    expectedKbank: 0,
+    expectedCard: 0,
+    expectedCredit: 0,
+    totalBills: 0,
+    payInTotal: 0,
+    payOutTotal: 0,
+    variance: 0,
+    note: '',
+    deviceId: entry.deviceId ?? undefined,
+    openedOffline: true,
+    syncState: entry.status === 'synced' ? 'synced' : 'pending',
+    cashEntries: [],
+  };
+}
+
+/**
+ * PK-1 — confirmation-grade shift-doc reader for open reconciliation.
+ * Uses `getDocFromServer` (never cache) — same contract as close confirmation.
+ */
+export const readShiftOpenConfirmation: ShiftOpenConfirmationReader = async (
+  shiftId,
+): Promise<ShiftOpenConfirmationRead> => {
+  if (!isFirebaseConfigured || !db) return { ok: false };
+  try {
+    const snap = await getDocFromServer(doc(db, collections.shifts, shiftId));
+    if (!snap.exists()) return { ok: true, doc: { exists: false } };
+    const data = snap.data() as Record<string, unknown>;
+    const confirmationDoc: ShiftOpenConfirmationDoc = {
+      exists: true,
+      status: data.status as string | undefined,
+      openedAt: data.openedAt,
+      branchId: data.branchId as string | undefined,
+      staffId: data.staffId as string | undefined,
+      staffName: data.staffName as string | undefined,
+      startingCash: data.startingCash as number | undefined,
+    };
+    return { ok: true, doc: confirmationDoc };
+  } catch {
+    return { ok: false };
+  }
+};
+
+export type ShiftOpenConfirmation =
+  | { outcome: 'confirmed'; openedAt: Date }
+  | { outcome: 'still_pending' }
+  | { outcome: 'identity_mismatch' }
+  | { outcome: 'unreachable' }
+  | { outcome: 'rejected'; message: string };
+
+export type OpenShiftResult = Shift & {
+  /**
+   * Resolves once the SAME-RUNTIME write settles AND (only on ACK) a
+   * confirmation-grade server read proves the open — never from the ACK alone.
+   */
+  whenServerConfirmed: Promise<ShiftOpenConfirmation>;
+};
+
+export type OpenShiftDeps = {
+  journal?: ShiftOpenIntentJournal;
+  /** Close journal — used only for open/close conflict guards. */
+  closeJournal?: ShiftCloseIntentJournal;
+  readConfirmation?: ShiftOpenConfirmationReader;
+  /** When false, skip issuing setDoc (resume path already queued the write). */
+  issueRemoteWrite?: boolean;
+};
+
+/**
+ * Open a shift — PK-1 local optimistic offline open, mirroring closeShift's
+ * durable-intent → non-awaited write → immediate snapshot contract.
+ *
+ * Ordering (load-bearing):
+ *  1. Conflict guards (rejected open/close; resume pending open).
+ *  2. Persist durable open-intent BEFORE any remote mutation.
+ *  3. Queue non-awaited W0 `setDoc` (exact rules allowlist — no offline extras).
+ *  4. Return client-built Shift immediately + `whenServerConfirmed`.
+ */
+export async function openShift(
+  branchId: string,
+  staffId: string,
+  staffName: string,
+  startingCash: number,
+  deps?: OpenShiftDeps,
+): Promise<OpenShiftResult> {
+  if (!isFirebaseConfigured || !db) {
+    const id = devOpenShift(branchId, staffId, staffName, startingCash);
+    const opened = (await getActiveShift(branchId, staffId)) ?? {
+      id,
+      branchId,
+      staffId,
+      staffName,
+      status: 'open' as const,
+      openedAt: { toDate: () => new Date(), toMillis: () => Date.now() } as Shift['openedAt'],
+      closedAt: null,
+      startingCash,
+      actualCashCount: 0,
+      expectedCash: 0,
+      expectedQr: 0,
+      expectedKbank: 0,
+      expectedCard: 0,
+      expectedCredit: 0,
+      totalBills: 0,
+      payInTotal: 0,
+      payOutTotal: 0,
+      variance: 0,
+      note: '',
+      cashEntries: [],
+    };
+    const openedAtServer =
+      opened.openedAt != null && typeof (opened.openedAt as { toDate?: unknown }).toDate === 'function'
+        ? (opened.openedAt as { toDate: () => Date }).toDate()
+        : new Date();
+    return {
+      ...opened,
+      whenServerConfirmed: Promise.resolve({ outcome: 'confirmed', openedAt: openedAtServer }),
+    };
+  }
+
+  const deviceId = getDeviceId();
+  const journal = deps?.journal ?? getDefaultShiftOpenIntentJournal();
+  const closeJournal = deps?.closeJournal ?? getDefaultShiftCloseIntentJournal();
+  const readConfirmation = deps?.readConfirmation ?? readShiftOpenConfirmation;
+
+  // Conflict: rejected open for this device blocks a new open.
+  const rejectedOpen = await journal.findRejectedOpenForDevice(deviceId);
+  if (!rejectedOpen.ok) {
+    throw new Error(OPEN_SHIFT_STORE_UNAVAILABLE_MESSAGE);
+  }
+  if (rejectedOpen.value) {
+    throw new Error(OPEN_SHIFT_REJECTED_OPEN_MESSAGE);
+  }
+
+  // Conflict: rejected close for this device blocks a new open.
+  const closeListed = await closeJournal.listCloseIntents();
+  if (!closeListed.ok) {
+    throw new Error(OPEN_SHIFT_STORE_UNAVAILABLE_MESSAGE);
+  }
+  const rejectedClose = closeListed.value.find(
+    (e) => e.status === 'rejected_manual_attention' && e.deviceId === deviceId,
+  );
+  if (rejectedClose) {
+    throw new Error(OPEN_SHIFT_REJECTED_CLOSE_MESSAGE);
+  }
+
+  // Conflict: pending close whose shift still appears open in local cache —
+  // fail closed (would otherwise invite a duplicate open). Pending close for an
+  // already-closed shift does NOT block (existing multi-shift contract).
+  const pendingCloses = closeListed.value.filter(
+    (e) => e.status === 'local_closed_pending' && e.deviceId === deviceId,
+  );
+  for (const pendingClose of pendingCloses) {
+    try {
+      const cached = await getDocFromCache(doc(db, collections.shifts, pendingClose.shiftId));
+      if (cached.exists() && (cached.data() as { status?: string }).status === 'open') {
+        throw new Error(OPEN_SHIFT_UNRESOLVED_CLOSE_MESSAGE);
+      }
+    } catch (err) {
+      if (err instanceof Error && err.message === OPEN_SHIFT_UNRESOLVED_CLOSE_MESSAGE) throw err;
+      // Cache miss/unverifiable for a pending close — fail closed rather than open over it.
+      throw new Error(OPEN_SHIFT_UNRESOLVED_CLOSE_MESSAGE);
+    }
+  }
+
+  // Resume existing pending open for this staff+device — never allocate a second id.
+  const existingPending = await journal.findPendingOpenForStaff(branchId, staffId, deviceId);
+  if (!existingPending.ok) {
+    throw new Error(OPEN_SHIFT_STORE_UNAVAILABLE_MESSAGE);
+  }
+
+  let pendingEntry: ShiftOpenIntentEntry;
+  let issueRemoteWrite = deps?.issueRemoteWrite !== false;
+
+  if (existingPending.value) {
+    pendingEntry = existingPending.value;
+    // Resume must not re-issue setDoc by default (a second setDoc after create
+    // succeeds becomes an update and is denied by W0/W1–W4). Boot/reconnect
+    // reissue is owned by the open reconciler when the server doc is absent.
+    issueRemoteWrite = deps?.issueRemoteWrite === true;
+  } else {
+    const ref = doc(collection(db, collections.shifts));
+    const businessSnapshot: ShiftOpenIntentBusinessSnapshot = {
+      shiftId: ref.id,
+      branchId,
+      staffId,
+      staffName,
+      startingCash,
+      deviceId,
+    };
+
+    const intentResult = await journal.upsertOpenIntent(businessSnapshot);
+    if (!intentResult.ok) {
+      if (intentResult.code === 'conflict') {
+        throw new Error(OPEN_SHIFT_CONFLICT_MESSAGE);
+      }
+      throw new Error(OPEN_SHIFT_STORE_UNAVAILABLE_MESSAGE);
+    }
+    pendingEntry = intentResult.value;
+  }
+
+  const firestore = db;
+  const shiftRef = doc(firestore, collections.shifts, pendingEntry.shiftId);
+  const w0Payload = buildW0ShiftOpenPayload(
+    pendingEntry.shiftId,
+    pendingEntry.branchId,
+    pendingEntry.staffId,
+    pendingEntry.staffName,
+    pendingEntry.startingCash,
+  );
+
+  const writeAck: Promise<void> = issueRemoteWrite
+    ? setDoc(shiftRef, w0Payload)
+    : Promise.resolve();
+
+  const whenServerConfirmed: Promise<ShiftOpenConfirmation> = (async (): Promise<ShiftOpenConfirmation> => {
+    try {
+      await writeAck;
+    } catch (err) {
+      console.warn('[shiftService] openShift write not yet acked (queued, will retry)', err);
+      const message = err instanceof Error ? err.message : String(err);
+      try {
+        await journal.markRejectedManualAttention(pendingEntry.shiftId, message);
+      } catch {
+        // Best-effort local journal write.
+      }
+      return { outcome: 'rejected', message };
+    }
+
+    // Resume path with no new write: still run confirmation-grade reconciliation.
+    try {
+      const result = await reconcileShiftOpenIntent(pendingEntry, {
+        journal,
+        readConfirmation,
+        deviceId,
+      });
+      if (result.outcome === 'confirmed' && result.openedAtServer) {
+        return { outcome: 'confirmed', openedAt: result.openedAtServer };
+      }
+      if (result.outcome === 'identity_mismatch') return { outcome: 'identity_mismatch' };
+      if (result.outcome === 'unreachable') return { outcome: 'unreachable' };
+      return { outcome: 'still_pending' };
+    } catch {
+      return { outcome: 'unreachable' };
+    }
+  })();
+
+  return {
+    ...buildLocalOpenShiftSnapshot(pendingEntry),
+    whenServerConfirmed,
+  };
+}
+
+/** Re-issue W0 create for a pending open whose server doc is confirmed absent. */
+export function reissueShiftOpenWrite(entry: ShiftOpenIntentEntry): Promise<void> {
+  if (!isFirebaseConfigured || !db) return Promise.resolve();
+  const ref = doc(db, collections.shifts, entry.shiftId);
+  return setDoc(
+    ref,
+    buildW0ShiftOpenPayload(
+      entry.shiftId,
+      entry.branchId,
+      entry.staffId,
+      entry.staffName,
+      entry.startingCash,
+    ),
+  );
 }
 
 // Packet 7C-B1 (Option 2) — local optimistic offline close. Honest error copy;

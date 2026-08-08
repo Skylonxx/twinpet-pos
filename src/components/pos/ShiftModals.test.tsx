@@ -3,7 +3,7 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { createElement } from 'react';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { CloseShiftModal, ShiftBootBlockedModal } from './ShiftModals';
+import { CloseShiftModal, OpenShiftModal, ShiftBootBlockedModal } from './ShiftModals';
 import type { Shift } from '../../lib/types';
 
 // Packet 7C-A — offline-safe close-shift UX guard. `closeShift` is mocked so
@@ -12,6 +12,7 @@ import type { Shift } from '../../lib/types';
 // used for the drawer-expected display copy) stays real via importActual.
 const mocks = vi.hoisted(() => ({
   closeShift: vi.fn(),
+  openShift: vi.fn(),
 }));
 
 vi.mock('../../lib/pos/shiftService', async (importOriginal) => {
@@ -19,6 +20,7 @@ vi.mock('../../lib/pos/shiftService', async (importOriginal) => {
   return {
     ...actual,
     closeShift: mocks.closeShift,
+    openShift: mocks.openShift,
   };
 });
 
@@ -612,5 +614,108 @@ describe('ShiftBootBlockedModal — Packet 7C-B2 boot fail-closed / attention st
 
     fireEvent.click(screen.getByRole('button', { name: 'ลองตรวจสอบอีกครั้ง' }));
     expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('OpenShiftModal — PK-1 optimistic open + defensive timeout backstop', () => {
+  afterEach(() => {
+    cleanup();
+    mocks.openShift.mockReset();
+    vi.useRealTimers();
+  });
+
+  test('locally accepted pending open advances via onSuccess with honest pending wording available', async () => {
+    const onSuccess = vi.fn();
+    mocks.openShift.mockResolvedValue({
+      ...makeShift({ id: 'new-open', openedOffline: true, syncState: 'pending' }),
+      whenServerConfirmed: new Promise(() => {}),
+    });
+
+    render(
+      createElement(OpenShiftModal, {
+        branchId: 'LDP-001',
+        staffId: 'staff-1',
+        staffName: 'ทดสอบ ระบบ',
+        onSuccess,
+      }),
+    );
+    fireEvent.change(screen.getByLabelText('เงินทอนเริ่มต้น (Starting Cash)'), {
+      target: { value: '500' },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'เปิดกะ' }));
+    });
+
+    expect(onSuccess).toHaveBeenCalledTimes(1);
+    const shiftArg = onSuccess.mock.calls[0]![0] as Shift;
+    expect(shiftArg.openedOffline).toBe(true);
+    expect(shiftArg.syncState).toBe('pending');
+    // Must not overclaim server confirmation in the modal surface.
+    expect(screen.queryByText(/ยืนยันจากเซิร์ฟเวอร์แล้ว/)).toBeNull();
+  });
+
+  test('bounded timeout fail-safe surfaces retry/reload-safe message without infinite spinner', async () => {
+    vi.useFakeTimers();
+    mocks.openShift.mockImplementation(() => new Promise(() => {}));
+
+    render(
+      createElement(OpenShiftModal, {
+        branchId: 'LDP-001',
+        staffId: 'staff-1',
+        staffName: 'ทดสอบ ระบบ',
+        onSuccess: vi.fn(),
+      }),
+    );
+    fireEvent.change(screen.getByLabelText('เงินทอนเริ่มต้น (Starting Cash)'), {
+      target: { value: '500' },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'เปิดกะ' }));
+    });
+    expect(screen.getByRole('button', { name: 'กำลังเปิดกะ...' })).toBeTruthy();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+
+    expect(screen.getByTestId('shift-open-error').textContent).toMatch(/โหลดหน้าใหม่|ลองอีกครั้ง/);
+    expect(screen.getByRole('button', { name: 'เปิดกะ' })).toBeTruthy();
+  });
+
+  test('hard local persistence failure shows clear failure copy', async () => {
+    mocks.openShift.mockRejectedValue(
+      new Error('บันทึกการเปิดกะแบบออฟไลน์ไม่สำเร็จ (พื้นที่จัดเก็บในเครื่องไม่พร้อมใช้งานหรือเต็ม)'),
+    );
+
+    render(
+      createElement(OpenShiftModal, {
+        branchId: 'LDP-001',
+        staffId: 'staff-1',
+        staffName: 'ทดสอบ ระบบ',
+        onSuccess: vi.fn(),
+      }),
+    );
+    fireEvent.change(screen.getByLabelText('เงินทอนเริ่มต้น (Starting Cash)'), {
+      target: { value: '500' },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'เปิดกะ' }));
+    });
+
+    expect(screen.getByTestId('shift-open-error').textContent).toContain('ออฟไลน์ไม่สำเร็จ');
+  });
+
+  test('attentionMessage disables open and shows durable attention', () => {
+    render(
+      createElement(OpenShiftModal, {
+        branchId: 'LDP-001',
+        staffId: 'staff-1',
+        staffName: 'ทดสอบ ระบบ',
+        onSuccess: vi.fn(),
+        attentionMessage: 'การเปิดกะก่อนหน้านี้ถูกปฏิเสธและต้องตรวจสอบ',
+      }),
+    );
+    expect(screen.getByTestId('shift-open-attention')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'เปิดกะ' }).hasAttribute('disabled')).toBe(true);
   });
 });

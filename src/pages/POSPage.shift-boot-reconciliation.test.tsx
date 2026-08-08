@@ -16,10 +16,40 @@ const mocks = vi.hoisted(() => ({
   showToast: vi.fn(),
   getActiveShift: vi.fn(),
   readShiftCloseConfirmation: vi.fn(),
+  readShiftOpenConfirmation: vi.fn(),
   normalizeShiftCloseSyncState: vi.fn(),
+  reissueShiftOpenWrite: vi.fn(),
+  buildLocalOpenShiftSnapshot: vi.fn((entry: { shiftId: string }) => ({
+    id: entry.shiftId,
+    branchId: 'B1',
+    staffId: 'U1',
+    staffName: 'Test User',
+    status: 'open' as const,
+    openedAt: new Date() as unknown,
+    closedAt: null,
+    startingCash: 0,
+    actualCashCount: 0,
+    expectedCash: 0,
+    expectedQr: 0,
+    expectedKbank: 0,
+    expectedCard: 0,
+    expectedCredit: 0,
+    totalBills: 0,
+    payInTotal: 0,
+    payOutTotal: 0,
+    variance: 0,
+    note: '',
+    cashEntries: [],
+    openedOffline: true,
+    syncState: 'pending' as const,
+  })),
   runShiftCloseReconciliationSweep: vi.fn().mockResolvedValue([]),
+  runShiftOpenReconciliationSweep: vi.fn().mockResolvedValue([]),
   getCloseIntent: vi.fn(),
   listCloseIntents: vi.fn().mockResolvedValue({ ok: true, value: [] }),
+  findRejectedOpenForDevice: vi.fn().mockResolvedValue({ ok: true, value: undefined }),
+  findPendingOpenForStaff: vi.fn().mockResolvedValue({ ok: true, value: undefined }),
+  listOpenIntents: vi.fn().mockResolvedValue({ ok: true, value: [] }),
 }));
 
 // ── Hook mocks ──────────────────────────────────────────────────────────────
@@ -98,7 +128,10 @@ vi.mock('../lib/hooks/useLocalLedger', () => ({
 vi.mock('../lib/pos/shiftService', () => ({
   getActiveShift: mocks.getActiveShift,
   readShiftCloseConfirmation: mocks.readShiftCloseConfirmation,
+  readShiftOpenConfirmation: mocks.readShiftOpenConfirmation,
   normalizeShiftCloseSyncState: mocks.normalizeShiftCloseSyncState,
+  reissueShiftOpenWrite: mocks.reissueShiftOpenWrite,
+  buildLocalOpenShiftSnapshot: mocks.buildLocalOpenShiftSnapshot,
 }));
 vi.mock('../lib/pos/offline/shiftCloseIntentStore', () => ({
   createShiftCloseIntentJournal: () => ({
@@ -109,8 +142,22 @@ vi.mock('../lib/pos/offline/shiftCloseIntentStore', () => ({
     markRejectedManualAttention: vi.fn(),
   }),
 }));
+vi.mock('../lib/pos/offline/shiftOpenIntentStore', () => ({
+  createShiftOpenIntentJournal: () => ({
+    findRejectedOpenForDevice: mocks.findRejectedOpenForDevice,
+    findPendingOpenForStaff: mocks.findPendingOpenForStaff,
+    listOpenIntents: mocks.listOpenIntents,
+    getOpenIntent: vi.fn(),
+    upsertOpenIntent: vi.fn(),
+    markSynced: vi.fn(),
+    markRejectedManualAttention: vi.fn(),
+  }),
+}));
 vi.mock('../lib/pos/offline/shiftCloseReconciler', () => ({
   runShiftCloseReconciliationSweep: mocks.runShiftCloseReconciliationSweep,
+}));
+vi.mock('../lib/pos/offline/shiftOpenReconciler', () => ({
+  runShiftOpenReconciliationSweep: mocks.runShiftOpenReconciliationSweep,
 }));
 vi.mock('../lib/pos/deviceId', () => ({ getDeviceId: () => 'DEV-TEST' }));
 vi.mock('../lib/firebase', () => ({ isFirebaseConfigured: false }));
@@ -119,7 +166,6 @@ vi.mock('../lib/pos/shiftLedger', () => ({ deriveShiftDrawer: (s: unknown) => s 
 vi.mock('../lib/branches', () => ({ getBranchLabel: () => 'B1' }));
 vi.mock('../lib/config/features', () => ({ POS_FEATURES: { enableLoyaltyPoints: false } }));
 
-// ── Component stubs ─────────────────────────────────────────────────────────
 vi.mock('flowbite-react', () => ({
   Badge: ({ children }: { children?: React.ReactNode }) => <span>{children}</span>,
 }));
@@ -137,7 +183,11 @@ vi.mock('../components/products/ProductPickerDialog', () => ({
 vi.mock('../components/pos/CashTransactionModal', () => ({ default: () => null }));
 vi.mock('../components/pos/ShiftModals', () => ({
   CloseShiftModal: () => null,
-  OpenShiftModal: () => <div data-testid="open-shift-modal" />,
+  OpenShiftModal: ({ attentionMessage }: { attentionMessage?: string | null }) => (
+    <div data-testid="open-shift-modal">
+      {attentionMessage ? <span data-testid="open-shift-attention-prop">{attentionMessage}</span> : null}
+    </div>
+  ),
   ShiftBootBlockedModal: ({ onRetry }: { onRetry: () => void }) => (
     <div data-testid="shift-boot-blocked-modal">
       <button type="button" data-testid="shift-boot-blocked-retry" onClick={onRetry}>
@@ -185,6 +235,11 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   mocks.listCloseIntents.mockResolvedValue({ ok: true, value: [] });
+  mocks.findRejectedOpenForDevice.mockResolvedValue({ ok: true, value: undefined });
+  mocks.findPendingOpenForStaff.mockResolvedValue({ ok: true, value: undefined });
+  mocks.listOpenIntents.mockResolvedValue({ ok: true, value: [] });
+  mocks.runShiftCloseReconciliationSweep.mockResolvedValue([]);
+  mocks.runShiftOpenReconciliationSweep.mockResolvedValue([]);
 });
 
 describe('POSPage — Packet 7C-B2 boot fail-closed guard (RC-3)', () => {
@@ -210,7 +265,7 @@ describe('POSPage — Packet 7C-B2 boot fail-closed guard (RC-3)', () => {
     });
   });
 
-  test('a locally-closed shift (intent present) stays closed on boot — OpenShiftModal renders, not blocked', async () => {
+  test('a locally-closed shift (intent present) stays closed on boot — OpenShiftModal renders with attention, not free open', async () => {
     mocks.getActiveShift.mockResolvedValue(makeOpenShift());
     mocks.getCloseIntent.mockResolvedValue({
       ok: true,
@@ -220,7 +275,55 @@ describe('POSPage — Packet 7C-B2 boot fail-closed guard (RC-3)', () => {
     render(<POSPage />);
 
     expect(await screen.findByTestId('open-shift-modal')).toBeTruthy();
+    expect(await screen.findByTestId('open-shift-attention-prop')).toBeTruthy();
     expect(screen.queryByTestId('shift-boot-blocked-modal')).toBeNull();
+  });
+
+  test('PK-1: pending local open is restored at boot without OpenShiftModal', async () => {
+    mocks.findPendingOpenForStaff.mockResolvedValue({
+      ok: true,
+      value: {
+        shiftId: 'pending-open-1',
+        branchId: 'B1',
+        staffId: 'U1',
+        staffName: 'Test User',
+        startingCash: 300,
+        deviceId: 'DEV-TEST',
+        openedAtLocal: Date.now(),
+        status: 'local_open_pending',
+        createdAtLocal: Date.now(),
+        updatedAtLocal: Date.now(),
+        lastErrorMessage: null,
+      },
+    });
+    mocks.getActiveShift.mockResolvedValue(null);
+
+    render(<POSPage />);
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('open-shift-modal')).toBeNull();
+      expect(screen.queryByTestId('shift-boot-blocked-modal')).toBeNull();
+      expect(screen.getByTestId('shift-open-pending-banner')).toBeTruthy();
+    });
+    expect(mocks.buildLocalOpenShiftSnapshot).toHaveBeenCalled();
+    expect(mocks.getActiveShift).not.toHaveBeenCalled();
+  });
+
+  test('PK-1: rejected open surfaces durable attention and disables free open', async () => {
+    mocks.findRejectedOpenForDevice.mockResolvedValue({
+      ok: true,
+      value: {
+        shiftId: 'rej-open',
+        status: 'rejected_manual_attention',
+        lastErrorMessage: 'rules denied',
+        deviceId: 'DEV-TEST',
+      },
+    });
+
+    render(<POSPage />);
+
+    expect(await screen.findByTestId('open-shift-attention-prop')).toBeTruthy();
+    expect(screen.getByTestId('open-shift-attention-prop').textContent).toContain('rules denied');
   });
 
   test('retry re-runs the boot check and clears the blocked state once the store becomes readable', async () => {
@@ -250,34 +353,38 @@ describe('POSPage — Packet 7C-B2 boot fail-closed guard (RC-3)', () => {
   });
 });
 
-describe('POSPage — Packet 7C-B2 boot/reconnect reconciliation sweep', () => {
-  test('runs the reconciliation sweep once shiftReady, scoped to this device', async () => {
+describe('POSPage — Packet 7C-B2 + PK-1 boot/reconnect reconciliation sweep', () => {
+  test('runs close and open reconciliation sweeps once shiftReady, scoped to this device', async () => {
     mocks.getActiveShift.mockResolvedValue(null);
 
     render(<POSPage />);
 
     await waitFor(() => {
       expect(mocks.runShiftCloseReconciliationSweep).toHaveBeenCalled();
+      expect(mocks.runShiftOpenReconciliationSweep).toHaveBeenCalled();
     });
-    const call = mocks.runShiftCloseReconciliationSweep.mock.calls[0]![0];
-    expect(call.deviceId).toBe('DEV-TEST');
-    expect(typeof call.readConfirmation).toBe('function');
-    expect(typeof call.normalizeSyncState).toBe('function');
+    const closeCall = mocks.runShiftCloseReconciliationSweep.mock.calls[0]![0];
+    expect(closeCall.deviceId).toBe('DEV-TEST');
+    const openCall = mocks.runShiftOpenReconciliationSweep.mock.calls[0]![0];
+    expect(openCall.deviceId).toBe('DEV-TEST');
+    expect(typeof openCall.reissueOpenWrite).toBe('function');
   });
 
-  test('re-runs the sweep on a browser "online" event', async () => {
+  test('re-runs both sweeps on a browser "online" event', async () => {
     mocks.getActiveShift.mockResolvedValue(null);
 
     render(<POSPage />);
 
     await waitFor(() => {
       expect(mocks.runShiftCloseReconciliationSweep).toHaveBeenCalledTimes(1);
+      expect(mocks.runShiftOpenReconciliationSweep).toHaveBeenCalledTimes(1);
     });
 
     window.dispatchEvent(new Event('online'));
 
     await waitFor(() => {
       expect(mocks.runShiftCloseReconciliationSweep).toHaveBeenCalledTimes(2);
+      expect(mocks.runShiftOpenReconciliationSweep).toHaveBeenCalledTimes(2);
     });
   });
 });

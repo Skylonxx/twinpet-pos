@@ -4,7 +4,6 @@ import { fmtBaht } from '../../lib/dashboard/format';
 import {
   calcShiftDrawerExpected,
   closeShift,
-  getActiveShift,
   openShift,
   type ShiftCloseConfirmation,
 } from '../../lib/pos/shiftService';
@@ -17,40 +16,84 @@ type OpenShiftModalProps = {
   staffId: string;
   staffName: string;
   onSuccess: (shift: Shift) => void;
+  /**
+   * Optional pre-check message when open is blocked by unresolved attention
+   * (rejected open/close). When set, the modal shows attention and disables open.
+   */
+  attentionMessage?: string | null;
 };
+
+/**
+ * PK-1: `openShift` never awaits the shift-doc write, so the modal normally
+ * resolves after local IndexedDB persistence. The timeout is a defensive
+ * UI fail-safe only (hung IndexedDB / unexpected stall) — not the offline path.
+ */
+const OPEN_SHIFT_TIMEOUT_MESSAGE =
+  'เปิดกะยังไม่สำเร็จในเวลาที่กำหนด กรุณาตรวจสอบการเชื่อมต่อหรือโหลดหน้าใหม่แล้วลองอีกครั้ง — หากเปิดกะในเครื่องสำเร็จแล้ว กะจะถูกกู้คืนอัตโนมัติ';
+const OPEN_SHIFT_TIMEOUT_MS = 10_000;
+const OPEN_SHIFT_TIMEOUT_MARKER = 'shift-open-timeout';
 
 export function OpenShiftModal({
   branchId,
   staffId,
   staffName,
   onSuccess,
+  attentionMessage = null,
 }: OpenShiftModalProps) {
   const [startingCash, setStartingCash] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const openAttemptRef = useRef(0);
 
   const handleOpen = useCallback(async () => {
+    if (attentionMessage) {
+      setError(attentionMessage);
+      return;
+    }
+
     const cash = parseFloat(startingCash) || 0;
     if (cash < 0) {
       setError('กรุณาระบุเงินทอนเริ่มต้นที่ถูกต้อง');
       return;
     }
 
+    const attemptId = ++openAttemptRef.current;
     setSubmitting(true);
     setError(null);
+
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const timeoutGuard = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(
+        () => reject(new Error(OPEN_SHIFT_TIMEOUT_MARKER)),
+        OPEN_SHIFT_TIMEOUT_MS,
+      );
+    });
+
     try {
-      await openShift(branchId, staffId, staffName, cash);
-      const shift = await getActiveShift(branchId, staffId);
-      if (!shift) {
-        throw new Error('เปิดกะไม่สำเร็จ');
-      }
-      onSuccess(shift);
+      const result = await Promise.race([
+        openShift(branchId, staffId, staffName, cash),
+        timeoutGuard,
+      ]);
+      if (openAttemptRef.current !== attemptId) return;
+
+      // Local acceptance advances into POS immediately. Pending sync is carried
+      // on the Shift snapshot (`openedOffline` + `syncState`) for POSPage — never
+      // claim server confirmation from this path.
+      onSuccess(result);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'เปิดกะไม่สำเร็จ');
+      if (openAttemptRef.current !== attemptId) return;
+      if (err instanceof Error && err.message === OPEN_SHIFT_TIMEOUT_MARKER) {
+        // Do not claim hard failure if a durable intent may already exist —
+        // surface a retry/reload-safe message and do not delete local intent.
+        setError(OPEN_SHIFT_TIMEOUT_MESSAGE);
+      } else {
+        setError(err instanceof Error ? err.message : 'เปิดกะไม่สำเร็จ');
+      }
     } finally {
-      setSubmitting(false);
+      clearTimeout(timeoutId);
+      if (openAttemptRef.current === attemptId) setSubmitting(false);
     }
-  }, [branchId, staffId, staffName, startingCash, onSuccess]);
+  }, [branchId, staffId, staffName, startingCash, onSuccess, attentionMessage]);
 
   return createPortal(
     <div className="shift-modal-bg" role="dialog" aria-modal="true" aria-label="เปิดกะ">
@@ -66,6 +109,19 @@ export function OpenShiftModal({
             พนักงาน: {staffName}
           </p>
         </div>
+        {attentionMessage && (
+          <div
+            className="shift-close-warning shift-close-warning--stale"
+            role="alert"
+            data-testid="shift-open-attention"
+          >
+            <i className="ti ti-alert-octagon" aria-hidden="true" />
+            <div>
+              <strong>ต้องตรวจสอบก่อนเปิดกะ</strong>
+              <p>{attentionMessage}</p>
+            </div>
+          </div>
+        )}
         <div className="shift-modal-field">
           <label className="shift-modal-label" htmlFor="shift-start-cash">
             เงินทอนเริ่มต้น (Starting Cash)
@@ -80,17 +136,22 @@ export function OpenShiftModal({
             value={startingCash}
             onChange={(e) => setStartingCash(e.target.value)}
             autoFocus
+            disabled={Boolean(attentionMessage) || submitting}
             onKeyDown={(e) => {
               if (e.key === 'Enter') void handleOpen();
             }}
           />
         </div>
-        {error && <p className="shift-modal-error">{error}</p>}
+        {error && (
+          <p className="shift-modal-error" data-testid="shift-open-error">
+            {error}
+          </p>
+        )}
         <div className="shift-modal-actions">
           <button
             type="button"
             className="shift-modal-btn shift-modal-btn--primary"
-            disabled={submitting}
+            disabled={submitting || Boolean(attentionMessage)}
             onClick={() => void handleOpen()}
           >
             {submitting ? 'กำลังเปิดกะ...' : 'เปิดกะ'}

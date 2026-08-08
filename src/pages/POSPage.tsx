@@ -18,9 +18,18 @@ import { getBranchLabel } from '../lib/branches';
 import { fmtBaht } from '../lib/dashboard/format';
 import { createSafeId } from '../lib/safeId';
 import { formatMoney, getLineTotal } from '../lib/pos/cartUtils';
-import { getActiveShift, normalizeShiftCloseSyncState, readShiftCloseConfirmation } from '../lib/pos/shiftService';
+import {
+  buildLocalOpenShiftSnapshot,
+  getActiveShift,
+  normalizeShiftCloseSyncState,
+  readShiftCloseConfirmation,
+  readShiftOpenConfirmation,
+  reissueShiftOpenWrite,
+} from '../lib/pos/shiftService';
 import { createShiftCloseIntentJournal } from '../lib/pos/offline/shiftCloseIntentStore';
 import { runShiftCloseReconciliationSweep } from '../lib/pos/offline/shiftCloseReconciler';
+import { createShiftOpenIntentJournal } from '../lib/pos/offline/shiftOpenIntentStore';
+import { runShiftOpenReconciliationSweep } from '../lib/pos/offline/shiftOpenReconciler';
 import { getDeviceId } from '../lib/pos/deviceId';
 import { priceLevelLabel, usePriceLevels } from '../lib/pricing/priceLevels';
 import { POS_FEATURES } from '../lib/config/features';
@@ -153,7 +162,15 @@ export default function POSPage() {
   // shift this device already closed (offline, pending sync) is never
   // re-opened / re-folded into a live drawer after reload/restart.
   const shiftCloseIntentJournalRef = useRef(createShiftCloseIntentJournal());
+  // PK-1: durable local open-intent journal — restore pending opens and block
+  // duplicate/rejected opens across boot/reconnect.
+  const shiftOpenIntentJournalRef = useRef(createShiftOpenIntentJournal());
   const deviceIdRef = useRef(getDeviceId());
+  // PK-1: durable attention copy when open must not proceed (rejected open/close,
+  // or unresolved close against a still-open cached shift).
+  const [shiftOpenAttention, setShiftOpenAttention] = useState<string | null>(null);
+  // PK-1: cashier-visible pending-open sync state (never claims server confirmation).
+  const [shiftOpenPendingSync, setShiftOpenPendingSync] = useState(false);
   const [showCloseShift, setShowCloseShift] = useState(false);
   const [holdNoteOpen, setHoldNoteOpen] = useState(false);
   const [suspendedListOpen, setSuspendedListOpen] = useState(false);
@@ -799,11 +816,79 @@ export default function POSPage() {
       if (!user || !branchId) {
         if (!cancelled) {
           setShiftBootBlocked(false);
+          setShiftOpenAttention(null);
+          setShiftOpenPendingSync(false);
           setShiftReady(true);
         }
         return;
       }
       try {
+        const deviceId = deviceIdRef.current;
+        const openJournal = shiftOpenIntentJournalRef.current;
+        const closeJournal = shiftCloseIntentJournalRef.current;
+
+        // PK-1 conflict: rejected open/close → durable attention, no OpenShiftModal create path.
+        const rejectedOpen = await openJournal.findRejectedOpenForDevice(deviceId);
+        if (cancelled) return;
+        if (!rejectedOpen.ok) {
+          setActiveShift(null);
+          setShiftBootBlocked(true);
+          setShiftOpenAttention(null);
+          setShiftOpenPendingSync(false);
+          return;
+        }
+        if (rejectedOpen.value) {
+          setActiveShift(null);
+          setShiftBootBlocked(false);
+          setShiftOpenAttention(
+            rejectedOpen.value.lastErrorMessage ||
+              'การเปิดกะก่อนหน้านี้ถูกปฏิเสธและต้องตรวจสอบ — ไม่สามารถเปิดกะใหม่ได้จนกว่าจะเคลียร์รายการนี้',
+          );
+          setShiftOpenPendingSync(false);
+          return;
+        }
+
+        const closeListed = await closeJournal.listCloseIntents();
+        if (cancelled) return;
+        if (!closeListed.ok) {
+          setActiveShift(null);
+          setShiftBootBlocked(true);
+          setShiftOpenAttention(null);
+          setShiftOpenPendingSync(false);
+          return;
+        }
+        const rejectedClose = closeListed.value.find(
+          (e) => e.status === 'rejected_manual_attention' && e.deviceId === deviceId,
+        );
+        if (rejectedClose) {
+          setActiveShift(null);
+          setShiftBootBlocked(false);
+          setShiftOpenAttention(
+            rejectedClose.lastErrorMessage ||
+              'การปิดกะก่อนหน้านี้ต้องตรวจสอบ — ไม่สามารถเปิดกะใหม่ได้จนกว่าจะเคลียร์รายการนี้',
+          );
+          setShiftOpenPendingSync(false);
+          return;
+        }
+
+        // PK-1: restore pending local open before remote active-shift discovery.
+        const pendingOpen = await openJournal.findPendingOpenForStaff(branchId, user.id, deviceId);
+        if (cancelled) return;
+        if (!pendingOpen.ok) {
+          setActiveShift(null);
+          setShiftBootBlocked(true);
+          setShiftOpenAttention(null);
+          setShiftOpenPendingSync(false);
+          return;
+        }
+        if (pendingOpen.value) {
+          setActiveShift(buildLocalOpenShiftSnapshot(pendingOpen.value));
+          setShiftBootBlocked(false);
+          setShiftOpenAttention(null);
+          setShiftOpenPendingSync(true);
+          return;
+        }
+
         const shift = await getActiveShift(branchId, user.id);
         if (cancelled) return;
         if (shift) {
@@ -811,7 +896,7 @@ export default function POSPage() {
           // already closed this shift (even while offline/pending sync), it
           // must stay closed locally — never re-opened, never re-folded into
           // a live drawer — regardless of what the shift doc currently shows.
-          const intentResult = await shiftCloseIntentJournalRef.current.getCloseIntent(shift.id);
+          const intentResult = await closeJournal.getCloseIntent(shift.id);
           if (cancelled) return;
           if (!intentResult.ok) {
             // Packet 7C-B2 (RC-3 fix): the store could not be read — fail
@@ -821,16 +906,30 @@ export default function POSPage() {
             // duplicate open). `shiftBootBlocked` suppresses both.
             setActiveShift(null);
             setShiftBootBlocked(true);
+            setShiftOpenAttention(null);
+            setShiftOpenPendingSync(false);
           } else if (intentResult.value) {
+            // PK-1: unresolved close against a still-open cached shift — block
+            // OpenShiftModal (duplicate-open risk). Do not restore the closed shift.
             setActiveShift(null);
             setShiftBootBlocked(false);
+            setShiftOpenAttention(
+              'มีกะที่ปิดค้างอยู่ในเครื่องนี้และยังยืนยันสถานะไม่ได้ — ไม่สามารถเปิดกะใหม่ได้ในขณะนี้',
+            );
+            setShiftOpenPendingSync(false);
           } else {
             setActiveShift(shift);
             setShiftBootBlocked(false);
+            setShiftOpenAttention(null);
+            setShiftOpenPendingSync(
+              shift.openedOffline === true && shift.syncState === 'pending',
+            );
           }
         } else {
           setActiveShift(null);
           setShiftBootBlocked(false);
+          setShiftOpenAttention(null);
+          setShiftOpenPendingSync(false);
         }
       } finally {
         if (!cancelled) setShiftReady(true);
@@ -842,25 +941,54 @@ export default function POSPage() {
     };
   }, [user, branchId, bootCheckAttempt]);
 
-  // Packet 7C-B2 — reconciliation sweeps. Same pure reconciler used by
-  // `closeShift`'s same-runtime confirmation; only the trigger differs here:
-  // once at boot (behind `shiftReady`, non-blocking) and again on every
-  // browser `online` event. Never claims Firestore confirmation from the
-  // `online` signal itself — it only re-runs the confirmation-grade sweep.
+  // Packet 7C-B2 + PK-1 — reconciliation sweeps. Same pure reconcilers used by
+  // same-runtime confirmation; triggers: once at boot (behind `shiftReady`)
+  // and again on every browser `online` event. Never claims Firestore
+  // confirmation from the `online` signal itself.
   useEffect(() => {
     if (!shiftReady) return;
     let cancelled = false;
-    const sweepDeps = {
+    const closeSweepDeps = {
       journal: shiftCloseIntentJournalRef.current,
       readConfirmation: readShiftCloseConfirmation,
       normalizeSyncState: normalizeShiftCloseSyncState,
       deviceId: deviceIdRef.current,
     };
+    const openSweepDeps = {
+      journal: shiftOpenIntentJournalRef.current,
+      readConfirmation: readShiftOpenConfirmation,
+      deviceId: deviceIdRef.current,
+      reissueOpenWrite: reissueShiftOpenWrite,
+    };
 
     const runSweep = () => {
-      void runShiftCloseReconciliationSweep(sweepDeps).catch(() => {
+      void runShiftCloseReconciliationSweep(closeSweepDeps).catch(() => {
         // Best-effort — a failed sweep just leaves entries pending for the next trigger.
       });
+      void runShiftOpenReconciliationSweep(openSweepDeps)
+        .then((results) => {
+          if (cancelled) return;
+          const confirmed = results.some((r) => r.outcome === 'confirmed');
+          if (confirmed) {
+            setShiftOpenPendingSync(false);
+            setActiveShift((prev) =>
+              prev && prev.openedOffline === true && prev.syncState === 'pending'
+                ? { ...prev, syncState: 'synced', openedOffline: true }
+                : prev,
+            );
+          }
+          const attention = results.find(
+            (r) => r.outcome === 'identity_mismatch',
+          );
+          if (attention) {
+            setShiftOpenAttention(
+              'การเปิดกะนี้ต้องตรวจสอบ — ข้อมูลบนเซิร์ฟเวอร์ไม่ตรงกับที่บันทึกในเครื่อง',
+            );
+          }
+        })
+        .catch(() => {
+          // Best-effort.
+        });
     };
 
     runSweep();
@@ -1699,8 +1827,55 @@ export default function POSPage() {
           branchId={branchId}
           staffId={user.id}
           staffName={`${user.firstName} ${user.lastName}`}
-          onSuccess={setActiveShift}
+          attentionMessage={shiftOpenAttention}
+          onSuccess={(shift) => {
+            setActiveShift(shift);
+            setShiftOpenAttention(null);
+            setShiftOpenPendingSync(
+              shift.openedOffline === true && shift.syncState === 'pending',
+            );
+          }}
         />
+      )}
+
+      {activeShift && shiftOpenPendingSync && (
+        <div
+          className="shift-close-warning"
+          role="status"
+          data-testid="shift-open-pending-banner"
+          style={{
+            margin: '8px 12px 0',
+            display: 'flex',
+            gap: 8,
+            alignItems: 'flex-start',
+          }}
+        >
+          <i className="ti ti-cloud-off" aria-hidden="true" />
+          <div>
+            <strong>เปิดกะในเครื่องแล้ว (รอซิงก์)</strong>
+            <p style={{ margin: 0 }}>บันทึกในเครื่องนี้แล้ว ยังไม่ได้รับการยืนยันจากเซิร์ฟเวอร์</p>
+          </div>
+        </div>
+      )}
+
+      {activeShift && shiftOpenAttention && (
+        <div
+          className="shift-close-warning shift-close-warning--stale"
+          role="alert"
+          data-testid="shift-open-attention-banner"
+          style={{
+            margin: '8px 12px 0',
+            display: 'flex',
+            gap: 8,
+            alignItems: 'flex-start',
+          }}
+        >
+          <i className="ti ti-alert-octagon" aria-hidden="true" />
+          <div>
+            <strong>การเปิดกะต้องตรวจสอบ</strong>
+            <p style={{ margin: 0 }}>{shiftOpenAttention}</p>
+          </div>
+        </div>
       )}
 
       {showCashTx && activeShift && (
