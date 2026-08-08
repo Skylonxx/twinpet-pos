@@ -8,38 +8,52 @@
 | Branch | `main` |
 | HEAD (code) | determined from live Git — run `git rev-parse HEAD` |
 | origin/main | determined from live Git — run `git rev-parse origin/main` |
-| Verified baseline entering this reconciliation | `78f7ffe5c5b69f47af5c20ed8efd54410f35ee09` (`docs(pos): close p-obs-1 process reconciliation`) |
+| Verified baseline entering this reconciliation | `513b198a30a1af72151ab6a8c0976799871529b8` (`fix(pos): harden offline shift open reconciliation`) |
+| PK-1 final HEAD | `513b198a30a1af72151ab6a8c0976799871529b8` |
 | Ahead/behind | determined from live Git — run `git status -sb` |
 
 ## Current Phase
 
-    P_OBS_1_CLOSED / POST_R6_SEVEN_FILE_TRACKER_RECONCILIATION
-    P1 Packet 5 / Post P-OBS-1 Closure / Post R6 Part C Review.
-    P_OBS_1_STATUS: CLOSED — permanent owner docs/ops/packet-5-monitoring-runbook.md §9 (pointer
-    only). P-OBS-1 implementation commit da3a8d1; closure docs commit 78f7ffe.
-    R6 Codex current-head re-review: PASS_WITH_NOTES (0 material findings, 2 notes).
-    COMPOSITE_R6_ARCHITECTURE_STATUS: COMPLETE. CURRENT_HEAD_COMPATIBILITY_STATUS: COMPATIBLE.
-    All thirteen R5 findings closed; R6-G14 accepted. Current E2 implementation supersedes
-    historical E2 detail (N-R6-01) — do not replay/overwrite. PROV is the first remaining
-    implementation stage — NOT authorized. E-2 real POSIX evidence: IDENTIFIED_BUT_HELD —
-    NOT authorized. Active implementation packet: NONE.
-    Broader Packet 5 NOT CLOSED. Passive natural-traffic
-    observation remains authorized in parallel, read-only only, when a natural event exists.
+    PK1_CLOSED_WITH_NOTES / POST_PK1_DOCS_RECONCILIATION
+    P1 Packet 5 / Post-PK-1 Docs Reconciliation.
+    PK1_STATUS: CLOSED_WITH_NOTES at 513b198a30a1af72151ab6a8c0976799871529b8
+    (fix(pos): harden offline shift open reconciliation; parent 5e9b52b).
+    Final Codex: PASS_WITH_NOTES (MATERIAL_FINDING_COUNT: 0).
+    Final AGY: PASS (MATERIAL_FINDING_COUNT: 0).
+    PK1_REOPEN_AUTHORIZED: NO.
+    PACKET_5_STATUS: NOT_CLOSED. BROADER_PACKET_5_CLOSURE_AUTHORIZED: NO.
+    Next roadmap candidate: PK-2 Offline Boot, Session and Cart Durability —
+    architecture planning AUTHORIZED_AFTER_DOCS_SUCCESS / NOT_YET_STARTED;
+    PK2_IMPLEMENTATION_AUTHORIZED: NO.
+    Active implementation packet: NONE.
+    Passive natural-traffic observation remains authorized in parallel, read-only only,
+    when a natural event exists.
 
-## P1 Packet 5 / Post-R6 Seven-File Tracker Reconciliation (this pass)
+## P1 Packet 5 / PK-1 Offline Shift Session (CLOSED_WITH_NOTES)
 
 | Field | Value |
 |-------|-------|
-| Status | **IMPLEMENTATION-COMPLETE, PENDING CODEX REVIEW** (docs-only; not committed/pushed) |
+| Status | **`CLOSED_WITH_NOTES`** |
+| Final HEAD | `513b198a30a1af72151ab6a8c0976799871529b8` |
+| Parent | `5e9b52bbbb8892d6c5dcf3453c3332724af7763b` |
+| Final remediation | `fix(pos): harden offline shift open reconciliation` |
+| Final Codex | `PASS_WITH_NOTES`; `MATERIAL_FINDING_COUNT: 0` |
+| Final AGY | `PASS`; `MATERIAL_FINDING_COUNT: 0` |
+| Closure notes | (1) analogous `closeShift` structured-result handling deferred / out of PK-1 scope / non-blocking; (2) Browser/Emulator runtime UAT separately gated; not required for PK-1 closure |
+| Packet 5 | **NOT CLOSED** |
+| Next roadmap | PK-2 Offline Boot, Session and Cart Durability — planning after docs success / not started; implementation NO |
+
+## P1 Packet 5 / Post-R6 Seven-File Tracker Reconciliation (historical)
+
+| Field | Value |
+|-------|-------|
+| Status | **HISTORICAL** (superseded as current phase by PK-1 closure) |
 | P-OBS-1 status | `CLOSED` — permanent owner `docs/ops/packet-5-monitoring-runbook.md` §9 (pointer only) |
 | P-OBS-1 implementation commit | `da3a8d1c9ddcb605a1f9a6e3cebc21d8dc2ffe72` |
 | P-OBS-1 closure docs commit | `78f7ffe5c5b69f47af5c20ed8efd54410f35ee09` |
-| Accepted P-OBS-1/E2 owners | `scripts/ops/e2-shift-close-document-lookup.sh`, `ops-tests/e2-shift-close-document-lookup.spec.ts`, `ops-tests/helpers/e2StubServer.ts`, `ops-tests/helpers/runE2Script.ts`, `vitest.ops.config.ts`, `package.json` (isolated `test:ops` entry), `docs/ops/packet-5-monitoring-runbook.md` (permanent owner) |
-| `test:ops` isolation | isolated; not part of `test:unit` or `test:rules`; not run this session |
-| R6 final result | `PASS_WITH_NOTES`; 0 material findings; 2 notes (N-R6-01, N-R6-02); architecture COMPLETE; current-head COMPATIBLE; all 13 R5 findings closed; R6-G14 accepted |
-| E2_VERIFY | `IMPLEMENTED_AND_CLOSED_AT_CURRENT_HEAD` |
-| PROV | first remaining implementation stage — **NOT authorized** |
-| E-2 POSIX evidence | `IDENTIFIED_BUT_HELD` — **NOT authorized**; blockers: real Linux/Darwin host, real `gcloud` auth, production Firestore read access, separate Gemini/Owner authorization |
+| R6 final result | `PASS_WITH_NOTES`; 0 material findings; 2 notes (N-R6-01, N-R6-02) |
+| PROV | **NOT authorized** |
+| E-2 POSIX evidence | `IDENTIFIED_BUT_HELD` — **NOT authorized** |
 | Broader Packet 5 | **NOT CLOSED** |
 
 ## Working Tree
@@ -140,12 +154,12 @@ All **CLOSED** where applicable.
 
 ## Next Recommended Block
 
-    NO_ACTIVE_IMPLEMENTATION_PACKET → PASSIVE_NATURAL_TRAFFIC_OBSERVATION_ONLY → AWAIT_GEMINI_SELECTION
+    PK1_CLOSED_WITH_NOTES → PK1_DOCS_RECONCILIATION → READY_FOR_PK2_STRICT_READ_ONLY_ARCHITECTURE_PLANNING
 
-1. Packet S implementation/commit/push/deploy/Codex-review gates — **closed**
-2. Docs/tracker reconciliation — **CLOSED** at `c6bdbd0`
-3. **Next action:** no active implementation packet is selected. Passive read-only observation may occur only when natural production traffic provides a real event; no agent-triggered activity is authorized. Await Gemini selection before any new planning or implementation gate.
-4. No next implementation candidate selected; any implementation requires a later Gemini authorization
+1. PK-1 Offline Shift Session — **`CLOSED_WITH_NOTES`** at `513b198`
+2. Packet 5 — **`NOT_CLOSED`**; broader closure **NOT AUTHORIZED**
+3. **Next action:** ChatGPT prepares Claude's strict read-only PK-2 architecture planning prompt after docs success. Do not start Claude from this gate. `PK2_IMPLEMENTATION_AUTHORIZED: NO`.
+4. Passive read-only observation may occur only when natural production traffic provides a real event; no agent-triggered activity is authorized
 
 ## Hard Boundaries
 

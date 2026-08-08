@@ -1,8 +1,10 @@
 # Twinpet POS โ€” Project Context
 
-> Last reconciled: 2026-08-07
+> Last reconciled: 2026-08-09
 > Current repository HEAD: determined from live Git — run `git rev-parse HEAD`
-> Verified baseline entering this reconciliation: `78f7ffe5c5b69f47af5c20ed8efd54410f35ee09` (`docs(pos): close p-obs-1 process reconciliation`)
+> Verified baseline entering this reconciliation: `513b198a30a1af72151ab6a8c0976799871529b8` (`fix(pos): harden offline shift open reconciliation`)
+> PK-1 final HEAD (binding): `513b198a30a1af72151ab6a8c0976799871529b8`
+> PK-1 parent: `5e9b52bbbb8892d6c5dcf3453c3332724af7763b` (`feat(pos): enable offline shift open with durable intent and reconciliation`)
 > Packet S implementation commit (historical, unchanged): `e9363e35f5a79f8e21d5dafe1e70d8ff3f82559c` (`feat(pos): add shift close case figures callable`)
 > Packet S docs/tracker closure commit (historical, unchanged): `c6bdbd00d01541201dbc53236b06080db1a148e4`
 > P-OBS-1 implementation commit (historical, unchanged): `da3a8d1c9ddcb605a1f9a6e3cebc21d8dc2ffe72`
@@ -12,23 +14,34 @@
 
 ## Current Phase
 
-**P1 Offline / Sync Resiliency — Packet 5 / Post P-OBS-1 Closure / Post R6 Part C Review — Post-R6 Seven-File Tracker Reconciliation.** `P_OBS_1_STATUS: CLOSED` — permanent process/status owner is `docs/ops/packet-5-monitoring-runbook.md` §9 (pointer only; this file does not copy, paraphrase, or duplicate the runbook's process rulings). R6 Codex current-head re-review verdict: `PASS_WITH_NOTES` (0 material findings, 2 notes); `COMPOSITE_R6_ARCHITECTURE_STATUS: COMPLETE`; `CURRENT_HEAD_COMPATIBILITY_STATUS: COMPATIBLE`; all thirteen R5 findings closed; R6-G14 accepted. The accepted current E2/P-OBS-1 implementation supersedes historical E2 implementation detail (N-R6-01) — do not replay or overwrite the current E2 stage. `PROV` is the first remaining implementation stage and is **not authorized**. `E-2` real POSIX evidence is `IDENTIFIED_BUT_HELD`, **not authorized**. **Broader Packet 5 is NOT CLOSED.** No active implementation packet is selected; passive natural-traffic observation remains authorized in parallel, read-only only, when a natural event exists. No agent-triggered activity is authorized. Await a later Gemini selection before any new planning or implementation gate.
+**P1 Offline / Sync Resiliency — Packet 5 / Post-PK-1 Docs Reconciliation.** `PK1_STATUS: CLOSED_WITH_NOTES` at final committed/pushed HEAD `513b198a30a1af72151ab6a8c0976799871529b8` (`fix(pos): harden offline shift open reconciliation`; parent `5e9b52bbbb8892d6c5dcf3453c3332724af7763b`). Final Codex: `PASS_WITH_NOTES` (`MATERIAL_FINDING_COUNT: 0`). Final AGY: `PASS` (`MATERIAL_FINDING_COUNT: 0`). `PK1_REOPEN_AUTHORIZED: NO`. **`PACKET_5_STATUS: NOT_CLOSED`.** `BROADER_PACKET_5_CLOSURE_AUTHORIZED: NO`. Next roadmap candidate: **PK-2 Offline Boot, Session and Cart Durability** — architecture planning authorized conditionally after this docs success; **not yet started**; implementation **NOT authorized**. Do not start Claude from this docs gate. Passive natural-traffic observation remains authorized in parallel, read-only only, when a natural event exists. No agent-triggered activity is authorized.
 
 Manual workflow remains active. `agentchattr` was not used as the executor for this phase.
 
-**Repository baseline:** branch `main`. For current repository state, use live Git: `git status --short --untracked-files=all`, `git diff --cached --name-status`, `git rev-parse "stash@{0}"`. This tracker reconciliation entered with a clean working tree, empty staged area, and unchanged stash (`stash@{0}` = `7d03cfec7ba52ff7e25b7e175ca190efc258d874` as of the verified baseline above).
+**Repository baseline:** branch `main`. For current repository state, use live Git: `git status --short --untracked-files=all`, `git diff --cached --name-status`, `git rev-parse "stash@{0}"`. This PK-1 docs reconciliation entered with a clean working tree, empty staged area, and unchanged stash (`stash@{0}` = `7d03cfec7ba52ff7e25b7e175ca190efc258d874` as of the verified baseline above). Docs edits in this gate are left uncommitted (`COMMIT_PUSH_AUTHORIZED: CONDITIONAL_LATER_DECISION`).
 
-### P1 Packet 5 — Post-R6 Seven-File Tracker Reconciliation (this pass)
+### P1 Packet 5 / PK-1 Offline Shift Session (CLOSED_WITH_NOTES)
 
-- **Status:** docs-only, Docs-Only Exception applies; implementation-complete pending Codex review; not yet committed/pushed.
-- **P-OBS-1** — `P_OBS_1_STATUS: CLOSED`. Implementation commit `da3a8d1c9ddcb605a1f9a6e3cebc21d8dc2ffe72`; closure docs commit `78f7ffe5c5b69f47af5c20ed8efd54410f35ee09`. Permanent owner: `docs/ops/packet-5-monitoring-runbook.md` §9 — pointer only.
-- **Accepted P-OBS-1/E2 owners (explicit list):** `scripts/ops/e2-shift-close-document-lookup.sh`; `ops-tests/e2-shift-close-document-lookup.spec.ts`; `ops-tests/helpers/e2StubServer.ts`; `ops-tests/helpers/runE2Script.ts`; `vitest.ops.config.ts`; `package.json` (isolated `test:ops` entry); `docs/ops/packet-5-monitoring-runbook.md` (permanent process/status owner). `npm run test:ops` is isolated — not part of `test:unit` or `test:rules`. Tests were not run in this session.
-- **R6 final result:** `PASS_WITH_NOTES`; 0 material findings; 2 notes (N-R6-01 current E2 supersession, N-R6-02 unverified historical model metadata); `IMPLEMENTATION_ALLOWLIST_STATUS: READY_FOR_GEMINI_DECISION`; `IMPLEMENTATION_READY: YES` (architecture readiness only — not implementation authority).
-- **Current stage disposition:** `E2_VERIFY: IMPLEMENTED_AND_CLOSED_AT_CURRENT_HEAD`; `PROV: FIRST_REMAINING_IMPLEMENTATION_STAGE`, `PROV_IMPLEMENTATION_AUTHORIZED: NO`; `ACTIVE_IMPLEMENTATION_PACKET: NONE`.
-- **E-2 POSIX evidence gate:** `IDENTIFIED_BUT_HELD`, `AUTHORIZED: NO`. Blockers: real Linux/Darwin host; real `gcloud` authentication; production Firestore read access; separate Gemini/Owner authorization.
-- **Preserved holds:** PROV, other implementation, tests/builds/scripts, deploy, runtime activation, production access, POSIX evidence, physical UAT, stash operations, and broader Packet 5 closure all remain **NOT AUTHORIZED**.
-- **Carried notes (unresolved, not invented a resolution):** Fallback A missing-vs-denied ambiguity (A-1); live-lease reject-code reuse; manager `reasonCode` accepts the full frozen enum; the full P5-C/P5-D/P5-E pipeline has never processed a real shift close end-to-end; no final-settlement truth claim.
-- **Reports:** implementation report and conditional Codex review under `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\` — see `docs/reports/latest-report.md`.
+- **Status:** `PK1_STATUS: CLOSED_WITH_NOTES` — do not reopen.
+- **Final HEAD:** `513b198a30a1af72151ab6a8c0976799871529b8`
+- **Parent:** `5e9b52bbbb8892d6c5dcf3453c3332724af7763b`
+- **Final remediation commit:** `fix(pos): harden offline shift open reconciliation`
+- **Implementation commit (prior):** `feat(pos): enable offline shift open with durable intent and reconciliation` (`5e9b52b`)
+- **Final Codex:** `PASS_WITH_NOTES`; `MATERIAL_FINDING_COUNT: 0`
+- **Final AGY:** `PASS`; `MATERIAL_FINDING_COUNT: 0`
+- **Closure notes (non-blocking, out of PK-1 scope):**
+  1. analogous `closeShift` structured-result handling remains deferred, non-blocking, and outside PK-1 scope
+  2. Browser/Emulator runtime UAT remains separately gated and was not required for PK-1 closure
+- **Packet 5:** `PACKET_5_STATUS: NOT_CLOSED`; broader Packet 5 closure **NOT AUTHORIZED**
+- **Next roadmap:** PK-2 Offline Boot, Session and Cart Durability — `PK2_ARCHITECTURE_PLANNING: AUTHORIZED_AFTER_DOCS_SUCCESS / NOT_YET_STARTED`; `PK2_IMPLEMENTATION_AUTHORIZED: NO`
+- **Preserved holds (subset):** PK-2..PK-6 implementation NO; offline login implementation NO; returns/refunds implementation NO; G14 activation ABORTED; OBS-C NO; deploy NO; production access NO; final UAT NO; stash operations NO; broader Packet 5 closure NO
+
+### P1 Packet 5 — Post-R6 Seven-File Tracker Reconciliation (historical)
+
+- **Status:** historical observability/tracker pass (superseded as current phase by PK-1 closure). `P_OBS_1_STATUS: CLOSED`. Permanent owner: `docs/ops/packet-5-monitoring-runbook.md` §9 — pointer only.
+- **P-OBS-1** — Implementation commit `da3a8d1c9ddcb605a1f9a6e3cebc21d8dc2ffe72`; closure docs commit `78f7ffe5c5b69f47af5c20ed8efd54410f35ee09`.
+- **R6 final result (historical):** `PASS_WITH_NOTES`; 0 material findings; 2 notes (N-R6-01, N-R6-02); architecture COMPLETE; current-head COMPATIBLE at that review.
+- **Held stages (unchanged holds):** `PROV` implementation **not authorized**; `E-2` POSIX evidence `IDENTIFIED_BUT_HELD`, **not authorized**.
 
 ### P1 Packet 5 / UI-B2 / Packet S — getShiftCloseCaseFigures (TECHNICALLY CLOSED WITH NONBLOCKING NOTES)
 
@@ -269,25 +282,28 @@ Non-blocking this-terminal pending-sync warning; close remains enabled.
 
 ### Deferred / next gate
 
-1. **Packet 5 / UI-B2 / Packet S — getShiftCloseCaseFigures TECHNICALLY CLOSED WITH NONBLOCKING NOTES** — `e9363e3` on `main`; commit/push/deploy/Codex-review gates closed; docs/tracker reconciliation CLOSED at `c6bdbd0`.
-2. **Packet 5 / UI-C Manager Adjudication Action Surface CLOSED AS COMMITTED AND PUSHED** — `3ef4d01` on `main`; docs reconciliation CLOSED at `5654362`.
-3. **Packet S docs/tracker reconciliation — CLOSED** at `c6bdbd0` (`docs(pos): reconcile packet s closure`); this durable post-Packet-S pass corrects the seven trackers' self-reference lag without reopening Packet S or claiming broader Packet 5 closure.
-4. **Active implementation packet: NONE.** No next candidate is selected; any implementation requires a later Gemini authorization. Do not select or authorize UI-B.1, UI-B2, P5-F, recapture, or another feature packet.
+1. **PK-1 Offline Shift Session — `CLOSED_WITH_NOTES`** at `513b198a30a1af72151ab6a8c0976799871529b8`. Do not reopen. Closure notes remain non-blocking and out of PK-1 scope.
+2. **`PACKET_5_STATUS: NOT_CLOSED`.** `BROADER_PACKET_5_CLOSURE_AUTHORIZED: NO`. Do not claim Packet 5 / final UAT / deployment complete.
+3. **Next roadmap candidate: PK-2 Offline Boot, Session and Cart Durability.** `PK2_ARCHITECTURE_PLANNING: AUTHORIZED_AFTER_DOCS_SUCCESS / NOT_YET_STARTED`. Claude strict read-only architecture planning is conditional after this docs success — do not start Claude from this gate. `PK2_IMPLEMENTATION_AUTHORIZED: NO`.
+4. **Active implementation packet: NONE.** PK-1 is closed; PK-2 planning is not started; no implementation packet is authorized.
 5. **Standing boundaries (carried forward):**
-   - UI-B.1 / UI-B2 — **NOT AUTHORIZED**
-   - P5-F planning/implementation — **NOT AUTHORIZED**
-   - recapture planning/implementation — **NOT AUTHORIZED**
+   - PK-2 / PK-3..PK-6 implementation — **NOT AUTHORIZED**
+   - offline login implementation — **NOT AUTHORIZED**
+   - returns/refunds implementation — **NOT AUTHORIZED**
+   - G14 activation — **ABORTED**
+   - OBS-C — **NOT AUTHORIZED**
+   - UI-B.1 / UI-B2 / P5-F / recapture — **NOT AUTHORIZED**
    - manual invocation of deployed functions (including `resolveShiftCloseAlert`) — **NOT AUTHORIZED**
    - production/emulator data mutation — **NOT AUTHORIZED**
    - Firestore rules/index/functions deployment — **NOT AUTHORIZED**
-   - deploy/runtime activation — **NOT AUTHORIZED**
+   - deploy/runtime activation / final UAT / production access — **NOT AUTHORIZED**
    - global Flowbite focus fix (A-1) — **NOT AUTHORIZED** (accepted deferred note)
-   - next implementation (any candidate) — **NOT AUTHORIZED** by this pass
-   - POSPage / PaymentModal / checkout/payment / navigation-menu / global keyboard changes — **NOT AUTHORIZED**
+   - PROV implementation / E-2 POSIX evidence — **NOT AUTHORIZED** / `IDENTIFIED_BUT_HELD`
+   - POSPage / PaymentModal / checkout/payment / navigation-menu / global keyboard changes — **NOT AUTHORIZED** beyond separately authorized packets
    - no `shifts.expected*` mutation; no FIFO/stock/credit/settlement writes; `stash@{0}` untouched
-6. **Passive observation** — read-only observation on **natural traffic only** remains authorized in parallel; no agent-triggered activity (no synthetic event, no manual invocation, no forced scheduler run, no recapture) is authorized. Absence of a natural event is not a blocker and does not authorize artificial stimulation.
-7. **Open decisions/risks carried forward:** live-lease conflict reject-code reuse; manager `reasonCode` accepts full frozen enum; optional PIN not enforced day one; A-1 global Flowbite modal focus-containment deferred; G3 monitoring resolved (runbook at `docs/ops/packet-5-monitoring-runbook.md`); no real shift close through full P5-C/P5-D/P5-E pipeline yet; UI-B Fallback A missing-vs-denied ambiguity and terminal permission-denied listener behavior remain unresolved; N-FINAL-01 (Packet S selected-run figures are not final settlement truth) remains a standing downstream UI/copy constraint.
-8. Do not automatically start another packet.
+6. **Passive observation** — read-only observation on **natural traffic only** remains authorized in parallel; no agent-triggered activity is authorized.
+7. **Open decisions/risks carried forward:** live-lease conflict reject-code reuse; manager `reasonCode` accepts full frozen enum; optional PIN not enforced day one; A-1 global Flowbite modal focus-containment deferred; G3 monitoring resolved (runbook at `docs/ops/packet-5-monitoring-runbook.md`); no real shift close through full P5-C/P5-D/P5-E pipeline yet; UI-B Fallback A missing-vs-denied ambiguity and terminal permission-denied listener behavior remain unresolved; N-FINAL-01 (Packet S selected-run figures are not final settlement truth) remains a standing downstream UI/copy constraint; PK-1 deferred `closeShift` structured-result handling; Browser/Emulator runtime UAT separately gated.
+8. Do not automatically start another packet. Do not start Claude or PK-2 implementation from this docs reconciliation.
 
 ### Future Phase โ€” True Standalone (Desktop & Native Mobile) (`TRUE-STANDALONE`)
 

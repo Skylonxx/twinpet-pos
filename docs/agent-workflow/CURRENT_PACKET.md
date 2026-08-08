@@ -2,12 +2,12 @@
 
 ## Phase
 
-**Post-R6 Seven-File Tracker Reconciliation**
+**Post-PK-1 Docs Reconciliation / Packet 5**
 
 STATUS:
-IMPLEMENTED_PENDING_CODEX_REVIEW
+PK1_CLOSED_WITH_NOTES
 
-`P_OBS_1_STATUS: CLOSED` — permanent process/status owner is `docs/ops/packet-5-monitoring-runbook.md` §9 (pointer only). P-OBS-1 implementation commit `da3a8d1c9ddcb605a1f9a6e3cebc21d8dc2ffe72`; closure docs commit `78f7ffe5c5b69f47af5c20ed8efd54410f35ee09`. R6 Codex current-head re-review is `PASS_WITH_NOTES` (0 material findings, 2 notes); `COMPOSITE_R6_ARCHITECTURE_STATUS: COMPLETE`; `CURRENT_HEAD_COMPATIBILITY_STATUS: COMPATIBLE`; all thirteen R5 findings closed; R6-G14 accepted. The current E2/P-OBS-1 implementation supersedes historical E2 implementation detail (N-R6-01) — do not replay or overwrite. `PROV` is the first remaining implementation stage and is **not authorized**. `E-2` real POSIX evidence is `IDENTIFIED_BUT_HELD`, **not authorized**. **Broader Packet 5 is NOT CLOSED.** No active implementation packet is selected. Passive natural-traffic observation remains authorized in parallel, read-only only, when a natural event exists; no agent-triggered activity is authorized. This reconciliation has not been committed or pushed.
+`PK1_STATUS: CLOSED_WITH_NOTES` at final HEAD `513b198a30a1af72151ab6a8c0976799871529b8` (`fix(pos): harden offline shift open reconciliation`; parent `5e9b52bbbb8892d6c5dcf3453c3332724af7763b`). Final Codex `PASS_WITH_NOTES` (`MATERIAL_FINDING_COUNT: 0`); Final AGY `PASS` (`MATERIAL_FINDING_COUNT: 0`). `PK1_REOPEN_AUTHORIZED: NO`. **`PACKET_5_STATUS: NOT_CLOSED`.** `BROADER_PACKET_5_CLOSURE_AUTHORIZED: NO`. Next roadmap candidate: PK-2 Offline Boot, Session and Cart Durability — architecture planning authorized after docs success / not yet started; implementation **NOT authorized**. No active implementation packet is selected. Passive natural-traffic observation remains authorized in parallel, read-only only, when a natural event exists; no agent-triggered activity is authorized. This docs reconciliation is left uncommitted (`COMMIT_PUSH_AUTHORIZED: CONDITIONAL_LATER_DECISION`).
 
 ## This packet — Packet 5 / UI-B2 / Packet S — getShiftCloseCaseFigures
 
@@ -61,10 +61,12 @@ IMPLEMENTED_PENDING_CODEX_REVIEW
 
 Determined from live Git — run `git rev-parse HEAD`.
 
+PK-1 final HEAD (binding): `513b198a30a1af72151ab6a8c0976799871529b8`
+
 Historical closure anchors (unchanged):
 - Packet S implementation: `e9363e35f5a79f8e21d5dafe1e70d8ff3f82559c`
 - Packet S docs/tracker closure: `c6bdbd00d01541201dbc53236b06080db1a148e4`
 
 ## Next gate
 
-**No active implementation packet is selected.** Passive read-only observation may occur only when natural production traffic provides a real event; no agent-triggered activity is authorized. Await Gemini selection before any new planning or implementation gate. UI-B.1, UI-B2, P5-F, recapture, deploy, runtime activation, callable invocation, production access, global Flowbite fix, stash operations, Packet R/C/U — NOT authorized.
+**PK-1 is closed with notes. Packet 5 remains NOT_CLOSED.** Next roadmap candidate is PK-2 Offline Boot, Session and Cart Durability — strict read-only architecture planning authorized after docs success / not yet started; implementation NOT authorized. Do not start Claude from this gate. Passive read-only observation may occur only when natural production traffic provides a real event; no agent-triggered activity is authorized. UI-B.1, UI-B2, P5-F, recapture, deploy, runtime activation, callable invocation, production access, final UAT, G14 (ABORTED), OBS-C, stash operations, Packet R/C/U, broader Packet 5 closure — NOT authorized.

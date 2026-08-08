@@ -1,8 +1,10 @@
 # Twinpet POS — Task Tracker
 
-> Last reconciled: 2026-08-07
+> Last reconciled: 2026-08-09
 > Current repository HEAD: determined from live Git — run `git rev-parse HEAD`
-> Verified baseline entering this reconciliation: `78f7ffe5c5b69f47af5c20ed8efd54410f35ee09` (`docs(pos): close p-obs-1 process reconciliation`)
+> Verified baseline entering this reconciliation: `513b198a30a1af72151ab6a8c0976799871529b8` (`fix(pos): harden offline shift open reconciliation`)
+> PK-1 final HEAD (binding): `513b198a30a1af72151ab6a8c0976799871529b8`
+> PK-1 parent: `5e9b52bbbb8892d6c5dcf3453c3332724af7763b` (`feat(pos): enable offline shift open with durable intent and reconciliation`)
 > Packet S implementation commit (historical, unchanged): `e9363e35f5a79f8e21d5dafe1e70d8ff3f82559c` (`feat(pos): add shift close case figures callable`)
 > Packet S docs/tracker closure commit (historical, unchanged): `c6bdbd00d01541201dbc53236b06080db1a148e4`
 > P-OBS-1 implementation commit (historical, unchanged): `da3a8d1c9ddcb605a1f9a6e3cebc21d8dc2ffe72`
@@ -10,20 +12,29 @@
 
 ---
 
-## P1 Offline / Sync Resiliency — Packet 5 / Post P-OBS-1 Closure — Post-R6 Seven-File Tracker Reconciliation (this pass)
+## P1 Offline / Sync Resiliency — Packet 5 / PK-1 Offline Shift Session — Docs Reconciliation (this pass)
 
-**Status: IMPLEMENTATION-COMPLETE, PENDING CODEX REVIEW** — docs-only, Docs-Only Exception applies; not yet committed/pushed.
+**Status: `PK1_STATUS: CLOSED_WITH_NOTES`** — docs-only reconciliation of verified PK-1 closure; leave uncommitted (`COMMIT_PUSH_AUTHORIZED: CONDITIONAL_LATER_DECISION`).
 
-- [x] `P_OBS_1_STATUS: CLOSED` — permanent owner `docs/ops/packet-5-monitoring-runbook.md` §9 (pointer only, not paraphrased/duplicated here)
-- [x] Explicit accepted P-OBS-1/E2 owner list used (not "four artifacts" shorthand): `scripts/ops/e2-shift-close-document-lookup.sh`, `ops-tests/e2-shift-close-document-lookup.spec.ts`, `ops-tests/helpers/e2StubServer.ts`, `ops-tests/helpers/runE2Script.ts`, `vitest.ops.config.ts`, `package.json` (isolated `test:ops` entry), `docs/ops/packet-5-monitoring-runbook.md` (permanent owner)
-- [x] `npm run test:ops` isolation recorded — not part of `test:unit` or `test:rules`; tests not run this session
-- [x] R6 final result recorded — `PASS_WITH_NOTES`, 0 material findings, 2 notes, `COMPOSITE_R6_ARCHITECTURE_STATUS: COMPLETE`, `CURRENT_HEAD_COMPATIBILITY_STATUS: COMPATIBLE`, all thirteen R5 findings closed, R6-G14 accepted
-- [x] Current E2 supersession recorded (N-R6-01) — do not replay/overwrite the current E2 stage
-- [x] `PROV` recorded as first remaining implementation stage — **not authorized**
-- [x] `E-2` POSIX evidence recorded as `IDENTIFIED_BUT_HELD` — **not authorized**
-- [x] Broader Packet 5 recorded as **NOT CLOSED**
+- [x] `PK1_STATUS: CLOSED_WITH_NOTES` at final HEAD `513b198a30a1af72151ab6a8c0976799871529b8`
+- [x] Final remediation commit recorded — `fix(pos): harden offline shift open reconciliation`
+- [x] Parent recorded — `5e9b52bbbb8892d6c5dcf3453c3332724af7763b`
+- [x] Final Codex recorded — `PASS_WITH_NOTES`; `MATERIAL_FINDING_COUNT: 0`
+- [x] Final AGY recorded — `PASS`; `MATERIAL_FINDING_COUNT: 0`
+- [x] Closure notes recorded as non-blocking / out of PK-1 scope:
+  - analogous `closeShift` structured-result handling remains deferred
+  - Browser/Emulator runtime UAT remains separately gated (not required for PK-1 closure)
+- [x] `PK1_REOPEN_AUTHORIZED: NO`
+- [x] `PACKET_5_STATUS: NOT_CLOSED`; `BROADER_PACKET_5_CLOSURE_AUTHORIZED: NO`
+- [x] Next roadmap candidate recorded — PK-2 Offline Boot, Session and Cart Durability
+- [x] `PK2_ARCHITECTURE_PLANNING: AUTHORIZED_AFTER_DOCS_SUCCESS / NOT_YET_STARTED`
+- [x] `PK2_IMPLEMENTATION_AUTHORIZED: NO`
 
-**Next decision gate:** after successful Codex review and commit/push closure of this reconciliation, the next decision gate is Gemini consideration of a bounded PROV implementation. PROV is not currently authorized. E-2 POSIX evidence remains held. All prior prohibitions (deploy, runtime activation, callable invocation, production access, POSIX evidence, physical UAT, stash operations, broader Packet 5 closure) are preserved.
+**Next decision gate:** after this docs reconciliation succeeds, ChatGPT may prepare Claude's already-authorized strict read-only PK-2 architecture planning prompt. Do not start Claude from this gate. Do not authorize PK-2 implementation. Do not reopen PK-1. Preserved holds remain (deploy, production access, final UAT, stash operations, G14 ABORTED, OBS-C, broader Packet 5 closure, offline login, returns/refunds, PK-3..PK-6 implementation).
+
+## P1 Offline / Sync Resiliency — Packet 5 / Post-R6 Seven-File Tracker Reconciliation (historical)
+
+**Status: HISTORICAL** — superseded as current phase by PK-1 closure. `P_OBS_1_STATUS: CLOSED` (permanent owner `docs/ops/packet-5-monitoring-runbook.md` §9). R6 Codex current-head re-review was `PASS_WITH_NOTES`. `PROV` and `E-2` POSIX evidence remains **not authorized** / `IDENTIFIED_BUT_HELD`. Broader Packet 5 remains **NOT CLOSED**.
 
 ## P1 Offline / Sync Resiliency — Packet 5 / UI-B2 / Packet S — getShiftCloseCaseFigures
 
@@ -164,12 +175,11 @@
 
 ### Next step
 
-1. Packet 5 / UI-B2 / Packet S — getShiftCloseCaseFigures — **TECHNICALLY CLOSED WITH NONBLOCKING NOTES** (`e9363e3`, deployed live)
-2. Packet 5 / UI-C Manager Adjudication Action Surface — **CLOSED AS COMMITTED AND PUSHED** (`3ef4d01`); docs reconciliation CLOSED at `5654362`
-3. **Packet S docs/tracker reconciliation — CLOSED** at `c6bdbd0` (`docs(pos): reconcile packet s closure`)
-4. **Active implementation packet: NONE.** Passive natural-traffic observation may occur only when a real natural business event exists, read-only only; no agent-triggered activity is authorized. Await a later Gemini selection before any new planning or implementation gate.
-5. **NOT authorized:** UI-B.1, UI-B2, P5-F, recapture, new implementation (any candidate), deploy, runtime activation, callable invocation, production access, global Flowbite (A-1) fix, stash operations, POSPage/PaymentModal/checkout/navigation/global-keyboard changes, Packet R/C/U
-6. **Next implementation/roadmap direction** — later Gemini decision; no active implementation packet and no next candidate selected
-7. Do not automatically start another packet.
+1. **PK-1 Offline Shift Session — `CLOSED_WITH_NOTES`** at `513b198a30a1af72151ab6a8c0976799871529b8` — do not reopen
+2. **`PACKET_5_STATUS: NOT_CLOSED`** — broader Packet 5 closure **NOT AUTHORIZED**
+3. **Next roadmap candidate: PK-2 Offline Boot, Session and Cart Durability** — architecture planning `AUTHORIZED_AFTER_DOCS_SUCCESS / NOT_YET_STARTED`; implementation **NOT AUTHORIZED**; do not start Claude from this gate
+4. **Active implementation packet: NONE.** Passive natural-traffic observation may occur only when a real natural business event exists, read-only only; no agent-triggered activity is authorized
+5. **NOT authorized:** PK-2 implementation, PK-3..PK-6 implementation, offline login, returns/refunds, G14 (ABORTED), OBS-C, UI-B.1, UI-B2, P5-F, recapture, deploy, runtime activation, callable invocation, production access, final UAT, global Flowbite (A-1) fix, stash operations, Packet R/C/U, broader Packet 5 closure
+6. Do not automatically start another packet
 
-**Not active:** UI-B.1, UI-B2, P5-F, recapture, or any new feature packet.
+**Not active:** PK-2 implementation, PK-3..PK-6, UI-B.1, UI-B2, P5-F, recapture, or any new feature packet.

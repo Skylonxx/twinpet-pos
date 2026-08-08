@@ -1,16 +1,27 @@
-# Latest Report — P1 Offline / Sync Packet 5 — Post-R6 Seven-File Tracker Reconciliation
+# Latest Report — P1 Offline / Sync Packet 5 — Post-PK-1 Docs Reconciliation
+
+> Date: 2026-08-09
+> Current repository HEAD: determined from live Git — run `git rev-parse HEAD`
+> Verified baseline entering this reconciliation: `513b198a30a1af72151ab6a8c0976799871529b8` (`fix(pos): harden offline shift open reconciliation`)
+> Status: **PK-1 Offline Shift Session — `CLOSED_WITH_NOTES`.** Final HEAD `513b198a30a1af72151ab6a8c0976799871529b8`. Final Codex `PASS_WITH_NOTES` (`MATERIAL_FINDING_COUNT: 0`). Final AGY `PASS` (`MATERIAL_FINDING_COUNT: 0`). `PACKET_5_STATUS: NOT_CLOSED`. Next roadmap candidate: PK-2 Offline Boot, Session and Cart Durability — architecture planning authorized after docs success / not yet started; implementation NOT authorized. This pass is docs-only and left uncommitted.
+
+## 0. This pass's report
+
+- Cursor Grok docs reconciliation: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Grok\twinpet-p1-offline-sync-packet-5-pk1-docs-reconciliation-report.md`
+
+---
+
+# Historical — Latest Report — P1 Offline / Sync Packet 5 — Post-R6 Seven-File Tracker Reconciliation
 
 > Date: 2026-08-07
 > Current repository HEAD: determined from live Git — run `git rev-parse HEAD`
 > Verified baseline entering this reconciliation: `78f7ffe5c5b69f47af5c20ed8efd54410f35ee09` (`docs(pos): close p-obs-1 process reconciliation`)
-> Status: **Post-R6 Seven-File Tracker Reconciliation — IMPLEMENTATION-COMPLETE, PENDING CODEX REVIEW.** `P_OBS_1_STATUS: CLOSED` (permanent owner `docs/ops/packet-5-monitoring-runbook.md` §9, pointer only). R6 Codex current-head re-review `PASS_WITH_NOTES` (0 material findings, 2 notes); architecture `COMPLETE`; current-head `COMPATIBLE`; all thirteen R5 findings closed; R6-G14 accepted. `PROV` is the first remaining implementation stage — **not authorized**. `E-2` real POSIX evidence — `IDENTIFIED_BUT_HELD`, **not authorized**. Broader Packet 5 **NOT CLOSED**. No active implementation packet; passive natural-traffic observation remains authorized in parallel, read-only only, when a natural event exists.
+> Status: **Post-R6 Seven-File Tracker Reconciliation — historical.** Superseded as current phase by PK-1 `CLOSED_WITH_NOTES`. `P_OBS_1_STATUS: CLOSED` (permanent owner `docs/ops/packet-5-monitoring-runbook.md` §9, pointer only). Broader Packet 5 **NOT CLOSED**.
 
-## 0. This pass's reports
+## 0. Historical reports (Post-R6 era)
 
 - Codex R6 current-head re-review: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Codex\twinpet-p1-offline-sync-packet-5-post-packet-s-observability-contract-architecture-exactification-r6-current-head-rereview.md`
 - Claude tracker reconciliation implementation report: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Claude\twinpet-p1-offline-sync-packet-5-post-r6-tracker-reconciliation-implementation-report.md`
-
-Current status: pending a fresh Codex docs-only review of this seven-file reconciliation. That Codex report does not yet exist and is not claimed here.
 
 ---
 
