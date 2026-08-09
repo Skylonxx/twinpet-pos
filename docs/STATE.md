@@ -8,26 +8,50 @@
 | Branch | `main` |
 | HEAD (code) | determined from live Git — run `git rev-parse HEAD` |
 | origin/main | determined from live Git — run `git rev-parse origin/main` |
-| Verified baseline entering this reconciliation | `513b198a30a1af72151ab6a8c0976799871529b8` (`fix(pos): harden offline shift open reconciliation`) |
+| Verified baseline entering this reconciliation | `79ba840ab6e01ee1a5fff6c0094104c25d754668` (`feat(pos): harden offline boot and session gating`) |
+| PK-2A code commit | `79ba840ab6e01ee1a5fff6c0094104c25d754668` |
+| PK-2A parent | `23f51554f6a9e31bb7232a38cb9721c40f630566` |
 | PK-1 final HEAD | `513b198a30a1af72151ab6a8c0976799871529b8` |
 | Ahead/behind | determined from live Git — run `git status -sb` |
 
 ## Current Phase
 
-    PK1_CLOSED_WITH_NOTES / POST_PK1_DOCS_RECONCILIATION
-    P1 Packet 5 / Post-PK-1 Docs Reconciliation.
-    PK1_STATUS: CLOSED_WITH_NOTES at 513b198a30a1af72151ab6a8c0976799871529b8
-    (fix(pos): harden offline shift open reconciliation; parent 5e9b52b).
-    Final Codex: PASS_WITH_NOTES (MATERIAL_FINDING_COUNT: 0).
-    Final AGY: PASS (MATERIAL_FINDING_COUNT: 0).
-    PK1_REOPEN_AUTHORIZED: NO.
+    PK2A_CLOSED_WITH_NOTES / POST_PK2A_DOCS_RECONCILIATION
+    P1 Packet 5 / PK-2A Boot / Session Gating and Offline Blocker — Docs Reconciliation.
+    PK2A_CODE_IMPLEMENTATION_STATUS: CLOSED_WITH_NOTES at 79ba840ab6e01ee1a5fff6c0094104c25d754668
+    (feat(pos): harden offline boot and session gating; parent 23f5155).
+    Codex: PASS (MATERIAL_FINDING_COUNT: 0).
+    AGY: PASS (MATERIAL_FINDING_COUNT: 0).
+    Exact 11-file code commit/push verified; HEAD == origin/main == remote main.
+    PK1_STATUS: CLOSED_WITH_NOTES (preserved). PK1_REOPEN_AUTHORIZED: NO.
     PACKET_5_STATUS: NOT_CLOSED. BROADER_PACKET_5_CLOSURE_AUTHORIZED: NO.
-    Next roadmap candidate: PK-2 Offline Boot, Session and Cart Durability —
-    architecture planning AUTHORIZED_AFTER_DOCS_SUCCESS / NOT_YET_STARTED;
-    PK2_IMPLEMENTATION_AUTHORIZED: NO.
+    G14_ACTIVATION_TRACK_STATUS: ABORTED.
+    PK-2A notes: browser UAT not performed; Emulator UAT not performed;
+    deployment/production not performed.
+    Next roadmap candidate: PK-2B — Cart Snapshot Store + Restore/Conflict Logic —
+    PK2B.ARCHITECTURE_PLANNING_AUTHORIZED_NOW: NO;
+    PK2B.IMPLEMENTATION_AUTHORIZED: NO.
     Active implementation packet: NONE.
     Passive natural-traffic observation remains authorized in parallel, read-only only,
     when a natural event exists.
+
+## P1 Packet 5 / PK-2A Boot / Session Gating and Offline Blocker (CLOSED_WITH_NOTES)
+
+| Field | Value |
+|-------|-------|
+| Status | **`CLOSED_WITH_NOTES`** |
+| Code commit | `79ba840ab6e01ee1a5fff6c0094104c25d754668` |
+| Parent | `23f51554f6a9e31bb7232a38cb9721c40f630566` |
+| Subject | `feat(pos): harden offline boot and session gating` |
+| Push | successful normal fast-forward; `HEAD == origin/main == remote main` |
+| Payload | exact 11 PK-2A files |
+| Codex | `PASS`; `MATERIAL_FINDING_COUNT: 0` |
+| AGY | `PASS`; `MATERIAL_FINDING_COUNT: 0` |
+| Semantics | provenance-aware active-shift boot; fail-closed unverifiable active shift; cache-empty ≠ authoritative absence; session schema/issuedAt; legacy session in-memory upgrade; cached role/branch offline continuation; offline-no-session LoginPage blocker; DEC-10 live; no navigator-only short-circuit; no offline credential login |
+| Validation (recorded) | focused 5/95 PASS; bounded regression 3/69 PASS; `tsc --noEmit` PASS; `git diff --check` PASS |
+| Closure notes | browser UAT NOT performed; Emulator UAT NOT performed; deployment NOT performed; production NOT performed |
+| Packet 5 | **NOT CLOSED** |
+| Next roadmap | PK-2B candidate only; architecture/planning **NOT authorized now**; implementation **NO** |
 
 ## P1 Packet 5 / PK-1 Offline Shift Session (CLOSED_WITH_NOTES)
 
@@ -41,7 +65,7 @@
 | Final AGY | `PASS`; `MATERIAL_FINDING_COUNT: 0` |
 | Closure notes | (1) analogous `closeShift` structured-result handling deferred / out of PK-1 scope / non-blocking; (2) Browser/Emulator runtime UAT separately gated; not required for PK-1 closure |
 | Packet 5 | **NOT CLOSED** |
-| Next roadmap | PK-2 Offline Boot, Session and Cart Durability — planning after docs success / not started; implementation NO |
+| Reopen | **NO** |
 
 ## P1 Packet 5 / Post-R6 Seven-File Tracker Reconciliation (historical)
 
@@ -58,10 +82,11 @@
 
 ## Working Tree
 
+- PK-2A code commit (binding): `79ba840` (`feat(pos): harden offline boot and session gating`)
 - Packet S implementation commit (historical): `e9363e3` (Packet 5 / UI-B2 / Packet S — getShiftCloseCaseFigures)
 - Packet S docs/tracker closure commit (historical): `c6bdbd0`
 - For current working-tree state, use live Git: `git status --short --untracked-files=all`
-- The Packet S docs/tracker closure gate settled with a clean working tree and empty staged area at the verified baseline above
+- This PK-2A docs reconciliation entered with a clean working tree and empty staged area at the verified baseline above; docs edits are left uncommitted (`DOC_COMMIT_PUSH_AUTHORIZED: NO`)
 
 ## Stash
 
@@ -143,6 +168,7 @@ All **CLOSED** where applicable.
 
 | Hash | Message |
 |------|---------|
+| `79ba840` | feat(pos): harden offline boot and session gating — **PK-2A CODE CLOSED_WITH_NOTES** |
 | `c6bdbd0` | docs(pos): reconcile packet s closure — **PACKET S DOCS/TRACKER RECONCILIATION CLOSED** |
 | `e9363e3` | feat(pos): add shift close case figures callable — **PACKET S TECHNICALLY CLOSED WITH NONBLOCKING NOTES** |
 | `5654362` | docs(pos): close packet 5 ui-c manager adjudication — **UI-C docs CLOSED** |
@@ -154,20 +180,25 @@ All **CLOSED** where applicable.
 
 ## Next Recommended Block
 
-    PK1_CLOSED_WITH_NOTES → PK1_DOCS_RECONCILIATION → READY_FOR_PK2_STRICT_READ_ONLY_ARCHITECTURE_PLANNING
+    PK2A_CLOSED_WITH_NOTES → PK2A_DOCS_RECONCILIATION → READY_FOR_POST_PK2A_ROADMAP_AUTHORIZATION_DECISION
 
-1. PK-1 Offline Shift Session — **`CLOSED_WITH_NOTES`** at `513b198`
-2. Packet 5 — **`NOT_CLOSED`**; broader closure **NOT AUTHORIZED**
-3. **Next action:** ChatGPT prepares Claude's strict read-only PK-2 architecture planning prompt after docs success. Do not start Claude from this gate. `PK2_IMPLEMENTATION_AUTHORIZED: NO`.
-4. Passive read-only observation may occur only when natural production traffic provides a real event; no agent-triggered activity is authorized
+1. PK-2A Boot / Session Gating — **`CLOSED_WITH_NOTES`** at `79ba840`
+2. PK-1 Offline Shift Session — **`CLOSED_WITH_NOTES`** at `513b198` (preserved)
+3. Packet 5 — **`NOT_CLOSED`**; broader closure **NOT AUTHORIZED**
+4. G14 — **`ABORTED`**
+5. **Next action:** Return PK-2A docs reconciliation report to ChatGPT / Gemini for docs commit/push authorization decision and post-PK-2A roadmap decision. `PK2B.ARCHITECTURE_PLANNING_AUTHORIZED_NOW: NO`. `PK2B.IMPLEMENTATION_AUTHORIZED: NO`.
+6. Passive read-only observation may occur only when natural production traffic provides a real event; no agent-triggered activity is authorized
 
 ## Hard Boundaries
 
 - No production/emulator data mutation; no synthetic events; no manual invocation of deployed functions (including `resolveShiftCloseAlert`)
 - No `shifts.expected*` mutation; no FIFO/stock/credit/settlement writes
+- PK-2B architecture/planning now — NOT AUTHORIZED; PK-2B/PK-2C implementation — NOT AUTHORIZED
 - UI-B.1 / UI-B2 / P5-F / recapture — NOT AUTHORIZED
-- POSPage / PaymentModal / checkout / navigation / global keyboard — NOT AUTHORIZED
+- PaymentModal / checkout/payment write-path / navigation / global keyboard — NOT AUTHORIZED
 - Firestore rules/index/functions deploy, deploy/runtime activation — NOT AUTHORIZED
+- Browser responsive UAT / Emulator runtime UAT — NOT performed / NOT authorized here
 - Global Flowbite focus fix (A-1) — NOT AUTHORIZED (accepted deferred note)
+- Docs commit/push — NOT AUTHORIZED by this pass (`DOC_COMMIT_PUSH_AUTHORIZED: NO`)
 - Next implementation (any candidate) — NOT AUTHORIZED by this pass
 - `stash@{0}` untouched (`7d03cfec7ba52ff7e25b7e175ca190efc258d874`)

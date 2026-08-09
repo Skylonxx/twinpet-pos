@@ -1,11 +1,57 @@
-# Latest Report — P1 Offline / Sync Packet 5 — Post-PK-1 Docs Reconciliation
+# Latest Report — P1 Offline / Sync Packet 5 — PK-2A Docs Reconciliation
+
+> Date: 2026-08-09
+> Current repository HEAD: determined from live Git — run `git rev-parse HEAD`
+> Verified baseline entering this reconciliation: `79ba840ab6e01ee1a5fff6c0094104c25d754668` (`feat(pos): harden offline boot and session gating`)
+> Status: **PK-2A Boot / Session Gating and Offline Blocker — `CLOSED_WITH_NOTES` (code).** Code commit `79ba840ab6e01ee1a5fff6c0094104c25d754668` (parent `23f51554f6a9e31bb7232a38cb9721c40f630566`). Codex implementation review `PASS` (`MATERIAL_FINDING_COUNT: 0`). AGY UI/UX review `PASS` (`MATERIAL_FINDING_COUNT: 0`). Exact 11-file code commit/push verified. `PK1_STATUS: CLOSED_WITH_NOTES` (preserved). `PACKET_5_STATUS: NOT_CLOSED`. `G14_ACTIVATION_TRACK_STATUS: ABORTED`. Browser/Emulator UAT not performed; deployment/production not performed. Next roadmap candidate: PK-2B — Cart Snapshot Store + Restore/Conflict Logic — architecture planning **NOT authorized now**; implementation **NOT authorized**. This pass is docs-only and left uncommitted (`DOC_COMMIT_PUSH_AUTHORIZED: NO`).
+
+## 0. This pass's reports
+
+- Cursor Grok code commit/push: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Grok\twinpet-p1-offline-sync-packet-5-pk2a-code-commit-push-report.md`
+- Codex implementation review: `PASS` (material findings: 0) — accepted under Gemini `TWINPET-P1-OFFLINE-SYNC-PACKET-5-PK2A-POST-REVIEW-CLOSURE-GEMINI-001`
+- AGY UI/UX review: `PASS` (material findings: 0) — accepted under the same Gemini closure authority
+- Cursor Grok docs reconciliation: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Grok\twinpet-p1-offline-sync-packet-5-pk2a-docs-reconciliation-report.md`
+
+## 1. PK-2A closure facts
+
+| Field | Value |
+|-------|-------|
+| Status | `CLOSED_WITH_NOTES` (code) |
+| Commit | `79ba840ab6e01ee1a5fff6c0094104c25d754668` |
+| Parent | `23f51554f6a9e31bb7232a38cb9721c40f630566` |
+| Subject | `feat(pos): harden offline boot and session gating` |
+| Push | successful normal fast-forward; `HEAD == origin/main == remote main` |
+| Payload | exact 11 PK-2A files |
+| Codex | `PASS`; 0 material findings |
+| AGY | `PASS`; 0 material findings |
+| Validation (recorded; not re-run here) | focused 5 files / 95 PASS; bounded regression 3 files / 69 PASS; `tsc --noEmit` PASS; `git diff --check` PASS |
+
+Implemented semantics (concise): provenance-aware active-shift boot read; unverifiable active-shift fails closed; cache-empty not treated as authoritative absence; session schema version + issuedAt; valid legacy sessions upgrade in memory without expiry; cached role/branch remains offline continuation truth; explicit offline-no-session LoginPage blocker; DEC-10 controls remain live; no navigator-only login short-circuit; no offline credential login.
+
+Closure notes (non-blocking for code closure): browser responsive UAT NOT performed; Emulator runtime UAT NOT performed; deployment NOT performed; production activation/access NOT performed. Do not fabricate runtime evidence.
+
+## 2. Preserved statuses
+
+- `PK1_STATUS: CLOSED_WITH_NOTES` — do not reopen
+- `PACKET_5_STATUS: NOT_CLOSED` — PK-2A closure is not Packet 5 closure
+- `G14_ACTIVATION_TRACK_STATUS: ABORTED`
+- `PK2B.ARCHITECTURE_PLANNING_AUTHORIZED_NOW: NO`
+- `PK2B.IMPLEMENTATION_AUTHORIZED: NO`
+
+## 3. Next gate
+
+Return this docs reconciliation report to ChatGPT / Gemini for docs commit/push authorization decision and post-PK-2A roadmap decision. Do not stage/commit/push docs. Do not start PK-2B. Do not deploy. Do not touch stash.
+
+---
+
+# Historical — Latest Report — P1 Offline / Sync Packet 5 — Post-PK-1 Docs Reconciliation
 
 > Date: 2026-08-09
 > Current repository HEAD: determined from live Git — run `git rev-parse HEAD`
 > Verified baseline entering this reconciliation: `513b198a30a1af72151ab6a8c0976799871529b8` (`fix(pos): harden offline shift open reconciliation`)
-> Status: **PK-1 Offline Shift Session — `CLOSED_WITH_NOTES`.** Final HEAD `513b198a30a1af72151ab6a8c0976799871529b8`. Final Codex `PASS_WITH_NOTES` (`MATERIAL_FINDING_COUNT: 0`). Final AGY `PASS` (`MATERIAL_FINDING_COUNT: 0`). `PACKET_5_STATUS: NOT_CLOSED`. Next roadmap candidate: PK-2 Offline Boot, Session and Cart Durability — architecture planning authorized after docs success / not yet started; implementation NOT authorized. This pass is docs-only and left uncommitted.
+> Status: **PK-1 Offline Shift Session — `CLOSED_WITH_NOTES`.** Final HEAD `513b198a30a1af72151ab6a8c0976799871529b8`. Final Codex `PASS_WITH_NOTES` (`MATERIAL_FINDING_COUNT: 0`). Final AGY `PASS` (`MATERIAL_FINDING_COUNT: 0`). `PACKET_5_STATUS: NOT_CLOSED`. Historical next-roadmap wording (superseded by PK-2A closure): PK-2 Offline Boot, Session and Cart Durability — architecture planning authorized after docs success / not yet started; implementation NOT authorized. This historical pass was docs-only and left uncommitted.
 
-## 0. This pass's report
+## 0. Historical PK-1 docs reconciliation report
 
 - Cursor Grok docs reconciliation: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Grok\twinpet-p1-offline-sync-packet-5-pk1-docs-reconciliation-report.md`
 
@@ -16,7 +62,7 @@
 > Date: 2026-08-07
 > Current repository HEAD: determined from live Git — run `git rev-parse HEAD`
 > Verified baseline entering this reconciliation: `78f7ffe5c5b69f47af5c20ed8efd54410f35ee09` (`docs(pos): close p-obs-1 process reconciliation`)
-> Status: **Post-R6 Seven-File Tracker Reconciliation — historical.** Superseded as current phase by PK-1 `CLOSED_WITH_NOTES`. `P_OBS_1_STATUS: CLOSED` (permanent owner `docs/ops/packet-5-monitoring-runbook.md` §9, pointer only). Broader Packet 5 **NOT CLOSED**.
+> Status: **Post-R6 Seven-File Tracker Reconciliation — historical.** Superseded as current phase by PK-1 `CLOSED_WITH_NOTES`, then by PK-2A `CLOSED_WITH_NOTES`. `P_OBS_1_STATUS: CLOSED` (permanent owner `docs/ops/packet-5-monitoring-runbook.md` §9, pointer only). Broader Packet 5 **NOT CLOSED**.
 
 ## 0. Historical reports (Post-R6 era)
 

@@ -2,8 +2,10 @@
 
 > Last reconciled: 2026-08-09
 > Current repository HEAD: determined from live Git — run `git rev-parse HEAD`
-> Verified baseline entering this reconciliation: `513b198a30a1af72151ab6a8c0976799871529b8` (`fix(pos): harden offline shift open reconciliation`)
-> PK-1 final HEAD (binding): `513b198a30a1af72151ab6a8c0976799871529b8`
+> Verified baseline entering this reconciliation: `79ba840ab6e01ee1a5fff6c0094104c25d754668` (`feat(pos): harden offline boot and session gating`)
+> PK-2A code commit (binding): `79ba840ab6e01ee1a5fff6c0094104c25d754668`
+> PK-2A parent: `23f51554f6a9e31bb7232a38cb9721c40f630566`
+> PK-1 final HEAD (binding, unchanged): `513b198a30a1af72151ab6a8c0976799871529b8`
 > PK-1 parent: `5e9b52bbbb8892d6c5dcf3453c3332724af7763b` (`feat(pos): enable offline shift open with durable intent and reconciliation`)
 > Packet S implementation commit (historical, unchanged): `e9363e35f5a79f8e21d5dafe1e70d8ff3f82559c` (`feat(pos): add shift close case figures callable`)
 > Packet S docs/tracker closure commit (historical, unchanged): `c6bdbd00d01541201dbc53236b06080db1a148e4`
@@ -14,11 +16,30 @@
 
 ## Current Phase
 
-**P1 Offline / Sync Resiliency — Packet 5 / Post-PK-1 Docs Reconciliation.** `PK1_STATUS: CLOSED_WITH_NOTES` at final committed/pushed HEAD `513b198a30a1af72151ab6a8c0976799871529b8` (`fix(pos): harden offline shift open reconciliation`; parent `5e9b52bbbb8892d6c5dcf3453c3332724af7763b`). Final Codex: `PASS_WITH_NOTES` (`MATERIAL_FINDING_COUNT: 0`). Final AGY: `PASS` (`MATERIAL_FINDING_COUNT: 0`). `PK1_REOPEN_AUTHORIZED: NO`. **`PACKET_5_STATUS: NOT_CLOSED`.** `BROADER_PACKET_5_CLOSURE_AUTHORIZED: NO`. Next roadmap candidate: **PK-2 Offline Boot, Session and Cart Durability** — architecture planning authorized conditionally after this docs success; **not yet started**; implementation **NOT authorized**. Do not start Claude from this docs gate. Passive natural-traffic observation remains authorized in parallel, read-only only, when a natural event exists. No agent-triggered activity is authorized.
+**P1 Offline / Sync Resiliency — Packet 5 / PK-2A Boot / Session Gating and Offline Blocker — Docs Reconciliation.** `PK2A_CODE_IMPLEMENTATION_STATUS: CLOSED_WITH_NOTES` at committed/pushed HEAD `79ba840ab6e01ee1a5fff6c0094104c25d754668` (`feat(pos): harden offline boot and session gating`; parent `23f51554f6a9e31bb7232a38cb9721c40f630566`). Codex implementation review: `PASS` (`MATERIAL_FINDING_COUNT: 0`). AGY UI/UX review: `PASS` (`MATERIAL_FINDING_COUNT: 0`). Exact 11-file code commit/push verified; `HEAD == origin/main == remote main`. `PK1_STATUS: CLOSED_WITH_NOTES` (unchanged; do not reopen). **`PACKET_5_STATUS: NOT_CLOSED`.** `BROADER_PACKET_5_CLOSURE_AUTHORIZED: NO`. `G14_ACTIVATION_TRACK_STATUS: ABORTED`. PK-2A closure notes (non-blocking for code closure): browser responsive UAT not performed; Emulator runtime UAT not performed; deployment/production activation not performed. Next roadmap candidate: **PK-2B — Cart Snapshot Store + Restore/Conflict Logic** — but `PK2B.ARCHITECTURE_PLANNING_AUTHORIZED_NOW: NO`; `PK2B.IMPLEMENTATION_AUTHORIZED: NO`. Current next action is post-PK-2A roadmap/authorization decision by Gemini/Owner after this docs reconciliation — not PK-2B planning or implementation. Passive natural-traffic observation remains authorized in parallel, read-only only, when a natural event exists. No agent-triggered activity is authorized.
 
 Manual workflow remains active. `agentchattr` was not used as the executor for this phase.
 
-**Repository baseline:** branch `main`. For current repository state, use live Git: `git status --short --untracked-files=all`, `git diff --cached --name-status`, `git rev-parse "stash@{0}"`. This PK-1 docs reconciliation entered with a clean working tree, empty staged area, and unchanged stash (`stash@{0}` = `7d03cfec7ba52ff7e25b7e175ca190efc258d874` as of the verified baseline above). Docs edits in this gate are left uncommitted (`COMMIT_PUSH_AUTHORIZED: CONDITIONAL_LATER_DECISION`).
+**Repository baseline:** branch `main`. For current repository state, use live Git: `git status --short --untracked-files=all`, `git diff --cached --name-status`, `git rev-parse "stash@{0}"`. This PK-2A docs reconciliation entered with a clean working tree, empty staged area, and unchanged stash (`stash@{0}` = `7d03cfec7ba52ff7e25b7e175ca190efc258d874` as of the verified baseline above). Docs edits in this gate are left uncommitted (`DOC_COMMIT_PUSH_AUTHORIZED: NO`).
+
+### P1 Packet 5 / PK-2A Boot / Session Gating and Offline Blocker (CLOSED_WITH_NOTES)
+
+- **Status:** `PK2A_CODE_IMPLEMENTATION_STATUS: CLOSED_WITH_NOTES`
+- **Code commit:** `79ba840ab6e01ee1a5fff6c0094104c25d754668`
+- **Parent:** `23f51554f6a9e31bb7232a38cb9721c40f630566`
+- **Subject:** `feat(pos): harden offline boot and session gating`
+- **Push:** successful normal fast-forward; `HEAD == origin/main == remote main`
+- **Payload:** exact 11 PK-2A files
+- **Codex:** `PASS`; `MATERIAL_FINDING_COUNT: 0`
+- **AGY:** `PASS`; `MATERIAL_FINDING_COUNT: 0`
+- **Implemented semantics (concise):** provenance-aware active-shift boot read; unverifiable active-shift state fails closed; cache-empty not treated as authoritative absence; session schema version + issuedAt metadata; valid legacy sessions upgrade in memory without expiry; cached role/branch remains offline continuation truth; explicit offline-no-session LoginPage blocker; DEC-10 controls remain live; no navigator-only login short-circuit; no offline credential login implementation
+- **Validation evidence (recorded; not re-run in this docs gate):** focused PK-2A tests 5 files / 95 PASS; bounded regression 3 files / 69 PASS; `npx tsc --noEmit` PASS; `git diff --check` PASS
+- **Closure notes (non-blocking for PK-2A code closure):** browser responsive UAT NOT performed; Emulator runtime UAT NOT performed; deployment NOT performed; production activation/access NOT performed
+- **Packet 5:** `PACKET_5_STATUS: NOT_CLOSED`; broader Packet 5 closure **NOT AUTHORIZED**
+- **PK-1:** remains `CLOSED_WITH_NOTES` — do not reopen
+- **G14:** `ABORTED`
+- **Next roadmap boundary:** PK-2B is the next expected planning unit, but architecture planning and implementation are **NOT authorized now**; await Gemini/Owner post-PK-2A roadmap decision
+- **Preserved holds (subset):** PK-1 reopen NO; PK-2B architecture/planning NO; PK-2B implementation NO; PK-2C..PK-6 implementation NO; PaymentModal touch NO; checkout/payment write-path change NO; offline credential login NO; returns/refunds NO; browser UAT NO; Emulator runtime UAT NO; deploy NO; production access NO; stash operations NO; broader Packet 5 closure NO
 
 ### P1 Packet 5 / PK-1 Offline Shift Session (CLOSED_WITH_NOTES)
 
@@ -282,13 +303,15 @@ Non-blocking this-terminal pending-sync warning; close remains enabled.
 
 ### Deferred / next gate
 
-1. **PK-1 Offline Shift Session — `CLOSED_WITH_NOTES`** at `513b198a30a1af72151ab6a8c0976799871529b8`. Do not reopen. Closure notes remain non-blocking and out of PK-1 scope.
-2. **`PACKET_5_STATUS: NOT_CLOSED`.** `BROADER_PACKET_5_CLOSURE_AUTHORIZED: NO`. Do not claim Packet 5 / final UAT / deployment complete.
-3. **Next roadmap candidate: PK-2 Offline Boot, Session and Cart Durability.** `PK2_ARCHITECTURE_PLANNING: AUTHORIZED_AFTER_DOCS_SUCCESS / NOT_YET_STARTED`. Claude strict read-only architecture planning is conditional after this docs success — do not start Claude from this gate. `PK2_IMPLEMENTATION_AUTHORIZED: NO`.
-4. **Active implementation packet: NONE.** PK-1 is closed; PK-2 planning is not started; no implementation packet is authorized.
-5. **Standing boundaries (carried forward):**
-   - PK-2 / PK-3..PK-6 implementation — **NOT AUTHORIZED**
-   - offline login implementation — **NOT AUTHORIZED**
+1. **PK-2A Boot / Session Gating and Offline Blocker — `CLOSED_WITH_NOTES`** at `79ba840ab6e01ee1a5fff6c0094104c25d754668`. Code commit/push + Codex/AGY PASS recorded. Docs reconciliation is this gate (left uncommitted).
+2. **PK-1 Offline Shift Session — `CLOSED_WITH_NOTES`** at `513b198a30a1af72151ab6a8c0976799871529b8`. Do not reopen. Closure notes remain non-blocking and out of PK-1 scope.
+3. **`PACKET_5_STATUS: NOT_CLOSED`.** `BROADER_PACKET_5_CLOSURE_AUTHORIZED: NO`. Do not claim Packet 5 / final UAT / deployment complete. PK-2A closure is not Packet 5 closure.
+4. **Next roadmap candidate: PK-2B — Cart Snapshot Store + Restore/Conflict Logic.** `PK2B.ARCHITECTURE_PLANNING_AUTHORIZED_NOW: NO`. `PK2B.IMPLEMENTATION_AUTHORIZED: NO`. Await Gemini/Owner post-PK-2A roadmap/authorization decision. Do not start PK-2B.
+5. **Active implementation packet: NONE.** PK-2A code is closed; no PK-2B/PK-2C implementation gate is authorized.
+6. **Standing boundaries (carried forward):**
+   - PK-2B architecture/planning — **NOT AUTHORIZED NOW**
+   - PK-2B / PK-2C / PK-3..PK-6 implementation — **NOT AUTHORIZED**
+   - offline credential login implementation — **NOT AUTHORIZED**
    - returns/refunds implementation — **NOT AUTHORIZED**
    - G14 activation — **ABORTED**
    - OBS-C — **NOT AUTHORIZED**
@@ -296,14 +319,15 @@ Non-blocking this-terminal pending-sync warning; close remains enabled.
    - manual invocation of deployed functions (including `resolveShiftCloseAlert`) — **NOT AUTHORIZED**
    - production/emulator data mutation — **NOT AUTHORIZED**
    - Firestore rules/index/functions deployment — **NOT AUTHORIZED**
+   - browser responsive UAT / Emulator runtime UAT — **NOT PERFORMED** (PK-2A notes; not re-authorized here)
    - deploy/runtime activation / final UAT / production access — **NOT AUTHORIZED**
    - global Flowbite focus fix (A-1) — **NOT AUTHORIZED** (accepted deferred note)
    - PROV implementation / E-2 POSIX evidence — **NOT AUTHORIZED** / `IDENTIFIED_BUT_HELD`
-   - POSPage / PaymentModal / checkout/payment / navigation-menu / global keyboard changes — **NOT AUTHORIZED** beyond separately authorized packets
+   - PaymentModal / checkout/payment write-path / navigation-menu / global keyboard changes — **NOT AUTHORIZED** beyond separately authorized packets
    - no `shifts.expected*` mutation; no FIFO/stock/credit/settlement writes; `stash@{0}` untouched
-6. **Passive observation** — read-only observation on **natural traffic only** remains authorized in parallel; no agent-triggered activity is authorized.
-7. **Open decisions/risks carried forward:** live-lease conflict reject-code reuse; manager `reasonCode` accepts full frozen enum; optional PIN not enforced day one; A-1 global Flowbite modal focus-containment deferred; G3 monitoring resolved (runbook at `docs/ops/packet-5-monitoring-runbook.md`); no real shift close through full P5-C/P5-D/P5-E pipeline yet; UI-B Fallback A missing-vs-denied ambiguity and terminal permission-denied listener behavior remain unresolved; N-FINAL-01 (Packet S selected-run figures are not final settlement truth) remains a standing downstream UI/copy constraint; PK-1 deferred `closeShift` structured-result handling; Browser/Emulator runtime UAT separately gated.
-8. Do not automatically start another packet. Do not start Claude or PK-2 implementation from this docs reconciliation.
+7. **Passive observation** — read-only observation on **natural traffic only** remains authorized in parallel; no agent-triggered activity is authorized.
+8. **Open decisions/risks carried forward:** live-lease conflict reject-code reuse; manager `reasonCode` accepts full frozen enum; optional PIN not enforced day one; A-1 global Flowbite modal focus-containment deferred; G3 monitoring resolved (runbook at `docs/ops/packet-5-monitoring-runbook.md`); no real shift close through full P5-C/P5-D/P5-E pipeline yet; UI-B Fallback A missing-vs-denied ambiguity and terminal permission-denied listener behavior remain unresolved; N-FINAL-01 (Packet S selected-run figures are not final settlement truth) remains a standing downstream UI/copy constraint; PK-1 deferred `closeShift` structured-result handling; PK-2A browser/Emulator UAT and deployment remain separately gated / not performed.
+9. Do not automatically start another packet. Do not start PK-2B architecture planning or implementation from this docs reconciliation. Do not stage/commit/push these docs without separate authorization.
 
 ### Future Phase โ€” True Standalone (Desktop & Native Mobile) (`TRUE-STANDALONE`)
 

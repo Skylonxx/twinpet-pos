@@ -2,8 +2,10 @@
 
 > Last reconciled: 2026-08-09
 > Current repository HEAD: determined from live Git — run `git rev-parse HEAD`
-> Verified baseline entering this reconciliation: `513b198a30a1af72151ab6a8c0976799871529b8` (`fix(pos): harden offline shift open reconciliation`)
-> PK-1 final HEAD (binding): `513b198a30a1af72151ab6a8c0976799871529b8`
+> Verified baseline entering this reconciliation: `79ba840ab6e01ee1a5fff6c0094104c25d754668` (`feat(pos): harden offline boot and session gating`)
+> PK-2A code commit (binding): `79ba840ab6e01ee1a5fff6c0094104c25d754668`
+> PK-2A parent: `23f51554f6a9e31bb7232a38cb9721c40f630566`
+> PK-1 final HEAD (binding, unchanged): `513b198a30a1af72151ab6a8c0976799871529b8`
 > PK-1 parent: `5e9b52bbbb8892d6c5dcf3453c3332724af7763b` (`feat(pos): enable offline shift open with durable intent and reconciliation`)
 > Packet S implementation commit (historical, unchanged): `e9363e35f5a79f8e21d5dafe1e70d8ff3f82559c` (`feat(pos): add shift close case figures callable`)
 > Packet S docs/tracker closure commit (historical, unchanged): `c6bdbd00d01541201dbc53236b06080db1a148e4`
@@ -12,9 +14,35 @@
 
 ---
 
-## P1 Offline / Sync Resiliency — Packet 5 / PK-1 Offline Shift Session — Docs Reconciliation (this pass)
+## P1 Offline / Sync Resiliency — Packet 5 / PK-2A Boot / Session Gating and Offline Blocker — Docs Reconciliation (this pass)
 
-**Status: `PK1_STATUS: CLOSED_WITH_NOTES`** — docs-only reconciliation of verified PK-1 closure; leave uncommitted (`COMMIT_PUSH_AUTHORIZED: CONDITIONAL_LATER_DECISION`).
+**Status: `PK2A_CODE_IMPLEMENTATION_STATUS: CLOSED_WITH_NOTES`** — docs-only reconciliation of verified PK-2A code closure; leave uncommitted (`DOC_COMMIT_PUSH_AUTHORIZED: NO`).
+
+- [x] `PK2A_CODE_IMPLEMENTATION_STATUS: CLOSED_WITH_NOTES` at `79ba840ab6e01ee1a5fff6c0094104c25d754668`
+- [x] Code commit recorded — `feat(pos): harden offline boot and session gating`
+- [x] Parent recorded — `23f51554f6a9e31bb7232a38cb9721c40f630566`
+- [x] Exact 11-file code commit + normal fast-forward push verified (`HEAD == origin/main == remote main`)
+- [x] Codex implementation review recorded — `PASS`; `MATERIAL_FINDING_COUNT: 0`
+- [x] AGY UI/UX review recorded — `PASS`; `MATERIAL_FINDING_COUNT: 0`
+- [x] Implemented PK-2A semantics recorded (provenance-aware boot; fail-closed unverifiable active shift; cache-empty not authoritative absence; session schema/issuedAt; legacy session in-memory upgrade; cached role/branch offline continuation; offline-no-session LoginPage blocker; DEC-10 live; no navigator-only short-circuit; no offline credential login)
+- [x] Validation evidence recorded — focused 5 files / 95 PASS; bounded regression 3 files / 69 PASS; `tsc --noEmit` PASS; `git diff --check` PASS
+- [x] Closure notes recorded (non-blocking for code closure):
+  - browser responsive UAT NOT performed
+  - Emulator runtime UAT NOT performed
+  - deployment NOT performed
+  - production activation/access NOT performed
+- [x] `PK1_STATUS: CLOSED_WITH_NOTES` preserved; `PK1_REOPEN_AUTHORIZED: NO`
+- [x] `PACKET_5_STATUS: NOT_CLOSED`; `BROADER_PACKET_5_CLOSURE_AUTHORIZED: NO`
+- [x] `G14_ACTIVATION_TRACK_STATUS: ABORTED` preserved
+- [x] Next roadmap candidate recorded — PK-2B — Cart Snapshot Store + Restore/Conflict Logic
+- [x] `PK2B.ARCHITECTURE_PLANNING_AUTHORIZED_NOW: NO`
+- [x] `PK2B.IMPLEMENTATION_AUTHORIZED: NO`
+
+**Current task:** complete this exact 7-doc PK-2A closure reconciliation and return the report to ChatGPT / Gemini for docs commit/push authorization decision and post-PK-2A roadmap decision. Do **not** mark PK-2B active. Do **not** start PK-2B architecture planning or implementation. Do not reopen PK-1. Preserved holds remain (deploy, production access, browser/Emulator UAT, stash operations, G14 ABORTED, OBS-C, broader Packet 5 closure, offline credential login, returns/refunds, PaymentModal/checkout write-path, PK-2C..PK-6 implementation).
+
+## P1 Offline / Sync Resiliency — Packet 5 / PK-1 Offline Shift Session — Docs Reconciliation (historical)
+
+**Status: `PK1_STATUS: CLOSED_WITH_NOTES`** — historical docs reconciliation of verified PK-1 closure (superseded as current phase by PK-2A code closure docs reconciliation).
 
 - [x] `PK1_STATUS: CLOSED_WITH_NOTES` at final HEAD `513b198a30a1af72151ab6a8c0976799871529b8`
 - [x] Final remediation commit recorded — `fix(pos): harden offline shift open reconciliation`
@@ -26,11 +54,6 @@
   - Browser/Emulator runtime UAT remains separately gated (not required for PK-1 closure)
 - [x] `PK1_REOPEN_AUTHORIZED: NO`
 - [x] `PACKET_5_STATUS: NOT_CLOSED`; `BROADER_PACKET_5_CLOSURE_AUTHORIZED: NO`
-- [x] Next roadmap candidate recorded — PK-2 Offline Boot, Session and Cart Durability
-- [x] `PK2_ARCHITECTURE_PLANNING: AUTHORIZED_AFTER_DOCS_SUCCESS / NOT_YET_STARTED`
-- [x] `PK2_IMPLEMENTATION_AUTHORIZED: NO`
-
-**Next decision gate:** after this docs reconciliation succeeds, ChatGPT may prepare Claude's already-authorized strict read-only PK-2 architecture planning prompt. Do not start Claude from this gate. Do not authorize PK-2 implementation. Do not reopen PK-1. Preserved holds remain (deploy, production access, final UAT, stash operations, G14 ABORTED, OBS-C, broader Packet 5 closure, offline login, returns/refunds, PK-3..PK-6 implementation).
 
 ## P1 Offline / Sync Resiliency — Packet 5 / Post-R6 Seven-File Tracker Reconciliation (historical)
 
@@ -175,11 +198,12 @@
 
 ### Next step
 
-1. **PK-1 Offline Shift Session — `CLOSED_WITH_NOTES`** at `513b198a30a1af72151ab6a8c0976799871529b8` — do not reopen
-2. **`PACKET_5_STATUS: NOT_CLOSED`** — broader Packet 5 closure **NOT AUTHORIZED**
-3. **Next roadmap candidate: PK-2 Offline Boot, Session and Cart Durability** — architecture planning `AUTHORIZED_AFTER_DOCS_SUCCESS / NOT_YET_STARTED`; implementation **NOT AUTHORIZED**; do not start Claude from this gate
-4. **Active implementation packet: NONE.** Passive natural-traffic observation may occur only when a real natural business event exists, read-only only; no agent-triggered activity is authorized
-5. **NOT authorized:** PK-2 implementation, PK-3..PK-6 implementation, offline login, returns/refunds, G14 (ABORTED), OBS-C, UI-B.1, UI-B2, P5-F, recapture, deploy, runtime activation, callable invocation, production access, final UAT, global Flowbite (A-1) fix, stash operations, Packet R/C/U, broader Packet 5 closure
-6. Do not automatically start another packet
+1. **PK-2A Boot / Session Gating and Offline Blocker — `CLOSED_WITH_NOTES`** at `79ba840ab6e01ee1a5fff6c0094104c25d754668` — code closed; this docs reconciliation left uncommitted
+2. **PK-1 Offline Shift Session — `CLOSED_WITH_NOTES`** at `513b198a30a1af72151ab6a8c0976799871529b8` — do not reopen
+3. **`PACKET_5_STATUS: NOT_CLOSED`** — broader Packet 5 closure **NOT AUTHORIZED**; PK-2A closure ≠ Packet 5 closure
+4. **Next roadmap candidate: PK-2B — Cart Snapshot Store + Restore/Conflict Logic** — `PK2B.ARCHITECTURE_PLANNING_AUTHORIZED_NOW: NO`; `PK2B.IMPLEMENTATION_AUTHORIZED: NO`; await Gemini/Owner post-PK-2A roadmap decision
+5. **Active implementation packet: NONE.** Passive natural-traffic observation may occur only when a real natural business event exists, read-only only; no agent-triggered activity is authorized
+6. **NOT authorized:** PK-2B architecture/planning now, PK-2B/PK-2C implementation, PK-3..PK-6 implementation, offline credential login, returns/refunds, G14 (ABORTED), OBS-C, UI-B.1, UI-B2, P5-F, recapture, deploy, runtime activation, callable invocation, production access, browser/Emulator UAT, global Flowbite (A-1) fix, stash operations, Packet R/C/U, broader Packet 5 closure, docs commit/push without separate authorization
+7. Do not automatically start another packet
 
-**Not active:** PK-2 implementation, PK-3..PK-6, UI-B.1, UI-B2, P5-F, recapture, or any new feature packet.
+**Not active:** PK-2B, PK-2C, PK-3..PK-6, UI-B.1, UI-B2, P5-F, recapture, or any new feature packet.
