@@ -14,7 +14,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 
 const mocks = vi.hoisted(() => ({
   showToast: vi.fn(),
-  getActiveShift: vi.fn(),
+  readActiveShiftForBoot: vi.fn(),
   readShiftCloseConfirmation: vi.fn(),
   readShiftOpenConfirmation: vi.fn(),
   normalizeShiftCloseSyncState: vi.fn(),
@@ -126,7 +126,7 @@ vi.mock('../lib/hooks/useLocalLedger', () => ({
 
 // ── Service / config mocks ────────────────────────────────────────────────
 vi.mock('../lib/pos/shiftService', () => ({
-  getActiveShift: mocks.getActiveShift,
+  readActiveShiftForBoot: mocks.readActiveShiftForBoot,
   readShiftCloseConfirmation: mocks.readShiftCloseConfirmation,
   readShiftOpenConfirmation: mocks.readShiftOpenConfirmation,
   normalizeShiftCloseSyncState: mocks.normalizeShiftCloseSyncState,
@@ -244,7 +244,11 @@ afterEach(() => {
 
 describe('POSPage — Packet 7C-B2 boot fail-closed guard (RC-3)', () => {
   test('non-ok close-intent store read blocks live drawer reopen and does not open OpenShiftModal', async () => {
-    mocks.getActiveShift.mockResolvedValue(makeOpenShift());
+    mocks.readActiveShiftForBoot.mockResolvedValue({
+      status: 'found',
+      shift: makeOpenShift(),
+      provenance: 'server',
+    });
     mocks.getCloseIntent.mockResolvedValue({ ok: false, code: 'unavailable' });
 
     render(<POSPage />);
@@ -253,8 +257,28 @@ describe('POSPage — Packet 7C-B2 boot fail-closed guard (RC-3)', () => {
     expect(screen.queryByTestId('open-shift-modal')).toBeNull();
   });
 
-  test('readable store with no local close-intent loads the shift as an active live drawer (no blocked/open-shift modal)', async () => {
-    mocks.getActiveShift.mockResolvedValue(makeOpenShift());
+  test('found/server with no local close-intent loads live drawer (no blocked/open-shift modal)', async () => {
+    mocks.readActiveShiftForBoot.mockResolvedValue({
+      status: 'found',
+      shift: makeOpenShift(),
+      provenance: 'server',
+    });
+    mocks.getCloseIntent.mockResolvedValue({ ok: true, value: undefined });
+
+    render(<POSPage />);
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('shift-boot-blocked-modal')).toBeNull();
+      expect(screen.queryByTestId('open-shift-modal')).toBeNull();
+    });
+  });
+
+  test('found/cache with no local close-intent loads live drawer (no blocked/open-shift modal)', async () => {
+    mocks.readActiveShiftForBoot.mockResolvedValue({
+      status: 'found',
+      shift: makeOpenShift(),
+      provenance: 'cache',
+    });
     mocks.getCloseIntent.mockResolvedValue({ ok: true, value: undefined });
 
     render(<POSPage />);
@@ -266,7 +290,11 @@ describe('POSPage — Packet 7C-B2 boot fail-closed guard (RC-3)', () => {
   });
 
   test('a locally-closed shift (intent present) stays closed on boot — OpenShiftModal renders with attention, not free open', async () => {
-    mocks.getActiveShift.mockResolvedValue(makeOpenShift());
+    mocks.readActiveShiftForBoot.mockResolvedValue({
+      status: 'found',
+      shift: makeOpenShift(),
+      provenance: 'server',
+    });
     mocks.getCloseIntent.mockResolvedValue({
       ok: true,
       value: { shiftId: 'shift-1', status: 'local_closed_pending' },
@@ -296,7 +324,7 @@ describe('POSPage — Packet 7C-B2 boot fail-closed guard (RC-3)', () => {
         lastErrorMessage: null,
       },
     });
-    mocks.getActiveShift.mockResolvedValue(null);
+    mocks.readActiveShiftForBoot.mockResolvedValue({ status: 'absent', provenance: 'server' });
 
     render(<POSPage />);
 
@@ -306,7 +334,7 @@ describe('POSPage — Packet 7C-B2 boot fail-closed guard (RC-3)', () => {
       expect(screen.getByTestId('shift-open-pending-banner')).toBeTruthy();
     });
     expect(mocks.buildLocalOpenShiftSnapshot).toHaveBeenCalled();
-    expect(mocks.getActiveShift).not.toHaveBeenCalled();
+    expect(mocks.readActiveShiftForBoot).not.toHaveBeenCalled();
   });
 
   test('PK-1: rejected open surfaces durable attention and disables free open', async () => {
@@ -327,7 +355,11 @@ describe('POSPage — Packet 7C-B2 boot fail-closed guard (RC-3)', () => {
   });
 
   test('retry re-runs the boot check and clears the blocked state once the store becomes readable', async () => {
-    mocks.getActiveShift.mockResolvedValue(makeOpenShift());
+    mocks.readActiveShiftForBoot.mockResolvedValue({
+      status: 'found',
+      shift: makeOpenShift(),
+      provenance: 'server',
+    });
     mocks.getCloseIntent.mockResolvedValueOnce({ ok: false, code: 'unavailable' });
     mocks.getCloseIntent.mockResolvedValue({ ok: true, value: undefined });
 
@@ -343,19 +375,82 @@ describe('POSPage — Packet 7C-B2 boot fail-closed guard (RC-3)', () => {
     });
   });
 
-  test('no active shift at all (getActiveShift resolves null) is unaffected by the close-intent guard', async () => {
-    mocks.getActiveShift.mockResolvedValue(null);
+  test('absent active shift is unaffected by the close-intent guard', async () => {
+    mocks.readActiveShiftForBoot.mockResolvedValue({ status: 'absent', provenance: 'server' });
 
     render(<POSPage />);
 
     expect(await screen.findByTestId('open-shift-modal')).toBeTruthy();
     expect(mocks.getCloseIntent).not.toHaveBeenCalled();
   });
+
+  test('unverifiable/cache_empty blocks OpenShiftModal', async () => {
+    mocks.readActiveShiftForBoot.mockResolvedValue({
+      status: 'unverifiable',
+      reason: 'cache_empty',
+    });
+
+    render(<POSPage />);
+
+    expect(await screen.findByTestId('shift-boot-blocked-modal')).toBeTruthy();
+    expect(screen.queryByTestId('open-shift-modal')).toBeNull();
+  });
+
+  test('unverifiable/cache_unavailable blocks OpenShiftModal', async () => {
+    mocks.readActiveShiftForBoot.mockResolvedValue({
+      status: 'unverifiable',
+      reason: 'cache_unavailable',
+    });
+
+    render(<POSPage />);
+
+    expect(await screen.findByTestId('shift-boot-blocked-modal')).toBeTruthy();
+    expect(screen.queryByTestId('open-shift-modal')).toBeNull();
+  });
+
+  test('unverifiable/read_failed blocks OpenShiftModal', async () => {
+    mocks.readActiveShiftForBoot.mockResolvedValue({
+      status: 'unverifiable',
+      reason: 'read_failed',
+    });
+
+    render(<POSPage />);
+
+    expect(await screen.findByTestId('shift-boot-blocked-modal')).toBeTruthy();
+    expect(screen.queryByTestId('open-shift-modal')).toBeNull();
+  });
+
+  test('readActiveShiftForBoot promise rejection fails closed via catch', async () => {
+    mocks.readActiveShiftForBoot.mockRejectedValue(new Error('unexpected boot failure'));
+
+    render(<POSPage />);
+
+    expect(await screen.findByTestId('shift-boot-blocked-modal')).toBeTruthy();
+    expect(screen.queryByTestId('open-shift-modal')).toBeNull();
+  });
+
+  test('retry from unverifiable then absent clears blocker and opens free-open path', async () => {
+    mocks.readActiveShiftForBoot
+      .mockResolvedValueOnce({ status: 'unverifiable', reason: 'cache_empty' })
+      .mockResolvedValue({ status: 'absent', provenance: 'server' });
+
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    render(<POSPage />);
+
+    const retryBtn = await screen.findByTestId('shift-boot-blocked-retry');
+    await user.click(retryBtn);
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('shift-boot-blocked-modal')).toBeNull();
+      expect(screen.getByTestId('open-shift-modal')).toBeTruthy();
+    });
+  });
 });
 
 describe('POSPage — Packet 7C-B2 + PK-1 boot/reconnect reconciliation sweep', () => {
   test('runs close and open reconciliation sweeps once shiftReady, scoped to this device', async () => {
-    mocks.getActiveShift.mockResolvedValue(null);
+    mocks.readActiveShiftForBoot.mockResolvedValue({ status: 'absent', provenance: 'server' });
 
     render(<POSPage />);
 
@@ -371,7 +466,7 @@ describe('POSPage — Packet 7C-B2 + PK-1 boot/reconnect reconciliation sweep', 
   });
 
   test('re-runs both sweeps on a browser "online" event', async () => {
-    mocks.getActiveShift.mockResolvedValue(null);
+    mocks.readActiveShiftForBoot.mockResolvedValue({ status: 'absent', provenance: 'server' });
 
     render(<POSPage />);
 

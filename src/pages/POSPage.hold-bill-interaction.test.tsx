@@ -106,16 +106,23 @@ vi.mock('../lib/hooks/useLocalLedger', () => ({
 
 // ── Service / config mocks ──────────────────────────────────────────────────────────
 vi.mock('../lib/pos/shiftService', () => ({
-  getActiveShift: vi.fn().mockResolvedValue({
-    id: 'shift-1', branchId: 'B1', staffId: 'U1', staffName: 'Test User',
-    openedAt: new Date().toISOString(), status: 'open', cashEntries: [],
-    initialCash: 1000, expectedCash: 1000, expectedTransfer: 0, expectedCredit: 0,
-    totalSales: 0, totalOrders: 0,
+  // Claude R1 M-01: restore active-shift boot precondition with provenance result.
+  readActiveShiftForBoot: vi.fn().mockResolvedValue({
+    status: 'found',
+    shift: {
+      id: 'shift-1', branchId: 'B1', staffId: 'U1', staffName: 'Test User',
+      openedAt: new Date().toISOString(), status: 'open', cashEntries: [],
+      initialCash: 1000, expectedCash: 1000, expectedTransfer: 0, expectedCredit: 0,
+      totalSales: 0, totalOrders: 0,
+    },
+    provenance: 'server',
   }),
   // Packet 7C-B2 — POSPage's boot/reconnect sweep imports these; not exercised
   // by this hold-bill suite, so they're inert stand-ins.
   readShiftCloseConfirmation: vi.fn().mockResolvedValue({ ok: false }),
+  readShiftOpenConfirmation: vi.fn().mockResolvedValue({ ok: false }),
   normalizeShiftCloseSyncState: vi.fn().mockResolvedValue(undefined),
+  reissueShiftOpenWrite: vi.fn().mockResolvedValue('skipped'),
 }));
 // Packet 7C-B2 — jsdom has no real IndexedDB, so the unmocked journal would
 // fail every read and (correctly) trip the RC-3 fail-closed boot guard,
@@ -130,8 +137,32 @@ vi.mock('../lib/pos/offline/shiftCloseIntentStore', () => ({
     markRejectedManualAttention: vi.fn(),
   }),
 }));
+// Claude R1 M-01: empty readable open-intent journal (no real IndexedDB).
+vi.mock('../lib/pos/offline/shiftOpenIntentStore', () => ({
+  createShiftOpenIntentJournal: () => ({
+    findRejectedOpenForDevice: vi.fn().mockResolvedValue({
+      ok: true,
+      value: undefined,
+    }),
+    findPendingOpenForStaff: vi.fn().mockResolvedValue({
+      ok: true,
+      value: undefined,
+    }),
+    listOpenIntents: vi.fn().mockResolvedValue({
+      ok: true,
+      value: [],
+    }),
+    getOpenIntent: vi.fn(),
+    upsertOpenIntent: vi.fn(),
+    markSynced: vi.fn(),
+    markRejectedManualAttention: vi.fn(),
+  }),
+}));
 vi.mock('../lib/pos/offline/shiftCloseReconciler', () => ({
   runShiftCloseReconciliationSweep: vi.fn().mockResolvedValue([]),
+}));
+vi.mock('../lib/pos/offline/shiftOpenReconciler', () => ({
+  runShiftOpenReconciliationSweep: vi.fn().mockResolvedValue([]),
 }));
 vi.mock('../lib/firebase', () => ({ isFirebaseConfigured: false }));
 vi.mock('../lib/pos/billId', () => ({ refreshReceiptConfigCache: vi.fn() }));

@@ -20,8 +20,8 @@ import { createSafeId } from '../lib/safeId';
 import { formatMoney, getLineTotal } from '../lib/pos/cartUtils';
 import {
   buildLocalOpenShiftSnapshot,
-  getActiveShift,
   normalizeShiftCloseSyncState,
+  readActiveShiftForBoot,
   readShiftCloseConfirmation,
   readShiftOpenConfirmation,
   reissueShiftOpenWrite,
@@ -799,7 +799,7 @@ export default function POSPage() {
   // Optimistically append the cash entry to the live shift. The DURABLE source is
   // `cashEntries[]` on the shift doc (queued to cache by recordCashTransaction);
   // this only mirrors it into state so the derived drawer updates instantly. On
-  // reload, getActiveShift re-reads cashEntries from cache and deriveShiftDrawer
+  // reload, readActiveShiftForBoot re-reads cashEntries from cache and deriveShiftDrawer
   // recomputes — so this is not the "lost on reload" optimistic-counter trap.
   const handleCashTxRecorded = useCallback((entry: ShiftCashEntry) => {
     setActiveShift((prev) =>
@@ -889,9 +889,17 @@ export default function POSPage() {
           return;
         }
 
-        const shift = await getActiveShift(branchId, user.id);
+        const result = await readActiveShiftForBoot(branchId, user.id);
         if (cancelled) return;
-        if (shift) {
+        if (result.status === 'unverifiable') {
+          setActiveShift(null);
+          setShiftBootBlocked(true);
+          setShiftOpenAttention(null);
+          setShiftOpenPendingSync(false);
+          return;
+        }
+        if (result.status === 'found') {
+          const shift = result.shift;
           // Cross-check the durable local close-intent store: if THIS device
           // already closed this shift (even while offline/pending sync), it
           // must stay closed locally — never re-opened, never re-folded into
@@ -926,8 +934,17 @@ export default function POSPage() {
             );
           }
         } else {
+          // result.status === 'absent'
           setActiveShift(null);
           setShiftBootBlocked(false);
+          setShiftOpenAttention(null);
+          setShiftOpenPendingSync(false);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.warn('[POSPage] active-shift boot read failed closed', err);
+          setActiveShift(null);
+          setShiftBootBlocked(true);
           setShiftOpenAttention(null);
           setShiftOpenPendingSync(false);
         }

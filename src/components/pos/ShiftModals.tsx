@@ -186,7 +186,7 @@ export function ShiftBootBlockedModal({ onRetry }: ShiftBootBlockedModalProps) {
         <div>
           <h2 className="shift-modal-title">ไม่สามารถยืนยันสถานะกะได้</h2>
           <p className="shift-modal-sub">
-            ระบบไม่สามารถตรวจสอบสถานะการปิดกะล่าสุดในเครื่องนี้ได้ในขณะนี้
+            ระบบไม่สามารถตรวจสอบสถานะกะของเครื่องนี้ได้ในขณะนี้
             เพื่อความปลอดภัย ระบบจะยังไม่เปิดลิ้นชักเดิมหรือให้เปิดกะใหม่ จนกว่าจะตรวจสอบได้
           </p>
         </div>

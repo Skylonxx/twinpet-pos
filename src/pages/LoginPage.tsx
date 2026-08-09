@@ -21,12 +21,15 @@ const ROLE_LABELS: Record<UserRole, string> = {
   staff: 'Staff',
 };
 
+const OFFLINE_LOGIN_MESSAGE =
+  'อุปกรณ์นี้ไม่ได้เชื่อมต่อเครือข่าย การเข้าสู่ระบบครั้งแรกต้องเชื่อมต่ออินเทอร์เน็ต แต่เครื่องที่เข้าสู่ระบบไว้แล้วสามารถทำงานออฟไลน์ได้';
+
 function formatRole(role: UserRole): string {
   return ROLE_LABELS[role] ?? role;
 }
 
 export default function LoginPage() {
-  const { loginWithPin, loginWithUsername, completeLogin } = useAuth();
+  const { loginWithPin, loginWithUsername, completeLogin, isAuthenticated } = useAuth();
   const { branches, loading: branchesLoading, error: branchesError, reload: reloadBranches } = useActiveBranches();
 
   const [mode, setMode] = useState<LoginMode>('pin');
@@ -41,8 +44,24 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [successUser, setSuccessUser] = useState<User | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [browserOnline, setBrowserOnline] = useState(
+    () => typeof navigator === 'undefined' || navigator.onLine !== false,
+  );
 
   const pinSubmitting = useRef(false);
+
+  useEffect(() => {
+    const handleOnline = () => setBrowserOnline(true);
+    const handleOffline = () => setBrowserOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  const showOfflineBlocker = !isAuthenticated && browserOnline === false;
 
   useEffect(() => {
     if (branchesLoading) return;
@@ -138,7 +157,11 @@ export default function LoginPage() {
       } catch (err) {
         console.error('[login] PIN submit failed', err);
         const message =
-          err instanceof Error ? err.message : 'PIN ไม่ถูกต้อง กรุณาลองใหม่';
+          typeof navigator !== 'undefined' && navigator.onLine === false
+            ? OFFLINE_LOGIN_MESSAGE
+            : err instanceof Error
+              ? err.message
+              : 'PIN ไม่ถูกต้อง กรุณาลองใหม่';
         showToast(message, 'error');
         setPinError(true);
         setPinShake(true);
@@ -200,7 +223,11 @@ export default function LoginPage() {
       handleSuccess(user);
     } catch (err) {
       const message =
-        err instanceof Error ? err.message : 'Username หรือ Password ไม่ถูกต้อง';
+        typeof navigator !== 'undefined' && navigator.onLine === false
+          ? OFFLINE_LOGIN_MESSAGE
+          : err instanceof Error
+            ? err.message
+            : 'Username หรือ Password ไม่ถูกต้อง';
       setPwError(message);
     } finally {
       setIsLoading(false);
@@ -280,6 +307,16 @@ export default function LoginPage() {
             <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-1">เข้าสู่ระบบ</h2>
             <p className="text-sm text-gray-500 dark:text-gray-400">เลือกสาขาและกรอกข้อมูลเพื่อเริ่มงาน</p>
           </header>
+
+          {showOfflineBlocker && (
+            <div
+              role="status"
+              data-testid="login-offline-blocker"
+              className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
+            >
+              {OFFLINE_LOGIN_MESSAGE}
+            </div>
+          )}
 
           <BranchSelector
             branches={branches}

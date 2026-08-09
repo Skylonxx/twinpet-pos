@@ -5,6 +5,7 @@ import {
   getDocFromCache,
   getDocFromServer,
   getDocs,
+  getDocsFromCache,
   increment,
   limit,
   query,
@@ -159,6 +160,86 @@ export async function getActiveShift(branchId: string, staffId: string): Promise
   if (snap.empty) return null;
   const docSnap = snap.docs[0]!;
   return mapShift(docSnap.id, docSnap.data());
+}
+
+/**
+ * DEC-08 — provenance-preserving boot read for the active shift.
+ *
+ * `absent` is asserted ONLY from an authoritative source. A cache-derived empty
+ * result, an unavailable cache, or a failed read are all `unverifiable` — they
+ * are never collapsed into "no active shift", because that collapse is what
+ * renders OpenShiftModal over a shift that is already open server-side.
+ */
+export type ActiveShiftReadResult =
+  | { status: 'found'; shift: Shift; provenance: 'server' | 'cache' | 'local_dev' }
+  | { status: 'absent'; provenance: 'server' | 'local_dev' }
+  | {
+      status: 'unverifiable';
+      reason: 'cache_empty' | 'cache_unavailable' | 'read_failed';
+    };
+
+/** Local copy of inventoryRepository's offline-symptom classifier — keep module-private. */
+function isOfflineLikeShiftReadError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const code = (err as { code?: string }).code;
+  if (code === 'unavailable') return true;
+  const msg = err.message || '';
+  return (
+    msg.includes('ERR_INTERNET_DISCONNECTED') ||
+    msg.includes('WebChannelConnection') ||
+    msg.includes('transport errored') ||
+    msg.includes('offline')
+  );
+}
+
+export async function readActiveShiftForBoot(
+  branchId: string,
+  staffId: string,
+): Promise<ActiveShiftReadResult> {
+  if (!isFirebaseConfigured || !db) {
+    const shift = devGetActiveShift(branchId, staffId);
+    return shift
+      ? { status: 'found', shift, provenance: 'local_dev' }
+      : { status: 'absent', provenance: 'local_dev' };
+  }
+
+  const q = query(
+    collection(db, collections.shifts),
+    where('branchId', '==', branchId),
+    where('staffId', '==', staffId),
+    where('status', '==', 'open'),
+    limit(1),
+  );
+
+  let snap;
+  try {
+    snap = await getDocs(q);
+  } catch (err) {
+    if (!isOfflineLikeShiftReadError(err)) {
+      return { status: 'unverifiable', reason: 'read_failed' };
+    }
+    try {
+      snap = await getDocsFromCache(q);
+    } catch {
+      return { status: 'unverifiable', reason: 'cache_unavailable' };
+    }
+    if (snap.empty) return { status: 'unverifiable', reason: 'cache_empty' };
+    const d = snap.docs[0]!;
+    return { status: 'found', shift: mapShift(d.id, d.data()), provenance: 'cache' };
+  }
+
+  const fromCache = snap.metadata?.fromCache === true;
+  if (!snap.empty) {
+    const d = snap.docs[0]!;
+    return {
+      status: 'found',
+      shift: mapShift(d.id, d.data()),
+      provenance: fromCache ? 'cache' : 'server',
+    };
+  }
+  return fromCache
+    ? { status: 'unverifiable', reason: 'cache_empty' }
+    : { status: 'absent', provenance: 'server' };
 }
 
 // PK-1 — local optimistic offline open. Honest error copy; no claim of server

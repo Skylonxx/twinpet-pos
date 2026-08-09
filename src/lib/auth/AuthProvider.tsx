@@ -29,6 +29,7 @@ import {
   clearSession,
   loadSession,
   saveSession,
+  SESSION_SCHEMA_VERSION,
   type AuthSession,
 } from './session';
 import { verifyPinLogin } from './verifyPinLogin';
@@ -91,6 +92,8 @@ async function establishSession(
 ): Promise<AuthSession> {
   assertBranchAccess(user, branchId);
   const session: AuthSession = {
+    schemaVersion: SESSION_SCHEMA_VERSION,
+    issuedAt: Date.now(),
     user: { ...user, pin: '' },
     branchId,
   };
@@ -128,7 +131,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
                 ? stored.branchId
                 : user.branchIds[0];
             if (branchId) {
-              const next = { user, branchId };
+              const next = {
+                schemaVersion: SESSION_SCHEMA_VERSION,
+                issuedAt: Date.now(),
+                user,
+                branchId,
+              };
               setSession(next);
               saveSession(next);
             }

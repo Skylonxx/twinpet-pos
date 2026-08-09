@@ -18,17 +18,27 @@ vi.mock('../firebase', () => ({
 const {
   getDocFromCacheMock,
   getDocFromServerMock,
+  getDocsMock,
+  getDocsFromCacheMock,
   updateDocMock,
   setDocMock,
   docMock,
   collectionMock,
+  queryMock,
+  whereMock,
+  limitMock,
 } = vi.hoisted(() => ({
   getDocFromCacheMock: vi.fn(),
   getDocFromServerMock: vi.fn(),
+  getDocsMock: vi.fn(),
+  getDocsFromCacheMock: vi.fn(),
   updateDocMock: vi.fn(),
   setDocMock: vi.fn(),
   docMock: vi.fn(() => ({ id: 'shift-1' }) as never),
   collectionMock: vi.fn(() => ({ path: 'shifts' }) as never),
+  queryMock: vi.fn((...args: unknown[]) => ({ __query: args }) as never),
+  whereMock: vi.fn((...args: unknown[]) => ({ __where: args }) as never),
+  limitMock: vi.fn((n: number) => ({ __limit: n }) as never),
 }));
 
 vi.mock('firebase/firestore', async (importOriginal) => {
@@ -37,8 +47,13 @@ vi.mock('firebase/firestore', async (importOriginal) => {
     ...actual,
     doc: docMock,
     collection: collectionMock,
+    query: queryMock,
+    where: whereMock,
+    limit: limitMock,
     getDocFromCache: getDocFromCacheMock,
     getDocFromServer: getDocFromServerMock,
+    getDocs: getDocsMock,
+    getDocsFromCache: getDocsFromCacheMock,
     updateDoc: updateDocMock,
     setDoc: setDocMock,
   };
@@ -53,7 +68,7 @@ vi.mock('./deviceId', async (importOriginal) => {
 });
 
 // Imported AFTER the mocks are declared (vi.mock is hoisted, so this is safe).
-import { closeShift, openShift } from './shiftService';
+import { closeShift, openShift, readActiveShiftForBoot } from './shiftService';
 import {
   createInMemoryShiftOpenIntentJournal,
   type ShiftOpenIntentJournal,
@@ -124,6 +139,8 @@ beforeEach(() => {
   setDocMock.mockReset();
   setDocMock.mockResolvedValue(undefined);
   getDocFromServerMock.mockReset();
+  getDocsMock.mockReset();
+  getDocsFromCacheMock.mockReset();
   // Packet 7C-B2 default: "not found" — the same-runtime confirmation chain
   // (triggered fire-and-forget off the write ACK) resolves to `still_pending`
   // by default so existing tests that don't care about confirmation stay
@@ -139,6 +156,9 @@ beforeEach(() => {
   });
   collectionMock.mockReset();
   collectionMock.mockReturnValue({ path: 'shifts' } as never);
+  queryMock.mockClear();
+  whereMock.mockClear();
+  limitMock.mockClear();
 });
 
 afterEach(() => {
@@ -957,5 +977,139 @@ describe('openShift — PK-1 local optimistic offline open', () => {
     });
     expect(second.id).toBe(first.id);
     expect(setDocMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('readActiveShiftForBoot - PK-2A DEC-08 provenance / fail-closed', () => {
+  function makeQuerySnap(opts: {
+    empty: boolean;
+    fromCache: boolean;
+    data?: Record<string, unknown>;
+  }) {
+    const data = opts.data ?? {
+      branchId: 'LDP-001',
+      staffId: 'staff-1',
+      staffName: 'Test Staff',
+      status: 'open',
+      openedAt: new Date(),
+      closedAt: null,
+      startingCash: 500,
+      actualCashCount: 0,
+      expectedCash: 0,
+      expectedQr: 0,
+      expectedKbank: 0,
+      expectedCard: 0,
+      expectedCredit: 0,
+      totalBills: 0,
+      payInTotal: 0,
+      payOutTotal: 0,
+      variance: 0,
+      note: '',
+      cashEntries: [],
+    };
+    return {
+      empty: opts.empty,
+      metadata: { fromCache: opts.fromCache },
+      docs: opts.empty
+        ? []
+        : [
+            {
+              id: 'shift-1',
+              data: () => data,
+            },
+          ],
+    };
+  }
+
+  test('getDocs non-empty fromCache false -> found/server', async () => {
+    getDocsMock.mockResolvedValue(makeQuerySnap({ empty: false, fromCache: false }));
+    const result = await readActiveShiftForBoot('LDP-001', 'staff-1');
+    expect(result).toMatchObject({ status: 'found', provenance: 'server' });
+    if (result.status === 'found') {
+      expect(result.shift.id).toBe('shift-1');
+      expect(result.shift.branchId).toBe('LDP-001');
+    }
+    expect(getDocsFromCacheMock).not.toHaveBeenCalled();
+  });
+
+  test('getDocs non-empty fromCache true -> found/cache', async () => {
+    getDocsMock.mockResolvedValue(makeQuerySnap({ empty: false, fromCache: true }));
+    const result = await readActiveShiftForBoot('LDP-001', 'staff-1');
+    expect(result).toEqual(
+      expect.objectContaining({ status: 'found', provenance: 'cache' }),
+    );
+  });
+
+  test('getDocs empty fromCache false -> absent/server', async () => {
+    getDocsMock.mockResolvedValue(makeQuerySnap({ empty: true, fromCache: false }));
+    const result = await readActiveShiftForBoot('LDP-001', 'staff-1');
+    expect(result).toEqual({ status: 'absent', provenance: 'server' });
+  });
+
+  test('getDocs empty fromCache true -> unverifiable/cache_empty', async () => {
+    getDocsMock.mockResolvedValue(makeQuerySnap({ empty: true, fromCache: true }));
+    const result = await readActiveShiftForBoot('LDP-001', 'staff-1');
+    expect(result).toEqual({ status: 'unverifiable', reason: 'cache_empty' });
+  });
+
+  test('offline-like reject + cache non-empty -> found/cache', async () => {
+    getDocsMock.mockRejectedValue(Object.assign(new Error('offline'), { code: 'unavailable' }));
+    getDocsFromCacheMock.mockResolvedValue(makeQuerySnap({ empty: false, fromCache: true }));
+    const result = await readActiveShiftForBoot('LDP-001', 'staff-1');
+    expect(result).toEqual(
+      expect.objectContaining({ status: 'found', provenance: 'cache' }),
+    );
+  });
+
+  test('offline-like reject + cache empty -> unverifiable/cache_empty', async () => {
+    getDocsMock.mockRejectedValue(Object.assign(new Error('offline'), { code: 'unavailable' }));
+    getDocsFromCacheMock.mockResolvedValue(makeQuerySnap({ empty: true, fromCache: true }));
+    const result = await readActiveShiftForBoot('LDP-001', 'staff-1');
+    expect(result).toEqual({ status: 'unverifiable', reason: 'cache_empty' });
+  });
+
+  test('offline-like reject + cache rejects -> unverifiable/cache_unavailable', async () => {
+    getDocsMock.mockRejectedValue(Object.assign(new Error('offline'), { code: 'unavailable' }));
+    getDocsFromCacheMock.mockRejectedValue(new Error('cache miss'));
+    const result = await readActiveShiftForBoot('LDP-001', 'staff-1');
+    expect(result).toEqual({ status: 'unverifiable', reason: 'cache_unavailable' });
+  });
+
+  test('message classifier covers WebChannelConnection / transport errored', async () => {
+    getDocsMock.mockRejectedValue(
+      new Error('WebChannelConnection RPC "Listen" stream transport errored'),
+    );
+    getDocsFromCacheMock.mockResolvedValue(makeQuerySnap({ empty: false, fromCache: true }));
+    const result = await readActiveShiftForBoot('LDP-001', 'staff-1');
+    expect(result).toEqual(
+      expect.objectContaining({ status: 'found', provenance: 'cache' }),
+    );
+    expect(getDocsFromCacheMock).toHaveBeenCalled();
+  });
+
+  test('permission-denied -> unverifiable/read_failed and cache fallback NOT called', async () => {
+    getDocsMock.mockRejectedValue(
+      Object.assign(new Error('Permission denied'), { code: 'permission-denied' }),
+    );
+    const result = await readActiveShiftForBoot('LDP-001', 'staff-1');
+    expect(result).toEqual({ status: 'unverifiable', reason: 'read_failed' });
+    expect(getDocsFromCacheMock).not.toHaveBeenCalled();
+  });
+
+  test('expected read failures never reject the public function', async () => {
+    getDocsMock.mockRejectedValue(Object.assign(new Error('offline'), { code: 'unavailable' }));
+    getDocsFromCacheMock.mockRejectedValue(new Error('no cache'));
+    await expect(readActiveShiftForBoot('LDP-001', 'staff-1')).resolves.toEqual({
+      status: 'unverifiable',
+      reason: 'cache_unavailable',
+    });
+
+    getDocsMock.mockRejectedValue(
+      Object.assign(new Error('denied'), { code: 'permission-denied' }),
+    );
+    await expect(readActiveShiftForBoot('LDP-001', 'staff-1')).resolves.toEqual({
+      status: 'unverifiable',
+      reason: 'read_failed',
+    });
   });
 });
