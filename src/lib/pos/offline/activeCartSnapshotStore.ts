@@ -57,6 +57,81 @@ function cartKey(branchId: string, deviceId: string): string {
   return `${branchId.length}:${branchId}|${deviceId.length}:${deviceId}`;
 }
 
+function isNonemptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
+}
+
+function isInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value);
+}
+
+function authorizationFieldsFromRecord(record: ActiveCartSnapshotRecord): FenceAuthorizationFields {
+  return {
+    branchId: record.branchId,
+    deviceId: record.deviceId,
+    generationId: record.generationId,
+    generationSeq: record.generationSeq,
+    storeEpochId: record.storeEpochId,
+    asyncOrderId: record.asyncOrderId,
+    billId: record.billId,
+    fenceSeq: record.resumeFence.fenceSeq,
+    fenceNonce: record.resumeFence.fenceNonce,
+  };
+}
+
+function isDurableIdentityValid(
+  record: ActiveCartSnapshotRecord,
+  branchId: string,
+  deviceId: string,
+): boolean {
+  return (
+    record.branchId === branchId &&
+    record.deviceId === deviceId &&
+    isNonemptyString(record.branchId) &&
+    isNonemptyString(record.deviceId) &&
+    isNonemptyString(record.generationId) &&
+    isNonemptyString(record.storeEpochId) &&
+    isNonemptyString(record.asyncOrderId) &&
+    isNonemptyString(record.billId) &&
+    isInteger(record.generationSeq)
+  );
+}
+
+function isOpenAcquireEligible(
+  record: ActiveCartSnapshotRecord,
+  branchId: string,
+  deviceId: string,
+): boolean {
+  return (
+    record.schemaVersion === 1 &&
+    record.marker === 'S2' &&
+    isInteger(record.resumeAttempts) &&
+    record.resumeAttempts === 0 &&
+    isDurableIdentityValid(record, branchId, deviceId) &&
+    record.resumeFence !== null &&
+    typeof record.resumeFence === 'object'
+  );
+}
+
+function isValidOpenHeldFence(record: ActiveCartSnapshotRecord): boolean {
+  return (
+    record.resumeFence.held === true &&
+    isInteger(record.resumeFence.fenceSeq) &&
+    record.resumeFence.fenceSeq > 0 &&
+    isNonemptyString(record.resumeFence.fenceNonce)
+  );
+}
+
+function isValidOpenIdleFence(record: ActiveCartSnapshotRecord): boolean {
+  return (
+    record.resumeFence.held === false &&
+    isInteger(record.resumeFence.fenceSeq) &&
+    record.resumeFence.fenceSeq >= 0 &&
+    typeof record.resumeFence.fenceNonce === 'string' &&
+    record.resumeFence.fenceNonce === ''
+  );
+}
+
 function reqP<T>(req: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
     req.onsuccess = () => resolve(req.result);
@@ -197,15 +272,29 @@ export async function acquireSaleSubmissionResumeFence(input: {
   branchId: string;
   deviceId: string;
 }): Promise<AcquireSaleSubmissionResumeFenceResult> {
+  // ONE_TRUSTED_ORCHESTRATION_OWNER_PER_CART_KEY: same-key recovery is
+  // device/cart-key scoped. Do not add a holder credential. Do not expose
+  // this primitive to arbitrary application callers (Row30/integration).
   let minted: FenceAuthorizationFields;
   try {
     minted = await transactCart('readwrite', async (txn) => {
       const key = cartKey(input.branchId, input.deviceId);
       const record = await txn.get<ActiveCartSnapshotRecord>(CART_STORE, key);
-      if (record === undefined || record.schemaVersion !== 1) {
+      if (record === undefined || !isOpenAcquireEligible(record, input.branchId, input.deviceId)) {
         throw new Error('acquire_refused');
       }
-      if (record.resumeFence.held) throw new Error('acquire_refused');
+      if (record.resumeFence.held === true) {
+        if (!isValidOpenHeldFence(record)) {
+          throw new Error('acquire_refused');
+        }
+        // Valid OPEN_HELD recovery: same fenceSeq/fenceNonce, zero put,
+        // no nonce generation, no sequence increment. Returns before the
+        // sole existing acquire put site below.
+        return authorizationFieldsFromRecord(record);
+      }
+      if (!isValidOpenIdleFence(record)) {
+        throw new Error('acquire_refused');
+      }
       const nextSeq = record.resumeFence.fenceSeq + 1;
       const nextNonce = freshCrockford128();
       const next: ActiveCartSnapshotRecord = {
@@ -283,9 +372,16 @@ export async function readActiveCartDurableDump(): Promise<{
 }
 
 /**
- * Consumer of ProvenEvidenceAbsence. Check 10 (authenticity) runs first and
- * unconditionally before the first mutation. No twelfth check. No new refusal
- * kind. Forged proofs gain no replay/resume authority.
+ * Consumer of ProvenEvidenceAbsence. Proof authenticity and authorization
+ * authenticity both run at function top level before transactCart / any cart
+ * DB open or work. No twelfth check. No new refusal kind. Forged proofs and
+ * inauthentic authorizations gain no replay/resume authority.
+ *
+ * Row30 must preserve: authorization authenticity, proof authenticity,
+ * branch/device, generationId/generationSeq, storeEpochId, asyncOrderId/billId,
+ * schema/marker, held, fenceSeq/fenceNonce, and resumeAttempts. Row30 must
+ * rerun the Row28 lifetime suite. This island has no cart-key reset owner;
+ * TERMINAL is permanent for the key (D-1 / integration lifecycle).
  */
 export async function releaseSaleSubmissionResumeFence(
   authorization: AcquiredResumeFenceAuthorization,
@@ -293,6 +389,9 @@ export async function releaseSaleSubmissionResumeFence(
 ): Promise<ReleaseSaleSubmissionResumeFenceResult> {
   const proof = request.proof;
   if (!isAuthenticProvenEvidenceAbsence(proof)) {
+    return { ok: false };
+  }
+  if (!isAuthenticAcquiredResumeFenceAuthorization(authorization)) {
     return { ok: false };
   }
 
@@ -333,11 +432,14 @@ export async function releaseSaleSubmissionResumeFence(
         throw new Error('release_refused');
       }
       if (record.marker !== 'S2') throw new Error('release_refused');
+      if (!isInteger(record.resumeAttempts) || record.resumeAttempts !== 0) {
+        throw new Error('release_refused');
+      }
 
       const next: ActiveCartSnapshotRecord = {
         ...record,
         resumeFence: { ...record.resumeFence, held: false },
-        resumeAttempts: record.resumeAttempts + 1,
+        resumeAttempts: 1,
       };
       await txn.put(CART_STORE, key, next);
     });

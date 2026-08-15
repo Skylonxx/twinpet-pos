@@ -138,6 +138,48 @@ function isWellFormedFence(seq: number, nonce: string): boolean {
   return Number.isInteger(seq) && seq > 0 && typeof nonce === 'string' && nonce.length > 0;
 }
 
+function isNonemptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
+}
+
+function isInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value);
+}
+
+function isExactAbsenceSealPointer(
+  pointer: unknown,
+  authorization: AcquiredResumeFenceAuthorization,
+  generationKey: string,
+): pointer is AbsenceSealAuthorityV1 {
+  if (pointer === null || typeof pointer !== 'object') return false;
+  const stored = pointer as Record<string, unknown>;
+  if (stored.kind !== 'absence_seal') return false;
+  if (stored.schemaVersion !== 1) return false;
+  if (stored.generationKey !== generationKey) return false;
+  if (typeof stored.createdAtLocal !== 'number' || !Number.isFinite(stored.createdAtLocal)) {
+    return false;
+  }
+  if (!isNonemptyString(stored.branchId)) return false;
+  if (!isNonemptyString(stored.deviceId)) return false;
+  if (!isNonemptyString(stored.generationId)) return false;
+  if (!isInteger(stored.generationSeq)) return false;
+  if (!isNonemptyString(stored.storeEpochId)) return false;
+  if (!isNonemptyString(stored.asyncOrderId)) return false;
+  if (!isNonemptyString(stored.billId)) return false;
+  if (!isInteger(stored.barrierFenceSeq) || stored.barrierFenceSeq <= 0) return false;
+  if (!isNonemptyString(stored.barrierFenceNonce)) return false;
+  if (stored.branchId !== authorization.branchId) return false;
+  if (stored.deviceId !== authorization.deviceId) return false;
+  if (stored.generationId !== authorization.generationId) return false;
+  if (stored.generationSeq !== authorization.generationSeq) return false;
+  if (stored.storeEpochId !== authorization.storeEpochId) return false;
+  if (stored.asyncOrderId !== authorization.asyncOrderId) return false;
+  if (stored.billId !== authorization.billId) return false;
+  if (stored.barrierFenceSeq !== authorization.fenceSeq) return false;
+  if (stored.barrierFenceNonce !== authorization.fenceNonce) return false;
+  return true;
+}
+
 async function runAuthorizedSealTransaction(
   authorization: AcquiredResumeFenceAuthorization,
 ): Promise<ProofFields> {
@@ -156,38 +198,56 @@ async function runAuthorizedSealTransaction(
       generationKey,
     );
     const entry = await txn.get<unknown>(ENTRY_STORE, authorization.asyncOrderId);
-    if (pointer !== undefined || entry !== undefined) {
+    if (entry !== undefined) {
       throw new Error('seal_refused');
     }
+    if (pointer === undefined) {
+      const seal: AbsenceSealAuthorityV1 = {
+        kind: 'absence_seal',
+        schemaVersion: 1,
+        generationKey,
+        storeEpochId: authorization.storeEpochId,
+        generationId: authorization.generationId,
+        generationSeq: authorization.generationSeq,
+        asyncOrderId: authorization.asyncOrderId,
+        billId: authorization.billId,
+        branchId: authorization.branchId,
+        deviceId: authorization.deviceId,
+        createdAtLocal: Date.now(),
+        barrierFenceSeq: authorization.fenceSeq,
+        barrierFenceNonce: authorization.fenceNonce,
+      };
+      await txn.add(POINTER_STORE, generationKey, seal);
 
-    const seal: AbsenceSealAuthorityV1 = {
-      kind: 'absence_seal',
-      schemaVersion: 1,
-      generationKey,
-      storeEpochId: authorization.storeEpochId,
-      generationId: authorization.generationId,
-      generationSeq: authorization.generationSeq,
-      asyncOrderId: authorization.asyncOrderId,
-      billId: authorization.billId,
-      branchId: authorization.branchId,
-      deviceId: authorization.deviceId,
-      createdAtLocal: Date.now(),
-      barrierFenceSeq: authorization.fenceSeq,
-      barrierFenceNonce: authorization.fenceNonce,
-    };
-    await txn.add(POINTER_STORE, generationKey, seal);
-
+      return {
+        kind: 'evidence_proven_absent',
+        branchId: authorization.branchId,
+        deviceId: authorization.deviceId,
+        generationId: authorization.generationId,
+        generationSeq: authorization.generationSeq,
+        storeEpochId: authorization.storeEpochId,
+        asyncOrderId: authorization.asyncOrderId,
+        billId: authorization.billId,
+        barrierFenceSeq: authorization.fenceSeq,
+        barrierFenceNonce: authorization.fenceNonce,
+      };
+    }
+    if (!isExactAbsenceSealPointer(pointer, authorization, generationKey)) {
+      throw new Error('seal_refused');
+    }
+    // Exact-pointer zero-write re-mint. Every proof field comes from the
+    // stored pointer only. No add/put/delete/clear.
     return {
       kind: 'evidence_proven_absent',
-      branchId: authorization.branchId,
-      deviceId: authorization.deviceId,
-      generationId: authorization.generationId,
-      generationSeq: authorization.generationSeq,
-      storeEpochId: authorization.storeEpochId,
-      asyncOrderId: authorization.asyncOrderId,
-      billId: authorization.billId,
-      barrierFenceSeq: authorization.fenceSeq,
-      barrierFenceNonce: authorization.fenceNonce,
+      branchId: pointer.branchId,
+      deviceId: pointer.deviceId,
+      generationId: pointer.generationId,
+      generationSeq: pointer.generationSeq,
+      storeEpochId: pointer.storeEpochId,
+      asyncOrderId: pointer.asyncOrderId,
+      billId: pointer.billId,
+      barrierFenceSeq: pointer.barrierFenceSeq,
+      barrierFenceNonce: pointer.barrierFenceNonce,
     };
   });
 }

@@ -1566,6 +1566,11 @@ describe('Row32 saleSubmissionWriterConfinement', () => {
       ]);
       expect(authCalls).toEqual([
         {
+          file: CART_FILE,
+          name: 'isAuthenticAcquiredResumeFenceAuthorization',
+          owner: 'releaseSaleSubmissionResumeFence',
+        },
+        {
           file: EVIDENCE_FILE,
           name: 'isAuthenticAcquiredResumeFenceAuthorization',
           owner: 'commitSaleSubmissionAbsenceSeal',
