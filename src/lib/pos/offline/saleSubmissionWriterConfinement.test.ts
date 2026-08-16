@@ -35,6 +35,7 @@ import * as evidenceRuntimeExports from './saleSubmissionEvidenceStore';
 const CART_FILE = '/src/lib/pos/offline/activeCartSnapshotStore.ts';
 const EVIDENCE_FILE = '/src/lib/pos/offline/saleSubmissionEvidenceStore.ts';
 const TYPES_FILE = '/src/lib/pos/offline/saleSubmissionEvidenceTypes.ts';
+const FACADE_FILE = '/src/lib/pos/offline/trustedOrchestrationOwner.ts';
 const CONTRACT_FILE = '/src/lib/pos/offline/saleSubmissionWriterConfinement.test.ts';
 
 const CART_DB_NAME = 'twinpet-active-cart-snapshot';
@@ -51,9 +52,9 @@ const ROW29_LITERAL_OWNERS: Record<string, string> = {
   [ENTRY_STORE]: EVIDENCE_FILE,
 };
 
-const FROZEN_CART_RUNTIME_IMPORTERS = [EVIDENCE_FILE];
+const FROZEN_CART_RUNTIME_IMPORTERS = [EVIDENCE_FILE, FACADE_FILE];
 const FROZEN_CART_TYPE_ONLY_IMPORTERS: string[] = [];
-const FROZEN_EVIDENCE_RUNTIME_IMPORTERS = [CART_FILE];
+const FROZEN_EVIDENCE_RUNTIME_IMPORTERS = [CART_FILE, FACADE_FILE];
 const FROZEN_EVIDENCE_TYPE_ONLY_IMPORTERS: string[] = [];
 const FROZEN_TYPES_RUNTIME_IMPORTERS: string[] = [];
 const FROZEN_TYPES_TYPE_ONLY_IMPORTERS = [CART_FILE, EVIDENCE_FILE];
@@ -78,6 +79,35 @@ const FROZEN_ALL_NINE_RUNTIME_EXPORTS = [
 
 const FROZEN_CART_TO_EVIDENCE_RUNTIME_SYMBOLS = ['isAuthenticProvenEvidenceAbsence'];
 const FROZEN_EVIDENCE_TO_CART_RUNTIME_SYMBOLS = ['isAuthenticAcquiredResumeFenceAuthorization'];
+const FROZEN_FACADE_CART_RUNTIME_SYMBOLS = [
+  'acquireSaleSubmissionResumeFence',
+  'beginActiveCartGeneration',
+  'isAuthenticAcquiredResumeFenceAuthorization',
+  'releaseSaleSubmissionResumeFence',
+];
+const FROZEN_FACADE_EVIDENCE_RUNTIME_SYMBOLS = ['commitSaleSubmissionAbsenceSeal'];
+const FROZEN_FACADE_GOVERNED_IDENTIFIER_NAMES = [
+  'acquireSaleSubmissionResumeFence',
+  'acquireSaleSubmissionResumeFence',
+  'acquireSaleSubmissionResumeFence',
+  'acquireSaleSubmissionResumeFence',
+  'beginActiveCartGeneration',
+  'beginActiveCartGeneration',
+  'beginActiveCartGeneration',
+  'beginActiveCartGeneration',
+  'commitSaleSubmissionAbsenceSeal',
+  'commitSaleSubmissionAbsenceSeal',
+  'commitSaleSubmissionAbsenceSeal',
+  'commitSaleSubmissionAbsenceSeal',
+  'isAuthenticAcquiredResumeFenceAuthorization',
+  'isAuthenticAcquiredResumeFenceAuthorization',
+  'isAuthenticAcquiredResumeFenceAuthorization',
+  'releaseSaleSubmissionResumeFence',
+  'releaseSaleSubmissionResumeFence',
+  'releaseSaleSubmissionResumeFence',
+  'releaseSaleSubmissionResumeFence',
+  'releaseSaleSubmissionResumeFence',
+];
 const FROZEN_CART_TO_TYPES_SYMBOLS = [
   'AcquiredResumeFenceAuthorization',
   'ActiveCartSnapshotRecord',
@@ -269,6 +299,10 @@ type Analysis = {
   semanticGets: SemanticAccess[];
   semanticMutationStores: SemanticAccess[];
   identifierHitsOutsideIsland: { file: string; name: string }[];
+  identifierHitsInFacade: { file: string; name: string }[];
+  facadeCartRuntimeSymbols: string[];
+  facadeEvidenceRuntimeSymbols: string[];
+  facadeReexportViolations: string[];
   predicateCalls: { file: string; name: string; owner: string }[];
   productionParseDiagnosticCount: number;
   config: {
@@ -1101,6 +1135,67 @@ function collectIdentifierHits(file: string, sf: ts.SourceFile, names: Set<strin
   return hits;
 }
 
+function collectFacadeReexportViolations(sf: ts.SourceFile): string[] {
+  const violations: string[] = [];
+  const islandSpecifiers = new Set(['./activeCartSnapshotStore', './saleSubmissionEvidenceStore']);
+  const importedLocalToOrigin = new Map<string, { specifier: string; symbol: string }>();
+
+  for (const stmt of sf.statements) {
+    if (!ts.isImportDeclaration(stmt)) continue;
+    const specifier = literalString(stmt.moduleSpecifier);
+    if (specifier === undefined || !islandSpecifiers.has(specifier)) continue;
+    const named = stmt.importClause?.namedBindings;
+    if (named && ts.isNamedImports(named)) {
+      for (const element of named.elements) {
+        importedLocalToOrigin.set(element.name.text, {
+          specifier,
+          symbol: namedSpecifierSourceSymbol(element),
+        });
+      }
+    } else if (named && ts.isNamespaceImport(named)) {
+      importedLocalToOrigin.set(named.name.text, { specifier, symbol: '*' });
+    }
+  }
+
+  const visit = (node: ts.Node): void => {
+    if (ts.isExportAssignment(node)) {
+      violations.push('export-assignment');
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+
+  for (const stmt of sf.statements) {
+    if (!ts.isExportDeclaration(stmt)) continue;
+    if (stmt.moduleSpecifier) {
+      const specifier = literalString(stmt.moduleSpecifier);
+      if (specifier !== undefined && islandSpecifiers.has(specifier)) {
+        const isStar =
+          stmt.exportClause === undefined ||
+          (stmt.exportClause !== undefined && ts.isNamespaceExport(stmt.exportClause));
+        violations.push(isStar ? 'export-star-from' : 'export-from');
+      } else if (stmt.exportClause === undefined || (stmt.exportClause && ts.isNamespaceExport(stmt.exportClause))) {
+        violations.push('export-star-from');
+      }
+      continue;
+    }
+    if (stmt.exportClause && ts.isNamespaceExport(stmt.exportClause)) {
+      violations.push('export-star');
+      continue;
+    }
+    if (stmt.exportClause && ts.isNamedExports(stmt.exportClause)) {
+      for (const element of stmt.exportClause.elements) {
+        const localName = element.propertyName?.text ?? element.name.text;
+        if (importedLocalToOrigin.has(localName)) {
+          violations.push(element.propertyName ? 'local-alias-reexport' : 'local-reexport');
+        }
+      }
+    }
+  }
+
+  return violations;
+}
+
 function inspectViteConfig(text: string, failures: string[]): boolean {
   const sf = parseSource('/vite.config.ts', text);
   let exportedObject: ts.ObjectLiteralExpression | undefined;
@@ -1240,6 +1335,7 @@ function buildAnalysis(): Analysis {
   const semanticGets: SemanticAccess[] = [];
   const semanticMutationStores: SemanticAccess[] = [];
   const identifierHitsOutsideIsland: { file: string; name: string }[] = [];
+  const identifierHitsInFacade: { file: string; name: string }[] = [];
   const predicateCalls: { file: string; name: string; owner: string }[] = [];
   const runtimeExportNames = new Set(FROZEN_ALL_NINE_RUNTIME_EXPORTS);
   const island = new Set([CART_FILE, EVIDENCE_FILE]);
@@ -1283,7 +1379,14 @@ function buildAnalysis(): Analysis {
     collectLiteralConfinement(file, sf, failures);
     openSites.push(...collectProductionOpens(file, sf, env, failures));
     if (!island.has(file)) {
-      identifierHitsOutsideIsland.push(...collectIdentifierHits(file, sf, runtimeExportNames));
+      const hits = collectIdentifierHits(file, sf, runtimeExportNames);
+      // Partition the trusted facade at this identifier-sweep call site only.
+      // The facade is not a Row29 island owner module and must not join `island`.
+      if (file === FACADE_FILE) {
+        identifierHitsInFacade.push(...hits);
+      } else {
+        identifierHitsOutsideIsland.push(...hits);
+      }
     }
     if (file === CART_FILE || file === EVIDENCE_FILE) {
       const owner = collectOwnerSites(file, sf, env, failures);
@@ -1346,6 +1449,18 @@ function buildAnalysis(): Analysis {
   const viteResolveAliasAbsent = globVerified ? inspectViteConfig(VITE_CONFIG_RAW['/vite.config.ts'], configFailures) : false;
   failures.push(...configFailures);
 
+  const facadeEdges = edgesByFrom.get(FACADE_FILE) ?? [];
+  const facadeCartRuntimeSymbols = uniqueSorted(
+    facadeEdges.filter((e) => !e.typeOnly && e.resolved === CART_FILE).flatMap((e) => e.symbols),
+  );
+  const facadeEvidenceRuntimeSymbols = uniqueSorted(
+    facadeEdges.filter((e) => !e.typeOnly && e.resolved === EVIDENCE_FILE).flatMap((e) => e.symbols),
+  );
+  const facadeSource = production.get(FACADE_FILE);
+  const facadeReexportViolations = facadeSource
+    ? collectFacadeReexportViolations(parseSource(FACADE_FILE, facadeSource))
+    : ['facade_source_missing'];
+
   return {
     productionFiles: [...production.keys()].sort(),
     testFiles: [...test.keys()].sort(),
@@ -1364,6 +1479,10 @@ function buildAnalysis(): Analysis {
     semanticGets,
     semanticMutationStores,
     identifierHitsOutsideIsland,
+    identifierHitsInFacade,
+    facadeCartRuntimeSymbols,
+    facadeEvidenceRuntimeSymbols,
+    facadeReexportViolations,
     predicateCalls,
     productionParseDiagnosticCount,
     config: {
@@ -1403,7 +1522,7 @@ describe('Row32 saleSubmissionWriterConfinement', () => {
   test('inventory partition is fail-closed and self-excluding', () => {
     const a = analysis();
     expect(a.failures.filter((f) => f.startsWith('inventory_key_normalization'))).toEqual([]);
-    expect(a.productionFiles).toEqual(expect.arrayContaining([CART_FILE, EVIDENCE_FILE, TYPES_FILE]));
+    expect(a.productionFiles).toEqual(expect.arrayContaining([CART_FILE, EVIDENCE_FILE, TYPES_FILE, FACADE_FILE]));
     expect(a.productionFiles.some((f) => f.includes('.test.') || f.includes('.spec.'))).toBe(false);
     expect(a.testFiles).toContain(CONTRACT_FILE);
   });
@@ -1435,7 +1554,7 @@ describe('Row32 saleSubmissionWriterConfinement', () => {
 
     test('no application-side runtime or type-only importer reaches a Row29 module', () => {
       const a = analysis();
-      const allowed = new Set([CART_FILE, EVIDENCE_FILE, TYPES_FILE]);
+      const allowed = new Set([CART_FILE, EVIDENCE_FILE, TYPES_FILE, FACADE_FILE]);
       for (const target of [CART_FILE, EVIDENCE_FILE, TYPES_FILE]) {
         for (const importer of [...a.importers[target].runtime, ...a.importers[target].typeOnly]) {
           expect(allowed.has(importer), `${importer} imports ${target}`).toBe(true);
@@ -1548,15 +1667,28 @@ describe('Row32 saleSubmissionWriterConfinement', () => {
 
     test('T7-a: no production application import-graph reachability of the nine', () => {
       const a = analysis();
-      expect(a.importers[CART_FILE].runtime).toEqual([EVIDENCE_FILE]);
+      expect(a.importers[CART_FILE].runtime).toEqual(sortedCopy(FROZEN_CART_RUNTIME_IMPORTERS));
       expect(a.importers[CART_FILE].typeOnly).toEqual([]);
-      expect(a.importers[EVIDENCE_FILE].runtime).toEqual([CART_FILE]);
+      expect(a.importers[EVIDENCE_FILE].runtime).toEqual(sortedCopy(FROZEN_EVIDENCE_RUNTIME_IMPORTERS));
       expect(a.importers[EVIDENCE_FILE].typeOnly).toEqual([]);
     });
 
     test('T7-b: identifier-name sweep outside the island is empty (defense in depth only)', () => {
       const a = analysis();
       expect(a.identifierHitsOutsideIsland).toEqual([]);
+      expect(sortedCopy(a.identifierHitsInFacade.map((h) => h.name))).toEqual(FROZEN_FACADE_GOVERNED_IDENTIFIER_NAMES);
+    });
+
+    test('trusted facade runtime edge symbols match the frozen governed sets', () => {
+      const a = analysis();
+      expect(a.facadeCartRuntimeSymbols).toEqual(FROZEN_FACADE_CART_RUNTIME_SYMBOLS);
+      expect(a.facadeEvidenceRuntimeSymbols).toEqual(FROZEN_FACADE_EVIDENCE_RUNTIME_SYMBOLS);
+    });
+
+    test('trusted facade does not re-export or launder governed island bindings', () => {
+      const a = analysis();
+      expect(a.productionFiles).toContain(FACADE_FILE);
+      expect(a.facadeReexportViolations).toEqual([]);
     });
 
     test('authenticity predicates retain only the approved internal cycle callers', () => {
