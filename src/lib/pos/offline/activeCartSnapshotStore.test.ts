@@ -286,6 +286,7 @@ describe('positive contrast', () => {
 const EXPECTED_CART_EXPORT_NAMES = Object.freeze(
   [
     'acquireSaleSubmissionResumeFence',
+    'beginActiveCartGeneration',
     'initializeActiveCartSaleSubmission',
     'isAuthenticAcquiredResumeFenceAuthorization',
     'readActiveCartDurableDump',
@@ -298,6 +299,7 @@ const EXPECTED_CART_EXPORT_NAMES = Object.freeze(
 
 const EXPECTED_CART_EXPORT_TYPE: Record<string, string> = {
   acquireSaleSubmissionResumeFence: 'function',
+  beginActiveCartGeneration: 'function',
   initializeActiveCartSaleSubmission: 'function',
   isAuthenticAcquiredResumeFenceAuthorization: 'function',
   readActiveCartDurableDump: 'function',

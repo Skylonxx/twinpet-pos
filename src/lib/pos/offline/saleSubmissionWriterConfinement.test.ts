@@ -60,6 +60,7 @@ const FROZEN_TYPES_TYPE_ONLY_IMPORTERS = [CART_FILE, EVIDENCE_FILE];
 
 const FROZEN_CART_RUNTIME_EXPORTS = [
   'acquireSaleSubmissionResumeFence',
+  'beginActiveCartGeneration',
   'initializeActiveCartSaleSubmission',
   'isAuthenticAcquiredResumeFenceAuthorization',
   'readActiveCartDurableDump',
@@ -70,7 +71,7 @@ const FROZEN_EVIDENCE_RUNTIME_EXPORTS = [
   'commitSaleSubmissionAbsenceSeal',
   'isAuthenticProvenEvidenceAbsence',
 ];
-const FROZEN_ALL_EIGHT_RUNTIME_EXPORTS = [
+const FROZEN_ALL_NINE_RUNTIME_EXPORTS = [
   ...FROZEN_CART_RUNTIME_EXPORTS,
   ...FROZEN_EVIDENCE_RUNTIME_EXPORTS,
 ].sort();
@@ -127,13 +128,13 @@ const FROZEN_ROW29_DB_OPEN_PAIRS: ReadonlyArray<{
     count: 1,
   },
 ];
-const ROW29_MUTATION_SITE_COUNT = 8;
+const ROW29_MUTATION_SITE_COUNT = 9;
 const ROW29_TRANSACTION_SITE_COUNT = 2;
 const POINTER_STORE_SEMANTIC_MUTATION_INVOCATION_COUNT = 1;
 const ENTRY_STORE_SEMANTIC_MUTATION_INVOCATION_COUNT = 0;
 const ENTRY_STORE_SEMANTIC_READ_INVOCATION_COUNT = 1;
-const W8_CART_TOTAL_RETAINED_SITE_COUNT = 5;
-const W8_CART_DISTINCT_TUPLE_COUNT = 5;
+const W8_CART_TOTAL_RETAINED_SITE_COUNT = 6;
+const W8_CART_DISTINCT_TUPLE_COUNT = 6;
 const W8_EVIDENCE_TOTAL_RETAINED_SITE_COUNT = 3;
 const W8_EVIDENCE_DISTINCT_TUPLE_COUNT = 3;
 const W8_DELETE_DATABASE_CART_COUNT = 0;
@@ -167,6 +168,7 @@ const ASSET_EXTENSIONS = new Set([
 
 const FROZEN_CART_W8_PAIRS: [string, number][] = [
   [`${CART_FILE}|acquireSaleSubmissionResumeFence|put|store:activeCartSnapshots|semantic`, 1],
+  [`${CART_FILE}|beginActiveCartGeneration|put|store:activeCartSnapshots|semantic`, 1],
   [`${CART_FILE}|initializeActiveCartSaleSubmission|put|store:activeCartSnapshots|semantic`, 1],
   [`${CART_FILE}|openCartDb|createObjectStore|store:activeCartSnapshots|schema`, 1],
   [`${CART_FILE}|releaseSaleSubmissionResumeFence|put|store:activeCartSnapshots|semantic`, 1],
@@ -1239,7 +1241,7 @@ function buildAnalysis(): Analysis {
   const semanticMutationStores: SemanticAccess[] = [];
   const identifierHitsOutsideIsland: { file: string; name: string }[] = [];
   const predicateCalls: { file: string; name: string; owner: string }[] = [];
-  const eight = new Set(FROZEN_ALL_EIGHT_RUNTIME_EXPORTS);
+  const runtimeExportNames = new Set(FROZEN_ALL_NINE_RUNTIME_EXPORTS);
   const island = new Set([CART_FILE, EVIDENCE_FILE]);
 
   let cycleRuntime: { symbols: string[]; namespace: boolean } = { symbols: [], namespace: false };
@@ -1281,7 +1283,7 @@ function buildAnalysis(): Analysis {
     collectLiteralConfinement(file, sf, failures);
     openSites.push(...collectProductionOpens(file, sf, env, failures));
     if (!island.has(file)) {
-      identifierHitsOutsideIsland.push(...collectIdentifierHits(file, sf, eight));
+      identifierHitsOutsideIsland.push(...collectIdentifierHits(file, sf, runtimeExportNames));
     }
     if (file === CART_FILE || file === EVIDENCE_FILE) {
       const owner = collectOwnerSites(file, sf, env, failures);
@@ -1487,7 +1489,7 @@ describe('Row32 saleSubmissionWriterConfinement', () => {
       }
     });
 
-    test('Row29 owner mutation-site store domains resolve (8/0) and transaction domains resolve (2/0)', () => {
+    test('Row29 owner mutation-site store domains resolve (9/0) and transaction domains resolve (2/0)', () => {
       const a = analysis();
       expect(a.unclassifiedMutationSites).toEqual([]);
       expect(a.ownerMutationSites).toHaveLength(ROW29_MUTATION_SITE_COUNT);
@@ -1536,15 +1538,15 @@ describe('Row32 saleSubmissionWriterConfinement', () => {
     });
   });
 
-  describe('T7 all-eight runtime-export reachability', () => {
-    test('live owner namespaces equal the frozen eight-name set', () => {
+  describe('T7 all-nine runtime-export reachability', () => {
+    test('live owner namespaces equal the frozen nine-name set', () => {
       const live = [...Object.keys(cartRuntimeExports), ...Object.keys(evidenceRuntimeExports)].sort();
       expect(Object.keys(cartRuntimeExports).sort()).toEqual(FROZEN_CART_RUNTIME_EXPORTS);
       expect(Object.keys(evidenceRuntimeExports).sort()).toEqual(FROZEN_EVIDENCE_RUNTIME_EXPORTS);
-      expect(live).toEqual(FROZEN_ALL_EIGHT_RUNTIME_EXPORTS);
+      expect(live).toEqual(FROZEN_ALL_NINE_RUNTIME_EXPORTS);
     });
 
-    test('T7-a: no production application import-graph reachability of the eight', () => {
+    test('T7-a: no production application import-graph reachability of the nine', () => {
       const a = analysis();
       expect(a.importers[CART_FILE].runtime).toEqual([EVIDENCE_FILE]);
       expect(a.importers[CART_FILE].typeOnly).toEqual([]);

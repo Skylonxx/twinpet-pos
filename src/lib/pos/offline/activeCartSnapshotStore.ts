@@ -50,6 +50,7 @@ const CART_DB_NAME = 'twinpet-active-cart-snapshot';
 const CART_DB_VERSION = 1;
 const CART_STORE = 'activeCartSnapshots';
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+const INITIAL_GENERATION_SEQ = 1;
 const authenticAcquiredResumeFenceAuthorizations = new WeakSet<object>();
 const acquiredResumeFenceAuthorizationMints = new WeakMap<object, FenceAuthorizationFields>();
 
@@ -63,6 +64,15 @@ interface CartTxn {
 }
 
 export type InitializeActiveCartResult = { ok: true } | { ok: false };
+
+export type BeginActiveCartGenerationResult =
+  | {
+      ok: true;
+      generationId: string;
+      generationSeq: number;
+      storeEpochId: string;
+    }
+  | { ok: false };
 
 export type AcquireSaleSubmissionResumeFenceResult =
   | { ok: true; authorization: AcquiredResumeFenceAuthorization }
@@ -185,6 +195,30 @@ function isValidOpenIdleFence(record: ActiveCartSnapshotRecord): boolean {
   );
 }
 
+function isExactValidTerminalSuccessor(
+  record: ActiveCartSnapshotRecord,
+  branchId: string,
+  deviceId: string,
+  asyncOrderId: string,
+  billId: string,
+): boolean {
+  if (record.schemaVersion !== 1) return false;
+  if (record.marker !== 'S2') return false;
+  if (!Number.isInteger(record.resumeAttempts) || record.resumeAttempts !== 1) return false;
+  const fence = record.resumeFence;
+  if (fence === null || typeof fence !== 'object') return false;
+  if (fence.held !== false) return false;
+  if (!Number.isInteger(fence.fenceSeq) || fence.fenceSeq <= 0) return false;
+  if (typeof fence.fenceNonce !== 'string' || fence.fenceNonce.length === 0) return false;
+  if (!isDurableIdentityValid(record, branchId, deviceId)) return false;
+  if (!Number.isSafeInteger(record.generationSeq)) return false;
+  if (record.generationSeq < INITIAL_GENERATION_SEQ) return false;
+  if (record.generationSeq >= Number.MAX_SAFE_INTEGER) return false;
+  if (asyncOrderId === record.asyncOrderId) return false;
+  if (billId === record.billId) return false;
+  return true;
+}
+
 function reqP<T>(req: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
     req.onsuccess = () => resolve(req.result);
@@ -286,6 +320,11 @@ function freshCrockford128(): string {
   return out;
 }
 
+/**
+ * @deprecated test/bootstrap-only
+ *
+ * Retained for closed-suite / test / bootstrap use. Runtime behavior is unchanged.
+ */
 export async function initializeActiveCartSaleSubmission(input: {
   branchId: string;
   deviceId: string;
@@ -316,6 +355,102 @@ export async function initializeActiveCartSaleSubmission(input: {
       await txn.put(CART_STORE, key, record);
     });
     return { ok: true };
+  } catch {
+    return { ok: false };
+  }
+}
+
+/**
+ * CANONICAL PRODUCTION ALLOCATOR for current active-cart generation identity.
+ *
+ * Owns first generation creation and exact valid TERMINAL N -> N+1 successor.
+ * Success returns plain committed identity after transaction completion.
+ * It is not a capability and is not the sole runtime creation API.
+ */
+export async function beginActiveCartGeneration(input: {
+  branchId: string;
+  deviceId: string;
+  asyncOrderId: string;
+  billId: string;
+}): Promise<BeginActiveCartGenerationResult> {
+  if (!(typeof input.branchId === 'string' && input.branchId.length > 0)) {
+    return { ok: false };
+  }
+  if (!(typeof input.deviceId === 'string' && input.deviceId.length > 0)) {
+    return { ok: false };
+  }
+  if (!(typeof input.asyncOrderId === 'string' && input.asyncOrderId.length > 0)) {
+    return { ok: false };
+  }
+  if (!(typeof input.billId === 'string' && input.billId.length > 0)) {
+    return { ok: false };
+  }
+
+  try {
+    const committed = await transactCart('readwrite', async (txn) => {
+      const key = cartKey(input.branchId, input.deviceId);
+      const record = await txn.get<ActiveCartSnapshotRecord>(CART_STORE, key);
+      let next: ActiveCartSnapshotRecord;
+      if (record === undefined) {
+        const generationId = freshCrockford128();
+        const storeEpochId = freshCrockford128();
+        next = {
+          schemaVersion: 1,
+          branchId: input.branchId,
+          deviceId: input.deviceId,
+          generationId,
+          generationSeq: INITIAL_GENERATION_SEQ,
+          storeEpochId,
+          asyncOrderId: input.asyncOrderId,
+          billId: input.billId,
+          resumeFence: { held: false, fenceSeq: 0, fenceNonce: '' },
+          resumeAttempts: 0,
+          marker: 'S2',
+        };
+      } else {
+        if (
+          !isExactValidTerminalSuccessor(
+            record,
+            input.branchId,
+            input.deviceId,
+            input.asyncOrderId,
+            input.billId,
+          )
+        ) {
+          throw new Error('generation_refused');
+        }
+        const generationId = freshCrockford128();
+        if (generationId === record.generationId) {
+          throw new Error('generation_refused');
+        }
+        const generationSeq = record.generationSeq + 1;
+        next = {
+          schemaVersion: 1,
+          branchId: record.branchId,
+          deviceId: record.deviceId,
+          generationId,
+          generationSeq,
+          storeEpochId: record.storeEpochId,
+          asyncOrderId: input.asyncOrderId,
+          billId: input.billId,
+          resumeFence: { held: false, fenceSeq: 0, fenceNonce: '' },
+          resumeAttempts: 0,
+          marker: 'S2',
+        };
+      }
+      await txn.put(CART_STORE, key, next);
+      return {
+        generationId: next.generationId,
+        generationSeq: next.generationSeq,
+        storeEpochId: next.storeEpochId,
+      };
+    });
+    return {
+      ok: true,
+      generationId: committed.generationId,
+      generationSeq: committed.generationSeq,
+      storeEpochId: committed.storeEpochId,
+    };
   } catch {
     return { ok: false };
   }
