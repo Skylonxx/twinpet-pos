@@ -1,11 +1,14 @@
 /**
  * Sole raw owner of the sale-submission evidence IndexedDB.
  * Runtime authenticity for ProvenEvidenceAbsence is a module-private WeakSet
- * of exact object identities. There is no exported registry, mint, or add seam.
- * The producer gates on the cart store's non-minting authorization predicate
- * before any evidence-DB work. Cycle invariants C-1..C-4: only hoisted function
- * declarations cross the cycle; no peer call during evaluation; no
- * peer-dependent top-level initializer; exactly two production runtime edges.
+ * of exact object identities plus presentation-time 10-field mint integrity
+ * over ordinary own data properties, including kind. There is no exported
+ * registry, mint, or add seam. The producer gates on the cart store's
+ * authorization predicate before any evidence-DB work, then consumes only a
+ * synchronous named-field authorization snapshot. Cycle invariants C-1..C-4:
+ * only hoisted function declarations cross the cycle; no peer call during
+ * evaluation; no peer-dependent top-level initializer; exactly two production
+ * runtime edges.
  */
 import type {
   AbsenceSealAuthorityV1,
@@ -16,6 +19,7 @@ import type {
 import { isAuthenticAcquiredResumeFenceAuthorization } from './activeCartSnapshotStore';
 
 const authenticProvenEvidenceAbsences = new WeakSet<object>();
+const provenEvidenceAbsenceMints = new WeakMap<object, ProofFields>();
 
 const EVIDENCE_DB_NAME = 'twinpet-sale-submission-evidence';
 const EVIDENCE_DB_VERSION = 1;
@@ -37,9 +41,59 @@ type ProofFields = {
   barrierFenceNonce: string;
 };
 
+type AuthorizationFieldSnapshot = {
+  branchId: string;
+  deviceId: string;
+  generationId: string;
+  generationSeq: number;
+  storeEpochId: string;
+  asyncOrderId: string;
+  billId: string;
+  fenceSeq: number;
+  fenceNonce: string;
+};
+
 interface EvidenceTxn {
   get<T>(store: EvidenceStoreName, key: string): Promise<T | undefined>;
   add(store: EvidenceStoreName, key: string, value: unknown): Promise<void>;
+}
+
+function isOwnDataProperty(value: object, field: string): boolean {
+  const descriptor = Object.getOwnPropertyDescriptor(value, field);
+  return descriptor !== undefined && 'value' in descriptor;
+}
+
+function copyAuthorizationFields(source: AuthorizationFieldSnapshot): AuthorizationFieldSnapshot {
+  const snapshot: AuthorizationFieldSnapshot = {
+    branchId: source.branchId,
+    deviceId: source.deviceId,
+    generationId: source.generationId,
+    generationSeq: source.generationSeq,
+    storeEpochId: source.storeEpochId,
+    asyncOrderId: source.asyncOrderId,
+    billId: source.billId,
+    fenceSeq: source.fenceSeq,
+    fenceNonce: source.fenceNonce,
+  };
+  Object.freeze(snapshot);
+  return snapshot;
+}
+
+function copyProofFields(source: ProofFields): ProofFields {
+  const snapshot: ProofFields = {
+    kind: source.kind,
+    branchId: source.branchId,
+    deviceId: source.deviceId,
+    generationId: source.generationId,
+    generationSeq: source.generationSeq,
+    storeEpochId: source.storeEpochId,
+    asyncOrderId: source.asyncOrderId,
+    billId: source.billId,
+    barrierFenceSeq: source.barrierFenceSeq,
+    barrierFenceNonce: source.barrierFenceNonce,
+  };
+  Object.freeze(snapshot);
+  return snapshot;
 }
 
 function canonicalGenerationKey(branchId: string, deviceId: string, generationId: string): string {
@@ -148,7 +202,7 @@ function isInteger(value: unknown): value is number {
 
 function isExactAbsenceSealPointer(
   pointer: unknown,
-  authorization: AcquiredResumeFenceAuthorization,
+  authSnapshot: AuthorizationFieldSnapshot,
   generationKey: string,
 ): pointer is AbsenceSealAuthorityV1 {
   if (pointer === null || typeof pointer !== 'object') return false;
@@ -168,28 +222,28 @@ function isExactAbsenceSealPointer(
   if (!isNonemptyString(stored.billId)) return false;
   if (!isInteger(stored.barrierFenceSeq) || stored.barrierFenceSeq <= 0) return false;
   if (!isNonemptyString(stored.barrierFenceNonce)) return false;
-  if (stored.branchId !== authorization.branchId) return false;
-  if (stored.deviceId !== authorization.deviceId) return false;
-  if (stored.generationId !== authorization.generationId) return false;
-  if (stored.generationSeq !== authorization.generationSeq) return false;
-  if (stored.storeEpochId !== authorization.storeEpochId) return false;
-  if (stored.asyncOrderId !== authorization.asyncOrderId) return false;
-  if (stored.billId !== authorization.billId) return false;
-  if (stored.barrierFenceSeq !== authorization.fenceSeq) return false;
-  if (stored.barrierFenceNonce !== authorization.fenceNonce) return false;
+  if (stored.branchId !== authSnapshot.branchId) return false;
+  if (stored.deviceId !== authSnapshot.deviceId) return false;
+  if (stored.generationId !== authSnapshot.generationId) return false;
+  if (stored.generationSeq !== authSnapshot.generationSeq) return false;
+  if (stored.storeEpochId !== authSnapshot.storeEpochId) return false;
+  if (stored.asyncOrderId !== authSnapshot.asyncOrderId) return false;
+  if (stored.billId !== authSnapshot.billId) return false;
+  if (stored.barrierFenceSeq !== authSnapshot.fenceSeq) return false;
+  if (stored.barrierFenceNonce !== authSnapshot.fenceNonce) return false;
   return true;
 }
 
 async function runAuthorizedSealTransaction(
-  authorization: AcquiredResumeFenceAuthorization,
+  authSnapshot: AuthorizationFieldSnapshot,
 ): Promise<ProofFields> {
   return transactEvidence('readwrite', async (txn) => {
     const generationKey = canonicalGenerationKey(
-      authorization.branchId,
-      authorization.deviceId,
-      authorization.generationId,
+      authSnapshot.branchId,
+      authSnapshot.deviceId,
+      authSnapshot.generationId,
     );
-    if (!isWellFormedFence(authorization.fenceSeq, authorization.fenceNonce)) {
+    if (!isWellFormedFence(authSnapshot.fenceSeq, authSnapshot.fenceNonce)) {
       throw new Error('seal_refused');
     }
 
@@ -197,7 +251,7 @@ async function runAuthorizedSealTransaction(
       POINTER_STORE,
       generationKey,
     );
-    const entry = await txn.get<unknown>(ENTRY_STORE, authorization.asyncOrderId);
+    const entry = await txn.get<unknown>(ENTRY_STORE, authSnapshot.asyncOrderId);
     if (entry !== undefined) {
       throw new Error('seal_refused');
     }
@@ -206,33 +260,33 @@ async function runAuthorizedSealTransaction(
         kind: 'absence_seal',
         schemaVersion: 1,
         generationKey,
-        storeEpochId: authorization.storeEpochId,
-        generationId: authorization.generationId,
-        generationSeq: authorization.generationSeq,
-        asyncOrderId: authorization.asyncOrderId,
-        billId: authorization.billId,
-        branchId: authorization.branchId,
-        deviceId: authorization.deviceId,
+        storeEpochId: authSnapshot.storeEpochId,
+        generationId: authSnapshot.generationId,
+        generationSeq: authSnapshot.generationSeq,
+        asyncOrderId: authSnapshot.asyncOrderId,
+        billId: authSnapshot.billId,
+        branchId: authSnapshot.branchId,
+        deviceId: authSnapshot.deviceId,
         createdAtLocal: Date.now(),
-        barrierFenceSeq: authorization.fenceSeq,
-        barrierFenceNonce: authorization.fenceNonce,
+        barrierFenceSeq: authSnapshot.fenceSeq,
+        barrierFenceNonce: authSnapshot.fenceNonce,
       };
       await txn.add(POINTER_STORE, generationKey, seal);
 
       return {
         kind: 'evidence_proven_absent',
-        branchId: authorization.branchId,
-        deviceId: authorization.deviceId,
-        generationId: authorization.generationId,
-        generationSeq: authorization.generationSeq,
-        storeEpochId: authorization.storeEpochId,
-        asyncOrderId: authorization.asyncOrderId,
-        billId: authorization.billId,
-        barrierFenceSeq: authorization.fenceSeq,
-        barrierFenceNonce: authorization.fenceNonce,
+        branchId: authSnapshot.branchId,
+        deviceId: authSnapshot.deviceId,
+        generationId: authSnapshot.generationId,
+        generationSeq: authSnapshot.generationSeq,
+        storeEpochId: authSnapshot.storeEpochId,
+        asyncOrderId: authSnapshot.asyncOrderId,
+        billId: authSnapshot.billId,
+        barrierFenceSeq: authSnapshot.fenceSeq,
+        barrierFenceNonce: authSnapshot.fenceNonce,
       };
     }
-    if (!isExactAbsenceSealPointer(pointer, authorization, generationKey)) {
+    if (!isExactAbsenceSealPointer(pointer, authSnapshot, generationKey)) {
       throw new Error('seal_refused');
     }
     // Exact-pointer zero-write re-mint. Every proof field comes from the
@@ -267,9 +321,11 @@ export async function commitSaleSubmissionAbsenceSeal(
     return { ok: false };
   }
 
+  const authSnapshot = copyAuthorizationFields(authorization);
+
   let fields: ProofFields;
   try {
-    fields = await runAuthorizedSealTransaction(authorization);
+    fields = await runAuthorizedSealTransaction(authSnapshot);
   } catch {
     return { ok: false };
   }
@@ -289,6 +345,7 @@ export async function commitSaleSubmissionAbsenceSeal(
   // SOLE authorized registry membership grant point. Adjacent to construction;
   // no await/yield/escape between construct, add, and return.
   authenticProvenEvidenceAbsences.add(proof);
+  provenEvidenceAbsenceMints.set(proof, copyProofFields(proof));
   return { ok: true, proof: proof as ProvenEvidenceAbsence };
 }
 
@@ -296,5 +353,30 @@ export function isAuthenticProvenEvidenceAbsence(
   value: unknown,
 ): value is ProvenEvidenceAbsence {
   if (value === null || typeof value !== 'object') return false;
-  return authenticProvenEvidenceAbsences.has(value);
+  if (!authenticProvenEvidenceAbsences.has(value)) return false;
+  const minted = provenEvidenceAbsenceMints.get(value);
+  if (minted === undefined) return false;
+  if (!isOwnDataProperty(value, 'kind')) return false;
+  if (!isOwnDataProperty(value, 'branchId')) return false;
+  if (!isOwnDataProperty(value, 'deviceId')) return false;
+  if (!isOwnDataProperty(value, 'generationId')) return false;
+  if (!isOwnDataProperty(value, 'generationSeq')) return false;
+  if (!isOwnDataProperty(value, 'storeEpochId')) return false;
+  if (!isOwnDataProperty(value, 'asyncOrderId')) return false;
+  if (!isOwnDataProperty(value, 'billId')) return false;
+  if (!isOwnDataProperty(value, 'barrierFenceSeq')) return false;
+  if (!isOwnDataProperty(value, 'barrierFenceNonce')) return false;
+  const current = value as ProofFields;
+  return (
+    current.kind === minted.kind &&
+    current.branchId === minted.branchId &&
+    current.deviceId === minted.deviceId &&
+    current.generationId === minted.generationId &&
+    current.generationSeq === minted.generationSeq &&
+    current.storeEpochId === minted.storeEpochId &&
+    current.asyncOrderId === minted.asyncOrderId &&
+    current.billId === minted.billId &&
+    current.barrierFenceSeq === minted.barrierFenceSeq &&
+    current.barrierFenceNonce === minted.barrierFenceNonce
+  );
 }

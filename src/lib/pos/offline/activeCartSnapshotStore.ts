@@ -2,13 +2,14 @@
  * Cart-currentness owner, consumer of ProvenEvidenceAbsence, and owner of the
  * authorization capability. Runtime authenticity for
  * AcquiredResumeFenceAuthorization is a module-private WeakSet of exact object
- * identities. The public acquire is one-step: a successful durable hold always
- * returns the exact registered authorization identity. There is deliberately no
- * low-level durable-acquire export. Cycle invariants C-1..C-4: only hoisted
- * function declarations cross the cycle; no peer call during evaluation; no
- * peer-dependent top-level initializer; exactly two production runtime edges.
- * Proofs travel by direct in-process reference; this module does not clone,
- * spread, serialize, or wrap them.
+ * identities plus presentation-time 9-field mint integrity over ordinary own
+ * data properties. The public acquire is one-step: a successful durable hold
+ * always returns the exact registered authorization identity. There is
+ * deliberately no low-level durable-acquire export. Cycle invariants C-1..C-4:
+ * only hoisted function declarations cross the cycle; no peer call during
+ * evaluation; no peer-dependent top-level initializer; exactly two production
+ * runtime edges. Proofs travel by direct in-process reference; this module does
+ * not clone, spread, serialize, or wrap them.
  */
 import { isAuthenticProvenEvidenceAbsence } from './saleSubmissionEvidenceStore';
 import type {
@@ -32,11 +33,25 @@ type FenceAuthorizationFields = {
   fenceNonce: string;
 };
 
+type ProofFieldSnapshot = {
+  kind: 'evidence_proven_absent';
+  branchId: string;
+  deviceId: string;
+  generationId: string;
+  generationSeq: number;
+  storeEpochId: string;
+  asyncOrderId: string;
+  billId: string;
+  barrierFenceSeq: number;
+  barrierFenceNonce: string;
+};
+
 const CART_DB_NAME = 'twinpet-active-cart-snapshot';
 const CART_DB_VERSION = 1;
 const CART_STORE = 'activeCartSnapshots';
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 const authenticAcquiredResumeFenceAuthorizations = new WeakSet<object>();
+const acquiredResumeFenceAuthorizationMints = new WeakMap<object, FenceAuthorizationFields>();
 
 type CartStoreName = typeof CART_STORE;
 
@@ -63,6 +78,44 @@ function isNonemptyString(value: unknown): value is string {
 
 function isInteger(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value);
+}
+
+function isOwnDataProperty(value: object, field: string): boolean {
+  const descriptor = Object.getOwnPropertyDescriptor(value, field);
+  return descriptor !== undefined && 'value' in descriptor;
+}
+
+function copyAuthorizationFields(source: FenceAuthorizationFields): FenceAuthorizationFields {
+  const snapshot: FenceAuthorizationFields = {
+    branchId: source.branchId,
+    deviceId: source.deviceId,
+    generationId: source.generationId,
+    generationSeq: source.generationSeq,
+    storeEpochId: source.storeEpochId,
+    asyncOrderId: source.asyncOrderId,
+    billId: source.billId,
+    fenceSeq: source.fenceSeq,
+    fenceNonce: source.fenceNonce,
+  };
+  Object.freeze(snapshot);
+  return snapshot;
+}
+
+function copyProofFields(source: ProofFieldSnapshot): ProofFieldSnapshot {
+  const snapshot: ProofFieldSnapshot = {
+    kind: source.kind,
+    branchId: source.branchId,
+    deviceId: source.deviceId,
+    generationId: source.generationId,
+    generationSeq: source.generationSeq,
+    storeEpochId: source.storeEpochId,
+    asyncOrderId: source.asyncOrderId,
+    billId: source.billId,
+    barrierFenceSeq: source.barrierFenceSeq,
+    barrierFenceNonce: source.barrierFenceNonce,
+  };
+  Object.freeze(snapshot);
+  return snapshot;
 }
 
 function authorizationFieldsFromRecord(record: ActiveCartSnapshotRecord): FenceAuthorizationFields {
@@ -333,6 +386,7 @@ export async function acquireSaleSubmissionResumeFence(input: {
   // no await/yield/escape between construct, add, and return. Outside the
   // transaction/refusal try/catch.
   authenticAcquiredResumeFenceAuthorizations.add(authorization);
+  acquiredResumeFenceAuthorizationMints.set(authorization, copyAuthorizationFields(authorization));
   return { ok: true, authorization: authorization as AcquiredResumeFenceAuthorization };
 }
 
@@ -340,7 +394,30 @@ export function isAuthenticAcquiredResumeFenceAuthorization(
   value: unknown,
 ): value is AcquiredResumeFenceAuthorization {
   if (value === null || typeof value !== 'object') return false;
-  return authenticAcquiredResumeFenceAuthorizations.has(value);
+  if (!authenticAcquiredResumeFenceAuthorizations.has(value)) return false;
+  const minted = acquiredResumeFenceAuthorizationMints.get(value);
+  if (minted === undefined) return false;
+  if (!isOwnDataProperty(value, 'branchId')) return false;
+  if (!isOwnDataProperty(value, 'deviceId')) return false;
+  if (!isOwnDataProperty(value, 'generationId')) return false;
+  if (!isOwnDataProperty(value, 'generationSeq')) return false;
+  if (!isOwnDataProperty(value, 'storeEpochId')) return false;
+  if (!isOwnDataProperty(value, 'asyncOrderId')) return false;
+  if (!isOwnDataProperty(value, 'billId')) return false;
+  if (!isOwnDataProperty(value, 'fenceSeq')) return false;
+  if (!isOwnDataProperty(value, 'fenceNonce')) return false;
+  const current = value as FenceAuthorizationFields;
+  return (
+    current.branchId === minted.branchId &&
+    current.deviceId === minted.deviceId &&
+    current.generationId === minted.generationId &&
+    current.generationSeq === minted.generationSeq &&
+    current.storeEpochId === minted.storeEpochId &&
+    current.asyncOrderId === minted.asyncOrderId &&
+    current.billId === minted.billId &&
+    current.fenceSeq === minted.fenceSeq &&
+    current.fenceNonce === minted.fenceNonce
+  );
 }
 
 export async function readActiveCartSnapshot(
@@ -395,39 +472,42 @@ export async function releaseSaleSubmissionResumeFence(
     return { ok: false };
   }
 
+  const authSnapshot = copyAuthorizationFields(authorization);
+  const proofSnapshot = copyProofFields(proof);
+  const key = cartKey(authSnapshot.branchId, authSnapshot.deviceId);
+
   try {
     await transactCart('readwrite', async (txn) => {
-      const key = cartKey(authorization.branchId, authorization.deviceId);
       const record = await txn.get<ActiveCartSnapshotRecord>(CART_STORE, key);
       if (record === undefined || record.schemaVersion !== 1) {
         throw new Error('release_refused');
       }
       if (
-        authorization.generationId !== record.generationId ||
-        authorization.generationSeq !== record.generationSeq ||
-        authorization.storeEpochId !== record.storeEpochId ||
-        proof.generationId !== record.generationId ||
-        proof.generationSeq !== record.generationSeq ||
-        proof.storeEpochId !== record.storeEpochId
+        authSnapshot.generationId !== record.generationId ||
+        authSnapshot.generationSeq !== record.generationSeq ||
+        authSnapshot.storeEpochId !== record.storeEpochId ||
+        proofSnapshot.generationId !== record.generationId ||
+        proofSnapshot.generationSeq !== record.generationSeq ||
+        proofSnapshot.storeEpochId !== record.storeEpochId
       ) {
         throw new Error('release_refused');
       }
       if (
-        authorization.asyncOrderId !== record.asyncOrderId ||
-        authorization.billId !== record.billId ||
-        proof.asyncOrderId !== record.asyncOrderId ||
-        proof.billId !== record.billId ||
-        proof.branchId !== record.branchId ||
-        proof.deviceId !== record.deviceId
+        authSnapshot.asyncOrderId !== record.asyncOrderId ||
+        authSnapshot.billId !== record.billId ||
+        proofSnapshot.asyncOrderId !== record.asyncOrderId ||
+        proofSnapshot.billId !== record.billId ||
+        proofSnapshot.branchId !== record.branchId ||
+        proofSnapshot.deviceId !== record.deviceId
       ) {
         throw new Error('release_refused');
       }
       if (record.resumeFence.held !== true) throw new Error('release_refused');
       if (
-        proof.barrierFenceSeq !== record.resumeFence.fenceSeq ||
-        proof.barrierFenceNonce !== record.resumeFence.fenceNonce ||
-        authorization.fenceSeq !== record.resumeFence.fenceSeq ||
-        authorization.fenceNonce !== record.resumeFence.fenceNonce
+        proofSnapshot.barrierFenceSeq !== record.resumeFence.fenceSeq ||
+        proofSnapshot.barrierFenceNonce !== record.resumeFence.fenceNonce ||
+        authSnapshot.fenceSeq !== record.resumeFence.fenceSeq ||
+        authSnapshot.fenceNonce !== record.resumeFence.fenceNonce
       ) {
         throw new Error('release_refused');
       }

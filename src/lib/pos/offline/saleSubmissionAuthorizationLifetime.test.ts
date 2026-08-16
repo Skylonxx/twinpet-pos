@@ -564,22 +564,27 @@ describe('R28-T6 concurrent exact seal', () => {
   });
 });
 
-describe('R28-T7 mutable handle / durable-truth recovery', () => {
-  test('mutated authentic fenceNonce is refused; reacquire restores durable fence with zero put', async () => {
+describe('R28-T7 mint-integrity loss / durable-truth recovery', () => {
+  test('mutated fenceNonce loses authenticity and is refused before evidence DB work; reacquire restores durable fence with zero put', async () => {
     const { authorization, record } = await arrangeHeldCart();
     const originalSeq = record.resumeFence.fenceSeq;
     const originalNonce = record.resumeFence.fenceNonce;
     authorization.fenceNonce = '';
-    expect(isAuthenticAcquiredResumeFenceAuthorization(authorization)).toBe(true);
+    expect(isAuthenticAcquiredResumeFenceAuthorization(authorization)).toBe(false);
 
+    openProbe = installIndexedDbOpenProbe();
     mutationProbe = installIdbMutationProbe();
     const markBeforeSeal = mutationProbe.snapshot();
     const sealedMutated = await commitSaleSubmissionAbsenceSeal(authorization);
     expect(sealedMutated.ok).toBe(false);
+    const evidenceOpens = openProbe.opens.filter((name) => name === EVIDENCE_DB_NAME);
     const evidenceMutations = mutationProbe.events
       .slice(markBeforeSeal)
       .filter((e) => e.db === EVIDENCE_DB_NAME).length;
+    expect(evidenceOpens).toEqual([]);
     expect(evidenceMutations).toBe(0);
+    openProbe.restore();
+    openProbe = undefined;
 
     const markBeforeRecover = mutationProbe.snapshot();
     const recovered = await acquireSaleSubmissionResumeFence({
@@ -668,7 +673,7 @@ describe('R28-T7 mutable handle / durable-truth recovery', () => {
     expect(mutations).toHaveLength(0);
   });
 
-  test('wrong-typed stored generationSeq refuses even when authentic authorization is mutated to the same bad value', async () => {
+  test('wrong-typed stored generationSeq refuses via pointer validator with unmodified authentic authorization', async () => {
     const { authorization } = await arrangeHeldCart();
     const generationKey = testCanonicalGenerationKey(
       FIXTURE.branchId,
@@ -690,8 +695,6 @@ describe('R28-T7 mutable handle / durable-truth recovery', () => {
       barrierFenceSeq: authorization.fenceSeq,
       barrierFenceNonce: authorization.fenceNonce,
     });
-    (authorization as { generationSeq: unknown }).generationSeq = '1';
-    expect(authorization.generationSeq).toBe('1');
     expect(isAuthenticAcquiredResumeFenceAuthorization(authorization)).toBe(true);
 
     const beforeCart = await captureCartState();
@@ -715,7 +718,7 @@ describe('R28-T7 mutable handle / durable-truth recovery', () => {
     expect(afterEvidence.pointerKeys).toHaveLength(1);
   });
 
-  test('malformed stored identity string refuses even when authentic authorization is mutated to the same bad value', async () => {
+  test('malformed stored billId refuses via pointer validator with unmodified authentic authorization', async () => {
     const { authorization } = await arrangeHeldCart();
     const generationKey = testCanonicalGenerationKey(
       FIXTURE.branchId,
@@ -737,8 +740,6 @@ describe('R28-T7 mutable handle / durable-truth recovery', () => {
       barrierFenceSeq: authorization.fenceSeq,
       barrierFenceNonce: authorization.fenceNonce,
     });
-    (authorization as { billId: unknown }).billId = 999;
-    expect(authorization.billId).toBe(999);
     expect(isAuthenticAcquiredResumeFenceAuthorization(authorization)).toBe(true);
 
     const beforeCart = await captureCartState();
