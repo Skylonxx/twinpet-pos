@@ -2,61 +2,51 @@
 
 ## Phase
 
-**Post-PK-2A Docs Reconciliation / Packet 5**
+**P1 Offline / Sync Resiliency — Packet 5 / PK-2B / R7 / R7-6 — Post Claude Correction-003 / Pre Fresh Codex Architecture Rereview**
 
 STATUS:
-PK2A_CLOSED_WITH_NOTES
+R7_6_POST_CLAUDE_CORRECTION_003_PRE_FRESH_CODEX_ARCHITECTURE_REREVIEW
 
-`PK2A_CODE_IMPLEMENTATION_STATUS: CLOSED_WITH_NOTES` at committed/pushed HEAD `79ba840ab6e01ee1a5fff6c0094104c25d754668` (`feat(pos): harden offline boot and session gating`; parent `23f51554f6a9e31bb7232a38cb9721c40f630566`). Exact 11-file code commit/push verified (`HEAD == origin/main == remote main`). Codex implementation review `PASS` (`MATERIAL_FINDING_COUNT: 0`); AGY UI/UX review `PASS` (`MATERIAL_FINDING_COUNT: 0`). `PK1_STATUS: CLOSED_WITH_NOTES` (preserved; do not reopen). **`PACKET_5_STATUS: NOT_CLOSED`.** `BROADER_PACKET_5_CLOSURE_AUTHORIZED: NO`. `G14_ACTIVATION_TRACK_STATUS: ABORTED`. PK-2A notes: browser responsive UAT not performed; Emulator runtime UAT not performed; deployment/production not performed. Next roadmap candidate: **PK-2B — Cart Snapshot Store + Restore/Conflict Logic** — but `PK2B.ARCHITECTURE_PLANNING_AUTHORIZED_NOW: NO`; `PK2B.IMPLEMENTATION_AUTHORIZED: NO`. No active implementation packet is selected. Passive natural-traffic observation remains authorized in parallel, read-only only, when a natural event exists; no agent-triggered activity is authorized. This docs reconciliation is left uncommitted (`DOC_COMMIT_PUSH_AUTHORIZED: NO`).
+```text
+ROADMAP_LABEL: R7-6 — all-history order / receipt freshness
+CORRECTED_BOUNDED_SCOPE: Sales History record freshness and receipt authority
+BASELINE: a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab
+D3_STATUS: CLOSED at a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab
+CODEX_ARCHITECTURE_REREVIEW_003: BLOCK / GEMINI REDECISION REQUIRED (historical; not a rereview of correction-003)
+CLAUDE_CORRECTION_003_STATUS: COMPLETE
+CODEX_STATUS: NOT YET RUN ON CORRECTION-003
+G-D6: DECIDED OPTION_A
+FINAL_R7_6_GEMINI_DECISION_COUNT: 5
+R7_6_IMPLEMENTATION_AUTHORIZED: NO
+APPLICATION_INTEGRATION: STILL_NOT_READY / NOT AUTHORIZED
+B1-B9: CLAUDE_CORRECTION_003_CLAIMS_CLOSED / PENDING_FRESH_CODEX_VERIFICATION
+CLAUDE_CANDIDATE_TEST_CONTRACT: 169
+CLAUDE_CANDIDATE_FILE_SURFACE: 43
+TEST_AND_FILE_SURFACE_STATUS: CLAUDE CANDIDATE / NOT YET CODEX-ACCEPTED / NOT IMPLEMENTATION-FROZEN
+```
 
-## This packet — Packet 5 / PK-2A Boot / Session Gating and Offline Blocker
+`PK1_STATUS: CLOSED_WITH_NOTES` (preserved; do not reopen). **`PACKET_5_STATUS: NOT_CLOSED`.** `BROADER_PACKET_5_CLOSURE_AUTHORIZED: NO`. `G14_ACTIVATION_TRACK_STATUS: ABORTED`. No active implementation packet. Passive natural-traffic observation remains authorized in parallel, read-only only, when a natural event exists. This pass is docs-only and left uncommitted (`DOC_COMMIT_PUSH_AUTHORIZED: NO`). The previous Owner-interrupt (Grok-001) remains historical.
 
-**Status: CLOSED_WITH_NOTES (code)**
+## This packet — Packet 5 / PK-2B / R7 / R7-6
 
-- Commit: `79ba840ab6e01ee1a5fff6c0094104c25d754668` (`feat(pos): harden offline boot and session gating`); parent `23f51554f6a9e31bb7232a38cb9721c40f630566`
-- Push: successful normal fast-forward; `HEAD == origin/main == remote main`
-- Payload: exact 11 PK-2A files
-- Reviews: Codex `PASS` (0 material); AGY `PASS` (0 material)
-- Semantics: provenance-aware active-shift boot read; unverifiable active-shift fails closed; cache-empty not authoritative absence; session schema version + issuedAt; valid legacy sessions upgrade in memory without expiry; cached role/branch offline continuation truth; explicit offline-no-session LoginPage blocker; DEC-10 controls remain live; no navigator-only login short-circuit; no offline credential login
-- Validation (recorded; not re-run in this docs gate): focused PK-2A 5 files / 95 PASS; bounded regression 3 files / 69 PASS; `npx tsc --noEmit` PASS; `git diff --check` PASS
-- Closure notes (non-blocking for code closure): browser UAT NOT performed; Emulator UAT NOT performed; deployment NOT performed; production NOT performed
-- Packet 5 remains open — PK-2A closure is not Packet 5 closure
-- PK-2B architecture/planning and implementation are NOT authorized now
+**Status: Post Claude Correction-003 / Pre Fresh Codex Architecture Rereview — not implementation-ready**
 
-## This packet — Packet 5 / UI-B2 / Packet S — getShiftCloseCaseFigures
+- Baseline: `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab` (`feat(pos): add trusted orchestration owner enforcement`)
+- D3: CLOSED; reopen = NO
+- Codex rereview-003: `BLOCK / GEMINI REDECISION REQUIRED` (historical; not a rereview of correction-003)
+- Claude correction-003: **COMPLETE** — B1–B9 claimed closed by Claude architecture correction; Codex has **not** yet verified
+- G-D6: DECIDED OPTION_A — authoritative historical reprint suppresses VAT breakdown; current VAT config is not proven sale-time VAT; no snapshot; no backfill; no legal/tax conclusion. Do not reopen.
+- Gemini set (exactly five): G-D1 OPEN; G-D2 OPEN; G-D3 OPEN; G-D5 OPEN; G-D6 DECIDED OPTION_A
+- B1–B9: `CLAUDE_CORRECTION_003_CLAIMS_CLOSED / PENDING_FRESH_CODEX_VERIFICATION` — not final CLOSED
+- Candidate package: 169 tests / 43 files = CLAUDE CANDIDATE / NOT YET CODEX-ACCEPTED / NOT IMPLEMENTATION-FROZEN
+- Prior 120 tests = NOT FROZEN; prior 41 files = NOT FROZEN
+- ENTRY_STORE: PARALLEL_FOR_RECORD_FRESHNESS_ONLY (no writer; no initializer retirement)
+- Closed-gate reopen: Row28/Row30/D1/D3/Row32 = NO
+- Previous Owner-interrupt (Grok-001) is historical; it correctly wrote conservative state before the formal correction-003 report existed
 
-**Status: TECHNICALLY CLOSED WITH NONBLOCKING NOTES**
+## This pass — Docs/tracker reconciliation (post Claude correction-003)
 
-- Commit: `e9363e35f5a79f8e21d5dafe1e70d8ff3f82559c` (`feat(pos): add shift close case figures callable`); parent `5654362`
-- Push: fast-forward `5654362..e9363e3 main -> main`; `HEAD == origin/main`
-- Payload: exactly 6 files
-- Surface: new read-only server-side callable `getShiftCloseCaseFigures` returning selected shift-close case figures
-- Review: Codex final C12 benign-presence exactness re-review — PASS WITH NOTES (0 blockers, 0 request changes, 2 carried nonblocking notes)
-- Deployment: `getShiftCloseCaseFigures` deployed live — `twinpet-pos`, `asia-southeast1`, `pos-db`, `nodejs22` v2/2nd Gen; successful create; no `--force`
-- Verification: targeted core 448 / targeted shell 135 / full Functions unit suite 24 files / 1353 tests; typecheck PASS; build PASS; `git diff --check` PASS
-- Not implemented / not claimed: no callable invocation performed; no production business-data UAT performed; no broader Packet 5 closure claimed; Packet R/C/U not authorized or claimed
-- N-FINAL-01 (active): selected-run figures returned by `getShiftCloseCaseFigures` are not final settlement truth; future UI/copy must not present them as reconciled or final without a separate backend contract
-
-## This packet — Packet 5 / UI-C Manager Adjudication Action Surface
-
-**Status: CLOSED AS COMMITTED AND PUSHED**
-
-- Commit: `3ef4d016eeb288bcdf7d76c959e4a748b97964c6` (`feat(pos): add shift close manager adjudication surface`); parent `70a23f9`
-- Push: fast-forward `70a23f9..3ef4d01 main -> main`; `HEAD == origin/main`
-- Payload: exactly 10 files; `3616 insertions(+), 12 deletions(-)`
-- Surface: manager Acknowledge/Resolve adjudication **action** on the read-only `/shift-close-review/:shiftId` detail page (UI-B was read-only; UI-C adds the action surface)
-- Modules: new `ShiftCloseAdjudicationPanel` (+ test), `shiftCloseAdjudicationMachine` (+ test), `resolveShiftCloseAlertAdapter` (+ test); modified `shiftCloseDetailProjection` (+ test), `ShiftCloseAlertDetailPage` (+ test)
-- Mutation boundary: the already-live `resolveShiftCloseAlert` callable (P5-E) is the only mutation path; manager/admin branch authority enforced server-side in a Firestore transaction; **no callable invocation performed** in this work
-- Scope guards: machine-owned retry authority; same-scope + current-source-binding required; scope-change abandons retry chains; no auto-retry; allowlist projection excludes sensitive cash/evidence/lease/note
-- Hook: `useShiftCloseAlertDetail.ts` unchanged (excluded from commit)
-- Not implemented: no new deploy/runtime activation/callable invocation; no rules/index/functions change; no App/route/nav/CSS/POS/payment/keyboard/PIN change; A-1 global Flowbite fix deferred
-- Review: Codex implementation closure re-review PASS WITH NOTES (0 blockers, 0 RCs, 4 notes) → AGY final rendered UX PASS (0 blockers, 0 RCs, 1 note; 320/768/1080) → Gemini implementation-closure + commit/push authorization
-- V-1 CLOSED (rendered yellow hierarchy); L-1 CLOSED (rendered warning/checkbox adjacency); A-1 accepted deferred global/library Flowbite focus NOTE
-- Verification: targeted UI-C 5 files / 260 tests; full root 69 files / 1540 tests; rules 8 files / 300 tests; POS three-suite 3 files / 178 tests; build/typecheck/targeted-lint/diff-check PASS
-
-## This pass — Docs/tracker reconciliation (PK-2A)
-
-**Status: IN PROGRESS / LEFT UNCOMMITTED** — exact 7-doc PK-2A closure reconciliation; `DOC_COMMIT_PUSH_AUTHORIZED: NO`
+**Status: IN PROGRESS / LEFT UNCOMMITTED** — exact 7-doc current-state correction; `DOC_COMMIT_PUSH_AUTHORIZED: NO`
 
 - Authorized files: `Context.md`, `Task.md`, `docs/STATE.md`, `docs/agent-workflow/CURRENT_PACKET.md`, `docs/agent-workflow/NEXT_ACTION.md`, `docs/agent-workflow/STATE.md`, `docs/reports/latest-report.md`
 - No source/test/config/rules/index/functions changes
@@ -65,6 +55,8 @@ PK2A_CLOSED_WITH_NOTES
 
 ## Prior closed packets
 
+- **D3 Trusted orchestration owner enforcement** — `a081bcb` (`CLOSED`; do not reopen)
+- **PK-2A Boot / Session Gating** — `79ba840` (`CLOSED_WITH_NOTES`; historical)
 - **PK-1 Offline Shift Session** — `513b198` (`CLOSED_WITH_NOTES`; do not reopen)
 - **UI-C Manager Adjudication Action Surface** — `3ef4d01` (manager Acknowledge/Resolve action surface; docs closed at `5654362`)
 - **Client-UI-B** — `490f4cf` (read-only shift-close alert detail; docs closed at `70a23f9`)
@@ -76,9 +68,11 @@ PK2A_CLOSED_WITH_NOTES
 
 ## Current repository HEAD
 
-Determined from live Git — run `git rev-parse HEAD`.
+`a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab`
 
-PK-2A code commit (binding): `79ba840ab6e01ee1a5fff6c0094104c25d754668`
+D3 closure commit (binding): `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab`
+
+PK-2A code commit (historical): `79ba840ab6e01ee1a5fff6c0094104c25d754668`
 
 PK-1 final HEAD (binding, unchanged): `513b198a30a1af72151ab6a8c0976799871529b8`
 
@@ -88,4 +82,6 @@ Historical closure anchors (unchanged):
 
 ## Next gate
 
-**PK-2A code is closed with notes. Packet 5 remains NOT_CLOSED.** Next roadmap candidate is PK-2B — Cart Snapshot Store + Restore/Conflict Logic, but architecture planning is **NOT authorized now** and implementation is **NOT authorized**. Current next action: return this docs reconciliation report to ChatGPT / Gemini for docs commit/push authorization decision and post-PK-2A roadmap decision. Do not start PK-2B. Do not reopen PK-1. Passive read-only observation may occur only when natural production traffic provides a real event; no agent-triggered activity is authorized. UI-B.1, UI-B2, P5-F, recapture, deploy, runtime activation, callable invocation, production access, browser/Emulator UAT, G14 (ABORTED), OBS-C, stash operations, Packet R/C/U, broader Packet 5 closure — NOT authorized.
+**R7-6 is not implementation-ready.** Claude correction-003 formal report is COMPLETE. B1–B9 are claimed closed by Claude architecture correction and remain `PENDING_FRESH_CODEX_VERIFICATION` (not final CLOSED). 169-test / 43-file package is CLAUDE CANDIDATE / NOT YET CODEX-ACCEPTED / NOT IMPLEMENTATION-FROZEN. G-D6 OPTION_A is DECIDED. Codex has **not** yet run on correction-003.
+
+**NEXT_WORKFLOW_ACTION:** Return the seven-doc reconciliation to ChatGPT; obtain separate exact seven-doc commit/push authority if approved; return the repository to an accepted clean baseline; ONLY THEN run a genuinely fresh Codex architecture rereview of correction-003. Do not start Codex from this dirty worktree. Next implementation action: NONE — NOT AUTHORIZED. Application Integration remains STILL_NOT_READY / NOT AUTHORIZED. Do not send the final G-D1/G-D2/G-D3/G-D5 Gemini bundle. Do not reopen Row28/Row30/D1/D3/Row32. Do not reopen PK-1. Passive read-only observation may occur only when natural production traffic provides a real event. UI-B.1, UI-B2, P5-F, recapture, deploy, runtime activation, callable invocation, production access, G14 (ABORTED), OBS-C, stash operations, Packet R/C/U, broader Packet 5 closure — NOT authorized.

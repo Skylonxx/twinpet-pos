@@ -2,43 +2,59 @@
 
 ## Current State
 
-- Current repository HEAD: determined from live Git — run `git rev-parse HEAD`
-- Verified baseline entering this reconciliation: `79ba840ab6e01ee1a5fff6c0094104c25d754668` (`feat(pos): harden offline boot and session gating`)
-- **PK-2A** — `PK2A_CODE_IMPLEMENTATION_STATUS: CLOSED_WITH_NOTES` at `79ba840ab6e01ee1a5fff6c0094104c25d754668`. Parent `23f51554f6a9e31bb7232a38cb9721c40f630566`. Codex `PASS` (0 material); AGY `PASS` (0 material). Exact 11-file code commit/push verified.
-- **PK-2A closure notes** — browser responsive UAT NOT performed; Emulator runtime UAT NOT performed; deployment NOT performed; production activation/access NOT performed.
-- **PK-1** — `PK1_STATUS: CLOSED_WITH_NOTES` at `513b198a30a1af72151ab6a8c0976799871529b8`. Do not reopen.
+- Current repository HEAD: `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab` (`feat(pos): add trusted orchestration owner enforcement`)
+- **Current gate:** R7-6 / Post Claude Correction-003 / Pre Fresh Codex Architecture Rereview
+- **Roadmap label:** R7-6 — all-history order / receipt freshness
+- **Bounded scope:** Sales History record freshness and receipt authority
+- **D3** — `CLOSED` at `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab`. Do not reopen.
+- **Codex rereview 003** — `BLOCK / GEMINI REDECISION REQUIRED` (historical; not a rereview of correction-003)
+- **Claude correction-003** — `COMPLETE`. B1–B9 claimed closed by Claude architecture correction. Codex has **not** yet verified.
+- **G-D6** — `DECIDED OPTION_A` (VAT breakdown suppressed; no snapshot; no backfill; no legal/tax conclusion). Do not reopen.
+- **Gemini set** — exactly five: G-D1/G-D2/G-D3/G-D5 `OPEN`; G-D6 `DECIDED OPTION_A`
+- **B1–B9** — `CLAUDE_CORRECTION_003_CLAIMS_CLOSED / PENDING_FRESH_CODEX_VERIFICATION` (not final CLOSED)
+- **Candidate package** — 169 tests / 43 files = CLAUDE CANDIDATE / NOT YET CODEX-ACCEPTED / NOT IMPLEMENTATION-FROZEN. Prior 120 tests / 41 files remain NOT FROZEN
+- **R7-6 implementation** — NOT AUTHORIZED / not implementation-ready
+- **Application Integration** — `STILL_NOT_READY` / NOT AUTHORIZED
+- **PK-2A** — `CLOSED_WITH_NOTES` at `79ba840` (historical)
+- **PK-1** — `CLOSED_WITH_NOTES` at `513b198`. Do not reopen.
 - **Packet 5** — `PACKET_5_STATUS: NOT_CLOSED`; `BROADER_PACKET_5_CLOSURE_AUTHORIZED: NO`
-- **G14** — `G14_ACTIVATION_TRACK_STATUS: ABORTED`
-- **PK-2B** — Cart Snapshot Store + Restore/Conflict Logic — next expected planning unit only; `PK2B.ARCHITECTURE_PLANNING_AUTHORIZED_NOW: NO`; `PK2B.IMPLEMENTATION_AUTHORIZED: NO`
-- **Post-PK-2A Docs Reconciliation (this pass)** — docs-only; left uncommitted (`DOC_COMMIT_PUSH_AUTHORIZED: NO`)
-- For current working-tree/stage/stash state, use live Git: `git status --short --untracked-files=all`, `git diff --cached --name-status`, `git rev-parse "stash@{0}"`. This reconciliation entered with a clean working tree, empty staged area, and unchanged stash (`stash@{0}` = `7d03cfec7ba52ff7e25b7e175ca190efc258d874` as of the verified baseline above).
+- **G14** — `ABORTED`
+- **This pass** — docs-only post-correction-003 reconciliation; left uncommitted (`DOC_COMMIT_PUSH_AUTHORIZED: NO`). Previous Owner-interrupt (Grok-001) is historical.
+- For current working-tree/stage/stash state, use live Git. These seven Master Plan docs are intentionally dirty. Stash remains `stash@{0}` = `7d03cfec7ba52ff7e25b7e175ca190efc258d874`.
 
 ## What Happens Next
 
-**Immediate next action:** Return this PK-2A docs reconciliation report to ChatGPT / Gemini for docs commit/push authorization decision and post-PK-2A roadmap/authorization decision. Do **not** stage/commit/push docs. Do **not** start PK-2B architecture planning or implementation.
+**Immediate next action:** Return this seven-doc reconciliation diff/report to ChatGPT for review.
 
-No active implementation packet is selected. `PK2B.IMPLEMENTATION_AUTHORIZED: NO`.
+THEN: obtain separate authorization for exact seven-doc commit/push if approved.
 
-Passive read-only observation may occur only when natural production traffic provides a real event. No agent-triggered activity is authorized.
+ONLY AFTER: the repository returns to an accepted clean baseline, prepare/run a genuinely fresh Codex architecture rereview of Claude correction-003.
 
-1. PK-2A — **`CLOSED_WITH_NOTES`** at `79ba840`
-2. PK-1 — **`CLOSED_WITH_NOTES`** at `513b198` (preserved)
-3. Packet 5 — **NOT CLOSED**
-4. G14 — **ABORTED**
-5. PK-2B — next roadmap candidate only; architecture/planning **NOT authorized now**; implementation **NOT authorized**
-6. **NOT authorized:** PK-2B architecture/planning now, PK-2B/PK-2C implementation, PK-3..PK-6 implementation, offline credential login, returns/refunds, G14 (ABORTED), OBS-C, PROV implementation, E-2 real POSIX evidence, UI-B.1, UI-B2, P5-F, recapture, deploy, runtime activation, callable invocation, production access, browser/Emulator UAT, global Flowbite (A-1) fix, stash operations, Packet R/C/U, broader Packet 5 closure, docs commit/push without separate authorization
-7. Do not automatically start another packet
+Do **not** start Codex from the current dirty worktree. Do **not** start implementation. Do **not** send the final G-D1/G-D2/G-D3/G-D5 Gemini bundle. Do **not** start Application Integration.
 
-**Not active:** PK-2B, PK-2C, PROV, UI-B.1, UI-B2, P5-F, recapture, or any new feature packet.
+**Next implementation action:** NONE — NOT AUTHORIZED.
+
+Do **not** stage/commit/push docs without that separate authorization.
+
+1. R7-6 — **Post Claude Correction-003 / Pre Fresh Codex Architecture Rereview** at `a081bcb` — Claude correction-003 COMPLETE; B1–B9 claimed closed pending fresh Codex verification; 169/43 CLAUDE CANDIDATE; G-D6 OPTION_A DECIDED
+2. D3 — **CLOSED** at `a081bcb` (preserved)
+3. PK-2A — **`CLOSED_WITH_NOTES`** at `79ba840` (historical)
+4. PK-1 — **`CLOSED_WITH_NOTES`** at `513b198` (preserved)
+5. Packet 5 — **NOT CLOSED**
+6. G14 — **ABORTED**
+7. **NOT authorized:** R7-6 implementation, Application Integration, final G-D1/G-D2/G-D3/G-D5 Gemini bundle, PK-2C..PK-6 implementation, offline credential login, returns/refunds, G14 (ABORTED), OBS-C, PROV implementation, E-2 real POSIX evidence, UI-B.1, UI-B2, P5-F, recapture, deploy, runtime activation, callable invocation, production access, stash operations, Packet R/C/U, broader Packet 5 closure, docs commit/push without separate authorization
+8. Closed-gate reopen: Row28/Row30/D1/D3/Row32 = NO
+9. Do not automatically start implementation or Codex from this dirty worktree
+
+**Not active:** R7-6 implementation, Application Integration, PK-2C, PROV, UI-B.1, UI-B2, P5-F, recapture, or any new feature packet.
 
 ## Reminders
 
 - `stash@{0}` — do not touch (`7d03cfec7ba52ff7e25b7e175ca190efc258d874`)
-- `getShiftCloseCaseFigures` (Packet S) is deployed live but **no callable invocation was performed**; N-FINAL-01: selected-run figures are not final settlement truth — future UI/copy must not present them as reconciled or final without a separate backend contract
+- ENTRY_STORE remains `PARALLEL_FOR_RECORD_FRESHNESS_ONLY`; no writer; no initializer retirement for R7-6
+- Authoritative historical reprint VAT: suppressed. Do not present current VAT configuration as proven sale-time VAT
+- `getShiftCloseCaseFigures` (Packet S) is deployed live but **no callable invocation was performed**; N-FINAL-01: selected-run figures are not final settlement truth
 - UI-C adds the manager Acknowledge/Resolve **action** surface; the `resolveShiftCloseAlert` callable (P5-E, already live) is the only mutation boundary — **no callable invocation was performed** in UI-C
-- Retry authority is machine-owned; same-scope + current-source-binding required; scope-change abandons retry chains; no auto-retry
-- A-1 remains an accepted deferred global/library Flowbite modal focus-containment NOTE — not worsened by UI-C, not fixed here
-- Repository-wide lint remains known unrelated debt; targeted ten-file ESLint passed — not a clean repo-wide lint pass
-- No real shift close has been exercised end-to-end through the full P5-C/P5-D/P5-E pipeline on natural production data; UI-C does not prove backend settlement
-- PK-2A browser/Emulator UAT and deployment remain not performed; do not invent runtime evidence
-- **Billing (O-15) — Completed with notes, 2026-07-20:** Owner completed the paid-account upgrade, THB 25 Owner-accepted / Owner-managed budget; billing account/linkage/`billingEnabled`/IAM independently verified; specific paid-upgrade status remains Owner-attested (CLI cannot distinguish it from a free-trial state); no engineering action currently pending
+- A-1 remains an accepted deferred global/library Flowbite modal focus-containment NOTE
+- No real shift close has been exercised end-to-end through the full P5-C/P5-D/P5-E pipeline on natural production data
+- **Billing (O-15) — Completed with notes, 2026-07-20:** Owner completed the paid-account upgrade, THB 25 Owner-accepted / Owner-managed budget; no engineering action currently pending

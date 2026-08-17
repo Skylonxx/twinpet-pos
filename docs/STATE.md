@@ -6,36 +6,70 @@
 |-------|-------|
 | Repo root | `C:/Users/Narachat/twinpet-pos` |
 | Branch | `main` |
-| HEAD (code) | determined from live Git — run `git rev-parse HEAD` |
-| origin/main | determined from live Git — run `git rev-parse origin/main` |
-| Verified baseline entering this reconciliation | `79ba840ab6e01ee1a5fff6c0094104c25d754668` (`feat(pos): harden offline boot and session gating`) |
-| PK-2A code commit | `79ba840ab6e01ee1a5fff6c0094104c25d754668` |
+| HEAD (code) | `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab` |
+| origin/main | `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab` |
+| live remote main | `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab` |
+| Current baseline | `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab` (`feat(pos): add trusted orchestration owner enforcement`) |
+| D3 closure commit | `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab` |
+| PK-2A code commit (historical) | `79ba840ab6e01ee1a5fff6c0094104c25d754668` |
 | PK-2A parent | `23f51554f6a9e31bb7232a38cb9721c40f630566` |
 | PK-1 final HEAD | `513b198a30a1af72151ab6a8c0976799871529b8` |
 | Ahead/behind | determined from live Git — run `git status -sb` |
 
 ## Current Phase
 
-    PK2A_CLOSED_WITH_NOTES / POST_PK2A_DOCS_RECONCILIATION
-    P1 Packet 5 / PK-2A Boot / Session Gating and Offline Blocker — Docs Reconciliation.
-    PK2A_CODE_IMPLEMENTATION_STATUS: CLOSED_WITH_NOTES at 79ba840ab6e01ee1a5fff6c0094104c25d754668
-    (feat(pos): harden offline boot and session gating; parent 23f5155).
-    Codex: PASS (MATERIAL_FINDING_COUNT: 0).
-    AGY: PASS (MATERIAL_FINDING_COUNT: 0).
-    Exact 11-file code commit/push verified; HEAD == origin/main == remote main.
+    R7_6_POST_CLAUDE_CORRECTION_003 / PRE_FRESH_CODEX_ARCHITECTURE_REREVIEW
+    P1 Packet 5 / PK-2B / R7 / R7-6 — all-history order / receipt freshness.
+    Corrected bounded scope: Sales History record freshness and receipt authority.
+    BASELINE: a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab
+    D3_STATUS: CLOSED at a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab
+    CODEX_ARCHITECTURE_REREVIEW_003: BLOCK / GEMINI REDECISION REQUIRED (historical; not a rereview of correction-003)
+    CLAUDE_CORRECTION_003_STATUS: COMPLETE
+    CLAUDE_CORRECTION_003_ARCHITECTURE_RESULT: B1-B9 CLAIMED CLOSED BY CLAUDE SYSTEM ARCHITECT
+    CODEX_ACCEPTANCE_STATUS: NOT YET VERIFIED
+    CODEX_STATUS: NOT YET RUN ON CORRECTION-003
+    G-D6: DECIDED OPTION_A (VAT breakdown suppressed; no snapshot; no backfill; no legal/tax conclusion)
+    FINAL_R7_6_GEMINI_DECISION_COUNT: 5
+    G-D1/G-D2/G-D3/G-D5: OPEN
+    B1-B9: CLAUDE_CORRECTION_003_CLAIMS_CLOSED / PENDING_FRESH_CODEX_VERIFICATION
+    CLAUDE_CANDIDATE_TEST_CONTRACT: 169
+    CLAUDE_CANDIDATE_FILE_SURFACE: 43
+    TEST_AND_FILE_SURFACE_STATUS: CLAUDE CANDIDATE / NOT YET CODEX-ACCEPTED / NOT IMPLEMENTATION-FROZEN
+    prior 120 tests: NOT FROZEN
+    prior 41 files: NOT FROZEN
+    R7_6_IMPLEMENTATION_READY_FINAL_STATUS: NO — PENDING FRESH CODEX ARCHITECTURE REREVIEW
+    R7_6_IMPLEMENTATION_AUTHORIZED: NO
+    APPLICATION_INTEGRATION: STILL_NOT_READY / NOT AUTHORIZED
     PK1_STATUS: CLOSED_WITH_NOTES (preserved). PK1_REOPEN_AUTHORIZED: NO.
     PACKET_5_STATUS: NOT_CLOSED. BROADER_PACKET_5_CLOSURE_AUTHORIZED: NO.
     G14_ACTIVATION_TRACK_STATUS: ABORTED.
-    PK-2A notes: browser UAT not performed; Emulator UAT not performed;
-    deployment/production not performed.
-    Next roadmap candidate: PK-2B — Cart Snapshot Store + Restore/Conflict Logic —
-    PK2B.ARCHITECTURE_PLANNING_AUTHORIZED_NOW: NO;
-    PK2B.IMPLEMENTATION_AUTHORIZED: NO.
     Active implementation packet: NONE.
-    Passive natural-traffic observation remains authorized in parallel, read-only only,
-    when a natural event exists.
+    NEXT_WORKFLOW_ACTION: Return seven-doc reconciliation to ChatGPT; obtain separate commit/push authority if approved; return to accepted clean baseline; ONLY THEN fresh Codex rereview of correction-003. Do not start Codex from this dirty worktree.
+    Next implementation action: NONE — NOT AUTHORIZED.
 
-## P1 Packet 5 / PK-2A Boot / Session Gating and Offline Blocker (CLOSED_WITH_NOTES)
+## P1 Packet 5 / PK-2B / R7 / R7-6 (CURRENT)
+
+| Field | Value |
+|-------|-------|
+| Status | **Post Claude Correction-003 / Pre Fresh Codex Architecture Rereview** — not implementation-ready |
+| Roadmap label | R7-6 — all-history order / receipt freshness |
+| Bounded scope | Sales History record freshness and receipt authority |
+| Baseline | `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab` |
+| D3 | **CLOSED** at `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab` |
+| Codex rereview 003 | `BLOCK / GEMINI REDECISION REQUIRED` (historical; not a rereview of correction-003) |
+| Claude correction-003 | **COMPLETE** — B1–B9 claimed closed by Claude architecture correction |
+| Codex acceptance | **NOT YET VERIFIED** / **NOT YET RUN ON CORRECTION-003** |
+| G-D6 | **DECIDED OPTION_A** |
+| Gemini set | 5 decisions: G-D1/G-D2/G-D3/G-D5 OPEN; G-D6 DECIDED OPTION_A |
+| B1–B9 | **CLAUDE_CORRECTION_003_CLAIMS_CLOSED / PENDING_FRESH_CODEX_VERIFICATION** — not final CLOSED |
+| Candidate package | **169 tests / 43 files** — CLAUDE CANDIDATE / NOT YET CODEX-ACCEPTED / NOT IMPLEMENTATION-FROZEN |
+| Prior 120 tests / 41 files | **NOT FROZEN** |
+| Implementation | **NOT AUTHORIZED** |
+| Application Integration | **STILL_NOT_READY / NOT AUTHORIZED** |
+| ENTRY_STORE | `PARALLEL_FOR_RECORD_FRESHNESS_ONLY` |
+| Closed-gate reopen | Row28/Row30/D1/D3/Row32 = **NO** |
+
+## P1 Packet 5 / PK-2A Boot / Session Gating and Offline Blocker (HISTORICAL — CLOSED_WITH_NOTES)
 
 | Field | Value |
 |-------|-------|
@@ -82,11 +116,12 @@
 
 ## Working Tree
 
-- PK-2A code commit (binding): `79ba840` (`feat(pos): harden offline boot and session gating`)
+- Current baseline (binding): `a081bcb` (`feat(pos): add trusted orchestration owner enforcement`) — D3 CLOSED
+- PK-2A code commit (historical): `79ba840` (`feat(pos): harden offline boot and session gating`)
 - Packet S implementation commit (historical): `e9363e3` (Packet 5 / UI-B2 / Packet S — getShiftCloseCaseFigures)
 - Packet S docs/tracker closure commit (historical): `c6bdbd0`
 - For current working-tree state, use live Git: `git status --short --untracked-files=all`
-- This PK-2A docs reconciliation entered with a clean working tree and empty staged area at the verified baseline above; docs edits are left uncommitted (`DOC_COMMIT_PUSH_AUTHORIZED: NO`)
+- This post-correction-003 reconciliation continues from the Owner-interrupt seven-doc dirty worktree at `a081bcb`; docs remain uncommitted (`DOC_COMMIT_PUSH_AUTHORIZED: NO`)
 
 ## Stash
 
@@ -168,37 +203,40 @@ All **CLOSED** where applicable.
 
 | Hash | Message |
 |------|---------|
+| `a081bcb` | feat(pos): add trusted orchestration owner enforcement — **D3 CLOSED** |
+| `60fae8c` | feat(pos): add generation epoch identity producer |
+| `01e4d26` | feat(pos): harden sale submission capability integrity |
+| `d657f59` | feat(pos): harden sale submission authorization lifetime |
+| `cdf2413` | test(pos): add sale submission writer confinement contract |
+| `b01e0ed` | feat(pos): harden sale submission evidence authenticity |
+| `96cfb7f` | docs: reconcile pk-2a closure |
 | `79ba840` | feat(pos): harden offline boot and session gating — **PK-2A CODE CLOSED_WITH_NOTES** |
 | `c6bdbd0` | docs(pos): reconcile packet s closure — **PACKET S DOCS/TRACKER RECONCILIATION CLOSED** |
 | `e9363e3` | feat(pos): add shift close case figures callable — **PACKET S TECHNICALLY CLOSED WITH NONBLOCKING NOTES** |
-| `5654362` | docs(pos): close packet 5 ui-c manager adjudication — **UI-C docs CLOSED** |
-| `3ef4d01` | feat(pos): add shift close manager adjudication surface — **UI-C CLOSED** |
-| `70a23f9` | docs(pos): close client ui-b reconciliation — **UI-B docs CLOSED** |
-| `490f4cf` | feat(pos): add shift close alert review detail — **Client-UI-B CLOSED** |
-| `4614e70` | feat(pos): add shift close review queue — **Client-UI-A CLOSED** |
-| `afacd3b` | feat(pos): add shift close alert adjudication callable — **P5-E LIVE** |
 
 ## Next Recommended Block
 
-    PK2A_CLOSED_WITH_NOTES → PK2A_DOCS_RECONCILIATION → READY_FOR_POST_PK2A_ROADMAP_AUTHORIZATION_DECISION
+    R7_6_POST_CLAUDE_CORRECTION_003 → CHATGPT_DOCS_REVIEW → SEPARATE_COMMIT_PUSH_AUTH → ACCEPTED_CLEAN_BASELINE → FRESH_CODEX_ARCHITECTURE_REREVIEW
 
-1. PK-2A Boot / Session Gating — **`CLOSED_WITH_NOTES`** at `79ba840`
-2. PK-1 Offline Shift Session — **`CLOSED_WITH_NOTES`** at `513b198` (preserved)
-3. Packet 5 — **`NOT_CLOSED`**; broader closure **NOT AUTHORIZED**
-4. G14 — **`ABORTED`**
-5. **Next action:** Return PK-2A docs reconciliation report to ChatGPT / Gemini for docs commit/push authorization decision and post-PK-2A roadmap decision. `PK2B.ARCHITECTURE_PLANNING_AUTHORIZED_NOW: NO`. `PK2B.IMPLEMENTATION_AUTHORIZED: NO`.
-6. Passive read-only observation may occur only when natural production traffic provides a real event; no agent-triggered activity is authorized
+1. R7-6 — **Post Claude Correction-003 / Pre Fresh Codex Architecture Rereview** at `a081bcb` — Claude correction-003 COMPLETE; B1–B9 claimed closed pending fresh Codex verification; 169/43 CLAUDE CANDIDATE / NOT YET CODEX-ACCEPTED; G-D6 OPTION_A DECIDED; not implementation-ready
+2. D3 — **CLOSED** at `a081bcb` (do not reopen)
+3. PK-2A Boot / Session Gating — **`CLOSED_WITH_NOTES`** at `79ba840` (historical)
+4. PK-1 Offline Shift Session — **`CLOSED_WITH_NOTES`** at `513b198` (preserved)
+5. Packet 5 — **`NOT_CLOSED`**; broader closure **NOT AUTHORIZED**
+6. G14 — **`ABORTED`**
+7. **NEXT_WORKFLOW_ACTION:** Return this seven-doc reconciliation to ChatGPT; obtain separate commit/push authority if approved; return to an accepted clean baseline; ONLY THEN a genuinely fresh Codex architecture rereview of correction-003. Do not start Codex from this dirty worktree. Implementation **NOT AUTHORIZED**. Application Integration **STILL_NOT_READY / NOT AUTHORIZED**.
+8. Passive read-only observation may occur only when natural production traffic provides a real event; no agent-triggered activity is authorized
 
 ## Hard Boundaries
 
 - No production/emulator data mutation; no synthetic events; no manual invocation of deployed functions (including `resolveShiftCloseAlert`)
 - No `shifts.expected*` mutation; no FIFO/stock/credit/settlement writes
-- PK-2B architecture/planning now — NOT AUTHORIZED; PK-2B/PK-2C implementation — NOT AUTHORIZED
+- R7-6 implementation — NOT AUTHORIZED; Application Integration — NOT AUTHORIZED
+- Row28 / Row30 / D1 / D3 / Row32 reopen — NO
+- ENTRY_STORE writer / initializer retirement for R7-6 — NO
+- PK-2C implementation — NOT AUTHORIZED
 - UI-B.1 / UI-B2 / P5-F / recapture — NOT AUTHORIZED
-- PaymentModal / checkout/payment write-path / navigation / global keyboard — NOT AUTHORIZED
 - Firestore rules/index/functions deploy, deploy/runtime activation — NOT AUTHORIZED
-- Browser responsive UAT / Emulator runtime UAT — NOT performed / NOT authorized here
-- Global Flowbite focus fix (A-1) — NOT AUTHORIZED (accepted deferred note)
 - Docs commit/push — NOT AUTHORIZED by this pass (`DOC_COMMIT_PUSH_AUTHORIZED: NO`)
 - Next implementation (any candidate) — NOT AUTHORIZED by this pass
 - `stash@{0}` untouched (`7d03cfec7ba52ff7e25b7e175ca190efc258d874`)

@@ -1,9 +1,9 @@
 # Twinpet POS — Task Tracker
 
-> Last reconciled: 2026-08-09
-> Current repository HEAD: determined from live Git — run `git rev-parse HEAD`
-> Verified baseline entering this reconciliation: `79ba840ab6e01ee1a5fff6c0094104c25d754668` (`feat(pos): harden offline boot and session gating`)
-> PK-2A code commit (binding): `79ba840ab6e01ee1a5fff6c0094104c25d754668`
+> Last reconciled: 2026-08-17
+> Current repository HEAD: `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab` (`feat(pos): add trusted orchestration owner enforcement`)
+> D3 closure commit (binding): `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab`
+> PK-2A code commit (historical): `79ba840ab6e01ee1a5fff6c0094104c25d754668`
 > PK-2A parent: `23f51554f6a9e31bb7232a38cb9721c40f630566`
 > PK-1 final HEAD (binding, unchanged): `513b198a30a1af72151ab6a8c0976799871529b8`
 > PK-1 parent: `5e9b52bbbb8892d6c5dcf3453c3332724af7763b` (`feat(pos): enable offline shift open with durable intent and reconciliation`)
@@ -14,9 +14,38 @@
 
 ---
 
-## P1 Offline / Sync Resiliency — Packet 5 / PK-2A Boot / Session Gating and Offline Blocker — Docs Reconciliation (this pass)
+## P1 Offline / Sync Resiliency — Packet 5 / PK-2B / R7 / R7-6 — Post Claude Correction-003 Master Plan Reconciliation (this pass)
 
-**Status: `PK2A_CODE_IMPLEMENTATION_STATUS: CLOSED_WITH_NOTES`** — docs-only reconciliation of verified PK-2A code closure; leave uncommitted (`DOC_COMMIT_PUSH_AUTHORIZED: NO`).
+**Status: `R7-6 / Post Claude Correction-003 / Pre Fresh Codex Architecture Rereview`** — docs-only current-state correction after the formal Claude correction-003 report. Leave uncommitted (`DOC_COMMIT_PUSH_AUTHORIZED: NO`).
+
+- [x] Baseline recorded — HEAD = origin/main = live remote main = `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab`
+- [x] `ROADMAP_LABEL: R7-6 — all-history order / receipt freshness`
+- [x] `CORRECTED_BOUNDED_SCOPE: Sales History record freshness and receipt authority`
+- [x] `D3_STATUS: CLOSED` at `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab`
+- [x] Codex rereview-003 recorded — `BLOCK / GEMINI REDECISION REQUIRED` (historical; not a rereview of correction-003)
+- [x] G-D6 recorded — `DECIDED OPTION_A` (VAT breakdown suppressed; no snapshot; no backfill; no legal/tax conclusion). Do not reopen.
+- [x] Gemini decision set recorded as exactly five — G-D1/G-D2/G-D3/G-D5 `OPEN`; G-D6 `DECIDED OPTION_A`
+- [x] `CLAUDE_CORRECTION_003_STATUS: COMPLETE`
+- [x] B1–B9 recorded as `CLAUDE_CORRECTION_003_CLAIMS_CLOSED / PENDING_FRESH_CODEX_VERIFICATION` (not final CLOSED)
+- [x] Claude candidate package recorded — 169 tests / 43 files = CLAUDE CANDIDATE / NOT YET CODEX-ACCEPTED / NOT IMPLEMENTATION-FROZEN
+- [x] Prior 120 tests / 41 files remain `NOT FROZEN`
+- [x] Closed-gate non-reopen recorded — Row28/Row30/D1/D3/Row32 = `NO`
+- [x] `ENTRY_STORE_RELATION: PARALLEL_FOR_RECORD_FRESHNESS_ONLY`
+- [x] Application Integration recorded — `STILL_NOT_READY` / `NOT AUTHORIZED`
+- [x] R7-6 implementation recorded — `NOT AUTHORIZED` / not implementation-ready
+- [x] Previous Owner-interrupt (Grok-001) retained as historical (it correctly wrote conservative state before the formal correction-003 report existed)
+
+**CURRENT_STATUS:** Claude correction-003 formal report COMPLETE. B1-B9 claimed closed by Claude architecture correction. 169-test / 43-file candidate package produced. Fresh Codex architecture rereview still required. No implementation authority.
+
+**NEXT_WORKFLOW_ACTION:** Return the seven-doc reconciliation to ChatGPT; obtain separate exact seven-doc commit/push authority if approved; return the repository to an accepted clean baseline; ONLY THEN run a genuinely fresh Codex architecture rereview of correction-003. Do not start Codex from this dirty worktree. **Next implementation action:** NONE — NOT AUTHORIZED.
+
+## P1 Offline / Sync Resiliency — Packet 5 / PK-2B / R7 / R7-6 — Master Plan Interrupt (historical)
+
+**Status: HISTORICAL** — Owner-interrupt docs-only write of conservative R7-6 state before the formal Claude correction-003 report existed. Superseded as current phase by the post-correction-003 reconciliation above. That interrupt recorded Claude correction-003 as NOT EXECUTED and B1–B9 as OPEN/PENDING awaiting Claude correction. Those current-state claims are no longer current.
+
+## P1 Offline / Sync Resiliency — Packet 5 / PK-2A Boot / Session Gating and Offline Blocker — Docs Reconciliation (historical)
+
+**Status: `PK2A_CODE_IMPLEMENTATION_STATUS: CLOSED_WITH_NOTES`** — historical docs reconciliation of verified PK-2A code closure (superseded as current phase by R7-6, then by post-correction-003 reconciliation).
 
 - [x] `PK2A_CODE_IMPLEMENTATION_STATUS: CLOSED_WITH_NOTES` at `79ba840ab6e01ee1a5fff6c0094104c25d754668`
 - [x] Code commit recorded — `feat(pos): harden offline boot and session gating`
@@ -38,7 +67,7 @@
 - [x] `PK2B.ARCHITECTURE_PLANNING_AUTHORIZED_NOW: NO`
 - [x] `PK2B.IMPLEMENTATION_AUTHORIZED: NO`
 
-**Current task:** complete this exact 7-doc PK-2A closure reconciliation and return the report to ChatGPT / Gemini for docs commit/push authorization decision and post-PK-2A roadmap decision. Do **not** mark PK-2B active. Do **not** start PK-2B architecture planning or implementation. Do not reopen PK-1. Preserved holds remain (deploy, production access, browser/Emulator UAT, stash operations, G14 ABORTED, OBS-C, broader Packet 5 closure, offline credential login, returns/refunds, PaymentModal/checkout write-path, PK-2C..PK-6 implementation).
+**Historical note:** PK-2A code remains `CLOSED_WITH_NOTES` at `79ba840`. Do not reopen PK-1. Preserved holds remain (deploy, production access, stash operations, G14 ABORTED, OBS-C, broader Packet 5 closure, offline credential login, returns/refunds, PK-2C..PK-6 implementation). R7-6 implementation is separately **NOT AUTHORIZED**.
 
 ## P1 Offline / Sync Resiliency — Packet 5 / PK-1 Offline Shift Session — Docs Reconciliation (historical)
 
@@ -198,12 +227,13 @@
 
 ### Next step
 
-1. **PK-2A Boot / Session Gating and Offline Blocker — `CLOSED_WITH_NOTES`** at `79ba840ab6e01ee1a5fff6c0094104c25d754668` — code closed; this docs reconciliation left uncommitted
-2. **PK-1 Offline Shift Session — `CLOSED_WITH_NOTES`** at `513b198a30a1af72151ab6a8c0976799871529b8` — do not reopen
-3. **`PACKET_5_STATUS: NOT_CLOSED`** — broader Packet 5 closure **NOT AUTHORIZED**; PK-2A closure ≠ Packet 5 closure
-4. **Next roadmap candidate: PK-2B — Cart Snapshot Store + Restore/Conflict Logic** — `PK2B.ARCHITECTURE_PLANNING_AUTHORIZED_NOW: NO`; `PK2B.IMPLEMENTATION_AUTHORIZED: NO`; await Gemini/Owner post-PK-2A roadmap decision
-5. **Active implementation packet: NONE.** Passive natural-traffic observation may occur only when a real natural business event exists, read-only only; no agent-triggered activity is authorized
-6. **NOT authorized:** PK-2B architecture/planning now, PK-2B/PK-2C implementation, PK-3..PK-6 implementation, offline credential login, returns/refunds, G14 (ABORTED), OBS-C, UI-B.1, UI-B2, P5-F, recapture, deploy, runtime activation, callable invocation, production access, browser/Emulator UAT, global Flowbite (A-1) fix, stash operations, Packet R/C/U, broader Packet 5 closure, docs commit/push without separate authorization
-7. Do not automatically start another packet
+1. **R7-6 / Post Claude Correction-003 / Pre Fresh Codex Architecture Rereview** at `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab` — Claude correction-003 COMPLETE; B1–B9 `CLAUDE_CORRECTION_003_CLAIMS_CLOSED / PENDING_FRESH_CODEX_VERIFICATION`; 169/43 CLAUDE CANDIDATE / NOT YET CODEX-ACCEPTED; G-D6 OPTION_A DECIDED; not implementation-ready
+2. **D3 — `CLOSED`** at `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab` — do not reopen
+3. **PK-2A Boot / Session Gating — `CLOSED_WITH_NOTES`** at `79ba840ab6e01ee1a5fff6c0094104c25d754668` — historical
+4. **PK-1 Offline Shift Session — `CLOSED_WITH_NOTES`** at `513b198a30a1af72151ab6a8c0976799871529b8` — do not reopen
+5. **`PACKET_5_STATUS: NOT_CLOSED`** — broader Packet 5 closure **NOT AUTHORIZED**
+6. **NEXT_WORKFLOW_ACTION:** Return this seven-doc reconciliation to ChatGPT; obtain separate commit/push authority if approved; return to an accepted clean baseline; ONLY THEN fresh Codex architecture rereview of correction-003. Do not start Codex from this dirty worktree. **Next implementation action:** NONE — NOT AUTHORIZED. Application Integration: `STILL_NOT_READY` / NOT AUTHORIZED
+7. **NOT authorized:** R7-6 implementation, Application Integration, final G-D1/G-D2/G-D3/G-D5 Gemini bundle, PK-2C..PK-6 implementation, offline credential login, returns/refunds, G14 (ABORTED), OBS-C, UI-B.1, UI-B2, P5-F, recapture, deploy, runtime activation, callable invocation, production access, stash operations, Packet R/C/U, broader Packet 5 closure, docs commit/push without separate authorization
+8. Do not automatically start implementation or Codex from the current dirty worktree
 
-**Not active:** PK-2B, PK-2C, PK-3..PK-6, UI-B.1, UI-B2, P5-F, recapture, or any new feature packet.
+**Not active:** R7-6 implementation, Application Integration, PK-2C, PK-3..PK-6, UI-B.1, UI-B2, P5-F, recapture, or any new feature packet.

@@ -1,18 +1,154 @@
-# Latest Report — P1 Offline / Sync Packet 5 — PK-2A Docs Reconciliation
+# Latest Report — P1 Offline / Sync Packet 5 — PK-2B / R7 / R7-6 Post Claude Correction-003 Master Plan Reconciliation
 
-> Date: 2026-08-09
-> Current repository HEAD: determined from live Git — run `git rev-parse HEAD`
-> Verified baseline entering this reconciliation: `79ba840ab6e01ee1a5fff6c0094104c25d754668` (`feat(pos): harden offline boot and session gating`)
-> Status: **PK-2A Boot / Session Gating and Offline Blocker — `CLOSED_WITH_NOTES` (code).** Code commit `79ba840ab6e01ee1a5fff6c0094104c25d754668` (parent `23f51554f6a9e31bb7232a38cb9721c40f630566`). Codex implementation review `PASS` (`MATERIAL_FINDING_COUNT: 0`). AGY UI/UX review `PASS` (`MATERIAL_FINDING_COUNT: 0`). Exact 11-file code commit/push verified. `PK1_STATUS: CLOSED_WITH_NOTES` (preserved). `PACKET_5_STATUS: NOT_CLOSED`. `G14_ACTIVATION_TRACK_STATUS: ABORTED`. Browser/Emulator UAT not performed; deployment/production not performed. Next roadmap candidate: PK-2B — Cart Snapshot Store + Restore/Conflict Logic — architecture planning **NOT authorized now**; implementation **NOT authorized**. This pass is docs-only and left uncommitted (`DOC_COMMIT_PUSH_AUTHORIZED: NO`).
+> Date: 2026-08-17
+> Current repository HEAD: `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab` (`feat(pos): add trusted orchestration owner enforcement`)
+> Status: **R7-6 / Post Claude Correction-003 / Pre Fresh Codex Architecture Rereview.** D3 CLOSED at `a081bcb`. Claude correction-003 formal report **COMPLETE**. B1–B9 claimed closed by Claude architecture correction; **PENDING FRESH CODEX VERIFICATION** (not final CLOSED). Candidate package **169 tests / 43 files** = CLAUDE CANDIDATE / NOT YET CODEX-ACCEPTED / NOT IMPLEMENTATION-FROZEN. G-D6 DECIDED OPTION_A. Gemini decision set = 5 (G-D1/G-D2/G-D3/G-D5 OPEN; G-D6 DECIDED). Codex has **not** yet run on correction-003. R7-6 is **not** implementation-ready. Implementation **NOT AUTHORIZED**. Application Integration **STILL_NOT_READY / NOT AUTHORIZED**. This pass is docs-only and left uncommitted (`DOC_COMMIT_PUSH_AUTHORIZED: NO`).
 
 ## 0. This pass's reports
+
+- Reconciliation prompt: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Prompt\twinpet-pk2b-r7-r7-6-master-plan-post-claude-correction003-reconciliation-grok-002.md`
+- Formal Claude correction-003 report: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Claude\twinpet-p1-offline-sync-packet-5-pk2b-r7-r7-6-claude-sa-bounded-architecture-correction-003.md`
+- Previous Grok interrupt report (now stale on current-state only): `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Cursor\twinpet-p1-offline-sync-packet-5-pk2b-r7-r7-6-master-plan-interrupt-grok-001.md`
+- Gemini G-D6 decision: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Prompt\gemini-code-1786930987132.md`
+- This reconciliation report: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Cursor\twinpet-p1-offline-sync-packet-5-pk2b-r7-r7-6-master-plan-post-claude-correction003-reconciliation-grok-002.md`
+
+## 1. Current R7-6 facts
+
+| Field | Value |
+|-------|-------|
+| CURRENT_GATE | R7-6 / Post Claude Correction-003 / Pre Fresh Codex Architecture Rereview |
+| Roadmap label | R7-6 — all-history order / receipt freshness |
+| Corrected bounded scope | Sales History record freshness and receipt authority |
+| Baseline | `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab` |
+| D3 | CLOSED at `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab` |
+| Codex rereview 003 | BLOCK / GEMINI REDECISION REQUIRED (historical; not a rereview of correction-003) |
+| CLAUDE_CORRECTION_003_STATUS | COMPLETE |
+| CODEX_STATUS | NOT YET RUN ON CORRECTION-003 |
+| G-D6 | DECIDED OPTION_A |
+| Candidate tests | 169 — CLAUDE CANDIDATE / NOT YET CODEX-ACCEPTED / NOT IMPLEMENTATION-FROZEN |
+| Candidate files | 43 — CLAUDE CANDIDATE / NOT YET CODEX-ACCEPTED / NOT IMPLEMENTATION-FROZEN |
+| Implementation | NOT AUTHORIZED / not implementation-ready |
+| Application Integration | STILL_NOT_READY / NOT AUTHORIZED |
+
+**CURRENT_STATUS:** Claude correction-003 formal report COMPLETE. B1-B9 claimed closed by Claude architecture correction. 169-test / 43-file candidate package produced. Fresh Codex architecture rereview still required. No implementation authority.
+
+**Authoritative historical reprint (G-D6 OPTION_A):** VAT breakdown suppressed. Do not present current VAT configuration as proven sale-time VAT. No VAT snapshot. No VAT backfill. No legal/tax conclusion. Do not reopen.
+
+## 2. Gemini decision set (exactly five)
+
+| ID | Subject | Status |
+|----|---------|--------|
+| R7-6-G-D1 | durable historyRev authority/schema | OPEN / PENDING FINAL R7-6 GEMINI DECISION BUNDLE |
+| R7-6-G-D2 | unqualified receipt policy including PaymentModal | OPEN / PENDING FINAL R7-6 GEMINI DECISION BUNDLE |
+| R7-6-G-D3 | corrected narrow/broad scope | OPEN / PENDING FINAL R7-6 GEMINI DECISION BUNDLE |
+| R7-6-G-D5 | legacy authoritative-history transition | OPEN / PENDING FINAL R7-6 GEMINI DECISION BUNDLE |
+| R7-6-G-D6 | historical authoritative-receipt VAT behavior | DECIDED OPTION_A |
+
+`FINAL_R7_6_GEMINI_DECISION_COUNT: 5`. Exact-four is no longer the current-state claim. Do not send the final G-D1/G-D2/G-D3/G-D5 Gemini bundle now.
+
+## 3. Codex B1–B9 — CLAUDE_CORRECTION_003_CLAIMS_CLOSED / PENDING_FRESH_CODEX_VERIFICATION
+
+Do **not** write B1–B9 as final CLOSED. Do not claim R7-6 implementation-ready. Do not treat 169/43 as Codex-accepted or implementation-frozen.
+
+| ID | Claude candidate architecture (not Codex-accepted) | Status |
+|----|-----------------------------------------------------|--------|
+| B1 | `asyncOrders` `voidAnomaly` / `voidAnomalyAt` create reservation required; update mutation/add/clear already denied at HEAD by `voidIntentChangesOnly().affectedKeys().hasOnly(...)`; literals `missing_canonical` / `canonical_ineligible`; malformed/present marker fails closed by presence guard | Claude claims CLOSED; PENDING FRESH CODEX VERIFICATION |
+| B2 | eligible first-void canonical statuses `completed` / `pending_payment`; `voided` / unexpected status => zero business writes + terminal anomaly; no double reversal | Claude claims CLOSED; PENDING FRESH CODEX VERIFICATION |
+| B3 | `getDocsFromServer(...)` per payment query chunk of 10; per-generation latch/state machine; all-chunk success before `SERVER_OBSERVED` | Claude claims CLOSED; PENDING FRESH CODEX VERIFICATION |
+| B4 | canonical data signature `docId` / `status` / `updatedAtKey` / `total` / `historyRevKey`; same-ID recreate invalidates auxiliary without empty ID-set snapshot | Claude claims CLOSED; PENDING FRESH CODEX VERIFICATION |
+| B5 | Sales History list items/payments remain display-only; do not contribute to row CURRENT; do not authorize receipt; only coherent `getOrderReceipt` envelope can authorize receipt | Claude claims CLOSED; PENDING FRESH CODEX VERIFICATION |
+| B6 | strict nested `productSnap` validation and finite numeric validation; malformed legacy receipt => typed refusal / UNPROVEN | Claude claims CLOSED; PENDING FRESH CODEX VERIFICATION |
+| B7 | coherent envelope `payments[]` rendering: sum all cash rows, no `.find()`; same-method duplicates preserved; change rendered when `changeAmt > 0` even without cash; partial credit / pending-payment; payment consistency gate; `src/lib/documents/formatters.ts` enters candidate scope | Claude claims CLOSED; PENDING FRESH CODEX VERIFICATION |
+| B8 | server-source presentation fields where repository supports them; suppress unsupported optional fields; G-D6 VAT suppression remains binding; no new product decision claimed by Claude | Claude claims CLOSED; PENDING FRESH CODEX VERIFICATION |
+| B9 | candidate counts **169 tests / 43 files** | Claude claims CLOSED; PENDING FRESH CODEX VERIFICATION |
+
+`prior 120 tests = NOT FROZEN`. `prior 41 files = NOT FROZEN`. Candidate 169 / 43 = CLAUDE CANDIDATE / NOT YET CODEX-ACCEPTED / NOT IMPLEMENTATION-FROZEN.
+
+## 4. Preserved accepted facts / closed gates
+
+Preserved: chronology/currentness split; corrected narrow R7-6 scope; row verdict separated from informational surface; MODEL B; process/hook-lifetime high-water only; no cross-restart high-water claim; ENTRY_STORE parallel for record freshness only; closed sale-submission island not reopened.
+
+```text
+ROW28_REOPEN_REQUIRED: NO
+ROW30_REOPEN_REQUIRED: NO
+D1_REOPEN_REQUIRED: NO
+D3_REOPEN_REQUIRED: NO
+ROW32_REOPEN_REQUIRED: NO
+ENTRY_STORE_RELATION: PARALLEL_FOR_RECORD_FRESHNESS_ONLY
+ENTRY_STORE_WRITER_REQUIRED_FOR_R7_6: NO
+INITIALIZER_RETIREMENT_REQUIRED_FOR_R7_6: NO
+POST_R7_6_APPLICATION_INTEGRATION_READINESS: STILL_NOT_READY
+APPLICATION_INTEGRATION_AUTHORIZED: NO
+```
+
+## 5. Next workflow
+
+```text
+NEXT_WORKFLOW_ACTION:
+Return the seven-doc reconciliation diff/report to ChatGPT for review.
+
+THEN:
+obtain separate authorization for exact seven-doc commit/push if approved.
+
+ONLY AFTER:
+repository returns to an accepted clean baseline,
+prepare/run a genuinely fresh Codex architecture rereview of Claude correction-003.
+
+DO NOT:
+start Codex from the current dirty worktree,
+start implementation,
+send G-D1/G-D2/G-D3/G-D5 final bundle,
+start Application Integration.
+```
+
+**Next implementation action:** NONE — NOT AUTHORIZED.
+
+Do not stage/commit/push docs without that separate authorization. Do not touch stash.
+
+---
+
+# Historical — Latest Report — P1 Offline / Sync Packet 5 — PK-2B / R7 / R7-6 Master Plan Interrupt
+
+> Date: 2026-08-17
+> Current repository HEAD at that pass: `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab`
+> Status: **HISTORICAL.** Owner-interrupt docs-only write of conservative R7-6 state **before** the formal Claude correction-003 report existed. That pass recorded Claude correction-003 as NOT EXECUTED and B1–B9 as OPEN/PENDING awaiting Claude correction. Those current-state claims are superseded by the post-correction-003 reconciliation above. G-D6 OPTION_A, five-decision set, closed-gate non-reopen, ENTRY_STORE parallel, and Application Integration STILL_NOT_READY remain binding and were preserved.
+
+## 0. Historical interrupt reports
+
+- Owner-interrupt prompt: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Prompt\twinpet-pk2b-r7-r7-6-master-plan-interrupt-grok-001.md`
+- Binding correction source then available: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Prompt\twinpet-pk2b-r7-r7-6-claude-sa-bounded-architecture-correction-003.md`
+- Codex rereview-003: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Codex\twinpet-p1-offline-sync-packet-5-pk2b-r7-r7-6-codex-architecture-rereview-003.md`
+- Gemini G-D6 decision: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Prompt\twinpet-pk2b-r7-r7-6-vat-redecision-and-bounded-correction-authorization-gemini-001.md` (decision recorded in `Prompt\gemini-code-1786930987132.md`)
+- Interrupt report: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Cursor\twinpet-p1-offline-sync-packet-5-pk2b-r7-r7-6-master-plan-interrupt-grok-001.md`
+
+## 1. Historical interrupt current-state (superseded)
+
+That interrupt correctly wrote conservative state because the formal Claude correction-003 report did not yet exist:
+
+- Claude correction-003: AUTHORIZED (strict read-only SA) / NOT EXECUTED
+- Codex B1–B9: OPEN / PENDING (not CLOSED)
+- Prior 120 tests / 41 files: NOT FROZEN
+- Next architecture action then: Resolve B1–B9 under G-D6 Option A, then fresh Codex rereview
+
+Those current-state claims are **no longer current**. G-D6 OPTION_A and the five-decision set were already recorded and remain binding.
+
+---
+
+# Historical — Latest Report — P1 Offline / Sync Packet 5 — PK-2A Docs Reconciliation
+
+> Date: 2026-08-09
+> Current repository HEAD at that pass: determined from live Git — run `git rev-parse HEAD`
+> Verified baseline entering that reconciliation: `79ba840ab6e01ee1a5fff6c0094104c25d754668` (`feat(pos): harden offline boot and session gating`)
+> Status: **PK-2A Boot / Session Gating and Offline Blocker — `CLOSED_WITH_NOTES` (code).** Historical. Superseded as current phase by R7-6 Master Plan reconciliation. Code commit `79ba840ab6e01ee1a5fff6c0094104c25d754668` (parent `23f51554f6a9e31bb7232a38cb9721c40f630566`). Codex implementation review `PASS` (`MATERIAL_FINDING_COUNT: 0`). AGY UI/UX review `PASS` (`MATERIAL_FINDING_COUNT: 0`). Exact 11-file code commit/push verified. `PK1_STATUS: CLOSED_WITH_NOTES` (preserved). `PACKET_5_STATUS: NOT_CLOSED`. `G14_ACTIVATION_TRACK_STATUS: ABORTED`. Browser/Emulator UAT not performed; deployment/production not performed. Historical next-roadmap wording (superseded): PK-2B architecture planning was then unauthorized. That pass was docs-only and left uncommitted.
+
+## 0. Historical PK-2A reports
 
 - Cursor Grok code commit/push: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Grok\twinpet-p1-offline-sync-packet-5-pk2a-code-commit-push-report.md`
 - Codex implementation review: `PASS` (material findings: 0) — accepted under Gemini `TWINPET-P1-OFFLINE-SYNC-PACKET-5-PK2A-POST-REVIEW-CLOSURE-GEMINI-001`
 - AGY UI/UX review: `PASS` (material findings: 0) — accepted under the same Gemini closure authority
 - Cursor Grok docs reconciliation: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Grok\twinpet-p1-offline-sync-packet-5-pk2a-docs-reconciliation-report.md`
 
-## 1. PK-2A closure facts
+## 1. Historical PK-2A closure facts
 
 | Field | Value |
 |-------|-------|
@@ -30,17 +166,17 @@ Implemented semantics (concise): provenance-aware active-shift boot read; unveri
 
 Closure notes (non-blocking for code closure): browser responsive UAT NOT performed; Emulator runtime UAT NOT performed; deployment NOT performed; production activation/access NOT performed. Do not fabricate runtime evidence.
 
-## 2. Preserved statuses
+## 2. Historical preserved statuses (as of the PK-2A docs pass)
 
 - `PK1_STATUS: CLOSED_WITH_NOTES` — do not reopen
 - `PACKET_5_STATUS: NOT_CLOSED` — PK-2A closure is not Packet 5 closure
 - `G14_ACTIVATION_TRACK_STATUS: ABORTED`
-- `PK2B.ARCHITECTURE_PLANNING_AUTHORIZED_NOW: NO`
+- `PK2B.ARCHITECTURE_PLANNING_AUTHORIZED_NOW: NO` (historical wording; superseded by later PK-2B/R7/D3/R7-6 work)
 - `PK2B.IMPLEMENTATION_AUTHORIZED: NO`
 
-## 3. Next gate
+## 3. Historical next gate (superseded)
 
-Return this docs reconciliation report to ChatGPT / Gemini for docs commit/push authorization decision and post-PK-2A roadmap decision. Do not stage/commit/push docs. Do not start PK-2B. Do not deploy. Do not touch stash.
+Historical next action at the PK-2A docs pass was to return that reconciliation report for docs commit/push and post-PK-2A roadmap decision. **Current next action is ChatGPT review of this seven-doc reconciliation, then separate commit/push authorization, then an accepted clean baseline, then a genuinely fresh Codex architecture rereview of correction-003 — not PK-2A docs commit, not Codex from this dirty worktree, and not R7-6 implementation.**
 
 ---
 
