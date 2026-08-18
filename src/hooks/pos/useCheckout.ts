@@ -4,7 +4,9 @@ import { devApplyCreditCharge, devApplyCrmAfterSale } from '../../lib/customers/
 import { isFirebaseConfigured } from '../../lib/firebase';
 import { roundMoney } from '../../lib/money';
 import { allocateOrderIdentity, submitAsyncOrder } from '../../lib/pos/asyncCheckout';
+import { makeAsyncOrderId } from '../../lib/pos/deviceId';
 import { createSaleIntentJournal } from '../../lib/pos/offline/saleIntentJournal';
+import { beginTrustedSaleSubmission } from '../../lib/pos/offline/trustedSaleSubmissionOrchestrator';
 import {
   createNoopSaleIntentObserver,
   createSaleIntentObserver,
@@ -96,6 +98,27 @@ export function useCheckout({
         // non-throwing by construction (allocateLocalSeq() is bounded
         // fail-open), so no fallback catch is added here.
         const identity = await allocateOrderIdentity();
+
+        // AI-1: begin trusted generation immediately after final identity
+        // allocation and before submitAsyncOrder. Second production derivation
+        // of the async order id uses the real makeAsyncOrderId formula (NV-2).
+        // Orchestration failure is NON-BLOCKING: the sale still proceeds.
+        // Observability is console-only. Do not treat this as crash-resume
+        // correctness. The gated cart initializer is never a production fallback.
+        const asyncOrderId = makeAsyncOrderId(identity.deviceId, identity.seq);
+        try {
+          const orchestration = await beginTrustedSaleSubmission({
+            branchId,
+            deviceId: identity.deviceId,
+            asyncOrderId,
+            billId: identity.billId,
+          });
+          if (!orchestration.ok) {
+            console.warn('[useCheckout] trusted sale-submission orchestration failed', orchestration.reason);
+          }
+        } catch (err) {
+          console.warn('[useCheckout] trusted sale-submission orchestration failed', err);
+        }
 
         // Write the sale intent and return immediately (durably queued by
         // persistentLocalCache; settled later by the reconcileOrder function).

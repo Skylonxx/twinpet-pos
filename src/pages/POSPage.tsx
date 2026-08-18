@@ -30,6 +30,7 @@ import { createShiftCloseIntentJournal } from '../lib/pos/offline/shiftCloseInte
 import { runShiftCloseReconciliationSweep } from '../lib/pos/offline/shiftCloseReconciler';
 import { createShiftOpenIntentJournal } from '../lib/pos/offline/shiftOpenIntentStore';
 import { runShiftOpenReconciliationSweep } from '../lib/pos/offline/shiftOpenReconciler';
+import { runTrustedResumeSweep } from '../lib/pos/offline/trustedSaleSubmissionOrchestrator';
 import { getDeviceId } from '../lib/pos/deviceId';
 import { priceLevelLabel, usePriceLevels } from '../lib/pricing/priceLevels';
 import { POS_FEATURES } from '../lib/config/features';
@@ -102,7 +103,11 @@ function findByScanCode(products: PosProduct[], code: string): ScanMatch | undef
   return undefined;
 }
 
-export default function POSPage() {
+export type POSPageProps = {
+  trustedResumeSweep?: typeof runTrustedResumeSweep;
+};
+
+export default function POSPage({ trustedResumeSweep }: POSPageProps = {}) {
   const { user, branchId } = useAuth();
   const { branch } = useBranch();
   // Static, pull-based inventory: the grid no longer reacts to live Firestore
@@ -1021,6 +1026,49 @@ export default function POSPage() {
       window.removeEventListener('online', handleOnline);
     };
   }, [shiftReady]);
+
+  // AI-1 trusted resume sweep. The existing shift-close/open sweep above is a
+  // STRUCTURAL template only (boot invocation, one online listener, cancelled
+  // flag, cleanup, best-effort). Do NOT copy its `[shiftReady]` dependency
+  // array. This sweep is keyed by the current (branchId, deviceId).
+  //
+  // AI-1 does NOT deliver crash-resume correctness. Absence seals are vacuous
+  // without an ENTRY_STORE writer and must not be treated as operator-facing
+  // authority. Sweep failure is console-only; never toast; never write the
+  // result into React state. Cross-tab: idempotent convergence + at-most-once
+  // release — not mutual exclusion.
+  const deviceId = getDeviceId();
+  useEffect(() => {
+    if (!shiftReady) return;
+    if (!branchId || !deviceId) return;
+    let cancelled = false;
+    const sweep = trustedResumeSweep ?? runTrustedResumeSweep;
+
+    const runTrusted = () => {
+      void sweep({ branchId, deviceId })
+        .then(() => {
+          // Intentionally ignore the plain result. Do not store island
+          // authority in React state. Do not surface operator-facing claims.
+        })
+        .catch((err: unknown) => {
+          if (cancelled) return;
+          console.warn('[POSPage] trusted resume sweep failed', err);
+        });
+    };
+
+    runTrusted();
+
+    const handleOnline = () => {
+      if (cancelled) return;
+      runTrusted();
+    };
+    window.addEventListener('online', handleOnline);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [shiftReady, branchId, deviceId, trustedResumeSweep]);
 
   // F12 modal suppression (Phase 7C-D4-C-3): true when any blocking POS modal/overlay is
   // open, so the checkout shortcut won't stack PaymentModal over another dialog. (OpenShift
