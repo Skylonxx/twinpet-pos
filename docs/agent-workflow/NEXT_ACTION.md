@@ -2,50 +2,59 @@
 
 ## Current State
 
-- Current repository HEAD: `ac29935d3fece70d50a6fe0d318ad2d4d7417305` (`feat(pos): complete r7-6 history and reconciliation hardening`)
-- **Current gate:** R7-6 implementation CLOSED / seven-doc source-of-truth reconciliation
-- **Roadmap label:** R7-6 — all-history order / receipt freshness
-- **Bounded scope:** Sales History record freshness and receipt authority
-- **R7-6 implementation** — `CLOSED` at `ac29935d3fece70d50a6fe0d318ad2d4d7417305`. Exact 55 paths. Parent `457662dcb422c2ea6e148ed745b069ff3642278f`.
-- **Codex rereview-005** — `PASS`; blockers = 0
-- **Contract** — exact accepted count = 282; hidden counted ID 283 = NO
-- **RR-007 / RR-008 / RR-009 / RR-010** — PASS
-- **RR-001 through RR-006** — NO REGRESSION
-- **G-D ledger** — G-D1 `OPTION_B`; G-D2 `OPTION_A`; G-D3 `OPTION_A`; G-D5 `OPTION_B`; G-D6 `OPTION_A / CLOSED`
-- **D3** — `CLOSED` at `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab`. Do not reopen.
-- **Application Integration** — `STILL_NOT_READY` / NOT PERFORMED / NOT AUTHORIZED
+- Current repository HEAD: `4298c14d0e0ef2ed838110a93c30e0ea3dfb8711` (`feat(pos): integrate trusted sale submission orchestration`)
+- **Current gate:** Application Integration AI-1 implementation COMPLETED FOR THIS GATE / two-doc tracker reconciliation
+- **Roadmap label:** Application Integration AI-1 — trusted sale submission orchestration
+- **Bounded scope:** POS checkout / POSPage application integration of trusted sale submission orchestration
+- **AI-1 implementation** — `PERFORMED / COMPLETED FOR THIS GATE` at `4298c14d0e0ef2ed838110a93c30e0ea3dfb8711`. Exact 8 paths. Parent `e17a8d27f0302dab7ff318bcd70540d3b18da74d`.
+- **Part A push** — origin/main and live remote matched `4298c14d0e0ef2ed838110a93c30e0ea3dfb8711` before this docs edit
+- **Stage-1** — final implementation review accepted
+- **Stage2A** — Playwright repaired harness evidence PASS; 7 / 7 authored AI-1 tests PASS
+- **Stage2B** — B-18 PASS; B-19 PASS; B-20 PASS; `EMULATOR_UAT_RESULT` PASS; local emulator only; no production Firebase access
+- **Claude final evidence review** — `IMPLEMENTATION_REVIEW_PASS_FOR_COMMIT_AUTHORIZATION_WITH_NOTES`; blockers = 0
+- **Claude notes** — N-1 through N-6 remain non-blocking (see CURRENT_PACKET)
+- **Deferred limitation** — `AI_1_POINTER_MONOTONIC_NO_PRUNE_LIMITATION` / `MONOTONIC_NO_PRUNE_PATH` deferred to future appropriate AI-2 / D-4 work
 - **Deployment** — NOT PERFORMED / NOT AUTHORIZED
-- **Next packet implementation** — NOT AUTHORIZED
+- **Production access** — NOT PERFORMED / NOT AUTHORIZED
+- **AI-2** — NOT AUTHORIZED / NOT STARTED
+- **D3** — `CLOSED` at `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab`. Do not reopen.
+- **D1 / Row32** — not reopened
+- **R7-6** — `CLOSED` at `ac29935` (historical); docs closure `e17a8d2` (historical)
 - **PK-2A** — `CLOSED_WITH_NOTES` at `79ba840` (historical)
 - **PK-1** — `CLOSED_WITH_NOTES` at `513b198`. Do not reopen.
-- **Packet 5** — `PACKET_5_STATUS: NOT_CLOSED`; `BROADER_PACKET_5_CLOSURE_AUTHORIZED: NO`. R7-6 closure is not Packet 5 closure.
+- **Packet 5** — `PACKET_5_STATUS: NOT_CLOSED`; `BROADER_PACKET_5_CLOSURE_AUTHORIZED: NO`. AI-1 gate completion is not Packet 5 closure.
 - **G14** — `ABORTED`
-- **This pass** — authorized docs-only closure reconciliation of the closed R7-6 implementation. Master Plan/docs were not part of the implementation commit. Prior architecture-docs pass (`457662d`) and Owner-interrupt (Grok-001) are historical.
+- **This pass** — authorized docs-only tracker reconciliation of the completed AI-1 implementation. Exact two files. No third docs path.
 - For current working-tree/stage/stash state, use live Git. Stash remains `stash@{0}` = `7d03cfec7ba52ff7e25b7e175ca190efc258d874`.
+
+Do not claim crash-resume correctness, reconnect as server confirmation, absence seal as authority, AI-1 as receipt authority, cross-tab mutual exclusion, or production deployment.
 
 ## What Happens Next
 
-**Immediate next action:** Return to ChatGPT for final R7-6 docs closure confirmation and next-gate coordination.
+**Immediate next action:** Return to ChatGPT for next explicitly authorized gate.
 
-Do **not** deploy. Do **not** start Application Integration. Do **not** start next packet implementation. Future work requires a separate authorized gate.
+Do **not** deploy. Do **not** start AI-2. Do **not** access production. Future work requires a separate authorized gate.
 
-**Next implementation action:** NONE — NOT AUTHORIZED.
+**Next implementation action:** NONE — AI-2 NOT AUTHORIZED / NOT STARTED.
 
-1. R7-6 implementation — **CLOSED** at `ac29935` — 55 paths; Codex rereview-005 PASS / 0 blockers; contract 282; hidden 283 = NO; G-D1 OPTION_B / G-D2 OPTION_A / G-D3 OPTION_A / G-D5 OPTION_B / G-D6 OPTION_A / CLOSED
+1. Application Integration AI-1 implementation — **COMPLETED FOR THIS GATE** at `4298c14` — 8 paths; Claude final verdict `IMPLEMENTATION_REVIEW_PASS_FOR_COMMIT_AUTHORIZATION_WITH_NOTES` / 0 blockers; Stage2A Playwright 7/7 PASS; Stage2B B-18/B-19/B-20 PASS
 2. D3 — **CLOSED** at `a081bcb` (preserved)
-3. PK-2A — **`CLOSED_WITH_NOTES`** at `79ba840` (historical)
-4. PK-1 — **`CLOSED_WITH_NOTES`** at `513b198` (preserved)
-5. Packet 5 — **NOT CLOSED**
-6. G14 — **ABORTED**
-7. **NOT authorized:** Application Integration, deployment, production access, Firebase runtime activation, next packet implementation, PK-2C..PK-6 implementation, offline credential login, returns/refunds, G14 (ABORTED), OBS-C, PROV implementation, E-2 real POSIX evidence, UI-B.1, UI-B2, P5-F, recapture, runtime activation, callable invocation, stash operations, Packet R/C/U, broader Packet 5 closure
-8. Closed-gate reopen: Row28/Row30/D1/D3/Row32 = NO
-9. Do not automatically start Application Integration, deployment, or next packet implementation
+3. R7-6 — **CLOSED** at `ac29935` (historical)
+4. PK-2A — **`CLOSED_WITH_NOTES`** at `79ba840` (historical)
+5. PK-1 — **`CLOSED_WITH_NOTES`** at `513b198` (preserved)
+6. Packet 5 — **NOT CLOSED**
+7. G14 — **ABORTED**
+8. **NOT authorized:** AI-2, deployment, production access, Firebase runtime activation, next packet implementation, PK-2C..PK-6 implementation, offline credential login, returns/refunds, G14 (ABORTED), OBS-C, PROV implementation, E-2 real POSIX evidence, UI-B.1, UI-B2, P5-F, recapture, runtime activation, callable invocation, stash operations, Packet R/C/U, broader Packet 5 closure
+9. Closed-gate reopen: D1/D3/Row32 = NO
+10. Do not automatically start AI-2, deployment, or next packet implementation
 
-**Not active:** Application Integration, deployment, next packet implementation, PK-2C, PROV, UI-B.1, UI-B2, P5-F, recapture, or any new feature packet.
+**Not active:** AI-2, deployment, next packet implementation, PK-2C, PROV, UI-B.1, UI-B2, P5-F, recapture, or any new feature packet.
 
 ## Reminders
 
 - `stash@{0}` — do not touch (`7d03cfec7ba52ff7e25b7e175ca190efc258d874`)
+- Claude notes N-1..N-6 remain non-blocking evidence notes; full text lives in CURRENT_PACKET and the Claude final evidence review
+- `AI_1_POINTER_MONOTONIC_NO_PRUNE_LIMITATION` / `MONOTONIC_NO_PRUNE_PATH` remains deferred future work
 - ENTRY_STORE remains `PARALLEL_FOR_RECORD_FRESHNESS_ONLY`; no writer; no initializer retirement for R7-6
 - Authoritative historical reprint VAT: suppressed. Do not present current VAT configuration as proven sale-time VAT
 - `getShiftCloseCaseFigures` (Packet S) is deployed live but **no callable invocation was performed**; N-FINAL-01: selected-run figures are not final settlement truth
