@@ -32,6 +32,12 @@ import {
 import { db } from './db';
 import { FIRESTORE_DATABASE_ID, FUNCTIONS_REGION } from './deployConfig';
 import { handleVoidIntent } from './voidIntent';
+import {
+  CanonicalExistsAnomaly,
+  CanonicalSourceInvalidError,
+  resolveLineQtyBase,
+  validateCanonicalSaleSource,
+} from './canonicalSaleSource';
 // Canonical server-side FIFO source of truth (shared with resolveTransferDiscrepancy).
 import {
   roundMoney,
@@ -268,7 +274,7 @@ export const reconcileOrder = onDocumentWritten(
 );
 
 /** Settle ONE offline sale atomically. Mirrors the old `completePosSale` phases. */
-async function reconcileSale(orderRef: DocumentReference): Promise<void> {
+export async function reconcileSale(orderRef: DocumentReference): Promise<void> {
   await db.runTransaction(async (tx) => {
     // ── Phase 1: reads (all before any write) ──
     const orderSnap = await tx.get(orderRef);
@@ -276,6 +282,16 @@ async function reconcileSale(orderRef: DocumentReference): Promise<void> {
     const order = orderSnap.data() as AsyncOrderDoc;
     // In-transaction idempotency guard — re-delivery races settle here.
     if (order.reconcileStatus !== 'pending_reconcile') return;
+
+    const canonicalRef = db.collection(C.orders).doc(order.id);
+    const canonicalSnap = await tx.get(canonicalRef);
+    if (canonicalSnap.exists) {
+      throw new CanonicalExistsAnomaly();
+    }
+    const sourceVerdict = validateCanonicalSaleSource(order as unknown as Record<string, unknown>);
+    if (!sourceVerdict.ok) {
+      throw new CanonicalSourceInvalidError(sourceVerdict.field, sourceVerdict.reason);
+    }
 
     const branchId = order.branchId;
     const productIds = [...new Set(order.lines.map((l) => l.productId))];
@@ -363,7 +379,11 @@ async function reconcileSale(orderRef: DocumentReference): Promise<void> {
     let hadOversell = false;
 
     for (const line of order.lines) {
-      const qtyBase = line.qtyBase || line.qty * line.unitFactor;
+      const qtyResolved = resolveLineQtyBase(line as unknown as Record<string, unknown>, 'lines');
+      if (!qtyResolved.ok) {
+        throw new CanonicalSourceInvalidError(qtyResolved.field, qtyResolved.reason);
+      }
+      const qtyBase = qtyResolved.qtyBase;
       stockDeduct.set(line.productId, (stockDeduct.get(line.productId) ?? 0) + qtyBase);
 
       const lots = lotsByProduct.get(line.productId) ?? [];
@@ -500,7 +520,6 @@ async function reconcileSale(orderRef: DocumentReference): Promise<void> {
     // than duplicates. `createdAt` uses the SALE time (device clock) so a sale
     // made days ago offline reports under its real day, not the sync day.
     const saleTime = Timestamp.fromMillis(order.clientCreatedAt || Date.now());
-    const canonicalRef = db.collection(C.orders).doc(order.id);
     tx.set(canonicalRef, {
       id: order.id,
       billId: order.billId,
@@ -534,6 +553,7 @@ async function reconcileSale(orderRef: DocumentReference): Promise<void> {
       // Provenance back to the offline source.
       asyncOrderId: order.id,
       deviceId: order.deviceId ?? null,
+      historyRev: 1,
     });
 
     const itemsCol = canonicalRef.collection(C.orderItems);

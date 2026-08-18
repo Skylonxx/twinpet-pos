@@ -393,6 +393,13 @@ export default function PaymentModal({
       <div className="thermal-receipt-ticket">
         <div className="thermal-center thermal-bold thermal-lg">{shopName}</div>
         <div className="thermal-center thermal-sm">ใบเสร็จรับเงิน / Receipt</div>
+        <div
+          className="thermal-center thermal-bold thermal-provisional-marker"
+          data-receipt-marker="provisional"
+          data-receipt-authority="PROVISIONAL"
+        >
+          ใบเสร็จชั่วคราว / PROVISIONAL
+        </div>
         <div className="thermal-dash" />
         <div className="thermal-row">
           <span>เลขที่</span>

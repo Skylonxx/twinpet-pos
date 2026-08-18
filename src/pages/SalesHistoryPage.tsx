@@ -20,12 +20,17 @@ import {
   type StatusFilter,
 } from '../lib/salesHistory/types';
 import { useSalesHistory } from '../lib/salesHistory/useSalesHistory';
+import { useOrderItemsLive } from '../lib/salesHistory/useOrderItemsLive';
+import { decideAction, settledVoidEligible } from '../lib/salesHistory/historyFreshness';
 import { usePosProducts } from '../lib/pos/usePosProducts';
 import { useAuth } from '../lib/hooks/useAuth';
 import { isFirebaseConfigured } from '../lib/firebase';
 import { voidOrderSafe } from '../lib/voidOrder';
 import { requestPendingVoid } from '../lib/pos/voidPendingOrder';
-import type { OrderItem, PaymentMethod } from '../lib/types';
+import { fetchOrderReceipt } from '../lib/documents/receiptFetch';
+import { loadReceiptSettingsForOrderBranch } from '../lib/documents/receiptSettings';
+import ThermalReceipt from '../components/documents/ThermalReceipt';
+import type { Order, OrderItem, Payment, PaymentMethod } from '../lib/types';
 import { DateRangeDropdown } from '../components/common/DateRangeDropdown';
 import {
   Table,
@@ -245,7 +250,7 @@ function VoidModal({
 
 export default function SalesHistoryPage() {
   const { user, branchId } = useAuth();
-  const { records, loading, error, loadItems, refresh, syncDevRecords } = useSalesHistory(branchId);
+  const { records, loading, error, refresh, syncDevRecords } = useSalesHistory(branchId);
   // Source of UOM-specific barcodes — order line items don't persist a barcode,
   // so we resolve it from each product's uomOptions by the sold unit.
   const { products } = usePosProducts(branchId);
@@ -258,13 +263,26 @@ export default function SalesHistoryPage() {
   const [dateTo, setDateTo] = useState(initialDateRange.end.toISOString().slice(0, 10));
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [drawerItems, setDrawerItems] = useState<SaleRecord['items']>([]);
-  const [itemsLoading, setItemsLoading] = useState(false);
+  const [printJob, setPrintJob] = useState<{
+    order: Order;
+    orderItems: OrderItem[];
+    payments: Payment[];
+    branchSettings: import('../lib/documents/types').BranchDocumentSettings;
+    authority: import('../lib/documents/receiptAuthority').ReceiptAuthority;
+    authorityReason?: string;
+    copyStatus: import('../lib/documents/receiptAuthority').CopyStatus;
+    isHistoricalReprint: boolean;
+  } | null>(null);
 
   const [voidOpen, setVoidOpen] = useState(false);
   const [voidProcessing, setVoidProcessing] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const [tablePage, setTablePage] = useState(1);
+
+  const showToast = useCallback((msg: string, type: 'success' | 'error' = 'success') => {
+    setToast({ msg, type });
+    window.setTimeout(() => setToast(null), 4000);
+  }, []);
 
   const tableCardRef = useRef<HTMLDivElement>(null);
 
@@ -321,41 +339,108 @@ export default function SalesHistoryPage() {
     [filtered, selectedId],
   );
 
+  const liveOrderId =
+    branchId && selected && !selected.pendingSync && selected.order.branchId === branchId
+      ? selected.order.id
+      : null;
+  const liveItems = useOrderItemsLive(branchId, liveOrderId);
+  const drawerItems = selected?.pendingSync ? selected.items : liveItems.items;
+  const itemsLoading = Boolean(selected && !selected.pendingSync && liveItems.state === 'loading');
+  const itemsUnverified = Boolean(selected && !selected.pendingSync && liveItems.fromCache);
+  const itemsUnavailable = Boolean(selected && !selected.pendingSync && liveItems.state === 'unavailable');
+  const itemsError = Boolean(selected && !selected.pendingSync && liveItems.state === 'error');
+
   // CEO Override: Cashiers must be able to void already-created orders.
   // Option A2 Mandate: Same-day orders ONLY.
-  const canVoid = useMemo(() => {
+  const sameDayVoid = useMemo(() => {
     if (!selected) return false;
     const today = new Date().toDateString();
     const orderDate = new Date(orderCreatedAt(selected.order)).toDateString();
     return today === orderDate;
   }, [selected]);
 
-  const showToast = useCallback((msg: string, type: 'success' | 'error' = 'success') => {
-    setToast({ msg, type });
-    window.setTimeout(() => setToast(null), 2600);
-  }, []);
+  const canVoid = useMemo(() => {
+    if (!selected || !sameDayVoid) return false;
+    if (selected.pendingSync) {
+      return decideAction('VOID_PENDING_SALE', selected.verdict ?? 'PROVISIONAL', selected.verdictReason ?? null) === 'ALLOW';
+    }
+    return settledVoidEligible(selected.verdict, selected.verdictReason);
+  }, [selected, sameDayVoid]);
 
-  const openDrawer = useCallback(
-    async (record: SaleRecord) => {
-      setSelectedId(record.order.id);
-      if (record.items.length) {
-        setDrawerItems(record.items);
-        return;
-      }
-      setItemsLoading(true);
-      try {
-        const items = await loadItems(record.order.id);
-        setDrawerItems(items);
-      } finally {
-        setItemsLoading(false);
-      }
-    },
-    [loadItems],
-  );
+  const canAttemptAuthoritativeReceipt = useMemo(() => {
+    if (!selected) return false;
+    return (
+      decideAction(
+        'AUTHORITATIVE_RECEIPT',
+        selected.verdict ?? 'UNPROVEN',
+        selected.verdictReason ?? null,
+      ) === 'ALLOW_ATTEMPT'
+    );
+  }, [selected]);
+
+  const handlePrintReceipt = useCallback(async () => {
+    if (!selected) return;
+    if (
+      decideAction(
+        'AUTHORITATIVE_RECEIPT',
+        selected.verdict ?? 'UNPROVEN',
+        selected.verdictReason ?? null,
+      ) !== 'ALLOW_ATTEMPT'
+    ) {
+      showToast('ไม่สามารถพิมพ์ใบเสร็จได้', 'error');
+      return;
+    }
+    const fetched = await fetchOrderReceipt(selected.order.id);
+    if (!fetched.ok || !fetched.envelope || !fetched.envelope.order) {
+      showToast('ไม่สามารถพิมพ์ใบเสร็จได้', 'error');
+      return;
+    }
+    const envelope = fetched.envelope;
+    if (
+      envelope.authority !== 'AUTHORITATIVE' &&
+      envelope.authority !== 'UNPROVEN' &&
+      envelope.authority !== 'PROVISIONAL'
+    ) {
+      showToast('ไม่สามารถพิมพ์ใบเสร็จได้', 'error');
+      return;
+    }
+    const envelopeBranchId =
+      envelope.order && typeof envelope.order.branchId === 'string' ? envelope.order.branchId.trim() : '';
+    if (!envelopeBranchId) {
+      showToast('ไม่สามารถพิมพ์ใบเสร็จได้', 'error');
+      return;
+    }
+    const settings = await loadReceiptSettingsForOrderBranch(
+      envelopeBranchId,
+      envelope.authority,
+      true,
+    );
+    if (!settings.ok) {
+      showToast('ไม่สามารถโหลดการตั้งค่าใบเสร็จได้', 'error');
+      return;
+    }
+    setPrintJob({
+      order: { ...(envelope.order as unknown as Order), id: selected.order.id },
+      orderItems: envelope.items as unknown as OrderItem[],
+      payments: envelope.payments as unknown as Payment[],
+      branchSettings: settings.settings,
+      authority: envelope.authority,
+      authorityReason: envelope.reason,
+      copyStatus: 'COPY',
+      isHistoricalReprint: true,
+    });
+    window.setTimeout(() => {
+      window.print();
+      setPrintJob(null);
+    }, 50);
+  }, [selected, showToast]);
+
+  const openDrawer = useCallback((record: SaleRecord) => {
+    setSelectedId(record.order.id);
+  }, []);
 
   const closeDrawer = useCallback(() => {
     setSelectedId(null);
-    setDrawerItems([]);
   }, []);
 
   const handleVoidConfirm = useCallback(
@@ -431,12 +516,6 @@ export default function SalesHistoryPage() {
     const maxPage = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
     if (tablePage > maxPage) setTablePage(maxPage);
   }, [filtered.length, tablePage]);
-
-  useEffect(() => {
-    if (selected && selected.items.length) {
-      setDrawerItems(selected.items);
-    }
-  }, [selected]);
 
   useEffect(() => {
     if (!selectedId) return;
@@ -645,20 +724,20 @@ export default function SalesHistoryPage() {
                                 <span
                                   className="sh-sync-badge"
                                   title="บันทึกในเครื่องแล้ว · กำลังรอซิงก์ขึ้นเซิร์ฟเวอร์"
-                                  style={{
-                                    display: 'inline-block',
-                                    marginTop: 2,
-                                    fontSize: 10,
-                                    fontWeight: 600,
-                                    color: '#b26a00',
-                                    background: '#fff4e0',
-                                    borderRadius: 6,
-                                    padding: '1px 6px',
-                                  }}
                                 >
                                   ⏳ รอซิงก์
                                 </span>
                               )}
+                              {record.voidRevisionFault ? (
+                                <span className="sh-fault-badge" title={record.voidRevisionFault}>
+                                  ⚠ revision fault
+                                </span>
+                              ) : null}
+                              {record.voidAnomaly ? (
+                                <span className="sh-fault-badge" title={record.voidAnomaly}>
+                                  ⚠ void anomaly
+                                </span>
+                              ) : null}
                             </TableCell>
                             <TableCell>
                               {order.customerSnap ? (
@@ -786,10 +865,22 @@ export default function SalesHistoryPage() {
                     <i className="ti ti-shopping-cart" aria-hidden="true" /> รายการสินค้า
                   </div>
                   <div className="sh-d-sec-body" style={{ padding: 0 }}>
-                    {itemsLoading ? (
+                    {itemsError ? (
+                      <div className="sh-loading sh-child-error">ไม่สามารถโหลดรายการสินค้าได้</div>
+                    ) : itemsUnavailable ? (
+                      <div className="sh-loading sh-child-unavailable">
+                        ไม่พบรายการสินค้าของบิลนี้ / กำลังตรวจสอบ
+                      </div>
+                    ) : itemsLoading ? (
                       <div className="sh-loading">กำลังโหลดรายการ...</div>
                     ) : (
-                      <Table className="table-fixed">
+                      <>
+                        {itemsUnverified ? (
+                          <div className="sh-unverified-banner" data-child-provenance="unverified">
+                            UNVERIFIED — รายการสินค้าจากแคช ยังไม่ยืนยันจากเซิร์ฟเวอร์
+                          </div>
+                        ) : null}
+                        <Table className="table-fixed">
                         <TableHead>
                           <TableRow>
                             <TableHeadCell>สินค้า</TableHeadCell>
@@ -845,6 +936,7 @@ export default function SalesHistoryPage() {
                           })}
                         </TableBody>
                       </Table>
+                      </>
                     )}
                   </div>
                 </div>
@@ -952,19 +1044,29 @@ export default function SalesHistoryPage() {
                   <button type="button" className="sh-df-btn sh-df-disabled" disabled>
                     <i className="ti ti-printer" aria-hidden="true" /> พิมพ์ใบยกเลิก
                   </button>
+                ) : selected.verdictReason === 'VOID_INTENT_UNRECONCILED' ? (
+                  <button type="button" className="sh-df-btn sh-df-disabled" disabled>
+                    <i className="ti ti-printer" aria-hidden="true" /> พิมพ์ใบเสร็จ
+                  </button>
                 ) : (
                   <>
-                    <button type="button" className="sh-df-btn sh-df-print">
-                      <i className="ti ti-printer" aria-hidden="true" /> พิมพ์ใบเสร็จ
-                    </button>
+                    {canAttemptAuthoritativeReceipt ? (
+                      <button type="button" className="sh-df-btn sh-df-print" onClick={() => void handlePrintReceipt()}>
+                        <i className="ti ti-printer" aria-hidden="true" /> พิมพ์ใบเสร็จ
+                      </button>
+                    ) : (
+                      <button type="button" className="sh-df-btn sh-df-disabled" disabled>
+                        <i className="ti ti-printer" aria-hidden="true" /> พิมพ์ใบเสร็จ
+                      </button>
+                    )}
                     {!canVoid ? (
                       <button
                         type="button"
                         className="sh-df-btn sh-df-disabled"
                         disabled
-                        title="ไม่อนุญาตให้ยกเลิกบิลข้ามวัน"
+                        title={sameDayVoid ? 'ไม่อนุญาตให้ยกเลิกบิลนี้' : 'ไม่อนุญาตให้ยกเลิกบิลข้ามวัน'}
                       >
-                        <i className="ti ti-ban" aria-hidden="true" /> ยกเลิกบิล (ข้ามวัน)
+                        <i className="ti ti-ban" aria-hidden="true" /> {sameDayVoid ? 'ยกเลิกบิล' : 'ยกเลิกบิล (ข้ามวัน)'}
                       </button>
                     ) : (
                       <button
@@ -997,6 +1099,18 @@ export default function SalesHistoryPage() {
       />
 
       {toast && <div className={`sh-toast sh-toast-${toast.type}`}>{toast.msg}</div>}
+      {printJob ? (
+        <ThermalReceipt
+          order={printJob.order}
+          orderItems={printJob.orderItems}
+          payments={printJob.payments}
+          branchSettings={printJob.branchSettings}
+          authority={printJob.authority}
+          authorityReason={printJob.authorityReason}
+          copyStatus={printJob.copyStatus}
+          isHistoricalReprint={printJob.isHistoricalReprint}
+        />
+      ) : null}
     </div>
   );
 }

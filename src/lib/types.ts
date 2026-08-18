@@ -387,6 +387,15 @@ export type Order = {
   printCount: number;
   createdAt: Timestamp;
   updatedAt: Timestamp;
+  /**
+   * Additive durable record-history revision. Server-owned. Absent on every
+   * pre-R7-6 row (G-D5 OPTION_B treats absence as legacy baseline 0).
+   * Clients must never author, inject, increment, or clear this field.
+   */
+  historyRev?: number;
+  /** Provenance back to the offline source. Server-written. */
+  asyncOrderId?: string;
+  deviceId?: string | null;
 };
 
 export type ProductSnap = {
@@ -531,6 +540,13 @@ export type AsyncOrder = {
   voidReason?: string | null;
   voidedBy?: string | null;
   voidedAt?: Timestamp | null;
+  voidReconciled?: boolean;
+  /** Server-owned V8 anomaly marker. Client must never write. */
+  voidAnomaly?: string | null;
+  voidAnomalyAt?: Timestamp | null;
+  /** Server-owned V9 revision-fault marker. Client must never write. */
+  voidRevisionFault?: string | null;
+  voidRevisionFaultAt?: Timestamp | null;
 
   note: string;
   printCount: number;

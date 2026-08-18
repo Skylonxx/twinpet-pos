@@ -59,19 +59,56 @@ export function customerTaxId(
 
 export function primaryPayLabel(order: Order, payments?: Payment[]): string {
   if (payments && payments.length > 0) {
-    if (payments.length === 1) return PAY_METHOD_LABELS[payments[0].method];
-    return payments.map((p) => PAY_METHOD_LABELS[p.method]).join(' + ');
+    const labels = distinctMethodLabels(payments);
+    return labels.join(' + ');
   }
   if (order.creditAmt > 0 && order.paidAmt === 0) return 'เชื่อ';
   if (order.creditAmt > 0) return 'หลายช่องทาง';
   return 'เงินสด';
 }
 
-export function cashReceived(order: Order, payments?: Payment[]): number {
-  const cashPay = payments?.find((p) => p.method === 'cash');
-  if (cashPay) return cashPay.amount;
-  if (order.changeAmt > 0) return order.paidAmt;
-  return Math.ceil(order.total / 100) * 100;
+const METHOD_ORDER: PaymentMethod[] = ['cash', 'qr', 'kbank', 'card', 'credit'];
+
+export function sumAllPayments(payments: Payment[]): number {
+  return payments.reduce((s, p) => s + p.amount, 0);
+}
+
+export function sumCash(payments: Payment[]): number {
+  return payments.reduce((s, p) => (p.method === 'cash' ? s + p.amount : s), 0);
+}
+
+export function sumCredit(payments: Payment[]): number {
+  return payments.reduce((s, p) => (p.method === 'credit' ? s + p.amount : s), 0);
+}
+
+export function distinctMethodLabels(payments: Payment[]): string[] {
+  const set = new Set(payments.map((p) => p.method));
+  return METHOD_ORDER.filter((m) => set.has(m)).map((m) => PAY_METHOD_LABELS[m]);
+}
+
+export type PaymentPresentation =
+  | { ok: true; channel: string; paidAmt: number; cashReceived: number; changeAmt: number; creditAmt: number; dueAmt: number; rows: Payment[] }
+  | { ok: false; reason: 'empty_payments' };
+
+export function presentPayments(order: Order, payments: Payment[]): PaymentPresentation {
+  if ((!payments || payments.length === 0) && order.total > 0) {
+    return { ok: false, reason: 'empty_payments' };
+  }
+  const list = payments ?? [];
+  return {
+    ok: true,
+    channel: distinctMethodLabels(list).join(' + ') || PAY_METHOD_LABELS.cash,
+    paidAmt: order.paidAmt,
+    cashReceived: sumCash(list),
+    changeAmt: order.changeAmt,
+    creditAmt: sumCredit(list),
+    dueAmt: order.status === 'pending_payment' ? Math.round((order.total - order.paidAmt) * 100) / 100 : 0,
+    rows: list,
+  };
+}
+
+export function cashReceived(_order: Order, payments?: Payment[]): number {
+  return sumCash(payments ?? []);
 }
 
 export function buildDocNumber(docType: A4DocType, order: Order): string {

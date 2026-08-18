@@ -20,6 +20,12 @@ export type SaleRecord = {
    * voided for summary totals so it never inflates revenue.
    */
   voidPendingSync?: boolean;
+  /** Closed overlay decoration — never replaces canonical money/items. */
+  voidAnomaly?: string | null;
+  voidRevisionFault?: string | null;
+  localReconciliationAnomaly?: boolean;
+  verdict?: import('./historyFreshness').RowVerdict;
+  verdictReason?: import('./historyFreshness').RowReason | null;
 };
 
 export type StatusFilter = 'all' | SaleStatus;

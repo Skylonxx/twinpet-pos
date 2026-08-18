@@ -55,11 +55,11 @@ beforeEach(async () => {
   });
 });
 
-// ── 1. Plain 'staff' with ['pos_sale'] can create orders + asyncOrders ───────
+// ── 1. Plain 'staff' with ['pos_sale'] cannot create canonical orders ────────
 describe("staff ['pos_sale'] → checkout create", () => {
-  it('creates a canonical order', async () => {
+  it('DENIES a canonical order create (server-owned projection)', async () => {
     const db = testEnv.authenticatedContext('staff1', staffWith(['pos_sale'])).firestore();
-    await assertSucceeds(
+    await assertFails(
       setDoc(doc(db, 'orders', 'o_new'), { branchId: BRANCH, staffId: 'staff1', total: 50 }),
     );
   });
@@ -77,13 +77,23 @@ describe("staff ['pos_sale'] → checkout create", () => {
       setDoc(doc(db, 'orders', 'o_bad'), { branchId: BRANCH, staffId: 'staff1', total: 50 }),
     );
   });
+
+  it('DENIES client historyRev injection on canonical update', async () => {
+    const db = testEnv.authenticatedContext('staff1', staffWith(['pos_sale', 'pos_void'])).firestore();
+    await assertFails(updateDoc(doc(db, 'orders', 'o1'), { historyRev: 1 }));
+  });
+
+  it('DENIES client mutation of a non-historyRev canonical money field', async () => {
+    const db = testEnv.authenticatedContext('staff1', staffWith(['pos_sale'])).firestore();
+    await assertFails(updateDoc(doc(db, 'orders', 'o1'), { total: 1 }));
+  });
 });
 
-// ── 2. Plain 'staff' with ['pos_void'] can void canonical orders ─────
+// ── 2. Canonical orders update is server-owned (R7-6) ─────
 describe("staff ['pos_void'] → void/update", () => {
-  it('updates (voids) a canonical order with NO manager/admin role', async () => {
+  it('DENIES client void/update of a canonical order even with pos_void', async () => {
     const db = testEnv.authenticatedContext('staff1', staffWith(['pos_void'])).firestore();
-    await assertSucceeds(
+    await assertFails(
       updateDoc(doc(db, 'orders', 'o1'), { status: 'voided', voidReason: 'test' }),
     );
   });

@@ -11,20 +11,24 @@ import {
   planStockRestores,
   type CreditAccountData,
 } from './voidReversal';
+function readRevision(doc: Record<string, unknown>):
+  | { kind: 'ABSENT' }
+  | { kind: 'VALID'; value: number }
+  | { kind: 'MALFORMED' } {
+  if (!Object.prototype.hasOwnProperty.call(doc, 'historyRev')) return { kind: 'ABSENT' };
+  const v = doc.historyRev;
+  if (typeof v !== 'number' || !Number.isFinite(v) || !Number.isInteger(v) || v < 1 || v > Number.MAX_SAFE_INTEGER) {
+    return { kind: 'MALFORMED' };
+  }
+  return { kind: 'VALID', value: v };
+}
 
-/**
- * Offline-safe void handler (extracted from reconcileOrder.ts for testability —
- * `db` is INJECTED so it runs against a fake Firestore in unit tests, with no
- * emulator). The `reconcileOrder` trigger calls `handleVoidIntent(db, ref)`.
- *
- *  - `pending_reconcile` → tombstone BEFORE it ever settles (no side-effects yet).
- *  - `settled`           → reverse the applied side-effects (Phase 7 / Phase B).
- *
- * Single transaction, idempotent (guarded by `voidReconciled`), at-least-once
- * trigger safe. CRITICAL: it must NEVER touch `shifts.expected*` — the terminal
- * is the single writer of its drawer and its local ledger already drops a voided
- * order (drawer single-writer, Phase 3/4).
- */
+function canMintSuccessor(current: number): boolean {
+  return current < Number.MAX_SAFE_INTEGER;
+}
+
+export const VOID_ANOMALY_LITERALS = ['missing_canonical', 'canonical_ineligible'] as const;
+export const VOID_REVISION_FAULT_LITERALS = ['revision_malformed', 'revision_overflow'] as const;
 
 const C = {
   products: 'products',
@@ -56,18 +60,44 @@ type VoidIntentOrder = {
   lines: VoidLine[];
 };
 
+export type VoidIntentTxnOutcome =
+  | { kind: 'NOOP'; reason: 'absent' | 'not_settled' | 'already_reconciled' | 'terminal_marker_present' }
+  | { kind: 'VOID_TOMBSTONED' }
+  | { kind: 'VOID_ANOMALY_COMMITTED'; anomaly: string }
+  | { kind: 'VOID_REVISION_FAULT_COMMITTED'; fault: string; branchId: string }
+  | { kind: 'VOID_APPLIED' };
+
+export function terminalMarkerPresent(order: Record<string, unknown>): boolean {
+  return (
+    'voidAnomaly' in order ||
+    'voidAnomalyAt' in order ||
+    'voidRevisionFault' in order ||
+    'voidRevisionFaultAt' in order
+  );
+}
+
+function classifyRevisionFault(canonical: Record<string, unknown>): 'revision_malformed' | 'revision_overflow' | null {
+  if (!('historyRev' in canonical)) return null;
+  const read = readRevision(canonical);
+  if (read.kind === 'MALFORMED') return 'revision_malformed';
+  if (read.kind === 'VALID' && !canMintSuccessor(read.value)) return 'revision_overflow';
+  return null;
+}
+
 export async function handleVoidIntent(
   db: Firestore,
   orderRef: DocumentReference,
-): Promise<void> {
-  await db.runTransaction(async (tx) => {
-    // ── Reads (all before any write, per Firestore tx rules) ──
+): Promise<VoidIntentTxnOutcome> {
+  const outcome = await db.runTransaction(async (tx): Promise<VoidIntentTxnOutcome> => {
     const snap = await tx.get(orderRef);
-    if (!snap.exists) return;
-    const order = snap.data() as VoidIntentOrder;
+    if (!snap.exists) return { kind: 'NOOP', reason: 'absent' };
+    const order = snap.data() as VoidIntentOrder & Record<string, unknown>;
+
+    if (terminalMarkerPresent(order)) {
+      return { kind: 'NOOP', reason: 'terminal_marker_present' };
+    }
 
     if (order.reconcileStatus === 'pending_reconcile') {
-      // Never applied → tombstone so reconcileSale skips it entirely.
       tx.set(
         orderRef,
         {
@@ -77,16 +107,62 @@ export async function handleVoidIntent(
         },
         { merge: true },
       );
-      return;
+      return { kind: 'VOID_TOMBSTONED' };
     }
 
-    // Only a SETTLED order needs reversal; `exception` (or anything else) is left
-    // for the exception sweeper — there is nothing safely reversible here.
-    if (order.reconcileStatus !== 'settled') return;
-    // Idempotency guard — re-delivery / double-trigger must not re-reverse.
-    if (order.voidReconciled === true) return;
+    if (order.reconcileStatus !== 'settled') {
+      return { kind: 'NOOP', reason: 'not_settled' };
+    }
+    if (order.voidReconciled === true) {
+      return { kind: 'NOOP', reason: 'already_reconciled' };
+    }
 
-    // Read the credit account up-front (needed to recompute the clamped balance).
+    const canonicalRef = db.collection(C.orders).doc(order.id);
+    const canonicalSnap = await tx.get(canonicalRef);
+
+    if (!canonicalSnap.exists) {
+      tx.set(
+        orderRef,
+        {
+          voidAnomaly: 'missing_canonical',
+          voidAnomalyAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
+      return { kind: 'VOID_ANOMALY_COMMITTED', anomaly: 'missing_canonical' };
+    }
+
+    const canonical = canonicalSnap.data() as Record<string, unknown>;
+    const canonicalStatus = canonical.status;
+    if (canonicalStatus !== 'completed' && canonicalStatus !== 'pending_payment') {
+      tx.set(
+        orderRef,
+        {
+          voidAnomaly: 'canonical_ineligible',
+          voidAnomalyAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
+      return { kind: 'VOID_ANOMALY_COMMITTED', anomaly: 'canonical_ineligible' };
+    }
+
+    const fault = classifyRevisionFault(canonical);
+    if (fault) {
+      const branchId = order.branchId;
+      tx.set(
+        orderRef,
+        {
+          voidRevisionFault: fault,
+          voidRevisionFaultAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
+      return { kind: 'VOID_REVISION_FAULT_COMMITTED', fault, branchId };
+    }
+
+    const revRead = readRevision(canonical);
+    const currentRev = revRead.kind === 'VALID' ? revRead.value : 0;
+
     let credData: CreditAccountData | null = null;
     let credRef: DocumentReference | null = null;
     let custRef: DocumentReference | null = null;
@@ -103,15 +179,12 @@ export async function handleVoidIntent(
       }
     }
 
-    // ── Plan (pure; unit-tested in voidReversal.test.ts) ──
     const lotRestocks = planLotRestocks(order.lines);
     const stockRestores = planStockRestores(order.lines);
     const creditReversal = planCreditReversal(order.creditAmt, credData);
     const voidedBy = order.voidedBy ?? order.staffId;
     const voidReason = order.voidReason ?? null;
 
-    // ── Writes ──
-    // 1. Restock FIFO lots (oversell virtual lot already filtered out).
     for (const r of lotRestocks) {
       tx.set(
         db.collection(C.stockLots).doc(r.lotId),
@@ -124,7 +197,6 @@ export async function handleVoidIntent(
       );
     }
 
-    // 2. Restore per-branch product stock.
     for (const s of stockRestores) {
       tx.set(
         db.collection(C.products).doc(s.productId).collection(C.productStocks).doc(order.branchId),
@@ -138,7 +210,6 @@ export async function handleVoidIntent(
       );
     }
 
-    // 3. Reversal stock movements (audit trail; mirrors the 'sale' rows).
     for (const line of order.lines) {
       const moveRef = db.collection(C.stockMovements).doc();
       const cost =
@@ -160,8 +231,6 @@ export async function handleVoidIntent(
       });
     }
 
-    // 4. Reverse credit: clamp `creditUsed`, restore `creditBalance`, draw down the
-    //    customer's outstanding balance, and write a reversal credit transaction.
     if (creditReversal && credRef && custRef) {
       tx.update(credRef, {
         creditUsed: creditReversal.newCreditUsed,
@@ -178,9 +247,6 @@ export async function handleVoidIntent(
         id: creditTxRef.id,
         customerId: order.customerId,
         branchId: order.branchId,
-        // Map to 'payment' (an existing reversal type) — matches the canonical
-        // voidOrder.ts path and renders cleanly in the back-office credit history
-        // ("ชำระ / ชำระแล้ว"); 'void' is not a CreditTransactionType.
         type: 'payment',
         amount: -order.creditAmt,
         balance: creditReversal.newCreditBalance,
@@ -194,42 +260,19 @@ export async function handleVoidIntent(
       });
     }
 
-    // ───────────────────────────────────────────────────────────────────────
-    // TODO: Future CRM Reversal — NOT YET IMPLEMENTED (per directive).
-    // ───────────────────────────────────────────────────────────────────────
-    // At settlement, reconcileSale() INCREMENTS the customer's CRM lifetime stats
-    // (`lifetimeValue` and `totalSpent` both += the order's grandTotal, and
-    // `lastVisitAt` is bumped). Voiding a settled sale should symmetrically
-    // REVERSE those, or lifetime metrics over-count voided sales. When CRM is
-    // activated, add HERE (inside this same transaction, using `custRef`):
-    //
-    //   if (order.customerId && custRef) {
-    //     tx.update(custRef, {
-    //       lifetimeValue: FieldValue.increment(-grandTotal),  // grandTotal = roundMoney(order.total)
-    //       totalSpent:    FieldValue.increment(-grandTotal),
-    //       updatedAt:     FieldValue.serverTimestamp(),
-    //       // NOTE: `lastVisitAt` is monotonic/derived — do NOT roll it back here.
-    //       // NOTE: loyalty points are feature-flagged off; reverse them too once enabled.
-    //     });
-    //   }
-    //
-    // Guard: this must run exactly once — protected by the `voidReconciled` check.
-    // ───────────────────────────────────────────────────────────────────────
-
-    // 5. Mark the canonical order voided so back-office/HQ reflects it.
     tx.set(
-      db.collection(C.orders).doc(order.id),
+      canonicalRef,
       {
         status: 'voided',
         voidReason,
         voidedBy,
         voidedAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
+        historyRev: currentRev + 1,
       },
       { merge: true },
     );
 
-    // 6. Audit log.
     const auditRef = db.collection(C.auditLogs).doc();
     tx.set(auditRef, {
       id: auditRef.id,
@@ -243,7 +286,6 @@ export async function handleVoidIntent(
       changedAt: FieldValue.serverTimestamp(),
     });
 
-    // 7. Flip the idempotency flag on the async source (stays `settled`).
     tx.set(
       orderRef,
       {
@@ -254,5 +296,16 @@ export async function handleVoidIntent(
       },
       { merge: true },
     );
+
+    return { kind: 'VOID_APPLIED' };
   });
+
+  if (outcome.kind === 'VOID_REVISION_FAULT_COMMITTED') {
+    console.error('[voidIntent] void_revision_fault_terminal', {
+      orderId: orderRef.id,
+      branchId: outcome.branchId,
+      fault: outcome.fault,
+    });
+  }
+  return outcome;
 }

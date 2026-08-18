@@ -67,7 +67,7 @@ function makeFakeDb(seed: Seed) {
 
   const db = {
     collection: (n: string) => collRef(n),
-    runTransaction: async (fn: (tx: unknown) => Promise<void>) => {
+    runTransaction: async (fn: (tx: unknown) => Promise<unknown>) => {
       let wrote = false;
       const tx = {
         get: async (ref: Ref) => {
@@ -85,7 +85,7 @@ function makeFakeDb(seed: Seed) {
           apply(ref.path, data, true);
         },
       };
-      await fn(tx);
+      return await fn(tx);
     },
     __store: store,
   };
@@ -197,5 +197,274 @@ describe('handleVoidIntent — settled-void soak (Phase 7, automated)', () => {
     // No stock restored (it was never applied).
     expect(db.__store.get('stockLots/lotA')!.qtyRemaining).toBe(0);
     expect(db.__store.get('products/P/productStocks/br1')!.totalStockBase).toBe(5);
+  });
+});
+
+describe('handleVoidIntent — R7-6 historyRev / V9', () => {
+  test('F13 canonical header read in READ phase; void mutation writes current+1 atomically', async () => {
+    const seed = seedSettledSale();
+    (seed['orders/dev01-1'] as Doc).historyRev = 1;
+    const db = makeFakeDb(seed);
+    const outcome = await handleVoidIntent(db as never, db.collection('asyncOrders').doc('dev01-1') as never);
+    expect(outcome.kind).toBe('VOID_APPLIED');
+    expect(db.__store.get('orders/dev01-1')!.historyRev).toBe(2);
+    expect(db.__store.get('orders/dev01-1')!.status).toBe('voided');
+  });
+
+  test('F14 missing canonical → one source marker; zero business/canonical writes', async () => {
+    const seed = seedSettledSale();
+    delete seed['orders/dev01-1'];
+    const db = makeFakeDb(seed);
+    const before = new Map(db.__store);
+    const outcome = await handleVoidIntent(db as never, db.collection('asyncOrders').doc('dev01-1') as never);
+    expect(outcome).toEqual({ kind: 'VOID_ANOMALY_COMMITTED', anomaly: 'missing_canonical' });
+    expect(db.__store.get('asyncOrders/dev01-1')!.voidAnomaly).toBe('missing_canonical');
+    expect(db.__store.get('asyncOrders/dev01-1')!.voidReconciled).toBeUndefined();
+    expect(db.__store.get('stockLots/lotA')!.qtyRemaining).toBe(before.get('stockLots/lotA')!.qtyRemaining);
+    expect([...db.__store.keys()].some((k) => k.startsWith('orders/'))).toBe(false);
+  });
+
+  test('F16 repeat delivery with marker present → zero writes', async () => {
+    const seed = seedSettledSale();
+    delete seed['orders/dev01-1'];
+    (seed['asyncOrders/dev01-1'] as Doc).voidAnomaly = 'missing_canonical';
+    (seed['asyncOrders/dev01-1'] as Doc).voidAnomalyAt = 111;
+    const db = makeFakeDb(seed);
+    const outcome = await handleVoidIntent(db as never, db.collection('asyncOrders').doc('dev01-1') as never);
+    expect(outcome).toEqual({ kind: 'NOOP', reason: 'terminal_marker_present' });
+    expect(db.__store.get('asyncOrders/dev01-1')!.voidAnomalyAt).toBe(111);
+  });
+
+  test('F17 voidReconciled true performs no second increment', async () => {
+    const seed = seedSettledSale();
+    (seed['asyncOrders/dev01-1'] as Doc).voidReconciled = true;
+    (seed['orders/dev01-1'] as Doc).historyRev = 4;
+    const db = makeFakeDb(seed);
+    const outcome = await handleVoidIntent(db as never, db.collection('asyncOrders').doc('dev01-1') as never);
+    expect(outcome).toEqual({ kind: 'NOOP', reason: 'already_reconciled' });
+    expect(db.__store.get('orders/dev01-1')!.historyRev).toBe(4);
+  });
+
+  test('F18 malformed canonical revision fail closed; void not applied', async () => {
+    const seed = seedSettledSale();
+    (seed['orders/dev01-1'] as Doc).historyRev = 1.5;
+    const db = makeFakeDb(seed);
+    const outcome = await handleVoidIntent(db as never, db.collection('asyncOrders').doc('dev01-1') as never);
+    expect(outcome.kind).toBe('VOID_REVISION_FAULT_COMMITTED');
+    expect(db.__store.get('orders/dev01-1')!.status).toBe('completed');
+  });
+
+  test('F22 value-blind voidAnomaly presence is terminal', async () => {
+    for (const value of ['missing_canonical', 'canonical_ineligible', '', 'x', 0, null, {}, [], true]) {
+      const seed = seedSettledSale();
+      (seed['asyncOrders/dev01-1'] as Doc).voidAnomaly = value as never;
+      const db = makeFakeDb(seed);
+      const outcome = await handleVoidIntent(db as never, db.collection('asyncOrders').doc('dev01-1') as never);
+      expect(outcome.kind).toBe('NOOP');
+      expect(db.__store.get('orders/dev01-1')!.status).toBe('completed');
+    }
+  });
+
+  test('F23 voidAnomalyAt present without voidAnomaly is terminal', async () => {
+    const seed = seedSettledSale();
+    (seed['asyncOrders/dev01-1'] as Doc).voidAnomalyAt = 1;
+    const db = makeFakeDb(seed);
+    expect((await handleVoidIntent(db as never, db.collection('asyncOrders').doc('dev01-1') as never)).kind).toBe('NOOP');
+  });
+
+  test('F24 canonical already voided → one asyncOrders marker; voidReconciled not set', async () => {
+    const seed = seedSettledSale();
+    (seed['orders/dev01-1'] as Doc).status = 'voided';
+    const db = makeFakeDb(seed);
+    const outcome = await handleVoidIntent(db as never, db.collection('asyncOrders').doc('dev01-1') as never);
+    expect(outcome).toEqual({ kind: 'VOID_ANOMALY_COMMITTED', anomaly: 'canonical_ineligible' });
+    expect(db.__store.get('asyncOrders/dev01-1')!.voidReconciled).toBeUndefined();
+    expect(db.__store.get('stockLots/lotA')!.qtyRemaining).toBe(0);
+  });
+
+  test('F25 unexpected canonical status refuses identically', async () => {
+    const seed = seedSettledSale();
+    (seed['orders/dev01-1'] as Doc).status = 12;
+    const db = makeFakeDb(seed);
+    const outcome = await handleVoidIntent(db as never, db.collection('asyncOrders').doc('dev01-1') as never);
+    expect(outcome.kind).toBe('VOID_ANOMALY_COMMITTED');
+  });
+
+  test('F26 completed/pending_payment proceed', async () => {
+    const seed = seedSettledSale();
+    (seed['orders/dev01-1'] as Doc).status = 'pending_payment';
+    (seed['orders/dev01-1'] as Doc).historyRev = 1;
+    const db = makeFakeDb(seed);
+    expect((await handleVoidIntent(db as never, db.collection('asyncOrders').doc('dev01-1') as never)).kind).toBe('VOID_APPLIED');
+  });
+
+  test('F27 repeat ineligible-marked source is zero writes', async () => {
+    const seed = seedSettledSale();
+    (seed['asyncOrders/dev01-1'] as Doc).voidAnomaly = 'canonical_ineligible';
+    (seed['asyncOrders/dev01-1'] as Doc).voidAnomalyAt = 9;
+    const db = makeFakeDb(seed);
+    expect((await handleVoidIntent(db as never, db.collection('asyncOrders').doc('dev01-1') as never)).kind).toBe('NOOP');
+    expect(db.__store.get('asyncOrders/dev01-1')!.voidAnomalyAt).toBe(9);
+  });
+
+  test('F28 malformed present historyRev writes revision_malformed only', async () => {
+    const seed = seedSettledSale();
+    (seed['orders/dev01-1'] as Doc).historyRev = '3';
+    const db = makeFakeDb(seed);
+    const outcome = await handleVoidIntent(db as never, db.collection('asyncOrders').doc('dev01-1') as never);
+    expect(outcome).toEqual({ kind: 'VOID_REVISION_FAULT_COMMITTED', fault: 'revision_malformed', branchId: 'br1' });
+    expect(db.__store.get('asyncOrders/dev01-1')!.voidRevisionFault).toBe('revision_malformed');
+    expect(db.__store.get('asyncOrders/dev01-1')!.voidReconciled).toBeUndefined();
+    expect(db.__store.get('asyncOrders/dev01-1')!.reconcileStatus).toBe('settled');
+    expect(db.__store.get('orders/dev01-1')!.status).toBe('completed');
+  });
+
+  test('F29 overflow writes revision_overflow', async () => {
+    const seed = seedSettledSale();
+    (seed['orders/dev01-1'] as Doc).historyRev = Number.MAX_SAFE_INTEGER;
+    const db = makeFakeDb(seed);
+    const outcome = await handleVoidIntent(db as never, db.collection('asyncOrders').doc('dev01-1') as never);
+    expect(outcome).toMatchObject({ kind: 'VOID_REVISION_FAULT_COMMITTED', fault: 'revision_overflow', branchId: 'br1' });
+  });
+
+  test('F30 repeat fault-marked source is zero writes and byte-unchanged timestamp', async () => {
+    const seed = seedSettledSale();
+    (seed['asyncOrders/dev01-1'] as Doc).voidRevisionFault = 'revision_malformed';
+    (seed['asyncOrders/dev01-1'] as Doc).voidRevisionFaultAt = 42;
+    const db = makeFakeDb(seed);
+    const outcome = await handleVoidIntent(db as never, db.collection('asyncOrders').doc('dev01-1') as never);
+    expect(outcome).toEqual({ kind: 'NOOP', reason: 'terminal_marker_present' });
+    expect(db.__store.get('asyncOrders/dev01-1')!.voidRevisionFaultAt).toBe(42);
+  });
+
+  test('F31 value-blind V9 fields only', async () => {
+    for (const field of ['voidRevisionFault', 'voidRevisionFaultAt'] as const) {
+      for (const value of ['', 'x', 0, null, {}, [], true]) {
+        const seed = seedSettledSale();
+        (seed['asyncOrders/dev01-1'] as Doc)[field] = value as never;
+        const db = makeFakeDb(seed);
+        expect((await handleVoidIntent(db as never, db.collection('asyncOrders').doc('dev01-1') as never)).kind).toBe('NOOP');
+      }
+    }
+  });
+
+  test('F32 valid historyRev mints current+1', async () => {
+    const seed = seedSettledSale();
+    (seed['orders/dev01-1'] as Doc).historyRev = 3;
+    const db = makeFakeDb(seed);
+    await handleVoidIntent(db as never, db.collection('asyncOrders').doc('dev01-1') as never);
+    expect(db.__store.get('orders/dev01-1')!.historyRev).toBe(4);
+  });
+
+  test('F33 absent historyRev is not routed to V9', async () => {
+    const seed = seedSettledSale();
+    const db = makeFakeDb(seed);
+    const outcome = await handleVoidIntent(db as never, db.collection('asyncOrders').doc('dev01-1') as never);
+    expect(outcome.kind).toBe('VOID_APPLIED');
+    expect(db.__store.get('asyncOrders/dev01-1')!.voidRevisionFault).toBeUndefined();
+    expect(db.__store.get('orders/dev01-1')!.historyRev).toBe(1);
+  });
+
+  test('F35 transaction callback retry performs no log side effect', async () => {
+    let inCallback = false;
+    let callbackLogs = 0;
+    let postCommitLogs = 0;
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      if (!String(args[0]).includes('void_revision_fault_terminal')) return;
+      if (inCallback) callbackLogs += 1;
+      else postCommitLogs += 1;
+    });
+    const seed = seedSettledSale();
+    (seed['orders/dev01-1'] as Doc).historyRev = 'bad';
+    const db = makeFakeDb(seed);
+    const orig = db.runTransaction;
+    db.runTransaction = async (fn: (tx: unknown) => Promise<unknown>) => {
+      const snapshot: Seed = {};
+      for (const [path, data] of db.__store.entries()) snapshot[path] = { ...data };
+      const isolated = makeFakeDb(snapshot);
+      inCallback = true;
+      await isolated.runTransaction(fn);
+      inCallback = false;
+      expect(db.__store.get('asyncOrders/dev01-1')!.voidRevisionFault).toBeUndefined();
+
+      inCallback = true;
+      const committed = await orig(fn);
+      inCallback = false;
+      return committed;
+    };
+    await handleVoidIntent(db as never, db.collection('asyncOrders').doc('dev01-1') as never);
+    expect(callbackLogs).toBe(0);
+    expect(postCommitLogs).toBe(1);
+    expect(db.__store.get('asyncOrders/dev01-1')!.voidRevisionFault).toBe('revision_malformed');
+    errorSpy.mockRestore();
+  });
+
+  test('F36 post-commit log uses outcome.branchId', async () => {
+    const seenBranches: string[] = [];
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const seed = seedSettledSale();
+    (seed['orders/dev01-1'] as Doc).historyRev = 1.2;
+    (seed['asyncOrders/dev01-1'] as Doc).branchId = 'br-attempt';
+    const db = makeFakeDb(seed);
+    const orig = db.runTransaction;
+    const wrapAttempt = async (
+      runner: typeof orig,
+      fn: (tx: unknown) => Promise<unknown>,
+    ) => {
+      return runner(async (innerTx) => {
+        const tx = innerTx as {
+          get: (ref: { path: string }) => Promise<{ data: () => Doc | undefined }>;
+          set: (...args: never[]) => void;
+          update: (...args: never[]) => void;
+        };
+        return fn({
+          get: async (ref: { path: string }) => {
+            const snap = await tx.get(ref);
+            if (ref.path === 'asyncOrders/dev01-1') {
+              const branchId = snap.data()?.branchId;
+              if (typeof branchId === 'string') seenBranches.push(branchId);
+            }
+            return snap;
+          },
+          set: tx.set.bind(tx),
+          update: tx.update.bind(tx),
+        });
+      });
+    };
+    db.runTransaction = async (fn: (tx: unknown) => Promise<unknown>) => {
+      const snapshot: Seed = {};
+      for (const [path, data] of db.__store.entries()) snapshot[path] = { ...data };
+      const isolated = makeFakeDb(snapshot);
+      await wrapAttempt(isolated.runTransaction, fn);
+      db.__store.get('asyncOrders/dev01-1')!.branchId = 'br-committed';
+      return wrapAttempt(orig, fn);
+    };
+    await handleVoidIntent(db as never, db.collection('asyncOrders').doc('dev01-1') as never);
+    expect(new Set(seenBranches).size).toBeGreaterThan(1);
+    expect(seenBranches).toContain('br-attempt');
+    expect(seenBranches).toContain('br-committed');
+    const terminalLogs = errorSpy.mock.calls.filter((c) => String(c[0]).includes('void_revision_fault_terminal'));
+    expect(terminalLogs).toHaveLength(1);
+    expect(terminalLogs[0]?.[1]).toEqual({
+      orderId: 'dev01-1',
+      branchId: 'br-committed',
+      fault: 'revision_malformed',
+    });
+    const logged = JSON.stringify(errorSpy.mock.calls);
+    expect(logged.includes('br-attempt')).toBe(false);
+    expect(logged.includes('br1')).toBe(false);
+    errorSpy.mockRestore();
+  });
+
+  test('F37 duplicate delivery NOOP emits no marker-commit log', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const seed = seedSettledSale();
+    (seed['asyncOrders/dev01-1'] as Doc).voidRevisionFault = 'revision_malformed';
+    (seed['asyncOrders/dev01-1'] as Doc).voidRevisionFaultAt = 1;
+    const db = makeFakeDb(seed);
+    const outcome = await handleVoidIntent(db as never, db.collection('asyncOrders').doc('dev01-1') as never);
+    expect(outcome).toEqual({ kind: 'NOOP', reason: 'terminal_marker_present' });
+    expect(errorSpy.mock.calls.some((c) => String(c[0]).includes('void_revision_fault_terminal'))).toBe(false);
+    errorSpy.mockRestore();
   });
 });

@@ -1,11 +1,12 @@
 import { useMemo } from 'react';
 import {
   barcodeSVG,
-  cashReceived,
   customerDisplayName,
   extractVatFromInclusive,
   fmtBahtSymbol,
   formatThaiDate,
+  PAY_METHOD_LABELS,
+  presentPayments,
   primaryPayLabel,
 } from '../../lib/documents/formatters';
 import type { ThermalReceiptProps } from '../../lib/documents/types';
@@ -147,16 +148,40 @@ function PickListContent({
   );
 }
 
+type ThermalReceiptViewProps = ThermalReceiptProps & {
+  authorityReason?: string;
+};
+
+function UnprovenMarker({ reason }: { reason?: string }) {
+  return (
+    <div className="t-center t-bold thermal-provisional-marker" data-receipt-marker="unproven">
+      ใบเสร็จที่ไม่ยืนยัน / UNPROVEN
+      {reason ? (
+        <div className="t-sm" data-receipt-unproven-reason={reason}>
+          {reason}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function ReceiptContent({
   order,
   orderItems,
   customer,
   branchSettings,
   isCopy,
-}: ThermalReceiptProps) {
+  authority = 'UNPROVEN',
+  authorityReason,
+  isHistoricalReprint = false,
+  payments,
+}: ThermalReceiptViewProps) {
   const custName = customerDisplayName(customer, order);
-  const payLabel = primaryPayLabel(order);
-  const showVat = branchSettings.showVatOnThermal && branchSettings.vatRegistered;
+  const presented = presentPayments(order, payments);
+  const suppressHistoricalChrome = authority === 'AUTHORITATIVE' && isHistoricalReprint;
+  const showVat = !suppressHistoricalChrome && branchSettings.showVatOnThermal && branchSettings.vatRegistered;
+  const showStaff = !suppressHistoricalChrome && branchSettings.showStaffOnReceipt;
+  const showSignature = !suppressHistoricalChrome && branchSettings.showSignatureOnReceipt;
 
   const { subtotal, totalDisc, total } = useMemo(() => {
     let sub = 0;
@@ -170,18 +195,63 @@ function ReceiptContent({
   }, [orderItems, order.billDiscount, order.total]);
 
   const vatInfo = showVat ? extractVatFromInclusive(total - order.surcharge, branchSettings.vatRate) : null;
-  const isCash = payLabel === 'เงินสด';
-  const cash = isCash ? cashReceived(order) : total;
-  const change = isCash ? order.changeAmt || cash - total : 0;
-
+  const cash = presented.ok ? presented.cashReceived : 0;
+  const change = presented.ok ? presented.changeAmt : 0;
+  const payLabel = presented.ok ? presented.channel : primaryPayLabel(order, payments);
   const footerLines = branchSettings.receiptFooter.split('\n');
+
+  if (authority === 'REFUSED') {
+    return (
+      <>
+        <HeaderBlock branchSettings={branchSettings} showLogo={branchSettings.showLogoOnReceipt} />
+        <div className="t-center t-bold thermal-receipt-refused" data-receipt-marker="refused">
+          ไม่สามารถพิมพ์ใบเสร็จได้{authorityReason ? ` — ${authorityReason}` : ''}
+        </div>
+      </>
+    );
+  }
+
+  if (!presented.ok) {
+    const paymentFailureIndication = (
+      <div className="t-center t-bold thermal-receipt-refused">
+        ไม่สามารถพิมพ์ใบเสร็จได้ — ไม่พบรายการชำระ
+      </div>
+    );
+
+    if (authority === 'UNPROVEN') {
+      return (
+        <>
+          <HeaderBlock branchSettings={branchSettings} showLogo={branchSettings.showLogoOnReceipt} />
+          <UnprovenMarker reason={authorityReason} />
+          {paymentFailureIndication}
+        </>
+      );
+    }
+
+    return (
+      <>
+        <HeaderBlock branchSettings={branchSettings} showLogo={branchSettings.showLogoOnReceipt} />
+        <div className="t-center t-bold thermal-receipt-refused" data-receipt-marker="refused">
+          ไม่สามารถพิมพ์ใบเสร็จได้ — ไม่พบรายการชำระ
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
       <HeaderBlock branchSettings={branchSettings} showLogo={branchSettings.showLogoOnReceipt} />
 
+      {authority === 'PROVISIONAL' ? (
+        <div className="t-center t-bold thermal-provisional-marker" data-receipt-marker="provisional">
+          ใบเสร็จชั่วคราว / PROVISIONAL
+        </div>
+      ) : null}
+
+      {authority === 'UNPROVEN' ? <UnprovenMarker reason={authorityReason} /> : null}
+
       {isCopy ? (
-        <div className="t-center t-bold" style={{ marginTop: '1mm', fontSize: '8pt' }}>
+        <div className="t-center t-bold" style={{ marginTop: '1mm', fontSize: '8pt' }} data-receipt-marker="copy">
           (สำเนา / COPY)
         </div>
       ) : null}
@@ -202,7 +272,7 @@ function ReceiptContent({
           <span>{custName}</span>
         </div>
       ) : null}
-      {branchSettings.showStaffOnReceipt ? (
+      {showStaff ? (
         <div className="t-row">
           <span>พนักงาน</span>
           <span>{order.staffName}</span>
@@ -282,25 +352,44 @@ function ReceiptContent({
         <span>ช่องทาง</span>
         <span>{payLabel}</span>
       </div>
-      {isCash ? (
-        <>
-          <div className="t-row">
-            <span>รับเงิน</span>
-            <span>{fmtBahtSymbol(cash)}</span>
-          </div>
-          <div className="t-row t-bold">
-            <span>เงินทอน</span>
-            <span>{fmtBahtSymbol(change)}</span>
-          </div>
-        </>
-      ) : (
-        <div className="t-row t-bold">
-          <span>ชำระ</span>
-          <span>{fmtBahtSymbol(total)}</span>
+      {presented.ok && presented.rows.length >= 1
+        ? presented.rows.map((p, i) => (
+            <div key={`${p.method}-${i}`} className="t-row t-sm">
+              <span>{PAY_METHOD_LABELS[p.method]}</span>
+              <span>{fmtBahtSymbol(p.amount)}</span>
+            </div>
+          ))
+        : null}
+      {cash > 0 ? (
+        <div className="t-row">
+          <span>รับเงิน</span>
+          <span>{fmtBahtSymbol(cash)}</span>
         </div>
-      )}
+      ) : null}
+      {change > 0 ? (
+        <div className="t-row t-bold">
+          <span>เงินทอน</span>
+          <span>{fmtBahtSymbol(change)}</span>
+        </div>
+      ) : null}
+      {presented.ok && presented.creditAmt > 0 ? (
+        <div className="t-row">
+          <span>เชื่อ</span>
+          <span>{fmtBahtSymbol(presented.creditAmt)}</span>
+        </div>
+      ) : null}
+      <div className="t-row t-bold">
+        <span>ชำระ</span>
+        <span>{fmtBahtSymbol(order.paidAmt)}</span>
+      </div>
+      {order.status === 'pending_payment' ? (
+        <div className="t-row">
+          <span>ค้างชำระ</span>
+          <span>{fmtBahtSymbol(presented.ok ? presented.dueAmt : order.total - order.paidAmt)}</span>
+        </div>
+      ) : null}
 
-      {branchSettings.showSignatureOnReceipt ? (
+      {showSignature ? (
         <>
           <div className="t-dash" />
           <div className="t-center t-sm" style={{ marginBottom: '8mm' }}>
@@ -347,7 +436,13 @@ export default function ThermalReceipt({
   branchSettings,
   mode = 'receipt',
   isCopy = false,
-}: ThermalReceiptProps) {
+  authority = 'UNPROVEN',
+  authorityReason,
+  copyStatus,
+  isHistoricalReprint = false,
+  payments,
+}: ThermalReceiptViewProps) {
+  const copy = isCopy || copyStatus === 'COPY';
   return (
     <div className="thermal-print-root" aria-hidden="true">
       <div className="thermal">
@@ -357,6 +452,9 @@ export default function ThermalReceipt({
             orderItems={orderItems}
             customer={customer}
             branchSettings={branchSettings}
+            payments={payments}
+            authority={authority}
+            isHistoricalReprint={isHistoricalReprint}
           />
         ) : (
           <ReceiptContent
@@ -364,7 +462,11 @@ export default function ThermalReceipt({
             orderItems={orderItems}
             customer={customer}
             branchSettings={branchSettings}
-            isCopy={isCopy}
+            isCopy={copy}
+            authority={authority}
+            authorityReason={authorityReason}
+            isHistoricalReprint={isHistoricalReprint}
+            payments={payments}
           />
         )}
       </div>

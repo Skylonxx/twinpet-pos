@@ -27,6 +27,17 @@
   }
 }
 
+.thermal-provisional-marker {
+  margin-top: 1mm;
+  font-size: 9pt;
+  letter-spacing: 0.04em;
+}
+
+.thermal-receipt-refused {
+  margin-top: 3mm;
+  font-size: 9pt;
+}
+
 .thermal-print-root .thermal {
   width: 80mm;
   background: #fff;

@@ -1,3 +1,4 @@
+import type { ReceiptAuthority, CopyStatus } from './receiptAuthority';
 import type { Branch, Customer, Order, OrderItem, Payment, Settings } from '../types';
 
 /** Branch + receipt settings merged for document rendering */
@@ -33,6 +34,10 @@ export type ThermalReceiptProps = {
   branchSettings: BranchDocumentSettings;
   mode?: ThermalReceiptMode;
   isCopy?: boolean;
+  authority?: ReceiptAuthority;
+  copyStatus?: CopyStatus;
+  isHistoricalReprint?: boolean;
+  payments: Payment[];
 };
 
 export type A4InvoiceProps = {

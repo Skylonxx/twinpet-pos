@@ -4,7 +4,7 @@ import { useAuth } from '../../lib/hooks/useAuth';
 import { canViewReconciliationExceptions } from '../../lib/reconciliation/adminGate';
 import { useReconciliationExceptions } from '../../lib/reconciliation/useReconciliationExceptions';
 import { callRetryReconcile } from '../../lib/reconciliation/retryReconcile';
-import { mapRetryError, retryDisableReason } from '../../lib/reconciliation/exceptionRows';
+import { mapRetryError, retryDisableReason, isV9Only, V9_FAULT_LIMIT } from '../../lib/reconciliation/exceptionRows';
 import './ReconciliationExceptionsPage.css';
 
 /**
@@ -14,9 +14,11 @@ import './ReconciliationExceptionsPage.css';
  */
 export default function ReconciliationExceptionsPage() {
   const { user } = useAuth();
-  // Admin gate FIRST.
   const isAdmin = canViewReconciliationExceptions(user?.role);
-  const { rows, loading, error } = useReconciliationExceptions(isAdmin);
+  const { rows, loading, error, fromCache, overCap, atLimit } = useReconciliationExceptions(
+    isAdmin,
+    user?.branchIds,
+  );
   const [busyId, setBusyId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'failure' } | null>(null);
 
@@ -72,6 +74,18 @@ export default function ReconciliationExceptionsPage() {
         </Alert>
       )}
 
+      {overCap ? (
+        <Alert color="warning">
+          จำนวนสาขาที่เข้าถึงได้เกินขีดจำกัดการสอบถาม — ไม่ได้แสดงครบทุกสาขา
+        </Alert>
+      ) : null}
+
+      {atLimit ? (
+        <Alert color="warning">
+          กำลังแสดง {V9_FAULT_LIMIT} รายการล่าสุด — อาจมีมากกว่านี้
+        </Alert>
+      ) : null}
+
       {error ? (
         <Alert color="failure">
           <span className="font-medium">โหลดข้อมูลไม่สำเร็จ:</span> {error}
@@ -80,10 +94,16 @@ export default function ReconciliationExceptionsPage() {
         <div className="flex justify-center p-8">
           <Spinner size="xl" aria-label="Loading exceptions" />
         </div>
-      ) : rows.length === 0 ? (
+      ) : rows.length === 0 && fromCache ? (
+        <Alert color="warning">
+          ยังไม่ยืนยันจากเซิร์ฟเวอร์ — รายการอาจยังไม่ครบ
+        </Alert>
+      ) : rows.length === 0 && !overCap ? (
         <Alert color="success">
           ไม่มีรายการกระทบยอดค้าง 🎉
         </Alert>
+      ) : rows.length === 0 ? (
+        null
       ) : (
         <Card className="overflow-hidden p-0">
           <div className="overflow-x-auto">
@@ -115,19 +135,23 @@ export default function ReconciliationExceptionsPage() {
                           {r.voidRequested && <Badge color="warning">void</Badge>}
                         </div>
                       </TableCell>
-                      <TableCell className="text-red-600 dark:text-red-400 max-w-xs truncate" title={r.lastReconcileError}>
-                        {r.lastReconcileError}
+                      <TableCell className="text-red-600 dark:text-red-400 max-w-xs truncate" title={r.rawFault ?? r.lastReconcileError}>
+                        {r.faultDisplay === 'unknown_fault' ? 'unknown_fault' : r.lastReconcileError}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          size="sm"
-                          color="light"
-                          disabled={disabledReason !== null || isBusy}
-                          title={disabledReason ?? 'รีทราย'}
-                          onClick={() => void onRetry(r.id)}
-                        >
-                          {isBusy ? <Spinner size="sm" /> : 'รีทราย'}
-                        </Button>
+                        {isV9Only(r) ? (
+                          <span className="text-xs text-gray-500">ไม่มีรีทราย</span>
+                        ) : (
+                          <Button
+                            size="sm"
+                            color="light"
+                            disabled={disabledReason !== null || isBusy}
+                            title={disabledReason ?? 'รีทราย'}
+                            onClick={() => void onRetry(r.id)}
+                          >
+                            {isBusy ? <Spinner size="sm" /> : 'รีทราย'}
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   );

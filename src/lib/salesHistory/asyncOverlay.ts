@@ -50,6 +50,8 @@ function asyncOrderToSaleRecord(a: AsyncOrder): SaleRecord {
     printCount: a.printCount,
     createdAt,
     updatedAt: createdAt,
+    asyncOrderId: a.id,
+    deviceId: a.deviceId ?? null,
   };
 
   const payments: Payment[] = a.payments.map((p, i) => ({
@@ -100,15 +102,48 @@ export function buildPendingOverlay(orders: readonly AsyncOrder[]): SaleRecord[]
     .map(asyncOrderToSaleRecord);
 }
 
+export function decorateCanonicalFromAsync(
+  canonical: SaleRecord,
+  source: AsyncOrder | undefined,
+): SaleRecord {
+  if (!source) return canonical;
+  const next: SaleRecord = { ...canonical };
+  if (source.voidRequested === true && canonical.order.status !== 'voided') {
+    next.voidPendingSync = true;
+  }
+  if (source.voidAnomaly != null && source.voidAnomaly !== '') {
+    next.voidAnomaly = source.voidAnomaly;
+  }
+  if (source.voidRevisionFault != null && source.voidRevisionFault !== '') {
+    next.voidRevisionFault = source.voidRevisionFault;
+  }
+  return next;
+}
+
 /**
  * Merge canonical Sales-History records with the pending overlay. Canonical wins
  * on id collision (defensive — a settled sale should already have left the
- * overlay). Sorting is left to the caller's existing `createdAt desc` memo.
+ * overlay). Overlay decorations never replace canonical totals, items, payments,
+ * settlement, chronology, or historyRev.
  */
 export function mergeWithOverlay(
   canonical: readonly SaleRecord[],
   overlay: readonly SaleRecord[],
+  asyncById?: ReadonlyMap<string, AsyncOrder>,
 ): SaleRecord[] {
+  const overlayById = new Map(overlay.map((r) => [r.order.id, r]));
   const seen = new Set(canonical.map((r) => r.order.id));
-  return [...canonical, ...overlay.filter((r) => !seen.has(r.order.id))];
+  const decoratedCanonical = canonical.map((r) => {
+    let next = decorateCanonicalFromAsync(r, asyncById?.get(r.order.id));
+    if (overlayById.has(r.order.id)) {
+      next = {
+        ...next,
+        localReconciliationAnomaly: true,
+        verdict: 'ERROR',
+        verdictReason: 'ROW_LOCAL_RECONCILIATION_ANOMALY',
+      };
+    }
+    return next;
+  });
+  return [...decoratedCanonical, ...overlay.filter((r) => !seen.has(r.order.id))];
 }

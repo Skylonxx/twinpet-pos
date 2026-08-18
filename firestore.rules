@@ -44,7 +44,10 @@ service cloud.firestore {
         && !('reconcileRecoveredAt' in data)
         && !('adminRetryCount' in data)
         && !('lastRetryBy' in data)
-        && !('lastRetryAt' in data);
+        && !('voidAnomaly' in data)
+        && !('voidAnomalyAt' in data)
+        && !('voidRevisionFault' in data)
+        && !('voidRevisionFaultAt' in data);
     }
 
     // asyncOrders client UPDATE = the offline void-intent merge ONLY. A pos_void
@@ -562,26 +565,21 @@ service cloud.firestore {
     // ── Sales ──
     match /orders/{orderId} {
       allow read: if isAdmin() || (isStaff() && hasBranchAccess(resource.data.branchId));
-      allow create: if hasPerm('pos_sale')
-        && hasBranchAccess(request.resource.data.branchId)
-        && stampedOwnStaffId(request.resource.data);
-      allow update: if hasPerm('pos_void')
-        && hasBranchAccess(resource.data.branchId);
+      allow create: if false;
+      allow update: if false;
       // Admin-only — used by the Danger Zone UAT reset to wipe sales history
       allow delete: if isAdmin();
 
       match /orderItems/{itemId} {
         allow read: if isStaff();
-        // Parent order may be created in the same batch — cannot get() it yet
-        allow create: if isStaff();
-        allow update, delete: if isAdmin() || (isStaff()
-          && hasBranchAccess(get(/databases/$(database)/documents/orders/$(orderId)).data.branchId));
+        allow create, update: if false;
+        allow delete: if isAdmin();
       }
     }
 
     match /payments/{paymentId} {
       allow read: if isStaff();
-      allow create: if isStaff();
+      allow create, update: if false;
       // Admin-only — used by the Danger Zone UAT reset to wipe sales history
       allow delete: if isAdmin();
     }

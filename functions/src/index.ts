@@ -69,6 +69,7 @@ export { resolveShiftCloseAlert } from './resolveShiftCloseAlert';
 // server-computed) for a shift-close case through its selected validation
 // run only — no query, no index, no latest-evidence fallback, zero writes.
 export { getShiftCloseCaseFigures } from './getShiftCloseCaseFigures';
+export { getOrderReceipt } from './getOrderReceipt';
 
 type UserRole = 'admin' | 'manager' | 'staff';
 
@@ -139,7 +140,8 @@ type VerifyPinLoginRequest = {
 type SanitizedUser = Omit<UserDoc, 'pin'> & { id: string };
 
 function serializeUser(user: UserDoc, id: string): SanitizedUser {
-  const { pin: _pin, ...rest } = user;
+  const { pin, ...rest } = user;
+  void pin;
   const serialized = { ...rest, id: user.id ?? id } as Record<string, unknown>;
 
   for (const key of ['createdAt', 'updatedAt', 'lastLoginAt', 'deletedAt'] as const) {

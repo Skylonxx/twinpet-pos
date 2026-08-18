@@ -170,4 +170,21 @@ describe('performReconcileRetry — voidRequested + exception conflict', () => {
     expect(o.adminRetryCount).toBeUndefined(); // no write occurred
     expect([...db.__store.keys()]).toEqual(['asyncOrders/o1']); // no stock/lot mutation
   });
+
+  test('F21 re-arm writes only asyncOrders; zero canonical writes; no revision transition; settled no-op; voidRequested refused', async () => {
+    const armed = await performReconcileRetry(
+      makeDb({ 'asyncOrders/o1': exceptionOrder() }) as never,
+      'o1',
+      admin,
+    );
+    expect(armed.status).toBe('re-armed');
+    const settledDb = makeDb({
+      'asyncOrders/o1': { id: 'o1', branchId: 'LDP-001', reconcileStatus: 'settled', historyRev: 3 },
+      'orders/o1': { historyRev: 3 },
+    });
+    const settled = await performReconcileRetry(settledDb as never, 'o1', admin);
+    expect(settled.status).toBe('noop_already_settled');
+    expect(settledDb.__store.get('orders/o1')!.historyRev).toBe(3);
+    expect([...settledDb.__store.keys()].filter((k) => k.startsWith('orders/'))).toEqual(['orders/o1']);
+  });
 });

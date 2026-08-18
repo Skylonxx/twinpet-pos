@@ -31,6 +31,12 @@ import {
   type Firestore,
   type QueryDocumentSnapshot,
 } from 'firebase-admin/firestore';
+import { roundMoney } from './fifo';
+import {
+  CanonicalSourceInvalidError,
+  resolveLineQtyBase,
+  validateCanonicalSaleSource,
+} from './canonicalSaleSource';
 
 const C = {
   asyncOrders: 'asyncOrders',
@@ -38,8 +44,6 @@ const C = {
   orderItems: 'orderItems',
   payments: 'payments',
 } as const;
-
-const roundMoney = (n: number): number => Math.round((n ?? 0) * 100) / 100;
 
 type LotRef = { lotId: string; qty: number; cost: number };
 type Payment = { method: string; amount: number; ref?: string | null };
@@ -97,16 +101,23 @@ export async function repairSettledOrder(
 
   // The canonical doc id is the `id` FIELD (deterministic), matching reconcileSale.
   const canonicalId = typeof order.id === 'string' && order.id ? order.id : snap.id;
+  const canonicalRef = db.collection(C.orders).doc(canonicalId);
+
+  // Fast pre-check before source validation: an intact canonical sale is a
+  // no-op even when the settled async source is a malformed legacy shape.
+  // Validation runs only after canonical absence is established.
+  if ((await canonicalRef.get()).exists) return 'already_present';
+
+  const sourceVerdict = validateCanonicalSaleSource(order as Record<string, unknown>);
+  if (!sourceVerdict.ok) {
+    throw new CanonicalSourceInvalidError(sourceVerdict.field, sourceVerdict.reason);
+  }
   const lines = Array.isArray(order.lines) ? (order.lines as Line[]) : null;
   if (!lines || lines.length === 0) {
     // A settled non-void order with no enriched lines can't be safely rebuilt.
     return 'unrepairable';
   }
 
-  const canonicalRef = db.collection(C.orders).doc(canonicalId);
-
-  // Fast pre-check outside the tx to avoid opening a tx for the common case.
-  if ((await canonicalRef.get()).exists) return 'already_present';
   if (!apply) return 'repaired'; // dry-run: would repair
 
   let outcome: RepairOutcome = 'repaired';
@@ -159,8 +170,7 @@ export async function repairSettledOrder(
       updatedAt: FieldValue.serverTimestamp(),
       asyncOrderId: canonicalId,
       deviceId: order.deviceId ?? null,
-      // Provenance: this read-model doc was rebuilt by the sweeper, not the
-      // reconciler. Useful for auditing which sales were repaired.
+      historyRev: 1,
       repairedBySweeper: true,
     });
 
@@ -174,7 +184,13 @@ export async function repairSettledOrder(
         unit: line.unit,
         unitFactor: line.unitFactor,
         qty: line.qty,
-        qtyBase: line.qtyBase ?? line.qty * line.unitFactor,
+        qtyBase: (() => {
+          const qtyResolved = resolveLineQtyBase(line as unknown as Record<string, unknown>, 'lines');
+          if (!qtyResolved.ok) {
+            throw new CanonicalSourceInvalidError(qtyResolved.field, qtyResolved.reason);
+          }
+          return qtyResolved.qtyBase;
+        })(),
         unitPrice: line.unitPrice,
         originalPrice: line.originalPrice ?? line.unitPrice,
         discountAmt: line.discountAmt,

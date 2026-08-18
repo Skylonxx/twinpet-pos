@@ -1,7 +1,8 @@
 import { describe, test, expect } from 'vitest';
 import type { AsyncOrder } from '../types';
 import { orderCreatedAt, type SaleRecord } from './types';
-import { buildPendingOverlay, mergeWithOverlay } from './asyncOverlay';
+import { buildPendingOverlay, decorateCanonicalFromAsync, mergeWithOverlay } from './asyncOverlay';
+import { decideAction, rowVerdict } from './historyFreshness';
 
 function makeAsyncOrder(o: Partial<AsyncOrder> & { id: string }): AsyncOrder {
   return {
@@ -43,7 +44,8 @@ function makeAsyncOrder(o: Partial<AsyncOrder> & { id: string }): AsyncOrder {
     reconcileStatus: o.reconcileStatus ?? 'pending_reconcile',
     reconciledAt: null,
     voidRequested: o.voidRequested,
-    note: '',
+    voidAnomaly: o.voidAnomaly,
+    voidRevisionFault: o.voidRevisionFault,
     printCount: 0,
     clientCreatedAt: o.clientCreatedAt ?? 1_700_000_000_000,
     serverCreatedAt: null,
@@ -102,20 +104,128 @@ describe('buildPendingOverlay', () => {
   });
 });
 
-describe('mergeWithOverlay', () => {
-  const canonical = (id: string): SaleRecord =>
-    ({ order: { id }, payments: [], items: [] }) as unknown as SaleRecord;
-  const overlay = (id: string): SaleRecord =>
-    ({ order: { id }, payments: [], items: [], pendingSync: true }) as unknown as SaleRecord;
+function canonical(id: string): SaleRecord {
+  return { order: { id }, payments: [], items: [] } as unknown as SaleRecord;
+}
+function overlayRow(id: string): SaleRecord {
+  return { order: { id }, payments: [], items: [], pendingSync: true } as unknown as SaleRecord;
+}
 
+describe('mergeWithOverlay', () => {
   test('appends overlay rows that are not already canonical', () => {
-    const merged = mergeWithOverlay([canonical('a')], [overlay('b')]);
+    const merged = mergeWithOverlay([canonical('a')], [overlayRow('b')]);
     expect(merged.map((r) => r.order.id)).toEqual(['a', 'b']);
   });
 
   test('canonical wins on id collision — the overlay duplicate is dropped', () => {
-    const merged = mergeWithOverlay([canonical('a')], [overlay('a')]);
+    const merged = mergeWithOverlay([canonical('a')], [overlayRow('a')]);
     expect(merged).toHaveLength(1);
     expect(merged[0].pendingSync).toBeUndefined();
+  });
+});
+
+describe('D overlay decorations', () => {
+  test('D01 canonical base plus closed transient decoration set only', () => {
+    const base = {
+      order: { id: 'a', total: 100, historyRev: 1, status: 'completed' },
+      payments: [{ id: 'p', amount: 100 }],
+      items: [{ id: 'i', lineTotal: 100 }],
+    } as unknown as SaleRecord;
+    const asyncDoc = makeAsyncOrder({
+      id: 'a',
+      reconcileStatus: 'settled',
+      voidAnomaly: 'missing_canonical',
+    });
+    const decorated = decorateCanonicalFromAsync(base, asyncDoc);
+    expect(decorated.order.total).toBe(100);
+    expect(decorated.voidAnomaly).toBe('missing_canonical');
+    expect(Object.keys(decorated).filter((k) => k.startsWith('void') || k === 'pendingSync')).toEqual(
+      expect.arrayContaining(['voidAnomaly']),
+    );
+  });
+
+  test('D02 overlay-only row is never duplicated against a canonical row', () => {
+    const merged = mergeWithOverlay([canonical('a')], [overlayRow('b'), overlayRow('a')]);
+    expect(merged.map((r) => r.order.id)).toEqual(['a', 'b']);
+  });
+
+  test('D03 overlay may not replace totals/items/payments/historyRev', () => {
+    const base = {
+      order: { id: 'a', total: 100, historyRev: 2, status: 'completed', paidAmt: 100 },
+      payments: [{ id: 'p', amount: 100 }],
+      items: [{ id: 'i', lineTotal: 100 }],
+    } as unknown as SaleRecord;
+    const asyncDoc = makeAsyncOrder({ id: 'a', reconcileStatus: 'settled' });
+    (asyncDoc as { total: number }).total = 1;
+    const decorated = decorateCanonicalFromAsync(base, asyncDoc);
+    expect(decorated.order.total).toBe(100);
+    expect(decorated.order.historyRev).toBe(2);
+    expect(decorated.payments[0].amount).toBe(100);
+    expect(decorated.items[0].lineTotal).toBe(100);
+  });
+
+  test('D04 collision with pending replay is not a newer-revision win', () => {
+    const can = { ...canonical('a'), order: { id: 'a', total: 100, historyRev: 1 } } as unknown as SaleRecord;
+    const over = { ...overlayRow('a'), order: { id: 'a', total: 999, historyRev: 99 }, pendingSync: true } as unknown as SaleRecord;
+    const merged = mergeWithOverlay([can], [over]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].order.total).toBe(100);
+    expect(merged[0].pendingSync).toBeUndefined();
+    expect(merged[0].localReconciliationAnomaly).toBe(true);
+    expect(merged[0].verdict).toBe('ERROR');
+    expect(merged[0].verdictReason).toBe('ROW_LOCAL_RECONCILIATION_ANOMALY');
+    expect(decideAction('VOID_SETTLED_SALE', merged[0].verdict ?? 'CURRENT', merged[0].verdictReason ?? null)).toBe('REFUSE');
+  });
+
+  test('D05 missing_canonical decorates canonical row as ERROR/SOURCE_VOID_ANOMALY', () => {
+    const verdict = rowVerdict({
+      canonicalPresent: true,
+      overlayOnly: false,
+      queryMeta: { fromCache: false, hasPendingWrites: false },
+      docMeta: { fromCache: false, hasPendingWrites: false },
+      revision: { kind: 'VALID', value: 1 },
+      highWater: 1,
+      chronologyValid: true,
+      unreconciledVoidIntent: false,
+      voidAnomaly: 'missing_canonical',
+    });
+    expect(verdict).toEqual({ verdict: 'ERROR', reason: 'SOURCE_VOID_ANOMALY' });
+  });
+
+  test('E26 voidRevisionFault surfaces at zero extra reads and gates VOID_SETTLED_SALE; control row unaffected', () => {
+    const faulted = decorateCanonicalFromAsync(canonical('a'), makeAsyncOrder({
+      id: 'a',
+      reconcileStatus: 'settled',
+      voidRevisionFault: 'revision_malformed',
+    } as Partial<AsyncOrder> & { id: string }));
+    const control = decorateCanonicalFromAsync(canonical('b'), makeAsyncOrder({ id: 'b', reconcileStatus: 'settled' }));
+    expect(faulted.voidRevisionFault).toBe('revision_malformed');
+    expect(control.voidRevisionFault).toBeUndefined();
+    const faultVerdict = rowVerdict({
+      canonicalPresent: true,
+      overlayOnly: false,
+      queryMeta: { fromCache: false, hasPendingWrites: false },
+      docMeta: { fromCache: false, hasPendingWrites: false },
+      revision: { kind: 'VALID', value: 1 },
+      highWater: 1,
+      chronologyValid: true,
+      unreconciledVoidIntent: false,
+      voidRevisionFault: faulted.voidRevisionFault,
+    });
+    const controlVerdict = rowVerdict({
+      canonicalPresent: true,
+      overlayOnly: false,
+      queryMeta: { fromCache: false, hasPendingWrites: false },
+      docMeta: { fromCache: false, hasPendingWrites: false },
+      revision: { kind: 'VALID', value: 1 },
+      highWater: 1,
+      chronologyValid: true,
+      unreconciledVoidIntent: false,
+      voidRevisionFault: control.voidRevisionFault,
+    });
+    expect(faultVerdict).toEqual({ verdict: 'ERROR', reason: 'REVISION_MALFORMED' });
+    expect(decideAction('VOID_SETTLED_SALE', faultVerdict.verdict, faultVerdict.reason)).toBe('REFUSE');
+    expect(controlVerdict.verdict).toBe('CURRENT');
+    expect(decideAction('VOID_SETTLED_SALE', controlVerdict.verdict, controlVerdict.reason)).toBe('ALLOW');
   });
 });

@@ -1116,3 +1116,43 @@
 .sh-toast-error {
   background: #c92a2a;
 }
+
+.sh-sync-badge {
+  display: inline-block;
+  margin-top: 2px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #b26a00;
+  background: #fff4e0;
+  border-radius: 6px;
+  padding: 1px 6px;
+}
+
+.sh-fault-badge {
+  display: inline-block;
+  margin-top: 2px;
+  margin-left: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #8b2525;
+  background: #fcebeb;
+  border-radius: 6px;
+  padding: 1px 6px;
+}
+
+.sh-unverified-banner {
+  margin: 8px 12px;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #854f0b;
+  background: #faeeda;
+  border-radius: 6px;
+}
+
+.sh-child-unavailable,
+.sh-child-error {
+  padding: 16px;
+  font-size: 13px;
+}
