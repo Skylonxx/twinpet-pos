@@ -1,70 +1,176 @@
-# Latest Report — P1 Offline / Sync Packet 5 — PK-2B / R7 / R7-6 Post Claude Correction-003 Master Plan Reconciliation
+# Latest Report — P1 Offline / Sync Packet 5 — PK-2B / R7 / R7-6 Implementation CLOSED / Seven-Doc Source-of-Truth Reconciliation
 
-> Date: 2026-08-17
-> Current repository HEAD: `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab` (`feat(pos): add trusted orchestration owner enforcement`)
-> Status: **R7-6 / Post Claude Correction-003 / Pre Fresh Codex Architecture Rereview.** D3 CLOSED at `a081bcb`. Claude correction-003 formal report **COMPLETE**. B1–B9 claimed closed by Claude architecture correction; **PENDING FRESH CODEX VERIFICATION** (not final CLOSED). Candidate package **169 tests / 43 files** = CLAUDE CANDIDATE / NOT YET CODEX-ACCEPTED / NOT IMPLEMENTATION-FROZEN. G-D6 DECIDED OPTION_A. Gemini decision set = 5 (G-D1/G-D2/G-D3/G-D5 OPEN; G-D6 DECIDED). Codex has **not** yet run on correction-003. R7-6 is **not** implementation-ready. Implementation **NOT AUTHORIZED**. Application Integration **STILL_NOT_READY / NOT AUTHORIZED**. This pass is docs-only and left uncommitted (`DOC_COMMIT_PUSH_AUTHORIZED: NO`).
+> Date: 2026-08-18
+> Current repository HEAD: `ac29935d3fece70d50a6fe0d318ad2d4d7417305` (`feat(pos): complete r7-6 history and reconciliation hardening`)
+> Status: **R7-6 implementation CLOSED.** Implementation commit `ac29935d3fece70d50a6fe0d318ad2d4d7417305`. Exact 55-path surface. Codex implementation rereview-005 **PASS**; blockers = **0**. Exact accepted contract count = **282**; hidden counted ID 283 = **NO**. RR-007/RR-008/RR-009/RR-010 = PASS. RR-001 through RR-006 = NO REGRESSION. G-D1 OPTION_B; G-D2 OPTION_A; G-D3 OPTION_A; G-D5 OPTION_B; G-D6 OPTION_A / CLOSED. Deployment **NOT PERFORMED / NOT AUTHORIZED**. Application Integration **NOT PERFORMED / NOT AUTHORIZED / STILL_NOT_READY**. Next packet implementation **NOT AUTHORIZED**. This pass is the authorized seven-doc source-of-truth reconciliation of that closed implementation. Master Plan/docs reconciliation was not part of the implementation commit.
 
 ## 0. This pass's reports
 
-- Reconciliation prompt: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Prompt\twinpet-pk2b-r7-r7-6-master-plan-post-claude-correction003-reconciliation-grok-002.md`
-- Formal Claude correction-003 report: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Claude\twinpet-p1-offline-sync-packet-5-pk2b-r7-r7-6-claude-sa-bounded-architecture-correction-003.md`
-- Previous Grok interrupt report (now stale on current-state only): `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Cursor\twinpet-p1-offline-sync-packet-5-pk2b-r7-r7-6-master-plan-interrupt-grok-001.md`
-- Gemini G-D6 decision: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Prompt\gemini-code-1786930987132.md`
-- This reconciliation report: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Cursor\twinpet-p1-offline-sync-packet-5-pk2b-r7-r7-6-master-plan-post-claude-correction003-reconciliation-grok-002.md`
+- Gemini closure/docs authorization: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Prompt\gemini-code-1787029125039.md` (PROMPT ID `TWINPET-P1-OFFLINE-SYNC-PACKET-5-PK2B-R7-R7-6-POST-PUSH-CLOSURE-DOCS-AUTHORIZATION-GEMINI-001`; DECISION `OPTION_A_CLOSE_R7_6_AND_AUTHORIZE_EXACT_7_DOC_RECONCILIATION_COMMIT_PUSH`)
+- Implementation validate-stage-commit-push: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Cursor\twinpet-p1-offline-sync-packet-5-pk2b-r7-r7-6-grok-validate-stage-commit-push-001.md`
+- Codex implementation rereview-005: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Codex\twinpet-p1-offline-sync-packet-5-pk2b-r7-r7-6-codex-r7-6-implementation-rereview-005.md`
+- This docs packet prompt: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Prompt\twinpet-pk2b-r7-r7-6-grok-post-push-7-doc-closure-commit-push-001.md`
 
 ## 1. Current R7-6 facts
 
 | Field | Value |
 |-------|-------|
-| CURRENT_GATE | R7-6 / Post Claude Correction-003 / Pre Fresh Codex Architecture Rereview |
+| CURRENT_GATE | R7-6 implementation CLOSED / seven-doc source-of-truth reconciliation |
 | Roadmap label | R7-6 — all-history order / receipt freshness |
 | Corrected bounded scope | Sales History record freshness and receipt authority |
-| Baseline | `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab` |
+| Implementation status | CLOSED |
+| Implementation commit | `ac29935d3fece70d50a6fe0d318ad2d4d7417305` |
+| Subject | `feat(pos): complete r7-6 history and reconciliation hardening` |
+| Parent | `457662dcb422c2ea6e148ed745b069ff3642278f` |
+| Surface | 55 paths |
+| Codex rereview-005 | PASS |
+| Blockers | 0 |
+| Accepted contract count | 282 |
+| Hidden counted ID 283 | NO |
+| RR-007 / RR-008 / RR-009 / RR-010 | PASS |
+| RR-001 through RR-006 | NO REGRESSION |
 | D3 | CLOSED at `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab` |
-| Codex rereview 003 | BLOCK / GEMINI REDECISION REQUIRED (historical; not a rereview of correction-003) |
-| CLAUDE_CORRECTION_003_STATUS | COMPLETE |
-| CODEX_STATUS | NOT YET RUN ON CORRECTION-003 |
-| G-D6 | DECIDED OPTION_A |
-| Candidate tests | 169 — CLAUDE CANDIDATE / NOT YET CODEX-ACCEPTED / NOT IMPLEMENTATION-FROZEN |
-| Candidate files | 43 — CLAUDE CANDIDATE / NOT YET CODEX-ACCEPTED / NOT IMPLEMENTATION-FROZEN |
-| Implementation | NOT AUTHORIZED / not implementation-ready |
-| Application Integration | STILL_NOT_READY / NOT AUTHORIZED |
+| Application Integration | NOT PERFORMED / NOT AUTHORIZED / STILL_NOT_READY |
+| Deployment | NOT PERFORMED / NOT AUTHORIZED |
+| Next packet implementation | NOT AUTHORIZED |
 
-**CURRENT_STATUS:** Claude correction-003 formal report COMPLETE. B1-B9 claimed closed by Claude architecture correction. 169-test / 43-file candidate package produced. Fresh Codex architecture rereview still required. No implementation authority.
+**CURRENT_STATUS:** R7-6 implementation CLOSED at `ac29935`. Codex rereview-005 PASS / 0 blockers. Contract 282; hidden 283 = NO. This seven-doc packet is the authorized docs-only closure reconciliation.
 
-**Authoritative historical reprint (G-D6 OPTION_A):** VAT breakdown suppressed. Do not present current VAT configuration as proven sale-time VAT. No VAT snapshot. No VAT backfill. No legal/tax conclusion. Do not reopen.
-
-## 2. Gemini decision set (exactly five)
+## 2. Gemini decision ledger (closed)
 
 | ID | Subject | Status |
 |----|---------|--------|
+| R7-6-G-D1 | durable historyRev authority/schema | OPTION_B |
+| R7-6-G-D2 | unqualified receipt policy including PaymentModal | OPTION_A |
+| R7-6-G-D3 | corrected gate scope | OPTION_A |
+| R7-6-G-D5 | legacy authoritative-history transition | OPTION_B |
+| R7-6-G-D6 | historical authoritative-receipt VAT behavior | OPTION_A / CLOSED |
+
+`FINAL_R7_6_GEMINI_DECISION_COUNT: 5`. Do not invent a new product decision. Do not reopen G-D6.
+
+**Authoritative historical reprint (G-D6 OPTION_A / CLOSED):** VAT breakdown suppressed. Do not present current VAT configuration as proven sale-time VAT. No VAT snapshot. No VAT backfill. No legal/tax conclusion.
+
+## 3. Final review / contract
+
+- Codex implementation rereview-005 = PASS
+- Codex blocker count = 0
+- Exact accepted contract count = 282
+- Hidden counted ID 283 = NO
+- Exact 55-file scope = PASS
+- RR-007 = PASS
+- RR-008 = PASS
+- RR-009 = PASS
+- RR-010 = PASS
+- RR-001 through RR-006 = NO REGRESSION
+
+## 4. Validation evidence (recorded; not re-run in this docs gate)
+
+| Suite | Result |
+|-------|--------|
+| RR-007 / RR-010 targeted receipt/history | 3 files / 36 tests PASS |
+| RR-008 targeted V9 admin | 1 file / 6 tests PASS |
+| RR-009 targeted sweeper/historyRev | 1 file / 4 tests PASS |
+| Full root unit regression | 2119 PASS plus the exact known Row32 first-test timeout under parallel load |
+| Authorized Row32 isolated verification | 26 / 26 PASS |
+| Row32 disposition | `NONBLOCKING_KNOWN_ROW32_FLAKE_WITH_ISOLATED_PASS` |
+| Full functions unit suite | 29 files / 1470 tests PASS |
+| Firestore/rules | 9 files / 339 tests PASS |
+| Root TypeScript | PASS |
+| Functions TypeScript | PASS |
+| Build | PASS |
+| `git diff --check` | PASS |
+| 55-file content fingerprint | identical before and after final validation |
+
+## 5. Preserved accepted facts / closed gates
+
+Preserved: chronology/currentness split; corrected narrow R7-6 scope; row verdict separated from informational surface; MODEL B; process/hook-lifetime high-water only; no cross-restart high-water claim; ENTRY_STORE parallel for record freshness only; closed sale-submission island not reopened.
+
+```text
+ROW28_REOPEN_REQUIRED: NO
+ROW30_REOPEN_REQUIRED: NO
+D1_REOPEN_REQUIRED: NO
+D3_REOPEN_REQUIRED: NO
+ROW32_REOPEN_REQUIRED: NO
+ENTRY_STORE_RELATION: PARALLEL_FOR_RECORD_FRESHNESS_ONLY
+ENTRY_STORE_WRITER_REQUIRED_FOR_R7_6: NO
+INITIALIZER_RETIREMENT_REQUIRED_FOR_R7_6: NO
+POST_R7_6_APPLICATION_INTEGRATION_READINESS: STILL_NOT_READY
+APPLICATION_INTEGRATION_AUTHORIZED: NO
+APPLICATION_INTEGRATION_PERFORMED: NO
+DEPLOYMENT_PERFORMED: NO
+NEXT_PACKET_IMPLEMENTATION_AUTHORIZED: NO
+PACKET_5_STATUS: NOT_CLOSED
+```
+
+## 6. Next workflow
+
+```text
+NEXT_WORKFLOW_ACTION:
+RETURN_TO_CHATGPT_FOR_FINAL_R7_6_DOCS_CLOSURE_CONFIRMATION_AND_NEXT_GATE_COORDINATION
+
+DO NOT:
+deploy,
+start Application Integration,
+start next packet implementation.
+```
+
+**Next implementation action:** NONE — NOT AUTHORIZED.
+
+Future work requires a separate authorized gate. Do not touch stash.
+
+---
+
+# Historical — Latest Report — P1 Offline / Sync Packet 5 — PK-2B / R7 / R7-6 Post Claude Correction-003 Master Plan Reconciliation
+
+> Date: 2026-08-17
+> Current repository HEAD at that pass: `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab` (`feat(pos): add trusted orchestration owner enforcement`)
+> Status: **HISTORICAL.** Architecture-docs commit later recorded as `457662dcb422c2ea6e148ed745b069ff3642278f` (`docs(pos): reconcile r7-6 post-correction architecture state`). That pass recorded post-correction-003 current-state: Claude correction-003 COMPLETE; B1–B9 claimed closed pending fresh Codex verification; 169/43 CLAUDE CANDIDATE; G-D1/G-D2/G-D3/G-D5 OPEN; G-D6 DECIDED OPTION_A; R7-6 not implementation-ready. Those current-state claims are superseded by R7-6 implementation CLOSED at `ac29935`. D3 remains CLOSED at `a081bcb`.
+
+## 0. Historical post-correction-003 reports
+
+- Reconciliation prompt: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Prompt\twinpet-pk2b-r7-r7-6-master-plan-post-claude-correction003-reconciliation-grok-002.md`
+- Formal Claude correction-003 report: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Claude\twinpet-p1-offline-sync-packet-5-pk2b-r7-r7-6-claude-sa-bounded-architecture-correction-003.md`
+- Previous Grok interrupt report (now stale on current-state only): `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Cursor\twinpet-p1-offline-sync-packet-5-pk2b-r7-r7-6-master-plan-interrupt-grok-001.md`
+- Gemini G-D6 decision: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Prompt\gemini-code-1786930987132.md`
+- That reconciliation report: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Cursor\twinpet-p1-offline-sync-packet-5-pk2b-r7-r7-6-master-plan-post-claude-correction003-reconciliation-grok-002.md`
+
+## 1. Historical post-correction-003 R7-6 facts (superseded)
+
+| Field | Value |
+|-------|-------|
+| CURRENT_GATE then | R7-6 / Post Claude Correction-003 / Pre Fresh Codex Architecture Rereview |
+| Roadmap label | R7-6 — all-history order / receipt freshness |
+| Corrected bounded scope | Sales History record freshness and receipt authority |
+| Baseline then | `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab` |
+| D3 | CLOSED at `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab` |
+| Codex rereview 003 | BLOCK / GEMINI REDECISION REQUIRED (historical; not a rereview of correction-003) |
+| CLAUDE_CORRECTION_003_STATUS | COMPLETE |
+| CODEX_STATUS then | NOT YET RUN ON CORRECTION-003 |
+| G-D6 | DECIDED OPTION_A |
+| Candidate tests then | 169 — CLAUDE CANDIDATE / NOT YET CODEX-ACCEPTED / NOT IMPLEMENTATION-FROZEN |
+| Candidate files then | 43 — CLAUDE CANDIDATE / NOT YET CODEX-ACCEPTED / NOT IMPLEMENTATION-FROZEN |
+| Implementation then | NOT AUTHORIZED / not implementation-ready |
+| Application Integration | STILL_NOT_READY / NOT AUTHORIZED |
+
+Those current-state claims are **no longer current**. G-D6 OPTION_A / CLOSED remains binding. The later closed implementation at `ac29935` is now authoritative.
+
+## 2. Historical Gemini decision set at that pass (superseded as current-state)
+
+| ID | Subject | Status then |
+|----|---------|-------------|
 | R7-6-G-D1 | durable historyRev authority/schema | OPEN / PENDING FINAL R7-6 GEMINI DECISION BUNDLE |
 | R7-6-G-D2 | unqualified receipt policy including PaymentModal | OPEN / PENDING FINAL R7-6 GEMINI DECISION BUNDLE |
 | R7-6-G-D3 | corrected narrow/broad scope | OPEN / PENDING FINAL R7-6 GEMINI DECISION BUNDLE |
 | R7-6-G-D5 | legacy authoritative-history transition | OPEN / PENDING FINAL R7-6 GEMINI DECISION BUNDLE |
 | R7-6-G-D6 | historical authoritative-receipt VAT behavior | DECIDED OPTION_A |
 
-`FINAL_R7_6_GEMINI_DECISION_COUNT: 5`. Exact-four is no longer the current-state claim. Do not send the final G-D1/G-D2/G-D3/G-D5 Gemini bundle now.
+`FINAL_R7_6_GEMINI_DECISION_COUNT: 5` remained. G-D1/G-D2/G-D3/G-D5 were later decided and are now closed as recorded in the current report above.
 
-## 3. Codex B1–B9 — CLAUDE_CORRECTION_003_CLAIMS_CLOSED / PENDING_FRESH_CODEX_VERIFICATION
+## 3. Historical Codex B1–B9 at that pass (superseded as current-state)
 
-Do **not** write B1–B9 as final CLOSED. Do not claim R7-6 implementation-ready. Do not treat 169/43 as Codex-accepted or implementation-frozen.
+That pass recorded B1–B9 as `CLAUDE_CORRECTION_003_CLAIMS_CLOSED / PENDING_FRESH_CODEX_VERIFICATION` and 169/43 as CLAUDE CANDIDATE / NOT YET CODEX-ACCEPTED / NOT IMPLEMENTATION-FROZEN. Those current-state claims are **no longer current**.
 
-| ID | Claude candidate architecture (not Codex-accepted) | Status |
-|----|-----------------------------------------------------|--------|
-| B1 | `asyncOrders` `voidAnomaly` / `voidAnomalyAt` create reservation required; update mutation/add/clear already denied at HEAD by `voidIntentChangesOnly().affectedKeys().hasOnly(...)`; literals `missing_canonical` / `canonical_ineligible`; malformed/present marker fails closed by presence guard | Claude claims CLOSED; PENDING FRESH CODEX VERIFICATION |
-| B2 | eligible first-void canonical statuses `completed` / `pending_payment`; `voided` / unexpected status => zero business writes + terminal anomaly; no double reversal | Claude claims CLOSED; PENDING FRESH CODEX VERIFICATION |
-| B3 | `getDocsFromServer(...)` per payment query chunk of 10; per-generation latch/state machine; all-chunk success before `SERVER_OBSERVED` | Claude claims CLOSED; PENDING FRESH CODEX VERIFICATION |
-| B4 | canonical data signature `docId` / `status` / `updatedAtKey` / `total` / `historyRevKey`; same-ID recreate invalidates auxiliary without empty ID-set snapshot | Claude claims CLOSED; PENDING FRESH CODEX VERIFICATION |
-| B5 | Sales History list items/payments remain display-only; do not contribute to row CURRENT; do not authorize receipt; only coherent `getOrderReceipt` envelope can authorize receipt | Claude claims CLOSED; PENDING FRESH CODEX VERIFICATION |
-| B6 | strict nested `productSnap` validation and finite numeric validation; malformed legacy receipt => typed refusal / UNPROVEN | Claude claims CLOSED; PENDING FRESH CODEX VERIFICATION |
-| B7 | coherent envelope `payments[]` rendering: sum all cash rows, no `.find()`; same-method duplicates preserved; change rendered when `changeAmt > 0` even without cash; partial credit / pending-payment; payment consistency gate; `src/lib/documents/formatters.ts` enters candidate scope | Claude claims CLOSED; PENDING FRESH CODEX VERIFICATION |
-| B8 | server-source presentation fields where repository supports them; suppress unsupported optional fields; G-D6 VAT suppression remains binding; no new product decision claimed by Claude | Claude claims CLOSED; PENDING FRESH CODEX VERIFICATION |
-| B9 | candidate counts **169 tests / 43 files** | Claude claims CLOSED; PENDING FRESH CODEX VERIFICATION |
-
-`prior 120 tests = NOT FROZEN`. `prior 41 files = NOT FROZEN`. Candidate 169 / 43 = CLAUDE CANDIDATE / NOT YET CODEX-ACCEPTED / NOT IMPLEMENTATION-FROZEN.
-
-## 4. Preserved accepted facts / closed gates
+## 4. Historical preserved accepted facts / closed gates (still binding)
 
 Preserved: chronology/currentness split; corrected narrow R7-6 scope; row verdict separated from informational surface; MODEL B; process/hook-lifetime high-water only; no cross-restart high-water claim; ENTRY_STORE parallel for record freshness only; closed sale-submission island not reopened.
 
@@ -81,29 +187,9 @@ POST_R7_6_APPLICATION_INTEGRATION_READINESS: STILL_NOT_READY
 APPLICATION_INTEGRATION_AUTHORIZED: NO
 ```
 
-## 5. Next workflow
+## 5. Historical next workflow at that pass (superseded)
 
-```text
-NEXT_WORKFLOW_ACTION:
-Return the seven-doc reconciliation diff/report to ChatGPT for review.
-
-THEN:
-obtain separate authorization for exact seven-doc commit/push if approved.
-
-ONLY AFTER:
-repository returns to an accepted clean baseline,
-prepare/run a genuinely fresh Codex architecture rereview of Claude correction-003.
-
-DO NOT:
-start Codex from the current dirty worktree,
-start implementation,
-send G-D1/G-D2/G-D3/G-D5 final bundle,
-start Application Integration.
-```
-
-**Next implementation action:** NONE — NOT AUTHORIZED.
-
-Do not stage/commit/push docs without that separate authorization. Do not touch stash.
+That pass next-actioned a ChatGPT docs review, then separate commit/push authority, then a fresh Codex architecture rereview of correction-003, and forbade starting implementation. Those next-action claims are **no longer current**. R7-6 implementation is now CLOSED at `ac29935`.
 
 ---
 

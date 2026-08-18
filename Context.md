@@ -1,8 +1,10 @@
 # Twinpet POS — Project Context
 
-> Last reconciled: 2026-08-17
-> Current repository HEAD: `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab` (`feat(pos): add trusted orchestration owner enforcement`)
-> D3 closure commit (binding): `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab`
+> Last reconciled: 2026-08-18
+> Current repository HEAD: `ac29935d3fece70d50a6fe0d318ad2d4d7417305` (`feat(pos): complete r7-6 history and reconciliation hardening`)
+> R7-6 implementation commit (binding): `ac29935d3fece70d50a6fe0d318ad2d4d7417305`
+> R7-6 implementation parent: `457662dcb422c2ea6e148ed745b069ff3642278f` (`docs(pos): reconcile r7-6 post-correction architecture state`)
+> D3 closure commit (historical, unchanged): `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab`
 > PK-2A code commit (historical): `79ba840ab6e01ee1a5fff6c0094104c25d754668`
 > PK-2A parent: `23f51554f6a9e31bb7232a38cb9721c40f630566`
 > PK-1 final HEAD (binding, unchanged): `513b198a30a1af72151ab6a8c0976799871529b8`
@@ -16,51 +18,55 @@
 
 ## Current Phase
 
-**P1 Offline / Sync Resiliency — Packet 5 / PK-2B / R7 / R7-6 — Post Claude Correction-003 / Pre Fresh Codex Architecture Rereview.**
+**P1 Offline / Sync Resiliency — Packet 5 / PK-2B / R7 / R7-6 — Implementation CLOSED / source-of-truth docs reconciliation.**
 
 ```text
-CURRENT_GATE: R7-6 / Post Claude Correction-003 / Pre Fresh Codex Architecture Rereview
+CURRENT_GATE: R7-6 implementation CLOSED / seven-doc source-of-truth reconciliation
 ROADMAP_LABEL: R7-6 — all-history order / receipt freshness
 CORRECTED_BOUNDED_SCOPE: Sales History record freshness and receipt authority
-BASELINE: a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab
+R7_6_IMPLEMENTATION_STATUS: CLOSED
+R7_6_IMPLEMENTATION_COMMIT: ac29935d3fece70d50a6fe0d318ad2d4d7417305
+R7_6_IMPLEMENTATION_SUBJECT: feat(pos): complete r7-6 history and reconciliation hardening
+R7_6_IMPLEMENTATION_PARENT: 457662dcb422c2ea6e148ed745b069ff3642278f
+R7_6_IMPLEMENTATION_SURFACE: 55 paths
+CODEX_IMPLEMENTATION_REREVIEW_005: PASS
+CODEX_BLOCKERS: 0
+ACCEPTED_CONTRACT_COUNT: 282
+HIDDEN_COUNTED_ID_283: NO
+RR-007: PASS
+RR-008: PASS
+RR-009: PASS
+RR-010: PASS
+RR-001_THROUGH_RR-006: NO REGRESSION
 D3_STATUS: CLOSED
 D3_CLOSURE_COMMIT: a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab
-CODEX_ARCHITECTURE_REREVIEW_003: BLOCK / GEMINI REDECISION REQUIRED (historical Codex verdict; not a rereview of correction-003)
-CLAUDE_CORRECTION_003_STATUS: COMPLETE
-CLAUDE_CORRECTION_003_ARCHITECTURE_RESULT: B1-B9 CLAIMED CLOSED BY CLAUDE SYSTEM ARCHITECT
-CODEX_ACCEPTANCE_STATUS: NOT YET VERIFIED
-CODEX_STATUS: NOT YET RUN ON CORRECTION-003
-R7_6_IMPLEMENTATION_READY_FINAL_STATUS: NO — PENDING FRESH CODEX ARCHITECTURE REREVIEW
-R7_6_IMPLEMENTATION_AUTHORIZED: NO
-APPLICATION_INTEGRATION: STILL_NOT_READY / NOT AUTHORIZED
-CLAUDE_CANDIDATE_TEST_CONTRACT: 169
-CLAUDE_CANDIDATE_FILE_SURFACE: 43
-TEST_AND_FILE_SURFACE_STATUS: CLAUDE CANDIDATE / NOT YET CODEX-ACCEPTED / NOT IMPLEMENTATION-FROZEN
+APPLICATION_INTEGRATION: NOT_PERFORMED / NOT_AUTHORIZED
+DEPLOYMENT: NOT_PERFORMED / NOT_AUTHORIZED
+NEXT_PACKET_IMPLEMENTATION: NOT_AUTHORIZED
 ```
 
-**CURRENT_STATUS:** Claude correction-003 formal report COMPLETE. B1-B9 claimed closed by Claude architecture correction. 169-test / 43-file candidate package produced. Fresh Codex architecture rereview still required. No implementation authority.
+**CURRENT_STATUS:** R7-6 implementation is **CLOSED** at `ac29935d3fece70d50a6fe0d318ad2d4d7417305`. Exact subject `feat(pos): complete r7-6 history and reconciliation hardening`. Exact committed surface = 55 paths. Codex implementation rereview-005 = **PASS**; blockers = 0. Exact accepted contract count = 282; hidden counted ID 283 = **NO**. This seven-doc packet is the authorized docs-only closure reconciliation. Master Plan/docs reconciliation was not part of the implementation commit.
 
-The previous Owner-interrupt (Grok-001) wrote conservative current-state before that formal report existed (`CLAUDE_CORRECTION_003: NOT EXECUTED`; B1–B9 OPEN/PENDING awaiting Claude correction; prior 120/41 NOT FROZEN). That interrupt remains historical. This reconciliation replaces only the current-state block.
+**G-D decision ledger (closed; do not invent a new product decision):**
+- R7-6-G-D1 — durable historyRev authority/schema — `OPTION_B` (additive `orders.historyRev`; server-controlled; rules hardening; no backfill)
+- R7-6-G-D2 — unqualified receipt policy including PaymentModal — `OPTION_A` (immediate slip allowed as PROVISIONAL with mandatory in-document marker)
+- R7-6-G-D3 — corrected gate scope — `OPTION_A` (authoritative scope = Sales History freshness + receipt authority)
+- R7-6-G-D5 — legacy authoritative-history transition — `OPTION_B` (absent `historyRev` → baseline `0`; malformed-present → FAIL_CLOSED)
+- R7-6-G-D6 — historical authoritative-receipt VAT behavior — `OPTION_A / CLOSED` (AUTHORITATIVE historical reprint suppresses VAT breakdown; no snapshot; no backfill; no legal/tax conclusion)
 
-**G-D6 (DECIDED — OPTION_A):** Authoritative historical reprint suppresses the VAT breakdown. Current branch VAT configuration must not be presented as a proven sale-time historical VAT fact. No VAT snapshot. No VAT backfill. No legal/tax conclusion. Do not reopen.
+**Final review / contract:** Codex rereview-005 PASS / 0 blockers. RR-007 PASS. RR-008 PASS. RR-009 PASS. RR-010 PASS. RR-001 through RR-006 = NO REGRESSION.
 
-**Gemini decision set (`FINAL_R7_6_GEMINI_DECISION_COUNT: 5`):**
-- R7-6-G-D1 — durable historyRev authority/schema — `OPEN / PENDING FINAL R7-6 GEMINI DECISION BUNDLE`
-- R7-6-G-D2 — unqualified receipt policy including PaymentModal — `OPEN / PENDING FINAL R7-6 GEMINI DECISION BUNDLE`
-- R7-6-G-D3 — corrected narrow/broad scope — `OPEN / PENDING FINAL R7-6 GEMINI DECISION BUNDLE`
-- R7-6-G-D5 — legacy authoritative-history transition — `OPEN / PENDING FINAL R7-6 GEMINI DECISION BUNDLE`
-- R7-6-G-D6 — historical authoritative-receipt VAT behavior — `DECIDED OPTION_A`
-
-**Codex B1–B9 — `CLAUDE_CORRECTION_003_CLAIMS_CLOSED / PENDING_FRESH_CODEX_VERIFICATION` (not final CLOSED; not Codex-accepted):**
-- B1 — Claude correction-003 claims CLOSED; PENDING FRESH CODEX VERIFICATION. Candidate: `asyncOrders` `voidAnomaly` / `voidAnomalyAt` create reservation required; update mutation/add/clear already denied at HEAD by `voidIntentChangesOnly().affectedKeys().hasOnly(...)`; marker literals `missing_canonical` / `canonical_ineligible`; malformed/present marker fails closed by presence guard.
-- B2 — Claude correction-003 claims CLOSED; PENDING FRESH CODEX VERIFICATION. Candidate eligible first-void canonical statuses: `completed`, `pending_payment`; `voided` / unexpected status => zero business writes + terminal anomaly candidate; no double reversal.
-- B3 — Claude correction-003 claims CLOSED; PENDING FRESH CODEX VERIFICATION. Candidate payment qualification: `getDocsFromServer(...)` per payment query chunk of 10, with per-generation latch/state machine and all-chunk success before `SERVER_OBSERVED`.
-- B4 — Claude correction-003 claims CLOSED; PENDING FRESH CODEX VERIFICATION. Candidate canonical data signature: `docId`, `status`, `updatedAtKey`, `total`, `historyRevKey` — invalidates same-ID recreated incarnation without requiring an empty ID-set snapshot.
-- B5 — Claude correction-003 claims CLOSED; PENDING FRESH CODEX VERIFICATION. Sales History list items/payments remain display-only; they do not contribute to row CURRENT and do not authorize receipt. Only the coherent `getOrderReceipt` envelope can authorize receipt.
-- B6 — Claude correction-003 claims CLOSED; PENDING FRESH CODEX VERIFICATION. Candidate strict nested `productSnap` validation and finite numeric validation; malformed legacy receipt data => typed refusal / UNPROVEN.
-- B7 — Claude correction-003 claims CLOSED; PENDING FRESH CODEX VERIFICATION. Candidate coherent payment rendering from envelope `payments[]` (sum all cash rows, no `.find()`; same-method duplicates preserved; change rendered when `changeAmt > 0` even without cash; partial credit / pending-payment handling; payment consistency gate). `src/lib/documents/formatters.ts` enters candidate scope.
-- B8 — Claude correction-003 claims CLOSED; PENDING FRESH CODEX VERIFICATION. Presentation/default candidate: server-source presentation fields where repository supports them; suppress unsupported optional fields; G-D6 VAT suppression remains binding; no new product decision claimed by Claude.
-- B9 — Claude correction-003 claims CLOSED; PENDING FRESH CODEX VERIFICATION. Candidate counts: **169 tests / 43 files** — CLAUDE CANDIDATE / NOT YET CODEX-ACCEPTED / NOT IMPLEMENTATION-FROZEN. Prior 120/41 remain NOT FROZEN.
+**Validation evidence (recorded from the implementation validate-stage-commit-push; not re-run in this docs gate):**
+- RR-007 / RR-010 targeted receipt/history: 3 files / 36 tests PASS
+- RR-008 targeted V9 admin: 1 file / 6 tests PASS
+- RR-009 targeted sweeper/historyRev: 1 file / 4 tests PASS
+- full root unit regression: 2119 PASS plus the exact known Row32 first-test timeout under parallel load
+- authorized Row32 isolated verification: 26 / 26 PASS
+- Row32 disposition: `NONBLOCKING_KNOWN_ROW32_FLAKE_WITH_ISOLATED_PASS`
+- full functions unit suite: 29 files / 1470 tests PASS
+- Firestore/rules: 9 files / 339 tests PASS
+- root TypeScript PASS; functions TypeScript PASS; build PASS; `git diff --check` PASS
+- complete 55-file content fingerprint remained identical before and after final validation
 
 **Preserved accepted facts (do not casually reopen):** chronology/currentness split; corrected narrow R7-6 scope; row verdict separated from informational surface verdict; MODEL B (list items/payments excluded from row-currentness authority); process/hook-lifetime high-water only; no cross-restart high-water claim; ENTRY_STORE parallel for record freshness only; closed sale-submission island not reopened.
 
@@ -75,16 +81,23 @@ ENTRY_STORE_WRITER_REQUIRED_FOR_R7_6: NO
 INITIALIZER_RETIREMENT_REQUIRED_FOR_R7_6: NO
 POST_R7_6_APPLICATION_INTEGRATION_READINESS: STILL_NOT_READY
 APPLICATION_INTEGRATION_AUTHORIZED: NO
+APPLICATION_INTEGRATION_PERFORMED: NO
+DEPLOYMENT_PERFORMED: NO
 PACKET_5_STATUS: NOT_CLOSED
+NEXT_PACKET_IMPLEMENTATION_AUTHORIZED: NO
 ```
 
-**NEXT_WORKFLOW_ACTION:** Return the seven-doc reconciliation diff/report to ChatGPT for review. THEN obtain separate authorization for exact seven-doc commit/push if approved. ONLY AFTER the repository returns to an accepted clean baseline, prepare/run a genuinely fresh Codex architecture rereview of Claude correction-003. Do **not** start Codex from this dirty worktree. Do **not** start implementation. Do **not** send the final G-D1/G-D2/G-D3/G-D5 Gemini bundle. Do **not** start Application Integration.
+**NEXT_WORKFLOW_ACTION:** Return to ChatGPT for final R7-6 docs closure confirmation and next-gate coordination. Do **not** deploy. Do **not** start Application Integration. Do **not** start next packet implementation. Future work requires a separate authorized gate.
 
 **Next implementation action:** NONE — NOT AUTHORIZED.
 
 Manual workflow remains active. `agentchattr` was not used as the executor for this phase.
 
-**Repository baseline:** branch `main`. HEAD = origin/main = live remote main = `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab`. For current working-tree state, use live Git. These seven Master Plan docs are intentionally dirty and uncommitted (`DOC_COMMIT_PUSH_AUTHORIZED: NO`). Stash remains `stash@{0}` = `7d03cfec7ba52ff7e25b7e175ca190efc258d874`.
+**Repository baseline:** branch `main`. Implementation HEAD = origin/main = live remote main = `ac29935d3fece70d50a6fe0d318ad2d4d7417305` before this docs-only closure commit. Stash remains `stash@{0}` = `7d03cfec7ba52ff7e25b7e175ca190efc258d874`. Protected stash was not touched.
+
+### P1 Packet 5 / PK-2B / R7 / R7-6 — Post Claude Correction-003 architecture docs (HISTORICAL)
+
+- **Status:** historical. Architecture-docs commit `457662dcb422c2ea6e148ed745b069ff3642278f` (`docs(pos): reconcile r7-6 post-correction architecture state`) recorded post-correction-003 current-state before implementation. That pass recorded G-D1/G-D2/G-D3/G-D5 OPEN, 169/43 as CLAUDE CANDIDATE, and R7-6 implementation NOT AUTHORIZED. Those current-state claims are superseded by the closed implementation at `ac29935`. D3 remains CLOSED at `a081bcb`. Owner-interrupt (Grok-001) remains historical.
 
 ### P1 Packet 5 / PK-2A Boot / Session Gating and Offline Blocker (HISTORICAL — CLOSED_WITH_NOTES)
 
@@ -367,15 +380,17 @@ Non-blocking this-terminal pending-sync warning; close remains enabled.
 
 ### Deferred / next gate
 
-1. **R7-6 / Post Claude Correction-003 / Pre Fresh Codex Architecture Rereview** at baseline `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab`. Claude correction-003 formal report COMPLETE. B1–B9: `CLAUDE_CORRECTION_003_CLAIMS_CLOSED / PENDING_FRESH_CODEX_VERIFICATION`. 169-test / 43-file package is CLAUDE CANDIDATE / NOT YET CODEX-ACCEPTED / NOT IMPLEMENTATION-FROZEN. G-D6 OPTION_A DECIDED. R7-6 is **not** implementation-ready. No implementation authority.
+1. **R7-6 implementation — `CLOSED`** at `ac29935d3fece70d50a6fe0d318ad2d4d7417305` (`feat(pos): complete r7-6 history and reconciliation hardening`). Exact 55-path surface. Codex rereview-005 PASS / 0 blockers. Contract 282; hidden ID 283 = NO. This seven-doc packet reconciles source-of-truth docs to that closed state.
 2. **D3 — `CLOSED`** at `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab`. Do not reopen (`D3_REOPEN_REQUIRED: NO`).
 3. **PK-2A Boot / Session Gating and Offline Blocker — `CLOSED_WITH_NOTES`** at `79ba840ab6e01ee1a5fff6c0094104c25d754668`. Historical. Do not reopen.
 4. **PK-1 Offline Shift Session — `CLOSED_WITH_NOTES`** at `513b198a30a1af72151ab6a8c0976799871529b8`. Do not reopen.
-5. **`PACKET_5_STATUS: NOT_CLOSED`.** `BROADER_PACKET_5_CLOSURE_AUTHORIZED: NO`.
-6. **NEXT_WORKFLOW_ACTION:** Return this seven-doc reconciliation to ChatGPT; obtain separate exact seven-doc commit/push authority if approved; return the repository to an accepted clean baseline; ONLY THEN run a genuinely fresh Codex architecture rereview of correction-003. Do not start Codex from the current dirty worktree. **Next implementation action:** NONE — NOT AUTHORIZED. Application Integration: `STILL_NOT_READY` / NOT AUTHORIZED.
+5. **`PACKET_5_STATUS: NOT_CLOSED`.** `BROADER_PACKET_5_CLOSURE_AUTHORIZED: NO`. R7-6 closure is not Packet 5 closure.
+6. **NEXT_WORKFLOW_ACTION:** Return to ChatGPT for final R7-6 docs closure confirmation and next-gate coordination. **Next implementation action:** NONE — NOT AUTHORIZED. Application Integration: `STILL_NOT_READY` / NOT PERFORMED / NOT AUTHORIZED. Deployment: NOT PERFORMED / NOT AUTHORIZED. Next packet implementation: NOT AUTHORIZED.
 7. **Standing boundaries (carried forward):**
-   - R7-6 implementation — **NOT AUTHORIZED**
-   - Application Integration — **NOT AUTHORIZED**
+   - R7-6 implementation — **CLOSED**; do not reopen as an implementation gate
+   - Application Integration — **NOT AUTHORIZED** / **NOT PERFORMED**
+   - Deployment / production access / Firebase runtime activation — **NOT AUTHORIZED** / **NOT PERFORMED**
+   - Next packet implementation — **NOT AUTHORIZED**
    - Row28 / Row30 / D1 / D3 / Row32 reopen — **NO**
    - ENTRY_STORE writer / initializer retirement for R7-6 — **NO**
    - PK-2C / PK-3..PK-6 implementation — **NOT AUTHORIZED**
@@ -390,7 +405,7 @@ Non-blocking this-terminal pending-sync warning; close remains enabled.
    - PROV implementation / E-2 POSIX evidence — **NOT AUTHORIZED** / `IDENTIFIED_BUT_HELD`
    - no `shifts.expected*` mutation; no FIFO/stock/credit/settlement writes; `stash@{0}` untouched
 8. **Passive observation** — read-only observation on **natural traffic only** remains authorized in parallel; no agent-triggered activity is authorized.
-9. Do not automatically start implementation. Do not stage/commit/push these docs without separate authorization.
+9. Do not automatically start Application Integration, deployment, or next packet implementation. Future work requires a separate authorized gate.
 
 ### Future Phase โ€” True Standalone (Desktop & Native Mobile) (`TRUE-STANDALONE`)
 

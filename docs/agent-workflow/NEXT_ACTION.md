@@ -2,51 +2,46 @@
 
 ## Current State
 
-- Current repository HEAD: `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab` (`feat(pos): add trusted orchestration owner enforcement`)
-- **Current gate:** R7-6 / Post Claude Correction-003 / Pre Fresh Codex Architecture Rereview
+- Current repository HEAD: `ac29935d3fece70d50a6fe0d318ad2d4d7417305` (`feat(pos): complete r7-6 history and reconciliation hardening`)
+- **Current gate:** R7-6 implementation CLOSED / seven-doc source-of-truth reconciliation
 - **Roadmap label:** R7-6 — all-history order / receipt freshness
 - **Bounded scope:** Sales History record freshness and receipt authority
+- **R7-6 implementation** — `CLOSED` at `ac29935d3fece70d50a6fe0d318ad2d4d7417305`. Exact 55 paths. Parent `457662dcb422c2ea6e148ed745b069ff3642278f`.
+- **Codex rereview-005** — `PASS`; blockers = 0
+- **Contract** — exact accepted count = 282; hidden counted ID 283 = NO
+- **RR-007 / RR-008 / RR-009 / RR-010** — PASS
+- **RR-001 through RR-006** — NO REGRESSION
+- **G-D ledger** — G-D1 `OPTION_B`; G-D2 `OPTION_A`; G-D3 `OPTION_A`; G-D5 `OPTION_B`; G-D6 `OPTION_A / CLOSED`
 - **D3** — `CLOSED` at `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab`. Do not reopen.
-- **Codex rereview 003** — `BLOCK / GEMINI REDECISION REQUIRED` (historical; not a rereview of correction-003)
-- **Claude correction-003** — `COMPLETE`. B1–B9 claimed closed by Claude architecture correction. Codex has **not** yet verified.
-- **G-D6** — `DECIDED OPTION_A` (VAT breakdown suppressed; no snapshot; no backfill; no legal/tax conclusion). Do not reopen.
-- **Gemini set** — exactly five: G-D1/G-D2/G-D3/G-D5 `OPEN`; G-D6 `DECIDED OPTION_A`
-- **B1–B9** — `CLAUDE_CORRECTION_003_CLAIMS_CLOSED / PENDING_FRESH_CODEX_VERIFICATION` (not final CLOSED)
-- **Candidate package** — 169 tests / 43 files = CLAUDE CANDIDATE / NOT YET CODEX-ACCEPTED / NOT IMPLEMENTATION-FROZEN. Prior 120 tests / 41 files remain NOT FROZEN
-- **R7-6 implementation** — NOT AUTHORIZED / not implementation-ready
-- **Application Integration** — `STILL_NOT_READY` / NOT AUTHORIZED
+- **Application Integration** — `STILL_NOT_READY` / NOT PERFORMED / NOT AUTHORIZED
+- **Deployment** — NOT PERFORMED / NOT AUTHORIZED
+- **Next packet implementation** — NOT AUTHORIZED
 - **PK-2A** — `CLOSED_WITH_NOTES` at `79ba840` (historical)
 - **PK-1** — `CLOSED_WITH_NOTES` at `513b198`. Do not reopen.
-- **Packet 5** — `PACKET_5_STATUS: NOT_CLOSED`; `BROADER_PACKET_5_CLOSURE_AUTHORIZED: NO`
+- **Packet 5** — `PACKET_5_STATUS: NOT_CLOSED`; `BROADER_PACKET_5_CLOSURE_AUTHORIZED: NO`. R7-6 closure is not Packet 5 closure.
 - **G14** — `ABORTED`
-- **This pass** — docs-only post-correction-003 reconciliation; left uncommitted (`DOC_COMMIT_PUSH_AUTHORIZED: NO`). Previous Owner-interrupt (Grok-001) is historical.
-- For current working-tree/stage/stash state, use live Git. These seven Master Plan docs are intentionally dirty. Stash remains `stash@{0}` = `7d03cfec7ba52ff7e25b7e175ca190efc258d874`.
+- **This pass** — authorized docs-only closure reconciliation of the closed R7-6 implementation. Master Plan/docs were not part of the implementation commit. Prior architecture-docs pass (`457662d`) and Owner-interrupt (Grok-001) are historical.
+- For current working-tree/stage/stash state, use live Git. Stash remains `stash@{0}` = `7d03cfec7ba52ff7e25b7e175ca190efc258d874`.
 
 ## What Happens Next
 
-**Immediate next action:** Return this seven-doc reconciliation diff/report to ChatGPT for review.
+**Immediate next action:** Return to ChatGPT for final R7-6 docs closure confirmation and next-gate coordination.
 
-THEN: obtain separate authorization for exact seven-doc commit/push if approved.
-
-ONLY AFTER: the repository returns to an accepted clean baseline, prepare/run a genuinely fresh Codex architecture rereview of Claude correction-003.
-
-Do **not** start Codex from the current dirty worktree. Do **not** start implementation. Do **not** send the final G-D1/G-D2/G-D3/G-D5 Gemini bundle. Do **not** start Application Integration.
+Do **not** deploy. Do **not** start Application Integration. Do **not** start next packet implementation. Future work requires a separate authorized gate.
 
 **Next implementation action:** NONE — NOT AUTHORIZED.
 
-Do **not** stage/commit/push docs without that separate authorization.
-
-1. R7-6 — **Post Claude Correction-003 / Pre Fresh Codex Architecture Rereview** at `a081bcb` — Claude correction-003 COMPLETE; B1–B9 claimed closed pending fresh Codex verification; 169/43 CLAUDE CANDIDATE; G-D6 OPTION_A DECIDED
+1. R7-6 implementation — **CLOSED** at `ac29935` — 55 paths; Codex rereview-005 PASS / 0 blockers; contract 282; hidden 283 = NO; G-D1 OPTION_B / G-D2 OPTION_A / G-D3 OPTION_A / G-D5 OPTION_B / G-D6 OPTION_A / CLOSED
 2. D3 — **CLOSED** at `a081bcb` (preserved)
 3. PK-2A — **`CLOSED_WITH_NOTES`** at `79ba840` (historical)
 4. PK-1 — **`CLOSED_WITH_NOTES`** at `513b198` (preserved)
 5. Packet 5 — **NOT CLOSED**
 6. G14 — **ABORTED**
-7. **NOT authorized:** R7-6 implementation, Application Integration, final G-D1/G-D2/G-D3/G-D5 Gemini bundle, PK-2C..PK-6 implementation, offline credential login, returns/refunds, G14 (ABORTED), OBS-C, PROV implementation, E-2 real POSIX evidence, UI-B.1, UI-B2, P5-F, recapture, deploy, runtime activation, callable invocation, production access, stash operations, Packet R/C/U, broader Packet 5 closure, docs commit/push without separate authorization
+7. **NOT authorized:** Application Integration, deployment, production access, Firebase runtime activation, next packet implementation, PK-2C..PK-6 implementation, offline credential login, returns/refunds, G14 (ABORTED), OBS-C, PROV implementation, E-2 real POSIX evidence, UI-B.1, UI-B2, P5-F, recapture, runtime activation, callable invocation, stash operations, Packet R/C/U, broader Packet 5 closure
 8. Closed-gate reopen: Row28/Row30/D1/D3/Row32 = NO
-9. Do not automatically start implementation or Codex from this dirty worktree
+9. Do not automatically start Application Integration, deployment, or next packet implementation
 
-**Not active:** R7-6 implementation, Application Integration, PK-2C, PROV, UI-B.1, UI-B2, P5-F, recapture, or any new feature packet.
+**Not active:** Application Integration, deployment, next packet implementation, PK-2C, PROV, UI-B.1, UI-B2, P5-F, recapture, or any new feature packet.
 
 ## Reminders
 

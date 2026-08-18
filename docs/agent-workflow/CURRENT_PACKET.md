@@ -2,59 +2,75 @@
 
 ## Phase
 
-**P1 Offline / Sync Resiliency — Packet 5 / PK-2B / R7 / R7-6 — Post Claude Correction-003 / Pre Fresh Codex Architecture Rereview**
+**P1 Offline / Sync Resiliency — Packet 5 / PK-2B / R7 / R7-6 — Implementation CLOSED / source-of-truth docs reconciliation**
 
 STATUS:
-R7_6_POST_CLAUDE_CORRECTION_003_PRE_FRESH_CODEX_ARCHITECTURE_REREVIEW
+R7_6_IMPLEMENTATION_CLOSED_SEVEN_DOC_SOURCE_OF_TRUTH_RECONCILIATION
 
 ```text
 ROADMAP_LABEL: R7-6 — all-history order / receipt freshness
 CORRECTED_BOUNDED_SCOPE: Sales History record freshness and receipt authority
-BASELINE: a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab
+R7_6_IMPLEMENTATION_STATUS: CLOSED
+R7_6_IMPLEMENTATION_COMMIT: ac29935d3fece70d50a6fe0d318ad2d4d7417305
+R7_6_IMPLEMENTATION_SUBJECT: feat(pos): complete r7-6 history and reconciliation hardening
+R7_6_IMPLEMENTATION_PARENT: 457662dcb422c2ea6e148ed745b069ff3642278f
+R7_6_IMPLEMENTATION_SURFACE: 55 paths
+CODEX_IMPLEMENTATION_REREVIEW_005: PASS
+CODEX_BLOCKERS: 0
+ACCEPTED_CONTRACT_COUNT: 282
+HIDDEN_COUNTED_ID_283: NO
+RR-007: PASS
+RR-008: PASS
+RR-009: PASS
+RR-010: PASS
+RR-001_THROUGH_RR-006: NO REGRESSION
+G-D1: OPTION_B
+G-D2: OPTION_A
+G-D3: OPTION_A
+G-D5: OPTION_B
+G-D6: OPTION_A / CLOSED
 D3_STATUS: CLOSED at a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab
-CODEX_ARCHITECTURE_REREVIEW_003: BLOCK / GEMINI REDECISION REQUIRED (historical; not a rereview of correction-003)
-CLAUDE_CORRECTION_003_STATUS: COMPLETE
-CODEX_STATUS: NOT YET RUN ON CORRECTION-003
-G-D6: DECIDED OPTION_A
-FINAL_R7_6_GEMINI_DECISION_COUNT: 5
-R7_6_IMPLEMENTATION_AUTHORIZED: NO
-APPLICATION_INTEGRATION: STILL_NOT_READY / NOT AUTHORIZED
-B1-B9: CLAUDE_CORRECTION_003_CLAIMS_CLOSED / PENDING_FRESH_CODEX_VERIFICATION
-CLAUDE_CANDIDATE_TEST_CONTRACT: 169
-CLAUDE_CANDIDATE_FILE_SURFACE: 43
-TEST_AND_FILE_SURFACE_STATUS: CLAUDE CANDIDATE / NOT YET CODEX-ACCEPTED / NOT IMPLEMENTATION-FROZEN
+APPLICATION_INTEGRATION: NOT_PERFORMED / NOT_AUTHORIZED
+DEPLOYMENT: NOT_PERFORMED / NOT_AUTHORIZED
+NEXT_PACKET_IMPLEMENTATION: NOT_AUTHORIZED
 ```
 
-`PK1_STATUS: CLOSED_WITH_NOTES` (preserved; do not reopen). **`PACKET_5_STATUS: NOT_CLOSED`.** `BROADER_PACKET_5_CLOSURE_AUTHORIZED: NO`. `G14_ACTIVATION_TRACK_STATUS: ABORTED`. No active implementation packet. Passive natural-traffic observation remains authorized in parallel, read-only only, when a natural event exists. This pass is docs-only and left uncommitted (`DOC_COMMIT_PUSH_AUTHORIZED: NO`). The previous Owner-interrupt (Grok-001) remains historical.
+`PK1_STATUS: CLOSED_WITH_NOTES` (preserved; do not reopen). **`PACKET_5_STATUS: NOT_CLOSED`.** `BROADER_PACKET_5_CLOSURE_AUTHORIZED: NO`. `G14_ACTIVATION_TRACK_STATUS: ABORTED`. No active implementation packet. Passive natural-traffic observation remains authorized in parallel, read-only only, when a natural event exists. This pass is the authorized docs-only closure reconciliation of the closed R7-6 implementation. Master Plan/docs reconciliation was not part of the implementation commit.
 
 ## This packet — Packet 5 / PK-2B / R7 / R7-6
 
-**Status: Post Claude Correction-003 / Pre Fresh Codex Architecture Rereview — not implementation-ready**
+**Status: CLOSED at `ac29935d3fece70d50a6fe0d318ad2d4d7417305`**
 
-- Baseline: `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab` (`feat(pos): add trusted orchestration owner enforcement`)
+- Implementation commit: `ac29935d3fece70d50a6fe0d318ad2d4d7417305` (`feat(pos): complete r7-6 history and reconciliation hardening`)
+- Parent: `457662dcb422c2ea6e148ed745b069ff3642278f`
+- Exact surface: 55 paths
+- Codex implementation rereview-005: **PASS**; blockers = 0
+- Exact accepted contract count: 282; hidden counted ID 283 = NO
+- RR-007 / RR-008 / RR-009 / RR-010: PASS
+- RR-001 through RR-006: NO REGRESSION
+- G-D1 OPTION_B; G-D2 OPTION_A; G-D3 OPTION_A; G-D5 OPTION_B; G-D6 OPTION_A / CLOSED
 - D3: CLOSED; reopen = NO
-- Codex rereview-003: `BLOCK / GEMINI REDECISION REQUIRED` (historical; not a rereview of correction-003)
-- Claude correction-003: **COMPLETE** — B1–B9 claimed closed by Claude architecture correction; Codex has **not** yet verified
-- G-D6: DECIDED OPTION_A — authoritative historical reprint suppresses VAT breakdown; current VAT config is not proven sale-time VAT; no snapshot; no backfill; no legal/tax conclusion. Do not reopen.
-- Gemini set (exactly five): G-D1 OPEN; G-D2 OPEN; G-D3 OPEN; G-D5 OPEN; G-D6 DECIDED OPTION_A
-- B1–B9: `CLAUDE_CORRECTION_003_CLAIMS_CLOSED / PENDING_FRESH_CODEX_VERIFICATION` — not final CLOSED
-- Candidate package: 169 tests / 43 files = CLAUDE CANDIDATE / NOT YET CODEX-ACCEPTED / NOT IMPLEMENTATION-FROZEN
-- Prior 120 tests = NOT FROZEN; prior 41 files = NOT FROZEN
 - ENTRY_STORE: PARALLEL_FOR_RECORD_FRESHNESS_ONLY (no writer; no initializer retirement)
 - Closed-gate reopen: Row28/Row30/D1/D3/Row32 = NO
-- Previous Owner-interrupt (Grok-001) is historical; it correctly wrote conservative state before the formal correction-003 report existed
+- Deployment: NOT PERFORMED / NOT AUTHORIZED
+- Application Integration: NOT PERFORMED / NOT AUTHORIZED / STILL_NOT_READY
+- Next packet implementation: NOT AUTHORIZED
+- Prior architecture-docs pass (`457662d`) and Owner-interrupt (Grok-001) remain historical
 
-## This pass — Docs/tracker reconciliation (post Claude correction-003)
+## This pass — Docs/tracker reconciliation (R7-6 implementation closure)
 
-**Status: IN PROGRESS / LEFT UNCOMMITTED** — exact 7-doc current-state correction; `DOC_COMMIT_PUSH_AUTHORIZED: NO`
+**Status: AUTHORIZED seven-doc source-of-truth reconciliation of the closed R7-6 implementation**
 
 - Authorized files: `Context.md`, `Task.md`, `docs/STATE.md`, `docs/agent-workflow/CURRENT_PACKET.md`, `docs/agent-workflow/NEXT_ACTION.md`, `docs/agent-workflow/STATE.md`, `docs/reports/latest-report.md`
 - No source/test/config/rules/index/functions changes
 - No deploy/runtime/production/emulator/callable/stash operations
 - No tests/TypeScript/build/browser/Emulator execution in this docs gate
+- Gemini decision: `OPTION_A_CLOSE_R7_6_AND_AUTHORIZE_EXACT_7_DOC_RECONCILIATION_COMMIT_PUSH`
 
 ## Prior closed packets
 
+- **R7-6 implementation** — `ac29935` (`CLOSED`; exact 55-path surface)
+- **R7-6 post-correction architecture docs** — `457662d` (historical)
 - **D3 Trusted orchestration owner enforcement** — `a081bcb` (`CLOSED`; do not reopen)
 - **PK-2A Boot / Session Gating** — `79ba840` (`CLOSED_WITH_NOTES`; historical)
 - **PK-1 Offline Shift Session** — `513b198` (`CLOSED_WITH_NOTES`; do not reopen)
@@ -68,9 +84,13 @@ TEST_AND_FILE_SURFACE_STATUS: CLAUDE CANDIDATE / NOT YET CODEX-ACCEPTED / NOT IM
 
 ## Current repository HEAD
 
-`a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab`
+`ac29935d3fece70d50a6fe0d318ad2d4d7417305`
 
-D3 closure commit (binding): `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab`
+R7-6 implementation commit (binding): `ac29935d3fece70d50a6fe0d318ad2d4d7417305`
+
+R7-6 implementation parent: `457662dcb422c2ea6e148ed745b069ff3642278f`
+
+D3 closure commit (historical, unchanged): `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab`
 
 PK-2A code commit (historical): `79ba840ab6e01ee1a5fff6c0094104c25d754668`
 
@@ -82,6 +102,6 @@ Historical closure anchors (unchanged):
 
 ## Next gate
 
-**R7-6 is not implementation-ready.** Claude correction-003 formal report is COMPLETE. B1–B9 are claimed closed by Claude architecture correction and remain `PENDING_FRESH_CODEX_VERIFICATION` (not final CLOSED). 169-test / 43-file package is CLAUDE CANDIDATE / NOT YET CODEX-ACCEPTED / NOT IMPLEMENTATION-FROZEN. G-D6 OPTION_A is DECIDED. Codex has **not** yet run on correction-003.
+**R7-6 implementation is CLOSED.** Codex rereview-005 = PASS / 0 blockers. Exact 55-path surface. Exact accepted contract = 282; hidden counted ID 283 = NO. G-D ledger closed. This seven-doc packet reconciles source-of-truth docs to that closed state.
 
-**NEXT_WORKFLOW_ACTION:** Return the seven-doc reconciliation to ChatGPT; obtain separate exact seven-doc commit/push authority if approved; return the repository to an accepted clean baseline; ONLY THEN run a genuinely fresh Codex architecture rereview of correction-003. Do not start Codex from this dirty worktree. Next implementation action: NONE — NOT AUTHORIZED. Application Integration remains STILL_NOT_READY / NOT AUTHORIZED. Do not send the final G-D1/G-D2/G-D3/G-D5 Gemini bundle. Do not reopen Row28/Row30/D1/D3/Row32. Do not reopen PK-1. Passive read-only observation may occur only when natural production traffic provides a real event. UI-B.1, UI-B2, P5-F, recapture, deploy, runtime activation, callable invocation, production access, G14 (ABORTED), OBS-C, stash operations, Packet R/C/U, broader Packet 5 closure — NOT authorized.
+**NEXT_WORKFLOW_ACTION:** Return to ChatGPT for final R7-6 docs closure confirmation and next-gate coordination. Next implementation action: NONE — NOT AUTHORIZED. Application Integration remains NOT PERFORMED / NOT AUTHORIZED / STILL_NOT_READY. Deployment remains NOT PERFORMED / NOT AUTHORIZED. Next packet implementation remains NOT AUTHORIZED. Future work requires a separate authorized gate. Do not reopen Row28/Row30/D1/D3/Row32. Do not reopen PK-1. Passive read-only observation may occur only when natural production traffic provides a real event. UI-B.1, UI-B2, P5-F, recapture, deploy, runtime activation, callable invocation, production access, G14 (ABORTED), OBS-C, stash operations, Packet R/C/U, broader Packet 5 closure — NOT authorized.
