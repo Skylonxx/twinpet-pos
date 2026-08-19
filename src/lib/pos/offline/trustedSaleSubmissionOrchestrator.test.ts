@@ -13,7 +13,7 @@ import {
   readActiveCartDurableDump,
   readActiveCartSnapshot,
 } from './activeCartSnapshotStore';
-import { isAuthenticProvenEvidenceAbsence } from './saleSubmissionEvidenceStore';
+import { isAuthenticProvenEvidenceAbsence, isAuthenticProvenEvidencePresence } from './saleSubmissionEvidenceStore';
 import {
   beginOwnedActiveCartGeneration,
   claimTrustedOrchestrationOwner,
@@ -97,11 +97,13 @@ function assertNoCapabilityLeak(value: unknown): void {
   expect(isAuthenticTrustedOrchestrationOwner(value as never)).toBe(false);
   expect(isAuthenticAcquiredResumeFenceAuthorization(value as never)).toBe(false);
   expect(isAuthenticProvenEvidenceAbsence(value as never)).toBe(false);
+  expect(isAuthenticProvenEvidencePresence(value as never)).toBe(false);
   if (value !== null && typeof value === 'object') {
     for (const nested of Object.values(value)) {
       expect(isAuthenticTrustedOrchestrationOwner(nested as never)).toBe(false);
       expect(isAuthenticAcquiredResumeFenceAuthorization(nested as never)).toBe(false);
       expect(isAuthenticProvenEvidenceAbsence(nested as never)).toBe(false);
+      expect(isAuthenticProvenEvidencePresence(nested as never)).toBe(false);
     }
   }
 }
@@ -165,7 +167,7 @@ describe('O — trusted sale-submission orchestrator', () => {
     const second = await beginTrustedSaleSubmission({
       branchId: 'O3-B',
       deviceId: 'O3-D',
-      asyncOrderId: 'O3-D-1',
+      asyncOrderId: 'O3-B-1',
       billId: 'B-O3-B',
     });
     expect(second.ok).toBe(true);
@@ -361,9 +363,9 @@ describe('NV-8 duplicate sweep convergence', () => {
     expect(record?.resumeAttempts).toBe(1);
     expect(record?.resumeFence.held).toBe(false);
     const evidence = await inspectEvidenceStores();
-    expect(evidence.pointerKeys).toHaveLength(1);
-    expect(evidence.entryKeys).toHaveLength(0);
-    expect(evidence.pointers).toHaveLength(1);
+    expect(evidence.entryKeys).toHaveLength(1);
+    expect(evidence.pointerKeys).toHaveLength(0);
+    expect(evidence.pointers).toHaveLength(0);
   });
 });
 
@@ -433,7 +435,7 @@ describe('owner re-key in-flight coordination', () => {
     const secondPromise = beginTrustedSaleSubmission({
       branchId: 'RK-B',
       deviceId: 'RK-D',
-      asyncOrderId: 'RK-D-1',
+      asyncOrderId: 'RK-B-1',
       billId: 'B-RK-B',
     });
     let secondSettled = false;

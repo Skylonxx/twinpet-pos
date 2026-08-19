@@ -16,7 +16,11 @@ import {
   isAuthenticAcquiredResumeFenceAuthorization,
   releaseSaleSubmissionResumeFence,
 } from './activeCartSnapshotStore';
-import { commitSaleSubmissionAbsenceSeal } from './saleSubmissionEvidenceStore';
+import {
+  commitSaleSubmissionAbsenceSeal,
+  commitSaleSubmissionEvidenceEntry,
+  proveSaleSubmissionEvidencePresence,
+} from './saleSubmissionEvidenceStore';
 
 declare const TrustedOrchestrationOwnerBrand: unique symbol;
 
@@ -174,6 +178,36 @@ export async function commitOwnedSaleSubmissionAbsenceSeal(
   return commitSaleSubmissionAbsenceSeal(authorization);
 }
 
+export async function commitOwnedSaleSubmissionEvidenceEntry(
+  owner: TrustedOrchestrationOwner,
+  authorization: Parameters<typeof commitSaleSubmissionEvidenceEntry>[0],
+): Promise<Awaited<ReturnType<typeof commitSaleSubmissionEvidenceEntry>>> {
+  if (!isAuthenticAcquiredResumeFenceAuthorization(authorization)) {
+    return { ok: false };
+  }
+  const branchId = authorization.branchId;
+  const deviceId = authorization.deviceId;
+  if (!isTrustedOrchestrationOwnerFor(owner, branchId, deviceId)) {
+    return { ok: false };
+  }
+  return commitSaleSubmissionEvidenceEntry(authorization);
+}
+
+export async function proveOwnedSaleSubmissionEvidencePresence(
+  owner: TrustedOrchestrationOwner,
+  authorization: Parameters<typeof proveSaleSubmissionEvidencePresence>[0],
+): Promise<Awaited<ReturnType<typeof proveSaleSubmissionEvidencePresence>>> {
+  if (!isAuthenticAcquiredResumeFenceAuthorization(authorization)) {
+    return { ok: false };
+  }
+  const branchId = authorization.branchId;
+  const deviceId = authorization.deviceId;
+  if (!isTrustedOrchestrationOwnerFor(owner, branchId, deviceId)) {
+    return { ok: false };
+  }
+  return proveSaleSubmissionEvidencePresence(authorization);
+}
+
 export async function releaseOwnedSaleSubmissionResumeFence(
   owner: TrustedOrchestrationOwner,
   authorization: Parameters<typeof releaseSaleSubmissionResumeFence>[0],
@@ -187,14 +221,12 @@ export async function releaseOwnedSaleSubmissionResumeFence(
   if (!isTrustedOrchestrationOwnerFor(owner, branchId, deviceId)) {
     return { ok: false };
   }
-  const localOutcome = request.outcome;
-  const localProof = request.proof;
+  const freshRequest =
+    request.outcome === 'evidence_present'
+      ? { outcome: 'evidence_present' as const, proof: request.proof }
+      : { outcome: 'evidence_proven_absent' as const, proof: request.proof };
   if (!isTrustedOrchestrationOwnerFor(owner, branchId, deviceId)) {
     return { ok: false };
   }
-  const freshRequest = {
-    outcome: localOutcome,
-    proof: localProof,
-  };
   return releaseSaleSubmissionResumeFence(authorization, freshRequest);
 }

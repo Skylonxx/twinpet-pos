@@ -18,6 +18,7 @@ import {
 } from './activeCartSnapshotStore';
 import {
   commitSaleSubmissionAbsenceSeal,
+  commitSaleSubmissionEvidenceEntry,
   isAuthenticProvenEvidenceAbsence,
 } from './saleSubmissionEvidenceStore';
 
@@ -1191,5 +1192,14 @@ describe('INVALID OPEN_IDLE fence data fails closed', () => {
     expect(cartPuts).toBe(0);
     const after = await captureCartState();
     assertCartByteIdentical(before, after);
+  });
+});
+
+describe('AI-2 additive presence-path lifetime', () => {
+  test('cloned presence authorization cannot write ENTRY', async () => {
+    const { authorization } = await arrangeHeldCart();
+    const clone = JSON.parse(JSON.stringify(authorization)) as AcquiredResumeFenceAuthorization;
+    const result = await commitSaleSubmissionEvidenceEntry(clone);
+    expect(result.ok).toBe(false);
   });
 });

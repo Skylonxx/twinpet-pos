@@ -70,14 +70,20 @@ const FROZEN_CART_RUNTIME_EXPORTS = [
 ];
 const FROZEN_EVIDENCE_RUNTIME_EXPORTS = [
   'commitSaleSubmissionAbsenceSeal',
+  'commitSaleSubmissionEvidenceEntry',
   'isAuthenticProvenEvidenceAbsence',
+  'isAuthenticProvenEvidencePresence',
+  'proveSaleSubmissionEvidencePresence',
 ];
-const FROZEN_ALL_NINE_RUNTIME_EXPORTS = [
+const FROZEN_ALL_TWELVE_RUNTIME_EXPORTS = [
   ...FROZEN_CART_RUNTIME_EXPORTS,
   ...FROZEN_EVIDENCE_RUNTIME_EXPORTS,
 ].sort();
 
-const FROZEN_CART_TO_EVIDENCE_RUNTIME_SYMBOLS = ['isAuthenticProvenEvidenceAbsence'];
+const FROZEN_CART_TO_EVIDENCE_RUNTIME_SYMBOLS = [
+  'isAuthenticProvenEvidenceAbsence',
+  'isAuthenticProvenEvidencePresence',
+];
 const FROZEN_EVIDENCE_TO_CART_RUNTIME_SYMBOLS = ['isAuthenticAcquiredResumeFenceAuthorization'];
 const FROZEN_FACADE_CART_RUNTIME_SYMBOLS = [
   'acquireSaleSubmissionResumeFence',
@@ -85,7 +91,11 @@ const FROZEN_FACADE_CART_RUNTIME_SYMBOLS = [
   'isAuthenticAcquiredResumeFenceAuthorization',
   'releaseSaleSubmissionResumeFence',
 ];
-const FROZEN_FACADE_EVIDENCE_RUNTIME_SYMBOLS = ['commitSaleSubmissionAbsenceSeal'];
+const FROZEN_FACADE_EVIDENCE_RUNTIME_SYMBOLS = [
+  'commitSaleSubmissionAbsenceSeal',
+  'commitSaleSubmissionEvidenceEntry',
+  'proveSaleSubmissionEvidencePresence',
+];
 const FROZEN_FACADE_GOVERNED_IDENTIFIER_NAMES = [
   'acquireSaleSubmissionResumeFence',
   'acquireSaleSubmissionResumeFence',
@@ -99,9 +109,19 @@ const FROZEN_FACADE_GOVERNED_IDENTIFIER_NAMES = [
   'commitSaleSubmissionAbsenceSeal',
   'commitSaleSubmissionAbsenceSeal',
   'commitSaleSubmissionAbsenceSeal',
+  'commitSaleSubmissionEvidenceEntry',
+  'commitSaleSubmissionEvidenceEntry',
+  'commitSaleSubmissionEvidenceEntry',
+  'commitSaleSubmissionEvidenceEntry',
   'isAuthenticAcquiredResumeFenceAuthorization',
   'isAuthenticAcquiredResumeFenceAuthorization',
   'isAuthenticAcquiredResumeFenceAuthorization',
+  'isAuthenticAcquiredResumeFenceAuthorization',
+  'isAuthenticAcquiredResumeFenceAuthorization',
+  'proveSaleSubmissionEvidencePresence',
+  'proveSaleSubmissionEvidencePresence',
+  'proveSaleSubmissionEvidencePresence',
+  'proveSaleSubmissionEvidencePresence',
   'releaseSaleSubmissionResumeFence',
   'releaseSaleSubmissionResumeFence',
   'releaseSaleSubmissionResumeFence',
@@ -112,13 +132,18 @@ const FROZEN_CART_TO_TYPES_SYMBOLS = [
   'AcquiredResumeFenceAuthorization',
   'ActiveCartSnapshotRecord',
   'ProvenEvidenceAbsence',
+  'ProvenEvidencePresence',
   'ReleaseSaleSubmissionResumeFenceResult',
 ];
 const FROZEN_EVIDENCE_TO_TYPES_SYMBOLS = [
   'AbsenceSealAuthorityV1',
   'AcquiredResumeFenceAuthorization',
   'CommitSaleSubmissionAbsenceSealResult',
+  'CommitSaleSubmissionEvidenceEntryResult',
+  'ProveSaleSubmissionEvidencePresenceResult',
   'ProvenEvidenceAbsence',
+  'ProvenEvidencePresence',
+  'SaleSubmissionEvidenceEntryV1',
 ];
 
 const FROZEN_BARE_SPECIFIERS = [
@@ -158,15 +183,15 @@ const FROZEN_ROW29_DB_OPEN_PAIRS: ReadonlyArray<{
     count: 1,
   },
 ];
-const ROW29_MUTATION_SITE_COUNT = 9;
+const ROW29_MUTATION_SITE_COUNT = 10;
 const ROW29_TRANSACTION_SITE_COUNT = 2;
 const POINTER_STORE_SEMANTIC_MUTATION_INVOCATION_COUNT = 1;
-const ENTRY_STORE_SEMANTIC_MUTATION_INVOCATION_COUNT = 0;
-const ENTRY_STORE_SEMANTIC_READ_INVOCATION_COUNT = 1;
+const ENTRY_STORE_SEMANTIC_MUTATION_INVOCATION_COUNT = 1;
+const ENTRY_STORE_SEMANTIC_READ_INVOCATION_COUNT = 3;
 const W8_CART_TOTAL_RETAINED_SITE_COUNT = 6;
 const W8_CART_DISTINCT_TUPLE_COUNT = 6;
-const W8_EVIDENCE_TOTAL_RETAINED_SITE_COUNT = 3;
-const W8_EVIDENCE_DISTINCT_TUPLE_COUNT = 3;
+const W8_EVIDENCE_TOTAL_RETAINED_SITE_COUNT = 4;
+const W8_EVIDENCE_DISTINCT_TUPLE_COUNT = 4;
 const W8_DELETE_DATABASE_CART_COUNT = 0;
 const W8_DELETE_DATABASE_EVIDENCE_COUNT = 0;
 
@@ -207,6 +232,7 @@ const FROZEN_CART_W8_PAIRS: [string, number][] = [
 
 const FROZEN_EVIDENCE_W8_PAIRS: [string, number][] = [
   [`${EVIDENCE_FILE}|openEvidenceDb|createObjectStore|store:saleEvidenceGenerationPointers+store:saleSubmissionEvidence|schema`, 1],
+  [`${EVIDENCE_FILE}|runAuthorizedEntryWriteTransaction|add|store:saleSubmissionEvidence|semantic`, 1],
   [`${EVIDENCE_FILE}|runAuthorizedSealTransaction|add|store:saleEvidenceGenerationPointers|semantic`, 1],
   [`${EVIDENCE_FILE}|transactEvidence|add|store:saleEvidenceGenerationPointers+store:saleSubmissionEvidence|raw_seam`, 1],
 ];
@@ -955,6 +981,7 @@ function collectOwnerSites(
       if (
         ts.isIdentifier(node.expression) &&
         (node.expression.text === 'isAuthenticProvenEvidenceAbsence' ||
+          node.expression.text === 'isAuthenticProvenEvidencePresence' ||
           node.expression.text === 'isAuthenticAcquiredResumeFenceAuthorization')
       ) {
         predicateCalls.push({ file, name: node.expression.text, owner });
@@ -1337,7 +1364,7 @@ function buildAnalysis(): Analysis {
   const identifierHitsOutsideIsland: { file: string; name: string }[] = [];
   const identifierHitsInFacade: { file: string; name: string }[] = [];
   const predicateCalls: { file: string; name: string; owner: string }[] = [];
-  const runtimeExportNames = new Set(FROZEN_ALL_NINE_RUNTIME_EXPORTS);
+  const runtimeExportNames = new Set(FROZEN_ALL_TWELVE_RUNTIME_EXPORTS);
   const island = new Set([CART_FILE, EVIDENCE_FILE]);
 
   let cycleRuntime: { symbols: string[]; namespace: boolean } = { symbols: [], namespace: false };
@@ -1608,7 +1635,7 @@ describe('Row32 saleSubmissionWriterConfinement', () => {
       }
     });
 
-    test('Row29 owner mutation-site store domains resolve (9/0) and transaction domains resolve (2/0)', () => {
+    test('Row29 owner mutation-site store domains resolve (10/0) and transaction domains resolve (2/0)', () => {
       const a = analysis();
       expect(a.unclassifiedMutationSites).toEqual([]);
       expect(a.ownerMutationSites).toHaveLength(ROW29_MUTATION_SITE_COUNT);
@@ -1657,15 +1684,15 @@ describe('Row32 saleSubmissionWriterConfinement', () => {
     });
   });
 
-  describe('T7 all-nine runtime-export reachability', () => {
-    test('live owner namespaces equal the frozen nine-name set', () => {
+  describe('T7 all-twelve runtime-export reachability', () => {
+    test('live owner namespaces equal the frozen twelve-name set', () => {
       const live = [...Object.keys(cartRuntimeExports), ...Object.keys(evidenceRuntimeExports)].sort();
       expect(Object.keys(cartRuntimeExports).sort()).toEqual(FROZEN_CART_RUNTIME_EXPORTS);
       expect(Object.keys(evidenceRuntimeExports).sort()).toEqual(FROZEN_EVIDENCE_RUNTIME_EXPORTS);
-      expect(live).toEqual(FROZEN_ALL_NINE_RUNTIME_EXPORTS);
+      expect(live).toEqual(FROZEN_ALL_TWELVE_RUNTIME_EXPORTS);
     });
 
-    test('T7-a: no production application import-graph reachability of the nine', () => {
+    test('T7-a: no production application import-graph reachability of the twelve', () => {
       const a = analysis();
       expect(a.importers[CART_FILE].runtime).toEqual(sortedCopy(FROZEN_CART_RUNTIME_IMPORTERS));
       expect(a.importers[CART_FILE].typeOnly).toEqual([]);
@@ -1693,10 +1720,15 @@ describe('Row32 saleSubmissionWriterConfinement', () => {
 
     test('authenticity predicates retain only the approved internal cycle callers', () => {
       const a = analysis();
-      const proofCalls = a.predicateCalls.filter((c) => c.name === 'isAuthenticProvenEvidenceAbsence');
+      const proofCalls = a.predicateCalls.filter(
+        (c) =>
+          c.name === 'isAuthenticProvenEvidenceAbsence' ||
+          c.name === 'isAuthenticProvenEvidencePresence',
+      );
       const authCalls = a.predicateCalls.filter((c) => c.name === 'isAuthenticAcquiredResumeFenceAuthorization');
       expect(proofCalls).toEqual([
         { file: CART_FILE, name: 'isAuthenticProvenEvidenceAbsence', owner: 'releaseSaleSubmissionResumeFence' },
+        { file: CART_FILE, name: 'isAuthenticProvenEvidencePresence', owner: 'releaseSaleSubmissionResumeFence' },
       ]);
       expect(authCalls).toEqual([
         {
@@ -1708,6 +1740,16 @@ describe('Row32 saleSubmissionWriterConfinement', () => {
           file: EVIDENCE_FILE,
           name: 'isAuthenticAcquiredResumeFenceAuthorization',
           owner: 'commitSaleSubmissionAbsenceSeal',
+        },
+        {
+          file: EVIDENCE_FILE,
+          name: 'isAuthenticAcquiredResumeFenceAuthorization',
+          owner: 'commitSaleSubmissionEvidenceEntry',
+        },
+        {
+          file: EVIDENCE_FILE,
+          name: 'isAuthenticAcquiredResumeFenceAuthorization',
+          owner: 'proveSaleSubmissionEvidencePresence',
         },
       ]);
     });

@@ -18,6 +18,7 @@ import {
 import * as cart from './activeCartSnapshotStore';
 import {
   commitSaleSubmissionAbsenceSeal,
+  commitSaleSubmissionEvidenceEntry,
   isAuthenticProvenEvidenceAbsence,
 } from './saleSubmissionEvidenceStore';
 import * as store from './saleSubmissionEvidenceStore';
@@ -478,5 +479,34 @@ describe('A-S4x cart-store export audit', () => {
     for (const name of EXPECTED_CART_EXPORT_NAMES) {
       expect(typeof cart[name as keyof typeof cart]).toBe(EXPECTED_CART_EXPORT_TYPE[name]);
     }
+  });
+});
+
+describe('AI-2 additive presence release', () => {
+  test('evidence_present terminalizes held fence without a second durable release effect', async () => {
+    const init = await initializeActiveCartSaleSubmission({ ...FIXTURE });
+    expect(init.ok).toBe(true);
+    const acquired = await acquireSaleSubmissionResumeFence({
+      branchId: FIXTURE.branchId,
+      deviceId: FIXTURE.deviceId,
+    });
+    expect(acquired.ok).toBe(true);
+    if (!acquired.ok) throw new Error('acquire failed');
+    const written = await commitSaleSubmissionEvidenceEntry(acquired.authorization);
+    expect(written.ok).toBe(true);
+    if (!written.ok) throw new Error('write failed');
+    const released = await releaseSaleSubmissionResumeFence(acquired.authorization, {
+      outcome: 'evidence_present',
+      proof: written.proof,
+    });
+    expect(released.ok).toBe(true);
+    const after = await readActiveCartSnapshot(FIXTURE.branchId, FIXTURE.deviceId);
+    expect(after?.resumeAttempts).toBe(1);
+    expect(after?.resumeFence.held).toBe(false);
+    const retry = await releaseSaleSubmissionResumeFence(acquired.authorization, {
+      outcome: 'evidence_present',
+      proof: written.proof,
+    });
+    expect(retry.ok).toBe(false);
   });
 });

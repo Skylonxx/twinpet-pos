@@ -11,11 +11,12 @@
  * runtime edges. Proofs travel by direct in-process reference; this module does
  * not clone, spread, serialize, or wrap them.
  */
-import { isAuthenticProvenEvidenceAbsence } from './saleSubmissionEvidenceStore';
+import { isAuthenticProvenEvidenceAbsence, isAuthenticProvenEvidencePresence } from './saleSubmissionEvidenceStore';
 import type {
   AcquiredResumeFenceAuthorization,
   ActiveCartSnapshotRecord,
   ProvenEvidenceAbsence,
+  ProvenEvidencePresence,
   ReleaseSaleSubmissionResumeFenceResult,
 } from './saleSubmissionEvidenceTypes';
 
@@ -34,7 +35,7 @@ type FenceAuthorizationFields = {
 };
 
 type ProofFieldSnapshot = {
-  kind: 'evidence_proven_absent';
+  kind: 'evidence_proven_absent' | 'evidence_present';
   branchId: string;
   deviceId: string;
   generationId: string;
@@ -584,10 +585,11 @@ export async function readActiveCartDurableDump(): Promise<{
 }
 
 /**
- * Consumer of ProvenEvidenceAbsence. Proof authenticity and authorization
- * authenticity both run at function top level before transactCart / any cart
- * DB open or work. No twelfth check. No new refusal kind. Forged proofs and
- * inauthentic authorizations gain no replay/resume authority.
+ * Consumer of ProvenEvidenceAbsence or ProvenEvidencePresence. Proof authenticity
+ * and authorization authenticity both run at function top level before transactCart
+ * / any cart DB open or work. Presence release terminalizes the same way as
+ * absence: resumeAttempts 0→1, held true→false, fenceSeq/nonce preserved, no
+ * pointer mint, no ENTRY mutation. Cross-outcome forgery is refused by WeakSet.
  *
  * Row30 must preserve: authorization authenticity, proof authenticity,
  * branch/device, generationId/generationSeq, storeEpochId, asyncOrderId/billId,
@@ -597,11 +599,19 @@ export async function readActiveCartDurableDump(): Promise<{
  */
 export async function releaseSaleSubmissionResumeFence(
   authorization: AcquiredResumeFenceAuthorization,
-  request: { outcome: 'evidence_proven_absent'; proof: ProvenEvidenceAbsence },
+  request:
+    | { outcome: 'evidence_proven_absent'; proof: ProvenEvidenceAbsence }
+    | { outcome: 'evidence_present'; proof: ProvenEvidencePresence },
 ): Promise<ReleaseSaleSubmissionResumeFenceResult> {
   const proof = request.proof;
-  if (!isAuthenticProvenEvidenceAbsence(proof)) {
-    return { ok: false };
+  if (request.outcome === 'evidence_proven_absent') {
+    if (!isAuthenticProvenEvidenceAbsence(proof)) {
+      return { ok: false };
+    }
+  } else {
+    if (!isAuthenticProvenEvidencePresence(proof)) {
+      return { ok: false };
+    }
   }
   if (!isAuthenticAcquiredResumeFenceAuthorization(authorization)) {
     return { ok: false };

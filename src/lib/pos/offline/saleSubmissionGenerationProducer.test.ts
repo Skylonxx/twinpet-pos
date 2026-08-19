@@ -983,28 +983,33 @@ describe('D1-T17 Row32 corrected exact topology', () => {
     const evidenceNames = Object.keys(evidenceRuntimeExports).sort();
     expect(cartNames).toHaveLength(7);
     expect(cartNames).toContain('beginActiveCartGeneration');
-    expect(evidenceNames).toHaveLength(2);
-    expect([...cartNames, ...evidenceNames].sort()).toHaveLength(9);
+    expect(evidenceNames).toHaveLength(5);
+    expect([...cartNames, ...evidenceNames].sort()).toHaveLength(12);
 
     expect(confinementContractRaw).toContain("'beginActiveCartGeneration'");
-    expect(confinementContractRaw).toContain('FROZEN_ALL_NINE_RUNTIME_EXPORTS');
+    expect(confinementContractRaw).toContain('FROZEN_ALL_TWELVE_RUNTIME_EXPORTS');
     expect(confinementContractRaw).toContain(
       '|beginActiveCartGeneration|put|store:activeCartSnapshots|semantic',
     );
     expect(confinementContractRaw).toContain('const W8_CART_TOTAL_RETAINED_SITE_COUNT = 6;');
     expect(confinementContractRaw).toContain('const W8_CART_DISTINCT_TUPLE_COUNT = 6;');
-    expect(confinementContractRaw).toContain('const ROW29_MUTATION_SITE_COUNT = 9;');
-    expect(confinementContractRaw).toContain('const runtimeExportNames = new Set(FROZEN_ALL_NINE_RUNTIME_EXPORTS);');
-    expect(confinementContractRaw).toContain("resolve (9/0) and transaction domains resolve (2/0)");
-    expect(confinementContractRaw).toContain("T7 all-nine runtime-export reachability");
-    expect(confinementContractRaw).toContain('frozen nine-name set');
-    expect(confinementContractRaw).toContain('reachability of the nine');
+    expect(confinementContractRaw).toContain('const ROW29_MUTATION_SITE_COUNT = 10;');
+    expect(confinementContractRaw).toContain('const runtimeExportNames = new Set(FROZEN_ALL_TWELVE_RUNTIME_EXPORTS);');
+    expect(confinementContractRaw).toContain("resolve (10/0) and transaction domains resolve (2/0)");
+    expect(confinementContractRaw).toContain("T7 all-twelve runtime-export reachability");
+    expect(confinementContractRaw).toContain('frozen twelve-name set');
+    expect(confinementContractRaw).toContain('reachability of the twelve');
 
     expect(confinementContractRaw).not.toContain('FROZEN_ALL_EIGHT_RUNTIME_EXPORTS');
     expect(confinementContractRaw).not.toContain('all-eight');
     expect(confinementContractRaw).not.toContain('eight-name set');
     expect(confinementContractRaw).not.toContain('reachability of the eight');
     expect(confinementContractRaw).not.toMatch(/\bconst eight = /);
+    expect(confinementContractRaw).not.toContain('FROZEN_ALL_NINE_RUNTIME_EXPORTS');
+    expect(confinementContractRaw).not.toContain('all-nine');
+    expect(confinementContractRaw).not.toContain('nine-name set');
+    expect(confinementContractRaw).not.toContain('reachability of the nine');
+    expect(confinementContractRaw).not.toMatch(/\bconst nine = /);
 
     expect(ownerTestRaw).toContain("'beginActiveCartGeneration'");
     expect(ownerTestRaw).toContain('beginActiveCartGeneration: \'function\'');

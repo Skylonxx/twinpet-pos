@@ -1,9 +1,15 @@
 /**
  * Sole raw owner of the sale-submission evidence IndexedDB.
- * Runtime authenticity for ProvenEvidenceAbsence is a module-private WeakSet
- * of exact object identities plus presentation-time 10-field mint integrity
- * over ordinary own data properties, including kind. There is no exported
- * registry, mint, or add seam. The producer gates on the cart store's
+ * Runtime authenticity for ProvenEvidenceAbsence and ProvenEvidencePresence is
+ * a module-private WeakSet of exact object identities plus presentation-time
+ * 10-field mint integrity over ordinary own data properties, including kind.
+ * There is no exported registry, mint, or add seam. ENTRY_STORE presence is
+ * local durable submission intent only. It does not mean a remote submit
+ * issued, queued, acked, settled, or reconciled.
+ *
+ * AI2_ABSENCE_SOUNDNESS_SCOPE: SINGLE_TAB_PER_CART_KEY
+ * AI2_ABSENCE_SOUNDNESS_FAILURE_PATH_CARVEOUT:
+ * ENTRY_WRITE_FAILED_AFTER_FENCE_ACQUISITION_AND_CHECKOUT_PROCEEDED The producer gates on the cart store's
  * authorization predicate before any evidence-DB work, then consumes only a
  * synchronous named-field authorization snapshot. Cycle invariants C-1..C-4:
  * only hoisted function declarations cross the cycle; no peer call during
@@ -14,12 +20,18 @@ import type {
   AbsenceSealAuthorityV1,
   AcquiredResumeFenceAuthorization,
   CommitSaleSubmissionAbsenceSealResult,
+  CommitSaleSubmissionEvidenceEntryResult,
+  ProveSaleSubmissionEvidencePresenceResult,
   ProvenEvidenceAbsence,
+  ProvenEvidencePresence,
+  SaleSubmissionEvidenceEntryV1,
 } from './saleSubmissionEvidenceTypes';
 import { isAuthenticAcquiredResumeFenceAuthorization } from './activeCartSnapshotStore';
 
 const authenticProvenEvidenceAbsences = new WeakSet<object>();
 const provenEvidenceAbsenceMints = new WeakMap<object, ProofFields>();
+const authenticProvenEvidencePresences = new WeakSet<object>();
+const provenEvidencePresenceMints = new WeakMap<object, PresenceProofFields>();
 
 const EVIDENCE_DB_NAME = 'twinpet-sale-submission-evidence';
 const EVIDENCE_DB_VERSION = 1;
@@ -30,6 +42,19 @@ type EvidenceStoreName = (typeof EVIDENCE_STORES)[number];
 
 type ProofFields = {
   kind: 'evidence_proven_absent';
+  branchId: string;
+  deviceId: string;
+  generationId: string;
+  generationSeq: number;
+  storeEpochId: string;
+  asyncOrderId: string;
+  billId: string;
+  barrierFenceSeq: number;
+  barrierFenceNonce: string;
+};
+
+type PresenceProofFields = {
+  kind: 'evidence_present';
   branchId: string;
   deviceId: string;
   generationId: string;
@@ -81,6 +106,23 @@ function copyAuthorizationFields(source: AuthorizationFieldSnapshot): Authorizat
 
 function copyProofFields(source: ProofFields): ProofFields {
   const snapshot: ProofFields = {
+    kind: source.kind,
+    branchId: source.branchId,
+    deviceId: source.deviceId,
+    generationId: source.generationId,
+    generationSeq: source.generationSeq,
+    storeEpochId: source.storeEpochId,
+    asyncOrderId: source.asyncOrderId,
+    billId: source.billId,
+    barrierFenceSeq: source.barrierFenceSeq,
+    barrierFenceNonce: source.barrierFenceNonce,
+  };
+  Object.freeze(snapshot);
+  return snapshot;
+}
+
+function copyPresenceProofFields(source: PresenceProofFields): PresenceProofFields {
+  const snapshot: PresenceProofFields = {
     kind: source.kind,
     branchId: source.branchId,
     deviceId: source.deviceId,
@@ -234,6 +276,69 @@ function isExactAbsenceSealPointer(
   return true;
 }
 
+function isExactSaleSubmissionEvidenceEntry(
+  entry: unknown,
+  authSnapshot: AuthorizationFieldSnapshot,
+): entry is SaleSubmissionEvidenceEntryV1 {
+  if (entry === null || typeof entry !== 'object') return false;
+  const stored = entry as Record<string, unknown>;
+  if (stored.kind !== 'submission_evidence') return false;
+  if (stored.schemaVersion !== 1) return false;
+  if (stored.entryKey !== authSnapshot.asyncOrderId) return false;
+  if (typeof stored.createdAtLocal !== 'number' || !Number.isFinite(stored.createdAtLocal)) {
+    return false;
+  }
+  if (!isNonemptyString(stored.branchId)) return false;
+  if (!isNonemptyString(stored.deviceId)) return false;
+  if (!isNonemptyString(stored.generationId)) return false;
+  if (!isInteger(stored.generationSeq)) return false;
+  if (!isNonemptyString(stored.storeEpochId)) return false;
+  if (!isNonemptyString(stored.asyncOrderId)) return false;
+  if (!isNonemptyString(stored.billId)) return false;
+  if (!isInteger(stored.barrierFenceSeq) || stored.barrierFenceSeq <= 0) return false;
+  if (!isNonemptyString(stored.barrierFenceNonce)) return false;
+  if (stored.branchId !== authSnapshot.branchId) return false;
+  if (stored.deviceId !== authSnapshot.deviceId) return false;
+  if (stored.generationId !== authSnapshot.generationId) return false;
+  if (stored.generationSeq !== authSnapshot.generationSeq) return false;
+  if (stored.storeEpochId !== authSnapshot.storeEpochId) return false;
+  if (stored.asyncOrderId !== authSnapshot.asyncOrderId) return false;
+  if (stored.billId !== authSnapshot.billId) return false;
+  if (stored.barrierFenceSeq !== authSnapshot.fenceSeq) return false;
+  if (stored.barrierFenceNonce !== authSnapshot.fenceNonce) return false;
+  return true;
+}
+
+function presenceFieldsFromStored(stored: SaleSubmissionEvidenceEntryV1): PresenceProofFields {
+  return {
+    kind: 'evidence_present',
+    branchId: stored.branchId,
+    deviceId: stored.deviceId,
+    generationId: stored.generationId,
+    generationSeq: stored.generationSeq,
+    storeEpochId: stored.storeEpochId,
+    asyncOrderId: stored.asyncOrderId,
+    billId: stored.billId,
+    barrierFenceSeq: stored.barrierFenceSeq,
+    barrierFenceNonce: stored.barrierFenceNonce,
+  };
+}
+
+function presenceFieldsFromAuth(authSnapshot: AuthorizationFieldSnapshot): PresenceProofFields {
+  return {
+    kind: 'evidence_present',
+    branchId: authSnapshot.branchId,
+    deviceId: authSnapshot.deviceId,
+    generationId: authSnapshot.generationId,
+    generationSeq: authSnapshot.generationSeq,
+    storeEpochId: authSnapshot.storeEpochId,
+    asyncOrderId: authSnapshot.asyncOrderId,
+    billId: authSnapshot.billId,
+    barrierFenceSeq: authSnapshot.fenceSeq,
+    barrierFenceNonce: authSnapshot.fenceNonce,
+  };
+}
+
 async function runAuthorizedSealTransaction(
   authSnapshot: AuthorizationFieldSnapshot,
 ): Promise<ProofFields> {
@@ -367,6 +472,161 @@ export function isAuthenticProvenEvidenceAbsence(
   if (!isOwnDataProperty(value, 'barrierFenceSeq')) return false;
   if (!isOwnDataProperty(value, 'barrierFenceNonce')) return false;
   const current = value as ProofFields;
+  return (
+    current.kind === minted.kind &&
+    current.branchId === minted.branchId &&
+    current.deviceId === minted.deviceId &&
+    current.generationId === minted.generationId &&
+    current.generationSeq === minted.generationSeq &&
+    current.storeEpochId === minted.storeEpochId &&
+    current.asyncOrderId === minted.asyncOrderId &&
+    current.billId === minted.billId &&
+    current.barrierFenceSeq === minted.barrierFenceSeq &&
+    current.barrierFenceNonce === minted.barrierFenceNonce
+  );
+}
+
+async function runAuthorizedEntryWriteTransaction(
+  authSnapshot: AuthorizationFieldSnapshot,
+): Promise<PresenceProofFields> {
+  return transactEvidence('readwrite', async (txn) => {
+    if (!isWellFormedFence(authSnapshot.fenceSeq, authSnapshot.fenceNonce)) {
+      throw new Error('entry_refused');
+    }
+    const existing = await txn.get<unknown>(ENTRY_STORE, authSnapshot.asyncOrderId);
+    if (existing !== undefined) {
+      if (isExactSaleSubmissionEvidenceEntry(existing, authSnapshot)) {
+        return presenceFieldsFromStored(existing);
+      }
+      throw new Error('entry_refused');
+    }
+    const entry: SaleSubmissionEvidenceEntryV1 = {
+      kind: 'submission_evidence',
+      schemaVersion: 1,
+      entryKey: authSnapshot.asyncOrderId,
+      branchId: authSnapshot.branchId,
+      deviceId: authSnapshot.deviceId,
+      generationId: authSnapshot.generationId,
+      generationSeq: authSnapshot.generationSeq,
+      storeEpochId: authSnapshot.storeEpochId,
+      asyncOrderId: authSnapshot.asyncOrderId,
+      billId: authSnapshot.billId,
+      createdAtLocal: Date.now(),
+      barrierFenceSeq: authSnapshot.fenceSeq,
+      barrierFenceNonce: authSnapshot.fenceNonce,
+    };
+    await txn.add(ENTRY_STORE, authSnapshot.asyncOrderId, entry);
+    return presenceFieldsFromAuth(authSnapshot);
+  });
+}
+
+async function runAuthorizedPresenceProveTransaction(
+  authSnapshot: AuthorizationFieldSnapshot,
+): Promise<PresenceProofFields> {
+  return transactEvidence('readonly', async (txn) => {
+    if (!isWellFormedFence(authSnapshot.fenceSeq, authSnapshot.fenceNonce)) {
+      throw new Error('presence_refused');
+    }
+    const existing = await txn.get<unknown>(ENTRY_STORE, authSnapshot.asyncOrderId);
+    if (existing === undefined) {
+      throw new Error('presence_refused');
+    }
+    if (!isExactSaleSubmissionEvidenceEntry(existing, authSnapshot)) {
+      throw new Error('presence_refused');
+    }
+    return presenceFieldsFromStored(existing);
+  });
+}
+
+function mintAuthenticPresenceProof(fields: PresenceProofFields): ProvenEvidencePresence {
+  const proof: PresenceProofFields = {
+    kind: 'evidence_present',
+    branchId: fields.branchId,
+    deviceId: fields.deviceId,
+    generationId: fields.generationId,
+    generationSeq: fields.generationSeq,
+    storeEpochId: fields.storeEpochId,
+    asyncOrderId: fields.asyncOrderId,
+    billId: fields.billId,
+    barrierFenceSeq: fields.barrierFenceSeq,
+    barrierFenceNonce: fields.barrierFenceNonce,
+  };
+  authenticProvenEvidencePresences.add(proof);
+  provenEvidencePresenceMints.set(proof, copyPresenceProofFields(proof));
+  return proof as ProvenEvidencePresence;
+}
+
+/**
+ * Sole ENTRY_STORE writer. IndexedDB `add` only — never put/delete/clear.
+ * Duplicate exact entry is a zero-write remint. Mismatched/corrupt entry fails closed.
+ * Presence means local durable intent only.
+ */
+export async function commitSaleSubmissionEvidenceEntry(
+  authorization: AcquiredResumeFenceAuthorization,
+): Promise<CommitSaleSubmissionEvidenceEntryResult> {
+  if (authorization === null || typeof authorization !== 'object') {
+    return { ok: false };
+  }
+  if (!isAuthenticAcquiredResumeFenceAuthorization(authorization)) {
+    return { ok: false };
+  }
+
+  const authSnapshot = copyAuthorizationFields(authorization);
+
+  let fields: PresenceProofFields;
+  try {
+    fields = await runAuthorizedEntryWriteTransaction(authSnapshot);
+  } catch {
+    return { ok: false };
+  }
+
+  return { ok: true, proof: mintAuthenticPresenceProof(fields) };
+}
+
+/**
+ * Read-only presence prover. Never creates an ENTRY row. Re-mints an authentic
+ * capability from an exact stored entry after tx.oncomplete.
+ */
+export async function proveSaleSubmissionEvidencePresence(
+  authorization: AcquiredResumeFenceAuthorization,
+): Promise<ProveSaleSubmissionEvidencePresenceResult> {
+  if (authorization === null || typeof authorization !== 'object') {
+    return { ok: false };
+  }
+  if (!isAuthenticAcquiredResumeFenceAuthorization(authorization)) {
+    return { ok: false };
+  }
+
+  const authSnapshot = copyAuthorizationFields(authorization);
+
+  let fields: PresenceProofFields;
+  try {
+    fields = await runAuthorizedPresenceProveTransaction(authSnapshot);
+  } catch {
+    return { ok: false };
+  }
+
+  return { ok: true, proof: mintAuthenticPresenceProof(fields) };
+}
+
+export function isAuthenticProvenEvidencePresence(
+  value: unknown,
+): value is ProvenEvidencePresence {
+  if (value === null || typeof value !== 'object') return false;
+  if (!authenticProvenEvidencePresences.has(value)) return false;
+  const minted = provenEvidencePresenceMints.get(value);
+  if (minted === undefined) return false;
+  if (!isOwnDataProperty(value, 'kind')) return false;
+  if (!isOwnDataProperty(value, 'branchId')) return false;
+  if (!isOwnDataProperty(value, 'deviceId')) return false;
+  if (!isOwnDataProperty(value, 'generationId')) return false;
+  if (!isOwnDataProperty(value, 'generationSeq')) return false;
+  if (!isOwnDataProperty(value, 'storeEpochId')) return false;
+  if (!isOwnDataProperty(value, 'asyncOrderId')) return false;
+  if (!isOwnDataProperty(value, 'billId')) return false;
+  if (!isOwnDataProperty(value, 'barrierFenceSeq')) return false;
+  if (!isOwnDataProperty(value, 'barrierFenceNonce')) return false;
+  const current = value as PresenceProofFields;
   return (
     current.kind === minted.kind &&
     current.branchId === minted.branchId &&

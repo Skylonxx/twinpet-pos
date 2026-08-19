@@ -19,6 +19,7 @@ import {
 } from './activeCartSnapshotStore';
 import {
   commitSaleSubmissionAbsenceSeal,
+  commitSaleSubmissionEvidenceEntry,
   isAuthenticProvenEvidenceAbsence,
 } from './saleSubmissionEvidenceStore';
 import cartOwnerSource from './activeCartSnapshotStore.ts?raw';
@@ -897,5 +898,23 @@ describe('R30-T17 accessor / deleted-field rejection', () => {
     assertCartByteIdentical(beforeK1, afterK1);
     assertCartByteIdentical(beforeK2, afterK2);
     expect(afterEvidence.serialized).toBe(beforeEvidence.serialized);
+  });
+});
+
+describe('AI-2 additive presence currentness', () => {
+  test('presence proof cannot release a foreign key', async () => {
+    const home = await arrangeHeldCart();
+    const written = await commitSaleSubmissionEvidenceEntry(home.authorization);
+    expect(written.ok).toBe(true);
+    if (!written.ok) throw new Error('write failed');
+    const foreign = await arrangeHeldCart(OTHER_KEY);
+    const before = await captureCartState(OTHER_KEY.branchId, OTHER_KEY.deviceId);
+    const released = await releaseSaleSubmissionResumeFence(foreign.authorization, {
+      outcome: 'evidence_present',
+      proof: written.proof,
+    });
+    expect(released.ok).toBe(false);
+    const after = await captureCartState(OTHER_KEY.branchId, OTHER_KEY.deviceId);
+    assertCartByteIdentical(before, after);
   });
 });

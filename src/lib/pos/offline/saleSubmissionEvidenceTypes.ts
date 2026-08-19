@@ -1,10 +1,10 @@
 /**
  * PK-2B / R7 sale-submission evidence types.
  *
- * Compile-time opacity for `ProvenEvidenceAbsence` lives here (type-only unique
- * symbol). Runtime authenticity is owned exclusively by
- * `saleSubmissionEvidenceStore.ts` (module-private WeakSet). This module emits
- * no runtime exports.
+ * Compile-time opacity for `ProvenEvidenceAbsence` and `ProvenEvidencePresence`
+ * lives here (type-only unique symbols). Runtime authenticity is owned
+ * exclusively by `saleSubmissionEvidenceStore.ts` (module-private WeakSet).
+ * This module emits no runtime exports.
  */
 
 declare const ProvenEvidenceAbsenceBrand: unique symbol;
@@ -53,8 +53,48 @@ export type AbsenceSealAuthorityV1 = {
   barrierFenceNonce: string;
 };
 
+declare const ProvenEvidencePresenceBrand: unique symbol;
+
+export type ProvenEvidencePresence = {
+  readonly [ProvenEvidencePresenceBrand]: true;
+  kind: 'evidence_present';
+  branchId: string;
+  deviceId: string;
+  generationId: string;
+  generationSeq: number;
+  storeEpochId: string;
+  asyncOrderId: string;
+  billId: string;
+  barrierFenceSeq: number;
+  barrierFenceNonce: string;
+};
+
+export type SaleSubmissionEvidenceEntryV1 = {
+  kind: 'submission_evidence';
+  schemaVersion: 1;
+  entryKey: string;
+  branchId: string;
+  deviceId: string;
+  generationId: string;
+  generationSeq: number;
+  storeEpochId: string;
+  asyncOrderId: string;
+  billId: string;
+  createdAtLocal: number;
+  barrierFenceSeq: number;
+  barrierFenceNonce: string;
+};
+
 export type CommitSaleSubmissionAbsenceSealResult =
   | { ok: true; proof: ProvenEvidenceAbsence }
+  | { ok: false };
+
+export type CommitSaleSubmissionEvidenceEntryResult =
+  | { ok: true; proof: ProvenEvidencePresence }
+  | { ok: false };
+
+export type ProveSaleSubmissionEvidencePresenceResult =
+  | { ok: true; proof: ProvenEvidencePresence }
   | { ok: false };
 
 export type ReleaseSaleSubmissionResumeFenceResult = { ok: true } | { ok: false };

@@ -25,7 +25,7 @@ const ORCHESTRATOR_FILE = '/src/lib/pos/offline/trustedSaleSubmissionOrchestrato
 const CART_FILE = '/src/lib/pos/offline/activeCartSnapshotStore.ts';
 const INITIALIZER_NAME = 'initializeActiveCartSaleSubmission';
 
-const NINE_GOVERNED_IDENTIFIERS = [
+const TWELVE_GOVERNED_IDENTIFIERS = [
   'acquireSaleSubmissionResumeFence',
   'beginActiveCartGeneration',
   'initializeActiveCartSaleSubmission',
@@ -35,6 +35,9 @@ const NINE_GOVERNED_IDENTIFIERS = [
   'releaseSaleSubmissionResumeFence',
   'commitSaleSubmissionAbsenceSeal',
   'isAuthenticProvenEvidenceAbsence',
+  'commitSaleSubmissionEvidenceEntry',
+  'proveSaleSubmissionEvidencePresence',
+  'isAuthenticProvenEvidencePresence',
 ] as const;
 
 const FIVE_GOVERNED_LITERALS = [
@@ -99,8 +102,8 @@ describe('AIC — Application Integration confinement', () => {
     expect(posPageSourceRaw).not.toMatch(new RegExp(`\\b${INITIALIZER_NAME}\\b`));
   });
 
-  test('AIC-3 orchestrator names none of the nine governed raw identifiers', () => {
-    for (const name of NINE_GOVERNED_IDENTIFIERS) {
+  test('AIC-3 orchestrator names none of the twelve governed raw identifiers', () => {
+    for (const name of TWELVE_GOVERNED_IDENTIFIERS) {
       expect(orchestratorSourceRaw, name).not.toMatch(new RegExp(`\\b${name}\\b`));
     }
   });

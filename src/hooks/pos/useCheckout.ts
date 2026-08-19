@@ -6,7 +6,7 @@ import { roundMoney } from '../../lib/money';
 import { allocateOrderIdentity, submitAsyncOrder } from '../../lib/pos/asyncCheckout';
 import { makeAsyncOrderId } from '../../lib/pos/deviceId';
 import { createSaleIntentJournal } from '../../lib/pos/offline/saleIntentJournal';
-import { beginTrustedSaleSubmission } from '../../lib/pos/offline/trustedSaleSubmissionOrchestrator';
+import { beginTrustedSaleSubmission, completeTrustedSaleSubmission } from '../../lib/pos/offline/trustedSaleSubmissionOrchestrator';
 import {
   createNoopSaleIntentObserver,
   createSaleIntentObserver,
@@ -139,6 +139,19 @@ export function useCheckout({
           },
           { observer: getSaleIntentObserver(), identity },
         );
+
+        try {
+          const completed = await completeTrustedSaleSubmission({
+            branchId,
+            deviceId: identity.deviceId,
+            asyncOrderId,
+          });
+          if (!completed.ok) {
+            console.warn('[useCheckout] trusted sale-submission completion failed', completed.reason);
+          }
+        } catch (err) {
+          console.warn('[useCheckout] trusted sale-submission completion failed', err);
+        }
 
         // Drawer single-writer: with Firebase, the shift drawer is DERIVED live
         // from the local ledger (`useLocalLedger` → `deriveShiftDrawer`), which

@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { makeAsyncOrderId } from '../../lib/pos/deviceId';
 import { beginOwnedActiveCartGeneration } from '../../lib/pos/offline/trustedOrchestrationOwner';
-import { beginTrustedSaleSubmission } from '../../lib/pos/offline/trustedSaleSubmissionOrchestrator';
+import { beginTrustedSaleSubmission, completeTrustedSaleSubmission } from '../../lib/pos/offline/trustedSaleSubmissionOrchestrator';
 import { allocateOrderIdentity, submitAsyncOrder } from '../../lib/pos/asyncCheckout';
 import { useCheckout } from './useCheckout';
 import type { CartLine, CartTotals, PaymentSplit } from '../../lib/pos/types';
@@ -122,12 +122,15 @@ beforeEach(() => {
     billId: identity.billId,
   });
   vi.mocked(beginTrustedSaleSubmission).mockClear();
+  vi.mocked(completeTrustedSaleSubmission).mockReset();
+  vi.mocked(completeTrustedSaleSubmission).mockResolvedValue({ ok: true, outcome: 'released' });
 });
 
 afterEach(() => {
   cleanup();
   vi.mocked(beginOwnedActiveCartGeneration).mockRestore();
   vi.mocked(beginTrustedSaleSubmission).mockRestore();
+  vi.mocked(completeTrustedSaleSubmission).mockRestore();
   vi.useRealTimers();
 });
 
@@ -157,6 +160,38 @@ describe('useCheckout trusted orchestration', () => {
     expect(beginTrustedSaleSubmission).toHaveBeenCalledTimes(1);
     expect(submitAsyncOrder).toHaveBeenCalledTimes(1);
     expect(billId).toBe(identity.billId);
+  });
+
+  test('J-D01 submitAsyncOrder is still called exactly once when begin returns evidence_write_refused', async () => {
+    vi.mocked(beginTrustedSaleSubmission).mockResolvedValue({
+      ok: false,
+      reason: 'evidence_write_refused',
+    });
+    const { result } = renderCheckout();
+    await act(async () => {
+      await result.current.confirmSale(payments, cartLines, totals);
+    });
+    expect(submitAsyncOrder).toHaveBeenCalledTimes(1);
+    expect(completeTrustedSaleSubmission).toHaveBeenCalledTimes(1);
+  });
+
+  test('J-O01 submitAsyncOrder called exactly once per confirmSale on the success path', async () => {
+    vi.mocked(beginTrustedSaleSubmission).mockResolvedValue({
+      ok: true,
+      generationId: 'GGGGGGGGGGGGGGGGGGGGGGGGGG',
+      generationSeq: 1,
+      storeEpochId: 'EEEEEEEEEEEEEEEEEEEEEEEEEE',
+    });
+    const { result } = renderCheckout();
+    await act(async () => {
+      await result.current.confirmSale(payments, cartLines, totals);
+    });
+    expect(submitAsyncOrder).toHaveBeenCalledTimes(1);
+    expect(completeTrustedSaleSubmission).toHaveBeenCalledWith({
+      branchId: 'BR-1',
+      deviceId: identity.deviceId,
+      asyncOrderId: makeAsyncOrderId(identity.deviceId, identity.seq),
+    });
   });
 
   test('NV-2 asyncOrderId equals the real makeAsyncOrderId derivation from the same identity', async () => {
@@ -200,6 +235,10 @@ describe('useCheckout trusted orchestration', () => {
     expect(submitAsyncOrder).not.toHaveBeenCalled();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(submitAsyncOrder).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(CHECKOUT_ORCHESTRATION_SETTLE_BOUND_MS);
     });
     const billId = await pending;
     expect(billId).toBe(identity.billId);

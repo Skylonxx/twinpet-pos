@@ -1,22 +1,15 @@
 /**
- * Packet AI-1 trusted orchestration — future browser evidence.
+ * Packet AI-2 trusted orchestration — browser evidence.
  *
- * AUTHORED NOW. DO NOT EXECUTE in the AI-1 pre-review deterministic gate.
- * Playwright remains unauthorized until Stage-1 implementation review PASS
- * for browser evidence only.
+ * AI-2 still does not claim a sound positive or Firestore confirmation.
+ * Absence soundness is SINGLE_TAB_PER_CART_KEY and excludes the AI2-D1-B
+ * write-failure path (ENTRY_WRITE_FAILED_AFTER_FENCE_ACQUISITION_AND_CHECKOUT_PROCEEDED).
+ * Consecutive sales with no intervening sweep must roll generationSeq (B-13).
+ * Cross-tab guarantee remains IDEMPOTENT_CONVERGENCE_PLUS_AT_MOST_ONCE_RELEASE.
  *
  * CR-012: this Playwright/dev-mock spec does NOT prove Firestore queue
  * behavior. Firestore-adjacent evidence requires the separately gated
- * local Emulator/manual UAT tier.
- *
- * Cross-tab guarantee:
- * IDEMPOTENT_CONVERGENCE_PLUS_AT_MOST_ONCE_RELEASE
- * Do NOT assert "second acquire is refused".
- *
- * AI-1 limitations encoded as expected behavior, not defects:
- * - no crash-resume correctness
- * - absence seals are vacuous without an ENTRY_STORE writer
- * - B-2a (no intervening sweep) keeps generationSeq 1 naming sale 1
+ * local Emulator/manual UAT tier (B-18/B-19/B-20 are not executed here).
  */
 import { expect, test, type Page, type BrowserContext } from '@playwright/test';
 
@@ -24,6 +17,7 @@ const CART_DB = 'twinpet-active-cart-snapshot';
 const CART_STORE = 'activeCartSnapshots';
 const EVIDENCE_DB = 'twinpet-sale-submission-evidence';
 const POINTER_STORE = 'saleEvidenceGenerationPointers';
+const ENTRY_STORE = 'saleSubmissionEvidence';
 
 const SEL = {
   searchInput: 'input[placeholder*="barcode"]',
@@ -190,37 +184,114 @@ async function readPointerCount(page: Page): Promise<number> {
   }, { dbName: EVIDENCE_DB, storeName: POINTER_STORE });
 }
 
+async function readEntryRows(page: Page): Promise<Array<{ asyncOrderId?: string }>> {
+  return page.evaluate(async ({ dbName, storeName }) => {
+    return await new Promise<Array<{ asyncOrderId?: string }>>((resolve) => {
+      const req = indexedDB.open(dbName, 1);
+      req.onerror = () => resolve([]);
+      req.onsuccess = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(storeName)) {
+          db.close();
+          resolve([]);
+          return;
+        }
+        const tx = db.transaction(storeName, 'readonly');
+        const store = tx.objectStore(storeName);
+        const getAll = store.getAll();
+        getAll.onsuccess = () => {
+          db.close();
+          resolve((getAll.result ?? []) as Array<{ asyncOrderId?: string }>);
+        };
+        getAll.onerror = () => {
+          db.close();
+          resolve([]);
+        };
+      };
+    });
+  }, { dbName: EVIDENCE_DB, storeName: ENTRY_STORE });
+}
+
+async function rewindCartToOpenHeld(page: Page): Promise<CartRecord> {
+  return page.evaluate(async ({ dbName, storeName }) => {
+    return await new Promise<CartRecord>((resolve, reject) => {
+      const req = indexedDB.open(dbName, 1);
+      req.onerror = () => reject(req.error ?? new Error('open failed'));
+      req.onsuccess = () => {
+        const db = req.result;
+        const tx = db.transaction(storeName, 'readwrite');
+        const store = tx.objectStore(storeName);
+        const getAll = store.getAll();
+        getAll.onsuccess = () => {
+          const records = (getAll.result ?? []) as CartRecord[];
+          const record = records[0];
+          if (!record) {
+            db.close();
+            reject(new Error('no cart record'));
+            return;
+          }
+          record.resumeAttempts = 0;
+          record.resumeFence.held = true;
+          const keyReq = store.getAllKeys();
+          keyReq.onsuccess = () => {
+            const key = keyReq.result[0];
+            if (key === undefined) {
+              db.close();
+              reject(new Error('no cart key'));
+              return;
+            }
+            store.put(record, key);
+          };
+        };
+        tx.oncomplete = () => {
+          db.close();
+          resolve((getAll.result ?? [])[0] as CartRecord);
+        };
+        tx.onerror = () => {
+          db.close();
+          reject(tx.error ?? new Error('rewind failed'));
+        };
+      };
+    });
+  }, { dbName: CART_DB, storeName: CART_STORE });
+}
+
+async function waitForSweep(page: Page) {
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await page.waitForTimeout(800);
+}
+
 async function readDeviceId(page: Page): Promise<string> {
   return page.evaluate(() => localStorage.getItem('twinpet_device_id') ?? '');
 }
 
-test.describe('AI-1 trusted orchestration browser evidence', () => {
+test.describe('AI-2 trusted orchestration browser evidence', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsWichai(page);
     await goToPOS(page);
     await openShiftIfNeeded(page);
   });
 
-  test('B-1 / NV-5 first sale binds durable asyncOrderId and billId to the completed sale', async ({ page }) => {
+  test('B-1 / NV-5 first sale binds durable asyncOrderId and billId and terminalizes inline at S5', async ({ page }) => {
     const sale = await completeDevMockSale(page);
     const records = await readCartRecords(page);
     expect(records).toHaveLength(1);
     const record = records[0]!;
     expect(record.generationSeq).toBe(1);
     expect(record.marker).toBe('S2');
-    expect(record.resumeAttempts).toBe(0);
+    expect(record.resumeAttempts).toBe(1);
+    expect(record.resumeFence.held).toBe(false);
+    expect(record.resumeFence.fenceSeq).toBeGreaterThan(0);
     expect(record.billId).toBe(sale.billId);
     const deviceId = await readDeviceId(page);
     expect(record.deviceId).toBe(deviceId);
-    // NV-5: expected asyncOrderId sequence comes from the actual sale billId
-    // trailing run (formatOfflineReceiptNumber), never from record.asyncOrderId.
     const sequenceFromActualSale = sequenceFromActualSaleBillId(sale.billId);
     const expectedAsyncOrderId = `${deviceId}-${sequenceFromActualSale}`;
     expect(record.asyncOrderId).toBe(expectedAsyncOrderId);
     expect(record.asyncOrderId.length).toBeGreaterThan(deviceId.length + 1);
   });
 
-  test('B-2a two sequential sales with NO trusted sweep between keep generationSeq 1 naming sale 1', async ({ page }) => {
+  test('B-13 two sequential sales with NO trusted sweep between roll generationSeq 1 → 2', async ({ page }) => {
     const sale1 = await completeDevMockSale(page);
     await page.click(SEL.payNewSaleBtn);
     await expect(page.locator('.pos-cart-empty')).toBeVisible({ timeout: 5_000 });
@@ -229,31 +300,39 @@ test.describe('AI-1 trusted orchestration browser evidence', () => {
     const records = await readCartRecords(page);
     expect(records).toHaveLength(1);
     const record = records[0]!;
-    expect(record.generationSeq).toBe(1);
-    expect(record.billId).toBe(sale1.billId);
-    expect(record.billId).not.toBe(sale2.billId);
+    expect(record.generationSeq).toBe(2);
+    expect(record.billId).toBe(sale2.billId);
+    expect(record.billId).not.toBe(sale1.billId);
+    expect(record.asyncOrderId).not.toContain(sale1.billId);
   });
 
-  test('B-2b two sales with a trusted online/resume sweep between roll generation 1 → 2', async ({ page }) => {
+  test('B-2b sweep is the actor that terminalizes reconstructed OPEN_HELD case-5 state', async ({ page }) => {
     const sale1 = await completeDevMockSale(page);
     const before = (await readCartRecords(page))[0]!;
     expect(before.generationSeq).toBe(1);
-    await page.evaluate(() => window.dispatchEvent(new Event('online')));
-    await page.waitForTimeout(500);
+    expect(before.resumeAttempts).toBe(1);
+    await rewindCartToOpenHeld(page);
+    const case5 = (await readCartRecords(page))[0]!;
+    expect(case5.resumeAttempts).toBe(0);
+    expect(case5.resumeFence.held).toBe(true);
+    const fenceSeq = case5.resumeFence.fenceSeq;
+    const generationId = case5.generationId;
+    await waitForSweep(page);
     const afterSweep = (await readCartRecords(page))[0]!;
     expect(afterSweep.resumeAttempts).toBe(1);
-    expect(afterSweep.generationId).toBe(before.generationId);
-    expect(afterSweep.storeEpochId).toBe(before.storeEpochId);
+    expect(afterSweep.resumeFence.held).toBe(false);
+    expect(afterSweep.resumeFence.fenceSeq).toBe(fenceSeq);
+    expect(afterSweep.generationId).toBe(generationId);
+    expect((await readEntryRows(page)).length).toBeGreaterThan(0);
     await page.click(SEL.payNewSaleBtn);
     await expect(page.locator('.pos-cart-empty')).toBeVisible({ timeout: 5_000 });
     const sale2 = await completeDevMockSale(page);
     expect(sale2.billId).not.toBe(sale1.billId);
     const afterSecond = (await readCartRecords(page))[0]!;
     expect(afterSecond.generationSeq).toBe(2);
-    expect(afterSecond.generationId).not.toBe(before.generationId);
-    expect(afterSecond.storeEpochId).toBe(before.storeEpochId);
+    expect(afterSecond.generationId).not.toBe(generationId);
     expect(afterSecond.billId).toBe(sale2.billId);
-    expect(afterSecond.asyncOrderId).not.toBe(before.asyncOrderId);
+    expect(afterSecond.asyncOrderId).not.toBe(case5.asyncOrderId);
   });
 
   test('B-3 StrictMode duplicate boot does not claim owner_unavailable in console', async ({ page }) => {
@@ -284,6 +363,9 @@ test.describe('AI-1 trusted orchestration browser evidence', () => {
 
   test('B-5 cross-tab is idempotent convergence plus at-most-once release, not mutual exclusion', async ({ page, context }: { page: Page; context: BrowserContext }) => {
     await completeDevMockSale(page);
+    await rewindCartToOpenHeld(page);
+    const case5 = (await readCartRecords(page))[0]!;
+    const fenceSeq = case5.resumeFence.fenceSeq;
     const page2 = await context.newPage();
     await goToPOS(page2);
     await openShiftIfNeeded(page2);
@@ -294,23 +376,88 @@ test.describe('AI-1 trusted orchestration browser evidence', () => {
     expect(records).toHaveLength(1);
     expect(records[0]?.resumeAttempts).toBe(1);
     expect(records[0]?.resumeFence.held).toBe(false);
-    const pointers = await readPointerCount(page);
-    expect(pointers).toBe(1);
+    expect(records[0]?.resumeFence.fenceSeq).toBe(fenceSeq);
     await page2.close();
   });
 
-  test('B-14 reconnect online event re-runs the trusted sweep without double-registration', async ({ page }) => {
+  test('B-9 exactly one ENTRY row is keyed by the sale asyncOrderId and POS UI hides island identifiers', async ({ page }) => {
+    const sale = await completeDevMockSale(page);
+    const record = (await readCartRecords(page))[0]!;
+    const entries = await readEntryRows(page);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.asyncOrderId).toBe(record.asyncOrderId);
+    expect(await readPointerCount(page)).toBe(0);
+    expect(record.billId).toBe(sale.billId);
+    await expect(page.locator('text=generationId')).toHaveCount(0);
+    await expect(page.locator('text=submission_evidence')).toHaveCount(0);
+    await expect(page.locator('text=absence_seal')).toHaveCount(0);
+  });
+
+  test('B-10 reconstructed case-5 state is presence-released by boot/reload sweep', async ({ page }) => {
     await completeDevMockSale(page);
-    await page.evaluate(() => window.dispatchEvent(new Event('online')));
-    await page.waitForTimeout(400);
+    await rewindCartToOpenHeld(page);
+    const case5 = (await readCartRecords(page))[0]!;
+    expect(case5.resumeAttempts).toBe(0);
+    expect(case5.resumeFence.held).toBe(true);
+    await page.reload();
+    await goToPOS(page);
+    await openShiftIfNeeded(page);
+    await page.waitForTimeout(800);
+    const after = (await readCartRecords(page))[0]!;
+    expect(after.resumeAttempts).toBe(1);
+    expect(after.resumeFence.held).toBe(false);
+    expect(after.generationId).toBe(case5.generationId);
+  });
+
+  test('B-11 after B-10 a new sale rolls the generation', async ({ page }) => {
+    await completeDevMockSale(page);
+    await rewindCartToOpenHeld(page);
+    await page.reload();
+    await goToPOS(page);
+    await openShiftIfNeeded(page);
+    await page.waitForTimeout(800);
+    const afterSweep = (await readCartRecords(page))[0]!;
+    expect(afterSweep.resumeAttempts).toBe(1);
+    await expect(page.locator('.pos-cart-empty')).toBeVisible({ timeout: 5_000 });
+    const sale2 = await completeDevMockSale(page);
+    const afterSecond = (await readCartRecords(page))[0]!;
+    expect(afterSecond.generationSeq).toBe(2);
+    expect(afterSecond.generationId).not.toBe(afterSweep.generationId);
+    expect(afterSecond.billId).toBe(sale2.billId);
+  });
+
+  test('B-12 exactly one durable ENTRY for the first sale; sweep does not mint a second', async ({ page }) => {
+    await completeDevMockSale(page);
+    const first = await readEntryRows(page);
+    expect(first).toHaveLength(1);
+    await waitForSweep(page);
+    const second = await readEntryRows(page);
+    expect(second).toHaveLength(1);
+    expect(second[0]?.asyncOrderId).toBe(first[0]?.asyncOrderId);
+    expect(await readPointerCount(page)).toBe(0);
+  });
+
+  test('B-14 reconnect online event presence-releases case-5 once then stays idempotent', async ({ page }) => {
+    await completeDevMockSale(page);
+    await rewindCartToOpenHeld(page);
+    const case5 = (await readCartRecords(page))[0]!;
+    expect(case5.resumeAttempts).toBe(0);
+    expect(case5.resumeFence.held).toBe(true);
+    const fenceSeq = case5.resumeFence.fenceSeq;
+    const generationId = case5.generationId;
+    await waitForSweep(page);
     const first = (await readCartRecords(page))[0]!;
     expect(first.resumeAttempts).toBe(1);
-    await page.evaluate(() => window.dispatchEvent(new Event('online')));
-    await page.waitForTimeout(400);
+    expect(first.resumeFence.held).toBe(false);
+    expect(first.resumeFence.fenceSeq).toBe(fenceSeq);
+    expect(first.generationId).toBe(generationId);
+    expect((await readEntryRows(page)).length).toBeGreaterThan(0);
+    await waitForSweep(page);
     const second = (await readCartRecords(page))[0]!;
     expect(second.resumeAttempts).toBe(1);
-    expect(second.resumeFence.fenceSeq).toBe(first.resumeFence.fenceSeq);
-    expect(await readPointerCount(page)).toBe(1);
+    expect(second.resumeFence.held).toBe(false);
+    expect(second.resumeFence.fenceSeq).toBe(fenceSeq);
+    expect(second.generationId).toBe(generationId);
   });
 });
 

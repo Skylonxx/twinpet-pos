@@ -1,40 +1,40 @@
 /**
- * Packet AI-1 trusted application orchestration.
+ * Packet AI-2 trusted application orchestration.
  *
- * Two application-facing responsibilities:
- * 1. submit-path generation begin (checkout)
- * 2. resume-path sweep (POS boot / reconnect)
+ * Application-facing responsibilities:
+ * 1. submit-path generation begin + ENTRY write (checkout S2–S4)
+ * 2. awaited post-submit presence release (checkout S5)
+ * 3. resume-path sweep (POS boot / reconnect)
  *
  * The only import into the Row29/D-3 trust island is `./trustedOrchestrationOwner`.
  * Owner / authorization / proof handles never cross this module boundary.
  *
- * AI-1 limitations (must not be overclaimed):
- * 1. AI-1 delivers a wired orchestration lifecycle. It does NOT deliver
- *    crash-resume correctness.
- * 2. With no ENTRY_STORE writer, every absence seal is vacuous: it proves
- *    nothing about whether a submission occurred.
- * 3. Boot/reconnect sweeps can write durable absence_seal pointers for
- *    generations whose sales did occur. At AI-1 these are NOT authoritative
- *    evidence.
- * 4. Between sweeps, the durable cart record can name an older sale's
- *    asyncOrderId/billId. It is not guaranteed to describe the most recent sale.
- * 5. A second sale in the same session with no intervening sweep can receive
- *    `{ ok:false }` from begin. The sale still proceeds.
- * 6. Cross-tab behavior is idempotent convergence plus at-most-once release.
- *    It is NOT mutual exclusion.
- * 7. No generation-count, sale-count, or evidence claim derived from the AI-1
- *    island may be surfaced as authoritative operator-facing information.
+ * Claim boundaries (must not be overclaimed):
+ * - AI2_ADDS_CRASH_RESUME_CORRECTNESS: PARTIAL
+ * - FIRESTORE_SERVER_CONFIRMATION_INFERENCE: NO
+ * - AI2_RECEIPT_AUTHORITY: NO
+ * - CROSS_TAB_MUTUAL_EXCLUSION_CLAIM: NO
+ * - AI2_ABSENCE_SOUNDNESS_SCOPE: SINGLE_TAB_PER_CART_KEY
+ * - AI2_ABSENCE_SOUNDNESS_FAILURE_PATH_CARVEOUT:
+ *   ENTRY_WRITE_FAILED_AFTER_FENCE_ACQUISITION_AND_CHECKOUT_PROCEEDED
+ * - ENTRY_STORE_RELATION: PARALLEL_FOR_RECORD_FRESHNESS_ONLY
  *
- * AI_1_ORCHESTRATION_FAILURE_OBSERVABILITY: CONSOLE_ONLY
- * AI_1_POINTER_GROWTH_LIMITATION: MONOTONIC_NO_PRUNE_PATH
+ * AI2-D1 = B_FAIL_OPEN_DISCLOSED: if the ENTRY_STORE write fails after fence
+ * acquisition, checkout proceeds. A later sweep may seal absence; that absence
+ * is UNSOUND on this accepted path (crash-matrix case 17).
+ *
  * CROSS_TAB_GUARANTEE: IDEMPOTENT_CONVERGENCE_PLUS_AT_MOST_ONCE_RELEASE
+ * AI_1_ORCHESTRATION_FAILURE_OBSERVABILITY: CONSOLE_ONLY
+ * POINTER_PRUNE_DISPOSITION: FUTURE_D4_OWNS_RETENTION
  */
 import {
   acquireOwnedSaleSubmissionResumeFence,
   beginOwnedActiveCartGeneration,
   claimTrustedOrchestrationOwner,
   commitOwnedSaleSubmissionAbsenceSeal,
+  commitOwnedSaleSubmissionEvidenceEntry,
   isTrustedOrchestrationOwnerFor,
+  proveOwnedSaleSubmissionEvidencePresence,
   releaseOwnedSaleSubmissionResumeFence,
   releaseTrustedOrchestrationOwner,
 } from './trustedOrchestrationOwner';
@@ -63,6 +63,25 @@ export type TrustedSaleSubmissionBeginResult =
       reason:
         | 'owner_unavailable'
         | 'generation_refused'
+        | 'fence_unavailable'
+        | 'evidence_write_refused'
+        | 'orchestration_timeout'
+        | 'orchestration_error';
+    };
+
+export type TrustedSaleSubmissionCompleteInput = {
+  branchId: string;
+  deviceId: string;
+  asyncOrderId: string;
+};
+
+export type TrustedSaleSubmissionCompleteResult =
+  | { ok: true; outcome: 'released' }
+  | {
+      ok: false;
+      reason:
+        | 'no_pending_cycle'
+        | 'release_refused'
         | 'orchestration_timeout'
         | 'orchestration_error';
     };
@@ -76,7 +95,12 @@ export type TrustedResumeSweepResult =
   | { ok: true; outcome: 'released' | 'not_eligible' }
   | {
       ok: false;
-      reason: 'owner_unavailable' | 'seal_refused' | 'release_refused' | 'orchestration_error';
+      reason:
+        | 'owner_unavailable'
+        | 'seal_refused'
+        | 'release_refused'
+        | 'unresolved'
+        | 'orchestration_error';
     };
 
 type ClaimOk = Extract<
@@ -84,6 +108,14 @@ type ClaimOk = Extract<
   { ok: true }
 >;
 type OwnedOwner = ClaimOk['owner'];
+type AcquireOk = Extract<
+  Awaited<ReturnType<typeof acquireOwnedSaleSubmissionResumeFence>>,
+  { ok: true }
+>;
+type CommitEntryOk = Extract<
+  Awaited<ReturnType<typeof commitOwnedSaleSubmissionEvidenceEntry>>,
+  { ok: true }
+>;
 
 type OwnedSlot = {
   key: string;
@@ -97,8 +129,17 @@ type EnsureOwnerResult =
   | { ok: true; slot: OwnedSlot }
   | { ok: false; reason: 'owner_unavailable' | 'owner_busy' };
 
+type PendingCycle = {
+  key: string;
+  asyncOrderId: string;
+  authorization: AcquireOk['authorization'];
+  proof: CommitEntryOk['proof'];
+};
+
 let slot: OwnedSlot | null = null;
 let idleWaiters: Array<() => void> = [];
+let pendingCycle: PendingCycle | null = null;
+const keyGate = new Map<string, Promise<void>>();
 
 function ownerKey(branchId: string, deviceId: string): string {
   return `${branchId.length}:${branchId}|${deviceId.length}:${deviceId}`;
@@ -131,6 +172,31 @@ function releaseInFlight(owned: OwnedSlot): void {
   notifyOwnerIdle();
 }
 
+function dropPendingCycle(): void {
+  pendingCycle = null;
+}
+
+async function withCartKeyGate<T>(key: string, work: () => Promise<T>): Promise<T> {
+  const previous = keyGate.get(key) ?? Promise.resolve();
+  let releaseGate = (): void => {};
+  const current = new Promise<void>((resolve) => {
+    releaseGate = resolve;
+  });
+  keyGate.set(
+    key,
+    previous.then(
+      () => current,
+      () => current,
+    ),
+  );
+  await previous;
+  try {
+    return await work();
+  } finally {
+    releaseGate();
+  }
+}
+
 /**
  * Live-owner check → synchronous facade claim → module-state assignment.
  * This critical section contains NO await, Promise continuation, timer yield,
@@ -150,6 +216,7 @@ function ensureOwnerCriticalSection(branchId: string, deviceId: string): EnsureO
     return { ok: false, reason: 'owner_busy' };
   }
   if (slot !== null) {
+    dropPendingCycle();
     releaseTrustedOrchestrationOwner(slot.owner);
     slot = null;
   }
@@ -205,12 +272,14 @@ async function withOwnedWork<T>(
   }
 }
 
-function settleCheckoutBound(
-  operation: Promise<TrustedSaleSubmissionBeginResult>,
-): Promise<TrustedSaleSubmissionBeginResult> {
+function settleBound<T>(
+  operation: Promise<T>,
+  onTimeout: () => T,
+  onError: () => T,
+): Promise<T> {
   return new Promise((resolve) => {
     let settled = false;
-    const finish = (value: TrustedSaleSubmissionBeginResult): void => {
+    const finish = (value: T): void => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
@@ -218,7 +287,7 @@ function settleCheckoutBound(
     };
     const timer = setTimeout(() => {
       observeFailure('orchestration_timeout');
-      finish({ ok: false, reason: 'orchestration_timeout' });
+      finish(onTimeout());
     }, CHECKOUT_ORCHESTRATION_SETTLE_BOUND_MS);
     operation.then(
       (value) => {
@@ -228,7 +297,7 @@ function settleCheckoutBound(
         if (!settled) {
           observeFailure('orchestration_error');
         }
-        finish({ ok: false, reason: 'orchestration_error' });
+        finish(onError());
       },
     );
   });
@@ -254,44 +323,140 @@ async function runBegin(
     observeFailure('owner_unavailable');
     return { ok: false, reason: 'owner_unavailable' };
   }
-  return withOwnedWork<TrustedSaleSubmissionBeginResult>(
-    branchId,
-    deviceId,
-    async (owner) => {
-      const begun = await beginOwnedActiveCartGeneration(owner, {
-        branchId,
-        deviceId,
-        asyncOrderId,
-        billId,
-      });
-      if (!begun.ok) {
-        observeFailure('generation_refused');
-        return { ok: false, reason: 'generation_refused' };
-      }
-      return {
-        ok: true,
-        generationId: begun.generationId,
-        generationSeq: begun.generationSeq,
-        storeEpochId: begun.storeEpochId,
-      };
-    },
-    () => ({ ok: false, reason: 'owner_unavailable' }),
+  const key = ownerKey(branchId, deviceId);
+  return withCartKeyGate(key, () =>
+    withOwnedWork<TrustedSaleSubmissionBeginResult>(
+      branchId,
+      deviceId,
+      async (owner) => {
+        const begun = await beginOwnedActiveCartGeneration(owner, {
+          branchId,
+          deviceId,
+          asyncOrderId,
+          billId,
+        });
+        if (!begun.ok) {
+          observeFailure('generation_refused');
+          return { ok: false, reason: 'generation_refused' };
+        }
+        const acquired = await acquireOwnedSaleSubmissionResumeFence(owner, {
+          branchId,
+          deviceId,
+        });
+        if (!acquired.ok) {
+          observeFailure('fence_unavailable');
+          return { ok: false, reason: 'fence_unavailable' };
+        }
+        const committed = await commitOwnedSaleSubmissionEvidenceEntry(
+          owner,
+          acquired.authorization,
+        );
+        if (!committed.ok) {
+          // AI2-D1 B_FAIL_OPEN_DISCLOSED: checkout proceeds; later absence
+          // on this generation is UNSOUND (crash-matrix case 17).
+          observeFailure('evidence_write_refused');
+          return { ok: false, reason: 'evidence_write_refused' };
+        }
+        pendingCycle = {
+          key,
+          asyncOrderId,
+          authorization: acquired.authorization,
+          proof: committed.proof,
+        };
+        return {
+          ok: true,
+          generationId: begun.generationId,
+          generationSeq: begun.generationSeq,
+          storeEpochId: begun.storeEpochId,
+        };
+      },
+      () => ({ ok: false, reason: 'owner_unavailable' }),
+    ),
+  );
+}
+
+async function runComplete(
+  input: TrustedSaleSubmissionCompleteInput,
+): Promise<TrustedSaleSubmissionCompleteResult> {
+  const branchId = input.branchId;
+  const deviceId = input.deviceId;
+  const asyncOrderId = input.asyncOrderId;
+  if (
+    typeof branchId !== 'string' ||
+    typeof deviceId !== 'string' ||
+    typeof asyncOrderId !== 'string' ||
+    branchId.length === 0 ||
+    deviceId.length === 0 ||
+    asyncOrderId.length === 0
+  ) {
+    observeFailure('no_pending_cycle');
+    return { ok: false, reason: 'no_pending_cycle' };
+  }
+  const key = ownerKey(branchId, deviceId);
+  return withCartKeyGate(key, () =>
+    withOwnedWork<TrustedSaleSubmissionCompleteResult>(
+      branchId,
+      deviceId,
+      async (owner) => {
+        const cycle = pendingCycle;
+        if (
+          cycle === null ||
+          cycle.key !== key ||
+          cycle.asyncOrderId !== asyncOrderId
+        ) {
+          observeFailure('no_pending_cycle');
+          return { ok: false, reason: 'no_pending_cycle' };
+        }
+        const released = await releaseOwnedSaleSubmissionResumeFence(
+          owner,
+          cycle.authorization,
+          { outcome: 'evidence_present', proof: cycle.proof },
+        );
+        if (!released.ok) {
+          observeFailure('release_refused');
+          return { ok: false, reason: 'release_refused' };
+        }
+        dropPendingCycle();
+        return { ok: true, outcome: 'released' };
+      },
+      () => ({ ok: false, reason: 'no_pending_cycle' }),
+    ),
   );
 }
 
 /**
- * Checkout-path generation begin. Always settles within 2000ms.
- * Failure is a plain serializable union — never a throw.
+ * Checkout-path generation begin + ENTRY write (S2–S4). Always settles within 2000ms.
+ * Failure is a plain serializable union — never a throw. ENTRY write failure is
+ * fail-open (AI2-D1): the caller still proceeds to submit.
  */
 export async function beginTrustedSaleSubmission(
   input: TrustedSaleSubmissionBeginInput,
 ): Promise<TrustedSaleSubmissionBeginResult> {
-  return settleCheckoutBound(runBegin(input));
+  return settleBound(
+    runBegin(input),
+    () => ({ ok: false, reason: 'orchestration_timeout' }),
+    () => ({ ok: false, reason: 'orchestration_error' }),
+  );
+}
+
+/**
+ * Checkout-path post-submit presence release (S5). Always settles within 2000ms.
+ * Failure cannot undo or refuse an already-submitted sale.
+ */
+export async function completeTrustedSaleSubmission(
+  input: TrustedSaleSubmissionCompleteInput,
+): Promise<TrustedSaleSubmissionCompleteResult> {
+  return settleBound(
+    runComplete(input),
+    () => ({ ok: false, reason: 'orchestration_timeout' }),
+    () => ({ ok: false, reason: 'orchestration_error' }),
+  );
 }
 
 /**
  * Boot / reconnect resume sweep. Best-effort. Never throws.
  * Duplicate concurrent sweeps converge: at most one durable release effect.
+ * Absence is attempted first; presence is a create-incapable fallback.
  */
 export async function runTrustedResumeSweep(
   input: TrustedResumeSweepInput,
@@ -307,35 +472,64 @@ export async function runTrustedResumeSweep(
     observeFailure('owner_unavailable');
     return { ok: false, reason: 'owner_unavailable' };
   }
+  const key = ownerKey(branchId, deviceId);
   try {
-    return await withOwnedWork<TrustedResumeSweepResult>(
-      branchId,
-      deviceId,
-      async (owner) => {
-        const acquired = await acquireOwnedSaleSubmissionResumeFence(owner, {
-          branchId,
-          deviceId,
-        });
-        if (!acquired.ok) {
-          return { ok: true, outcome: 'not_eligible' };
-        }
-        const sealed = await commitOwnedSaleSubmissionAbsenceSeal(owner, acquired.authorization);
-        if (!sealed.ok) {
-          observeFailure('seal_refused');
-          return { ok: false, reason: 'seal_refused' };
-        }
-        const proof = sealed.proof;
-        const released = await releaseOwnedSaleSubmissionResumeFence(owner, acquired.authorization, {
-          outcome: 'evidence_proven_absent',
-          proof,
-        });
-        if (!released.ok) {
-          observeFailure('release_refused');
-          return { ok: false, reason: 'release_refused' };
-        }
-        return { ok: true, outcome: 'released' };
-      },
-      () => ({ ok: false, reason: 'owner_unavailable' }),
+    return await withCartKeyGate(key, () =>
+      withOwnedWork<TrustedResumeSweepResult>(
+        branchId,
+        deviceId,
+        async (owner) => {
+          const acquired = await acquireOwnedSaleSubmissionResumeFence(owner, {
+            branchId,
+            deviceId,
+          });
+          if (!acquired.ok) {
+            return { ok: true, outcome: 'not_eligible' };
+          }
+          const sealed = await commitOwnedSaleSubmissionAbsenceSeal(
+            owner,
+            acquired.authorization,
+          );
+          if (sealed.ok) {
+            const proof = sealed.proof;
+            const released = await releaseOwnedSaleSubmissionResumeFence(
+              owner,
+              acquired.authorization,
+              {
+                outcome: 'evidence_proven_absent',
+                proof,
+              },
+            );
+            if (!released.ok) {
+              observeFailure('release_refused');
+              return { ok: false, reason: 'release_refused' };
+            }
+            return { ok: true, outcome: 'released' };
+          }
+          const proven = await proveOwnedSaleSubmissionEvidencePresence(
+            owner,
+            acquired.authorization,
+          );
+          if (!proven.ok) {
+            observeFailure('unresolved');
+            return { ok: false, reason: 'unresolved' };
+          }
+          const releasedPresent = await releaseOwnedSaleSubmissionResumeFence(
+            owner,
+            acquired.authorization,
+            {
+              outcome: 'evidence_present',
+              proof: proven.proof,
+            },
+          );
+          if (!releasedPresent.ok) {
+            observeFailure('release_refused');
+            return { ok: false, reason: 'release_refused' };
+          }
+          return { ok: true, outcome: 'released' };
+        },
+        () => ({ ok: false, reason: 'owner_unavailable' }),
+      ),
     );
   } catch {
     observeFailure('orchestration_error');

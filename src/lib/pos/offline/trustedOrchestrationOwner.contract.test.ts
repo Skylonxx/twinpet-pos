@@ -55,8 +55,10 @@ const FROZEN_D3_RUNTIME_EXPORTS = [
   'beginOwnedActiveCartGeneration',
   'claimTrustedOrchestrationOwner',
   'commitOwnedSaleSubmissionAbsenceSeal',
+  'commitOwnedSaleSubmissionEvidenceEntry',
   'isAuthenticTrustedOrchestrationOwner',
   'isTrustedOrchestrationOwnerFor',
+  'proveOwnedSaleSubmissionEvidencePresence',
   'releaseOwnedSaleSubmissionResumeFence',
   'releaseTrustedOrchestrationOwner',
 ] as const;
@@ -68,7 +70,11 @@ const FROZEN_FACADE_CART_IMPORTS = [
   'releaseSaleSubmissionResumeFence',
 ] as const;
 
-const FROZEN_FACADE_EVIDENCE_IMPORTS = ['commitSaleSubmissionAbsenceSeal'] as const;
+const FROZEN_FACADE_EVIDENCE_IMPORTS = [
+  'commitSaleSubmissionAbsenceSeal',
+  'commitSaleSubmissionEvidenceEntry',
+  'proveSaleSubmissionEvidencePresence',
+] as const;
 
 const FROZEN_C5_COMMENT = [
   '// C5 cart-first host: relative value-import order is load-bearing and must',
@@ -1008,11 +1014,11 @@ describe('D3-T13 static / C-5 / re-export contract', () => {
 describe('D3-T14 Row29 / Row32 topology after narrow update', () => {
   test('raw runtime export counts remain 7 + 2 and the facade is the added production importer', () => {
     expect(Object.keys(cartRuntimeExports).sort()).toHaveLength(7);
-    expect(Object.keys(evidenceRuntimeExports).sort()).toHaveLength(2);
-    expect([...Object.keys(cartRuntimeExports), ...Object.keys(evidenceRuntimeExports)].sort()).toHaveLength(9);
+    expect(Object.keys(evidenceRuntimeExports).sort()).toHaveLength(5);
+    expect([...Object.keys(cartRuntimeExports), ...Object.keys(evidenceRuntimeExports)].sort()).toHaveLength(12);
     expect(Object.keys(facadeRuntimeExports).sort()).toEqual([...FROZEN_D3_RUNTIME_EXPORTS].sort());
     expect(confinementContractRaw).toContain("const FACADE_FILE = '/src/lib/pos/offline/trustedOrchestrationOwner.ts';");
-    expect(confinementContractRaw).toContain('const runtimeExportNames = new Set(FROZEN_ALL_NINE_RUNTIME_EXPORTS);');
+    expect(confinementContractRaw).toContain('const runtimeExportNames = new Set(FROZEN_ALL_TWELVE_RUNTIME_EXPORTS);');
     expect(confinementContractRaw).toContain('FROZEN_FACADE_CART_RUNTIME_SYMBOLS');
     expect(confinementContractRaw).toContain('FROZEN_FACADE_EVIDENCE_RUNTIME_SYMBOLS');
     expect(confinementContractRaw).not.toContain('FROZEN_ALL_EIGHT_RUNTIME_EXPORTS');
@@ -1020,6 +1026,11 @@ describe('D3-T14 Row29 / Row32 topology after narrow update', () => {
     expect(confinementContractRaw).not.toContain('eight-name set');
     expect(confinementContractRaw).not.toContain('reachability of the eight');
     expect(confinementContractRaw).not.toMatch(/\bconst eight = /);
+    expect(confinementContractRaw).not.toContain('FROZEN_ALL_NINE_RUNTIME_EXPORTS');
+    expect(confinementContractRaw).not.toContain('all-nine');
+    expect(confinementContractRaw).not.toContain('nine-name set');
+    expect(confinementContractRaw).not.toContain('reachability of the nine');
+    expect(confinementContractRaw).not.toMatch(/\bconst nine = /);
   });
 });
 

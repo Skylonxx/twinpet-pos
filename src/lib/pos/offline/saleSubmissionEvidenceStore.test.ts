@@ -34,12 +34,23 @@ const FIXTURE = {
 } as const;
 
 const EXPECTED_EXPORT_NAMES = Object.freeze(
-  ['commitSaleSubmissionAbsenceSeal', 'isAuthenticProvenEvidenceAbsence'].slice().sort(),
+  [
+    'commitSaleSubmissionAbsenceSeal',
+    'commitSaleSubmissionEvidenceEntry',
+    'isAuthenticProvenEvidenceAbsence',
+    'isAuthenticProvenEvidencePresence',
+    'proveSaleSubmissionEvidencePresence',
+  ]
+    .slice()
+    .sort(),
 );
 
 const EXPECTED_EXPORT_TYPE: Record<string, string> = {
   commitSaleSubmissionAbsenceSeal: 'function',
+  commitSaleSubmissionEvidenceEntry: 'function',
   isAuthenticProvenEvidenceAbsence: 'function',
+  isAuthenticProvenEvidencePresence: 'function',
+  proveSaleSubmissionEvidencePresence: 'function',
 };
 
 function deleteDb(name: string): Promise<void> {
@@ -246,6 +257,11 @@ describe('S4 export audit', () => {
   test('S4-g validator export exists and is callable', () => {
     expect(typeof store.isAuthenticProvenEvidenceAbsence).toBe('function');
     expect(store.isAuthenticProvenEvidenceAbsence.length).toBe(1);
+  });
+
+  test('S4-g presence validator export exists and is callable', () => {
+    expect(typeof store.isAuthenticProvenEvidencePresence).toBe('function');
+    expect(store.isAuthenticProvenEvidencePresence.length).toBe(1);
   });
 });
 
