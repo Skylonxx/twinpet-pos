@@ -2,73 +2,77 @@
 
 ## Phase
 
-**P1 Offline / Sync Resiliency — Packet 5 / Application Integration / AI-2 — implementation CLOSED_WITH_NOTES / tracker reconciliation**
+**P1 Offline / Sync Resiliency — Packet 5 — CLOSED**
 
 STATUS:
-AI_2_IMPLEMENTATION_CLOSED_WITH_NOTES_TRACKER_RECONCILIATION
+PACKET_5_CLOSED_DOCS_RECONCILIATION
 
 ```text
-ROADMAP_LABEL: Application Integration AI-2 — sale submission evidence writer
-BOUNDED_SCOPE: POS sale-submission evidence writer / trusted orchestration application integration
-AI_2_IMPLEMENTATION_STATUS: CLOSED_WITH_NOTES
-AI_2_IMPLEMENTATION_COMMIT: c45f5a3af8b73011466fe08ccc3517d4562d750c
-AI_2_IMPLEMENTATION_COMMIT_SUBJECT: feat(pos): add sale submission evidence writer
-AI_2_IMPLEMENTATION_PARENT: 9f97d7fce51fb93a687c76a2e224c92a6b1149fe
-AI_2_IMPLEMENTATION_FILE_COUNT: 18
-AI_2_UNAUTHORIZED_FILE_COUNT: 0
-AI_2_PUSHED: YES
-FILE_19_REQUIRED: NO
-A5_EXACT_COUNT: 30
-A5_EXACTIFICATION: RATIFIED
-H11_TRIGGERED: NO
-BOUNDED_AMENDMENT_COUNT: 34
-AMENDMENT_35_REQUIRED: NO
-AI2_FINAL_VALIDATION_FULL_ROOT_STATUS: PASS_WITH_KNOWN_PARALLEL_LOAD_NOTES
-AI2_FULL_ROOT_PARALLEL_LOAD_DISPOSITION: KNOWN_PARALLEL_LOAD_FLAKE_CLASS_CONFIRMED_FOR_THIS_RELEASE_GATE
-STANDING_FUTURE_FLAKE_WAIVER: NO
-PLAYWRIGHT_SCENARIO_COUNT: 11
-PLAYWRIGHT_SCENARIO_12_ADDED: NO
-DEFERRED_EMULATOR_B18_B20_EXECUTED: NO
-MANUAL_EMULATOR_B18_B20: NOT_AUTHORIZED / NOT_PERFORMED
+ROADMAP_LABEL: P1 Offline / Sync Resiliency — Packet 5
+BOUNDED_SCOPE: Packet 5 final closure / docs-only source-of-truth reconciliation
+PACKET_5_STATUS: CLOSED
+PACKET5_TECHNICAL_ADJUDICATION: PASS_WITH_NOTES
+PACKET5_CLOSURE: AUTHORIZED / COMPLETED
+GEMINI_DECISION: TWINPET-P1-OFFLINE-SYNC-PACKET-5-FINAL-ADJUDICATION-AND-CLOSURE-GEMINI-001
+DEFERRED_LOCAL_EMULATOR_UAT: PASS
+FINAL_RUNTIME_UAT: R4 / 36 OF 36 PASS
+B18: 14 / 14 PASS
+B19: 14 / 14 PASS
+B20: 8 / 8 PASS
+PRODUCTION_HITS: 0
+NON_LOCAL_FUNCTION_HITS: 0
+ADDITIONAL_UAT_REQUIRED: NO
+POST_UAT_SOURCE_RESTORE: PASS
+TRACKED_SOURCE_MARKER_COUNT: 0
+TECHNICAL_BASELINE_BEFORE_DOCS_COMMIT: f8b67c144b96383d69196cc9080d038d1dac60d8
+HEAD_SUBJECT: fix(receipt): normalize callable receipt timestamps
+GENERATED_LIB_STALE_MARKER_DISPOSITION: NONBLOCKING_IGNORED_ARTIFACT
+WORKTREE_AT_CLOSURE_PRE_DOCS: CLEAN
 DEPLOYMENT: NOT_AUTHORIZED / NOT_PERFORMED
 PRODUCTION_ACCESS: NOT_AUTHORIZED / NOT_PERFORMED
 NEXT_IMPLEMENTATION: NOT_AUTHORIZED
 STASH: UNTOUCHED
+AI_2_IMPLEMENTATION_STATUS: CLOSED_WITH_NOTES (historical; preserved)
 AI_1_IMPLEMENTATION_STATUS: CLOSED_WITH_NOTES (historical; preserved)
+PK1_STATUS: CLOSED_WITH_NOTES (preserved; do not reopen)
 D1_T18: UNTOUCHED
 D3_T15: UNTOUCHED
 D3_T16: UNTOUCHED
 ROW28: ADDITIVE_ONLY_NOT_REOPENED
 ROW30: ADDITIVE_ONLY_NOT_REOPENED
 R7_6: NOT_REOPENED
-PACKET_5_STATUS: OPEN
-BROADER_PACKET_5_CLOSURE_AUTHORIZED: NO
 ```
 
-`PK1_STATUS: CLOSED_WITH_NOTES` (preserved; do not reopen). **`PACKET_5_STATUS: OPEN`.** `BROADER_PACKET_5_CLOSURE_AUTHORIZED: NO`. Application Integration AI-2 implementation is `CLOSED_WITH_NOTES` and pushed. This pass reconciles the three authorized workflow trackers to that closed-with-notes evidence state. Packet 5 remains open. Deployment was not performed and is not authorized. Next implementation is not authorized.
+`PK1_STATUS: CLOSED_WITH_NOTES` (preserved; do not reopen). **`PACKET_5_STATUS: CLOSED`.** Gemini adjudicated Packet 5 `PASS_WITH_NOTES` and authorized closure after R4 full-chain local-emulator UAT `36 / 36 PASS` and exact post-UAT source restore. This pass reconciles the authorized workflow trackers to that closed state. No additional Packet 5 UAT is required. Next implementation is not authorized. Deployment was not performed and is not authorized.
 
-## This packet — Packet 5 / Application Integration / AI-2
+## This packet — Packet 5 final closure
 
-**Status: AI-2 implementation CLOSED_WITH_NOTES at `c45f5a3af8b73011466fe08ccc3517d4562d750c`**
+**Status: Packet 5 CLOSED.** Technical baseline before this docs closure commit: `f8b67c144b96383d69196cc9080d038d1dac60d8` (`fix(receipt): normalize callable receipt timestamps`).
 
-- Implementation commit: `c45f5a3af8b73011466fe08ccc3517d4562d750c` (`feat(pos): add sale submission evidence writer`)
-- Parent: `9f97d7fce51fb93a687c76a2e224c92a6b1149fe`
-- Exact surface: 18 paths; unauthorized file count = 0; file 19 required = NO
-- Push: origin/main and live remote matched `c45f5a3af8b73011466fe08ccc3517d4562d750c` before this docs edit
-- Census: `A5_EXACT_COUNT: 30` (`A5_EXACTIFICATION: RATIFIED`); `H11_TRIGGERED: NO`; `BOUNDED_AMENDMENT_COUNT: 34`; `AMENDMENT_35_REQUIRED: NO`
-- Final validation full-root: `PASS_WITH_KNOWN_PARALLEL_LOAD_NOTES`
-- Parallel-load disposition: `KNOWN_PARALLEL_LOAD_FLAKE_CLASS_CONFIRMED_FOR_THIS_RELEASE_GATE` (current AI-2 release gate only)
-- Standing future flake waiver: NO
-- Playwright: exactly 11 scenarios PASS; scenario 12 added = NO
-- Playwright parent-emulator process note: Existing unchanged Playwright tooling may start local emulator infrastructure as a parent process; this is not execution of the deferred B-18/B-19/B-20 evidence tier and no emulator-derived AI-2 evidence was claimed.
-- Deferred emulator B-18/B-19/B-20: NOT EXECUTED / NOT AUTHORIZED / NOT PERFORMED
-- Deployment: NOT AUTHORIZED / NOT PERFORMED
-- Production access: NOT AUTHORIZED / NOT PERFORMED
-- Next implementation: NOT AUTHORIZED
-- Closed-gate reopen: D1-T18 / D3-T15 / D3-T16 = UNTOUCHED; Row28 / Row30 = ADDITIVE_ONLY_NOT_REOPENED; R7-6 = NOT_REOPENED
+- Gemini decision: `TWINPET-P1-OFFLINE-SYNC-PACKET-5-FINAL-ADJUDICATION-AND-CLOSURE-GEMINI-001`
+- Technical adjudication: `PASS_WITH_NOTES`
+- Closure: `AUTHORIZED / COMPLETED`
+- Deferred local emulator UAT: `PASS`
+- Final runtime UAT: R4 / `36 / 36 PASS`
+  - B18: `14 / 14 PASS`
+  - B19: `14 / 14 PASS`
+  - B20: `8 / 8 PASS`
+- Production hits: `0`
+- Non-local function hits: `0`
+- Additional UAT required: `NO`
+- Post-UAT source restore: `PASS`
+- Tracked `functions/src/reconcileOrder.ts` marker count: `0`
 - Protected stash remains untouched: `stash@{0}` = `7d03cfec7ba52ff7e25b7e175ca190efc258d874`
 
+### Closure notes (nonblocking)
+
+- Ignored/generated `functions/lib/reconcileOrder.js` may still contain the temporary UAT marker from the consumed R4 `predev` build. Gemini classified this as `NONBLOCKING_IGNORED_ARTIFACT`. It is not tracked product source. It was not cleaned, rebuilt, staged, or treated as a closure blocker.
+- The R4 TEMP driver lived outside the repository and is not product code.
+- This docs commit is the Packet 5 closure record. It is distinct from the technical baseline `f8b67c144b96383d69196cc9080d038d1dac60d8`.
+
 ### Claim boundaries (must not overclaim)
+
+Packet 5 closure does not authorize deployment, production access, or the next roadmap packet. AI-2 claim boundaries remain:
 
 - `AI2_ADDS_CRASH_RESUME_CORRECTNESS: PARTIAL`
 - `FIRESTORE_SERVER_CONFIRMATION_INFERENCE: NO`
@@ -86,23 +90,22 @@ BROADER_PACKET_5_CLOSURE_AUTHORIZED: NO
 - `ENTRY_KEY_RISK_STATUS: ACCEPTED_NONBLOCKING`
 - `C1_READ_ONCE_RESIDUAL: ACCEPTED_NONBLOCKING_NOTE`
 
-Do not claim crash-resume completeness, reconnect as server confirmation, AI-2 as receipt authority, cross-tab mutual exclusion, Packet 5 closed, or production deployment.
+Do not claim crash-resume completeness, reconnect as server confirmation, AI-2 as receipt authority, cross-tab mutual exclusion, or production deployment.
 
-## This pass — Docs/tracker reconciliation (AI-2 implementation closure)
+## This pass — Docs/tracker reconciliation (Packet 5 closure)
 
-**Status: AUTHORIZED exact 3-doc source-of-truth reconciliation of the completed AI-2 implementation**
+**Status: AUTHORIZED docs-only source-of-truth reconciliation of the Gemini-closed Packet 5 state**
 
-- Authorized files: `docs/agent-workflow/CURRENT_PACKET.md`, `docs/agent-workflow/NEXT_ACTION.md`, `docs/agent-workflow/STATE.md`
-- No fourth docs path
+- Authorized files: `docs/agent-workflow/CURRENT_PACKET.md`, `docs/agent-workflow/NEXT_ACTION.md`, `docs/agent-workflow/STATE.md`, `docs/reports/latest-report.md`
 - No source/test/config/rules/index/functions changes
 - No deploy/runtime/production/callable/stash operations
-- No manual Emulator B-18/B-19/B-20
-- Gemini flake decision: `OPTION_A_AUTHORIZE_AI2_BOUNDED_NO_CODE_REDUCED_CONCURRENCY_REVALIDATION_AND_CONDITIONAL_RELEASE_CONTINUATION`
-- Gemini release decision: `OPTION_A_AUTHORIZE_AI2_FINAL_VALIDATION_EXACT18_COMMIT_PUSH_AND_CONDITIONAL_TRACKER_RECONCILIATION`
+- No UAT rerun
+- Gemini: `PACKET5_CLOSURE: AUTHORIZED`; `FINAL_DOCS_RECONCILIATION: AUTHORIZE`; `FINAL_DOCS_COMMIT_SUBJECT: docs: close packet 5 offline sync resiliency`
 
 ## Prior closed packets
 
-- **Application Integration AI-2 implementation** — `c45f5a3` (`CLOSED_WITH_NOTES`; exact 18-path surface; this pass is docs reconciliation only)
+- **Packet 5** — `CLOSED` (`PASS_WITH_NOTES`). Technical baseline before this docs commit: `f8b67c1`. Final runtime UAT R4 `36 / 36 PASS`. This pass is docs reconciliation only.
+- **Application Integration AI-2 implementation** — `c45f5a3` (`CLOSED_WITH_NOTES`; exact 18-path surface); AI-2 tracker reconciliation `8d6b174` (historical)
 - **Application Integration AI-1 implementation** — `4298c14` (`CLOSED_WITH_NOTES`; exact 8-path surface)
 - **AI-1 tracker reconciliation** — `17461473` (`docs(pos): reconcile ai-1 application integration closure`; historical)
 - **AI-1 STATE.md reconciliation** — `9f97d7f` (`docs(pos): reconcile ai-1 workflow state`; historical)
@@ -120,11 +123,31 @@ Do not claim crash-resume completeness, reconnect as server confirmation, AI-2 a
 - **P5-D / P5-C / P5-B** — closed/live as documented
 - **Packet S** — `e9363e3` (technically closed with nonblocking notes; docs `c6bdbd0`)
 
+## Historical — Application Integration AI-2 (CLOSED_WITH_NOTES)
+
+**Status: AI-2 implementation CLOSED_WITH_NOTES at `c45f5a3af8b73011466fe08ccc3517d4562d750c`**
+
+- Implementation commit: `c45f5a3af8b73011466fe08ccc3517d4562d750c` (`feat(pos): add sale submission evidence writer`)
+- Parent: `9f97d7fce51fb93a687c76a2e224c92a6b1149fe`
+- Tracker reconciliation: `8d6b174` (`docs(pos): reconcile ai-2 application integration closure`)
+- Exact surface: 18 paths; unauthorized file count = 0; file 19 required = NO
+- Census: `A5_EXACT_COUNT: 30` (`A5_EXACTIFICATION: RATIFIED`); `H11_TRIGGERED: NO`; `BOUNDED_AMENDMENT_COUNT: 34`; `AMENDMENT_35_REQUIRED: NO`
+- Final validation full-root: `PASS_WITH_KNOWN_PARALLEL_LOAD_NOTES`
+- Parallel-load disposition: `KNOWN_PARALLEL_LOAD_FLAKE_CLASS_CONFIRMED_FOR_THIS_RELEASE_GATE` (AI-2 release gate only; not a standing future flake waiver)
+- Playwright: exactly 11 scenarios PASS; scenario 12 added = NO
+- At the AI-2 tracker gate, deferred emulator B-18/B-19/B-20 had not yet been executed. That historical AI-2-gate wording is superseded: the deferred local-emulator chain later ran as R4 and passed `36 / 36`.
+
 ## Current repository HEAD
 
-`c45f5a3af8b73011466fe08ccc3517d4562d750c`
+Technical baseline before this docs closure commit:
 
-AI-2 implementation commit (binding): `c45f5a3af8b73011466fe08ccc3517d4562d750c`
+`f8b67c144b96383d69196cc9080d038d1dac60d8`
+
+HEAD subject: `fix(receipt): normalize callable receipt timestamps`
+
+AI-2 docs reconciliation (historical): `8d6b174`
+
+AI-2 implementation commit (historical): `c45f5a3af8b73011466fe08ccc3517d4562d750c`
 
 AI-2 implementation parent: `9f97d7fce51fb93a687c76a2e224c92a6b1149fe`
 
@@ -150,6 +173,6 @@ Historical closure anchors (unchanged):
 
 ## Next gate
 
-**AI-2 implementation is CLOSED_WITH_NOTES** at `c45f5a3af8b73011466fe08ccc3517d4562d750c`. Exact 18-path surface. Pushed to origin/main. This three-doc packet reconciles source-of-truth trackers to that closed-with-notes state.
+**Packet 5 is CLOSED.** No additional Packet 5 UAT is required. Do not rerun B-18/B-19/B-20. Do not start the next roadmap packet.
 
-**NEXT_WORKFLOW_ACTION:** Return to ChatGPT for AI-2 post-push closure confirmation and next authority coordination. Do NOT deploy. Do NOT start next implementation. Packet 5 remains OPEN. Do not reopen D1/D3/Row32/R7-6. Do not reopen PK-1. Passive read-only observation may occur only when natural production traffic provides a real event. UI-B.1, UI-B2, P5-F, recapture, deploy, runtime activation, callable invocation, production access, G14 (ABORTED), OBS-C, stash operations, Packet R/C/U, broader Packet 5 closure, next implementation — NOT authorized.
+**NEXT_WORKFLOW_ACTION:** Return to ChatGPT. Await next roadmap / packet selection or explicit Owner / Tech Lead authorization. Do NOT deploy. Do NOT start next implementation. Do not reopen D1/D3/Row32/R7-6. Do not reopen PK-1. Passive read-only observation may occur only when natural production traffic provides a real event. UI-B.1, UI-B2, P5-F, recapture, deploy, runtime activation, callable invocation, production access, G14 (ABORTED), OBS-C, stash operations, Packet R/C/U, next implementation — NOT authorized.
