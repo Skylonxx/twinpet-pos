@@ -1,9 +1,16 @@
 # Twinpet POS — Task Tracker
 
-> Last reconciled: 2026-08-18
-> Current repository HEAD: `ac29935d3fece70d50a6fe0d318ad2d4d7417305` (`feat(pos): complete r7-6 history and reconciliation hardening`)
-> R7-6 implementation commit (binding): `ac29935d3fece70d50a6fe0d318ad2d4d7417305`
-> R7-6 implementation parent: `457662dcb422c2ea6e148ed745b069ff3642278f` (`docs(pos): reconcile r7-6 post-correction architecture state`)
+> Last reconciled: 2026-08-22
+> Current repository HEAD (pre this docs commit): `292d51ff5092283e07e1aed9dcc8ac76fedbd866` (`docs: close packet 5 offline sync resiliency`)
+> Packet 5 closure commit (binding): `292d51ff5092283e07e1aed9dcc8ac76fedbd866`
+> Packet 5 technical baseline: `f8b67c144b96383d69196cc9080d038d1dac60d8` (`fix(receipt): normalize callable receipt timestamps`)
+> AI-2 implementation commit (historical): `c45f5a3af8b73011466fe08ccc3517d4562d750c`
+> AI-2 tracker reconciliation (historical): `8d6b174`
+> AI-1 implementation commit (historical): `4298c14d0e0ef2ed838110a93c30e0ea3dfb8711`
+> AI-1 tracker reconciliation (historical): `17461473bb117cc4316a73f85748aa1c3df89cba`
+> AI-1 STATE.md reconciliation (historical): `9f97d7fce51fb93a687c76a2e224c92a6b1149fe`
+> R7-6 implementation commit (historical): `ac29935d3fece70d50a6fe0d318ad2d4d7417305`
+> R7-6 implementation parent (historical): `457662dcb422c2ea6e148ed745b069ff3642278f` (`docs(pos): reconcile r7-6 post-correction architecture state`)
 > D3 closure commit (historical, unchanged): `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab`
 > PK-2A code commit (historical): `79ba840ab6e01ee1a5fff6c0094104c25d754668`
 > PK-2A parent: `23f51554f6a9e31bb7232a38cb9721c40f630566`
@@ -13,12 +20,36 @@
 > Packet S docs/tracker closure commit (historical, unchanged): `c6bdbd00d01541201dbc53236b06080db1a148e4`
 > P-OBS-1 implementation commit (historical, unchanged): `da3a8d1c9ddcb605a1f9a6e3cebc21d8dc2ffe72`
 > P-OBS-1 closure docs commit (historical, unchanged): `78f7ffe5c5b69f47af5c20ed8efd54410f35ee09`
+>
+> **Live workflow authority:** `docs/agent-workflow/STATE.md` (with `CURRENT_PACKET.md` / `NEXT_ACTION.md`) wins on gate/status conflict over this historical tracker.
 
 ---
 
-## P1 Offline / Sync Resiliency — Packet 5 / PK-2B / R7 / R7-6 — Implementation CLOSED / seven-doc source-of-truth reconciliation (this pass)
+## Post Packet 5 Closure / PK-3 Unified Sync Orchestrator — Docs reconciliation (this pass)
 
-**Status: `R7-6 implementation CLOSED`** — implementation committed and pushed at `ac29935d3fece70d50a6fe0d318ad2d4d7417305`. This pass reconciles the exact seven source-of-truth docs to that closed state. Gemini: `OPTION_A_CLOSE_R7_6_AND_AUTHORIZE_EXACT_7_DOC_RECONCILIATION_COMMIT_PUSH`.
+**Status: Packet 5 `CLOSED`; PK-3 `SELECTED`; this pass is docs-only source-of-truth reconciliation.** Gemini: `TWINPET-PK3-OWNER-GEMINI-DECISION-AND-IMPLEMENTATION-AUTHORIZATION-001`. Live workflow authority remains `docs/agent-workflow/STATE.md`.
+
+- [x] Packet 5 status recorded — `CLOSED` / `PASS_WITH_NOTES`
+- [x] Packet 5 closure commit recorded — `292d51ff5092283e07e1aed9dcc8ac76fedbd866`
+- [x] Packet 5 technical baseline recorded — `f8b67c144b96383d69196cc9080d038d1dac60d8`
+- [x] Final runtime UAT recorded — R4 `36 / 36 PASS`
+- [x] AI-2 recorded — `CLOSED_WITH_NOTES` at `c45f5a3` (historical)
+- [x] AI-1 recorded — `CLOSED_WITH_NOTES` at `4298c14` (historical)
+- [x] R7-6 recorded — `CLOSED` at `ac29935` (historical)
+- [x] PK-3 recorded — `SELECTED`; architecture `PASS_WITH_NOTES`; implementation authorized as bounded tests; **feature not complete**
+- [x] PK-3 feature commit/push recorded — **NOT AUTHORIZED**
+- [x] Closed-gate non-reopen recorded — D1_T18 / D3_T15 / D3_T16 UNTOUCHED; Row28/Row30 ADDITIVE_ONLY_NOT_REOPENED; Row32 = NO; R7_6 NOT_REOPENED
+- [x] Live-workflow precedence recorded — `docs/agent-workflow/STATE.md` wins on gate/status conflict
+- [x] Protected stash recorded unchanged — `stash@{0}` = `7d03cfec7ba52ff7e25b7e175ca190efc258d874`
+- [x] Prior R7-6 seven-doc pass retained as historical (`e17a8d2` / `ac29935`)
+
+**CURRENT_STATUS:** Packet 5 CLOSED at `292d51ff`. AI-1/AI-2 CLOSED_WITH_NOTES. PK-3 is the Owner/Gemini-selected next packet. This three-doc packet does **not** record PK-3 feature completion.
+
+**NEXT_WORKFLOW_ACTION:** After this docs commit/push, execute Gemini-authorized PK-3 bounded implementation and tests. Then return to ChatGPT for mandatory Codex implementation review. Do not commit/push the feature. Do not run UAT. Do not deploy. Do not reopen Packet 5.
+
+## P1 Offline / Sync Resiliency — Packet 5 / PK-2B / R7 / R7-6 — Implementation CLOSED / seven-doc source-of-truth reconciliation (historical)
+
+**Status: `R7-6 implementation CLOSED` (historical)** — implementation committed and pushed at `ac29935d3fece70d50a6fe0d318ad2d4d7417305`. Superseded as current phase by Packet 5 closure and PK-3 selection. Gemini at that pass: `OPTION_A_CLOSE_R7_6_AND_AUTHORIZE_EXACT_7_DOC_RECONCILIATION_COMMIT_PUSH`.
 
 - [x] R7-6 implementation status recorded — `CLOSED`
 - [x] Implementation commit recorded — `ac29935d3fece70d50a6fe0d318ad2d4d7417305`
@@ -40,9 +71,7 @@
 - [x] Protected stash recorded unchanged — `stash@{0}` = `7d03cfec7ba52ff7e25b7e175ca190efc258d874`
 - [x] Prior architecture-docs pass retained as historical (`457662d`)
 
-**CURRENT_STATUS:** R7-6 implementation CLOSED at `ac29935`. Codex rereview-005 PASS / 0 blockers. Contract 282; hidden 283 = NO. This seven-doc packet is the authorized docs-only closure reconciliation. Master Plan/docs reconciliation was not part of the implementation commit.
-
-**NEXT_WORKFLOW_ACTION:** Return to ChatGPT for final R7-6 docs closure confirmation and next-gate coordination. Do not deploy. Do not start Application Integration. Do not start next packet implementation. **Next implementation action:** NONE — NOT AUTHORIZED.
+**Historical note (that pass):** R7-6 implementation CLOSED at `ac29935`. Codex rereview-005 PASS / 0 blockers. Contract 282; hidden 283 = NO. The `PACKET_5_STATUS: NOT_CLOSED` checkbox above is the historical R7-6-pass record and is superseded by Packet 5 closure at `292d51ff`.
 
 ## P1 Offline / Sync Resiliency — Packet 5 / PK-2B / R7 / R7-6 — Post Claude Correction-003 Master Plan Reconciliation (historical)
 
@@ -236,13 +265,16 @@
 
 ### Next step
 
-1. **R7-6 implementation — `CLOSED`** at `ac29935d3fece70d50a6fe0d318ad2d4d7417305` — exact 55 paths; Codex rereview-005 PASS / 0 blockers; contract 282; hidden 283 = NO; G-D1 OPTION_B / G-D2 OPTION_A / G-D3 OPTION_A / G-D5 OPTION_B / G-D6 OPTION_A / CLOSED
-2. **D3 — `CLOSED`** at `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab` — do not reopen
-3. **PK-2A Boot / Session Gating — `CLOSED_WITH_NOTES`** at `79ba840ab6e01ee1a5fff6c0094104c25d754668` — historical
-4. **PK-1 Offline Shift Session — `CLOSED_WITH_NOTES`** at `513b198a30a1af72151ab6a8c0976799871529b8` — do not reopen
-5. **`PACKET_5_STATUS: NOT_CLOSED`** — broader Packet 5 closure **NOT AUTHORIZED**; R7-6 closure is not Packet 5 closure
-6. **NEXT_WORKFLOW_ACTION:** Return to ChatGPT for final R7-6 docs closure confirmation and next-gate coordination. **Next implementation action:** NONE — NOT AUTHORIZED. Application Integration: `STILL_NOT_READY` / NOT PERFORMED / NOT AUTHORIZED. Deployment: NOT PERFORMED / NOT AUTHORIZED. Next packet implementation: NOT AUTHORIZED
-7. **NOT authorized:** Application Integration, deployment, production access, Firebase runtime activation, next packet implementation, PK-2C..PK-6 implementation, offline credential login, returns/refunds, G14 (ABORTED), OBS-C, UI-B.1, UI-B2, P5-F, recapture, runtime activation, callable invocation, stash operations, Packet R/C/U, broader Packet 5 closure
-8. Do not automatically start Application Integration, deployment, or next packet implementation. Future work requires a separate authorized gate.
+1. **Packet 5 — `CLOSED`** at `292d51ff5092283e07e1aed9dcc8ac76fedbd866` — `PASS_WITH_NOTES`; R4 `36 / 36 PASS`; do not reopen
+2. **PK-3 — `SELECTED`** — Gemini `TWINPET-PK3-OWNER-GEMINI-DECISION-AND-IMPLEMENTATION-AUTHORIZATION-001` authorized bounded implementation and tests; feature **not complete**; feature commit/push **NOT AUTHORIZED**
+3. **AI-2 — `CLOSED_WITH_NOTES`** at `c45f5a3` — historical
+4. **AI-1 — `CLOSED_WITH_NOTES`** at `4298c14` — historical
+5. **R7-6 implementation — `CLOSED`** at `ac29935` — historical; do not reopen
+6. **D3 — `CLOSED`** at `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab` — do not reopen
+7. **PK-2A — `CLOSED_WITH_NOTES`** at `79ba840` — historical
+8. **PK-1 — `CLOSED_WITH_NOTES`** at `513b198` — do not reopen
+9. **NEXT_WORKFLOW_ACTION:** After this three-doc commit/push, execute PK-3 bounded implementation and tests; then return to ChatGPT for mandatory Codex review. Do not commit/push the feature. Do not run UAT. Do not deploy.
+10. **NOT authorized:** PK-3 feature commit/push, runtime UAT in this docs pass, deployment, production access, PK-2C / PK-4 / PK-5 / PK-6, offline credential login, returns/refunds, G14 (ABORTED), OBS-C, UI-B.1, UI-B2, P5-F, recapture, callable invocation, stash operations, Packet 5 reopen
+11. Do not automatically deploy or start PK-4. Future work beyond the authorized PK-3 implementation/tests requires a separate authorized gate.
 
-**Not active:** Application Integration, deployment, next packet implementation, PK-2C, PK-3..PK-6, UI-B.1, UI-B2, P5-F, recapture, or any new feature packet.
+**Not active:** PK-3 feature commit/push, deployment, PK-2C, PK-4..PK-6, UI-B.1, UI-B2, P5-F, recapture, or any packet other than the Gemini-authorized PK-3 implementation/tests.
