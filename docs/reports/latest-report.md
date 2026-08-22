@@ -1,8 +1,134 @@
-# Latest Report — P1 Offline / Sync Packet 5 — CLOSED / Docs-Only Closure Reconciliation
+# Latest Report — PK-3 Unified Sync Orchestrator — CLOSED / Docs-Only Closure Reconciliation
+
+> Date: 2026-08-23
+> Technical baseline before this docs closure commit: `ec7cf8beb52d56c1c412aa12c843cbd1151f687a` (`feat(pos): add unified offline sync recovery`)
+> Status: **PK-3 CLOSED.** Technical adjudication `PASS`. Product implementation closed. Gemini authorized closure after Codex final RC1/RC2/RC3 re-review **PASS**, AGY UI **PASS_WITH_NOTES**, and local-emulator UAT **U1–U7 PASS**. Both AGY notes confirmed nonblocking by runtime UAT. Production hits **0**. Non-local function hits **0**. Additional UAT / Codex / AGY **NOT REQUIRED**. Deployment **NOT REQUIRED / NOT PERFORMED / NOT AUTHORIZED**. Packet 5 remains **CLOSED**. Next packet implementation **NOT AUTHORIZED**. PK-4 and PK-2C **NOT AUTHORIZED**. This pass is the authorized seven-doc source-of-truth reconciliation of that closed PK-3 state.
+
+## 0. This pass's reports
+
+- Gemini final UAT adjudication / closure / docs authorization: `TWINPET-PK3-FINAL-UAT-ADJUDICATION-CLOSURE-AND-DOCS-AUTHORIZATION-GEMINI-001` (`PK3_UAT_ADJUDICATION: PASS`; `PK3_TECHNICAL_ADJUDICATION: PASS`; `PK3_TECHNICALLY_COMPLETE: YES`; `PK3_PRODUCT_IMPLEMENTATION_CLOSED: YES`; `U1-U7: ALL ACCEPTED`; `CLOSURE_DOC_RECONCILIATION_AUTHORIZED: YES`; commit subject `docs: close pk-3 unified sync recovery`)
+- Codex final RC1/RC2/RC3 re-review: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Codex\twinpet-pk3-mandatory-codex-rereview-after-rc123-001.md` (`PK3_CODEX_REREVIEW: PASS`; `FINAL_VERDICT: PASS`)
+- AGY narrow UI review: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\AGY\twinpet-pk3-narrow-ui-review-agy-001.md` (`AGY_UI_REVIEW: PASS_WITH_NOTES`; `UI-NOTE-01`; `UI-NOTE-02`)
+- AGY local-emulator UAT: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\AGY\twinpet-pk3-local-emulator-uat-agy-001.md` (`FINAL UAT VERDICT: PASS`; U1–U7 `PASS`; production hits `0`; non-local function hits `0`; both UI notes `NONBLOCKING CONFIRMED`)
+- PK-3 feature commit (already on main): `ec7cf8beb52d56c1c412aa12c843cbd1151f687a` (`feat(pos): add unified offline sync recovery`)
+- This docs packet contract: `twinpet-pk3-closure-docs-reconciliation-commit-push-grok-001.md`
+
+## 1. Current PK-3 facts
+
+| Field | Value |
+|-------|-------|
+| CURRENT_PHASE | Post PK-3 Closure / Roadmap Re-entry |
+| CURRENT_GATE | POST_PK3_READ_ONLY_ROADMAP_REENTRY |
+| STATUS | PK-3 CLOSED / READY FOR READ-ONLY NEXT-PACKET SELECTION |
+| PK3_STATUS | CLOSED |
+| PK3_TECHNICAL_ADJUDICATION | PASS |
+| PK3_TECHNICALLY_COMPLETE | YES |
+| PK3_PRODUCT_IMPLEMENTATION_CLOSED | YES |
+| PK3_UAT_ADJUDICATION | PASS |
+| U1–U7 | ALL ACCEPTED / PASS |
+| CODEX_FINAL_RC1_RC2_RC3_REREVIEW | PASS |
+| AGY_UI_REVIEW | PASS_WITH_NOTES |
+| AGY_UI_NOTES | UI-NOTE-01 / UI-NOTE-02; runtime UAT confirmed nonblocking |
+| PRODUCTION_HITS | 0 |
+| NON_LOCAL_FUNCTION_HITS | 0 |
+| ADDITIONAL_UAT_REQUIRED | NO |
+| ADDITIONAL_CODEX_REVIEW_REQUIRED | NO |
+| ADDITIONAL_AGY_REVIEW_REQUIRED | NO |
+| DEPLOYMENT_REQUIRED | NO |
+| TECHNICAL_BASELINE_BEFORE_DOCS_COMMIT | `ec7cf8beb52d56c1c412aa12c843cbd1151f687a` |
+| HEAD subject | `feat(pos): add unified offline sync recovery` |
+| PACKET_5_STATUS | CLOSED |
+| PK4_IMPLEMENTATION | NOT AUTHORIZED |
+| PK2C_IMPLEMENTATION | NOT AUTHORIZED |
+| Deployment | NOT PERFORMED / NOT AUTHORIZED |
+| Next packet implementation | NOT AUTHORIZED |
+
+**CURRENT_STATUS:** PK-3 is **CLOSED** at feature SHA `ec7cf8b`. Gemini `PASS`. U1–U7 `PASS`. This seven-doc packet is the authorized docs-only closure reconciliation. Packet 5 remains CLOSED.
+
+## 2. Gemini decision ledger (closed)
+
+| ID | Subject | Status |
+|----|---------|--------|
+| TWINPET-PK3-FINAL-UAT-ADJUDICATION-CLOSURE-AND-DOCS-AUTHORIZATION-GEMINI-001 | PK-3 final UAT adjudication, technical closure, and docs authorization | `PK3_UAT_ADJUDICATION: PASS`; `PK3_TECHNICAL_ADJUDICATION: PASS`; `PK3_TECHNICALLY_COMPLETE: YES`; `PK3_PRODUCT_IMPLEMENTATION_CLOSED: YES`; `U1-U7: ALL ACCEPTED`; `ADDITIONAL_UAT_REQUIRED: NO`; `ADDITIONAL_CODEX_REVIEW_REQUIRED: NO`; `ADDITIONAL_AGY_REVIEW_REQUIRED: NO`; `CLOSURE_DOC_RECONCILIATION_AUTHORIZED: YES`; `CLOSURE_DOC_COMMIT_ALLOWED: YES`; `CLOSURE_DOC_PUSH_AUTHORIZED: YES`; commit subject `docs: close pk-3 unified sync recovery`; `PRODUCT_CODE_CHANGE_ALLOWED: NO`; `DEPLOYMENT_ALLOWED: NO`; `STASH_OPERATION_ALLOWED: NO` |
+
+Do not invent a new product decision. Do not reopen PK-3. Do not reopen Packet 5. Do not authorize PK-4 or PK-2C.
+
+## 3. Final review / UAT evidence (recorded; not re-run in this docs gate)
+
+- Codex RC1 re-review: PASS
+- Codex RC2 re-review: PASS
+- Codex RC3 re-review: PASS
+- Codex blocking findings: 0
+- AGY UI: PASS_WITH_NOTES; blocking findings 0; notes UI-NOTE-01 / UI-NOTE-02
+- U1 Offline sale → reconnect converges without reload: PASS
+- U2 Offline void → reconnect confirmed or explicit terminal: PASS
+- U3 Offline reversal → reconnect drains (CH-4): PASS
+- U4 Offline shift close → reconnect on `/manual-review` still converges: PASS
+- U5 Boot offline → stay offline → reconnect later drains without reload: PASS
+- U6 Two tabs reconnect simultaneously → exactly one drain (Web Locks): PASS
+- U7 Day-boundary void → explicit terminal, never silent failure: PASS
+- Production hits: 0
+- Non-local function hits: 0
+- Both AGY UI notes: NONBLOCKING CONFIRMED by runtime UAT
+
+## 4. Closure notes (nonblocking)
+
+AGY UI notes `UI-NOTE-01` (Sales History table-row multi-badge density) and `UI-NOTE-02` (drawer footer terminal-fault wrapping) remain accepted nonblocking notes. Runtime UAT confirmed both as nonblocking. No product remediation is authorized in this docs gate.
+
+Packet 5 remains CLOSED. Its historical generated-lib stale-marker note (`NONBLOCKING_IGNORED_ARTIFACT`) is unchanged and is not a PK-3 blocker.
+
+## 5. Preserved accepted facts / closed gates
+
+Preserved: Packet 5 `CLOSED`; AI-2 `CLOSED_WITH_NOTES`; AI-1 `CLOSED_WITH_NOTES`; R7-6 `CLOSED`; D3 `CLOSED`; PK-2A `CLOSED_WITH_NOTES`; PK-1 `CLOSED_WITH_NOTES`; chronology/currentness split; ENTRY_STORE parallel for record freshness only; closed-gate non-reopen.
+
+```text
+PK3_STATUS: CLOSED
+PK3_TECHNICAL_ADJUDICATION: PASS
+PK3_PRODUCT_IMPLEMENTATION_CLOSED: YES
+PACKET_5_STATUS: CLOSED
+ADDITIONAL_UAT_REQUIRED: NO
+ADDITIONAL_CODEX_REVIEW_REQUIRED: NO
+ADDITIONAL_AGY_REVIEW_REQUIRED: NO
+DEPLOYMENT_REQUIRED: NO
+ROW28_REOPEN_REQUIRED: NO
+ROW30_REOPEN_REQUIRED: NO
+D1_REOPEN_REQUIRED: NO
+D3_REOPEN_REQUIRED: NO
+ROW32_REOPEN_REQUIRED: NO
+ENTRY_STORE_RELATION: PARALLEL_FOR_RECORD_FRESHNESS_ONLY
+DEPLOYMENT_PERFORMED: NO
+NEXT_PACKET_IMPLEMENTATION_AUTHORIZED: NO
+PK4_IMPLEMENTATION_AUTHORIZED: NO
+PK2C_IMPLEMENTATION_AUTHORIZED: NO
+```
+
+## 6. Next workflow
+
+```text
+NEXT_WORKFLOW_ACTION:
+PK3_CLOSED
+READY_FOR_POST_PK3_READ_ONLY_ROADMAP_REENTRY
+AWAIT_NEXT_PACKET_SELECTION_OR_EXPLICIT_OWNER_TECH_LEAD_AUTHORIZATION
+
+DO NOT:
+deploy,
+rerun PK-3 UAT,
+start PK-4 implementation,
+start PK-2C implementation,
+start next packet implementation.
+```
+
+**Next implementation action:** NONE — NOT AUTHORIZED.
+
+Future work requires a separate authorized gate. Do not touch stash.
+
+---
+
+# Historical — Latest Report — P1 Offline / Sync Packet 5 — CLOSED / Docs-Only Closure Reconciliation
 
 > Date: 2026-08-22
-> Technical baseline before this docs closure commit: `f8b67c144b96383d69196cc9080d038d1dac60d8` (`fix(receipt): normalize callable receipt timestamps`)
-> Status: **Packet 5 CLOSED.** Technical adjudication `PASS_WITH_NOTES`. Gemini authorized closure after R4 full-chain local-emulator UAT **36 / 36 PASS** and exact post-UAT source restore. Deferred local emulator UAT **PASS**. Additional UAT **NOT REQUIRED**. Deployment **NOT PERFORMED / NOT AUTHORIZED**. Next packet implementation **NOT AUTHORIZED**. This pass is the authorized four-doc source-of-truth reconciliation of that closed Packet 5 state.
+> Technical baseline before that docs closure commit: `f8b67c144b96383d69196cc9080d038d1dac60d8` (`fix(receipt): normalize callable receipt timestamps`)
+> Status: **HISTORICAL.** Packet 5 CLOSED. Technical adjudication `PASS_WITH_NOTES`. Gemini authorized closure after R4 full-chain local-emulator UAT **36 / 36 PASS** and exact post-UAT source restore. Deferred local emulator UAT **PASS**. Additional UAT **NOT REQUIRED**. Deployment **NOT PERFORMED / NOT AUTHORIZED**. That pass was the authorized four-doc source-of-truth reconciliation of the closed Packet 5 state. Packet 5 remains CLOSED. Current phase is now Post PK-3 Closure / Roadmap Re-entry.
 
 ## 0. This pass's reports
 
@@ -36,7 +162,7 @@
 | Deployment | NOT PERFORMED / NOT AUTHORIZED |
 | Next packet implementation | NOT AUTHORIZED |
 
-**CURRENT_STATUS:** Packet 5 is **CLOSED** at technical baseline `f8b67c1`. Gemini `PASS_WITH_NOTES`. R4 `36 / 36 PASS`. Post-UAT restore `PASS`. This four-doc packet is the authorized docs-only closure reconciliation.
+**Then-current status (superseded as live current-state):** Packet 5 is **CLOSED** at technical baseline `f8b67c1`. Gemini `PASS_WITH_NOTES`. R4 `36 / 36 PASS`. Post-UAT restore `PASS`. That four-doc packet was the authorized Packet 5 docs-only closure reconciliation. Packet 5 remains CLOSED. Current live status is PK-3 CLOSED.
 
 ## 2. Gemini decision ledger (closed)
 
@@ -90,7 +216,7 @@ DEPLOYMENT_PERFORMED: NO
 NEXT_PACKET_IMPLEMENTATION_AUTHORIZED: NO
 ```
 
-## 6. Next workflow
+## 6. Historical next workflow at that Packet 5 pass (superseded as current-state)
 
 ```text
 NEXT_WORKFLOW_ACTION:
@@ -104,9 +230,7 @@ rerun Packet 5 UAT,
 start next packet implementation.
 ```
 
-**Next implementation action:** NONE — NOT AUTHORIZED.
-
-Future work requires a separate authorized gate. Do not touch stash.
+Those next-action claims are **no longer the live current-state**. Packet 5 remains CLOSED. Current next action is ChatGPT post-PK-3 read-only roadmap re-entry. Do not touch stash.
 
 ---
 
