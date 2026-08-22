@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Badge,
@@ -27,6 +27,7 @@ import {
 import { listQueue, resolveManualReview } from '../lib/pos/offline/offlineReversalQueue';
 import { createIndexedDbReversalStore } from '../lib/pos/offline/reversalLocalStore';
 import { listReversalRejections } from '../lib/pos/offline/reversalRejectionLog';
+import { listTerminalVoidIntents, subscribeVoidIntentStore, type VoidIntentRecord, type VoidTerminalReason } from '../lib/pos/offline/voidIntentStore';
 import type { OfflineReversalIntent } from '../lib/pos/offline/offlineReversalTypes';
 import type { ReversalRejectionRecord } from '../lib/inventory/reversalRejectionRecord';
 
@@ -36,6 +37,17 @@ import type { ReversalRejectionRecord } from '../lib/inventory/reversalRejection
  * runtime helper to `src/lib/pos/offline`. It reads the existing intent field only and
  * changes no query, schema, or mutation behavior.
  */
+function getVoidTerminalReasonLabel(reason: VoidTerminalReason | null): string {
+  if (reason === 'order_absent_server_side') return 'บิลยังไม่ถึงเซิร์ฟเวอร์';
+  if (reason === 'day_boundary_expired') return 'เลยกำหนดยกเลิกภายในวัน';
+  if (reason === 'authority_refused') return 'เซิร์ฟเวอร์ปฏิเสธ';
+  if (reason === 'attempt_ceiling_reached') return 'ครบจำนวนครั้งที่ลองส่ง';
+  if (reason === 'malformed_intent') return 'คำขอไม่ถูกต้อง';
+  if (reason === 'order_already_terminal') return 'บิลถูกยกเลิกแล้ว';
+  if (reason === 'staff_identity_mismatch') return 'พนักงานผู้ขอไม่ตรงกับรอบปัจจุบัน';
+  return 'ไม่ระบุ';
+}
+
 function getEvidenceSourceLabel(source: unknown): string {
   if (source === 'header_snapshot') return 'หลักฐานจากหัวเอกสาร';
   if (source === 'legacy_subcollection') return 'รายการย่อยเดิม';
@@ -75,6 +87,10 @@ export default function ManualReviewOpsPage() {
   const [rejections, setRejections] = useState<ReversalRejectionRecord[]>([]);
   const [rejectionsLoading, setRejectionsLoading] = useState(canResolve);
   const [rejectionsError, setRejectionsError] = useState<string | null>(null);
+  const [voidTerminals, setVoidTerminals] = useState<VoidIntentRecord[]>([]);
+  const [voidTerminalsLoading, setVoidTerminalsLoading] = useState(canResolve);
+  const [voidTerminalsError, setVoidTerminalsError] = useState<string | null>(null);
+  const voidTerminalsMountedRef = useRef(true);
 
   const refresh = useCallback(async () => {
     if (!canResolve) {
@@ -124,6 +140,41 @@ export default function ManualReviewOpsPage() {
   useEffect(() => {
     void refreshRejections();
   }, [refreshRejections]);
+
+  const refreshVoidTerminals = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!canResolve) {
+      if (!voidTerminalsMountedRef.current) return;
+      setVoidTerminals([]);
+      setVoidTerminalsLoading(false);
+      return;
+    }
+    if (!opts?.silent) setVoidTerminalsLoading(true);
+    try {
+      const rows = await listTerminalVoidIntents(store);
+      if (!voidTerminalsMountedRef.current) return;
+      setVoidTerminals(rows);
+      setVoidTerminalsError(null);
+    } catch (err) {
+      if (!voidTerminalsMountedRef.current) return;
+      setVoidTerminalsError(err instanceof Error ? err.message : String(err));
+      setVoidTerminals([]);
+    } finally {
+      if (!voidTerminalsMountedRef.current) return;
+      if (!opts?.silent) setVoidTerminalsLoading(false);
+    }
+  }, [canResolve, store]);
+
+  useEffect(() => {
+    voidTerminalsMountedRef.current = true;
+    void refreshVoidTerminals();
+    const unsubscribe = subscribeVoidIntentStore(() => {
+      void refreshVoidTerminals({ silent: true });
+    });
+    return () => {
+      voidTerminalsMountedRef.current = false;
+      unsubscribe();
+    };
+  }, [refreshVoidTerminals]);
 
   useEffect(() => {
     if (!toast) return;
@@ -343,6 +394,81 @@ export default function ManualReviewOpsPage() {
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-gray-500 dark:text-gray-400">
                         {r.staffId ?? '—'}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </Card>
+        )}
+      </div>
+
+      <div className="mt-8 flex flex-col gap-4 border-t-2 border-gray-200 pt-8 dark:border-gray-700">
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                คำขอยกเลิกบิลที่ไม่ถูกส่ง (อุปกรณ์นี้)
+              </h2>
+              <Badge color="gray" size="sm" className="w-fit">
+                อ่านอย่างเดียว
+              </Badge>
+            </div>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              คำขอยกเลิกบิลที่หยุดส่งแล้ว และต้องให้ผู้จัดการตรวจสอบ — ไม่มีปุ่มซิงก์ในหน้านี้
+            </p>
+          </div>
+          <Badge color="gray" size="sm" className="w-fit">
+            {voidTerminalsLoading ? <Spinner size="sm" /> : `${voidTerminals.length} รายการ`}
+          </Badge>
+        </div>
+
+        <Alert color="info">
+          รายการนี้เป็นสถานะเฉพาะเครื่องนี้ อ่านอย่างเดียว ไม่ใช่ศูนย์ซิงก์ และไม่มีปุ่มส่งซ้ำในขั้นตอนนี้
+        </Alert>
+
+        {voidTerminalsError ? (
+          <Alert color="failure">
+            <span className="font-medium">โหลดคำขอยกเลิกไม่สำเร็จ:</span> {voidTerminalsError}
+          </Alert>
+        ) : voidTerminalsLoading ? (
+          <div className="flex justify-center p-8">
+            <Spinner size="xl" aria-label="Loading terminal void intents" />
+          </div>
+        ) : voidTerminals.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-gray-200 p-8 text-center text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">
+            ไม่มีคำขอยกเลิกบิลที่หยุดส่งบนอุปกรณ์นี้
+          </div>
+        ) : (
+          <Card className="overflow-hidden p-0">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHead>
+                  <TableHeadCell>เลขบิล</TableHeadCell>
+                  <TableHeadCell>สาขา</TableHeadCell>
+                  <TableHeadCell>เหตุผล</TableHeadCell>
+                  <TableHeadCell>ผู้ขอ</TableHeadCell>
+                  <TableHeadCell>สถานะ</TableHeadCell>
+                </TableHead>
+                <TableBody className="divide-y">
+                  {voidTerminals.map((row) => (
+                    <TableRow
+                      key={row.orderId}
+                      className="bg-white dark:border-gray-700 dark:bg-gray-800"
+                    >
+                      <TableCell className="font-mono text-xs whitespace-nowrap">{row.orderId}</TableCell>
+                      <TableCell className="whitespace-nowrap">{row.branchId}</TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {getVoidTerminalReasonLabel(row.terminalReason)}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-gray-500 dark:text-gray-400">
+                        {row.voidedBy}
+                      </TableCell>
+                      <TableCell>
+                        <Badge color="failure" size="sm" className="w-fit">
+                          ไม่ได้ส่ง
+                        </Badge>
                       </TableCell>
                     </TableRow>
                   ))}

@@ -18,6 +18,7 @@ import { useAuth } from '../lib/hooks/useAuth';
 import { useBranch } from '../lib/hooks/useBranch';
 import { useDeviceSeqReconcileBoot } from '../lib/pos/offline/deviceSeqReconcileBoot';
 import { useSaleIntentSweepBoot } from '../lib/pos/offline/saleIntentSweepBoot';
+import { useSyncOrchestrator } from '../lib/pos/offline/syncOrchestrator';
 import type { UserRole } from '../lib/types';
 
 const ROLE_LABELS: Record<UserRole, string> = {
@@ -64,6 +65,7 @@ export default function AppShell() {
   const { branch } = useBranch();
   const location = useLocation();
 
+  useSyncOrchestrator();
   // Fail-open, once-per-tab startup Sale Intent sweep. Mounts here (structurally
   // past ProtectedRoute + PosShellRoute guards); silent no-op on every skip path.
   useSaleIntentSweepBoot();

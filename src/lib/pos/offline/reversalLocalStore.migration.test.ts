@@ -5,7 +5,7 @@ import {
 } from './reversalLocalStore';
 
 /**
- * Phase 7B-H7-C migration coverage.
+ * Phase 7B-H7-C + PK-3 migration coverage.
  *
  * `fake-indexeddb` is not a project dependency (and adding one is out of scope), so this
  * suite injects a COMPACT, deterministic fake `indexedDB` that exercises the REAL
@@ -15,14 +15,14 @@ import {
  *     (setTimeout 0) AFTER all microtask request callbacks (and the user `fn` await chain)
  *     have drained — matching IndexedDB's "auto-commit once requests settle" semantics.
  *
- * The fake persists a pre-seeded v1 database (the four original stores + data, NO
- * `rejections`) so opening at the production `DB_VERSION` (2) triggers a real upgrade.
+ * PK-3 (V2=A): production DB_VERSION is 3. The v1→v2 hop is retained as the first
+ * missing-store creation; v2→v3 adds only `voidIntents`.
  */
 
 interface FakeDbState {
   version: number;
   stores: Map<string, Map<string, unknown>>;
-  created: string[]; // names passed to createObjectStore during the last upgrade
+  created: string[];
 }
 
 function installFakeIndexedDb(state: FakeDbState): void {
@@ -71,7 +71,6 @@ function installFakeIndexedDb(state: FakeDbState): void {
       },
     };
     let aborted = false;
-    // Auto-commit on a macrotask, after all request microtasks + the fn await chain drain.
     setTimeout(() => {
       if (!aborted) tx.oncomplete?.();
     }, 0);
@@ -100,7 +99,7 @@ function installFakeIndexedDb(state: FakeDbState): void {
         req.result = makeDb();
         if (version > state.version) {
           state.created = [];
-          req.onupgradeneeded?.(); // production handler creates only missing stores
+          req.onupgradeneeded?.();
           state.version = version;
         }
         req.onsuccess?.();
@@ -125,54 +124,82 @@ function seedV1(): FakeDbState {
   };
 }
 
+function seedV2(): FakeDbState {
+  const state = seedV1();
+  state.version = 2;
+  state.stores.set('rejections', new Map<string, unknown>([['rej_existing', { recordId: 'rej_existing' }]]));
+  return state;
+}
+
 afterEach(() => {
   delete (globalThis as unknown as { indexedDB?: unknown }).indexedDB;
 });
 
-describe('H7-C: REVERSAL_STORES is additive (no original store removed)', () => {
-  it('contains the four original stores plus rejections', () => {
-    expect(REVERSAL_STORES).toEqual(['intents', 'stock', 'ledger', 'markers', 'rejections']);
+describe('H7-C / PK-3: REVERSAL_STORES is additive (no original store removed)', () => {
+  it('contains the four original stores plus rejections plus voidIntents', () => {
+    expect(REVERSAL_STORES).toEqual([
+      'intents',
+      'stock',
+      'ledger',
+      'markers',
+      'rejections',
+      'voidIntents',
+    ]);
   });
 });
 
-describe('H7-C: DB_VERSION 1 → 2 migration (real openDb/onupgradeneeded via injected fake)', () => {
-  it('upgrading a v1 DB creates ONLY the rejections store and preserves existing stores + data', async () => {
+describe('H7-C: DB_VERSION 1 → 2 hop retained inside current open (v3)', () => {
+  it('upgrading a v1 DB creates missing stores (rejections then voidIntents) and preserves data', async () => {
     const state = seedV1();
     installFakeIndexedDb(state);
 
-    // Any transact triggers openDb at the production DB_VERSION (2) → upgrade fires.
     const store = createIndexedDbReversalStore();
     const got = await store.transact(['rejections'], 'readwrite', async (txn) => {
       await txn.put('rejections', 'rej_1', { recordId: 'rej_1', sourceType: 'transfer' });
       return txn.get('rejections', 'rej_1');
     });
 
-    // Upgrade fired (version bumped) and created ONLY the missing store.
-    expect(state.version).toBe(2);
-    expect(state.created).toEqual(['rejections']);
-
-    // Existing stores + their data are preserved untouched.
+    expect(state.version).toBe(3);
+    expect(state.created).toEqual(['rejections', 'voidIntents']);
     expect(state.stores.get('intents')!.get('i1')).toEqual({ id: 'i1', status: 'queued' });
     expect(state.stores.get('stock')!.get('p1::b1')).toEqual({ count: 5 });
     expect(state.stores.get('ledger')!.get('row-1')).toEqual({ delta: -5 });
     expect(state.stores.get('markers')!.get('mut-1')).toEqual({ applied: true });
-
-    // The new store exists and accepted the write.
     expect(state.stores.has('rejections')).toBe(true);
+    expect(state.stores.has('voidIntents')).toBe(true);
     expect(got).toEqual({ recordId: 'rej_1', sourceType: 'transfer' });
   });
+});
 
-  it('does not recreate stores that already exist (no data loss on re-open)', async () => {
-    const state = seedV1();
-    state.version = 2; // already migrated
-    state.stores.set('rejections', new Map<string, unknown>([['rej_existing', { recordId: 'rej_existing' }]]));
+describe('PK-3: DB_VERSION 2 → 3 migration', () => {
+  it('upgrading a v2 DB creates ONLY voidIntents and preserves existing stores + data', async () => {
+    const state = seedV2();
     installFakeIndexedDb(state);
 
     const store = createIndexedDbReversalStore();
-    await store.transact(['rejections'], 'readonly', async (txn) => txn.getAll('rejections'));
+    const got = await store.transact(['voidIntents'], 'readwrite', async (txn) => {
+      await txn.put('voidIntents', 'ord-1', { orderId: 'ord-1', status: 'pending' });
+      return txn.get('voidIntents', 'ord-1');
+    });
 
-    // No upgrade → no createObjectStore calls; the pre-existing rejection row survives.
+    expect(state.version).toBe(3);
+    expect(state.created).toEqual(['voidIntents']);
+    expect(state.stores.get('intents')!.get('i1')).toEqual({ id: 'i1', status: 'queued' });
+    expect(state.stores.get('rejections')!.get('rej_existing')).toEqual({ recordId: 'rej_existing' });
+    expect(got).toEqual({ orderId: 'ord-1', status: 'pending' });
+  });
+
+  it('does not recreate stores that already exist on an already-v3 database', async () => {
+    const state = seedV2();
+    state.version = 3;
+    state.stores.set('voidIntents', new Map<string, unknown>([['ord_existing', { orderId: 'ord_existing' }]]));
+    installFakeIndexedDb(state);
+
+    const store = createIndexedDbReversalStore();
+    await store.transact(['voidIntents'], 'readonly', async (txn) => txn.getAll('voidIntents'));
+
     expect(state.created).toEqual([]);
+    expect(state.stores.get('voidIntents')!.get('ord_existing')).toEqual({ orderId: 'ord_existing' });
     expect(state.stores.get('rejections')!.get('rej_existing')).toEqual({ recordId: 'rej_existing' });
   });
 });

@@ -198,7 +198,7 @@ describe('H7-C: in-memory parity', () => {
 
   it('exposes the rejections store alongside the four existing stores', () => {
     const store = createInMemoryReversalStore();
-    expect(Object.keys(store.dump()).sort()).toEqual(['intents', 'ledger', 'markers', 'rejections', 'stock']);
+    expect(Object.keys(store.dump()).sort()).toEqual(['intents', 'ledger', 'markers', 'rejections', 'stock', 'voidIntents']);
   });
 
   it('writing a rejection does not disturb the four stock-correction stores', async () => {

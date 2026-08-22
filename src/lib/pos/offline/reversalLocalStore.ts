@@ -34,9 +34,22 @@
  * stock-correction stores and never part of an `intents`/`stock`/`ledger`/`markers`
  * transaction, so it cannot affect reversal-queue atomicity.
  */
-export type ReversalStoreName = 'intents' | 'stock' | 'ledger' | 'markers' | 'rejections';
+export type ReversalStoreName =
+  | 'intents'
+  | 'stock'
+  | 'ledger'
+  | 'markers'
+  | 'rejections'
+  | 'voidIntents';
 
-export const REVERSAL_STORES: ReversalStoreName[] = ['intents', 'stock', 'ledger', 'markers', 'rejections'];
+export const REVERSAL_STORES: ReversalStoreName[] = [
+  'intents',
+  'stock',
+  'ledger',
+  'markers',
+  'rejections',
+  'voidIntents',
+];
 
 /** Per-transaction handle exposed to orchestration code. All ops are out-of-line keyed. */
 export interface ReversalTxn {
@@ -56,10 +69,13 @@ export interface ReversalLocalStore {
 }
 
 const DB_NAME = 'twinpet-offline-reversal';
-// v2 (Phase 7B-H7-C): adds the `rejections` store. The upgrade is additive — the
+// v2 (Phase 7B-H7-C): adds the `rejections` store.
+// v3 (PK-3): adds the `voidIntents` store. The upgrade is additive — the
 // `onupgradeneeded` loop only creates stores not already present, so existing
-// `intents`/`stock`/`ledger`/`markers` data is preserved across the bump.
-const DB_VERSION = 2;
+// `intents`/`stock`/`ledger`/`markers`/`rejections` data is preserved across the bump.
+// After a runtime has opened v3, naively reverting source to DB_VERSION=2 can raise
+// IndexedDB VersionError; rollback must be version-floor-aware (see PK-3 report).
+const DB_VERSION = 3;
 
 function openDb(): Promise<IDBDatabase | null> {
   return new Promise((resolve) => {
@@ -180,52 +196,65 @@ export function createInMemoryReversalStore(): ReversalLocalStore & {
     ledger: new Map(),
     markers: new Map(),
     rejections: new Map(),
+    voidIntents: new Map(),
   };
 
   const clone = <T>(v: T): T => (v === undefined ? v : (JSON.parse(JSON.stringify(v)) as T));
 
+  // Model IndexedDB's per-database transaction queue so overlapping transact()
+  // calls cannot both commit a claim against the same pending row.
+  let chain: Promise<unknown> = Promise.resolve();
+
   return {
-    async transact<T>(
+    transact<T>(
       stores: ReversalStoreName[],
       mode: 'readonly' | 'readwrite',
       fn: (txn: ReversalTxn) => Promise<T>,
     ): Promise<T> {
-      // Working copy of just the touched stores (structured-clone semantics).
-      const working = new Map<ReversalStoreName, Map<string, unknown>>();
-      for (const s of stores) {
-        const copy = new Map<string, unknown>();
-        for (const [k, v] of data[s]) copy.set(k, clone(v));
-        working.set(s, copy);
-      }
-      const ensure = (store: ReversalStoreName): Map<string, unknown> => {
-        const m = working.get(store);
-        if (!m) throw new Error(`store "${store}" not in transaction scope`);
-        return m;
-      };
+      const run = async (): Promise<T> => {
+        // Working copy of just the touched stores (structured-clone semantics).
+        const working = new Map<ReversalStoreName, Map<string, unknown>>();
+        for (const s of stores) {
+          const copy = new Map<string, unknown>();
+          for (const [k, v] of data[s]) copy.set(k, clone(v));
+          working.set(s, copy);
+        }
+        const ensure = (store: ReversalStoreName): Map<string, unknown> => {
+          const m = working.get(store);
+          if (!m) throw new Error(`store "${store}" not in transaction scope`);
+          return m;
+        };
 
-      const txn: ReversalTxn = {
-        async get<R>(store: ReversalStoreName, key: string): Promise<R | undefined> {
-          return clone(ensure(store).get(key)) as R | undefined;
-        },
-        async getAll<R>(store: ReversalStoreName): Promise<R[]> {
-          return [...ensure(store).values()].map((v) => clone(v)) as R[];
-        },
-        async put(store, key, value) {
-          if (mode !== 'readwrite') throw new Error('put in readonly transaction');
-          ensure(store).set(key, clone(value));
-        },
-        async delete(store, key) {
-          if (mode !== 'readwrite') throw new Error('delete in readonly transaction');
-          ensure(store).delete(key);
-        },
-      };
+        const txn: ReversalTxn = {
+          async get<R>(store: ReversalStoreName, key: string): Promise<R | undefined> {
+            return clone(ensure(store).get(key)) as R | undefined;
+          },
+          async getAll<R>(store: ReversalStoreName): Promise<R[]> {
+            return [...ensure(store).values()].map((v) => clone(v)) as R[];
+          },
+          async put(store, key, value) {
+            if (mode !== 'readwrite') throw new Error('put in readonly transaction');
+            ensure(store).set(key, clone(value));
+          },
+          async delete(store, key) {
+            if (mode !== 'readwrite') throw new Error('delete in readonly transaction');
+            ensure(store).delete(key);
+          },
+        };
 
-      // Throw inside fn → working copy discarded, backing data untouched (abort).
-      const result = await fn(txn);
-      if (mode === 'readwrite') {
-        for (const s of stores) data[s] = working.get(s)!;
-      }
-      return result;
+        // Throw inside fn → working copy discarded, backing data untouched (abort).
+        const result = await fn(txn);
+        if (mode === 'readwrite') {
+          for (const s of stores) data[s] = working.get(s)!;
+        }
+        return result;
+      };
+      const next = chain.then(run, run);
+      chain = next.then(
+        () => undefined,
+        () => undefined,
+      );
+      return next;
     },
 
     dump() {

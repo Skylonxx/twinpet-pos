@@ -136,6 +136,7 @@ describe('createOfflineReversal', () => {
     expect(dump.stock).toEqual({});
     expect(dump.ledger).toEqual({});
     expect(dump.markers).toEqual({});
+    expect(dump.voidIntents).toEqual({});
     expect(await readLocalStock(store, 'p1', 'b1')).toBe(0);
   });
 

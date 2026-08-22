@@ -26,7 +26,14 @@ import { usePosProducts } from '../lib/pos/usePosProducts';
 import { useAuth } from '../lib/hooks/useAuth';
 import { isFirebaseConfigured } from '../lib/firebase';
 import { voidOrderSafe } from '../lib/voidOrder';
-import { requestPendingVoid } from '../lib/pos/voidPendingOrder';
+import { requestPendingVoid, type VoidRequestOutcome } from '../lib/pos/voidPendingOrder';
+import { createIndexedDbReversalStore } from '../lib/pos/offline/reversalLocalStore';
+import {
+  listVoidIntents,
+  subscribeVoidIntentStore,
+  type VoidIntentRecord,
+  type VoidTerminalReason,
+} from '../lib/pos/offline/voidIntentStore';
 import { fetchOrderReceipt } from '../lib/documents/receiptFetch';
 import { loadReceiptSettingsForOrderBranch } from '../lib/documents/receiptSettings';
 import ThermalReceipt from '../components/documents/ThermalReceipt';
@@ -248,6 +255,27 @@ function VoidModal({
   );
 }
 
+function voidTerminalThai(reason: VoidTerminalReason): string {
+  switch (reason) {
+    case 'order_absent_server_side':
+      return 'คำขอยกเลิกยังส่งไม่ได้ เพราะบิลนี้ยังไม่ถึงเซิร์ฟเวอร์';
+    case 'day_boundary_expired':
+      return 'คำขอยกเลิกไม่ได้ถูกส่ง เพราะเลยกำหนดยกเลิกภายในวันแล้ว';
+    case 'authority_refused':
+      return 'เซิร์ฟเวอร์ปฏิเสธคำขอยกเลิกบิล';
+    case 'attempt_ceiling_reached':
+      return 'คำขอยกเลิกยังไม่ได้ส่ง และต้องให้ผู้จัดการตรวจสอบ';
+    case 'malformed_intent':
+      return 'คำขอยกเลิกไม่ถูกต้อง จึงไม่ได้ส่ง';
+    case 'order_already_terminal':
+      return 'บิลนี้ถูกยกเลิกแล้ว';
+    case 'staff_identity_mismatch':
+      return 'คำขอยกเลิกไม่ได้ถูกส่ง เพราะพนักงานที่ขอไม่ตรงกับพนักงานปัจจุบัน — ให้ผู้จัดการตรวจสอบ';
+    default:
+      return 'คำขอยกเลิกบิลไม่ได้ถูกส่ง';
+  }
+}
+
 export default function SalesHistoryPage() {
   const { user, branchId } = useAuth();
   const { records, loading, error, refresh, syncDevRecords } = useSalesHistory(branchId);
@@ -278,6 +306,30 @@ export default function SalesHistoryPage() {
   const [voidProcessing, setVoidProcessing] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const [tablePage, setTablePage] = useState(1);
+  const [voidIntentsByOrderId, setVoidIntentsByOrderId] = useState<Record<string, VoidIntentRecord>>(
+    {},
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    const store = createIndexedDbReversalStore();
+    const load = () => {
+      void listVoidIntents(store)
+        .then((rows) => {
+          if (cancelled) return;
+          setVoidIntentsByOrderId(Object.fromEntries(rows.map((r) => [r.orderId, r])));
+        })
+        .catch(() => {
+          /* IndexedDB unavailable — cashier still sees the void outcome toast. */
+        });
+    };
+    load();
+    const unsubscribe = subscribeVoidIntentStore(load);
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, []);
 
   const showToast = useCallback((msg: string, type: 'success' | 'error' = 'success') => {
     setToast({ msg, type });
@@ -452,34 +504,30 @@ export default function SalesHistoryPage() {
       // optimistic updateDoc on the asyncOrders doc.
       // Offline-safe and non-blocking — never waits for a network response.
       if (isFirebaseConfigured) {
-        let isSettled = false;
-        
-        requestPendingVoid(selected.order.id, { reason, note, voidedBy: user.id })
-          .then(() => {
-            isSettled = true;
-            showToast('✅ ยืนยันคำขอยกเลิกบิลสำเร็จ');
-          })
-          .catch((err) => {
-            isSettled = true;
-            console.error('Void request rejected:', err);
-            const msg = err instanceof Error ? err.message : String(err);
-            showToast(`❌ คำขอยกเลิกถูกปฏิเสธ: ${msg}`, 'error');
-          });
-
         setVoidOpen(false);
-
-        // Allow 300ms for a synchronous/online rejection or success to surface.
-        // If it takes longer (offline or slow network), gracefully show the queued message.
-        window.setTimeout(() => {
-          if (!isSettled) {
-            showToast(
-              selected.pendingSync
-                ? 'ยกเลิกบิลแล้ว (อยู่ในคิวซิงก์แบบออฟไลน์)'
-                : 'บันทึกคำขอยกเลิกแล้ว (อยู่ในคิวซิงก์)'
-            );
+        try {
+          const outcome: VoidRequestOutcome = await requestPendingVoid(selected.order.id, {
+            reason,
+            note,
+            voidedBy: user.id,
+            branchId,
+          });
+          const store = createIndexedDbReversalStore();
+          const rows = await listVoidIntents(store).catch(() => [] as VoidIntentRecord[]);
+          if (rows.length > 0) {
+            setVoidIntentsByOrderId(Object.fromEntries(rows.map((r) => [r.orderId, r])));
           }
-        }, 300);
-
+          if (outcome.kind === 'confirmed') {
+            showToast('ยืนยันคำขอยกเลิกบิลสำเร็จ');
+          } else if (outcome.kind === 'queued') {
+            showToast('บันทึกคำขอยกเลิกในเครื่องแล้ว · จะส่งเมื่อออนไลน์');
+          } else {
+            showToast(voidTerminalThai(outcome.reason), 'error');
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          showToast(`คำขอยกเลิกไม่สำเร็จ: ${msg}`, 'error');
+        }
         return;
       }
 
@@ -728,6 +776,18 @@ export default function SalesHistoryPage() {
                                   ⏳ รอซิงก์
                                 </span>
                               )}
+                              {voidIntentsByOrderId[order.id]?.status === 'terminal' &&
+                              voidIntentsByOrderId[order.id]?.terminalReason ? (
+                                <span
+                                  className="sh-fault-badge"
+                                  role="status"
+                                  title={voidTerminalThai(
+                                    voidIntentsByOrderId[order.id]!.terminalReason!,
+                                  )}
+                                >
+                                  ยกเลิกไม่สำเร็จ
+                                </span>
+                              ) : null}
                               {record.voidRevisionFault ? (
                                 <span className="sh-fault-badge" title={record.voidRevisionFault}>
                                   ⚠ revision fault
@@ -1083,6 +1143,13 @@ export default function SalesHistoryPage() {
                         {selected.pendingSync ? ' (ออฟไลน์)' : ''}
                       </button>
                     )}
+                    {selected &&
+                    voidIntentsByOrderId[selected.order.id]?.status === 'terminal' &&
+                    voidIntentsByOrderId[selected.order.id]?.terminalReason ? (
+                      <p className="sh-fault-badge" role="status">
+                        {voidTerminalThai(voidIntentsByOrderId[selected.order.id]!.terminalReason!)}
+                      </p>
+                    ) : null}
                   </>
                 )}
               </footer>
