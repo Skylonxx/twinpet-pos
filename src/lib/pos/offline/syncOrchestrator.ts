@@ -18,8 +18,9 @@ import {
 import { createAsyncOrderServerLookup } from './asyncOrderLookup';
 import { createSaleIntentJournal } from './saleIntentJournal';
 import { runSaleIntentSweep } from './saleIntentSweep';
-import { createIndexedDbReversalStore } from './reversalLocalStore';
-import { listClaimable } from './offlineReversalQueue';
+import { createIndexedDbReversalStore, type ReversalLocalStore } from './reversalLocalStore';
+import { getCanonicalSyncContext } from './canonicalSyncContext';
+import { listClaimable, getIntent } from './offlineReversalQueue';
 import {
   getDefaultCallResolveReversal,
   syncOneReversal,
@@ -656,8 +657,21 @@ function startCycle(
   return cycleInFlight;
 }
 
-export function requestSyncOrchestratorCycle(
-  _reason: string,
+type PreCycleResetPolicy = 'global_eligibility_reset' | 'none';
+
+function applyPreCycleReset(policy: PreCycleResetPolicy, d: ResolvedDeps): void {
+  if (policy !== 'global_eligibility_reset') return;
+  for (const [key, entry] of retryLedger) {
+    if (entry.attempts >= SYNC_ORCHESTRATOR_MAX_ATTEMPTS) continue;
+    retryLedger.set(key, { ...entry, nextEligibleAtMs: 0 });
+  }
+  void clearVoidIntentBackoff(createIndexedDbReversalStore(), d.now()).catch(() => {
+    /* best-effort: IDB may be absent in tests / private mode */
+  });
+}
+
+function requestCycleWithPolicy(
+  policy: PreCycleResetPolicy,
   ctxRef?: { current: SyncOrchestratorAuthContext },
   deps?: SyncOrchestratorDeps,
 ): Promise<SyncCycleOutcome> {
@@ -671,15 +685,57 @@ export function requestSyncOrchestratorCycle(
       channels: [],
     });
   }
-  for (const [key, entry] of retryLedger) {
-    if (entry.attempts >= SYNC_ORCHESTRATOR_MAX_ATTEMPTS) continue;
-    retryLedger.set(key, { ...entry, nextEligibleAtMs: 0 });
-  }
-  void clearVoidIntentBackoff(createIndexedDbReversalStore(), d.now()).catch(() => {
-    /* best-effort: IDB may be absent in tests / private mode */
-  });
-  const ref = ctxRef ?? mountedCtxRef ?? { current: { session: null, branchId: null, firebaseUser: null } };
+  applyPreCycleReset(policy, d);
+  const ref =
+    ctxRef ?? mountedCtxRef ?? { current: { session: null, branchId: null, firebaseUser: null } };
   return startCycle('MANUAL_INVOCATION', ref, d);
+}
+
+export function requestSyncOrchestratorItemRetryCycle(
+  ctxRef?: { current: SyncOrchestratorAuthContext },
+  deps?: SyncOrchestratorDeps,
+): Promise<SyncCycleOutcome> {
+  return requestCycleWithPolicy('none', ctxRef, deps);
+}
+
+export function requestSyncOrchestratorCycle(
+  _reason: string,
+  ctxRef?: { current: SyncOrchestratorAuthContext },
+  deps?: SyncOrchestratorDeps,
+): Promise<SyncCycleOutcome> {
+  return requestCycleWithPolicy('global_eligibility_reset', ctxRef, deps);
+}
+
+export type ClearReversalRetryEligibilityOutcome =
+  | 'cleared'
+  | 'no_ledger_entry'
+  | 'attempt_ceiling_reached'
+  | 'not_eligible_state'
+  | 'out_of_scope'
+  | 'intent_absent';
+
+export async function clearOfflineReversalRetryEligibility(
+  store: ReversalLocalStore,
+  intentId: string,
+  nowMs: number,
+): Promise<ClearReversalRetryEligibilityOutcome> {
+  void nowMs;
+  const early = getCanonicalSyncContext();
+  if (!early) return 'out_of_scope';
+
+  const intent = await getIntent(store, intentId);
+  const canonical = getCanonicalSyncContext();
+  if (!intent) return 'intent_absent';
+  if (!canonical || intent.branchId !== canonical.branchId) return 'out_of_scope';
+  if (!(intent.status === 'queued' || intent.status === 'retryable_error')) {
+    return 'not_eligible_state';
+  }
+  const key = `offline_reversal:${intentId}`;
+  const entry = retryLedger.get(key);
+  if (!entry) return 'no_ledger_entry';
+  if (entry.attempts >= SYNC_ORCHESTRATOR_MAX_ATTEMPTS) return 'attempt_ceiling_reached';
+  retryLedger.set(key, { ...entry, nextEligibleAtMs: 0 });
+  return 'cleared';
 }
 
 export function maybeStartSyncOrchestrator(

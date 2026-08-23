@@ -48,6 +48,7 @@ import StockReportPage from './pages/StockReportPage';
 import SupplierPage from './pages/SupplierPage';
 import ShiftCloseReviewPage from './pages/ShiftCloseReviewPage';
 import ShiftCloseAlertDetailPage from './pages/ShiftCloseAlertDetailPage';
+import SyncCenterPage from './pages/SyncCenterPage';
 
 export default function App() {
   return (
@@ -78,6 +79,7 @@ export default function App() {
               element={<Navigate to="/inventory/transfer" replace />}
             />
             <Route path="/sales-history" element={<SalesHistoryPage />} />
+            <Route path="/sync-center" element={<SyncCenterPage />} />
             <Route path="/receivables" element={<ReceivablesPage />} />
             <Route path="/customers" element={<CustomerPage />} />
             <Route path="/suppliers" element={<SupplierPage />} />

@@ -24,6 +24,7 @@ export const NAV_CATEGORIES: NavCategory[] = [
     items: [
       { path: '/pos', label: 'ขาย', icon: 'ti-shopping-cart' },
       { path: '/sales-history', label: 'ประวัติขาย', icon: 'ti-receipt' },
+      { path: '/sync-center', label: 'ศูนย์ซิงก์', icon: 'ti-refresh-alert' },
     ],
   },
   {
@@ -73,6 +74,7 @@ export const NAV_CATEGORIES: NavCategory[] = [
     items: [
       { path: '/staff', label: 'พนักงาน', icon: 'ti-user-cog' },
       { path: '/settings', label: 'ตั้งค่า', icon: 'ti-settings' },
+      { path: '/manual-review', label: 'ตรวจสอบด้วยตนเอง', icon: 'ti-checklist' },
       { path: '/admin/branches', label: 'จัดการสาขา', icon: 'ti-building-store' },
     ],
   },

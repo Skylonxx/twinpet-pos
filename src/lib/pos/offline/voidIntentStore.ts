@@ -6,6 +6,7 @@
  * No Firestore types — timestamps are epoch milliseconds.
  */
 
+import { getCanonicalSyncContext } from './canonicalSyncContext';
 import type { ReversalLocalStore } from './reversalLocalStore';
 
 export const VOID_INTENTS_STORE = 'voidIntents' as const;
@@ -400,6 +401,63 @@ export async function listTerminalVoidIntents(
 export async function countTerminalVoidIntents(store: ReversalLocalStore): Promise<number> {
   const rows = await listTerminalVoidIntents(store);
   return rows.length;
+}
+
+export type ClearVoidBackoffOutcome =
+  | 'cleared'
+  | 'already_eligible'
+  | 'not_pending'
+  | 'in_flight_claim_live'
+  | 'confirmed'
+  | 'terminal'
+  | 'out_of_scope'
+  | 'absent';
+
+export async function clearVoidIntentBackoffForOrder(
+  store: ReversalLocalStore,
+  orderId: string,
+  nowMs: number,
+): Promise<{ outcome: ClearVoidBackoffOutcome; record: VoidIntentRecord | null }> {
+  const early = getCanonicalSyncContext();
+  if (!early) return { outcome: 'out_of_scope', record: null };
+
+  return store
+    .transact([VOID_INTENTS_STORE], 'readwrite', async (txn) => {
+      const rec = await txn.get<VoidIntentRecord>(VOID_INTENTS_STORE, orderId);
+      const canonical = getCanonicalSyncContext();
+      if (!rec) return { outcome: 'absent' as const, record: null };
+      if (
+        !canonical ||
+        rec.branchId !== canonical.branchId ||
+        rec.deviceId !== canonical.deviceId
+      ) {
+        return { outcome: 'out_of_scope' as const, record: rec };
+      }
+      if (rec.status === 'confirmed') return { outcome: 'confirmed' as const, record: rec };
+      if (rec.status === 'terminal') return { outcome: 'terminal' as const, record: rec };
+      if (
+        rec.status === 'in_flight' &&
+        rec.claimExpiresAtMs != null &&
+        rec.claimExpiresAtMs > nowMs
+      ) {
+        return { outcome: 'in_flight_claim_live' as const, record: rec };
+      }
+      if (rec.status !== 'pending') return { outcome: 'not_pending' as const, record: rec };
+      if (rec.nextEligibleAtMs <= nowMs) {
+        return { outcome: 'already_eligible' as const, record: rec };
+      }
+      const next: VoidIntentRecord = {
+        ...rec,
+        nextEligibleAtMs: 0,
+        updatedAtMs: nowMs,
+      };
+      await txn.put(VOID_INTENTS_STORE, orderId, next);
+      return { outcome: 'cleared' as const, record: next };
+    })
+    .then((result) => {
+      if (result.outcome === 'cleared') notifyVoidIntentStoreChanged();
+      return result;
+    });
 }
 
 export async function listClaimableVoidIntents(

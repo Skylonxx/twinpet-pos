@@ -19,6 +19,7 @@ import { useBranch } from '../lib/hooks/useBranch';
 import { useDeviceSeqReconcileBoot } from '../lib/pos/offline/deviceSeqReconcileBoot';
 import { useSaleIntentSweepBoot } from '../lib/pos/offline/saleIntentSweepBoot';
 import { useSyncOrchestrator } from '../lib/pos/offline/syncOrchestrator';
+import SyncStatusBar from './SyncStatusBar';
 import type { UserRole } from '../lib/types';
 
 const ROLE_LABELS: Record<UserRole, string> = {
@@ -207,6 +208,7 @@ export default function AppShell() {
             {pageTitle}
           </span>
           <div className="flex-1" />
+          <SyncStatusBar />
         </header>
 
         <main className="flex-1 overflow-auto min-h-0">
