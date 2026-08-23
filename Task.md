@@ -1,8 +1,9 @@
 # Twinpet POS — Task Tracker
 
 > Last reconciled: 2026-08-23
-> Current repository HEAD (pre this docs commit): `ec7cf8beb52d56c1c412aa12c843cbd1151f687a` (`feat(pos): add unified offline sync recovery`)
-> PK-3 feature SHA (binding): `ec7cf8beb52d56c1c412aa12c843cbd1151f687a`
+> Current repository HEAD (binding; PK-4 feature not committed): `5e6675758c4ce95b00620aaf202c79f8b134be60` (`docs: close pk-3 unified sync recovery`)
+> PK-3 closure docs commit (binding): `5e6675758c4ce95b00620aaf202c79f8b134be60`
+> PK-3 feature SHA (binding, preserved): `ec7cf8beb52d56c1c412aa12c843cbd1151f687a`
 > PK-3 feature parent: `ee5e291c9463e84810213add98b367192d20e1c0` (`docs: reconcile post-packet5 project state`)
 > Packet 5 closure commit (binding, preserved): `292d51ff5092283e07e1aed9dcc8ac76fedbd866`
 > Packet 5 technical baseline: `f8b67c144b96383d69196cc9080d038d1dac60d8` (`fix(receipt): normalize callable receipt timestamps`)
@@ -27,9 +28,44 @@
 
 ---
 
-## Post PK-3 Closure / Roadmap Re-entry — Docs reconciliation (this pass)
+## PK-4 Operator Sync Center — Technical closure / docs reconciliation (this pass)
 
-**Status: PK-3 `CLOSED`; Packet 5 remains `CLOSED`; this pass is docs-only source-of-truth reconciliation.** Gemini: `TWINPET-PK3-FINAL-UAT-ADJUDICATION-CLOSURE-AND-DOCS-AUTHORIZATION-GEMINI-001`. Live workflow authority remains `docs/agent-workflow/STATE.md`.
+**Status: PK-4 technically `CLOSED`; repository delivery `UNCOMMITTED / UNPUSHED`; this pass is docs-only source-of-truth reconciliation.** Gemini: `TWINPET-PK4-FINAL-EVIDENCE-ADJUDICATION-CLOSURE-GEMINI-001`. Live workflow authority remains `docs/agent-workflow/STATE.md`.
+
+- [x] PK-4 technical status recorded — `CLOSED`
+- [x] Repository delivery recorded — `UNCOMMITTED / UNPUSHED`
+- [x] HEAD recorded unchanged — `5e6675758c4ce95b00620aaf202c79f8b134be60`
+- [x] D1 recorded — `A` (no terminal void revival; terminal void read-only attention / manual review)
+- [x] D2 recorded — `A` (`/shift-close-review` route-only; contextual Sync Center link)
+- [x] Implementation surface recorded — 8 new production + 5 modified production + 15 tests = 28 paths, unstaged
+- [x] Grok implementation recorded — `PASS_WITH_NOTES`
+- [x] Codex implementation review recorded — `PASS_WITH_NOTES`; blockers 0; request changes 0
+- [x] AGY UI recorded — `PASS_WITH_NOTES`; 320 / 768 / 1080 PASS
+- [x] Local UAT recorded — `PASS_WITH_NOTES`; run ID `PK4-UAT-20260823T112638Z`; U1–U9 accepted PASS after reconciliation where applicable; U11 PASS; U12 PASS
+- [x] AGY evidence reconciliation recorded — `PASS_WITH_NOTES`
+- [x] U8 correction recorded — reporting error only; `U8_CORRECTED_RESULT = PASS`; EXCLUDED / EXCLUDED / VISIBLE
+- [x] U10 / A16 correction recorded — NO catch; `CAN_ESCAPE_AFTER_FINALLY`; `NOT_REPRODUCIBLE_WITHOUT_UNAUTHORIZED_EDIT`
+- [x] onRetry exception recorded — Gemini `ACCEPT_NONBLOCKING_NOTE`; not fixed; not runtime-PASS
+- [x] Production hits recorded — `0`
+- [x] Non-local function hits recorded — `0`
+- [x] Further code / Codex / AGY / UAT recorded — `NO` / `NO` / `NO` / `NO`
+- [x] Deployment recorded — not required / not authorized / not performed
+- [x] Commit / push recorded — **NOT AUTHORIZED**
+- [x] PK-3 status recorded — remains `CLOSED` at `ec7cf8beb52d56c1c412aa12c843cbd1151f687a`
+- [x] Packet 5 status recorded — remains `CLOSED` / `PASS_WITH_NOTES`
+- [x] PK-2D / PK-6 recorded — record-only / not parallel-authorized
+- [x] Closed-gate non-reopen recorded — D1_T18 / D3_T15 / D3_T16 UNTOUCHED; Row28/Row30 ADDITIVE_ONLY_NOT_REOPENED; Row32 = NO; R7_6 NOT_REOPENED; Packet 5 CLOSED; PK-3 CLOSED
+- [x] Live-workflow precedence recorded — `docs/agent-workflow/STATE.md` wins on gate/status conflict
+- [x] Protected stash recorded unchanged — `stash@{0}` = `7d03cfec7ba52ff7e25b7e175ca190efc258d874`
+- [x] Prior PK-3 seven-doc pass retained as historical (`5e6675758`)
+
+**CURRENT_STATUS:** PK-4 technically CLOSED. Feature code remains UNSTAGED / UNCOMMITTED / UNPUSHED on HEAD `5e6675758`. PK-3 remains CLOSED at `ec7cf8b`. Packet 5 remains CLOSED at `292d51ff`. This seven-doc packet records PK-4 technical closure only. It does **not** authorize commit, push, deploy, PK-2D, or PK-6.
+
+**NEXT_WORKFLOW_ACTION:** Return to ChatGPT for exact final combined dirty-set adjudication and Gemini commit/push authorization routing. Do not stage. Do not commit. Do not push. Do not deploy. Do not reopen Packet 5 or PK-3. Do not activate PK-2D or PK-6.
+
+## Post PK-3 Closure / Roadmap Re-entry — Docs reconciliation (historical)
+
+**Status: HISTORICAL.** PK-3 `CLOSED`; Packet 5 remains `CLOSED`; that pass was the seven-doc source-of-truth reconciliation committed at `5e6675758` (`docs: close pk-3 unified sync recovery`). Gemini then: `TWINPET-PK3-FINAL-UAT-ADJUDICATION-CLOSURE-AND-DOCS-AUTHORIZATION-GEMINI-001`. Those then-current claims (`PK-4 / PK-2C implementation NOT AUTHORIZED` as live current-state) are superseded by PK-4 technical closure. PK-3 remains CLOSED. Packet 5 remains CLOSED.
 
 - [x] PK-3 status recorded — `CLOSED` / `PASS`
 - [x] PK-3 product implementation recorded — `CLOSED`
@@ -51,9 +87,9 @@
 - [x] Prior Packet 5 four-doc pass retained as historical (`292d51ff`)
 - [x] Prior post-Packet-5 three-doc pass retained as historical (`ee5e291`)
 
-**CURRENT_STATUS:** PK-3 CLOSED at `ec7cf8b`. Packet 5 remains CLOSED at `292d51ff`. AI-1/AI-2 CLOSED_WITH_NOTES. This seven-doc packet records PK-3 closure only. It does **not** authorize PK-4 or PK-2C.
+**Historical note (that pass):** PK-3 CLOSED at `ec7cf8b`. Packet 5 remains CLOSED at `292d51ff`. That seven-doc packet recorded PK-3 closure only. Its then-current "PK-4 not authorized" claim is superseded by PK-4 technical closure. PK-3 remains CLOSED.
 
-**NEXT_WORKFLOW_ACTION:** Return to ChatGPT for post-PK-3 read-only roadmap re-entry. Do not start next implementation. Do not run UAT. Do not deploy. Do not reopen Packet 5. Do not authorize PK-4 or PK-2C.
+**Then-current NEXT_WORKFLOW_ACTION (superseded):** Return to ChatGPT for post-PK-3 read-only roadmap re-entry.
 
 ## Post Packet 5 Closure / PK-3 Unified Sync Orchestrator — Docs reconciliation (historical)
 
@@ -277,16 +313,17 @@
 
 ### Next step
 
-1. **PK-3 — `CLOSED`** at `ec7cf8beb52d56c1c412aa12c843cbd1151f687a` — `PASS`; U1–U7 `PASS`; do not reopen
-2. **Packet 5 — `CLOSED`** at `292d51ff5092283e07e1aed9dcc8ac76fedbd866` — `PASS_WITH_NOTES`; R4 `36 / 36 PASS`; do not reopen
-3. **AI-2 — `CLOSED_WITH_NOTES`** at `c45f5a3` — historical
-4. **AI-1 — `CLOSED_WITH_NOTES`** at `4298c14` — historical
-5. **R7-6 implementation — `CLOSED`** at `ac29935` — historical; do not reopen
-6. **D3 — `CLOSED`** at `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab` — do not reopen
-7. **PK-2A — `CLOSED_WITH_NOTES`** at `79ba840` — historical
-8. **PK-1 — `CLOSED_WITH_NOTES`** at `513b198` — do not reopen
-9. **NEXT_WORKFLOW_ACTION:** Return to ChatGPT for post-PK-3 read-only roadmap re-entry. Do not start next implementation. Do not run UAT. Do not deploy.
-10. **NOT authorized:** PK-4, PK-2C, PK-5, PK-6, next implementation, deployment, production access, offline credential login, returns/refunds, G14 (ABORTED), OBS-C, UI-B.1, UI-B2, P5-F, recapture, callable invocation, stash operations, Packet 5 reopen, PK-3 UAT/Codex/AGY rerun
-11. Do not automatically deploy or start PK-4 / PK-2C. Future work requires a separate authorized gate.
+1. **PK-4 — technically `CLOSED`** — UNCOMMITTED / UNPUSHED on HEAD `5e6675758`; docs reconciliation COMPLETE; commit/push **NOT AUTHORIZED**
+2. **PK-3 — `CLOSED`** at `ec7cf8beb52d56c1c412aa12c843cbd1151f687a` — `PASS`; U1–U7 `PASS`; docs `5e6675758`; do not reopen
+3. **Packet 5 — `CLOSED`** at `292d51ff5092283e07e1aed9dcc8ac76fedbd866` — `PASS_WITH_NOTES`; R4 `36 / 36 PASS`; do not reopen
+4. **AI-2 — `CLOSED_WITH_NOTES`** at `c45f5a3` — historical
+5. **AI-1 — `CLOSED_WITH_NOTES`** at `4298c14` — historical
+6. **R7-6 implementation — `CLOSED`** at `ac29935` — historical; do not reopen
+7. **D3 — `CLOSED`** at `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab` — do not reopen
+8. **PK-2A — `CLOSED_WITH_NOTES`** at `79ba840` — historical
+9. **PK-1 — `CLOSED_WITH_NOTES`** at `513b198` — do not reopen
+10. **NEXT_WORKFLOW_ACTION:** Return to ChatGPT for exact final combined dirty-set adjudication and Gemini commit/push authorization routing. Do not stage. Do not commit. Do not push. Do not deploy.
+11. **NOT authorized:** stage, commit, push, deploy, production access, PK-2C, PK-2D, PK-5, PK-6, next implementation, offline credential login, returns/refunds, G14 (ABORTED), OBS-C, UI-B.1, UI-B2, P5-F, recapture, callable invocation, stash operations, Packet 5 reopen, PK-3 reopen, further PK-4 code/Codex/AGY/UAT
+12. Do not automatically stage, commit, push, deploy, or start PK-2D / PK-6. Future commit/push requires a separate authorized gate.
 
-**Not active:** next implementation, deployment, PK-2C, PK-4..PK-6, UI-B.1, UI-B2, P5-F, recapture, or any new feature packet.
+**Not active:** staging, commit, push, deploy, PK-2C, PK-2D, PK-5, PK-6, UI-B.1, UI-B2, P5-F, recapture, or any new feature packet.

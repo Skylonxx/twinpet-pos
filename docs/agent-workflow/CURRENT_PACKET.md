@@ -2,100 +2,116 @@
 
 ## Phase
 
-**Post PK-3 Closure / Roadmap Re-entry**
+**PK-4 — Operator Sync Center / Technical Closure**
 
 STATUS:
-PK3_CLOSED_READY_FOR_READ_ONLY_NEXT_PACKET_SELECTION
+PK4_TECHNICAL_CLOSED_DOCS_RECONCILIATION_COMPLETE_COMMIT_PUSH_NOT_AUTHORIZED
 
 ```text
-CURRENT_PHASE: Post PK-3 Closure / Roadmap Re-entry
-CURRENT_GATE: POST_PK3_READ_ONLY_ROADMAP_REENTRY
-STATUS: PK-3 CLOSED / READY FOR READ-ONLY NEXT-PACKET SELECTION
-ROADMAP_LABEL: PK-3 — Unified Sync Orchestrator and Reconnect Recovery
-BOUNDED_SCOPE: PK-3 closure docs reconciliation only
+CURRENT_PHASE: PK-4 — Operator Sync Center / Technical Closure
+CURRENT_GATE: PK4_CLOSURE_DOC_RECONCILIATION / PRE_COMMIT_CUSTODY
+PK4_TECHNICAL_STATUS: CLOSED
+REPOSITORY_DELIVERY_STATUS: UNCOMMITTED / UNPUSHED
+DOCS_RECONCILIATION: COMPLETE
+COMMIT_PUSH: NOT AUTHORIZED
+DEPLOY: NOT REQUIRED / NOT AUTHORIZED
+PRODUCTION_ACCESS: NOT AUTHORIZED / none performed
+ROADMAP_LABEL: PK-4 — Operator Sync Center
+PRIORITY: P1/P2
+BOUNDED_SCOPE: exact seven closure docs only; 28 PK-4 implementation/test paths remain unstaged
+PRIOR_DEPENDENCY: PK-3 CLOSED
 PK3_STATUS: CLOSED
-PK3_TECHNICAL_ADJUDICATION: PASS
-PK3_TECHNICALLY_COMPLETE: YES
-PK3_PRODUCT_IMPLEMENTATION_CLOSED: YES
-PK3_UAT_ADJUDICATION: PASS
-PK3_UAT_REPORT_ACCEPTED: YES
-U1_U7: ALL ACCEPTED / PASS
-GEMINI_DECISION: TWINPET-PK3-FINAL-UAT-ADJUDICATION-CLOSURE-AND-DOCS-AUTHORIZATION-GEMINI-001
-PK3_FEATURE_SHA: ec7cf8beb52d56c1c412aa12c843cbd1151f687a
-PK3_FEATURE_SUBJECT: feat(pos): add unified offline sync recovery
-PK3_FEATURE_PARENT: ee5e291c9463e84810213add98b367192d20e1c0
-CODEX_FINAL_RC1_RC2_RC3_REREVIEW: PASS
+PK4_IMPLEMENTATION_ACCEPTED: YES
+PK4_TECHNICAL_CLOSURE: YES
+GEMINI_DECISION: TWINPET-PK4-FINAL-EVIDENCE-ADJUDICATION-CLOSURE-GEMINI-001
+ONRETRY_EXCEPTION_CLOSURE_DECISION: ACCEPT_NONBLOCKING_NOTE
+D1: A
+D2: A
+GROK_IMPLEMENTATION: PASS_WITH_NOTES
+CODEX_IMPLEMENTATION_REVIEW: PASS_WITH_NOTES
 AGY_UI_REVIEW: PASS_WITH_NOTES
-AGY_UI_NOTES: UI-NOTE-01 / UI-NOTE-02
-AGY_UI_NOTES_RUNTIME_UAT: NONBLOCKING CONFIRMED
-FINAL_RUNTIME_UAT: U1-U7 PASS
+LOCAL_UAT: PASS_WITH_NOTES
+UAT_RUN_ID: PK4-UAT-20260823T112638Z
+AGY_EVIDENCE_RECONCILIATION: PASS_WITH_NOTES
+U1_U9: ACCEPTED PASS after reconciliation where applicable
+U8_CORRECTED_RESULT: PASS
+U10_CLASSIFICATION: NOT_REPRODUCIBLE_WITHOUT_UNAUTHORIZED_EDIT
+U11: PASS
+U12: PASS
 PRODUCTION_HITS: 0
 NON_LOCAL_FUNCTION_HITS: 0
-ADDITIONAL_UAT_REQUIRED: NO
-ADDITIONAL_CODEX_REVIEW_REQUIRED: NO
-ADDITIONAL_AGY_REVIEW_REQUIRED: NO
-DEPLOYMENT_REQUIRED: NO
-DEPLOYMENT: NOT_AUTHORIZED / NOT_PERFORMED
-PRODUCTION_ACCESS: NOT_AUTHORIZED / NOT_PERFORMED
+FURTHER_CODE_REMEDIATION_REQUIRED: NO
+FURTHER_CODEX_IMPLEMENTATION_REVIEW_REQUIRED: NO
+FURTHER_AGY_UI_REVIEW_REQUIRED: NO
+FURTHER_LOCAL_UAT_REQUIRED: NO
+HEAD: 5e6675758c4ce95b00620aaf202c79f8b134be60
+HEAD_SUBJECT: docs: close pk-3 unified sync recovery
+PK3_FEATURE_SHA: ec7cf8beb52d56c1c412aa12c843cbd1151f687a
 PACKET_5_STATUS: CLOSED
-PACKET5_TECHNICAL_ADJUDICATION: PASS_WITH_NOTES
 PACKET5_CLOSURE_COMMIT: 292d51ff5092283e07e1aed9dcc8ac76fedbd866
-TECHNICAL_BASELINE_BEFORE_DOCS_COMMIT: ec7cf8beb52d56c1c412aa12c843cbd1151f687a
+PK4_FEATURE_COMMIT: NONE — implementation remains UNSTAGED / UNCOMMITTED / UNPUSHED
 NEXT_IMPLEMENTATION: NOT_AUTHORIZED
-PK4_IMPLEMENTATION: NOT_AUTHORIZED
 PK2C_IMPLEMENTATION: NOT_AUTHORIZED
+PK2D: RECORD_ONLY / NOT_AUTHORIZED
+PK6: NOT_PARALLEL_AUTHORIZED
 STASH: UNTOUCHED
 ```
 
-`PK3_STATUS: CLOSED.` Gemini adjudicated PK-3 technical and UAT `PASS`, marked product implementation closed, and authorized this docs-only source-of-truth reconciliation. Feature SHA `ec7cf8beb52d56c1c412aa12c843cbd1151f687a` (`feat(pos): add unified offline sync recovery`). Codex final RC1/RC2/RC3 re-review `PASS`. AGY UI `PASS_WITH_NOTES`; both notes confirmed nonblocking by runtime UAT. U1–U7 `PASS`. Production hits `0`. Non-local function hits `0`. No additional UAT / Codex / AGY required. No deployment required. Packet 5 remains `CLOSED`. Protected stash remains untouched. This pass does **not** authorize PK-4 or PK-2C implementation.
+`PK4_TECHNICAL_STATUS: CLOSED.` Gemini accepted the PK-4 implementation, Codex implementation review, AGY UI review, local-emulator UAT, AGY evidence reconciliation, and production isolation. Feature code is implemented + reviewed + UAT accepted, but still **UNSTAGED / UNCOMMITTED / UNPUSHED** on HEAD `5e6675758c4ce95b00620aaf202c79f8b134be60`. This gate is closure-doc reconciliation / pre-commit custody, not implementation. It does **not** authorize commit, push, deploy, production access, PK-2D, or PK-6.
 
-## This packet — PK-3 Unified Sync Orchestrator and Reconnect Recovery (CLOSED)
+## This packet — PK-4 Operator Sync Center (TECHNICAL CLOSED / UNCOMMITTED)
 
-**Status: PK-3 CLOSED.** Technical / product baseline before this docs closure commit: `ec7cf8beb52d56c1c412aa12c843cbd1151f687a` (`feat(pos): add unified offline sync recovery`).
+**Status: PK-4 technical CLOSED.** Repository delivery remains `UNCOMMITTED / UNPUSHED`. Current HEAD is unchanged:
 
-- Gemini decision: `TWINPET-PK3-FINAL-UAT-ADJUDICATION-CLOSURE-AND-DOCS-AUTHORIZATION-GEMINI-001`
-- Technical adjudication: `PASS`
-- Product implementation: `CLOSED`
-- Codex final RC1/RC2/RC3 re-review: `PASS`
-- AGY UI: `PASS_WITH_NOTES` (`UI-NOTE-01`, `UI-NOTE-02`)
-- Runtime UAT confirmation of both AGY notes: `NONBLOCKING CONFIRMED`
-- Final runtime UAT: U1–U7 `PASS`
-- Production hits: `0`
-- Non-local function hits: `0`
-- Additional UAT / Codex / AGY: `NO`
-- Deployment: not required / not authorized / not performed
+`5e6675758c4ce95b00620aaf202c79f8b134be60` (`docs: close pk-3 unified sync recovery`)
+
+- Gemini decision: `TWINPET-PK4-FINAL-EVIDENCE-ADJUDICATION-CLOSURE-GEMINI-001`
+- D1 = A — no terminal void revival; terminal void remains read-only attention / manual review
+- D2 = A — `/shift-close-review` remains route-only; contextual Sync Center link when relevant
+- Implementation surface: 8 new production + 5 modified production + 15 tests = 28 paths
+- Grok implementation: `PASS_WITH_NOTES` (targeted 15 files / 122 tests PASS; closed 8 files / 148 tests PASS; broad 119 files / 2419 tests PASS; typecheck PASS; build PASS; `git diff --check` PASS; production `indexedDB.open` count = 8)
+- Codex implementation review: `PASS_WITH_NOTES`; blockers 0; request changes 0; all implementation review axes PASS
+- AGY UI: `PASS_WITH_NOTES`; viewports 320 / 768 / 1080 PASS; D1 UI PASS; D2 UI PASS; accessibility smoke PASS; AppShell regression PASS; refusal Alert severity PASS
+- Local-emulator UAT: `PASS_WITH_NOTES`; run ID `PK4-UAT-20260823T112638Z`; U1–U9 accepted PASS after reconciliation where applicable; U11 PASS; U12 PASS
+- Production isolation: `PRODUCTION_HITS = 0`; `NON_LOCAL_FUNCTION_HITS = 0`; deployments 0; production data mutations 0
+- Further code / Codex / AGY / UAT: `NO`
 - Protected stash remains untouched: `stash@{0}` = `7d03cfec7ba52ff7e25b7e175ca190efc258d874`
 
-### Closure notes (nonblocking)
+### Closure notes (accepted / nonblocking)
 
-- AGY UI notes `UI-NOTE-01` (Sales History table-row multi-badge density) and `UI-NOTE-02` (drawer footer terminal-fault wrapping) remain accepted nonblocking notes. Runtime UAT confirmed both as nonblocking.
-- This docs commit is the PK-3 closure record. It is distinct from the feature SHA `ec7cf8beb52d56c1c412aa12c843cbd1151f687a`.
-- PK-3 closed product implementation. It does not authorize PK-4, PK-2C, deployment, or production access.
+- **U8 reporting error (corrected):** original UAT prose incorrectly said foreign-device void was displayed read-only. Correct fact: foreign-branch void = EXCLUDED; same-branch foreign-device void = EXCLUDED; in-scope branch+device control void = VISIBLE. `U8_PRIOR_REPORTING_ERROR = YES`; `U8_CORRECTED_RESULT = PASS`. Reporting error only; no implementation remediation.
+- **U10 / A16 reporting error (corrected):** original AGY UI report incorrectly stated unexpected exceptions were swallowed by try/catch. Correct source fact: page `onRetry` try/finally NO catch; hook `retryItem` try/finally NO catch; action `retrySyncCenterItem` NO catch; unexpected store/IndexedDB exception may `CAN_ESCAPE_AFTER_FINALLY`. Safe deterministic local reproduction: NO. Formal classification: `NOT_REPRODUCIBLE_WITHOUT_UNAUTHORIZED_EDIT`. False success observed: NO.
+- **onRetry exception:** Gemini `ACCEPT_NONBLOCKING_NOTE`. Accepted for PK-4 closure. Not fixed. Not a runtime-PASS. Do not reopen implementation.
 
 ### Claim boundaries (must not overclaim)
 
-- Do not claim PK-4 or PK-2C implementation authorized
+- Do not claim PK-4 committed, pushed, or shipped to main
+- Do not claim a PK-4 feature SHA / closure commit exists
+- Do not present the onRetry exception as fixed or as runtime-PASS
+- Do not reopen PK-3 or Packet 5
+- Do not activate PK-2D or PK-6
 - Do not claim reconnect as server confirmation
 - Do not claim crash-resume completeness
 - Do not claim production deployed
-- Do not reopen Packet 5
 
-## This pass — Docs/tracker reconciliation (PK-3 closure)
+## This pass — Docs/tracker reconciliation (PK-4 technical closure)
 
-**Status: AUTHORIZED docs-only source-of-truth reconciliation of the Gemini-closed PK-3 state**
+**Status: COMPLETE docs-only source-of-truth reconciliation of the Gemini-closed PK-4 technical state**
 
-- Authorized candidate maximum: 7 files. This pass edits the CHANGE_REQUIRED subset (all seven were stale).
+- Authorized candidate maximum: 7 files.
 - Authorized files: `docs/agent-workflow/CURRENT_PACKET.md`, `docs/agent-workflow/NEXT_ACTION.md`, `docs/agent-workflow/STATE.md`, `docs/reports/latest-report.md`, `Context.md`, `Task.md`, `docs/STATE.md`
 - No source/test/config/rules/index/functions changes
 - No deploy/runtime/production/callable/stash operations
 - No UAT rerun
-- Gemini: `CLOSURE_DOC_RECONCILIATION_AUTHORIZED: YES`; `CLOSURE_DOC_COMMIT_SUBJECT: docs: close pk-3 unified sync recovery`
+- No stage / commit / push
+- Gemini: `PK4_CLOSURE_DOCS_RECONCILIATION_AUTHORIZED: YES`; commit/push remain **NOT AUTHORIZED**
 
 ## Prior closed packets
 
-- **PK-3** — `CLOSED` (`PASS`). Feature SHA `ec7cf8b`. Codex RC1/RC2/RC3 `PASS`. AGY UI `PASS_WITH_NOTES`. U1–U7 `PASS`. This pass is docs reconciliation only.
+- **PK-4** — technical `CLOSED` (`PASS_WITH_NOTES` evidence chain). Implementation remains UNCOMMITTED / UNPUSHED on HEAD `5e6675758`. This pass is docs reconciliation / pre-commit custody only.
+- **PK-3** — `CLOSED` (`PASS`). Feature SHA `ec7cf8b`. Closure docs commit `5e6675758`. Codex RC1/RC2/RC3 `PASS`. AGY UI `PASS_WITH_NOTES`. U1–U7 `PASS`.
 - **Packet 5** — `CLOSED` (`PASS_WITH_NOTES`). Closure commit `292d51ff`. Technical baseline `f8b67c1`. Final runtime UAT R4 `36 / 36 PASS`. Do not reopen.
-- **Post-Packet-5 three-doc reconciliation** — `ee5e291` (`docs: reconcile post-packet5 project state`; historical PK-3-selected tracker state, superseded by this closure)
+- **Post-Packet-5 three-doc reconciliation** — `ee5e291` (`docs: reconcile post-packet5 project state`; historical)
 - **Application Integration AI-2 implementation** — `c45f5a3` (`CLOSED_WITH_NOTES`; exact 18-path surface); AI-2 tracker reconciliation `8d6b174` (historical)
 - **Application Integration AI-1 implementation** — `4298c14` (`CLOSED_WITH_NOTES`; exact 8-path surface)
 - **AI-1 tracker reconciliation** — `17461473` (`docs(pos): reconcile ai-1 application integration closure`; historical)
@@ -116,11 +132,13 @@ STASH: UNTOUCHED
 
 ## Current repository HEAD
 
-Technical baseline before this docs closure commit:
+Binding HEAD (feature not committed; do not invent a future SHA):
 
-`ec7cf8beb52d56c1c412aa12c843cbd1151f687a`
+`5e6675758c4ce95b00620aaf202c79f8b134be60`
 
-HEAD subject: `feat(pos): add unified offline sync recovery`
+HEAD subject: `docs: close pk-3 unified sync recovery`
+
+PK-3 feature SHA (historical, preserved): `ec7cf8beb52d56c1c412aa12c843cbd1151f687a`
 
 PK-3 feature parent: `ee5e291c9463e84810213add98b367192d20e1c0`
 
@@ -144,6 +162,6 @@ PK-1 final HEAD (binding, unchanged): `513b198a30a1af72151ab6a8c0976799871529b8`
 
 ## Next gate
 
-**PK-3 is CLOSED.** Packet 5 remains CLOSED. No additional PK-3 UAT / Codex / AGY is required. No deployment is required. Do not start PK-4 or PK-2C.
+**PK-4 is technically CLOSED.** Codex / AGY / local UAT are not pending. No further code remediation is required. Commit / push remain **NOT AUTHORIZED**. Do not select a new roadmap packet. PK-2D remains record-only / unauthorized. PK-6 remains not parallel-authorized.
 
-**NEXT_WORKFLOW_ACTION:** Return to ChatGPT for post-PK-3 read-only roadmap re-entry / next-packet selection. Do NOT deploy. Do NOT start next implementation. Do NOT authorize PK-4 or PK-2C from this closure. Do not reopen Packet 5. Passive read-only observation may occur only when natural production traffic provides a real event.
+**NEXT_WORKFLOW_ACTION:** Return to ChatGPT for exact final combined dirty-set adjudication and Gemini commit/push authorization routing. Do NOT stage. Do NOT commit. Do NOT push. Do NOT deploy. Do NOT start PK-2D or PK-6. Do not reopen PK-3 or Packet 5.
