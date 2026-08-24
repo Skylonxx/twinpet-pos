@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react';
-import type { PosProduct } from '../../lib/pos/types';
+import type { PosProduct, StockTruth } from '../../lib/pos/types';
+import { formatStockTruth } from '../../lib/pos/stockTruthDisplay';
 import { CATEGORY_EMOJI, CATEGORY_STYLE } from '../../lib/productCrud/types';
 import type { ProductListItem } from '../../lib/productCrud/types';
 
@@ -13,6 +14,8 @@ export type ProductPickerItem = {
   category: string;
   emoji: string;
   stock: number;
+  /** Present for POS `PosProduct` items; absent for admin `ProductListItem` path. */
+  stockTruth?: StockTruth;
   /** Barcodes on alternate UOM units (for picker search) */
   uomBarcodes: string[];
 };
@@ -67,8 +70,14 @@ export function posProductToPickerItem(product: PosProduct & { barcode?: string 
     category: product.category,
     emoji: product.emoji || CATEGORY_EMOJI[product.category] || '📦',
     stock: product.stock,
+    stockTruth: product.stockTruth,
     uomBarcodes: [],
   };
+}
+
+/** Truth-gated picker stock text. Admin items (no stockTruth) keep the raw number. */
+export function formatPickerStock(item: ProductPickerItem): string {
+  return item.stockTruth ? formatStockTruth(item.stockTruth, item.stock) : String(item.stock);
 }
 
 function matchesPickerSearch(p: ProductPickerItem, q: string): boolean {

@@ -11,7 +11,7 @@ import {
 import { collections, db, isFirebaseConfigured } from '../firebase';
 import type { Product } from '../types';
 import { DEV_POS_PRODUCTS } from './devProducts';
-import { mergePosProducts, type StockEntry } from './posProductMapper';
+import { mergePosProducts, stockEntryFromStockDoc, type StockEntry } from './posProductMapper';
 import type { PosProduct } from './types';
 
 function isIndexError(err: unknown): boolean {
@@ -81,10 +81,7 @@ export function usePosProducts(branchId: string | null) {
           stockRef,
           (snap) => {
             const data = snap.exists() ? snap.data() : null;
-            stockByProduct.set(id, {
-              stock: (data?.totalStockBase as number) ?? 0,
-              overrideTierPrices: (data?.overrideTierPrices as Record<string, number>) ?? undefined,
-            });
+            stockByProduct.set(id, stockEntryFromStockDoc(data, snap.metadata.fromCache === true));
             publish();
           },
           (err) => {
@@ -114,10 +111,7 @@ export function usePosProducts(branchId: string | null) {
             const productId = d.ref.parent.parent?.id;
             if (!productId) continue;
             const data = d.data();
-            stockByProduct.set(productId, {
-              stock: (data?.totalStockBase as number) ?? 0,
-              overrideTierPrices: (data?.overrideTierPrices as Record<string, number>) ?? undefined,
-            });
+            stockByProduct.set(productId, stockEntryFromStockDoc(data, snap.metadata.fromCache === true));
           }
           publish();
         },

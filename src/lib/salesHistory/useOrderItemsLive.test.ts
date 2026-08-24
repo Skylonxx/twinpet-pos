@@ -166,7 +166,7 @@ describe('useOrderItemsLive B4', () => {
     act(() => listeners[0].onNext(itemSnap('a1', false)));
     act(() => listeners[0].onNext(emptySnap(false)));
     expect(renders[renders.length - 1].items).toEqual([]);
-    expect(renders[renders.length - 1].state).toBe('unavailable');
+    expect(renders[renders.length - 1].state).toBe('empty');
   });
 
   test('E37 same-id recreate does not require parent removal', () => {
@@ -247,5 +247,28 @@ describe('useOrderItemsLive B4', () => {
     expect(renders[0].fromCache).toBe(false);
     expect(unsub).toHaveBeenCalled();
     expect(listeners[listeners.length - 1].path).toBe('orders/X/orderItems');
+  });
+
+  test('T42 server-confirmed empty is empty; cache empty remains unavailable', () => {
+    const renders: Array<ReturnType<typeof useOrderItemsLive>> = [];
+    render(createElement(Probe, { branchId: 'A', orderId: 'X', onRender: (v) => renders.push(v) }));
+    act(() => listeners[0].onNext(emptySnap(false)));
+    expect(renders[renders.length - 1].state).toBe('empty');
+    act(() => listeners[0].onNext(emptySnap(true)));
+    expect(renders[renders.length - 1].state).toBe('unavailable');
+  });
+
+  test('T43 live / loading / error / idle matrix is preserved', () => {
+    const idle: Array<ReturnType<typeof useOrderItemsLive>> = [];
+    render(createElement(Probe, { branchId: null, orderId: null, onRender: (v) => idle.push(v) }));
+    expect(idle[0].state).toBe('idle');
+
+    const liveRenders: Array<ReturnType<typeof useOrderItemsLive>> = [];
+    render(createElement(Probe, { branchId: 'A', orderId: 'X', onRender: (v) => liveRenders.push(v) }));
+    expect(liveRenders[0].state).toBe('loading');
+    act(() => listeners[listeners.length - 1].onNext(itemSnap('a1', false)));
+    expect(liveRenders[liveRenders.length - 1].state).toBe('live');
+    act(() => listeners[listeners.length - 1].onError({ code: 'permission-denied' }));
+    expect(liveRenders[liveRenders.length - 1].state).toBe('error');
   });
 });

@@ -1,7 +1,7 @@
 import type { PosProduct } from './types';
 
-/** Mock catalog aligned with reference HTML */
-export const DEV_POS_PRODUCTS: PosProduct[] = [
+/** Mock catalog aligned with reference HTML. Truth is unknown — not a Firestore baseline. */
+const DEV_POS_PRODUCTS_RAW: Omit<PosProduct, 'stockTruth'>[] = [
   {
     id: 'p1',
     name: "Hill's Science Diet สุนัขสูงอายุ 7+ 5.67 kg",
@@ -158,6 +158,11 @@ export const DEV_POS_PRODUCTS: PosProduct[] = [
     uomOptions: [{ unit: 'ชิ้น', factor: 1, price: 329 }],
   },
 ];
+
+export const DEV_POS_PRODUCTS: PosProduct[] = DEV_POS_PRODUCTS_RAW.map((p) => ({
+  ...p,
+  stockTruth: { state: 'unknown' as const },
+}));
 
 export const DEV_CATEGORY_GRADIENTS: Record<string, string> = {
   'อาหารสัตว์': 'linear-gradient(135deg,#1D9E75,#085041)',

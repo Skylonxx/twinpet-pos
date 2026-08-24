@@ -22,8 +22,8 @@ import {
   OVERSELL_WARNING_MESSAGE,
   resolveStockMode,
 } from '../../lib/pos/cartUtils';
-import type { ItemDiscountType } from '../../lib/pos/types';
-import type { CartLine, PosProduct, UomOption } from '../../lib/pos/types';
+import type { CartLine, ItemDiscountType, PosProduct, StockTruth, UomOption } from '../../lib/pos/types';
+import { formatStockTruth } from '../../lib/pos/stockTruthDisplay';
 
 let cartSource: string;
 // UI-12: the toast store is a module with module-level state + a setTimeout-driven dismiss
@@ -51,6 +51,7 @@ function makeProduct(overrides: Partial<PosProduct> = {}): PosProduct {
     emoji: '📦',
     imageUrl: null,
     stock: 58,
+    stockTruth: { state: 'known', asOf: 'server', localDeltaApplied: false },
     baseUnit: 'ชิ้น',
     allowNegativeStock: false,
     warnOnOversell: true,
@@ -321,10 +322,10 @@ describe('7C-POS-Stock-Matrix · aggregate base-unit accounting (cartUtils.ts)',
 // dynamic product/stock detail into a `\n`-joined structured description — identical layout for
 // the red and yellow variants, with only the strict block adding the third explanatory line.
 // Keeping this harness faithful means the spy assertions below prove the ACTUAL UI-13 payload.
-type StockToastContext = { name: string; stock: number; unit: string } | null;
+type StockToastContext = { name: string; stock: number; unit: string; stockTruth: StockTruth } | null;
 
 function stockToastContext(product: PosProduct): StockToastContext {
-  return { name: product.name, stock: product.stock, unit: product.baseUnit };
+  return { name: product.name, stock: product.stock, unit: product.baseUnit, stockTruth: product.stockTruth };
 }
 
 function resolveStockToastContext(
@@ -343,7 +344,7 @@ function buildStockDescription(ctx: StockToastContext, includeDetail: boolean): 
   const lines: string[] = [];
   if (ctx) {
     lines.push(ctx.name);
-    lines.push(ctx.unit ? `คงเหลือ: ${ctx.stock} ${ctx.unit}` : `คงเหลือ: ${ctx.stock}`);
+    lines.push(ctx.unit ? `คงเหลือ: ${formatStockTruth(ctx.stockTruth, ctx.stock)} ${ctx.unit}` : `คงเหลือ: ${formatStockTruth(ctx.stockTruth, ctx.stock)}`);
   }
   if (includeDetail) lines.push('ไม่สามารถเพิ่มสินค้าเกินจำนวนสต็อกที่มีอยู่ได้');
   return lines.length > 0 ? lines.join('\n') : undefined;
@@ -683,7 +684,7 @@ describe('7C-POS-Stock-Matrix · useCart wiring uses the latest-cart ref + pure 
     const fn = region(cartSource, 'const addToCart = useCallback', '[buildCartLine, commit, showToast]');
     expect(fn).toContain('applyAddToCart(cartRef.current, product, option');
     // UI-13: the dispatch now threads product context for the structured description.
-    expect(fn).toContain('dispatchStockToast(result.toast, { name: product.name, stock: product.stock, unit: product.baseUnit }, showToast)');
+    expect(fn).toContain('dispatchStockToast(result.toast, { name: product.name, stock: product.stock, unit: product.baseUnit, stockTruth: product.stockTruth }, showToast)');
     expect(fn).toContain('if (result.blocked) return;');
     // UI-01-HOTFIX-BUMP-TO-TOP: an existing-line add re-keys the updated line to the end of the
     // record (commit still runs only after the blocked-return). New lines append naturally.
@@ -738,6 +739,7 @@ describe('7C-UI-13-TOAST-TYPOGRAPHY · dispatchStockToast uses static titles + s
   test('buildStockDescription emits product name, a distinct คงเหลือ line, and the strict-only detail', () => {
     const fn = region(cartSource, 'function buildStockDescription', 'function dispatchStockToast');
     expect(fn).toContain('ctx.name');
+    expect(fn).toContain('formatStockTruth(ctx.stockTruth, ctx.stock)');
     expect(fn).toContain('คงเหลือ:');
     expect(fn).toContain('ไม่สามารถเพิ่มสินค้าเกินจำนวนสต็อกที่มีอยู่ได้');
   });
@@ -794,6 +796,28 @@ describe('7C-UI-13-TOAST-TYPOGRAPHY · dispatched payloads carry static title + 
     const h = makeHarness(cartWith(mkLine('ชิ้น', 58, 1)));
     h.addToCart(makeProduct({ stock: 58, allowNegativeStock: true, warnOnOversell: false }), BASE);
     expect(h.showToast).not.toHaveBeenCalled();
+  });
+
+  test('T13 unknown stockTruth uses the placeholder, never a bare fabricated 0', () => {
+    const h = makeHarness(cartWith(mkLine('ชิ้น', 1, 1)));
+    h.addToCart(
+      makeProduct({
+        stock: 0,
+        stockTruth: { state: 'unknown' },
+        allowNegativeStock: false,
+      }),
+      BASE,
+    );
+    const payload = h.showToast.mock.calls[0]![0];
+    expect(payload.description).toContain('สต็อกไม่ทราบ');
+    expect(payload.description).not.toMatch(/คงเหลือ: 0\b/);
+  });
+
+  test('T14 cartUtils oversell decision surface is unchanged (dead toast text still embeds product.stock)', async () => {
+    const cartUtilsSource = (await import('../../lib/pos/cartUtils.ts?raw')).default as string;
+    expect(cartUtilsSource).toContain('เหลือ ${product.stock}');
+    expect(cartUtilsSource).toContain('function resolveStockMode');
+    expect(cartUtilsSource).toContain('function evaluateAddToCartStock');
   });
 });
 

@@ -12,7 +12,8 @@
 
 import type { Product } from '../types';
 import { RETAIL_PRICE_LEVEL_ID } from '../types';
-import type { PosProduct, UomOption } from './types';
+import type { PosProduct, StockTruth, UomOption } from './types';
+import { UNKNOWN_STOCK_TRUTH } from './types';
 
 const CATEGORY_EMOJI: Record<string, string> = {
   'อาหารสุนัข': '🐕',
@@ -26,7 +27,32 @@ const CATEGORY_EMOJI: Record<string, string> = {
 };
 
 /** Per-branch stock + price-override slice merged into a product projection. */
-export type StockEntry = { stock: number; overrideTierPrices?: Record<string, number> };
+export type StockEntry = {
+  stock: number;
+  stockTruth: StockTruth;
+  overrideTierPrices?: Record<string, number>;
+};
+
+export const UNKNOWN_STOCK_ENTRY: StockEntry = {
+  stock: 0,
+  stockTruth: UNKNOWN_STOCK_TRUTH,
+};
+
+/** Found-vs-fallback stock truth from one productStocks read. */
+export function stockEntryFromStockDoc(
+  data: Record<string, unknown> | null | undefined,
+  fromCache: boolean,
+): StockEntry {
+  const raw = data?.totalStockBase;
+  const numeric = typeof raw === 'number' && Number.isFinite(raw);
+  return {
+    stock: numeric ? raw : 0,
+    stockTruth: numeric
+      ? { state: 'known', asOf: fromCache ? 'cache' : 'server', localDeltaApplied: false }
+      : UNKNOWN_STOCK_TRUTH,
+    overrideTierPrices: (data?.overrideTierPrices as Record<string, number> | undefined) ?? undefined,
+  };
+}
 
 export function buildUomOptions(product: Product): UomOption[] {
   const retailPrices = product.prices.filter((p) => p.priceLevelId === RETAIL_PRICE_LEVEL_ID);
@@ -67,6 +93,7 @@ export function toPosProduct(product: Product, entry: StockEntry): PosProduct {
     emoji: CATEGORY_EMOJI[product.category] ?? '📦',
     imageUrl: product.imageUrl ?? null,
     stock: entry.stock,
+    stockTruth: entry.stockTruth,
     baseUnit: product.baseUnit,
     allowNegativeStock: product.allowNegativeStock ?? false,
     // Stock Matrix Tier 2: default ABSENT/legacy to `true` (warn) so oversell is never
@@ -86,5 +113,5 @@ export function mergePosProducts(
   rawProducts: Product[],
   stockByProduct: Map<string, StockEntry>,
 ): PosProduct[] {
-  return rawProducts.map((p) => toPosProduct(p, stockByProduct.get(p.id) ?? { stock: 0 }));
+  return rawProducts.map((p) => toPosProduct(p, stockByProduct.get(p.id) ?? UNKNOWN_STOCK_ENTRY));
 }

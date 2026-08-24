@@ -400,6 +400,7 @@ export default function SalesHistoryPage() {
   const itemsLoading = Boolean(selected && !selected.pendingSync && liveItems.state === 'loading');
   const itemsUnverified = Boolean(selected && !selected.pendingSync && liveItems.fromCache);
   const itemsUnavailable = Boolean(selected && !selected.pendingSync && liveItems.state === 'unavailable');
+  const itemsEmpty = Boolean(selected && !selected.pendingSync && liveItems.state === 'empty');
   const itemsError = Boolean(selected && !selected.pendingSync && liveItems.state === 'error');
 
   // CEO Override: Cashiers must be able to void already-created orders.
@@ -933,6 +934,8 @@ export default function SalesHistoryPage() {
                       </div>
                     ) : itemsLoading ? (
                       <div className="sh-loading">กำลังโหลดรายการ...</div>
+                    ) : itemsEmpty ? (
+                      <div className="sh-loading sh-child-empty">บิลนี้ไม่มีรายการสินค้า</div>
                     ) : (
                       <>
                         {itemsUnverified ? (

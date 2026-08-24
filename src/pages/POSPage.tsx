@@ -53,7 +53,9 @@ import {
   sortCategories,
   sortProductsByCustomOrder,
 } from '../lib/pos/categoryService';
+import { formatStockTruth } from '../lib/pos/stockTruthDisplay';
 import type { ItemDiscountType, PosProduct, UomOption } from '../lib/pos/types';
+import { isInventoryOverallFresh } from '../lib/pos/types';
 import type { Shift, ProductCategory, ShiftCashEntry } from '../lib/types';
 import { useAuth } from '../lib/hooks/useAuth';
 import { useBranch } from '../lib/hooks/useBranch';
@@ -120,10 +122,12 @@ export default function POSPage({ trustedResumeSweep }: POSPageProps = {}) {
     sorting,
     quickMenus,
     fromCache,
+    provenance,
     loading,
     refreshing,
     error,
     refreshInventory,
+    pendingRetirementRefresh,
   } = usePosInventory(branchId);
   const { bills: suspendedBills, count: suspendedCount, addBill, removeBill } =
     useSuspendedBills(branchId);
@@ -419,6 +423,18 @@ export default function POSPage({ trustedResumeSweep }: POSPageProps = {}) {
       setUpdateBanner(true);
     }
   }, [syncInitialized, lastForceUpdate, cartLines.length, refreshInventory]);
+
+  // Normal-sale settlement retirement reuses the same empty-cart safe point as
+  // admin-broadcast: refresh immediately when idle; defer via updateBanner mid-sale.
+  useEffect(() => {
+    if (!pendingRetirementRefresh) return;
+    if (cartLines.length === 0) {
+      setUpdateBanner(false);
+      void refreshInventory();
+    } else {
+      setUpdateBanner(true);
+    }
+  }, [pendingRetirementRefresh, cartLines.length, refreshInventory]);
 
   const branchDisplay = branch?.name ?? (branchId ? getBranchLabel(branchId) : '—');
   // This terminal's branch — drives all branch-scoped ordering & visibility.
@@ -1272,6 +1288,18 @@ export default function POSPage({ trustedResumeSweep }: POSPageProps = {}) {
               ออฟไลน์ (ใช้ข้อมูลในเครื่อง)
             </Badge>
           )}
+          {products.length > 0 && (
+            <Badge color="gray" className="ml-2 whitespace-nowrap" data-testid="pos-cache-age">
+              {isInventoryOverallFresh(provenance)
+                ? 'ซิงก์ล่าสุด: เมื่อครู่'
+                : 'ข้อมูลจากแคช (ไม่ทราบเวลาซิงก์ล่าสุด)'}
+            </Badge>
+          )}
+          {products.some((p) => p.stockTruth.state === 'known' && p.stockTruth.localDeltaApplied) && (
+            <Badge color="gray" className="ml-2 whitespace-nowrap" data-testid="pos-local-delta">
+              รวมยอดขายในเครื่อง
+            </Badge>
+          )}
         </div>
         {/* Packet 6 UX fix — compact header status cluster. Relocated OUT of the
             action toolbar (`pos-search-group`) into this narrow right-aligned
@@ -1511,7 +1539,7 @@ export default function POSPage({ trustedResumeSweep }: POSPageProps = {}) {
                           {/* UI-04: stock indicator is shown only when the preference is on.
                               When hidden it is not rendered at all, so no empty badge gap
                               remains (the price simply left-aligns in the bottom row). */}
-                          {showStock && <span className="pos-prod-stock">{p.stock}</span>}
+                          {showStock && <span className="pos-prod-stock">{formatStockTruth(p.stockTruth, p.stock)}</span>}
                         </div>
                       </div>
                     </button>
@@ -1611,7 +1639,7 @@ export default function POSPage({ trustedResumeSweep }: POSPageProps = {}) {
                       {isOversold && (
                         <span className="ml-2 inline-flex items-center rounded bg-yellow-100 px-2 py-0.5 text-[10px] font-medium text-yellow-800 border border-yellow-200 shadow-sm">
                           <i className="ti ti-alert-triangle mr-1" aria-hidden="true" />
-                          ขายเกินสต๊อก ({product.stock})
+                          ขายเกินสต๊อก ({formatStockTruth(product.stockTruth, product.stock)})
                         </span>
                       )}
                     </div>

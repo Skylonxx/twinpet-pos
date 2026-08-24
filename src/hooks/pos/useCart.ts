@@ -11,12 +11,8 @@ import {
 } from '../../lib/pos/cartUtils';
 import { cartLinesToRecord, type SuspendedBill } from '../../lib/pos/suspendedBills';
 import { resolvePosUnitPrice } from '../../lib/pos/tierPricing';
-import type {
-  CartLine,
-  ItemDiscountType,
-  PosProduct,
-  UomOption,
-} from '../../lib/pos/types';
+import type { CartLine, ItemDiscountType, PosProduct, StockTruth, UomOption } from '../../lib/pos/types';
+import { formatStockTruth } from '../../lib/pos/stockTruthDisplay';
 
 export type PosCustomer = PosCustomerPick;
 
@@ -66,7 +62,7 @@ export type UseCartArgs = {
 };
 
 /** Product context used to compose the structured toast description (UI-13). */
-type StockToastContext = { name: string; stock: number; unit: string } | null;
+type StockToastContext = { name: string; stock: number; unit: string; stockTruth: StockTruth } | null;
 
 /** Resolve the toast context for a cart line (used by changeQty / setLineQty). */
 function resolveStockToastContext(
@@ -78,7 +74,7 @@ function resolveStockToastContext(
   if (!line) return null;
   const product = products.find((p) => p.id === line.productId);
   if (!product) return null;
-  return { name: product.name, stock: product.stock, unit: product.baseUnit };
+  return { name: product.name, stock: product.stock, unit: product.baseUnit, stockTruth: product.stockTruth };
 }
 
 // UI-13: build the structured, multi-line description shared by Strict Block (red) and
@@ -91,7 +87,7 @@ function buildStockDescription(ctx: StockToastContext, includeDetail: boolean): 
   const lines: string[] = [];
   if (ctx) {
     lines.push(ctx.name);
-    lines.push(ctx.unit ? `คงเหลือ: ${ctx.stock} ${ctx.unit}` : `คงเหลือ: ${ctx.stock}`);
+    lines.push(ctx.unit ? `คงเหลือ: ${formatStockTruth(ctx.stockTruth, ctx.stock)} ${ctx.unit}` : `คงเหลือ: ${formatStockTruth(ctx.stockTruth, ctx.stock)}`);
   }
   if (includeDetail) lines.push('ไม่สามารถเพิ่มสินค้าเกินจำนวนสต็อกที่มีอยู่ได้');
   return lines.length > 0 ? lines.join('\n') : undefined;
@@ -266,7 +262,7 @@ export function useCart({ products, customer, showToast }: UseCartArgs) {
       const result = applyAddToCart(cartRef.current, product, option, () =>
         buildCartLine(product, option),
       );
-      if (result.toast) dispatchStockToast(result.toast, { name: product.name, stock: product.stock, unit: product.baseUnit }, showToast);
+      if (result.toast) dispatchStockToast(result.toast, { name: product.name, stock: product.stock, unit: product.baseUnit, stockTruth: product.stockTruth }, showToast);
       if (result.blocked) return;
       // UI-01-HOTFIX (bump-to-top): an EXISTING line was incremented in place by applyAddToCart
       // and would stay buried at its old position; re-key it last so POSPage's reversed render

@@ -31,9 +31,10 @@ import { collections, db, isFirebaseConfigured } from '../firebase';
 import type { Product, ProductCategory } from '../types';
 import { DEV_POS_PRODUCTS } from './devProducts';
 import { readReversalOverlay } from './offline/reversalStockOverlay';
-import { mergePosProducts, type StockEntry } from './posProductMapper';
+import { mergePosProducts, stockEntryFromStockDoc, type StockEntry } from './posProductMapper';
+import { UNKNOWN_STOCK_TRUTH } from './types';
 import { getBranchSortOrders } from './productSorting';
-import type { PosProduct } from './types';
+import type { InventoryProvenance, PosProduct } from './types';
 
 /** Static, point-in-time view of a branch's sellable catalog. */
 export type InventorySnapshot = {
@@ -43,8 +44,10 @@ export type InventorySnapshot = {
   sorting: Record<string, string[]>;
   /** Admin-curated virtual categories (order-sorted; POS filters to active ones). */
   quickMenus: QuickMenu[];
-  /** True if the snapshot was served from the local offline cache. */
+  /** True if the snapshot was served from the local offline cache (composite). */
   fromCache?: boolean;
+  /** Per-dimension cache provenance for this pull. Session-local only. */
+  provenance?: InventoryProvenance;
 };
 
 function isIndexError(err: unknown): boolean {
@@ -108,16 +111,31 @@ async function safeGetDoc(ref: any): Promise<any> {
   }
 }
 
-/** Read this branch's per-product stock + price overrides, keyed by productId. */
-async function fetchStockByProduct(branchId: string, productIds: string[]): Promise<Map<string, StockEntry>> {
-  const stockByProduct = new Map<string, StockEntry>();
+function devProvenance(): InventoryProvenance {
+  return {
+    products: { fromCache: true },
+    stock: { fromCache: true },
+    categories: { fromCache: true },
+    observedAtLocal: Date.now(),
+  };
+}
 
-  const apply = (productId: string | undefined, data: Record<string, unknown> | undefined) => {
+/** Read this branch's per-product stock + price overrides, keyed by productId. */
+export async function fetchStockByProduct(
+  branchId: string,
+  productIds: string[],
+): Promise<{ entries: Map<string, StockEntry>; fromCache: boolean }> {
+  const stockByProduct = new Map<string, StockEntry>();
+  let fromCache = false;
+
+  const apply = (
+    productId: string | undefined,
+    data: Record<string, unknown> | undefined,
+    readFromCache: boolean,
+  ) => {
     if (!productId) return;
-    stockByProduct.set(productId, {
-      stock: (data?.totalStockBase as number) ?? 0,
-      overrideTierPrices: (data?.overrideTierPrices as Record<string, number>) ?? undefined,
-    });
+    if (readFromCache) fromCache = true;
+    stockByProduct.set(productId, stockEntryFromStockDoc(data, readFromCache));
   };
 
   try {
@@ -126,8 +144,10 @@ async function fetchStockByProduct(branchId: string, productIds: string[]): Prom
       where('branchId', '==', branchId),
     );
     const snap = await safeGetDocs(stockQ);
-    for (const d of snap.docs) apply(d.ref.parent.parent?.id, d.data());
-    return stockByProduct;
+    const snapFromCache = snap.metadata?.fromCache === true;
+    if (snapFromCache) fromCache = true;
+    for (const d of snap.docs) apply(d.ref.parent.parent?.id, d.data(), snapFromCache);
+    return { entries: stockByProduct, fromCache };
   } catch (err) {
     if (!isIndexError(err)) throw err;
     // Collection-group index unavailable — fall back to per-product reads
@@ -137,10 +157,11 @@ async function fetchStockByProduct(branchId: string, productIds: string[]): Prom
       productIds.map(async (id) => {
         const stockRef = doc(db!, collections.products, id, collections.productStocks, branchId);
         const stockSnap = await safeGetDoc(stockRef);
-        apply(id, stockSnap.exists() ? stockSnap.data() : undefined);
+        const readFromCache = stockSnap.metadata?.fromCache === true;
+        apply(id, stockSnap.exists() ? stockSnap.data() : undefined, readFromCache);
       }),
     );
-    return stockByProduct;
+    return { entries: stockByProduct, fromCache };
   }
 }
 
@@ -148,9 +169,10 @@ async function fetchStockByProduct(branchId: string, productIds: string[]): Prom
  * Overlay pending offline-reversal deltas onto the Firestore stock map (mutates in
  * place). This is what makes the queue's IMMEDIATE local stock correction visible to
  * the POS grid — `visible stock = Firestore productStocks + pending reversal deltas`.
- * A product touched only by a reversal (absent from the Firestore map) is seeded from 0.
+ * A product touched only by a reversal (absent from the Firestore map) is seeded from 0
+ * with `stockTruth: unknown` — the overlay never manufactures `known`.
  */
-function applyReversalOverlay(
+export function applyReversalOverlay(
   stockByProduct: Map<string, StockEntry>,
   overlay: Map<string, number>,
 ): void {
@@ -158,6 +180,7 @@ function applyReversalOverlay(
     const cur = stockByProduct.get(productId);
     stockByProduct.set(productId, {
       stock: (cur?.stock ?? 0) + delta,
+      stockTruth: cur?.stockTruth ?? UNKNOWN_STOCK_TRUTH,
       overrideTierPrices: cur?.overrideTierPrices,
     });
   }
@@ -176,6 +199,7 @@ export async function getInventorySnapshot(branchId: string): Promise<InventoryS
   if (!isFirebaseConfigured || !db) {
     const { products, categories } = devProductsAndCategories();
     const reversalOverlay = await readReversalOverlay(branchId);
+    const provenance = devProvenance();
     return {
       products: reversalOverlay.size
         ? products.map((p) =>
@@ -185,6 +209,8 @@ export async function getInventorySnapshot(branchId: string): Promise<InventoryS
       categories,
       sorting: await getBranchSortOrders(branchId),
       quickMenus: await getQuickMenus(branchId),
+      fromCache: true,
+      provenance,
     };
   }
 
@@ -206,17 +232,27 @@ export async function getInventorySnapshot(branchId: string): Promise<InventoryS
     .map((d: any) => ({ ...(d.data() as Product), id: d.id }))
     .filter((p: any) => !p.deletedAt);
 
-  const [stockByProduct, reversalOverlay] = await Promise.all([
+  const [stockResult, reversalOverlay] = await Promise.all([
     fetchStockByProduct(branchId, rawProducts.map((p) => p.id)),
     readReversalOverlay(branchId),
   ]);
-  applyReversalOverlay(stockByProduct, reversalOverlay);
+  applyReversalOverlay(stockResult.entries, reversalOverlay);
+
+  const productsFromCache = productSnap.metadata?.fromCache === true;
+  const categoriesFromCache = categorySnap.metadata?.fromCache === true;
+  const provenance: InventoryProvenance = {
+    products: { fromCache: productsFromCache },
+    stock: { fromCache: stockResult.fromCache },
+    categories: { fromCache: categoriesFromCache },
+    observedAtLocal: Date.now(),
+  };
 
   return {
-    products: mergePosProducts(rawProducts, stockByProduct),
+    products: mergePosProducts(rawProducts, stockResult.entries),
     categories: categorySnap.docs.map(mapCategoryDoc),
     sorting,
     quickMenus,
-    fromCache: productSnap.metadata?.fromCache === true,
+    fromCache: productsFromCache || stockResult.fromCache || categoriesFromCache,
+    provenance,
   };
 }

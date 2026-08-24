@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { collections, db, isFirebaseConfigured } from '../firebase';
 import type { OrderItem } from '../types';
 
-export type LiveItemsState = 'idle' | 'loading' | 'live' | 'unavailable' | 'error';
+export type LiveItemsState = 'idle' | 'loading' | 'live' | 'empty' | 'unavailable' | 'error';
 
 type RequestSession = {
   branchId: string | null;
@@ -18,7 +18,7 @@ type LiveItemsObservation = {
   sourceOrderId: string;
   sourceAttachmentId: number;
   items: OrderItem[];
-  state: 'loading' | 'live' | 'unavailable' | 'error';
+  state: 'loading' | 'live' | 'empty' | 'unavailable' | 'error';
   fromCache: boolean;
 };
 
@@ -97,7 +97,13 @@ export function useOrderItemsLive(
         const items = snap.docs.map((d) => ({ ...(d.data() as OrderItem), id: d.id }));
         const fromCache = snap.metadata.fromCache;
         const nextState: LiveItemsObservation['state'] =
-          fromCache && items.length === 0 ? 'unavailable' : fromCache ? 'loading' : items.length === 0 ? 'unavailable' : 'live';
+          fromCache && items.length === 0
+            ? 'unavailable'
+            : fromCache
+              ? 'loading'
+              : items.length === 0
+                ? 'empty'
+                : 'live';
         setObservation((prev) => {
           const next: LiveItemsObservation = {
             sourceBranchId: subscribedBranchId,
@@ -108,7 +114,7 @@ export function useOrderItemsLive(
             fromCache,
           };
           if (!fromCache && items.length > 0) next.state = 'live';
-          if (!fromCache && items.length === 0) next.state = 'unavailable';
+          if (!fromCache && items.length === 0) next.state = 'empty';
           if (prev != null && prev.sourceAttachmentId > subscribedAttachmentId) return prev;
           return next;
         });

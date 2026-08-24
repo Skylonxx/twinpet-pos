@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useProductCrud } from '../../lib/productCrud/useProductCrud';
+import { formatStockTruth } from '../../lib/pos/stockTruthDisplay';
 import {
   PICKER_PAGE_SIZE,
   buildPageNumbers,
@@ -277,7 +278,9 @@ export default function ProductPickerDialog({
                         </span>
                       </TableCell>
                       <TableCell className="text-right">
-                        <span className={stockClass(p.stock)}>{p.stock}</span>
+                        <span className={p.stockTruth?.state === 'unknown' ? undefined : stockClass(p.stock)}>
+                          {p.stockTruth ? formatStockTruth(p.stockTruth, p.stock) : p.stock}
+                        </span>
                       </TableCell>
                     </TableRow>
                   );

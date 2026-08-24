@@ -105,6 +105,7 @@ export function productListItemToPosProduct(product: ProductListItem): PosProduc
     emoji: product.emoji,
     imageUrl: product.imageUrl ?? null,
     stock: product.stock,
+    stockTruth: { state: 'unknown' },
     baseUnit: product.baseUnit,
     uomOptions: [...unique.values()],
   };
