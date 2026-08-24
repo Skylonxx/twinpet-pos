@@ -1,10 +1,173 @@
-# Latest Report — PK-5 Offline Read-Side Truth — CLOSED / DELIVERED / Docs-Only Closure Reconciliation
+# Latest Report — PK-6 Online-Only Guardrails — CLOSED / DELIVERED / Docs-Only Closure Reconciliation
 
 > Date: 2026-08-24
-> Binding HEAD (PK-5 feature delivered): `ef90d4ec4cce1decfed6e4809849fb9f991a2412` (`feat(pos): add offline read-side truth`)
-> Status: **PK-5 CLOSED / DELIVERED / repository delivery complete.** Codex `PASS_WITH_NOTES`. Corrected UAT `PASS_WITH_NOTES`. AGY `PASS_WITH_NOTES`. Targeted `14/186 PASS`. Root `130/2486 PASS`. Typecheck / build / `git diff --check` **PASS**. B16/B18 accepted harness limitations under Gemini Option A; not product defects; no runtime reproduction required before closure. PaymentModal boundary **CLOSED**. Deployment **NOT REQUIRED / NOT PERFORMED / NOT AUTHORIZED**. This pass is the authorized seven-doc source-of-truth reconciliation of that delivered state. It does **not** declare PK-5 full packet closure.
+> Binding HEAD (PK-6 feature delivered): `e7ae0080eab574b207f53d3403d8a5ebacefff7c` (`feat(pos): add online-only guardrails`)
+> Status: **PK-6 CLOSED / DELIVERED / repository delivery complete.** Targeted `3 files / 21 tests PASS`. Root `130 files / 2490 tests PASS`. Typecheck / build / `git diff --check` **PASS**. UAT U01–U11 **PASS**. Responsive 320 / 768 / 1080 **PASS**. PK-6 product defects **0**. AGY `PASS_WITH_NOTES`. AGY material UI/UX defects **0**. PaymentModal boundary **CLOSED**. Checkout write path **CLOSED**. PK-5 behavior **CLOSED / PRESERVED**. Deployment **NOT REQUIRED / NOT PERFORMED / NOT AUTHORIZED**. PK-6 is the **final packet** of the binding PK-1 → PK-6 sequence. `NEXT_ELIGIBLE_PK_PACKET: NONE`. PK-7 is **NOT DEFINED / DO NOT INVENT**. This pass is the authorized seven-doc source-of-truth reconciliation of that delivered state. It does **not** declare PK-6 full packet closure.
 
 ## 0. This pass's reports
+
+- Gemini docs-reconciliation / commit-push authorization: `TWINPET-PK6-DOCS-RECONCILIATION-COMMIT-PUSH-AUTHORIZATION-GEMINI-001` (`PK6_CLOSURE_AUDIT_ACCEPTED: YES`; `DOC_EDIT_EXACT_7_AUTHORIZED: YES`; `PK6_DOCS_COMMIT_AUTHORIZED: YES`; `PK6_DOCS_PUSH_MAIN_FAST_FORWARD_AUTHORIZED: YES`; source/test/non-doc edits **NO**; test/build/browser UAT execution **NO**; PK-2D / PK-7 / new PK packet activation **NO**; PK-6 full packet closure declared **NO**)
+- Closure audit: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Grok\twinpet-pk6-repository-closure-readonly-audit-grok-001.md` (`READY`)
+- Implementation: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Grok\twinpet-pk6-bounded-implementation-grok-001.md`
+- Post-implementation UAT: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Grok\twinpet-pk6-post-implementation-uat-grok-001.md` (`PASS_WITH_NOTES`; U01–U11 PASS)
+- AGY UI/UX UAT review: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\AGY\twinpet-pk6-ui-ux-uat-review-agy-001.md` (`PASS_WITH_NOTES`)
+- Feature commit/push: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Grok\twinpet-pk6-commit-push-execution-grok-001.md`
+- PK-6 feature commit: `e7ae0080eab574b207f53d3403d8a5ebacefff7c` (`feat(pos): add online-only guardrails`)
+- This docs packet contract: `TWINPET-PK6-DOCS-RECONCILIATION-COMMIT-PUSH-GROK-001`
+
+## 1. Current PK-6 facts
+
+| Field | Value |
+|-------|-------|
+| CURRENT_PHASE | Post PK-6 Closure / Roadmap Re-entry |
+| CURRENT_GATE | POST_PK6_READ_ONLY_ROADMAP_REENTRY |
+| PK6_STATUS | CLOSED / DELIVERED / repository delivery complete |
+| PK6_FEATURE_COMMIT | `e7ae0080eab574b207f53d3403d8a5ebacefff7c` |
+| HEAD subject | `feat(pos): add online-only guardrails` |
+| PK6_COMMITTED_PATHS | 4 (1 production + 3 tests) |
+| TARGETED | 3 files / 21 tests PASS |
+| ROOT | 130 files / 2490 tests PASS |
+| TYPECHECK | PASS |
+| BUILD | PASS |
+| git diff --check | PASS |
+| UAT | U01-U11 PASS |
+| RESPONSIVE | 320 / 768 / 1080 PASS |
+| PK6_PRODUCT_DEFECTS | 0 |
+| AGY | PASS_WITH_NOTES |
+| AGY_MATERIAL_UIUX_DEFECTS | 0 |
+| PAYMENTMODAL_BOUNDARY | CLOSED |
+| CHECKOUT_WRITE_PATH | CLOSED |
+| PK5_BEHAVIOR | CLOSED / PRESERVED |
+| DEPLOY | NOT REQUIRED / NOT AUTHORIZED / NOT PERFORMED |
+| PRODUCTION_ACCESS | NOT AUTHORIZED / none performed |
+| BINDING_SEQUENCE_FINAL_PACKET | PK-6 |
+| NEXT_ELIGIBLE_PK_PACKET | NONE |
+| PK7 | NOT DEFINED / DO NOT INVENT |
+| PK5_STATUS | CLOSED / DELIVERED |
+| PK5_FEATURE_COMMIT | `ef90d4ec4cce1decfed6e4809849fb9f991a2412` |
+| PK5_DOCS_CLOSURE_COMMIT | `cf9c6f392f8416f247b16244351ec4567c71996b` |
+| PK4_STATUS | CLOSED / DELIVERED |
+| PK4_FEATURE_COMMIT | `d27850abe80bac8b055f08206f17c36fda29e352` |
+| PK4_DOCS_CLOSURE_COMMIT | `6a82fefa7238cc1eed8e9ce0790a2e9bb0913ad0` |
+| PACKET_5_STATUS | CLOSED |
+| PK3_STATUS | CLOSED |
+| PK2D | RECORD_ONLY / NOT ACTIVE / NOT AUTHORIZED |
+| NEXT_IMPLEMENTATION | NOT_AUTHORIZED |
+| PK6_FULL_PACKET_CLOSURE_DECLARED | NO |
+| stash@{0} | unchanged `7d03cfec7ba52ff7e25b7e175ca190efc258d874` |
+
+**CURRENT_STATUS:** PK-6 is **CLOSED / DELIVERED**. Feature commit `e7ae008` is on `main`. This seven-doc packet is the authorized docs-only closure reconciliation. Full packet closure is **not** declared here. PK-6 is the final packet of the binding sequence. `NEXT_ELIGIBLE_PK_PACKET: NONE`. PK-7 is not defined. PK-2D remains record-only / not active / not authorized.
+
+## 2. Gemini decision ledger (this docs gate)
+
+| ID | Subject | Status |
+|----|---------|--------|
+| TWINPET-PK6-DOCS-RECONCILIATION-COMMIT-PUSH-AUTHORIZATION-GEMINI-001 | PK-6 exact seven-file docs reconciliation + commit/push | `PK6_CLOSURE_AUDIT_ACCEPTED: YES`; `DOC_EDIT_EXACT_7_AUTHORIZED: YES`; `SOURCE_EDIT_AUTHORIZED: NO`; `TEST_EDIT_AUTHORIZED: NO`; `PK6_DOCS_COMMIT_AUTHORIZED: YES`; `PK6_DOCS_PUSH_MAIN_FAST_FORWARD_AUTHORIZED: YES`; `PK2D_ACTIVATION_ALLOWED: NO`; `PK7_ACTIVATION_ALLOWED: NO`; `PK6_FULL_PACKET_CLOSURE_DECLARED: NO` |
+| TWINPET-PK6-REPOSITORY-DELIVERY-ACCEPTANCE-AND-CLOSURE-AUDIT-AUTHORIZATION-GEMINI-001 | PK-6 repository delivery accepted; read-only closure audit authorized | `PK6_FEATURE_REPOSITORY_DELIVERY_ACCEPTED: YES`; `PK6_REPOSITORY_DELIVERY_STATUS: DELIVERED` |
+
+Do not invent a new product decision. Do not reopen PK-6 implementation. Do not reopen PK-5, PK-4, PK-3, or Packet 5. Do not activate PK-2D. Do not invent PK-7.
+
+## 3. Implementation / Codex / AGY / UAT evidence (recorded; not re-run in this docs gate)
+
+- Architecture: accepted
+- Implementation: accepted
+- Committed surface: 4 paths (`SyncCenterPage.tsx` + 3 tests)
+- Targeted: 3 files / 21 tests PASS
+- Root: 130 files / 2490 tests PASS
+- Typecheck: PASS
+- Build: PASS
+- `git diff --check`: PASS
+- UAT: U01–U11 PASS
+- Responsive: 320 / 768 / 1080 PASS
+- PK-6 product defects: 0
+- AGY UI: PASS_WITH_NOTES
+- AGY material UI/UX defects: 0
+- PaymentModal boundary: CLOSED
+- Checkout write path: CLOSED
+- PK-5 behavior: CLOSED / PRESERVED
+- PRODUCTION_HITS = 0
+- DEPLOYMENTS = 0
+
+## 4. Binding sequence / post-PK-6 roadmap
+
+```text
+BINDING_SEQUENCE: PK-1 -> PK-2 -> PK-3 -> PK-4 -> PK-5 -> PK-6
+BINDING_SEQUENCE_FINAL_PACKET: PK-6
+NEXT_ELIGIBLE_PK_PACKET: NONE
+PK7: NOT DEFINED / DO NOT INVENT
+PK2D: RECORD_ONLY / NOT ACTIVE / NOT AUTHORIZED
+TRUE-STANDALONE: FUTURE / NOT STARTED / NOT AUTHORIZED
+UI-11 Packet 2 / UI-10-D: NOT STARTED / NOT AUTHORIZED
+NEXT_IMPLEMENTATION: NOT_AUTHORIZED
+```
+
+PK-6 is the final packet of this binding sequence. That does **not** authorize TRUE-STANDALONE, UI-11 Packet 2, UI-10-D, PK-2D, deploy, or any new packet.
+
+## 5. Exact docs surface for this reconciliation
+
+Seven docs only:
+
+`Context.md`, `Task.md`, `docs/STATE.md`, `docs/agent-workflow/CURRENT_PACKET.md`, `docs/agent-workflow/NEXT_ACTION.md`, `docs/agent-workflow/STATE.md`, `docs/reports/latest-report.md`
+
+Source paths: 0. Test paths: 0.
+
+## 6. Preserved accepted facts / closed gates
+
+```text
+PK6_STATUS: CLOSED / DELIVERED / repository delivery complete
+PK6_FEATURE_COMMIT: e7ae0080eab574b207f53d3403d8a5ebacefff7c
+PK5_STATUS: CLOSED / DELIVERED
+PK5_FEATURE_COMMIT: ef90d4ec4cce1decfed6e4809849fb9f991a2412
+PK5_DOCS_CLOSURE_COMMIT: cf9c6f392f8416f247b16244351ec4567c71996b
+PK4_STATUS: CLOSED / DELIVERED
+PK4_FEATURE_COMMIT: d27850abe80bac8b055f08206f17c36fda29e352
+PK4_DOCS_CLOSURE_COMMIT: 6a82fefa7238cc1eed8e9ce0790a2e9bb0913ad0
+TARGETED: 3 files / 21 tests PASS
+ROOT: 130 files / 2490 tests PASS
+TYPECHECK_BUILD_DIFF_CHECK: PASS
+UAT: U01-U11 PASS
+RESPONSIVE: 320 / 768 / 1080 PASS
+PK6_PRODUCT_DEFECTS: 0
+AGY: PASS_WITH_NOTES
+AGY_MATERIAL_UIUX_DEFECTS: 0
+PAYMENTMODAL_BOUNDARY: CLOSED
+CHECKOUT_WRITE_PATH: CLOSED
+PK5_BEHAVIOR: CLOSED / PRESERVED
+PK3_STATUS: CLOSED
+PACKET_5_STATUS: CLOSED
+DEPLOY: NOT REQUIRED / NOT AUTHORIZED / NOT PERFORMED
+PK2D_IMPLEMENTATION_AUTHORIZED: NO
+NEXT_ELIGIBLE_PK_PACKET: NONE
+PK7: NOT DEFINED / DO NOT INVENT
+PK6_FULL_PACKET_CLOSURE_DECLARED: NO
+```
+
+## 7. Next workflow
+
+```text
+NEXT_WORKFLOW_ACTION:
+RETURN_TO_CHATGPT_FOR_PK6_FINAL_CLOSURE_ROUTING
+
+DO NOT:
+deploy,
+reopen PK-6 implementation,
+activate PK-2D,
+invent PK-7,
+declare PK-6 full packet closure in this docs gate.
+```
+
+**Next implementation action:** NONE — NOT AUTHORIZED.
+
+---
+
+# Historical — Latest Report — PK-5 Offline Read-Side Truth — CLOSED / DELIVERED / later docs-closed at cf9c6f3
+
+> Date: 2026-08-24
+> Historical note: That pass recorded PK-5 as CLOSED / DELIVERED on HEAD `ef90d4ec4cce1decfed6e4809849fb9f991a2412`. Git history later docs-closed it at `cf9c6f392f8416f247b16244351ec4567c71996b` (`docs: close pk-5 offline read-side truth`) and delivered PK-6 at `e7ae0080eab574b207f53d3403d8a5ebacefff7c` (`feat(pos): add online-only guardrails`). Those then-current "PK-6 next eligible / not authorized" live facts are historical only. Current live status is PK-6 CLOSED / DELIVERED.
+> Binding HEAD (PK-5 feature delivered): `ef90d4ec4cce1decfed6e4809849fb9f991a2412` (`feat(pos): add offline read-side truth`)
+> Status: **HISTORICAL.** PK-5 CLOSED / DELIVERED / repository delivery complete. Codex `PASS_WITH_NOTES`. Corrected UAT `PASS_WITH_NOTES`. AGY `PASS_WITH_NOTES`. Targeted `14/186 PASS`. Root `130/2486 PASS`. Typecheck / build / `git diff --check` **PASS**. B16/B18 accepted harness limitations under Gemini Option A; not product defects; no runtime reproduction required before closure. PaymentModal boundary **CLOSED**. Deployment **NOT REQUIRED / NOT PERFORMED / NOT AUTHORIZED**. That pass was the authorized seven-doc source-of-truth reconciliation of that delivered state. It did **not** declare PK-5 full packet closure.
+
+## 0. That pass's reports
 
 - Gemini docs-reconciliation / commit-push authorization: `TWINPET-PK5-DOCS-RECONCILIATION-COMMIT-PUSH-AUTHORIZATION-GEMINI-001` (`PK5_DOCS_RECONCILIATION_AUTHORIZED: YES`; `DOC_EDIT_EXACT_7_AUTHORIZED: YES`; `DOCS_COMMIT_AUTHORIZED: YES`; `DOCS_PUSH_MAIN_FAST_FORWARD_AUTHORIZED: YES`; source/test/non-doc edits **NO**; PK-6 / PK-2D activation **NO**; PK-5 full packet closure declared **NO**)
 - Closure audit: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Grok\twinpet-pk5-repository-closure-readonly-audit-grok-001.md` (`READY`)
@@ -14,7 +177,7 @@
 - PK-5 feature commit: `ef90d4ec4cce1decfed6e4809849fb9f991a2412` (`feat(pos): add offline read-side truth`)
 - This docs packet contract: `TWINPET-PK5-DOCS-RECONCILIATION-COMMIT-PUSH-GROK-001`
 
-## 1. Current PK-5 facts
+## 1. Historical PK-5 facts
 
 | Field | Value |
 |-------|-------|
@@ -43,9 +206,9 @@
 | NEXT_IMPLEMENTATION | NOT_AUTHORIZED |
 | stash@{0} | unchanged `7d03cfec7ba52ff7e25b7e175ca190efc258d874` |
 
-**CURRENT_STATUS:** PK-5 is **CLOSED / DELIVERED**. Feature commit `ef90d4e` is on `main`. This seven-doc packet is the authorized docs-only closure reconciliation. Full packet closure is **not** declared here. PK-6 remains next eligible / not active / not authorized.
+**Then-current status (superseded as live current-state):** PK-5 is **CLOSED / DELIVERED**. Feature commit `ef90d4e` is on `main`. That seven-doc packet was the authorized docs-only closure reconciliation. Full packet closure was **not** declared there. Then-current "PK-6 remains next eligible / not active / not authorized" is superseded by PK-6 CLOSED / DELIVERED at `e7ae008`. Current live status is PK-6 CLOSED / DELIVERED.
 
-## 2. Gemini decision ledger (this docs gate)
+## 2. Gemini decision ledger (closed; historical PK-5)
 
 | ID | Subject | Status |
 |----|---------|--------|
@@ -105,28 +268,23 @@ PK6_AUTHORIZED: NO
 PK6_ACTIVE: NO
 ```
 
-## 7. Next workflow
+## 7. Next workflow (then-current; superseded)
 
 ```text
-NEXT_WORKFLOW_ACTION:
+THEN_CURRENT_NEXT_WORKFLOW_ACTION:
 RETURN_TO_CHATGPT_FOR_PK5_FINAL_CLOSURE_ROUTING
-
-DO NOT:
-deploy,
-reopen PK-5 implementation,
-activate PK-2D,
-activate PK-6,
-declare PK-5 full packet closure in this docs gate.
 ```
 
-**Next implementation action:** NONE — NOT AUTHORIZED.
+That then-current PK-5 final-closure routing is historical. Current live next action is PK-6 final closure routing after this PK-6 docs reconciliation.
+
+**Then-current next implementation action:** NONE — NOT AUTHORIZED.
 
 ---
 
 # Historical — Latest Report — PK-4 Operator Sync Center — TECHNICAL CLOSED / later DELIVERED at d27850a / 6a82fef
 
 > Date: 2026-08-23
-> Historical note: That pass recorded PK-4 as technically CLOSED / UNCOMMITTED on HEAD `5e6675758c4ce95b00620aaf202c79f8b134be60`. Git history later delivered the feature at `d27850abe80bac8b055f08206f17c36fda29e352` (`feat(pos): add operator sync center`) and docs-closed it at `6a82fefa7238cc1eed8e9ce0790a2e9bb0913ad0` (`docs: close pk-4 operator sync center`). Those UNCOMMITTED live facts are historical only. Current live status is PK-5 CLOSED / DELIVERED.
+> Historical note: That pass recorded PK-4 as technically CLOSED / UNCOMMITTED on HEAD `5e6675758c4ce95b00620aaf202c79f8b134be60`. Git history later delivered the feature at `d27850abe80bac8b055f08206f17c36fda29e352` (`feat(pos): add operator sync center`) and docs-closed it at `6a82fefa7238cc1eed8e9ce0790a2e9bb0913ad0` (`docs: close pk-4 operator sync center`). Those UNCOMMITTED live facts are historical only. Current live status is PK-6 CLOSED / DELIVERED.
 > Status: **HISTORICAL.** PK-4 later CLOSED / DELIVERED. Gemini `TWINPET-PK4-FINAL-EVIDENCE-ADJUDICATION-CLOSURE-GEMINI-001` accepted implementation, Codex implementation review, AGY UI, local UAT, AGY evidence reconciliation, and production isolation.
 
 ## 0. That pass's reports
@@ -154,7 +312,7 @@ declare PK-5 full packet closure in this docs gate.
 | PK2D | RECORD_ONLY / NOT AUTHORIZED |
 | PK6 | NOT PARALLEL-AUTHORIZED |
 
-**Then-current status (superseded as live current-state):** PK-4 was recorded as technically CLOSED / UNCOMMITTED. Later delivered at `d27850a` / `6a82fef`. Current live status is PK-5 CLOSED / DELIVERED.
+**Then-current status (superseded as live current-state):** PK-4 was recorded as technically CLOSED / UNCOMMITTED. Later delivered at `d27850a` / `6a82fef`. Current live status is PK-6 CLOSED / DELIVERED.
 
 ## 2. Gemini decision ledger (closed; historical PK-4)
 
@@ -237,13 +395,13 @@ U10_CLASSIFICATION: NOT_REPRODUCIBLE_WITHOUT_UNAUTHORIZED_EDIT
 
 ## 8. Next workflow (then; superseded)
 
-Then-current next action was ChatGPT PK-4 dirty-set / commit-push routing. That action completed. Current live next action is ChatGPT PK-5 final closure routing.
+Then-current next action was ChatGPT PK-4 dirty-set / commit-push routing. That action completed. Current live next action is ChatGPT PK-6 final closure routing.
 
 ---
 
 > Date: 2026-08-23
 > Binding HEAD then (PK-4 feature not yet committed in that snapshot): `5e6675758c4ce95b00620aaf202c79f8b134be60` (`docs: close pk-3 unified sync recovery`)
-> Status: **HISTORICAL duplicate PK-4 snapshot.** Then-current repository delivery **UNCOMMITTED / UNPUSHED** was later completed at `d27850a` / `6a82fef`. Current live status is PK-5 CLOSED / DELIVERED. Evidence body below is preserved.
+> Status: **HISTORICAL duplicate PK-4 snapshot.** Then-current repository delivery **UNCOMMITTED / UNPUSHED** was later completed at `d27850a` / `6a82fef`. Current live status is PK-6 CLOSED / DELIVERED. Evidence body below is preserved.
 
 ## 0. This pass's reports
 
@@ -292,7 +450,7 @@ Then-current next action was ChatGPT PK-4 dirty-set / commit-push routing. That 
 | Staged | empty |
 | stash@{0} | unchanged `7d03cfec7ba52ff7e25b7e175ca190efc258d874` |
 
-**Then-current status (superseded as live current-state):** PK-4 was recorded as technically CLOSED / UNCOMMITTED on HEAD `5e6675758`. Later delivered at `d27850a` / `6a82fef`. Current live status is PK-5 CLOSED / DELIVERED.
+**Then-current status (superseded as live current-state):** PK-4 was recorded as technically CLOSED / UNCOMMITTED on HEAD `5e6675758`. Later delivered at `d27850a` / `6a82fef`. Current live status is PK-6 CLOSED / DELIVERED.
 
 ## 2. Gemini decision ledger (closed)
 
@@ -424,7 +582,7 @@ Future commit/push requires a separate explicit Gemini authorization. Do not tou
 
 > Date: 2026-08-23
 > Technical baseline before that PK-3 docs closure commit: `ec7cf8beb52d56c1c412aa12c843cbd1151f687a` (`feat(pos): add unified offline sync recovery`)
-> Status: **HISTORICAL.** PK-3 CLOSED. Technical adjudication `PASS`. Product implementation closed. Gemini authorized closure after Codex final RC1/RC2/RC3 re-review **PASS**, AGY UI **PASS_WITH_NOTES**, and local-emulator UAT **U1–U7 PASS**. Both AGY notes confirmed nonblocking by runtime UAT. Production hits **0**. Non-local function hits **0**. Additional UAT / Codex / AGY **NOT REQUIRED**. Deployment **NOT REQUIRED / NOT PERFORMED / NOT AUTHORIZED**. Packet 5 remains **CLOSED**. That pass was the authorized seven-doc source-of-truth reconciliation of that closed PK-3 state, later committed at `5e6675758c4ce95b00620aaf202c79f8b134be60`. Current live status is PK-5 CLOSED / DELIVERED.
+> Status: **HISTORICAL.** PK-3 CLOSED. Technical adjudication `PASS`. Product implementation closed. Gemini authorized closure after Codex final RC1/RC2/RC3 re-review **PASS**, AGY UI **PASS_WITH_NOTES**, and local-emulator UAT **U1–U7 PASS**. Both AGY notes confirmed nonblocking by runtime UAT. Production hits **0**. Non-local function hits **0**. Additional UAT / Codex / AGY **NOT REQUIRED**. Deployment **NOT REQUIRED / NOT PERFORMED / NOT AUTHORIZED**. Packet 5 remains **CLOSED**. That pass was the authorized seven-doc source-of-truth reconciliation of that closed PK-3 state, later committed at `5e6675758c4ce95b00620aaf202c79f8b134be60`. Current live status is PK-6 CLOSED / DELIVERED.
 
 ## 0. This pass's reports
 
@@ -465,7 +623,7 @@ Future commit/push requires a separate explicit Gemini authorization. Do not tou
 | Deployment | NOT PERFORMED / NOT AUTHORIZED |
 | Next packet implementation | NOT AUTHORIZED |
 
-**Then-current status (superseded as live current-state):** PK-3 is **CLOSED** at feature SHA `ec7cf8b`. Gemini `PASS`. U1–U7 `PASS`. That seven-doc packet was the authorized PK-3 docs-only closure reconciliation, later committed at `5e6675758`. Packet 5 remains CLOSED. Current live status is PK-5 CLOSED / DELIVERED.
+**Then-current status (superseded as live current-state):** PK-3 is **CLOSED** at feature SHA `ec7cf8b`. Gemini `PASS`. U1–U7 `PASS`. That seven-doc packet was the authorized PK-3 docs-only closure reconciliation, later committed at `5e6675758`. Packet 5 remains CLOSED. Current live status is PK-6 CLOSED / DELIVERED.
 
 ## 2. Gemini decision ledger (closed)
 
@@ -548,7 +706,7 @@ Those next-action claims are **no longer the live current-state**. PK-3 remains 
 
 > Date: 2026-08-22
 > Technical baseline before that docs closure commit: `f8b67c144b96383d69196cc9080d038d1dac60d8` (`fix(receipt): normalize callable receipt timestamps`)
-> Status: **HISTORICAL.** Packet 5 CLOSED. Technical adjudication `PASS_WITH_NOTES`. Gemini authorized closure after R4 full-chain local-emulator UAT **36 / 36 PASS** and exact post-UAT source restore. Deferred local emulator UAT **PASS**. Additional UAT **NOT REQUIRED**. Deployment **NOT PERFORMED / NOT AUTHORIZED**. That pass was the authorized four-doc source-of-truth reconciliation of the closed Packet 5 state. Packet 5 remains CLOSED. Current live status is PK-5 CLOSED / DELIVERED.
+> Status: **HISTORICAL.** Packet 5 CLOSED. Technical adjudication `PASS_WITH_NOTES`. Gemini authorized closure after R4 full-chain local-emulator UAT **36 / 36 PASS** and exact post-UAT source restore. Deferred local emulator UAT **PASS**. Additional UAT **NOT REQUIRED**. Deployment **NOT PERFORMED / NOT AUTHORIZED**. That pass was the authorized four-doc source-of-truth reconciliation of the closed Packet 5 state. Packet 5 remains CLOSED. Current live status is PK-6 CLOSED / DELIVERED.
 
 ## 0. This pass's reports
 
