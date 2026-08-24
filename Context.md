@@ -1,9 +1,12 @@
 # Twinpet POS — Project Context
 
-> Last reconciled: 2026-08-23
-> Current repository HEAD (binding; PK-4 feature not committed): `5e6675758c4ce95b00620aaf202c79f8b134be60` (`docs: close pk-3 unified sync recovery`)
-> PK-3 closure docs commit (binding): `5e6675758c4ce95b00620aaf202c79f8b134be60`
-> PK-3 feature SHA (binding, preserved): `ec7cf8beb52d56c1c412aa12c843cbd1151f687a`
+> Last reconciled: 2026-08-24
+> Current repository HEAD (binding; PK-5 feature delivered): `ef90d4ec4cce1decfed6e4809849fb9f991a2412` (`feat(pos): add offline read-side truth`)
+> PK-5 feature SHA (binding): `ef90d4ec4cce1decfed6e4809849fb9f991a2412`
+> PK-4 feature SHA (historical, delivered): `d27850abe80bac8b055f08206f17c36fda29e352`
+> PK-4 docs closure commit (historical): `6a82fefa7238cc1eed8e9ce0790a2e9bb0913ad0`
+> PK-3 closure docs commit (historical): `5e6675758c4ce95b00620aaf202c79f8b134be60`
+> PK-3 feature SHA (historical, preserved): `ec7cf8beb52d56c1c412aa12c843cbd1151f687a`
 > PK-3 feature parent: `ee5e291c9463e84810213add98b367192d20e1c0` (`docs: reconcile post-packet5 project state`)
 > Packet 5 closure commit (binding, preserved): `292d51ff5092283e07e1aed9dcc8ac76fedbd866`
 > Packet 5 technical baseline: `f8b67c144b96383d69196cc9080d038d1dac60d8` (`fix(receipt): normalize callable receipt timestamps`)
@@ -24,50 +27,43 @@
 > P-OBS-1 implementation commit (historical, unchanged): `da3a8d1c9ddcb605a1f9a6e3cebc21d8dc2ffe72`
 > P-OBS-1 closure docs commit (historical, unchanged): `78f7ffe5c5b69f47af5c20ed8efd54410f35ee09`
 >
-> **Live workflow authority:** `docs/agent-workflow/STATE.md` (with `CURRENT_PACKET.md` / `NEXT_ACTION.md`) wins on gate/status conflict over this historical tracker. This file is the long-form project context, reconciled here to PK-4 Operator Sync Center / Technical Closure. PK-4 is technically CLOSED and remains UNCOMMITTED / UNPUSHED.
+> **Live workflow authority:** `docs/agent-workflow/STATE.md` (with `CURRENT_PACKET.md` / `NEXT_ACTION.md`) wins on gate/status conflict over this historical tracker. This file is the long-form project context, reconciled here to Post PK-5 Closure / Roadmap Re-entry. PK-5 is CLOSED / DELIVERED at `ef90d4e`. PK-4 is historical CLOSED / DELIVERED at `d27850a` / `6a82fef`.
 
 ---
 
 ## Current Phase
 
-**PK-4 — Operator Sync Center / Technical Closure — technically CLOSED; docs reconciliation COMPLETE; commit/push still pending explicit Gemini authority.**
+**Post PK-5 Closure / Roadmap Re-entry — PK-5 CLOSED / DELIVERED; repository delivery complete; next implementation NOT AUTHORIZED.**
 
 ```text
-CURRENT_PHASE: PK-4 — Operator Sync Center / Technical Closure
-CURRENT_GATE: PK4_CLOSURE_DOC_RECONCILIATION / PRE_COMMIT_CUSTODY
-PK4_TECHNICAL_STATUS: CLOSED
-REPOSITORY_DELIVERY_STATUS: UNCOMMITTED / UNPUSHED
-DOCS_RECONCILIATION: COMPLETE
-COMMIT_PUSH: NOT AUTHORIZED
-DEPLOY: NOT REQUIRED / NOT AUTHORIZED
+CURRENT_PHASE: Post PK-5 Closure / Roadmap Re-entry
+CURRENT_GATE: POST_PK5_READ_ONLY_ROADMAP_REENTRY
+PK5_STATUS: CLOSED / DELIVERED / repository delivery complete
+PK5_FEATURE_COMMIT: ef90d4ec4cce1decfed6e4809849fb9f991a2412
+PK5_FEATURE_SUBJECT: feat(pos): add offline read-side truth
+HEAD: ef90d4ec4cce1decfed6e4809849fb9f991a2412
+origin/main: ef90d4ec4cce1decfed6e4809849fb9f991a2412
+live remote main: ef90d4ec4cce1decfed6e4809849fb9f991a2412
+CODEX: PASS_WITH_NOTES
+CORRECTED_UAT: PASS_WITH_NOTES
+AGY: PASS_WITH_NOTES
+TARGETED: 14/186 PASS
+ROOT: 130/2486 PASS
+TYPECHECK_BUILD_DIFF_CHECK: PASS
+B16_B18: accepted harness limitations under Gemini Option A; not product defects; no runtime reproduction required before closure
+PAYMENTMODAL_BOUNDARY: CLOSED
+DEPLOY: NOT REQUIRED / NOT AUTHORIZED / NOT PERFORMED
 PRODUCTION_ACCESS: NOT AUTHORIZED / none performed
-ROADMAP_LABEL: PK-4 — Operator Sync Center
+ROADMAP_LABEL: PK-5 — Offline Read-Side Truth
 PRIORITY: P1/P2
 LIVE_WORKFLOW_AUTHORITY: docs/agent-workflow/STATE.md
-PRIOR_DEPENDENCY: PK-3 CLOSED
+PK4_STATUS: CLOSED / DELIVERED
+PK4_FEATURE_COMMIT: d27850abe80bac8b055f08206f17c36fda29e352
+PK4_DOCS_CLOSURE_COMMIT: 6a82fefa7238cc1eed8e9ce0790a2e9bb0913ad0
+PRIOR_DEPENDENCY: PK-4 CLOSED / DELIVERED
 PK3_STATUS: CLOSED
 PK3_FEATURE_SHA: ec7cf8beb52d56c1c412aa12c843cbd1151f687a
 PK3_CLOSURE_DOCS_COMMIT: 5e6675758c4ce95b00620aaf202c79f8b134be60
-PK4_GEMINI_DECISION: TWINPET-PK4-FINAL-EVIDENCE-ADJUDICATION-CLOSURE-GEMINI-001
-PK4_IMPLEMENTATION_ACCEPTED: YES
-PK4_TECHNICAL_CLOSURE: YES
-D1: A
-D2: A
-GROK_IMPLEMENTATION: PASS_WITH_NOTES
-CODEX_IMPLEMENTATION_REVIEW: PASS_WITH_NOTES
-AGY_UI_REVIEW: PASS_WITH_NOTES
-LOCAL_UAT: PASS_WITH_NOTES
-UAT_RUN_ID: PK4-UAT-20260823T112638Z
-AGY_EVIDENCE_RECONCILIATION: PASS_WITH_NOTES
-U8_CORRECTED_RESULT: PASS
-U10_CLASSIFICATION: NOT_REPRODUCIBLE_WITHOUT_UNAUTHORIZED_EDIT
-ONRETRY_EXCEPTION_CLOSURE_DECISION: ACCEPT_NONBLOCKING_NOTE
-PRODUCTION_HITS: 0
-NON_LOCAL_FUNCTION_HITS: 0
-FURTHER_CODE_REMEDIATION_REQUIRED: NO
-FURTHER_CODEX_IMPLEMENTATION_REVIEW_REQUIRED: NO
-FURTHER_AGY_UI_REVIEW_REQUIRED: NO
-FURTHER_LOCAL_UAT_REQUIRED: NO
 PACKET_5_STATUS: CLOSED
 PACKET5_TECHNICAL_ADJUDICATION: PASS_WITH_NOTES
 PACKET5_CLOSURE_COMMIT: 292d51ff5092283e07e1aed9dcc8ac76fedbd866
@@ -79,14 +75,13 @@ DEPLOYMENT: NOT_PERFORMED / NOT_AUTHORIZED
 PRODUCTION_ACCESS: NOT_AUTHORIZED
 STASH_OPERATION_ALLOWED: NO
 PACKET5_REOPEN_ALLOWED: NO
-PK4_FEATURE_COMMIT: NONE
 PK2C_IMPLEMENTATION: NOT_AUTHORIZED
-PK2D: RECORD_ONLY / NOT_AUTHORIZED
-PK6: NOT_PARALLEL_AUTHORIZED
+PK2D: RECORD_ONLY / NOT ACTIVE / NOT AUTHORIZED
+PK6: NEXT ELIGIBLE ROADMAP PACKET / NOT ACTIVE / NOT AUTHORIZED
 NEXT_IMPLEMENTATION: NOT_AUTHORIZED
 ```
 
-**CURRENT_STATUS:** PK-4 is **technically CLOSED**. Gemini `TWINPET-PK4-FINAL-EVIDENCE-ADJUDICATION-CLOSURE-GEMINI-001` accepted the implementation, Codex review, AGY UI, local UAT, evidence reconciliation, and production isolation. Feature code is implemented + reviewed + UAT accepted, but still **UNSTAGED / UNCOMMITTED / UNPUSHED** on HEAD `5e6675758c4ce95b00620aaf202c79f8b134be60` (`docs: close pk-3 unified sync recovery`). This seven-doc pass records that technical closure. It does **not** authorize commit, push, deploy, PK-2D, or PK-6. PK-3 remains **CLOSED** at `ec7cf8beb52d56c1c412aa12c843cbd1151f687a`. Packet 5 remains **CLOSED** at `292d51ff5092283e07e1aed9dcc8ac76fedbd866`.
+**CURRENT_STATUS:** PK-5 is **CLOSED / DELIVERED / repository delivery complete** at `ef90d4ec4cce1decfed6e4809849fb9f991a2412` (`feat(pos): add offline read-side truth`). Codex `PASS_WITH_NOTES`. Corrected UAT `PASS_WITH_NOTES`. AGY `PASS_WITH_NOTES`. Targeted `14/186 PASS`. Root `130/2486 PASS`. Typecheck / build / `git diff --check` PASS. B16/B18 are accepted harness limitations under Gemini Option A; not product defects; no runtime reproduction required before closure. PaymentModal boundary remains **CLOSED**. PK-4 is historical **CLOSED / DELIVERED** at `d27850abe80bac8b055f08206f17c36fda29e352` with docs closure `6a82fefa7238cc1eed8e9ce0790a2e9bb0913ad0`. PK-3 remains **CLOSED** at `ec7cf8beb52d56c1c412aa12c843cbd1151f687a`. Packet 5 remains **CLOSED** at `292d51ff5092283e07e1aed9dcc8ac76fedbd866`. This seven-doc pass records that delivered PK-5 state. It does **not** declare PK-5 full packet closure. It does **not** authorize PK-6, PK-2D, deploy, or next implementation.
 
 **Preserved closed-gate markers (verbatim, do not casually reopen):**
 
@@ -108,11 +103,13 @@ PACKET_5_STATUS: CLOSED
 PACKET5_REOPEN_ALLOWED: NO
 PK3_STATUS: CLOSED
 PK3_PRODUCT_IMPLEMENTATION_CLOSED: YES
-PK4_TECHNICAL_STATUS: CLOSED
-PK4_FEATURE_COMMIT: NONE
+PK5_STATUS: CLOSED
+PK5_FEATURE_COMMIT: ef90d4ec4cce1decfed6e4809849fb9f991a2412
+PK4_STATUS: CLOSED / DELIVERED
+PK4_FEATURE_COMMIT: d27850abe80bac8b055f08206f17c36fda29e352
 PK2C_IMPLEMENTATION_AUTHORIZED: NO
 PK2D_IMPLEMENTATION_AUTHORIZED: NO
-PK6_PARALLEL_AUTHORIZED: NO
+PK6_IMPLEMENTATION_AUTHORIZED: NO
 ```
 
 **Claim boundaries (must not overclaim):**
@@ -122,25 +119,41 @@ PK6_PARALLEL_AUTHORIZED: NO
 - `CROSS_TAB_MUTUAL_EXCLUSION_CLAIM: NO`
 - `AI2_ABSENCE_SOUNDNESS_SCOPE: SINGLE_TAB_PER_CART_KEY`
 - `ENTRY_STORE_RELATION: PARALLEL_FOR_RECORD_FRESHNESS_ONLY`
-- Do not claim crash-resume completeness, reconnect as server confirmation, production deployed, Packet 5 reopened, PK-3 reopened, PK-4 committed/pushed/shipped to main, onRetry exception fixed, PK-2D activated, or PK-6 parallel-authorized.
+- Do not claim crash-resume completeness, reconnect as server confirmation, production deployed, Packet 5 reopened, PK-3 reopened, PK-5 full packet closure declared, PK-2D activated, or PK-6 authorized/started.
 
-**NEXT_WORKFLOW_ACTION:** Return to ChatGPT for exact final combined dirty-set adjudication and Gemini commit/push authorization routing. Do **not** stage. Do **not** commit. Do **not** push. Do **not** deploy. Do **not** reopen Packet 5 or PK-3. Do **not** activate PK-2D or PK-6.
+**NEXT_WORKFLOW_ACTION:** Return to ChatGPT for PK-5 final closure routing. Do **not** deploy. Do **not** reopen Packet 5, PK-3, or PK-4 implementation. Do **not** activate PK-2D or PK-6. Do **not** start next implementation.
 
 **Next implementation action:** NONE — NOT AUTHORIZED.
 
 Manual workflow remains active. `agentchattr` was not used as the executor for this phase.
 
-**Repository baseline:** branch `main`. HEAD = origin/main = live remote main = `5e6675758c4ce95b00620aaf202c79f8b134be60`. PK-4 implementation remains unstaged on that HEAD. Stash remains `stash@{0}` = `7d03cfec7ba52ff7e25b7e175ca190efc258d874`. Protected stash was not touched.
+**Repository baseline:** branch `main`. HEAD = origin/main = live remote main = `ef90d4ec4cce1decfed6e4809849fb9f991a2412`. Stash remains `stash@{0}` = `7d03cfec7ba52ff7e25b7e175ca190efc258d874`. Protected stash was not touched.
 
-### PK-4 Operator Sync Center (TECHNICAL CLOSED / UNCOMMITTED)
+### PK-5 Offline Read-Side Truth (CLOSED / DELIVERED)
 
-- **Status:** `PK4_TECHNICAL_STATUS: CLOSED`. Repository delivery `UNCOMMITTED / UNPUSHED`.
-- **HEAD (unchanged):** `5e6675758c4ce95b00620aaf202c79f8b134be60` (`docs: close pk-3 unified sync recovery`)
-- **Feature commit:** **NONE** — do not invent a future SHA
+- **Status:** `PK5_STATUS: CLOSED / DELIVERED / repository delivery complete`.
+- **Feature SHA:** `ef90d4ec4cce1decfed6e4809849fb9f991a2412` (`feat(pos): add offline read-side truth`)
+- **Parent:** `6a82fefa7238cc1eed8e9ce0790a2e9bb0913ad0` (`docs: close pk-4 operator sync center`)
+- **Codex:** `PASS_WITH_NOTES` (RC-4 later-retirement race re-review closed RC-4)
+- **Corrected UAT:** `PASS_WITH_NOTES`
+- **AGY UI:** `PASS_WITH_NOTES`
+- **Targeted tests:** 14 files / 186 tests PASS
+- **Root tests:** 130 files / 2486 tests PASS
+- **Typecheck / build / `git diff --check`:** PASS
+- **B16/B18:** accepted harness limitations under Gemini Option A; not product defects; no runtime reproduction required before closure
+- **PaymentModal boundary:** CLOSED
+- **Deployment:** not required / not authorized / not performed
+- **Do not declare PK-5 full packet closure in this docs gate.** PK-6 remains next eligible / not active / not authorized. PK-2D remains record-only / not active / not authorized.
+
+### PK-4 Operator Sync Center (HISTORICAL — CLOSED / DELIVERED)
+
+- **Status:** `PK4_STATUS: CLOSED / DELIVERED`. Historical. Do not reopen implementation.
+- **Feature SHA:** `d27850abe80bac8b055f08206f17c36fda29e352` (`feat(pos): add operator sync center`)
+- **Docs closure:** `6a82fefa7238cc1eed8e9ce0790a2e9bb0913ad0` (`docs: close pk-4 operator sync center`)
 - **Gemini:** `TWINPET-PK4-FINAL-EVIDENCE-ADJUDICATION-CLOSURE-GEMINI-001`
 - **D1 = A:** no terminal void revival; terminal void remains read-only attention / manual review
 - **D2 = A:** `/shift-close-review` remains route-only; contextual Sync Center link when relevant
-- **Surface:** 8 new production + 5 modified production + 15 tests = 28 implementation/test paths, still unstaged
+- **Surface:** 8 new production + 5 modified production + 15 tests = 28 implementation/test paths, later committed at `d27850a`
 - **Grok implementation:** `PASS_WITH_NOTES` (15 files / 122 tests PASS; closed 8 files / 148 tests PASS; broad 119 files / 2419 tests PASS; typecheck PASS; build PASS; `git diff --check` PASS; production `indexedDB.open` count = 8)
 - **Codex implementation review:** `PASS_WITH_NOTES`; blockers 0; request changes 0; all axes PASS
 - **AGY UI:** `PASS_WITH_NOTES`; 320 / 768 / 1080 PASS; D1 UI PASS; D2 UI PASS; accessibility smoke PASS; AppShell regression PASS; refusal Alert severity PASS
@@ -152,7 +165,7 @@ Manual workflow remains active. `agentchattr` was not used as the executor for t
 - **Production isolation:** `PRODUCTION_HITS = 0`; `NON_LOCAL_FUNCTION_HITS = 0`; deployments 0; production data mutations 0
 - **Further code / Codex / AGY / UAT:** `NO`
 - **Deployment:** not required / not authorized / not performed
-- **Do not claim committed or pushed.** Do not activate PK-2D or PK-6.
+- **Historical delivery complete at `d27850a` / `6a82fef`.** Do not reopen PK-4 implementation. Do not activate PK-2D or PK-6.
 
 ### PK-3 Unified Sync Orchestrator and Reconnect Recovery (CLOSED)
 
@@ -165,7 +178,7 @@ Manual workflow remains active. `agentchattr` was not used as the executor for t
 - **Final runtime UAT:** U1–U7 `PASS`. Production hits: `0`. Non-local function hits: `0`.
 - **Additional UAT / Codex / AGY:** `NO`
 - **Deployment:** not required / not authorized / not performed
-- **Do not reopen.** PK-3 closed product implementation. PK-4 later completed technically on top of the PK-3 docs commit `5e6675758` and remains UNCOMMITTED.
+- **Do not reopen.** PK-3 closed product implementation. PK-4 later delivered at `d27850a` / `6a82fef`. PK-5 later delivered at `ef90d4e`.
 
 ### P1 Offline / Sync Resiliency — Packet 5 (CLOSED)
 
@@ -475,7 +488,8 @@ Non-blocking this-terminal pending-sync warning; close remains enabled.
 
 - **Packet 5 (full closure)** — `292d51ff` (`docs: close packet 5 offline sync resiliency`; `PASS_WITH_NOTES`; R4 `36 / 36 PASS`)
 - **PK-3 Unified Sync Orchestrator** — `ec7cf8b` (`feat(pos): add unified offline sync recovery`; `CLOSED` / `PASS`; U1–U7 `PASS`; docs `5e6675758`)
-- **PK-4 Operator Sync Center** — technically `CLOSED` / `UNCOMMITTED / UNPUSHED` on HEAD `5e6675758`
+- **PK-5 Offline Read-Side Truth** — `CLOSED / DELIVERED` at `ef90d4e` (`feat(pos): add offline read-side truth`)
+- **PK-4 Operator Sync Center** — `CLOSED / DELIVERED` at `d27850a` / docs `6a82fef`
 - **Application Integration AI-2** — `c45f5a3` (`CLOSED_WITH_NOTES`; tracker `8d6b174`)
 - **Application Integration AI-1** — `4298c14` (`CLOSED_WITH_NOTES`; tracker `17461473`; STATE `9f97d7f`)
 - **Callable receipt timestamps** — `f8b67c1` (`fix(receipt): normalize callable receipt timestamps`)
@@ -497,23 +511,26 @@ Non-blocking this-terminal pending-sync warning; close remains enabled.
 
 ### Deferred / next gate
 
-1. **PK-4 — technically `CLOSED`** on uncommitted 28-path surface atop HEAD `5e6675758c4ce95b00620aaf202c79f8b134be60`. Gemini `PK4_TECHNICAL_CLOSURE: YES`. Commit/push **NOT AUTHORIZED**.
-2. **PK-3 — `CLOSED`** at `ec7cf8beb52d56c1c412aa12c843cbd1151f687a`; docs commit `5e6675758`. Technical adjudication `PASS`. U1–U7 `PASS`. Do not reopen.
-3. **Packet 5 — `CLOSED`** at `292d51ff5092283e07e1aed9dcc8ac76fedbd866`. Technical adjudication `PASS_WITH_NOTES`. Do not reopen.
-4. **AI-2 — `CLOSED_WITH_NOTES`** at `c45f5a3`. Historical. Do not reopen.
-5. **AI-1 — `CLOSED_WITH_NOTES`** at `4298c14`. Historical. Do not reopen.
-6. **R7-6 implementation — `CLOSED`** at `ac29935d3fece70d50a6fe0d318ad2d4d7417305`. Historical. Do not reopen.
-7. **D3 — `CLOSED`** at `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab`. Do not reopen (`D3_REOPEN_REQUIRED: NO`).
-8. **PK-2A Boot / Session Gating — `CLOSED_WITH_NOTES`** at `79ba840ab6e01ee1a5fff6c0094104c25d754668`. Historical. Do not reopen.
-9. **PK-1 Offline Shift Session — `CLOSED_WITH_NOTES`** at `513b198a30a1af72151ab6a8c0976799871529b8`. Do not reopen.
-10. **NEXT_WORKFLOW_ACTION:** Return to ChatGPT for exact final combined dirty-set adjudication and Gemini commit/push authorization routing. Do **not** stage. Do **not** commit. Do **not** push. Do **not** deploy. Do **not** activate PK-2D or PK-6.
-11. **Standing boundaries (carried forward):**
+1. **PK-5 — `CLOSED / DELIVERED`** at `ef90d4ec4cce1decfed6e4809849fb9f991a2412`. Codex / corrected UAT / AGY `PASS_WITH_NOTES`. Targeted `14/186 PASS`. Root `130/2486 PASS`. B16/B18 accepted harness limitations. Full packet closure routing is the next workflow, not this docs gate.
+2. **PK-4 — `CLOSED / DELIVERED`** at `d27850abe80bac8b055f08206f17c36fda29e352`; docs `6a82fefa7238cc1eed8e9ce0790a2e9bb0913ad0`. Do not reopen.
+3. **PK-3 — `CLOSED`** at `ec7cf8beb52d56c1c412aa12c843cbd1151f687a`; docs commit `5e6675758`. Technical adjudication `PASS`. U1–U7 `PASS`. Do not reopen.
+4. **Packet 5 — `CLOSED`** at `292d51ff5092283e07e1aed9dcc8ac76fedbd866`. Technical adjudication `PASS_WITH_NOTES`. Do not reopen.
+5. **AI-2 — `CLOSED_WITH_NOTES`** at `c45f5a3`. Historical. Do not reopen.
+6. **AI-1 — `CLOSED_WITH_NOTES`** at `4298c14`. Historical. Do not reopen.
+7. **R7-6 implementation — `CLOSED`** at `ac29935d3fece70d50a6fe0d318ad2d4d7417305`. Historical. Do not reopen.
+8. **D3 — `CLOSED`** at `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab`. Do not reopen (`D3_REOPEN_REQUIRED: NO`).
+9. **PK-2A Boot / Session Gating — `CLOSED_WITH_NOTES`** at `79ba840ab6e01ee1a5fff6c0094104c25d754668`. Historical. Do not reopen.
+10. **PK-1 Offline Shift Session — `CLOSED_WITH_NOTES`** at `513b198a30a1af72151ab6a8c0976799871529b8`. Do not reopen.
+11. **NEXT_WORKFLOW_ACTION:** Return to ChatGPT for PK-5 final closure routing. Do **not** deploy. Do **not** activate PK-2D or PK-6. Do **not** start next implementation. Do **not** declare PK-5 full packet closure in this docs gate.
+12. **Standing boundaries (carried forward):**
    - Packet 5 — **CLOSED**; do not reopen
    - PK-3 — **CLOSED**; do not reopen
-   - PK-4 technical — **CLOSED**; commit/push — **NOT AUTHORIZED**
-   - PK-2C / PK-2D / PK-5 / PK-6 implementation — **NOT AUTHORIZED**
-   - PK-2D — **RECORD_ONLY / NOT AUTHORIZED**
-   - PK-6 — **NOT PARALLEL-AUTHORIZED**
+   - PK-4 — **CLOSED / DELIVERED**; do not reopen
+   - PK-5 — **CLOSED / DELIVERED**; full packet closure routing is next workflow, not this docs gate
+   - PK-2C implementation — **NOT AUTHORIZED**
+   - PK-2D — **RECORD_ONLY / NOT ACTIVE / NOT AUTHORIZED**
+   - PK-6 — **NEXT ELIGIBLE ROADMAP PACKET / NOT ACTIVE / NOT AUTHORIZED**
+   - PaymentModal boundary — **CLOSED**
    - Live workflow authority — `docs/agent-workflow/STATE.md`
    - Row28 / Row30 / D1 / D3 / Row32 reopen — **NO**
    - ENTRY_STORE writer / initializer retirement for R7-6 — **NO**
@@ -527,8 +544,8 @@ Non-blocking this-terminal pending-sync warning; close remains enabled.
    - global Flowbite focus fix (A-1) — **NOT AUTHORIZED**
    - PROV implementation / E-2 POSIX evidence — **NOT AUTHORIZED** / `IDENTIFIED_BUT_HELD`
    - no `shifts.expected*` mutation; no FIFO/stock/credit/settlement writes; `stash@{0}` untouched
-12. **Passive observation** — read-only observation on **natural traffic only** remains authorized in parallel; no agent-triggered activity is authorized.
-13. Do not automatically stage, commit, push, deploy, or start PK-2D / PK-6. Future commit/push requires a separate authorized gate.
+13. **Passive observation** — read-only observation on **natural traffic only** remains authorized in parallel; no agent-triggered activity is authorized.
+14. Do not automatically deploy or start PK-2D / PK-6. Next implementation remains **NOT AUTHORIZED**.
 
 ### Future Phase โ€” True Standalone (Desktop & Native Mobile) (`TRUE-STANDALONE`)
 
