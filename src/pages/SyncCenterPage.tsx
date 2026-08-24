@@ -41,6 +41,11 @@ import {
 import { useSyncCenterState } from '../hooks/pos/useSyncCenterState';
 import { getBranchLabel } from '../lib/branches';
 
+/** Transport-offline hint only — not server reachability or confirmation. */
+const OFFLINE_NO_REQUEST_COPY =
+  'ออฟไลน์ — ส่งหรือตรวจไม่ได้ตอนนี้ ไม่มีคำขอถูกส่ง';
+const OFFLINE_NO_REQUEST_COPY_ID = 'sync-center-offline-no-request';
+
 function formatHm(ms: number | null): string {
   if (ms == null) return '—';
   return new Date(ms).toLocaleTimeString('th-TH', {
@@ -68,17 +73,26 @@ function ItemRowActions(props: {
   row: SyncCenterRow;
   role: 'admin' | 'manager' | 'staff';
   busyId: string | null;
+  isOnline: boolean;
   onRetry: (row: SyncCenterRow) => void;
 }) {
-  const { row, role, busyId, onRetry } = props;
+  const { row, role, busyId, isOnline, onRetry } = props;
   if (row.deviceId === null && row.channel !== 'offline_reversal') {
     return <span className="text-xs text-[var(--text-muted)]">ไม่ทราบเครื่อง</span>;
   }
   if (row.channel === 'void_intent' && row.state === 'attention') {
+    const canOpenRegistry = role === 'manager' || role === 'admin';
     return (
-      <span className="text-xs text-[var(--text-secondary)]">
-        หยุดส่งแล้ว — ต้องให้เจ้าหน้าที่ตรวจสอบ
-      </span>
+      <div className="flex min-w-0 flex-col gap-1">
+        <span className="text-xs text-[var(--text-secondary)]">
+          หยุดส่งแล้ว — ต้องให้เจ้าหน้าที่ตรวจสอบ
+        </span>
+        {canOpenRegistry && (
+          <Link to="/manual-review" className="text-xs font-medium text-[var(--p600)] underline break-words">
+            ดูคำขอยกเลิกบิลที่ไม่ถูกส่ง
+          </Link>
+        )}
+      </div>
     );
   }
   if (row.attemptCeilingReached) {
@@ -86,13 +100,18 @@ function ItemRowActions(props: {
   }
   if (row.actionable.includes('item_retry_now')) {
     const pending = busyId === row.id;
+    const offline = !isOnline;
     return (
       <Button
         size="xs"
         color="purple"
-        disabled={pending}
-        onClick={() => onRetry(row)}
-        title={pending ? 'กำลังส่งคำขอนี้' : 'ลองส่งรายการนี้ตอนนี้'}
+        disabled={pending || offline}
+        onClick={() => {
+          if (!isOnline || pending) return;
+          onRetry(row);
+        }}
+        title={offline ? OFFLINE_NO_REQUEST_COPY : pending ? 'กำลังส่งคำขอนี้' : 'ลองส่งรายการนี้ตอนนี้'}
+        aria-describedby={offline ? OFFLINE_NO_REQUEST_COPY_ID : undefined}
       >
         {pending ? 'กำลังส่ง…' : 'ลองส่งรายการนี้ตอนนี้'}
       </Button>
@@ -129,9 +148,10 @@ function RowCard(props: {
   scopeDeviceId: string;
   role: 'admin' | 'manager' | 'staff';
   busyId: string | null;
+  isOnline: boolean;
   onRetry: (row: SyncCenterRow) => void;
 }) {
-  const { row, scopeDeviceId, role, busyId, onRetry } = props;
+  const { row, scopeDeviceId, role, busyId, isOnline, onRetry } = props;
   return (
     <Card className="min-w-0">
       <div className="flex flex-col gap-2 text-sm">
@@ -149,7 +169,7 @@ function RowCard(props: {
           {row.attempts != null ? ` · ลองแล้ว ${row.attempts}/8` : ''}
           {row.lastErrorAtMs != null ? ` · ผิดพลาดล่าสุด ${formatHm(row.lastErrorAtMs)}` : ''}
         </div>
-        <ItemRowActions row={row} role={role} busyId={busyId} onRetry={onRetry} />
+        <ItemRowActions row={row} role={role} busyId={busyId} isOnline={isOnline} onRetry={onRetry} />
       </div>
     </Card>
   );
@@ -160,6 +180,7 @@ function RowTable(props: {
   scopeDeviceId: string;
   role: 'admin' | 'manager' | 'staff';
   busyId: string | null;
+  isOnline: boolean;
   onRetry: (row: SyncCenterRow) => void;
 }) {
   return (
@@ -199,6 +220,7 @@ function RowTable(props: {
                   row={row}
                   role={props.role}
                   busyId={props.busyId}
+                  isOnline={props.isOnline}
                   onRetry={props.onRetry}
                 />
               </TableCell>
@@ -215,6 +237,7 @@ function SectionList(props: {
   scopeDeviceId: string;
   role: 'admin' | 'manager' | 'staff';
   busyId: string | null;
+  isOnline: boolean;
   onRetry: (row: SyncCenterRow) => void;
 }) {
   return (
@@ -227,6 +250,7 @@ function SectionList(props: {
             scopeDeviceId={props.scopeDeviceId}
             role={props.role}
             busyId={props.busyId}
+            isOnline={props.isOnline}
             onRetry={props.onRetry}
           />
         ))}
@@ -374,9 +398,12 @@ export default function SyncCenterPage() {
         className="flex min-w-0 flex-col gap-3 rounded-lg border border-[var(--border)] bg-white p-3 md:flex-row md:flex-wrap md:items-center"
       >
         {!isOnline && (
-          <span className="inline-flex items-center gap-1 text-sm text-[var(--warn)]">
+          <span
+            id={OFFLINE_NO_REQUEST_COPY_ID}
+            className="inline-flex min-w-0 items-center gap-1 text-sm text-[var(--warn)]"
+          >
             <i className="ti ti-wifi-off" aria-hidden="true" />
-            ออฟไลน์ — ขายต่อได้ ข้อมูลถูกบันทึกไว้ในเครื่อง
+            {OFFLINE_NO_REQUEST_COPY}
           </span>
         )}
         <span>รอส่ง {agg.unifiedPending}</span>
@@ -395,9 +422,19 @@ export default function SyncCenterPage() {
         )}
         <Button
           color="purple"
-          disabled={isBusy}
-          onClick={() => void onResweep()}
-          title={isBusy ? 'กำลังตรวจสอบอยู่' : 'ตรวจสอบและส่งใหม่ทั้งหมด'}
+          disabled={isBusy || !isOnline}
+          onClick={() => {
+            if (!isOnline || isBusy) return;
+            void onResweep();
+          }}
+          title={
+            !isOnline
+              ? OFFLINE_NO_REQUEST_COPY
+              : isBusy
+                ? 'กำลังตรวจสอบอยู่'
+                : 'ตรวจสอบและส่งใหม่ทั้งหมด'
+          }
+          aria-describedby={!isOnline ? OFFLINE_NO_REQUEST_COPY_ID : undefined}
         >
           ตรวจสอบและส่งใหม่ทั้งหมด
         </Button>
@@ -475,6 +512,7 @@ export default function SyncCenterPage() {
               scopeDeviceId={agg.scopeDeviceId}
               role={actor.role}
               busyId={busyId}
+              isOnline={isOnline}
               onRetry={(row) => void onRetry(row)}
             />
           )}
@@ -489,6 +527,7 @@ export default function SyncCenterPage() {
               scopeDeviceId={agg.scopeDeviceId}
               role={actor.role}
               busyId={busyId}
+              isOnline={isOnline}
               onRetry={(row) => void onRetry(row)}
             />
           )}
@@ -512,6 +551,7 @@ export default function SyncCenterPage() {
               scopeDeviceId={agg.scopeDeviceId}
               role={actor.role}
               busyId={busyId}
+              isOnline={isOnline}
               onRetry={(row) => void onRetry(row)}
             />
           )

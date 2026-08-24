@@ -247,4 +247,67 @@ describe('SyncCenterPage', () => {
       true,
     );
   });
+
+  it('offline disables global resweep and item retry, shows no-request copy, and does not invoke handlers', () => {
+    const retryItem = vi.fn();
+    const resweep = vi.fn();
+    const agg = buildSyncCenterAggregate(emptyRead(), NOW);
+    agg.rows = [
+      row({
+        channel: 'void_intent',
+        id: 'v1',
+        state: 'waiting_retry',
+        actionable: ['item_retry_now'],
+        reasonTh: 'รอส่งใหม่',
+      }),
+      row({
+        channel: 'void_intent',
+        id: 'term',
+        state: 'attention',
+        reasonCode: 'terminal',
+        reasonTh: VOID_TERMINAL_REASON_TH.authority_refused,
+      }),
+      row({
+        channel: 'offline_reversal',
+        id: 'mr',
+        state: 'attention',
+        reasonCode: 'manual_review_required',
+        actionable: ['open_manual_review'],
+      }),
+    ];
+    agg.unifiedPending = 1;
+    agg.unifiedAttention = 2;
+    hook.current = fixture({ isOnline: false, retryItem, resweep }, { status: 'scoped', aggregate: agg });
+    renderPage();
+
+    expect(screen.getAllByText(VOID_TERMINAL_REASON_TH.authority_refused).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('รอส่งใหม่').length).toBeGreaterThan(0);
+    expect(screen.getByText('ออฟไลน์ — ส่งหรือตรวจไม่ได้ตอนนี้ ไม่มีคำขอถูกส่ง')).toBeTruthy();
+
+    const resweepButton = screen.getByRole('button', { name: 'ตรวจสอบและส่งใหม่ทั้งหมด' });
+    expect(resweepButton).toHaveProperty('disabled', true);
+    resweepButton.click();
+    expect(resweep).not.toHaveBeenCalled();
+
+    const retryButtons = screen.getAllByRole('button', { name: 'ลองส่งรายการนี้ตอนนี้' });
+    expect(retryButtons.every((b) => (b as HTMLButtonElement).disabled)).toBe(true);
+    retryButtons.forEach((b) => b.click());
+    expect(retryItem).not.toHaveBeenCalled();
+
+    expect(
+      screen.getAllByRole('link', { name: 'ดูคำขอยกเลิกบิลที่ไม่ถูกส่ง' }).some(
+        (a) => a.getAttribute('href') === '/manual-review',
+      ),
+    ).toBe(true);
+    expect(
+      screen.getAllByRole('link', { name: 'ตรวจสอบด้วยตนเอง' }).some(
+        (a) => a.getAttribute('href') === '/manual-review',
+      ),
+    ).toBe(true);
+  });
+
+  it('offline view and navigation do not call Manual Review resolver APIs', () => {
+    expect(pageSource).not.toContain('resolveManualReview');
+    expect(pageSource).not.toContain('callRetryReconcile');
+  });
 });

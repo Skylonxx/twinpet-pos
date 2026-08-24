@@ -184,4 +184,51 @@ describe('SyncCenterPage a11y / responsive', () => {
     expect(buttons.length).toBeGreaterThan(1);
     expect(buttons.every((b) => !(b as HTMLButtonElement).disabled)).toBe(true);
   });
+
+  it('offline retry/resweep is semantically disabled with a text reason, not colour alone', () => {
+    const aggregate = buildSyncCenterAggregate(emptyRead(), NOW);
+    aggregate.rows = [
+      row({
+        channel: 'void_intent',
+        id: 'v1',
+        state: 'waiting_retry',
+        actionable: ['item_retry_now'],
+      }),
+      row({
+        channel: 'void_intent',
+        id: 't1',
+        state: 'attention',
+        reasonCode: 'terminal',
+        reasonTh: 'เซิร์ฟเวอร์ปฏิเสธ',
+      }),
+    ];
+    aggregate.unifiedPending = 1;
+    aggregate.unifiedAttention = 1;
+    hook.current = {
+      view: { status: 'scoped', aggregate },
+      status: 'ready',
+      refresh: vi.fn(),
+      isBusy: false,
+      isOnline: false,
+      scope: scopeA(),
+      actor: { role: 'manager' },
+      retryItem: vi.fn(),
+      resweep: vi.fn(),
+    };
+    const { container } = render(createElement(MemoryRouter, null, createElement(SyncCenterPage)));
+    const resweep = screen.getByRole('button', { name: 'ตรวจสอบและส่งใหม่ทั้งหมด' });
+    expect(resweep).toHaveProperty('disabled', true);
+    expect(resweep.getAttribute('title')).toContain('ออฟไลน์');
+    expect(resweep.getAttribute('aria-describedby')).toBe('sync-center-offline-no-request');
+    expect(screen.getByText('ออฟไลน์ — ส่งหรือตรวจไม่ได้ตอนนี้ ไม่มีคำขอถูกส่ง')).toBeTruthy();
+    expect(document.querySelector('.ti-wifi-off')).toBeTruthy();
+    const retries = screen.getAllByRole('button', { name: 'ลองส่งรายการนี้ตอนนี้' });
+    expect(retries.every((b) => (b as HTMLButtonElement).disabled)).toBe(true);
+    expect(retries.every((b) => b.getAttribute('aria-describedby') === 'sync-center-offline-no-request')).toBe(true);
+    expect(resweep.textContent).toContain('ตรวจสอบและส่งใหม่ทั้งหมด');
+    expect(container.querySelector('[class*="overflow-x-hidden"]')).toBeTruthy();
+    expect(container.querySelector('[class*="min-w-0"]')).toBeTruthy();
+    expect(pageSource).toContain('md:hidden');
+    expect(pageSource).toContain('overflow-x-auto');
+  });
 });

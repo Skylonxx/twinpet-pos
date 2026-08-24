@@ -205,4 +205,40 @@ describe('SyncCenterPage authority rendering', () => {
     expect(screen.queryByRole('button', { name: 'ลองส่งรายการนี้ตอนนี้' })).toBeNull();
     expect(screen.getAllByText('ระบบจะไม่ลองส่งรายการนี้อีก').length).toBeGreaterThan(0);
   });
+
+  it('manager and admin get a contextual terminal-void manual-review link; staff does not', () => {
+    const rows = [
+      row({
+        channel: 'void_intent',
+        id: 'term-refused',
+        state: 'attention',
+        reasonCode: 'terminal',
+        reasonTh: 'เซิร์ฟเวอร์ปฏิเสธ',
+        actionable: [],
+      }),
+      row({
+        channel: 'void_intent',
+        id: 'term-mismatch',
+        state: 'attention',
+        reasonCode: 'terminal',
+        reasonTh: 'พนักงานผู้ขอไม่ตรงกับรอบปัจจุบัน',
+        actionable: [],
+      }),
+    ];
+    for (const role of ['staff', 'manager', 'admin'] as const) {
+      cleanup();
+      renderWith(role, rows);
+      expect(screen.queryByRole('button', { name: 'ลองส่งรายการนี้ตอนนี้' })).toBeNull();
+      expect(screen.getAllByText('หยุดส่งแล้ว — ต้องให้เจ้าหน้าที่ตรวจสอบ').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('เซิร์ฟเวอร์ปฏิเสธ').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('พนักงานผู้ขอไม่ตรงกับรอบปัจจุบัน').length).toBeGreaterThan(0);
+      const links = screen.queryAllByRole('link', { name: 'ดูคำขอยกเลิกบิลที่ไม่ถูกส่ง' });
+      if (role === 'staff') {
+        expect(links.length).toBe(0);
+      } else {
+        expect(links.length).toBeGreaterThan(0);
+        expect(links.every((a) => a.getAttribute('href') === '/manual-review')).toBe(true);
+      }
+    }
+  });
 });
