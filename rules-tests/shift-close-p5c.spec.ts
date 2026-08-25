@@ -52,9 +52,27 @@ const staff = (staffId = 'staff1', branchId = BRANCH) => ({
   branchIds: [branchId],
   permissions: [],
 });
-const manager = (branchId = BRANCH) => ({ staffId: 'm1', role: 'manager', branchIds: [branchId], permissions: [] });
-const admin = (branchId = BRANCH) => ({ staffId: 'a1', role: 'admin', branchIds: [branchId], permissions: [] });
-const globalAdmin = () => ({ staffId: 'ga1', role: 'admin', branchIds: ['ALL'], permissions: [] });
+const manager = (branchId = BRANCH) => ({
+  staffId: 'm1',
+  role: 'manager',
+  branchIds: [branchId],
+  permissions: [],
+  authVersion: 0,
+});
+const admin = (branchId = BRANCH) => ({
+  staffId: 'a1',
+  role: 'admin',
+  branchIds: [branchId],
+  permissions: [],
+  authVersion: 0,
+});
+const globalAdmin = () => ({
+  staffId: 'ga1',
+  role: 'admin',
+  branchIds: ['ALL'],
+  permissions: [],
+  authVersion: 0,
+});
 
 let testEnv: RulesTestEnvironment;
 
@@ -76,6 +94,15 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await testEnv.clearFirestore();
+  // Privileged Packet-5 reads go through isManagerOrAdmin() → hasFreshAuthority().
+  // Staff tokens stay unfenced (no authVersion, no live users/staff1) so A3
+  // shifts create/update remain stale-reachable.
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    const live = { isActive: true, deletedAt: null, authVersion: 0 };
+    await setDoc(doc(ctx.firestore(), 'users', 'm1'), live);
+    await setDoc(doc(ctx.firestore(), 'users', 'a1'), live);
+    await setDoc(doc(ctx.firestore(), 'users', 'ga1'), live);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────

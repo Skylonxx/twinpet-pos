@@ -20,6 +20,7 @@ const staffWith = (perms: string[]) => ({
   role: 'staff',
   branchIds: [BRANCH],
   permissions: perms,
+  authVersion: 0,
 });
 
 let testEnv: RulesTestEnvironment;
@@ -52,6 +53,7 @@ beforeEach(async () => {
       total: 100,
       status: 'completed',
     });
+    await setDoc(doc(db, 'users', 'staff1'), { isActive: true, deletedAt: null, authVersion: 0 });
   });
 });
 

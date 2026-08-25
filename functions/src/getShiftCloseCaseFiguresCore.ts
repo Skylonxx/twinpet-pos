@@ -649,8 +649,10 @@ export function hasBranchAuthority(claims: CuratedAuthClaims, branchId: string):
 export function decideAuthorization(
   claims: CuratedAuthClaims | null,
   request: CuratedRequestView,
+  freshnessVerified: boolean,
 ): GetShiftCloseCaseFiguresResponse | null {
   if (claims === null) return DENIED;
+  if (freshnessVerified !== true) return DENIED;
   if (!hasBranchAuthority(claims, request.branchId)) return DENIED;
   return null;
 }

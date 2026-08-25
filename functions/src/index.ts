@@ -1,10 +1,17 @@
 import { getAuth } from 'firebase-admin/auth';
-import { FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp, type Firestore } from 'firebase-admin/firestore';
 import bcrypt from 'bcryptjs';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { setGlobalOptions } from 'firebase-functions/v2';
 import { db } from './db';
 import { FUNCTIONS_REGION } from './deployConfig';
+import {
+  COLLECTIONS,
+  isPrivilegedRole,
+  isUsableForLogin,
+  normalizeUsername,
+  readUserCredential,
+} from './credentialStore';
 
 setGlobalOptions({ region: FUNCTIONS_REGION });
 
@@ -70,6 +77,7 @@ export { resolveShiftCloseAlert } from './resolveShiftCloseAlert';
 // run only — no query, no index, no latest-evidence fallback, zero writes.
 export { getShiftCloseCaseFigures } from './getShiftCloseCaseFigures';
 export { getOrderReceipt } from './getOrderReceipt';
+export { setUserAccount } from './setUserAccount';
 
 type UserRole = 'admin' | 'manager' | 'staff';
 
@@ -113,7 +121,7 @@ type UserDoc = {
   firstName: string;
   lastName: string;
   username: string;
-  pin: string;
+  pin?: string;
   role: UserRole;
   branchIds: string[];
   permissions: {
@@ -124,10 +132,22 @@ type UserDoc = {
     canManageStaff: boolean;
   };
   isActive: boolean;
+  authVersion?: number;
   lastLoginAt: Timestamp | null;
   createdAt: Timestamp;
   updatedAt: Timestamp;
   deletedAt: Timestamp | null;
+};
+
+/** Fixed dummy bcrypt hash — never a real stored credential. */
+export const LOGIN_DUMMY_PIN_HASH =
+  '$2b$10$WCOTRHGYk1RxxHdHMy9.guo3rg259b4w/opYiC13GSmPmCmPJVYwO';
+
+export const GENERIC_LOGIN_DENIED = 'PIN ไม่ถูกต้องหรือไม่มีสิทธิ์สาขานี้';
+
+export type PinLoginIdentityOutcome = {
+  bcryptComparisons: number;
+  match: { user: UserDoc; id: string } | null;
 };
 
 type VerifyPinLoginRequest = {
@@ -140,8 +160,8 @@ type VerifyPinLoginRequest = {
 type SanitizedUser = Omit<UserDoc, 'pin'> & { id: string };
 
 function serializeUser(user: UserDoc, id: string): SanitizedUser {
-  const { pin, ...rest } = user;
-  void pin;
+  const { pin: _legacyPin, ...rest } = user;
+  void _legacyPin;
   const serialized = { ...rest, id: user.id ?? id } as Record<string, unknown>;
 
   for (const key of ['createdAt', 'updatedAt', 'lastLoginAt', 'deletedAt'] as const) {
@@ -174,6 +194,10 @@ async function pinMatches(storedHash: string | undefined, pin: string): Promise<
   }
 }
 
+async function dummyCompare(pin: string): Promise<void> {
+  await pinMatches(LOGIN_DUMMY_PIN_HASH, pin);
+}
+
 /**
  * Merge docs from two parallel Firestore queries, deduplicating by document ID.
  * This is needed because Firestore's array-contains cannot OR two values in one
@@ -193,74 +217,93 @@ function mergeDocs(
   return result;
 }
 
-async function findUserByPinInBranch(
+async function loadUsernameCandidates(
+  database: Firestore,
+  username: string,
+  branchId: string,
+): Promise<FirebaseFirestore.QueryDocumentSnapshot[]> {
+  const [branchSnap, globalSnap] = await Promise.all([
+    database.collection(COLLECTIONS.users)
+      .where('username', '==', username)
+      .where('branchIds', 'array-contains', branchId)
+      .where('isActive', '==', true)
+      .limit(2)
+      .get(),
+    database.collection(COLLECTIONS.users)
+      .where('username', '==', username)
+      .where('branchIds', 'array-contains', 'ALL')
+      .where('isActive', '==', true)
+      .limit(2)
+      .get(),
+  ]);
+  return mergeDocs(branchSnap, globalSnap).filter((docSnap) => {
+    const user = docSnap.data() as UserDoc;
+    return user.deletedAt == null;
+  });
+}
+
+async function verifyCanonicalPin(
+  database: Firestore,
+  userId: string,
+  pin: string,
+  role: UserRole,
+): Promise<boolean> {
+  const cred = await readUserCredential(database, userId);
+  if (!isUsableForLogin(cred)) {
+    await dummyCompare(pin);
+    return false;
+  }
+  const ok = await pinMatches(cred.pinHash, pin);
+  if (!ok) return false;
+  if (isPrivilegedRole(role) && cred.credentialState !== 'rotated_authoritative') {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Typed username/userId identity resolver. Zero or ambiguous candidates do
+ * exactly one dummy bcrypt compare and never select an identity. Exactly one
+ * candidate does exactly one real compare against userCredentials/{id}.
+ */
+export async function resolvePinLoginIdentity(
+  database: Firestore,
   pin: string,
   branchId: string,
   username?: string,
   userId?: string,
-): Promise<{ user: UserDoc; id: string } | null> {
-  // ── Fast path: direct lookup by UID ────────────────────────────────────────
+): Promise<PinLoginIdentityOutcome> {
+  if (!userId && !username) {
+    throw new HttpsError('invalid-argument', 'กรุณาระบุชื่อผู้ใช้');
+  }
+
   if (userId) {
-    const snap = await db.collection('users').doc(userId).get();
-    if (!snap.exists) return null;
+    const snap = await database.collection(COLLECTIONS.users).doc(userId).get();
+    if (!snap.exists) {
+      await dummyCompare(pin);
+      return { bcryptComparisons: 1, match: null };
+    }
     const user = snap.data() as UserDoc;
-    if (!(await pinMatches(user.pin, pin))) return null;
-    assertActiveBranchUser(user, branchId);   // handles 'ALL' bypass
-    return { user, id: snap.id };
-  }
-
-  // ── Lookup by username ──────────────────────────────────────────────────────
-  // Run two queries in parallel: users assigned to the requested branch, and
-  // Global Admins (branchIds array contains 'ALL'). Deduplicate by doc ID.
-  if (username) {
-    const normalized = username.trim().toLowerCase();
-    const [branchSnap, globalSnap] = await Promise.all([
-      db.collection('users')
-        .where('username', '==', normalized)
-        .where('branchIds', 'array-contains', branchId)
-        .where('isActive', '==', true)
-        .limit(5)
-        .get(),
-      db.collection('users')
-        .where('username', '==', normalized)
-        .where('branchIds', 'array-contains', 'ALL')
-        .where('isActive', '==', true)
-        .limit(5)
-        .get(),
-    ]);
-
-    for (const docSnap of mergeDocs(branchSnap, globalSnap)) {
-      const user = docSnap.data() as UserDoc;
-      if (user.deletedAt != null) continue;
-      if (await pinMatches(user.pin, pin)) {
-        return { user, id: docSnap.id };
-      }
+    try {
+      assertActiveBranchUser(user, branchId);
+    } catch {
+      await dummyCompare(pin);
+      return { bcryptComparisons: 1, match: null };
     }
-    return null;
+    const ok = await verifyCanonicalPin(database, snap.id, pin, user.role);
+    return { bcryptComparisons: 1, match: ok ? { user, id: snap.id } : null };
   }
 
-  // ── General PIN scan ────────────────────────────────────────────────────────
-  // Same two-query strategy: branch-specific users + Global Admins.
-  const [branchSnap, globalSnap] = await Promise.all([
-    db.collection('users')
-      .where('branchIds', 'array-contains', branchId)
-      .where('isActive', '==', true)
-      .get(),
-    db.collection('users')
-      .where('branchIds', 'array-contains', 'ALL')
-      .where('isActive', '==', true)
-      .get(),
-  ]);
-
-  for (const docSnap of mergeDocs(branchSnap, globalSnap)) {
-    const user = docSnap.data() as UserDoc;
-    if (user.deletedAt != null || !user.pin) continue;
-    if (await pinMatches(user.pin, pin)) {
-      return { user, id: docSnap.id };
-    }
+  const normalized = normalizeUsername(username ?? '');
+  const candidates = await loadUsernameCandidates(database, normalized, branchId);
+  if (candidates.length !== 1) {
+    await dummyCompare(pin);
+    return { bcryptComparisons: 1, match: null };
   }
-
-  return null;
+  const docSnap = candidates[0]!;
+  const user = docSnap.data() as UserDoc;
+  const ok = await verifyCanonicalPin(database, docSnap.id, pin, user.role);
+  return { bcryptComparisons: 1, match: ok ? { user, id: docSnap.id } : null };
 }
 
 export const verifyPinLogin = onCall(
@@ -277,7 +320,7 @@ export const verifyPinLogin = onCall(
       const data = (request.data ?? {}) as VerifyPinLoginRequest;
       const pin = String(data.pin ?? '').trim();
       const branchId = String(data.branchId ?? '').trim();
-      const username = data.username ? String(data.username).trim().toLowerCase() : undefined;
+      const username = data.username ? normalizeUsername(String(data.username)) : undefined;
       const userId = data.userId ? String(data.userId).trim() : undefined;
 
       if (!/^\d{4}$/.test(pin)) {
@@ -286,14 +329,18 @@ export const verifyPinLogin = onCall(
       if (!branchId) {
         throw new HttpsError('invalid-argument', 'กรุณาระบุสาขา');
       }
-
-      const match = await findUserByPinInBranch(pin, branchId, username, userId);
-      if (!match) {
-        throw new HttpsError('permission-denied', 'PIN ไม่ถูกต้องหรือไม่มีสิทธิ์สาขานี้');
+      if (!username && !userId) {
+        throw new HttpsError('invalid-argument', 'กรุณาระบุชื่อผู้ใช้');
       }
 
-      const staffId = match.id;
-      const user = match.user;
+      const resolved = await resolvePinLoginIdentity(db, pin, branchId, username, userId);
+      if (!resolved.match) {
+        throw new HttpsError('permission-denied', GENERIC_LOGIN_DENIED);
+      }
+
+      const staffId = resolved.match.id;
+      const user = resolved.match.user;
+      const authVersion = typeof user.authVersion === 'number' ? user.authVersion : 0;
 
       const permissions = await resolvePermissionKeys(user.role);
 
@@ -302,6 +349,7 @@ export const verifyPinLogin = onCall(
         role: user.role,
         branchIds: user.branchIds,
         permissions,
+        authVersion,
       });
 
       await db.collection('users').doc(staffId).update({

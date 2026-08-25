@@ -20,6 +20,7 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { FieldValue, type Firestore } from 'firebase-admin/firestore';
 import { db } from './db';
 import { FUNCTIONS_REGION } from './deployConfig';
+import { assertFreshPrivilegedAuthority } from './authorityFence';
 
 /** Max TOTAL settlement attempts (automatic + admin retries) before manual investigation. */
 export const RECONCILE_RETRY_CAP = 3;
@@ -41,6 +42,7 @@ export async function performReconcileRetry(
   auth: AuthLike,
 ): Promise<RetryResult> {
   if (!auth) throw new HttpsError('unauthenticated', 'ต้องเข้าสู่ระบบก่อน');
+  await assertFreshPrivilegedAuthority(database, auth);
   if (auth.token?.role !== 'admin') {
     throw new HttpsError('permission-denied', 'เฉพาะผู้ดูแลระบบ (admin) เท่านั้นที่รีทรายได้');
   }

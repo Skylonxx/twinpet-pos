@@ -22,9 +22,9 @@ const BRANCH = 'LDP-001';
 const OTHER = 'LDP-002';
 const SETTINGS_PATH = `settings/${BRANCH}`;
 
-const manager = (branchId = BRANCH) => ({ staffId: 'm1', role: 'manager', branchIds: [branchId], permissions: [] });
-const adminGlobal = { staffId: 'a1', role: 'admin', branchIds: ['ALL'], permissions: [] };
-const staff = (branchId = BRANCH) => ({ staffId: 's1', role: 'staff', branchIds: [branchId], permissions: [] });
+const manager = (branchId = BRANCH) => ({ staffId: 'm1', role: 'manager', branchIds: [branchId], permissions: [], authVersion: 0 });
+const adminGlobal = { staffId: 'a1', role: 'admin', branchIds: ['ALL'], permissions: [], authVersion: 0 };
+const staff = (branchId = BRANCH) => ({ staffId: 's1', role: 'staff', branchIds: [branchId], permissions: [], authVersion: 0 });
 
 let testEnv: RulesTestEnvironment;
 
@@ -48,12 +48,16 @@ beforeEach(async () => {
   await testEnv.clearFirestore();
   // Seed an existing per-branch settings doc (rules-bypassed) for the update path.
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    const live = { isActive: true, deletedAt: null, authVersion: 0 };
     await setDoc(doc(ctx.firestore(), SETTINGS_PATH), {
       branchId: BRANCH,
       requiresPasswordForVoid: true,
       allowNegativeStock: false,
       vatRate: 7,
     });
+    await setDoc(doc(ctx.firestore(), 'users', 'm1'), live);
+    await setDoc(doc(ctx.firestore(), 'users', 'a1'), live);
+    await setDoc(doc(ctx.firestore(), 'users', 's1'), live);
   });
 });
 

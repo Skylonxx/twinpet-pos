@@ -16,7 +16,7 @@
  * Authority (server is the ultimate authority — client evidence is never trusted):
  *   • Manager/Admin (verified custom claims) bypass PIN (CEO 3.2).
  *   • Staff must supply a raw `pin`, verified server-side via bcrypt against
- *     `users/{staffId}.pin` (the existing verifyPinLogin convention). The opaque
+ *     `userCredentials/{staffId}` (canonical store). The opaque
  *     `pinVerificationId`/`pinVerifiedAt` are stored as audit evidence ONLY.
  *   • The raw `pin` is transient — used only for verification, never persisted.
  *
@@ -43,9 +43,11 @@ import {
 import { db } from './db';
 import { FUNCTIONS_REGION } from './deployConfig';
 import { planFifoCutFromState, mergeLotCuts, parseReceivedAtMs, type MutableLot, type LotCut } from './fifo';
+import { isUsableForLogin, readUserCredential } from './credentialStore';
 
 const C = {
   users: 'users',
+  userCredentials: 'userCredentials',
   products: 'products',
   productStocks: 'productStocks',
   stockLots: 'stockLots',
@@ -237,8 +239,10 @@ function isClientObservationStale(req: ResolveReversalRequest, serverDoc: Docume
 
 /**
  * Server-authoritative actor check. Manager/Admin pass on verified claims; Staff
- * must pass a server-side bcrypt PIN verification against `users/{staffId}.pin`.
- * Client `pinVerificationId` is NEVER accepted as authority.
+ * must pass a server-side bcrypt PIN verification against
+ * `userCredentials/{staffId}` (canonical store). Client `pinVerificationId` is
+ * NEVER accepted as authority. Live user freshness (active, not deleted,
+ * authVersion) is fail-closed before any source-document mutation.
  */
 async function checkActorAuthority(
   database: Firestore,
@@ -248,20 +252,27 @@ async function checkActorAuthority(
   branchId: string,
 ): Promise<{ rejectCode?: ReversalRejectCode; pinVerifiedAt: string | null }> {
   if (!hasBranchAccess(auth, branchId)) return { rejectCode: 'unauthorized', pinVerifiedAt: null };
-  const role = auth?.token?.role;
-  if (role === 'admin' || role === 'manager') return { pinVerifiedAt: null }; // CEO 3.2 — PIN bypass.
-  if (role !== 'staff') return { rejectCode: 'unauthorized', pinVerifiedAt: null };
-
-  // Staff: real server-side PIN re-auth (the ultimate authority).
   const staffId = (auth?.token?.staffId as string | undefined) ?? auth?.uid;
-  const pin = String(req.pin ?? '').trim();
-  if (!staffId || !pin) return { rejectCode: 'invalid_pin', pinVerifiedAt: null };
+  if (!staffId) return { rejectCode: 'unauthorized', pinVerifiedAt: null };
+
   const userSnap = await tx.get(database.collection(C.users).doc(staffId));
   const user = userSnap.exists ? (userSnap.data() as DocumentData) : null;
-  if (!user || typeof user.pin !== 'string' || !user.pin) {
-    return { rejectCode: 'invalid_pin', pinVerifiedAt: null };
+  if (!user || user.isActive !== true || user.deletedAt != null) {
+    return { rejectCode: 'unauthorized', pinVerifiedAt: null };
   }
-  const ok = await bcrypt.compare(pin, user.pin);
+  const liveVersion = typeof user.authVersion === 'number' ? user.authVersion : 0;
+  const claimed = typeof auth?.token?.authVersion === 'number' ? auth.token.authVersion : -1;
+  if (liveVersion !== claimed) return { rejectCode: 'unauthorized', pinVerifiedAt: null };
+
+  const role = auth?.token?.role;
+  if (role === 'admin' || role === 'manager') return { pinVerifiedAt: null };
+  if (role !== 'staff') return { rejectCode: 'unauthorized', pinVerifiedAt: null };
+
+  const pin = String(req.pin ?? '').trim();
+  if (!pin) return { rejectCode: 'invalid_pin', pinVerifiedAt: null };
+  const cred = await readUserCredential(database, staffId, tx);
+  if (!isUsableForLogin(cred)) return { rejectCode: 'invalid_pin', pinVerifiedAt: null };
+  const ok = await bcrypt.compare(pin, cred.pinHash);
   if (!ok) return { rejectCode: 'invalid_pin', pinVerifiedAt: null };
   return { pinVerifiedAt: isoNow() };
 }
@@ -408,15 +419,17 @@ async function resolveReceivingReversal(
   tx: Transaction,
   ctx: Ctx,
 ): Promise<ResolveReversalResponse> {
+  const authz = await checkActorAuthority(database, tx, ctx.auth, ctx.req, ctx.branchId);
+  if (authz.rejectCode) return reject(ctx.idempotencyKey, authz.rejectCode, 'ไม่มีสิทธิ์/ยืนยัน PIN ไม่ผ่าน');
+
   const recRef = database.collection(C.receivings).doc(ctx.sourceDocumentId);
   const recSnap = await tx.get(recRef);
   if (!recSnap.exists) return reject(ctx.idempotencyKey, 'source_document_not_found', 'ไม่พบเอกสารรับเข้า');
   const receiving = recSnap.data() as DocumentData;
   const branchId = receiving.branchId as string;
-
-  // Authority (branch access + server PIN re-auth for Staff).
-  const authz = await checkActorAuthority(database, tx, ctx.auth, ctx.req, branchId);
-  if (authz.rejectCode) return reject(ctx.idempotencyKey, authz.rejectCode, 'ไม่มีสิทธิ์/ยืนยัน PIN ไม่ผ่าน');
+  if (branchId !== ctx.branchId) {
+    return reject(ctx.idempotencyKey, 'unauthorized', 'ไม่มีสิทธิ์/ยืนยัน PIN ไม่ผ่าน');
+  }
 
   // H4 stale-client guard — reject (mutation-free) if the client's observation of
   // this document is older than the live server state. Placed before every status
@@ -537,16 +550,18 @@ async function resolveTransferReversal(
   tx: Transaction,
   ctx: Ctx,
 ): Promise<ResolveReversalResponse> {
+  const authz = await checkActorAuthority(database, tx, ctx.auth, ctx.req, ctx.branchId);
+  if (authz.rejectCode) return reject(ctx.idempotencyKey, authz.rejectCode, 'ไม่มีสิทธิ์/ยืนยัน PIN ไม่ผ่าน');
+
   const trRef = database.collection(C.inventoryTransfers).doc(ctx.sourceDocumentId);
   const trSnap = await tx.get(trRef);
   if (!trSnap.exists) return reject(ctx.idempotencyKey, 'source_document_not_found', 'ไม่พบเอกสารโอนย้าย');
   const transfer = trSnap.data() as DocumentData;
   const fromBranchId = transfer.fromBranchId as string;
   const toBranchId = transfer.toBranchId as string;
-
-  // Origin-branch authority (+ Staff server PIN re-auth).
-  const authz = await checkActorAuthority(database, tx, ctx.auth, ctx.req, fromBranchId);
-  if (authz.rejectCode) return reject(ctx.idempotencyKey, authz.rejectCode, 'ไม่มีสิทธิ์/ยืนยัน PIN ไม่ผ่าน');
+  if (fromBranchId !== ctx.branchId) {
+    return reject(ctx.idempotencyKey, 'unauthorized', 'ไม่มีสิทธิ์/ยืนยัน PIN ไม่ผ่าน');
+  }
 
   // H4 stale-client guard — reject (mutation-free) if the client's observation of
   // this document is older than the live server state. Placed before every status

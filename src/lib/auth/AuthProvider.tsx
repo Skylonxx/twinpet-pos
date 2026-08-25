@@ -41,7 +41,7 @@ export type AuthContextValue = {
   isLoading: boolean;
   isAuthenticated: boolean;
   firebaseUser: FirebaseUser | null;
-  loginWithPin: (pin: string, branchId: string) => Promise<User>;
+  loginWithPin: (pin: string, branchId: string, username: string) => Promise<User>;
   loginWithUsername: (
     username: string,
     password: string,
@@ -157,10 +157,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
     });
   }, []);
 
-  const loginWithPin = useCallback(async (pin: string, branchId: string) => {
+  const loginWithPin = useCallback(async (pin: string, branchId: string, username: string) => {
     const normalizedPin = pin.trim();
+    const normalizedUsername = username.trim().toLowerCase();
     if (!/^\d{4}$/.test(normalizedPin)) {
       throw new Error('PIN ต้องเป็นตัวเลข 4 หลัก');
+    }
+    if (!normalizedUsername) {
+      throw new Error('กรุณากรอกชื่อผู้ใช้');
     }
     if (!branchId) {
       throw new Error('กรุณาเลือกสาขา');
@@ -175,7 +179,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           );
         }
         await auth.currentUser.getIdToken(true);
-        const user = await verifyPinLogin(normalizedPin, branchId);
+        const user = await verifyPinLogin(normalizedPin, branchId, { username: normalizedUsername });
         await auth.currentUser.getIdToken(true);
         if (!isActiveUser(user)) {
           throw new Error('PIN ไม่ถูกต้องหรือไม่มีสิทธิ์สาขานี้');
@@ -188,7 +192,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
     if (import.meta.env.DEV) {
-      const user = await findDevUserByPin(normalizedPin, branchId);
+      const user = await findDevUserByPin(normalizedPin, branchId, normalizedUsername);
       if (user && isActiveUser(user)) {
         return { ...user, pin: '' };
       }

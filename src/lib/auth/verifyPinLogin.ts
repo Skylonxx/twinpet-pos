@@ -75,7 +75,7 @@ export async function verifyPinLogin(
   const callable = getVerifyPinLoginCallable();
 
   try {
-    console.log('[verifyPinLogin] calling Cloud Function', { branchId, pinLength: pin.length });
+    console.log('[verifyPinLogin] calling Cloud Function', { branchId, pinLength: pin.length, hasUsername: Boolean(options?.username) });
     const result = await callable({
       pin,
       branchId,

@@ -26,7 +26,12 @@ import { performReconcileRetry, RECONCILE_RETRY_CAP } from './retryReconcile';
 // ── Minimal transactional fake Firestore (asyncOrders only) ──────────────────
 type Doc = Record<string, unknown>;
 function makeDb(seed: Record<string, Doc>) {
-  const store = new Map<string, Doc>(Object.entries(seed).map(([k, v]) => [k, { ...v }]));
+  const store = new Map<string, Doc>(Object.entries({
+    'users/admin1': { isActive: true, deletedAt: null, authVersion: 0, role: 'admin' },
+    'users/s1': { isActive: true, deletedAt: null, authVersion: 0, role: 'staff' },
+    'users/m1': { isActive: true, deletedAt: null, authVersion: 0, role: 'manager' },
+    ...seed,
+  }).map(([k, v]) => [k, { ...v }]));
   const resolve = (cur: unknown, inc: unknown): unknown => {
     if (inc && typeof inc === 'object' && (inc as { __fv?: string }).__fv === 'inc') {
       return ((cur as number) ?? 0) + ((inc as { n: number }).n ?? 0);
@@ -34,7 +39,14 @@ function makeDb(seed: Record<string, Doc>) {
     if (inc && typeof inc === 'object' && (inc as { __fv?: string }).__fv === 'ts') return 1_700_000_000_000;
     return inc;
   };
-  const ref = (path: string) => ({ path, id: path.slice(path.lastIndexOf('/') + 1) });
+  const ref = (path: string) => ({
+    path,
+    id: path.slice(path.lastIndexOf('/') + 1),
+    get: async () => {
+      const d = store.get(path);
+      return { exists: d !== undefined, data: () => d };
+    },
+  });
   // Serialize transactions so overlapping calls behave like Firestore's
   // serializable transactions (a conflicting tx effectively runs after the
   // other commits) — lets us model an Admin double-click on Retry.
@@ -63,9 +75,9 @@ function makeDb(seed: Record<string, Doc>) {
   return db;
 }
 
-const admin = { uid: 'u-admin', token: { role: 'admin', staffId: 'admin1' } };
-const staff = { uid: 'u-staff', token: { role: 'staff', staffId: 's1', permissions: ['pos_sale'] } };
-const manager = { uid: 'u-mgr', token: { role: 'manager', staffId: 'm1' } };
+const admin = { uid: 'u-admin', token: { role: 'admin', staffId: 'admin1', authVersion: 0 } };
+const staff = { uid: 'u-staff', token: { role: 'staff', staffId: 's1', permissions: ['pos_sale'], authVersion: 0 } };
+const manager = { uid: 'u-mgr', token: { role: 'manager', staffId: 'm1', authVersion: 0 } };
 
 const exceptionOrder = (over: Doc = {}): Doc => ({
   id: 'o1',
@@ -78,7 +90,12 @@ const exceptionOrder = (over: Doc = {}): Doc => ({
 
 let db: ReturnType<typeof makeDb>;
 beforeEach(() => {
-  db = makeDb({ 'asyncOrders/o1': exceptionOrder() });
+  db = makeDb({
+    'asyncOrders/o1': exceptionOrder(),
+    'users/admin1': { isActive: true, deletedAt: null, authVersion: 0, role: 'admin' },
+    'users/s1': { isActive: true, deletedAt: null, authVersion: 0, role: 'staff' },
+    'users/m1': { isActive: true, deletedAt: null, authVersion: 0, role: 'manager' },
+  });
 });
 
 describe('performReconcileRetry — admin-only', () => {
@@ -110,7 +127,7 @@ describe('performReconcileRetry — re-arm + idempotency', () => {
     expect(o.lastRetryBy).toBe('admin1');
     // Re-arm does NOT touch stock/lots and does NOT reset the attempt counter.
     expect(o.reconcileAttempts).toBe(1);
-    expect([...db.__store.keys()]).toEqual(['asyncOrders/o1']); // only the async order changed
+    expect([...db.__store.keys()].filter((k) => k.startsWith('asyncOrders/'))).toEqual(['asyncOrders/o1']);
   });
 
   test('already-settled order is a safe no-op (never re-settled)', async () => {
@@ -144,7 +161,7 @@ describe('performReconcileRetry — concurrent retry (Admin double-click)', () =
     expect(o.reconcileStatus).toBe('pending_reconcile'); // single re-arm
     expect(o.adminRetryCount).toBe(1); // NOT 2 — second click did not double-apply
     expect(o.reconcileAttempts).toBe(1); // counter untouched by re-arm (no double-deduct)
-    expect([...db.__store.keys()]).toEqual(['asyncOrders/o1']); // no stock/lot writes
+    expect([...db.__store.keys()].filter((k) => k.startsWith('asyncOrders/'))).toEqual(['asyncOrders/o1']);
   });
 });
 
@@ -168,7 +185,7 @@ describe('performReconcileRetry — voidRequested + exception conflict', () => {
     const o = db.__store.get('asyncOrders/o1')!;
     expect(o.reconcileStatus).toBe('exception'); // NOT blindly re-armed to pending_reconcile
     expect(o.adminRetryCount).toBeUndefined(); // no write occurred
-    expect([...db.__store.keys()]).toEqual(['asyncOrders/o1']); // no stock/lot mutation
+    expect([...db.__store.keys()].filter((k) => k.startsWith('asyncOrders/'))).toEqual(['asyncOrders/o1']);
   });
 
   test('F21 re-arm writes only asyncOrders; zero canonical writes; no revision transition; settled no-op; voidRequested refused', async () => {

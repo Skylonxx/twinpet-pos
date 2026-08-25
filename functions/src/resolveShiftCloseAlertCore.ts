@@ -135,7 +135,12 @@ export interface AuthorityResult {
   managerUid: string | null;
 }
 
-export function checkAdjudicationAuthority(auth: AuthTokenLike, branchId: string): AuthorityResult {
+export function checkAdjudicationAuthority(
+  auth: AuthTokenLike,
+  branchId: string,
+  freshnessVerified: boolean,
+): AuthorityResult {
+  if (freshnessVerified !== true) return { rejectCode: 'unauthorized', managerUid: null };
   if (!hasBranchAccess(auth, branchId)) return { rejectCode: 'unauthorized', managerUid: null };
   const role = auth?.token?.role;
   if (role !== 'admin' && role !== 'manager') return { rejectCode: 'unauthorized', managerUid: null };

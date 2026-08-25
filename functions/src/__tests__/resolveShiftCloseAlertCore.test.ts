@@ -104,29 +104,34 @@ describe('hasBranchAccess / checkAdjudicationAuthority', () => {
     expect(hasBranchAccess({ token: { role: 'manager', branchIds: ['B2'] } }, 'B1')).toBe(false);
   });
 
-  test('checkAdjudicationAuthority: manager with branch access -> managerUid recorded from staffId', () => {
-    const res = checkAdjudicationAuthority({ uid: 'u1', token: { role: 'manager', staffId: 'm1', branchIds: ['B1'] } }, 'B1');
+  test('checkAdjudicationAuthority: freshnessVerified false -> unauthorized', () => {
+    const res = checkAdjudicationAuthority({ uid: 'u1', token: { role: 'manager', staffId: 'm1', branchIds: ['B1'] } }, 'B1', false);
+    expect(res.rejectCode).toBe('unauthorized');
+  });
+
+  test('checkAdjudicationAuthority: manager with matching branch passes when freshnessVerified', () => {
+    const res = checkAdjudicationAuthority({ uid: 'u1', token: { role: 'manager', staffId: 'm1', branchIds: ['B1'] } }, 'B1', true);
     expect(res.rejectCode).toBeUndefined();
     expect(res.managerUid).toBe('m1');
   });
 
   test('checkAdjudicationAuthority: admin without staffId falls back to uid', () => {
-    const res = checkAdjudicationAuthority({ uid: 'u2', token: { role: 'admin', branchIds: ['ALL'] } }, 'B1');
+    const res = checkAdjudicationAuthority({ uid: 'u2', token: { role: 'admin', branchIds: ['ALL'] } }, 'B1', true);
     expect(res.managerUid).toBe('u2');
   });
 
   test('checkAdjudicationAuthority: staff role always unauthorized (no PIN path)', () => {
-    const res = checkAdjudicationAuthority({ uid: 'u3', token: { role: 'staff', staffId: 's1', branchIds: ['B1'] } }, 'B1');
+    const res = checkAdjudicationAuthority({ uid: 'u3', token: { role: 'staff', staffId: 's1', branchIds: ['B1'] } }, 'B1', true);
     expect(res.rejectCode).toBe('unauthorized');
   });
 
   test('checkAdjudicationAuthority: manager without branch access -> unauthorized', () => {
-    const res = checkAdjudicationAuthority({ uid: 'u4', token: { role: 'manager', staffId: 'm2', branchIds: ['B2'] } }, 'B1');
+    const res = checkAdjudicationAuthority({ uid: 'u4', token: { role: 'manager', staffId: 'm2', branchIds: ['B2'] } }, 'B1', true);
     expect(res.rejectCode).toBe('unauthorized');
   });
 
   test('checkAdjudicationAuthority: unknown role -> unauthorized', () => {
-    const res = checkAdjudicationAuthority({ uid: 'u5', token: { role: 'cashier', branchIds: ['ALL'] } }, 'B1');
+    const res = checkAdjudicationAuthority({ uid: 'u5', token: { role: 'cashier', branchIds: ['ALL'] } }, 'B1', true);
     expect(res.rejectCode).toBe('unauthorized');
   });
 });

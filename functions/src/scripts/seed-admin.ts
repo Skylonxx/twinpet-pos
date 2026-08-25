@@ -17,6 +17,7 @@ import { getAuth } from 'firebase-admin/auth';
 import { FieldValue, getFirestore, Timestamp, Firestore } from 'firebase-admin/firestore';
 import bcrypt from 'bcryptjs';
 import { FIRESTORE_DATABASE_ID } from '../deployConfig';
+import { COLLECTIONS } from '../credentialStore';
 
 // ─── Edit these defaults or override via environment variables ───────────────
 
@@ -26,14 +27,12 @@ const CONFIG = {
   username: (process.env.SEED_USERNAME ?? 'admin').trim().toLowerCase(),
   /** Plain PIN — will be bcrypt-hashed before save (must be 4 digits for verifyPinLogin) */
   pin: process.env.SEED_PIN ?? '1234',
-  /** Password for username/password login (Firebase Auth email) */
+  /** Password for username/password login (Firebase Auth email) — never logged */
   password: process.env.SEED_PASSWORD ?? 'Admin@1234',
   /** Set to skip branch lookup and use this id directly */
   branchId: process.env.SEED_BRANCH_ID?.trim() || null,
   /** When true and no active branch exists, create a default branch (LDP-001) */
   createBranchIfMissing: process.env.SEED_CREATE_BRANCH === '1',
-  /** When true, reset PIN hash on an existing admin user */
-  resetPin: process.env.SEED_ADMIN_RESET_PIN === '1',
   /** When true, force-sync role/permissions/branch on existing admin */
   syncExisting: process.env.SEED_ADMIN_SYNC === '1',
 };
@@ -214,7 +213,16 @@ async function resolveBranchId(db: Firestore): Promise<string> {
   return first.id;
 }
 
+export function assertSeedAdminResetPinDisabled(): void {
+  if (process.env.SEED_ADMIN_RESET_PIN === '1') {
+    throw new Error(
+      'SEED_ADMIN_RESET_PIN is decommissioned. Use recoverUserCredential for existing-user PIN recovery.',
+    );
+  }
+}
+
 async function main(): Promise<void> {
+  assertSeedAdminResetPinDisabled();
   if (!/^\d{4}$/.test(CONFIG.pin)) {
     throw new Error('SEED_PIN ต้องเป็นตัวเลข 4 หลัก (verifyPinLogin บังคับรูปแบบนี้)');
   }
@@ -235,8 +243,8 @@ async function main(): Promise<void> {
     .get();
 
   if (!existing.empty) {
-    const doc = existing.docs[0]!;
-    const data = doc.data() as {
+    const docSnap = existing.docs[0]!;
+    const data = docSnap.data() as {
       branchIds?: string[];
       isActive?: boolean;
       deletedAt?: unknown;
@@ -246,12 +254,12 @@ async function main(): Promise<void> {
     const needsBranchSync = !currentBranchIds.includes(branchId);
     const needsActiveSync = data.isActive !== true || data.deletedAt != null;
 
-    console.log(`มีผู้ใช้ username="${CONFIG.username}" อยู่แล้ว (doc id: ${doc.id}) — ข้ามการสร้าง`);
+    console.log(`มีผู้ใช้ username="${CONFIG.username}" อยู่แล้ว (doc id: ${docSnap.id}) — ข้ามการสร้าง`);
     console.log(`  branchIds ปัจจุบัน : ${JSON.stringify(currentBranchIds)}`);
     console.log(`  isActive          : ${String(data.isActive ?? '(ไม่ระบุ)')}`);
     console.log(`  role              : ${data.role ?? '(ไม่ระบุ)'}`);
 
-    if (needsBranchSync || needsActiveSync || CONFIG.syncExisting || CONFIG.resetPin) {
+    if (needsBranchSync || needsActiveSync || CONFIG.syncExisting) {
       const updates: Record<string, unknown> = {
         updatedAt: Timestamp.now(),
       };
@@ -269,27 +277,20 @@ async function main(): Promise<void> {
         updates.permissions = { ...ADMIN_PERMISSIONS };
       }
 
-      if (CONFIG.resetPin) {
-        updates.pin = await bcrypt.hash(CONFIG.pin, 10);
-      }
-
-      await doc.ref.update(updates);
+      await docSnap.ref.update(updates);
       console.log('');
       console.log('✓ อัปเดตผู้ใช้ admin ที่มีอยู่แล้ว');
       if (updates.branchIds) {
         console.log(`  branchIds → ${JSON.stringify(updates.branchIds)}`);
       }
-      if (CONFIG.resetPin) {
-        console.log(`  PIN ใหม่    : ${CONFIG.pin} (bcrypt hash แล้ว)`);
-      }
     } else {
       console.log('');
-      console.log('ข้อมูล admin ครบแล้ว — ใช้ PIN เดิมที่ตั้งไว้ตอนสร้างครั้งแรก');
-      console.log('ถ้าลืม PIN ให้รัน: $env:SEED_ADMIN_RESET_PIN="1"; npm run seed-admin');
+      console.log('ข้อมูล admin ครบแล้ว — ใช้ credential เดิม');
+      console.log('ถ้าต้องหมุน PIN ของผู้ใช้ที่มีอยู่แล้ว ให้ใช้ recoverUserCredential');
     }
 
     console.log('');
-    console.log('ทดสอบ: เปิดแอป → เลือกสาขา → กรอก PIN แล้วล็อกอิน');
+    console.log('ทดสอบ: เปิดแอป → เลือกสาขา → กรอก username + PIN แล้วล็อกอิน');
     process.exit(0);
   }
 
@@ -321,18 +322,32 @@ async function main(): Promise<void> {
     firstName: CONFIG.firstName,
     lastName: CONFIG.lastName,
     username: CONFIG.username,
-    pin: pinHash,
     role: 'admin' as const,
     branchIds: [branchId],
     permissions: { ...ADMIN_PERMISSIONS },
     isActive: true,
+    authVersion: 0,
     lastLoginAt: null,
     createdAt: now,
     updatedAt: now,
     deletedAt: null,
   };
 
-  await db.collection('users').doc(uid).set(userDoc);
+  await db.collection(COLLECTIONS.users).doc(uid).set(userDoc);
+  await db.collection(COLLECTIONS.userCredentials).doc(uid).set({
+    pinHash,
+    algo: 'bcrypt',
+    cost: 10,
+    credentialVersion: 0,
+    credentialState: 'rotated_authoritative',
+    disabled: false,
+    updatedAt: now,
+    updatedBy: 'seed-admin',
+  });
+  await db.collection(COLLECTIONS.usernames).doc(CONFIG.username).set({
+    userId: uid,
+    reservedAt: now,
+  });
 
   console.log('');
   console.log('✓ สร้าง Admin สำเร็จ');
@@ -341,20 +356,25 @@ async function main(): Promise<void> {
   console.log(`  ชื่อ          : ${CONFIG.firstName} ${CONFIG.lastName}`);
   console.log(`  Username      : ${CONFIG.username}`);
   console.log(`  Auth email    : ${email}`);
-  console.log(`  Password      : ${CONFIG.password}`);
-  console.log(`  PIN (plain)   : ${CONFIG.pin}  → เก็บเป็น bcrypt hash ใน Firestore`);
   console.log(`  สาขา          : ${branchId}`);
   console.log(`  role          : admin`);
   console.log(`  isActive      : true`);
   console.log(`  deletedAt     : null`);
   console.log('──────────────────────────────────────');
   console.log('');
-  console.log('ทดสอบ: เปิดแอป → เลือกสาขา → กรอก PIN แล้วล็อกอิน');
+  console.log('ทดสอบ: เปิดแอป → เลือกสาขา → กรอก username + PIN แล้วล็อกอิน');
 }
 
-main().catch((err) => {
-  console.error('');
-  console.error('✗ seed-admin ล้มเหลว:');
-  console.error(err instanceof Error ? err.message : err);
-  process.exit(1);
-});
+function isExecutedAsCli(): boolean {
+  const entry = (process.argv[1] ?? '').replace(/\\/g, '/');
+  return /seed-admin\.(ts|js)$/.test(entry);
+}
+
+if (isExecutedAsCli()) {
+  main().catch((err) => {
+    console.error('');
+    console.error('✗ seed-admin ล้มเหลว:');
+    console.error(err instanceof Error ? err.message : err);
+    process.exit(1);
+  });
+}

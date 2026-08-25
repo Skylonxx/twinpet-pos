@@ -15,16 +15,46 @@ vi.mock('firebase-functions/v2/https', () => ({
 
 import { authorizeReceiptAccess, performGetOrderReceipt } from '../getOrderReceipt';
 
+function freshDb(staffId = 'u', over: Record<string, unknown> = {}) {
+  const users: Record<string, Record<string, unknown>> = {
+    [staffId]: { isActive: true, deletedAt: null, authVersion: 0, ...over },
+  };
+  return {
+    collection: (name: string) => ({
+      doc: (id: string) => ({
+        path: `${name}/${id}`,
+        collection: (sub: string) => ({ path: `${name}/${id}/${sub}`, __kind: sub }),
+        get: async () => {
+          if (name !== 'users') return { exists: false, data: () => undefined };
+          const data = users[id];
+          return { exists: data !== undefined, data: () => data };
+        },
+      }),
+      where: (field: string, _op: string, value: unknown) => ({ path: `${name}?${field}=${String(value)}`, __kind: name }),
+    }),
+    runTransaction: async (fn: (t: unknown) => Promise<unknown>) => fn({
+      get: async (ref: { path?: string; __kind?: string }) => ({
+        exists: false,
+        data: () => undefined,
+        docs: [],
+        path: ref.path,
+        __kind: ref.__kind,
+      }),
+    }),
+  };
+}
+
 describe('G01 G12 G13 getOrderReceipt callable layer', () => {
-  test('G01 authz allow/deny set', () => {
-    expect(() => authorizeReceiptAccess(null, 'br1')).toThrow(/unauthenticated|เข้าสู่ระบบ/);
-    expect(() => authorizeReceiptAccess({ uid: 'u', token: { branchIds: [] } }, 'br1')).toThrow(/permission-denied|สิทธิ์/);
-    expect(() => authorizeReceiptAccess({ uid: 'u', token: { branchIds: ['br2'] } }, 'br1')).toThrow(/permission-denied|สาขา/);
-    expect(() => authorizeReceiptAccess({ uid: 'u', token: { branchIds: ['ALL'] } }, 'br1')).not.toThrow();
-    expect(() => authorizeReceiptAccess({ uid: 'u', token: { branchIds: ['br1'] } }, 'br1')).not.toThrow();
+  test('G01 authz allow/deny set', async () => {
+    const db = freshDb('u') as never;
+    await expect(authorizeReceiptAccess(db, null, 'br1')).rejects.toThrow(/unauthenticated|เข้าสู่ระบบ/);
+    await expect(authorizeReceiptAccess(db, { uid: 'u', token: { staffId: 'u', branchIds: [], authVersion: 0 } }, 'br1')).rejects.toThrow(/permission-denied|สิทธิ์/);
+    await expect(authorizeReceiptAccess(db, { uid: 'u', token: { staffId: 'u', branchIds: ['br2'], authVersion: 0 } }, 'br1')).rejects.toThrow(/permission-denied|สาขา/);
+    await expect(authorizeReceiptAccess(db, { uid: 'u', token: { staffId: 'u', branchIds: ['ALL'], authVersion: 0 } }, 'br1')).resolves.toBeUndefined();
+    await expect(authorizeReceiptAccess(db, { uid: 'u', token: { staffId: 'u', branchIds: ['br1'], authVersion: 0 } }, 'br1')).resolves.toBeUndefined();
   });
 
-  test('G12 exactly four reads inside one transaction; no read outside', async () => {
+  test('G12 exactly four reads inside one transaction; no extra tx read', async () => {
     const reads: string[] = [];
     const tx = {
       get: async (ref: { path?: string; __kind?: string }) => {
@@ -37,6 +67,10 @@ describe('G01 G12 G13 getOrderReceipt callable layer', () => {
         doc: (id: string) => ({
           path: `${name}/${id}`,
           collection: (sub: string) => ({ path: `${name}/${id}/${sub}`, __kind: sub }),
+          get: async () => ({
+            exists: name === 'users',
+            data: () => (name === 'users' ? { isActive: true, deletedAt: null, authVersion: 0 } : undefined),
+          }),
         }),
         where: (field: string, _op: string, value: unknown) => ({ path: `${name}?${field}=${String(value)}`, __kind: name }),
       }),
@@ -45,7 +79,7 @@ describe('G01 G12 G13 getOrderReceipt callable layer', () => {
     await performGetOrderReceipt(
       database as never,
       { orderId: 'o1' },
-      { uid: 'u', token: { branchIds: ['ALL'] } },
+      { uid: 'u', token: { staffId: 'u', branchIds: ['ALL'], authVersion: 0 } },
     ).catch(() => undefined);
     expect(reads).toHaveLength(4);
   });
@@ -54,7 +88,7 @@ describe('G01 G12 G13 getOrderReceipt callable layer', () => {
     const writes: string[] = [];
     const { HttpsError } = await import('firebase-functions/v2/https');
     await expect(
-      performGetOrderReceipt({ runTransaction: async () => writes.push('x') } as never, {}, { uid: 'u', token: { branchIds: ['ALL'] } }),
+      performGetOrderReceipt({ runTransaction: async () => writes.push('x') } as never, {}, { uid: 'u', token: { staffId: 'u', branchIds: ['ALL'], authVersion: 0 } }),
     ).rejects.toBeInstanceOf(HttpsError);
     expect(writes).toHaveLength(0);
     await expect(

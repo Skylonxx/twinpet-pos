@@ -79,12 +79,25 @@ function makeDb(seed: Record<string, Doc>) {
   return db;
 }
 
-const mgrB1 = { uid: 'u1', token: { role: 'manager', staffId: 'm1', branchIds: ['B1'] } };
-const adminAll = { uid: 'u2', token: { role: 'admin', staffId: 'a1', branchIds: ['ALL'] } };
-const staffB1 = { uid: 'u3', token: { role: 'staff', staffId: 's-staff', branchIds: ['B1'] } };
-const otherBranch = { uid: 'u4', token: { role: 'staff', staffId: 's-x', branchIds: ['BX'] } };
+const mgrB1 = { uid: 'u1', token: { role: 'manager', staffId: 'm1', branchIds: ['B1'], authVersion: 0 } };
+const adminAll = { uid: 'u2', token: { role: 'admin', staffId: 'a1', branchIds: ['ALL'], authVersion: 0 } };
+const staffB1 = { uid: 'u3', token: { role: 'staff', staffId: 's-staff', branchIds: ['B1'], authVersion: 0 } };
+const otherBranch = { uid: 'u4', token: { role: 'staff', staffId: 's-x', branchIds: ['BX'], authVersion: 0 } };
 
-const USER_SEED = { 'users/s-staff': { pin: '1234', role: 'staff' } };
+const USER_SEED = {
+  'users/s-staff': { role: 'staff', isActive: true, deletedAt: null, authVersion: 0 },
+  'users/m1': { role: 'manager', isActive: true, deletedAt: null, authVersion: 0 },
+  'users/a1': { role: 'admin', isActive: true, deletedAt: null, authVersion: 0 },
+  'users/s-x': { role: 'staff', isActive: true, deletedAt: null, authVersion: 0 },
+  'userCredentials/s-staff': {
+    pinHash: '1234',
+    algo: 'bcrypt',
+    cost: 10,
+    credentialVersion: 0,
+    credentialState: 'rotated_authoritative',
+    disabled: false,
+  },
+};
 
 function seedReceiving(over: { stock?: number; lotRemaining?: number; status?: string; updatedAt?: unknown } = {}) {
   return makeDb({

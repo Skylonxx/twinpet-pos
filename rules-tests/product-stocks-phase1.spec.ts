@@ -34,9 +34,10 @@ const staff = (branchIds: string[], perms: string[]) => ({
   role: 'staff',
   branchIds,
   permissions: perms,
+  authVersion: 0,
 });
-const manager = { staffId: 'mgr1', role: 'manager', branchIds: [HOME], permissions: ['stock_receive', 'product_view'] };
-const adminAll = { staffId: 'admin1', role: 'admin', branchIds: ['ALL'], permissions: ['product_view'] };
+const manager = { staffId: 'mgr1', role: 'manager', branchIds: [HOME], permissions: ['stock_receive', 'product_view'], authVersion: 0 };
+const adminAll = { staffId: 'admin1', role: 'admin', branchIds: ['ALL'], permissions: ['product_view'], authVersion: 0 };
 const notStaff = {};
 
 // Actors
@@ -77,6 +78,10 @@ beforeEach(async () => {
     const db = ctx.firestore();
     await setDoc(doc(db, stockPath('p1', HOME)), stockDoc(HOME, 10));
     await setDoc(doc(db, stockPath('p1', OTHER)), stockDoc(OTHER, 10));
+    const live = { isActive: true, deletedAt: null, authVersion: 0 };
+    await setDoc(doc(db, 'users', 'staff1'), live);
+    await setDoc(doc(db, 'users', 'mgr1'), live);
+    await setDoc(doc(db, 'users', 'admin1'), live);
   });
 });
 

@@ -36,6 +36,7 @@ const staffAt = (branchId: string) => ({
   role: 'staff',
   branchIds: [branchId],
   permissions: [],
+  authVersion: 0,
 });
 
 let testEnv: RulesTestEnvironment;
@@ -60,12 +61,16 @@ beforeEach(async () => {
   await testEnv.clearFirestore();
   // Seed the parent transfer (rules-bypassed).
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    const live = { isActive: true, deletedAt: null, authVersion: 0 };
     await setDoc(doc(ctx.firestore(), 'inventoryTransfers', TRANSFER_ID), {
       id: TRANSFER_ID,
       fromBranchId: ORIGIN,
       toBranchId: DEST,
       status: 'completed',
     });
+    await setDoc(doc(ctx.firestore(), 'users', `staff-${ORIGIN}`), live);
+    await setDoc(doc(ctx.firestore(), 'users', `staff-${DEST}`), live);
+    await setDoc(doc(ctx.firestore(), 'users', `staff-${OTHER}`), live);
   });
 });
 

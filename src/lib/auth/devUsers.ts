@@ -113,20 +113,26 @@ export async function getDevUsers(): Promise<User[]> {
 export async function findDevUserByPin(
   pin: string,
   branchId: string,
+  username?: string,
 ): Promise<User | null> {
   await ensureDevCaches();
-  const users = cachedUsers!.filter(
-    // 'ALL' sentinel grants access to any branch
-    (u) => u.isActive && (u.branchIds.includes('ALL') || u.branchIds.includes(branchId)) && !u.deletedAt,
+  const normalized = (username ?? '').trim().toLowerCase();
+  if (!normalized) return null;
+  const candidates = cachedUsers!.filter(
+    (u) =>
+      u.username === normalized &&
+      u.isActive &&
+      (u.branchIds.includes('ALL') || u.branchIds.includes(branchId)) &&
+      !u.deletedAt,
   );
-
-  for (const user of users) {
-    const hash = cachedPinHashes!.get(user.id);
-    if (hash && (await bcrypt.compare(pin, hash))) {
-      return user;
-    }
+  if (candidates.length !== 1) {
+    await bcrypt.compare(pin, '$2b$10$WCOTRHGYk1RxxHdHMy9.guo3rg259b4w/opYiC13GSmPmCmPJVYwO');
+    return null;
   }
-  return null;
+  const user = candidates[0]!;
+  const hash = cachedPinHashes!.get(user.id);
+  if (!hash || !(await bcrypt.compare(pin, hash))) return null;
+  return user;
 }
 
 export async function findDevUserByUsernamePassword(

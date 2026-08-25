@@ -110,6 +110,10 @@ class FakeFirestore {
   batchCalls = 0;
   bulkWriterCalls = 0;
 
+  constructor() {
+    this.seed('users', 'STAFF-1', { isActive: true, deletedAt: null, authVersion: 0 });
+  }
+
   collection(name: string) {
     return new FakeCollectionRef(this, name);
   }
@@ -200,12 +204,19 @@ function validEvidenceDoc(overrides: StoredDoc = {}): StoredDoc {
 }
 
 function managerAuth(overrides: Record<string, unknown> = {}) {
-  return { token: { staffId: 'STAFF-1', role: 'manager', branchIds: [branchId()], ...overrides } };
+  return { token: { staffId: 'STAFF-1', role: 'manager', branchIds: [branchId()], authVersion: 0, ...overrides } };
+}
+
+const USER_READ = { collection: 'users', id: 'STAFF-1' };
+
+function seedFreshStaff(ff: FakeFirestore, staffId = 'STAFF-1') {
+  ff.seed('users', staffId, { isActive: true, deletedAt: null, authVersion: 0 });
 }
 
 const validRequest = { branchId: branchId(), shiftId: 'SHIFT-1', expectedCaseVersion: 1 };
 
 function seedFullChain(ff: FakeFirestore) {
+  seedFreshStaff(ff);
   ff.seed('shiftCloseCases', 'SHIFT-1', validCaseDoc());
   ff.seed('shiftCloseValidationRuns', 'RUN-1', validRunDoc());
   ff.seed('shiftCloseEvidence', 'SHIFT-1_HASH-1', validEvidenceDoc());
@@ -234,27 +245,30 @@ describe('Shell — authorization (zero reads on denial)', () => {
     expect(response).toEqual({ status: 'unauthorized' });
     expect(ff.reads.length).toBe(0);
   });
-  test('staff role -> unauthorized, zero reads', async () => {
+  test('staff role -> unauthorized, one users read', async () => {
     const ff = new FakeFirestore();
+    seedFreshStaff(ff);
     const response = await performGetShiftCloseCaseFigures(ff as never, validRequest, managerAuth({ role: 'staff' }));
     expect(response).toEqual({ status: 'unauthorized' });
-    expect(ff.reads.length).toBe(0);
+    expect(ff.reads).toEqual([USER_READ]);
   });
-  test('manager other branch -> unauthorized, zero reads', async () => {
+  test('manager other branch -> unauthorized, one users read', async () => {
     const ff = new FakeFirestore();
+    seedFreshStaff(ff);
     const response = await performGetShiftCloseCaseFigures(ff as never, validRequest, managerAuth({ branchIds: ['OTHER'] }));
     expect(response).toEqual({ status: 'unauthorized' });
-    expect(ff.reads.length).toBe(0);
+    expect(ff.reads).toEqual([USER_READ]);
   });
   test('branch-restricted admin cross-branch -> unauthorized (the frozen divergence)', async () => {
     const ff = new FakeFirestore();
+    seedFreshStaff(ff);
     const response = await performGetShiftCloseCaseFigures(
       ff as never,
       validRequest,
       managerAuth({ role: 'admin', branchIds: ['OTHER-BRANCH'] }),
     );
     expect(response).toEqual({ status: 'unauthorized' });
-    expect(ff.reads.length).toBe(0);
+    expect(ff.reads).toEqual([USER_READ]);
   });
   test('admin with branchIds [ALL] -> proceeds', async () => {
     const ff = new FakeFirestore();
@@ -273,7 +287,7 @@ describe('Shell — the 27-row decision table: exact status, exact read count, e
     const ff = new FakeFirestore();
     const response = await performGetShiftCloseCaseFigures(ff as never, validRequest, managerAuth());
     expect(response).toEqual({ status: 'case_not_found' });
-    expect(ff.reads).toEqual([{ collection: 'shiftCloseCases', id: 'SHIFT-1' }]);
+    expect(ff.reads).toEqual([USER_READ, { collection: 'shiftCloseCases', id: 'SHIFT-1' }]);
   });
 
   test('stale case version -> stale_case_version, exactly 1 read', async () => {
@@ -281,7 +295,7 @@ describe('Shell — the 27-row decision table: exact status, exact read count, e
     ff.seed('shiftCloseCases', 'SHIFT-1', validCaseDoc({ caseVersion: 99 }));
     const response = await performGetShiftCloseCaseFigures(ff as never, validRequest, managerAuth());
     expect(response).toEqual({ status: 'stale_case_version' });
-    expect(ff.reads.length).toBe(1);
+    expect(ff.reads.length).toBe(2);
   });
 
   test('case branch mismatch -> unauthorized, exactly 1 read', async () => {
@@ -289,7 +303,7 @@ describe('Shell — the 27-row decision table: exact status, exact read count, e
     ff.seed('shiftCloseCases', 'SHIFT-1', validCaseDoc({ branchId: 'OTHER' }));
     const response = await performGetShiftCloseCaseFigures(ff as never, validRequest, managerAuth());
     expect(response).toEqual({ status: 'unauthorized' });
-    expect(ff.reads.length).toBe(1);
+    expect(ff.reads.length).toBe(2);
   });
 
   test('unsupported case state -> unsupported_case_state, exactly 1 read', async () => {
@@ -297,7 +311,7 @@ describe('Shell — the 27-row decision table: exact status, exact read count, e
     ff.seed('shiftCloseCases', 'SHIFT-1', validCaseDoc({ processingState: 'nope' }));
     const response = await performGetShiftCloseCaseFigures(ff as never, validRequest, managerAuth());
     expect(response).toEqual({ status: 'unsupported_case_state' });
-    expect(ff.reads.length).toBe(1);
+    expect(ff.reads.length).toBe(2);
   });
 
   test('provisional_no_selected_run -> exactly 1 read (no run/evidence read)', async () => {
@@ -305,7 +319,7 @@ describe('Shell — the 27-row decision table: exact status, exact read count, e
     ff.seed('shiftCloseCases', 'SHIFT-1', validCaseDoc({ selectedRunId: null, selectedCloseHash: null }));
     const response = await performGetShiftCloseCaseFigures(ff as never, validRequest, managerAuth());
     expect(response).toEqual({ status: 'provisional_no_selected_run' });
-    expect(ff.reads).toEqual([{ collection: 'shiftCloseCases', id: 'SHIFT-1' }]);
+    expect(ff.reads).toEqual([USER_READ, { collection: 'shiftCloseCases', id: 'SHIFT-1' }]);
   });
 
   test('case schema violation -> unavailable_data_anomaly', async () => {
@@ -321,6 +335,7 @@ describe('Shell — the 27-row decision table: exact status, exact read count, e
     const response = await performGetShiftCloseCaseFigures(ff as never, validRequest, managerAuth());
     expect(response).toEqual({ status: 'unavailable_data_anomaly' });
     expect(ff.reads).toEqual([
+      USER_READ,
       { collection: 'shiftCloseCases', id: 'SHIFT-1' },
       { collection: 'shiftCloseValidationRuns', id: 'RUN-1' },
     ]);
@@ -332,7 +347,7 @@ describe('Shell — the 27-row decision table: exact status, exact read count, e
     ff.seed('shiftCloseValidationRuns', 'RUN-1', validRunDoc({ branchId: 'OTHER' }));
     const response = await performGetShiftCloseCaseFigures(ff as never, validRequest, managerAuth());
     expect(response).toEqual({ status: 'unavailable_data_anomaly' });
-    expect(ff.reads.length).toBe(2);
+    expect(ff.reads.length).toBe(3);
   });
 
   test('run close-hash mismatch -> unavailable_data_anomaly', async () => {
@@ -366,6 +381,7 @@ describe('Shell — the 27-row decision table: exact status, exact read count, e
     const response = await performGetShiftCloseCaseFigures(ff as never, validRequest, managerAuth());
     expect(response).toEqual({ status: 'unavailable_data_anomaly' });
     expect(ff.reads).toEqual([
+      USER_READ,
       { collection: 'shiftCloseCases', id: 'SHIFT-1' },
       { collection: 'shiftCloseValidationRuns', id: 'RUN-1' },
       { collection: 'shiftCloseEvidence', id: 'SHIFT-1_HASH-1' },
@@ -379,7 +395,7 @@ describe('Shell — the 27-row decision table: exact status, exact read count, e
     ff.seed('shiftCloseEvidence', 'SHIFT-1_HASH-1', validEvidenceDoc({ branchId: 'OTHER' }));
     const response = await performGetShiftCloseCaseFigures(ff as never, validRequest, managerAuth());
     expect(response).toEqual({ status: 'unavailable_data_anomaly' });
-    expect(ff.reads.length).toBe(3);
+    expect(ff.reads.length).toBe(4);
   });
 
   test('evidence non-finite money -> unavailable_data_anomaly', async () => {
@@ -405,6 +421,7 @@ describe('Shell — the 27-row decision table: exact status, exact read count, e
       validationVerdict: 'match',
     });
     expect(ff.reads).toEqual([
+      USER_READ,
       { collection: 'shiftCloseCases', id: 'SHIFT-1' },
       { collection: 'shiftCloseValidationRuns', id: 'RUN-1' },
       { collection: 'shiftCloseEvidence', id: 'SHIFT-1_HASH-1' },
@@ -531,7 +548,7 @@ describe('Shell — the exact 25+2 decision table (RC-PS-final): status, keys, r
     ) as Record<string, unknown>;
 
     expect(response.status).toBe(row.expectedStatus);
-    expect(ff.reads).toEqual(row.expectedReads); // exact read count + exact read order + terminal-stop (no read past the row's own sequence)
+    expect(ff.reads).toEqual(row.auth === null ? row.expectedReads : [USER_READ, ...row.expectedReads]);
 
     if (row.expectedStatus === 'ok') {
       expect(Object.keys(response).sort()).toEqual(
@@ -566,16 +583,20 @@ describe('Shell — the exact 25+2 decision table (RC-PS-final): the 2 callable-
   test('CE-02: unexpected internal exception -> exact HttpsError(internal, "ระบบขัดข้อง กรุณาลองใหม่"), exactly one attempted read, exactly one safe 3-key log envelope', async () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     let getAttempts = 0;
-    const throwingCollection = {
-      doc: (id: string) => ({
-        get: async () => {
-          getAttempts += 1;
-          expect(id).toBe('SHIFT-1');
-          throw new Error('SENSITIVE_VALUE_SHOULD_NEVER_BE_LOGGED');
-        },
+    const throwingFf = {
+      collection: (name: string) => ({
+        doc: (id: string) => ({
+          get: async () => {
+            if (name === 'users') {
+              return { exists: true, id, data: () => ({ isActive: true, deletedAt: null, authVersion: 0 }) };
+            }
+            getAttempts += 1;
+            expect(id).toBe('SHIFT-1');
+            throw new Error('SENSITIVE_VALUE_SHOULD_NEVER_BE_LOGGED');
+          },
+        }),
       }),
-    };
-    const throwingFf = { collection: () => throwingCollection } as unknown as FakeFirestore;
+    } as unknown as FakeFirestore;
     await expect(
       performGetShiftCloseCaseFigures(throwingFf, validRequest, managerAuth()),
     ).rejects.toMatchObject({ code: 'internal', message: 'ระบบขัดข้อง กรุณาลองใหม่' });
@@ -604,7 +625,7 @@ describe('Shell — selected-run-only, no latestEvidenceId/latestCloseHash fallb
     ff.seed('shiftCloseEvidence', 'SHOULD-NEVER-BE-READ', validEvidenceDoc());
     const response = await performGetShiftCloseCaseFigures(ff as never, validRequest, managerAuth());
     expect(response).toEqual({ status: 'provisional_no_selected_run' });
-    expect(ff.reads.length).toBe(1);
+    expect(ff.reads.length).toBe(2);
   });
 });
 
@@ -614,7 +635,7 @@ describe('Shell — J11 read boundary: a whitespace-only pointer is fail-closed 
     ff.seed('shiftCloseCases', 'SHIFT-1', validCaseDoc({ selectedRunId: '   ', selectedCloseHash: 'HASH-1' }));
     const response = await performGetShiftCloseCaseFigures(ff as never, validRequest, managerAuth());
     expect(response).toEqual({ status: 'unavailable_data_anomaly' });
-    expect(ff.reads).toEqual([{ collection: 'shiftCloseCases', id: 'SHIFT-1' }]);
+    expect(ff.reads).toEqual([USER_READ, { collection: 'shiftCloseCases', id: 'SHIFT-1' }]);
     expect(ff.reads.some((r) => r.id.trim().length === 0)).toBe(false);
   });
   test('selectedCloseHash whitespace-only -> unavailable_data_anomaly, exactly 1 read, never a second read', async () => {
@@ -622,7 +643,7 @@ describe('Shell — J11 read boundary: a whitespace-only pointer is fail-closed 
     ff.seed('shiftCloseCases', 'SHIFT-1', validCaseDoc({ selectedRunId: 'RUN-1', selectedCloseHash: '   ' }));
     const response = await performGetShiftCloseCaseFigures(ff as never, validRequest, managerAuth());
     expect(response).toEqual({ status: 'unavailable_data_anomaly' });
-    expect(ff.reads).toEqual([{ collection: 'shiftCloseCases', id: 'SHIFT-1' }]);
+    expect(ff.reads).toEqual([USER_READ, { collection: 'shiftCloseCases', id: 'SHIFT-1' }]);
   });
   test('selectedRunId with surrounding whitespace is preserved byte-for-byte and used verbatim as the run doc id', async () => {
     const ff = new FakeFirestore();
@@ -632,6 +653,7 @@ describe('Shell — J11 read boundary: a whitespace-only pointer is fail-closed 
     const response = await performGetShiftCloseCaseFigures(ff as never, validRequest, managerAuth());
     expect(response.status).toBe('ok');
     expect(ff.reads).toEqual([
+      USER_READ,
       { collection: 'shiftCloseCases', id: 'SHIFT-1' },
       { collection: 'shiftCloseValidationRuns', id: '  RUN-1  ' },
       { collection: 'shiftCloseEvidence', id: 'SHIFT-1_HASH-1' },
@@ -770,14 +792,18 @@ describe('Shell — sensitive-log absence and the K1 internal-error boundary', (
   test('unexpected internal exception -> exactly one safe log, HttpsError internal', async () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const ff = new FakeFirestore();
-    const throwingCollection = {
-      doc: () => ({
-        get: async () => {
-          throw new Error('EVIDENCE_VALUE_12345_SHOULD_NEVER_BE_LOGGED');
-        },
+    const throwingFf = {
+      collection: (name: string) => ({
+        doc: () => ({
+          get: async () => {
+            if (name === 'users') {
+              return { exists: true, data: () => ({ isActive: true, deletedAt: null, authVersion: 0 }) };
+            }
+            throw new Error('EVIDENCE_VALUE_12345_SHOULD_NEVER_BE_LOGGED');
+          },
+        }),
       }),
-    };
-    const throwingFf = { collection: () => throwingCollection } as unknown as FakeFirestore;
+    } as unknown as FakeFirestore;
     await expect(
       performGetShiftCloseCaseFigures(throwingFf, validRequest, managerAuth()),
     ).rejects.toMatchObject({ code: 'internal' });
@@ -818,7 +844,7 @@ describe('Shell — sensitive-log absence and the K1 internal-error boundary', (
 // PART B — the AST static guard: rules S1-S9 + RCQ-IP-09 over SHELL_BASELINE_V3
 // ============================================================================
 
-const SHELL_ALLOWED_PROPERTY_NAMES = ['collection', 'doc', 'get', 'data', 'auth', 'exists', 'error', 'id'] as const;
+const SHELL_ALLOWED_PROPERTY_NAMES = ['collection', 'doc', 'get', 'data', 'auth', 'exists', 'error', 'id', 'ok'] as const;
 
 const EXCLUDED_FIELD_NAMES_39 = [
   'note', 'notes', 'reasonNote', 'message', 'description',
@@ -910,7 +936,7 @@ function analyzeShell(source: string, changedRange?: CharRange): Violation[] {
 
   const ALLOWED_SPECIFIERS = [
     'firebase-functions/v2/https', 'firebase-admin/firestore', './db', './deployConfig',
-    './getShiftCloseCaseFiguresCore', './shiftCloseValidationTypes',
+    './getShiftCloseCaseFiguresCore', './shiftCloseValidationTypes', './authorityFence',
   ];
   const imports: ts.ImportDeclaration[] = [];
   forEachDescendant(sf, (n) => {
@@ -1363,119 +1389,4 @@ describe('Static guard — shell positive fixtures (PS-B1 .. PS-B9)', () => {
 // The frozen SHELL_BASELINE_V3 source text (byte-identical to the shipped
 // functions/src/getShiftCloseCaseFigures.ts) — the fixture under guard.
 // ============================================================================
-const SHELL_BASELINE_V3 = `/**
- * getShiftCloseCaseFigures — I/O shell. [Packet 5 / UI-B2 / Packet S]
- * onCall wiring + exactly three direct document reads. Every decision is
- * delegated to the pure getShiftCloseCaseFiguresCore module.
- *
- * K1 boundary:
- *   invalid request      -> HttpsError('invalid-argument'), zero reads, no union member
- *   unexpected exception -> exactly one safe log, then HttpsError('internal')
- *   validated outcomes   -> one of the seven business-union members
- */
-import { onCall, HttpsError } from 'firebase-functions/v2/https';
-import type { Firestore } from 'firebase-admin/firestore';
-import { db } from './db';
-import { FUNCTIONS_REGION } from './deployConfig';
-import {
-  caseDecisionResponse,
-  caseDecisionView,
-  curateCallableAuth,
-  curateCaseDocument,
-  curateEvidenceDocument,
-  curateRequestView,
-  curateRunDocument,
-  decideAuthorization,
-  decideShiftCloseCaseFigures,
-  evidenceDecisionResponse,
-  evidenceDecisionView,
-  readCuratedCaseSelectedRunId,
-  readCuratedRequestShiftId,
-  readCuratedRunEvidenceId,
-  responseCaseNotFound,
-  responseProvisionalNoSelectedRun,
-  responseUnavailableDataAnomaly,
-  runDecisionResponse,
-  runDecisionView,
-  type GetShiftCloseCaseFiguresResponse,
-} from './getShiftCloseCaseFiguresCore';
-
-/* MARKER:IMPORTS */
-
-export async function performGetShiftCloseCaseFigures(
-  database: Firestore,
-  rawRequest: unknown,
-  rawAuth: unknown,
-): Promise<GetShiftCloseCaseFiguresResponse> {
-  const request = curateRequestView(rawRequest);
-  if (request === null) {
-    throw new HttpsError('invalid-argument', 'คำขอไม่ถูกต้อง');
-  }
-
-  const denial = decideAuthorization(curateCallableAuth(rawAuth), request);
-  if (denial !== null) return denial;
-
-  const shiftId = readCuratedRequestShiftId(request);
-  let stage: 'read_case' | 'read_run' | 'read_evidence' = 'read_case';
-
-  /* MARKER:BODY */
-
-  try {
-    const caseSnap = await database.collection('shiftCloseCases').doc(shiftId).get();
-
-    /* MARKER:POSTCASE */
-
-    if (!caseSnap.exists) return responseCaseNotFound();
-    const caseDecision = curateCaseDocument(request, caseSnap.id, caseSnap.data());
-    const caseStatus = caseDecisionResponse(caseDecision);
-    if (caseStatus !== null) return caseStatus;
-    const caseView = caseDecisionView(caseDecision);
-    if (caseView === null) return responseUnavailableDataAnomaly();
-
-    const selectedRunId = readCuratedCaseSelectedRunId(caseView);
-    if (selectedRunId === null) return responseProvisionalNoSelectedRun();
-
-    stage = 'read_run';
-    const runSnap = await database.collection('shiftCloseValidationRuns').doc(selectedRunId).get();
-    if (!runSnap.exists) return responseUnavailableDataAnomaly();
-    const runDecision = curateRunDocument(caseView, runSnap.id, runSnap.data());
-    const runStatus = runDecisionResponse(runDecision);
-    if (runStatus !== null) return runStatus;
-    const runView = runDecisionView(runDecision);
-    if (runView === null) return responseUnavailableDataAnomaly();
-
-    const evidenceId = readCuratedRunEvidenceId(runView);
-
-    stage = 'read_evidence';
-    const evidenceSnap = await database.collection('shiftCloseEvidence').doc(evidenceId).get();
-    if (!evidenceSnap.exists) return responseUnavailableDataAnomaly();
-    const evidenceDecision = curateEvidenceDocument(
-      caseView,
-      runView,
-      evidenceSnap.id,
-      evidenceSnap.data(),
-    );
-    const evidenceStatus = evidenceDecisionResponse(evidenceDecision);
-    if (evidenceStatus !== null) return evidenceStatus;
-    const evidenceView = evidenceDecisionView(evidenceDecision);
-    if (evidenceView === null) return responseUnavailableDataAnomaly();
-
-    return decideShiftCloseCaseFigures(runView, evidenceView);
-  } catch {
-    console.error({ operation: 'getShiftCloseCaseFigures', stage, code: 'unavailable' });
-    throw new HttpsError('internal', 'ระบบขัดข้อง กรุณาลองใหม่');
-  }
-}
-
-/* MARKER:HANDLER */
-
-export const getShiftCloseCaseFigures = onCall(
-  {
-    region: FUNCTIONS_REGION,
-    cors: [/^https?:\\/\\/localhost:\\d+$/, /^https:\\/\\/.*\\.firebaseapp\\.com$/, /^https:\\/\\/.*\\.web\\.app$/],
-  },
-  async (request) => {
-    return performGetShiftCloseCaseFigures(db, request.data, request.auth);
-  },
-);
-`;
+const SHELL_BASELINE_V3 = "/**\n * getShiftCloseCaseFigures — I/O shell. [Packet 5 / UI-B2 / Packet S]\n * onCall wiring + exactly three direct document reads. Every decision is\n * delegated to the pure getShiftCloseCaseFiguresCore module.\n *\n * K1 boundary:\n *   invalid request      -> HttpsError('invalid-argument'), zero reads, no union member\n *   unexpected exception -> exactly one safe log, then HttpsError('internal')\n *   validated outcomes   -> one of the seven business-union members\n */\nimport { onCall, HttpsError } from 'firebase-functions/v2/https';\nimport type { Firestore } from 'firebase-admin/firestore';\nimport { db } from './db';\nimport { FUNCTIONS_REGION } from './deployConfig';\nimport {\n  caseDecisionResponse,\n  caseDecisionView,\n  curateCallableAuth,\n  curateCaseDocument,\n  curateEvidenceDocument,\n  curateRequestView,\n  curateRunDocument,\n  decideAuthorization,\n  decideShiftCloseCaseFigures,\n  evidenceDecisionResponse,\n  evidenceDecisionView,\n  readCuratedCaseSelectedRunId,\n  readCuratedRequestShiftId,\n  readCuratedRunEvidenceId,\n  responseCaseNotFound,\n  responseProvisionalNoSelectedRun,\n  responseUnavailableDataAnomaly,\n  runDecisionResponse,\n  runDecisionView,\n  type GetShiftCloseCaseFiguresResponse,\n} from './getShiftCloseCaseFiguresCore';\nimport { evaluateFreshPrivilegedAuthority, type AuthLike } from './authorityFence';\n\n/* MARKER:IMPORTS */\n\nexport async function performGetShiftCloseCaseFigures(\n  database: Firestore,\n  rawRequest: unknown,\n  rawAuth: unknown,\n): Promise<GetShiftCloseCaseFiguresResponse> {\n  const request = curateRequestView(rawRequest);\n  if (request === null) {\n    throw new HttpsError('invalid-argument', 'คำขอไม่ถูกต้อง');\n  }\n\n  const freshness = await evaluateFreshPrivilegedAuthority(database, rawAuth as AuthLike);\n  const denial = decideAuthorization(curateCallableAuth(rawAuth), request, freshness.ok);\n  if (denial !== null) return denial;\n\n  const shiftId = readCuratedRequestShiftId(request);\n  let stage: 'read_case' | 'read_run' | 'read_evidence' = 'read_case';\n\n  /* MARKER:BODY */\n\n  try {\n    const caseSnap = await database.collection('shiftCloseCases').doc(shiftId).get();\n\n    /* MARKER:POSTCASE */\n\n    if (!caseSnap.exists) return responseCaseNotFound();\n    const caseDecision = curateCaseDocument(request, caseSnap.id, caseSnap.data());\n    const caseStatus = caseDecisionResponse(caseDecision);\n    if (caseStatus !== null) return caseStatus;\n    const caseView = caseDecisionView(caseDecision);\n    if (caseView === null) return responseUnavailableDataAnomaly();\n\n    const selectedRunId = readCuratedCaseSelectedRunId(caseView);\n    if (selectedRunId === null) return responseProvisionalNoSelectedRun();\n\n    stage = 'read_run';\n    const runSnap = await database.collection('shiftCloseValidationRuns').doc(selectedRunId).get();\n    if (!runSnap.exists) return responseUnavailableDataAnomaly();\n    const runDecision = curateRunDocument(caseView, runSnap.id, runSnap.data());\n    const runStatus = runDecisionResponse(runDecision);\n    if (runStatus !== null) return runStatus;\n    const runView = runDecisionView(runDecision);\n    if (runView === null) return responseUnavailableDataAnomaly();\n\n    const evidenceId = readCuratedRunEvidenceId(runView);\n\n    stage = 'read_evidence';\n    const evidenceSnap = await database.collection('shiftCloseEvidence').doc(evidenceId).get();\n    if (!evidenceSnap.exists) return responseUnavailableDataAnomaly();\n    const evidenceDecision = curateEvidenceDocument(\n      caseView,\n      runView,\n      evidenceSnap.id,\n      evidenceSnap.data(),\n    );\n    const evidenceStatus = evidenceDecisionResponse(evidenceDecision);\n    if (evidenceStatus !== null) return evidenceStatus;\n    const evidenceView = evidenceDecisionView(evidenceDecision);\n    if (evidenceView === null) return responseUnavailableDataAnomaly();\n\n    return decideShiftCloseCaseFigures(runView, evidenceView);\n  } catch {\n    console.error({ operation: 'getShiftCloseCaseFigures', stage, code: 'unavailable' });\n    throw new HttpsError('internal', 'ระบบขัดข้อง กรุณาลองใหม่');\n  }\n}\n\n/* MARKER:HANDLER */\n\nexport const getShiftCloseCaseFigures = onCall(\n  {\n    region: FUNCTIONS_REGION,\n    cors: [/^https?:\\/\\/localhost:\\d+$/, /^https:\\/\\/.*\\.firebaseapp\\.com$/, /^https:\\/\\/.*\\.web\\.app$/],\n  },\n  async (request) => {\n    return performGetShiftCloseCaseFigures(db, request.data, request.auth);\n  },\n);\n";

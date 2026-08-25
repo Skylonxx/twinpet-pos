@@ -33,6 +33,7 @@ import {
 } from 'firebase-admin/firestore';
 import { db } from './db';
 import { FUNCTIONS_REGION } from './deployConfig';
+import { assertFreshPrivilegedAuthority } from './authorityFence';
 // Canonical server-side FIFO source of truth (shared with reconcileOrder).
 import {
   roundMoney,
@@ -99,6 +100,7 @@ export async function performResolveTransferDiscrepancy(
   auth: AuthLike,
 ): Promise<{ adjustmentId: string }> {
   if (!auth) throw new HttpsError('unauthenticated', 'ต้องเข้าสู่ระบบก่อน');
+  await assertFreshPrivilegedAuthority(database, auth);
 
   const transferId = String(input.transferId ?? '').trim();
   const discrepancyId = String(input.discrepancyId ?? '').trim();

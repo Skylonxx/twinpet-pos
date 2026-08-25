@@ -34,6 +34,7 @@ import {
   runDecisionView,
   type GetShiftCloseCaseFiguresResponse,
 } from './getShiftCloseCaseFiguresCore';
+import { evaluateFreshPrivilegedAuthority, type AuthLike } from './authorityFence';
 
 /* MARKER:IMPORTS */
 
@@ -47,7 +48,8 @@ export async function performGetShiftCloseCaseFigures(
     throw new HttpsError('invalid-argument', 'คำขอไม่ถูกต้อง');
   }
 
-  const denial = decideAuthorization(curateCallableAuth(rawAuth), request);
+  const freshness = await evaluateFreshPrivilegedAuthority(database, rawAuth as AuthLike);
+  const denial = decideAuthorization(curateCallableAuth(rawAuth), request, freshness.ok);
   if (denial !== null) return denial;
 
   const shiftId = readCuratedRequestShiftId(request);

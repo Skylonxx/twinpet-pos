@@ -17,6 +17,7 @@ const staff = (over: Record<string, unknown> = {}) => ({
   role: 'staff',
   branchIds: [BRANCH],
   permissions: ['pos_sale', 'pos_void'],
+  authVersion: 0,
   ...over,
 });
 
@@ -68,6 +69,9 @@ beforeEach(async () => {
       voidAnomaly: 'missing_canonical',
       voidAnomalyAt: Timestamp.now(),
     });
+    const live = { isActive: true, deletedAt: null, authVersion: 0 };
+    await setDoc(doc(db, 'users', 'staff1'), live);
+    await setDoc(doc(db, 'users', 'admin1'), live);
   });
 });
 

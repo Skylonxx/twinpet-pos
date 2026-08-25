@@ -3,6 +3,7 @@ import type { Firestore } from 'firebase-admin/firestore';
 import { db } from './db';
 import { FUNCTIONS_REGION } from './deployConfig';
 import { evaluateReceiptCore, type ReceiptCoreResult, type ReceiptSnapshots } from './getOrderReceiptCore';
+import { assertFreshPrivilegedAuthority } from './authorityFence';
 
 type AuthLike = { uid?: string; token?: Record<string, unknown> } | null | undefined;
 
@@ -13,8 +14,13 @@ function callerBranchIds(auth: AuthLike): string[] | null {
   return raw.filter((x): x is string => typeof x === 'string');
 }
 
-export function authorizeReceiptAccess(auth: AuthLike, orderBranchId: string): void {
+export async function authorizeReceiptAccess(
+  database: Firestore,
+  auth: AuthLike,
+  orderBranchId: string,
+): Promise<void> {
   if (!auth) throw new HttpsError('unauthenticated', 'ต้องเข้าสู่ระบบก่อน');
+  await assertFreshPrivilegedAuthority(database, auth);
   const ids = callerBranchIds(auth);
   if (ids == null) throw new HttpsError('unauthenticated', 'ต้องเข้าสู่ระบบก่อน');
   if (ids.length === 0) throw new HttpsError('permission-denied', 'ไม่พบสิทธิ์สาขา');
@@ -51,8 +57,9 @@ export async function performGetOrderReceipt(
     const order = orderSnap.exists ? (orderSnap.data() as Record<string, unknown>) : null;
     if (orderSnap.exists) {
       const branchId = typeof order?.branchId === 'string' ? order.branchId : '';
-      authorizeReceiptAccess(auth, branchId);
+      await authorizeReceiptAccess(database, auth, branchId);
     } else {
+      await assertFreshPrivilegedAuthority(database, auth);
       const ids = callerBranchIds(auth) ?? [];
       if (ids.length === 0 && !ids.includes('ALL')) {
         throw new HttpsError('permission-denied', 'ไม่พบสิทธิ์สาขา');

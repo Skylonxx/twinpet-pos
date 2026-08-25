@@ -3,17 +3,16 @@ import {
   collection,
   doc,
   getDoc,
-  getDocs,
   onSnapshot,
   orderBy,
   query,
   serverTimestamp,
   setDoc,
-  updateDoc,
   where,
   type Timestamp,
 } from 'firebase/firestore';
 import { useCallback, useEffect, useState } from 'react';
+import { setUserAccount } from '../auth/setUserAccount';
 import { collections, db, isFirebaseConfigured } from '../firebase';
 import type { StaffActivity, User, UserRole } from '../types';
 import { diffUserFields, writeStaffActivity, writeUserAuditLog } from './audit';
@@ -282,20 +281,42 @@ export function useStaffManagement(
         if (!snap.exists()) throw new Error('ไม่พบพนักงาน');
         const existing = snap.data() as User;
 
+        await setUserAccount({
+          op: 'updateProfile',
+          userId: editId,
+          firstName: form.firstName.trim(),
+          lastName: form.lastName.trim(),
+          role: form.role,
+          branchIds: form.branchIds,
+          permissions,
+        });
+
+        const nextUsername = form.username.trim().toLowerCase();
+        if (nextUsername && nextUsername !== String(existing.username ?? '').trim().toLowerCase()) {
+          await setUserAccount({
+            op: 'rename',
+            userId: editId,
+            newUsername: nextUsername,
+          });
+        }
+        if (form.pin && /^\d{4}$/.test(form.pin)) {
+          await setUserAccount({
+            op: 'rotate',
+            userId: editId,
+            pin: form.pin,
+            rotateIdempotencyKey: `staff-rotate:${editId}:${crypto.randomUUID()}`,
+          });
+        }
+
         const patch: Partial<User> = {
           firstName: form.firstName.trim(),
           lastName: form.lastName.trim(),
-          username: form.username.trim().toLowerCase(),
+          username: nextUsername,
           role: form.role,
           branchIds: form.branchIds,
           permissions,
           updatedAt: now,
         };
-        if (form.pin && /^\d{4}$/.test(form.pin)) {
-          patch.pin = await bcrypt.hash(form.pin, 10);
-        }
-
-        await updateDoc(ref, patch);
 
         const changed = diffUserFields(
           existing as unknown as Record<string, unknown>,
@@ -335,33 +356,19 @@ export function useStaffManagement(
         }
 
         const normalizedUsername = form.username.trim().toLowerCase();
-        const usernameSnap = await getDocs(
-          query(collection(db, collections.users), where('username', '==', normalizedUsername)),
-        );
-        if (!usernameSnap.empty) {
-          throw new Error('ชื่อผู้ใช้นี้มีอยู่แล้ว');
-        }
-
-        const userRef = doc(collection(db, collections.users));
-        const pinHash = await bcrypt.hash(form.pin, 10);
-
-        const user: User = {
-          id: userRef.id,
+        const created = await setUserAccount({
+          op: 'create',
+          idempotencyKey: `staff-create:${normalizedUsername}:${crypto.randomUUID()}`,
+          username: normalizedUsername,
           firstName: form.firstName.trim(),
           lastName: form.lastName.trim(),
-          username: normalizedUsername,
-          pin: pinHash,
           role: form.role,
           branchIds: form.branchIds,
           permissions,
           isActive: true,
-          lastLoginAt: null,
-          createdAt: now,
-          updatedAt: now,
-          deletedAt: null,
-        };
-
-        await setDoc(userRef, user);
+          pin: form.pin,
+        });
+        if (!created.userId) throw new Error('ไม่สามารถสร้างพนักงานได้');
 
         await writeStaffActivity(
           { firestore: db, changedBy: actor.id, changedByName: actor.name },
@@ -370,8 +377,8 @@ export function useStaffManagement(
             userId: actor.id,
             userName: actor.name,
             action: 'STAFF_CREATE',
-            detail: `เพิ่มพนักงาน ${user.firstName} ${user.lastName}`,
-            refId: user.id,
+            detail: `เพิ่มพนักงาน ${form.firstName.trim()} ${form.lastName.trim()}`,
+            refId: created.userId,
           },
         );
       }
@@ -411,7 +418,7 @@ export function useStaffManagement(
       const logBranchId = hq ? (existing.branchIds[0] ?? branchId) : branchId;
       if (!logBranchId) return;
 
-      await updateDoc(ref, { isActive, updatedAt: serverTimestamp() });
+      await setUserAccount({ op: 'setActive', userId, isActive });
 
       await writeUserAuditLog(
         { firestore: db, changedBy: actor.id, changedByName: actor.name },
@@ -472,11 +479,7 @@ export function useStaffManagement(
       const logBranchId = hq ? (existing.branchIds[0] ?? branchId) : branchId;
       if (!logBranchId) return;
 
-      await updateDoc(ref, {
-        deletedAt: serverTimestamp(),
-        isActive: false,
-        updatedAt: serverTimestamp(),
-      });
+      await setUserAccount({ op: 'softDelete', userId });
 
       await writeUserAuditLog(
         { firestore: db, changedBy: actor.id, changedByName: actor.name },

@@ -37,6 +37,7 @@ import {
   type ResolveShiftCloseAlertRequest,
   type ValidatedAdjudicationRequest,
 } from './resolveShiftCloseAlertCore';
+import { evaluateFreshPrivilegedAuthority } from './authorityFence';
 
 const C = {
   cases: 'shiftCloseCases',
@@ -93,7 +94,8 @@ export async function performResolveShiftCloseAlert(
 
   if (!auth) return reject(value.commandId, value.shiftId, 'unauthorized', 'ต้องเข้าสู่ระบบก่อน');
 
-  const authority = checkAdjudicationAuthority(auth, value.branchId);
+  const freshness = await evaluateFreshPrivilegedAuthority(database, auth);
+  const authority = checkAdjudicationAuthority(auth, value.branchId, freshness.ok);
   if (authority.rejectCode) {
     return reject(value.commandId, value.shiftId, authority.rejectCode, 'ไม่มีสิทธิ์ดำเนินการ');
   }

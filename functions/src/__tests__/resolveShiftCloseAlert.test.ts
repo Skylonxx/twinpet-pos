@@ -28,13 +28,28 @@ import { performResolveShiftCloseAlert, type ResolveShiftCloseAlertRequest } fro
 // resolveReversal.test.ts pattern with tx.create (immutable audit events). ──
 type Doc = Record<string, unknown>;
 function makeDb(seed: Record<string, Doc>) {
-  const store = new Map<string, Doc>(Object.entries(seed).map(([k, v]) => [k, { ...v }]));
+  const store = new Map<string, Doc>(Object.entries({
+    'users/m1': { isActive: true, deletedAt: null, authVersion: 0, role: 'manager' },
+    'users/m2': { isActive: true, deletedAt: null, authVersion: 0, role: 'manager' },
+    'users/a1': { isActive: true, deletedAt: null, authVersion: 0, role: 'admin' },
+    'users/s1': { isActive: true, deletedAt: null, authVersion: 0, role: 'staff' },
+    'users/m3': { isActive: true, deletedAt: null, authVersion: 0, role: 'manager' },
+    ...seed,
+  }).map(([k, v]) => [k, { ...v }]));
   const resolveVal = (v: unknown): unknown => {
     if (v && typeof v === 'object' && (v as { __fv?: string }).__fv === 'ts') return 1_700_000_000_000;
     return v;
   };
   function docRef(path: string): any {
-    return { __doc: true, path, id: path.slice(path.lastIndexOf('/') + 1) };
+    return {
+      __doc: true,
+      path,
+      id: path.slice(path.lastIndexOf('/') + 1),
+      get: async () => {
+        const data = store.get(path);
+        return { exists: data !== undefined, id: path.slice(path.lastIndexOf('/') + 1), data: () => data };
+      },
+    };
   }
   function colRef(path: string): any {
     return { __col: true, path, doc: (id: string) => docRef(`${path}/${id}`) };
@@ -72,11 +87,11 @@ function makeDb(seed: Record<string, Doc>) {
   return db;
 }
 
-const mgrB1 = { uid: 'u1', token: { role: 'manager', staffId: 'm1', branchIds: ['B1'] } };
-const mgrB1Second = { uid: 'u9', token: { role: 'manager', staffId: 'm2', branchIds: ['B1'] } };
-const adminAll = { uid: 'u2', token: { role: 'admin', staffId: 'a1', branchIds: ['ALL'] } };
-const staffB1 = { uid: 'u3', token: { role: 'staff', staffId: 's1', branchIds: ['B1'] } };
-const mgrOtherBranch = { uid: 'u4', token: { role: 'manager', staffId: 'm3', branchIds: ['B2'] } };
+const mgrB1 = { uid: 'u1', token: { role: 'manager', staffId: 'm1', branchIds: ['B1'], authVersion: 0 } };
+const mgrB1Second = { uid: 'u9', token: { role: 'manager', staffId: 'm2', branchIds: ['B1'], authVersion: 0 } };
+const adminAll = { uid: 'u2', token: { role: 'admin', staffId: 'a1', branchIds: ['ALL'], authVersion: 0 } };
+const staffB1 = { uid: 'u3', token: { role: 'staff', staffId: 's1', branchIds: ['B1'], authVersion: 0 } };
+const mgrOtherBranch = { uid: 'u4', token: { role: 'manager', staffId: 'm3', branchIds: ['B2'], authVersion: 0 } };
 
 function seedOpenCase(over: { caseVersion?: number; leaseOwner?: string | null; leaseExpiryMs?: number | null; settlementState?: string } = {}) {
   return makeDb({

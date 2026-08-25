@@ -140,6 +140,7 @@ export default function LoginPage() {
         return;
       }
 
+      const normalizedUsername = username.trim().toLowerCase();
       const normalizedPin = pin.trim();
       if (!/^\d{4}$/.test(normalizedPin)) {
         showToast('PIN ต้องเป็นตัวเลข 4 หลัก', 'error');
@@ -152,7 +153,7 @@ export default function LoginPage() {
       clearErrors();
 
       try {
-        const user = await loginWithPin(normalizedPin, branchId);
+        const user = await loginWithPin(normalizedPin, branchId, normalizedUsername);
         handleSuccess(user);
       } catch (err) {
         console.error('[login] PIN submit failed', err);
@@ -181,6 +182,7 @@ export default function LoginPage() {
       loginWithPin,
       mode,
       showToast,
+      username,
     ],
   );
 
@@ -479,6 +481,29 @@ export default function LoginPage() {
 
           {mode === 'pin' && (
             <div className="animate-fadeIn">
+              <div className="mb-5">
+                <label htmlFor="inp-pin-user" className="block mb-2 text-sm font-medium text-gray-900 dark:text-white">
+                  Username
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none">
+                    <i className="ti ti-user text-gray-400 dark:text-gray-500" aria-hidden="true" />
+                  </div>
+                  <input
+                    type="text"
+                    id="inp-pin-user"
+                    className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-primary-500 focus:border-primary-500 block w-full pl-10 p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white"
+                    placeholder="กรอก username"
+                    autoComplete="username"
+                    value={username}
+                    onChange={(e) => {
+                      setUsername(e.target.value);
+                      clearErrors();
+                    }}
+                    disabled={isLoading}
+                  />
+                </div>
+              </div>
               <PinPad
                 pinValue={pinValue}
                 onPinPress={handlePinPress}

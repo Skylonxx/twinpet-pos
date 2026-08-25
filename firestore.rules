@@ -84,11 +84,39 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isStaff() && role() == 'admin';
+      return isStaff() && role() == 'admin' && hasFreshAuthority();
     }
 
     function isManagerOrAdmin() {
-      return isStaff() && role() in ['admin', 'manager'];
+      return isStaff() && role() in ['admin', 'manager'] && hasFreshAuthority();
+    }
+
+    function hasFreshAuthority() {
+      let userPath = /databases/$(database)/documents/users/$(staffId());
+      return exists(userPath)
+        && get(userPath).data.get('isActive', false) == true
+        && get(userPath).data.get('deletedAt', null) == null
+        && get(userPath).data.get('authVersion', 0) == request.auth.token.get('authVersion', -1);
+    }
+
+    function hasFreshBranchAccess(branchId) {
+      return hasBranchAccess(branchId) && hasFreshAuthority();
+    }
+
+    function hasFreshPerm(p) {
+      return hasPerm(p) && hasFreshAuthority();
+    }
+
+    function canMutateStockFresh() {
+      return canMutateStock() && hasFreshAuthority();
+    }
+
+    function isFreshStaff() {
+      return isStaff() && hasFreshAuthority();
+    }
+
+    function hasFreshAnyBranchAccess(ids) {
+      return ids.hasAny(branchIds()) && hasFreshAuthority();
     }
 
     function hasBranchAccess(branchId) {
@@ -132,7 +160,7 @@ service cloud.firestore {
         && d.fromBranchId == t.fromBranchId
         && d.toBranchId == t.toBranchId
         && d.reportedByBranchId == t.toBranchId
-        && hasBranchAccess(t.toBranchId)
+        && hasFreshBranchAccess(t.toBranchId)
         && d.reason is string
         && d.lines is list
         && d.lines.size() > 0
@@ -377,7 +405,35 @@ service cloud.firestore {
     // ── Staff profiles ──
     match /users/{userId} {
       allow read: if isStaff();
-      allow write: if isAdmin();
+      allow create, delete: if false;
+      allow update: if isStaff()
+        && userId == staffId()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastLoginAt'])
+        && request.resource.data.lastLoginAt == request.time;
+    }
+
+    match /userCredentials/{userId} {
+      allow read, write: if false;
+    }
+
+    match /usernames/{username} {
+      allow read, write: if false;
+    }
+
+    match /userAccountCommandIntents/{intentId} {
+      allow read, write: if false;
+    }
+
+    match /migrationControl/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /managerApprovals/{approvalId} {
+      allow read, write: if false;
+    }
+
+    match /managerApprovalAttempts/{scopeKey} {
+      allow read, write: if false;
     }
 
     // ── Settings (global + per-branch) ──
@@ -397,7 +453,7 @@ service cloud.firestore {
              .hasOnly(['requiresPasswordForVoid', 'updatedAt']);
 
       match /docCounters/{counterId} {
-        allow read, write: if isStaff();
+        allow read, write: if isFreshStaff();
       }
     }
 
@@ -451,7 +507,7 @@ service cloud.firestore {
         // (Admin SDK), so oversell/negative stock is unaffected (decision #2).
         allow create, update: if isStaff()
           && request.resource.data.branchId == stockBranchId
-          && canMutateStock();
+          && canMutateStockFresh();
         // Admin-only — explicit (NOT a broad `write`, so delete is not subsumed).
         allow delete: if isAdmin();
       }
@@ -466,7 +522,7 @@ service cloud.firestore {
       // blocks, so leaving this permissive would re-open the writes hardened above.
       allow create, update: if isStaff()
         && request.resource.data.branchId == stockDocId
-        && canMutateStock();
+        && canMutateStockFresh();
       // Admin-only — explicit delete for the Danger Zone hard-delete collectionGroup sweep
       allow delete: if isAdmin();
     }
@@ -490,14 +546,12 @@ service cloud.firestore {
       // (POS staff can only create branch-local suppliers, not global ones)
       allow create: if isStaff()
         && request.resource.data.allowedBranchIds is list
-        && request.resource.data.allowedBranchIds.hasAny(branchIds())
+        && hasFreshAnyBranchAccess(request.resource.data.allowedBranchIds)
         && !request.resource.data.allowedBranchIds.hasAny(['ALL']);
 
       // Staff: update a supplier that is already visible to (i.e. owned by) their branch
       allow update: if isStaff()
-        && (
-          resource.data.allowedBranchIds.hasAny(branchIds())
-        )
+        && hasFreshAnyBranchAccess(resource.data.allowedBranchIds)
         // Cannot escalate to ALL-branches visibility
         && !request.resource.data.allowedBranchIds.hasAny(['ALL']);
     }
@@ -505,21 +559,21 @@ service cloud.firestore {
     // ── Customers & credit ──
     match /customers/{customerId} {
       allow read: if isStaff();
-      allow write: if isStaff();
+      allow write: if isFreshStaff();
       // Admin-only — used by the Danger Zone hard-delete of customer master data
       allow delete: if isAdmin();
     }
 
     match /creditAccounts/{accountId} {
       allow read: if isStaff();
-      allow write: if isStaff();
+      allow write: if isFreshStaff();
       // Admin-only — used by the Danger Zone hard-delete of customer master data
       allow delete: if isAdmin();
     }
 
     match /creditTransactions/{txId} {
       allow read: if isStaff();
-      allow create: if isStaff();
+      allow create: if isFreshStaff();
       allow update: if isManagerOrAdmin();
       // Admin-only — used by the Danger Zone UAT reset to wipe credit history
       allow delete: if isAdmin();
@@ -527,7 +581,7 @@ service cloud.firestore {
 
     match /creditPayments/{paymentId} {
       allow read: if isStaff();
-      allow create: if isStaff();
+      allow create: if isFreshStaff();
       // Admin-only — used by the Danger Zone UAT reset to wipe credit history
       allow delete: if isAdmin();
     }
@@ -586,25 +640,25 @@ service cloud.firestore {
 
     match /parkedOrders/{parkedId} {
       allow read: if isStaff() && hasBranchAccess(resource.data.branchId);
-      allow write: if isStaff() && hasBranchAccess(request.resource.data.branchId);
+      allow write: if isStaff() && hasFreshBranchAccess(request.resource.data.branchId);
 
       match /parkedItems/{itemId} {
         allow read: if isStaff();
-        allow create: if isStaff();
+        allow create: if isFreshStaff();
         allow update, delete: if isStaff()
-          && hasBranchAccess(get(/databases/$(database)/documents/parkedOrders/$(parkedId)).data.branchId);
+          && hasFreshBranchAccess(get(/databases/$(database)/documents/parkedOrders/$(parkedId)).data.branchId);
       }
     }
 
     match /quotations/{quotationId} {
       allow read: if isStaff() && hasBranchAccess(resource.data.branchId);
-      allow write: if isStaff() && hasBranchAccess(request.resource.data.branchId);
+      allow write: if isStaff() && hasFreshBranchAccess(request.resource.data.branchId);
 
       match /quotationItems/{itemId} {
         allow read: if isStaff();
-        allow create: if isStaff();
+        allow create: if isFreshStaff();
         allow update, delete: if isStaff()
-          && hasBranchAccess(get(/databases/$(database)/documents/quotations/$(quotationId)).data.branchId);
+          && hasFreshBranchAccess(get(/databases/$(database)/documents/quotations/$(quotationId)).data.branchId);
       }
     }
 
@@ -621,12 +675,9 @@ service cloud.firestore {
       // intentionally do NOT require destination-branch access here (staff
       // transfers preserved); branch isolation of that leg is a later phase.
       // Create additionally requires a declared branchId (every real lot has one).
-      allow create: if isStaff() && canMutateStock()
+      allow create: if isStaff() && canMutateStockFresh()
         && request.resource.data.branchId is string;
-      // Update: stock-capable staff only, and branchId is IMMUTABLE — it must
-      // stay present and unchanged (no mutation, no removal). `.get(_, null)` on
-      // the request side gives a CLEAN deny on removal instead of a hard-error.
-      allow update: if isStaff() && canMutateStock()
+      allow update: if isStaff() && canMutateStockFresh()
         && request.resource.data.get('branchId', null) == resource.data.branchId;
       allow delete: if isManagerOrAdmin();
     }
@@ -636,7 +687,7 @@ service cloud.firestore {
       // Own-branch movements (sale, receive, adjust, transfer_out) require branch
       // access. The transfer_in leg writes to the DESTINATION branch, so allow
       // movements tagged refType 'inventoryTransfer' to be created cross-branch.
-      allow create: if isAdmin() || (isStaff()
+      allow create: if isAdmin() || (isStaff() && hasFreshAuthority()
         && (hasBranchAccess(request.resource.data.branchId)
           || request.resource.data.refType == 'inventoryTransfer'));
       // Managers/admins can update or delete movements when editing a confirmed receiving
@@ -655,10 +706,9 @@ service cloud.firestore {
 
       match /receivingItems/{itemId} {
         allow read: if isStaff();
-        allow create: if isStaff();
-        // Admin deletes items when finalizing a cross-branch draft
+        allow create: if isFreshStaff();
         allow update, delete: if isAdmin() || (isStaff()
-          && hasBranchAccess(get(/databases/$(database)/documents/receivings/$(receivingId)).data.branchId));
+          && hasFreshBranchAccess(get(/databases/$(database)/documents/receivings/$(receivingId)).data.branchId));
       }
     }
 
@@ -671,14 +721,14 @@ service cloud.firestore {
       // client may create one. This prevents any branch (destination OR origin)
       // from self-resolving/concealing a discrepancy via a marked adjustment.
       allow create: if !isDiscrepancyResolutionAdjustment()
-        && (isAdmin() || (isStaff() && hasBranchAccess(request.resource.data.branchId)));
-      allow update, delete: if isAdmin() || (isStaff() && hasBranchAccess(resource.data.branchId));
+        && (isAdmin() || (isStaff() && hasFreshBranchAccess(request.resource.data.branchId)));
+      allow update, delete: if isAdmin() || (isStaff() && hasFreshBranchAccess(resource.data.branchId));
 
       match /adjustmentItems/{itemId} {
         allow read: if isStaff();
-        allow create: if isStaff();
+        allow create: if isFreshStaff();
         allow update, delete: if isAdmin() || (isStaff()
-          && hasBranchAccess(get(/databases/$(database)/documents/inventoryAdjustments/$(adjustmentId)).data.branchId));
+          && hasFreshBranchAccess(get(/databases/$(database)/documents/inventoryAdjustments/$(adjustmentId)).data.branchId));
       }
     }
 
@@ -688,13 +738,13 @@ service cloud.firestore {
           || hasBranchAccess(resource.data.toBranchId)));
       // Admin (incl. global 'ALL') or a staff member at the SOURCE branch.
       allow write: if isAdmin()
-        || (isStaff() && hasBranchAccess(request.resource.data.fromBranchId));
+        || (isStaff() && hasFreshBranchAccess(request.resource.data.fromBranchId));
 
       match /transferItems/{itemId} {
         allow read: if isStaff();
-        allow create: if isStaff();
+        allow create: if isFreshStaff();
         allow update, delete: if isAdmin() || (isStaff()
-          && hasBranchAccess(get(/databases/$(database)/documents/inventoryTransfers/$(transferId)).data.fromBranchId));
+          && hasFreshBranchAccess(get(/databases/$(database)/documents/inventoryTransfers/$(transferId)).data.fromBranchId));
       }
 
       // ── Phase 7B-2: Origin-Controlled Discrepancy Handling ──
@@ -743,7 +793,7 @@ service cloud.firestore {
     match /cashTransactions/{txId} {
       allow read: if isStaff() && hasBranchAccess(resource.data.branchId);
       allow create: if isStaff()
-        && hasBranchAccess(request.resource.data.branchId);
+        && hasFreshBranchAccess(request.resource.data.branchId);
       // Admin-only — used by the Danger Zone UAT reset to wipe cash history
       allow delete: if isAdmin();
     }
@@ -792,14 +842,14 @@ service cloud.firestore {
     // ── Staff activity & audit ──
     match /staffActivities/{activityId} {
       allow read: if isStaff();
-      allow create: if isStaff();
+      allow create: if isFreshStaff();
       // Admin-only — used by the Danger Zone UAT reset to wipe activity logs
       allow delete: if isAdmin();
     }
 
     match /auditLogs/{logId} {
       allow read: if isAdmin();
-      allow create: if isStaff();
+      allow create: if isFreshStaff();
       // Admin-only — used by the Danger Zone UAT reset to wipe audit logs
       allow delete: if isAdmin();
     }

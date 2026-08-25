@@ -30,7 +30,13 @@ import { performResolveTransferDiscrepancy } from './resolveTransferDiscrepancy'
 type Doc = Record<string, unknown>;
 
 function makeDb(seed: Record<string, Doc>) {
-  const store = new Map<string, Doc>(Object.entries(seed).map(([k, v]) => [k, { ...v }]));
+  const store = new Map<string, Doc>(Object.entries({
+    'users/s-origin': { isActive: true, deletedAt: null, authVersion: 0, role: 'staff' },
+    'users/s-dest': { isActive: true, deletedAt: null, authVersion: 0, role: 'staff' },
+    'users/s-other': { isActive: true, deletedAt: null, authVersion: 0, role: 'staff' },
+    'users/admin1': { isActive: true, deletedAt: null, authVersion: 0, role: 'admin' },
+    ...seed,
+  }).map(([k, v]) => [k, { ...v }]));
   let auto = 0;
 
   const resolveVal = (cur: unknown, v: unknown): unknown => {
@@ -57,6 +63,10 @@ function makeDb(seed: Record<string, Doc>) {
       path,
       id: path.slice(path.lastIndexOf('/') + 1),
       collection: (name: string) => colRef(`${path}/${name}`),
+      get: async () => {
+        const data = store.get(path);
+        return { exists: data !== undefined, id: path.slice(path.lastIndexOf('/') + 1), data: () => data };
+      },
     };
   }
   function makeQuery(path: string, wheres: Array<{ f: string; v: unknown }>, order: string | null): any {
@@ -125,10 +135,10 @@ const DEST = 'BR-DEST';
 const TID = 'TR-7B2-1';
 const DID = 'DISC-1';
 
-const origin = { uid: 'u1', token: { role: 'staff', staffId: 's-origin', branchIds: [ORIGIN] } };
-const dest = { uid: 'u2', token: { role: 'staff', staffId: 's-dest', branchIds: [DEST] } };
-const other = { uid: 'u3', token: { role: 'staff', staffId: 's-other', branchIds: ['BR-OTHER'] } };
-const admin = { uid: 'u4', token: { role: 'admin', staffId: 'admin1', branchIds: ['ALL'] } };
+const origin = { uid: 'u1', token: { role: 'staff', staffId: 's-origin', branchIds: [ORIGIN], authVersion: 0 } };
+const dest = { uid: 'u2', token: { role: 'staff', staffId: 's-dest', branchIds: [DEST], authVersion: 0 } };
+const other = { uid: 'u3', token: { role: 'staff', staffId: 's-other', branchIds: ['BR-OTHER'], authVersion: 0 } };
+const admin = { uid: 'u4', token: { role: 'admin', staffId: 'admin1', branchIds: ['ALL'], authVersion: 0 } };
 
 /** Seed a completed transfer (10 of PD), dest stock 10, two inherited dest lots, + a reported discrepancy. */
 function seedScenario(over: { discLines?: Doc[]; productCost?: number } = {}) {
