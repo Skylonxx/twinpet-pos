@@ -2,6 +2,10 @@
  * Canonical credential backfill + forced-rotation state machine.
  * Never executes against live data from this module's default export; tests inject a db.
  * Legacy users.pin is cleared only after every in-scope account is rotated or waived.
+ *
+ * Operator CLI (no work on import):
+ *   npm run migrate-credentials -- --project=<id> --database=<id> --credentials=<path> --phase=backfill|cut_over_readers|clear_legacy_pin --apply
+ *   npm run migrate-credentials -- --project=<id> --database=<id> --credentials=<path> --phase=waive --userId=<id> --apply
  */
 import bcrypt from 'bcryptjs';
 import { FieldValue, type Firestore } from 'firebase-admin/firestore';
@@ -168,4 +172,128 @@ export async function pinHashLooksLikeBcrypt(hash: string): Promise<boolean> {
   } catch {
     return hash.startsWith('$2');
   }
+}
+
+// ── Operator CLI (import-safe; runs only when this file is process entry) ──
+
+function cliFlag(argv: string[], name: string): string | undefined {
+  const prefix = `--${name}=`;
+  const hit = argv.find((a) => a.startsWith(prefix));
+  if (hit) return hit.slice(prefix.length);
+  const i = argv.indexOf(`--${name}`);
+  if (i >= 0 && argv[i + 1] && !argv[i + 1].startsWith('-')) return argv[i + 1];
+  return undefined;
+}
+
+export type MigrateCredentialsCliArgs = {
+  projectId: string;
+  databaseId: string;
+  credentialsPath: string;
+  apply: boolean;
+} & (
+  | { phase: MigrateCredentialsPhase }
+  | { phase: 'waive'; userId: string }
+);
+
+export function parseMigrateCredentialsCliArgs(
+  argv: string[],
+  env: NodeJS.ProcessEnv = {},
+): MigrateCredentialsCliArgs {
+  const projectId = (cliFlag(argv, 'project') ?? '').trim();
+  const databaseId = (cliFlag(argv, 'database') ?? '').trim();
+  const credentialsPath = (cliFlag(argv, 'credentials') ?? env.GOOGLE_APPLICATION_CREDENTIALS ?? '').trim();
+  if (!projectId) throw new Error('MISSING_PROJECT: pass --project=<id> (no default)');
+  if (!databaseId) throw new Error('MISSING_DATABASE: pass --database=<id> (no default)');
+  if (!credentialsPath) {
+    throw new Error('MISSING_CREDENTIALS: pass --credentials=<path> or GOOGLE_APPLICATION_CREDENTIALS');
+  }
+  const phase = (cliFlag(argv, 'phase') ?? cliFlag(argv, 'action') ?? '').trim();
+  if (!phase) {
+    throw new Error('MISSING_PHASE: pass --phase=backfill|cut_over_readers|clear_legacy_pin|waive');
+  }
+  const base = {
+    projectId,
+    databaseId,
+    credentialsPath,
+    apply: argv.includes('--apply'),
+  };
+  if (phase === 'waive') {
+    const userId = (cliFlag(argv, 'userId') ?? '').trim();
+    if (!userId) throw new Error('MISSING_USER_ID: waive requires --userId=<id>');
+    return { ...base, phase: 'waive', userId };
+  }
+  if (phase === 'backfill' || phase === 'cut_over_readers' || phase === 'clear_legacy_pin') {
+    return { ...base, phase };
+  }
+  throw new Error(`INVALID_PHASE: ${phase}`);
+}
+
+export async function executeMigrateCredentialsCli(
+  args: MigrateCredentialsCliArgs,
+  deps: { database: Firestore },
+): Promise<MigrateCredentialsResult | { ok: true; phase: 'waive'; userId: string }> {
+  if (!args.apply) throw new Error('MISSING_APPLY: pass --apply to execute');
+  if (args.phase === 'waive') {
+    await waiveCredential(deps.database, args.userId);
+    return { ok: true, phase: 'waive', userId: args.userId };
+  }
+  return runMigrateCredentials(deps.database, args.phase);
+}
+
+export function isMigrateCredentialsCliEntry(entry = process.argv[1] ?? ''): boolean {
+  return /migrateCredentials\.(ts|js)$/.test(entry.replace(/\\/g, '/'));
+}
+
+async function openOperatorFirestore(args: MigrateCredentialsCliArgs): Promise<Firestore> {
+  const { readFileSync, existsSync } = await import('node:fs');
+  const { initializeApp, cert, getApps } = await import('firebase-admin/app');
+  const { getFirestore } = await import('firebase-admin/firestore');
+  if (!existsSync(args.credentialsPath)) {
+    throw new Error(`CREDENTIALS_FILE_MISSING:${args.credentialsPath}`);
+  }
+  const raw = JSON.parse(readFileSync(args.credentialsPath, 'utf8')) as {
+    project_id?: string;
+    projectId?: string;
+    client_email?: string;
+    clientEmail?: string;
+    private_key?: string;
+    privateKey?: string;
+  };
+  const saProject = raw.projectId ?? raw.project_id ?? '';
+  if (saProject && saProject !== args.projectId) {
+    throw new Error(`PROJECT_MISMATCH: --project=${args.projectId} != service account ${saProject}`);
+  }
+  const existing = getApps()[0];
+  if (existing) {
+    const existingProject = existing.options.projectId;
+    if (existingProject && existingProject !== args.projectId) {
+      throw new Error(`PROJECT_MISMATCH: already initialized as ${existingProject}`);
+    }
+    return getFirestore(existing, args.databaseId);
+  }
+  const app = initializeApp({
+    credential: cert({
+      projectId: args.projectId,
+      clientEmail: raw.clientEmail ?? raw.client_email ?? '',
+      privateKey: raw.privateKey ?? raw.private_key ?? '',
+    }),
+    projectId: args.projectId,
+  });
+  return getFirestore(app, args.databaseId);
+}
+
+async function main(): Promise<void> {
+  const args = parseMigrateCredentialsCliArgs(process.argv.slice(2), process.env);
+  if (!args.apply) throw new Error('MISSING_APPLY: pass --apply to execute');
+  const database = await openOperatorFirestore(args);
+  const result = await executeMigrateCredentialsCli(args, { database });
+  console.log(JSON.stringify(result));
+  if (!result.ok) process.exit(1);
+}
+
+if (isMigrateCredentialsCliEntry()) {
+  main().catch((err) => {
+    console.error(err instanceof Error ? err.message : err);
+    process.exit(1);
+  });
 }
