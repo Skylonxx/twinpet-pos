@@ -25,8 +25,39 @@ const firestoreAdminMocks = vi.hoisted(() => ({
   })),
 }));
 
+const recoverCoreMocks = vi.hoisted(() => ({
+  performSetUserAccount: vi.fn(),
+}));
+
+const authAdminMocks = vi.hoisted(() => {
+  const createUser = vi.fn();
+  const updateUser = vi.fn();
+  const deleteUser = vi.fn();
+  const setCustomUserClaims = vi.fn();
+  return {
+    createUser,
+    updateUser,
+    deleteUser,
+    setCustomUserClaims,
+    getAuth: vi.fn(() => ({ createUser, updateUser, deleteUser, setCustomUserClaims })),
+  };
+});
+
 vi.mock('firebase-admin/app', () => adminAppMocks);
 vi.mock('firebase-admin/firestore', () => firestoreAdminMocks);
+vi.mock('firebase-admin/auth', () => authAdminMocks);
+
+vi.mock('../../setUserAccountCore', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../setUserAccountCore')>();
+  recoverCoreMocks.performSetUserAccount.mockImplementation((...args) =>
+    actual.performSetUserAccount(...args as Parameters<typeof actual.performSetUserAccount>),
+  );
+  return {
+    ...actual,
+    performSetUserAccount: (...args: Parameters<typeof actual.performSetUserAccount>) =>
+      recoverCoreMocks.performSetUserAccount(...args),
+  };
+});
 
 import {
   executeCensusUsernamesCli,
@@ -66,6 +97,11 @@ import {
 } from '../recoverUserCredential';
 
 type Doc = Record<string, unknown>;
+type ReadOp = { op: 'get'; path: string };
+
+function userCredentialReads(reads: ReadOp[]): ReadOp[] {
+  return reads.filter((r) => r.path === 'userCredentials' || r.path.startsWith('userCredentials/'));
+}
 
 const TARGET = ['--project=demo-twinpet', '--database=pos-db', '--credentials=unused-sa.json'];
 const EMPTY_ENV: NodeJS.ProcessEnv = {};
@@ -89,6 +125,8 @@ const EXISTING_DEPLOY_FUNCTIONS = [
 
 function makeDb(seed: Record<string, Doc> = {}) {
   const store = new Map<string, Doc>(Object.entries(seed).map(([k, v]) => [k, { ...v }]));
+  const writes: Array<{ op: string; path?: string }> = [];
+  const reads: ReadOp[] = [];
   const resolveVal = (cur: unknown, v: unknown): unknown => {
     if (v && typeof v === 'object' && (v as { __fv?: string }).__fv === 'inc') {
       return ((cur as number) ?? 0) + ((v as { n: number }).n ?? 0);
@@ -101,6 +139,7 @@ function makeDb(seed: Record<string, Doc> = {}) {
       id: path.slice(path.lastIndexOf('/') + 1),
       collection: (n: string) => col(`${path}/${n}`),
       set: async (data: Doc, opts?: { merge?: boolean }) => {
+        writes.push({ op: 'set', path });
         const existing = opts?.merge ? (store.get(path) ?? {}) : {};
         const next: Doc = opts?.merge ? { ...existing } : {};
         const source = opts?.merge ? data : data;
@@ -111,7 +150,21 @@ function makeDb(seed: Record<string, Doc> = {}) {
         for (const [k, v] of Object.entries(source)) next[k] = resolveVal(existing[k], v);
         store.set(path, next);
       },
+      update: async (data: Doc) => {
+        writes.push({ op: 'update', path });
+        const existing = store.get(path) ?? {};
+        store.set(path, { ...existing, ...data });
+      },
+      create: async (data: Doc) => {
+        writes.push({ op: 'create', path });
+        store.set(path, { ...data });
+      },
+      delete: async () => {
+        writes.push({ op: 'delete', path });
+        store.delete(path);
+      },
       get: async () => {
+        reads.push({ op: 'get', path });
         const data = store.get(path);
         return { exists: data !== undefined, data: () => data };
       },
@@ -121,6 +174,7 @@ function makeDb(seed: Record<string, Doc> = {}) {
     return {
       doc: (id: string) => docRef(`${path}/${id}`),
       get: async () => {
+        reads.push({ op: 'get', path });
         const docs = [...store.entries()]
           .filter(([p]) => p.startsWith(`${path}/`) && !p.slice(path.length + 1).includes('/'))
           .map(([p, data]) => ({
@@ -135,41 +189,66 @@ function makeDb(seed: Record<string, Doc> = {}) {
   return {
     collection: (c: string) => col(c),
     batch: () => {
+      writes.push({ op: 'batch' });
       const ops: Array<() => void> = [];
       return {
         set: (ref: { path: string }, data: Doc) => {
+          writes.push({ op: 'batch.set', path: ref.path });
           ops.push(() => {
             store.set(ref.path, { ...data });
           });
         },
+        update: (ref: { path: string }, data: Doc) => {
+          writes.push({ op: 'batch.update', path: ref.path });
+          ops.push(() => {
+            const existing = store.get(ref.path) ?? {};
+            store.set(ref.path, { ...existing, ...data });
+          });
+        },
+        delete: (ref: { path: string }) => {
+          writes.push({ op: 'batch.delete', path: ref.path });
+          ops.push(() => {
+            store.delete(ref.path);
+          });
+        },
         commit: async () => {
+          writes.push({ op: 'batch.commit' });
           for (const op of ops) op();
         },
       };
     },
     runTransaction: async (fn: (tx: unknown) => Promise<unknown>) => {
+      writes.push({ op: 'runTransaction' });
       const tx = {
         get: async (r: { path: string }) => {
+          reads.push({ op: 'get', path: r.path });
           const data = store.get(r.path);
           return { exists: data !== undefined, data: () => data };
         },
         set: (r: { path: string }, data: Doc, opts?: { merge?: boolean }) => {
+          writes.push({ op: 'tx.set', path: r.path });
           const existing = opts?.merge ? (store.get(r.path) ?? {}) : {};
           const next: Doc = { ...existing };
           for (const [k, v] of Object.entries(data)) next[k] = resolveVal(existing[k], v);
           store.set(r.path, next);
         },
         update: (r: { path: string }, data: Doc) => {
+          writes.push({ op: 'tx.update', path: r.path });
           const existing = store.get(r.path) ?? {};
           const next: Doc = { ...existing };
           for (const [k, v] of Object.entries(data)) next[k] = resolveVal(existing[k], v);
           store.set(r.path, next);
         },
-        delete: (r: { path: string }) => store.delete(r.path),
+        delete: (r: { path: string }) => {
+          writes.push({ op: 'tx.delete', path: r.path });
+          store.delete(r.path);
+        },
       };
       return fn(tx);
     },
     __store: store,
+    __writes: writes,
+    __reads: reads,
   };
 }
 
@@ -363,6 +442,36 @@ describe('operator CLI entrypoints', () => {
     expect(JSON.stringify(db.__store)).not.toContain(pin);
   });
 
+  test('recovery --dry-run parser matrix: accepted, exclusive of --apply, binding required, PIN/key not required', () => {
+    const accepted = parseRecoverUserCredentialCliArgs([...TARGET, '--userId=target', '--dry-run'], EMPTY_ENV);
+    expect(accepted.dryRun).toBe(true);
+    expect(accepted.apply).toBe(false);
+    expect(accepted.pin).toBe('');
+    expect(accepted.rotateIdempotencyKey).toBe('');
+    expect(() => parseRecoverUserCredentialCliArgs(
+      [...TARGET, '--userId=target', '--dry-run', '--apply'],
+      EMPTY_ENV,
+    )).toThrow(/INVALID_MODE/);
+    expect(() => parseRecoverUserCredentialCliArgs(
+      ['--database=pos-db', '--credentials=x.json', '--userId=target', '--dry-run'],
+      EMPTY_ENV,
+    )).toThrow(/MISSING_PROJECT/);
+    expect(() => parseRecoverUserCredentialCliArgs(
+      ['--project=demo', '--credentials=x.json', '--userId=target', '--dry-run'],
+      EMPTY_ENV,
+    )).toThrow(/MISSING_DATABASE/);
+    expect(() => parseRecoverUserCredentialCliArgs(
+      ['--project=demo', '--database=pos-db', '--userId=target', '--dry-run'],
+      EMPTY_ENV,
+    )).toThrow(/MISSING_CREDENTIALS/);
+    expect(() => parseRecoverUserCredentialCliArgs([...TARGET, '--dry-run'], EMPTY_ENV)).toThrow(/MISSING_TARGET/);
+    expect(() => parseRecoverUserCredentialCliArgs(
+      [...TARGET, '--userId=a', '--username=ann', '--dry-run'],
+      EMPTY_ENV,
+    )).toThrow(/INVALID_TARGET/);
+    expect(() => parseRecoverUserCredentialCliArgs([...TARGET, '--username=ann', '--dry-run'], EMPTY_ENV)).not.toThrow();
+  });
+
   test('CLI handling does not log raw PIN/password secrets', () => {
     const recoverSrc = readFileSync(resolve(__dirname, '../recoverUserCredential.ts'), 'utf8');
     const migrateSrc = readFileSync(resolve(__dirname, '../migrateCredentials.ts'), 'utf8');
@@ -473,6 +582,12 @@ function resetAdminMocks() {
     app,
     databaseId,
   }));
+  recoverCoreMocks.performSetUserAccount.mockClear();
+  authAdminMocks.getAuth.mockClear();
+  authAdminMocks.createUser.mockClear();
+  authAdminMocks.updateUser.mockClear();
+  authAdminMocks.deleteUser.mockClear();
+  authAdminMocks.setCustomUserClaims.mockClear();
 }
 
 function stringifyCliLog(args: unknown[]): string {
@@ -750,5 +865,255 @@ describe('operator CLI real main() boundary', () => {
     expect(result.stdout).not.toMatch(/--pin=/);
     expect(adminAppMocks.initializeApp).not.toHaveBeenCalled();
     expect(firestoreAdminMocks.getFirestore).not.toHaveBeenCalled();
+  });
+});
+
+describe('recoverUserCredential real main() --dry-run boundary', () => {
+  const tempDirs: string[] = [];
+
+  function writeCredentialFixture(projectId: string): string {
+    const dir = mkdtempSync(join(tmpdir(), 'twinpet-operator-cli-dryrun-'));
+    tempDirs.push(dir);
+    const path = join(dir, 'sa.json');
+    writeFileSync(path, JSON.stringify({
+      type: 'service_account',
+      project_id: projectId,
+      client_email: 'operator-cli-test@example.invalid',
+      private_key: '-----BEGIN PRIVATE KEY-----\nNOT_A_REAL_KEY\n-----END PRIVATE KEY-----\n',
+    }));
+    return path;
+  }
+
+  afterEach(() => {
+    for (const dir of tempDirs.splice(0)) {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  function assertNoAuthOrRotate() {
+    expect(recoverCoreMocks.performSetUserAccount).not.toHaveBeenCalled();
+    expect(authAdminMocks.getAuth).not.toHaveBeenCalled();
+    expect(authAdminMocks.createUser).not.toHaveBeenCalled();
+    expect(authAdminMocks.updateUser).not.toHaveBeenCalled();
+    expect(authAdminMocks.deleteUser).not.toHaveBeenCalled();
+    expect(authAdminMocks.setCustomUserClaims).not.toHaveBeenCalled();
+    expect(adminAppMocks.applicationDefault).not.toHaveBeenCalled();
+  }
+
+  test('main() --dry-run + --apply rejects before credentials/Admin/Firestore', async () => {
+    const credentialsPath = join(tmpdir(), 'twinpet-operator-cli-must-not-open', 'recover-dryrun-apply.json');
+    const result = await runCliMain('recoverUserCredential.ts', [
+      `--project=${PROJECT_A}`,
+      `--database=${DATABASE_ID}`,
+      `--credentials=${credentialsPath}`,
+      '--userId=target',
+      '--dry-run',
+      '--apply',
+    ]);
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toMatch(/INVALID_MODE/);
+    expect(result.stderr).not.toMatch(/CREDENTIALS_FILE_MISSING/);
+    expect(result.stderr).not.toMatch(/MISSING_PIN/);
+    expect(result.stderr).not.toMatch(/MISSING_ROTATE_IDEMPOTENCY_KEY/);
+    expect(adminAppMocks.getApps).not.toHaveBeenCalled();
+    expect(adminAppMocks.initializeApp).not.toHaveBeenCalled();
+    expect(adminAppMocks.cert).not.toHaveBeenCalled();
+    expect(firestoreAdminMocks.getFirestore).not.toHaveBeenCalled();
+    assertNoAuthOrRotate();
+  });
+
+  test('main() --dry-run rejects credential project mismatch before Firestore return', async () => {
+    const credentialsPath = writeCredentialFixture(PROJECT_A);
+    const result = await runCliMain('recoverUserCredential.ts', [
+      `--project=${PROJECT_B}`,
+      `--database=${DATABASE_ID}`,
+      `--credentials=${credentialsPath}`,
+      '--userId=target',
+      '--dry-run',
+    ]);
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toMatch(/PROJECT_MISMATCH/);
+    expect(result.stderr).toContain(PROJECT_B);
+    expect(result.stderr).toContain(PROJECT_A);
+    expect(adminAppMocks.initializeApp).not.toHaveBeenCalled();
+    expect(adminAppMocks.cert).not.toHaveBeenCalled();
+    expect(firestoreAdminMocks.getFirestore).not.toHaveBeenCalled();
+    assertNoAuthOrRotate();
+  });
+
+  test('main() --dry-run binds exact requested project and database at Admin open', async () => {
+    const credentialsPath = writeCredentialFixture(PROJECT_A);
+    const result = await runCliMain('recoverUserCredential.ts', [
+      `--project=${PROJECT_A}`,
+      `--database=${DATABASE_ID}`,
+      `--credentials=${credentialsPath}`,
+      '--userId=target',
+      '--dry-run',
+    ]);
+    expect(adminAppMocks.applicationDefault).not.toHaveBeenCalled();
+    expect(adminAppMocks.cert).toHaveBeenCalledTimes(1);
+    expect(adminAppMocks.cert).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: PROJECT_A,
+      clientEmail: 'operator-cli-test@example.invalid',
+    }));
+    expect(adminAppMocks.initializeApp).toHaveBeenCalledTimes(1);
+    const initOpts = adminAppMocks.initializeApp.mock.calls[0]?.[0] as {
+      projectId?: string;
+      credential?: unknown;
+    };
+    expect(initOpts.projectId).toBe(PROJECT_A);
+    expect(firestoreAdminMocks.getFirestore).toHaveBeenCalledTimes(1);
+    const fsCall = firestoreAdminMocks.getFirestore.mock.calls[0] ?? [];
+    expect(fsCall).toHaveLength(2);
+    expect(fsCall[1]).toBe(DATABASE_ID);
+    expect(fsCall[0]).toEqual(expect.objectContaining({
+      options: expect.objectContaining({ projectId: PROJECT_A }),
+    }));
+    expect(result.stderr).not.toContain(SENTINEL_PIN);
+    expect(result.stdout).not.toContain(SENTINEL_PIN);
+    assertNoAuthOrRotate();
+  });
+
+  test('main() --dry-run resolves userId from fake Firestore with zero writes', async () => {
+    const credentialsPath = writeCredentialFixture(PROJECT_A);
+    const recoveryDb = makeDb({
+      'users/target': { username: 'admin', role: 'admin', isActive: true, deletedAt: null, authVersion: 0 },
+      'userCredentials/target': { pinHash: '$2b$10$not.a.real.hash', disabled: false },
+    });
+    const before = snapshot(recoveryDb.__store);
+    const result = await runCliMain(
+      'recoverUserCredential.ts',
+      [
+        `--project=${PROJECT_A}`,
+        `--database=${DATABASE_ID}`,
+        `--credentials=${credentialsPath}`,
+        '--userId=target',
+        '--dry-run',
+      ],
+      () => {
+        firestoreAdminMocks.getFirestore.mockImplementation(() => recoveryDb);
+      },
+    );
+    expect(result.stdout).toMatch(/"ok":true/);
+    expect(result.stdout).toMatch(/"dryRun":true/);
+    expect(result.stdout).toMatch(/"targetKind":"userId"/);
+    expect(result.stdout).toMatch(/"userId":"target"/);
+    expect(result.stdout).toMatch(/"resolvable":true/);
+    expect(result.exitCode).toBeUndefined();
+    expect(result.stdout).not.toContain('$2b$10$not.a.real.hash');
+    expect(result.stdout).not.toContain(SENTINEL_PIN);
+    expect(snapshot(recoveryDb.__store)).toBe(before);
+    expect(recoveryDb.__writes).toEqual([]);
+    expect(recoveryDb.__reads).toEqual([{ op: 'get', path: 'users/target' }]);
+    expect(userCredentialReads(recoveryDb.__reads)).toHaveLength(0);
+    assertNoAuthOrRotate();
+  });
+
+  test('main() --dry-run resolves username from fake Firestore with zero writes', async () => {
+    const credentialsPath = writeCredentialFixture(PROJECT_A);
+    const recoveryDb = makeDb({
+      'users/u1': { username: 'Ann', deletedAt: null, isActive: true },
+      'userCredentials/u1': { pinHash: '$2b$10$not.a.real.hash', disabled: false },
+    });
+    const before = snapshot(recoveryDb.__store);
+    const result = await runCliMain(
+      'recoverUserCredential.ts',
+      [
+        `--project=${PROJECT_A}`,
+        `--database=${DATABASE_ID}`,
+        `--credentials=${credentialsPath}`,
+        '--username=ann',
+        '--dry-run',
+      ],
+      () => {
+        firestoreAdminMocks.getFirestore.mockImplementation(() => recoveryDb);
+      },
+    );
+    expect(result.stdout).toMatch(/"ok":true/);
+    expect(result.stdout).toMatch(/"targetKind":"username"/);
+    expect(result.stdout).toMatch(/"userId":"u1"/);
+    expect(result.exitCode).toBeUndefined();
+    expect(snapshot(recoveryDb.__store)).toBe(before);
+    expect(recoveryDb.__writes).toEqual([]);
+    expect(recoveryDb.__reads).toEqual([
+      { op: 'get', path: 'users' },
+      { op: 'get', path: 'users/u1' },
+    ]);
+    expect(userCredentialReads(recoveryDb.__reads)).toHaveLength(0);
+    assertNoAuthOrRotate();
+  });
+
+  test('main() --dry-run missing userId fails closed with zero writes', async () => {
+    const credentialsPath = writeCredentialFixture(PROJECT_A);
+    const recoveryDb = makeDb({
+      'users/other': { username: 'ann', deletedAt: null },
+    });
+    const before = snapshot(recoveryDb.__store);
+    const result = await runCliMain(
+      'recoverUserCredential.ts',
+      [
+        `--project=${PROJECT_A}`,
+        `--database=${DATABASE_ID}`,
+        `--credentials=${credentialsPath}`,
+        '--userId=missing',
+        '--dry-run',
+      ],
+      () => {
+        firestoreAdminMocks.getFirestore.mockImplementation(() => recoveryDb);
+      },
+    );
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toMatch(/"ok":false/);
+    expect(result.stdout).toMatch(/USER_NOT_FOUND/);
+    expect(snapshot(recoveryDb.__store)).toBe(before);
+    expect(recoveryDb.__writes).toEqual([]);
+    expect(recoveryDb.__reads).toEqual([{ op: 'get', path: 'users/missing' }]);
+    expect(userCredentialReads(recoveryDb.__reads)).toHaveLength(0);
+    assertNoAuthOrRotate();
+  });
+
+  test('main() --dry-run ambiguous username fails closed with zero writes', async () => {
+    const credentialsPath = writeCredentialFixture(PROJECT_A);
+    const recoveryDb = makeDb({
+      'users/a': { username: 'Same', deletedAt: null },
+      'users/b': { username: 'same', deletedAt: null },
+    });
+    const before = snapshot(recoveryDb.__store);
+    const result = await runCliMain(
+      'recoverUserCredential.ts',
+      [
+        `--project=${PROJECT_A}`,
+        `--database=${DATABASE_ID}`,
+        `--credentials=${credentialsPath}`,
+        '--username=same',
+        '--dry-run',
+      ],
+      () => {
+        firestoreAdminMocks.getFirestore.mockImplementation(() => recoveryDb);
+      },
+    );
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toMatch(/"ok":false/);
+    expect(result.stdout).toMatch(/USERNAME_AMBIGUOUS/);
+    expect(snapshot(recoveryDb.__store)).toBe(before);
+    expect(recoveryDb.__writes).toEqual([]);
+    expect(recoveryDb.__reads).toEqual([{ op: 'get', path: 'users' }]);
+    expect(userCredentialReads(recoveryDb.__reads)).toHaveLength(0);
+    assertNoAuthOrRotate();
+  });
+
+  test('main() --dry-run missing target fails before Admin open', async () => {
+    const credentialsPath = join(tmpdir(), 'twinpet-operator-cli-must-not-open', 'recover-dryrun-notarget.json');
+    const result = await runCliMain('recoverUserCredential.ts', [
+      `--project=${PROJECT_A}`,
+      `--database=${DATABASE_ID}`,
+      `--credentials=${credentialsPath}`,
+      '--dry-run',
+    ]);
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toMatch(/MISSING_TARGET/);
+    expect(adminAppMocks.initializeApp).not.toHaveBeenCalled();
+    expect(firestoreAdminMocks.getFirestore).not.toHaveBeenCalled();
+    assertNoAuthOrRotate();
   });
 });

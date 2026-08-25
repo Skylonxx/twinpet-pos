@@ -4,12 +4,14 @@
  * Never logs the PIN.
  *
  * Operator CLI (no work on import):
+ *   npm run recover-user-credential -- --project=<id> --database=<id> --credentials=<path> --userId=<id>|--username=<name> --dry-run
  *   npm run recover-user-credential -- --project=<id> --database=<id> --credentials=<path> --userId=<id>|--username=<name> --rotateIdempotencyKey=<key> --pin=<pin> --apply
- *   PIN may instead come from RECOVER_USER_PIN (never logged).
+ *   --dry-run and --apply are mutually exclusive.
+ *   PIN may instead come from RECOVER_USER_PIN (never logged). Dry-run does not require PIN.
  */
 import { performSetUserAccount, type SetUserAccountResult } from '../setUserAccountCore';
 import { loadAllUsersUnfiltered } from './censusUsernames';
-import { normalizeUsername } from '../credentialStore';
+import { COLLECTIONS, normalizeUsername } from '../credentialStore';
 import type { Firestore } from 'firebase-admin/firestore';
 
 export type RecoverTarget =
@@ -60,6 +62,57 @@ export async function runRecoverUserCredential(
   );
 }
 
+export type RecoverTargetKind = 'userId' | 'username';
+
+export type RecoverUserCredentialDryRunResult = {
+  ok: boolean;
+  dryRun: true;
+  userId?: string;
+  targetKind: RecoverTargetKind;
+  resolvable: boolean;
+  status: string;
+};
+
+function recoverTargetKind(target: RecoverTarget): RecoverTargetKind {
+  return 'userId' in target ? 'userId' : 'username';
+}
+
+export async function runRecoverUserCredentialDryRun(
+  database: Firestore,
+  target: RecoverTarget,
+): Promise<RecoverUserCredentialDryRunResult> {
+  const targetKind = recoverTargetKind(target);
+  const resolved = await resolveRecoveryUserId(database, target);
+  if (!resolved.ok) {
+    return {
+      ok: false,
+      dryRun: true,
+      targetKind,
+      resolvable: false,
+      status: resolved.error,
+    };
+  }
+  const userSnap = await database.collection(COLLECTIONS.users).doc(resolved.userId).get();
+  if (!userSnap.exists) {
+    return {
+      ok: false,
+      dryRun: true,
+      userId: resolved.userId,
+      targetKind,
+      resolvable: false,
+      status: 'USER_NOT_FOUND',
+    };
+  }
+  return {
+    ok: true,
+    dryRun: true,
+    userId: resolved.userId,
+    targetKind,
+    resolvable: true,
+    status: 'RESOLVED',
+  };
+}
+
 // ── Operator CLI (import-safe; runs only when this file is process entry) ──
 // Never auth.createUser. Never logs the PIN.
 
@@ -77,6 +130,7 @@ export type RecoverUserCredentialCliArgs = {
   databaseId: string;
   credentialsPath: string;
   apply: boolean;
+  dryRun: boolean;
   target: RecoverTarget;
   pin: string;
   rotateIdempotencyKey: string;
@@ -98,6 +152,21 @@ export function parseRecoverUserCredentialCliArgs(
   const username = (cliFlag(argv, 'username') ?? '').trim();
   if (userId && username) throw new Error('INVALID_TARGET: pass only --userId or --username');
   if (!userId && !username) throw new Error('MISSING_TARGET: pass --userId=<id> or --username=<name>');
+  const apply = argv.includes('--apply');
+  const dryRun = argv.includes('--dry-run');
+  if (apply && dryRun) throw new Error('INVALID_MODE: pass only --dry-run or --apply');
+  if (dryRun) {
+    return {
+      projectId,
+      databaseId,
+      credentialsPath,
+      apply: false,
+      dryRun: true,
+      target: userId ? { userId } : { username },
+      pin: '',
+      rotateIdempotencyKey: '',
+    };
+  }
   const pin = (cliFlag(argv, 'pin') ?? env.RECOVER_USER_PIN ?? '').trim();
   if (!pin) throw new Error('MISSING_PIN: pass --pin=<pin> or RECOVER_USER_PIN');
   const rotateIdempotencyKey = (cliFlag(argv, 'rotateIdempotencyKey') ?? '').trim();
@@ -106,7 +175,8 @@ export function parseRecoverUserCredentialCliArgs(
     projectId,
     databaseId,
     credentialsPath,
-    apply: argv.includes('--apply'),
+    apply,
+    dryRun: false,
     target: userId ? { userId } : { username },
     pin,
     rotateIdempotencyKey,
@@ -129,6 +199,17 @@ export function formatRecoverUserCredentialCliResult(result: SetUserAccountResul
     authVersion: result.authVersion,
     credentialVersion: result.credentialVersion,
     message: result.message,
+  });
+}
+
+export function formatRecoverUserCredentialDryRunResult(result: RecoverUserCredentialDryRunResult): string {
+  return JSON.stringify({
+    ok: result.ok,
+    dryRun: true,
+    userId: result.userId,
+    targetKind: result.targetKind,
+    resolvable: result.resolvable,
+    status: result.status,
   });
 }
 
@@ -182,6 +263,13 @@ function redactSecret(text: string, secret: string): string {
 async function main(): Promise<void> {
   const args = parseRecoverUserCredentialCliArgs(process.argv.slice(2), process.env);
   try {
+    if (args.dryRun) {
+      const database = await openOperatorFirestore(args);
+      const result = await runRecoverUserCredentialDryRun(database, args.target);
+      console.log(redactSecret(formatRecoverUserCredentialDryRunResult(result), args.pin));
+      if (!result.ok) process.exit(1);
+      return;
+    }
     if (!args.apply) throw new Error('MISSING_APPLY: pass --apply to execute');
     const database = await openOperatorFirestore(args);
     const result = await executeRecoverUserCredentialCli(args, { database });
