@@ -1,8 +1,197 @@
-# Latest Report — UI-11 Packet 2 / Packet 2A — CLOSED_WITH_NOTES
+# Latest Report — UI-11 Packet 2 / Model 2 — CLOSED_WITH_NOTES
+
+> Date: 2026-08-27
+> Final Model 2 runtime/source baseline (binding; do not overwrite with the later docs SHA): `ffb8069690173c80455f355d432e141865c09a33` (`feat(auth): add delegated manager approval`)
+> Status: **UI-11 Packet 2 / Model 2 Runtime: CLOSED_WITH_NOTES.** Gemini `TWINPET-UI11-PACKET2-MODEL2-FINAL-RUNTIME-CLOSURE-GEMINI-001` = `APPROVED_WITH_CONDITIONS`. Exact Functions deploy PASS (`requestManagerApproval`, `resolveShiftCloseAlert`); Firestore Rules PASS to named DB `pos-db`; region `asia-southeast1`; no index; no Hosting; no Native/Capacitor. AGY-002 PASS. Grok-004B PASS_WITH_NOTES. U-14 through U-19 `DEFERRED_TO_AUTOMATED_EVIDENCE`. Retained credential/audit/expired-approval notes accepted. SoftDelete transaction-order defect `NON_BLOCKING_SEPARATE_FOLLOWUP`. TRUE-STANDALONE / NO HOSTING guardrail remains binding. Native/Capacitor **NOT AUTHORIZED**. PKT-2 **NOT AUTHORIZED**. This pass is the authorized four-doc live-authority reconciliation of that closed state.
+
+UI-11 Packet 2 / Model 2 Runtime: CLOSED_WITH_NOTES. No Model 2 runtime UAT rerun. No Model 2 redeploy. SoftDelete remediation is a separate non-blocking follow-up, not a Model 2 reopen.
+
+## 0. This pass's reports
+
+- Gemini final runtime closure: `TWINPET-UI11-PACKET2-MODEL2-FINAL-RUNTIME-CLOSURE-GEMINI-001` (`DECISION_STATUS: APPROVED_WITH_CONDITIONS`; `MODEL2_RUNTIME_CLOSURE: CLOSED_WITH_NOTES`; `DEPLOYED_COMMIT_ACCEPTED: YES`; `AGY_002_ACCEPTED: YES`; `GROK_004B_ACCEPTED: YES`; `U1_U13_REQUIRED_RUNTIME_EVIDENCE_SATISFIED: YES`; `U14_U19_AUTOMATED_DEFERRAL_ACCEPTED: YES`; `TOMBSTONED_PROFILE_WITH_RETAINED_CREDENTIAL_DOC_ACCEPTED: YES`; `SOFTDELETE_TRANSACTION_ORDER_DEFECT_CLASSIFICATION: NON_BLOCKING_SEPARATE_FOLLOWUP`; `SOFTDELETE_REMEDIATION_AUTHORIZED_NOW: NO`; `POST_CLOSURE_SOFTDELETE_FOLLOWUP_REQUIRED: YES`; native **NO**; Hosting **NO**)
+- Deployment: `TWINPET-UI11-PACKET2-MODEL2-DEPLOYMENT-PREFLIGHT-AND-CONDITIONAL-DEPLOY-GROK-003` (`VERDICT: PASS`; exact two Functions + named `pos-db` Rules)
+- AGY runtime UAT: `TWINPET-UI11-PACKET2-MODEL2-RUNTIME-UAT-AGY-002` (`STATUS: COMPLETE`; `VERDICT: PASS`; UI/UX blockers 0; functional defects 0; security defects 0)
+- Grok technical evidence + cleanup: `TWINPET-UI11-PACKET2-MODEL2-TECHNICAL-EVIDENCE-AND-CLEANUP-GROK-004B` (`STATUS: COMPLETE`; `VERDICT: PASS_WITH_NOTES`)
+- This docs packet contract: `TWINPET-UI11-PACKET2-MODEL2-DOCS-CLOSURE-GROK-005`
+- Final runtime/source baseline: `ffb8069690173c80455f355d432e141865c09a33` (`feat(auth): add delegated manager approval`)
+
+## 1. Current Model 2 facts
+
+| Field | Value |
+|-------|-------|
+| CURRENT_PHASE | Post PK-6 Closure / UI-11 Packet 2 / Model 2 |
+| CURRENT_GATE | MODEL2_DOCS_CLOSURE |
+| MODEL2_RUNTIME_STATUS | CLOSED_WITH_NOTES |
+| FINAL_RUNTIME_SOURCE_BASELINE | `ffb8069690173c80455f355d432e141865c09a33` |
+| HEAD subject at source baseline | `feat(auth): add delegated manager approval` |
+| SERVER_DEPLOY | exact `requestManagerApproval` + `resolveShiftCloseAlert` |
+| RULES_DEPLOY | named DB `pos-db` PASS |
+| DEPLOY_PROJECT | `twinpet-pos` |
+| DEPLOY_REGION | `asia-southeast1` |
+| INDEX_DEPLOY | NO |
+| HOSTING | NO |
+| NATIVE_CAPACITOR | NO |
+| AGY_002 | COMPLETE / PASS |
+| GROK_004B | COMPLETE / PASS_WITH_NOTES |
+| U1 / U2 / U3 / U4 / U8 / U9 / U11 / U12 | PASS |
+| U5 UI / U6 UI | PASS |
+| U5 direct | PASS / `self_approval_not_permitted` |
+| U6 direct | PASS / `approver_not_eligible` |
+| U7 TTL | PASS / `invalid_pin` |
+| U10 replay | PASS / `duplicate_confirmed` |
+| U13 Rules denial | PASS / `PERMISSION_DENIED` |
+| U14 through U19 | `DEFERRED_TO_AUTOMATED_EVIDENCE` (not executed live) |
+| RAW_PIN_PERSISTENCE_FOUND | NO |
+| RAW_PIN_LOGGING_FOUND | NO |
+| EXISTING_ADMIN_UNCHANGED | YES |
+| NARA_UNUSED | YES |
+| LEGACY_PIN_INTRODUCED | NO |
+| TEMP_UAT_ACTIVE_PRIVILEGE_REMAINS | NO |
+| TEMP_UAT_USABLE_LOGIN_REMAINS | NO |
+| TOMBSTONED_PROFILE_WITH_RETAINED_CREDENTIAL_DOC | ACCEPTED |
+| EXPIRED_U7_APPROVAL_RETENTION | ACCEPTED |
+| UAT_ATTEMPT_BUCKET_RETENTION | ACCEPTED |
+| IMMUTABLE_AUDIT_LEDGER_RETENTION | ACCEPTED |
+| SOFTDELETE_TRANSACTION_ORDER_DEFECT | NON_BLOCKING_SEPARATE_FOLLOWUP |
+| POST_CLOSURE_SOFTDELETE_FOLLOWUP_REQUIRED | YES |
+| STAGE10_HOSTING | SKIPPED_BY_TRUE_STANDALONE_USER_OVERRIDE |
+| TRUE_STANDALONE_NO_HOSTING_GUARDRAIL | BINDING |
+| NATIVE_IMPLEMENTATION_AUTHORIZED | NO |
+| PKT2_IMPLEMENTATION | NOT_AUTHORIZED |
+| PACKET2A_STATUS | CLOSED_WITH_NOTES (historical) |
+| PKT1_STATUS | CLOSED / DELIVERED / Runtime deployment complete (historical) |
+| PK6_STATUS | CLOSED / DELIVERED (historical) |
+| PACKET_5_STATUS | CLOSED |
+| PK3_STATUS | CLOSED |
+| stash@{0} | unchanged `7d03cfec7ba52ff7e25b7e175ca190efc258d874` |
+
+**CURRENT_STATUS:** Model 2 is **CLOSED_WITH_NOTES**. Final runtime/source baseline `ffb8069` is the semantic implementation baseline. This four-doc packet is the authorized live-authority docs-only closure reconciliation. After the docs commit, repository HEAD advances to the docs SHA; do not treat that docs SHA as the source baseline. PKT-2 / native are **not** authorized. SoftDelete follow-up is required later and does **not** keep Model 2 open. Next roadmap routing is **pending** at ChatGPT. Do not invent the next packet.
+
+## 2. Gemini decision ledger (this docs gate)
+
+| ID | Subject | Status |
+|----|---------|--------|
+| TWINPET-UI11-PACKET2-MODEL2-FINAL-RUNTIME-CLOSURE-GEMINI-001 | Model 2 final runtime closure + docs reconciliation + conditional commit/push | `APPROVED_WITH_CONDITIONS`; `MODEL2_RUNTIME_CLOSURE: CLOSED_WITH_NOTES`; `DEPLOYED_COMMIT_ACCEPTED: YES`; `AGY_002_ACCEPTED: YES`; `GROK_004B_ACCEPTED: YES`; `U1_U13_REQUIRED_RUNTIME_EVIDENCE_SATISFIED: YES`; `U14_U19_AUTOMATED_DEFERRAL_ACCEPTED: YES`; `TOMBSTONED_PROFILE_WITH_RETAINED_CREDENTIAL_DOC_ACCEPTED: YES`; `SOFTDELETE_TRANSACTION_ORDER_DEFECT_CLASSIFICATION: NON_BLOCKING_SEPARATE_FOLLOWUP`; `SOFTDELETE_REMEDIATION_AUTHORIZED_NOW: NO`; `EXPIRED_U7_APPROVAL_RETENTION_ACCEPTED: YES`; `UAT_ATTEMPT_BUCKET_RETENTION_ACCEPTED: YES`; `IMMUTABLE_AUDIT_LEDGER_RETENTION_ACCEPTED: YES`; `PRODUCTION_SECURITY_STATE_ACCEPTED_SAFE: YES`; `RAW_PIN_BOUNDARY_ACCEPTED: YES`; `EXISTING_ADMIN_NON_MUTATION_ACCEPTED: YES`; `NARA_NON_USE_ACCEPTED: YES`; `DOCS_RECONCILIATION_AUTHORIZED: YES`; `DOCS_COMMIT_PUSH_AUTHORIZED: YES`; `POST_CLOSURE_SOFTDELETE_FOLLOWUP_REQUIRED: YES` |
+
+Do not invent a new product decision. Do not reopen Model 2 runtime. Do not implement softDelete remediation now. Do not authorize PKT-2 / native. Do not deploy Hosting.
+
+## 3. Server deployment (recorded; not re-run)
+
+Exact production Functions deployment completed for:
+
+1. `requestManagerApproval`
+2. `resolveShiftCloseAlert`
+
+Firestore Rules deployed to named DB `pos-db`. Project: `twinpet-pos`. Region: `asia-southeast1`. No index deployment. No Hosting. No Native/Capacitor.
+
+## 4. Runtime UAT (recorded; not re-run)
+
+### AGY-002 (browser / user surface)
+
+STATUS COMPLETE. VERDICT PASS. UI/UX blockers 0. Functional defects 0. Security defects 0.
+
+| Scenario | Result |
+|----------|--------|
+| U-1 staff queue/detail | PASS |
+| U-2 delegated ACK same-branch manager | PASS |
+| U-3 delegated RESOLVE admin ALL | PASS |
+| U-4 one dummy wrong PIN fail-closed | PASS |
+| U-5 UI self-exclusion | PASS |
+| U-6 UI wrong-branch exclusion | PASS |
+| U-8 offline / no reconnect replay | PASS |
+| U-9 browser raw-PIN boundary | PASS |
+| U-11 Model 1 smoke | PASS |
+| U-12 none-state denial | PASS |
+
+### Grok-004B (technical evidence)
+
+STATUS COMPLETE. VERDICT PASS_WITH_NOTES.
+
+| Scenario | Result |
+|----------|--------|
+| U-5 direct self-approval | PASS — `self_approval_not_permitted` |
+| U-6 direct wrong-branch | PASS — `approver_not_eligible` |
+| U-7 TTL expiry | PASS — `invalid_pin` |
+| U-10 replay / idempotency | PASS — `duplicate_confirmed` |
+| U-13 Rules denial | PASS — `PERMISSION_DENIED` |
+
+### Deferred (not executed live)
+
+U-14 through U-19: `DEFERRED_TO_AUTOMATED_EVIDENCE`. Do not imply they ran in production.
+
+## 5. Security evidence (recorded; no secrets)
+
+- raw PIN persistence found: NO; raw PIN logging found: NO
+- existing admin unchanged; `nara` not used; no legacy PIN introduced
+- production security state accepted safe
+- real business data used: NO; inventory/payment/FIFO mutation: NO
+
+## 6. Cleanup notes (recorded; Gemini accepted)
+
+- synthetic UAT case/alert fixtures removed (ACK-001, RES-001, M1-001, NONE-001, NEG-001 cases; matching alerts except NONE-001 which had none)
+- temporary UAT profiles tombstoned / inactive; username reservations removed
+- no temporary active privilege remains; no usable temporary UAT login remains
+- credential docs remain (`disabled=false`) matching current canonical `softDelete` semantics — **not** physically deleted and **not** disabled; Gemini accepted
+- expired U-7 approval retained (fail-closed after TTL; no canonical approval-delete)
+- UAT attempt bucket retained (no canonical attempt-delete)
+- immutable consumed approvals / command ledgers / audit events / create intents retained
+
+## 7. SoftDelete follow-up (separated from Model 2 closure)
+
+Canonical live `setUserAccount` / `handleSoftDelete` failed closed because Firestore transaction performed read after write. No partial mutation occurred. This defect was **not** introduced by Model 2. Classification: `NON_BLOCKING_SEPARATE_FOLLOWUP`. `POST_CLOSURE_SOFTDELETE_FOLLOWUP_REQUIRED: YES`. Remediation is **not** authorized in this gate. Model 2 remains closed with notes.
+
+## 8. TRUE-STANDALONE / Hosting / native (preserved)
+
+```text
+TRUE-STANDALONE: offline-capable Desktop/Mobile Native App with local sync; FUTURE / NOT STARTED / NOT AUTHORIZED by Model 2 closure
+NOT_A_STANDARD_WEB_APP: YES
+FIREBASE_HOSTING: permanently out of scope
+STAGE10_HOSTING: SKIPPED_BY_TRUE_STANDALONE_USER_OVERRIDE
+CLOUD_BACKEND: Firestore + Cloud Functions only
+NATIVE_IMPLEMENTATION_AUTHORIZED: NO
+PKT2_IMPLEMENTATION: NOT_AUTHORIZED
+NEXT_ELIGIBLE_PK_PACKET: NONE
+PK7: NOT DEFINED / DO NOT INVENT
+POST_CLOSURE_SOFTDELETE_FOLLOWUP_REQUIRED: YES
+```
+
+Model 2 closure does **not** authorize native/Capacitor work, Hosting rollout, PKT-2, index deployment, or softDelete remediation.
+
+## 9. Exact docs surface for this reconciliation
+
+Four live-authority docs only:
+
+`docs/agent-workflow/STATE.md`, `docs/agent-workflow/CURRENT_PACKET.md`, `docs/agent-workflow/NEXT_ACTION.md`, `docs/reports/latest-report.md`
+
+`Context.md` / `Task.md` / `docs/STATE.md` remain the last PKT-1 snapshot and already defer to the live workflow trio on gate/status/HEAD. TRUE-STANDALONE guardrails already present there are preserved (not edited; not weakened).
+
+Source paths: 0. Test paths: 0. Config/runtime paths: 0.
+
+## 10. Next workflow
+
+```text
+NEXT_WORKFLOW_ACTION:
+RETURN_TO_CHATGPT_FOR_POST_UI11_PACKET2_MODEL2_ROADMAP_ROUTING
+
+DO NOT:
+implement softDelete remediation,
+begin the next roadmap item,
+implement PKT-2,
+authorize native/Capacitor,
+invent the next packet,
+deploy Hosting,
+reopen Model 2 runtime.
+```
+
+**Next implementation action:** NONE — Model 2 runtime is closed with notes. PKT-2 / native NOT AUTHORIZED. SoftDelete follow-up is separate. Next roadmap routing pending at ChatGPT.
+
+---
+
+# Historical — Latest Report — UI-11 Packet 2 / Packet 2A — CLOSED_WITH_NOTES / later superseded as live current-state by Model 2 CLOSED_WITH_NOTES at ffb8069
 
 > Date: 2026-08-26
 > Final Packet 2A runtime/source baseline (binding; do not overwrite with the later docs SHA): `88086f45228488027af9babf93c1917fde5e754a` (`fix(pos): honor selected branch for global admin`)
-> Status: **Packet 2A CLOSED_WITH_NOTES.** Gemini `TWINPET-UI11-PACKET2A-FINAL-RUNTIME-CLOSURE-ADJUDICATION-GEMINI-001` = `APPROVED_WITH_CONDITIONS`. Exact two Functions deployed (`requestManagerApproval`, `resolveShiftCloseAlert`) on `twinpet-pos` / `asia-southeast1`. Global-admin branch-scope fix accepted. Controlled UAT accepted with notes. No more Packet 2A runtime UAT, credential recovery, or source remediation. TRUE-STANDALONE / NO HOSTING guardrail remains binding. Native/Capacitor **NOT AUTHORIZED**. Model2 remains separate/future scope. PKT-2 **NOT AUTHORIZED**. This pass is the authorized four-doc live-authority reconciliation of that closed state.
+> Status: **HISTORICAL.** Packet 2A CLOSED_WITH_NOTES. The then-current "Model2 remains separate/future scope / PKT-2 NOT AUTHORIZED / next roadmap routing pending" live facts are superseded as live current-state by Model 2 `CLOSED_WITH_NOTES` at `ffb8069`. Gemini `TWINPET-UI11-PACKET2A-FINAL-RUNTIME-CLOSURE-ADJUDICATION-GEMINI-001` = `APPROVED_WITH_CONDITIONS`. Exact two Functions deployed (`requestManagerApproval`, `resolveShiftCloseAlert`) on `twinpet-pos` / `asia-southeast1`. Global-admin branch-scope fix accepted. Controlled UAT accepted with notes. No more Packet 2A runtime UAT, credential recovery, or source remediation. TRUE-STANDALONE / NO HOSTING guardrail remains binding. Native/Capacitor **NOT AUTHORIZED**. That pass was the authorized four-doc live-authority reconciliation of that closed Packet 2A state.
 
 Packet 2A CLOSED_WITH_NOTES. No more Packet 2A runtime UAT, credential recovery, or source remediation.
 

@@ -2,25 +2,25 @@
 
 ## Current State
 
-- Final Packet 2A runtime/source baseline (binding; do not overwrite with the later docs SHA): `88086f45228488027af9babf93c1917fde5e754a` (`fix(pos): honor selected branch for global admin`)
-- **Current phase:** Post PK-6 Closure / UI-11 Packet 2 / Packet 2A
-- **Current gate:** `PACKET2A_FINAL_DOCS_RECONCILIATION`
-- **Packet 2A runtime status:** `CLOSED_WITH_NOTES`
-- **Concise closure:** Packet 2A CLOSED_WITH_NOTES. No more Packet 2A runtime UAT, credential recovery, or source remediation.
-- **Final runtime closure authority:** `TWINPET-UI11-PACKET2A-FINAL-RUNTIME-CLOSURE-ADJUDICATION-GEMINI-001` — `APPROVED_WITH_CONDITIONS`
-- **Packet 2A feature commit:** `4befe0e1574e71b5e270e7414fc2482901a62e76`
-- **Server deploy:** exact `requestManagerApproval` + `resolveShiftCloseAlert`; project `twinpet-pos`; region `asia-southeast1`; no full Functions redeploy; no Rules/index/Hosting in final Packet 2A closure
-- **Global-admin branch-scope fix:** accepted at `88086f45228488027af9babf93c1917fde5e754a`; Codex `PASS_WITH_NOTES`; blockers 0
-- **UAT-1 / UAT-2 / UAT-3 / UAT-6 / UAT-7 / UAT-8:** PASS
-- **UAT-5:** `PASS_WITH_NOTE`
-- **UAT-4 / UAT-9:** `N/A_NOT_AUTHORIZED`
-- **Extra login re-entry:** accepted bounded execution deviation with note (4 extra same-principal re-entries; 5 total post-fix `verifyPinLogin`; no security/product defect; no rerun)
-- **External driver false-stop:** `NONBLOCKING_EVIDENCE_TOOLING_NOTE`
+- Final Model 2 runtime/source baseline (binding; do not overwrite with the later docs SHA): `ffb8069690173c80455f355d432e141865c09a33` (`feat(auth): add delegated manager approval`)
+- **Current phase:** Post PK-6 Closure / UI-11 Packet 2 / Model 2
+- **Current gate:** `MODEL2_DOCS_CLOSURE`
+- **Model 2 runtime status:** `CLOSED_WITH_NOTES`
+- **Concise closure:** UI-11 Packet 2 / Model 2 Runtime: CLOSED_WITH_NOTES. No Model 2 runtime UAT rerun. No Model 2 redeploy. SoftDelete remediation is a separate non-blocking follow-up, not a Model 2 reopen.
+- **Final runtime closure authority:** `TWINPET-UI11-PACKET2-MODEL2-FINAL-RUNTIME-CLOSURE-GEMINI-001` — `APPROVED_WITH_CONDITIONS`
+- **Server deploy:** exact `requestManagerApproval` + `resolveShiftCloseAlert`; Firestore Rules to named DB `pos-db`; project `twinpet-pos`; region `asia-southeast1`; no index deploy; no Hosting; no Native/Capacitor
+- **AGY-002:** COMPLETE / PASS; UI/UX blockers 0; functional defects 0; security defects 0; U-1/U-2/U-3/U-4/U-5-UI/U-6-UI/U-8/U-9/U-11/U-12 PASS including U-3 admin ALL delegated resolve and Model 1 smoke
+- **Grok-004B:** COMPLETE / PASS_WITH_NOTES; U-5 `self_approval_not_permitted`; U-6 `approver_not_eligible`; U-7 `invalid_pin`; U-10 `duplicate_confirmed`; U-13 `PERMISSION_DENIED`
+- **U-14 through U-19:** `DEFERRED_TO_AUTOMATED_EVIDENCE` (not executed live)
+- **Cleanup:** synthetic fixtures removed; temporary UAT profiles tombstoned / inactive; username reservations removed; no temporary active privilege; no usable temporary UAT login
+- **Retained (accepted):** credential docs remain (`disabled=false`); expired U-7 approval retained; UAT attempt bucket retained; immutable approvals/ledgers/audit/create-intent evidence retained
+- **Raw PIN:** persistence found NO; logging found NO; existing admin unchanged; `nara` unused; no legacy PIN introduced
+- **SoftDelete follow-up:** `NON_BLOCKING_SEPARATE_FOLLOWUP`; `POST_CLOSURE_SOFTDELETE_FOLLOWUP_REQUIRED: YES`; remediation not authorized now; does not keep Model 2 open
 - **TRUE-STANDALONE / NO HOSTING:** BINDING
 - **Stage 10 Hosting:** `SKIPPED_BY_TRUE_STANDALONE_USER_OVERRIDE`
 - **Native/Capacitor:** NOT AUTHORIZED by this closure
-- **Model2:** NOT AUTHORIZED / separate future scope
 - **PKT-2 implementation:** `NOT AUTHORIZED`
+- **Packet 2A:** historical `CLOSED_WITH_NOTES` at `88086f45228488027af9babf93c1917fde5e754a`; docs `b0875d1b14473a3dfaa710e9d6652a81da3a0605`
 - **PKT-1:** historical `CLOSED / DELIVERED / Runtime deployment complete` at `8abcd1550ef3004ebf0c9d2d5da32c9645a99010`
 - **PK-6** — historical `CLOSED / DELIVERED` at `e7ae0080eab574b207f53d3403d8a5ebacefff7c`; docs `acdae5fd6260c6c8740ad16e78023439aa0b4b0d`
 - **PK-5** — historical `CLOSED / DELIVERED` at `ef90d4ec4cce1decfed6e4809849fb9f991a2412`; docs `cf9c6f392f8416f247b16244351ec4567c71996b`
@@ -30,25 +30,33 @@
 - **Binding sequence:** PK-1 → PK-2 → PK-3 → PK-4 → PK-5 → PK-6; PK-6 is the **final PK packet**
 - **Next eligible PK packet:** `NONE`
 - **PK-7:** `NOT DEFINED / DO NOT INVENT`
-- **This pass** — authorized docs-only tracker reconciliation of Packet 2A `CLOSED_WITH_NOTES`. Exact four frozen live-authority docs only. No source/test/config/runtime work. No PKT-2 / Model2 / native. Do not invent the next packet.
+- **This pass** — authorized docs-only tracker reconciliation of Model 2 `CLOSED_WITH_NOTES`. Exact four frozen live-authority docs only. No source/test/config/runtime work. No PKT-2 / native. No softDelete remediation. Do not invent the next packet.
 - For current working-tree/stage/stash state, use live Git. Stash remains `stash@{0}` = `7d03cfec7ba52ff7e25b7e175ca190efc258d874`.
 
 ### Claim boundaries (must not overclaim)
 
 - Do not invent the next packet
-- Do not reopen Packet 2A runtime UAT or convert accepted notes into blockers
-- Do not authorize PKT-2 / Model2 / native/Capacitor
-- Do not claim Hosting deployed
+- Do not imply U-14 through U-19 ran in production
+- Do not claim credential docs were physically deleted or disabled
+- Do not claim expired U-7 approval or attempt bucket were deleted
+- Do not claim the softDelete defect was fixed
+- Do not treat the softDelete follow-up as keeping Model 2 open
+- Do not authorize PKT-2 / native/Capacitor
+- Do not claim Hosting deployed or index deployment occurred
 - Do not claim TRUE-STANDALONE native/Capacitor implementation started
-- Do not overwrite semantic source baseline `88086f45228488027af9babf93c1917fde5e754a` with the later docs SHA
-- Do not reopen PKT-1 runtime Stages 0–13
-- Do not reopen Packet 5, PK-3, PK-4, or PK-5 implementation
+- Do not overwrite semantic source baseline `ffb8069690173c80455f355d432e141865c09a33` with the later docs SHA
+- Do not reopen Packet 2A, PKT-1 runtime Stages 0–13, Packet 5, PK-3, PK-4, or PK-5
 
 ### Accepted residuals (nonblocking)
 
-- Extra login re-entry: accepted bounded execution deviation with note (not originally five authorized logins)
-- UAT-5: live source invalidation unmounted the PIN modal; page-level offline copy accepted as `PASS_WITH_NOTE`
-- External driver false-stop: nonblocking evidence-tooling note; UAT-1 product action was not re-executed
+- Temporary UAT credential docs retained with `disabled=false` matching current canonical `softDelete`; profiles tombstoned; login unusable; Gemini accepted
+- Expired U-7 approval retained (fail-closed after TTL; no canonical approval-delete)
+- UAT requester attempt bucket retained (no canonical attempt-delete)
+- Immutable consumed approvals / command ledgers / audit events / create intents retained
+- Canonical `handleSoftDelete` live transaction read-after-write is `NON_BLOCKING_SEPARATE_FOLLOWUP`; fail-closed; no partial mutation; not introduced by Model 2
+- Historical Packet 2A extra login re-entry: accepted bounded execution deviation with note
+- Historical Packet 2A UAT-5: live source invalidation unmounted the PIN modal; page-level offline copy accepted as `PASS_WITH_NOTE`
+- Historical Packet 2A external driver false-stop: nonblocking evidence-tooling note
 - Historical Stage 2 / Stage 7 / Stage 8 rollout stops remain historical events; PKT-1 current/final state remains CLOSED
 - Stage 10 Hosting skip is accepted, not a failure
 - PK-5 B16/B18 accepted harness limitations under Gemini Option A; not product defects; historical PK-5 note
@@ -57,33 +65,37 @@
 
 ## What Happens Next
 
-**Immediate next action:** Return to ChatGPT for UI-11 Packet 2A full closure and next roadmap routing.
+**Immediate next action:** Return to ChatGPT for post UI-11 Packet 2 / Model 2 roadmap routing.
 
-Do **not** perform additional Packet 2A runtime UAT. Do **not** perform additional credential recovery. Do **not** perform additional source remediation. Do **not** implement PKT-2. Do **not** activate Model2. Do **not** authorize native/Capacitor. Do **not** invent the next packet. Do **not** deploy Hosting. Do **not** reopen Packet 2A runtime.
+Do **not** implement softDelete remediation. Do **not** begin the next roadmap item. Do **not** implement PKT-2. Do **not** authorize native/Capacitor. Do **not** invent the next packet. Do **not** deploy Hosting. Do **not** reopen Model 2 runtime.
 
-**Next implementation action:** NONE — Packet 2A runtime is closed with notes. PKT-2 / Model2 / native NOT AUTHORIZED. Next roadmap routing pending at ChatGPT.
+**Next implementation action:** NONE — Model 2 runtime is closed with notes. PKT-2 / native NOT AUTHORIZED. SoftDelete follow-up is separate and not this gate. Next roadmap routing pending at ChatGPT.
 
-1. UI-11 Packet 2 / Packet 2A — **CLOSED_WITH_NOTES** at runtime/source baseline `88086f4`
-2. UI-11 Packet 2 / PKT-1 — historical **CLOSED / DELIVERED / Runtime deployment complete** at `8abcd15`
-3. PK-6 — historical **CLOSED / DELIVERED** at `e7ae008` / docs `acdae5f`
-4. PK-5 — **CLOSED / DELIVERED** at `ef90d4e` / docs `cf9c6f3`
-5. PK-4 — **CLOSED / DELIVERED** at `d27850a` / docs `6a82fef`
-6. PK-3 — **CLOSED** (`PASS`) at feature SHA `ec7cf8b`; docs commit `5e6675758`; U1–U7 `PASS`
-7. Packet 5 — **CLOSED** (`PASS_WITH_NOTES`) at `292d51ff`; R4 `36 / 36 PASS`
-8. **NOT authorized:** PKT-2, Model2, Hosting, native/Capacitor, PK-2C, PK-2D, PK-7, next packet implementation, TRUE-STANDALONE native implementation, stash operations
-9. Closed-gate reopen: Packet 2A runtime = CLOSED_WITH_NOTES; PKT-1 = CLOSED / DELIVERED; Packet 5 = CLOSED; PK-3 = CLOSED; PK-4 = CLOSED / DELIVERED; PK-5 = CLOSED / DELIVERED; PK-6 = CLOSED / DELIVERED
+1. UI-11 Packet 2 / Model 2 — **CLOSED_WITH_NOTES** at runtime/source baseline `ffb8069`
+2. UI-11 Packet 2 / Packet 2A — historical **CLOSED_WITH_NOTES** at `88086f4` / docs `b0875d1`
+3. UI-11 Packet 2 / PKT-1 — historical **CLOSED / DELIVERED / Runtime deployment complete** at `8abcd15`
+4. PK-6 — historical **CLOSED / DELIVERED** at `e7ae008` / docs `acdae5f`
+5. PK-5 — **CLOSED / DELIVERED** at `ef90d4e` / docs `cf9c6f3`
+6. PK-4 — **CLOSED / DELIVERED** at `d27850a` / docs `6a82fef`
+7. PK-3 — **CLOSED** (`PASS`) at feature SHA `ec7cf8b`; docs commit `5e6675758`; U1–U7 `PASS`
+8. Packet 5 — **CLOSED** (`PASS_WITH_NOTES`) at `292d51ff`; R4 `36 / 36 PASS`
+9. **Separate follow-up (not Model 2 reopen):** canonical `setUserAccount` / `handleSoftDelete` transaction-order defect — `NON_BLOCKING_SEPARATE_FOLLOWUP`
+10. **NOT authorized now:** PKT-2, Hosting, native/Capacitor, PK-2C, PK-2D, PK-7, next packet implementation, TRUE-STANDALONE native implementation, stash operations, softDelete remediation
+11. Closed-gate reopen: Model 2 runtime = CLOSED_WITH_NOTES; Packet 2A = CLOSED_WITH_NOTES; PKT-1 = CLOSED / DELIVERED; Packet 5 = CLOSED; PK-3 = CLOSED; PK-4 = CLOSED / DELIVERED; PK-5 = CLOSED / DELIVERED; PK-6 = CLOSED / DELIVERED
 
-**Not active:** PKT-2, Model2, Hosting, native, or any new feature packet. Packet 2A is closed with notes. `NEXT_ELIGIBLE_PK_PACKET: NONE`. Next roadmap routing pending.
+**Not active:** PKT-2, Hosting, native, or any new feature packet. Model 2 is closed with notes. `NEXT_ELIGIBLE_PK_PACKET: NONE`. Next roadmap routing pending.
 
 ## Reminders
 
 - `stash@{0}` — do not touch (`7d03cfec7ba52ff7e25b7e175ca190efc258d874`)
-- Packet 2A runtime is closed with notes at `88086f4`; this pass is docs-only
-- Semantic source baseline remains `88086f45228488027af9babf93c1917fde5e754a` after the docs SHA advances
+- Model 2 runtime is closed with notes at `ffb8069`; this pass is docs-only
+- Semantic source baseline remains `ffb8069690173c80455f355d432e141865c09a33` after the docs SHA advances
 - TRUE-STANDALONE / NO HOSTING guardrail remains binding
 - Stage 10 Hosting remains `SKIPPED_BY_TRUE_STANDALONE_USER_OVERRIDE`
-- Native implementation is not authorized by Packet 2A closure
-- PKT-2 / Model2 remain NOT AUTHORIZED
+- Native implementation is not authorized by Model 2 closure
+- PKT-2 remains NOT AUTHORIZED
+- U-14 through U-19 remain `DEFERRED_TO_AUTOMATED_EVIDENCE`
+- SoftDelete follow-up is required later and is not a Model 2 reopen
 - Packet 5 remains CLOSED; do not reopen
 - PK-3 remains CLOSED; do not reopen
 - PK-4 remains CLOSED / DELIVERED; do not reopen
