@@ -14,6 +14,29 @@ import { useAuth } from './useAuth';
 
 const BRANCH_STORAGE_KEY = 'twinpet_branch_id';
 
+/** Authorization capability marker — not a physical operational branch. */
+const ALL_BRANCH_CAPABILITY = 'ALL';
+
+function isConcretePhysicalBranchId(branchId: string): boolean {
+  return branchId !== ALL_BRANCH_CAPABILITY;
+}
+
+/**
+ * Honor a selected workspace when it is explicitly allowed, or when the
+ * user holds the `ALL` capability and the selection is a concrete branch.
+ * `ALL` as a selected session/stored value remains the non-operational marker.
+ */
+function isAuthorizedSelectedBranch(
+  selectedBranchId: string,
+  allowedBranchIds: readonly string[],
+): boolean {
+  if (allowedBranchIds.includes(selectedBranchId)) return true;
+  return (
+    isConcretePhysicalBranchId(selectedBranchId) &&
+    allowedBranchIds.includes(ALL_BRANCH_CAPABILITY)
+  );
+}
+
 export type UseBranchResult = {
   branchId: string | null;
   branch: Branch | null;
@@ -40,12 +63,12 @@ export function useBranch(): UseBranchResult {
   const branchId = useMemo(() => {
     if (!isAuthenticated || !user) return null;
 
-    if (sessionBranchId && allowedBranchIds.includes(sessionBranchId)) {
+    if (sessionBranchId && isAuthorizedSelectedBranch(sessionBranchId, allowedBranchIds)) {
       return sessionBranchId;
     }
 
     const stored = localStorage.getItem(BRANCH_STORAGE_KEY);
-    if (stored && allowedBranchIds.includes(stored)) {
+    if (stored && isAuthorizedSelectedBranch(stored, allowedBranchIds)) {
       return stored;
     }
 

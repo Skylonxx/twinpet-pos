@@ -11,21 +11,40 @@ import type { ShiftCloseAlertDetailState } from '../lib/pos/shiftClose/useShiftC
 import { mapShiftCloseReviewRow } from '../lib/pos/shiftClose/shiftCloseReviewRows';
 import { mapShiftCloseCaseProjection } from '../lib/pos/shiftClose/shiftCloseDetailProjection';
 
-let mockUser: { role: string } | null = { role: 'manager' };
+let mockUser: { role: string; branchIds?: string[] } | null = { role: 'manager' };
+let mockSessionBranchId: string | null = 'BR-001';
+let mockIsAuthenticated = true;
+let useResolvedBranchHook = false;
 vi.mock('../lib/hooks/useAuth', () => ({
-  useAuth: () => ({ user: mockUser }),
+  useAuth: () => ({
+    user: mockUser,
+    branchId: mockSessionBranchId,
+    isAuthenticated: mockIsAuthenticated,
+    setBranchId: vi.fn(),
+  }),
 }));
 
 let mockBranchId: string | null = 'BR-001';
-vi.mock('../lib/hooks/useBranch', () => ({
-  useBranch: () => ({ branchId: mockBranchId, branch: { name: 'สาขาทดสอบ' } }),
-}));
+vi.mock('../lib/hooks/useBranch', async () => {
+  const actual = await vi.importActual<typeof import('../lib/hooks/useBranch')>(
+    '../lib/hooks/useBranch',
+  );
+  return {
+    ...actual,
+    useBranch: () =>
+      useResolvedBranchHook
+        ? actual.useBranch()
+        : { branchId: mockBranchId, branch: { name: 'สาขาทดสอบ' } },
+  };
+});
 
 let mockFirebaseConfigured = true;
 vi.mock('../lib/firebase', () => ({
   get isFirebaseConfigured() {
     return mockFirebaseConfigured;
   },
+  db: null,
+  collections: { branches: 'branches' },
 }));
 
 let detailState: ShiftCloseAlertDetailState;
@@ -102,8 +121,12 @@ afterEach(() => {
   cleanup();
   mockUser = { role: 'manager' };
   mockBranchId = 'BR-001';
+  mockSessionBranchId = 'BR-001';
+  mockIsAuthenticated = true;
+  useResolvedBranchHook = false;
   mockFirebaseConfigured = true;
   capturedHookArgs = null;
+  localStorage.removeItem('twinpet_branch_id');
   resolveAlertMock.mockClear();
   approvalTransportMock.mockClear();
 });
@@ -665,3 +688,45 @@ function expectPacket2AAcknowledgeFlow(scope: { shiftId: string; branchId: strin
   expect(sent.approvalId).toBe(TEST_APPROVAL_ID);
   expect(sent).not.toHaveProperty('pin');
 }
+
+describe('ShiftCloseAlertDetailPage — CASE E global ALL + selected LDP-001 workspace', () => {
+  test('useBranch honors session LDP-001 for ALL-authorized admin; adjudication mounts and is not the select-branch gate', async () => {
+    const user = userEvent.setup();
+    useResolvedBranchHook = true;
+    mockUser = { role: 'admin', branchIds: ['ALL'] };
+    mockSessionBranchId = 'LDP-001';
+    mockIsAuthenticated = true;
+    mockFirebaseConfigured = true;
+
+    const row = mapShiftCloseReviewRow('SHIFT-001', {
+      shiftId: 'SHIFT-001',
+      branchId: 'LDP-001',
+      alertState: 'open',
+      reasonCode: 'drawer_discrepancy',
+      caseVersion: 2,
+    });
+    const projection = mapShiftCloseCaseProjection('SHIFT-001', {
+      shiftId: 'SHIFT-001',
+      branchId: 'LDP-001',
+      alertState: 'open',
+      processingState: 'validated',
+      settlementState: 'manual_review_required',
+      caseVersion: 2,
+    });
+    detailState = baseState({
+      alert: { status: 'ready', fromCache: false, empty: false, errorType: null, row },
+      case: { status: 'ready', fromCache: false, empty: false, errorType: null, projection },
+    });
+
+    renderAtRoute('SHIFT-001');
+
+    expect(screen.queryByText('โปรดเลือกสาขาเพื่อดูข้อมูล')).toBeNull();
+    expect(capturedHookArgs?.[1]).toBe('LDP-001');
+    expect(screen.getByRole('button', { name: 'รับทราบ' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'ยืนยันแก้ไข' })).toBeTruthy();
+
+    await confirmAcknowledgeThroughPin(user);
+    await waitFor(() => expect(screen.getByText('ทำรายการสำเร็จ')).toBeTruthy());
+    expectPacket2AAcknowledgeFlow({ shiftId: 'SHIFT-001', branchId: 'LDP-001' });
+  });
+});
