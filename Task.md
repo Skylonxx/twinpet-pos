@@ -1,5 +1,33 @@
 # Twinpet POS — Task Tracker
 
+# ARCHITECTURAL GUARDRAILS
+
+These rules are **permanent and binding now**. They constrain all current and future interim work, including UI-11 Packet 2. This is a **forward architectural guardrail**, not retroactive history erasure. Historical records below are unchanged.
+
+**TRUE-STANDALONE implementation itself remains FUTURE / NOT STARTED.** This section does **not** authorize native, Capacitor, Tauri, Electron, desktop/mobile packaging, local-storage migration, PKT-2, Packet2A, or Model2 work.
+
+## 1. TARGET ARCHITECTURE
+
+Twinpet POS is destined to be a **TRUE-STANDALONE** application: an offline-capable Desktop/Mobile Native App with Local Storage sync.
+
+## 2. NOT A WEB APP
+
+Twinpet POS is **explicitly not** a standard Web Application.
+
+## 3. NO HOSTING
+
+Firebase Hosting is **permanently out of scope**. Do not configure, suggest, or attempt to deploy Firebase Hosting.
+
+## 4. BACKEND ONLY
+
+Cloud infrastructure is strictly limited to **Firestore** and **Firebase Cloud Functions**.
+
+## 5. INTERIM COMPATIBILITY
+
+All current development, including UI-11 Packet 2 and beyond, must preserve compatibility with the offline-first standalone trajectory.
+
+---
+
 > Last reconciled: 2026-08-24
 > Current repository HEAD (binding; PK-6 feature delivered): `e7ae0080eab574b207f53d3403d8a5ebacefff7c` (`feat(pos): add online-only guardrails`)
 > PK-6 feature SHA (binding): `e7ae0080eab574b207f53d3403d8a5ebacefff7c`
