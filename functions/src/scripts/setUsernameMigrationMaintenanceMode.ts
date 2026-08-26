@@ -1,9 +1,13 @@
 /**
- * Asymmetric maintenanceMode writer: may only request false→true, or no-op at true.
- * Hard-rejects any request to set maintenanceMode false before any write.
+ * MaintenanceMode writer.
+ * Enable path (unchanged): may only request false→true, or no-op at true.
+ * Hard-rejects runSetUsernameMigrationMaintenanceMode(..., false) before any write.
+ * Disable path: explicit CLI --disable only; true→false while preserving complete and epoch.
  *
- * Operator CLI (no work on import). Enable only — no reverse off-ramp:
+ * Operator CLI (no work on import):
  *   npm run set-username-migration-maintenance-mode -- --project=<id> --database=<id> --credentials=<path> --enable --apply
+ *   npm run set-username-migration-maintenance-mode -- --project=<id> --database=<id> --credentials=<path> --disable --apply
+ *   --enable and --disable are mutually exclusive. Neither mode fails closed.
  */
 import type { Firestore } from 'firebase-admin/firestore';
 import { COLLECTIONS } from '../credentialStore';
@@ -14,6 +18,19 @@ export type EnterMaintenanceResult = {
   noop: boolean;
   error?: string;
 };
+
+export type DisableMaintenanceResult = {
+  ok: boolean;
+  maintenanceMode: boolean;
+  noop: boolean;
+  complete: boolean;
+  epoch: number;
+  error?: string;
+};
+
+function isValidEpoch(epoch: unknown): epoch is number {
+  return typeof epoch === 'number' && Number.isInteger(epoch) && epoch >= 0;
+}
 
 export async function runSetUsernameMigrationMaintenanceMode(
   database: Firestore,
@@ -39,8 +56,56 @@ export async function runSetUsernameMigrationMaintenanceMode(
   return { ok: true, maintenanceMode: true, noop: false };
 }
 
+export async function runDisableUsernameMigrationMaintenanceMode(
+  database: Firestore,
+): Promise<DisableMaintenanceResult> {
+  const ref = database.collection(COLLECTIONS.migrationControl).doc('usernameReservations');
+  const snap = await ref.get();
+  if (!snap.exists) {
+    throw new Error('CONTROL_DOC_MISSING');
+  }
+  const current = (snap.data() ?? {}) as {
+    maintenanceMode?: boolean;
+    complete?: boolean;
+    epoch?: number;
+  };
+  if (current.complete !== true) {
+    throw new Error('COMPLETE_NOT_TRUE');
+  }
+  if (!isValidEpoch(current.epoch)) {
+    throw new Error('EPOCH_INVALID');
+  }
+  if (current.maintenanceMode === false) {
+    return {
+      ok: true,
+      maintenanceMode: false,
+      noop: true,
+      complete: true,
+      epoch: current.epoch,
+    };
+  }
+  if (current.maintenanceMode !== true) {
+    throw new Error('MAINTENANCE_NOT_TRUE');
+  }
+  await ref.set(
+    {
+      maintenanceMode: false,
+      updatedAt: new Date().toISOString(),
+    },
+    { merge: true },
+  );
+  return {
+    ok: true,
+    maintenanceMode: false,
+    noop: false,
+    complete: true,
+    epoch: current.epoch,
+  };
+}
+
 // ── Operator CLI (import-safe; runs only when this file is process entry) ──
-// Enable-only: never maps to requested=false. Reverse off-ramp is not in this CLI.
+// --enable maps to requested=true only. --disable is the explicit true→false off-ramp.
+// --requested=false / --maintenanceMode=false remain rejected (not a disable alias).
 
 function cliFlag(argv: string[], name: string): string | undefined {
   const prefix = `--${name}=`;
@@ -56,6 +121,7 @@ export type SetUsernameMigrationMaintenanceModeCliArgs = {
   databaseId: string;
   credentialsPath: string;
   apply: boolean;
+  mode: 'enable' | 'disable';
 };
 
 export function parseSetUsernameMigrationMaintenanceModeCliArgs(
@@ -71,31 +137,43 @@ export function parseSetUsernameMigrationMaintenanceModeCliArgs(
     throw new Error('MISSING_CREDENTIALS: pass --credentials=<path> or GOOGLE_APPLICATION_CREDENTIALS');
   }
   const requestedRaw = (cliFlag(argv, 'requested') ?? cliFlag(argv, 'maintenanceMode') ?? '').trim().toLowerCase();
-  if (
-    argv.includes('--disable') ||
-    requestedRaw === 'false' ||
-    requestedRaw === '0' ||
-    requestedRaw === 'off'
-  ) {
+  if (requestedRaw === 'false' || requestedRaw === '0' || requestedRaw === 'off') {
     throw new Error('MAINTENANCE_FALSE_REJECTED');
   }
+  const disable = argv.includes('--disable');
   const enable = argv.includes('--enable') || requestedRaw === 'true' || requestedRaw === '1' || requestedRaw === 'on';
+  if (enable && disable) {
+    throw new Error('INVALID_MODE: pass only --enable or --disable');
+  }
+  if (disable) {
+    return {
+      projectId,
+      databaseId,
+      credentialsPath,
+      apply: argv.includes('--apply'),
+      mode: 'disable',
+    };
+  }
   if (!enable) {
-    throw new Error('MISSING_ENABLE: pass --enable (disable/false is rejected)');
+    throw new Error('MISSING_ENABLE: pass --enable (or --disable)');
   }
   return {
     projectId,
     databaseId,
     credentialsPath,
     apply: argv.includes('--apply'),
+    mode: 'enable',
   };
 }
 
 export async function executeSetUsernameMigrationMaintenanceModeCli(
   args: SetUsernameMigrationMaintenanceModeCliArgs,
   deps: { database: Firestore },
-): Promise<EnterMaintenanceResult> {
+): Promise<EnterMaintenanceResult | DisableMaintenanceResult> {
   if (!args.apply) throw new Error('MISSING_APPLY: pass --apply to execute');
+  if (args.mode === 'disable') {
+    return runDisableUsernameMigrationMaintenanceMode(deps.database);
+  }
   return runSetUsernameMigrationMaintenanceMode(deps.database, true);
 }
 
@@ -151,6 +229,7 @@ async function main(): Promise<void> {
     maintenanceMode: result.maintenanceMode,
     noop: result.noop,
     error: result.error,
+    ...('complete' in result ? { complete: result.complete, epoch: result.epoch } : {}),
   }));
   if (!result.ok) process.exit(1);
 }

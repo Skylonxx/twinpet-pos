@@ -83,6 +83,7 @@ import {
   executeSetUsernameMigrationMaintenanceModeCli,
   isSetUsernameMigrationMaintenanceModeCliEntry,
   parseSetUsernameMigrationMaintenanceModeCliArgs,
+  runSetUsernameMigrationMaintenanceMode,
 } from '../setUsernameMigrationMaintenanceMode';
 import {
   executeMigrateCredentialsCli,
@@ -379,12 +380,42 @@ describe('operator CLI entrypoints', () => {
       'migrationControl/usernameReservations': { maintenanceMode: true, complete: true, epoch: 1 },
     });
     const before = snapshot(db.__store);
-    expect(() => parseSetUsernameMigrationMaintenanceModeCliArgs([...TARGET, '--disable', '--apply'], EMPTY_ENV))
-      .toThrow(/MAINTENANCE_FALSE_REJECTED/);
+    const disableArgs = parseSetUsernameMigrationMaintenanceModeCliArgs(
+      [...TARGET, '--disable', '--apply'],
+      EMPTY_ENV,
+    );
+    expect(disableArgs.mode).toBe('disable');
+    expect(disableArgs.apply).toBe(true);
     expect(() => parseSetUsernameMigrationMaintenanceModeCliArgs(
       [...TARGET, '--requested=false', '--apply'],
       EMPTY_ENV,
     )).toThrow(/MAINTENANCE_FALSE_REJECTED/);
+    expect(() => parseSetUsernameMigrationMaintenanceModeCliArgs(
+      [...TARGET, '--maintenanceMode=false', '--apply'],
+      EMPTY_ENV,
+    )).toThrow(/MAINTENANCE_FALSE_REJECTED/);
+    expect(() => parseSetUsernameMigrationMaintenanceModeCliArgs(
+      [...TARGET, '--requested=off', '--apply'],
+      EMPTY_ENV,
+    )).toThrow(/MAINTENANCE_FALSE_REJECTED/);
+    expect(() => parseSetUsernameMigrationMaintenanceModeCliArgs(
+      [...TARGET, '--requested=0', '--apply'],
+      EMPTY_ENV,
+    )).toThrow(/MAINTENANCE_FALSE_REJECTED/);
+    expect(() => parseSetUsernameMigrationMaintenanceModeCliArgs(
+      [...TARGET, '--enable', '--disable', '--apply'],
+      EMPTY_ENV,
+    )).toThrow(/INVALID_MODE/);
+    const disableWithoutApply = parseSetUsernameMigrationMaintenanceModeCliArgs(
+      [...TARGET, '--disable'],
+      EMPTY_ENV,
+    );
+    expect(disableWithoutApply.mode).toBe('disable');
+    expect(disableWithoutApply.apply).toBe(false);
+    await expect(executeSetUsernameMigrationMaintenanceModeCli(disableWithoutApply, { database: db as never }))
+      .rejects.toThrow(/MISSING_APPLY/);
+    await expect(runSetUsernameMigrationMaintenanceMode(db as never, false))
+      .rejects.toThrow('MAINTENANCE_FALSE_REJECTED');
     expect(snapshot(db.__store)).toBe(before);
     const args = parseSetUsernameMigrationMaintenanceModeCliArgs([...TARGET, '--enable', '--apply'], EMPTY_ENV);
     const res = await executeSetUsernameMigrationMaintenanceModeCli(args, { database: db as never });
