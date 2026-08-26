@@ -2,34 +2,50 @@
 
 ## Phase
 
-**Post PK-6 Closure / UI-11 Packet 2 / PKT-1**
+**Post PK-6 Closure / UI-11 Packet 2 / Packet 2A**
 
 STATUS:
-PKT1_CLOSED_DELIVERED_RUNTIME_DEPLOYMENT_COMPLETE_NEXT_PHASE_PLANNING_PENDING
+PACKET2A_CLOSED_WITH_NOTES_AWAIT_CHATGPT_FULL_CLOSURE_AND_NEXT_ROADMAP_ROUTING
 
 ```text
-CURRENT_PHASE: Post PK-6 Closure / UI-11 Packet 2 / PKT-1
-CURRENT_GATE: PKT1_FINAL_DOCS_RECONCILIATION
-PKT1_STATUS: CLOSED / DELIVERED / Runtime deployment complete
-PKT1_RUNTIME_HEAD: 8abcd1550ef3004ebf0c9d2d5da32c9645a99010
-PKT1_RUNTIME_SUBJECT: fix(auth): add pk-1 runtime closure tooling
-HEAD: 8abcd1550ef3004ebf0c9d2d5da32c9645a99010
-HEAD_SUBJECT: fix(auth): add pk-1 runtime closure tooling
-STAGE0_TO_STAGE13: COMPLETED under accepted rollout history
-STAGE10_HOSTING: SKIPPED_BY_TRUE_STANDALONE_USER_OVERRIDE
+CURRENT_PHASE: Post PK-6 Closure / UI-11 Packet 2 / Packet 2A
+CURRENT_GATE: PACKET2A_FINAL_DOCS_RECONCILIATION
+PACKET2A_RUNTIME_STATUS: CLOSED_WITH_NOTES
+PACKET2A_FINAL_RUNTIME_CLOSURE_AUTHORITY: TWINPET-UI11-PACKET2A-FINAL-RUNTIME-CLOSURE-ADJUDICATION-GEMINI-001
+DECISION_STATUS: APPROVED_WITH_CONDITIONS
+FINAL_RUNTIME_SOURCE_BASELINE: 88086f45228488027af9babf93c1917fde5e754a
+FINAL_RUNTIME_SOURCE_SUBJECT: fix(pos): honor selected branch for global admin
+PACKET2A_FEATURE_COMMIT: 4befe0e1574e71b5e270e7414fc2482901a62e76
+PACKET2A_SERVER_DEPLOY: requestManagerApproval + resolveShiftCloseAlert
+PACKET2A_DEPLOY_PROJECT: twinpet-pos
+PACKET2A_DEPLOY_REGION: asia-southeast1
+FULL_FUNCTIONS_REDEPLOY: NO
+FUNCTIONS_REDEPLOY_AFTER_BRANCH_SCOPE_FIX: NO
+RULES_INDEX_HOSTING_IN_FINAL_PACKET2A_CLOSURE: NO
+GLOBAL_ADMIN_BRANCH_SCOPE_FIX: ACCEPTED
+CODEX_BRANCH_SCOPE_REVIEW: TWINPET-UI11-PACKET2A-GLOBAL-ADMIN-BRANCH-SCOPE-CODEX-REVIEW-001 PASS_WITH_NOTES BLOCKER_COUNT:0
+UAT1_ACKNOWLEDGE: PASS
+UAT2_RESOLVE: PASS
+UAT3_WRONG_PIN: PASS
+UAT4_LOCKOUT: N/A_NOT_AUTHORIZED
+UAT5_OFFLINE: PASS_WITH_NOTE
+UAT6_MISSING_APPROVALID: PASS
+UAT7_RAW_PIN: PASS
+UAT8_REPLAY: PASS
+UAT9_STALE_CALLBACK: N/A_NOT_AUTHORIZED
+ADDITIONAL_RUNTIME_UAT_REQUIRED: NO
+ADDITIONAL_CREDENTIAL_RECOVERY_REQUIRED: NO
+ADDITIONAL_SOURCE_REMEDIATION_REQUIRED: NO
+EXTRA_LOGIN_REENTRY_CLASSIFICATION: ACCEPT_BOUNDED_EXECUTION_DEVIATION_WITH_NOTE
+EXTERNAL_DRIVER_FALSE_STOP: NONBLOCKING_EVIDENCE_TOOLING_NOTE
 TRUE_STANDALONE_NO_HOSTING_GUARDRAIL: BINDING
-RUNTIME_BLOCKER_COUNT: 0
-pendingRotation: 0
-maintenanceMode: false
-LEGACY_PIN_CLEANUP: COMPLETE
-NAMED_POS_DB_RULES: LIVE (c77d0f28-8cf5-49b3-9491-9543d80a0ddb)
+STAGE10_HOSTING: SKIPPED_BY_TRUE_STANDALONE_USER_OVERRIDE
+NATIVE_IMPLEMENTATION_AUTHORIZED: NO
+MODEL2_ACTIVATION: NOT_AUTHORIZED / SEPARATE_FUTURE_SCOPE
 PKT2_IMPLEMENTATION: NOT_AUTHORIZED
-PACKET2A_ACTIVATION: NOT_AUTHORIZED
-MODEL2_ACTIVATION: NOT_AUTHORIZED
-NEXT_PHASE_PLANNING: PENDING / requires separate authority
-GEMINI_FINAL_CLOSURE: TWINPET-UI11-PACKET2-PKT1-FINAL-RUNTIME-CLOSURE-ADJUDICATION-GEMINI-001
-DECISION_STATUS: APPROVED_WITH_NOTES
-BOUNDED_SCOPE: exact seven closure docs only
+PKT1_STATUS: CLOSED / DELIVERED / Runtime deployment complete (historical)
+PKT1_RUNTIME_HEAD: 8abcd1550ef3004ebf0c9d2d5da32c9645a99010
+BOUNDED_SCOPE: exact four live-authority docs only
 BINDING_SEQUENCE: PK-1 -> PK-2 -> PK-3 -> PK-4 -> PK-5 -> PK-6
 BINDING_SEQUENCE_FINAL_PACKET: PK-6
 NEXT_ELIGIBLE_PK_PACKET: NONE
@@ -43,52 +59,61 @@ PK2D: RECORD_ONLY / NOT ACTIVE / NOT AUTHORIZED
 STASH: UNTOUCHED
 ```
 
-PKT-1 CLOSED / DELIVERED / Runtime deployment complete. Next phase planning pending.
+Packet 2A CLOSED_WITH_NOTES. Final runtime/source baseline `88086f45228488027af9babf93c1917fde5e754a`. Gemini `APPROVED_WITH_CONDITIONS`. No more Packet 2A runtime UAT, credential recovery, or source remediation. TRUE-STANDALONE / NO HOSTING guardrail remains binding. Native implementation is not authorized. Model2 remains separate/future scope. PKT-2 remains NOT AUTHORIZED. Do not invent the next packet. After this docs commit, repository HEAD will advance to the docs SHA; the semantic source baseline remains `88086f45228488027af9babf93c1917fde5e754a`.
 
-`PKT1_STATUS: CLOSED / DELIVERED.` Runtime HEAD `8abcd1550ef3004ebf0c9d2d5da32c9645a99010` is on `main`. Gemini `APPROVED_WITH_NOTES`. Stage 0–13 completed under accepted rollout history. Stage 10 Hosting = `SKIPPED_BY_TRUE_STANDALONE_USER_OVERRIDE`. TRUE-STANDALONE / NO HOSTING guardrail remains binding. Runtime blockers 0. `pendingRotation = 0`. `maintenanceMode = false`. Legacy PIN cleanup complete. Named `pos-db` Rules live. PKT-2 / Packet2A / Model2 NOT AUTHORIZED. This gate is docs-only source-of-truth reconciliation of that closed state. It does **not** authorize PKT-2, Packet2A, Model2, Hosting, or invent the next packet.
+## This packet — UI-11 Packet 2 / Packet 2A final docs reconciliation
 
-## This packet — UI-11 Packet 2 / PKT-1 final docs reconciliation
+**Status: Packet 2A CLOSED_WITH_NOTES.** Final runtime/source implementation baseline:
 
-**Status: PKT-1 CLOSED / DELIVERED / Runtime deployment complete.** Current repository HEAD:
+`88086f45228488027af9babf93c1917fde5e754a` (`fix(pos): honor selected branch for global admin`)
 
-`8abcd1550ef3004ebf0c9d2d5da32c9645a99010` (`fix(auth): add pk-1 runtime closure tooling`)
-
-- Feature SHA: `2e0a11ddc702ef80d123fd151b597456ac39d5f6`
-- Gemini: `TWINPET-UI11-PACKET2-PKT1-FINAL-RUNTIME-CLOSURE-ADJUDICATION-GEMINI-001` — `APPROVED_WITH_NOTES`
-- Stage 0–13: completed under accepted rollout history
-- Stage 10 Hosting: `SKIPPED_BY_TRUE_STANDALONE_USER_OVERRIDE`
-- TRUE-STANDALONE / NO HOSTING: BINDING
-- Runtime blockers: 0
-- pendingRotation: 0
-- maintenanceMode: false
-- Legacy PIN cleanup: complete
-- Named `pos-db` Rules: live (`c77d0f28-8cf5-49b3-9491-9543d80a0ddb`)
-- Historical Stage 2 / Stage 7 / Stage 8 stops: historical events only; current state is CLOSED
+- Feature SHA: `4befe0e1574e71b5e270e7414fc2482901a62e76` (`feat(auth): add packet 2a shift-close reauthorization`)
+- Gemini: `TWINPET-UI11-PACKET2A-FINAL-RUNTIME-CLOSURE-ADJUDICATION-GEMINI-001` — `APPROVED_WITH_CONDITIONS`
+- Server deploy: exact `requestManagerApproval` (create) + `resolveShiftCloseAlert` (update); project `twinpet-pos`; region `asia-southeast1`
+- No full Functions redeploy; no Functions redeploy after the client branch-scope fix
+- No Rules/index/Hosting deployment belongs to final Packet 2A closure
+- Global-admin branch-scope defect: `UI11_PACKET2A_ADMIN_USEBRANCH_ALL_HIDES_PACKET2A_UI` classified `TRUE_CLIENT_BRANCH_SCOPE_DEFECT`; fix honors selected concrete physical session/stored branch when authorization contains `ALL`; `ALL` remains a capability marker, not a physical branch; non-ALL restrictions remain fail-closed; server branch authorization remains authoritative
+- Codex: `TWINPET-UI11-PACKET2A-GLOBAL-ADMIN-BRANCH-SCOPE-CODEX-REVIEW-001` — `PASS_WITH_NOTES`; blockers 0; landing commit `88086f45228488027af9babf93c1917fde5e754a`
+- UAT-1 acknowledge PASS; UAT-2 resolve PASS; UAT-3 wrong reauth PIN PASS (exactly one wrong attempt; approval rejected; resolver count 0; business mutation 0; no lockout)
+- UAT-4 lockout `N/A_NOT_AUTHORIZED`; UAT-9 stale callback live `N/A_NOT_AUTHORIZED`
+- UAT-5 offline `PASS_WITH_NOTE` (offline approval request count 0; offline resolver request count 0; reconnect auto-resume NO; production mutation NO; live source invalidation unmounted the PIN modal; page-level offline copy accepted)
+- UAT-6 missing approvalId PASS (`invalid_payload`; zero business mutation)
+- UAT-7 raw PIN own-property PASS (`invalid_payload`; zero business mutation)
+- UAT-8 replay/idempotency PASS (ledger-first duplicate confirmation; zero duplicate protected mutation; zero second approval mint)
+- Same-principal / approval binding / authVersion / credentialVersion / TTL / consume evidence PASS
+- Raw PIN persistence found: NO; raw PIN logging found: NO; real business data used: NO; inventory/payment/FIFO mutation: NO
+- Controlled UAT credential recovery: canonical model preserved; authVersion 3; credentialVersion 3; legacy `users.pin` non-authoritative; no further recovery required (not a product feature)
+- Extra login re-entry: accepted bounded execution deviation with note (post-fix max normal login 1; first admin production login PASS; 4 additional same-principal successful session re-entries; total post-fix `verifyPinLogin` = 5; credential rotation after recovery 0; failed-login retry 0; `nara` use 0; security defect NO; product defect NO; rerun required NO)
+- External driver false-stop: `NONBLOCKING_EVIDENCE_TOOLING_NOTE` (UAT-1 product path succeeded; Vite module GETs initially misclassified as Function callable rows; classifier corrected; UAT-1 not re-executed; no product defect)
 - Protected stash remains untouched: `stash@{0}` = `7d03cfec7ba52ff7e25b7e175ca190efc258d874`
 
 ### Claim boundaries (must not overclaim)
 
 - Do not invent the next packet
-- Do not authorize PKT-2 / Packet2A / Model2
+- Do not reopen Packet 2A runtime UAT / convert accepted notes into blockers
+- Do not authorize PKT-2 / Model2 / native/Capacitor
 - Do not claim Hosting deployed
 - Do not claim TRUE-STANDALONE native/Capacitor implementation started
-- Do not reopen PKT-1 runtime Stages 0–13
-- Do not reopen PK-6, PK-5, PK-4, PK-3, or Packet 5
+- Do not overwrite the semantic source baseline `88086f45228488027af9babf93c1917fde5e754a` with the later docs SHA
+- Do not reopen PKT-1, PK-6, PK-5, PK-4, PK-3, or Packet 5
 
-## This pass — Docs/tracker reconciliation (PKT-1 closed)
+## This pass — Docs/tracker reconciliation (Packet 2A closed with notes)
 
-**Status: COMPLETE docs-only source-of-truth reconciliation of closed PKT-1**
+**Status: COMPLETE docs-only source-of-truth reconciliation of Packet 2A CLOSED_WITH_NOTES**
 
-- Authorized candidate maximum: 7 files.
-- Authorized files: `docs/agent-workflow/CURRENT_PACKET.md`, `docs/agent-workflow/NEXT_ACTION.md`, `docs/agent-workflow/STATE.md`, `docs/reports/latest-report.md`, `Context.md`, `Task.md`, `docs/STATE.md`
+- Frozen allowlist maximum: 4 files.
+- Frozen files: `docs/agent-workflow/CURRENT_PACKET.md`, `docs/agent-workflow/NEXT_ACTION.md`, `docs/agent-workflow/STATE.md`, `docs/reports/latest-report.md`
+- Live workflow authority remains this trio; `Context.md` / `Task.md` / `docs/STATE.md` remain the last PKT-1 snapshot and already defer to this trio on gate/status/HEAD
+- TRUE-STANDALONE / NO HOSTING guardrails already present in `Context.md` / `Task.md` are preserved (not edited; not weakened)
 - No source/test/config/rules/index/functions changes
 - No production/deploy/Hosting/callable/stash operations
-- No PKT-2 / Packet2A / Model2 work
-- Gemini: `FINAL_DOCS_RECONCILIATION_REQUIRED: YES` / `FINAL_DOCS_STAGE_COMMIT_PUSH_AUTHORIZED: YES` / `TWINPET-UI11-PACKET2-PKT1-FINAL-RUNTIME-CLOSURE-ADJUDICATION-GEMINI-001`
+- No PKT-2 / Model2 / native work
+- Gemini: `CONDITIONAL_DOCS_RECONCILIATION_AUTHORIZED: YES` / `DOCS_MAX_PATHS: 4` / `TWINPET-UI11-PACKET2A-FINAL-RUNTIME-CLOSURE-ADJUDICATION-GEMINI-001`
 
 ## Prior closed packets
 
-- **UI-11 Packet 2 / PKT-1** — `CLOSED / DELIVERED / Runtime deployment complete` at `8abcd15` (`fix(auth): add pk-1 runtime closure tooling`). Gemini `APPROVED_WITH_NOTES`. Stage 0–13 completed. Stage 10 Hosting `SKIPPED_BY_TRUE_STANDALONE_USER_OVERRIDE`. This pass is docs reconciliation only.
+- **UI-11 Packet 2 / Packet 2A** — `CLOSED_WITH_NOTES` at runtime/source baseline `88086f4` (`fix(pos): honor selected branch for global admin`); feature `4befe0e`. Gemini `APPROVED_WITH_CONDITIONS`. Exact two Functions deployed. This pass is docs reconciliation only.
+- **UI-11 Packet 2 / PKT-1** — `CLOSED / DELIVERED / Runtime deployment complete` at `8abcd15` (`fix(auth): add pk-1 runtime closure tooling`); docs `6ca8739`. Gemini `APPROVED_WITH_NOTES`. Stage 0–13 completed. Stage 10 Hosting `SKIPPED_BY_TRUE_STANDALONE_USER_OVERRIDE`.
 - **PK-6** — `CLOSED / DELIVERED` at `e7ae008` (`feat(pos): add online-only guardrails`); docs `acdae5f`. Targeted `3/21 PASS`. Root `130/2490 PASS`. UAT U01–U11 PASS. AGY `PASS_WITH_NOTES`.
 - **PK-5** — `CLOSED / DELIVERED` at `ef90d4e` (`feat(pos): add offline read-side truth`); docs `cf9c6f3`. Codex / corrected UAT / AGY `PASS_WITH_NOTES`.
 - **PK-4** — `CLOSED / DELIVERED` at `d27850a` (`feat(pos): add operator sync center`); docs `6a82fef`.
@@ -115,15 +140,19 @@ PKT-1 CLOSED / DELIVERED / Runtime deployment complete. Next phase planning pend
 
 ## Current repository HEAD
 
-Binding HEAD (PKT-1 runtime closed):
+Final Packet 2A runtime/source implementation baseline (binding; do not overwrite with the later docs SHA):
 
-`8abcd1550ef3004ebf0c9d2d5da32c9645a99010`
+`88086f45228488027af9babf93c1917fde5e754a`
 
-HEAD subject: `fix(auth): add pk-1 runtime closure tooling`
+HEAD subject at that baseline: `fix(pos): honor selected branch for global admin`
 
-PKT-1 runtime SHA (binding): `8abcd1550ef3004ebf0c9d2d5da32c9645a99010`
+Packet 2A feature SHA: `4befe0e1574e71b5e270e7414fc2482901a62e76`
 
-PKT-1 feature SHA (historical, delivered): `2e0a11ddc702ef80d123fd151b597456ac39d5f6`
+PKT-1 runtime SHA (historical): `8abcd1550ef3004ebf0c9d2d5da32c9645a99010`
+
+PKT-1 feature SHA (historical): `2e0a11ddc702ef80d123fd151b597456ac39d5f6`
+
+PKT-1 docs closure (historical): `6ca8739c6633f36f4026aa171ba61e31b4aac00b`
 
 TRUE-STANDALONE docs guardrail (historical): `58285246392a1da5e3538555df5e96462ded0a80`
 
@@ -161,6 +190,6 @@ PK-1 final HEAD (binding, unchanged): `513b198a30a1af72151ab6a8c0976799871529b8`
 
 ## Next gate
 
-**PKT-1 is CLOSED / DELIVERED / Runtime deployment complete.** Stage 0–13 completed under accepted rollout history. Stage 10 Hosting = `SKIPPED_BY_TRUE_STANDALONE_USER_OVERRIDE`. Runtime blockers 0. `pendingRotation = 0`. `maintenanceMode = false`. Legacy PIN cleanup complete. Named `pos-db` Rules live. PKT-2 / Packet2A / Model2 remain **NOT AUTHORIZED**. Next phase planning is **PENDING**. PK-6 remains historical CLOSED / DELIVERED. Binding PK sequence still ends at PK-6. `NEXT_ELIGIBLE_PK_PACKET: NONE`. PK-7 is **NOT DEFINED / DO NOT INVENT**.
+**Packet 2A is CLOSED_WITH_NOTES.** No more Packet 2A runtime UAT, credential recovery, or source remediation. TRUE-STANDALONE / NO HOSTING remains binding. Native implementation is not authorized. Model2 remains separate/future scope. PKT-2 remains NOT AUTHORIZED. PKT-1 remains historical CLOSED / DELIVERED. PK-6 remains historical CLOSED / DELIVERED. Binding PK sequence still ends at PK-6. `NEXT_ELIGIBLE_PK_PACKET: NONE`. PK-7 is **NOT DEFINED / DO NOT INVENT**. Do not invent the next packet.
 
-**NEXT_WORKFLOW_ACTION:** Return to ChatGPT for UI-11 Packet 2 / PKT-1 final docs closure confirmation. Do NOT implement PKT-2. Do NOT activate Packet2A or Model2. Do NOT invent the next packet. Do NOT deploy Hosting. Do NOT reopen PKT-1 runtime Stages 0–13.
+**NEXT_WORKFLOW_ACTION:** Return to ChatGPT for UI-11 Packet 2A full closure and next roadmap routing. Do NOT perform additional Packet 2A runtime UAT. Do NOT implement PKT-2. Do NOT activate Model2. Do NOT authorize native/Capacitor. Do NOT invent the next packet. Do NOT deploy Hosting. Do NOT reopen Packet 2A runtime.

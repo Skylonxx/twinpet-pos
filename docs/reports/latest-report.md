@@ -1,8 +1,171 @@
-# Latest Report — UI-11 Packet 2 / PKT-1 — CLOSED / DELIVERED / Runtime deployment complete
+# Latest Report — UI-11 Packet 2 / Packet 2A — CLOSED_WITH_NOTES
+
+> Date: 2026-08-26
+> Final Packet 2A runtime/source baseline (binding; do not overwrite with the later docs SHA): `88086f45228488027af9babf93c1917fde5e754a` (`fix(pos): honor selected branch for global admin`)
+> Status: **Packet 2A CLOSED_WITH_NOTES.** Gemini `TWINPET-UI11-PACKET2A-FINAL-RUNTIME-CLOSURE-ADJUDICATION-GEMINI-001` = `APPROVED_WITH_CONDITIONS`. Exact two Functions deployed (`requestManagerApproval`, `resolveShiftCloseAlert`) on `twinpet-pos` / `asia-southeast1`. Global-admin branch-scope fix accepted. Controlled UAT accepted with notes. No more Packet 2A runtime UAT, credential recovery, or source remediation. TRUE-STANDALONE / NO HOSTING guardrail remains binding. Native/Capacitor **NOT AUTHORIZED**. Model2 remains separate/future scope. PKT-2 **NOT AUTHORIZED**. This pass is the authorized four-doc live-authority reconciliation of that closed state.
+
+Packet 2A CLOSED_WITH_NOTES. No more Packet 2A runtime UAT, credential recovery, or source remediation.
+
+## 0. This pass's reports
+
+- Gemini final runtime closure: `TWINPET-UI11-PACKET2A-FINAL-RUNTIME-CLOSURE-ADJUDICATION-GEMINI-001` (`DECISION_STATUS: APPROVED_WITH_CONDITIONS`; `PACKET2A_FINAL_RUNTIME_STATUS: CLOSED_WITH_NOTES`; `PACKET2A_FINAL_RUNTIME_CLOSURE_AUTHORIZED: YES`; `CONDITIONAL_DOCS_RECONCILIATION_AUTHORIZED: YES`; `DOCS_MAX_PATHS: 4`; native **NO**; Hosting out of scope; Model2 separate future)
+- Global-admin branch-scope Codex review: `TWINPET-UI11-PACKET2A-GLOBAL-ADMIN-BRANCH-SCOPE-CODEX-REVIEW-001` (`PASS_WITH_NOTES`; blockers 0; `READY_FOR_CONDITIONAL_LANDING: YES`)
+- Global-admin branch-scope landing + UAT: `TWINPET-UI11-PACKET2A-GLOBAL-ADMIN-BRANCH-SCOPE-LANDING-AND-UAT-GROK-009`
+- Functions deployment: `TWINPET-UI11-PACKET2A-FUNCTIONS-DEPLOYMENT-GROK-005` (exact two Functions; project `twinpet-pos`; region `asia-southeast1`)
+- This docs packet contract: `TWINPET-UI11-PACKET2A-FINAL-DOCS-RECONCILIATION-GROK-010`
+- Final runtime/source baseline: `88086f45228488027af9babf93c1917fde5e754a` (`fix(pos): honor selected branch for global admin`)
+- Packet 2A feature: `4befe0e1574e71b5e270e7414fc2482901a62e76` (`feat(auth): add packet 2a shift-close reauthorization`)
+
+## 1. Current Packet 2A facts
+
+| Field | Value |
+|-------|-------|
+| CURRENT_PHASE | Post PK-6 Closure / UI-11 Packet 2 / Packet 2A |
+| CURRENT_GATE | PACKET2A_FINAL_DOCS_RECONCILIATION |
+| PACKET2A_RUNTIME_STATUS | CLOSED_WITH_NOTES |
+| FINAL_RUNTIME_SOURCE_BASELINE | `88086f45228488027af9babf93c1917fde5e754a` |
+| HEAD subject at source baseline | `fix(pos): honor selected branch for global admin` |
+| PACKET2A_FEATURE_COMMIT | `4befe0e1574e71b5e270e7414fc2482901a62e76` |
+| SERVER_DEPLOY | exact `requestManagerApproval` (create) + `resolveShiftCloseAlert` (update) |
+| DEPLOY_PROJECT | `twinpet-pos` |
+| DEPLOY_REGION | `asia-southeast1` |
+| FULL_FUNCTIONS_REDEPLOY | NO |
+| FUNCTIONS_REDEPLOY_AFTER_BRANCH_SCOPE_FIX | NO |
+| RULES_INDEX_HOSTING_IN_FINAL_CLOSURE | NO |
+| GLOBAL_ADMIN_BRANCH_SCOPE_FIX | ACCEPTED (`TRUE_CLIENT_BRANCH_SCOPE_DEFECT`) |
+| UAT1 / UAT2 / UAT3 / UAT6 / UAT7 / UAT8 | PASS |
+| UAT5 | PASS_WITH_NOTE |
+| UAT4 / UAT9 | N/A_NOT_AUTHORIZED |
+| ADDITIONAL_RUNTIME_UAT | NO |
+| ADDITIONAL_CREDENTIAL_RECOVERY | NO |
+| ADDITIONAL_SOURCE_REMEDIATION | NO |
+| STAGE10_HOSTING | SKIPPED_BY_TRUE_STANDALONE_USER_OVERRIDE |
+| TRUE_STANDALONE_NO_HOSTING_GUARDRAIL | BINDING |
+| NATIVE_IMPLEMENTATION_AUTHORIZED | NO |
+| PKT2_IMPLEMENTATION | NOT_AUTHORIZED |
+| MODEL2_ACTIVATION | NOT_AUTHORIZED / SEPARATE_FUTURE_SCOPE |
+| PKT1_STATUS | CLOSED / DELIVERED / Runtime deployment complete (historical) |
+| PK6_STATUS | CLOSED / DELIVERED (historical) |
+| PACKET_5_STATUS | CLOSED |
+| PK3_STATUS | CLOSED |
+| stash@{0} | unchanged `7d03cfec7ba52ff7e25b7e175ca190efc258d874` |
+
+**CURRENT_STATUS:** Packet 2A is **CLOSED_WITH_NOTES**. Final runtime/source baseline `88086f4` is the semantic implementation baseline. This four-doc packet is the authorized live-authority docs-only closure reconciliation. After the docs commit, repository HEAD advances to the docs SHA; do not treat that docs SHA as the source baseline. PKT-2 / Model2 / native are **not** authorized. Next roadmap routing is **pending** at ChatGPT. Do not invent the next packet.
+
+## 2. Gemini decision ledger (this docs gate)
+
+| ID | Subject | Status |
+|----|---------|--------|
+| TWINPET-UI11-PACKET2A-FINAL-RUNTIME-CLOSURE-ADJUDICATION-GEMINI-001 | Packet 2A final runtime closure + max-4 docs reconciliation + conditional commit/push | `APPROVED_WITH_CONDITIONS`; `PACKET2A_FINAL_RUNTIME_STATUS: CLOSED_WITH_NOTES`; `FINAL_SOURCE_HEAD_ACCEPTED: YES`; `PACKET2A_SERVER_DEPLOYMENT_ACCEPTED: YES`; `GLOBAL_ADMIN_BRANCH_SCOPE_FIX_ACCEPTED: YES`; UAT-1/2/3/5/6/7/8 accepted; UAT-4/9 N/A; `FUNCTIONS_REDEPLOY_REQUIRED: NO`; `ADDITIONAL_RUNTIME_UAT_REQUIRED: NO`; `NATIVE_IMPLEMENTATION_AUTHORIZED: NO`; `MODEL2_REMAINS_SEPARATE_FUTURE_SCOPE: YES`; `DOCS_MAX_PATHS: 4` |
+
+Do not invent a new product decision. Do not reopen Packet 2A runtime. Do not authorize PKT-2 / Model2 / native. Do not deploy Hosting.
+
+## 3. Server deployment (recorded; not re-run)
+
+Exact production Functions deployment completed for:
+
+1. `requestManagerApproval` — create
+2. `resolveShiftCloseAlert` — update
+
+Project: `twinpet-pos`. Region: `asia-southeast1`. No full Functions redeploy. No Functions redeploy after the client branch-scope fix. No Rules/index/Hosting deployment belongs to final Packet 2A closure.
+
+## 4. Global-admin branch-scope defect / fix (recorded)
+
+Observed UAT blocker: `UI11_PACKET2A_ADMIN_USEBRANCH_ALL_HIDES_PACKET2A_UI`. Gemini classification: `TRUE_CLIENT_BRANCH_SCOPE_DEFECT`.
+
+Problem: global admin had authorization marker `ALL`, selected physical workspace `LDP-001`, but old `useBranch()` resolved operational branch back to `ALL`, hiding shift-close adjudication UI.
+
+Fix: selected concrete physical session/stored branch is honored when authorization contains `ALL`, while non-ALL branch restrictions remain fail-closed, `ALL` remains a capability marker (not a physical branch), and server branch authorization remains authoritative.
+
+Codex: `TWINPET-UI11-PACKET2A-GLOBAL-ADMIN-BRANCH-SCOPE-CODEX-REVIEW-001` — `PASS_WITH_NOTES`; `BLOCKER_COUNT: 0`; `READY_FOR_CONDITIONAL_LANDING: YES`. Landing commit: `88086f45228488027af9babf93c1917fde5e754a`.
+
+## 5. Controlled runtime UAT (recorded; not re-run)
+
+| Scenario | Result |
+|----------|--------|
+| UAT-1 acknowledge | PASS |
+| UAT-2 resolve | PASS |
+| UAT-3 wrong reauth PIN | PASS — exactly one wrong attempt; approval rejected; resolver count 0; business mutation 0; no lockout |
+| UAT-4 lockout | `N/A_NOT_AUTHORIZED` |
+| UAT-5 offline | `PASS_WITH_NOTE` — offline approval request count 0; offline resolver request count 0; reconnect auto-resume NO; production mutation NO. Live source invalidation unmounted the PIN modal when the browser went offline, so modal-specific offline copy was superseded by page-level offline state/copy. Gemini accepted this as `PASS_WITH_NOTE`. |
+| UAT-6 missing approvalId | PASS — `invalid_payload`; zero business mutation |
+| UAT-7 raw PIN own-property | PASS — `invalid_payload`; zero business mutation |
+| UAT-8 replay/idempotency | PASS — ledger-first duplicate confirmation; zero duplicate protected mutation; zero second approval mint |
+| UAT-9 stale callback live | `N/A_NOT_AUTHORIZED` |
+
+## 6. Security evidence (recorded; no secrets)
+
+- same-principal runtime evidence PASS; requester == approver == executor
+- approval binding PASS; authVersion fence PASS; credentialVersion fence PASS; TTL evidence PASS; consume evidence PASS
+- raw PIN persistence found: NO; raw PIN logging found: NO
+- real business data used: NO; inventory/payment/FIFO mutation: NO
+
+Controlled UAT credential recovery (not a product feature): canonical authoritative credential model preserved; authVersion became 3; credentialVersion became 3; legacy `users.pin` remained non-authoritative; no further recovery required. PIN is not recorded.
+
+## 7. Governance notes (must remain accurate)
+
+Gemini classification: `ACCEPT_BOUNDED_EXECUTION_DEVIATION_WITH_NOTE`.
+
+Exact fact: post-fix authority had max normal login attempts = 1; first admin production login PASS; external evidence-driver false-stop later led to 4 additional same-principal successful session re-entries; total post-fix `verifyPinLogin` calls = 5; extra re-entry count = 4; credential rotation count after recovery = 0; failed-login retry count in these re-entries = 0; `nara` use = 0; security defect = NO; product defect = NO; rerun required = NO.
+
+Do not rewrite history to imply all five were originally authorized. Wording: accepted bounded execution deviation with note.
+
+External driver false-stop Gemini classification: `NONBLOCKING_EVIDENCE_TOOLING_NOTE`. UAT-1 product path succeeded. External driver initially misclassified Vite module GETs as Function callable rows. Classifier was corrected. UAT-1 product action was not re-executed. No product defect.
+
+## 8. TRUE-STANDALONE / Hosting / Model2 (preserved)
+
+```text
+TRUE-STANDALONE: offline-capable Desktop/Mobile Native App with local sync; FUTURE / NOT STARTED / NOT AUTHORIZED by Packet 2A closure
+NOT_A_STANDARD_WEB_APP: YES
+FIREBASE_HOSTING: permanently out of scope
+STAGE10_HOSTING: SKIPPED_BY_TRUE_STANDALONE_USER_OVERRIDE
+CLOUD_BACKEND: Firestore + Cloud Functions only
+NATIVE_IMPLEMENTATION_AUTHORIZED: NO
+MODEL2: SEPARATE_FUTURE_SCOPE / NOT AUTHORIZED
+PKT2_IMPLEMENTATION: NOT_AUTHORIZED
+NEXT_ELIGIBLE_PK_PACKET: NONE
+PK7: NOT DEFINED / DO NOT INVENT
+```
+
+Packet 2A closure does **not** authorize native/Capacitor work, Hosting rollout, PKT-2, or Model2.
+
+## 9. Exact docs surface for this reconciliation
+
+Four live-authority docs only:
+
+`docs/agent-workflow/STATE.md`, `docs/agent-workflow/CURRENT_PACKET.md`, `docs/agent-workflow/NEXT_ACTION.md`, `docs/reports/latest-report.md`
+
+`Context.md` / `Task.md` / `docs/STATE.md` remain the last PKT-1 snapshot and already defer to the live workflow trio on gate/status/HEAD. TRUE-STANDALONE guardrails already present there are preserved (not edited; not weakened).
+
+Source paths: 0. Test paths: 0. Config/runtime paths: 0.
+
+## 10. Next workflow
+
+```text
+NEXT_WORKFLOW_ACTION:
+RETURN_TO_CHATGPT_FOR_UI11_PACKET2A_FULL_CLOSURE_AND_NEXT_ROADMAP_ROUTING
+
+DO NOT:
+perform additional Packet 2A runtime UAT,
+perform additional credential recovery,
+perform additional source remediation,
+implement PKT-2,
+activate Model2,
+authorize native/Capacitor,
+invent the next packet,
+deploy Hosting,
+reopen Packet 2A runtime.
+```
+
+**Next implementation action:** NONE — Packet 2A runtime is closed with notes. PKT-2 / Model2 / native NOT AUTHORIZED. Next roadmap routing pending at ChatGPT.
+
+---
+
+# Historical — Latest Report — UI-11 Packet 2 / PKT-1 — CLOSED / DELIVERED / later superseded as live current-state by Packet 2A CLOSED_WITH_NOTES at 88086f4
 
 > Date: 2026-08-26
 > Binding HEAD (PKT-1 runtime closed): `8abcd1550ef3004ebf0c9d2d5da32c9645a99010` (`fix(auth): add pk-1 runtime closure tooling`)
-> Status: **PKT-1 CLOSED / DELIVERED / Runtime deployment complete.** Next phase planning pending. Gemini `TWINPET-UI11-PACKET2-PKT1-FINAL-RUNTIME-CLOSURE-ADJUDICATION-GEMINI-001` = `APPROVED_WITH_NOTES`. Stage 0–13 completed under accepted rollout history. Stage 10 Hosting = `SKIPPED_BY_TRUE_STANDALONE_USER_OVERRIDE`. TRUE-STANDALONE / NO HOSTING guardrail remains binding. Runtime blockers **0**. `pendingRotation = 0`. `maintenanceMode = false`. Legacy PIN cleanup complete. Named `pos-db` Rules live. PKT-2 / Packet2A / Model2 **NOT AUTHORIZED**. This pass is the authorized seven-doc source-of-truth reconciliation of that closed state.
+> Status: **HISTORICAL.** PKT-1 CLOSED / DELIVERED / Runtime deployment complete. The then-current "Packet2A / Model2 NOT AUTHORIZED / next phase planning pending" live facts are superseded as live current-state by Packet 2A `CLOSED_WITH_NOTES` at `88086f4`. Gemini `TWINPET-UI11-PACKET2-PKT1-FINAL-RUNTIME-CLOSURE-ADJUDICATION-GEMINI-001` = `APPROVED_WITH_NOTES`. Stage 0–13 completed under accepted rollout history. Stage 10 Hosting = `SKIPPED_BY_TRUE_STANDALONE_USER_OVERRIDE`. TRUE-STANDALONE / NO HOSTING guardrail remains binding. Runtime blockers **0**. `pendingRotation = 0`. `maintenanceMode = false`. Legacy PIN cleanup complete. Named `pos-db` Rules live. That pass was the authorized seven-doc source-of-truth reconciliation of that closed PKT-1 state.
 
 PKT-1 CLOSED / DELIVERED / Runtime deployment complete. Next phase planning pending.
 

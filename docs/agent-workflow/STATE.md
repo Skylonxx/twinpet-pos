@@ -2,19 +2,22 @@
 
 ## Master Plan
 
-UI-01 through **UI-10-C** are **DONE**. **P1 Packet 1–7C-B2**, **P5-B**, **P5-C**, **P5-D**, **P5-E**, **Client-UI-A**, **Client-UI-B**, **UI-C Manager Adjudication Action Surface**, **UI-B2 / Packet S — getShiftCloseCaseFigures**, **PK-1 Offline Shift Session**, **PK-2A Boot / Session Gating**, **D3 Trusted orchestration owner enforcement**, **R7-6 history and reconciliation hardening**, **Application Integration AI-1 trusted sale submission orchestration**, **Application Integration AI-2 sale submission evidence writer**, **P1 Offline / Sync Resiliency Packet 5**, **PK-3 Unified Sync Orchestrator and Reconnect Recovery**, **PK-4 Operator Sync Center**, **PK-5 Offline Read-Side Truth**, and **PK-6 Online-Only Guardrails** are **CLOSED / PUSHED** where applicable (`798b344` → `e9363e3` → `c6bdbd0` docs closure → `513b198` PK-1 → `79ba840` PK-2A → `a081bcb` D3 → `457662d` R7-6 architecture docs → `ac29935` R7-6 implementation → `e17a8d2` R7-6 docs closure → `4298c14` AI-1 implementation → `17461473` AI-1 tracker reconciliation → `9f97d7f` AI-1 STATE.md reconciliation → `c45f5a3` AI-2 implementation → `8d6b174` AI-2 tracker reconciliation → `f8b67c1` receipt timestamp baseline → `292d51ff` Packet 5 docs closure → `ee5e291` post-Packet-5 tracker reconciliation → `ec7cf8b` PK-3 feature → `5e6675758` PK-3 docs closure → `d27850a` PK-4 feature → `6a82fef` PK-4 docs closure → `ef90d4e` PK-5 feature → `cf9c6f3` PK-5 docs closure → `e7ae008` PK-6 feature → `acdae5f` PK-6 docs closure → `2e0a11d` PKT-1 feature → `8abcd15` PKT-1 runtime closure). Application Integration AI-1 is **`CLOSED_WITH_NOTES`**. Application Integration AI-2 is **`CLOSED_WITH_NOTES`**. Packet 5 is **`CLOSED`** (`PASS_WITH_NOTES`). PK-3 is **`CLOSED`** (`PASS`). **PK-4 Operator Sync Center** is **`CLOSED / DELIVERED`**. **PK-5 Offline Read-Side Truth** is **`CLOSED / DELIVERED`**. **PK-6 Online-Only Guardrails** is **`CLOSED / DELIVERED`**. **UI-11 Packet 2 / PKT-1** is **`CLOSED / DELIVERED / Runtime deployment complete`**. Binding sequence PK-1 → PK-6 is **complete**. `NEXT_ELIGIBLE_PK_PACKET: NONE`. PK-7 is **NOT DEFINED / DO NOT INVENT**. UI-10-D remains **NOT STARTED**. PKT-2 / Packet2A / Model2 are **NOT AUTHORIZED**. TRUE-STANDALONE native/Capacitor/desktop/mobile remains **FUTURE / NOT STARTED**. Firebase Hosting is **permanently out of scope**. Stage 10 Hosting = `SKIPPED_BY_TRUE_STANDALONE_USER_OVERRIDE`. PK-2C and PK-2D are **NOT_AUTHORIZED**. PK-2D remains record-only / not active. Next phase planning is **PENDING**.
+UI-01 through **UI-10-C** are **DONE**. **P1 Packet 1–7C-B2**, **P5-B**, **P5-C**, **P5-D**, **P5-E**, **Client-UI-A**, **Client-UI-B**, **UI-C Manager Adjudication Action Surface**, **UI-B2 / Packet S — getShiftCloseCaseFigures**, **PK-1 Offline Shift Session**, **PK-2A Boot / Session Gating**, **D3 Trusted orchestration owner enforcement**, **R7-6 history and reconciliation hardening**, **Application Integration AI-1 trusted sale submission orchestration**, **Application Integration AI-2 sale submission evidence writer**, **P1 Offline / Sync Resiliency Packet 5**, **PK-3 Unified Sync Orchestrator and Reconnect Recovery**, **PK-4 Operator Sync Center**, **PK-5 Offline Read-Side Truth**, and **PK-6 Online-Only Guardrails** are **CLOSED / PUSHED** where applicable (`798b344` → `e9363e3` → `c6bdbd0` docs closure → `513b198` PK-1 → `79ba840` PK-2A → `a081bcb` D3 → `457662d` R7-6 architecture docs → `ac29935` R7-6 implementation → `e17a8d2` R7-6 docs closure → `4298c14` AI-1 implementation → `17461473` AI-1 tracker reconciliation → `9f97d7f` AI-1 STATE.md reconciliation → `c45f5a3` AI-2 implementation → `8d6b174` AI-2 tracker reconciliation → `f8b67c1` receipt timestamp baseline → `292d51ff` Packet 5 docs closure → `ee5e291` post-Packet-5 tracker reconciliation → `ec7cf8b` PK-3 feature → `5e6675758` PK-3 docs closure → `d27850a` PK-4 feature → `6a82fef` PK-4 docs closure → `ef90d4e` PK-5 feature → `cf9c6f3` PK-5 docs closure → `e7ae008` PK-6 feature → `acdae5f` PK-6 docs closure → `2e0a11d` PKT-1 feature → `8abcd15` PKT-1 runtime closure → `6ca8739` PKT-1 docs closure → `4befe0e` Packet 2A feature → `88086f4` Packet 2A global-admin branch-scope). Application Integration AI-1 is **`CLOSED_WITH_NOTES`**. Application Integration AI-2 is **`CLOSED_WITH_NOTES`**. Packet 5 is **`CLOSED`** (`PASS_WITH_NOTES`). PK-3 is **`CLOSED`** (`PASS`). **PK-4 Operator Sync Center** is **`CLOSED / DELIVERED`**. **PK-5 Offline Read-Side Truth** is **`CLOSED / DELIVERED`**. **PK-6 Online-Only Guardrails** is **`CLOSED / DELIVERED`**. **UI-11 Packet 2 / PKT-1** is **`CLOSED / DELIVERED / Runtime deployment complete`** (historical). **UI-11 Packet 2 / Packet 2A** is **`CLOSED_WITH_NOTES`**. Binding sequence PK-1 → PK-6 is **complete**. `NEXT_ELIGIBLE_PK_PACKET: NONE`. PK-7 is **NOT DEFINED / DO NOT INVENT**. UI-10-D remains **NOT STARTED**. PKT-2 implementation remains **NOT AUTHORIZED**. Model2 remains **NOT AUTHORIZED** / separate future scope. TRUE-STANDALONE native/Capacitor/desktop/mobile remains **FUTURE / NOT STARTED / NOT AUTHORIZED by Packet 2A closure**. Firebase Hosting is **permanently out of scope**. Stage 10 Hosting = `SKIPPED_BY_TRUE_STANDALONE_USER_OVERRIDE`. PK-2C and PK-2D are **NOT_AUTHORIZED**. PK-2D remains record-only / not active. Next roadmap routing is **PENDING** (return to ChatGPT; do not invent the next packet).
 
 ## Repository Baseline
 
 | Field | Value |
 |-------|-------|
-| HEAD (binding; PKT-1 runtime closed) | `8abcd1550ef3004ebf0c9d2d5da32c9645a99010` |
-| origin/main | `8abcd1550ef3004ebf0c9d2d5da32c9645a99010` |
-| live remote main | `8abcd1550ef3004ebf0c9d2d5da32c9645a99010` |
-| Current HEAD subject | `fix(auth): add pk-1 runtime closure tooling` |
-| PKT-1 status | `CLOSED / DELIVERED / Runtime deployment complete` |
+| Final Packet 2A runtime/source baseline (binding; do not overwrite with docs SHA) | `88086f45228488027af9babf93c1917fde5e754a` |
+| Final runtime/source subject | `fix(pos): honor selected branch for global admin` |
+| Packet 2A feature commit | `4befe0e1574e71b5e270e7414fc2482901a62e76` (`feat(auth): add packet 2a shift-close reauthorization`) |
+| Packet 2A runtime status | `CLOSED_WITH_NOTES` |
+| Packet 2A final runtime closure authority | `TWINPET-UI11-PACKET2A-FINAL-RUNTIME-CLOSURE-ADJUDICATION-GEMINI-001` |
+| Packet 2A server deploy | exact two Functions: `requestManagerApproval` (create) + `resolveShiftCloseAlert` (update); project `twinpet-pos`; region `asia-southeast1`; no full Functions redeploy; no Rules/index/Hosting in final Packet 2A closure |
+| PKT-1 status | `CLOSED / DELIVERED / Runtime deployment complete` (historical) |
 | PKT-1 runtime HEAD | `8abcd1550ef3004ebf0c9d2d5da32c9645a99010` |
 | PKT-1 feature commit | `2e0a11ddc702ef80d123fd151b597456ac39d5f6` |
+| PKT-1 docs closure | `6ca8739c6633f36f4026aa171ba61e31b4aac00b` |
 | Stage 10 Hosting | `SKIPPED_BY_TRUE_STANDALONE_USER_OVERRIDE` |
 | pendingRotation | `0` |
 | maintenanceMode | `false` |
@@ -40,15 +43,17 @@ UI-01 through **UI-10-C** are **DONE**. **P1 Packet 1–7C-B2**, **P5-B**, **P5-
 | D3 closure commit (historical) | `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab` |
 | PK-2A code commit (historical) | `79ba840ab6e01ee1a5fff6c0094104c25d754668` |
 | PK-1 final HEAD (historical) | `513b198a30a1af72151ab6a8c0976799871529b8` |
-| Working tree | these seven closure docs dirty until the docs commit; staged empty |
+| Working tree | these four live-authority docs dirty until the Packet 2A docs commit; staged empty. `Context.md` / `Task.md` / `docs/STATE.md` remain the last PKT-1 snapshot and defer to this live trio on gate/status/HEAD |
 
 ## Current Phase
 
-**Post PK-6 Closure / UI-11 Packet 2 / PKT-1 — PKT-1 `CLOSED / DELIVERED / Runtime deployment complete`; docs reconciliation in this pass; next phase planning pending.** Binding HEAD is `8abcd1550ef3004ebf0c9d2d5da32c9645a99010`. `PKT1_STATUS: CLOSED / DELIVERED / Runtime deployment complete`. Stage 0–13 completed under accepted rollout history. Stage 10 Hosting = `SKIPPED_BY_TRUE_STANDALONE_USER_OVERRIDE`. TRUE-STANDALONE / NO HOSTING guardrail remains BINDING. Runtime blockers 0. `pendingRotation = 0`. `maintenanceMode = false`. Legacy PIN cleanup complete. Named `pos-db` Rules live. PKT-2 / Packet2A / Model2 NOT AUTHORIZED. `PK6_STATUS: CLOSED / DELIVERED` (historical). `PK5_STATUS: CLOSED / DELIVERED`. `PK4_STATUS: CLOSED / DELIVERED`. `PACKET_5_STATUS: CLOSED`. `PK3_STATUS: CLOSED`. Binding sequence PK-1 → PK-6 complete. `NEXT_ELIGIBLE_PK_PACKET: NONE`. PK-7: NOT DEFINED / DO NOT INVENT. This pass edits the seven authorized docs candidates only.
+**Post PK-6 Closure / UI-11 Packet 2 / Packet 2A — Packet 2A `CLOSED_WITH_NOTES`.** Final runtime/source baseline is `88086f45228488027af9babf93c1917fde5e754a` (`fix(pos): honor selected branch for global admin`). Gemini `TWINPET-UI11-PACKET2A-FINAL-RUNTIME-CLOSURE-ADJUDICATION-GEMINI-001` = `APPROVED_WITH_CONDITIONS`. No more Packet 2A runtime UAT, credential recovery, or source remediation. Stage 10 Hosting = `SKIPPED_BY_TRUE_STANDALONE_USER_OVERRIDE`. TRUE-STANDALONE / NO HOSTING guardrail remains BINDING. Native/Capacitor implementation is **NOT AUTHORIZED** by this closure. Model2 remains separate/future scope. PKT-2 implementation remains NOT AUTHORIZED. PKT-1 remains historical `CLOSED / DELIVERED / Runtime deployment complete` at `8abcd15`. `PK6_STATUS: CLOSED / DELIVERED` (historical). `PK5_STATUS: CLOSED / DELIVERED`. `PK4_STATUS: CLOSED / DELIVERED`. `PACKET_5_STATUS: CLOSED`. `PK3_STATUS: CLOSED`. Binding sequence PK-1 → PK-6 complete. `NEXT_ELIGIBLE_PK_PACKET: NONE`. PK-7: NOT DEFINED / DO NOT INVENT. This pass edits the four frozen live-authority docs only.
 
 ## Latest Verdict
 
-**UI-11 Packet 2 / PKT-1 — `CLOSED / DELIVERED / Runtime deployment complete`.** Runtime HEAD `8abcd1550ef3004ebf0c9d2d5da32c9645a99010`. Gemini `APPROVED_WITH_NOTES`. Stage 0–13 completed. Stage 10 Hosting `SKIPPED_BY_TRUE_STANDALONE_USER_OVERRIDE`. Runtime blockers 0. `pendingRotation = 0`. `maintenanceMode = false`. Legacy PIN cleanup complete. Named `pos-db` Rules live. PKT-2 / Packet2A / Model2 NOT AUTHORIZED. Next phase planning pending.
+**UI-11 Packet 2 / Packet 2A — `CLOSED_WITH_NOTES`.** Final runtime/source baseline `88086f45228488027af9babf93c1917fde5e754a`. Feature `4befe0e1574e71b5e270e7414fc2482901a62e76`. Gemini `APPROVED_WITH_CONDITIONS`. Exact two Functions deployed (`requestManagerApproval`, `resolveShiftCloseAlert`) on `twinpet-pos` / `asia-southeast1`. Global-admin branch-scope fix accepted. Controlled UAT-1/2/3/5/6/7/8 accepted; UAT-4/9 `N/A_NOT_AUTHORIZED`; UAT-5 `PASS_WITH_NOTE`. Extra login re-entry: accepted bounded execution deviation with note (4 extra same-principal re-entries; 5 total post-fix `verifyPinLogin`; no security/product defect; no rerun). External driver false-stop: nonblocking evidence-tooling note. No additional Packet 2A runtime UAT / credential recovery / source remediation. Native not authorized. Hosting remains out of scope. Model2 remains separate future scope. Do not invent the next packet.
+
+**UI-11 Packet 2 / PKT-1 — historical `CLOSED / DELIVERED / Runtime deployment complete`.** Runtime HEAD `8abcd1550ef3004ebf0c9d2d5da32c9645a99010`; docs `6ca8739c6633f36f4026aa171ba61e31b4aac00b`. Gemini `APPROVED_WITH_NOTES`. Stage 0–13 completed. Stage 10 Hosting `SKIPPED_BY_TRUE_STANDALONE_USER_OVERRIDE`. Do not reopen PKT-1 runtime.
 
 **PK-6 — historical `CLOSED / DELIVERED`.** Feature commit `e7ae0080eab574b207f53d3403d8a5ebacefff7c`; docs `acdae5fd6260c6c8740ad16e78023439aa0b4b0d`.
 
@@ -61,7 +66,8 @@ UI-01 through **UI-10-C** are **DONE**. **P1 Packet 1–7C-B2**, **P5-B**, **P5-
 **PK-3:** remains `PK3_STATUS: CLOSED`. Do not reopen.
 
 **Closed-gate boundaries:**
-- `PKT1: CLOSED_DELIVERED`
+- `PACKET2A: CLOSED_WITH_NOTES`
+- `PKT1: CLOSED_DELIVERED` (historical)
 - `PACKET_5: CLOSED_NOT_REOPENED`
 - `PK3: CLOSED_NOT_REOPENED`
 - `PK4: CLOSED_DELIVERED_NOT_REOPENED`
@@ -74,8 +80,9 @@ UI-01 through **UI-10-C** are **DONE**. **P1 Packet 1–7C-B2**, **P5-B**, **P5-
 - `ROW30: ADDITIVE_ONLY_NOT_REOPENED`
 - `R7_6: NOT_REOPENED`
 - PKT-2 implementation: **NOT_AUTHORIZED**
-- Packet2A activation: **NOT_AUTHORIZED**
-- Model2 activation: **NOT_AUTHORIZED**
+- Packet 2A additional runtime UAT / credential recovery / source remediation: **NOT REQUIRED**
+- Model2 activation: **NOT_AUTHORIZED** / separate future scope
+- Native/Capacitor implementation: **NOT_AUTHORIZED** by Packet 2A closure
 - Stage 10 Hosting: **SKIPPED_BY_TRUE_STANDALONE_USER_OVERRIDE**
 - TRUE-STANDALONE / NO HOSTING: **BINDING**
 - PK-2C implementation: **NOT_AUTHORIZED**
@@ -100,19 +107,19 @@ UI-01 through **UI-10-C** are **DONE**. **P1 Packet 1–7C-B2**, **P5-B**, **P5-
 
 **PK-1 — `CLOSED_WITH_NOTES`** at `513b198a30a1af72151ab6a8c0976799871529b8` (preserved; do not reopen).
 
-**Current stage disposition:** `ACTIVE_IMPLEMENTATION_PACKET: NONE`. `PKT1_STATUS: CLOSED / DELIVERED / Runtime deployment complete`. `PK6_STATUS: CLOSED / DELIVERED`. `PK5_STATUS: CLOSED / DELIVERED`. `PK4_STATUS: CLOSED / DELIVERED`. `PK3_STATUS: CLOSED`. `PACKET_5_STATUS: CLOSED`. `PKT2_IMPLEMENTATION: NOT_AUTHORIZED`. `PACKET2A_ACTIVATION: NOT_AUTHORIZED`. `MODEL2_ACTIVATION: NOT_AUTHORIZED`. `NEXT_PHASE_PLANNING: PENDING`. `NEXT_ELIGIBLE_PK_PACKET: NONE`. `PK7: NOT_DEFINED`. Closed-gate reopen: Packet 5 / PK-3 / PK-4 / PK-5 / D1 / D3 / Row32 / R7-6 = NO.
+**Current stage disposition:** `ACTIVE_IMPLEMENTATION_PACKET: NONE`. `PACKET2A_RUNTIME_STATUS: CLOSED_WITH_NOTES`. `PKT1_STATUS: CLOSED / DELIVERED / Runtime deployment complete` (historical). `PK6_STATUS: CLOSED / DELIVERED`. `PK5_STATUS: CLOSED / DELIVERED`. `PK4_STATUS: CLOSED / DELIVERED`. `PK3_STATUS: CLOSED`. `PACKET_5_STATUS: CLOSED`. `PKT2_IMPLEMENTATION: NOT_AUTHORIZED`. `MODEL2_ACTIVATION: NOT_AUTHORIZED`. `NATIVE_IMPLEMENTATION: NOT_AUTHORIZED`. `NEXT_ROADMAP_ROUTING: PENDING`. `NEXT_ELIGIBLE_PK_PACKET: NONE`. `PK7: NOT_DEFINED`. Closed-gate reopen: Packet 2A runtime / Packet 5 / PK-3 / PK-4 / PK-5 / D1 / D3 / Row32 / R7-6 = NO.
 
-Do not invent the next packet. Do not authorize PKT-2 / Packet2A / Model2. Do not claim Hosting deployed. Do not claim TRUE-STANDALONE native implementation started.
+Do not invent the next packet. Do not reopen Packet 2A runtime. Do not authorize PKT-2 / Model2 / native. Do not claim Hosting deployed. Do not claim TRUE-STANDALONE native implementation started.
 
 ## Mode
 
-No active implementation packet. Docs-only seven-file source-of-truth reconciliation of closed PKT-1 onto the authorized candidate docs. PKT-2 / Packet2A / Model2 remain **NOT AUTHORIZED**. Next phase planning remains **PENDING**. No source/test/config edits. No Hosting. No stash. Do not invent a new product decision or next packet.
+No active implementation packet. Docs-only four-path source-of-truth reconciliation of Packet 2A `CLOSED_WITH_NOTES` onto the live workflow trio plus `docs/reports/latest-report.md`. PKT-2 / Model2 / native remain **NOT AUTHORIZED**. Next roadmap routing remains **PENDING** at ChatGPT. No source/test/config edits. No Hosting. No stash. Do not invent a new product decision or next packet.
 
 ## Next Action
 
-**NEXT_WORKFLOW_ACTION:** `RETURN_TO_CHATGPT_FOR_UI11_PACKET2_PKT1_FINAL_DOCS_CLOSURE_CONFIRMATION`
+**NEXT_WORKFLOW_ACTION:** `RETURN_TO_CHATGPT_FOR_UI11_PACKET2A_FULL_CLOSURE_AND_NEXT_ROADMAP_ROUTING`
 
-Do **not** implement PKT-2. Do **not** activate Packet2A or Model2. Do **not** invent the next packet. Do **not** deploy Hosting. Do **not** reopen PKT-1 runtime. Do **not** reopen Packet 5, PK-3, PK-4, or PK-5.
+Do **not** perform additional Packet 2A runtime UAT. Do **not** perform additional credential recovery. Do **not** perform additional source remediation. Do **not** implement PKT-2. Do **not** activate Model2. Do **not** authorize native/Capacitor. Do **not** invent the next packet. Do **not** deploy Hosting. Do **not** reopen Packet 2A runtime. Do **not** reopen Packet 5, PK-3, PK-4, or PK-5.
 
 ## Stash
 
