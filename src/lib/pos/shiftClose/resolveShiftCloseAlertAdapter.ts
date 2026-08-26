@@ -75,6 +75,7 @@ export interface ResolveShiftCloseAlertAdapterRequest {
    * machine's `normalizeReasonNote`/`submitAdjudication`).
    */
   reasonNote?: string;
+  approvalId?: string;
 }
 
 /** Mirrors resolveShiftCloseAlert.ts's ResolveShiftCloseAlertResponse, runtime-validated. */

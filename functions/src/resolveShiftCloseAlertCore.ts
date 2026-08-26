@@ -38,6 +38,15 @@ import {
 } from './shiftCloseValidationTypes';
 import { type AlertProjectionDelta, computeManagerResolution, isValidAlertProjection } from './shiftCloseValidationState';
 import { sha256Hex } from './shiftCloseValidationHash';
+import {
+  checkApprovalBinding,
+  expectedActionFor,
+  type ApprovalBindingExpected,
+  type ApprovalRecordView,
+} from './requestManagerApprovalCore';
+
+export { checkApprovalBinding, expectedActionFor };
+export type { ApprovalBindingExpected, ApprovalRecordView };
 
 export type AdjudicationOutcome = 'acknowledge' | 'resolve';
 
@@ -61,7 +70,8 @@ export interface ResolveShiftCloseAlertRequest {
   requestedOutcome?: string;
   reasonCode?: string;
   reasonNote?: string;
-  /** D5 Option C: optional transient re-auth evidence. Never verified/persisted this packet. */
+  approvalId?: string;
+  /** Any present pin is hard-rejected. PIN never reaches this boundary. */
   pin?: string;
 }
 
@@ -75,9 +85,19 @@ export interface ValidatedAdjudicationRequest {
   requestedOutcome: AdjudicationOutcome;
   reasonCode: AlertReasonCode;
   reasonNote: string | null;
+  approvalId: string;
 }
 
 export type PayloadValidationResult = { ok: true; value: ValidatedAdjudicationRequest } | { ok: false };
+
+/**
+ * True when a `pin` own-property is present. Value is irrelevant — `undefined`,
+ * `null`, `''`, and any other own value all count as present. Inherited
+ * prototype `pin` is not an own-property and is not treated as present.
+ */
+export function hasPresentPin(req: ResolveShiftCloseAlertRequest): boolean {
+  return Object.prototype.hasOwnProperty.call(req, 'pin');
+}
 
 /** Pure structural validation only — never touches auth or live case/alert state. */
 export function validateAdjudicationPayload(req: ResolveShiftCloseAlertRequest): PayloadValidationResult {
@@ -88,8 +108,11 @@ export function validateAdjudicationPayload(req: ResolveShiftCloseAlertRequest):
   const requestedOutcome = req.requestedOutcome;
   const reasonCode = req.reasonCode;
   const reasonNote = req.reasonNote;
+  const approvalId = String(req.approvalId ?? '').trim();
 
+  if (hasPresentPin(req)) return { ok: false };
   if (!commandId || !shiftId || !branchId) return { ok: false };
+  if (!approvalId) return { ok: false };
   if (typeof expectedCaseVersion !== 'number' || !Number.isInteger(expectedCaseVersion) || expectedCaseVersion < 0) {
     return { ok: false };
   }
@@ -109,6 +132,7 @@ export function validateAdjudicationPayload(req: ResolveShiftCloseAlertRequest):
       requestedOutcome,
       reasonCode,
       reasonNote: reasonNote ?? null,
+      approvalId,
     },
   };
 }

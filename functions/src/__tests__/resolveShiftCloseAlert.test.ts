@@ -23,23 +23,61 @@ vi.mock('firebase-admin/firestore', () => ({
 }));
 
 import { performResolveShiftCloseAlert, type ResolveShiftCloseAlertRequest } from '../resolveShiftCloseAlert';
+import { deriveApprovalId, expectedActionFor } from '../requestManagerApprovalCore';
 
 // ── Fake Admin Firestore (paths, get/set/update/create) — extends the
 // resolveReversal.test.ts pattern with tx.create (immutable audit events). ──
 type Doc = Record<string, unknown>;
 function makeDb(seed: Record<string, Doc>) {
   const store = new Map<string, Doc>(Object.entries({
-    'users/m1': { isActive: true, deletedAt: null, authVersion: 0, role: 'manager' },
-    'users/m2': { isActive: true, deletedAt: null, authVersion: 0, role: 'manager' },
-    'users/a1': { isActive: true, deletedAt: null, authVersion: 0, role: 'admin' },
-    'users/s1': { isActive: true, deletedAt: null, authVersion: 0, role: 'staff' },
-    'users/m3': { isActive: true, deletedAt: null, authVersion: 0, role: 'manager' },
+    'users/m1': { isActive: true, deletedAt: null, authVersion: 0, role: 'manager', branchIds: ['B1'] },
+    'users/m2': { isActive: true, deletedAt: null, authVersion: 0, role: 'manager', branchIds: ['B1'] },
+    'users/a1': { isActive: true, deletedAt: null, authVersion: 0, role: 'admin', branchIds: ['ALL'] },
+    'users/s1': { isActive: true, deletedAt: null, authVersion: 0, role: 'staff', branchIds: ['B1'] },
+    'users/m3': { isActive: true, deletedAt: null, authVersion: 0, role: 'manager', branchIds: ['B2'] },
+    'userCredentials/m1': {
+      pinHash: '$2b$10$abcdefghijklmnopqrstuv',
+      algo: 'bcrypt',
+      cost: 10,
+      credentialVersion: 1,
+      credentialState: 'rotated_authoritative',
+      disabled: false,
+      updatedBy: 't',
+    },
+    'userCredentials/m2': {
+      pinHash: '$2b$10$abcdefghijklmnopqrstuv',
+      algo: 'bcrypt',
+      cost: 10,
+      credentialVersion: 1,
+      credentialState: 'rotated_authoritative',
+      disabled: false,
+      updatedBy: 't',
+    },
+    'userCredentials/a1': {
+      pinHash: '$2b$10$abcdefghijklmnopqrstuv',
+      algo: 'bcrypt',
+      cost: 10,
+      credentialVersion: 1,
+      credentialState: 'rotated_authoritative',
+      disabled: false,
+      updatedBy: 't',
+    },
+    'userCredentials/m3': {
+      pinHash: '$2b$10$abcdefghijklmnopqrstuv',
+      algo: 'bcrypt',
+      cost: 10,
+      credentialVersion: 1,
+      credentialState: 'rotated_authoritative',
+      disabled: false,
+      updatedBy: 't',
+    },
     ...seed,
   }).map(([k, v]) => [k, { ...v }]));
   const resolveVal = (v: unknown): unknown => {
     if (v && typeof v === 'object' && (v as { __fv?: string }).__fv === 'ts') return 1_700_000_000_000;
     return v;
   };
+  const reads: string[] = [];
   function docRef(path: string): any {
     return {
       __doc: true,
@@ -59,6 +97,7 @@ function makeDb(seed: Record<string, Doc>) {
     runTransaction: async (fn: (tx: unknown) => Promise<unknown>) => {
       const tx = {
         get: async (x: any) => {
+          reads.push(x.path);
           const data = store.get(x.path);
           return { exists: data !== undefined, id: x.id, data: () => data };
         },
@@ -83,6 +122,7 @@ function makeDb(seed: Record<string, Doc>) {
       return fn(tx);
     },
     __store: store,
+    __reads: reads,
   };
   return db;
 }
@@ -93,7 +133,68 @@ const adminAll = { uid: 'u2', token: { role: 'admin', staffId: 'a1', branchIds: 
 const staffB1 = { uid: 'u3', token: { role: 'staff', staffId: 's1', branchIds: ['B1'], authVersion: 0 } };
 const mgrOtherBranch = { uid: 'u4', token: { role: 'manager', staffId: 'm3', branchIds: ['B2'], authVersion: 0 } };
 
-function seedOpenCase(over: { caseVersion?: number; leaseOwner?: string | null; leaseExpiryMs?: number | null; settlementState?: string } = {}) {
+function approvalDoc(over: {
+  commandId?: string;
+  staffId?: string;
+  branchId?: string;
+  shiftId?: string;
+  requestedOutcome?: 'acknowledge' | 'resolve';
+  consumedAt?: unknown;
+  expiresAtMs?: number;
+  credentialVersionAtIssue?: number;
+  authVersionAtIssue?: number;
+} = {}): { id: string; data: Doc } {
+  const commandId = over.commandId ?? 'cmd-1';
+  const staffId = over.staffId ?? 'm1';
+  const branchId = over.branchId ?? 'B1';
+  const shiftId = over.shiftId ?? 'S1';
+  const requestedOutcome = over.requestedOutcome ?? 'acknowledge';
+  return {
+    id: deriveApprovalId(commandId),
+    data: {
+      schemaVersion: 1,
+      audience: 'resolveShiftCloseAlert',
+      protectedAction: expectedActionFor(requestedOutcome),
+      targetEntityId: shiftId,
+      branchId,
+      commandId,
+      requesterStaffId: staffId,
+      approverStaffId: staffId,
+      executorStaffId: staffId,
+      approverRole: 'manager',
+      securityModel: 'reauth',
+      authVersionAtIssue: over.authVersionAtIssue ?? 0,
+      credentialVersionAtIssue: over.credentialVersionAtIssue ?? 1,
+      issuedAt: 1_700_000_000_000,
+      expiresAt: { toMillis: () => over.expiresAtMs ?? Date.now() + 60_000 },
+      consumedAt: over.consumedAt ?? null,
+      consumedByStaffId: null,
+      consumingAudience: null,
+      consumedCaseVersion: null,
+    },
+  };
+}
+
+function bindApproval(db: ReturnType<typeof makeDb>, over: Parameters<typeof approvalDoc>[0] = {}) {
+  const { id, data } = approvalDoc(over);
+  db.__store.set(`managerApprovals/${id}`, { ...data });
+  return id;
+}
+
+function seedOpenCase(over: {
+  caseVersion?: number;
+  leaseOwner?: string | null;
+  leaseExpiryMs?: number | null;
+  settlementState?: string;
+  requestedOutcome?: 'acknowledge' | 'resolve';
+  staffId?: string;
+  commandId?: string;
+} = {}) {
+  const approval = approvalDoc({
+    requestedOutcome: over.requestedOutcome,
+    staffId: over.staffId,
+    commandId: over.commandId,
+  });
   return makeDb({
     'shiftCloseCases/S1': {
       shiftId: 'S1',
@@ -114,19 +215,26 @@ function seedOpenCase(over: { caseVersion?: number; leaseOwner?: string | null; 
       resolvedByActor: null,
       caseVersion: over.caseVersion ?? 5,
     },
+    [`managerApprovals/${approval.id}`]: approval.data,
   });
 }
 
-const req = (over: Partial<ResolveShiftCloseAlertRequest> = {}): ResolveShiftCloseAlertRequest => ({
-  commandId: 'cmd-1',
-  shiftId: 'S1',
-  branchId: 'B1',
-  expectedCaseVersion: 5,
-  requestedOutcome: 'acknowledge',
-  reasonCode: 'drawer_discrepancy',
-  reasonNote: 'confirmed with staff',
-  ...over,
-});
+const req = (over: Partial<ResolveShiftCloseAlertRequest> = {}): ResolveShiftCloseAlertRequest => {
+  const commandId = String(over.commandId ?? 'cmd-1');
+  return {
+    commandId,
+    shiftId: 'S1',
+    branchId: 'B1',
+    expectedCaseVersion: 5,
+    requestedOutcome: 'acknowledge',
+    reasonCode: 'drawer_discrepancy',
+    reasonNote: 'confirmed with staff',
+    approvalId: deriveApprovalId(commandId),
+    ...over,
+    commandId,
+    approvalId: over.approvalId ?? deriveApprovalId(String(over.commandId ?? commandId)),
+  };
+};
 
 const auditDocs = (db: ReturnType<typeof makeDb>) => [...db.__store.entries()].filter(([p]) => /^shiftCloseAuditEvents\//.test(p));
 const commandDocs = (db: ReturnType<typeof makeDb>) => [...db.__store.entries()].filter(([p]) => /^shiftCloseAdjudicationCommands\//.test(p));
@@ -150,14 +258,14 @@ describe('resolveShiftCloseAlert — happy paths', () => {
   });
 
   test('resolve: open -> resolved, manual_review_required -> manually_resolved', async () => {
-    const db = seedOpenCase();
+    const db = seedOpenCase({ requestedOutcome: 'resolve' });
     const res = await performResolveShiftCloseAlert(db as never, req({ requestedOutcome: 'resolve' }), mgrB1);
     expect(res).toMatchObject({ ok: true, status: 'confirmed', newAlertState: 'resolved', newSettlementState: 'manually_resolved' });
     expect(db.__store.get('shiftCloseCases/S1')).toMatchObject({ alertState: 'resolved', settlementState: 'manually_resolved' });
   });
 
   test('resolve preserves prior manager acknowledgement actor', async () => {
-    const db = seedOpenCase();
+    const db = seedOpenCase({ requestedOutcome: 'resolve', staffId: 'm2' });
     db.__store.set('shiftCloseCases/S1', { ...db.__store.get('shiftCloseCases/S1'), alertState: 'acknowledged' });
     db.__store.set('shiftCloseAlerts/S1', {
       ...db.__store.get('shiftCloseAlerts/S1'),
@@ -173,7 +281,7 @@ describe('resolveShiftCloseAlert — happy paths', () => {
   });
 
   test('admin (branchIds: ALL) can adjudicate any branch', async () => {
-    const db = seedOpenCase();
+    const db = seedOpenCase({ staffId: 'a1' });
     const res = await performResolveShiftCloseAlert(db as never, req(), adminAll);
     expect(res.ok).toBe(true);
   });
@@ -215,6 +323,7 @@ describe('resolveShiftCloseAlert — payload / not-found / transition', () => {
 
   test('case not found -> case_not_found', async () => {
     const db = makeDb({});
+    bindApproval(db);
     const res = await performResolveShiftCloseAlert(db as never, req(), mgrB1);
     expect(res).toMatchObject({ ok: false, rejectCode: 'case_not_found' });
   });
@@ -285,9 +394,10 @@ describe('resolveShiftCloseAlert — idempotency', () => {
   });
 
   test('a different commandId is keyed independently — a second logically-different command against the resulting state gets its own audit event', async () => {
-    const db = seedOpenCase();
+    const db = seedOpenCase({ commandId: 'cmd-a' });
     const r1 = await performResolveShiftCloseAlert(db as never, req({ commandId: 'cmd-a' }), mgrB1);
     expect(r1.status).toBe('confirmed');
+    bindApproval(db, { commandId: 'cmd-b', requestedOutcome: 'resolve', staffId: 'm1' });
     const r2 = await performResolveShiftCloseAlert(db as never, req({ commandId: 'cmd-b', requestedOutcome: 'resolve', expectedCaseVersion: 6 }), mgrB1);
     expect(r2.status).toBe('confirmed');
     expect(r2.auditEventId).not.toBe(r1.auditEventId);
@@ -299,6 +409,7 @@ describe('resolveShiftCloseAlert — red-zone / audit shape', () => {
   test('never writes any shifts/* document', async () => {
     const db = seedOpenCase();
     await performResolveShiftCloseAlert(db as never, req(), mgrB1);
+    bindApproval(db, { commandId: 'cmd-2', requestedOutcome: 'resolve' });
     await performResolveShiftCloseAlert(db as never, req({ commandId: 'cmd-2', requestedOutcome: 'resolve' }), mgrB1);
     expect(anyShiftsWrite(db)).toBe(false);
   });
@@ -314,7 +425,7 @@ describe('resolveShiftCloseAlert — red-zone / audit shape', () => {
       reasonCode: 'drawer_discrepancy',
       note: 'double-checked drawer',
       branchId: 'B1',
-      pinVerifiedAtServer: null,
+      pinVerifiedAtServer: 1_700_000_000_000,
       commandId: 'cmd-1',
     });
   });
@@ -328,24 +439,137 @@ describe('resolveShiftCloseAlert — red-zone / audit shape', () => {
   });
 });
 
-describe('resolveShiftCloseAlert — D5 Option C (PIN optional, never persisted)', () => {
-  test('succeeds with no pin supplied', async () => {
+describe('resolveShiftCloseAlert — Packet 2A approval consume', () => {
+  test('old client missing approvalId fails closed with invalid_payload', async () => {
     const db = seedOpenCase();
-    const res = await performResolveShiftCloseAlert(db as never, req({ pin: undefined }), mgrB1);
-    expect(res.ok).toBe(true);
+    const res = await performResolveShiftCloseAlert(db as never, req({ approvalId: '' }), mgrB1);
+    expect(res).toMatchObject({ ok: false, rejectCode: 'invalid_payload' });
   });
 
-  test('succeeds identically whether or not a pin is supplied — never verified, never persisted', async () => {
-    const dbNoPin = seedOpenCase();
-    const dbWithPin = seedOpenCase();
-    const resNoPin = await performResolveShiftCloseAlert(dbNoPin as never, req({ pin: undefined }), mgrB1);
-    const resWithPin = await performResolveShiftCloseAlert(dbWithPin as never, req({ pin: '9999' }), mgrB1);
-    expect(resNoPin.ok).toBe(true);
-    expect(resWithPin.ok).toBe(true);
-    const commandDoc = commandDocs(dbWithPin)[0]?.[1] as Record<string, unknown>;
-    const auditDoc = auditDocs(dbWithPin)[0]?.[1] as Record<string, unknown>;
-    expect(JSON.stringify(commandDoc)).not.toContain('9999');
-    expect(JSON.stringify(auditDoc)).not.toContain('9999');
+  test('present pin is hard-rejected as invalid_payload and never persisted', async () => {
+    const db = seedOpenCase();
+    const res = await performResolveShiftCloseAlert(db as never, req({ pin: '9999' }), mgrB1);
+    expect(res).toMatchObject({ ok: false, rejectCode: 'invalid_payload' });
+    expect(JSON.stringify([...db.__store.entries()])).not.toContain('9999');
+  });
+
+  test.each([
+    ['undefined', { pin: undefined }],
+    ['null', { pin: null as unknown as string }],
+    ['empty string', { pin: '' }],
+    ['value', { pin: '1234' }],
+  ])('own pin property (%s) is invalid_payload at the shell', async (_label, over) => {
+    const db = seedOpenCase();
+    const payload = req(over);
+    expect(Object.prototype.hasOwnProperty.call(payload, 'pin')).toBe(true);
+    const res = await performResolveShiftCloseAlert(db as never, payload, mgrB1);
+    expect(res).toMatchObject({ ok: false, rejectCode: 'invalid_payload' });
+    expect(db.__store.get('shiftCloseCases/S1')).toMatchObject({ caseVersion: 5, alertState: 'open' });
+  });
+
+  test('ledger duplicate short-circuits without reading or consuming the approval', async () => {
+    const db = seedOpenCase();
+    const r1 = await performResolveShiftCloseAlert(db as never, req(), mgrB1);
+    expect(r1.status).toBe('confirmed');
+    db.__reads.length = 0;
+    const r2 = await performResolveShiftCloseAlert(db as never, req(), mgrB1);
+    expect(r2.status).toBe('duplicate_confirmed');
+    expect(db.__reads.some((p) => p.startsWith('managerApprovals/'))).toBe(false);
+    const approvalId = deriveApprovalId('cmd-1');
+    expect(db.__store.get(`managerApprovals/${approvalId}`)).toMatchObject({ consumedAt: 1_700_000_000_000 });
+  });
+
+  test('missing approval gives invalid_pin with zero case writes', async () => {
+    const db = seedOpenCase();
+    db.__store.delete(`managerApprovals/${deriveApprovalId('cmd-1')}`);
+    const res = await performResolveShiftCloseAlert(db as never, req(), mgrB1);
+    expect(res).toMatchObject({ ok: false, rejectCode: 'invalid_pin' });
+    expect(db.__store.get('shiftCloseCases/S1')).toMatchObject({ caseVersion: 5, alertState: 'open' });
+  });
+
+  test('expired approval gives invalid_pin and leaves the approval unconsumed', async () => {
+    const db = seedOpenCase();
+    bindApproval(db, { expiresAtMs: Date.now() - 1_000 });
+    const res = await performResolveShiftCloseAlert(db as never, req(), mgrB1);
+    expect(res).toMatchObject({ ok: false, rejectCode: 'invalid_pin' });
+    expect(db.__store.get(`managerApprovals/${deriveApprovalId('cmd-1')}`)?.consumedAt).toBeNull();
+  });
+
+  test('consumed approval gives invalid_pin with zero writes', async () => {
+    const db = seedOpenCase();
+    bindApproval(db, { consumedAt: 1 });
+    const res = await performResolveShiftCloseAlert(db as never, req(), mgrB1);
+    expect(res).toMatchObject({ ok: false, rejectCode: 'invalid_pin' });
+    expect(db.__store.get('shiftCloseCases/S1')).toMatchObject({ caseVersion: 5 });
+  });
+
+  test('mis-bound approval (action) gives invalid_pin', async () => {
+    const db = seedOpenCase({ requestedOutcome: 'resolve' });
+    const res = await performResolveShiftCloseAlert(db as never, req(), mgrB1);
+    expect(res).toMatchObject({ ok: false, rejectCode: 'invalid_pin' });
+  });
+
+  test('disabled live user in-transaction gives unauthorized and leaves approval unconsumed', async () => {
+    const db = seedOpenCase();
+    db.__store.set('users/m1', { ...db.__store.get('users/m1'), isActive: false });
+    const res = await performResolveShiftCloseAlert(db as never, req(), mgrB1);
+    expect(res).toMatchObject({ ok: false, rejectCode: 'unauthorized' });
+    expect(db.__store.get(`managerApprovals/${deriveApprovalId('cmd-1')}`)?.consumedAt).toBeNull();
+  });
+
+  test('stale authVersion in-transaction gives unauthorized and leaves approval unconsumed', async () => {
+    const db = seedOpenCase();
+    db.__store.set('users/m1', { ...db.__store.get('users/m1'), authVersion: 9 });
+    const res = await performResolveShiftCloseAlert(db as never, req(), mgrB1);
+    expect(res).toMatchObject({ ok: false, rejectCode: 'unauthorized' });
+    expect(db.__store.get(`managerApprovals/${deriveApprovalId('cmd-1')}`)?.consumedAt).toBeNull();
+  });
+
+  test('credential rotated between mint and consume gives invalid_pin', async () => {
+    const db = seedOpenCase();
+    db.__store.set('userCredentials/m1', { ...db.__store.get('userCredentials/m1'), credentialVersion: 99 });
+    const res = await performResolveShiftCloseAlert(db as never, req(), mgrB1);
+    expect(res).toMatchObject({ ok: false, rejectCode: 'invalid_pin' });
+    expect(db.__store.get(`managerApprovals/${deriveApprovalId('cmd-1')}`)?.consumedAt).toBeNull();
+  });
+
+  test('happy path consumes approval in the same transaction as case/alert/audit/ledger', async () => {
+    const db = seedOpenCase();
+    const res = await performResolveShiftCloseAlert(db as never, req(), mgrB1);
+    expect(res.ok).toBe(true);
+    const approvalId = deriveApprovalId('cmd-1');
+    expect(db.__store.get(`managerApprovals/${approvalId}`)).toMatchObject({
+      consumedByStaffId: 'm1',
+      consumingAudience: 'resolveShiftCloseAlert',
+      consumedCaseVersion: 6,
+    });
+    expect(db.__store.get('shiftCloseCases/S1')).toMatchObject({ caseVersion: 6 });
+    const audit = db.__store.get(`shiftCloseAuditEvents/${res.auditEventId}`) as Record<string, unknown>;
+    expect(audit).toMatchObject({
+      pinVerifiedAtServer: 1_700_000_000_000,
+      approvalId,
+      securityModel: 'reauth',
+      requesterStaffId: 'm1',
+      approverStaffId: 'm1',
+      executorStaffId: 'm1',
+    });
+  });
+
+  test('CAS replay: a second consume of the same approval is invalid_pin', async () => {
+    const db = seedOpenCase();
+    const r1 = await performResolveShiftCloseAlert(db as never, req(), mgrB1);
+    expect(r1.ok).toBe(true);
+    db.__store.delete([...commandDocs(db)][0]![0]);
+    const r2 = await performResolveShiftCloseAlert(db as never, req(), mgrB1);
+    expect(r2).toMatchObject({ ok: false, rejectCode: 'invalid_pin' });
+    expect(auditDocs(db)).toHaveLength(1);
+  });
+
+  test('a case-guard rejection leaves the approval unconsumed', async () => {
+    const db = seedOpenCase({ caseVersion: 7 });
+    const res = await performResolveShiftCloseAlert(db as never, req({ expectedCaseVersion: 5 }), mgrB1);
+    expect(res).toMatchObject({ ok: false, rejectCode: 'stale_case_version' });
+    expect(db.__store.get(`managerApprovals/${deriveApprovalId('cmd-1')}`)?.consumedAt).toBeNull();
   });
 });
 

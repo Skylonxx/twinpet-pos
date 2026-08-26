@@ -7,6 +7,8 @@ import ShiftCloseAdjudicationPanel, { type ShiftCloseAdjudicationPanelProps } fr
 import { mapShiftCloseReviewRow } from '../../lib/pos/shiftClose/shiftCloseReviewRows';
 import { mapShiftCloseCaseProjection } from '../../lib/pos/shiftClose/shiftCloseDetailProjection';
 import type { ResolveShiftCloseAlertAdapterRequest } from '../../lib/pos/shiftClose/resolveShiftCloseAlertAdapter';
+import type { RequestManagerApprovalTransport } from '../../lib/auth/requestManagerApproval';
+import { MANAGER_APPROVAL_ERROR_LABELS } from '../../lib/auth/managerApprovalTypes';
 
 afterEach(() => cleanup());
 
@@ -27,6 +29,12 @@ const caseProjection = mapShiftCloseCaseProjection('SHIFT-1', {
   caseVersion: 2,
 });
 
+const okApproval: RequestManagerApprovalTransport = async () => ({
+  ok: true,
+  approvalId: 'appr-1',
+  expiresAtMillis: Date.now() + 120_000,
+});
+
 function baseProps(overrides: Partial<ShiftCloseAdjudicationPanelProps> = {}): ShiftCloseAdjudicationPanelProps {
   return {
     role: 'manager',
@@ -35,8 +43,24 @@ function baseProps(overrides: Partial<ShiftCloseAdjudicationPanelProps> = {}): S
     alertSource: { status: 'ready', fromCache: false, empty: false, errorType: null, row: alertRow },
     caseSource: { status: 'ready', fromCache: false, empty: false, errorType: null, projection: caseProjection },
     integrityCautions: [],
+    approvalTransport: okApproval,
     ...overrides,
   };
+}
+
+async function submitPin(user: ReturnType<typeof userEvent.setup>, pin = '1234') {
+  const dialog = await screen.findByRole('dialog', { name: 'ยืนยันตัวตนก่อนดำเนินการ' });
+  for (const d of pin) {
+    await user.click(within(dialog).getByRole('button', { name: d }));
+  }
+  await user.click(within(dialog).getByRole('button', { name: 'ยืนยัน' }));
+}
+
+async function confirmAcknowledgeWithPin(user: ReturnType<typeof userEvent.setup>, pin = '1234') {
+  await user.click(screen.getByRole('button', { name: 'รับทราบ' }));
+  const confirmButtons = screen.getAllByRole('button', { name: 'รับทราบ' });
+  await user.click(confirmButtons[confirmButtons.length - 1]);
+  await submitPin(user, pin);
 }
 
 describe('ShiftCloseAdjudicationPanel — visibility (baseAvailability gate)', () => {
@@ -111,9 +135,7 @@ describe('ShiftCloseAdjudicationPanel — V-1 remediation (valid yellow Button c
     const user = userEvent.setup();
     const transport = () => Promise.reject(new Error('down'));
     render(<ShiftCloseAdjudicationPanel {...baseProps({ transport })} />);
-    await user.click(screen.getByRole('button', { name: 'รับทราบ' }));
-    const confirmButtons = screen.getAllByRole('button', { name: 'รับทราบ' });
-    await user.click(confirmButtons[confirmButtons.length - 1]);
+    await confirmAcknowledgeWithPin(user);
     const retryButton = await screen.findByRole('button', { name: 'ลองส่งข้อมูลเดิมอีกครั้ง' });
     expect(retryButton.className).toMatch(/bg-yellow-400/);
   });
@@ -256,9 +278,7 @@ describe('ShiftCloseAdjudicationPanel — submit + result states', () => {
     const user = userEvent.setup();
     const transport = vi.fn().mockResolvedValue({ ok: true, commandId: 'ignored', shiftId: 'SHIFT-1', status: 'confirmed' });
     render(<ShiftCloseAdjudicationPanel {...baseProps({ transport: (req: ResolveShiftCloseAlertAdapterRequest) => transport(req).then((r: unknown) => ({ ...(r as object), commandId: req.commandId })) })} />);
-    await user.click(screen.getByRole('button', { name: 'รับทราบ' }));
-    const confirmButtons = screen.getAllByRole('button', { name: 'รับทราบ' });
-    await user.click(confirmButtons[confirmButtons.length - 1]);
+    await confirmAcknowledgeWithPin(user);
     await waitFor(() => expect(screen.getByText('ทำรายการสำเร็จ')).toBeTruthy());
     expect(screen.queryByRole('button', { name: 'ยืนยันแก้ไข' })).toBeNull();
   });
@@ -268,9 +288,7 @@ describe('ShiftCloseAdjudicationPanel — submit + result states', () => {
     const transport = (req: ResolveShiftCloseAlertAdapterRequest) =>
       Promise.resolve({ ok: true, commandId: req.commandId, shiftId: req.shiftId, status: 'duplicate_confirmed' });
     render(<ShiftCloseAdjudicationPanel {...baseProps({ transport })} />);
-    await user.click(screen.getByRole('button', { name: 'รับทราบ' }));
-    const confirmButtons = screen.getAllByRole('button', { name: 'รับทราบ' });
-    await user.click(confirmButtons[confirmButtons.length - 1]);
+    await confirmAcknowledgeWithPin(user);
     await waitFor(() => expect(screen.getByText('ทำรายการสำเร็จ')).toBeTruthy());
     expect(screen.getByText(/ยืนยันไปแล้วก่อนหน้านี้/)).toBeTruthy();
   });
@@ -280,9 +298,7 @@ describe('ShiftCloseAdjudicationPanel — submit + result states', () => {
     const transport = (req: ResolveShiftCloseAlertAdapterRequest) =>
       Promise.resolve({ ok: false, commandId: req.commandId, shiftId: req.shiftId, status: 'conflict_requires_manual_review', rejectCode: 'stale_case_version' });
     render(<ShiftCloseAdjudicationPanel {...baseProps({ transport })} />);
-    await user.click(screen.getByRole('button', { name: 'รับทราบ' }));
-    const confirmButtons = screen.getAllByRole('button', { name: 'รับทราบ' });
-    await user.click(confirmButtons[confirmButtons.length - 1]);
+    await confirmAcknowledgeWithPin(user);
     await waitFor(() =>
       expect(
         screen.getByText('ข้อมูลมีการเปลี่ยนแปลงหรือกำลังประมวลผล โปรดตรวจสอบข้อมูลล่าสุดก่อนตัดสินใจอีกครั้ง'),
@@ -295,9 +311,7 @@ describe('ShiftCloseAdjudicationPanel — submit + result states', () => {
     const transport = (req: ResolveShiftCloseAlertAdapterRequest) =>
       Promise.resolve({ ok: false, commandId: req.commandId, shiftId: req.shiftId, status: 'rejected', rejectCode: 'unauthorized' });
     render(<ShiftCloseAdjudicationPanel {...baseProps({ transport })} />);
-    await user.click(screen.getByRole('button', { name: 'รับทราบ' }));
-    const confirmButtons = screen.getAllByRole('button', { name: 'รับทราบ' });
-    await user.click(confirmButtons[confirmButtons.length - 1]);
+    await confirmAcknowledgeWithPin(user);
     await waitFor(() => expect(screen.getByText(/ไม่สามารถทำรายการได้/)).toBeTruthy());
     expect(screen.queryByText('ทำรายการสำเร็จ')).toBeNull();
   });
@@ -320,9 +334,7 @@ describe('ShiftCloseAdjudicationPanel — submit + result states', () => {
         })}
       />,
     );
-    await user.click(screen.getByRole('button', { name: 'รับทราบ' }));
-    const confirmButtons = screen.getAllByRole('button', { name: 'รับทราบ' });
-    await user.click(confirmButtons[confirmButtons.length - 1]);
+    await confirmAcknowledgeWithPin(user);
     await waitFor(() => expect(screen.getByText(/ไม่ได้รับการตอบกลับจากเซิร์ฟเวอร์/)).toBeTruthy());
     expect(transport).toHaveBeenCalledTimes(1);
 
@@ -336,22 +348,21 @@ describe('ShiftCloseAdjudicationPanel — submit + result states', () => {
     const user = userEvent.setup();
     const transport = () => Promise.reject(new Error('down'));
     render(<ShiftCloseAdjudicationPanel {...baseProps({ transport })} />);
-    await user.click(screen.getByRole('button', { name: 'รับทราบ' }));
-    const confirmButtons = screen.getAllByRole('button', { name: 'รับทราบ' });
-    await user.click(confirmButtons[confirmButtons.length - 1]);
+    await confirmAcknowledgeWithPin(user);
     await waitFor(() => expect(screen.getByText(/ไม่ได้รับการตอบกลับจากเซิร์ฟเวอร์/)).toBeTruthy());
     await user.click(screen.getByRole('button', { name: 'ยกเลิกคำสั่งนี้' }));
     await waitFor(() => expect(screen.getByRole('button', { name: 'รับทราบ' })).toBeTruthy());
   });
 });
 
-describe('ShiftCloseAdjudicationPanel — no Firestore/PIN/global-listener surface', () => {
-  test('module does not import a PIN modal or attach a global keydown listener', async () => {
+describe('ShiftCloseAdjudicationPanel — no global Enter listener', () => {
+  test('does not attach a global keydown listener; the PIN modal is expected after a valid confirm', async () => {
     const addSpy = vi.spyOn(window, 'addEventListener');
     render(<ShiftCloseAdjudicationPanel {...baseProps()} />);
     const keydownCalls = addSpy.mock.calls.filter((c) => c[0] === 'keydown');
     expect(keydownCalls.length).toBe(0);
     addSpy.mockRestore();
+    expect(screen.queryByRole('dialog', { name: 'ยืนยันตัวตนก่อนดำเนินการ' })).toBeNull();
   });
 });
 
@@ -364,9 +375,7 @@ describe('ShiftCloseAdjudicationPanel — RC-1 empty-note omission', () => {
         {...baseProps({ transport: (req: ResolveShiftCloseAlertAdapterRequest) => transport(req).then((r: unknown) => ({ ...(r as object), commandId: req.commandId })) })}
       />,
     );
-    await user.click(screen.getByRole('button', { name: 'รับทราบ' }));
-    const confirmButtons = screen.getAllByRole('button', { name: 'รับทราบ' });
-    await user.click(confirmButtons[confirmButtons.length - 1]);
+    await confirmAcknowledgeWithPin(user);
     await waitFor(() => expect(transport).toHaveBeenCalled());
     const sentReq = transport.mock.calls[0][0] as ResolveShiftCloseAlertAdapterRequest;
     expect('reasonNote' in sentReq).toBe(false);
@@ -379,9 +388,7 @@ describe('ShiftCloseAdjudicationPanel — RC-3 terminal command collision', () =
     const transport = (req: ResolveShiftCloseAlertAdapterRequest) =>
       Promise.resolve({ ok: false, commandId: req.commandId, shiftId: req.shiftId, status: 'conflict_requires_manual_review', rejectCode: 'invalid_payload' });
     render(<ShiftCloseAdjudicationPanel {...baseProps({ transport })} />);
-    await user.click(screen.getByRole('button', { name: 'รับทราบ' }));
-    const confirmButtons = screen.getAllByRole('button', { name: 'รับทราบ' });
-    await user.click(confirmButtons[confirmButtons.length - 1]);
+    await confirmAcknowledgeWithPin(user);
     await waitFor(() =>
       expect(
         screen.getByText('ไม่สามารถยืนยันคำสั่งนี้ได้ เนื่องจากรหัสคำสั่งไม่ตรงกับข้อมูลเดิม โปรดเริ่มทำรายการใหม่'),
@@ -401,10 +408,8 @@ describe('ShiftCloseAdjudicationPanel — RC-4 scope-freeze / race-safe late-res
     });
     const transport = vi.fn().mockReturnValue(pending);
     const { rerender } = render(<ShiftCloseAdjudicationPanel {...baseProps({ transport })} />);
-    await user.click(screen.getByRole('button', { name: 'รับทราบ' }));
-    const confirmButtons = screen.getAllByRole('button', { name: 'รับทราบ' });
-    await user.click(confirmButtons[confirmButtons.length - 1]);
-    expect(transport).toHaveBeenCalledTimes(1);
+    await confirmAcknowledgeWithPin(user);
+    await waitFor(() => expect(transport).toHaveBeenCalledTimes(1));
     const sentCommandId = (transport.mock.calls[0][0] as ResolveShiftCloseAlertAdapterRequest).commandId;
 
     // Scope-changing prop rerender BEFORE the transport promise resolves.
@@ -427,9 +432,8 @@ describe('ShiftCloseAdjudicationPanel — RC-4 scope-freeze / race-safe late-res
     });
     const transport = vi.fn().mockReturnValue(pending);
     const { unmount } = render(<ShiftCloseAdjudicationPanel {...baseProps({ transport })} />);
-    await user.click(screen.getByRole('button', { name: 'รับทราบ' }));
-    const confirmButtons = screen.getAllByRole('button', { name: 'รับทราบ' });
-    await user.click(confirmButtons[confirmButtons.length - 1]);
+    await confirmAcknowledgeWithPin(user);
+    await waitFor(() => expect(transport).toHaveBeenCalledTimes(1));
     const sentCommandId = (transport.mock.calls[0][0] as ResolveShiftCloseAlertAdapterRequest).commandId;
 
     unmount();
@@ -451,9 +455,7 @@ describe('ShiftCloseAdjudicationPanel — RC-4 scope-freeze / race-safe late-res
     const transport = (req: ResolveShiftCloseAlertAdapterRequest) =>
       Promise.resolve({ ok: true, commandId: req.commandId, shiftId: req.shiftId, status: 'confirmed' });
     render(<ShiftCloseAdjudicationPanel {...baseProps({ transport })} />);
-    await user.click(screen.getByRole('button', { name: 'รับทราบ' }));
-    const confirmButtons = screen.getAllByRole('button', { name: 'รับทราบ' });
-    await user.click(confirmButtons[confirmButtons.length - 1]);
+    await confirmAcknowledgeWithPin(user);
     await waitFor(() => expect(screen.getByText('ทำรายการสำเร็จ')).toBeTruthy());
   });
 });
@@ -554,9 +556,7 @@ describe('ShiftCloseAdjudicationPanel — final RC-4 fail-closed source/scope bi
         {...baseProps({ ...rowsFor('B::C', 'A'), branchId: 'A', routeShiftId: 'B::C', transport })}
       />,
     );
-    await user.click(screen.getByRole('button', { name: 'รับทราบ' }));
-    const confirmButtons = screen.getAllByRole('button', { name: 'รับทราบ' });
-    await user.click(confirmButtons[confirmButtons.length - 1]);
+    await confirmAcknowledgeWithPin(user);
     await waitFor(() => expect(screen.getByText('ทำรายการสำเร็จ')).toBeTruthy());
     expect(transport).toHaveBeenCalledTimes(1);
     const sent = transport.mock.calls[0][0] as ResolveShiftCloseAlertAdapterRequest;
@@ -574,9 +574,7 @@ describe('ShiftCloseAdjudicationPanel — final retry-scope remediation (retry b
     props: Partial<ShiftCloseAdjudicationPanelProps>,
   ) {
     const utils = render(<ShiftCloseAdjudicationPanel {...baseProps(props)} />);
-    await user.click(screen.getByRole('button', { name: 'รับทราบ' }));
-    const confirmButtons = screen.getAllByRole('button', { name: 'รับทราบ' });
-    await user.click(confirmButtons[confirmButtons.length - 1]);
+    await confirmAcknowledgeWithPin(user);
     await waitFor(() => expect(screen.getByText(/ไม่ได้รับการตอบกลับจากเซิร์ฟเวอร์/)).toBeTruthy());
     return utils;
   }
@@ -767,5 +765,283 @@ describe('ShiftCloseAdjudicationPanel — RC-6 mobile footer layout', () => {
     const cancelIndex = buttons.findIndex((b) => b.textContent === 'ยกเลิก');
     expect(confirmIndex).toBeGreaterThanOrEqual(0);
     expect(confirmIndex).toBeLessThan(cancelIndex);
+  });
+});
+
+describe('ShiftCloseAdjudicationPanel — Packet 2A reauthorization', () => {
+  test('PIN modal appears only after a valid confirm, not on dialog open', async () => {
+    const user = userEvent.setup();
+    render(<ShiftCloseAdjudicationPanel {...baseProps()} />);
+    await user.click(screen.getByRole('button', { name: 'รับทราบ' }));
+    expect(screen.queryByRole('dialog', { name: 'ยืนยันตัวตนก่อนดำเนินการ' })).toBeNull();
+    const confirmButtons = screen.getAllByRole('button', { name: 'รับทราบ' });
+    await user.click(confirmButtons[confirmButtons.length - 1]);
+    expect(await screen.findByRole('dialog', { name: 'ยืนยันตัวตนก่อนดำเนินการ' })).toBeTruthy();
+  });
+
+  test('PIN modal is PIN-only: four digits, no username field', async () => {
+    const user = userEvent.setup();
+    render(<ShiftCloseAdjudicationPanel {...baseProps()} />);
+    await user.click(screen.getByRole('button', { name: 'รับทราบ' }));
+    const confirmButtons = screen.getAllByRole('button', { name: 'รับทราบ' });
+    await user.click(confirmButtons[confirmButtons.length - 1]);
+    const dialog = await screen.findByRole('dialog', { name: 'ยืนยันตัวตนก่อนดำเนินการ' });
+    expect(within(dialog).queryByRole('textbox')).toBeNull();
+    expect(within(dialog).queryByRole('combobox')).toBeNull();
+    expect(within(dialog).queryByLabelText(/username|ผู้ใช้|ชื่อผู้ใช้/i)).toBeNull();
+    for (const d of ['1', '2', '3', '4']) {
+      expect(within(dialog).getByRole('button', { name: d })).toBeTruthy();
+    }
+  });
+
+  test('offline sends zero approval and zero adjudication requests', async () => {
+    const user = userEvent.setup();
+    const approvalTransport = vi.fn();
+    const transport = vi.fn();
+    render(
+      <ShiftCloseAdjudicationPanel
+        {...baseProps({ approvalTransport, transport, isOnline: () => false })}
+      />,
+    );
+    await confirmAcknowledgeWithPin(user);
+    await waitFor(() => expect(screen.getByText(MANAGER_APPROVAL_ERROR_LABELS.offline)).toBeTruthy());
+    expect(approvalTransport).not.toHaveBeenCalled();
+    expect(transport).not.toHaveBeenCalled();
+  });
+
+  test('wrong PIN keeps the modal open with an empty remounted buffer', async () => {
+    const user = userEvent.setup();
+    const approvalTransport: RequestManagerApprovalTransport = vi.fn().mockResolvedValue({
+      ok: false,
+      code: 'invalid_credentials',
+    });
+    const transport = vi.fn();
+    render(<ShiftCloseAdjudicationPanel {...baseProps({ approvalTransport, transport })} />);
+    await confirmAcknowledgeWithPin(user);
+    await waitFor(() => expect(screen.getByText(MANAGER_APPROVAL_ERROR_LABELS.invalid_credentials)).toBeTruthy());
+    const dialog = screen.getByRole('dialog', { name: 'ยืนยันตัวตนก่อนดำเนินการ' });
+    expect((within(dialog).getByRole('button', { name: 'ยืนยัน' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(transport).not.toHaveBeenCalled();
+  });
+
+  test('cancel PIN returns to confirming with the draft intact', async () => {
+    const user = userEvent.setup();
+    const transport = vi.fn();
+    render(<ShiftCloseAdjudicationPanel {...baseProps({ transport })} />);
+    await user.click(screen.getByRole('button', { name: 'รับทราบ' }));
+    const textarea = screen.getByLabelText('หมายเหตุ (ทางเลือก)') as HTMLTextAreaElement;
+    await user.type(textarea, 'kept-draft');
+    const confirmButtons = screen.getAllByRole('button', { name: 'รับทราบ' });
+    await user.click(confirmButtons[confirmButtons.length - 1]);
+    const pinDialog = await screen.findByRole('dialog', { name: 'ยืนยันตัวตนก่อนดำเนินการ' });
+    await user.click(within(pinDialog).getByRole('button', { name: 'ยกเลิก' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'ยืนยันตัวตนก่อนดำเนินการ' })).toBeNull());
+    expect(screen.getByText('ยืนยันการรับทราบการแจ้งเตือน')).toBeTruthy();
+    expect((screen.getByLabelText('หมายเหตุ (ทางเลือก)') as HTMLTextAreaElement).value).toBe('kept-draft');
+    expect(transport).not.toHaveBeenCalled();
+  });
+
+  test('duplicate PIN submit issues one approval and one adjudication call', async () => {
+    const user = userEvent.setup();
+    let release!: (value: unknown) => void;
+    const approvalTransport = vi.fn().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    const transport = vi.fn().mockResolvedValue({
+      ok: true,
+      commandId: 'ignored',
+      shiftId: 'SHIFT-1',
+      status: 'confirmed',
+    });
+    render(
+      <ShiftCloseAdjudicationPanel
+        {...baseProps({
+          approvalTransport,
+          transport: (req: ResolveShiftCloseAlertAdapterRequest) =>
+            transport(req).then((r: unknown) => ({ ...(r as object), commandId: req.commandId })),
+        })}
+      />,
+    );
+    await confirmAcknowledgeWithPin(user);
+    await waitFor(() => expect(approvalTransport).toHaveBeenCalledTimes(1));
+    const pinDialog = screen.getByRole('dialog', { name: 'ยืนยันตัวตนก่อนดำเนินการ' });
+    const submit = within(pinDialog).getByRole('button', { name: 'กำลังส่งข้อมูล...' });
+    expect((submit as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => {
+      release({ ok: true, approvalId: 'appr-1', expiresAtMillis: Date.now() + 120_000 });
+    });
+    await waitFor(() => expect(screen.getByText('ทำรายการสำเร็จ')).toBeTruthy());
+    expect(approvalTransport).toHaveBeenCalledTimes(1);
+    expect(transport).toHaveBeenCalledTimes(1);
+  });
+
+  test('consume invalid_pin shows the widened copy', async () => {
+    const user = userEvent.setup();
+    const transport = (req: ResolveShiftCloseAlertAdapterRequest) =>
+      Promise.resolve({
+        ok: false,
+        commandId: req.commandId,
+        shiftId: req.shiftId,
+        status: 'rejected',
+        rejectCode: 'invalid_pin',
+      });
+    render(<ShiftCloseAdjudicationPanel {...baseProps({ transport })} />);
+    await confirmAcknowledgeWithPin(user);
+    await waitFor(() => expect(screen.getByText('ต้องยืนยัน PIN ใหม่ก่อนดำเนินการ')).toBeTruthy());
+    expect(screen.queryByText('ทำรายการสำเร็จ')).toBeNull();
+  });
+
+  test('retry reuses the same commandId and approvalId with no re-mint', async () => {
+    const user = userEvent.setup();
+    const approvalTransport = vi.fn().mockResolvedValue({
+      ok: true,
+      approvalId: 'appr-frozen',
+      expiresAtMillis: Date.now() + 120_000,
+    });
+    const transport = vi.fn().mockRejectedValueOnce(new Error('down')).mockResolvedValueOnce({
+      ok: true,
+      commandId: 'x',
+      shiftId: 'SHIFT-1',
+      status: 'confirmed',
+    });
+    render(
+      <ShiftCloseAdjudicationPanel
+        {...baseProps({
+          approvalTransport,
+          transport: async (req: ResolveShiftCloseAlertAdapterRequest) => {
+            const r = await transport(req);
+            return { ...(r as object), commandId: req.commandId };
+          },
+        })}
+      />,
+    );
+    await confirmAcknowledgeWithPin(user);
+    await waitFor(() => expect(screen.getByText(/ไม่ได้รับการตอบกลับจากเซิร์ฟเวอร์/)).toBeTruthy());
+    expect(approvalTransport).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole('button', { name: 'ลองส่งข้อมูลเดิมอีกครั้ง' }));
+    await waitFor(() => expect(screen.getByText('ทำรายการสำเร็จ')).toBeTruthy());
+    expect(approvalTransport).toHaveBeenCalledTimes(1);
+    expect(transport).toHaveBeenCalledTimes(2);
+    const first = transport.mock.calls[0][0] as ResolveShiftCloseAlertAdapterRequest;
+    const second = transport.mock.calls[1][0] as ResolveShiftCloseAlertAdapterRequest;
+    expect(second.commandId).toBe(first.commandId);
+    expect(first.approvalId).toBe('appr-frozen');
+    expect(second.approvalId).toBe('appr-frozen');
+  });
+
+  test('scope/source invalidation while approval is pending discards the stale approvalId and never calls resolver', async () => {
+    const user = userEvent.setup();
+    let resolveApproval!: (value: unknown) => void;
+    const approvalTransport = vi.fn().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveApproval = resolve;
+        }),
+    );
+    const transport = vi.fn();
+    const staleCase = mapShiftCloseCaseProjection('SHIFT-1', {
+      shiftId: 'SHIFT-1',
+      branchId: 'BR-001',
+      alertState: 'open',
+      processingState: 'validated',
+      settlementState: 'manual_review_required',
+      caseVersion: 99,
+    });
+    const { rerender } = render(<ShiftCloseAdjudicationPanel {...baseProps({ approvalTransport, transport })} />);
+    await confirmAcknowledgeWithPin(user);
+    await waitFor(() => expect(approvalTransport).toHaveBeenCalledTimes(1));
+
+    rerender(
+      <ShiftCloseAdjudicationPanel
+        {...baseProps({
+          approvalTransport,
+          transport,
+          caseSource: { status: 'ready', fromCache: false, empty: false, errorType: null, projection: staleCase },
+        })}
+      />,
+    );
+
+    await act(async () => {
+      resolveApproval({ ok: true, approvalId: 'appr-stale', expiresAtMillis: Date.now() + 120_000 });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(transport).not.toHaveBeenCalled();
+    expect(screen.queryByText('ทำรายการสำเร็จ')).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'ยืนยันตัวตนก่อนดำเนินการ' })).toBeNull();
+  });
+
+  test('an older pending approval cannot attach to a later independent attempt', async () => {
+    const user = userEvent.setup();
+    let resolveA!: (value: unknown) => void;
+    let resolveB!: (value: unknown) => void;
+    let approvalCalls = 0;
+    const approvalTransport = vi.fn().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          approvalCalls += 1;
+          if (approvalCalls === 1) resolveA = resolve;
+          else resolveB = resolve;
+        }),
+    );
+    const transport = vi.fn().mockImplementation(async (req: ResolveShiftCloseAlertAdapterRequest) => ({
+      ok: true,
+      commandId: req.commandId,
+      shiftId: req.shiftId,
+      status: 'confirmed',
+    }));
+    const staleCase = mapShiftCloseCaseProjection('SHIFT-1', {
+      shiftId: 'SHIFT-1',
+      branchId: 'BR-001',
+      alertState: 'open',
+      processingState: 'validated',
+      settlementState: 'manual_review_required',
+      caseVersion: 99,
+    });
+    const { rerender } = render(<ShiftCloseAdjudicationPanel {...baseProps({ approvalTransport, transport })} />);
+    await confirmAcknowledgeWithPin(user);
+    await waitFor(() => expect(approvalTransport).toHaveBeenCalledTimes(1));
+
+    rerender(
+      <ShiftCloseAdjudicationPanel
+        {...baseProps({
+          approvalTransport,
+          transport,
+          caseSource: { status: 'ready', fromCache: false, empty: false, errorType: null, projection: staleCase },
+        })}
+      />,
+    );
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'ยืนยันตัวตนก่อนดำเนินการ' })).toBeNull());
+
+    rerender(<ShiftCloseAdjudicationPanel {...baseProps({ approvalTransport, transport })} />);
+    await confirmAcknowledgeWithPin(user);
+    await waitFor(() => expect(approvalTransport).toHaveBeenCalledTimes(2));
+
+    await act(async () => {
+      resolveA({ ok: true, approvalId: 'appr-A', expiresAtMillis: Date.now() + 120_000 });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(transport).not.toHaveBeenCalled();
+
+    await act(async () => {
+      resolveB({ ok: true, approvalId: 'appr-B', expiresAtMillis: Date.now() + 120_000 });
+    });
+    await waitFor(() => expect(screen.getByText('ทำรายการสำเร็จ')).toBeTruthy());
+    expect(transport).toHaveBeenCalledTimes(1);
+    expect((transport.mock.calls[0][0] as ResolveShiftCloseAlertAdapterRequest).approvalId).toBe('appr-B');
+  });
+
+  test('success closes the PIN modal', async () => {
+    const user = userEvent.setup();
+    const transport = (req: ResolveShiftCloseAlertAdapterRequest) =>
+      Promise.resolve({ ok: true, commandId: req.commandId, shiftId: req.shiftId, status: 'confirmed' });
+    render(<ShiftCloseAdjudicationPanel {...baseProps({ transport })} />);
+    await confirmAcknowledgeWithPin(user);
+    await waitFor(() => expect(screen.getByText('ทำรายการสำเร็จ')).toBeTruthy());
+    expect(screen.queryByRole('dialog', { name: 'ยืนยันตัวตนก่อนดำเนินการ' })).toBeNull();
   });
 });

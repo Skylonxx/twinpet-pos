@@ -27,23 +27,31 @@ import {
   adjudicationPayloadCanonical,
   adjudicationPayloadHash,
   checkAdjudicationAuthority,
+  checkApprovalBinding,
   commandLedgerId,
   decideAdjudicationTransition,
+  expectedActionFor,
+  hasPresentPin,
   isLeaseLive,
   validateAdjudicationPayload,
   type AdjudicationRejectCode,
   type AdjudicationStatus,
+  type ApprovalRecordView,
   type AuthTokenLike,
   type ResolveShiftCloseAlertRequest,
   type ValidatedAdjudicationRequest,
 } from './resolveShiftCloseAlertCore';
 import { evaluateFreshPrivilegedAuthority } from './authorityFence';
+import { isUsableForLogin, readUserCredential } from './credentialStore';
+import { APPROVAL_AUDIENCE, type ApprovalBindingExpected } from './requestManagerApprovalCore';
 
 const C = {
   cases: 'shiftCloseCases',
   alerts: 'shiftCloseAlerts',
   auditEvents: 'shiftCloseAuditEvents',
   adjudicationCommands: 'shiftCloseAdjudicationCommands',
+  approvals: 'managerApprovals',
+  users: 'users',
 } as const;
 
 export type { ResolveShiftCloseAlertRequest };
@@ -73,6 +81,50 @@ function reject(
 
 const isoNow = (): string => new Date().toISOString();
 
+function toMillis(value: unknown): number | null {
+  if (value == null) return null;
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'object' && value !== null && 'toMillis' in value) {
+    const fn = (value as { toMillis?: unknown }).toMillis;
+    if (typeof fn === 'function') {
+      const ms = fn.call(value);
+      return typeof ms === 'number' && Number.isFinite(ms) ? ms : null;
+    }
+  }
+  return null;
+}
+
+function approvalViewFromData(data: DocumentData | undefined): ApprovalRecordView | null {
+  if (!data) return null;
+  return {
+    audience: data.audience,
+    protectedAction: data.protectedAction,
+    targetEntityId: data.targetEntityId,
+    branchId: data.branchId,
+    commandId: data.commandId,
+    requesterStaffId: data.requesterStaffId,
+    approverStaffId: data.approverStaffId,
+    executorStaffId: data.executorStaffId,
+    securityModel: data.securityModel,
+    authVersionAtIssue: data.authVersionAtIssue,
+    credentialVersionAtIssue: data.credentialVersionAtIssue,
+    consumedAt: data.consumedAt ?? null,
+    expiresAtMillis: toMillis(data.expiresAt),
+  };
+}
+
+function liveRole(user: DocumentData): string | null {
+  return typeof user.role === 'string' ? user.role : null;
+}
+
+function liveBranchIds(user: DocumentData): string[] {
+  return Array.isArray(user.branchIds) ? user.branchIds.filter((v): v is string => typeof v === 'string') : [];
+}
+
+function hasLiveBranchAccess(branchIds: string[], branchId: string): boolean {
+  return branchIds.includes('ALL') || branchIds.includes(branchId);
+}
+
 /**
  * Core resolver — EXPORTED so it is unit-tested without the Functions
  * runtime (see `__tests__/resolveShiftCloseAlert.test.ts`), mirroring
@@ -86,16 +138,24 @@ export async function performResolveShiftCloseAlert(
   const rawCommandId = String(req.commandId ?? '').trim();
   const rawShiftId = String(req.shiftId ?? '').trim();
 
+  if (hasPresentPin(req)) {
+    return reject(rawCommandId, rawShiftId, 'invalid_payload', 'payload ไม่ครบถ้วนหรือไม่ถูกต้อง');
+  }
+
+  if (!auth) return reject(rawCommandId, rawShiftId, 'unauthorized', 'ต้องเข้าสู่ระบบก่อน');
+
+  const freshness = await evaluateFreshPrivilegedAuthority(database, auth);
+  if (!freshness.ok) {
+    return reject(rawCommandId, rawShiftId, 'unauthorized', 'ไม่มีสิทธิ์ดำเนินการ');
+  }
+
   const validated = validateAdjudicationPayload(req);
   if (!validated.ok) {
     return reject(rawCommandId, rawShiftId, 'invalid_payload', 'payload ไม่ครบถ้วนหรือไม่ถูกต้อง');
   }
   const value: ValidatedAdjudicationRequest = validated.value;
 
-  if (!auth) return reject(value.commandId, value.shiftId, 'unauthorized', 'ต้องเข้าสู่ระบบก่อน');
-
-  const freshness = await evaluateFreshPrivilegedAuthority(database, auth);
-  const authority = checkAdjudicationAuthority(auth, value.branchId, freshness.ok);
+  const authority = checkAdjudicationAuthority(auth, value.branchId, true);
   if (authority.rejectCode) {
     return reject(value.commandId, value.shiftId, authority.rejectCode, 'ไม่มีสิทธิ์ดำเนินการ');
   }
@@ -107,7 +167,7 @@ export async function performResolveShiftCloseAlert(
 
   try {
     return await database.runTransaction(async (tx) => {
-      // ── Idempotency ledger (read first) ──
+      // R1 — Idempotency ledger first. Duplicate short-circuits before approval.
       const commandSnap = await tx.get(commandRef);
       if (commandSnap.exists) {
         const command = commandSnap.data() as DocumentData;
@@ -123,7 +183,6 @@ export async function performResolveShiftCloseAlert(
             confirmedAtServer: (command.confirmedAtServer as string) ?? undefined,
           };
         }
-        // Same commandId + DIFFERENT payload → never mutate, never overwrite audit.
         return reject(
           value.commandId,
           value.shiftId,
@@ -133,10 +192,74 @@ export async function performResolveShiftCloseAlert(
         );
       }
 
-      // ── Case + alert reads (same shiftId doc id on both collections) ──
+      // R2 approval, R3 live user, R4 live credential, R5 case/alert
+      const approvalRef = database.collection(C.approvals).doc(value.approvalId);
+      const userRef = database.collection(C.users).doc(managerUid);
       const caseRef = database.collection(C.cases).doc(value.shiftId);
       const alertRef = database.collection(C.alerts).doc(value.shiftId);
+
+      const approvalSnap = await tx.get(approvalRef);
+      const userSnap = await tx.get(userRef);
+      const cred = await readUserCredential(database, managerUid, tx);
       const [caseSnap, alertSnap] = await Promise.all([tx.get(caseRef), tx.get(alertRef)]);
+
+      // C1–C4 live user (document, never token)
+      if (!userSnap.exists) {
+        return reject(value.commandId, value.shiftId, 'unauthorized', 'ไม่มีสิทธิ์ดำเนินการ');
+      }
+      const liveUser = (userSnap.data() ?? {}) as DocumentData;
+      if (liveUser.isActive !== true || liveUser.deletedAt != null) {
+        return reject(value.commandId, value.shiftId, 'unauthorized', 'ไม่มีสิทธิ์ดำเนินการ');
+      }
+      const liveAuthVersion =
+        typeof liveUser.authVersion === 'number' && Number.isFinite(liveUser.authVersion) ? liveUser.authVersion : 0;
+      const tokenAuthVersion =
+        typeof auth?.token?.authVersion === 'number' && Number.isFinite(auth.token.authVersion)
+          ? auth.token.authVersion
+          : -1;
+      if (liveAuthVersion !== tokenAuthVersion) {
+        return reject(value.commandId, value.shiftId, 'unauthorized', 'ไม่มีสิทธิ์ดำเนินการ');
+      }
+      const role = liveRole(liveUser);
+      if (role !== 'admin' && role !== 'manager') {
+        return reject(value.commandId, value.shiftId, 'unauthorized', 'ไม่มีสิทธิ์ดำเนินการ');
+      }
+      if (!hasLiveBranchAccess(liveBranchIds(liveUser), value.branchId)) {
+        return reject(value.commandId, value.shiftId, 'unauthorized', 'ไม่มีสิทธิ์ดำเนินการ');
+      }
+
+      // C5–C6 credential
+      if (!isUsableForLogin(cred) || cred.credentialState !== 'rotated_authoritative') {
+        return reject(value.commandId, value.shiftId, 'invalid_pin', 'ต้องยืนยัน PIN ใหม่ก่อนดำเนินการ');
+      }
+
+      const approval = approvalViewFromData(approvalSnap.exists ? approvalSnap.data() : undefined);
+      if (!approval) {
+        return reject(value.commandId, value.shiftId, 'invalid_pin', 'ต้องยืนยัน PIN ใหม่ก่อนดำเนินการ');
+      }
+      if (cred.credentialVersion !== approval.credentialVersionAtIssue) {
+        return reject(value.commandId, value.shiftId, 'invalid_pin', 'ต้องยืนยัน PIN ใหม่ก่อนดำเนินการ');
+      }
+
+      const bindingExpected: ApprovalBindingExpected = {
+        audience: APPROVAL_AUDIENCE,
+        protectedAction: expectedActionFor(value.requestedOutcome),
+        targetEntityId: value.shiftId,
+        branchId: value.branchId,
+        commandId: value.commandId,
+        staffId: managerUid,
+        authVersion: liveAuthVersion,
+      };
+      if (!checkApprovalBinding(approval, bindingExpected)) {
+        return reject(value.commandId, value.shiftId, 'invalid_pin', 'ต้องยืนยัน PIN ใหม่ก่อนดำเนินการ');
+      }
+      if (approval.consumedAt != null) {
+        return reject(value.commandId, value.shiftId, 'invalid_pin', 'ต้องยืนยัน PIN ใหม่ก่อนดำเนินการ');
+      }
+      const nowMillis = Date.now();
+      if (approval.expiresAtMillis == null || approval.expiresAtMillis <= nowMillis) {
+        return reject(value.commandId, value.shiftId, 'invalid_pin', 'ต้องยืนยัน PIN ใหม่ก่อนดำเนินการ');
+      }
 
       if (!caseSnap.exists) {
         return reject(value.commandId, value.shiftId, 'case_not_found', 'ไม่พบเคสปิดกะนี้');
@@ -157,12 +280,7 @@ export async function performResolveShiftCloseAlert(
         );
       }
 
-      // Gemini Lease Option 1 — refuse on a live (non-expired) P5-D worker
-      // lease; zero writes. Reuses 'stale_case_version' (the closest of the
-      // frozen 8 reject codes: the case is not currently stable to
-      // adjudicate) — distinguished by message text and status.
       const leaseExpiry = caseData.leaseExpiry as Timestamp | null | undefined;
-      const nowMillis = Date.now();
       if (
         isLeaseLive(
           { leaseOwner: (caseData.leaseOwner as string | null) ?? null, leaseExpiryMillis: leaseExpiry ? leaseExpiry.toMillis() : null },
@@ -200,11 +318,17 @@ export async function performResolveShiftCloseAlert(
         return reject(value.commandId, value.shiftId, transition.rejectCode, 'ไม่สามารถเปลี่ยนสถานะการแจ้งเตือนได้');
       }
 
-      // ── Writes (only after every guard above passed) ──
       const now = FieldValue.serverTimestamp();
       const confirmedAtServer = isoNow();
       const newCaseVersion = (caseData.caseVersion as number) + 1;
       const { alertProjection, newSettlementState } = transition;
+
+      tx.update(approvalRef, {
+        consumedAt: now,
+        consumedByStaffId: managerUid,
+        consumingAudience: APPROVAL_AUDIENCE,
+        consumedCaseVersion: newCaseVersion,
+      });
 
       tx.update(caseRef, {
         alertState: alertProjection.alertState,
@@ -213,9 +337,6 @@ export async function performResolveShiftCloseAlert(
         updatedAt: now,
       });
 
-      // openedAt is preserved verbatim — 'acknowledged'/'resolved' are both
-      // "preserve" transitions in the frozen P5-B/P5-D rule (never 'open',
-      // never 'none'; see shiftCloseValidationWorkerCore's computeOpenedAtWrite).
       tx.update(alertRef, {
         alertState: alertProjection.alertState,
         reasonCode: alertProjection.reasonCode,
@@ -231,6 +352,7 @@ export async function performResolveShiftCloseAlert(
         transitionType: `adjudication_${value.requestedOutcome}`,
         targetCaseVersion: newCaseVersion,
       });
+      const approvalData = (approvalSnap.data() ?? {}) as DocumentData;
       tx.create(database.collection(C.auditEvents).doc(auditEventId), {
         eventId: auditEventId,
         shiftId: value.shiftId,
@@ -244,8 +366,12 @@ export async function performResolveShiftCloseAlert(
         note: value.reasonNote,
         branchId: value.branchId,
         schemaVersion: 1,
-        // D5 Option C: reserved for a future step-up gate; never verified/persisted this packet.
-        pinVerifiedAtServer: null,
+        pinVerifiedAtServer: approvalData.issuedAt ?? null,
+        approvalId: value.approvalId,
+        securityModel: 'reauth',
+        requesterStaffId: managerUid,
+        approverStaffId: managerUid,
+        executorStaffId: managerUid,
         commandId: value.commandId,
         createdAt: now,
       });
@@ -257,6 +383,7 @@ export async function performResolveShiftCloseAlert(
         shiftId: value.shiftId,
         branchId: value.branchId,
         requestedOutcome: value.requestedOutcome,
+        approvalId: value.approvalId,
         newAlertState: alertProjection.alertState,
         newSettlementState,
         auditEventId,

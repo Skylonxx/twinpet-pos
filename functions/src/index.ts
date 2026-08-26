@@ -63,13 +63,12 @@ export {
   shiftCloseSourceEventCreditPayments,
 } from './shiftCloseSourceEvents';
 
-// P1 offline-sync Packet 5 / P5-E: manager/admin ADJUDICATION callable for an
-// existing shift-close alert (open->acknowledged, open|acknowledged->resolved).
-// Server-authoritative: verified claim + branch access + case-version CAS +
-// idempotent commandId; refuses on a live P5-D worker lease (Gemini Lease
-// Option 1); D5 Option C — optional transient `pin`, never verified/stored
-// this packet. Never reads/writes `shifts`.
+// P1 offline-sync Packet 5 / P5-E / UI-11 Packet 2A: manager/admin
+// ADJUDICATION callable for an existing shift-close alert. Consume requires a
+// one-shot same-principal `approvalId` from `requestManagerApproval`; any
+// present `pin` is hard-rejected. Never reads/writes `shifts`.
 export { resolveShiftCloseAlert } from './resolveShiftCloseAlert';
+export { requestManagerApproval } from './requestManagerApproval';
 
 // P1 offline-sync Packet 5 / UI-B2 / Packet S: read-only manager/admin
 // callable that resolves the sensitive drawer figures (client-reported and

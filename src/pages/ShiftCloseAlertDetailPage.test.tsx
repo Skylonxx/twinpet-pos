@@ -2,10 +2,11 @@
 
 import { afterEach, beforeAll, describe, expect, test, vi } from 'vitest';
 import { createElement } from 'react';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { ResolveShiftCloseAlertAdapterRequest } from '../lib/pos/shiftClose/resolveShiftCloseAlertAdapter';
+import type { RequestManagerApprovalClientRequest } from '../lib/auth/managerApprovalTypes';
 import type { ShiftCloseAlertDetailState } from '../lib/pos/shiftClose/useShiftCloseAlertDetail';
 import { mapShiftCloseReviewRow } from '../lib/pos/shiftClose/shiftCloseReviewRows';
 import { mapShiftCloseCaseProjection } from '../lib/pos/shiftClose/shiftCloseDetailProjection';
@@ -46,6 +47,30 @@ vi.mock('../lib/pos/shiftClose/useShiftCloseAlertDetail', async () => {
   };
 });
 
+const TEST_APPROVAL_ID = 'approval-test-001';
+// Packet 2A: the page mounts the panel without injecting transports, so the
+// approval adapter is exercised through its real `callRequestManagerApproval`
+// entry — only the default network transport is replaced. A successful PIN
+// must return this deterministic approvalId, which the panel then folds into
+// the resolver request. This is not a PIN bypass.
+const approvalTransportMock = vi.fn(async (_req: RequestManagerApprovalClientRequest) => ({
+  ok: true as const,
+  approvalId: TEST_APPROVAL_ID,
+  expiresAtMillis: Date.now() + 120_000,
+}));
+vi.mock('../lib/auth/requestManagerApproval', async () => {
+  const actual = await vi.importActual<typeof import('../lib/auth/requestManagerApproval')>(
+    '../lib/auth/requestManagerApproval',
+  );
+  return {
+    ...actual,
+    callRequestManagerApproval: (
+      req: Parameters<typeof actual.callRequestManagerApproval>[0],
+      transport?: Parameters<typeof actual.callRequestManagerApproval>[1],
+    ) => actual.callRequestManagerApproval(req, transport ?? approvalTransportMock),
+  };
+});
+
 // Final RC-4: the page renders the production panel WITHOUT a transport
 // injection point, so the transport boundary is observed by mocking the
 // adapter module itself — `resolveAlertMock` records the exact request the
@@ -80,6 +105,7 @@ afterEach(() => {
   mockFirebaseConfigured = true;
   capturedHookArgs = null;
   resolveAlertMock.mockClear();
+  approvalTransportMock.mockClear();
 });
 
 function baseState(overrides: Partial<ShiftCloseAlertDetailState> = {}): ShiftCloseAlertDetailState {
@@ -566,15 +592,10 @@ describe('ShiftCloseAlertDetailPage — final RC-4 canonical route authority at 
     detailState = eligibleRows(legalId, 'BR-001');
     renderAtRoute(legalId);
 
-    await user.click(screen.getByRole('button', { name: 'รับทราบ' }));
-    const confirmButtons = screen.getAllByRole('button', { name: 'รับทราบ' });
-    await user.click(confirmButtons[confirmButtons.length - 1]);
-    await waitFor(() => expect(screen.getByText('ทำรายการสำเร็จ')).toBeTruthy());
+    await confirmAcknowledgeThroughPin(user);
 
-    expect(resolveAlertMock).toHaveBeenCalledTimes(1);
-    const sent = resolveAlertMock.mock.calls[0][0];
-    expect(sent.shiftId).toBe(legalId);
-    expect(sent.branchId).toBe('BR-001');
+    await waitFor(() => expect(screen.getByText('ทำรายการสำเร็จ')).toBeTruthy());
+    expectPacket2AAcknowledgeFlow({ shiftId: legalId, branchId: 'BR-001' });
   });
 
   test('delimiter collision: stale prior-scope rows (branch "A::B", doc "C") under scope (branch "A", route "B::C") offer no panel and reach no transport', () => {
@@ -588,6 +609,7 @@ describe('ShiftCloseAlertDetailPage — final RC-4 canonical route authority at 
 
     expect(screen.queryByRole('button', { name: 'รับทราบ' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'ยืนยันแก้ไข' })).toBeNull();
+    expect(approvalTransportMock).not.toHaveBeenCalled();
     expect(resolveAlertMock).not.toHaveBeenCalled();
   });
 
@@ -597,12 +619,49 @@ describe('ShiftCloseAlertDetailPage — final RC-4 canonical route authority at 
     renderAtRoute('SHIFT-001');
 
     expect(screen.getByRole('button', { name: 'ยืนยันแก้ไข' })).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: 'รับทราบ' }));
-    const confirmButtons = screen.getAllByRole('button', { name: 'รับทราบ' });
-    await user.click(confirmButtons[confirmButtons.length - 1]);
+    await confirmAcknowledgeThroughPin(user);
+
     await waitFor(() => expect(screen.getByText('ทำรายการสำเร็จ')).toBeTruthy());
-    const sent = resolveAlertMock.mock.calls[0][0];
-    expect(sent.shiftId).toBe('SHIFT-001');
-    expect(sent.branchId).toBe('BR-001');
+    expectPacket2AAcknowledgeFlow({ shiftId: 'SHIFT-001', branchId: 'BR-001' });
   });
 });
+
+async function confirmAcknowledgeThroughPin(
+  user: ReturnType<typeof userEvent.setup>,
+  pin = '1234',
+) {
+  await user.click(screen.getByRole('button', { name: 'รับทราบ' }));
+  const confirmButtons = screen.getAllByRole('button', { name: 'รับทราบ' });
+  await user.click(confirmButtons[confirmButtons.length - 1]);
+
+  const pinDialog = await screen.findByRole('dialog', { name: 'ยืนยันตัวตนก่อนดำเนินการ' });
+  expect(resolveAlertMock).not.toHaveBeenCalled();
+  expect(approvalTransportMock).not.toHaveBeenCalled();
+
+  for (const digit of pin) {
+    await user.click(within(pinDialog).getByRole('button', { name: digit }));
+  }
+  await user.click(within(pinDialog).getByRole('button', { name: 'ยืนยัน' }));
+}
+
+function expectPacket2AAcknowledgeFlow(scope: { shiftId: string; branchId: string }) {
+  expect(approvalTransportMock).toHaveBeenCalledTimes(1);
+  expect(resolveAlertMock).toHaveBeenCalledTimes(1);
+  expect(approvalTransportMock.mock.invocationCallOrder[0]).toBeLessThan(
+    resolveAlertMock.mock.invocationCallOrder[0],
+  );
+
+  const approvalReq = approvalTransportMock.mock.calls[0][0];
+  expect(approvalReq.pin).toBe('1234');
+  expect(approvalReq.protectedAction).toBe('shift_close_alert_acknowledge');
+  expect(approvalReq.targetEntityId).toBe(scope.shiftId);
+  expect(approvalReq.branchId).toBe(scope.branchId);
+  expect(approvalReq.commandId).toEqual(expect.any(String));
+  expect(approvalReq.commandId.length).toBeGreaterThan(0);
+
+  const sent = resolveAlertMock.mock.calls[0][0];
+  expect(sent.shiftId).toBe(scope.shiftId);
+  expect(sent.branchId).toBe(scope.branchId);
+  expect(sent.approvalId).toBe(TEST_APPROVAL_ID);
+  expect(sent).not.toHaveProperty('pin');
+}

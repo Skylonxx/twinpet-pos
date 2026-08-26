@@ -24,6 +24,7 @@ const baseReq: ResolveShiftCloseAlertAdapterRequest = {
   expectedCaseVersion: 2,
   requestedOutcome: 'acknowledge',
   reasonCode: 'drawer_discrepancy',
+  approvalId: 'appr-1',
 };
 
 function injected(response: unknown): ResolveShiftCloseAlertTransport {
@@ -284,5 +285,12 @@ describe('callResolveShiftCloseAlert — default transport wiring', () => {
     const result = await callResolveShiftCloseAlert(baseReq);
     expect(callableMock).toHaveBeenCalledWith(baseReq);
     expect(result.kind).toBe('response');
+  });
+
+  it('approvalId is present in the transported request', async () => {
+    const transport = injected({ ok: true, commandId: 'cmd-1', shiftId: 'SHIFT-001', status: 'confirmed' });
+    await callResolveShiftCloseAlert(baseReq, transport);
+    const forwarded = (transport as ReturnType<typeof vi.fn>).mock.calls[0][0] as ResolveShiftCloseAlertAdapterRequest;
+    expect(forwarded.approvalId).toBe('appr-1');
   });
 });

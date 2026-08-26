@@ -539,8 +539,9 @@ describe('operator CLI entrypoints', () => {
       expect(pkg.scripts.deploy).toContain(`functions:${name}`);
     }
     expect(pkg.scripts.deploy).toContain('functions:setUserAccount');
+    expect(pkg.scripts.deploy).toContain('functions:requestManagerApproval');
     const functionRefs = [...pkg.scripts.deploy.matchAll(/functions:([A-Za-z0-9_]+)/g)].map((m) => m[1]);
-    expect(functionRefs).toEqual([...EXISTING_DEPLOY_FUNCTIONS, 'setUserAccount']);
+    expect(functionRefs).toEqual([...EXISTING_DEPLOY_FUNCTIONS, 'requestManagerApproval', 'setUserAccount']);
   });
 
   test('operator modules do not silently default FIRESTORE_DATABASE_ID', () => {

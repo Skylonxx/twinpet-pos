@@ -5,7 +5,9 @@ import type { ShiftCloseAlertSourceState, ShiftCloseCaseSourceState } from '../.
 import type { IntegrityCaution } from '../../lib/pos/shiftClose/shiftCloseDetailProjection';
 import {
   applyAdjudicationResult,
+  applyApprovalResult,
   availableOutcomes,
+  cancelReauth,
   checkAdjudicationLiveInvalidation,
   closeAdjudicationDialog,
   computeScopeKey,
@@ -26,6 +28,15 @@ import {
   type ResolveShiftCloseAlertAdapterRequest,
   type ResolveShiftCloseAlertTransport,
 } from '../../lib/pos/shiftClose/resolveShiftCloseAlertAdapter';
+import ManagerPinModal from './ManagerPinModal';
+import {
+  callRequestManagerApproval,
+  type RequestManagerApprovalTransport,
+} from '../../lib/auth/requestManagerApproval';
+import {
+  expectedProtectedAction,
+  MANAGER_APPROVAL_ERROR_LABELS,
+} from '../../lib/auth/managerApprovalTypes';
 
 /**
  * Packet 5 / Client-UI-C — manager adjudication action surface. Frozen DP1-DP4
@@ -47,11 +58,15 @@ export interface ShiftCloseAdjudicationPanelProps {
   integrityCautions: IntegrityCaution[];
   /** Test-only injection point — production callers omit this (default Firebase transport). */
   transport?: ResolveShiftCloseAlertTransport;
+  /** Test-only injection point for the Packet 2A approval callable. */
+  approvalTransport?: RequestManagerApprovalTransport;
+  /** Test-only online signal; production uses navigator.onLine. */
+  isOnline?: () => boolean;
 }
 
 const REJECT_CODE_LABELS: Record<string, string> = {
   unauthorized: 'ไม่มีสิทธิ์ดำเนินการ',
-  invalid_pin: 'PIN ไม่ถูกต้อง',
+  invalid_pin: 'ต้องยืนยัน PIN ใหม่ก่อนดำเนินการ',
   invalid_payload: 'ข้อมูลไม่ถูกต้องหรือไม่ครบถ้วน',
   case_not_found: 'ไม่พบเคสปิดกะนี้',
   alert_not_open: 'ไม่สามารถดำเนินการกับการแจ้งเตือนนี้ได้แล้ว',
@@ -67,6 +82,8 @@ export default function ShiftCloseAdjudicationPanel({
   caseSource,
   integrityCautions,
   transport,
+  approvalTransport,
+  isOnline,
 }: ShiftCloseAdjudicationPanelProps) {
   const live: BaseAvailabilityInput = {
     alertSource: { status: alertSource.status, fromCache: alertSource.fromCache },
@@ -84,6 +101,14 @@ export default function ShiftCloseAdjudicationPanel({
   const available = scopeBoundAvailability(live, scopeKey);
 
   const [state, setState] = useState<AdjudicationMachineState>(initialAdjudicationMachineState);
+  const [pinSubmitting, setPinSubmitting] = useState(false);
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [pinModalKey, setPinModalKey] = useState(0);
+
+  const readOnline = (): boolean => {
+    if (isOnline) return isOnline();
+    return typeof navigator === 'undefined' || navigator.onLine !== false;
+  };
 
   // React-endorsed "adjusting state during render" pattern (same precedent as
   // useShiftCloseAlertDetail.ts's genKey reset) — invalidates a `confirming`
@@ -106,8 +131,19 @@ export default function ShiftCloseAdjudicationPanel({
   // microtask (a promise `.then`) can run in between, so the ref is always
   // current by the time any pending transport promise settles.
   const scopeKeyRef = useRef(scopeKey);
+  const machineStateRef = useRef(effectiveState);
+  machineStateRef.current = effectiveState;
+  const approvalEpochRef = useRef(0);
+  const prevMachineStatusRef = useRef(effectiveState.status);
   useLayoutEffect(() => {
     scopeKeyRef.current = scopeKey;
+    machineStateRef.current = effectiveState;
+    if (prevMachineStatusRef.current === 'reauth_required' && effectiveState.status !== 'reauth_required') {
+      approvalEpochRef.current += 1;
+      setPinSubmitting(false);
+      setPinError(null);
+    }
+    prevMachineStatusRef.current = effectiveState.status;
   });
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -143,12 +179,68 @@ export default function ShiftCloseAdjudicationPanel({
     setState(openAdjudicationDialog(outcome, live, scopeKey));
   };
 
-  const handleClose = () => setState(closeAdjudicationDialog());
+  const handleClose = () => {
+    setPinError(null);
+    setPinSubmitting(false);
+    setState(closeAdjudicationDialog());
+  };
 
   const handleSubmit = () => {
     const next = submitAdjudication(effectiveState, live, scopeKey);
     setState(next);
-    if (next.status === 'submitting') void runTransport(next.payload);
+    setPinError(null);
+  };
+
+  const handlePinCancel = () => {
+    if (pinSubmitting) return;
+    setPinError(null);
+    setState((prev) => cancelReauth(prev));
+  };
+
+  const handlePinSubmit = (pin: string) => {
+    if (effectiveState.status !== 'reauth_required') return;
+    if (pinSubmitting) return;
+    if (!readOnline()) {
+      setPinError(MANAGER_APPROVAL_ERROR_LABELS.offline);
+      setPinModalKey((k) => k + 1);
+      return;
+    }
+    setPinSubmitting(true);
+    const frozen = effectiveState;
+    const attemptCommandId = frozen.commandId;
+    const attemptEpoch = approvalEpochRef.current;
+    void (async () => {
+      const result = await callRequestManagerApproval(
+        {
+          commandId: frozen.commandId,
+          protectedAction: expectedProtectedAction(frozen.outcome),
+          targetEntityId: frozen.payload.shiftId,
+          branchId: frozen.payload.branchId,
+          pin,
+        },
+        approvalTransport,
+      );
+      if (!mountedRef.current) return;
+      const current = machineStateRef.current;
+      const stale =
+        approvalEpochRef.current !== attemptEpoch ||
+        current.status !== 'reauth_required' ||
+        current.commandId !== attemptCommandId;
+      if (stale) {
+        setPinSubmitting(false);
+        return;
+      }
+      setPinSubmitting(false);
+      if (result.kind !== 'ok') {
+        setPinError(MANAGER_APPROVAL_ERROR_LABELS[result.code] ?? MANAGER_APPROVAL_ERROR_LABELS.invalid_credentials);
+        setPinModalKey((k) => k + 1);
+        return;
+      }
+      setPinError(null);
+      const submitting = applyApprovalResult(current, result.approvalId, attemptCommandId);
+      setState(submitting);
+      if (submitting.status === 'submitting') void runTransport(submitting.payload);
+    })();
   };
 
   const handleRetry = () => {
@@ -163,7 +255,11 @@ export default function ShiftCloseAdjudicationPanel({
     if (next.status === 'submitting') void runTransport(next.payload);
   };
 
-  const dialogOpen = effectiveState.status === 'confirming' || effectiveState.status === 'submitting' || effectiveState.status === 'retryable';
+  const dialogOpen =
+    effectiveState.status === 'confirming' ||
+    effectiveState.status === 'reauth_required' ||
+    effectiveState.status === 'submitting' ||
+    effectiveState.status === 'retryable';
 
   useEffect(() => {
     if (wasDialogOpenRef.current && !dialogOpen) {
@@ -298,6 +394,19 @@ export default function ShiftCloseAdjudicationPanel({
           submitGuardFailure={validateAdjudicationSubmit(effectiveState, live, scopeKey)}
         />
       )}
+      {effectiveState.status === 'reauth_required' && (
+        <ManagerPinModal
+          key={pinModalKey}
+          open
+          title="ยืนยันตัวตนก่อนดำเนินการ"
+          description="กรุณาใส่ PIN ของท่านเพื่อยืนยันการดำเนินการ"
+          pinLength={4}
+          isSubmitting={pinSubmitting}
+          errorMessage={pinError}
+          onSubmitPin={handlePinSubmit}
+          onCancel={handlePinCancel}
+        />
+      )}
     </Card>
   );
 }
@@ -316,7 +425,7 @@ function AdjudicationDialog({
   onRetry,
   submitGuardFailure,
 }: {
-  state: Extract<AdjudicationMachineState, { status: 'confirming' | 'submitting' | 'retryable' }>;
+  state: Extract<AdjudicationMachineState, { status: 'confirming' | 'reauth_required' | 'submitting' | 'retryable' }>;
   titleId: string;
   descId: string;
   noteId: string;
@@ -330,8 +439,10 @@ function AdjudicationDialog({
   submitGuardFailure: ReturnType<typeof validateAdjudicationSubmit>;
 }) {
   const isResolve = state.outcome === 'resolve';
-  const note = state.status === 'confirming' ? state.note : state.payload.reasonNote ?? '';
-  const evidenceChecked = state.status === 'confirming' ? state.evidenceChecked : true;
+  const note =
+    state.status === 'confirming' || state.status === 'reauth_required' ? state.note : state.payload.reasonNote ?? '';
+  const evidenceChecked =
+    state.status === 'confirming' || state.status === 'reauth_required' ? state.evidenceChecked : true;
   const reasonLabel = ALERT_REASON_LABELS[state.token.alertReasonCode];
   const fieldsReadOnly = state.status !== 'confirming';
   const isBusy = state.status === 'submitting';

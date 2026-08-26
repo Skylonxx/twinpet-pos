@@ -9,6 +9,8 @@ import {
   adjudicationPayloadHash,
   commandLedgerId,
   buildManagerActor,
+  checkApprovalBinding,
+  expectedActionFor,
   MAX_REASON_NOTE_LENGTH,
   type ResolveShiftCloseAlertRequest,
   type ValidatedAdjudicationRequest,
@@ -26,6 +28,7 @@ const baseReq = (over: Partial<ResolveShiftCloseAlertRequest> = {}): ResolveShif
   requestedOutcome: 'acknowledge',
   reasonCode: 'drawer_discrepancy',
   reasonNote: 'checked with staff',
+  approvalId: 'appr-1',
   ...over,
 });
 
@@ -37,6 +40,7 @@ const validated = (over: Partial<ValidatedAdjudicationRequest> = {}): ValidatedA
   requestedOutcome: 'acknowledge',
   reasonCode: 'drawer_discrepancy',
   reasonNote: 'checked with staff',
+  approvalId: 'appr-1',
   ...over,
 });
 
@@ -45,7 +49,7 @@ describe('validateAdjudicationPayload', () => {
     const res = validateAdjudicationPayload(baseReq());
     expect(res.ok).toBe(true);
     if (res.ok) {
-      expect(res.value).toMatchObject({ commandId: 'cmd-1', shiftId: 'S1', branchId: 'B1', expectedCaseVersion: 3, requestedOutcome: 'acknowledge', reasonCode: 'drawer_discrepancy', reasonNote: 'checked with staff' });
+      expect(res.value).toMatchObject({ commandId: 'cmd-1', shiftId: 'S1', branchId: 'B1', expectedCaseVersion: 3, requestedOutcome: 'acknowledge', reasonCode: 'drawer_discrepancy', reasonNote: 'checked with staff', approvalId: 'appr-1' });
     }
   });
 
@@ -55,11 +59,38 @@ describe('validateAdjudicationPayload', () => {
     if (res.ok) expect(res.value.reasonNote).toBeNull();
   });
 
-  test('pin optional and never required for structural validity', () => {
+  test('present pin field is hard-rejected', () => {
     const withPin = validateAdjudicationPayload(baseReq({ pin: '1234' }));
-    const withoutPin = validateAdjudicationPayload(baseReq({ pin: undefined }));
-    expect(withPin.ok).toBe(true);
-    expect(withoutPin.ok).toBe(true);
+    expect(withPin.ok).toBe(false);
+  });
+
+  test('absent pin property may continue normal validation', () => {
+    const req = baseReq();
+    expect(Object.prototype.hasOwnProperty.call(req, 'pin')).toBe(false);
+    expect(validateAdjudicationPayload(req).ok).toBe(true);
+  });
+
+  test.each([
+    ['undefined', { pin: undefined }],
+    ['null', { pin: null as unknown as string }],
+    ['empty string', { pin: '' }],
+    ['value 1234', { pin: '1234' }],
+  ])('own pin property (%s) is invalid_payload regardless of value', (_label, over) => {
+    const req = { ...baseReq(), ...over };
+    expect(Object.prototype.hasOwnProperty.call(req, 'pin')).toBe(true);
+    expect(validateAdjudicationPayload(req).ok).toBe(false);
+  });
+
+  test('inherited prototype pin is not an own-property and is not rejected by presence', () => {
+    const req = Object.assign(Object.create({ pin: '1234' }), baseReq()) as ResolveShiftCloseAlertRequest;
+    expect(Object.prototype.hasOwnProperty.call(req, 'pin')).toBe(false);
+    expect(validateAdjudicationPayload(req).ok).toBe(true);
+  });
+
+  test('missing or empty approvalId fails closed', () => {
+    expect(validateAdjudicationPayload(baseReq({ approvalId: undefined })).ok).toBe(false);
+    expect(validateAdjudicationPayload(baseReq({ approvalId: '' })).ok).toBe(false);
+    expect(validateAdjudicationPayload(baseReq({ approvalId: '   ' })).ok).toBe(false);
   });
 
   test.each([
@@ -284,5 +315,56 @@ describe('idempotency payload hash + ledger id', () => {
 describe('buildManagerActor', () => {
   test('builds a manager-kind actor from a uid', () => {
     expect(buildManagerActor('m1')).toEqual({ kind: 'manager', managerUid: 'm1' });
+  });
+});
+
+describe('expectedActionFor / checkApprovalBinding', () => {
+  test('maps both outcomes', () => {
+    expect(expectedActionFor('acknowledge')).toBe('shift_close_alert_acknowledge');
+    expect(expectedActionFor('resolve')).toBe('shift_close_alert_resolve');
+  });
+
+  const bound = {
+    audience: 'resolveShiftCloseAlert' as const,
+    protectedAction: 'shift_close_alert_acknowledge' as const,
+    targetEntityId: 'S1',
+    branchId: 'B1',
+    commandId: 'cmd-1',
+    requesterStaffId: 'm1',
+    approverStaffId: 'm1',
+    executorStaffId: 'm1',
+    securityModel: 'reauth' as const,
+    authVersionAtIssue: 0,
+    credentialVersionAtIssue: 1,
+    consumedAt: null,
+    expiresAtMillis: Date.now() + 60_000,
+  };
+  const expected = {
+    audience: 'resolveShiftCloseAlert' as const,
+    protectedAction: 'shift_close_alert_acknowledge' as const,
+    targetEntityId: 'S1',
+    branchId: 'B1',
+    commandId: 'cmd-1',
+    staffId: 'm1',
+    authVersion: 0,
+  };
+
+  test('positive binding', () => {
+    expect(checkApprovalBinding(bound, expected)).toBe(true);
+  });
+
+  test.each([
+    ['audience', { audience: 'other' }],
+    ['action', { protectedAction: 'shift_close_alert_resolve' }],
+    ['target', { targetEntityId: 'S2' }],
+    ['branch', { branchId: 'B2' }],
+    ['commandId', { commandId: 'cmd-x' }],
+    ['requester', { requesterStaffId: 'm9' }],
+    ['approver', { approverStaffId: 'm9' }],
+    ['executor', { executorStaffId: 'm9' }],
+    ['securityModel', { securityModel: 'delegated' }],
+    ['authVersionAtIssue', { authVersionAtIssue: 7 }],
+  ] as const)('negative: %s', (_label, patch) => {
+    expect(checkApprovalBinding({ ...bound, ...patch }, expected)).toBe(false);
   });
 });

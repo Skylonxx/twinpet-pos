@@ -3,8 +3,10 @@ import { mapShiftCloseReviewRow } from './shiftCloseReviewRows';
 import { mapShiftCloseCaseProjection } from './shiftCloseDetailProjection';
 import {
   applyAdjudicationResult,
+  applyApprovalResult,
   availableOutcomes,
   baseAvailability,
+  cancelReauth,
   captureDecisionSnapshotToken,
   checkAdjudicationLiveInvalidation,
   closeAdjudicationDialog,
@@ -60,6 +62,20 @@ function makeInput(overrides: Partial<BaseAvailabilityInput> = {}): BaseAvailabi
 }
 
 const SCOPE = computeScopeKey('manager', 'BR-001', 'SHIFT-1');
+const TEST_APPROVAL_ID = 'appr-1';
+
+function submitAndApprove(
+  confirming: ReturnType<typeof openAdjudicationDialog>,
+  live: BaseAvailabilityInput = makeInput(),
+  scope = SCOPE,
+  approvalId = TEST_APPROVAL_ID,
+) {
+  const reauth = submitAdjudication(confirming, live, scope);
+  if (reauth.status !== 'reauth_required') throw new Error('setup failed');
+  const submitting = applyApprovalResult(reauth, approvalId);
+  if (submitting.status !== 'submitting') throw new Error('setup failed');
+  return submitting;
+}
 
 describe('baseAvailability — table-driven fail-closed conditions', () => {
   it('is true for a clean, fully agreeing, stable case', () => {
@@ -314,23 +330,24 @@ describe('submitAdjudication — mint on first valid submit only', () => {
       evidenceChecked: true,
       note: '  investigated with z-report  ',
     });
-    const submitting = submitAdjudication(confirming, makeInput(), SCOPE);
-    expect(submitting.status).toBe('submitting');
-    if (submitting.status === 'submitting') {
-      expect(submitting.commandId).toBeTruthy();
-      expect(submitting.payload.shiftId).toBe('SHIFT-1');
-      expect(submitting.payload.branchId).toBe('BR-001');
-      expect(submitting.payload.expectedCaseVersion).toBe(2);
-      expect(submitting.payload.requestedOutcome).toBe('resolve');
-      expect(submitting.payload.reasonCode).toBe('drawer_discrepancy');
-      expect(submitting.payload.reasonNote).toBe('investigated with z-report');
+    const reauth = submitAdjudication(confirming, makeInput(), SCOPE);
+    expect(reauth.status).toBe('reauth_required');
+    if (reauth.status === 'reauth_required') {
+      expect(reauth.commandId).toBeTruthy();
+      expect(reauth.payload.shiftId).toBe('SHIFT-1');
+      expect(reauth.payload.branchId).toBe('BR-001');
+      expect(reauth.payload.expectedCaseVersion).toBe(2);
+      expect(reauth.payload.requestedOutcome).toBe('resolve');
+      expect(reauth.payload.reasonCode).toBe('drawer_discrepancy');
+      expect(reauth.payload.reasonNote).toBe('investigated with z-report');
+      expect(reauth.payload.approvalId).toBeUndefined();
     }
   });
 
   it('the submitted reason always equals the token alert reason — no alternate reason path exists', () => {
     const confirming = openAdjudicationDialog('acknowledge', makeInput({ alertRow: makeAlertRow({ reasonCode: 'identity_mismatch' }) }), SCOPE);
-    const submitting = submitAdjudication(confirming, makeInput({ alertRow: makeAlertRow({ reasonCode: 'identity_mismatch' }) }), SCOPE);
-    if (submitting.status === 'submitting') expect(submitting.payload.reasonCode).toBe('identity_mismatch');
+    const reauth = submitAdjudication(confirming, makeInput({ alertRow: makeAlertRow({ reasonCode: 'identity_mismatch' }) }), SCOPE);
+    if (reauth.status === 'reauth_required') expect(reauth.payload.reasonCode).toBe('identity_mismatch');
   });
 
   it('is a no-op (stays confirming) when the guard fails', () => {
@@ -344,20 +361,16 @@ describe('submitAdjudication — mint on first valid submit only', () => {
     const s1 = submitAdjudication(c1, makeInput(), SCOPE);
     const c2 = openAdjudicationDialog('acknowledge', makeInput(), SCOPE);
     const s2 = submitAdjudication(c2, makeInput(), SCOPE);
-    if (s1.status === 'submitting' && s2.status === 'submitting') {
+    if (s1.status === 'reauth_required' && s2.status === 'reauth_required') {
       expect(s1.commandId).not.toBe(s2.commandId);
     }
   });
 
   it('RC-4: payload branchId comes from the frozen token, never from a live argument — submitAdjudication takes no live branchId parameter at all', () => {
-    // A scope-changed live branchId can only ever reach the machine via the
-    // `scopeKey` argument (which then fails decisionSnapshotFresh — see the
-    // dedicated scope-drift test below). There is no other channel by which
-    // a live branchId could leak into the payload.
     const confirming = openAdjudicationDialog('acknowledge', makeInput(), SCOPE);
-    const submitting = submitAdjudication(confirming, makeInput(), SCOPE);
-    if (submitting.status === 'submitting') {
-      expect(submitting.payload.branchId).toBe(submitting.token.scopeKey.branchId);
+    const reauth = submitAdjudication(confirming, makeInput(), SCOPE);
+    if (reauth.status === 'reauth_required') {
+      expect(reauth.payload.branchId).toBe(reauth.token.scopeKey.branchId);
     }
   });
 
@@ -372,31 +385,30 @@ describe('submitAdjudication — mint on first valid submit only', () => {
 describe('reason note (RC-1) — payload omission semantics', () => {
   it('omits reasonNote entirely from the submitted payload when the draft note is absent', () => {
     const confirming = openAdjudicationDialog('acknowledge', makeInput(), SCOPE);
-    const submitting = submitAdjudication(confirming, makeInput(), SCOPE);
-    if (submitting.status === 'submitting') {
-      expect('reasonNote' in submitting.payload).toBe(false);
-      expect(submitting.payload.reasonNote).toBeUndefined();
+    const reauth = submitAdjudication(confirming, makeInput(), SCOPE);
+    if (reauth.status === 'reauth_required') {
+      expect('reasonNote' in reauth.payload).toBe(false);
+      expect(reauth.payload.reasonNote).toBeUndefined();
     }
   });
 
   it('omits reasonNote entirely when the draft note is whitespace-only', () => {
     const confirming = updateAdjudicationDraft(openAdjudicationDialog('acknowledge', makeInput(), SCOPE), { note: '   ' });
-    const submitting = submitAdjudication(confirming, makeInput(), SCOPE);
-    if (submitting.status === 'submitting') {
-      expect('reasonNote' in submitting.payload).toBe(false);
+    const reauth = submitAdjudication(confirming, makeInput(), SCOPE);
+    if (reauth.status === 'reauth_required') {
+      expect('reasonNote' in reauth.payload).toBe(false);
     }
   });
 
   it('includes the trimmed note when non-empty', () => {
     const confirming = updateAdjudicationDraft(openAdjudicationDialog('acknowledge', makeInput(), SCOPE), { note: '  z-report attached  ' });
-    const submitting = submitAdjudication(confirming, makeInput(), SCOPE);
-    if (submitting.status === 'submitting') expect(submitting.payload.reasonNote).toBe('z-report attached');
+    const reauth = submitAdjudication(confirming, makeInput(), SCOPE);
+    if (reauth.status === 'reauth_required') expect(reauth.payload.reasonNote).toBe('z-report attached');
   });
 
   it('retry of a no-note submission preserves the exact same property-absent payload', () => {
     const confirming = openAdjudicationDialog('acknowledge', makeInput(), SCOPE);
-    const submitting = submitAdjudication(confirming, makeInput(), SCOPE);
-    if (submitting.status !== 'submitting') throw new Error('setup failed');
+    const submitting = submitAndApprove(confirming);
     const failed = applyAdjudicationResult(submitting, { kind: 'transport_failure', cause: new Error('x') }, SCOPE);
     const retried = retrySameAdjudicationCommand(failed, makeInput(), SCOPE);
     if (retried.status === 'submitting') {
@@ -407,8 +419,7 @@ describe('reason note (RC-1) — payload omission semantics', () => {
 
   it('retry of a non-empty-note submission preserves the exact same value', () => {
     const confirming = updateAdjudicationDraft(openAdjudicationDialog('acknowledge', makeInput(), SCOPE), { note: 'kept exact' });
-    const submitting = submitAdjudication(confirming, makeInput(), SCOPE);
-    if (submitting.status !== 'submitting') throw new Error('setup failed');
+    const submitting = submitAndApprove(confirming);
     const failed = applyAdjudicationResult(submitting, { kind: 'transport_failure', cause: new Error('x') }, SCOPE);
     const retried = retrySameAdjudicationCommand(failed, makeInput(), SCOPE);
     if (retried.status === 'submitting') expect(retried.payload.reasonNote).toBe('kept exact');
@@ -420,9 +431,7 @@ describe('applyAdjudicationResult — runtime result matrix', () => {
     const draft = outcome === 'resolve'
       ? updateAdjudicationDraft(openAdjudicationDialog('resolve', makeInput(), SCOPE), { evidenceChecked: true })
       : openAdjudicationDialog('acknowledge', makeInput(), SCOPE);
-    const submitting = submitAdjudication(draft, makeInput(), SCOPE);
-    if (submitting.status !== 'submitting') throw new Error('setup failed');
-    return submitting;
+    return submitAndApprove(draft);
   }
 
   it('confirmed -> success', () => {
@@ -534,8 +543,7 @@ describe('applyAdjudicationResult — runtime result matrix', () => {
       caseProjection: makeCaseProjection({}, 'C'),
     });
     const confirming = openAdjudicationDialog('acknowledge', scopeAInput, tokenScope);
-    const submitting = submitAdjudication(confirming, scopeAInput, tokenScope);
-    if (submitting.status !== 'submitting') throw new Error('setup failed');
+    const submitting = submitAndApprove(confirming, scopeAInput, tokenScope);
 
     const result: ResolveShiftCloseAlertAdapterResult = {
       kind: 'response',
@@ -559,8 +567,7 @@ describe('applyAdjudicationResult — runtime result matrix', () => {
 describe('retrySameAdjudicationCommand — exact same-ID/payload retry only, no auto-retry', () => {
   it('re-enters submitting with the identical commandId and payload', () => {
     const draft = openAdjudicationDialog('acknowledge', makeInput(), SCOPE);
-    const submitting = submitAdjudication(draft, makeInput(), SCOPE);
-    if (submitting.status !== 'submitting') throw new Error('setup failed');
+    const submitting = submitAndApprove(draft);
     const failed = applyAdjudicationResult(submitting, { kind: 'transport_failure', cause: new Error('x') }, SCOPE);
     const retried = retrySameAdjudicationCommand(failed, makeInput(), SCOPE);
     expect(retried.status).toBe('submitting');
@@ -577,8 +584,7 @@ describe('retrySameAdjudicationCommand — exact same-ID/payload retry only, no 
   it('no automatic retry ever occurs — applying a failure never itself triggers another transport call', () => {
     const transportSpy = vi.fn();
     const draft = openAdjudicationDialog('acknowledge', makeInput(), SCOPE);
-    const submitting = submitAdjudication(draft, makeInput(), SCOPE);
-    if (submitting.status !== 'submitting') throw new Error('setup failed');
+    const submitting = submitAndApprove(draft);
     applyAdjudicationResult(submitting, { kind: 'transport_failure', cause: new Error('x') }, SCOPE);
     expect(transportSpy).not.toHaveBeenCalled();
   });
@@ -713,13 +719,13 @@ describe('canonical route request authority (final RC-4) — shiftId from token.
       caseProjection: makeCaseProjection({}, 'B::C'),
     });
     const confirming = openAdjudicationDialog('acknowledge', input, scope);
-    const submitting = submitAdjudication(confirming, input, scope);
-    expect(submitting.status).toBe('submitting');
-    if (submitting.status === 'submitting') {
-      expect(submitting.payload.shiftId).toBe(submitting.token.scopeKey.routeShiftId);
-      expect(submitting.payload.shiftId).toBe('B::C');
-      expect(submitting.payload.branchId).toBe(submitting.token.scopeKey.branchId);
-      expect(submitting.payload.branchId).toBe('A');
+    const reauth = submitAdjudication(confirming, input, scope);
+    expect(reauth.status).toBe('reauth_required');
+    if (reauth.status === 'reauth_required') {
+      expect(reauth.payload.shiftId).toBe(reauth.token.scopeKey.routeShiftId);
+      expect(reauth.payload.shiftId).toBe('B::C');
+      expect(reauth.payload.branchId).toBe(reauth.token.scopeKey.branchId);
+      expect(reauth.payload.branchId).toBe('A');
     }
   });
 
@@ -733,10 +739,10 @@ describe('canonical route request authority (final RC-4) — shiftId from token.
       caseProjection: makeCaseProjection({}, legalId),
     });
     const confirming = openAdjudicationDialog('acknowledge', input, scope);
-    const submitting = submitAdjudication(confirming, input, scope);
-    if (submitting.status !== 'submitting') throw new Error('setup failed');
-    expect(submitting.payload.shiftId).toBe(legalId);
-    expect(submitting.payload.shiftId).toBe(submitting.token.scopeKey.routeShiftId);
+    const reauth = submitAdjudication(confirming, input, scope);
+    if (reauth.status !== 'reauth_required') throw new Error('setup failed');
+    expect(reauth.payload.shiftId).toBe(legalId);
+    expect(reauth.payload.shiftId).toBe(reauth.token.scopeKey.routeShiftId);
   });
 
   it('a forged token whose alertId differs from its route authority can never mint or reach transport', () => {
@@ -775,8 +781,7 @@ describe('canonical route request authority (final RC-4) — shiftId from token.
 describe('retryAuthorityValid / retrySameAdjudicationCommand — retry scope/source authority', () => {
   function makeRetryable(live: BaseAvailabilityInput = makeInput(), scope = SCOPE) {
     const draft = openAdjudicationDialog('acknowledge', live, scope);
-    const submitting = submitAdjudication(draft, live, scope);
-    if (submitting.status !== 'submitting') throw new Error('setup failed');
+    const submitting = submitAndApprove(draft, live, scope);
     const failed = applyAdjudicationResult(submitting, { kind: 'transport_failure', cause: new Error('x') }, scope);
     if (failed.status !== 'retryable') throw new Error('setup failed');
     return failed;
@@ -892,9 +897,88 @@ describe('retryAuthorityValid / retrySameAdjudicationCommand — retry scope/sou
 
   it('in-flight submitting is never invalidated by the render-time check (late results are scope-checked at application instead)', () => {
     const draft = openAdjudicationDialog('acknowledge', makeInput(), SCOPE);
-    const submitting = submitAdjudication(draft, makeInput(), SCOPE);
-    if (submitting.status !== 'submitting') throw new Error('setup failed');
+    const submitting = submitAndApprove(draft);
     const scopeB = computeScopeKey('manager', 'A', 'B::C');
     expect(checkAdjudicationLiveInvalidation(submitting, makeInput(), scopeB)).toBe(submitting);
+  });
+});
+
+describe('Packet 2A reauth_required', () => {
+  it('approval success folds approvalId into the frozen payload and enters submitting with no other field mutated', () => {
+    const confirming = openAdjudicationDialog('acknowledge', makeInput(), SCOPE);
+    const reauth = submitAdjudication(confirming, makeInput(), SCOPE);
+    if (reauth.status !== 'reauth_required') throw new Error('setup failed');
+    const before = { ...reauth.payload };
+    const submitting = applyApprovalResult(reauth, TEST_APPROVAL_ID);
+    expect(submitting.status).toBe('submitting');
+    if (submitting.status === 'submitting') {
+      expect(submitting.commandId).toBe(reauth.commandId);
+      expect(submitting.payload).toEqual({ ...before, approvalId: TEST_APPROVAL_ID });
+    }
+  });
+
+  it('approval failure is a no-op of applyApprovalResult when staying in reauth — caller never transports', () => {
+    const confirming = openAdjudicationDialog('acknowledge', makeInput(), SCOPE);
+    const reauth = submitAdjudication(confirming, makeInput(), SCOPE);
+    expect(applyApprovalResult(reauth, '')).toBe(reauth);
+  });
+
+  it('cancel returns to confirming with the draft preserved and the commandId discarded', () => {
+    const confirming = updateAdjudicationDraft(openAdjudicationDialog('acknowledge', makeInput(), SCOPE), {
+      note: 'keep this draft',
+    });
+    const reauth = submitAdjudication(confirming, makeInput(), SCOPE);
+    const cancelled = cancelReauth(reauth);
+    expect(cancelled.status).toBe('confirming');
+    if (cancelled.status === 'confirming') {
+      expect(cancelled.note).toBe('keep this draft');
+      expect(cancelled.evidenceChecked).toBe(false);
+    }
+    const again = submitAdjudication(cancelled, makeInput(), SCOPE);
+    if (reauth.status === 'reauth_required' && again.status === 'reauth_required') {
+      expect(again.commandId).not.toBe(reauth.commandId);
+    }
+  });
+
+  it('a scope/source break in reauth_required returns idle', () => {
+    const confirming = openAdjudicationDialog('acknowledge', makeInput(), SCOPE);
+    const reauth = submitAdjudication(confirming, makeInput(), SCOPE);
+    const stale = makeInput({ caseProjection: makeCaseProjection({ caseVersion: 99 }) });
+    expect(checkAdjudicationLiveInvalidation(reauth, stale, SCOPE)).toEqual({ status: 'idle' });
+  });
+
+  it('stale applyApprovalResult against idle or a newer commandId is a no-op', () => {
+    const confirming = openAdjudicationDialog('acknowledge', makeInput(), SCOPE);
+    const reauthA = submitAdjudication(confirming, makeInput(), SCOPE);
+    if (reauthA.status !== 'reauth_required') throw new Error('setup failed');
+    const idle = checkAdjudicationLiveInvalidation(
+      reauthA,
+      makeInput({ caseProjection: makeCaseProjection({ caseVersion: 99 }) }),
+      SCOPE,
+    );
+    expect(applyApprovalResult(idle, 'appr-A', reauthA.commandId)).toEqual({ status: 'idle' });
+    const confirmingB = openAdjudicationDialog('acknowledge', makeInput(), SCOPE);
+    const reauthB = submitAdjudication(confirmingB, makeInput(), SCOPE);
+    if (reauthB.status !== 'reauth_required') throw new Error('setup failed');
+    expect(applyApprovalResult(reauthB, 'appr-A', reauthA.commandId)).toBe(reauthB);
+    const submittingB = applyApprovalResult(reauthB, 'appr-B', reauthB.commandId);
+    expect(submittingB.status).toBe('submitting');
+    if (submittingB.status === 'submitting') {
+      expect(submittingB.payload.approvalId).toBe('appr-B');
+      expect(submittingB.commandId).toBe(reauthB.commandId);
+    }
+  });
+
+  it('retryable replays the exact frozen commandId and approvalId with no re-mint', () => {
+    const confirming = openAdjudicationDialog('acknowledge', makeInput(), SCOPE);
+    const submitting = submitAndApprove(confirming);
+    const failed = applyAdjudicationResult(submitting, { kind: 'transport_failure', cause: new Error('x') }, SCOPE);
+    const retried = retrySameAdjudicationCommand(failed, makeInput(), SCOPE);
+    expect(retried.status).toBe('submitting');
+    if (retried.status === 'submitting') {
+      expect(retried.commandId).toBe(submitting.commandId);
+      expect(retried.payload.approvalId).toBe(TEST_APPROVAL_ID);
+      expect(retried.payload).toEqual(submitting.payload);
+    }
   });
 });

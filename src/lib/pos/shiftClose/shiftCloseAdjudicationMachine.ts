@@ -319,6 +319,15 @@ export type AdjudicationMachineState =
       evidenceChecked: boolean;
     }
   | {
+      status: 'reauth_required';
+      outcome: AdjudicationOutcome;
+      token: DecisionSnapshotToken;
+      commandId: string;
+      payload: ResolveShiftCloseAlertAdapterRequest;
+      note: string;
+      evidenceChecked: boolean;
+    }
+  | {
       status: 'submitting';
       outcome: AdjudicationOutcome;
       token: DecisionSnapshotToken;
@@ -394,6 +403,9 @@ export function updateAdjudicationDraft(
  * NOT silently close the ambiguity dialog mid-read; the guarded retry
  * transition (`retryAuthorityValid`) still refuses transport for them.
  *
+ * `reauth_required`: same freshness/scope break as confirming — return idle
+ * and discard the frozen commandId. No reconnect auto-resume.
+ *
  * `submitting` stays untouched — the in-flight command is protected, and a
  * late result is scope-checked by `applyAdjudicationResult`.
  */
@@ -402,7 +414,7 @@ export function checkAdjudicationLiveInvalidation(
   live: BaseAvailabilityInput,
   scopeKey: ScopeKey,
 ): AdjudicationMachineState {
-  if (state.status === 'confirming') {
+  if (state.status === 'confirming' || state.status === 'reauth_required') {
     if (!decisionSnapshotFresh(live, scopeKey, state.token)) return { status: 'idle' };
     return state;
   }
@@ -443,6 +455,9 @@ export function validateAdjudicationSubmit(
  * not a route authority) and `branchId` from `state.token.scopeKey.branchId`.
  * Both are frozen at dialog-open time; no live caller-supplied route/branch
  * input can reach the payload after capture.
+ *
+ * Packet 2A: the first valid submit enters `reauth_required` (PIN step-up)
+ * rather than transporting immediately. `commandId` is minted once here.
  */
 export function submitAdjudication(
   state: AdjudicationMachineState,
@@ -461,11 +476,56 @@ export function submitAdjudication(
     expectedCaseVersion: state.token.caseVersion,
     requestedOutcome: state.outcome,
     reasonCode: state.token.alertReasonCode,
-    // RC-1: omit the property entirely for an empty/whitespace-only note —
-    // the deployed contract's `reasonNote?: string` rejects a present `null`.
     ...(trimmedNote !== null ? { reasonNote: trimmedNote } : {}),
   };
-  return { status: 'submitting', outcome: state.outcome, token: state.token, commandId, payload };
+  return {
+    status: 'reauth_required',
+    outcome: state.outcome,
+    token: state.token,
+    commandId,
+    payload,
+    note: state.note,
+    evidenceChecked: state.evidenceChecked,
+  };
+}
+
+/**
+ * Fold a minted approvalId into the frozen payload and enter submitting.
+ * No other payload field is mutated. No-op outside `reauth_required`.
+ * When `expectedCommandId` is provided, a stale completion for a different
+ * (or already-invalidated) attempt is discarded — it cannot attach to a
+ * newer reauth or fold into idle/confirming/submitting.
+ */
+export function applyApprovalResult(
+  state: AdjudicationMachineState,
+  approvalId: string,
+  expectedCommandId?: string,
+): AdjudicationMachineState {
+  if (state.status !== 'reauth_required') return state;
+  if (expectedCommandId !== undefined && state.commandId !== expectedCommandId) return state;
+  if (!approvalId) return state;
+  return {
+    status: 'submitting',
+    outcome: state.outcome,
+    token: state.token,
+    commandId: state.commandId,
+    payload: { ...state.payload, approvalId },
+  };
+}
+
+/**
+ * Cancel PIN step-up: return to confirming with the draft preserved and the
+ * frozen commandId discarded. A later confirm mints a fresh commandId.
+ */
+export function cancelReauth(state: AdjudicationMachineState): AdjudicationMachineState {
+  if (state.status !== 'reauth_required') return state;
+  return {
+    status: 'confirming',
+    outcome: state.outcome,
+    token: state.token,
+    note: state.note,
+    evidenceChecked: state.evidenceChecked,
+  };
 }
 
 /**
@@ -571,7 +631,7 @@ export function startNewAdjudicationDecision(
   live: BaseAvailabilityInput,
   scopeKey: ScopeKey,
 ): AdjudicationMachineState {
-  if (state.status === 'confirming' || state.status === 'submitting') return state;
+  if (state.status === 'confirming' || state.status === 'submitting' || state.status === 'reauth_required') return state;
   return openAdjudicationDialog(outcome, live, scopeKey);
 }
 
