@@ -156,6 +156,17 @@ describe('hasBranchAccess / checkAdjudicationAuthority', () => {
     expect(res.rejectCode).toBe('unauthorized');
   });
 
+  test('checkAdjudicationAuthority 4-arg admits staff at the gate only', () => {
+    const res = checkAdjudicationAuthority(
+      { uid: 'u3', token: { role: 'staff', staffId: 's1', branchIds: ['B1'] } },
+      'B1',
+      true,
+      true,
+    );
+    expect(res.rejectCode).toBeUndefined();
+    expect(res.managerUid).toBe('s1');
+  });
+
   test('checkAdjudicationAuthority: manager without branch access -> unauthorized', () => {
     const res = checkAdjudicationAuthority({ uid: 'u4', token: { role: 'manager', staffId: 'm2', branchIds: ['B2'] } }, 'B1', true);
     expect(res.rejectCode).toBe('unauthorized');

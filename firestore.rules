@@ -812,7 +812,13 @@ service cloud.firestore {
     }
 
     match /shiftCloseCases/{caseShiftId} {
-      allow read: if isManagerOrAdmin() && hasBranchAccess(resource.data.branchId);
+      allow get: if (isManagerOrAdmin() && hasBranchAccess(resource.data.branchId))
+                 || (isFreshStaff()
+                     && role() == 'staff'
+                     && resource.data.branchId in branchIds()
+                     && resource.data.get('alertState', 'none')
+                          in ['open', 'acknowledged', 'resolved']);
+      allow list: if isManagerOrAdmin() && hasBranchAccess(resource.data.branchId);
       allow create, update, delete: if false;
     }
 
@@ -822,7 +828,10 @@ service cloud.firestore {
     }
 
     match /shiftCloseAlerts/{alertShiftId} {
-      allow read: if isManagerOrAdmin() && hasBranchAccess(resource.data.branchId);
+      allow read: if (isManagerOrAdmin() && hasBranchAccess(resource.data.branchId))
+                  || (isFreshStaff()
+                      && role() == 'staff'
+                      && resource.data.branchId in branchIds());
       allow create, update, delete: if false;
     }
 

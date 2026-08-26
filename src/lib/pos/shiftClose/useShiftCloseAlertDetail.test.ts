@@ -78,11 +78,25 @@ describe('useShiftCloseAlertDetail — query contract (Fallback A: direct doc li
 });
 
 describe('useShiftCloseAlertDetail — gate', () => {
-  test('gate false (non-manager/admin) → onSnapshot never called, both sources disabled', () => {
+  test('gate true (staff + concrete branch + valid shiftId) → both listeners start; sources pending', () => {
     const { result } = renderHook(() => useShiftCloseAlertDetail('staff', 'BR-001', 'SHIFT-001'));
-    expect(onSnapshotSpy).not.toHaveBeenCalled();
-    expect(result.current.alert.status).toBe('disabled');
-    expect(result.current.case.status).toBe('disabled');
+    expect(onSnapshotSpy).toHaveBeenCalledTimes(2);
+    expect(docSpy).toHaveBeenCalledWith(expect.anything(), 'shiftCloseAlerts', 'SHIFT-001');
+    expect(docSpy).toHaveBeenCalledWith(expect.anything(), 'shiftCloseCases', 'SHIFT-001');
+    expect(result.current.alert.status).toBe('pending');
+    expect(result.current.case.status).toBe('pending');
+  });
+
+  test('gate false (cashier / null / undefined / unknown role) → onSnapshot never called, both sources disabled', () => {
+    for (const role of ['cashier', null, undefined, 'some-unknown-role'] as const) {
+      onSnapshotSpy.mockClear();
+      listeners.length = 0;
+      const { result, unmount } = renderHook(() => useShiftCloseAlertDetail(role, 'BR-001', 'SHIFT-001'));
+      expect(onSnapshotSpy).not.toHaveBeenCalled();
+      expect(result.current.alert.status).toBe('disabled');
+      expect(result.current.case.status).toBe('disabled');
+      unmount();
+    }
   });
 
   test('gate false (invalid route shiftId) → onSnapshot never called, routeValid is false', () => {

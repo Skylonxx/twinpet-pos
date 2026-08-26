@@ -14,16 +14,22 @@ import { FUNCTIONS_REGION } from './deployConfig';
 import { evaluateFreshPrivilegedAuthority, type AuthLike } from './authorityFence';
 import { isUsableForLogin, readUserCredential } from './credentialStore';
 import {
+  APPROVAL_SECURITY_MODEL_DELEGATED,
   APPROVAL_TTL_MS,
+  type ApprovalBindingExpected,
   type ApprovalRecordView,
   type ManagerApprovalServerErrorCode,
   type NextAttemptState,
   type RequestManagerApprovalRequest,
+  approverBranchEligible,
   buildApprovalDocument,
   deriveApprovalId,
   deriveAttemptScopeKey,
   isLockoutActive,
+  isModel2ApproverRole,
+  isModel2RequesterRole,
   nextFailureAttemptState,
+  requesterBranchEligible,
   resetAttemptState,
   selectMintOutcome,
   shouldApplyAttemptReset,
@@ -87,6 +93,7 @@ function approvalViewFromData(data: DocumentData | undefined): ApprovalRecordVie
     credentialVersionAtIssue: data.credentialVersionAtIssue,
     consumedAt: data.consumedAt ?? null,
     expiresAtMillis: toMillis(data.expiresAt),
+    approverAuthVersionAtIssue: data.approverAuthVersionAtIssue,
   };
 }
 
@@ -223,6 +230,12 @@ export async function performRequestManagerApproval(
   const validated = validateManagerApprovalRequest(req);
   if (!validated.ok) return fail('invalid_target');
   const value = validated.value;
+  const delegated = value.securityModel === APPROVAL_SECURITY_MODEL_DELEGATED;
+
+  // M3b — self-approval is structural, before any approver read or bcrypt.
+  if (delegated && value.approverStaffId === staffId) {
+    return fail('self_approval_not_permitted');
+  }
 
   const userSnap = await database.collection(C.users).doc(staffId).get();
   if (!userSnap.exists) return fail('not_authorized');
@@ -230,36 +243,36 @@ export async function performRequestManagerApproval(
   const role = liveRole(user);
   const branchIds = liveBranchIds(user);
 
-  // M4
-  if (role !== 'admin' && role !== 'manager') {
-    const scopeKey = deriveAttemptScopeKey(value.branchId, staffId);
-    const attemptRef = database.collection(C.attempts).doc(scopeKey);
-    await commitAttemptFailure(database, attemptRef, value.branchId, staffId, nowMillis);
+  const failWithAttempt = async (
+    code: Extract<ManagerApprovalServerErrorCode, 'not_authorized' | 'branch_mismatch' | 'approver_not_eligible'>,
+    category: string,
+  ): Promise<RequestManagerApprovalResponse> => {
+    const attemptScopeKey = deriveAttemptScopeKey(value.branchId, staffId);
+    const failAttemptRef = database.collection(C.attempts).doc(attemptScopeKey);
+    await commitAttemptFailure(database, failAttemptRef, value.branchId, staffId, nowMillis);
     await writeAudit(database, {
       eventType: 'manager_approval_failed',
-      category: 'authorization',
+      category,
       staffId,
       branchId: value.branchId,
       commandId: value.commandId,
       nowMillis,
     });
-    return fail('not_authorized');
+    return fail(code);
+  };
+
+  // M4′ — Model 1: manager/admin. Model 2: staff requester only.
+  const requesterRoleOk = delegated ? isModel2RequesterRole(role) : role === 'admin' || role === 'manager';
+  if (!requesterRoleOk) {
+    return failWithAttempt('not_authorized', 'authorization');
   }
 
-  // M5
-  if (!hasLiveBranchAccess(branchIds, value.branchId)) {
-    const scopeKey = deriveAttemptScopeKey(value.branchId, staffId);
-    const attemptRef = database.collection(C.attempts).doc(scopeKey);
-    await commitAttemptFailure(database, attemptRef, value.branchId, staffId, nowMillis);
-    await writeAudit(database, {
-      eventType: 'manager_approval_failed',
-      category: 'authorization',
-      staffId,
-      branchId: value.branchId,
-      commandId: value.commandId,
-      nowMillis,
-    });
-    return fail('branch_mismatch');
+  // M5 — Model 1 keeps the shared ALL-admitting helper; Model 2 is exact-only.
+  const requesterBranchOk = delegated
+    ? requesterBranchEligible(branchIds, value.branchId)
+    : hasLiveBranchAccess(branchIds, value.branchId);
+  if (!requesterBranchOk) {
+    return failWithAttempt('branch_mismatch', 'authorization');
   }
 
   const scopeKey = deriveAttemptScopeKey(value.branchId, staffId);
@@ -267,7 +280,7 @@ export async function performRequestManagerApproval(
   const attemptSnap = await attemptRef.get();
   const observedAttempt = attemptViewFromData(attemptSnap.data());
 
-  // M6 — lockout before any bcrypt
+  // M6 — lockout before any bcrypt; keyed on requester only.
   if (isLockoutActive(observedAttempt?.lockedUntilMillis ?? null, nowMillis)) {
     await writeAudit(database, {
       eventType: 'manager_approval_failed',
@@ -280,8 +293,34 @@ export async function performRequestManagerApproval(
     return fail('locked');
   }
 
-  // M7 — real vs dummy selection
-  const cred = await readUserCredential(database, staffId);
+  let credentialSubjectId = staffId;
+  let mintedApproverRole = role as string;
+  let mintedApproverAuthVersion: number | undefined;
+  if (delegated) {
+    const namedApproverId = value.approverStaffId as string;
+    const approverSnap = await database.collection(C.users).doc(namedApproverId).get();
+    const approver = approverSnap.exists ? ((approverSnap.data() ?? {}) as DocumentData) : null;
+    const approverRole = approver ? liveRole(approver) : null;
+    const approverEligible =
+      approverSnap.exists &&
+      approver != null &&
+      approver.isActive === true &&
+      approver.deletedAt == null &&
+      isModel2ApproverRole(approverRole) &&
+      approverBranchEligible(approverRole, liveBranchIds(approver), value.branchId);
+    if (!approverEligible) {
+      return failWithAttempt('approver_not_eligible', 'authorization');
+    }
+    credentialSubjectId = namedApproverId;
+    mintedApproverRole = approverRole as string;
+    mintedApproverAuthVersion =
+      typeof approver!.authVersion === 'number' && Number.isFinite(approver!.authVersion)
+        ? approver!.authVersion
+        : 0;
+  }
+
+  // M7 — real vs dummy selection (caller credential for reauth, named approver for delegated)
+  const cred = await readUserCredential(database, credentialSubjectId);
   const useReal = shouldUseRealPinCompare({
     credentialExists: cred != null,
     usableForLogin: isUsableForLogin(cred),
@@ -299,14 +338,17 @@ export async function performRequestManagerApproval(
   const approvalSnap = await approvalRef.get();
   const record = approvalViewFromData(approvalSnap.exists ? approvalSnap.data() : undefined);
 
-  const expected = {
-    audience: 'resolveShiftCloseAlert' as const,
+  const expected: ApprovalBindingExpected = {
+    audience: 'resolveShiftCloseAlert',
     protectedAction: value.protectedAction,
     targetEntityId: value.targetEntityId,
     branchId: value.branchId,
     commandId: value.commandId,
     staffId,
     authVersion: liveAuthVersion,
+    ...(delegated
+      ? { approverStaffId: value.approverStaffId as string, approverAuthVersion: mintedApproverAuthVersion }
+      : {}),
   };
 
   // M9 — outcome only after compare
@@ -391,9 +433,16 @@ export async function performRequestManagerApproval(
     targetEntityId: value.targetEntityId,
     branchId: value.branchId,
     staffId,
-    approverRole: role as string,
+    approverRole: mintedApproverRole,
     authVersionAtIssue: liveAuthVersion,
     credentialVersionAtIssue,
+    ...(delegated
+      ? {
+          securityModel: APPROVAL_SECURITY_MODEL_DELEGATED,
+          approverStaffId: value.approverStaffId as string,
+          approverAuthVersionAtIssue: mintedApproverAuthVersion,
+        }
+      : {}),
   });
 
   const grantAuditId = deriveApprovalId(`manager_approval_granted:new:${value.commandId}:${nowMillis}:${staffId}`);

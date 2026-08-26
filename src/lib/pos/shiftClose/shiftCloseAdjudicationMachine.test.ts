@@ -21,6 +21,9 @@ import {
   sourceScopeBindingValid,
   startNewAdjudicationDecision,
   submitAdjudication,
+  selectApprover,
+  confirmApproverSelection,
+  returnToApproverSelection,
   updateAdjudicationDraft,
   validateAdjudicationSubmit,
   type BaseAvailabilityInput,
@@ -62,7 +65,14 @@ function makeInput(overrides: Partial<BaseAvailabilityInput> = {}): BaseAvailabi
 }
 
 const SCOPE = computeScopeKey('manager', 'BR-001', 'SHIFT-1');
+const STAFF_SCOPE = computeScopeKey('staff', 'BR-001', 'SHIFT-1');
 const TEST_APPROVAL_ID = 'appr-1';
+const APPROVER = {
+  userId: 'm1',
+  displayName: 'Somchai Manager',
+  username: 'somchai',
+  role: 'manager' as const,
+};
 
 function submitAndApprove(
   confirming: ReturnType<typeof openAdjudicationDialog>,
@@ -980,5 +990,80 @@ describe('Packet 2A reauth_required', () => {
       expect(retried.payload.approvalId).toBe(TEST_APPROVAL_ID);
       expect(retried.payload).toEqual(submitting.payload);
     }
+  });
+});
+
+describe('Packet 2 Model 2 delegated selection', () => {
+  it('staff submit enters approver_selection and does not mint a PIN step-up', () => {
+    const confirming = openAdjudicationDialog('acknowledge', makeInput(), STAFF_SCOPE);
+    const next = submitAdjudication(confirming, makeInput(), STAFF_SCOPE);
+    expect(next.status).toBe('approver_selection');
+    if (next.status === 'approver_selection') {
+      expect(next.selectedApproverId).toBeNull();
+      expect(next.commandId).toBeTruthy();
+      expect(next.payload.shiftId).toBe('SHIFT-1');
+      expect(next.payload.branchId).toBe('BR-001');
+    }
+  });
+
+  it('manager submit still skips selection and enters reauth with securityModel reauth', () => {
+    const confirming = openAdjudicationDialog('acknowledge', makeInput(), SCOPE);
+    const next = submitAdjudication(confirming, makeInput(), SCOPE);
+    expect(next.status).toBe('reauth_required');
+    if (next.status === 'reauth_required') {
+      expect(next.securityModel).toBe('reauth');
+      expect(next.approver).toBeNull();
+    }
+  });
+
+  it('confirmApproverSelection requires a matching selected id, then freezes the approver', () => {
+    const confirming = openAdjudicationDialog('acknowledge', makeInput(), STAFF_SCOPE);
+    const selecting = submitAdjudication(confirming, makeInput(), STAFF_SCOPE);
+    expect(confirmApproverSelection(selecting, APPROVER)).toBe(selecting);
+    const chosen = selectApprover(selecting, APPROVER.userId);
+    const reauth = confirmApproverSelection(chosen, APPROVER);
+    expect(reauth.status).toBe('reauth_required');
+    if (reauth.status === 'reauth_required') {
+      expect(reauth.securityModel).toBe('delegated');
+      expect(reauth.approver).toEqual(APPROVER);
+      expect(reauth.commandId).toBe(selecting.status === 'approver_selection' ? selecting.commandId : '');
+    }
+  });
+
+  it('returnToApproverSelection keeps the commandId; cancel from selection discards it', () => {
+    const confirming = updateAdjudicationDraft(openAdjudicationDialog('acknowledge', makeInput(), STAFF_SCOPE), {
+      note: 'keep-draft',
+    });
+    const selecting = submitAdjudication(confirming, makeInput(), STAFF_SCOPE);
+    const chosen = selectApprover(selecting, APPROVER.userId);
+    const reauth = confirmApproverSelection(chosen, APPROVER);
+    const back = returnToApproverSelection(reauth);
+    expect(back.status).toBe('approver_selection');
+    if (back.status === 'approver_selection' && selecting.status === 'approver_selection') {
+      expect(back.commandId).toBe(selecting.commandId);
+      expect(back.selectedApproverId).toBe('m1');
+      expect(back.note).toBe('keep-draft');
+    }
+    const cancelled = cancelReauth(selecting);
+    expect(cancelled.status).toBe('confirming');
+    const again = submitAdjudication(cancelled, makeInput(), STAFF_SCOPE);
+    if (selecting.status === 'approver_selection' && again.status === 'approver_selection') {
+      expect(again.commandId).not.toBe(selecting.commandId);
+    }
+  });
+
+  it('a scope/source break in approver_selection returns idle', () => {
+    const confirming = openAdjudicationDialog('acknowledge', makeInput(), STAFF_SCOPE);
+    const selecting = submitAdjudication(confirming, makeInput(), STAFF_SCOPE);
+    const stale = makeInput({ caseProjection: makeCaseProjection({ caseVersion: 99 }) });
+    expect(checkAdjudicationLiveInvalidation(selecting, stale, STAFF_SCOPE)).toEqual({ status: 'idle' });
+  });
+
+  it('manager cancelReauth is unchanged and does not enter approver_selection', () => {
+    const confirming = openAdjudicationDialog('acknowledge', makeInput(), SCOPE);
+    const reauth = submitAdjudication(confirming, makeInput(), SCOPE);
+    const cancelled = cancelReauth(reauth);
+    expect(cancelled.status).toBe('confirming');
+    expect(returnToApproverSelection(reauth).status).toBe('reauth_required');
   });
 });

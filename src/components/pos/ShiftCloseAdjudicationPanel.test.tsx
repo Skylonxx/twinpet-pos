@@ -9,8 +9,32 @@ import { mapShiftCloseCaseProjection } from '../../lib/pos/shiftClose/shiftClose
 import type { ResolveShiftCloseAlertAdapterRequest } from '../../lib/pos/shiftClose/resolveShiftCloseAlertAdapter';
 import type { RequestManagerApprovalTransport } from '../../lib/auth/requestManagerApproval';
 import { MANAGER_APPROVAL_ERROR_LABELS } from '../../lib/auth/managerApprovalTypes';
+import type { ApproverCandidate } from '../../lib/auth/approverEligibility';
 
-afterEach(() => cleanup());
+const { rosterState } = vi.hoisted(() => ({
+  rosterState: {
+    current: {
+      status: 'disabled' as 'disabled' | 'pending' | 'ready' | 'error',
+      fromCache: false,
+      candidates: [] as ApproverCandidate[],
+    },
+  },
+}));
+
+vi.mock('../../lib/auth/useApproverRoster', () => ({
+  useApproverRoster: () => rosterState.current,
+}));
+
+const DISABLED_ROSTER = {
+  status: 'disabled' as const,
+  fromCache: false,
+  candidates: [] as ApproverCandidate[],
+};
+
+afterEach(() => {
+  rosterState.current = { ...DISABLED_ROSTER, candidates: [] };
+  cleanup();
+});
 
 const alertRow = mapShiftCloseReviewRow('SHIFT-1', {
   shiftId: 'SHIFT-1',
@@ -1043,5 +1067,187 @@ describe('ShiftCloseAdjudicationPanel — Packet 2A reauthorization', () => {
     await confirmAcknowledgeWithPin(user);
     await waitFor(() => expect(screen.getByText('ทำรายการสำเร็จ')).toBeTruthy());
     expect(screen.queryByRole('dialog', { name: 'ยืนยันตัวตนก่อนดำเนินการ' })).toBeNull();
+  });
+});
+
+const STAFF_APPROVER: ApproverCandidate = {
+  userId: 'm1',
+  displayName: 'Somchai Manager',
+  username: 'somchai',
+  role: 'manager',
+};
+
+function setRoster(over: Partial<typeof rosterState.current>) {
+  rosterState.current = {
+    status: 'ready',
+    fromCache: false,
+    candidates: [STAFF_APPROVER],
+    ...over,
+  };
+}
+
+async function openStaffAcknowledgePicker(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('button', { name: 'รับทราบ' }));
+  const confirmButtons = screen.getAllByRole('button', { name: 'รับทราบ' });
+  await user.click(confirmButtons[confirmButtons.length - 1]);
+}
+
+describe('ShiftCloseAdjudicationPanel — Packet 2 Model 2 delegated', () => {
+  test('staff confirm opens the approver picker, not the PIN modal', async () => {
+    const user = userEvent.setup();
+    setRoster({});
+    render(<ShiftCloseAdjudicationPanel {...baseProps({ role: 'staff', requesterStaffId: 's1' })} />);
+    await openStaffAcknowledgePicker(user);
+    expect(await screen.findByLabelText('เลือกผู้อนุมัติ')).toBeTruthy();
+    expect(screen.queryByRole('dialog', { name: 'ยืนยันตัวตนก่อนดำเนินการ' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'ดำเนินการต่อ' })).toBeTruthy();
+  });
+
+  test('manager flow still skips the picker and opens the same-principal PIN modal', async () => {
+    const user = userEvent.setup();
+    setRoster({});
+    render(<ShiftCloseAdjudicationPanel {...baseProps()} />);
+    await user.click(screen.getByRole('button', { name: 'รับทราบ' }));
+    const confirmButtons = screen.getAllByRole('button', { name: 'รับทราบ' });
+    await user.click(confirmButtons[confirmButtons.length - 1]);
+    expect(await screen.findByRole('dialog', { name: 'ยืนยันตัวตนก่อนดำเนินการ' })).toBeTruthy();
+    expect(screen.queryByLabelText('เลือกผู้อนุมัติ')).toBeNull();
+  });
+
+  test('confirmed-empty roster shows no_eligible_approver and never opens PIN', async () => {
+    const user = userEvent.setup();
+    const approvalTransport = vi.fn();
+    setRoster({ candidates: [], fromCache: false, status: 'ready' });
+    render(
+      <ShiftCloseAdjudicationPanel
+        {...baseProps({ role: 'staff', requesterStaffId: 's1', approvalTransport })}
+      />,
+    );
+    await openStaffAcknowledgePicker(user);
+    expect(await screen.findByText(MANAGER_APPROVAL_ERROR_LABELS.no_eligible_approver)).toBeTruthy();
+    expect(screen.queryByRole('dialog', { name: 'ยืนยันตัวตนก่อนดำเนินการ' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: /ยืนยันโดย/ })).toBeNull();
+    expect((screen.getByRole('button', { name: 'ดำเนินการต่อ' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(approvalTransport).not.toHaveBeenCalled();
+  });
+
+  test('cache-only empty roster does not confirm empty and does not open PIN', async () => {
+    const user = userEvent.setup();
+    const approvalTransport = vi.fn();
+    setRoster({ candidates: [], fromCache: true, status: 'ready' });
+    render(
+      <ShiftCloseAdjudicationPanel
+        {...baseProps({ role: 'staff', requesterStaffId: 's1', approvalTransport })}
+      />,
+    );
+    await openStaffAcknowledgePicker(user);
+    expect(await screen.findByText(/กำลังยืนยันรายชื่อผู้อนุมัติกับเซิร์ฟเวอร์/)).toBeTruthy();
+    expect(screen.queryByText(MANAGER_APPROVAL_ERROR_LABELS.no_eligible_approver)).toBeNull();
+    expect(screen.queryByRole('dialog', { name: /ยืนยันโดย/ })).toBeNull();
+    expect((screen.getByRole('button', { name: 'ดำเนินการต่อ' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(approvalTransport).not.toHaveBeenCalled();
+  });
+
+  test('selected approver is named in the PIN modal and mint carries delegated fields', async () => {
+    const user = userEvent.setup();
+    const approvalTransport = vi.fn().mockResolvedValue({
+      ok: true,
+      approvalId: 'appr-d1',
+      expiresAtMillis: Date.now() + 120_000,
+    });
+    const transport = vi.fn().mockImplementation((req: ResolveShiftCloseAlertAdapterRequest) =>
+      Promise.resolve({
+        ok: true,
+        commandId: req.commandId,
+        shiftId: req.shiftId,
+        status: 'confirmed',
+      }),
+    );
+    setRoster({});
+    render(
+      <ShiftCloseAdjudicationPanel
+        {...baseProps({
+          role: 'staff',
+          requesterStaffId: 's1',
+          approvalTransport,
+          transport,
+        })}
+      />,
+    );
+    await openStaffAcknowledgePicker(user);
+    await user.selectOptions(screen.getByLabelText('เลือกผู้อนุมัติ'), 'm1');
+    await user.click(screen.getByRole('button', { name: 'ดำเนินการต่อ' }));
+    const pinDialog = await screen.findByRole('dialog', { name: 'ยืนยันโดย Somchai Manager' });
+    expect(pinDialog.getAttribute('aria-label')).toBe('ยืนยันโดย Somchai Manager');
+    expect(within(pinDialog).getByText(/กรุณาให้ Somchai Manager ใส่ PIN/)).toBeTruthy();
+    for (const d of '1234') {
+      await user.click(within(pinDialog).getByRole('button', { name: d }));
+    }
+    await user.click(within(pinDialog).getByRole('button', { name: 'ยืนยัน' }));
+    await waitFor(() => expect(approvalTransport).toHaveBeenCalledTimes(1));
+    expect(approvalTransport.mock.calls[0][0]).toMatchObject({
+      securityModel: 'delegated',
+      approverStaffId: 'm1',
+      branchId: 'BR-001',
+      protectedAction: 'shift_close_alert_acknowledge',
+    });
+    expect(approvalTransport.mock.calls[0][0].pin).toBe('1234');
+    await waitFor(() => expect(screen.getByText('ทำรายการสำเร็จ')).toBeTruthy());
+    expect(transport).toHaveBeenCalledTimes(1);
+  });
+
+  test('offline after approver confirm sends zero approval requests', async () => {
+    const user = userEvent.setup();
+    const approvalTransport = vi.fn();
+    setRoster({});
+    render(
+      <ShiftCloseAdjudicationPanel
+        {...baseProps({
+          role: 'staff',
+          requesterStaffId: 's1',
+          approvalTransport,
+          isOnline: () => false,
+        })}
+      />,
+    );
+    await openStaffAcknowledgePicker(user);
+    await user.selectOptions(screen.getByLabelText('เลือกผู้อนุมัติ'), 'm1');
+    await user.click(screen.getByRole('button', { name: 'ดำเนินการต่อ' }));
+    const pinDialog = await screen.findByRole('dialog', { name: 'ยืนยันโดย Somchai Manager' });
+    for (const d of '1234') {
+      await user.click(within(pinDialog).getByRole('button', { name: d }));
+    }
+    await user.click(within(pinDialog).getByRole('button', { name: 'ยืนยัน' }));
+    await waitFor(() => expect(screen.getByText(MANAGER_APPROVAL_ERROR_LABELS.offline)).toBeTruthy());
+    expect(approvalTransport).not.toHaveBeenCalled();
+  });
+
+  test('approver_not_eligible returns to the picker without consuming', async () => {
+    const user = userEvent.setup();
+    const approvalTransport = vi.fn().mockResolvedValue({ ok: false, code: 'approver_not_eligible' });
+    const transport = vi.fn();
+    setRoster({});
+    render(
+      <ShiftCloseAdjudicationPanel
+        {...baseProps({
+          role: 'staff',
+          requesterStaffId: 's1',
+          approvalTransport,
+          transport,
+        })}
+      />,
+    );
+    await openStaffAcknowledgePicker(user);
+    await user.selectOptions(screen.getByLabelText('เลือกผู้อนุมัติ'), 'm1');
+    await user.click(screen.getByRole('button', { name: 'ดำเนินการต่อ' }));
+    const pinDialog = await screen.findByRole('dialog', { name: 'ยืนยันโดย Somchai Manager' });
+    for (const d of '1234') {
+      await user.click(within(pinDialog).getByRole('button', { name: d }));
+    }
+    await user.click(within(pinDialog).getByRole('button', { name: 'ยืนยัน' }));
+    await waitFor(() => expect(screen.getByText(MANAGER_APPROVAL_ERROR_LABELS.approver_not_eligible)).toBeTruthy());
+    expect(await screen.findByLabelText('เลือกผู้อนุมัติ')).toBeTruthy();
+    expect(screen.queryByRole('dialog', { name: 'ยืนยันโดย Somchai Manager' })).toBeNull();
+    expect(transport).not.toHaveBeenCalled();
   });
 });

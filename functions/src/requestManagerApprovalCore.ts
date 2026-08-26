@@ -11,11 +11,44 @@ import { sha256Hex } from './shiftCloseValidationHash';
 
 export const APPROVAL_SCHEMA_VERSION = 1;
 export const APPROVAL_AUDIENCE = 'resolveShiftCloseAlert';
-export const APPROVAL_SECURITY_MODEL = 'reauth';
+export const APPROVAL_SECURITY_MODELS = ['reauth', 'delegated'] as const;
+export type ApprovalSecurityModel = (typeof APPROVAL_SECURITY_MODELS)[number];
+export const APPROVAL_SECURITY_MODEL: 'reauth' = 'reauth';
+export const APPROVAL_SECURITY_MODEL_DELEGATED: 'delegated' = 'delegated';
+export const MODEL2_REQUESTER_ROLES = ['staff'] as const;
+export const MODEL2_APPROVER_ROLES = ['manager', 'admin'] as const;
 export const APPROVAL_TTL_MS = 120_000;
 export const LOCKOUT_THRESHOLD = 5;
 export const LOCKOUT_WINDOW_MS = 900_000;
 export const ATTEMPTS_SCHEMA_VERSION = 1;
+
+export function isApprovalSecurityModel(value: unknown): value is ApprovalSecurityModel {
+  return value === 'reauth' || value === 'delegated';
+}
+
+export function isModel2RequesterRole(role: string | null | undefined): boolean {
+  return role === 'staff';
+}
+
+export function isModel2ApproverRole(role: string | null | undefined): boolean {
+  return role === 'manager' || role === 'admin';
+}
+
+/** Staff requester: exact physical branch only. Never admits token `ALL`. */
+export function requesterBranchEligible(liveBranchIds: readonly string[], branchId: string): boolean {
+  return liveBranchIds.includes(branchId);
+}
+
+/** Manager: exact branch only. Admin: exact branch OR live `ALL`. */
+export function approverBranchEligible(
+  role: string | null | undefined,
+  liveBranchIds: readonly string[],
+  branchId: string,
+): boolean {
+  if (role === 'manager') return liveBranchIds.includes(branchId);
+  if (role === 'admin') return liveBranchIds.includes('ALL') || liveBranchIds.includes(branchId);
+  return false;
+}
 
 export const PROTECTED_ACTIONS = [
   'shift_close_alert_acknowledge',
@@ -31,7 +64,9 @@ export type ManagerApprovalServerErrorCode =
   | 'invalid_target'
   | 'locked'
   | 'expired_approval'
-  | 'replayed_approval';
+  | 'replayed_approval'
+  | 'self_approval_not_permitted'
+  | 'approver_not_eligible';
 
 export type AdjudicationOutcome = 'acknowledge' | 'resolve';
 
@@ -41,6 +76,8 @@ export interface RequestManagerApprovalRequest {
   targetEntityId?: string;
   branchId?: string;
   pin?: string;
+  securityModel?: string;
+  approverStaffId?: string;
 }
 
 export interface ValidatedManagerApprovalRequest {
@@ -49,6 +86,8 @@ export interface ValidatedManagerApprovalRequest {
   targetEntityId: string;
   branchId: string;
   pin: string;
+  securityModel: ApprovalSecurityModel;
+  approverStaffId: string | null;
 }
 
 export type StructuralValidationResult =
@@ -63,6 +102,10 @@ export interface ApprovalBindingExpected {
   commandId: string;
   staffId: string;
   authVersion: number;
+  /** Mint-only Model 2 expected approver. Omit at consume. */
+  approverStaffId?: string;
+  /** Mint-only Model 2 expected approver authVersion. Omit at consume. */
+  approverAuthVersion?: number;
 }
 
 export interface ApprovalRecordView {
@@ -79,6 +122,7 @@ export interface ApprovalRecordView {
   credentialVersionAtIssue: unknown;
   consumedAt: unknown;
   expiresAtMillis: number | null;
+  approverAuthVersionAtIssue?: unknown;
 }
 
 export type MintOutcomeKind =
@@ -113,9 +157,11 @@ export interface ApprovalDocumentFields {
   approverStaffId: string;
   executorStaffId: string;
   approverRole: string;
-  securityModel: typeof APPROVAL_SECURITY_MODEL;
+  securityModel: ApprovalSecurityModel;
   authVersionAtIssue: number;
   credentialVersionAtIssue: number;
+  /** Model-2-only. Absent on reauth documents. */
+  approverAuthVersionAtIssue?: number;
   consumedAt: null;
   consumedByStaffId: null;
   consumingAudience: null;
@@ -152,15 +198,32 @@ export function validateManagerApprovalRequest(req: RequestManagerApprovalReques
   const targetEntityId = String(req.targetEntityId ?? '').trim();
   const branchId = String(req.branchId ?? '').trim();
   const pin = typeof req.pin === 'string' ? req.pin : '';
+  const rawModel = req.securityModel;
 
   if (!commandId) return { ok: false, code: 'invalid_target' };
   if (!isProtectedAction(protectedAction)) return { ok: false, code: 'invalid_target' };
   if (!targetEntityId) return { ok: false, code: 'invalid_target' };
   if (!branchId || branchId === 'ALL') return { ok: false, code: 'invalid_target' };
 
+  let securityModel: ApprovalSecurityModel;
+  if (rawModel === undefined || rawModel === null || rawModel === '') {
+    securityModel = APPROVAL_SECURITY_MODEL;
+  } else if (isApprovalSecurityModel(rawModel)) {
+    securityModel = rawModel;
+  } else {
+    return { ok: false, code: 'invalid_target' };
+  }
+
+  let approverStaffId: string | null = null;
+  if (securityModel === APPROVAL_SECURITY_MODEL_DELEGATED) {
+    const trimmed = String(req.approverStaffId ?? '').trim();
+    if (!trimmed) return { ok: false, code: 'invalid_target' };
+    approverStaffId = trimmed;
+  }
+
   return {
     ok: true,
-    value: { commandId, protectedAction, targetEntityId, branchId, pin },
+    value: { commandId, protectedAction, targetEntityId, branchId, pin, securityModel, approverStaffId },
   };
 }
 
@@ -236,19 +299,44 @@ export function checkApprovalBinding(
   record: ApprovalRecordView,
   expected: ApprovalBindingExpected,
 ): boolean {
-  if (record.audience !== expected.audience) return false;
-  if (record.protectedAction !== expected.protectedAction) return false;
-  if (record.targetEntityId !== expected.targetEntityId) return false;
-  if (record.branchId !== expected.branchId) return false;
-  if (record.commandId !== expected.commandId) return false;
-  if (record.requesterStaffId !== expected.staffId) return false;
-  if (record.approverStaffId !== expected.staffId) return false;
-  if (record.executorStaffId !== expected.staffId) return false;
-  if (record.requesterStaffId !== record.approverStaffId) return false;
-  if (record.approverStaffId !== record.executorStaffId) return false;
-  if (record.securityModel !== APPROVAL_SECURITY_MODEL) return false;
-  if (record.authVersionAtIssue !== expected.authVersion) return false;
-  return true;
+  if (record.securityModel === APPROVAL_SECURITY_MODEL) {
+    if (record.audience !== expected.audience) return false;
+    if (record.protectedAction !== expected.protectedAction) return false;
+    if (record.targetEntityId !== expected.targetEntityId) return false;
+    if (record.branchId !== expected.branchId) return false;
+    if (record.commandId !== expected.commandId) return false;
+    if (record.requesterStaffId !== expected.staffId) return false;
+    if (record.approverStaffId !== expected.staffId) return false;
+    if (record.executorStaffId !== expected.staffId) return false;
+    if (record.requesterStaffId !== record.approverStaffId) return false;
+    if (record.approverStaffId !== record.executorStaffId) return false;
+    if (record.securityModel !== APPROVAL_SECURITY_MODEL) return false;
+    if (record.authVersionAtIssue !== expected.authVersion) return false;
+    return true;
+  }
+  if (record.securityModel === APPROVAL_SECURITY_MODEL_DELEGATED) {
+    if (record.audience !== expected.audience) return false;
+    if (record.protectedAction !== expected.protectedAction) return false;
+    if (record.targetEntityId !== expected.targetEntityId) return false;
+    if (record.branchId !== expected.branchId) return false;
+    if (record.commandId !== expected.commandId) return false;
+    if (record.requesterStaffId !== expected.staffId) return false;
+    if (typeof record.approverStaffId !== 'string' || record.approverStaffId.length === 0) return false;
+    if (record.executorStaffId !== expected.staffId) return false;
+    if (record.requesterStaffId === record.approverStaffId) return false;
+    if (record.executorStaffId !== record.requesterStaffId) return false;
+    if (record.securityModel !== APPROVAL_SECURITY_MODEL_DELEGATED) return false;
+    if (record.authVersionAtIssue !== expected.authVersion) return false;
+    if (expected.approverStaffId !== undefined && record.approverStaffId !== expected.approverStaffId) return false;
+    if (
+      expected.approverAuthVersion !== undefined &&
+      record.approverAuthVersionAtIssue !== expected.approverAuthVersion
+    ) {
+      return false;
+    }
+    return true;
+  }
+  return false;
 }
 
 export function selectMintOutcome(
@@ -274,19 +362,26 @@ export function buildApprovalDocument(params: {
   approverRole: string;
   authVersionAtIssue: number;
   credentialVersionAtIssue: number;
+  securityModel?: ApprovalSecurityModel;
+  approverStaffId?: string;
+  approverAuthVersionAtIssue?: number;
 }): ApprovalDocumentFields {
-  return {
+  const securityModel = params.securityModel ?? APPROVAL_SECURITY_MODEL;
+  const requesterStaffId = params.staffId;
+  const approverStaffId =
+    securityModel === APPROVAL_SECURITY_MODEL_DELEGATED ? (params.approverStaffId ?? '') : params.staffId;
+  const fields: ApprovalDocumentFields = {
     schemaVersion: APPROVAL_SCHEMA_VERSION,
     audience: APPROVAL_AUDIENCE,
     protectedAction: params.protectedAction,
     targetEntityId: params.targetEntityId,
     branchId: params.branchId,
     commandId: params.commandId,
-    requesterStaffId: params.staffId,
-    approverStaffId: params.staffId,
-    executorStaffId: params.staffId,
+    requesterStaffId,
+    approverStaffId,
+    executorStaffId: requesterStaffId,
     approverRole: params.approverRole,
-    securityModel: APPROVAL_SECURITY_MODEL,
+    securityModel,
     authVersionAtIssue: params.authVersionAtIssue,
     credentialVersionAtIssue: params.credentialVersionAtIssue,
     consumedAt: null,
@@ -294,6 +389,10 @@ export function buildApprovalDocument(params: {
     consumingAudience: null,
     consumedCaseVersion: null,
   };
+  if (securityModel === APPROVAL_SECURITY_MODEL_DELEGATED) {
+    fields.approverAuthVersionAtIssue = params.approverAuthVersionAtIssue ?? 0;
+  }
+  return fields;
 }
 
 export function approvalDocHasPinAdjacentField(doc: Record<string, unknown>): boolean {

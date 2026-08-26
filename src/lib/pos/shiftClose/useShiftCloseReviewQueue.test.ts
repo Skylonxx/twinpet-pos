@@ -78,11 +78,24 @@ describe('useShiftCloseReviewQueue — query contract', () => {
 });
 
 describe('useShiftCloseReviewQueue — gate', () => {
-  test('gate false (non-manager/admin) → onSnapshot is never called', () => {
+  test('gate true (staff + concrete branch) → onSnapshot starts; status is pending', () => {
     const { result } = renderHook(() => useShiftCloseReviewQueue('staff', 'BR-001'));
-    expect(onSnapshotSpy).not.toHaveBeenCalled();
-    expect(result.current.status).toBe('disabled');
-    expect(result.current.loading).toBe(false);
+    expect(onSnapshotSpy).toHaveBeenCalledTimes(1);
+    expect(collectionSpy).toHaveBeenCalledWith(expect.anything(), 'shiftCloseAlerts');
+    expect(whereSpy).toHaveBeenCalledWith('branchId', '==', 'BR-001');
+    expect(result.current.status).toBe('pending');
+    expect(result.current.loading).toBe(true);
+  });
+
+  test('gate false (cashier / null / undefined / unknown role) → onSnapshot is never called', () => {
+    for (const role of ['cashier', null, undefined, 'some-unknown-role'] as const) {
+      onSnapshotSpy.mockClear();
+      const { result, unmount } = renderHook(() => useShiftCloseReviewQueue(role, 'BR-001'));
+      expect(onSnapshotSpy).not.toHaveBeenCalled();
+      expect(result.current.status).toBe('disabled');
+      expect(result.current.loading).toBe(false);
+      unmount();
+    }
   });
 
   test('gate false (branchId ALL) → onSnapshot is never called', () => {

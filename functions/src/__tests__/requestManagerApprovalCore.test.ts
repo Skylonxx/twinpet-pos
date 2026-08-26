@@ -3,19 +3,24 @@ import {
   APPROVAL_AUDIENCE,
   APPROVAL_SCHEMA_VERSION,
   APPROVAL_SECURITY_MODEL,
+  APPROVAL_SECURITY_MODEL_DELEGATED,
   APPROVAL_TTL_MS,
   LOCKOUT_THRESHOLD,
   LOCKOUT_WINDOW_MS,
+  MODEL2_REQUESTER_ROLES,
   PROTECTED_ACTIONS,
   approvalDocHasPinAdjacentField,
+  approverBranchEligible,
   buildApprovalDocument,
   checkApprovalBinding,
   deriveApprovalId,
   deriveAttemptScopeKey,
   expectedActionFor,
+  isApprovalSecurityModel,
   isLockoutActive,
   isProtectedAction,
   nextFailureAttemptState,
+  requesterBranchEligible,
   resetAttemptState,
   selectMintOutcome,
   shouldApplyAttemptReset,
@@ -90,7 +95,10 @@ describe('validateManagerApprovalRequest', () => {
 
   test('accepts a well-formed request', () => {
     const res = validateManagerApprovalRequest(base);
-    expect(res).toEqual({ ok: true, value: base });
+    expect(res).toEqual({
+      ok: true,
+      value: { ...base, securityModel: 'reauth', approverStaffId: null },
+    });
   });
 
   test('refuses branchId ALL', () => {
@@ -109,6 +117,41 @@ describe('validateManagerApprovalRequest', () => {
     expect(validateManagerApprovalRequest({ ...base, ...patch })).toEqual({
       ok: false,
       code: 'invalid_target',
+    });
+  });
+
+  test('old client without securityModel defaults to reauth', () => {
+    const res = validateManagerApprovalRequest(base);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.value.securityModel).toBe(APPROVAL_SECURITY_MODEL);
+      expect(res.value.approverStaffId).toBeNull();
+    }
+  });
+
+  test('unknown securityModel fails closed', () => {
+    expect(validateManagerApprovalRequest({ ...base, securityModel: 'break-glass' })).toEqual({
+      ok: false,
+      code: 'invalid_target',
+    });
+  });
+
+  test('delegated requires a non-empty approverStaffId', () => {
+    expect(
+      validateManagerApprovalRequest({ ...base, securityModel: APPROVAL_SECURITY_MODEL_DELEGATED }),
+    ).toEqual({ ok: false, code: 'invalid_target' });
+    const ok = validateManagerApprovalRequest({
+      ...base,
+      securityModel: APPROVAL_SECURITY_MODEL_DELEGATED,
+      approverStaffId: 'm2',
+    });
+    expect(ok).toEqual({
+      ok: true,
+      value: {
+        ...base,
+        securityModel: APPROVAL_SECURITY_MODEL_DELEGATED,
+        approverStaffId: 'm2',
+      },
     });
   });
 });
@@ -295,5 +338,127 @@ describe('selectMintOutcome — after compare only', () => {
     expect(selectMintOutcome(true, { ...bound, consumedAt: 1 }, expected, 1_000)).toBe('replayed_approval');
     expect(selectMintOutcome(true, { ...bound, expiresAtMillis: 1_000 }, expected, 1_000)).toBe('expired_approval');
     expect(selectMintOutcome(true, { ...bound, branchId: 'B2' }, expected, 1_000)).toBe('invalid_target');
+  });
+});
+
+describe('closed securityModel union and Model 2 binding', () => {
+  test('APPROVAL_SECURITY_MODEL remains reauth and the union is closed', () => {
+    expect(APPROVAL_SECURITY_MODEL).toBe('reauth');
+    expect(APPROVAL_SECURITY_MODEL_DELEGATED).toBe('delegated');
+    expect(isApprovalSecurityModel('reauth')).toBe(true);
+    expect(isApprovalSecurityModel('delegated')).toBe(true);
+    expect(isApprovalSecurityModel('other')).toBe(false);
+    expect([...MODEL2_REQUESTER_ROLES]).toEqual(['staff']);
+  });
+
+  test('buildApprovalDocument reauth output stays byte-identical and omits approverAuthVersionAtIssue', () => {
+    const doc = buildApprovalDocument({
+      commandId: 'cmd-1',
+      protectedAction: 'shift_close_alert_acknowledge',
+      targetEntityId: 'S1',
+      branchId: 'B1',
+      staffId: 'm1',
+      approverRole: 'manager',
+      authVersionAtIssue: 0,
+      credentialVersionAtIssue: 1,
+    });
+    expect(doc.securityModel).toBe(APPROVAL_SECURITY_MODEL);
+    expect(Object.prototype.hasOwnProperty.call(doc, 'approverAuthVersionAtIssue')).toBe(false);
+    expect(approvalDocHasPinAdjacentField(doc as unknown as Record<string, unknown>)).toBe(false);
+  });
+
+  test('buildApprovalDocument delegated enforces executor === requester internally', () => {
+    const doc = buildApprovalDocument({
+      commandId: 'cmd-1',
+      protectedAction: 'shift_close_alert_acknowledge',
+      targetEntityId: 'S1',
+      branchId: 'B1',
+      staffId: 's1',
+      approverRole: 'manager',
+      authVersionAtIssue: 3,
+      credentialVersionAtIssue: 2,
+      securityModel: APPROVAL_SECURITY_MODEL_DELEGATED,
+      approverStaffId: 'm2',
+      approverAuthVersionAtIssue: 4,
+    });
+    expect(doc.requesterStaffId).toBe('s1');
+    expect(doc.approverStaffId).toBe('m2');
+    expect(doc.executorStaffId).toBe('s1');
+    expect(doc.securityModel).toBe(APPROVAL_SECURITY_MODEL_DELEGATED);
+    expect(doc.approverAuthVersionAtIssue).toBe(4);
+  });
+
+  const delegatedRecord: ApprovalRecordView = {
+    audience: APPROVAL_AUDIENCE,
+    protectedAction: 'shift_close_alert_acknowledge',
+    targetEntityId: 'S1',
+    branchId: 'B1',
+    commandId: 'cmd-1',
+    requesterStaffId: 's1',
+    approverStaffId: 'm2',
+    executorStaffId: 's1',
+    securityModel: APPROVAL_SECURITY_MODEL_DELEGATED,
+    authVersionAtIssue: 3,
+    credentialVersionAtIssue: 2,
+    consumedAt: null,
+    expiresAtMillis: 2_000,
+    approverAuthVersionAtIssue: 4,
+  };
+  const delegatedExpected: ApprovalBindingExpected = {
+    audience: APPROVAL_AUDIENCE,
+    protectedAction: 'shift_close_alert_acknowledge',
+    targetEntityId: 'S1',
+    branchId: 'B1',
+    commandId: 'cmd-1',
+    staffId: 's1',
+    authVersion: 3,
+    approverStaffId: 'm2',
+    approverAuthVersion: 4,
+  };
+
+  test('delegated mint binding accepts requester !== approver and executor === requester', () => {
+    expect(checkApprovalBinding(delegatedRecord, delegatedExpected)).toBe(true);
+  });
+
+  test('delegated consume binding does not require mint-only expected approver fields', () => {
+    const consumeExpected: ApprovalBindingExpected = {
+      audience: APPROVAL_AUDIENCE,
+      protectedAction: 'shift_close_alert_acknowledge',
+      targetEntityId: 'S1',
+      branchId: 'B1',
+      commandId: 'cmd-1',
+      staffId: 's1',
+      authVersion: 3,
+    };
+    expect(checkApprovalBinding(delegatedRecord, consumeExpected)).toBe(true);
+  });
+
+  test('unknown persisted securityModel fails closed', () => {
+    expect(checkApprovalBinding({ ...bound, securityModel: 'break-glass' }, expected)).toBe(false);
+    expect(checkApprovalBinding({ ...delegatedRecord, securityModel: 'break-glass' }, delegatedExpected)).toBe(false);
+  });
+
+  test('delegated self-approval shape fails binding', () => {
+    expect(
+      checkApprovalBinding({ ...delegatedRecord, approverStaffId: 's1', executorStaffId: 's1' }, delegatedExpected),
+    ).toBe(false);
+  });
+});
+
+describe('branch eligibility predicates', () => {
+  test('requester is exact membership only — ALL never widens', () => {
+    expect(requesterBranchEligible(['B1'], 'B1')).toBe(true);
+    expect(requesterBranchEligible(['B1'], 'B2')).toBe(false);
+    expect(requesterBranchEligible(['ALL'], 'B1')).toBe(false);
+  });
+
+  test('manager approver is exact; admin admits ALL or exact', () => {
+    expect(approverBranchEligible('manager', ['B1'], 'B1')).toBe(true);
+    expect(approverBranchEligible('manager', ['B1'], 'B2')).toBe(false);
+    expect(approverBranchEligible('manager', ['ALL'], 'B1')).toBe(false);
+    expect(approverBranchEligible('admin', ['ALL'], 'B1')).toBe(true);
+    expect(approverBranchEligible('admin', ['B1'], 'B1')).toBe(true);
+    expect(approverBranchEligible('admin', ['B2'], 'B1')).toBe(false);
+    expect(approverBranchEligible('staff', ['B1'], 'B1')).toBe(false);
   });
 });

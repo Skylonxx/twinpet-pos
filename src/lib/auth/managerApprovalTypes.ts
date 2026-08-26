@@ -11,6 +11,8 @@ export const PROTECTED_ACTIONS = [
 
 export type ProtectedAction = (typeof PROTECTED_ACTIONS)[number];
 
+export type ApprovalSecurityModel = 'reauth' | 'delegated';
+
 export type ManagerApprovalErrorCode =
   | 'invalid_credentials'
   | 'not_authorized'
@@ -19,6 +21,9 @@ export type ManagerApprovalErrorCode =
   | 'locked'
   | 'expired_approval'
   | 'replayed_approval'
+  | 'self_approval_not_permitted'
+  | 'approver_not_eligible'
+  | 'no_eligible_approver'
   | 'offline'
   | 'verifier_unavailable';
 
@@ -28,6 +33,8 @@ export interface RequestManagerApprovalClientRequest {
   targetEntityId: string;
   branchId: string;
   pin: string;
+  securityModel?: ApprovalSecurityModel;
+  approverStaffId?: string;
 }
 
 export type RequestManagerApprovalClientSuccess = {
@@ -53,6 +60,9 @@ export const MANAGER_APPROVAL_ERROR_LABELS: Record<ManagerApprovalErrorCode, str
   locked: 'ถูกล็อกชั่วคราว กรุณาติดต่อผู้ดูแล',
   expired_approval: 'การอนุมัติหมดอายุ กรุณาขออนุมัติใหม่',
   replayed_approval: 'การอนุมัตินี้ถูกใช้ไปแล้ว',
+  self_approval_not_permitted: 'ผู้ขออนุมัติและผู้อนุมัติต้องไม่ใช่คนเดียวกัน',
+  approver_not_eligible: 'ผู้อนุมัติที่เลือกไม่มีสิทธิ์อนุมัติรายการนี้',
+  no_eligible_approver: 'ไม่มีผู้อนุมัติที่มีสิทธิ์ในสาขานี้ ไม่สามารถดำเนินการได้',
   offline: 'ออฟไลน์ — ขออนุมัติไม่ได้ตอนนี้ ไม่มีคำขอถูกส่ง',
   verifier_unavailable: 'ระบบอนุมัติไม่ตอบสนอง กรุณาลองใหม่',
 };

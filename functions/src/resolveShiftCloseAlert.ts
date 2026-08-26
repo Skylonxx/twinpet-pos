@@ -43,7 +43,16 @@ import {
 } from './resolveShiftCloseAlertCore';
 import { evaluateFreshPrivilegedAuthority } from './authorityFence';
 import { isUsableForLogin, readUserCredential } from './credentialStore';
-import { APPROVAL_AUDIENCE, type ApprovalBindingExpected } from './requestManagerApprovalCore';
+import {
+  APPROVAL_AUDIENCE,
+  APPROVAL_SECURITY_MODEL,
+  APPROVAL_SECURITY_MODEL_DELEGATED,
+  approverBranchEligible,
+  isModel2ApproverRole,
+  isModel2RequesterRole,
+  requesterBranchEligible,
+  type ApprovalBindingExpected,
+} from './requestManagerApprovalCore';
 
 const C = {
   cases: 'shiftCloseCases',
@@ -110,6 +119,7 @@ function approvalViewFromData(data: DocumentData | undefined): ApprovalRecordVie
     credentialVersionAtIssue: data.credentialVersionAtIssue,
     consumedAt: data.consumedAt ?? null,
     expiresAtMillis: toMillis(data.expiresAt),
+    approverAuthVersionAtIssue: data.approverAuthVersionAtIssue,
   };
 }
 
@@ -155,7 +165,7 @@ export async function performResolveShiftCloseAlert(
   }
   const value: ValidatedAdjudicationRequest = validated.value;
 
-  const authority = checkAdjudicationAuthority(auth, value.branchId, true);
+  const authority = checkAdjudicationAuthority(auth, value.branchId, true, true);
   if (authority.rejectCode) {
     return reject(value.commandId, value.shiftId, authority.rejectCode, 'ไม่มีสิทธิ์ดำเนินการ');
   }
@@ -192,7 +202,7 @@ export async function performResolveShiftCloseAlert(
         );
       }
 
-      // R2 approval, R3 live user, R4 live credential, R5 case/alert
+      // R2 approval, R3 live caller, then model-discriminated credential + case/alert.
       const approvalRef = database.collection(C.approvals).doc(value.approvalId);
       const userRef = database.collection(C.users).doc(managerUid);
       const caseRef = database.collection(C.cases).doc(value.shiftId);
@@ -200,10 +210,8 @@ export async function performResolveShiftCloseAlert(
 
       const approvalSnap = await tx.get(approvalRef);
       const userSnap = await tx.get(userRef);
-      const cred = await readUserCredential(database, managerUid, tx);
-      const [caseSnap, alertSnap] = await Promise.all([tx.get(caseRef), tx.get(alertRef)]);
 
-      // C1–C4 live user (document, never token)
+      // C1–C2 live caller (document, never token)
       if (!userSnap.exists) {
         return reject(value.commandId, value.shiftId, 'unauthorized', 'ไม่มีสิทธิ์ดำเนินการ');
       }
@@ -220,21 +228,73 @@ export async function performResolveShiftCloseAlert(
       if (liveAuthVersion !== tokenAuthVersion) {
         return reject(value.commandId, value.shiftId, 'unauthorized', 'ไม่มีสิทธิ์ดำเนินการ');
       }
-      const role = liveRole(liveUser);
-      if (role !== 'admin' && role !== 'manager') {
-        return reject(value.commandId, value.shiftId, 'unauthorized', 'ไม่มีสิทธิ์ดำเนินการ');
-      }
-      if (!hasLiveBranchAccess(liveBranchIds(liveUser), value.branchId)) {
-        return reject(value.commandId, value.shiftId, 'unauthorized', 'ไม่มีสิทธิ์ดำเนินการ');
-      }
-
-      // C5–C6 credential
-      if (!isUsableForLogin(cred) || cred.credentialState !== 'rotated_authoritative') {
-        return reject(value.commandId, value.shiftId, 'invalid_pin', 'ต้องยืนยัน PIN ใหม่ก่อนดำเนินการ');
-      }
 
       const approval = approvalViewFromData(approvalSnap.exists ? approvalSnap.data() : undefined);
       if (!approval) {
+        return reject(value.commandId, value.shiftId, 'invalid_pin', 'ต้องยืนยัน PIN ใหม่ก่อนดำเนินการ');
+      }
+
+      const role = liveRole(liveUser);
+      let credentialSubjectId = managerUid;
+      let projectionManagerUid = managerUid;
+
+      if (approval.securityModel === APPROVAL_SECURITY_MODEL) {
+        if (role !== 'admin' && role !== 'manager') {
+          return reject(value.commandId, value.shiftId, 'unauthorized', 'ไม่มีสิทธิ์ดำเนินการ');
+        }
+        if (!hasLiveBranchAccess(liveBranchIds(liveUser), value.branchId)) {
+          return reject(value.commandId, value.shiftId, 'unauthorized', 'ไม่มีสิทธิ์ดำเนินการ');
+        }
+      } else if (approval.securityModel === APPROVAL_SECURITY_MODEL_DELEGATED) {
+        if (!isModel2RequesterRole(role)) {
+          return reject(value.commandId, value.shiftId, 'unauthorized', 'ไม่มีสิทธิ์ดำเนินการ');
+        }
+        if (!requesterBranchEligible(liveBranchIds(liveUser), value.branchId)) {
+          return reject(value.commandId, value.shiftId, 'unauthorized', 'ไม่มีสิทธิ์ดำเนินการ');
+        }
+        if (managerUid !== approval.requesterStaffId || managerUid !== approval.executorStaffId) {
+          return reject(value.commandId, value.shiftId, 'unauthorized', 'ไม่มีสิทธิ์ดำเนินการ');
+        }
+        const approverId =
+          typeof approval.approverStaffId === 'string' && approval.approverStaffId.length > 0
+            ? approval.approverStaffId
+            : '';
+        if (!approverId) {
+          return reject(value.commandId, value.shiftId, 'invalid_pin', 'ต้องยืนยัน PIN ใหม่ก่อนดำเนินการ');
+        }
+        const approverSnap = await tx.get(database.collection(C.users).doc(approverId));
+        if (!approverSnap.exists) {
+          return reject(value.commandId, value.shiftId, 'invalid_pin', 'ต้องยืนยัน PIN ใหม่ก่อนดำเนินการ');
+        }
+        const liveApprover = (approverSnap.data() ?? {}) as DocumentData;
+        if (liveApprover.isActive !== true || liveApprover.deletedAt != null) {
+          return reject(value.commandId, value.shiftId, 'invalid_pin', 'ต้องยืนยัน PIN ใหม่ก่อนดำเนินการ');
+        }
+        const approverRole = liveRole(liveApprover);
+        if (!isModel2ApproverRole(approverRole)) {
+          return reject(value.commandId, value.shiftId, 'invalid_pin', 'ต้องยืนยัน PIN ใหม่ก่อนดำเนินการ');
+        }
+        if (!approverBranchEligible(approverRole, liveBranchIds(liveApprover), value.branchId)) {
+          return reject(value.commandId, value.shiftId, 'invalid_pin', 'ต้องยืนยัน PIN ใหม่ก่อนดำเนินการ');
+        }
+        const liveApproverAuthVersion =
+          typeof liveApprover.authVersion === 'number' && Number.isFinite(liveApprover.authVersion)
+            ? liveApprover.authVersion
+            : 0;
+        if (liveApproverAuthVersion !== approval.approverAuthVersionAtIssue) {
+          return reject(value.commandId, value.shiftId, 'invalid_pin', 'ต้องยืนยัน PIN ใหม่ก่อนดำเนินการ');
+        }
+        credentialSubjectId = approverId;
+        // Alert projection records under whose authority the alert was adjudicated.
+        projectionManagerUid = approverId;
+      } else {
+        return reject(value.commandId, value.shiftId, 'invalid_pin', 'ต้องยืนยัน PIN ใหม่ก่อนดำเนินการ');
+      }
+
+      const cred = await readUserCredential(database, credentialSubjectId, tx);
+      const [caseSnap, alertSnap] = await Promise.all([tx.get(caseRef), tx.get(alertRef)]);
+
+      if (!isUsableForLogin(cred) || cred.credentialState !== 'rotated_authoritative') {
         return reject(value.commandId, value.shiftId, 'invalid_pin', 'ต้องยืนยัน PIN ใหม่ก่อนดำเนินการ');
       }
       if (cred.credentialVersion !== approval.credentialVersionAtIssue) {
@@ -312,7 +372,7 @@ export async function performResolveShiftCloseAlert(
           acknowledgedByActor: (alertData.acknowledgedByActor as never) ?? null,
         },
         requestedOutcome: value.requestedOutcome,
-        managerUid,
+        managerUid: projectionManagerUid,
       });
       if (transition.kind === 'rejected') {
         return reject(value.commandId, value.shiftId, transition.rejectCode, 'ไม่สามารถเปลี่ยนสถานะการแจ้งเตือนได้');
@@ -368,10 +428,10 @@ export async function performResolveShiftCloseAlert(
         schemaVersion: 1,
         pinVerifiedAtServer: approvalData.issuedAt ?? null,
         approvalId: value.approvalId,
-        securityModel: 'reauth',
-        requesterStaffId: managerUid,
-        approverStaffId: managerUid,
-        executorStaffId: managerUid,
+        securityModel: approval.securityModel,
+        requesterStaffId: approval.requesterStaffId,
+        approverStaffId: approval.approverStaffId,
+        executorStaffId: approval.executorStaffId,
         commandId: value.commandId,
         createdAt: now,
       });

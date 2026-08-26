@@ -490,6 +490,176 @@ describe('shiftCloseAlerts / shiftCloseCases — direct doc reads (UI-B Fallback
 });
 
 // ─────────────────────────────────────────────────────────────────────────
+// UI-11 Packet 2 Model 2 / F-1 — fenced staff exact-branch vs ALL
+// Unfenced staff() rows above stay DENY (A3 stale-reachable). These rows
+// fence a distinct staffId so the branch predicate itself is proven.
+// ─────────────────────────────────────────────────────────────────────────
+
+describe('Packet 2 Model 2 F-1 — fenced staff exact branch vs ALL', () => {
+  const fencedStaff = (staffId: string, branchIds: string[]) => ({
+    staffId,
+    role: 'staff',
+    branchIds,
+    permissions: [],
+    authVersion: 0,
+  });
+
+  const seedFencedUser = async (staffId: string) => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'users', staffId), {
+        isActive: true,
+        deletedAt: null,
+        authVersion: 0,
+      });
+    });
+  };
+
+  const seedAlertedCase = async (id: string, branchId: string, alertState = 'open') => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'shiftCloseCases', id), {
+        shiftId: id,
+        branchId,
+        alertState,
+        processingState: 'validated',
+        settlementState: 'manual_review_required',
+        caseVersion: 1,
+        schemaVersion: 1,
+      });
+    });
+  };
+
+  const seedAlert = async (id: string, branchId: string) => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'shiftCloseAlerts', id), {
+        shiftId: id,
+        branchId,
+        alertState: 'open',
+        schemaVersion: 1,
+      });
+    });
+  };
+
+  const seedSensitive = async (collectionName: string, id: string, branchId = BRANCH) => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), collectionName, id), {
+        shiftId: id,
+        branchId,
+        schemaVersion: 1,
+      });
+    });
+  };
+
+  it('ALLOWED: fenced staff exact-branch get of an alerted same-branch case', async () => {
+    await seedFencedUser('staffExact');
+    await seedAlertedCase('f1-c-a', BRANCH, 'open');
+    const db = testEnv.authenticatedContext('staffExact', fencedStaff('staffExact', [BRANCH])).firestore();
+    await assertSucceeds(getDoc(doc(db, 'shiftCloseCases', 'f1-c-a')));
+  });
+
+  it('ALLOWED: fenced staff exact-branch get/list of same-branch alerts', async () => {
+    await seedFencedUser('staffExact');
+    await seedAlert('f1-a-a', BRANCH);
+    const db = testEnv.authenticatedContext('staffExact', fencedStaff('staffExact', [BRANCH])).firestore();
+    await assertSucceeds(getDoc(doc(db, 'shiftCloseAlerts', 'f1-a-a')));
+    await assertSucceeds(
+      getDocs(query(collection(db, 'shiftCloseAlerts'), where('branchId', '==', BRANCH))),
+    );
+  });
+
+  it('DENIED: fenced staff exact-branch get of a different-branch case', async () => {
+    await seedFencedUser('staffExact');
+    await seedAlertedCase('f1-c-b', OTHER_BRANCH, 'open');
+    const db = testEnv.authenticatedContext('staffExact', fencedStaff('staffExact', [BRANCH])).firestore();
+    await assertFails(getDoc(doc(db, 'shiftCloseCases', 'f1-c-b')));
+  });
+
+  it('DENIED: fenced staff exact-branch get/list of a different-branch alert', async () => {
+    await seedFencedUser('staffExact');
+    await seedAlert('f1-a-b', OTHER_BRANCH);
+    const db = testEnv.authenticatedContext('staffExact', fencedStaff('staffExact', [BRANCH])).firestore();
+    await assertFails(getDoc(doc(db, 'shiftCloseAlerts', 'f1-a-b')));
+    await assertFails(
+      getDocs(query(collection(db, 'shiftCloseAlerts'), where('branchId', '==', OTHER_BRANCH))),
+    );
+  });
+
+  it("DENIED: fenced staff + branchIds ['ALL'] cannot get a concrete case", async () => {
+    await seedFencedUser('staffAll');
+    await seedAlertedCase('f1-c-all', BRANCH, 'open');
+    const db = testEnv.authenticatedContext('staffAll', fencedStaff('staffAll', ['ALL'])).firestore();
+    await assertFails(getDoc(doc(db, 'shiftCloseCases', 'f1-c-all')));
+  });
+
+  it("DENIED: fenced staff + branchIds ['ALL'] cannot get a concrete alert", async () => {
+    await seedFencedUser('staffAll');
+    await seedAlert('f1-a-all', BRANCH);
+    const db = testEnv.authenticatedContext('staffAll', fencedStaff('staffAll', ['ALL'])).firestore();
+    await assertFails(getDoc(doc(db, 'shiftCloseAlerts', 'f1-a-all')));
+  });
+
+  it("DENIED: fenced staff + branchIds ['ALL'] cannot list concrete-branch alerts", async () => {
+    await seedFencedUser('staffAll');
+    await seedAlert('f1-a-all-list', BRANCH);
+    const db = testEnv.authenticatedContext('staffAll', fencedStaff('staffAll', ['ALL'])).firestore();
+    await assertFails(
+      getDocs(query(collection(db, 'shiftCloseAlerts'), where('branchId', '==', BRANCH))),
+    );
+  });
+
+  it('DENIED: fenced staff cannot get a none-state case even on the exact branch', async () => {
+    await seedFencedUser('staffExact');
+    await seedAlertedCase('f1-c-none', BRANCH, 'none');
+    const db = testEnv.authenticatedContext('staffExact', fencedStaff('staffExact', [BRANCH])).firestore();
+    await assertFails(getDoc(doc(db, 'shiftCloseCases', 'f1-c-none')));
+  });
+
+  it('DENIED: fenced staff cannot list cases', async () => {
+    await seedFencedUser('staffExact');
+    await seedAlertedCase('f1-c-list', BRANCH, 'open');
+    const db = testEnv.authenticatedContext('staffExact', fencedStaff('staffExact', [BRANCH])).firestore();
+    await assertFails(
+      getDocs(query(collection(db, 'shiftCloseCases'), where('branchId', '==', BRANCH))),
+    );
+  });
+
+  it('DENIED: fenced staff cannot read evidence, validation runs, or audit events', async () => {
+    await seedFencedUser('staffExact');
+    await seedSensitive('shiftCloseEvidence', 'f1-ev');
+    await seedSensitive('shiftCloseValidationRuns', 'f1-run');
+    await seedSensitive('shiftCloseAuditEvents', 'f1-aud');
+    const db = testEnv.authenticatedContext('staffExact', fencedStaff('staffExact', [BRANCH])).firestore();
+    await assertFails(getDoc(doc(db, 'shiftCloseEvidence', 'f1-ev')));
+    await assertFails(getDoc(doc(db, 'shiftCloseValidationRuns', 'f1-run')));
+    await assertFails(getDoc(doc(db, 'shiftCloseAuditEvents', 'f1-aud')));
+  });
+
+  it('DENIED: fenced staff cannot read or write managerApprovals / attempts', async () => {
+    await seedFencedUser('staffExact');
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'managerApprovals', 'f1-appr'), { branchId: BRANCH, schemaVersion: 1 });
+      await setDoc(doc(ctx.firestore(), 'managerApprovalAttempts', 'f1-att'), { branchId: BRANCH, schemaVersion: 1 });
+    });
+    const db = testEnv.authenticatedContext('staffExact', fencedStaff('staffExact', [BRANCH])).firestore();
+    await assertFails(getDoc(doc(db, 'managerApprovals', 'f1-appr')));
+    await assertFails(getDoc(doc(db, 'managerApprovalAttempts', 'f1-att')));
+    await assertFails(setDoc(doc(db, 'managerApprovals', 'f1-appr-w'), { branchId: BRANCH }));
+    await assertFails(setDoc(doc(db, 'managerApprovalAttempts', 'f1-att-w'), { branchId: BRANCH }));
+  });
+
+  it('DENIED: fenced staff cannot write cases or alerts', async () => {
+    await seedFencedUser('staffExact');
+    await seedAlertedCase('f1-c-w', BRANCH, 'open');
+    await seedAlert('f1-a-w', BRANCH);
+    const db = testEnv.authenticatedContext('staffExact', fencedStaff('staffExact', [BRANCH])).firestore();
+    await assertFails(setDoc(doc(db, 'shiftCloseCases', 'f1-c-new'), { shiftId: 'f1-c-new', branchId: BRANCH }));
+    await assertFails(updateDoc(doc(db, 'shiftCloseCases', 'f1-c-w'), { alertState: 'acknowledged' }));
+    await assertFails(deleteDoc(doc(db, 'shiftCloseCases', 'f1-c-w')));
+    await assertFails(updateDoc(doc(db, 'shiftCloseAlerts', 'f1-a-w'), { alertState: 'acknowledged' }));
+    await assertFails(deleteDoc(doc(db, 'shiftCloseAlerts', 'f1-a-w')));
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
 // shifts D4 — W0–W4 lifecycle hardening
 // ─────────────────────────────────────────────────────────────────────────
 

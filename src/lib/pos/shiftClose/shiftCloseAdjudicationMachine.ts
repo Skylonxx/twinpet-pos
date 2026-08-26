@@ -50,6 +50,8 @@ import type {
   ResolveShiftCloseAlertAdapterResult,
   ValidatedResolveShiftCloseAlertResponse,
 } from './resolveShiftCloseAlertAdapter';
+import type { ApprovalSecurityModel } from '../../auth/managerApprovalTypes';
+import type { ApproverCandidate } from '../../auth/approverEligibility';
 
 export type { AdjudicationOutcome };
 
@@ -319,6 +321,16 @@ export type AdjudicationMachineState =
       evidenceChecked: boolean;
     }
   | {
+      status: 'approver_selection';
+      outcome: AdjudicationOutcome;
+      token: DecisionSnapshotToken;
+      commandId: string;
+      payload: ResolveShiftCloseAlertAdapterRequest;
+      note: string;
+      evidenceChecked: boolean;
+      selectedApproverId: string | null;
+    }
+  | {
       status: 'reauth_required';
       outcome: AdjudicationOutcome;
       token: DecisionSnapshotToken;
@@ -326,6 +338,8 @@ export type AdjudicationMachineState =
       payload: ResolveShiftCloseAlertAdapterRequest;
       note: string;
       evidenceChecked: boolean;
+      securityModel: ApprovalSecurityModel;
+      approver: ApproverCandidate | null;
     }
   | {
       status: 'submitting';
@@ -403,7 +417,7 @@ export function updateAdjudicationDraft(
  * NOT silently close the ambiguity dialog mid-read; the guarded retry
  * transition (`retryAuthorityValid`) still refuses transport for them.
  *
- * `reauth_required`: same freshness/scope break as confirming — return idle
+ * `reauth_required` / `approver_selection`: same freshness/scope break as confirming — return idle
  * and discard the frozen commandId. No reconnect auto-resume.
  *
  * `submitting` stays untouched — the in-flight command is protected, and a
@@ -414,7 +428,7 @@ export function checkAdjudicationLiveInvalidation(
   live: BaseAvailabilityInput,
   scopeKey: ScopeKey,
 ): AdjudicationMachineState {
-  if (state.status === 'confirming' || state.status === 'reauth_required') {
+  if (state.status === 'confirming' || state.status === 'reauth_required' || state.status === 'approver_selection') {
     if (!decisionSnapshotFresh(live, scopeKey, state.token)) return { status: 'idle' };
     return state;
   }
@@ -478,6 +492,18 @@ export function submitAdjudication(
     reasonCode: state.token.alertReasonCode,
     ...(trimmedNote !== null ? { reasonNote: trimmedNote } : {}),
   };
+  if (state.token.scopeKey.role === 'staff') {
+    return {
+      status: 'approver_selection',
+      outcome: state.outcome,
+      token: state.token,
+      commandId,
+      payload,
+      note: state.note,
+      evidenceChecked: state.evidenceChecked,
+      selectedApproverId: null,
+    };
+  }
   return {
     status: 'reauth_required',
     outcome: state.outcome,
@@ -486,6 +512,8 @@ export function submitAdjudication(
     payload,
     note: state.note,
     evidenceChecked: state.evidenceChecked,
+    securityModel: 'reauth',
+    approver: null,
   };
 }
 
@@ -518,13 +546,55 @@ export function applyApprovalResult(
  * frozen commandId discarded. A later confirm mints a fresh commandId.
  */
 export function cancelReauth(state: AdjudicationMachineState): AdjudicationMachineState {
-  if (state.status !== 'reauth_required') return state;
+  if (state.status !== 'reauth_required' && state.status !== 'approver_selection') return state;
   return {
     status: 'confirming',
     outcome: state.outcome,
     token: state.token,
     note: state.note,
     evidenceChecked: state.evidenceChecked,
+  };
+}
+
+export function selectApprover(
+  state: AdjudicationMachineState,
+  approverId: string,
+): AdjudicationMachineState {
+  if (state.status !== 'approver_selection') return state;
+  return { ...state, selectedApproverId: approverId };
+}
+
+export function confirmApproverSelection(
+  state: AdjudicationMachineState,
+  approver: ApproverCandidate,
+): AdjudicationMachineState {
+  if (state.status !== 'approver_selection') return state;
+  if (!approver.userId || state.selectedApproverId !== approver.userId) return state;
+  return {
+    status: 'reauth_required',
+    outcome: state.outcome,
+    token: state.token,
+    commandId: state.commandId,
+    payload: state.payload,
+    note: state.note,
+    evidenceChecked: state.evidenceChecked,
+    securityModel: 'delegated',
+    approver,
+  };
+}
+
+/** Return from PIN entry to approver selection without discarding commandId. */
+export function returnToApproverSelection(state: AdjudicationMachineState): AdjudicationMachineState {
+  if (state.status !== 'reauth_required' || state.securityModel !== 'delegated') return state;
+  return {
+    status: 'approver_selection',
+    outcome: state.outcome,
+    token: state.token,
+    commandId: state.commandId,
+    payload: state.payload,
+    note: state.note,
+    evidenceChecked: state.evidenceChecked,
+    selectedApproverId: state.approver?.userId ?? null,
   };
 }
 
@@ -631,7 +701,7 @@ export function startNewAdjudicationDecision(
   live: BaseAvailabilityInput,
   scopeKey: ScopeKey,
 ): AdjudicationMachineState {
-  if (state.status === 'confirming' || state.status === 'submitting' || state.status === 'reauth_required') return state;
+  if (state.status === 'confirming' || state.status === 'submitting' || state.status === 'reauth_required' || state.status === 'approver_selection') return state;
   return openAdjudicationDialog(outcome, live, scopeKey);
 }
 

@@ -22,6 +22,8 @@ const SERVER_CODES: ManagerApprovalErrorCode[] = [
   'locked',
   'expired_approval',
   'replayed_approval',
+  'self_approval_not_permitted',
+  'approver_not_eligible',
 ];
 
 function injected(response: unknown): RequestManagerApprovalTransport {
@@ -75,6 +77,26 @@ describe('callRequestManagerApproval', () => {
       kind: 'error',
       code: 'verifier_unavailable',
     });
+  });
+
+  it('forwards optional Model 2 fields unchanged', async () => {
+    const transport = injected({ ok: true, approvalId: 'appr-2', expiresAtMillis: 2_000 });
+    const delegated: RequestManagerApprovalClientRequest = {
+      ...baseReq,
+      securityModel: 'delegated',
+      approverStaffId: 'm9',
+    };
+    await callRequestManagerApproval(delegated, transport);
+    expect(transport).toHaveBeenCalledWith(delegated);
+  });
+
+  it('maps no_eligible_approver from a well-formed server-shaped error', async () => {
+    const result = await callRequestManagerApproval(
+      baseReq,
+      injected({ ok: false, code: 'no_eligible_approver' }),
+    );
+    expect(result).toEqual({ kind: 'error', code: 'no_eligible_approver' });
+    expect(MANAGER_APPROVAL_ERROR_LABELS.no_eligible_approver).toBeTruthy();
   });
 
   it('never copies the PIN into diagnostic fields of the returned result', async () => {

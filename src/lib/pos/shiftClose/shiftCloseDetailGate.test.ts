@@ -5,14 +5,14 @@ import {
   validateRouteShiftId,
 } from './shiftCloseDetailGate';
 
-describe('canViewShiftCloseAlertDetail (manager/admin gate)', () => {
-  it('is true for manager and admin', () => {
+describe('canViewShiftCloseAlertDetail (manager/admin/staff gate)', () => {
+  it('is true for manager, admin, and staff', () => {
     expect(canViewShiftCloseAlertDetail('manager')).toBe(true);
     expect(canViewShiftCloseAlertDetail('admin')).toBe(true);
+    expect(canViewShiftCloseAlertDetail('staff')).toBe(true);
   });
 
-  it('is false for staff, cashier, null, undefined, and unknown roles', () => {
-    expect(canViewShiftCloseAlertDetail('staff')).toBe(false);
+  it('is false for cashier, null, undefined, and unknown roles', () => {
     expect(canViewShiftCloseAlertDetail('cashier')).toBe(false);
     expect(canViewShiftCloseAlertDetail(null)).toBe(false);
     expect(canViewShiftCloseAlertDetail(undefined)).toBe(false);
@@ -60,8 +60,8 @@ describe('validateRouteShiftId', () => {
 });
 
 describe('shouldStartShiftCloseAlertDetailQuery (must NOT start under any disqualifying condition)', () => {
-  it('is FALSE for a non-manager/admin role, even with everything else ready', () => {
-    for (const role of ['staff', 'cashier', null, undefined] as const) {
+  it('is FALSE for cashier/unknown/null, even with everything else ready', () => {
+    for (const role of ['cashier', null, undefined] as const) {
       expect(shouldStartShiftCloseAlertDetailQuery(role, true, true, 'BR-001', 'SHIFT-001')).toBe(false);
     }
   });
@@ -94,8 +94,9 @@ describe('shouldStartShiftCloseAlertDetailQuery (must NOT start under any disqua
     expect(shouldStartShiftCloseAlertDetailQuery('manager', true, true, 'BR-001', 'a/b')).toBe(false);
   });
 
-  it('is TRUE only when every condition holds: manager/admin, Firebase ready, db present, real branchId, valid shiftId', () => {
+  it('is TRUE only when every condition holds: manager/admin/staff, Firebase ready, db present, real branchId, valid shiftId', () => {
     expect(shouldStartShiftCloseAlertDetailQuery('manager', true, true, 'BR-001', 'SHIFT-001')).toBe(true);
     expect(shouldStartShiftCloseAlertDetailQuery('admin', true, true, 'BR-002', 'SHIFT-002')).toBe(true);
+    expect(shouldStartShiftCloseAlertDetailQuery('staff', true, true, 'BR-001', 'SHIFT-001')).toBe(true);
   });
 });

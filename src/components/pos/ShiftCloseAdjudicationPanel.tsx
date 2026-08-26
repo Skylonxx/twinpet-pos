@@ -1,5 +1,5 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
-import { Alert, Button, Card, Checkbox, Label, Modal, ModalBody, ModalFooter, ModalHeader, Spinner, Textarea } from 'flowbite-react';
+import { useContext, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { Alert, Button, Card, Checkbox, Label, Modal, ModalBody, ModalFooter, ModalHeader, Select, Spinner, Textarea } from 'flowbite-react';
 import { ALERT_REASON_LABELS } from '../../lib/pos/shiftClose/shiftCloseReviewRows';
 import type { ShiftCloseAlertSourceState, ShiftCloseCaseSourceState } from '../../lib/pos/shiftClose/useShiftCloseAlertDetail';
 import type { IntegrityCaution } from '../../lib/pos/shiftClose/shiftCloseDetailProjection';
@@ -11,11 +11,14 @@ import {
   checkAdjudicationLiveInvalidation,
   closeAdjudicationDialog,
   computeScopeKey,
+  confirmApproverSelection,
   initialAdjudicationMachineState,
   MAX_REASON_NOTE_LENGTH,
   openAdjudicationDialog,
   retrySameAdjudicationCommand,
+  returnToApproverSelection,
   scopeBoundAvailability,
+  selectApprover,
   submitAdjudication,
   updateAdjudicationDraft,
   validateAdjudicationSubmit,
@@ -37,6 +40,9 @@ import {
   expectedProtectedAction,
   MANAGER_APPROVAL_ERROR_LABELS,
 } from '../../lib/auth/managerApprovalTypes';
+import { useApproverRoster } from '../../lib/auth/useApproverRoster';
+import type { ApproverCandidate } from '../../lib/auth/approverEligibility';
+import { AuthContext } from '../../lib/auth/AuthProvider';
 
 /**
  * Packet 5 / Client-UI-C — manager adjudication action surface. Frozen DP1-DP4
@@ -62,6 +68,8 @@ export interface ShiftCloseAdjudicationPanelProps {
   approvalTransport?: RequestManagerApprovalTransport;
   /** Test-only online signal; production uses navigator.onLine. */
   isOnline?: () => boolean;
+  /** Test-only requester id. Production reads AuthContext.user.id. */
+  requesterStaffId?: string | null;
 }
 
 const REJECT_CODE_LABELS: Record<string, string> = {
@@ -84,7 +92,10 @@ export default function ShiftCloseAdjudicationPanel({
   transport,
   approvalTransport,
   isOnline,
+  requesterStaffId: requesterStaffIdProp,
 }: ShiftCloseAdjudicationPanelProps) {
+  const authCtx = useContext(AuthContext);
+  const requesterStaffId = requesterStaffIdProp ?? authCtx?.user?.id ?? null;
   const live: BaseAvailabilityInput = {
     alertSource: { status: alertSource.status, fromCache: alertSource.fromCache },
     alertRow: alertSource.row,
@@ -123,6 +134,13 @@ export default function ShiftCloseAdjudicationPanel({
   }
   const effectiveState = checked;
 
+  const rosterEnabled = effectiveState.status === 'approver_selection' && role === 'staff';
+  const roster = useApproverRoster({
+    enabled: rosterEnabled,
+    branchId,
+    requesterStaffId,
+  });
+
   // RC-4: kept race-safe via `useLayoutEffect`, NOT a passive `useEffect`.
   // A passive effect runs only after the browser paints; a transport promise
   // can resolve inside that window and would then read a stale ref still
@@ -141,7 +159,9 @@ export default function ShiftCloseAdjudicationPanel({
     if (prevMachineStatusRef.current === 'reauth_required' && effectiveState.status !== 'reauth_required') {
       approvalEpochRef.current += 1;
       setPinSubmitting(false);
-      setPinError(null);
+      if (effectiveState.status !== 'approver_selection') {
+        setPinError(null);
+      }
     }
     prevMachineStatusRef.current = effectiveState.status;
   });
@@ -217,6 +237,9 @@ export default function ShiftCloseAdjudicationPanel({
           targetEntityId: frozen.payload.shiftId,
           branchId: frozen.payload.branchId,
           pin,
+          ...(frozen.securityModel === 'delegated' && frozen.approver
+            ? { securityModel: 'delegated' as const, approverStaffId: frozen.approver.userId }
+            : {}),
         },
         approvalTransport,
       );
@@ -234,6 +257,11 @@ export default function ShiftCloseAdjudicationPanel({
       if (result.kind !== 'ok') {
         setPinError(MANAGER_APPROVAL_ERROR_LABELS[result.code] ?? MANAGER_APPROVAL_ERROR_LABELS.invalid_credentials);
         setPinModalKey((k) => k + 1);
+        if (result.code === 'approver_not_eligible' || result.code === 'self_approval_not_permitted') {
+          setState((prev) => returnToApproverSelection(prev));
+        } else if (result.code === 'invalid_target' && frozen.securityModel === 'delegated') {
+          setState((prev) => cancelReauth(prev));
+        }
         return;
       }
       setPinError(null);
@@ -257,6 +285,7 @@ export default function ShiftCloseAdjudicationPanel({
 
   const dialogOpen =
     effectiveState.status === 'confirming' ||
+    effectiveState.status === 'approver_selection' ||
     effectiveState.status === 'reauth_required' ||
     effectiveState.status === 'submitting' ||
     effectiveState.status === 'retryable';
@@ -392,14 +421,30 @@ export default function ShiftCloseAdjudicationPanel({
           onSubmit={handleSubmit}
           onRetry={handleRetry}
           submitGuardFailure={validateAdjudicationSubmit(effectiveState, live, scopeKey)}
+          roster={roster}
+          pinError={pinError}
+          onSelectApprover={(id) => setState((prev) => selectApprover(prev, id))}
+          onConfirmApprover={(candidate) => {
+            setPinError(null);
+            setState((prev) => confirmApproverSelection(prev, candidate));
+          }}
         />
       )}
       {effectiveState.status === 'reauth_required' && (
         <ManagerPinModal
           key={pinModalKey}
           open
-          title="ยืนยันตัวตนก่อนดำเนินการ"
-          description="กรุณาใส่ PIN ของท่านเพื่อยืนยันการดำเนินการ"
+          title={
+            effectiveState.approver
+              ? `ยืนยันโดย ${effectiveState.approver.displayName}`
+              : 'ยืนยันตัวตนก่อนดำเนินการ'
+          }
+          description={
+            effectiveState.approver
+              ? `กรุณาให้ ${effectiveState.approver.displayName} ใส่ PIN เพื่ออนุมัติรายการนี้`
+              : 'กรุณาใส่ PIN ของท่านเพื่อยืนยันการดำเนินการ'
+          }
+          sessionDisplayName={effectiveState.approver?.displayName}
           pinLength={4}
           isSubmitting={pinSubmitting}
           errorMessage={pinError}
@@ -424,8 +469,15 @@ function AdjudicationDialog({
   onSubmit,
   onRetry,
   submitGuardFailure,
+  roster,
+  pinError,
+  onSelectApprover,
+  onConfirmApprover,
 }: {
-  state: Extract<AdjudicationMachineState, { status: 'confirming' | 'reauth_required' | 'submitting' | 'retryable' }>;
+  state: Extract<
+    AdjudicationMachineState,
+    { status: 'confirming' | 'approver_selection' | 'reauth_required' | 'submitting' | 'retryable' }
+  >;
   titleId: string;
   descId: string;
   noteId: string;
@@ -437,12 +489,20 @@ function AdjudicationDialog({
   onSubmit: () => void;
   onRetry: () => void;
   submitGuardFailure: ReturnType<typeof validateAdjudicationSubmit>;
+  roster: ReturnType<typeof useApproverRoster>;
+  pinError: string | null;
+  onSelectApprover: (id: string) => void;
+  onConfirmApprover: (candidate: ApproverCandidate) => void;
 }) {
   const isResolve = state.outcome === 'resolve';
   const note =
-    state.status === 'confirming' || state.status === 'reauth_required' ? state.note : state.payload.reasonNote ?? '';
+    state.status === 'confirming' || state.status === 'reauth_required' || state.status === 'approver_selection'
+      ? state.note
+      : state.payload.reasonNote ?? '';
   const evidenceChecked =
-    state.status === 'confirming' || state.status === 'reauth_required' ? state.evidenceChecked : true;
+    state.status === 'confirming' || state.status === 'reauth_required' || state.status === 'approver_selection'
+      ? state.evidenceChecked
+      : true;
   const reasonLabel = ALERT_REASON_LABELS[state.token.alertReasonCode];
   const fieldsReadOnly = state.status !== 'confirming';
   const isBusy = state.status === 'submitting';
@@ -545,6 +605,15 @@ function AdjudicationDialog({
           {(isRetryable || isBusy) && (
             <RetryAmbiguitySection state={state} onRetry={onRetry} onAbandon={onClose} />
           )}
+
+          {state.status === 'approver_selection' && (
+            <ApproverPicker
+              roster={roster}
+              selectedApproverId={state.selectedApproverId}
+              pinError={pinError}
+              onSelect={onSelectApprover}
+            />
+          )}
         </div>
       </ModalBody>
       {/*
@@ -565,6 +634,24 @@ function AdjudicationDialog({
             {isResolve ? 'ยืนยันการแก้ไข' : 'รับทราบ'}
           </Button>
         )}
+        {state.status === 'approver_selection' && (
+          <Button
+            color={isResolve ? 'yellow' : 'light'}
+            className="min-h-11 w-full sm:w-auto"
+            disabled={
+              roster.status !== 'ready' ||
+              roster.fromCache ||
+              roster.candidates.length === 0 ||
+              !state.selectedApproverId
+            }
+            onClick={() => {
+              const chosen = roster.candidates.find((c) => c.userId === state.selectedApproverId);
+              if (chosen) onConfirmApprover(chosen);
+            }}
+          >
+            ดำเนินการต่อ
+          </Button>
+        )}
         {isBusy && (
           <Button color={isResolve ? 'yellow' : 'light'} disabled className="min-h-11 w-full sm:w-auto">
             <Spinner size="sm" />
@@ -575,6 +662,80 @@ function AdjudicationDialog({
         </Button>
       </ModalFooter>
     </Modal>
+  );
+}
+
+function ApproverPicker({
+  roster,
+  selectedApproverId,
+  pinError,
+  onSelect,
+}: {
+  roster: ReturnType<typeof useApproverRoster>;
+  selectedApproverId: string | null;
+  pinError: string | null;
+  onSelect: (id: string) => void;
+}) {
+  const errorAlert = pinError ? <Alert color="failure">{pinError}</Alert> : null;
+  if (roster.status === 'pending' || (roster.status === 'ready' && roster.fromCache && roster.candidates.length === 0)) {
+    return (
+      <div className="flex flex-col gap-2">
+        {errorAlert}
+        <Alert color="gray">
+          กำลังยืนยันรายชื่อผู้อนุมัติกับเซิร์ฟเวอร์ ยังไม่สามารถดำเนินการได้
+        </Alert>
+      </div>
+    );
+  }
+  if (roster.status === 'error') {
+    return (
+      <div className="flex flex-col gap-2">
+        {errorAlert}
+        <Alert color="failure">ไม่สามารถโหลดรายชื่อผู้อนุมัติได้</Alert>
+      </div>
+    );
+  }
+  if (roster.status === 'ready' && !roster.fromCache && roster.candidates.length === 0) {
+    return (
+      <div className="flex flex-col gap-2">
+        {errorAlert}
+        <Alert color="failure">{MANAGER_APPROVAL_ERROR_LABELS.no_eligible_approver}</Alert>
+      </div>
+    );
+  }
+  if (roster.status !== 'ready' || roster.candidates.length === 0) {
+    return (
+      <div className="flex flex-col gap-2">
+        {errorAlert}
+        <Alert color="gray">
+          กำลังยืนยันรายชื่อผู้อนุมัติกับเซิร์ฟเวอร์ ยังไม่สามารถดำเนินการได้
+        </Alert>
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-2">
+      {errorAlert}
+      <Label htmlFor="approver-select">เลือกผู้อนุมัติ</Label>
+      <Select
+        id="approver-select"
+        value={selectedApproverId ?? ''}
+        onChange={(e) => onSelect(e.target.value)}
+        className="min-h-11"
+      >
+        <option value="">เลือกผู้อนุมัติ</option>
+        {roster.candidates.map((c) => (
+          <option key={c.userId} value={c.userId}>
+            {c.displayName} ({c.username}) · {c.role}
+          </option>
+        ))}
+      </Select>
+      {selectedApproverId && (
+        <p className="text-sm text-gray-700 dark:text-gray-300">
+          ผู้อนุมัติที่เลือก: {roster.candidates.find((c) => c.userId === selectedApproverId)?.displayName}
+        </p>
+      )}
+    </div>
   );
 }
 

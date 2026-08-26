@@ -575,3 +575,28 @@ describe('requestManagerApproval — authorization before bcrypt', () => {
     });
   });
 });
+
+describe('requestManagerApproval — old client / new server', () => {
+  test('payload without securityModel or approverStaffId mints reauth same-principal', async () => {
+    const db = makeDb();
+    const { calls, comparePin } = makeCompare();
+    const res = await run(db, comparePin, {
+      commandId: 'cmd-1',
+      protectedAction: 'shift_close_alert_acknowledge',
+      targetEntityId: 'S1',
+      branchId: 'B1',
+      pin: PIN,
+    });
+    expect(res.ok).toBe(true);
+    expect(calls).toHaveLength(1);
+    expect(db.__store.get(approvalPath())).toMatchObject({
+      requesterStaffId: 'm1',
+      approverStaffId: 'm1',
+      executorStaffId: 'm1',
+      securityModel: 'reauth',
+    });
+    expect(Object.prototype.hasOwnProperty.call(db.__store.get(approvalPath()) ?? {}, 'approverAuthVersionAtIssue')).toBe(
+      false,
+    );
+  });
+});

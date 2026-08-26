@@ -41,11 +41,12 @@ import { sha256Hex } from './shiftCloseValidationHash';
 import {
   checkApprovalBinding,
   expectedActionFor,
+  MODEL2_REQUESTER_ROLES,
   type ApprovalBindingExpected,
   type ApprovalRecordView,
 } from './requestManagerApprovalCore';
 
-export { checkApprovalBinding, expectedActionFor };
+export { checkApprovalBinding, expectedActionFor, MODEL2_REQUESTER_ROLES };
 export type { ApprovalBindingExpected, ApprovalRecordView };
 
 export type AdjudicationOutcome = 'acknowledge' | 'resolve';
@@ -163,11 +164,17 @@ export function checkAdjudicationAuthority(
   auth: AuthTokenLike,
   branchId: string,
   freshnessVerified: boolean,
+  allowRequesterRoles = false,
 ): AuthorityResult {
   if (freshnessVerified !== true) return { rejectCode: 'unauthorized', managerUid: null };
   if (!hasBranchAccess(auth, branchId)) return { rejectCode: 'unauthorized', managerUid: null };
   const role = auth?.token?.role;
-  if (role !== 'admin' && role !== 'manager') return { rejectCode: 'unauthorized', managerUid: null };
+  const privileged = role === 'admin' || role === 'manager';
+  const requesterOk =
+    allowRequesterRoles === true &&
+    typeof role === 'string' &&
+    (MODEL2_REQUESTER_ROLES as readonly string[]).includes(role);
+  if (!privileged && !requesterOk) return { rejectCode: 'unauthorized', managerUid: null };
   const managerUid = (auth?.token?.staffId as string | undefined) ?? auth?.uid ?? null;
   if (!managerUid) return { rejectCode: 'unauthorized', managerUid: null };
   return { managerUid };
