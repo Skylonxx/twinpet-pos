@@ -8,10 +8,14 @@
 |-------|-------|
 | Repo root | `C:/Users/Narachat/twinpet-pos` |
 | Branch | `main` |
-| HEAD (binding; PK-6 feature delivered) | `e7ae0080eab574b207f53d3403d8a5ebacefff7c` |
-| origin/main | `e7ae0080eab574b207f53d3403d8a5ebacefff7c` |
-| live remote main | `e7ae0080eab574b207f53d3403d8a5ebacefff7c` |
-| Current baseline | `e7ae0080eab574b207f53d3403d8a5ebacefff7c` (`feat(pos): add online-only guardrails`) |
+| HEAD (binding; PKT-1 runtime closed) | `8abcd1550ef3004ebf0c9d2d5da32c9645a99010` |
+| origin/main | `8abcd1550ef3004ebf0c9d2d5da32c9645a99010` |
+| live remote main | `8abcd1550ef3004ebf0c9d2d5da32c9645a99010` |
+| Current baseline | `8abcd1550ef3004ebf0c9d2d5da32c9645a99010` (`fix(auth): add pk-1 runtime closure tooling`) |
+| PKT-1 runtime HEAD | `8abcd1550ef3004ebf0c9d2d5da32c9645a99010` |
+| PKT-1 feature commit | `2e0a11ddc702ef80d123fd151b597456ac39d5f6` |
+| TRUE-STANDALONE docs guardrail commit | `58285246392a1da5e3538555df5e96462ded0a80` |
+| PK-6 docs closure commit | `acdae5fd6260c6c8740ad16e78023439aa0b4b0d` |
 | PK-6 feature commit | `e7ae0080eab574b207f53d3403d8a5ebacefff7c` |
 | PK-5 feature commit | `ef90d4ec4cce1decfed6e4809849fb9f991a2412` |
 | PK-5 docs closure commit | `cf9c6f392f8416f247b16244351ec4567c71996b` |
@@ -36,64 +40,70 @@
 
 ## Current Phase
 
-    POST_PK6_CLOSURE / READ_ONLY_ROADMAP_REENTRY
+    POST_PK6_CLOSURE / UI-11_PACKET2 / PKT-1
     Live workflow authority: docs/agent-workflow/STATE.md
-    CURRENT_GATE: POST_PK6_READ_ONLY_ROADMAP_REENTRY
-    PK6_STATUS: CLOSED / DELIVERED / repository delivery complete
+    CURRENT_GATE: PKT1_FINAL_DOCS_RECONCILIATION
+    PKT1_STATUS: CLOSED / DELIVERED / Runtime deployment complete
+    PKT1_RUNTIME_HEAD: 8abcd1550ef3004ebf0c9d2d5da32c9645a99010
+    PKT1_RUNTIME_SUBJECT: fix(auth): add pk-1 runtime closure tooling
+    HEAD: 8abcd1550ef3004ebf0c9d2d5da32c9645a99010
+    origin/main: 8abcd1550ef3004ebf0c9d2d5da32c9645a99010
+    live remote main: 8abcd1550ef3004ebf0c9d2d5da32c9645a99010
+    STAGE0_TO_STAGE13: COMPLETED under accepted rollout history
+    STAGE10_HOSTING: SKIPPED_BY_TRUE_STANDALONE_USER_OVERRIDE
+    TRUE_STANDALONE_NO_HOSTING_GUARDRAIL: BINDING
+    RUNTIME_BLOCKER_COUNT: 0
+    pendingRotation: 0
+    maintenanceMode: false
+    LEGACY_PIN_CLEANUP: COMPLETE
+    NAMED_POS_DB_RULES: LIVE (c77d0f28-8cf5-49b3-9491-9543d80a0ddb)
+    PKT2_IMPLEMENTATION: NOT_AUTHORIZED
+    PACKET2A_ACTIVATION: NOT_AUTHORIZED
+    MODEL2_ACTIVATION: NOT_AUTHORIZED
+    NEXT_PHASE_PLANNING: PENDING / requires separate authority
+    GEMINI_FINAL_CLOSURE: TWINPET-UI11-PACKET2-PKT1-FINAL-RUNTIME-CLOSURE-ADJUDICATION-GEMINI-001
+    DECISION_STATUS: APPROVED_WITH_NOTES
+    PKT1_RUNTIME_CLOSURE_ACCEPTED: YES
+    PK6_STATUS: CLOSED / DELIVERED (historical)
     PK6_FEATURE_COMMIT: e7ae0080eab574b207f53d3403d8a5ebacefff7c
-    PK6_FEATURE_SUBJECT: feat(pos): add online-only guardrails
-    PK6_COMMITTED_PATHS: 4 (1 production + 3 tests)
-    HEAD: e7ae0080eab574b207f53d3403d8a5ebacefff7c
-    origin/main: e7ae0080eab574b207f53d3403d8a5ebacefff7c
-    live remote main: e7ae0080eab574b207f53d3403d8a5ebacefff7c
-    TARGETED: 3 files / 21 tests PASS
-    ROOT: 130 files / 2490 tests PASS
-    TYPECHECK: PASS
-    BUILD: PASS
-    git diff --check: PASS
-    UAT: U01-U11 PASS
-    RESPONSIVE: 320 / 768 / 1080 PASS
-    PK6_PRODUCT_DEFECTS: 0
-    AGY: PASS_WITH_NOTES
-    AGY_MATERIAL_UIUX_DEFECTS: 0
-    PAYMENTMODAL_BOUNDARY: CLOSED
-    CHECKOUT_WRITE_PATH: CLOSED
-    PK5_BEHAVIOR: CLOSED / PRESERVED
-    DEPLOY: NOT REQUIRED / NOT AUTHORIZED / NOT PERFORMED
-    PRODUCTION_ACCESS: NOT AUTHORIZED / none performed
+    PK6_DOCS_CLOSURE_COMMIT: acdae5fd6260c6c8740ad16e78023439aa0b4b0d
     BINDING_SEQUENCE: PK-1 -> PK-2 -> PK-3 -> PK-4 -> PK-5 -> PK-6
     BINDING_SEQUENCE_FINAL_PACKET: PK-6
     NEXT_ELIGIBLE_PK_PACKET: NONE
     PK7: NOT DEFINED / DO NOT INVENT
     PK5_STATUS: CLOSED / DELIVERED
-    PK5_FEATURE_COMMIT: ef90d4ec4cce1decfed6e4809849fb9f991a2412
-    PK5_DOCS_CLOSURE_COMMIT: cf9c6f392f8416f247b16244351ec4567c71996b
     PK4_STATUS: CLOSED / DELIVERED
-    PK4_FEATURE_COMMIT: d27850abe80bac8b055f08206f17c36fda29e352
-    PK4_DOCS_CLOSURE_COMMIT: 6a82fefa7238cc1eed8e9ce0790a2e9bb0913ad0
     PK3_STATUS: CLOSED
-    PK3_FEATURE_SHA: ec7cf8beb52d56c1c412aa12c843cbd1151f687a
-    PK3_CLOSURE_DOCS_COMMIT: 5e6675758c4ce95b00620aaf202c79f8b134be60
     PACKET_5_STATUS: CLOSED
-    PACKET5_TECHNICAL_ADJUDICATION: PASS_WITH_NOTES
-    PACKET5_CLOSURE_COMMIT: 292d51ff5092283e07e1aed9dcc8ac76fedbd866
-    PACKET5_TECHNICAL_BASELINE: f8b67c144b96383d69196cc9080d038d1dac60d8
-    AI_2_IMPLEMENTATION_STATUS: CLOSED_WITH_NOTES (historical) at c45f5a3
-    AI_1_IMPLEMENTATION_STATUS: CLOSED_WITH_NOTES (historical) at 4298c14
-    R7_6_IMPLEMENTATION_STATUS: CLOSED (historical) at ac29935
-    D3_STATUS: CLOSED at a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab
-    DEPLOYMENT: NOT_PERFORMED / NOT_AUTHORIZED
+    PAYMENTMODAL_BOUNDARY: CLOSED
+    CHECKOUT_WRITE_PATH: CLOSED
     PK2C_IMPLEMENTATION: NOT_AUTHORIZED
     PK2D: RECORD_ONLY / NOT ACTIVE / NOT AUTHORIZED
-    NEXT_IMPLEMENTATION: NOT_AUTHORIZED
-    PK6_FULL_PACKET_CLOSURE_DECLARED: NO
-    PK1_STATUS: CLOSED_WITH_NOTES (preserved). PK1_REOPEN_AUTHORIZED: NO.
-    G14_ACTIVATION_TRACK_STATUS: ABORTED.
-    Closed-gate reopen: D1_T18 / D3_T15 / D3_T16 UNTOUCHED; Row28 / Row30 ADDITIVE_ONLY_NOT_REOPENED; Row32 NO; R7_6 NOT_REOPENED; Packet 5 CLOSED; PK-3 CLOSED; PK-4 CLOSED / DELIVERED; PK-5 CLOSED / DELIVERED.
-    NEXT_WORKFLOW_ACTION: Return to ChatGPT for PK-6 final closure routing. Do not deploy. Do not reopen Packet 5, PK-3, PK-4, or PK-5 implementation. Do not activate PK-2D. Do not invent PK-7.
-    Next implementation action: NONE — NOT AUTHORIZED.
+    NEXT_WORKFLOW_ACTION: Return to ChatGPT for UI-11 Packet 2 / PKT-1 final docs closure confirmation. Do not implement PKT-2. Do not activate Packet2A or Model2. Do not invent the next packet. Do not deploy Hosting.
+    Next implementation action: NONE — PKT-2 / Packet2A / Model2 NOT AUTHORIZED. Next phase planning pending.
 
-## PK-6 Online-Only Guardrails (CLOSED / DELIVERED)
+## UI-11 Packet 2 / PKT-1 (CLOSED / DELIVERED)
+
+| Field | Value |
+|-------|-------|
+| Status | **CLOSED / DELIVERED / Runtime deployment complete** |
+| Concise closure | PKT-1 CLOSED / DELIVERED / Runtime deployment complete. Next phase planning pending. |
+| Runtime HEAD | `8abcd1550ef3004ebf0c9d2d5da32c9645a99010` (`fix(auth): add pk-1 runtime closure tooling`) |
+| Feature commit | `2e0a11ddc702ef80d123fd151b597456ac39d5f6` |
+| Gemini | `TWINPET-UI11-PACKET2-PKT1-FINAL-RUNTIME-CLOSURE-ADJUDICATION-GEMINI-001` — `APPROVED_WITH_NOTES` |
+| Stage 0–13 | completed under accepted rollout history |
+| Stage 10 Hosting | `SKIPPED_BY_TRUE_STANDALONE_USER_OVERRIDE` |
+| TRUE-STANDALONE / NO HOSTING | **BINDING** |
+| Runtime blockers | **0** |
+| pendingRotation | **0** |
+| maintenanceMode | **false** |
+| Legacy PIN cleanup | **COMPLETE** |
+| Named `pos-db` Rules | **LIVE** (`c77d0f28-8cf5-49b3-9491-9543d80a0ddb`) |
+| PKT-2 / Packet2A / Model2 | **NOT AUTHORIZED** |
+| Next phase | planning pending / requires separate authority |
+| Historical stops | Stage 2 / Stage 7 / Stage 8 hard-stops remain historical; current state is CLOSED |
+
+## PK-6 Online-Only Guardrails (HISTORICAL — CLOSED / DELIVERED)
 
 | Field | Value |
 |-------|-------|
@@ -271,8 +281,11 @@
 
 ## Working Tree
 
-- Current baseline (binding; PK-6 feature delivered): `e7ae008` (`feat(pos): add online-only guardrails`)
-- PK-6 implementation: committed at `e7ae0080eab574b207f53d3403d8a5ebacefff7c`
+- Current baseline (binding; PKT-1 runtime closed): `8abcd15` (`fix(auth): add pk-1 runtime closure tooling`)
+- PKT-1 runtime: committed at `8abcd1550ef3004ebf0c9d2d5da32c9645a99010`
+- PKT-1 feature: committed at `2e0a11ddc702ef80d123fd151b597456ac39d5f6`
+- TRUE-STANDALONE docs guardrail: `58285246392a1da5e3538555df5e96462ded0a80`
+- PK-6 implementation: committed at `e7ae0080eab574b207f53d3403d8a5ebacefff7c`; docs closed at `acdae5fd6260c6c8740ad16e78023439aa0b4b0d`
 - PK-5 implementation: committed at `ef90d4ec4cce1decfed6e4809849fb9f991a2412`; docs closed at `cf9c6f392f8416f247b16244351ec4567c71996b`
 - PK-4 implementation: committed at `d27850abe80bac8b055f08206f17c36fda29e352`; docs closed at `6a82fefa7238cc1eed8e9ce0790a2e9bb0913ad0`
 - PK-6 closure docs: these seven tracked docs after this reconciliation
@@ -288,7 +301,7 @@
 - Packet S implementation commit (historical): `e9363e3` (Packet 5 / UI-B2 / Packet S — getShiftCloseCaseFigures)
 - Packet S docs/tracker closure commit (historical): `c6bdbd0`
 - For current working-tree state, use live Git: `git status --short --untracked-files=all`
-- This seven-doc packet is the authorized docs-only reconciliation of delivered PK-6. Next implementation is not authorized. Do not activate PK-2D. Do not invent PK-7.
+- This seven-doc packet is the authorized docs-only reconciliation of closed PKT-1. PKT-2 / Packet2A / Model2 are not authorized. Next phase planning is pending.
 
 ## Stash
 
@@ -370,6 +383,10 @@ All **CLOSED** where applicable.
 
 | Hash | Message |
 |------|---------|
+| `8abcd15` | fix(auth): add pk-1 runtime closure tooling — **PKT-1 RUNTIME CLOSED** |
+| `5828524` | docs: embed true-standalone architectural guardrails |
+| `2e0a11d` | feat(auth): add pk-1 credential and authority hardening — **PKT-1 FEATURE** |
+| `acdae5f` | docs: close pk-6 online-only guardrails — **PK-6 DOCS CLOSED** |
 | `e7ae008` | feat(pos): add online-only guardrails — **PK-6 FEATURE DELIVERED** |
 | `cf9c6f3` | docs: close pk-5 offline read-side truth — **PK-5 DOCS CLOSED** |
 | `ef90d4e` | feat(pos): add offline read-side truth — **PK-5 FEATURE DELIVERED** |
@@ -393,32 +410,39 @@ All **CLOSED** where applicable.
 
 ## Next Recommended Block
 
-    PK6_CLOSED_DELIVERED → DOCS_RECONCILIATION → AWAIT_CHATGPT_PK6_FINAL_CLOSURE_ROUTING
+    PKT1_CLOSED_DELIVERED → DOCS_RECONCILIATION → AWAIT_CHATGPT_UI11_PACKET2_PKT1_FINAL_DOCS_CLOSURE_CONFIRMATION
 
-1. PK-6 — **CLOSED / DELIVERED** at `e7ae008`; targeted `3/21 PASS`; root `130/2490 PASS`; UAT U01–U11 PASS; responsive 320 / 768 / 1080 PASS; AGY `PASS_WITH_NOTES`; PK-6 product defects 0; full packet closure routing is next workflow; final packet of binding sequence; `NEXT_ELIGIBLE_PK_PACKET: NONE`; PK-7 NOT DEFINED
-2. PK-5 — **CLOSED / DELIVERED** at `ef90d4e` / docs `cf9c6f3`; Codex / corrected UAT / AGY `PASS_WITH_NOTES`; targeted `14/186 PASS`; root `130/2486 PASS`; B16/B18 accepted harness limitations; do not reopen
-3. PK-4 — **CLOSED / DELIVERED** at `d27850a` / docs `6a82fef`; do not reopen
-4. PK-3 — **CLOSED** at `ec7cf8b` — `PASS`; U1–U7 `PASS`; docs `5e6675758`; do not reopen
-5. Packet 5 — **CLOSED** at `292d51ff` — `PASS_WITH_NOTES`; R4 `36 / 36 PASS`; do not reopen
-6. AI-2 — **CLOSED_WITH_NOTES** at `c45f5a3` (historical)
-7. AI-1 — **CLOSED_WITH_NOTES** at `4298c14` (historical)
-8. R7-6 implementation — **CLOSED** at `ac29935` (historical)
-9. D3 — **CLOSED** at `a081bcb` (do not reopen)
-10. PK-2A Boot / Session Gating — **`CLOSED_WITH_NOTES`** at `79ba840` (historical)
-11. PK-1 Offline Shift Session — **`CLOSED_WITH_NOTES`** at `513b198` (preserved)
-12. G14 — **`ABORTED`**
-13. **NEXT_WORKFLOW_ACTION:** Return to ChatGPT for PK-6 final closure routing. Do not deploy. Do not activate PK-2D. Do not invent PK-7.
-14. Passive read-only observation may occur only when natural production traffic provides a real event; no agent-triggered activity is authorized
+1. UI-11 Packet 2 / PKT-1 — **CLOSED / DELIVERED / Runtime deployment complete** at `8abcd15`; Stage 0–13 completed; Stage 10 Hosting `SKIPPED_BY_TRUE_STANDALONE_USER_OVERRIDE`; runtime blockers 0; `pendingRotation = 0`; `maintenanceMode = false`; legacy PIN cleanup complete; named `pos-db` Rules live; PKT-2 / Packet2A / Model2 NOT AUTHORIZED; next phase planning pending
+2. PK-6 — historical **CLOSED / DELIVERED** at `e7ae008`; docs `acdae5f`; targeted `3/21 PASS`; root `130/2490 PASS`; UAT U01–U11 PASS; responsive 320 / 768 / 1080 PASS; AGY `PASS_WITH_NOTES`; PK-6 product defects 0; final packet of binding sequence; `NEXT_ELIGIBLE_PK_PACKET: NONE`; PK-7 NOT DEFINED
+3. PK-5 — **CLOSED / DELIVERED** at `ef90d4e` / docs `cf9c6f3`; Codex / corrected UAT / AGY `PASS_WITH_NOTES`; targeted `14/186 PASS`; root `130/2486 PASS`; B16/B18 accepted harness limitations; do not reopen
+4. PK-4 — **CLOSED / DELIVERED** at `d27850a` / docs `6a82fef`; do not reopen
+5. PK-3 — **CLOSED** at `ec7cf8b` — `PASS`; U1–U7 `PASS`; docs `5e6675758`; do not reopen
+6. Packet 5 — **CLOSED** at `292d51ff` — `PASS_WITH_NOTES`; R4 `36 / 36 PASS`; do not reopen
+7. AI-2 — **CLOSED_WITH_NOTES** at `c45f5a3` (historical)
+8. AI-1 — **CLOSED_WITH_NOTES** at `4298c14` (historical)
+9. R7-6 implementation — **CLOSED** at `ac29935` (historical)
+10. D3 — **CLOSED** at `a081bcb` (do not reopen)
+11. PK-2A Boot / Session Gating — **`CLOSED_WITH_NOTES`** at `79ba840` (historical)
+12. PK-1 Offline Shift Session — **`CLOSED_WITH_NOTES`** at `513b198` (preserved)
+13. G14 — **`ABORTED`**
+14. **NEXT_WORKFLOW_ACTION:** Return to ChatGPT for UI-11 Packet 2 / PKT-1 final docs closure confirmation. Do not implement PKT-2. Do not activate Packet2A or Model2. Do not invent the next packet. Do not deploy Hosting.
+15. Passive read-only observation may occur only when natural production traffic provides a real event; no agent-triggered activity is authorized
 
 ## Hard Boundaries
 
 - No production/emulator data mutation; no synthetic events; no manual invocation of deployed functions (including `resolveShiftCloseAlert`)
 - No `shifts.expected*` mutation; no FIFO/stock/credit/settlement writes
+- UI-11 Packet 2 / PKT-1 — CLOSED / DELIVERED / Runtime deployment complete
+- PKT-2 implementation — NOT AUTHORIZED
+- Packet2A activation — NOT AUTHORIZED
+- Model2 activation — NOT AUTHORIZED
+- Stage 10 Hosting — SKIPPED_BY_TRUE_STANDALONE_USER_OVERRIDE; Firebase Hosting permanently out of scope
+- TRUE-STANDALONE native/Capacitor/desktop/mobile — FUTURE / NOT STARTED
 - Packet 5 — CLOSED; do not reopen
 - PK-3 — CLOSED; do not reopen
 - PK-4 — CLOSED / DELIVERED; do not reopen
 - PK-5 — CLOSED / DELIVERED; do not reopen
-- PK-6 — CLOSED / DELIVERED; full packet closure routing is next workflow, not this docs gate; final packet of binding sequence
+- PK-6 — CLOSED / DELIVERED; final packet of binding PK sequence
 - NEXT_ELIGIBLE_PK_PACKET — NONE
 - PK-7 — NOT DEFINED / DO NOT INVENT
 - PK-2C implementation — NOT AUTHORIZED
@@ -429,5 +453,4 @@ All **CLOSED** where applicable.
 - Row28 / Row30 / D1 / D3 / Row32 reopen — NO
 - ENTRY_STORE writer / initializer retirement for R7-6 — NO
 - UI-B.1 / UI-B2 / P5-F / recapture — NOT AUTHORIZED
-- Firestore rules/index/functions deploy, deploy/runtime activation — NOT AUTHORIZED
 - `stash@{0}` untouched (`7d03cfec7ba52ff7e25b7e175ca190efc258d874`)

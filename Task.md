@@ -28,9 +28,13 @@ All current development, including UI-11 Packet 2 and beyond, must preserve comp
 
 ---
 
-> Last reconciled: 2026-08-24
-> Current repository HEAD (binding; PK-6 feature delivered): `e7ae0080eab574b207f53d3403d8a5ebacefff7c` (`feat(pos): add online-only guardrails`)
-> PK-6 feature SHA (binding): `e7ae0080eab574b207f53d3403d8a5ebacefff7c`
+> Last reconciled: 2026-08-26
+> Current repository HEAD (binding; PKT-1 runtime closed): `8abcd1550ef3004ebf0c9d2d5da32c9645a99010` (`fix(auth): add pk-1 runtime closure tooling`)
+> PKT-1 runtime HEAD (binding): `8abcd1550ef3004ebf0c9d2d5da32c9645a99010`
+> PKT-1 feature SHA (historical, delivered): `2e0a11ddc702ef80d123fd151b597456ac39d5f6`
+> TRUE-STANDALONE docs guardrail commit (historical): `58285246392a1da5e3538555df5e96462ded0a80`
+> PK-6 docs closure commit (historical): `acdae5fd6260c6c8740ad16e78023439aa0b4b0d`
+> PK-6 feature SHA (historical, delivered): `e7ae0080eab574b207f53d3403d8a5ebacefff7c`
 > PK-5 feature SHA (historical, delivered): `ef90d4ec4cce1decfed6e4809849fb9f991a2412`
 > PK-5 docs closure commit (historical): `cf9c6f392f8416f247b16244351ec4567c71996b`
 > PK-4 feature SHA (historical, delivered): `d27850abe80bac8b055f08206f17c36fda29e352`
@@ -57,13 +61,42 @@ All current development, including UI-11 Packet 2 and beyond, must preserve comp
 > P-OBS-1 implementation commit (historical, unchanged): `da3a8d1c9ddcb605a1f9a6e3cebc21d8dc2ffe72`
 > P-OBS-1 closure docs commit (historical, unchanged): `78f7ffe5c5b69f47af5c20ed8efd54410f35ee09`
 >
-> **Live workflow authority:** `docs/agent-workflow/STATE.md` (with `CURRENT_PACKET.md` / `NEXT_ACTION.md`) wins on gate/status conflict over this historical tracker.
+> **Live workflow authority:** `docs/agent-workflow/STATE.md` (with `CURRENT_PACKET.md` / `NEXT_ACTION.md`) wins on gate/status conflict over this historical tracker. Reconciled here to Post PK-6 Closure / UI-11 Packet 2 / PKT-1. PKT-1 is CLOSED / DELIVERED / Runtime deployment complete at `8abcd15`. PK-6 is historical CLOSED / DELIVERED. PKT-2 / Packet2A / Model2 are NOT AUTHORIZED.
 
 ---
 
-## PK-6 Online-Only Guardrails — Docs closure / source-of-truth reconciliation (this pass)
+## UI-11 Packet 2 / PKT-1 — Final docs reconciliation (this pass)
 
-**Status: PK-6 `CLOSED / DELIVERED / repository delivery complete`; this pass is docs-only source-of-truth reconciliation.** Gemini: `TWINPET-PK6-DOCS-RECONCILIATION-COMMIT-PUSH-AUTHORIZATION-GEMINI-001`. Live workflow authority remains `docs/agent-workflow/STATE.md`.
+**Status: PKT-1 `CLOSED / DELIVERED / Runtime deployment complete`; this pass is docs-only source-of-truth reconciliation.** Gemini: `TWINPET-UI11-PACKET2-PKT1-FINAL-RUNTIME-CLOSURE-ADJUDICATION-GEMINI-001` (`APPROVED_WITH_NOTES`). Live workflow authority remains `docs/agent-workflow/STATE.md`.
+
+PKT-1 CLOSED / DELIVERED / Runtime deployment complete. Next phase planning pending.
+
+- [x] PKT-1 status recorded — `CLOSED / DELIVERED / Runtime deployment complete`
+- [x] Runtime HEAD recorded — `8abcd1550ef3004ebf0c9d2d5da32c9645a99010` (`fix(auth): add pk-1 runtime closure tooling`)
+- [x] Feature SHA recorded — `2e0a11ddc702ef80d123fd151b597456ac39d5f6`
+- [x] Stage 0–13 recorded — completed under accepted rollout history
+- [x] Stage 10 Hosting recorded — `SKIPPED_BY_TRUE_STANDALONE_USER_OVERRIDE`
+- [x] TRUE-STANDALONE / NO HOSTING guardrail recorded — BINDING
+- [x] Runtime blockers recorded — 0
+- [x] `pendingRotation` recorded — 0
+- [x] `maintenanceMode` recorded — false
+- [x] Legacy PIN cleanup recorded — complete
+- [x] Named `pos-db` Rules recorded — live (`c77d0f28-8cf5-49b3-9491-9543d80a0ddb`)
+- [x] PKT-2 recorded — NOT AUTHORIZED
+- [x] Packet2A recorded — NOT AUTHORIZED
+- [x] Model2 recorded — NOT AUTHORIZED
+- [x] Next phase planning recorded — PENDING / requires separate authority
+- [x] Historical Stage 2 / Stage 7 / Stage 8 stops retained as historical events, not current state
+- [x] PK-6 status recorded — historical `CLOSED / DELIVERED` at `e7ae008` / docs `acdae5f`
+- [x] Protected stash recorded unchanged — `stash@{0}` = `7d03cfec7ba52ff7e25b7e175ca190efc258d874`
+
+**CURRENT_STATUS:** PKT-1 CLOSED / DELIVERED / Runtime deployment complete at `8abcd15`. Next phase planning pending. PKT-2 / Packet2A / Model2 NOT AUTHORIZED. PK-6 remains historical CLOSED / DELIVERED. Binding PK sequence still ends at PK-6. Do not invent PK-7. Do not invent the next packet.
+
+**NEXT_WORKFLOW_ACTION:** Return to ChatGPT for UI-11 Packet 2 / PKT-1 final docs closure confirmation. Do not implement PKT-2. Do not activate Packet2A or Model2. Do not deploy Hosting.
+
+## PK-6 Online-Only Guardrails — Docs closure / source-of-truth reconciliation (historical)
+
+**Status: HISTORICAL.** PK-6 later `CLOSED / DELIVERED / repository delivery complete` at feature `e7ae0080eab574b207f53d3403d8a5ebacefff7c` (`feat(pos): add online-only guardrails`) and docs `acdae5fd6260c6c8740ad16e78023439aa0b4b0d` (`docs: close pk-6 online-only guardrails`). The then-current "PK-6 final closure routing / next implementation NOT AUTHORIZED" snapshot is superseded as live current-state by UI-11 Packet 2 / PKT-1 CLOSED at `8abcd15`. Gemini then: `TWINPET-PK6-DOCS-RECONCILIATION-COMMIT-PUSH-AUTHORIZATION-GEMINI-001`. Live workflow authority remains `docs/agent-workflow/STATE.md`.
 
 - [x] PK-6 status recorded — `CLOSED / DELIVERED / repository delivery complete`
 - [x] PK-6 feature SHA recorded — `e7ae0080eab574b207f53d3403d8a5ebacefff7c` (`feat(pos): add online-only guardrails`)
@@ -98,9 +131,9 @@ All current development, including UI-11 Packet 2 and beyond, must preserve comp
 - [x] Prior PK-4 seven-doc pass retained as historical (`6a82fef`)
 - [x] Prior PK-3 seven-doc pass retained as historical (`5e6675758`)
 
-**CURRENT_STATUS:** PK-6 CLOSED / DELIVERED at `e7ae008`. PK-5 CLOSED / DELIVERED at `ef90d4e` / `cf9c6f3`. PK-4 CLOSED / DELIVERED at `d27850a` / `6a82fef`. PK-3 remains CLOSED at `ec7cf8b`. Packet 5 remains CLOSED at `292d51ff`. Binding sequence ends at PK-6. `NEXT_ELIGIBLE_PK_PACKET: NONE`. PK-7 is NOT DEFINED. This seven-doc packet records PK-6 delivered repository state. It does **not** declare PK-6 full packet closure. It does **not** authorize PK-2D, PK-7, deploy, or next implementation.
+**Historical note (that pass):** PK-6 CLOSED / DELIVERED at `e7ae008`. PK-5 CLOSED / DELIVERED at `ef90d4e` / `cf9c6f3`. PK-4 CLOSED / DELIVERED at `d27850a` / `6a82fef`. PK-3 remains CLOSED at `ec7cf8b`. Packet 5 remains CLOSED at `292d51ff`. Binding sequence ends at PK-6. `NEXT_ELIGIBLE_PK_PACKET: NONE`. PK-7 is NOT DEFINED. That seven-doc packet recorded PK-6 delivered repository state. It did **not** declare PK-6 full packet closure. Live current-state is now UI-11 Packet 2 / PKT-1 CLOSED at `8abcd15`.
 
-**NEXT_WORKFLOW_ACTION:** Return to ChatGPT for PK-6 final closure routing. Do not deploy. Do not reopen Packet 5, PK-3, PK-4, or PK-5 implementation. Do not activate PK-2D. Do not invent PK-7.
+**Then-current NEXT_WORKFLOW_ACTION (superseded):** Return to ChatGPT for PK-6 final closure routing.
 
 ## PK-5 Offline Read-Side Truth — Docs closure / source-of-truth reconciliation (historical)
 
@@ -401,23 +434,26 @@ All current development, including UI-11 Packet 2 and beyond, must preserve comp
 
 ## Future Phase — True Standalone (`TRUE-STANDALONE`) — NOT AUTHORIZED
 
-## UI-10-D / UI-11 Packet 2 — NOT STARTED
+## UI-10-D — NOT STARTED
+
+## UI-11 Packet 2 / PKT-1 — CLOSED / DELIVERED
 
 ### Next step
 
-1. **PK-6 — `CLOSED / DELIVERED`** at `e7ae0080eab574b207f53d3403d8a5ebacefff7c` — targeted `3 files / 21 tests PASS`; root `130 files / 2490 tests PASS`; UAT U01–U11 PASS; responsive 320 / 768 / 1080 PASS; AGY `PASS_WITH_NOTES`; PK-6 product defects 0; full packet closure routing is next workflow; final packet of binding sequence; `NEXT_ELIGIBLE_PK_PACKET: NONE`; PK-7 NOT DEFINED
-2. **PK-5 — `CLOSED / DELIVERED`** at `ef90d4ec4cce1decfed6e4809849fb9f991a2412`; docs `cf9c6f392f8416f247b16244351ec4567c71996b` — Codex / corrected UAT / AGY `PASS_WITH_NOTES`; targeted `14/186 PASS`; root `130/2486 PASS`; B16/B18 accepted harness limitations; do not reopen
-3. **PK-4 — `CLOSED / DELIVERED`** at `d27850abe80bac8b055f08206f17c36fda29e352`; docs `6a82fefa7238cc1eed8e9ce0790a2e9bb0913ad0`; do not reopen
-4. **PK-3 — `CLOSED`** at `ec7cf8beb52d56c1c412aa12c843cbd1151f687a` — `PASS`; U1–U7 `PASS`; docs `5e6675758`; do not reopen
-5. **Packet 5 — `CLOSED`** at `292d51ff5092283e07e1aed9dcc8ac76fedbd866` — `PASS_WITH_NOTES`; R4 `36 / 36 PASS`; do not reopen
-6. **AI-2 — `CLOSED_WITH_NOTES`** at `c45f5a3` — historical
-7. **AI-1 — `CLOSED_WITH_NOTES`** at `4298c14` — historical
-8. **R7-6 implementation — `CLOSED`** at `ac29935` — historical; do not reopen
-9. **D3 — `CLOSED`** at `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab` — do not reopen
-10. **PK-2A — `CLOSED_WITH_NOTES`** at `79ba840` — historical
-11. **PK-1 — `CLOSED_WITH_NOTES`** at `513b198` — do not reopen
-12. **NEXT_WORKFLOW_ACTION:** Return to ChatGPT for PK-6 final closure routing. Do not deploy. Do not activate PK-2D. Do not invent PK-7. Do not start next implementation.
-13. **NOT authorized:** deploy, production access, PK-2C, PK-2D, PK-7, next implementation, offline credential login, returns/refunds, G14 (ABORTED), OBS-C, UI-B.1, UI-B2, P5-F, recapture, callable invocation, stash operations, Packet 5 reopen, PK-3 reopen, PK-4 reopen, PK-5 reopen
-14. Do not automatically deploy or start PK-2D. Do not invent PK-7. Next implementation remains **NOT AUTHORIZED**.
+1. **UI-11 Packet 2 / PKT-1 — `CLOSED / DELIVERED / Runtime deployment complete`** at `8abcd1550ef3004ebf0c9d2d5da32c9645a99010`. Stage 0–13 completed under accepted rollout history. Stage 10 Hosting = `SKIPPED_BY_TRUE_STANDALONE_USER_OVERRIDE`. Runtime blockers 0. `pendingRotation = 0`. `maintenanceMode = false`. Legacy PIN cleanup complete. Named `pos-db` Rules live. PKT-2 / Packet2A / Model2 **NOT AUTHORIZED**. Next phase planning pending.
+2. **PK-6 — historical `CLOSED / DELIVERED`** at `e7ae0080eab574b207f53d3403d8a5ebacefff7c`; docs `acdae5fd6260c6c8740ad16e78023439aa0b4b0d` — targeted `3 files / 21 tests PASS`; root `130 files / 2490 tests PASS`; UAT U01–U11 PASS; responsive 320 / 768 / 1080 PASS; AGY `PASS_WITH_NOTES`; PK-6 product defects 0; final packet of binding PK sequence; `NEXT_ELIGIBLE_PK_PACKET: NONE`; PK-7 NOT DEFINED
+3. **PK-5 — `CLOSED / DELIVERED`** at `ef90d4ec4cce1decfed6e4809849fb9f991a2412`; docs `cf9c6f392f8416f247b16244351ec4567c71996b` — Codex / corrected UAT / AGY `PASS_WITH_NOTES`; targeted `14/186 PASS`; root `130/2486 PASS`; B16/B18 accepted harness limitations; do not reopen
+4. **PK-4 — `CLOSED / DELIVERED`** at `d27850abe80bac8b055f08206f17c36fda29e352`; docs `6a82fefa7238cc1eed8e9ce0790a2e9bb0913ad0`; do not reopen
+5. **PK-3 — `CLOSED`** at `ec7cf8beb52d56c1c412aa12c843cbd1151f687a` — `PASS`; U1–U7 `PASS`; docs `5e6675758`; do not reopen
+6. **Packet 5 — `CLOSED`** at `292d51ff5092283e07e1aed9dcc8ac76fedbd866` — `PASS_WITH_NOTES`; R4 `36 / 36 PASS`; do not reopen
+7. **AI-2 — `CLOSED_WITH_NOTES`** at `c45f5a3` — historical
+8. **AI-1 — `CLOSED_WITH_NOTES`** at `4298c14` — historical
+9. **R7-6 implementation — `CLOSED`** at `ac29935` — historical; do not reopen
+10. **D3 — `CLOSED`** at `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab` — do not reopen
+11. **PK-2A — `CLOSED_WITH_NOTES`** at `79ba840` — historical
+12. **PK-1 — `CLOSED_WITH_NOTES`** at `513b198` — do not reopen
+13. **NEXT_WORKFLOW_ACTION:** Return to ChatGPT for UI-11 Packet 2 / PKT-1 final docs closure confirmation. Do not implement PKT-2. Do not activate Packet2A or Model2. Do not invent the next packet. Do not deploy Hosting.
+14. **NOT authorized:** PKT-2, Packet2A, Model2, Hosting, PK-2C, PK-2D, PK-7, next packet implementation, TRUE-STANDALONE native/Capacitor implementation, stash operations, Packet 5 reopen, PK-3 reopen, PK-4 reopen, PK-5 reopen
+15. Do not invent the next packet. Next phase planning remains **PENDING**.
 
-**Not active:** deploy, PK-2C, PK-2D, PK-7, UI-B.1, UI-B2, P5-F, recapture, or any new feature packet. PK-6 is closed/delivered, not a future unauthorized packet. `NEXT_ELIGIBLE_PK_PACKET: NONE`.
+**Not active:** PKT-2, Packet2A, Model2, Hosting, PK-2C, PK-2D, PK-7, or any new feature packet. PKT-1 is closed/delivered. `NEXT_ELIGIBLE_PK_PACKET: NONE`. Next phase planning pending.
