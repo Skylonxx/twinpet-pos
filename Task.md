@@ -2,17 +2,19 @@
 
 # ARCHITECTURAL GUARDRAILS
 
-These rules are **permanent and binding now**. They constrain all current and future interim work, including UI-11 Packet 2. This is a **forward architectural guardrail**, not retroactive history erasure. Historical records below are unchanged.
+These rules are **permanent and binding now**. They constrain all current and future interim work. This is a **forward architectural guardrail**, not retroactive history erasure. Historical records below are unchanged.
 
-**TRUE-STANDALONE implementation itself remains FUTURE / NOT STARTED.** This section does **not** authorize native, Capacitor, Tauri, Electron, desktop/mobile packaging, local-storage migration, PKT-2, Packet2A, or Model2 work.
+**TRUE-STANDALONE architecture is `APPROVED_WITH_NOTES`. Architecture Planning Gate is `CLOSED`.** Claude PLAN-004 completed. Codex final architecture review = `PASS_WITH_NOTES`. Gemini `TWINPET-TRUE-STANDALONE-FINAL-ARCHITECTURE-ADJUDICATION-GEMINI-001` accepted D-1 through D-6. **No TRUE-STANDALONE implementation has started.** `PHASE_A_IMPLEMENTATION_AUTHORIZED_NOW: NO`. Phase A implementation authorization becomes eligible only after this docs reconciliation closes, via a **separate** Gemini gate.
+
+This section does **not** authorize native, Capacitor, Tauri, Electron, desktop/mobile packaging, SQLite, local-storage migration, Windows installer, Android build, PKT-2, Packet2A, or Model2 work.
 
 ## 1. TARGET ARCHITECTURE
 
-Twinpet POS is destined to be a **TRUE-STANDALONE** application: an offline-capable Desktop/Mobile Native App with Local Storage sync.
+Twinpet POS is a **TRUE-STANDALONE** application: an offline-capable Desktop/Mobile Native App with local durable storage and cloud sync.
 
-## 2. NOT A WEB APP
+## 2. NOT A WEB APP / NOT A HOSTED WEB DEPLOYMENT
 
-Twinpet POS is **explicitly not** a standard Web Application.
+Twinpet POS is **explicitly not** a standard Web Application. Browser runtime remains useful for **development and test compatibility only**. Browser/Web App is **not** the production delivery target. Do not describe TRUE-STANDALONE as a hosted web deployment.
 
 ## 3. NO HOSTING
 
@@ -24,13 +26,41 @@ Cloud infrastructure is strictly limited to **Firestore** and **Firebase Cloud F
 
 ## 5. INTERIM COMPATIBILITY
 
-All current development, including UI-11 Packet 2 and beyond, must preserve compatibility with the offline-first standalone trajectory.
+All current development must preserve compatibility with the offline-first standalone trajectory.
+
+## 6. RATIFIED SHELLS (architecture only)
+
+- **D-1** `TAURI_V2_CONDITIONAL` — desktop shell = Tauri v2; Phase C must still prove BrowserRouter History API, Firestore Web SDK persistence, Firebase Auth persistence, Web Locks, and WebView2 compatibility. Electron remains a documented fallback if a future hard requirement (for example mandatory silent/raw ESC/POS) changes the tradeoff. Tauri runtime is **not** already validated.
+- **D-2** `CAPACITOR_ANDROID_FIRST` — mobile shell = Capacitor; Android first; existing `android/` scaffold is historical/package evidence only, not runtime proof; iOS remains future/out of current scope; `allowBackup` / Android backup-data extraction must be reviewed before durable SQLite POS data is enabled.
+- **D-3** `SEPARATE_SHELLS_UNIFIED_APP_LAYER` — Desktop Tauri + Mobile Capacitor + shared React/Vite application + shared domain/service layer + shared platform-port contracts; runtime DI selects adapters; separate platform packaging. Do **not** describe one universal native shell.
+
+## 7. RATIFIED LOCAL STORE / DISTRIBUTION (architecture only)
+
+**D-4** `ACCEPT_FINAL_PLAN_004`:
+
+- SQLite behind Twinpet durable-store port; preserve KV semantics for first migration; IndexedDB retained as browser adapter + first-migration source; **no dual-write**.
+- Active epoch = highest committed epoch; incomplete newer migration never replaces an older committed epoch; committed active epoch is monotonic; **no IndexedDB fallback after SQLite commit**.
+- After a committed epoch may exist: missing/corrupt/unreadable/unrecognized manifest = fail closed; inconsistent committed domain state = fail closed; missing manifest must **not** imply virgin reset.
+- Candidate migration isolated until commit; later N→N+1 copies from active N, not stale IndexedDB; interrupted candidate leaves active N unchanged; one store bundle/epoch per process; no per-store fallback; R4/R6/evidence/cart/retry state cannot cross epochs.
+- `COMMIT_IS_IRREVERSIBLE`; after commit, active epoch never decreases; recovery is forward-only.
+- Windows supported production: single installed product; Tauri as managed installed product; MSI family / canonical install identity; **no** portable production mode; **no** side-by-side production versions on the same data root; supported downgrade blocked before launch; exact WiX/MSI behavior validated later.
+- Android supported production: stable app identity/signing; monotonic `versionCode`; normal production downgrade blocked by OS package-manager semantics; debug/ADB downgrade = unsupported production path; backup/data-extraction rules finalized before SQLite production enablement.
+- Architecture does **not** guarantee prevention of manually launched archived old binaries, portable copies outside the supported path, debug/ADB bypass, OS-level restore/tampering, or malware/admin filesystem access. An archived old binary is **not** a supported rollback path. No backend client-version fence is required.
+
+## 8. FIRST IMPLEMENTATION PHASE (not authorized now)
+
+**D-5** `PLATFORM_PORT_LAYER_FOUNDATION`: first real day-one port consumer = ConnectivityPort; existing composition seam = `src/components/AppShell.tsx`; `useSyncOrchestrator()` accepts the dependency path; Phase A intended behavior-preserving; no native dependency, shell, SQLite, D-6 exception, new production bare specifier, new/changed IndexedDB open site, Vite alias, TS path alias, new root tsconfig, or Row29 owner import/export amendment.
+
+**D-6** `PHASE_SPECIFIC_B_D_ONLY_IF_EXACTLY_REQUIRED`: Phase A no exception; Phase C no exception under accepted non-bare `window.__TAURI__` bridge; Phase B/D exact native-plugin/config exception only if required, each by separate Gemini authority, named frozen item, and mandatory Codex line-by-line review. No broad native exception. No authority inheritance across phases.
 
 ---
 
-> Last reconciled: 2026-08-26
-> Current repository HEAD (binding; PKT-1 runtime closed): `8abcd1550ef3004ebf0c9d2d5da32c9645a99010` (`fix(auth): add pk-1 runtime closure tooling`)
-> PKT-1 runtime HEAD (binding): `8abcd1550ef3004ebf0c9d2d5da32c9645a99010`
+> Last reconciled: 2026-08-27
+> Current repository HEAD (binding until this docs commit advances it): `ec8c97c6d238bc9c321812f67750965b8ff7cba2` (`docs: close soft delete transaction ordering follow-up`)
+> SoftDelete docs closure (historical): `ec8c97c6d238bc9c321812f67750965b8ff7cba2`
+> SoftDelete landing/source (historical, binding for that follow-up): `4d9be50411d72dbcc2bc9c35aebcbfdfa0819d19`
+> Model 2 runtime/source baseline (historical, not reopened): `ffb8069690173c80455f355d432e141865c09a33`
+> PKT-1 runtime HEAD (historical): `8abcd1550ef3004ebf0c9d2d5da32c9645a99010`
 > PKT-1 feature SHA (historical, delivered): `2e0a11ddc702ef80d123fd151b597456ac39d5f6`
 > TRUE-STANDALONE docs guardrail commit (historical): `58285246392a1da5e3538555df5e96462ded0a80`
 > PK-6 docs closure commit (historical): `acdae5fd6260c6c8740ad16e78023439aa0b4b0d`
@@ -61,15 +91,47 @@ All current development, including UI-11 Packet 2 and beyond, must preserve comp
 > P-OBS-1 implementation commit (historical, unchanged): `da3a8d1c9ddcb605a1f9a6e3cebc21d8dc2ffe72`
 > P-OBS-1 closure docs commit (historical, unchanged): `78f7ffe5c5b69f47af5c20ed8efd54410f35ee09`
 >
-> **Live workflow authority:** `docs/agent-workflow/STATE.md` (with `CURRENT_PACKET.md` / `NEXT_ACTION.md`) wins on gate/status conflict over this historical tracker. Reconciled here to Post PK-6 Closure / UI-11 Packet 2 / PKT-1. PKT-1 is CLOSED / DELIVERED / Runtime deployment complete at `8abcd15`. PK-6 is historical CLOSED / DELIVERED. PKT-2 / Packet2A / Model2 are NOT AUTHORIZED.
+> **Live workflow authority:** `docs/agent-workflow/STATE.md` (with `CURRENT_PACKET.md` / `NEXT_ACTION.md`) wins on gate/status conflict over this historical tracker. Reconciled here to TRUE-STANDALONE architecture `APPROVED_WITH_NOTES` / Architecture Planning Gate `CLOSED`. SoftDelete follow-up remains historical CLOSED_WITH_NOTES. Model 2 remains historical CLOSED_WITH_NOTES. PKT-1 remains historical CLOSED / DELIVERED. PK-6 remains historical CLOSED / DELIVERED. PKT-2 / Packet2A / Model2 remain NOT AUTHORIZED as next packets. Phase A implementation is NOT AUTHORIZED by this docs gate.
 
 ---
 
-## UI-11 Packet 2 / PKT-1 — Final docs reconciliation (this pass)
+## TRUE-STANDALONE — Docs reconciliation / closure (this pass)
 
-**Status: PKT-1 `CLOSED / DELIVERED / Runtime deployment complete`; this pass is docs-only source-of-truth reconciliation.** Gemini: `TWINPET-UI11-PACKET2-PKT1-FINAL-RUNTIME-CLOSURE-ADJUDICATION-GEMINI-001` (`APPROVED_WITH_NOTES`). Live workflow authority remains `docs/agent-workflow/STATE.md`.
+**Status: architecture `APPROVED_WITH_NOTES`; Planning Gate `CLOSED`; this pass is docs-only source-of-truth reconciliation.** Gemini: `TWINPET-TRUE-STANDALONE-FINAL-ARCHITECTURE-ADJUDICATION-GEMINI-001` (`APPROVED_WITH_CONDITIONS`). Codex final review: `PASS_WITH_NOTES`. Claude PLAN-004 completed. Live workflow authority remains `docs/agent-workflow/STATE.md`.
 
-PKT-1 CLOSED / DELIVERED / Runtime deployment complete. Next phase planning pending.
+No TRUE-STANDALONE implementation has started. Phase A (`PLATFORM_PORT_LAYER_FOUNDATION`) is **not** authorized yet. After this docs gate closes, Phase A implementation authorization becomes eligible via a **separate** Gemini gate.
+
+- [x] TRUE-STANDALONE architecture recorded — `APPROVED_WITH_NOTES`
+- [x] Architecture Planning Gate recorded — `CLOSED`
+- [x] Claude architecture planning recorded — COMPLETED (PLAN-004)
+- [x] Codex final architecture review recorded — `PASS_WITH_NOTES`
+- [x] Gemini D-1 recorded — `TAURI_V2_CONDITIONAL`
+- [x] Gemini D-2 recorded — `CAPACITOR_ANDROID_FIRST`
+- [x] Gemini D-3 recorded — `SEPARATE_SHELLS_UNIFIED_APP_LAYER`
+- [x] Gemini D-4 recorded — `ACCEPT_FINAL_PLAN_004`
+- [x] Gemini D-5 recorded — `PLATFORM_PORT_LAYER_FOUNDATION`
+- [x] Gemini D-6 recorded — `PHASE_SPECIFIC_B_D_ONLY_IF_EXACTLY_REQUIRED`
+- [x] Codex final notes recorded — non-blocking future acceptance criteria (Windows / Android / unsupported stale binary)
+- [x] Product delivery recorded — offline-capable Desktop/Mobile Native App; Browser/Web App is **not** the production delivery target
+- [x] Firebase Hosting recorded — permanently out of scope
+- [x] Cloud backend recorded — Firestore + Cloud Functions only
+- [x] TRUE-STANDALONE implementation recorded — NOT STARTED
+- [x] Phase A implementation recorded — NOT AUTHORIZED now
+- [x] Phase A eligibility after docs recorded — YES, via separate Gemini authorization
+- [x] Baseline HEAD recorded — `ec8c97c6d238bc9c321812f67750965b8ff7cba2`
+- [x] SoftDelete follow-up recorded — historical `CLOSED_WITH_NOTES` at landing `4d9be50` / docs `ec8c97c`
+- [x] Model 2 recorded — historical `CLOSED_WITH_NOTES` at `ffb8069`; not reopened
+- [x] PKT-1 recorded — historical `CLOSED / DELIVERED / Runtime deployment complete` at `8abcd15`
+- [x] PKT-2 / Packet2A / Model2 next-packet activation recorded — NOT AUTHORIZED
+- [x] Protected stash recorded unchanged — `stash@{0}` = `7d03cfec7ba52ff7e25b7e175ca190efc258d874`
+
+**CURRENT_STATUS:** TRUE-STANDALONE architecture APPROVED_WITH_NOTES. Planning gate CLOSED. Implementation NOT STARTED. Phase A NOT AUTHORIZED. Browser is not the production delivery target. Hosting remains out of scope. SoftDelete follow-up / Model 2 / PKT-1 remain historical closed. Binding PK sequence still ends at PK-6. Do not invent PK-7. Do not implement Phase A.
+
+**NEXT_WORKFLOW_ACTION:** RETURN_TO_CHATGPT_FOR_TRUE_STANDALONE_PHASE_A_IMPLEMENTATION_AUTHORIZATION_ROUTING. Do not implement Phase A. Do not initialize Tauri/Capacitor/Electron/SQLite. Do not implement PKT-2. Do not activate Packet2A or Model2. Do not deploy Hosting.
+
+## UI-11 Packet 2 / PKT-1 — Final docs reconciliation (historical)
+
+**Status: HISTORICAL.** PKT-1 `CLOSED / DELIVERED / Runtime deployment complete` at runtime `8abcd1550ef3004ebf0c9d2d5da32c9645a99010`. The then-current "next phase planning pending" snapshot is superseded as live current-state by TRUE-STANDALONE architecture `APPROVED_WITH_NOTES`. Gemini then: `TWINPET-UI11-PACKET2-PKT1-FINAL-RUNTIME-CLOSURE-ADJUDICATION-GEMINI-001` (`APPROVED_WITH_NOTES`). Live workflow authority remains `docs/agent-workflow/STATE.md`.
 
 - [x] PKT-1 status recorded — `CLOSED / DELIVERED / Runtime deployment complete`
 - [x] Runtime HEAD recorded — `8abcd1550ef3004ebf0c9d2d5da32c9645a99010` (`fix(auth): add pk-1 runtime closure tooling`)
@@ -90,9 +152,9 @@ PKT-1 CLOSED / DELIVERED / Runtime deployment complete. Next phase planning pend
 - [x] PK-6 status recorded — historical `CLOSED / DELIVERED` at `e7ae008` / docs `acdae5f`
 - [x] Protected stash recorded unchanged — `stash@{0}` = `7d03cfec7ba52ff7e25b7e175ca190efc258d874`
 
-**CURRENT_STATUS:** PKT-1 CLOSED / DELIVERED / Runtime deployment complete at `8abcd15`. Next phase planning pending. PKT-2 / Packet2A / Model2 NOT AUTHORIZED. PK-6 remains historical CLOSED / DELIVERED. Binding PK sequence still ends at PK-6. Do not invent PK-7. Do not invent the next packet.
+**Historical note (that pass):** PKT-1 CLOSED / DELIVERED at `8abcd15`. Next phase planning was then pending. PKT-2 / Packet2A / Model2 were NOT AUTHORIZED. That snapshot is superseded as live current-state by TRUE-STANDALONE architecture `APPROVED_WITH_NOTES`.
 
-**NEXT_WORKFLOW_ACTION:** Return to ChatGPT for UI-11 Packet 2 / PKT-1 final docs closure confirmation. Do not implement PKT-2. Do not activate Packet2A or Model2. Do not deploy Hosting.
+**Then-current NEXT_WORKFLOW_ACTION (superseded):** Return to ChatGPT for UI-11 Packet 2 / PKT-1 final docs closure confirmation.
 
 ## PK-6 Online-Only Guardrails — Docs closure / source-of-truth reconciliation (historical)
 
@@ -432,15 +494,17 @@ PKT-1 CLOSED / DELIVERED / Runtime deployment complete. Next phase planning pend
 
 ## UI-11 Packet 1 / UI-10-C / UI-10-B / UI-10-A — CLOSED / PUSHED
 
-## Future Phase — True Standalone (`TRUE-STANDALONE`) — NOT AUTHORIZED
+## Future Phase — True Standalone (`TRUE-STANDALONE`) — architecture APPROVED_WITH_NOTES / implementation NOT AUTHORIZED
+
+Architecture is `APPROVED_WITH_NOTES`. Planning gate is `CLOSED`. Implementation has **not** started. Phase A (`PLATFORM_PORT_LAYER_FOUNDATION`) is **not** authorized by this docs gate. D-1 Tauri v2 conditional; D-2 Capacitor Android-first; D-3 separate shells / unified app layer; D-4 SQLite durable store + supported distribution; D-5 platform-port foundation; D-6 phase-specific B/D exceptions only if exactly required. Browser/Web App is **not** the production delivery target. Firebase Hosting remains permanently out of scope.
 
 ## UI-10-D — NOT STARTED
 
-## UI-11 Packet 2 / PKT-1 — CLOSED / DELIVERED
+## UI-11 Packet 2 / PKT-1 — HISTORICAL CLOSED / DELIVERED
 
 ### Next step
 
-1. **UI-11 Packet 2 / PKT-1 — `CLOSED / DELIVERED / Runtime deployment complete`** at `8abcd1550ef3004ebf0c9d2d5da32c9645a99010`. Stage 0–13 completed under accepted rollout history. Stage 10 Hosting = `SKIPPED_BY_TRUE_STANDALONE_USER_OVERRIDE`. Runtime blockers 0. `pendingRotation = 0`. `maintenanceMode = false`. Legacy PIN cleanup complete. Named `pos-db` Rules live. PKT-2 / Packet2A / Model2 **NOT AUTHORIZED**. Next phase planning pending.
+1. **TRUE-STANDALONE architecture — `APPROVED_WITH_NOTES` / Planning Gate `CLOSED`.** Gemini `TWINPET-TRUE-STANDALONE-FINAL-ARCHITECTURE-ADJUDICATION-GEMINI-001`. Codex `PASS_WITH_NOTES`. D-1 through D-6 accepted. Implementation **NOT STARTED**. Phase A **NOT AUTHORIZED**. After this docs gate closes, return to ChatGPT for Phase A implementation authorization routing.
 2. **PK-6 — historical `CLOSED / DELIVERED`** at `e7ae0080eab574b207f53d3403d8a5ebacefff7c`; docs `acdae5fd6260c6c8740ad16e78023439aa0b4b0d` — targeted `3 files / 21 tests PASS`; root `130 files / 2490 tests PASS`; UAT U01–U11 PASS; responsive 320 / 768 / 1080 PASS; AGY `PASS_WITH_NOTES`; PK-6 product defects 0; final packet of binding PK sequence; `NEXT_ELIGIBLE_PK_PACKET: NONE`; PK-7 NOT DEFINED
 3. **PK-5 — `CLOSED / DELIVERED`** at `ef90d4ec4cce1decfed6e4809849fb9f991a2412`; docs `cf9c6f392f8416f247b16244351ec4567c71996b` — Codex / corrected UAT / AGY `PASS_WITH_NOTES`; targeted `14/186 PASS`; root `130/2486 PASS`; B16/B18 accepted harness limitations; do not reopen
 4. **PK-4 — `CLOSED / DELIVERED`** at `d27850abe80bac8b055f08206f17c36fda29e352`; docs `6a82fefa7238cc1eed8e9ce0790a2e9bb0913ad0`; do not reopen
@@ -452,8 +516,8 @@ PKT-1 CLOSED / DELIVERED / Runtime deployment complete. Next phase planning pend
 10. **D3 — `CLOSED`** at `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab` — do not reopen
 11. **PK-2A — `CLOSED_WITH_NOTES`** at `79ba840` — historical
 12. **PK-1 — `CLOSED_WITH_NOTES`** at `513b198` — do not reopen
-13. **NEXT_WORKFLOW_ACTION:** Return to ChatGPT for UI-11 Packet 2 / PKT-1 final docs closure confirmation. Do not implement PKT-2. Do not activate Packet2A or Model2. Do not invent the next packet. Do not deploy Hosting.
-14. **NOT authorized:** PKT-2, Packet2A, Model2, Hosting, PK-2C, PK-2D, PK-7, next packet implementation, TRUE-STANDALONE native/Capacitor implementation, stash operations, Packet 5 reopen, PK-3 reopen, PK-4 reopen, PK-5 reopen
-15. Do not invent the next packet. Next phase planning remains **PENDING**.
+13. **NEXT_WORKFLOW_ACTION:** RETURN_TO_CHATGPT_FOR_TRUE_STANDALONE_PHASE_A_IMPLEMENTATION_AUTHORIZATION_ROUTING. Do not implement Phase A. Do not initialize Tauri/Capacitor/Electron/SQLite. Do not implement PKT-2. Do not activate Packet2A or Model2. Do not invent the next packet. Do not deploy Hosting.
+14. **NOT authorized:** Phase A implementation, Tauri, Capacitor, Electron, SQLite, Windows installer, Android build, PKT-2, Packet2A reopen, Model2 reopen, Hosting, PK-2C, PK-2D, PK-7, next packet implementation, stash operations, Packet 5 reopen, PK-3 reopen, PK-4 reopen, PK-5 reopen
+15. Do not invent the next packet. Do not imply Phase A is in progress. Phase A implementation authorization remains **PENDING** at a separate Gemini gate.
 
-**Not active:** PKT-2, Packet2A, Model2, Hosting, PK-2C, PK-2D, PK-7, or any new feature packet. PKT-1 is closed/delivered. `NEXT_ELIGIBLE_PK_PACKET: NONE`. Next phase planning pending.
+**Not active:** Phase A, Tauri, Capacitor, SQLite, PKT-2, Hosting, or any new feature packet. TRUE-STANDALONE architecture is approved with notes. Implementation has not started. `NEXT_ELIGIBLE_PK_PACKET: NONE`.
