@@ -18,6 +18,7 @@ import { useAuth } from '../lib/hooks/useAuth';
 import { useBranch } from '../lib/hooks/useBranch';
 import { useDeviceSeqReconcileBoot } from '../lib/pos/offline/deviceSeqReconcileBoot';
 import { useSaleIntentSweepBoot } from '../lib/pos/offline/saleIntentSweepBoot';
+import { createBrowserSyncOrchestratorDeps } from '../lib/platform/adapters/browser/browserConnectivityPort';
 import { useSyncOrchestrator } from '../lib/pos/offline/syncOrchestrator';
 import SyncStatusBar from './SyncStatusBar';
 import type { UserRole } from '../lib/types';
@@ -66,7 +67,7 @@ export default function AppShell() {
   const { branch } = useBranch();
   const location = useLocation();
 
-  useSyncOrchestrator();
+  useSyncOrchestrator(createBrowserSyncOrchestratorDeps()); // useSyncOrchestrator() composition seam
   // Fail-open, once-per-tab startup Sale Intent sweep. Mounts here (structurally
   // past ProtectedRoute + PosShellRoute guards); silent no-op on every skip path.
   useSaleIntentSweepBoot();
