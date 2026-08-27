@@ -410,18 +410,16 @@ async function handleSoftDelete(
   const userSnap = await tx.get(userRef);
   if (!userSnap.exists) return invalid('not_found', 'ไม่พบผู้ใช้');
   const username = normalizeUsername(String(asUser(userSnap.data()).username ?? ''));
+  const unameRef = username ? database.collection(COLLECTIONS.usernames).doc(username) : null;
+  const unameSnap = unameRef ? await tx.get(unameRef) : null;
   tx.update(userRef, {
     deletedAt: FieldValue.serverTimestamp(),
     isActive: false,
     updatedAt: FieldValue.serverTimestamp(),
   });
   bumpAuthVersion(tx, database, userId);
-  if (username) {
-    const unameRef = database.collection(COLLECTIONS.usernames).doc(username);
-    const unameSnap = await tx.get(unameRef);
-    if (unameSnap.exists && asUser(unameSnap.data()).userId === userId) {
-      tx.delete(unameRef);
-    }
+  if (unameRef && unameSnap?.exists && asUser(unameSnap.data()).userId === userId) {
+    tx.delete(unameRef);
   }
   const live = asUser(userSnap.data());
   return {
