@@ -2,15 +2,16 @@
 
 ## Phase
 
-**Post PK-6 Closure / UI-11 Packet 2 / Model 2**
+**Post PK-6 Closure / UI-11 Packet 2 / Model 2 — softDelete follow-up**
 
 STATUS:
-MODEL2_CLOSED_WITH_NOTES_AWAIT_CHATGPT_POST_MODEL2_ROADMAP_ROUTING
+SOFTDELETE_FOLLOWUP_CLOSED_WITH_NOTES_AWAIT_CHATGPT_POST_SOFTDELETE_ROADMAP_ROUTING
 
 ```text
 CURRENT_PHASE: Post PK-6 Closure / UI-11 Packet 2 / Model 2
-CURRENT_GATE: MODEL2_DOCS_CLOSURE
+CURRENT_GATE: POST_MODEL2_SOFTDELETE_FOLLOWUP_DOCS_CLOSURE
 MODEL2_RUNTIME_STATUS: CLOSED_WITH_NOTES
+MODEL2_REOPENED: NO
 MODEL2_FINAL_RUNTIME_CLOSURE_AUTHORITY: TWINPET-UI11-PACKET2-MODEL2-FINAL-RUNTIME-CLOSURE-GEMINI-001
 DECISION_STATUS: APPROVED_WITH_CONDITIONS
 FINAL_RUNTIME_SOURCE_BASELINE: ffb8069690173c80455f355d432e141865c09a33
@@ -20,6 +21,29 @@ MODEL2_SERVER_DEPLOY: requestManagerApproval + resolveShiftCloseAlert
 MODEL2_DEPLOY_PROJECT: twinpet-pos
 MODEL2_DEPLOY_REGION: asia-southeast1
 MODEL2_RULES_DEPLOY: pos-db PASS
+SOFTDELETE_TRANSACTION_ORDER_FOLLOWUP: CLOSED_WITH_NOTES
+SOFTDELETE_FOLLOWUP_CLASSIFICATION: NON_BLOCKING_SEPARATE_FOLLOWUP (closed; not a UI-11 packet)
+SOFTDELETE_LANDING_COMMIT: 4d9be50411d72dbcc2bc9c35aebcbfdfa0819d19
+SOFTDELETE_LANDING_SUBJECT: fix(auth): correct soft delete transaction ordering
+SOFTDELETE_PRODUCTION_SOURCE: functions/src/setUserAccountCore.ts
+SOFTDELETE_TEST: functions/src/setUserAccountCore.test.ts
+SOFTDELETE_CODEX_REVIEW: PASS_WITH_NOTES (APPROVE)
+SOFTDELETE_TARGETED_TESTS: 13/13 PASS
+SOFTDELETE_FULL_FUNCTIONS_TESTS: 1771/1771 PASS
+SOFTDELETE_FUNCTIONS_TSC: PASS
+SOFTDELETE_FUNCTIONS_BUILD: PASS
+SOFTDELETE_EXACT_DEPLOY_TARGET: setUserAccount
+SOFTDELETE_DEPLOY_PROJECT: twinpet-pos
+SOFTDELETE_DEPLOY_REGION: asia-southeast1
+SOFTDELETE_DEPLOY_GENERATION: GEN_2
+SOFTDELETE_DEPLOY_STATE: ACTIVE
+SOFTDELETE_POST_DEPLOY_UPDATE_TIME: 2026-08-27T00:54:41.745400451Z
+SOFTDELETE_BROAD_FUNCTIONS_DEPLOY: NO
+SOFTDELETE_RULES_INDEX_HOSTING_NATIVE: NO
+SOFTDELETE_PRODUCTION_RUNTIME_UAT: NOT_REQUIRED / NOT_PERFORMED
+SOFTDELETE_PRODUCTION_USER_MUTATION: NO
+POST_CLOSURE_SOFTDELETE_FOLLOWUP_REQUIRED: NO
+SOFTDELETE_ACCEPTED_NOTE: in-memory unit transaction mock does not emulate rollback/retry/snapshot isolation; non-blocking for this ordering-only remediation
 FULL_FUNCTIONS_REDEPLOY: NO
 INDEX_DEPLOY: NO
 HOSTING_IN_MODEL2_CLOSURE: NO
@@ -54,9 +78,6 @@ EXPIRED_U7_APPROVAL_RETENTION_ACCEPTED: YES
 UAT_ATTEMPT_BUCKET_RETENTION_ACCEPTED: YES
 IMMUTABLE_AUDIT_LEDGER_RETENTION_ACCEPTED: YES
 PRODUCTION_SECURITY_STATE_ACCEPTED_SAFE: YES
-SOFTDELETE_TRANSACTION_ORDER_DEFECT: NON_BLOCKING_SEPARATE_FOLLOWUP
-SOFTDELETE_REMEDIATION_AUTHORIZED_NOW: NO
-POST_CLOSURE_SOFTDELETE_FOLLOWUP_REQUIRED: YES
 TRUE_STANDALONE_NO_HOSTING_GUARDRAIL: BINDING
 STAGE10_HOSTING: SKIPPED_BY_TRUE_STANDALONE_USER_OVERRIDE
 NATIVE_IMPLEMENTATION_AUTHORIZED: NO
@@ -80,57 +101,60 @@ PK2D: RECORD_ONLY / NOT ACTIVE / NOT AUTHORIZED
 STASH: UNTOUCHED
 ```
 
-UI-11 Packet 2 / Model 2 Runtime: CLOSED_WITH_NOTES. Final runtime/source baseline `ffb8069690173c80455f355d432e141865c09a33`. Gemini `APPROVED_WITH_CONDITIONS`. Exact Functions deploy PASS (`requestManagerApproval`, `resolveShiftCloseAlert`); Firestore Rules deploy PASS to named DB `pos-db`; region `asia-southeast1`; no index deploy; no Hosting; no Native/Capacitor. AGY-002 PASS. Grok-004B PASS_WITH_NOTES. U-14 through U-19 `DEFERRED_TO_AUTOMATED_EVIDENCE` (not executed live). Temporary UAT principals tombstoned; no usable temporary login remains. Retained credential docs / expired U-7 approval / attempt bucket / immutable audit ledgers accepted. Canonical `setUserAccount` / `handleSoftDelete` transaction-order defect is `NON_BLOCKING_SEPARATE_FOLLOWUP` (`POST_CLOSURE_SOFTDELETE_FOLLOWUP_REQUIRED: YES`); it does not keep Model 2 open. TRUE-STANDALONE / NO HOSTING remains binding. Native implementation is not authorized. PKT-2 remains NOT AUTHORIZED. Do not invent the next packet. After this docs commit, repository HEAD will advance to the docs SHA; the semantic Model 2 source baseline remains `ffb8069690173c80455f355d432e141865c09a33`.
+softDelete transaction-order follow-up: **CLOSED_WITH_NOTES**. This is a post-Model-2 maintenance follow-up, **not** a new UI-11 packet. Model 2 remains **CLOSED_WITH_NOTES** at `ffb8069690173c80455f355d432e141865c09a33` and was **not** reopened. Landing commit `4d9be50411d72dbcc2bc9c35aebcbfdfa0819d19` (`fix(auth): correct soft delete transaction ordering`). Exact `setUserAccount` deploy PASS on `twinpet-pos` / `asia-southeast1` / GEN_2 / ACTIVE. Post-deploy updateTime `2026-08-27T00:54:41.745400451Z`. Codex `PASS_WITH_NOTES (APPROVE)`. Targeted 13/13 PASS; full Functions 1771/1771 PASS; Functions tsc PASS; Functions build PASS. No production runtime UAT. No production user mutation. No broad Functions / Rules / index / Hosting / Native deploy. Accepted non-blocking note: in-memory unit transaction mock does not emulate rollback/retry/snapshot isolation; do not claim rollback behavior is fully emulated. TRUE-STANDALONE / NO HOSTING remains binding. Native implementation is not authorized. PKT-2 remains NOT AUTHORIZED. Do not invent the next packet. After this docs commit, repository HEAD will advance to the docs SHA; the semantic Model 2 source baseline remains `ffb8069690173c80455f355d432e141865c09a33`; the softDelete source landing remains `4d9be50411d72dbcc2bc9c35aebcbfdfa0819d19`.
 
-## This packet — UI-11 Packet 2 / Model 2 docs closure
+## This pass — softDelete transaction-order follow-up closure
 
-**Status: Model 2 CLOSED_WITH_NOTES.** Final runtime/source implementation baseline:
+**Status: CLOSED_WITH_NOTES.** Not a new UI-11 packet. Model 2 not reopened.
 
-`ffb8069690173c80455f355d432e141865c09a33` (`feat(auth): add delegated manager approval`)
-
-- Gemini: `TWINPET-UI11-PACKET2-MODEL2-FINAL-RUNTIME-CLOSURE-GEMINI-001` — `APPROVED_WITH_CONDITIONS`; `MODEL2_RUNTIME_CLOSURE: CLOSED_WITH_NOTES`
-- Deployment (`TWINPET-UI11-PACKET2-MODEL2-DEPLOYMENT-PREFLIGHT-AND-CONDITIONAL-DEPLOY-GROK-003`): exact `requestManagerApproval` + `resolveShiftCloseAlert` PASS; Firestore Rules PASS to `pos-db`; project `twinpet-pos`; region `asia-southeast1`; no index deploy; no Hosting; no Native/Capacitor
-- AGY (`TWINPET-UI11-PACKET2-MODEL2-RUNTIME-UAT-AGY-002`): STATUS COMPLETE; VERDICT PASS; UI/UX blockers 0; functional defects 0; security defects 0
-- AGY browser/user-surface: U-1 staff queue/detail PASS; U-2 delegated ACK same-branch manager PASS; U-3 delegated RESOLVE admin ALL PASS; U-4 one dummy wrong PIN fail-closed PASS; U-5 UI self-exclusion PASS; U-6 UI wrong-branch exclusion PASS; U-8 offline/no reconnect replay PASS; U-9 browser raw-PIN boundary PASS; U-11 Model 1 smoke PASS; U-12 none-state denial PASS
-- Grok (`TWINPET-UI11-PACKET2-MODEL2-TECHNICAL-EVIDENCE-AND-CLEANUP-GROK-004B`): STATUS COMPLETE; VERDICT PASS_WITH_NOTES
-- Grok technical: U-5 direct `self_approval_not_permitted` PASS; U-6 direct `approver_not_eligible` PASS; U-7 TTL `invalid_pin` PASS; U-10 replay `duplicate_confirmed` PASS; U-13 Rules denial `PERMISSION_DENIED` PASS
-- U-14 through U-19: `DEFERRED_TO_AUTOMATED_EVIDENCE` — not executed in production
-- Security: raw PIN persistence found NO; raw PIN logging found NO; existing admin unchanged; `nara` not used; no legacy PIN introduced; production security state accepted safe
-- Cleanup: synthetic UAT case/alert fixtures removed (ACK-001, RES-001, M1-001, NONE-001, NEG-001 cases; matching alerts except NONE-001 which had none); temporary UAT profiles tombstoned / inactive; username reservations removed; no temporary active privilege remains; no usable temporary UAT login remains
-- Retained (Gemini accepted): credential docs remain (`disabled=false`, current canonical `softDelete` semantics); expired U-7 approval retained; UAT attempt bucket retained; immutable approvals/ledgers/audit/create-intent evidence retained
-- Separate follow-up: canonical `setUserAccount` / `handleSoftDelete` transaction-order defect — live Firestore rejected read-after-write; no partial mutation; not introduced by Model 2; classification `NON_BLOCKING_SEPARATE_FOLLOWUP`; `POST_CLOSURE_SOFTDELETE_FOLLOWUP_REQUIRED: YES`; remediation not authorized in this gate
+- Origin: pre-existing canonical `setUserAccount` / `handleSoftDelete` transaction-order defect (Firestore read after write). Classified as a separate non-blocking follow-up after Model 2.
+- Landing commit: `4d9be50411d72dbcc2bc9c35aebcbfdfa0819d19` (`fix(auth): correct soft delete transaction ordering`)
+- Production source: `functions/src/setUserAccountCore.ts`
+- Test: `functions/src/setUserAccountCore.test.ts`
+- Validation: targeted 13/13 PASS; full Functions 1771/1771 PASS; Functions tsc PASS; Functions build PASS
+- Codex: `TWINPET-POST-MODEL2-SOFTDELETE-CODEX-REVIEW-001` — `PASS_WITH_NOTES (APPROVE)`
+- Deploy authority: `TWINPET-POST-MODEL2-SOFTDELETE-EXACT-DEPLOY-AUTHORITY-GEMINI-001` — `APPROVED_WITH_CONDITIONS`; `SOFTDELETE_FOLLOWUP_CLOSURE_IF_DEPLOY_PASS: CLOSED_WITH_NOTES`
+- Exact deploy: `firebase deploy --only functions:setUserAccount --project twinpet-pos` PASS
+- Live identity: `setUserAccount`; project `twinpet-pos`; region `asia-southeast1`; GEN_2; ACTIVE
+- Post-deploy updateTime: `2026-08-27T00:54:41.745400451Z` (advanced from `2026-08-25T06:46:58.934929036Z`)
+- Runtime: Gemini set production mutating UAT not required / not authorized; no `setUserAccount` callable invoked; no production user mutation
+- Accepted note: unit in-memory transaction mock lacks rollback/retry/snapshot-isolation emulation; non-blocking for this ordering-only remediation
 - Protected stash remains untouched: `stash@{0}` = `7d03cfec7ba52ff7e25b7e175ca190efc258d874`
 
 ### Claim boundaries (must not overclaim)
 
 - Do not invent the next packet
+- Do not claim this follow-up is a new UI-11 packet
+- Do not reopen Model 2
+- Do not claim production runtime UAT ran
+- Do not claim rollback/retry/snapshot isolation is fully emulated by the unit mock
 - Do not imply U-14 through U-19 ran in production
 - Do not claim credential docs were physically deleted or disabled
 - Do not claim expired U-7 approval or attempt bucket were deleted
-- Do not claim the softDelete defect was fixed
-- Do not treat the softDelete follow-up as keeping Model 2 open
+- Do not treat the closed softDelete follow-up as keeping Model 2 open
 - Do not authorize PKT-2 / native/Capacitor
 - Do not claim Hosting deployed or index deployment occurred
 - Do not claim TRUE-STANDALONE native/Capacitor implementation started
 - Do not overwrite the semantic Model 2 source baseline `ffb8069690173c80455f355d432e141865c09a33` with the later docs SHA
+- Do not overwrite the softDelete landing SHA `4d9be50411d72dbcc2bc9c35aebcbfdfa0819d19` with the later docs SHA
 - Do not reopen Packet 2A, PKT-1, PK-6, PK-5, PK-4, PK-3, or Packet 5
 
-## This pass — Docs/tracker reconciliation (Model 2 closed with notes)
+## This pass — Docs/tracker reconciliation (softDelete follow-up closed with notes)
 
-**Status: COMPLETE docs-only source-of-truth reconciliation of Model 2 CLOSED_WITH_NOTES**
+**Status: COMPLETE docs-only source-of-truth reconciliation of softDelete follow-up CLOSED_WITH_NOTES**
 
 - Frozen allowlist: `docs/agent-workflow/CURRENT_PACKET.md`, `docs/agent-workflow/NEXT_ACTION.md`, `docs/agent-workflow/STATE.md`, `docs/reports/latest-report.md`
 - Live workflow authority remains this trio; `Context.md` / `Task.md` / `docs/STATE.md` remain the last PKT-1 snapshot and already defer to this trio on gate/status/HEAD
 - TRUE-STANDALONE / NO HOSTING guardrails already present in `Context.md` / `Task.md` are preserved (not edited; not weakened)
-- No source/test/config/rules/index/functions changes
-- No production/deploy/Hosting/callable/stash operations
+- No source/test/config/rules/index/functions changes in this docs pass
+- No additional production/deploy/Hosting/callable/stash operations in this docs pass
 - No PKT-2 / native work
-- No softDelete remediation
-- Gemini: `DOCS_RECONCILIATION_AUTHORIZED: YES` / `DOCS_COMMIT_PUSH_AUTHORIZED: YES` / `TWINPET-UI11-PACKET2-MODEL2-FINAL-RUNTIME-CLOSURE-GEMINI-001`
+- Gemini: `DOCS_RECONCILIATION_AUTHORIZED_IF_DEPLOY_PASS: YES` / `DOCS_COMMIT_PUSH_AUTHORIZED_IF_DEPLOY_PASS: YES` / `TWINPET-POST-MODEL2-SOFTDELETE-EXACT-DEPLOY-AUTHORITY-GEMINI-001`
 
 ## Prior closed packets
 
-- **UI-11 Packet 2 / Model 2** — `CLOSED_WITH_NOTES` at runtime/source baseline `ffb8069` (`feat(auth): add delegated manager approval`). Gemini `APPROVED_WITH_CONDITIONS`. Exact two Functions + named `pos-db` Rules deployed. This pass is docs reconciliation only.
+- **Post Model 2 softDelete transaction-order follow-up** — `CLOSED_WITH_NOTES` at landing `4d9be50` (`fix(auth): correct soft delete transaction ordering`). Exact `setUserAccount` deployed. Not a UI-11 packet. Model 2 not reopened.
+- **UI-11 Packet 2 / Model 2** — `CLOSED_WITH_NOTES` at runtime/source baseline `ffb8069` (`feat(auth): add delegated manager approval`). Gemini `APPROVED_WITH_CONDITIONS`. Exact two Functions + named `pos-db` Rules deployed. Remains closed; not reopened.
 - **UI-11 Packet 2 / Packet 2A** — `CLOSED_WITH_NOTES` at runtime/source baseline `88086f4` (`fix(pos): honor selected branch for global admin`); feature `4befe0e`; docs `b0875d1`. Gemini `APPROVED_WITH_CONDITIONS`. Exact two Functions deployed.
 - **UI-11 Packet 2 / PKT-1** — `CLOSED / DELIVERED / Runtime deployment complete` at `8abcd15` (`fix(auth): add pk-1 runtime closure tooling`); docs `6ca8739`. Gemini `APPROVED_WITH_NOTES`. Stage 0–13 completed. Stage 10 Hosting `SKIPPED_BY_TRUE_STANDALONE_USER_OVERRIDE`.
 - **PK-6** — `CLOSED / DELIVERED` at `e7ae008` (`feat(pos): add online-only guardrails`); docs `acdae5f`. Targeted `3/21 PASS`. Root `130/2490 PASS`. UAT U01–U11 PASS. AGY `PASS_WITH_NOTES`.
@@ -159,11 +183,19 @@ UI-11 Packet 2 / Model 2 Runtime: CLOSED_WITH_NOTES. Final runtime/source baseli
 
 ## Current repository HEAD
 
-Final Model 2 runtime/source implementation baseline (binding; do not overwrite with the later docs SHA):
+SoftDelete follow-up landing/source commit (binding for this maintenance follow-up; do not overwrite with the later docs SHA):
+
+`4d9be50411d72dbcc2bc9c35aebcbfdfa0819d19`
+
+HEAD subject at that landing: `fix(auth): correct soft delete transaction ordering`
+
+Final Model 2 runtime/source implementation baseline (binding; not reopened; do not overwrite with the later docs SHA):
 
 `ffb8069690173c80455f355d432e141865c09a33`
 
 HEAD subject at that baseline: `feat(auth): add delegated manager approval`
+
+Model 2 docs closure SHA (historical): `8e343373a65c6fc8c73d3eda422ea6fbdb1e4ee7`
 
 Packet 2A docs closure SHA (historical): `b0875d1b14473a3dfaa710e9d6652a81da3a0605`
 
@@ -213,6 +245,6 @@ PK-1 final HEAD (binding, unchanged): `513b198a30a1af72151ab6a8c0976799871529b8`
 
 ## Next gate
 
-**UI-11 Packet 2 / Model 2 Runtime is CLOSED_WITH_NOTES.** No Model 2 runtime UAT rerun. No Model 2 redeploy. No softDelete remediation in this gate. TRUE-STANDALONE / NO HOSTING remains binding. Native implementation is not authorized. PKT-2 remains NOT AUTHORIZED. Packet 2A remains historical CLOSED_WITH_NOTES. PKT-1 remains historical CLOSED / DELIVERED. PK-6 remains historical CLOSED / DELIVERED. Binding PK sequence still ends at PK-6. `NEXT_ELIGIBLE_PK_PACKET: NONE`. PK-7 is **NOT DEFINED / DO NOT INVENT**. Do not invent the next packet.
+**softDelete transaction-order follow-up is CLOSED_WITH_NOTES.** Model 2 remains CLOSED_WITH_NOTES and was not reopened. No production runtime UAT. No next roadmap implementation in this gate. TRUE-STANDALONE / NO HOSTING remains binding. Native implementation is not authorized. PKT-2 remains NOT AUTHORIZED. Packet 2A remains historical CLOSED_WITH_NOTES. PKT-1 remains historical CLOSED / DELIVERED. PK-6 remains historical CLOSED / DELIVERED. Binding PK sequence still ends at PK-6. `NEXT_ELIGIBLE_PK_PACKET: NONE`. PK-7 is **NOT DEFINED / DO NOT INVENT**. Do not invent the next packet.
 
-**NEXT_WORKFLOW_ACTION:** Return to ChatGPT for post UI-11 Packet 2 / Model 2 roadmap routing. Do NOT implement softDelete remediation. Do NOT begin the next roadmap item. Do NOT implement PKT-2. Do NOT authorize native/Capacitor. Do NOT invent the next packet. Do NOT deploy Hosting. Do NOT reopen Model 2 runtime.
+**NEXT_WORKFLOW_ACTION:** RETURN_TO_CHATGPT_FOR_POST_SOFTDELETE_FOLLOWUP_ROADMAP_ROUTING. Do NOT begin the next roadmap item. Do NOT implement PKT-2. Do NOT authorize native/Capacitor. Do NOT invent the next packet. Do NOT deploy Hosting. Do NOT reopen Model 2 runtime.
