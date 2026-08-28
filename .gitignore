@@ -33,3 +33,6 @@ test-results/
 !/.cursor/rules/
 # Claude Code local tooling config — never commit
 .claude/
+# Tauri native generated output
+src-tauri/target/
+src-tauri/gen/

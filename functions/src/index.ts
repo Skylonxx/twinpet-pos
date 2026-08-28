@@ -308,7 +308,12 @@ export async function resolvePinLoginIdentity(
 export const verifyPinLogin = onCall(
   {
     invoker: 'public',
-    cors: [/^https?:\/\/localhost:\d+$/, /^https:\/\/.*\.firebaseapp\.com$/, /^https:\/\/.*\.web\.app$/],
+    cors: [
+      /^https?:\/\/localhost:\d+$/,
+      /^https:\/\/.*\.firebaseapp\.com$/,
+      /^https:\/\/.*\.web\.app$/,
+      'http://tauri.localhost',
+    ],
   },
   async (request) => {
     try {
