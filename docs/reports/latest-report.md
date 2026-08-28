@@ -1,13 +1,209 @@
-# Latest Report — TRUE-STANDALONE Phase A — CLOSED_WITH_NOTES / Pre Phase-C Planning
+# Latest Report — TRUE-STANDALONE Phase C — CLOSED_WITH_NOTES / Post Phase-C Next-Phase Adjudication
+
+> Date: 2026-08-28
+> Phase C landing HEAD: `92351999bb897c326a7cbefa3c97311887b5c5a1` (`feat(pos): add tauri desktop compatibility shell`)
+> Phase A landing (historical): `6ea48c1ce3792f91eaec7c44c4d025e004f63414` (`feat(pos): add platform port layer foundation`)
+> TRUE-STANDALONE architecture docs ratification (historical): `765b54b3d61419593a59fe559f95402ca00e21d6` (`docs: ratify true standalone architecture`)
+> SoftDelete landing (historical): `4d9be50411d72dbcc2bc9c35aebcbfdfa0819d19` (`fix(auth): correct soft delete transaction ordering`)
+> Final Model 2 runtime/source baseline (historical; not reopened; do not overwrite with the later docs SHA): `ffb8069690173c80455f355d432e141865c09a33` (`feat(auth): add delegated manager approval`)
+> Status: **TRUE-STANDALONE architecture APPROVED_WITH_NOTES. Architecture Planning Gate CLOSED. Phase A CLOSED_WITH_NOTES. Phase C CLOSED_WITH_NOTES.** Gemini `TWINPET-TRUE-STANDALONE-PHASE-C-FINAL-CLOSURE-LANDING-ADJUDICATION-GEMINI-001` accepted Phase C runtime/UAT and C7 Option A. Codex Phase-C final `PASS_WITH_NOTES` (blockers 0; request changes 0). Source landing complete at `92351999`. Next TRUE-STANDALONE phase is **not selected**. Production runtime activation is **NOT AUTHORIZED**. Browser/Web App is **not** the production delivery target. Firebase Hosting remains permanently out of scope. This pass is the authorized six-doc live-authority reconciliation of that Phase-C closure.
+
+TRUE-STANDALONE architecture is approved with notes. Planning gate is closed. Phase A is closed with notes. Phase C is closed with notes. Do not start Phase B. Do not implement SQLite. Do not implement Capacitor/Android. Do not activate production. Do not reopen Phase C.
+
+## 0. This pass's reports
+
+- Gemini Phase-C final closure: `TWINPET-TRUE-STANDALONE-PHASE-C-FINAL-CLOSURE-LANDING-ADJUDICATION-GEMINI-001` (`PHASE_C_RUNTIME_UAT_ACCEPTED: YES`; `C7_OPTION_A_CLOSURE_ACCEPTED: YES`; `PHASE_C_RUNTIME_CLOSURE_STATUS: CLOSED_WITH_NOTES`; source landing authorized and completed)
+- Gemini Phase-C docs authority: `TWINPET-TRUE-STANDALONE-PHASE-C-DOCS-RECONCILIATION-AUTHORIZATION-GEMINI-001` (`DECISION_STATUS: APPROVED_WITH_CONDITIONS`; `PHASE_C_DOCS_WRITE_ALLOWLIST_EXACT_SIX: YES`; `PHASE_C_DOCS_COMMIT_PUSH_AUTHORIZED: YES`)
+- Codex Phase-C final implementation review: `TWINPET-TRUE-STANDALONE-PHASE-C-FINAL-IMPLEMENTATION-REVIEW-CODEX-001` (`VERDICT: PASS_WITH_NOTES`; blockers 0; request changes 0)
+- Phase C landing: `TWINPET-TRUE-STANDALONE-PHASE-C-EXACT-LANDING-GROK-001` (`COMMIT_HASH: 92351999bb897c326a7cbefa3c97311887b5c5a1`)
+- This docs packet: `TWINPET-TRUE-STANDALONE-PHASE-C-DOCS-RECONCILIATION-GROK-001`
+- Baseline HEAD: `92351999bb897c326a7cbefa3c97311887b5c5a1` (`feat(pos): add tauri desktop compatibility shell`)
+
+## 1. Current TRUE-STANDALONE facts
+
+| Field | Value |
+|-------|-------|
+| CURRENT_PHASE | TRUE-STANDALONE |
+| CURRENT_GATE | TRUE_STANDALONE_PHASE_C_DOCS_RECONCILIATION |
+| TRUE_STANDALONE_ARCHITECTURE_STATUS | APPROVED_WITH_NOTES |
+| ARCHITECTURE_PLANNING_GATE | CLOSED |
+| GEMINI_ARCHITECTURE_AUTHORITY | TWINPET-TRUE-STANDALONE-FINAL-ARCHITECTURE-ADJUDICATION-GEMINI-001 |
+| GEMINI_PHASE_A_CLOSURE_AUTHORITY | TWINPET-TRUE-STANDALONE-PHASE-A-CLOSURE-NEXT-PHASE-GEMINI-001 |
+| GEMINI_PHASE_C_CLOSURE_AUTHORITY | TWINPET-TRUE-STANDALONE-PHASE-C-FINAL-CLOSURE-LANDING-ADJUDICATION-GEMINI-001 |
+| GEMINI_PHASE_C_DOCS_AUTHORITY | TWINPET-TRUE-STANDALONE-PHASE-C-DOCS-RECONCILIATION-AUTHORIZATION-GEMINI-001 |
+| DECISION_STATUS | APPROVED_WITH_CONDITIONS |
+| CODEX_FINAL_ARCHITECTURE_REVIEW | PASS_WITH_NOTES |
+| CODEX_PHASE_A_FINAL | PASS_WITH_NOTES |
+| CODEX_PHASE_C_FINAL | PASS_WITH_NOTES |
+| CLAUDE_ARCHITECTURE_PLANNING | COMPLETED (PLAN-004) |
+| D1_DESKTOP_SHELL | TAURI_V2_CONDITIONAL |
+| D2_MOBILE_SHELL | CAPACITOR_ANDROID_FIRST |
+| D3_SHELL_STRATEGY | SEPARATE_SHELLS_UNIFIED_APP_LAYER |
+| D4_LOCAL_DURABLE_STORE_AND_DISTRIBUTION_MODEL | ACCEPT_FINAL_PLAN_004 |
+| D5_FIRST_IMPLEMENTATION_PHASE | PLATFORM_PORT_LAYER_FOUNDATION |
+| D6_FROZEN_CONTRACT_EXCEPTION_MODEL | PHASE_SPECIFIC_B_D_ONLY_IF_EXACTLY_REQUIRED |
+| CODEX_FINAL_NOTES_ACCEPTED_AS_NON_BLOCKING | YES |
+| TRUE_STANDALONE_IMPLEMENTATION_STARTED | YES (Phase A landed; Phase C landed) |
+| PHASE_A_NAME | PLATFORM_PORT_LAYER_FOUNDATION |
+| PHASE_A_STATUS | CLOSED_WITH_NOTES |
+| PHASE_A_CLOSED | YES |
+| PHASE_A_IMPLEMENTATION_ACTIVE | NO |
+| PHASE_A_LANDING_COMMIT | `6ea48c1ce3792f91eaec7c44c4d025e004f63414` |
+| PHASE_A_LANDING_SUBJECT | feat(pos): add platform port layer foundation |
+| PHASE_A_BLOCKERS | 0 |
+| PHASE_A_REQUEST_CHANGES | 0 |
+| PHASE_C_NAME | DESKTOP_TAURI |
+| PHASE_C_STARTED | YES |
+| PHASE_C_IMPLEMENTATION_LANDED | YES |
+| PHASE_C_IMPLEMENTATION_ACTIVE | NO |
+| PHASE_C_RUNTIME_CLOSURE_STATUS | CLOSED_WITH_NOTES |
+| PHASE_C_LANDING_COMMIT | `92351999bb897c326a7cbefa3c97311887b5c5a1` |
+| PHASE_C_LANDING_SUBJECT | feat(pos): add tauri desktop compatibility shell |
+| PHASE_C_BLOCKERS | 0 |
+| PHASE_C_REQUEST_CHANGES | 0 |
+| TAURI_DESKTOP_RUNTIME | VALIDATED |
+| C7_OPTION_A | ACCEPTED |
+| PRODUCTION_RUNTIME_ACTIVATION | NOT_AUTHORIZED |
+| INSTALLER_MSI_SIGNING | NOT_PERFORMED |
+| POST_PHASE_C_NEXT_PHASE_SELECTION_DEFERRED_TO_GEMINI | YES |
+| NEXT_TRUE_STANDALONE_PHASE | UNDECIDED |
+| NEXT_PHASE_IMPLEMENTATION_AUTHORIZED_NOW | NO |
+| NEXT_ELIGIBLE_GATE | TRUE_STANDALONE_POST_PHASE_C_NEXT_PHASE_ADJUDICATION |
+| BROWSER_PRODUCTION_TARGET | NO |
+| FIREBASE_HOSTING | PERMANENTLY_OUT_OF_SCOPE |
+| STAGE10_HOSTING | SKIPPED_BY_TRUE_STANDALONE_USER_OVERRIDE |
+| TRUE_STANDALONE_NO_HOSTING_GUARDRAIL | BINDING |
+| CLOUD_BACKEND | Firestore + Cloud Functions only |
+| NATIVE_TAURI_IMPLEMENTATION | PHASE_C_LANDED_CLOSED_WITH_NOTES |
+| NATIVE_CAPACITOR_IMPLEMENTATION | NOT_AUTHORIZED |
+| SQLITE_IMPLEMENTATION | NOT_AUTHORIZED |
+| WINDOWS_INSTALLER_IMPLEMENTATION | NOT_AUTHORIZED |
+| ANDROID_BUILD | NOT_AUTHORIZED |
+| PHASE_B_SQLITE | NOT_AUTHORIZED |
+| PHASE_D_MOBILE_CAPACITOR | NOT_SELECTED |
+| PHASE_E_F | NOT_AUTHORIZED |
+| BASELINE_HEAD | `92351999bb897c326a7cbefa3c97311887b5c5a1` |
+| TRUE_STANDALONE_DOCS_RATIFICATION | `765b54b3d61419593a59fe559f95402ca00e21d6` |
+| SOFTDELETE_FOLLOWUP_STATUS | CLOSED_WITH_NOTES (historical) |
+| SOFTDELETE_LANDING_COMMIT | `4d9be50411d72dbcc2bc9c35aebcbfdfa0819d19` |
+| MODEL2_RUNTIME_STATUS | CLOSED_WITH_NOTES (historical; not reopened) |
+| MODEL2_FEATURE_COMMIT | `ffb8069690173c80455f355d432e141865c09a33` |
+| PACKET2A_STATUS | CLOSED_WITH_NOTES (historical) |
+| PKT1_STATUS | CLOSED / DELIVERED / Runtime deployment complete (historical) |
+| PKT2_IMPLEMENTATION | NOT_AUTHORIZED |
+| PK6_STATUS | CLOSED / DELIVERED (historical) |
+| PACKET_5_STATUS | CLOSED |
+| PK3_STATUS | CLOSED |
+| stash@{0} | unchanged `7d03cfec7ba52ff7e25b7e175ca190efc258d874` |
+
+**CURRENT_STATUS:** TRUE-STANDALONE architecture is **APPROVED_WITH_NOTES**. Architecture Planning Gate is **CLOSED**. Phase A is **CLOSED_WITH_NOTES** at `6ea48c1`. Phase C is **CLOSED_WITH_NOTES** at `92351999`. Next TRUE-STANDALONE phase is **not selected**. After the docs commit, repository HEAD advances to the docs SHA; do not treat that docs SHA as a source baseline. Semantic Phase C source remains `92351999`. Semantic Phase A source remains `6ea48c1`. Phase B / SQLite / Capacitor / production activation / installer/signing are **not** authorized. Post-Phase-C next-phase adjudication routing is **pending** at ChatGPT. Do not invent the next packet. Do not reopen Phase C.
+
+## 2. Gemini decision ledger (this docs gate)
+
+| ID | Subject | Status |
+|----|---------|--------|
+| TWINPET-TRUE-STANDALONE-PHASE-C-DOCS-RECONCILIATION-AUTHORIZATION-GEMINI-001 | Authorize six-doc Phase-C docs reconciliation | `APPROVED_WITH_CONDITIONS`; `LANDED_SOURCE_HEAD_ACCEPTED: 92351999`; `PHASE_C_RUNTIME_CLOSURE_STATUS: CLOSED_WITH_NOTES`; `PHASE_C_IMPLEMENTATION_LANDED: YES`; `POST_PHASE_C_NEXT_PHASE_SELECTION_DEFERRED_TO_GEMINI: YES`; `PHASE_C_DOCS_COMMIT_PUSH_AUTHORIZED: YES` |
+| TWINPET-TRUE-STANDALONE-PHASE-C-FINAL-CLOSURE-LANDING-ADJUDICATION-GEMINI-001 | Close Phase C runtime + authorize source landing | Phase C runtime/UAT accepted; C7 Option A accepted; `CLOSED_WITH_NOTES`; source landing authorized and completed |
+| TWINPET-TRUE-STANDALONE-PHASE-C-FINAL-IMPLEMENTATION-REVIEW-CODEX-001 | Final Phase-C implementation review | `PASS_WITH_NOTES`; blockers 0; request changes 0 |
+| TWINPET-TRUE-STANDALONE-PHASE-A-CLOSURE-NEXT-PHASE-GEMINI-001 | Historical Phase-A closure | `APPROVED_WITH_CONDITIONS`; Phase A `CLOSED_WITH_NOTES` at `6ea48c1` |
+| TWINPET-TRUE-STANDALONE-FINAL-ARCHITECTURE-ADJUDICATION-GEMINI-001 | Final TRUE-STANDALONE architecture (unchanged) | `APPROVED_WITH_CONDITIONS`; architecture `APPROVED_WITH_NOTES`; Planning Gate `CLOSED` |
+
+Do not invent a new product decision. Do not start Phase B. Do not implement SQLite. Do not implement Capacitor/Android. Do not activate production. Do not reopen Phase C. Do not reopen Phase A. Do not reopen Model 2 runtime. Do not authorize PKT-2. Do not deploy Hosting.
+
+## 3. Phase C delivered content (canonical)
+
+- Windows native Tauri v2 shell validated
+- BrowserRouter validated
+- Firestore persistent IndexedDB cache validated
+- offline full-process startup validated
+- reconnect validated
+- username/password login validated
+- PIN login / `verifyPinLogin` validated
+- Web Locks / observable `lock_held` validated
+- native privileged capability confinement validated
+- C7 Option A accepted/proven
+- no production runtime activation
+- no Hosting
+- no SQLite / Phase B
+- no installer/MSI/signing
+
+## 4. Frozen non-blocking notes (do not reopen Phase C)
+
+1. Generic client Firestore write was not exercised in Phase C.
+2. No explicit stored pre-re-UAT `lastLoginAt` snapshot; correlation evidence accepted.
+3. Exact production Functions origin is static CSP compatibility only, not production runtime authority.
+4. Benign Firestore cleardot image CSP warning remains.
+5. Reusable UAT project/billing/synthetic identity retained.
+6. Firebase Web API key in the client bundle follows Firebase Web SDK design.
+7. Installer/MSI/signing was not performed and is outside Phase C.
+
+## 5. TRUE-STANDALONE delivery direction
+
+```text
+TARGET: offline-capable Desktop/Mobile Native App with local durable storage and cloud sync
+NOT_A_STANDARD_WEB_APP: YES
+BROWSER_PRODUCTION_TARGET: NO
+BROWSER_RUNTIME: development/test compatibility only
+FIREBASE_HOSTING: permanently out of scope
+STAGE10_HOSTING: SKIPPED_BY_TRUE_STANDALONE_USER_OVERRIDE
+CLOUD_BACKEND: Firestore + Cloud Functions only
+PHASE_A_STATUS: CLOSED_WITH_NOTES
+PHASE_C_STATUS: CLOSED_WITH_NOTES
+NEXT_TRUE_STANDALONE_PHASE: UNDECIDED
+PHASE_B_SQLITE: NOT_AUTHORIZED
+PRODUCTION_RUNTIME_ACTIVATION: NOT_AUTHORIZED
+PKT2_IMPLEMENTATION: NOT_AUTHORIZED
+NEXT_ELIGIBLE_PK_PACKET: NONE
+PK7: NOT DEFINED / DO NOT INVENT
+```
+
+Do not describe TRUE-STANDALONE as a hosted web deployment. Do not describe "Web mode" as production delivery. Do not describe Phase C as pending. Do not describe a next implementation phase as selected.
+
+## 6. Exact docs surface for this closure
+
+Six authorized docs only:
+
+`Context.md`, `Task.md`, `docs/agent-workflow/CURRENT_PACKET.md`, `docs/agent-workflow/NEXT_ACTION.md`, `docs/agent-workflow/STATE.md`, `docs/reports/latest-report.md`
+
+`docs/skills/SKILL-GLOBAL-ARCHITECTURE.md` was **not** in the allowlist and was **not** edited. UI master plans were not edited. Live workflow authority (`STATE.md` / `CURRENT_PACKET.md` / `NEXT_ACTION.md`) wins on gate/status conflict.
+
+Source paths: 0. Test paths: 0. Config/runtime paths: 0.
+
+## 7. Next workflow
+
+```text
+NEXT_WORKFLOW_ACTION:
+RETURN_TO_CHATGPT_FOR_TRUE-STANDALONE_POST_PHASE_C_NEXT_PHASE_ADJUDICATION_ROUTING
+
+DO NOT:
+select or start a next implementation phase,
+start Phase B,
+implement SQLite,
+implement Capacitor / Android,
+build installer / signing,
+activate production,
+implement PKT-2,
+invent the next packet,
+deploy Hosting,
+reopen Phase C,
+reopen Phase A,
+reopen Model 2 runtime.
+```
+
+**Next implementation action:** NONE — Phase C is CLOSED_WITH_NOTES. Docs gate closes with this commit/push. Next TRUE-STANDALONE phase is not selected. Phase B / SQLite / Capacitor / production activation NOT AUTHORIZED. PKT-2 NOT AUTHORIZED. Post-Phase-C next-phase adjudication routing pending at ChatGPT.
+
+---
+
+# Historical — Latest Report — TRUE-STANDALONE Phase A — CLOSED_WITH_NOTES / Pre Phase-C Planning / later superseded as live current-state by Phase C CLOSED_WITH_NOTES
 
 > Date: 2026-08-27
 > Phase A landing HEAD: `6ea48c1ce3792f91eaec7c44c4d025e004f63414` (`feat(pos): add platform port layer foundation`)
 > TRUE-STANDALONE architecture docs ratification (historical): `765b54b3d61419593a59fe559f95402ca00e21d6` (`docs: ratify true standalone architecture`)
 > SoftDelete landing (historical): `4d9be50411d72dbcc2bc9c35aebcbfdfa0819d19` (`fix(auth): correct soft delete transaction ordering`)
 > Final Model 2 runtime/source baseline (historical; not reopened; do not overwrite with the later docs SHA): `ffb8069690173c80455f355d432e141865c09a33` (`feat(auth): add delegated manager approval`)
-> Status: **TRUE-STANDALONE architecture APPROVED_WITH_NOTES. Architecture Planning Gate CLOSED. Phase A CLOSED_WITH_NOTES.** Gemini `TWINPET-TRUE-STANDALONE-PHASE-A-CLOSURE-NEXT-PHASE-GEMINI-001` = `APPROVED_WITH_CONDITIONS`. Codex Phase-A final `PASS_WITH_NOTES` (blockers 0; request changes 0). Selected next phase = **`PHASE_C_DESKTOP_TAURI`**. **Phase C implementation is NOT AUTHORIZED.** Phase C has **not** started. Browser/Web App is **not** the production delivery target. Firebase Hosting remains permanently out of scope. This pass is the authorized six-doc live-authority reconciliation of that Phase-A closure.
+> Status: **HISTORICAL as live current-state.** TRUE-STANDALONE architecture APPROVED_WITH_NOTES. Architecture Planning Gate CLOSED. Phase A CLOSED_WITH_NOTES. Gemini `TWINPET-TRUE-STANDALONE-PHASE-A-CLOSURE-NEXT-PHASE-GEMINI-001` = `APPROVED_WITH_CONDITIONS`. Codex Phase-A final `PASS_WITH_NOTES` (blockers 0; request changes 0). The then-current "Selected next phase = PHASE_C_DESKTOP_TAURI / Phase C implementation is NOT AUTHORIZED / Phase C has not started" live facts are superseded as live current-state by Phase C `CLOSED_WITH_NOTES` at `92351999`. Browser/Web App is **not** the production delivery target. Firebase Hosting remains permanently out of scope. That pass was the authorized six-doc live-authority reconciliation of that Phase-A closure.
 
-TRUE-STANDALONE architecture is approved with notes. Planning gate is closed. Phase A is closed with notes. Do not start Phase C. Do not initialize Tauri/Capacitor/Electron/SQLite. Do not reopen Phase A.
+TRUE-STANDALONE architecture is approved with notes. Planning gate is closed. Phase A is closed with notes. Historical. Do not treat Phase C as still pending.
 
 ## 0. This pass's reports
 
