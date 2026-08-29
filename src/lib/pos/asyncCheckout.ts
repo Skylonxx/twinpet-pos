@@ -5,14 +5,8 @@ import type { AsyncOrder, AsyncOrderLine, AsyncPayment } from '../types';
 import { RETAIL_PRICE_LEVEL_ID } from '../types';
 import { formatOfflineReceiptNumber } from './billId';
 import { getLineTotal } from './cartUtils';
-import {
-  allocateLocalSeq,
-  getDeviceId,
-  getDeviceLabel,
-  getReceiptDeviceSegment,
-  makeAsyncOrderId,
-  nextLocalSeq,
-} from './deviceId';
+import { allocateLocalSeq, getDeviceId, getDeviceLabel, getReceiptDeviceSegment, makeAsyncOrderId, nextLocalSeq } from './deviceId';
+import { isNativeCommittedDurableStore } from '../platform/durableStore/bootDurableStore';
 import type { SaleIntentObserver } from './offline/saleIntentObserver';
 import type { CartLine, CartTotals, PaymentSplit } from './types';
 
@@ -167,6 +161,9 @@ export function submitAsyncOrder(
   const ident: OrderIdentity =
     deps?.identity ??
     (() => {
+      if (isNativeCommittedDurableStore()) {
+        throw new Error('sale identity must be preallocated after native committed epoch');
+      }
       const deviceId = getDeviceId();
       const seq = nextLocalSeq();
       // Receipt segment prefers the admin label ("iPad-01" → "IPAD01"); the doc id

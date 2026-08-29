@@ -12,6 +12,14 @@
  * not clone, spread, serialize, or wrap them.
  */
 import { isAuthenticProvenEvidenceAbsence, isAuthenticProvenEvidencePresence } from './saleSubmissionEvidenceStore';
+import {
+  getCommittedDurableStore,
+  nativeTxnGet,
+  nativeTxnGetAll,
+  nativeTxnGetAllKeys,
+  nativeTxnPut,
+  registerDomainDumper,
+} from '../../platform/durableStore/bootDurableStore';
 import type {
   AcquiredResumeFenceAuthorization,
   ActiveCartSnapshotRecord,
@@ -251,6 +259,17 @@ function transactCart<T>(
   mode: 'readonly' | 'readwrite',
   fn: (txn: CartTxn) => Promise<T>,
 ): Promise<T> {
+  const native = getCommittedDurableStore('twinpet-active-cart-snapshot');
+  if (native) {
+    return native.transact([CART_STORE], mode, (txn) =>
+      fn({
+        get: (store, key) => nativeTxnGet(txn, store, key),
+        put: (store, key, value) => nativeTxnPut(txn, store, key, value),
+        getAllKeys: (store) => nativeTxnGetAllKeys(txn, store) as Promise<IDBValidKey[]>,
+        getAll: (store) => nativeTxnGetAll(txn, store),
+      }),
+    );
+  }
   return openCartDb().then(
     (dbi) =>
       new Promise<T>((resolve, reject) => {
@@ -673,3 +692,16 @@ export async function releaseSaleSubmissionResumeFence(
     return { ok: false };
   }
 }
+
+registerDomainDumper('cart', async () => {
+  return transactCart('readonly', async (txn) => {
+    const rows: Array<{ store: string; key: string; value: unknown }> = [];
+    const read = txn.get.bind(txn);
+    const keys = await txn.getAllKeys(CART_STORE);
+    for (const key of keys) {
+      if (typeof key !== 'string') continue;
+      rows.push({ store: CART_STORE, key, value: await read(CART_STORE, key) });
+    }
+    return rows;
+  });
+});

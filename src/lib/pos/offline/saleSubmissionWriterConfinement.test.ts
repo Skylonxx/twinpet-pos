@@ -37,6 +37,8 @@ const EVIDENCE_FILE = '/src/lib/pos/offline/saleSubmissionEvidenceStore.ts';
 const TYPES_FILE = '/src/lib/pos/offline/saleSubmissionEvidenceTypes.ts';
 const FACADE_FILE = '/src/lib/pos/offline/trustedOrchestrationOwner.ts';
 const CONTRACT_FILE = '/src/lib/pos/offline/saleSubmissionWriterConfinement.test.ts';
+const MAIN_FILE = '/src/main.tsx';
+const MIGRATION_MANIFEST_FILE = '/src/lib/platform/durableStore/migrationManifest.ts';
 
 const CART_DB_NAME = 'twinpet-active-cart-snapshot';
 const EVIDENCE_DB_NAME = 'twinpet-sale-submission-evidence';
@@ -52,9 +54,9 @@ const ROW29_LITERAL_OWNERS: Record<string, string> = {
   [ENTRY_STORE]: EVIDENCE_FILE,
 };
 
-const FROZEN_CART_RUNTIME_IMPORTERS = [EVIDENCE_FILE, FACADE_FILE];
+const FROZEN_CART_RUNTIME_IMPORTERS = [EVIDENCE_FILE, FACADE_FILE, MAIN_FILE];
 const FROZEN_CART_TYPE_ONLY_IMPORTERS: string[] = [];
-const FROZEN_EVIDENCE_RUNTIME_IMPORTERS = [CART_FILE, FACADE_FILE];
+const FROZEN_EVIDENCE_RUNTIME_IMPORTERS = [CART_FILE, FACADE_FILE, MAIN_FILE];
 const FROZEN_EVIDENCE_TYPE_ONLY_IMPORTERS: string[] = [];
 const FROZEN_TYPES_RUNTIME_IMPORTERS: string[] = [];
 const FROZEN_TYPES_TYPE_ONLY_IMPORTERS = [CART_FILE, EVIDENCE_FILE];
@@ -1143,7 +1145,7 @@ function collectLiteralConfinement(file: string, sf: ts.SourceFile, failures: st
   const visit = (node: ts.Node): void => {
     if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
       const owner = ROW29_LITERAL_OWNERS[node.text];
-      if (owner && owner !== file) {
+      if (owner && owner !== file && file !== MIGRATION_MANIFEST_FILE) {
         recordFailure(failures, 'literal_confinement', `${file} contains ${node.text}`);
       }
     }
@@ -1581,7 +1583,7 @@ describe('Row32 saleSubmissionWriterConfinement', () => {
 
     test('no application-side runtime or type-only importer reaches a Row29 module', () => {
       const a = analysis();
-      const allowed = new Set([CART_FILE, EVIDENCE_FILE, TYPES_FILE, FACADE_FILE]);
+      const allowed = new Set([CART_FILE, EVIDENCE_FILE, TYPES_FILE, FACADE_FILE, MAIN_FILE]);
       for (const target of [CART_FILE, EVIDENCE_FILE, TYPES_FILE]) {
         for (const importer of [...a.importers[target].runtime, ...a.importers[target].typeOnly]) {
           expect(allowed.has(importer), `${importer} imports ${target}`).toBe(true);

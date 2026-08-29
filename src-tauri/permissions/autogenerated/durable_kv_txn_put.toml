@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-durable-kv-txn-put"
+description = "Enables the durable_kv_txn_put command without any pre-configured scope."
+commands.allow = ["durable_kv_txn_put"]
+
+[[permission]]
+identifier = "deny-durable-kv-txn-put"
+description = "Denies the durable_kv_txn_put command without any pre-configured scope."
+commands.deny = ["durable_kv_txn_put"]

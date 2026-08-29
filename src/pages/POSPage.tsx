@@ -129,7 +129,7 @@ export default function POSPage({ trustedResumeSweep }: POSPageProps = {}) {
     refreshInventory,
     pendingRetirementRefresh,
   } = usePosInventory(branchId);
-  const { bills: suspendedBills, count: suspendedCount, addBill, removeBill } =
+  const { bills: suspendedBills, count: suspendedCount, addBill, removeBill, status: suspendedStatus } =
     useSuspendedBills(branchId);
   const { priceLevels: customerTiers } = usePriceLevels(branchId);
 
@@ -766,15 +766,19 @@ export default function POSPage({ trustedResumeSweep }: POSPageProps = {}) {
   }, [cartLines.length]);
 
   const handleHoldClick = useCallback(() => {
+    if (suspendedStatus === 'loading' || suspendedStatus === 'error') {
+      showToast(suspendedStatus === 'error' ? 'พักบิลยังไม่พร้อม' : 'กำลังโหลดบิลที่พักไว้');
+      return;
+    }
     if (cartLines.length === 0) {
       showToast('ไม่มีสินค้าในตะกร้า');
       return;
     }
     setHoldNoteOpen(true);
-  }, [cartLines.length, showToast]);
+  }, [cartLines.length, showToast, suspendedStatus]);
 
   const handleHoldConfirm = useCallback(
-    (note: string) => {
+    async (note: string) => {
       const bill: SuspendedBill = {
         id: createSafeId('suspended-bill'),
         note,
@@ -788,7 +792,12 @@ export default function POSPage({ trustedResumeSweep }: POSPageProps = {}) {
         totalAmount: totals.grandTotal,
         itemCount: totals.totalQty,
       };
-      addBill(bill);
+      try {
+        await addBill(bill);
+      } catch {
+        showToast('พักบิลไม่สำเร็จ');
+        return;
+      }
       clearPosCart();
       setHoldNoteOpen(false);
       showToast('พักบิลเรียบร้อย');
@@ -798,14 +807,19 @@ export default function POSPage({ trustedResumeSweep }: POSPageProps = {}) {
   );
 
   const handleRestoreBill = useCallback(
-    (bill: SuspendedBill) => {
+    async (bill: SuspendedBill) => {
       if (cartLines.length > 0) {
         showToast('กรุณาชำระหรือพักบิลปัจจุบันก่อนเรียกคืน');
         return;
       }
+      try {
+        await removeBill(bill.id);
+      } catch {
+        showToast('เรียกคืนบิลไม่สำเร็จ');
+        return;
+      }
       cart.restoreCart(bill);
       checkout.setCustomer(bill.customer);
-      removeBill(bill.id);
       setSuspendedListOpen(false);
       showToast('เรียกคืนบิลแล้ว');
       focusSearch();
@@ -1326,7 +1340,7 @@ export default function POSPage({ trustedResumeSweep }: POSPageProps = {}) {
               type="button"
               className="pos-topbar-btn pos-topbar-btn--secondary"
               onClick={handleHoldClick}
-              disabled={cartLines.length === 0}
+              disabled={cartLines.length === 0 || suspendedStatus !== 'ready'}
             >
               <i className="ti ti-player-pause" aria-hidden="true" /> พักบิล
             </button>
@@ -2095,16 +2109,22 @@ export default function POSPage({ trustedResumeSweep }: POSPageProps = {}) {
         }
         destructiveLabel="ยืนยัน"
         onConfirm={() => {
-          if (confirmModalState.payload?.type === 'clearCart') {
-            cart.clearCart();
-            showToast('ล้างตะกร้าแล้ว');
-            focusSearch();
-          } else if (confirmModalState.payload?.type === 'cancelParkedOrder') {
-            removeBill(confirmModalState.payload.bill.id);
-            showToast('ลบบิลที่พักไว้แล้ว');
-            focusSearch();
-          }
-          setConfirmModalState({ open: false });
+          void (async () => {
+            if (confirmModalState.payload?.type === 'clearCart') {
+              cart.clearCart();
+              showToast('ล้างตะกร้าแล้ว');
+              focusSearch();
+            } else if (confirmModalState.payload?.type === 'cancelParkedOrder') {
+              try {
+                await removeBill(confirmModalState.payload.bill.id);
+                showToast('ลบบิลที่พักไว้แล้ว');
+                focusSearch();
+              } catch {
+                showToast('ลบบิลที่พักไว้ไม่สำเร็จ');
+              }
+            }
+            setConfirmModalState({ open: false });
+          })();
         }}
         onCancel={() => {
           // 7C-UI-02-HOTFIX-FOCUS-EDGE: Clear-Cart / cancel-parked confirm dismissed — the

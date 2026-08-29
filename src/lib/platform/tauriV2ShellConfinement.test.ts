@@ -41,7 +41,6 @@ const FORBIDDEN_CARGO_TOKENS = [
   'tauri-plugin-process',
   'tauri-plugin-updater',
   'tauri-plugin-store',
-  'rusqlite',
   'sqlx',
 ] as const;
 
@@ -160,7 +159,10 @@ describe('Phase C Tauri v2 shell confinement', () => {
       expect(text, file).not.toMatch(/from\s+['"]@tauri-apps/);
       expect(text, file).not.toMatch(/from\s+['"]electron['"]/);
       expect(text, file).not.toMatch(/from\s+['"]@capacitor/);
-      expect(text, file).not.toContain('window.__TAURI__');
+      if (!file.startsWith('/src/lib/platform/adapters/tauri/')) {
+        expect(text, file).not.toContain('window.__TAURI__');
+        expect(text, file).not.toContain('__TAURI__');
+      }
       expect(text, file).not.toContain('__TAURI_INTERNALS__');
     }
   });
@@ -264,7 +266,7 @@ describe('Phase C Tauri v2 shell confinement', () => {
         beforeDevCommand?: string;
         beforeBuildCommand?: string;
       };
-      app?: { security?: { csp?: unknown; dangerousDisableAssetCspModification?: unknown } };
+      app?: { security?: { csp?: unknown; dangerousDisableAssetCspModification?: unknown }; withGlobalTauri?: boolean };
     };
     expect(conf.productName).toBe('Twinpet POS');
     expect(conf.identifier).toBe('com.twinpet.pos');
@@ -298,9 +300,10 @@ describe('Phase C Tauri v2 shell confinement', () => {
     expect(connectSrc).not.toContain('https://*.cloudfunctions.net');
     expect(connectSrc.includes('*')).toBe(false);
     expect(conf.app?.security?.dangerousDisableAssetCspModification).toBeUndefined();
+    expect(conf.app?.withGlobalTauri).toBe(true);
   });
 
-  test('capabilities remain core-only and Cargo has no plugin/sql/fs/shell crates or custom commands', () => {
+  test('capabilities remain core plus exact 13 durable-store app permissions and Cargo has rusqlite without plugins', () => {
     const capDir = resolve(ROOT, 'src-tauri/capabilities');
     const capFiles = readdirSync(capDir).filter((n) => n.endsWith('.json')).sort();
     expect(capFiles).toEqual(['default.json']);
@@ -309,7 +312,22 @@ describe('Phase C Tauri v2 shell confinement', () => {
       permissions?: unknown[];
     };
     expect(cap.windows).toEqual(['main']);
-    expect(cap.permissions).toEqual(['core:default']);
+    expect(cap.permissions).toEqual([
+      'core:default',
+      'allow-durable-kv-txn-begin',
+      'allow-durable-kv-txn-get',
+      'allow-durable-kv-txn-get-all',
+      'allow-durable-kv-txn-get-all-keys',
+      'allow-durable-kv-txn-put',
+      'allow-durable-kv-txn-delete',
+      'allow-durable-kv-txn-commit',
+      'allow-durable-kv-txn-abort',
+      'allow-durable-manifest-get',
+      'allow-durable-manifest-put-epoch',
+      'allow-durable-manifest-lease-acquire',
+      'allow-durable-manifest-lease-heartbeat',
+      'allow-durable-manifest-lease-release',
+    ]);
     const capText = readRepoFile('/src-tauri/capabilities/default.json');
     for (const token of FORBIDDEN_CAPABILITY_TOKENS) {
       if (token === 'sql') {
@@ -325,14 +343,14 @@ describe('Phase C Tauri v2 shell confinement', () => {
     }
     expect(cargo).toContain('tauri =');
     expect(cargo).toContain('tauri-build');
+    expect(cargo).toContain('rusqlite');
+    expect(cargo).toContain('bundled');
 
     const mainRs = readRepoFile('/src-tauri/src/main.rs');
     const libRs = readRepoFile('/src-tauri/src/lib.rs');
-    for (const text of [mainRs, libRs]) {
-      expect(text).not.toContain('#[tauri::command]');
-      expect(text).not.toContain('invoke_handler');
-      expect(text).not.toContain('generate_handler');
-    }
+    expect(mainRs).not.toContain('#[tauri::command]');
+    expect(libRs).toContain('invoke_handler');
+    expect(libRs).toContain('generate_handler');
   });
 
   test('generated target/gen output is ignored and not present as tracked source', () => {

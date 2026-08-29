@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-durable-manifest-lease-acquire"
+description = "Enables the durable_manifest_lease_acquire command without any pre-configured scope."
+commands.allow = ["durable_manifest_lease_acquire"]
+
+[[permission]]
+identifier = "deny-durable-manifest-lease-acquire"
+description = "Denies the durable_manifest_lease_acquire command without any pre-configured scope."
+commands.deny = ["durable_manifest_lease_acquire"]

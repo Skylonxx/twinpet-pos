@@ -374,3 +374,17 @@ describe('3B-3 · useCheckout source contract', () => {
     expect(hookSource).not.toContain('allocateOrderIdentity().catch(');
   });
 });
+
+describe('Phase B · native committed sale identity', () => {
+  afterEach(async () => {
+    const boot = await import('../platform/durableStore/bootDurableStore');
+    boot.__resetBootDurableStoreForTests();
+  });
+
+  test('submitAsyncOrder without preallocated identity fails closed after native commit', async () => {
+    const boot = await import('../platform/durableStore/bootDurableStore');
+    boot.__setNativeCommittedForTests('epoch-1');
+    expect(() => submitAsyncOrder(input)).toThrow(/preallocated/);
+    expect(deviceIdModule.nextLocalSeq).not.toHaveBeenCalled();
+  });
+});

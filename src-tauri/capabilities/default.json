@@ -1,11 +1,24 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Phase C compatibility shell — no privileged native APIs",
+  "description": "Phase B SQLite durable store — exact 13 app commands, no generic SQL/fs/shell",
   "windows": [
     "main"
   ],
   "permissions": [
-    "core:default"
+    "core:default",
+    "allow-durable-kv-txn-begin",
+    "allow-durable-kv-txn-get",
+    "allow-durable-kv-txn-get-all",
+    "allow-durable-kv-txn-get-all-keys",
+    "allow-durable-kv-txn-put",
+    "allow-durable-kv-txn-delete",
+    "allow-durable-kv-txn-commit",
+    "allow-durable-kv-txn-abort",
+    "allow-durable-manifest-get",
+    "allow-durable-manifest-put-epoch",
+    "allow-durable-manifest-lease-acquire",
+    "allow-durable-manifest-lease-heartbeat",
+    "allow-durable-manifest-lease-release"
   ]
 }

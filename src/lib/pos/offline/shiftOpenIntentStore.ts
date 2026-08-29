@@ -12,6 +12,14 @@ import type {
   ShiftOpenRemoteCreateState,
 } from './shiftOpenIntentTypes';
 import { SHIFT_OPEN_INTENT_STALE_AGE_MS } from './shiftOpenIntentTypes';
+import {
+  getCommittedDurableStore,
+  nativeTxnGet,
+  nativeTxnGetAll,
+  nativeTxnGetAllKeys,
+  nativeTxnPut,
+  registerDomainDumper,
+} from '../../platform/durableStore/bootDurableStore';
 
 export { SHIFT_OPEN_INTENT_STALE_AGE_MS };
 
@@ -21,6 +29,7 @@ const SHIFT_OPEN_INTENT_STORES: ShiftOpenIntentStoreName[] = ['shiftOpenIntents'
 interface ShiftOpenIntentTxn {
   get<T>(store: ShiftOpenIntentStoreName, key: string): Promise<T | undefined>;
   getAll<T>(store: ShiftOpenIntentStoreName): Promise<T[]>;
+  getAllKeys(store: ShiftOpenIntentStoreName): Promise<string[]>;
   put(store: ShiftOpenIntentStoreName, key: string, value: unknown): Promise<void>;
 }
 
@@ -64,7 +73,28 @@ function reqP<T>(req: IDBRequest<T>): Promise<T> {
   });
 }
 
-function createIndexedDbShiftOpenIntentStore(): ShiftOpenIntentKvStore {
+export function createIndexedDbShiftOpenIntentStore(): ShiftOpenIntentKvStore {
+  const native = getCommittedDurableStore('twinpet-shift-open-intent');
+  if (native) {
+    return {
+      transact(stores, mode, fn) {
+        return native.transact(stores, mode, (txn) =>
+          fn({
+            get: (store, key) => nativeTxnGet(txn, store, key),
+            getAll: (store) => nativeTxnGetAll(txn, store),
+            getAllKeys: (store) =>
+              nativeTxnGetAllKeys(txn, store).then((keys) =>
+                keys.map((key) => {
+                  if (typeof key !== 'string') throw new Error('shift-open native key must be a string');
+                  return key;
+                }),
+              ),
+            put: (store, key, value) => nativeTxnPut(txn, store, key, value),
+          }),
+        );
+      },
+    };
+  }
   return {
     transact<T>(
       stores: ShiftOpenIntentStoreName[],
@@ -98,6 +128,15 @@ function createIndexedDbShiftOpenIntentStore(): ShiftOpenIntentKvStore {
             const txn: ShiftOpenIntentTxn = {
               get: (store, key) => reqP(tx.objectStore(store).get(key)),
               getAll: (store) => reqP(tx.objectStore(store).getAll()),
+              getAllKeys: (store) =>
+                reqP(tx.objectStore(store).getAllKeys()).then((keys) =>
+                  keys.map((key) => {
+                    if (typeof key !== 'string') {
+                      throw new Error(`shift-open store "${store}" returned a non-string key`);
+                    }
+                    return key;
+                  }),
+                ),
               put: (store, key, value) =>
                 reqP(tx.objectStore(store).put(value, key)).then(() => undefined),
             };
@@ -162,6 +201,9 @@ export function createInMemoryShiftOpenIntentStore(): ShiftOpenIntentKvStore & {
         },
         async getAll<R>(store: ShiftOpenIntentStoreName): Promise<R[]> {
           return [...ensure(store).values()].map((v) => clone(v)) as R[];
+        },
+        async getAllKeys(store: ShiftOpenIntentStoreName): Promise<string[]> {
+          return [...ensure(store).keys()];
         },
         async put(store, key, value) {
           if (mode !== 'readwrite') throw new Error('put in readonly transaction');
@@ -560,3 +602,14 @@ export function isStaleOpenPending(entry: ShiftOpenIntentEntry, nowMs: number = 
     nowMs - entry.openedAtLocal >= SHIFT_OPEN_INTENT_STALE_AGE_MS
   );
 }
+
+registerDomainDumper('shiftOpen', async () => {
+  const store = createIndexedDbShiftOpenIntentStore();
+  return store.transact(['shiftOpenIntents'], 'readonly', async (txn) => {
+    const rows: Array<{ store: string; key: string; value: unknown }> = [];
+    for (const key of await txn.getAllKeys('shiftOpenIntents')) {
+      rows.push({ store: 'shiftOpenIntents', key, value: await txn.get('shiftOpenIntents', key) });
+    }
+    return rows;
+  });
+});

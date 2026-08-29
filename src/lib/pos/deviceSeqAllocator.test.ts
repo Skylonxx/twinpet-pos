@@ -439,3 +439,39 @@ describe('fastForwardLocalSeqTo · upward-only fast-forward', () => {
     await expect(fastForwardLocalSeqTo(50)).resolves.toBeUndefined();
   });
 });
+
+describe('Phase B · native committed device sequence', () => {
+  afterEach(async () => {
+    const boot = await import('../platform/durableStore/bootDurableStore');
+    boot.__resetBootDurableStoreForTests();
+    delete (globalThis as { __TAURI__?: unknown }).__TAURI__;
+  });
+
+  test('nextLocalSeq is not authoritative after native commit', async () => {
+    const boot = await import('../platform/durableStore/bootDurableStore');
+    boot.__setNativeCommittedForTests('epoch-1');
+    expect(() => nextLocalSeq()).toThrow(/not authoritative after native committed epoch/);
+  });
+
+  test('getDeviceId does not mint after native commit when cache is empty', async () => {
+    const boot = await import('../platform/durableStore/bootDurableStore');
+    boot.__setNativeCommittedForTests('epoch-1');
+    localStorage.removeItem('twinpet_device_id');
+    expect(() => getDeviceId()).toThrow(/device id cache empty/);
+  });
+
+  test('allocateLocalSeq fails closed on native command failure and does not consume localStorage seq', async () => {
+    const boot = await import('../platform/durableStore/bootDurableStore');
+    boot.__setNativeCommittedForTests('epoch-1');
+    localStorage.setItem(DEVICE_SEQ_KEY, '7');
+    (globalThis as unknown as { __TAURI__: { core: { invoke: () => Promise<never> } } }).__TAURI__ = {
+      core: {
+        invoke: async () => {
+          throw new Error('sqlite busy');
+        },
+      },
+    };
+    await expect(allocateLocalSeq()).rejects.toThrow(/sqlite busy|Tauri durable-store/);
+    expect(localStorage.getItem(DEVICE_SEQ_KEY)).toBe('7');
+  });
+});

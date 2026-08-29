@@ -2,11 +2,14 @@
 
 export type DurableStoreMode = 'readonly' | 'readwrite';
 
+export type DurableStoreKey = string | string[];
+
 export interface DurableStoreTxn {
-  get<T>(store: string, key: string): Promise<T | undefined>;
+  get<T>(store: string, key: DurableStoreKey): Promise<T | undefined>;
   getAll<T>(store: string): Promise<T[]>;
-  put(store: string, key: string, value: unknown): Promise<void>;
-  delete(store: string, key: string): Promise<void>;
+  getAllKeys(store: string): Promise<DurableStoreKey[]>;
+  put(store: string, key: DurableStoreKey, value: unknown): Promise<void>;
+  delete(store: string, key: DurableStoreKey): Promise<void>;
 }
 
 export interface DurableStorePort {

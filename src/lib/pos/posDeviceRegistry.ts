@@ -141,8 +141,8 @@ export async function claimDevice(
   const lastSeq = await getDeviceLastSeq(deviceId);
   // setDeviceIdentity stores the seq as-is; nextLocalSeq() returns stored + 1,
   // so the next receipt is lastSeq + 1 — strictly above prior synced bills.
-  setDeviceIdentity(deviceId, lastSeq);
-  setDeviceLabel(label);
+  await setDeviceIdentity(deviceId, lastSeq);
+  await setDeviceLabel(label);
   await registerThisDevice(branchId, label, userId);
 }
 

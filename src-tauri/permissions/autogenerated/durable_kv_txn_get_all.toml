@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-durable-kv-txn-get-all"
+description = "Enables the durable_kv_txn_get_all command without any pre-configured scope."
+commands.allow = ["durable_kv_txn_get_all"]
+
+[[permission]]
+identifier = "deny-durable-kv-txn-get-all"
+description = "Denies the durable_kv_txn_get_all command without any pre-configured scope."
+commands.deny = ["durable_kv_txn_get_all"]

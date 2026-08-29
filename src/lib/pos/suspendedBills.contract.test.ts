@@ -60,7 +60,7 @@ describe('Hold Bill · button wiring (POSPage.tsx)', () => {
     const fn = region(
       posPageSource,
       'const handleHoldClick',
-      '[cartLines.length, showToast]',
+      '[cartLines.length, showToast, suspendedStatus]',
     );
     expect(fn).toContain('setHoldNoteOpen(true)');
   });
@@ -69,7 +69,7 @@ describe('Hold Bill · button wiring (POSPage.tsx)', () => {
     const fn = region(
       posPageSource,
       'const handleHoldClick',
-      '[cartLines.length, showToast]',
+      '[cartLines.length, showToast, suspendedStatus]',
     );
     expect(fn).toContain('cartLines.length === 0');
     expect(fn).toContain('showToast');
@@ -80,15 +80,16 @@ describe('Hold Bill · button wiring (POSPage.tsx)', () => {
     expect(posPageSource).toContain('onConfirm={handleHoldConfirm}');
   });
 
-  test('handleHoldConfirm calls addBill, clearPosCart, and closes the modal', () => {
+  test('handleHoldConfirm clears the cart only after addBill succeeds', () => {
     const fn = region(
       posPageSource,
       'const handleHoldConfirm',
       '[addBill,',
     );
-    expect(fn).toContain('addBill(bill)');
+    expect(fn).toContain('await addBill(bill)');
     expect(fn).toContain('clearPosCart()');
-    expect(fn).toContain('setHoldNoteOpen(false)');
+    expect(fn.indexOf('await addBill(bill)')).toBeLessThan(fn.indexOf('clearPosCart()'));
+    expect(fn).toContain("showToast('พักบิลไม่สำเร็จ')");
   });
 
   test('handleHoldConfirm uses createSafeId for suspended bill ids (LAN HTTP safe)', () => {
@@ -153,13 +154,15 @@ describe('Restore Bill · customer restore (POSPage.tsx)', () => {
     expect(fn).toContain('cart.restoreCart(bill)');
   });
 
-  test('handleRestoreBill removes the bill and closes the list modal', () => {
+  test('handleRestoreBill removes the bill before restoring the cart', () => {
     const fn = region(
       posPageSource,
       'const handleRestoreBill',
       '[cartLines.length,',
     );
     expect(fn).toContain('removeBill(bill.id)');
+    expect(fn).toContain('cart.restoreCart(bill)');
+    expect(fn.indexOf('removeBill(bill.id)')).toBeLessThan(fn.indexOf('cart.restoreCart(bill)'));
     expect(fn).toContain('setSuspendedListOpen(false)');
   });
 
@@ -286,5 +289,42 @@ describe('Restore Bill · useCart.restoreCart seeds bill-level state (useCart.ts
   test('restoreCart updates cartRef synchronously (same-tick correctness)', () => {
     const fn = region(useCartSource, 'const restoreCart = useCallback', '}, []);');
     expect(fn).toContain('cartRef.current = restored');
+  });
+});
+
+describe('Suspended Bill · native mutation failure propagation (useSuspendedBills.ts)', () => {
+  let hookSource: string;
+  beforeAll(async () => {
+    hookSource = (await import('./useSuspendedBills.ts?raw')).default;
+  });
+
+  test('addBill rethrows after setting error status', () => {
+    const fn = region(hookSource, 'const addBill = useCallback', '[branchId, native],');
+    expect(fn).toContain("setStatus('error')");
+    expect(fn).toContain('throw err');
+  });
+
+  test('removeBill rethrows after setting error status', () => {
+    const fn = region(hookSource, 'const removeBill = useCallback', '[branchId, native],');
+    expect(fn).toContain("setStatus('error')");
+    expect(fn).toContain('throw err');
+  });
+
+  test('legacy addBill persists before setBills and does not persist inside a state updater', () => {
+    const fn = region(hookSource, 'const addBill = useCallback', '[branchId, native],');
+    expect(fn).not.toMatch(/setBills\(\s*\(prev\)\s*=>\s*\{[\s\S]*saveSuspendedBills/);
+    const persistAt = fn.indexOf('saveSuspendedBills(branchId, next)');
+    const stateAt = fn.indexOf('setBills(next)', persistAt);
+    expect(persistAt).toBeGreaterThan(-1);
+    expect(stateAt).toBeGreaterThan(persistAt);
+  });
+
+  test('legacy removeBill persists before setBills and does not persist inside a state updater', () => {
+    const fn = region(hookSource, 'const removeBill = useCallback', '[branchId, native],');
+    expect(fn).not.toMatch(/setBills\(\s*\(prev\)\s*=>\s*\{[\s\S]*saveSuspendedBills/);
+    const persistAt = fn.indexOf('saveSuspendedBills(branchId, next)');
+    const stateAt = fn.indexOf('setBills(next)', persistAt);
+    expect(persistAt).toBeGreaterThan(-1);
+    expect(stateAt).toBeGreaterThan(persistAt);
   });
 });

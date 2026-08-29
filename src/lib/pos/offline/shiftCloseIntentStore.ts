@@ -9,6 +9,14 @@ import type {
   ShiftCloseIntentStatus,
 } from './shiftCloseIntentTypes';
 import { SHIFT_CLOSE_INTENT_STALE_AGE_MS } from './shiftCloseIntentTypes';
+import {
+  getCommittedDurableStore,
+  nativeTxnGet,
+  nativeTxnGetAll,
+  nativeTxnGetAllKeys,
+  nativeTxnPut,
+  registerDomainDumper,
+} from '../../platform/durableStore/bootDurableStore';
 
 export type {
   PointerRepairObserver,
@@ -31,6 +39,7 @@ type ShiftCloseIntentStoreKey = IDBValidKey;
 interface ShiftCloseIntentTxn {
   get<T>(store: ShiftCloseIntentStoreName, key: ShiftCloseIntentStoreKey): Promise<T | undefined>;
   getAll<T>(store: ShiftCloseIntentStoreName): Promise<T[]>;
+  getAllKeys?: (store: ShiftCloseIntentStoreName) => Promise<Array<string | string[]>>;
   put(store: ShiftCloseIntentStoreName, key: ShiftCloseIntentStoreKey, value: unknown): Promise<void>;
 }
 
@@ -74,7 +83,30 @@ function reqP<T>(req: IDBRequest<T>): Promise<T> {
   });
 }
 
-function createIndexedDbShiftCloseIntentStore(): ShiftCloseIntentKvStore {
+function asShiftCloseDurableKey(key: IDBValidKey): string | string[] {
+  if (typeof key === 'string') return key;
+  if (Array.isArray(key) && key.every((part) => typeof part === 'string')) {
+    return key as string[];
+  }
+  throw new Error('unsupported shift-close-intent store key');
+}
+
+export function createIndexedDbShiftCloseIntentStore(): ShiftCloseIntentKvStore {
+  const native = getCommittedDurableStore('twinpet-shift-close-intent');
+  if (native) {
+    return {
+      transact(stores, mode, fn) {
+        return native.transact(stores, mode, (txn) =>
+          fn({
+            get: (store, key) => nativeTxnGet(txn, store, asShiftCloseDurableKey(key)),
+            getAll: (store) => nativeTxnGetAll(txn, store),
+            getAllKeys: (store) => nativeTxnGetAllKeys(txn, store) as Promise<Array<string | string[]>>,
+            put: (store, key, value) => nativeTxnPut(txn, store, asShiftCloseDurableKey(key), value),
+          }),
+        );
+      },
+    };
+  }
   return {
     transact<T>(
       stores: ShiftCloseIntentStoreName[],
@@ -108,6 +140,8 @@ function createIndexedDbShiftCloseIntentStore(): ShiftCloseIntentKvStore {
             const txn: ShiftCloseIntentTxn = {
               get: (store, key) => reqP(tx.objectStore(store).get(key)),
               getAll: (store) => reqP(tx.objectStore(store).getAll()),
+              getAllKeys: (store) =>
+                reqP(tx.objectStore(store).getAllKeys()).then((keys) => keys.map(asShiftCloseDurableKey)),
               put: (store, key, value) =>
                 reqP(tx.objectStore(store).put(value, key)).then(() => undefined),
             };
@@ -191,6 +225,15 @@ export function createInMemoryShiftCloseIntentStore(): ShiftCloseIntentKvStore &
             else pointers.push(clone(v));
           }
           return [...entries, ...pointers] as R[];
+        },
+        async getAllKeys(store: ShiftCloseIntentStoreName): Promise<Array<string | string[]>> {
+          const strings: string[] = [];
+          const arrays: string[][] = [];
+          for (const k of ensure(store).keys()) {
+            if (k.startsWith('s:')) strings.push(k.slice(2));
+            else arrays.push(JSON.parse(k.slice(2)) as string[]);
+          }
+          return [...strings, ...arrays];
         },
         async put(store, key, value) {
           if (mode !== 'readwrite') throw new Error('put in readonly transaction');
@@ -1091,3 +1134,16 @@ export function createInMemoryShiftCloseIntentJournal(
     dump: () => memory.dump(),
   };
 }
+
+registerDomainDumper('shiftClose', async () => {
+  const store = createIndexedDbShiftCloseIntentStore();
+  return store.transact(['shiftCloseIntents'], 'readonly', async (txn) => {
+    const rows: Array<{ store: string; key: string | string[]; value: unknown }> = [];
+    const getAllKeys = txn.getAllKeys;
+    if (!getAllKeys) throw new Error('shift-close getAllKeys unavailable');
+    for (const key of await getAllKeys('shiftCloseIntents')) {
+      rows.push({ store: 'shiftCloseIntents', key, value: await txn.get('shiftCloseIntents', key) });
+    }
+    return rows;
+  });
+});

@@ -28,6 +28,16 @@
  * a partial create/rollback can never be observed.
  */
 
+import {
+  getCommittedDurableStore,
+  nativeTxnDelete,
+  nativeTxnGet,
+  nativeTxnGetAll,
+  nativeTxnGetAllKeys,
+  nativeTxnPut,
+  registerDomainDumper,
+} from '../../platform/durableStore/bootDurableStore';
+
 /**
  * The object stores. `rejections` (Phase 7B-H7-C) is a forensic, append-style log of
  * pre-queue fail-closed reversal-evidence rejections — independent of the four
@@ -51,10 +61,13 @@ export const REVERSAL_STORES: ReversalStoreName[] = [
   'voidIntents',
 ];
 
+export const REVERSAL_DB_NAME = 'twinpet-offline-reversal';
+
 /** Per-transaction handle exposed to orchestration code. All ops are out-of-line keyed. */
 export interface ReversalTxn {
   get<T>(store: ReversalStoreName, key: string): Promise<T | undefined>;
   getAll<T>(store: ReversalStoreName): Promise<T[]>;
+  getAllKeys?: (store: ReversalStoreName) => Promise<string[]>;
   put(store: ReversalStoreName, key: string, value: unknown): Promise<void>;
   delete(store: ReversalStoreName, key: string): Promise<void>;
 }
@@ -68,7 +81,7 @@ export interface ReversalLocalStore {
   ): Promise<T>;
 }
 
-const DB_NAME = 'twinpet-offline-reversal';
+const DB_NAME = REVERSAL_DB_NAME;
 // v2 (Phase 7B-H7-C): adds the `rejections` store.
 // v3 (PK-3): adds the `voidIntents` store. The upgrade is additive — the
 // `onupgradeneeded` loop only creates stores not already present, so existing
@@ -114,6 +127,32 @@ function reqP<T>(req: IDBRequest<T>): Promise<T> {
  * degrades. Construct once and reuse.
  */
 export function createIndexedDbReversalStore(): ReversalLocalStore {
+  const native = getCommittedDurableStore('twinpet-offline-reversal');
+  if (native) {
+    return {
+      transact<T>(
+        stores: ReversalStoreName[],
+        mode: 'readonly' | 'readwrite',
+        fn: (txn: ReversalTxn) => Promise<T>,
+      ): Promise<T> {
+        return native.transact(stores, mode, (txn) =>
+          fn({
+            get: (store, key) => nativeTxnGet(txn, store, key),
+            getAll: (store) => nativeTxnGetAll(txn, store),
+            getAllKeys: (store) =>
+              nativeTxnGetAllKeys(txn, store).then((keys) =>
+                keys.map((key) => {
+                  if (typeof key !== 'string') throw new Error('reversal native key must be a string');
+                  return key;
+                }),
+              ),
+            put: (store, key, value) => nativeTxnPut(txn, store, key, value),
+            delete: (store, key) => nativeTxnDelete(txn, store, key),
+          }),
+        );
+      },
+    };
+  }
   return {
     transact<T>(
       stores: ReversalStoreName[],
@@ -147,6 +186,15 @@ export function createIndexedDbReversalStore(): ReversalLocalStore {
             const txn: ReversalTxn = {
               get: (store, key) => reqP(tx.objectStore(store).get(key)),
               getAll: (store) => reqP(tx.objectStore(store).getAll()),
+              getAllKeys: (store) =>
+                reqP(tx.objectStore(store).getAllKeys()).then((keys) =>
+                  keys.map((key) => {
+                    if (typeof key !== 'string') {
+                      throw new Error(`reversal store "${store}" returned a non-string key`);
+                    }
+                    return key;
+                  }),
+                ),
               put: (store, key, value) => reqP(tx.objectStore(store).put(value, key)).then(() => undefined),
               delete: (store, key) => reqP(tx.objectStore(store).delete(key)).then(() => undefined),
             };
@@ -232,6 +280,9 @@ export function createInMemoryReversalStore(): ReversalLocalStore & {
           async getAll<R>(store: ReversalStoreName): Promise<R[]> {
             return [...ensure(store).values()].map((v) => clone(v)) as R[];
           },
+          async getAllKeys(store: ReversalStoreName): Promise<string[]> {
+            return [...ensure(store).keys()];
+          },
           async put(store, key, value) {
             if (mode !== 'readwrite') throw new Error('put in readonly transaction');
             ensure(store).set(key, clone(value));
@@ -264,3 +315,18 @@ export function createInMemoryReversalStore(): ReversalLocalStore & {
     },
   };
 }
+
+registerDomainDumper('reversal', async () => {
+  const store = createIndexedDbReversalStore();
+  return store.transact([...REVERSAL_STORES], 'readonly', async (txn) => {
+    const rows: Array<{ store: string; key: string; value: unknown }> = [];
+    const getAllKeys = txn.getAllKeys;
+    if (!getAllKeys) throw new Error('reversal getAllKeys unavailable');
+    for (const name of REVERSAL_STORES) {
+      for (const key of await getAllKeys(name)) {
+        rows.push({ store: name, key, value: await txn.get(name, key) });
+      }
+    }
+    return rows;
+  });
+});

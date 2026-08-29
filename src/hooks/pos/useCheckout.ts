@@ -94,10 +94,15 @@ export function useCheckout({
 
         // Pre-allocate the order identity (3B-3) via the atomic cross-tab
         // allocator before the write, so two same-device tabs can never mint
-        // the same sequence/receipt number. allocateOrderIdentity() is
-        // non-throwing by construction (allocateLocalSeq() is bounded
-        // fail-open), so no fallback catch is added here.
-        const identity = await allocateOrderIdentity();
+        // the same sequence/receipt number. allocateOrderIdentity() may throw
+        // on the native committed path; never mint a localStorage sequence fallback.
+        let identity;
+        try {
+          identity = await allocateOrderIdentity();
+        } catch (err) {
+          showToast('บันทึกการขายไม่สำเร็จ · ไม่สามารถออกเลขบิลได้');
+          throw err;
+        }
 
         // AI-1: begin trusted generation immediately after final identity
         // allocation and before submitAsyncOrder. Second production derivation

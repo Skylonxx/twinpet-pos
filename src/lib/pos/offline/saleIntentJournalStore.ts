@@ -1,3 +1,13 @@
+import {
+  getCommittedDurableStore,
+  nativeTxnDelete,
+  nativeTxnGet,
+  nativeTxnGetAll,
+  nativeTxnGetAllKeys,
+  nativeTxnPut,
+  registerDomainDumper,
+} from '../../platform/durableStore/bootDurableStore';
+
 export type SaleIntentJournalStoreName = 'saleIntents' | 'saleIntentEvents' | 'saleIntentMeta';
 
 export const SALE_INTENT_JOURNAL_STORES: SaleIntentJournalStoreName[] = [
@@ -9,6 +19,7 @@ export const SALE_INTENT_JOURNAL_STORES: SaleIntentJournalStoreName[] = [
 export interface SaleIntentJournalTxn {
   get<T>(store: SaleIntentJournalStoreName, key: string): Promise<T | undefined>;
   getAll<T>(store: SaleIntentJournalStoreName): Promise<T[]>;
+  getAllKeys(store: SaleIntentJournalStoreName): Promise<string[]>;
   put(store: SaleIntentJournalStoreName, key: string, value: unknown): Promise<void>;
   delete(store: SaleIntentJournalStoreName, key: string): Promise<void>;
 }
@@ -54,6 +65,28 @@ function reqP<T>(req: IDBRequest<T>): Promise<T> {
 }
 
 export function createIndexedDbSaleIntentJournalStore(): SaleIntentJournalStore {
+  const native = getCommittedDurableStore('twinpet-sale-intent-journal');
+  if (native) {
+    return {
+      transact(stores, mode, fn) {
+        return native.transact(stores, mode, (txn) =>
+          fn({
+            get: (store, key) => nativeTxnGet(txn, store, key),
+            getAll: (store) => nativeTxnGetAll(txn, store),
+            getAllKeys: (store) =>
+              nativeTxnGetAllKeys(txn, store).then((keys) =>
+                keys.map((key) => {
+                  if (typeof key !== 'string') throw new Error('journal native key must be a string');
+                  return key;
+                }),
+              ),
+            put: (store, key, value) => nativeTxnPut(txn, store, key, value),
+            delete: (store, key) => nativeTxnDelete(txn, store, key),
+          }),
+        );
+      },
+    };
+  }
   return {
     transact<T>(
       stores: SaleIntentJournalStoreName[],
@@ -87,6 +120,15 @@ export function createIndexedDbSaleIntentJournalStore(): SaleIntentJournalStore 
             const txn: SaleIntentJournalTxn = {
               get: (store, key) => reqP(tx.objectStore(store).get(key)),
               getAll: (store) => reqP(tx.objectStore(store).getAll()),
+              getAllKeys: (store) =>
+                reqP(tx.objectStore(store).getAllKeys()).then((keys) =>
+                  keys.map((key) => {
+                    if (typeof key !== 'string') {
+                      throw new Error(`journal store "${store}" returned a non-string key`);
+                    }
+                    return key;
+                  }),
+                ),
               put: (store, key, value) =>
                 reqP(tx.objectStore(store).put(value, key)).then(() => undefined),
               delete: (store, key) =>
@@ -156,6 +198,9 @@ export function createInMemorySaleIntentJournalStore(): SaleIntentJournalStore &
         async getAll<R>(store: SaleIntentJournalStoreName): Promise<R[]> {
           return [...ensure(store).values()].map((v) => clone(v)) as R[];
         },
+        async getAllKeys(store: SaleIntentJournalStoreName): Promise<string[]> {
+          return [...ensure(store).keys()];
+        },
         async put(store, key, value) {
           if (mode !== 'readwrite') throw new Error('put in readonly transaction');
           ensure(store).set(key, clone(value));
@@ -180,3 +225,16 @@ export function createInMemorySaleIntentJournalStore(): SaleIntentJournalStore &
     },
   };
 }
+
+registerDomainDumper('journal', async () => {
+  const store = createIndexedDbSaleIntentJournalStore();
+  return store.transact([...SALE_INTENT_JOURNAL_STORES], 'readonly', async (txn) => {
+    const rows: Array<{ store: string; key: string; value: unknown }> = [];
+    for (const name of SALE_INTENT_JOURNAL_STORES) {
+      for (const key of await txn.getAllKeys(name)) {
+        rows.push({ store: name, key, value: await txn.get(name, key) });
+      }
+    }
+    return rows;
+  });
+});

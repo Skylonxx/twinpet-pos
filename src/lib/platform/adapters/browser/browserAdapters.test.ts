@@ -129,7 +129,7 @@ describe('browser durable-store adapter', () => {
   afterEach(() => {
     restoreBrowserGlobals();
   });
-  test('delegates get / getAll / put / delete / transaction to the existing factory contract', async () => {
+  test('delegates get / getAll / getAllKeys / put / delete / transaction to the existing factory contract', async () => {
     const memory = createInMemoryReversalStore();
     const transact = vi.spyOn(memory, 'transact');
     const port = createBrowserDurableStorePort(memory);
@@ -138,6 +138,7 @@ describe('browser durable-store adapter', () => {
       expect(await txn.get('intents', 'k1')).toEqual({ n: 1 });
       await txn.put('intents', 'k2', { n: 2 });
       expect(await txn.getAll('intents')).toEqual([{ n: 1 }, { n: 2 }]);
+      expect(await txn.getAllKeys('intents')).toEqual(['k1', 'k2']);
       await txn.delete('intents', 'k1');
       expect(await txn.get('intents', 'k1')).toBeUndefined();
       expect(await txn.getAll('intents')).toEqual([{ n: 2 }]);
@@ -163,8 +164,16 @@ describe('browser durable-store adapter', () => {
     expect(durableAdapterRaw).not.toContain('indexedDB.open');
     expect(durableAdapterRaw).not.toContain('indexedDB.open(');
     expect(durableAdapterRaw).toContain('createIndexedDbReversalStore');
+    expect(durableAdapterRaw).toContain('createIndexedDbSaleIntentJournalStore');
     expect(durableAdapterRaw).not.toContain('activeCartSnapshotStore');
     expect(durableAdapterRaw).not.toContain('saleSubmissionEvidenceStore');
+  });
+
+  test('rejects mixed logical-file stores in one transact', async () => {
+    const port = createBrowserDurableStorePort(createInMemoryReversalStore());
+    await expect(
+      port.transact(['intents', 'saleIntents'], 'readonly', async () => undefined),
+    ).rejects.toThrow(/mix stores/);
   });
 });
 

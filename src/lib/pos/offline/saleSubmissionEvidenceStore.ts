@@ -27,6 +27,13 @@ import type {
   SaleSubmissionEvidenceEntryV1,
 } from './saleSubmissionEvidenceTypes';
 import { isAuthenticAcquiredResumeFenceAuthorization } from './activeCartSnapshotStore';
+import {
+  getCommittedDurableStore,
+  nativeTxnGet,
+  nativeTxnGetAllKeys,
+  nativeTxnPut,
+  registerDomainDumper,
+} from '../../platform/durableStore/bootDurableStore';
 
 const authenticProvenEvidenceAbsences = new WeakSet<object>();
 const provenEvidenceAbsenceMints = new WeakMap<object, ProofFields>();
@@ -81,6 +88,7 @@ type AuthorizationFieldSnapshot = {
 interface EvidenceTxn {
   get<T>(store: EvidenceStoreName, key: string): Promise<T | undefined>;
   add(store: EvidenceStoreName, key: string, value: unknown): Promise<void>;
+  getAllKeys(store: EvidenceStoreName): Promise<string[]>;
 }
 
 function isOwnDataProperty(value: object, field: string): boolean {
@@ -175,6 +183,26 @@ function transactEvidence<T>(
   mode: 'readonly' | 'readwrite',
   fn: (txn: EvidenceTxn) => Promise<T>,
 ): Promise<T> {
+  const native = getCommittedDurableStore('twinpet-sale-submission-evidence');
+  if (native) {
+    return native.transact([...EVIDENCE_STORES], mode, (txn) =>
+      fn({
+        get: (store, key) => nativeTxnGet(txn, store, key),
+        add: async (store, key, value) => {
+          const existing = await nativeTxnGet(txn, store, key);
+          if (existing !== undefined) throw new Error('Key already exists in the object store.');
+          await nativeTxnPut(txn, store, key, value);
+        },
+        getAllKeys: (store) =>
+          nativeTxnGetAllKeys(txn, store).then((keys) =>
+            keys.map((key) => {
+              if (typeof key !== 'string') throw new Error('evidence native key must be a string');
+              return key;
+            }),
+          ),
+      }),
+    );
+  }
   return openEvidenceDb().then(
     (dbi) =>
       new Promise<T>((resolve, reject) => {
@@ -203,6 +231,15 @@ function transactEvidence<T>(
           get: (store, key) => reqP(tx.objectStore(store).get(key)),
           add: (store, key, value) =>
             reqP(tx.objectStore(store).add(value, key)).then(() => undefined),
+          getAllKeys: (store) =>
+            reqP(tx.objectStore(store).getAllKeys()).then((keys) =>
+              keys.map((key) => {
+                if (typeof key !== 'string') {
+                  throw new Error(`evidence store "${store}" returned a non-string key`);
+                }
+                return key;
+              }),
+            ),
         };
 
         tx.oncomplete = () => {
@@ -640,3 +677,16 @@ export function isAuthenticProvenEvidencePresence(
     current.barrierFenceNonce === minted.barrierFenceNonce
   );
 }
+
+registerDomainDumper('evidence', async () => {
+  return transactEvidence('readonly', async (txn) => {
+    const rows: Array<{ store: string; key: string; value: unknown }> = [];
+    const read = txn.get.bind(txn);
+    for (const store of EVIDENCE_STORES) {
+      for (const key of await txn.getAllKeys(store)) {
+        rows.push({ store, key, value: await read(store, key) });
+      }
+    }
+    return rows;
+  });
+});

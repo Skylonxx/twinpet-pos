@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-durable-manifest-get"
+description = "Enables the durable_manifest_get command without any pre-configured scope."
+commands.allow = ["durable_manifest_get"]
+
+[[permission]]
+identifier = "deny-durable-manifest-get"
+description = "Denies the durable_manifest_get command without any pre-configured scope."
+commands.deny = ["durable_manifest_get"]

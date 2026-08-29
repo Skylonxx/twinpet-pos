@@ -79,10 +79,10 @@ function posixResolve(fromFile: string, specifier: string): string {
 function collectSpecifiers(text: string): string[] {
   const specs: string[] = [];
   const re =
-    /(?:import|export)\s+(?:type\s+)?(?:[^'"\n]+from\s+)?['"]([^'"]+)['"]|import\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
+    /(?:import|export)\s+(?:type\s+)?(?:[^'"\n]+from\s+)?['"]([^'"]+)['"]|import\s*\(\s*['"]([^'"]+)['"]\s*\)|from\s+['"]([^'"]+)['"]/g;
   let match: RegExpExecArray | null;
   while ((match = re.exec(text)) !== null) {
-    const spec = match[1] ?? match[2];
+    const spec = match[1] ?? match[2] ?? match[3];
     if (spec) specs.push(spec);
   }
   return specs;
@@ -270,7 +270,7 @@ describe('Phase A platform port layer confinement', () => {
     expect(viteText).not.toContain('alias:');
   });
 
-  test('only AppShell among existing production sources wires the platform layer', () => {
+  test('only AppShell among production sources wires connectivity; Phase B durable-store importers are explicit', () => {
     const importers: string[] = [];
     for (const { file, text } of productionEntries()) {
       if (isPlatformPath(file)) continue;
@@ -286,7 +286,22 @@ describe('Phase A platform port layer confinement', () => {
       });
       if (hitsPlatform) importers.push(file);
     }
-    expect(importers).toEqual([APP_SHELL]);
+    expect(importers.sort()).toEqual(
+      [
+        APP_SHELL,
+        '/src/lib/pos/asyncCheckout.ts',
+        '/src/lib/pos/deviceId.ts',
+        '/src/lib/pos/offline/activeCartSnapshotStore.ts',
+        '/src/lib/pos/offline/reversalLocalStore.ts',
+        '/src/lib/pos/offline/saleIntentJournalStore.ts',
+        '/src/lib/pos/offline/saleSubmissionEvidenceStore.ts',
+        '/src/lib/pos/offline/shiftCloseIntentStore.ts',
+        '/src/lib/pos/offline/shiftOpenIntentStore.ts',
+        '/src/lib/pos/suspendedBills.ts',
+        '/src/lib/pos/useSuspendedBills.ts',
+        '/src/main.tsx',
+      ].sort(),
+    );
     const appShellWiring = inspectAppShellWiring(appShellSource, APP_SHELL);
     expect(appShellWiring.hasNamedConnectivityImport).toBe(true);
     expect(appShellWiring.hasSyncOrchestratorCall).toBe(true);

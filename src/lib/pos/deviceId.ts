@@ -14,7 +14,15 @@
  * sequence — `initDeviceIdentity()` recovers id + seq + label from IndexedDB at
  * boot (await it before render). A total wipe of BOTH stores is handled by the
  * "Claim Device" recovery flow in the POS Devices settings screen.
+ * After a native committed SQLite epoch, SQLite is the sole durable authority
+ * and localStorage is cache-only.
  */
+
+import {
+  getCommittedDurableStore,
+  isNativeCommittedDurableStore,
+  registerDomainDumper,
+} from '../platform/durableStore/bootDurableStore';
 
 const DEVICE_ID_KEY = 'twinpet_device_id';
 const DEVICE_LABEL_KEY = 'twinpet_device_label';
@@ -123,6 +131,12 @@ function generateShortId(): string {
  * call. Idempotent: every subsequent call returns the same id for this browser.
  */
 export function getDeviceId(): string {
+  if (isNativeCommittedDurableStore()) {
+    if (!hasLocalStorage()) throw new Error('device id cache unavailable after committed epoch');
+    const id = localStorage.getItem(DEVICE_ID_KEY);
+    if (!id) throw new Error('device id cache empty after committed epoch');
+    return id;
+  }
   if (!hasLocalStorage()) return generateShortId(); // ephemeral (SSR/tests)
   let id = localStorage.getItem(DEVICE_ID_KEY);
   if (!id) {
@@ -140,9 +154,20 @@ export function getDeviceLabel(): string {
 }
 
 /** Admin override — rename the terminal (e.g. "iPad-01"). Identity id is unchanged. */
-export function setDeviceLabel(label: string): void {
-  if (!hasLocalStorage()) return;
+export async function setDeviceLabel(label: string): Promise<void> {
   const clean = label.trim();
+  const native = getCommittedDurableStore('twinpet-device');
+  if (native) {
+    await native.transact(['kv'], 'readwrite', async (txn) => {
+      if (clean) await txn.put('kv', IDB_KEYS.label, clean);
+      else await txn.delete('kv', IDB_KEYS.label);
+    });
+    if (!hasLocalStorage()) return;
+    if (clean) localStorage.setItem(DEVICE_LABEL_KEY, clean);
+    else localStorage.removeItem(DEVICE_LABEL_KEY);
+    return;
+  }
+  if (!hasLocalStorage()) return;
   if (clean) localStorage.setItem(DEVICE_LABEL_KEY, clean);
   else localStorage.removeItem(DEVICE_LABEL_KEY);
   void idbSet(IDB_KEYS.label, clean);
@@ -181,6 +206,9 @@ export function getReceiptDeviceSegment(): string {
  * the keystone of collision-free offline numbering. Returns 1 on first use.
  */
 export function nextLocalSeq(): number {
+  if (isNativeCommittedDurableStore()) {
+    throw new Error('nextLocalSeq is not authoritative after native committed epoch');
+  }
   if (!hasLocalStorage()) return Date.now(); // ephemeral fallback (still unique-ish)
   const current = Number.parseInt(localStorage.getItem(DEVICE_SEQ_KEY) ?? '0', 10);
   const next = (Number.isFinite(current) ? current : 0) + 1;
@@ -327,6 +355,18 @@ function idbAllocateSeq(lsBase: number): Promise<number | null> {
  * never before. UNWIRED in 3B-2 — checkout still uses `nextLocalSeq()`.
  */
 export async function allocateLocalSeq(): Promise<number> {
+  const native = getCommittedDurableStore('twinpet-device');
+  if (native) {
+    const allocated = await native.transact(['kv'], 'readwrite', async (txn) => {
+      const current = sanitizeSeqBase(await txn.get('kv', IDB_KEYS.seq));
+      const next = current + 1;
+      await txn.put('kv', IDB_KEYS.seq, next);
+      return next;
+    });
+    if (hasLocalStorage()) localStorage.setItem(DEVICE_SEQ_KEY, String(allocated));
+    return allocated;
+  }
+
   const lsBase = hasLocalStorage()
     ? sanitizeSeqBase(localStorage.getItem(DEVICE_SEQ_KEY))
     : 0;
@@ -357,6 +397,23 @@ export async function allocateLocalSeq(): Promise<number> {
 export async function fastForwardLocalSeqTo(minSeq: number): Promise<void> {
   if (typeof minSeq !== 'number' || !Number.isFinite(minSeq) || minSeq < 0) return;
   const target = Math.floor(minSeq);
+  const native = getCommittedDurableStore('twinpet-device');
+  if (native) {
+    await native.transact(['kv'], 'readwrite', async (txn) => {
+      const dbCurrent = sanitizeSeqBase(await txn.get('kv', IDB_KEYS.seq));
+      const lsCurrent = hasLocalStorage()
+        ? sanitizeSeqBase(localStorage.getItem(DEVICE_SEQ_KEY))
+        : 0;
+      const base = Math.max(dbCurrent, lsCurrent);
+      if (target <= base) return;
+      await txn.put('kv', IDB_KEYS.seq, target);
+    });
+    if (hasLocalStorage()) {
+      const lsCurrent = sanitizeSeqBase(localStorage.getItem(DEVICE_SEQ_KEY));
+      if (target > lsCurrent) localStorage.setItem(DEVICE_SEQ_KEY, String(target));
+    }
+    return;
+  }
 
   const lsCurrent = hasLocalStorage()
     ? sanitizeSeqBase(localStorage.getItem(DEVICE_SEQ_KEY))
@@ -384,8 +441,20 @@ export function makeAsyncOrderId(deviceId: string, seq: number): string {
  * should be set ABOVE the device's last known receipt so numbers never collide.
  * Mirrors to both localStorage and IndexedDB.
  */
-export function setDeviceIdentity(id: string, seq: number): void {
+export async function setDeviceIdentity(id: string, seq: number): Promise<void> {
   const safeSeq = Math.max(0, Math.floor(seq));
+  const native = getCommittedDurableStore('twinpet-device');
+  if (native) {
+    await native.transact(['kv'], 'readwrite', async (txn) => {
+      await txn.put('kv', IDB_KEYS.id, id);
+      await txn.put('kv', IDB_KEYS.seq, safeSeq);
+    });
+    if (hasLocalStorage()) {
+      localStorage.setItem(DEVICE_ID_KEY, id);
+      localStorage.setItem(DEVICE_SEQ_KEY, String(safeSeq));
+    }
+    return;
+  }
   if (hasLocalStorage()) {
     localStorage.setItem(DEVICE_ID_KEY, id);
     localStorage.setItem(DEVICE_SEQ_KEY, String(safeSeq));
@@ -402,6 +471,35 @@ export function setDeviceIdentity(id: string, seq: number): void {
  * empty it's a genuinely new device (or one needing a manual Claim).
  */
 export async function initDeviceIdentity(): Promise<void> {
+  if (isNativeCommittedDurableStore()) {
+    const native = getCommittedDurableStore('twinpet-device');
+    if (!native) throw new Error('native device store unavailable');
+    if (!hasLocalStorage()) return;
+    await native.transact(['kv'], 'readwrite', async (txn) => {
+      const dbSeq = sanitizeSeqBase(await txn.get('kv', IDB_KEYS.seq));
+      const lsSeq = sanitizeSeqBase(localStorage.getItem(DEVICE_SEQ_KEY));
+      if (lsSeq < dbSeq) {
+        localStorage.setItem(DEVICE_SEQ_KEY, String(dbSeq));
+      } else if (lsSeq > dbSeq) {
+        await txn.put('kv', IDB_KEYS.seq, lsSeq);
+      }
+      const dbId = await txn.get<string>('kv', IDB_KEYS.id);
+      const lsId = localStorage.getItem(DEVICE_ID_KEY);
+      if (lsId && !dbId) await txn.put('kv', IDB_KEYS.id, lsId);
+      else if (typeof dbId === 'string' && dbId && !lsId) localStorage.setItem(DEVICE_ID_KEY, dbId);
+      else if (!lsId && (typeof dbId !== 'string' || !dbId)) {
+        throw new Error('device id missing after committed epoch');
+      }
+      const dbLabel = await txn.get<string>('kv', IDB_KEYS.label);
+      const lsLabel = localStorage.getItem(DEVICE_LABEL_KEY);
+      if (lsLabel && !dbLabel) await txn.put('kv', IDB_KEYS.label, lsLabel);
+      else if (typeof dbLabel === 'string' && dbLabel && !lsLabel) {
+        localStorage.setItem(DEVICE_LABEL_KEY, dbLabel);
+      }
+    });
+    return;
+  }
+
   if (!hasLocalStorage()) return;
 
   const lsId = localStorage.getItem(DEVICE_ID_KEY);
@@ -427,3 +525,28 @@ export async function initDeviceIdentity(): Promise<void> {
     }
   }
 }
+
+registerDomainDumper('device', async () => {
+  const lsId = hasLocalStorage() ? localStorage.getItem(DEVICE_ID_KEY) : null;
+  const idbId = await idbGet(IDB_KEYS.id);
+  const id =
+    typeof lsId === 'string' && lsId
+      ? lsId
+      : typeof idbId === 'string' && idbId
+        ? idbId
+        : generateShortId();
+  const lsSeq = hasLocalStorage() ? sanitizeSeqBase(localStorage.getItem(DEVICE_SEQ_KEY)) : 0;
+  const idbSeq = sanitizeSeqBase(await idbGet(IDB_KEYS.seq));
+  const seq = Math.max(lsSeq, idbSeq, 0);
+  const rows: Array<{ store: string; key: string; value: unknown }> = [
+    { store: 'kv', key: IDB_KEYS.id, value: id },
+    { store: 'kv', key: IDB_KEYS.seq, value: seq },
+  ];
+  const lsLabel = hasLocalStorage() ? localStorage.getItem(DEVICE_LABEL_KEY) : null;
+  const idbLabel = await idbGet(IDB_KEYS.label);
+  const label =
+    (typeof lsLabel === 'string' && lsLabel.trim()) ||
+    (typeof idbLabel === 'string' && idbLabel ? idbLabel : '');
+  if (label) rows.push({ store: 'kv', key: IDB_KEYS.label, value: label });
+  return rows;
+});
