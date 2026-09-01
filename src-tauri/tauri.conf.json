@@ -3,6 +3,7 @@
   "productName": "Twinpet POS",
   "version": "0.0.0",
   "identifier": "com.twinpet.pos",
+  "mainBinaryName": "TwinpetPOS",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
@@ -26,7 +27,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": "nsis",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -36,6 +37,12 @@
     ],
     "android": {
       "debugApplicationIdSuffix": ".debug"
+    },
+    "windows": {
+      "allowDowngrades": false,
+      "nsis": {
+        "installMode": "currentUser"
+      }
     }
   }
 }
