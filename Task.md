@@ -4,9 +4,9 @@
 
 These rules are **permanent and binding now**. They constrain all current and future interim work. This is a **forward architectural guardrail**, not retroactive history erasure. Historical records below are unchanged.
 
-**TRUE-STANDALONE architecture is `APPROVED_WITH_NOTES`. Architecture Planning Gate is `CLOSED`.** Claude PLAN-004 completed. Codex final architecture review = `PASS_WITH_NOTES`. Gemini `TWINPET-TRUE-STANDALONE-FINAL-ARCHITECTURE-ADJUDICATION-GEMINI-001` accepted D-1 through D-6. **Phase A (`PLATFORM_PORT_LAYER_FOUNDATION`) is `CLOSED_WITH_NOTES`** at `6ea48c1ce3792f91eaec7c44c4d025e004f63414`. Codex Phase-A final implementation re-review = `PASS_WITH_NOTES` (blockers 0; request changes 0). **Phase C (`DESKTOP_TAURI`) is `CLOSED_WITH_NOTES`** at `92351999bb897c326a7cbefa3c97311887b5c5a1`. Codex Phase-C final = `PASS_WITH_NOTES` (blockers 0; request changes 0). Gemini `TWINPET-TRUE-STANDALONE-PHASE-C-FINAL-CLOSURE-LANDING-ADJUDICATION-GEMINI-001` accepted Phase C runtime/UAT and C7 Option A. Next TRUE-STANDALONE phase is **not selected**. `POST_PHASE_C_NEXT_PHASE_SELECTION_DEFERRED_TO_GEMINI: YES`.
+**TRUE-STANDALONE architecture is `APPROVED_WITH_NOTES`. Architecture Planning Gate is `CLOSED`.** Claude PLAN-004 completed. Codex final architecture review = `PASS_WITH_NOTES`. Gemini `TWINPET-TRUE-STANDALONE-FINAL-ARCHITECTURE-ADJUDICATION-GEMINI-001` accepted D-1 through D-6. **Phase A (`PLATFORM_PORT_LAYER_FOUNDATION`) is `CLOSED_WITH_NOTES`** at `6ea48c1ce3792f91eaec7c44c4d025e004f63414`. Codex Phase-A final implementation re-review = `PASS_WITH_NOTES` (blockers 0; request changes 0). **Phase C (`DESKTOP_TAURI`) is `CLOSED_WITH_NOTES`** at `92351999bb897c326a7cbefa3c97311887b5c5a1`. Codex Phase-C final = `PASS_WITH_NOTES` (blockers 0; request changes 0). Gemini `TWINPET-TRUE-STANDALONE-PHASE-C-FINAL-CLOSURE-LANDING-ADJUDICATION-GEMINI-001` accepted Phase C runtime/UAT and C7 Option A. **Phase B (`SQLITE_DURABLE_STORE`) is `CLOSED`** at SQLite source `54bb622aa3aff5ed662bf287e00f8e70f3aac500` and B13 packaging `40a3e10ce9805e851081c7aa512115026754776e`. Codex Phase-B SQLite final = `PASS`. B13 is `CLOSED_WITH_NOTES`. W1–W22 complete (W8 = `PASS_WITH_NOTE`). No implementation regression. Next TRUE-STANDALONE phase is **not selected**. `POST_PHASE_B_NEXT_PHASE_SELECTION_DEFERRED: YES`.
 
-This section does **not** authorize Phase B, Capacitor, Electron, desktop/mobile packaging beyond the landed Phase-C Tauri compatibility shell, SQLite, local-storage migration, Windows installer, Android build, PKT-2, Packet2A, or Model2 work. Production runtime activation, installer/MSI/signing, and Hosting remain **NOT AUTHORIZED**.
+This section does **not** authorize the next implementation phase, Capacitor, Electron, production runtime activation, installer signing, public release, deployment, Android build, PKT-2, Packet2A, or Model2 work. Hosting remains **NOT AUTHORIZED**.
 
 ## 1. TARGET ARCHITECTURE
 
@@ -30,7 +30,7 @@ All current development must preserve compatibility with the offline-first stand
 
 ## 6. RATIFIED SHELLS (architecture only)
 
-- **D-1** `TAURI_V2_CONDITIONAL` — desktop shell = Tauri v2; Phase C validated Windows native Tauri v2 / WebView2 compatibility including BrowserRouter, Firestore persistent IndexedDB cache, offline full-process startup, reconnect, username/password login, PIN login / `verifyPinLogin`, Web Locks, and native privileged capability confinement. Electron remains a documented fallback if a future hard requirement (for example mandatory silent/raw ESC/POS) changes the tradeoff. Production runtime activation is **not** authorized. Installer/MSI/signing was **not** performed.
+- **D-1** `TAURI_V2_CONDITIONAL` — desktop shell = Tauri v2; Phase C validated Windows native Tauri v2 / WebView2 compatibility including BrowserRouter, Firestore persistent IndexedDB cache, offline full-process startup, reconnect, username/password login, PIN login / `verifyPinLogin`, Web Locks, and native privileged capability confinement. Electron remains a documented fallback if a future hard requirement (for example mandatory silent/raw ESC/POS) changes the tradeoff. Production runtime activation is **not** authorized.
 - **D-2** `CAPACITOR_ANDROID_FIRST` — mobile shell = Capacitor; Android first; existing `android/` scaffold is historical/package evidence only, not runtime proof; iOS remains future/out of current scope; `allowBackup` / Android backup-data extraction must be reviewed before durable SQLite POS data is enabled.
 - **D-3** `SEPARATE_SHELLS_UNIFIED_APP_LAYER` — Desktop Tauri + Mobile Capacitor + shared React/Vite application + shared domain/service layer + shared platform-port contracts; runtime DI selects adapters; separate platform packaging. Do **not** describe one universal native shell.
 
@@ -43,7 +43,7 @@ All current development must preserve compatibility with the offline-first stand
 - After a committed epoch may exist: missing/corrupt/unreadable/unrecognized manifest = fail closed; inconsistent committed domain state = fail closed; missing manifest must **not** imply virgin reset.
 - Candidate migration isolated until commit; later N→N+1 copies from active N, not stale IndexedDB; interrupted candidate leaves active N unchanged; one store bundle/epoch per process; no per-store fallback; R4/R6/evidence/cart/retry state cannot cross epochs.
 - `COMMIT_IS_IRREVERSIBLE`; after commit, active epoch never decreases; recovery is forward-only.
-- Windows supported production: single installed product; Tauri as managed installed product; MSI family / canonical install identity; **no** portable production mode; **no** side-by-side production versions on the same data root; supported downgrade blocked before launch; exact WiX/MSI behavior validated later.
+- Windows supported production: single installed product; Tauri as managed installed product; Phase B B13 landed **NSIS** current-user (`mainBinaryName = TwinpetPOS`, `targets = nsis`, `allowDowngrades = false`) at `40a3e10`; **no** portable production mode; **no** side-by-side production versions on the same data root; supported downgrade blocked before launch; unsigned NSIS UAT complete; signing / public release **not** authorized.
 - Android supported production: stable app identity/signing; monotonic `versionCode`; normal production downgrade blocked by OS package-manager semantics; debug/ADB downgrade = unsupported production path; backup/data-extraction rules finalized before SQLite production enablement.
 - Architecture does **not** guarantee prevention of manually launched archived old binaries, portable copies outside the supported path, debug/ADB bypass, OS-level restore/tampering, or malware/admin filesystem access. An archived old binary is **not** a supported rollback path. No backend client-version fence is required.
 
@@ -51,13 +51,14 @@ All current development must preserve compatibility with the offline-first stand
 
 **D-5** `PLATFORM_PORT_LAYER_FOUNDATION`: first real day-one port consumer = ConnectivityPort; existing composition seam = `src/components/AppShell.tsx`; `useSyncOrchestrator()` accepts the dependency path; Phase A intended behavior-preserving; no native dependency, shell, SQLite, D-6 exception, new production bare specifier, new/changed IndexedDB open site, Vite alias, TS path alias, new root tsconfig, or Row29 owner import/export amendment. **Landed / `CLOSED_WITH_NOTES`** at `6ea48c1`. ConnectivityPort is the only production-wired Phase-A consumer. Six port contracts and six browser adapters landed. `syncOrchestrator.ts` unchanged. D-6 was not required.
 
-**D-6** `PHASE_SPECIFIC_B_D_ONLY_IF_EXACTLY_REQUIRED`: Phase A no exception; Phase C no exception under accepted non-bare `window.__TAURI__` bridge; Phase B/D exact native-plugin/config exception only if required, each by separate Gemini authority, named frozen item, and mandatory Codex line-by-line review. No broad native exception. No authority inheritance across phases.
+**D-6** `PHASE_SPECIFIC_B_D_ONLY_IF_EXACTLY_REQUIRED`: Phase A no exception; Phase C no exception under accepted non-bare `window.__TAURI__` bridge; Phase B native-storage exception closed with B13 `CLOSED_WITH_NOTES`; Phase D exact native-plugin/config exception only if required, by separate Gemini authority, named frozen item, and mandatory Codex line-by-line review. No broad native exception. No authority inheritance across phases.
 
 ---
 
-> Last reconciled: 2026-08-28
-> Current repository HEAD (binding until this docs commit advances it): `92351999bb897c326a7cbefa3c97311887b5c5a1` (`feat(pos): add tauri desktop compatibility shell`)
-> Phase C landing / source (binding; do not overwrite with the later docs SHA): `92351999bb897c326a7cbefa3c97311887b5c5a1`
+> Last reconciled: 2026-09-01
+> Current repository HEAD (binding until this docs commit advances it): `40a3e10ce9805e851081c7aa512115026754776e` (`feat(pos): add windows nsis distribution config`)
+> Phase B SQLite landing / source (binding; do not overwrite with the later docs SHA): `54bb622aa3aff5ed662bf287e00f8e70f3aac500`
+> Phase C landing / source (historical, binding for that phase; do not overwrite with a later SHA): `92351999bb897c326a7cbefa3c97311887b5c5a1`
 > Phase A landing / source (historical, binding for that phase; do not overwrite with a later SHA): `6ea48c1ce3792f91eaec7c44c4d025e004f63414`
 > TRUE-STANDALONE architecture docs ratification (historical): `765b54b3d61419593a59fe559f95402ca00e21d6`
 > SoftDelete docs closure (historical): `ec8c97c6d238bc9c321812f67750965b8ff7cba2`
@@ -94,13 +95,51 @@ All current development must preserve compatibility with the offline-first stand
 > P-OBS-1 implementation commit (historical, unchanged): `da3a8d1c9ddcb605a1f9a6e3cebc21d8dc2ffe72`
 > P-OBS-1 closure docs commit (historical, unchanged): `78f7ffe5c5b69f47af5c20ed8efd54410f35ee09`
 >
-> **Live workflow authority:** `docs/agent-workflow/STATE.md` (with `CURRENT_PACKET.md` / `NEXT_ACTION.md`) wins on gate/status conflict over this historical tracker. Reconciled here to Phase C `CLOSED_WITH_NOTES` at `92351999` / next phase UNDECIDED (deferred to Gemini). Architecture remains `APPROVED_WITH_NOTES` / Planning Gate `CLOSED`. Phase A remains historical CLOSED_WITH_NOTES at `6ea48c1`. SoftDelete follow-up remains historical CLOSED_WITH_NOTES. Model 2 remains historical CLOSED_WITH_NOTES. PKT-1 remains historical CLOSED / DELIVERED. PK-6 remains historical CLOSED / DELIVERED. PKT-2 / Packet2A / Model2 remain NOT AUTHORIZED as next packets. Phase B / production activation / installer/signing remain NOT AUTHORIZED.
+> **Live workflow authority:** `docs/agent-workflow/STATE.md` (with `CURRENT_PACKET.md` / `NEXT_ACTION.md`) wins on gate/status conflict over this historical tracker. Reconciled here to Phase B `CLOSED` at `54bb622` / B13 `40a3e10` / next phase UNDECIDED. Architecture remains `APPROVED_WITH_NOTES` / Planning Gate `CLOSED`. Phase C remains historical CLOSED_WITH_NOTES at `92351999`. Phase A remains historical CLOSED_WITH_NOTES at `6ea48c1`. SoftDelete follow-up remains historical CLOSED_WITH_NOTES. Model 2 remains historical CLOSED_WITH_NOTES. PKT-1 remains historical CLOSED / DELIVERED. PK-6 remains historical CLOSED / DELIVERED. PKT-2 / Packet2A / Model2 remain NOT AUTHORIZED as next packets. Production activation / signing / public release remain NOT AUTHORIZED.
 
 ---
 
-## TRUE-STANDALONE — Phase C docs reconciliation (this pass)
+## TRUE-STANDALONE — Phase B final closure (this pass)
 
-**Status: Phase C `CLOSED_WITH_NOTES`; Planning Gate `CLOSED`; this pass is docs-only source-of-truth reconciliation.** Gemini: `TWINPET-TRUE-STANDALONE-PHASE-C-DOCS-RECONCILIATION-AUTHORIZATION-GEMINI-001` (`APPROVED_WITH_CONDITIONS`). Codex Phase-C final: `PASS_WITH_NOTES`. Landing: `92351999bb897c326a7cbefa3c97311887b5c5a1`. Live workflow authority remains `docs/agent-workflow/STATE.md`.
+**Status: Phase B `CLOSED`; B13 `CLOSED_WITH_NOTES`; this pass records Part A packaging commit `40a3e10ce9805e851081c7aa512115026754776e` and reconciles canonical closure docs.** Prompt: `TWINPET-TRUE-STANDALONE-PHASE-B-FINAL-CLOSURE-GROK-001`. Codex Phase-B SQLite final: `PASS`. Landing: SQLite `54bb622aa3aff5ed662bf287e00f8e70f3aac500`; B13 `40a3e10ce9805e851081c7aa512115026754776e`. Live workflow authority remains `docs/agent-workflow/STATE.md`.
+
+Phase B (`SQLITE_DURABLE_STORE`) is **CLOSED**. B13 is **CLOSED_WITH_NOTES**. Phase B implementation is landed and no longer active. Next TRUE-STANDALONE phase is **not selected**.
+
+- [x] TRUE-STANDALONE architecture recorded — `APPROVED_WITH_NOTES`
+- [x] Architecture Planning Gate recorded — `CLOSED`
+- [x] Phase A status recorded — historical `CLOSED_WITH_NOTES` at `6ea48c1ce3792f91eaec7c44c4d025e004f63414`
+- [x] Phase C status recorded — historical `CLOSED_WITH_NOTES` at `92351999bb897c326a7cbefa3c97311887b5c5a1`
+- [x] Phase B name recorded — `SQLITE_DURABLE_STORE`
+- [x] Phase B status recorded — `CLOSED`
+- [x] Phase B SQLite landing recorded — `54bb622aa3aff5ed662bf287e00f8e70f3aac500` (`feat(pos): add sqlite durable store cutover`)
+- [x] B13 packaging landing recorded — `40a3e10ce9805e851081c7aa512115026754776e` (`feat(pos): add windows nsis distribution config`)
+- [x] Codex Phase-B SQLite final recorded — `PASS`
+- [x] B13 status recorded — `CLOSED_WITH_NOTES`
+- [x] W1–W22 recorded — complete
+- [x] W8 recorded — `PASS_WITH_NOTE`
+- [x] W1–W7 / W9–W22 recorded — `PASS`
+- [x] Stages A–D recorded — CLOSED
+- [x] Implementation regression recorded — NO
+- [x] NSIS contract recorded — `mainBinaryName = TwinpetPOS`; `targets = nsis`; `allowDowngrades = false`; `installMode = currentUser`
+- [x] Production runtime activation recorded — NOT AUTHORIZED / not performed
+- [x] Signing / public release / deployment recorded — NOT AUTHORIZED / not performed
+- [x] Hosting recorded — not used
+- [x] Capacitor / Android recorded — not selected / not authorized
+- [x] Next TRUE-STANDALONE phase recorded — UNDECIDED
+- [x] Next eligible gate recorded — `TRUE_STANDALONE_POST_PHASE_B_NEXT_PHASE_ADJUDICATION`
+- [x] Ready for post-Phase-B next-phase adjudication recorded — YES
+- [x] Baseline HEAD recorded — `40a3e10ce9805e851081c7aa512115026754776e`
+- [x] Firebase Hosting recorded — permanently out of scope
+- [x] Cloud backend recorded — Firestore + Cloud Functions only
+- [x] Protected stash recorded unchanged — `stash@{0}` = `7d03cfec7ba52ff7e25b7e175ca190efc258d874`
+
+**CURRENT_STATUS:** TRUE-STANDALONE architecture APPROVED_WITH_NOTES. Planning gate CLOSED. Phase A CLOSED_WITH_NOTES at `6ea48c1`. Phase C CLOSED_WITH_NOTES at `92351999`. Phase B CLOSED at `54bb622` / B13 `40a3e10`. B13 CLOSED_WITH_NOTES. W8 PASS_WITH_NOTE. Next phase UNDECIDED. Browser is not the production delivery target. Hosting remains out of scope. SoftDelete follow-up / Model 2 / PKT-1 remain historical closed. Binding PK sequence still ends at PK-6. Do not invent PK-7. Do not reopen Phase B. Do not reopen Phase C. Do not reopen Phase A.
+
+**NEXT_WORKFLOW_ACTION:** RETURN_TO_CHATGPT_FOR_TRUE-STANDALONE_POST_PHASE_B_NEXT_PHASE_ADJUDICATION_ROUTING. Do not select or start a next implementation phase. Do not implement Capacitor/Android. Do not sign, deploy, or publicly release. Do not activate production. Do not implement PKT-2. Do not activate Packet2A or Model2. Do not deploy Hosting. Do not reopen Phase B.
+
+## TRUE-STANDALONE — Phase C docs reconciliation (historical)
+
+**Status: HISTORICAL.** Phase C `CLOSED_WITH_NOTES`; Planning Gate `CLOSED`; that pass was docs-only source-of-truth reconciliation. Gemini: `TWINPET-TRUE-STANDALONE-PHASE-C-DOCS-RECONCILIATION-AUTHORIZATION-GEMINI-001` (`APPROVED_WITH_CONDITIONS`). Codex Phase-C final: `PASS_WITH_NOTES`. Landing: `92351999bb897c326a7cbefa3c97311887b5c5a1`. The then-current "Phase B SQLite NOT AUTHORIZED / next gate = post-Phase-C next-phase adjudication" live facts are superseded as live current-state by Phase B `CLOSED` at `54bb622` / B13 `40a3e10`. Live workflow authority remains `docs/agent-workflow/STATE.md`.
 
 Phase C (`DESKTOP_TAURI`) is **CLOSED_WITH_NOTES**. Phase C implementation is landed and no longer active. Next TRUE-STANDALONE phase is **not selected**.
 
@@ -140,9 +179,9 @@ Phase C (`DESKTOP_TAURI`) is **CLOSED_WITH_NOTES**. Phase C implementation is la
 - [x] Phase D Capacitor recorded — not selected
 - [x] Protected stash recorded unchanged — `stash@{0}` = `7d03cfec7ba52ff7e25b7e175ca190efc258d874`
 
-**CURRENT_STATUS:** TRUE-STANDALONE architecture APPROVED_WITH_NOTES. Planning gate CLOSED. Phase A CLOSED_WITH_NOTES at `6ea48c1`. Phase C CLOSED_WITH_NOTES at `92351999`. Next phase UNDECIDED. Browser is not the production delivery target. Hosting remains out of scope. SoftDelete follow-up / Model 2 / PKT-1 remain historical closed. Binding PK sequence still ends at PK-6. Do not invent PK-7. Do not start Phase B. Do not reopen Phase C. Do not reopen Phase A.
+**Historical snapshot CURRENT_STATUS (superseded as live current-state by Phase B CLOSED):** TRUE-STANDALONE architecture APPROVED_WITH_NOTES. Planning gate CLOSED. Phase A CLOSED_WITH_NOTES at `6ea48c1`. Phase C CLOSED_WITH_NOTES at `92351999`. Next phase then UNDECIDED. That snapshot is superseded by Phase B `CLOSED` at `54bb622` / B13 `40a3e10`.
 
-**NEXT_WORKFLOW_ACTION:** RETURN_TO_CHATGPT_FOR_TRUE-STANDALONE_POST_PHASE_C_NEXT_PHASE_ADJUDICATION_ROUTING. Do not select or start a next implementation phase. Do not start Phase B. Do not implement SQLite. Do not implement Capacitor/Android. Do not build installer/signing. Do not activate production. Do not implement PKT-2. Do not activate Packet2A or Model2. Do not deploy Hosting. Do not reopen Phase C.
+**Then-current NEXT_WORKFLOW_ACTION (superseded):** RETURN_TO_CHATGPT_FOR_TRUE-STANDALONE_POST_PHASE_C_NEXT_PHASE_ADJUDICATION_ROUTING.
 
 ## TRUE-STANDALONE — Phase A docs closure (historical)
 
@@ -591,9 +630,9 @@ Phase A (`PLATFORM_PORT_LAYER_FOUNDATION`) remains historical **CLOSED_WITH_NOTE
 
 ## UI-11 Packet 1 / UI-10-C / UI-10-B / UI-10-A — CLOSED / PUSHED
 
-## Future Phase — True Standalone (`TRUE-STANDALONE`) — architecture APPROVED_WITH_NOTES / Phase A CLOSED_WITH_NOTES / Phase C CLOSED_WITH_NOTES / next phase UNDECIDED
+## Future Phase — True Standalone (`TRUE-STANDALONE`) — architecture APPROVED_WITH_NOTES / Phase A CLOSED_WITH_NOTES / Phase C CLOSED_WITH_NOTES / Phase B CLOSED / next phase UNDECIDED
 
-Architecture is `APPROVED_WITH_NOTES`. Planning gate is `CLOSED`. Phase A (`PLATFORM_PORT_LAYER_FOUNDATION`) is **CLOSED_WITH_NOTES** at `6ea48c1`. Phase C (`DESKTOP_TAURI`) is **CLOSED_WITH_NOTES** at `92351999`. Next TRUE-STANDALONE phase is **not selected**. D-1 Tauri v2 conditional (Phase C runtime validated); D-2 Capacitor Android-first; D-3 separate shells / unified app layer; D-4 SQLite durable store + supported distribution; D-5 platform-port foundation landed; D-6 phase-specific B/D exceptions only if exactly required. Browser/Web App is **not** the production delivery target. Firebase Hosting remains permanently out of scope.
+Architecture is `APPROVED_WITH_NOTES`. Planning gate is `CLOSED`. Phase A (`PLATFORM_PORT_LAYER_FOUNDATION`) is **CLOSED_WITH_NOTES** at `6ea48c1`. Phase C (`DESKTOP_TAURI`) is **CLOSED_WITH_NOTES** at `92351999`. Phase B (`SQLITE_DURABLE_STORE`) is **CLOSED** at `54bb622` / B13 `40a3e10`. B13 is **CLOSED_WITH_NOTES**. W8 = `PASS_WITH_NOTE`. Next TRUE-STANDALONE phase is **not selected**. D-1 Tauri v2 conditional (Phase C runtime validated); D-2 Capacitor Android-first; D-3 separate shells / unified app layer; D-4 SQLite durable store + NSIS current-user distribution landed; D-5 platform-port foundation landed; D-6 phase-specific B exception closed with B13 / D exceptions only if exactly required. Browser/Web App is **not** the production delivery target. Firebase Hosting remains permanently out of scope.
 
 ## UI-10-D — NOT STARTED
 
@@ -601,7 +640,7 @@ Architecture is `APPROVED_WITH_NOTES`. Planning gate is `CLOSED`. Phase A (`PLAT
 
 ### Next step
 
-1. **TRUE-STANDALONE architecture — `APPROVED_WITH_NOTES` / Planning Gate `CLOSED`. Phase A `CLOSED_WITH_NOTES`. Phase C `CLOSED_WITH_NOTES`.** Gemini `TWINPET-TRUE-STANDALONE-PHASE-C-FINAL-CLOSURE-LANDING-ADJUDICATION-GEMINI-001`. Landing `92351999`. Codex `PASS_WITH_NOTES`. Next TRUE-STANDALONE phase is **not selected**. After this docs gate closes, return to ChatGPT for post-Phase-C next-phase adjudication routing.
+1. **TRUE-STANDALONE architecture — `APPROVED_WITH_NOTES` / Planning Gate `CLOSED`. Phase A `CLOSED_WITH_NOTES`. Phase C `CLOSED_WITH_NOTES`. Phase B `CLOSED`. B13 `CLOSED_WITH_NOTES`.** SQLite landing `54bb622`. B13 packaging `40a3e10`. W1–W22 complete (W8 = `PASS_WITH_NOTE`). No implementation regression. Next TRUE-STANDALONE phase is **not selected**. After this docs gate closes, return to ChatGPT for post-Phase-B next-phase adjudication routing.
 2. **PK-6 — historical `CLOSED / DELIVERED`** at `e7ae0080eab574b207f53d3403d8a5ebacefff7c`; docs `acdae5fd6260c6c8740ad16e78023439aa0b4b0d` — targeted `3 files / 21 tests PASS`; root `130 files / 2490 tests PASS`; UAT U01–U11 PASS; responsive 320 / 768 / 1080 PASS; AGY `PASS_WITH_NOTES`; PK-6 product defects 0; final packet of binding PK sequence; `NEXT_ELIGIBLE_PK_PACKET: NONE`; PK-7 NOT DEFINED
 3. **PK-5 — `CLOSED / DELIVERED`** at `ef90d4ec4cce1decfed6e4809849fb9f991a2412`; docs `cf9c6f392f8416f247b16244351ec4567c71996b` — Codex / corrected UAT / AGY `PASS_WITH_NOTES`; targeted `14/186 PASS`; root `130/2486 PASS`; B16/B18 accepted harness limitations; do not reopen
 4. **PK-4 — `CLOSED / DELIVERED`** at `d27850abe80bac8b055f08206f17c36fda29e352`; docs `6a82fefa7238cc1eed8e9ce0790a2e9bb0913ad0`; do not reopen
@@ -613,8 +652,8 @@ Architecture is `APPROVED_WITH_NOTES`. Planning gate is `CLOSED`. Phase A (`PLAT
 10. **D3 — `CLOSED`** at `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab` — do not reopen
 11. **PK-2A — `CLOSED_WITH_NOTES`** at `79ba840` — historical
 12. **PK-1 — `CLOSED_WITH_NOTES`** at `513b198` — do not reopen
-13. **NEXT_WORKFLOW_ACTION:** RETURN_TO_CHATGPT_FOR_TRUE-STANDALONE_POST_PHASE_C_NEXT_PHASE_ADJUDICATION_ROUTING. Do not select or start a next implementation phase. Do not start Phase B. Do not implement SQLite. Do not implement Capacitor/Android. Do not build installer/signing. Do not activate production. Do not implement PKT-2. Do not activate Packet2A or Model2. Do not invent the next packet. Do not deploy Hosting. Do not reopen Phase C. Do not reopen Phase A.
-14. **NOT authorized:** Phase B, SQLite, Capacitor, Electron, Windows installer/signing, Android build, production activation, PKT-2, Packet2A reopen, Model2 reopen, Hosting, PK-2C, PK-2D, PK-7, next packet implementation, stash operations, Packet 5 reopen, PK-3 reopen, PK-4 reopen, PK-5 reopen, Phase A reopen, Phase C reopen
-15. Do not invent the next packet. Do not imply a next implementation phase is selected. Phase B remains **NOT AUTHORIZED**.
+13. **NEXT_WORKFLOW_ACTION:** RETURN_TO_CHATGPT_FOR_TRUE-STANDALONE_POST_PHASE_B_NEXT_PHASE_ADJUDICATION_ROUTING. Do not select or start a next implementation phase. Do not implement Capacitor/Android. Do not sign, deploy, or publicly release. Do not activate production. Do not implement PKT-2. Do not activate Packet2A or Model2. Do not invent the next packet. Do not deploy Hosting. Do not reopen Phase B. Do not reopen Phase C. Do not reopen Phase A.
+14. **NOT authorized:** next implementation phase, Capacitor, Electron, signing, Android build, production activation, public release, deployment, PKT-2, Packet2A reopen, Model2 reopen, Hosting, PK-2C, PK-2D, PK-7, next packet implementation, stash operations, Packet 5 reopen, PK-3 reopen, PK-4 reopen, PK-5 reopen, Phase A reopen, Phase C reopen, Phase B reopen
+15. Do not invent the next packet. Do not imply a next implementation phase is selected. Phase B is **CLOSED**.
 
-**Not active:** Phase B, SQLite, Capacitor, PKT-2, Hosting, production activation, installer/signing, or any new feature packet. TRUE-STANDALONE architecture is approved with notes. Phase A is closed with notes. Phase C is closed with notes. `NEXT_ELIGIBLE_PK_PACKET: NONE`.
+**Not active:** next implementation phase, Capacitor, PKT-2, Hosting, production activation, signing, public release, or any new feature packet. TRUE-STANDALONE architecture is approved with notes. Phase A is closed with notes. Phase C is closed with notes. Phase B is closed. `NEXT_ELIGIBLE_PK_PACKET: NONE`.

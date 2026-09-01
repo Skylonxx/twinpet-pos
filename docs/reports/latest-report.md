@@ -1,4 +1,177 @@
-# Latest Report — TRUE-STANDALONE Phase C — CLOSED_WITH_NOTES / Post Phase-C Next-Phase Adjudication
+# Latest Report — TRUE-STANDALONE Phase B — CLOSED / B13 CLOSED_WITH_NOTES / Post Phase-B Next-Phase Adjudication
+
+> Date: 2026-09-01
+> B13 packaging HEAD: `40a3e10ce9805e851081c7aa512115026754776e` (`feat(pos): add windows nsis distribution config`)
+> Phase B SQLite landing (binding; do not overwrite with the later docs SHA): `54bb622aa3aff5ed662bf287e00f8e70f3aac500` (`feat(pos): add sqlite durable store cutover`)
+> Phase C landing (historical): `92351999bb897c326a7cbefa3c97311887b5c5a1` (`feat(pos): add tauri desktop compatibility shell`)
+> Phase A landing (historical): `6ea48c1ce3792f91eaec7c44c4d025e004f63414` (`feat(pos): add platform port layer foundation`)
+> TRUE-STANDALONE architecture docs ratification (historical): `765b54b3d61419593a59fe559f95402ca00e21d6` (`docs: ratify true standalone architecture`)
+> SoftDelete landing (historical): `4d9be50411d72dbcc2bc9c35aebcbfdfa0819d19` (`fix(auth): correct soft delete transaction ordering`)
+> Final Model 2 runtime/source baseline (historical; not reopened; do not overwrite with the later docs SHA): `ffb8069690173c80455f355d432e141865c09a33` (`feat(auth): add delegated manager approval`)
+> Status: **TRUE-STANDALONE architecture APPROVED_WITH_NOTES. Architecture Planning Gate CLOSED. Phase A CLOSED_WITH_NOTES. Phase C CLOSED_WITH_NOTES. Phase B CLOSED. B13 CLOSED_WITH_NOTES.** Codex Phase-B SQLite final `PASS`. W1–W22 complete (W8 = `PASS_WITH_NOTE`; W1–W7 / W9–W22 = `PASS`). No implementation regression. Production runtime activation, deployment, signing, and public release are **NOT AUTHORIZED**. Browser/Web App is **not** the production delivery target. Firebase Hosting remains permanently out of scope. This pass is the authorized Part A NSIS config commit plus seven-doc live-authority reconciliation of Phase B closure.
+
+TRUE-STANDALONE architecture is approved with notes. Planning gate is closed. Phase A is closed with notes. Phase C is closed with notes. Phase B is closed. B13 is closed with notes. Do not select a next implementation phase. Do not implement Capacitor/Android. Do not activate production. Do not reopen Phase B.
+
+## 0. This pass's reports
+
+- Phase B final-closure prompt: `TWINPET-TRUE-STANDALONE-PHASE-B-FINAL-CLOSURE-GROK-001` (`PHASE_B_FINAL_CLOSURE_AUTHORIZED: YES`)
+- Gemini Phase-B SQLite authority: `TWINPET-TRUE-STANDALONE-PHASE-B-SQLITE-IMPLEMENTATION-AUTHORIZATION-GEMINI-001`
+- Codex Phase-B SQLite final: `TWINPET-TRUE-STANDALONE-PHASE-B-SQLITE-FINAL-IMPLEMENTATION-REREVIEW-CODEX-001` (`VERDICT: PASS`; blockers 0; request changes 0)
+- Gemini B13 authority: `TWINPET-TRUE-STANDALONE-PHASE-B-B13-WINDOWS-DISTRIBUTION-GEMINI-PLAN-ADJUDICATION-IMPLEMENTATION-AUTHORIZATION-001`
+- Gemini W8 authority: `TWINPET-TRUE-STANDALONE-PHASE-B-B13-STAGE-B-W8-VISIBLE-BACKEND-ADJUDICATION-AND-NEXT-GATE-GEMINI-001` (`W8_COMBINED_ACCEPTANCE_STATUS: PASS_WITH_NOTE`)
+- Phase B SQLite landing: `54bb622aa3aff5ed662bf287e00f8e70f3aac500`
+- Part A B13 packaging landing: `40a3e10ce9805e851081c7aa512115026754776e`
+- This docs packet: `TWINPET-TRUE-STANDALONE-PHASE-B-FINAL-CLOSURE-GROK-001`
+- Baseline HEAD at docs write: `40a3e10ce9805e851081c7aa512115026754776e` (`feat(pos): add windows nsis distribution config`)
+
+## 1. Current TRUE-STANDALONE facts
+
+| Field | Value |
+|-------|-------|
+| CURRENT_PHASE | TRUE-STANDALONE |
+| CURRENT_GATE | PHASE_B_FINAL_CLOSURE |
+| TRUE_STANDALONE_ARCHITECTURE_STATUS | APPROVED_WITH_NOTES |
+| ARCHITECTURE_PLANNING_GATE | CLOSED |
+| PHASE_A_STATUS | CLOSED_WITH_NOTES |
+| PHASE_C_STATUS | CLOSED_WITH_NOTES |
+| PHASE_B_STATUS | CLOSED |
+| PHASE_B_CLOSED | YES |
+| B13_OVERALL_STATUS | CLOSED_WITH_NOTES |
+| B13_CLOSED | YES |
+| W1_W22 | COMPLETE |
+| W8 | PASS_WITH_NOTE |
+| W1_W7_W9_W22 | PASS |
+| STAGE_A_B_C_D | CLOSED |
+| PHASE_B_IMPLEMENTATION_REGRESSION_ESTABLISHED | NO |
+| PHASE_B_SQLITE_LANDING | `54bb622aa3aff5ed662bf287e00f8e70f3aac500` |
+| PHASE_B_B13_PACKAGING | `40a3e10ce9805e851081c7aa512115026754776e` |
+| MAIN_BINARY_NAME | TwinpetPOS |
+| BUNDLE_TARGETS | nsis |
+| ALLOW_DOWNGRADES | false |
+| NSIS_INSTALL_MODE | currentUser |
+| PRODUCTION_RUNTIME_ACTIVATION | NOT_AUTHORIZED |
+| INSTALLER_SIGNING | NOT_PERFORMED |
+| PUBLIC_RELEASE | NOT_AUTHORIZED |
+| DEPLOYMENT | NOT_AUTHORIZED |
+| NEXT_TRUE_STANDALONE_PHASE | UNDECIDED |
+| NEXT_PHASE_IMPLEMENTATION_AUTHORIZED_NOW | NO |
+| NEXT_ELIGIBLE_GATE | TRUE_STANDALONE_POST_PHASE_B_NEXT_PHASE_ADJUDICATION |
+| READY_FOR_POST_PHASE_B_NEXT_PHASE_ADJUDICATION | YES |
+| BROWSER_PRODUCTION_TARGET | NO |
+| FIREBASE_HOSTING | PERMANENTLY_OUT_OF_SCOPE |
+| STAGE10_HOSTING | SKIPPED_BY_TRUE_STANDALONE_USER_OVERRIDE |
+| TRUE_STANDALONE_NO_HOSTING_GUARDRAIL | BINDING |
+| CLOUD_BACKEND | Firestore + Cloud Functions only |
+| NATIVE_TAURI_IMPLEMENTATION | PHASE_C_LANDED_CLOSED_WITH_NOTES |
+| SQLITE_IMPLEMENTATION | PHASE_B_CLOSED |
+| WINDOWS_INSTALLER_IMPLEMENTATION | B13_NSIS_CLOSED_WITH_NOTES |
+| NATIVE_CAPACITOR_IMPLEMENTATION | NOT_AUTHORIZED |
+| PHASE_D_MOBILE_CAPACITOR | NOT_SELECTED |
+| PKT2_IMPLEMENTATION | NOT_AUTHORIZED |
+| BASELINE_HEAD | `40a3e10ce9805e851081c7aa512115026754776e` |
+| stash@{0} | unchanged `7d03cfec7ba52ff7e25b7e175ca190efc258d874` |
+
+**CURRENT_STATUS:** TRUE-STANDALONE architecture is **APPROVED_WITH_NOTES**. Architecture Planning Gate is **CLOSED**. Phase A is **CLOSED_WITH_NOTES** at `6ea48c1`. Phase C is **CLOSED_WITH_NOTES** at `92351999`. Phase B is **CLOSED** at `54bb622` / B13 `40a3e10`. B13 is **CLOSED_WITH_NOTES**. After the docs commit, repository HEAD advances to the docs SHA; do not treat that docs SHA as a source baseline. Semantic B13 packaging source remains `40a3e10`. Semantic Phase B SQLite source remains `54bb622`. Semantic Phase C source remains `92351999`. Semantic Phase A source remains `6ea48c1`. Capacitor / production activation / signing / public release are **not** authorized. Post-Phase-B next-phase adjudication routing is **pending** at ChatGPT. Do not invent the next packet. Do not reopen Phase B.
+
+## 2. Gemini / Codex decision ledger (this closure gate)
+
+| ID | Subject | Status |
+|----|---------|--------|
+| TWINPET-TRUE-STANDALONE-PHASE-B-FINAL-CLOSURE-GROK-001 | Phase B final closure (this packet) | authorized; Part A `40a3e10`; seven-doc reconciliation |
+| TWINPET-TRUE-STANDALONE-PHASE-B-SQLITE-IMPLEMENTATION-AUTHORIZATION-GEMINI-001 | Phase B SQLite implementation | authorized; source landed `54bb622` |
+| TWINPET-TRUE-STANDALONE-PHASE-B-SQLITE-FINAL-IMPLEMENTATION-REREVIEW-CODEX-001 | Final Phase-B SQLite review | `PASS`; blockers 0; request changes 0 |
+| TWINPET-TRUE-STANDALONE-PHASE-B-B13-WINDOWS-DISTRIBUTION-GEMINI-PLAN-ADJUDICATION-IMPLEMENTATION-AUTHORIZATION-001 | B13 NSIS packaging | authorized; landed `40a3e10` |
+| TWINPET-TRUE-STANDALONE-PHASE-B-B13-STAGE-B-W8-VISIBLE-BACKEND-ADJUDICATION-AND-NEXT-GATE-GEMINI-001 | W8 combined acceptance | `PASS_WITH_NOTE`; not a SQLite regression |
+| TWINPET-TRUE-STANDALONE-PHASE-C-FINAL-CLOSURE-LANDING-ADJUDICATION-GEMINI-001 | Historical Phase-C closure | Phase C `CLOSED_WITH_NOTES` at `92351999` |
+| TWINPET-TRUE-STANDALONE-PHASE-A-CLOSURE-NEXT-PHASE-GEMINI-001 | Historical Phase-A closure | Phase A `CLOSED_WITH_NOTES` at `6ea48c1` |
+| TWINPET-TRUE-STANDALONE-FINAL-ARCHITECTURE-ADJUDICATION-GEMINI-001 | Final TRUE-STANDALONE architecture (unchanged) | `APPROVED_WITH_CONDITIONS`; architecture `APPROVED_WITH_NOTES`; Planning Gate `CLOSED` |
+
+Do not invent a new product decision. Do not select a next implementation phase. Do not implement Capacitor/Android. Do not activate production. Do not sign or publicly release. Do not reopen Phase B. Do not reopen Phase C. Do not reopen Phase A. Do not reopen Model 2 runtime. Do not authorize PKT-2. Do not deploy Hosting.
+
+## 3. Phase B delivered content (canonical)
+
+- SQLite durable-store cutover behind Twinpet DurableStorePort
+- native KV / epoch / manifest / single-instance confinement
+- first-migration from IndexedDB; no dual-write; fail-closed missing manifest after committed epoch
+- B13 Windows NSIS packaging contract: `mainBinaryName = TwinpetPOS`, `bundle.targets = nsis`, `allowDowngrades = false`, `nsis.installMode = currentUser`
+- W1–W22 unsigned NSIS runtime UAT complete
+- W8 = `PASS_WITH_NOTE`; W1–W7 / W9–W22 = `PASS`
+- Stages A–D closed
+- B13 `CLOSED_WITH_NOTES`
+- no implementation regression
+- no production runtime activation
+- no Hosting
+- no signing / public release / deployment
+- no Capacitor / Android
+
+## 4. Frozen notes (do not reopen Phase B / B13)
+
+1. W8 = `PASS_WITH_NOTE`: parked-bill UI was blocked by the upstream `ShiftBootBlockedModal` / missing `activeShift` environment limitation; backend durability of the W8 fixture survived N→N+1. Not a SQLite durable-store regression.
+2. B13 = `CLOSED_WITH_NOTES`: unsigned NSIS current-user UAT only; Authenticode signing was not performed.
+3. Production runtime activation, deployment, and public release remain unauthorized.
+4. Phase C installer/MSI/signing note remains historical; Phase B accepted NSIS rather than MSI/WiX.
+
+## 5. TRUE-STANDALONE delivery direction
+
+```text
+TARGET: offline-capable Desktop/Mobile Native App with local durable storage and cloud sync
+NOT_A_STANDARD_WEB_APP: YES
+BROWSER_PRODUCTION_TARGET: NO
+BROWSER_RUNTIME: development/test compatibility only
+FIREBASE_HOSTING: permanently out of scope
+STAGE10_HOSTING: SKIPPED_BY_TRUE_STANDALONE_USER_OVERRIDE
+CLOUD_BACKEND: Firestore + Cloud Functions only
+PHASE_A_STATUS: CLOSED_WITH_NOTES
+PHASE_C_STATUS: CLOSED_WITH_NOTES
+PHASE_B_STATUS: CLOSED
+B13_OVERALL_STATUS: CLOSED_WITH_NOTES
+NEXT_TRUE_STANDALONE_PHASE: UNDECIDED
+PRODUCTION_RUNTIME_ACTIVATION: NOT_AUTHORIZED
+PUBLIC_RELEASE: NOT_AUTHORIZED
+PKT2_IMPLEMENTATION: NOT_AUTHORIZED
+NEXT_ELIGIBLE_PK_PACKET: NONE
+PK7: NOT DEFINED / DO NOT INVENT
+```
+
+Do not describe TRUE-STANDALONE as a hosted web deployment. Do not describe "Web mode" as production delivery. Do not describe Phase B as pending. Do not describe a next implementation phase as selected.
+
+## 6. Exact docs surface for this closure
+
+Seven authorized docs:
+
+`Context.md`, `Task.md`, `docs/skills/SKILL-GLOBAL-ARCHITECTURE.md`, `docs/agent-workflow/CURRENT_PACKET.md`, `docs/agent-workflow/NEXT_ACTION.md`, `docs/agent-workflow/STATE.md`, `docs/reports/latest-report.md`
+
+Part A (already committed, not part of this docs commit): `src-tauri/tauri.conf.json` at `40a3e10ce9805e851081c7aa512115026754776e`. Bytes were inspected and not modified in this packet.
+
+Live workflow authority (`STATE.md` / `CURRENT_PACKET.md` / `NEXT_ACTION.md`) wins on gate/status conflict.
+
+## 7. Next workflow
+
+```text
+NEXT_WORKFLOW_ACTION:
+RETURN_TO_CHATGPT_FOR_TRUE-STANDALONE_POST_PHASE_B_NEXT_PHASE_ADJUDICATION_ROUTING
+
+DO NOT:
+select or start a next implementation phase,
+implement Capacitor / Android,
+sign / deploy / publicly release,
+activate production,
+implement PKT-2,
+invent the next packet,
+deploy Hosting,
+reopen Phase B,
+reopen Phase C,
+reopen Phase A,
+reopen Model 2 runtime.
+```
+
+**Next implementation action:** NONE — Phase B is CLOSED. B13 is CLOSED_WITH_NOTES. Docs gate closes with this commit/push. Next TRUE-STANDALONE phase is not selected. Capacitor / production activation / signing / public release NOT AUTHORIZED. PKT-2 NOT AUTHORIZED. Post-Phase-B next-phase adjudication routing pending at ChatGPT.
+
+---
+
+# Historical — Latest Report — TRUE-STANDALONE Phase C — CLOSED_WITH_NOTES / Post Phase-C Next-Phase Adjudication
+
+**Status: HISTORICAL as live current-state.** The then-current "Do not start Phase B / SQLite NOT AUTHORIZED / next action = post-Phase-C adjudication" live facts are superseded by Phase B `CLOSED` at `54bb622` / B13 `40a3e10`. Preserve this section as the Phase C docs snapshot.
 
 > Date: 2026-08-28
 > Phase C landing HEAD: `92351999bb897c326a7cbefa3c97311887b5c5a1` (`feat(pos): add tauri desktop compatibility shell`)
