@@ -1,0 +1,15 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "SEC-001 Packet C-A Admin Issuance Console — exact 4 commands, no generic SQL/fs/shell",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "allow-issuer-key-get-or-create-public-key",
+    "allow-issuer-key-sign-request",
+    "allow-bootstrap-import-parse",
+    "allow-file-export-write"
+  ]
+}

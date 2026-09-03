@@ -70,12 +70,25 @@ export type VoidIntentTxnOutcome =
 /** Server-owned exact privileged-void correlation. Written only by the privileged caller. */
 export const PRIVILEGED_VOID_EXECUTION_ID_FIELD = 'privilegedVoidExecutionId' as const;
 
+/**
+ * SEC-001 Packet C-A forward-compatibility field: when a privileged void
+ * originates from an offline OAC-authorized approval (rather than the
+ * existing online manager-approval path), the OAC's `oacId` is correlated
+ * here alongside `privilegedVoidExecutionId`. Packet C does not itself
+ * submit offline-OAC voids (that is Packet D/E's evidence-journal handoff —
+ * see `docs/agent-workflow/CURRENT_PACKET.md`'s Packet D boundary); this is
+ * only the write-through field Packet D will populate from.
+ */
+export const PRIVILEGED_VOID_OAC_ID_FIELD = 'privilegedVoidOacId' as const;
+
 export type HandleVoidIntentOptions = {
   /**
    * Exact privileged execution correlation. Absence means no privileged claim.
    * Only the privileged server path supplies this. Generic callers must omit it.
    */
   privilegedVoidExecutionId?: string;
+  /** Optional offline-OAC correlation (SEC-001 Packet C-A). See `PRIVILEGED_VOID_OAC_ID_FIELD`. */
+  oacId?: string;
 };
 
 function readIncomingPrivilegedVoidExecutionId(
@@ -87,15 +100,25 @@ function readIncomingPrivilegedVoidExecutionId(
   return id.length > 0 ? id : undefined;
 }
 
+function readIncomingOacId(options?: HandleVoidIntentOptions): string | undefined {
+  const raw = options?.oacId;
+  if (typeof raw !== 'string') return undefined;
+  const id = raw.trim();
+  return id.length > 0 ? id : undefined;
+}
+
 function isCanonicallyVoidTerminal(order: Record<string, unknown>): boolean {
   return order.status === 'voided' || order.voidReconciled === true;
 }
 
 function privilegedCorrelationWrite(
   incomingId: string | undefined,
+  incomingOacId?: string,
 ): Record<string, string> {
-  if (incomingId == null) return {};
-  return { [PRIVILEGED_VOID_EXECUTION_ID_FIELD]: incomingId };
+  const write: Record<string, string> = {};
+  if (incomingId != null) write[PRIVILEGED_VOID_EXECUTION_ID_FIELD] = incomingId;
+  if (incomingOacId != null) write[PRIVILEGED_VOID_OAC_ID_FIELD] = incomingOacId;
+  return write;
 }
 
 export function terminalMarkerPresent(order: Record<string, unknown>): boolean {
@@ -121,6 +144,7 @@ export async function handleVoidIntent(
   options?: HandleVoidIntentOptions,
 ): Promise<VoidIntentTxnOutcome> {
   const incomingPrivilegedVoidExecutionId = readIncomingPrivilegedVoidExecutionId(options);
+  const incomingOacId = readIncomingOacId(options);
   const outcome = await db.runTransaction(async (tx): Promise<VoidIntentTxnOutcome> => {
     const snap = await tx.get(orderRef);
     if (!snap.exists) return { kind: 'NOOP', reason: 'absent' };
@@ -143,7 +167,7 @@ export async function handleVoidIntent(
           status: 'voided',
           reconcileStatus: 'settled' satisfies ReconcileStatus,
           voidedAt: FieldValue.serverTimestamp(),
-          ...privilegedCorrelationWrite(incomingPrivilegedVoidExecutionId),
+          ...privilegedCorrelationWrite(incomingPrivilegedVoidExecutionId, incomingOacId),
         },
         { merge: true },
       );
@@ -333,7 +357,7 @@ export async function handleVoidIntent(
         voidReconciled: true,
         voidedAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
-        ...privilegedCorrelationWrite(incomingPrivilegedVoidExecutionId),
+        ...privilegedCorrelationWrite(incomingPrivilegedVoidExecutionId, incomingOacId),
       },
       { merge: true },
     );

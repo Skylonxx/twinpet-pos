@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Phase B SQLite durable store — exact 13 app commands, no generic SQL/fs/shell",
+  "description": "Phase B SQLite durable store (13 commands) + SEC-001 Packet C-A privileged_auth (exact 5 commands) — no generic SQL/fs/shell, no sign-arbitrary-bytes/pepper/DPAPI-blob/device-private-key/raw-Argon2-verifier/arbitrary-file-read/raw-keyset-manifest-bytes command",
   "windows": [
     "main"
   ],
@@ -19,6 +19,11 @@
     "allow-durable-manifest-put-epoch",
     "allow-durable-manifest-lease-acquire",
     "allow-durable-manifest-lease-heartbeat",
-    "allow-durable-manifest-lease-release"
+    "allow-durable-manifest-lease-release",
+    "allow-native-import-device-enrollment-file",
+    "allow-native-generate-device-registration-proof",
+    "allow-native-complete-oac-provisioning",
+    "allow-native-argon2-benchmark",
+    "allow-native-get-device-registration-status"
   ]
 }

@@ -14,6 +14,7 @@ import {
   sha256Slice40,
   type CredentialState,
 } from './credentialStore';
+import { STAGED_ROLE_DENY_COLLECTION } from './privilegedActionAuthority';
 
 const BCRYPT_COST = 10;
 const PIN_RE = /^\d{4}$/;
@@ -169,6 +170,26 @@ function bumpAuthVersion(tx: Transaction, database: Firestore, userId: string): 
   });
 }
 
+/**
+ * F7 (SEC-001 Packet C-A) entrant self-stamp: when a user enters (is created
+ * with, or is changed into) a role, record which staged-deny round — if any
+ * — was live on `privilegedStagedRoleDeny/{roleId}` at that exact moment.
+ * Read inside the same transaction as the role write for consistency. This
+ * is an audit/observability marker only; live authorization always reads the
+ * staged-deny head directly (`privilegedActionAuthority.ts`'s
+ * `stagedDenyReader`), never this stamp.
+ */
+async function readStagedDenyRoundIdAtEntry(
+  database: Firestore,
+  tx: Transaction,
+  roleId: string,
+): Promise<string | null> {
+  const snap = await tx.get(database.collection(STAGED_ROLE_DENY_COLLECTION).doc(roleId));
+  if (!snap.exists) return null;
+  const data = asUser(snap.data());
+  return typeof data.changeId === 'string' && data.changeId ? data.changeId : null;
+}
+
 async function handleCreate(
   database: Firestore,
   tx: Transaction,
@@ -223,6 +244,7 @@ async function handleCreate(
   const pinHash = await hashPin(cmd.pin);
   const actorId = actor.kind === 'operator_cli' ? 'OPERATOR_CLI' : actor.staffId;
   const now = FieldValue.serverTimestamp();
+  const stagedDenyRoundIdAtEntry = await readStagedDenyRoundIdAtEntry(database, tx, cmd.role);
 
   tx.set(userRef, {
     id: userId,
@@ -238,6 +260,7 @@ async function handleCreate(
     createdAt: now,
     updatedAt: now,
     deletedAt: null,
+    stagedDenyRoundIdAtEntry,
   });
   tx.set(database.collection(COLLECTIONS.userCredentials).doc(userId), {
     pinHash,
@@ -355,7 +378,10 @@ async function handleUpdateProfile(
   const patch: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() };
   if (typeof cmd.firstName === 'string') patch.firstName = cmd.firstName.trim();
   if (typeof cmd.lastName === 'string') patch.lastName = cmd.lastName.trim();
-  if (cmd.role) patch.role = cmd.role;
+  if (cmd.role) {
+    patch.role = cmd.role;
+    patch.stagedDenyRoundIdAtEntry = await readStagedDenyRoundIdAtEntry(database, tx, cmd.role);
+  }
   if (cmd.branchIds) patch.branchIds = cmd.branchIds;
   if (cmd.permissions) patch.permissions = cmd.permissions;
   tx.update(userRef, patch);

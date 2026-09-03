@@ -38,7 +38,7 @@ import {
   validateManagerApprovalRequest,
 } from './requestManagerApprovalCore';
 import { isPrivilegedActionId, PRIVILEGED_REQUESTER_PERMISSION } from './privilegedActionRegistry';
-import { liveRoleHoldsPosVoid, type RolePermissionsReader } from './privilegedActionAuthority';
+import { liveRoleHoldsPosVoid, type RolePermissionsReader, type StagedRoleDenyHeadReader } from './privilegedActionAuthority';
 
 const C = {
   users: 'users',
@@ -62,6 +62,8 @@ export interface RequestManagerApprovalDeps {
   comparePin?: PinCompareFn;
   dummyPinHash?: string;
   readRolePermissions?: RolePermissionsReader;
+  /** F7 (SEC-001 Packet C-A): staged-deny fail-closed check, threaded through to liveRoleHoldsPosVoid. */
+  readStagedDenyHead?: StagedRoleDenyHeadReader;
 }
 
 function fail(code: ManagerApprovalServerErrorCode): RequestManagerApprovalResponse {
@@ -227,6 +229,7 @@ export async function performRequestManagerApproval(
   const comparePin = deps.comparePin ?? defaultCompare;
   const dummyPinHash = deps.dummyPinHash ?? APPROVAL_DUMMY_PIN_HASH;
   const readRolePermissions = deps.readRolePermissions;
+  const readStagedDenyHead = deps.readStagedDenyHead;
 
   // M1
   if (!auth) return fail('not_authorized');
@@ -306,7 +309,7 @@ export async function performRequestManagerApproval(
     return failWithAttempt('not_authorized', 'authorization');
   }
   if (voidAction) {
-    const requesterHasVoid = await liveRoleHoldsPosVoid(database, role, readRolePermissions);
+    const requesterHasVoid = await liveRoleHoldsPosVoid(database, role, readRolePermissions, readStagedDenyHead);
     if (!requesterHasVoid) {
       return failWithAttempt('not_authorized', 'authorization');
     }
@@ -349,7 +352,7 @@ export async function performRequestManagerApproval(
       return failWithAttempt('approver_not_eligible', 'authorization');
     }
     if (voidAction) {
-      const approverHasVoid = await liveRoleHoldsPosVoid(database, approverRole, readRolePermissions);
+      const approverHasVoid = await liveRoleHoldsPosVoid(database, approverRole, readRolePermissions, readStagedDenyHead);
       if (!approverHasVoid) {
         return failWithAttempt('approver_not_eligible', 'authorization');
       }

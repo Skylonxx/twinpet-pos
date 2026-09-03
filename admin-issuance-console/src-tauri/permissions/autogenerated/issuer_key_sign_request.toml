@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-issuer-key-sign-request"
+description = "Enables the issuer_key_sign_request command without any pre-configured scope."
+commands.allow = ["issuer_key_sign_request"]
+
+[[permission]]
+identifier = "deny-issuer-key-sign-request"
+description = "Denies the issuer_key_sign_request command without any pre-configured scope."
+commands.deny = ["issuer_key_sign_request"]

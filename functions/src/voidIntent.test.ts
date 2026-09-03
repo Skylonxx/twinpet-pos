@@ -498,6 +498,32 @@ describe('handleVoidIntent — privileged execution correlation', () => {
     expect(db.__store.get('products/P/productStocks/br1')!.totalStockBase).toBe(20);
   });
 
+  test('SEC-001 Packet C-A: an optional oacId is correlated alongside privilegedVoidExecutionId', async () => {
+    const seed = seedSettledSale();
+    (seed['asyncOrders/dev01-1'] as Doc).status = 'completed';
+    const db = makeFakeDb(seed);
+    const outcome = await handleVoidIntent(
+      db as never,
+      db.collection('asyncOrders').doc('dev01-1') as never,
+      { privilegedVoidExecutionId: EXEC_A, oacId: 'oac-123' },
+    );
+    expect(outcome.kind).toBe('VOID_APPLIED');
+    expect(db.__store.get('asyncOrders/dev01-1')).toMatchObject({
+      privilegedVoidExecutionId: EXEC_A,
+      privilegedVoidOacId: 'oac-123',
+    });
+  });
+
+  test('SEC-001 Packet C-A: absence of oacId does not stamp privilegedVoidOacId', async () => {
+    const seed = seedSettledSale();
+    (seed['asyncOrders/dev01-1'] as Doc).status = 'completed';
+    const db = makeFakeDb(seed);
+    await handleVoidIntent(db as never, db.collection('asyncOrders').doc('dev01-1') as never, {
+      privilegedVoidExecutionId: EXEC_A,
+    });
+    expect(db.__store.get('asyncOrders/dev01-1')!.privilegedVoidOacId).toBeUndefined();
+  });
+
   test('VOID_TOMBSTONED writes correlation without FIFO reversal', async () => {
     const seed = seedSettledSale();
     (seed['asyncOrders/dev01-1'] as Doc).status = 'completed';

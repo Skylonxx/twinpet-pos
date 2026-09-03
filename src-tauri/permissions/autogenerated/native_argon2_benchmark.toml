@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-native-argon2-benchmark"
+description = "Enables the native_argon2_benchmark command without any pre-configured scope."
+commands.allow = ["native_argon2_benchmark"]
+
+[[permission]]
+identifier = "deny-native-argon2-benchmark"
+description = "Denies the native_argon2_benchmark command without any pre-configured scope."
+commands.deny = ["native_argon2_benchmark"]

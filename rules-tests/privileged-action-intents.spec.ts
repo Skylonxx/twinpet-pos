@@ -186,6 +186,28 @@ describe('privilegedActionIntents immutability', () => {
   });
 });
 
+describe('SEC-001 Packet C-A / F7 regression lock', () => {
+  // The privilegedActionIntents create gate is a CLIENT ASSERTION, deliberately
+  // keyed on the token's `permissions` claim (hasFreshPerm), not on the live
+  // settings/_rolePermissions matrix or the F7 staged-deny head — those are
+  // consulted server-side only (privilegedActionAuthority.ts's
+  // stagedDenyReader, inside submitPrivilegedVoid/requestManagerApproval).
+  // This proves that invariant still holds: a token that still carries
+  // pos_void may create the assertion even though, server-side, an active
+  // staged-deny round for their role would ultimately reject it.
+  it('a token still carrying pos_void may create the client assertion (server enforces the real staged-deny gate)', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'privilegedStagedRoleDeny', 'staff'), {
+        state: 'DRAINING',
+        changeId: 'change-1',
+        deniedPermissions: ['pos_void'],
+      });
+    });
+    const db = testEnv.authenticatedContext('staff1', voidStaff).firestore();
+    await assertSucceeds(setDoc(doc(db, 'privilegedActionIntents', 'i1'), validIntent()));
+  });
+});
+
 describe('privilegedActionNonces are server-only', () => {
   it('client nonce read is DENIED', async () => {
     await testEnv.withSecurityRulesDisabled(async (ctx) => {

@@ -36,3 +36,6 @@ test-results/
 # Tauri native generated output
 src-tauri/target/
 src-tauri/gen/
+# Admin Issuance Console Tauri native generated output
+admin-issuance-console/src-tauri/target/
+admin-issuance-console/src-tauri/gen/

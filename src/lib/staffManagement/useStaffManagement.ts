@@ -7,13 +7,18 @@ import {
   orderBy,
   query,
   serverTimestamp,
-  setDoc,
   where,
   type Timestamp,
 } from 'firebase/firestore';
+import { FirebaseError } from 'firebase/app';
+import { connectFunctionsEmulator, getFunctions, httpsCallable } from 'firebase/functions';
 import { useCallback, useEffect, useState } from 'react';
 import { setUserAccount } from '../auth/setUserAccount';
-import { collections, db, isFirebaseConfigured } from '../firebase';
+import {
+  isSetRolePermissionsFailureCode,
+  SET_ROLE_PERMISSIONS_ERROR_LABELS,
+} from '../auth/managerApprovalTypes';
+import { app, collections, db, getEmulatorHost, isFirebaseConfigured, USE_EMULATOR } from '../firebase';
 import type { StaffActivity, User, UserRole } from '../types';
 import { diffUserFields, writeStaffActivity, writeUserAuditLog } from './audit';
 import {
@@ -40,6 +45,47 @@ import {
 type RolePermDoc = {
   rolePermissions?: RolePermissionMatrix;
 };
+
+type SetRolePermissionsResult =
+  | { ok: true; requiresStaging: false }
+  | { ok: true; requiresStaging: true; changeId: string }
+  | { ok: false; code: string };
+
+let rolePermissionsEmulatorConnected = false;
+
+/**
+ * SEC-001 Packet C-A / F7 — routes a role-permission change through the
+ * `setRolePermissions` Cloud Function instead of a direct client Firestore
+ * write, so a removal gets the staged-deny fail-closed protection instead of
+ * taking effect for live sessions only once they refresh their claims.
+ */
+async function callSetRolePermissions(role: UserRole, permissions: string[]): Promise<void> {
+  if (!app) throw new Error('Firebase is not configured');
+  const functions = getFunctions(app, import.meta.env.VITE_FUNCTIONS_REGION);
+  if (USE_EMULATOR && !rolePermissionsEmulatorConnected) {
+    connectFunctionsEmulator(functions, getEmulatorHost(), 5001);
+    rolePermissionsEmulatorConnected = true;
+  }
+  const callable = httpsCallable<{ roleId: UserRole; permissions: string[] }, SetRolePermissionsResult>(
+    functions,
+    'setRolePermissions',
+  );
+  try {
+    const result = await callable({ roleId: role, permissions });
+    const payload = result.data;
+    if (!payload.ok) {
+      const message = isSetRolePermissionsFailureCode(payload.code)
+        ? SET_ROLE_PERMISSIONS_ERROR_LABELS[payload.code]
+        : 'ไม่สามารถบันทึกสิทธิ์การใช้งานได้';
+      throw new Error(message);
+    }
+  } catch (err) {
+    if (err instanceof FirebaseError) {
+      throw new Error(err.message || 'ไม่สามารถบันทึกสิทธิ์การใช้งานได้');
+    }
+    throw err;
+  }
+}
 
 export type UseStaffManagementOptions = {
   /** HQ admin panel — list all staff across branches */
@@ -541,11 +587,7 @@ export function useStaffManagement(
         return;
       }
 
-      await setDoc(
-        doc(db, collections.settings, ROLE_PERMISSIONS_DOC_ID),
-        { rolePermissions: next, updatedAt: serverTimestamp() },
-        { merge: true },
-      );
+      await callSetRolePermissions(role, next[role]);
 
       await writeStaffActivity(
         { firestore: db, changedBy: actor.id, changedByName: actor.name },
@@ -586,11 +628,10 @@ export function useStaffManagement(
       return;
     }
 
-    await setDoc(
-      doc(db, collections.settings, ROLE_PERMISSIONS_DOC_ID),
-      { rolePermissions: next, updatedAt: serverTimestamp() },
-      { merge: true },
-    );
+    const roles = Object.keys(next) as UserRole[];
+    for (const role of roles) {
+      await callSetRolePermissions(role, next[role]);
+    }
 
     await writeStaffActivity(
       { firestore: db, changedBy: actor.id, changedByName: actor.name },

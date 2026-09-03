@@ -1,5 +1,6 @@
 mod durable_kv;
 mod epoch_floor;
+mod privileged_auth;
 mod single_instance;
 
 use durable_kv::DurableKvEngine;
@@ -30,6 +31,11 @@ pub fn run() {
             durable_kv::durable_manifest_lease_acquire,
             durable_kv::durable_manifest_lease_heartbeat,
             durable_kv::durable_manifest_lease_release,
+            privileged_auth::native_import_device_enrollment_file,
+            privileged_auth::native_generate_device_registration_proof,
+            privileged_auth::native_complete_oac_provisioning,
+            privileged_auth::native_argon2_benchmark,
+            privileged_auth::native_get_device_registration_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

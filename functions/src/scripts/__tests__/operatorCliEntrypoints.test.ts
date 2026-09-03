@@ -124,6 +124,21 @@ const EXISTING_DEPLOY_FUNCTIONS = [
   'getOrderReceipt',
 ];
 
+/** SEC-001 Packet C-A — frozen deploy allowlist string, appended verbatim (see docs/agent-workflow/CURRENT_PACKET.md). */
+const SEC001_PACKET_C_A_DEPLOY_FUNCTIONS = [
+  'registerIssuer',
+  'revokeIssuerRegistration',
+  'beginDeviceEnrollmentAuthorizationIssuance',
+  'completeDeviceEnrollmentAuthorizationIssuance',
+  'beginDeviceRegistration',
+  'completeDeviceRegistration',
+  'beginPrivilegedOacIssuanceSession',
+  'completePrivilegedOacIssuanceSession',
+  'getOacKeysetManifest',
+  'setRolePermissions',
+  'roleSweepScheduler',
+];
+
 function makeDb(seed: Record<string, Doc> = {}) {
   const store = new Map<string, Doc>(Object.entries(seed).map(([k, v]) => [k, { ...v }]));
   const writes: Array<{ op: string; path?: string }> = [];
@@ -540,8 +555,16 @@ describe('operator CLI entrypoints', () => {
     }
     expect(pkg.scripts.deploy).toContain('functions:setUserAccount');
     expect(pkg.scripts.deploy).toContain('functions:requestManagerApproval');
+    for (const name of SEC001_PACKET_C_A_DEPLOY_FUNCTIONS) {
+      expect(pkg.scripts.deploy).toContain(`functions:${name}`);
+    }
     const functionRefs = [...pkg.scripts.deploy.matchAll(/functions:([A-Za-z0-9_]+)/g)].map((m) => m[1]);
-    expect(functionRefs).toEqual([...EXISTING_DEPLOY_FUNCTIONS, 'requestManagerApproval', 'setUserAccount']);
+    expect(functionRefs).toEqual([
+      ...EXISTING_DEPLOY_FUNCTIONS,
+      'requestManagerApproval',
+      'setUserAccount',
+      ...SEC001_PACKET_C_A_DEPLOY_FUNCTIONS,
+    ]);
   });
 
   test('operator modules do not silently default FIRESTORE_DATABASE_ID', () => {

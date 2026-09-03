@@ -1,0 +1,31 @@
+{
+  "name": "twinpet-admin-issuance-console",
+  "private": true,
+  "version": "1.0.0",
+  "description": "SEC-001 Packet C-A Admin Issuance Console — issuer bootstrap + device enrollment file issuance (OPTION_I1_PER_INSTALL_ASYMMETRIC_ISSUER_KEYPAIR_OPS_BOOTSTRAP). Tauri v2 desktop app.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "firebase": "12.13.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.11.4",
+    "@types/react": "19.2.15",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.2",
+    "typescript": "6.0.3",
+    "vite": "8.0.14",
+    "vitest": "4.1.7",
+    "jsdom": "29.1.1",
+    "@testing-library/react": "16.3.2",
+    "@testing-library/user-event": "14.6.1"
+  }
+}

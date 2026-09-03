@@ -721,6 +721,52 @@ describe('submitPrivilegedVoid — BF-2 empty/malformed live matrix', () => {
     expect(res).toEqual({ ok: false, code: 'not_authorized' });
     expect(exec.calls).toHaveLength(0);
   });
+
+  test('F7 (SEC-001 Packet C-A): an active staged-deny for pos_void blocks the requester even though the matrix still grants it', async () => {
+    const db = makeDb({
+      'asyncOrders/O1': pendingOrder(),
+      [approvalPath()]: matchingApproval(),
+    });
+    const exec = makeExecutor(db.__store);
+    const res = await performSubmitPrivilegedVoid(db as never, baseReq(), requester, {
+      nowMillis: NOW,
+      executeCanonicalVoid: exec.executeCanonicalVoid,
+      readStagedDenyHead: async (roleId: string) =>
+        roleId === 'staff'
+          ? { roleId: 'staff', state: 'DRAINING', changeId: 'change-1', deniedPermissions: ['pos_void'] }
+          : null,
+    });
+    expect(res).toEqual({ ok: false, code: 'not_authorized' });
+    expect(exec.calls).toHaveLength(0);
+  });
+
+  test('C-A-RC-003: a staged-deny head reader failure blocks the requester even though the matrix grants pos_void', async () => {
+    const db = makeDb({
+      'asyncOrders/O1': pendingOrder(),
+      [approvalPath()]: matchingApproval(),
+    });
+    const exec = makeExecutor(db.__store);
+    const res = await performSubmitPrivilegedVoid(db as never, baseReq(), requester, {
+      nowMillis: NOW,
+      executeCanonicalVoid: exec.executeCanonicalVoid,
+      readStagedDenyHead: async () => {
+        throw new Error('staged-deny head unavailable');
+      },
+    });
+    expect(res).toEqual({ ok: false, code: 'not_authorized' });
+    expect(exec.calls).toHaveLength(0);
+  });
+
+  test('C-A-RC-003-R1: a present but malformed staged-deny head blocks the requester via the default Firestore reader', async () => {
+    const db = makeDb({
+      'asyncOrders/O1': pendingOrder(),
+      [approvalPath()]: matchingApproval(),
+      'privilegedStagedRoleDeny/staff': { state: 'DRAINING', changeId: 'change-1', deniedPermissions: [42] },
+    });
+    const { res, exec } = await run(db);
+    expect(res).toEqual({ ok: false, code: 'not_authorized' });
+    expect(exec.calls).toHaveLength(0);
+  });
 });
 
 describe('submitPrivilegedVoid — BF-3 durable exact-bound resume', () => {

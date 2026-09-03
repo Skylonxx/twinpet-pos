@@ -59,7 +59,7 @@ describe('Phase B SQLite confinement', () => {
     expect(hits.some((h) => h.file === '/src/lib/platform/adapters/tauri/tauriDurableStorePort.ts')).toBe(true);
   });
 
-  test('D6-2: exactly 13 custom commands, rusqlite bundled, no plugin-sql', () => {
+  test('D6-2: exactly 13 durable-store commands + 5 SEC-001 Packet C-A privileged_auth commands, rusqlite bundled, no plugin-sql', () => {
     const cargo = readFileSync(resolve(ROOT, 'src-tauri/Cargo.toml'), 'utf8');
     expect(cargo).toContain('rusqlite');
     expect(cargo).toContain('bundled');
@@ -69,11 +69,12 @@ describe('Phase B SQLite confinement', () => {
       expect(lib).toContain(`durable_kv::${cmd}`);
     }
     expect(lib.match(/durable_kv::durable_/g)?.length).toBe(13);
+    expect(lib.match(/privileged_auth::native_/g)?.length).toBe(5);
     const cap = JSON.parse(readFileSync(resolve(ROOT, 'src-tauri/capabilities/default.json'), 'utf8')) as {
       permissions: string[];
     };
     expect(cap.permissions[0]).toBe('core:default');
-    expect(cap.permissions).toHaveLength(14);
+    expect(cap.permissions).toHaveLength(19);
     expect(cap.permissions.some((p) => p.includes('sql'))).toBe(false);
     expect(cap.permissions.some((p) => p.startsWith('fs:'))).toBe(false);
     expect(cap.permissions.some((p) => p.startsWith('shell:'))).toBe(false);

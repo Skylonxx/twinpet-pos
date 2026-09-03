@@ -18,7 +18,7 @@ import { db } from './db';
 import { FUNCTIONS_REGION } from './deployConfig';
 import { evaluateFreshPrivilegedAuthority, type AuthLike } from './authorityFence';
 import { isUsableForLogin, readUserCredential } from './credentialStore';
-import { liveRoleHoldsPosVoid, type RolePermissionsReader } from './privilegedActionAuthority';
+import { liveRoleHoldsPosVoid, type RolePermissionsReader, type StagedRoleDenyHeadReader } from './privilegedActionAuthority';
 import { PRIVILEGED_REQUESTER_PERMISSION, PRIVILEGED_VOID_AUDIENCE } from './privilegedActionRegistry';
 import {
   type ApprovalRecordView,
@@ -70,6 +70,8 @@ export interface SubmitPrivilegedVoidDeps {
   nowMillis?: number;
   executeCanonicalVoid?: CanonicalVoidExecutor;
   readRolePermissions?: RolePermissionsReader;
+  /** F7 (SEC-001 Packet C-A): staged-deny fail-closed check, threaded through to liveRoleHoldsPosVoid. */
+  readStagedDenyHead?: StagedRoleDenyHeadReader;
 }
 
 function fail(code: ManagerApprovalServerErrorCode): SubmitPrivilegedVoidResponse {
@@ -141,6 +143,7 @@ export async function performSubmitPrivilegedVoid(
   const nowMillis = deps.nowMillis ?? Date.now();
   const executeCanonicalVoid = deps.executeCanonicalVoid ?? handleVoidIntent;
   const readRolePermissions = deps.readRolePermissions;
+  const readStagedDenyHead = deps.readStagedDenyHead;
 
   if (!auth) return fail('not_authorized');
 
@@ -269,7 +272,7 @@ export async function performSubmitPrivilegedVoid(
   if (requesterRole !== 'admin' && requesterRole !== 'manager' && requesterRole !== 'staff') {
     return fail('not_authorized');
   }
-  const requesterHasVoid = await liveRoleHoldsPosVoid(database, requesterRole, readRolePermissions);
+  const requesterHasVoid = await liveRoleHoldsPosVoid(database, requesterRole, readRolePermissions, readStagedDenyHead);
   if (!requesterHasVoid) return fail('not_authorized');
   if (!requesterLiveBranchOk(requesterRole, liveBranchIds(requester), value.branchId)) {
     return fail('branch_mismatch');
@@ -333,7 +336,7 @@ export async function performSubmitPrivilegedVoid(
   ) {
     return fail('not_authorized');
   }
-  const approverHasVoid = await liveRoleHoldsPosVoid(database, approverRole, readRolePermissions);
+  const approverHasVoid = await liveRoleHoldsPosVoid(database, approverRole, readRolePermissions, readStagedDenyHead);
   if (!approverHasVoid) return fail('approver_not_eligible');
 
   const cred = await readUserCredential(database, approverId);

@@ -96,3 +96,23 @@ export function expectedProtectedAction(
 export function isManagerApprovalErrorCode(value: unknown): value is ManagerApprovalErrorCode {
   return typeof value === 'string' && Object.prototype.hasOwnProperty.call(MANAGER_APPROVAL_ERROR_LABELS, value);
 }
+
+/**
+ * SEC-001 Packet C-A / F7 — shared client contract for `setRolePermissions`.
+ * Matches `functions/src/setRolePermissions.ts`'s `SetRolePermissionsFailureCode`.
+ * A role-permission REMOVAL now goes through this Function (not a direct
+ * client Firestore write) so it gets F7's staged-deny fail-closed protection
+ * (`privilegedActionAuthority.ts`'s `stagedDenyReader`) instead of taking
+ * effect only after every live session happens to refresh its claims.
+ */
+export type SetRolePermissionsFailureCode = 'not_authorized' | 'invalid_request_shape' | 'staging_already_active';
+
+export const SET_ROLE_PERMISSIONS_ERROR_LABELS: Record<SetRolePermissionsFailureCode, string> = {
+  not_authorized: 'ไม่มีสิทธิ์แก้ไขสิทธิ์การใช้งาน',
+  invalid_request_shape: 'ข้อมูลสิทธิ์ที่ส่งไม่ถูกต้อง',
+  staging_already_active: 'มีการเปลี่ยนแปลงสิทธิ์ role นี้ที่กำลังดำเนินการอยู่ กรุณารอสักครู่แล้วลองใหม่',
+};
+
+export function isSetRolePermissionsFailureCode(value: unknown): value is SetRolePermissionsFailureCode {
+  return typeof value === 'string' && Object.prototype.hasOwnProperty.call(SET_ROLE_PERMISSIONS_ERROR_LABELS, value);
+}

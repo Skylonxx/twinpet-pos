@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-native-import-device-enrollment-file"
+description = "Enables the native_import_device_enrollment_file command without any pre-configured scope."
+commands.allow = ["native_import_device_enrollment_file"]
+
+[[permission]]
+identifier = "deny-native-import-device-enrollment-file"
+description = "Denies the native_import_device_enrollment_file command without any pre-configured scope."
+commands.deny = ["native_import_device_enrollment_file"]

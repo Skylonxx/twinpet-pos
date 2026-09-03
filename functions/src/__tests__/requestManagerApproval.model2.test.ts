@@ -542,6 +542,47 @@ describe('requestManagerApproval Packet B void audience', () => {
     expect(db.__store.get('users/s1')).toMatchObject({ authVersion: 0 });
   });
 
+  test('F7 (SEC-001 Packet C-A): an active staged-deny for pos_void denies the mint even though the matrix still grants it', async () => {
+    const db = makeDb();
+    const { calls, comparePin } = makeCompare();
+    const res = await performRequestManagerApproval(db as never, voidReq(), voidStaff, {
+      nowMillis: NOW,
+      comparePin,
+      dummyPinHash: APPROVAL_DUMMY_PIN_HASH,
+      readStagedDenyHead: async (roleId: string) =>
+        roleId === 'staff'
+          ? { roleId: 'staff', state: 'VERIFYING', changeId: 'change-1', deniedPermissions: ['pos_void'] }
+          : null,
+    });
+    expect(res).toEqual({ ok: false, code: 'not_authorized' });
+    expect(calls).toHaveLength(0);
+  });
+
+  test('C-A-RC-003: a staged-deny head reader failure denies the mint even though the matrix grants pos_void', async () => {
+    const db = makeDb();
+    const { calls, comparePin } = makeCompare();
+    const res = await performRequestManagerApproval(db as never, voidReq(), voidStaff, {
+      nowMillis: NOW,
+      comparePin,
+      dummyPinHash: APPROVAL_DUMMY_PIN_HASH,
+      readStagedDenyHead: async () => {
+        throw new Error('staged-deny head unavailable');
+      },
+    });
+    expect(res).toEqual({ ok: false, code: 'not_authorized' });
+    expect(calls).toHaveLength(0);
+  });
+
+  test('C-A-RC-003-R1: a present but malformed staged-deny head denies the mint via the default Firestore reader', async () => {
+    const db = makeDb({
+      'privilegedStagedRoleDeny/staff': { state: 'DRAINING', changeId: 'change-1', deniedPermissions: [42] },
+    });
+    const { calls, comparePin } = makeCompare();
+    const res = await run(db, comparePin, voidReq(), voidStaff);
+    expect(res).toEqual({ ok: false, code: 'not_authorized' });
+    expect(calls).toHaveLength(0);
+  });
+
   test('manager requester follows the same live resolver', async () => {
     const db = makeDb({
       'settings/_rolePermissions': {

@@ -1,0 +1,17 @@
+{
+  "name": "twinpet-pos-ops",
+  "private": true,
+  "version": "1.0.0",
+  "description": "SEC-001 Packet C-A Ops-only elevated-IAM scripts (issuer bootstrap, OAC signing-key rotation). Never deployed as a Function; run manually by Ops with real GCP/Firebase project IAM.",
+  "scripts": {
+    "build": "tsc",
+    "test:unit": "vitest run"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.6.0"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3",
+    "vitest": "^4.1.7"
+  }
+}

@@ -47,7 +47,12 @@ service cloud.firestore {
         && !('voidAnomaly' in data)
         && !('voidAnomalyAt' in data)
         && !('voidRevisionFault' in data)
-        && !('voidRevisionFaultAt' in data);
+        && !('voidRevisionFaultAt' in data)
+        // SEC-001 Packet C-A: server-owned privileged-void correlation fields
+        // (voidIntent.ts) must never be client-seedable at create either —
+        // closes the same spoof class as the existing fields above.
+        && !('privilegedVoidExecutionId' in data)
+        && !('privilegedVoidOacId' in data);
     }
 
     // privilegedActionIntents create: the client may assert a void request, never
@@ -649,6 +654,66 @@ service cloud.firestore {
     // privileged-void consume (`CONSUMED_PENDING_EXECUTION` / `COMPLETED`).
     // Client nonce APIs remain deny-all.
     match /privilegedActionNonces/{nonceKey} {
+      allow read, write: if false;
+    }
+
+    // ── SEC-001 Packet C-A — Functions-only collections ──
+    // Every collection below is written and read exclusively via Cloud
+    // Functions (Admin SDK, which bypasses these rules) and Ops-only scripts
+    // running with real GCP/Firebase project IAM (also Admin SDK). No client
+    // (staff, manager, admin, or the Admin Issuance Console's Firebase Auth
+    // session) may read or write any of them directly. This default-deny is
+    // explicit — not merely inherited from the catch-all below — so each
+    // collection's server-only posture is documented and independently
+    // tested (see rules-tests/*.spec.ts).
+
+    // Issuer trust bootstrap (OPTION_I1_PER_INSTALL_ASYMMETRIC_ISSUER_KEYPAIR_OPS_BOOTSTRAP).
+    match /privilegedIssuerBootstrapTokens/{tokenId} {
+      allow read, write: if false;
+    }
+    match /privilegedIssuerRegistrations/{issuerId} {
+      allow read, write: if false;
+    }
+    match /privilegedIssuerRequestReplayRecords/{recordId} {
+      allow read, write: if false;
+    }
+
+    // Device enrollment lifecycle (D17 — OPTION_A_ENROLLMENT_FILE).
+    match /privilegedDeviceEnrollmentAuthorizations/{enrollmentAuthId} {
+      allow read, write: if false;
+    }
+    match /privilegedDeviceRegistrationSessions/{sessionId} {
+      allow read, write: if false;
+    }
+    match /privilegedDeviceRegistrations/{securityDeviceIdHex} {
+      allow read, write: if false;
+    }
+
+    // Online OAC provisioning ceremony + OAC signing-key/keyset material.
+    match /privilegedOacIssuanceSessions/{sessionId} {
+      allow read, write: if false;
+    }
+    match /privilegedOacKeysetMeta/{docId} {
+      allow read, write: if false;
+    }
+    match /privilegedOacSigningKeys/{signingKeyId} {
+      allow read, write: if false;
+    }
+
+    // Global OAC revocation epoch.
+    match /privilegedRevocationState/{docId} {
+      allow read, write: if false;
+    }
+
+    // F7 role-permission staged-deny state machine (DRAINING -> VERIFYING ->
+    // CONVERGED -> COMPLETED). setRolePermissions/roleSweepScheduler write
+    // these; no client ever reads or writes the head/job docs directly —
+    // live authorization reads them via privilegedActionAuthority.ts's
+    // stagedDenyReader inside the Functions runtime, not from the client.
+    match /privilegedStagedRoleDeny/{roleId} {
+      allow read, write: if false;
+    }
+    match /privilegedRoleSweepJobs/{jobId} {
       allow read, write: if false;
     }
 

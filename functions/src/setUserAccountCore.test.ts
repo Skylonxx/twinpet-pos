@@ -128,6 +128,66 @@ describe('setUserAccountCore C1 create / rotate', () => {
     expect(await bcrypt.compare('9999', hash2)).toBe(false);
   });
 
+  test('F7 (SEC-001 Packet C-A): create stamps the entrant with the active staged-deny round for its role', async () => {
+    const db = makeDb({
+      ...marker,
+      ...adminUser,
+      'privilegedStagedRoleDeny/staff': { roleId: 'staff', state: 'DRAINING', changeId: 'change-abc', deniedPermissions: ['pos_void'] },
+    });
+    const result = await performSetUserAccount(db as never, adminActor, {
+      op: 'create',
+      idempotencyKey: 'create-stamp-1',
+      username: 'stamped',
+      firstName: 'S',
+      lastName: 'T',
+      role: 'staff',
+      branchIds: ['LDP-001'],
+      permissions: {},
+      isActive: true,
+      pin: '1234',
+    });
+    expect(result.ok).toBe(true);
+    const user = db.__store.get(`users/${result.userId}`) as { stagedDenyRoundIdAtEntry: string | null };
+    expect(user.stagedDenyRoundIdAtEntry).toBe('change-abc');
+  });
+
+  test('F7: create stamps null when no staged-deny round is active for the role', async () => {
+    const db = makeDb({ ...marker, ...adminUser });
+    const result = await performSetUserAccount(db as never, adminActor, {
+      op: 'create',
+      idempotencyKey: 'create-stamp-2',
+      username: 'unstamped',
+      firstName: 'U',
+      lastName: 'N',
+      role: 'staff',
+      branchIds: ['LDP-001'],
+      permissions: {},
+      isActive: true,
+      pin: '1234',
+    });
+    expect(result.ok).toBe(true);
+    const user = db.__store.get(`users/${result.userId}`) as { stagedDenyRoundIdAtEntry: string | null };
+    expect(user.stagedDenyRoundIdAtEntry).toBeNull();
+  });
+
+  test('F7: updateProfile re-stamps the entrant marker only when the role changes', async () => {
+    const db = makeDb({
+      ...marker,
+      ...adminUser,
+      'users/u1': { role: 'staff', isActive: true, deletedAt: null, authVersion: 0, branchIds: ['LDP-001'] },
+      'privilegedStagedRoleDeny/manager': { roleId: 'manager', state: 'VERIFYING', changeId: 'change-xyz', deniedPermissions: ['pos_void'] },
+    });
+    const result = await performSetUserAccount(db as never, adminActor, {
+      op: 'updateProfile',
+      userId: 'u1',
+      role: 'manager',
+    });
+    expect(result.ok).toBe(true);
+    const user = db.__store.get('users/u1') as { role: string; stagedDenyRoundIdAtEntry: string | null };
+    expect(user.role).toBe('manager');
+    expect(user.stagedDenyRoundIdAtEntry).toBe('change-xyz');
+  });
+
   test('rotate uses a separate namespace and bumps authVersion', async () => {
     const db = makeDb({ ...marker, ...adminUser });
     const created = await performSetUserAccount(db as never, adminActor, {

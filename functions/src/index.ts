@@ -79,6 +79,41 @@ export { getShiftCloseCaseFigures } from './getShiftCloseCaseFigures';
 export { getOrderReceipt } from './getOrderReceipt';
 export { setUserAccount } from './setUserAccount';
 
+// SEC-001 Packet C-A: issuer trust bootstrap (OPTION_I1_PER_INSTALL_ASYMMETRIC_ISSUER_KEYPAIR_OPS_BOOTSTRAP).
+// registerIssuer consumes a one-time Ops-issued bootstrap token + a possession-proof
+// signature; revokeIssuerRegistration is Admin-only issuer revocation.
+export { registerIssuer, revokeIssuerRegistration } from './issuerRegistration';
+
+// SEC-001 Packet C-A: device-enrollment lifecycle (D17 — OPTION_A_ENROLLMENT_FILE).
+// The first pair issues/signs the ENR1 enrollment authorization (Admin Console side,
+// issuer-signed request); the second pair consumes the native DRP1 possession proof
+// (POS terminal side) and persists validatedSecurityDeviceId/validatedDevProofPublicKeyBase64/
+// devProofRegistrationNonce.
+export {
+  beginDeviceEnrollmentAuthorizationIssuance,
+  completeDeviceEnrollmentAuthorizationIssuance,
+  beginDeviceRegistration,
+  completeDeviceRegistration,
+} from './deviceEnrollment';
+
+// SEC-001 Packet C-A: online OAC (offline authorization capability) provisioning
+// ceremony — a live manager/admin, at an already-registered device, obtains a
+// signed offline void-authorization capability bound to that exact device.
+export {
+  beginPrivilegedOacIssuanceSession,
+  completePrivilegedOacIssuanceSession,
+} from './oacIssuanceSession';
+
+// SEC-001 Packet C-A: serves the OKS1 keyset manifest (active OAC-signing public
+// keys + current revocation epoch) native terminals cache for offline verification.
+export { getOacKeysetManifest } from './oacKeysetManifest';
+
+// SEC-001 Packet C-A / F7: admin-only role-permission entrypoint. Pure additions
+// apply immediately; removals stage a DRAINING deny round that roleSweepScheduler
+// sweeps to COMPLETED (DRAINING -> VERIFYING -> CONVERGED -> COMPLETED).
+export { setRolePermissions } from './setRolePermissions';
+export { roleSweepScheduler } from './roleSweepScheduler';
+
 type UserRole = 'admin' | 'manager' | 'staff';
 
 // Fallback mirror of the client DEFAULT_ROLE_PERMS (src/lib/staffManagement/types.ts).
