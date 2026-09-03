@@ -8,17 +8,24 @@ import {
   LOCKOUT_THRESHOLD,
   LOCKOUT_WINDOW_MS,
   MODEL2_REQUESTER_ROLES,
+  LIVE_MANAGER_APPROVAL_ACTIONS,
+  PRIVILEGED_VOID_AUDIENCE,
   PROTECTED_ACTIONS,
+  SHIFT_CLOSE_PROTECTED_ACTIONS,
   approvalDocHasPinAdjacentField,
   approverBranchEligible,
+  audienceForProtectedAction,
   buildApprovalDocument,
   checkApprovalBinding,
   deriveApprovalId,
   deriveAttemptScopeKey,
   expectedActionFor,
   isApprovalSecurityModel,
+  isLiveManagerApprovalAction,
+  isLiveManagerApprovalPinCompareEligible,
   isLockoutActive,
   isProtectedAction,
+  isWellFormedPin,
   nextFailureAttemptState,
   requesterBranchEligible,
   resetAttemptState,
@@ -71,16 +78,35 @@ describe('deterministic ids', () => {
 });
 
 describe('protectedAction enum', () => {
-  test('freezes exactly the two Packet 2A actions', () => {
-    expect([...PROTECTED_ACTIONS]).toEqual([
+  test('freezes Packet 2A shift-close actions plus closed void actions', () => {
+    expect([...SHIFT_CLOSE_PROTECTED_ACTIONS]).toEqual([
       'shift_close_alert_acknowledge',
       'shift_close_alert_resolve',
     ]);
+    expect([...LIVE_MANAGER_APPROVAL_ACTIONS]).toEqual([...PROTECTED_ACTIONS]);
+    expect([...PROTECTED_ACTIONS]).toEqual([
+      'shift_close_alert_acknowledge',
+      'shift_close_alert_resolve',
+      'VOID_PENDING_SALE',
+      'VOID_SETTLED_SALE',
+    ]);
     expect(isProtectedAction('shift_close_alert_acknowledge')).toBe(true);
     expect(isProtectedAction('shift_close_alert_resolve')).toBe(true);
+    expect(isProtectedAction('VOID_PENDING_SALE')).toBe(true);
+    expect(isProtectedAction('VOID_SETTLED_SALE')).toBe(true);
     expect(isProtectedAction('closeShift')).toBe(false);
+    expect(isProtectedAction('RETURN')).toBe(false);
+    expect(isLiveManagerApprovalAction('shift_close_alert_acknowledge')).toBe(true);
+    expect(isLiveManagerApprovalAction('VOID_PENDING_SALE')).toBe(true);
+    expect(isLiveManagerApprovalAction('VOID_SETTLED_SALE')).toBe(true);
     expect(expectedActionFor('acknowledge')).toBe('shift_close_alert_acknowledge');
     expect(expectedActionFor('resolve')).toBe('shift_close_alert_resolve');
+    expect(audienceForProtectedAction('shift_close_alert_acknowledge')).toBe(APPROVAL_AUDIENCE);
+    expect(audienceForProtectedAction('shift_close_alert_resolve')).toBe(APPROVAL_AUDIENCE);
+    expect(audienceForProtectedAction('VOID_PENDING_SALE')).toBe(PRIVILEGED_VOID_AUDIENCE);
+    expect(audienceForProtectedAction('VOID_SETTLED_SALE')).toBe(PRIVILEGED_VOID_AUDIENCE);
+    expect(audienceForProtectedAction('RETURN')).toBeNull();
+    expect(audienceForProtectedAction('unknown')).toBeNull();
   });
 });
 
@@ -153,6 +179,19 @@ describe('validateManagerApprovalRequest', () => {
         approverStaffId: 'm2',
       },
     });
+  });
+
+  test('accepts closed void actions in the live Packet B set', () => {
+    expect(validateManagerApprovalRequest({ ...base, protectedAction: 'VOID_PENDING_SALE' })).toEqual({
+      ok: true,
+      value: {
+        ...base,
+        protectedAction: 'VOID_PENDING_SALE',
+        securityModel: 'reauth',
+        approverStaffId: null,
+      },
+    });
+    expect(validateManagerApprovalRequest({ ...base, protectedAction: 'VOID_SETTLED_SALE' }).ok).toBe(true);
   });
 });
 
@@ -252,8 +291,10 @@ describe('shouldUseRealPinCompare', () => {
     pin: '1234',
   };
 
-  test('real only when canonical usable rotated PIN is well formed', () => {
+  test('real only when canonical usable rotated PIN matches live PIN4 compatibility', () => {
     expect(shouldUseRealPinCompare(ok)).toBe(true);
+    expect(isLiveManagerApprovalPinCompareEligible('1234')).toBe(true);
+    expect(isLiveManagerApprovalPinCompareEligible('123456')).toBe(false);
   });
 
   test.each([
@@ -262,6 +303,7 @@ describe('shouldUseRealPinCompare', () => {
     ['disabled', { disabled: true }],
     ['pre-rotation', { credentialState: 'backfilled_not_trusted' }],
     ['malformed PIN', { pin: '12' }],
+    ['target PIN6 is not current live compare eligibility', { pin: '123456' }],
   ] as const)('%s uses dummy', (_label, patch) => {
     expect(shouldUseRealPinCompare({ ...ok, ...patch })).toBe(false);
   });
@@ -299,6 +341,64 @@ describe('buildApprovalDocument', () => {
       consumedCaseVersion: null,
     });
     expect(approvalDocHasPinAdjacentField(doc as unknown as Record<string, unknown>)).toBe(false);
+  });
+
+  test('void protected actions stamp privilegedVoid and cannot bind to shift-close audience', () => {
+    const doc = buildApprovalDocument({
+      commandId: 'cmd-void',
+      protectedAction: 'VOID_PENDING_SALE',
+      targetEntityId: 'O1',
+      branchId: 'B1',
+      staffId: 'm1',
+      approverRole: 'manager',
+      authVersionAtIssue: 0,
+      credentialVersionAtIssue: 1,
+    });
+    expect(doc.audience).toBe(PRIVILEGED_VOID_AUDIENCE);
+    expect(doc.protectedAction).toBe('VOID_PENDING_SALE');
+    const voidRecord: ApprovalRecordView = {
+      ...bound,
+      audience: doc.audience,
+      protectedAction: 'VOID_PENDING_SALE',
+      targetEntityId: 'O1',
+      commandId: 'cmd-void',
+    };
+    expect(checkApprovalBinding(voidRecord, expected)).toBe(false);
+    expect(
+      checkApprovalBinding(voidRecord, {
+        ...expected,
+        audience: PRIVILEGED_VOID_AUDIENCE,
+        protectedAction: 'VOID_PENDING_SALE',
+        targetEntityId: 'O1',
+        commandId: 'cmd-void',
+      }),
+    ).toBe(true);
+  });
+
+  test('derives audience from the action map and rejects unregistered actions', () => {
+    const shiftDoc = buildApprovalDocument({
+      commandId: 'cmd-1',
+      protectedAction: 'shift_close_alert_resolve',
+      targetEntityId: 'S1',
+      branchId: 'B1',
+      staffId: 'm1',
+      approverRole: 'manager',
+      authVersionAtIssue: 0,
+      credentialVersionAtIssue: 1,
+    });
+    expect(shiftDoc.audience).toBe(APPROVAL_AUDIENCE);
+    expect(() =>
+      buildApprovalDocument({
+        commandId: 'cmd-x',
+        protectedAction: 'RETURN' as never,
+        targetEntityId: 'S1',
+        branchId: 'B1',
+        staffId: 'm1',
+        approverRole: 'manager',
+        authVersionAtIssue: 0,
+        credentialVersionAtIssue: 1,
+      }),
+    ).toThrow('unregistered_protected_action');
   });
 });
 
@@ -442,6 +542,21 @@ describe('closed securityModel union and Model 2 binding', () => {
     expect(
       checkApprovalBinding({ ...delegatedRecord, approverStaffId: 's1', executorStaffId: 's1' }, delegatedExpected),
     ).toBe(false);
+  });
+});
+
+describe('six-digit PIN target contract', () => {
+  test('isWellFormedPin accepts only six digits', () => {
+    expect(isWellFormedPin('123456')).toBe(true);
+    expect(isWellFormedPin('1234')).toBe(false);
+    expect(isWellFormedPin('0123456')).toBe(false);
+    expect(isWellFormedPin('12345a')).toBe(false);
+  });
+
+  test('live compare eligibility stays PIN4-shaped until coordinated cutover', () => {
+    expect(isLiveManagerApprovalPinCompareEligible('1234')).toBe(true);
+    expect(isLiveManagerApprovalPinCompareEligible('123456')).toBe(false);
+    expect(isWellFormedPin('1234')).toBe(false);
   });
 });
 

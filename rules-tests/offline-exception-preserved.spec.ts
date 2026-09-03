@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import {
   initializeTestEnvironment,
   assertSucceeds,
+  assertFails,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
 import { doc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
@@ -96,7 +97,7 @@ beforeEach(async () => {
   });
 });
 
-describe('exactly 3 stale-authority offline exceptions', () => {
+describe('stale-authority offline exceptions after SEC-001', () => {
   it('A1 asyncOrders create remains reachable with a stale token and no live user doc', async () => {
     const db = testEnv.authenticatedContext('staff1', staleStaff).firestore();
     await assertSucceeds(
@@ -104,9 +105,9 @@ describe('exactly 3 stale-authority offline exceptions', () => {
     );
   });
 
-  it('A2 asyncOrders void-intent update remains reachable with a stale token', async () => {
+  it('A2 asyncOrders void-intent update is DENIED even with a stale token', async () => {
     const db = testEnv.authenticatedContext('staff1', staleStaff).firestore();
-    await assertSucceeds(
+    await assertFails(
       setDoc(
         doc(db, 'asyncOrders', 'a_void'),
         { voidRequested: true, status: 'voided', voidedBy: 'staff1' },
@@ -121,7 +122,7 @@ describe('exactly 3 stale-authority offline exceptions', () => {
     await assertSucceeds(updateDoc(doc(db, 'shifts', 'open1'), { expectedCash: 500 }));
   });
 
-  it('does not treat a fenced C-path as an offline exception', async () => {
-    expect(['A1', 'A2', 'A3']).toHaveLength(3);
+  it('does not treat the retired A2 void-intent lane as an offline exception', async () => {
+    expect(['A1', 'A3']).toHaveLength(2);
   });
 });

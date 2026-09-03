@@ -4,12 +4,32 @@
  * the functions/src boundary.
  */
 
-export const PROTECTED_ACTIONS = [
+import {
+  PRIVILEGED_ACTION_IDS,
+  PRIVILEGED_VOID_AUDIENCE,
+} from './privilegedAction/privilegedActionTypes';
+
+export { PRIVILEGED_VOID_AUDIENCE };
+
+export const SHIFT_CLOSE_PROTECTED_ACTIONS = [
   'shift_close_alert_acknowledge',
   'shift_close_alert_resolve',
 ] as const;
 
+/** Current live wrapper accept-set. Void stays frozen, not live-accepted. */
+export const LIVE_MANAGER_APPROVAL_ACTIONS = SHIFT_CLOSE_PROTECTED_ACTIONS;
+export type LiveManagerApprovalAction = (typeof LIVE_MANAGER_APPROVAL_ACTIONS)[number];
+
+export const PROTECTED_ACTIONS = [
+  ...SHIFT_CLOSE_PROTECTED_ACTIONS,
+  ...PRIVILEGED_ACTION_IDS,
+] as const;
+
 export type ProtectedAction = (typeof PROTECTED_ACTIONS)[number];
+
+export const APPROVAL_AUDIENCE = 'resolveShiftCloseAlert' as const;
+export const APPROVAL_AUDIENCES = [APPROVAL_AUDIENCE, PRIVILEGED_VOID_AUDIENCE] as const;
+export type ApprovalAudience = (typeof APPROVAL_AUDIENCES)[number];
 
 export type ApprovalSecurityModel = 'reauth' | 'delegated';
 
@@ -29,7 +49,7 @@ export type ManagerApprovalErrorCode =
 
 export interface RequestManagerApprovalClientRequest {
   commandId: string;
-  protectedAction: ProtectedAction;
+  protectedAction: LiveManagerApprovalAction;
   targetEntityId: string;
   branchId: string;
   pin: string;

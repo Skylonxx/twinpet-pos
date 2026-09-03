@@ -50,13 +50,28 @@ service cloud.firestore {
         && !('voidRevisionFaultAt' in data);
     }
 
-    // asyncOrders client UPDATE = the offline void-intent merge ONLY. A pos_void
-    // client may change ONLY these approved void-intent fields; EVERY other field
-    // (sale payload — lines/payments/total/creditAmt/staffId/branchId — AND every
-    // server-owned reconcile/audit field) must stay unchanged. Using diff/hasOnly
-    // also correctly denies absent→null writes on protected fields (they appear as
-    // affected keys). branchId is intentionally NOT approved: the void merge
-    // re-writes the SAME branchId (not an affected key), but any real change is denied.
+    // privilegedActionIntents create: the client may assert a void request, never
+    // an adjudication. Server-owned verdict / processed / audit / nonce-consumption
+    // fields must be ABSENT (null is not equivalent to absent).
+    function registeredPrivilegedVoidAction(actionId) {
+      return actionId in ['VOID_PENDING_SALE', 'VOID_SETTLED_SALE'];
+    }
+
+    function safeInitialPrivilegedIntentState(data) {
+      return data.get('status', 'PENDING') == 'PENDING'
+        && !('serverVerdict' in data)
+        && !('processedAt' in data)
+        && !('serverRejectionReason' in data)
+        && !('adjudicatedAt' in data)
+        && !('processedBy' in data)
+        && !('nonceConsumedAt' in data)
+        && !('serverAudit' in data)
+        && !('consumedNonceKey' in data)
+        && !('managerApproved' in data);
+    }
+
+    // RETIRED by SEC-001 Packet B: client asyncOrders void-update lane is closed.
+    // Kept so historical comments/tests can name the previous seven-key allowlist.
     function voidIntentChangesOnly() {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
         'voidRequested', 'status', 'voidReason', 'voidedBy', 'voidedAt', 'updatedAt', 'deviceId'
@@ -589,8 +604,8 @@ service cloud.firestore {
     // ── Async sales (offline-first checkout "intent" inbox) ──
     // The client writes the sale here with a single queueable setDoc (offline-safe).
     // The reconcileOrder Cloud Function (Admin SDK — bypasses these rules) settles
-    // it and dual-writes the canonical `orders`. Checkout needs `pos_sale`;
-    // void-intent (create or update) needs `pos_void`.
+    // it and dual-writes the canonical `orders`. Checkout needs `pos_sale`.
+    // SEC-001 Packet B: client void update is retired. Canonical void is server-owned.
     match /asyncOrders/{orderId} {
       allow read: if isAdmin() || (isStaff() && hasBranchAccess(resource.data.branchId));
       // A normal checkout stamps the caller's own staffId. 
@@ -598,22 +613,43 @@ service cloud.firestore {
         && safeInitialReconcileState(request.resource.data)
         && hasPerm('pos_sale') 
         && stampedOwnStaffId(request.resource.data);
-      // Client updates = the offline void-intent merge only. A pos_void client may
-      // change ONLY approved void-intent fields; sale-payload fields (lines,
-      // payments, total, creditAmt, staffId, branchId, …) and ALL server-owned
-      // reconcile/audit fields stay frozen (those move only via the Admin-SDK
-      // reconciler / retryReconcile callable, which bypass these rules).
-      allow update: if isStaff()
-        && request.resource.data.voidedBy == request.auth.token.staffId
-        && request.resource.data.get('voidRequested', false) == true
-        && request.resource.data.get('status', '') == 'voided'
-        && hasBranchAccess(resource.data.branchId)
-        && voidIntentChangesOnly()
-        // SAME-DAY CONSTRAINT: standard staff can only void orders created on the same local calendar day.
-        && "serverCreatedAt" in resource.data
-        && resource.data.serverCreatedAt != null
-        && (request.time + duration.value(7, 'h')).date() == (resource.data.serverCreatedAt + duration.value(7, 'h')).date();
+      // SEC-001: any authenticated staff used to void here. Client update is now false.
+      allow update: if false;
       allow delete: if isAdmin();
+    }
+
+    // Client-authored privileged-action ASSERTION, never an authorization.
+    // Canonical void mutation is Admin-SDK only after server adjudication / the
+    // online mediating callable. Unknown action = deny. Fail closed.
+    match /privilegedActionIntents/{intentId} {
+      allow read: if isStaff() && hasBranchAccess(resource.data.branchId);
+      allow create: if isStaff()
+        && hasFreshPerm('pos_void')
+        && request.resource.data.get('initiatingStaffId', '') == staffId()
+        && request.resource.data.get('branchId', '') is string
+        && request.resource.data.get('branchId', '') != ''
+        && request.resource.data.get('branchId', '') != 'ALL'
+        && hasFreshBranchAccess(request.resource.data.get('branchId', ''))
+        && registeredPrivilegedVoidAction(request.resource.data.get('actionId', ''))
+        && request.resource.data.get('approvingManagerId', '') is string
+        && request.resource.data.get('approvingManagerId', '') != ''
+        && request.resource.data.get('approvingManagerId', '')
+             != request.resource.data.get('initiatingStaffId', '')
+        && request.resource.data.get('targetOrderId', '') is string
+        && request.resource.data.get('targetOrderId', '') != ''
+        && request.resource.data.keys().hasOnly([
+             'actionId', 'branchId', 'initiatingStaffId', 'approvingManagerId',
+             'targetOrderId', 'commandId', 'deviceId', 'voidReason', 'createdAt', 'status'
+           ])
+        && safeInitialPrivilegedIntentState(request.resource.data);
+      allow update, delete: if false;
+    }
+
+    // Server Admin SDK only. Durable exact-bound execution record after a valid
+    // privileged-void consume (`CONSUMED_PENDING_EXECUTION` / `COMPLETED`).
+    // Client nonce APIs remain deny-all.
+    match /privilegedActionNonces/{nonceKey} {
+      allow read, write: if false;
     }
 
     // ── Sales ──

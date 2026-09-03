@@ -3,7 +3,10 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import ShiftCloseAdjudicationPanel, { type ShiftCloseAdjudicationPanelProps } from './ShiftCloseAdjudicationPanel';
+import ShiftCloseAdjudicationPanel, {
+  isShiftCloseAlertAction,
+  type ShiftCloseAdjudicationPanelProps,
+} from './ShiftCloseAdjudicationPanel';
 import { mapShiftCloseReviewRow } from '../../lib/pos/shiftClose/shiftCloseReviewRows';
 import { mapShiftCloseCaseProjection } from '../../lib/pos/shiftClose/shiftCloseDetailProjection';
 import type { ResolveShiftCloseAlertAdapterRequest } from '../../lib/pos/shiftClose/resolveShiftCloseAlertAdapter';
@@ -11,7 +14,7 @@ import type { RequestManagerApprovalTransport } from '../../lib/auth/requestMana
 import { MANAGER_APPROVAL_ERROR_LABELS } from '../../lib/auth/managerApprovalTypes';
 import type { ApproverCandidate } from '../../lib/auth/approverEligibility';
 
-const { rosterState } = vi.hoisted(() => ({
+const { rosterState, protectedActionOverride } = vi.hoisted(() => ({
   rosterState: {
     current: {
       status: 'disabled' as 'disabled' | 'pending' | 'ready' | 'error',
@@ -19,11 +22,29 @@ const { rosterState } = vi.hoisted(() => ({
       candidates: [] as ApproverCandidate[],
     },
   },
+  protectedActionOverride: {
+    current: null as null | 'VOID_PENDING_SALE' | 'VOID_SETTLED_SALE',
+  },
 }));
 
 vi.mock('../../lib/auth/useApproverRoster', () => ({
   useApproverRoster: () => rosterState.current,
 }));
+
+// SEC-001 Part P/A/B F-001 remediation: a controllable spy on
+// `expectedProtectedAction` — every other export is the real module. Only
+// `protectedActionOverride.current` (set per test, reset in afterEach) makes
+// it return something other than the real outcome mapping, so the VOID
+// boundary tests below drive the REAL production `handlePinSubmit` through
+// `isShiftCloseAlertAction`'s re-narrow, not a standalone mock.
+vi.mock('../../lib/auth/managerApprovalTypes', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../lib/auth/managerApprovalTypes')>();
+  return {
+    ...actual,
+    expectedProtectedAction: (outcome: 'acknowledge' | 'resolve') =>
+      protectedActionOverride.current ?? actual.expectedProtectedAction(outcome),
+  };
+});
 
 const DISABLED_ROSTER = {
   status: 'disabled' as const,
@@ -33,6 +54,7 @@ const DISABLED_ROSTER = {
 
 afterEach(() => {
   rosterState.current = { ...DISABLED_ROSTER, candidates: [] };
+  protectedActionOverride.current = null;
   cleanup();
 });
 
@@ -84,6 +106,14 @@ async function confirmAcknowledgeWithPin(user: ReturnType<typeof userEvent.setup
   await user.click(screen.getByRole('button', { name: 'รับทราบ' }));
   const confirmButtons = screen.getAllByRole('button', { name: 'รับทราบ' });
   await user.click(confirmButtons[confirmButtons.length - 1]);
+  await submitPin(user, pin);
+}
+
+async function confirmResolveWithPin(user: ReturnType<typeof userEvent.setup>, pin = '1234') {
+  await user.click(screen.getByRole('button', { name: 'ยืนยันแก้ไข' }));
+  await user.click(screen.getByRole('checkbox'));
+  const dialog = screen.getByText('ยืนยันการแก้ไขการแจ้งเตือน').closest('div')!.parentElement!.parentElement!;
+  await user.click(within(dialog).getByRole('button', { name: 'ยืนยันการแก้ไข' }));
   await submitPin(user, pin);
 }
 
@@ -1249,5 +1279,94 @@ describe('ShiftCloseAdjudicationPanel — Packet 2 Model 2 delegated', () => {
     expect(await screen.findByLabelText('เลือกผู้อนุมัติ')).toBeTruthy();
     expect(screen.queryByRole('dialog', { name: 'ยืนยันโดย Somchai Manager' })).toBeNull();
     expect(transport).not.toHaveBeenCalled();
+  });
+});
+
+describe('ShiftCloseAdjudicationPanel — SEC-001 Part P/A/B shift-close action type guard', () => {
+  test('acknowledge outcome sends protectedAction shift_close_alert_acknowledge to the approval transport', async () => {
+    const user = userEvent.setup();
+    const approvalTransport = vi.fn().mockResolvedValue({ ok: true, approvalId: 'appr-1', expiresAtMillis: Date.now() + 120_000 });
+    const transport = (req: ResolveShiftCloseAlertAdapterRequest) =>
+      Promise.resolve({ ok: true, commandId: req.commandId, shiftId: req.shiftId, status: 'confirmed' });
+    render(<ShiftCloseAdjudicationPanel {...baseProps({ approvalTransport, transport })} />);
+    await confirmAcknowledgeWithPin(user);
+    await waitFor(() => expect(approvalTransport).toHaveBeenCalledTimes(1));
+    expect(approvalTransport.mock.calls[0][0].protectedAction).toBe('shift_close_alert_acknowledge');
+    await waitFor(() => expect(screen.getByText('ทำรายการสำเร็จ')).toBeTruthy());
+  });
+
+  test('resolve outcome sends protectedAction shift_close_alert_resolve to the approval transport', async () => {
+    const user = userEvent.setup();
+    const approvalTransport = vi.fn().mockResolvedValue({ ok: true, approvalId: 'appr-1', expiresAtMillis: Date.now() + 120_000 });
+    const transport = (req: ResolveShiftCloseAlertAdapterRequest) =>
+      Promise.resolve({ ok: true, commandId: req.commandId, shiftId: req.shiftId, status: 'confirmed' });
+    render(<ShiftCloseAdjudicationPanel {...baseProps({ approvalTransport, transport })} />);
+    await confirmResolveWithPin(user);
+    await waitFor(() => expect(approvalTransport).toHaveBeenCalledTimes(1));
+    expect(approvalTransport.mock.calls[0][0].protectedAction).toBe('shift_close_alert_resolve');
+    await waitFor(() => expect(screen.getByText('ทำรายการสำเร็จ')).toBeTruthy());
+  });
+
+  test('exported type guard accepts both shift-close actions', () => {
+    expect(isShiftCloseAlertAction('shift_close_alert_acknowledge')).toBe(true);
+    expect(isShiftCloseAlertAction('shift_close_alert_resolve')).toBe(true);
+  });
+
+  test('exported type guard rejects VOID_PENDING_SALE and VOID_SETTLED_SALE — neither can reach the acknowledge/resolve handler', () => {
+    expect(isShiftCloseAlertAction('VOID_PENDING_SALE')).toBe(false);
+    expect(isShiftCloseAlertAction('VOID_SETTLED_SALE')).toBe(false);
+  });
+
+  test('VOID_PENDING_SALE forced from expectedProtectedAction never reaches approval/adjudication transport at the real handlePinSubmit boundary', async () => {
+    const user = userEvent.setup();
+    const approvalTransport = vi.fn();
+    const transport = vi.fn();
+    render(<ShiftCloseAdjudicationPanel {...baseProps({ approvalTransport, transport })} />);
+    await user.click(screen.getByRole('button', { name: 'รับทราบ' }));
+    const confirmButtons = screen.getAllByRole('button', { name: 'รับทราบ' });
+    await user.click(confirmButtons[confirmButtons.length - 1]);
+    const dialog = await screen.findByRole('dialog', { name: 'ยืนยันตัวตนก่อนดำเนินการ' });
+    for (const d of '1234') {
+      await user.click(within(dialog).getByRole('button', { name: d }));
+    }
+
+    // Force the REAL handlePinSubmit's expectedProtectedAction(outcome) call
+    // to resolve to a privileged VOID action instead of the true shift-close
+    // mapping, then submit — this proves isShiftCloseAlertAction's re-narrow
+    // at the production boundary, not a standalone/unwired mock assertion.
+    protectedActionOverride.current = 'VOID_PENDING_SALE';
+    await user.click(within(dialog).getByRole('button', { name: 'ยืนยัน' }));
+
+    expect(approvalTransport).not.toHaveBeenCalled();
+    expect(transport).not.toHaveBeenCalled();
+    expect(screen.queryByText('ทำรายการสำเร็จ')).toBeNull();
+    // Not left stuck submitting: the guard short-circuits synchronously, so
+    // the modal stays open with an actionable submit control (never frozen
+    // on the "กำลังส่งข้อมูล..." pending label).
+    expect(screen.getByRole('dialog', { name: 'ยืนยันตัวตนก่อนดำเนินการ' })).toBeTruthy();
+    expect(within(dialog).getByRole('button', { name: 'ยืนยัน' })).toBeTruthy();
+  });
+
+  test('VOID_SETTLED_SALE forced from expectedProtectedAction never reaches approval/adjudication transport at the real handlePinSubmit boundary', async () => {
+    const user = userEvent.setup();
+    const approvalTransport = vi.fn();
+    const transport = vi.fn();
+    render(<ShiftCloseAdjudicationPanel {...baseProps({ approvalTransport, transport })} />);
+    await user.click(screen.getByRole('button', { name: 'รับทราบ' }));
+    const confirmButtons = screen.getAllByRole('button', { name: 'รับทราบ' });
+    await user.click(confirmButtons[confirmButtons.length - 1]);
+    const dialog = await screen.findByRole('dialog', { name: 'ยืนยันตัวตนก่อนดำเนินการ' });
+    for (const d of '1234') {
+      await user.click(within(dialog).getByRole('button', { name: d }));
+    }
+
+    protectedActionOverride.current = 'VOID_SETTLED_SALE';
+    await user.click(within(dialog).getByRole('button', { name: 'ยืนยัน' }));
+
+    expect(approvalTransport).not.toHaveBeenCalled();
+    expect(transport).not.toHaveBeenCalled();
+    expect(screen.queryByText('ทำรายการสำเร็จ')).toBeNull();
+    expect(screen.getByRole('dialog', { name: 'ยืนยันตัวตนก่อนดำเนินการ' })).toBeTruthy();
+    expect(within(dialog).getByRole('button', { name: 'ยืนยัน' })).toBeTruthy();
   });
 });

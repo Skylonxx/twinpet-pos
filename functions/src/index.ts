@@ -69,6 +69,7 @@ export {
 // present `pin` is hard-rejected. Never reads/writes `shifts`.
 export { resolveShiftCloseAlert } from './resolveShiftCloseAlert';
 export { requestManagerApproval } from './requestManagerApproval';
+export { submitPrivilegedVoid } from './submitPrivilegedVoid';
 
 // P1 offline-sync Packet 5 / UI-B2 / Packet S: read-only manager/admin
 // callable that resolves the sensitive drawer figures (client-reported and

@@ -21,6 +21,7 @@ import {
   type ManagerApprovalServerErrorCode,
   type NextAttemptState,
   type RequestManagerApprovalRequest,
+  audienceForProtectedAction,
   approverBranchEligible,
   buildApprovalDocument,
   deriveApprovalId,
@@ -36,6 +37,8 @@ import {
   shouldUseRealPinCompare,
   validateManagerApprovalRequest,
 } from './requestManagerApprovalCore';
+import { isPrivilegedActionId, PRIVILEGED_REQUESTER_PERMISSION } from './privilegedActionRegistry';
+import { liveRoleHoldsPosVoid, type RolePermissionsReader } from './privilegedActionAuthority';
 
 const C = {
   users: 'users',
@@ -58,6 +61,7 @@ export interface RequestManagerApprovalDeps {
   nowMillis?: number;
   comparePin?: PinCompareFn;
   dummyPinHash?: string;
+  readRolePermissions?: RolePermissionsReader;
 }
 
 function fail(code: ManagerApprovalServerErrorCode): RequestManagerApprovalResponse {
@@ -204,6 +208,12 @@ function hasLiveBranchAccess(branchIds: string[], branchId: string): boolean {
   return branchIds.includes('ALL') || branchIds.includes(branchId);
 }
 
+function tokenHasPermission(auth: AuthLike, perm: string): boolean {
+  const raw = auth?.token?.permissions;
+  if (!Array.isArray(raw)) return false;
+  return raw.some((p) => p === perm);
+}
+
 /**
  * Core verifier — EXPORTED so it is unit-tested without the Functions runtime.
  */
@@ -216,6 +226,7 @@ export async function performRequestManagerApproval(
   const nowMillis = deps.nowMillis ?? Date.now();
   const comparePin = deps.comparePin ?? defaultCompare;
   const dummyPinHash = deps.dummyPinHash ?? APPROVAL_DUMMY_PIN_HASH;
+  const readRolePermissions = deps.readRolePermissions;
 
   // M1
   if (!auth) return fail('not_authorized');
@@ -234,6 +245,12 @@ export async function performRequestManagerApproval(
 
   // M3b — self-approval is structural, before any approver read or bcrypt.
   if (delegated && value.approverStaffId === staffId) {
+    return fail('self_approval_not_permitted');
+  }
+
+  const voidAction = isPrivilegedActionId(value.protectedAction);
+  // D1: void reauth is the requester approving themselves.
+  if (voidAction && !delegated) {
     return fail('self_approval_not_permitted');
   }
 
@@ -261,18 +278,38 @@ export async function performRequestManagerApproval(
     return fail(code);
   };
 
-  // M4′ — Model 1: manager/admin. Model 2: staff requester only.
-  const requesterRoleOk = delegated ? isModel2RequesterRole(role) : role === 'admin' || role === 'manager';
+  // M4′ — Model 1: manager/admin. Model 2 shift-close: staff requester only.
+  // Void: any live role may request if they hold fresh pos_void (checked below).
+  const requesterRoleOk = voidAction
+    ? role === 'admin' || role === 'manager' || role === 'staff'
+    : delegated
+      ? isModel2RequesterRole(role)
+      : role === 'admin' || role === 'manager';
   if (!requesterRoleOk) {
     return failWithAttempt('not_authorized', 'authorization');
   }
 
   // M5 — Model 1 keeps the shared ALL-admitting helper; Model 2 is exact-only.
-  const requesterBranchOk = delegated
-    ? requesterBranchEligible(branchIds, value.branchId)
-    : hasLiveBranchAccess(branchIds, value.branchId);
+  // Void requesters: staff/manager exact membership; admin may use live ALL.
+  const requesterBranchOk = voidAction
+    ? role === 'admin'
+      ? hasLiveBranchAccess(branchIds, value.branchId)
+      : requesterBranchEligible(branchIds, value.branchId)
+    : delegated
+      ? requesterBranchEligible(branchIds, value.branchId)
+      : hasLiveBranchAccess(branchIds, value.branchId);
   if (!requesterBranchOk) {
     return failWithAttempt('branch_mismatch', 'authorization');
+  }
+
+  if (voidAction && !tokenHasPermission(auth, PRIVILEGED_REQUESTER_PERMISSION)) {
+    return failWithAttempt('not_authorized', 'authorization');
+  }
+  if (voidAction) {
+    const requesterHasVoid = await liveRoleHoldsPosVoid(database, role, readRolePermissions);
+    if (!requesterHasVoid) {
+      return failWithAttempt('not_authorized', 'authorization');
+    }
   }
 
   const scopeKey = deriveAttemptScopeKey(value.branchId, staffId);
@@ -311,6 +348,12 @@ export async function performRequestManagerApproval(
     if (!approverEligible) {
       return failWithAttempt('approver_not_eligible', 'authorization');
     }
+    if (voidAction) {
+      const approverHasVoid = await liveRoleHoldsPosVoid(database, approverRole, readRolePermissions);
+      if (!approverHasVoid) {
+        return failWithAttempt('approver_not_eligible', 'authorization');
+      }
+    }
     credentialSubjectId = namedApproverId;
     mintedApproverRole = approverRole as string;
     mintedApproverAuthVersion =
@@ -338,8 +381,11 @@ export async function performRequestManagerApproval(
   const approvalSnap = await approvalRef.get();
   const record = approvalViewFromData(approvalSnap.exists ? approvalSnap.data() : undefined);
 
+  const derivedAudience = audienceForProtectedAction(value.protectedAction);
+  if (derivedAudience == null) return fail('invalid_target');
+
   const expected: ApprovalBindingExpected = {
-    audience: 'resolveShiftCloseAlert',
+    audience: derivedAudience,
     protectedAction: value.protectedAction,
     targetEntityId: value.targetEntityId,
     branchId: value.branchId,

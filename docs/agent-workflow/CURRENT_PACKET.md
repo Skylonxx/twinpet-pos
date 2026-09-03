@@ -2,14 +2,43 @@
 
 ## Phase
 
-**TRUE-STANDALONE — Architecture `APPROVED_WITH_NOTES` / Planning Gate `CLOSED` / Phase A `CLOSED_WITH_NOTES` / Phase C `CLOSED_WITH_NOTES` / Phase B `CLOSED` / Post Phase-B Next-Phase Adjudication**
+**TRUE-STANDALONE — Architecture `APPROVED_WITH_NOTES` / Planning Gate `CLOSED` / Phase A `CLOSED_WITH_NOTES` / Phase C `CLOSED_WITH_NOTES` / Phase B `CLOSED` / SEC-001 Part B exact canonical correlation remediation**
 
 STATUS:
-TRUE_STANDALONE_PHASE_B_CLOSED_DOCS_RECONCILIATION
+SEC_001_PART_B_CANONICAL_CORRELATION_REMEDIATION
 
 ```text
 CURRENT_PHASE: TRUE-STANDALONE
-CURRENT_GATE: PHASE_B_FINAL_CLOSURE
+CURRENT_GATE: SEC_001_PART_B_CANONICAL_CORRELATION_REMEDIATION
+ACTIVE_IMPLEMENTATION_PACKET: SEC-001-PART-B-CANONICAL-CORRELATION-REMEDIATION
+SEC_001_GEMINI_AUTHORITY: TWINPET-TRUE-STANDALONE-SEC-001-OWNER-DECISIONS-PIN6-BACKOFFICE-PLAN-DOCS-AND-AB-AUTH-GEMINI-001
+SEC_001_PART_B_CORRELATION_AUTHORITY: TWINPET-TRUE-STANDALONE-SEC-001-PART-B-EXACT-CANONICAL-CORRELATION-SCOPE-AUTH-GEMINI-001
+SEC_001_PART_A_REREVIEW: TWINPET-TRUE-STANDALONE-SEC-001-PART-P-PLUS-PART-A-CODEX-FINAL-REREVIEW-003
+SEC_001_PART_B_IMPLEMENTATION: TWINPET-TRUE-STANDALONE-SEC-001-PART-B-SERVER-RULES-ENFORCEMENT-IMPLEMENTATION-GROK-001
+SEC_001_PART_B_CODEX_REVIEW: TWINPET-TRUE-STANDALONE-SEC-001-PART-B-CODEX-REVIEW-001
+SEC_001_PART_B_CODEX_REREVIEW_HARD_ROUTE: TWINPET-TRUE-STANDALONE-SEC-001-PART-B-CODEX-REREVIEW-HARD-ROUTE-003
+SEC_001_PROMPT: TWINPET-TRUE-STANDALONE-SEC-001-PART-B-CANONICAL-CORRELATION-REMEDIATION-GROK-001
+OAC_MODEL: OAC_D_SEALED_CAPABILITY_WITH_SERVER_ADJUDICATED_PENDING_INTENT
+PIN_LENGTH: 6
+PIN_APPLIES_TO_ALL_ROLES: YES
+LEGACY_PIN4_AUTO_CONVERSION_ALLOWED: NO
+PART_P_DOCS_RECONCILIATION_AUTHORIZED: YES
+PART_A_IMPLEMENTATION_AUTHORIZED: YES
+PART_B_IMPLEMENTATION_AUTHORIZED_NOW: YES
+PART_B_CONDITIONAL_GATE_SATISFIED: YES
+VOID_TEMPORARILY_FAIL_CLOSED_UNTIL_PACKET_E: YES
+PENDING_EXECUTION_LIFETIME_REQUIRED_BEFORE_DEPLOY: YES
+PACKET_E_REQUIRED_BEFORE_DEPLOY: YES
+SERVER_ONLY_EXECUTION_CORRELATION: YES
+STALE_RULES_A2_K14_RECONCILED: YES
+FULL_RULES_SUITE: 16 files / 419 tests PASS
+PACKET_C_THROUGH_H_IMPLEMENTATION_AUTHORIZED_NOW: NO
+ANDROID_CAPACITOR_AUTHORIZED: NO
+RELEASE_READINESS: PAUSED
+PRODUCTION_ACTIVATION: PAUSED
+STANDING_RULE: NO_FUTURE_WORK_ONLY_IN_AGENT_REPORTS
+CANONICAL_SEC001_REGISTER: docs/agent-workflow/CURRENT_PACKET.md (this file, SEC-001 standing register)
+
 TRUE_STANDALONE_ARCHITECTURE_STATUS: APPROVED_WITH_NOTES
 ARCHITECTURE_PLANNING_GATE: CLOSED
 GEMINI_ARCHITECTURE_AUTHORITY: TWINPET-TRUE-STANDALONE-FINAL-ARCHITECTURE-ADJUDICATION-GEMINI-001
@@ -89,8 +118,8 @@ DEPLOYMENT: NOT_AUTHORIZED
 POST_PHASE_B_NEXT_PHASE_SELECTION_DEFERRED: YES
 NEXT_TRUE_STANDALONE_PHASE: UNDECIDED
 NEXT_PHASE_IMPLEMENTATION_AUTHORIZED_NOW: NO
-NEXT_ELIGIBLE_GATE: TRUE_STANDALONE_POST_PHASE_B_NEXT_PHASE_ADJUDICATION
-READY_FOR_POST_PHASE_B_NEXT_PHASE_ADJUDICATION: YES
+NEXT_ELIGIBLE_GATE: CODEX_REREVIEW_SEC_001_PART_B_CANONICAL_CORRELATION
+READY_FOR_POST_PHASE_B_NEXT_PHASE_ADJUDICATION: SUPERSEDED_AS_LIVE_BY_SEC_001_PART_B
 BROWSER_PRODUCTION_TARGET: NO
 FIREBASE_HOSTING: PERMANENTLY_OUT_OF_SCOPE
 STAGE10_HOSTING: SKIPPED_BY_TRUE_STANDALONE_USER_OVERRIDE
@@ -117,7 +146,7 @@ PACKET2A_RUNTIME_SOURCE_BASELINE: 88086f45228488027af9babf93c1917fde5e754a
 PKT1_STATUS: CLOSED / DELIVERED / Runtime deployment complete (historical)
 PKT1_RUNTIME_HEAD: 8abcd1550ef3004ebf0c9d2d5da32c9645a99010
 PKT2_IMPLEMENTATION: NOT_AUTHORIZED
-BOUNDED_SCOPE: exact seven docs only
+BOUNDED_SCOPE: Part B exact canonical execution correlation (server-only privilegedVoidExecutionId atomic with canonical void)
 BINDING_SEQUENCE: PK-1 -> PK-2 -> PK-3 -> PK-4 -> PK-5 -> PK-6
 BINDING_SEQUENCE_FINAL_PACKET: PK-6
 NEXT_ELIGIBLE_PK_PACKET: NONE
@@ -131,9 +160,131 @@ PK2D: RECORD_ONLY / NOT ACTIVE / NOT AUTHORIZED
 STASH: UNTOUCHED
 ```
 
-TRUE-STANDALONE architecture is **APPROVED_WITH_NOTES**. Architecture Planning Gate is **CLOSED**. Phase A (`PLATFORM_PORT_LAYER_FOUNDATION`) remains historical **CLOSED_WITH_NOTES** at `6ea48c1ce3792f91eaec7c44c4d025e004f63414` (`feat(pos): add platform port layer foundation`). Phase C (`DESKTOP_TAURI`) remains historical **CLOSED_WITH_NOTES** at source landing `92351999bb897c326a7cbefa3c97311887b5c5a1` (`feat(pos): add tauri desktop compatibility shell`). Phase B (`SQLITE_DURABLE_STORE`) is **CLOSED** at SQLite source `54bb622aa3aff5ed662bf287e00f8e70f3aac500` (`feat(pos): add sqlite durable store cutover`) and B13 packaging `40a3e10ce9805e851081c7aa512115026754776e` (`feat(pos): add windows nsis distribution config`). Codex Phase-B SQLite final = `PASS` (blockers 0; request changes 0). B13 is **CLOSED_WITH_NOTES**. W1–W22 runtime UAT is complete (W8 = `PASS_WITH_NOTE`; W1–W7 / W9–W22 = `PASS`). Stages A–D are **CLOSED**. No implementation regression was established. Production runtime activation, deployment, signing, and public release are **NOT AUTHORIZED**. Next-phase selection is **deferred** and is **not** selected here. Browser/Web App is **not** the production delivery target. Firebase Hosting remains permanently out of scope. Cloud backend remains Firestore + Cloud Functions. Phase D Capacitor is **not** selected. SoftDelete follow-up remains historical **CLOSED_WITH_NOTES** at landing `4d9be50` / docs `ec8c97c`. Model 2 remains historical **CLOSED_WITH_NOTES** at `ffb8069` and was **not** reopened. PKT-1 remains historical **CLOSED / DELIVERED**. PKT-2 remains NOT AUTHORIZED. Do not invent the next packet. After this docs commit, repository HEAD will advance to the docs SHA; do not treat that SHA as a source baseline. Semantic B13 packaging source remains `40a3e10`. Semantic Phase B SQLite source remains `54bb622`. Semantic Phase C source remains `92351999`. Semantic Phase A source remains `6ea48c1`.
+TRUE-STANDALONE architecture is **APPROVED_WITH_NOTES**. Architecture Planning Gate is **CLOSED**. Phase A / Phase C remain historical **CLOSED_WITH_NOTES**. Phase B is **CLOSED**. Live work is **SEC-001 Part B exact canonical correlation remediation** under Gemini `TWINPET-TRUE-STANDALONE-SEC-001-PART-B-EXACT-CANONICAL-CORRELATION-SCOPE-AUTH-GEMINI-001` after Codex hard-route `REQUEST_CHANGES` (`TWINPET-TRUE-STANDALONE-SEC-001-PART-B-CODEX-REREVIEW-HARD-ROUTE-003`). Part B conditional gate was activated by `TWINPET-TRUE-STANDALONE-SEC-001-PART-P-PLUS-PART-A-CODEX-FINAL-REREVIEW-003`. Packets C–H are **not** authorized. `VOID_TEMPORARILY_FAIL_CLOSED_UNTIL_PACKET_E` is recorded. Pending execution lifetime remains **REQUIRED_BEFORE_DEPLOY** (not fixed now). Android remains PARKED LAST. Release Readiness remains PAUSED. Production Activation remains PAUSED. Semantic B13 packaging source remains `40a3e10`. Semantic Phase B SQLite source remains `54bb622`. Semantic Phase C source remains `92351999`. Semantic Phase A source remains `6ea48c1`. Current repository HEAD at this implementation: `7b29c7f7edd55e4f7b8500d92604cfffc8e8209a` (`docs(pos): close true-standalone phase b`).
 
-## This pass — TRUE-STANDALONE Phase B final closure
+## SEC-001 standing register (authoritative)
+
+Standing rule: `NO_FUTURE_WORK_ONLY_IN_AGENT_REPORTS`. Future work must be recorded here (or another live canonical file that cross-references this register). Do not leave future work only in external agent reports.
+
+### Owner decisions D1–D14
+
+Gemini `APPROVED_WITH_CONDITIONS`; all D1–D14 accepted.
+
+| ID | Binding decision |
+|----|------------------|
+| D1 | Self-approval: **NO** |
+| D2 | Pending and settled void share the same Manager Authorization policy |
+| D3 | OAC freshness: **24h** |
+| D4 | Offline approval age: **72h** |
+| D5 | Offline PIN attempts: **5** |
+| D6 | Lockout: **15m** + **online clear required** |
+| D7 | Exact branch / per-branch OAC |
+| D8 | Cross-midnight offline void: **reject** |
+| D9 | Pending until server accepted |
+| D10 | Rejection → Sync Center / Manual Attention; **no stock rollback** |
+| D11 | Manager/Admin same void approval policy, subject to branch authority |
+| D12 | `posDevices` registration **mandatory** |
+| D13 | PIN = **6 digits, ALL roles** |
+| D14 | `requiresPasswordForVoid` disable-able semantics **retired**; Manager Authorization **mandatory** |
+
+### PIN migration rule
+
+- All Staff / Manager / Admin PINs move to 6 digits (`PIN_LENGTH = 6`, `/^\d{6}$/`).
+- No 4-digit auto-conversion, padding, prefix, suffix, or silent continued acceptance after cutover.
+- Controlled Admin Backoffice credential reset/rotation is required.
+- Legacy credential cannot provision offline authorization (OAC).
+- `credentialVersion` must advance on reset; audit trail required.
+- Actual migration execution belongs to a **future bounded PIN6 migration/cutover packet**. Persisted `credentialState` is not mutated in Part A.
+
+### Live vs target PIN semantics (temporary; removed by PIN6 cutover packet)
+
+- Target policy remains PIN6 for all roles (`isTargetPinWellFormed` / `isWellFormedPin`).
+- Current live manager-approval compare eligibility remains the authoritative PIN4 shape via `isLiveManagerApprovalPinCompareEligible`. Compatibility only — not target policy, not OAC eligibility, not a six-digit claim.
+- Do not cut live compare, login, create/reset/rotation, Admin Backoffice, keypad/UI, Functions validation, fixtures/tests, or server execution to PIN6 until that coordinated packet.
+- OAC provisioning remains PIN6-only (`canProvisionOac`).
+- No helper may auto-convert 4→6.
+
+### Existing Admin Backoffice
+
+Existing Admin Backoffice already exists. It is the security control plane for user / RBAC / credentials. **No new standalone Backoffice is required now.**
+
+### Future Admin Backoffice extensions (not authorized now)
+
+- registered POS device list
+- device branch assignment
+- device revoke
+- OAC / offline capability status
+- OAC revoke / force reprovision
+- credential freshness / version visibility
+- failed offline approval / lockout visibility
+- authorized online lockout clear
+- user / security change audit
+- force reauthentication / logout where supported
+- SEC-005 comprehensive client role-gating hardening for `/admin/*`
+
+### SEC-001 roadmap
+
+Recommended model: `OAC_D_SEALED_CAPABILITY_WITH_SERVER_ADJUDICATED_PENDING_INTENT`.
+
+| Packet | Status |
+|--------|--------|
+| A Authorization / security primitives | **in working tree; Part A Codex RC remediations preserved** |
+| B Server / rules enforcement | **exact canonical correlation remediating in working tree; awaiting Codex re-review** |
+| C Offline credential / verifier (native) | **not authorized** — future: OAC semantic crypto validation (Codex N-2) |
+| D Durable evidence + reconciliation | **not authorized** — future: evidence state-matrix hardening (Codex N-3) |
+| E POS UI wiring | **not authorized** — required to supersede interim POS fail-closed before any deploy/release |
+| F Tests / emulator proof | **not authorized** |
+| G Runtime UAT | **not authorized** |
+| H Docs reconciliation | **not authorized** |
+
+Android / Capacitor remains **PARKED LAST**. Release Readiness remains **PAUSED**. Production Activation remains **PAUSED**.
+
+## This pass — SEC-001 Part B exact canonical correlation remediation
+
+**Status: Codex hard-route `REQUEST_CHANGES` (`EXACT_CANONICAL_COMPLETION_ATTRIBUTION`) remediating. Packets C–H not executed. Commit/push/deploy not authorized.** Prompt: `TWINPET-TRUE-STANDALONE-SEC-001-PART-B-CANONICAL-CORRELATION-REMEDIATION-GROK-001`. Next action: Codex Part-B final re-review.
+
+- Gemini correlation authority: `TWINPET-TRUE-STANDALONE-SEC-001-PART-B-EXACT-CANONICAL-CORRELATION-SCOPE-AUTH-GEMINI-001` — `APPROVED_WITH_CONDITIONS` / Option A
+- Codex hard-route: `TWINPET-TRUE-STANDALONE-SEC-001-PART-B-CODEX-REREVIEW-HARD-ROUTE-003` — `REQUEST_CHANGES` (single blocker: generic `voided` / `voidReconciled` is not proof that THIS exact privileged execution completed)
+- Server-owned `privilegedVoidExecutionId` is derived from the exact privileged binding and written in the same `handleVoidIntent` transaction as the canonical void effect
+- Generic void state is **not** sufficient exact-completion evidence
+- Unrelated / missing / different correlation must not complete a pending execution; matching correlation after ambiguous transport may complete without re-entering the canonical executor
+- `PENDING_EXECUTION_LIFETIME_REQUIRED_BEFORE_DEPLOY: YES` (not fixed now)
+- `PACKET_E_REQUIRED_BEFORE_DEPLOY: YES`
+- Packet C still NOT authorized. Commit/push/deploy still NOT authorized
+- PIN6 target preserved; live PIN4 manager-approval compare compatibility preserved until coordinated cutover
+- Protected stash unchanged: `stash@{0}` = `7d03cfec7ba52ff7e25b7e175ca190efc258d874`
+
+## Prior this-pass — SEC-001 Part B Codex RC remediation (historical as live current-state)
+
+**Status: HISTORICAL as live current-state.** BF-1/BF-2/BF-3 remediations remain in the dirty worktree and are preserved. Live work is now exact canonical correlation remediation.
+
+- Gemini: `TWINPET-TRUE-STANDALONE-SEC-001-OWNER-DECISIONS-PIN6-BACKOFFICE-PLAN-DOCS-AND-AB-AUTH-GEMINI-001` — `APPROVED_WITH_CONDITIONS`
+- Part A Codex final re-review (activated Part B): `TWINPET-TRUE-STANDALONE-SEC-001-PART-P-PLUS-PART-A-CODEX-FINAL-REREVIEW-003`
+- Part B implementation: `TWINPET-TRUE-STANDALONE-SEC-001-PART-B-SERVER-RULES-ENFORCEMENT-IMPLEMENTATION-GROK-001`
+- Codex Part B review: `TWINPET-TRUE-STANDALONE-SEC-001-PART-B-CODEX-REVIEW-001` — `REQUEST_CHANGES`
+- BF-1: live requester `pos_void` revalidated at mint and submit from `settings/_rolePermissions`; token claims are an additional early gate only; live branch revalidated at initial submit
+- BF-2: present empty/malformed/unreadable role-permission rows fail closed; login defaults are not reused for privileged void; requester and approver share `privilegedActionAuthority.ts`
+- BF-3: `privilegedActionNonces/{nonceKey}` is a server-owned execution record (`CONSUMED_PENDING_EXECUTION` / `COMPLETED`); exact-bound resume does not consult original approval TTL; never-consumed expired approval remains denied
+- `VOID_TEMPORARILY_FAIL_CLOSED_UNTIL_PACKET_E`: current POS still uses retired direct client `asyncOrders` void merge; no unauthorized void can succeed; void UI/functionality is temporarily unavailable; Packet E/D supersession required before any deploy/release. Codex classified this intermediate as `ACCEPTABLE_INTERMEDIATE`.
+- Stale full-rules A2/K14 inverted to denial proofs. Full active rules suite: **16 files / 419 tests PASS**. Functions targeted: **8 files / 173 tests PASS**.
+- PIN6 target preserved; live PIN4 manager-approval compare compatibility preserved until coordinated cutover
+- Packet C OAC crypto/freshness, Packet D evidence state matrix, coordinated PIN6 migration remain future / not authorized
+- Android PARKED LAST. Release Readiness PAUSED. Production Activation PAUSED
+- No commit, push, deploy, Packet C–H, client POS/UI wiring, or `reconcileOrder.ts` edits
+- Protected stash unchanged: `stash@{0}` = `7d03cfec7ba52ff7e25b7e175ca190efc258d874`
+
+## Prior this-pass — SEC-001 Part P + Part A Codex RC remediation (historical)
+
+**Status: HISTORICAL as live current-state.** Part P docs + Part A primitives remain in the dirty worktree and are preserved. Codex Part A review `TWINPET-TRUE-STANDALONE-SEC-001-PART-P-PLUS-PART-A-CODEX-REVIEW-001` = `REQUEST_CHANGES` was remediating; Part A re-review `TWINPET-TRUE-STANDALONE-SEC-001-PART-P-PLUS-PART-A-CODEX-FINAL-REREVIEW-003` activated Part B. Live work is now Part B Codex RC remediation.
+
+- Frozen docs allowlist: `docs/agent-workflow/STATE.md`, `docs/agent-workflow/CURRENT_PACKET.md`, `docs/agent-workflow/NEXT_ACTION.md`, `Context.md`, `Task.md`
+- Part A code allowlist: `requestManagerApprovalCore.ts`, `managerApprovalTypes.ts`, `privilegedActionRegistry.ts`, `privilegedActionTypes.ts`, matched `pinPolicy.ts` (client + Functions)
+- Live `validateManagerApprovalRequest` remains shift-close-only (`LIVE_MANAGER_APPROVAL_ACTIONS`); void contracts stay frozen, not live-accepted by that validator
+- Live manager-approval PIN compare restored to PIN4 compatibility until coordinated cutover; PIN6 target contract preserved
+- Existing shift-close manager approval remains the live callable behavior until a later authorized packet
+- Protected stash unchanged: `stash@{0}` = `7d03cfec7ba52ff7e25b7e175ca190efc258d874`
+
+## Prior this-pass — TRUE-STANDALONE Phase B final closure (historical)
 
 **Status: Phase B `CLOSED`; B13 `CLOSED_WITH_NOTES`; this pass records the reviewed NSIS packaging commit `40a3e10ce9805e851081c7aa512115026754776e` and reconciles canonical closure docs.** Phase B implementation is landed and no longer active. Next TRUE-STANDALONE phase is not selected.
 
@@ -407,6 +558,6 @@ PK-1 final HEAD (binding, unchanged): `513b198a30a1af72151ab6a8c0976799871529b8`
 
 ## Next gate
 
-**TRUE-STANDALONE architecture is APPROVED_WITH_NOTES. Architecture Planning Gate is CLOSED. Phase A is CLOSED_WITH_NOTES. Phase C is CLOSED_WITH_NOTES. Phase B is CLOSED. B13 is CLOSED_WITH_NOTES.** SQLite source is `54bb622aa3aff5ed662bf287e00f8e70f3aac500`. B13 packaging source is `40a3e10ce9805e851081c7aa512115026754776e`. No active Phase-B implementation gate remains. Next TRUE-STANDALONE phase is **not selected**. `NEXT_ELIGIBLE_GATE: TRUE_STANDALONE_POST_PHASE_B_NEXT_PHASE_ADJUDICATION`. Next-phase selection remains deferred. Capacitor/Android is **not** selected. Production runtime activation, deployment, signing, and public release are **NOT AUTHORIZED**. No Hosting / PKT-2 work. TRUE-STANDALONE / NO HOSTING remains binding. Binding PK sequence still ends at PK-6. `NEXT_ELIGIBLE_PK_PACKET: NONE`. PK-7 is **NOT DEFINED / DO NOT INVENT**. Do not invent the next packet.
+**TRUE-STANDALONE architecture is APPROVED_WITH_NOTES. Architecture Planning Gate is CLOSED. Phase A is CLOSED_WITH_NOTES. Phase C is CLOSED_WITH_NOTES. Phase B is CLOSED. B13 is CLOSED_WITH_NOTES.** Live gate is **SEC-001 Part B exact canonical correlation remediation**. Codex must re-review Part B correlation. Packets C–H remain unauthorized. `VOID_TEMPORARILY_FAIL_CLOSED_UNTIL_PACKET_E` is recorded. Pending execution lifetime remains REQUIRED_BEFORE_DEPLOY. Android remains PARKED LAST. Production activation remains NOT AUTHORIZED. `NEXT_ELIGIBLE_PK_PACKET: NONE`. PK-7 is **NOT DEFINED / DO NOT INVENT**.
 
-**NEXT_WORKFLOW_ACTION:** RETURN_TO_CHATGPT_FOR_TRUE-STANDALONE_POST_PHASE_B_NEXT_PHASE_ADJUDICATION_ROUTING. Do NOT select or start a next implementation phase. Do NOT implement Capacitor/Android. Do NOT sign, deploy, or publicly release. Do NOT activate production. Do NOT implement PKT-2. Do NOT invent the next packet. Do NOT deploy Hosting. Do NOT reopen Phase B. Do NOT reopen Phase C. Do NOT reopen Phase A. Do NOT reopen Model 2 runtime.
+**NEXT_WORKFLOW_ACTION:** RETURN_TO_CHATGPT_FOR_CODEX_PART_B_FINAL_REREVIEW_ROUTING. Do NOT start Packet C. Do NOT implement Capacitor/Android. Do NOT sign, deploy, or publicly release. Do NOT activate production. Do NOT implement PKT-2. Do NOT deploy Hosting. Do NOT reopen Phase B. Do NOT reopen Phase C. Do NOT reopen Phase A. Do NOT reopen Model 2 runtime.

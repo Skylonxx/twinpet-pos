@@ -109,8 +109,8 @@ describe("staff ['pos_void'] → void/update", () => {
 });
 
 // ── 3. ANY 'staff' can request async void if they log themselves AND it's same-day ─────
-describe("any staff → async void intent", () => {
-  it('updates an existing asyncOrder with void-intent (voidRequested) by logging own UID (voidedBy)', async () => {
+describe("any staff → async void intent is DENIED (SEC-001 Packet B)", () => {
+  it('DENIES client asyncOrder void-intent even when voidedBy matches the caller', async () => {
     await testEnv.withSecurityRulesDisabled(async (ctx) => {
       await setDoc(doc(ctx.firestore(), 'asyncOrders', 'a_void_update'), {
         branchId: BRANCH,
@@ -125,7 +125,7 @@ describe("any staff → async void intent", () => {
     });
 
     const db = testEnv.authenticatedContext('staff1', staffWith(['pos_sale'])).firestore();
-    await assertSucceeds(
+    await assertFails(
       setDoc(doc(db, 'asyncOrders', 'a_void_update'), { voidRequested: true, status: 'voided', voidedBy: 'staff1' }, { merge: true }),
     );
   });

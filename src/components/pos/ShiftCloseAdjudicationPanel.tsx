@@ -39,6 +39,8 @@ import {
 import {
   expectedProtectedAction,
   MANAGER_APPROVAL_ERROR_LABELS,
+  type LiveManagerApprovalAction,
+  type ProtectedAction,
 } from '../../lib/auth/managerApprovalTypes';
 import { useApproverRoster } from '../../lib/auth/useApproverRoster';
 import type { ApproverCandidate } from '../../lib/auth/approverEligibility';
@@ -70,6 +72,17 @@ export interface ShiftCloseAdjudicationPanelProps {
   isOnline?: () => boolean;
   /** Test-only requester id. Production reads AuthContext.user.id. */
   requesterStaffId?: string | null;
+}
+
+// SEC-001 Part P/A/B seam: the shared `ProtectedAction` union now also
+// carries the privileged VOID_PENDING_SALE/VOID_SETTLED_SALE members. This
+// panel is a shift-close-only consumer, so any value routed toward its
+// acknowledge/resolve manager-approval path must be re-narrowed at this
+// boundary — a VOID action must never reach that handler.
+export type ShiftCloseAlertAction = LiveManagerApprovalAction;
+
+export function isShiftCloseAlertAction(action: ProtectedAction): action is ShiftCloseAlertAction {
+  return action === 'shift_close_alert_acknowledge' || action === 'shift_close_alert_resolve';
 }
 
 const REJECT_CODE_LABELS: Record<string, string> = {
@@ -229,11 +242,16 @@ export default function ShiftCloseAdjudicationPanel({
     const frozen = effectiveState;
     const attemptCommandId = frozen.commandId;
     const attemptEpoch = approvalEpochRef.current;
+    const protectedAction = expectedProtectedAction(frozen.outcome);
+    if (!isShiftCloseAlertAction(protectedAction)) {
+      setPinSubmitting(false);
+      return;
+    }
     void (async () => {
       const result = await callRequestManagerApproval(
         {
           commandId: frozen.commandId,
-          protectedAction: expectedProtectedAction(frozen.outcome),
+          protectedAction,
           targetEntityId: frozen.payload.shiftId,
           branchId: frozen.payload.branchId,
           pin,

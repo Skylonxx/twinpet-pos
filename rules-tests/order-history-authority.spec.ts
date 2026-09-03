@@ -206,9 +206,9 @@ describe('K order history authority rules', () => {
     );
   });
 
-  it('K14 seven-key void intent update is ALLOWED', async () => {
+  it('K14 seven-key void intent update is DENIED', async () => {
     const db = testEnv.authenticatedContext('staff1', staff()).firestore();
-    await assertSucceeds(
+    await assertFails(
       updateDoc(doc(db, 'asyncOrders', 'a1'), {
         voidRequested: true,
         status: 'voided',

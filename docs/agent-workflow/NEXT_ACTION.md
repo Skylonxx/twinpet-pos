@@ -10,7 +10,21 @@
 - SoftDelete follow-up landing/source commit (historical; do not overwrite with the later docs SHA): `4d9be50411d72dbcc2bc9c35aebcbfdfa0819d19` (`fix(auth): correct soft delete transaction ordering`)
 - Final Model 2 runtime/source baseline (historical; not reopened; do not overwrite with the later docs SHA): `ffb8069690173c80455f355d432e141865c09a33` (`feat(auth): add delegated manager approval`)
 - **Current phase:** TRUE-STANDALONE
-- **Current gate:** `PHASE_B_FINAL_CLOSURE`
+- **Current gate:** `SEC_001_PART_B_CANONICAL_CORRELATION_REMEDIATION`
+- **Active packet:** SEC-001 Part B exact canonical correlation remediation
+- **Gemini SEC-001 authority:** `TWINPET-TRUE-STANDALONE-SEC-001-OWNER-DECISIONS-PIN6-BACKOFFICE-PLAN-DOCS-AND-AB-AUTH-GEMINI-001` — `APPROVED_WITH_CONDITIONS`
+- **Gemini correlation authority:** `TWINPET-TRUE-STANDALONE-SEC-001-PART-B-EXACT-CANONICAL-CORRELATION-SCOPE-AUTH-GEMINI-001` — `APPROVED_WITH_CONDITIONS` / Option A
+- **SEC-001 standing register (authoritative):** `docs/agent-workflow/CURRENT_PACKET.md`
+- **PIN length target:** 6 (all roles)
+- **Legacy PIN4 auto-conversion:** NO
+- **Part B authorized now:** YES (exact canonical correlation remediating Codex hard-route `REQUEST_CHANGES`)
+- **Part B conditional gate:** SATISFIED (A re-review); Packet C still NOT authorized
+- **VOID_TEMPORARILY_FAIL_CLOSED_UNTIL_PACKET_E:** YES
+- **PENDING_EXECUTION_LIFETIME_REQUIRED_BEFORE_DEPLOY:** YES
+- **PACKET_E_REQUIRED_BEFORE_DEPLOY:** YES
+- **Packets C–H authorized now:** NO
+- **Android / Capacitor:** PARKED LAST / NOT AUTHORIZED
+- **Release Readiness / Production Activation:** PAUSED
 - **Architecture status:** `APPROVED_WITH_NOTES`
 - **Architecture Planning Gate:** `CLOSED`
 - **Gemini architecture authority:** `TWINPET-TRUE-STANDALONE-FINAL-ARCHITECTURE-ADJUDICATION-GEMINI-001` â€” `APPROVED_WITH_CONDITIONS`
@@ -56,8 +70,8 @@
 - **Installer signing / public release / deployment:** NOT_PERFORMED / NOT_AUTHORIZED
 - **Next TRUE-STANDALONE phase:** UNDECIDED
 - **Next-phase implementation authorized now:** NO
-- **Next eligible gate:** `TRUE_STANDALONE_POST_PHASE_B_NEXT_PHASE_ADJUDICATION`
-- **Ready for post-Phase-B next-phase adjudication:** YES
+- **Next eligible gate:** `CODEX_REREVIEW_SEC_001_PART_B_CANONICAL_CORRELATION`
+- **Ready for post-Phase-B next-phase adjudication:** SUPERSEDED_AS_LIVE_BY_SEC_001_PART_P_A
 - **Product delivery:** offline-capable Desktop/Mobile Native App. Browser/Web App is **not** the production delivery target. Browser runtime remains development/test compatibility only.
 - **TRUE-STANDALONE / NO HOSTING:** BINDING
 - **Stage 10 Hosting:** `SKIPPED_BY_TRUE_STANDALONE_USER_OVERRIDE`
@@ -79,7 +93,7 @@
 - **Binding sequence:** PK-1 â†’ PK-2 â†’ PK-3 â†’ PK-4 â†’ PK-5 â†’ PK-6; PK-6 is the **final PK packet**
 - **Next eligible PK packet:** `NONE`
 - **PK-7:** `NOT DEFINED / DO NOT INVENT`
-- **This pass** â€” authorized Phase B final closure: Part A config commit `40a3e10` plus seven-doc reconciliation. No next-phase selection. Do not invent the next packet.
+- **This pass** — authorized SEC-001 Part B exact canonical correlation remediation only. Packets C-H not executed. Do not invent packets C-H as current work.
 - For current working-tree/stage/stash state, use live Git. Stash remains `stash@{0}` = `7d03cfec7ba52ff7e25b7e175ca190efc258d874`.
 
 ### Claim boundaries (must not overclaim)
@@ -141,18 +155,18 @@
 
 ## What Happens Next
 
-**Immediate next action:** RETURN_TO_CHATGPT_FOR_TRUE-STANDALONE_POST_PHASE_B_NEXT_PHASE_ADJUDICATION_ROUTING
+**Immediate next action:** RETURN_TO_CHATGPT_FOR_CODEX_PART_B_FINAL_REREVIEW_ROUTING
 
-Do **not** select or start a next implementation phase. Do **not** implement Capacitor/Android. Do **not** sign, deploy, or publicly release. Do **not** activate production. Do **not** implement PKT-2. Do **not** invent the next packet. Do **not** deploy Hosting. Do **not** reopen Phase B. Do **not** reopen Phase C. Do **not** reopen Phase A. Do **not** reopen Model 2 runtime.
+Do **not** start Packet C. Do **not** implement Capacitor/Android. Do **not** sign, deploy, or publicly release. Do **not** activate production. Do **not** implement PKT-2. Do **not** invent the next packet. Do **not** deploy Hosting. Do **not** reopen Phase B. Do **not** reopen Phase C. Do **not** reopen Phase A. Do **not** reopen Model 2 runtime.
 
-**Next implementation action:** NONE â€” Phase B is CLOSED. B13 is CLOSED_WITH_NOTES. No next implementation phase is selected. Production activation is not authorized. Capacitor/Android remain NOT AUTHORIZED. PKT-2 NOT AUTHORIZED. Post-Phase-B next-phase adjudication routing pending at ChatGPT.
+**Next implementation action:** NONE until Codex re-reviews Part B exact canonical correlation. Packets C–H remain unauthorized. Production activation is not authorized. Capacitor/Android remain NOT AUTHORIZED. PKT-2 NOT AUTHORIZED.
 
 1. TRUE-STANDALONE architecture â€” **APPROVED_WITH_NOTES** / Planning Gate **CLOSED**
 2. Phase A (`PLATFORM_PORT_LAYER_FOUNDATION`) â€” **CLOSED_WITH_NOTES** at `6ea48c1`
 3. Phase C (`DESKTOP_TAURI`) â€” **CLOSED_WITH_NOTES** at `92351999`; Codex `PASS_WITH_NOTES`; C7 Option A accepted
 4. Phase B (`SQLITE_DURABLE_STORE`) â€” **CLOSED** at `54bb622` / B13 `40a3e10`; B13 `CLOSED_WITH_NOTES`; W8 `PASS_WITH_NOTE`
-5. Next TRUE-STANDALONE phase â€” **UNDECIDED**
-6. Next eligible gate â€” **`TRUE_STANDALONE_POST_PHASE_B_NEXT_PHASE_ADJUDICATION`**
+5. SEC-001 Part B exact canonical correlation remediation — remediating in working tree; Codex re-review required; generic void state is not exact-completion evidence; `VOID_TEMPORARILY_FAIL_CLOSED_UNTIL_PACKET_E` recorded; pending lifetime REQUIRED_BEFORE_DEPLOY; Packet E REQUIRED_BEFORE_DEPLOY
+6. Next eligible gate — **`CODEX_REREVIEW_SEC_001_PART_B_CANONICAL_CORRELATION`**
 7. Post Model 2 softDelete transaction-order follow-up â€” historical **CLOSED_WITH_NOTES** at landing `4d9be50`; exact `setUserAccount` deployed
 8. UI-11 Packet 2 / Model 2 â€” historical **CLOSED_WITH_NOTES** at runtime/source baseline `ffb8069` (not reopened)
 9. UI-11 Packet 2 / Packet 2A â€” historical **CLOSED_WITH_NOTES** at `88086f4` / docs `b0875d1`
@@ -162,15 +176,17 @@ Do **not** select or start a next implementation phase. Do **not** implement Cap
 13. PK-4 â€” **CLOSED / DELIVERED** at `d27850a` / docs `6a82fef`
 14. PK-3 â€” **CLOSED** (`PASS`) at feature SHA `ec7cf8b`; docs commit `5e6675758`; U1â€“U7 `PASS`
 15. Packet 5 â€” **CLOSED** (`PASS_WITH_NOTES`) at `292d51ff`; R4 `36 / 36 PASS`
-16. **NOT authorized now:** next implementation phase, Capacitor/Android, Electron, signing, production activation, public release, deployment, PKT-2, Hosting, PK-2C, PK-2D, PK-7, next packet implementation, stash operations
+16. **NOT authorized now:** packets C-H, Capacitor/Android, Electron, signing, production activation, public release, deployment, PKT-2, Hosting, PK-2C, PK-2D, PK-7, stash operations
 17. Closed-gate reopen: Phase B = CLOSED (do not reopen); B13 = CLOSED_WITH_NOTES (do not reopen); Phase C = CLOSED_WITH_NOTES (do not reopen); Phase A = CLOSED_WITH_NOTES (do not reopen); Model 2 runtime = CLOSED_WITH_NOTES; Packet 2A = CLOSED_WITH_NOTES; PKT-1 = CLOSED / DELIVERED; Packet 5 = CLOSED; PK-3 = CLOSED; PK-4 = CLOSED / DELIVERED; PK-5 = CLOSED / DELIVERED; PK-6 = CLOSED / DELIVERED
 
-**Not active:** next implementation phase, Capacitor, PKT-2, Hosting, production activation, signing, public release, or any new feature packet. TRUE-STANDALONE architecture is approved with notes. Phase A is closed with notes. Phase C is closed with notes. Phase B is closed. `NEXT_ELIGIBLE_PK_PACKET: NONE`. Post-Phase-B next-phase adjudication routing pending.
+**Not active:** packets C-H, Capacitor, PKT-2, Hosting, production activation, signing, public release. TRUE-STANDALONE architecture is approved with notes. Phase A is closed with notes. Phase C is closed with notes. Phase B is closed. SEC-001 Part B exact canonical correlation remediation is in the working tree. `VOID_TEMPORARILY_FAIL_CLOSED_UNTIL_PACKET_E` is recorded. `NEXT_ELIGIBLE_PK_PACKET: NONE`. Codex re-review of Part B correlation pending.
 
 ## Reminders
 
 - `stash@{0}` â€” do not touch (`7d03cfec7ba52ff7e25b7e175ca190efc258d874`)
-- TRUE-STANDALONE architecture is APPROVED_WITH_NOTES; this docs pass is Phase B final closure
+- TRUE-STANDALONE architecture is APPROVED_WITH_NOTES; this docs pass is SEC-001 Part B exact canonical correlation remediation
+- Live eligible gate is Codex re-review of Part B correlation; do not start Packet C
+- Standing rule `NO_FUTURE_WORK_ONLY_IN_AGENT_REPORTS` — canonical register is `docs/agent-workflow/CURRENT_PACKET.md`
 - Semantic B13 packaging source remains `40a3e10ce9805e851081c7aa512115026754776e` after the docs SHA advances
 - Semantic Phase B SQLite source remains `54bb622aa3aff5ed662bf287e00f8e70f3aac500` after the docs SHA advances
 - Semantic Phase C source remains `92351999bb897c326a7cbefa3c97311887b5c5a1` after the docs SHA advances

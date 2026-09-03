@@ -88,9 +88,9 @@ describe('asyncOrders reconcile-control immutability (client updates)', () => {
     await assertFails(updateDoc(doc(db, 'asyncOrders', 'a1'), { reconcileAttempts: 0 }));
   });
 
-  it('the legitimate offline void-intent merge (no reconcile fields) still SUCCEEDS', async () => {
+  it('the legitimate offline void-intent merge is DENIED after SEC-001 Packet B', async () => {
     const db = testEnv.authenticatedContext('staff1', voidStaff).firestore();
-    await assertSucceeds(
+    await assertFails(
       setDoc(
         doc(db, 'asyncOrders', 'a1'),
         { voidRequested: true, status: 'voided', voidReason: 'ลูกค้าเปลี่ยนใจ', voidedBy: 'staff1' },
@@ -99,9 +99,9 @@ describe('asyncOrders reconcile-control immutability (client updates)', () => {
     );
   });
 
-  it('a client without pos_void CAN void if they securely stamp their own voidedBy', async () => {
+  it('a client without pos_void CANNOT void even if they securely stamp their own voidedBy', async () => {
     const db = testEnv.authenticatedContext('staff2', saleOnly).firestore();
-    await assertSucceeds(
+    await assertFails(
       setDoc(
         doc(db, 'asyncOrders', 'a1'),
         { voidRequested: true, status: 'voided', voidedBy: 'staff2' },
@@ -188,9 +188,9 @@ describe('asyncOrders update — pos_void cannot mutate SALE PAYLOAD fields', ()
     );
   });
 
-  it('a FULL legitimate void merge (all approved void fields) still SUCCEEDS', async () => {
+  it('a FULL legitimate void merge (all approved void fields) is DENIED after SEC-001 Packet B', async () => {
     const db = testEnv.authenticatedContext('staff1', voidStaff).firestore();
-    await assertSucceeds(
+    await assertFails(
       setDoc(
         doc(db, 'asyncOrders', 'a1'),
         {

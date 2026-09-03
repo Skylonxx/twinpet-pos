@@ -1,9 +1,8 @@
 /**
- * PK-3 — rules alignment for drain-time void pre-flight.
+ * PK-3 / SEC-001 Packet B — drain-time void pre-flight aligned to retired client update.
  *
- * Production firestore.rules are UNCHANGED. This spec restates the server-side
- * PF-1 shape (update of a document that does not exist is DENIED) and the
- * same-day ALLOW path so the new file is self-contained and non-vacuous.
+ * Direct client asyncOrders void merge is DENIED. Same-day and missing-doc paths
+ * fail closed at the rules boundary; canonical void is server-owned.
  *
  * Run (from repo root):
  *   firebase emulators:exec --only firestore --project demo-twinpet \
@@ -13,7 +12,6 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   initializeTestEnvironment,
-  assertSucceeds,
   assertFails,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
@@ -69,7 +67,7 @@ describe('asyncOrders void preflight (PK-3, production rules unchanged)', () => 
     );
   });
 
-  it('RL-02 same-day seven-field void merge is ALLOWED', async () => {
+  it('RL-02 same-day seven-field void merge is DENIED (client void update retired)', async () => {
     await testEnv.withSecurityRulesDisabled(async (ctx) => {
       await setDoc(doc(ctx.firestore(), 'asyncOrders', 'a_same_day'), {
         id: 'a_same_day',
@@ -86,7 +84,7 @@ describe('asyncOrders void preflight (PK-3, production rules unchanged)', () => 
       });
     });
     const db = testEnv.authenticatedContext('staff1', staff).firestore();
-    await assertSucceeds(
+    await assertFails(
       setDoc(doc(db, 'asyncOrders', 'a_same_day'), sevenFieldVoid, { merge: true }),
     );
   });

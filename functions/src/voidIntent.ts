@@ -67,6 +67,37 @@ export type VoidIntentTxnOutcome =
   | { kind: 'VOID_REVISION_FAULT_COMMITTED'; fault: string; branchId: string }
   | { kind: 'VOID_APPLIED' };
 
+/** Server-owned exact privileged-void correlation. Written only by the privileged caller. */
+export const PRIVILEGED_VOID_EXECUTION_ID_FIELD = 'privilegedVoidExecutionId' as const;
+
+export type HandleVoidIntentOptions = {
+  /**
+   * Exact privileged execution correlation. Absence means no privileged claim.
+   * Only the privileged server path supplies this. Generic callers must omit it.
+   */
+  privilegedVoidExecutionId?: string;
+};
+
+function readIncomingPrivilegedVoidExecutionId(
+  options?: HandleVoidIntentOptions,
+): string | undefined {
+  const raw = options?.privilegedVoidExecutionId;
+  if (typeof raw !== 'string') return undefined;
+  const id = raw.trim();
+  return id.length > 0 ? id : undefined;
+}
+
+function isCanonicallyVoidTerminal(order: Record<string, unknown>): boolean {
+  return order.status === 'voided' || order.voidReconciled === true;
+}
+
+function privilegedCorrelationWrite(
+  incomingId: string | undefined,
+): Record<string, string> {
+  if (incomingId == null) return {};
+  return { [PRIVILEGED_VOID_EXECUTION_ID_FIELD]: incomingId };
+}
+
 export function terminalMarkerPresent(order: Record<string, unknown>): boolean {
   return (
     'voidAnomaly' in order ||
@@ -87,7 +118,9 @@ function classifyRevisionFault(canonical: Record<string, unknown>): 'revision_ma
 export async function handleVoidIntent(
   db: Firestore,
   orderRef: DocumentReference,
+  options?: HandleVoidIntentOptions,
 ): Promise<VoidIntentTxnOutcome> {
+  const incomingPrivilegedVoidExecutionId = readIncomingPrivilegedVoidExecutionId(options);
   const outcome = await db.runTransaction(async (tx): Promise<VoidIntentTxnOutcome> => {
     const snap = await tx.get(orderRef);
     if (!snap.exists) return { kind: 'NOOP', reason: 'absent' };
@@ -97,6 +130,12 @@ export async function handleVoidIntent(
       return { kind: 'NOOP', reason: 'terminal_marker_present' };
     }
 
+    // Privileged path only: generic void terminal is not a claimable completion.
+    // Do not re-enter destructive effects and do not overwrite another winner.
+    if (incomingPrivilegedVoidExecutionId != null && isCanonicallyVoidTerminal(order)) {
+      return { kind: 'NOOP', reason: 'already_reconciled' };
+    }
+
     if (order.reconcileStatus === 'pending_reconcile') {
       tx.set(
         orderRef,
@@ -104,6 +143,7 @@ export async function handleVoidIntent(
           status: 'voided',
           reconcileStatus: 'settled' satisfies ReconcileStatus,
           voidedAt: FieldValue.serverTimestamp(),
+          ...privilegedCorrelationWrite(incomingPrivilegedVoidExecutionId),
         },
         { merge: true },
       );
@@ -293,6 +333,7 @@ export async function handleVoidIntent(
         voidReconciled: true,
         voidedAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
+        ...privilegedCorrelationWrite(incomingPrivilegedVoidExecutionId),
       },
       { merge: true },
     );

@@ -468,3 +468,95 @@ describe('handleVoidIntent — R7-6 historyRev / V9', () => {
     errorSpy.mockRestore();
   });
 });
+
+describe('handleVoidIntent — privileged execution correlation', () => {
+  const EXEC_A = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+  const EXEC_B = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+
+  test('absence of options does not stamp privilegedVoidExecutionId', async () => {
+    const db = makeFakeDb(seedSettledSale());
+    await handleVoidIntent(db as never, db.collection('asyncOrders').doc('dev01-1') as never);
+    expect(db.__store.get('asyncOrders/dev01-1')!.privilegedVoidExecutionId).toBeUndefined();
+    expect(db.__store.get('asyncOrders/dev01-1')!.voidReconciled).toBe(true);
+  });
+
+  test('VOID_APPLIED writes correlation in the same canonical effect', async () => {
+    const seed = seedSettledSale();
+    (seed['asyncOrders/dev01-1'] as Doc).status = 'completed';
+    const db = makeFakeDb(seed);
+    const outcome = await handleVoidIntent(
+      db as never,
+      db.collection('asyncOrders').doc('dev01-1') as never,
+      { privilegedVoidExecutionId: EXEC_A },
+    );
+    expect(outcome.kind).toBe('VOID_APPLIED');
+    expect(db.__store.get('asyncOrders/dev01-1')).toMatchObject({
+      status: 'voided',
+      voidReconciled: true,
+      privilegedVoidExecutionId: EXEC_A,
+    });
+    expect(db.__store.get('products/P/productStocks/br1')!.totalStockBase).toBe(20);
+  });
+
+  test('VOID_TOMBSTONED writes correlation without FIFO reversal', async () => {
+    const seed = seedSettledSale();
+    (seed['asyncOrders/dev01-1'] as Doc).status = 'completed';
+    (seed['asyncOrders/dev01-1'] as Doc).reconcileStatus = 'pending_reconcile';
+    const db = makeFakeDb(seed);
+    const outcome = await handleVoidIntent(
+      db as never,
+      db.collection('asyncOrders').doc('dev01-1') as never,
+      { privilegedVoidExecutionId: EXEC_A },
+    );
+    expect(outcome.kind).toBe('VOID_TOMBSTONED');
+    expect(db.__store.get('asyncOrders/dev01-1')).toMatchObject({
+      status: 'voided',
+      reconcileStatus: 'settled',
+      privilegedVoidExecutionId: EXEC_A,
+    });
+    expect(db.__store.get('asyncOrders/dev01-1')!.voidReconciled).toBeUndefined();
+    expect(db.__store.get('products/P/productStocks/br1')!.totalStockBase).toBe(5);
+  });
+
+  test('matching correlation on already-voided target is NOOP and does not restock again', async () => {
+    const seed = seedSettledSale();
+    (seed['asyncOrders/dev01-1'] as Doc).status = 'completed';
+    const db = makeFakeDb(seed);
+    const ref = db.collection('asyncOrders').doc('dev01-1');
+    await handleVoidIntent(db as never, ref as never, { privilegedVoidExecutionId: EXEC_A });
+    const second = await handleVoidIntent(db as never, ref as never, { privilegedVoidExecutionId: EXEC_A });
+    expect(second).toEqual({ kind: 'NOOP', reason: 'already_reconciled' });
+    expect(db.__store.get('asyncOrders/dev01-1')!.privilegedVoidExecutionId).toBe(EXEC_A);
+    expect(db.__store.get('products/P/productStocks/br1')!.totalStockBase).toBe(20);
+    expect([...db.__store.keys()].filter((k) => k.startsWith('creditTransactions/'))).toHaveLength(1);
+  });
+
+  test('different correlation on already-voided target is not overwritten and does not re-enter reversal', async () => {
+    const seed = seedSettledSale();
+    (seed['asyncOrders/dev01-1'] as Doc).voidReconciled = true;
+    (seed['asyncOrders/dev01-1'] as Doc).privilegedVoidExecutionId = EXEC_B;
+    const db = makeFakeDb(seed);
+    const outcome = await handleVoidIntent(
+      db as never,
+      db.collection('asyncOrders').doc('dev01-1') as never,
+      { privilegedVoidExecutionId: EXEC_A },
+    );
+    expect(outcome).toEqual({ kind: 'NOOP', reason: 'already_reconciled' });
+    expect(db.__store.get('asyncOrders/dev01-1')!.privilegedVoidExecutionId).toBe(EXEC_B);
+    expect(db.__store.get('products/P/productStocks/br1')!.totalStockBase).toBe(5);
+  });
+
+  test('missing correlation on already-voided target is not stamped by a later privileged caller', async () => {
+    const seed = seedSettledSale();
+    (seed['asyncOrders/dev01-1'] as Doc).voidReconciled = true;
+    const db = makeFakeDb(seed);
+    const outcome = await handleVoidIntent(
+      db as never,
+      db.collection('asyncOrders').doc('dev01-1') as never,
+      { privilegedVoidExecutionId: EXEC_A },
+    );
+    expect(outcome).toEqual({ kind: 'NOOP', reason: 'already_reconciled' });
+    expect(db.__store.get('asyncOrders/dev01-1')!.privilegedVoidExecutionId).toBeUndefined();
+    expect(db.__store.get('products/P/productStocks/br1')!.totalStockBase).toBe(5);
+  });
+});

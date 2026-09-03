@@ -8,9 +8,21 @@
  */
 
 import { sha256Hex } from './shiftCloseValidationHash';
+import { isLiveManagerApprovalPinCompareEligible, isWellFormedPin } from './pinPolicy';
+import {
+  PRIVILEGED_ACTION_IDS,
+  PRIVILEGED_VOID_AUDIENCE,
+  isApprovalAudience,
+  isPrivilegedActionId,
+} from './privilegedActionRegistry';
+
+export { isLiveManagerApprovalPinCompareEligible, isWellFormedPin };
+export { PRIVILEGED_VOID_AUDIENCE, isApprovalAudience };
 
 export const APPROVAL_SCHEMA_VERSION = 1;
 export const APPROVAL_AUDIENCE = 'resolveShiftCloseAlert';
+export const APPROVAL_AUDIENCES = [APPROVAL_AUDIENCE, PRIVILEGED_VOID_AUDIENCE] as const;
+export type ApprovalAudience = (typeof APPROVAL_AUDIENCES)[number];
 export const APPROVAL_SECURITY_MODELS = ['reauth', 'delegated'] as const;
 export type ApprovalSecurityModel = (typeof APPROVAL_SECURITY_MODELS)[number];
 export const APPROVAL_SECURITY_MODEL: 'reauth' = 'reauth';
@@ -50,9 +62,21 @@ export function approverBranchEligible(
   return false;
 }
 
-export const PROTECTED_ACTIONS = [
+export const SHIFT_CLOSE_PROTECTED_ACTIONS = [
   'shift_close_alert_acknowledge',
   'shift_close_alert_resolve',
+] as const;
+
+/** Live wrapper accept-set. Packet B widens this to include closed void actions. */
+export const LIVE_MANAGER_APPROVAL_ACTIONS = [
+  ...SHIFT_CLOSE_PROTECTED_ACTIONS,
+  ...PRIVILEGED_ACTION_IDS,
+] as const;
+export type LiveManagerApprovalAction = (typeof LIVE_MANAGER_APPROVAL_ACTIONS)[number];
+
+export const PROTECTED_ACTIONS = [
+  ...SHIFT_CLOSE_PROTECTED_ACTIONS,
+  ...PRIVILEGED_ACTION_IDS,
 ] as const;
 
 export type ProtectedAction = (typeof PROTECTED_ACTIONS)[number];
@@ -95,7 +119,7 @@ export type StructuralValidationResult =
   | { ok: false; code: 'invalid_target' };
 
 export interface ApprovalBindingExpected {
-  audience: typeof APPROVAL_AUDIENCE;
+  audience: ApprovalAudience;
   protectedAction: ProtectedAction;
   targetEntityId: string;
   branchId: string;
@@ -148,7 +172,7 @@ export interface NextAttemptState {
 
 export interface ApprovalDocumentFields {
   schemaVersion: number;
-  audience: typeof APPROVAL_AUDIENCE;
+  audience: ApprovalAudience;
   protectedAction: ProtectedAction;
   targetEntityId: string;
   branchId: string;
@@ -181,15 +205,27 @@ export function deriveAttemptScopeKey(branchId: string, staffId: string): string
 }
 
 export function isProtectedAction(value: unknown): value is ProtectedAction {
-  return value === 'shift_close_alert_acknowledge' || value === 'shift_close_alert_resolve';
+  return (PROTECTED_ACTIONS as readonly string[]).includes(value as string);
+}
+
+export function isLiveManagerApprovalAction(value: unknown): value is LiveManagerApprovalAction {
+  return (LIVE_MANAGER_APPROVAL_ACTIONS as readonly string[]).includes(value as string);
+}
+
+/**
+ * Total action→audience map. Unknown/unregistered → null (fail closed).
+ * Privileged void is checked first so widening the live accept-set cannot
+ * collapse void into the shift-close audience. Never defaults to shift-close.
+ * Callers cannot override the derived audience.
+ */
+export function audienceForProtectedAction(action: string): ApprovalAudience | null {
+  if (isPrivilegedActionId(action)) return PRIVILEGED_VOID_AUDIENCE;
+  if ((SHIFT_CLOSE_PROTECTED_ACTIONS as readonly string[]).includes(action)) return APPROVAL_AUDIENCE;
+  return null;
 }
 
 export function expectedActionFor(outcome: AdjudicationOutcome): ProtectedAction {
   return outcome === 'acknowledge' ? 'shift_close_alert_acknowledge' : 'shift_close_alert_resolve';
-}
-
-export function isWellFormedPin(pin: string): boolean {
-  return /^\d{4}$/.test(pin);
 }
 
 export function validateManagerApprovalRequest(req: RequestManagerApprovalRequest): StructuralValidationResult {
@@ -204,6 +240,7 @@ export function validateManagerApprovalRequest(req: RequestManagerApprovalReques
   if (!isProtectedAction(protectedAction)) return { ok: false, code: 'invalid_target' };
   if (!targetEntityId) return { ok: false, code: 'invalid_target' };
   if (!branchId || branchId === 'ALL') return { ok: false, code: 'invalid_target' };
+  if (audienceForProtectedAction(protectedAction) == null) return { ok: false, code: 'invalid_target' };
 
   let securityModel: ApprovalSecurityModel;
   if (rawModel === undefined || rawModel === null || rawModel === '') {
@@ -239,7 +276,7 @@ export function shouldUseRealPinCompare(params: {
     params.usableForLogin &&
     params.disabled !== true &&
     params.credentialState === 'rotated_authoritative' &&
-    isWellFormedPin(params.pin)
+    isLiveManagerApprovalPinCompareEligible(params.pin)
   );
 }
 
@@ -370,9 +407,13 @@ export function buildApprovalDocument(params: {
   const requesterStaffId = params.staffId;
   const approverStaffId =
     securityModel === APPROVAL_SECURITY_MODEL_DELEGATED ? (params.approverStaffId ?? '') : params.staffId;
+  const audience = audienceForProtectedAction(params.protectedAction);
+  if (audience == null) {
+    throw new Error('unregistered_protected_action');
+  }
   const fields: ApprovalDocumentFields = {
     schemaVersion: APPROVAL_SCHEMA_VERSION,
-    audience: APPROVAL_AUDIENCE,
+    audience,
     protectedAction: params.protectedAction,
     targetEntityId: params.targetEntityId,
     branchId: params.branchId,

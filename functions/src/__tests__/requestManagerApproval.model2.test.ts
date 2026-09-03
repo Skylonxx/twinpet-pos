@@ -88,6 +88,13 @@ function makeDb(seed: Record<string, Doc> = {}) {
         disabled: false,
         updatedBy: 't',
       },
+      'settings/_rolePermissions': {
+        rolePermissions: {
+          admin: ['pos_sale', 'pos_discount', 'pos_void', 'product_view'],
+          manager: ['pos_sale', 'pos_discount', 'pos_void', 'product_view'],
+          staff: ['pos_sale', 'pos_void', 'product_view'],
+        },
+      },
       ...seed,
     }).map(([k, v]) => [k, { ...v }]),
   );
@@ -179,7 +186,7 @@ async function run(
   db: ReturnType<typeof makeDb>,
   comparePin: PinCompareFn,
   req: RequestManagerApprovalRequest = delegatedReq(),
-  auth: typeof staff | typeof mgr | null = staff,
+  auth: { uid: string; token: Record<string, unknown> } | null = staff,
 ) {
   return performRequestManagerApproval(db as never, req, auth, {
     nowMillis: NOW,
@@ -390,5 +397,239 @@ describe('requestManagerApproval Model 2 — negatives', () => {
   test('exactly one bcrypt compare site remains', () => {
     const shellSrc = readFileSync(resolve(__dirname, '../requestManagerApproval.ts'), 'utf8');
     expect(shellSrc.match(/await comparePin\(/g)?.length).toBe(1);
+  });
+});
+
+const voidStaff = {
+  uid: 'u-s1',
+  token: { role: 'staff', staffId: 's1', branchIds: ['B1'], authVersion: 0, permissions: ['pos_void'] },
+};
+
+const voidReq = (over: Partial<RequestManagerApprovalRequest> = {}): RequestManagerApprovalRequest =>
+  delegatedReq({
+    commandId: 'cmd-void-1',
+    protectedAction: 'VOID_PENDING_SALE',
+    targetEntityId: 'O1',
+    ...over,
+  });
+
+describe('requestManagerApproval Packet B void audience', () => {
+  test('void approval mints under privilegedVoid', async () => {
+    const db = makeDb();
+    const { calls, comparePin } = makeCompare();
+    const res = await run(db, comparePin, voidReq(), voidStaff);
+    expect(res.ok).toBe(true);
+    expect(calls).toHaveLength(1);
+    expect(db.__store.get(approvalPath('cmd-void-1'))).toMatchObject({
+      audience: 'privilegedVoid',
+      protectedAction: 'VOID_PENDING_SALE',
+      requesterStaffId: 's1',
+      approverStaffId: 'm1',
+      executorStaffId: 's1',
+    });
+  });
+
+  test('shift-close approval document cannot bind as privilegedVoid mint retry', async () => {
+    const db = makeDb();
+    const { comparePin } = makeCompare();
+    const shift = await run(db, comparePin, delegatedReq({ commandId: 'cmd-cross' }));
+    expect(shift.ok).toBe(true);
+    const voidRetry = await run(
+      db,
+      comparePin,
+      voidReq({ commandId: 'cmd-cross' }),
+      voidStaff,
+    );
+    expect(voidRetry).toEqual({ ok: false, code: 'invalid_target' });
+  });
+
+  test('void approval cannot bind to shift-close on same commandId retry', async () => {
+    const db = makeDb();
+    const { comparePin } = makeCompare();
+    const minted = await run(db, comparePin, voidReq({ commandId: 'cmd-cross-2' }), voidStaff);
+    expect(minted.ok).toBe(true);
+    const shiftRetry = await run(
+      db,
+      comparePin,
+      delegatedReq({ commandId: 'cmd-cross-2' }),
+    );
+    expect(shiftRetry).toEqual({ ok: false, code: 'invalid_target' });
+  });
+
+  test('void self-approval is rejected before bcrypt', async () => {
+    const db = makeDb();
+    const { calls, comparePin } = makeCompare();
+    const res = await run(db, comparePin, voidReq({ approverStaffId: 's1' }), voidStaff);
+    expect(res).toEqual({ ok: false, code: 'self_approval_not_permitted' });
+    expect(calls).toHaveLength(0);
+  });
+
+  test('void reauth is rejected as self-approval before bcrypt', async () => {
+    const db = makeDb();
+    const { calls, comparePin } = makeCompare();
+    const mgrVoid = {
+      uid: 'u-m1',
+      token: { role: 'manager', staffId: 'm1', branchIds: ['B1'], authVersion: 0, permissions: ['pos_void'] },
+    };
+    const res = await run(
+      db,
+      comparePin,
+      {
+        commandId: 'cmd-reauth-void',
+        protectedAction: 'VOID_PENDING_SALE',
+        targetEntityId: 'O1',
+        branchId: 'B1',
+        pin: PIN,
+      },
+      mgrVoid,
+    );
+    expect(res).toEqual({ ok: false, code: 'self_approval_not_permitted' });
+    expect(calls).toHaveLength(0);
+  });
+
+  test('approver without pos_void is rejected', async () => {
+    const db = makeDb({
+      'settings/_rolePermissions': {
+        rolePermissions: { manager: ['pos_sale'], admin: ['pos_void'], staff: ['pos_void'] },
+      },
+    });
+    const { calls, comparePin } = makeCompare();
+    const res = await run(db, comparePin, voidReq(), voidStaff);
+    expect(res).toEqual({ ok: false, code: 'approver_not_eligible' });
+    expect(calls).toHaveLength(0);
+  });
+
+  test('requester without pos_void is rejected', async () => {
+    const db = makeDb();
+    const { calls, comparePin } = makeCompare();
+    const res = await run(db, comparePin, voidReq(), staff);
+    expect(res).toEqual({ ok: false, code: 'not_authorized' });
+    expect(calls).toHaveLength(0);
+  });
+
+  test('approver wrong branch is rejected', async () => {
+    const db = makeDb();
+    const { calls, comparePin } = makeCompare();
+    const res = await run(db, comparePin, voidReq({ approverStaffId: 'm2' }), voidStaff);
+    expect(res).toEqual({ ok: false, code: 'approver_not_eligible' });
+    expect(calls).toHaveLength(0);
+  });
+
+  test('duplicate void request is idempotent', async () => {
+    const db = makeDb();
+    const { comparePin } = makeCompare();
+    const first = await run(db, comparePin, voidReq(), voidStaff);
+    const second = await run(db, comparePin, voidReq(), voidStaff);
+    expect(first.ok).toBe(true);
+    expect(second).toEqual(first);
+  });
+
+  test('live staff pos_void revocation denies mint even when token still carries pos_void', async () => {
+    const db = makeDb({
+      'settings/_rolePermissions': {
+        rolePermissions: {
+          admin: ['pos_sale', 'pos_void'],
+          manager: ['pos_sale', 'pos_void'],
+          staff: ['pos_sale', 'product_view'],
+        },
+      },
+    });
+    const { calls, comparePin } = makeCompare();
+    const res = await run(db, comparePin, voidReq(), voidStaff);
+    expect(res).toEqual({ ok: false, code: 'not_authorized' });
+    expect(calls).toHaveLength(0);
+    expect(voidStaff.token.permissions).toEqual(['pos_void']);
+    expect(db.__store.get('users/s1')).toMatchObject({ authVersion: 0 });
+  });
+
+  test('manager requester follows the same live resolver', async () => {
+    const db = makeDb({
+      'settings/_rolePermissions': {
+        rolePermissions: {
+          admin: ['pos_sale', 'pos_void'],
+          manager: ['pos_sale'],
+          staff: ['pos_sale', 'pos_void'],
+        },
+      },
+    });
+    const { calls, comparePin } = makeCompare();
+    const mgrVoid = {
+      uid: 'u-m1',
+      token: { role: 'manager', staffId: 'm1', branchIds: ['B1'], authVersion: 0, permissions: ['pos_void'] },
+    };
+    const res = await run(db, comparePin, voidReq({ approverStaffId: 'a1' }), mgrVoid);
+    expect(res).toEqual({ ok: false, code: 'not_authorized' });
+    expect(calls).toHaveLength(0);
+  });
+
+  test('admin requester follows the same live resolver', async () => {
+    const db = makeDb({
+      'settings/_rolePermissions': {
+        rolePermissions: {
+          admin: ['pos_sale'],
+          manager: ['pos_sale', 'pos_void'],
+          staff: ['pos_sale', 'pos_void'],
+        },
+      },
+    });
+    const { calls, comparePin } = makeCompare();
+    const adminVoid = {
+      uid: 'u-a1',
+      token: { role: 'admin', staffId: 'a1', branchIds: ['ALL'], authVersion: 0, permissions: ['pos_void'] },
+    };
+    const res = await run(db, comparePin, voidReq({ approverStaffId: 'm1' }), adminVoid);
+    expect(res).toEqual({ ok: false, code: 'not_authorized' });
+    expect(calls).toHaveLength(0);
+  });
+
+  test('explicit empty manager/admin/staff rows deny mint', async () => {
+    const { comparePin, calls } = makeCompare();
+    for (const role of ['staff', 'manager', 'admin'] as const) {
+      const db = makeDb({
+        'settings/_rolePermissions': {
+          rolePermissions: {
+            admin: role === 'admin' ? [] : ['pos_void'],
+            manager: role === 'manager' ? [] : ['pos_void'],
+            staff: role === 'staff' ? [] : ['pos_void'],
+          },
+        },
+      });
+      const auth =
+        role === 'staff'
+          ? voidStaff
+          : role === 'manager'
+            ? {
+                uid: 'u-m1',
+                token: { role: 'manager', staffId: 'm1', branchIds: ['B1'], authVersion: 0, permissions: ['pos_void'] },
+              }
+            : {
+                uid: 'u-a1',
+                token: { role: 'admin', staffId: 'a1', branchIds: ['ALL'], authVersion: 0, permissions: ['pos_void'] },
+              };
+      const req = role === 'staff' ? voidReq() : voidReq({ approverStaffId: role === 'manager' ? 'a1' : 'm1' });
+      const res = await run(db, comparePin, req, auth);
+      expect(res).toEqual({ ok: false, code: 'not_authorized' });
+    }
+    expect(calls).toHaveLength(0);
+  });
+
+  test('malformed and unreadable role-permission source denies mint', async () => {
+    const malformed = makeDb({
+      'settings/_rolePermissions': { rolePermissions: { staff: { pos_void: true }, manager: ['pos_void'], admin: ['pos_void'] } },
+    });
+    const { comparePin, calls } = makeCompare();
+    expect(await run(malformed, comparePin, voidReq(), voidStaff)).toEqual({ ok: false, code: 'not_authorized' });
+    const unreadable = makeDb();
+    expect(
+      await performRequestManagerApproval(unreadable as never, voidReq(), voidStaff, {
+        nowMillis: NOW,
+        comparePin,
+        dummyPinHash: APPROVAL_DUMMY_PIN_HASH,
+        readRolePermissions: async () => {
+          throw new Error('unreadable');
+        },
+      }),
+    ).toEqual({ ok: false, code: 'not_authorized' });
+    expect(calls).toHaveLength(0);
   });
 });
