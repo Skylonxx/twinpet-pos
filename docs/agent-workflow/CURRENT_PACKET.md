@@ -2,15 +2,15 @@
 
 ## Phase
 
-**TRUE-STANDALONE — Architecture `APPROVED_WITH_NOTES` / Planning Gate `CLOSED` / Phase A `CLOSED_WITH_NOTES` / Phase C `CLOSED_WITH_NOTES` / Phase B `CLOSED` / SEC-001 Part P/A/B `CLOSED` / SEC-001 Packet C architecture `CLOSED / PASS` / F9 canonical documentation `COMPLETED`**
+**TRUE-STANDALONE — Architecture `APPROVED_WITH_NOTES` / Planning Gate `CLOSED` / Phase A `CLOSED_WITH_NOTES` / Phase C `CLOSED_WITH_NOTES` / Phase B `CLOSED` / SEC-001 Part P/A/B `CLOSED` / SEC-001 Packet C architecture `CLOSED / PASS` / F9 canonical documentation `COMPLETED` / SEC-001 Packet C / C-A implementation `LANDED / CLOSED`**
 
 STATUS:
-F9_CANONICALIZATION_COMPLETE_C_A_IMPLEMENTATION_NOT_AUTHORIZED
+SEC_001_PACKET_C_C_A_IMPLEMENTATION_LANDED_CLOSED_NEXT_PACKET_C_GATE_NOT_SELECTED
 
 ```text
 CURRENT_PHASE: TRUE-STANDALONE
-CURRENT_GATE: F9_CANONICAL_DOCS_COMPLETE_AWAITING_C_A_IMPLEMENTATION_AUTHORIZATION
-ACTIVE_IMPLEMENTATION_PACKET: NONE (Packet C implementation not authorized)
+CURRENT_GATE: SEC_001_PACKET_C_C_A_LANDED_AWAITING_NEXT_PACKET_C_GATE_SELECTION
+ACTIVE_IMPLEMENTATION_PACKET: NONE (SEC-001 Packet C / C-A implementation LANDED / CLOSED; next Packet C gate not yet selected)
 SEC_001_GEMINI_AUTHORITY: TWINPET-TRUE-STANDALONE-SEC-001-OWNER-DECISIONS-PIN6-BACKOFFICE-PLAN-DOCS-AND-AB-AUTH-GEMINI-001
 SEC_001_PART_B_CORRELATION_AUTHORITY: TWINPET-TRUE-STANDALONE-SEC-001-PART-B-EXACT-CANONICAL-CORRELATION-SCOPE-AUTH-GEMINI-001
 SEC_001_PART_A_REREVIEW: TWINPET-TRUE-STANDALONE-SEC-001-PART-P-PLUS-PART-A-CODEX-FINAL-REREVIEW-003
@@ -20,6 +20,11 @@ SEC_001_PART_B_CODEX_REREVIEW_HARD_ROUTE: TWINPET-TRUE-STANDALONE-SEC-001-PART-B
 SEC_001_PART_B_FINAL_CLOSURE_COMMIT_PUSH: TWINPET-TRUE-STANDALONE-SEC-001-PART-PAB-FINAL-COMMIT-PUSH-CLAUDE-007 (CODEX_F001_CLOSURE_VERDICT: PASS_WITH_NOTES; COMMIT_SHA: 5873aa68d3960c71c950c15a66a9d48a68ac1bf8)
 SEC_001_PACKET_C_ARCHITECTURE_FINAL_REVIEW: TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-ARCHITECTURE-CODEX-REREVIEW-014 (VERDICT: PASS; PACKET_C_ARCHITECTURE_REVIEW_GATE: PASS; PACKET_C_ARCHITECTURE_EXACTIFICATION_CLOSED: YES)
 SEC_001_F9_PROMPT: TWINPET-TRUE-STANDALONE-SEC-001-F9-CANONICAL-DOCS-CLAUDE-008
+SEC_001_PACKET_C_C_A_IMPLEMENTATION_AUTHORITY: TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-C-A-IMPLEMENTATION-AUTHORIZATION-GEMINI-002 (AUTHORIZE_C_A_IMPLEMENTATION; MODE: COMPLETE_CANONICAL_C_A_SINGLE_GATE; EXECUTOR: Claude/Developer/Implementer; COMMIT_PUSH_DEPLOY_AT_GATE: NO)
+SEC_001_PACKET_C_C_A_CODEX_REVIEW_LINEAGE: TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-C-A-CODEX-REVIEW-001 (REQUEST_CHANGES; RC-001/RC-002/RC-003) -> TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-C-A-RC001-RC003-REMEDIATION-CLAUDE-002 -> TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-C-A-CODEX-REREVIEW-002 (REQUEST_CHANGES; residual RC-003-R1) -> TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-C-A-RC003-R1-REMEDIATION-CLAUDE-003 -> TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-C-A-CODEX-REREVIEW-003 (FINAL: PASS_WITH_NOTES; blockers 0; RC-001/RC-002/RC-003-R1 CLOSED; COMMIT_PUSH_READY: YES)
+SEC_001_PACKET_C_C_A_COMMIT_PUSH_AUTHORITY: TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-C-A-COMMIT-PUSH-AUTHORIZATION-GEMINI-001 (AUTHORIZE_C_A_COMMIT_PUSH; PUSH: YES; FORCE_PUSH: NO; DEPLOY: NO; PRODUCTION: NO; F7_RUNTIME_ACTIVATION: NO; PACKET_D_IMPLEMENTATION: NO; PACKET_E_IMPLEMENTATION: NO)
+SEC_001_PACKET_C_C_A_LANDING_COMMIT: 8d98bfeb7242f910a46209d3ca7ffc969a9961bd (feat(pos): add offline manager authorization credential foundation; 129 files = 24 modified tracked + 105 added/untracked)
+SEC_001_PACKET_C_C_A_POST_LANDING_DOCS_PROMPT: TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-C-A-POST-LANDING-DOCS-CLAUDE-005
 OAC_MODEL: OAC_D_SEALED_CAPABILITY_WITH_SERVER_ADJUDICATED_PENDING_INTENT
 PIN_LENGTH: 6
 PIN_APPLIES_TO_ALL_ROLES: YES
@@ -36,8 +41,9 @@ SERVER_ONLY_EXECUTION_CORRELATION: YES
 STALE_RULES_A2_K14_RECONCILED: YES
 FULL_RULES_SUITE: 16 files / 419 tests PASS
 PACKET_C_ARCHITECTURE_STATUS: CLOSED / PASS
-PACKET_C_THROUGH_H_IMPLEMENTATION_AUTHORIZED_NOW: NO
-C_A_IMPLEMENTATION_AUTHORIZED_NOW: NO (next authority: Gemini / Tech Lead)
+SEC_001_PACKET_C_C_A_IMPLEMENTATION_STATUS: LANDED / CLOSED (8d98bfe; final Codex PASS_WITH_NOTES; blockers 0; commit/push COMPLETE)
+PACKET_D_THROUGH_H_IMPLEMENTATION_AUTHORIZED_NOW: NO
+NEXT_PACKET_C_GATE_SELECTED: NO (next authority: Gemini / Tech Lead; ChatGPT workflow coordinator routes the decision)
 ANDROID_CAPACITOR_AUTHORIZED: NO
 RELEASE_READINESS: PAUSED
 PRODUCTION_ACTIVATION: PAUSED
@@ -165,7 +171,7 @@ PK2D: RECORD_ONLY / NOT ACTIVE / NOT AUTHORIZED
 STASH: UNTOUCHED
 ```
 
-TRUE-STANDALONE architecture is **APPROVED_WITH_NOTES**. Architecture Planning Gate is **CLOSED**. Phase A / Phase C remain historical **CLOSED_WITH_NOTES**. Phase B is **CLOSED**. **SEC-001 Part P/A/B is CLOSED** at commit `5873aa68d3960c71c950c15a66a9d48a68ac1bf8` (`feat(pos): enforce manager authorization for privileged void`; `CODEX_F001_CLOSURE_VERDICT: PASS_WITH_NOTES`, report `TWINPET-TRUE-STANDALONE-SEC-001-PART-PAB-FINAL-COMMIT-PUSH-CLAUDE-007`). **SEC-001 Packet C architecture is CLOSED / PASS** (final Codex verdict `TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-ARCHITECTURE-CODEX-REREVIEW-014`: `PACKET_C_ARCHITECTURE_REVIEW_GATE: PASS`, `PACKET_C_ARCHITECTURE_EXACTIFICATION_CLOSED: YES`). **F9 canonical-documentation reconciliation is COMPLETE** as of this pass (`TWINPET-TRUE-STANDALONE-SEC-001-F9-CANONICAL-DOCS-CLAUDE-008`). **Packet C implementation, and specifically C-A, remain NOT AUTHORIZED** — next authority gate is Gemini / Tech Lead C-A implementation authorization. Packets C–H are **not** authorized. `VOID_TEMPORARILY_FAIL_CLOSED_UNTIL_PACKET_E` is recorded. Pending execution lifetime remains **REQUIRED_BEFORE_DEPLOY** (not fixed now). Android remains PARKED LAST. Release Readiness remains PAUSED. Production Activation remains PAUSED. Semantic B13 packaging source remains `40a3e10`. Semantic Phase B SQLite source remains `54bb622`. Semantic Phase C source remains `92351999`. Semantic Phase A source remains `6ea48c1`. Current repository HEAD at this implementation: `5873aa68d3960c71c950c15a66a9d48a68ac1bf8` (`feat(pos): enforce manager authorization for privileged void`).
+TRUE-STANDALONE architecture is **APPROVED_WITH_NOTES**. Architecture Planning Gate is **CLOSED**. Phase A / Phase C remain historical **CLOSED_WITH_NOTES**. Phase B is **CLOSED**. **SEC-001 Part P/A/B is CLOSED** at commit `5873aa68d3960c71c950c15a66a9d48a68ac1bf8` (`feat(pos): enforce manager authorization for privileged void`; `CODEX_F001_CLOSURE_VERDICT: PASS_WITH_NOTES`, report `TWINPET-TRUE-STANDALONE-SEC-001-PART-PAB-FINAL-COMMIT-PUSH-CLAUDE-007`). **SEC-001 Packet C architecture is CLOSED / PASS** (final Codex verdict `TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-ARCHITECTURE-CODEX-REREVIEW-014`: `PACKET_C_ARCHITECTURE_REVIEW_GATE: PASS`, `PACKET_C_ARCHITECTURE_EXACTIFICATION_CLOSED: YES`). **F9 canonical-documentation reconciliation is COMPLETE** (`TWINPET-TRUE-STANDALONE-SEC-001-F9-CANONICAL-DOCS-CLAUDE-008`). **SEC-001 Packet C / C-A implementation is LANDED / CLOSED** at `8d98bfeb7242f910a46209d3ca7ffc969a9961bd` (`feat(pos): add offline manager authorization credential foundation`; 129 files); final Codex `TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-C-A-CODEX-REREVIEW-003` = `PASS_WITH_NOTES` (blockers 0); commit/push authorized by Gemini `TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-C-A-COMMIT-PUSH-AUTHORIZATION-GEMINI-001` and **COMPLETE**. **Packets D–H implementation remain NOT AUTHORIZED** — next authority gate is a new Gemini / Tech Lead decision selecting the next Packet C gate; this docs pass does not select or invent that sub-packet's name or scope. `VOID_TEMPORARILY_FAIL_CLOSED_UNTIL_PACKET_E` is recorded. Pending execution lifetime remains **REQUIRED_BEFORE_DEPLOY** (not fixed now). Android remains PARKED LAST. Release Readiness remains PAUSED. Production Activation remains PAUSED. Deploy, production, and F7 runtime activation remain NOT AUTHORIZED. Semantic B13 packaging source remains `40a3e10`. Semantic Phase B SQLite source remains `54bb622`. Semantic Phase C source remains `92351999`. Semantic Phase A source remains `6ea48c1`. Semantic SEC-001 Part P/A/B source remains `5873aa6`. Current repository HEAD (binding until a later docs commit advances it): `8d98bfeb7242f910a46209d3ca7ffc969a9961bd` (`feat(pos): add offline manager authorization credential foundation`).
 
 ## SEC-001 standing register (authoritative)
 
@@ -251,9 +257,9 @@ Recommended model: `OAC_D_SEALED_CAPABILITY_WITH_SERVER_ADJUDICATED_PENDING_INTE
 
 | Packet | Status |
 |--------|--------|
-| A Authorization / security primitives | **in working tree; Part A Codex RC remediations preserved** |
-| B Server / rules enforcement | **exact canonical correlation remediating in working tree; awaiting Codex re-review** |
-| C Offline credential / verifier (native) | **architecture CLOSED / PASS** (Codex final `TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-ARCHITECTURE-CODEX-REREVIEW-014`); **implementation NOT authorized** — next authority: Gemini / Tech Lead C-A authorization |
+| A Authorization / security primitives | **CLOSED** — historical, closed within SEC-001 Part P/A/B at `5873aa6` |
+| B Server / rules enforcement | **CLOSED** — historical, closed within SEC-001 Part P/A/B at `5873aa6` (`CODEX_F001_CLOSURE_VERDICT: PASS_WITH_NOTES`) |
+| C Offline credential / verifier (native) | **architecture CLOSED / PASS** (Codex final `TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-ARCHITECTURE-CODEX-REREVIEW-014`); **C-A implementation LANDED / CLOSED** at `8d98bfe` (final Codex `PASS_WITH_NOTES`; commit/push COMPLETE) — next authority: Gemini / Tech Lead selection of the next Packet C gate (sub-packet name/scope not selected here) |
 | D Durable evidence + reconciliation | **not authorized** — future: evidence state-matrix hardening (Codex N-3) |
 | E POS UI wiring | **not authorized** — required to supersede interim POS fail-closed before any deploy/release |
 | F Tests / emulator proof | **not authorized** |
@@ -262,17 +268,33 @@ Recommended model: `OAC_D_SEALED_CAPABILITY_WITH_SERVER_ADJUDICATED_PENDING_INTE
 
 Android / Capacitor remains **PARKED LAST**. Release Readiness remains **PAUSED**. Production Activation remains **PAUSED**.
 
-## This pass — F9 canonical documentation closure (Packet C architecture)
+## This pass — SEC-001 Packet C / C-A implementation post-landing docs reconciliation
 
-**Status: F9 COMPLETE. SEC-001 Part P/A/B CLOSED. SEC-001 Packet C architecture CLOSED / PASS. Packet C implementation, and C-A specifically, remain NOT AUTHORIZED.** Prompt: `TWINPET-TRUE-STANDALONE-SEC-001-F9-CANONICAL-DOCS-CLAUDE-008`. This pass canonicalizes the already-frozen Packet C architecture and the Part P/A/B closure into the five canonical workflow documents; it invents no new architecture and reopens no frozen decision. Next action: return to Gemini / Tech Lead for C-A implementation authorization.
+**Status: SEC-001 Packet C / C-A implementation LANDED / CLOSED. Docs-only reconciliation; no reopening of C-A implementation; no new sub-packet selected or invented.** Prompt: `TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-C-A-POST-LANDING-DOCS-CLAUDE-005`. This pass canonicalizes the already-landed C-A implementation into the five canonical workflow documents so they no longer claim C-A is awaiting authorization. It does not reopen C-A implementation, authorize deployment/production/F7 runtime activation/Packet D/Packet E, or select/invent a new Packet C sub-packet.
+
+- C-A landing commit: `8d98bfeb7242f910a46209d3ca7ffc969a9961bd` (`feat(pos): add offline manager authorization credential foundation`); landing scope 129 files (24 modified tracked + 105 added/untracked before commit)
+- Gemini C-A implementation authority: `TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-C-A-IMPLEMENTATION-AUTHORIZATION-GEMINI-002` — `AUTHORIZE_C_A_IMPLEMENTATION` (mode `COMPLETE_CANONICAL_C_A_SINGLE_GATE`; executor Claude / Developer / Implementer; commit/push/deploy at that gate: NO)
+- Codex C-A implementation review lineage: initial `TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-C-A-CODEX-REVIEW-001` = `REQUEST_CHANGES` (RC-001 scope/generated-artifact containment; RC-002 arbitrary filesystem read; RC-003 staged-deny fail-open) → first remediation `TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-C-A-RC001-RC003-REMEDIATION-CLAUDE-002` → rereview `TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-C-A-CODEX-REREVIEW-002` = `REQUEST_CHANGES` (residual RC-003-R1, malformed PRESENT staged-deny head interpreted as absence) → residual remediation `TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-C-A-RC003-R1-REMEDIATION-CLAUDE-003` → final rereview `TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-C-A-CODEX-REREVIEW-003` = `PASS_WITH_NOTES`; blockers 0; RC-001/RC-002/RC-003-R1 CLOSED; `COMMIT_PUSH_READY: YES`. Sole final non-blocking note: Claude's remediation report counted 79 dirty paths while Codex independently reproduced the correct 129 physical dirty paths; no authorized path missing, no unauthorized path present.
+- Gemini C-A commit/push authority: `TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-C-A-COMMIT-PUSH-AUTHORIZATION-GEMINI-001` — `AUTHORIZE_C_A_COMMIT_PUSH`; exact commit message `feat(pos): add offline manager authorization credential foundation`; push YES; force push NO; deploy NO; production NO; F7 runtime activation NO; Packet D implementation NO; Packet E implementation NO; docs reconciliation in that landing gate NO (deliberate gate separation, not an authorization defect)
+- Verification evidence — developer final residual-remediation: targeted F7 5 files / 107 tests PASS; full Functions 76 files / 2060 tests PASS; Functions typecheck PASS; Functions build PASS; Rules 26 files / 472 tests PASS; `git diff --check` PASS. Final Codex independently reproduced targeted F7 (5 files / 107 tests PASS), Functions typecheck PASS, and source/security review PASS; Codex attempted full Functions and full Rules reruns but hit its local command timeout before completion, emitting no test failure — non-blocking; final verdict remained `PASS_WITH_NOTES` / blockers 0 / `COMMIT_PUSH_READY: YES`. Do not claim Codex independently reproduced all 2060 Functions or 472 Rules tests in the final rereview.
+- Architecture lineage (Claude System Architect, read-only exactification, no repo edits performed in any pass): exactification-001 → RC2…RC13 (iterative Codex-remediated corrections) → RC13 (final: lockfile-materialization command-sequencing fix) → Codex rereview-014 (final PASS)
+- Owner/Gemini issuer-trust redecision: `TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-ISSUER-TRUST-MODEL-GEMINI-REDECISION-001` froze `OPTION_I1_PER_INSTALL_ASYMMETRIC_ISSUER_KEYPAIR_OPS_BOOTSTRAP` and D15/D16/D17 (table above) — unchanged by this pass
+- Selected offline-authorization architecture model: `OAC_D_SEALED_CAPABILITY_WITH_SERVER_ADJUDICATED_PENDING_INTENT` (unchanged, already recorded)
+- Protected VOID actions unchanged: `VOID_PENDING_SALE`, `VOID_SETTLED_SALE`
+- `SEC_001_PACKET_C_C_A_IMPLEMENTATION_STATUS: LANDED / CLOSED`. `PACKET_D_THROUGH_H_IMPLEMENTATION_AUTHORIZED_NOW: NO`. Deploy/production/F7-runtime-activation/Packet-D/Packet-E/Android/Capacitor/Hosting remain unauthorized/untouched by this pass. No new Packet C sub-packet name or scope is selected or invented by this pass.
+- Protected stash unchanged: `stash@{0}` = `7d03cfec7ba52ff7e25b7e175ca190efc258d874`
+
+## Prior this-pass — F9 canonical documentation closure (Packet C architecture) (historical — superseded by C-A implementation landing)
+
+**Status: HISTORICAL. F9 COMPLETE. SEC-001 Part P/A/B CLOSED. SEC-001 Packet C architecture CLOSED / PASS.** Prompt: `TWINPET-TRUE-STANDALONE-SEC-001-F9-CANONICAL-DOCS-CLAUDE-008`. This pass canonicalized the already-frozen Packet C architecture and the Part P/A/B closure into the five canonical workflow documents; it invented no new architecture and reopened no frozen decision. The then-current "Packet C implementation, and C-A specifically, remain NOT AUTHORIZED / next authority gate is Gemini / Tech Lead C-A implementation authorization" live facts are superseded as live current-state by C-A implementation `LANDED / CLOSED` above.
 
 - Part P/A/B closure commit: `5873aa68d3960c71c950c15a66a9d48a68ac1bf8` (`feat(pos): enforce manager authorization for privileged void`); `CODEX_F001_CLOSURE_VERDICT: PASS_WITH_NOTES` (report `TWINPET-TRUE-STANDALONE-SEC-001-PART-PAB-FINAL-COMMIT-PUSH-CLAUDE-007`)
-- Packet C architecture final Codex verdict: `TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-ARCHITECTURE-CODEX-REREVIEW-014` — `VERDICT: PASS`; `PACKET_C_ARCHITECTURE_REVIEW_GATE: PASS`; `PACKET_C_ARCHITECTURE_EXACTIFICATION_CLOSED: YES`; `OWNER_DECISION_REQUIRED_COUNT: 0`; `PACKET_C_IMPLEMENTATION_AUTHORIZED: NO`
+- Packet C architecture final Codex verdict: `TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-ARCHITECTURE-CODEX-REREVIEW-014` — `VERDICT: PASS`; `PACKET_C_ARCHITECTURE_REVIEW_GATE: PASS`; `PACKET_C_ARCHITECTURE_EXACTIFICATION_CLOSED: YES`; `OWNER_DECISION_REQUIRED_COUNT: 0`
 - Architecture lineage (Claude System Architect, read-only exactification, no repo edits performed in any pass): exactification-001 → RC2…RC13 (iterative Codex-remediated corrections) → RC13 (final: lockfile-materialization command-sequencing fix) → Codex rereview-014 (final PASS)
 - Owner/Gemini issuer-trust redecision: `TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-ISSUER-TRUST-MODEL-GEMINI-REDECISION-001` froze `OPTION_I1_PER_INSTALL_ASYMMETRIC_ISSUER_KEYPAIR_OPS_BOOTSTRAP` and D15/D16/D17 (table above)
 - Selected offline-authorization architecture model: `OAC_D_SEALED_CAPABILITY_WITH_SERVER_ADJUDICATED_PENDING_INTENT` (unchanged, already recorded)
 - Protected VOID actions unchanged: `VOID_PENDING_SALE`, `VOID_SETTLED_SALE`
-- `C_A_IMPLEMENTATION_AUTHORIZED_NOW: NO`. `PACKET_C_THROUGH_H_IMPLEMENTATION_AUTHORIZED_NOW: NO`. Android/Capacitor/deploy/production/Hosting/F7-runtime-activation remain unauthorized/untouched by this pass.
+- Then-current: `C_A_IMPLEMENTATION_AUTHORIZED_NOW: NO`. **Later superseded**: C-A implementation authorized by Gemini `...GEMINI-002`, implemented, Codex-reviewed to `PASS_WITH_NOTES`, and landed at `8d98bfe` (see "This pass" above).
 - Protected stash unchanged: `stash@{0}` = `7d03cfec7ba52ff7e25b7e175ca190efc258d874`
 
 ### DRP1 — `DeviceRegistrationPossessionFrameV1` (exact wire contract, frozen)
@@ -339,9 +361,9 @@ Client contract mirror (MODIFIED): `src/lib/auth/managerApprovalTypes.ts`, `src/
 
 **Full deploy allowlist string** (frozen, literal): `functions:verifyPinLogin,functions:reconcileOrder,functions:retryReconcile,functions:resolveTransferDiscrepancy,functions:resolveReversal,functions:shiftCloseEvidenceCapture,functions:shiftCloseValidationSweep,functions:shiftCloseSourceEventAsyncOrders,functions:shiftCloseSourceEventOrders,functions:shiftCloseSourceEventCashTransactions,functions:shiftCloseSourceEventCreditPayments,functions:resolveShiftCloseAlert,functions:getShiftCloseCaseFigures,functions:getOrderReceipt,functions:requestManagerApproval,functions:setUserAccount,functions:registerIssuer,functions:revokeIssuerRegistration,functions:beginDeviceEnrollmentAuthorizationIssuance,functions:completeDeviceEnrollmentAuthorizationIssuance,functions:beginDeviceRegistration,functions:completeDeviceRegistration,functions:beginPrivilegedOacIssuanceSession,functions:completePrivilegedOacIssuanceSession,functions:getOacKeysetManifest,functions:setRolePermissions,functions:roleSweepScheduler`
 
-### Test / verification boundaries required before any C-A commit/deploy authority
+### Test / verification boundaries satisfied for C-A commit/push (deploy remains separately gated)
 
-Full active Firestore rules suite (16 files / 419 tests) must PASS; Functions targeted suite must PASS; `npm run typecheck` and `npm test` must PASS inside `admin-issuance-console/` per the frozen lockfile lifecycle above; Rust unit tests colocated per `privileged_auth/*.rs` module (matching `durable_kv.rs`/`epoch_floor.rs` convention) plus `src-tauri/tests/privileged_auth_confinement.rs` integration tests must PASS. No C-A commit, push, or deploy is authorized until Gemini/Tech Lead grants C-A implementation authority — this F9 pass grants none of that itself.
+Full active Firestore rules suite (16 files / 419 tests) PASSED; Functions targeted suite PASSED; `npm run typecheck` and `npm test` PASSED inside `admin-issuance-console/` per the frozen lockfile lifecycle above; Rust unit tests colocated per `privileged_auth/*.rs` module (matching `durable_kv.rs`/`epoch_floor.rs` convention) plus `src-tauri/tests/privileged_auth_confinement.rs` integration tests PASSED. C-A commit/push is `COMPLETE` at `8d98bfe`. No C-A deploy is authorized — deploy remains a separate, not-yet-granted authority gate.
 
 ### Packet D boundary (hand-off from Packet C, not designed here)
 
@@ -574,7 +596,13 @@ Phase A delivered (historical, preserved): six platform port contracts; six brow
 
 ## Current repository HEAD
 
-SEC-001 Part P/A/B closure / current repository HEAD (binding; do not overwrite with a later docs SHA):
+SEC-001 Packet C / C-A implementation landing / current repository HEAD (binding until this docs commit advances it; do not overwrite with a later docs SHA):
+
+`8d98bfeb7242f910a46209d3ca7ffc969a9961bd`
+
+HEAD subject at that landing: `feat(pos): add offline manager authorization credential foundation`
+
+SEC-001 Part P/A/B closure / source baseline (historical; binding for that closure; do not overwrite with a later SHA):
 
 `5873aa68d3960c71c950c15a66a9d48a68ac1bf8`
 
@@ -676,6 +704,6 @@ PK-1 final HEAD (binding, unchanged): `513b198a30a1af72151ab6a8c0976799871529b8`
 
 ## Next gate
 
-**TRUE-STANDALONE architecture is APPROVED_WITH_NOTES. Architecture Planning Gate is CLOSED. Phase A is CLOSED_WITH_NOTES. Phase C is CLOSED_WITH_NOTES. Phase B is CLOSED. B13 is CLOSED_WITH_NOTES. SEC-001 Part P/A/B is CLOSED. SEC-001 Packet C architecture is CLOSED / PASS. F9 canonical documentation is COMPLETE.** Packet C implementation, and C-A specifically, remain **NOT AUTHORIZED**. Packets C–H remain unauthorized as implementation. `VOID_TEMPORARILY_FAIL_CLOSED_UNTIL_PACKET_E` is recorded. Pending execution lifetime remains REQUIRED_BEFORE_DEPLOY. Android remains PARKED LAST. Production activation remains NOT AUTHORIZED. `NEXT_ELIGIBLE_PK_PACKET: NONE`. PK-7 is **NOT DEFINED / DO NOT INVENT**.
+**TRUE-STANDALONE architecture is APPROVED_WITH_NOTES. Architecture Planning Gate is CLOSED. Phase A is CLOSED_WITH_NOTES. Phase C is CLOSED_WITH_NOTES. Phase B is CLOSED. B13 is CLOSED_WITH_NOTES. SEC-001 Part P/A/B is CLOSED. SEC-001 Packet C architecture is CLOSED / PASS. F9 canonical documentation is COMPLETE. SEC-001 Packet C / C-A implementation is LANDED / CLOSED.** Packets D–H remain unauthorized as implementation. `VOID_TEMPORARILY_FAIL_CLOSED_UNTIL_PACKET_E` is recorded. Pending execution lifetime remains REQUIRED_BEFORE_DEPLOY. Android remains PARKED LAST. Production activation remains NOT AUTHORIZED. Deploy and F7 runtime activation remain NOT AUTHORIZED. `NEXT_ELIGIBLE_PK_PACKET: NONE`. PK-7 is **NOT DEFINED / DO NOT INVENT**.
 
-**NEXT_WORKFLOW_ACTION:** RETURN_TO_CHATGPT_FOR_C_A_IMPLEMENTATION_AUTHORITY_ROUTING (Gemini / Tech Lead). Do NOT start Packet C / C-A implementation before that authorization. Do NOT implement Capacitor/Android. Do NOT sign, deploy, or publicly release. Do NOT activate production. Do NOT implement PKT-2. Do NOT deploy Hosting. Do NOT reopen Phase B. Do NOT reopen Phase C. Do NOT reopen Phase A. Do NOT reopen Model 2 runtime.
+**NEXT_WORKFLOW_ACTION:** RETURN_TO_CHATGPT_FOR_NEXT_SEC_001_PACKET_C_GATE_SELECTION (Gemini / Tech Lead / ChatGPT workflow coordinator). Do NOT reopen or re-authorize C-A implementation. Do NOT invent the name or scope of a new implementation packet. Do NOT implement Capacitor/Android. Do NOT sign, deploy, or publicly release. Do NOT activate production. Do NOT activate F7 runtime. Do NOT implement PKT-2. Do NOT deploy Hosting. Do NOT reopen Phase B. Do NOT reopen Phase C. Do NOT reopen Phase A. Do NOT reopen Model 2 runtime.
