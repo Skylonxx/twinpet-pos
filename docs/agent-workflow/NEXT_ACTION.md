@@ -26,11 +26,11 @@
 - **PIN length target:** 6 (all roles)
 - **Legacy PIN4 auto-conversion:** NO
 - **Part B status:** CLOSED (was: exact canonical correlation remediating Codex hard-route `REQUEST_CHANGES`; closed by `5873aa6`, `CODEX_F001_CLOSURE_VERDICT: PASS_WITH_NOTES`)
-- **Part B conditional gate:** SATISFIED; Packet C architecture CLOSED/PASS; Packet C **implementation** still NOT authorized
+- **Part B conditional gate:** SATISFIED; Packet C architecture CLOSED/PASS; SEC-001 Packet C / C-A implementation **LANDED / CLOSED**; no FURTHER Packet C implementation gate is currently authorized because the next Packet C gate has not yet been selected
 - **VOID_TEMPORARILY_FAIL_CLOSED_UNTIL_PACKET_E:** YES
 - **PENDING_EXECUTION_LIFETIME_REQUIRED_BEFORE_DEPLOY:** YES
 - **PACKET_E_REQUIRED_BEFORE_DEPLOY:** YES
-- **Packets C–H authorized now:** NO
+- **FURTHER_PACKET_C_AND_PACKETS_D_THROUGH_H_IMPLEMENTATION_AUTHORIZED_NOW:** NO (SEC-001 Packet C / C-A implementation is already LANDED / CLOSED; this refers only to any further Packet C sub-packet and to Packets D–H, none of which are authorized now)
 - **Android / Capacitor:** PARKED LAST / NOT AUTHORIZED
 - **Release Readiness / Production Activation:** PAUSED
 - **Architecture status:** `APPROVED_WITH_NOTES`
@@ -78,7 +78,7 @@
 - **Installer signing / public release / deployment:** NOT_PERFORMED / NOT_AUTHORIZED
 - **Next TRUE-STANDALONE phase:** UNDECIDED
 - **Next-phase implementation authorized now:** NO
-- **Next eligible gate:** `CODEX_REREVIEW_SEC_001_PART_B_CANONICAL_CORRELATION`
+- **Next eligible gate:** `SEC_001_NEXT_PACKET_C_GATE_SELECTION` (historical/superseded prior gate: `CODEX_REREVIEW_SEC_001_PART_B_CANONICAL_CORRELATION`, closed by `5873aa6`)
 - **Ready for post-Phase-B next-phase adjudication:** SUPERSEDED_AS_LIVE_BY_SEC_001_PART_P_A
 - **Product delivery:** offline-capable Desktop/Mobile Native App. Browser/Web App is **not** the production delivery target. Browser runtime remains development/test compatibility only.
 - **TRUE-STANDALONE / NO HOSTING:** BINDING
