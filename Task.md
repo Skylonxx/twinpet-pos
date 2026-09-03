@@ -99,9 +99,29 @@ All current development must preserve compatibility with the offline-first stand
 
 ---
 
-## SEC-001 Part B exact canonical correlation remediation (this pass)
+## SEC-001 F9 canonical documentation closure (this pass)
 
-**Status: Codex hard-route `REQUEST_CHANGES` (`EXACT_CANONICAL_COMPLETION_ATTRIBUTION`) remediating. Packets C–H not executed. Commit/push/deploy not authorized.** Prompt: `TWINPET-TRUE-STANDALONE-SEC-001-PART-B-CANONICAL-CORRELATION-REMEDIATION-GROK-001`. Gemini: `TWINPET-TRUE-STANDALONE-SEC-001-PART-B-EXACT-CANONICAL-CORRELATION-SCOPE-AUTH-GEMINI-001` (`APPROVED_WITH_CONDITIONS` / Option A). Codex hard-route: `TWINPET-TRUE-STANDALONE-SEC-001-PART-B-CODEX-REREVIEW-HARD-ROUTE-003` (`REQUEST_CHANGES`). Live workflow authority remains `docs/agent-workflow/STATE.md`. Authoritative standing register: `docs/agent-workflow/CURRENT_PACKET.md`.
+**Status: F9 COMPLETE. SEC-001 Part P/A/B CLOSED. SEC-001 Packet C architecture CLOSED / PASS. Packet C implementation, and C-A specifically, remain NOT AUTHORIZED.** Prompt: `TWINPET-TRUE-STANDALONE-SEC-001-F9-CANONICAL-DOCS-CLAUDE-008`. This pass canonicalizes the already-frozen Part P/A/B closure and Packet C architecture into the five canonical workflow documents; it invents no new architecture and reopens no frozen decision. Live workflow authority remains `docs/agent-workflow/STATE.md`. Authoritative standing register: `docs/agent-workflow/CURRENT_PACKET.md`.
+
+- [x] Part P/A/B closure commit recorded — `5873aa68d3960c71c950c15a66a9d48a68ac1bf8` (`feat(pos): enforce manager authorization for privileged void`); `CODEX_F001_CLOSURE_VERDICT: PASS_WITH_NOTES`
+- [x] Server-owned `privilegedVoidExecutionId` derived from exact privileged binding, written atomically with canonical void (Part B, closed)
+- [x] Packet C architecture final Codex verdict recorded — `TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-ARCHITECTURE-CODEX-REREVIEW-014` = `PASS`; `PACKET_C_ARCHITECTURE_REVIEW_GATE: PASS`; `PACKET_C_ARCHITECTURE_EXACTIFICATION_CLOSED: YES`
+- [x] D15/D16/D17 and issuer trust decision (`OPTION_I1_PER_INSTALL_ASYMMETRIC_ISSUER_KEYPAIR_OPS_BOOTSTRAP`) recorded in `CURRENT_PACKET.md`
+- [x] DRP1 exact 185-byte frame recorded in `CURRENT_PACKET.md`
+- [x] C-A exact literal allowlist / module / deploy inventory recorded in `CURRENT_PACKET.md`
+- [x] F7 state model (`DRAINING → VERIFYING → CONVERGED → COMPLETED`, no persisted `STAGED`) recorded
+- [x] Admin Console exact dependency map + lockfile lifecycle recorded
+- [x] Packet D / Packet E boundaries recorded
+- [x] Packet C implementation, incl. C-A, recorded NOT AUTHORIZED
+- [x] Protected stash recorded unchanged — `stash@{0}` = `7d03cfec7ba52ff7e25b7e175ca190efc258d874`
+
+**CURRENT_STATUS:** F9 canonical documentation reconciliation is complete. SEC-001 Part P/A/B is CLOSED. SEC-001 Packet C architecture is CLOSED / PASS. Packet C / C-A implementation remains NOT AUTHORIZED. Do not start Packet C / C-A implementation. Do not deploy.
+
+**NEXT_WORKFLOW_ACTION:** RETURN_TO_CHATGPT_FOR_C_A_IMPLEMENTATION_AUTHORITY_ROUTING (Gemini / Tech Lead). Do not start Packet C / C-A implementation before that authorization. Do not implement Capacitor/Android. Do not sign, deploy, or publicly release. Do not activate production. Do not implement PKT-2. Do not activate Packet2A or Model2. Do not deploy Hosting. Do not reopen Phase B.
+
+## SEC-001 Part B exact canonical correlation remediation (historical — CLOSED at `5873aa6`)
+
+**Status: HISTORICAL. Closed by commit `5873aa68d3960c71c950c15a66a9d48a68ac1bf8`; `CODEX_F001_CLOSURE_VERDICT: PASS_WITH_NOTES`.** Prompt: `TWINPET-TRUE-STANDALONE-SEC-001-PART-B-CANONICAL-CORRELATION-REMEDIATION-GROK-001`. Gemini: `TWINPET-TRUE-STANDALONE-SEC-001-PART-B-EXACT-CANONICAL-CORRELATION-SCOPE-AUTH-GEMINI-001` (`APPROVED_WITH_CONDITIONS` / Option A). Codex hard-route: `TWINPET-TRUE-STANDALONE-SEC-001-PART-B-CODEX-REREVIEW-HARD-ROUTE-003` (`REQUEST_CHANGES`, remediated and closed by `5873aa6`). Then-current "awaiting Codex re-review" facts are superseded as live current-state by the Part P/A/B closure above.
 
 - [x] Server-owned `privilegedVoidExecutionId` derived from exact privileged binding
 - [x] Correlation written in the same `handleVoidIntent` transaction as canonical void
@@ -118,10 +138,6 @@ All current development must preserve compatibility with the offline-first stand
 - [x] PIN6 target preserved; live PIN4 compatibility preserved
 - [x] Packets C–H not executed
 - [x] Protected stash recorded unchanged — `stash@{0}` = `7d03cfec7ba52ff7e25b7e175ca190efc258d874`
-
-**CURRENT_STATUS:** SEC-001 Part B exact canonical correlation remediating in the working tree. Codex Part-B final re-review required next. Packets C–H not authorized. Phase B remains CLOSED. Do not start Packet C. Do not deploy. Do not commit.
-
-**NEXT_WORKFLOW_ACTION:** RETURN_TO_CHATGPT_FOR_CODEX_PART_B_FINAL_REREVIEW_ROUTING. Do not start Packet C. Do not implement Capacitor/Android. Do not sign, deploy, or publicly release. Do not activate production. Do not implement PKT-2. Do not activate Packet2A or Model2. Do not deploy Hosting. Do not reopen Phase B.
 
 ## SEC-001 Part B Codex RC remediation (historical as live current-state)
 
@@ -711,7 +727,7 @@ Architecture is `APPROVED_WITH_NOTES`. Planning gate is `CLOSED`. Phase A (`PLAT
 
 ### Next step
 
-1. **SEC-001 Part B exact canonical correlation remediation is the live packet.** Authoritative register: `docs/agent-workflow/CURRENT_PACKET.md`. Generic void state is not exact-completion evidence. PIN target = 6 digits all roles. Live manager-approval compare PIN4-compatible until cutover. `VOID_TEMPORARILY_FAIL_CLOSED_UNTIL_PACKET_E` recorded. Pending execution lifetime REQUIRED_BEFORE_DEPLOY. Packet E REQUIRED_BEFORE_DEPLOY. Packets C–H not authorized. After this pass, return to ChatGPT for Codex final re-review routing of Part B.
+1. **SEC-001 Part P/A/B is CLOSED at `5873aa6`. SEC-001 Packet C architecture is CLOSED / PASS. F9 canonical documentation is COMPLETE.** Authoritative register: `docs/agent-workflow/CURRENT_PACKET.md` (D1–D17, issuer trust decision, DRP1, C-A allowlist/module/deploy inventory, F7 state model, Admin Console dependency map, Packet D/E boundaries). PIN target = 6 digits all roles. Live manager-approval compare PIN4-compatible until cutover. `VOID_TEMPORARILY_FAIL_CLOSED_UNTIL_PACKET_E` recorded. Pending execution lifetime REQUIRED_BEFORE_DEPLOY. Packet E REQUIRED_BEFORE_DEPLOY. Packet C implementation, and C-A specifically, remain NOT AUTHORIZED. After this pass, return to ChatGPT for Gemini / Tech Lead C-A implementation authority routing.
 2. **PK-6 — historical `CLOSED / DELIVERED`** at `e7ae0080eab574b207f53d3403d8a5ebacefff7c`; docs `acdae5fd6260c6c8740ad16e78023439aa0b4b0d` — targeted `3 files / 21 tests PASS`; root `130 files / 2490 tests PASS`; UAT U01–U11 PASS; responsive 320 / 768 / 1080 PASS; AGY `PASS_WITH_NOTES`; PK-6 product defects 0; final packet of binding PK sequence; `NEXT_ELIGIBLE_PK_PACKET: NONE`; PK-7 NOT DEFINED
 3. **PK-5 — `CLOSED / DELIVERED`** at `ef90d4ec4cce1decfed6e4809849fb9f991a2412`; docs `cf9c6f392f8416f247b16244351ec4567c71996b` — Codex / corrected UAT / AGY `PASS_WITH_NOTES`; targeted `14/186 PASS`; root `130/2486 PASS`; B16/B18 accepted harness limitations; do not reopen
 4. **PK-4 — `CLOSED / DELIVERED`** at `d27850abe80bac8b055f08206f17c36fda29e352`; docs `6a82fefa7238cc1eed8e9ce0790a2e9bb0913ad0`; do not reopen

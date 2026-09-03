@@ -2,29 +2,32 @@
 
 ## Phase
 
-**TRUE-STANDALONE — Architecture `APPROVED_WITH_NOTES` / Planning Gate `CLOSED` / Phase A `CLOSED_WITH_NOTES` / Phase C `CLOSED_WITH_NOTES` / Phase B `CLOSED` / SEC-001 Part B exact canonical correlation remediation**
+**TRUE-STANDALONE — Architecture `APPROVED_WITH_NOTES` / Planning Gate `CLOSED` / Phase A `CLOSED_WITH_NOTES` / Phase C `CLOSED_WITH_NOTES` / Phase B `CLOSED` / SEC-001 Part P/A/B `CLOSED` / SEC-001 Packet C architecture `CLOSED / PASS` / F9 canonical documentation `COMPLETED`**
 
 STATUS:
-SEC_001_PART_B_CANONICAL_CORRELATION_REMEDIATION
+F9_CANONICALIZATION_COMPLETE_C_A_IMPLEMENTATION_NOT_AUTHORIZED
 
 ```text
 CURRENT_PHASE: TRUE-STANDALONE
-CURRENT_GATE: SEC_001_PART_B_CANONICAL_CORRELATION_REMEDIATION
-ACTIVE_IMPLEMENTATION_PACKET: SEC-001-PART-B-CANONICAL-CORRELATION-REMEDIATION
+CURRENT_GATE: F9_CANONICAL_DOCS_COMPLETE_AWAITING_C_A_IMPLEMENTATION_AUTHORIZATION
+ACTIVE_IMPLEMENTATION_PACKET: NONE (Packet C implementation not authorized)
 SEC_001_GEMINI_AUTHORITY: TWINPET-TRUE-STANDALONE-SEC-001-OWNER-DECISIONS-PIN6-BACKOFFICE-PLAN-DOCS-AND-AB-AUTH-GEMINI-001
 SEC_001_PART_B_CORRELATION_AUTHORITY: TWINPET-TRUE-STANDALONE-SEC-001-PART-B-EXACT-CANONICAL-CORRELATION-SCOPE-AUTH-GEMINI-001
 SEC_001_PART_A_REREVIEW: TWINPET-TRUE-STANDALONE-SEC-001-PART-P-PLUS-PART-A-CODEX-FINAL-REREVIEW-003
 SEC_001_PART_B_IMPLEMENTATION: TWINPET-TRUE-STANDALONE-SEC-001-PART-B-SERVER-RULES-ENFORCEMENT-IMPLEMENTATION-GROK-001
 SEC_001_PART_B_CODEX_REVIEW: TWINPET-TRUE-STANDALONE-SEC-001-PART-B-CODEX-REVIEW-001
 SEC_001_PART_B_CODEX_REREVIEW_HARD_ROUTE: TWINPET-TRUE-STANDALONE-SEC-001-PART-B-CODEX-REREVIEW-HARD-ROUTE-003
-SEC_001_PROMPT: TWINPET-TRUE-STANDALONE-SEC-001-PART-B-CANONICAL-CORRELATION-REMEDIATION-GROK-001
+SEC_001_PART_B_FINAL_CLOSURE_COMMIT_PUSH: TWINPET-TRUE-STANDALONE-SEC-001-PART-PAB-FINAL-COMMIT-PUSH-CLAUDE-007 (CODEX_F001_CLOSURE_VERDICT: PASS_WITH_NOTES; COMMIT_SHA: 5873aa68d3960c71c950c15a66a9d48a68ac1bf8)
+SEC_001_PACKET_C_ARCHITECTURE_FINAL_REVIEW: TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-ARCHITECTURE-CODEX-REREVIEW-014 (VERDICT: PASS; PACKET_C_ARCHITECTURE_REVIEW_GATE: PASS; PACKET_C_ARCHITECTURE_EXACTIFICATION_CLOSED: YES)
+SEC_001_F9_PROMPT: TWINPET-TRUE-STANDALONE-SEC-001-F9-CANONICAL-DOCS-CLAUDE-008
 OAC_MODEL: OAC_D_SEALED_CAPABILITY_WITH_SERVER_ADJUDICATED_PENDING_INTENT
 PIN_LENGTH: 6
 PIN_APPLIES_TO_ALL_ROLES: YES
 LEGACY_PIN4_AUTO_CONVERSION_ALLOWED: NO
 PART_P_DOCS_RECONCILIATION_AUTHORIZED: YES
 PART_A_IMPLEMENTATION_AUTHORIZED: YES
-PART_B_IMPLEMENTATION_AUTHORIZED_NOW: YES
+PART_A_STATUS: CLOSED
+PART_B_STATUS: CLOSED (CODEX_F001_CLOSURE_VERDICT: PASS_WITH_NOTES at 5873aa6)
 PART_B_CONDITIONAL_GATE_SATISFIED: YES
 VOID_TEMPORARILY_FAIL_CLOSED_UNTIL_PACKET_E: YES
 PENDING_EXECUTION_LIFETIME_REQUIRED_BEFORE_DEPLOY: YES
@@ -32,7 +35,9 @@ PACKET_E_REQUIRED_BEFORE_DEPLOY: YES
 SERVER_ONLY_EXECUTION_CORRELATION: YES
 STALE_RULES_A2_K14_RECONCILED: YES
 FULL_RULES_SUITE: 16 files / 419 tests PASS
+PACKET_C_ARCHITECTURE_STATUS: CLOSED / PASS
 PACKET_C_THROUGH_H_IMPLEMENTATION_AUTHORIZED_NOW: NO
+C_A_IMPLEMENTATION_AUTHORIZED_NOW: NO (next authority: Gemini / Tech Lead)
 ANDROID_CAPACITOR_AUTHORIZED: NO
 RELEASE_READINESS: PAUSED
 PRODUCTION_ACTIVATION: PAUSED
@@ -160,7 +165,7 @@ PK2D: RECORD_ONLY / NOT ACTIVE / NOT AUTHORIZED
 STASH: UNTOUCHED
 ```
 
-TRUE-STANDALONE architecture is **APPROVED_WITH_NOTES**. Architecture Planning Gate is **CLOSED**. Phase A / Phase C remain historical **CLOSED_WITH_NOTES**. Phase B is **CLOSED**. Live work is **SEC-001 Part B exact canonical correlation remediation** under Gemini `TWINPET-TRUE-STANDALONE-SEC-001-PART-B-EXACT-CANONICAL-CORRELATION-SCOPE-AUTH-GEMINI-001` after Codex hard-route `REQUEST_CHANGES` (`TWINPET-TRUE-STANDALONE-SEC-001-PART-B-CODEX-REREVIEW-HARD-ROUTE-003`). Part B conditional gate was activated by `TWINPET-TRUE-STANDALONE-SEC-001-PART-P-PLUS-PART-A-CODEX-FINAL-REREVIEW-003`. Packets C–H are **not** authorized. `VOID_TEMPORARILY_FAIL_CLOSED_UNTIL_PACKET_E` is recorded. Pending execution lifetime remains **REQUIRED_BEFORE_DEPLOY** (not fixed now). Android remains PARKED LAST. Release Readiness remains PAUSED. Production Activation remains PAUSED. Semantic B13 packaging source remains `40a3e10`. Semantic Phase B SQLite source remains `54bb622`. Semantic Phase C source remains `92351999`. Semantic Phase A source remains `6ea48c1`. Current repository HEAD at this implementation: `7b29c7f7edd55e4f7b8500d92604cfffc8e8209a` (`docs(pos): close true-standalone phase b`).
+TRUE-STANDALONE architecture is **APPROVED_WITH_NOTES**. Architecture Planning Gate is **CLOSED**. Phase A / Phase C remain historical **CLOSED_WITH_NOTES**. Phase B is **CLOSED**. **SEC-001 Part P/A/B is CLOSED** at commit `5873aa68d3960c71c950c15a66a9d48a68ac1bf8` (`feat(pos): enforce manager authorization for privileged void`; `CODEX_F001_CLOSURE_VERDICT: PASS_WITH_NOTES`, report `TWINPET-TRUE-STANDALONE-SEC-001-PART-PAB-FINAL-COMMIT-PUSH-CLAUDE-007`). **SEC-001 Packet C architecture is CLOSED / PASS** (final Codex verdict `TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-ARCHITECTURE-CODEX-REREVIEW-014`: `PACKET_C_ARCHITECTURE_REVIEW_GATE: PASS`, `PACKET_C_ARCHITECTURE_EXACTIFICATION_CLOSED: YES`). **F9 canonical-documentation reconciliation is COMPLETE** as of this pass (`TWINPET-TRUE-STANDALONE-SEC-001-F9-CANONICAL-DOCS-CLAUDE-008`). **Packet C implementation, and specifically C-A, remain NOT AUTHORIZED** — next authority gate is Gemini / Tech Lead C-A implementation authorization. Packets C–H are **not** authorized. `VOID_TEMPORARILY_FAIL_CLOSED_UNTIL_PACKET_E` is recorded. Pending execution lifetime remains **REQUIRED_BEFORE_DEPLOY** (not fixed now). Android remains PARKED LAST. Release Readiness remains PAUSED. Production Activation remains PAUSED. Semantic B13 packaging source remains `40a3e10`. Semantic Phase B SQLite source remains `54bb622`. Semantic Phase C source remains `92351999`. Semantic Phase A source remains `6ea48c1`. Current repository HEAD at this implementation: `5873aa68d3960c71c950c15a66a9d48a68ac1bf8` (`feat(pos): enforce manager authorization for privileged void`).
 
 ## SEC-001 standing register (authoritative)
 
@@ -186,6 +191,24 @@ Gemini `APPROVED_WITH_CONDITIONS`; all D1–D14 accepted.
 | D12 | `posDevices` registration **mandatory** |
 | D13 | PIN = **6 digits, ALL roles** |
 | D14 | `requiresPasswordForVoid` disable-able semantics **retired**; Manager Authorization **mandatory** |
+
+### Packet C architecture decisions D15–D17 (frozen; Gemini issuer-trust redecision `TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-ISSUER-TRUST-MODEL-GEMINI-REDECISION-001`)
+
+| ID | Binding decision |
+|----|------------------|
+| D15 | `ARGON2_UNDERPOWERED_TERMINAL = HARD_FAIL` — a terminal that cannot meet the frozen Argon2id benchmark (≥250ms target, hard ceiling 1000ms at `m=65536 KiB, t=3, p=1, saltLen=16, hashLen=32`) fails provisioning closed (`native_secret_unavailable`); no automatic parameter downgrade, no tiered security profile |
+| D16 | `OAC_SLOT_MODEL = MULTI_MANAGER` — a terminal's native OAC store supports multiple concurrently-valid OACs keyed by `(securityDeviceId, managerStaffId)`; several managers may independently hold offline authorization on the same shared terminal (supersedes the single-slot default named in the original exactification pass) |
+| D17 | `DEVICE_ENROLLMENT_CEREMONY = OPTION_A_ENROLLMENT_FILE` — device registration is bootstrapped via an offline enrollment-file ceremony (`ENR1`/`DRP1` frames, §DRP1 below), not a live online-only flow; untrusted POS WebView cannot mint or present issuer/enrollment trust material |
+
+### Issuer trust decision (frozen; Gemini redecision, supersedes Claude RC5's rejected shared-secret model)
+
+`ISSUER_TRUST_MODEL: OPTION_I1_PER_INSTALL_ASYMMETRIC_ISSUER_KEYPAIR_OPS_BOOTSTRAP`
+
+- Each Admin Issuance Console instance holds its own Ed25519 issuer keypair, generated locally, DPAPI-CurrentUser-protected (or non-exportable Windows CNG where practical), never leaving the console, with **no shared fleet secret**.
+- Public key registered server-side under `privilegedIssuerRegistrations/{issuerId}` with `{ issuerId, publicKey, machine/operator metadata, active/revoked, credentialVersion, createdAt, createdByOps }`; individually revocable.
+- Bootstrap is a one-time, out-of-band Ops-only ceremony (Head-Office deployment/administrative script requiring GCP/Firebase project IAM not available to POS/Admin runtime): a random, short-lived, single-use bootstrap token bound to the intended `issuerId`/registration ceremony; the console imports it once and proves possession of its locally-generated private key; the server registers only the resulting public key and consumes the bootstrap authorization.
+- Normal enrollment-file issuance requires Admin Firebase Auth (`role == admin`) **and** a replay-resistant issuer-signed request frame; server verifies issuer registration active, exact issuer public key, `credentialVersion`/revoked state, Admin identity, and a nonce/`requestId` replay record. No shared secret is ever compiled into any client.
+- Rejected: Claude RC5's `ADMIN_ISSUER_APP_SECRET` shared-HMAC model (Codex-rejected: extractable from a distributable binary, a bearer secret, copyable across machines, one extracted binary compromises the whole issuer fleet, and proves possession of a secret rather than identity of a specific trusted issuer instance).
 
 ### PIN migration rule
 
@@ -230,7 +253,7 @@ Recommended model: `OAC_D_SEALED_CAPABILITY_WITH_SERVER_ADJUDICATED_PENDING_INTE
 |--------|--------|
 | A Authorization / security primitives | **in working tree; Part A Codex RC remediations preserved** |
 | B Server / rules enforcement | **exact canonical correlation remediating in working tree; awaiting Codex re-review** |
-| C Offline credential / verifier (native) | **not authorized** — future: OAC semantic crypto validation (Codex N-2) |
+| C Offline credential / verifier (native) | **architecture CLOSED / PASS** (Codex final `TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-ARCHITECTURE-CODEX-REREVIEW-014`); **implementation NOT authorized** — next authority: Gemini / Tech Lead C-A authorization |
 | D Durable evidence + reconciliation | **not authorized** — future: evidence state-matrix hardening (Codex N-3) |
 | E POS UI wiring | **not authorized** — required to supersede interim POS fail-closed before any deploy/release |
 | F Tests / emulator proof | **not authorized** |
@@ -239,9 +262,98 @@ Recommended model: `OAC_D_SEALED_CAPABILITY_WITH_SERVER_ADJUDICATED_PENDING_INTE
 
 Android / Capacitor remains **PARKED LAST**. Release Readiness remains **PAUSED**. Production Activation remains **PAUSED**.
 
-## This pass — SEC-001 Part B exact canonical correlation remediation
+## This pass — F9 canonical documentation closure (Packet C architecture)
 
-**Status: Codex hard-route `REQUEST_CHANGES` (`EXACT_CANONICAL_COMPLETION_ATTRIBUTION`) remediating. Packets C–H not executed. Commit/push/deploy not authorized.** Prompt: `TWINPET-TRUE-STANDALONE-SEC-001-PART-B-CANONICAL-CORRELATION-REMEDIATION-GROK-001`. Next action: Codex Part-B final re-review.
+**Status: F9 COMPLETE. SEC-001 Part P/A/B CLOSED. SEC-001 Packet C architecture CLOSED / PASS. Packet C implementation, and C-A specifically, remain NOT AUTHORIZED.** Prompt: `TWINPET-TRUE-STANDALONE-SEC-001-F9-CANONICAL-DOCS-CLAUDE-008`. This pass canonicalizes the already-frozen Packet C architecture and the Part P/A/B closure into the five canonical workflow documents; it invents no new architecture and reopens no frozen decision. Next action: return to Gemini / Tech Lead for C-A implementation authorization.
+
+- Part P/A/B closure commit: `5873aa68d3960c71c950c15a66a9d48a68ac1bf8` (`feat(pos): enforce manager authorization for privileged void`); `CODEX_F001_CLOSURE_VERDICT: PASS_WITH_NOTES` (report `TWINPET-TRUE-STANDALONE-SEC-001-PART-PAB-FINAL-COMMIT-PUSH-CLAUDE-007`)
+- Packet C architecture final Codex verdict: `TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-ARCHITECTURE-CODEX-REREVIEW-014` — `VERDICT: PASS`; `PACKET_C_ARCHITECTURE_REVIEW_GATE: PASS`; `PACKET_C_ARCHITECTURE_EXACTIFICATION_CLOSED: YES`; `OWNER_DECISION_REQUIRED_COUNT: 0`; `PACKET_C_IMPLEMENTATION_AUTHORIZED: NO`
+- Architecture lineage (Claude System Architect, read-only exactification, no repo edits performed in any pass): exactification-001 → RC2…RC13 (iterative Codex-remediated corrections) → RC13 (final: lockfile-materialization command-sequencing fix) → Codex rereview-014 (final PASS)
+- Owner/Gemini issuer-trust redecision: `TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-ISSUER-TRUST-MODEL-GEMINI-REDECISION-001` froze `OPTION_I1_PER_INSTALL_ASYMMETRIC_ISSUER_KEYPAIR_OPS_BOOTSTRAP` and D15/D16/D17 (table above)
+- Selected offline-authorization architecture model: `OAC_D_SEALED_CAPABILITY_WITH_SERVER_ADJUDICATED_PENDING_INTENT` (unchanged, already recorded)
+- Protected VOID actions unchanged: `VOID_PENDING_SALE`, `VOID_SETTLED_SALE`
+- `C_A_IMPLEMENTATION_AUTHORIZED_NOW: NO`. `PACKET_C_THROUGH_H_IMPLEMENTATION_AUTHORIZED_NOW: NO`. Android/Capacitor/deploy/production/Hosting/F7-runtime-activation remain unauthorized/untouched by this pass.
+- Protected stash unchanged: `stash@{0}` = `7d03cfec7ba52ff7e25b7e175ca190efc258d874`
+
+### DRP1 — `DeviceRegistrationPossessionFrameV1` (exact wire contract, frozen)
+
+Little-endian, no padding, total **185 bytes**, no trailing bytes permitted (parser rejects any input ≠ 185 bytes):
+
+| Offset | Field | Size | Constraint |
+|---|---|---|---|
+| 0 | magic | 4 bytes ASCII | `"DRP1"` |
+| 4 | version | u8 | must equal `1` |
+| 5 | enrollmentAuthIdLen | u8 | must equal `32` |
+| 6 | enrollmentAuthId | 32 bytes ASCII | lowercase hex `[0-9a-f]{32}` |
+| 38 | deviceRegistrationNonceLen | u8 | must equal `32` |
+| 39 | deviceRegistrationNonce | 32 bytes raw | CSPRNG nonce |
+| 71 | securityDeviceIdLen | u8 | must equal `16` |
+| 72 | securityDeviceId | 16 bytes raw | canonical raw UUID bytes |
+| 88 | devProofPublicKeyLen | u8 | must equal `32` |
+| 89 | devProofPublicKey | 32 bytes raw | Ed25519 raw public key |
+| 121 | signature | 64 bytes raw | Ed25519 signature over bytes `[0,121)` |
+
+`DRP1_TOTAL_BYTES: 185`. `DRP1_BINDING_COMPLETE: YES`. Arithmetic: `4+1+1+32+1+32+1+16+1+32+64 = 185`.
+
+### Admin Console frozen exact dependency map + lockfile lifecycle
+
+```json
+{
+  "dependencies": { "react": "19.2.6", "react-dom": "19.2.6", "firebase": "12.13.0" },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.11.4", "@types/react": "19.2.15", "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.2", "typescript": "6.0.3", "vite": "8.0.14",
+    "vitest": "4.1.7", "jsdom": "29.1.1", "@testing-library/react": "16.3.2",
+    "@testing-library/user-event": "14.6.1"
+  }
+}
+```
+
+Every specifier is an exact bare version (no `^ ~ > < *`, no tag, no workspace protocol). Lockfile lifecycle, frozen exact sequence: `exact package.json` → `npm install --package-lock-only --ignore-scripts` (materializes the lockfile; `npm ci` never generates/updates a lockfile) → `exact package-lock.json` → `npm ci` (clean install/verification only) → `npm run typecheck` → `npm test`. Future root-lockfile movement is **not** a Packet-C gate — this 13-entry snapshot is frozen independently.
+
+### F7 role-permission state model (frozen; `STAGED` is not a persisted state)
+
+Persisted states, head and job, no exception: `DRAINING → VERIFYING → CONVERGED → COMPLETED`. The staging transaction writes both `privilegedStagedRoleDeny/{roleId}.state` and `privilegedRoleSweepJobs/{jobId}.state` to `DRAINING` atomically with a new `changeId`; no intermediate persisted state exists between "no active change" and `DRAINING`. The finalizer requires `head.changeId === job.changeId` and `job.state === 'CONVERGED'`, then atomically sets both `head.state` and `job.state` to `COMPLETED` (head is never deleted). `stagedDenyReader(head, expectedChangeId)` returns `[]` unless `head.state` is one of `{DRAINING, VERIFYING, CONVERGED}` and `head.changeId === expectedChangeId`.
+
+### C-A exact literal file allowlist / module / deploy inventory (frozen, from `TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-ARCH-RC12-V2-CLAUDE-001` §10–§12, preserved verbatim through RC13 and Codex rereview-014 — `FULL_C_A_LITERAL_ALLOWLIST: PASS`, `MODULE_COMMAND_INVENTORY: PASS`, `FUNCTION_DEPLOY_INVENTORY: PASS`)
+
+One row = one exact repository-relative path. NEW/MODIFIED classification and C-A class are as originated in RC12-V2.
+
+Ops / issuer bootstrap (C-A-1/4): `ops/issuerBootstrap/createIssuerBootstrapAuthorization.ts` (+`.test.ts`), `ops/issuerBootstrap/harden-directory-acl.ps1` (+`.test.ts`, 10 fixtures incl. `PropagationFlags`), `ops/oacKeysetRotation/rotateOacSigningKey.ts` (+`.test.ts`), `ops/package.json`, `ops/tsconfig.json`.
+
+Admin Issuance Console (C-A-6, exact dependency map above): `admin-issuance-console/package.json`, `package-lock.json`, `tsconfig.json`, `tsconfig.node.json`, `vite.config.ts`, `index.html`, `src/main.tsx`, `src/App.tsx`, `src/firebase.ts`, `src/auth/AuthProvider.tsx` (+`.test.tsx`), `src/lib/issuerApi.ts` (+`.test.ts`, C-A-1/2), `src/lib/requestId.ts` (+`.test.ts`, C-A-1, manifest-contract assertion), `src/pages/IssuerConsolePage.tsx` (+`.test.tsx`), `src-tauri/Cargo.toml`, `Cargo.lock`, `build.rs`, `tauri.conf.json`, `capabilities/default.json`, `src/main.rs`, `src/lib.rs`, `src/issuer_key.rs` (+`_tests.rs`, C-A-1/5), `src/bootstrap_import.rs` (+`_tests.rs`, C-A-1), `src/file_export.rs` (+`_tests.rs`, C-A-3).
+
+Functions / server issuance (C-A-1/2/3/4/6): `functions/src/issuerRegistration.ts`+Core (+tests), `issuerRequestChallenge.ts`+Core (+tests), `issuerSignatureAuth.ts` (+tests), `deviceEnrollment.ts`+Core (+tests, `DRP1` frame via `oacFrame.ts`, persists/consumes `validatedSecurityDeviceId`/`validatedDevProofPublicKeyBase64`/`devProofRegistrationNonce`), `oacIssuanceSession.ts`+Core (+tests), `oacFrame.ts` (+tests, `DRP1`/`ProvisioningTupleProofFrameV1`/`PinBindingFrameV1`/`EnrollmentProofFrameV1`/`OKS1`), `oacSigner.ts` (+tests), `signingKeyLoader.ts` (+tests), `oacKeysetManifest.ts`+Core (+tests), `privilegedRevocationState.ts` (+tests), `roleSweepScheduler.ts`+Core (+tests), `setRolePermissions.ts`+Core (+tests, F7 `DRAINING`-only staging), `setUserAccount.ts`+Core (MODIFIED, `stagedDenyReader` entrant self-stamp) (+test), `voidIntent.ts` (MODIFIED, +test), `submitPrivilegedVoid.ts`+Core (MODIFIED) (+tests), `requestManagerApproval.ts`+Core (MODIFIED) (+tests), `privilegedActionAuthority.ts` (MODIFIED, adds `stagedDenyReader(head, expectedChangeId)`) (+test), `index.ts` (MODIFIED), `functions/package.json` (MODIFIED). Explicitly **not** modified: `privilegedActionRegistry.ts` (+test), `credentialStore.ts`, `scripts/seed-admin.ts`, `scripts/migrateCredentials.ts`, `scripts/recoverUserCredential.ts`.
+
+Rules / config (MODIFIED unless noted NEW): `firestore.rules`, `firestore.indexes.json`; NEW `rules-tests/issuer-registration.spec.ts`, `device-enrollment.spec.ts`, `privileged-oac-issuance-sessions.spec.ts`, `oac-keyset-manifest.spec.ts`, `privileged-revocation-state.spec.ts`, `privileged-staged-role-deny.spec.ts`, `privileged-role-sweep-jobs.spec.ts`, `privileged-void-execution-outcomes.spec.ts`, `settings-role-permissions.spec.ts`, `user-security-markers.spec.ts`; MODIFIED `rules-tests/privileged-action-intents.spec.ts`.
+
+Native Tauri (POS terminal) (MODIFIED unless noted NEW, C-A-3/4/5): `src-tauri/Cargo.toml`, `Cargo.lock`, `src/lib.rs`, `capabilities/default.json`; NEW `src-tauri/src/privileged_auth/mod.rs`, `enrollment_import.rs` (+tests), `device_registration_proof.rs` (+tests, exact `DRP1`), `frames.rs` (+tests, exact `DRP1` encode/decode, parity-tested against `functions/src/__tests__/oacFrame.test.ts`), `oac_keyset_frame.rs` (+tests), `security_device_id.rs` (+tests), `device_proof.rs` (+tests), `dpapi_envelope.rs` (+tests), `pepper_store.rs` (+tests), `argon2_kdf.rs` (+tests), `argon2_benchmark.rs` (+tests); NEW `src-tauri/tests/privileged_auth_confinement.rs`.
+
+Client contract mirror (MODIFIED): `src/lib/auth/managerApprovalTypes.ts`, `src/lib/staffManagement/useStaffManagement.ts`.
+
+**Native module tree** (`src-tauri/src/privileged_auth/mod.rs`, ten modules, each with a `#[cfg(test)] mod`): `enrollment_import`, `device_registration_proof`, `frames`, `oac_keyset_frame`, `security_device_id`, `device_proof`, `dpapi_envelope`, `pepper_store`, `argon2_kdf`, `argon2_benchmark`.
+
+**Five native commands** (exact, granted in `capabilities/default.json`; nothing else from `privileged_auth` is registered): `native_import_device_enrollment_file`, `native_generate_device_registration_proof`, `native_complete_oac_provisioning`, `native_argon2_benchmark`, `native_get_device_registration_status`. Forbidden/never-registered: sign-arbitrary-bytes, get-pepper, get-DPAPI-blob, get-device-private-key, raw-Argon2-verifier-export, arbitrary-file-read, native keyset-manifest-bytes command.
+
+**Eleven new/modified Functions exports** (no callable/scheduled export added, removed, or renamed by RC12-V2/RC13): `registerIssuer, revokeIssuerRegistration, beginDeviceEnrollmentAuthorizationIssuance, completeDeviceEnrollmentAuthorizationIssuance, beginDeviceRegistration, completeDeviceRegistration, beginPrivilegedOacIssuanceSession, completePrivilegedOacIssuanceSession, getOacKeysetManifest, setRolePermissions, roleSweepScheduler (scheduled)`.
+
+**Full deploy allowlist string** (frozen, literal): `functions:verifyPinLogin,functions:reconcileOrder,functions:retryReconcile,functions:resolveTransferDiscrepancy,functions:resolveReversal,functions:shiftCloseEvidenceCapture,functions:shiftCloseValidationSweep,functions:shiftCloseSourceEventAsyncOrders,functions:shiftCloseSourceEventOrders,functions:shiftCloseSourceEventCashTransactions,functions:shiftCloseSourceEventCreditPayments,functions:resolveShiftCloseAlert,functions:getShiftCloseCaseFigures,functions:getOrderReceipt,functions:requestManagerApproval,functions:setUserAccount,functions:registerIssuer,functions:revokeIssuerRegistration,functions:beginDeviceEnrollmentAuthorizationIssuance,functions:completeDeviceEnrollmentAuthorizationIssuance,functions:beginDeviceRegistration,functions:completeDeviceRegistration,functions:beginPrivilegedOacIssuanceSession,functions:completePrivilegedOacIssuanceSession,functions:getOacKeysetManifest,functions:setRolePermissions,functions:roleSweepScheduler`
+
+### Test / verification boundaries required before any C-A commit/deploy authority
+
+Full active Firestore rules suite (16 files / 419 tests) must PASS; Functions targeted suite must PASS; `npm run typecheck` and `npm test` must PASS inside `admin-issuance-console/` per the frozen lockfile lifecycle above; Rust unit tests colocated per `privileged_auth/*.rs` module (matching `durable_kv.rs`/`epoch_floor.rs` convention) plus `src-tauri/tests/privileged_auth_confinement.rs` integration tests must PASS. No C-A commit, push, or deploy is authorized until Gemini/Tech Lead grants C-A implementation authority — this F9 pass grants none of that itself.
+
+### Packet D boundary (hand-off from Packet C, not designed here)
+
+Packet C hands Packet D exactly a `verify_offline_pin` result (`evidenceSeed`) populating `oacId, oacSchemaVersion, revocationEpochAtIssue, managerAuthVersionAtIssue, managerCredentialVersionAtIssue, nonce, attemptCount, approvalResult, approvalProofDigest` (`SHA-256` over `oacId ‖ nonce ‖ approvalResult ‖ deviceId`). Packet D sources elsewhere and Packet C does not produce: `evidenceId, privilegedActionRequestId, targetOrderId, localSeq, localObservedAtMs, anchorServerMs, anchorSeq, estimatedApprovalMs, localIntentId, resultingVoidIntentId, syncStatus, serverVerdict, serverRejectionReason, manualReviewStatus`. Packet C does not design the evidence journal's persistence store, sync/retry orchestration, Sync Center/manual-attention projection, or `voidIntentStore` interaction.
+
+### Packet E boundary (hand-off from Packet C, not designed here)
+
+Packet C hands Packet E exactly the five native commands above, the frozen error-code vocabulary, and the operator-facing state names/Thai labels already frozen in `privilegedActionRegistry.ts`/`privilegedActionTypes.ts` (`PRIVILEGED_ACTION_OPERATOR_STATES`). Packet C does not design the modal's visual layout, `DestructiveConfirmModal.requiresPin` retirement sequencing, when in checkout the manager-selection UI appears, or how "pending" state is visually communicated. `VOID_TEMPORARILY_FAIL_CLOSED_UNTIL_PACKET_E` remains recorded — current POS void UI/functionality remains temporarily unavailable pending Packet D/E supersession, required before any deploy/release.
+
+## Prior this-pass — SEC-001 Part B exact canonical correlation remediation (historical — CLOSED at `5873aa6`)
+
+**Status: HISTORICAL. Closed by commit `5873aa68d3960c71c950c15a66a9d48a68ac1bf8`; `CODEX_F001_CLOSURE_VERDICT: PASS_WITH_NOTES`.** Prompt: `TWINPET-TRUE-STANDALONE-SEC-001-PART-B-CANONICAL-CORRELATION-REMEDIATION-GROK-001`. Then-current "awaiting Codex re-review" facts are superseded as live current-state by the Part P/A/B closure above.
 
 - Gemini correlation authority: `TWINPET-TRUE-STANDALONE-SEC-001-PART-B-EXACT-CANONICAL-CORRELATION-SCOPE-AUTH-GEMINI-001` — `APPROVED_WITH_CONDITIONS` / Option A
 - Codex hard-route: `TWINPET-TRUE-STANDALONE-SEC-001-PART-B-CODEX-REREVIEW-HARD-ROUTE-003` — `REQUEST_CHANGES` (single blocker: generic `voided` / `voidReconciled` is not proof that THIS exact privileged execution completed)
@@ -462,6 +574,12 @@ Phase A delivered (historical, preserved): six platform port contracts; six brow
 
 ## Current repository HEAD
 
+SEC-001 Part P/A/B closure / current repository HEAD (binding; do not overwrite with a later docs SHA):
+
+`5873aa68d3960c71c950c15a66a9d48a68ac1bf8`
+
+HEAD subject at that landing: `feat(pos): enforce manager authorization for privileged void`
+
 B13 packaging / current source baseline (binding until this docs commit advances repository HEAD; do not overwrite the semantic source SHA with the later docs SHA):
 
 `40a3e10ce9805e851081c7aa512115026754776e`
@@ -558,6 +676,6 @@ PK-1 final HEAD (binding, unchanged): `513b198a30a1af72151ab6a8c0976799871529b8`
 
 ## Next gate
 
-**TRUE-STANDALONE architecture is APPROVED_WITH_NOTES. Architecture Planning Gate is CLOSED. Phase A is CLOSED_WITH_NOTES. Phase C is CLOSED_WITH_NOTES. Phase B is CLOSED. B13 is CLOSED_WITH_NOTES.** Live gate is **SEC-001 Part B exact canonical correlation remediation**. Codex must re-review Part B correlation. Packets C–H remain unauthorized. `VOID_TEMPORARILY_FAIL_CLOSED_UNTIL_PACKET_E` is recorded. Pending execution lifetime remains REQUIRED_BEFORE_DEPLOY. Android remains PARKED LAST. Production activation remains NOT AUTHORIZED. `NEXT_ELIGIBLE_PK_PACKET: NONE`. PK-7 is **NOT DEFINED / DO NOT INVENT**.
+**TRUE-STANDALONE architecture is APPROVED_WITH_NOTES. Architecture Planning Gate is CLOSED. Phase A is CLOSED_WITH_NOTES. Phase C is CLOSED_WITH_NOTES. Phase B is CLOSED. B13 is CLOSED_WITH_NOTES. SEC-001 Part P/A/B is CLOSED. SEC-001 Packet C architecture is CLOSED / PASS. F9 canonical documentation is COMPLETE.** Packet C implementation, and C-A specifically, remain **NOT AUTHORIZED**. Packets C–H remain unauthorized as implementation. `VOID_TEMPORARILY_FAIL_CLOSED_UNTIL_PACKET_E` is recorded. Pending execution lifetime remains REQUIRED_BEFORE_DEPLOY. Android remains PARKED LAST. Production activation remains NOT AUTHORIZED. `NEXT_ELIGIBLE_PK_PACKET: NONE`. PK-7 is **NOT DEFINED / DO NOT INVENT**.
 
-**NEXT_WORKFLOW_ACTION:** RETURN_TO_CHATGPT_FOR_CODEX_PART_B_FINAL_REREVIEW_ROUTING. Do NOT start Packet C. Do NOT implement Capacitor/Android. Do NOT sign, deploy, or publicly release. Do NOT activate production. Do NOT implement PKT-2. Do NOT deploy Hosting. Do NOT reopen Phase B. Do NOT reopen Phase C. Do NOT reopen Phase A. Do NOT reopen Model 2 runtime.
+**NEXT_WORKFLOW_ACTION:** RETURN_TO_CHATGPT_FOR_C_A_IMPLEMENTATION_AUTHORITY_ROUTING (Gemini / Tech Lead). Do NOT start Packet C / C-A implementation before that authorization. Do NOT implement Capacitor/Android. Do NOT sign, deploy, or publicly release. Do NOT activate production. Do NOT implement PKT-2. Do NOT deploy Hosting. Do NOT reopen Phase B. Do NOT reopen Phase C. Do NOT reopen Phase A. Do NOT reopen Model 2 runtime.

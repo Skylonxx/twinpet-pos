@@ -101,13 +101,13 @@ All current development must preserve compatibility with the offline-first stand
 
 ## Current Phase
 
-**TRUE-STANDALONE — Architecture `APPROVED_WITH_NOTES` / Planning Gate `CLOSED` / Phase A `CLOSED_WITH_NOTES` / Phase C `CLOSED_WITH_NOTES` / Phase B `CLOSED` / B13 `CLOSED_WITH_NOTES` / SEC-001 Part B exact canonical correlation remediation.**
+**TRUE-STANDALONE — Architecture `APPROVED_WITH_NOTES` / Planning Gate `CLOSED` / Phase A `CLOSED_WITH_NOTES` / Phase C `CLOSED_WITH_NOTES` / Phase B `CLOSED` / B13 `CLOSED_WITH_NOTES` / SEC-001 Part P/A/B `CLOSED` / SEC-001 Packet C architecture `CLOSED / PASS` / F9 canonical documentation `COMPLETE`.**
 
-Phase B (`SQLITE_DURABLE_STORE`) is **CLOSED** at `54bb622aa3aff5ed662bf287e00f8e70f3aac500` / B13 `40a3e10ce9805e851081c7aa512115026754776e`. Codex SQLite final = `PASS`. B13 is **CLOSED_WITH_NOTES**. W1–W22 complete (W8 = `PASS_WITH_NOTE`). No implementation regression. Phase C remains historical **CLOSED_WITH_NOTES** at `92351999bb897c326a7cbefa3c97311887b5c5a1`. Phase A remains historical **CLOSED_WITH_NOTES** at `6ea48c1ce3792f91eaec7c44c4d025e004f63414`. Live packet is **SEC-001 Part B exact canonical correlation remediation**. Owner D1–D14, PIN6-all-roles, live PIN4 manager-approval compatibility until coordinated cutover, legacy PIN4 controlled rotation, existing Admin Backoffice control plane, `VOID_TEMPORARILY_FAIL_CLOSED_UNTIL_PACKET_E`, pending execution lifetime REQUIRED_BEFORE_DEPLOY, Packet E REQUIRED_BEFORE_DEPLOY, and packets A–H status live in `docs/agent-workflow/CURRENT_PACKET.md` (SEC-001 standing register). Standing rule: `NO_FUTURE_WORK_ONLY_IN_AGENT_REPORTS`.
+Phase B (`SQLITE_DURABLE_STORE`) is **CLOSED** at `54bb622aa3aff5ed662bf287e00f8e70f3aac500` / B13 `40a3e10ce9805e851081c7aa512115026754776e`. Codex SQLite final = `PASS`. B13 is **CLOSED_WITH_NOTES**. W1–W22 complete (W8 = `PASS_WITH_NOTE`). No implementation regression. Phase C remains historical **CLOSED_WITH_NOTES** at `92351999bb897c326a7cbefa3c97311887b5c5a1`. Phase A remains historical **CLOSED_WITH_NOTES** at `6ea48c1ce3792f91eaec7c44c4d025e004f63414`. **SEC-001 Part P/A/B is CLOSED** at `5873aa68d3960c71c950c15a66a9d48a68ac1bf8` (`feat(pos): enforce manager authorization for privileged void`; `CODEX_F001_CLOSURE_VERDICT: PASS_WITH_NOTES`). **SEC-001 Packet C architecture is CLOSED / PASS** (`TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-ARCHITECTURE-CODEX-REREVIEW-014`). **Packet C implementation, and C-A specifically, remain NOT AUTHORIZED** — next authority gate is Gemini / Tech Lead C-A implementation authorization. Owner D1–D14, Packet C's D15–D17, the frozen issuer trust decision (`OPTION_I1_PER_INSTALL_ASYMMETRIC_ISSUER_KEYPAIR_OPS_BOOTSTRAP`), PIN6-all-roles, live PIN4 manager-approval compatibility until coordinated cutover, legacy PIN4 controlled rotation, existing Admin Backoffice control plane, `VOID_TEMPORARILY_FAIL_CLOSED_UNTIL_PACKET_E`, pending execution lifetime REQUIRED_BEFORE_DEPLOY, Packet E REQUIRED_BEFORE_DEPLOY, the exact C-A literal allowlist/module/deploy inventory, DRP1 (185 bytes), the Admin Console dependency map/lockfile lifecycle, the F7 state model, and Packet D/E boundaries all live in `docs/agent-workflow/CURRENT_PACKET.md` (SEC-001 standing register). Standing rule: `NO_FUTURE_WORK_ONLY_IN_AGENT_REPORTS`.
 
 ```text
 CURRENT_PHASE: TRUE-STANDALONE
-CURRENT_GATE: SEC_001_PART_B_CANONICAL_CORRELATION_REMEDIATION
+CURRENT_GATE: F9_CANONICAL_DOCS_COMPLETE_AWAITING_C_A_IMPLEMENTATION_AUTHORIZATION
 TRUE_STANDALONE_ARCHITECTURE_STATUS: APPROVED_WITH_NOTES
 ARCHITECTURE_PLANNING_GATE: CLOSED
 GEMINI_ARCHITECTURE_AUTHORITY: TWINPET-TRUE-STANDALONE-FINAL-ARCHITECTURE-ADJUDICATION-GEMINI-001
@@ -165,7 +165,12 @@ PHASE_B_IMPLEMENTATION_REGRESSION_ESTABLISHED: NO
 POST_PHASE_B_NEXT_PHASE_SELECTION_DEFERRED: YES
 NEXT_TRUE_STANDALONE_PHASE: UNDECIDED
 NEXT_PHASE_IMPLEMENTATION_AUTHORIZED_NOW: NO
-NEXT_ELIGIBLE_GATE: CODEX_REREVIEW_SEC_001_PART_P_PLUS_PART_A
+NEXT_ELIGIBLE_GATE: C_A_IMPLEMENTATION_AUTHORIZATION_GEMINI_TECH_LEAD
+SEC_001_PART_P_A_B_STATUS: CLOSED
+SEC_001_PART_P_A_B_COMMIT: 5873aa68d3960c71c950c15a66a9d48a68ac1bf8
+SEC_001_PACKET_C_ARCHITECTURE_STATUS: CLOSED / PASS
+F9_STATUS: COMPLETE
+C_A_IMPLEMENTATION_AUTHORIZED_NOW: NO
 READY_FOR_POST_PHASE_B_NEXT_PHASE_ADJUDICATION: SUPERSEDED_AS_LIVE_BY_SEC_001_PART_P_A
 BROWSER_PRODUCTION_TARGET: NO
 FIREBASE_HOSTING: PERMANENTLY_OUT_OF_SCOPE
@@ -209,7 +214,7 @@ PHASE_D_MOBILE_CAPACITOR: NOT_SELECTED
 PHASE_E_F: NOT_AUTHORIZED
 ```
 
-**CURRENT_STATUS:** TRUE-STANDALONE architecture is **APPROVED_WITH_NOTES**. Architecture Planning Gate is **CLOSED**. Phase A (`PLATFORM_PORT_LAYER_FOUNDATION`) is **CLOSED_WITH_NOTES** at `6ea48c1`. Phase C (`DESKTOP_TAURI`) is **CLOSED_WITH_NOTES** at `92351999`. Phase B (`SQLITE_DURABLE_STORE`) is **CLOSED** at `54bb622` / B13 `40a3e10`. B13 is **CLOSED_WITH_NOTES**. Live packet is **SEC-001 Part B exact canonical correlation remediation**. PIN target is 6 digits for all roles. Live manager-approval compare remains PIN4-compatible until coordinated cutover. Legacy PIN4 auto-conversion is forbidden. Existing Admin Backoffice is the security control plane. `VOID_TEMPORARILY_FAIL_CLOSED_UNTIL_PACKET_E` is recorded. Pending execution lifetime remains REQUIRED_BEFORE_DEPLOY. Packet E remains REQUIRED_BEFORE_DEPLOY. Packets C–H are **not** authorized now. Authoritative standing register: `docs/agent-workflow/CURRENT_PACKET.md`. Standing rule: `NO_FUTURE_WORK_ONLY_IN_AGENT_REPORTS`.
+**CURRENT_STATUS:** TRUE-STANDALONE architecture is **APPROVED_WITH_NOTES**. Architecture Planning Gate is **CLOSED**. Phase A (`PLATFORM_PORT_LAYER_FOUNDATION`) is **CLOSED_WITH_NOTES** at `6ea48c1`. Phase C (`DESKTOP_TAURI`) is **CLOSED_WITH_NOTES** at `92351999`. Phase B (`SQLITE_DURABLE_STORE`) is **CLOSED** at `54bb622` / B13 `40a3e10`. B13 is **CLOSED_WITH_NOTES**. **SEC-001 Part P/A/B is CLOSED** at `5873aa6` (`feat(pos): enforce manager authorization for privileged void`). **SEC-001 Packet C architecture is CLOSED / PASS.** **F9 canonical documentation is COMPLETE.** **Packet C / C-A implementation remains NOT AUTHORIZED** — next authority gate is Gemini / Tech Lead C-A implementation authorization. PIN target is 6 digits for all roles. Live manager-approval compare remains PIN4-compatible until coordinated cutover. Legacy PIN4 auto-conversion is forbidden. Existing Admin Backoffice is the security control plane. `VOID_TEMPORARILY_FAIL_CLOSED_UNTIL_PACKET_E` is recorded. Pending execution lifetime remains REQUIRED_BEFORE_DEPLOY. Packet E remains REQUIRED_BEFORE_DEPLOY. Packets C–H remain **not** authorized as implementation now. Authoritative standing register: `docs/agent-workflow/CURRENT_PACKET.md`. Standing rule: `NO_FUTURE_WORK_ONLY_IN_AGENT_REPORTS`.
 
 **Preserved closed-gate markers (verbatim, do not casually reopen):**
 
@@ -690,7 +695,7 @@ Non-blocking this-terminal pending-sync warning; close remains enabled.
 
 ### Deferred / next gate
 
-1. **SEC-001 Part B exact canonical correlation remediation is the live packet.** Authoritative register: `docs/agent-workflow/CURRENT_PACKET.md`. Generic void state is not exact-completion evidence. Server-owned `privilegedVoidExecutionId` is atomic with canonical void. PIN target = 6 digits all roles. Live manager-approval compare remains PIN4-compatible until coordinated cutover. Legacy PIN4 auto-conversion forbidden. Existing Admin Backoffice is the control plane. `VOID_TEMPORARILY_FAIL_CLOSED_UNTIL_PACKET_E` recorded. Pending execution lifetime REQUIRED_BEFORE_DEPLOY. Packet E REQUIRED_BEFORE_DEPLOY. Packets C–H not authorized. Android PARKED LAST. Release Readiness / Production Activation PAUSED. Historical: TRUE-STANDALONE Phase A `CLOSED_WITH_NOTES`, Phase C `CLOSED_WITH_NOTES`, Phase B `CLOSED`, B13 `CLOSED_WITH_NOTES`. UI-11 Packet 2 / PKT-1 remains `CLOSED / DELIVERED / Runtime deployment complete` at `8abcd1550ef3004ebf0c9d2d5da32c9645a99010`. Stage 10 Hosting = `SKIPPED_BY_TRUE_STANDALONE_USER_OVERRIDE`. PKT-2 / Packet2A / Model2 remain **NOT AUTHORIZED** as next packets.
+1. **SEC-001 Part P/A/B is CLOSED at `5873aa6`. SEC-001 Packet C architecture is CLOSED / PASS. F9 canonical documentation is COMPLETE. Packet C / C-A implementation remains NOT AUTHORIZED — next gate is Gemini / Tech Lead C-A implementation authorization.** Authoritative register: `docs/agent-workflow/CURRENT_PACKET.md` (D1–D17, issuer trust decision, DRP1, C-A allowlist/module/deploy inventory, F7 state model, Admin Console dependency map, Packet D/E boundaries). Server-owned `privilegedVoidExecutionId` is atomic with canonical void. PIN target = 6 digits all roles. Live manager-approval compare remains PIN4-compatible until coordinated cutover. Legacy PIN4 auto-conversion forbidden. Existing Admin Backoffice is the control plane. `VOID_TEMPORARILY_FAIL_CLOSED_UNTIL_PACKET_E` recorded. Pending execution lifetime REQUIRED_BEFORE_DEPLOY. Packet E REQUIRED_BEFORE_DEPLOY. Packet C implementation and packets D–H not authorized. Android PARKED LAST. Release Readiness / Production Activation PAUSED. Historical: TRUE-STANDALONE Phase A `CLOSED_WITH_NOTES`, Phase C `CLOSED_WITH_NOTES`, Phase B `CLOSED`, B13 `CLOSED_WITH_NOTES`. UI-11 Packet 2 / PKT-1 remains `CLOSED / DELIVERED / Runtime deployment complete` at `8abcd1550ef3004ebf0c9d2d5da32c9645a99010`. Stage 10 Hosting = `SKIPPED_BY_TRUE_STANDALONE_USER_OVERRIDE`. PKT-2 / Packet2A / Model2 remain **NOT AUTHORIZED** as next packets.
 2. **PK-6 — historical `CLOSED / DELIVERED`** at `e7ae0080eab574b207f53d3403d8a5ebacefff7c`; docs `acdae5fd6260c6c8740ad16e78023439aa0b4b0d`. Targeted `3 files / 21 tests PASS`. Root `130 files / 2490 tests PASS`. UAT U01–U11 PASS. Responsive 320 / 768 / 1080 PASS. AGY `PASS_WITH_NOTES`. PK-6 product defects 0. PK-6 is the final packet of the binding PK-1 → PK-6 sequence. `NEXT_ELIGIBLE_PK_PACKET: NONE`. PK-7 is **NOT DEFINED / DO NOT INVENT**.
 3. **PK-5 — `CLOSED / DELIVERED`** at `ef90d4ec4cce1decfed6e4809849fb9f991a2412`; docs `cf9c6f392f8416f247b16244351ec4567c71996b`. Codex / corrected UAT / AGY `PASS_WITH_NOTES`. Targeted `14/186 PASS`. Root `130/2486 PASS`. B16/B18 accepted harness limitations. Do not reopen.
 4. **PK-4 — `CLOSED / DELIVERED`** at `d27850abe80bac8b055f08206f17c36fda29e352`; docs `6a82fefa7238cc1eed8e9ce0790a2e9bb0913ad0`. Do not reopen.
@@ -702,13 +707,14 @@ Non-blocking this-terminal pending-sync warning; close remains enabled.
 10. **D3 — `CLOSED`** at `a081bcb850da3b9b3ac3bd2d9280a0815ecd4eab`. Do not reopen (`D3_REOPEN_REQUIRED: NO`).
 11. **PK-2A Boot / Session Gating — `CLOSED_WITH_NOTES`** at `79ba840ab6e01ee1a5fff6c0094104c25d754668`. Historical. Do not reopen.
 12. **PK-1 Offline Shift Session — `CLOSED_WITH_NOTES`** at `513b198a30a1af72151ab6a8c0976799871529b8`. Do not reopen.
-13. **NEXT_WORKFLOW_ACTION:** RETURN_TO_CHATGPT_FOR_CODEX_PART_B_FINAL_REREVIEW_ROUTING. Do **not** start Packet C. Do **not** implement Capacitor/Android. Do **not** sign, deploy, or publicly release. Do **not** activate production. Do **not** implement PKT-2. Do **not** activate Packet2A or Model2. Do **not** invent the next packet. Do **not** deploy Hosting. Do **not** reopen Phase B. Do **not** reopen Phase C. Do **not** reopen Phase A.
+13. **NEXT_WORKFLOW_ACTION:** RETURN_TO_CHATGPT_FOR_C_A_IMPLEMENTATION_AUTHORITY_ROUTING (Gemini / Tech Lead). Do **not** start Packet C / C-A implementation before that authorization. Do **not** implement Capacitor/Android. Do **not** sign, deploy, or publicly release. Do **not** activate production. Do **not** implement PKT-2. Do **not** activate Packet2A or Model2. Do **not** invent the next packet. Do **not** deploy Hosting. Do **not** reopen Phase B. Do **not** reopen Phase C. Do **not** reopen Phase A.
 14. **Standing boundaries (carried forward):**
    - TRUE-STANDALONE architecture — **APPROVED_WITH_NOTES** / Planning Gate **CLOSED**
    - Phase A (`PLATFORM_PORT_LAYER_FOUNDATION`) — **CLOSED_WITH_NOTES** at `6ea48c1`
    - Phase C (`DESKTOP_TAURI`) — **CLOSED_WITH_NOTES** at `92351999`
    - Phase B (`SQLITE_DURABLE_STORE`) — **CLOSED** at `54bb622` / B13 `40a3e10`
    - B13 — **CLOSED_WITH_NOTES**; W8 = `PASS_WITH_NOTE`
+   - SEC-001 Part P/A/B — **CLOSED** at `5873aa6`; SEC-001 Packet C architecture — **CLOSED / PASS**; F9 canonical documentation — **COMPLETE**; Packet C / C-A implementation — **NOT AUTHORIZED**
    - Next TRUE-STANDALONE phase — **UNDECIDED**
    - Historical next eligible gate (superseded by SEC-001 remediation) — **`TRUE_STANDALONE_POST_PHASE_B_NEXT_PHASE_ADJUDICATION`**
    - UI-11 Packet 2 / PKT-1 — historical **CLOSED / DELIVERED / Runtime deployment complete**
