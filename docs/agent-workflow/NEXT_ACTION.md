@@ -9,28 +9,33 @@
 - TRUE-STANDALONE architecture docs ratification (historical): `765b54b3d61419593a59fe559f95402ca00e21d6` (`docs: ratify true standalone architecture`)
 - SoftDelete follow-up landing/source commit (historical; do not overwrite with the later docs SHA): `4d9be50411d72dbcc2bc9c35aebcbfdfa0819d19` (`fix(auth): correct soft delete transaction ordering`)
 - Final Model 2 runtime/source baseline (historical; not reopened; do not overwrite with the later docs SHA): `ffb8069690173c80455f355d432e141865c09a33` (`feat(auth): add delegated manager approval`)
-- **C-A landing / current repository HEAD (binding until a later docs commit advances it):** `8d98bfeb7242f910a46209d3ca7ffc969a9961bd` (`feat(pos): add offline manager authorization credential foundation`)
+- **C-B landing / current repository HEAD (binding until a later docs commit advances it):** `10c033252c023436864913372b57c3bc638c8ae1` (`feat(pos): add offline manager authorization verifier lifecycle`)
+- **C-A landing baseline (historical; preserved):** `8d98bfeb7242f910a46209d3ca7ffc969a9961bd` (`feat(pos): add offline manager authorization credential foundation`)
 - **Current phase:** TRUE-STANDALONE
-- **Current gate:** `SEC_001_PACKET_C_C_A_LANDED_AWAITING_NEXT_PACKET_C_GATE_SELECTION`
-- **Active packet:** NONE — C-A implementation is landed and closed; next step is a Gemini / Tech Lead / ChatGPT workflow-coordinator decision on the next Packet C gate, not implementation
+- **Current gate:** `SEC_001_PACKET_C_COMPLETE_PACKET_D_TRANSITION`
+- **Active packet:** NONE — SEC-001 Packet C is COMPLETE (C-A and C-B landed and closed); next step is Packet D planning and exactification (read-only planning AUTHORIZED; implementation NO)
 - **SEC-001 Part P/A/B:** `CLOSED` at `5873aa68d3960c71c950c15a66a9d48a68ac1bf8` (`feat(pos): enforce manager authorization for privileged void`); `CODEX_F001_CLOSURE_VERDICT: PASS_WITH_NOTES` (report `TWINPET-TRUE-STANDALONE-SEC-001-PART-PAB-FINAL-COMMIT-PUSH-CLAUDE-007`)
 - **SEC-001 Packet C architecture:** `CLOSED / PASS` (final Codex verdict `TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-ARCHITECTURE-CODEX-REREVIEW-014`; `PACKET_C_ARCHITECTURE_REVIEW_GATE: PASS`; `PACKET_C_ARCHITECTURE_EXACTIFICATION_CLOSED: YES`; `OWNER_DECISION_REQUIRED_COUNT: 0`)
 - **F9 canonical documentation:** `COMPLETE` (`TWINPET-TRUE-STANDALONE-SEC-001-F9-CANONICAL-DOCS-CLAUDE-008`)
-- **Gemini C-A implementation authority:** `TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-C-A-IMPLEMENTATION-AUTHORIZATION-GEMINI-002` — `AUTHORIZE_C_A_IMPLEMENTATION` (mode `COMPLETE_CANONICAL_C_A_SINGLE_GATE`; executor Claude / Developer / Implementer; commit/push/deploy at that gate: NO)
-- **Codex C-A implementation review lineage:** `TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-C-A-CODEX-REVIEW-001` (`REQUEST_CHANGES`; RC-001 scope/generated-artifact containment, RC-002 arbitrary filesystem read, RC-003 staged-deny fail-open) → `TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-C-A-RC001-RC003-REMEDIATION-CLAUDE-002` → `TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-C-A-CODEX-REREVIEW-002` (`REQUEST_CHANGES`; residual RC-003-R1) → `TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-C-A-RC003-R1-REMEDIATION-CLAUDE-003` → final `TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-C-A-CODEX-REREVIEW-003` = `PASS_WITH_NOTES` (blockers 0; RC-001/RC-002/RC-003-R1 CLOSED; `COMMIT_PUSH_READY: YES`)
-- **SEC-001 Packet C / C-A implementation:** `LANDED / CLOSED` at `8d98bfeb7242f910a46209d3ca7ffc969a9961bd` (`feat(pos): add offline manager authorization credential foundation`; 129 files — 24 modified tracked + 105 added/untracked); Gemini commit/push authority `TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-C-A-COMMIT-PUSH-AUTHORIZATION-GEMINI-001` (`AUTHORIZE_C_A_COMMIT_PUSH`; push YES; force push NO; deploy NO; production NO; F7 runtime activation NO; Packet D/E implementation NO); commit/push `COMPLETE`
+- **Gemini C-A implementation authority:** `TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-C-A-IMPLEMENTATION-AUTHORIZATION-GEMINI-002`
+- **SEC-001 Packet C / C-A implementation:** `LANDED / CLOSED` at `8d98bfeb7242f910a46209d3ca7ffc969a9961bd` (`feat(pos): add offline manager authorization credential foundation`; 129 files)
+- **Gemini C-B implementation authority:** `TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-B-IMPLEMENTATION-AUTHORIZATION-GEMINI-001`
+- **Codex C-B review lineage:** review-001 through rereview-005 (`TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-B-CODEX-REREVIEW-005` = `PASS`; 0 blockers, RC-001 through RC-006 CLOSED, 0 new RCs; `COMMIT_PUSH_READY: YES`)
+- **SEC-001 Packet C / C-B implementation:** `LANDED / CLOSED` at `10c033252c023436864913372b57c3bc638c8ae1` (`feat(pos): add offline manager authorization verifier lifecycle`; 17 files = 13 modified tracked + 4 added/untracked); Gemini commit/push authority `TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-B-COMMIT-PUSH-AUTHORIZATION-GEMINI-001`; commit/push `COMPLETE`
+- **SEC-001 Packet C status:** `COMPLETE` (architecture CLOSED/PASS; C-A LANDED/CLOSED; C-B LANDED/CLOSED)
 - **Gemini SEC-001 authority:** `TWINPET-TRUE-STANDALONE-SEC-001-OWNER-DECISIONS-PIN6-BACKOFFICE-PLAN-DOCS-AND-AB-AUTH-GEMINI-001` — `APPROVED_WITH_CONDITIONS`
 - **Gemini correlation authority:** `TWINPET-TRUE-STANDALONE-SEC-001-PART-B-EXACT-CANONICAL-CORRELATION-SCOPE-AUTH-GEMINI-001` — `APPROVED_WITH_CONDITIONS` / Option A (closed by `5873aa6`)
 - **Gemini issuer-trust redecision:** `TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-ISSUER-TRUST-MODEL-GEMINI-REDECISION-001` — froze `OPTION_I1_PER_INSTALL_ASYMMETRIC_ISSUER_KEYPAIR_OPS_BOOTSTRAP` and D15/D16/D17
 - **SEC-001 standing register (authoritative):** `docs/agent-workflow/CURRENT_PACKET.md`
 - **PIN length target:** 6 (all roles)
 - **Legacy PIN4 auto-conversion:** NO
-- **Part B status:** CLOSED (was: exact canonical correlation remediating Codex hard-route `REQUEST_CHANGES`; closed by `5873aa6`, `CODEX_F001_CLOSURE_VERDICT: PASS_WITH_NOTES`)
-- **Part B conditional gate:** SATISFIED; Packet C architecture CLOSED/PASS; SEC-001 Packet C / C-A implementation **LANDED / CLOSED**; no FURTHER Packet C implementation gate is currently authorized because the next Packet C gate has not yet been selected
+- **Part B status:** CLOSED (closed by `5873aa6`, `CODEX_F001_CLOSURE_VERDICT: PASS_WITH_NOTES`)
+- **Part B conditional gate:** SATISFIED; Packet C COMPLETE; next gate is Packet D planning
 - **VOID_TEMPORARILY_FAIL_CLOSED_UNTIL_PACKET_E:** YES
 - **PENDING_EXECUTION_LIFETIME_REQUIRED_BEFORE_DEPLOY:** YES
 - **PACKET_E_REQUIRED_BEFORE_DEPLOY:** YES
-- **FURTHER_PACKET_C_AND_PACKETS_D_THROUGH_H_IMPLEMENTATION_AUTHORIZED_NOW:** NO (SEC-001 Packet C / C-A implementation is already LANDED / CLOSED; this refers only to any further Packet C sub-packet and to Packets D–H, none of which are authorized now)
+- **PACKETS_D_THROUGH_H_IMPLEMENTATION_AUTHORIZED_NOW:** NO (Packet D read-only planning AUTHORIZED; implementation NO)
+- **NEXT_ELIGIBLE_GATE:** `PACKET_D_PLANNING_AND_EXACTIFICATION` (`PACKET_D_TRANSITION`; read-only planning `AUTHORIZED`; Packet D implementation `NO`)
 - **Android / Capacitor:** PARKED LAST / NOT AUTHORIZED
 - **Release Readiness / Production Activation:** PAUSED
 - **Architecture status:** `APPROVED_WITH_NOTES`
@@ -78,7 +83,7 @@
 - **Installer signing / public release / deployment:** NOT_PERFORMED / NOT_AUTHORIZED
 - **Next TRUE-STANDALONE phase:** UNDECIDED
 - **Next-phase implementation authorized now:** NO
-- **Next eligible gate:** `SEC_001_NEXT_PACKET_C_GATE_SELECTION` (historical/superseded prior gate: `CODEX_REREVIEW_SEC_001_PART_B_CANONICAL_CORRELATION`, closed by `5873aa6`)
+- **Next eligible gate:** `PACKET_D_PLANNING_AND_EXACTIFICATION` (`PACKET_D_TRANSITION`; read-only planning `AUTHORIZED`; Packet D implementation `NO`)
 - **Ready for post-Phase-B next-phase adjudication:** SUPERSEDED_AS_LIVE_BY_SEC_001_PART_P_A
 - **Product delivery:** offline-capable Desktop/Mobile Native App. Browser/Web App is **not** the production delivery target. Browser runtime remains development/test compatibility only.
 - **TRUE-STANDALONE / NO HOSTING:** BINDING
@@ -93,15 +98,15 @@
 - **Model 2:** historical `CLOSED_WITH_NOTES` at `ffb8069` (not reopened)
 - **Packet 2A:** historical `CLOSED_WITH_NOTES` at `88086f4`; docs `b0875d1`
 - **PKT-1:** historical `CLOSED / DELIVERED / Runtime deployment complete` at `8abcd15`
-- **PK-6** â€” historical `CLOSED / DELIVERED` at `e7ae008`; docs `acdae5f`
-- **PK-5** â€” historical `CLOSED / DELIVERED` at `ef90d4e`; docs `cf9c6f3`
-- **PK-4** â€” historical `CLOSED / DELIVERED` at `d27850a`; docs `6a82fef`
-- **PK-3** â€” remains `CLOSED` at feature SHA `ec7cf8b`; docs commit `5e6675758`
-- **Packet 5** â€” remains `CLOSED` (`PASS_WITH_NOTES`) at `292d51ff`
-- **Binding sequence:** PK-1 â†’ PK-2 â†’ PK-3 â†’ PK-4 â†’ PK-5 â†’ PK-6; PK-6 is the **final PK packet**
+- **PK-6** — historical `CLOSED / DELIVERED` at `e7ae008`; docs `acdae5f`
+- **PK-5** — historical `CLOSED / DELIVERED` at `ef90d4e`; docs `cf9c6f3`
+- **PK-4** — historical `CLOSED / DELIVERED` at `d27850a`; docs `6a82fef`
+- **PK-3** — remains `CLOSED` at feature SHA `ec7cf8b`; docs commit `5e6675758`
+- **Packet 5** — remains `CLOSED` (`PASS_WITH_NOTES`) at `292d51ff`
+- **Binding sequence:** PK-1 → PK-2 → PK-3 → PK-4 → PK-5 → PK-6; PK-6 is the **final PK packet**
 - **Next eligible PK packet:** `NONE`
 - **PK-7:** `NOT DEFINED / DO NOT INVENT`
-- **This pass** — docs-only reconciliation of the already-landed SEC-001 Packet C / C-A implementation (`8d98bfe`) into the canonical workflow docs. No source/test/config edits. No new packet selected or invented. Packets D-H not executed.
+- **This pass** — docs-only reconciliation of the landed SEC-001 Packet C / C-B implementation (`10c0332`) and Packet D transition into the canonical workflow docs. Packet C is COMPLETE. No source/test/config edits. Packet D implementation NOT authorized.
 - For current working-tree/stage/stash state, use live Git. Stash remains `stash@{0}` = `7d03cfec7ba52ff7e25b7e175ca190efc258d874`.
 
 ### Claim boundaries (must not overclaim)
@@ -163,11 +168,11 @@
 
 ## What Happens Next
 
-**Immediate next action:** RETURN_TO_CHATGPT_FOR_NEXT_SEC_001_PACKET_C_GATE_SELECTION (ChatGPT / workflow coordinator to route the next authorized Packet C decision)
+**Immediate next action:** RETURN_TO_CHATGPT_AFTER_C_B_DOCS_LANDING_FOR_PACKET_D_PLANNING_ROUTING (ChatGPT / workflow coordinator to route the next authorized Packet D planning gate)
 
-This is the **one and only** next action. Do **not** reopen or re-authorize C-A implementation. Do **not** invent the name or scope of a new implementation packet (no C-B, no Packet D, no Packet E). Do **not** implement Capacitor/Android. Do **not** sign, deploy, or publicly release. Do **not** activate production. Do **not** activate F7 runtime. Do **not** implement PKT-2. Do **not** deploy Hosting. Do **not** reopen Phase B. Do **not** reopen Phase C. Do **not** reopen Phase A. Do **not** reopen Model 2 runtime.
+This is the **one and only** next action. Do **not** begin Packet D planning in this docs gate. Do **not** implement Packet D. Do **not** implement Packet E. Do **not** reopen or re-authorize C-A or C-B implementation. Do **not** implement Capacitor/Android. Do **not** sign, deploy, or publicly release. Do **not** activate production. Do **not** activate F7 runtime. Do **not** implement PKT-2. Do **not** deploy Hosting. Do **not** reopen Phase B. Do **not** reopen Phase C. Do **not** reopen Phase A. Do **not** reopen Model 2 runtime.
 
-**Next implementation action:** NONE until a new Gemini / Tech Lead authority decision selects the next Packet C gate. SEC-001 Packet C / C-A implementation is **LANDED / CLOSED** at `8d98bfe`. Packets D–H remain unauthorized. Production activation is not authorized. Capacitor/Android remain NOT AUTHORIZED. PKT-2 NOT AUTHORIZED.
+**Next implementation action:** NONE until Packet D planning and exactification is completed, reviewed, and authorized. SEC-001 Packet C is **COMPLETE** (C-A landed at `8d98bfe`, C-B landed at `10c0332`). Packets D–H implementation remain unauthorized. Production activation is not authorized. Capacitor/Android remain NOT AUTHORIZED. PKT-2 NOT AUTHORIZED.
 
 1. TRUE-STANDALONE architecture — **APPROVED_WITH_NOTES** / Planning Gate **CLOSED**
 2. Phase A (`PLATFORM_PORT_LAYER_FOUNDATION`) — **CLOSED_WITH_NOTES** at `6ea48c1`
@@ -176,27 +181,29 @@ This is the **one and only** next action. Do **not** reopen or re-authorize C-A 
 5. SEC-001 Part P/A/B — **CLOSED** at `5873aa6` (`CODEX_F001_CLOSURE_VERDICT: PASS_WITH_NOTES`); server-owned `privilegedVoidExecutionId` atomic with canonical void; `VOID_TEMPORARILY_FAIL_CLOSED_UNTIL_PACKET_E` recorded; pending lifetime REQUIRED_BEFORE_DEPLOY; Packet E REQUIRED_BEFORE_DEPLOY
 6. SEC-001 Packet C architecture — **CLOSED / PASS** (`TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-ARCHITECTURE-CODEX-REREVIEW-014`); DRP1 185 bytes, C-A literal allowlist, F7 state model, Admin Console dependency map, D15–D17, and issuer trust (`OPTION_I1_...`) are canonicalized in `docs/agent-workflow/CURRENT_PACKET.md`
 7. F9 canonical documentation — **COMPLETE** (`TWINPET-TRUE-STANDALONE-SEC-001-F9-CANONICAL-DOCS-CLAUDE-008`)
-8. SEC-001 Packet C / C-A implementation — **LANDED / CLOSED** at `8d98bfeb7242f910a46209d3ca7ffc969a9961bd` (`feat(pos): add offline manager authorization credential foundation`); final Codex `TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-C-A-CODEX-REREVIEW-003` = `PASS_WITH_NOTES` (blockers 0); commit/push `COMPLETE` via `TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-C-A-COMMIT-PUSH-AUTHORIZATION-GEMINI-001`
-9. Next eligible gate — **`SEC_001_NEXT_PACKET_C_GATE_SELECTION`** (name/scope of next sub-packet not selected here)
-10. Post Model 2 softDelete transaction-order follow-up — historical **CLOSED_WITH_NOTES** at landing `4d9be50`; exact `setUserAccount` deployed
-11. UI-11 Packet 2 / Model 2 — historical **CLOSED_WITH_NOTES** at runtime/source baseline `ffb8069` (not reopened)
-12. UI-11 Packet 2 / Packet 2A — historical **CLOSED_WITH_NOTES** at `88086f4` / docs `b0875d1`
-13. UI-11 Packet 2 / PKT-1 — historical **CLOSED / DELIVERED / Runtime deployment complete** at `8abcd15`
-14. PK-6 — historical **CLOSED / DELIVERED** at `e7ae008` / docs `acdae5f`
-15. PK-5 — **CLOSED / DELIVERED** at `ef90d4e` / docs `cf9c6f3`
-16. PK-4 — **CLOSED / DELIVERED** at `d27850a` / docs `6a82fef`
-17. PK-3 — **CLOSED** (`PASS`) at feature SHA `ec7cf8b`; docs commit `5e6675758`; U1–U7 `PASS`
-18. Packet 5 — **CLOSED** (`PASS_WITH_NOTES`) at `292d51ff`; R4 `36 / 36 PASS`
-19. **NOT authorized now:** the next Packet C sub-packet (name/scope unselected), packets D-H, Capacitor/Android, Electron, signing, production activation, public release, deployment, F7 runtime activation, PKT-2, Hosting, PK-2C, PK-2D, PK-7, stash operations
-20. Closed-gate reopen: Phase B = CLOSED (do not reopen); B13 = CLOSED_WITH_NOTES (do not reopen); Phase C = CLOSED_WITH_NOTES (do not reopen); Phase A = CLOSED_WITH_NOTES (do not reopen); Model 2 runtime = CLOSED_WITH_NOTES; Packet 2A = CLOSED_WITH_NOTES; PKT-1 = CLOSED / DELIVERED; Packet 5 = CLOSED; PK-3 = CLOSED; PK-4 = CLOSED / DELIVERED; PK-5 = CLOSED / DELIVERED; PK-6 = CLOSED / DELIVERED; SEC-001 Part P/A/B = CLOSED (do not reopen); Packet C architecture = CLOSED / PASS (do not reopen); SEC-001 Packet C / C-A implementation = LANDED / CLOSED (do not reopen)
+8. SEC-001 Packet C / C-A implementation — **LANDED / CLOSED** at `8d98bfeb7242f910a46209d3ca7ffc969a9961bd` (`feat(pos): add offline manager authorization credential foundation`; 129 files)
+9. SEC-001 Packet C / C-B implementation — **LANDED / CLOSED** at `10c033252c023436864913372b57c3bc638c8ae1` (`feat(pos): add offline manager authorization verifier lifecycle`; 17 files); final Codex `PASS` (0 blockers, RC-001 through RC-006 CLOSED, 0 new RCs; commit/push `COMPLETE`)
+10. SEC-001 Packet C status — **COMPLETE**
+11. Next eligible gate — **`PACKET_D_PLANNING_AND_EXACTIFICATION`** (`PACKET_D_TRANSITION`; read-only planning `AUTHORIZED`; Packet D implementation `NO`)
+12. Post Model 2 softDelete transaction-order follow-up — historical **CLOSED_WITH_NOTES** at landing `4d9be50`; exact `setUserAccount` deployed
+13. UI-11 Packet 2 / Model 2 — historical **CLOSED_WITH_NOTES** at runtime/source baseline `ffb8069` (not reopened)
+14. UI-11 Packet 2 / Packet 2A — historical **CLOSED_WITH_NOTES** at `88086f4` / docs `b0875d1`
+15. UI-11 Packet 2 / PKT-1 — historical **CLOSED / DELIVERED / Runtime deployment complete** at `8abcd15`
+16. PK-6 — historical **CLOSED / DELIVERED** at `e7ae008` / docs `acdae5f`
+17. PK-5 — **CLOSED / DELIVERED** at `ef90d4e` / docs `cf9c6f3`
+18. PK-4 — **CLOSED / DELIVERED** at `d27850a` / docs `6a82fef`
+19. PK-3 — **CLOSED** (`PASS`) at feature SHA `ec7cf8b`; docs commit `5e6675758`; U1–U7 `PASS`
+20. Packet 5 — **CLOSED** (`PASS_WITH_NOTES`) at `292d51ff`; R4 `36 / 36 PASS`
+21. **NOT authorized now:** Packet D implementation, Packet E implementation, packets F-H, Capacitor/Android, Electron, signing, production activation, public release, deployment, F7 runtime activation, PKT-2, Hosting, PK-2C, PK-2D, PK-7, stash operations
+22. Closed-gate reopen: Phase B = CLOSED (do not reopen); B13 = CLOSED_WITH_NOTES (do not reopen); Phase C = CLOSED_WITH_NOTES (do not reopen); Phase A = CLOSED_WITH_NOTES (do not reopen); Model 2 runtime = CLOSED_WITH_NOTES; Packet 2A = CLOSED_WITH_NOTES; PKT-1 = CLOSED / DELIVERED; Packet 5 = CLOSED; PK-3 = CLOSED; PK-4 = CLOSED / DELIVERED; PK-5 = CLOSED / DELIVERED; PK-6 = CLOSED / DELIVERED; SEC-001 Part P/A/B = CLOSED (do not reopen); Packet C architecture = CLOSED / PASS (do not reopen); SEC-001 Packet C C-A implementation = LANDED / CLOSED (do not reopen); SEC-001 Packet C C-B implementation = LANDED / CLOSED (do not reopen)
 
-**Not active:** the next Packet C sub-packet (not yet named/selected), packets D-H, Capacitor, PKT-2, Hosting, production activation, signing, public release, F7 runtime activation. TRUE-STANDALONE architecture is approved with notes. Phase A is closed with notes. Phase C is closed with notes. Phase B is closed. SEC-001 Part P/A/B is closed. SEC-001 Packet C architecture is closed/PASS. F9 canonical documentation is complete. SEC-001 Packet C / C-A implementation is landed/closed. `VOID_TEMPORARILY_FAIL_CLOSED_UNTIL_PACKET_E` is recorded. `NEXT_ELIGIBLE_PK_PACKET: NONE`. Next Packet C gate selection pending via ChatGPT / workflow coordinator.
+**Not active:** Packet D implementation, Packet E implementation, packets F-H, Capacitor, PKT-2, Hosting, production activation, signing, public release, F7 runtime activation. TRUE-STANDALONE architecture is approved with notes. Phase A is closed with notes. Phase C is closed with notes. Phase B is closed. SEC-001 Part P/A/B is closed. SEC-001 Packet C architecture is closed/PASS. F9 canonical documentation is complete. SEC-001 Packet C is COMPLETE (C-A landed at `8d98bfe`, C-B landed at `10c0332`). `VOID_TEMPORARILY_FAIL_CLOSED_UNTIL_PACKET_E` is recorded. `NEXT_ELIGIBLE_PK_PACKET: NONE`. Next eligible gate: `PACKET_D_PLANNING_AND_EXACTIFICATION` (`PACKET_D_TRANSITION`; read-only planning `AUTHORIZED`; Packet D implementation `NO`).
 
 ## Reminders
 
 - `stash@{0}` — do not touch (`7d03cfec7ba52ff7e25b7e175ca190efc258d874`)
-- TRUE-STANDALONE architecture is APPROVED_WITH_NOTES; this docs pass reconciles the already-landed SEC-001 Packet C / C-A implementation (`8d98bfe`) into canonical docs
-- SEC-001 Packet C / C-A implementation is LANDED / CLOSED; live eligible gate is the next Packet C sub-packet selection by Gemini / Tech Lead — this pass does not select or invent that sub-packet
+- TRUE-STANDALONE architecture is APPROVED_WITH_NOTES; this docs pass reconciles the landed SEC-001 Packet C / C-B implementation (`10c0332`) and Packet D transition into canonical docs
+- SEC-001 Packet C is COMPLETE; live eligible gate is `PACKET_D_PLANNING_AND_EXACTIFICATION` (`PACKET_D_TRANSITION`; read-only planning `AUTHORIZED`; Packet D implementation `NO`)
 - Standing rule `NO_FUTURE_WORK_ONLY_IN_AGENT_REPORTS` — canonical register is `docs/agent-workflow/CURRENT_PACKET.md`
 - Semantic B13 packaging source remains `40a3e10ce9805e851081c7aa512115026754776e` after the docs SHA advances
 - Semantic Phase B SQLite source remains `54bb622aa3aff5ed662bf287e00f8e70f3aac500` after the docs SHA advances
