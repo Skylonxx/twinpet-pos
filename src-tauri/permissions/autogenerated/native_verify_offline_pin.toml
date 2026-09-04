@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-native-verify-offline-pin"
+description = "Enables the native_verify_offline_pin command without any pre-configured scope."
+commands.allow = ["native_verify_offline_pin"]
+
+[[permission]]
+identifier = "deny-native-verify-offline-pin"
+description = "Denies the native_verify_offline_pin command without any pre-configured scope."
+commands.deny = ["native_verify_offline_pin"]

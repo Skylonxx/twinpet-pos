@@ -3,15 +3,21 @@ import {
   DRP1_TOTAL_BYTES,
   decodeDrp1,
   decodeEnr1,
+  decodeLct1,
   decodeOks1,
   decodePin1,
   decodePtp1,
   encodeDrp1,
   encodeEnr1,
+  encodeLct1,
   encodeOks1,
   encodePin1,
   encodePtp1,
+  lct1SignedPrefix,
+  LCT1_CANONICAL_PARITY_HEX,
+  LOCKOUT_CLEAR_TOKEN_TTL_MS,
   type DeviceRegistrationPossessionFrameV1,
+  type LockoutClearTokenFrameV1,
 } from '../oacFrame';
 
 // Canonical DRP1 test vector — MUST stay byte-identical to the Rust vector in
@@ -188,6 +194,108 @@ describe('OacKeysetManifestFrameV1 (OKS1)', () => {
   it('rejects zero keys', () => {
     expect(() =>
       encodeOks1({ revocationEpoch: 0, generatedAtServerMs: 0, keys: [], signature: Buffer.alloc(64) }),
+    ).toThrow();
+  });
+});
+
+describe('LockoutClearTokenFrameV1 (LCT1)', () => {
+  function canonicalLct1Vector(): LockoutClearTokenFrameV1 {
+    return {
+      securityDeviceId: Buffer.from(Array.from({ length: 16 }, (_, i) => 0x10 + i)),
+      managerStaffId: 'mgr_001',
+      lockoutId: Buffer.from(Array.from({ length: 32 }, (_, i) => 0x20 + i)),
+      issuedAtServerMs: 1_700_000_000_000,
+      expiresAtServerMs: 1_700_000_900_000,
+      tokenNonce: Buffer.from(Array.from({ length: 32 }, (_, i) => 0x30 + i)),
+      signingKeyId: 'key_001',
+      signature: Buffer.from(Array.from({ length: 64 }, (_, i) => 0x40 + (i % 64))),
+    };
+  }
+
+  it('encodes canonical vector to exact 181 bytes and matches literal parity hex (TS/Rust anchor)', () => {
+    const frame = canonicalLct1Vector();
+    const encoded = encodeLct1(frame);
+    expect(encoded.length).toBe(181);
+    expect(encoded.toString('hex')).toBe(LCT1_CANONICAL_PARITY_HEX);
+
+    const prefix = lct1SignedPrefix(frame);
+    expect(prefix.length).toBe(117);
+
+    const fromHex = decodeLct1(Buffer.from(LCT1_CANONICAL_PARITY_HEX, 'hex'));
+    expect(fromHex.ok).toBe(true);
+    if (!fromHex.ok) throw new Error('unreachable');
+    expect(fromHex.value.securityDeviceId.equals(frame.securityDeviceId)).toBe(true);
+    expect(fromHex.value.managerStaffId).toBe(frame.managerStaffId);
+    expect(fromHex.value.lockoutId.equals(frame.lockoutId)).toBe(true);
+    expect(fromHex.value.issuedAtServerMs).toBe(frame.issuedAtServerMs);
+    expect(fromHex.value.expiresAtServerMs).toBe(frame.expiresAtServerMs);
+    expect(fromHex.value.tokenNonce.equals(frame.tokenNonce)).toBe(true);
+    expect(fromHex.value.signingKeyId).toBe(frame.signingKeyId);
+    expect(fromHex.value.signature.equals(frame.signature)).toBe(true);
+  });
+
+  it('rejects truncated bytes', () => {
+    const frame = canonicalLct1Vector();
+    const encoded = encodeLct1(frame);
+    expect(decodeLct1(encoded.subarray(0, encoded.length - 1))).toEqual({ ok: false, code: 'wrong_total_length' });
+  });
+
+  it('rejects trailing bytes', () => {
+    const frame = canonicalLct1Vector();
+    const encoded = encodeLct1(frame);
+    expect(decodeLct1(Buffer.concat([encoded, Buffer.from([0x00])]))).toEqual({
+      ok: false,
+      code: 'wrong_total_length',
+    });
+  });
+
+  it('rejects bad magic', () => {
+    const frame = canonicalLct1Vector();
+    const encoded = encodeLct1(frame);
+    encoded[0] = 0x58; // 'X'
+    expect(decodeLct1(encoded)).toEqual({ ok: false, code: 'bad_magic' });
+  });
+
+  it('rejects bad version', () => {
+    const frame = canonicalLct1Vector();
+    const encoded = encodeLct1(frame);
+    encoded[4] = 2;
+    expect(decodeLct1(encoded)).toEqual({ ok: false, code: 'bad_version' });
+  });
+
+  it('strictly rejects invalid non-UTF8 bytes in identifiers with bad_field_format', () => {
+    const frame = canonicalLct1Vector();
+    const encoded = encodeLct1(frame);
+    // Replace bytes in managerStaffId (offset 5 + 16 = 21 is length byte (7), bytes 22..28 are "mgr_001")
+    // Set invalid UTF-8 byte 0xFF at byte 22
+    const corrupted = Buffer.from(encoded);
+    corrupted[22] = 0xff;
+    expect(decodeLct1(corrupted)).toEqual({ ok: false, code: 'bad_field_format' });
+  });
+
+  it('rejects non-canonical identifiers', () => {
+    const frame = canonicalLct1Vector();
+    expect(() =>
+      lct1SignedPrefix({ ...frame, managerStaffId: 'bad id with space' }),
+    ).toThrow();
+    expect(() =>
+      lct1SignedPrefix({ ...frame, signingKeyId: 'k'.repeat(65) }),
+    ).toThrow();
+  });
+
+  it('rejects timestamp inversion and oversized TTL', () => {
+    const frame = canonicalLct1Vector();
+    expect(() =>
+      lct1SignedPrefix({ ...frame, expiresAtServerMs: frame.issuedAtServerMs - 1 }),
+    ).toThrow();
+    expect(() =>
+      lct1SignedPrefix({ ...frame, expiresAtServerMs: frame.issuedAtServerMs }),
+    ).toThrow();
+    expect(() =>
+      lct1SignedPrefix({
+        ...frame,
+        expiresAtServerMs: frame.issuedAtServerMs + LOCKOUT_CLEAR_TOKEN_TTL_MS + 1,
+      }),
     ).toThrow();
   });
 });

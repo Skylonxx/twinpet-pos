@@ -11,12 +11,15 @@
 
 pub mod argon2_benchmark;
 pub mod argon2_kdf;
+pub mod clock_guard;
 pub mod device_proof;
 pub mod device_registration_proof;
 pub mod dpapi_envelope;
 pub mod enrollment_import;
 pub mod frames;
+pub mod lockout_state;
 pub mod oac_keyset_frame;
+pub mod offline_verifier;
 pub mod pepper_store;
 pub mod security_device_id;
 
@@ -78,9 +81,21 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
     fs::rename(&tmp, path).map_err(|e| e.to_string())
 }
 
+pub fn manager_active_slot_path(root: &Path, manager_staff_id: &str) -> Result<PathBuf, String> {
+    if !frames::is_canonical_identifier(manager_staff_id) {
+        return Err(format!("invalid managerStaffId grammar: '{manager_staff_id}'"));
+    }
+    Ok(root.join("oac-store").join("by-manager").join(format!("{manager_staff_id}.json")))
+}
+
 fn count_stored_oacs(root: &Path) -> u32 {
     fs::read_dir(oac_store_dir(root))
-        .map(|entries| entries.filter_map(|e| e.ok()).filter(|e| e.path().extension().map(|x| x == "json").unwrap_or(false)).count() as u32)
+        .map(|entries| {
+            entries
+                .filter_map(|e| e.ok())
+                .filter(|e| e.path().is_file() && e.path().extension().map(|x| x == "json").unwrap_or(false))
+                .count() as u32
+        })
         .unwrap_or(0)
 }
 
@@ -277,6 +292,13 @@ fn persist_provisioned_oac(root: &Path, oac_envelope_json: &str, oks1_base64: &s
         serde_json::from_str(oac_envelope_json).map_err(|e| format!("invalid OAC envelope JSON: {e}"))?;
     let obj = envelope.as_object().ok_or("OAC envelope must be a JSON object")?;
     let oac_id = obj.get("oacId").and_then(|v| v.as_str()).ok_or("OAC envelope missing oacId")?.to_string();
+    let manager_staff_id = obj
+        .get("managerStaffId")
+        .and_then(|v| v.as_str())
+        .ok_or("OAC envelope missing managerStaffId")?;
+    if !frames::is_canonical_identifier(manager_staff_id) {
+        return Err(format!("invalid managerStaffId grammar: '{manager_staff_id}'"));
+    }
     let signing_key_id = obj
         .get("signingKeyId")
         .and_then(|v| v.as_str())
@@ -301,6 +323,8 @@ fn persist_provisioned_oac(root: &Path, oac_envelope_json: &str, oks1_base64: &s
         .map_err(|_| "OAC envelope signature verification failed".to_string())?;
 
     write_atomic(&oac_store_dir(root).join(format!("{oac_id}.json")), oac_envelope_json.as_bytes())?;
+    let active_slot = manager_active_slot_path(root, manager_staff_id)?;
+    write_atomic(&active_slot, oac_envelope_json.as_bytes())?;
     write_atomic(&oks1_manifest_path(root), &oks1_bytes)?;
     Ok(())
 }
@@ -366,6 +390,28 @@ pub fn native_get_device_registration_status() -> Result<DeviceRegistrationStatu
     let device_key_present = fs::metadata(device_proof::device_proof_key_path(&root)).is_ok();
     let stored_oac_count = count_stored_oacs(&root);
     Ok(DeviceRegistrationStatusDto { security_device_id_hex, device_key_present, stored_oac_count })
+}
+
+// --- Command 6: native_verify_offline_pin ---
+
+#[tauri::command]
+pub fn native_verify_offline_pin(
+    manager_staff_id: String,
+    action_id: String,
+    pin: String,
+) -> Result<offline_verifier::PrivilegedVerifyOutcomeDto, String> {
+    let root = app_data_dir();
+    offline_verifier::verify_offline_pin(&root, &manager_staff_id, &action_id, &pin)
+}
+
+// --- Command 7: native_clear_offline_lockout ---
+
+#[tauri::command]
+pub fn native_clear_offline_lockout(
+    lct1_bytes_base64: String,
+) -> Result<offline_verifier::ClearLockoutOutcomeDto, String> {
+    let root = app_data_dir();
+    offline_verifier::clear_offline_lockout(&root, &lct1_bytes_base64)
 }
 
 // --- Minimal base64 (standard + url-safe), no external dependency ---
@@ -620,6 +666,10 @@ mod command_glue_tests {
 
         let stored = fs::read_to_string(oac_store_dir(&dir).join("oac-1.json")).unwrap();
         assert_eq!(stored, envelope_json);
+        let active_slot = manager_active_slot_path(&dir, "staff-1").unwrap();
+        let stored_active = fs::read_to_string(&active_slot).unwrap();
+        assert_eq!(stored_active, envelope_json);
+        assert_eq!(count_stored_oacs(&dir), 1);
         assert!(oks1_manifest_path(&dir).exists());
         let _ = fs::remove_dir_all(&dir);
     }

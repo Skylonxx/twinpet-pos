@@ -517,6 +517,122 @@ pub fn decode_oks1(bytes: &[u8]) -> Result<OacKeysetManifestFrameV1, FrameDecode
     Ok(OacKeysetManifestFrameV1 { revocation_epoch, generated_at_server_ms, keys, signature })
 }
 
+// --- LockoutClearTokenFrameV1 ("LCT1") --------------------------------------
+
+pub const LCT1_MAGIC: &[u8; 4] = b"LCT1";
+pub const LCT1_VERSION: u8 = 1;
+pub const LCT1_SECURITY_DEVICE_ID_LEN: usize = 16;
+pub const LCT1_LOCKOUT_ID_LEN: usize = 32;
+pub const LCT1_NONCE_LEN: usize = 32;
+pub const LCT1_SIGNATURE_LEN: usize = 64;
+pub const LOCKOUT_CLEAR_TOKEN_TTL_MS: u64 = 15 * 60 * 1000; // 900_000 ms
+
+pub fn is_canonical_identifier(s: &str) -> bool {
+    !s.is_empty()
+        && s.len() <= 64
+        && s.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LockoutClearTokenFrameV1 {
+    pub security_device_id: [u8; LCT1_SECURITY_DEVICE_ID_LEN],
+    pub manager_staff_id: String,
+    pub lockout_id: [u8; LCT1_LOCKOUT_ID_LEN],
+    pub issued_at_server_ms: u64,
+    pub expires_at_server_ms: u64,
+    pub token_nonce: [u8; LCT1_NONCE_LEN],
+    pub signing_key_id: String,
+    pub signature: [u8; LCT1_SIGNATURE_LEN],
+}
+
+pub fn lct1_signed_prefix(frame: &LockoutClearTokenFrameV1) -> Result<Vec<u8>, FrameDecodeError> {
+    if !is_canonical_identifier(&frame.manager_staff_id) || !is_canonical_identifier(&frame.signing_key_id) {
+        return Err(FrameDecodeError::BadFieldFormat);
+    }
+    if frame.expires_at_server_ms <= frame.issued_at_server_ms {
+        return Err(FrameDecodeError::BadFieldFormat);
+    }
+    if frame.expires_at_server_ms - frame.issued_at_server_ms > LOCKOUT_CLEAR_TOKEN_TTL_MS {
+        return Err(FrameDecodeError::BadFieldFormat);
+    }
+    let mut out = Vec::with_capacity(4 + 1 + 16 + 1 + frame.manager_staff_id.len() + 32 + 8 + 8 + 32 + 1 + frame.signing_key_id.len());
+    out.extend_from_slice(LCT1_MAGIC);
+    out.push(LCT1_VERSION);
+    out.extend_from_slice(&frame.security_device_id);
+    write_len_prefixed_str(&mut out, &frame.manager_staff_id)?;
+    out.extend_from_slice(&frame.lockout_id);
+    out.extend_from_slice(&frame.issued_at_server_ms.to_le_bytes());
+    out.extend_from_slice(&frame.expires_at_server_ms.to_le_bytes());
+    out.extend_from_slice(&frame.token_nonce);
+    write_len_prefixed_str(&mut out, &frame.signing_key_id)?;
+    Ok(out)
+}
+
+pub fn encode_lct1(frame: &LockoutClearTokenFrameV1) -> Result<Vec<u8>, FrameDecodeError> {
+    let mut out = lct1_signed_prefix(frame)?;
+    out.extend_from_slice(&frame.signature);
+    Ok(out)
+}
+
+pub fn decode_lct1(bytes: &[u8]) -> Result<LockoutClearTokenFrameV1, FrameDecodeError> {
+    if bytes.len() < 4 + 1 + 16 + 1 + 32 + 8 + 8 + 32 + 1 + 64 {
+        return Err(FrameDecodeError::WrongTotalLength);
+    }
+    if &bytes[0..4] != LCT1_MAGIC {
+        return Err(FrameDecodeError::BadMagic);
+    }
+    if bytes[4] != LCT1_VERSION {
+        return Err(FrameDecodeError::BadVersion);
+    }
+    let mut o = 5usize;
+    let mut security_device_id = [0u8; LCT1_SECURITY_DEVICE_ID_LEN];
+    security_device_id.copy_from_slice(&bytes[o..o + LCT1_SECURITY_DEVICE_ID_LEN]);
+    o += LCT1_SECURITY_DEVICE_ID_LEN;
+    let (manager_staff_id, next) = read_len_prefixed_str(bytes, o)?;
+    o = next;
+    if o + LCT1_LOCKOUT_ID_LEN + 8 + 8 + LCT1_NONCE_LEN > bytes.len() {
+        return Err(FrameDecodeError::WrongTotalLength);
+    }
+    let mut lockout_id = [0u8; LCT1_LOCKOUT_ID_LEN];
+    lockout_id.copy_from_slice(&bytes[o..o + LCT1_LOCKOUT_ID_LEN]);
+    o += LCT1_LOCKOUT_ID_LEN;
+    let issued_at_server_ms = u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+    o += 8;
+    let expires_at_server_ms = u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+    o += 8;
+    let mut token_nonce = [0u8; LCT1_NONCE_LEN];
+    token_nonce.copy_from_slice(&bytes[o..o + LCT1_NONCE_LEN]);
+    o += LCT1_NONCE_LEN;
+    let (signing_key_id, next) = read_len_prefixed_str(bytes, o)?;
+    o = next;
+    if o + LCT1_SIGNATURE_LEN != bytes.len() {
+        return Err(FrameDecodeError::WrongTotalLength);
+    }
+    let mut signature = [0u8; LCT1_SIGNATURE_LEN];
+    signature.copy_from_slice(&bytes[o..o + LCT1_SIGNATURE_LEN]);
+
+    if !is_canonical_identifier(&manager_staff_id) || !is_canonical_identifier(&signing_key_id) {
+        return Err(FrameDecodeError::BadFieldFormat);
+    }
+    if expires_at_server_ms <= issued_at_server_ms {
+        return Err(FrameDecodeError::BadFieldFormat);
+    }
+    if expires_at_server_ms - issued_at_server_ms > LOCKOUT_CLEAR_TOKEN_TTL_MS {
+        return Err(FrameDecodeError::BadFieldFormat);
+    }
+
+    Ok(LockoutClearTokenFrameV1 {
+        security_device_id,
+        manager_staff_id,
+        lockout_id,
+        issued_at_server_ms,
+        expires_at_server_ms,
+        token_nonce,
+        signing_key_id,
+        signature,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -709,5 +825,133 @@ mod tests {
             signature: [0u8; 64],
         };
         assert_eq!(encode_oks1(&frame), Err(FrameDecodeError::BadFieldLength));
+    }
+
+    fn canonical_lct1_vector() -> LockoutClearTokenFrameV1 {
+        let mut security_device_id = [0u8; 16];
+        for (i, b) in security_device_id.iter_mut().enumerate() {
+            *b = 0x10 + i as u8;
+        }
+        let mut lockout_id = [0u8; 32];
+        for (i, b) in lockout_id.iter_mut().enumerate() {
+            *b = 0x20 + i as u8;
+        }
+        let mut token_nonce = [0u8; 32];
+        for (i, b) in token_nonce.iter_mut().enumerate() {
+            *b = 0x30 + i as u8;
+        }
+        let mut signature = [0u8; 64];
+        for (i, b) in signature.iter_mut().enumerate() {
+            *b = 0x40 + (i as u8 % 64);
+        }
+        LockoutClearTokenFrameV1 {
+            security_device_id,
+            manager_staff_id: "mgr_001".to_string(),
+            lockout_id,
+            issued_at_server_ms: 1_700_000_000_000,
+            expires_at_server_ms: 1_700_000_900_000,
+            token_nonce,
+            signing_key_id: "key_001".to_string(),
+            signature,
+        }
+    }
+
+    pub const LCT1_CANONICAL_PARITY_HEX: &str =
+        "4c43543101101112131415161718191a1b1c1d1e1f076d67725f303031202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f0068e5cf8b010000a023f3cf8b010000303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f076b65795f303031404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f";
+
+    #[test]
+    fn lct1_matches_shared_literal_fixture_and_ts_parity() {
+        let frame = canonical_lct1_vector();
+        let encoded = encode_lct1(&frame).unwrap();
+        assert_eq!(encoded.len(), 181);
+
+        let hex_str: String = encoded.iter().map(|b| format!("{b:02x}")).collect();
+        assert_eq!(hex_str, LCT1_CANONICAL_PARITY_HEX);
+
+        // Prefix length check
+        let prefix = lct1_signed_prefix(&frame).unwrap();
+        assert_eq!(prefix.len(), 117);
+
+        // Decode from literal hex
+        let mut hex_bytes = Vec::with_capacity(181);
+        for i in (0..LCT1_CANONICAL_PARITY_HEX.len()).step_by(2) {
+            hex_bytes.push(u8::from_str_radix(&LCT1_CANONICAL_PARITY_HEX[i..i + 2], 16).unwrap());
+        }
+        let decoded = decode_lct1(&hex_bytes).unwrap();
+        assert_eq!(decoded, frame);
+    }
+
+    #[test]
+    fn lct1_round_trips_canonical_vector() {
+        let frame = canonical_lct1_vector();
+        let encoded = encode_lct1(&frame).unwrap();
+        assert_eq!(encoded.len(), 181);
+        let decoded = decode_lct1(&encoded).unwrap();
+        assert_eq!(decoded, frame);
+    }
+
+    #[test]
+    fn lct1_rejects_truncated_input() {
+        let frame = canonical_lct1_vector();
+        let encoded = encode_lct1(&frame).unwrap();
+        assert_eq!(decode_lct1(&encoded[..encoded.len() - 1]), Err(FrameDecodeError::WrongTotalLength));
+    }
+
+    #[test]
+    fn lct1_rejects_trailing_bytes() {
+        let frame = canonical_lct1_vector();
+        let mut encoded = encode_lct1(&frame).unwrap();
+        encoded.push(0x00);
+        assert_eq!(decode_lct1(&encoded), Err(FrameDecodeError::WrongTotalLength));
+    }
+
+    #[test]
+    fn lct1_rejects_bad_magic() {
+        let frame = canonical_lct1_vector();
+        let mut encoded = encode_lct1(&frame).unwrap();
+        encoded[0] = b'X';
+        assert_eq!(decode_lct1(&encoded), Err(FrameDecodeError::BadMagic));
+    }
+
+    #[test]
+    fn lct1_rejects_bad_version() {
+        let frame = canonical_lct1_vector();
+        let mut encoded = encode_lct1(&frame).unwrap();
+        encoded[4] = 2;
+        assert_eq!(decode_lct1(&encoded), Err(FrameDecodeError::BadVersion));
+    }
+
+    #[test]
+    fn lct1_rejects_timestamp_inversion() {
+        let mut frame = canonical_lct1_vector();
+        frame.expires_at_server_ms = frame.issued_at_server_ms - 1000;
+        assert_eq!(encode_lct1(&frame), Err(FrameDecodeError::BadFieldFormat));
+
+        // Equal timestamps also invalid (TTL must be positive)
+        frame.expires_at_server_ms = frame.issued_at_server_ms;
+        assert_eq!(encode_lct1(&frame), Err(FrameDecodeError::BadFieldFormat));
+    }
+
+    #[test]
+    fn lct1_rejects_oversized_ttl() {
+        let mut frame = canonical_lct1_vector();
+        // TTL > 900_000 ms
+        frame.expires_at_server_ms = frame.issued_at_server_ms + LOCKOUT_CLEAR_TOKEN_TTL_MS + 1;
+        assert_eq!(encode_lct1(&frame), Err(FrameDecodeError::BadFieldFormat));
+    }
+
+    #[test]
+    fn lct1_rejects_invalid_identifiers() {
+        let mut frame = canonical_lct1_vector();
+        frame.manager_staff_id = "".to_string();
+        assert_eq!(encode_lct1(&frame), Err(FrameDecodeError::BadFieldFormat));
+
+        let mut frame2 = canonical_lct1_vector();
+        frame2.manager_staff_id = "mgr with spaces".to_string();
+        assert_eq!(encode_lct1(&frame2), Err(FrameDecodeError::BadFieldFormat));
+
+        let mut frame3 = canonical_lct1_vector();
+        frame3.signing_key_id = "k".repeat(65);
+        assert_eq!(encode_lct1(&frame3), Err(FrameDecodeError::BadFieldFormat));
     }
 }

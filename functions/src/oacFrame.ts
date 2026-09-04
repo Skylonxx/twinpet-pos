@@ -111,6 +111,14 @@ const PTP1_MAGIC = 'PTP1';
 const PTP1_VERSION = 1;
 const PTP1_NONCE_LEN = 32;
 
+const STRICT_UTF8_DECODER = new TextDecoder('utf-8', { fatal: true });
+
+export const CANONICAL_IDENTIFIER_RE = /^[A-Za-z0-9_-]{1,64}$/;
+
+export function isCanonicalIdentifier(s: unknown): s is string {
+  return typeof s === 'string' && CANONICAL_IDENTIFIER_RE.test(s);
+}
+
 function writeLenPrefixedAscii(chunks: Buffer[], value: string): void {
   const encoded = Buffer.from(value, 'utf8');
   if (encoded.length > 255) throw new RangeError('length-prefixed field exceeds 255 bytes');
@@ -119,13 +127,27 @@ function writeLenPrefixedAscii(chunks: Buffer[], value: string): void {
   chunks.push(lenBuf, encoded);
 }
 
-function readLenPrefixedAscii(bytes: Buffer, offset: number): { value: string; next: number } | null {
-  if (offset >= bytes.length) return null;
+function readLenPrefixedStrictUtf8(
+  bytes: Buffer,
+  offset: number
+): { ok: true; value: string; next: number } | { ok: false; code: 'bad_field_length' | 'bad_field_format' } {
+  if (offset >= bytes.length) return { ok: false, code: 'bad_field_length' };
   const len = bytes.readUInt8(offset);
   const start = offset + 1;
   const end = start + len;
-  if (end > bytes.length) return null;
-  return { value: bytes.toString('utf8', start, end), next: end };
+  if (end > bytes.length) return { ok: false, code: 'bad_field_length' };
+  try {
+    const value = STRICT_UTF8_DECODER.decode(bytes.subarray(start, end));
+    return { ok: true, value, next: end };
+  } catch {
+    return { ok: false, code: 'bad_field_format' };
+  }
+}
+
+function readLenPrefixedAscii(bytes: Buffer, offset: number): { value: string; next: number } | null {
+  const res = readLenPrefixedStrictUtf8(bytes, offset);
+  if (!res.ok) return null;
+  return { value: res.value, next: res.next };
 }
 
 export function ptp1SignedPrefix(frame: Omit<ProvisioningTupleProofFrameV1, 'signature'>): Buffer {
@@ -464,4 +486,120 @@ export function decodeOks1(bytes: Buffer): FrameDecodeResult<OacKeysetManifestFr
   if (offset + DRP1_SIGNATURE_LEN !== bytes.length) return { ok: false, code: 'wrong_total_length' };
   const signature = Buffer.from(bytes.subarray(offset, offset + DRP1_SIGNATURE_LEN));
   return { ok: true, value: { revocationEpoch, generatedAtServerMs, keys, signature } };
+}
+
+// --- LockoutClearTokenFrameV1 ("LCT1") --------------------------------------
+
+export const LCT1_MAGIC = 'LCT1';
+export const LCT1_VERSION = 1;
+export const LCT1_SECURITY_DEVICE_ID_LEN = 16;
+export const LCT1_LOCKOUT_ID_LEN = 32;
+export const LCT1_NONCE_LEN = 32;
+export const LCT1_SIGNATURE_LEN = 64;
+export const LOCKOUT_CLEAR_TOKEN_TTL_MS = 15 * 60 * 1000; // 900_000 ms
+
+export const LCT1_CANONICAL_PARITY_HEX =
+  '4c43543101101112131415161718191a1b1c1d1e1f076d67725f303031202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f0068e5cf8b010000a023f3cf8b010000303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f076b65795f303031404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f';
+
+export interface LockoutClearTokenFrameV1 {
+  securityDeviceId: Buffer;
+  managerStaffId: string;
+  lockoutId: Buffer;
+  issuedAtServerMs: number;
+  expiresAtServerMs: number;
+  tokenNonce: Buffer;
+  signingKeyId: string;
+  signature: Buffer;
+}
+
+export function lct1SignedPrefix(frame: Omit<LockoutClearTokenFrameV1, 'signature'>): Buffer {
+  if (!isCanonicalIdentifier(frame.managerStaffId) || !isCanonicalIdentifier(frame.signingKeyId)) {
+    throw new RangeError('managerStaffId and signingKeyId must be canonical identifiers');
+  }
+  if (frame.expiresAtServerMs <= frame.issuedAtServerMs) {
+    throw new RangeError('expiresAtServerMs must be greater than issuedAtServerMs');
+  }
+  if (frame.expiresAtServerMs - frame.issuedAtServerMs > LOCKOUT_CLEAR_TOKEN_TTL_MS) {
+    throw new RangeError(`expiresAtServerMs exceeds maximum TTL of ${LOCKOUT_CLEAR_TOKEN_TTL_MS} ms`);
+  }
+  const chunks: Buffer[] = [Buffer.from(LCT1_MAGIC, 'ascii'), Buffer.from([LCT1_VERSION])];
+  if (frame.securityDeviceId.length !== LCT1_SECURITY_DEVICE_ID_LEN) {
+    throw new RangeError('securityDeviceId must be 16 bytes');
+  }
+  chunks.push(frame.securityDeviceId);
+  writeLenPrefixedAscii(chunks, frame.managerStaffId);
+  if (frame.lockoutId.length !== LCT1_LOCKOUT_ID_LEN) {
+    throw new RangeError('lockoutId must be 32 bytes');
+  }
+  chunks.push(frame.lockoutId);
+  const issuedBuf = Buffer.alloc(8);
+  issuedBuf.writeBigUInt64LE(BigInt(frame.issuedAtServerMs));
+  chunks.push(issuedBuf);
+  const expiresBuf = Buffer.alloc(8);
+  expiresBuf.writeBigUInt64LE(BigInt(frame.expiresAtServerMs));
+  chunks.push(expiresBuf);
+  if (frame.tokenNonce.length !== LCT1_NONCE_LEN) {
+    throw new RangeError('tokenNonce must be 32 bytes');
+  }
+  chunks.push(frame.tokenNonce);
+  writeLenPrefixedAscii(chunks, frame.signingKeyId);
+  return Buffer.concat(chunks);
+}
+
+export function encodeLct1(frame: LockoutClearTokenFrameV1): Buffer {
+  return Buffer.concat([lct1SignedPrefix(frame), frame.signature]);
+}
+
+export function decodeLct1(bytes: Buffer): FrameDecodeResult<LockoutClearTokenFrameV1> {
+  if (bytes.length < 4 + 1 + 16 + 1 + 32 + 8 + 8 + 32 + 1 + 64) {
+    return { ok: false, code: 'wrong_total_length' };
+  }
+  if (bytes.toString('ascii', 0, 4) !== LCT1_MAGIC) return { ok: false, code: 'bad_magic' };
+  if (bytes.readUInt8(4) !== LCT1_VERSION) return { ok: false, code: 'bad_version' };
+  let offset = 5;
+  const securityDeviceId = Buffer.from(bytes.subarray(offset, offset + LCT1_SECURITY_DEVICE_ID_LEN));
+  offset += LCT1_SECURITY_DEVICE_ID_LEN;
+  const staffField = readLenPrefixedStrictUtf8(bytes, offset);
+  if (!staffField.ok) return { ok: false, code: staffField.code };
+  offset = staffField.next;
+  if (offset + LCT1_LOCKOUT_ID_LEN + 8 + 8 + LCT1_NONCE_LEN > bytes.length) {
+    return { ok: false, code: 'wrong_total_length' };
+  }
+  const lockoutId = Buffer.from(bytes.subarray(offset, offset + LCT1_LOCKOUT_ID_LEN));
+  offset += LCT1_LOCKOUT_ID_LEN;
+  const issuedAtServerMs = Number(bytes.readBigUInt64LE(offset));
+  offset += 8;
+  const expiresAtServerMs = Number(bytes.readBigUInt64LE(offset));
+  offset += 8;
+  const tokenNonce = Buffer.from(bytes.subarray(offset, offset + LCT1_NONCE_LEN));
+  offset += LCT1_NONCE_LEN;
+  const keyIdField = readLenPrefixedStrictUtf8(bytes, offset);
+  if (!keyIdField.ok) return { ok: false, code: keyIdField.code };
+  offset = keyIdField.next;
+  if (offset + LCT1_SIGNATURE_LEN !== bytes.length) {
+    return { ok: false, code: 'wrong_total_length' };
+  }
+  const signature = Buffer.from(bytes.subarray(offset, offset + LCT1_SIGNATURE_LEN));
+  if (!isCanonicalIdentifier(staffField.value) || !isCanonicalIdentifier(keyIdField.value)) {
+    return { ok: false, code: 'bad_field_format' };
+  }
+  if (expiresAtServerMs <= issuedAtServerMs) {
+    return { ok: false, code: 'bad_field_format' };
+  }
+  if (expiresAtServerMs - issuedAtServerMs > LOCKOUT_CLEAR_TOKEN_TTL_MS) {
+    return { ok: false, code: 'bad_field_format' };
+  }
+  return {
+    ok: true,
+    value: {
+      securityDeviceId,
+      managerStaffId: staffField.value,
+      lockoutId,
+      issuedAtServerMs,
+      expiresAtServerMs,
+      tokenNonce,
+      signingKeyId: keyIdField.value,
+      signature,
+    },
+  };
 }

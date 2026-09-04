@@ -114,6 +114,10 @@ export { getOacKeysetManifest } from './oacKeysetManifest';
 export { setRolePermissions } from './setRolePermissions';
 export { roleSweepScheduler } from './roleSweepScheduler';
 
+// SEC-001 Packet C-B: admin-only entrypoint for minting a replay-safe signed
+// LockoutClearTokenFrameV1 (LCT1) to clear offline manager lockout.
+export { issuePrivilegedLockoutClear } from './issuePrivilegedLockoutClear';
+
 type UserRole = 'admin' | 'manager' | 'staff';
 
 // Fallback mirror of the client DEFAULT_ROLE_PERMS (src/lib/staffManagement/types.ts).

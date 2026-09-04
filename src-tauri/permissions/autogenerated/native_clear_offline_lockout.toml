@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-native-clear-offline-lockout"
+description = "Enables the native_clear_offline_lockout command without any pre-configured scope."
+commands.allow = ["native_clear_offline_lockout"]
+
+[[permission]]
+identifier = "deny-native-clear-offline-lockout"
+description = "Denies the native_clear_offline_lockout command without any pre-configured scope."
+commands.deny = ["native_clear_offline_lockout"]

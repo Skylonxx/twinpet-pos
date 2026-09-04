@@ -36,6 +36,8 @@ pub fn run() {
             privileged_auth::native_complete_oac_provisioning,
             privileged_auth::native_argon2_benchmark,
             privileged_auth::native_get_device_registration_status,
+            privileged_auth::native_verify_offline_pin,
+            privileged_auth::native_clear_offline_lockout,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
