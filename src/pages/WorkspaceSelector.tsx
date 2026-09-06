@@ -15,6 +15,8 @@ export default function WorkspaceSelector() {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState('');
   const [loadingBranches, setLoadingBranches] = useState(false);
+  const [switchingError, setSwitchingError] = useState<string | null>(null);
+  const [isSwitching, setIsSwitching] = useState(false);
 
   // Non-Global-Admin users should not reach this page.
   if (user && !user.branchIds.includes('ALL')) {
@@ -40,10 +42,19 @@ export default function WorkspaceSelector() {
     setStep('branch');
   };
 
-  const handleEnterPOS = () => {
-    if (!selectedBranchId) return;
-    setBranchId(selectedBranchId);
-    navigate('/dashboard', { replace: true });
+  const handleEnterPOS = async () => {
+    if (!selectedBranchId || isSwitching) return;
+    setIsSwitching(true);
+    setSwitchingError(null);
+    try {
+      await setBranchId(selectedBranchId);
+      navigate('/dashboard', { replace: true });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการเปลี่ยนสาขา';
+      setSwitchingError(msg);
+    } finally {
+      setIsSwitching(false);
+    }
   };
 
   // ── Step 2: branch picker ─────────────────────────────────────────────────
@@ -85,11 +96,22 @@ export default function WorkspaceSelector() {
               </select>
             </div>
 
+            {switchingError && (
+              <div
+                className="ws-error-banner text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 mb-4"
+                role="alert"
+              >
+                <i className="ti ti-alert-circle mr-1.5" aria-hidden="true" />
+                {switchingError}
+              </div>
+            )}
+
             <div className="ws-btn-row">
               <button
                 type="button"
                 className="ws-btn ws-btn-ghost"
                 onClick={() => setStep('choose')}
+                disabled={isSwitching}
               >
                 <i className="ti ti-arrow-left" aria-hidden="true" />
                 ย้อนกลับ
@@ -97,11 +119,11 @@ export default function WorkspaceSelector() {
               <button
                 type="button"
                 className="ws-btn ws-btn-primary"
-                onClick={handleEnterPOS}
-                disabled={!selectedBranchId}
+                onClick={() => void handleEnterPOS()}
+                disabled={!selectedBranchId || isSwitching}
               >
                 <i className="ti ti-login" aria-hidden="true" />
-                เข้าสู่ POS
+                {isSwitching ? 'กำลังสลับสาขา...' : 'เข้าสู่ POS'}
               </button>
             </div>
           </div>

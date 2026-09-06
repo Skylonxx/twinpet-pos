@@ -420,9 +420,17 @@ export function decodeEnr1(bytes: Buffer): FrameDecodeResult<EnrollmentProofFram
 // for the cached copy — transport authenticity is already provided by the
 // authenticated Functions-callable/TLS channel that delivered it.
 
+export type OacKeyLifecycleStatus = 'ACTIVE' | 'VERIFY_ONLY' | 'RETIRED';
+
+export const OAC_KEY_STATUS_ACTIVE = 1;
+export const OAC_KEY_STATUS_VERIFY_ONLY = 2;
+export const OAC_KEY_STATUS_RETIRED = 3;
+
 export interface OacKeysetManifestKeyV1 {
   signingKeyId: string;
   publicKey: Buffer;
+  status: OacKeyLifecycleStatus;
+  verifyUntilServerMs?: number;
 }
 
 export interface OacKeysetManifestFrameV1 {
@@ -432,8 +440,31 @@ export interface OacKeysetManifestFrameV1 {
   signature: Buffer;
 }
 
-const OKS1_MAGIC = 'OKS1';
-const OKS1_VERSION = 1;
+export const OKS1_MAGIC = 'OKS1';
+export const OKS1_VERSION = 2;
+
+function writeU16LePrefixedAscii(chunks: Buffer[], value: string): void {
+  const buf = Buffer.from(value, 'ascii');
+  if (buf.length < 1 || buf.length > 1500) {
+    throw new RangeError('identifier length must be 1..1500 bytes');
+  }
+  const lenBuf = Buffer.alloc(2);
+  lenBuf.writeUInt16LE(buf.length, 0);
+  chunks.push(lenBuf, buf);
+}
+
+function readU16LePrefixedAscii(bytes: Buffer, offset: number): { value: string; next: number } | null {
+  if (offset + 2 > bytes.length) return null;
+  const len = bytes.readUInt16LE(offset);
+  if (len < 1 || len > 1500) return null;
+  const start = offset + 2;
+  const end = start + len;
+  if (end > bytes.length) return null;
+  const value = bytes.toString('ascii', start, end);
+  return { value, next: end };
+}
+
+const CANONICAL_KEY_ID_RE = /^[a-zA-Z0-9_\-]+$/;
 
 export function oks1SignedPrefix(frame: Omit<OacKeysetManifestFrameV1, 'signature'>): Buffer {
   if (frame.keys.length === 0 || frame.keys.length > 255) {
@@ -447,12 +478,49 @@ export function oks1SignedPrefix(frame: Omit<OacKeysetManifestFrameV1, 'signatur
   genBuf.writeBigUInt64LE(BigInt(frame.generatedAtServerMs));
   chunks.push(Buffer.from(genBuf));
   chunks.push(Buffer.from([frame.keys.length]));
+
+  const seenIds = new Set<string>();
   for (const key of frame.keys) {
+    if (!key.signingKeyId || !CANONICAL_KEY_ID_RE.test(key.signingKeyId) || key.signingKeyId.length > 1500) {
+      throw new RangeError(`invalid signingKeyId grammar: "${key.signingKeyId}"`);
+    }
+    if (seenIds.has(key.signingKeyId)) {
+      throw new RangeError(`duplicate signingKeyId in keyset: "${key.signingKeyId}"`);
+    }
+    seenIds.add(key.signingKeyId);
+
     if (key.publicKey.length !== DRP1_DEV_PROOF_PUBLIC_KEY_LEN) {
       throw new RangeError('OKS1 public key must be 32 bytes');
     }
-    writeLenPrefixedAscii(chunks, key.signingKeyId);
+    writeU16LePrefixedAscii(chunks, key.signingKeyId);
     chunks.push(key.publicKey);
+
+    if (key.status === 'ACTIVE') {
+      if (key.verifyUntilServerMs !== undefined) {
+        throw new RangeError('ACTIVE key cannot have verifyUntilServerMs');
+      }
+      chunks.push(Buffer.from([OAC_KEY_STATUS_ACTIVE]));
+    } else if (key.status === 'VERIFY_ONLY') {
+      if (
+        typeof key.verifyUntilServerMs !== 'number' ||
+        !Number.isFinite(key.verifyUntilServerMs) ||
+        !Number.isSafeInteger(key.verifyUntilServerMs) ||
+        key.verifyUntilServerMs <= 0
+      ) {
+        throw new RangeError('VERIFY_ONLY key requires valid u64 verifyUntilServerMs');
+      }
+      chunks.push(Buffer.from([OAC_KEY_STATUS_VERIFY_ONLY]));
+      const expBuf = Buffer.alloc(8);
+      expBuf.writeBigUInt64LE(BigInt(key.verifyUntilServerMs));
+      chunks.push(expBuf);
+    } else if (key.status === 'RETIRED') {
+      if (key.verifyUntilServerMs !== undefined) {
+        throw new RangeError('RETIRED key cannot have verifyUntilServerMs');
+      }
+      chunks.push(Buffer.from([OAC_KEY_STATUS_RETIRED]));
+    } else {
+      throw new RangeError(`unknown lifecycle status: ${(key as any).status}`);
+    }
   }
   return Buffer.concat(chunks);
 }
@@ -462,7 +530,7 @@ export function encodeOks1(frame: OacKeysetManifestFrameV1): Buffer {
 }
 
 export function decodeOks1(bytes: Buffer): FrameDecodeResult<OacKeysetManifestFrameV1> {
-  if (bytes.length < 4 + 1 + 4 + 8 + 1) return { ok: false, code: 'wrong_total_length' };
+  if (bytes.length < 4 + 1 + 4 + 8 + 1 + 64) return { ok: false, code: 'wrong_total_length' };
   if (bytes.toString('ascii', 0, 4) !== OKS1_MAGIC) return { ok: false, code: 'bad_magic' };
   if (bytes.readUInt8(4) !== OKS1_VERSION) return { ok: false, code: 'bad_version' };
   let offset = 5;
@@ -474,15 +542,41 @@ export function decodeOks1(bytes: Buffer): FrameDecodeResult<OacKeysetManifestFr
   offset += 1;
   if (keyCount === 0) return { ok: false, code: 'bad_field_length' };
   const keys: OacKeysetManifestKeyV1[] = [];
+  const seenIds = new Set<string>();
+
   for (let i = 0; i < keyCount; i += 1) {
-    const idField = readLenPrefixedAscii(bytes, offset);
+    const idField = readU16LePrefixedAscii(bytes, offset);
     if (!idField || !idField.value) return { ok: false, code: 'bad_field_length' };
+    if (!CANONICAL_KEY_ID_RE.test(idField.value)) return { ok: false, code: 'bad_field_format' };
+    if (seenIds.has(idField.value)) return { ok: false, code: 'bad_field_format' };
+    seenIds.add(idField.value);
     offset = idField.next;
+
     if (offset + DRP1_DEV_PROOF_PUBLIC_KEY_LEN > bytes.length) return { ok: false, code: 'wrong_total_length' };
     const publicKey = Buffer.from(bytes.subarray(offset, offset + DRP1_DEV_PROOF_PUBLIC_KEY_LEN));
     offset += DRP1_DEV_PROOF_PUBLIC_KEY_LEN;
-    keys.push({ signingKeyId: idField.value, publicKey });
+
+    if (offset >= bytes.length) return { ok: false, code: 'wrong_total_length' };
+    const statusCode = bytes.readUInt8(offset);
+    offset += 1;
+
+    if (statusCode === OAC_KEY_STATUS_ACTIVE) {
+      keys.push({ signingKeyId: idField.value, publicKey, status: 'ACTIVE' });
+    } else if (statusCode === OAC_KEY_STATUS_VERIFY_ONLY) {
+      if (offset + 8 > bytes.length) return { ok: false, code: 'wrong_total_length' };
+      const verifyUntilServerMs = Number(bytes.readBigUInt64LE(offset));
+      offset += 8;
+      if (!Number.isFinite(verifyUntilServerMs) || !Number.isSafeInteger(verifyUntilServerMs) || verifyUntilServerMs <= 0) {
+        return { ok: false, code: 'bad_field_format' };
+      }
+      keys.push({ signingKeyId: idField.value, publicKey, status: 'VERIFY_ONLY', verifyUntilServerMs });
+    } else if (statusCode === OAC_KEY_STATUS_RETIRED) {
+      keys.push({ signingKeyId: idField.value, publicKey, status: 'RETIRED' });
+    } else {
+      return { ok: false, code: 'bad_field_format' };
+    }
   }
+
   if (offset + DRP1_SIGNATURE_LEN !== bytes.length) return { ok: false, code: 'wrong_total_length' };
   const signature = Buffer.from(bytes.subarray(offset, offset + DRP1_SIGNATURE_LEN));
   return { ok: true, value: { revocationEpoch, generatedAtServerMs, keys, signature } };

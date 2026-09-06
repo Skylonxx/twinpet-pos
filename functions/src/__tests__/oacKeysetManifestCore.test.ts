@@ -18,8 +18,13 @@ describe('buildOacKeysetManifest', () => {
     const other = rawKeypair();
     const result = buildOacKeysetManifest(
       [
-        { signingKeyId: 'key-active', publicKeyBase64Url: active.publicKeyBase64Url },
-        { signingKeyId: 'key-other', publicKeyBase64Url: other.publicKeyBase64Url },
+        { signingKeyId: 'key-active', publicKeyBase64Url: active.publicKeyBase64Url, status: 'ACTIVE' },
+        {
+          signingKeyId: 'key-other',
+          publicKeyBase64Url: other.publicKeyBase64Url,
+          status: 'VERIFY_ONLY',
+          verifyUntilServerMs: 1_773_000_000_000,
+        },
       ],
       4,
       1_772_000_000_000,
@@ -54,12 +59,73 @@ describe('buildOacKeysetManifest', () => {
     const active = rawKeypair();
     const other = rawKeypair();
     const result = buildOacKeysetManifest(
-      [{ signingKeyId: 'key-other', publicKeyBase64Url: other.publicKeyBase64Url }],
+      [{ signingKeyId: 'key-other', publicKeyBase64Url: other.publicKeyBase64Url, status: 'ACTIVE' }],
       0,
       1,
       'key-active',
       privateKeyFromRaw(active.publicKeyBase64Url, active.privateKeyBase64Url),
     );
     expect(result).toEqual({ ok: false, code: 'active_key_not_in_verifiable_set' });
+  });
+
+  it('fails when the active key has status VERIFY_ONLY (must be ACTIVE)', () => {
+    const active = rawKeypair();
+    const result = buildOacKeysetManifest(
+      [
+        {
+          signingKeyId: 'key-active',
+          publicKeyBase64Url: active.publicKeyBase64Url,
+          status: 'VERIFY_ONLY',
+          verifyUntilServerMs: 1_800_000_000_000,
+        },
+      ],
+      0,
+      1,
+      'key-active',
+      privateKeyFromRaw(active.publicKeyBase64Url, active.privateKeyBase64Url),
+    );
+    expect(result).toEqual({ ok: false, code: 'active_key_not_in_verifiable_set' });
+  });
+
+  it('fails when duplicate key IDs are provided', () => {
+    const active = rawKeypair();
+    const result = buildOacKeysetManifest(
+      [
+        { signingKeyId: 'key-active', publicKeyBase64Url: active.publicKeyBase64Url, status: 'ACTIVE' },
+        { signingKeyId: 'key-active', publicKeyBase64Url: active.publicKeyBase64Url, status: 'RETIRED' },
+      ],
+      0,
+      1,
+      'key-active',
+      privateKeyFromRaw(active.publicKeyBase64Url, active.privateKeyBase64Url),
+    );
+    expect(result).toEqual({ ok: false, code: 'duplicate_signing_key_id' });
+  });
+
+  it('fails when key status is invalid or VERIFY_ONLY lacks verifyUntilServerMs', () => {
+    const active = rawKeypair();
+    const result1 = buildOacKeysetManifest(
+      [
+        { signingKeyId: 'key-active', publicKeyBase64Url: active.publicKeyBase64Url, status: 'ACTIVE' },
+        { signingKeyId: 'key-other', publicKeyBase64Url: active.publicKeyBase64Url, status: 'INVALID' as any },
+      ],
+      0,
+      1,
+      'key-active',
+      privateKeyFromRaw(active.publicKeyBase64Url, active.privateKeyBase64Url),
+    );
+    expect(result1).toEqual({ ok: false, code: 'invalid_key_status' });
+
+    const result2 = buildOacKeysetManifest(
+      [
+        { signingKeyId: 'key-active', publicKeyBase64Url: active.publicKeyBase64Url, status: 'ACTIVE' },
+        { signingKeyId: 'key-other', publicKeyBase64Url: active.publicKeyBase64Url, status: 'VERIFY_ONLY' },
+      ],
+      0,
+      1,
+      'key-active',
+      privateKeyFromRaw(active.publicKeyBase64Url, active.privateKeyBase64Url),
+    );
+    expect(result2).toEqual({ ok: false, code: 'invalid_key_expiry' });
   });
 });

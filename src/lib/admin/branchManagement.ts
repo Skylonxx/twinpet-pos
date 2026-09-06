@@ -36,11 +36,16 @@ export function validateBranchForm(
   const id = input.id.trim();
   const name = input.name.trim();
 
-  if (mode === 'create' && !id) {
-    return 'กรุณากรอก Branch ID';
-  }
-  if (mode === 'create' && !/^[A-Za-z0-9-]+$/.test(id)) {
-    return 'Branch ID ใช้ได้เฉพาะตัวอักษร ตัวเลข และ -';
+  if (mode === 'create') {
+    if (!id) {
+      return 'กรุณากรอก Branch ID';
+    }
+    if (id.length > 1500) {
+      return 'Branch ID ต้องไม่เกิน 1,500 ตัวอักษร';
+    }
+    if (!/^[A-Za-z0-9_-]+$/.test(id)) {
+      return 'Branch ID ใช้ได้เฉพาะตัวอักษร ตัวเลข _ และ -';
+    }
   }
   if (!name) {
     return 'กรุณากรอกชื่อสาขา';

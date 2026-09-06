@@ -15,13 +15,14 @@ export const OAC_SIGNING_KEYS_COLLECTION = 'privilegedOacSigningKeys';
 export const OAC_KEYSET_META_COLLECTION = 'privilegedOacKeysetMeta';
 export const OAC_KEYSET_META_DOC_ID = 'current';
 
-export type OacSigningKeyStatus = 'ACTIVE' | 'RETIRED';
+export type OacSigningKeyStatus = 'ACTIVE' | 'VERIFY_ONLY' | 'RETIRED';
 
 export interface OacSigningKeyRecord {
   signingKeyId: string;
   publicKeyBase64Url: string;
   privateKeyBase64Url: string;
   status: OacSigningKeyStatus;
+  verifyUntilServerMs?: number;
 }
 
 export interface OacKeysetMetaRecord {
@@ -33,7 +34,8 @@ export type SigningKeyLoadFailureCode =
   | 'meta_malformed'
   | 'active_key_missing'
   | 'active_key_malformed'
-  | 'active_key_retired';
+  | 'active_key_retired'
+  | 'active_key_not_active';
 
 export type SigningKeyLoadResult =
   | { ok: true; signingKeyId: string; privateKey: KeyObject; publicKeyBase64Url: string }
@@ -44,7 +46,7 @@ function isNonEmptyString(value: unknown): value is string {
 }
 
 function isSigningKeyStatus(value: unknown): value is OacSigningKeyStatus {
-  return value === 'ACTIVE' || value === 'RETIRED';
+  return value === 'ACTIVE' || value === 'VERIFY_ONLY' || value === 'RETIRED';
 }
 
 export function parseKeysetMeta(data: unknown): OacKeysetMetaRecord | null {
@@ -65,11 +67,13 @@ export function parseSigningKeyRecord(data: unknown): OacSigningKeyRecord | null
   ) {
     return null;
   }
+  const verifyUntilServerMs = typeof raw.verifyUntilServerMs === 'number' ? raw.verifyUntilServerMs : undefined;
   return {
     signingKeyId: raw.signingKeyId,
     publicKeyBase64Url: raw.publicKeyBase64Url,
     privateKeyBase64Url: raw.privateKeyBase64Url,
     status: raw.status,
+    ...(verifyUntilServerMs !== undefined ? { verifyUntilServerMs } : {}),
   };
 }
 
@@ -113,7 +117,9 @@ export async function loadActiveSigningKey(readers: SigningKeyReaders): Promise<
   const key = parseSigningKeyRecord(keyData);
   if (!key) return { ok: false, code: 'active_key_missing' };
   if (key.signingKeyId !== meta.activeSigningKeyId) return { ok: false, code: 'active_key_malformed' };
-  if (key.status === 'RETIRED') return { ok: false, code: 'active_key_retired' };
+  if (key.status !== 'ACTIVE') {
+    return { ok: false, code: key.status === 'RETIRED' ? 'active_key_retired' : 'active_key_not_active' };
+  }
 
   return {
     ok: true,
@@ -123,24 +129,101 @@ export async function loadActiveSigningKey(readers: SigningKeyReaders): Promise<
   };
 }
 
+export const CANONICAL_OAC_ROOT_PUBLIC_KEY_BASE64URL = 'DXVQdU4IAKXSN-71gmA1dmubPloVhoqUCrKJlYeI47A';
+
+export interface RootSigningKey {
+  rootPrivateKey: KeyObject;
+  rootPublicKeyBase64Url: string;
+}
+
+export type RootSigningKeyResult =
+  | { ok: true; rootPrivateKey: KeyObject; rootPublicKeyBase64Url: string }
+  | { ok: false; code: 'root_signing_key_unavailable' };
+
+const ED25519_PKCS8_HEADER = Buffer.from('302e020100300506032b657004220420', 'hex');
+
+export async function loadRootSigningKey(injectedSecret?: string): Promise<RootSigningKeyResult> {
+  const secret = injectedSecret !== undefined ? injectedSecret : process.env.OAC_ROOT_PRIVATE_KEY_BASE64URL;
+  if (typeof secret !== 'string' || secret.trim().length === 0) {
+    return { ok: false, code: 'root_signing_key_unavailable' };
+  }
+  let secretBuf: Buffer;
+  try {
+    secretBuf = Buffer.from(secret, 'base64url');
+  } catch {
+    return { ok: false, code: 'root_signing_key_unavailable' };
+  }
+  if (secretBuf.length !== 32 || secretBuf.toString('base64url') !== secret) {
+    return { ok: false, code: 'root_signing_key_unavailable' };
+  }
+
+  try {
+    const pkcs8 = Buffer.concat([ED25519_PKCS8_HEADER, secretBuf]);
+    const privateKey = createPrivateKey({ key: pkcs8, format: 'der', type: 'pkcs8' });
+    const pubKey = createPublicKey(privateKey);
+    const pubJwk = pubKey.export({ format: 'jwk' }) as { x?: string };
+    if (pubJwk.x !== CANONICAL_OAC_ROOT_PUBLIC_KEY_BASE64URL) {
+      return { ok: false, code: 'root_signing_key_unavailable' };
+    }
+    return {
+      ok: true,
+      rootPrivateKey: privateKey,
+      rootPublicKeyBase64Url: CANONICAL_OAC_ROOT_PUBLIC_KEY_BASE64URL,
+    };
+  } catch {
+    return { ok: false, code: 'root_signing_key_unavailable' };
+  }
+}
+
 export interface VerifiableSigningKey {
   signingKeyId: string;
   publicKey: KeyObject;
   publicKeyBase64Url: string;
+  status: OacSigningKeyStatus;
+  verifyUntilServerMs?: number;
 }
 
-/** Loads every non-retired signing key's public half, for OKS1 keyset-manifest assembly. */
-export async function loadAllVerifiableSigningKeys(db: Firestore): Promise<VerifiableSigningKey[]> {
-  const snap = await db.collection(OAC_SIGNING_KEYS_COLLECTION).where('status', '==', 'ACTIVE').get();
+/** Loads every non-retired signing key's public half (ACTIVE + valid VERIFY_ONLY), for OKS1 keyset-manifest assembly. */
+export async function loadAllVerifiableSigningKeys(
+  db: Firestore,
+  nowMs: number = Date.now(),
+): Promise<VerifiableSigningKey[]> {
+  const [activeSnap, verifyOnlySnap] = await Promise.all([
+    db.collection(OAC_SIGNING_KEYS_COLLECTION).where('status', '==', 'ACTIVE').get(),
+    db.collection(OAC_SIGNING_KEYS_COLLECTION).where('status', '==', 'VERIFY_ONLY').get(),
+  ]);
+
   const keys: VerifiableSigningKey[] = [];
-  for (const doc of snap.docs) {
+  for (const doc of activeSnap.docs) {
     const key = parseSigningKeyRecord(doc.data());
     if (!key) continue;
     keys.push({
       signingKeyId: key.signingKeyId,
       publicKey: publicKeyFromRaw(key.publicKeyBase64Url),
       publicKeyBase64Url: key.publicKeyBase64Url,
+      status: 'ACTIVE',
     });
   }
+
+  for (const doc of verifyOnlySnap.docs) {
+    const key = parseSigningKeyRecord(doc.data());
+    if (!key) continue;
+    if (
+      typeof key.verifyUntilServerMs !== 'number' ||
+      !Number.isFinite(key.verifyUntilServerMs) ||
+      !Number.isSafeInteger(key.verifyUntilServerMs) ||
+      nowMs >= key.verifyUntilServerMs
+    ) {
+      continue;
+    }
+    keys.push({
+      signingKeyId: key.signingKeyId,
+      publicKey: publicKeyFromRaw(key.publicKeyBase64Url),
+      publicKeyBase64Url: key.publicKeyBase64Url,
+      status: 'VERIFY_ONLY',
+      verifyUntilServerMs: key.verifyUntilServerMs,
+    });
+  }
+
   return keys;
 }

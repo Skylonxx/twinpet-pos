@@ -28,13 +28,18 @@ import {
   checkDrp1NonceBinding,
   checkEnrollmentAuthorizationForIssuance,
   checkEnrollmentAuthorizationForRegistration,
+  checkExistingDeviceForInitialRegistration,
+  buildSignedEfr1,
   type CompleteIssuanceFailureCode,
   type DeviceRegistrationSessionRecord,
   type EnrollmentAuthorizationRecord,
 } from './deviceEnrollmentCore';
-import { decodeDrp1, drp1SignedPrefix, enr1SignedPrefix, type EnrollmentProofFrameV1 } from './oacFrame';
-import { publicKeyFromRaw, loadActiveSigningKey, firestoreSigningKeyReaders } from './signingKeyLoader';
+import { decodeDrp1, drp1SignedPrefix, enr1SignedPrefix, encodeOks1, type EnrollmentProofFrameV1 } from './oacFrame';
+import { publicKeyFromRaw, loadActiveSigningKey, loadAllVerifiableSigningKeys, loadRootSigningKey, firestoreSigningKeyReaders } from './signingKeyLoader';
 import { verifyIssuerSignedRequest } from './issuerSignatureAuth';
+import { readRevocationEpoch } from './privilegedRevocationState';
+import { buildOacKeysetManifest } from './oacKeysetManifestCore';
+import { EFR1_OP_INITIAL_ENROLLMENT } from './staffSessionAssertionFrame';
 
 export const ENROLLMENT_AUTHORIZATIONS_COLLECTION = 'privilegedDeviceEnrollmentAuthorizations';
 export const REGISTRATION_SESSIONS_COLLECTION = 'privilegedDeviceRegistrationSessions';
@@ -276,7 +281,15 @@ export async function performBeginDeviceRegistration(
 // --- completeDeviceRegistration ----------------------------------------------
 
 export type CompleteRegistrationResponse =
-  | { ok: true; securityDeviceIdHex: string; branchId: string }
+  | {
+      ok: true;
+      securityDeviceIdHex: string;
+      branchId: string;
+      deviceKeyVersion: number;
+      acceptedPublicKeyBase64: string;
+      serverFinalizationReceiptBase64: string;
+      oks1Base64?: string;
+    }
   | { ok: false; code: string };
 
 export async function performCompleteDeviceRegistration(
@@ -328,22 +341,88 @@ export async function performCompleteDeviceRegistration(
   const registration = buildValidatedDeviceRegistration(drp1, authRecord!.branchId, nowMs);
   const deviceRef = database.collection(DEVICE_REGISTRATIONS_COLLECTION).doc(registration.securityDeviceIdHex);
 
-  await database.runTransaction(async (tx) => {
-    const freshAuthSnap = await tx.get(authRef);
-    const freshAuth = enrollmentAuthFromData(freshAuthSnap.exists ? freshAuthSnap.data() : undefined);
-    const freshAuthCheck = checkEnrollmentAuthorizationForRegistration(freshAuth, null, nowMs);
-    if (!freshAuthCheck.ok) throw new Error(freshAuthCheck.code);
-    const freshSessionSnap = await tx.get(sessionRef);
-    const freshSession = sessionFromData(freshSessionSnap.exists ? freshSessionSnap.data() : undefined);
-    const freshSessionCheck = checkDeviceRegistrationSession(freshSession, auth.uid as string, nowMs);
-    if (!freshSessionCheck.ok) throw new Error(freshSessionCheck.code);
+  const activeKey = await loadActiveSigningKey(firestoreSigningKeyReaders(database));
+  if (!activeKey.ok) return { ok: false, code: 'signing_key_unavailable' };
 
-    tx.update(authRef, { status: 'CONSUMED', consumedAtServerMs: nowMs, consumedAt: FieldValue.serverTimestamp() });
-    tx.update(sessionRef, { status: 'CONSUMED' });
-    tx.set(deviceRef, { ...registration, registeredAt: FieldValue.serverTimestamp() });
-  });
+  try {
+    await database.runTransaction(async (tx) => {
+      const freshDeviceSnap = await tx.get(deviceRef);
+      if (freshDeviceSnap.exists) {
+        const existingCheck = checkExistingDeviceForInitialRegistration(freshDeviceSnap.data());
+        if (!existingCheck.ok) throw new Error(existingCheck.code);
+      }
+      const freshAuthSnap = await tx.get(authRef);
+      const freshAuth = enrollmentAuthFromData(freshAuthSnap.exists ? freshAuthSnap.data() : undefined);
+      const freshAuthCheck = checkEnrollmentAuthorizationForRegistration(freshAuth, null, nowMs);
+      if (!freshAuthCheck.ok) throw new Error(freshAuthCheck.code);
+      const freshSessionSnap = await tx.get(sessionRef);
+      const freshSession = sessionFromData(freshSessionSnap.exists ? freshSessionSnap.data() : undefined);
+      const freshSessionCheck = checkDeviceRegistrationSession(freshSession, auth.uid as string, nowMs);
+      if (!freshSessionCheck.ok) throw new Error(freshSessionCheck.code);
 
-  return { ok: true, securityDeviceIdHex: registration.securityDeviceIdHex, branchId: registration.branchId };
+      tx.update(authRef, { status: 'CONSUMED', consumedAtServerMs: nowMs, consumedAt: FieldValue.serverTimestamp() });
+      tx.update(sessionRef, { status: 'CONSUMED' });
+      tx.set(deviceRef, { ...registration, registeredAt: FieldValue.serverTimestamp() });
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false, code: msg };
+  }
+
+  const [verifiableKeys, revocationEpoch, rootKey] = await Promise.all([
+    loadAllVerifiableSigningKeys(database, nowMs),
+    readRevocationEpoch(database),
+    loadRootSigningKey(),
+  ]);
+
+  if (!rootKey.ok) {
+    return { ok: false, code: rootKey.code };
+  }
+
+  const manifestRes = buildOacKeysetManifest(
+    verifiableKeys.map((k) => ({
+      signingKeyId: k.signingKeyId,
+      publicKeyBase64Url: k.publicKeyBase64Url,
+      status: k.status,
+      verifyUntilServerMs: k.verifyUntilServerMs,
+    })),
+    revocationEpoch,
+    nowMs,
+    activeKey.signingKeyId,
+    rootKey.rootPrivateKey,
+  );
+  if (!manifestRes.ok) {
+    return { ok: false, code: manifestRes.code };
+  }
+  const oks1Base64 = encodeOks1(manifestRes.manifest).toString('base64');
+
+  const enrollmentGenId =
+    typeof raw.enrollmentGenerationId === 'string' && /^[0-9a-f]{32}$/i.test(raw.enrollmentGenerationId)
+      ? raw.enrollmentGenerationId
+      : '00000000000000000000000000000000';
+
+  const { efr1Bytes } = buildSignedEfr1(
+    EFR1_OP_INITIAL_ENROLLMENT,
+    enrollmentGenId,
+    registration.securityDeviceIdHex,
+    registration.deviceKeyVersion,
+    drp1.devProofPublicKey,
+    drp1.deviceRegistrationNonce,
+    registration.branchId,
+    nowMs,
+    activeKey.signingKeyId,
+    activeKey.privateKey,
+  );
+
+  return {
+    ok: true,
+    securityDeviceIdHex: registration.securityDeviceIdHex,
+    branchId: registration.branchId,
+    deviceKeyVersion: registration.deviceKeyVersion,
+    acceptedPublicKeyBase64: drp1.devProofPublicKey.toString('base64'),
+    serverFinalizationReceiptBase64: efr1Bytes.toString('base64'),
+    oks1Base64,
+  };
 }
 
 export const beginDeviceEnrollmentAuthorizationIssuance = onCall({ region: FUNCTIONS_REGION }, async (request) => {

@@ -85,7 +85,7 @@ describe('OAC keyset manifest (OKS1) sign/verify', () => {
       {
         revocationEpoch: 3,
         generatedAtServerMs: 1_772_000_000_000,
-        keys: [{ signingKeyId: 'key-1', publicKey: Buffer.alloc(32, 0x09) }],
+        keys: [{ signingKeyId: 'key-1', publicKey: Buffer.alloc(32, 0x09), status: 'ACTIVE' }],
       },
       privateKey,
     );
@@ -98,7 +98,7 @@ describe('OAC keyset manifest (OKS1) sign/verify', () => {
       {
         revocationEpoch: 3,
         generatedAtServerMs: 1_772_000_000_000,
-        keys: [{ signingKeyId: 'key-1', publicKey: Buffer.alloc(32, 0x09) }],
+        keys: [{ signingKeyId: 'key-1', publicKey: Buffer.alloc(32, 0x09), status: 'ACTIVE' }],
       },
       privateKey,
     );

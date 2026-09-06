@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-native-persist-staff-session-assertion"
+description = "Enables the native_persist_staff_session_assertion command without any pre-configured scope."
+commands.allow = ["native_persist_staff_session_assertion"]
+
+[[permission]]
+identifier = "deny-native-persist-staff-session-assertion"
+description = "Denies the native_persist_staff_session_assertion command without any pre-configured scope."
+commands.deny = ["native_persist_staff_session_assertion"]

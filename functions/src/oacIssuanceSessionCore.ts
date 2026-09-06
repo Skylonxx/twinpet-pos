@@ -8,7 +8,14 @@
  * No Firestore/crypto side effects here; see `oacIssuanceSession.ts`.
  */
 
+import { createHash, sign as ed25519Sign, type KeyObject } from 'node:crypto';
 import type { ProvisioningTupleProofFrameV1, PinBindingFrameV1 } from './oacFrame';
+import {
+  encodeSrf1,
+  srf1SignaturePreimage,
+  SRF1_OBJECT_KIND_OAC,
+  type ServerReceiptFrameV1,
+} from './staffSessionAssertionFrame';
 
 export const OAC_SESSION_DEFAULT_TTL_MS = 10 * 60 * 1000; // 10 minutes
 export const OAC_FRESHNESS_TTL_MS = 24 * 60 * 60 * 1000; // D3: OAC freshness 24h
@@ -151,4 +158,30 @@ export function pin1Tuple(pin1: PinBindingFrameV1) {
     managerStaffId: pin1.managerStaffId,
     devProofPublicKey: pin1.devProofPublicKey,
   };
+}
+
+export function buildSignedSrf1ForOac(
+  challengeNonce: Buffer,
+  securityDeviceId: Buffer,
+  branchId: string,
+  rawOacBytes: Buffer,
+  nowMs: number,
+  signingKeyId: string,
+  privateKey: KeyObject,
+): { srf1: ServerReceiptFrameV1; srf1Bytes: Buffer } {
+  const objectDigest = createHash('sha256').update(rawOacBytes).digest();
+  const unsigned = {
+    challengeNonce,
+    securityDeviceId,
+    branchId,
+    objectKind: SRF1_OBJECT_KIND_OAC,
+    objectDigest,
+    serverSentAtMs: nowMs,
+    signingKeyId,
+  };
+  const preimage = srf1SignaturePreimage(unsigned);
+  const signature = ed25519Sign(null, preimage, privateKey);
+  const srf1: ServerReceiptFrameV1 = { ...unsigned, signature };
+  const srf1Bytes = encodeSrf1(srf1);
+  return { srf1, srf1Bytes };
 }

@@ -75,8 +75,25 @@ export default function AppShell() {
   // (Packet 3B-4). Fire-and-forget — never blocks render or checkout.
   useDeviceSeqReconcileBoot();
 
-  // Click-to-expand sidebar (no hover). Collapsed = icon rail. Default closed.
   const [open, setOpen] = useState(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  const handleLogout = async () => {
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
+    setLogoutError(null);
+    try {
+      await logout();
+    } catch (err: unknown) {
+      console.error('[AppShell] logout failed', err);
+      const msg = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการออกจากระบบ';
+      setLogoutError(msg);
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
+
   // Single-open accordion — defaults to the category holding the active route.
   const [expandedCategory, setExpandedCategory] = useState<string | null>(() =>
     activeCategoryId(location.pathname),
@@ -179,16 +196,36 @@ export default function AppShell() {
               )}
             </div>
           )}
+          {logoutError && (
+            <div
+              className="p-2 bg-red-900/50 border border-red-500 rounded text-xs text-red-200 mb-2"
+              role="alert"
+            >
+              <div className="font-semibold flex items-center gap-1">
+                <i className="ti ti-alert-circle" aria-hidden="true" />
+                ล้างข้อมูลล้มเหลว
+              </div>
+              <div>{logoutError}</div>
+              <button
+                type="button"
+                className="mt-1 text-[10px] underline text-red-300 hover:text-white"
+                onClick={() => setLogoutError(null)}
+              >
+                ปิด
+              </button>
+            </div>
+          )}
           <button
             type="button"
-            onClick={() => void logout()}
+            onClick={() => void handleLogout()}
+            disabled={isLoggingOut}
             title="ออกจากระบบ"
-            className={`flex h-9 items-center gap-2 rounded-lg text-xs text-white/45 transition hover:bg-white/10 hover:text-white/85 ${
+            className={`flex h-9 items-center gap-2 rounded-lg text-xs text-white/45 transition hover:bg-white/10 hover:text-white/85 disabled:opacity-50 ${
               open ? 'justify-start px-3' : 'justify-center'
             }`}
           >
             <i className="ti ti-logout" aria-hidden="true" />
-            {open && <span>ออกจากระบบ</span>}
+            {open && <span>{isLoggingOut ? 'กำลังออกจากระบบ...' : 'ออกจากระบบ'}</span>}
           </button>
         </div>
       </Sidebar>

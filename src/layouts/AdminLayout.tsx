@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/hooks/useAuth';
 
@@ -86,8 +87,22 @@ export default function AdminLayout() {
   const isGlobalAdmin = user?.branchIds.includes('ALL') ?? false;
   const displayName = user ? `${user.firstName} ${user.lastName}`.trim() : '';
 
-  const handleLogout = () => {
-    void logout();
+  const [logoutError, setLogoutError] = useState<string | null>(null);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  const handleLogout = async () => {
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
+    setLogoutError(null);
+    try {
+      await logout();
+    } catch (err: unknown) {
+      console.error('[AdminLayout] logout failed', err);
+      const msg = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการออกจากระบบ';
+      setLogoutError(msg);
+    } finally {
+      setIsLoggingOut(false);
+    }
   };
 
   return (
@@ -112,6 +127,23 @@ export default function AdminLayout() {
           </div>
         )}
 
+        {logoutError && (
+          <div
+            className="flex items-center gap-2 rounded bg-red-100 border border-red-300 px-3 py-1 text-xs text-red-700"
+            role="alert"
+          >
+            <i className="ti ti-alert-circle" aria-hidden="true" />
+            <span>{logoutError}</span>
+            <button
+              type="button"
+              className="text-red-800 underline ml-1"
+              onClick={() => setLogoutError(null)}
+            >
+              ปิด
+            </button>
+          </div>
+        )}
+
         {isGlobalAdmin && (
           <button
             type="button"
@@ -126,12 +158,13 @@ export default function AdminLayout() {
 
         <button
           type="button"
-          className={`${TOPBAR_BTN} border-[rgba(226,75,74,0.3)] text-[#c0392b] hover:border-[#e24b4a] hover:bg-[#fef2f2] hover:text-[#a32d2d]`}
-          onClick={handleLogout}
+          className={`${TOPBAR_BTN} border-[rgba(226,75,74,0.3)] text-[#c0392b] hover:border-[#e24b4a] hover:bg-[#fef2f2] hover:text-[#a32d2d] disabled:opacity-50`}
+          onClick={() => void handleLogout()}
+          disabled={isLoggingOut}
           title="ออกจากระบบ"
         >
           <i className="ti ti-logout" aria-hidden="true" />
-          ออกจากระบบ
+          {isLoggingOut ? 'กำลังออกจากระบบ...' : 'ออกจากระบบ'}
         </button>
       </header>
 

@@ -1,0 +1,11 @@
+﻿# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-native-finalize-device-enrollment"
+description = "Enables the native_finalize_device_enrollment command without any pre-configured scope."
+commands.allow = ["native_finalize_device_enrollment"]
+
+[[permission]]
+identifier = "deny-native-finalize-device-enrollment"
+description = "Denies the native_finalize_device_enrollment command without any pre-configured scope."
+commands.deny = ["native_finalize_device_enrollment"]

@@ -16,18 +16,21 @@ pub mod device_proof;
 pub mod device_registration_proof;
 pub mod dpapi_envelope;
 pub mod enrollment_import;
+pub mod enrollment_meta;
 pub mod frames;
 pub mod lockout_state;
+pub mod monotonic_clock;
 pub mod oac_keyset_frame;
 pub mod offline_verifier;
 pub mod pepper_store;
 pub mod security_device_id;
+pub mod staff_session;
 
 use argon2_benchmark::Argon2BenchmarkVerdict;
 use device_registration_proof::generate_device_registration_proof;
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use enrollment_import::import_enrollment_file;
-use oac_keyset_frame::{find_signing_key, parse_and_verify_oac_keyset};
+use oac_keyset_frame::find_signing_key;
 use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -68,9 +71,6 @@ fn oac_store_dir(root: &Path) -> PathBuf {
     root.join("oac-store")
 }
 
-fn oks1_manifest_path(root: &Path) -> PathBuf {
-    root.join("twinpet-oac-keyset-manifest.bin")
-}
 
 fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
     if let Some(parent) = path.parent() {
@@ -162,20 +162,33 @@ pub fn native_import_device_enrollment_file() -> Result<ImportedEnrollmentDto, S
 
 // --- Command 2: native_generate_device_registration_proof ---
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GenerateDeviceRegistrationProofDto {
+    pub drp1_base64: String,
+    pub enrollment_generation_id: String,
+    pub staged_public_key_base64: String,
+}
+
 #[tauri::command]
 pub fn native_generate_device_registration_proof(
+    state: tauri::State<'_, enrollment_meta::EnrollmentRuntimeState>,
     enrollment_auth_id: String,
     device_registration_nonce_base64: String,
-) -> Result<String, String> {
+) -> Result<GenerateDeviceRegistrationProofDto, String> {
     let nonce_bytes = base64_decode(&device_registration_nonce_base64)?;
     if nonce_bytes.len() != 32 {
         return Err("device_registration_nonce must decode to 32 bytes".to_string());
     }
     let mut nonce = [0u8; 32];
     nonce.copy_from_slice(&nonce_bytes);
-    let drp1 = generate_device_registration_proof(&app_data_dir(), &enrollment_auth_id, nonce)
+    let outcome = generate_device_registration_proof(&state, &app_data_dir(), &enrollment_auth_id, nonce)
         .map_err(|e| format!("{e:?}"))?;
-    Ok(base64_encode(&drp1))
+    Ok(GenerateDeviceRegistrationProofDto {
+        drp1_base64: base64_encode(&outcome.drp1_bytes),
+        enrollment_generation_id: outcome.enrollment_generation_id_hex,
+        staged_public_key_base64: enrollment_meta::base64_encode_std(&outcome.staged_public_key_bytes),
+    })
 }
 
 // --- Command 3: native_complete_oac_provisioning ---
@@ -226,7 +239,7 @@ fn produce_provisioning_proof(
     let mut nonce = [0u8; 32];
     nonce.copy_from_slice(&nonce_bytes);
 
-    let signing_key = device_proof::resolve_or_create_device_keypair(root).map_err(|e| format!("{e:?}"))?;
+    let signing_key = device_proof::load_enrolled_device_keypair(root).map_err(|e| format!("{e:?}"))?;
     let dev_proof_public_key = signing_key.verifying_key().to_bytes();
 
     let ptp1_unsigned = frames::ProvisioningTupleProofFrameV1 {
@@ -286,7 +299,14 @@ fn produce_provisioning_proof(
 
 fn persist_provisioned_oac(root: &Path, oac_envelope_json: &str, oks1_base64: &str) -> Result<(), String> {
     let oks1_bytes = base64_decode(oks1_base64)?;
-    let manifest = parse_and_verify_oac_keyset(&oks1_bytes).map_err(|e| format!("{e:?}"))?;
+    let active_manifest_path = enrollment_meta::resolve_active_manifest_path(root)
+        .map_err(|e| format!("cannot resolve active OAC keyset manifest: {e}"))?;
+    let active_manifest_bytes = fs::read(&active_manifest_path)
+        .map_err(|e| format!("cannot read active OAC keyset manifest: {e}"))?;
+    if active_manifest_bytes != oks1_bytes {
+        return Err("PROVISIONING_MANIFEST_MISMATCH: supplied OKS1 keyset bytes do not match active digest manifest; re-anchor required".to_string());
+    }
+    let manifest = frames::decode_oks1(&active_manifest_bytes).map_err(|e| format!("{e:?}"))?;
 
     let envelope: serde_json::Value =
         serde_json::from_str(oac_envelope_json).map_err(|e| format!("invalid OAC envelope JSON: {e}"))?;
@@ -325,7 +345,6 @@ fn persist_provisioned_oac(root: &Path, oac_envelope_json: &str, oks1_base64: &s
     write_atomic(&oac_store_dir(root).join(format!("{oac_id}.json")), oac_envelope_json.as_bytes())?;
     let active_slot = manager_active_slot_path(root, manager_staff_id)?;
     write_atomic(&active_slot, oac_envelope_json.as_bytes())?;
-    write_atomic(&oks1_manifest_path(root), &oks1_bytes)?;
     Ok(())
 }
 
@@ -387,7 +406,7 @@ pub fn native_get_device_registration_status() -> Result<DeviceRegistrationStatu
         .ok()
         .filter(|b| b.len() == security_device_id::SECURITY_DEVICE_ID_LEN)
         .map(|b| b.iter().map(|byte| format!("{byte:02x}")).collect::<String>());
-    let device_key_present = fs::metadata(device_proof::device_proof_key_path(&root)).is_ok();
+    let device_key_present = device_proof::load_enrolled_device_keypair(&root).is_ok();
     let stored_oac_count = count_stored_oacs(&root);
     Ok(DeviceRegistrationStatusDto { security_device_id_hex, device_key_present, stored_oac_count })
 }
@@ -412,6 +431,104 @@ pub fn native_clear_offline_lockout(
 ) -> Result<offline_verifier::ClearLockoutOutcomeDto, String> {
     let root = app_data_dir();
     offline_verifier::clear_offline_lockout(&root, &lct1_bytes_base64)
+}
+
+// --- Command 8: native_prepare_staff_session_challenge ---
+
+#[tauri::command]
+pub fn native_prepare_staff_session_challenge(
+    purpose: String,
+    branch_id: String,
+    intended_staff_id: String,
+) -> Result<staff_session::StaffSessionChallengeDto, String> {
+    let root = app_data_dir();
+    staff_session::prepare_staff_session_challenge_internal(&root, &purpose, &branch_id, &intended_staff_id)
+}
+
+// --- Command 9: native_persist_staff_session_assertion ---
+
+#[tauri::command]
+pub fn native_persist_staff_session_assertion(
+    generation: u64,
+    ssa1_base64: String,
+    srf1_base64: String,
+    oks1_base64: String,
+) -> Result<(), String> {
+    let root = app_data_dir();
+    staff_session::persist_staff_session_assertion_internal(&root, generation, &ssa1_base64, &srf1_base64, &oks1_base64)
+}
+
+// --- Command 10: native_clear_staff_session ---
+
+#[tauri::command]
+pub fn native_clear_staff_session() -> Result<(), String> {
+    let root = app_data_dir();
+    staff_session::clear_staff_session_internal(&root)
+}
+
+// --- Command 11: native_prepare_oac_reanchor_challenge ---
+
+#[tauri::command]
+pub fn native_prepare_oac_reanchor_challenge(
+    branch_id: String,
+    manager_staff_id: String,
+) -> Result<staff_session::StaffSessionChallengeDto, String> {
+    let root = app_data_dir();
+    staff_session::prepare_staff_session_challenge_internal(&root, "OAC_REANCHOR", &branch_id, &manager_staff_id)
+}
+
+// --- Command 12: native_persist_oac_reanchor ---
+
+#[tauri::command]
+pub fn native_persist_oac_reanchor(
+    generation: u64,
+    oac_id: String,
+    srf1_base64: String,
+    oks1_base64: String,
+) -> Result<(), String> {
+    let root = app_data_dir();
+    staff_session::persist_oac_reanchor_internal(&root, generation, &oac_id, &srf1_base64, &oks1_base64)
+}
+
+// --- Command 13: native_finalize_device_enrollment ---
+
+#[tauri::command]
+pub fn native_finalize_device_enrollment(
+    state: tauri::State<'_, enrollment_meta::EnrollmentRuntimeState>,
+    enrollment_generation_id: String,
+    security_device_id_hex: String,
+    branch_id: String,
+    device_key_version: u32,
+    accepted_public_key_base64: String,
+    server_receipt_base64: Option<String>,
+    oks1_base64: Option<String>,
+    expected_operation_kind: Option<String>,
+) -> Result<enrollment_meta::FinalizeDeviceEnrollmentOutcomeDto, String> {
+    if let Some(ref receipt_b64) = server_receipt_base64 {
+        state.record_receipt_ingress_from_base64(receipt_b64)?;
+    }
+    let root = app_data_dir();
+    enrollment_meta::finalize_device_enrollment_internal(
+        &state,
+        &root,
+        &enrollment_generation_id,
+        &security_device_id_hex,
+        &branch_id,
+        device_key_version,
+        &accepted_public_key_base64,
+        server_receipt_base64.as_deref(),
+        oks1_base64.as_deref(),
+        expected_operation_kind.as_deref(),
+    )
+}
+
+// --- Validated Staff Session Authority Loader (for Packet D-1A/D-1B) ---
+
+#[allow(dead_code)]
+pub fn load_and_validate_canonical_staff_session(
+    root: &Path,
+) -> Result<frames::StaffSessionCacheEnvelopeV1, String> {
+    staff_session::load_and_validate_canonical_staff_session(root)
 }
 
 // --- Minimal base64 (standard + url-safe), no external dependency ---
@@ -480,6 +597,7 @@ fn base64_decode_std(input: &str) -> Result<Vec<u8>, String> {
 #[cfg(test)]
 mod command_glue_tests {
     use super::*;
+    use ed25519_dalek::SigningKey;
 
     #[test]
     fn canonical_json_sorts_keys_and_matches_json_stringify_shape() {
@@ -576,12 +694,62 @@ mod command_glue_tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
+    fn setup_test_enrolled_device(dir: &Path, sec_id_hex: &str) -> SigningKey {
+        let dev_key = SigningKey::generate(&mut rand::rngs::OsRng);
+        let mut sec_id = [0u8; 16];
+        for i in 0..16 {
+            sec_id[i] = u8::from_str_radix(&sec_id_hex[i * 2..i * 2 + 2], 16).unwrap();
+        }
+        let _ = fs::write(security_device_id::security_device_id_path(dir), &sec_id);
+
+        let gen_hex = "0102030405060708090a0b0c0d0e0f10";
+        let mut gen_bytes = [0u8; 16];
+        for i in 0..16 {
+            gen_bytes[i] = u8::from_str_radix(&gen_hex[i * 2..i * 2 + 2], 16).unwrap();
+        }
+
+        let key_path = enrollment_meta::generation_proof_key_path(dir, gen_hex);
+        let key_cipher = dpapi_envelope::dpapi_protect(&dev_key.to_bytes()).unwrap();
+        fs::write(&key_path, &key_cipher).unwrap();
+        let key_sha256 = enrollment_meta::compute_sha256_hex(&key_cipher);
+
+        let frame = enrollment_meta::EnrollmentMetaFrameV1 {
+            enrollment_generation_id: gen_bytes,
+            security_device_id: sec_id,
+            device_key_version: 1,
+            expected_public_key: dev_key.verifying_key().to_bytes(),
+            branch_id: "HQ-001".to_string(),
+        };
+        let meta_bytes = enrollment_meta::encode_enrm(&frame).unwrap();
+        let meta_cipher = dpapi_envelope::dpapi_protect(&meta_bytes).unwrap();
+        let meta_path = enrollment_meta::generation_meta_path(dir, gen_hex);
+        fs::write(&meta_path, &meta_cipher).unwrap();
+        let meta_sha256 = enrollment_meta::compute_sha256_hex(&meta_cipher);
+
+        let fence = enrollment_meta::EnrollmentFenceState {
+            state: "COMMITTED".to_string(),
+            enrollment_generation_id: gen_hex.to_string(),
+            security_device_id_hex: sec_id_hex.to_string(),
+            device_key_version: 1,
+            key_sha256,
+            meta_sha256,
+            manifest_sha256: None,
+            committed_at_local_ms: 1000,
+        };
+        let fence_json = serde_json::to_vec_pretty(&fence).unwrap();
+        fs::write(enrollment_meta::enrollment_fence_path(dir), &fence_json).unwrap();
+
+        dev_key
+    }
+
     #[test]
     fn produce_provisioning_proof_returns_self_verifiable_ptp1_and_pin1() {
         let dir = temp_dir();
+        let sec_id_hex = "00112233445566778899aabbccddeeff";
+        let _key = setup_test_enrolled_device(&dir, sec_id_hex);
         let nonce = base64_encode(&[7u8; 32]);
         let dto =
-            produce_provisioning_proof(&dir, "123456", "sess-1", "00112233445566778899aabbccddeeff", "staff-1", &nonce)
+            produce_provisioning_proof(&dir, "123456", "sess-1", sec_id_hex, "staff-1", &nonce)
                 .unwrap();
 
         let ptp1_bytes = base64_decode(&dto.ptp1_base64).unwrap();
@@ -603,6 +771,15 @@ mod command_glue_tests {
     }
 
     #[test]
+    fn produce_provisioning_proof_rejects_when_device_is_not_enrolled() {
+        let dir = temp_dir();
+        let nonce = base64_encode(&[7u8; 32]);
+        let result = produce_provisioning_proof(&dir, "123456", "sess-1", "00112233445566778899aabbccddeeff", "staff-1", &nonce);
+        assert!(result.is_err());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn produce_provisioning_proof_rejects_a_malformed_device_id() {
         let dir = temp_dir();
         let result = produce_provisioning_proof(&dir, "123456", "sess-1", "not-hex", "staff-1", &base64_encode(&[0u8; 32]));
@@ -610,18 +787,19 @@ mod command_glue_tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
-    fn signed_oac_test_manifest() -> (String, ed25519_dalek::SigningKey) {
+    fn signed_oac_test_manifest(dir: &Path) -> (String, ed25519_dalek::SigningKey) {
         let signing_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
         let public_key = signing_key.verifying_key().to_bytes();
-        let unsigned = frames::OacKeysetManifestFrameV1 {
-            revocation_epoch: 0,
-            generated_at_server_ms: 1000,
-            keys: vec![frames::OacKeysetManifestKeyV1 { signing_key_id: "key-1".to_string(), public_key }],
-            signature: [0u8; 64],
-        };
-        let prefix = frames::oks1_signed_prefix(&unsigned).unwrap();
-        let signature = ed25519_dalek::Signer::sign(&signing_key, &prefix).to_bytes();
-        let bytes = frames::encode_oks1(&frames::OacKeysetManifestFrameV1 { signature, ..unsigned }).unwrap();
+        let sec_id = [0x42u8; 16];
+        let keys = vec![frames::OacKeysetManifestKeyV1 {
+            signing_key_id: "key-1".to_string(),
+            public_key,
+            status: frames::OacKeyLifecycleStatus::Active,
+            verify_until_server_ms: None,
+        }];
+        let (_dev_key, bytes, _sha) = enrollment_meta::setup_committed_test_enrollment_with_manifest(
+            dir, "LDP-001", sec_id, keys, 0,
+        );
         (base64_encode(&bytes), signing_key)
     }
 
@@ -659,7 +837,7 @@ mod command_glue_tests {
     #[test]
     fn persist_provisioned_oac_accepts_a_validly_signed_envelope_and_stores_it() {
         let dir = temp_dir();
-        let (oks1_base64, signing_key) = signed_oac_test_manifest();
+        let (oks1_base64, signing_key) = signed_oac_test_manifest(&dir);
         let envelope_json = signed_oac_envelope(&signing_key, "oac-1");
 
         persist_provisioned_oac(&dir, &envelope_json, &oks1_base64).unwrap();
@@ -670,14 +848,14 @@ mod command_glue_tests {
         let stored_active = fs::read_to_string(&active_slot).unwrap();
         assert_eq!(stored_active, envelope_json);
         assert_eq!(count_stored_oacs(&dir), 1);
-        assert!(oks1_manifest_path(&dir).exists());
+        assert!(!dir.join("twinpet-oac-keyset-manifest.bin").exists());
         let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn persist_provisioned_oac_rejects_a_tampered_signature() {
         let dir = temp_dir();
-        let (oks1_base64, signing_key) = signed_oac_test_manifest();
+        let (oks1_base64, signing_key) = signed_oac_test_manifest(&dir);
         let envelope_json = signed_oac_envelope(&signing_key, "oac-2");
         let mut value: serde_json::Value = serde_json::from_str(&envelope_json).unwrap();
         value["branchId"] = serde_json::Value::String("TAMPERED".to_string());

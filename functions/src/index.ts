@@ -118,6 +118,12 @@ export { roleSweepScheduler } from './roleSweepScheduler';
 // LockoutClearTokenFrameV1 (LCT1) to clear offline manager lockout.
 export { issuePrivilegedLockoutClear } from './issuePrivilegedLockoutClear';
 
+// SEC-001 Packet D-1A: Staff / Device Trust, Receipts, OAC Anchors & Key Lifecycle.
+export { reEnrollPrivilegedDevice } from './reEnrollPrivilegedDevice';
+export { issueOfflineStaffSessionAssertion } from './issueOfflineStaffSessionAssertion';
+export { refreshOfflineStaffSessionAssertion } from './refreshOfflineStaffSessionAssertion';
+export { reanchorPrivilegedOacReceipt } from './reanchorPrivilegedOacReceipt';
+
 type UserRole = 'admin' | 'manager' | 'staff';
 
 // Fallback mirror of the client DEFAULT_ROLE_PERMS (src/lib/staffManagement/types.ts).

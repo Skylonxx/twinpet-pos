@@ -3,6 +3,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -18,9 +19,11 @@ import {
   serverTimestamp,
   updateDoc,
 } from 'firebase/firestore';
-import { auth, authEmailForUsername, collections, db, isFirebaseConfigured } from '../firebase';
+import { getFunctions, httpsCallable } from 'firebase/functions';
+import { auth, app, authEmailForUsername, collections, db, isFirebaseConfigured } from '../firebase';
 import { ensureFirebaseAuth } from '../firebaseAuth';
 import type { User } from '../types';
+import { getNativeStaffSessionInvoke } from './refreshStaffSession';
 import {
   findDevUserByPin,
   findDevUserByUsernamePassword,
@@ -49,7 +52,7 @@ export type AuthContextValue = {
   ) => Promise<User>;
   completeLogin: (user: User, branchId: string) => Promise<void>;
   logout: () => Promise<void>;
-  setBranchId: (branchId: string) => void;
+  setBranchId: (branchId: string) => Promise<void> | void;
 };
 
 export const AuthContext = createContext<AuthContextValue | null>(null);
@@ -110,6 +113,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [session, setSession] = useState<AuthSession | null>(() => loadSession());
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const lastPersistedStaffIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!auth || !isFirebaseConfigured) {
@@ -180,10 +184,65 @@ export function AuthProvider({ children }: AuthProviderProps) {
         }
         await auth.currentUser.getIdToken(true);
         const user = await verifyPinLogin(normalizedPin, branchId, { username: normalizedUsername });
-        await auth.currentUser.getIdToken(true);
+
+        // Stage-2 login ordering (SEC-001 D-1A)
+        // Forced token refresh to inspect newly minted custom claims from Cloud Function
+        const tokenResult = await auth.currentUser.getIdTokenResult(true);
+        const claimedStaffId = tokenResult?.claims?.staffId;
+        if (!claimedStaffId || claimedStaffId !== user.id) {
+          throw new Error('การยืนยันตัวตนล้มเหลว (staff identity claim mismatch)');
+        }
+
         if (!isActiveUser(user)) {
           throw new Error('PIN ไม่ถูกต้องหรือไม่มีสิทธิ์สาขานี้');
         }
+
+        // Native offline staff session issuance if native bridge is available
+        const invoke = getNativeStaffSessionInvoke();
+        if (invoke && app) {
+          const challengeRaw = await invoke('native_prepare_staff_session_challenge', {
+            purpose: 'SSA1_LOGIN',
+            branchId,
+            intendedStaffId: user.id,
+          });
+          const challenge = challengeRaw as { generation: number; sscp1ProofBase64: string };
+          if (
+            typeof challenge?.generation !== 'number' ||
+            typeof challenge?.sscp1ProofBase64 !== 'string' ||
+            !challenge.sscp1ProofBase64
+          ) {
+            throw new Error('การเตรียม native challenge ล้มเหลว (challenge malformed)');
+          }
+
+          const functions = getFunctions(app, import.meta.env.VITE_FUNCTIONS_REGION);
+          const issueCallable = httpsCallable<
+            { sscp1Base64: string },
+            { ok: boolean; ssa1Base64?: string; srf1Base64?: string; code?: string }
+          >(functions, 'issueOfflineStaffSessionAssertion');
+          const issueRes = await issueCallable({ sscp1Base64: challenge.sscp1ProofBase64 });
+          if (!issueRes.data.ok || !issueRes.data.ssa1Base64 || !issueRes.data.srf1Base64) {
+            throw new Error(`การออก offline staff session assertion ล้มเหลว: ${issueRes.data.code || 'issue_call_failed'}`);
+          }
+
+          const keysetCallable = httpsCallable<unknown, { ok: boolean; oks1Base64?: string }>(
+            functions,
+            'getOacKeysetManifest',
+          );
+          const keysetRes = await keysetCallable({});
+          if (!keysetRes.data.ok || !keysetRes.data.oks1Base64) {
+            throw new Error('การดึง keyset manifest ล้มเหลว (getOacKeysetManifest unavailable)');
+          }
+
+          await invoke('native_persist_staff_session_assertion', {
+            generation: challenge.generation,
+            ssa1Base64: issueRes.data.ssa1Base64,
+            srf1Base64: issueRes.data.srf1Base64,
+            oks1Base64: keysetRes.data.oks1Base64,
+          });
+
+          lastPersistedStaffIdRef.current = user.id;
+        }
+
         return user;
       } catch (err) {
         console.error('[auth] loginWithPin failed', err);
@@ -202,6 +261,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, []);
 
   const completeLogin = useCallback(async (user: User, branchId: string) => {
+    if (lastPersistedStaffIdRef.current !== user.id) {
+      const invoke = getNativeStaffSessionInvoke();
+      if (invoke) {
+        await invoke('native_clear_staff_session');
+      }
+      lastPersistedStaffIdRef.current = null;
+    }
     const nextSession = await establishSession(user, branchId);
     setSession(nextSession);
   }, []);
@@ -250,15 +316,25 @@ export function AuthProvider({ children }: AuthProviderProps) {
   );
 
   const logout = useCallback(async () => {
+    const invoke = getNativeStaffSessionInvoke();
+    if (invoke) {
+      await invoke('native_clear_staff_session');
+    }
     clearSession();
     setSession(null);
+    lastPersistedStaffIdRef.current = null;
     if (auth) {
       await signOut(auth);
     }
   }, []);
 
   const setBranchId = useCallback(
-    (branchId: string) => {
+    async (branchId: string) => {
+      const invoke = getNativeStaffSessionInvoke();
+      if (invoke) {
+        await invoke('native_clear_staff_session');
+      }
+      lastPersistedStaffIdRef.current = null;
       setSession((prev) => {
         if (!prev) return prev;
         assertBranchAccess(prev.user, branchId);

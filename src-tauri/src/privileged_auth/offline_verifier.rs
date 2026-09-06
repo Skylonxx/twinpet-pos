@@ -281,10 +281,6 @@ fn oac_store_dir(root: &Path) -> PathBuf {
     root.join("oac-store")
 }
 
-fn oks1_manifest_path(root: &Path) -> PathBuf {
-    root.join("twinpet-oac-keyset-manifest.bin")
-}
-
 pub const LIFECYCLE_LOCK_FILENAME: &str = "twinpet-privileged-auth-lifecycle.lock";
 
 pub fn lifecycle_lock_path(root: &Path) -> PathBuf {
@@ -484,8 +480,19 @@ pub fn verify_offline_pin(
         });
     }
 
-    // 4. Cached OKS1 manifest verification
-    let manifest_bytes = match fs::read(oks1_manifest_path(root)) {
+    // 4. Fallible fence-selected OKS1 manifest verification (IR-002)
+    let manifest_path = match super::enrollment_meta::resolve_active_manifest_path(root) {
+        Ok(p) => p,
+        Err(_) => {
+            return Ok(PrivilegedVerifyOutcomeDto {
+                ok: false,
+                verified_branch_id: None,
+                evidence_seed: None,
+                error_code: Some("DENIED_UNVERIFIABLE".to_string()),
+            });
+        }
+    };
+    let manifest_bytes = match fs::read(&manifest_path) {
         Ok(b) => b,
         Err(_) => {
             return Ok(PrivilegedVerifyOutcomeDto {
@@ -496,7 +503,7 @@ pub fn verify_offline_pin(
             });
         }
     };
-    let manifest = match oac_keyset_frame::parse_and_verify_oac_keyset(&manifest_bytes) {
+    let manifest = match frames::decode_oks1(&manifest_bytes) {
         Ok(m) => m,
         Err(_) => {
             return Ok(PrivilegedVerifyOutcomeDto {
@@ -841,7 +848,19 @@ pub fn clear_offline_lockout(
         });
     }
 
-    let manifest_bytes = match fs::read(oks1_manifest_path(root)) {
+    let manifest_path = match super::enrollment_meta::resolve_active_manifest_path(root) {
+        Ok(p) => p,
+        Err(_) => {
+            return Ok(ClearLockoutOutcomeDto {
+                ok: false,
+                manager_staff_id: Some(lct1.manager_staff_id),
+                reopens_now: false,
+                cooldown_remaining_ms: 0,
+                error_code: Some("DENIED_UNVERIFIABLE".to_string()),
+            });
+        }
+    };
+    let manifest_bytes = match fs::read(&manifest_path) {
         Ok(b) => b,
         Err(_) => {
             return Ok(ClearLockoutOutcomeDto {
@@ -854,7 +873,7 @@ pub fn clear_offline_lockout(
         }
     };
 
-    let manifest = match oac_keyset_frame::parse_and_verify_oac_keyset(&manifest_bytes) {
+    let manifest = match frames::decode_oks1(&manifest_bytes) {
         Ok(m) => m,
         Err(_) => {
             return Ok(ClearLockoutOutcomeDto {
@@ -1029,21 +1048,17 @@ mod tests {
 
         let mut csprng = rand::rngs::OsRng;
         let signing_key = SigningKey::generate(&mut csprng);
-        let manifest_frame = frames::OacKeysetManifestFrameV1 {
-            revocation_epoch: epoch,
-            generated_at_server_ms: 1_700_000_000_000,
-            keys: vec![frames::OacKeysetManifestKeyV1 {
-                signing_key_id: "test-signing-key".to_string(),
-                public_key: signing_key.verifying_key().to_bytes(),
-            }],
-            signature: [0u8; 64],
-        };
-        let unsigned_prefix = frames::oks1_signed_prefix(&manifest_frame).unwrap();
-        let manifest_sig = signing_key.sign(&unsigned_prefix);
-        let mut signed_manifest = manifest_frame;
-        signed_manifest.signature = manifest_sig.to_bytes();
-        let encoded_manifest = frames::encode_oks1(&signed_manifest).unwrap();
-        fs::write(oks1_manifest_path(root), encoded_manifest).unwrap();
+
+        let keys = vec![frames::OacKeysetManifestKeyV1 {
+            signing_key_id: "test-signing-key".to_string(),
+            public_key: signing_key.verifying_key().to_bytes(),
+            status: frames::OacKeyLifecycleStatus::Active,
+            verify_until_server_ms: None,
+        }];
+
+        super::super::enrollment_meta::setup_committed_test_enrollment_with_manifest(
+            root, "B01", sec_dev_id, keys, epoch,
+        );
 
         (signing_key, sec_dev_id_hex)
     }

@@ -104,19 +104,34 @@ export default function LoginPage() {
   );
 
   const handleSuccess = useCallback(
-    (user: User) => {
-      setSuccessUser(user);
+    async (user: User) => {
       // Global Admins (branchIds: ['ALL']) are not tied to a physical branch.
       // Pass 'ALL' so the session is created correctly and PosShellRoute can
       // redirect them straight to /admin.
       const effectiveBranchId = user.branchIds.includes('ALL') ? 'ALL' : branchId;
-      window.setTimeout(() => {
-        void completeLogin(user, effectiveBranchId).then(() => {
+      try {
+        await completeLogin(user, effectiveBranchId);
+        setSuccessUser(user);
+        window.setTimeout(() => {
           setSuccessUser(null);
-        });
-      }, 2200);
+        }, 2200);
+      } catch (err: unknown) {
+        console.error('[login] completeLogin failed', err);
+        setSuccessUser(null);
+        const message =
+          err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการเข้าสู่ระบบ';
+        showToast(message, 'error');
+        if (mode === 'password') {
+          setPwError(message);
+        } else {
+          setPinError(true);
+          setPinShake(true);
+          window.setTimeout(() => setPinShake(false), 300);
+          setPinValue('');
+        }
+      }
     },
-    [branchId, completeLogin],
+    [branchId, completeLogin, mode, showToast],
   );
 
   const submitPin = useCallback(
@@ -154,7 +169,7 @@ export default function LoginPage() {
 
       try {
         const user = await loginWithPin(normalizedPin, branchId, normalizedUsername);
-        handleSuccess(user);
+        await handleSuccess(user);
       } catch (err) {
         console.error('[login] PIN submit failed', err);
         const message =
@@ -222,7 +237,7 @@ export default function LoginPage() {
 
     try {
       const user = await loginWithUsername(normalizedUsername, password, branchId);
-      handleSuccess(user);
+      await handleSuccess(user);
     } catch (err) {
       const message =
         typeof navigator !== 'undefined' && navigator.onLine === false

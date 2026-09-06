@@ -88,6 +88,9 @@ export async function verifyPinLogin(
       throw new Error('PIN ไม่ถูกต้องหรือไม่มีสิทธิ์สาขานี้');
     }
 
+    // Force token refresh so freshly stamped custom claims are available to caller immediately
+    await auth.currentUser.getIdToken(true);
+
     return { ...payload.user, pin: '' };
   } catch (err) {
     if (err instanceof FirebaseError) {

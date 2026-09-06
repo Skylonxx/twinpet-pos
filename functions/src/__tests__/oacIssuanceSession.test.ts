@@ -170,6 +170,11 @@ describe('performCompletePrivilegedOacIssuanceSession', () => {
     expect(result.oac.allowedActions).toEqual(['VOID_PENDING_SALE', 'VOID_SETTLED_SALE']);
     const publicKey = publicKeyFromRaw(signingKey.publicKeyBase64Url);
     expect(verifyOacEnvelopeSignature(result.oac, publicKey)).toBe(true);
+
+    expect(typeof result.oacEnvelopeBytesBase64).toBe('string');
+    expect(typeof result.srf1OacBase64).toBe('string');
+    const rawBytes = Buffer.from(result.oacEnvelopeBytesBase64, 'base64');
+    expect(JSON.parse(rawBytes.toString('utf8')).oacId).toBe(result.oac.oacId);
   });
 
   it('rejects an invalid PIN', async () => {

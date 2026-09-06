@@ -12,14 +12,20 @@
 use std::fs;
 use std::path::PathBuf;
 
-const EXACT_SEVEN_COMMANDS: &[&str] = &[
+const EXACT_THIRTEEN_COMMANDS: &[&str] = &[
     "native_import_device_enrollment_file",
     "native_generate_device_registration_proof",
+    "native_finalize_device_enrollment",
     "native_complete_oac_provisioning",
     "native_argon2_benchmark",
     "native_get_device_registration_status",
     "native_verify_offline_pin",
     "native_clear_offline_lockout",
+    "native_prepare_staff_session_challenge",
+    "native_persist_staff_session_assertion",
+    "native_clear_staff_session",
+    "native_prepare_oac_reanchor_challenge",
+    "native_persist_oac_reanchor",
 ];
 
 const FORBIDDEN_NAME_FRAGMENTS: &[&str] = &[
@@ -69,34 +75,34 @@ fn lib_rs_source() -> String {
 }
 
 #[test]
-fn exactly_seven_native_commands_are_granted_in_capabilities() {
+fn exactly_thirteen_native_commands_are_granted_in_capabilities() {
     let granted = granted_native_permissions();
     let mut expected: Vec<String> =
-        EXACT_SEVEN_COMMANDS.iter().map(|c| format!("allow-{}", c.replace('_', "-"))).collect();
+        EXACT_THIRTEEN_COMMANDS.iter().map(|c| format!("allow-{}", c.replace('_', "-"))).collect();
     expected.sort();
     let mut actual = granted.clone();
     actual.sort();
-    assert_eq!(actual, expected, "capabilities/default.json must grant exactly the seven frozen commands");
+    assert_eq!(actual, expected, "capabilities/default.json must grant exactly the thirteen frozen commands");
 }
 
 #[test]
-fn exactly_seven_tauri_command_functions_are_defined_in_mod_rs() {
+fn exactly_thirteen_tauri_command_functions_are_defined_in_mod_rs() {
     let source = mod_rs_source();
-    let defined: Vec<&str> = EXACT_SEVEN_COMMANDS
+    let defined: Vec<&str> = EXACT_THIRTEEN_COMMANDS
         .iter()
         .filter(|name| source.contains(&format!("pub fn {name}(")))
         .copied()
         .collect();
-    assert_eq!(defined.len(), 7, "expected exactly 7 command functions defined, found: {defined:?}");
+    assert_eq!(defined.len(), 13, "expected exactly 13 command functions defined, found: {defined:?}");
 
     let command_attr_count = source.matches("#[tauri::command]").count();
-    assert_eq!(command_attr_count, 7, "expected exactly 7 #[tauri::command]-annotated functions in mod.rs");
+    assert_eq!(command_attr_count, 13, "expected exactly 13 #[tauri::command]-annotated functions in mod.rs");
 }
 
 #[test]
-fn exactly_seven_commands_are_registered_in_generate_handler() {
+fn exactly_thirteen_commands_are_registered_in_generate_handler() {
     let source = lib_rs_source();
-    for name in EXACT_SEVEN_COMMANDS {
+    for name in EXACT_THIRTEEN_COMMANDS {
         assert!(
             source.contains(&format!("privileged_auth::{name}")),
             "lib.rs generate_handler! must register privileged_auth::{name}"
@@ -165,7 +171,7 @@ fn native_verify_offline_pin_has_no_caller_controlled_time_or_branch_arguments()
 }
 
 #[test]
-fn all_thirteen_privileged_auth_modules_are_declared() {
+fn all_sixteen_privileged_auth_modules_are_declared() {
     let source = mod_rs_source();
     let expected_modules = [
         "argon2_benchmark",
@@ -175,12 +181,15 @@ fn all_thirteen_privileged_auth_modules_are_declared() {
         "device_registration_proof",
         "dpapi_envelope",
         "enrollment_import",
+        "enrollment_meta",
         "frames",
         "lockout_state",
+        "monotonic_clock",
         "oac_keyset_frame",
         "offline_verifier",
         "pepper_store",
         "security_device_id",
+        "staff_session",
     ];
     for module in expected_modules {
         assert!(

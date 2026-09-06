@@ -54,7 +54,12 @@ mod tests {
         let unsigned = OacKeysetManifestFrameV1 {
             revocation_epoch,
             generated_at_server_ms: 1000,
-            keys: vec![OacKeysetManifestKeyV1 { signing_key_id: "key-1".to_string(), public_key }],
+            keys: vec![OacKeysetManifestKeyV1 {
+                signing_key_id: "key-1".to_string(),
+                public_key,
+                status: crate::privileged_auth::frames::OacKeyLifecycleStatus::Active,
+                verify_until_server_ms: None,
+            }],
             signature: [0u8; 64],
         };
         let prefix = oks1_signed_prefix(&unsigned).unwrap();

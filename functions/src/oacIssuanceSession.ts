@@ -19,10 +19,11 @@ import bcrypt from 'bcryptjs';
 import { db } from './db';
 import { FUNCTIONS_REGION } from './deployConfig';
 import { evaluateFreshPrivilegedAuthority, type AuthLike } from './authorityFence';
-import { isUsableForLogin, readUserCredential } from './credentialStore';
+import { canonicalJSON, isUsableForLogin, readUserCredential } from './credentialStore';
 import { canProvisionOac, derivePinMigrationState } from './pinPolicy';
 import {
   buildOacIssuanceSession,
+  buildSignedSrf1ForOac,
   buildUnsignedOac,
   checkOacIssuanceSession,
   checkTupleBinding,
@@ -154,7 +155,12 @@ export type CompleteOacSessionFailureCode =
   | 'signing_key_unavailable';
 
 export type CompleteOacSessionResponse =
-  | { ok: true; oac: ReturnType<typeof signOacEnvelope> }
+  | {
+      ok: true;
+      oac: ReturnType<typeof signOacEnvelope>;
+      oacEnvelopeBytesBase64: string;
+      srf1OacBase64: string;
+    }
   | { ok: false; code: CompleteOacSessionFailureCode };
 
 export async function performCompletePrivilegedOacIssuanceSession(
@@ -253,9 +259,23 @@ export async function performCompletePrivilegedOacIssuanceSession(
     activeKey.privateKey,
   );
 
+  const oacBytes = Buffer.from(canonicalJSON(oac), 'utf8');
+  const oacEnvelopeBytesBase64 = oacBytes.toString('base64');
+
+  const { srf1Bytes } = buildSignedSrf1ForOac(
+    session!.nonce,
+    ptp1.securityDeviceId,
+    session!.branchId,
+    oacBytes,
+    nowMs,
+    activeKey.signingKeyId,
+    activeKey.privateKey,
+  );
+  const srf1OacBase64 = srf1Bytes.toString('base64');
+
   await sessionRef.update({ status: 'CONSUMED', consumedAtServerMs: nowMs, consumedAt: FieldValue.serverTimestamp() });
 
-  return { ok: true, oac };
+  return { ok: true, oac, oacEnvelopeBytesBase64, srf1OacBase64 };
 }
 
 export const beginPrivilegedOacIssuanceSession = onCall({ region: FUNCTIONS_REGION }, async (request) => {

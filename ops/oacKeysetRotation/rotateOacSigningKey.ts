@@ -28,7 +28,9 @@ export const OAC_SIGNING_KEYS_COLLECTION = 'privilegedOacSigningKeys';
 export const OAC_KEYSET_META_COLLECTION = 'privilegedOacKeysetMeta';
 export const OAC_KEYSET_META_DOC_ID = 'current';
 
-export type OacSigningKeyStatus = 'ACTIVE' | 'RETIRED';
+export const VERIFY_ONLY_WINDOW_MS = 96 * 60 * 60 * 1000; // 345_600_000 ms
+
+export type OacSigningKeyStatus = 'ACTIVE' | 'VERIFY_ONLY' | 'RETIRED';
 
 export interface OacSigningKeyDoc {
   signingKeyId: string;
@@ -38,6 +40,7 @@ export interface OacSigningKeyDoc {
   status: OacSigningKeyStatus;
   createdAtServerMs: number;
   createdByOps: string;
+  verifyUntilServerMs?: number;
 }
 
 export interface OacKeysetMetaDoc {
@@ -50,6 +53,17 @@ export interface RotatedKeysetUpdate {
   keyDoc: OacSigningKeyDoc;
   metaDoc: OacKeysetMetaDoc;
 }
+
+export type KeyNormalizationUpdate =
+  | {
+      signingKeyId: string;
+      status: 'VERIFY_ONLY';
+      verifyUntilServerMs: number;
+    }
+  | {
+      signingKeyId: string;
+      status: 'RETIRED';
+    };
 
 /** Raw 32-byte Ed25519 public key from a JWK `x` field. */
 export function rawFromJwkCoordinate(base64Url: string): Buffer {
@@ -103,17 +117,102 @@ export function generateOacSigningKeypair(): { publicKeyBase64Url: string; priva
   return { publicKeyBase64Url: pubJwk.x, privateKeyBase64Url: privJwk.d };
 }
 
-async function persistRotatedKeyset(db: Firestore, update: RotatedKeysetUpdate): Promise<void> {
-  const batch = db.batch();
-  batch.set(db.collection(OAC_SIGNING_KEYS_COLLECTION).doc(update.keyDoc.signingKeyId), {
-    ...update.keyDoc,
-    createdAt: FieldValue.serverTimestamp(),
+export function normalizePriorActiveKeys(
+  existingKeys: Array<{ signingKeyId: string; status: OacSigningKeyStatus; verifyUntilServerMs?: number }>,
+  newSigningKeyId: string,
+  nowMs: number,
+): KeyNormalizationUpdate[] {
+  const updates: KeyNormalizationUpdate[] = [];
+  for (const k of existingKeys) {
+    if (k.signingKeyId === newSigningKeyId) continue;
+    if (k.status === 'ACTIVE') {
+      updates.push({
+        signingKeyId: k.signingKeyId,
+        status: 'VERIFY_ONLY',
+        verifyUntilServerMs: nowMs + VERIFY_ONLY_WINDOW_MS,
+      });
+    } else if (k.status === 'VERIFY_ONLY') {
+      if (typeof k.verifyUntilServerMs === 'number' && k.verifyUntilServerMs <= nowMs) {
+        updates.push({
+          signingKeyId: k.signingKeyId,
+          status: 'RETIRED',
+        });
+      }
+    }
+  }
+  return updates;
+}
+
+export async function persistRotatedKeyset(
+  db: Firestore,
+  update: RotatedKeysetUpdate,
+  nowMs: number = Date.now(),
+): Promise<KeyNormalizationUpdate[]> {
+  return await db.runTransaction(async (transaction) => {
+    const metaRef = db.collection(OAC_KEYSET_META_COLLECTION).doc(OAC_KEYSET_META_DOC_ID);
+    const keysCollection = db.collection(OAC_SIGNING_KEYS_COLLECTION);
+
+    const [metaSnap, keysSnap] = await Promise.all([
+      transaction.get(metaRef),
+      transaction.get(keysCollection),
+    ]);
+
+    const currentMeta = metaSnap.exists ? (metaSnap.data() as Record<string, unknown>) : null;
+    const currentGeneration =
+      typeof currentMeta?.generation === 'number' && Number.isSafeInteger(currentMeta.generation)
+        ? currentMeta.generation
+        : 0;
+    const nextGeneration = currentGeneration + 1;
+
+    const existingKeys = keysSnap.docs.map((d) => {
+      const data = d.data();
+      const rawStatus = typeof data.status === 'string' ? data.status : '';
+      const status: OacSigningKeyStatus =
+        rawStatus === 'ACTIVE' || rawStatus === 'VERIFY_ONLY' || rawStatus === 'RETIRED'
+          ? (rawStatus as OacSigningKeyStatus)
+          : 'RETIRED';
+      return {
+        signingKeyId: d.id,
+        status,
+        verifyUntilServerMs:
+          typeof data.verifyUntilServerMs === 'number' && Number.isSafeInteger(data.verifyUntilServerMs)
+            ? data.verifyUntilServerMs
+            : undefined,
+      };
+    });
+
+    const normalizations = normalizePriorActiveKeys(existingKeys, update.keyDoc.signingKeyId, nowMs);
+
+    for (const n of normalizations) {
+      const keyRef = db.collection(OAC_SIGNING_KEYS_COLLECTION).doc(n.signingKeyId);
+      if (n.status === 'RETIRED') {
+        transaction.update(keyRef, {
+          status: 'RETIRED',
+          retiredAtServerMs: nowMs,
+        });
+      } else {
+        transaction.update(keyRef, {
+          status: n.status,
+          verifyUntilServerMs: n.verifyUntilServerMs,
+        });
+      }
+    }
+
+    const newKeyRef = db.collection(OAC_SIGNING_KEYS_COLLECTION).doc(update.keyDoc.signingKeyId);
+    transaction.set(newKeyRef, {
+      ...update.keyDoc,
+      generation: nextGeneration,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+
+    transaction.set(metaRef, {
+      ...update.metaDoc,
+      generation: nextGeneration,
+      rotatedAt: FieldValue.serverTimestamp(),
+    });
+
+    return normalizations;
   });
-  batch.set(db.collection(OAC_KEYSET_META_COLLECTION).doc(OAC_KEYSET_META_DOC_ID), {
-    ...update.metaDoc,
-    rotatedAt: FieldValue.serverTimestamp(),
-  });
-  await batch.commit();
 }
 
 function loadServiceAccount(): ServiceAccount {

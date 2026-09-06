@@ -1,5 +1,5 @@
 import { createHash, generateKeyPairSync, sign as ed25519Sign } from 'node:crypto';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   performBeginDeviceEnrollmentAuthorizationIssuance,
   performBeginDeviceRegistration,
@@ -8,6 +8,7 @@ import {
 } from '../deviceEnrollment';
 import { canonicalJSON } from '../credentialStore';
 import { decodeEnr1, drp1SignedPrefix, encodeDrp1 } from '../oacFrame';
+import { decodeEfr1, EFR1_OP_INITIAL_ENROLLMENT } from '../staffSessionAssertionFrame';
 import { privateKeyFromRaw } from '../signingKeyLoader';
 import type { Firestore } from 'firebase-admin/firestore';
 
@@ -262,10 +263,25 @@ function buildSignedDrp1(enrollmentAuthId: string, nonce: Buffer, securityDevice
 }
 
 describe('completeDeviceRegistration', () => {
-  it('validates DRP1, consumes the authorization + session, and persists the device registration', async () => {
+  const originalEnv = process.env.OAC_ROOT_PRIVATE_KEY_BASE64URL;
+
+  beforeEach(() => {
+    process.env.OAC_ROOT_PRIVATE_KEY_BASE64URL = Buffer.alloc(32, 0x5a).toString('base64url');
+  });
+
+  afterEach(() => {
+    if (originalEnv !== undefined) {
+      process.env.OAC_ROOT_PRIVATE_KEY_BASE64URL = originalEnv;
+    } else {
+      delete process.env.OAC_ROOT_PRIVATE_KEY_BASE64URL;
+    }
+  });
+
+  it('fails closed when root signing key is unavailable', async () => {
+    delete process.env.OAC_ROOT_PRIVATE_KEY_BASE64URL;
     const issuer = rawKeypair();
     const signingKey = rawKeypair();
-    const { db, store } = genericFakeFirestore(baseSeed(issuer, signingKey));
+    const { db } = genericFakeFirestore(baseSeed(issuer, signingKey));
     const { enrollmentAuthId } = await beginAndCompleteIssuance(db, issuer, 'LDP-001', 1000);
 
     const beginReg = await performBeginDeviceRegistration(db, { uid: STAFF_UID }, 2000);
@@ -280,12 +296,87 @@ describe('completeDeviceRegistration', () => {
       { registrationSessionId: beginReg.registrationSessionId, drp1Base64: drp1.toString('base64') },
       2100,
     );
-    expect(result).toEqual({ ok: true, securityDeviceIdHex: securityDeviceId.toString('hex'), branchId: 'LDP-001' });
+    expect(result).toEqual({ ok: false, code: 'root_signing_key_unavailable' });
+  });
+
+  it('validates DRP1, consumes the authorization + session, and persists the device registration', async () => {
+    const issuer = rawKeypair();
+    const signingKey = rawKeypair();
+    const { db, store } = genericFakeFirestore(baseSeed(issuer, signingKey));
+    const { enrollmentAuthId } = await beginAndCompleteIssuance(db, issuer, 'LDP-001', 1000);
+
+    const beginReg = await performBeginDeviceRegistration(db, { uid: STAFF_UID }, 2000);
+    if (!beginReg.ok) throw new Error('unreachable');
+    const nonce = Buffer.from(beginReg.deviceRegistrationNonceBase64, 'base64');
+    const securityDeviceId = Buffer.alloc(16, 0x77);
+    const { drp1, device } = buildSignedDrp1(enrollmentAuthId, nonce, securityDeviceId);
+
+    const result = await performCompleteDeviceRegistration(
+      db,
+      { uid: STAFF_UID },
+      { registrationSessionId: beginReg.registrationSessionId, drp1Base64: drp1.toString('base64') },
+      2100,
+    );
+    expect(result).toEqual({
+      ok: true,
+      securityDeviceIdHex: securityDeviceId.toString('hex'),
+      branchId: 'LDP-001',
+      deviceKeyVersion: 1,
+      acceptedPublicKeyBase64: Buffer.from(device.publicKeyBase64Url, 'base64url').toString('base64'),
+      serverFinalizationReceiptBase64: expect.any(String),
+      oks1Base64: expect.any(String),
+    });
+
+    if (result.ok) {
+      const decodedReceipt = decodeEfr1(Buffer.from(result.serverFinalizationReceiptBase64, 'base64'));
+      expect(decodedReceipt.ok).toBe(true);
+      if (decodedReceipt.ok) {
+        expect(decodedReceipt.value.operationKind).toBe(EFR1_OP_INITIAL_ENROLLMENT);
+        expect(decodedReceipt.value.securityDeviceId).toEqual(securityDeviceId);
+        expect(decodedReceipt.value.deviceKeyVersion).toBe(1);
+        expect(decodedReceipt.value.branchId).toBe('LDP-001');
+      }
+    }
 
     const authRecord = store.get('privilegedDeviceEnrollmentAuthorizations')!.get(enrollmentAuthId) as { status: string };
     expect(authRecord.status).toBe('CONSUMED');
-    const deviceRecord = store.get('privilegedDeviceRegistrations')!.get(securityDeviceId.toString('hex'));
+    const deviceRecord = store.get('privilegedDeviceRegistrations')!.get(securityDeviceId.toString('hex')) as {
+      status: string;
+      deviceKeyVersion: number;
+    };
     expect(deviceRecord).toBeDefined();
+    expect(deviceRecord.status).toBe('ACTIVE');
+    expect(deviceRecord.deviceKeyVersion).toBe(1);
+  });
+
+  it('rejects initial registration when device is already enrolled', async () => {
+    const issuer = rawKeypair();
+    const signingKey = rawKeypair();
+    const seed = baseSeed(issuer, signingKey);
+    const securityDeviceId = Buffer.alloc(16, 0x77);
+    const existingDeviceIdHex = securityDeviceId.toString('hex');
+    (seed as Record<string, unknown>).privilegedDeviceRegistrations = {
+      [existingDeviceIdHex]: {
+        securityDeviceIdHex: existingDeviceIdHex,
+        status: 'ACTIVE',
+        deviceKeyVersion: 1,
+      },
+    };
+    const { db } = genericFakeFirestore(seed);
+    const { enrollmentAuthId } = await beginAndCompleteIssuance(db, issuer, 'LDP-001', 1000);
+
+    const beginReg = await performBeginDeviceRegistration(db, { uid: STAFF_UID }, 2000);
+    if (!beginReg.ok) throw new Error('unreachable');
+    const nonce = Buffer.from(beginReg.deviceRegistrationNonceBase64, 'base64');
+    const { drp1 } = buildSignedDrp1(enrollmentAuthId, nonce, securityDeviceId);
+
+    const result = await performCompleteDeviceRegistration(
+      db,
+      { uid: STAFF_UID },
+      { registrationSessionId: beginReg.registrationSessionId, drp1Base64: drp1.toString('base64') },
+      2100,
+    );
+    expect(result).toEqual({ ok: false, code: 'device_already_enrolled_reenroll_required' });
   });
 
   it('rejects a DRP1 whose nonce does not match the session nonce', async () => {

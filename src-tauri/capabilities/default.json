@@ -26,6 +26,12 @@
     "allow-native-argon2-benchmark",
     "allow-native-get-device-registration-status",
     "allow-native-verify-offline-pin",
-    "allow-native-clear-offline-lockout"
+    "allow-native-clear-offline-lockout",
+    "allow-native-prepare-staff-session-challenge",
+    "allow-native-persist-staff-session-assertion",
+    "allow-native-clear-staff-session",
+    "allow-native-prepare-oac-reanchor-challenge",
+    "allow-native-persist-oac-reanchor",
+    "allow-native-finalize-device-enrollment"
   ]
 }

@@ -26,6 +26,11 @@ ed25519-dalek = { version = "2.1.1", features = ["rand_core"] }
 rand = "0.8"
 argon2 = "0.5.3"
 zeroize = "1.8.2"
-windows = { version = "0.61.3", features = ["Win32_Security_Cryptography", "Win32_Foundation"] }
+windows = { version = "0.61.3", features = [
+    "Win32_Security_Cryptography",
+    "Win32_Foundation",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Performance",
+] }
 sha2 = "0.10.9"
 rfd = "0.15"

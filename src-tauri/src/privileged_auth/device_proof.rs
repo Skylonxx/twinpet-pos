@@ -14,11 +14,13 @@ pub const DEVICE_PROOF_KEY_FILE_NAME: &str = "twinpet-device-proof-key.dpapi";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DeviceProofError {
+    NotFound,
     Corrupt,
     Io,
     DpapiFailed,
 }
 
+/// Legacy canonical device proof key path (migration-only / non-authoritative).
 pub fn device_proof_key_path(app_data_dir: &Path) -> PathBuf {
     app_data_dir.join(DEVICE_PROOF_KEY_FILE_NAME)
 }
@@ -55,6 +57,56 @@ pub fn resolve_or_create_device_keypair(app_data_dir: &Path) -> Result<SigningKe
             write_atomic(&path, &ciphertext)?;
             Ok(signing_key)
         }
+        Err(_) => Err(DeviceProofError::Io),
+    }
+}
+
+/// Returns the strict fence-selected generation key path for the active COMMITTED generation.
+/// Fails closed if fence is missing, not COMMITTED, empty generation, or file absent.
+/// Never falls back to legacy canonical or compatibility copies.
+pub fn active_enrolled_device_key_path(app_data_dir: &Path) -> Result<PathBuf, DeviceProofError> {
+    let fence_path = super::enrollment_meta::enrollment_fence_path(app_data_dir);
+    let fence_bytes = match fs::read(&fence_path) {
+        Ok(b) => b,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Err(DeviceProofError::NotFound),
+        Err(_) => return Err(DeviceProofError::Io),
+    };
+    let fence: super::enrollment_meta::EnrollmentFenceState = serde_json::from_slice(&fence_bytes)
+        .map_err(|_| DeviceProofError::Corrupt)?;
+
+    if fence.state != "COMMITTED" || fence.enrollment_generation_id.trim().is_empty() {
+        return Err(DeviceProofError::NotFound);
+    }
+
+    let gen_path = app_data_dir.join(format!(
+        "twinpet-device-proof-key-{}.dpapi",
+        fence.enrollment_generation_id.to_lowercase()
+    ));
+
+    if !gen_path.exists() {
+        return Err(DeviceProofError::NotFound);
+    }
+
+    Ok(gen_path)
+}
+
+/// Reads the persisted device-proof signing key without auto-creating.
+/// Selects the runtime authority key strictly from the active COMMITTED generation fence.
+/// Never falls back to legacy canonical or compatibility copies.
+/// Fails closed with NotFound if missing (DEC-D-08 runtime load-only).
+pub fn load_enrolled_device_keypair(app_data_dir: &Path) -> Result<SigningKey, DeviceProofError> {
+    let path = active_enrolled_device_key_path(app_data_dir)?;
+    match fs::read(&path) {
+        Ok(ciphertext) => {
+            let plaintext = dpapi_unprotect(&ciphertext).map_err(|_| DeviceProofError::DpapiFailed)?;
+            if plaintext.len() != 32 {
+                return Err(DeviceProofError::Corrupt);
+            }
+            let mut seed = [0u8; 32];
+            seed.copy_from_slice(&plaintext);
+            Ok(SigningKey::from_bytes(&seed))
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Err(DeviceProofError::NotFound),
         Err(_) => Err(DeviceProofError::Io),
     }
 }

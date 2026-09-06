@@ -10,7 +10,14 @@
  * effects here.
  */
 
+import type { KeyObject } from 'node:crypto';
+import { sign as ed25519Sign } from 'node:crypto';
 import type { DeviceRegistrationPossessionFrameV1 } from './oacFrame';
+import {
+  efr1SignaturePreimage,
+  encodeEfr1,
+  type EnrollmentFinalizationReceiptFrameV1,
+} from './staffSessionAssertionFrame';
 
 // --- Enrollment authorization issuance (Admin Console side) ---------------
 
@@ -161,6 +168,8 @@ export interface ValidatedDeviceRegistration {
   validatedDevProofPublicKeyBase64: string;
   devProofRegistrationNonce: string;
   branchId: string;
+  status: 'ACTIVE' | 'REVOKED';
+  deviceKeyVersion: number;
   registeredAtServerMs: number;
 }
 
@@ -175,6 +184,68 @@ export function buildValidatedDeviceRegistration(
     validatedDevProofPublicKeyBase64: drp1.devProofPublicKey.toString('base64'),
     devProofRegistrationNonce: drp1.deviceRegistrationNonce.toString('base64'),
     branchId,
+    status: 'ACTIVE',
+    deviceKeyVersion: 1,
     registeredAtServerMs: nowMs,
   };
+}
+
+export type CheckExistingDeviceResult =
+  | { ok: true }
+  | { ok: false; code: 'device_already_enrolled_reenroll_required' };
+
+export function checkExistingDeviceForInitialRegistration(
+  existingDevice: { status?: string } | null | undefined,
+): CheckExistingDeviceResult {
+  if (existingDevice && (existingDevice.status === 'ACTIVE' || existingDevice.status === undefined)) {
+    return { ok: false, code: 'device_already_enrolled_reenroll_required' };
+  }
+  return { ok: true };
+}
+
+export function buildSignedEfr1(
+  operationKind: number,
+  enrollmentGenerationId: Buffer | string,
+  securityDeviceId: Buffer | string,
+  deviceKeyVersion: number,
+  acceptedPublicKey: Buffer | string,
+  receiptNonce: Buffer | string,
+  branchId: string,
+  nowMs: number,
+  signingKeyId: string,
+  signingPrivateKey: KeyObject,
+): { efr1: EnrollmentFinalizationReceiptFrameV1; efr1Bytes: Buffer } {
+  const genBuf =
+    typeof enrollmentGenerationId === 'string'
+      ? Buffer.from(enrollmentGenerationId, 'hex')
+      : enrollmentGenerationId;
+  const secBuf =
+    typeof securityDeviceId === 'string'
+      ? Buffer.from(securityDeviceId, 'hex')
+      : securityDeviceId;
+  const pubBuf =
+    typeof acceptedPublicKey === 'string'
+      ? Buffer.from(acceptedPublicKey, 'base64')
+      : acceptedPublicKey;
+  const nonceBuf =
+    typeof receiptNonce === 'string'
+      ? Buffer.from(receiptNonce, 'base64')
+      : receiptNonce;
+
+  const unsigned: Omit<EnrollmentFinalizationReceiptFrameV1, 'signature'> = {
+    operationKind,
+    enrollmentGenerationId: genBuf,
+    securityDeviceId: secBuf,
+    deviceKeyVersion,
+    acceptedPublicKey: pubBuf,
+    receiptNonce: nonceBuf,
+    serverSentAtMs: nowMs,
+    branchId,
+    signingKeyId,
+  };
+  const preimage = efr1SignaturePreimage(unsigned);
+  const signature = ed25519Sign(null, preimage, signingPrivateKey);
+  const efr1: EnrollmentFinalizationReceiptFrameV1 = { ...unsigned, signature };
+  const efr1Bytes = encodeEfr1(efr1);
+  return { efr1, efr1Bytes };
 }

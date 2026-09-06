@@ -15,8 +15,10 @@ pub fn run() {
         std::process::exit(1);
     }
     let engine = DurableKvEngine::new(app_data);
+    let enrollment_runtime = privileged_auth::enrollment_meta::EnrollmentRuntimeState::new();
     tauri::Builder::default()
         .manage(engine)
+        .manage(enrollment_runtime)
         .invoke_handler(tauri::generate_handler![
             durable_kv::durable_kv_txn_begin,
             durable_kv::durable_kv_txn_get,
@@ -38,6 +40,12 @@ pub fn run() {
             privileged_auth::native_get_device_registration_status,
             privileged_auth::native_verify_offline_pin,
             privileged_auth::native_clear_offline_lockout,
+            privileged_auth::native_prepare_staff_session_challenge,
+            privileged_auth::native_persist_staff_session_assertion,
+            privileged_auth::native_clear_staff_session,
+            privileged_auth::native_prepare_oac_reanchor_challenge,
+            privileged_auth::native_persist_oac_reanchor,
+            privileged_auth::native_finalize_device_enrollment,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

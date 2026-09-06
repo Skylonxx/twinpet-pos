@@ -1,9 +1,9 @@
 import { generateKeyPairSync } from 'node:crypto';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { performGetOacKeysetManifest } from '../oacKeysetManifest';
 import { decodeOks1 } from '../oacFrame';
 import { verifyOacKeysetManifestSignature } from '../oacSigner';
-import { publicKeyFromRaw } from '../signingKeyLoader';
+import { publicKeyFromRaw, CANONICAL_OAC_ROOT_PUBLIC_KEY_BASE64URL } from '../signingKeyLoader';
 import type { Firestore } from 'firebase-admin/firestore';
 
 function rawKeypair() {
@@ -33,10 +33,10 @@ function fakeDb(opts: {
           doc: (id: string) => ({
             get: async () => ({ exists: id in keys, data: () => keys[id] }),
           }),
-          where: () => ({
+          where: (_field: string, _op: string, val: string) => ({
             get: async () => ({
               docs: Object.values(keys)
-                .filter((k) => k.status === 'ACTIVE')
+                .filter((k) => k.status === val)
                 .map((k) => ({ data: () => k })),
             }),
           }),
@@ -55,6 +55,38 @@ function fakeDb(opts: {
 }
 
 describe('performGetOacKeysetManifest', () => {
+  const originalEnv = process.env.OAC_ROOT_PRIVATE_KEY_BASE64URL;
+
+  beforeEach(() => {
+    process.env.OAC_ROOT_PRIVATE_KEY_BASE64URL = Buffer.alloc(32, 0x5a).toString('base64url');
+  });
+
+  afterEach(() => {
+    if (originalEnv !== undefined) {
+      process.env.OAC_ROOT_PRIVATE_KEY_BASE64URL = originalEnv;
+    } else {
+      delete process.env.OAC_ROOT_PRIVATE_KEY_BASE64URL;
+    }
+  });
+
+  it('fails closed when root signing key secret is unavailable', async () => {
+    delete process.env.OAC_ROOT_PRIVATE_KEY_BASE64URL;
+    const active = rawKeypair();
+    const db = fakeDb({
+      meta: { activeSigningKeyId: 'key-1' },
+      keys: {
+        'key-1': {
+          signingKeyId: 'key-1',
+          publicKeyBase64Url: active.publicKeyBase64Url,
+          privateKeyBase64Url: active.privateKeyBase64Url,
+          status: 'ACTIVE',
+        },
+      },
+    });
+    const result = await performGetOacKeysetManifest(db, { uid: 'u1' });
+    expect(result).toEqual({ ok: false, code: 'root_signing_key_unavailable' });
+  });
+
   it('denies unauthenticated requests', async () => {
     const result = await performGetOacKeysetManifest(fakeDb({}), null);
     expect(result).toEqual({ ok: false, code: 'not_authorized' });
@@ -91,8 +123,8 @@ describe('performGetOacKeysetManifest', () => {
     expect(decoded.value.revocationEpoch).toBe(2);
     expect(decoded.value.keys).toHaveLength(1);
 
-    const publicKey = publicKeyFromRaw(active.publicKeyBase64Url);
-    expect(verifyOacKeysetManifestSignature(decoded.value, publicKey)).toBe(true);
+    const rootPublicKey = publicKeyFromRaw(CANONICAL_OAC_ROOT_PUBLIC_KEY_BASE64URL);
+    expect(verifyOacKeysetManifestSignature(decoded.value, rootPublicKey)).toBe(true);
   });
 
   it('defaults revocation epoch to 0 when never bumped (virgin state)', async () => {

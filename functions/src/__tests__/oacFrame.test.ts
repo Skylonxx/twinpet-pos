@@ -177,17 +177,24 @@ describe('EnrollmentProofFrameV1 (ENR1)', () => {
 });
 
 describe('OacKeysetManifestFrameV1 (OKS1)', () => {
-  it('round-trips a multi-key manifest', () => {
+  it('round-trips a multi-key manifest with ACTIVE, VERIFY_ONLY, and RETIRED keys', () => {
     const frame = {
       revocationEpoch: 7,
       generatedAtServerMs: 1_772_000_000_000,
       keys: [
-        { signingKeyId: 'key-1', publicKey: Buffer.alloc(32, 0x08) },
-        { signingKeyId: 'key-2', publicKey: Buffer.alloc(32, 0x09) },
+        { signingKeyId: 'key-1', publicKey: Buffer.alloc(32, 0x08), status: 'ACTIVE' as const },
+        {
+          signingKeyId: 'key-2',
+          publicKey: Buffer.alloc(32, 0x09),
+          status: 'VERIFY_ONLY' as const,
+          verifyUntilServerMs: 1_773_000_000_000,
+        },
+        { signingKeyId: 'key-3', publicKey: Buffer.alloc(32, 0x0a), status: 'RETIRED' as const },
       ],
-      signature: Buffer.alloc(64, 0x0a),
+      signature: Buffer.alloc(64, 0x0b),
     };
-    const decoded = decodeOks1(encodeOks1(frame));
+    const encoded = encodeOks1(frame);
+    const decoded = decodeOks1(encoded);
     expect(decoded).toEqual({ ok: true, value: frame });
   });
 
@@ -195,6 +202,82 @@ describe('OacKeysetManifestFrameV1 (OKS1)', () => {
     expect(() =>
       encodeOks1({ revocationEpoch: 0, generatedAtServerMs: 0, keys: [], signature: Buffer.alloc(64) }),
     ).toThrow();
+  });
+
+  it('rejects duplicate key IDs', () => {
+    const frame = {
+      revocationEpoch: 1,
+      generatedAtServerMs: 1_000,
+      keys: [
+        { signingKeyId: 'dup-key', publicKey: Buffer.alloc(32, 0x01), status: 'ACTIVE' as const },
+        { signingKeyId: 'dup-key', publicKey: Buffer.alloc(32, 0x02), status: 'RETIRED' as const },
+      ],
+      signature: Buffer.alloc(64, 0x03),
+    };
+    expect(() => encodeOks1(frame)).toThrow(/duplicate signingKeyId/);
+  });
+
+  it('rejects VERIFY_ONLY without verifyUntilServerMs', () => {
+    const frame = {
+      revocationEpoch: 1,
+      generatedAtServerMs: 1_000,
+      keys: [
+        { signingKeyId: 'key-1', publicKey: Buffer.alloc(32, 0x01), status: 'VERIFY_ONLY' as const },
+      ],
+      signature: Buffer.alloc(64, 0x03),
+    };
+    expect(() => encodeOks1(frame)).toThrow(/verifyUntilServerMs/);
+  });
+
+  it('rejects non-canonical / invalid key IDs', () => {
+    expect(() =>
+      encodeOks1({
+        revocationEpoch: 1,
+        generatedAtServerMs: 1_000,
+        keys: [{ signingKeyId: 'key|with|pipes', publicKey: Buffer.alloc(32, 0x01), status: 'ACTIVE' as const }],
+        signature: Buffer.alloc(64),
+      }),
+    ).toThrow();
+
+    expect(() =>
+      encodeOks1({
+        revocationEpoch: 1,
+        generatedAtServerMs: 1_000,
+        keys: [{ signingKeyId: 'key with spaces', publicKey: Buffer.alloc(32, 0x01), status: 'ACTIVE' as const }],
+        signature: Buffer.alloc(64),
+      }),
+    ).toThrow();
+
+    expect(() =>
+      encodeOks1({
+        revocationEpoch: 1,
+        generatedAtServerMs: 1_000,
+        keys: [{ signingKeyId: 'a'.repeat(1501), publicKey: Buffer.alloc(32, 0x01), status: 'ACTIVE' as const }],
+        signature: Buffer.alloc(64),
+      }),
+    ).toThrow();
+  });
+
+  it('rejects decode of corrupted status byte', () => {
+    const frame = {
+      revocationEpoch: 1,
+      generatedAtServerMs: 1_000,
+      keys: [{ signingKeyId: 'key-1', publicKey: Buffer.alloc(32, 0x01), status: 'ACTIVE' as const }],
+      signature: Buffer.alloc(64, 0x03),
+    };
+    const encoded = encodeOks1(frame);
+    // Dynamic offset calculation:
+    // MAGIC (4) + VER (1) + EPOCH (4) + GEN_MS (8) + KEY_COUNT (1) = 18
+    const keyIdOffset = 18;
+    const keyIdLen = encoded.readUInt16LE(keyIdOffset);
+    const pubKeyOffset = keyIdOffset + 2 + keyIdLen;
+    const statusOffset = pubKeyOffset + 32;
+
+    const corrupted = Buffer.from(encoded);
+    corrupted[statusOffset] = 0x99;
+
+    const res = decodeOks1(corrupted);
+    expect(res).toEqual({ ok: false, code: 'bad_field_format' });
   });
 });
 

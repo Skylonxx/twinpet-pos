@@ -104,9 +104,11 @@ pub fn is_lowercase_hex64(s: &str) -> bool {
     s.len() == 64 && s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
+pub const IDENTIFIER_MAX_BYTES: usize = 1500;
+
 pub fn is_canonical_identifier(s: &str) -> bool {
     !s.is_empty()
-        && s.len() <= 64
+        && s.len() <= IDENTIFIER_MAX_BYTES
         && s.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
 }
 
@@ -697,5 +699,17 @@ mod tests {
         }
 
         let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn test_canonical_identifier_1500_byte_boundary() {
+        assert!(is_canonical_identifier(&"a".repeat(64)));
+        assert!(is_canonical_identifier(&"a".repeat(65)));
+        assert!(is_canonical_identifier(&"a".repeat(1499)));
+        assert!(is_canonical_identifier(&"a".repeat(1500)));
+        assert!(!is_canonical_identifier(&"a".repeat(1501)));
+        assert!(!is_canonical_identifier(""));
+        assert!(!is_canonical_identifier("bad id!"));
+        assert!(is_canonical_identifier("valid_id-123"));
     }
 }

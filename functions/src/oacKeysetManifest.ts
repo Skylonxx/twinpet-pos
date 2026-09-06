@@ -13,12 +13,12 @@ import { FUNCTIONS_REGION } from './deployConfig';
 import type { AuthLike } from './authorityFence';
 import { buildOacKeysetManifest, type BuildKeysetManifestFailureCode } from './oacKeysetManifestCore';
 import { encodeOks1 } from './oacFrame';
-import { loadActiveSigningKey, loadAllVerifiableSigningKeys, firestoreSigningKeyReaders } from './signingKeyLoader';
+import { loadActiveSigningKey, loadAllVerifiableSigningKeys, loadRootSigningKey, firestoreSigningKeyReaders } from './signingKeyLoader';
 import { readRevocationEpoch } from './privilegedRevocationState';
 
 export type GetOacKeysetManifestResponse =
   | { ok: true; oks1Base64: string }
-  | { ok: false; code: 'not_authorized' | BuildKeysetManifestFailureCode | 'signing_key_unavailable' };
+  | { ok: false; code: 'not_authorized' | BuildKeysetManifestFailureCode | 'signing_key_unavailable' | 'root_signing_key_unavailable' };
 
 export async function performGetOacKeysetManifest(
   database: Firestore,
@@ -30,17 +30,27 @@ export async function performGetOacKeysetManifest(
   const activeKey = await loadActiveSigningKey(firestoreSigningKeyReaders(database));
   if (!activeKey.ok) return { ok: false, code: 'signing_key_unavailable' };
 
-  const [verifiableKeys, revocationEpoch] = await Promise.all([
-    loadAllVerifiableSigningKeys(database),
+  const [verifiableKeys, revocationEpoch, rootKey] = await Promise.all([
+    loadAllVerifiableSigningKeys(database, nowMs),
     readRevocationEpoch(database),
+    loadRootSigningKey(),
   ]);
 
+  if (!rootKey.ok) {
+    return { ok: false, code: rootKey.code };
+  }
+
   const result = buildOacKeysetManifest(
-    verifiableKeys.map((k) => ({ signingKeyId: k.signingKeyId, publicKeyBase64Url: k.publicKeyBase64Url })),
+    verifiableKeys.map((k) => ({
+      signingKeyId: k.signingKeyId,
+      publicKeyBase64Url: k.publicKeyBase64Url,
+      status: k.status,
+      verifyUntilServerMs: k.verifyUntilServerMs,
+    })),
     revocationEpoch,
     nowMs,
     activeKey.signingKeyId,
-    activeKey.privateKey,
+    rootKey.rootPrivateKey,
   );
   if (!result.ok) return { ok: false, code: result.code };
 
