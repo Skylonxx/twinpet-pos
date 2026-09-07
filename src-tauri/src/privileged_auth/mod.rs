@@ -8,7 +8,13 @@
 //! arbitrary-bytes, no pepper/DPAPI-blob/device-private-key getters, no raw
 //! Argon2 verifier export, no arbitrary file read, no raw keyset-manifest-
 //! bytes command).
+//!
+//! SEC-001 Packet D / D-1B adds exactly one module (`action_attestation`) and
+//! exactly one command (`native_attest_privileged_action`). It signs one frame
+//! shape (`PAA1`) over natively-derived fields under a fixed domain separator;
+//! it is not, and must never become, a generic signing surface.
 
+pub mod action_attestation;
 pub mod argon2_benchmark;
 pub mod argon2_kdf;
 pub mod clock_guard;
@@ -519,6 +525,36 @@ pub fn native_finalize_device_enrollment(
         server_receipt_base64.as_deref(),
         oks1_base64.as_deref(),
         expected_operation_kind.as_deref(),
+    )
+}
+
+// --- Command 14: native_attest_privileged_action (SEC-001 Packet D / D-1B) ---
+//
+// The only D-1B addition to the native command surface. It performs the landed
+// offline PIN verification and PAA1 sealing as one indivisible operation, so the
+// WebView can never obtain an unbound, reusable approval. It takes no
+// caller-supplied bytes to sign, no path, no key/pepper/DPAPI accessor, and no
+// wall-clock or branch argument: every authority field is derived natively.
+// The PIN is in-process only and is zeroized before this returns.
+
+#[tauri::command]
+pub fn native_attest_privileged_action(
+    manager_staff_id: String,
+    action_id: String,
+    target_order_id: String,
+    target_order_utc7_date: String,
+    local_intent_id: String,
+    pin: String,
+) -> Result<action_attestation::PrivilegedActionAttestationDto, String> {
+    let root = app_data_dir();
+    action_attestation::attest_privileged_action_owned(
+        &root,
+        manager_staff_id,
+        action_id,
+        target_order_id,
+        target_order_utc7_date,
+        local_intent_id,
+        pin,
     )
 }
 

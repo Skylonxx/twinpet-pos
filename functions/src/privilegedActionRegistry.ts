@@ -479,3 +479,215 @@ export const PRIVILEGED_ACTION_OPERATOR_STATE_LABELS: Record<PrivilegedActionOpe
   SERVER_REJECTED: 'ระบบปฏิเสธคำขอยกเลิก บิลยังไม่ถูกยกเลิก',
   MANUAL_ATTENTION: 'ต้องตรวจสอบด้วยมือ',
 };
+
+// ---------------------------------------------------------------------------
+// SEC-001 Packet D / D-1B — offline attestation adjudication closed vocabularies.
+//
+// Seven closed enums, cardinality 8 / 32 / 3 / 2 / 3 / 3 / 4 plus 7 response
+// kinds. Mirrored member-for-member by
+// `src/lib/auth/privilegedAction/privilegedActionTypes.ts`; parity and
+// cardinality are asserted by that file's test.
+// ---------------------------------------------------------------------------
+
+/** Admin-SDK-only durable adjudication anchor. Client access is deny-all in firestore.rules. */
+export const PRIVILEGED_OFFLINE_ADJUDICATIONS_COLLECTION = 'privilegedOfflineAdjudications' as const;
+
+/**
+ * Recoverability lattice (PERM-1). A Family-1 response is PERMANENT if and only
+ * if it is decided from the request bytes alone; anything downstream of a
+ * mutable-document read is STATE_DEPENDENT; anything decided from the current
+ * relay caller is CALLER_DEPENDENT.
+ */
+export const OFFLINE_ADJUDICATION_RECOVERABILITY_CLASSES = [
+  'PERMANENT',
+  'STATE_DEPENDENT',
+  'CALLER_DEPENDENT',
+] as const;
+export type OfflineAdjudicationRecoverability = (typeof OFFLINE_ADJUDICATION_RECOVERABILITY_CLASSES)[number];
+
+/** Pre-authentication protocol reasons — exactly 8, closed. */
+export const OFFLINE_ADJUDICATION_PROTOCOL_REASONS = [
+  'request_shape_invalid',
+  'attestation_base64_invalid',
+  'attestation_malformed',
+  'device_registration_unavailable',
+  'device_key_material_unavailable',
+  'attestation_signature_invalid',
+  'relay_caller_not_authorized',
+  'relay_branch_not_permitted',
+] as const;
+export type OfflineAdjudicationProtocolReason = (typeof OFFLINE_ADJUDICATION_PROTOCOL_REASONS)[number];
+
+/** Total protocol-reason → recoverability classifier. No reason is unclassified. */
+export const OFFLINE_ADJUDICATION_PROTOCOL_REASON_RECOVERABILITY: {
+  readonly [K in OfflineAdjudicationProtocolReason]: OfflineAdjudicationRecoverability;
+} = Object.freeze({
+  request_shape_invalid: 'PERMANENT',
+  attestation_base64_invalid: 'PERMANENT',
+  attestation_malformed: 'PERMANENT',
+  device_registration_unavailable: 'STATE_DEPENDENT',
+  device_key_material_unavailable: 'STATE_DEPENDENT',
+  attestation_signature_invalid: 'STATE_DEPENDENT',
+  relay_caller_not_authorized: 'CALLER_DEPENDENT',
+  relay_branch_not_permitted: 'CALLER_DEPENDENT',
+});
+
+/** The three PERMANENT byte reasons, decided in Stage P before Stage R or Stage F. */
+export const OFFLINE_ADJUDICATION_PERMANENT_BYTE_REASONS = [
+  'request_shape_invalid',
+  'attestation_base64_invalid',
+  'attestation_malformed',
+] as const;
+
+/** Authenticated Class-B terminal rejection reasons — exactly 32, closed. */
+export const OFFLINE_ADJUDICATION_REJECTION_REASONS = [
+  // frame residue (1)
+  'trusted_time_bounds_invalid',
+  // authenticated device authorisation (2)
+  'device_not_active',
+  'device_branch_mismatch',
+  // staff session (4)
+  'ssa1_digest_mismatch',
+  'ssa1_signature_invalid',
+  'ssa1_binding_mismatch',
+  'ssa1_expired',
+  // original initiating staff (5)
+  'initiator_not_found',
+  'initiator_inactive',
+  'initiator_auth_version_changed',
+  'initiator_permission_revoked',
+  'initiator_branch_mismatch',
+  // OAC / approving manager (13)
+  'oac_digest_mismatch',
+  'oac_signature_invalid',
+  'oac_signing_key_not_verifiable',
+  'oac_freshness_expired',
+  'action_not_allowed_by_oac',
+  'manager_not_found',
+  'manager_inactive_or_not_privileged',
+  'manager_auth_version_changed',
+  'manager_credential_version_changed',
+  'manager_permission_revoked',
+  'manager_branch_mismatch',
+  'revocation_epoch_changed',
+  'self_approval_not_permitted',
+  // target / lifetime (7)
+  'target_order_not_found',
+  'target_branch_mismatch',
+  'target_state_mismatch',
+  'target_already_voided',
+  'pending_execution_expired_72h',
+  'pending_execution_expired_day_boundary',
+  'attested_expiry_exceeds_authority',
+] as const;
+export type OfflineAdjudicationRejectionReason = (typeof OFFLINE_ADJUDICATION_REJECTION_REASONS)[number];
+
+/** Post-consume ambiguous-correlation reasons — exactly 3, closed. All write MANUAL_ATTENTION_REQUIRED. */
+export const OFFLINE_ADJUDICATION_MANUAL_ATTENTION_REASONS = [
+  'canonical_correlation_missing',
+  'canonical_correlation_conflict',
+  'canonical_execution_unresolved',
+] as const;
+export type OfflineAdjudicationManualAttentionReason =
+  (typeof OFFLINE_ADJUDICATION_MANUAL_ATTENTION_REASONS)[number];
+
+/**
+ * Existing-record anomaly reasons — exactly 2, closed, and disjoint from the
+ * rejection enum. AN-1/AN-2: an anomaly outcome never creates, updates,
+ * overwrites, merges into, or deletes the adjudication record, and carries no
+ * server verdict.
+ */
+export const OFFLINE_ADJUDICATION_ANOMALY_REASONS = [
+  'adjudication_record_unreadable',
+  'adjudication_record_binding_conflict',
+] as const;
+export type OfflineAdjudicationAnomalyReason = (typeof OFFLINE_ADJUDICATION_ANOMALY_REASONS)[number];
+
+/** Infrastructure retry reasons — exactly 3, closed. A retryable response never writes. */
+export const OFFLINE_ADJUDICATION_RETRY_REASONS = [
+  'backend_unavailable',
+  'transaction_contention',
+  'internal_error',
+] as const;
+export type OfflineAdjudicationRetryReason = (typeof OFFLINE_ADJUDICATION_RETRY_REASONS)[number];
+
+/** Durable record states — exactly 4, closed. */
+export const OFFLINE_ADJUDICATION_RECORD_STATES = [
+  'TERMINALLY_REJECTED',
+  'CONSUMED_PENDING_EXECUTION',
+  'COMPLETED',
+  'MANUAL_ATTENTION_REQUIRED',
+] as const;
+export type OfflineAdjudicationRecordState = (typeof OFFLINE_ADJUDICATION_RECORD_STATES)[number];
+
+/**
+ * The complete legal transition set. No terminal state ever transitions out.
+ * `∅` is spelled as the literal `null` origin.
+ */
+export const OFFLINE_ADJUDICATION_LEGAL_TRANSITIONS: readonly (readonly [
+  OfflineAdjudicationRecordState | null,
+  OfflineAdjudicationRecordState,
+])[] = Object.freeze([
+  Object.freeze([null, 'TERMINALLY_REJECTED'] as const),
+  Object.freeze([null, 'CONSUMED_PENDING_EXECUTION'] as const),
+  Object.freeze(['CONSUMED_PENDING_EXECUTION', 'COMPLETED'] as const),
+  Object.freeze(['CONSUMED_PENDING_EXECUTION', 'MANUAL_ATTENTION_REQUIRED'] as const),
+]);
+
+export function isLegalOfflineAdjudicationTransition(
+  from: OfflineAdjudicationRecordState | null,
+  to: OfflineAdjudicationRecordState,
+): boolean {
+  return OFFLINE_ADJUDICATION_LEGAL_TRANSITIONS.some(([f, t]) => f === from && t === to);
+}
+
+/** Total response-kind set — exactly 7, closed, across two families. */
+export const OFFLINE_ADJUDICATION_RESPONSE_KINDS = [
+  'PROTOCOL_REJECTED',
+  'PROTOCOL_RETRYABLE',
+  'ACCEPTED',
+  'REJECTED',
+  'MANUAL_ATTENTION_REQUIRED',
+  'ADJUDICATION_ANOMALY',
+  'RETRYABLE',
+] as const;
+export type OfflineAdjudicationResponseKind = (typeof OFFLINE_ADJUDICATION_RESPONSE_KINDS)[number];
+
+export const OFFLINE_ADJUDICATION_OUTCOME_KINDS = ['VOID_APPLIED', 'VOID_TOMBSTONED', 'NOOP'] as const;
+export type OfflineAdjudicationOutcomeKind = (typeof OFFLINE_ADJUDICATION_OUTCOME_KINDS)[number];
+
+/** Frozen cardinalities — asserted on both sides of the matched contract. */
+export const OFFLINE_ADJUDICATION_VOCABULARY_CARDINALITY = Object.freeze({
+  protocolReasons: 8,
+  rejectionReasons: 32,
+  manualAttentionReasons: 3,
+  anomalyReasons: 2,
+  retryReasons: 3,
+  recoverabilityClasses: 3,
+  recordStates: 4,
+  responseKinds: 7,
+});
+
+export function isOfflineAdjudicationProtocolReason(v: unknown): v is OfflineAdjudicationProtocolReason {
+  return (OFFLINE_ADJUDICATION_PROTOCOL_REASONS as readonly string[]).includes(v as string);
+}
+export function isOfflineAdjudicationRejectionReason(v: unknown): v is OfflineAdjudicationRejectionReason {
+  return (OFFLINE_ADJUDICATION_REJECTION_REASONS as readonly string[]).includes(v as string);
+}
+export function isOfflineAdjudicationManualAttentionReason(
+  v: unknown,
+): v is OfflineAdjudicationManualAttentionReason {
+  return (OFFLINE_ADJUDICATION_MANUAL_ATTENTION_REASONS as readonly string[]).includes(v as string);
+}
+export function isOfflineAdjudicationAnomalyReason(v: unknown): v is OfflineAdjudicationAnomalyReason {
+  return (OFFLINE_ADJUDICATION_ANOMALY_REASONS as readonly string[]).includes(v as string);
+}
+export function isOfflineAdjudicationRetryReason(v: unknown): v is OfflineAdjudicationRetryReason {
+  return (OFFLINE_ADJUDICATION_RETRY_REASONS as readonly string[]).includes(v as string);
+}
+export function isOfflineAdjudicationRecordState(v: unknown): v is OfflineAdjudicationRecordState {
+  return (OFFLINE_ADJUDICATION_RECORD_STATES as readonly string[]).includes(v as string);
+}
+export function isOfflineAdjudicationOutcomeKind(v: unknown): v is OfflineAdjudicationOutcomeKind {
+  return (OFFLINE_ADJUDICATION_OUTCOME_KINDS as readonly string[]).includes(v as string);
+}

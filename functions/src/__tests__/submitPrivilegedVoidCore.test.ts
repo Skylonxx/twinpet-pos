@@ -7,7 +7,10 @@ import {
   decideCanonicalVoidCorrelation,
   derivePrivilegedNonceKey,
   derivePrivilegedVoidExecutionId,
+  deriveOfflineVoidExecutionId,
   executionRecordMatchesBinding,
+  PENDING_EXECUTION_72H_MS,
+  utcPlus7DayEndMs,
   isAlreadyCanonicallyVoided,
   isSameUtc7Day,
   parsePrivilegedExecutionRecord,
@@ -199,5 +202,66 @@ describe('privileged execution record — exact-bound resume', () => {
     expect(
       decideCanonicalVoidCorrelation({ status: 'voided', privilegedVoidExecutionId: 'other-execution' }, executionId),
     ).toBe('DIFFERENT');
+  });
+
+  // ── SEC-001 Packet D / D-1B additions ────────────────────────────────────
+
+  test('AC-14 — the offline execution-id namespace can never collide with the online one', () => {
+    const offlineBinding = {
+      adjudicationId: expected.approvalId,
+      actionId: expected.protectedAction,
+      targetOrderId: expected.targetEntityId,
+      branchId: expected.branchId,
+      initiatingStaffId: expected.requesterStaffId,
+      approvingManagerStaffId: expected.approvingManagerId,
+      oacId: expected.commandId,
+      audience: expected.audience,
+    };
+    const offline = deriveOfflineVoidExecutionId(offlineBinding);
+    expect(offline).toMatch(/^[0-9a-f]{40}$/);
+    expect(offline).toBe(deriveOfflineVoidExecutionId(offlineBinding));
+
+    // Same effective input tuple, both derivations: never equal, because the
+    // domain prefix differs.
+    expect(offline).not.toBe(derivePrivilegedVoidExecutionId(expected));
+
+    // Cross-product sweep over every field: no assignment collides.
+    const fields = Object.keys(offlineBinding) as (keyof typeof offlineBinding)[];
+    const seen = new Set<string>([derivePrivilegedVoidExecutionId(expected)]);
+    for (const field of fields) {
+      const mutated = { ...offlineBinding, [field]: 'MUTATED' };
+      const id = deriveOfflineVoidExecutionId(mutated);
+      expect(seen.has(id)).toBe(false);
+      seen.add(id);
+      expect(id).not.toBe(offline);
+      expect(id).not.toBe(derivePrivilegedVoidExecutionId(expected));
+    }
+
+    // Both derivations still write the same canonical order field, so the
+    // landed correlation decides mutual exclusion between them unchanged.
+    expect(decideCanonicalVoidCorrelation({ status: 'voided', privilegedVoidExecutionId: offline }, offline)).toBe(
+      'MATCHING',
+    );
+    expect(
+      decideCanonicalVoidCorrelation(
+        { status: 'voided', privilegedVoidExecutionId: derivePrivilegedVoidExecutionId(expected) },
+        offline,
+      ),
+    ).toBe('DIFFERENT');
+  });
+
+  test('the UTC+7 day-end helper matches the frozen lifetime formula', () => {
+    expect(PENDING_EXECUTION_72H_MS).toBe(259_200_000);
+    // 2025-11-14 UTC+7 ends at 2025-11-14T17:00:00Z.
+    const end = utcPlus7DayEndMs('2025-11-14');
+    expect(end).toBe(Date.UTC(2025, 10, 14, 17, 0, 0));
+    expect(utcPlus7Date((end as number) - 1)).toBe('2025-11-14');
+    expect(utcPlus7Date(end as number)).toBe('2025-11-15');
+
+    expect(utcPlus7DayEndMs('2024-02-29')).toBe(Date.UTC(2024, 1, 29, 17, 0, 0));
+    for (const bad of ['2025-11-4', '20251114', '2025-13-01', '2025-02-31', '2025-02-29', '', 'nope']) {
+      expect(utcPlus7DayEndMs(bad), bad).toBeNull();
+    }
+    expect(utcPlus7DayEndMs(undefined as unknown as string)).toBeNull();
   });
 });

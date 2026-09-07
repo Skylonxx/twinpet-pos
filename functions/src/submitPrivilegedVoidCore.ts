@@ -61,6 +61,34 @@ export function isSameUtc7Day(serverCreatedAtMs: number, nowMs: number): boolean
   return utcPlus7Date(serverCreatedAtMs) === utcPlus7Date(nowMs);
 }
 
+/** Frozen D4 pending-execution window: trusted approval time + 72 hours. */
+export const PENDING_EXECUTION_72H_MS = 259_200_000;
+
+const UTC7_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Exclusive end of the given UTC+7 calendar day, in epoch ms:
+ * `((daysSinceEpochUtc7(dateStr) + 1) * 86_400_000) - 25_200_000`.
+ * Mirrors `utc7_day_end_ms` in `src-tauri/src/privileged_auth/action_attestation.rs`.
+ * Returns `null` for a malformed or non-existent calendar date.
+ */
+export function utcPlus7DayEndMs(date: string): number | null {
+  if (typeof date !== 'string' || !UTC7_DATE_RE.test(date)) return null;
+  const y = Number(date.slice(0, 4));
+  const m = Number(date.slice(5, 7));
+  const d = Number(date.slice(8, 10));
+  if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+  const utcMidnight = Date.UTC(y, m - 1, d);
+  if (!Number.isFinite(utcMidnight)) return null;
+  // Reject a non-existent calendar date (e.g. 2025-02-31) by round-tripping.
+  const round = new Date(utcMidnight);
+  if (round.getUTCFullYear() !== y || round.getUTCMonth() + 1 !== m || round.getUTCDate() !== d) {
+    return null;
+  }
+  const days = Math.floor(utcMidnight / 86_400_000);
+  return (days + 1) * 86_400_000 - UTC_PLUS_7_OFFSET_MS;
+}
+
 export function timestampToMs(value: unknown): number | null {
   if (value == null) return null;
   if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -124,6 +152,42 @@ export function derivePrivilegedVoidExecutionId(binding: PrivilegedExecutionBind
         binding.branchId,
         binding.requesterStaffId,
         binding.approvingManagerId,
+        binding.audience,
+      ].join('|'),
+  ).slice(0, 40);
+}
+
+export type OfflinePrivilegedExecutionBinding = {
+  adjudicationId: string;
+  actionId: string;
+  targetOrderId: string;
+  branchId: string;
+  initiatingStaffId: string;
+  approvingManagerStaffId: string;
+  oacId: string;
+  audience: string;
+};
+
+/**
+ * SEC-001 Packet D / D-1B — offline sibling of `derivePrivilegedVoidExecutionId`.
+ *
+ * A *sibling* derivation, not a modification of the frozen online one. Both
+ * write the same canonical order field (`privilegedVoidExecutionId`), so the
+ * landed `decideCanonicalVoidCorrelation` establishes mutual exclusion between
+ * an online and an offline execution for the same order unchanged. The domain
+ * prefix differs, so the two namespaces can never collide for any input tuple.
+ */
+export function deriveOfflineVoidExecutionId(binding: OfflinePrivilegedExecutionBinding): string {
+  return sha256Hex(
+    'privilegedVoidExecution:offline:v1:' +
+      [
+        binding.adjudicationId,
+        binding.actionId,
+        binding.targetOrderId,
+        binding.branchId,
+        binding.initiatingStaffId,
+        binding.approvingManagerStaffId,
+        binding.oacId,
         binding.audience,
       ].join('|'),
   ).slice(0, 40);

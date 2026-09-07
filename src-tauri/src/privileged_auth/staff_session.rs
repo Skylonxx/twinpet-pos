@@ -452,6 +452,66 @@ pub fn check_dec_d07_temporal_bounds(
     Ok(estimated_server_upper_bound_ms)
 }
 
+/// SEC-001 Packet D / D-1B — trusted approval-time bounds.
+///
+/// True server time at approval lies in `[lower_ms, upper_ms]`. Expiry uses the
+/// lower bound (earliest possible approval ⇒ earliest deadline ⇒ fail closed);
+/// session-validity assertions use the upper bound (latest possible now ⇒
+/// strictest liveness check), which is exactly DEC-D-07 as landed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TrustedApprovalBounds {
+    pub lower_ms: u64,
+    pub upper_ms: u64,
+}
+
+/// Pure bounds computation. `upper_ms` is produced by the unchanged
+/// `check_dec_d07_temporal_bounds`, so every DEC-D-07 guard (monotonicity,
+/// positive frequency, checked arithmetic, expiry) applies here too;
+/// `lower_ms` is the same expression with the RTT term dropped.
+pub fn compute_trusted_approval_bounds(
+    server_sent_at_ms: u64,
+    expires_at_server_ms: u64,
+    request_qpc_ticks: u64,
+    receipt_qpc_ticks: u64,
+    current_qpc_ticks: u64,
+    freq: u64,
+) -> Result<TrustedApprovalBounds, String> {
+    let upper_ms = check_dec_d07_temporal_bounds(
+        server_sent_at_ms,
+        expires_at_server_ms,
+        request_qpc_ticks,
+        receipt_qpc_ticks,
+        current_qpc_ticks,
+        freq,
+    )?;
+    let elapsed_ms = ticks_to_elapsed_ms(receipt_qpc_ticks, current_qpc_ticks, freq)
+        .map_err(|e| format!("elapsed ms conversion error: {e:?}"))?;
+    let lower_ms = server_sent_at_ms
+        .checked_add(elapsed_ms)
+        .ok_or_else(|| "overflow calculating trusted approval lower bound".to_string())?;
+    if lower_ms == 0 || upper_ms < lower_ms {
+        return Err("trusted approval bounds are not ordered".to_string());
+    }
+    Ok(TrustedApprovalBounds { lower_ms, upper_ms })
+}
+
+/// Production entry point: bounds for an already-validated cache envelope,
+/// against the live monotonic clock.
+pub fn compute_trusted_approval_bounds_now(
+    envelope: &StaffSessionCacheEnvelopeV1,
+) -> Result<TrustedApprovalBounds, String> {
+    let current_qpc_ticks = read_qpc_ticks().map_err(|e| format!("monotonic clock error: {e:?}"))?;
+    let freq = qpc_frequency().map_err(|e| format!("monotonic clock error: {e:?}"))?;
+    compute_trusted_approval_bounds(
+        envelope.server_sent_at_ms,
+        envelope.expires_at_server_ms,
+        envelope.request_qpc_ticks,
+        envelope.receipt_qpc_ticks,
+        current_qpc_ticks,
+        freq,
+    )
+}
+
 /// Production entry point for validating and loading the canonical staff session cache.
 pub fn load_and_validate_canonical_staff_session(root: &Path) -> Result<StaffSessionCacheEnvelopeV1, String> {
     let current_boot = boot_session_id();

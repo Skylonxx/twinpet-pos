@@ -46,6 +46,7 @@ pub fn run() {
             privileged_auth::native_prepare_oac_reanchor_challenge,
             privileged_auth::native_persist_oac_reanchor,
             privileged_auth::native_finalize_device_enrollment,
+            privileged_auth::native_attest_privileged_action,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

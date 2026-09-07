@@ -303,7 +303,7 @@ describe('Phase C Tauri v2 shell confinement', () => {
     expect(conf.app?.withGlobalTauri).toBe(true);
   });
 
-  test('capabilities remain core plus exact 13 durable-store + 13 SEC-001 Packet D-1A privileged_auth app permissions, and Cargo has rusqlite without plugins', () => {
+  test('capabilities remain core plus exact 13 durable-store + 14 SEC-001 Packet D privileged_auth app permissions, and Cargo has rusqlite without plugins', () => {
     const capDir = resolve(ROOT, 'src-tauri/capabilities');
     const capFiles = readdirSync(capDir).filter((n) => n.endsWith('.json')).sort();
     expect(capFiles).toEqual(['default.json']);
@@ -340,6 +340,7 @@ describe('Phase C Tauri v2 shell confinement', () => {
       'allow-native-prepare-oac-reanchor-challenge',
       'allow-native-persist-oac-reanchor',
       'allow-native-finalize-device-enrollment',
+      'allow-native-attest-privileged-action',
     ]);
     const capText = readRepoFile('/src-tauri/capabilities/default.json');
     for (const token of FORBIDDEN_CAPABILITY_TOKENS) {

@@ -70,6 +70,10 @@ export {
 export { resolveShiftCloseAlert } from './resolveShiftCloseAlert';
 export { requestManagerApproval } from './requestManagerApproval';
 export { submitPrivilegedVoid } from './submitPrivilegedVoid';
+// SEC-001 Packet D / D-1B: adjudicates a PAA1 offline privileged-action
+// attestation relayed by an authenticated, branch-eligible POS terminal.
+// Not in the deploy inventory — Packet E remains required before deploy.
+export { adjudicateOfflinePrivilegedAction } from './adjudicateOfflinePrivilegedAction';
 
 // P1 offline-sync Packet 5 / UI-B2 / Packet S: read-only manager/admin
 // callable that resolves the sensitive drawer figures (client-reported and

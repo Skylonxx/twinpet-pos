@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Phase B SQLite durable store (13 commands) + SEC-001 Packet C-A/C-B privileged_auth (exact 7 commands) — no generic SQL/fs/shell, no sign-arbitrary-bytes/pepper/DPAPI-blob/device-private-key/raw-Argon2-verifier/arbitrary-file-read/raw-keyset-manifest-bytes command",
+  "description": "Phase B SQLite durable store (13 commands) + SEC-001 Packet C-A/C-B/D privileged_auth (exact 14 commands) — no generic SQL/fs/shell, no sign-arbitrary-bytes/pepper/DPAPI-blob/device-private-key/raw-Argon2-verifier/arbitrary-file-read/raw-keyset-manifest-bytes command",
   "windows": [
     "main"
   ],
@@ -32,6 +32,7 @@
     "allow-native-clear-staff-session",
     "allow-native-prepare-oac-reanchor-challenge",
     "allow-native-persist-oac-reanchor",
-    "allow-native-finalize-device-enrollment"
+    "allow-native-finalize-device-enrollment",
+    "allow-native-attest-privileged-action"
   ]
 }

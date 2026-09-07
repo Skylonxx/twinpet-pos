@@ -11,6 +11,7 @@ import {
   planStockRestores,
   type CreditAccountData,
 } from './voidReversal';
+import { isCanonicalIdentifier } from './staffSessionAssertionFrame';
 function readRevision(doc: Record<string, unknown>):
   | { kind: 'ABSENT' }
   | { kind: 'VALID'; value: number }
@@ -89,6 +90,15 @@ export type HandleVoidIntentOptions = {
   privilegedVoidExecutionId?: string;
   /** Optional offline-OAC correlation (SEC-001 Packet C-A). See `PRIVILEGED_VOID_OAC_ID_FIELD`. */
   oacId?: string;
+  /**
+   * SEC-001 Packet D / D-1B: server-authoritative initiating-staff identity for
+   * a privileged caller. Only the privileged offline-adjudication path supplies
+   * this. Its presence — not its value — is what changes behavior: a generic
+   * caller that omits it gets byte-identical `order.voidedBy ?? order.staffId`
+   * derivation. PE-RM-NORM-01: presence requires a complete, valid privileged
+   * execution/OAC correlation tuple, checked before any transaction is opened.
+   */
+  authoritativeActorStaffId?: string;
 };
 
 function readIncomingPrivilegedVoidExecutionId(
@@ -105,6 +115,30 @@ function readIncomingOacId(options?: HandleVoidIntentOptions): string | undefine
   if (typeof raw !== 'string') return undefined;
   const id = raw.trim();
   return id.length > 0 ? id : undefined;
+}
+
+/**
+ * PE-RM-NORM-01: fail closed, before any Firestore transaction, if the
+ * authoritative actor override is present without a complete and valid
+ * privileged execution/OAC correlation tuple. This keeps the new field from
+ * becoming a generic actor override usable by an incomplete/malformed caller.
+ */
+function readIncomingAuthoritativeActorStaffId(
+  options: HandleVoidIntentOptions | undefined,
+  incomingPrivilegedVoidExecutionId: string | undefined,
+  incomingOacId: string | undefined,
+): string | undefined {
+  const raw = options?.authoritativeActorStaffId;
+  if (raw === undefined) return undefined;
+  if (typeof raw !== 'string' || !isCanonicalIdentifier(raw.trim())) {
+    throw new Error('authoritativeActorStaffId failed canonical staff-id grammar');
+  }
+  if (incomingPrivilegedVoidExecutionId == null || incomingOacId == null) {
+    throw new Error(
+      'authoritativeActorStaffId requires a complete privilegedVoidExecutionId/oacId correlation tuple',
+    );
+  }
+  return raw.trim();
 }
 
 function isCanonicallyVoidTerminal(order: Record<string, unknown>): boolean {
@@ -145,6 +179,11 @@ export async function handleVoidIntent(
 ): Promise<VoidIntentTxnOutcome> {
   const incomingPrivilegedVoidExecutionId = readIncomingPrivilegedVoidExecutionId(options);
   const incomingOacId = readIncomingOacId(options);
+  const incomingAuthoritativeActorStaffId = readIncomingAuthoritativeActorStaffId(
+    options,
+    incomingPrivilegedVoidExecutionId,
+    incomingOacId,
+  );
   const outcome = await db.runTransaction(async (tx): Promise<VoidIntentTxnOutcome> => {
     const snap = await tx.get(orderRef);
     if (!snap.exists) return { kind: 'NOOP', reason: 'absent' };
@@ -246,7 +285,7 @@ export async function handleVoidIntent(
     const lotRestocks = planLotRestocks(order.lines);
     const stockRestores = planStockRestores(order.lines);
     const creditReversal = planCreditReversal(order.creditAmt, credData);
-    const voidedBy = order.voidedBy ?? order.staffId;
+    const voidedBy = incomingAuthoritativeActorStaffId ?? order.voidedBy ?? order.staffId;
     const voidReason = order.voidReason ?? null;
 
     for (const r of lotRestocks) {
@@ -357,6 +396,7 @@ export async function handleVoidIntent(
         voidReconciled: true,
         voidedAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
+        ...(incomingAuthoritativeActorStaffId != null ? { voidedBy: incomingAuthoritativeActorStaffId } : {}),
         ...privilegedCorrelationWrite(incomingPrivilegedVoidExecutionId, incomingOacId),
       },
       { merge: true },

@@ -689,6 +689,14 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // SEC-001 Packet D / D-1B — durable offline-attestation adjudication anchor.
+    // Admin-SDK-only: the server writes at most one record per adjudicationId and
+    // never lets a client read a verdict, forge a replay anchor, or fabricate
+    // "this offline void already completed" state. No composite index is used.
+    match /privilegedOfflineAdjudications/{adjudicationId} {
+      allow read, write: if false;
+    }
+
     // Online OAC provisioning ceremony + OAC signing-key/keyset material.
     match /privilegedOacIssuanceSessions/{sessionId} {
       allow read, write: if false;

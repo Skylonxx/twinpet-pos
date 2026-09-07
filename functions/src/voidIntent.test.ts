@@ -586,3 +586,92 @@ describe('handleVoidIntent — privileged execution correlation', () => {
     expect(db.__store.get('products/P/productStocks/br1')!.totalStockBase).toBe(5);
   });
 });
+
+describe('handleVoidIntent — SEC-001 Packet D / D-1B atomic authoritative actor binding (IR-004)', () => {
+  const EXEC_A = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+
+  test('the authoritative actor overrides a client-controlled/pre-existing order.voidedBy on every effect, in the same transaction', async () => {
+    const seed = seedSettledSale();
+    (seed['asyncOrders/dev01-1'] as Doc).status = 'completed';
+    (seed['asyncOrders/dev01-1'] as Doc).voidedBy = 'client-supplied-imposter';
+    const db = makeFakeDb(seed);
+    const outcome = await handleVoidIntent(
+      db as never,
+      db.collection('asyncOrders').doc('dev01-1') as never,
+      { privilegedVoidExecutionId: EXEC_A, oacId: 'oac-1', authoritativeActorStaffId: 'manager-9' },
+    );
+    expect(outcome.kind).toBe('VOID_APPLIED');
+
+    // Canonical order actor.
+    expect(db.__store.get('orders/dev01-1')!.voidedBy).toBe('manager-9');
+    // Async order actor (never the client-supplied placeholder).
+    expect(db.__store.get('asyncOrders/dev01-1')).toMatchObject({
+      voidedBy: 'manager-9',
+      privilegedVoidExecutionId: EXEC_A,
+      privilegedVoidOacId: 'oac-1',
+    });
+    // Stock movement actor.
+    const moves = [...db.__store.entries()].filter(([k]) => k.startsWith('stockMovements/'));
+    expect(moves).toHaveLength(1);
+    expect(moves[0][1]).toMatchObject({ createdBy: 'manager-9' });
+    // Credit transaction actor.
+    const creditTxs = [...db.__store.entries()].filter(([k]) => k.startsWith('creditTransactions/'));
+    expect(creditTxs).toHaveLength(1);
+    expect(creditTxs[0][1]).toMatchObject({ createdBy: 'manager-9' });
+    // Audit log actor.
+    const auditLogs = [...db.__store.entries()].filter(([k]) => k.startsWith('auditLogs/'));
+    expect(auditLogs).toHaveLength(1);
+    expect(auditLogs[0][1]).toMatchObject({ changedBy: 'manager-9' });
+  });
+
+  test('existing callers that omit the authoritative actor retain exact old order.voidedBy ?? order.staffId behavior', async () => {
+    const seed = seedSettledSale();
+    (seed['asyncOrders/dev01-1'] as Doc).status = 'completed';
+    const db = makeFakeDb(seed);
+    await handleVoidIntent(db as never, db.collection('asyncOrders').doc('dev01-1') as never, {
+      privilegedVoidExecutionId: EXEC_A,
+      oacId: 'oac-1',
+    });
+    expect(db.__store.get('orders/dev01-1')!.voidedBy).toBe('staff1');
+    expect(db.__store.get('asyncOrders/dev01-1')!.voidedBy).toBe('staff1');
+  });
+
+  test('an incomplete privileged correlation tuple fails closed before any transaction write — PE-RM-NORM-01', async () => {
+    const db = makeFakeDb(seedSettledSale());
+    const ref = db.collection('asyncOrders').doc('dev01-1');
+    const before = new Map(db.__store);
+
+    await expect(
+      handleVoidIntent(db as never, ref as never, { authoritativeActorStaffId: 'manager-9' }),
+    ).rejects.toThrow();
+    expect(db.__store).toEqual(before);
+
+    await expect(
+      handleVoidIntent(db as never, ref as never, {
+        authoritativeActorStaffId: 'manager-9',
+        privilegedVoidExecutionId: EXEC_A,
+      }),
+    ).rejects.toThrow();
+    expect(db.__store).toEqual(before);
+
+    await expect(
+      handleVoidIntent(db as never, ref as never, { authoritativeActorStaffId: 'manager-9', oacId: 'oac-1' }),
+    ).rejects.toThrow();
+    expect(db.__store).toEqual(before);
+  });
+
+  test('an actor that fails the canonical staff-id grammar fails closed before any transaction write', async () => {
+    const db = makeFakeDb(seedSettledSale());
+    const ref = db.collection('asyncOrders').doc('dev01-1');
+    const before = new Map(db.__store);
+
+    await expect(
+      handleVoidIntent(db as never, ref as never, {
+        authoritativeActorStaffId: 'not a valid id!',
+        privilegedVoidExecutionId: EXEC_A,
+        oacId: 'oac-1',
+      }),
+    ).rejects.toThrow();
+    expect(db.__store).toEqual(before);
+  });
+});

@@ -1982,3 +1982,482 @@ pub fn decode_ssca1(bytes: &[u8]) -> Result<StaffSessionCacheEnvelopeV1, FrameDe
         srf1_digest,
     })
 }
+
+// --- PAA1: PrivilegedActionAttestationFrameV1 (SEC-001 Packet D / D-1B) ---
+//
+// House framing, identical to SSA1/SRF1/EFR1: little-endian fixed head, then
+// u16-LE-length-prefixed UTF-8 strings, then a trailing 64-byte Ed25519
+// signature. No trailing bytes are permitted. The signature preimage is
+// `PAA1_DOMAIN_SEPARATOR` followed by `signed_prefix`, where `signed_prefix` is
+// every byte before the signature.
+//
+// Wire format matches `functions/src/privilegedActionAttestationFrame.ts`
+// byte-for-byte; `PAA1_CANONICAL_PARITY_HEX` is the shared literal both sides
+// assert against.
+
+pub const PAA1_MAGIC: &[u8; 4] = b"PAA1";
+pub const PAA1_VERSION: u8 = 1;
+pub const PAA1_DOMAIN_SEPARATOR: &[u8] = b"TWINPET_PAA1_V1:";
+
+pub const PAA1_ATTESTATION_ID_LEN: usize = 16;
+pub const PAA1_SECURITY_DEVICE_ID_LEN: usize = 16;
+pub const PAA1_NONCE_LEN: usize = 32;
+pub const PAA1_DIGEST_LEN: usize = 32;
+pub const PAA1_SIGNATURE_LEN: usize = 64;
+
+/// 4+1+16+1+1+1+16+4+4+4+4+4+4+4+8+8+8+8+32+32+32+32
+pub const PAA1_FIXED_HEAD_BYTES: usize = 228;
+/// 228 + 8 empty u16 length prefixes (16) + 64 signature
+pub const PAA1_MINIMUM_TOTAL_BYTES: usize = 308;
+
+pub const PAA1_ACTION_KIND_VOID_PENDING_SALE: u8 = 0x01;
+pub const PAA1_ACTION_KIND_VOID_SETTLED_SALE: u8 = 0x02;
+/// `PAA1` is minted only for `APPROVED_LOCAL`. A signed denial cannot exist.
+pub const PAA1_APPROVAL_RESULT_APPROVED_LOCAL: u8 = 0x01;
+pub const PAA1_MANAGER_ROLE_MANAGER: u8 = 0x01;
+pub const PAA1_MANAGER_ROLE_ADMIN: u8 = 0x02;
+pub const PAA1_OAC_SCHEMA_VERSION: u32 = 1;
+
+pub const PAA1_CANONICAL_PARITY_HEX: &str = "5041413101000102030405060708090a0b0c0d0e0f020101101112131415161718191a1b1c1d1e1f0300000001000000070000000b0000000d0000001100000000000000a023f3cf8b0100000068e5cf8b010000fa68e5cf8b01000080097fd38b010000212121212121212121212121212121212121212121212121212121212121212122222222222222222222222222222222222222222222222222222222222222222323232323232323232323232323232323232323232323232323232323232323242424242424242424242424242424242424242424242424242424242424242407004c44502d303031070073746166662d3109006d616e616765722d3105006f61632d310600737361312d3107006f726465722d310a00323032352d31312d31340800696e74656e742d315a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PrivilegedActionAttestationFrameV1 {
+    pub attestation_id: [u8; PAA1_ATTESTATION_ID_LEN],
+    pub action_kind: u8,
+    pub approval_result_kind: u8,
+    pub manager_role_kind: u8,
+    pub security_device_id: [u8; PAA1_SECURITY_DEVICE_ID_LEN],
+    pub device_key_version: u32,
+    pub oac_schema_version: u32,
+    pub revocation_epoch_at_issue: u32,
+    pub manager_auth_version_at_issue: u32,
+    pub manager_credential_version_at_issue: u32,
+    pub ssa1_auth_version_at_issue: u32,
+    pub attempt_count: u32,
+    pub ssa1_expires_at_server_ms: u64,
+    pub trusted_approval_lower_ms: u64,
+    pub trusted_approval_upper_ms: u64,
+    pub pending_execution_expires_at_ms: u64,
+    pub nonce: [u8; PAA1_NONCE_LEN],
+    pub approval_proof_digest: [u8; PAA1_DIGEST_LEN],
+    pub oac_digest: [u8; PAA1_DIGEST_LEN],
+    pub ssa1_digest: [u8; PAA1_DIGEST_LEN],
+    pub branch_id: String,
+    pub initiating_staff_id: String,
+    pub approving_manager_staff_id: String,
+    pub oac_id: String,
+    pub ssa1_id: String,
+    pub target_order_id: String,
+    pub target_order_utc7_date: String,
+    pub local_intent_id: String,
+    pub signature: [u8; PAA1_SIGNATURE_LEN],
+}
+
+pub fn is_paa1_action_kind(kind: u8) -> bool {
+    kind == PAA1_ACTION_KIND_VOID_PENDING_SALE || kind == PAA1_ACTION_KIND_VOID_SETTLED_SALE
+}
+
+pub fn is_paa1_manager_role_kind(kind: u8) -> bool {
+    kind == PAA1_MANAGER_ROLE_MANAGER || kind == PAA1_MANAGER_ROLE_ADMIN
+}
+
+/// `YYYY-MM-DD` shape only. Calendar validity is the server's job.
+pub fn is_paa1_utc7_date(value: &str) -> bool {
+    let b = value.as_bytes();
+    b.len() == 10
+        && b[0].is_ascii_digit()
+        && b[1].is_ascii_digit()
+        && b[2].is_ascii_digit()
+        && b[3].is_ascii_digit()
+        && b[4] == b'-'
+        && b[5].is_ascii_digit()
+        && b[6].is_ascii_digit()
+        && b[7] == b'-'
+        && b[8].is_ascii_digit()
+        && b[9].is_ascii_digit()
+}
+
+/// Structural invariants shared by encode and strict decode. A pure function of
+/// the frame fields alone: no file, clock, or key material is consulted, which
+/// is what makes `attestation_malformed` a PERMANENT server classification.
+fn paa1_structural_check(frame: &PrivilegedActionAttestationFrameV1) -> Result<(), FrameDecodeError> {
+    if frame.attestation_id.iter().all(|b| *b == 0) {
+        return Err(FrameDecodeError::BadFieldFormat);
+    }
+    if !is_paa1_action_kind(frame.action_kind) {
+        return Err(FrameDecodeError::BadFieldFormat);
+    }
+    if frame.approval_result_kind != PAA1_APPROVAL_RESULT_APPROVED_LOCAL {
+        return Err(FrameDecodeError::BadFieldFormat);
+    }
+    if !is_paa1_manager_role_kind(frame.manager_role_kind) {
+        return Err(FrameDecodeError::BadFieldFormat);
+    }
+    if frame.device_key_version == 0 {
+        return Err(FrameDecodeError::BadFieldFormat);
+    }
+    if frame.oac_schema_version != PAA1_OAC_SCHEMA_VERSION {
+        return Err(FrameDecodeError::BadFieldFormat);
+    }
+    if frame.trusted_approval_lower_ms == 0 {
+        return Err(FrameDecodeError::BadFieldFormat);
+    }
+    if frame.trusted_approval_upper_ms < frame.trusted_approval_lower_ms {
+        return Err(FrameDecodeError::BadFieldFormat);
+    }
+    if frame.pending_execution_expires_at_ms <= frame.trusted_approval_lower_ms {
+        return Err(FrameDecodeError::BadFieldFormat);
+    }
+    if frame.ssa1_expires_at_server_ms <= frame.trusted_approval_upper_ms {
+        return Err(FrameDecodeError::BadFieldFormat);
+    }
+    for id in [
+        &frame.branch_id,
+        &frame.initiating_staff_id,
+        &frame.approving_manager_staff_id,
+        &frame.oac_id,
+        &frame.ssa1_id,
+        &frame.target_order_id,
+        &frame.target_order_utc7_date,
+        &frame.local_intent_id,
+    ] {
+        if !is_canonical_identifier(id) {
+            return Err(FrameDecodeError::BadFieldFormat);
+        }
+    }
+    if frame.branch_id == "ALL" {
+        return Err(FrameDecodeError::BadFieldFormat);
+    }
+    // D1 self-approval bar is bound into the bytes, not only enforced live.
+    if frame.approving_manager_staff_id == frame.initiating_staff_id {
+        return Err(FrameDecodeError::BadFieldFormat);
+    }
+    if !is_paa1_utc7_date(&frame.target_order_utc7_date) {
+        return Err(FrameDecodeError::BadFieldFormat);
+    }
+    Ok(())
+}
+
+pub fn paa1_signed_prefix(frame: &PrivilegedActionAttestationFrameV1) -> Result<Vec<u8>, FrameDecodeError> {
+    paa1_structural_check(frame)?;
+    let mut out = Vec::with_capacity(PAA1_MINIMUM_TOTAL_BYTES);
+    out.extend_from_slice(PAA1_MAGIC);
+    out.push(PAA1_VERSION);
+    out.extend_from_slice(&frame.attestation_id);
+    out.push(frame.action_kind);
+    out.push(frame.approval_result_kind);
+    out.push(frame.manager_role_kind);
+    out.extend_from_slice(&frame.security_device_id);
+    out.extend_from_slice(&frame.device_key_version.to_le_bytes());
+    out.extend_from_slice(&frame.oac_schema_version.to_le_bytes());
+    out.extend_from_slice(&frame.revocation_epoch_at_issue.to_le_bytes());
+    out.extend_from_slice(&frame.manager_auth_version_at_issue.to_le_bytes());
+    out.extend_from_slice(&frame.manager_credential_version_at_issue.to_le_bytes());
+    out.extend_from_slice(&frame.ssa1_auth_version_at_issue.to_le_bytes());
+    out.extend_from_slice(&frame.attempt_count.to_le_bytes());
+    out.extend_from_slice(&frame.ssa1_expires_at_server_ms.to_le_bytes());
+    out.extend_from_slice(&frame.trusted_approval_lower_ms.to_le_bytes());
+    out.extend_from_slice(&frame.trusted_approval_upper_ms.to_le_bytes());
+    out.extend_from_slice(&frame.pending_execution_expires_at_ms.to_le_bytes());
+    out.extend_from_slice(&frame.nonce);
+    out.extend_from_slice(&frame.approval_proof_digest);
+    out.extend_from_slice(&frame.oac_digest);
+    out.extend_from_slice(&frame.ssa1_digest);
+    debug_assert_eq!(out.len(), PAA1_FIXED_HEAD_BYTES);
+    write_u16_le_prefixed_str(&mut out, &frame.branch_id)?;
+    write_u16_le_prefixed_str(&mut out, &frame.initiating_staff_id)?;
+    write_u16_le_prefixed_str(&mut out, &frame.approving_manager_staff_id)?;
+    write_u16_le_prefixed_str(&mut out, &frame.oac_id)?;
+    write_u16_le_prefixed_str(&mut out, &frame.ssa1_id)?;
+    write_u16_le_prefixed_str(&mut out, &frame.target_order_id)?;
+    write_u16_le_prefixed_str(&mut out, &frame.target_order_utc7_date)?;
+    write_u16_le_prefixed_str(&mut out, &frame.local_intent_id)?;
+    Ok(out)
+}
+
+pub fn paa1_signature_preimage(
+    frame: &PrivilegedActionAttestationFrameV1,
+) -> Result<Vec<u8>, FrameDecodeError> {
+    let prefix = paa1_signed_prefix(frame)?;
+    let mut out = Vec::with_capacity(PAA1_DOMAIN_SEPARATOR.len() + prefix.len());
+    out.extend_from_slice(PAA1_DOMAIN_SEPARATOR);
+    out.extend_from_slice(&prefix);
+    Ok(out)
+}
+
+pub fn encode_paa1(frame: &PrivilegedActionAttestationFrameV1) -> Result<Vec<u8>, FrameDecodeError> {
+    let mut out = paa1_signed_prefix(frame)?;
+    out.extend_from_slice(&frame.signature);
+    Ok(out)
+}
+
+pub fn decode_paa1(bytes: &[u8]) -> Result<PrivilegedActionAttestationFrameV1, FrameDecodeError> {
+    if bytes.len() < PAA1_MINIMUM_TOTAL_BYTES {
+        return Err(FrameDecodeError::WrongTotalLength);
+    }
+    if &bytes[0..4] != PAA1_MAGIC {
+        return Err(FrameDecodeError::BadMagic);
+    }
+    if bytes[4] != PAA1_VERSION {
+        return Err(FrameDecodeError::BadVersion);
+    }
+
+    let mut attestation_id = [0u8; PAA1_ATTESTATION_ID_LEN];
+    attestation_id.copy_from_slice(&bytes[5..21]);
+    let action_kind = bytes[21];
+    let approval_result_kind = bytes[22];
+    let manager_role_kind = bytes[23];
+    let mut security_device_id = [0u8; PAA1_SECURITY_DEVICE_ID_LEN];
+    security_device_id.copy_from_slice(&bytes[24..40]);
+    let device_key_version = u32::from_le_bytes(bytes[40..44].try_into().unwrap());
+    let oac_schema_version = u32::from_le_bytes(bytes[44..48].try_into().unwrap());
+    let revocation_epoch_at_issue = u32::from_le_bytes(bytes[48..52].try_into().unwrap());
+    let manager_auth_version_at_issue = u32::from_le_bytes(bytes[52..56].try_into().unwrap());
+    let manager_credential_version_at_issue = u32::from_le_bytes(bytes[56..60].try_into().unwrap());
+    let ssa1_auth_version_at_issue = u32::from_le_bytes(bytes[60..64].try_into().unwrap());
+    let attempt_count = u32::from_le_bytes(bytes[64..68].try_into().unwrap());
+    let ssa1_expires_at_server_ms = u64::from_le_bytes(bytes[68..76].try_into().unwrap());
+    let trusted_approval_lower_ms = u64::from_le_bytes(bytes[76..84].try_into().unwrap());
+    let trusted_approval_upper_ms = u64::from_le_bytes(bytes[84..92].try_into().unwrap());
+    let pending_execution_expires_at_ms = u64::from_le_bytes(bytes[92..100].try_into().unwrap());
+    let mut nonce = [0u8; PAA1_NONCE_LEN];
+    nonce.copy_from_slice(&bytes[100..132]);
+    let mut approval_proof_digest = [0u8; PAA1_DIGEST_LEN];
+    approval_proof_digest.copy_from_slice(&bytes[132..164]);
+    let mut oac_digest = [0u8; PAA1_DIGEST_LEN];
+    oac_digest.copy_from_slice(&bytes[164..196]);
+    let mut ssa1_digest = [0u8; PAA1_DIGEST_LEN];
+    ssa1_digest.copy_from_slice(&bytes[196..228]);
+
+    let mut o = PAA1_FIXED_HEAD_BYTES;
+    let (branch_id, next) = read_u16_le_prefixed_str(bytes, o)?;
+    o = next;
+    let (initiating_staff_id, next) = read_u16_le_prefixed_str(bytes, o)?;
+    o = next;
+    let (approving_manager_staff_id, next) = read_u16_le_prefixed_str(bytes, o)?;
+    o = next;
+    let (oac_id, next) = read_u16_le_prefixed_str(bytes, o)?;
+    o = next;
+    let (ssa1_id, next) = read_u16_le_prefixed_str(bytes, o)?;
+    o = next;
+    let (target_order_id, next) = read_u16_le_prefixed_str(bytes, o)?;
+    o = next;
+    let (target_order_utc7_date, next) = read_u16_le_prefixed_str(bytes, o)?;
+    o = next;
+    let (local_intent_id, next) = read_u16_le_prefixed_str(bytes, o)?;
+    o = next;
+
+    // No trailing bytes are permitted.
+    if o + PAA1_SIGNATURE_LEN != bytes.len() {
+        return Err(FrameDecodeError::WrongTotalLength);
+    }
+    let mut signature = [0u8; PAA1_SIGNATURE_LEN];
+    signature.copy_from_slice(&bytes[o..o + PAA1_SIGNATURE_LEN]);
+
+    let frame = PrivilegedActionAttestationFrameV1 {
+        attestation_id,
+        action_kind,
+        approval_result_kind,
+        manager_role_kind,
+        security_device_id,
+        device_key_version,
+        oac_schema_version,
+        revocation_epoch_at_issue,
+        manager_auth_version_at_issue,
+        manager_credential_version_at_issue,
+        ssa1_auth_version_at_issue,
+        attempt_count,
+        ssa1_expires_at_server_ms,
+        trusted_approval_lower_ms,
+        trusted_approval_upper_ms,
+        pending_execution_expires_at_ms,
+        nonce,
+        approval_proof_digest,
+        oac_digest,
+        ssa1_digest,
+        branch_id,
+        initiating_staff_id,
+        approving_manager_staff_id,
+        oac_id,
+        ssa1_id,
+        target_order_id,
+        target_order_utc7_date,
+        local_intent_id,
+        signature,
+    };
+    paa1_structural_check(&frame)?;
+    Ok(frame)
+}
+
+/// The shared canonical parity vector. Mirrored by `paa1CanonicalParityFrame()`
+/// in `functions/src/privilegedActionAttestationFrame.ts`.
+pub fn paa1_canonical_parity_frame() -> PrivilegedActionAttestationFrameV1 {
+    let mut attestation_id = [0u8; PAA1_ATTESTATION_ID_LEN];
+    for (i, slot) in attestation_id.iter_mut().enumerate() {
+        *slot = i as u8;
+    }
+    let mut security_device_id = [0u8; PAA1_SECURITY_DEVICE_ID_LEN];
+    for (i, slot) in security_device_id.iter_mut().enumerate() {
+        *slot = 0x10 + i as u8;
+    }
+    PrivilegedActionAttestationFrameV1 {
+        attestation_id,
+        action_kind: PAA1_ACTION_KIND_VOID_SETTLED_SALE,
+        approval_result_kind: PAA1_APPROVAL_RESULT_APPROVED_LOCAL,
+        manager_role_kind: PAA1_MANAGER_ROLE_MANAGER,
+        security_device_id,
+        device_key_version: 3,
+        oac_schema_version: 1,
+        revocation_epoch_at_issue: 7,
+        manager_auth_version_at_issue: 11,
+        manager_credential_version_at_issue: 13,
+        ssa1_auth_version_at_issue: 17,
+        attempt_count: 0,
+        ssa1_expires_at_server_ms: 1_700_000_900_000,
+        trusted_approval_lower_ms: 1_700_000_000_000,
+        trusted_approval_upper_ms: 1_700_000_000_250,
+        pending_execution_expires_at_ms: 1_700_060_400_000,
+        nonce: [0x21u8; PAA1_NONCE_LEN],
+        approval_proof_digest: [0x22u8; PAA1_DIGEST_LEN],
+        oac_digest: [0x23u8; PAA1_DIGEST_LEN],
+        ssa1_digest: [0x24u8; PAA1_DIGEST_LEN],
+        branch_id: "LDP-001".to_string(),
+        initiating_staff_id: "staff-1".to_string(),
+        approving_manager_staff_id: "manager-1".to_string(),
+        oac_id: "oac-1".to_string(),
+        ssa1_id: "ssa1-1".to_string(),
+        target_order_id: "order-1".to_string(),
+        target_order_utc7_date: "2025-11-14".to_string(),
+        local_intent_id: "intent-1".to_string(),
+        signature: [0x5au8; PAA1_SIGNATURE_LEN],
+    }
+}
+
+#[cfg(test)]
+mod paa1_tests {
+    use super::*;
+
+    fn hex_of(bytes: &[u8]) -> String {
+        bytes.iter().map(|b| format!("{b:02x}")).collect()
+    }
+
+    #[test]
+    fn paa1_frozen_constants_match_the_ratified_contract() {
+        assert_eq!(PAA1_MAGIC, b"PAA1");
+        assert_eq!(PAA1_VERSION, 1);
+        assert_eq!(PAA1_DOMAIN_SEPARATOR, b"TWINPET_PAA1_V1:");
+        assert_eq!(PAA1_DOMAIN_SEPARATOR.len(), 16);
+        assert_eq!(PAA1_FIXED_HEAD_BYTES, 228);
+        assert_eq!(PAA1_MINIMUM_TOTAL_BYTES, 308);
+        assert_eq!(PAA1_FIXED_HEAD_BYTES + 8 * 2 + PAA1_SIGNATURE_LEN, PAA1_MINIMUM_TOTAL_BYTES);
+    }
+
+    #[test]
+    fn paa1_matches_the_shared_typescript_parity_literal() {
+        let frame = paa1_canonical_parity_frame();
+        let encoded = encode_paa1(&frame).unwrap();
+        assert_eq!(hex_of(&encoded), PAA1_CANONICAL_PARITY_HEX);
+
+        let mut hex_bytes = Vec::with_capacity(PAA1_CANONICAL_PARITY_HEX.len() / 2);
+        for i in (0..PAA1_CANONICAL_PARITY_HEX.len()).step_by(2) {
+            hex_bytes.push(u8::from_str_radix(&PAA1_CANONICAL_PARITY_HEX[i..i + 2], 16).unwrap());
+        }
+        assert_eq!(decode_paa1(&hex_bytes).unwrap(), frame);
+    }
+
+    #[test]
+    fn paa1_signed_prefix_is_every_byte_before_the_signature() {
+        let frame = paa1_canonical_parity_frame();
+        let encoded = encode_paa1(&frame).unwrap();
+        let prefix = paa1_signed_prefix(&frame).unwrap();
+        assert_eq!(prefix, encoded[..encoded.len() - PAA1_SIGNATURE_LEN].to_vec());
+
+        let preimage = paa1_signature_preimage(&frame).unwrap();
+        assert_eq!(&preimage[..PAA1_DOMAIN_SEPARATOR.len()], PAA1_DOMAIN_SEPARATOR);
+        assert_eq!(&preimage[PAA1_DOMAIN_SEPARATOR.len()..], &prefix[..]);
+    }
+
+    #[test]
+    fn paa1_rejects_trailing_bytes_and_truncation() {
+        let frame = paa1_canonical_parity_frame();
+        let encoded = encode_paa1(&frame).unwrap();
+
+        let mut extra = encoded.clone();
+        extra.push(0);
+        assert_eq!(decode_paa1(&extra), Err(FrameDecodeError::WrongTotalLength));
+
+        assert_eq!(
+            decode_paa1(&encoded[..PAA1_MINIMUM_TOTAL_BYTES - 1]),
+            Err(FrameDecodeError::WrongTotalLength)
+        );
+    }
+
+    #[test]
+    fn paa1_rejects_bad_magic_and_version() {
+        let encoded = encode_paa1(&paa1_canonical_parity_frame()).unwrap();
+
+        let mut bad_magic = encoded.clone();
+        bad_magic[3] = b'2';
+        assert_eq!(decode_paa1(&bad_magic), Err(FrameDecodeError::BadMagic));
+
+        let mut bad_version = encoded.clone();
+        bad_version[4] = 2;
+        assert_eq!(decode_paa1(&bad_version), Err(FrameDecodeError::BadVersion));
+    }
+
+    #[test]
+    fn paa1_strict_decode_rejects_every_head_invariant_violation() {
+        let base = encode_paa1(&paa1_canonical_parity_frame()).unwrap();
+        let mutations: Vec<Box<dyn Fn(&mut Vec<u8>)>> = vec![
+            Box::new(|b: &mut Vec<u8>| b[5..21].fill(0)),
+            Box::new(|b: &mut Vec<u8>| b[21] = 0x03),
+            Box::new(|b: &mut Vec<u8>| b[22] = 0x02),
+            Box::new(|b: &mut Vec<u8>| b[23] = 0x09),
+            Box::new(|b: &mut Vec<u8>| b[40..44].copy_from_slice(&0u32.to_le_bytes())),
+            Box::new(|b: &mut Vec<u8>| b[44..48].copy_from_slice(&2u32.to_le_bytes())),
+            Box::new(|b: &mut Vec<u8>| b[76..84].copy_from_slice(&0u64.to_le_bytes())),
+            Box::new(|b: &mut Vec<u8>| b[84..92].copy_from_slice(&1_699_999_999_999u64.to_le_bytes())),
+            Box::new(|b: &mut Vec<u8>| b[92..100].copy_from_slice(&1_700_000_000_000u64.to_le_bytes())),
+            Box::new(|b: &mut Vec<u8>| b[68..76].copy_from_slice(&1_700_000_000_250u64.to_le_bytes())),
+        ];
+        for mutate in mutations {
+            let mut bytes = base.clone();
+            mutate(&mut bytes);
+            assert_eq!(decode_paa1(&bytes), Err(FrameDecodeError::BadFieldFormat));
+        }
+    }
+
+    #[test]
+    fn paa1_encode_refuses_self_approval_branch_all_and_bad_date() {
+        let base = paa1_canonical_parity_frame();
+
+        let mut self_approved = base.clone();
+        self_approved.approving_manager_staff_id = self_approved.initiating_staff_id.clone();
+        assert_eq!(encode_paa1(&self_approved), Err(FrameDecodeError::BadFieldFormat));
+
+        let mut branch_all = base.clone();
+        branch_all.branch_id = "ALL".to_string();
+        assert_eq!(encode_paa1(&branch_all), Err(FrameDecodeError::BadFieldFormat));
+
+        let mut bad_date = base.clone();
+        bad_date.target_order_utc7_date = "2025-11-4".to_string();
+        assert_eq!(encode_paa1(&bad_date), Err(FrameDecodeError::BadFieldFormat));
+    }
+
+    #[test]
+    fn paa1_decode_rejects_an_overrunning_length_prefix() {
+        let mut bytes = encode_paa1(&paa1_canonical_parity_frame()).unwrap();
+        bytes[PAA1_FIXED_HEAD_BYTES..PAA1_FIXED_HEAD_BYTES + 2]
+            .copy_from_slice(&u16::MAX.to_le_bytes());
+        assert_eq!(decode_paa1(&bytes), Err(FrameDecodeError::BadFieldLength));
+    }
+
+    #[test]
+    fn paa1_utc7_date_shape_check_is_exact() {
+        assert!(is_paa1_utc7_date("2025-11-14"));
+        assert!(!is_paa1_utc7_date("2025-11-4"));
+        assert!(!is_paa1_utc7_date("20251114"));
+        assert!(!is_paa1_utc7_date("2025/11/14"));
+        assert!(!is_paa1_utc7_date(""));
+    }
+}

@@ -252,6 +252,21 @@ pub fn compute_approval_proof_digest(
     approval_result: &str,
     device_id_raw: &[u8; 16],
 ) -> String {
+    compute_approval_proof_digest_raw(oac_id, nonce_raw, approval_result, device_id_raw)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+/// Raw 32 bytes of the frozen approval-proof digest. `compute_approval_proof_digest`
+/// is exactly its lowercase hex rendering — the construction is unchanged from C-B.
+/// PAA1 carries the raw bytes; the evidence seed carries the hex.
+pub fn compute_approval_proof_digest_raw(
+    oac_id: &str,
+    nonce_raw: &[u8; 32],
+    approval_result: &str,
+    device_id_raw: &[u8; 16],
+) -> [u8; 32] {
     let mut hasher = Sha256::new();
 
     // 1. oacId
@@ -272,8 +287,7 @@ pub fn compute_approval_proof_digest(
     hasher.update((16u32).to_le_bytes());
     hasher.update(device_id_raw);
 
-    let digest = hasher.finalize();
-    digest.iter().map(|b| format!("{b:02x}")).collect()
+    hasher.finalize().into()
 }
 
 #[cfg(test)]
@@ -366,6 +380,37 @@ fn verify_oac_signature(
     verifying_key.verify(payload.as_bytes(), &signature).is_ok()
 }
 
+/// Native-derived facts observed by the landed C-B pipeline while it ran.
+///
+/// Purely additive: nothing in the verification pipeline reads this, and no
+/// decision depends on it. It exists so `action_attestation.rs` can mint PAA1
+/// from the *same* pipeline run rather than re-deriving (or re-implementing)
+/// authority material. Fields are `None` on any path that never reached them.
+#[derive(Debug, Default, Clone)]
+pub struct PrivilegedVerifyEvidence {
+    pub oac: Option<StoredOacEnvelope>,
+    /// The exact stored OAC envelope bytes — the preimage of `oacDigest`.
+    pub oac_envelope_bytes: Option<Vec<u8>>,
+    pub security_device_id: Option<[u8; 16]>,
+    pub now_ms: Option<u64>,
+    pub nonce_raw: Option<[u8; 32]>,
+    pub approval_proof_digest_raw: Option<[u8; 32]>,
+}
+
+/// Held for the whole security-critical verify transaction: the cross-process
+/// lifecycle lock plus `VERIFIER_MUTEX`, in that order. Acquiring both is what
+/// makes offline PIN verification and PAA1 sealing one indivisible operation.
+pub struct PrivilegedVerifierGuards {
+    _lifecycle: LifecycleLockGuard,
+    _verifier: std::sync::MutexGuard<'static, ()>,
+}
+
+pub fn acquire_privileged_verifier_guards(root: &Path) -> Result<PrivilegedVerifierGuards, ()> {
+    let lifecycle = acquire_lifecycle_lock(root, 120_000).map_err(|_| ())?;
+    let verifier = VERIFIER_MUTEX.lock().map_err(|_| ())?;
+    Ok(PrivilegedVerifierGuards { _lifecycle: lifecycle, _verifier: verifier })
+}
+
 /// Native offline PIN verification implementation (no WebView now_ms / branchId).
 /// Serialized by VERIFIER_MUTEX across the entire security-critical verify transaction.
 pub fn verify_offline_pin(
@@ -374,7 +419,7 @@ pub fn verify_offline_pin(
     action_id: &str,
     pin: &str,
 ) -> Result<PrivilegedVerifyOutcomeDto, String> {
-    let _lifecycle_guard = match acquire_lifecycle_lock(root, 120_000) {
+    let _guards = match acquire_privileged_verifier_guards(root) {
         Ok(g) => g,
         Err(_) => {
             return Ok(PrivilegedVerifyOutcomeDto {
@@ -386,18 +431,21 @@ pub fn verify_offline_pin(
         }
     };
 
-    let _verifier_guard = match VERIFIER_MUTEX.lock() {
-        Ok(g) => g,
-        Err(_) => {
-            return Ok(PrivilegedVerifyOutcomeDto {
-                ok: false,
-                verified_branch_id: None,
-                evidence_seed: None,
-                error_code: Some("DENIED_UNVERIFIABLE".to_string()),
-            });
-        }
-    };
+    let mut evidence = PrivilegedVerifyEvidence::default();
+    verify_offline_pin_locked(root, manager_staff_id, action_id, pin, &mut evidence)
+}
 
+/// The landed C-B verification pipeline, unchanged step for step. The caller
+/// must already hold `acquire_privileged_verifier_guards`; splitting the guards
+/// out is the entire extraction, so `native_attest_privileged_action` can seal
+/// PAA1 inside the same held-lock window.
+pub fn verify_offline_pin_locked(
+    root: &Path,
+    manager_staff_id: &str,
+    action_id: &str,
+    pin: &str,
+    evidence: &mut PrivilegedVerifyEvidence,
+) -> Result<PrivilegedVerifyOutcomeDto, String> {
     if !frames::is_canonical_identifier(manager_staff_id) {
         return Ok(PrivilegedVerifyOutcomeDto {
             ok: false,
@@ -420,6 +468,7 @@ pub fn verify_offline_pin(
         }
     };
     let device_id_hex: String = security_device_id_bytes.iter().map(|b| format!("{b:02x}")).collect();
+    evidence.security_device_id = Some(security_device_id_bytes);
 
     // 2. Resolve selected manager's active slot directly (no fallback)
     let active_slot_path = match super::manager_active_slot_path(root, manager_staff_id) {
@@ -447,6 +496,8 @@ pub fn verify_offline_pin(
         }
     };
 
+    evidence.oac_envelope_bytes = Some(content.as_bytes().to_vec());
+
     let oac: StoredOacEnvelope = match serde_json::from_str(&content) {
         Ok(env) => env,
         Err(_) => {
@@ -459,6 +510,8 @@ pub fn verify_offline_pin(
             });
         }
     };
+
+    evidence.oac = Some(oac.clone());
 
     // 3. Strict schema validation
     if validate_stored_oac(&oac).is_err() {
@@ -570,6 +623,8 @@ pub fn verify_offline_pin(
             });
         }
     };
+
+    evidence.now_ms = Some(now_ms);
 
     if clock_guard::assert_valid_and_advance_clock(root, now_ms).is_err() {
         return Ok(PrivilegedVerifyOutcomeDto {
@@ -706,7 +761,11 @@ pub fn verify_offline_pin(
 
     if pin_match {
         let _ = lockout_state::record_successful_pin_attempt(root, manager_staff_id, now_ms);
-        let digest = compute_approval_proof_digest(&oac.oac_id, &nonce_raw, "APPROVED_LOCAL", &security_device_id_bytes);
+        let digest_raw =
+            compute_approval_proof_digest_raw(&oac.oac_id, &nonce_raw, "APPROVED_LOCAL", &security_device_id_bytes);
+        let digest: String = digest_raw.iter().map(|b| format!("{b:02x}")).collect();
+        evidence.nonce_raw = Some(nonce_raw);
+        evidence.approval_proof_digest_raw = Some(digest_raw);
 
         Ok(PrivilegedVerifyOutcomeDto {
             ok: true,
