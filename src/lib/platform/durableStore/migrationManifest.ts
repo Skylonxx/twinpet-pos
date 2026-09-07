@@ -24,8 +24,8 @@ export const DURABLE_DOMAINS: readonly DurableDomainSpec[] = [
   {
     id: 'reversal',
     database: 'twinpet-offline-reversal',
-    stores: ['intents', 'stock', 'ledger', 'markers', 'rejections', 'voidIntents'],
-    sourceIdbVersion: 3,
+    stores: ['intents', 'stock', 'ledger', 'markers', 'rejections', 'voidIntents', 'privilegedEvidence'],
+    sourceIdbVersion: 4,
   },
   {
     id: 'journal',

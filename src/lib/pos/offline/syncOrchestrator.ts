@@ -36,6 +36,12 @@ import {
   listClaimableVoidIntents,
 } from './voidIntentStore';
 import { drainOneVoidIntent } from '../voidPendingOrder';
+import { clearPrivilegedEvidenceBackoff } from './privilegedEvidenceStore';
+import {
+  runPrivilegedEvidenceSweep as defaultRunPrivilegedEvidenceSweep,
+  type PrivilegedEvidenceSweepInput,
+  type PrivilegedEvidenceSweepResult,
+} from './syncPrivilegedEvidence';
 
 export const SYNC_ORCHESTRATOR_INTERVAL_MS = 120_000;
 export const SYNC_ORCHESTRATOR_BOOT_DELAY_MS = 3_000;
@@ -73,7 +79,8 @@ export type GateSkipReason =
   | 'no_firebase_user'
   | 'no_staff_claim'
   | 'offline'
-  | 'lock_held';
+  | 'lock_held'
+  | 'gate_timeout';
 
 export type ChannelRunResult = {
   channel: SyncChannelId;
@@ -138,6 +145,7 @@ export type SyncOrchestratorDeps = {
   runCh1?: (input: ChannelAdapterInput) => Promise<ChannelRunResult>;
   runCh3?: (input: ChannelAdapterInput) => Promise<ChannelRunResult>;
   countTerminal?: () => Promise<number>;
+  runPrivilegedEvidenceSweep?: (input: PrivilegedEvidenceSweepInput) => Promise<PrivilegedEvidenceSweepResult>;
   addEventListener?: (type: 'online' | 'offline', fn: () => void) => void;
   removeEventListener?: (type: 'online' | 'offline', fn: () => void) => void;
   setTimeoutFn?: (fn: () => void, ms: number) => unknown;
@@ -364,6 +372,15 @@ function resolveDeps(deps?: SyncOrchestratorDeps) {
     countTerminal:
       deps?.countTerminal ??
       (() => countTerminalVoidIntents(createIndexedDbReversalStore())),
+    runPrivilegedEvidenceSweep:
+      deps?.runPrivilegedEvidenceSweep ??
+      ((input: PrivilegedEvidenceSweepInput) =>
+        defaultRunPrivilegedEvidenceSweep(input, {
+          now: deps?.now ?? Date.now,
+          setTimeoutFn: deps?.setTimeoutFn ?? ((fn, ms) => setTimeout(fn, ms)),
+          clearTimeoutFn: deps?.clearTimeoutFn ?? ((id) => clearTimeout(id as ReturnType<typeof setTimeout>)),
+          random: deps?.random ?? Math.random,
+        })),
     addEventListener:
       deps?.addEventListener ??
       ((type, fn) => {
@@ -411,50 +428,75 @@ async function evaluateGates(
   }
 }
 
-async function awaitWithCycleDeadline<T>(
+/**
+ * A05/A09 (F09/A03 closure): one promise, resolved at most once, latched.
+ * Armed ONCE per owning scope (cycle or phase) and shared by every await in
+ * that scope — the aggregate real event-loop time across all sequential
+ * awaits is bounded by this one timer, not by a per-await `Date.now`
+ * subtraction (which A03 proved unbounded under a backward clock jump).
+ */
+type DeadlineSignal = {
+  readonly promise: Promise<'deadline'>;
+  expired: () => boolean;
+  dispose: () => void;
+};
+
+function armDeadline(d: ResolvedDeps, ms: number): DeadlineSignal {
+  let fired = false;
+  let id: unknown = null;
+  const promise = new Promise<'deadline'>((resolve) => {
+    id = d.setTimeoutFn(() => {
+      fired = true;
+      resolve('deadline');
+    }, ms);
+  });
+  return {
+    promise,
+    expired: () => fired,
+    dispose: () => {
+      if (id != null) {
+        d.clearTimeoutFn(id);
+        id = null;
+      }
+    },
+  };
+}
+
+async function awaitWithDeadlineSignals<T>(
   work: Promise<T>,
-  remainingMs: number,
-  d: ResolvedDeps,
+  signals: readonly DeadlineSignal[],
+  _d: ResolvedDeps,
 ): Promise<{ status: 'settled'; value: T } | { status: 'timeout' }> {
-  if (remainingMs <= 0) {
+  if (signals.some((s) => s.expired())) {
     void work.then(
       () => undefined,
       () => undefined,
     );
     return { status: 'timeout' };
   }
-  let timeoutId: unknown;
-  const timeoutPromise = new Promise<'timeout'>((resolve) => {
-    timeoutId = d.setTimeoutFn(() => resolve('timeout'), remainingMs);
-  });
-  try {
-    const winner = await Promise.race([
-      work.then((value) => ({ kind: 'settled' as const, value })),
-      timeoutPromise.then(() => ({ kind: 'timeout' as const })),
-    ]);
-    if (winner.kind === 'timeout') {
-      void work.then(
-        () => undefined,
-        () => undefined,
-      );
-      return { status: 'timeout' };
-    }
-    return { status: 'settled', value: winner.value };
-  } finally {
-    if (timeoutId != null) d.clearTimeoutFn(timeoutId);
+  const winner = await Promise.race([
+    work.then((value) => ({ kind: 'settled' as const, value })),
+    ...signals.map((s) => s.promise.then(() => ({ kind: 'timeout' as const }))),
+  ]);
+  if (winner.kind === 'timeout') {
+    void work.then(
+      () => undefined,
+      () => undefined,
+    );
+    return { status: 'timeout' };
   }
+  return { status: 'settled', value: winner.value };
 }
 
 async function runChannels(
   trigger: SyncTrigger,
   ctx: SyncOrchestratorAuthContext,
   d: ResolvedDeps,
-  startedAtMs: number,
+  cycleDeadline: DeadlineSignal,
   staffId: string,
   token: number,
 ): Promise<ChannelRunResult[]> {
   const results: ChannelRunResult[] = [];
-  const deadlineMs = startedAtMs + SYNC_ORCHESTRATOR_MAX_CYCLE_DURATION_MS;
   const deviceId = getDeviceId();
   const input: ChannelAdapterInput = {
     trigger,
@@ -470,7 +512,7 @@ async function runChannels(
   let capped = false;
 
   for (const channel of CHANNEL_ORDER) {
-    if (capped || d.now() >= deadlineMs) {
+    if (capped || cycleDeadline.expired()) {
       results.push({ channel, status: 'skipped', skipReason: 'capped' });
       continue;
     }
@@ -479,7 +521,6 @@ async function runChannels(
       continue;
     }
     try {
-      const remainingMs = deadlineMs - d.now();
       const work =
         channel === 'sale_intent' && locks && typeof locks.request === 'function'
           ? (async () => {
@@ -494,7 +535,7 @@ async function runChannels(
               return nested ?? { channel, status: 'skipped' as const, skipReason: 'lock_held' };
             })()
           : d[CHANNEL_RUNNERS[channel]](input);
-      const raced = await awaitWithCycleDeadline(work, remainingMs, d);
+      const raced = await awaitWithDeadlineSignals(work, [cycleDeadline], d);
       if (raced.status === 'timeout') {
         results.push({ channel, status: 'skipped', skipReason: 'capped' });
         capped = true;
@@ -512,6 +553,117 @@ async function runChannels(
   return results;
 }
 
+type WebLockRunOutcome =
+  | { kind: 'timeout' }
+  | { kind: 'lock_held' }
+  | { kind: 'ran'; channels: ChannelRunResult[] };
+
+/**
+ * RC-D2-002: separates the lock-ACQUISITION DECISION (denied / stale-grant /
+ * started — or the raw request itself failing before any callback ever ran,
+ * whether that failure arrives as a rejected promise OR as a synchronous
+ * throw out of `locks.request(...)` itself) from the CALLBACK WORK. The
+ * cycle accounts for exactly one `run()` invocation via
+ * `callbackWorkPromise`, captured once inside the callback — never via the
+ * raw `locks.request` transport promise, which is only consulted to detect a
+ * genuine pre-callback lock-API failure (the fallback-eligible case) and is
+ * otherwise just drained so it can never surface as an unhandled rejection
+ * or, by itself, hold `cycleInFlight` open past the shared cycle deadline.
+ */
+async function runChannelsUnderWebLock(
+  locks: MinimalLockManager,
+  run: () => Promise<ChannelRunResult[]>,
+  cycleDeadline: DeadlineSignal,
+  d: ResolvedDeps,
+): Promise<WebLockRunOutcome> {
+  let callbackStarted = false;
+  let callbackWorkPromise: Promise<ChannelRunResult[]> | null = null;
+  let lockGrantedResolve!: () => void;
+  const lockGranted = new Promise<void>((resolve) => {
+    lockGrantedResolve = resolve;
+  });
+
+  let lockRequest: Promise<unknown>;
+  try {
+    lockRequest = locks.request(SYNC_ORCHESTRATOR_LOCK, { ifAvailable: true }, async (lock) => {
+      lockGrantedResolve();
+      if (!lock) return;
+      // A late grant on an abandoned request (this cycle's deadline already
+      // expired): stale work must never start. A later fresh cycle will
+      // re-request the lock normally.
+      if (cycleDeadline.expired()) return;
+      callbackStarted = true;
+      callbackWorkPromise = run();
+      await callbackWorkPromise;
+    });
+  } catch {
+    // RC-D2-002: `locks.request(...)` can still throw synchronously AFTER
+    // synchronously invoking the callback (some Web Locks implementations /
+    // test mocks run the callback inline before returning or throwing). When
+    // that happened, `callbackWorkPromise` already captured the one and only
+    // `run()` invocation for this cycle — the synchronous throw is a raw
+    // Web Locks transport failure that must be treated as observational
+    // only, never as license to double-run via the fallback below.
+    if (callbackStarted) {
+      return { kind: 'ran', channels: await callbackWorkPromise! };
+    }
+    // The callback never ran, so this is the same fail-open fallback case as
+    // "no Web Locks available", unless the shared cycle deadline has already
+    // expired, in which case no late work may start at all.
+    if (cycleDeadline.expired()) return { kind: 'timeout' };
+    return { kind: 'ran', channels: await run() };
+  }
+
+  // The raw transport promise is never awaited for accounting. Its
+  // rejection is absorbed here — attaching this handler is what keeps it
+  // from ever becoming an unhandled rejection — and, only if it arrives
+  // BEFORE any callback was ever invoked, treated below as a genuine
+  // lock-API failure. A rejection that follows callback-started work is the
+  // very rejection `callbackWorkPromise` already surfaces; draining it here
+  // a second time changes nothing.
+  const lockRequestRejection = new Promise<never>((_resolve, reject) => {
+    lockRequest.then(
+      () => undefined,
+      (err) => reject(err),
+    );
+  });
+
+  let decision: { status: 'settled' } | { status: 'timeout' };
+  try {
+    decision = await awaitWithDeadlineSignals(
+      Promise.race([lockGranted, lockRequestRejection]),
+      [cycleDeadline],
+      d,
+    );
+  } catch {
+    // The raw request failed before any callback was ever invoked: a
+    // genuine Web Locks / lock API error. Callback work never started, so
+    // falling back to running inline here carries no double-run risk —
+    // it is the only `run()` invocation for this cycle, same as the
+    // "no Web Locks available" path.
+    return { kind: 'ran', channels: await run() };
+  }
+
+  if (decision.status === 'timeout') {
+    // The deadline won before the callback was ever invoked (or before it
+    // decided anything). Abandon this request logically; a late callback
+    // will observe the expired deadline above and refuse to start work.
+    return { kind: 'timeout' };
+  }
+
+  if (!callbackStarted) {
+    // The callback fired but declined to start work: denied elsewhere, or
+    // a stale grant that arrived after the deadline.
+    return { kind: 'lock_held' };
+  }
+
+  // Exactly one `run()` invocation for this cycle. Its rejection (e.g. a
+  // pre-loop `getDeviceId()` throw inside `runChannels`) propagates as-is —
+  // it must never trigger a second, fallback `run()` here.
+  const channels = await callbackWorkPromise!;
+  return { kind: 'ran', channels };
+}
+
 function publishIfCurrent(token: number, next: SyncOrchestratorState): void {
   if (token !== cycleToken) return;
   publish(next);
@@ -524,54 +676,93 @@ async function runCycleBody(
   token: number,
 ): Promise<SyncCycleOutcome> {
   const startedAtMs = d.now();
-  const gate = await evaluateGates(ctx, d);
-  let terminalCount = 0;
+  // A03/F09: ONE armed signal for the whole cycle, shared by the gate, both
+  // terminal counts, the privileged-evidence phase, and every channel.
+  const cycleDeadline = armDeadline(d, SYNC_ORCHESTRATOR_MAX_CYCLE_DURATION_MS);
   try {
-    terminalCount = await d.countTerminal();
-  } catch {
-    terminalCount = state.terminalVoidIntentCount;
-  }
+    // A01: a hung getIdTokenResult now costs one cycle, not every future cycle.
+    const gateRace = await awaitWithDeadlineSignals(evaluateGates(ctx, d), [cycleDeadline], d);
+    const gate: GateEvaluation = gateRace.status === 'timeout' ? { skip: 'gate_timeout', staffId: null } : gateRace.value;
 
-  if (gate.skip) {
-    const outcome: SyncCycleOutcome = {
-      ran: false,
-      reason: gate.skip,
-      trigger,
-      completed: true,
-      channels: [],
-    };
-    publishIfCurrent(token, {
-      ...state,
-      webLocksAvailable: Boolean(webLocksOf(d.navigatorRef)),
-      terminalVoidIntentCount: terminalCount,
-      lastCycle: {
-        trigger,
-        startedAtMs,
-        durationMs: d.now() - startedAtMs,
-        completed: true,
-        gateOutcome: 'skipped',
-        gateSkipReason: gate.skip,
-        channels: [],
-      },
-      cycleCount: state.cycleCount + 1,
-    });
-    return outcome;
-  }
-
-  const locks = webLocksOf(d.navigatorRef);
-  const run = async (): Promise<ChannelRunResult[]> =>
-    runChannels(trigger, ctx, d, startedAtMs, gate.staffId, token);
-
-  let channels: ChannelRunResult[] = [];
-  if (locks && typeof locks.request === 'function') {
+    let terminalCount = 0;
+    // A02: a blocked countTerminal() now costs one cycle, not every future cycle.
     try {
-      let ran = false;
-      await locks.request(SYNC_ORCHESTRATOR_LOCK, { ifAvailable: true }, async (lock) => {
-        if (!lock) return;
-        ran = true;
-        channels = await run();
+      const raced = await awaitWithDeadlineSignals(d.countTerminal(), [cycleDeadline], d);
+      terminalCount = raced.status === 'timeout' ? state.terminalVoidIntentCount : raced.value;
+    } catch {
+      terminalCount = state.terminalVoidIntentCount;
+    }
+
+    if (gate.skip) {
+      const outcome: SyncCycleOutcome = {
+        ran: false,
+        reason: gate.skip,
+        trigger,
+        completed: true,
+        channels: [],
+      };
+      publishIfCurrent(token, {
+        ...state,
+        webLocksAvailable: Boolean(webLocksOf(d.navigatorRef)),
+        terminalVoidIntentCount: terminalCount,
+        lastCycle: {
+          trigger,
+          startedAtMs,
+          durationMs: d.now() - startedAtMs,
+          completed: true,
+          gateOutcome: 'skipped',
+          gateSkipReason: gate.skip,
+          channels: [],
+        },
+        cycleCount: state.cycleCount + 1,
       });
-      if (!ran) {
+      return outcome;
+    }
+
+    const locks = webLocksOf(d.navigatorRef);
+    const run = async (): Promise<ChannelRunResult[]> => {
+      // A04: the D-2 privileged-evidence phase runs BEFORE the existing
+      // channel sequence, under its own reserved budget, so no landed
+      // channel (e.g. CH4 offline_reversal) can starve it. A throw here can
+      // never suppress the channels that follow.
+      try {
+        await awaitWithDeadlineSignals(
+          d.runPrivilegedEvidenceSweep({
+            branchId: ctx.branchId as string,
+            staffId: gate.staffId,
+            deviceId: getDeviceId(),
+            cycleDeadline,
+          }),
+          [cycleDeadline],
+          d,
+        );
+      } catch {
+        /* the privileged-evidence phase must never suppress the channel sequence */
+      }
+      return runChannels(trigger, ctx, d, cycleDeadline, gate.staffId, token);
+    };
+
+    let channels: ChannelRunResult[] = [];
+    if (locks && typeof locks.request === 'function') {
+      const lockOutcome = await runChannelsUnderWebLock(locks, run, cycleDeadline, d);
+      if (lockOutcome.kind === 'timeout') {
+        publishIfCurrent(token, {
+          ...state,
+          webLocksAvailable: true,
+          terminalVoidIntentCount: terminalCount,
+          lastCycle: {
+            trigger,
+            startedAtMs,
+            durationMs: d.now() - startedAtMs,
+            completed: false,
+            gateOutcome: 'ran',
+            channels: [],
+          },
+          cycleCount: state.cycleCount + 1,
+        });
+        return { ran: true, trigger, completed: false, channels: [] };
+      }
+      if (lockOutcome.kind === 'lock_held') {
         publishIfCurrent(token, {
           ...state,
           webLocksAvailable: true,
@@ -589,41 +780,43 @@ async function runCycleBody(
         });
         return { ran: false, reason: 'lock_held', trigger, completed: true, channels: [] };
       }
-    } catch {
+      channels = lockOutcome.channels;
+    } else {
       channels = await run();
     }
-  } else {
-    channels = await run();
-  }
 
-  try {
-    terminalCount = await d.countTerminal();
-  } catch {
-    /* keep previous */
-  }
+    try {
+      const raced = await awaitWithDeadlineSignals(d.countTerminal(), [cycleDeadline], d);
+      if (raced.status === 'settled') terminalCount = raced.value;
+    } catch {
+      /* keep previous */
+    }
 
-  const completed = channels.every((c) => c.skipReason !== 'capped');
-  const failed = channels.some((c) => c.status === 'failed');
-  const exhausted = [...retryLedger.entries()]
-    .filter(([, e]) => e.attempts >= SYNC_ORCHESTRATOR_MAX_ATTEMPTS)
-    .map(([k]) => k);
-  publishIfCurrent(token, {
-    schemaVersion: 1,
-    webLocksAvailable: Boolean(webLocksOf(d.navigatorRef)),
-    lastCycle: {
-      trigger,
-      startedAtMs,
-      durationMs: d.now() - startedAtMs,
-      completed,
-      gateOutcome: 'ran',
-      channels,
-    },
-    cycleCount: state.cycleCount + 1,
-    terminalVoidIntentCount: terminalCount,
-    lastErrorAtMs: failed ? d.now() : state.lastErrorAtMs,
-    ch4AttemptExhaustedIds: exhausted,
-  });
-  return { ran: true, trigger, completed, channels };
+    const completed = channels.every((c) => c.skipReason !== 'capped');
+    const failed = channels.some((c) => c.status === 'failed');
+    const exhausted = [...retryLedger.entries()]
+      .filter(([, e]) => e.attempts >= SYNC_ORCHESTRATOR_MAX_ATTEMPTS)
+      .map(([k]) => k);
+    publishIfCurrent(token, {
+      schemaVersion: 1,
+      webLocksAvailable: Boolean(webLocksOf(d.navigatorRef)),
+      lastCycle: {
+        trigger,
+        startedAtMs,
+        durationMs: d.now() - startedAtMs,
+        completed,
+        gateOutcome: 'ran',
+        channels,
+      },
+      cycleCount: state.cycleCount + 1,
+      terminalVoidIntentCount: terminalCount,
+      lastErrorAtMs: failed ? d.now() : state.lastErrorAtMs,
+      ch4AttemptExhaustedIds: exhausted,
+    });
+    return { ran: true, trigger, completed, channels };
+  } finally {
+    cycleDeadline.dispose();
+  }
 }
 
 function startCycle(
@@ -666,6 +859,9 @@ function applyPreCycleReset(policy: PreCycleResetPolicy, d: ResolvedDeps): void 
     retryLedger.set(key, { ...entry, nextEligibleAtMs: 0 });
   }
   void clearVoidIntentBackoff(createIndexedDbReversalStore(), d.now()).catch(() => {
+    /* best-effort: IDB may be absent in tests / private mode */
+  });
+  void clearPrivilegedEvidenceBackoff(createIndexedDbReversalStore(), d.now()).catch(() => {
     /* best-effort: IDB may be absent in tests / private mode */
   });
 }

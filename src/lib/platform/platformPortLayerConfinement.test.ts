@@ -292,6 +292,7 @@ describe('Phase A platform port layer confinement', () => {
         '/src/lib/pos/asyncCheckout.ts',
         '/src/lib/pos/deviceId.ts',
         '/src/lib/pos/offline/activeCartSnapshotStore.ts',
+        '/src/lib/pos/offline/privilegedEvidenceStore.ts',
         '/src/lib/pos/offline/reversalLocalStore.ts',
         '/src/lib/pos/offline/saleIntentJournalStore.ts',
         '/src/lib/pos/offline/saleSubmissionEvidenceStore.ts',

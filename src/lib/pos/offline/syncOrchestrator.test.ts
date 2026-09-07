@@ -1,7 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { User as FirebaseUser } from 'firebase/auth';
 import appShellSource from '../../../components/AppShell.tsx?raw';
 import orchestratorSource from './syncOrchestrator.ts?raw';
+import * as deviceIdModule from '../deviceId';
 import {
   CHANNEL_ORDER,
   SYNC_ORCHESTRATOR_BACKOFF_CAP_MS,
@@ -26,6 +27,8 @@ import {
   type SyncOrchestratorDeps,
 } from './syncOrchestrator';
 
+vi.mock('../deviceId', { spy: true });
+
 const FAKE_USER = { uid: 'u1' } as unknown as FirebaseUser;
 
 function baseCtx(
@@ -49,7 +52,15 @@ function channelOk(channel: ChannelRunResult['channel']): ChannelRunResult {
 
 function makeHarness(opts?: {
   onLine?: boolean;
-  locks?: 'acquire' | 'held' | 'none' | 'throw';
+  locks?:
+    | 'acquire'
+    | 'held'
+    | 'none'
+    | 'throw'
+    | 'sync-throw'
+    | 'sync-throw-after-callback'
+    | 'never-settle'
+    | 'acquire-request-never-settles';
   ch1Held?: boolean;
   claims?: Record<string, unknown> | 'throw';
   lookupNull?: boolean;
@@ -71,6 +82,7 @@ function makeHarness(opts?: {
   let hangOnce = opts?.hangCh4 === true;
   let cycleLockHeld = false;
   let cycleLockReleaseCount = 0;
+  let neverSettleCallback: ((lock: unknown | null) => Promise<void> | void) | null = null;
 
   const run = (channel: ChannelRunResult['channel']) => {
     if (channel === 'offline_reversal' && opts?.throwCh4) throw new Error('ch4 boom');
@@ -133,6 +145,103 @@ function makeHarness(opts?: {
     locks = {
       request: async () => {
         throw new Error('locks exploded');
+      },
+    };
+  } else if (opts?.locks === 'sync-throw') {
+    // RC-D2-002: a truly synchronous throw. `request` is deliberately NOT
+    // `async` here — calling it throws immediately, before ever returning a
+    // promise and before the callback could ever run. (The `'throw'` variant
+    // above is an `async` function, so its throw becomes a REJECTED PROMISE,
+    // not a genuine synchronous throw — insufficient to exercise the
+    // synchronous-throw branch.) Scoped to the shared cycle lock name only —
+    // RC-D2-002 concerns that lock's own guarded acquisition path; CH-1's
+    // unrelated nested lock request (already independently try/caught per
+    // channel in `runChannels`) behaves normally so this test isolates the
+    // one code path under remediation.
+    locks = {
+      request: (
+        name: string,
+        options: { ifAvailable?: boolean },
+        cb: (lock: unknown | null) => Promise<void> | void,
+      ): Promise<unknown> => {
+        expect(options.ifAvailable).toBe(true);
+        if (name === SYNC_ORCHESTRATOR_LOCK) {
+          throw new Error('locks exploded synchronously');
+        }
+        return Promise.resolve(cb({ name }));
+      },
+    };
+  } else if (opts?.locks === 'sync-throw-after-callback') {
+    // RC-D2-002: `request` synchronously INVOKES the callback — so
+    // `callbackStarted` becomes true and `callbackWorkPromise` is captured
+    // by the orchestrator's own callback body before this mock ever returns
+    // — and THEN throws synchronously, before ever returning a promise to
+    // the caller. This is the schedule the prior 'sync-throw' variant above
+    // cannot reach (that one throws strictly BEFORE the callback runs).
+    // Scoped to the shared cycle lock name only, matching 'sync-throw'.
+    locks = {
+      request: (
+        name: string,
+        options: { ifAvailable?: boolean },
+        cb: (lock: unknown | null) => Promise<void> | void,
+      ): Promise<unknown> => {
+        lockNames.push(name);
+        expect(options.ifAvailable).toBe(true);
+        if (name === SYNC_ORCHESTRATOR_LOCK) {
+          cycleLockHeld = true;
+          void Promise.resolve(cb({ name })).then(
+            () => {
+              cycleLockHeld = false;
+              cycleLockReleaseCount += 1;
+            },
+            () => {
+              cycleLockHeld = false;
+              cycleLockReleaseCount += 1;
+            },
+          );
+          throw new Error('locks exploded synchronously after callback started');
+        }
+        return Promise.resolve(cb({ name }));
+      },
+    };
+  } else if (opts?.locks === 'never-settle') {
+    // RC-D2-002: models a `locks.request` call whose promise never settles
+    // (e.g. a hung Web Locks implementation). The callback is captured so a
+    // test can simulate a LATE grant arriving after the cycle deadline.
+    locks = {
+      request: (
+        name: string,
+        options: { ifAvailable?: boolean },
+        cb: (lock: unknown | null) => Promise<void> | void,
+      ) => {
+        lockNames.push(name);
+        expect(options.ifAvailable).toBe(true);
+        if (name === SYNC_ORCHESTRATOR_LOCK) neverSettleCallback = cb;
+        return new Promise<unknown>(() => {});
+      },
+    };
+  } else if (opts?.locks === 'acquire-request-never-settles') {
+    // RC-D2-002 (T1): the callback IS invoked (grants immediately, so
+    // callback work starts and can finish) but the raw `locks.request(...)`
+    // promise itself never settles — a hung platform Promise even though
+    // its own callback ran to completion.
+    locks = {
+      request: (
+        name: string,
+        options: { ifAvailable?: boolean },
+        cb: (lock: unknown | null) => Promise<void> | void,
+      ) => {
+        lockNames.push(name);
+        expect(options.ifAvailable).toBe(true);
+        if (name === SYNC_ORCHESTRATOR_LOCK) {
+          cycleLockHeld = true;
+          void Promise.resolve(cb({ name })).then(() => {
+            cycleLockHeld = false;
+            cycleLockReleaseCount += 1;
+          });
+          return new Promise<unknown>(() => {});
+        }
+        return cb({ name });
       },
     };
   } else {
@@ -207,6 +316,7 @@ function makeHarness(opts?: {
     releaseHang: () => hangRelease?.(),
     isCycleLockHeld: () => cycleLockHeld,
     cycleLockReleaseCount: () => cycleLockReleaseCount,
+    invokeNeverSettleLockCallback: () => neverSettleCallback?.({ name: SYNC_ORCHESTRATOR_LOCK }),
     waitUntilHung: async () => {
       const start = Date.now();
       while (!hung) {
@@ -508,6 +618,220 @@ describe('syncOrchestrator locks', () => {
     expect(outcome.ran).toBe(true);
     expect(h.calls[0]).toBe('offline_reversal');
   });
+
+  it('RC-D2-002: a truly synchronous locks.request throw (before any promise or callback) fail-opens exactly once, and a later cycle runs normally', async () => {
+    const h = makeHarness({ locks: 'sync-throw' });
+    const ctx = baseCtx();
+    maybeStartSyncOrchestrator(ctx, h.deps);
+    const outcome = await requestSyncOrchestratorCycle('a', ctx, h.deps);
+    expect(outcome.ran).toBe(true);
+    expect(outcome.completed).toBe(true);
+    // The inline fallback `run()` ran exactly once: every channel appears,
+    // and CH-4 specifically appears exactly once (not zero, not twice).
+    expect(h.calls).toEqual(['offline_reversal', 'void_intent', 'shift_intent', 'sale_intent', 'trusted_resume']);
+    expect(h.calls.filter((c) => c === 'offline_reversal')).toHaveLength(1);
+    expect(__syncOrchestratorPendingCycleForTests()).toBeNull();
+    // No second, Web-Locks-specific timer — only the one shared cycle deadline.
+    expect(h.timeouts.filter((t) => t.ms === SYNC_ORCHESTRATOR_MAX_CYCLE_DURATION_MS)).toHaveLength(1);
+
+    // A later fresh cycle (a settling lock this time) still runs normally.
+    const h2 = makeHarness({ locks: 'acquire' });
+    const ctx2 = baseCtx();
+    maybeStartSyncOrchestrator(ctx2, h2.deps);
+    const second = await requestSyncOrchestratorCycle('b', ctx2, h2.deps);
+    expect(second.ran).toBe(true);
+    expect(second.completed).toBe(true);
+    expect(h2.calls).toEqual(['offline_reversal', 'void_intent', 'shift_intent', 'sale_intent', 'trusted_resume']);
+  });
+
+  it('RC-D2-002: a synchronous locks.request throw after the cycle deadline already expired never falls back', async () => {
+    const h = makeHarness({ locks: 'sync-throw' });
+    // Fire the shared cycle deadline from inside countTerminal — it runs
+    // AFTER the gate has already resolved (skip: null) but strictly BEFORE
+    // `runChannelsUnderWebLock` ever calls `locks.request(...)`, so the
+    // deadline is deterministically expired by the time the synchronous
+    // throw is caught, without racing real timers/microtasks.
+    h.deps.countTerminal = async () => {
+      const deadline = h.timeouts.find((t) => t.ms === SYNC_ORCHESTRATOR_MAX_CYCLE_DURATION_MS && !t.cleared);
+      deadline?.fn();
+      return 0;
+    };
+    const ctx = baseCtx();
+    maybeStartSyncOrchestrator(ctx, h.deps);
+    const outcome = await requestSyncOrchestratorCycle('a', ctx, h.deps);
+    expect(outcome.ran).toBe(true);
+    expect(outcome.completed).toBe(false);
+    expect(h.calls).toEqual([]); // never fell back — no late/expired-deadline work
+    expect(__syncOrchestratorPendingCycleForTests()).toBeNull();
+  });
+
+  it('RC-D2-002: a never-settling locks.request releases the cycle at the shared deadline, and a later cycle runs normally', async () => {
+    const h = makeHarness({ locks: 'never-settle' });
+    const ctx = baseCtx();
+    maybeStartSyncOrchestrator(ctx, h.deps);
+    const first = requestSyncOrchestratorCycle('a', ctx, h.deps);
+    // The 20s timer exists almost immediately (armed at the very top of
+    // runCycleBody, A03) — wait for the lock to actually be REQUESTED
+    // instead, so the deadline fires once we're truly inside the Web Locks
+    // acquisition wait, not during gate evaluation.
+    const waitStart = Date.now();
+    while (!h.lockNames.includes(SYNC_ORCHESTRATOR_LOCK)) {
+      if (Date.now() - waitStart > 2_000) throw new Error('lock was not requested');
+      await new Promise((r) => setTimeout(r, 0));
+    }
+    // No second, independent Web-Locks-specific timer is armed — only the
+    // one shared cycle deadline.
+    expect(h.timeouts.filter((t) => t.ms === SYNC_ORCHESTRATOR_MAX_CYCLE_DURATION_MS)).toHaveLength(1);
+    const deadline = h.timeouts.find((t) => t.ms === SYNC_ORCHESTRATOR_MAX_CYCLE_DURATION_MS && !t.cleared)!;
+    deadline.fn();
+    const outcome = await first;
+    expect(outcome.ran).toBe(true);
+    expect(outcome.completed).toBe(false);
+    expect(outcome.channels).toEqual([]);
+    expect(h.calls).toEqual([]); // no channel work ever started
+    expect(__syncOrchestratorPendingCycleForTests()).toBeNull(); // cycleInFlight released
+
+    // A later fresh cycle (a settling lock this time) runs normally.
+    const h2 = makeHarness({ locks: 'acquire' });
+    const ctx2 = baseCtx();
+    maybeStartSyncOrchestrator(ctx2, h2.deps);
+    const second = await requestSyncOrchestratorCycle('b', ctx2, h2.deps);
+    expect(second.ran).toBe(true);
+    expect(second.completed).toBe(true);
+    expect(h2.calls).toEqual(['offline_reversal', 'void_intent', 'shift_intent', 'sale_intent', 'trusted_resume']);
+  });
+
+  it('RC-D2-002: a lock callback invoked only after the deadline never starts stale work', async () => {
+    const h = makeHarness({ locks: 'never-settle' });
+    const ctx = baseCtx();
+    maybeStartSyncOrchestrator(ctx, h.deps);
+    const first = requestSyncOrchestratorCycle('a', ctx, h.deps);
+    // The 20s timer exists almost immediately (armed at the very top of
+    // runCycleBody, A03) — wait for the lock to actually be REQUESTED
+    // instead, so the deadline fires once we're truly inside the Web Locks
+    // acquisition wait, not during gate evaluation.
+    const waitStart = Date.now();
+    while (!h.lockNames.includes(SYNC_ORCHESTRATOR_LOCK)) {
+      if (Date.now() - waitStart > 2_000) throw new Error('lock was not requested');
+      await new Promise((r) => setTimeout(r, 0));
+    }
+    const deadline = h.timeouts.find((t) => t.ms === SYNC_ORCHESTRATOR_MAX_CYCLE_DURATION_MS && !t.cleared)!;
+    deadline.fn();
+    const outcome = await first;
+    expect(outcome.completed).toBe(false);
+    // The lock is granted only now — strictly after the deadline fired.
+    await h.invokeNeverSettleLockCallback();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(h.calls).toEqual([]); // still no channel work, no privileged-evidence phase
+    expect(readSyncOrchestratorState().lastCycle?.channels).toEqual([]);
+  });
+
+  it('RC-D2-002 (T1): callback work is accounted via its own promise, so it completes boundedly even when the raw locks.request promise never settles', async () => {
+    const h = makeHarness({ locks: 'acquire-request-never-settles' });
+    const ctx = baseCtx();
+    maybeStartSyncOrchestrator(ctx, h.deps);
+    const outcome = await requestSyncOrchestratorCycle('a', ctx, h.deps);
+    expect(outcome.ran).toBe(true);
+    expect(outcome.completed).toBe(true);
+    expect(h.calls).toEqual(['offline_reversal', 'void_intent', 'shift_intent', 'sale_intent', 'trusted_resume']);
+    // run() invoked exactly once for this cycle.
+    expect(h.calls.filter((c) => c === 'offline_reversal')).toHaveLength(1);
+    expect(__syncOrchestratorPendingCycleForTests()).toBeNull();
+
+    // A later fresh cycle (a settling lock this time) still runs normally —
+    // the never-settling raw request from the first cycle never held
+    // `cycleInFlight` open.
+    const h2 = makeHarness({ locks: 'acquire' });
+    const ctx2 = baseCtx();
+    maybeStartSyncOrchestrator(ctx2, h2.deps);
+    const second = await requestSyncOrchestratorCycle('b', ctx2, h2.deps);
+    expect(second.ran).toBe(true);
+    expect(second.completed).toBe(true);
+  });
+
+  it('RC-D2-002 (T2): callback-started work rejecting propagates without ever invoking a second, fallback run()', async () => {
+    const h = makeHarness({ locks: 'acquire' });
+    // Codex's concrete source path: `runChannels` reads `getDeviceId()`
+    // synchronously, unguarded, before its per-channel loop. The first call
+    // (the D-2 privileged-evidence phase's own `getDeviceId()`, wrapped in a
+    // swallowing try/catch — A04) succeeds; the second (inside
+    // `runChannels`, uncaught) throws, rejecting this cycle's single `run()`.
+    let deviceIdCalls = 0;
+    vi.mocked(deviceIdModule.getDeviceId).mockImplementation(() => {
+      deviceIdCalls += 1;
+      if (deviceIdCalls === 2) throw new Error('device id boom');
+      return 'test-device';
+    });
+    try {
+      const ctx = baseCtx();
+      maybeStartSyncOrchestrator(ctx, h.deps);
+      await expect(requestSyncOrchestratorCycle('a', ctx, h.deps)).rejects.toThrow('device id boom');
+      // No second/fallback run() followed the resulting raw locks.request
+      // rejection: no channel ever ran (if a second run() had executed with
+      // a fresh, non-throwing getDeviceId(), every channel would appear here).
+      expect(h.calls).toEqual([]);
+      expect(__syncOrchestratorPendingCycleForTests()).toBeNull();
+      expect(h.isCycleLockHeld()).toBe(false);
+
+      // A later fresh cycle (getDeviceId no longer throwing) runs normally.
+      const second = await requestSyncOrchestratorCycle('b', ctx, h.deps);
+      expect(second.ran).toBe(true);
+      expect(second.completed).toBe(true);
+    } finally {
+      vi.mocked(deviceIdModule.getDeviceId).mockRestore();
+    }
+  });
+
+  it('RC-D2-002: a synchronous locks.request throw AFTER the callback already started never falls back to a second run()', async () => {
+    const h = makeHarness({ locks: 'sync-throw-after-callback' });
+    let privilegedSweepCalls = 0;
+    h.deps.runPrivilegedEvidenceSweep = async () => {
+      privilegedSweepCalls += 1;
+      return { itemsAttempted: 0, itemsAdvanced: 0 };
+    };
+    const ctx = baseCtx();
+    maybeStartSyncOrchestrator(ctx, h.deps);
+    const outcome = await requestSyncOrchestratorCycle('a', ctx, h.deps);
+    expect(outcome.ran).toBe(true);
+    expect(outcome.completed).toBe(true);
+    // Callback started exactly once, and its own `run()` is the only cycle
+    // execution: every channel appears exactly once, never twice (a
+    // fallback double-run would duplicate every entry here).
+    expect(h.calls).toEqual(['offline_reversal', 'void_intent', 'shift_intent', 'sale_intent', 'trusted_resume']);
+    expect(h.calls.filter((c) => c === 'offline_reversal')).toHaveLength(1);
+    expect(privilegedSweepCalls).toBe(1);
+    // The raw transport failure (thrown after callback-start) is absorbed
+    // observationally: cycleInFlight still releases and the callback-work
+    // promise's fulfillment is still accounted for via `outcome`.
+    expect(__syncOrchestratorPendingCycleForTests()).toBeNull();
+    // No second, Web-Locks-specific timer — only the one shared cycle deadline.
+    expect(h.timeouts.filter((t) => t.ms === SYNC_ORCHESTRATOR_MAX_CYCLE_DURATION_MS)).toHaveLength(1);
+
+    // A later fresh cycle (a settling lock this time) still runs normally.
+    const h2 = makeHarness({ locks: 'acquire' });
+    const ctx2 = baseCtx();
+    maybeStartSyncOrchestrator(ctx2, h2.deps);
+    const second = await requestSyncOrchestratorCycle('b', ctx2, h2.deps);
+    expect(second.ran).toBe(true);
+    expect(second.completed).toBe(true);
+    expect(h2.calls).toEqual(['offline_reversal', 'void_intent', 'shift_intent', 'sale_intent', 'trusted_resume']);
+  });
+
+  it('RC-D2-002: a synchronous locks.request throw AFTER the callback started propagates callback-work rejection without a fallback run()', async () => {
+    const h = makeHarness({ locks: 'sync-throw-after-callback', throwCh4: true });
+    const ctx = baseCtx();
+    maybeStartSyncOrchestrator(ctx, h.deps);
+    const outcome = await requestSyncOrchestratorCycle('a', ctx, h.deps);
+    // CH-4 throwing synchronously inside `run()` is caught per-channel
+    // (`runChannels`'s own try/catch) and reported `failed` — it must not
+    // be swallowed into a silent "no fallback ran" false negative, and no
+    // second run() may follow the raw transport throw.
+    expect(outcome.ran).toBe(true);
+    expect(outcome.channels[0]).toMatchObject({ channel: 'offline_reversal', status: 'failed' });
+    expect(h.calls).toEqual(['void_intent', 'shift_intent', 'sale_intent', 'trusted_resume']);
+    expect(__syncOrchestratorPendingCycleForTests()).toBeNull();
+  });
 });
 
 describe('syncOrchestrator channels', () => {
@@ -543,19 +867,26 @@ describe('syncOrchestrator channels', () => {
     expect(h.calls).toContain('void_intent');
   });
 
-  it('T-42 wall-clock cap marks remaining channels skipped/capped', async () => {
-    let t = 1_000;
+  it('T-42 cycle deadline signal firing mid-cycle marks remaining channels skipped/capped', async () => {
+    // A03 closure: the cycle bound is a single armed setTimeoutFn signal shared
+    // by every await in the cycle, not a per-await Date.now() subtraction — so
+    // this test fires the one cycle-scope timer instead of advancing a fake clock.
     const h = makeHarness();
-    h.deps.now = () => t;
-    const originalCh4 = h.deps.runCh4!;
-    h.deps.runCh4 = async (input) => {
-      const result = await originalCh4(input);
-      t += SYNC_ORCHESTRATOR_MAX_CYCLE_DURATION_MS;
-      return result;
+    // Fire the deadline as CH5's OWN first action: by the time CH5 is
+    // dispatched, CH4's own race has already resolved and been recorded
+    // (runChannels checks `capped || cycleDeadline.expired()` BEFORE
+    // dispatching each channel), so CH4 keeps its 'ok' result and CH5
+    // onward lose their own race against the now-fired signal.
+    const originalCh5 = h.deps.runCh5!;
+    h.deps.runCh5 = async (input) => {
+      const deadline = h.timeouts.find((tm) => tm.ms === SYNC_ORCHESTRATOR_MAX_CYCLE_DURATION_MS && !tm.cleared);
+      deadline?.fn();
+      return originalCh5(input);
     };
     const ctx = baseCtx();
     maybeStartSyncOrchestrator(ctx, h.deps);
     const outcome = await requestSyncOrchestratorCycle('a', ctx, h.deps);
+    expect(outcome.channels[0]).toMatchObject({ channel: 'offline_reversal', status: 'ok' });
     expect(outcome.channels.slice(1).every((c) => c.skipReason === 'capped')).toBe(true);
     expect(outcome.completed).toBe(false);
   });
@@ -659,11 +990,13 @@ describe('syncOrchestrator RC-1 true cycle deadline', () => {
     const ctx = baseCtx();
     maybeStartSyncOrchestrator(ctx, h.deps);
     const first = requestSyncOrchestratorCycle('hang', ctx, h.deps);
+    // The cycle-scope deadline is armed at the very TOP of runCycleBody
+    // (A03) — before the gate, before the D-2 phase, before the lock — so
+    // its timer exists almost immediately. Wait for the LOCK instead, which
+    // only becomes held once we are actually about to run the channels.
     const waitStart = Date.now();
-    while (
-      !h.timeouts.some((t) => t.ms === SYNC_ORCHESTRATOR_MAX_CYCLE_DURATION_MS && !t.cleared)
-    ) {
-      if (Date.now() - waitStart > 2_000) throw new Error('deadline timer was not scheduled');
+    while (!h.isCycleLockHeld()) {
+      if (Date.now() - waitStart > 2_000) throw new Error('cycle lock was not acquired');
       await new Promise((r) => setTimeout(r, 0));
     }
     expect(h.isCycleLockHeld()).toBe(true);
@@ -741,5 +1074,124 @@ describe('syncOrchestrator RC-1 true cycle deadline', () => {
       nextEligibleAtMs: 42,
       lastErrorClass: 'transport',
     });
+  });
+});
+
+describe('syncOrchestrator A01-A04 shared-deadline hardening', () => {
+  it('A01: a hung getIdTokenResult costs exactly one cycle, then the next cycle runs normally', async () => {
+    const h = makeHarness();
+    h.deps.getClaims = () => new Promise(() => {});
+    const ctx = baseCtx();
+    maybeStartSyncOrchestrator(ctx, h.deps);
+    const first = requestSyncOrchestratorCycle('a', ctx, h.deps);
+    const waitStart = Date.now();
+    while (!h.timeouts.some((t) => t.ms === SYNC_ORCHESTRATOR_MAX_CYCLE_DURATION_MS && !t.cleared)) {
+      if (Date.now() - waitStart > 2_000) throw new Error('cycle deadline timer was not scheduled');
+      await new Promise((r) => setTimeout(r, 0));
+    }
+    const deadline = h.timeouts.find((t) => t.ms === SYNC_ORCHESTRATOR_MAX_CYCLE_DURATION_MS && !t.cleared)!;
+    deadline.fn();
+    const outcome = await first;
+    expect(outcome.ran).toBe(false);
+    expect(outcome.reason).toBe('gate_timeout');
+    expect(__syncOrchestratorPendingCycleForTests()).toBeNull();
+
+    // Next cycle: a fresh (settling) getClaims runs normally.
+    h.deps.getClaims = async () => ({ claims: { staffId: 'staff-1' } });
+    const second = await requestSyncOrchestratorCycle('b', ctx, h.deps);
+    expect(second.ran).toBe(true);
+  });
+
+  it('A02: a blocked countTerminal falls back to the prior state value and the cycle still completes', async () => {
+    const h = makeHarness();
+    let countTerminalCalled = false;
+    h.deps.countTerminal = () => {
+      countTerminalCalled = true;
+      return new Promise(() => {});
+    };
+    const ctx = baseCtx();
+    maybeStartSyncOrchestrator(ctx, h.deps);
+    const first = requestSyncOrchestratorCycle('a', ctx, h.deps);
+    // Fire the cycle deadline only once countTerminal has actually been
+    // invoked — it is armed at the top of the cycle (A03), before the gate,
+    // so firing it as soon as its timer exists would also cap the gate race.
+    const waitStart = Date.now();
+    while (!countTerminalCalled) {
+      if (Date.now() - waitStart > 2_000) throw new Error('countTerminal was not called');
+      await new Promise((r) => setTimeout(r, 0));
+    }
+    const deadline = h.timeouts.find((t) => t.ms === SYNC_ORCHESTRATOR_MAX_CYCLE_DURATION_MS && !t.cleared)!;
+    deadline.fn();
+    const outcome = await first;
+    expect(outcome.ran).toBe(true);
+    expect(readSyncOrchestratorState().terminalVoidIntentCount).toBe(0);
+  });
+
+  it('A03: exactly one cycle-scope 20s timer is armed per cycle, independent of a frozen or jumping clock', async () => {
+    let now = 1_000;
+    const h = makeHarness();
+    h.deps.now = () => now;
+    const ctx = baseCtx();
+    maybeStartSyncOrchestrator(ctx, h.deps);
+    now -= 10_000_000; // backward jump before the cycle even starts
+    await requestSyncOrchestratorCycle('a', ctx, h.deps);
+    const cycleTimers = h.timeouts.filter((t) => t.ms === SYNC_ORCHESTRATOR_MAX_CYCLE_DURATION_MS);
+    expect(cycleTimers).toHaveLength(1);
+  });
+
+  it('A04: the privileged-evidence phase runs before any channel, and its throw cannot suppress the channels', async () => {
+    const order: string[] = [];
+    const h = makeHarness();
+    h.deps.runPrivilegedEvidenceSweep = async () => {
+      order.push('privileged_evidence');
+      throw new Error('phase boom');
+    };
+    const originalCh4 = h.deps.runCh4!;
+    h.deps.runCh4 = async (input) => {
+      order.push('offline_reversal');
+      return originalCh4(input);
+    };
+    const ctx = baseCtx();
+    maybeStartSyncOrchestrator(ctx, h.deps);
+    const outcome = await requestSyncOrchestratorCycle('a', ctx, h.deps);
+    expect(order).toEqual(['privileged_evidence', 'offline_reversal']);
+    expect(outcome.ran).toBe(true);
+    expect(outcome.channels[0]).toMatchObject({ channel: 'offline_reversal', status: 'ok' });
+  });
+
+  it('A04: a never-settling privileged-evidence phase is bounded by the shared cycle deadline, not left to hang forever', async () => {
+    const h = makeHarness({ locks: 'acquire' });
+    h.deps.runPrivilegedEvidenceSweep = () => new Promise(() => {});
+    const ctx = baseCtx();
+    maybeStartSyncOrchestrator(ctx, h.deps);
+    const first = requestSyncOrchestratorCycle('a', ctx, h.deps);
+    // Wait for the lock (acquired only once the D-2 phase call is under way)
+    // rather than for the cycle-deadline timer's mere existence (armed
+    // before the gate, per A03).
+    const waitStart = Date.now();
+    while (!h.isCycleLockHeld()) {
+      if (Date.now() - waitStart > 2_000) throw new Error('cycle lock was not acquired');
+      await new Promise((r) => setTimeout(r, 0));
+    }
+    const deadline = h.timeouts.find((t) => t.ms === SYNC_ORCHESTRATOR_MAX_CYCLE_DURATION_MS && !t.cleared)!;
+    deadline.fn();
+    const outcome = await first;
+    expect(outcome.ran).toBe(true);
+    expect(outcome.completed).toBe(false);
+    expect(h.isCycleLockHeld()).toBe(false);
+    expect(__syncOrchestratorPendingCycleForTests()).toBeNull();
+  });
+});
+
+describe('syncOrchestrator / privileged-evidence confinement', () => {
+  it('does not import syncCenterModel/syncCenterReader/syncCenterActions or firebase/firestore', () => {
+    expect(orchestratorSource).not.toMatch(/from\s+['"][^'"]*syncCenterModel['"]/);
+    expect(orchestratorSource).not.toMatch(/from\s+['"][^'"]*syncCenterReader['"]/);
+    expect(orchestratorSource).not.toMatch(/from\s+['"][^'"]*syncCenterActions['"]/);
+    expect(orchestratorSource).not.toMatch(/from\s+['"]firebase\/firestore['"]/);
+  });
+
+  it('CHANNEL_ORDER still has exactly the five landed channels (D-2 is not a sixth channel)', () => {
+    expect([...CHANNEL_ORDER]).toHaveLength(5);
   });
 });

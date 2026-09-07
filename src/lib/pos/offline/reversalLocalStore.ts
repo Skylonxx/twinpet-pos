@@ -50,7 +50,8 @@ export type ReversalStoreName =
   | 'ledger'
   | 'markers'
   | 'rejections'
-  | 'voidIntents';
+  | 'voidIntents'
+  | 'privilegedEvidence';
 
 export const REVERSAL_STORES: ReversalStoreName[] = [
   'intents',
@@ -59,6 +60,7 @@ export const REVERSAL_STORES: ReversalStoreName[] = [
   'markers',
   'rejections',
   'voidIntents',
+  'privilegedEvidence',
 ];
 
 export const REVERSAL_DB_NAME = 'twinpet-offline-reversal';
@@ -83,12 +85,17 @@ export interface ReversalLocalStore {
 
 const DB_NAME = REVERSAL_DB_NAME;
 // v2 (Phase 7B-H7-C): adds the `rejections` store.
-// v3 (PK-3): adds the `voidIntents` store. The upgrade is additive — the
-// `onupgradeneeded` loop only creates stores not already present, so existing
-// `intents`/`stock`/`ledger`/`markers`/`rejections` data is preserved across the bump.
-// After a runtime has opened v3, naively reverting source to DB_VERSION=2 can raise
-// IndexedDB VersionError; rollback must be version-floor-aware (see PK-3 report).
-const DB_VERSION = 3;
+// v3 (PK-3): adds the `voidIntents` store.
+// v4 (SEC-001 Packet D / D-2): adds the `privilegedEvidence` store. The upgrade
+// is additive — the `onupgradeneeded` loop only creates stores not already
+// present, so existing `intents`/`stock`/`ledger`/`markers`/`rejections`/`voidIntents`
+// data is preserved across the bump. After a runtime has opened v4, naively
+// reverting source to a lower DB_VERSION can raise IndexedDB VersionError;
+// rollback must be version-floor-aware (see PK-3 report).
+const DB_VERSION = 4;
+
+/** P02: bound a blocked/hung IndexedDB open so it can never stall a durable operation forever. */
+const OPEN_DB_TIMEOUT_MS = 2_000;
 
 function openDb(): Promise<IDBDatabase | null> {
   return new Promise((resolve) => {
@@ -96,19 +103,33 @@ function openDb(): Promise<IDBDatabase | null> {
       resolve(null);
       return;
     }
+    let settled = false;
+    const finish = (v: IDBDatabase | null): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(v);
+    };
+    // Fail open if the open/upgrade never settles (blocked by another tab
+    // holding an older-version connection open, or a hung upgrade transaction).
+    const timer = setTimeout(() => finish(null), OPEN_DB_TIMEOUT_MS);
+
+    let req: IDBOpenDBRequest;
     try {
-      const req = indexedDB.open(DB_NAME, DB_VERSION);
-      req.onupgradeneeded = () => {
-        const dbi = req.result;
-        for (const s of REVERSAL_STORES) {
-          if (!dbi.objectStoreNames.contains(s)) dbi.createObjectStore(s);
-        }
-      };
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => resolve(null);
+      req = indexedDB.open(DB_NAME, DB_VERSION);
     } catch {
-      resolve(null);
+      finish(null);
+      return;
     }
+    req.onupgradeneeded = () => {
+      const dbi = req.result;
+      for (const s of REVERSAL_STORES) {
+        if (!dbi.objectStoreNames.contains(s)) dbi.createObjectStore(s);
+      }
+    };
+    req.onblocked = () => finish(null);
+    req.onsuccess = () => finish(req.result);
+    req.onerror = () => finish(null);
   });
 }
 
@@ -245,6 +266,7 @@ export function createInMemoryReversalStore(): ReversalLocalStore & {
     markers: new Map(),
     rejections: new Map(),
     voidIntents: new Map(),
+    privilegedEvidence: new Map(),
   };
 
   const clone = <T>(v: T): T => (v === undefined ? v : (JSON.parse(JSON.stringify(v)) as T));
