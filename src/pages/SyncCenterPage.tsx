@@ -1,6 +1,8 @@
 /**
  * PK-4 Operator Sync Center — /sync-center
- * Sole production owner of canonical mutation context.
+ *
+ * SEC-001 Packet E / GD-E-005 — the canonical mutation-context mount was
+ * relocated to `AppShell.tsx`; this page no longer mounts it.
  */
 
 import { useState } from 'react';
@@ -22,7 +24,6 @@ import { useAuth } from '../lib/hooks/useAuth';
 import { useBranch } from '../lib/hooks/useBranch';
 import { isFirebaseConfigured } from '../lib/firebase';
 import { getDeviceId } from '../lib/pos/deviceId';
-import { useMountCanonicalSyncContext } from '../lib/pos/offline/canonicalSyncContext';
 import {
   canOpenAdminReconciliation,
   canViewSyncCenter,
@@ -263,7 +264,6 @@ function SectionList(props: {
 }
 
 export default function SyncCenterPage() {
-  useMountCanonicalSyncContext();
   const { user, branchId } = useAuth();
   const { branch } = useBranch();
   const role = user?.role ?? 'staff';

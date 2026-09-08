@@ -20,6 +20,7 @@ import { useDeviceSeqReconcileBoot } from '../lib/pos/offline/deviceSeqReconcile
 import { useSaleIntentSweepBoot } from '../lib/pos/offline/saleIntentSweepBoot';
 import { createBrowserSyncOrchestratorDeps } from '../lib/platform/adapters/browser/browserConnectivityPort';
 import { useSyncOrchestrator } from '../lib/pos/offline/syncOrchestrator';
+import { useMountCanonicalSyncContext } from '../lib/pos/offline/canonicalSyncContext';
 import SyncStatusBar from './SyncStatusBar';
 import type { UserRole } from '../lib/types';
 
@@ -74,6 +75,10 @@ export default function AppShell() {
   // Fail-open, once-per-tab boot-time device-sequence watermark reconciliation
   // (Packet 3B-4). Fire-and-forget — never blocks render or checkout.
   useDeviceSeqReconcileBoot();
+  // SEC-001 Packet E / GD-E-005 — sole production mount of the canonical
+  // sync/mutation context (relocated from SyncCenterPage). Still exactly one
+  // production mount site; see T-LIFE-5 in syncCenterClosedGateConfinement.test.ts.
+  useMountCanonicalSyncContext();
 
   const [open, setOpen] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);

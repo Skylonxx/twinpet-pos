@@ -177,12 +177,13 @@ describe('syncCenterClosedGateConfinement', () => {
   });
 
   it('T-LIFE-5 exactly one production mount call site; test-only seams stay out of production', () => {
+    // SEC-001 Packet E / GD-E-005 — relocated from SyncCenterPage to AppShell.
     const callers = productionSources()
       .filter((e) => e.file !== '/src/lib/pos/offline/canonicalSyncContext.ts')
       .filter((e) => /\buseMountCanonicalSyncContext\s*\(/.test(e.text))
       .map((e) => e.file)
       .sort();
-    expect(callers).toEqual(['/src/pages/SyncCenterPage.tsx']);
+    expect(callers).toEqual(['/src/components/AppShell.tsx']);
     const hits = productionSources().filter(
       (e) =>
         e.file !== '/src/lib/pos/offline/canonicalSyncContext.ts' &&

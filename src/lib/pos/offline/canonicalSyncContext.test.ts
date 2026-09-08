@@ -11,7 +11,7 @@ import {
 } from './canonicalSyncContext';
 import hookSource from '../../../hooks/pos/useSyncCenterState.ts?raw';
 import barSource from '../../../components/SyncStatusBar.tsx?raw';
-import pageSource from '../../../pages/SyncCenterPage.tsx?raw';
+import appShellSource from '../../../components/AppShell.tsx?raw';
 
 const auth = vi.hoisted(() => ({ branchId: 'A' as string | null }));
 
@@ -67,6 +67,6 @@ describe('canonicalSyncContext', () => {
   test('generic useSyncCenterState and SyncStatusBar do not mount canonical context', () => {
     expect(hookSource).not.toMatch(/\buseMountCanonicalSyncContext\s*\(/);
     expect(barSource).not.toMatch(/\buseMountCanonicalSyncContext\s*\(/);
-    expect(pageSource).toMatch(/\buseMountCanonicalSyncContext\s*\(/);
+    expect(appShellSource).toMatch(/\buseMountCanonicalSyncContext\s*\(/);
   });
 });

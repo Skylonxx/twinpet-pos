@@ -73,6 +73,7 @@ vi.mock('../components/common/DateRangeDropdown', () => ({
 
 vi.mock('../lib/firebase', () => ({
   isFirebaseConfigured: true,
+  db: null,
 }));
 
 vi.mock('../lib/voidOrder', () => ({

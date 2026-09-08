@@ -1,0 +1,228 @@
+/* SEC-001 Packet E / E-1 · Privileged Void Modal styles.
+   Namespaced `pvm-*` only. Imported EXCLUSIVELY from PrivilegedVoidModal.tsx
+   so it cannot collide with other component CSS bundles (no mpin-/sh-/pos-
+   reuse, no global resets, no unrelated selectors). */
+
+.pvm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(26, 26, 46, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 690;
+  padding: 16px;
+}
+
+.pvm-dialog {
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 16px 48px rgba(38, 33, 92, 0.2);
+  width: 100%;
+  max-width: 380px;
+  padding: 20px;
+  font-family: inherit;
+  outline: none;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+}
+
+.pvm-step {
+  display: flex;
+  flex-direction: column;
+}
+
+.pvm-title {
+  margin: 0 0 6px;
+  font-size: 17px;
+  font-family: 'Prompt', sans-serif;
+  font-weight: 600;
+  color: var(--text-primary, #1a1a2e);
+  text-align: center;
+}
+
+.pvm-desc {
+  margin: 0 0 14px;
+  font-size: 13px;
+  color: var(--text-secondary, #6b7280);
+  line-height: 1.5;
+  text-align: center;
+}
+
+.pvm-field {
+  margin-bottom: 12px;
+}
+
+.pvm-field label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary, #6b7280);
+}
+
+.pvm-required {
+  color: #e24b4a;
+}
+
+.pvm-field select,
+.pvm-field textarea {
+  width: 100%;
+  border: 0.5px solid var(--g200, #d3d1c7);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--text-primary, #1a1a2e);
+  background: #fff;
+}
+
+.pvm-field textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
+.pvm-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.pvm-btn {
+  flex: 1;
+  min-height: 48px;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background 0.13s, opacity 0.13s;
+}
+
+.pvm-btn-cancel {
+  border: 0.5px solid var(--border-md, rgba(0, 0, 0, 0.13));
+  background: #fff;
+  color: var(--text-primary, #1a1a2e);
+}
+
+.pvm-btn-cancel:hover:not(:disabled) {
+  background: var(--g50, #f8f8fc);
+}
+
+.pvm-btn-primary {
+  border: none;
+  background: var(--p600, #534ab7);
+  color: #fff;
+}
+
+.pvm-btn-primary:hover:not(:disabled) {
+  background: var(--p800, #3c3489);
+}
+
+.pvm-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.pvm-loading,
+.pvm-spinner {
+  text-align: center;
+  padding: 24px 4px;
+  font-size: 13px;
+  color: var(--text-secondary, #6b7280);
+}
+
+.pvm-roster-list {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.pvm-roster-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 0.5px solid var(--g200, #d3d1c7);
+  border-radius: 10px;
+  background: #fff;
+  padding: 10px 12px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.pvm-roster-item:hover {
+  background: var(--g50, #f8f8fc);
+  border-color: var(--p400, #8279d3);
+}
+
+.pvm-roster-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary, #1a1a2e);
+}
+
+.pvm-roster-role {
+  font-size: 11px;
+  color: var(--text-muted, #9ca3af);
+}
+
+.pvm-roster-cache-marker {
+  margin: 0 0 10px;
+  font-size: 11px;
+  color: var(--text-muted, #9ca3af);
+  text-align: center;
+}
+
+.pvm-banner {
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.4;
+  margin-bottom: 12px;
+}
+
+.pvm-banner-warning {
+  background: var(--warning-bg, #fdf3e0);
+  color: var(--warning, #8a5a12);
+}
+
+.pvm-result-icon {
+  align-self: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  margin-bottom: 10px;
+}
+
+.pvm-result-pending {
+  background: var(--warning-bg, #fdf3e0);
+  color: var(--warning, #8a5a12);
+}
+
+.pvm-result-info {
+  background: var(--p50, #f1effc);
+  color: var(--p600, #534ab7);
+}
+
+.pvm-result-warning {
+  background: var(--warning-bg, #fdf3e0);
+  color: var(--warning, #8a5a12);
+}
+
+.pvm-result-error {
+  background: var(--danger-bg, #fcebeb);
+  color: var(--danger, #a32d2d);
+}

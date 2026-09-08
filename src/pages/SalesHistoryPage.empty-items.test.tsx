@@ -55,6 +55,7 @@ vi.mock('../components/common/DateRangeDropdown', () => ({
 
 vi.mock('../lib/firebase', () => ({
   isFirebaseConfigured: true,
+  db: null,
 }));
 
 vi.mock('../lib/voidOrder', () => ({
@@ -69,10 +70,14 @@ vi.mock('../lib/pos/offline/reversalLocalStore', () => ({
   createIndexedDbReversalStore: () => ({}),
 }));
 
-vi.mock('../lib/pos/offline/voidIntentStore', () => ({
-  listVoidIntents: vi.fn().mockResolvedValue([]),
-  subscribeVoidIntentStore: () => () => {},
-}));
+vi.mock('../lib/pos/offline/voidIntentStore', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/pos/offline/voidIntentStore')>();
+  return {
+    ...actual,
+    listVoidIntents: vi.fn().mockResolvedValue([]),
+    subscribeVoidIntentStore: () => () => {},
+  };
+});
 
 vi.mock('../lib/branches', () => ({
   getBranchLabel: (id: string) => id,

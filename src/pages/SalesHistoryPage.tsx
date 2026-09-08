@@ -26,14 +26,17 @@ import { usePosProducts } from '../lib/pos/usePosProducts';
 import { useAuth } from '../lib/hooks/useAuth';
 import { isFirebaseConfigured } from '../lib/firebase';
 import { voidOrderSafe } from '../lib/voidOrder';
-import { requestPendingVoid, type VoidRequestOutcome } from '../lib/pos/voidPendingOrder';
 import { createIndexedDbReversalStore } from '../lib/pos/offline/reversalLocalStore';
 import {
   listVoidIntents,
   subscribeVoidIntentStore,
+  utcPlus7Date,
   type VoidIntentRecord,
   type VoidTerminalReason,
 } from '../lib/pos/offline/voidIntentStore';
+import { usePrivilegedVoidFlow } from '../hooks/pos/usePrivilegedVoidFlow';
+import PrivilegedVoidModal from '../components/pos/PrivilegedVoidModal';
+import type { PrivilegedActionId } from '../lib/auth/privilegedAction/privilegedActionTypes';
 import { fetchOrderReceipt } from '../lib/documents/receiptFetch';
 import { loadReceiptSettingsForOrderBranch } from '../lib/documents/receiptSettings';
 import ThermalReceipt from '../components/documents/ThermalReceipt';
@@ -50,6 +53,18 @@ import {
 import './SalesHistoryPage.css';
 
 const PAGE_SIZE = 15;
+
+/**
+ * RC-E1-003 — shared same-day predicate for both the CTA (`sameDayVoid`) and
+ * the final pre-D-3 gate (`isCurrentlyVoidEligible`). Compares UTC+7
+ * calendar dates — the explicit business-day authority already used by
+ * `targetOrderUtc7Date`/D-3 — never the process/device-local calendar day.
+ * `Date.toDateString()` rolls over at process-timezone midnight, not UTC+7
+ * midnight, and is wrong under any host timezone including `TZ=UTC`.
+ */
+function isSameUtc7BusinessDay(order: Order): boolean {
+  return utcPlus7Date(Date.now()) === utcPlus7Date(orderCreatedAt(order).getTime());
+}
 
 function buildPaginationItems(current: number, total: number): (number | 'ellipsis')[] {
   if (total <= 1) return [1];
@@ -276,6 +291,11 @@ function voidTerminalThai(reason: VoidTerminalReason): string {
   }
 }
 
+/** SEC-001 Packet E/E-1 — the order's own settled/pending classification decides the privileged action id, independently of whichever branch is currently ambient. */
+function privilegedActionIdFor(pendingSync: boolean | undefined): PrivilegedActionId {
+  return pendingSync ? 'VOID_PENDING_SALE' : 'VOID_SETTLED_SALE';
+}
+
 export default function SalesHistoryPage() {
   const { user, branchId } = useAuth();
   const { records, loading, error, refresh, syncDevRecords } = useSalesHistory(branchId);
@@ -391,6 +411,41 @@ export default function SalesHistoryPage() {
     [filtered, selectedId],
   );
 
+  // RC-E1-003 — the final pre-D-3 gate. Called fresh, at the moment
+  // `usePrivilegedVoidFlow` checks it (immediately before projecting), never
+  // memoized against render time — so a same-day-window expiry or an
+  // eligibility change while the modal is open is caught even without
+  // another re-render in between. Reuses the exact same `decideAction`/
+  // `settledVoidEligible` vocabulary as `canVoid` below; no second
+  // independent business rule.
+  const isCurrentlyVoidEligible = useCallback((): boolean => {
+    if (!selected) return false;
+    // RC-E1-003 — an order that is already ACTUALLY voided, or already
+    // carries a pending void synchronization, fails closed here even if the
+    // freshness verdict alone would otherwise still read as eligible (e.g. a
+    // real-time update lands the terminal void status before the verdict
+    // machinery catches up).
+    if (saleDisplayStatus(selected.order) === 'void') return false;
+    if (selected.voidPendingSync === true) return false;
+    if (!isSameUtc7BusinessDay(selected.order)) return false;
+    if (selected.pendingSync) {
+      return decideAction('VOID_PENDING_SALE', selected.verdict ?? 'PROVISIONAL', selected.verdictReason ?? null) === 'ALLOW';
+    }
+    return settledVoidEligible(selected.verdict, selected.verdictReason);
+  }, [selected]);
+
+  // SEC-001 Packet E/E-1 — the privileged void flow revalidates its captured
+  // identity against this SAME live selection immediately before projecting
+  // (GD-E-004). It is re-derived every render from `selected`, never cached.
+  const privilegedVoidFlow = usePrivilegedVoidFlow({
+    liveSelection: {
+      orderId: selected?.order.id ?? null,
+      orderBranchId: selected?.order.branchId ?? null,
+      expectedActionId: selected ? privilegedActionIdFor(selected.pendingSync) : null,
+      isCurrentlyVoidEligible,
+    },
+  });
+
   const liveOrderId =
     branchId && selected && !selected.pendingSync && selected.order.branchId === branchId
       ? selected.order.id
@@ -407,9 +462,7 @@ export default function SalesHistoryPage() {
   // Option A2 Mandate: Same-day orders ONLY.
   const sameDayVoid = useMemo(() => {
     if (!selected) return false;
-    const today = new Date().toDateString();
-    const orderDate = new Date(orderCreatedAt(selected.order)).toDateString();
-    return today === orderDate;
+    return isSameUtc7BusinessDay(selected.order);
   }, [selected]);
 
   const canVoid = useMemo(() => {
@@ -496,48 +549,31 @@ export default function SalesHistoryPage() {
     setSelectedId(null);
   }, []);
 
+  // SEC-001 Packet E/E-1 — GD-E-008: the Firebase-configured production void
+  // CTA is privileged-only. `handleVoidConfirm` (below) is preserved ONLY as
+  // the dev/mock path (`!isFirebaseConfigured`) — it is never reachable when
+  // Firebase is configured, so it never doubles as a production fallback.
+  const handleOpenVoid = useCallback(() => {
+    if (!selected || !user) return;
+    if (isFirebaseConfigured) {
+      if (!branchId) return;
+      privilegedVoidFlow.open({
+        actionId: privilegedActionIdFor(selected.pendingSync),
+        targetOrderId: selected.order.id,
+        targetOrderUtc7Date: utcPlus7Date(orderCreatedAt(selected.order).getTime()),
+        targetBranchId: selected.order.branchId,
+        operatorStaffId: user.id,
+      });
+      return;
+    }
+    setVoidOpen(true);
+  }, [selected, user, branchId, privilegedVoidFlow]);
+
   const handleVoidConfirm = useCallback(
     async (reason: string, note: string) => {
       if (!selected || !user || !branchId) return;
-
-      // Unified local-first void (Phase 6 + 7b). With Firebase, BOTH a pending
-      // sale (Phase A) and a settled sale (Phase B) are voided by the SAME 
-      // optimistic updateDoc on the asyncOrders doc.
-      // Offline-safe and non-blocking — never waits for a network response.
-      if (isFirebaseConfigured) {
-        setVoidOpen(false);
-        try {
-          // RC-D3-003 — bind the legacy fence to the SELECTED ORDER's own
-          // branch (`selected.order.branchId`), independently of the current
-          // trusted `branchId`. `requestPendingVoid` fails closed on any
-          // mismatch/`ALL`/unavailable value before touching legacy state.
-          const outcome: VoidRequestOutcome = await requestPendingVoid(selected.order.id, {
-            reason,
-            note,
-            voidedBy: user.id,
-            branchId,
-            targetOrderBranchId: selected.order.branchId,
-          });
-          const store = createIndexedDbReversalStore();
-          const rows = await listVoidIntents(store).catch(() => [] as VoidIntentRecord[]);
-          if (rows.length > 0) {
-            setVoidIntentsByOrderId(Object.fromEntries(rows.map((r) => [r.orderId, r])));
-          }
-          if (outcome.kind === 'confirmed') {
-            showToast('ยืนยันคำขอยกเลิกบิลสำเร็จ');
-          } else if (outcome.kind === 'queued') {
-            showToast('บันทึกคำขอยกเลิกในเครื่องแล้ว · จะส่งเมื่อออนไลน์');
-          } else {
-            showToast(voidTerminalThai(outcome.reason), 'error');
-          }
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          showToast(`คำขอยกเลิกไม่สำเร็จ: ${msg}`, 'error');
-        }
-        return;
-      }
-
-      // Dev mode (no Firebase): canonical void via the dev-mock path.
+      // Dev mode (no Firebase) ONLY — the Firebase-configured production path
+      // never opens this modal (see `handleOpenVoid`).
       setVoidProcessing(true);
       try {
         await voidOrderSafe({
@@ -550,9 +586,7 @@ export default function SalesHistoryPage() {
         });
         setVoidOpen(false);
         showToast('ยกเลิกบิลสำเร็จ — คืนสต็อกแล้ว');
-        if (!isFirebaseConfigured) {
-          syncDevRecords();
-        }
+        syncDevRecords();
       } catch (err) {
         showToast(err instanceof Error ? err.message : 'ยกเลิกบิลไม่สำเร็จ', 'error');
       } finally {
@@ -1140,7 +1174,7 @@ export default function SalesHistoryPage() {
                       <button
                         type="button"
                         className="sh-df-btn sh-df-void"
-                        onClick={() => setVoidOpen(true)}
+                        onClick={handleOpenVoid}
                         title={
                           selected.pendingSync
                             ? 'ยกเลิกบิลที่ยังรอซิงก์ (ทำงานแบบออฟไลน์ได้)'
@@ -1171,6 +1205,11 @@ export default function SalesHistoryPage() {
         processing={voidProcessing}
         onClose={() => !voidProcessing && setVoidOpen(false)}
         onConfirm={handleVoidConfirm}
+      />
+
+      <PrivilegedVoidModal
+        flow={privilegedVoidFlow}
+        requesterDisplayName={user ? `${user.firstName} ${user.lastName}` : undefined}
       />
 
       {toast && <div className={`sh-toast sh-toast-${toast.type}`}>{toast.msg}</div>}

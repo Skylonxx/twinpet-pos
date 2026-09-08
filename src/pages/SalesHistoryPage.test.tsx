@@ -1,25 +1,28 @@
 // @vitest-environment jsdom
 
 /**
- * SEC-001 Packet D / D-3, RC-D3-003 — exact narrow SalesHistory safety
- * wiring. Proves the page sources `targetOrderBranchId` from the SELECTED
- * ORDER's own record (`selected.order.branchId`), independently of the
- * current trusted `branchId` (`useAuth().branchId`), and passes BOTH
- * distinct values through to `requestPendingVoid` without collapsing them
- * into a caller-invented fallback — even when they mismatch (the stale
- * cross-branch selection schedule Codex identified). The library-level
- * fail-closed enforcement of a mismatch is proven in
- * `voidPendingOrder.test.ts` against the REAL `requestPendingVoid`; this
- * page-level test only proves the UI plumbing is honest, per the narrow
- * machine-safety-only UI boundary (no modal sequencing, no new copy, no
- * ManagerPinModal/Sync Center/Packet E behavior changed or added).
+ * SEC-001 Packet E / E-1 — Sales History void CTA plumbing.
+ *
+ * GD-E-008: the Firebase-configured production void CTA is privileged-only.
+ * This file proves the page-level plumbing: clicking the CTA opens the
+ * privileged flow with the SELECTED ORDER's own branch/action/operator
+ * (never the ambient `branchId`, mirroring the retired RC-D3-003 binding
+ * discipline), and NEVER falls back to the legacy dev-mock void path while
+ * Firebase is configured. The dev/mock path (`!isFirebaseConfigured`) is
+ * preserved unchanged and is proven separately below.
+ *
+ * The deeper privileged flow sequencing (reason -> manager -> PIN -> D-3
+ * outcomes, staleness, restart recovery) is covered by
+ * `SalesHistoryPage.privilegedVoid.test.tsx`, `usePrivilegedVoidFlow.test.tsx`,
+ * and `privilegedVoidFlowMachine.test.ts` — this file stays narrowly scoped
+ * to the CTA-level wiring.
  */
 import { createElement } from 'react';
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import type { SaleRecord } from '../lib/salesHistory/types';
 import type { VoidIntentRecord } from '../lib/pos/offline/voidIntentStore';
-import type { VoidRequestOutcome } from '../lib/pos/voidPendingOrder';
+import type { UsePrivilegedVoidFlowResult } from '../hooks/pos/usePrivilegedVoidFlow';
 
 const historyState = {
   records: [] as SaleRecord[],
@@ -31,12 +34,14 @@ const historyState = {
 
 let authBranchId: string | null = 'LDP-001';
 let voidRows: VoidIntentRecord[] = [];
+let firebaseConfigured = true;
 
-const requestPendingVoidMock = vi.fn<(orderId: string, input: Record<string, unknown>) => Promise<VoidRequestOutcome>>();
+const voidOrderSafeMock = vi.fn<(input: Record<string, unknown>) => Promise<void>>();
+const openPrivilegedVoidMock = vi.fn();
 
 vi.mock('../lib/hooks/useAuth', () => ({
   useAuth: () => ({
-    user: { id: 'staff1', role: 'staff', name: 'Dao' },
+    user: { id: 'staff1', role: 'staff', name: 'Dao', firstName: 'Dao', lastName: 'K' },
     branchId: authBranchId,
   }),
 }));
@@ -70,15 +75,13 @@ vi.mock('../components/common/DateRangeDropdown', () => ({
 }));
 
 vi.mock('../lib/firebase', () => ({
-  isFirebaseConfigured: true,
+  get isFirebaseConfigured() {
+    return firebaseConfigured;
+  },
 }));
 
 vi.mock('../lib/voidOrder', () => ({
-  voidOrderSafe: vi.fn(),
-}));
-
-vi.mock('../lib/pos/voidPendingOrder', () => ({
-  requestPendingVoid: (orderId: string, input: Record<string, unknown>) => requestPendingVoidMock(orderId, input),
+  voidOrderSafe: (input: Record<string, unknown>) => voidOrderSafeMock(input),
 }));
 
 vi.mock('../lib/branches', () => ({
@@ -92,6 +95,22 @@ vi.mock('../lib/pos/offline/reversalLocalStore', () => ({
 vi.mock('../lib/pos/offline/voidIntentStore', () => ({
   listVoidIntents: async () => voidRows,
   subscribeVoidIntentStore: () => () => {},
+  utcPlus7Date: (ms: number) => new Date(ms).toISOString().slice(0, 10),
+}));
+
+vi.mock('../hooks/pos/usePrivilegedVoidFlow', () => ({
+  usePrivilegedVoidFlow: (): UsePrivilegedVoidFlowResult => ({
+    state: { status: 'IDLE' },
+    roster: { status: 'disabled', fromCache: false, candidates: [] },
+    isSubmitting: false,
+    open: (order) => openPrivilegedVoidMock(order),
+    submitReason: vi.fn(),
+    chooseManager: vi.fn(),
+    backToManagerSelect: vi.fn(),
+    submitPin: vi.fn(),
+    close: vi.fn(),
+    retryReconciliation: vi.fn(),
+  }),
 }));
 
 import SalesHistoryPage from './SalesHistoryPage';
@@ -150,65 +169,82 @@ afterEach(() => {
   historyState.records = [];
   voidRows = [];
   authBranchId = 'LDP-001';
-  requestPendingVoidMock.mockReset();
+  firebaseConfigured = true;
+  voidOrderSafeMock.mockReset();
+  openPrivilegedVoidMock.mockReset();
 });
 
-async function openVoidDialogAndConfirm(billId: string): Promise<void> {
+async function openDrawerAndClickVoid(billId: string): Promise<void> {
   fireEvent.click(screen.getByText(billId));
   await waitFor(() => {
-    expect(screen.getByText('ยกเลิกบิล')).toBeTruthy();
+    expect(screen.getByText(/^ยกเลิกบิล/)).toBeTruthy();
   });
-  fireEvent.click(screen.getByText('ยกเลิกบิล'));
-  // The Sales History drawer is also `role="dialog"`, so scope to the void
-  // modal specifically via its unique title rather than `getByRole('dialog')`.
-  const title = await screen.findByText('ยืนยันการยกเลิกบิล');
-  const dialog = title.closest('[role="dialog"]') as HTMLElement;
-  const select = within(dialog).getByRole('combobox');
-  fireEvent.change(select, { target: { value: 'ลูกค้าเปลี่ยนใจ' } });
-  await act(async () => {
-    fireEvent.click(within(dialog).getByText('ยืนยันยกเลิกบิล'));
-  });
+  fireEvent.click(screen.getByText(/^ยกเลิกบิล/));
 }
 
-describe('SalesHistoryPage — RC-D3-003 target-branch binding plumbing', () => {
-  test('same-branch order: requestPendingVoid receives matching branchId and targetOrderBranchId', async () => {
+describe('SalesHistoryPage — privileged-only void CTA (GD-E-008)', () => {
+  test('Firebase-configured: the CTA opens the privileged flow with the ORDER\'s own branch/action/operator, never the legacy dev-mock path', async () => {
+    firebaseConfigured = true;
     authBranchId = 'LDP-001';
-    historyState.records = [record('BILL-MATCH', 'LDP-001')];
-    requestPendingVoidMock.mockResolvedValue({ kind: 'queued' });
+    historyState.records = [record('BILL-A', 'LDP-001')];
 
     render(createElement(SalesHistoryPage));
-    await waitFor(() => {
-      expect(screen.getByText('BILL-MATCH')).toBeTruthy();
-    });
-    await openVoidDialogAndConfirm('BILL-MATCH');
+    await waitFor(() => expect(screen.getByText('BILL-A')).toBeTruthy());
+    await openDrawerAndClickVoid('BILL-A');
 
-    await waitFor(() => {
-      expect(requestPendingVoidMock).toHaveBeenCalledTimes(1);
-    });
-    const [orderId, input] = requestPendingVoidMock.mock.calls[0]!;
-    expect(orderId).toBe('BILL-MATCH');
-    expect(input.branchId).toBe('LDP-001');
-    expect(input.targetOrderBranchId).toBe('LDP-001');
+    expect(openPrivilegedVoidMock).toHaveBeenCalledTimes(1);
+    const order = openPrivilegedVoidMock.mock.calls[0]![0] as Record<string, unknown>;
+    expect(order.targetOrderId).toBe('BILL-A');
+    expect(order.targetBranchId).toBe('LDP-001');
+    expect(order.operatorStaffId).toBe('staff1');
+    expect(order.actionId).toBe('VOID_SETTLED_SALE');
+    expect(voidOrderSafeMock).not.toHaveBeenCalled();
+    // The legacy confirmation dialog never opens in the Firebase-configured path.
+    expect(screen.queryByText('ยืนยันการยกเลิกบิล')).toBeNull();
   });
 
-  test('cross-branch order (stale selection): the page still sources targetOrderBranchId from the order itself, independently of the current branchId — no page-level fallback/collapse', async () => {
+  test('Firebase-configured, cross-branch order: sources targetBranchId from the ORDER itself, independently of the ambient branchId', async () => {
+    firebaseConfigured = true;
     authBranchId = 'LDP-002';
     historyState.records = [record('BILL-STALE', 'LDP-001')];
-    requestPendingVoidMock.mockResolvedValue({ kind: 'blocked', reason: 'authority_refused' });
 
     render(createElement(SalesHistoryPage));
-    await waitFor(() => {
-      expect(screen.getByText('BILL-STALE')).toBeTruthy();
-    });
-    await openVoidDialogAndConfirm('BILL-STALE');
+    await waitFor(() => expect(screen.getByText('BILL-STALE')).toBeTruthy());
+    await openDrawerAndClickVoid('BILL-STALE');
 
-    await waitFor(() => {
-      expect(requestPendingVoidMock).toHaveBeenCalledTimes(1);
-    });
-    const [orderId, input] = requestPendingVoidMock.mock.calls[0]!;
-    expect(orderId).toBe('BILL-STALE');
-    expect(input.branchId).toBe('LDP-002');
-    expect(input.targetOrderBranchId).toBe('LDP-001');
-    expect(input.branchId).not.toBe(input.targetOrderBranchId);
+    const order = openPrivilegedVoidMock.mock.calls[0]![0] as Record<string, unknown>;
+    expect(order.targetBranchId).toBe('LDP-001');
+    expect(order.targetBranchId).not.toBe(authBranchId);
+  });
+
+  test('pending-sale order requests VOID_PENDING_SALE, settled requests VOID_SETTLED_SALE', async () => {
+    firebaseConfigured = true;
+    const pending = { ...record('BILL-PENDING', 'LDP-001'), pendingSync: true, verdict: 'PROVISIONAL' as const };
+    historyState.records = [pending];
+
+    render(createElement(SalesHistoryPage));
+    await waitFor(() => expect(screen.getByText('BILL-PENDING')).toBeTruthy());
+    await openDrawerAndClickVoid('BILL-PENDING');
+
+    const order = openPrivilegedVoidMock.mock.calls[0]![0] as Record<string, unknown>;
+    expect(order.actionId).toBe('VOID_PENDING_SALE');
+  });
+
+  test('dev/mock mode (no Firebase): the legacy void dialog still works, and the privileged flow is never opened', async () => {
+    firebaseConfigured = false;
+    historyState.records = [record('BILL-DEV', 'LDP-001')];
+    voidOrderSafeMock.mockResolvedValue(undefined);
+
+    render(createElement(SalesHistoryPage));
+    await waitFor(() => expect(screen.getByText('BILL-DEV')).toBeTruthy());
+    await openDrawerAndClickVoid('BILL-DEV');
+
+    const title = await screen.findByText('ยืนยันการยกเลิกบิล');
+    const dialog = title.closest('[role="dialog"]') as HTMLElement;
+    fireEvent.change(dialog.querySelector('select')!, { target: { value: 'ลูกค้าเปลี่ยนใจ' } });
+    fireEvent.click(screen.getByText('ยืนยันยกเลิกบิล'));
+
+    await waitFor(() => expect(voidOrderSafeMock).toHaveBeenCalledTimes(1));
+    expect(openPrivilegedVoidMock).not.toHaveBeenCalled();
   });
 });
