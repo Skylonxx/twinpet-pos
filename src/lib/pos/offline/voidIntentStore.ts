@@ -7,7 +7,8 @@
  */
 
 import { getCanonicalSyncContext } from './canonicalSyncContext';
-import type { ReversalLocalStore } from './reversalLocalStore';
+import type { ReversalLocalStore, ReversalTxn } from './reversalLocalStore';
+import { probeOpenPrivilegedRowForTargetInTxn } from './privilegedEvidenceStore';
 
 export const VOID_INTENTS_STORE = 'voidIntents' as const;
 export const VOID_INTENT_SCHEMA_VERSION = 1 as const;
@@ -146,62 +147,121 @@ function noteOf(input: VoidIntentEnqueueInput): string | null {
   return trimmed ? trimmed : null;
 }
 
+/**
+ * The single write-side owner of void-intent record semantics, shared by
+ * `enqueueVoidIntent` (its own `[voidIntents]`-scoped transaction) and
+ * `enqueueVoidIntentWithPrivilegedFence` (RC-D3-004's wider
+ * `[voidIntents, privilegedEvidence]`-scoped transaction) so the record
+ * builder is never duplicated across the two entry points.
+ */
+async function performVoidIntentEnqueue(
+  txn: ReversalTxn,
+  orderId: string,
+  input: VoidIntentEnqueueInput,
+  nowMs: number,
+): Promise<VoidIntentEnqueueResult> {
+  const existing = await txn.get<VoidIntentRecord>(VOID_INTENTS_STORE, orderId);
+  if (!existing) {
+    const record: VoidIntentRecord = {
+      orderId,
+      branchId: input.branchId,
+      deviceId: input.deviceId,
+      reason: input.reason,
+      note: noteOf(input),
+      voidedBy: input.voidedBy,
+      status: 'pending',
+      attempts: 0,
+      createdAtMs: nowMs,
+      updatedAtMs: nowMs,
+      nextEligibleAtMs: 0,
+      claimOwner: null,
+      claimExpiresAtMs: null,
+      lastErrorClass: null,
+      lastErrorAtMs: null,
+      terminalReason: null,
+      confirmedAtMs: null,
+      observedServerCreatedAtMs: null,
+      schemaVersion: VOID_INTENT_SCHEMA_VERSION,
+    };
+    await txn.put(VOID_INTENTS_STORE, orderId, record);
+    return { kind: 'created' as const, record };
+  }
+  if (existing.status === 'confirmed') {
+    return { kind: 'confirmed_noop' as const, record: existing };
+  }
+  if (existing.status === 'terminal') {
+    return { kind: 'terminal_noop' as const, record: existing };
+  }
+  const record: VoidIntentRecord = {
+    ...existing,
+    reason: input.reason,
+    note: noteOf(input),
+    voidedBy: input.voidedBy,
+    branchId: input.branchId,
+    deviceId: input.deviceId,
+    updatedAtMs: nowMs,
+  };
+  await txn.put(VOID_INTENTS_STORE, orderId, record);
+  return { kind: 'updated' as const, record };
+}
+
 export async function enqueueVoidIntent(
   store: ReversalLocalStore,
   orderId: string,
   input: VoidIntentEnqueueInput,
   nowMs: number = Date.now(),
 ): Promise<VoidIntentEnqueueResult> {
-  return store.transact([VOID_INTENTS_STORE], 'readwrite', async (txn) => {
-    const existing = await txn.get<VoidIntentRecord>(VOID_INTENTS_STORE, orderId);
-    if (!existing) {
-      const record: VoidIntentRecord = {
-        orderId,
-        branchId: input.branchId,
-        deviceId: input.deviceId,
-        reason: input.reason,
-        note: noteOf(input),
-        voidedBy: input.voidedBy,
-        status: 'pending',
-        attempts: 0,
-        createdAtMs: nowMs,
-        updatedAtMs: nowMs,
-        nextEligibleAtMs: 0,
-        claimOwner: null,
-        claimExpiresAtMs: null,
-        lastErrorClass: null,
-        lastErrorAtMs: null,
-        terminalReason: null,
-        confirmedAtMs: null,
-        observedServerCreatedAtMs: null,
-        schemaVersion: VOID_INTENT_SCHEMA_VERSION,
-      };
-      await txn.put(VOID_INTENTS_STORE, orderId, record);
-      return { kind: 'created' as const, record };
-    }
-    if (existing.status === 'confirmed') {
-      return { kind: 'confirmed_noop' as const, record: existing };
-    }
-    if (existing.status === 'terminal') {
-      return { kind: 'terminal_noop' as const, record: existing };
-    }
-    const record: VoidIntentRecord = {
-      ...existing,
-      reason: input.reason,
-      note: noteOf(input),
-      voidedBy: input.voidedBy,
-      branchId: input.branchId,
-      deviceId: input.deviceId,
-      updatedAtMs: nowMs,
-    };
-    await txn.put(VOID_INTENTS_STORE, orderId, record);
-    return { kind: 'updated' as const, record };
-  }).then((result) => {
-    if (result.kind === 'created' || result.kind === 'updated') {
-      notifyVoidIntentStoreChanged();
-    }
-    return result;
-  });
+  return store
+    .transact([VOID_INTENTS_STORE], 'readwrite', (txn) => performVoidIntentEnqueue(txn, orderId, input, nowMs))
+    .then((result) => {
+      if (result.kind === 'created' || result.kind === 'updated') {
+        notifyVoidIntentStoreChanged();
+      }
+      return result;
+    });
+}
+
+export type VoidIntentPrivilegedFenceOutcome =
+  | VoidIntentEnqueueResult
+  | { kind: 'privileged_conflict' }
+  | { kind: 'unreadable' };
+
+/**
+ * SEC-001 Packet D / D-3, RC-D3-003 / RC-D3-004 — the single atomic owner of
+ * the legacy no-bypass fence together with the void-intent create/update.
+ * `targetOrderBranchId` must already be the caller's verified, concrete,
+ * target-bound branch (see `voidPendingOrder.ts::requestPendingVoid`) — this
+ * function trusts it as-is and does not re-derive or fall back to
+ * `input.branchId`.
+ *
+ * The privileged-evidence probe and the `voidIntents` write run in ONE
+ * durable readwrite transaction spanning `privilegedEvidence` +
+ * `voidIntents`, closing the TOCTOU window a separate fence-read
+ * transaction followed by a separate enqueue transaction would leave open.
+ * `requestPendingVoid` must treat this as the sole authority; any pre-read it
+ * keeps is a non-authoritative optimization only.
+ */
+export async function enqueueVoidIntentWithPrivilegedFence(
+  store: ReversalLocalStore,
+  orderId: string,
+  input: VoidIntentEnqueueInput,
+  targetOrderBranchId: string,
+  nowMs: number = Date.now(),
+): Promise<VoidIntentPrivilegedFenceOutcome> {
+  const result = await store.transact(
+    [VOID_INTENTS_STORE, 'privilegedEvidence'],
+    'readwrite',
+    async (txn): Promise<VoidIntentPrivilegedFenceOutcome> => {
+      const probe = await probeOpenPrivilegedRowForTargetInTxn(txn, targetOrderBranchId, orderId);
+      if (probe.kind === 'unreadable') return { kind: 'unreadable' };
+      if (probe.kind === 'open') return { kind: 'privileged_conflict' };
+      return performVoidIntentEnqueue(txn, orderId, input, nowMs);
+    },
+  );
+  if (result.kind === 'created' || result.kind === 'updated') {
+    notifyVoidIntentStoreChanged();
+  }
+  return result;
 }
 
 export async function claimVoidIntent(

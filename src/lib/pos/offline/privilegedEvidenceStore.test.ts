@@ -22,6 +22,7 @@ import {
   listPrivilegedEvidenceForBranch,
   subscribePrivilegedEvidenceStore,
 } from './privilegedEvidenceStore';
+import { enqueueVoidIntent, markVoidIntentConfirmed, markVoidIntentTerminal } from './voidIntentStore';
 
 function envelope(over: Partial<OfflineAttestationEnvelope> = {}): OfflineAttestationEnvelope {
   return {
@@ -114,6 +115,232 @@ describe('ingestAttestedPrivilegedAction — atomic CAS boundary', () => {
     const outcome = await ingestAttestedPrivilegedAction(store, envelope(), ctx, 1_000);
     if (outcome.kind !== 'created') throw new Error('unreachable');
     expect(outcome.record.resultingVoidIntentId).toBeNull();
+  });
+});
+
+describe('ingestAttestedPrivilegedAction — GD-D3-002 OPTION A target-level duplicate exclusion', () => {
+  const secondEnvelope = envelope({ attestationIdHex: 'b'.repeat(32), localIntentId: 'intent-2', ssa1Base64: 'SSA1-B' });
+
+  async function driveToStatus(
+    store: ReturnType<typeof createInMemoryReversalStore>,
+    status: 'PRIVILEGED_INTENT_QUEUED' | 'SYNCING' | 'SERVER_ACCEPTED' | 'SERVER_REJECTED' | 'MANUAL_ATTENTION',
+  ): Promise<void> {
+    await ingestAttestedPrivilegedAction(store, envelope(), ctx, 1_000);
+    if (status === 'PRIVILEGED_INTENT_QUEUED') return;
+    const claim = await claimPrivilegedEvidenceRow(store, envelope().attestationIdHex, 1, {
+      deviceId: 'd1',
+      nowMs: 1_000,
+      staffId: 'staff-1',
+    });
+    if (claim.kind !== 'claimed') throw new Error('setup: claim failed');
+    if (status === 'SYNCING') return;
+
+    if (status === 'SERVER_ACCEPTED') {
+      const response: OfflineAdjudicationResponse = {
+        family: 'ADJUDICATION',
+        kind: 'ACCEPTED',
+        adjudicationId: envelope().attestationIdHex,
+        targetOrderId: 'order-1',
+        offlineExecutionId: 'exec-1',
+        outcomeKind: 'VOID_APPLIED',
+        idempotent: false,
+        serverAdjudicatedAtMs: 5_000,
+      };
+      await applyPrivilegedEvidenceDisposition(
+        store,
+        envelope().attestationIdHex,
+        1,
+        { kind: 'server', response, disposition: classifyOfflineAdjudicationResponse(response) },
+        { nowMs: 6_000, staffId: 'staff-1' },
+      );
+      return;
+    }
+
+    if (status === 'SERVER_REJECTED') {
+      const response: OfflineAdjudicationResponse = {
+        family: 'ADJUDICATION',
+        kind: 'REJECTED',
+        adjudicationId: envelope().attestationIdHex,
+        targetOrderId: 'order-1',
+        rejectionReason: 'trusted_time_bounds_invalid',
+        terminal: true,
+        idempotent: false,
+        serverAdjudicatedAtMs: 5_000,
+      };
+      await applyPrivilegedEvidenceDisposition(
+        store,
+        envelope().attestationIdHex,
+        1,
+        { kind: 'server', response, disposition: classifyOfflineAdjudicationResponse(response) },
+        { nowMs: 6_000, staffId: 'staff-1' },
+      );
+      return;
+    }
+
+    // MANUAL_ATTENTION
+    const response: OfflineAdjudicationResponse = {
+      family: 'ADJUDICATION',
+      kind: 'MANUAL_ATTENTION_REQUIRED',
+      adjudicationId: envelope().attestationIdHex,
+      targetOrderId: 'order-1',
+      manualAttentionReason: 'canonical_correlation_missing',
+      terminal: true,
+      idempotent: false,
+      serverAdjudicatedAtMs: 5_000,
+    };
+    await applyPrivilegedEvidenceDisposition(
+      store,
+      envelope().attestationIdHex,
+      1,
+      { kind: 'server', response, disposition: classifyOfflineAdjudicationResponse(response) },
+      { nowMs: 6_000, staffId: 'staff-1' },
+    );
+  }
+
+  it('1. option disabled/omitted leaves landed ingest behavior unchanged (second envelope same target still creates)', async () => {
+    const store = createInMemoryReversalStore();
+    await ingestAttestedPrivilegedAction(store, envelope(), ctx, 1_000);
+    const outcome = await ingestAttestedPrivilegedAction(store, secondEnvelope, ctx, 2_000);
+    expect(outcome.kind).toBe('created');
+    expect(await listPrivilegedEvidence(store)).toHaveLength(2);
+  });
+
+  it.each([
+    ['PRIVILEGED_INTENT_QUEUED'],
+    ['SYNCING'],
+    ['SERVER_ACCEPTED'],
+    ['MANUAL_ATTENTION'],
+  ] as const)('2-5. an open %s row blocks a fresh target-matching ingest with duplicate_target', async (status) => {
+    const store = createInMemoryReversalStore();
+    await driveToStatus(store, status);
+    const outcome = await ingestAttestedPrivilegedAction(
+      store,
+      secondEnvelope,
+      { ...ctx, expectNoOpenRowForTarget: true },
+      2_000,
+    );
+    expect(outcome.kind).toBe('duplicate_target');
+    expect(await listPrivilegedEvidence(store)).toHaveLength(1);
+  });
+
+  it('6. SERVER_REJECTED does not block a fresh approval for the same target', async () => {
+    const store = createInMemoryReversalStore();
+    await driveToStatus(store, 'SERVER_REJECTED');
+    const outcome = await ingestAttestedPrivilegedAction(store, secondEnvelope, { ...ctx, expectNoOpenRowForTarget: true }, 2_000);
+    expect(outcome.kind).toBe('created');
+    expect(await listPrivilegedEvidence(store)).toHaveLength(2);
+  });
+
+  it('7. a different target order is never blocked', async () => {
+    const store = createInMemoryReversalStore();
+    await ingestAttestedPrivilegedAction(store, envelope(), ctx, 1_000);
+    const other = envelope({ attestationIdHex: 'c'.repeat(32), targetOrderId: 'order-2', localIntentId: 'intent-3' });
+    const outcome = await ingestAttestedPrivilegedAction(store, other, { ...ctx, expectNoOpenRowForTarget: true }, 2_000);
+    expect(outcome.kind).toBe('created');
+    expect(await listPrivilegedEvidence(store)).toHaveLength(2);
+  });
+
+  it('8. a different branch is never blocked', async () => {
+    const store = createInMemoryReversalStore();
+    await ingestAttestedPrivilegedAction(store, envelope(), ctx, 1_000);
+    const other = envelope({ attestationIdHex: 'd'.repeat(32), verifiedBranchId: 'LDP-002', localIntentId: 'intent-4' });
+    const outcome = await ingestAttestedPrivilegedAction(store, other, { ...ctx, expectNoOpenRowForTarget: true }, 2_000);
+    expect(outcome.kind).toBe('created');
+    expect(await listPrivilegedEvidence(store)).toHaveLength(2);
+  });
+
+  it('9. concurrent opted-in ingests for the same target converge to exactly one winner', async () => {
+    const store = createInMemoryReversalStore();
+    const third = envelope({ attestationIdHex: 'e'.repeat(32), localIntentId: 'intent-5' });
+    const [a, b] = await Promise.all([
+      ingestAttestedPrivilegedAction(store, envelope(), { ...ctx, expectNoOpenRowForTarget: true }, 1_000),
+      ingestAttestedPrivilegedAction(store, third, { ...ctx, expectNoOpenRowForTarget: true }, 1_000),
+    ]);
+    const kinds = [a.kind, b.kind].sort();
+    expect(kinds).toEqual(['created', 'duplicate_target']);
+    expect(await listPrivilegedEvidence(store)).toHaveLength(1);
+  });
+
+  it('10. the opted-in path performs no schema/parser/matrix change: every row stays parser-valid, 54-key', async () => {
+    const store = createInMemoryReversalStore();
+    await ingestAttestedPrivilegedAction(store, envelope(), { ...ctx, expectNoOpenRowForTarget: true }, 1_000);
+    const rows = await listPrivilegedEvidence(store);
+    expect(rows).toHaveLength(1);
+    expect(parsePrivilegedEvidenceJournalRecordV1(rows[0])).not.toBeNull();
+    expect(Object.keys(rows[0]!)).toHaveLength(54);
+  });
+
+  it('11. the original open row bytes stay untouched when a duplicate target loses', async () => {
+    const store = createInMemoryReversalStore();
+    await ingestAttestedPrivilegedAction(store, envelope(), ctx, 1_000);
+    const before = (await listPrivilegedEvidence(store))[0]!;
+    const outcome = await ingestAttestedPrivilegedAction(store, secondEnvelope, { ...ctx, expectNoOpenRowForTarget: true }, 2_000);
+    expect(outcome.kind).toBe('duplicate_target');
+    const after = (await listPrivilegedEvidence(store))[0]!;
+    expect(after).toEqual(before);
+  });
+});
+
+describe('ingestAttestedPrivilegedAction — RC-D3-002 unreadable privileged state fails closed', () => {
+  it('an unreadable row anywhere in the store blocks the opted-in fresh-row ingest, zero write', async () => {
+    const store = createInMemoryReversalStore();
+    await store.transact(['privilegedEvidence'], 'readwrite', async (txn) => {
+      await txn.put('privilegedEvidence', 'corrupt-1', { garbage: true });
+    });
+    const outcome = await ingestAttestedPrivilegedAction(store, envelope(), { ...ctx, expectNoOpenRowForTarget: true }, 1_000);
+    expect(outcome).toEqual({ kind: 'unreadable' });
+    expect(await listPrivilegedEvidence(store)).toHaveLength(0);
+  });
+
+  it('an unreadable row does not affect the landed (non-opted-in) ingest path', async () => {
+    const store = createInMemoryReversalStore();
+    await store.transact(['privilegedEvidence'], 'readwrite', async (txn) => {
+      await txn.put('privilegedEvidence', 'corrupt-1', { garbage: true });
+    });
+    const outcome = await ingestAttestedPrivilegedAction(store, envelope(), ctx, 1_000);
+    expect(outcome.kind).toBe('created');
+  });
+});
+
+describe('ingestAttestedPrivilegedAction — RC-D3-004 Ordering B: legacy-first mutual exclusion', () => {
+  const legacyInput = { branchId: 'LDP-001', deviceId: 'dev-1', reason: 'x', voidedBy: 'staff-1' };
+
+  it('an active pending legacy voidIntent for the same bound target blocks a fresh opted-in privileged row', async () => {
+    const store = createInMemoryReversalStore();
+    await enqueueVoidIntent(store, 'order-1', legacyInput, 1_000);
+    const outcome = await ingestAttestedPrivilegedAction(store, envelope(), { ...ctx, expectNoOpenRowForTarget: true }, 2_000);
+    expect(outcome).toEqual({ kind: 'legacy_conflict' });
+    expect(await listPrivilegedEvidence(store)).toHaveLength(0);
+  });
+
+  it('a CONFIRMED legacy voidIntent does not block a fresh opted-in privileged row', async () => {
+    const store = createInMemoryReversalStore();
+    await enqueueVoidIntent(store, 'order-1', legacyInput, 1_000);
+    await markVoidIntentConfirmed(store, 'order-1', 1_500);
+    const outcome = await ingestAttestedPrivilegedAction(store, envelope(), { ...ctx, expectNoOpenRowForTarget: true }, 2_000);
+    expect(outcome.kind).toBe('created');
+  });
+
+  it('a TERMINAL legacy voidIntent does not block a fresh opted-in privileged row', async () => {
+    const store = createInMemoryReversalStore();
+    await enqueueVoidIntent(store, 'order-1', legacyInput, 1_000);
+    await markVoidIntentTerminal(store, 'order-1', 'authority_refused', 'permission_denied', 1_500);
+    const outcome = await ingestAttestedPrivilegedAction(store, envelope(), { ...ctx, expectNoOpenRowForTarget: true }, 2_000);
+    expect(outcome.kind).toBe('created');
+  });
+
+  it('a legacy voidIntent on a different branch never blocks', async () => {
+    const store = createInMemoryReversalStore();
+    await enqueueVoidIntent(store, 'order-1', { ...legacyInput, branchId: 'LDP-999' }, 1_000);
+    const outcome = await ingestAttestedPrivilegedAction(store, envelope(), { ...ctx, expectNoOpenRowForTarget: true }, 2_000);
+    expect(outcome.kind).toBe('created');
+  });
+
+  it('the reverse check does not apply to the landed (non-opted-in) ingest path', async () => {
+    const store = createInMemoryReversalStore();
+    await enqueueVoidIntent(store, 'order-1', legacyInput, 1_000);
+    const outcome = await ingestAttestedPrivilegedAction(store, envelope(), ctx, 2_000);
+    expect(outcome.kind).toBe('created');
   });
 });
 

@@ -21,7 +21,8 @@ import {
   isOfflineAdjudicationManualAttentionReason,
   isOfflineAdjudicationRejectionReason,
 } from '../../auth/privilegedAction/privilegedActionTypes';
-import type { ReversalLocalStore, ReversalTxn } from './reversalLocalStore';
+import type { ReversalLocalStore, ReversalStoreName, ReversalTxn } from './reversalLocalStore';
+import type { VoidIntentRecord } from './voidIntentStore';
 import {
   PRIVILEGED_EVIDENCE_CLAIM_GENERATION_KEY,
   PRIVILEGED_EVIDENCE_MAX_RETRYABLE_FAILURES,
@@ -117,11 +118,75 @@ export type IngestOutcome =
   | { kind: 'idempotent_noop'; record: Row }
   | { kind: 'binding_conflict'; record: Row }
   | { kind: 'unreadable' }
-  | { kind: 'not_approved_local' };
+  | { kind: 'not_approved_local' }
+  | { kind: 'duplicate_target'; record: Row }
+  /**
+   * SEC-001 Packet D / D-3, RC-D3-004 Ordering B — an active (non-terminal,
+   * non-confirmed) legacy `voidIntent` already exists for this bound
+   * `(branchId, targetOrderId)`. Refusing the fresh privileged row here is
+   * the reverse half of the atomic no-bypass contract: the system must never
+   * hold two mutually active authority paths (privileged + legacy) for the
+   * same target at once. This is an in-memory outcome only — no journal
+   * schema/parser/matrix change.
+   */
+  | { kind: 'legacy_conflict' };
 
 export interface IngestContext {
   ingestStaffId: string;
   ingestDeviceId: string;
+  /**
+   * SEC-001 Packet D / D-3, GD-D3-002 OPTION A — opt-in atomic target-level
+   * duplicate exclusion. When true, the fresh-row create branch first checks,
+   * inside the SAME readwrite transaction, whether an OPEN privileged row
+   * already exists for `(envelope.verifiedBranchId, envelope.targetOrderId)`
+   * and returns `duplicate_target` instead of writing a second one. Omitted
+   * or false preserves the landed pre-D-3 ingest behavior exactly.
+   */
+  expectNoOpenRowForTarget?: boolean;
+}
+
+/** GD-D3-002: open statuses that block a second privileged row for the same target. `SERVER_REJECTED` does not block. */
+const OPEN_TARGET_EXCLUSION_STATUSES = new Set<Row['syncStatus']>([
+  'PRIVILEGED_INTENT_QUEUED',
+  'SYNCING',
+  'SERVER_ACCEPTED',
+  'MANUAL_ATTENTION',
+]);
+
+export type PrivilegedFenceProbe =
+  | { kind: 'open'; record: Row }
+  | { kind: 'clear' }
+  | { kind: 'unreadable' };
+
+/**
+ * SEC-001 Packet D / D-3, RC-D3-002 / RC-D3-004 — exported ONLY so
+ * `voidIntentStore.ts`'s atomic legacy fence
+ * (`enqueueVoidIntentWithPrivilegedFence`) can probe the SAME enumeration
+ * inside its own `[privilegedEvidence, voidIntents]` durable transaction,
+ * instead of a second, separately-committed read (which would reopen the
+ * RC-D3-004 TOCTOU window) and without duplicating the read/status logic.
+ * `txn`'s transaction scope must already include `privilegedEvidence`.
+ * Fails closed (`unreadable`) whenever ANY row in the store is
+ * parser-invalid — the caller cannot tell which target an unreadable row
+ * belonged to, so it must never be treated as "no open row" (RC-D3-002).
+ */
+export async function probeOpenPrivilegedRowForTargetInTxn(
+  txn: ReversalTxn,
+  branchId: string,
+  targetOrderId: string,
+): Promise<PrivilegedFenceProbe> {
+  const { rows, unreadableCount } = await enumerateRows(txn);
+  if (unreadableCount > 0) return { kind: 'unreadable' };
+  for (const row of rows) {
+    if (
+      row.branchId === branchId &&
+      row.targetOrderId === targetOrderId &&
+      OPEN_TARGET_EXCLUSION_STATUSES.has(row.syncStatus)
+    ) {
+      return { kind: 'open', record: row };
+    }
+  }
+  return { kind: 'clear' };
 }
 
 function buildFreshRecord(envelope: OfflineAttestationEnvelope, digest: string, ctx: IngestContext, nowMs: number): Row {
@@ -184,8 +249,9 @@ function buildFreshRecord(envelope: OfflineAttestationEnvelope, digest: string, 
 }
 
 /**
- * D-2's durable ingest API. `ingestAttestedPrivilegedAction` has no production
- * caller in this packet (`NONE_UNTIL_D3`) — it is exercised only by tests.
+ * D-2's durable ingest API. `ingestAttestedPrivilegedAction`'s sole production
+ * caller is the SEC-001 Packet D / D-3 adapter,
+ * `projectPrivilegedOfflineAction` (`src/lib/pos/offline/projectPrivilegedOfflineAction.ts`).
  */
 export async function ingestAttestedPrivilegedAction(
   store: ReversalLocalStore,
@@ -198,9 +264,36 @@ export async function ingestAttestedPrivilegedAction(
   }
   const digest = await computeEvidenceBindingDigest(envelope);
 
-  return store.transact([STORE_NAME], 'readwrite', async (txn): Promise<IngestOutcome> => {
+  // RC-D3-004 Ordering B — the opted-in fresh-row path also needs to read
+  // `voidIntents` (for the reverse legacy-conflict check below), so widen the
+  // transaction scope ONLY for that opted-in caller. Every landed caller that
+  // omits `expectNoOpenRowForTarget` keeps the exact original single-store
+  // transaction scope and behavior.
+  const stores: ReversalStoreName[] = ctx.expectNoOpenRowForTarget ? [STORE_NAME, 'voidIntents'] : [STORE_NAME];
+
+  return store.transact(stores, 'readwrite', async (txn): Promise<IngestOutcome> => {
     const existingRaw = await txn.get<unknown>(STORE_NAME, envelope.attestationIdHex);
     if (existingRaw === undefined) {
+      if (ctx.expectNoOpenRowForTarget) {
+        // RC-D3-002 — fail closed before minting a fresh row whenever ANY
+        // privileged row in the store is unreadable/corrupted.
+        const probe = await probeOpenPrivilegedRowForTargetInTxn(txn, envelope.verifiedBranchId, envelope.targetOrderId);
+        if (probe.kind === 'unreadable') return { kind: 'unreadable' };
+        if (probe.kind === 'open') return { kind: 'duplicate_target', record: probe.record };
+
+        // RC-D3-004 Ordering B — an active (non-terminal, non-confirmed)
+        // legacy voidIntent for this exact bound target already exists.
+        // Refuse to open a second, mutually active authority path.
+        const legacyRaw = await txn.get<VoidIntentRecord>('voidIntents', envelope.targetOrderId);
+        if (
+          legacyRaw !== undefined &&
+          legacyRaw.branchId === envelope.verifiedBranchId &&
+          legacyRaw.status !== 'confirmed' &&
+          legacyRaw.status !== 'terminal'
+        ) {
+          return { kind: 'legacy_conflict' };
+        }
+      }
       const record = buildFreshRecord(envelope, digest, ctx, nowMs);
       await txn.put(STORE_NAME, envelope.attestationIdHex, record);
       return { kind: 'created', record };

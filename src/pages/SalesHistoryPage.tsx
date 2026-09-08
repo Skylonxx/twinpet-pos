@@ -507,11 +507,16 @@ export default function SalesHistoryPage() {
       if (isFirebaseConfigured) {
         setVoidOpen(false);
         try {
+          // RC-D3-003 — bind the legacy fence to the SELECTED ORDER's own
+          // branch (`selected.order.branchId`), independently of the current
+          // trusted `branchId`. `requestPendingVoid` fails closed on any
+          // mismatch/`ALL`/unavailable value before touching legacy state.
           const outcome: VoidRequestOutcome = await requestPendingVoid(selected.order.id, {
             reason,
             note,
             voidedBy: user.id,
             branchId,
+            targetOrderBranchId: selected.order.branchId,
           });
           const store = createIndexedDbReversalStore();
           const rows = await listVoidIntents(store).catch(() => [] as VoidIntentRecord[]);

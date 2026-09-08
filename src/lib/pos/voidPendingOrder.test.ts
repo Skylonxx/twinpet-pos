@@ -13,6 +13,15 @@ import {
   utcPlus7Date,
 } from './voidPendingOrder';
 import voidPendingSource from './voidPendingOrder.ts?raw';
+import {
+  applyPrivilegedEvidenceDisposition,
+  claimPrivilegedEvidenceRow,
+  ingestAttestedPrivilegedAction,
+  listPrivilegedEvidence,
+} from './offline/privilegedEvidenceStore';
+import { classifyOfflineAdjudicationResponse } from '../auth/privilegedAction/offlineAdjudicationTransport';
+import type { OfflineAdjudicationResponse } from '../auth/privilegedAction/offlineAdjudicationTransport';
+import type { OfflineAttestationEnvelope } from '../auth/privilegedAction/offlineAttestation';
 
 describe('buildPendingVoidFields', () => {
   test('sets the queueable void-intent flags', () => {
@@ -80,7 +89,7 @@ describe('requestPendingVoid outcomes', () => {
     const store = createInMemoryReversalStore();
     const outcome = await requestPendingVoid(
       'ord-q',
-      { reason: 'ลูกค้าเปลี่ยนใจ', note: 'x', voidedBy: 'staff-1', branchId: 'LDP-001' },
+      { reason: 'ลูกค้าเปลี่ยนใจ', note: 'x', voidedBy: 'staff-1', branchId: 'LDP-001', targetOrderBranchId: 'LDP-001' },
       NOW,
       store,
     );
@@ -111,7 +120,7 @@ describe('requestPendingVoid outcomes', () => {
     expect(first).toBe('confirmed');
     const outcome = await requestPendingVoid(
       'ord-c',
-      { reason: 'x', voidedBy: 'staff-1', branchId: 'LDP-001' },
+      { reason: 'x', voidedBy: 'staff-1', branchId: 'LDP-001', targetOrderBranchId: 'LDP-001' },
       NOW + 1,
       store,
     );
@@ -138,11 +147,375 @@ describe('requestPendingVoid outcomes', () => {
     });
     const outcome = await requestPendingVoid(
       'ord-t',
-      { reason: 'x', voidedBy: 'staff-1', branchId: 'LDP-001' },
+      { reason: 'x', voidedBy: 'staff-1', branchId: 'LDP-001', targetOrderBranchId: 'LDP-001' },
       NOW + 1,
       store,
     );
     expect(outcome).toEqual({ kind: 'blocked', reason: 'day_boundary_expired' });
+  });
+});
+
+describe('requestPendingVoid — GD-D3-003 legacy no-bypass fence', () => {
+  function privilegedEnvelope(over: Partial<OfflineAttestationEnvelope> = {}): OfflineAttestationEnvelope {
+    return {
+      attestationIdHex: 'a'.repeat(32),
+      paa1Base64: 'PAA1',
+      ssa1Base64: 'SSA1',
+      oacEnvelopeBytesBase64: 'OAC1',
+      verifiedBranchId: 'LDP-001',
+      evidenceSeed: {
+        oacId: 'oac-1',
+        oacSchemaVersion: 1,
+        revocationEpochAtIssue: 0,
+        managerAuthVersionAtIssue: 0,
+        managerCredentialVersionAtIssue: 0,
+        nonce: 'nonce-1',
+        attemptCount: 1,
+        approvalResult: 'APPROVED_LOCAL',
+        approvalProofDigest: 'proof-1',
+      },
+      trustedApprovalLowerMs: 1_000,
+      trustedApprovalUpperMs: 2_000,
+      pendingExecutionExpiresAtMs: 100_000,
+      localIntentId: 'intent-1',
+      actionId: 'VOID_PENDING_SALE',
+      targetOrderId: 'ord-fence',
+      targetOrderUtc7Date: '2026-08-21',
+      approvingManagerStaffId: 'mgr-1',
+      ...over,
+    };
+  }
+
+  const ingestCtx = { ingestStaffId: 'mgr-cashier', ingestDeviceId: 'device-1' };
+
+  async function seedPrivilegedRow(
+    store: ReturnType<typeof createInMemoryReversalStore>,
+    status: 'PRIVILEGED_INTENT_QUEUED' | 'SYNCING' | 'SERVER_ACCEPTED' | 'SERVER_REJECTED' | 'MANUAL_ATTENTION',
+  ): Promise<void> {
+    const env = privilegedEnvelope();
+    await ingestAttestedPrivilegedAction(store, env, ingestCtx, NOW);
+    if (status === 'PRIVILEGED_INTENT_QUEUED') return;
+    const claim = await claimPrivilegedEvidenceRow(store, env.attestationIdHex, 1, {
+      deviceId: 'device-1',
+      nowMs: NOW,
+      staffId: 'mgr-cashier',
+    });
+    if (claim.kind !== 'claimed') throw new Error('setup: claim failed');
+    if (status === 'SYNCING') return;
+
+    if (status === 'SERVER_ACCEPTED') {
+      const response: OfflineAdjudicationResponse = {
+        family: 'ADJUDICATION',
+        kind: 'ACCEPTED',
+        adjudicationId: env.attestationIdHex,
+        targetOrderId: env.targetOrderId,
+        offlineExecutionId: 'exec-1',
+        outcomeKind: 'VOID_APPLIED',
+        idempotent: false,
+        serverAdjudicatedAtMs: NOW,
+      };
+      await applyPrivilegedEvidenceDisposition(
+        store,
+        env.attestationIdHex,
+        1,
+        { kind: 'server', response, disposition: classifyOfflineAdjudicationResponse(response) },
+        { nowMs: NOW, staffId: 'mgr-cashier' },
+      );
+      return;
+    }
+
+    if (status === 'SERVER_REJECTED') {
+      const response: OfflineAdjudicationResponse = {
+        family: 'ADJUDICATION',
+        kind: 'REJECTED',
+        adjudicationId: env.attestationIdHex,
+        targetOrderId: env.targetOrderId,
+        rejectionReason: 'trusted_time_bounds_invalid',
+        terminal: true,
+        idempotent: false,
+        serverAdjudicatedAtMs: NOW,
+      };
+      await applyPrivilegedEvidenceDisposition(
+        store,
+        env.attestationIdHex,
+        1,
+        { kind: 'server', response, disposition: classifyOfflineAdjudicationResponse(response) },
+        { nowMs: NOW, staffId: 'mgr-cashier' },
+      );
+      return;
+    }
+
+    // MANUAL_ATTENTION
+    const response: OfflineAdjudicationResponse = {
+      family: 'ADJUDICATION',
+      kind: 'MANUAL_ATTENTION_REQUIRED',
+      adjudicationId: env.attestationIdHex,
+      targetOrderId: env.targetOrderId,
+      manualAttentionReason: 'canonical_correlation_missing',
+      terminal: true,
+      idempotent: false,
+      serverAdjudicatedAtMs: NOW,
+    };
+    await applyPrivilegedEvidenceDisposition(
+      store,
+      env.attestationIdHex,
+      1,
+      { kind: 'server', response, disposition: classifyOfflineAdjudicationResponse(response) },
+      { nowMs: NOW, staffId: 'mgr-cashier' },
+    );
+  }
+
+  test('an empty privileged journal leaves existing behavior unchanged', async () => {
+    const store = createInMemoryReversalStore();
+    const outcome = await requestPendingVoid(
+      'ord-fence',
+      { reason: 'x', voidedBy: 'staff-1', branchId: 'LDP-001', targetOrderBranchId: 'LDP-001' },
+      NOW,
+      store,
+    );
+    expect(outcome).toEqual({ kind: 'queued' });
+    expect((await getVoidIntent(store, 'ord-fence'))?.status).toBe('pending');
+  });
+
+  test.each([
+    ['PRIVILEGED_INTENT_QUEUED'],
+    ['SYNCING'],
+    ['SERVER_ACCEPTED'],
+    ['MANUAL_ATTENTION'],
+  ] as const)('an open %s privileged row blocks the legacy path, no legacy void intent created', async (status) => {
+    const store = createInMemoryReversalStore();
+    await seedPrivilegedRow(store, status);
+    const outcome = await requestPendingVoid(
+      'ord-fence',
+      { reason: 'x', voidedBy: 'staff-1', branchId: 'LDP-001', targetOrderBranchId: 'LDP-001' },
+      NOW,
+      store,
+    );
+    expect(outcome).toEqual({ kind: 'blocked', reason: 'authority_refused' });
+    expect(await getVoidIntent(store, 'ord-fence')).toBeUndefined();
+  });
+
+  test('SERVER_REJECTED does not block the legacy path', async () => {
+    const store = createInMemoryReversalStore();
+    await seedPrivilegedRow(store, 'SERVER_REJECTED');
+    const outcome = await requestPendingVoid(
+      'ord-fence',
+      { reason: 'x', voidedBy: 'staff-1', branchId: 'LDP-001', targetOrderBranchId: 'LDP-001' },
+      NOW,
+      store,
+    );
+    expect(outcome).toEqual({ kind: 'queued' });
+    expect((await getVoidIntent(store, 'ord-fence'))?.status).toBe('pending');
+  });
+
+  test('a different target order is never blocked', async () => {
+    const store = createInMemoryReversalStore();
+    await seedPrivilegedRow(store, 'SYNCING');
+    const outcome = await requestPendingVoid(
+      'ord-other',
+      { reason: 'x', voidedBy: 'staff-1', branchId: 'LDP-001', targetOrderBranchId: 'LDP-001' },
+      NOW,
+      store,
+    );
+    expect(outcome).toEqual({ kind: 'queued' });
+  });
+
+  test('a privileged journal read error fails closed and creates no legacy void intent', async () => {
+    const throwingStore = {
+      transact: async () => {
+        throw new Error('durable read failure');
+      },
+    };
+    const outcome = await requestPendingVoid(
+      'ord-fence',
+      { reason: 'x', voidedBy: 'staff-1', branchId: 'LDP-001', targetOrderBranchId: 'LDP-001' },
+      NOW,
+      throwingStore,
+    );
+    expect(outcome).toEqual({ kind: 'blocked', reason: 'authority_refused' });
+  });
+});
+
+describe('requestPendingVoid — RC-D3-003 target-branch binding', () => {
+  test('branch-A order + current branch-B fails closed before any legacy write', async () => {
+    const store = createInMemoryReversalStore();
+    const outcome = await requestPendingVoid(
+      'ord-cross-branch',
+      { reason: 'x', voidedBy: 'staff-1', branchId: 'LDP-002', targetOrderBranchId: 'LDP-001' },
+      NOW,
+      store,
+    );
+    expect(outcome).toEqual({ kind: 'blocked', reason: 'authority_refused' });
+    expect(await getVoidIntent(store, 'ord-cross-branch')).toBeUndefined();
+  });
+
+  test('target branch equal to current branch proceeds normally', async () => {
+    const store = createInMemoryReversalStore();
+    const outcome = await requestPendingVoid(
+      'ord-match',
+      { reason: 'x', voidedBy: 'staff-1', branchId: 'LDP-001', targetOrderBranchId: 'LDP-001' },
+      NOW,
+      store,
+    );
+    expect(outcome).toEqual({ kind: 'queued' });
+    expect((await getVoidIntent(store, 'ord-match'))?.branchId).toBe('LDP-001');
+  });
+
+  test('current branch ALL fails closed', async () => {
+    const store = createInMemoryReversalStore();
+    const outcome = await requestPendingVoid(
+      'ord-all-current',
+      { reason: 'x', voidedBy: 'staff-1', branchId: 'ALL', targetOrderBranchId: 'LDP-001' },
+      NOW,
+      store,
+    );
+    expect(outcome).toEqual({ kind: 'blocked', reason: 'authority_refused' });
+    expect(await getVoidIntent(store, 'ord-all-current')).toBeUndefined();
+  });
+
+  test('target order branch ALL fails closed', async () => {
+    const store = createInMemoryReversalStore();
+    const outcome = await requestPendingVoid(
+      'ord-all-target',
+      { reason: 'x', voidedBy: 'staff-1', branchId: 'LDP-001', targetOrderBranchId: 'ALL' },
+      NOW,
+      store,
+    );
+    expect(outcome).toEqual({ kind: 'blocked', reason: 'authority_refused' });
+    expect(await getVoidIntent(store, 'ord-all-target')).toBeUndefined();
+  });
+
+  test('an empty/absent target order branch fails closed', async () => {
+    const store = createInMemoryReversalStore();
+    const outcome = await requestPendingVoid(
+      'ord-empty-target',
+      { reason: 'x', voidedBy: 'staff-1', branchId: 'LDP-001', targetOrderBranchId: '' },
+      NOW,
+      store,
+    );
+    expect(outcome).toEqual({ kind: 'blocked', reason: 'authority_refused' });
+    expect(await getVoidIntent(store, 'ord-empty-target')).toBeUndefined();
+  });
+});
+
+describe('requestPendingVoid — RC-D3-002 unreadable privileged state fails closed', () => {
+  test('an unreadable privileged row blocks the legacy enqueue, zero legacy write', async () => {
+    const store = createInMemoryReversalStore();
+    await store.transact(['privilegedEvidence'], 'readwrite', async (txn) => {
+      await txn.put('privilegedEvidence', 'corrupt-1', { garbage: true });
+    });
+    const outcome = await requestPendingVoid(
+      'ord-corrupt',
+      { reason: 'x', voidedBy: 'staff-1', branchId: 'LDP-001', targetOrderBranchId: 'LDP-001' },
+      NOW,
+      store,
+    );
+    expect(outcome).toEqual({ kind: 'blocked', reason: 'authority_refused' });
+    expect(await getVoidIntent(store, 'ord-corrupt')).toBeUndefined();
+  });
+});
+
+describe('requestPendingVoid / ingestAttestedPrivilegedAction — RC-D3-004 atomic no-bypass race', () => {
+  const ingestCtx = { ingestStaffId: 'mgr-cashier', ingestDeviceId: 'device-1' };
+
+  function raceEnvelope(): OfflineAttestationEnvelope {
+    return {
+      attestationIdHex: 'f'.repeat(32),
+      paa1Base64: 'PAA1',
+      ssa1Base64: 'SSA1',
+      oacEnvelopeBytesBase64: 'OAC1',
+      verifiedBranchId: 'LDP-001',
+      evidenceSeed: {
+        oacId: 'oac-1',
+        oacSchemaVersion: 1,
+        revocationEpochAtIssue: 0,
+        managerAuthVersionAtIssue: 0,
+        managerCredentialVersionAtIssue: 0,
+        nonce: 'nonce-race',
+        attemptCount: 1,
+        approvalResult: 'APPROVED_LOCAL',
+        approvalProofDigest: 'proof-race',
+      },
+      trustedApprovalLowerMs: 1_000,
+      trustedApprovalUpperMs: 2_000,
+      pendingExecutionExpiresAtMs: 100_000,
+      localIntentId: 'intent-race',
+      actionId: 'VOID_PENDING_SALE',
+      targetOrderId: 'ord-race',
+      targetOrderUtc7Date: '2026-08-21',
+      approvingManagerStaffId: 'mgr-1',
+    };
+  }
+
+  test('Ordering A — privileged projection commits first: legacy enqueue blocks, zero legacy write', async () => {
+    const store = createInMemoryReversalStore();
+    const ingestOutcome = await ingestAttestedPrivilegedAction(
+      store,
+      raceEnvelope(),
+      { ...ingestCtx, expectNoOpenRowForTarget: true },
+      NOW,
+    );
+    expect(ingestOutcome.kind).toBe('created');
+
+    const outcome = await requestPendingVoid(
+      'ord-race',
+      { reason: 'x', voidedBy: 'staff-1', branchId: 'LDP-001', targetOrderBranchId: 'LDP-001' },
+      NOW,
+      store,
+    );
+    expect(outcome).toEqual({ kind: 'blocked', reason: 'authority_refused' });
+    expect(await getVoidIntent(store, 'ord-race')).toBeUndefined();
+  });
+
+  test('Ordering B — legacy enqueue commits first: the reverse D-2 opted-in check refuses the privileged row', async () => {
+    const store = createInMemoryReversalStore();
+    const outcome = await requestPendingVoid(
+      'ord-race',
+      { reason: 'x', voidedBy: 'staff-1', branchId: 'LDP-001', targetOrderBranchId: 'LDP-001' },
+      NOW,
+      store,
+    );
+    expect(outcome).toEqual({ kind: 'queued' });
+    expect((await getVoidIntent(store, 'ord-race'))?.status).toBe('pending');
+
+    const ingestOutcome = await ingestAttestedPrivilegedAction(
+      store,
+      raceEnvelope(),
+      { ...ingestCtx, expectNoOpenRowForTarget: true },
+      NOW + 1,
+    );
+    expect(ingestOutcome).toEqual({ kind: 'legacy_conflict' });
+    expect(await listPrivilegedEvidence(store)).toHaveLength(0);
+  });
+
+  test('true concurrency: exactly one authority path wins, never both', async () => {
+    const store = createInMemoryReversalStore();
+    const [ingestOutcome, voidOutcome] = await Promise.all([
+      ingestAttestedPrivilegedAction(store, raceEnvelope(), { ...ingestCtx, expectNoOpenRowForTarget: true }, NOW),
+      requestPendingVoid(
+        'ord-race',
+        { reason: 'x', voidedBy: 'staff-1', branchId: 'LDP-001', targetOrderBranchId: 'LDP-001' },
+        NOW,
+        store,
+      ),
+    ]);
+
+    const privilegedRows = await listPrivilegedEvidence(store);
+    const voidIntent = await getVoidIntent(store, 'ord-race');
+    const privilegedWon = ingestOutcome.kind === 'created';
+    const legacyWon = voidOutcome.kind === 'queued' || voidOutcome.kind === 'confirmed';
+
+    // Exactly one authority path landed a live record — never both, never neither.
+    expect(privilegedWon !== legacyWon).toBe(true);
+    if (privilegedWon) {
+      expect(privilegedRows).toHaveLength(1);
+      expect(voidIntent).toBeUndefined();
+      expect(ingestOutcome.kind).toBe('created');
+    } else {
+      expect(privilegedRows).toHaveLength(0);
+      expect(voidIntent).not.toBeUndefined();
+      expect(ingestOutcome).toEqual({ kind: 'legacy_conflict' });
+    }
   });
 });
 

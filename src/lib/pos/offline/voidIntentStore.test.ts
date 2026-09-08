@@ -5,6 +5,7 @@ import {
   countTerminalVoidIntents,
   decideVoidPreflight,
   enqueueVoidIntent,
+  enqueueVoidIntentWithPrivilegedFence,
   getVoidIntent,
   listClaimableVoidIntents,
   markVoidIntentConfirmed,
@@ -15,6 +16,8 @@ import {
   __resetVoidIntentStoreListenersForTests,
   type VoidIntentRecord,
 } from './voidIntentStore';
+import { ingestAttestedPrivilegedAction } from './privilegedEvidenceStore';
+import type { OfflineAttestationEnvelope } from '../../auth/privilegedAction/offlineAttestation';
 import storeSource from './voidIntentStore.ts?raw';
 
 const NOW = 1_700_000_000_000;
@@ -345,5 +348,102 @@ describe('voidIntentStore same-tab subscription', () => {
     stop();
     await enqueueVoidIntent(store, 'ord-2', input(), NOW);
     expect(hits).toBe(2);
+  });
+});
+
+describe('enqueueVoidIntentWithPrivilegedFence — SEC-001 Packet D / D-3, RC-D3-004 atomic legacy fence', () => {
+  const ingestCtx = { ingestStaffId: 'mgr-cashier', ingestDeviceId: 'device-1' };
+
+  function privilegedEnvelope(over: Partial<OfflineAttestationEnvelope> = {}): OfflineAttestationEnvelope {
+    return {
+      attestationIdHex: 'a'.repeat(32),
+      paa1Base64: 'PAA1',
+      ssa1Base64: 'SSA1',
+      oacEnvelopeBytesBase64: 'OAC1',
+      verifiedBranchId: 'LDP-001',
+      evidenceSeed: {
+        oacId: 'oac-1',
+        oacSchemaVersion: 1,
+        revocationEpochAtIssue: 0,
+        managerAuthVersionAtIssue: 0,
+        managerCredentialVersionAtIssue: 0,
+        nonce: 'nonce-1',
+        attemptCount: 1,
+        approvalResult: 'APPROVED_LOCAL',
+        approvalProofDigest: 'proof-1',
+      },
+      trustedApprovalLowerMs: 1_000,
+      trustedApprovalUpperMs: 2_000,
+      pendingExecutionExpiresAtMs: 100_000,
+      localIntentId: 'intent-1',
+      actionId: 'VOID_PENDING_SALE',
+      targetOrderId: 'ord-fence',
+      targetOrderUtc7Date: '2026-08-21',
+      approvingManagerStaffId: 'mgr-1',
+      ...over,
+    };
+  }
+
+  it('with an empty privileged journal, behaves exactly like enqueueVoidIntent (created)', async () => {
+    const store = createInMemoryReversalStore();
+    const outcome = await enqueueVoidIntentWithPrivilegedFence(store, 'ord-fence', input(), 'LDP-001', NOW);
+    expect(outcome.kind).toBe('created');
+    expect((await getVoidIntent(store, 'ord-fence'))?.branchId).toBe('LDP-001');
+  });
+
+  it('an open privileged row for the same bound (branch, target) blocks: privileged_conflict, zero voidIntent write', async () => {
+    const store = createInMemoryReversalStore();
+    await ingestAttestedPrivilegedAction(store, privilegedEnvelope(), ingestCtx, NOW);
+    const outcome = await enqueueVoidIntentWithPrivilegedFence(store, 'ord-fence', input(), 'LDP-001', NOW);
+    expect(outcome).toEqual({ kind: 'privileged_conflict' });
+    expect(await getVoidIntent(store, 'ord-fence')).toBeUndefined();
+  });
+
+  it('an unreadable privileged row anywhere in the store blocks: unreadable, zero voidIntent write', async () => {
+    const store = createInMemoryReversalStore();
+    await store.transact(['privilegedEvidence'], 'readwrite', async (txn) => {
+      await txn.put('privilegedEvidence', 'corrupt-1', { garbage: true });
+    });
+    const outcome = await enqueueVoidIntentWithPrivilegedFence(store, 'ord-fence', input(), 'LDP-001', NOW);
+    expect(outcome).toEqual({ kind: 'unreadable' });
+    expect(await getVoidIntent(store, 'ord-fence')).toBeUndefined();
+  });
+
+  it('a privileged row on a different branch does not block', async () => {
+    const store = createInMemoryReversalStore();
+    await ingestAttestedPrivilegedAction(store, privilegedEnvelope({ verifiedBranchId: 'LDP-002' }), ingestCtx, NOW);
+    const outcome = await enqueueVoidIntentWithPrivilegedFence(store, 'ord-fence', input(), 'LDP-001', NOW);
+    expect(outcome.kind).toBe('created');
+  });
+
+  it('a privileged row for a different target order does not block', async () => {
+    const store = createInMemoryReversalStore();
+    await ingestAttestedPrivilegedAction(store, privilegedEnvelope({ targetOrderId: 'ord-other' }), ingestCtx, NOW);
+    const outcome = await enqueueVoidIntentWithPrivilegedFence(store, 'ord-fence', input(), 'LDP-001', NOW);
+    expect(outcome.kind).toBe('created');
+  });
+
+  it('preserves confirmed_noop / terminal_noop passthrough behavior from the shared enqueue logic', async () => {
+    const store = createInMemoryReversalStore();
+    await enqueueVoidIntent(store, 'ord-fence', input(), NOW);
+    await markVoidIntentConfirmed(store, 'ord-fence', NOW + 1);
+    const outcome = await enqueueVoidIntentWithPrivilegedFence(store, 'ord-fence', input(), 'LDP-001', NOW + 2);
+    expect(outcome.kind).toBe('confirmed_noop');
+  });
+
+  it('notifies same-tab subscribers only on an actual created/updated write, not on a blocked outcome', async () => {
+    const store = createInMemoryReversalStore();
+    await ingestAttestedPrivilegedAction(store, privilegedEnvelope(), ingestCtx, NOW);
+    let hits = 0;
+    const stop = subscribeVoidIntentStore(() => {
+      hits += 1;
+    });
+    const blocked = await enqueueVoidIntentWithPrivilegedFence(store, 'ord-fence', input(), 'LDP-001', NOW);
+    expect(blocked).toEqual({ kind: 'privileged_conflict' });
+    expect(hits).toBe(0);
+    const created = await enqueueVoidIntentWithPrivilegedFence(store, 'ord-other', input(), 'LDP-001', NOW);
+    expect(created.kind).toBe('created');
+    expect(hits).toBe(1);
+    stop();
   });
 });

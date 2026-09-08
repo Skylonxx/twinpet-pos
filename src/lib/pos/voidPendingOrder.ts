@@ -9,7 +9,7 @@ import {
   claimVoidIntent,
   decideVoidPreflight,
   deferVoidIntentPending,
-  enqueueVoidIntent,
+  enqueueVoidIntentWithPrivilegedFence,
   getVoidIntent,
   markVoidIntentConfirmed,
   markVoidIntentRetryable,
@@ -39,7 +39,17 @@ export type PendingVoidInput = {
 };
 
 export type PendingVoidRequest = PendingVoidInput & {
+  /** Current trusted concrete branch context (e.g. `useAuth().branchId`). */
   branchId: string;
+  /**
+   * RC-D3-003 — independently-sourced target-order branch identity (e.g.
+   * `selected.order.branchId`, NOT re-derived from `branchId`). Must be
+   * concrete and equal `branchId`, or `requestPendingVoid` fails closed
+   * before any legacy read/write. This binds the legacy fence and enqueue
+   * to the order's own branch instead of trusting a caller-supplied/current
+   * branch that may have raced ahead during a branch-context transition.
+   */
+  targetOrderBranchId: string;
 };
 
 /** The exact update fields written onto the pending `asyncOrders` doc. Pure. */
@@ -383,6 +393,10 @@ async function applyRetryable(
   return 'retryable';
 }
 
+function isConcreteBranchId(value: string | null | undefined): value is string {
+  return typeof value === 'string' && value.length > 0 && value !== 'ALL';
+}
+
 /**
  * Submits an offline-first void request for a pending sale.
  * Durable enqueue happens first. An online attempt drains this intent immediately.
@@ -393,19 +407,52 @@ export async function requestPendingVoid(
   nowMs: number = Date.now(),
   store: ReversalLocalStore = createIndexedDbReversalStore(),
 ): Promise<VoidRequestOutcome> {
-  const enqueued = await enqueueVoidIntent(
-    store,
-    orderId,
-    {
-      branchId: input.branchId,
-      deviceId: getDeviceId(),
-      reason: input.reason,
-      note: input.note,
-      voidedBy: input.voidedBy,
-    },
-    nowMs,
-  );
+  // RC-D3-003 — the legacy fence must bind to the TARGET ORDER's branch, not
+  // a caller-supplied/current branch alone. `input.targetOrderBranchId` is
+  // independently sourced from `input.branchId` (the current trusted
+  // branch). Both must be concrete and equal before any legacy read/write;
+  // `ALL`/mismatch/absent fails closed. Reuses the existing
+  // `authority_refused` vocabulary — no new Packet E value is introduced.
+  if (
+    !isConcreteBranchId(input.branchId) ||
+    !isConcreteBranchId(input.targetOrderBranchId) ||
+    input.branchId !== input.targetOrderBranchId
+  ) {
+    return { kind: 'blocked', reason: 'authority_refused' };
+  }
+  const targetBranchId = input.targetOrderBranchId;
 
+  // GD-D3-003 / RC-D3-004 — fail-closed legacy no-bypass fence, made atomic
+  // with the void-intent create/update in ONE durable transaction (see
+  // `voidIntentStore.ts::enqueueVoidIntentWithPrivilegedFence`), so a
+  // privileged row cannot land in the window between a separate fence read
+  // and a separate enqueue. A journal read error, an unreadable privileged
+  // row (RC-D3-002), or an open privileged row for this target all fail
+  // closed before any legacy write. Reuses the landed, closed
+  // `VoidTerminalReason` vocabulary — `authority_refused` is the existing
+  // member matching a system-side refusal to process this legacy void.
+  let enqueued: Awaited<ReturnType<typeof enqueueVoidIntentWithPrivilegedFence>>;
+  try {
+    enqueued = await enqueueVoidIntentWithPrivilegedFence(
+      store,
+      orderId,
+      {
+        branchId: targetBranchId,
+        deviceId: getDeviceId(),
+        reason: input.reason,
+        note: input.note,
+        voidedBy: input.voidedBy,
+      },
+      targetBranchId,
+      nowMs,
+    );
+  } catch {
+    return { kind: 'blocked', reason: 'authority_refused' };
+  }
+
+  if (enqueued.kind === 'unreadable' || enqueued.kind === 'privileged_conflict') {
+    return { kind: 'blocked', reason: 'authority_refused' };
+  }
   if (enqueued.kind === 'confirmed_noop') return { kind: 'confirmed' };
   if (enqueued.kind === 'terminal_noop') {
     return { kind: 'blocked', reason: enqueued.record.terminalReason ?? 'authority_refused' };
