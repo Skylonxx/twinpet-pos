@@ -139,6 +139,17 @@ const SEC001_PACKET_C_A_DEPLOY_FUNCTIONS = [
   'roleSweepScheduler',
 ];
 
+/** SEC-001 Gemini-031-required TRUE-STANDALONE privileged deploy allowlist, appended verbatim (see docs/agent-workflow/CURRENT_PACKET.md). */
+const TRUE_STANDALONE_PRIVILEGED_DEPLOY_FUNCTIONS = [
+  'adjudicateOfflinePrivilegedAction',
+  'issueOfflineStaffSessionAssertion',
+  'issuePrivilegedLockoutClear',
+  'reanchorPrivilegedOacReceipt',
+  'reEnrollPrivilegedDevice',
+  'refreshOfflineStaffSessionAssertion',
+  'submitPrivilegedVoid',
+];
+
 function makeDb(seed: Record<string, Doc> = {}) {
   const store = new Map<string, Doc>(Object.entries(seed).map(([k, v]) => [k, { ...v }]));
   const writes: Array<{ op: string; path?: string }> = [];
@@ -558,12 +569,16 @@ describe('operator CLI entrypoints', () => {
     for (const name of SEC001_PACKET_C_A_DEPLOY_FUNCTIONS) {
       expect(pkg.scripts.deploy).toContain(`functions:${name}`);
     }
+    for (const name of TRUE_STANDALONE_PRIVILEGED_DEPLOY_FUNCTIONS) {
+      expect(pkg.scripts.deploy).toContain(`functions:${name}`);
+    }
     const functionRefs = [...pkg.scripts.deploy.matchAll(/functions:([A-Za-z0-9_]+)/g)].map((m) => m[1]);
     expect(functionRefs).toEqual([
       ...EXISTING_DEPLOY_FUNCTIONS,
       'requestManagerApproval',
       'setUserAccount',
       ...SEC001_PACKET_C_A_DEPLOY_FUNCTIONS,
+      ...TRUE_STANDALONE_PRIVILEGED_DEPLOY_FUNCTIONS,
     ]);
   });
 

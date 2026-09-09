@@ -130,17 +130,16 @@ describe('adjudicateOfflinePrivilegedAction callable', () => {
     });
   });
 
-  test('the callable is exported from index.ts and is not in the deploy inventory', () => {
+  test('the callable is exported from index.ts and is present exactly once in the deploy inventory', () => {
     const indexSrc = readFileSync(resolve(repoRoot, 'functions/src/index.ts'), 'utf8');
     expect(indexSrc).toContain(
       "export { adjudicateOfflinePrivilegedAction } from './adjudicateOfflinePrivilegedAction';",
     );
-    // Packet E remains required before deploy: the callable must not have been
-    // added to the functions deploy list.
     const pkg = JSON.parse(readFileSync(resolve(repoRoot, 'functions/package.json'), 'utf8')) as {
       scripts: Record<string, string>;
     };
-    expect(pkg.scripts.deploy).not.toContain('adjudicateOfflinePrivilegedAction');
+    const matches = pkg.scripts.deploy.match(/functions:adjudicateOfflinePrivilegedAction(?![A-Za-z0-9_])/g) ?? [];
+    expect(matches).toHaveLength(1);
   });
 
   test('the wrapper adds no decision logic of its own', () => {

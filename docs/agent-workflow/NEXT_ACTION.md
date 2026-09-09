@@ -1,5 +1,14 @@
 # Next Action
 
+## Current pass — SEC-001 bounded predeploy blocker remediation (Claude-016, closes Claude-015 blockers)
+
+**Immediate next action: `RETURN_TO_CHATGPT_FOR_PREDEPLOY_BLOCKER_FILTER_AND_FRESH_CODEX_ROUTING`** (per `TWINPET-TRUE-STANDALONE-SEC-001-BOUNDED-PREDEPLOY-BLOCKER-REMEDIATION-CLAUDE-016`, authorized by Gemini `TWINPET-TRUE-STANDALONE-SEC-001-PREDEPLOY-EVIDENCE-BLOCKER-ADJUDICATION-GEMINI-032`). Do **not** commit, push, deploy, contact production, inspect live Firebase, activate runtime, build/package Tauri native, run Capacitor/Android, or implement manual resolution. A fresh Codex predeploy review is required next.
+
+- Baseline remains `HEAD == origin/main == d35da1aae670d221b86a3c9ddc6d5b4574d3b3fb` (from `10c0332`); detail in `docs/agent-workflow/CURRENT_PACKET.md` ("This pass" section) and `docs/agent-workflow/STATE.md`. No commit landed this pass.
+- Per controlling Gemini-032 authority, controlling Gemini lineage is authoritative for current packet/gate state: Packet E-1 = `LANDED_CLOSED`, Packet E-2 = `LANDED_CLOSED`, Packet E = `SOURCE_COMPLETE`. Deploy / production / live Firebase remain **NOT AUTHORIZED**. Manual resolution remains a future, separate gate, not a blocker.
+- Both Claude-015 evidence blockers are **closed** this pass under Gemini-032's exact six-path bounded authority: (1) `functions/src/__tests__/adjudicateOfflinePrivilegedAction.test.ts` and `functions/src/scripts/__tests__/operatorCliEntrypoints.test.ts` were updated to assert the correct current contract (the seven Gemini-031-required deploy names present, exact/non-duplicated) — Functions unit 89 files / 2405 tests PASS, typecheck PASS, build PASS; (2) the Firestore Rules suite executed via transient pinned `firebase-tools@13.31.0` against the local emulator (`demo-twinpet`) — 27 files / 486 tests PASS, including the privileged offline adjudication deny-all boundary spec, no production contact.
+- Full report: `TWINPET-TRUE-STANDALONE-SEC-001-BOUNDED-PREDEPLOY-BLOCKER-REMEDIATION-CLAUDE-016`. Prior report: `TWINPET-TRUE-STANDALONE-SEC-001-CONSOLIDATED-PREDEPLOY-SOURCE-EVIDENCE-CLAUDE-015`.
+
 ## Current State
 
 - B13 packaging / current source baseline (binding until this docs commit advances repository HEAD): `40a3e10ce9805e851081c7aa512115026754776e` (`feat(pos): add windows nsis distribution config`)
