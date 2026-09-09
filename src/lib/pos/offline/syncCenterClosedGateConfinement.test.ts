@@ -202,3 +202,110 @@ describe('syncCenterClosedGateConfinement', () => {
     }
   });
 });
+
+// ─── SEC-001 Packet E / E-2 — additional confinement over the exact 12-path
+// privileged Sync Center presentation. ─────────────────────────────────────
+
+const E2_PRODUCTION_FILES = [
+  '/src/lib/pos/offline/syncCenterPrivilegedProjection.ts',
+  '/src/lib/pos/offline/syncCenterModel.ts',
+  '/src/lib/pos/offline/syncCenterReader.ts',
+  '/src/hooks/pos/useSyncCenterState.ts',
+  '/src/pages/SyncCenterPage.tsx',
+] as const;
+
+const E2_FORBIDDEN_D3_D2_WRITE_IDENTIFIERS = [
+  'requestOfflineAttestation',
+  'ingestAttestedPrivilegedAction',
+  'claimPrivilegedEvidenceRow',
+  'applyPrivilegedEvidenceDisposition',
+  'applyPrivilegedEvidenceDeferredCycleCounts',
+  'clearPrivilegedEvidenceBackoff',
+  'allocatePrivilegedSweepGeneration',
+] as const;
+
+const E2_FORBIDDEN_MANUAL_RESOLUTION_IDENTIFIERS = [
+  'resolveManualReview',
+  'resolvePrivileged',
+  'retryPrivileged',
+  'forcePrivileged',
+  'approvePrivileged',
+  'overridePrivileged',
+  'discardPrivileged',
+  'resubmitPrivileged',
+] as const;
+
+const E2_FORBIDDEN_RAW_EVIDENCE_FIELDS = [
+  'paa1Base64',
+  'ssa1Base64',
+  'oacEnvelopeBytesBase64',
+  'evidenceBindingDigest',
+  'approvalProofDigest',
+  'approvingManagerStaffId',
+  'ingestDeviceId',
+] as const;
+
+const E2_FORBIDDEN_NATIVE_FUNCTIONS_TOKENS = ['firebase/functions', 'httpsCallable', '@tauri-apps', "invoke('", 'invoke("'] as const;
+
+describe('syncCenterClosedGateConfinement — SEC-001 Packet E / E-2', () => {
+  it('E2-CG-1 packet E-2 files add zero new production D-3 caller and zero D-2 write invocation', () => {
+    for (const file of E2_PRODUCTION_FILES) {
+      const text = pk4Text(file);
+      for (const name of E2_FORBIDDEN_D3_D2_WRITE_IDENTIFIERS) {
+        expect(text, `${file} ${name}`).not.toMatch(new RegExp(`\\b${name}\\b`));
+      }
+    }
+  });
+
+  it('E2-CG-2 packet E-2 files add zero privileged manual-resolution action', () => {
+    for (const file of E2_PRODUCTION_FILES) {
+      const text = pk4Text(file);
+      for (const name of E2_FORBIDDEN_MANUAL_RESOLUTION_IDENTIFIERS) {
+        expect(text, `${file} ${name}`).not.toMatch(new RegExp(`\\b${name}\\b`));
+      }
+    }
+  });
+
+  it('E2-CG-3 CHANNEL_ORDER / SYNC_CENTER_CHANNEL_ORDER remain unchanged; privileged evidence is not a channel', () => {
+    const modelText = pk4Text('/src/lib/pos/offline/syncCenterModel.ts');
+    expect(modelText).toContain(
+      "export const SYNC_CENTER_CHANNEL_ORDER = [\n  'offline_reversal',\n  'void_intent',\n  'shift_intent',\n  'sale_intent',\n  'trusted_resume',\n] as const satisfies readonly SyncChannelId[];",
+    );
+    expect(modelText).not.toMatch(/'privileged_void'/);
+    expect(modelText).not.toMatch(/'privileged'\s*,?\s*\n?\s*\] as const satisfies readonly SyncChannelId/);
+  });
+
+  it('E2-CG-4 privileged projection output is non-channel and the page never touches raw journal fields', () => {
+    const projectionSource = pk4Text('/src/lib/pos/offline/syncCenterPrivilegedProjection.ts');
+    expect(projectionSource).not.toMatch(/\bchannel\s*:/);
+    const pageText = pk4Text('/src/pages/SyncCenterPage.tsx');
+    for (const field of E2_FORBIDDEN_RAW_EVIDENCE_FIELDS) {
+      expect(pageText, field).not.toMatch(new RegExp(`\\b${field}\\b`));
+    }
+    expect(pageText).not.toMatch(/\bPrivilegedEvidenceJournalRecordV1\b/);
+  });
+
+  it('E2-CG-5 packet E-2 files reach no Functions/Rules/native privileged writer path', () => {
+    for (const file of E2_PRODUCTION_FILES) {
+      const text = pk4Text(file);
+      for (const token of E2_FORBIDDEN_NATIVE_FUNCTIONS_TOKENS) {
+        expect(text, `${file} ${token}`).not.toContain(token);
+      }
+      expect(text, file).not.toMatch(/from\s+['"]firebase\/firestore['"]/);
+    }
+  });
+
+  it('E2-CG-6 negative control: the forbidden-identifier regex actually flags a planted violation', () => {
+    const synthetic = "import { ingestAttestedPrivilegedAction } from './privilegedEvidenceStore';\nfunction resolvePrivileged() {}\n";
+    for (const name of ['ingestAttestedPrivilegedAction', 'resolvePrivileged']) {
+      expect(synthetic).toMatch(new RegExp(`\\b${name}\\b`));
+    }
+  });
+
+  it('E2-CG-7 the page defines a distinct privileged section component and never passes it a mutation callback', () => {
+    const pageText = pk4Text('/src/pages/SyncCenterPage.tsx');
+    expect(pageText).toMatch(/PrivilegedEvidenceSection/);
+    expect(pageText).not.toMatch(/<PrivilegedEvidenceSection[^>]*onRetry/);
+    expect(pageText).not.toMatch(/<PrivilegedEvidenceSection[^>]*onResolve/);
+  });
+});

@@ -36,11 +36,14 @@ import {
   SYNC_CENTER_HISTORY_CAP,
   aggregateForbidsClean,
   thaiStateLabel,
+  type SyncCenterAvailability,
   type SyncCenterItemState,
   type SyncCenterRow,
 } from '../lib/pos/offline/syncCenterModel';
+import type { SyncCenterPrivilegedRow } from '../lib/pos/offline/syncCenterPrivilegedProjection';
 import { useSyncCenterState } from '../hooks/pos/useSyncCenterState';
 import { getBranchLabel } from '../lib/branches';
+import './SyncCenterPage.css';
 
 /** Transport-offline hint only — not server reachability or confirmation. */
 const OFFLINE_NO_REQUEST_COPY =
@@ -263,6 +266,60 @@ function SectionList(props: {
   );
 }
 
+/**
+ * SEC-001 Packet E / E-2 — non-channel, read-only privileged void evidence
+ * section. Passive display only: no retry/resolve/approve/force/discard
+ * control is ever rendered here, and no `SyncCenterActionId` is attached to
+ * a privileged row (`allowedActionsForRow` is never called for these rows).
+ */
+function PrivilegedEvidenceSection(props: {
+  rows: SyncCenterPrivilegedRow[];
+  availability: SyncCenterAvailability;
+  unavailableReason: string | null;
+}) {
+  const { rows, availability, unavailableReason } = props;
+  return (
+    <section
+      aria-labelledby="sync-center-privileged-heading"
+      className="sync-center-privileged-section min-w-0"
+    >
+      <h2 id="sync-center-privileged-heading" className="mb-1 text-sm font-semibold">
+        การยกเลิกบิลที่อนุมัติแบบออฟไลน์ (ต้องมีลายเซ็นผู้จัดการ)
+      </h2>
+      <p className="sync-center-privileged-caption mb-2 text-xs text-[var(--text-secondary)]">
+        แสดงผลอย่างเดียว — ไม่ใช่ช่องทางซิงก์ปกติ ไม่มีปุ่มดำเนินการในหน้านี้
+      </p>
+      {availability !== 'ok' ? (
+        <p role="status" className="text-sm text-[var(--warn)]">
+          {unavailableReason ?? 'อ่านรายการนี้ไม่ได้'}
+        </p>
+      ) : rows.length === 0 ? (
+        <p className="text-sm text-[var(--text-secondary)]">ไม่มีรายการยกเลิกบิลที่อนุมัติแบบออฟไลน์</p>
+      ) : (
+        <ul className="sync-center-privileged-list" aria-label="รายการยกเลิกบิลที่อนุมัติแบบออฟไลน์">
+          {rows.map((row) => (
+            <li key={row.id} className="sync-center-privileged-row">
+              <span className="sync-center-privileged-order font-mono text-xs" title={row.id}>
+                บิล {row.targetOrderId}
+              </span>
+              <span className="sync-center-privileged-status" data-status={row.statusClass}>
+                {row.attentionClass === 'requires_attention' && (
+                  <i className="ti ti-alert-triangle" aria-hidden="true" />
+                )}
+                <span className="sync-center-sr-only">สถานะ: </span>
+                {row.statusTh}
+              </span>
+              <span className="sync-center-privileged-detail text-xs text-[var(--text-secondary)]">
+                {row.detailTh}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 export default function SyncCenterPage() {
   const { user, branchId } = useAuth();
   const { branch } = useBranch();
@@ -373,12 +430,14 @@ export default function SyncCenterPage() {
     (role === 'manager' || role === 'admin') &&
     agg.rows.some((r) => r.channel === 'shift_intent' && r.state === 'attention');
   const showAdminLink = canOpenAdminReconciliation(role);
-  const readableOk = agg.channels
-    .filter((c) => c.channel !== 'trusted_resume')
-    .every((c) => c.availability === 'ok');
+  // RC-E2-002 — "readable" must speak for every Sync Center source, not just
+  // the five ordinary channels, so it also requires the privileged section.
+  const readableOk =
+    agg.channels.filter((c) => c.channel !== 'trusted_resume').every((c) => c.availability === 'ok') &&
+    agg.privilegedAvailability === 'ok';
   const attentionEmptyCopy = readableOk
     ? 'ไม่มีรายการที่ต้องตรวจสอบ'
-    : 'ไม่พบรายการ แต่บางช่องทางอ่านไม่ได้';
+    : 'ไม่พบรายการ แต่บางแหล่งข้อมูลอ่านไม่ได้';
 
   const channelById = new Map(agg.channels.map((ch) => [ch.channel, ch]));
 
@@ -411,7 +470,10 @@ export default function SyncCenterPage() {
           {agg.unifiedAttention > 0 && <i className="ti ti-alert-triangle" aria-hidden="true" />}
           ต้องตรวจสอบ {agg.unifiedAttention}
         </span>
-        <span>อ่านไม่ได้ {agg.unavailableChannelCount}</span>
+        {/* RC-E2-002 — this global count must speak for every Sync Center
+            source, so it includes privileged unavailability, not just the
+            five ordinary channels. */}
+        <span>อ่านไม่ได้ {agg.unavailableSourceCount}</span>
         <span>
           {agg.lastSyncCheckAtMs != null
             ? `ตรวจสอบการซิงก์ล่าสุด ${formatHm(agg.lastSyncCheckAtMs)}`
@@ -497,6 +559,12 @@ export default function SyncCenterPage() {
           </Table>
         </div>
       </section>
+
+      <PrivilegedEvidenceSection
+        rows={agg.privilegedRows}
+        availability={agg.privilegedAvailability}
+        unavailableReason={agg.privilegedUnavailableReason}
+      />
 
       <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2">
         <section className="min-w-0">

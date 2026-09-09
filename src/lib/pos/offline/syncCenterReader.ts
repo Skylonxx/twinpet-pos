@@ -28,6 +28,9 @@ import { listVoidIntents } from './voidIntentStore';
 import type { SaleIntentEntry } from './saleIntentJournalTypes';
 import type { ShiftCloseIntentEntry } from './shiftCloseIntentTypes';
 import type { ShiftOpenIntentEntry } from './shiftOpenIntentTypes';
+import { listPrivilegedEvidenceForBranch } from './privilegedEvidenceStore';
+import type { PrivilegedEvidenceJournalRecordV1 } from './privilegedEvidenceTypes';
+import { getCanonicalSyncContext } from './canonicalSyncContext';
 
 export type SyncCenterReaderDeps = {
   reversalStore?: ReversalLocalStore;
@@ -106,6 +109,31 @@ export async function readSyncCenterSources(
     return { ok: true as const, rows };
   });
 
+  // SEC-001 Packet E / E-2 — read-only, branch-scoped privileged-evidence
+  // presentation. Fails closed (no rows) whenever the canonical mutation
+  // context is unmounted, unavailable, or scoped to a different branch than
+  // this read — never inferred from stale cached privileged rows. Reuses
+  // the same durable store handle as the other channels above; no second
+  // durable-store open site is introduced.
+  //
+  // RC-E2-002 — `listPrivilegedEvidenceForBranch` reports `unreadableCount`
+  // for any parser-invalid row it could not enumerate. A caller cannot tell
+  // which row (or which target) an unreadable row belonged to, so any
+  // `unreadableCount > 0` must fail the whole privileged read closed rather
+  // than present the readable rows as a complete, healthy set — mirroring
+  // D-3's `probeOpenPrivilegedRowForTargetInTxn` fail-closed contract.
+  const privilegedEvidence = await isolate<PrivilegedEvidenceJournalRecordV1>(async () => {
+    const canonical = getCanonicalSyncContext();
+    if (!canonical || canonical.branchId !== scope.branchId) {
+      return asFailed('canonical_sync_context_unavailable');
+    }
+    const { rows, unreadableCount } = await listPrivilegedEvidenceForBranch(store, scope.branchId);
+    if (unreadableCount > 0) {
+      return asFailed('privileged_evidence_unreadable');
+    }
+    return { ok: true as const, rows };
+  });
+
   let lastCycle: SyncOrchestratorState['lastCycle'] = null;
   let webLocksAvailable = false;
   let ch4AttemptExhaustedIds: string[] = [];
@@ -133,5 +161,6 @@ export async function readSyncCenterSources(
       ch4AttemptExhaustedIds,
     },
     isOnline: deps?.isOnline ?? (typeof navigator !== 'undefined' ? navigator.onLine !== false : true),
+    privilegedEvidence,
   };
 }

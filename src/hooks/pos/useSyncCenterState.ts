@@ -33,6 +33,7 @@ import {
 } from '../../lib/pos/offline/syncOrchestrator';
 import { subscribeVoidIntentStore } from '../../lib/pos/offline/voidIntentStore';
 import { subscribeShiftCloseIntentNotifier } from '../../lib/pos/offline/shiftCloseIntentStore';
+import { subscribePrivilegedEvidenceStore } from '../../lib/pos/offline/privilegedEvidenceStore';
 
 export type UseSyncCenterStateOptions = {
   now?: () => number;
@@ -92,6 +93,68 @@ function stripStaleCycle(result: SyncCenterReadResult, branchChangedAtMs: number
   return result;
 }
 
+/**
+ * RC-E2-001 — the safe baseline for a freshly (re)selected concrete scope:
+ * every channel and the privileged section start empty/ok, never carrying
+ * over a prior scope's rows. Used both for the hook's initial state and to
+ * fail closed immediately on every scope-identity change, before the new
+ * scope's own read has had a chance to resolve.
+ */
+function neutralScopedView(scope: ActiveSyncScope, nowMs: number, isOnline: boolean): SyncCenterView {
+  return {
+    status: 'scoped',
+    aggregate: buildSyncCenterAggregate(
+      {
+        scope,
+        reversal: { ok: true, rows: [] },
+        voidIntent: { ok: true, rows: [] },
+        shiftClose: { ok: true, rows: [] },
+        shiftOpen: { ok: true, rows: [] },
+        saleIntent: { ok: true, rows: [] },
+        privilegedEvidence: { ok: true, rows: [] },
+        orchestrator: {
+          lastCycle: null,
+          webLocksAvailable: true,
+          ch4AttemptExhaustedIds: [],
+        },
+        isOnline,
+      },
+      nowMs,
+    ),
+  };
+}
+
+/**
+ * RC-E2-001 — the fail-closed view for a live, still-current scope whose
+ * read attempt itself failed outright (rejected), as opposed to a per-channel
+ * isolation failure already handled inside `readSyncCenterSources`. Every
+ * channel and the privileged section report unavailable, never a stale
+ * previous-scope row and never a false-clean empty state.
+ */
+function unavailableScopedView(scope: ActiveSyncScope, nowMs: number, isOnline: boolean): SyncCenterView {
+  return {
+    status: 'scoped',
+    aggregate: buildSyncCenterAggregate(
+      {
+        scope,
+        reversal: { ok: false, reason: 'read_failed' },
+        voidIntent: { ok: false, reason: 'read_failed' },
+        shiftClose: { ok: false, reason: 'read_failed' },
+        shiftOpen: { ok: false, reason: 'read_failed' },
+        saleIntent: { ok: false, reason: 'read_failed' },
+        privilegedEvidence: { ok: false, reason: 'read_failed' },
+        orchestrator: {
+          lastCycle: null,
+          webLocksAvailable: false,
+          ch4AttemptExhaustedIds: [],
+        },
+        isOnline,
+      },
+      nowMs,
+    ),
+  };
+}
+
 export function useSyncCenterState(opts?: UseSyncCenterStateOptions): UseSyncCenterStateResult {
   const { user, session, branchId, firebaseUser } = useAuth();
   const actor: SyncCenterActor = { role: user?.role ?? 'staff' };
@@ -111,26 +174,7 @@ export function useSyncCenterState(opts?: UseSyncCenterStateOptions): UseSyncCen
 
   const [view, setView] = useState<SyncCenterView>(() =>
     resolved.ok
-      ? {
-          status: 'scoped',
-          aggregate: buildSyncCenterAggregate(
-            {
-              scope: resolved.scope,
-              reversal: { ok: true, rows: [] },
-              voidIntent: { ok: true, rows: [] },
-              shiftClose: { ok: true, rows: [] },
-              shiftOpen: { ok: true, rows: [] },
-              saleIntent: { ok: true, rows: [] },
-              orchestrator: {
-                lastCycle: null,
-                webLocksAvailable: true,
-                ch4AttemptExhaustedIds: [],
-              },
-              isOnline: navOnline(),
-            },
-            nowFn(),
-          ),
-        }
+      ? neutralScopedView(resolved.scope, nowFn(), navOnline())
       : { status: 'scope_unavailable', reason: resolved.reason },
   );
   const [status, setStatus] = useState<SyncCenterHookStatus>(resolved.ok ? 'pending' : 'ready');
@@ -143,19 +187,73 @@ export function useSyncCenterState(opts?: UseSyncCenterStateOptions): UseSyncCen
   const branchChangedAtMsRef = useRef(0);
   const lastBranchRef = useRef<string | null>(scope?.branchId ?? null);
   const scopeRef = useRef(scope);
-  scopeRef.current = scope;
   const actorRef = useRef(actor);
-  actorRef.current = actor;
   const storeRef = useRef<ReversalLocalStore>(opts?.reversalStore ?? createIndexedDbReversalStore());
-  if (opts?.reversalStore) storeRef.current = opts.reversalStore;
-
   const ctxRef = useRef<SyncOrchestratorAuthContext>({ session, branchId, firebaseUser });
-  ctxRef.current = { session, branchId, firebaseUser };
+  const mountedGenerationRef = useRef(false);
 
-  if (scope?.branchId !== lastBranchRef.current) {
-    lastBranchRef.current = scope?.branchId ?? null;
-    branchChangedAtMsRef.current = nowFn();
-  }
+  // RC-E2-001 — monotonic scope/read generation fence. `generationRef` /
+  // `scopeKeyRef` / `scopeRef` / `branchChangedAtMsRef` are the sole
+  // authoritative record of the last COMMITTED scope identity, and are
+  // written ONLY from this committed effect below — never from the render
+  // body itself. A render React discards without committing (Strict Mode's
+  // dev double-invoke, an abandoned speculative/concurrent render, a
+  // bailed-out re-render for a hypothetical future scope) never runs this
+  // effect, so it can never corrupt the fence a still-committed scope's
+  // in-flight read relies on to decide whether its own result is stale (see
+  // `runRead` below) — abandoned speculative work for one scope can never
+  // invalidate or redirect a still-committed different scope's reads. The
+  // render body itself never mutates these refs and never calls
+  // `setView`/`setStatus` — see the pure fail-closed mask below instead.
+  const generationRef = useRef(0);
+  const scopeKeyRef = useRef(scopeKey);
+
+  useEffect(() => {
+    if (mountedGenerationRef.current) {
+      generationRef.current += 1;
+    } else {
+      mountedGenerationRef.current = true;
+    }
+    scopeKeyRef.current = scopeKey;
+    scopeRef.current = scope;
+    if (scope?.branchId !== lastBranchRef.current) {
+      lastBranchRef.current = scope?.branchId ?? null;
+      branchChangedAtMsRef.current = nowFn();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scopeKey]);
+
+  useEffect(() => {
+    actorRef.current = actor;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [actor.role]);
+
+  useEffect(() => {
+    ctxRef.current = { session, branchId, firebaseUser };
+  }, [session, branchId, firebaseUser]);
+
+  useEffect(() => {
+    if (opts?.reversalStore) storeRef.current = opts.reversalStore;
+  }, [opts?.reversalStore]);
+
+  // RC-E2-001 — pure, render-derived fail-closed mask. Reads only; never
+  // mutates a ref and never calls setState. Compares this render's live
+  // scope resolution against the scope the currently-committed `view` state
+  // was actually built for, and substitutes a neutral/unavailable view and
+  // 'pending'/'ready' status whenever they diverge — covering the gap
+  // between a scope-changing render and the committed effect above (and the
+  // read it kicks off) catching up, with no dependency on effect timing.
+  const viewScopeKey =
+    view.status === 'scoped' ? `${view.aggregate.scopeBranchId}::${view.aggregate.scopeDeviceId}` : null;
+  const scopeIsCurrent = resolved.ok
+    ? viewScopeKey === scopeKey
+    : view.status === 'scope_unavailable' && view.reason === resolved.reason;
+  const maskedView: SyncCenterView = scopeIsCurrent
+    ? view
+    : resolved.ok
+      ? neutralScopedView(resolved.scope, nowFn(), navOnline())
+      : { status: 'scope_unavailable', reason: resolved.reason };
+  const maskedStatus: SyncCenterHookStatus = scopeIsCurrent ? status : resolved.ok ? 'pending' : 'ready';
 
   const applyView = useCallback((next: SyncCenterView, nowMs: number) => {
     if (cancelledRef.current) return;
@@ -163,8 +261,7 @@ export function useSyncCenterState(opts?: UseSyncCenterStateOptions): UseSyncCen
   }, []);
 
   const runRead = useCallback(async () => {
-    const current = scopeRef.current;
-    if (!current) {
+    if (!scopeRef.current) {
       const resolution = resolveActiveSyncScope(ctxRef.current.branchId, getDeviceId());
       applyView(
         {
@@ -184,19 +281,53 @@ export function useSyncCenterState(opts?: UseSyncCenterStateOptions): UseSyncCen
     try {
       do {
         rerunRef.current = false;
-        const read = optsRef.current?.read ?? readSyncCenterSources;
-        const raw = await read(current, {
-          ...optsRef.current?.readerDeps,
-          isOnline: navOnline(),
-        });
-        if (cancelledRef.current) return;
-        const scoped = stripStaleCycle(raw, branchChangedAtMsRef.current);
-        const nowMs = nowFn();
-        applyView({ status: 'scoped', aggregate: buildSyncCenterAggregate(scoped, nowMs) }, nowMs);
-        setStatus('ready');
+        // RC-E2-001 — re-obtain the live scope on every iteration (including
+        // a rerun triggered by a scope switch that arrived while the
+        // previous iteration was in flight). Never reuse a scope captured
+        // before an earlier await.
+        const current = scopeRef.current;
+        if (!current) {
+          const resolution = resolveActiveSyncScope(ctxRef.current.branchId, getDeviceId());
+          applyView(
+            { status: 'scope_unavailable', reason: resolution.ok ? 'no_branch' : resolution.reason },
+            nowFn(),
+          );
+          setStatus('ready');
+          break;
+        }
+        const readGeneration = generationRef.current;
+        const readScopeKey = `${current.branchId}::${current.deviceId}`;
+        try {
+          const read = optsRef.current?.read ?? readSyncCenterSources;
+          const raw = await read(current, {
+            ...optsRef.current?.readerDeps,
+            isOnline: navOnline(),
+          });
+          if (cancelledRef.current) return;
+          const stillCurrent =
+            readGeneration === generationRef.current && readScopeKey === scopeKeyRef.current;
+          if (!stillCurrent) {
+            // Stale: the scope changed while this read was in flight. Full
+            // no-op — the next loop iteration (or the switch's own runRead
+            // call) picks up the live scope instead.
+            continue;
+          }
+          const scoped = stripStaleCycle(raw, branchChangedAtMsRef.current);
+          const nowMs = nowFn();
+          applyView({ status: 'scoped', aggregate: buildSyncCenterAggregate(scoped, nowMs) }, nowMs);
+          setStatus('ready');
+        } catch {
+          if (cancelledRef.current) return;
+          const stillCurrent =
+            readGeneration === generationRef.current && readScopeKey === scopeKeyRef.current;
+          if (!stillCurrent) continue;
+          // The read itself failed outright (not a per-channel isolation
+          // failure) — fail closed rather than leaving a stale prior view.
+          const nowMs = nowFn();
+          applyView(unavailableScopedView(current, nowMs, navOnline()), nowMs);
+          setStatus('ready');
+        }
       } while (rerunRef.current && !cancelledRef.current);
-    } catch {
-      if (!cancelledRef.current) setStatus('ready');
     } finally {
       inFlightRef.current = false;
     }
@@ -228,6 +359,9 @@ export function useSyncCenterState(opts?: UseSyncCenterStateOptions): UseSyncCen
     const unsubShift = subscribeShiftCloseIntentNotifier(() => {
       void runRead();
     });
+    const unsubPrivileged = subscribePrivilegedEvidenceStore(() => {
+      void runRead();
+    });
 
     const interval = window.setInterval(() => {
       void runRead();
@@ -251,6 +385,7 @@ export function useSyncCenterState(opts?: UseSyncCenterStateOptions): UseSyncCen
       unsubVoid();
       unsubOrch();
       unsubShift();
+      unsubPrivileged();
       window.clearInterval(interval);
       remove('online', onOnline);
       remove('offline', onOffline);
@@ -303,8 +438,8 @@ export function useSyncCenterState(opts?: UseSyncCenterStateOptions): UseSyncCen
   }, [runRead]);
 
   return {
-    view,
-    status,
+    view: maskedView,
+    status: maskedStatus,
     refresh,
     isBusy,
     isOnline,

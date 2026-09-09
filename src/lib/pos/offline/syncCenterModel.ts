@@ -14,6 +14,11 @@ import type {
   SyncTrigger,
 } from './syncOrchestrator';
 import type { VoidIntentRecord, VoidTerminalReason } from './voidIntentStore';
+import type { PrivilegedEvidenceJournalRecordV1 } from './privilegedEvidenceTypes';
+import {
+  projectPrivilegedEvidenceForSyncCenter,
+  type SyncCenterPrivilegedRow,
+} from './syncCenterPrivilegedProjection';
 
 export const SYNC_CENTER_CHANNEL_ORDER = [
   'offline_reversal',
@@ -98,12 +103,33 @@ export type SyncCenterAggregate = {
   unifiedPending: number;
   unifiedAttention: number;
   unavailableChannelCount: number;
+  /**
+   * SEC-001 Packet E / E-2, RC-E2-002 — `unavailableChannelCount` above keeps
+   * meaning ordinary channels only. `privilegedUnavailableCount` is 1 when
+   * the non-channel privileged section is unavailable, else 0.
+   * `unavailableSourceCount` is the sum of both and is the only global truth
+   * that represents every Sync Center source (channels + privileged) — use
+   * it, not `unavailableChannelCount`, anywhere the summary claims to speak
+   * for the whole page.
+   */
+  privilegedUnavailableCount: number;
+  unavailableSourceCount: number;
   outOfScopeDroppedCount: number;
   lastSyncCheckAtMs: number | null;
   lastCycleTrigger: SyncTrigger | null;
   lastCycleGateSkipReason: string | null;
   channels: SyncCenterChannelSummary[];
   rows: SyncCenterRow[];
+  /**
+   * SEC-001 Packet E / E-2 — non-channel, read-only privileged void
+   * evidence presentation. Structurally separate from `rows`/`channels`:
+   * never added to `SYNC_CENTER_CHANNEL_ORDER`, never routed through
+   * `allowedActionsForRow`, never given a mutation callback.
+   */
+  privilegedRows: SyncCenterPrivilegedRow[];
+  privilegedAvailability: SyncCenterAvailability;
+  privilegedUnavailableReason: string | null;
+  privilegedAttentionCount: number;
 };
 
 export type SyncCenterView =
@@ -123,6 +149,14 @@ export type SyncCenterReadResult = {
   saleIntent: SyncCenterChannelRead<SaleIntentEntry>;
   orchestrator: Pick<SyncOrchestratorState, 'lastCycle' | 'webLocksAvailable' | 'ch4AttemptExhaustedIds'>;
   isOnline: boolean;
+  /**
+   * SEC-001 Packet E / E-2. Optional so every pre-E-2 fixture that builds a
+   * `SyncCenterReadResult` literal without this field keeps compiling
+   * unchanged; `buildSyncCenterAggregate` treats an absent field exactly
+   * like `{ ok: false }` — the privileged section fails closed to empty,
+   * never to a fabricated row.
+   */
+  privilegedEvidence?: SyncCenterChannelRead<PrivilegedEvidenceJournalRecordV1>;
 };
 
 export const SALE_INTENT_PENDING_STATUSES: readonly SaleIntentJournalStatus[] = [
@@ -606,6 +640,113 @@ function pushClassified(
   target.set(`${result.row.channel}:${result.row.id}`, result.row);
 }
 
+/**
+ * SEC-001 Packet E / E-2 — the sole combination point for channel attention
+ * and privileged (non-channel) attention. Adds each input exactly once; the
+ * caller is responsible for each input itself already being de-duplicated
+ * (channel attention rows are keyed by `channel:id` in `buildSyncCenterAggregate`
+ * above the call site; privileged attention is keyed by `adjudicationId`
+ * below). Never introduces a second, competing counter — this is the only
+ * producer of `SyncCenterAggregate.unifiedAttention`.
+ */
+export function calculateSyncCenterAttentionCount(
+  channelAttentionCount: number,
+  privilegedAttentionCount: number,
+): number {
+  return channelAttentionCount + privilegedAttentionCount;
+}
+
+// RC-E2-003 — deterministic, input-order-independent fail-closed copy for two
+// projected rows that share a durable identity (`adjudicationId`), tie on
+// `updatedAtMs`, and disagree on displayed status/attention state. Mirrors
+// the safe non-success spirit of `syncCenterPrivilegedProjection`'s own
+// `unknown_fail_closed` class without needing to import its private copy.
+const PRIVILEGED_DUPLICATE_CONFLICT_STATUS_TH = 'ไม่ทราบสถานะ — ต้องตรวจสอบ';
+const PRIVILEGED_DUPLICATE_CONFLICT_DETAIL_TH =
+  'พบข้อมูลรายการเดียวกันขัดแย้งกัน — ต้องให้เจ้าหน้าที่ตรวจสอบ';
+
+/**
+ * A content-derived (never arrival-order-derived) ordering over two projected
+ * rows sharing one `adjudicationId`. Used only to pick a canonical `[first,
+ * second]` pair before building a fail-closed conflict row, so the result is
+ * identical no matter which of the two records appeared first in `read.rows`.
+ */
+function canonicalPrivilegedRowOrder(
+  a: SyncCenterPrivilegedRow,
+  b: SyncCenterPrivilegedRow,
+): [SyncCenterPrivilegedRow, SyncCenterPrivilegedRow] {
+  const key = (r: SyncCenterPrivilegedRow) =>
+    `${r.targetOrderId} ${r.statusClass} ${r.attentionClass} ${r.integrityConflict}`;
+  return key(a) <= key(b) ? [a, b] : [b, a];
+}
+
+/** True only when two projected rows display identically — safe to collapse to one without loss. */
+function privilegedRowsEquivalent(a: SyncCenterPrivilegedRow, b: SyncCenterPrivilegedRow): boolean {
+  return (
+    a.statusClass === b.statusClass &&
+    a.attentionClass === b.attentionClass &&
+    a.contributesToAttentionCount === b.contributesToAttentionCount &&
+    a.integrityConflict === b.integrityConflict &&
+    a.targetOrderId === b.targetOrderId &&
+    a.createdAtMs === b.createdAtMs
+  );
+}
+
+/** RC-E2-003, case C — equal `updatedAtMs`, conflicting displayed state: fail closed to one deterministic, attention-contributing row rather than guessing. */
+function failClosedDuplicatePrivilegedRow(
+  a: SyncCenterPrivilegedRow,
+  b: SyncCenterPrivilegedRow,
+): SyncCenterPrivilegedRow {
+  const [first, second] = canonicalPrivilegedRowOrder(a, b);
+  return {
+    id: first.id,
+    branchId: first.branchId,
+    targetOrderId: first.targetOrderId,
+    createdAtMs: Math.min(first.createdAtMs, second.createdAtMs),
+    updatedAtMs: first.updatedAtMs,
+    statusClass: 'unknown_fail_closed',
+    statusTh: PRIVILEGED_DUPLICATE_CONFLICT_STATUS_TH,
+    detailTh: PRIVILEGED_DUPLICATE_CONFLICT_DETAIL_TH,
+    attentionClass: 'requires_attention',
+    contributesToAttentionCount: true,
+    integrityConflict: true,
+  };
+}
+
+/**
+ * RC-E2-003 — deterministic resolution for two projected rows sharing one
+ * `adjudicationId`. Strictly newer `updatedAtMs` always wins, regardless of
+ * which one is `existing` vs. `incoming` (i.e. regardless of input order).
+ * An exact tie that displays identically collapses to one row. An exact tie
+ * that disagrees fails closed via `failClosedDuplicatePrivilegedRow`, itself
+ * order-independent.
+ */
+function resolveDuplicatePrivilegedRow(
+  existing: SyncCenterPrivilegedRow,
+  incoming: SyncCenterPrivilegedRow,
+): SyncCenterPrivilegedRow {
+  if (incoming.updatedAtMs > existing.updatedAtMs) return incoming;
+  if (incoming.updatedAtMs < existing.updatedAtMs) return existing;
+  if (privilegedRowsEquivalent(existing, incoming)) return existing;
+  return failClosedDuplicatePrivilegedRow(existing, incoming);
+}
+
+/** De-duplicates by durable row identity (`adjudicationId`) and projects each row through the safe boundary. Branch filter is defense-in-depth: the reader already scopes the read itself. */
+function buildPrivilegedRows(
+  read: SyncCenterChannelRead<PrivilegedEvidenceJournalRecordV1> | undefined,
+  scope: ActiveSyncScope,
+): SyncCenterPrivilegedRow[] {
+  if (!read || !read.ok) return [];
+  const byId = new Map<string, SyncCenterPrivilegedRow>();
+  for (const record of read.rows) {
+    if (record.branchId !== scope.branchId) continue;
+    const projected = projectPrivilegedEvidenceForSyncCenter(record);
+    const existing = byId.get(projected.id);
+    byId.set(projected.id, existing ? resolveDuplicatePrivilegedRow(existing, projected) : projected);
+  }
+  return [...byId.values()];
+}
+
 export function buildSyncCenterAggregate(input: SyncCenterReadResult, nowMs: number): SyncCenterAggregate {
   const exhausted = new Set(input.orchestrator.ch4AttemptExhaustedIds);
   const dropped = { count: 0 };
@@ -676,6 +817,17 @@ export function buildSyncCenterAggregate(input: SyncCenterReadResult, nowMs: num
   );
   const attentionRows = rows.filter((r) => r.state === 'attention');
 
+  const privilegedRows = buildPrivilegedRows(input.privilegedEvidence, input.scope);
+  const privilegedAvailability: SyncCenterAvailability =
+    input.privilegedEvidence === undefined || input.privilegedEvidence.ok ? 'ok' : 'unavailable';
+  const privilegedUnavailableReason =
+    input.privilegedEvidence !== undefined && !input.privilegedEvidence.ok
+      ? 'อ่านรายการยกเลิกบิลที่อนุมัติแบบออฟไลน์ไม่ได้'
+      : null;
+  const privilegedAttentionCount = privilegedRows.filter((r) => r.contributesToAttentionCount).length;
+  const unavailableChannelCount = channels.filter((c) => c.availability === 'unavailable').length;
+  const privilegedUnavailableCount = privilegedAvailability === 'unavailable' ? 1 : 0;
+
   return {
     generatedAtMs: nowMs,
     isOnline: input.isOnline,
@@ -683,22 +835,34 @@ export function buildSyncCenterAggregate(input: SyncCenterReadResult, nowMs: num
     scopeBranchId: input.scope.branchId,
     scopeDeviceId: input.scope.deviceId,
     unifiedPending: pendingRows.length,
-    unifiedAttention: attentionRows.length,
-    unavailableChannelCount: channels.filter((c) => c.availability === 'unavailable').length,
+    unifiedAttention: calculateSyncCenterAttentionCount(attentionRows.length, privilegedAttentionCount),
+    unavailableChannelCount,
+    privilegedUnavailableCount,
+    unavailableSourceCount: unavailableChannelCount + privilegedUnavailableCount,
     outOfScopeDroppedCount: dropped.count,
     lastSyncCheckAtMs: lastSyncCheckAtMs(input.orchestrator.lastCycle),
     lastCycleTrigger: input.orchestrator.lastCycle?.trigger ?? null,
     lastCycleGateSkipReason: input.orchestrator.lastCycle?.gateSkipReason ?? null,
     channels,
     rows,
+    privilegedRows,
+    privilegedAvailability,
+    privilegedUnavailableReason,
+    privilegedAttentionCount,
   };
 }
 
+/**
+ * SEC-001 Packet E / E-2, RC-E2-002 — `unavailableSourceCount` (channels +
+ * privileged) gates "clean", not `unavailableChannelCount` alone, so an
+ * unreadable privileged section forbids the global clean/complete claim
+ * exactly like an unreadable ordinary channel does.
+ */
 export function aggregateForbidsClean(aggregate: SyncCenterAggregate): boolean {
   return (
     aggregate.unifiedPending > 0 ||
     aggregate.unifiedAttention > 0 ||
-    aggregate.unavailableChannelCount > 0 ||
+    aggregate.unavailableSourceCount > 0 ||
     aggregate.lastSyncCheckAtMs == null
   );
 }

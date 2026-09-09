@@ -311,3 +311,191 @@ describe('SyncCenterPage', () => {
     expect(pageSource).not.toContain('callRetryReconcile');
   });
 });
+
+describe('SyncCenterPage — SEC-001 Packet E / E-2 privileged (non-channel) section', () => {
+  it('E2-P1 renders a distinct, headed privileged section separate from the five-channel overview', () => {
+    const agg = buildSyncCenterAggregate(emptyRead(), NOW);
+    agg.privilegedRows = [
+      {
+        id: 'a'.repeat(32),
+        branchId: 'A',
+        targetOrderId: 'order-1',
+        createdAtMs: NOW,
+        updatedAtMs: NOW,
+        statusClass: 'manual_attention',
+        statusTh: 'ต้องตรวจสอบด้วยตนเอง',
+        detailTh: 'ต้องให้เจ้าหน้าที่ตรวจสอบก่อนดำเนินการต่อ',
+        attentionClass: 'requires_attention',
+        contributesToAttentionCount: true,
+        integrityConflict: false,
+      },
+    ];
+    agg.privilegedAttentionCount = 1;
+    agg.unifiedAttention = 1;
+    hook.current = fixture({}, { status: 'scoped', aggregate: agg });
+    renderPage();
+    expect(screen.getByRole('heading', { name: /การยกเลิกบิลที่อนุมัติแบบออฟไลน์/ })).toBeTruthy();
+    expect(screen.getByText('ต้องตรวจสอบด้วยตนเอง')).toBeTruthy();
+    expect(screen.getByText('ต้องให้เจ้าหน้าที่ตรวจสอบก่อนดำเนินการต่อ')).toBeTruthy();
+    for (const channel of SYNC_CENTER_CHANNEL_ORDER) {
+      expect(screen.getAllByText(CHANNEL_NAME_TH[channel]).length).toBeGreaterThan(0);
+    }
+  });
+
+  it('E2-P2 display-only: zero action controls render for a privileged row, including a manual-attention one', () => {
+    const agg = buildSyncCenterAggregate(emptyRead(), NOW);
+    agg.privilegedRows = [
+      {
+        id: 'a'.repeat(32),
+        branchId: 'A',
+        targetOrderId: 'order-1',
+        createdAtMs: NOW,
+        updatedAtMs: NOW,
+        statusClass: 'manual_attention',
+        statusTh: 'ต้องตรวจสอบด้วยตนเอง',
+        detailTh: 'ต้องให้เจ้าหน้าที่ตรวจสอบก่อนดำเนินการต่อ',
+        attentionClass: 'requires_attention',
+        contributesToAttentionCount: true,
+        integrityConflict: false,
+      },
+    ];
+    hook.current = fixture({}, { status: 'scoped', aggregate: agg });
+    renderPage();
+    const section = screen.getByRole('heading', { name: /การยกเลิกบิลที่อนุมัติแบบออฟไลน์/ }).closest('section')!;
+    expect(section.querySelectorAll('button')).toHaveLength(0);
+    expect(section.querySelectorAll('a')).toHaveLength(0);
+    for (const forbidden of ['แก้ไข', 'Retry', 'Resolve', 'Force']) {
+      expect(section.textContent).not.toContain(forbidden);
+    }
+  });
+
+  it('E2-P3 empty state shows honest copy, not a hidden/absent section', () => {
+    hook.current = fixture();
+    renderPage();
+    expect(screen.getByText('ไม่มีรายการยกเลิกบิลที่อนุมัติแบบออฟไลน์')).toBeTruthy();
+  });
+
+  it('E2-P4 unavailable privileged read shows an honest unavailable message, not a false empty state', () => {
+    const agg = buildSyncCenterAggregate(emptyRead(), NOW);
+    agg.privilegedAvailability = 'unavailable';
+    agg.privilegedUnavailableReason = 'อ่านรายการยกเลิกบิลที่อนุมัติแบบออฟไลน์ไม่ได้';
+    hook.current = fixture({}, { status: 'scoped', aggregate: agg });
+    renderPage();
+    expect(screen.getByText('อ่านรายการยกเลิกบิลที่อนุมัติแบบออฟไลน์ไม่ได้')).toBeTruthy();
+    expect(screen.queryByText('ไม่มีรายการยกเลิกบิลที่อนุมัติแบบออฟไลน์')).toBeNull();
+  });
+
+  it('E2-P5 status is not communicated by color alone: an icon and text both accompany an attention-worthy row', () => {
+    const agg = buildSyncCenterAggregate(emptyRead(), NOW);
+    agg.privilegedRows = [
+      {
+        id: 'a'.repeat(32),
+        branchId: 'A',
+        targetOrderId: 'order-1',
+        createdAtMs: NOW,
+        updatedAtMs: NOW,
+        statusClass: 'uncertain',
+        statusTh: 'ผลลัพธ์ยังไม่ชัดเจน — ต้องตรวจสอบ',
+        detailTh: 'เซิร์ฟเวอร์รับคำขอไว้แต่ยังสรุปผลไม่ได้ — ต้องให้เจ้าหน้าที่ตรวจสอบ',
+        attentionClass: 'requires_attention',
+        contributesToAttentionCount: true,
+        integrityConflict: false,
+      },
+    ];
+    hook.current = fixture({}, { status: 'scoped', aggregate: agg });
+    renderPage();
+    expect(screen.getByText('ผลลัพธ์ยังไม่ชัดเจน — ต้องตรวจสอบ')).toBeTruthy();
+    const section = screen.getByRole('heading', { name: /การยกเลิกบิลที่อนุมัติแบบออฟไลน์/ }).closest('section')!;
+    expect(section.querySelector('.ti-alert-triangle[aria-hidden="true"]')).toBeTruthy();
+    expect(section.textContent).toContain('ผลลัพธ์ยังไม่ชัดเจน');
+  });
+
+  it('E2-P6 page source names no privileged manual-resolution action and never renders raw journal fields', () => {
+    expect(pageSource).not.toContain('resolvePrivileged');
+    expect(pageSource).not.toContain('retryPrivileged');
+    expect(pageSource).not.toContain('approvePrivileged');
+    expect(pageSource).not.toContain('overridePrivileged');
+    expect(pageSource).not.toContain('forcePrivileged');
+    expect(pageSource).not.toMatch(/\bpaa1Base64\b/);
+    expect(pageSource).not.toMatch(/\bssa1Base64\b/);
+    expect(pageSource).not.toMatch(/\boacEnvelopeBytesBase64\b/);
+    expect(pageSource).not.toMatch(/\bPrivilegedEvidenceJournalRecordV1\b/);
+    expect(pageSource).not.toContain('ซิงก์แล้ว');
+    expect(pageSource).not.toContain('ซิงก์สำเร็จ');
+    expect(pageSource).not.toContain('ส่งข้อมูลเรียบร้อย');
+  });
+
+  it('RC-E2-002-P1 an unavailable privileged read (reader unreadableCount fail-closed) never presents the unified count as complete privileged coverage, alongside real ordinary attention', () => {
+    const agg = buildSyncCenterAggregate(emptyRead(), NOW);
+    agg.rows = [
+      row({
+        channel: 'void_intent',
+        id: 'v1',
+        state: 'attention',
+        reasonCode: 'terminal',
+        reasonTh: VOID_TERMINAL_REASON_TH.authority_refused,
+      }),
+    ];
+    agg.unifiedAttention = 1;
+    // Mirrors what buildSyncCenterAggregate produces when the reader's
+    // privilegedEvidence channel reports `{ ok: false }` after RC-E2-002's
+    // unreadableCount fail-closed — never a partial/healthy row set.
+    agg.privilegedRows = [];
+    agg.privilegedAvailability = 'unavailable';
+    agg.privilegedUnavailableReason = 'อ่านรายการยกเลิกบิลที่อนุมัติแบบออฟไลน์ไม่ได้';
+    agg.privilegedAttentionCount = 0;
+    hook.current = fixture({}, { status: 'scoped', aggregate: agg });
+    renderPage();
+    expect(screen.getByText('อ่านรายการยกเลิกบิลที่อนุมัติแบบออฟไลน์ไม่ได้')).toBeTruthy();
+    expect(screen.queryByText('ไม่มีรายการยกเลิกบิลที่อนุมัติแบบออฟไลน์')).toBeNull();
+    // Ordinary attention still renders honestly alongside the unavailable privileged section.
+    expect(screen.getAllByText(VOID_TERMINAL_REASON_TH.authority_refused).length).toBeGreaterThan(0);
+  });
+
+  it('RC-E2-002-P2 exact otherwise-clean regression: privileged unavailable never renders global clean or attention-complete copy, and the global unreadable count is truthful and non-zero', () => {
+    const agg = buildSyncCenterAggregate(emptyRead(), NOW);
+    agg.privilegedAvailability = 'unavailable';
+    agg.privilegedUnavailableReason = 'อ่านรายการยกเลิกบิลที่อนุมัติแบบออฟไลน์ไม่ได้';
+    agg.privilegedUnavailableCount = 1;
+    agg.unavailableSourceCount = 1;
+    hook.current = fixture({}, { status: 'scoped', aggregate: agg });
+    renderPage();
+    // 4. no unconditional global "ไม่มีรายการค้าง"
+    expect(screen.queryByText('ไม่มีรายการค้าง')).toBeNull();
+    // 5. no unconditional global "ไม่มีรายการที่ต้องตรวจสอบ" — attention is
+    // empty but that must not be presented as proof every source was read.
+    expect(screen.queryByText('ไม่มีรายการที่ต้องตรวจสอบ')).toBeNull();
+    expect(screen.getByText('ไม่พบรายการ แต่บางแหล่งข้อมูลอ่านไม่ได้')).toBeTruthy();
+    // global "อ่านไม่ได้" summary must be non-zero even though every ordinary
+    // channel is healthy — it speaks for the privileged section too.
+    expect(screen.getByText('อ่านไม่ได้ 1')).toBeTruthy();
+  });
+
+  it('E2-P7 the privileged section does not bury ordinary content: pending/attention channel sections still render', () => {
+    const agg = buildSyncCenterAggregate(emptyRead(), NOW);
+    agg.rows = [
+      row({ channel: 'void_intent', id: 'v1', state: 'waiting_retry', actionable: ['item_retry_now'] }),
+    ];
+    agg.unifiedPending = 1;
+    agg.privilegedRows = [
+      {
+        id: 'a'.repeat(32),
+        branchId: 'A',
+        targetOrderId: 'order-1',
+        createdAtMs: NOW,
+        updatedAtMs: NOW,
+        statusClass: 'queued',
+        statusTh: 'รอส่งไปยังเซิร์ฟเวอร์',
+        detailTh: 'บันทึกไว้ในเครื่องแล้ว ยังไม่ได้ส่ง',
+        attentionClass: 'none',
+        contributesToAttentionCount: false,
+        integrityConflict: false,
+      },
+    ];
+    hook.current = fixture({}, { status: 'scoped', aggregate: agg });
+    renderPage();
+    expect(screen.getByRole('heading', { name: /การยกเลิกบิลที่อนุมัติแบบออฟไลน์/ })).toBeTruthy();
+    expect(screen.getByText('รอส่งไปยังเซิร์ฟเวอร์')).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'ลองส่งรายการนี้ตอนนี้' }).length).toBeGreaterThan(0);
+  });
+});

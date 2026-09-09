@@ -10,6 +10,7 @@ import {
   VOID_TERMINAL_REASON_TH,
   aggregateForbidsClean,
   buildSyncCenterAggregate,
+  calculateSyncCenterAttentionCount,
   classifyReversalIntent,
   classifySaleIntentEntry,
   classifyTrustedResume,
@@ -19,6 +20,7 @@ import {
   type ActiveSyncScope,
   type SyncCenterReadResult,
 } from './syncCenterModel';
+import type { PrivilegedEvidenceJournalRecordV1 } from './privilegedEvidenceTypes';
 import modelSource from './syncCenterModel.ts?raw';
 import readerSource from './syncCenterReader.ts?raw';
 import authoritySource from './syncCenterAuthority.ts?raw';
@@ -153,6 +155,67 @@ function emptyRead(scope: ActiveSyncScope, over: Partial<SyncCenterReadResult> =
     saleIntent: { ok: true, rows: [] },
     orchestrator: { lastCycle: null, webLocksAvailable: true, ch4AttemptExhaustedIds: [] },
     isOnline: true,
+    ...over,
+  };
+}
+
+function privilegedRecord(
+  over: Partial<PrivilegedEvidenceJournalRecordV1> &
+    Pick<PrivilegedEvidenceJournalRecordV1, 'adjudicationId' | 'branchId'>,
+): PrivilegedEvidenceJournalRecordV1 {
+  return {
+    schemaVersion: 1,
+    localIntentId: 'intent-1',
+    paa1Base64: 'PAA1',
+    ssa1Base64: 'SSA1',
+    oacEnvelopeBytesBase64: 'OAC1',
+    evidenceBindingDigest: 'digest-1',
+    actionId: 'VOID_PENDING_SALE',
+    targetOrderId: 'order-1',
+    targetOrderUtc7Date: '2026-09-07',
+    approvingManagerStaffId: 'mgr-1',
+    oacId: 'oac-1',
+    oacSchemaVersion: 1,
+    revocationEpochAtIssue: 0,
+    managerAuthVersionAtIssue: 0,
+    managerCredentialVersionAtIssue: 0,
+    nonce: 'nonce-1',
+    approvalProofDigest: 'proof-1',
+    attestationAttemptCount: 1,
+    approvalResult: 'APPROVED_LOCAL',
+    trustedApprovalLowerMs: NOW - 1000,
+    trustedApprovalUpperMs: NOW,
+    pendingExecutionExpiresAtMs: NOW + 100_000,
+    syncStatus: 'PRIVILEGED_INTENT_QUEUED',
+    manualReviewStatus: 'NOT_REQUIRED',
+    localTerminalReason: null,
+    submissionClaims: 0,
+    unresolvedClaimCount: 0,
+    retryableFailureCount: 0,
+    relayDeferrals: 0,
+    deferredCycleCount: 0,
+    nextAttemptAtMs: NOW,
+    claimOwner: null,
+    claimGeneration: null,
+    createdAtMs: NOW - 5000,
+    updatedAtMs: NOW,
+    lastAttemptAtMs: null,
+    lastDispositionKind: null,
+    lastRelayCallerStaffId: null,
+    lastCallerDependentStaffId: null,
+    integrityConflict: false,
+    ingestStaffId: 'staff-1',
+    ingestDeviceId: 'device-1',
+    resultingVoidIntentId: null,
+    serverVerdict: null,
+    serverReason: null,
+    serverAdjudicationId: null,
+    serverTargetOrderId: null,
+    offlineExecutionId: null,
+    outcomeKind: null,
+    serverAdjudicatedAtMs: null,
+    serverObservedAtMs: null,
+    serverIdempotentReplay: null,
     ...over,
   };
 }
@@ -439,5 +502,471 @@ describe('syncCenterModel', () => {
       NOW,
     );
     expect(result.inScope && result.row.state).toBe('waiting_retry');
+  });
+});
+
+describe('syncCenterModel — SEC-001 Packet E / E-2 privileged (non-channel) aggregation', () => {
+  it('calculateSyncCenterAttentionCount is a pure sum, exactly once', () => {
+    expect(calculateSyncCenterAttentionCount(0, 0)).toBe(0);
+    expect(calculateSyncCenterAttentionCount(3, 2)).toBe(5);
+    expect(calculateSyncCenterAttentionCount(0, 4)).toBe(4);
+  });
+
+  it('E2-M1 channel attention only: privileged section absent leaves unifiedAttention unchanged', () => {
+    const scope = mustScope('A', 'X');
+    const agg = buildSyncCenterAggregate(
+      emptyRead(scope, {
+        voidIntent: {
+          ok: true,
+          rows: [voidRec({ orderId: 'v1', branchId: 'A', deviceId: 'X', status: 'terminal', terminalReason: 'authority_refused' })],
+        },
+      }),
+      NOW,
+    );
+    expect(agg.unifiedAttention).toBe(1);
+    expect(agg.privilegedRows).toEqual([]);
+    expect(agg.privilegedAttentionCount).toBe(0);
+    expect(agg.privilegedAvailability).toBe('ok');
+  });
+
+  it('E2-M2 privileged count only: zero channel attention, one privileged attention row', () => {
+    const scope = mustScope('A', 'X');
+    const agg = buildSyncCenterAggregate(
+      emptyRead(scope, {
+        privilegedEvidence: {
+          ok: true,
+          rows: [
+            privilegedRecord({
+              adjudicationId: 'a'.repeat(32),
+              branchId: 'A',
+              syncStatus: 'MANUAL_ATTENTION',
+              lastDispositionKind: 'MANUAL_ATTENTION_REQUIRED',
+            }),
+          ],
+        },
+      }),
+      NOW,
+    );
+    expect(agg.unifiedAttention).toBe(1);
+    expect(agg.privilegedAttentionCount).toBe(1);
+    expect(agg.privilegedRows).toHaveLength(1);
+  });
+
+  it('E2-M3 combined count adds channel and privileged attention exactly once', () => {
+    const scope = mustScope('A', 'X');
+    const agg = buildSyncCenterAggregate(
+      emptyRead(scope, {
+        voidIntent: {
+          ok: true,
+          rows: [voidRec({ orderId: 'v1', branchId: 'A', deviceId: 'X', status: 'terminal', terminalReason: 'authority_refused' })],
+        },
+        privilegedEvidence: {
+          ok: true,
+          rows: [
+            privilegedRecord({
+              adjudicationId: 'a'.repeat(32),
+              branchId: 'A',
+              syncStatus: 'MANUAL_ATTENTION',
+              lastDispositionKind: 'ADJUDICATION_ANOMALY',
+            }),
+          ],
+        },
+      }),
+      NOW,
+    );
+    expect(agg.unifiedAttention).toBe(2);
+  });
+
+  it('E2-M4 non-attention privileged statuses (queued/syncing/accepted/rejected) contribute zero', () => {
+    const scope = mustScope('A', 'X');
+    const agg = buildSyncCenterAggregate(
+      emptyRead(scope, {
+        privilegedEvidence: {
+          ok: true,
+          rows: [
+            privilegedRecord({ adjudicationId: 'a'.repeat(32), branchId: 'A', syncStatus: 'PRIVILEGED_INTENT_QUEUED' }),
+            privilegedRecord({ adjudicationId: 'b'.repeat(32), branchId: 'A', syncStatus: 'SYNCING' }),
+            privilegedRecord({
+              adjudicationId: 'c'.repeat(32),
+              branchId: 'A',
+              syncStatus: 'SERVER_ACCEPTED',
+              lastDispositionKind: 'ACCEPTED',
+            }),
+            privilegedRecord({
+              adjudicationId: 'd'.repeat(32),
+              branchId: 'A',
+              syncStatus: 'SERVER_REJECTED',
+              lastDispositionKind: 'REJECTED',
+            }),
+          ],
+        },
+      }),
+      NOW,
+    );
+    expect(agg.privilegedAttentionCount).toBe(0);
+    expect(agg.unifiedAttention).toBe(0);
+    expect(agg.privilegedRows).toHaveLength(4);
+  });
+
+  it('E2-M5 multiple privileged attention rows all count', () => {
+    const scope = mustScope('A', 'X');
+    const agg = buildSyncCenterAggregate(
+      emptyRead(scope, {
+        privilegedEvidence: {
+          ok: true,
+          rows: [
+            privilegedRecord({
+              adjudicationId: 'a'.repeat(32),
+              branchId: 'A',
+              syncStatus: 'MANUAL_ATTENTION',
+              lastDispositionKind: 'MANUAL_ATTENTION_REQUIRED',
+            }),
+            privilegedRecord({
+              adjudicationId: 'b'.repeat(32),
+              branchId: 'A',
+              syncStatus: 'MANUAL_ATTENTION',
+              lastDispositionKind: 'LOCAL_TERMINAL',
+            }),
+          ],
+        },
+      }),
+      NOW,
+    );
+    expect(agg.privilegedAttentionCount).toBe(2);
+    expect(agg.unifiedAttention).toBe(2);
+  });
+
+  it('E2-M6 same durable row (same adjudicationId) appearing twice is never double-counted', () => {
+    const scope = mustScope('A', 'X');
+    const dup = privilegedRecord({
+      adjudicationId: 'a'.repeat(32),
+      branchId: 'A',
+      syncStatus: 'MANUAL_ATTENTION',
+      lastDispositionKind: 'MANUAL_ATTENTION_REQUIRED',
+    });
+    const agg = buildSyncCenterAggregate(
+      emptyRead(scope, { privilegedEvidence: { ok: true, rows: [dup, { ...dup }] } }),
+      NOW,
+    );
+    expect(agg.privilegedRows).toHaveLength(1);
+    expect(agg.privilegedAttentionCount).toBe(1);
+  });
+
+  it('E2-M7 a status transition away from attention removes it from the count', () => {
+    const scope = mustScope('A', 'X');
+    const attentionAgg = buildSyncCenterAggregate(
+      emptyRead(scope, {
+        privilegedEvidence: {
+          ok: true,
+          rows: [
+            privilegedRecord({
+              adjudicationId: 'a'.repeat(32),
+              branchId: 'A',
+              syncStatus: 'MANUAL_ATTENTION',
+              lastDispositionKind: 'MANUAL_ATTENTION_REQUIRED',
+            }),
+          ],
+        },
+      }),
+      NOW,
+    );
+    expect(attentionAgg.privilegedAttentionCount).toBe(1);
+    const resolvedAgg = buildSyncCenterAggregate(
+      emptyRead(scope, {
+        privilegedEvidence: {
+          ok: true,
+          rows: [
+            privilegedRecord({
+              adjudicationId: 'a'.repeat(32),
+              branchId: 'A',
+              syncStatus: 'SERVER_REJECTED',
+              lastDispositionKind: 'REJECTED',
+            }),
+          ],
+        },
+      }),
+      NOW,
+    );
+    expect(resolvedAgg.privilegedAttentionCount).toBe(0);
+  });
+
+  it('E2-M8 branch scope isolation: cross-branch privileged rows are excluded from this view', () => {
+    const scope = mustScope('A', 'X');
+    const agg = buildSyncCenterAggregate(
+      emptyRead(scope, {
+        privilegedEvidence: {
+          ok: true,
+          rows: [
+            privilegedRecord({
+              adjudicationId: 'a'.repeat(32),
+              branchId: 'B',
+              syncStatus: 'MANUAL_ATTENTION',
+              lastDispositionKind: 'MANUAL_ATTENTION_REQUIRED',
+            }),
+          ],
+        },
+      }),
+      NOW,
+    );
+    expect(agg.privilegedRows).toEqual([]);
+    expect(agg.privilegedAttentionCount).toBe(0);
+  });
+
+  it('E2-M9 unavailable privileged read fails closed: empty rows, zero attention, unavailable flag set', () => {
+    const scope = mustScope('A', 'X');
+    const agg = buildSyncCenterAggregate(
+      emptyRead(scope, { privilegedEvidence: { ok: false, reason: 'canonical_sync_context_unavailable' } }),
+      NOW,
+    );
+    expect(agg.privilegedRows).toEqual([]);
+    expect(agg.privilegedAttentionCount).toBe(0);
+    expect(agg.privilegedAvailability).toBe('unavailable');
+    expect(agg.privilegedUnavailableReason).not.toBeNull();
+  });
+
+  it('RC-E2-003-1 newer SERVER_REJECTED beats older MANUAL_ATTENTION regardless of input order', () => {
+    const scope = mustScope('A', 'X');
+    const older = privilegedRecord({
+      adjudicationId: 'a'.repeat(32),
+      branchId: 'A',
+      syncStatus: 'MANUAL_ATTENTION',
+      lastDispositionKind: 'MANUAL_ATTENTION_REQUIRED',
+      updatedAtMs: NOW - 1000,
+    });
+    const newer = privilegedRecord({
+      adjudicationId: 'a'.repeat(32),
+      branchId: 'A',
+      syncStatus: 'SERVER_REJECTED',
+      lastDispositionKind: 'REJECTED',
+      updatedAtMs: NOW,
+    });
+    const forward = buildSyncCenterAggregate(
+      emptyRead(scope, { privilegedEvidence: { ok: true, rows: [older, newer] } }),
+      NOW,
+    );
+    const reversed = buildSyncCenterAggregate(
+      emptyRead(scope, { privilegedEvidence: { ok: true, rows: [newer, older] } }),
+      NOW,
+    );
+    for (const agg of [forward, reversed]) {
+      expect(agg.privilegedRows).toHaveLength(1);
+      expect(agg.privilegedRows[0].statusClass).toBe('rejected');
+      expect(agg.privilegedAttentionCount).toBe(0);
+    }
+  });
+
+  it('RC-E2-003-2 newer MANUAL_ATTENTION beats older non-attention status regardless of input order; stale non-attention cannot hide it', () => {
+    const scope = mustScope('A', 'X');
+    const older = privilegedRecord({
+      adjudicationId: 'b'.repeat(32),
+      branchId: 'A',
+      syncStatus: 'PRIVILEGED_INTENT_QUEUED',
+      updatedAtMs: NOW - 1000,
+    });
+    const newer = privilegedRecord({
+      adjudicationId: 'b'.repeat(32),
+      branchId: 'A',
+      syncStatus: 'MANUAL_ATTENTION',
+      lastDispositionKind: 'MANUAL_ATTENTION_REQUIRED',
+      updatedAtMs: NOW,
+    });
+    const forward = buildSyncCenterAggregate(
+      emptyRead(scope, { privilegedEvidence: { ok: true, rows: [older, newer] } }),
+      NOW,
+    );
+    const reversed = buildSyncCenterAggregate(
+      emptyRead(scope, { privilegedEvidence: { ok: true, rows: [newer, older] } }),
+      NOW,
+    );
+    for (const agg of [forward, reversed]) {
+      expect(agg.privilegedRows).toHaveLength(1);
+      expect(agg.privilegedRows[0].statusClass).toBe('manual_attention');
+      expect(agg.privilegedAttentionCount).toBe(1);
+    }
+  });
+
+  it('RC-E2-003-3 equal-timestamp equivalent duplicates collapse to one row without double counting', () => {
+    const scope = mustScope('A', 'X');
+    const dup = privilegedRecord({
+      adjudicationId: 'c'.repeat(32),
+      branchId: 'A',
+      syncStatus: 'MANUAL_ATTENTION',
+      lastDispositionKind: 'MANUAL_ATTENTION_REQUIRED',
+      updatedAtMs: NOW,
+    });
+    const agg = buildSyncCenterAggregate(
+      emptyRead(scope, { privilegedEvidence: { ok: true, rows: [dup, { ...dup }] } }),
+      NOW,
+    );
+    expect(agg.privilegedRows).toHaveLength(1);
+    expect(agg.privilegedAttentionCount).toBe(1);
+    expect(agg.unifiedAttention).toBe(1);
+  });
+
+  it('RC-E2-003-4 equal-timestamp conflicting status fails closed deterministically, identically regardless of input order', () => {
+    const scope = mustScope('A', 'X');
+    const variantA = privilegedRecord({
+      adjudicationId: 'd'.repeat(32),
+      branchId: 'A',
+      syncStatus: 'MANUAL_ATTENTION',
+      lastDispositionKind: 'MANUAL_ATTENTION_REQUIRED',
+      updatedAtMs: NOW,
+    });
+    const variantB = privilegedRecord({
+      adjudicationId: 'd'.repeat(32),
+      branchId: 'A',
+      syncStatus: 'SERVER_REJECTED',
+      lastDispositionKind: 'REJECTED',
+      updatedAtMs: NOW,
+    });
+    const forward = buildSyncCenterAggregate(
+      emptyRead(scope, { privilegedEvidence: { ok: true, rows: [variantA, variantB] } }),
+      NOW,
+    );
+    const reversed = buildSyncCenterAggregate(
+      emptyRead(scope, { privilegedEvidence: { ok: true, rows: [variantB, variantA] } }),
+      NOW,
+    );
+    expect(forward.privilegedRows).toEqual(reversed.privilegedRows);
+    expect(forward.privilegedRows).toHaveLength(1);
+    expect(forward.privilegedRows[0].statusClass).toBe('unknown_fail_closed');
+    expect(forward.privilegedRows[0].integrityConflict).toBe(true);
+    expect(forward.privilegedRows[0].contributesToAttentionCount).toBe(true);
+    expect(forward.privilegedAttentionCount).toBe(1);
+  });
+
+  it('RC-E2-003-5 a duplicate ID never doubles the unified attention count, even with three copies', () => {
+    const scope = mustScope('A', 'X');
+    const dup = privilegedRecord({
+      adjudicationId: 'e'.repeat(32),
+      branchId: 'A',
+      syncStatus: 'MANUAL_ATTENTION',
+      lastDispositionKind: 'MANUAL_ATTENTION_REQUIRED',
+      updatedAtMs: NOW,
+    });
+    const agg = buildSyncCenterAggregate(
+      emptyRead(scope, { privilegedEvidence: { ok: true, rows: [dup, { ...dup }, { ...dup }] } }),
+      NOW,
+    );
+    expect(agg.privilegedRows).toHaveLength(1);
+    expect(agg.privilegedAttentionCount).toBe(1);
+    expect(agg.unifiedAttention).toBe(1);
+  });
+
+  it('RC-E2-003-6 branch filtering is preserved alongside duplicate resolution', () => {
+    const scope = mustScope('A', 'X');
+    const dupA = privilegedRecord({
+      adjudicationId: 'f'.repeat(32),
+      branchId: 'A',
+      syncStatus: 'MANUAL_ATTENTION',
+      lastDispositionKind: 'MANUAL_ATTENTION_REQUIRED',
+      updatedAtMs: NOW,
+    });
+    const otherBranch = privilegedRecord({
+      adjudicationId: 'g'.repeat(32),
+      branchId: 'B',
+      syncStatus: 'MANUAL_ATTENTION',
+      lastDispositionKind: 'MANUAL_ATTENTION_REQUIRED',
+      updatedAtMs: NOW + 1,
+    });
+    const agg = buildSyncCenterAggregate(
+      emptyRead(scope, { privilegedEvidence: { ok: true, rows: [dupA, { ...dupA }, otherBranch] } }),
+      NOW,
+    );
+    expect(agg.privilegedRows).toHaveLength(1);
+    expect(agg.privilegedRows[0].id).toBe('f'.repeat(32));
+  });
+
+  it('RC-E2-002-M1 exact otherwise-clean regression: all channels healthy, zero rows, successful last cycle, privileged unavailable', () => {
+    const scope = mustScope('A', 'X');
+    const agg = buildSyncCenterAggregate(
+      emptyRead(scope, {
+        privilegedEvidence: { ok: false, reason: 'canonical_sync_context_unavailable' },
+        orchestrator: {
+          lastCycle: {
+            trigger: 'MANUAL_INVOCATION',
+            startedAtMs: 100,
+            durationMs: 7,
+            completed: true,
+            gateOutcome: 'ran',
+            channels: [{ channel: 'sale_intent', status: 'ok' }],
+          },
+          webLocksAvailable: true,
+          ch4AttemptExhaustedIds: [],
+        },
+      }),
+      NOW,
+    );
+    // 1. privileged section unavailable
+    expect(agg.privilegedAvailability).toBe('unavailable');
+    // 2. global unavailable/source-unavailable summary truthful and non-zero,
+    // while unavailableChannelCount keeps meaning ordinary channels only
+    expect(agg.unavailableChannelCount).toBe(0);
+    expect(agg.privilegedUnavailableCount).toBe(1);
+    expect(agg.unavailableSourceCount).toBe(1);
+    // 3. global clean predicate false
+    expect(aggregateForbidsClean(agg)).toBe(true);
+    // 5/6. attention stays 0 and is not proof of source completeness
+    expect(agg.unifiedAttention).toBe(0);
+    // 7/8. no privileged pseudo-channel; CHANNEL_ORDER unchanged
+    expect(agg.channels.map((c) => c.channel)).toEqual([...SYNC_CENTER_CHANNEL_ORDER]);
+    expect(agg.rows).toEqual([]);
+  });
+
+  it('RC-E2-002-M2 privileged available and all channels ok: unavailableSourceCount is 0 and clean can be true', () => {
+    const scope = mustScope('A', 'X');
+    const agg = buildSyncCenterAggregate(
+      emptyRead(scope, {
+        orchestrator: {
+          lastCycle: {
+            trigger: 'MANUAL_INVOCATION',
+            startedAtMs: 100,
+            durationMs: 7,
+            completed: true,
+            gateOutcome: 'ran',
+            channels: [{ channel: 'sale_intent', status: 'ok' }],
+          },
+          webLocksAvailable: true,
+          ch4AttemptExhaustedIds: [],
+        },
+      }),
+      NOW,
+    );
+    expect(agg.privilegedAvailability).toBe('ok');
+    expect(agg.unavailableSourceCount).toBe(0);
+    expect(aggregateForbidsClean(agg)).toBe(false);
+  });
+
+  it('RC-E2-002-M3 an unavailable ordinary channel alongside a healthy privileged section still sums correctly', () => {
+    const scope = mustScope('A', 'X');
+    const agg = buildSyncCenterAggregate(
+      emptyRead(scope, { saleIntent: { ok: false, reason: 'unavailable' } }),
+      NOW,
+    );
+    expect(agg.unavailableChannelCount).toBe(1);
+    expect(agg.privilegedUnavailableCount).toBe(0);
+    expect(agg.unavailableSourceCount).toBe(1);
+  });
+
+  it('E2-M10 privileged evidence never spreads into the ordinary channel rows/CHANNEL_ORDER', () => {
+    const scope = mustScope('A', 'X');
+    const agg = buildSyncCenterAggregate(
+      emptyRead(scope, {
+        privilegedEvidence: {
+          ok: true,
+          rows: [
+            privilegedRecord({
+              adjudicationId: 'a'.repeat(32),
+              branchId: 'A',
+              syncStatus: 'MANUAL_ATTENTION',
+              lastDispositionKind: 'MANUAL_ATTENTION_REQUIRED',
+            }),
+          ],
+        },
+      }),
+      NOW,
+    );
+    expect(agg.rows).toEqual([]);
+    expect(agg.channels.map((c) => c.channel)).toEqual([...SYNC_CENTER_CHANNEL_ORDER]);
   });
 });
