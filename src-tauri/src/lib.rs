@@ -14,7 +14,8 @@ pub fn run() {
         eprintln!("Twinpet POS cannot start: {reason}");
         std::process::exit(1);
     }
-    let (_, build_id) = epoch_floor::build_provenance();
+    let (git_sha, build_id) = epoch_floor::build_provenance();
+    eprintln!("Twinpet native provenance git_sha={git_sha} build_id={build_id}");
     if let Err(reason) = epoch_floor::write_floor_atomic(&app_data, build_id) {
         eprintln!("Twinpet POS cannot start: failed to commit compatibility epoch floor: {reason}");
         std::process::exit(1);
