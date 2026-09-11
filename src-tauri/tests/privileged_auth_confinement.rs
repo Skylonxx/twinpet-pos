@@ -57,7 +57,8 @@ fn manifest_dir() -> PathBuf {
 
 fn capabilities_json() -> serde_json::Value {
     let path = manifest_dir().join("capabilities").join("default.json");
-    let raw = fs::read_to_string(&path).unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
+    let raw =
+        fs::read_to_string(&path).unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
     serde_json::from_str(&raw).unwrap_or_else(|e| panic!("cannot parse {}: {e}", path.display()))
 }
 
@@ -73,7 +74,10 @@ fn granted_native_permissions() -> Vec<String> {
 }
 
 fn mod_rs_source() -> String {
-    let path = manifest_dir().join("src").join("privileged_auth").join("mod.rs");
+    let path = manifest_dir()
+        .join("src")
+        .join("privileged_auth")
+        .join("mod.rs");
     fs::read_to_string(&path).unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()))
 }
 
@@ -85,12 +89,17 @@ fn lib_rs_source() -> String {
 #[test]
 fn exactly_fourteen_native_commands_are_granted_in_capabilities() {
     let granted = granted_native_permissions();
-    let mut expected: Vec<String> =
-        EXACT_FOURTEEN_COMMANDS.iter().map(|c| format!("allow-{}", c.replace('_', "-"))).collect();
+    let mut expected: Vec<String> = EXACT_FOURTEEN_COMMANDS
+        .iter()
+        .map(|c| format!("allow-{}", c.replace('_', "-")))
+        .collect();
     expected.sort();
     let mut actual = granted.clone();
     actual.sort();
-    assert_eq!(actual, expected, "capabilities/default.json must grant exactly the fourteen frozen commands");
+    assert_eq!(
+        actual, expected,
+        "capabilities/default.json must grant exactly the fourteen frozen commands"
+    );
 }
 
 #[test]
@@ -101,10 +110,17 @@ fn exactly_fourteen_tauri_command_functions_are_defined_in_mod_rs() {
         .filter(|name| source.contains(&format!("pub fn {name}(")))
         .copied()
         .collect();
-    assert_eq!(defined.len(), 14, "expected exactly 14 command functions defined, found: {defined:?}");
+    assert_eq!(
+        defined.len(),
+        14,
+        "expected exactly 14 command functions defined, found: {defined:?}"
+    );
 
     let command_attr_count = source.matches("#[tauri::command]").count();
-    assert_eq!(command_attr_count, 14, "expected exactly 14 #[tauri::command]-annotated functions in mod.rs");
+    assert_eq!(
+        command_attr_count, 14,
+        "expected exactly 14 #[tauri::command]-annotated functions in mod.rs"
+    );
 }
 
 #[test]
@@ -117,7 +133,10 @@ fn exactly_fourteen_commands_are_registered_in_generate_handler() {
         );
     }
     let registered = source.matches("privileged_auth::native_").count();
-    assert_eq!(registered, 14, "generate_handler! must register exactly 14 privileged_auth commands");
+    assert_eq!(
+        registered, 14,
+        "generate_handler! must register exactly 14 privileged_auth commands"
+    );
 }
 
 #[test]
@@ -148,7 +167,11 @@ fn native_attest_privileged_action_exposes_no_signing_path_or_clock_surface() {
     let source = mod_rs_source();
     let signature_block: Vec<&str> = source
         .lines()
-        .skip_while(|line| !line.trim_start().starts_with("pub fn native_attest_privileged_action("))
+        .skip_while(|line| {
+            !line
+                .trim_start()
+                .starts_with("pub fn native_attest_privileged_action(")
+        })
         .take_while(|line| !line.contains(')'))
         .collect();
     let combined = signature_block.join(" ");
@@ -159,8 +182,20 @@ fn native_attest_privileged_action_exposes_no_signing_path_or_clock_surface() {
     // No arbitrary-bytes signing surface, no caller-controlled path, no WebView
     // clock (Ruling R1), no WebView branch (Ruling R2).
     for forbidden in [
-        "bytes", "payload", "message", "digest", "prefix", "preimage", "path", "file", "now_ms", "now:",
-        "branch_id", "branchId", "key", "pepper",
+        "bytes",
+        "payload",
+        "message",
+        "digest",
+        "prefix",
+        "preimage",
+        "path",
+        "file",
+        "now_ms",
+        "now:",
+        "branch_id",
+        "branchId",
+        "key",
+        "pepper",
     ] {
         assert!(
             !combined.contains(forbidden),
@@ -176,19 +211,31 @@ fn native_attest_privileged_action_exposes_no_signing_path_or_clock_surface() {
         "local_intent_id: String",
         "pin: String",
     ] {
-        assert!(combined.contains(expected), "missing declared argument {expected} in: {combined}");
+        assert!(
+            combined.contains(expected),
+            "missing declared argument {expected} in: {combined}"
+        );
     }
 }
 
 #[test]
 fn the_pin_is_never_persisted_logged_or_returned() {
     let attestation = fs::read_to_string(
-        manifest_dir().join("src").join("privileged_auth").join("action_attestation.rs"),
+        manifest_dir()
+            .join("src")
+            .join("privileged_auth")
+            .join("action_attestation.rs"),
     )
     .expect("action_attestation.rs must exist");
-    assert!(attestation.contains("pin.zeroize()"), "the owned PIN must be zeroized on every path");
+    assert!(
+        attestation.contains("pin.zeroize()"),
+        "the owned PIN must be zeroized on every path"
+    );
     for forbidden in ["println!", "eprintln!", "dbg!", "log::"] {
-        assert!(!attestation.contains(forbidden), "action_attestation.rs must not log ({forbidden})");
+        assert!(
+            !attestation.contains(forbidden),
+            "action_attestation.rs must not log ({forbidden})"
+        );
     }
     // The returned DTO carries no PIN-shaped field.
     let dto_block: String = attestation
@@ -197,7 +244,10 @@ fn the_pin_is_never_persisted_logged_or_returned() {
         .take_while(|l| !l.trim().eq("}"))
         .collect::<Vec<_>>()
         .join(" ");
-    assert!(!dto_block.contains("pin"), "the attestation DTO must never expose the PIN: {dto_block}");
+    assert!(
+        !dto_block.contains("pin"),
+        "the attestation DTO must never expose the PIN: {dto_block}"
+    );
 }
 
 #[test]
@@ -222,7 +272,10 @@ fn no_forbidden_public_tauri_command_exists_in_mod_rs() {
         }
         let lower = line.to_ascii_lowercase();
         for fragment in FORBIDDEN_NAME_FRAGMENTS {
-            assert!(!lower.contains(fragment), "public function line matches a forbidden fragment: {line}");
+            assert!(
+                !lower.contains(fragment),
+                "public function line matches a forbidden fragment: {line}"
+            );
         }
     }
 }
@@ -232,7 +285,10 @@ fn native_import_device_enrollment_file_has_no_caller_controlled_path_argument()
     let source = mod_rs_source();
     let signature_line = source
         .lines()
-        .find(|line| line.trim_start().starts_with("pub fn native_import_device_enrollment_file("))
+        .find(|line| {
+            line.trim_start()
+                .starts_with("pub fn native_import_device_enrollment_file(")
+        })
         .expect("native_import_device_enrollment_file signature line must exist in mod.rs");
     assert!(
         signature_line.contains("native_import_device_enrollment_file()"),
@@ -246,7 +302,11 @@ fn native_verify_offline_pin_has_no_caller_controlled_time_or_branch_arguments()
     let source = mod_rs_source();
     let signature_block: Vec<&str> = source
         .lines()
-        .skip_while(|line| !line.trim_start().starts_with("pub fn native_verify_offline_pin("))
+        .skip_while(|line| {
+            !line
+                .trim_start()
+                .starts_with("pub fn native_verify_offline_pin(")
+        })
         .take_while(|line| !line.contains('{'))
         .collect();
     let combined = signature_block.join(" ");
@@ -288,4 +348,74 @@ fn all_seventeen_privileged_auth_modules_are_declared() {
             "mod.rs must declare `pub mod {module};`"
         );
     }
+}
+
+/// SEC-001 epoch-2 native rollback remediation — exact persisted-store
+/// version-envelope inventory. Each row names the file and the explicit
+/// version constant it must declare; a future silent addition/removal of a
+/// privileged-auth store's version marker fails this test, mirroring the
+/// exhaustiveness style used for the fourteen-command surface above.
+const EXPECTED_PRIVILEGED_AUTH_VERSION_MARKERS: &[(&str, &str)] = &[
+    ("pepper_store.rs", "PEPPER_STORE_VERSION"),
+    ("security_device_id.rs", "SECURITY_DEVICE_ID_STORE_VERSION"),
+    ("device_proof.rs", "DEVICE_PROOF_KEY_STORE_VERSION"),
+    ("enrollment_meta.rs", "STAGED_ENROLLMENT_SCHEMA_VERSION"),
+    ("enrollment_meta.rs", "ENROLLMENT_FENCE_SCHEMA_VERSION"),
+    ("lockout_state.rs", "LOCKOUT_STORE_SCHEMA_VERSION"),
+    ("clock_guard.rs", "CLOCK_GUARD_SCHEMA_VERSION"),
+];
+
+#[test]
+fn sec_001_epoch2_persisted_store_version_envelope_inventory_is_present() {
+    for (file, marker) in EXPECTED_PRIVILEGED_AUTH_VERSION_MARKERS {
+        let path = manifest_dir()
+            .join("src")
+            .join("privileged_auth")
+            .join(file);
+        let source = fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
+        assert!(
+            source.contains(&format!("pub const {marker}")),
+            "{file} must declare an explicit version-envelope constant `{marker}` \
+             (SEC-001 epoch-2 persisted-store inventory row missing)"
+        );
+    }
+}
+
+#[test]
+fn sec_001_epoch2_global_compatibility_epoch_is_exactly_two() {
+    let path = manifest_dir().join("src").join("epoch_floor.rs");
+    let source =
+        fs::read_to_string(&path).unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
+    assert!(
+        source.contains("pub const MAX_KNOWN_EPOCH_SCHEMA: u32 = 2;"),
+        "MAX_KNOWN_EPOCH_SCHEMA must be exactly 2 after the SEC-001 epoch-2 remediation"
+    );
+    assert!(
+        source.contains("fn privileged_auth_state_exists("),
+        "epoch_floor.rs must widen virgin/non-virgin detection to privileged-auth artifacts"
+    );
+}
+
+#[test]
+fn sec_001_epoch2_package_version_is_not_placeholder_in_either_manifest() {
+    let tauri_conf_path = manifest_dir().join("tauri.conf.json");
+    let tauri_conf = fs::read_to_string(&tauri_conf_path).unwrap();
+    let tauri_json: serde_json::Value = serde_json::from_str(&tauri_conf).unwrap();
+    let tauri_version = tauri_json["version"]
+        .as_str()
+        .expect("tauri.conf.json must have version");
+    assert_ne!(tauri_version, "0.0.0");
+
+    let cargo_toml_path = manifest_dir().join("Cargo.toml");
+    let cargo_toml = fs::read_to_string(&cargo_toml_path).unwrap();
+    let cargo_version = cargo_toml
+        .lines()
+        .find_map(|l| l.trim().strip_prefix("version = \""))
+        .and_then(|rest| rest.strip_suffix('"'))
+        .expect("Cargo.toml must have a version field");
+    assert_eq!(
+        cargo_version, tauri_version,
+        "Cargo.toml and tauri.conf.json versions must stay synchronized"
+    );
 }

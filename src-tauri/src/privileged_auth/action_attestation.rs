@@ -159,9 +159,16 @@ fn manager_role_kind_for(role: &str) -> Option<u8> {
     }
 }
 
+/// SEC-001 epoch-2 rollback remediation (Claude-024): Codex-011 found this
+/// production reader deserialized the committed fence without enforcing
+/// `check_enrollment_fence_schema_version`, bypassing the
+/// unknown-newer-schema fail-closed contract every other fence reader
+/// enforces. An unknown-newer schema now yields `None`, which callers
+/// already treat as "no valid committed device key version" (denied).
 fn committed_device_key_version(root: &Path) -> Option<u32> {
     let fence_bytes = std::fs::read(enrollment_meta::enrollment_fence_path(root)).ok()?;
     let fence: enrollment_meta::EnrollmentFenceState = serde_json::from_slice(&fence_bytes).ok()?;
+    enrollment_meta::check_enrollment_fence_schema_version(fence.schema_version).ok()?;
     if fence.state != "COMMITTED" {
         return None;
     }
@@ -478,6 +485,27 @@ mod tests {
         assert!(dto.paa1_base64.is_none());
         assert!(dto.attestation_id_hex.is_none());
         assert_eq!(dto.error_code.as_deref(), Some("DENIED_STALE"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// SEC-001 epoch-2 rollback remediation (Claude-024), required behavioral
+    /// test: an unknown-newer fence schema version must fail closed through
+    /// this production reader (previously bypassed the centralized check).
+    #[test]
+    fn committed_device_key_version_fails_closed_on_unknown_newer_fence_schema() {
+        let dir = std::env::temp_dir().join(format!(
+            "twinpet-attest-fence-schema-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let fence_path = enrollment_meta::enrollment_fence_path(&dir);
+        let json = format!(
+            r#"{{"state":"COMMITTED","enrollmentGenerationId":"0102030405060708090a0b0c0d0e0f10","securityDeviceIdHex":"aabbccddeeff00112233445566778899","deviceKeyVersion":1,"keySha256":"aa","metaSha256":"bb","committedAtLocalMs":1000,"schemaVersion":{}}}"#,
+            enrollment_meta::ENROLLMENT_FENCE_SCHEMA_VERSION + 1
+        );
+        std::fs::write(&fence_path, json).unwrap();
+        assert_eq!(committed_device_key_version(&dir), None);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

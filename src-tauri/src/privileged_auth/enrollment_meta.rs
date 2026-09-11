@@ -16,11 +16,10 @@ use std::path::{Path, PathBuf};
 use windows::core::PCWSTR;
 use windows::Win32::Storage::FileSystem::MOVEFILE_WRITE_THROUGH;
 
+use super::device_proof;
 use super::dpapi_envelope::{dpapi_protect, dpapi_unprotect};
 use super::frames;
-use super::staff_session::{
-    win32_move_file, win32_replace_file, MoveFileFn, ReplaceFileFn,
-};
+use super::staff_session::{win32_move_file, win32_replace_file, MoveFileFn, ReplaceFileFn};
 
 pub const ENROLLMENT_META_FILE_NAME: &str = "twinpet-device-enrollment-meta.dpapi";
 pub const ENROLLMENT_FENCE_FILE_NAME: &str = "twinpet-device-enrollment.fence";
@@ -33,25 +32,39 @@ pub const ENRM_SCHEMA_VERSION_1: u8 = 1;
 pub const ENRM_FIXED_MINIMUM_LENGTH: usize = 4 + 1 + 16 + 16 + 4 + 32 + 2; // 75 bytes
 
 pub fn is_lowercase_hex32(s: &str) -> bool {
-    s.len() == 32 && s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    s.len() == 32
+        && s.bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
 pub fn enrollment_staged_generation_path(app_data_dir: &Path, gen_hex: &str) -> PathBuf {
-    app_data_dir.join(format!("twinpet-device-enrollment-staged-{}.dpapi", gen_hex.to_lowercase()))
+    app_data_dir.join(format!(
+        "twinpet-device-enrollment-staged-{}.dpapi",
+        gen_hex.to_lowercase()
+    ))
 }
 
 pub fn generation_proof_key_path(app_data_dir: &Path, gen_hex: &str) -> PathBuf {
-    app_data_dir.join(format!("twinpet-device-proof-key-{}.dpapi", gen_hex.to_lowercase()))
+    app_data_dir.join(format!(
+        "twinpet-device-proof-key-{}.dpapi",
+        gen_hex.to_lowercase()
+    ))
 }
 
 pub fn generation_meta_path(app_data_dir: &Path, gen_hex: &str) -> PathBuf {
-    app_data_dir.join(format!("twinpet-device-enrollment-meta-{}.dpapi", gen_hex.to_lowercase()))
+    app_data_dir.join(format!(
+        "twinpet-device-enrollment-meta-{}.dpapi",
+        gen_hex.to_lowercase()
+    ))
 }
 
-fn durable_first_create_file(tmp_path: &Path, final_path: &Path, bytes: &[u8]) -> Result<(), String> {
+fn durable_first_create_file(
+    tmp_path: &Path,
+    final_path: &Path,
+    bytes: &[u8],
+) -> Result<(), String> {
     {
-        let mut f = File::create(tmp_path)
-            .map_err(|e| format!("cannot create tmp file: {e}"))?;
+        let mut f = File::create(tmp_path).map_err(|e| format!("cannot create tmp file: {e}"))?;
         f.write_all(bytes)
             .map_err(|e| format!("cannot write tmp file: {e}"))?;
         f.sync_all()
@@ -74,7 +87,10 @@ fn durable_first_create_file(tmp_path: &Path, final_path: &Path, bytes: &[u8]) -
         if res.is_err() {
             let err = unsafe { GetLastError() };
             let _ = fs::remove_file(tmp_path);
-            return Err(format!("first-create MoveFileExW failed with code {}", err.0));
+            return Err(format!(
+                "first-create MoveFileExW failed with code {}",
+                err.0
+            ));
         }
         Ok(())
     }
@@ -94,8 +110,16 @@ pub struct EnrollmentMetaFrameV1 {
     pub branch_id: String,
 }
 
+/// SEC-001 epoch-2: current explicit `schemaVersion` for `EnrollmentFenceState`.
+/// Absence of the field on an existing on-disk fence (serde default `0`) is
+/// treated as implicit legacy version 1; any value greater than this
+/// constant is an unknown newer format and fails closed. Unrelated to
+/// `device_key_version`, which is a server-adjudicated rotation counter, not
+/// a local persistence schema version.
+pub const ENROLLMENT_FENCE_SCHEMA_VERSION: u32 = 1;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct EnrollmentFenceState {
     pub state: String,
     pub enrollment_generation_id: String,
@@ -106,6 +130,20 @@ pub struct EnrollmentFenceState {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub manifest_sha256: Option<String>,
     pub committed_at_local_ms: u64,
+    #[serde(default)]
+    pub schema_version: u32,
+}
+
+/// Fails closed if the fence's `schema_version` is a value newer than this
+/// build knows about. `0` (field absent, legacy pre-remediation fence) and
+/// the current version are both accepted.
+pub fn check_enrollment_fence_schema_version(schema_version: u32) -> Result<(), String> {
+    if schema_version > ENROLLMENT_FENCE_SCHEMA_VERSION {
+        return Err(format!(
+            "ENROLLMENT_FENCE_UNKNOWN_SCHEMA_VERSION: {schema_version} > {ENROLLMENT_FENCE_SCHEMA_VERSION}"
+        ));
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -143,12 +181,21 @@ impl ReceiptContextStore {
     }
 
     pub fn record_pending_request(&mut self, req: PendingRequestContext) {
-        self.pending_requests.retain(|p| !p.enrollment_generation_id_hex.eq_ignore_ascii_case(&req.enrollment_generation_id_hex));
+        self.pending_requests.retain(|p| {
+            !p.enrollment_generation_id_hex
+                .eq_ignore_ascii_case(&req.enrollment_generation_id_hex)
+        });
         self.pending_requests.push(req);
     }
 
     pub fn find_pending_request(&self, generation_id_hex: &str) -> Option<PendingRequestContext> {
-        self.pending_requests.iter().find(|p| p.enrollment_generation_id_hex.eq_ignore_ascii_case(generation_id_hex)).cloned()
+        self.pending_requests
+            .iter()
+            .find(|p| {
+                p.enrollment_generation_id_hex
+                    .eq_ignore_ascii_case(generation_id_hex)
+            })
+            .cloned()
     }
 
     pub fn record_receipt_ingress(
@@ -160,7 +207,11 @@ impl ReceiptContextStore {
         let efr1 = frames::decode_efr1(raw_efr1_bytes)
             .map_err(|e| format!("MALFORMED_RECEIPT_INGRESS: {e:?}"))?;
         let raw_efr1_digest = compute_sha256(raw_efr1_bytes);
-        let gen_hex = efr1.enrollment_generation_id.iter().map(|b| format!("{b:02x}")).collect::<String>();
+        let gen_hex = efr1
+            .enrollment_generation_id
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<String>();
 
         let pending = self.find_pending_request(&gen_hex).ok_or_else(|| {
             format!("INGRESS_NO_MATCHING_REQUEST: no pending request context found for generation '{gen_hex}'")
@@ -170,10 +221,16 @@ impl ReceiptContextStore {
             return Err("INGRESS_BOOT_SESSION_MISMATCH: pending request was issued in a different boot session".to_string());
         }
         if pending.device_registration_nonce != efr1.receipt_nonce {
-            return Err("INGRESS_NONCE_MISMATCH: receipt nonce does not match pending challenge nonce".to_string());
+            return Err(
+                "INGRESS_NONCE_MISMATCH: receipt nonce does not match pending challenge nonce"
+                    .to_string(),
+            );
         }
         if pending.security_device_id != efr1.security_device_id {
-            return Err("INGRESS_DEVICE_MISMATCH: security device id does not match pending request".to_string());
+            return Err(
+                "INGRESS_DEVICE_MISMATCH: security device id does not match pending request"
+                    .to_string(),
+            );
         }
         if pending.staged_public_key != efr1.accepted_public_key {
             return Err("INGRESS_PUBLIC_KEY_MISMATCH: accepted public key does not match pending request staged key".to_string());
@@ -191,7 +248,9 @@ impl ReceiptContextStore {
         };
 
         self.receipt_observations.retain(|o| {
-            !(o.enrollment_generation_id_hex.eq_ignore_ascii_case(&gen_hex) && o.raw_efr1_digest == raw_efr1_digest)
+            !(o.enrollment_generation_id_hex
+                .eq_ignore_ascii_case(&gen_hex)
+                && o.raw_efr1_digest == raw_efr1_digest)
         });
         self.receipt_observations.push(obs.clone());
         Ok(obs)
@@ -202,10 +261,14 @@ impl ReceiptContextStore {
         generation_id_hex: &str,
         raw_efr1_digest: &[u8; 32],
     ) -> Option<ReceiptObservation> {
-        self.receipt_observations.iter().find(|o| {
-            o.enrollment_generation_id_hex.eq_ignore_ascii_case(generation_id_hex)
-                && &o.raw_efr1_digest == raw_efr1_digest
-        }).cloned()
+        self.receipt_observations
+            .iter()
+            .find(|o| {
+                o.enrollment_generation_id_hex
+                    .eq_ignore_ascii_case(generation_id_hex)
+                    && &o.raw_efr1_digest == raw_efr1_digest
+            })
+            .cloned()
     }
 
     pub fn take_observation(
@@ -214,7 +277,8 @@ impl ReceiptContextStore {
         raw_efr1_digest: &[u8; 32],
     ) -> Option<ReceiptObservation> {
         if let Some(pos) = self.receipt_observations.iter().position(|o| {
-            o.enrollment_generation_id_hex.eq_ignore_ascii_case(generation_id_hex)
+            o.enrollment_generation_id_hex
+                .eq_ignore_ascii_case(generation_id_hex)
                 && &o.raw_efr1_digest == raw_efr1_digest
         }) {
             Some(self.receipt_observations.remove(pos))
@@ -246,30 +310,56 @@ impl EnrollmentRuntimeState {
         }
     }
 
-    pub fn record_receipt_ingress_from_bytes(&self, raw_efr1_bytes: &[u8]) -> Result<ReceiptObservation, String> {
+    pub fn record_receipt_ingress_from_bytes(
+        &self,
+        raw_efr1_bytes: &[u8],
+    ) -> Result<ReceiptObservation, String> {
         let receipt_ticks = super::monotonic_clock::read_qpc_ticks()
             .map_err(|e| format!("cannot read monotonic QPC: {e:?}"))?;
         let boot_session = super::monotonic_clock::boot_session_id();
-        let mut store = self.receipt_store.lock().map_err(|e| format!("mutex poisoned: {e}"))?;
+        let mut store = self
+            .receipt_store
+            .lock()
+            .map_err(|e| format!("mutex poisoned: {e}"))?;
         store.record_receipt_ingress(raw_efr1_bytes, receipt_ticks, boot_session)
     }
 
-    pub fn record_receipt_ingress_from_base64(&self, server_receipt_base64: &str) -> Result<ReceiptObservation, String> {
+    pub fn record_receipt_ingress_from_base64(
+        &self,
+        server_receipt_base64: &str,
+    ) -> Result<ReceiptObservation, String> {
         let bytes = base64_decode(server_receipt_base64)
             .map_err(|e| format!("cannot base64 decode receipt: {e}"))?;
         self.record_receipt_ingress_from_bytes(&bytes)
     }
 
-    pub fn find_observation(&self, generation_id_hex: &str, raw_efr1_digest: &[u8; 32]) -> Option<ReceiptObservation> {
-        self.receipt_store.lock().ok()?.find_observation(generation_id_hex, raw_efr1_digest)
+    pub fn find_observation(
+        &self,
+        generation_id_hex: &str,
+        raw_efr1_digest: &[u8; 32],
+    ) -> Option<ReceiptObservation> {
+        self.receipt_store
+            .lock()
+            .ok()?
+            .find_observation(generation_id_hex, raw_efr1_digest)
     }
 
     pub fn find_pending_request(&self, generation_id_hex: &str) -> Option<PendingRequestContext> {
-        self.receipt_store.lock().ok()?.find_pending_request(generation_id_hex)
+        self.receipt_store
+            .lock()
+            .ok()?
+            .find_pending_request(generation_id_hex)
     }
 
-    pub fn take_observation(&self, generation_id_hex: &str, raw_efr1_digest: &[u8; 32]) -> Option<ReceiptObservation> {
-        self.receipt_store.lock().ok()?.take_observation(generation_id_hex, raw_efr1_digest)
+    pub fn take_observation(
+        &self,
+        generation_id_hex: &str,
+        raw_efr1_digest: &[u8; 32],
+    ) -> Option<ReceiptObservation> {
+        self.receipt_store
+            .lock()
+            .ok()?
+            .take_observation(generation_id_hex, raw_efr1_digest)
     }
 
     pub fn clear(&self) {
@@ -315,14 +405,29 @@ impl std::fmt::Display for EnrollmentMetaError {
         match self {
             EnrollmentMetaError::NotFound => write!(f, "Enrollment metadata or fence not found"),
             EnrollmentMetaError::Io(e) => write!(f, "Enrollment meta IO error: {e}"),
-            EnrollmentMetaError::DpapiFailed => write!(f, "DPAPI unprotect failed for enrollment metadata"),
+            EnrollmentMetaError::DpapiFailed => {
+                write!(f, "DPAPI unprotect failed for enrollment metadata")
+            }
             EnrollmentMetaError::Corrupt(msg) => write!(f, "Enrollment metadata corrupt: {msg}"),
-            EnrollmentMetaError::FenceUncommitted => write!(f, "Enrollment fence is not in COMMITTED state"),
-            EnrollmentMetaError::GenerationMismatch => write!(f, "Enrollment generation mismatch between fence and metadata"),
-            EnrollmentMetaError::KeyHashMismatch => write!(f, "Device proof key SHA-256 does not match fence"),
-            EnrollmentMetaError::MetaHashMismatch => write!(f, "Enrollment metadata SHA-256 does not match fence"),
-            EnrollmentMetaError::PublicKeyMismatch => write!(f, "Derived public key does not match enrolled expected key"),
-            EnrollmentMetaError::VersionMismatch => write!(f, "Device key version mismatch between fence and metadata"),
+            EnrollmentMetaError::FenceUncommitted => {
+                write!(f, "Enrollment fence is not in COMMITTED state")
+            }
+            EnrollmentMetaError::GenerationMismatch => write!(
+                f,
+                "Enrollment generation mismatch between fence and metadata"
+            ),
+            EnrollmentMetaError::KeyHashMismatch => {
+                write!(f, "Device proof key SHA-256 does not match fence")
+            }
+            EnrollmentMetaError::MetaHashMismatch => {
+                write!(f, "Enrollment metadata SHA-256 does not match fence")
+            }
+            EnrollmentMetaError::PublicKeyMismatch => {
+                write!(f, "Derived public key does not match enrolled expected key")
+            }
+            EnrollmentMetaError::VersionMismatch => {
+                write!(f, "Device key version mismatch between fence and metadata")
+            }
         }
     }
 }
@@ -342,7 +447,9 @@ pub fn digest_manifest_path(app_data_dir: &Path, sha256_hex: &str) -> PathBuf {
 }
 
 pub fn is_canonical_lowercase_sha256(s: &str) -> bool {
-    s.len() == 64 && s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    s.len() == 64
+        && s.bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -574,16 +681,21 @@ pub fn classify_directory_artifacts(
         return CleanArtifactClassification::PartialOrHistorical;
     }
     let sec_id_path = super::security_device_id::security_device_id_path(app_data_dir);
-    let sec_id_bytes = match fs::read(&sec_id_path) {
-        Ok(b) if b.len() == 16 => b,
-        _ => return CleanArtifactClassification::PartialOrHistorical,
+    let sec_id_bytes = match fs::read(&sec_id_path)
+        .ok()
+        .and_then(|b| super::security_device_id::decode_security_device_id_bytes(&b).ok())
+    {
+        Some(b) => b,
+        None => return CleanArtifactClassification::PartialOrHistorical,
     };
-    if sec_id_bytes.as_slice() != bindings.security_device_id {
+    if sec_id_bytes != *bindings.security_device_id {
         return CleanArtifactClassification::PartialOrHistorical;
     }
 
     // Must have exactly one staged record matching bindings
-    if staged_generations.len() != 1 || !staged_generations[0].eq_ignore_ascii_case(bindings.generation_id_hex) {
+    if staged_generations.len() != 1
+        || !staged_generations[0].eq_ignore_ascii_case(bindings.generation_id_hex)
+    {
         return CleanArtifactClassification::PartialOrHistorical;
     }
     let staged_path = enrollment_staged_generation_path(app_data_dir, bindings.generation_id_hex);
@@ -599,20 +711,45 @@ pub fn classify_directory_artifacts(
         Ok(s) => s,
         Err(_) => return CleanArtifactClassification::PartialOrHistorical,
     };
-    if !staged.enrollment_generation_id_hex.eq_ignore_ascii_case(bindings.generation_id_hex) {
+    // SEC-001 epoch-2 rollback remediation (Claude-024): Codex-011 found this
+    // deserialization trusted the staged record's shape without enforcing
+    // the centralized schema-version check, unlike every other staged/fence
+    // reader. An unknown-newer schema must classify as PartialOrHistorical
+    // (never ExactPendingInitial), the same fail-closed outcome as any other
+    // untrusted/unrecognized staged content.
+    if check_staged_enrollment_schema_version(staged.schema_version).is_err() {
         return CleanArtifactClassification::PartialOrHistorical;
     }
-    let sec_id_hex = bindings.security_device_id.iter().map(|b| format!("{b:02x}")).collect::<String>();
-    if !staged.security_device_id_hex.eq_ignore_ascii_case(&sec_id_hex) {
+    if !staged
+        .enrollment_generation_id_hex
+        .eq_ignore_ascii_case(bindings.generation_id_hex)
+    {
         return CleanArtifactClassification::PartialOrHistorical;
     }
-    let accepted_hex = bindings.accepted_public_key.iter().map(|b| format!("{b:02x}")).collect::<String>();
+    let sec_id_hex = bindings
+        .security_device_id
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect::<String>();
+    if !staged
+        .security_device_id_hex
+        .eq_ignore_ascii_case(&sec_id_hex)
+    {
+        return CleanArtifactClassification::PartialOrHistorical;
+    }
+    let accepted_hex = bindings
+        .accepted_public_key
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect::<String>();
     if !staged.public_key_hex.eq_ignore_ascii_case(&accepted_hex) {
         return CleanArtifactClassification::PartialOrHistorical;
     }
 
     // Generation key: MUST require exactly one valid G key matching bindings
-    if gen_key_generations.len() != 1 || !gen_key_generations[0].eq_ignore_ascii_case(bindings.generation_id_hex) {
+    if gen_key_generations.len() != 1
+        || !gen_key_generations[0].eq_ignore_ascii_case(bindings.generation_id_hex)
+    {
         return CleanArtifactClassification::PartialOrHistorical;
     }
     let gen_key_path = generation_proof_key_path(app_data_dir, bindings.generation_id_hex);
@@ -621,11 +758,17 @@ pub fn classify_directory_artifacts(
         Err(_) => return CleanArtifactClassification::PartialOrHistorical,
     };
     let key_plain = match dpapi_unprotect(&key_cipher) {
-        Ok(b) if b.len() == 32 => b,
-        _ => return CleanArtifactClassification::PartialOrHistorical,
+        Ok(b) => b,
+        Err(_) => return CleanArtifactClassification::PartialOrHistorical,
     };
-    let mut seed = [0u8; 32];
-    seed.copy_from_slice(&key_plain);
+    // SEC-001 epoch-2 rollback remediation (Claude-024): accepts both the
+    // legacy unversioned and current versioned generation-key plaintext
+    // shapes via the centralized decoder, matching the versioned writer in
+    // `stage_device_enrollment` below.
+    let seed = match device_proof::decode_device_proof_key_plaintext(&key_plain) {
+        Ok(s) => s,
+        Err(_) => return CleanArtifactClassification::PartialOrHistorical,
+    };
     let signing_key = SigningKey::from_bytes(&seed);
     if signing_key.verifying_key().to_bytes() != *bindings.accepted_public_key {
         return CleanArtifactClassification::PartialOrHistorical;
@@ -654,10 +797,11 @@ pub fn classify_directory_artifacts(
         };
         let mut expected_gen_bytes = [0u8; 16];
         for i in 0..16 {
-            expected_gen_bytes[i] = match u8::from_str_radix(&bindings.generation_id_hex[i * 2..i * 2 + 2], 16) {
-                Ok(b) => b,
-                Err(_) => return CleanArtifactClassification::PartialOrHistorical,
-            };
+            expected_gen_bytes[i] =
+                match u8::from_str_radix(&bindings.generation_id_hex[i * 2..i * 2 + 2], 16) {
+                    Ok(b) => b,
+                    Err(_) => return CleanArtifactClassification::PartialOrHistorical,
+                };
         }
         if meta_frame.enrollment_generation_id != expected_gen_bytes
             || meta_frame.security_device_id != *bindings.security_device_id
@@ -717,9 +861,14 @@ pub fn resolve_active_manifest_path_with_root(
         .map_err(|e| format!("RESOLVER_FAIL_CLOSED: cannot read fence file: {e}"))?;
     let fence = serde_json::from_slice::<EnrollmentFenceState>(&fence_bytes)
         .map_err(|e| format!("RESOLVER_FAIL_CLOSED: cannot parse fence JSON: {e}"))?;
+    check_enrollment_fence_schema_version(fence.schema_version)
+        .map_err(|e| format!("RESOLVER_FAIL_CLOSED: {e}"))?;
 
     if fence.state != "COMMITTED" {
-        return Err(format!("RESOLVER_FAIL_CLOSED: fence state is not COMMITTED (found '{}')", fence.state));
+        return Err(format!(
+            "RESOLVER_FAIL_CLOSED: fence state is not COMMITTED (found '{}')",
+            fence.state
+        ));
     }
 
     if !is_lowercase_hex32(&fence.enrollment_generation_id) {
@@ -736,7 +885,9 @@ pub fn resolve_active_manifest_path_with_root(
     let key_bytes = fs::read(&gen_key_path)
         .map_err(|e| format!("RESOLVER_FAIL_CLOSED: cannot read generation key: {e}"))?;
     if compute_sha256_hex(&key_bytes) != fence.key_sha256 {
-        return Err("RESOLVER_FAIL_CLOSED: generation key SHA-256 does not match fence".to_string());
+        return Err(
+            "RESOLVER_FAIL_CLOSED: generation key SHA-256 does not match fence".to_string(),
+        );
     }
 
     let gen_meta_path = generation_meta_path(app_data_dir, &fence.enrollment_generation_id);
@@ -746,11 +897,14 @@ pub fn resolve_active_manifest_path_with_root(
     let meta_bytes = fs::read(&gen_meta_path)
         .map_err(|e| format!("RESOLVER_FAIL_CLOSED: cannot read generation metadata: {e}"))?;
     if compute_sha256_hex(&meta_bytes) != fence.meta_sha256 {
-        return Err("RESOLVER_FAIL_CLOSED: generation metadata SHA-256 does not match fence".to_string());
+        return Err(
+            "RESOLVER_FAIL_CLOSED: generation metadata SHA-256 does not match fence".to_string(),
+        );
     }
 
-    let sha_hex = fence.manifest_sha256
-        .ok_or_else(|| "RESOLVER_FAIL_CLOSED: manifest_sha256 missing from committed fence".to_string())?;
+    let sha_hex = fence.manifest_sha256.ok_or_else(|| {
+        "RESOLVER_FAIL_CLOSED: manifest_sha256 missing from committed fence".to_string()
+    })?;
 
     if !is_canonical_lowercase_sha256(&sha_hex) {
         return Err(format!("RESOLVER_FAIL_CLOSED: manifest_sha256 is not canonical lowercase SHA-256 ('{sha_hex}')"));
@@ -758,7 +912,10 @@ pub fn resolve_active_manifest_path_with_root(
 
     let digest_path = digest_manifest_path(app_data_dir, &sha_hex);
     if !digest_path.exists() {
-        return Err(format!("RESOLVER_FAIL_CLOSED: digest manifest file does not exist ({})", digest_path.display()));
+        return Err(format!(
+            "RESOLVER_FAIL_CLOSED: digest manifest file does not exist ({})",
+            digest_path.display()
+        ));
     }
     if !digest_path.is_file() {
         return Err("RESOLVER_FAIL_CLOSED: digest manifest path is not a regular file".to_string());
@@ -775,14 +932,16 @@ pub fn resolve_active_manifest_path_with_root(
     let manifest = frames::decode_oks1(&manifest_bytes)
         .map_err(|e| format!("RESOLVER_FAIL_CLOSED: typed OKS1 V2 decode failed: {e:?}"))?;
 
-    let root_pk = trusted_root.ok_or_else(|| "RESOLVER_FAIL_CLOSED: no trusted root key available".to_string())?;
+    let root_pk = trusted_root
+        .ok_or_else(|| "RESOLVER_FAIL_CLOSED: no trusted root key available".to_string())?;
     let root_vk = VerifyingKey::from_bytes(root_pk)
         .map_err(|e| format!("RESOLVER_FAIL_CLOSED: invalid trusted root key: {e}"))?;
     let prefix = frames::oks1_signed_prefix(&manifest)
         .map_err(|e| format!("RESOLVER_FAIL_CLOSED: cannot build OKS1 prefix: {e:?}"))?;
     let sig = Signature::from_bytes(&manifest.signature);
-    root_vk.verify(&prefix, &sig)
-        .map_err(|_| "RESOLVER_FAIL_CLOSED: digest manifest root signature verification failed".to_string())?;
+    root_vk.verify(&prefix, &sig).map_err(|_| {
+        "RESOLVER_FAIL_CLOSED: digest manifest root signature verification failed".to_string()
+    })?;
 
     if manifest.keys.is_empty() {
         return Err("RESOLVER_FAIL_CLOSED: manifest contains no keys".to_string());
@@ -853,17 +1012,24 @@ pub fn persist_digest_manifest_atomic_with_hooks(
 
     if !already_existed {
         if hooks.fail_temp_create {
-            return Err("cannot create digest manifest tmp file: injected temp create failure".to_string());
+            return Err(
+                "cannot create digest manifest tmp file: injected temp create failure".to_string(),
+            );
         }
 
-        let tmp_path = root.join(format!("twinpet-oac-keyset-manifest-{sha256_hex}-{}.tmp", rand::random::<u64>()));
+        let tmp_path = root.join(format!(
+            "twinpet-oac-keyset-manifest-{sha256_hex}-{}.tmp",
+            rand::random::<u64>()
+        ));
         {
             let mut f = File::create(&tmp_path)
                 .map_err(|e| format!("cannot create digest manifest tmp file: {e}"))?;
 
             if hooks.fail_write {
                 let _ = fs::remove_file(&tmp_path);
-                return Err("cannot write digest manifest tmp file: injected write failure".to_string());
+                return Err(
+                    "cannot write digest manifest tmp file: injected write failure".to_string(),
+                );
             }
 
             let bytes_to_write = if hooks.truncate_write {
@@ -877,7 +1043,9 @@ pub fn persist_digest_manifest_atomic_with_hooks(
 
             if hooks.fail_sync {
                 let _ = fs::remove_file(&tmp_path);
-                return Err("sync_all failed on digest manifest tmp: injected sync failure".to_string());
+                return Err(
+                    "sync_all failed on digest manifest tmp: injected sync failure".to_string(),
+                );
             }
 
             f.sync_all()
@@ -908,7 +1076,9 @@ pub fn persist_digest_manifest_atomic_with_hooks(
                     }
                 }
             } else {
-                return Err(format!("MoveFileExW failed on digest manifest: error code {code}"));
+                return Err(format!(
+                    "MoveFileExW failed on digest manifest: error code {code}"
+                ));
             }
         }
     }
@@ -923,26 +1093,30 @@ pub fn persist_digest_manifest_atomic_with_hooks(
     }
 
     // Post-publish validation: reread, hash, decode, and root-signature verification
-    let disk_bytes = fs::read(&target_path)
-        .map_err(|e| format!("reread digest manifest failed: {e}"))?;
+    let disk_bytes =
+        fs::read(&target_path).map_err(|e| format!("reread digest manifest failed: {e}"))?;
     if disk_bytes != oks1_bytes {
         return Err("reread bytes mismatch".to_string());
     }
     let disk_sha = compute_sha256_hex(&disk_bytes);
     if disk_sha != sha256_hex {
-        return Err(format!("reread hash mismatch: on-disk '{disk_sha}' != expected '{sha256_hex}'"));
+        return Err(format!(
+            "reread hash mismatch: on-disk '{disk_sha}' != expected '{sha256_hex}'"
+        ));
     }
 
     let decoded = frames::decode_oks1(&disk_bytes)
         .map_err(|e| format!("typed OKS1 V2 decode failed on persisted manifest: {e:?}"))?;
 
-    let root_pk = trusted_root.ok_or_else(|| "missing trusted root key for verification".to_string())?;
-    let root_vk = VerifyingKey::from_bytes(root_pk)
-        .map_err(|e| format!("invalid root key: {e}"))?;
-    let prefix = frames::oks1_signed_prefix(&decoded)
-        .map_err(|e| format!("cannot build prefix: {e:?}"))?;
+    let root_pk =
+        trusted_root.ok_or_else(|| "missing trusted root key for verification".to_string())?;
+    let root_vk =
+        VerifyingKey::from_bytes(root_pk).map_err(|e| format!("invalid root key: {e}"))?;
+    let prefix =
+        frames::oks1_signed_prefix(&decoded).map_err(|e| format!("cannot build prefix: {e:?}"))?;
     let sig = Signature::from_bytes(&decoded.signature);
-    root_vk.verify(&prefix, &sig)
+    root_vk
+        .verify(&prefix, &sig)
         .map_err(|_| "persisted digest manifest root signature verification failed".to_string())?;
 
     Ok(target_path)
@@ -969,7 +1143,10 @@ pub fn encode_enrm(frame: &EnrollmentMetaFrameV1) -> Result<Vec<u8>, String> {
 
 pub fn decode_enrm(bytes: &[u8]) -> Result<EnrollmentMetaFrameV1, String> {
     if bytes.len() < ENRM_FIXED_MINIMUM_LENGTH {
-        return Err(format!("buffer too short: {} < {ENRM_FIXED_MINIMUM_LENGTH}", bytes.len()));
+        return Err(format!(
+            "buffer too short: {} < {ENRM_FIXED_MINIMUM_LENGTH}",
+            bytes.len()
+        ));
     }
 
     if &bytes[0..4] != ENRM_MAGIC {
@@ -1004,7 +1181,11 @@ pub fn decode_enrm(bytes: &[u8]) -> Result<EnrollmentMetaFrameV1, String> {
     offset += 2;
 
     if bytes.len() != offset + branch_len {
-        return Err(format!("trailing or truncated bytes: expected {}, got {}", offset + branch_len, bytes.len()));
+        return Err(format!(
+            "trailing or truncated bytes: expected {}, got {}",
+            offset + branch_len,
+            bytes.len()
+        ));
     }
 
     let branch_id = std::str::from_utf8(&bytes[offset..offset + branch_len])
@@ -1032,7 +1213,6 @@ pub fn compute_sha256_hex(bytes: &[u8]) -> String {
     format!("{:064x}", hasher.finalize())
 }
 
-
 /// Verifies local enrollment fence, DPAPI metadata, and key binding.
 /// Strictly reads only the fence-selected generation key and metadata.
 /// Never falls back to legacy canonical or compatibility copies.
@@ -1044,12 +1224,16 @@ pub fn verify_local_enrollment(
     let fence_path = enrollment_fence_path(app_data_dir);
     let fence_bytes = match fs::read(&fence_path) {
         Ok(b) => b,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Err(EnrollmentMetaError::NotFound),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Err(EnrollmentMetaError::NotFound)
+        }
         Err(e) => return Err(EnrollmentMetaError::Io(e.to_string())),
     };
 
     let fence: EnrollmentFenceState = serde_json::from_slice(&fence_bytes)
         .map_err(|e| EnrollmentMetaError::Corrupt(format!("fence json invalid: {e}")))?;
+    check_enrollment_fence_schema_version(fence.schema_version)
+        .map_err(EnrollmentMetaError::Corrupt)?;
 
     if fence.state != "COMMITTED" || fence.enrollment_generation_id.trim().is_empty() {
         return Err(EnrollmentMetaError::FenceUncommitted);
@@ -1058,7 +1242,9 @@ pub fn verify_local_enrollment(
     let key_path = generation_proof_key_path(app_data_dir, &fence.enrollment_generation_id);
     let key_bytes = match fs::read(&key_path) {
         Ok(b) => b,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Err(EnrollmentMetaError::NotFound),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Err(EnrollmentMetaError::NotFound)
+        }
         Err(e) => return Err(EnrollmentMetaError::Io(e.to_string())),
     };
 
@@ -1070,7 +1256,9 @@ pub fn verify_local_enrollment(
     let meta_path = generation_meta_path(app_data_dir, &fence.enrollment_generation_id);
     let meta_cipher = match fs::read(&meta_path) {
         Ok(b) => b,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Err(EnrollmentMetaError::NotFound),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Err(EnrollmentMetaError::NotFound)
+        }
         Err(e) => return Err(EnrollmentMetaError::Io(e.to_string())),
     };
 
@@ -1079,20 +1267,28 @@ pub fn verify_local_enrollment(
         return Err(EnrollmentMetaError::MetaHashMismatch);
     }
 
-    let meta_plain = dpapi_unprotect(&meta_cipher)
-        .map_err(|_| EnrollmentMetaError::DpapiFailed)?;
+    let meta_plain = dpapi_unprotect(&meta_cipher).map_err(|_| EnrollmentMetaError::DpapiFailed)?;
 
-    let meta_frame = decode_enrm(&meta_plain)
-        .map_err(EnrollmentMetaError::Corrupt)?;
+    let meta_frame = decode_enrm(&meta_plain).map_err(EnrollmentMetaError::Corrupt)?;
 
-    let gen_hex = meta_frame.enrollment_generation_id.iter().map(|b| format!("{b:02x}")).collect::<String>();
+    let gen_hex = meta_frame
+        .enrollment_generation_id
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect::<String>();
     if gen_hex.to_lowercase() != fence.enrollment_generation_id.to_lowercase() {
         return Err(EnrollmentMetaError::GenerationMismatch);
     }
 
-    let dev_id_hex = meta_frame.security_device_id.iter().map(|b| format!("{b:02x}")).collect::<String>();
+    let dev_id_hex = meta_frame
+        .security_device_id
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect::<String>();
     if dev_id_hex.to_lowercase() != fence.security_device_id_hex.to_lowercase() {
-        return Err(EnrollmentMetaError::Corrupt("security device id mismatch between fence and meta".to_string()));
+        return Err(EnrollmentMetaError::Corrupt(
+            "security device id mismatch between fence and meta".to_string(),
+        ));
     }
 
     if meta_frame.device_key_version != fence.device_key_version {
@@ -1179,13 +1375,19 @@ pub fn commit_enrollment_metadata(
     frame: &EnrollmentMetaFrameV1,
     committed_at_ms: u64,
 ) -> Result<(), EnrollmentMetaError> {
-    let meta_bytes = encode_enrm(frame)
-        .map_err(EnrollmentMetaError::Corrupt)?;
-    let meta_cipher = dpapi_protect(&meta_bytes)
-        .map_err(|_| EnrollmentMetaError::DpapiFailed)?;
+    let meta_bytes = encode_enrm(frame).map_err(EnrollmentMetaError::Corrupt)?;
+    let meta_cipher = dpapi_protect(&meta_bytes).map_err(|_| EnrollmentMetaError::DpapiFailed)?;
 
-    let gen_hex = frame.enrollment_generation_id.iter().map(|b| format!("{b:02x}")).collect::<String>();
-    let dev_id_hex = frame.security_device_id.iter().map(|b| format!("{b:02x}")).collect::<String>();
+    let gen_hex = frame
+        .enrollment_generation_id
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect::<String>();
+    let dev_id_hex = frame
+        .security_device_id
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect::<String>();
 
     let gen_key_path = generation_proof_key_path(app_data_dir, &gen_hex);
     if !gen_key_path.exists() {
@@ -1194,14 +1396,12 @@ pub fn commit_enrollment_metadata(
             let _ = fs::copy(&legacy_key_path, &gen_key_path);
         }
     }
-    let key_bytes = fs::read(&gen_key_path)
-        .map_err(|e| EnrollmentMetaError::Io(e.to_string()))?;
+    let key_bytes = fs::read(&gen_key_path).map_err(|e| EnrollmentMetaError::Io(e.to_string()))?;
     let key_sha256 = compute_sha256_hex(&key_bytes);
 
     let gen_meta_path = generation_meta_path(app_data_dir, &gen_hex);
     let meta_tmp = gen_meta_path.with_extension("tmp");
-    fs::write(&meta_tmp, &meta_cipher)
-        .map_err(|e| EnrollmentMetaError::Io(e.to_string()))?;
+    fs::write(&meta_tmp, &meta_cipher).map_err(|e| EnrollmentMetaError::Io(e.to_string()))?;
 
     let meta_sha256 = compute_sha256_hex(&meta_cipher);
 
@@ -1217,11 +1417,11 @@ pub fn commit_enrollment_metadata(
         meta_sha256: meta_sha256.clone(),
         manifest_sha256: None,
         committed_at_local_ms: committed_at_ms,
+        schema_version: ENROLLMENT_FENCE_SCHEMA_VERSION,
     };
     let prepared_json = serde_json::to_vec_pretty(&prepared_fence)
         .map_err(|e| EnrollmentMetaError::Corrupt(e.to_string()))?;
-    fs::write(&fence_tmp, &prepared_json)
-        .map_err(|e| EnrollmentMetaError::Io(e.to_string()))?;
+    fs::write(&fence_tmp, &prepared_json).map_err(|e| EnrollmentMetaError::Io(e.to_string()))?;
     atomic_replace_file(&fence_tmp, &fence_path)
         .map_err(|e| EnrollmentMetaError::Io(e.to_string()))?;
 
@@ -1234,8 +1434,7 @@ pub fn commit_enrollment_metadata(
     };
     let committed_json = serde_json::to_vec_pretty(&committed_fence)
         .map_err(|e| EnrollmentMetaError::Corrupt(e.to_string()))?;
-    fs::write(&fence_tmp, &committed_json)
-        .map_err(|e| EnrollmentMetaError::Io(e.to_string()))?;
+    fs::write(&fence_tmp, &committed_json).map_err(|e| EnrollmentMetaError::Io(e.to_string()))?;
     atomic_replace_file(&fence_tmp, &fence_path)
         .map_err(|e| EnrollmentMetaError::Io(e.to_string()))?;
 
@@ -1278,7 +1477,10 @@ pub fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
             _ => None,
         }
     }
-    let cleaned: Vec<u8> = input.bytes().filter(|&b| b != b'=' && !b.is_ascii_whitespace()).collect();
+    let cleaned: Vec<u8> = input
+        .bytes()
+        .filter(|&b| b != b'=' && !b.is_ascii_whitespace())
+        .collect();
     let mut out = Vec::with_capacity(cleaned.len() * 3 / 4);
     for chunk in cleaned.chunks(4) {
         let vals: Vec<u8> = chunk
@@ -1305,14 +1507,34 @@ pub struct StagedEnrollmentOutcome {
     pub staged_public_key: [u8; 32],
 }
 
+/// SEC-001 epoch-2: current explicit `schemaVersion` for `StagedEnrollmentFrameV1`.
+/// Absence of the field on an existing on-disk file (serde default `0`) is
+/// treated as implicit legacy version 1; any value greater than this
+/// constant is an unknown newer format and fails closed.
+pub const STAGED_ENROLLMENT_SCHEMA_VERSION: u32 = 1;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct StagedEnrollmentFrameV1 {
     pub enrollment_generation_id_hex: String,
     pub security_device_id_hex: String,
     pub private_key_seed_hex: String,
     pub public_key_hex: String,
     pub staged_at_ms: u64,
+    #[serde(default)]
+    pub schema_version: u32,
+}
+
+/// Fails closed if `schema_version` is a value newer than this build knows
+/// about. `0` (field absent, legacy pre-remediation record) and the current
+/// version are both accepted.
+pub fn check_staged_enrollment_schema_version(schema_version: u32) -> Result<(), String> {
+    if schema_version > STAGED_ENROLLMENT_SCHEMA_VERSION {
+        return Err(format!(
+            "STAGED_ENROLLMENT_UNKNOWN_SCHEMA_VERSION: {schema_version} > {STAGED_ENROLLMENT_SCHEMA_VERSION}"
+        ));
+    }
+    Ok(())
 }
 
 pub fn stage_device_enrollment(
@@ -1326,11 +1548,24 @@ pub fn stage_device_enrollment(
     let mut enrollment_generation_id = [0u8; 16];
     OsRng.fill_bytes(&mut enrollment_generation_id);
 
-    let gen_hex = enrollment_generation_id.iter().map(|b| format!("{b:02x}")).collect::<String>();
-    let sec_id_hex = security_device_id.iter().map(|b| format!("{b:02x}")).collect::<String>();
-    let priv_seed_hex = signing_key.to_bytes().iter().map(|b| format!("{b:02x}")).collect::<String>();
+    let gen_hex = enrollment_generation_id
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect::<String>();
+    let sec_id_hex = security_device_id
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect::<String>();
+    let priv_seed_hex = signing_key
+        .to_bytes()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect::<String>();
     let pub_bytes = signing_key.verifying_key().to_bytes();
-    let pub_hex = pub_bytes.iter().map(|b| format!("{b:02x}")).collect::<String>();
+    let pub_hex = pub_bytes
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect::<String>();
 
     let now_ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -1343,6 +1578,7 @@ pub fn stage_device_enrollment(
         private_key_seed_hex: priv_seed_hex,
         public_key_hex: pub_hex,
         staged_at_ms: now_ms,
+        schema_version: STAGED_ENROLLMENT_SCHEMA_VERSION,
     };
 
     let json_bytes = serde_json::to_vec_pretty(&staged_frame)
@@ -1355,10 +1591,22 @@ pub fn stage_device_enrollment(
     let staged_tmp = app_data_dir.join(format!("staged-{}-{}.tmp", gen_hex, rand::random::<u64>()));
     durable_first_create_file(&staged_tmp, &staged_path, &ciphertext)?;
 
-    // 2. Generation-scoped key file
+    // 2. Generation-scoped key file. SEC-001 epoch-2 rollback remediation
+    // (Claude-024 / Gemini-041 authority): a new generation's key now
+    // encodes the current version marker before DPAPI protection. Every
+    // call site that reads a generation-scoped key (this module's
+    // finalize/verify/classify flow, plus `device_proof::load_enrolled_device_keypair`)
+    // was audited and migrated to the centralized
+    // `device_proof::decode_device_proof_key_plaintext`, which accepts both
+    // this versioned shape and the exact legacy unversioned shape already
+    // committed for pre-existing generations — those committed ciphertexts,
+    // pinned by `keySha256` in their fence, remain byte-for-byte unchanged
+    // and are never rewritten.
     let gen_key_path = generation_proof_key_path(app_data_dir, &gen_hex);
-    let gen_key_cipher = dpapi_protect(&signing_key.to_bytes())
-        .map_err(|e| format!("DPAPI protect failed for gen-scoped key: {e:?}"))?;
+    let gen_key_cipher = dpapi_protect(&device_proof::versioned_key_payload(
+        &signing_key.to_bytes(),
+    ))
+    .map_err(|e| format!("DPAPI protect failed for gen-scoped key: {e:?}"))?;
     let gen_key_tmp = app_data_dir.join(format!("key-{}-{}.tmp", gen_hex, rand::random::<u64>()));
     durable_first_create_file(&gen_key_tmp, &gen_key_path, &gen_key_cipher)?;
 
@@ -1384,10 +1632,8 @@ pub struct FinalizeDeviceEnrollmentOutcomeDto {
 /// Canonical OAC Root Public Key pinned in native client (Option A: public key raw 32 bytes only).
 /// Generated from stable server root; private root key material NEVER exists on client in production.
 pub const CANONICAL_OAC_ROOT_PUBLIC_KEY: [u8; 32] = [
-    0x0d, 0x75, 0x50, 0x75, 0x4e, 0x08, 0x00, 0xa5,
-    0xd2, 0x37, 0xee, 0xf5, 0x82, 0x60, 0x35, 0x76,
-    0x6b, 0x9b, 0x3e, 0x5a, 0x15, 0x86, 0x8a, 0x94,
-    0x0a, 0xb2, 0x89, 0x95, 0x87, 0x88, 0xe3, 0xb0,
+    0x0d, 0x75, 0x50, 0x75, 0x4e, 0x08, 0x00, 0xa5, 0xd2, 0x37, 0xee, 0xf5, 0x82, 0x60, 0x35, 0x76,
+    0x6b, 0x9b, 0x3e, 0x5a, 0x15, 0x86, 0x8a, 0x94, 0x0a, 0xb2, 0x89, 0x95, 0x87, 0x88, 0xe3, 0xb0,
 ];
 
 pub fn canonical_oac_root_public_key() -> [u8; 32] {
@@ -1407,7 +1653,10 @@ pub fn setup_committed_test_enrollment_with_manifest(
 ) -> (SigningKey, Vec<u8>, String) {
     use ed25519_dalek::Signer;
     let dev_key = SigningKey::generate(&mut rand::rngs::OsRng);
-    let sec_id_hex = sec_id.iter().map(|b| format!("{b:02x}")).collect::<String>();
+    let sec_id_hex = sec_id
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect::<String>();
     let sec_id_path = super::security_device_id::security_device_id_path(root);
     let _ = fs::write(&sec_id_path, &sec_id);
 
@@ -1464,6 +1713,7 @@ pub fn setup_committed_test_enrollment_with_manifest(
         meta_sha256,
         manifest_sha256: Some(manifest_sha256.clone()),
         committed_at_local_ms: 1000,
+        schema_version: ENROLLMENT_FENCE_SCHEMA_VERSION,
     };
     let fence_path = enrollment_fence_path(root);
     let fence_bytes = serde_json::to_vec_pretty(&fence).unwrap();
@@ -1535,7 +1785,9 @@ fn validate_signing_key_lifecycle(
         .keys
         .iter()
         .find(|k| k.signing_key_id == signing_key_id)
-        .ok_or_else(|| format!("KEY_LIFECYCLE_VIOLATION: signing key '{signing_key_id}' not found in manifest"))?;
+        .ok_or_else(|| {
+            format!("KEY_LIFECYCLE_VIOLATION: signing key '{signing_key_id}' not found in manifest")
+        })?;
 
     match key.status {
         frames::OacKeyLifecycleStatus::Active => Ok(()),
@@ -1551,9 +1803,9 @@ fn validate_signing_key_lifecycle(
             }
             Ok(())
         }
-        frames::OacKeyLifecycleStatus::Retired => {
-            Err(format!("KEY_LIFECYCLE_VIOLATION: signing key '{signing_key_id}' is RETIRED"))
-        }
+        frames::OacKeyLifecycleStatus::Retired => Err(format!(
+            "KEY_LIFECYCLE_VIOLATION: signing key '{signing_key_id}' is RETIRED"
+        )),
     }
 }
 
@@ -1563,10 +1815,11 @@ fn authenticate_candidate_keyset(
     trusted_root_public_key: Option<&[u8; 32]>,
     pending_initial: Option<&PendingInitialBindings>,
 ) -> Result<(frames::OacKeysetManifestFrameV1, Option<Vec<u8>>), String> {
-    let root_pk = trusted_root_public_key
-        .ok_or_else(|| "UNTRUSTED_KEYSET_BOOTSTRAP: no trusted root public key configured".to_string())?;
-    let root_vk = VerifyingKey::from_bytes(root_pk)
-        .map_err(|e| format!("INVALID_TRUSTED_ROOT_KEY: {e}"))?;
+    let root_pk = trusted_root_public_key.ok_or_else(|| {
+        "UNTRUSTED_KEYSET_BOOTSTRAP: no trusted root public key configured".to_string()
+    })?;
+    let root_vk =
+        VerifyingKey::from_bytes(root_pk).map_err(|e| format!("INVALID_TRUSTED_ROOT_KEY: {e}"))?;
 
     let candidate_raw = match oks1_base64.filter(|s| !s.trim().is_empty()) {
         Some(s) => Some(base64_decode(s).map_err(|e| format!("cannot decode oks1_base64: {e}"))?),
@@ -1620,7 +1873,8 @@ fn authenticate_candidate_keyset(
 
             let classification = classify_directory_artifacts(app_data_dir, pending_initial);
             match classification {
-                CleanArtifactClassification::TrulyClean | CleanArtifactClassification::ExactPendingInitial => {}
+                CleanArtifactClassification::TrulyClean
+                | CleanArtifactClassification::ExactPendingInitial => {}
                 CleanArtifactClassification::PartialOrHistorical => {
                     return Err(format!("UNTRUSTED_KEYSET_ROTATION_FAIL_CLOSED: resolver failed on enrolled/partial device: {err}"));
                 }
@@ -1657,16 +1911,22 @@ pub fn finalize_device_enrollment_internal_with_hooks(
     oks1_base64: Option<&str>,
     hooks: &FinalizeHooks,
 ) -> Result<FinalizeDeviceEnrollmentOutcomeDto, String> {
-    let _lock = FINALIZE_MUTEX.lock().map_err(|e| format!("mutex poisoned: {e}"))?;
+    let _lock = FINALIZE_MUTEX
+        .lock()
+        .map_err(|e| format!("mutex poisoned: {e}"))?;
 
     if device_key_version == 0 || device_key_version > MAX_DEVICE_KEY_VERSION {
         return Err(format!("INVALID_DEVICE_KEY_VERSION: {device_key_version}"));
     }
     if !is_lowercase_hex32(enrollment_generation_id) {
-        return Err(format!("INVALID_ENROLLMENT_GENERATION_ID: '{enrollment_generation_id}'"));
+        return Err(format!(
+            "INVALID_ENROLLMENT_GENERATION_ID: '{enrollment_generation_id}'"
+        ));
     }
     if !is_lowercase_hex32(security_device_id_hex) {
-        return Err(format!("INVALID_SECURITY_DEVICE_ID: '{security_device_id_hex}'"));
+        return Err(format!(
+            "INVALID_SECURITY_DEVICE_ID: '{security_device_id_hex}'"
+        ));
     }
     if !super::frames::is_canonical_identifier(branch_id) {
         return Err(format!("INVALID_BRANCH_ID: '{branch_id}'"));
@@ -1675,7 +1935,10 @@ pub fn finalize_device_enrollment_internal_with_hooks(
     let accepted_pubkey = base64_decode(accepted_public_key_base64)
         .map_err(|e| format!("cannot decode accepted_public_key_base64: {e}"))?;
     if accepted_pubkey.len() != 32 {
-        return Err(format!("accepted public key length mismatch: {} != 32", accepted_pubkey.len()));
+        return Err(format!(
+            "accepted public key length mismatch: {} != 32",
+            accepted_pubkey.len()
+        ));
     }
     let mut accepted_pubkey_bytes = [0u8; 32];
     accepted_pubkey_bytes.copy_from_slice(&accepted_pubkey);
@@ -1693,10 +1956,16 @@ pub fn finalize_device_enrollment_internal_with_hooks(
 
     let sec_id_path = super::security_device_id::security_device_id_path(app_data_dir);
     if sec_id_path.exists() {
-        let stored_sec_id = fs::read(&sec_id_path)
+        let stored_bytes = fs::read(&sec_id_path)
             .map_err(|e| format!("cannot read stored security device id: {e}"))?;
-        let stored_hex = stored_sec_id.iter().map(|b| format!("{b:02x}")).collect::<String>();
-        if !stored_hex.eq_ignore_ascii_case(security_device_id_hex) {
+        // SEC-001 epoch-2 rollback remediation (Claude-024): migrated from a
+        // raw-bytes hex comparison to the centralized decoder, which accepts
+        // both the legacy and current versioned on-disk shapes and fails
+        // closed (distinctly from a legitimate mismatch) on corrupt bytes or
+        // an unknown newer version.
+        let stored_id = super::security_device_id::decode_security_device_id_bytes(&stored_bytes)
+            .map_err(|e| format!("SECURITY_DEVICE_ID_STORE_UNREADABLE: {e:?}"))?;
+        if stored_id != sec_id_bytes {
             return Err("SECURITY_DEVICE_ID_MISMATCH".to_string());
         }
     }
@@ -1704,24 +1973,34 @@ pub fn finalize_device_enrollment_internal_with_hooks(
     // --- Validate Server Finalization Receipt (EFR1) & Keyset Manifest ---
     let receipt_str = server_receipt_base64
         .filter(|s| !s.trim().is_empty())
-        .ok_or_else(|| "SERVER_RECEIPT_REQUIRED: server finalization receipt is required".to_string())?;
+        .ok_or_else(|| {
+            "SERVER_RECEIPT_REQUIRED: server finalization receipt is required".to_string()
+        })?;
 
     let receipt_bytes = base64_decode(receipt_str)
         .map_err(|e| format!("RECEIPT_DECODE_FAILED: cannot base64 decode receipt: {e}"))?;
-    let efr1 = frames::decode_efr1(&receipt_bytes)
-        .map_err(|e| format!("RECEIPT_DECODE_FAILED: {e:?}"))?;
+    let efr1 =
+        frames::decode_efr1(&receipt_bytes).map_err(|e| format!("RECEIPT_DECODE_FAILED: {e:?}"))?;
 
     // Check committed fence state to determine whether device is enrolled (fail-closed on corrupt/malformed fence)
     let fence_path = enrollment_fence_path(app_data_dir);
     let prior_committed_fence: Option<EnrollmentFenceState> = if fence_path.exists() {
-        let fence_bytes = fs::read(&fence_path)
-            .map_err(|e| format!("MALFORMED_FENCE_FAIL_CLOSED: cannot read existing fence file: {e}"))?;
+        let fence_bytes = fs::read(&fence_path).map_err(|e| {
+            format!("MALFORMED_FENCE_FAIL_CLOSED: cannot read existing fence file: {e}")
+        })?;
         let fence = serde_json::from_slice::<EnrollmentFenceState>(&fence_bytes)
             .map_err(|e| format!("MALFORMED_FENCE_FAIL_CLOSED: cannot parse fence JSON: {e}"))?;
+        check_enrollment_fence_schema_version(fence.schema_version)
+            .map_err(|e| format!("MALFORMED_FENCE_FAIL_CLOSED: {e}"))?;
         if fence.state != "COMMITTED" {
-            return Err(format!("MALFORMED_FENCE_FAIL_CLOSED: incoherent fence state '{}'", fence.state));
+            return Err(format!(
+                "MALFORMED_FENCE_FAIL_CLOSED: incoherent fence state '{}'",
+                fence.state
+            ));
         }
-        if !is_lowercase_hex32(&fence.enrollment_generation_id) || !is_lowercase_hex32(&fence.security_device_id_hex) {
+        if !is_lowercase_hex32(&fence.enrollment_generation_id)
+            || !is_lowercase_hex32(&fence.security_device_id_hex)
+        {
             return Err("MALFORMED_FENCE_FAIL_CLOSED: invalid identifiers in fence".to_string());
         }
         Some(fence)
@@ -1733,7 +2012,10 @@ pub fn finalize_device_enrollment_internal_with_hooks(
     let native_derived_op = match &prior_committed_fence {
         None => frames::EFR1_OP_INITIAL_ENROLLMENT,
         Some(fence) => {
-            if fence.enrollment_generation_id.eq_ignore_ascii_case(enrollment_generation_id) {
+            if fence
+                .enrollment_generation_id
+                .eq_ignore_ascii_case(enrollment_generation_id)
+            {
                 efr1.operation_kind
             } else {
                 frames::EFR1_OP_RE_ENROLLMENT
@@ -1743,14 +2025,23 @@ pub fn finalize_device_enrollment_internal_with_hooks(
 
     // Caller cannot override native-derived context; caller expected_operation_kind may only confirm consistency
     if let Some(caller_op) = hooks.expected_operation_kind {
-        if caller_op != frames::EFR1_OP_INITIAL_ENROLLMENT && caller_op != frames::EFR1_OP_RE_ENROLLMENT {
+        if caller_op != frames::EFR1_OP_INITIAL_ENROLLMENT
+            && caller_op != frames::EFR1_OP_RE_ENROLLMENT
+        {
             return Err(format!("INVALID_EXPECTED_OPERATION_KIND: {caller_op}"));
         }
         if prior_committed_fence.is_none() && caller_op == frames::EFR1_OP_RE_ENROLLMENT {
-            return Err("OPERATION_CONTEXT_MISMATCH: re-enrollment attempted on unenrolled device".to_string());
+            return Err(
+                "OPERATION_CONTEXT_MISMATCH: re-enrollment attempted on unenrolled device"
+                    .to_string(),
+            );
         }
         if let Some(ref fence) = prior_committed_fence {
-            if !fence.enrollment_generation_id.eq_ignore_ascii_case(enrollment_generation_id) && caller_op == frames::EFR1_OP_INITIAL_ENROLLMENT {
+            if !fence
+                .enrollment_generation_id
+                .eq_ignore_ascii_case(enrollment_generation_id)
+                && caller_op == frames::EFR1_OP_INITIAL_ENROLLMENT
+            {
                 return Err("OPERATION_CONTEXT_MISMATCH: initial enrollment attempted on already enrolled device".to_string());
             }
         }
@@ -1770,22 +2061,36 @@ pub fn finalize_device_enrollment_internal_with_hooks(
     }
 
     // Validate cryptographic receipt binding against claimed arguments
-    let efr1_gen_hex = efr1.enrollment_generation_id.iter().map(|b| format!("{b:02x}")).collect::<String>();
+    let efr1_gen_hex = efr1
+        .enrollment_generation_id
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect::<String>();
     if !efr1_gen_hex.eq_ignore_ascii_case(enrollment_generation_id) {
         return Err(format!("RECEIPT_BINDING_MISMATCH: generation id mismatch ('{efr1_gen_hex}' != '{enrollment_generation_id}')"));
     }
-    let efr1_sec_id_hex = efr1.security_device_id.iter().map(|b| format!("{b:02x}")).collect::<String>();
+    let efr1_sec_id_hex = efr1
+        .security_device_id
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect::<String>();
     if !efr1_sec_id_hex.eq_ignore_ascii_case(security_device_id_hex) {
         return Err(format!("RECEIPT_BINDING_MISMATCH: security device id mismatch ('{efr1_sec_id_hex}' != '{security_device_id_hex}')"));
     }
     if efr1.device_key_version != device_key_version {
-        return Err(format!("RECEIPT_BINDING_MISMATCH: device key version mismatch ({} != {device_key_version})", efr1.device_key_version));
+        return Err(format!(
+            "RECEIPT_BINDING_MISMATCH: device key version mismatch ({} != {device_key_version})",
+            efr1.device_key_version
+        ));
     }
     if efr1.accepted_public_key != accepted_pubkey_bytes {
         return Err("RECEIPT_BINDING_MISMATCH: accepted public key mismatch".to_string());
     }
     if efr1.branch_id != branch_id {
-        return Err(format!("RECEIPT_BINDING_MISMATCH: branch id mismatch ('{}' != '{branch_id}')", efr1.branch_id));
+        return Err(format!(
+            "RECEIPT_BINDING_MISMATCH: branch id mismatch ('{}' != '{branch_id}')",
+            efr1.branch_id
+        ));
     }
 
     // Validate staged enrollment record
@@ -1797,14 +2102,24 @@ pub fn finalize_device_enrollment_internal_with_hooks(
             .map_err(|e| format!("DPAPI unprotect failed on staged enrollment: {e:?}"))?;
         let staged: StagedEnrollmentFrameV1 = serde_json::from_slice(&staged_plain)
             .map_err(|e| format!("cannot parse staged enrollment frame: {e}"))?;
+        check_staged_enrollment_schema_version(staged.schema_version)?;
 
-        if !staged.enrollment_generation_id_hex.eq_ignore_ascii_case(enrollment_generation_id) {
+        if !staged
+            .enrollment_generation_id_hex
+            .eq_ignore_ascii_case(enrollment_generation_id)
+        {
             return Err("STAGED_GENERATION_ID_MISMATCH".to_string());
         }
-        if !staged.security_device_id_hex.eq_ignore_ascii_case(security_device_id_hex) {
+        if !staged
+            .security_device_id_hex
+            .eq_ignore_ascii_case(security_device_id_hex)
+        {
             return Err("SECURITY_DEVICE_ID_MISMATCH".to_string());
         }
-        let accepted_hex = accepted_pubkey_bytes.iter().map(|b| format!("{b:02x}")).collect::<String>();
+        let accepted_hex = accepted_pubkey_bytes
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<String>();
         if !staged.public_key_hex.eq_ignore_ascii_case(&accepted_hex) {
             return Err(format!(
                 "STAGED_PUBLIC_KEY_MISMATCH: server accepted key '{accepted_hex}' != staged key '{}'",
@@ -1813,7 +2128,9 @@ pub fn finalize_device_enrollment_internal_with_hooks(
         }
         Some(staged)
     } else if prior_committed_fence.is_none() {
-        return Err(format!("STAGED_ENROLLMENT_UNAVAILABLE: generation '{enrollment_generation_id}' not found"));
+        return Err(format!(
+            "STAGED_ENROLLMENT_UNAVAILABLE: generation '{enrollment_generation_id}' not found"
+        ));
     } else {
         None
     };
@@ -1847,10 +2164,17 @@ pub fn finalize_device_enrollment_internal_with_hooks(
         .keys
         .iter()
         .find(|k| k.signing_key_id == efr1.signing_key_id)
-        .ok_or_else(|| format!("UNKNOWN_SIGNING_KEY: signing key '{}' not found in manifest", efr1.signing_key_id))?;
+        .ok_or_else(|| {
+            format!(
+                "UNKNOWN_SIGNING_KEY: signing key '{}' not found in manifest",
+                efr1.signing_key_id
+            )
+        })?;
 
     let raw_efr1_digest = compute_sha256(&receipt_bytes);
-    let active_obs = hooks.receipt_observation_override.clone()
+    let active_obs = hooks
+        .receipt_observation_override
+        .clone()
         .or_else(|| {
             hooks.receipt_context_override.as_ref().and_then(|c| {
                 c.receipt_qpc_ticks.map(|rt| ReceiptObservation {
@@ -1866,26 +2190,32 @@ pub fn finalize_device_enrollment_internal_with_hooks(
             })
         })
         .or_else(|| {
-            runtime.find_observation(enrollment_generation_id, &raw_efr1_digest)
+            runtime
+                .find_observation(enrollment_generation_id, &raw_efr1_digest)
                 .or_else(|| {
-                    runtime.find_pending_request(enrollment_generation_id).and_then(|pending| {
-                        pending.test_receipt_qpc_ticks.map(|rt| ReceiptObservation {
-                            request_qpc_ticks: pending.request_qpc_ticks,
-                            receipt_qpc_ticks: rt,
-                            boot_session_id: pending.boot_session_id,
-                            receipt_nonce: pending.device_registration_nonce,
-                            raw_efr1_digest,
-                            security_device_id: pending.security_device_id,
-                            enrollment_generation_id_hex: pending.enrollment_generation_id_hex,
-                            staged_public_key: pending.staged_public_key,
+                    runtime
+                        .find_pending_request(enrollment_generation_id)
+                        .and_then(|pending| {
+                            pending.test_receipt_qpc_ticks.map(|rt| ReceiptObservation {
+                                request_qpc_ticks: pending.request_qpc_ticks,
+                                receipt_qpc_ticks: rt,
+                                boot_session_id: pending.boot_session_id,
+                                receipt_nonce: pending.device_registration_nonce,
+                                raw_efr1_digest,
+                                security_device_id: pending.security_device_id,
+                                enrollment_generation_id_hex: pending.enrollment_generation_id_hex,
+                                staged_public_key: pending.staged_public_key,
+                            })
                         })
-                    })
                 })
         });
 
     if let Some(ref obs) = active_obs {
         if obs.receipt_nonce != efr1.receipt_nonce {
-            return Err("RECEIPT_NONCE_MISMATCH: receipt nonce does not match registration challenge nonce".to_string());
+            return Err(
+                "RECEIPT_NONCE_MISMATCH: receipt nonce does not match registration challenge nonce"
+                    .to_string(),
+            );
         }
     }
 
@@ -1899,33 +2229,56 @@ pub fn finalize_device_enrollment_internal_with_hooks(
 
         let current_boot = super::monotonic_clock::boot_session_id();
         if obs.boot_session_id != current_boot {
-            return Err("TRUSTED_TIME_UNAVAILABLE_REANCHOR_REQUIRED: boot session mismatch".to_string());
+            return Err(
+                "TRUSTED_TIME_UNAVAILABLE_REANCHOR_REQUIRED: boot session mismatch".to_string(),
+            );
         }
         if obs.receipt_nonce != efr1.receipt_nonce {
-            return Err("RECEIPT_NONCE_MISMATCH: receipt nonce does not match registration challenge nonce".to_string());
+            return Err(
+                "RECEIPT_NONCE_MISMATCH: receipt nonce does not match registration challenge nonce"
+                    .to_string(),
+            );
         }
-        if !obs.enrollment_generation_id_hex.eq_ignore_ascii_case(enrollment_generation_id) {
-            return Err("RECEIPT_BINDING_MISMATCH: generation id mismatch in receipt context".to_string());
+        if !obs
+            .enrollment_generation_id_hex
+            .eq_ignore_ascii_case(enrollment_generation_id)
+        {
+            return Err(
+                "RECEIPT_BINDING_MISMATCH: generation id mismatch in receipt context".to_string(),
+            );
         }
         if obs.security_device_id != sec_id_bytes {
-            return Err("RECEIPT_BINDING_MISMATCH: security device id mismatch in receipt context".to_string());
+            return Err(
+                "RECEIPT_BINDING_MISMATCH: security device id mismatch in receipt context"
+                    .to_string(),
+            );
         }
         if obs.staged_public_key != accepted_pubkey_bytes {
-            return Err("RECEIPT_BINDING_MISMATCH: public key mismatch in receipt context".to_string());
+            return Err(
+                "RECEIPT_BINDING_MISMATCH: public key mismatch in receipt context".to_string(),
+            );
         }
         if obs.raw_efr1_digest != raw_efr1_digest {
-            return Err("RECEIPT_BINDING_MISMATCH: raw EFR1 digest mismatch in receipt observation".to_string());
+            return Err(
+                "RECEIPT_BINDING_MISMATCH: raw EFR1 digest mismatch in receipt observation"
+                    .to_string(),
+            );
         }
 
         let request_ticks = obs.request_qpc_ticks;
         let receipt_ticks = obs.receipt_qpc_ticks;
-        let approval_ticks = super::monotonic_clock::read_qpc_ticks()
-            .map_err(|e| format!("TRUSTED_TIME_UNAVAILABLE_REANCHOR_REQUIRED: monotonic error: {e:?}"))?;
-        let freq = super::monotonic_clock::qpc_frequency()
-            .map_err(|e| format!("TRUSTED_TIME_UNAVAILABLE_REANCHOR_REQUIRED: monotonic error: {e:?}"))?;
+        let approval_ticks = super::monotonic_clock::read_qpc_ticks().map_err(|e| {
+            format!("TRUSTED_TIME_UNAVAILABLE_REANCHOR_REQUIRED: monotonic error: {e:?}")
+        })?;
+        let freq = super::monotonic_clock::qpc_frequency().map_err(|e| {
+            format!("TRUSTED_TIME_UNAVAILABLE_REANCHOR_REQUIRED: monotonic error: {e:?}")
+        })?;
 
         if freq == 0 {
-            return Err("TRUSTED_TIME_UNAVAILABLE_REANCHOR_REQUIRED: invalid zero QPC frequency".to_string());
+            return Err(
+                "TRUSTED_TIME_UNAVAILABLE_REANCHOR_REQUIRED: invalid zero QPC frequency"
+                    .to_string(),
+            );
         }
         if receipt_ticks < request_ticks {
             return Err("TRUSTED_TIME_UNAVAILABLE_REANCHOR_REQUIRED: monotonic clock anomaly (receipt ticks < request ticks)".to_string());
@@ -1934,44 +2287,57 @@ pub fn finalize_device_enrollment_internal_with_hooks(
             return Err("TRUSTED_TIME_UNAVAILABLE_REANCHOR_REQUIRED: monotonic clock anomaly (approval ticks < receipt ticks)".to_string());
         }
 
-        let rtt_upper_ms = super::monotonic_clock::ticks_to_elapsed_ms(request_ticks, receipt_ticks, freq)
-            .map_err(|e| format!("TRUSTED_TIME_UNAVAILABLE_REANCHOR_REQUIRED: {e:?}"))?;
-        let elapsed_ms = super::monotonic_clock::ticks_to_elapsed_ms(receipt_ticks, approval_ticks, freq)
-            .map_err(|e| format!("TRUSTED_TIME_UNAVAILABLE_REANCHOR_REQUIRED: {e:?}"))?;
+        let rtt_upper_ms =
+            super::monotonic_clock::ticks_to_elapsed_ms(request_ticks, receipt_ticks, freq)
+                .map_err(|e| format!("TRUSTED_TIME_UNAVAILABLE_REANCHOR_REQUIRED: {e:?}"))?;
+        let elapsed_ms =
+            super::monotonic_clock::ticks_to_elapsed_ms(receipt_ticks, approval_ticks, freq)
+                .map_err(|e| format!("TRUSTED_TIME_UNAVAILABLE_REANCHOR_REQUIRED: {e:?}"))?;
 
-        let _l_ms = efr1.server_sent_at_ms
+        let _l_ms = efr1
+            .server_sent_at_ms
             .checked_add(elapsed_ms)
-            .ok_or_else(|| "TRUSTED_TIME_UNAVAILABLE_REANCHOR_REQUIRED: calculation overflow".to_string())?;
+            .ok_or_else(|| {
+                "TRUSTED_TIME_UNAVAILABLE_REANCHOR_REQUIRED: calculation overflow".to_string()
+            })?;
 
-        let u_ms = efr1.server_sent_at_ms
+        let u_ms = efr1
+            .server_sent_at_ms
             .checked_add(rtt_upper_ms)
             .and_then(|t| t.checked_add(elapsed_ms))
-            .ok_or_else(|| "TRUSTED_TIME_UNAVAILABLE_REANCHOR_REQUIRED: calculation overflow".to_string())?;
+            .ok_or_else(|| {
+                "TRUSTED_TIME_UNAVAILABLE_REANCHOR_REQUIRED: calculation overflow".to_string()
+            })?;
 
         u_ms
     } else {
         get_dec_d07_trusted_now_ms(app_data_dir)?
     };
 
-    validate_signing_key_lifecycle(
-        &manifest,
-        &efr1.signing_key_id,
-        trusted_now_ms,
-    )?;
+    validate_signing_key_lifecycle(&manifest, &efr1.signing_key_id, trusted_now_ms)?;
 
     let vk = VerifyingKey::from_bytes(&signing_key_entry.public_key)
         .map_err(|e| format!("INVALID_VERIFYING_KEY: {e}"))?;
     let preimage = frames::efr1_signature_preimage(&efr1)
         .map_err(|e| format!("CANNOT_BUILD_PREIMAGE: {e:?}"))?;
     let sig = Signature::from_bytes(&efr1.signature);
-    vk.verify(&preimage, &sig)
-        .map_err(|_| "RECEIPT_SIGNATURE_INVALID: server receipt signature verification failed".to_string())?;
+    vk.verify(&preimage, &sig).map_err(|_| {
+        "RECEIPT_SIGNATURE_INVALID: server receipt signature verification failed".to_string()
+    })?;
     // 1. Idempotency and stale check
     if let Some(ref fence) = prior_committed_fence {
-        if fence.enrollment_generation_id.eq_ignore_ascii_case(enrollment_generation_id) {
+        if fence
+            .enrollment_generation_id
+            .eq_ignore_ascii_case(enrollment_generation_id)
+        {
             // Same generation! Must match all parameters exactly.
-            if !fence.security_device_id_hex.eq_ignore_ascii_case(security_device_id_hex) {
-                return Err("IDEMPOTENT_REPLAY_MISMATCH: security_device_id_hex mismatch".to_string());
+            if !fence
+                .security_device_id_hex
+                .eq_ignore_ascii_case(security_device_id_hex)
+            {
+                return Err(
+                    "IDEMPOTENT_REPLAY_MISMATCH: security_device_id_hex mismatch".to_string(),
+                );
             }
             if fence.device_key_version != device_key_version {
                 return Err("IDEMPOTENT_REPLAY_MISMATCH: device_key_version mismatch".to_string());
@@ -1988,30 +2354,46 @@ pub fn finalize_device_enrollment_internal_with_hooks(
             }
 
             // Must validate committed fence-selected digest authority (digest-only, no legacy)
-            let sha_hex = fence.manifest_sha256.as_ref()
-                .ok_or_else(|| "IDEMPOTENT_REPLAY_MISMATCH: fence missing manifest_sha256".to_string())?;
+            let sha_hex = fence.manifest_sha256.as_ref().ok_or_else(|| {
+                "IDEMPOTENT_REPLAY_MISMATCH: fence missing manifest_sha256".to_string()
+            })?;
             if !is_canonical_lowercase_sha256(sha_hex) {
-                return Err(format!("IDEMPOTENT_REPLAY_MISMATCH: malformed manifest_sha256 '{sha_hex}'"));
+                return Err(format!(
+                    "IDEMPOTENT_REPLAY_MISMATCH: malformed manifest_sha256 '{sha_hex}'"
+                ));
             }
             let d_path = digest_manifest_path(app_data_dir, sha_hex);
             if !d_path.exists() {
-                return Err("IDEMPOTENT_REPLAY_MISMATCH: committed digest manifest file does not exist".to_string());
+                return Err(
+                    "IDEMPOTENT_REPLAY_MISMATCH: committed digest manifest file does not exist"
+                        .to_string(),
+                );
             }
-            let disk_bytes = fs::read(&d_path)
-                .map_err(|e| format!("IDEMPOTENT_REPLAY_MISMATCH: cannot read committed digest manifest: {e}"))?;
+            let disk_bytes = fs::read(&d_path).map_err(|e| {
+                format!("IDEMPOTENT_REPLAY_MISMATCH: cannot read committed digest manifest: {e}")
+            })?;
             if compute_sha256_hex(&disk_bytes) != *sha_hex {
-                return Err("IDEMPOTENT_REPLAY_MISMATCH: committed digest manifest hash mismatch".to_string());
+                return Err(
+                    "IDEMPOTENT_REPLAY_MISMATCH: committed digest manifest hash mismatch"
+                        .to_string(),
+                );
             }
-            let d_manifest = frames::decode_oks1(&disk_bytes)
-                .map_err(|e| format!("IDEMPOTENT_REPLAY_MISMATCH: typed OKS1 decode failed: {e:?}"))?;
-            let root_pk = hooks.trusted_root_public_key.as_ref()
+            let d_manifest = frames::decode_oks1(&disk_bytes).map_err(|e| {
+                format!("IDEMPOTENT_REPLAY_MISMATCH: typed OKS1 decode failed: {e:?}")
+            })?;
+            let root_pk = hooks
+                .trusted_root_public_key
+                .as_ref()
                 .ok_or_else(|| "IDEMPOTENT_REPLAY_MISMATCH: missing root key".to_string())?;
             let root_vk = VerifyingKey::from_bytes(root_pk)
                 .map_err(|e| format!("IDEMPOTENT_REPLAY_MISMATCH: invalid root key: {e}"))?;
             let d_prefix = frames::oks1_signed_prefix(&d_manifest)
                 .map_err(|e| format!("IDEMPOTENT_REPLAY_MISMATCH: prefix error: {e:?}"))?;
-            root_vk.verify(&d_prefix, &Signature::from_bytes(&d_manifest.signature))
-                .map_err(|_| "IDEMPOTENT_REPLAY_MISMATCH: root signature verification failed".to_string())?;
+            root_vk
+                .verify(&d_prefix, &Signature::from_bytes(&d_manifest.signature))
+                .map_err(|_| {
+                    "IDEMPOTENT_REPLAY_MISMATCH: root signature verification failed".to_string()
+                })?;
 
             if let Some(cand_bytes) = &candidate_bytes_to_persist {
                 if cand_bytes != &disk_bytes {
@@ -2042,7 +2424,11 @@ pub fn finalize_device_enrollment_internal_with_hooks(
     // 2. Use validated staged generation
     let _staged = match staged_record {
         Some(s) => s,
-        None => return Err(format!("STAGED_ENROLLMENT_UNAVAILABLE: generation '{enrollment_generation_id}' not found")),
+        None => {
+            return Err(format!(
+                "STAGED_ENROLLMENT_UNAVAILABLE: generation '{enrollment_generation_id}' not found"
+            ))
+        }
     };
 
     // 3. Ensure generation-scoped key exists and is durable
@@ -2055,17 +2441,17 @@ pub fn finalize_device_enrollment_internal_with_hooks(
             "GENERATION_KEY_UNAVAILABLE_FAIL_CLOSED: generation proof key for '{enrollment_generation_id}' not found"
         ));
     }
-    let key_cipher = fs::read(&gen_key_path)
-        .map_err(|e| format!("cannot read gen key: {e}"))?;
+    let key_cipher = fs::read(&gen_key_path).map_err(|e| format!("cannot read gen key: {e}"))?;
     let key_sha256 = compute_sha256_hex(&key_cipher);
 
     let key_plain = dpapi_unprotect(&key_cipher)
         .map_err(|e| format!("DPAPI unprotect failed on gen key: {e:?}"))?;
-    if key_plain.len() != 32 {
-        return Err("invalid gen key seed length".to_string());
-    }
-    let mut seed = [0u8; 32];
-    seed.copy_from_slice(&key_plain);
+    // SEC-001 epoch-2 rollback remediation (Claude-024): accepts both the
+    // legacy unversioned and current versioned generation-key plaintext
+    // shapes via the centralized decoder (fails closed on an unknown newer
+    // version or any other malformed length).
+    let seed = device_proof::decode_device_proof_key_plaintext(&key_plain)
+        .map_err(|e| format!("invalid gen key seed: {e:?}"))?;
     let signing_key = SigningKey::from_bytes(&seed);
     if signing_key.verifying_key().to_bytes() != accepted_pubkey_bytes {
         return Err("GEN_KEY_PUBLIC_KEY_MISMATCH".to_string());
@@ -2084,18 +2470,25 @@ pub fn finalize_device_enrollment_internal_with_hooks(
     };
     let gen_meta_path = generation_meta_path(app_data_dir, enrollment_generation_id);
     let meta_cipher = if !gen_meta_path.exists() {
-        let meta_bytes = encode_enrm(&meta_frame)
-            .map_err(|e| format!("cannot encode enrm: {e}"))?;
+        let meta_bytes =
+            encode_enrm(&meta_frame).map_err(|e| format!("cannot encode enrm: {e}"))?;
         let cipher = dpapi_protect(&meta_bytes)
             .map_err(|e| format!("DPAPI protect failed on enrm: {e:?}"))?;
-        let gen_meta_tmp = app_data_dir.join(format!("meta-{}-{}.tmp", enrollment_generation_id, rand::random::<u64>()));
+        let gen_meta_tmp = app_data_dir.join(format!(
+            "meta-{}-{}.tmp",
+            enrollment_generation_id,
+            rand::random::<u64>()
+        ));
         durable_first_create_file(&gen_meta_tmp, &gen_meta_path, &cipher)?;
         cipher
     } else {
         // Generation metadata already exists. Treat generation metadata as immutable once created!
-        let existing = fs::read(&gen_meta_path).map_err(|e| format!("cannot read existing gen meta: {e}"))?;
-        let existing_plain = dpapi_unprotect(&existing).map_err(|e| format!("cannot unprotect existing gen meta: {e:?}"))?;
-        let existing_frame = decode_enrm(&existing_plain).map_err(|e| format!("cannot decode existing gen meta: {e}"))?;
+        let existing =
+            fs::read(&gen_meta_path).map_err(|e| format!("cannot read existing gen meta: {e}"))?;
+        let existing_plain = dpapi_unprotect(&existing)
+            .map_err(|e| format!("cannot unprotect existing gen meta: {e:?}"))?;
+        let existing_frame = decode_enrm(&existing_plain)
+            .map_err(|e| format!("cannot decode existing gen meta: {e}"))?;
         if existing_frame != meta_frame {
             return Err("EXISTING_GENERATION_METADATA_MISMATCH: generation metadata already exists and does not match accepted frame".to_string());
         }
@@ -2108,12 +2501,15 @@ pub fn finalize_device_enrollment_internal_with_hooks(
     if compute_sha256_hex(&re_key) != key_sha256 {
         return Err("PRE_FENCE_VALIDATION_FAILED: key sha256 mismatch".to_string());
     }
-    let re_meta = fs::read(&gen_meta_path).map_err(|e| format!("pre-fence meta read failed: {e}"))?;
+    let re_meta =
+        fs::read(&gen_meta_path).map_err(|e| format!("pre-fence meta read failed: {e}"))?;
     if compute_sha256_hex(&re_meta) != meta_sha256 {
         return Err("PRE_FENCE_VALIDATION_FAILED: meta sha256 mismatch".to_string());
     }
-    let re_meta_plain = dpapi_unprotect(&re_meta).map_err(|e| format!("pre-fence meta unprotect failed: {e:?}"))?;
-    let re_frame = decode_enrm(&re_meta_plain).map_err(|e| format!("pre-fence meta decode failed: {e}"))?;
+    let re_meta_plain =
+        dpapi_unprotect(&re_meta).map_err(|e| format!("pre-fence meta unprotect failed: {e:?}"))?;
+    let re_frame =
+        decode_enrm(&re_meta_plain).map_err(|e| format!("pre-fence meta decode failed: {e}"))?;
     if re_frame != meta_frame {
         return Err("PRE_FENCE_VALIDATION_FAILED: meta frame mismatch".to_string());
     }
@@ -2124,22 +2520,29 @@ pub fn finalize_device_enrollment_internal_with_hooks(
             return Err("KEYSET_PERSIST_FAILED: simulated manifest write failure".to_string());
         }
         let sha256_hex = compute_sha256_hex(oks1_bytes);
-        let persist_hooks = hooks.digest_persist_hooks.unwrap_or(DEFAULT_DIGEST_PERSIST_HOOKS);
+        let persist_hooks = hooks
+            .digest_persist_hooks
+            .unwrap_or(DEFAULT_DIGEST_PERSIST_HOOKS);
         persist_digest_manifest_atomic_with_hooks(
             app_data_dir,
             oks1_bytes,
             &sha256_hex,
             hooks.trusted_root_public_key.as_ref(),
             &persist_hooks,
-        ).map_err(|e| format!("KEYSET_PERSIST_FAILED: {e}"))?;
+        )
+        .map_err(|e| format!("KEYSET_PERSIST_FAILED: {e}"))?;
 
         if hooks.fail_manifest_reread {
-            return Err("KEYSET_VERIFY_READ_FAILED: simulated manifest re-read failure".to_string());
+            return Err(
+                "KEYSET_VERIFY_READ_FAILED: simulated manifest re-read failure".to_string(),
+            );
         }
 
         Some(sha256_hex)
     } else {
-        prior_committed_fence.as_ref().and_then(|f| f.manifest_sha256.clone())
+        prior_committed_fence
+            .as_ref()
+            .and_then(|f| f.manifest_sha256.clone())
     };
 
     // 6. Atomically switch active COMMITTED fence
@@ -2157,13 +2560,18 @@ pub fn finalize_device_enrollment_internal_with_hooks(
         meta_sha256,
         manifest_sha256: cand_sha256_opt,
         committed_at_local_ms: now_ms,
+        schema_version: ENROLLMENT_FENCE_SCHEMA_VERSION,
     };
     let fence_json = serde_json::to_vec_pretty(&committed_fence)
         .map_err(|e| format!("cannot serialize fence: {e}"))?;
-    let fence_tmp = app_data_dir.join(format!("fence-{}-{}.tmp", enrollment_generation_id, rand::random::<u64>()));
+    let fence_tmp = app_data_dir.join(format!(
+        "fence-{}-{}.tmp",
+        enrollment_generation_id,
+        rand::random::<u64>()
+    ));
     {
-        let mut f = File::create(&fence_tmp)
-            .map_err(|e| format!("cannot create fence tmp: {e}"))?;
+        let mut f =
+            File::create(&fence_tmp).map_err(|e| format!("cannot create fence tmp: {e}"))?;
         f.write_all(&fence_json)
             .map_err(|e| format!("cannot write fence tmp: {e}"))?;
         f.sync_all()
@@ -2263,7 +2671,10 @@ mod tests {
         let dir = std::env::temp_dir().join(format!(
             "twinpet-enrm-test-{}-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos(),
             n
         ));
         fs::create_dir_all(&dir).unwrap();
@@ -2271,8 +2682,12 @@ mod tests {
     }
 
     fn setup_test_device(dir: &Path) -> ([u8; 16], String) {
-        let sec_id = super::super::security_device_id::resolve_or_create_security_device_id(dir).unwrap();
-        let sec_id_hex = sec_id.iter().map(|b| format!("{b:02x}")).collect::<String>();
+        let sec_id =
+            super::super::security_device_id::resolve_or_create_security_device_id(dir).unwrap();
+        let sec_id_hex = sec_id
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<String>();
         (sec_id, sec_id_hex)
     }
 
@@ -2395,8 +2810,17 @@ mod tests {
             sec_bytes[i] = u8::from_str_radix(&sec_id_hex[i * 2..i * 2 + 2], 16).unwrap_or(0);
         }
 
-        let safe_branch = if frames::is_canonical_identifier(branch_id) { branch_id } else { "HQ-001" };
-        let safe_version = if device_key_version == 0 || device_key_version > MAX_DEVICE_KEY_VERSION { 1 } else { device_key_version };
+        let safe_branch = if frames::is_canonical_identifier(branch_id) {
+            branch_id
+        } else {
+            "HQ-001"
+        };
+        let safe_version = if device_key_version == 0 || device_key_version > MAX_DEVICE_KEY_VERSION
+        {
+            1
+        } else {
+            device_key_version
+        };
 
         let unsigned_efr1 = frames::EnrollmentFinalizationReceiptFrameV1 {
             operation_kind,
@@ -2498,8 +2922,14 @@ mod tests {
             });
             n
         };
-        let op = if version > 1 { frames::EFR1_OP_RE_ENROLLMENT } else { frames::EFR1_OP_INITIAL_ENROLLMENT };
-        let (receipt_b64, oks1_b64) = test_keyset_and_receipt_with_nonce(op, gen_hex, sec_id_hex, version, pk, branch_id, nonce);
+        let op = if version > 1 {
+            frames::EFR1_OP_RE_ENROLLMENT
+        } else {
+            frames::EFR1_OP_INITIAL_ENROLLMENT
+        };
+        let (receipt_b64, oks1_b64) = test_keyset_and_receipt_with_nonce(
+            op, gen_hex, sec_id_hex, version, pk, branch_id, nonce,
+        );
         let _ = runtime.record_receipt_ingress_from_base64(&receipt_b64);
         finalize_device_enrollment_internal_with_hooks(
             runtime,
@@ -2552,14 +2982,18 @@ mod tests {
         let dir = temp_dir();
         let (_sec_id, sec_id_hex) = setup_test_device(&dir);
         let runtime = EnrollmentRuntimeState::new();
-        let outcome = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "00112233445566778899aabbccddeeff",
             [0x01; 32],
         )
         .unwrap();
 
         let pubkey_b64 = base64_encode_std(&outcome.staged_public_key_bytes);
-        let res = test_finalize_device_enrollment(&runtime, &dir,
+        let res = test_finalize_device_enrollment(
+            &runtime,
+            &dir,
             &outcome.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -2573,10 +3007,16 @@ mod tests {
         assert_eq!(res.device_key_version, 1);
         assert_eq!(res.branch_id, "HQ-001");
         assert_eq!(res.security_device_id_hex, sec_id_hex);
-        assert_eq!(res.enrollment_generation_id_hex, outcome.enrollment_generation_id_hex);
+        assert_eq!(
+            res.enrollment_generation_id_hex,
+            outcome.enrollment_generation_id_hex
+        );
 
         let keypair = super::super::device_proof::load_enrolled_device_keypair(&dir).unwrap();
-        assert_eq!(keypair.verifying_key().to_bytes(), outcome.staged_public_key_bytes);
+        assert_eq!(
+            keypair.verifying_key().to_bytes(),
+            outcome.staged_public_key_bytes
+        );
 
         let meta = verify_local_enrollment(&dir, &keypair).unwrap();
         assert_eq!(meta.device_key_version, 1);
@@ -2590,13 +3030,17 @@ mod tests {
         let (_sec_id, sec_id_hex) = setup_test_device(&dir);
         let runtime = EnrollmentRuntimeState::new();
 
-        let outcome1 = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome1 = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "00112233445566778899aabbccddeeff",
             [0x01; 32],
         )
         .unwrap();
         let pubkey_b64_1 = base64_encode_std(&outcome1.staged_public_key_bytes);
-        test_finalize_device_enrollment(&runtime, &dir,
+        test_finalize_device_enrollment(
+            &runtime,
+            &dir,
             &outcome1.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -2606,13 +3050,17 @@ mod tests {
         .unwrap();
 
         // Advance to generation 2, version 2
-        let outcome2 = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome2 = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "00112233445566778899aabbccddeeff",
             [0x02; 32],
         )
         .unwrap();
         let pubkey_b64_2 = base64_encode_std(&outcome2.staged_public_key_bytes);
-        let res2 = test_finalize_device_enrollment(&runtime, &dir,
+        let res2 = test_finalize_device_enrollment(
+            &runtime,
+            &dir,
             &outcome2.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-002",
@@ -2627,7 +3075,10 @@ mod tests {
         assert_eq!(res2.branch_id, "HQ-002");
 
         let keypair2 = super::super::device_proof::load_enrolled_device_keypair(&dir).unwrap();
-        assert_eq!(keypair2.verifying_key().to_bytes(), outcome2.staged_public_key_bytes);
+        assert_eq!(
+            keypair2.verifying_key().to_bytes(),
+            outcome2.staged_public_key_bytes
+        );
 
         let meta2 = verify_local_enrollment(&dir, &keypair2).unwrap();
         assert_eq!(meta2.device_key_version, 2);
@@ -2641,13 +3092,17 @@ mod tests {
         let (_sec_id, sec_id_hex) = setup_test_device(&dir);
         let runtime = EnrollmentRuntimeState::new();
 
-        let outcome = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "00112233445566778899aabbccddeeff",
             [0x01; 32],
         )
         .unwrap();
         let pubkey_b64 = base64_encode_std(&outcome.staged_public_key_bytes);
-        let res1 = test_finalize_device_enrollment(&runtime, &dir,
+        let res1 = test_finalize_device_enrollment(
+            &runtime,
+            &dir,
             &outcome.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -2658,7 +3113,9 @@ mod tests {
         assert_eq!(res1.status, "COMMITTED");
 
         // Idempotent retry with exact same generation and bindings
-        let res2 = test_finalize_device_enrollment(&runtime, &dir,
+        let res2 = test_finalize_device_enrollment(
+            &runtime,
+            &dir,
             &outcome.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -2678,13 +3135,17 @@ mod tests {
         let (_sec_id, sec_id_hex) = setup_test_device(&dir);
         let runtime = EnrollmentRuntimeState::new();
 
-        let outcome = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "00112233445566778899aabbccddeeff",
             [0x01; 32],
         )
         .unwrap();
         let pubkey_b64 = base64_encode_std(&outcome.staged_public_key_bytes);
-        test_finalize_device_enrollment(&runtime, &dir,
+        test_finalize_device_enrollment(
+            &runtime,
+            &dir,
             &outcome.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -2695,7 +3156,9 @@ mod tests {
 
         // Replay with unknown/different generation
         let fake_gen = "ff".repeat(16);
-        let res_replay = test_finalize_device_enrollment(&runtime, &dir,
+        let res_replay = test_finalize_device_enrollment(
+            &runtime,
+            &dir,
             &fake_gen,
             &sec_id_hex,
             "HQ-001",
@@ -2712,7 +3175,9 @@ mod tests {
         let (_sec_id, sec_id_hex) = setup_test_device(&dir);
         let runtime = EnrollmentRuntimeState::new();
 
-        let outcome = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "00112233445566778899aabbccddeeff",
             [0x01; 32],
         )
@@ -2721,7 +3186,9 @@ mod tests {
         let wrong_key = SigningKey::generate(&mut OsRng);
         let wrong_pubkey_b64 = base64_encode_std(&wrong_key.verifying_key().to_bytes());
 
-        let res = test_finalize_device_enrollment(&runtime, &dir,
+        let res = test_finalize_device_enrollment(
+            &runtime,
+            &dir,
             &outcome.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -2739,7 +3206,9 @@ mod tests {
         let (_sec_id, _sec_id_hex) = setup_test_device(&dir);
         let runtime = EnrollmentRuntimeState::new();
 
-        let outcome = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "00112233445566778899aabbccddeeff",
             [0x01; 32],
         )
@@ -2747,7 +3216,9 @@ mod tests {
         let pubkey_b64 = base64_encode_std(&outcome.staged_public_key_bytes);
 
         let wrong_device_hex = "bb".repeat(16);
-        let res = test_finalize_device_enrollment(&runtime, &dir,
+        let res = test_finalize_device_enrollment(
+            &runtime,
+            &dir,
             &outcome.enrollment_generation_id_hex,
             &wrong_device_hex,
             "HQ-001",
@@ -2765,14 +3236,18 @@ mod tests {
         let (_sec_id, sec_id_hex) = setup_test_device(&dir);
         let runtime = EnrollmentRuntimeState::new();
 
-        let outcome = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "00112233445566778899aabbccddeeff",
             [0x01; 32],
         )
         .unwrap();
         let pubkey_b64 = base64_encode_std(&outcome.staged_public_key_bytes);
 
-        let res = test_finalize_device_enrollment(&runtime, &dir,
+        let res = test_finalize_device_enrollment(
+            &runtime,
+            &dir,
             &outcome.enrollment_generation_id_hex,
             &sec_id_hex,
             "INVALID/BRANCH!@",
@@ -2790,14 +3265,18 @@ mod tests {
         let (_sec_id, sec_id_hex) = setup_test_device(&dir);
         let runtime = EnrollmentRuntimeState::new();
 
-        let outcome = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "00112233445566778899aabbccddeeff",
             [0x01; 32],
         )
         .unwrap();
         let pubkey_b64 = base64_encode_std(&outcome.staged_public_key_bytes);
 
-        let res0 = test_finalize_device_enrollment(&runtime, &dir,
+        let res0 = test_finalize_device_enrollment(
+            &runtime,
+            &dir,
             &outcome.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -2816,25 +3295,34 @@ mod tests {
         let runtime = EnrollmentRuntimeState::new();
 
         // Prepare generation 1
-        let outcome1 = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome1 = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "00112233445566778899aabbccddeeff",
             [0x01; 32],
         )
         .unwrap();
 
         // Prepare generation 2
-        let outcome2 = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome2 = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "00112233445566778899aabbccddeeff",
             [0x02; 32],
         )
         .unwrap();
 
-        assert_ne!(outcome1.enrollment_generation_id_hex, outcome2.enrollment_generation_id_hex);
+        assert_ne!(
+            outcome1.enrollment_generation_id_hex,
+            outcome2.enrollment_generation_id_hex
+        );
 
         let pubkey_b64_1 = base64_encode_std(&outcome1.staged_public_key_bytes);
 
         // Under N-IR002, extra uncommitted generation on disk without committed fence fails closed
-        let res_fail = test_finalize_device_enrollment(&runtime, &dir,
+        let res_fail = test_finalize_device_enrollment(
+            &runtime,
+            &dir,
             &outcome1.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -2842,13 +3330,23 @@ mod tests {
             &pubkey_b64_1,
         );
         assert!(res_fail.is_err());
-        assert!(res_fail.unwrap_err().contains("UNTRUSTED_KEYSET_ROTATION_FAIL_CLOSED"));
+        assert!(res_fail
+            .unwrap_err()
+            .contains("UNTRUSTED_KEYSET_ROTATION_FAIL_CLOSED"));
 
         // When extraneous generation 2 artifacts are cleaned, exact pending initial generation 1 succeeds
-        let _ = fs::remove_file(enrollment_staged_generation_path(&dir, &outcome2.enrollment_generation_id_hex));
-        let _ = fs::remove_file(generation_proof_key_path(&dir, &outcome2.enrollment_generation_id_hex));
+        let _ = fs::remove_file(enrollment_staged_generation_path(
+            &dir,
+            &outcome2.enrollment_generation_id_hex,
+        ));
+        let _ = fs::remove_file(generation_proof_key_path(
+            &dir,
+            &outcome2.enrollment_generation_id_hex,
+        ));
 
-        let res = test_finalize_device_enrollment(&runtime, &dir,
+        let res = test_finalize_device_enrollment(
+            &runtime,
+            &dir,
             &outcome1.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -2858,10 +3356,16 @@ mod tests {
         .unwrap();
 
         assert!(res.success);
-        assert_eq!(res.enrollment_generation_id_hex, outcome1.enrollment_generation_id_hex);
+        assert_eq!(
+            res.enrollment_generation_id_hex,
+            outcome1.enrollment_generation_id_hex
+        );
 
         let keypair = super::super::device_proof::load_enrolled_device_keypair(&dir).unwrap();
-        assert_eq!(keypair.verifying_key().to_bytes(), outcome1.staged_public_key_bytes);
+        assert_eq!(
+            keypair.verifying_key().to_bytes(),
+            outcome1.staged_public_key_bytes
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -2871,7 +3375,9 @@ mod tests {
         let (_sec_id, sec_id_hex) = setup_test_device(&dir);
         let runtime = EnrollmentRuntimeState::new();
 
-        let outcome = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "00112233445566778899aabbccddeeff",
             [0x01; 32],
         )
@@ -2886,7 +3392,9 @@ mod tests {
             fail_gen_meta_write: false,
             ..FinalizeHooks::default()
         };
-        let err = test_finalize_device_enrollment_with_hooks(&runtime, &dir,
+        let err = test_finalize_device_enrollment_with_hooks(
+            &runtime,
+            &dir,
             &outcome.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -2897,7 +3405,9 @@ mod tests {
         assert!(err.is_err());
 
         // Exact retry with production hooks succeeds without contacting server again
-        let res_retry = test_finalize_device_enrollment(&runtime, &dir,
+        let res_retry = test_finalize_device_enrollment(
+            &runtime,
+            &dir,
             &outcome.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -2916,13 +3426,17 @@ mod tests {
         let (_sec_id, sec_id_hex) = setup_test_device(&dir);
         let runtime = EnrollmentRuntimeState::new();
 
-        let outcome1 = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome1 = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "00112233445566778899aabbccddeeff",
             [0x01; 32],
         )
         .unwrap();
         let pubkey_b64_1 = base64_encode_std(&outcome1.staged_public_key_bytes);
-        test_finalize_device_enrollment(&runtime, &dir,
+        test_finalize_device_enrollment(
+            &runtime,
+            &dir,
             &outcome1.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -2932,7 +3446,9 @@ mod tests {
         .unwrap();
 
         // Generation 2 attempt with failing hook
-        let outcome2 = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome2 = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "00112233445566778899aabbccddeeff",
             [0x02; 32],
         )
@@ -2946,7 +3462,9 @@ mod tests {
             fail_gen_meta_write: false,
             ..FinalizeHooks::default()
         };
-        let err = test_finalize_device_enrollment_with_hooks(&runtime, &dir,
+        let err = test_finalize_device_enrollment_with_hooks(
+            &runtime,
+            &dir,
             &outcome2.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-002",
@@ -2958,7 +3476,10 @@ mod tests {
 
         // Previous committed generation 1 is fully preserved
         let keypair = super::super::device_proof::load_enrolled_device_keypair(&dir).unwrap();
-        assert_eq!(keypair.verifying_key().to_bytes(), outcome1.staged_public_key_bytes);
+        assert_eq!(
+            keypair.verifying_key().to_bytes(),
+            outcome1.staged_public_key_bytes
+        );
 
         let meta = verify_local_enrollment(&dir, &keypair).unwrap();
         assert_eq!(meta.device_key_version, 1);
@@ -2972,13 +3493,17 @@ mod tests {
         let (_sec_id, sec_id_hex) = setup_test_device(&dir);
         let runtime = EnrollmentRuntimeState::new();
 
-        let outcome = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "00112233445566778899aabbccddeeff",
             [0x01; 32],
         )
         .unwrap();
         let pubkey_b64 = base64_encode_std(&outcome.staged_public_key_bytes);
-        test_finalize_device_enrollment(&runtime, &dir,
+        test_finalize_device_enrollment(
+            &runtime,
+            &dir,
             &outcome.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -3011,12 +3536,16 @@ mod tests {
         let (_sec_id, sec_id_hex) = setup_test_device(&dir);
         let runtime = EnrollmentRuntimeState::new();
 
-        let outcome1 = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome1 = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "00112233445566778899aabbccddeeff",
             [0x01; 32],
         )
         .unwrap();
-        test_finalize_device_enrollment(&runtime, &dir,
+        test_finalize_device_enrollment(
+            &runtime,
+            &dir,
             &outcome1.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -3025,7 +3554,9 @@ mod tests {
         )
         .unwrap();
 
-        let outcome2 = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome2 = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "00112233445566778899aabbccddeeff",
             [0x02; 32],
         )
@@ -3042,7 +3573,9 @@ mod tests {
             fail_gen_meta_write: false,
             ..FinalizeHooks::default()
         };
-        let res = test_finalize_device_enrollment_with_hooks(&runtime, &dir,
+        let res = test_finalize_device_enrollment_with_hooks(
+            &runtime,
+            &dir,
             &outcome2.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-002",
@@ -3054,11 +3587,20 @@ mod tests {
         assert!(res.unwrap_err().contains("ReplaceFileW error code 1176"));
 
         // Modeled 1176 aftermath: canonical fence absent, replacement temp remains, resolver fails closed
-        assert!(!enrollment_fence_path(&dir).exists(), "Canonical fence must be absent under 1176 aftermath");
+        assert!(
+            !enrollment_fence_path(&dir).exists(),
+            "Canonical fence must be absent under 1176 aftermath"
+        );
         let active_res = resolve_active_manifest_path(&dir);
-        assert!(active_res.is_err(), "Resolver must fail closed under 1176 aftermath");
+        assert!(
+            active_res.is_err(),
+            "Resolver must fail closed under 1176 aftermath"
+        );
         let key_res = super::super::device_proof::load_enrolled_device_keypair(&dir);
-        assert!(key_res.is_err(), "Keypair load must fail closed when canonical fence is absent");
+        assert!(
+            key_res.is_err(),
+            "Keypair load must fail closed when canonical fence is absent"
+        );
 
         let _ = fs::remove_dir_all(&dir);
     }
@@ -3069,12 +3611,16 @@ mod tests {
         let (_sec_id, sec_id_hex) = setup_test_device(&dir);
         let runtime = EnrollmentRuntimeState::new();
 
-        let outcome1 = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome1 = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "00112233445566778899aabbccddeeff",
             [0x01; 32],
         )
         .unwrap();
-        test_finalize_device_enrollment(&runtime, &dir,
+        test_finalize_device_enrollment(
+            &runtime,
+            &dir,
             &outcome1.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -3083,7 +3629,9 @@ mod tests {
         )
         .unwrap();
 
-        let outcome2 = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome2 = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "00112233445566778899aabbccddeeff",
             [0x02; 32],
         )
@@ -3100,7 +3648,9 @@ mod tests {
             fail_gen_meta_write: false,
             ..FinalizeHooks::default()
         };
-        let res = test_finalize_device_enrollment_with_hooks(&runtime, &dir,
+        let res = test_finalize_device_enrollment_with_hooks(
+            &runtime,
+            &dir,
             &outcome2.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-002",
@@ -3112,13 +3662,25 @@ mod tests {
         assert!(res.unwrap_err().contains("ReplaceFileW error code 1177"));
 
         // Modeled 1177 aftermath: canonical fence absent, orphan backup file exists, resolver fails closed
-        assert!(!enrollment_fence_path(&dir).exists(), "Canonical fence must be absent under 1177 aftermath");
+        assert!(
+            !enrollment_fence_path(&dir).exists(),
+            "Canonical fence must be absent under 1177 aftermath"
+        );
         let orphan_path = dir.join("fence-orphan-1177.tmp");
-        assert!(orphan_path.exists(), "1177 orphan fence must exist at modeled orphan path");
+        assert!(
+            orphan_path.exists(),
+            "1177 orphan fence must exist at modeled orphan path"
+        );
         let active_res = resolve_active_manifest_path(&dir);
-        assert!(active_res.is_err(), "Resolver must fail closed under 1177 aftermath");
+        assert!(
+            active_res.is_err(),
+            "Resolver must fail closed under 1177 aftermath"
+        );
         let key_res = super::super::device_proof::load_enrolled_device_keypair(&dir);
-        assert!(key_res.is_err(), "Keypair load must fail closed when canonical fence is absent");
+        assert!(
+            key_res.is_err(),
+            "Keypair load must fail closed when canonical fence is absent"
+        );
 
         let _ = fs::remove_dir_all(&dir);
     }
@@ -3129,12 +3691,16 @@ mod tests {
         let (_sec_id, sec_id_hex) = setup_test_device(&dir);
         let runtime = EnrollmentRuntimeState::new();
 
-        let outcome1 = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome1 = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "00112233445566778899aabbccddeeff",
             [0x01; 32],
         )
         .unwrap();
-        test_finalize_device_enrollment(&runtime, &dir,
+        test_finalize_device_enrollment(
+            &runtime,
+            &dir,
             &outcome1.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -3143,7 +3709,9 @@ mod tests {
         )
         .unwrap();
 
-        let outcome2 = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome2 = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "00112233445566778899aabbccddeeff",
             [0x02; 32],
         )
@@ -3159,7 +3727,9 @@ mod tests {
             fail_gen_meta_write: false,
             ..FinalizeHooks::default()
         };
-        let res = test_finalize_device_enrollment_with_hooks(&runtime, &dir,
+        let res = test_finalize_device_enrollment_with_hooks(
+            &runtime,
+            &dir,
             &outcome2.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-002",
@@ -3177,12 +3747,18 @@ mod tests {
         let fence_bytes = fs::read(enrollment_fence_path(&dir)).unwrap();
         let fence: EnrollmentFenceState = serde_json::from_slice(&fence_bytes).unwrap();
         assert_eq!(fence.state, "COMMITTED");
-        assert_eq!(fence.enrollment_generation_id, outcome1.enrollment_generation_id_hex);
+        assert_eq!(
+            fence.enrollment_generation_id,
+            outcome1.enrollment_generation_id_hex
+        );
         assert_eq!(fence.device_key_version, 1);
 
         // Previous committed generation 1 remains strictly valid
         let keypair = super::super::device_proof::load_enrolled_device_keypair(&dir).unwrap();
-        assert_eq!(keypair.verifying_key().to_bytes(), outcome1.staged_public_key_bytes);
+        assert_eq!(
+            keypair.verifying_key().to_bytes(),
+            outcome1.staged_public_key_bytes
+        );
 
         let meta = verify_local_enrollment(&dir, &keypair).unwrap();
         assert_eq!(meta.device_key_version, 1);
@@ -3210,7 +3786,9 @@ mod tests {
         let (_sec_id, sec_id_hex) = setup_test_device(&dir);
         let runtime = EnrollmentRuntimeState::new();
 
-        let outcome = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "00112233445566778899aabbccddeeff",
             [0x01; 32],
         )
@@ -3227,7 +3805,9 @@ mod tests {
             fail_gen_meta_write: false,
             ..FinalizeHooks::default()
         };
-        let res = test_finalize_device_enrollment_with_hooks(&runtime, &dir,
+        let res = test_finalize_device_enrollment_with_hooks(
+            &runtime,
+            &dir,
             &outcome.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -3258,7 +3838,9 @@ mod tests {
         let runtime = EnrollmentRuntimeState::new();
 
         // Case A: First enrollment fails at key write
-        let outcome = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "00112233445566778899aabbccddeeff",
             [0x01; 32],
         )
@@ -3270,7 +3852,9 @@ mod tests {
             fail_gen_meta_write: false,
             ..FinalizeHooks::default()
         };
-        let res = test_finalize_device_enrollment_with_hooks(&runtime, &dir,
+        let res = test_finalize_device_enrollment_with_hooks(
+            &runtime,
+            &dir,
             &outcome.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -3292,12 +3876,16 @@ mod tests {
         // Case B: Re-enrollment key write failure preserves previous committed generation
         let dir = temp_dir();
         let (_sec_id, sec_id_hex) = setup_test_device(&dir);
-        let outcome1 = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome1 = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "00112233445566778899aabbccddeeff",
             [0x01; 32],
         )
         .unwrap();
-        test_finalize_device_enrollment(&runtime, &dir,
+        test_finalize_device_enrollment(
+            &runtime,
+            &dir,
             &outcome1.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -3306,12 +3894,16 @@ mod tests {
         )
         .unwrap();
 
-        let outcome2 = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome2 = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "00112233445566778899aabbccddeeff",
             [0x02; 32],
         )
         .unwrap();
-        let res2 = test_finalize_device_enrollment_with_hooks(&runtime, &dir,
+        let res2 = test_finalize_device_enrollment_with_hooks(
+            &runtime,
+            &dir,
             &outcome2.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-002",
@@ -3326,7 +3918,10 @@ mod tests {
 
         // Disk check: generation 1 remains intact and valid
         let keypair = super::super::device_proof::load_enrolled_device_keypair(&dir).unwrap();
-        assert_eq!(keypair.verifying_key().to_bytes(), outcome1.staged_public_key_bytes);
+        assert_eq!(
+            keypair.verifying_key().to_bytes(),
+            outcome1.staged_public_key_bytes
+        );
         let meta = verify_local_enrollment(&dir, &keypair).unwrap();
         assert_eq!(meta.device_key_version, 1);
 
@@ -3340,7 +3935,9 @@ mod tests {
         let runtime = EnrollmentRuntimeState::new();
 
         // Case A: First enrollment fails at metadata write
-        let outcome = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "00112233445566778899aabbccddeeff",
             [0x01; 32],
         )
@@ -3352,7 +3949,9 @@ mod tests {
             fail_gen_meta_write: true,
             ..FinalizeHooks::default()
         };
-        let res = test_finalize_device_enrollment_with_hooks(&runtime, &dir,
+        let res = test_finalize_device_enrollment_with_hooks(
+            &runtime,
+            &dir,
             &outcome.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -3374,12 +3973,16 @@ mod tests {
         // Case B: Re-enrollment metadata write failure preserves previous committed generation
         let dir = temp_dir();
         let (_sec_id, sec_id_hex) = setup_test_device(&dir);
-        let outcome1 = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome1 = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "00112233445566778899aabbccddeeff",
             [0x01; 32],
         )
         .unwrap();
-        test_finalize_device_enrollment(&runtime, &dir,
+        test_finalize_device_enrollment(
+            &runtime,
+            &dir,
             &outcome1.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -3388,12 +3991,16 @@ mod tests {
         )
         .unwrap();
 
-        let outcome2 = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome2 = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "00112233445566778899aabbccddeeff",
             [0x02; 32],
         )
         .unwrap();
-        let res2 = test_finalize_device_enrollment_with_hooks(&runtime, &dir,
+        let res2 = test_finalize_device_enrollment_with_hooks(
+            &runtime,
+            &dir,
             &outcome2.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-002",
@@ -3408,7 +4015,10 @@ mod tests {
 
         // Disk check: generation 1 remains intact and valid
         let keypair = super::super::device_proof::load_enrolled_device_keypair(&dir).unwrap();
-        assert_eq!(keypair.verifying_key().to_bytes(), outcome1.staged_public_key_bytes);
+        assert_eq!(
+            keypair.verifying_key().to_bytes(),
+            outcome1.staged_public_key_bytes
+        );
         let meta = verify_local_enrollment(&dir, &keypair).unwrap();
         assert_eq!(meta.device_key_version, 1);
 
@@ -3421,13 +4031,17 @@ mod tests {
         let (_sec_id, sec_id_hex) = setup_test_device(&dir);
         let runtime = EnrollmentRuntimeState::new();
 
-        let outcome1 = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome1 = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "00112233445566778899aabbccddeeff",
             [0x01; 32],
         )
         .unwrap();
         let pubkey_b64 = base64_encode_std(&outcome1.staged_public_key_bytes);
-        test_finalize_device_enrollment(&runtime, &dir,
+        test_finalize_device_enrollment(
+            &runtime,
+            &dir,
             &outcome1.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -3453,7 +4067,10 @@ mod tests {
 
         // Reopen / reload from disk and assert strict fail-closed
         let key_res = super::super::device_proof::load_enrolled_device_keypair(&dir);
-        assert_eq!(key_res.err(), Some(super::super::device_proof::DeviceProofError::NotFound));
+        assert_eq!(
+            key_res.err(),
+            Some(super::super::device_proof::DeviceProofError::NotFound)
+        );
 
         let challenge_res = super::super::staff_session::prepare_staff_session_challenge_internal(
             &dir,
@@ -3464,7 +4081,9 @@ mod tests {
         assert!(challenge_res.is_err());
 
         let fake_gen = "00112233445566778899aabbccddeeff";
-        let finalize_res = test_finalize_device_enrollment(&runtime, &dir,
+        let finalize_res = test_finalize_device_enrollment(
+            &runtime,
+            &dir,
             fake_gen,
             &sec_id_hex,
             "HQ-001",
@@ -3482,13 +4101,17 @@ mod tests {
         let (_sec_id, sec_id_hex) = setup_test_device(&dir);
         let runtime = EnrollmentRuntimeState::new();
 
-        let outcome1 = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome1 = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "00112233445566778899aabbccddeeff",
             [0x01; 32],
         )
         .unwrap();
         let pubkey_b64 = base64_encode_std(&outcome1.staged_public_key_bytes);
-        test_finalize_device_enrollment(&runtime, &dir,
+        test_finalize_device_enrollment(
+            &runtime,
+            &dir,
             &outcome1.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -3526,7 +4149,9 @@ mod tests {
         );
         assert!(challenge_res.is_err());
 
-        let finalize_res = test_finalize_device_enrollment(&runtime, &dir,
+        let finalize_res = test_finalize_device_enrollment(
+            &runtime,
+            &dir,
             &gen_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -3544,13 +4169,17 @@ mod tests {
         let (_sec_id, sec_id_hex) = setup_test_device(&dir);
         let runtime = EnrollmentRuntimeState::new();
 
-        let outcome = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "00112233445566778899aabbccddeeff",
             [0x01; 32],
         )
         .unwrap();
         let pubkey_b64 = base64_encode_std(&outcome.staged_public_key_bytes);
-        test_finalize_device_enrollment(&runtime, &dir,
+        test_finalize_device_enrollment(
+            &runtime,
+            &dir,
             &outcome.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -3565,32 +4194,40 @@ mod tests {
         // 1. Missing fence
         fs::remove_file(&fence_path).unwrap();
         assert!(super::super::device_proof::load_enrolled_device_keypair(&dir).is_err());
-        assert!(super::super::staff_session::prepare_staff_session_challenge_internal(
+        assert!(
+            super::super::staff_session::prepare_staff_session_challenge_internal(
+                &dir,
+                "SSA1_LOGIN",
+                "HQ-001",
+                "STAFF-001",
+            )
+            .is_err()
+        );
+        assert!(test_finalize_device_enrollment(
+            &runtime,
             &dir,
-            "SSA1_LOGIN",
-            "HQ-001",
-            "STAFF-001",
-        ).is_err());
-        assert!(test_finalize_device_enrollment(&runtime, &dir,
             &outcome.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
             1,
             &pubkey_b64,
-        ).is_err());
+        )
+        .is_err());
 
         // 2. Corrupt / non-JSON fence
         fs::write(&fence_path, b"{CORRUPT_FENCE_JSON").unwrap();
         assert!(super::super::device_proof::load_enrolled_device_keypair(&dir).is_err());
 
         // 3. Non-COMMITTED state in fence
-        let mut uncommitted_fence: EnrollmentFenceState = serde_json::from_slice(&valid_fence_bytes).unwrap();
+        let mut uncommitted_fence: EnrollmentFenceState =
+            serde_json::from_slice(&valid_fence_bytes).unwrap();
         uncommitted_fence.state = "PREPARED".to_string();
         fs::write(&fence_path, serde_json::to_vec(&uncommitted_fence).unwrap()).unwrap();
         assert!(super::super::device_proof::load_enrolled_device_keypair(&dir).is_err());
 
         // 4. Empty generation ID in fence
-        let mut empty_gen_fence: EnrollmentFenceState = serde_json::from_slice(&valid_fence_bytes).unwrap();
+        let mut empty_gen_fence: EnrollmentFenceState =
+            serde_json::from_slice(&valid_fence_bytes).unwrap();
         empty_gen_fence.enrollment_generation_id = "   ".to_string();
         fs::write(&fence_path, serde_json::to_vec(&empty_gen_fence).unwrap()).unwrap();
         assert!(super::super::device_proof::load_enrolled_device_keypair(&dir).is_err());
@@ -3599,7 +4236,11 @@ mod tests {
         let empty_dir = temp_dir();
         assert!(super::super::device_proof::load_enrolled_device_keypair(&empty_dir).is_err());
         let entries: Vec<_> = fs::read_dir(&empty_dir).unwrap().collect();
-        assert_eq!(entries.len(), 0, "no key generation or fallback files may be created on load");
+        assert_eq!(
+            entries.len(),
+            0,
+            "no key generation or fallback files may be created on load"
+        );
         let _ = fs::remove_dir_all(&empty_dir);
 
         let _ = fs::remove_dir_all(&dir);
@@ -3611,14 +4252,18 @@ mod tests {
         let (_sec_id, sec_id_hex) = setup_test_device(&dir);
         let runtime = EnrollmentRuntimeState::new();
 
-        let outcome = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "00112233445566778899aabbccddeeff",
             [0x01; 32],
         )
         .unwrap();
         let pubkey_b64 = base64_encode_std(&outcome.staged_public_key_bytes);
 
-        test_finalize_device_enrollment(&runtime, &dir,
+        test_finalize_device_enrollment(
+            &runtime,
+            &dir,
             &outcome.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -3653,7 +4298,9 @@ mod tests {
         let dir = temp_dir();
         let (_sec_id, sec_id_hex) = setup_test_device(&dir);
         let runtime = EnrollmentRuntimeState::new();
-        let outcome = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "00112233445566778899aabbccddeeff",
             [0x01; 32],
         )
@@ -3672,7 +4319,9 @@ mod tests {
         );
 
         // Sub-test A: missing receipt fails with SERVER_RECEIPT_REQUIRED
-        let err_missing = finalize_device_enrollment_internal(&runtime, &dir,
+        let err_missing = finalize_device_enrollment_internal(
+            &runtime,
+            &dir,
             &outcome.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -3686,7 +4335,9 @@ mod tests {
         assert!(err_missing.unwrap_err().contains("SERVER_RECEIPT_REQUIRED"));
 
         // Sub-test B: empty receipt fails with SERVER_RECEIPT_REQUIRED
-        let err_empty = finalize_device_enrollment_internal(&runtime, &dir,
+        let err_empty = finalize_device_enrollment_internal(
+            &runtime,
+            &dir,
             &outcome.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -3700,7 +4351,9 @@ mod tests {
         assert!(err_empty.unwrap_err().contains("SERVER_RECEIPT_REQUIRED"));
 
         // Sub-test C: malformed base64 fails with RECEIPT_DECODE_FAILED
-        let err_b64 = finalize_device_enrollment_internal(&runtime, &dir,
+        let err_b64 = finalize_device_enrollment_internal(
+            &runtime,
+            &dir,
             &outcome.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -3718,7 +4371,9 @@ mod tests {
         let last_idx = tampered_bytes.len() - 1;
         tampered_bytes[last_idx] ^= 0xff;
         let tampered_receipt = base64_encode_std(&tampered_bytes);
-        let err_sig = finalize_device_enrollment_internal(&runtime, &dir,
+        let err_sig = finalize_device_enrollment_internal(
+            &runtime,
+            &dir,
             &outcome.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -3740,7 +4395,9 @@ mod tests {
             pk,
             "HQ-001",
         );
-        let err_gen = finalize_device_enrollment_internal(&runtime, &dir,
+        let err_gen = finalize_device_enrollment_internal(
+            &runtime,
+            &dir,
             &outcome.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -3762,7 +4419,9 @@ mod tests {
             pk,
             "HQ-001",
         );
-        let err_dev = finalize_device_enrollment_internal(&runtime, &dir,
+        let err_dev = finalize_device_enrollment_internal(
+            &runtime,
+            &dir,
             &outcome.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -3784,7 +4443,9 @@ mod tests {
             pk,
             "HQ-001",
         );
-        let err_ver = finalize_device_enrollment_internal(&runtime, &dir,
+        let err_ver = finalize_device_enrollment_internal(
+            &runtime,
+            &dir,
             &outcome.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -3806,7 +4467,9 @@ mod tests {
             pk,
             "BRANCH-999",
         );
-        let err_branch = finalize_device_enrollment_internal(&runtime, &dir,
+        let err_branch = finalize_device_enrollment_internal(
+            &runtime,
+            &dir,
             &outcome.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -3820,7 +4483,9 @@ mod tests {
         assert!(err_branch.unwrap_err().contains("RECEIPT_BINDING_MISMATCH"));
 
         // Sub-test I: missing manifest when no cached manifest exists fails with KEYSET_MANIFEST_UNAVAILABLE
-        let err_manifest = finalize_device_enrollment_internal(&runtime, &dir,
+        let err_manifest = finalize_device_enrollment_internal(
+            &runtime,
+            &dir,
             &outcome.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -3831,10 +4496,14 @@ mod tests {
             None,
         );
         assert!(err_manifest.is_err());
-        assert!(err_manifest.unwrap_err().contains("KEYSET_MANIFEST_UNAVAILABLE"));
+        assert!(err_manifest
+            .unwrap_err()
+            .contains("KEYSET_MANIFEST_UNAVAILABLE"));
 
         // Sub-test J: valid receipt + valid OKS1 commits and caches manifest
-        let res_commit = finalize_device_enrollment_internal(&runtime, &dir,
+        let res_commit = finalize_device_enrollment_internal(
+            &runtime,
+            &dir,
             &outcome.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -3850,7 +4519,9 @@ mod tests {
         assert!(resolve_active_manifest_path(&dir).is_ok());
 
         // Sub-test K: subsequent finalize (or idempotency retry) succeeds using cached manifest with oks1_base64: None
-        let res_idempotent = finalize_device_enrollment_internal(&runtime, &dir,
+        let res_idempotent = finalize_device_enrollment_internal(
+            &runtime,
+            &dir,
             &outcome.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -3873,7 +4544,9 @@ mod tests {
         let (_sec_id, sec_id_hex) = setup_test_device(&dir);
         let runtime = EnrollmentRuntimeState::new();
 
-        let outcome = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "aa".repeat(16).as_str(),
             [0x77u8; 32],
         )
@@ -3909,7 +4582,9 @@ mod tests {
 
         let mut gen_bytes = [0u8; 16];
         for i in 0..16 {
-            gen_bytes[i] = u8::from_str_radix(&outcome.enrollment_generation_id_hex[i * 2..i * 2 + 2], 16).unwrap_or(0);
+            gen_bytes[i] =
+                u8::from_str_radix(&outcome.enrollment_generation_id_hex[i * 2..i * 2 + 2], 16)
+                    .unwrap_or(0);
         }
         let mut sec_bytes = [0u8; 16];
         for i in 0..16 {
@@ -3937,7 +4612,9 @@ mod tests {
         let receipt_b64 = base64_encode_std(&frames::encode_efr1(&signed_efr1).unwrap());
 
         // Attempt finalize with attacker material on clean bootstrap
-        let res = finalize_device_enrollment_internal(&runtime, &dir,
+        let res = finalize_device_enrollment_internal(
+            &runtime,
+            &dir,
             &outcome.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -3951,10 +4628,16 @@ mod tests {
         // MUST FAIL: bootstrap keyset not signed by trusted root!
         assert!(res.is_err());
         let err_msg = res.unwrap_err();
-        assert!(err_msg.contains("UNTRUSTED_KEYSET_BOOTSTRAP"), "Expected UNTRUSTED_KEYSET_BOOTSTRAP, got: {err_msg}");
+        assert!(
+            err_msg.contains("UNTRUSTED_KEYSET_BOOTSTRAP"),
+            "Expected UNTRUSTED_KEYSET_BOOTSTRAP, got: {err_msg}"
+        );
 
         // Manifest file MUST NOT exist on disk!
-        assert!(!dir.join("twinpet-oac-keyset-manifest.bin").exists(), "Manifest was written despite verification failure!");
+        assert!(
+            !dir.join("twinpet-oac-keyset-manifest.bin").exists(),
+            "Manifest was written despite verification failure!"
+        );
 
         let _ = fs::remove_dir_all(&dir);
     }
@@ -3966,13 +4649,17 @@ mod tests {
         let runtime = EnrollmentRuntimeState::new();
 
         // 1. Legitimate initial enrollment (version 1)
-        let outcome1 = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome1 = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "bb".repeat(16).as_str(),
             [0x77u8; 32],
         )
         .unwrap();
         let pubkey_b64_1 = base64_encode_std(&outcome1.staged_public_key_bytes);
-        let res1 = test_finalize_device_enrollment(&runtime, &dir,
+        let res1 = test_finalize_device_enrollment(
+            &runtime,
+            &dir,
             &outcome1.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -3987,7 +4674,9 @@ mod tests {
         let orig_cached_bytes = fs::read(&cached_manifest_path).unwrap();
 
         // 2. Stage second generation for re-enrollment
-        let outcome2 = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome2 = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "cc".repeat(16).as_str(),
             [0x88u8; 32],
         )
@@ -4022,7 +4711,9 @@ mod tests {
 
         let mut gen_bytes2 = [0u8; 16];
         for i in 0..16 {
-            gen_bytes2[i] = u8::from_str_radix(&outcome2.enrollment_generation_id_hex[i * 2..i * 2 + 2], 16).unwrap_or(0);
+            gen_bytes2[i] =
+                u8::from_str_radix(&outcome2.enrollment_generation_id_hex[i * 2..i * 2 + 2], 16)
+                    .unwrap_or(0);
         }
         let mut sec_bytes = [0u8; 16];
         for i in 0..16 {
@@ -4049,7 +4740,9 @@ mod tests {
         };
         let attacker_receipt_b64 = base64_encode_std(&frames::encode_efr1(&signed_efr1).unwrap());
 
-        let res = finalize_device_enrollment_internal(&runtime, &dir,
+        let res = finalize_device_enrollment_internal(
+            &runtime,
+            &dir,
             &outcome2.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -4063,17 +4756,26 @@ mod tests {
         // MUST FAIL: candidate rotation not signed by any trusted authority!
         assert!(res.is_err());
         let err_msg = res.unwrap_err();
-        assert!(err_msg.contains("UNTRUSTED_KEYSET_ROTATION"), "Expected UNTRUSTED_KEYSET_ROTATION, got: {err_msg}");
+        assert!(
+            err_msg.contains("UNTRUSTED_KEYSET_ROTATION"),
+            "Expected UNTRUSTED_KEYSET_ROTATION, got: {err_msg}"
+        );
 
         // Cached manifest MUST NOT have been overwritten!
         let post_attack_cached_bytes = fs::read(&cached_manifest_path).unwrap();
-        assert_eq!(post_attack_cached_bytes, orig_cached_bytes, "Cached manifest was mutated by untrusted attacker rotation!");
+        assert_eq!(
+            post_attack_cached_bytes, orig_cached_bytes,
+            "Cached manifest was mutated by untrusted attacker rotation!"
+        );
 
         // Active fence MUST NOT have been modified!
         let fence_bytes = fs::read(dir.join(ENROLLMENT_FENCE_FILE_NAME)).unwrap();
         let fence: EnrollmentFenceState = serde_json::from_slice(&fence_bytes).unwrap();
         assert_eq!(fence.device_key_version, 1);
-        assert_eq!(fence.enrollment_generation_id, outcome1.enrollment_generation_id_hex);
+        assert_eq!(
+            fence.enrollment_generation_id,
+            outcome1.enrollment_generation_id_hex
+        );
 
         let _ = fs::remove_dir_all(&dir);
     }
@@ -4084,13 +4786,17 @@ mod tests {
         let (_sec_id, sec_id_hex) = setup_test_device(&dir);
         let runtime = EnrollmentRuntimeState::new();
 
-        let outcome1 = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome1 = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "11".repeat(16).as_str(),
             [0x11u8; 32],
         )
         .unwrap();
         let pubkey_b64_1 = base64_encode_std(&outcome1.staged_public_key_bytes);
-        test_finalize_device_enrollment(&runtime, &dir,
+        test_finalize_device_enrollment(
+            &runtime,
+            &dir,
             &outcome1.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -4099,7 +4805,9 @@ mod tests {
         )
         .unwrap();
 
-        let outcome2 = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome2 = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "22".repeat(16).as_str(),
             [0x22u8; 32],
         )
@@ -4118,7 +4826,9 @@ mod tests {
             "HQ-001",
         );
 
-        let err = finalize_device_enrollment_internal(&runtime, &dir,
+        let err = finalize_device_enrollment_internal(
+            &runtime,
+            &dir,
             &outcome2.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -4130,7 +4840,11 @@ mod tests {
         );
         assert!(err.is_err());
         let msg = err.unwrap_err();
-        assert!(msg.contains("RECEIPT_OPERATION_KIND_MISMATCH") || msg.contains("OPERATION_CONTEXT_MISMATCH"), "Expected operation mismatch error, got: {msg}");
+        assert!(
+            msg.contains("RECEIPT_OPERATION_KIND_MISMATCH")
+                || msg.contains("OPERATION_CONTEXT_MISMATCH"),
+            "Expected operation mismatch error, got: {msg}"
+        );
 
         let _ = fs::remove_dir_all(&dir);
     }
@@ -4141,7 +4855,9 @@ mod tests {
         let (_sec_id, sec_id_hex) = setup_test_device(&dir);
         let runtime = EnrollmentRuntimeState::new();
 
-        let outcome = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "33".repeat(16).as_str(),
             [0x33u8; 32],
         )
@@ -4160,7 +4876,9 @@ mod tests {
             "HQ-001",
         );
 
-        let err = finalize_device_enrollment_internal(&runtime, &dir,
+        let err = finalize_device_enrollment_internal(
+            &runtime,
+            &dir,
             &outcome.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -4172,7 +4890,11 @@ mod tests {
         );
         assert!(err.is_err());
         let msg = err.unwrap_err();
-        assert!(msg.contains("RECEIPT_OPERATION_KIND_MISMATCH") || msg.contains("OPERATION_CONTEXT_MISMATCH"), "Expected operation mismatch error, got: {msg}");
+        assert!(
+            msg.contains("RECEIPT_OPERATION_KIND_MISMATCH")
+                || msg.contains("OPERATION_CONTEXT_MISMATCH"),
+            "Expected operation mismatch error, got: {msg}"
+        );
 
         let _ = fs::remove_dir_all(&dir);
     }
@@ -4183,7 +4905,9 @@ mod tests {
         let root_pub = canonical_oac_root_public_key();
         assert_eq!(root_pub.len(), 32);
         // Assert that the derived public key matches the test root seed
-        let derived = SigningKey::from_bytes(&TEST_OAC_ROOT_SEED).verifying_key().to_bytes();
+        let derived = SigningKey::from_bytes(&TEST_OAC_ROOT_SEED)
+            .verifying_key()
+            .to_bytes();
         assert_eq!(root_pub, derived);
     }
 
@@ -4193,7 +4917,9 @@ mod tests {
         let (_sec_id, sec_id_hex) = setup_test_device(&dir);
         let runtime = EnrollmentRuntimeState::new();
 
-        let outcome = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "44".repeat(16).as_str(),
             [0x01u8; 32],
         )
@@ -4208,7 +4934,9 @@ mod tests {
 
         let mut gen_bytes = [0u8; 16];
         for i in 0..16 {
-            gen_bytes[i] = u8::from_str_radix(&outcome.enrollment_generation_id_hex[i * 2..i * 2 + 2], 16).unwrap_or(0);
+            gen_bytes[i] =
+                u8::from_str_radix(&outcome.enrollment_generation_id_hex[i * 2..i * 2 + 2], 16)
+                    .unwrap_or(0);
         }
         let mut sec_bytes = [0u8; 16];
         for i in 0..16 {
@@ -4235,49 +4963,52 @@ mod tests {
         };
         let receipt_b64 = base64_encode_std(&frames::encode_efr1(&signed_efr1).unwrap());
 
-        let make_manifest_b64 = |status: frames::OacKeyLifecycleStatus, verify_until: Option<u64>| -> String {
-            use ed25519_dalek::Signer;
-            let root_key = SigningKey::from_bytes(&TEST_OAC_ROOT_SEED);
-            if status == frames::OacKeyLifecycleStatus::VerifyOnly && verify_until.is_none() {
-                // Manually craft invalid wire format with VERIFY_ONLY status but missing 8-byte expiry
-                let mut prefix = Vec::new();
-                prefix.extend_from_slice(b"OKS1");
-                prefix.push(2);
-                prefix.extend_from_slice(&1u32.to_le_bytes());
-                prefix.extend_from_slice(&1000u64.to_le_bytes());
-                prefix.push(1);
-                prefix.push(raw_key_id.len() as u8);
-                prefix.extend_from_slice(raw_key_id.as_bytes());
-                prefix.extend_from_slice(&oac_pubkey);
-                prefix.push(frames::OAC_KEY_STATUS_VERIFY_ONLY); // missing expiry bytes
+        let make_manifest_b64 =
+            |status: frames::OacKeyLifecycleStatus, verify_until: Option<u64>| -> String {
+                use ed25519_dalek::Signer;
+                let root_key = SigningKey::from_bytes(&TEST_OAC_ROOT_SEED);
+                if status == frames::OacKeyLifecycleStatus::VerifyOnly && verify_until.is_none() {
+                    // Manually craft invalid wire format with VERIFY_ONLY status but missing 8-byte expiry
+                    let mut prefix = Vec::new();
+                    prefix.extend_from_slice(b"OKS1");
+                    prefix.push(2);
+                    prefix.extend_from_slice(&1u32.to_le_bytes());
+                    prefix.extend_from_slice(&1000u64.to_le_bytes());
+                    prefix.push(1);
+                    prefix.push(raw_key_id.len() as u8);
+                    prefix.extend_from_slice(raw_key_id.as_bytes());
+                    prefix.extend_from_slice(&oac_pubkey);
+                    prefix.push(frames::OAC_KEY_STATUS_VERIFY_ONLY); // missing expiry bytes
+                    let sig = root_key.sign(&prefix).to_bytes();
+                    let mut full = prefix;
+                    full.extend_from_slice(&sig);
+                    return base64_encode_std(&full);
+                }
+                let manifest_frame = frames::OacKeysetManifestFrameV1 {
+                    revocation_epoch: 1,
+                    generated_at_server_ms: 1000,
+                    keys: vec![frames::OacKeysetManifestKeyV1 {
+                        signing_key_id: raw_key_id.to_string(),
+                        public_key: oac_pubkey,
+                        status,
+                        verify_until_server_ms: verify_until,
+                    }],
+                    signature: [0u8; 64],
+                };
+                let prefix = frames::oks1_signed_prefix(&manifest_frame).unwrap();
                 let sig = root_key.sign(&prefix).to_bytes();
-                let mut full = prefix;
-                full.extend_from_slice(&sig);
-                return base64_encode_std(&full);
-            }
-            let manifest_frame = frames::OacKeysetManifestFrameV1 {
-                revocation_epoch: 1,
-                generated_at_server_ms: 1000,
-                keys: vec![frames::OacKeysetManifestKeyV1 {
-                    signing_key_id: raw_key_id.to_string(),
-                    public_key: oac_pubkey,
-                    status,
-                    verify_until_server_ms: verify_until,
-                }],
-                signature: [0u8; 64],
+                let signed_manifest = frames::OacKeysetManifestFrameV1 {
+                    signature: sig,
+                    ..manifest_frame
+                };
+                base64_encode_std(&frames::encode_oks1(&signed_manifest).unwrap())
             };
-            let prefix = frames::oks1_signed_prefix(&manifest_frame).unwrap();
-            let sig = root_key.sign(&prefix).to_bytes();
-            let signed_manifest = frames::OacKeysetManifestFrameV1 {
-                signature: sig,
-                ..manifest_frame
-            };
-            base64_encode_std(&frames::encode_oks1(&signed_manifest).unwrap())
-        };
 
         // Subtest 1: RETIRED key is rejected
         let oks1_retired = make_manifest_b64(frames::OacKeyLifecycleStatus::Retired, None);
-        let err_retired = finalize_device_enrollment_internal(&runtime, &dir,
+        let err_retired = finalize_device_enrollment_internal(
+            &runtime,
+            &dir,
             &outcome.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -4294,7 +5025,9 @@ mod tests {
         let oks1_expired = make_manifest_b64(frames::OacKeyLifecycleStatus::VerifyOnly, Some(1500));
         let mut expired_hooks = FinalizeHooks::default();
         expired_hooks.trusted_now_override_ms = Some(2000); // 2000 > 1500
-        let err_expired = finalize_device_enrollment_internal_with_hooks(&runtime, &dir,
+        let err_expired = finalize_device_enrollment_internal_with_hooks(
+            &runtime,
+            &dir,
             &outcome.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -4311,7 +5044,9 @@ mod tests {
         let oks1_exact = make_manifest_b64(frames::OacKeyLifecycleStatus::VerifyOnly, Some(2000));
         let mut exact_hooks = FinalizeHooks::default();
         exact_hooks.trusted_now_override_ms = Some(2000); // 2000 == 2000
-        let err_exact = finalize_device_enrollment_internal_with_hooks(&runtime, &dir,
+        let err_exact = finalize_device_enrollment_internal_with_hooks(
+            &runtime,
+            &dir,
             &outcome.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -4326,7 +5061,9 @@ mod tests {
 
         // Subtest 4: VERIFY_ONLY missing expiry is rejected
         let oks1_missing = make_manifest_b64(frames::OacKeyLifecycleStatus::VerifyOnly, None);
-        let err_missing = finalize_device_enrollment_internal(&runtime, &dir,
+        let err_missing = finalize_device_enrollment_internal(
+            &runtime,
+            &dir,
             &outcome.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -4339,7 +5076,8 @@ mod tests {
         assert!(err_missing.is_err());
         let err_missing_str = err_missing.unwrap_err();
         assert!(
-            err_missing_str.contains("decode failed") || err_missing_str.contains("missing verify_until_server_ms"),
+            err_missing_str.contains("decode failed")
+                || err_missing_str.contains("missing verify_until_server_ms"),
             "Expected decode failure on missing expiry, got: {err_missing_str}"
         );
 
@@ -4359,7 +5097,9 @@ mod tests {
         pk5.copy_from_slice(&outcome5.staged_public_key_bytes);
         let mut gen_bytes5 = [0u8; 16];
         for i in 0..16 {
-            gen_bytes5[i] = u8::from_str_radix(&outcome5.enrollment_generation_id_hex[i * 2..i * 2 + 2], 16).unwrap_or(0);
+            gen_bytes5[i] =
+                u8::from_str_radix(&outcome5.enrollment_generation_id_hex[i * 2..i * 2 + 2], 16)
+                    .unwrap_or(0);
         }
         let unsigned_efr1_5 = frames::EnrollmentFinalizationReceiptFrameV1 {
             operation_kind: frames::EFR1_OP_INITIAL_ENROLLMENT,
@@ -4375,12 +5115,16 @@ mod tests {
         };
         let efr1_preimage_5 = frames::efr1_signature_preimage(&unsigned_efr1_5).unwrap();
         let efr1_sig_5 = oac_signer.sign(&efr1_preimage_5).to_bytes();
-        let receipt_b64_5 = base64_encode_std(&frames::encode_efr1(&frames::EnrollmentFinalizationReceiptFrameV1 {
-            signature: efr1_sig_5,
-            ..unsigned_efr1_5
-        }).unwrap());
+        let receipt_b64_5 = base64_encode_std(
+            &frames::encode_efr1(&frames::EnrollmentFinalizationReceiptFrameV1 {
+                signature: efr1_sig_5,
+                ..unsigned_efr1_5
+            })
+            .unwrap(),
+        );
 
-        let oks1_valid_vo = make_manifest_b64(frames::OacKeyLifecycleStatus::VerifyOnly, Some(3000));
+        let oks1_valid_vo =
+            make_manifest_b64(frames::OacKeyLifecycleStatus::VerifyOnly, Some(3000));
         let mut valid_vo_hooks = FinalizeHooks::default();
         valid_vo_hooks.trusted_now_override_ms = Some(2000);
         let ok_vo = finalize_device_enrollment_internal_with_hooks(
@@ -4402,7 +5146,8 @@ mod tests {
         // Ensure receipt context is populated matching outcome
         let current_ticks = monotonic_clock::read_qpc_ticks().unwrap_or(100);
         let boot_id = monotonic_clock::boot_session_id();
-        let oks1_dec_ok = make_manifest_b64(frames::OacKeyLifecycleStatus::VerifyOnly, Some(10_000_000));
+        let oks1_dec_ok =
+            make_manifest_b64(frames::OacKeyLifecycleStatus::VerifyOnly, Some(10_000_000));
 
         // 6b: Past expiry rejected through DEC-D-07 interval
         runtime.record_pending_request(PendingRequestContext {
@@ -4414,8 +5159,11 @@ mod tests {
             staged_public_key: pk,
             test_receipt_qpc_ticks: Some(current_ticks.saturating_sub(5)),
         });
-        let oks1_dec_expired = make_manifest_b64(frames::OacKeyLifecycleStatus::VerifyOnly, Some(2000));
-        let res_dec_expired = finalize_device_enrollment_internal(&runtime, &dir,
+        let oks1_dec_expired =
+            make_manifest_b64(frames::OacKeyLifecycleStatus::VerifyOnly, Some(2000));
+        let res_dec_expired = finalize_device_enrollment_internal(
+            &runtime,
+            &dir,
             &outcome.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -4430,7 +5178,9 @@ mod tests {
 
         // 6c: Missing receipt context fails closed with TRUSTED_TIME_UNAVAILABLE_REANCHOR_REQUIRED
         runtime.clear();
-        let res_missing_ctx = finalize_device_enrollment_internal(&runtime, &dir,
+        let res_missing_ctx = finalize_device_enrollment_internal(
+            &runtime,
+            &dir,
             &outcome.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -4441,7 +5191,9 @@ mod tests {
             None,
         );
         assert!(res_missing_ctx.is_err());
-        assert!(res_missing_ctx.unwrap_err().contains("TRUSTED_TIME_UNAVAILABLE_REANCHOR_REQUIRED"));
+        assert!(res_missing_ctx
+            .unwrap_err()
+            .contains("TRUSTED_TIME_UNAVAILABLE_REANCHOR_REQUIRED"));
 
         // 6d: Boot session mismatch fails closed
         let mut bad_boot = boot_id;
@@ -4455,7 +5207,9 @@ mod tests {
             staged_public_key: pk,
             test_receipt_qpc_ticks: Some(current_ticks.saturating_sub(5)),
         });
-        let res_boot_mismatch = finalize_device_enrollment_internal(&runtime, &dir,
+        let res_boot_mismatch = finalize_device_enrollment_internal(
+            &runtime,
+            &dir,
             &outcome.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -4466,7 +5220,9 @@ mod tests {
             None,
         );
         assert!(res_boot_mismatch.is_err());
-        assert!(res_boot_mismatch.unwrap_err().contains("boot session mismatch"));
+        assert!(res_boot_mismatch
+            .unwrap_err()
+            .contains("boot session mismatch"));
 
         // 6e: Nonce mismatch fails closed with RECEIPT_NONCE_MISMATCH
         runtime.record_pending_request(PendingRequestContext {
@@ -4478,7 +5234,9 @@ mod tests {
             staged_public_key: pk,
             test_receipt_qpc_ticks: Some(current_ticks.saturating_sub(5)),
         });
-        let res_nonce_mismatch = finalize_device_enrollment_internal(&runtime, &dir,
+        let res_nonce_mismatch = finalize_device_enrollment_internal(
+            &runtime,
+            &dir,
             &outcome.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -4489,7 +5247,9 @@ mod tests {
             None,
         );
         assert!(res_nonce_mismatch.is_err());
-        assert!(res_nonce_mismatch.unwrap_err().contains("RECEIPT_NONCE_MISMATCH"));
+        assert!(res_nonce_mismatch
+            .unwrap_err()
+            .contains("RECEIPT_NONCE_MISMATCH"));
 
         // 6a: Future expiry accepted through DEC-D-07 interval
         runtime.record_pending_request(PendingRequestContext {
@@ -4501,7 +5261,9 @@ mod tests {
             staged_public_key: pk,
             test_receipt_qpc_ticks: Some(current_ticks.saturating_sub(5)),
         });
-        let res_dec_ok = finalize_device_enrollment_internal(&runtime, &dir,
+        let res_dec_ok = finalize_device_enrollment_internal(
+            &runtime,
+            &dir,
             &outcome.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -4511,7 +5273,11 @@ mod tests {
             Some(&oks1_dec_ok),
             None,
         );
-        assert!(res_dec_ok.is_ok(), "res_dec_ok failed: {:?}", res_dec_ok.err());
+        assert!(
+            res_dec_ok.is_ok(),
+            "res_dec_ok failed: {:?}",
+            res_dec_ok.err()
+        );
 
         let _ = fs::remove_dir_all(&dir);
     }
@@ -4522,13 +5288,17 @@ mod tests {
         let (_sec_id, sec_id_hex) = setup_test_device(&dir);
         let runtime = EnrollmentRuntimeState::new();
 
-        let outcome1 = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome1 = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "ee".repeat(16).as_str(),
             [0x11u8; 32],
         )
         .unwrap();
         let pubkey_b64_1 = base64_encode_std(&outcome1.staged_public_key_bytes);
-        test_finalize_device_enrollment(&runtime, &dir,
+        test_finalize_device_enrollment(
+            &runtime,
+            &dir,
             &outcome1.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -4537,7 +5307,9 @@ mod tests {
         )
         .unwrap();
 
-        let outcome2 = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome2 = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "ff".repeat(16).as_str(),
             [0x22u8; 32],
         )
@@ -4573,7 +5345,9 @@ mod tests {
 
         let mut gen_bytes2 = [0u8; 16];
         for i in 0..16 {
-            gen_bytes2[i] = u8::from_str_radix(&outcome2.enrollment_generation_id_hex[i * 2..i * 2 + 2], 16).unwrap_or(0);
+            gen_bytes2[i] =
+                u8::from_str_radix(&outcome2.enrollment_generation_id_hex[i * 2..i * 2 + 2], 16)
+                    .unwrap_or(0);
         }
         let mut sec_bytes = [0u8; 16];
         for i in 0..16 {
@@ -4600,7 +5374,9 @@ mod tests {
         };
         let receipt_b64 = base64_encode_std(&frames::encode_efr1(&signed_efr1).unwrap());
 
-        let res = finalize_device_enrollment_internal(&runtime, &dir,
+        let res = finalize_device_enrollment_internal(
+            &runtime,
+            &dir,
             &outcome2.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -4613,7 +5389,10 @@ mod tests {
 
         assert!(res.is_err());
         let err = res.unwrap_err();
-        assert!(err.contains("UNTRUSTED_KEYSET_ROTATION"), "Expected UNTRUSTED_KEYSET_ROTATION on equal epoch, got: {err}");
+        assert!(
+            err.contains("UNTRUSTED_KEYSET_ROTATION"),
+            "Expected UNTRUSTED_KEYSET_ROTATION on equal epoch, got: {err}"
+        );
         assert!(err.contains("equal-epoch changed bytes and downgrades rejected"));
 
         let _ = fs::remove_dir_all(&dir);
@@ -4625,13 +5404,17 @@ mod tests {
         let (_sec_id, sec_id_hex) = setup_test_device(&dir);
         let runtime = EnrollmentRuntimeState::new();
 
-        let outcome1 = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome1 = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "dd".repeat(16).as_str(),
             [0x11u8; 32],
         )
         .unwrap();
         let pubkey_b64_1 = base64_encode_std(&outcome1.staged_public_key_bytes);
-        test_finalize_device_enrollment(&runtime, &dir,
+        test_finalize_device_enrollment(
+            &runtime,
+            &dir,
             &outcome1.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -4640,7 +5423,9 @@ mod tests {
         )
         .unwrap();
 
-        let outcome2 = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome2 = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "cc".repeat(16).as_str(),
             [0x22u8; 32],
         )
@@ -4676,7 +5461,9 @@ mod tests {
 
         let mut gen_bytes2 = [0u8; 16];
         for i in 0..16 {
-            gen_bytes2[i] = u8::from_str_radix(&outcome2.enrollment_generation_id_hex[i * 2..i * 2 + 2], 16).unwrap_or(0);
+            gen_bytes2[i] =
+                u8::from_str_radix(&outcome2.enrollment_generation_id_hex[i * 2..i * 2 + 2], 16)
+                    .unwrap_or(0);
         }
         let mut sec_bytes = [0u8; 16];
         for i in 0..16 {
@@ -4703,7 +5490,9 @@ mod tests {
         };
         let receipt_b64 = base64_encode_std(&frames::encode_efr1(&signed_efr1).unwrap());
 
-        let res = finalize_device_enrollment_internal(&runtime, &dir,
+        let res = finalize_device_enrollment_internal(
+            &runtime,
+            &dir,
             &outcome2.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -4716,7 +5505,10 @@ mod tests {
 
         assert!(res.is_err());
         let err = res.unwrap_err();
-        assert!(err.contains("UNTRUSTED_KEYSET_ROTATION"), "Expected UNTRUSTED_KEYSET_ROTATION, got: {err}");
+        assert!(
+            err.contains("UNTRUSTED_KEYSET_ROTATION"),
+            "Expected UNTRUSTED_KEYSET_ROTATION, got: {err}"
+        );
         assert!(err.contains("old active keys cannot authenticate rotation"));
 
         let _ = fs::remove_dir_all(&dir);
@@ -4728,7 +5520,9 @@ mod tests {
         let (_sec_id, sec_id_hex) = setup_test_device(&dir);
         let runtime = EnrollmentRuntimeState::new();
 
-        let outcome = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "99".repeat(16).as_str(),
             [0x99u8; 32],
         )
@@ -4750,7 +5544,9 @@ mod tests {
             "HQ-001",
         );
 
-        let res = finalize_device_enrollment_internal(&runtime, &dir,
+        let res = finalize_device_enrollment_internal(
+            &runtime,
+            &dir,
             &outcome.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -4763,7 +5559,10 @@ mod tests {
 
         assert!(res.is_err());
         let err = res.unwrap_err();
-        assert!(err.contains("MALFORMED_FENCE_FAIL_CLOSED"), "Expected MALFORMED_FENCE_FAIL_CLOSED, got: {err}");
+        assert!(
+            err.contains("MALFORMED_FENCE_FAIL_CLOSED"),
+            "Expected MALFORMED_FENCE_FAIL_CLOSED, got: {err}"
+        );
 
         let _ = fs::remove_dir_all(&dir);
     }
@@ -4774,7 +5573,9 @@ mod tests {
         let (_sec_id, sec_id_hex) = setup_test_device(&dir);
         let runtime = EnrollmentRuntimeState::new();
 
-        let outcome = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "ab".repeat(16).as_str(),
             [0xabu8; 32],
         )
@@ -4792,7 +5593,9 @@ mod tests {
         );
 
         // Clean device: caller claims RE_ENROLLMENT
-        let res = finalize_device_enrollment_internal(&runtime, &dir,
+        let res = finalize_device_enrollment_internal(
+            &runtime,
+            &dir,
             &outcome.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -4804,7 +5607,10 @@ mod tests {
         );
         assert!(res.is_err());
         let err = res.unwrap_err();
-        assert!(err.contains("OPERATION_CONTEXT_MISMATCH"), "Expected OPERATION_CONTEXT_MISMATCH, got: {err}");
+        assert!(
+            err.contains("OPERATION_CONTEXT_MISMATCH"),
+            "Expected OPERATION_CONTEXT_MISMATCH, got: {err}"
+        );
 
         let _ = fs::remove_dir_all(&dir);
     }
@@ -4816,13 +5622,17 @@ mod tests {
         let runtime = EnrollmentRuntimeState::new();
 
         // 1. Initial enrollment version 1 succeeds
-        let outcome1 = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome1 = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "71".repeat(16).as_str(),
             [0x71u8; 32],
         )
         .unwrap();
         let pubkey_b64_1 = base64_encode_std(&outcome1.staged_public_key_bytes);
-        test_finalize_device_enrollment(&runtime, &dir,
+        test_finalize_device_enrollment(
+            &runtime,
+            &dir,
             &outcome1.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -4836,7 +5646,9 @@ mod tests {
         let old_manifest_bytes = fs::read(&cached_path).unwrap();
 
         // 2. Stage version 2
-        let outcome2 = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome2 = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "72".repeat(16).as_str(),
             [0x72u8; 32],
         )
@@ -4872,7 +5684,9 @@ mod tests {
 
         let mut gen_bytes2 = [0u8; 16];
         for i in 0..16 {
-            gen_bytes2[i] = u8::from_str_radix(&outcome2.enrollment_generation_id_hex[i * 2..i * 2 + 2], 16).unwrap_or(0);
+            gen_bytes2[i] =
+                u8::from_str_radix(&outcome2.enrollment_generation_id_hex[i * 2..i * 2 + 2], 16)
+                    .unwrap_or(0);
         }
         let mut sec_bytes = [0u8; 16];
         for i in 0..16 {
@@ -4903,7 +5717,9 @@ mod tests {
         let mut fail_persist_hooks = FinalizeHooks::default();
         fail_persist_hooks.fail_manifest_write = true;
 
-        let res = finalize_device_enrollment_internal_with_hooks(&runtime, &dir,
+        let res = finalize_device_enrollment_internal_with_hooks(
+            &runtime,
+            &dir,
             &outcome2.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -4916,21 +5732,35 @@ mod tests {
 
         assert!(res.is_err());
         let err = res.unwrap_err();
-        assert!(err.contains("KEYSET_PERSIST_FAILED"), "Expected KEYSET_PERSIST_FAILED, got: {err}");
+        assert!(
+            err.contains("KEYSET_PERSIST_FAILED"),
+            "Expected KEYSET_PERSIST_FAILED, got: {err}"
+        );
 
         // Previous authority preserved!
         let post_fail_manifest_bytes = fs::read(&cached_path).unwrap();
-        assert_eq!(post_fail_manifest_bytes, old_manifest_bytes, "Manifest was mutated despite persistence failure!");
+        assert_eq!(
+            post_fail_manifest_bytes, old_manifest_bytes,
+            "Manifest was mutated despite persistence failure!"
+        );
 
         let fence_bytes = fs::read(dir.join(ENROLLMENT_FENCE_FILE_NAME)).unwrap();
         let fence: EnrollmentFenceState = serde_json::from_slice(&fence_bytes).unwrap();
-        assert_eq!(fence.device_key_version, 1, "Fence was committed despite keyset persistence failure!");
-        assert_eq!(fence.enrollment_generation_id, outcome1.enrollment_generation_id_hex);
+        assert_eq!(
+            fence.device_key_version, 1,
+            "Fence was committed despite keyset persistence failure!"
+        );
+        assert_eq!(
+            fence.enrollment_generation_id,
+            outcome1.enrollment_generation_id_hex
+        );
 
         // Injected keyset re-read failure (IR-002 part B)
         let mut fail_reread_hooks = FinalizeHooks::default();
         fail_reread_hooks.fail_manifest_reread = true;
-        let res_reread = finalize_device_enrollment_internal_with_hooks(&runtime, &dir,
+        let res_reread = finalize_device_enrollment_internal_with_hooks(
+            &runtime,
+            &dir,
             &outcome2.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -4941,13 +5771,17 @@ mod tests {
             &fail_reread_hooks,
         );
         assert!(res_reread.is_err());
-        assert!(res_reread.unwrap_err().contains("KEYSET_VERIFY_READ_FAILED"));
+        assert!(res_reread
+            .unwrap_err()
+            .contains("KEYSET_VERIFY_READ_FAILED"));
 
         // Injected fence switch failure after candidate B persistence (IR-002 part C)
         // Proves candidate B is durable on disk, but fence remains G1 and resolves authority A!
         let mut fail_fence_hooks = FinalizeHooks::default();
         fail_fence_hooks.fail_fence_switch = true;
-        let res_fence_fail = finalize_device_enrollment_internal_with_hooks(&runtime, &dir,
+        let res_fence_fail = finalize_device_enrollment_internal_with_hooks(
+            &runtime,
+            &dir,
             &outcome2.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -4964,12 +5798,18 @@ mod tests {
         let fence_bytes_post = fs::read(dir.join(ENROLLMENT_FENCE_FILE_NAME)).unwrap();
         let fence_post: EnrollmentFenceState = serde_json::from_slice(&fence_bytes_post).unwrap();
         assert_eq!(fence_post.device_key_version, 1);
-        assert_eq!(fence_post.enrollment_generation_id, outcome1.enrollment_generation_id_hex);
+        assert_eq!(
+            fence_post.enrollment_generation_id,
+            outcome1.enrollment_generation_id_hex
+        );
 
         // Active manifest resolution MUST STILL RESOLVE AUTHORITY A!
         let active_path = resolve_active_manifest_path(&dir).unwrap();
         let active_bytes = fs::read(&active_path).unwrap();
-        assert_eq!(active_bytes, old_manifest_bytes, "Active authority shifted despite fence switch failure!");
+        assert_eq!(
+            active_bytes, old_manifest_bytes,
+            "Active authority shifted despite fence switch failure!"
+        );
 
         let _ = fs::remove_dir_all(&dir);
     }
@@ -4980,7 +5820,9 @@ mod tests {
         let (_sec_id, sec_id_hex) = setup_test_device(&dir);
         let runtime = EnrollmentRuntimeState::new();
 
-        let outcome = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "fe".repeat(16).as_str(),
             [0xfeu8; 32],
         )
@@ -5018,7 +5860,9 @@ mod tests {
         // 2. Server OAC key signs EFR1
         let mut gen_bytes = [0u8; 16];
         for i in 0..16 {
-            gen_bytes[i] = u8::from_str_radix(&outcome.enrollment_generation_id_hex[i * 2..i * 2 + 2], 16).unwrap_or(0);
+            gen_bytes[i] =
+                u8::from_str_radix(&outcome.enrollment_generation_id_hex[i * 2..i * 2 + 2], 16)
+                    .unwrap_or(0);
         }
         let mut sec_bytes = [0u8; 16];
         for i in 0..16 {
@@ -5046,7 +5890,9 @@ mod tests {
         let receipt_b64 = base64_encode_std(&frames::encode_efr1(&signed_efr1).unwrap());
 
         // 3. Native production verifier validates the entire chain
-        let res = finalize_device_enrollment_internal(&runtime, &dir,
+        let res = finalize_device_enrollment_internal(
+            &runtime,
+            &dir,
             &outcome.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -5056,7 +5902,11 @@ mod tests {
             Some(&oks1_b64),
             Some("INITIAL_ENROLLMENT"),
         );
-        assert!(res.is_ok(), "Production verifier failed on legitimate Functions trust chain: {:?}", res.err());
+        assert!(
+            res.is_ok(),
+            "Production verifier failed on legitimate Functions trust chain: {:?}",
+            res.err()
+        );
         let outcome_dto = res.unwrap();
         assert_eq!(outcome_dto.status, "COMMITTED");
 
@@ -5064,13 +5914,14 @@ mod tests {
         let dir_bad = temp_dir();
         let runtime_bad = EnrollmentRuntimeState::new();
         let (_sec_id_bad, sec_id_hex_bad) = setup_test_device(&dir_bad);
-        let outcome_bad = super::super::device_registration_proof::generate_device_registration_proof(
-            &runtime_bad,
-            &dir_bad,
-            "fc".repeat(16).as_str(),
-            [0xfcu8; 32],
-        )
-        .unwrap();
+        let outcome_bad =
+            super::super::device_registration_proof::generate_device_registration_proof(
+                &runtime_bad,
+                &dir_bad,
+                "fc".repeat(16).as_str(),
+                [0xfcu8; 32],
+            )
+            .unwrap();
         let pubkey_b64_bad = base64_encode_std(&outcome_bad.staged_public_key_bytes);
 
         let unrelated_root = SigningKey::generate(&mut OsRng);
@@ -5084,7 +5935,11 @@ mod tests {
 
         let mut gen_bytes_bad = [0u8; 16];
         for i in 0..16 {
-            gen_bytes_bad[i] = u8::from_str_radix(&outcome_bad.enrollment_generation_id_hex[i * 2..i * 2 + 2], 16).unwrap_or(0);
+            gen_bytes_bad[i] = u8::from_str_radix(
+                &outcome_bad.enrollment_generation_id_hex[i * 2..i * 2 + 2],
+                16,
+            )
+            .unwrap_or(0);
         }
         let unsigned_efr1_bad = frames::EnrollmentFinalizationReceiptFrameV1 {
             operation_kind: frames::EFR1_OP_INITIAL_ENROLLMENT,
@@ -5100,10 +5955,13 @@ mod tests {
         };
         let efr1_preimage_bad = frames::efr1_signature_preimage(&unsigned_efr1_bad).unwrap();
         let efr1_sig_bad = server_oac_key.sign(&efr1_preimage_bad).to_bytes();
-        let receipt_b64_bad = base64_encode_std(&frames::encode_efr1(&frames::EnrollmentFinalizationReceiptFrameV1 {
-            signature: efr1_sig_bad,
-            ..unsigned_efr1_bad
-        }).unwrap());
+        let receipt_b64_bad = base64_encode_std(
+            &frames::encode_efr1(&frames::EnrollmentFinalizationReceiptFrameV1 {
+                signature: efr1_sig_bad,
+                ..unsigned_efr1_bad
+            })
+            .unwrap(),
+        );
 
         let res_bad = finalize_device_enrollment_internal(
             &runtime_bad,
@@ -5130,7 +5988,9 @@ mod tests {
         let (_sec_id, sec_id_hex) = setup_test_device(&dir);
         let runtime = EnrollmentRuntimeState::new();
 
-        let outcome = super::super::device_registration_proof::generate_device_registration_proof(&runtime, &dir,
+        let outcome = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
             "55".repeat(16).as_str(),
             [0x55u8; 32],
         )
@@ -5152,7 +6012,9 @@ mod tests {
         let mut fail_hooks = FinalizeHooks::default();
         fail_hooks.fail_gen_meta_write = true;
 
-        let err = finalize_device_enrollment_internal_with_hooks(&runtime, &dir,
+        let err = finalize_device_enrollment_internal_with_hooks(
+            &runtime,
+            &dir,
             &outcome.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -5166,13 +6028,18 @@ mod tests {
         assert!(err.unwrap_err().contains("METADATA_WRITE_FAILED"));
 
         // Critical: Keyset manifest MUST NOT have been written to disk!
-        assert!(!dir.join("twinpet-oac-keyset-manifest.bin").exists(), "Keyset manifest was persisted despite failed finalize!");
+        assert!(
+            !dir.join("twinpet-oac-keyset-manifest.bin").exists(),
+            "Keyset manifest was persisted despite failed finalize!"
+        );
 
         // Now retry with hooks repaired
         let mut ok_hooks = FinalizeHooks::default();
         ok_hooks.fail_gen_meta_write = false;
 
-        let ok_res = finalize_device_enrollment_internal_with_hooks(&runtime, &dir,
+        let ok_res = finalize_device_enrollment_internal_with_hooks(
+            &runtime,
+            &dir,
             &outcome.enrollment_generation_id_hex,
             &sec_id_hex,
             "HQ-001",
@@ -5219,7 +6086,8 @@ mod tests {
         );
 
         // Verify staged file is durable on disk before restart
-        let staged_path = enrollment_staged_generation_path(&dir, &outcome.enrollment_generation_id_hex);
+        let staged_path =
+            enrollment_staged_generation_path(&dir, &outcome.enrollment_generation_id_hex);
         assert!(staged_path.exists());
 
         // Step 2: Simulate process crash and restart: no active fence exists yet
@@ -5286,12 +6154,14 @@ mod tests {
 
         // 1. Runtime A
         let runtime_a = EnrollmentRuntimeState::new();
-        let outcome_a = super::super::device_registration_proof::generate_device_registration_proof(
-            &runtime_a,
-            &dir,
-            "00112233445566778899aabbccddeeff",
-            [0x44; 32],
-        ).unwrap();
+        let outcome_a =
+            super::super::device_registration_proof::generate_device_registration_proof(
+                &runtime_a,
+                &dir,
+                "00112233445566778899aabbccddeeff",
+                [0x44; 32],
+            )
+            .unwrap();
         let gen_hex = outcome_a.enrollment_generation_id_hex.clone();
         let mut pk = [0u8; 32];
         pk.copy_from_slice(&outcome_a.staged_public_key_bytes);
@@ -5315,17 +6185,20 @@ mod tests {
         };
         let prefix = frames::oks1_signed_prefix(&manifest).unwrap();
         let sig = root_key.sign(&prefix).to_bytes();
-        let signed_manifest = frames::OacKeysetManifestFrameV1 { signature: sig, ..manifest };
+        let signed_manifest = frames::OacKeysetManifestFrameV1 {
+            signature: sig,
+            ..manifest
+        };
         let oks1_bytes = frames::encode_oks1(&signed_manifest).unwrap();
         let oks1_b64 = base64_encode_std(&oks1_bytes);
 
         let mut gen_bytes = [0u8; 16];
         for i in 0..16 {
-            gen_bytes[i] = u8::from_str_radix(&gen_hex[i*2..i*2+2], 16).unwrap();
+            gen_bytes[i] = u8::from_str_radix(&gen_hex[i * 2..i * 2 + 2], 16).unwrap();
         }
         let mut sec_bytes = [0u8; 16];
         for i in 0..16 {
-            sec_bytes[i] = u8::from_str_radix(&sec_id_hex[i*2..i*2+2], 16).unwrap();
+            sec_bytes[i] = u8::from_str_radix(&sec_id_hex[i * 2..i * 2 + 2], 16).unwrap();
         }
 
         let unsigned_efr1 = frames::EnrollmentFinalizationReceiptFrameV1 {
@@ -5342,18 +6215,25 @@ mod tests {
         };
         let preimage = frames::efr1_signature_preimage(&unsigned_efr1).unwrap();
         let sig_efr1 = oac_signer.sign(&preimage).to_bytes();
-        let signed_efr1 = frames::EnrollmentFinalizationReceiptFrameV1 { signature: sig_efr1, ..unsigned_efr1 };
+        let signed_efr1 = frames::EnrollmentFinalizationReceiptFrameV1 {
+            signature: sig_efr1,
+            ..unsigned_efr1
+        };
         let efr1_bytes = frames::encode_efr1(&signed_efr1).unwrap();
         let receipt_b64 = base64_encode_std(&efr1_bytes);
 
         // 3. Raw ingress into Runtime A
-        let obs_a = runtime_a.record_receipt_ingress_from_base64(&receipt_b64).unwrap();
+        let obs_a = runtime_a
+            .record_receipt_ingress_from_base64(&receipt_b64)
+            .unwrap();
         assert_eq!(obs_a.enrollment_generation_id_hex, gen_hex);
 
         // 4. Assert A contains exact binding
         assert!(runtime_a.find_pending_request(&gen_hex).is_some());
         let raw_efr1_digest = compute_sha256(&efr1_bytes);
-        assert!(runtime_a.find_observation(&gen_hex, &raw_efr1_digest).is_some());
+        assert!(runtime_a
+            .find_observation(&gen_hex, &raw_efr1_digest)
+            .is_some());
 
         // 5. Drop A completely (simulating process restart)
         drop(runtime_a);
@@ -5363,7 +6243,9 @@ mod tests {
 
         // 8. Assert B starts empty
         assert!(runtime_b.find_pending_request(&gen_hex).is_none());
-        assert!(runtime_b.find_observation(&gen_hex, &raw_efr1_digest).is_none());
+        assert!(runtime_b
+            .find_observation(&gen_hex, &raw_efr1_digest)
+            .is_none());
 
         // 9. Invoke VERIFY_ONLY finalization with same receipt
         let res = finalize_device_enrollment_internal(
@@ -5388,10 +6270,19 @@ mod tests {
         );
 
         // 11. Prove zero mutation to generation key, generation meta, digest manifest, and fence
-        assert!(!dir.join(ENROLLMENT_FENCE_FILE_NAME).exists(), "Fence must not be created");
-        assert!(!generation_meta_path(&dir, &gen_hex).exists(), "Meta file must not be created");
+        assert!(
+            !dir.join(ENROLLMENT_FENCE_FILE_NAME).exists(),
+            "Fence must not be created"
+        );
+        assert!(
+            !generation_meta_path(&dir, &gen_hex).exists(),
+            "Meta file must not be created"
+        );
         let d_hex = compute_sha256_hex(&oks1_bytes);
-        assert!(!digest_manifest_path(&dir, &d_hex).exists(), "Digest manifest must not be persisted");
+        assert!(
+            !digest_manifest_path(&dir, &d_hex).exists(),
+            "Digest manifest must not be persisted"
+        );
 
         let _ = fs::remove_dir_all(&dir);
     }
@@ -5404,12 +6295,14 @@ mod tests {
 
             // 1. Commit G1 with manifest A
             let runtime1 = EnrollmentRuntimeState::new();
-            let outcome1 = super::super::device_registration_proof::generate_device_registration_proof(
-                &runtime1,
-                &dir,
-                "11112222333344445555666677778888",
-                [0x21; 32],
-            ).unwrap();
+            let outcome1 =
+                super::super::device_registration_proof::generate_device_registration_proof(
+                    &runtime1,
+                    &dir,
+                    "11112222333344445555666677778888",
+                    [0x21; 32],
+                )
+                .unwrap();
             let pubkey_b64_1 = base64_encode_std(&outcome1.staged_public_key_bytes);
             let res1 = test_finalize_device_enrollment(
                 &runtime1,
@@ -5419,7 +6312,8 @@ mod tests {
                 "HQ-001",
                 1,
                 &pubkey_b64_1,
-            ).unwrap();
+            )
+            .unwrap();
             assert_eq!(res1.status, "COMMITTED");
 
             let active_a_path = resolve_active_manifest_path(&dir).unwrap();
@@ -5427,12 +6321,14 @@ mod tests {
 
             // 2. Prepare candidate G2 with distinct manifest B
             let runtime2 = EnrollmentRuntimeState::new();
-            let outcome2 = super::super::device_registration_proof::generate_device_registration_proof(
-                &runtime2,
-                &dir,
-                "22223333444455556666777788889999",
-                [0x22; 32],
-            ).unwrap();
+            let outcome2 =
+                super::super::device_registration_proof::generate_device_registration_proof(
+                    &runtime2,
+                    &dir,
+                    "22223333444455556666777788889999",
+                    [0x22; 32],
+                )
+                .unwrap();
             let mut pk2 = [0u8; 32];
             pk2.copy_from_slice(&outcome2.staged_public_key_bytes);
             let pubkey_b64_2 = base64_encode_std(&pk2);
@@ -5477,7 +6373,11 @@ mod tests {
 
             let mut gen_bytes2 = [0u8; 16];
             for i in 0..16 {
-                gen_bytes2[i] = u8::from_str_radix(&outcome2.enrollment_generation_id_hex[i * 2..i * 2 + 2], 16).unwrap_or(0);
+                gen_bytes2[i] = u8::from_str_radix(
+                    &outcome2.enrollment_generation_id_hex[i * 2..i * 2 + 2],
+                    16,
+                )
+                .unwrap_or(0);
             }
             let mut sec_bytes = [0u8; 16];
             for i in 0..16 {
@@ -5558,24 +6458,45 @@ mod tests {
 
             if case == 6 {
                 // Case 6 (1176): target canonical fence absent, replacement temp remains, resolver fails closed
-                assert!(!enrollment_fence_path(&dir).exists(), "Case 6 canonical fence must be absent");
-                assert!(resolve_active_manifest_path(&dir).is_err(), "Case 6 resolver must fail closed");
+                assert!(
+                    !enrollment_fence_path(&dir).exists(),
+                    "Case 6 canonical fence must be absent"
+                );
+                assert!(
+                    resolve_active_manifest_path(&dir).is_err(),
+                    "Case 6 resolver must fail closed"
+                );
             } else if case == 7 {
                 // Case 7 (1177): target canonical fence absent, orphan fence exists, resolver fails closed
-                assert!(!enrollment_fence_path(&dir).exists(), "Case 7 canonical fence must be absent");
-                assert!(dir.join("fence-orphan-1177.tmp").exists(), "Case 7 orphan fence must exist");
-                assert!(resolve_active_manifest_path(&dir).is_err(), "Case 7 resolver must fail closed");
+                assert!(
+                    !enrollment_fence_path(&dir).exists(),
+                    "Case 7 canonical fence must be absent"
+                );
+                assert!(
+                    dir.join("fence-orphan-1177.tmp").exists(),
+                    "Case 7 orphan fence must exist"
+                );
+                assert!(
+                    resolve_active_manifest_path(&dir).is_err(),
+                    "Case 7 resolver must fail closed"
+                );
             } else {
                 // Cases 1-5, 8-11: Reread committed fence: MUST resolve coherent G1+A!
                 let fence_bytes = fs::read(enrollment_fence_path(&dir)).unwrap();
                 let fence: EnrollmentFenceState = serde_json::from_slice(&fence_bytes).unwrap();
                 assert_eq!(fence.state, "COMMITTED");
-                assert_eq!(fence.enrollment_generation_id, outcome1.enrollment_generation_id_hex);
+                assert_eq!(
+                    fence.enrollment_generation_id,
+                    outcome1.enrollment_generation_id_hex
+                );
                 assert_eq!(fence.device_key_version, 1);
 
                 let active_res = resolve_active_manifest_path(&dir).unwrap();
                 let resolved_bytes = fs::read(&active_res).unwrap();
-                assert_eq!(resolved_bytes, manifest_a_bytes, "Case {case} mixed authority or mutated active manifest!");
+                assert_eq!(
+                    resolved_bytes, manifest_a_bytes,
+                    "Case {case} mixed authority or mutated active manifest!"
+                );
 
                 // Case 5: B is durable on disk, but unselected data
                 if case == 5 {
@@ -5587,7 +6508,10 @@ mod tests {
             }
 
             // Legacy canonical file must not exist and must not influence result
-            assert!(!dir.join("twinpet-oac-keyset-manifest.bin").exists(), "Case {case} created legacy file!");
+            assert!(
+                !dir.join("twinpet-oac-keyset-manifest.bin").exists(),
+                "Case {case} created legacy file!"
+            );
 
             let _ = fs::remove_dir_all(&dir);
         }
@@ -5666,7 +6590,9 @@ mod tests {
 
         let mut gen_bytes2 = [0u8; 16];
         for i in 0..16 {
-            gen_bytes2[i] = u8::from_str_radix(&outcome2.enrollment_generation_id_hex[i * 2..i * 2 + 2], 16).unwrap_or(0);
+            gen_bytes2[i] =
+                u8::from_str_radix(&outcome2.enrollment_generation_id_hex[i * 2..i * 2 + 2], 16)
+                    .unwrap_or(0);
         }
         let mut sec_bytes = [0u8; 16];
         for i in 0..16 {
@@ -5730,7 +6656,10 @@ mod tests {
         let fence_bytes = fs::read(enrollment_fence_path(&dir)).unwrap();
         let fence: EnrollmentFenceState = serde_json::from_slice(&fence_bytes).unwrap();
         assert_eq!(fence.state, "COMMITTED");
-        assert_eq!(fence.enrollment_generation_id, outcome1.enrollment_generation_id_hex);
+        assert_eq!(
+            fence.enrollment_generation_id,
+            outcome1.enrollment_generation_id_hex
+        );
         assert_eq!(fence.device_key_version, 1);
         assert_eq!(fence.manifest_sha256, Some(sha_a.clone()));
 
@@ -5764,7 +6693,10 @@ mod tests {
         // Fixture 1: empty directory -> TrulyClean
         {
             let dir = temp_dir();
-            assert_eq!(classify_directory_artifacts(&dir, None), CleanArtifactClassification::TrulyClean);
+            assert_eq!(
+                classify_directory_artifacts(&dir, None),
+                CleanArtifactClassification::TrulyClean
+            );
             let _ = fs::remove_dir_all(&dir);
         }
 
@@ -5800,34 +6732,44 @@ mod tests {
         }
 
         // Helper setup for fixtures 3-14
-        let setup_valid_pending = |dir: &Path| -> (PendingInitialBindings<'static>, [u8; 16], [u8; 32]) {
-            let runtime = EnrollmentRuntimeState::new();
-            let outcome = super::super::device_registration_proof::generate_device_registration_proof(
-                &runtime,
-                dir,
-                "00112233445566778899aabbccddeeff",
-                [0x42u8; 32],
-            ).unwrap();
-            let pk = outcome.staged_public_key_bytes;
-            let sec_id_path = dir.join("twinpet-security-device-id");
-            let sec_bytes: [u8; 16] = fs::read(&sec_id_path).unwrap().try_into().unwrap();
-            let actual_gen_hex = Box::leak(outcome.enrollment_generation_id_hex.into_boxed_str());
-            let bindings = PendingInitialBindings {
-                security_device_id: Box::leak(Box::new(sec_bytes)),
-                generation_id_hex: actual_gen_hex,
-                accepted_public_key: Box::leak(Box::new(pk)),
-                branch_id: "HQ-001",
-                device_key_version: 1,
-                candidate_manifest_bytes: None,
+        let setup_valid_pending =
+            |dir: &Path| -> (PendingInitialBindings<'static>, [u8; 16], [u8; 32]) {
+                let runtime = EnrollmentRuntimeState::new();
+                let outcome =
+                    super::super::device_registration_proof::generate_device_registration_proof(
+                        &runtime,
+                        dir,
+                        "00112233445566778899aabbccddeeff",
+                        [0x42u8; 32],
+                    )
+                    .unwrap();
+                let pk = outcome.staged_public_key_bytes;
+                let sec_id_path = dir.join("twinpet-security-device-id");
+                let sec_bytes = super::super::security_device_id::decode_security_device_id_bytes(
+                    &fs::read(&sec_id_path).unwrap(),
+                )
+                .unwrap();
+                let actual_gen_hex =
+                    Box::leak(outcome.enrollment_generation_id_hex.into_boxed_str());
+                let bindings = PendingInitialBindings {
+                    security_device_id: Box::leak(Box::new(sec_bytes)),
+                    generation_id_hex: actual_gen_hex,
+                    accepted_public_key: Box::leak(Box::new(pk)),
+                    branch_id: "HQ-001",
+                    device_key_version: 1,
+                    candidate_manifest_bytes: None,
+                };
+                (bindings, sec_bytes, pk)
             };
-            (bindings, sec_bytes, pk)
-        };
 
         // Fixture 3: exact G/S/K pending set -> ExactPendingInitial
         {
             let dir = temp_dir();
             let (bindings, _, _) = setup_valid_pending(&dir);
-            assert_eq!(classify_directory_artifacts(&dir, Some(&bindings)), CleanArtifactClassification::ExactPendingInitial);
+            assert_eq!(
+                classify_directory_artifacts(&dir, Some(&bindings)),
+                CleanArtifactClassification::ExactPendingInitial
+            );
             let _ = fs::remove_dir_all(&dir);
         }
 
@@ -5837,7 +6779,10 @@ mod tests {
             let (mut bindings, _, _) = setup_valid_pending(&dir);
             let diff_sec = [0x99u8; 16];
             bindings.security_device_id = &diff_sec;
-            assert_eq!(classify_directory_artifacts(&dir, Some(&bindings)), CleanArtifactClassification::PartialOrHistorical);
+            assert_eq!(
+                classify_directory_artifacts(&dir, Some(&bindings)),
+                CleanArtifactClassification::PartialOrHistorical
+            );
             let _ = fs::remove_dir_all(&dir);
         }
 
@@ -5846,7 +6791,10 @@ mod tests {
             let dir = temp_dir();
             let (mut bindings, _, _) = setup_valid_pending(&dir);
             bindings.generation_id_hex = "ffeeddccbbaa99887766554433221100";
-            assert_eq!(classify_directory_artifacts(&dir, Some(&bindings)), CleanArtifactClassification::PartialOrHistorical);
+            assert_eq!(
+                classify_directory_artifacts(&dir, Some(&bindings)),
+                CleanArtifactClassification::PartialOrHistorical
+            );
             let _ = fs::remove_dir_all(&dir);
         }
 
@@ -5856,7 +6804,10 @@ mod tests {
             let (mut bindings, _, _) = setup_valid_pending(&dir);
             let diff_pk = [0x55u8; 32];
             bindings.accepted_public_key = &diff_pk;
-            assert_eq!(classify_directory_artifacts(&dir, Some(&bindings)), CleanArtifactClassification::PartialOrHistorical);
+            assert_eq!(
+                classify_directory_artifacts(&dir, Some(&bindings)),
+                CleanArtifactClassification::PartialOrHistorical
+            );
             let _ = fs::remove_dir_all(&dir);
         }
 
@@ -5873,8 +6824,15 @@ mod tests {
                 branch_id: "BRANCH-OTHER".to_string(),
             };
             let meta_cipher = dpapi_protect(&encode_enrm(&meta_frame).unwrap()).unwrap();
-            fs::write(generation_meta_path(&dir, bindings.generation_id_hex), &meta_cipher).unwrap();
-            assert_eq!(classify_directory_artifacts(&dir, Some(&bindings)), CleanArtifactClassification::PartialOrHistorical);
+            fs::write(
+                generation_meta_path(&dir, bindings.generation_id_hex),
+                &meta_cipher,
+            )
+            .unwrap();
+            assert_eq!(
+                classify_directory_artifacts(&dir, Some(&bindings)),
+                CleanArtifactClassification::PartialOrHistorical
+            );
             let _ = fs::remove_dir_all(&dir);
         }
 
@@ -5885,8 +6843,15 @@ mod tests {
             let cand_bytes = b"CORRECT_CANDIDATE_BYTES";
             bindings.candidate_manifest_bytes = Some(cand_bytes);
             let d_hex = compute_sha256_hex(cand_bytes);
-            fs::write(digest_manifest_path(&dir, &d_hex), b"DIFFERENT_ON_DISK_BYTES").unwrap();
-            assert_eq!(classify_directory_artifacts(&dir, Some(&bindings)), CleanArtifactClassification::PartialOrHistorical);
+            fs::write(
+                digest_manifest_path(&dir, &d_hex),
+                b"DIFFERENT_ON_DISK_BYTES",
+            )
+            .unwrap();
+            assert_eq!(
+                classify_directory_artifacts(&dir, Some(&bindings)),
+                CleanArtifactClassification::PartialOrHistorical
+            );
             let _ = fs::remove_dir_all(&dir);
         }
 
@@ -5895,8 +6860,15 @@ mod tests {
             let dir = temp_dir();
             let (bindings, _, _) = setup_valid_pending(&dir);
             let extra_gen = "aabbccddeeff00112233445566778899";
-            fs::write(enrollment_staged_generation_path(&dir, extra_gen), b"EXTRA_GEN").unwrap();
-            assert_eq!(classify_directory_artifacts(&dir, Some(&bindings)), CleanArtifactClassification::PartialOrHistorical);
+            fs::write(
+                enrollment_staged_generation_path(&dir, extra_gen),
+                b"EXTRA_GEN",
+            )
+            .unwrap();
+            assert_eq!(
+                classify_directory_artifacts(&dir, Some(&bindings)),
+                CleanArtifactClassification::PartialOrHistorical
+            );
             let _ = fs::remove_dir_all(&dir);
         }
 
@@ -5906,7 +6878,10 @@ mod tests {
             let (bindings, _, _) = setup_valid_pending(&dir);
             let fake_d = "11".repeat(32);
             fs::write(digest_manifest_path(&dir, &fake_d), b"EXTRA_D").unwrap();
-            assert_eq!(classify_directory_artifacts(&dir, Some(&bindings)), CleanArtifactClassification::PartialOrHistorical);
+            assert_eq!(
+                classify_directory_artifacts(&dir, Some(&bindings)),
+                CleanArtifactClassification::PartialOrHistorical
+            );
             let _ = fs::remove_dir_all(&dir);
         }
 
@@ -5915,7 +6890,10 @@ mod tests {
             let dir = temp_dir();
             let (bindings, _, _) = setup_valid_pending(&dir);
             fs::write(dir.join("twinpet-device-proof-key.dpapi"), b"LEGACY_KEY").unwrap();
-            assert_eq!(classify_directory_artifacts(&dir, Some(&bindings)), CleanArtifactClassification::PartialOrHistorical);
+            assert_eq!(
+                classify_directory_artifacts(&dir, Some(&bindings)),
+                CleanArtifactClassification::PartialOrHistorical
+            );
             let _ = fs::remove_dir_all(&dir);
         }
 
@@ -5923,8 +6901,15 @@ mod tests {
         {
             let dir = temp_dir();
             let (bindings, _, _) = setup_valid_pending(&dir);
-            fs::write(dir.join("fence-00112233445566778899aabbccddeeff-999.tmp"), b"TEMP_FENCE").unwrap();
-            assert_eq!(classify_directory_artifacts(&dir, Some(&bindings)), CleanArtifactClassification::PartialOrHistorical);
+            fs::write(
+                dir.join("fence-00112233445566778899aabbccddeeff-999.tmp"),
+                b"TEMP_FENCE",
+            )
+            .unwrap();
+            assert_eq!(
+                classify_directory_artifacts(&dir, Some(&bindings)),
+                CleanArtifactClassification::PartialOrHistorical
+            );
             let _ = fs::remove_dir_all(&dir);
         }
 
@@ -5932,8 +6917,15 @@ mod tests {
         {
             let dir = temp_dir();
             let (bindings, _, _) = setup_valid_pending(&dir);
-            fs::write(dir.join("twinpet-device-enrollment-staged-NOTHEX32.dpapi"), b"MALFORMED").unwrap();
-            assert_eq!(classify_directory_artifacts(&dir, Some(&bindings)), CleanArtifactClassification::PartialOrHistorical);
+            fs::write(
+                dir.join("twinpet-device-enrollment-staged-NOTHEX32.dpapi"),
+                b"MALFORMED",
+            )
+            .unwrap();
+            assert_eq!(
+                classify_directory_artifacts(&dir, Some(&bindings)),
+                CleanArtifactClassification::PartialOrHistorical
+            );
             let _ = fs::remove_dir_all(&dir);
         }
 
@@ -5942,8 +6934,15 @@ mod tests {
             let dir = temp_dir();
             let (bindings, _, _) = setup_valid_pending(&dir);
             // Replace staged file with an invalid DPAPI payload so DPAPI unprotect fails
-            fs::write(enrollment_staged_generation_path(&dir, bindings.generation_id_hex), b"NOT_VALID_DPAPI").unwrap();
-            assert_eq!(classify_directory_artifacts(&dir, Some(&bindings)), CleanArtifactClassification::PartialOrHistorical);
+            fs::write(
+                enrollment_staged_generation_path(&dir, bindings.generation_id_hex),
+                b"NOT_VALID_DPAPI",
+            )
+            .unwrap();
+            assert_eq!(
+                classify_directory_artifacts(&dir, Some(&bindings)),
+                CleanArtifactClassification::PartialOrHistorical
+            );
             let _ = fs::remove_dir_all(&dir);
         }
 
@@ -5954,7 +6953,10 @@ mod tests {
             let key_path = generation_proof_key_path(&dir, bindings.generation_id_hex);
             assert!(key_path.exists());
             fs::remove_file(&key_path).unwrap();
-            assert_eq!(classify_directory_artifacts(&dir, Some(&bindings)), CleanArtifactClassification::PartialOrHistorical);
+            assert_eq!(
+                classify_directory_artifacts(&dir, Some(&bindings)),
+                CleanArtifactClassification::PartialOrHistorical
+            );
             let _ = fs::remove_dir_all(&dir);
         }
 
@@ -5965,7 +6967,10 @@ mod tests {
             let key_path = generation_proof_key_path(&dir, bindings.generation_id_hex);
             assert!(key_path.exists());
             fs::write(&key_path, b"CORRUPT_NOT_DPAPI").unwrap();
-            assert_eq!(classify_directory_artifacts(&dir, Some(&bindings)), CleanArtifactClassification::PartialOrHistorical);
+            assert_eq!(
+                classify_directory_artifacts(&dir, Some(&bindings)),
+                CleanArtifactClassification::PartialOrHistorical
+            );
             let _ = fs::remove_dir_all(&dir);
         }
     }
@@ -5975,7 +6980,8 @@ mod tests {
         // 1. exact staged-record filename created as a DIRECTORY -> PartialOrHistorical
         {
             let dir = temp_dir();
-            let staged_dir = dir.join("twinpet-device-enrollment-staged-00112233445566778899aabbccddeeff.dpapi");
+            let staged_dir =
+                dir.join("twinpet-device-enrollment-staged-00112233445566778899aabbccddeeff.dpapi");
             fs::create_dir(&staged_dir).unwrap();
             assert_eq!(
                 classify_directory_artifacts(&dir, None),
@@ -6012,7 +7018,10 @@ mod tests {
         // 3. digest-temp authority namespace as DIRECTORY -> PartialOrHistorical
         {
             let dir = temp_dir();
-            let digest_tmp_dir = dir.join(format!("twinpet-oac-keyset-manifest-{}-12345.tmp", "01".repeat(32)));
+            let digest_tmp_dir = dir.join(format!(
+                "twinpet-oac-keyset-manifest-{}-12345.tmp",
+                "01".repeat(32)
+            ));
             fs::create_dir(&digest_tmp_dir).unwrap();
             assert_eq!(
                 classify_directory_artifacts(&dir, None),
@@ -6023,7 +7032,10 @@ mod tests {
         }
         {
             let dir = temp_dir();
-            let digest_bin_dir = dir.join(format!("twinpet-oac-keyset-manifest-{}.bin", "01".repeat(32)));
+            let digest_bin_dir = dir.join(format!(
+                "twinpet-oac-keyset-manifest-{}.bin",
+                "01".repeat(32)
+            ));
             fs::create_dir(&digest_bin_dir).unwrap();
             assert_eq!(
                 classify_directory_artifacts(&dir, None),
@@ -6036,7 +7048,11 @@ mod tests {
         // 4. malformed authority-prefix entry -> PartialOrHistorical
         {
             let dir = temp_dir();
-            fs::write(dir.join("twinpet-device-malformed-authority-file"), b"MALFORMED").unwrap();
+            fs::write(
+                dir.join("twinpet-device-malformed-authority-file"),
+                b"MALFORMED",
+            )
+            .unwrap();
             assert_eq!(
                 classify_directory_artifacts(&dir, None),
                 CleanArtifactClassification::PartialOrHistorical,
@@ -6094,15 +7110,20 @@ mod tests {
         {
             let dir = temp_dir();
             let runtime = EnrollmentRuntimeState::new();
-            let outcome = super::super::device_registration_proof::generate_device_registration_proof(
-                &runtime,
-                &dir,
-                "00112233445566778899aabbccddeeff",
-                [0x42u8; 32],
-            ).unwrap();
+            let outcome =
+                super::super::device_registration_proof::generate_device_registration_proof(
+                    &runtime,
+                    &dir,
+                    "00112233445566778899aabbccddeeff",
+                    [0x42u8; 32],
+                )
+                .unwrap();
             let pk = outcome.staged_public_key_bytes;
             let sec_id_path = dir.join("twinpet-security-device-id");
-            let sec_bytes: [u8; 16] = fs::read(&sec_id_path).unwrap().try_into().unwrap();
+            let sec_bytes = super::super::security_device_id::decode_security_device_id_bytes(
+                &fs::read(&sec_id_path).unwrap(),
+            )
+            .unwrap();
             let actual_gen_hex = outcome.enrollment_generation_id_hex.clone();
             let bindings = PendingInitialBindings {
                 security_device_id: &sec_bytes,
@@ -6146,7 +7167,8 @@ mod tests {
             &dir,
             "00112233445566778899aabbccddeeff",
             [0x55u8; 32],
-        ).unwrap();
+        )
+        .unwrap();
         let gen_hex = outcome.enrollment_generation_id_hex.clone();
         let mut pk = [0u8; 32];
         pk.copy_from_slice(&outcome.staged_public_key_bytes);
@@ -6154,7 +7176,10 @@ mod tests {
 
         // Remove the generation key after proof issuance
         let key_path = generation_proof_key_path(&dir, &gen_hex);
-        assert!(key_path.exists(), "Generation key must exist after proof generation");
+        assert!(
+            key_path.exists(),
+            "Generation key must exist after proof generation"
+        );
         fs::remove_file(&key_path).unwrap();
         assert!(!key_path.exists());
 
@@ -6184,10 +7209,15 @@ mod tests {
         );
 
         // Required outcome: fail closed
-        assert!(fin_res.is_err(), "Finalizer must fail closed when generation key is missing");
+        assert!(
+            fin_res.is_err(),
+            "Finalizer must fail closed when generation key is missing"
+        );
         let err = fin_res.unwrap_err();
         assert!(
-            err.contains("FAIL_CLOSED") || err.contains("GENERATION_KEY_UNAVAILABLE") || err.contains("UNTRUSTED_KEYSET_ROTATION_FAIL_CLOSED"),
+            err.contains("FAIL_CLOSED")
+                || err.contains("GENERATION_KEY_UNAVAILABLE")
+                || err.contains("UNTRUSTED_KEYSET_ROTATION_FAIL_CLOSED"),
             "Error must be typed fail closed: {err}"
         );
 
@@ -6196,12 +7226,18 @@ mod tests {
 
         // No generation metadata
         let meta_path = generation_meta_path(&dir, &gen_hex);
-        assert!(!meta_path.exists(), "Generation metadata must not be created");
+        assert!(
+            !meta_path.exists(),
+            "Generation metadata must not be created"
+        );
 
         // No candidate digest promotion
         for entry in fs::read_dir(&dir).unwrap().filter_map(|e| e.ok()) {
             let n = entry.file_name().to_string_lossy().to_string();
-            assert!(!n.starts_with("twinpet-oac-keyset-manifest-"), "No candidate digest must be promoted: {n}");
+            assert!(
+                !n.starts_with("twinpet-oac-keyset-manifest-"),
+                "No candidate digest must be promoted: {n}"
+            );
         }
 
         // No fence
@@ -6215,12 +7251,14 @@ mod tests {
         let dir_control = temp_dir();
         let (_sec_id_c, sec_id_hex_c) = setup_test_device(&dir_control);
         let runtime_c = EnrollmentRuntimeState::new();
-        let outcome_c = super::super::device_registration_proof::generate_device_registration_proof(
-            &runtime_c,
-            &dir_control,
-            "00112233445566778899aabbccddeeff",
-            [0x66u8; 32],
-        ).unwrap();
+        let outcome_c =
+            super::super::device_registration_proof::generate_device_registration_proof(
+                &runtime_c,
+                &dir_control,
+                "00112233445566778899aabbccddeeff",
+                [0x66u8; 32],
+            )
+            .unwrap();
         let gen_hex_c = outcome_c.enrollment_generation_id_hex.clone();
         let mut pk_c = [0u8; 32];
         pk_c.copy_from_slice(&outcome_c.staged_public_key_bytes);
@@ -6248,7 +7286,11 @@ mod tests {
             Some(&oks1_b64_c),
             None,
         );
-        assert!(fin_res_c.is_ok(), "Legitimate pending state with one key must succeed: {:?}", fin_res_c.err());
+        assert!(
+            fin_res_c.is_ok(),
+            "Legitimate pending state with one key must succeed: {:?}",
+            fin_res_c.err()
+        );
         assert!(enrollment_fence_path(&dir_control).exists());
 
         let _ = fs::remove_dir_all(&dir);
@@ -6267,7 +7309,8 @@ mod tests {
             &dir,
             "11112222333344445555666677778888",
             [0x11; 32],
-        ).unwrap();
+        )
+        .unwrap();
         let pubkey_b64_1 = base64_encode_std(&outcome1.staged_public_key_bytes);
         let res1 = test_finalize_device_enrollment(
             &runtime,
@@ -6277,7 +7320,8 @@ mod tests {
             "HQ-001",
             1,
             &pubkey_b64_1,
-        ).unwrap();
+        )
+        .unwrap();
         assert_eq!(res1.status, "COMMITTED");
 
         // Snapshot G1 committed fence and selected A digest authority
@@ -6302,11 +7346,17 @@ mod tests {
         };
         let prefix_b = frames::oks1_signed_prefix(&manifest_b).unwrap();
         let sig_b = root_key.sign(&prefix_b).to_bytes();
-        let signed_manifest_b = frames::OacKeysetManifestFrameV1 { signature: sig_b, ..manifest_b };
+        let signed_manifest_b = frames::OacKeysetManifestFrameV1 {
+            signature: sig_b,
+            ..manifest_b
+        };
         let b_manifest_bytes = frames::encode_oks1(&signed_manifest_b).unwrap();
         let b_d_hex = compute_sha256_hex(&b_manifest_bytes);
         let b_target_path = digest_manifest_path(&dir, &b_d_hex);
-        assert_ne!(a_digest_path, b_target_path, "Candidate B digest must differ from committed A");
+        assert_ne!(
+            a_digest_path, b_target_path,
+            "Candidate B digest must differ from committed A"
+        );
 
         // --- SCENARIO A: Existing target collision ---
         // 1. Prewrite adversarial DIFFERENT bytes at B's digest path D
@@ -6328,7 +7378,10 @@ mod tests {
         );
 
         // 4. Require exactly IMMUTABLE_DIGEST_COLLISION
-        assert_eq!(collision_res.err(), Some("IMMUTABLE_DIGEST_COLLISION".to_string()));
+        assert_eq!(
+            collision_res.err(),
+            Some("IMMUTABLE_DIGEST_COLLISION".to_string())
+        );
 
         // 5. Reread B target and assert byte-for-byte unchanged
         assert_eq!(fs::read(&b_target_path).unwrap(), b_target_snapshot);
@@ -6336,16 +7389,23 @@ mod tests {
         // 6. Assert no invocation temp becomes authority
         for entry in fs::read_dir(&dir).unwrap().filter_map(|e| e.ok()) {
             let n = entry.file_name().to_string_lossy().to_string();
-            assert!(!n.ends_with(".tmp"), "Unexpected temp file left behind: {n}");
+            assert!(
+                !n.ends_with(".tmp"),
+                "Unexpected temp file left behind: {n}"
+            );
         }
 
         // 7. Assert G1 fence bytes unchanged
         assert_eq!(fs::read(&fence_path).unwrap(), g1_fence_bytes);
 
         // 8. Assert no G2 fence promotion
-        let current_fence_a: EnrollmentFenceState = serde_json::from_slice(&fs::read(&fence_path).unwrap()).unwrap();
+        let current_fence_a: EnrollmentFenceState =
+            serde_json::from_slice(&fs::read(&fence_path).unwrap()).unwrap();
         assert_eq!(current_fence_a.device_key_version, 1);
-        assert_eq!(current_fence_a.enrollment_generation_id, outcome1.enrollment_generation_id_hex);
+        assert_eq!(
+            current_fence_a.enrollment_generation_id,
+            outcome1.enrollment_generation_id_hex
+        );
 
         // 9. Drop/recreate EnrollmentRuntimeState
         drop(runtime);
@@ -6364,8 +7424,13 @@ mod tests {
         assert!(!b_target_path.exists());
 
         // 2. Existing race seam creates D with exact B bytes after absence check/before first-create completion
-        static RACE_TARGET: std::sync::Mutex<Option<(PathBuf, Vec<u8>)>> = std::sync::Mutex::new(None);
-        fn mock_race_move_fn(_existing: PCWSTR, _new: PCWSTR, _flags: windows::Win32::Storage::FileSystem::MOVE_FILE_FLAGS) -> Result<(), u32> {
+        static RACE_TARGET: std::sync::Mutex<Option<(PathBuf, Vec<u8>)>> =
+            std::sync::Mutex::new(None);
+        fn mock_race_move_fn(
+            _existing: PCWSTR,
+            _new: PCWSTR,
+            _flags: windows::Win32::Storage::FileSystem::MOVE_FILE_FLAGS,
+        ) -> Result<(), u32> {
             if let Ok(guard) = RACE_TARGET.lock() {
                 if let Some((path, bytes)) = guard.as_ref() {
                     let _ = fs::write(path, bytes);
@@ -6387,15 +7452,23 @@ mod tests {
             Some(&root_key.verifying_key().to_bytes()),
             &hooks_race_exact,
         );
-        assert!(race_exact_res.is_ok(), "Exact create race should succeed idempotently: {:?}", race_exact_res.err());
+        assert!(
+            race_exact_res.is_ok(),
+            "Exact create race should succeed idempotently: {:?}",
+            race_exact_res.err()
+        );
 
         // 5. G1 fence remains unchanged
         assert_eq!(fs::read(&fence_path).unwrap(), g1_fence_bytes);
 
         // 6. No unintended fence promotion occurs
-        let current_fence_b: EnrollmentFenceState = serde_json::from_slice(&fs::read(&fence_path).unwrap()).unwrap();
+        let current_fence_b: EnrollmentFenceState =
+            serde_json::from_slice(&fs::read(&fence_path).unwrap()).unwrap();
         assert_eq!(current_fence_b.device_key_version, 1);
-        assert_eq!(current_fence_b.enrollment_generation_id, outcome1.enrollment_generation_id_hex);
+        assert_eq!(
+            current_fence_b.enrollment_generation_id,
+            outcome1.enrollment_generation_id_hex
+        );
 
         // 7. Drop/recreate runtime
         drop(runtime_after_collision);
@@ -6434,22 +7507,35 @@ mod tests {
         );
 
         // 5. Require exactly IMMUTABLE_DIGEST_CREATE_RACE_COLLISION
-        assert_eq!(race_diff_res.err(), Some("IMMUTABLE_DIGEST_CREATE_RACE_COLLISION".to_string()));
+        assert_eq!(
+            race_diff_res.err(),
+            Some("IMMUTABLE_DIGEST_CREATE_RACE_COLLISION".to_string())
+        );
 
         // 6. Reread B D and assert byte-for-byte unchanged from the race snapshot
         let reread_diff_bytes = fs::read(&b_target_path).unwrap();
-        assert_eq!(reread_diff_bytes, race_snapshot, "Different-race target bytes must remain unchanged");
+        assert_eq!(
+            reread_diff_bytes, race_snapshot,
+            "Different-race target bytes must remain unchanged"
+        );
 
         // 7. Assert no invocation temp remains promoted
         for entry in fs::read_dir(&dir).unwrap().filter_map(|e| e.ok()) {
             let n = entry.file_name().to_string_lossy().to_string();
-            assert!(!n.ends_with(".tmp"), "Unexpected temp file left behind after different race: {n}");
+            assert!(
+                !n.ends_with(".tmp"),
+                "Unexpected temp file left behind after different race: {n}"
+            );
         }
 
         // 8. Assert no fence promotion
-        let current_fence_c: EnrollmentFenceState = serde_json::from_slice(&fs::read(&fence_path).unwrap()).unwrap();
+        let current_fence_c: EnrollmentFenceState =
+            serde_json::from_slice(&fs::read(&fence_path).unwrap()).unwrap();
         assert_eq!(current_fence_c.device_key_version, 1);
-        assert_eq!(current_fence_c.enrollment_generation_id, outcome1.enrollment_generation_id_hex);
+        assert_eq!(
+            current_fence_c.enrollment_generation_id,
+            outcome1.enrollment_generation_id_hex
+        );
 
         // 9. G1 fence bytes remain unchanged
         assert_eq!(fs::read(&fence_path).unwrap(), g1_fence_bytes);
@@ -6468,7 +7554,9 @@ mod tests {
     }
     #[test]
     fn test_ir002_structural_legacy_authority_audit() {
-        let auth_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join("privileged_auth");
+        let auth_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join("privileged_auth");
         let production_files = [
             "enrollment_meta.rs",
             "staff_session.rs",
@@ -6480,7 +7568,11 @@ mod tests {
 
         for filename in &production_files {
             let file_path = auth_dir.join(filename);
-            assert!(file_path.exists(), "Source file not found: {}", file_path.display());
+            assert!(
+                file_path.exists(),
+                "Source file not found: {}",
+                file_path.display()
+            );
 
             let content = fs::read_to_string(&file_path).unwrap();
 
@@ -6528,6 +7620,198 @@ mod tests {
         assert!(
             err.contains("RESOLVER_FAIL_CLOSED") || err.contains("DEVICE_NOT_ENROLLED"),
             "Expected fail-closed error, got: {err}"
+        );
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // --- SEC-001 epoch-2: fence / staged-record schemaVersion coverage ---
+
+    #[test]
+    fn fence_schema_version_absent_field_parses_as_legacy_zero() {
+        let json = r#"{"state":"COMMITTED","enrollmentGenerationId":"0102030405060708090a0b0c0d0e0f10","securityDeviceIdHex":"aabbccddeeff00112233445566778899","deviceKeyVersion":1,"keySha256":"aa","metaSha256":"bb","committedAtLocalMs":1000}"#;
+        let fence: EnrollmentFenceState = serde_json::from_str(json).unwrap();
+        assert_eq!(fence.schema_version, 0);
+        assert!(check_enrollment_fence_schema_version(fence.schema_version).is_ok());
+    }
+
+    #[test]
+    fn fence_schema_version_current_round_trips() {
+        let json = format!(
+            r#"{{"state":"COMMITTED","enrollmentGenerationId":"0102030405060708090a0b0c0d0e0f10","securityDeviceIdHex":"aabbccddeeff00112233445566778899","deviceKeyVersion":1,"keySha256":"aa","metaSha256":"bb","committedAtLocalMs":1000,"schemaVersion":{ENROLLMENT_FENCE_SCHEMA_VERSION}}}"#
+        );
+        let fence: EnrollmentFenceState = serde_json::from_str(&json).unwrap();
+        assert_eq!(fence.schema_version, ENROLLMENT_FENCE_SCHEMA_VERSION);
+        assert!(check_enrollment_fence_schema_version(fence.schema_version).is_ok());
+    }
+
+    #[test]
+    fn fence_unknown_newer_schema_version_fails_closed() {
+        let err =
+            check_enrollment_fence_schema_version(ENROLLMENT_FENCE_SCHEMA_VERSION + 1).unwrap_err();
+        assert!(err.contains("UNKNOWN_SCHEMA_VERSION"));
+    }
+
+    #[test]
+    fn legacy_unversioned_fence_is_still_resolvable() {
+        let dir = temp_dir();
+        let manifest_key = SigningKey::generate(&mut OsRng);
+        let (_dev_key, _oks1_bytes, _manifest_sha) = setup_committed_test_enrollment_with_manifest(
+            &dir,
+            "branch-1",
+            [0x11u8; 16],
+            vec![frames::OacKeysetManifestKeyV1 {
+                signing_key_id: "test-key-1".to_string(),
+                public_key: manifest_key.verifying_key().to_bytes(),
+                status: frames::OacKeyLifecycleStatus::Active,
+                verify_until_server_ms: None,
+            }],
+            1,
+        );
+        let root_vk = SigningKey::from_bytes(&TEST_OAC_ROOT_SEED)
+            .verifying_key()
+            .to_bytes();
+
+        // Simulate a fence written before SEC-001 epoch-2 landed: strip the
+        // schemaVersion field entirely (rewrite as legacy-shaped JSON).
+        let fence_path = enrollment_fence_path(&dir);
+        let mut fence: serde_json::Value =
+            serde_json::from_slice(&fs::read(&fence_path).unwrap()).unwrap();
+        fence.as_object_mut().unwrap().remove("schemaVersion");
+        fs::write(&fence_path, serde_json::to_vec(&fence).unwrap()).unwrap();
+
+        let resolved = resolve_active_manifest_path_with_root(&dir, Some(&root_vk));
+        assert!(
+            resolved.is_ok(),
+            "legacy unversioned fence must still resolve: {resolved:?}"
+        );
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn fence_with_unknown_newer_schema_version_fails_closed_end_to_end() {
+        let dir = temp_dir();
+        let manifest_key = SigningKey::generate(&mut OsRng);
+        let (_dev_key, _oks1_bytes, _manifest_sha) = setup_committed_test_enrollment_with_manifest(
+            &dir,
+            "branch-1",
+            [0x22u8; 16],
+            vec![frames::OacKeysetManifestKeyV1 {
+                signing_key_id: "test-key-1".to_string(),
+                public_key: manifest_key.verifying_key().to_bytes(),
+                status: frames::OacKeyLifecycleStatus::Active,
+                verify_until_server_ms: None,
+            }],
+            1,
+        );
+        let root_vk = SigningKey::from_bytes(&TEST_OAC_ROOT_SEED)
+            .verifying_key()
+            .to_bytes();
+
+        let fence_path = enrollment_fence_path(&dir);
+        let mut fence: serde_json::Value =
+            serde_json::from_slice(&fs::read(&fence_path).unwrap()).unwrap();
+        fence.as_object_mut().unwrap().insert(
+            "schemaVersion".to_string(),
+            serde_json::json!(ENROLLMENT_FENCE_SCHEMA_VERSION + 1),
+        );
+        fs::write(&fence_path, serde_json::to_vec(&fence).unwrap()).unwrap();
+
+        let resolved = resolve_active_manifest_path_with_root(&dir, Some(&root_vk));
+        assert!(resolved.is_err());
+        assert!(resolved.unwrap_err().contains("RESOLVER_FAIL_CLOSED"));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn staged_schema_version_absent_field_parses_as_legacy_zero() {
+        let json = r#"{"enrollmentGenerationIdHex":"0102030405060708090a0b0c0d0e0f10","securityDeviceIdHex":"aabbccddeeff00112233445566778899","privateKeySeedHex":"00","publicKeyHex":"00","stagedAtMs":1000}"#;
+        let staged: StagedEnrollmentFrameV1 = serde_json::from_str(json).unwrap();
+        assert_eq!(staged.schema_version, 0);
+        assert!(check_staged_enrollment_schema_version(staged.schema_version).is_ok());
+    }
+
+    #[test]
+    fn staged_unknown_newer_schema_version_fails_closed() {
+        let err = check_staged_enrollment_schema_version(STAGED_ENROLLMENT_SCHEMA_VERSION + 1)
+            .unwrap_err();
+        assert!(err.contains("UNKNOWN_SCHEMA_VERSION"));
+    }
+
+    #[test]
+    fn stage_device_enrollment_writes_current_schema_version() {
+        let dir = temp_dir();
+        let (sec_id, _sec_id_hex) = setup_test_device(&dir);
+        let signing_key = SigningKey::generate(&mut OsRng);
+        let outcome = stage_device_enrollment(&dir, sec_id, &signing_key).unwrap();
+
+        let staged_path =
+            enrollment_staged_generation_path(&dir, &outcome.enrollment_generation_id_hex);
+        let staged_cipher = fs::read(&staged_path).unwrap();
+        let staged_plain = dpapi_unprotect(&staged_cipher).unwrap();
+        let staged: StagedEnrollmentFrameV1 = serde_json::from_slice(&staged_plain).unwrap();
+        assert_eq!(staged.schema_version, STAGED_ENROLLMENT_SCHEMA_VERSION);
+
+        // SEC-001 epoch-2 rollback remediation (Claude-024): the
+        // generation-scoped key is now written in the current versioned
+        // shape (1-byte version prefix + 32-byte seed) before DPAPI.
+        let key_path = generation_proof_key_path(&dir, &outcome.enrollment_generation_id_hex);
+        let key_cipher = fs::read(&key_path).unwrap();
+        let key_plain = dpapi_unprotect(&key_cipher).unwrap();
+        assert_eq!(key_plain.len(), 33);
+        assert_eq!(key_plain[0], device_proof::DEVICE_PROOF_KEY_STORE_VERSION);
+        assert_eq!(&key_plain[1..], &signing_key.to_bytes()[..]);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// SEC-001 epoch-2 rollback remediation (Claude-024), required behavioral
+    /// test: a full stage -> finalize flow's fence `key_sha256` pin must
+    /// match the actual on-disk ciphertext bytes of the (now versioned)
+    /// generation key, and that same generation key must decode correctly
+    /// through the production loader (`device_proof::load_enrolled_device_keypair`).
+    #[test]
+    fn new_generation_fence_key_sha256_pins_the_actual_versioned_ciphertext() {
+        let dir = temp_dir();
+        let (_sec_id, sec_id_hex) = setup_test_device(&dir);
+        let runtime = EnrollmentRuntimeState::new();
+
+        let outcome = super::super::device_registration_proof::generate_device_registration_proof(
+            &runtime,
+            &dir,
+            "00112233445566778899aabbccddeeff",
+            [0x01; 32],
+        )
+        .unwrap();
+
+        let dto = test_finalize_device_enrollment(
+            &runtime,
+            &dir,
+            &outcome.enrollment_generation_id_hex,
+            &sec_id_hex,
+            "HQ-001",
+            1,
+            &base64_encode_std(&outcome.staged_public_key_bytes),
+        )
+        .unwrap();
+        assert!(dto.success);
+
+        let key_path = generation_proof_key_path(&dir, &outcome.enrollment_generation_id_hex);
+        let on_disk = fs::read(&key_path).unwrap();
+        let key_plain = dpapi_unprotect(&on_disk).unwrap();
+        assert_eq!(key_plain.len(), 33);
+        assert_eq!(key_plain[0], device_proof::DEVICE_PROOF_KEY_STORE_VERSION);
+
+        let fence_bytes = fs::read(enrollment_fence_path(&dir)).unwrap();
+        let fence: EnrollmentFenceState = serde_json::from_slice(&fence_bytes).unwrap();
+        assert_eq!(fence.key_sha256, compute_sha256_hex(&on_disk));
+
+        let loaded = device_proof::load_enrolled_device_keypair(&dir).unwrap();
+        assert_eq!(
+            loaded.verifying_key().to_bytes(),
+            outcome.staged_public_key_bytes
         );
 
         let _ = fs::remove_dir_all(&dir);

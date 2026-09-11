@@ -8,12 +8,12 @@
 //! - DPAPI-protected store with tamper-evident fail-closed integrity (R5)
 //! - Manager isolation (each manager has independent lockout state)
 
+use rand::RngCore;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use rand::RngCore;
-use serde::{Deserialize, Serialize};
 
 use super::dpapi_envelope;
 
@@ -47,9 +47,17 @@ impl Default for ManagerLockoutState {
     }
 }
 
+/// SEC-001 epoch-2: current explicit `schemaVersion` for `LockoutStore`.
+/// Absence of the field on an existing on-disk store (serde default `0`) is
+/// treated as implicit legacy version 1; any value greater than this
+/// constant is an unknown newer format and fails closed.
+pub const LOCKOUT_STORE_SCHEMA_VERSION: u32 = 1;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct LockoutStore {
+    #[serde(default)]
+    pub schema_version: u32,
     pub managers: HashMap<String, ManagerLockoutState>,
 }
 
@@ -64,8 +72,13 @@ pub enum LockoutError {
 impl std::fmt::Display for LockoutError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LockoutError::PresentMalformed(msg) => write!(f, "Lockout state present but invalid: {msg}"),
-            LockoutError::LockoutIdMismatch => write!(f, "LCT1 lockoutId does not match current lockout generation"),
+            LockoutError::PresentMalformed(msg) => {
+                write!(f, "Lockout state present but invalid: {msg}")
+            }
+            LockoutError::LockoutIdMismatch => write!(
+                f,
+                "LCT1 lockoutId does not match current lockout generation"
+            ),
             LockoutError::ManagerNotLockedOut => write!(f, "Manager is not currently locked out"),
             LockoutError::IoError(msg) => write!(f, "Lockout IO error: {msg}"),
         }
@@ -101,7 +114,9 @@ fn hex_encode(bytes: &[u8]) -> String {
 }
 
 pub fn is_lowercase_hex64(s: &str) -> bool {
-    s.len() == 64 && s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    s.len() == 64
+        && s.bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
 pub const IDENTIFIER_MAX_BYTES: usize = 1500;
@@ -109,12 +124,16 @@ pub const IDENTIFIER_MAX_BYTES: usize = 1500;
 pub fn is_canonical_identifier(s: &str) -> bool {
     !s.is_empty()
         && s.len() <= IDENTIFIER_MAX_BYTES
-        && s.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+        && s.bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
 }
 
 /// Explicit invariant validator.
 /// Fails closed (Err(PresentMalformed)) on ANY impossible state.
-pub fn validate_manager_lockout_state(manager_staff_id: &str, state: &ManagerLockoutState) -> Result<(), LockoutError> {
+pub fn validate_manager_lockout_state(
+    manager_staff_id: &str,
+    state: &ManagerLockoutState,
+) -> Result<(), LockoutError> {
     if !is_canonical_identifier(manager_staff_id) {
         return Err(LockoutError::PresentMalformed(format!(
             "invalid manager_staff_id grammar: '{manager_staff_id}'"
@@ -141,7 +160,8 @@ pub fn validate_manager_lockout_state(manager_staff_id: &str, state: &ManagerLoc
         }
         if state.current_lockout_id_hex.is_some() {
             return Err(LockoutError::PresentMalformed(
-                "unlocked state invariant violated: current_lockout_id_hex must be None".to_string(),
+                "unlocked state invariant violated: current_lockout_id_hex must be None"
+                    .to_string(),
             ));
         }
         if state.clear_token_recorded {
@@ -160,7 +180,8 @@ pub fn validate_manager_lockout_state(manager_staff_id: &str, state: &ManagerLoc
             Some(ts) if ts > 0 => {}
             _ => {
                 return Err(LockoutError::PresentMalformed(
-                    "locked state invariant violated: locked_at_ms must be Some(positive integer)".to_string(),
+                    "locked state invariant violated: locked_at_ms must be Some(positive integer)"
+                        .to_string(),
                 ));
             }
         }
@@ -202,6 +223,13 @@ pub fn read_lockout_store(root: &Path) -> Result<LockoutStore, LockoutError> {
     let store: LockoutStore = serde_json::from_slice(&plaintext)
         .map_err(|e| LockoutError::PresentMalformed(format!("JSON parse failed: {e}")))?;
 
+    if store.schema_version > LOCKOUT_STORE_SCHEMA_VERSION {
+        return Err(LockoutError::PresentMalformed(format!(
+            "unknown newer schemaVersion: {} > {LOCKOUT_STORE_SCHEMA_VERSION}",
+            store.schema_version
+        )));
+    }
+
     validate_lockout_store(&store)?;
 
     Ok(store)
@@ -210,8 +238,13 @@ pub fn read_lockout_store(root: &Path) -> Result<LockoutStore, LockoutError> {
 pub fn write_lockout_store(root: &Path, store: &LockoutStore) -> Result<(), LockoutError> {
     validate_lockout_store(store)?;
 
+    // The writer always emits the current schema version, regardless of what
+    // the in-memory value was (e.g. a legacy-zero value just read back).
+    let mut store = store.clone();
+    store.schema_version = LOCKOUT_STORE_SCHEMA_VERSION;
+
     let path = lockout_state_path(root);
-    let plaintext = serde_json::to_vec(store)
+    let plaintext = serde_json::to_vec(&store)
         .map_err(|e| LockoutError::PresentMalformed(format!("JSON serialize failed: {e}")))?;
 
     let ciphertext = dpapi_envelope::dpapi_protect(&plaintext)
@@ -248,7 +281,11 @@ pub fn check_manager_lockout(
 
     let mut store = read_lockout_store(root)?;
     let entry = match store.managers.get_mut(manager_staff_id) {
-        None => return Ok(LockoutPrecheck::Unlocked { consecutive_failed_attempts: 0 }),
+        None => {
+            return Ok(LockoutPrecheck::Unlocked {
+                consecutive_failed_attempts: 0,
+            })
+        }
         Some(e) => e,
     };
 
@@ -274,12 +311,20 @@ pub fn check_manager_lockout(
         entry.clear_token_recorded = false;
         entry.last_attempt_ms = now_ms;
         write_lockout_store(root, &store)?;
-        return Ok(LockoutPrecheck::Unlocked { consecutive_failed_attempts: 0 });
+        return Ok(LockoutPrecheck::Unlocked {
+            consecutive_failed_attempts: 0,
+        });
     }
 
-    let lockout_id = entry.current_lockout_id_hex.as_ref().ok_or_else(|| {
-        LockoutError::PresentMalformed("locked state missing current_lockout_id_hex".to_string())
-    })?.clone();
+    let lockout_id = entry
+        .current_lockout_id_hex
+        .as_ref()
+        .ok_or_else(|| {
+            LockoutError::PresentMalformed(
+                "locked state missing current_lockout_id_hex".to_string(),
+            )
+        })?
+        .clone();
 
     Ok(LockoutPrecheck::LockedOut {
         consecutive_failed_attempts: entry.consecutive_failed_attempts,
@@ -308,7 +353,10 @@ pub fn record_failed_pin_attempt(
     }
 
     let mut store = read_lockout_store(root)?;
-    let entry = store.managers.entry(manager_staff_id.to_string()).or_default();
+    let entry = store
+        .managers
+        .entry(manager_staff_id.to_string())
+        .or_default();
 
     entry.last_attempt_ms = now_ms;
 
@@ -348,7 +396,10 @@ pub fn record_successful_pin_attempt(
     }
 
     let mut store = read_lockout_store(root)?;
-    let entry = store.managers.entry(manager_staff_id.to_string()).or_default();
+    let entry = store
+        .managers
+        .entry(manager_staff_id.to_string())
+        .or_default();
 
     entry.consecutive_failed_attempts = 0;
     entry.locked_out = false;
@@ -451,7 +502,12 @@ mod tests {
             assert!(state.current_lockout_id_hex.is_none());
 
             let check = check_manager_lockout(&root, mgr, now).unwrap();
-            assert_eq!(check, LockoutPrecheck::Unlocked { consecutive_failed_attempts: attempt });
+            assert_eq!(
+                check,
+                LockoutPrecheck::Unlocked {
+                    consecutive_failed_attempts: attempt
+                }
+            );
             now += 1000;
         }
 
@@ -479,7 +535,12 @@ mod tests {
         // Before 15m, check says LockedOut
         let check = check_manager_lockout(&root, mgr, now + 1000).unwrap();
         match check {
-            LockoutPrecheck::LockedOut { current_lockout_id_hex, cooldown_remaining_ms, clear_token_recorded, .. } => {
+            LockoutPrecheck::LockedOut {
+                current_lockout_id_hex,
+                cooldown_remaining_ms,
+                clear_token_recorded,
+                ..
+            } => {
                 assert_eq!(current_lockout_id_hex, lockout_id);
                 assert_eq!(cooldown_remaining_ms, LOCKOUT_COOLDOWN_MS - 1000);
                 assert!(!clear_token_recorded);
@@ -501,30 +562,57 @@ mod tests {
         }
 
         let store = read_lockout_store(&root).unwrap();
-        let lockout_id_hex = store.managers.get(mgr).unwrap().current_lockout_id_hex.clone().unwrap();
+        let lockout_id_hex = store
+            .managers
+            .get(mgr)
+            .unwrap()
+            .current_lockout_id_hex
+            .clone()
+            .unwrap();
         let mut raw_lockout_id = [0u8; 32];
         for i in 0..32 {
             raw_lockout_id[i] = u8::from_str_radix(&lockout_id_hex[i * 2..i * 2 + 2], 16).unwrap();
         }
 
         // 1. After 16m without clear token => STILL LOCKED
-        let check_no_token = check_manager_lockout(&root, mgr, now + LOCKOUT_COOLDOWN_MS + 60_000).unwrap();
-        assert!(matches!(check_no_token, LockoutPrecheck::LockedOut { clear_token_recorded: false, .. }));
+        let check_no_token =
+            check_manager_lockout(&root, mgr, now + LOCKOUT_COOLDOWN_MS + 60_000).unwrap();
+        assert!(matches!(
+            check_no_token,
+            LockoutPrecheck::LockedOut {
+                clear_token_recorded: false,
+                ..
+            }
+        ));
 
         // 2. Clear token recorded at 5m (before 15m) => recorded, but cannot reopen until 15m
-        let res_5m = record_lockout_clear_token(&root, mgr, &raw_lockout_id, now + 300_000).unwrap();
+        let res_5m =
+            record_lockout_clear_token(&root, mgr, &raw_lockout_id, now + 300_000).unwrap();
         assert!(!res_5m.reopens_now);
         assert_eq!(res_5m.cooldown_remaining_ms, LOCKOUT_COOLDOWN_MS - 300_000);
 
         let check_at_10m = check_manager_lockout(&root, mgr, now + 600_000).unwrap();
-        assert!(matches!(check_at_10m, LockoutPrecheck::LockedOut { clear_token_recorded: true, .. }));
+        assert!(matches!(
+            check_at_10m,
+            LockoutPrecheck::LockedOut {
+                clear_token_recorded: true,
+                ..
+            }
+        ));
 
         // 3. At 15m+1ms (BOTH conditions satisfied) => REOPENS!
-        let check_reopen = check_manager_lockout(&root, mgr, now + LOCKOUT_COOLDOWN_MS + 1).unwrap();
-        assert_eq!(check_reopen, LockoutPrecheck::Unlocked { consecutive_failed_attempts: 0 });
+        let check_reopen =
+            check_manager_lockout(&root, mgr, now + LOCKOUT_COOLDOWN_MS + 1).unwrap();
+        assert_eq!(
+            check_reopen,
+            LockoutPrecheck::Unlocked {
+                consecutive_failed_attempts: 0
+            }
+        );
 
         // 4. Old LCT1 cannot be reused (generation was consumed/closed)
-        let res_replay = record_lockout_clear_token(&root, mgr, &raw_lockout_id, now + LOCKOUT_COOLDOWN_MS + 2);
+        let res_replay =
+            record_lockout_clear_token(&root, mgr, &raw_lockout_id, now + LOCKOUT_COOLDOWN_MS + 2);
         assert_eq!(res_replay, Err(LockoutError::ManagerNotLockedOut));
 
         let _ = fs::remove_dir_all(&root);
@@ -542,7 +630,12 @@ mod tests {
 
         // mgr-2 is unaffected
         let check2 = check_manager_lockout(&root, "mgr-2", now).unwrap();
-        assert_eq!(check2, LockoutPrecheck::Unlocked { consecutive_failed_attempts: 0 });
+        assert_eq!(
+            check2,
+            LockoutPrecheck::Unlocked {
+                consecutive_failed_attempts: 0
+            }
+        );
 
         let _ = fs::remove_dir_all(&root);
     }
@@ -560,7 +653,10 @@ mod tests {
         // 2. Corrupted ciphertext
         fs::write(&path, b"corrupted-ciphertext-not-dpapi").unwrap();
         let res_corrupt = read_lockout_store(&root);
-        assert!(matches!(res_corrupt, Err(LockoutError::PresentMalformed(_))));
+        assert!(matches!(
+            res_corrupt,
+            Err(LockoutError::PresentMalformed(_))
+        ));
 
         // Verify file was NOT wiped or deleted
         assert!(path.exists());
@@ -640,9 +736,18 @@ mod tests {
 
         // 1. Invalid states with lastAttemptMs = 0 must fail closed
         let invalid_cases = [
-            ("attempts1_zero_last_attempt", r#"{"managers":{"mgr-1":{"consecutiveFailedAttempts":1,"lockedOut":false,"lockedAtMs":null,"currentLockoutIdHex":null,"clearTokenRecorded":false,"lastAttemptMs":0}}}"#),
-            ("attempts4_zero_last_attempt", r#"{"managers":{"mgr-1":{"consecutiveFailedAttempts":4,"lockedOut":false,"lockedAtMs":null,"currentLockoutIdHex":null,"clearTokenRecorded":false,"lastAttemptMs":0}}}"#),
-            ("reset_count0_zero_last_attempt", r#"{"managers":{"mgr-1":{"consecutiveFailedAttempts":0,"lockedOut":false,"lockedAtMs":null,"currentLockoutIdHex":null,"clearTokenRecorded":false,"lastAttemptMs":0}}}"#),
+            (
+                "attempts1_zero_last_attempt",
+                r#"{"managers":{"mgr-1":{"consecutiveFailedAttempts":1,"lockedOut":false,"lockedAtMs":null,"currentLockoutIdHex":null,"clearTokenRecorded":false,"lastAttemptMs":0}}}"#,
+            ),
+            (
+                "attempts4_zero_last_attempt",
+                r#"{"managers":{"mgr-1":{"consecutiveFailedAttempts":4,"lockedOut":false,"lockedAtMs":null,"currentLockoutIdHex":null,"clearTokenRecorded":false,"lastAttemptMs":0}}}"#,
+            ),
+            (
+                "reset_count0_zero_last_attempt",
+                r#"{"managers":{"mgr-1":{"consecutiveFailedAttempts":0,"lockedOut":false,"lockedAtMs":null,"currentLockoutIdHex":null,"clearTokenRecorded":false,"lastAttemptMs":0}}}"#,
+            ),
         ];
 
         for (name, json_str) in invalid_cases {
@@ -675,29 +780,98 @@ mod tests {
 
             // Invariant: rejected PRESENT_INVALID file remains intact and is NOT replaced or reset
             let raw_after = fs::read(&path).unwrap();
-            assert_eq!(raw_before, raw_after, "{name} file must remain intact and not be overwritten/reset");
+            assert_eq!(
+                raw_before, raw_after,
+                "{name} file must remain intact and not be overwritten/reset"
+            );
         }
 
         // 2. Corresponding positive timestamp states must be accepted as valid
         let valid_cases = [
-            ("attempts1_positive_last_attempt", r#"{"managers":{"mgr-1":{"consecutiveFailedAttempts":1,"lockedOut":false,"lockedAtMs":null,"currentLockoutIdHex":null,"clearTokenRecorded":false,"lastAttemptMs":500000}}}"#, 1),
-            ("attempts4_positive_last_attempt", r#"{"managers":{"mgr-1":{"consecutiveFailedAttempts":4,"lockedOut":false,"lockedAtMs":null,"currentLockoutIdHex":null,"clearTokenRecorded":false,"lastAttemptMs":500000}}}"#, 4),
-            ("reset_count0_positive_last_attempt", r#"{"managers":{"mgr-1":{"consecutiveFailedAttempts":0,"lockedOut":false,"lockedAtMs":null,"currentLockoutIdHex":null,"clearTokenRecorded":false,"lastAttemptMs":500000}}}"#, 0),
+            (
+                "attempts1_positive_last_attempt",
+                r#"{"managers":{"mgr-1":{"consecutiveFailedAttempts":1,"lockedOut":false,"lockedAtMs":null,"currentLockoutIdHex":null,"clearTokenRecorded":false,"lastAttemptMs":500000}}}"#,
+                1,
+            ),
+            (
+                "attempts4_positive_last_attempt",
+                r#"{"managers":{"mgr-1":{"consecutiveFailedAttempts":4,"lockedOut":false,"lockedAtMs":null,"currentLockoutIdHex":null,"clearTokenRecorded":false,"lastAttemptMs":500000}}}"#,
+                4,
+            ),
+            (
+                "reset_count0_positive_last_attempt",
+                r#"{"managers":{"mgr-1":{"consecutiveFailedAttempts":0,"lockedOut":false,"lockedAtMs":null,"currentLockoutIdHex":null,"clearTokenRecorded":false,"lastAttemptMs":500000}}}"#,
+                0,
+            ),
         ];
 
         for (name, json_str, expected_attempts) in valid_cases {
             let ciphertext = dpapi_envelope::dpapi_protect(json_str.as_bytes()).unwrap();
             write_atomic(&path, &ciphertext).unwrap();
 
-            let store = read_lockout_store(&root).unwrap_or_else(|e| panic!("{name} must be readable: {e:?}"));
+            let store = read_lockout_store(&root)
+                .unwrap_or_else(|e| panic!("{name} must be readable: {e:?}"));
             let entry = store.managers.get("mgr-1").expect("mgr-1 entry present");
             assert_eq!(entry.consecutive_failed_attempts, expected_attempts);
             assert_eq!(entry.last_attempt_ms, 500000);
 
-            let check = check_manager_lockout(&root, "mgr-1", 1_000_000).unwrap_or_else(|e| panic!("{name} check must succeed: {e:?}"));
-            assert_eq!(check, LockoutPrecheck::Unlocked { consecutive_failed_attempts: expected_attempts });
+            let check = check_manager_lockout(&root, "mgr-1", 1_000_000)
+                .unwrap_or_else(|e| panic!("{name} check must succeed: {e:?}"));
+            assert_eq!(
+                check,
+                LockoutPrecheck::Unlocked {
+                    consecutive_failed_attempts: expected_attempts
+                }
+            );
         }
 
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn legacy_unversioned_store_is_migrated_on_next_write() {
+        let root = temp_root();
+        let path = lockout_state_path(&root);
+
+        let legacy_json = r#"{"managers":{"mgr-1":{"consecutiveFailedAttempts":1,"lockedOut":false,"lockedAtMs":null,"currentLockoutIdHex":null,"clearTokenRecorded":false,"lastAttemptMs":1000}}}"#;
+        let ciphertext = dpapi_envelope::dpapi_protect(legacy_json.as_bytes()).unwrap();
+        write_atomic(&path, &ciphertext).unwrap();
+
+        let store = read_lockout_store(&root).unwrap();
+        assert_eq!(store.schema_version, 0);
+
+        // Any successful write (e.g. the next recorded attempt) upgrades the
+        // on-disk schemaVersion to current.
+        record_failed_pin_attempt(&root, "mgr-1", 2000).unwrap();
+        let migrated = read_lockout_store(&root).unwrap();
+        assert_eq!(migrated.schema_version, LOCKOUT_STORE_SCHEMA_VERSION);
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn unknown_newer_store_schema_version_fails_closed() {
+        let root = temp_root();
+        let path = lockout_state_path(&root);
+
+        let json = format!(
+            r#"{{"schemaVersion":{},"managers":{{}}}}"#,
+            LOCKOUT_STORE_SCHEMA_VERSION + 1
+        );
+        let ciphertext = dpapi_envelope::dpapi_protect(json.as_bytes()).unwrap();
+        write_atomic(&path, &ciphertext).unwrap();
+
+        let res = read_lockout_store(&root);
+        assert!(matches!(res, Err(LockoutError::PresentMalformed(_))));
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn writer_always_emits_current_store_schema_version() {
+        let root = temp_root();
+        record_successful_pin_attempt(&root, "mgr-1", 1000).unwrap();
+        let store = read_lockout_store(&root).unwrap();
+        assert_eq!(store.schema_version, LOCKOUT_STORE_SCHEMA_VERSION);
         let _ = fs::remove_dir_all(&root);
     }
 

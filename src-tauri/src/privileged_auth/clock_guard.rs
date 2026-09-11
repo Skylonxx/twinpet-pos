@@ -6,9 +6,9 @@
 //! Conforms strictly to Gemini Ruling R1 (native time only, rollback fail-closed)
 //! and R5 (PRESENT_INVALID = FAIL_CLOSED).
 
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
-use serde::{Deserialize, Serialize};
 
 use super::dpapi_envelope;
 
@@ -20,27 +20,37 @@ use std::sync::Mutex;
 
 static CLOCK_GUARD_MUTEX: Mutex<()> = Mutex::new(());
 
+/// SEC-001 epoch-2: current explicit `schemaVersion` for `ClockGuardState`.
+/// Absence of the field on an existing on-disk store (serde default `0`) is
+/// treated as implicit legacy version 1; any value greater than this
+/// constant is an unknown newer format and fails closed.
+pub const CLOCK_GUARD_SCHEMA_VERSION: u32 = 1;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ClockGuardState {
     pub last_observed_system_time_ms: u64,
+    #[serde(default)]
+    pub schema_version: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ClockGuardError {
     PresentMalformed(String),
-    ClockRollbackDetected {
-        now_ms: u64,
-        last_observed_ms: u64,
-    },
+    ClockRollbackDetected { now_ms: u64, last_observed_ms: u64 },
     IoError(String),
 }
 
 impl std::fmt::Display for ClockGuardError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ClockGuardError::PresentMalformed(msg) => write!(f, "Clock guard state present but invalid: {msg}"),
-            ClockGuardError::ClockRollbackDetected { now_ms, last_observed_ms } => {
+            ClockGuardError::PresentMalformed(msg) => {
+                write!(f, "Clock guard state present but invalid: {msg}")
+            }
+            ClockGuardError::ClockRollbackDetected {
+                now_ms,
+                last_observed_ms,
+            } => {
                 write!(f, "Clock rollback detected: current time {now_ms} < last observed {last_observed_ms}")
             }
             ClockGuardError::IoError(msg) => write!(f, "Clock guard IO error: {msg}"),
@@ -64,7 +74,9 @@ pub fn read_clock_guard_state(root: &Path) -> Result<Option<ClockGuardState>, Cl
     };
 
     if ciphertext.is_empty() {
-        return Err(ClockGuardError::PresentMalformed("file is empty".to_string()));
+        return Err(ClockGuardError::PresentMalformed(
+            "file is empty".to_string(),
+        ));
     }
 
     let plaintext = dpapi_envelope::dpapi_unprotect(&ciphertext)
@@ -74,18 +86,36 @@ pub fn read_clock_guard_state(root: &Path) -> Result<Option<ClockGuardState>, Cl
         .map_err(|e| ClockGuardError::PresentMalformed(format!("JSON parse failed: {e}")))?;
 
     if state.last_observed_system_time_ms == 0 {
-        return Err(ClockGuardError::PresentMalformed("last_observed_system_time_ms must be positive".to_string()));
+        return Err(ClockGuardError::PresentMalformed(
+            "last_observed_system_time_ms must be positive".to_string(),
+        ));
+    }
+    if state.schema_version > CLOCK_GUARD_SCHEMA_VERSION {
+        return Err(ClockGuardError::PresentMalformed(format!(
+            "unknown newer schemaVersion: {} > {CLOCK_GUARD_SCHEMA_VERSION}",
+            state.schema_version
+        )));
     }
 
     Ok(Some(state))
 }
 
-pub fn write_clock_guard_state(root: &Path, state: &ClockGuardState) -> Result<(), ClockGuardError> {
+pub fn write_clock_guard_state(
+    root: &Path,
+    state: &ClockGuardState,
+) -> Result<(), ClockGuardError> {
     if state.last_observed_system_time_ms == 0 {
-        return Err(ClockGuardError::PresentMalformed("last_observed_system_time_ms must be positive".to_string()));
+        return Err(ClockGuardError::PresentMalformed(
+            "last_observed_system_time_ms must be positive".to_string(),
+        ));
     }
+    // The writer always emits the current schema version.
+    let state = ClockGuardState {
+        last_observed_system_time_ms: state.last_observed_system_time_ms,
+        schema_version: CLOCK_GUARD_SCHEMA_VERSION,
+    };
     let path = clock_guard_path(root);
-    let plaintext = serde_json::to_vec(state)
+    let plaintext = serde_json::to_vec(&state)
         .map_err(|e| ClockGuardError::PresentMalformed(format!("JSON serialize failed: {e}")))?;
 
     let ciphertext = dpapi_envelope::dpapi_protect(&plaintext)
@@ -114,7 +144,9 @@ pub fn assert_valid_and_advance_clock(root: &Path, now_ms: u64) -> Result<(), Cl
         .map_err(|_| ClockGuardError::PresentMalformed("clock guard mutex poisoned".to_string()))?;
 
     if now_ms == 0 {
-        return Err(ClockGuardError::PresentMalformed("now_ms must be positive".to_string()));
+        return Err(ClockGuardError::PresentMalformed(
+            "now_ms must be positive".to_string(),
+        ));
     }
 
     let existing = read_clock_guard_state(root)?;
@@ -122,6 +154,7 @@ pub fn assert_valid_and_advance_clock(root: &Path, now_ms: u64) -> Result<(), Cl
         None => {
             let initial = ClockGuardState {
                 last_observed_system_time_ms: now_ms,
+                schema_version: CLOCK_GUARD_SCHEMA_VERSION,
             };
             write_clock_guard_state(root, &initial)?;
             Ok(())
@@ -135,6 +168,7 @@ pub fn assert_valid_and_advance_clock(root: &Path, now_ms: u64) -> Result<(), Cl
             }
             let updated = ClockGuardState {
                 last_observed_system_time_ms: now_ms,
+                schema_version: CLOCK_GUARD_SCHEMA_VERSION,
             };
             write_clock_guard_state(root, &updated)?;
             Ok(())
@@ -222,8 +256,59 @@ mod tests {
         let same_day_later_utc7 = before_midnight_utc7 + 30_000; // +30s
         let after_midnight_utc7 = before_midnight_utc7 + 120_000; // +2m
 
-        assert!(!is_cross_midnight_utc7(before_midnight_utc7, same_day_later_utc7));
-        assert!(is_cross_midnight_utc7(before_midnight_utc7, after_midnight_utc7));
+        assert!(!is_cross_midnight_utc7(
+            before_midnight_utc7,
+            same_day_later_utc7
+        ));
+        assert!(is_cross_midnight_utc7(
+            before_midnight_utc7,
+            after_midnight_utc7
+        ));
+    }
+
+    #[test]
+    fn legacy_unversioned_clock_guard_is_migrated_on_next_write() {
+        let root = temp_root();
+        let path = clock_guard_path(&root);
+
+        let legacy_json = r#"{"lastObservedSystemTimeMs":1000000}"#;
+        let ciphertext = dpapi_envelope::dpapi_protect(legacy_json.as_bytes()).unwrap();
+        write_atomic(&path, &ciphertext).unwrap();
+
+        let state = read_clock_guard_state(&root).unwrap().unwrap();
+        assert_eq!(state.schema_version, 0);
+
+        assert!(assert_valid_and_advance_clock(&root, 1_000_001).is_ok());
+        let migrated = read_clock_guard_state(&root).unwrap().unwrap();
+        assert_eq!(migrated.schema_version, CLOCK_GUARD_SCHEMA_VERSION);
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn unknown_newer_clock_guard_schema_version_fails_closed() {
+        let root = temp_root();
+        let path = clock_guard_path(&root);
+
+        let json = format!(
+            r#"{{"lastObservedSystemTimeMs":1000000,"schemaVersion":{}}}"#,
+            CLOCK_GUARD_SCHEMA_VERSION + 1
+        );
+        let ciphertext = dpapi_envelope::dpapi_protect(json.as_bytes()).unwrap();
+        write_atomic(&path, &ciphertext).unwrap();
+
+        let res = read_clock_guard_state(&root);
+        assert!(matches!(res, Err(ClockGuardError::PresentMalformed(_))));
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn writer_always_emits_current_clock_guard_schema_version() {
+        let root = temp_root();
+        assert!(assert_valid_and_advance_clock(&root, 1_000_000).is_ok());
+        let state = read_clock_guard_state(&root).unwrap().unwrap();
+        assert_eq!(state.schema_version, CLOCK_GUARD_SCHEMA_VERSION);
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]
@@ -258,7 +343,10 @@ mod tests {
 
         // A subsequent call with older timestamp MUST be rejected as rollback
         let rollback_res = assert_valid_and_advance_clock(&root_arc, 1_009_999);
-        assert!(matches!(rollback_res, Err(ClockGuardError::ClockRollbackDetected { .. })));
+        assert!(matches!(
+            rollback_res,
+            Err(ClockGuardError::ClockRollbackDetected { .. })
+        ));
 
         let _ = fs::remove_dir_all(&*root_arc);
     }

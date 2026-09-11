@@ -447,12 +447,40 @@ fn validate_existing_committed_state(root: &Path) -> Result<(), String> {
 
 /// Fail-closed native startup gate. True virgin may proceed. Any prior committed
 /// Phase-B state must have a readable manifest, valid inventory, and all eight files.
+///
+/// SEC-001 epoch-2 rollback remediation (Claude-024 / Gemini-041 authority
+/// `GLOBAL_FLOOR_INDEPENDENT_OF_LEGACY_MANIFEST`): the committed epoch floor
+/// can legitimately exist with no legacy Phase-B manifest ever having been
+/// created — e.g. a machine that only ever exercised privileged-auth state,
+/// which commits floor 2 independently of Phase-B migration. A committed
+/// floor therefore does *not* by itself imply a manifest must exist; only
+/// actual legacy Phase-B durable state (the manifest file itself, or domain
+/// `.sqlite` files) does. Codex-011 found the prior version of this function
+/// conflated the two, incorrectly failing closed on a legitimate
+/// privileged-auth-only clean-install restart.
 pub fn assert_startup_integrity(app_data: &Path) -> Result<(), String> {
     match epoch_floor::evaluate_floor(app_data) {
         epoch_floor::FloorDecision::PermitVirgin => Ok(()),
         epoch_floor::FloorDecision::FailClosed { reason } => Err(reason),
         epoch_floor::FloorDecision::PermitCompatible { .. } => {
-            validate_existing_committed_state(app_data)
+            let manifest_path = durable_dir(app_data).join(MANIFEST_FILE_NAME);
+            if manifest_path.exists() {
+                // A manifest exists (whatever its state) — it is authoritative
+                // and must validate.
+                return validate_existing_committed_state(app_data);
+            }
+            if epoch_floor::durable_domain_files_exist(app_data) {
+                // Legacy Phase-B durable state exists but its manifest is
+                // missing: this is exactly the case the manifest is required
+                // to explain. Fail closed.
+                return Err(
+                    "migration manifest is missing while durable domain files exist".into(),
+                );
+            }
+            // No manifest and no legacy Phase-B domain files: the committed
+            // floor reflects privileged-auth-only (or otherwise non-legacy)
+            // state, which never required a Phase-B manifest. Permit.
+            Ok(())
         }
     }
 }
@@ -1441,17 +1469,98 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
+    /// SEC-001 epoch-2 rollback remediation (Claude-024), required behavioral
+    /// test #2/#3: a committed floor with no legacy Phase-B durable state
+    /// (no domain `.sqlite` files) and no manifest must PASS — this is the
+    /// clean-install / privileged-auth-only restart case Codex-011 found
+    /// incorrectly failing closed under the prior (pre-remediation) logic,
+    /// which required the previous version of this same test to assert the
+    /// opposite outcome.
     #[test]
-    fn valid_floor_missing_manifest_fails_closed() {
+    fn floor2_no_legacy_state_no_manifest_passes() {
         let dir = std::env::temp_dir().join(format!(
-            "twinpet-kv-floor-{}-{}",
+            "twinpet-kv-floor-nolegacy-{}-{}",
             std::process::id(),
             random_session_id()
         ));
         std::fs::create_dir_all(&dir).unwrap();
         epoch_floor::write_floor_atomic(&dir, "test-build").unwrap();
+        assert!(assert_startup_integrity(&dir).is_ok());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// SEC-001 epoch-2 rollback remediation (Claude-024), required behavioral
+    /// test #3: privileged-auth-only state (no legacy Phase-B artifacts) plus
+    /// a committed floor and no legacy manifest must PASS.
+    #[test]
+    fn privileged_auth_only_state_with_floor2_and_no_legacy_manifest_passes() {
+        let dir = std::env::temp_dir().join(format!(
+            "twinpet-kv-floor-privauth-{}-{}",
+            std::process::id(),
+            random_session_id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("twinpet-oac-pepper.dpapi"), b"x").unwrap();
+        epoch_floor::write_floor_atomic(&dir, "test-build").unwrap();
+        assert!(assert_startup_integrity(&dir).is_ok());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// SEC-001 epoch-2 rollback remediation (Claude-024), required behavioral
+    /// test #1: a true virgin machine that commits floor 2 at startup and is
+    /// then restarted with no legacy manifest ever having existed must PASS
+    /// on the simulated restart.
+    #[test]
+    fn virgin_floor2_commit_then_restart_with_no_legacy_manifest_passes() {
+        let (_, dir) = engine();
+        assert!(assert_startup_integrity(&dir).is_ok());
+        epoch_floor::write_floor_atomic(&dir, "test-build").unwrap();
+        // Simulated restart: re-evaluate from disk state only.
+        assert!(assert_startup_integrity(&dir).is_ok());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// SEC-001 epoch-2 rollback remediation (Claude-024), required behavioral
+    /// test #4: legacy Phase-B durable state (domain `.sqlite` files) that
+    /// actually requires a manifest, with the manifest missing, must fail
+    /// closed — this is the real defect the manifest requirement protects
+    /// against, and must remain intact after distinguishing it from the
+    /// no-legacy-state case above.
+    #[test]
+    fn legacy_durable_domain_files_without_manifest_fails_closed() {
+        let dir = std::env::temp_dir().join(format!(
+            "twinpet-kv-floor-legacy-nomanifest-{}-{}",
+            std::process::id(),
+            random_session_id()
+        ));
+        let durable = durable_dir(&dir);
+        std::fs::create_dir_all(&durable).unwrap();
+        std::fs::write(durable.join("twinpet-device.epoch1.sqlite"), b"x").unwrap();
+        epoch_floor::write_floor_atomic(&dir, "test-build").unwrap();
         let err = assert_startup_integrity(&dir).unwrap_err();
-        assert!(err.contains("manifest"), "{err}");
+        assert!(err.contains("manifest") && err.contains("domain"), "{err}");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// SEC-001 epoch-2 rollback remediation (Claude-024), required behavioral
+    /// test #7: an epoch-1 legacy floor with no legacy Phase-B state and no
+    /// manifest must remain permitted under this (epoch-2) binary, exactly
+    /// like the epoch-2 case above — the manifest-requirement fix must not
+    /// regress epoch-1 compatibility.
+    #[test]
+    fn epoch1_floor_with_no_legacy_state_passes_under_epoch2_binary() {
+        let dir = std::env::temp_dir().join(format!(
+            "twinpet-kv-floor-epoch1-nolegacy-{}-{}",
+            std::process::id(),
+            random_session_id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            epoch_floor::floor_path(&dir),
+            "committedEpochFloor=1\nwriterBuildId=legacy-build\n",
+        )
+        .unwrap();
+        assert!(assert_startup_integrity(&dir).is_ok());
         let _ = std::fs::remove_dir_all(dir);
     }
 
@@ -1514,7 +1623,7 @@ mod tests {
             .unwrap();
         seed_domain_files(&dir, TEST_EPOCH);
         let incomplete = serde_json::json!({
-          "schemaVersion": 1,
+          "schemaVersion": MAX_KNOWN_EPOCH_SCHEMA,
           "domains": [{
             "database": "twinpet-device",
             "digestSha256": hex64()
@@ -1557,6 +1666,36 @@ mod tests {
         assert_eq!(
             snapshot["activeCommitted"]["epochId"],
             Value::String(TEST_EPOCH.into())
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// SEC-001 epoch-2 regression: the existing 8-domain Phase-B COMMITTED
+    /// path must remain unaffected by the `MAX_KNOWN_EPOCH_SCHEMA` bump from
+    /// 1 to 2 — `manifest_put_epoch`'s existing floor commit now durably
+    /// writes floor 2, and startup integrity must still validate cleanly.
+    #[test]
+    fn epoch2_bump_does_not_break_existing_committed_domain_path() {
+        let (engine, dir) = engine();
+        engine
+            .manifest_put_epoch(TEST_EPOCH, "COPYING", "{}", None, None)
+            .unwrap();
+        seed_domain_files(&dir, TEST_EPOCH);
+        engine
+            .manifest_put_epoch(
+                TEST_EPOCH,
+                "COMMITTED",
+                &committed_inventory(&["empty-branch"]),
+                None,
+                None,
+            )
+            .unwrap();
+        assert!(assert_startup_integrity(&dir).is_ok());
+        assert_eq!(
+            epoch_floor::evaluate_floor(&dir),
+            epoch_floor::FloorDecision::PermitCompatible {
+                floor: epoch_floor::MAX_KNOWN_EPOCH_SCHEMA
+            }
         );
         let _ = std::fs::remove_dir_all(dir);
     }

@@ -405,16 +405,35 @@ pub fn native_argon2_benchmark() -> Result<Argon2BenchmarkDto, String> {
 
 // --- Command 5: native_get_device_registration_status ---
 
+/// Root-parameterized so the row-2 status decode-error behavior below is
+/// directly unit-testable without depending on the runtime `APPDATA` root.
+/// SEC-001 epoch-2 final remediation (Claude-025 / Gemini-042 authority),
+/// `PROPAGATE_EXISTING_COMMAND_ERROR_CHANNEL`: a genuinely absent security
+/// device id file remains a non-error absent result (`Ok(None)` from the
+/// centralized decoder), but a decode failure — corrupt bytes or an unknown
+/// newer version — must now propagate through this command's existing
+/// `Result<_, String>` error channel rather than being collapsed via
+/// `.ok().flatten()` into a false "not yet registered" success. The prior
+/// `.filter(|b| b.len() == SECURITY_DEVICE_ID_LEN)` (Claude-024) had already
+/// fixed a related false-negative for the current versioned (longer) shape;
+/// this closes the remaining Codex-012 finding that corrupt/unknown-newer
+/// content was still silently swallowed.
+fn device_registration_status_internal(root: &Path) -> Result<DeviceRegistrationStatusDto, String> {
+    let security_device_id_hex = security_device_id::read_persisted_security_device_id(root)
+        .map_err(|e| format!("{e:?}"))?
+        .map(|b| {
+            b.iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>()
+        });
+    let device_key_present = device_proof::load_enrolled_device_keypair(root).is_ok();
+    let stored_oac_count = count_stored_oacs(root);
+    Ok(DeviceRegistrationStatusDto { security_device_id_hex, device_key_present, stored_oac_count })
+}
+
 #[tauri::command]
 pub fn native_get_device_registration_status() -> Result<DeviceRegistrationStatusDto, String> {
-    let root = app_data_dir();
-    let security_device_id_hex = fs::read(security_device_id::security_device_id_path(&root))
-        .ok()
-        .filter(|b| b.len() == security_device_id::SECURITY_DEVICE_ID_LEN)
-        .map(|b| b.iter().map(|byte| format!("{byte:02x}")).collect::<String>());
-    let device_key_present = device_proof::load_enrolled_device_keypair(&root).is_ok();
-    let stored_oac_count = count_stored_oacs(&root);
-    Ok(DeviceRegistrationStatusDto { security_device_id_hex, device_key_present, stored_oac_count })
+    device_registration_status_internal(&app_data_dir())
 }
 
 // --- Command 6: native_verify_offline_pin ---
@@ -771,6 +790,7 @@ mod command_glue_tests {
             meta_sha256,
             manifest_sha256: None,
             committed_at_local_ms: 1000,
+            schema_version: enrollment_meta::ENROLLMENT_FENCE_SCHEMA_VERSION,
         };
         let fence_json = serde_json::to_vec_pretty(&fence).unwrap();
         fs::write(enrollment_meta::enrollment_fence_path(dir), &fence_json).unwrap();
@@ -900,6 +920,77 @@ mod command_glue_tests {
         let result = persist_provisioned_oac(&dir, &tampered_json, &oks1_base64);
         assert!(result.is_err());
         assert!(!oac_store_dir(&dir).join("oac-2.json").exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // --- R2: row-2 device registration status decode-error propagation ---
+    // SEC-001 epoch-2 final remediation (Claude-025 / Gemini-042 authority).
+
+    #[test]
+    fn device_registration_status_genuinely_absent_is_non_error() {
+        let dir = temp_dir();
+        let dto = device_registration_status_internal(&dir).unwrap();
+        assert_eq!(dto.security_device_id_hex, None);
+        assert!(!dto.device_key_present);
+        assert_eq!(dto.stored_oac_count, 0);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn device_registration_status_legacy_valid_is_success() {
+        let dir = temp_dir();
+        let legacy = [7u8; security_device_id::SECURITY_DEVICE_ID_LEN];
+        fs::write(security_device_id::security_device_id_path(&dir), legacy).unwrap();
+        let dto = device_registration_status_internal(&dir).unwrap();
+        assert_eq!(
+            dto.security_device_id_hex,
+            Some(
+                legacy
+                    .iter()
+                    .map(|b| format!("{b:02x}"))
+                    .collect::<String>()
+            )
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn device_registration_status_current_versioned_is_success() {
+        let dir = temp_dir();
+        let id = [9u8; security_device_id::SECURITY_DEVICE_ID_LEN];
+        fs::write(
+            security_device_id::security_device_id_path(&dir),
+            security_device_id::versioned_payload(&id),
+        )
+        .unwrap();
+        let dto = device_registration_status_internal(&dir).unwrap();
+        assert_eq!(
+            dto.security_device_id_hex,
+            Some(id.iter().map(|b| format!("{b:02x}")).collect::<String>())
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn device_registration_status_corrupt_fails_closed_through_error_channel() {
+        let dir = temp_dir();
+        fs::write(security_device_id::security_device_id_path(&dir), b"short").unwrap();
+        let result = device_registration_status_internal(&dir);
+        assert!(
+            result.is_err(),
+            "corrupt security device id must propagate an error, not a false-absent success"
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn device_registration_status_unknown_newer_version_fails_closed_through_error_channel() {
+        let dir = temp_dir();
+        let mut payload = vec![security_device_id::SECURITY_DEVICE_ID_STORE_VERSION + 1];
+        payload.extend_from_slice(&[5u8; security_device_id::SECURITY_DEVICE_ID_LEN]);
+        fs::write(security_device_id::security_device_id_path(&dir), &payload).unwrap();
+        let result = device_registration_status_internal(&dir);
+        assert!(result.is_err(), "unknown-newer security device id version must propagate an error, not a false-absent success");
         let _ = fs::remove_dir_all(&dir);
     }
 }

@@ -36,7 +36,7 @@ use super::frames::{
 };
 use super::monotonic_clock::{boot_session_id, qpc_frequency, read_qpc_ticks, ticks_to_elapsed_ms};
 use super::oac_keyset_frame::find_signing_key;
-use super::security_device_id::{security_device_id_path, SECURITY_DEVICE_ID_LEN};
+use super::security_device_id::{decode_security_device_id_bytes, security_device_id_path};
 
 pub const STAFF_SESSION_CACHE_FILENAME: &str = "twinpet-staff-session.dpapi";
 pub const STAFF_SESSION_CACHE_TMP_FILENAME: &str = "twinpet-staff-session.dpapi.tmp";
@@ -134,15 +134,18 @@ fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
     Ok(out)
 }
 
+/// SEC-001 epoch-2 rollback remediation (Claude-024 / Gemini-041 authority):
+/// migrated from a raw `fs::read` + exact-16-byte assumption to the
+/// centralized `security_device_id::decode_security_device_id_bytes`, which
+/// accepts both the legacy unversioned and current versioned on-disk shapes
+/// and rejects an unknown newer version — Codex-011 found the previous exact-
+/// length check would silently break once the writer emitted the versioned
+/// shape.
 fn load_security_device_id(root: &Path) -> Result<[u8; 16], String> {
     let path = security_device_id_path(root);
     let bytes = fs::read(&path).map_err(|e| format!("cannot read security device id: {e}"))?;
-    if bytes.len() != SECURITY_DEVICE_ID_LEN {
-        return Err(format!("security device id length mismatch: {} != {SECURITY_DEVICE_ID_LEN}", bytes.len()));
-    }
-    let mut id = [0u8; 16];
-    id.copy_from_slice(&bytes);
-    Ok(id)
+    decode_security_device_id_bytes(&bytes)
+        .map_err(|e| format!("security device id decode failed: {e:?}"))
 }
 
 /// Prepares a fresh staff session challenge, minting and signing SSCP1 with the enrolled device key.
@@ -1098,6 +1101,45 @@ mod tests {
     }
 
     static TEST_SERIAL_MUTEX: Mutex<()> = Mutex::new(());
+
+    /// SEC-001 epoch-2 rollback remediation (Claude-024), required behavioral
+    /// test: the current versioned security-device-id shape must work
+    /// through this real production consumer path end-to-end, not merely
+    /// through the centralized decoder in isolation.
+    #[test]
+    fn prepare_challenge_succeeds_with_current_versioned_security_device_id() {
+        let _serial = TEST_SERIAL_MUTEX.lock().unwrap();
+        reset_in_process_invalidation();
+        let root = temp_dir();
+        let (_dev_key, sec_id) = setup_device_identity(&root, "BRANCH-1");
+        fs::write(
+            security_device_id_path(&root),
+            super::super::security_device_id::versioned_payload(&sec_id),
+        )
+        .unwrap();
+        let c1 = prepare_staff_session_challenge_internal(&root, "SSA1_LOGIN", "BRANCH-1", "STAFF-A").unwrap();
+        assert!(c1.generation >= 1);
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    /// SEC-001 epoch-2 rollback remediation (Claude-024), required behavioral
+    /// test: an unknown-newer security-device-id version must fail closed
+    /// through this same production consumer path.
+    #[test]
+    fn prepare_challenge_fails_closed_on_unknown_newer_security_device_id_version() {
+        let _serial = TEST_SERIAL_MUTEX.lock().unwrap();
+        reset_in_process_invalidation();
+        let root = temp_dir();
+        let (_dev_key, sec_id) = setup_device_identity(&root, "BRANCH-1");
+        let mut bad =
+            vec![super::super::security_device_id::SECURITY_DEVICE_ID_STORE_VERSION + 1];
+        bad.extend_from_slice(&sec_id);
+        fs::write(security_device_id_path(&root), &bad).unwrap();
+        let err = prepare_staff_session_challenge_internal(&root, "SSA1_LOGIN", "BRANCH-1", "STAFF-A")
+            .unwrap_err();
+        assert!(err.contains("decode"), "{err}");
+        let _ = fs::remove_dir_all(&root);
+    }
 
     #[test]
     fn prepare_challenge_increments_generation_and_signs_sscp1() {
