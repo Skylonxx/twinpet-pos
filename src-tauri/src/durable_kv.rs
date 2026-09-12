@@ -346,6 +346,19 @@ fn legal_epoch_transition(from: Option<&str>, to: &str) -> Result<(), String> {
     }
 }
 
+/// SEC-001 schema-1 compatibility remediation (Claude-040 / Gemini-059 authority
+/// `OPTION_A_DECOUPLE_KEEP_CURRENT_INVENTORY_SCHEMA_1`): the migration-inventory
+/// contract version carried in `inventory_json.schemaVersion` is intentionally
+/// independent from the global epoch schema (`MAX_KNOWN_EPOCH_SCHEMA`, defined in
+/// `epoch_floor.rs`). AGY-001 proved a historical committed manifest legitimately
+/// persisted with `schemaVersion=1` before any global epoch bump was being
+/// rejected only because this validator compared it against the global constant
+/// instead of the inventory contract's own version. The inventory contract has
+/// not changed shape, so its supported set remains `{1}` regardless of later,
+/// unrelated global epoch bumps; a future inventory contract change must bump
+/// this constant explicitly, not implicitly track the global epoch.
+const CURRENT_MIGRATION_INVENTORY_SCHEMA_VERSION: u64 = 1;
+
 fn validate_committed_inventory(
     root: &Path,
     epoch_id: &str,
@@ -358,7 +371,7 @@ fn validate_committed_inventory(
         .get("schemaVersion")
         .and_then(Value::as_u64)
         .ok_or_else(|| "committed inventory missing schemaVersion".to_string())?;
-    if schema != MAX_KNOWN_EPOCH_SCHEMA as u64 {
+    if schema != CURRENT_MIGRATION_INVENTORY_SCHEMA_VERSION {
         return Err(format!("committed schemaVersion {schema} is unsupported"));
     }
     let domains = parsed
@@ -1179,7 +1192,11 @@ mod tests {
         "a".repeat(64)
     }
 
-    fn committed_inventory(branch_ids: &[&str]) -> String {
+    /// Builds a syntactically-complete committed inventory with an explicit
+    /// `schemaVersion`, passed in by the caller as a plain literal so each
+    /// call site controls its own version independently of any named
+    /// constant.
+    fn inventory_with_schema(schema_version: u64, branch_ids: &[&str]) -> String {
         let digest = hex64();
         let domains: Vec<Value> = DOMAIN_DATABASES
             .iter()
@@ -1193,7 +1210,7 @@ mod tests {
             })
             .collect();
         serde_json::json!({
-          "schemaVersion": MAX_KNOWN_EPOCH_SCHEMA,
+          "schemaVersion": schema_version,
           "domains": domains,
           "p13": {
             "branchIds": branch_ids,
@@ -1207,6 +1224,21 @@ mod tests {
           }
         })
         .to_string()
+    }
+
+    fn committed_inventory(branch_ids: &[&str]) -> String {
+        inventory_with_schema(CURRENT_MIGRATION_INVENTORY_SCHEMA_VERSION, branch_ids)
+    }
+
+    /// SEC-001 Claude-040 historical literal schema-1 regression fixture.
+    /// The `1` here is a hardcoded literal — deliberately NOT
+    /// `CURRENT_MIGRATION_INVENTORY_SCHEMA_VERSION` and NOT
+    /// `MAX_KNOWN_EPOCH_SCHEMA` — so a future bump of either named constant
+    /// cannot silently rewrite this fixture out from under the regression it
+    /// exists to prove: that bytes literally persisted with
+    /// `"schemaVersion": 1` before any global epoch bump remain acceptable.
+    fn historical_literal_schema1_inventory(branch_ids: &[&str]) -> String {
+        inventory_with_schema(1, branch_ids)
     }
 
     fn seed_domain_files(root: &Path, epoch: &str) {
@@ -1623,7 +1655,7 @@ mod tests {
             .unwrap();
         seed_domain_files(&dir, TEST_EPOCH);
         let incomplete = serde_json::json!({
-          "schemaVersion": MAX_KNOWN_EPOCH_SCHEMA,
+          "schemaVersion": CURRENT_MIGRATION_INVENTORY_SCHEMA_VERSION,
           "domains": [{
             "database": "twinpet-device",
             "digestSha256": hex64()
@@ -1697,6 +1729,118 @@ mod tests {
                 floor: epoch_floor::MAX_KNOWN_EPOCH_SCHEMA
             }
         );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// SEC-001 Claude-040 / Gemini-059 historical literal schema-1 regression.
+    /// Before this remediation, `validate_committed_inventory` compared
+    /// `schemaVersion` against `MAX_KNOWN_EPOCH_SCHEMA` (2), so this literal
+    /// `1` fixture would have been rejected with "committed schemaVersion 1
+    /// is unsupported" — exactly the AGY-001 UAT fatal. After decoupling to
+    /// `CURRENT_MIGRATION_INVENTORY_SCHEMA_VERSION` (1), it must be accepted.
+    #[test]
+    fn historical_literal_schema1_inventory_is_accepted_by_validator() {
+        let (_engine, dir) = engine();
+        seed_domain_files(&dir, TEST_EPOCH);
+        let inventory = historical_literal_schema1_inventory(&["empty-branch"]);
+        assert_eq!(
+            validate_committed_inventory(&dir, TEST_EPOCH, &inventory),
+            Ok(())
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// SEC-001 Claude-040 / Gemini-059 full real-state compatibility
+    /// regression, modeling the AGY-001 finding as closely as this module's
+    /// test architecture allows: a `committedEpochFloor=1` marker (written
+    /// literally, not via `write_floor_atomic`, which always stamps the
+    /// current global max) alongside a COMMITTED manifest row carrying the
+    /// historical literal `inventory_json.schemaVersion=1`, exact 8-domain
+    /// inventory, valid SHA-256 digests, and a valid p13 block, while the
+    /// current global epoch max is 2. This exercises the full
+    /// `assert_startup_integrity` startup-integrity boundary, not just a
+    /// trivial schema helper call.
+    #[test]
+    fn historical_schema1_committed_state_passes_full_startup_integrity() {
+        let (engine, dir) = engine();
+        engine
+            .manifest_put_epoch(TEST_EPOCH, "COPYING", "{}", None, None)
+            .unwrap();
+        seed_domain_files(&dir, TEST_EPOCH);
+        engine
+            .manifest_put_epoch(
+                TEST_EPOCH,
+                "COMMITTED",
+                &historical_literal_schema1_inventory(&["empty-branch"]),
+                None,
+                None,
+            )
+            .unwrap();
+        std::fs::write(
+            epoch_floor::floor_path(&dir),
+            "committedEpochFloor=1\nwriterBuildId=legacy-build\n",
+        )
+        .unwrap();
+        assert_eq!(
+            epoch_floor::evaluate_floor(&dir),
+            epoch_floor::FloorDecision::PermitCompatible { floor: 1 }
+        );
+        assert_eq!(assert_startup_integrity(&dir), Ok(()));
+        let snapshot = engine.manifest_get().unwrap();
+        assert_eq!(
+            snapshot["activeCommitted"]["epochId"],
+            Value::String(TEST_EPOCH.into())
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// SEC-001 Claude-040 / Gemini-059: Option A keeps the supported
+    /// migration-inventory schema set at `{1}`. An unknown-newer inventory
+    /// schema (e.g. `2`, which happens to equal the unrelated global
+    /// `MAX_KNOWN_EPOCH_SCHEMA`) must still fail closed with no compatibility
+    /// fallback.
+    #[test]
+    fn unknown_newer_inventory_schema_fails_closed() {
+        let (_engine, dir) = engine();
+        seed_domain_files(&dir, TEST_EPOCH);
+        let newer = inventory_with_schema(2, &["empty-branch"]);
+        let err = validate_committed_inventory(&dir, TEST_EPOCH, &newer).unwrap_err();
+        assert!(err.contains("schemaVersion 2 is unsupported"), "{err}");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// Regression for the exact validator lines this remediation touched:
+    /// a committed inventory with no `schemaVersion` key must still fail
+    /// closed after decoupling from `MAX_KNOWN_EPOCH_SCHEMA`.
+    #[test]
+    fn missing_inventory_schema_fails_closed() {
+        let (_engine, dir) = engine();
+        seed_domain_files(&dir, TEST_EPOCH);
+        let missing = serde_json::json!({
+          "domains": [],
+          "p13": {}
+        })
+        .to_string();
+        let err = validate_committed_inventory(&dir, TEST_EPOCH, &missing).unwrap_err();
+        assert!(err.contains("missing schemaVersion"), "{err}");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// Regression for the exact validator lines this remediation touched:
+    /// a non-numeric `schemaVersion` must still fail closed after decoupling
+    /// from `MAX_KNOWN_EPOCH_SCHEMA`.
+    #[test]
+    fn malformed_inventory_schema_fails_closed() {
+        let (_engine, dir) = engine();
+        seed_domain_files(&dir, TEST_EPOCH);
+        let malformed = serde_json::json!({
+          "schemaVersion": "1",
+          "domains": [],
+          "p13": {}
+        })
+        .to_string();
+        let err = validate_committed_inventory(&dir, TEST_EPOCH, &malformed).unwrap_err();
+        assert!(err.contains("missing schemaVersion"), "{err}");
         let _ = std::fs::remove_dir_all(dir);
     }
 }
