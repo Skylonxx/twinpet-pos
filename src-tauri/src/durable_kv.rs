@@ -193,10 +193,34 @@ fn domain_file_path(root: &Path, database: &str, epoch_id: &str) -> Result<PathB
     }
 }
 
-fn prior_phase_b_state_exists(root: &Path) -> bool {
-    epoch_floor::floor_path(root).exists()
-        || epoch_floor::durable_domain_files_exist(root)
-        || durable_dir(root).join(MANIFEST_FILE_NAME).exists()
+/// SEC-001 Codex-005 remediation (Claude-046, same Gemini-062 authority): the
+/// manifest limb of this predicate was `durable_dir(root).join(..).exists()`,
+/// which follows symlinks. A dangling manifest symlink — a directory entry that
+/// exists — therefore contributed `false`, and with no floor and no domain
+/// files the whole predicate answered "no prior durable state". That answer is
+/// what `open_or_create_manifest_if_virgin` and `manifest_get` consult before
+/// treating the pathname as virgin, so the false absence propagated straight
+/// into manifest creation and into the empty-manifest view.
+///
+/// The manifest limb now goes through the shared `manifest_path_state`
+/// classifier: only genuine pathname absence contributes `false`, `RegularFile`
+/// (direct or via a symlink resolving to a regular file) contributes `true`,
+/// and every unusable-but-present or unreadable pathname is an `Err` that
+/// callers must propagate rather than a boolean they can misread as absence.
+///
+/// The floor and domain limbs still use `epoch_floor`'s existence semantics.
+/// `epoch_floor::durable_domain_files_exist` is outside this packet's
+/// one-file allowlist and keeps following symlinks, but it can now only ever
+/// *understate* prior state for the manifest pathname specifically — and that
+/// pathname is decided here by the classifier, which fails closed.
+fn prior_phase_b_state_exists(root: &Path) -> Result<bool, String> {
+    if epoch_floor::floor_path(root).exists() || epoch_floor::durable_domain_files_exist(root) {
+        return Ok(true);
+    }
+    Ok(match manifest_path_state(&durable_dir(root).join(MANIFEST_FILE_NAME))? {
+        ManifestPathState::Absent => false,
+        ManifestPathState::RegularFile => true,
+    })
 }
 
 fn open_kv_connection(path: &Path, create: bool) -> Result<Connection, String> {
@@ -271,13 +295,24 @@ fn create_manifest_schema(conn: &Connection) -> Result<(), String> {
         .pragma_query_value(None, "user_version", |row| row.get(0))
         .map_err(|e| e.to_string())?;
     if version == 0 {
-        conn.pragma_update(None, "user_version", 1)
+        conn.pragma_update(None, "user_version", CURRENT_MANIFEST_SQLITE_USER_VERSION)
             .map_err(|e| e.to_string())?;
-    } else if version != 1 {
+    } else if version != CURRENT_MANIFEST_SQLITE_USER_VERSION {
         return Err(format!("unsupported manifest user_version {version}"));
     }
     Ok(())
 }
+
+/// SEC-001 existing-manifest version gate (Claude-042 / Gemini-062 authority
+/// `TWINPET-TRUE-STANDALONE-SEC-001-SCENARIO08R-MANIFEST-USER-VERSION-ADJUDICATION-GEMINI-062`):
+/// the migration-manifest SQLite file's own `PRAGMA user_version` is a schema
+/// contract for the manifest file alone. It is intentionally decoupled from
+/// `MAX_KNOWN_EPOCH_SCHEMA`, `inventory_json.schemaVersion`, domain SQLite
+/// `user_version`, and `epochs.schema_version` — none of those may be
+/// substituted for it. AGY-003 proved `open_existing_manifest` never checked
+/// this pragma at all, so a manifest hand-mutated to an unknown-newer version
+/// (e.g. 2) was silently trusted through startup.
+const CURRENT_MANIFEST_SQLITE_USER_VERSION: i32 = 1;
 
 fn open_existing_manifest(path: &Path) -> Result<Connection, String> {
     if !path.is_file() {
@@ -295,15 +330,44 @@ fn open_existing_manifest(path: &Path) -> Result<Connection, String> {
     if has_epochs == 0 {
         return Err("migration manifest is corrupt: epochs table missing".into());
     }
+    // Existing (nonvirgin) manifest: require exact version equality. A
+    // nonvirgin file left at 0 is not entitled to virgin treatment — only a
+    // genuinely new file (handled in `create_manifest_schema`) may start at 0.
+    let version: i32 = conn
+        .pragma_query_value(None, "user_version", |row| row.get(0))
+        .map_err(|e| format!("migration manifest is corrupt: {e}"))?;
+    if version != CURRENT_MANIFEST_SQLITE_USER_VERSION {
+        return Err(format!("unsupported manifest user_version {version}"));
+    }
     Ok(conn)
 }
 
+/// SEC-001 Codex-005 blocking-finding remediation (Claude-046, same Gemini-062
+/// authority): the presence test here was `path.exists()`, which follows
+/// symlinks. On a dangling manifest symlink it reported `false`, the helper
+/// took the virgin branch, and `Connection::open(&path)` then *followed the
+/// link and created the missing target* — potentially outside the durable
+/// directory — initializing it as an authoritative manifest at
+/// `user_version` 1. Every public manifest/lease writer reaches this helper, so
+/// the create was production-reachable.
+///
+/// Pathname presence is now decided by the shared `manifest_path_state`
+/// classifier before anything opens the path: creation is reachable only from
+/// `Absent`, i.e. no directory entry at the manifest pathname at all. A
+/// pathname that resolves to a regular file (directly or through a symlink)
+/// keeps its existing accepted behaviour — it is authoritative and goes through
+/// the `open_existing_manifest` version gate, never re-created. A dangling
+/// symlink, a nonregular target, or a metadata error fails closed, so
+/// `Connection::open` can no longer materialize a missing symlink target.
 fn open_or_create_manifest_if_virgin(root: &Path) -> Result<Connection, String> {
     let path = durable_dir(root).join(MANIFEST_FILE_NAME);
-    if path.exists() {
-        return open_existing_manifest(&path);
+    match manifest_path_state(&path)? {
+        // Present and usable: authoritative, validated, never re-created.
+        ManifestPathState::RegularFile => return open_existing_manifest(&path),
+        // Genuine pathname absence is the only state entitled to creation.
+        ManifestPathState::Absent => {}
     }
-    if prior_phase_b_state_exists(root) {
+    if prior_phase_b_state_exists(root)? {
         return Err("migration manifest is missing while prior durable state exists".into());
     }
     if let Some(parent) = path.parent() {
@@ -314,18 +378,110 @@ fn open_or_create_manifest_if_virgin(root: &Path) -> Result<Connection, String> 
     Ok(conn)
 }
 
-fn epoch_status_from_manifest(root: &Path, epoch_id: &str) -> Option<String> {
-    let path = durable_dir(root).join(MANIFEST_FILE_NAME);
-    if !path.is_file() {
-        return None;
+/// Directory-entry state of the migration-manifest pathname, kept deliberately
+/// distinct from the state of whatever that pathname resolves to. Only
+/// `Absent` — no directory entry at the pathname at all — may be read as "no
+/// manifest"; every other non-usable state is an `Err` from
+/// `manifest_path_state`, never a variant callers can mistake for absence.
+enum ManifestPathState {
+    /// No directory entry exists at the manifest pathname.
+    Absent,
+    /// The pathname yields a regular file, either directly or through a
+    /// symlink whose target is a regular file.
+    RegularFile,
+}
+
+/// SEC-001 Codex-004 remediation (Claude-045, Gemini-062 authority): the single
+/// manifest-pathname classifier shared by the `DurableKvEngine::begin` status
+/// read and the `assert_startup_integrity` startup gate, so both sides of the
+/// manifest boundary answer "is there a manifest here?" the same way.
+///
+/// The distinction that matters is pathname presence versus target presence.
+/// `std::fs::metadata` and `Path::exists` both follow symlinks, so a dangling
+/// manifest symlink — a directory entry that very much exists — reports
+/// `NotFound`/`false` and reads as genuine absence. `symlink_metadata` is
+/// therefore used first: it never follows the link, so `ErrorKind::NotFound`
+/// from it is the only genuine nonexistence signal.
+///
+/// A symlink that resolves to a regular manifest keeps its existing accepted
+/// behaviour: it is `RegularFile`, and the caller puts it through
+/// `open_existing_manifest` and the full manifest version/table validation
+/// exactly as for a direct regular file. Being a symlink is not itself
+/// rejected — only a symlink that cannot yield a regular file is.
+fn manifest_path_state(path: &Path) -> Result<ManifestPathState, String> {
+    let entry = match std::fs::symlink_metadata(path) {
+        Ok(entry) => entry,
+        // Pathname-level not-found: no directory entry at all. The only
+        // condition entitled to be read as absence.
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(ManifestPathState::Absent)
+        }
+        Err(e) => return Err(format!("migration manifest path is unreadable: {e}")),
+    };
+    if entry.file_type().is_symlink() {
+        // The pathname exists. Only the target's usability is still open, and
+        // an unusable target is an error about a present manifest path — never
+        // absence.
+        return match std::fs::metadata(path) {
+            Ok(target) if target.is_file() => Ok(ManifestPathState::RegularFile),
+            Ok(_) => Err("migration manifest path is not a regular file".into()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                Err("migration manifest symlink target is missing".into())
+            }
+            Err(e) => Err(format!("migration manifest path is unreadable: {e}")),
+        };
     }
-    let conn = Connection::open(path).ok()?;
+    if entry.is_file() {
+        return Ok(ManifestPathState::RegularFile);
+    }
+    Err("migration manifest path is not a regular file".into())
+}
+
+/// SEC-001 Codex-002 remediation (Claude-043, same Gemini-062 authority): this
+/// status read previously called `Connection::open` directly and collapsed every
+/// failure to `None`, bypassing the `open_existing_manifest` version gate. An
+/// existing manifest at `user_version` 0/2/99 was therefore still trusted here
+/// even though startup rejects it, and `DurableKvEngine::begin` read that `None`
+/// as "no committed epoch" — the exact false-uncommitted classification that
+/// permits domain creation. The read now goes through the single validated
+/// existing-manifest path, so absence of the manifest file is the only condition
+/// that yields `None`; an existing-but-invalid manifest returns `Err`.
+///
+/// SEC-001 Codex-003 remediation (Claude-044, same Gemini-062 authority): the
+/// absence test itself was still `!path.is_file()`, a convenience boolean that
+/// collapses "genuinely not there" together with "exists but is not a regular
+/// file" (for example a directory named `twinpet-migration-manifest.sqlite`)
+/// and with metadata inspection failures. Those existing-but-invalid path
+/// states therefore became `Ok(None)`, which `DurableKvEngine::begin` read as
+/// "no committed epoch" — the same false-uncommitted classification, reached by
+/// a different route, that lets `open_kv_connection(.., create = true)` create a
+/// domain SQLite file under a manifest path that was never validated. The check
+/// became explicit instead: only `ErrorKind::NotFound` may yield `Ok(None)`; an
+/// existing non-file path and any other metadata error both fail closed.
+///
+/// SEC-001 Codex-004 remediation (Claude-045, same Gemini-062 authority): that
+/// check used `std::fs::metadata`, which *follows* symlinks and therefore
+/// reports the state of the target rather than of the pathname. A manifest
+/// pathname present as a symlink whose target does not exist yielded
+/// `ErrorKind::NotFound` from the target lookup, which the absence branch read
+/// as genuine nonexistence — a third route to the same false-uncommitted
+/// classification, under a manifest pathname that exists and was never
+/// validated. Pathname presence is now decided by `manifest_path_state`, which
+/// inspects the directory entry itself before ever following it.
+fn epoch_status_from_manifest(root: &Path, epoch_id: &str) -> Result<Option<String>, String> {
+    let path = durable_dir(root).join(MANIFEST_FILE_NAME);
+    match manifest_path_state(&path)? {
+        ManifestPathState::Absent => return Ok(None),
+        ManifestPathState::RegularFile => {}
+    }
+    let conn = open_existing_manifest(&path)?;
     conn.query_row(
         "SELECT status FROM epochs WHERE epoch_id = ?1",
         params![epoch_id],
         |row| row.get::<_, String>(0),
     )
-    .ok()
+    .optional()
+    .map_err(|e| format!("migration manifest is unreadable: {e}"))
 }
 
 fn legal_epoch_transition(from: Option<&str>, to: &str) -> Result<(), String> {
@@ -437,8 +593,16 @@ fn validate_committed_inventory(
 
 fn validate_existing_committed_state(root: &Path) -> Result<(), String> {
     let path = durable_dir(root).join(MANIFEST_FILE_NAME);
-    if !path.exists() {
-        return Err("migration manifest is missing while a committed epoch floor exists".into());
+    // SEC-001 Codex-005 remediation (Claude-046): this presence test was
+    // `!path.exists()`. It already failed closed either way, so it was never a
+    // false-absence hole, but it recreated independent pathname semantics
+    // alongside the shared classifier. It now uses `manifest_path_state` so
+    // every manifest-pathname decision in this file has exactly one source.
+    match manifest_path_state(&path)? {
+        ManifestPathState::Absent => {
+            return Err("migration manifest is missing while a committed epoch floor exists".into())
+        }
+        ManifestPathState::RegularFile => {}
     }
     let conn = open_existing_manifest(&path)?;
     let row: Option<(String, String, String)> = conn
@@ -471,16 +635,51 @@ fn validate_existing_committed_state(root: &Path) -> Result<(), String> {
 /// `.sqlite` files) does. Codex-011 found the prior version of this function
 /// conflated the two, incorrectly failing closed on a legitimate
 /// privileged-auth-only clean-install restart.
+///
+/// SEC-001 Codex-005 remediation (Claude-046, same Gemini-062 authority): the
+/// `PermitVirgin` arm returned `Ok(())` immediately, before any manifest
+/// pathname was ever inspected, so the Claude-045 pathname validation on the
+/// `PermitCompatible` arm was simply never reached on the no-floor path.
+/// `epoch_floor::durable_domain_files_exist` decides presence with
+/// symlink-following existence semantics and lives outside this packet's
+/// one-file allowlist, so with no floor, no domain files and a dangling
+/// manifest symlink the floor evaluation legitimately answers `PermitVirgin` —
+/// and startup was then permitted under a manifest pathname that exists and is
+/// unusable, letting `lib.rs` proceed to the floor write and WebView start.
+///
+/// The manifest pathname is therefore classified on this arm too, before the
+/// virgin return. This deliberately changes nothing about floor/virgin policy:
+/// both `Ok` classifications stay permitted exactly as before (a resolvable
+/// manifest is in any case unreachable here — `durable_domain_files_exist`
+/// follows the pathname, so it would already have made `evaluate_floor` fail
+/// closed). Only the error half is new: a present-but-unusable manifest
+/// pathname now fails closed instead of passing as virgin startup. Nothing is
+/// created and no runtime state is mutated by the check.
 pub fn assert_startup_integrity(app_data: &Path) -> Result<(), String> {
     match epoch_floor::evaluate_floor(app_data) {
-        epoch_floor::FloorDecision::PermitVirgin => Ok(()),
+        epoch_floor::FloorDecision::PermitVirgin => {
+            let manifest_path = durable_dir(app_data).join(MANIFEST_FILE_NAME);
+            let _ = manifest_path_state(&manifest_path)?;
+            Ok(())
+        }
         epoch_floor::FloorDecision::FailClosed { reason } => Err(reason),
         epoch_floor::FloorDecision::PermitCompatible { .. } => {
             let manifest_path = durable_dir(app_data).join(MANIFEST_FILE_NAME);
-            if manifest_path.exists() {
-                // A manifest exists (whatever its state) — it is authoritative
-                // and must validate.
-                return validate_existing_committed_state(app_data);
+            // SEC-001 Codex-004 remediation (Claude-045): this was
+            // `manifest_path.exists()`, which follows symlinks. A compatible
+            // floor with no domain files and a dangling manifest symlink
+            // therefore fell through both branches below and startup was
+            // *permitted* — the same pathname-versus-target confusion Codex-004
+            // found in the `begin` status read, on the startup side of the same
+            // boundary. `manifest_path_state` decides pathname presence, so an
+            // unusable-but-present manifest pathname now fails closed here too.
+            match manifest_path_state(&manifest_path)? {
+                ManifestPathState::RegularFile => {
+                    // A manifest exists (whatever its state) — it is
+                    // authoritative and must validate.
+                    return validate_existing_committed_state(app_data);
+                }
+                ManifestPathState::Absent => {}
             }
             if epoch_floor::durable_domain_files_exist(app_data) {
                 // Legacy Phase-B durable state exists but its manifest is
@@ -557,7 +756,11 @@ impl DurableKvEngine {
                 let mut guard = self.inner.lock().map_err(|e| e.to_string())?;
                 if !guard.occupied.contains_key(&occupancy_key) {
                     let path = domain_file_path(&guard.root, database, epoch_id)?;
-                    let committed = epoch_status_from_manifest(&guard.root, epoch_id)
+                    // Codex-002 remediation: an existing-but-unsupported manifest
+                    // must abort the session here rather than degrade into the
+                    // `committed == false` branch below, which would let
+                    // `open_kv_connection` create a domain file.
+                    let committed = epoch_status_from_manifest(&guard.root, epoch_id)?
                         .is_some_and(|status| status == "COMMITTED");
                     if committed && !path.is_file() {
                         return Err(format!("committed domain file is missing: {database}"));
@@ -763,20 +966,34 @@ impl DurableKvEngine {
         rollback_session(&mut guard, session_id)
     }
 
+    /// SEC-001 Codex-005 remediation (Claude-046, same Gemini-062 authority):
+    /// the absence test was `!path.exists()`, which follows symlinks, so a
+    /// dangling manifest symlink took the absence branch and — with no floor
+    /// and no domain files — returned the empty/virgin manifest payload. A
+    /// present-but-unusable manifest pathname was thereby reported to callers
+    /// as "no epochs, no lease, nothing committed". Pathname presence is now
+    /// decided by the shared `manifest_path_state` classifier: only genuine
+    /// pathname absence may yield the empty view, a resolvable regular file
+    /// (direct or through a symlink) is read through the validated
+    /// `open_existing_manifest` gate as before, and dangling/nonregular/
+    /// unreadable fails closed.
     pub fn manifest_get(&self) -> Result<Value, String> {
         let root = self.inner.lock().map_err(|e| e.to_string())?.root.clone();
         let path = durable_dir(&root).join(MANIFEST_FILE_NAME);
-        if !path.exists() {
-            if prior_phase_b_state_exists(&root) {
-                return Err(
-                    "migration manifest is missing while prior durable state exists".into(),
-                );
+        match manifest_path_state(&path)? {
+            ManifestPathState::Absent => {
+                if prior_phase_b_state_exists(&root)? {
+                    return Err(
+                        "migration manifest is missing while prior durable state exists".into(),
+                    );
+                }
+                return Ok(serde_json::json!({
+                  "activeCommitted": null,
+                  "epochs": [],
+                  "lease": null,
+                }));
             }
-            return Ok(serde_json::json!({
-              "activeCommitted": null,
-              "epochs": [],
-              "lease": null,
-            }));
+            ManifestPathState::RegularFile => {}
         }
         let conn = open_existing_manifest(&path)?;
         let mut stmt = conn
@@ -1241,6 +1458,70 @@ mod tests {
         inventory_with_schema(1, branch_ids)
     }
 
+    /// Creates `link` as a **file** symlink pointing at `target`, which is not
+    /// required to exist. Per the Claude-045 test-portability requirement the
+    /// symlink regressions must never be silently skipped or degraded, so a
+    /// creation failure panics loudly with the exact OS error instead.
+    fn symlink_file_for_test(target: &Path, link: &Path) {
+        #[cfg(windows)]
+        let result = std::os::windows::fs::symlink_file(target, link);
+        #[cfg(unix)]
+        let result = std::os::unix::fs::symlink(target, link);
+        if let Err(e) = result {
+            panic!(
+                "BLOCKED_TEST_ENVIRONMENT_SYMLINK_CREATION: file symlink {link:?} -> \
+                 {target:?} failed: kind={:?} raw={:?}: {e}",
+                e.kind(),
+                e.raw_os_error()
+            );
+        }
+    }
+
+    /// Creates `link` as a **directory** symlink pointing at `target`. Used to
+    /// build the symlink-to-nonregular-target fixture, which on Windows must
+    /// be a directory symlink for the target to resolve at all.
+    fn symlink_dir_for_test(target: &Path, link: &Path) {
+        #[cfg(windows)]
+        let result = std::os::windows::fs::symlink_dir(target, link);
+        #[cfg(unix)]
+        let result = std::os::unix::fs::symlink(target, link);
+        if let Err(e) = result {
+            panic!(
+                "BLOCKED_TEST_ENVIRONMENT_SYMLINK_CREATION: dir symlink {link:?} -> \
+                 {target:?} failed: kind={:?} raw={:?}: {e}",
+                e.kind(),
+                e.raw_os_error()
+            );
+        }
+    }
+
+    /// Asserts the fixture really is the pathname-present/target-missing state
+    /// Codex-004 described, so the regressions below cannot pass vacuously
+    /// against a fixture that silently failed to materialize.
+    fn assert_dangling_symlink(link: &Path) {
+        let entry = std::fs::symlink_metadata(link)
+            .expect("manifest pathname must exist as a directory entry");
+        assert!(
+            entry.file_type().is_symlink(),
+            "fixture must be a symlink at the manifest pathname"
+        );
+        let target = std::fs::metadata(link);
+        assert!(
+            target.is_err(),
+            "fixture target must be missing, but metadata resolved"
+        );
+        assert_eq!(
+            target.unwrap_err().kind(),
+            std::io::ErrorKind::NotFound,
+            "fixture target must be missing with NotFound"
+        );
+        assert!(
+            !link.exists(),
+            "Path::exists() must report false here — this is exactly the \
+             follow-the-symlink false-absence signal the fix stops trusting"
+        );
+    }
+
     fn seed_domain_files(root: &Path, epoch: &str) {
         for database in DOMAIN_DATABASES {
             let path = domain_file_path(root, database, epoch).unwrap();
@@ -1613,6 +1894,775 @@ mod tests {
             err.contains("corrupt") || err.contains("unreadable") || err.contains("manifest"),
             "{err}"
         );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// SEC-001 Claude-042 / Gemini-062 full-startup regression matching the
+    /// AGY-003 runtime evidence exactly: a source-valid COMMITTED manifest
+    /// with valid domain files and a compatible floor, whose manifest SQLite
+    /// `user_version` is then mutated to 2 (a value SQLite itself accepts —
+    /// `PRAGMA integrity_check` remains `ok`), must fail closed through the
+    /// real `assert_startup_integrity` entrypoint rather than being silently
+    /// trusted. Fails on pre-remediation source; passes after the gate in
+    /// `open_existing_manifest`.
+    #[test]
+    fn existing_manifest_user_version_2_fails_full_startup_integrity() {
+        let (engine, dir) = engine();
+        engine
+            .manifest_put_epoch(TEST_EPOCH, "COPYING", "{}", None, None)
+            .unwrap();
+        seed_domain_files(&dir, TEST_EPOCH);
+        engine
+            .manifest_put_epoch(
+                TEST_EPOCH,
+                "COMMITTED",
+                &committed_inventory(&["empty-branch"]),
+                None,
+                None,
+            )
+            .unwrap();
+        assert!(assert_startup_integrity(&dir).is_ok());
+
+        let manifest = durable_dir(&dir).join(MANIFEST_FILE_NAME);
+        let conn = Connection::open(&manifest).unwrap();
+        conn.pragma_update(None, "user_version", 2).unwrap();
+        let integrity: String = conn
+            .pragma_query_value(None, "integrity_check", |row| row.get(0))
+            .unwrap();
+        assert_eq!(integrity, "ok");
+        drop(conn);
+
+        let err = assert_startup_integrity(&dir).unwrap_err();
+        assert!(err.contains("unsupported manifest user_version 2"), "{err}");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// SEC-001 Claude-042 / Gemini-062 existing-manifest version matrix: v1
+    /// is the only accepted existing manifest SQLite `user_version`; v2, v99,
+    /// and a nonvirgin v0 must all fail closed. Nonvirgin v0 is deliberately
+    /// distinct from true virgin initialization (see
+    /// `virgin_manifest_zero_to_one_initialization` below) — here the
+    /// manifest schema/table already exists, so being left at 0 is not
+    /// entitled to virgin treatment.
+    #[test]
+    fn existing_manifest_version_matrix() {
+        for (version, should_pass) in [(1i32, true), (2, false), (99, false), (0, false)] {
+            let dir = std::env::temp_dir().join(format!(
+                "twinpet-kv-manifest-matrix-{version}-{}-{}",
+                std::process::id(),
+                random_session_id()
+            ));
+            let manifest = durable_dir(&dir).join(MANIFEST_FILE_NAME);
+            std::fs::create_dir_all(manifest.parent().unwrap()).unwrap();
+            let conn = Connection::open(&manifest).unwrap();
+            create_manifest_schema(&conn).unwrap();
+            conn.pragma_update(None, "user_version", version).unwrap();
+            drop(conn);
+
+            let result = open_existing_manifest(&manifest);
+            assert_eq!(
+                result.is_ok(),
+                should_pass,
+                "existing manifest user_version {version} expected pass={should_pass}, got {result:?}"
+            );
+            if !should_pass {
+                let err = result.unwrap_err();
+                assert!(
+                    err.contains(&format!("unsupported manifest user_version {version}")),
+                    "{err}"
+                );
+            }
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+
+    /// SEC-001 Claude-042 / Gemini-062: a genuinely virgin manifest (the
+    /// SQLite file does not exist yet) must still initialize 0 -> 1 and the
+    /// resulting file must then be immediately acceptable as an existing
+    /// manifest under the new version gate.
+    #[test]
+    fn virgin_manifest_zero_to_one_initialization() {
+        let dir = std::env::temp_dir().join(format!(
+            "twinpet-kv-manifest-virgin-init-{}-{}",
+            std::process::id(),
+            random_session_id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let conn = open_or_create_manifest_if_virgin(&dir).unwrap();
+        let version: i32 = conn
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, CURRENT_MANIFEST_SQLITE_USER_VERSION);
+        drop(conn);
+
+        let manifest = durable_dir(&dir).join(MANIFEST_FILE_NAME);
+        assert!(open_existing_manifest(&manifest).is_ok());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// SEC-001 Codex-002 blocking-finding regression (Claude-043): the
+    /// `DurableKvEngine::begin` production path must not consume an existing
+    /// manifest whose SQLite `user_version` is unsupported, even though its
+    /// `epochs` state is perfectly readable and SQLite itself reports the file
+    /// as structurally sound.
+    ///
+    /// Both pre-remediation failure shapes are pinned, because the direct
+    /// `Connection::open` bypass had two distinct consequences:
+    ///
+    /// * Phase 1 — a readable `COMMITTED` row on a `user_version = 2` manifest
+    ///   was taken at face value, so `begin` proceeded into committed-domain
+    ///   handling and reported only `committed domain file is missing` — an
+    ///   unsupported manifest was still being trusted to classify the epoch.
+    /// * Phase 2 — an epoch with no row yielded `None`, which `begin` read as
+    ///   "no committed epoch", letting `open_kv_connection` *create* a domain
+    ///   file under a manifest the startup gate rejects.
+    ///
+    /// Both must now fail with the manifest version error itself. Non-vacuity
+    /// is anchored by the phase-1 baseline: the identical sequence succeeds at
+    /// `user_version = 1` immediately before the mutation.
+    #[test]
+    fn begin_fails_closed_on_existing_manifest_user_version_2() {
+        let (engine, dir) = engine();
+        engine
+            .manifest_put_epoch(TEST_EPOCH, "COPYING", "{}", None, None)
+            .unwrap();
+        seed_domain_files(&dir, TEST_EPOCH);
+        engine
+            .manifest_put_epoch(
+                TEST_EPOCH,
+                "COMMITTED",
+                &committed_inventory(&["empty-branch"]),
+                None,
+                None,
+            )
+            .unwrap();
+
+        // Baseline at the supported version: begin succeeds, so the failures
+        // asserted below are attributable to the version mutation alone.
+        let sid = begin_device(&engine, "readonly");
+        engine.commit("main", &sid).unwrap();
+
+        let manifest = durable_dir(&dir).join(MANIFEST_FILE_NAME);
+        let conn = Connection::open(&manifest).unwrap();
+        conn.pragma_update(None, "user_version", 2).unwrap();
+        let integrity: String = conn
+            .pragma_query_value(None, "integrity_check", |row| row.get(0))
+            .unwrap();
+        assert_eq!(integrity, "ok");
+        let readable_status: String = conn
+            .query_row(
+                "SELECT status FROM epochs WHERE epoch_id = ?1",
+                params![TEST_EPOCH],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(readable_status, "COMMITTED");
+        drop(conn);
+
+        // Phase 1: the readable COMMITTED row must no longer be consulted at
+        // all; the manifest version error must surface instead of the
+        // downstream committed-domain error.
+        let device_path = domain_file_path(&dir, "twinpet-device", TEST_EPOCH).unwrap();
+        std::fs::remove_file(&device_path).unwrap();
+        let err = engine
+            .begin(
+                "main",
+                "twinpet-device",
+                vec!["kv".into()],
+                "readwrite",
+                TEST_EPOCH,
+            )
+            .unwrap_err();
+        assert!(err.contains("unsupported manifest user_version 2"), "{err}");
+        assert!(
+            !device_path.is_file(),
+            "begin must not fabricate a domain file for an unsupported manifest"
+        );
+
+        // Phase 2: an epoch absent from the same unsupported manifest must not
+        // be classified as uncommitted, which previously permitted creation.
+        let unknown_epoch = "epoch-1700000000001-0123456789abcdef0123456789abcdef";
+        let unknown_path = domain_file_path(&dir, "twinpet-device", unknown_epoch).unwrap();
+        assert!(!unknown_path.exists());
+        let err = engine
+            .begin(
+                "main",
+                "twinpet-device",
+                vec!["kv".into()],
+                "readwrite",
+                unknown_epoch,
+            )
+            .unwrap_err();
+        assert!(err.contains("unsupported manifest user_version 2"), "{err}");
+        assert!(
+            !unknown_path.exists(),
+            "begin must not create a domain file under an unsupported manifest"
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// SEC-001 Codex-002 remediation guard (Claude-043): absence of the manifest
+    /// file stays the only condition that means "no manifest status". Tightening
+    /// the status read must not turn a virgin root into a begin failure.
+    #[test]
+    fn absent_manifest_status_is_none_and_begin_proceeds() {
+        let (engine, dir) = engine();
+        let manifest = durable_dir(&dir).join(MANIFEST_FILE_NAME);
+        assert!(!manifest.exists());
+        assert_eq!(epoch_status_from_manifest(&dir, TEST_EPOCH).unwrap(), None);
+
+        let sid = begin_device(&engine, "readwrite");
+        engine.commit("main", &sid).unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// SEC-001 Codex-003 remediation regression (Claude-044): the manifest
+    /// pathname exists but is a **directory**, not a regular file. Before the
+    /// path-state fix, `!path.is_file()` was true here exactly as it is for a
+    /// genuinely absent manifest, so `epoch_status_from_manifest` returned
+    /// `Ok(None)`, `begin` classified the epoch as uncommitted and
+    /// `open_kv_connection(.., create = true)` fabricated a domain SQLite file
+    /// under a manifest path that had never been validated. This exercises the
+    /// real `DurableKvEngine::begin` entry point (not the private status
+    /// helper alone) and proves both halves: the error surfaces, and no domain
+    /// file is created.
+    ///
+    /// Non-vacuity: the identical root/epoch/domain triple succeeds and does
+    /// create the domain file in
+    /// `absent_manifest_status_is_none_and_begin_proceeds`, so the directory at
+    /// the manifest pathname is the only differing condition. With the
+    /// path-state fix reverted to `!path.is_file()` this test fails at the
+    /// `unwrap_err()` below, because `begin` succeeds instead.
+    #[test]
+    fn directory_at_manifest_path_fails_begin_before_domain_creation() {
+        let (engine, dir) = engine();
+        let manifest = durable_dir(&dir).join(MANIFEST_FILE_NAME);
+        std::fs::create_dir_all(&manifest).unwrap();
+        assert!(manifest.is_dir());
+        assert!(
+            !manifest.is_file(),
+            "fixture must reproduce the is_file()-false-but-present state"
+        );
+
+        // Status helper: an existing non-file manifest pathname is an error,
+        // never absence.
+        let status_err = epoch_status_from_manifest(&dir, TEST_EPOCH).unwrap_err();
+        assert!(
+            status_err.contains("migration manifest path is not a regular file"),
+            "{status_err}"
+        );
+
+        // Real begin path: the error must propagate before the
+        // committed/uncommitted decision and before any domain-file creation.
+        let device_path = domain_file_path(&dir, "twinpet-device", TEST_EPOCH).unwrap();
+        assert!(!device_path.exists());
+        let err = engine
+            .begin(
+                "main",
+                "twinpet-device",
+                vec!["kv".into()],
+                "readwrite",
+                TEST_EPOCH,
+            )
+            .unwrap_err();
+        assert!(
+            err.contains("migration manifest path is not a regular file"),
+            "{err}"
+        );
+        assert!(
+            !device_path.exists(),
+            "begin must not create a domain file under an invalid manifest path"
+        );
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// SEC-001 Codex-003 remediation guard (Claude-044): tightening the
+    /// path-state check must not convert "valid manifest, no row for the
+    /// requested epoch" into a path error. That case is still `Ok(None)` and
+    /// `begin` still proceeds, which is what keeps a fresh epoch startable
+    /// against an already-initialized manifest.
+    #[test]
+    fn valid_manifest_without_epoch_row_is_none_and_begin_proceeds() {
+        let (engine, dir) = engine();
+        let manifest = durable_dir(&dir).join(MANIFEST_FILE_NAME);
+        std::fs::create_dir_all(manifest.parent().unwrap()).unwrap();
+        let conn = Connection::open(&manifest).unwrap();
+        create_manifest_schema(&conn).unwrap();
+        drop(conn);
+        assert!(manifest.is_file());
+
+        assert_eq!(epoch_status_from_manifest(&dir, TEST_EPOCH).unwrap(), None);
+
+        let sid = begin_device(&engine, "readwrite");
+        engine.commit("main", &sid).unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// SEC-001 Codex-004 blocking-finding regression (Claude-045): the manifest
+    /// pathname exists as a **symlink whose target is missing**. This is not
+    /// pathname absence — the directory entry is there — but `std::fs::metadata`
+    /// follows the link and reports the *target's* `ErrorKind::NotFound`, which
+    /// the Claude-044 absence branch accepted as genuine nonexistence. `begin`
+    /// therefore classified the epoch as uncommitted and
+    /// `open_kv_connection(.., create = true)` fabricated a domain SQLite file
+    /// under a manifest pathname that was never validated — the same
+    /// false-uncommitted defect as the directory case, reached through a third
+    /// route. This runs the real `DurableKvEngine::begin` entry point and pins
+    /// both halves: the error surfaces, and no domain file is created.
+    ///
+    /// Non-vacuity: the fixture is asserted to be genuinely
+    /// pathname-present/target-missing (including that `Path::exists()` reports
+    /// `false`, the exact misleading signal), and the identical root/epoch/domain
+    /// triple succeeds and *does* create the domain file in
+    /// `absent_manifest_status_is_none_and_begin_proceeds`, so the dangling
+    /// symlink is the only differing condition. With `manifest_path_state`
+    /// reverted to a symlink-following `std::fs::metadata` check this test fails
+    /// at the `unwrap_err()` below, because `begin` succeeds instead.
+    #[test]
+    fn dangling_manifest_symlink_fails_begin_before_domain_creation() {
+        let (engine, dir) = engine();
+        let manifest = durable_dir(&dir).join(MANIFEST_FILE_NAME);
+        std::fs::create_dir_all(manifest.parent().unwrap()).unwrap();
+        // Target deliberately never created.
+        let missing_target = durable_dir(&dir).join("twinpet-migration-manifest.absent");
+        symlink_file_for_test(&missing_target, &manifest);
+        assert_dangling_symlink(&manifest);
+        assert!(!missing_target.exists());
+
+        // Status helper: a present-but-dangling manifest pathname is an error,
+        // never absence.
+        let status_err = epoch_status_from_manifest(&dir, TEST_EPOCH).unwrap_err();
+        assert!(
+            status_err.contains("migration manifest symlink target is missing"),
+            "{status_err}"
+        );
+
+        // Real begin path: the error must propagate through the existing `?`
+        // seam before the committed/uncommitted classification, before any
+        // `create = true` decision, and before any domain-file creation.
+        let device_path = domain_file_path(&dir, "twinpet-device", TEST_EPOCH).unwrap();
+        assert!(!device_path.exists());
+        let err = engine
+            .begin(
+                "main",
+                "twinpet-device",
+                vec!["kv".into()],
+                "readwrite",
+                TEST_EPOCH,
+            )
+            .unwrap_err();
+        assert!(
+            err.contains("migration manifest symlink target is missing"),
+            "{err}"
+        );
+        assert!(
+            !device_path.exists(),
+            "begin must not create a domain file under a dangling manifest symlink"
+        );
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// SEC-001 Codex-004 remediation guard (Claude-045): distinguishing the
+    /// pathname from its target must not newly reject a manifest pathname that
+    /// is a symlink **resolving to a valid regular manifest**. That accepted
+    /// compatibility behaviour is unchanged: the link is followed, the resolved
+    /// regular file goes through `open_existing_manifest`, normal status reads
+    /// work, and `begin` proceeds.
+    ///
+    /// The second half proves the validation genuinely follows the link rather
+    /// than stopping at the entry: mutating the *target's* manifest SQLite
+    /// `user_version` to 2 must fail the read closed through the same gate that
+    /// guards a direct regular file.
+    #[test]
+    fn valid_manifest_symlink_to_regular_file_is_followed_and_validated() {
+        let (engine, dir) = engine();
+        let durable = durable_dir(&dir);
+        std::fs::create_dir_all(&durable).unwrap();
+        // Real manifest lives outside the durable directory so only the symlink
+        // occupies the manifest pathname.
+        let target = dir.join("real-manifest-target.sqlite");
+        let conn = Connection::open(&target).unwrap();
+        create_manifest_schema(&conn).unwrap();
+        drop(conn);
+        assert!(target.is_file());
+
+        let manifest = durable.join(MANIFEST_FILE_NAME);
+        symlink_file_for_test(&target, &manifest);
+        assert!(
+            std::fs::symlink_metadata(&manifest)
+                .unwrap()
+                .file_type()
+                .is_symlink(),
+            "fixture must be a symlink at the manifest pathname"
+        );
+        assert!(
+            manifest.is_file(),
+            "fixture symlink must resolve to a regular file"
+        );
+
+        // Followed and validated: a valid manifest with no row for this epoch
+        // is still `Ok(None)`, and `begin` still proceeds.
+        assert!(open_existing_manifest(&manifest).is_ok());
+        assert_eq!(epoch_status_from_manifest(&dir, TEST_EPOCH).unwrap(), None);
+        let sid = begin_device(&engine, "readwrite");
+        engine.commit("main", &sid).unwrap();
+
+        // SEC-001 Codex-005 compatibility guard (Claude-046): routing the
+        // create helper and `manifest_get` through the pathname classifier must
+        // not newly reject — or re-create, or report as virgin — a symlink that
+        // resolves to a valid regular manifest. The helper opens the resolved
+        // file through `open_existing_manifest` and leaves the pathname as the
+        // symlink it was; the write lands in the target; the read comes back
+        // through the link as real content, not the empty/virgin payload.
+        drop(open_or_create_manifest_if_virgin(&dir).unwrap());
+        assert!(
+            std::fs::symlink_metadata(&manifest)
+                .unwrap()
+                .file_type()
+                .is_symlink(),
+            "the manifest pathname must still be the symlink, not a re-created file"
+        );
+        engine
+            .manifest_put_epoch(TEST_EPOCH, "COPYING", "{}", None, None)
+            .unwrap();
+        let snapshot = engine.manifest_get().unwrap();
+        assert_eq!(
+            snapshot["epochs"].as_array().unwrap().len(),
+            1,
+            "manifest_get must read through the valid symlink, not report a virgin view"
+        );
+        assert_eq!(
+            epoch_status_from_manifest(&dir, TEST_EPOCH).unwrap(),
+            Some("COPYING".to_string())
+        );
+
+        // Validation follows the link: mutating the target's version fails the
+        // read closed exactly as for a direct regular file.
+        let conn = Connection::open(&target).unwrap();
+        conn.pragma_update(None, "user_version", 2).unwrap();
+        drop(conn);
+        let err = epoch_status_from_manifest(&dir, TEST_EPOCH).unwrap_err();
+        assert!(err.contains("unsupported manifest user_version 2"), "{err}");
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// SEC-001 Codex-004 remediation (Claude-045): a manifest pathname that is
+    /// a symlink resolving to a **non-regular** target (here a directory) is
+    /// present, not absent, and is not usable as a manifest. It must fail
+    /// closed like the direct-directory case rather than yielding `Ok(None)`.
+    #[test]
+    fn manifest_symlink_to_directory_target_fails_closed() {
+        let (engine, dir) = engine();
+        let durable = durable_dir(&dir);
+        std::fs::create_dir_all(&durable).unwrap();
+        let target_dir = dir.join("manifest-target-dir");
+        std::fs::create_dir_all(&target_dir).unwrap();
+
+        let manifest = durable.join(MANIFEST_FILE_NAME);
+        symlink_dir_for_test(&target_dir, &manifest);
+        assert!(
+            std::fs::symlink_metadata(&manifest)
+                .unwrap()
+                .file_type()
+                .is_symlink(),
+            "fixture must be a symlink at the manifest pathname"
+        );
+        assert!(manifest.is_dir(), "fixture target must resolve to a dir");
+        assert!(!manifest.is_file());
+
+        let status_err = epoch_status_from_manifest(&dir, TEST_EPOCH).unwrap_err();
+        assert!(
+            status_err.contains("migration manifest path is not a regular file"),
+            "{status_err}"
+        );
+
+        let device_path = domain_file_path(&dir, "twinpet-device", TEST_EPOCH).unwrap();
+        assert!(!device_path.exists());
+        let err = engine
+            .begin(
+                "main",
+                "twinpet-device",
+                vec!["kv".into()],
+                "readwrite",
+                TEST_EPOCH,
+            )
+            .unwrap_err();
+        assert!(
+            err.contains("migration manifest path is not a regular file"),
+            "{err}"
+        );
+        assert!(
+            !device_path.exists(),
+            "begin must not create a domain file under a nonregular manifest target"
+        );
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// SEC-001 Codex-004 Part-E regression (Claude-045): the same
+    /// pathname-versus-target confusion existed on the startup side.
+    /// `assert_startup_integrity` tested `manifest_path.exists()`, which follows
+    /// symlinks, so with a compatible floor and no legacy domain files a
+    /// dangling manifest symlink fell through *both* branches — neither
+    /// "manifest exists, validate it" nor "domain files exist without a
+    /// manifest" — and startup was **permitted** under a manifest pathname that
+    /// exists and is unusable. It must now fail closed.
+    ///
+    /// Non-vacuity is anchored inline: the identical floor-only root is asserted
+    /// to pass `assert_startup_integrity` immediately before the symlink is
+    /// created, so the dangling symlink is the only differing condition. With
+    /// the startup check reverted to `manifest_path.exists()` this test fails at
+    /// the `unwrap_err()` below, because startup returns `Ok(())` instead.
+    #[test]
+    fn dangling_manifest_symlink_fails_startup_integrity() {
+        let dir = std::env::temp_dir().join(format!(
+            "twinpet-kv-startup-dangling-symlink-{}-{}",
+            std::process::id(),
+            random_session_id()
+        ));
+        let durable = durable_dir(&dir);
+        std::fs::create_dir_all(&durable).unwrap();
+        std::fs::write(
+            epoch_floor::floor_path(&dir),
+            "committedEpochFloor=1\nwriterBuildId=legacy-build\n",
+        )
+        .unwrap();
+        assert_eq!(
+            epoch_floor::evaluate_floor(&dir),
+            epoch_floor::FloorDecision::PermitCompatible { floor: 1 }
+        );
+        assert!(
+            !epoch_floor::durable_domain_files_exist(&dir),
+            "fixture must have no legacy domain files"
+        );
+        // Baseline: floor-compatible, no domain files, no manifest pathname at
+        // all is legitimately permitted.
+        assert_eq!(assert_startup_integrity(&dir), Ok(()));
+
+        let manifest = durable.join(MANIFEST_FILE_NAME);
+        let missing_target = durable.join("twinpet-migration-manifest.absent");
+        symlink_file_for_test(&missing_target, &manifest);
+        assert_dangling_symlink(&manifest);
+        assert!(
+            !epoch_floor::durable_domain_files_exist(&dir),
+            "dangling symlink must not be counted as a domain file either"
+        );
+
+        let err = assert_startup_integrity(&dir).unwrap_err();
+        assert!(
+            err.contains("migration manifest symlink target is missing"),
+            "{err}"
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// SEC-001 Codex-005 finding-1 regression (Claude-046): the Claude-045
+    /// pathname validation lived only on the `PermitCompatible` arm of
+    /// `assert_startup_integrity`, while the `PermitVirgin` arm returned
+    /// `Ok(())` before any manifest pathname was inspected. With **no floor**,
+    /// no domain files, and a dangling manifest symlink,
+    /// `epoch_floor::durable_domain_files_exist` (symlink-following, and
+    /// outside this packet's one-file allowlist) reports `false`, so
+    /// `evaluate_floor` legitimately answers `PermitVirgin` — and startup was
+    /// therefore *permitted* under a present, unusable manifest pathname, with
+    /// `lib.rs` free to continue to the floor write and WebView start.
+    ///
+    /// Non-vacuity is anchored inline three ways: the identical root is proved
+    /// to pass `assert_startup_integrity` in the true-virgin baseline
+    /// immediately before the symlink is created, so the dangling symlink is
+    /// the only differing condition; `evaluate_floor` is asserted to still
+    /// return `PermitVirgin` *after* the symlink exists, so the test really
+    /// exercises the virgin arm rather than silently falling into the
+    /// already-fixed compatible arm; and the fixture is asserted to be
+    /// genuinely pathname-present/target-missing. With the virgin-arm
+    /// classification removed this test fails at the `unwrap_err()` below,
+    /// because startup returns `Ok(())` instead.
+    #[test]
+    fn no_floor_dangling_manifest_symlink_fails_startup_integrity() {
+        let dir = std::env::temp_dir().join(format!(
+            "twinpet-kv-startup-nofloor-dangling-{}-{}",
+            std::process::id(),
+            random_session_id()
+        ));
+        let durable = durable_dir(&dir);
+        std::fs::create_dir_all(&durable).unwrap();
+        let floor = epoch_floor::floor_path(&dir);
+        let manifest = durable.join(MANIFEST_FILE_NAME);
+        let missing_target = durable.join("twinpet-migration-manifest.absent");
+
+        // True-virgin baseline: no floor, no domain files, and no directory
+        // entry at all at the manifest pathname. This must stay permitted.
+        assert!(!floor.exists(), "fixture must have no floor marker");
+        assert!(
+            !epoch_floor::durable_domain_files_exist(&dir),
+            "fixture must have no legacy domain files"
+        );
+        assert!(
+            std::fs::symlink_metadata(&manifest).is_err(),
+            "fixture must start with no manifest directory entry"
+        );
+        assert_eq!(
+            epoch_floor::evaluate_floor(&dir),
+            epoch_floor::FloorDecision::PermitVirgin
+        );
+        assert_eq!(assert_startup_integrity(&dir), Ok(()));
+
+        // Only differing condition: a dangling symlink at the manifest pathname.
+        symlink_file_for_test(&missing_target, &manifest);
+        assert_dangling_symlink(&manifest);
+        assert!(!missing_target.exists());
+        // The bypass precondition itself: floor evaluation still says virgin.
+        assert!(
+            !epoch_floor::durable_domain_files_exist(&dir),
+            "a dangling manifest symlink must not be counted as a domain file"
+        );
+        assert_eq!(
+            epoch_floor::evaluate_floor(&dir),
+            epoch_floor::FloorDecision::PermitVirgin,
+            "this regression must exercise the PermitVirgin arm"
+        );
+
+        let err = assert_startup_integrity(&dir).unwrap_err();
+        assert!(
+            err.contains("migration manifest symlink target is missing"),
+            "{err}"
+        );
+
+        // The startup check itself must create nothing and mutate nothing.
+        assert!(!floor.exists(), "startup integrity must not write a floor");
+        assert!(
+            !missing_target.exists(),
+            "startup integrity must not materialize the symlink target"
+        );
+        assert_dangling_symlink(&manifest);
+        assert!(!epoch_floor::durable_domain_files_exist(&dir));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// SEC-001 Codex-005 finding-2 create-path regression (Claude-046):
+    /// `open_or_create_manifest_if_virgin` decided presence with
+    /// `path.exists()`, which follows symlinks. On a dangling manifest symlink
+    /// that reported `false`, `prior_phase_b_state_exists` agreed (its manifest
+    /// limb used the same following `.exists()`), and `Connection::open(&path)`
+    /// then followed the link and **created the missing target** — here
+    /// deliberately outside the durable directory — initializing it as an
+    /// authoritative manifest at `user_version` 1. Both public writers that
+    /// reach the helper are exercised: the epoch writer and the lease writer.
+    ///
+    /// Non-vacuity: the fixture is asserted genuinely
+    /// pathname-present/target-missing, and the control block proves the very
+    /// same `manifest_put_epoch` call on a root whose manifest pathname is
+    /// truly absent still creates the manifest and succeeds — so the dangling
+    /// symlink is the only differing condition. With the classifier removed
+    /// from the helper this test fails at the first `unwrap_err()`, because the
+    /// write succeeds and materializes `missing_target`.
+    #[test]
+    fn dangling_manifest_symlink_fails_create_path_without_materializing_target() {
+        // Built first: the local `engine` binding below shadows the fixture
+        // helper of the same name.
+        let (control_engine, control_dir) = engine();
+        let (engine, dir) = engine();
+        let durable = durable_dir(&dir);
+        std::fs::create_dir_all(&durable).unwrap();
+        let manifest = durable.join(MANIFEST_FILE_NAME);
+        // Target outside the durable directory: creating it through the link is
+        // exactly the escape Codex-005 described.
+        let missing_target = dir.join("outside-durable-manifest.sqlite");
+        symlink_file_for_test(&missing_target, &manifest);
+        assert_dangling_symlink(&manifest);
+        assert!(!missing_target.exists());
+
+        // Public epoch writer.
+        let err = engine
+            .manifest_put_epoch(TEST_EPOCH, "COPYING", "{}", None, None)
+            .unwrap_err();
+        assert!(
+            err.contains("migration manifest symlink target is missing"),
+            "{err}"
+        );
+        assert!(
+            !missing_target.exists(),
+            "the manifest write must not materialize the dangling symlink target"
+        );
+
+        // Public lease writer, same helper, same fail-closed requirement.
+        let lease_err = engine.lease_acquire("owner-046", 60_000).unwrap_err();
+        assert!(
+            lease_err.contains("migration manifest symlink target is missing"),
+            "{lease_err}"
+        );
+        assert!(
+            !missing_target.exists(),
+            "the lease write must not materialize the dangling symlink target"
+        );
+
+        // Nothing authoritative was materialized anywhere on the pathname.
+        assert_dangling_symlink(&manifest);
+        assert!(
+            !epoch_floor::floor_path(&dir).exists(),
+            "no floor may be written by a rejected manifest write"
+        );
+
+        // Non-vacuity control: the identical call on a genuinely absent
+        // manifest pathname still creates the manifest and succeeds.
+        control_engine
+            .manifest_put_epoch(TEST_EPOCH, "COPYING", "{}", None, None)
+            .unwrap();
+        assert!(
+            durable_dir(&control_dir).join(MANIFEST_FILE_NAME).is_file(),
+            "control must prove the create path is otherwise reachable"
+        );
+        let _ = std::fs::remove_dir_all(control_dir);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// SEC-001 Codex-005 finding-2 read regression (Claude-046): `manifest_get`
+    /// tested `!path.exists()`, which follows symlinks, so a dangling manifest
+    /// symlink took the absence branch and returned the empty/virgin payload —
+    /// `activeCommitted: null`, no epochs, no lease — for a manifest pathname
+    /// that exists and is unusable. It must fail closed instead.
+    ///
+    /// Non-vacuity: the control block proves genuine pathname absence still
+    /// returns the empty view, so the dangling symlink is the only differing
+    /// condition. With the classifier removed this test fails at the
+    /// `unwrap_err()`, because `manifest_get` returns the empty payload.
+    #[test]
+    fn dangling_manifest_symlink_fails_manifest_get_without_empty_view() {
+        // Built first: the local `engine` binding below shadows the fixture
+        // helper of the same name.
+        let (control_engine, control_dir) = engine();
+        let (engine, dir) = engine();
+        let durable = durable_dir(&dir);
+        std::fs::create_dir_all(&durable).unwrap();
+        let manifest = durable.join(MANIFEST_FILE_NAME);
+        let missing_target = durable.join("twinpet-migration-manifest.absent");
+        symlink_file_for_test(&missing_target, &manifest);
+        assert_dangling_symlink(&manifest);
+
+        let err = engine.manifest_get().unwrap_err();
+        assert!(
+            err.contains("migration manifest symlink target is missing"),
+            "{err}"
+        );
+        assert!(
+            !missing_target.exists(),
+            "manifest_get must not materialize the dangling symlink target"
+        );
+        assert_dangling_symlink(&manifest);
+
+        // Non-vacuity control: genuine pathname absence keeps the empty view.
+        let snapshot = control_engine.manifest_get().unwrap();
+        assert!(snapshot["activeCommitted"].is_null());
+        assert!(snapshot["epochs"].as_array().unwrap().is_empty());
+        assert!(snapshot["lease"].is_null());
+        assert!(
+            std::fs::symlink_metadata(durable_dir(&control_dir).join(MANIFEST_FILE_NAME)).is_err(),
+            "the empty view must not have created a manifest"
+        );
+        let _ = std::fs::remove_dir_all(control_dir);
         let _ = std::fs::remove_dir_all(dir);
     }
 
