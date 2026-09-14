@@ -2,15 +2,75 @@
 
 ## Phase
 
-**TRUE-STANDALONE — Architecture `APPROVED_WITH_NOTES` / Planning Gate `CLOSED` / Phase A `CLOSED_WITH_NOTES` / Phase C `CLOSED_WITH_NOTES` / Phase B `CLOSED` / SEC-001 Part P/A/B `CLOSED` / SEC-001 Packet C architecture `CLOSED / PASS` / F9 canonical documentation `COMPLETED` / SEC-001 Packet C / C-A implementation `LANDED / CLOSED` / SEC-001 Packet C / C-B implementation `LANDED / CLOSED` / Packet C `COMPLETE`**
+**TRUE-STANDALONE — Architecture `APPROVED_WITH_NOTES` / Planning Gate `CLOSED` / Phase A `CLOSED_WITH_NOTES` / Phase C `CLOSED_WITH_NOTES` / Phase B `CLOSED` / SEC-001 Part P/A/B `CLOSED` / SEC-001 Packet C architecture `CLOSED / PASS` / F9 canonical documentation `COMPLETED` / SEC-001 Packet C / C-A implementation `LANDED / CLOSED` / SEC-001 Packet C / C-B implementation `LANDED / CLOSED` / Packet C `COMPLETE` / Packet D + Packet E source `LANDED / SOURCE_COMPLETE` / SEC-001 native subgate `CLOSED_RUNTIME_PROVEN` / SEC-001 Firestore Rules `LANDED_LIVE_VERIFIED`**
 
 STATUS:
-SEC_001_PACKET_C_COMPLETE_PACKET_D_TRANSITION
+SEC001_RULES_LANDED_LIVE_DOCS_RECONCILIATION_PENDING_COMMIT
 
 ```text
 CURRENT_PHASE: TRUE-STANDALONE
-CURRENT_GATE: SEC_001_PACKET_C_COMPLETE_PACKET_D_TRANSITION
-ACTIVE_IMPLEMENTATION_PACKET: NONE (SEC-001 Packet C is COMPLETE; C-A and C-B LANDED / CLOSED; next gate is Packet D planning and exactification)
+CURRENT_GATE: SEC001_RULES_LANDED_LIVE_DOCS_RECONCILIATION_PENDING_COMMIT
+SEC001_OVERALL_STATUS: RULES_LANDED_LIVE_DOCS_RECONCILIATION_PENDING_COMMIT
+ACTIVE_IMPLEMENTATION_PACKET: NONE (SEC-001 Packet C COMPLETE; Packet D + Packet E source LANDED / SOURCE_COMPLETE; native subgate CLOSED_RUNTIME_PROVEN; Firestore Rules deployed and live-verified; only docs review/commit-push remains)
+
+# ── SEC-001 final state (Gemini-068; Claude-049 evidence + Claude-050 deploy) ──
+SEC001_DEPLOY_AUTHORITY: TWINPET-TRUE-STANDALONE-SEC-001-AUTHORITATIVE-RULES-VOID-ARCHITECTURE-DEPLOY-GEMINI-068
+SEC001_RULES_VISIBILITY_AUTHORITY: TWINPET-TRUE-STANDALONE-SEC-001-RULES-VISIBILITY-VOID-LANE-GEMINI-067
+SEC001_NATIVE_SUBGATE_STATUS: CLOSED_RUNTIME_PROVEN
+SEC001_RULES_STATUS: LANDED_LIVE_VERIFIED
+LANDED_NATIVE_SOURCE: 5ba41be7d73ba4f2a31d7b01288e653fa1d8862c
+ACCEPTED_VERSION: 0.1.0
+ACCEPTED_BUILD_ID: rel-0.1.0-5ba41be7d73b-20260914T114442Z
+SCHEMA1_COMPATIBILITY_DEFECT_STATUS: CLOSED (remediation landed)
+SCENARIO08_EXISTING_MANIFEST_USER_VERSION_2_DEFECT_STATUS: CLOSED
+OPTION_B_RUNTIME_UAT: PASS
+CLIENT_COMPATIBILITY_ESTABLISHED: YES
+
+# ── Void architecture (Gemini-068 ratified) ──
+VOID_ARCHITECTURE_DECISION: OPTION_1_RATIFY_OFFLINE_ADJUDICATION
+CANONICAL_CLIENT_VOID_PATH: OFFLINE_ATTESTATION_TO_ADJUDICATE_OFFLINE_PRIVILEGED_ACTION
+DIRECT_CLIENT_ASYNCORDERS_VOID_UPDATE: RETIRED
+DIRECT_CLIENT_SUBMIT_PRIVILEGED_VOID_CALLER_REQUIRED: NO
+PVC_4_CONFINEMENT_BINDING: YES
+CLIENT_VOID_MIGRATION_IMPLEMENTATION_REQUIRED: NO
+RESIDUAL_LEGACY_VOID_INTENT_TERMINALIZATION_ACCEPTED: YES
+NEW_BUILD_REQUIRED_FOR_VOID_POLICY: NO
+ADDITIONAL_NATIVE_UAT_REQUIRED: NO
+
+# ── Rules authoritative reconciliation (supersedes Claude-048 presumptions) ──
+AUTHORITATIVE_FIRESTORE_DATABASE: pos-db (named; NOT (default))
+PREDEPLOY_LIVE_POS_DB_RULESET: be1fa1fe-f70d-419b-989e-8c9e0778ca98
+LIVE_LEGACY_ASYNCORDERS_VOID_UPDATE_WAS_OPEN_BEFORE_THIS_DEPLOY: YES
+LOCAL_RULES_NEWLY_RETIRE_LEGACY_VOID_UPDATE: YES
+CLAUDE_048_ASYNCORDERS_DIRECTION_PRESUMPTION: SUPERSEDED
+SHIFT_CLOSE_RULES_LIVE_AND_LOCAL_IDENTICAL: YES
+CLAUDE_048_SHIFT_CLOSE_MISMATCH_PRESUMPTION: SUPERSEDED
+RULES_COMPILER_VALIDATION: PASS
+RULES_TEST_RESULT: 486/486 PASS (27 spec files)
+
+# ── Rules deploy result (executed this pass) ──
+RULES_DEPLOY_TIMESTAMP_UTC: 2026-09-14T15:26:50Z..2026-09-14T15:27:05Z
+RULES_DEPLOY_RESULT: PASS (exit 0, single attempt, no retry)
+RULES_DEPLOY_PROJECT: twinpet-pos
+RULES_DEPLOY_DATABASE: pos-db
+RULES_DEPLOY_SOURCE_SHA256: 70ed089f44e9f78eae39817ea9e361bddb9ce5cef99ef073a69c668723397f6f
+POST_DEPLOY_POS_DB_RULESET_ID: b611d945-93f6-47df-9c41-c7479a7945ff
+POST_DEPLOY_POS_DB_RULESET_UPDATE_TIME: 2026-09-14T15:27:05.172711Z
+POST_DEPLOY_READBACK_SOURCE_HASH_MATCH: PASS
+DEFAULT_DATABASE_RELEASE_UNCHANGED: YES (cloud.firestore still ruleset cc6f6bfe-4634-45a7-b4a1-47d5ae8938e2)
+PRODUCTION_DOCUMENT_SMOKE_WRITE: NOT_EXECUTED (not authorized)
+POST_DEPLOY_RUNTIME_SMOKE: NOT_EXECUTED (not authorized)
+
+# ── Functions ──
+EXACT7_FUNCTIONS_STATUS: LIVE / CLOSED (not reopened by this gate)
+
+# ── Runtime evidence custody ──
+HISTORICAL_PRE_UAT_INITIAL_STATE: MISSING (retained as recorded; not recreated)
+HISTORICAL_POST_SCENARIO1R_BASELINE: TRUNCATED (preserved as evidence; not repaired)
+CURRENT_RETAINED_RUNTIME_EVIDENCE_BASELINE: C:\Users\Narachat\AppData\Local\Temp\Twinpet-SEC001-UAT\option-b-20260914-204000\PRE_OPTION_B_BASELINE
+SNAPSHOT_CLEANUP_AUTHORIZED: NO
+
+DOCS_COMMITTED: NO (docs edited this pass; commit/push NOT authorized by Gemini-068)
 SEC_001_GEMINI_AUTHORITY: TWINPET-TRUE-STANDALONE-SEC-001-OWNER-DECISIONS-PIN6-BACKOFFICE-PLAN-DOCS-AND-AB-AUTH-GEMINI-001
 SEC_001_PART_B_CORRELATION_AUTHORITY: TWINPET-TRUE-STANDALONE-SEC-001-PART-B-EXACT-CANONICAL-CORRELATION-SCOPE-AUTH-GEMINI-001
 SEC_001_PART_A_REREVIEW: TWINPET-TRUE-STANDALONE-SEC-001-PART-P-PLUS-PART-A-CODEX-FINAL-REREVIEW-003
@@ -39,22 +99,23 @@ PART_A_IMPLEMENTATION_AUTHORIZED: YES
 PART_A_STATUS: CLOSED
 PART_B_STATUS: CLOSED (CODEX_F001_CLOSURE_VERDICT: PASS_WITH_NOTES at 5873aa6)
 PART_B_CONDITIONAL_GATE_SATISFIED: YES
-VOID_TEMPORARILY_FAIL_CLOSED_UNTIL_PACKET_E: YES
-PENDING_EXECUTION_LIFETIME_REQUIRED_BEFORE_DEPLOY: YES
-PACKET_E_REQUIRED_BEFORE_DEPLOY: YES
+VOID_TEMPORARILY_FAIL_CLOSED_UNTIL_PACKET_E: SUPERSEDED (Packet E landed; canonical void path is OFFLINE_ATTESTATION_TO_ADJUDICATE_OFFLINE_PRIVILEGED_ACTION)
+PENDING_EXECUTION_LIFETIME_REQUIRED_BEFORE_DEPLOY: SATISFIED (Packet D/E landed before this Rules deploy)
+PACKET_E_REQUIRED_BEFORE_DEPLOY: SATISFIED (Packet E SOURCE_COMPLETE before this Rules deploy)
 SERVER_ONLY_EXECUTION_CORRELATION: YES
 STALE_RULES_A2_K14_RECONCILED: YES
-FULL_RULES_SUITE: 16 files / 419 tests PASS
+FULL_RULES_SUITE: 27 files / 486 tests PASS (supersedes the historical 16 files / 419 tests figure)
 PACKET_C_STATUS: COMPLETE
 PACKET_C_ARCHITECTURE_STATUS: CLOSED / PASS
 SEC_001_PACKET_C_C_A_IMPLEMENTATION_STATUS: LANDED / CLOSED (8d98bfe)
 SEC_001_PACKET_C_C_B_IMPLEMENTATION_STATUS: LANDED / CLOSED (10c0332; final Codex PASS; blockers 0; commit/push COMPLETE)
-PACKET_D_THROUGH_H_IMPLEMENTATION_AUTHORIZED_NOW: NO
-NEXT_ELIGIBLE_GATE: PACKET_D_PLANNING_AND_EXACTIFICATION
-NEXT_GATE_CLASS: PACKET_D_TRANSITION
-PACKET_D_READ_ONLY_PLANNING: AUTHORIZED
-PACKET_D_IMPLEMENTATION_AUTHORIZED: NO
-PACKET_E_IMPLEMENTATION_AUTHORIZED: NO
+PACKET_D_STATUS: LANDED (source)
+PACKET_E_STATUS: SOURCE_COMPLETE / LANDED_CLOSED (E-1, E-2)
+PACKET_F_THROUGH_H_IMPLEMENTATION_AUTHORIZED_NOW: NO
+NEXT_ELIGIBLE_GATE: SEC001_DOCS_REVIEW_AND_COMMIT_PUSH_DECISION
+NEXT_GATE_CLASS: SEC001_DOCS_CLOSURE
+FIRESTORE_RULES_DEPLOY_AUTHORIZED: EXECUTED_AND_CLOSED (single attempt, Gemini-068)
+FURTHER_RULES_DEPLOY_AUTHORIZED_NOW: NO
 ANDROID_CAPACITOR_AUTHORIZED: NO
 RELEASE_READINESS: PAUSED
 PRODUCTION_ACTIVATION: PAUSED
@@ -182,7 +243,7 @@ PK2D: RECORD_ONLY / NOT ACTIVE / NOT AUTHORIZED
 STASH: UNTOUCHED
 ```
 
-TRUE-STANDALONE architecture is **APPROVED_WITH_NOTES**. Architecture Planning Gate is **CLOSED**. Phase A / Phase C remain historical **CLOSED_WITH_NOTES**. Phase B is **CLOSED**. **SEC-001 Part P/A/B is CLOSED** at commit `5873aa68d3960c71c950c15a66a9d48a68ac1bf8` (`feat(pos): enforce manager authorization for privileged void`; `CODEX_F001_CLOSURE_VERDICT: PASS_WITH_NOTES`, report `TWINPET-TRUE-STANDALONE-SEC-001-PART-PAB-FINAL-COMMIT-PUSH-CLAUDE-007`). **SEC-001 Packet C architecture is CLOSED / PASS** (final Codex verdict `TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-ARCHITECTURE-CODEX-REREVIEW-014`: `PACKET_C_ARCHITECTURE_REVIEW_GATE: PASS`, `PACKET_C_ARCHITECTURE_EXACTIFICATION_CLOSED: YES`). **F9 canonical-documentation reconciliation is COMPLETE** (`TWINPET-TRUE-STANDALONE-SEC-001-F9-CANONICAL-DOCS-CLAUDE-008`). **SEC-001 Packet C / C-A implementation is LANDED / CLOSED** at `8d98bfeb7242f910a46209d3ca7ffc969a9961bd` (`feat(pos): add offline manager authorization credential foundation`; 129 files); final Codex `PASS_WITH_NOTES`. **SEC-001 Packet C / C-B implementation is LANDED / CLOSED** at `10c033252c023436864913372b57c3bc638c8ae1` (`feat(pos): add offline manager authorization verifier lifecycle`; 17 files); final Codex `TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-B-CODEX-REREVIEW-005` = `PASS` (0 blockers, RC-001 through RC-006 CLOSED, 0 new RCs); commit/push authorized by Gemini `TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-B-COMMIT-PUSH-AUTHORIZATION-GEMINI-001` and **COMPLETE**. **SEC-001 Packet C is COMPLETE**. `ACTIVE_IMPLEMENTATION_PACKET: NONE`. Next eligible gate is `PACKET_D_PLANNING_AND_EXACTIFICATION` (next gate class `PACKET_D_TRANSITION`; read-only planning `AUTHORIZED`; Packet D implementation `NO`). Packets D–H implementation remain **NOT AUTHORIZED**. `VOID_TEMPORARILY_FAIL_CLOSED_UNTIL_PACKET_E` is recorded. Pending execution lifetime remains **REQUIRED_BEFORE_DEPLOY** (not fixed now). Packet E remains **REQUIRED_BEFORE_DEPLOY**. Android remains PARKED LAST. Release Readiness remains PAUSED. Production Activation remains PAUSED. Deploy, production, and F7 runtime activation remain NOT AUTHORIZED. Semantic B13 packaging source remains `40a3e10`. Semantic Phase B SQLite source remains `54bb622`. Semantic Phase C source remains `92351999`. Semantic Phase A source remains `6ea48c1`. Semantic SEC-001 Part P/A/B source remains `5873aa6`. Current repository HEAD (binding until a later docs commit advances it): `10c033252c023436864913372b57c3bc638c8ae1` (`feat(pos): add offline manager authorization verifier lifecycle`).
+TRUE-STANDALONE architecture is **APPROVED_WITH_NOTES**. Architecture Planning Gate is **CLOSED**. Phase A / Phase C remain historical **CLOSED_WITH_NOTES**. Phase B is **CLOSED**. **SEC-001 Part P/A/B is CLOSED** at commit `5873aa68d3960c71c950c15a66a9d48a68ac1bf8` (`feat(pos): enforce manager authorization for privileged void`; `CODEX_F001_CLOSURE_VERDICT: PASS_WITH_NOTES`, report `TWINPET-TRUE-STANDALONE-SEC-001-PART-PAB-FINAL-COMMIT-PUSH-CLAUDE-007`). **SEC-001 Packet C architecture is CLOSED / PASS** (final Codex verdict `TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-ARCHITECTURE-CODEX-REREVIEW-014`: `PACKET_C_ARCHITECTURE_REVIEW_GATE: PASS`, `PACKET_C_ARCHITECTURE_EXACTIFICATION_CLOSED: YES`). **F9 canonical-documentation reconciliation is COMPLETE** (`TWINPET-TRUE-STANDALONE-SEC-001-F9-CANONICAL-DOCS-CLAUDE-008`). **SEC-001 Packet C / C-A implementation is LANDED / CLOSED** at `8d98bfeb7242f910a46209d3ca7ffc969a9961bd` (`feat(pos): add offline manager authorization credential foundation`; 129 files); final Codex `PASS_WITH_NOTES`. **SEC-001 Packet C / C-B implementation is LANDED / CLOSED** at `10c033252c023436864913372b57c3bc638c8ae1` (`feat(pos): add offline manager authorization verifier lifecycle`; 17 files); final Codex `TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-B-CODEX-REREVIEW-005` = `PASS` (0 blockers, RC-001 through RC-006 CLOSED, 0 new RCs); commit/push authorized by Gemini `TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-B-COMMIT-PUSH-AUTHORIZATION-GEMINI-001` and **COMPLETE**. **SEC-001 Packet C is COMPLETE**. **Packet D source is LANDED and Packet E is SOURCE_COMPLETE** (E-1 / E-2 `LANDED_CLOSED`). **The SEC-001 native subgate is `CLOSED_RUNTIME_PROVEN`** at accepted version `0.1.0`, build `rel-0.1.0-5ba41be7d73b-20260914T114442Z` (Option-B runtime UAT PASS; schema1 compatibility defect and Scenario08 existing-manifest `user_version=2` defect both CLOSED; client compatibility established). **SEC-001 Firestore Rules are `LANDED_LIVE_VERIFIED`** on named database `pos-db` (ruleset `b611d945-93f6-47df-9c41-c7479a7945ff`, source SHA-256 `70ed089f44e9f78eae39817ea9e361bddb9ce5cef99ef073a69c668723397f6f`, readback hash match PASS, `(default)` release unchanged). `ACTIVE_IMPLEMENTATION_PACKET: NONE`. Next eligible gate is `SEC001_DOCS_REVIEW_AND_COMMIT_PUSH_DECISION` (gate class `SEC001_DOCS_CLOSURE`). The historical `VOID_TEMPORARILY_FAIL_CLOSED_UNTIL_PACKET_E`, `PENDING_EXECUTION_LIFETIME_REQUIRED_BEFORE_DEPLOY` and `PACKET_E_REQUIRED_BEFORE_DEPLOY` guardrails are **satisfied/superseded** — Packet D/E landed before this Rules deploy. Packets F/G are evidence-complete (Rules suite 27 files / 486 tests PASS; Option-B runtime UAT PASS); Packet H docs reconciliation is in progress in this pass. exact7 Functions remain **live / closed** and are not reopened by this gate. A further Rules deploy is **NOT AUTHORIZED** (the Gemini-068 single-attempt authority is spent). Android remains PARKED LAST. Release Readiness remains PAUSED. Production Activation remains PAUSED. Production document access, Function invocation, runtime smoke/UAT, snapshot cleanup, and docs commit/push remain NOT AUTHORIZED. Semantic B13 packaging source remains `40a3e10`. Semantic Phase B SQLite source remains `54bb622`. Semantic Phase C source remains `92351999`. Semantic Phase A source remains `6ea48c1`. Semantic SEC-001 Part P/A/B source remains `5873aa6`. Current repository HEAD (binding until a later docs commit advances it): `5ba41be7d73ba4f2a31d7b01288e653fa1d8862c`.
 
 ## SEC-001 standing register (authoritative)
 
@@ -271,15 +332,29 @@ Recommended model: `OAC_D_SEALED_CAPABILITY_WITH_SERVER_ADJUDICATED_PENDING_INTE
 | A Authorization / security primitives | **CLOSED** — historical, closed within SEC-001 Part P/A/B at `5873aa6` |
 | B Server / rules enforcement | **CLOSED** — historical, closed within SEC-001 Part P/A/B at `5873aa6` (`CODEX_F001_CLOSURE_VERDICT: PASS_WITH_NOTES`) |
 | C Offline credential / verifier (native) | **COMPLETE** — architecture CLOSED / PASS (`TWINPET-TRUE-STANDALONE-SEC-001-PACKET-C-ARCHITECTURE-CODEX-REREVIEW-014`); C-A implementation LANDED / CLOSED at `8d98bfe`; C-B implementation LANDED / CLOSED at `10c0332` (final Codex `PASS`, blockers 0; commit/push COMPLETE). Packet C is COMPLETE. |
-| D Durable evidence + reconciliation | **not authorized as implementation** — next eligible gate: `PACKET_D_PLANNING_AND_EXACTIFICATION` (`PACKET_D_TRANSITION`; read-only planning `AUTHORIZED`; implementation `NO`); future: evidence state-matrix hardening (Codex N-3) |
-| E POS UI wiring | **not authorized** — required to supersede interim POS fail-closed before any deploy/release |
-| F Tests / emulator proof | **not authorized** |
-| G Runtime UAT | **not authorized** |
-| H Docs reconciliation | **not authorized** |
+| D Durable evidence + reconciliation | **LANDED (source)** — D-1B attestation/adjudication, D-2 durable privileged evidence store/scheduler/sync, D-3 machine seam projection landed; future: evidence state-matrix hardening (Codex N-3) |
+| E POS UI wiring | **SOURCE_COMPLETE** — E-1 and E-2 `LANDED_CLOSED`; POS privileged-void production flow landed; supersedes the interim POS fail-closed note |
+| F Tests / emulator proof | **PASS** — Firestore Rules suite 27 files / 486 tests PASS under pinned `firebase-tools@13.31.0` + local emulator (`demo-twinpet`); Rules compiler PASS |
+| G Runtime UAT | **PASS** — Option-B runtime UAT PASS at build `rel-0.1.0-5ba41be7d73b-20260914T114442Z`; native subgate `CLOSED_RUNTIME_PROVEN` |
+| H Docs reconciliation | **IN PROGRESS** — this pass reconciles `CURRENT_PACKET.md` + `STATE.md` under Gemini-068; commit/push **NOT AUTHORIZED** |
 
 Android / Capacitor remains **PARKED LAST**. Release Readiness remains **PAUSED**. Production Activation remains **PAUSED**.
 
-## This pass — SEC-001 bounded predeploy blocker remediation (Claude-016, closes Claude-015 blockers)
+## This pass — SEC-001 Firestore Rules deploy + readback + docs reconciliation (Claude-050)
+
+**Status: Firestore Rules DEPLOYED and LIVE-VERIFIED against named database `pos-db`. Docs-only write allowlist exactly `docs/agent-workflow/CURRENT_PACKET.md` and `docs/agent-workflow/STATE.md`. No commit. No push.** Authority: Gemini `TWINPET-TRUE-STANDALONE-SEC-001-AUTHORITATIVE-RULES-VOID-ARCHITECTURE-DEPLOY-GEMINI-068` (`FIRESTORE_RULES_DEPLOY_AUTHORIZED_NOW: YES`; deploy attempt limit `1`; automatic retry `NO`; post-deploy ruleset readback `REQUIRED`; post-deploy source-hash match `REQUIRED`; `(default)` database release `MUST REMAIN UNCHANGED`; production document smoke write `NO`; post-deploy runtime smoke `NO`). Prompt/report: `TWINPET-TRUE-STANDALONE-SEC-001-FIRESTORE-RULES-DEPLOY-READBACK-DOCS-CLAUDE-050`. Preceding evidence pass: `TWINPET-TRUE-STANDALONE-SEC-001-RULES-CONTROL-PLANE-VOID-EXACTIFICATION-CLAUDE-049` under Gemini-067.
+
+- **Repository baseline unchanged this pass: `HEAD == origin/main == remote main == 5ba41be7d73ba4f2a31d7b01288e653fa1d8862c`.** No commit landed. Tracked-dirty set after this pass is exactly the two authorized docs paths above. Protected stash unchanged: `stash@{0}` = `7d03cfec7ba52ff7e25b7e175ca190efc258d874`. Known four `ops/lib` transients unchanged.
+- **Rules deploy executed exactly once.** Command: `npx --yes firebase-tools@13.31.0 deploy --only firestore:rules --project twinpet-pos`. Start `2026-09-14T15:26:50Z`, end `2026-09-14T15:27:05Z`, exit code `0`, `Deploy complete!`. No retry attempted. The pre-existing Firebase CLI auth session from Claude-049 was reused; **no `firebase login` executed**, no credential created/exported, no IAM change. `package.json`/lockfiles unmodified (transient `npx`).
+- **Compiler output (non-fatal warnings, expected):** `[W] 80:14 Unused function: voidIntentChangesOnly`, `[W] 81:14 Invalid variable name: request`, `[W] 81:41 Invalid variable name: resource`. These are the known, intentional consequence of retaining the now-dead `voidIntentChangesOnly()` helper after the `asyncOrders` client update lane was set to `allow update: if false`; the helper is referenced by no `allow` expression. `rules file firestore.rules compiled successfully`.
+- **Post-deploy readback (mandatory, PASS).** Active release `projects/twinpet-pos/releases/cloud.firestore/pos-db` now binds ruleset `projects/twinpet-pos/rulesets/b611d945-93f6-47df-9c41-c7479a7945ff` (`updateTime 2026-09-14T15:27:05.172711Z`, matching the deploy completion instant), superseding predeploy ruleset `be1fa1fe-f70d-419b-989e-8c9e0778ca98`. The deployed ruleset source was fetched read-only and is **byte-identical** to local `firestore.rules` (48,437 bytes / 1,004 lines), SHA-256 `70ed089f44e9f78eae39817ea9e361bddb9ce5cef99ef073a69c668723397f6f` — exactly the Gemini-068 authorized hash. `POST_DEPLOY_SOURCE_HASH_MATCH: YES`.
+- **`(default)` database release proven unchanged.** The CLI's progress line reads `released rules firestore.rules to cloud.firestore`, which is a generic label and not by itself proof of target. Readback resolves it: `projects/twinpet-pos/releases/cloud.firestore` still binds ruleset `cc6f6bfe-4634-45a7-b4a1-47d5ae8938e2` with `updateTime 2026-06-02T11:45:41.432083Z` — byte-identical to the predeploy snapshot. The Storage release (`5ae85475-1ee2-4cdf-88c5-8ca8f2982d3c`) is likewise unchanged. Only the named `pos-db` release advanced. `DEFAULT_DATABASE_RELEASE_UNCHANGED: YES`.
+- **Live security effect of this deploy.** The legacy client `asyncOrders` void-update lane — which Claude-049 proved was still **open in production** before this deploy, contrary to the earlier Claude-048 presumption — is now closed live (`allow update: if false`). The two server-owned privileged-void correlation fields (`privilegedVoidExecutionId`, `privilegedVoidOacId`) are now non-seedable at `asyncOrders` create, and fifteen `privileged*` collections now carry explicit fail-closed match blocks. Shift-close Rules were already live/local identical and were not changed by this deploy. Residual legacy void intents still queued in a device's IndexedDB will now terminalize as `authority_refused` / `day_boundary_expired` through the existing tested mapping — accepted by Gemini-068.
+- **No production documents were read or written; no Function was invoked; no Functions/Storage/Hosting deploy occurred; no runtime smoke or UAT was run.** Retrieval and readback used read-only Rules API `GET`s (`listAllReleases`, `getRulesetContent`) via the authenticated CLI context.
+- Void architecture ratified by Gemini-068 as `OPTION_1_RATIFY_OFFLINE_ADJUDICATION`: the canonical client void path is `OFFLINE_ATTESTATION_TO_ADJUDICATE_OFFLINE_PRIVILEGED_ACTION`; direct client `asyncOrders` void update remains retired; **no** direct client `submitPrivilegedVoid` caller is required; PVC-4 confinement remains binding; no client migration implementation is required; no new build and no additional native UAT are required for void policy.
+- **Remaining work: docs review, then a separate commit/push decision.** `SEC001_OVERALL_STATUS: RULES_LANDED_LIVE_DOCS_RECONCILIATION_PENDING_COMMIT`. These docs are edited but **not** committed and **not** pushed — Gemini-068 set docs commit/push to `NO` and the commit subject to `NOT_AUTHORIZED`.
+
+## Prior this-pass — SEC-001 bounded predeploy blocker remediation (Claude-016, closes Claude-015 blockers) (historical)
 
 **Status: Bounded exact-6-path predeploy blocker remediation + Functions/Rules evidence (source-write allowlist exactly `functions/package.json`, `docs/agent-workflow/STATE.md`, `docs/agent-workflow/CURRENT_PACKET.md`, `docs/agent-workflow/NEXT_ACTION.md`, `functions/src/__tests__/adjudicateOfflinePrivilegedAction.test.ts`, `functions/src/scripts/__tests__/operatorCliEntrypoints.test.ts`).** Authority: Gemini decision `TWINPET-TRUE-STANDALONE-SEC-001-PREDEPLOY-EVIDENCE-BLOCKER-ADJUDICATION-GEMINI-032` (`CLAUDE_015_NONBLOCKED_EVIDENCE_ACCEPTED: YES`; `FUNCTIONS_DEPLOY_INVENTORY_TEST_CONTRADICTION_DECISION: ACCEPT_STALE_TESTS_REQUIRE_UPDATE`; `PACKET_E_SOURCE_COMPLETE_DOC_AUTHORITY_DECISION: CONTROLLING_GEMINI_LINEAGE_IS_AUTHORITATIVE` — controlling Gemini lineage is authoritative for current packet/gate state). Supersedes prior gate authority `TWINPET-TRUE-STANDALONE-SEC-001-DEPLOYMENT-READINESS-AUDIT-ADJUDICATION-GEMINI-031`. Prompt: `TWINPET-TRUE-STANDALONE-SEC-001-BOUNDED-PREDEPLOY-BLOCKER-REMEDIATION-CLAUDE-016`. Report: `TWINPET-TRUE-STANDALONE-SEC-001-BOUNDED-PREDEPLOY-BLOCKER-REMEDIATION-CLAUDE-016`. Prior prompt/report: `TWINPET-TRUE-STANDALONE-SEC-001-CONSOLIDATED-PREDEPLOY-SOURCE-EVIDENCE-CLAUDE-015`.
 
@@ -656,7 +731,15 @@ Phase A delivered (historical, preserved): six platform port contracts; six brow
 
 ## Current repository HEAD
 
-Consolidated predeploy source/evidence pass / current repository HEAD (binding until a later docs commit advances it; do not overwrite with a later docs SHA):
+SEC-001 landed native source / current repository HEAD (binding until a later docs commit advances it; do not overwrite with a later docs SHA):
+
+`5ba41be7d73ba4f2a31d7b01288e653fa1d8862c`
+
+HEAD subject at that landing: `fix(native): fail closed on invalid migration manifest paths`
+
+Accepted version `0.1.0`; accepted build ID `rel-0.1.0-5ba41be7d73b-20260914T114442Z`; SEC-001 native subgate `CLOSED_RUNTIME_PROVEN` (Option-B runtime UAT PASS). SEC-001 Firestore Rules deployed live from this HEAD to named database `pos-db` (ruleset `b611d945-93f6-47df-9c41-c7479a7945ff`).
+
+Consolidated predeploy source/evidence pass HEAD (historical; superseded as live current-state by `5ba41be`):
 
 `d35da1aae670d221b86a3c9ddc6d5b4574d3b3fb`
 
@@ -776,6 +859,6 @@ PK-1 final HEAD (binding, unchanged): `513b198a30a1af72151ab6a8c0976799871529b8`
 
 ## Next gate
 
-**Current baseline `d35da1a`. Packet C remains COMPLETE (unchanged). Packet D and Packet E source have landed (see "This pass" section above); readiness accepted as `READY_WITH_PREDEPLOY_EVIDENCE_GAPS` by Gemini-031. Current gate is the consolidated predeploy source/evidence pass.** Deploy, production contact, live Firebase inspection, runtime activation, and Tauri native rollout remain **NOT AUTHORIZED** in this pass. Firestore Rules deployment is recorded as required (not executed). `VOID_TEMPORARILY_FAIL_CLOSED_UNTIL_PACKET_E` and `PENDING_EXECUTION_LIFETIME_REQUIRED_BEFORE_DEPLOY` remain historical guardrail notes carried from earlier passes; this pass does not independently re-verify whether POS void UI is still fail-closed now that `ae98b34` has landed production void UI wiring — that is exactly the kind of live-behavior claim reserved for the fresh Codex predeploy review and live baseline verification gates below, not for this source/docs pass. Android/Capacitor remain **NOT required / NOT authorized**. Manual resolution remains a future separate gate, not authorized now.
+**Current baseline `5ba41be`. Packet C remains COMPLETE (unchanged). Packet D source LANDED; Packet E `SOURCE_COMPLETE`. SEC-001 native subgate `CLOSED_RUNTIME_PROVEN` (accepted version `0.1.0`, build `rel-0.1.0-5ba41be7d73b-20260914T114442Z`, Option-B runtime UAT PASS). SEC-001 Firestore Rules are `LANDED_LIVE_VERIFIED` on named database `pos-db` under Gemini-068 — deployed once, readback hash match PASS, `(default)` release unchanged. Current gate is SEC-001 docs review and the separate commit/push decision.** The docs edited in this pass (`CURRENT_PACKET.md`, `STATE.md`) are **not committed and not pushed** — Gemini-068 set docs commit/push to `NO`. A further Rules deploy, production document access, Function invocation, runtime smoke/UAT, native rebuild, snapshot cleanup, and Tauri native rollout all remain **NOT AUTHORIZED**. Android/Capacitor remain **NOT required / NOT authorized**. Manual resolution remains a future separate gate, not authorized now.
 
-**NEXT_WORKFLOW_ACTION:** `RETURN_TO_CHATGPT_FOR_PREDEPLOY_EVIDENCE_FILTER_AND_FRESH_CODEX_ROUTING` (per `TWINPET-TRUE-STANDALONE-SEC-001-CONSOLIDATED-PREDEPLOY-SOURCE-EVIDENCE-CLAUDE-015`). Do NOT commit. Do NOT push. Do NOT deploy. Do NOT contact production. Do NOT inspect live Firebase. Do NOT activate runtime. Do NOT build/package Tauri native. Do NOT run Capacitor/Android. Do NOT implement manual resolution. Do NOT edit Functions source, Rules source, or native source. Fresh Codex predeploy review is required next.
+**NEXT_WORKFLOW_ACTION:** `RETURN_TO_CHATGPT_FOR_POST_DEPLOY_DOCS_REVIEW_AND_CLOSURE_DECISION` (per `TWINPET-TRUE-STANDALONE-SEC-001-FIRESTORE-RULES-DEPLOY-READBACK-DOCS-CLAUDE-050`). Do NOT commit. Do NOT push. Do NOT deploy Rules again. Do NOT deploy Functions. Do NOT invoke Functions. Do NOT read/write production documents. Do NOT run runtime smoke/UAT. Do NOT build/package Tauri native. Do NOT run Capacitor/Android. Do NOT clean up snapshots or repair historical runtime-evidence snapshots. Do NOT edit Functions source, Rules source, client source, or native source. Docs review and a separate Gemini commit/push authority are required next.
