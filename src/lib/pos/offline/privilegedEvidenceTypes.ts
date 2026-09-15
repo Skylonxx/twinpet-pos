@@ -427,6 +427,16 @@ export function parsePrivilegedEvidenceJournalRecordV1(raw: unknown): Privileged
   // ── Cross-invariant: serverVerdict non-null only under ACCEPTED / REJECTED
   if (r.serverVerdict !== null && lastDispositionKind !== 'ACCEPTED' && lastDispositionKind !== 'REJECTED') return null;
 
+  // ── Cross-invariant: a queued row carries no manual-review state. Every
+  // writer that can yield PRIVILEGED_INTENT_QUEUED emits 'NOT_REQUIRED' — the
+  // classifier's four retryable dispositions, TRANSPORT_FAILURE_DISPOSITION,
+  // and the fresh-ingest record — so a queued row holding 'REQUIRED' or
+  // 'RESOLVED' is contradictory, not a lifecycle state. Keyed on syncStatus
+  // rather than on a disposition kind so it also covers a row no disposition
+  // has been applied to yet; the per-kind matrix below stays the sole owner of
+  // the Class III field shape.
+  if (syncStatus === 'PRIVILEGED_INTENT_QUEUED' && r.manualReviewStatus !== 'NOT_REQUIRED') return null;
+
   // ── Cross-invariant: no disposition ever applied => queued/syncing, everything else null
   if (lastDispositionKind === null) {
     if (syncStatus !== 'PRIVILEGED_INTENT_QUEUED' && syncStatus !== 'SYNCING') return null;

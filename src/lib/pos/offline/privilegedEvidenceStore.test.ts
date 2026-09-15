@@ -972,9 +972,9 @@ describe('applyPrivilegedEvidenceDisposition — apply CAS (OP-3)', () => {
       expect(parsePrivilegedEvidenceJournalRecordV1(outcome.record)).not.toBeNull();
     });
 
-    it('retryable apply consumes disposition-carried lifecycle fields rather than duplicating hard-coded constants', async () => {
+    it('retryable apply consumes disposition-carried lifecycle fields rather than substituting hard-coded constants', async () => {
       const store = createInMemoryReversalStore();
-      await claimedRow(store, 1);
+      const claimed = await claimedRow(store, 1);
       const response: OfflineAdjudicationResponse = {
         family: 'ADJUDICATION',
         kind: 'RETRYABLE',
@@ -985,9 +985,13 @@ describe('applyPrivilegedEvidenceDisposition — apply CAS (OP-3)', () => {
       };
       // A deliberately distinguishable `manualReviewStatus` the real
       // classifier never produces for a retryable disposition (always
-      // 'NOT_REQUIRED') — the parser's matrix does not constrain it for a
-      // retryable kind, so this proves the writer reads `disposition`
-      // rather than matching today's hard-coded 'NOT_REQUIRED' constant.
+      // 'NOT_REQUIRED'). Now that the parser requires 'NOT_REQUIRED' for a
+      // queued row, no legal queued-family value can differ from the
+      // hard-coded RETRYABLE_QUEUED_LIFECYCLE constant — so consumption is
+      // proven in the contrapositive: had the writer substituted that
+      // constant, this apply would have succeeded with 'NOT_REQUIRED'. It is
+      // fenced precisely because the disposition's own value is carried
+      // verbatim to the canonical parser, and nothing is written.
       const disposition: OfflineAdjudicationDisposition = {
         retryable: true,
         terminalForAutomation: false,
@@ -1005,11 +1009,28 @@ describe('applyPrivilegedEvidenceDisposition — apply CAS (OP-3)', () => {
         { kind: 'server', response, disposition },
         { nowMs: 6_000, staffId: 'staff-1' },
       );
-      expect(outcome.kind).toBe('applied');
-      if (outcome.kind !== 'applied') throw new Error('unreachable');
-      expect(outcome.record.manualReviewStatus).toBe('RESOLVED');
-      expect(outcome.record.lastDispositionKind).toBe('RETRYABLE');
-      expect(parsePrivilegedEvidenceJournalRecordV1(outcome.record)).not.toBeNull();
+      expect(outcome.kind).toBe('fenced');
+      const fencedRows = await listPrivilegedEvidence(store);
+      expect(fencedRows[0]!.syncStatus).toBe('SYNCING'); // untouched, still claimed
+      expect(fencedRows[0]!.manualReviewStatus).toBe(claimed.manualReviewStatus);
+      expect(fencedRows[0]!.retryableFailureCount).toBe(claimed.retryableFailureCount);
+
+      // The consumption half on a disposition the invariant admits: every
+      // lifecycle field is read from `disposition`, never a local literal.
+      const real = classifyOfflineAdjudicationResponse(response);
+      const applied = await applyPrivilegedEvidenceDisposition(
+        store,
+        envelope().attestationIdHex,
+        1,
+        { kind: 'server', response, disposition: real },
+        { nowMs: 7_000, staffId: 'staff-1' },
+      );
+      expect(applied.kind).toBe('applied');
+      if (applied.kind !== 'applied') throw new Error('unreachable');
+      expect(applied.record.syncStatus).toBe(real.syncStatus);
+      expect(applied.record.manualReviewStatus).toBe(real.manualReviewStatus);
+      expect(applied.record.lastDispositionKind).toBe('RETRYABLE');
+      expect(parsePrivilegedEvidenceJournalRecordV1(applied.record)).not.toBeNull();
     });
 
     it('STATE_DEPENDENT protocol-rejected retry increments retryableFailureCount like any other retryable outcome, never flipping to terminal', async () => {
@@ -1674,10 +1695,8 @@ describe('applyPrivilegedEvidenceDisposition — apply CAS (OP-3)', () => {
   });
 
   describe('Codex N-3 hardening — concrete RETRYABLE + RESOLVED field-matrix gap (Codex-007/R1)', () => {
-    // Codex-007/R1 identified that the existing test immediately above this
-    // block ("retryable apply consumes disposition-carried lifecycle fields
-    // rather than duplicating hard-coded constants") proves the writer AND
-    // `parsePrivilegedEvidenceJournalRecordV1` both silently ACCEPT a
+    // Codex-007/R1 identified that the writer AND
+    // `parsePrivilegedEvidenceJournalRecordV1` both silently ACCEPTED a
     // `manualReviewStatus: 'RESOLVED'` paired with a RETRYABLE disposition —
     // a field-value combination the real classifier
     // (`classifyOfflineAdjudicationResponse`) never itself produces (it
@@ -1686,20 +1705,13 @@ describe('applyPrivilegedEvidenceDisposition — apply CAS (OP-3)', () => {
     // transition gap, so the transition-binding block above — which only
     // asserts `isLegalPrivilegedEvidenceTransition` — cannot catch it.
     //
-    // Per GEMINI-073R1 Part E §17: production source
-    // (`applyPrivilegedEvidenceDisposition` / `parsePrivilegedEvidenceJournalRecordV1`
-    // in `privilegedEvidenceTypes.ts`) is NOT edited by this packet. This
-    // test therefore documents the desired behavior (rejection) as an
-    // expected-failing case via `it.fails`: it fails today against
-    // unmodified production code (proving the gap is real and reproducible)
-    // while the overall suite stays green, exactly encoding
-    // N3_NEGATIVE_CASE_EXPOSES_PRODUCTION_GAP_REQUIRING_NEW_AUTHORITY. A
-    // future authorized packet closes this by making `it.fails` an ordinary
-    // `it` once the writer/parser matrix constrains `manualReviewStatus` for
-    // a RETRYABLE-classified disposition (one source of truth — bind this to
-    // `isLegalPrivilegedEvidenceTransition`'s matrix or an equivalent single
-    // canonical table; do not add a second, independently-maintained one).
-    it.fails(
+    // Closed by the canonical parser cross-invariant
+    // "PRIVILEGED_INTENT_QUEUED requires manualReviewStatus NOT_REQUIRED" in
+    // `privilegedEvidenceTypes.ts`. One source of truth: the parser is
+    // already OP-3's write fence, so no writer-side guard duplicates the
+    // rule. The case below is now ordinary enforced behavior, not a deferred
+    // expected failure.
+    it(
       'a RETRYABLE disposition carrying manualReviewStatus RESOLVED is rejected, not silently applied',
       async () => {
         const store = createInMemoryReversalStore();
@@ -1733,9 +1745,9 @@ describe('applyPrivilegedEvidenceDisposition — apply CAS (OP-3)', () => {
           { kind: 'server', response, disposition },
           { nowMs: 6_000, staffId: 'staff-1' },
         );
-        // Desired: fail closed (fenced / not applied) rather than silently
-        // persist a RETRYABLE-kind row with a RESOLVED manual-review status
-        // the real classifier can never itself produce.
+        // Fails closed (fenced / not applied) rather than silently persisting
+        // a RETRYABLE-kind row with a RESOLVED manual-review status the real
+        // classifier can never itself produce.
         expect(outcome.kind).not.toBe('applied');
       },
     );

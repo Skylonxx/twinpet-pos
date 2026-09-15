@@ -242,7 +242,7 @@ describe('parsePrivilegedEvidenceJournalRecordV1 — per-disposition-kind field 
     expect(parsePrivilegedEvidenceJournalRecordV1({ ...rec, serverAdjudicationId: 'adj-1' })).toBeNull();
   });
 
-  it('retryable/queued kinds require every server field null', () => {
+  it('retryable/queued kinds require every server field null and manualReviewStatus NOT_REQUIRED', () => {
     for (const kind of [
       'PROTOCOL_REJECTED_STATE_DEPENDENT',
       'PROTOCOL_REJECTED_CALLER_DEPENDENT',
@@ -254,6 +254,10 @@ describe('parsePrivilegedEvidenceJournalRecordV1 — per-disposition-kind field 
       const rec = validRecord({ syncStatus: 'PRIVILEGED_INTENT_QUEUED', lastDispositionKind: kind });
       expect(parsePrivilegedEvidenceJournalRecordV1(rec)).not.toBeNull();
       expect(parsePrivilegedEvidenceJournalRecordV1({ ...rec, serverVerdict: 'ACCEPTED' })).toBeNull();
+      // Everything else about the row stays valid for the queued family, so
+      // the rejection is attributable to the manual-review invariant alone.
+      expect(parsePrivilegedEvidenceJournalRecordV1({ ...rec, manualReviewStatus: 'RESOLVED' })).toBeNull();
+      expect(parsePrivilegedEvidenceJournalRecordV1({ ...rec, manualReviewStatus: 'REQUIRED' })).toBeNull();
     }
   });
 
@@ -296,6 +300,10 @@ describe('parsePrivilegedEvidenceJournalRecordV1 — per-disposition-kind field 
     expect(
       parsePrivilegedEvidenceJournalRecordV1(validRecord({ syncStatus: 'SERVER_ACCEPTED', lastDispositionKind: null })),
     ).toBeNull();
+    // The manual-review invariant is keyed on syncStatus, so it also reaches a
+    // queued row no disposition has been applied to yet.
+    expect(parsePrivilegedEvidenceJournalRecordV1(validRecord({ manualReviewStatus: 'RESOLVED' }))).toBeNull();
+    expect(parsePrivilegedEvidenceJournalRecordV1(validRecord({ manualReviewStatus: 'REQUIRED' }))).toBeNull();
   });
 });
 
