@@ -8,6 +8,7 @@ import type {
 import { classifyOfflineAdjudicationResponse } from '../../auth/privilegedAction/offlineAdjudicationTransport';
 import {
   PRIVILEGED_EVIDENCE_MAX_RETRYABLE_FAILURES,
+  isLegalPrivilegedEvidenceTransition,
   parsePrivilegedEvidenceJournalRecordV1,
 } from './privilegedEvidenceTypes';
 import {
@@ -1469,6 +1470,275 @@ describe('applyPrivilegedEvidenceDisposition — apply CAS (OP-3)', () => {
       expect(outcome.record.outcomeKind).toBeNull();
       expect(parsePrivilegedEvidenceJournalRecordV1(outcome.record)).not.toBeNull();
     });
+  });
+
+  describe('Codex N-3 hardening — production write paths bind to the canonical transition predicate', () => {
+    // GEMINI-073R1 N3 test-only hardening (Claude-055R1). No production source
+    // is edited by this block: it asserts every syncStatus transition the
+    // write paths above already produce is legal under the SAME canonical
+    // `isLegalPrivilegedEvidenceTransition` predicate `privilegedEvidenceTypes.ts`
+    // declares — reusing that one function rather than re-deriving a second,
+    // independently-maintained copy of `LEGAL_TRANSITIONS` here (one source of
+    // truth, per the binding N3 requirement).
+
+    it('ingest produces the sole legal null → PRIVILEGED_INTENT_QUEUED transition', async () => {
+      const store = createInMemoryReversalStore();
+      const outcome = await ingestAttestedPrivilegedAction(store, envelope(), ctx, 1_000);
+      expect(outcome.kind).toBe('created');
+      if (outcome.kind !== 'created') throw new Error('unreachable');
+      expect(isLegalPrivilegedEvidenceTransition(null, outcome.record.syncStatus)).toBe(true);
+      expect(outcome.record.syncStatus).toBe('PRIVILEGED_INTENT_QUEUED');
+    });
+
+    it('claim produces the legal PRIVILEGED_INTENT_QUEUED → SYNCING transition', async () => {
+      const store = createInMemoryReversalStore();
+      await ingestAttestedPrivilegedAction(store, envelope(), ctx, 1_000);
+      const claim = await claimPrivilegedEvidenceRow(store, envelope().attestationIdHex, 1, {
+        deviceId: 'd1',
+        nowMs: 1_000,
+        staffId: 'staff-1',
+      });
+      if (claim.kind !== 'claimed') throw new Error('setup failed');
+      expect(
+        isLegalPrivilegedEvidenceTransition('PRIVILEGED_INTENT_QUEUED', claim.record.syncStatus),
+      ).toBe(true);
+      expect(claim.record.syncStatus).toBe('SYNCING');
+    });
+
+    it('an ACCEPTED apply produces the legal SYNCING → SERVER_ACCEPTED transition', async () => {
+      const store = createInMemoryReversalStore();
+      await claimedRow(store, 1);
+      const response: OfflineAdjudicationResponse = {
+        family: 'ADJUDICATION',
+        kind: 'ACCEPTED',
+        adjudicationId: envelope().attestationIdHex,
+        targetOrderId: 'order-1',
+        offlineExecutionId: 'exec-1',
+        outcomeKind: 'VOID_APPLIED',
+        idempotent: false,
+        serverAdjudicatedAtMs: 5_000,
+      };
+      const outcome = await applyPrivilegedEvidenceDisposition(
+        store,
+        envelope().attestationIdHex,
+        1,
+        { kind: 'server', response, disposition: classifyOfflineAdjudicationResponse(response) },
+        { nowMs: 6_000, staffId: 'staff-1' },
+      );
+      expect(outcome.kind).toBe('applied');
+      if (outcome.kind !== 'applied') throw new Error('unreachable');
+      expect(isLegalPrivilegedEvidenceTransition('SYNCING', outcome.record.syncStatus)).toBe(true);
+      expect(outcome.record.syncStatus).toBe('SERVER_ACCEPTED');
+    });
+
+    it('a REJECTED apply produces the legal SYNCING → SERVER_REJECTED transition', async () => {
+      const store = createInMemoryReversalStore();
+      await claimedRow(store, 1);
+      const response: OfflineAdjudicationResponse = {
+        family: 'ADJUDICATION',
+        kind: 'ACCEPTED',
+        adjudicationId: envelope().attestationIdHex,
+        targetOrderId: 'order-1',
+        offlineExecutionId: 'exec-1',
+        outcomeKind: 'VOID_APPLIED',
+        idempotent: false,
+        serverAdjudicatedAtMs: 5_000,
+      };
+      const disposition: OfflineAdjudicationDisposition = {
+        retryable: false,
+        terminalForAutomation: true,
+        syncStatus: 'SERVER_REJECTED',
+        manualReviewStatus: 'REQUIRED',
+        serverVerdict: 'REJECTED',
+        serverRejectionReason: 'trusted_time_bounds_invalid',
+        offlineExecutionId: null,
+        outcomeKind: null,
+      };
+      const outcome = await applyPrivilegedEvidenceDisposition(
+        store,
+        envelope().attestationIdHex,
+        1,
+        { kind: 'server', response, disposition },
+        { nowMs: 6_000, staffId: 'staff-1' },
+      );
+      expect(outcome.kind).toBe('applied');
+      if (outcome.kind !== 'applied') throw new Error('unreachable');
+      expect(isLegalPrivilegedEvidenceTransition('SYNCING', outcome.record.syncStatus)).toBe(true);
+      expect(outcome.record.syncStatus).toBe('SERVER_REJECTED');
+    });
+
+    it('a terminal manual-attention apply produces the legal SYNCING → MANUAL_ATTENTION transition', async () => {
+      const store = createInMemoryReversalStore();
+      await claimedRow(store, 1);
+      const response: OfflineAdjudicationResponse = {
+        family: 'ADJUDICATION',
+        kind: 'ACCEPTED',
+        adjudicationId: envelope().attestationIdHex,
+        targetOrderId: 'order-1',
+        offlineExecutionId: 'exec-1',
+        outcomeKind: 'VOID_APPLIED',
+        idempotent: false,
+        serverAdjudicatedAtMs: 1,
+      };
+      const disposition: OfflineAdjudicationDisposition = {
+        retryable: false,
+        terminalForAutomation: true,
+        syncStatus: 'MANUAL_ATTENTION',
+        manualReviewStatus: 'REQUIRED',
+        serverVerdict: null,
+        serverRejectionReason: 'canonical_correlation_missing',
+        offlineExecutionId: null,
+        outcomeKind: null,
+      };
+      const outcome = await applyPrivilegedEvidenceDisposition(
+        store,
+        envelope().attestationIdHex,
+        1,
+        { kind: 'server', response, disposition },
+        { nowMs: 6_000, staffId: 'staff-1' },
+      );
+      expect(outcome.kind).toBe('applied');
+      if (outcome.kind !== 'applied') throw new Error('unreachable');
+      expect(isLegalPrivilegedEvidenceTransition('SYNCING', outcome.record.syncStatus)).toBe(true);
+      expect(outcome.record.syncStatus).toBe('MANUAL_ATTENTION');
+    });
+
+    it('a retryable apply produces the legal SYNCING → PRIVILEGED_INTENT_QUEUED transition', async () => {
+      const store = createInMemoryReversalStore();
+      await claimedRow(store, 1);
+      const outcome = await applyPrivilegedEvidenceDisposition(
+        store,
+        envelope().attestationIdHex,
+        1,
+        { kind: 'transport_failure' },
+        { nowMs: 10_000, staffId: 'staff-1' },
+      );
+      expect(outcome.kind).toBe('applied');
+      if (outcome.kind !== 'applied') throw new Error('unreachable');
+      expect(isLegalPrivilegedEvidenceTransition('SYNCING', outcome.record.syncStatus)).toBe(true);
+      expect(outcome.record.syncStatus).toBe('PRIVILEGED_INTENT_QUEUED');
+    });
+
+    it('the retryable-ceiling apply produces the legal SYNCING → MANUAL_ATTENTION transition', async () => {
+      const store = createInMemoryReversalStore();
+      await ingestAttestedPrivilegedAction(store, envelope(), ctx, 1_000);
+      let ceilingClaimBeforeStatus;
+      let lastRecordStatus: string | undefined;
+      for (let attempt = 1; attempt <= PRIVILEGED_EVIDENCE_MAX_RETRYABLE_FAILURES; attempt += 1) {
+        const claim = await claimPrivilegedEvidenceRow(store, envelope().attestationIdHex, attempt, {
+          deviceId: 'd1',
+          nowMs: 1_000,
+          staffId: 'staff-1',
+        });
+        if (claim.kind !== 'claimed') throw new Error(`claim failed at attempt ${attempt}`);
+        // The actual before-state for the ceiling apply below: bind to the
+        // claim's own observed row state rather than assuming the prior
+        // iteration's post-apply status still holds — the loop re-claims the
+        // row every iteration, and claim itself transitions the row to SYNCING.
+        ceilingClaimBeforeStatus = claim.record.syncStatus;
+        const outcome = await applyPrivilegedEvidenceDisposition(
+          store,
+          envelope().attestationIdHex,
+          attempt,
+          { kind: 'transport_failure' },
+          { nowMs: 1_000, staffId: 'staff-1' },
+        );
+        if (outcome.kind === 'applied') lastRecordStatus = outcome.record.syncStatus;
+      }
+      const rows = await listPrivilegedEvidence(store);
+      expect(rows[0]!.syncStatus).toBe('MANUAL_ATTENTION');
+      // The final iteration first claims the row into SYNCING, then applies
+      // the ceiling disposition — so the actual observed pair is
+      // SYNCING → MANUAL_ATTENTION, not the retry loop's earlier
+      // PRIVILEGED_INTENT_QUEUED → SYNCING transitions.
+      expect(ceilingClaimBeforeStatus).toBe('SYNCING');
+      expect(
+        isLegalPrivilegedEvidenceTransition(ceilingClaimBeforeStatus ?? null, rows[0]!.syncStatus),
+      ).toBe(true);
+      expect(lastRecordStatus).toBe('MANUAL_ATTENTION');
+    });
+
+    it('non-vacuity: the canonical predicate does reject an illegal reversal out of a terminal status', () => {
+      // Proves the assertions above are discriminating, not vacuously true —
+      // the same predicate correctly rejects a transition no write path here
+      // ever produces (a terminal SERVER_ACCEPTED row silently reopened back
+      // to PRIVILEGED_INTENT_QUEUED).
+      expect(isLegalPrivilegedEvidenceTransition('SERVER_ACCEPTED', 'PRIVILEGED_INTENT_QUEUED')).toBe(
+        false,
+      );
+      expect(isLegalPrivilegedEvidenceTransition('SERVER_REJECTED', 'SYNCING')).toBe(false);
+      expect(isLegalPrivilegedEvidenceTransition('MANUAL_ATTENTION', 'PRIVILEGED_INTENT_QUEUED')).toBe(
+        false,
+      );
+    });
+  });
+
+  describe('Codex N-3 hardening — concrete RETRYABLE + RESOLVED field-matrix gap (Codex-007/R1)', () => {
+    // Codex-007/R1 identified that the existing test immediately above this
+    // block ("retryable apply consumes disposition-carried lifecycle fields
+    // rather than duplicating hard-coded constants") proves the writer AND
+    // `parsePrivilegedEvidenceJournalRecordV1` both silently ACCEPT a
+    // `manualReviewStatus: 'RESOLVED'` paired with a RETRYABLE disposition —
+    // a field-value combination the real classifier
+    // (`classifyOfflineAdjudicationResponse`) never itself produces (it
+    // always emits `manualReviewStatus: 'NOT_REQUIRED'` for a retryable
+    // disposition). This is a field-matrix gap, not a `(from,to)` status
+    // transition gap, so the transition-binding block above — which only
+    // asserts `isLegalPrivilegedEvidenceTransition` — cannot catch it.
+    //
+    // Per GEMINI-073R1 Part E §17: production source
+    // (`applyPrivilegedEvidenceDisposition` / `parsePrivilegedEvidenceJournalRecordV1`
+    // in `privilegedEvidenceTypes.ts`) is NOT edited by this packet. This
+    // test therefore documents the desired behavior (rejection) as an
+    // expected-failing case via `it.fails`: it fails today against
+    // unmodified production code (proving the gap is real and reproducible)
+    // while the overall suite stays green, exactly encoding
+    // N3_NEGATIVE_CASE_EXPOSES_PRODUCTION_GAP_REQUIRING_NEW_AUTHORITY. A
+    // future authorized packet closes this by making `it.fails` an ordinary
+    // `it` once the writer/parser matrix constrains `manualReviewStatus` for
+    // a RETRYABLE-classified disposition (one source of truth — bind this to
+    // `isLegalPrivilegedEvidenceTransition`'s matrix or an equivalent single
+    // canonical table; do not add a second, independently-maintained one).
+    it.fails(
+      'a RETRYABLE disposition carrying manualReviewStatus RESOLVED is rejected, not silently applied',
+      async () => {
+        const store = createInMemoryReversalStore();
+        await claimedRow(store, 1);
+        const response: OfflineAdjudicationResponse = {
+          family: 'ADJUDICATION',
+          kind: 'RETRYABLE',
+          adjudicationId: envelope().attestationIdHex,
+          retryReason: 'backend_unavailable',
+          terminal: false,
+          serverAdjudicatedAtMs: 1,
+        };
+        // The real classifier never produces this pairing — it always emits
+        // 'NOT_REQUIRED' for a retryable disposition (see the RC-D2-004 test
+        // immediately above). This synthesizes the contradictory pairing
+        // directly, exactly as Codex-007/R1 did.
+        const disposition: OfflineAdjudicationDisposition = {
+          retryable: true,
+          terminalForAutomation: false,
+          syncStatus: 'PRIVILEGED_INTENT_QUEUED',
+          manualReviewStatus: 'RESOLVED',
+          serverVerdict: null,
+          serverRejectionReason: null,
+          offlineExecutionId: null,
+          outcomeKind: null,
+        };
+        const outcome = await applyPrivilegedEvidenceDisposition(
+          store,
+          envelope().attestationIdHex,
+          1,
+          { kind: 'server', response, disposition },
+          { nowMs: 6_000, staffId: 'staff-1' },
+        );
+        // Desired: fail closed (fenced / not applied) rather than silently
+        // persist a RETRYABLE-kind row with a RESOLVED manual-review status
+        // the real classifier can never itself produce.
+        expect(outcome.kind).not.toBe('applied');
+      },
+    );
   });
 });
 
