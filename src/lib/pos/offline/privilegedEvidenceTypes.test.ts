@@ -193,6 +193,12 @@ describe('parsePrivilegedEvidenceJournalRecordV1 — per-disposition-kind field 
     expect(parsePrivilegedEvidenceJournalRecordV1(rec)).not.toBeNull();
     expect(parsePrivilegedEvidenceJournalRecordV1({ ...rec, serverReason: 'x' })).toBeNull();
     expect(parsePrivilegedEvidenceJournalRecordV1({ ...rec, offlineExecutionId: null })).toBeNull();
+    // Everything else about the row stays valid for the accepted family, so
+    // the rejection is attributable to the manual-review invariant alone.
+    // `classifyOfflineAdjudicationResponse` emits SERVER_ACCEPTED only with
+    // 'NOT_REQUIRED'; the other two vocabulary members invert the signal.
+    expect(parsePrivilegedEvidenceJournalRecordV1({ ...rec, manualReviewStatus: 'REQUIRED' })).toBeNull();
+    expect(parsePrivilegedEvidenceJournalRecordV1({ ...rec, manualReviewStatus: 'RESOLVED' })).toBeNull();
   });
 
   it('REJECTED requires a valid rejection reason and rejects a wrong-family reason', () => {
@@ -211,6 +217,11 @@ describe('parsePrivilegedEvidenceJournalRecordV1 — per-disposition-kind field 
     expect(
       parsePrivilegedEvidenceJournalRecordV1({ ...rec, serverReason: 'canonical_correlation_missing' }),
     ).toBeNull(); // manual-attention family, not rejection family
+    // Same attribution argument as the ACCEPTED case above: the classifier
+    // emits SERVER_REJECTED only with 'REQUIRED' — the void did not happen, so
+    // a human must reconcile the bill.
+    expect(parsePrivilegedEvidenceJournalRecordV1({ ...rec, manualReviewStatus: 'NOT_REQUIRED' })).toBeNull();
+    expect(parsePrivilegedEvidenceJournalRecordV1({ ...rec, manualReviewStatus: 'RESOLVED' })).toBeNull();
   });
 
   it('ADJUDICATION_ANOMALY writes serverObservedAtMs and never serverAdjudicatedAtMs or a verdict', () => {

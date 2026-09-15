@@ -437,6 +437,20 @@ export function parsePrivilegedEvidenceJournalRecordV1(raw: unknown): Privileged
   // the Class III field shape.
   if (syncStatus === 'PRIVILEGED_INTENT_QUEUED' && r.manualReviewStatus !== 'NOT_REQUIRED') return null;
 
+  // ── Cross-invariant: the two server-adjudicated terminal statuses carry the
+  // manual-review state their sole canonical emitter assigns. D-1B's
+  // `classifyOfflineAdjudicationResponse` is the only production origin of
+  // either status, and it pairs SERVER_ACCEPTED with 'NOT_REQUIRED' (a verdict
+  // was reached and the void applied — nothing is left for a human) and
+  // SERVER_REJECTED with 'REQUIRED' (the void did NOT happen, so a human must
+  // reconcile the bill). Any other pairing inverts the review signal and is
+  // contradictory, not a lifecycle state. Keyed on syncStatus for the same
+  // reason as the queued invariant above: it also reaches a hydrated row, and
+  // it stays correct if a future disposition kind maps onto either status. The
+  // per-kind matrix below remains the sole owner of the Class III field shape.
+  if (syncStatus === 'SERVER_ACCEPTED' && r.manualReviewStatus !== 'NOT_REQUIRED') return null;
+  if (syncStatus === 'SERVER_REJECTED' && r.manualReviewStatus !== 'REQUIRED') return null;
+
   // ── Cross-invariant: no disposition ever applied => queued/syncing, everything else null
   if (lastDispositionKind === null) {
     if (syncStatus !== 'PRIVILEGED_INTENT_QUEUED' && syncStatus !== 'SYNCING') return null;

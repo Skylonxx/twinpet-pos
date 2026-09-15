@@ -1752,6 +1752,138 @@ describe('applyPrivilegedEvidenceDisposition — apply CAS (OP-3)', () => {
       },
     );
   });
+
+  describe('Claude N-3 hardening — SERVER_ACCEPTED / SERVER_REJECTED manual-review field-matrix gap', () => {
+    // Claude-061 exactified the sibling of the RETRYABLE + RESOLVED gap above:
+    // the per-kind matrix's 'ACCEPTED' and 'REJECTED' cases constrained every
+    // Class III field but said nothing about `manualReviewStatus`, while the
+    // real classifier (`classifyOfflineAdjudicationResponse`) emits
+    // SERVER_ACCEPTED only with 'NOT_REQUIRED' and SERVER_REJECTED only with
+    // 'REQUIRED'. A synthetic disposition inverting that signal therefore
+    // wrote all the way through OP-3 and was reported `applied`.
+    //
+    // Closed by the canonical parser cross-invariants
+    // "SERVER_ACCEPTED requires NOT_REQUIRED" / "SERVER_REJECTED requires
+    // REQUIRED" in `privilegedEvidenceTypes.ts`. One source of truth: the
+    // parser is already OP-3's write fence, so no writer-side guard
+    // duplicates the rule — these two tests prove the fence actually refuses.
+
+    it('an ACCEPTED disposition carrying manualReviewStatus REQUIRED is fenced, not silently applied', async () => {
+      const store = createInMemoryReversalStore();
+      const claimed = await claimedRow(store, 1);
+      const response: OfflineAdjudicationResponse = {
+        family: 'ADJUDICATION',
+        kind: 'ACCEPTED',
+        adjudicationId: envelope().attestationIdHex,
+        targetOrderId: 'order-1',
+        offlineExecutionId: 'exec-1',
+        outcomeKind: 'VOID_APPLIED',
+        idempotent: false,
+        serverAdjudicatedAtMs: 5_000,
+      };
+      // Canonical in every ACCEPTED-matrix respect EXCEPT the inverted
+      // manual-review signal, so the fence is attributable to the new
+      // invariant alone: had the parser stayed silent on the field, this
+      // would have been persisted as a terminal SERVER_ACCEPTED row.
+      const disposition: OfflineAdjudicationDisposition = {
+        retryable: false,
+        terminalForAutomation: true,
+        syncStatus: 'SERVER_ACCEPTED',
+        manualReviewStatus: 'REQUIRED',
+        serverVerdict: 'ACCEPTED',
+        serverRejectionReason: null,
+        offlineExecutionId: 'exec-1',
+        outcomeKind: 'VOID_APPLIED',
+      };
+      const outcome = await applyPrivilegedEvidenceDisposition(
+        store,
+        envelope().attestationIdHex,
+        1,
+        { kind: 'server', response, disposition },
+        { nowMs: 6_000, staffId: 'staff-1' },
+      );
+      expect(outcome.kind).toBe('fenced');
+
+      // The claimed row is untouched — no terminal accepted row is persisted.
+      const rows = await listPrivilegedEvidence(store);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toEqual(claimed);
+      expect(rows[0]!.syncStatus).toBe('SYNCING');
+      expect(rows[0]!.serverVerdict).toBeNull();
+
+      // The consumption half: the real classifier's disposition for the same
+      // response applies and parses, so the fence is not merely rejecting
+      // every ACCEPTED apply.
+      const real = classifyOfflineAdjudicationResponse(response);
+      expect(real.manualReviewStatus).toBe('NOT_REQUIRED');
+      const applied = await applyPrivilegedEvidenceDisposition(
+        store,
+        envelope().attestationIdHex,
+        1,
+        { kind: 'server', response, disposition: real },
+        { nowMs: 7_000, staffId: 'staff-1' },
+      );
+      expect(applied.kind).toBe('applied');
+      if (applied.kind !== 'applied') throw new Error('unreachable');
+      expect(applied.record.syncStatus).toBe('SERVER_ACCEPTED');
+      expect(applied.record.manualReviewStatus).toBe('NOT_REQUIRED');
+      expect(parsePrivilegedEvidenceJournalRecordV1(applied.record)).not.toBeNull();
+    });
+
+    it('a REJECTED disposition carrying manualReviewStatus NOT_REQUIRED is fenced, not silently applied', async () => {
+      const store = createInMemoryReversalStore();
+      const claimed = await claimedRow(store, 1);
+      const response: OfflineAdjudicationResponse = {
+        family: 'ADJUDICATION',
+        kind: 'REJECTED',
+        adjudicationId: envelope().attestationIdHex,
+        targetOrderId: 'order-1',
+        rejectionReason: 'trusted_time_bounds_invalid',
+        terminal: true,
+        idempotent: false,
+        serverAdjudicatedAtMs: 5_000,
+      };
+      const disposition: OfflineAdjudicationDisposition = {
+        retryable: false,
+        terminalForAutomation: true,
+        syncStatus: 'SERVER_REJECTED',
+        manualReviewStatus: 'NOT_REQUIRED',
+        serverVerdict: 'REJECTED',
+        serverRejectionReason: 'trusted_time_bounds_invalid',
+        offlineExecutionId: null,
+        outcomeKind: null,
+      };
+      const outcome = await applyPrivilegedEvidenceDisposition(
+        store,
+        envelope().attestationIdHex,
+        1,
+        { kind: 'server', response, disposition },
+        { nowMs: 6_000, staffId: 'staff-1' },
+      );
+      expect(outcome.kind).toBe('fenced');
+
+      const rows = await listPrivilegedEvidence(store);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toEqual(claimed);
+      expect(rows[0]!.syncStatus).toBe('SYNCING');
+      expect(rows[0]!.serverVerdict).toBeNull();
+
+      const real = classifyOfflineAdjudicationResponse(response);
+      expect(real.manualReviewStatus).toBe('REQUIRED');
+      const applied = await applyPrivilegedEvidenceDisposition(
+        store,
+        envelope().attestationIdHex,
+        1,
+        { kind: 'server', response, disposition: real },
+        { nowMs: 7_000, staffId: 'staff-1' },
+      );
+      expect(applied.kind).toBe('applied');
+      if (applied.kind !== 'applied') throw new Error('unreachable');
+      expect(applied.record.syncStatus).toBe('SERVER_REJECTED');
+      expect(applied.record.manualReviewStatus).toBe('REQUIRED');
+      expect(parsePrivilegedEvidenceJournalRecordV1(applied.record)).not.toBeNull();
+    });
+  });
 });
 
 describe('applyPrivilegedEvidenceDeferredCycleCounts (OP-4)', () => {

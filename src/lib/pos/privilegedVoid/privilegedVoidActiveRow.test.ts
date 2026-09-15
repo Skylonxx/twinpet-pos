@@ -102,6 +102,11 @@ function acceptedRow(over: Partial<PrivilegedEvidenceJournalRecordV1> = {}) {
 function rejectedRow(over: Partial<PrivilegedEvidenceJournalRecordV1> = {}) {
   return baseRow({
     syncStatus: 'SERVER_REJECTED',
+    // The canonical classifier pairs SERVER_REJECTED with 'REQUIRED' — the
+    // void did not happen, so a human must reconcile the bill. `baseRow`
+    // defaults to the queued row's 'NOT_REQUIRED', which the parser's
+    // syncStatus-keyed manual-review invariant refuses.
+    manualReviewStatus: 'REQUIRED',
     lastDispositionKind: 'REJECTED',
     serverVerdict: 'REJECTED',
     serverReason: 'trusted_time_bounds_invalid',
