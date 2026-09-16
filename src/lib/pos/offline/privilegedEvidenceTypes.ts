@@ -451,6 +451,24 @@ export function parsePrivilegedEvidenceJournalRecordV1(raw: unknown): Privileged
   if (syncStatus === 'SERVER_ACCEPTED' && r.manualReviewStatus !== 'NOT_REQUIRED') return null;
   if (syncStatus === 'SERVER_REJECTED' && r.manualReviewStatus !== 'REQUIRED') return null;
 
+  // ── Cross-invariant: an in-flight row carries no manual-review state. The
+  // claim CAS (`claimPrivilegedEvidenceRow`) is the SOLE writer of
+  // `syncStatus: 'SYNCING'` — OP-3 can never persist one (it nulls both claim
+  // fields after the patch, which the claim-field totality rule above then
+  // refuses) and the D-1B classifier never emits the status at all. That
+  // writer INHERITS `manualReviewStatus` from its source row rather than
+  // assigning it, and that source parsed as either PRIVILEGED_INTENT_QUEUED
+  // (pinned to 'NOT_REQUIRED' by the invariant above) or SYNCING (inductively
+  // the same), so no production write can reach a contradictory pairing. What
+  // this rule closes is therefore the HYDRATION half: a corrupted or tampered
+  // row read back from IndexedDB in that shape would otherwise parse, be
+  // admitted, and be carried forward verbatim by the next reclaim. Keyed on
+  // syncStatus because it must be — no branch of the per-kind matrix below
+  // permits `syncStatus === 'SYNCING'` (a SYNCING row always has
+  // `lastDispositionKind === null`), so no disposition-keyed rule can reach
+  // this row at all.
+  if (syncStatus === 'SYNCING' && r.manualReviewStatus !== 'NOT_REQUIRED') return null;
+
   // ── Cross-invariant: no disposition ever applied => queued/syncing, everything else null
   if (lastDispositionKind === null) {
     if (syncStatus !== 'PRIVILEGED_INTENT_QUEUED' && syncStatus !== 'SYNCING') return null;

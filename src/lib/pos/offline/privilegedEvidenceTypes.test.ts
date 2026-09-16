@@ -157,6 +157,20 @@ describe('parsePrivilegedEvidenceJournalRecordV1 — schema shape', () => {
     ).not.toBeNull();
   });
 
+  it('SYNCING requires manualReviewStatus NOT_REQUIRED', () => {
+    // The canonical positive (this exact record, untouched) is the last
+    // assertion of the claim-field totality test above. Everything else here
+    // stays valid for an in-flight row — claim fields present, no disposition
+    // applied, every Class III field null — so each rejection is attributable
+    // to the manual-review invariant alone. The claim CAS is the sole writer
+    // of SYNCING and inherits `manualReviewStatus` from a source row already
+    // pinned to 'NOT_REQUIRED', so neither pairing below is reachable by any
+    // production write; both are hydration shapes the parser must refuse.
+    const rec = validRecord({ syncStatus: 'SYNCING', claimOwner: 'o', claimGeneration: 3 });
+    expect(parsePrivilegedEvidenceJournalRecordV1({ ...rec, manualReviewStatus: 'REQUIRED' })).toBeNull();
+    expect(parsePrivilegedEvidenceJournalRecordV1({ ...rec, manualReviewStatus: 'RESOLVED' })).toBeNull();
+  });
+
   it('resultingVoidIntentId must be exactly null', () => {
     expect(
       parsePrivilegedEvidenceJournalRecordV1(validRecord({ resultingVoidIntentId: 'x' as unknown as null })),
