@@ -80,6 +80,9 @@ export const OFFLINE_ATTESTATION_UNAVAILABLE = 'DENIED_UNVERIFIABLE' as const;
 
 const UTC7_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const CANONICAL_ID_RE = /^[A-Za-z0-9_-]{1,1500}$/;
+/** The native attestation id is a 128-bit value rendered as lowercase hex. */
+const ATTESTATION_ID_RE = /^[0-9a-f]{32}$/;
+const ZERO_ATTESTATION_ID = '0'.repeat(32);
 
 type TauriBridge = { core?: { invoke?: unknown } } | undefined;
 
@@ -98,6 +101,41 @@ function isNonEmptyString(value: unknown): value is string {
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
+}
+
+/**
+ * The attestation id as the native attestor must render it: exactly 32
+ * lowercase hex characters, and never the all-zero sentinel. Verify only —
+ * a non-canonical id is rejected, never normalized, padded, truncated, or
+ * re-derived. This module does not mint identifiers.
+ *
+ * This is the native DTO protocol contract, not journal policy. D-2's
+ * `parsePrivilegedEvidenceJournalRecordV1` remains the sole and final owner
+ * of journal-record validity and applies its own rule before persistence.
+ */
+function isCanonicalAttestationIdHex(value: unknown): value is string {
+  return typeof value === 'string' && ATTESTATION_ID_RE.test(value) && value !== ZERO_ATTESTATION_ID;
+}
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0;
+}
+
+/**
+ * The four evidence-seed counters are epochs, monotone versions, and an
+ * attempt tally — every one of them a non-negative integer by construction.
+ * `parseEvidenceSeed` accepts any finite number so that a DENIAL DTO keeps
+ * being evidenced exactly as before; this stricter domain is applied only to
+ * an APPROVING DTO, whose seed is the one that reaches durable storage.
+ * No upper bound is imposed.
+ */
+function hasCanonicalSeedNumerics(seed: PrivilegedEvidenceSeed): boolean {
+  return (
+    isNonNegativeInteger(seed.revocationEpochAtIssue) &&
+    isNonNegativeInteger(seed.managerAuthVersionAtIssue) &&
+    isNonNegativeInteger(seed.managerCredentialVersionAtIssue) &&
+    isNonNegativeInteger(seed.attemptCount)
+  );
 }
 
 /**
@@ -195,13 +233,14 @@ export async function requestOfflineAttestation(
 
   // An approving DTO must carry every field D-2 has to persist verbatim.
   if (
-    !isNonEmptyString(dto.attestationIdHex) ||
+    !isCanonicalAttestationIdHex(dto.attestationIdHex) ||
     !isNonEmptyString(dto.paa1Base64) ||
     !isNonEmptyString(dto.ssa1Base64) ||
     !isNonEmptyString(dto.oacEnvelopeBytesBase64) ||
     !isNonEmptyString(dto.verifiedBranchId) ||
     evidenceSeed == null ||
     evidenceSeed.approvalResult !== 'APPROVED_LOCAL' ||
+    !hasCanonicalSeedNumerics(evidenceSeed) ||
     !isFiniteNumber(dto.trustedApprovalLowerMs) ||
     !isFiniteNumber(dto.trustedApprovalUpperMs) ||
     !isFiniteNumber(dto.pendingExecutionExpiresAtMs) ||

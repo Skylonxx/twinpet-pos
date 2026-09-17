@@ -144,6 +144,85 @@ describe('offlineAttestation client boundary', () => {
     });
   });
 
+  // N3 fresh-ingest boundary — the native attestation id must arrive already
+  // canonical. The client verifies and rejects; it never normalizes case,
+  // pads, truncates, or re-derives the id.
+  test.each<[string, unknown]>([
+    ['uppercase 32-hex', 'A1A2A3A4A5A6A7A8A9AAABACADAEAF00'],
+    ['mixed-case 32-hex', 'a1A2a3A4a5A6a7A8a9AaAbAcAdAeAf00'],
+    ['31-char hex', 'a'.repeat(31)],
+    ['33-char hex', 'a'.repeat(33)],
+    ['64-char hex', 'a'.repeat(64)],
+    ['all-zero 32-hex', '0'.repeat(32)],
+    ['non-hex 32-char', 'g'.repeat(32)],
+    ['non-string', 12345],
+  ])('an approving DTO carrying a %s attestation id fails closed', async (_label, attestationIdHex) => {
+    const invoke = vi.fn(async () => ({ ...approvingDto, attestationIdHex }));
+    expect(await requestOfflineAttestation(input, invoke)).toEqual({
+      ok: false,
+      errorCode: OFFLINE_ATTESTATION_UNAVAILABLE,
+    });
+  });
+
+  // N3 fresh-ingest boundary — each of the four seed counters is independently
+  // wired to `Number.isInteger(v) && v >= 0`. One representative negative and
+  // one representative fractional value per field proves the wiring without a
+  // combinatorial matrix.
+  test.each<[string, number]>([
+    ['revocationEpochAtIssue', -1],
+    ['revocationEpochAtIssue', 1.5],
+    ['managerAuthVersionAtIssue', -1],
+    ['managerAuthVersionAtIssue', 0.5],
+    ['managerCredentialVersionAtIssue', -2],
+    ['managerCredentialVersionAtIssue', 3.25],
+    ['attemptCount', -1],
+    ['attemptCount', 2.5],
+  ])('an approving DTO whose %s is %s fails closed', async (field, value) => {
+    const invoke = vi.fn(async () => ({
+      ...approvingDto,
+      evidenceSeed: { ...approvingSeed, [field]: value },
+    }));
+    expect(await requestOfflineAttestation(input, invoke)).toEqual({
+      ok: false,
+      errorCode: OFFLINE_ATTESTATION_UNAVAILABLE,
+    });
+  });
+
+  test('a canonical approving DTO with zeroed seed counters is still accepted', async () => {
+    const invoke = vi.fn(async () => ({
+      ...approvingDto,
+      evidenceSeed: {
+        ...approvingSeed,
+        revocationEpochAtIssue: 0,
+        managerAuthVersionAtIssue: 0,
+        managerCredentialVersionAtIssue: 0,
+        attemptCount: 0,
+      },
+    }));
+    const res = await requestOfflineAttestation(input, invoke);
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.attestation.attestationIdHex).toBe(approvingDto.attestationIdHex);
+    expect(res.attestation.evidenceSeed.attemptCount).toBe(0);
+  });
+
+  // §5 hold — the stricter seed-numeric domain is scoped to the APPROVING DTO.
+  // A denial is still evidenced exactly as before, malformed counters and all.
+  test('a denial DTO with out-of-domain seed counters is still evidenced unchanged', async () => {
+    const invoke = vi.fn(async () => ({
+      ok: false,
+      verifiedBranchId: 'LDP-001',
+      evidenceSeed: { ...approvingSeed, approvalResult: 'DENIED_STALE', attemptCount: -1.5 },
+      errorCode: 'DENIED_STALE',
+    }));
+    const res = await requestOfflineAttestation(input, invoke);
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.errorCode).toBe('DENIED_STALE');
+    expect(res.verifiedBranchId).toBe('LDP-001');
+    expect(res.evidenceSeed?.attemptCount).toBe(-1.5);
+  });
+
   test('a thrown or non-object native response fails closed', async () => {
     expect(
       await requestOfflineAttestation(input, async () => {

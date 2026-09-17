@@ -188,6 +188,46 @@ describe('ingestAttestedPrivilegedAction — atomic CAS boundary', () => {
     expect(await listPrivilegedEvidence(store)).toHaveLength(0);
   });
 
+  // N3 fresh-ingest fence. Called directly against the store API with a
+  // parser-invalid envelope, which is exactly the shape the tightened D-1B
+  // boundary now refuses — proving the store fence holds independently of that
+  // upstream validator, for any caller and any future parser invariant.
+  it('refuses to persist a fresh row the canonical parser rejects, writing nothing', async () => {
+    const store = createInMemoryReversalStore();
+    const outcome = await ingestAttestedPrivilegedAction(
+      store,
+      envelope({ attestationIdHex: 'A'.repeat(32) }),
+      ctx,
+      1_000,
+    );
+
+    // Fail closed, with the existing vocabulary — never `created`.
+    expect(outcome.kind).toBe('unreadable');
+
+    // Nothing was written: no readable row, and no unreadable row either. The
+    // second assertion is the load-bearing one — it proves the row was never
+    // persisted, rather than persisted and merely unparseable.
+    const { rows, unreadableCount } = await listPrivilegedEvidenceForBranch(store, 'LDP-001');
+    expect(rows).toHaveLength(0);
+    expect(unreadableCount).toBe(0);
+    expect(await listPrivilegedEvidence(store)).toHaveLength(0);
+  });
+
+  it('a fresh row that passes the fence is persisted as the parser-returned canonical row', async () => {
+    const store = createInMemoryReversalStore();
+    const outcome = await ingestAttestedPrivilegedAction(store, envelope(), ctx, 1_000);
+    expect(outcome.kind).toBe('created');
+    if (outcome.kind !== 'created') throw new Error('unreachable');
+
+    // The returned record is the parser's own output, so it round-trips.
+    expect(parsePrivilegedEvidenceJournalRecordV1(outcome.record)).toEqual(outcome.record);
+
+    const { rows, unreadableCount } = await listPrivilegedEvidenceForBranch(store, 'LDP-001');
+    expect(unreadableCount).toBe(0);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toEqual(outcome.record);
+  });
+
   it('never creates a resultingVoidIntentId (D-2 never writes a PK-3 voidIntents row)', async () => {
     const store = createInMemoryReversalStore();
     const outcome = await ingestAttestedPrivilegedAction(store, envelope(), ctx, 1_000);

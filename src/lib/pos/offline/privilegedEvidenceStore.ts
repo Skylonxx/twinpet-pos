@@ -294,7 +294,26 @@ export async function ingestAttestedPrivilegedAction(
           return { kind: 'legacy_conflict' };
         }
       }
-      const record = buildFreshRecord(envelope, digest, ctx, nowMs);
+      const candidate = buildFreshRecord(envelope, digest, ctx, nowMs);
+
+      // N3 fresh-ingest fence — the final canonical gate before the FIRST
+      // durable write. `buildFreshRecord` copies attestation- and seed-derived
+      // values straight from the native envelope, so a faulty or compromised
+      // attestor can shape a candidate this parser refuses (a non-canonical
+      // `attestationIdHex`, a fractional or negative seed counter). Persisting
+      // one is uniquely damaging on this path: the row would be counted by
+      // `enumerateRows` as unreadable yet excluded from `rows`, which strands
+      // it behind the store-wide unreadable containment forever AND reports
+      // `created` -> D-3 `projected` to the operator — a void claimed as
+      // durably queued that can never sync. The boundary validator in D-1B now
+      // rejects both shapes first; this fence is the unconditional owner that
+      // also covers any invariant the parser gains later. Same contract as the
+      // conflict/digest fences below: nothing is written, the candidate is
+      // never mutated to "make it parse", and the caller receives the existing
+      // `unreadable` outcome, which D-3 already maps to `integrity_conflict`.
+      const record = parsePrivilegedEvidenceJournalRecordV1(candidate);
+      if (record === null) return { kind: 'unreadable' };
+
       await txn.put(STORE_NAME, envelope.attestationIdHex, record);
       return { kind: 'created', record };
     }
