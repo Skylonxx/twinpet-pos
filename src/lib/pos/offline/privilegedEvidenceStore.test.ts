@@ -10,6 +10,7 @@ import {
   PRIVILEGED_EVIDENCE_MAX_RETRYABLE_FAILURES,
   isLegalPrivilegedEvidenceTransition,
   parsePrivilegedEvidenceJournalRecordV1,
+  type PrivilegedEvidenceJournalRecordV1,
 } from './privilegedEvidenceTypes';
 import {
   allocatePrivilegedSweepGeneration,
@@ -56,6 +57,82 @@ function envelope(over: Partial<OfflineAttestationEnvelope> = {}): OfflineAttest
 }
 
 const ctx = { ingestStaffId: 'staff-1', ingestDeviceId: 'device-1' };
+
+async function driveToStatus(
+  store: ReturnType<typeof createInMemoryReversalStore>,
+  status: 'PRIVILEGED_INTENT_QUEUED' | 'SYNCING' | 'SERVER_ACCEPTED' | 'SERVER_REJECTED' | 'MANUAL_ATTENTION',
+): Promise<void> {
+  await ingestAttestedPrivilegedAction(store, envelope(), ctx, 1_000);
+  if (status === 'PRIVILEGED_INTENT_QUEUED') return;
+  const claim = await claimPrivilegedEvidenceRow(store, envelope().attestationIdHex, 1, {
+    deviceId: 'd1',
+    nowMs: 1_000,
+    staffId: 'staff-1',
+  });
+  if (claim.kind !== 'claimed') throw new Error('setup: claim failed');
+  if (status === 'SYNCING') return;
+
+  if (status === 'SERVER_ACCEPTED') {
+    const response: OfflineAdjudicationResponse = {
+      family: 'ADJUDICATION',
+      kind: 'ACCEPTED',
+      adjudicationId: envelope().attestationIdHex,
+      targetOrderId: 'order-1',
+      offlineExecutionId: 'exec-1',
+      outcomeKind: 'VOID_APPLIED',
+      idempotent: false,
+      serverAdjudicatedAtMs: 5_000,
+    };
+    await applyPrivilegedEvidenceDisposition(
+      store,
+      envelope().attestationIdHex,
+      1,
+      { kind: 'server', response, disposition: classifyOfflineAdjudicationResponse(response) },
+      { nowMs: 6_000, staffId: 'staff-1' },
+    );
+    return;
+  }
+
+  if (status === 'SERVER_REJECTED') {
+    const response: OfflineAdjudicationResponse = {
+      family: 'ADJUDICATION',
+      kind: 'REJECTED',
+      adjudicationId: envelope().attestationIdHex,
+      targetOrderId: 'order-1',
+      rejectionReason: 'trusted_time_bounds_invalid',
+      terminal: true,
+      idempotent: false,
+      serverAdjudicatedAtMs: 5_000,
+    };
+    await applyPrivilegedEvidenceDisposition(
+      store,
+      envelope().attestationIdHex,
+      1,
+      { kind: 'server', response, disposition: classifyOfflineAdjudicationResponse(response) },
+      { nowMs: 6_000, staffId: 'staff-1' },
+    );
+    return;
+  }
+
+  // MANUAL_ATTENTION
+  const response: OfflineAdjudicationResponse = {
+    family: 'ADJUDICATION',
+    kind: 'MANUAL_ATTENTION_REQUIRED',
+    adjudicationId: envelope().attestationIdHex,
+    targetOrderId: 'order-1',
+    manualAttentionReason: 'canonical_correlation_missing',
+    terminal: true,
+    idempotent: false,
+    serverAdjudicatedAtMs: 5_000,
+  };
+  await applyPrivilegedEvidenceDisposition(
+    store,
+    envelope().attestationIdHex,
+    1,
+    { kind: 'server', response, disposition: classifyOfflineAdjudicationResponse(response) },
+    { nowMs: 6_000, staffId: 'staff-1' },
+  );
+}
 
 describe('ingestAttestedPrivilegedAction — atomic CAS boundary', () => {
   it('creates a new row on first ingest with the queued state and zeroed counters', async () => {
@@ -121,82 +198,6 @@ describe('ingestAttestedPrivilegedAction — atomic CAS boundary', () => {
 
 describe('ingestAttestedPrivilegedAction — GD-D3-002 OPTION A target-level duplicate exclusion', () => {
   const secondEnvelope = envelope({ attestationIdHex: 'b'.repeat(32), localIntentId: 'intent-2', ssa1Base64: 'SSA1-B' });
-
-  async function driveToStatus(
-    store: ReturnType<typeof createInMemoryReversalStore>,
-    status: 'PRIVILEGED_INTENT_QUEUED' | 'SYNCING' | 'SERVER_ACCEPTED' | 'SERVER_REJECTED' | 'MANUAL_ATTENTION',
-  ): Promise<void> {
-    await ingestAttestedPrivilegedAction(store, envelope(), ctx, 1_000);
-    if (status === 'PRIVILEGED_INTENT_QUEUED') return;
-    const claim = await claimPrivilegedEvidenceRow(store, envelope().attestationIdHex, 1, {
-      deviceId: 'd1',
-      nowMs: 1_000,
-      staffId: 'staff-1',
-    });
-    if (claim.kind !== 'claimed') throw new Error('setup: claim failed');
-    if (status === 'SYNCING') return;
-
-    if (status === 'SERVER_ACCEPTED') {
-      const response: OfflineAdjudicationResponse = {
-        family: 'ADJUDICATION',
-        kind: 'ACCEPTED',
-        adjudicationId: envelope().attestationIdHex,
-        targetOrderId: 'order-1',
-        offlineExecutionId: 'exec-1',
-        outcomeKind: 'VOID_APPLIED',
-        idempotent: false,
-        serverAdjudicatedAtMs: 5_000,
-      };
-      await applyPrivilegedEvidenceDisposition(
-        store,
-        envelope().attestationIdHex,
-        1,
-        { kind: 'server', response, disposition: classifyOfflineAdjudicationResponse(response) },
-        { nowMs: 6_000, staffId: 'staff-1' },
-      );
-      return;
-    }
-
-    if (status === 'SERVER_REJECTED') {
-      const response: OfflineAdjudicationResponse = {
-        family: 'ADJUDICATION',
-        kind: 'REJECTED',
-        adjudicationId: envelope().attestationIdHex,
-        targetOrderId: 'order-1',
-        rejectionReason: 'trusted_time_bounds_invalid',
-        terminal: true,
-        idempotent: false,
-        serverAdjudicatedAtMs: 5_000,
-      };
-      await applyPrivilegedEvidenceDisposition(
-        store,
-        envelope().attestationIdHex,
-        1,
-        { kind: 'server', response, disposition: classifyOfflineAdjudicationResponse(response) },
-        { nowMs: 6_000, staffId: 'staff-1' },
-      );
-      return;
-    }
-
-    // MANUAL_ATTENTION
-    const response: OfflineAdjudicationResponse = {
-      family: 'ADJUDICATION',
-      kind: 'MANUAL_ATTENTION_REQUIRED',
-      adjudicationId: envelope().attestationIdHex,
-      targetOrderId: 'order-1',
-      manualAttentionReason: 'canonical_correlation_missing',
-      terminal: true,
-      idempotent: false,
-      serverAdjudicatedAtMs: 5_000,
-    };
-    await applyPrivilegedEvidenceDisposition(
-      store,
-      envelope().attestationIdHex,
-      1,
-      { kind: 'server', response, disposition: classifyOfflineAdjudicationResponse(response) },
-      { nowMs: 6_000, staffId: 'staff-1' },
-    );
-  }
 
   it('1. option disabled/omitted leaves landed ingest behavior unchanged (second envelope same target still creates)', async () => {
     const store = createInMemoryReversalStore();
@@ -1936,5 +1937,218 @@ describe('D-3 read contract', () => {
     expect(seen.length).toBeGreaterThan(0);
     expect(seen[seen.length - 1]).toBe(1);
     unsubscribe();
+  });
+});
+
+describe('Claude N-3 write-fence — status-aware containment + canonical parser fence', () => {
+  /**
+   * Gemini-084 / Claude-068. Both containment writers spread a parser-valid
+   * source row and force a LOCAL_TERMINAL shape. On a server-adjudicated
+   * source the 9 inherited Class III fields survive that spread into a shape
+   * the parser refuses twice over (the LOCAL_TERMINAL matrix requires
+   * `isNull(...ALL_SERVER_FIELDS)`, and the serverVerdict cross-invariant
+   * admits a non-null verdict only under ACCEPTED/REJECTED), and neither
+   * writer re-parsed before `txn.put`. A persisted invalid row is then dropped
+   * by `enumerateRows` and fails every consumer closed store-wide.
+   */
+
+  /** The 9 Class III server-owned fields, as a comparable snapshot. */
+  function serverEvidenceOf(row: PrivilegedEvidenceJournalRecordV1) {
+    return {
+      serverVerdict: row.serverVerdict,
+      serverReason: row.serverReason,
+      serverAdjudicationId: row.serverAdjudicationId,
+      serverTargetOrderId: row.serverTargetOrderId,
+      offlineExecutionId: row.offlineExecutionId,
+      outcomeKind: row.outcomeKind,
+      serverAdjudicatedAtMs: row.serverAdjudicatedAtMs,
+      serverObservedAtMs: row.serverObservedAtMs,
+      serverIdempotentReplay: row.serverIdempotentReplay,
+    };
+  }
+
+  async function readRow(store: ReversalLocalStore): Promise<unknown> {
+    return store.transact(['privilegedEvidence'], 'readonly', (txn) =>
+      txn.get('privilegedEvidence', envelope().attestationIdHex),
+    );
+  }
+
+  /** Desynchronizes the stored digest from the row's own binding bytes. */
+  async function corruptDigest(store: ReversalLocalStore): Promise<void> {
+    await store.transact(['privilegedEvidence'], 'readwrite', async (txn) => {
+      const raw = await txn.get('privilegedEvidence', envelope().attestationIdHex);
+      const rec = parsePrivilegedEvidenceJournalRecordV1(raw)!;
+      await txn.put('privilegedEvidence', envelope().attestationIdHex, { ...rec, evidenceBindingDigest: 'corrupted' });
+    });
+  }
+
+  describe('binding-conflict writer (ingest)', () => {
+    it('A. a SERVER_REJECTED source survives a conflicting re-ingest as a readable row with its server evidence intact', async () => {
+      const store = createInMemoryReversalStore();
+      await driveToStatus(store, 'SERVER_REJECTED');
+      const before = (await listPrivilegedEvidence(store))[0]!;
+      expect(before.syncStatus).toBe('SERVER_REJECTED');
+      expect(before.serverVerdict).toBe('REJECTED');
+
+      const outcome = await ingestAttestedPrivilegedAction(store, envelope({ paa1Base64: 'TAMPERED' }), ctx, 7_000);
+      expect(outcome.kind).toBe('binding_conflict');
+
+      // The load-bearing assertion: the persisted row still parses. Before the
+      // fence this row was dropped by `enumerateRows` and the whole privileged
+      // path failed closed store-wide.
+      const { rows, unreadableCount } = await listPrivilegedEvidenceForBranch(store, 'LDP-001');
+      expect(unreadableCount).toBe(0);
+      expect(rows).toHaveLength(1);
+
+      const after = rows[0]!;
+      // Terminal semantics preserved — never relabelled LOCAL_TERMINAL.
+      expect(after.syncStatus).toBe('SERVER_REJECTED');
+      expect(after.manualReviewStatus).toBe('REQUIRED');
+      expect(after.lastDispositionKind).toBe('REJECTED');
+      expect(after.localTerminalReason).toBeNull();
+      // No Class III evidence silently nulled.
+      expect(serverEvidenceOf(after)).toEqual(serverEvidenceOf(before));
+      // Containment metadata is the only change, plus updatedAtMs.
+      expect(after.integrityConflict).toBe(true);
+      expect(after.updatedAtMs).toBe(7_000);
+      // Original bytes preserved verbatim; the conflicting bytes are discarded.
+      expect(after.paa1Base64).toBe('PAA1');
+    });
+
+    it.each([['SERVER_ACCEPTED'], ['MANUAL_ATTENTION']] as const)(
+      'B. a %s source is contained without losing its disposition or server evidence',
+      async (status) => {
+        const store = createInMemoryReversalStore();
+        await driveToStatus(store, status);
+        const before = (await listPrivilegedEvidence(store))[0]!;
+
+        const outcome = await ingestAttestedPrivilegedAction(store, envelope({ ssa1Base64: 'TAMPERED' }), ctx, 7_000);
+        expect(outcome.kind).toBe('binding_conflict');
+
+        const { rows, unreadableCount } = await listPrivilegedEvidenceForBranch(store, 'LDP-001');
+        expect(unreadableCount).toBe(0);
+        expect(rows).toHaveLength(1);
+
+        const after = rows[0]!;
+        expect(after.syncStatus).toBe(status);
+        expect(after.manualReviewStatus).toBe(before.manualReviewStatus);
+        expect(after.lastDispositionKind).toBe(before.lastDispositionKind);
+        expect(after.localTerminalReason).toBe(before.localTerminalReason);
+        expect(serverEvidenceOf(after)).toEqual(serverEvidenceOf(before));
+        expect(after.integrityConflict).toBe(true);
+      },
+    );
+
+    it('C. a queued source keeps the existing forced LOCAL_TERMINAL containment exactly', async () => {
+      const store = createInMemoryReversalStore();
+      await ingestAttestedPrivilegedAction(store, envelope(), ctx, 1_000);
+      const outcome = await ingestAttestedPrivilegedAction(store, envelope({ paa1Base64: 'TAMPERED' }), ctx, 2_000);
+      expect(outcome.kind).toBe('binding_conflict');
+
+      const { rows, unreadableCount } = await listPrivilegedEvidenceForBranch(store, 'LDP-001');
+      expect(unreadableCount).toBe(0);
+      expect(rows).toHaveLength(1);
+
+      const after = rows[0]!;
+      expect(after.integrityConflict).toBe(true);
+      expect(after.syncStatus).toBe('MANUAL_ATTENTION');
+      expect(after.manualReviewStatus).toBe('REQUIRED');
+      expect(after.localTerminalReason).toBe('journal_binding_conflict');
+      expect(after.lastDispositionKind).toBe('LOCAL_TERMINAL');
+      expect(after.claimOwner).toBeNull();
+      expect(after.claimGeneration).toBeNull();
+      expect(after.paa1Base64).toBe('PAA1'); // original, never overwritten
+    });
+  });
+
+  describe('digest-mismatch writer (claim)', () => {
+    it('D. a server-terminal source reaching the exported claim directly is contained without evidence loss', async () => {
+      const store = createInMemoryReversalStore();
+      await driveToStatus(store, 'SERVER_REJECTED');
+      await corruptDigest(store);
+      const before = (await listPrivilegedEvidence(store))[0]!;
+
+      const outcome = await claimPrivilegedEvidenceRow(store, envelope().attestationIdHex, 1, {
+        deviceId: 'd1',
+        nowMs: 8_000,
+        staffId: 'staff-1',
+      });
+      expect(outcome.kind).toBe('digest_mismatch');
+
+      const { rows, unreadableCount } = await listPrivilegedEvidenceForBranch(store, 'LDP-001');
+      expect(unreadableCount).toBe(0);
+      expect(rows).toHaveLength(1);
+
+      const after = rows[0]!;
+      expect(after.syncStatus).toBe('SERVER_REJECTED');
+      expect(after.manualReviewStatus).toBe('REQUIRED');
+      expect(after.lastDispositionKind).toBe('REJECTED');
+      expect(after.localTerminalReason).toBeNull();
+      expect(serverEvidenceOf(after)).toEqual(serverEvidenceOf(before));
+      expect(after.integrityConflict).toBe(true);
+    });
+
+    it('E. a queued source keeps the existing forced LOCAL_TERMINAL digest-mismatch behavior exactly', async () => {
+      const store = createInMemoryReversalStore();
+      await ingestAttestedPrivilegedAction(store, envelope(), ctx, 1_000);
+      await corruptDigest(store);
+
+      const outcome = await claimPrivilegedEvidenceRow(store, envelope().attestationIdHex, 1, {
+        deviceId: 'd1',
+        nowMs: 1_000,
+        staffId: 'staff-1',
+      });
+      expect(outcome.kind).toBe('digest_mismatch');
+      if (outcome.kind !== 'digest_mismatch') throw new Error('unreachable');
+      expect(outcome.record.syncStatus).toBe('MANUAL_ATTENTION');
+      expect(outcome.record.manualReviewStatus).toBe('REQUIRED');
+      expect(outcome.record.localTerminalReason).toBe('evidence_binding_digest_mismatch');
+      expect(outcome.record.lastDispositionKind).toBe('LOCAL_TERMINAL');
+      expect(outcome.record.paa1Base64).toBe('PAA1');
+      // RC-D2-003: a failed claim writes neither relay/attempt provenance field.
+      expect(outcome.record.lastRelayCallerStaffId).toBeNull();
+
+      const { unreadableCount } = await listPrivilegedEvidenceForBranch(store, 'LDP-001');
+      expect(unreadableCount).toBe(0);
+    });
+  });
+
+  describe('F. canonical parser fence fails closed', () => {
+    // Narrowest available seam that survives status-aware normalization: both
+    // writers stamp `updatedAtMs` from a caller-supplied clock, and the parser
+    // requires it to be > 0. No test-only production hook is introduced.
+    it('binding-conflict: an unparseable candidate is not written, the source is unchanged, and the result is unreadable', async () => {
+      const store = createInMemoryReversalStore();
+      await driveToStatus(store, 'SERVER_REJECTED');
+      const before = await readRow(store);
+
+      const outcome = await ingestAttestedPrivilegedAction(store, envelope({ paa1Base64: 'TAMPERED' }), ctx, 0);
+      expect(outcome.kind).toBe('unreadable');
+
+      // Source row byte-unchanged; nothing invalid reached the store.
+      expect(await readRow(store)).toEqual(before);
+      const { rows, unreadableCount } = await listPrivilegedEvidenceForBranch(store, 'LDP-001');
+      expect(unreadableCount).toBe(0);
+      expect(rows[0]!.integrityConflict).toBe(false);
+      expect(rows[0]!.syncStatus).toBe('SERVER_REJECTED');
+    });
+
+    it('digest-mismatch: an unparseable candidate is not written, the source is unchanged, and the result is not_eligible', async () => {
+      const store = createInMemoryReversalStore();
+      await driveToStatus(store, 'SERVER_REJECTED');
+      await corruptDigest(store);
+      const before = await readRow(store);
+
+      const outcome = await claimPrivilegedEvidenceRow(store, envelope().attestationIdHex, 1, {
+        deviceId: 'd1',
+        nowMs: 0,
+        staffId: 'staff-1',
+      });
+      expect(outcome.kind).toBe('not_eligible');
+
+      expect(await readRow(store)).toEqual(before);
+      const { unreadableCount } = await listPrivilegedEvidenceForBranch(store, 'LDP-001');
+      expect(unreadableCount).toBe(0);
+    });
   });
 });

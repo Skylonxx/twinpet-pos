@@ -311,19 +311,48 @@ export async function ingestAttestedPrivilegedAction(
     if (identical) return { kind: 'idempotent_noop', record: existing };
 
     // Fail closed. The ORIGINAL bytes are preserved verbatim; the new bytes are discarded, never merged.
-    const conflicted: Row = {
-      ...existing,
-      integrityConflict: true,
-      syncStatus: 'MANUAL_ATTENTION',
-      manualReviewStatus: 'REQUIRED',
-      localTerminalReason: 'journal_binding_conflict',
-      lastDispositionKind: 'LOCAL_TERMINAL',
-      claimOwner: null,
-      claimGeneration: null,
-      updatedAtMs: nowMs,
-    };
-    await txn.put(STORE_NAME, envelope.attestationIdHex, conflicted);
-    return { kind: 'binding_conflict', record: conflicted };
+    //
+    // N3 write-fence — status-aware containment. Spreading `existing` carries
+    // all 9 Class III fields into the candidate, so forcing the LOCAL_TERMINAL
+    // shape onto a row the server has already adjudicated builds a row the
+    // parser refuses twice over: the LOCAL_TERMINAL matrix requires
+    // `isNull(...ALL_SERVER_FIELDS)`, and the serverVerdict cross-invariant
+    // admits a non-null verdict only under ACCEPTED/REJECTED. Nulling that
+    // evidence to satisfy the label is not an option either — it would discard
+    // the authoritative server disposition this journal exists to retain, and
+    // the landed manual-review matrix independently forbids relabelling a
+    // SERVER_ACCEPTED row 'REQUIRED'. A server-terminal row therefore keeps its
+    // status, disposition and server evidence verbatim and is marked
+    // integrity-suspect through `integrityConflict` alone, which already makes
+    // it permanently unclaimable (OP-2 rule 2). Non-terminal rows keep the
+    // original forced-terminalization shape, which was always parser-valid.
+    const conflicted: Row = isPrivilegedEvidenceTerminalStatus(existing.syncStatus)
+      ? { ...existing, integrityConflict: true, updatedAtMs: nowMs }
+      : {
+          ...existing,
+          integrityConflict: true,
+          syncStatus: 'MANUAL_ATTENTION',
+          manualReviewStatus: 'REQUIRED',
+          localTerminalReason: 'journal_binding_conflict',
+          lastDispositionKind: 'LOCAL_TERMINAL',
+          claimOwner: null,
+          claimGeneration: null,
+          updatedAtMs: nowMs,
+        };
+
+    // N3 write-fence — canonical parser fence, mirroring OP-3's RC-D2-004
+    // fence. Never persist a row `parsePrivilegedEvidenceJournalRecordV1`
+    // would reject, and never mutate the candidate to "make it parse": a
+    // rejected candidate means an invariant the construction above does not
+    // yet honor, and persisting it would strand the row behind the store-wide
+    // unreadable containment. The source row is left byte-unchanged and the
+    // caller receives the existing `unreadable` outcome, which D-3 already
+    // maps to `integrity_conflict`.
+    const parsedConflicted = parsePrivilegedEvidenceJournalRecordV1(conflicted);
+    if (parsedConflicted === null) return { kind: 'unreadable' };
+
+    await txn.put(STORE_NAME, envelope.attestationIdHex, parsedConflicted);
+    return { kind: 'binding_conflict', record: parsedConflicted };
   }).then((outcome) => {
     notifyPrivilegedEvidenceListeners(store);
     return outcome;
@@ -404,18 +433,36 @@ export async function claimPrivilegedEvidenceRow(
     // rule 2
     if (row.integrityConflict) return { kind: 'not_eligible' };
     if (row.evidenceBindingDigest !== recomputedDigest) {
-      const failed: Row = {
-        ...row,
-        syncStatus: 'MANUAL_ATTENTION',
-        manualReviewStatus: 'REQUIRED',
-        localTerminalReason: 'evidence_binding_digest_mismatch',
-        lastDispositionKind: 'LOCAL_TERMINAL',
-        claimOwner: null,
-        claimGeneration: null,
-        updatedAtMs: ctx.nowMs,
-      };
-      await txn.put(STORE_NAME, adjudicationId, failed);
-      return { kind: 'digest_mismatch', record: failed };
+      // N3 write-fence — the same status-aware containment as the ingest
+      // binding-conflict sibling, for the same reason. No landed production
+      // caller can deliver a server-terminal row here: admission rule 3
+      // filters terminal rows out of the sweep, and no production writer can
+      // desynchronize a row's stored digest from its own binding bytes. But
+      // that protection lives in the caller, not at this write site, and this
+      // function is exported. A terminal row arriving through it keeps its
+      // status, disposition and server evidence and is marked
+      // integrity-suspect only.
+      const failed: Row = isPrivilegedEvidenceTerminalStatus(row.syncStatus)
+        ? { ...row, integrityConflict: true, updatedAtMs: ctx.nowMs }
+        : {
+            ...row,
+            syncStatus: 'MANUAL_ATTENTION',
+            manualReviewStatus: 'REQUIRED',
+            localTerminalReason: 'evidence_binding_digest_mismatch',
+            lastDispositionKind: 'LOCAL_TERMINAL',
+            claimOwner: null,
+            claimGeneration: null,
+            updatedAtMs: ctx.nowMs,
+          };
+
+      // Canonical parser fence. On failure nothing is written, the source row
+      // stays byte-unchanged, and the caller receives the existing no-write
+      // `not_eligible` result — no throw, no new vocabulary, no repair.
+      const parsedFailed = parsePrivilegedEvidenceJournalRecordV1(failed);
+      if (parsedFailed === null) return { kind: 'not_eligible' };
+
+      await txn.put(STORE_NAME, adjudicationId, parsedFailed);
+      return { kind: 'digest_mismatch', record: parsedFailed };
     }
 
     // rule 3
