@@ -996,6 +996,49 @@ export async function listPrivilegedEvidenceForBranch(
   });
 }
 
+// ─── Phase 1 — read-only unreadable-row diagnostic ──────────────────────────
+
+/**
+ * One raw privileged-evidence row the canonical parser rejected.
+ *
+ * Both fields are UNTRUSTED. `key` is the IndexedDB storage handle and nothing
+ * more: it is whatever the original writer supplied, so on a malformed row it
+ * IS the malformed value and never proves which attestation the row belongs
+ * to. `rawValue` is the stored value exactly as read — unparsed, unnormalized,
+ * and never destructured into typed properties.
+ */
+export interface RawUnreadablePrivilegedEvidenceEntry {
+  key: string;
+  rawValue: unknown;
+}
+
+/**
+ * Support/diagnostic primitive surfacing the rows `enumerateRows` can only
+ * count. Strictly observational: a readonly transaction, no write, no delete,
+ * no repair or normalization, no listener notification, and no effect on
+ * `unreadableCount` or on the fail-closed behavior every consumer enforces.
+ * It is not a recovery executor, and no production path calls it.
+ *
+ * The parser is invoked solely to classify readable vs unreadable; its output
+ * is discarded, so this adds no second definition of journal validity.
+ * Reserved keys are skipped exactly as `enumerateRows` skips them, and entries
+ * follow the same key-enumeration order.
+ */
+export async function listRawUnreadablePrivilegedEvidence(
+  store: ReversalLocalStore,
+): Promise<RawUnreadablePrivilegedEvidenceEntry[]> {
+  return store.transact([STORE_NAME], 'readonly', async (txn) => {
+    const keys = await requireGetAllKeys(txn);
+    const entries: RawUnreadablePrivilegedEvidenceEntry[] = [];
+    for (const key of keys) {
+      if (RESERVED_KEY_SET.has(key)) continue;
+      const rawValue = await txn.get<unknown>(STORE_NAME, key);
+      if (parsePrivilegedEvidenceJournalRecordV1(rawValue) === null) entries.push({ key, rawValue });
+    }
+    return entries;
+  });
+}
+
 const listeners = new Set<(rows: Row[]) => void>();
 
 /** Same-tab only, mirroring `subscribeVoidIntentStore`. */

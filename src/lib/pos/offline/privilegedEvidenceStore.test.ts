@@ -7,6 +7,7 @@ import type {
 } from '../../auth/privilegedAction/offlineAdjudicationTransport';
 import { classifyOfflineAdjudicationResponse } from '../../auth/privilegedAction/offlineAdjudicationTransport';
 import {
+  PRIVILEGED_EVIDENCE_CLAIM_GENERATION_KEY,
   PRIVILEGED_EVIDENCE_MAX_RETRYABLE_FAILURES,
   isLegalPrivilegedEvidenceTransition,
   parsePrivilegedEvidenceJournalRecordV1,
@@ -22,6 +23,7 @@ import {
   ingestAttestedPrivilegedAction,
   listPrivilegedEvidence,
   listPrivilegedEvidenceForBranch,
+  listRawUnreadablePrivilegedEvidence,
   subscribePrivilegedEvidenceStore,
 } from './privilegedEvidenceStore';
 import { enqueueVoidIntent, markVoidIntentConfirmed, markVoidIntentTerminal } from './voidIntentStore';
@@ -1966,6 +1968,104 @@ describe('D-3 read contract', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]!.branchId).toBe('LDP-001');
     expect(unreadableCount).toBe(0);
+  });
+
+  // N3 Phase 1 — read-only raw unreadable-row diagnostic. Observational only:
+  // it surfaces what `enumerateRows` can merely count, and changes nothing.
+  describe('listRawUnreadablePrivilegedEvidence — Phase 1 read-only diagnostic', () => {
+    const CORRUPT_KEY = 'corrupt-1';
+    const CORRUPT_VALUE = { garbage: true, nested: { serverVerdict: 'ACCEPTED' } };
+
+    async function seedRaw(store: ReversalLocalStore, key: string, value: unknown): Promise<void> {
+      await store.transact(['privilegedEvidence'], 'readwrite', async (txn) => {
+        await txn.put('privilegedEvidence', key, value);
+      });
+    }
+
+    async function rawSnapshot(store: ReversalLocalStore): Promise<Array<[string, unknown]>> {
+      return store.transact(['privilegedEvidence'], 'readonly', async (txn) => {
+        const keys = await txn.getAllKeys!('privilegedEvidence');
+        const out: Array<[string, unknown]> = [];
+        for (const k of keys) out.push([k, await txn.get('privilegedEvidence', k)]);
+        return out;
+      });
+    }
+
+    // Case A — the exact raw key and the exact raw value are surfaced verbatim.
+    it('surfaces an unreadable row as its exact raw key and exact raw value', async () => {
+      const store = createInMemoryReversalStore();
+      await seedRaw(store, CORRUPT_KEY, CORRUPT_VALUE);
+
+      const entries = await listRawUnreadablePrivilegedEvidence(store);
+      expect(entries).toHaveLength(1);
+      expect(entries[0]!.key).toBe(CORRUPT_KEY);
+      expect(entries[0]!.rawValue).toEqual(CORRUPT_VALUE);
+      // Nothing nested is promoted to a typed/trusted top-level property.
+      expect(Object.keys(entries[0]!).sort()).toEqual(['key', 'rawValue']);
+    });
+
+    // Case B — parser-valid rows are never included.
+    it('excludes canonical valid rows and returns only the unreadable one', async () => {
+      const store = createInMemoryReversalStore();
+      await ingestAttestedPrivilegedAction(store, envelope(), ctx, 1_000);
+      await seedRaw(store, CORRUPT_KEY, CORRUPT_VALUE);
+
+      const entries = await listRawUnreadablePrivilegedEvidence(store);
+      expect(entries).toHaveLength(1);
+      expect(entries[0]!.key).toBe(CORRUPT_KEY);
+      expect(entries.map((e) => e.key)).not.toContain(envelope().attestationIdHex);
+    });
+
+    // Case C — the real reserved key is skipped exactly as enumerateRows skips it.
+    it('excludes reserved keys even when their raw value would not parse as a row', async () => {
+      const store = createInMemoryReversalStore();
+      await seedRaw(store, PRIVILEGED_EVIDENCE_CLAIM_GENERATION_KEY, { generation: 7 });
+      await seedRaw(store, CORRUPT_KEY, CORRUPT_VALUE);
+
+      const entries = await listRawUnreadablePrivilegedEvidence(store);
+      expect(entries).toHaveLength(1);
+      expect(entries[0]!.key).toBe(CORRUPT_KEY);
+      expect(entries.map((e) => e.key)).not.toContain(PRIVILEGED_EVIDENCE_CLAIM_GENERATION_KEY);
+    });
+
+    // Case D — strictly read-only: the raw store is byte-identical afterwards.
+    it('mutates nothing — every raw key and value is unchanged after the call', async () => {
+      const store = createInMemoryReversalStore();
+      await ingestAttestedPrivilegedAction(store, envelope(), ctx, 1_000);
+      await seedRaw(store, CORRUPT_KEY, CORRUPT_VALUE);
+      await seedRaw(store, PRIVILEGED_EVIDENCE_CLAIM_GENERATION_KEY, { generation: 7 });
+
+      const before = await rawSnapshot(store);
+      await listRawUnreadablePrivilegedEvidence(store);
+      const after = await rawSnapshot(store);
+
+      expect(after).toEqual(before);
+      expect(after).toHaveLength(before.length); // no row added, none deleted
+    });
+
+    // Case E — the diagnostic unblocks nothing; fail-closed behavior is intact.
+    it('does not unblock the store — fail-closed behavior is identical before and after', async () => {
+      const store = createInMemoryReversalStore();
+      await ingestAttestedPrivilegedAction(store, envelope(), ctx, 1_000);
+      await seedRaw(store, CORRUPT_KEY, CORRUPT_VALUE);
+
+      const beforeRead = await listPrivilegedEvidenceForBranch(store, 'LDP-001');
+      expect(beforeRead.unreadableCount).toBe(1);
+
+      await listRawUnreadablePrivilegedEvidence(store);
+
+      const afterRead = await listPrivilegedEvidenceForBranch(store, 'LDP-001');
+      expect(afterRead.unreadableCount).toBe(1);
+      expect(afterRead.rows).toHaveLength(1);
+      // The opted-in ingest guard still refuses, exactly as before the call.
+      const outcome = await ingestAttestedPrivilegedAction(
+        store,
+        envelope({ attestationIdHex: 'c'.repeat(32), targetOrderId: 'order-9', localIntentId: 'intent-9' }),
+        { ...ctx, expectNoOpenRowForTarget: true },
+        2_000,
+      );
+      expect(outcome).toEqual({ kind: 'unreadable' });
+    });
   });
 
   it('subscribePrivilegedEvidenceStore notifies same-tab listeners on mutation', async () => {
