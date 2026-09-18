@@ -10,6 +10,8 @@
  */
 
 import { sha256HexOfRows } from '../../platform/durableStore/canonicalDigest';
+import { createBrowserFilePort } from '../../platform/adapters/browser/browserFilePort';
+import type { FilePort } from '../../platform/ports/filePort';
 import type { OfflineAttestationEnvelope } from '../../auth/privilegedAction/offlineAttestation';
 import type {
   OfflineAdjudicationDisposition,
@@ -21,6 +23,8 @@ import {
   isOfflineAdjudicationManualAttentionReason,
   isOfflineAdjudicationRejectionReason,
 } from '../../auth/privilegedAction/privilegedActionTypes';
+import { isOfflineReversalAuthoritySupported } from './offlineReversalLogic';
+import type { ReversalActorRole } from './offlineReversalTypes';
 import type { ReversalLocalStore, ReversalStoreName, ReversalTxn } from './reversalLocalStore';
 import type { VoidIntentRecord } from './voidIntentStore';
 import {
@@ -1037,6 +1041,326 @@ export async function listRawUnreadablePrivilegedEvidence(
     }
     return entries;
   });
+}
+
+// ─── Phase 2 — operator-mediated unreadable-row recovery ────────────────────
+//
+// Capture-then-delete, one explicit human act at a time. The capture lands in
+// the EXISTING `rejections` store (landed at DB v2) inside the SAME readwrite
+// transaction as the delete, so evidence can never be lost without being
+// preserved and can never be preserved without the row leaving. No schema
+// change, no DB_VERSION bump, no new object store, and no change to
+// `enumerateRows` or to the parser — recovery removes a row, it never repairs
+// one and never redefines validity.
+
+const REJECTIONS_STORE_NAME = 'rejections' as const;
+
+/**
+ * Capture discriminant. Recovery captures share the `rejections` store with the
+ * H7-A/H7-C reversal-rejection log, so every reader of that store selects
+ * POSITIVELY for the shape it owns — this constant is the positive selector for
+ * recovery captures, and `reversalRejectionLog` has its own for its records.
+ */
+export const PRIVILEGED_EVIDENCE_DISCARD_CAPTURE_KIND =
+  'privileged_evidence_unreadable_discard_v1' as const;
+
+const DISCARD_CAPTURE_KEY_PREFIX = 'privileged_evidence_unreadable_discard:';
+
+/**
+ * Advisory read of untrusted bytes. NEVER an identity or authority claim.
+ *
+ * `server_evidence_present` is trusted only to BLOCK a local delete;
+ * `no_server_evidence_detected` is never proof that no server state exists — a
+ * truncated or partially-written row can lose the field entirely.
+ */
+export type PrivilegedEvidenceRecoveryClassification =
+  | 'server_evidence_present'
+  | 'no_server_evidence_detected';
+
+/** Own, top-level probe fields only. No recursive descent, no value interpretation. */
+const SERVER_EVIDENCE_PROBE_FIELDS = [
+  'serverVerdict',
+  'serverAdjudicationId',
+  'serverAdjudicatedAtMs',
+] as const;
+
+/**
+ * Classify one raw unreadable row. Presence-only over three own, top-level
+ * properties: the field's VALUE is never read or interpreted, and nested
+ * objects are never descended into (a nested `serverVerdict` inside arbitrary
+ * garbage is not server evidence). The parser remains the sole owner of
+ * validity; this owns nothing but a display/escalation hint.
+ */
+export function classifyRawUnreadablePrivilegedEvidence(
+  rawValue: unknown,
+): PrivilegedEvidenceRecoveryClassification {
+  if (rawValue === null || typeof rawValue !== 'object') return 'no_server_evidence_detected';
+  const candidate = rawValue as Record<string, unknown>;
+  for (const field of SERVER_EVIDENCE_PROBE_FIELDS) {
+    if (!Object.prototype.hasOwnProperty.call(candidate, field)) continue;
+    if (candidate[field] != null) return 'server_evidence_present';
+  }
+  return 'no_server_evidence_detected';
+}
+
+/**
+ * The durable forensic capture written immediately before a raw row is deleted.
+ *
+ * `rawKey` / `rawValue` are stored VERBATIM — unparsed, unnormalized, never
+ * reconstructed from typed fields. `branchId` / `deviceId` are the ACTING
+ * context supplied by the caller and are never read out of `rawValue`, so
+ * untrusted bytes can never be laundered into the audit record.
+ */
+export interface DiscardedPrivilegedEvidenceCaptureV1 {
+  readonly captureKind: typeof PRIVILEGED_EVIDENCE_DISCARD_CAPTURE_KIND;
+  readonly captureRecordId: string;
+  readonly sourceStore: typeof STORE_NAME;
+  readonly rawKey: string;
+  readonly rawValue: unknown;
+  readonly classification: PrivilegedEvidenceRecoveryClassification;
+  readonly branchId: string;
+  readonly deviceId: string;
+  readonly actorStaffId: string;
+  readonly actorRole: string;
+  readonly reasonCode: string;
+  readonly note?: string;
+  readonly discardedAtMs: number;
+}
+
+export interface DiscardUnreadablePrivilegedEvidenceInput {
+  key: string;
+  actorStaffId: string;
+  actorRole: string;
+  branchId: string;
+  deviceId: string;
+  reasonCode: string;
+  note?: string;
+  /** Injected — no clock is read inside the transaction. */
+  nowMs: number;
+}
+
+export type DiscardRefusalReason =
+  | 'unauthorized'
+  | 'missing_reason'
+  | 'scope_unavailable'
+  | 'reserved_key'
+  | 'not_found'
+  | 'readable_row'
+  | 'server_evidence_present'
+  | 'capture_key_collision'
+  | 'capture_failed';
+
+export type DiscardUnreadablePrivilegedEvidenceOutcome =
+  | {
+      kind: 'discarded';
+      key: string;
+      captureRecordId: string;
+      classification: PrivilegedEvidenceRecoveryClassification;
+    }
+  | { kind: 'refused'; reason: DiscardRefusalReason };
+
+function refusedDiscard(reason: DiscardRefusalReason): DiscardUnreadablePrivilegedEvidenceOutcome {
+  return { kind: 'refused', reason };
+}
+
+/** Deterministic, hash-free capture id — composed, so the whole operation stays inside one transaction (CL-D2-A05). */
+function discardCaptureKey(nowMs: number, rawKey: string): string {
+  return `${DISCARD_CAPTURE_KEY_PREFIX}${nowMs}:${rawKey}`;
+}
+
+function isDiscardedPrivilegedEvidenceCapture(
+  value: unknown,
+): value is DiscardedPrivilegedEvidenceCaptureV1 {
+  if (value === null || typeof value !== 'object') return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    candidate.captureKind === PRIVILEGED_EVIDENCE_DISCARD_CAPTURE_KIND &&
+    typeof candidate.captureRecordId === 'string' &&
+    typeof candidate.rawKey === 'string' &&
+    typeof candidate.discardedAtMs === 'number'
+  );
+}
+
+/**
+ * Remove ONE unreadable privileged-evidence row, capturing its exact raw bytes
+ * first, in a single atomic transaction over `privilegedEvidence` + `rejections`.
+ *
+ * Never automatic: no startup, enumeration, sweep, claim, ingest, or projection
+ * path calls this. One row per explicit operator confirmation — there is no bulk
+ * form, and adding one would be the most likely way to destroy server-adjudicated
+ * evidence by accident.
+ *
+ * A row whose raw bytes expose server adjudication evidence is refused outright
+ * (`server_evidence_present`) and stays on the device for support escalation.
+ * There is deliberately NO acknowledgement, override, or bypass input: local
+ * destruction of authoritative server evidence is not an operator decision.
+ *
+ * Authority is rechecked here, independently of any UI gate, using the same
+ * canonical Manager/Admin rule the manual-review resolve path enforces.
+ */
+export async function discardUnreadablePrivilegedEvidenceRow(
+  store: ReversalLocalStore,
+  input: DiscardUnreadablePrivilegedEvidenceInput,
+): Promise<DiscardUnreadablePrivilegedEvidenceOutcome> {
+  let outcome: DiscardUnreadablePrivilegedEvidenceOutcome;
+  try {
+    outcome = await store.transact(
+      [STORE_NAME, REJECTIONS_STORE_NAME],
+      'readwrite',
+      async (txn): Promise<DiscardUnreadablePrivilegedEvidenceOutcome> => {
+        // 1 — a reserved key is infrastructure (the generation fence), never a row.
+        if (RESERVED_KEY_SET.has(input.key)) return refusedDiscard('reserved_key');
+
+        // 2/3 — re-read inside the destructive transaction; the operator's key
+        // came from a list that may be seconds stale.
+        const rawValue = await txn.get<unknown>(STORE_NAME, input.key);
+        if (rawValue === undefined) return refusedDiscard('not_found');
+
+        // 4/5 — a row the canonical parser accepts is NOT recoverable debris and
+        // must never be deletable through this path.
+        if (parsePrivilegedEvidenceJournalRecordV1(rawValue) !== null) {
+          return refusedDiscard('readable_row');
+        }
+
+        // 6/7 — C2: server-evidence-bearing rows are support-escalation only.
+        const classification = classifyRawUnreadablePrivilegedEvidence(rawValue);
+        if (classification === 'server_evidence_present') {
+          return refusedDiscard('server_evidence_present');
+        }
+
+        // 8 — authority, rechecked here and not trusted from the UI.
+        const actorStaffId = input.actorStaffId.trim();
+        if (
+          !isOfflineReversalAuthoritySupported(input.actorRole as ReversalActorRole) ||
+          actorStaffId.length === 0
+        ) {
+          return refusedDiscard('unauthorized');
+        }
+
+        // 9 — a reason code is mandatory, exactly as manual-review resolution requires.
+        const reasonCode = input.reasonCode.trim();
+        if (reasonCode.length === 0) return refusedDiscard('missing_reason');
+
+        // 10 — acting scope must be real. Never guessed, never derived from rawValue.
+        const branchId = input.branchId.trim();
+        const deviceId = input.deviceId.trim();
+        if (branchId.length === 0 || deviceId.length === 0) {
+          return refusedDiscard('scope_unavailable');
+        }
+
+        // 11 — never overwrite an existing capture: that would destroy evidence
+        // to make room for evidence.
+        const captureRecordId = discardCaptureKey(input.nowMs, input.key);
+        const existingCapture = await txn.get<unknown>(REJECTIONS_STORE_NAME, captureRecordId);
+        if (existingCapture !== undefined) return refusedDiscard('capture_key_collision');
+
+        // 12 — capture the exact bytes that step 13 deletes (same value, not a re-read).
+        const note = input.note?.trim();
+        const capture: DiscardedPrivilegedEvidenceCaptureV1 = {
+          captureKind: PRIVILEGED_EVIDENCE_DISCARD_CAPTURE_KIND,
+          captureRecordId,
+          sourceStore: STORE_NAME,
+          rawKey: input.key,
+          rawValue,
+          classification,
+          branchId,
+          deviceId,
+          actorStaffId,
+          actorRole: input.actorRole,
+          reasonCode,
+          ...(note ? { note } : {}),
+          discardedAtMs: input.nowMs,
+        };
+        await txn.put(REJECTIONS_STORE_NAME, captureRecordId, capture);
+
+        // 13 — delete by key only; the value is never parsed to authorize its removal.
+        await txn.delete(STORE_NAME, input.key);
+
+        return { kind: 'discarded', key: input.key, captureRecordId, classification };
+      },
+    );
+  } catch {
+    // The transaction aborted: the row remains and no capture partially survives.
+    return refusedDiscard('capture_failed');
+  }
+  // Only a real removal changes the read model — refusals notify nothing.
+  if (outcome.kind === 'discarded') notifyPrivilegedEvidenceListeners(store);
+  return outcome;
+}
+
+/**
+ * Forensic read-back of recovery captures, newest-first. Read-only, and
+ * positively selects the capture discriminant so ordinary reversal-rejection
+ * rows sharing the store are never mistaken for captures.
+ */
+export async function listDiscardedPrivilegedEvidenceCaptures(
+  store: ReversalLocalStore,
+): Promise<DiscardedPrivilegedEvidenceCaptureV1[]> {
+  return store.transact([REJECTIONS_STORE_NAME], 'readonly', async (txn) => {
+    const all = await txn.getAll<unknown>(REJECTIONS_STORE_NAME);
+    return all
+      .filter(isDiscardedPrivilegedEvidenceCapture)
+      .sort((a, b) => b.discardedAtMs - a.discardedAtMs);
+  });
+}
+
+/**
+ * Text form of a stored capture. `rawValue` is untrusted and may be
+ * unserializable (cycles, BigInt), so a serialization failure degrades to a
+ * labelled placeholder rather than throwing into the operator's surface. The
+ * stored capture itself is never touched.
+ */
+export function serializeDiscardedPrivilegedEvidenceCapture(
+  capture: DiscardedPrivilegedEvidenceCaptureV1,
+): string {
+  try {
+    return JSON.stringify(capture, null, 2);
+  } catch {
+    return JSON.stringify(
+      {
+        captureKind: capture.captureKind,
+        captureRecordId: capture.captureRecordId,
+        sourceStore: capture.sourceStore,
+        rawKey: capture.rawKey,
+        rawValueSerializationFailed: true,
+        classification: capture.classification,
+        branchId: capture.branchId,
+        deviceId: capture.deviceId,
+        actorStaffId: capture.actorStaffId,
+        actorRole: capture.actorRole,
+        reasonCode: capture.reasonCode,
+        discardedAtMs: capture.discardedAtMs,
+      },
+      null,
+      2,
+    );
+  }
+}
+
+export type ExportDiscardedPrivilegedEvidenceCaptureOutcome = 'exported' | 'not_found';
+
+/**
+ * Hand one STORED capture to the operator through the landed `FilePort`.
+ *
+ * Reads the durable capture only — never the live raw row — so what support
+ * receives is provably what was preserved. It is not a precondition for
+ * deletion, gates nothing, and mutates nothing. The filename carries no
+ * untrusted bytes.
+ */
+export async function exportDiscardedPrivilegedEvidenceCapture(
+  store: ReversalLocalStore,
+  captureRecordId: string,
+  port: FilePort = createBrowserFilePort(),
+): Promise<ExportDiscardedPrivilegedEvidenceCaptureOutcome> {
+  const captures = await listDiscardedPrivilegedEvidenceCaptures(store);
+  const capture = captures.find((row) => row.captureRecordId === captureRecordId);
+  if (!capture) return 'not_found';
+  port.saveTextFile(
+    `privileged-evidence-capture_${capture.discardedAtMs}.json`,
+    'application/json;charset=utf-8;',
+    serializeDiscardedPrivilegedEvidenceCapture(capture),
+  );
+  return 'exported';
 }
 
 const listeners = new Set<(rows: Row[]) => void>();

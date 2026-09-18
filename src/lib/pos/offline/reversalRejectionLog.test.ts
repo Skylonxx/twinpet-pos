@@ -273,3 +273,98 @@ describe('H7-C: listReversalRejections ordering and filters', () => {
     expect(rows.map((r) => r.sourceId)).toEqual(['TR-B']);
   });
 });
+
+// ─── SEC-001 N3 Phase 2 — shared-store positive shape fence ──────────────────
+//
+// The `rejections` store is now shared: the N3 unreadable-row recovery writes its
+// forensic captures there, inside the same transaction that deletes the row. This
+// reader must therefore return ONLY H7-A rejection records. The fence is a
+// positive shape test, not an exclusion by capture name, so it also holds against
+// any future co-tenant shape.
+
+describe('N3 Phase 2: listReversalRejections positive-shape fence', () => {
+  /** A capture-shaped row exactly as the recovery path writes it. */
+  const captureRow = {
+    captureKind: 'privileged_evidence_unreadable_discard_v1',
+    captureRecordId: 'privileged_evidence_unreadable_discard:9000000:corrupt-1',
+    sourceStore: 'privilegedEvidence',
+    rawKey: 'corrupt-1',
+    rawValue: { garbage: true },
+    classification: 'no_server_evidence_detected',
+    branchId: 'branch-origin',
+    deviceId: 'dev-1',
+    actorStaffId: 'mgr-1',
+    actorRole: 'manager',
+    reasonCode: 'unreadable_row_support_cleared',
+    discardedAtMs: 9_000_000,
+  };
+
+  async function seedRejections(
+    store: ReversalLocalStore,
+    rows: Array<[string, unknown]>,
+  ): Promise<void> {
+    for (const [key, value] of rows) {
+      await store.transact(['rejections'], 'readwrite', async (txn) => {
+        await txn.put('rejections', key, value);
+      });
+    }
+  }
+
+  it('never returns a recovery capture as a ReversalRejectionRecord', async () => {
+    const store = createInMemoryReversalStore();
+    await seedRejections(store, [[captureRow.captureRecordId, captureRow]]);
+    expect(await listReversalRejections(store)).toEqual([]);
+  });
+
+  it('keeps genuine transfer and receiving records alongside a capture, newest-first', async () => {
+    const store = createInMemoryReversalStore();
+    const transfer = buildReversalRejectionRecord(transferInput); // 09:00
+    const receiving = buildReversalRejectionRecord(receivingInput); // 09:05
+    await seedRejections(store, [
+      [transfer.recordId, transfer],
+      [captureRow.captureRecordId, captureRow],
+      [receiving.recordId, receiving],
+    ]);
+
+    const rows = await listReversalRejections(store);
+    expect(rows.map((r) => r.sourceId)).toEqual(['GRN-2002', 'TR-1001']);
+    expect(rows.every((r) => r.sourceType === 'transfer' || r.sourceType === 'receiving')).toBe(true);
+  });
+
+  it('existing sourceType / branchId filters still apply once the fence has run', async () => {
+    const store = createInMemoryReversalStore();
+    const transfer = buildReversalRejectionRecord(transferInput);
+    const receiving = buildReversalRejectionRecord(receivingInput);
+    await seedRejections(store, [
+      [transfer.recordId, transfer],
+      [captureRow.captureRecordId, captureRow],
+      [receiving.recordId, receiving],
+    ]);
+
+    expect((await listReversalRejections(store, { sourceType: 'transfer' })).map((r) => r.sourceId)).toEqual([
+      'TR-1001',
+    ]);
+    expect((await listReversalRejections(store, { branchId: 'branch-a' })).map((r) => r.sourceId)).toEqual([
+      'GRN-2002',
+    ]);
+    // The capture's branchId matches the transfer record's branch — the fence, not
+    // the filter, is what keeps it out.
+    expect(captureRow.branchId).toBe('branch-origin');
+    expect(
+      (await listReversalRejections(store, { branchId: 'branch-origin' })).map((r) => r.sourceId),
+    ).toEqual(['TR-1001']);
+  });
+
+  it('rejects other malformed shapes too (positive test, not an exclusion list)', async () => {
+    const store = createInMemoryReversalStore();
+    const transfer = buildReversalRejectionRecord(transferInput);
+    await seedRejections(store, [
+      [transfer.recordId, transfer],
+      ['junk-1', { recordId: 'junk-1', sourceType: 'something_else' }],
+      ['junk-2', { sourceType: 'transfer' }],
+      ['junk-3', null],
+      ['junk-4', 'not-an-object'],
+    ]);
+    expect((await listReversalRejections(store)).map((r) => r.recordId)).toEqual([transfer.recordId]);
+  });
+});

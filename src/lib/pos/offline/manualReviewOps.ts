@@ -21,6 +21,7 @@
 
 import { isOfflineReversalAuthoritySupported, type ManualReviewResolveInput } from './offlineReversalLogic';
 import type { ReversalActorRole } from './offlineReversalTypes';
+import type { DiscardUnreadablePrivilegedEvidenceInput } from './privilegedEvidenceStore';
 
 /**
  * Whether a role may view AND execute manual-review resolution. Manager/Admin only —
@@ -68,6 +69,73 @@ export function buildManualReviewResolvePayload(
       resolvedByRole: actor.role as ReversalActorRole,
       reasonCode,
       ...(note ? { note } : {}),
+    },
+  };
+}
+
+// ─── SEC-001 N3 Phase 2 — unreadable privileged-evidence discard request ─────
+
+/** The two operator-supplied form fields for an unreadable-row discard. */
+export type UnreadableEvidenceDiscardFormValues = {
+  reasonCode: string;
+  note?: string;
+};
+
+/** The device's canonical acting scope, as the page resolved it. Never guessed. */
+export type UnreadableEvidenceDiscardScope = {
+  branchId: string | null | undefined;
+  deviceId: string | null | undefined;
+};
+
+/** Discriminated result of mapping the actor + scope + form to the store input. */
+export type BuildUnreadableEvidenceDiscardResult =
+  | { ok: true; input: DiscardUnreadablePrivilegedEvidenceInput }
+  | { ok: false; error: 'unauthorized' | 'missing_reason' | 'scope_unavailable' };
+
+/**
+ * Map the acting Manager/Admin + canonical scope + form into the exact input the
+ * D-2 discard mutator expects — the same shape/role the H2 resolve payload
+ * builder has, for the same reason: the page must not be the only thing standing
+ * between an operator and a destructive call.
+ *
+ * It re-checks authority (defense in depth; the store re-checks again), requires
+ * a non-blank `reasonCode`, and requires a real branch/device scope — an Admin
+ * viewing all branches has none, and a guessed branch must never reach an audit
+ * record. `key` is carried through as the opaque, untrusted storage handle the
+ * Phase 1 diagnostic reported; this builder never parses, classifies, inspects,
+ * or normalizes raw evidence, and performs no mutation of any kind.
+ */
+export function buildUnreadableEvidenceDiscardRequest(
+  actor: { id: string | null | undefined; role: string | null | undefined },
+  target: { key: string },
+  scope: UnreadableEvidenceDiscardScope | null,
+  form: UnreadableEvidenceDiscardFormValues,
+  nowMs: number,
+): BuildUnreadableEvidenceDiscardResult {
+  if (!canViewManualReviewOps(actor.role) || !actor.id) {
+    return { ok: false, error: 'unauthorized' };
+  }
+  const reasonCode = form.reasonCode.trim();
+  if (reasonCode.length === 0) {
+    return { ok: false, error: 'missing_reason' };
+  }
+  const branchId = scope?.branchId?.trim();
+  const deviceId = scope?.deviceId?.trim();
+  if (!branchId || !deviceId) {
+    return { ok: false, error: 'scope_unavailable' };
+  }
+  const note = form.note?.trim();
+  return {
+    ok: true,
+    input: {
+      key: target.key,
+      actorStaffId: actor.id,
+      actorRole: actor.role as ReversalActorRole,
+      branchId,
+      deviceId,
+      reasonCode,
+      ...(note ? { note } : {}),
+      nowMs,
     },
   };
 }

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import {
   buildManualReviewResolvePayload,
+  buildUnreadableEvidenceDiscardRequest,
   canViewManualReviewOps,
 } from './manualReviewOps';
 import {
@@ -363,5 +364,149 @@ describe('H7-G: ManualReviewOpsPage.tsx durable rejection panel (source-level)',
     expect(source).toContain("listQueue(store, ['manual_review_required'])");
     expect(source).toContain('resolveManualReview(store');
     expect(source).toContain('buildManualReviewResolvePayload');
+  });
+});
+
+// ─── SEC-001 N3 Phase 2 — unreadable-evidence discard request builder ────────
+//
+// Pure. It re-checks the same Manager/Admin rule the store re-checks again, and
+// refuses rather than guessing when the canonical acting scope is missing. It
+// never parses, classifies, or normalizes raw evidence and never mutates.
+
+describe('buildUnreadableEvidenceDiscardRequest', () => {
+  const scope = { branchId: 'LDP-001', deviceId: 'dev-1' };
+  const target = { key: 'corrupt-1' };
+  const NOW = 9_000_000;
+
+  test('Manager/Admin maps actor + scope + form to the exact store input (with note)', () => {
+    expect(
+      buildUnreadableEvidenceDiscardRequest(
+        { id: 'mgr-1', role: 'manager' },
+        target,
+        scope,
+        { reasonCode: 'unreadable_row_support_cleared', note: 'ตรวจแล้ว' },
+        NOW,
+      ),
+    ).toEqual({
+      ok: true,
+      input: {
+        key: 'corrupt-1',
+        actorStaffId: 'mgr-1',
+        actorRole: 'manager',
+        branchId: 'LDP-001',
+        deviceId: 'dev-1',
+        reasonCode: 'unreadable_row_support_cleared',
+        note: 'ตรวจแล้ว',
+        nowMs: NOW,
+      },
+    });
+
+    const asAdmin = buildUnreadableEvidenceDiscardRequest(
+      { id: 'adm-1', role: 'admin' },
+      target,
+      scope,
+      { reasonCode: 'x' },
+      NOW,
+    );
+    expect(asAdmin.ok).toBe(true);
+  });
+
+  test('trims reasonCode/scope and omits a blank note', () => {
+    const res = buildUnreadableEvidenceDiscardRequest(
+      { id: 'mgr-1', role: 'manager' },
+      target,
+      { branchId: ' LDP-001 ', deviceId: ' dev-1 ' },
+      { reasonCode: '  cleared  ', note: '   ' },
+      NOW,
+    );
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.input.reasonCode).toBe('cleared');
+    expect(res.input.branchId).toBe('LDP-001');
+    expect(res.input.deviceId).toBe('dev-1');
+    expect('note' in res.input).toBe(false);
+  });
+
+  test('Staff, unknown roles and a missing actor id are unauthorized', () => {
+    for (const actor of [
+      { id: 'stf-1', role: 'staff' },
+      { id: 'x-1', role: 'cashier' },
+      { id: null, role: 'manager' },
+      { id: 'mgr-1', role: null },
+    ]) {
+      expect(
+        buildUnreadableEvidenceDiscardRequest(actor, target, scope, { reasonCode: 'x' }, NOW),
+      ).toEqual({ ok: false, error: 'unauthorized' });
+    }
+  });
+
+  test('a blank reason blocks the request', () => {
+    expect(
+      buildUnreadableEvidenceDiscardRequest(
+        { id: 'mgr-1', role: 'manager' },
+        target,
+        scope,
+        { reasonCode: '   ' },
+        NOW,
+      ),
+    ).toEqual({ ok: false, error: 'missing_reason' });
+  });
+
+  test('a missing/blank canonical scope refuses — the branch is never guessed', () => {
+    for (const badScope of [
+      null,
+      { branchId: null, deviceId: 'dev-1' },
+      { branchId: 'LDP-001', deviceId: undefined },
+      { branchId: '   ', deviceId: 'dev-1' },
+      { branchId: 'LDP-001', deviceId: '' },
+    ]) {
+      expect(
+        buildUnreadableEvidenceDiscardRequest(
+          { id: 'mgr-1', role: 'manager' },
+          target,
+          badScope,
+          { reasonCode: 'x' },
+          NOW,
+        ),
+      ).toEqual({ ok: false, error: 'scope_unavailable' });
+    }
+  });
+
+  test('the raw key passes through untouched and no raw evidence is inspected', async () => {
+    const weirdKey = 'NOT-HEX ยาว ๆ !@#';
+    const res = buildUnreadableEvidenceDiscardRequest(
+      { id: 'mgr-1', role: 'manager' },
+      { key: weirdKey },
+      scope,
+      { reasonCode: 'x' },
+      NOW,
+    );
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.input.key).toBe(weirdKey);
+
+    // Non-vacuous: the builder module never names the parser or the classifier,
+    // so raw-evidence interpretation cannot drift into this layer.
+    const builderSource = (await import('./manualReviewOps.ts?raw')).default;
+    expect(builderSource).not.toContain('parsePrivilegedEvidenceJournalRecordV1');
+    expect(builderSource).not.toContain('classifyRawUnreadablePrivilegedEvidence');
+    expect(builderSource).not.toContain('discardUnreadablePrivilegedEvidenceRow');
+    expect(builderSource).not.toContain('rawValue');
+  });
+
+  test('building a request performs no store mutation of any kind', async () => {
+    const s = createInMemoryReversalStore();
+    await s.transact(['privilegedEvidence'], 'readwrite', async (txn) => {
+      await txn.put('privilegedEvidence', 'corrupt-1', { garbage: true });
+    });
+    const before = s.dump();
+    buildUnreadableEvidenceDiscardRequest(
+      { id: 'mgr-1', role: 'manager' },
+      target,
+      scope,
+      { reasonCode: 'x' },
+      NOW,
+    );
+    expect(s.dump()).toEqual(before);
   });
 });

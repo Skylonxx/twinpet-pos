@@ -22,11 +22,24 @@ import {
 import { useAuth } from '../lib/hooks/useAuth';
 import {
   buildManualReviewResolvePayload,
+  buildUnreadableEvidenceDiscardRequest,
   canViewManualReviewOps,
 } from '../lib/pos/offline/manualReviewOps';
 import { listQueue, resolveManualReview } from '../lib/pos/offline/offlineReversalQueue';
 import { createIndexedDbReversalStore } from '../lib/pos/offline/reversalLocalStore';
 import { listReversalRejections } from '../lib/pos/offline/reversalRejectionLog';
+import { getCanonicalSyncContext } from '../lib/pos/offline/canonicalSyncContext';
+import {
+  classifyRawUnreadablePrivilegedEvidence,
+  discardUnreadablePrivilegedEvidenceRow,
+  exportDiscardedPrivilegedEvidenceCapture,
+  listDiscardedPrivilegedEvidenceCaptures,
+  listRawUnreadablePrivilegedEvidence,
+  type DiscardedPrivilegedEvidenceCaptureV1,
+  type DiscardRefusalReason,
+  type PrivilegedEvidenceRecoveryClassification,
+  type RawUnreadablePrivilegedEvidenceEntry,
+} from '../lib/pos/offline/privilegedEvidenceStore';
 import { listTerminalVoidIntents, subscribeVoidIntentStore, type VoidIntentRecord, type VoidTerminalReason } from '../lib/pos/offline/voidIntentStore';
 import type { OfflineReversalIntent } from '../lib/pos/offline/offlineReversalTypes';
 import type { ReversalRejectionRecord } from '../lib/inventory/reversalRejectionRecord';
@@ -46,6 +59,62 @@ function getVoidTerminalReasonLabel(reason: VoidTerminalReason | null): string {
   if (reason === 'order_already_terminal') return 'บิลถูกยกเลิกแล้ว';
   if (reason === 'staff_identity_mismatch') return 'พนักงานผู้ขอไม่ตรงกับรอบปัจจุบัน';
   return 'ไม่ระบุ';
+}
+
+/**
+ * SEC-001 N3 Phase 2 — Thai copy for a discard refusal. Every refusal the store
+ * can return has an operator-visible sentence: a destructive control that fails
+ * quietly is worse than one that does not exist.
+ */
+function getDiscardRefusalLabel(reason: DiscardRefusalReason): string {
+  if (reason === 'unauthorized') return 'เฉพาะผู้จัดการ/ผู้ดูแลระบบเท่านั้นที่ดำเนินการได้';
+  if (reason === 'missing_reason') return 'กรุณาระบุเหตุผล (reasonCode)';
+  if (reason === 'scope_unavailable') return 'ไม่พบสาขา/อุปกรณ์ปัจจุบัน — ไม่สามารถบันทึกหลักฐานได้';
+  if (reason === 'reserved_key') return 'รายการนี้เป็นคีย์ระบบ ไม่ใช่ข้อมูลรายการ — ไม่สามารถลบได้';
+  if (reason === 'not_found') return 'ไม่พบรายการนี้แล้ว (อาจถูกลบไปก่อนหน้านี้) — กรุณารีเฟรช';
+  if (reason === 'readable_row') return 'รายการนี้อ่านได้ตามปกติ จึงไม่อยู่ในขอบเขตการกู้คืนนี้';
+  if (reason === 'server_evidence_present') {
+    return 'พบร่องรอยผลตัดสินจากเซิร์ฟเวอร์ในข้อมูลดิบ — ต้องส่งให้ฝ่ายสนับสนุนตรวจสอบ ห้ามลบบนเครื่อง';
+  }
+  if (reason === 'capture_key_collision') return 'มีบันทึกหลักฐานรหัสเดียวกันอยู่แล้ว — ยกเลิกเพื่อไม่ทับข้อมูลเดิม';
+  return 'บันทึกหลักฐานไม่สำเร็จ — ยกเลิกการลบทั้งหมด ข้อมูลเดิมยังอยู่ครบ';
+}
+
+/**
+ * The device's canonical acting scope, guarded. Returns `null` when no branch is
+ * mounted or an Admin is viewing all branches — the discard is then refused
+ * rather than recorded against a guessed branch.
+ */
+function readCanonicalScope(): { branchId: string; deviceId: string } | null {
+  try {
+    return getCanonicalSyncContext();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Short, non-throwing preview of an UNTRUSTED raw value, for support triage only.
+ * Never parsed, never reconstructed — a serialization failure shows a label
+ * instead of breaking the panel.
+ */
+function previewRawValue(value: unknown): string {
+  let text: string;
+  try {
+    text = JSON.stringify(value) ?? String(value);
+  } catch {
+    return '(แสดงตัวอย่างข้อมูลดิบไม่ได้)';
+  }
+  return text.length > 160 ? `${text.slice(0, 160)}…` : text;
+}
+
+/** Advisory badge copy. Never an identity or authority claim. */
+function getRecoveryClassificationLabel(
+  classification: PrivilegedEvidenceRecoveryClassification,
+): string {
+  return classification === 'server_evidence_present'
+    ? 'พบร่องรอยผลตัดสินจากเซิร์ฟเวอร์'
+    : 'ไม่พบร่องรอยผลตัดสินจากเซิร์ฟเวอร์';
 }
 
 function getEvidenceSourceLabel(source: unknown): string {
@@ -91,6 +160,22 @@ export default function ManualReviewOpsPage() {
   const [voidTerminalsLoading, setVoidTerminalsLoading] = useState(canResolve);
   const [voidTerminalsError, setVoidTerminalsError] = useState<string | null>(null);
   const voidTerminalsMountedRef = useRef(true);
+
+  // SEC-001 N3 Phase 2 — unreadable privileged-evidence recovery state. Device-local,
+  // Manager/Admin only, one row per explicit confirmation. Nothing here runs by itself.
+  const [unreadableRows, setUnreadableRows] = useState<RawUnreadablePrivilegedEvidenceEntry[]>([]);
+  const [unreadableLoading, setUnreadableLoading] = useState(canResolve);
+  const [unreadableError, setUnreadableError] = useState<string | null>(null);
+  const [captures, setCaptures] = useState<DiscardedPrivilegedEvidenceCaptureV1[]>([]);
+  const [capturesError, setCapturesError] = useState<string | null>(null);
+  const [discardTarget, setDiscardTarget] = useState<RawUnreadablePrivilegedEvidenceEntry | null>(
+    null,
+  );
+  const [discardReasonCode, setDiscardReasonCode] = useState('');
+  const [discardNote, setDiscardNote] = useState('');
+  const [discardSubmitting, setDiscardSubmitting] = useState(false);
+  const [discardError, setDiscardError] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     if (!canResolve) {
@@ -176,6 +261,39 @@ export default function ManualReviewOpsPage() {
     };
   }, [refreshVoidTerminals]);
 
+  // SEC-001 N3 Phase 2 — read-only load of this device's unreadable privileged-evidence
+  // rows (landed Phase 1 diagnostic) plus the durable recovery captures. Both are reads;
+  // neither unblocks anything on its own. Behind the same Manager/Admin gate.
+  // Every state write below happens AFTER an await, so mounting this panel never
+  // cascades a synchronous re-render; `unreadableLoading` starts true for an
+  // authorized actor and is cleared once the first read settles.
+  const refreshUnreadable = useCallback(async () => {
+    if (!canResolve) return;
+    try {
+      setUnreadableRows(await listRawUnreadablePrivilegedEvidence(store));
+      setUnreadableError(null);
+    } catch (err) {
+      setUnreadableError(err instanceof Error ? err.message : String(err));
+      setUnreadableRows([]);
+    } finally {
+      setUnreadableLoading(false);
+    }
+    try {
+      setCaptures(await listDiscardedPrivilegedEvidenceCaptures(store));
+      setCapturesError(null);
+    } catch (err) {
+      setCapturesError(err instanceof Error ? err.message : String(err));
+      setCaptures([]);
+    }
+  }, [canResolve, store]);
+
+  useEffect(() => {
+    if (!canResolve) return;
+    void (async () => {
+      await refreshUnreadable();
+    })();
+  }, [canResolve, refreshUnreadable]);
+
   useEffect(() => {
     if (!toast) return;
     const t = window.setTimeout(() => setToast(null), 5000);
@@ -225,6 +343,66 @@ export default function ManualReviewOpsPage() {
       setSubmitting(false);
     }
   }, [target, user?.id, user?.role, reasonCode, note, store, refresh]);
+
+  // SEC-001 N3 Phase 2 — destructive discard flow. Opened only by an explicit click on
+  // one row; nothing here is reachable from a sweep, boot, or subscription.
+  const openDiscard = (entry: RawUnreadablePrivilegedEvidenceEntry) => {
+    setDiscardTarget(entry);
+    setDiscardReasonCode('');
+    setDiscardNote('');
+    setDiscardError(null);
+  };
+
+  const closeDiscard = () => {
+    if (discardSubmitting) return;
+    setDiscardTarget(null);
+  };
+
+  const submitDiscard = async () => {
+    if (!discardTarget) return;
+    const built = buildUnreadableEvidenceDiscardRequest(
+      { id: user?.id, role: user?.role },
+      { key: discardTarget.key },
+      readCanonicalScope(),
+      { reasonCode: discardReasonCode, note: discardNote },
+      Date.now(),
+    );
+    if (!built.ok) {
+      setDiscardError(getDiscardRefusalLabel(built.error));
+      return;
+    }
+    setDiscardSubmitting(true);
+    setDiscardError(null);
+    try {
+      const outcome = await discardUnreadablePrivilegedEvidenceRow(store, built.input);
+      if (outcome.kind === 'refused') {
+        setDiscardError(getDiscardRefusalLabel(outcome.reason));
+        return;
+      }
+      setToast({
+        message: `ลบข้อมูลที่อ่านไม่ได้แล้ว และเก็บหลักฐานดิบไว้เรียบร้อย (${outcome.captureRecordId})`,
+        type: 'success',
+      });
+      setDiscardTarget(null);
+      await refreshUnreadable();
+    } catch (err) {
+      setDiscardError(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการดำเนินการ');
+    } finally {
+      setDiscardSubmitting(false);
+    }
+  };
+
+  const exportCapture = async (captureRecordId: string) => {
+    setExportError(null);
+    try {
+      const outcome = await exportDiscardedPrivilegedEvidenceCapture(store, captureRecordId);
+      if (outcome === 'not_found') {
+        setExportError('ไม่พบบันทึกหลักฐานนี้แล้ว — กรุณารีเฟรชหน้านี้');
+      }
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : String(err));
+    }
+  };
 
   if (!canResolve) {
     return (
@@ -314,6 +492,179 @@ export default function ManualReviewOpsPage() {
           </div>
         </Card>
       )}
+
+      {/*
+        SEC-001 N3 Phase 2 — operator-mediated recovery of unreadable privileged-evidence
+        rows (LOCAL / device only). Rows the canonical parser rejects block every NEW
+        privileged void on this device, store-wide, with no other in-app remedy. This
+        panel makes them visible and — for rows with no detected server adjudication —
+        removable by a Manager/Admin, one row per explicit confirmation, with the exact
+        raw bytes captured durably first. It never repairs a row, never re-submits
+        anything, and never changes any server-side outcome.
+      */}
+      <div className="mt-8 flex flex-col gap-4 border-t-2 border-gray-200 pt-8 dark:border-gray-700">
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                ข้อมูลอนุมัติยกเลิกบิลที่อ่านไม่ได้ (อุปกรณ์นี้)
+              </h2>
+              <Badge color="failure" size="sm" className="w-fit">
+                ต้องให้ผู้จัดการดำเนินการ
+              </Badge>
+            </div>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              ข้อมูลเหล่านี้ทำให้เครื่องนี้สร้างรายการยกเลิกบิลแบบมีลายเซ็นผู้จัดการใหม่ไม่ได้ —
+              ลบออกได้ทีละรายการหลังเก็บหลักฐานดิบไว้แล้วเท่านั้น
+            </p>
+          </div>
+          <Badge color="gray" size="sm" className="w-fit">
+            {unreadableLoading ? <Spinner size="sm" /> : `${unreadableRows.length} รายการ`}
+          </Badge>
+        </div>
+
+        <Alert color="warning">
+          การลบที่นี่เป็นการลบข้อมูลถาวรบนเครื่องนี้ ไม่ใช่การซ่อมข้อมูล ไม่ใช่การส่งซ้ำ
+          และไม่เปลี่ยนผลการยกเลิกบิลบนเซิร์ฟเวอร์แต่อย่างใด ระบบจะบันทึกคีย์และข้อมูลดิบทั้งหมดไว้ก่อนลบเสมอ
+        </Alert>
+
+        {unreadableError ? (
+          <Alert color="failure">
+            <span className="font-medium">โหลดรายการที่อ่านไม่ได้ไม่สำเร็จ:</span> {unreadableError}
+          </Alert>
+        ) : unreadableLoading ? (
+          <div className="flex justify-center p-8">
+            <Spinner size="xl" aria-label="Loading unreadable privileged evidence" />
+          </div>
+        ) : unreadableRows.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-gray-200 p-8 text-center text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">
+            ไม่มีข้อมูลอนุมัติยกเลิกบิลที่อ่านไม่ได้บนอุปกรณ์นี้
+          </div>
+        ) : (
+          <Card className="overflow-hidden p-0">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHead>
+                  <TableHeadCell>คีย์ (ข้อมูลดิบ — ไม่ยืนยันตัวตน)</TableHeadCell>
+                  <TableHeadCell>ผลตรวจเบื้องต้น</TableHeadCell>
+                  <TableHeadCell>ตัวอย่างข้อมูลดิบ</TableHeadCell>
+                  <TableHeadCell>
+                    <span className="sr-only">การกระทำ</span>
+                  </TableHeadCell>
+                </TableHead>
+                <TableBody className="divide-y">
+                  {unreadableRows.map((entry) => {
+                    const classification = classifyRawUnreadablePrivilegedEvidence(entry.rawValue);
+                    const serverEvidence = classification === 'server_evidence_present';
+                    return (
+                      <TableRow
+                        key={entry.key}
+                        className="bg-white dark:border-gray-700 dark:bg-gray-800"
+                      >
+                        <TableCell className="font-mono text-xs break-all" title={entry.key}>
+                          {entry.key}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap">
+                          <Badge color={serverEvidence ? 'failure' : 'warning'} className="w-fit">
+                            {getRecoveryClassificationLabel(classification)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="max-w-xs truncate font-mono text-xs text-gray-500 dark:text-gray-400">
+                          {previewRawValue(entry.rawValue)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {serverEvidence ? (
+                            <span className="text-xs text-red-600 dark:text-red-400">
+                              ส่งให้ฝ่ายสนับสนุนตรวจสอบ — ไม่มีการลบบนเครื่องนี้
+                            </span>
+                          ) : (
+                            <Button
+                              size="sm"
+                              color="failure"
+                              onClick={() => openDiscard(entry)}
+                              disabled={discardSubmitting}
+                            >
+                              ลบรายการนี้
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          </Card>
+        )}
+
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
+            หลักฐานดิบที่เก็บไว้ก่อนลบ (อุปกรณ์นี้)
+          </h3>
+          <Badge color="gray" size="sm" className="w-fit">
+            {`${captures.length} รายการ`}
+          </Badge>
+        </div>
+
+        {capturesError && (
+          <Alert color="failure">
+            <span className="font-medium">โหลดบันทึกหลักฐานไม่สำเร็จ:</span> {capturesError}
+          </Alert>
+        )}
+        {exportError && <Alert color="failure">{exportError}</Alert>}
+
+        {captures.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-gray-200 p-6 text-center text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">
+            ยังไม่มีการลบข้อมูลที่อ่านไม่ได้บนอุปกรณ์นี้
+          </div>
+        ) : (
+          <Card className="overflow-hidden p-0">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHead>
+                  <TableHeadCell>เวลา</TableHeadCell>
+                  <TableHeadCell>คีย์เดิม</TableHeadCell>
+                  <TableHeadCell>เหตุผล</TableHeadCell>
+                  <TableHeadCell>ผู้ทำรายการ</TableHeadCell>
+                  <TableHeadCell>
+                    <span className="sr-only">ส่งออก</span>
+                  </TableHeadCell>
+                </TableHead>
+                <TableBody className="divide-y">
+                  {captures.map((cap) => (
+                    <TableRow
+                      key={cap.captureRecordId}
+                      className="bg-white dark:border-gray-700 dark:bg-gray-800"
+                    >
+                      <TableCell className="whitespace-nowrap font-mono text-xs text-gray-500 dark:text-gray-400">
+                        {new Date(cap.discardedAtMs).toISOString()}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs break-all" title={cap.rawKey}>
+                        {cap.rawKey}
+                      </TableCell>
+                      <TableCell className="max-w-xs truncate" title={cap.reasonCode}>
+                        {cap.reasonCode}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap text-gray-500 dark:text-gray-400">
+                        {cap.actorStaffId}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          size="sm"
+                          color="light"
+                          onClick={() => void exportCapture(cap.captureRecordId)}
+                        >
+                          ส่งออกหลักฐาน
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </Card>
+        )}
+      </div>
 
       {/*
         Phase 7B-H7-G — Durable rejection log (LOCAL / device only, READ-ONLY forensic).
@@ -517,6 +868,63 @@ export default function ManualReviewOpsPage() {
           </Button>
           <Button color="warning" onClick={() => void submitResolve()} disabled={submitting}>
             {submitting ? <Spinner size="sm" /> : 'ยืนยันปิดงาน'}
+          </Button>
+        </ModalFooter>
+      </Modal>
+
+      {/*
+        SEC-001 N3 Phase 2 — destructive confirmation. One row at a time, reason required,
+        and the copy states plainly what is destroyed and what the absence of detected
+        server evidence does NOT prove. Cancel closes without calling anything.
+      */}
+      <Modal show={discardTarget !== null} onClose={closeDiscard} size="md">
+        <ModalHeader>ลบข้อมูลอนุมัติยกเลิกบิลที่อ่านไม่ได้</ModalHeader>
+        <ModalBody>
+          <div className="flex flex-col gap-4">
+            <Alert color="failure">
+              การลบนี้ถาวรและย้อนกลับไม่ได้ — ข้อมูลดิบของคีย์{' '}
+              <span className="font-mono break-all">{discardTarget?.key}</span>{' '}
+              จะถูกเก็บเป็นหลักฐานไว้บนเครื่องนี้ก่อน แล้วจึงลบออกจากคลังข้อมูลอนุมัติ
+            </Alert>
+            <Alert color="warning">
+              ระบบไม่พบร่องรอยผลตัดสินจากเซิร์ฟเวอร์ในข้อมูลดิบนี้
+              แต่<span className="font-semibold">ไม่ได้พิสูจน์ว่าไม่เคยมีการส่งหรือไม่มีผลบนเซิร์ฟเวอร์</span>{' '}
+              ข้อมูลอาจเสียหายจนหายไปได้ หากไม่แน่ใจ ให้ส่งเรื่องให้ฝ่ายสนับสนุนก่อน
+            </Alert>
+            <div>
+              <Label htmlFor="ue-reason">เหตุผล (reasonCode) *</Label>
+              <TextInput
+                id="ue-reason"
+                value={discardReasonCode}
+                onChange={(e) => setDiscardReasonCode(e.target.value)}
+                placeholder="เช่น unreadable_row_support_cleared"
+                required
+                autoFocus
+              />
+            </div>
+            <div>
+              <Label htmlFor="ue-note">หมายเหตุ (note)</Label>
+              <Textarea
+                id="ue-note"
+                value={discardNote}
+                onChange={(e) => setDiscardNote(e.target.value)}
+                rows={3}
+                placeholder="ไม่บังคับ"
+              />
+            </div>
+            {discardError && <Alert color="failure">{discardError}</Alert>}
+          </div>
+        </ModalBody>
+        <ModalFooter>
+          <Button color="gray" onClick={closeDiscard} disabled={discardSubmitting}>
+            ยกเลิก
+          </Button>
+          <Button
+            color="failure"
+            onClick={() => void submitDiscard()}
+            disabled={discardSubmitting}
+          >
+            {discardSubmitting ? <Spinner size="sm" /> : 'ยืนยันลบถาวร'}
           </Button>
         </ModalFooter>
       </Modal>

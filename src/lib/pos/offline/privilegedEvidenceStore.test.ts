@@ -1,5 +1,17 @@
+// SEC-001 N3 Phase 2 requires a REAL IndexedDB atomicity proof for the
+// capture-then-delete transaction. `fake-indexeddb/auto` is the repository's
+// established, authorized harness for that (see
+// `shiftCloseIntentStore.realIndexedDb.test.ts`); installing it globally is inert
+// for every other test in this file, which all use the in-memory double.
+import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
-import { createInMemoryReversalStore, type ReversalLocalStore } from './reversalLocalStore';
+import {
+  createInMemoryReversalStore,
+  createIndexedDbReversalStore,
+  type ReversalLocalStore,
+  type ReversalStoreName,
+  type ReversalTxn,
+} from './reversalLocalStore';
 import type { OfflineAttestationEnvelope } from '../../auth/privilegedAction/offlineAttestation';
 import type {
   OfflineAdjudicationDisposition,
@@ -14,13 +26,18 @@ import {
   type PrivilegedEvidenceJournalRecordV1,
 } from './privilegedEvidenceTypes';
 import {
+  PRIVILEGED_EVIDENCE_DISCARD_CAPTURE_KIND,
   allocatePrivilegedSweepGeneration,
   applyPrivilegedEvidenceDeferredCycleCounts,
   applyPrivilegedEvidenceDisposition,
   claimPrivilegedEvidenceRow,
+  classifyRawUnreadablePrivilegedEvidence,
   clearPrivilegedEvidenceBackoff,
   computeEvidenceBindingDigest,
+  discardUnreadablePrivilegedEvidenceRow,
+  exportDiscardedPrivilegedEvidenceCapture,
   ingestAttestedPrivilegedAction,
+  listDiscardedPrivilegedEvidenceCaptures,
   listPrivilegedEvidence,
   listPrivilegedEvidenceForBranch,
   listRawUnreadablePrivilegedEvidence,
@@ -2290,5 +2307,440 @@ describe('Claude N-3 write-fence — status-aware containment + canonical parser
       const { unreadableCount } = await listPrivilegedEvidenceForBranch(store, 'LDP-001');
       expect(unreadableCount).toBe(0);
     });
+  });
+});
+
+// ─── SEC-001 N3 Phase 2 — operator-mediated unreadable-row recovery ─────────
+//
+// Capture-then-delete, one explicit act at a time, into the EXISTING `rejections`
+// store. Nothing here runs automatically, nothing repairs a row, and a row whose
+// raw bytes expose server adjudication is refused outright (C2 support-only).
+
+describe('N3 Phase 2 — classifyRawUnreadablePrivilegedEvidence', () => {
+  it('flags a present, non-null top-level serverVerdict', () => {
+    expect(classifyRawUnreadablePrivilegedEvidence({ serverVerdict: 'ACCEPTED' })).toBe(
+      'server_evidence_present',
+    );
+  });
+
+  it('flags serverAdjudicationId and serverAdjudicatedAtMs too', () => {
+    expect(classifyRawUnreadablePrivilegedEvidence({ serverAdjudicationId: 'adj-1' })).toBe(
+      'server_evidence_present',
+    );
+    expect(classifyRawUnreadablePrivilegedEvidence({ serverAdjudicatedAtMs: 5_000 })).toBe(
+      'server_evidence_present',
+    );
+  });
+
+  it('a present-but-null probe field is not server evidence', () => {
+    expect(
+      classifyRawUnreadablePrivilegedEvidence({
+        serverVerdict: null,
+        serverAdjudicationId: null,
+        serverAdjudicatedAtMs: null,
+      }),
+    ).toBe('no_server_evidence_detected');
+  });
+
+  // NEGATIVE CONTROL — the classifier must never become a recursive scanner:
+  // arbitrary garbage that merely CONTAINS the word somewhere deeper is Class D,
+  // and treating it as server evidence would strand it forever.
+  it('a nested serverVerdict is NOT server evidence (no recursive descent)', () => {
+    expect(
+      classifyRawUnreadablePrivilegedEvidence({ garbage: true, nested: { serverVerdict: 'ACCEPTED' } }),
+    ).toBe('no_server_evidence_detected');
+  });
+
+  it('non-objects and inherited properties are never server evidence', () => {
+    expect(classifyRawUnreadablePrivilegedEvidence(null)).toBe('no_server_evidence_detected');
+    expect(classifyRawUnreadablePrivilegedEvidence('serverVerdict')).toBe('no_server_evidence_detected');
+    expect(classifyRawUnreadablePrivilegedEvidence(42)).toBe('no_server_evidence_detected');
+    const inherited = Object.create({ serverVerdict: 'ACCEPTED' }) as Record<string, unknown>;
+    expect(classifyRawUnreadablePrivilegedEvidence(inherited)).toBe('no_server_evidence_detected');
+  });
+});
+
+describe('N3 Phase 2 — discardUnreadablePrivilegedEvidenceRow', () => {
+  const NOW = 9_000_000;
+  const CORRUPT_KEY = 'corrupt-1';
+  const CORRUPT_VALUE = { garbage: true, nested: { serverVerdict: 'ACCEPTED' } };
+
+  function discardInput(over: Record<string, unknown> = {}) {
+    return {
+      key: CORRUPT_KEY,
+      actorStaffId: 'mgr-1',
+      actorRole: 'manager',
+      branchId: 'LDP-001',
+      deviceId: 'dev-1',
+      reasonCode: 'unreadable_row_support_cleared',
+      nowMs: NOW,
+      ...over,
+    } as Parameters<typeof discardUnreadablePrivilegedEvidenceRow>[1];
+  }
+
+  async function seedRaw(store: ReversalLocalStore, key: string, value: unknown): Promise<void> {
+    await store.transact(['privilegedEvidence'], 'readwrite', async (txn) => {
+      await txn.put('privilegedEvidence', key, value);
+    });
+  }
+
+  async function rawSnapshot(store: ReversalLocalStore): Promise<Array<[string, unknown]>> {
+    return store.transact(['privilegedEvidence'], 'readonly', async (txn) => {
+      const keys = await txn.getAllKeys!('privilegedEvidence');
+      const out: Array<[string, unknown]> = [];
+      for (const k of keys) out.push([k, await txn.get('privilegedEvidence', k)]);
+      return out;
+    });
+  }
+
+  async function rejectionsSnapshot(store: ReversalLocalStore): Promise<unknown[]> {
+    return store.transact(['rejections'], 'readonly', (txn) => txn.getAll('rejections'));
+  }
+
+  /** Decorator whose `delete` always throws — models a storage fault mid-transaction. */
+  function failingDeleteStore(inner: ReversalLocalStore): ReversalLocalStore {
+    return {
+      transact<T>(
+        stores: ReversalStoreName[],
+        mode: 'readonly' | 'readwrite',
+        fn: (txn: ReversalTxn) => Promise<T>,
+      ): Promise<T> {
+        return inner.transact(stores, mode, (txn) =>
+          fn({
+            ...txn,
+            delete: async () => {
+              throw new Error('induced storage fault');
+            },
+          }),
+        );
+      },
+    };
+  }
+
+  // Case 1 — surgical removal.
+  it('removes only the targeted unreadable row; valid rows and the reserved key are untouched', async () => {
+    const store = createInMemoryReversalStore();
+    await ingestAttestedPrivilegedAction(store, envelope(), ctx, 1_000);
+    await allocatePrivilegedSweepGeneration(store); // writes the reserved generation key
+    await seedRaw(store, CORRUPT_KEY, CORRUPT_VALUE);
+    const validBefore = await listPrivilegedEvidence(store);
+    const reservedBefore = await store.transact(['privilegedEvidence'], 'readonly', (txn) =>
+      txn.get('privilegedEvidence', PRIVILEGED_EVIDENCE_CLAIM_GENERATION_KEY),
+    );
+
+    const outcome = await discardUnreadablePrivilegedEvidenceRow(store, discardInput());
+
+    expect(outcome.kind).toBe('discarded');
+    if (outcome.kind !== 'discarded') return;
+    expect(outcome.key).toBe(CORRUPT_KEY);
+    expect(outcome.classification).toBe('no_server_evidence_detected');
+    expect(await listRawUnreadablePrivilegedEvidence(store)).toEqual([]);
+    expect(await listPrivilegedEvidence(store)).toEqual(validBefore);
+    expect(
+      await store.transact(['privilegedEvidence'], 'readonly', (txn) =>
+        txn.get('privilegedEvidence', PRIVILEGED_EVIDENCE_CLAIM_GENERATION_KEY),
+      ),
+    ).toEqual(reservedBefore);
+  });
+
+  // Case 2 — a capture must never be overwritten to make room for a capture.
+  it('refuses on capture-key collision and deletes nothing', async () => {
+    const store = createInMemoryReversalStore();
+    await seedRaw(store, CORRUPT_KEY, CORRUPT_VALUE);
+    const first = await discardUnreadablePrivilegedEvidenceRow(store, discardInput());
+    expect(first.kind).toBe('discarded');
+    if (first.kind !== 'discarded') return;
+
+    // Re-seed the same key and replay at the SAME injected clock → same capture id.
+    await seedRaw(store, CORRUPT_KEY, CORRUPT_VALUE);
+    const before = await rawSnapshot(store);
+    const second = await discardUnreadablePrivilegedEvidenceRow(store, discardInput());
+
+    expect(second).toEqual({ kind: 'refused', reason: 'capture_key_collision' });
+    expect(await rawSnapshot(store)).toEqual(before);
+    expect(await listDiscardedPrivilegedEvidenceCaptures(store)).toHaveLength(1);
+  });
+
+  // Case 3 — atomicity: a fault after the capture put must roll the capture back too.
+  it('a storage fault during capture-then-delete leaves the row intact AND writes no capture', async () => {
+    const inner = createInMemoryReversalStore();
+    await seedRaw(inner, CORRUPT_KEY, CORRUPT_VALUE);
+    const before = await rawSnapshot(inner);
+
+    const outcome = await discardUnreadablePrivilegedEvidenceRow(
+      failingDeleteStore(inner),
+      discardInput(),
+    );
+
+    expect(outcome).toEqual({ kind: 'refused', reason: 'capture_failed' });
+    expect(await rawSnapshot(inner)).toEqual(before);
+    expect(await rejectionsSnapshot(inner)).toEqual([]);
+    expect(await listDiscardedPrivilegedEvidenceCaptures(inner)).toEqual([]);
+  });
+
+  // Case 4 — the point of the whole packet: the device actually unblocks.
+  it('after the last discard unreadableCount returns to 0 and the branch read is healthy again', async () => {
+    const store = createInMemoryReversalStore();
+    await ingestAttestedPrivilegedAction(store, envelope(), ctx, 1_000);
+    await seedRaw(store, CORRUPT_KEY, CORRUPT_VALUE);
+    await seedRaw(store, 'corrupt-2', { alsoGarbage: 1 });
+    expect((await listPrivilegedEvidenceForBranch(store, 'LDP-001')).unreadableCount).toBe(2);
+
+    for (const key of [CORRUPT_KEY, 'corrupt-2']) {
+      const outcome = await discardUnreadablePrivilegedEvidenceRow(
+        store,
+        discardInput({ key, nowMs: NOW + key.length }),
+      );
+      expect(outcome.kind).toBe('discarded');
+    }
+
+    const healthy = await listPrivilegedEvidenceForBranch(store, 'LDP-001');
+    expect(healthy.unreadableCount).toBe(0);
+    expect(healthy.rows).toHaveLength(1);
+    expect(await listRawUnreadablePrivilegedEvidence(store)).toEqual([]);
+  });
+
+  // Case 5 — C2: support escalation only. No acknowledgement, no override, no bypass.
+  it('a top-level non-null serverVerdict is hard-refused — no capture, no delete', async () => {
+    const store = createInMemoryReversalStore();
+    const serverish = { serverVerdict: 'ACCEPTED', broken: true };
+    await seedRaw(store, 'server-ish-1', serverish);
+
+    const outcome = await discardUnreadablePrivilegedEvidenceRow(
+      store,
+      discardInput({ key: 'server-ish-1' }),
+    );
+
+    expect(outcome).toEqual({ kind: 'refused', reason: 'server_evidence_present' });
+    expect(await rawSnapshot(store)).toEqual([['server-ish-1', serverish]]);
+    expect(await rejectionsSnapshot(store)).toEqual([]);
+  });
+
+  // Case 6 — the capture is the bytes, not a reconstruction of them.
+  it('captures the exact raw key and raw value with no normalization', async () => {
+    const store = createInMemoryReversalStore();
+    const weird = {
+      garbage: true,
+      list: [1, 'two', { three: null }],
+      attestationIdHex: 'NOT-HEX',
+      deep: { deeper: { deepest: 'x' } },
+    };
+    await seedRaw(store, 'weird-key-1', weird);
+
+    const outcome = await discardUnreadablePrivilegedEvidenceRow(
+      store,
+      discardInput({ key: 'weird-key-1', note: '  reviewed  ' }),
+    );
+    expect(outcome.kind).toBe('discarded');
+
+    const [capture] = await listDiscardedPrivilegedEvidenceCaptures(store);
+    expect(capture.captureKind).toBe(PRIVILEGED_EVIDENCE_DISCARD_CAPTURE_KIND);
+    expect(capture.sourceStore).toBe('privilegedEvidence');
+    expect(capture.rawKey).toBe('weird-key-1');
+    expect(capture.rawValue).toEqual(weird);
+    expect(capture.classification).toBe('no_server_evidence_detected');
+    expect(capture.branchId).toBe('LDP-001');
+    expect(capture.deviceId).toBe('dev-1');
+    expect(capture.actorStaffId).toBe('mgr-1');
+    expect(capture.actorRole).toBe('manager');
+    expect(capture.reasonCode).toBe('unreadable_row_support_cleared');
+    expect(capture.note).toBe('reviewed');
+    expect(capture.discardedAtMs).toBe(NOW);
+    // Branch/device are the ACTING context — never laundered out of the raw value.
+    expect(Object.prototype.hasOwnProperty.call(weird, 'branchId')).toBe(false);
+  });
+
+  // Case 8 — a parser-valid row is never deletable through the recovery path.
+  it('refuses a readable row and leaves it byte-identical', async () => {
+    const store = createInMemoryReversalStore();
+    await ingestAttestedPrivilegedAction(store, envelope(), ctx, 1_000);
+    const before = await rawSnapshot(store);
+
+    const outcome = await discardUnreadablePrivilegedEvidenceRow(
+      store,
+      discardInput({ key: envelope().attestationIdHex }),
+    );
+
+    expect(outcome).toEqual({ kind: 'refused', reason: 'readable_row' });
+    expect(await rawSnapshot(store)).toEqual(before);
+    expect(await rejectionsSnapshot(store)).toEqual([]);
+  });
+
+  // Case 9 — the authority / scope / target refusal matrix, each with zero mutation.
+  it('refuses staff, blank reason, missing scope, a reserved key and an absent key — no mutation on any path', async () => {
+    const store = createInMemoryReversalStore();
+    await seedRaw(store, CORRUPT_KEY, CORRUPT_VALUE);
+    const before = await rawSnapshot(store);
+
+    const cases: Array<[Record<string, unknown>, string]> = [
+      [{ actorRole: 'staff' }, 'unauthorized'],
+      [{ actorRole: 'cashier' }, 'unauthorized'],
+      [{ actorStaffId: '   ' }, 'unauthorized'],
+      [{ reasonCode: '   ' }, 'missing_reason'],
+      [{ branchId: '  ' }, 'scope_unavailable'],
+      [{ deviceId: '' }, 'scope_unavailable'],
+      [{ key: PRIVILEGED_EVIDENCE_CLAIM_GENERATION_KEY }, 'reserved_key'],
+      [{ key: 'does-not-exist' }, 'not_found'],
+    ];
+
+    for (const [over, reason] of cases) {
+      expect(await discardUnreadablePrivilegedEvidenceRow(store, discardInput(over))).toEqual({
+        kind: 'refused',
+        reason,
+      });
+    }
+
+    expect(await rawSnapshot(store)).toEqual(before);
+    expect(await rejectionsSnapshot(store)).toEqual([]);
+  });
+
+  // Case 10 — listeners fire on a real removal only.
+  it('notifies privileged-evidence listeners after a successful discard, and never on a refusal', async () => {
+    const store = createInMemoryReversalStore();
+    await seedRaw(store, CORRUPT_KEY, CORRUPT_VALUE);
+
+    const seen: number[] = [];
+    const unsubscribe = subscribePrivilegedEvidenceStore((rows) => seen.push(rows.length));
+    try {
+      await discardUnreadablePrivilegedEvidenceRow(store, discardInput({ actorRole: 'staff' }));
+      await new Promise((r) => setTimeout(r, 0));
+      expect(seen).toEqual([]);
+
+      const outcome = await discardUnreadablePrivilegedEvidenceRow(store, discardInput());
+      expect(outcome.kind).toBe('discarded');
+      await new Promise((r) => setTimeout(r, 0));
+      expect(seen.length).toBeGreaterThan(0);
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  // Case 11 — read-back + export read the STORED capture, never the live row.
+  it('reads captures back newest-first and exports the stored capture through the FilePort', async () => {
+    const store = createInMemoryReversalStore();
+    await seedRaw(store, 'older', { a: 1 });
+    await seedRaw(store, 'newer', { b: 2 });
+    await discardUnreadablePrivilegedEvidenceRow(store, discardInput({ key: 'older', nowMs: 1_000 }));
+    await discardUnreadablePrivilegedEvidenceRow(store, discardInput({ key: 'newer', nowMs: 2_000 }));
+
+    const captures = await listDiscardedPrivilegedEvidenceCaptures(store);
+    expect(captures.map((c) => c.rawKey)).toEqual(['newer', 'older']);
+
+    const saved: Array<{ name: string; mime: string; contents: string }> = [];
+    const port = {
+      saveTextFile: (name: string, mime: string, contents: string) =>
+        void saved.push({ name, mime, contents }),
+    };
+    expect(
+      await exportDiscardedPrivilegedEvidenceCapture(store, captures[0].captureRecordId, port),
+    ).toBe('exported');
+    expect(saved).toHaveLength(1);
+    expect(saved[0].name).not.toContain('newer'); // no untrusted bytes in the filename
+    const parsed = JSON.parse(saved[0].contents) as { rawKey: string; rawValue: unknown };
+    expect(parsed.rawKey).toBe('newer');
+    expect(parsed.rawValue).toEqual({ b: 2 });
+
+    // The store is untouched by an export, and an unknown id is a plain miss.
+    expect(await exportDiscardedPrivilegedEvidenceCapture(store, 'no-such-capture', port)).toBe(
+      'not_found',
+    );
+    expect(saved).toHaveLength(1);
+    expect(await listDiscardedPrivilegedEvidenceCaptures(store)).toHaveLength(2);
+  });
+
+  // Ordinary reversal-rejection rows share `rejections`; the capture reader must not claim them.
+  it('never returns a foreign rejections-store row as a recovery capture', async () => {
+    const store = createInMemoryReversalStore();
+    await store.transact(['rejections'], 'readwrite', async (txn) => {
+      await txn.put('rejections', 'rej-1', {
+        recordId: 'rej-1',
+        sourceType: 'transfer',
+        sourceId: 'TR-1',
+        branchId: 'b1',
+        evidenceCode: 'x',
+        evidenceMessage: 'y',
+        createdAt: '2026-06-12T09:00:00.000Z',
+      });
+    });
+    expect(await listDiscardedPrivilegedEvidenceCaptures(store)).toEqual([]);
+  });
+});
+
+// Case 12 — REAL IndexedDB proof (fake-indexeddb, the repo's authorized harness).
+// The in-memory double models abort-on-throw, but the multi-store transaction,
+// its auto-commit ordering and an out-of-line-key delete are only genuinely
+// exercised against a real IDB implementation.
+describe('N3 Phase 2 — real IndexedDB capture/delete atomicity', () => {
+  const REAL_KEY = 'real-corrupt-1';
+  const REAL_VALUE = { garbage: true, from: 'real-idb' };
+
+  function realInput(over: Record<string, unknown> = {}) {
+    return {
+      key: REAL_KEY,
+      actorStaffId: 'mgr-9',
+      actorRole: 'admin',
+      branchId: 'LDP-001',
+      deviceId: 'dev-real',
+      reasonCode: 'real_idb_proof',
+      nowMs: 4_242_000,
+      ...over,
+    } as Parameters<typeof discardUnreadablePrivilegedEvidenceRow>[1];
+  }
+
+  async function clearRealStores(store: ReversalLocalStore): Promise<void> {
+    await store.transact(['privilegedEvidence', 'rejections'], 'readwrite', async (txn) => {
+      for (const name of ['privilegedEvidence', 'rejections'] as const) {
+        for (const key of await txn.getAllKeys!(name)) await txn.delete(name, key);
+      }
+    });
+  }
+
+  it('commits the capture and the raw-row delete together, and rolls both back on a fault', async () => {
+    const store = createIndexedDbReversalStore();
+    await clearRealStores(store);
+    await store.transact(['privilegedEvidence'], 'readwrite', async (txn) => {
+      await txn.put('privilegedEvidence', REAL_KEY, REAL_VALUE);
+    });
+    expect(await listRawUnreadablePrivilegedEvidence(store)).toEqual([
+      { key: REAL_KEY, rawValue: REAL_VALUE },
+    ]);
+
+    // (a) Injected fault → BOTH the capture and the delete are discarded.
+    const faulting: ReversalLocalStore = {
+      transact<T>(
+        stores: ReversalStoreName[],
+        mode: 'readonly' | 'readwrite',
+        fn: (txn: ReversalTxn) => Promise<T>,
+      ): Promise<T> {
+        return store.transact(stores, mode, (txn) =>
+          fn({
+            ...txn,
+            delete: async () => {
+              throw new Error('induced real-idb fault');
+            },
+          }),
+        );
+      },
+    };
+    expect(await discardUnreadablePrivilegedEvidenceRow(faulting, realInput())).toEqual({
+      kind: 'refused',
+      reason: 'capture_failed',
+    });
+    expect(await listRawUnreadablePrivilegedEvidence(store)).toEqual([
+      { key: REAL_KEY, rawValue: REAL_VALUE },
+    ]);
+    expect(await listDiscardedPrivilegedEvidenceCaptures(store)).toEqual([]);
+
+    // (b) Clean run → the out-of-line key is deleted and the capture is committed,
+    //     in one multi-store transaction over privilegedEvidence + rejections.
+    const outcome = await discardUnreadablePrivilegedEvidenceRow(store, realInput());
+    expect(outcome.kind).toBe('discarded');
+    expect(await listRawUnreadablePrivilegedEvidence(store)).toEqual([]);
+    const captures = await listDiscardedPrivilegedEvidenceCaptures(store);
+    expect(captures).toHaveLength(1);
+    expect(captures[0].rawKey).toBe(REAL_KEY);
+    expect(captures[0].rawValue).toEqual(REAL_VALUE);
+
+    await clearRealStores(store);
   });
 });

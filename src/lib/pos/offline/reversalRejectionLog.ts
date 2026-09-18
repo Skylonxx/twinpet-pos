@@ -70,6 +70,29 @@ export async function recordReversalRejection(
   }
 }
 
+/** The two source kinds an H7-A record can carry (restated locally — no union import). */
+const REVERSAL_REJECTION_SOURCE_TYPES: ReadonlySet<string> = new Set(['transfer', 'receiving']);
+
+/**
+ * POSITIVE shape predicate for an H7-A rejection record.
+ *
+ * The `rejections` store is shared: the SEC-001 N3 unreadable-row recovery writes
+ * its forensic captures here too, inside the same transaction that deletes the
+ * row. This reader therefore selects only the shape it owns, rather than
+ * excluding foreign shapes by name — a positive test fails closed against every
+ * future co-tenant, not just the one that exists today. The record model itself
+ * is unchanged; nothing here widens `ReversalRejectionRecord`.
+ */
+function isReversalRejectionRecord(value: unknown): value is ReversalRejectionRecord {
+  if (value === null || typeof value !== 'object') return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.recordId === 'string' &&
+    typeof candidate.sourceType === 'string' &&
+    REVERSAL_REJECTION_SOURCE_TYPES.has(candidate.sourceType)
+  );
+}
+
 /**
  * List durable rejection records from THIS device's `rejections` store, newest-first by
  * `createdAt`. Optional in-memory filters by `sourceType` and/or `branchId`. Read-only;
@@ -83,7 +106,7 @@ export async function listReversalRejections(
   },
 ): Promise<ReversalRejectionRecord[]> {
   return store.transact(['rejections'], 'readonly', async (txn) => {
-    const all = await txn.getAll<ReversalRejectionRecord>('rejections');
+    const all = (await txn.getAll<unknown>('rejections')).filter(isReversalRejectionRecord);
     const filtered = all.filter(
       (r) =>
         (filter?.sourceType === undefined || r.sourceType === filter.sourceType) &&
