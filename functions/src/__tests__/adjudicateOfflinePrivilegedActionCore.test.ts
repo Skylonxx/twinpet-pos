@@ -355,9 +355,20 @@ function makeDb(seed: Record<string, Doc> = {}) {
     };
   }
   let txMutex: Promise<void> = Promise.resolve();
+  // Interleaving seam: fires once, on entry to the FIRST transaction, before
+  // any of its reads. Lets a test mutate live state in the exact window between
+  // preflight (already read) and the first-consume transaction (about to read).
+  let beforeTransaction: (() => void) | null = null;
+  let beforeTransactionFireCount = 0;
   const database: any = {
     collection: (c: string) => ({ __col: true, path: c, doc: (id: string) => docRef(`${c}/${id}`) }),
     runTransaction: async (fn: (tx: unknown) => Promise<unknown>) => {
+      if (beforeTransaction) {
+        const hook = beforeTransaction;
+        beforeTransaction = null; // self-clearing: exactly one firing
+        beforeTransactionFireCount += 1;
+        hook();
+      }
       let release!: () => void;
       const held = new Promise<void>((r) => {
         release = r;
@@ -390,6 +401,10 @@ function makeDb(seed: Record<string, Doc> = {}) {
     failReads,
     readsIn: (collection: string) => reads.filter((p) => p.startsWith(`${collection}/`)),
     writesIn: (collection: string) => writes.filter((p) => p.startsWith(`${collection}/`)),
+    setBeforeFirstTransaction: (fn: () => void) => {
+      beforeTransaction = fn;
+    },
+    beforeTransactionFireCount: () => beforeTransactionFireCount,
     resetSpies: () => {
       reads.length = 0;
       writes.length = 0;
@@ -559,8 +574,9 @@ describe('D-1B contract surface', () => {
     }
     expect(emitted.size).toBe(32);
     // `terminalize` is the only producer of a TERMINALLY_REJECTED record outside
-    // the consume transaction's two in-transaction target checks, and each call
-    // creates exactly one record via `tx.create`.
+    // the consume transaction's own in-transaction refusal branch (the target
+    // checks plus the OPTION_A_LINEARIZE authority checks, which share the one
+    // `tx.create`), and each call creates exactly one record via `tx.create`.
     const terminalCreates = [
       ...src.matchAll(/tx\.create\(adjudicationRef,\s*\{[\s\S]{0,400}?state: 'TERMINALLY_REJECTED'/g),
     ].length;
@@ -2544,4 +2560,420 @@ describe('IR-007 — source-level no-fallback regression', () => {
     expect(src).not.toMatch(/manualAttentionReason\s*\?\?/);
     expect(src).not.toMatch(/executionId\s*==\s*null/);
   });
+});
+
+// ── OPTION_A_LINEARIZE — first-consume authority linearization ──────────────
+//
+// Every case here exercises the same window: preflight has already read live
+// authority and passed, and a sentinel then changes before the first-consume
+// transaction reads it. `setBeforeFirstTransaction` fires exactly once, on
+// entry to the first transaction, which on a Stage-F happy path IS the consume
+// transaction (no `terminalize()` runs when preflight passes). Each test
+// asserts the hook fired, so a future refactor that inserts an earlier
+// transaction fails loudly instead of silently testing nothing.
+
+const MANAGER_CREDENTIAL_SEED: Doc = {
+  pinHash: '$2b$10$realhashplaceholderxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+  algo: 'bcrypt',
+  cost: 10,
+  credentialVersion: 5,
+  credentialState: 'rotated_authoritative',
+  disabled: false,
+  updatedBy: 't',
+};
+
+const activeDeviceSeed = (over: Doc = {}): Doc => ({
+  status: 'ACTIVE',
+  deviceKeyVersion: 3,
+  branchId: BRANCH,
+  validatedDevProofPublicKeyBase64: rawPublicKeyBase64(deviceKey.publicKey),
+  ...over,
+});
+
+/** The canonical void executor, wrapped so a test can prove it never ran. */
+function countingVoidExecutor() {
+  const calls: unknown[] = [];
+  const executeCanonicalVoid: NonNullable<AdjudicateOfflinePrivilegedActionDeps['executeCanonicalVoid']> =
+    async (_d, orderRef, options) => {
+      calls.push(options);
+      await orderRef.set(
+        {
+          status: 'voided',
+          voidReconciled: true,
+          privilegedVoidExecutionId: options?.privilegedVoidExecutionId,
+          privilegedVoidOacId: options?.oacId,
+          ...(options?.authoritativeActorStaffId != null ? { voidedBy: options.authoritativeActorStaffId } : {}),
+        },
+        { merge: true },
+      );
+      return voidApplied;
+    };
+  return { calls, executeCanonicalVoid };
+}
+
+describe('OPTION_A_LINEARIZE — authority is re-read inside the first-consume transaction', () => {
+  test('PRIMARY — a manager credential rotation landing before first consume is terminally refused', async () => {
+    const db = makeDb();
+    const paa1 = buildPaa1();
+    const { calls, executeCanonicalVoid } = countingVoidExecutor();
+    db.setBeforeFirstTransaction(() => {
+      db.store.set('userCredentials/manager-1', { ...MANAGER_CREDENTIAL_SEED, credentialVersion: 6 });
+    });
+
+    const res = await run(db, paa1.request, relayAuth(), { executeCanonicalVoid });
+
+    // The interleaving actually happened, at the first transaction boundary.
+    expect(db.beforeTransactionFireCount()).toBe(1);
+    // Preflight saw the valid credential; the transaction saw the rotated one.
+    // Exactly two reads: F11 preflight, then the transactional re-read.
+    expect(db.readsIn('userCredentials')).toEqual([
+      'userCredentials/manager-1',
+      'userCredentials/manager-1',
+    ]);
+
+    expect(res).toMatchObject({
+      family: 'ADJUDICATION',
+      kind: 'REJECTED',
+      rejectionReason: 'manager_credential_version_changed',
+      terminal: true,
+      idempotent: false,
+    });
+
+    // A durable refusal, never a consume.
+    const record = db.store.get(`privilegedOfflineAdjudications/${paa1.adjudicationId}`)!;
+    expect(record.state).toBe('TERMINALLY_REJECTED');
+    expect(record.rejectionReason).toBe('manager_credential_version_changed');
+    expect(record.consumedAtMillis).toBeNull();
+    expect(record.offlineExecutionId).toBeNull();
+    expect(record.terminalizedAtMillis).toBe(NOW);
+    expect(parseOfflineAdjudicationRecord(record)).not.toBeNull();
+    expect(db.writesIn('privilegedOfflineAdjudications')).toHaveLength(1);
+
+    // The order is untouched and downstream execution never ran.
+    expect(db.writesIn('asyncOrders')).toHaveLength(0);
+    expect(db.store.get('asyncOrders/order-1')!.status).toBe('settled');
+    expect(db.store.get('asyncOrders/order-1')!.privilegedVoidExecutionId).toBeUndefined();
+    expect(calls).toHaveLength(0);
+  });
+
+  test.each<[string, (db: ReturnType<typeof makeDb>) => void, string]>([
+    [
+      'manager deactivated',
+      (db) =>
+        db.store.set('users/manager-1', {
+          isActive: false,
+          deletedAt: null,
+          authVersion: 9,
+          role: 'manager',
+          branchIds: [BRANCH],
+        }),
+      'manager_inactive_or_not_privileged',
+    ],
+    [
+      'manager demoted',
+      (db) =>
+        db.store.set('users/manager-1', {
+          isActive: true,
+          deletedAt: null,
+          authVersion: 9,
+          role: 'staff',
+          branchIds: [BRANCH],
+        }),
+      'manager_inactive_or_not_privileged',
+    ],
+    [
+      'manager branch moved',
+      (db) =>
+        db.store.set('users/manager-1', {
+          isActive: true,
+          deletedAt: null,
+          authVersion: 9,
+          role: 'manager',
+          branchIds: ['OTHER'],
+        }),
+      'manager_branch_mismatch',
+    ],
+    [
+      'initiator deactivated',
+      (db) =>
+        db.store.set('users/staff-1', {
+          isActive: false,
+          deletedAt: null,
+          authVersion: 4,
+          role: 'staff',
+          branchIds: [BRANCH],
+        }),
+      'initiator_inactive',
+    ],
+    [
+      'initiator session force-invalidated (authVersion bumped)',
+      (db) =>
+        db.store.set('users/staff-1', {
+          isActive: true,
+          deletedAt: null,
+          authVersion: 5,
+          role: 'staff',
+          branchIds: [BRANCH],
+        }),
+      'initiator_auth_version_changed',
+    ],
+    [
+      'device revoked',
+      (db) => db.store.set(`privilegedDeviceRegistrations/${DEVICE_HEX}`, activeDeviceSeed({ status: 'REVOKED' })),
+      'device_not_active',
+    ],
+    [
+      'device registration deleted',
+      (db) => db.store.delete(`privilegedDeviceRegistrations/${DEVICE_HEX}`),
+      'device_not_active',
+    ],
+    [
+      'device rebound to another branch',
+      (db) => db.store.set(`privilegedDeviceRegistrations/${DEVICE_HEX}`, activeDeviceSeed({ branchId: 'OTHER' })),
+      'device_branch_mismatch',
+    ],
+    [
+      'global revocation epoch bumped (emergency revoke)',
+      (db) =>
+        db.store.set('privilegedRevocationState/current', {
+          revocationEpoch: 4,
+          updatedAtServerMs: 1,
+          updatedBy: 'emergency',
+          reason: 'compromise',
+        }),
+      'revocation_epoch_changed',
+    ],
+    [
+      'manager role loses pos_void',
+      (db) =>
+        db.store.set('settings/_rolePermissions', {
+          rolePermissions: {
+            admin: ['pos_sale', 'pos_void'],
+            manager: ['pos_sale'],
+            staff: ['pos_sale', 'pos_void'],
+          },
+        }),
+      'manager_permission_revoked',
+    ],
+    [
+      'initiator role loses pos_void',
+      (db) =>
+        db.store.set('settings/_rolePermissions', {
+          rolePermissions: {
+            admin: ['pos_sale', 'pos_void'],
+            manager: ['pos_sale', 'pos_void'],
+            staff: ['pos_sale'],
+          },
+        }),
+      'initiator_permission_revoked',
+    ],
+    [
+      'staged-deny round opens for the manager role',
+      (db) =>
+        db.store.set('privilegedStagedRoleDeny/manager', {
+          state: 'DRAINING',
+          changeId: 'change-1',
+          deniedPermissions: ['pos_void'],
+        }),
+      'manager_permission_revoked',
+    ],
+    [
+      'staged-deny round opens for the initiator role',
+      (db) =>
+        db.store.set('privilegedStagedRoleDeny/staff', {
+          state: 'VERIFYING',
+          changeId: 'change-1',
+          deniedPermissions: ['pos_void'],
+        }),
+      'initiator_permission_revoked',
+    ],
+    [
+      'a present-but-malformed staged-deny head still fails closed (C-A-RC-003-R1)',
+      (db) =>
+        db.store.set('privilegedStagedRoleDeny/manager', {
+          state: 'BOGUS',
+          changeId: 'change-1',
+          deniedPermissions: ['pos_void'],
+        }),
+      'manager_permission_revoked',
+    ],
+  ])('sentinel interleaving: %s', async (label, mutate, reason) => {
+    const db = makeDb();
+    const paa1 = buildPaa1();
+    const { calls, executeCanonicalVoid } = countingVoidExecutor();
+    db.setBeforeFirstTransaction(() => mutate(db));
+
+    const res = await run(db, paa1.request, relayAuth(), { executeCanonicalVoid });
+
+    expect(db.beforeTransactionFireCount(), label).toBe(1);
+    expect(res, label).toMatchObject({
+      family: 'ADJUDICATION',
+      kind: 'REJECTED',
+      rejectionReason: reason,
+      terminal: true,
+      idempotent: false,
+    });
+
+    const record = db.store.get(`privilegedOfflineAdjudications/${paa1.adjudicationId}`)!;
+    expect(record.state, label).toBe('TERMINALLY_REJECTED');
+    expect(record.rejectionReason, label).toBe(reason);
+    expect(record.consumedAtMillis, label).toBeNull();
+    expect(record.offlineExecutionId, label).toBeNull();
+    expect(parseOfflineAdjudicationRecord(record), label).not.toBeNull();
+    expect(db.writesIn('privilegedOfflineAdjudications'), label).toHaveLength(1);
+    expect(db.writesIn('asyncOrders'), label).toHaveLength(0);
+    expect(db.store.get('asyncOrders/order-1')!.status, label).toBe('settled');
+    expect(calls, label).toHaveLength(0);
+  });
+
+  test('CONTROL — with no mutation at the boundary the frame still consumes and completes', async () => {
+    const db = makeDb();
+    const paa1 = buildPaa1();
+    const { calls, executeCanonicalVoid } = countingVoidExecutor();
+    db.setBeforeFirstTransaction(() => {
+      /* the interleaving window opens and nothing changes */
+    });
+
+    const res = await run(db, paa1.request, relayAuth(), { executeCanonicalVoid });
+
+    expect(db.beforeTransactionFireCount()).toBe(1);
+    expect(res).toMatchObject({ kind: 'ACCEPTED', outcomeKind: 'VOID_APPLIED', idempotent: false });
+    expect(db.store.get(`privilegedOfflineAdjudications/${paa1.adjudicationId}`)!.state).toBe('COMPLETED');
+    expect(calls).toHaveLength(1);
+  });
+
+  test('CONTROL — the relay caller is not bound-action authority: deactivating it at the boundary still consumes', async () => {
+    const db = makeDb();
+    const paa1 = buildPaa1();
+    const { calls, executeCanonicalVoid } = countingVoidExecutor();
+    db.setBeforeFirstTransaction(() => {
+      db.store.set('users/relay-1', {
+        isActive: false,
+        deletedAt: NOW,
+        authVersion: 0,
+        role: 'staff',
+        branchIds: [BRANCH],
+      });
+    });
+
+    const res = await run(db, paa1.request, relayAuth(), { executeCanonicalVoid });
+
+    expect(db.beforeTransactionFireCount()).toBe(1);
+    expect(res).toMatchObject({ kind: 'ACCEPTED', outcomeKind: 'VOID_APPLIED' });
+    expect(calls).toHaveLength(1);
+    // The relay document is read exactly twice, both at the P0 preflight gate,
+    // and never inside the transaction. Model B: transport, zero authority.
+    expect(db.readsIn('users').filter((p) => p === 'users/relay-1')).toHaveLength(2);
+    // The bound parties ARE re-read: once at preflight, once transactionally.
+    expect(db.readsIn('users').filter((p) => p === 'users/staff-1')).toHaveLength(2);
+    expect(db.readsIn('users').filter((p) => p === 'users/manager-1')).toHaveLength(2);
+  });
+
+  test('CONTROL — benign re-enrolment is not revocation: a key-version bump alone still consumes', async () => {
+    const db = makeDb();
+    const paa1 = buildPaa1();
+    const { calls, executeCanonicalVoid } = countingVoidExecutor();
+    db.setBeforeFirstTransaction(() => {
+      // Re-enrolment: ACTIVE, same branch, new key material at a new version.
+      db.store.set(
+        `privilegedDeviceRegistrations/${DEVICE_HEX}`,
+        activeDeviceSeed({
+          deviceKeyVersion: 4,
+          validatedDevProofPublicKeyBase64: rawPublicKeyBase64(generateKeyPairSync('ed25519').publicKey),
+        }),
+      );
+    });
+
+    const res = await run(db, paa1.request, relayAuth(), { executeCanonicalVoid });
+
+    expect(db.beforeTransactionFireCount()).toBe(1);
+    expect(res).toMatchObject({ kind: 'ACCEPTED', outcomeKind: 'VOID_APPLIED' });
+    expect(calls).toHaveLength(1);
+    // The frame was already authenticated at F2/F3 against the key that signed
+    // it; the transaction re-reads status/branch only.
+    expect(db.readsIn('privilegedDeviceRegistrations')).toHaveLength(2);
+  });
+
+  test('CONTROL — an existing CONSUMED_PENDING_EXECUTION replay never re-reads transactional authority', async () => {
+    const db = makeDb();
+    const paa1 = buildPaa1();
+    // First pass consumes but the canonical void fails, leaving the record.
+    await run(db, paa1.request, relayAuth(), {
+      executeCanonicalVoid: async () => {
+        throw new Error('transient');
+      },
+    });
+    expect(db.store.get(`privilegedOfflineAdjudications/${paa1.adjudicationId}`)!.state).toBe(
+      'CONSUMED_PENDING_EXECUTION',
+    );
+
+    // Now revoke the manager every way at once, then replay.
+    db.store.set('userCredentials/manager-1', { ...MANAGER_CREDENTIAL_SEED, credentialVersion: 6 });
+    db.store.set('users/manager-1', {
+      isActive: false,
+      deletedAt: NOW,
+      authVersion: 77,
+      role: 'staff',
+      branchIds: [],
+    });
+    db.store.set('privilegedRevocationState/current', {
+      revocationEpoch: 9,
+      updatedAtServerMs: 1,
+      updatedBy: 'emergency',
+      reason: null,
+    });
+    db.store.set('privilegedStagedRoleDeny/manager', {
+      state: 'DRAINING',
+      changeId: 'change-1',
+      deniedPermissions: ['pos_void'],
+    });
+    db.resetSpies();
+
+    const replay = await run(db, paa1.request);
+
+    expect(replay).toMatchObject({ kind: 'ACCEPTED', outcomeKind: 'VOID_APPLIED' });
+    expect(db.store.get(`privilegedOfflineAdjudications/${paa1.adjudicationId}`)!.state).toBe('COMPLETED');
+    // Not one of the linearized sentinels is consulted on the replay path.
+    expect(db.readsIn('userCredentials')).toHaveLength(0);
+    expect(db.readsIn('privilegedRevocationState')).toHaveLength(0);
+    expect(db.readsIn('privilegedDeviceRegistrations')).toHaveLength(0);
+    expect(db.readsIn('users').every((p) => p === 'users/relay-1')).toBe(true);
+    // The single settings/staged-deny read is the P0 relay gate, not the
+    // transaction: the relay gate is unchanged and still runs.
+    expect(db.readsIn('settings')).toEqual(['settings/_rolePermissions']);
+    expect(db.readsIn('privilegedStagedRoleDeny')).toEqual(['privilegedStagedRoleDeny/staff']);
+  });
+
+  test.each<[string, string]>([
+    ['role-permission matrix', 'settings/_rolePermissions'],
+    ['initiator staged-deny head', 'privilegedStagedRoleDeny/staff'],
+    ['manager staged-deny head', 'privilegedStagedRoleDeny/manager'],
+    ['manager credential', 'userCredentials/manager-1'],
+    ['initiator user document', 'users/staff-1'],
+  ])(
+    'a transaction-bound %s read FAILURE propagates for retry and never becomes a durable revocation',
+    async (label, path) => {
+      const db = makeDb();
+      const paa1 = buildPaa1();
+      const { calls, executeCanonicalVoid } = countingVoidExecutor();
+      // Preflight succeeds; the failure is injected only for the transaction.
+      db.setBeforeFirstTransaction(() => db.failReads.add(path));
+
+      const res = await run(db, paa1.request, relayAuth(), { executeCanonicalVoid });
+
+      expect(db.beforeTransactionFireCount(), label).toBe(1);
+      // A transient read failure is not proof of revocation: it must surface as
+      // the retryable transaction outcome, never as a terminal verdict.
+      expect(res, label).toMatchObject({
+        family: 'ADJUDICATION',
+        kind: 'RETRYABLE',
+        retryReason: 'transaction_contention',
+        terminal: false,
+      });
+      expect(db.writesIn('privilegedOfflineAdjudications'), label).toHaveLength(0);
+      expect(db.store.get(`privilegedOfflineAdjudications/${paa1.adjudicationId}`), label).toBeUndefined();
+      expect(db.writesIn('asyncOrders'), label).toHaveLength(0);
+      expect(calls, label).toHaveLength(0);
+    },
+  );
 });

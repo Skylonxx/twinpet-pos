@@ -26,8 +26,14 @@ import { type DocumentData, type DocumentReference, type Firestore } from 'fireb
 import { evaluateFreshPrivilegedAuthority, type AuthLike } from './authorityFence';
 import { isUsableForLogin, readUserCredential } from './credentialStore';
 import {
+  StagedRoleDenyHeadMalformedError,
+  decideLiveRolePermission,
+  firestoreStagedRoleDenyHeadReader,
   liveRoleHoldsPosVoid,
+  readRolePermissionsDoc,
+  type RolePermissionsDocSnapshot,
   type RolePermissionsReader,
+  type StagedRoleDenyHead,
   type StagedRoleDenyHeadReader,
 } from './privilegedActionAuthority';
 import {
@@ -698,6 +704,11 @@ function liveBranchIds(user: DocumentData): string[] {
   return Array.isArray(user.branchIds) ? user.branchIds.filter((v): v is string => typeof v === 'string') : [];
 }
 
+/** Absent/non-finite `authVersion` reads as 0 — the same default the fence uses. */
+function liveAuthVersion(user: DocumentData): number {
+  return typeof user.authVersion === 'number' && Number.isFinite(user.authVersion) ? user.authVersion : 0;
+}
+
 function hasLiveBranchAccess(branchIds: string[], branchId: string): boolean {
   return branchIds.includes('ALL') || branchIds.includes(branchId);
 }
@@ -707,6 +718,29 @@ export function relayBranchEligible(role: string | null, branchIds: string[], br
   if (role === 'admin') return hasLiveBranchAccess(branchIds, branchId);
   if (role === 'manager' || role === 'staff') return requesterBranchEligible(branchIds, branchId);
   return false;
+}
+
+/**
+ * A staged-deny head as observed inside the first-consume transaction.
+ * `malformed` carries the C-A-RC-003-R1 semantic fail-closed case — a present
+ * head that does not parse — as a *value*, so it can deny without being
+ * conflated with an infrastructure read failure, which is never a denial and
+ * must escape the transaction callback instead (LZ-3).
+ */
+type LinearizedStagedDeny = { malformed: true } | { malformed: false; head: StagedRoleDenyHead | null };
+
+/**
+ * The live `pos_void` decision for a role, evaluated against snapshots already
+ * enrolled in the transaction's read set. Reuses `decideLiveRolePermission`
+ * verbatim — the matrix semantics are never restated here.
+ */
+function linearizedRoleHoldsPosVoid(
+  role: string | null,
+  snapshot: RolePermissionsDocSnapshot,
+  staged: LinearizedStagedDeny,
+): boolean {
+  if (staged.malformed) return false;
+  return decideLiveRolePermission(role, PRIVILEGED_REQUESTER_PERMISSION, snapshot, staged.head).allowed;
 }
 
 function tokenHasPermission(auth: AuthLike, perm: string): boolean {
@@ -1268,10 +1302,7 @@ export async function performAdjudicateOfflinePrivilegedAction(
     if (initiatorRole !== 'admin' && initiatorRole !== 'manager' && initiatorRole !== 'staff') {
       return await terminalize('initiator_inactive');
     }
-    const initiatorAuthVersion =
-      typeof initiator.authVersion === 'number' && Number.isFinite(initiator.authVersion)
-        ? initiator.authVersion
-        : 0;
+    const initiatorAuthVersion = liveAuthVersion(initiator);
     if (initiatorAuthVersion !== paa1.ssa1AuthVersionAtIssue) {
       return await terminalize('initiator_auth_version_changed');
     }
@@ -1298,8 +1329,7 @@ export async function performAdjudicateOfflinePrivilegedAction(
     ) {
       return await terminalize('manager_inactive_or_not_privileged');
     }
-    const managerAuthVersion =
-      typeof manager.authVersion === 'number' && Number.isFinite(manager.authVersion) ? manager.authVersion : 0;
+    const managerAuthVersion = liveAuthVersion(manager);
     if (managerAuthVersion !== paa1.managerAuthVersionAtIssue) {
       return await terminalize('manager_auth_version_changed');
     }
@@ -1381,6 +1411,12 @@ export async function performAdjudicateOfflinePrivilegedAction(
       audience: PRIVILEGED_VOID_AUDIENCE,
     });
 
+    const initiatorRef = database.collection(COLLECTIONS.users).doc(paa1.initiatingStaffId);
+    const managerRef = database.collection(COLLECTIONS.users).doc(paa1.approvingManagerStaffId);
+    const deviceRef = database
+      .collection(COLLECTIONS.deviceRegistrations)
+      .doc(binding.securityDeviceIdHex);
+
     let adopted: unknown | undefined;
     let terminalizedInTransaction: OfflineAdjudicationRejectionReason | null = null;
     try {
@@ -1393,6 +1429,136 @@ export async function performAdjudicateOfflinePrivilegedAction(
           adopted = snap.data();
           return;
         }
+
+        // ── OPTION_A_LINEARIZE ──────────────────────────────────────────────
+        // LZ-1 — every MUTABLE authority sentinel is re-read here, inside the
+        // transaction that performs the irreversible consume, so the consume is
+        // conditioned on authority that is current at that exact boundary and
+        // not merely at preflight. Firestore enrols each read document in the
+        // transaction's read set: a mutation landing after a read but before
+        // the commit aborts the commit and re-runs this callback against fresh
+        // snapshots, so no authority change can slip through the window.
+        //
+        // These reads are reached ONLY on the record-absent path: the existing
+        // record adopted above returns before any of them, because an already
+        // decided adjudication must replay its stored verdict verbatim and is
+        // never re-authorized (IR-007 / TR-1). Linearization is first-consume only.
+        //
+        // The relay caller is deliberately NOT re-read. Under Model B it is
+        // transport with zero authority over the bound action (see the header),
+        // the void is attributed to the initiator, and the durable rejection
+        // vocabulary has no relay reason. Its preflight gate is unchanged.
+        const freshInitiatorSnap = await tx.get(initiatorRef);
+        const freshManagerSnap = await tx.get(managerRef);
+        const freshCredential = await readUserCredential(database, paa1.approvingManagerStaffId, tx);
+        const freshDeviceSnap = await tx.get(deviceRef);
+        const freshRevocationEpoch = await readRevocationEpoch(database, tx);
+        // Read once; evaluated below against BOTH the initiator and the manager
+        // role, so the two decisions can never see two different snapshots.
+        const freshRolePermissions = await readRolePermissionsDoc(database, tx);
+
+        const freshInitiator = freshInitiatorSnap.exists
+          ? ((freshInitiatorSnap.data() ?? {}) as DocumentData)
+          : null;
+        const freshManager = freshManagerSnap.exists ? ((freshManagerSnap.data() ?? {}) as DocumentData) : null;
+        const freshInitiatorRole = freshInitiator == null ? null : liveRole(freshInitiator);
+        const freshManagerRole = freshManager == null ? null : liveRole(freshManager);
+
+        const stagedDenyInTransaction = firestoreStagedRoleDenyHeadReader(database, tx);
+        const readStagedDeny = async (role: string | null): Promise<LinearizedStagedDeny> => {
+          // No role, no document to key a read by. Such a frame already fails
+          // earlier in the precedence chain below (initiator_inactive /
+          // manager_inactive_or_not_privileged), exactly as it does at F10/F11,
+          // so skipping the read changes no outcome.
+          if (role == null || role === '') return { malformed: false, head: null };
+          try {
+            return { malformed: false, head: await stagedDenyInTransaction(role) };
+          } catch (err) {
+            // LZ-3 — the one distinction that must not be collapsed. A present
+            // but unparseable head is evidence of an active staging round that
+            // cannot be verified, and still fails closed (C-A-RC-003-R1). A
+            // Firestore/transaction read error is no evidence at all: it must
+            // escape so the SDK can retry and, on exhaustion, the outer handler
+            // returns RETRYABLE/transaction_contention. Swallowing it here
+            // would durably terminalize a transient failure as a revocation.
+            if (err instanceof StagedRoleDenyHeadMalformedError) return { malformed: true };
+            throw err;
+          }
+        };
+        const freshInitiatorStagedDeny = await readStagedDeny(freshInitiatorRole);
+        // Staged-deny heads are keyed by ROLE, not by user: when both parties
+        // hold the same role the two sentinels are the same document, and it is
+        // read once.
+        const freshManagerStagedDeny =
+          freshManagerRole != null && freshManagerRole === freshInitiatorRole
+            ? freshInitiatorStagedDeny
+            : await readStagedDeny(freshManagerRole);
+
+        const freshRegistration = parseDeviceRegistration(
+          freshDeviceSnap.exists ? freshDeviceSnap.data() : null,
+        );
+
+        // LZ-2 — evaluation follows the F5→F14 preflight precedence exactly, so
+        // the reason reported for a given condition is the same whether the
+        // mutation landed just before or just after the preflight read.
+        if (freshRegistration == null || freshRegistration.status !== 'ACTIVE') {
+          // Absent or unparseable is treated as not-active: by this point the
+          // frame is authenticated, so the pre-authentication PROTOCOL reasons
+          // are no longer in scope and the durable vocabulary is closed.
+          terminalizedInTransaction = 'device_not_active';
+        } else if (freshRegistration.branchId !== paa1.branchId) {
+          terminalizedInTransaction = 'device_branch_mismatch';
+        } else if (freshInitiator == null) {
+          terminalizedInTransaction = 'initiator_not_found';
+        } else if (
+          freshInitiator.isActive !== true ||
+          freshInitiator.deletedAt != null ||
+          (freshInitiatorRole !== 'admin' && freshInitiatorRole !== 'manager' && freshInitiatorRole !== 'staff')
+        ) {
+          terminalizedInTransaction = 'initiator_inactive';
+        } else if (liveAuthVersion(freshInitiator) !== paa1.ssa1AuthVersionAtIssue) {
+          terminalizedInTransaction = 'initiator_auth_version_changed';
+        } else if (
+          !linearizedRoleHoldsPosVoid(freshInitiatorRole, freshRolePermissions, freshInitiatorStagedDeny)
+        ) {
+          terminalizedInTransaction = 'initiator_permission_revoked';
+        } else if (!relayBranchEligible(freshInitiatorRole, liveBranchIds(freshInitiator), paa1.branchId)) {
+          terminalizedInTransaction = 'initiator_branch_mismatch';
+        } else if (freshManager == null) {
+          terminalizedInTransaction = 'manager_not_found';
+        } else if (
+          freshManager.isActive !== true ||
+          freshManager.deletedAt != null ||
+          (freshManagerRole !== 'manager' && freshManagerRole !== 'admin')
+        ) {
+          terminalizedInTransaction = 'manager_inactive_or_not_privileged';
+        } else if (liveAuthVersion(freshManager) !== paa1.managerAuthVersionAtIssue) {
+          terminalizedInTransaction = 'manager_auth_version_changed';
+        } else if (
+          !isUsableForLogin(freshCredential) ||
+          freshCredential.credentialState !== 'rotated_authoritative' ||
+          freshCredential.credentialVersion !== paa1.managerCredentialVersionAtIssue
+        ) {
+          terminalizedInTransaction = 'manager_credential_version_changed';
+        } else if (
+          !linearizedRoleHoldsPosVoid(freshManagerRole, freshRolePermissions, freshManagerStagedDeny)
+        ) {
+          terminalizedInTransaction = 'manager_permission_revoked';
+        } else if (!approverBranchEligible(freshManagerRole, liveBranchIds(freshManager), paa1.branchId)) {
+          terminalizedInTransaction = 'manager_branch_mismatch';
+        } else if (freshRevocationEpoch !== paa1.revocationEpochAtIssue) {
+          terminalizedInTransaction = 'revocation_epoch_changed';
+        } else if (!freshOrderSnap.exists) {
+          terminalizedInTransaction = 'target_order_not_found';
+        } else if (isAlreadyCanonicallyVoided((freshOrderSnap.data() ?? {}) as DocumentData)) {
+          terminalizedInTransaction = 'target_already_voided';
+        }
+        // `deviceKeyVersion` is deliberately NOT re-compared. It is an
+        // authentication input, discharged at F2/F3 against the snapshot whose
+        // key actually verified the frame; re-enrolment bumps it while the
+        // device stays ACTIVE, and re-enrolment is not revocation. `status` is
+        // the fact that withdraws authority, and it is checked above.
+
         const base = {
           ...binding,
           schemaVersion: OFFLINE_ADJUDICATION_RECORD_SCHEMA_VERSION,
@@ -1405,11 +1571,6 @@ export async function performAdjudicateOfflinePrivilegedAction(
           firstRelayCallerStaffId: callerStaffId,
           completingRelayCallerStaffId: null,
         };
-        if (!freshOrderSnap.exists) {
-          terminalizedInTransaction = 'target_order_not_found';
-        } else if (isAlreadyCanonicallyVoided((freshOrderSnap.data() ?? {}) as DocumentData)) {
-          terminalizedInTransaction = 'target_already_voided';
-        }
         if (terminalizedInTransaction != null) {
           tx.create(adjudicationRef, {
             ...base,

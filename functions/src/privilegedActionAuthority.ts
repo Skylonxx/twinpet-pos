@@ -11,7 +11,7 @@
  * reused here: an absent/malformed privileged source is deny, not a grant.
  */
 
-import type { Firestore } from 'firebase-admin/firestore';
+import type { Firestore, Transaction } from 'firebase-admin/firestore';
 import { PRIVILEGED_REQUESTER_PERMISSION } from './privilegedActionRegistry';
 
 export const ROLE_PERMISSIONS_COLLECTION = 'settings';
@@ -40,8 +40,20 @@ export type RolePermissionsDocSnapshot = {
 
 export type RolePermissionsReader = () => Promise<RolePermissionsDocSnapshot>;
 
-export async function readRolePermissionsDoc(database: Firestore): Promise<RolePermissionsDocSnapshot> {
-  const snap = await database.collection(ROLE_PERMISSIONS_COLLECTION).doc(ROLE_PERMISSIONS_DOC_ID).get();
+/**
+ * Reads the live role-permission matrix. Passing `tx` enrols the document in a
+ * Firestore transaction's read set instead of reading it at ambient time, so a
+ * caller that must decide permission *at* a transactional boundary reads the
+ * same document through the same parser rather than reimplementing it. A read
+ * failure is not caught here: it propagates to the caller, which is what lets a
+ * transactional caller retry rather than mistake a read error for a denial.
+ */
+export async function readRolePermissionsDoc(
+  database: Firestore,
+  tx?: Transaction,
+): Promise<RolePermissionsDocSnapshot> {
+  const ref = database.collection(ROLE_PERMISSIONS_COLLECTION).doc(ROLE_PERMISSIONS_DOC_ID);
+  const snap = tx ? await tx.get(ref) : await ref.get();
   return { exists: snap.exists === true, data: snap.exists ? snap.data() : undefined };
 }
 
@@ -99,9 +111,30 @@ function parseStagedRoleDenyHead(roleId: string, data: unknown): StagedRoleDenyH
   return { roleId, state: raw.state, changeId: raw.changeId, deniedPermissions: raw.deniedPermissions as string[] };
 }
 
-export function firestoreStagedRoleDenyHeadReader(database: Firestore): StagedRoleDenyHeadReader {
+/**
+ * Thrown for the *semantic* fail-closed case only: a staged-deny head that is
+ * present but does not parse. It is deliberately distinguishable from an
+ * infrastructure read failure, which is a different thing entirely — one is
+ * evidence that a staging round exists and cannot be trusted, the other is no
+ * evidence at all. `resolveLivePrivilegedPermission` catches both identically
+ * (`staged_deny_unreadable`), so this adds no new public authority semantics;
+ * it exists so a transactional caller can fail closed on the first and retry on
+ * the second instead of terminalizing a transient error as a revocation.
+ */
+export class StagedRoleDenyHeadMalformedError extends Error {
+  constructor(public readonly roleId: string) {
+    super(`staged-deny head for role "${roleId}" exists but is malformed/unverifiable`);
+    this.name = 'StagedRoleDenyHeadMalformedError';
+  }
+}
+
+export function firestoreStagedRoleDenyHeadReader(
+  database: Firestore,
+  tx?: Transaction,
+): StagedRoleDenyHeadReader {
   return async (roleId: string) => {
-    const snap = await database.collection(STAGED_ROLE_DENY_COLLECTION).doc(roleId).get();
+    const ref = database.collection(STAGED_ROLE_DENY_COLLECTION).doc(roleId);
+    const snap = tx ? await tx.get(ref) : await ref.get();
     if (!snap.exists) return null;
     const parsed = parseStagedRoleDenyHead(roleId, snap.data());
     if (parsed == null) {
@@ -110,7 +143,7 @@ export function firestoreStagedRoleDenyHeadReader(database: Firestore): StagedRo
       // existing. Collapsing it to `null` here would let resolveLivePrivilegedPermission
       // read it as absence and fall through to granting. Throw so the caller's
       // existing fail-closed catch (staged_deny_unreadable) applies instead.
-      throw new Error(`staged-deny head for role "${roleId}" exists but is malformed/unverifiable`);
+      throw new StagedRoleDenyHeadMalformedError(roleId);
     }
     return parsed;
   };
