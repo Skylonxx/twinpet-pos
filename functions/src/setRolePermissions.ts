@@ -42,6 +42,18 @@ export type SetRolePermissionsResponse =
   | { ok: true; requiresStaging: true; changeId: string }
   | { ok: false; code: SetRolePermissionsFailureCode };
 
+/**
+ * Carries an expected failure out of the role-permission transaction so it
+ * surfaces as the existing `{ok:false, code}` contract instead of a generic
+ * `HttpsError('internal')` from the onCall wrapper.
+ */
+class SetRolePermissionsTransactionError extends Error {
+  constructor(public readonly code: SetRolePermissionsFailureCode) {
+    super(code);
+    this.name = 'SetRolePermissionsTransactionError';
+  }
+}
+
 export async function performSetRolePermissions(
   database: Firestore,
   auth: AuthLike,
@@ -61,46 +73,75 @@ export async function performSetRolePermissions(
   const matrixRef = database.collection(ROLE_PERMISSIONS_DOC_PATH[0]).doc(ROLE_PERMISSIONS_DOC_PATH[1]);
   const headRef = database.collection(STAGED_ROLE_DENY_COLLECTION).doc(roleId);
 
-  const [matrixSnap, headSnap] = await Promise.all([matrixRef.get(), headRef.get()]);
-  const matrix = (matrixSnap.exists ? matrixSnap.data() : {}) as { rolePermissions?: Record<string, unknown> };
-  const currentRowRaw = matrix.rolePermissions?.[roleId];
-  const currentRow: string[] = Array.isArray(currentRowRaw) ? currentRowRaw.filter((p): p is string => typeof p === 'string') : [];
+  // F1 — changeId/jobId are minted ONCE, before the transaction, and closed
+  // over. Generating them inside the callback would mint a fresh jobId on
+  // every Firestore retry and orphan job documents.
+  const changeIdBytes = randomBytes(16);
+  const jobIdBytes = randomBytes(16);
+  const jobRef = database.collection(ROLE_SWEEP_JOBS_COLLECTION).doc(jobIdBytes.toString('hex'));
 
-  const change = computeRolePermissionChange(currentRow, nextRow);
+  // Every role-row update — additions-only included — is derived inside one
+  // transaction whose read set holds both the matrix and the staged-deny head.
+  // Previously the additions path read outside any transaction and wrote a
+  // bare merge, so a stale interim row could be written after a sweep had
+  // finalized, silently reintroducing a permission the round had removed; and
+  // two concurrent additions could overwrite one another.
+  let stagedChangeId: string | null = null;
 
-  if (!change.requiresStaging) {
-    await matrixRef.set(
-      { rolePermissions: { [roleId]: interimMatrixRow(change) }, updatedAt: FieldValue.serverTimestamp() },
-      { merge: true },
-    );
-    return { ok: true, requiresStaging: false };
+  try {
+    await database.runTransaction(async (tx) => {
+      stagedChangeId = null;
+
+      const [matrixSnap, headSnap] = await Promise.all([tx.get(matrixRef), tx.get(headRef)]);
+
+      const matrix = (matrixSnap.exists ? matrixSnap.data() : {}) as { rolePermissions?: Record<string, unknown> };
+      const currentRowRaw = matrix.rolePermissions?.[roleId];
+      const currentRow: string[] = Array.isArray(currentRowRaw)
+        ? currentRowRaw.filter((p): p is string => typeof p === 'string')
+        : [];
+
+      const change = computeRolePermissionChange(currentRow, nextRow);
+
+      // REJECT_ACTIVE_ROUND — the guard now gates BOTH branches. Merging an
+      // addition into an in-flight round would mean re-deriving
+      // deniedPermissions mid-drain and could un-deny a permission a live
+      // session has already had denied, so an active round is refused outright.
+      // A COMPLETED head is not active and must not block.
+      const existingHead = headSnap.exists ? (headSnap.data() as { state?: StagingState }) : null;
+      const activeCheck = checkNoActiveStaging(
+        existingHead && existingHead.state ? { state: existingHead.state } : null,
+      );
+      if (!activeCheck.ok) throw new SetRolePermissionsTransactionError(activeCheck.code);
+
+      if (!change.requiresStaging) {
+        tx.set(
+          matrixRef,
+          { rolePermissions: { [roleId]: interimMatrixRow(change) }, updatedAt: FieldValue.serverTimestamp() },
+          { merge: true },
+        );
+        return;
+      }
+
+      const { head, job } = buildStagedRoleDenyDocs(roleId, change, nowMs, changeIdBytes, jobIdBytes);
+      stagedChangeId = head.changeId;
+      tx.set(headRef, { ...head, updatedAt: FieldValue.serverTimestamp() });
+      tx.set(jobRef, { ...job, updatedAt: FieldValue.serverTimestamp() });
+      // Additions apply immediately; removed permissions stay present in the
+      // matrix (protected instead by the staged-deny read-time fail-closed
+      // check) until the sweep finalizes and overwrites the row with targetRow.
+      tx.set(
+        matrixRef,
+        { rolePermissions: { [roleId]: interimMatrixRow(change) }, updatedAt: FieldValue.serverTimestamp() },
+        { merge: true },
+      );
+    });
+  } catch (err: unknown) {
+    if (err instanceof SetRolePermissionsTransactionError) return { ok: false, code: err.code };
+    throw err;
   }
 
-  const existingHead = headSnap.exists ? (headSnap.data() as { state?: StagingState }) : null;
-  const activeCheck = checkNoActiveStaging(existingHead && existingHead.state ? { state: existingHead.state } : null);
-  if (!activeCheck.ok) return { ok: false, code: activeCheck.code };
-
-  const { head, job } = buildStagedRoleDenyDocs(roleId, change, nowMs, randomBytes(16), randomBytes(16));
-  const jobRef = database.collection(ROLE_SWEEP_JOBS_COLLECTION).doc(job.jobId);
-
-  await database.runTransaction(async (tx) => {
-    const freshHeadSnap = await tx.get(headRef);
-    const freshHead = freshHeadSnap.exists ? (freshHeadSnap.data() as { state?: StagingState }) : null;
-    const freshCheck = checkNoActiveStaging(freshHead && freshHead.state ? { state: freshHead.state } : null);
-    if (!freshCheck.ok) throw new Error(freshCheck.code);
-    tx.set(headRef, { ...head, updatedAt: FieldValue.serverTimestamp() });
-    tx.set(jobRef, { ...job, updatedAt: FieldValue.serverTimestamp() });
-    // Additions apply immediately; removed permissions stay present in the
-    // matrix (protected instead by the staged-deny read-time fail-closed
-    // check) until the sweep finalizes and overwrites the row with targetRow.
-    tx.set(
-      matrixRef,
-      { rolePermissions: { [roleId]: interimMatrixRow(change) }, updatedAt: FieldValue.serverTimestamp() },
-      { merge: true },
-    );
-  });
-
-  return { ok: true, requiresStaging: true, changeId: head.changeId };
+  if (stagedChangeId === null) return { ok: true, requiresStaging: false };
+  return { ok: true, requiresStaging: true, changeId: stagedChangeId };
 }
 
 export const setRolePermissions = onCall({ region: FUNCTIONS_REGION }, async (request) => {

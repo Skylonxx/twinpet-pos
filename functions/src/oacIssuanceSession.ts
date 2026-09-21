@@ -36,6 +36,10 @@ import { publicKeyFromRaw, loadActiveSigningKey, firestoreSigningKeyReaders } fr
 import { signOacEnvelope } from './oacSigner';
 import { readRevocationEpoch } from './privilegedRevocationState';
 import { DEVICE_REGISTRATIONS_COLLECTION } from './deviceEnrollment';
+// F5 — the canonical strict device-record parser. Imported, never relocated:
+// it lives in the currently-deployed adjudicator core, and moving it would put
+// a live function's source out of step with its deployed bytes.
+import { parseDeviceRegistration } from './adjudicateOfflinePrivilegedActionCore';
 
 const OAC_SESSIONS_COLLECTION = 'privilegedOacIssuanceSessions';
 const APPROVAL_DUMMY_PIN_HASH = '$2b$10$WCOTRHGYk1RxxHdHMy9.guo3rg259b4w/opYiC13GSmPmCmPJVYwO';
@@ -76,7 +80,11 @@ function sessionFromData(data: DocumentData | undefined): OacIssuanceSessionReco
 
 // --- beginPrivilegedOacIssuanceSession --------------------------------------
 
-export type BeginOacSessionFailureCode = 'not_authorized' | 'device_not_registered' | 'device_branch_mismatch';
+export type BeginOacSessionFailureCode =
+  | 'not_authorized'
+  | 'device_not_registered'
+  | 'device_not_active'
+  | 'device_branch_mismatch';
 
 export type BeginOacSessionResponse =
   | { ok: true; sessionId: string; nonceBase64: string; expiresAtMillis: number }
@@ -99,8 +107,13 @@ export async function performBeginPrivilegedOacIssuanceSession(
   }
   const deviceSnap = await database.collection(DEVICE_REGISTRATIONS_COLLECTION).doc(raw.securityDeviceIdHex).get();
   if (!deviceSnap.exists) return { ok: false, code: 'device_not_registered' };
-  const device = deviceSnap.data() as { branchId?: string };
-  if (typeof device.branchId !== 'string') return { ok: false, code: 'device_not_registered' };
+  // F5 — strict canonical parse: a malformed, legacy or status-less record is
+  // not a device we will mint an offline capability for. Issuance is a
+  // privileged capability boundary and must fail closed at provisioning, not
+  // only at redemption.
+  const device = parseDeviceRegistration(deviceSnap.data());
+  if (!device) return { ok: false, code: 'device_not_registered' };
+  if (device.status !== 'ACTIVE') return { ok: false, code: 'device_not_active' };
 
   const userSnap = await database.collection('users').doc(freshness.staffId).get();
   const branchIds: string[] = Array.isArray(userSnap.data()?.branchIds) ? (userSnap.data()!.branchIds as string[]) : [];
@@ -150,6 +163,8 @@ export type CompleteOacSessionFailureCode =
   | 'tuple_manager_mismatch'
   | 'tuple_device_key_mismatch'
   | 'device_not_registered'
+  | 'device_not_active'
+  | 'device_branch_mismatch'
   | 'invalid_pin'
   | 'oac_provision_forbidden_legacy_pin4'
   | 'signing_key_unavailable';
@@ -162,6 +177,19 @@ export type CompleteOacSessionResponse =
       srf1OacBase64: string;
     }
   | { ok: false; code: CompleteOacSessionFailureCode };
+
+/**
+ * Carries an expected completion failure out of the one-winner consume
+ * transaction. The losing side of a concurrent completion is an *expected*
+ * outcome and must surface as the existing `{ok:false, code}` contract rather
+ * than a generic `HttpsError('internal')` from the onCall wrapper.
+ */
+class CompleteOacSessionTransactionError extends Error {
+  constructor(public readonly code: CompleteOacSessionFailureCode) {
+    super(code);
+    this.name = 'CompleteOacSessionTransactionError';
+  }
+}
 
 export async function performCompletePrivilegedOacIssuanceSession(
   database: Firestore,
@@ -197,10 +225,15 @@ export async function performCompletePrivilegedOacIssuanceSession(
   const ptp1 = decodedPtp1.value;
   const pin1 = decodedPin1.value;
 
-  const deviceSnap = await database.collection(DEVICE_REGISTRATIONS_COLLECTION).doc(session!.securityDeviceIdHex).get();
+  const deviceRef = database.collection(DEVICE_REGISTRATIONS_COLLECTION).doc(session!.securityDeviceIdHex);
+  const deviceSnap = await deviceRef.get();
   if (!deviceSnap.exists) return { ok: false, code: 'device_not_registered' };
-  const device = deviceSnap.data() as { validatedDevProofPublicKeyBase64?: string };
-  if (typeof device.validatedDevProofPublicKeyBase64 !== 'string') return { ok: false, code: 'device_not_registered' };
+  // F5 — advisory strict parse. The deciding re-validation happens inside the
+  // consume transaction below, where the device document is in the read set.
+  const device = parseDeviceRegistration(deviceSnap.data());
+  if (!device) return { ok: false, code: 'device_not_registered' };
+  if (device.status !== 'ACTIVE') return { ok: false, code: 'device_not_active' };
+  if (device.branchId !== session!.branchId) return { ok: false, code: 'device_branch_mismatch' };
   const registeredDevProofPublicKey = Buffer.from(device.validatedDevProofPublicKeyBase64, 'base64');
 
   const ptp1Check = checkTupleBinding(ptp1Tuple(ptp1), session!, registeredDevProofPublicKey);
@@ -273,7 +306,50 @@ export async function performCompletePrivilegedOacIssuanceSession(
   );
   const srf1OacBase64 = srf1Bytes.toString('base64');
 
-  await sessionRef.update({ status: 'CONSUMED', consumedAtServerMs: nowMs, consumedAt: FieldValue.serverTimestamp() });
+  // --- F6 one-winner consume + F5 completion-time revalidation -------------
+  //
+  // The OAC and SRF1 above are already built and signed, deliberately: if the
+  // consume were committed first, a signing failure would burn a one-shot
+  // session and return no capability — Finding 3's shape all over again. The
+  // loser of a concurrent completion discards its envelope in memory and
+  // returns `session_already_consumed`, so at most one OAC is ever emitted.
+  // Nothing about the OAC is persisted.
+  //
+  // The device document is in the transaction read set so a revocation, branch
+  // change, deletion or key rotation landing between the advisory checks and
+  // the commit forces a retry and is observed.
+  try {
+    await database.runTransaction(async (tx) => {
+      const freshSessionSnap = await tx.get(sessionRef);
+      const freshSession = sessionFromData(freshSessionSnap.exists ? freshSessionSnap.data() : undefined);
+      const freshSessionCheck = checkOacIssuanceSession(freshSession, freshness.staffId, nowMs);
+      if (!freshSessionCheck.ok) throw new CompleteOacSessionTransactionError(freshSessionCheck.code);
+
+      const freshDeviceSnap = await tx.get(deviceRef);
+      if (!freshDeviceSnap.exists) throw new CompleteOacSessionTransactionError('device_not_registered');
+      const freshDevice = parseDeviceRegistration(freshDeviceSnap.data());
+      if (!freshDevice) throw new CompleteOacSessionTransactionError('device_not_registered');
+      if (freshDevice.status !== 'ACTIVE') throw new CompleteOacSessionTransactionError('device_not_active');
+      if (freshDevice.branchId !== freshSession!.branchId) {
+        throw new CompleteOacSessionTransactionError('device_branch_mismatch');
+      }
+      // The signed PTP1/PIN1 tuples were bound to this exact key; a
+      // re-enrollment between the advisory read and the commit must not be
+      // able to slip a different device key under an already-signed proof.
+      if (freshDevice.validatedDevProofPublicKeyBase64 !== device.validatedDevProofPublicKeyBase64) {
+        throw new CompleteOacSessionTransactionError('tuple_device_key_mismatch');
+      }
+
+      tx.update(sessionRef, {
+        status: 'CONSUMED',
+        consumedAtServerMs: nowMs,
+        consumedAt: FieldValue.serverTimestamp(),
+      });
+    });
+  } catch (err: unknown) {
+    if (err instanceof CompleteOacSessionTransactionError) return { ok: false, code: err.code };
+    throw err;
+  }
 
   return { ok: true, oac, oacEnvelopeBytesBase64, srf1OacBase64 };
 }

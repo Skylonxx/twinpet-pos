@@ -1,13 +1,23 @@
 /**
- * SEC-001 Packet C-A / F7 — settings/_rolePermissions regression lock.
+ * SEC-001 Packet C-A / F7 — settings/_rolePermissions server-authority boundary.
  *
- * F7 (setRolePermissions/roleSweepScheduler, Admin SDK) is the mechanism that
- * actually finalizes a role's permission row after a staged-deny sweep
- * converges, but the client-facing rules for this document are pre-existing
- * (Admin writes, staff+admin read as a global settings id) and must remain
- * exactly as they were — the Functions-only staging collections
- * (privilegedStagedRoleDeny/privilegedRoleSweepJobs, tested separately) are
- * what actually enforce F7; this doc's own access shape does not change.
+ * Codex-020 Finding 2: the client UI was moved to the `setRolePermissions`
+ * callable, but the rules still let a fresh admin client rewrite the matrix
+ * document directly, bypassing the callable's validation, its transaction, the
+ * staged-deny head, the sweep job and the pairing semantics. Deploying Group 1
+ * would therefore not establish the intended server-authoritative mutation
+ * boundary.
+ *
+ * This spec now locks the corrected shape: the document stays READABLE exactly
+ * as before (login-time permission resolution and the admin panel both read
+ * it), and every client mutation path — full write, create, delete, and the
+ * narrow Phase 7B-3B field grant — is denied for every role. The Admin SDK
+ * (setRolePermissions / roleSweepScheduler) is the only mutation authority.
+ *
+ * Note on why the fix is written as an explicit exclusion on each write grant:
+ * Firestore ORs every matching `allow`, so adding a specific deny block would
+ * do nothing, and removing the id from isGlobalSettingsId() would not close it
+ * either because hasBranchAccess() is true for any admin holding 'ALL'.
  *
  * Run (from repo root):
  *   firebase emulators:exec --only firestore --project demo-twinpet \
@@ -21,13 +31,14 @@ import {
   assertFails,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { deleteDoc, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest';
 
 const BRANCH = 'LDP-001';
 const staff = { staffId: 'staff1', role: 'staff', branchIds: [BRANCH], permissions: [], authVersion: 0 };
 const manager = { staffId: 'mgr1', role: 'manager', branchIds: [BRANCH], permissions: [], authVersion: 0 };
 const admin = { staffId: 'admin1', role: 'admin', branchIds: ['ALL'], permissions: [], authVersion: 0 };
+const branchAdmin = { staffId: 'admin2', role: 'admin', branchIds: [BRANCH], permissions: [], authVersion: 0 };
 
 const matrix = { rolePermissions: { admin: ['pos_sale'], manager: ['pos_sale'], staff: ['pos_sale'] } };
 
@@ -48,25 +59,69 @@ afterAll(async () => {
 beforeEach(async () => {
   await testEnv.clearFirestore();
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
-    await setDoc(doc(ctx.firestore(), 'users', 'staff1'), { role: 'staff', isActive: true, deletedAt: null, authVersion: 0 });
-    await setDoc(doc(ctx.firestore(), 'users', 'mgr1'), { role: 'manager', isActive: true, deletedAt: null, authVersion: 0 });
-    await setDoc(doc(ctx.firestore(), 'users', 'admin1'), { role: 'admin', isActive: true, deletedAt: null, authVersion: 0 });
-    await setDoc(doc(ctx.firestore(), 'settings', '_rolePermissions'), matrix);
+    const db = ctx.firestore();
+    await setDoc(doc(db, 'users', 'staff1'), { role: 'staff', isActive: true, deletedAt: null, authVersion: 0 });
+    await setDoc(doc(db, 'users', 'mgr1'), { role: 'manager', isActive: true, deletedAt: null, authVersion: 0 });
+    await setDoc(doc(db, 'users', 'admin1'), { role: 'admin', isActive: true, deletedAt: null, authVersion: 0 });
+    await setDoc(doc(db, 'users', 'admin2'), { role: 'admin', isActive: true, deletedAt: null, authVersion: 0 });
+    await setDoc(doc(db, 'settings', '_rolePermissions'), matrix);
+    await setDoc(doc(db, 'settings', 'system'), { companyName: 'TwinPet' });
+    await setDoc(doc(db, 'settings', 'expiryPolicies'), { defaultDays: 30 });
+    await setDoc(doc(db, 'settings', BRANCH), { branchId: BRANCH, requiresPasswordForVoid: false });
   });
 });
 
-describe('settings/_rolePermissions access shape is unchanged by F7', () => {
+describe('settings/_rolePermissions reads are preserved', () => {
   it('staff can read the matrix (login-time permission resolution)', async () => {
     const db = testEnv.authenticatedContext('staff1', staff).firestore();
     await assertSucceeds(getDoc(doc(db, 'settings', '_rolePermissions')));
   });
 
-  it('admin can write the full matrix', async () => {
-    const db = testEnv.authenticatedContext('admin1', admin).firestore();
-    await assertSucceeds(setDoc(doc(db, 'settings', '_rolePermissions'), matrix));
+  it('manager can read the matrix', async () => {
+    const db = testEnv.authenticatedContext('mgr1', manager).firestore();
+    await assertSucceeds(getDoc(doc(db, 'settings', '_rolePermissions')));
   });
 
-  it('manager cannot write the matrix (not the narrow requiresPasswordForVoid grant)', async () => {
+  it('admin can read the matrix (admin panel role editor)', async () => {
+    const db = testEnv.authenticatedContext('admin1', admin).firestore();
+    await assertSucceeds(getDoc(doc(db, 'settings', '_rolePermissions')));
+  });
+});
+
+describe('settings/_rolePermissions client mutation is denied for every role', () => {
+  it('global admin CANNOT write the full matrix (server-authority boundary)', async () => {
+    const db = testEnv.authenticatedContext('admin1', admin).firestore();
+    await assertFails(setDoc(doc(db, 'settings', '_rolePermissions'), matrix));
+  });
+
+  it('global admin cannot create the matrix document', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await deleteDoc(doc(ctx.firestore(), 'settings', '_rolePermissions'));
+    });
+    const db = testEnv.authenticatedContext('admin1', admin).firestore();
+    await assertFails(setDoc(doc(db, 'settings', '_rolePermissions'), matrix));
+  });
+
+  it('global admin cannot delete the matrix document', async () => {
+    const db = testEnv.authenticatedContext('admin1', admin).firestore();
+    await assertFails(deleteDoc(doc(db, 'settings', '_rolePermissions')));
+  });
+
+  it('global admin cannot use the narrow requiresPasswordForVoid grant on the matrix', async () => {
+    // hasBranchAccess('_rolePermissions') is TRUE for an 'ALL' admin, so the
+    // Phase 7B-3B grant needs its own server-owned exclusion.
+    const db = testEnv.authenticatedContext('admin1', admin).firestore();
+    await assertFails(
+      updateDoc(doc(db, 'settings', '_rolePermissions'), { requiresPasswordForVoid: true, updatedAt: new Date() }),
+    );
+  });
+
+  it('branch-scoped admin cannot write the matrix', async () => {
+    const db = testEnv.authenticatedContext('admin2', branchAdmin).firestore();
+    await assertFails(setDoc(doc(db, 'settings', '_rolePermissions'), matrix));
+  });
+
+  it('manager cannot write the matrix', async () => {
     const db = testEnv.authenticatedContext('mgr1', manager).firestore();
     await assertFails(setDoc(doc(db, 'settings', '_rolePermissions'), matrix));
   });
@@ -74,5 +129,29 @@ describe('settings/_rolePermissions access shape is unchanged by F7', () => {
   it('staff cannot write the matrix', async () => {
     const db = testEnv.authenticatedContext('staff1', staff).firestore();
     await assertFails(setDoc(doc(db, 'settings', '_rolePermissions'), matrix));
+  });
+});
+
+describe('unrelated settings write behaviour is unchanged', () => {
+  it('admin can still write settings/system', async () => {
+    const db = testEnv.authenticatedContext('admin1', admin).firestore();
+    await assertSucceeds(setDoc(doc(db, 'settings', 'system'), { companyName: 'TwinPet 2' }));
+  });
+
+  it('admin can still write settings/expiryPolicies', async () => {
+    const db = testEnv.authenticatedContext('admin1', admin).firestore();
+    await assertSucceeds(setDoc(doc(db, 'settings', 'expiryPolicies'), { defaultDays: 45 }));
+  });
+
+  it('admin can still write a per-branch settings document', async () => {
+    const db = testEnv.authenticatedContext('admin1', admin).firestore();
+    await assertSucceeds(setDoc(doc(db, 'settings', BRANCH), { branchId: BRANCH, requiresPasswordForVoid: true }));
+  });
+
+  it('manager can still use the narrow requiresPasswordForVoid grant on their branch', async () => {
+    const db = testEnv.authenticatedContext('mgr1', manager).firestore();
+    await assertSucceeds(
+      updateDoc(doc(db, 'settings', BRANCH), { requiresPasswordForVoid: true, updatedAt: new Date() }),
+    );
   });
 });

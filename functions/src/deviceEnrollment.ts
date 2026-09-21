@@ -344,31 +344,15 @@ export async function performCompleteDeviceRegistration(
   const activeKey = await loadActiveSigningKey(firestoreSigningKeyReaders(database));
   if (!activeKey.ok) return { ok: false, code: 'signing_key_unavailable' };
 
-  try {
-    await database.runTransaction(async (tx) => {
-      const freshDeviceSnap = await tx.get(deviceRef);
-      if (freshDeviceSnap.exists) {
-        const existingCheck = checkExistingDeviceForInitialRegistration(freshDeviceSnap.data());
-        if (!existingCheck.ok) throw new Error(existingCheck.code);
-      }
-      const freshAuthSnap = await tx.get(authRef);
-      const freshAuth = enrollmentAuthFromData(freshAuthSnap.exists ? freshAuthSnap.data() : undefined);
-      const freshAuthCheck = checkEnrollmentAuthorizationForRegistration(freshAuth, null, nowMs);
-      if (!freshAuthCheck.ok) throw new Error(freshAuthCheck.code);
-      const freshSessionSnap = await tx.get(sessionRef);
-      const freshSession = sessionFromData(freshSessionSnap.exists ? freshSessionSnap.data() : undefined);
-      const freshSessionCheck = checkDeviceRegistrationSession(freshSession, auth.uid as string, nowMs);
-      if (!freshSessionCheck.ok) throw new Error(freshSessionCheck.code);
-
-      tx.update(authRef, { status: 'CONSUMED', consumedAtServerMs: nowMs, consumedAt: FieldValue.serverTimestamp() });
-      tx.update(sessionRef, { status: 'CONSUMED' });
-      tx.set(deviceRef, { ...registration, registeredAt: FieldValue.serverTimestamp() });
-    });
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return { ok: false, code: msg };
-  }
-
+  // F3 / OPTION_A_PRECOMPUTE_BEFORE_CONSUME — every fallible operation needed
+  // to build the success response runs BEFORE the one-time state is consumed.
+  // Previously the keyset/root/manifest/receipt work ran after the commit, so
+  // a root-key, keyset or receipt failure returned ok:false with the
+  // authorization and session already CONSUMED and the device already ACTIVE —
+  // a half-valid durable record the caller could never recover from. All of
+  // the work below depends only on pre-transaction inputs (`registration` is
+  // built above and is exactly what the transaction stores), so hoisting it
+  // cannot desynchronize the receipt from the persisted record.
   const [verifiableKeys, revocationEpoch, rootKey] = await Promise.all([
     loadAllVerifiableSigningKeys(database, nowMs),
     readRevocationEpoch(database),
@@ -413,6 +397,32 @@ export async function performCompleteDeviceRegistration(
     activeKey.signingKeyId,
     activeKey.privateKey,
   );
+
+  // --- Durable commit. Nothing below this point may fail. ---
+  try {
+    await database.runTransaction(async (tx) => {
+      const freshDeviceSnap = await tx.get(deviceRef);
+      if (freshDeviceSnap.exists) {
+        const existingCheck = checkExistingDeviceForInitialRegistration(freshDeviceSnap.data());
+        if (!existingCheck.ok) throw new Error(existingCheck.code);
+      }
+      const freshAuthSnap = await tx.get(authRef);
+      const freshAuth = enrollmentAuthFromData(freshAuthSnap.exists ? freshAuthSnap.data() : undefined);
+      const freshAuthCheck = checkEnrollmentAuthorizationForRegistration(freshAuth, null, nowMs);
+      if (!freshAuthCheck.ok) throw new Error(freshAuthCheck.code);
+      const freshSessionSnap = await tx.get(sessionRef);
+      const freshSession = sessionFromData(freshSessionSnap.exists ? freshSessionSnap.data() : undefined);
+      const freshSessionCheck = checkDeviceRegistrationSession(freshSession, auth.uid as string, nowMs);
+      if (!freshSessionCheck.ok) throw new Error(freshSessionCheck.code);
+
+      tx.update(authRef, { status: 'CONSUMED', consumedAtServerMs: nowMs, consumedAt: FieldValue.serverTimestamp() });
+      tx.update(sessionRef, { status: 'CONSUMED' });
+      tx.set(deviceRef, { ...registration, registeredAt: FieldValue.serverTimestamp() });
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false, code: msg };
+  }
 
   return {
     ok: true,

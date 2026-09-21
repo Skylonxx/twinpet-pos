@@ -277,26 +277,158 @@ describe('completeDeviceRegistration', () => {
     }
   });
 
-  it('fails closed when root signing key is unavailable', async () => {
-    delete process.env.OAC_ROOT_PRIVATE_KEY_BASE64URL;
+  // --- F3: precompute-before-consume durable no-op harness ------------------
+
+  /**
+   * Snapshots the three collections `completeDeviceRegistration` may mutate.
+   * F3's invariant is that ANY post-validation failure leaves all three byte
+   * identical — the caller must always be able to retry with the same DRP1.
+   */
+  function durableSnapshot(store: Map<string, Map<string, unknown>>) {
+    const pick = (c: string) => JSON.stringify(Array.from(store.get(c)?.entries() ?? []));
+    return {
+      auth: pick('privilegedDeviceEnrollmentAuthorizations'),
+      session: pick('privilegedDeviceRegistrationSessions'),
+      device: pick('privilegedDeviceRegistrations'),
+    };
+  }
+
+  /**
+   * Drives a registration up to (but not through) completion.
+   *
+   * `afterStaging` runs once the authorization is ISSUED and the session is
+   * PENDING — i.e. exactly the state a real caller reaches before invoking
+   * `completeDeviceRegistration`. Keyset/signing-key faults must be injected
+   * there, not in the seed, because issuing the ENR1 authorization itself
+   * needs a working signing key.
+   */
+  async function stagedRegistration(afterStaging?: (store: Map<string, Map<string, unknown>>) => void) {
     const issuer = rawKeypair();
     const signingKey = rawKeypair();
-    const { db } = genericFakeFirestore(baseSeed(issuer, signingKey));
+    const seed = baseSeed(issuer, signingKey) as unknown as Record<string, Record<string, unknown>>;
+    const { db, store } = genericFakeFirestore(seed);
     const { enrollmentAuthId } = await beginAndCompleteIssuance(db, issuer, 'LDP-001', 1000);
-
     const beginReg = await performBeginDeviceRegistration(db, { uid: STAFF_UID }, 2000);
     if (!beginReg.ok) throw new Error('unreachable');
     const nonce = Buffer.from(beginReg.deviceRegistrationNonceBase64, 'base64');
     const securityDeviceId = Buffer.alloc(16, 0x77);
     const { drp1 } = buildSignedDrp1(enrollmentAuthId, nonce, securityDeviceId);
-
-    const result = await performCompleteDeviceRegistration(
+    afterStaging?.(store);
+    return {
       db,
-      { uid: STAFF_UID },
-      { registrationSessionId: beginReg.registrationSessionId, drp1Base64: drp1.toString('base64') },
-      2100,
-    );
+      store,
+      signingKey,
+      complete: () =>
+        performCompleteDeviceRegistration(
+          db,
+          { uid: STAFF_UID },
+          { registrationSessionId: beginReg.registrationSessionId, drp1Base64: drp1.toString('base64') },
+          2100,
+        ),
+    };
+  }
+
+  function expectDurableNoOp(store: Map<string, Map<string, unknown>>, before: ReturnType<typeof durableSnapshot>) {
+    const after = durableSnapshot(store);
+    expect(after.auth).toBe(before.auth);
+    expect(after.session).toBe(before.session);
+    expect(after.device).toBe(before.device);
+    // Explicit, readable restatement of the same invariant.
+    const auth = Array.from(store.get('privilegedDeviceEnrollmentAuthorizations')!.values())[0] as { status: string };
+    const session = Array.from(store.get('privilegedDeviceRegistrationSessions')!.values())[0] as { status: string };
+    expect(auth.status).toBe('ISSUED');
+    expect(session.status).toBe('PENDING');
+    expect(store.get('privilegedDeviceRegistrations')?.size ?? 0).toBe(0);
+  }
+
+  it('F3: fails closed with a durable no-op when the root signing key is absent', async () => {
+    delete process.env.OAC_ROOT_PRIVATE_KEY_BASE64URL;
+    const { store, complete } = await stagedRegistration();
+    const before = durableSnapshot(store);
+
+    const result = await complete();
+
     expect(result).toEqual({ ok: false, code: 'root_signing_key_unavailable' });
+    expectDurableNoOp(store, before);
+  });
+
+  it('F3: fails closed with a durable no-op when the root key is malformed', async () => {
+    process.env.OAC_ROOT_PRIVATE_KEY_BASE64URL = 'not-a-valid-32-byte-key';
+    const { store, complete } = await stagedRegistration();
+    const before = durableSnapshot(store);
+
+    const result = await complete();
+
+    expect(result).toEqual({ ok: false, code: 'root_signing_key_unavailable' });
+    expectDurableNoOp(store, before);
+  });
+
+  it('F3: fails closed with a durable no-op when there is no active signing key', async () => {
+    const { store, complete } = await stagedRegistration((s) => {
+      // Point the keyset meta at a signing key document that does not exist,
+      // only once the authorization has already been issued.
+      s.get('privilegedOacKeysetMeta')!.set('current', { activeSigningKeyId: 'missing-key' });
+    });
+    const before = durableSnapshot(store);
+
+    const result = await complete();
+
+    expect(result).toEqual({ ok: false, code: 'signing_key_unavailable' });
+    expectDurableNoOp(store, before);
+  });
+
+  it('F3: fails closed with a durable no-op when keyset manifest construction fails', async () => {
+    const { store, complete } = await stagedRegistration((s) => {
+      // A VERIFY_ONLY record re-using the ACTIVE key's signingKeyId makes the
+      // verifiable set inconsistent, so buildOacKeysetManifest rejects it.
+      const keys = s.get('privilegedOacSigningKeys')!;
+      const active = keys.get('key-1') as Record<string, unknown>;
+      keys.set('key-1-dup', { ...active, status: 'VERIFY_ONLY', verifyUntilServerMs: 9_000_000 });
+    });
+    const before = durableSnapshot(store);
+
+    const result = await complete();
+
+    expect(result.ok).toBe(false);
+    expect((result as { code: string }).code).toBe('duplicate_signing_key_id');
+    expectDurableNoOp(store, before);
+  });
+
+  it('F3: the happy path consumes each one-time record exactly once and returns both artifacts', async () => {
+    const { store, complete } = await stagedRegistration();
+
+    const result = await complete();
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('unreachable');
+    expect(typeof result.oks1Base64).toBe('string');
+    expect(result.oks1Base64!.length).toBeGreaterThan(0);
+    expect(typeof result.serverFinalizationReceiptBase64).toBe('string');
+
+    const auth = Array.from(store.get('privilegedDeviceEnrollmentAuthorizations')!.values())[0] as { status: string };
+    const session = Array.from(store.get('privilegedDeviceRegistrationSessions')!.values())[0] as { status: string };
+    expect(auth.status).toBe('CONSUMED');
+    expect(session.status).toBe('CONSUMED');
+    expect(store.get('privilegedDeviceRegistrations')!.size).toBe(1);
+    const device = Array.from(store.get('privilegedDeviceRegistrations')!.values())[0] as { status: string };
+    expect(device.status).toBe('ACTIVE');
+  });
+
+  it('F3: an already-ACTIVE device leaves the authorization and session unchanged', async () => {
+    const { db, store, complete } = await stagedRegistration();
+    // Pre-create the device this DRP1 would register.
+    db.collection('privilegedDeviceRegistrations')
+      .doc(Buffer.alloc(16, 0x77).toString('hex'))
+      .set({ status: 'ACTIVE', branchId: 'LDP-001', deviceKeyVersion: 1, validatedDevProofPublicKeyBase64: 'x' });
+    const before = durableSnapshot(store);
+
+    const result = await complete();
+
+    expect(result).toEqual({ ok: false, code: 'device_already_enrolled_reenroll_required' });
+    const after = durableSnapshot(store);
+    expect(after.auth).toBe(before.auth);
+    expect(after.session).toBe(before.session);
+    expect(after.device).toBe(before.device);
   });
 
   it('validates DRP1, consumes the authorization + session, and persists the device registration', async () => {

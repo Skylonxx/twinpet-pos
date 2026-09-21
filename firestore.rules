@@ -408,12 +408,30 @@ service cloud.firestore {
       return settingId in ['system', 'expiryPolicies', '_rolePermissions'];
     }
 
+    // SEC-001 Packet C-A / F7 — server-owned settings documents. The role
+    // permission matrix is mutated ONLY by the Admin SDK (setRolePermissions /
+    // roleSweepScheduler) so that every change goes through the callable's
+    // validation, the staged-deny head and the sweep job. A direct client
+    // write would bypass that whole protocol, so it is denied here.
+    //
+    // The exclusion is applied to each write grant individually and on purpose:
+    // Firestore ORs every matching `allow`, so a more specific match block
+    // cannot subtract this permission. Dropping the id from
+    // isGlobalSettingsId() would not work either — hasBranchAccess() is true
+    // for any admin whose token carries branchIds 'ALL', which is exactly the
+    // global-admin persona that manages role permissions.
+    function isServerOwnedSettingsId(settingId) {
+      return settingId == '_rolePermissions';
+    }
+
     function canReadSettingsDoc(settingId) {
       return isStaff() && (isGlobalSettingsId(settingId) || hasBranchAccess(settingId));
     }
 
     function canWriteSettingsDoc(settingId) {
-      return isAdmin() && (isGlobalSettingsId(settingId) || hasBranchAccess(settingId));
+      return isAdmin()
+        && !isServerOwnedSettingsId(settingId)
+        && (isGlobalSettingsId(settingId) || hasBranchAccess(settingId));
     }
 
     // ── Branches (login dropdown — any signed-in client incl. anonymous) ──
@@ -467,7 +485,11 @@ service cloud.firestore {
       // settings write above stays Admin-only; this narrow grant is field-scoped
       // so it can never change any other setting, and the branch check blocks
       // toggling another branch. Staff have neither path → denied.
+      // The server-owned exclusion is repeated here because this grant is
+      // scoped only by hasBranchAccess(), which a global admin ('ALL')
+      // satisfies for any document id — including _rolePermissions.
       allow update: if isManagerOrAdmin()
+        && !isServerOwnedSettingsId(settingId)
         && hasBranchAccess(settingId)
         && request.resource.data.diff(resource.data).affectedKeys()
              .hasOnly(['requiresPasswordForVoid', 'updatedAt']);

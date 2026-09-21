@@ -45,6 +45,20 @@ export type RegisterIssuerFailureCode =
 
 export type RegisterIssuerResponse = { ok: true; issuerId: string } | { ok: false; code: RegisterIssuerFailureCode };
 
+/**
+ * Carries an expected `registerIssuer` failure code out of the registration
+ * transaction. The bootstrap token is single-use, so the losing side of a
+ * concurrent race is an *expected* outcome and must surface as the existing
+ * `{ok:false, code}` contract — never as a generic `HttpsError('internal')`
+ * from the onCall wrapper.
+ */
+class RegisterIssuerTransactionError extends Error {
+  constructor(public readonly code: RegisterIssuerFailureCode) {
+    super(code);
+    this.name = 'RegisterIssuerTransactionError';
+  }
+}
+
 async function isLiveAdmin(database: Firestore, uid: string): Promise<boolean> {
   const snap = await database.collection('users').doc(uid).get();
   if (!snap.exists) return false;
@@ -111,22 +125,44 @@ export async function performRegisterIssuer(
 
   const registrationRef = database.collection(ISSUER_REGISTRATIONS_COLLECTION).doc(req.issuerId);
 
-  await database.runTransaction(async (tx) => {
-    const priorSnap = await tx.get(registrationRef);
-    const priorCredentialVersion =
-      priorSnap.exists && typeof priorSnap.data()?.credentialVersion === 'number'
-        ? (priorSnap.data()!.credentialVersion as number)
-        : 0;
-    const registration = buildIssuerRegistrationDoc(
-      req.issuerId,
-      req.publicKeyBase64Url,
-      nowMs,
-      auth.uid as string,
-      priorCredentialVersion,
-    );
-    tx.set(registrationRef, { ...registration, createdAt: FieldValue.serverTimestamp() });
-    tx.update(bootstrapRef, { status: 'CONSUMED', consumedAtServerMs: nowMs, consumedAt: FieldValue.serverTimestamp() });
-  });
+  // The bootstrap token is single-use and establishes issuer trust, so its
+  // validation and its consumption must be one linearizable step. The token
+  // document is therefore in the transaction's *read* set: a concurrent
+  // request that consumes it first invalidates this attempt, Firestore
+  // retries, and the retry observes CONSUMED and aborts. The outer read above
+  // stays only as a cheap pre-check — it is never the deciding read.
+  try {
+    await database.runTransaction(async (tx) => {
+      const freshBootstrapSnap = await tx.get(bootstrapRef);
+      const freshBootstrapDoc = bootstrapDocFromData(
+        freshBootstrapSnap.exists ? freshBootstrapSnap.data() : undefined,
+      );
+      const freshBootstrapCheck = verifyBootstrapToken(freshBootstrapDoc, req.issuerId, req.bootstrapToken, nowMs);
+      if (!freshBootstrapCheck.ok) throw new RegisterIssuerTransactionError(freshBootstrapCheck.code);
+
+      const priorSnap = await tx.get(registrationRef);
+      const priorCredentialVersion =
+        priorSnap.exists && typeof priorSnap.data()?.credentialVersion === 'number'
+          ? (priorSnap.data()!.credentialVersion as number)
+          : 0;
+      const registration = buildIssuerRegistrationDoc(
+        req.issuerId,
+        req.publicKeyBase64Url,
+        nowMs,
+        auth.uid as string,
+        priorCredentialVersion,
+      );
+      tx.set(registrationRef, { ...registration, createdAt: FieldValue.serverTimestamp() });
+      tx.update(bootstrapRef, {
+        status: 'CONSUMED',
+        consumedAtServerMs: nowMs,
+        consumedAt: FieldValue.serverTimestamp(),
+      });
+    });
+  } catch (err: unknown) {
+    if (err instanceof RegisterIssuerTransactionError) return { ok: false, code: err.code };
+    throw err;
+  }
 
   return { ok: true, issuerId: req.issuerId };
 }
