@@ -15,6 +15,7 @@ import {
   setsFromMatrix,
   userInitials,
   type LogFilter,
+  type PermRole,
   type StaffFormData,
   type StaffTab,
 } from '../../lib/staffManagement/types';
@@ -29,6 +30,10 @@ import {
   TableCell,
 } from '../../components/ui';
 import '../StaffManagementPage.css';
+
+/** Staged-removal notice — the server persisted only the interim row, so the
+ * requested removal is accepted but not yet converged. */
+const STAGED_REMOVAL_MESSAGE = 'กำลังดำเนินการถอนสิทธิ์ ระบบจะอัปเดตให้เสร็จในอีกสักครู่';
 
 const LOG_CHIPS: { id: LogFilter; label: string }[] = [
   { id: 'all', label: 'ทั้งหมด' },
@@ -127,6 +132,7 @@ export default function AdminStaffManagementPage() {
     softDeleteUser,
     updateRoleMatrix,
     resetRoleMatrix,
+    pendingRoles,
   } = useStaffManagement(activityBranchId, actorInfo, { hq: true });
 
   useEffect(() => {
@@ -150,6 +156,7 @@ export default function AdminStaffManagementPage() {
   const [editUser, setEditUser] = useState<User | null>(null);
   const [confirm, setConfirm] = useState<{ userId: string; name: string } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [permBusy, setPermBusy] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'info' | 'warn' } | null>(null);
   const [clock, setClock] = useState('');
 
@@ -250,6 +257,33 @@ export default function AdminStaffManagementPage() {
       showToast(err instanceof Error ? err.message : 'บันทึกไม่สำเร็จ', 'warn');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleResetRoleMatrix = async () => {
+    setPermBusy(true);
+    try {
+      const result = await resetRoleMatrix();
+      if (result.requiresStaging) {
+        showToast(STAGED_REMOVAL_MESSAGE, 'info');
+      } else {
+        showToast('Reset สิทธิ์เป็นค่าเริ่มต้นเรียบร้อย', 'success');
+      }
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Reset สิทธิ์ไม่สำเร็จ', 'warn');
+    } finally {
+      setPermBusy(false);
+    }
+  };
+
+  const handleToggleRolePermission = async (role: PermRole, key: string, value: boolean) => {
+    try {
+      const result = await updateRoleMatrix(role, key, value);
+      if (result.requiresStaging) {
+        showToast(STAGED_REMOVAL_MESSAGE, 'info');
+      }
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'บันทึกสิทธิ์ไม่สำเร็จ', 'warn');
     }
   };
 
@@ -492,9 +526,9 @@ export default function AdminStaffManagementPage() {
                 type="button"
                 className="sm-btn sm-btn-ghost sm-btn-sm"
                 style={{ marginLeft: 'auto' }}
+                disabled={permBusy || pendingRoles.size > 0}
                 onClick={() => {
-                  void resetRoleMatrix();
-                  showToast('Reset สิทธิ์เป็นค่าเริ่มต้นเรียบร้อย', 'success');
+                  void handleResetRoleMatrix();
                 }}
               >
                 <i className="ti ti-refresh" aria-hidden="true" /> Reset Default
@@ -524,8 +558,10 @@ export default function AdminStaffManagementPage() {
                           <div key={role} className="sm-perm-cell">
                             <Toggle
                               checked={permSets[role].has(item.key)}
-                              disabled={role === 'admin'}
-                              onChange={(v) => void updateRoleMatrix(role, item.key, v)}
+                              disabled={role === 'admin' || permBusy || pendingRoles.has(role)}
+                              onChange={(v) => {
+                                void handleToggleRolePermission(role, item.key, v);
+                              }}
                             />
                           </div>
                         ))}

@@ -12,7 +12,7 @@ import {
 } from 'firebase/firestore';
 import { FirebaseError } from 'firebase/app';
 import { connectFunctionsEmulator, getFunctions, httpsCallable } from 'firebase/functions';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { setUserAccount } from '../auth/setUserAccount';
 import {
   isSetRolePermissionsFailureCode,
@@ -54,12 +54,48 @@ type SetRolePermissionsResult =
 let rolePermissionsEmulatorConnected = false;
 
 /**
+ * Shared success shape for both role-matrix mutations. `requiresStaging: true`
+ * means the server accepted the write but only persisted an *interim* row —
+ * the removal converges later via the staged-deny sweep — so the UI must not
+ * render the requested target as already converged.
+ */
+export type RoleMatrixMutationOutcome = {
+  requiresStaging: boolean;
+};
+
+const NO_STAGING: RoleMatrixMutationOutcome = { requiresStaging: false };
+
+/**
+ * A resolved `RoleMatrixMutationOutcome` means the server accepted a permission
+ * mutation. Every local guard / concurrency refusal therefore throws instead of
+ * resolving, so a page can never turn a no-op into success feedback.
+ */
+const ROLE_PERMISSION_BUSY_MESSAGE =
+  'กำลังบันทึกสิทธิ์อยู่ กรุณารอให้เสร็จก่อนแล้วลองใหม่';
+const ROLE_PERMISSION_ADMIN_LOCKED_MESSAGE = 'ไม่สามารถแก้ไขสิทธิ์ของ Admin ได้';
+
+/**
+ * Mirrors the server's `interimMatrixRow` (`functions/src/setRolePermissionsCore.ts`)
+ * without importing across the functions/src boundary: the server persists
+ * `currentRow ∪ addedPermissions`, so removals stay present until convergence.
+ * For a pure removal this returns the prior row unchanged.
+ */
+function computeInterimRow(priorRow: readonly string[], requestedRow: readonly string[]): string[] {
+  const prior = new Set(priorRow);
+  const additions = requestedRow.filter((key) => !prior.has(key));
+  return [...new Set([...priorRow, ...additions])];
+}
+
+/**
  * SEC-001 Packet C-A / F7 — routes a role-permission change through the
  * `setRolePermissions` Cloud Function instead of a direct client Firestore
  * write, so a removal gets the staged-deny fail-closed protection instead of
  * taking effect for live sessions only once they refresh their claims.
  */
-async function callSetRolePermissions(role: UserRole, permissions: string[]): Promise<void> {
+async function callSetRolePermissions(
+  role: UserRole,
+  permissions: string[],
+): Promise<RoleMatrixMutationOutcome> {
   if (!app) throw new Error('Firebase is not configured');
   const functions = getFunctions(app, import.meta.env.VITE_FUNCTIONS_REGION);
   if (USE_EMULATOR && !rolePermissionsEmulatorConnected) {
@@ -79,6 +115,7 @@ async function callSetRolePermissions(role: UserRole, permissions: string[]): Pr
         : 'ไม่สามารถบันทึกสิทธิ์การใช้งานได้';
       throw new Error(message);
     }
+    return { requiresStaging: payload.requiresStaging === true };
   } catch (err) {
     if (err instanceof FirebaseError) {
       throw new Error(err.message || 'ไม่สามารถบันทึกสิทธิ์การใช้งานได้');
@@ -117,6 +154,48 @@ export function useStaffManagement(
   const [roleMatrix, setRoleMatrix] = useState<RolePermissionMatrix>(cloneDefaultMatrix());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  /**
+   * Authoritative mirror of `roleMatrix`, kept eagerly in sync so a mutation
+   * started in the same tick as another reads current rows instead of a stale
+   * render closure (the lost-update hazard behind the original toggle defect).
+   */
+  const roleMatrixRef = useRef<RolePermissionMatrix>(roleMatrix);
+  /** Per-role in-flight lock. The ref is the synchronous source of truth; the
+   * state copy exists so both pages can disable the affected role's toggles. */
+  const pendingRolesRef = useRef<ReadonlySet<UserRole>>(new Set<UserRole>());
+  const [pendingRoles, setPendingRoles] = useState<ReadonlySet<UserRole>>(() => new Set<UserRole>());
+  /**
+   * Reset-exclusive lock. Reset and role toggles are mutually exclusive at the
+   * hook boundary, not merely via disabled controls: a synchronous ref is the
+   * source of truth so a same-tick caller cannot slip past the check.
+   */
+  const resetPendingRef = useRef(false);
+
+  const commitWholeMatrix = useCallback((next: RolePermissionMatrix) => {
+    roleMatrixRef.current = next;
+    setRoleMatrix(next);
+  }, []);
+
+  /** Row-scoped commit — never replaces a whole-matrix snapshot, so a rollback
+   * on one role can never undo a concurrent success on another. */
+  const commitRoleRow = useCallback((role: UserRole, row: string[]) => {
+    roleMatrixRef.current = { ...roleMatrixRef.current, [role]: row };
+    setRoleMatrix((prev) => ({ ...prev, [role]: row }));
+  }, []);
+
+  const markRolePending = useCallback((role: UserRole) => {
+    const next = new Set(pendingRolesRef.current);
+    next.add(role);
+    pendingRolesRef.current = next;
+    setPendingRoles(next);
+  }, []);
+
+  const clearRolePending = useCallback((role: UserRole) => {
+    const next = new Set(pendingRolesRef.current);
+    next.delete(role);
+    pendingRolesRef.current = next;
+    setPendingRoles(next);
+  }, []);
 
   useEffect(() => {
     if (!hq && !branchId) {
@@ -135,7 +214,7 @@ export function useStaffManagement(
           setUsers(getDevStaffUsers().filter((u) => u.branchIds.includes(branchId!) && !u.deletedAt));
           setActivities(getDevStaffActivities(branchId!));
         }
-        setRoleMatrix(getDevRoleMatrix());
+        commitWholeMatrix(getDevRoleMatrix());
         setLoading(false);
       });
       return;
@@ -217,7 +296,7 @@ export function useStaffManagement(
       if (cancelled) return;
       const data = snap.data() as RolePermDoc | undefined;
       if (data?.rolePermissions) {
-        setRoleMatrix(data.rolePermissions);
+        commitWholeMatrix(data.rolePermissions);
       }
     });
 
@@ -227,21 +306,21 @@ export function useStaffManagement(
       unsubAct();
       unsubActFallback?.();
     };
-  }, [branchId, hq]);
+  }, [branchId, hq, commitWholeMatrix]);
 
   const refreshDev = useCallback(() => {
     if (isFirebaseConfigured) return;
     if (hq) {
       setUsers(getDevStaffUsers().filter((u) => !u.deletedAt));
       setActivities(getDevAllStaffActivities());
-      setRoleMatrix(getDevRoleMatrix());
+      commitWholeMatrix(getDevRoleMatrix());
       return;
     }
     if (!branchId) return;
     setUsers(getDevStaffUsers().filter((u) => u.branchIds.includes(branchId) && !u.deletedAt));
     setActivities(getDevStaffActivities(branchId));
-    setRoleMatrix(getDevRoleMatrix());
-  }, [branchId, hq]);
+    commitWholeMatrix(getDevRoleMatrix());
+  }, [branchId, hq, commitWholeMatrix]);
 
   const saveUser = useCallback(
     async (form: StaffFormData, editId?: string): Promise<void> => {
@@ -554,25 +633,31 @@ export function useStaffManagement(
   );
 
   const updateRoleMatrix = useCallback(
-    async (role: UserRole, key: string, enabled: boolean): Promise<void> => {
-      if (!actor) return;
-      if (!hq && !branchId) return;
-      if (role === 'admin') return;
+    async (role: UserRole, key: string, enabled: boolean): Promise<RoleMatrixMutationOutcome> => {
+      if (!actor) throw new Error('ไม่พบผู้ใช้งาน');
+      if (!hq && !branchId) throw new Error('ไม่พบสาขา');
+      if (role === 'admin') throw new Error(ROLE_PERMISSION_ADMIN_LOCKED_MESSAGE);
 
       const logBranchId = branchId;
-      if (!logBranchId) return;
+      if (!logBranchId) throw new Error('ไม่พบสาขา');
 
-      const next: RolePermissionMatrix = {
-        ...roleMatrix,
-        [role]: enabled
-          ? [...new Set([...roleMatrix[role], key])]
-          : roleMatrix[role].filter((k) => k !== key),
-      };
+      // Reset owns the whole matrix while it runs, so a toggle must not start.
+      if (resetPendingRef.current) throw new Error(ROLE_PERMISSION_BUSY_MESSAGE);
 
-      setRoleMatrix(next);
+      // Same-role overlap is refused outright: no second request, no second
+      // local mutation. That is what makes row-scoped rollback safe without a
+      // request-sequence token.
+      if (pendingRolesRef.current.has(role)) throw new Error(ROLE_PERMISSION_BUSY_MESSAGE);
+
+      const priorRow = [...roleMatrixRef.current[role]];
+      const requestedRow = enabled
+        ? [...new Set([...priorRow, key])]
+        : priorRow.filter((k) => k !== key);
+
+      commitRoleRow(role, requestedRow);
 
       if (!isFirebaseConfigured || !db) {
-        setDevRoleMatrix(next);
+        setDevRoleMatrix(roleMatrixRef.current);
         devAddActivity({
           branchId: logBranchId,
           userId: actor.id,
@@ -584,10 +669,97 @@ export function useStaffManagement(
           deviceId: null,
         });
         refreshDev();
-        return;
+        return NO_STAGING;
       }
 
-      await callSetRolePermissions(role, next[role]);
+      markRolePending(role);
+      try {
+        let outcome: RoleMatrixMutationOutcome;
+        try {
+          outcome = await callSetRolePermissions(role, requestedRow);
+        } catch (err) {
+          // Row-scoped rollback only — a whole-matrix restore would silently
+          // revert a concurrent success on a different role.
+          commitRoleRow(role, priorRow);
+          throw err;
+        }
+
+        if (outcome.requiresStaging) {
+          // The server persisted only the interim row, so the removal is not
+          // converged yet. Render that interim truth instead of the target.
+          commitRoleRow(role, computeInterimRow(priorRow, requestedRow));
+        }
+
+        await writeStaffActivity(
+          { firestore: db, changedBy: actor.id, changedByName: actor.name },
+          {
+            branchId: logBranchId,
+            userId: actor.id,
+            userName: actor.name,
+            action: 'PERM_CHANGE',
+            detail: `อัปเดตสิทธิ์ ${role}: ${key} → ${enabled ? 'เปิด' : 'ปิด'}`,
+          },
+        );
+
+        return outcome;
+      } finally {
+        clearRolePending(role);
+      }
+    },
+    [branchId, actor, refreshDev, hq, commitRoleRow, markRolePending, clearRolePending],
+  );
+
+  const resetRoleMatrix = useCallback(async (): Promise<RoleMatrixMutationOutcome> => {
+    // Context is validated before any local mutation: an unusable actor/branch
+    // must never visually reset the matrix.
+    if (!actor) throw new Error('ไม่พบผู้ใช้งาน');
+    if (!hq && !branchId) throw new Error('ไม่พบสาขา');
+    const logBranchId = branchId;
+    if (!logBranchId) throw new Error('ไม่พบสาขา');
+
+    // Mutual exclusion, enforced here rather than only by disabled controls:
+    // Reset rewrites every non-admin row, so it must not overlap another Reset
+    // or any in-flight role toggle whose late response would land afterwards.
+    if (resetPendingRef.current) throw new Error(ROLE_PERMISSION_BUSY_MESSAGE);
+    if (pendingRolesRef.current.size > 0) throw new Error(ROLE_PERMISSION_BUSY_MESSAGE);
+
+    resetPendingRef.current = true;
+    try {
+      const target = cloneDefaultMatrix();
+
+      if (!isFirebaseConfigured || !db) {
+        commitWholeMatrix(target);
+        setDevRoleMatrix(target);
+        devAddActivity({
+          branchId: logBranchId,
+          userId: actor.id,
+          userName: actor.name,
+          action: 'PERM_CHANGE',
+          detail: 'Reset สิทธิ์ Role เป็นค่าเริ่มต้น',
+          refId: null,
+          ip: null,
+          deviceId: null,
+        });
+        refreshDev();
+        return NO_STAGING;
+      }
+
+      // No optimism: each row is committed only after the server accepts it, so a
+      // mid-loop failure leaves the rendered matrix equal to what actually landed.
+      // `admin` is excluded because the interactive toggle path refuses it.
+      const roles = (Object.keys(target) as UserRole[]).filter((role) => role !== 'admin');
+      let anyRequiresStaging = false;
+
+      for (const role of roles) {
+        const priorRow = [...roleMatrixRef.current[role]];
+        const requestedRow = [...target[role]];
+        const outcome = await callSetRolePermissions(role, requestedRow);
+        anyRequiresStaging = anyRequiresStaging || outcome.requiresStaging;
+        commitRoleRow(
+          role,
+          outcome.requiresStaging ? computeInterimRow(priorRow, requestedRow) : requestedRow,
+        );
+      }
 
       await writeStaffActivity(
         { firestore: db, changedBy: actor.id, changedByName: actor.name },
@@ -596,59 +768,21 @@ export function useStaffManagement(
           userId: actor.id,
           userName: actor.name,
           action: 'PERM_CHANGE',
-          detail: `อัปเดตสิทธิ์ ${role}: ${key} → ${enabled ? 'เปิด' : 'ปิด'}`,
+          detail: 'Reset สิทธิ์ Role เป็นค่าเริ่มต้น',
         },
       );
-    },
-    [branchId, actor, roleMatrix, refreshDev, hq],
-  );
 
-  const resetRoleMatrix = useCallback(async (): Promise<void> => {
-    const next = cloneDefaultMatrix();
-    setRoleMatrix(next);
-
-    if (!actor) return;
-    if (!hq && !branchId) return;
-    const logBranchId = branchId;
-    if (!logBranchId) return;
-
-    if (!isFirebaseConfigured || !db) {
-      setDevRoleMatrix(next);
-      devAddActivity({
-        branchId: logBranchId,
-        userId: actor.id,
-        userName: actor.name,
-        action: 'PERM_CHANGE',
-        detail: 'Reset สิทธิ์ Role เป็นค่าเริ่มต้น',
-        refId: null,
-        ip: null,
-        deviceId: null,
-      });
-      refreshDev();
-      return;
+      return { requiresStaging: anyRequiresStaging };
+    } finally {
+      resetPendingRef.current = false;
     }
-
-    const roles = Object.keys(next) as UserRole[];
-    for (const role of roles) {
-      await callSetRolePermissions(role, next[role]);
-    }
-
-    await writeStaffActivity(
-      { firestore: db, changedBy: actor.id, changedByName: actor.name },
-      {
-        branchId: logBranchId,
-        userId: actor.id,
-        userName: actor.name,
-        action: 'PERM_CHANGE',
-        detail: 'Reset สิทธิ์ Role เป็นค่าเริ่มต้น',
-      },
-    );
-  }, [branchId, actor, refreshDev, hq]);
+  }, [branchId, actor, refreshDev, hq, commitWholeMatrix, commitRoleRow]);
 
   return {
     users,
     activities,
     roleMatrix,
+    pendingRoles,
     loading,
     error,
     saveUser,
