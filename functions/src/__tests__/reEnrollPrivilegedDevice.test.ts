@@ -7,11 +7,35 @@ import { decodeEfr1, EFR1_OP_RE_ENROLLMENT } from '../staffSessionAssertionFrame
 import { privateKeyFromRaw } from '../signingKeyLoader';
 import type { Firestore } from 'firebase-admin/firestore';
 
+/**
+ * Deterministic injection seams for the atomicity tests. All of them are
+ * test-local: no helper module is modified to create a seam.
+ *
+ * - `failDocRead` / `failCollectionQuery` reject a specific read, standing in
+ *   for a Firestore deadline/quota/transient rejection.
+ * - `beforeTransaction` runs once immediately before a transaction body, which
+ *   is how the same-device concurrency and branch-race interleavings are
+ *   produced without sleeps or real parallelism.
+ */
+interface FakeFirestoreControl {
+  /** `"collection/docId"` whose `.get()` rejects. */
+  failDocRead: string | null;
+  /** Collection name whose `.where(...).get()` rejects. */
+  failCollectionQuery: string | null;
+  /** Fired once before the next transaction body, then cleared by the caller. */
+  beforeTransaction: (() => void | Promise<void>) | null;
+}
+
 function genericFakeFirestore(seed: Record<string, Record<string, unknown>> = {}) {
   const store = new Map<string, Map<string, unknown>>();
   for (const [collection, docs] of Object.entries(seed)) {
     store.set(collection, new Map(Object.entries(docs)));
   }
+  const control: FakeFirestoreControl = {
+    failDocRead: null,
+    failCollectionQuery: null,
+    beforeTransaction: null,
+  };
   function coll(name: string): Map<string, unknown> {
     if (!store.has(name)) store.set(name, new Map());
     return store.get(name)!;
@@ -19,6 +43,9 @@ function genericFakeFirestore(seed: Record<string, Record<string, unknown>> = {}
   function docHandle(collectionName: string, id: string) {
     return {
       get: async () => {
+        if (control.failDocRead === `${collectionName}/${id}`) {
+          throw new Error('injected_doc_read_failure');
+        }
         const m = coll(collectionName);
         return { exists: m.has(id), data: () => m.get(id) };
       },
@@ -31,14 +58,22 @@ function genericFakeFirestore(seed: Record<string, Record<string, unknown>> = {}
     collection: (name: string) => ({
       doc: (id: string) => docHandle(name, id),
       where: (field: string, _op: string, value: unknown) => ({
-        get: async () => ({
-          docs: Array.from(coll(name).values())
-            .filter((d) => (d as Record<string, unknown>)[field] === value)
-            .map((d) => ({ data: () => d })),
-        }),
+        get: async () => {
+          if (control.failCollectionQuery === name) {
+            throw new Error('injected_collection_query_failure');
+          }
+          return {
+            docs: Array.from(coll(name).values())
+              .filter((d) => (d as Record<string, unknown>)[field] === value)
+              .map((d) => ({ data: () => d })),
+          };
+        },
       }),
     }),
     runTransaction: async (fn: (tx: unknown) => Promise<void>) => {
+      if (control.beforeTransaction) {
+        await control.beforeTransaction();
+      }
       const tx = {
         get: async (ref: { get: () => Promise<unknown> }) => ref.get(),
         set: (ref: { set: (d: unknown) => void }, data: unknown) => ref.set(data),
@@ -47,7 +82,7 @@ function genericFakeFirestore(seed: Record<string, Record<string, unknown>> = {}
       await fn(tx);
     },
   } as unknown as Firestore;
-  return { db, store };
+  return { db, store, control };
 }
 
 function rawKeypair() {
@@ -109,6 +144,109 @@ function buildSignedDrp1(nonce: Buffer, securityDeviceId: Buffer, device = rawKe
   return { drp1, device };
 }
 
+const DEVICES_COLLECTION = 'privilegedDeviceRegistrations';
+const SESSIONS_COLLECTION = 'privilegedDeviceRegistrationSessions';
+
+type Store = Map<string, Map<string, unknown>>;
+
+function readDevice(store: Store, deviceIdHex: string): Record<string, unknown> {
+  return store.get(DEVICES_COLLECTION)!.get(deviceIdHex) as Record<string, unknown>;
+}
+
+function readSession(store: Store, sessionId: string): Record<string, unknown> {
+  return store.get(SESSIONS_COLLECTION)!.get(sessionId) as Record<string, unknown>;
+}
+
+function durableSnapshot(store: Store, deviceIdHex: string, sessionId: string) {
+  return {
+    device: JSON.stringify(readDevice(store, deviceIdHex) ?? null),
+    session: JSON.stringify(readSession(store, sessionId) ?? null),
+  };
+}
+
+/**
+ * The atomicity invariant, asserted positively rather than by response shape:
+ * a failure anywhere before the commit must leave the session PENDING and the
+ * device registration byte-for-byte untouched, with no re-enrollment audit
+ * field written.
+ */
+function expectDurableNoOp(
+  store: Store,
+  deviceIdHex: string,
+  sessionId: string,
+  before: ReturnType<typeof durableSnapshot>,
+) {
+  const device = readDevice(store, deviceIdHex);
+  const session = readSession(store, sessionId);
+
+  expect(session.status).toBe('PENDING');
+  expect(device.reEnrolledAtServerMs).toBeUndefined();
+  expect(device.reEnrolledByStaffId).toBeUndefined();
+  expect(device.reEnrolledAt).toBeUndefined();
+
+  const beforeDevice = JSON.parse(before.device) as Record<string, unknown>;
+  expect(device.deviceKeyVersion).toBe(beforeDevice.deviceKeyVersion);
+  expect(device.validatedDevProofPublicKeyBase64).toBe(beforeDevice.validatedDevProofPublicKeyBase64);
+  expect(device.devProofRegistrationNonce).toBe(beforeDevice.devProofRegistrationNonce);
+
+  // Whole-document equality, so a field this helper does not name explicitly
+  // still cannot be mutated silently.
+  expect(JSON.stringify(device)).toBe(before.device);
+  expect(JSON.stringify(session)).toBe(before.session);
+}
+
+const ADMIN_AUTH = {
+  uid: ADMIN_STAFF_ID,
+  token: { staffId: ADMIN_STAFF_ID, role: 'admin', authVersion: 1 },
+};
+
+/**
+ * Builds a device + PENDING session + valid DRP1 that is ready to re-enroll,
+ * plus a `call()` that invokes the function with those bindings.
+ */
+async function stagedReEnrollment(
+  seedMutator?: (seed: ReturnType<typeof baseSeed>) => void,
+) {
+  const securityDeviceId = Buffer.alloc(16, 0x55);
+  const deviceIdHex = securityDeviceId.toString('hex');
+  const seed = baseSeed(securityDeviceId, rawKeypair());
+  seedMutator?.(seed);
+  const { db, store, control } = genericFakeFirestore(seed);
+
+  const beginReg = await performBeginDeviceRegistration(db, { uid: ADMIN_STAFF_ID }, 2000);
+  if (!beginReg.ok) throw new Error('unreachable');
+  const nonce = Buffer.from(beginReg.deviceRegistrationNonceBase64, 'base64');
+  const newKey = rawKeypair();
+  const { drp1 } = buildSignedDrp1(nonce, securityDeviceId, newKey);
+
+  const call = (overrides: Record<string, unknown> = {}, nowMs = 2100) =>
+    performReEnrollPrivilegedDevice(
+      db,
+      ADMIN_AUTH,
+      {
+        registrationSessionId: beginReg.registrationSessionId,
+        expectedDeviceKeyVersion: 1,
+        drp1Base64: drp1.toString('base64'),
+        ...overrides,
+      },
+      nowMs,
+    );
+
+  return {
+    db,
+    store,
+    control,
+    securityDeviceId,
+    deviceIdHex,
+    sessionId: beginReg.registrationSessionId,
+    newKey,
+    call,
+    snapshot: () => durableSnapshot(store, deviceIdHex, beginReg.registrationSessionId),
+    expectNoOp: (before: ReturnType<typeof durableSnapshot>) =>
+      expectDurableNoOp(store, deviceIdHex, beginReg.registrationSessionId, before),
+  };
+}
+
 describe('reEnrollPrivilegedDevice', () => {
   const originalEnv = process.env.OAC_ROOT_PRIVATE_KEY_BASE64URL;
 
@@ -124,27 +262,15 @@ describe('reEnrollPrivilegedDevice', () => {
     }
   });
 
-  it('fails closed when root signing key secret is unavailable', async () => {
+  it('fails closed with a durable no-op when root signing key secret is unavailable', async () => {
     delete process.env.OAC_ROOT_PRIVATE_KEY_BASE64URL;
-    const securityDeviceId = Buffer.alloc(16, 0x55);
-    const initialKey = rawKeypair();
-    const { db } = genericFakeFirestore(baseSeed(securityDeviceId, initialKey));
-    const beginReg = await performBeginDeviceRegistration(db, { uid: ADMIN_STAFF_ID }, 2000);
-    if (!beginReg.ok) throw new Error('unreachable');
-    const nonce = Buffer.from(beginReg.deviceRegistrationNonceBase64, 'base64');
-    const newKey = rawKeypair();
-    const { drp1 } = buildSignedDrp1(nonce, securityDeviceId, newKey);
-    const res = await performReEnrollPrivilegedDevice(
-      db,
-      { uid: ADMIN_STAFF_ID, token: { staffId: ADMIN_STAFF_ID, role: 'admin', authVersion: 1 } },
-      {
-        registrationSessionId: beginReg.registrationSessionId,
-        expectedDeviceKeyVersion: 1,
-        drp1Base64: drp1.toString('base64'),
-      },
-      2100,
-    );
+    const staged = await stagedReEnrollment();
+    const before = staged.snapshot();
+
+    const res = await staged.call();
+
     expect(res).toEqual({ ok: false, code: 'root_signing_key_unavailable' });
+    staged.expectNoOp(before);
   });
 
   it('denies unauthenticated caller', async () => {
@@ -530,5 +656,242 @@ describe('reEnrollPrivilegedDevice', () => {
         expect(decoded.value.branchId).toBe('B-HQ');
       }
     }
+  });
+
+  // --- F3 / OPTION_A_PRECOMPUTE_BEFORE_CONSUME ------------------------------
+  // Every fallible step needed to build the success response now runs before
+  // the durable commit. These tests assert the invariant positively: on any
+  // such failure the session stays PENDING and the device registration is
+  // byte-for-byte untouched. A response-shape assertion alone is not accepted
+  // as proof, because the pre-remediation code returned exactly the same
+  // envelope while the rotation had already committed.
+  describe('durable-no-op atomicity', () => {
+    it('T2: version mismatch is a durable no-op', async () => {
+      const staged = await stagedReEnrollment();
+      const before = staged.snapshot();
+
+      const res = await staged.call({ expectedDeviceKeyVersion: 99 });
+
+      expect(res).toEqual({ ok: false, code: 'device_key_version_mismatch' });
+      staged.expectNoOp(before);
+    });
+
+    it('T4: malformed root signing key is a durable no-op', async () => {
+      process.env.OAC_ROOT_PRIVATE_KEY_BASE64URL = 'not-a-valid-32-byte-key';
+      const staged = await stagedReEnrollment();
+      const before = staged.snapshot();
+
+      const res = await staged.call();
+
+      expect(res).toEqual({ ok: false, code: 'root_signing_key_unavailable' });
+      staged.expectNoOp(before);
+    });
+
+    it('T5: keyset manifest construction failure is a durable no-op', async () => {
+      const staged = await stagedReEnrollment((seed) => {
+        // A VERIFY_ONLY record re-using the ACTIVE key's signingKeyId makes the
+        // verifiable set inconsistent, so buildOacKeysetManifest rejects it.
+        const keys = seed.privilegedOacSigningKeys as Record<string, unknown>;
+        keys['key-1-dup'] = {
+          ...(keys['key-1'] as Record<string, unknown>),
+          status: 'VERIFY_ONLY',
+          verifyUntilServerMs: 9_000_000,
+        };
+      });
+      const before = staged.snapshot();
+
+      const res = await staged.call();
+
+      expect(res).toEqual({ ok: false, code: 'duplicate_signing_key_id' });
+      staged.expectNoOp(before);
+    });
+
+    it('T6: unavailable active signing key is a durable no-op', async () => {
+      const staged = await stagedReEnrollment((seed) => {
+        // Point keyset meta at a signing-key document that does not exist.
+        seed.privilegedOacKeysetMeta.current = { activeSigningKeyId: 'missing-key' };
+      });
+      const before = staged.snapshot();
+
+      const res = await staged.call();
+
+      expect(res).toEqual({ ok: false, code: 'signing_key_unavailable' });
+      staged.expectNoOp(before);
+    });
+
+    it('T7a: verifiable-keyset query rejection is a durable no-op', async () => {
+      const staged = await stagedReEnrollment();
+      const before = staged.snapshot();
+      staged.control.failCollectionQuery = 'privilegedOacSigningKeys';
+
+      await expect(staged.call()).rejects.toThrow('injected_collection_query_failure');
+
+      staged.expectNoOp(before);
+    });
+
+    it('T7b: revocation-epoch read rejection is a durable no-op', async () => {
+      const staged = await stagedReEnrollment();
+      const before = staged.snapshot();
+      staged.control.failDocRead = 'privilegedRevocationState/current';
+
+      await expect(staged.call()).rejects.toThrow('injected_doc_read_failure');
+
+      staged.expectNoOp(before);
+    });
+
+    it('T8: OKS1 encoding failure is a durable no-op', async () => {
+      const staged = await stagedReEnrollment((seed) => {
+        // OKS1 encodes the key count as a u8, so a verifiable set larger than
+        // 255 makes oks1SignedPrefix throw. buildOacKeysetManifest does not cap
+        // the count, so this reaches the encoder — a throw, not an ok:false.
+        const keys = seed.privilegedOacSigningKeys as Record<string, unknown>;
+        const spare = rawKeypair();
+        for (let i = 0; i < 255; i += 1) {
+          keys[`vk-${i}`] = {
+            signingKeyId: `vk-${i}`,
+            publicKeyBase64Url: spare.publicKeyBase64Url,
+            privateKeyBase64Url: spare.privateKeyBase64Url,
+            status: 'VERIFY_ONLY',
+            verifyUntilServerMs: 9_000_000,
+          };
+        }
+      });
+      const before = staged.snapshot();
+
+      await expect(staged.call()).rejects.toThrow('OKS1 keys must be 1-255 entries');
+
+      staged.expectNoOp(before);
+    });
+
+    it('T9: retry after a failed precompute does not inflate deviceKeyVersion', async () => {
+      delete process.env.OAC_ROOT_PRIVATE_KEY_BASE64URL;
+      const staged = await stagedReEnrollment();
+      const before = staged.snapshot();
+
+      const failed = await staged.call();
+      expect(failed).toEqual({ ok: false, code: 'root_signing_key_unavailable' });
+      staged.expectNoOp(before);
+
+      // Repair the environment and retry with the ORIGINAL expected version.
+      process.env.OAC_ROOT_PRIVATE_KEY_BASE64URL = Buffer.alloc(32, 0x5a).toString('base64url');
+      const retried = await staged.call();
+
+      expect(retried.ok).toBe(true);
+      if (retried.ok) {
+        expect(retried.newDeviceKeyVersion).toBe(2);
+        expect(retried.serverFinalizationReceiptBase64).toEqual(expect.any(String));
+      }
+      // Exactly one increment across both attempts — never 3.
+      expect(readDevice(staged.store, staged.deviceIdHex).deviceKeyVersion).toBe(2);
+      expect(readSession(staged.store, staged.sessionId).status).toBe('CONSUMED');
+    });
+
+    it('T10: replaying a consumed session does not mutate the device again', async () => {
+      const staged = await stagedReEnrollment();
+
+      const first = await staged.call();
+      expect(first.ok).toBe(true);
+      const afterFirst = staged.snapshot();
+
+      const replay = await staged.call();
+
+      expect(replay).toEqual({ ok: false, code: 'session_already_consumed' });
+      expect(staged.snapshot()).toEqual(afterFirst);
+      expect(readDevice(staged.store, staged.deviceIdHex).deviceKeyVersion).toBe(2);
+    });
+
+    it('T11: concurrent same-device re-enrollment increments exactly once', async () => {
+      const staged = await stagedReEnrollment();
+
+      // A second, independent PENDING session against the same device.
+      const beginReg2 = await performBeginDeviceRegistration(staged.db, { uid: ADMIN_STAFF_ID }, 2000);
+      if (!beginReg2.ok) throw new Error('unreachable');
+      const nonce2 = Buffer.from(beginReg2.deviceRegistrationNonceBase64, 'base64');
+      const { drp1: drp1b } = buildSignedDrp1(nonce2, staged.securityDeviceId, rawKeypair());
+
+      // Deterministic interleaving: caller B has already pre-read v1 and
+      // precomputed its receipt; caller A then runs to completion inside B's
+      // pre-commit window, so B's authoritative in-transaction read sees v2.
+      let winner: Awaited<ReturnType<typeof staged.call>> | undefined;
+      staged.control.beforeTransaction = async () => {
+        staged.control.beforeTransaction = null;
+        winner = await staged.call();
+      };
+
+      const loser = await performReEnrollPrivilegedDevice(
+        staged.db,
+        ADMIN_AUTH,
+        {
+          registrationSessionId: beginReg2.registrationSessionId,
+          expectedDeviceKeyVersion: 1,
+          drp1Base64: drp1b.toString('base64'),
+        },
+        2100,
+      );
+
+      expect(winner?.ok).toBe(true);
+      expect(loser).toEqual({ ok: false, code: 'device_key_version_mismatch' });
+
+      // Exactly N+1, never N+2.
+      expect(readDevice(staged.store, staged.deviceIdHex).deviceKeyVersion).toBe(2);
+      expect(readSession(staged.store, staged.sessionId).status).toBe('CONSUMED');
+      // The loser's one-time session was never burned.
+      expect(readSession(staged.store, beginReg2.registrationSessionId).status).toBe('PENDING');
+    });
+
+    it('T12: an expired session is a durable no-op', async () => {
+      const staged = await stagedReEnrollment();
+      const before = staged.snapshot();
+
+      // Session was minted at 2000 with a 10-minute TTL.
+      const res = await staged.call({}, 2000 + 10 * 60 * 1000 + 1);
+
+      expect(res).toEqual({ ok: false, code: 'session_expired' });
+      staged.expectNoOp(before);
+    });
+
+    it('T12: a session owned by another caller is a durable no-op', async () => {
+      const staged = await stagedReEnrollment();
+      const before = staged.snapshot();
+
+      const res = await performReEnrollPrivilegedDevice(
+        staged.db,
+        { uid: STAFF_ID, token: { staffId: ADMIN_STAFF_ID, role: 'admin', authVersion: 1 } },
+        { registrationSessionId: staged.sessionId, expectedDeviceKeyVersion: 1, drp1Base64: '' },
+        2100,
+      );
+
+      expect(res).toEqual({ ok: false, code: 'session_wrong_owner' });
+      staged.expectNoOp(before);
+    });
+
+    it('T13: a branch change between pre-read and commit is a durable no-op', async () => {
+      const staged = await stagedReEnrollment();
+      const before = JSON.parse(staged.snapshot().device) as Record<string, unknown>;
+
+      // The pre-read observes B-HQ and the receipt is signed over it; the live
+      // branch then moves before the authoritative in-transaction read.
+      staged.control.beforeTransaction = () => {
+        staged.control.beforeTransaction = null;
+        const device = readDevice(staged.store, staged.deviceIdHex);
+        staged.store.get(DEVICES_COLLECTION)!.set(staged.deviceIdHex, { ...device, branchId: 'B-2' });
+      };
+
+      const res = await staged.call();
+
+      expect(res).toEqual({ ok: false, code: 'device_branch_changed' });
+
+      // The harness moved branchId, so assert every other field is untouched
+      // rather than whole-document equality.
+      const device = readDevice(staged.store, staged.deviceIdHex);
+      expect(readSession(staged.store, staged.sessionId).status).toBe('PENDING');
+      expect(device.branchId).toBe('B-2');
+      expect(device.deviceKeyVersion).toBe(before.deviceKeyVersion);
+      expect(device.validatedDevProofPublicKeyBase64).toBe(before.validatedDevProofPublicKeyBase64);
+      expect(device.devProofRegistrationNonce).toBe(before.devProofRegistrationNonce);
+      expect(device.reEnrolledAtServerMs).toBeUndefined();
+      expect(device.reEnrolledByStaffId).toBeUndefined();
+      expect(device.reEnrolledAt).toBeUndefined();
+    });
   });
 });

@@ -8,6 +8,12 @@
  * - Fresh DRP1 possession proof signed by the new device key
  * - Expected current deviceKeyVersion matching live registration
  * - Atomic increment of deviceKeyVersion in Firestore transaction
+ *
+ * Atomicity invariant (F3 / OPTION_A_PRECOMPUTE_BEFORE_CONSUME): no durable
+ * session or device mutation may occur until every fallible operation needed
+ * for the success response has already succeeded. The transaction is the last
+ * fallible step; after it commits, the response is assembled from values that
+ * were all computed before it.
  */
 
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
@@ -81,6 +87,61 @@ function sessionFromData(data: DocumentData | undefined): DeviceRegistrationSess
     createdAtServerMs: data.createdAtServerMs,
     expiresAtServerMs: data.expiresAtServerMs,
   };
+}
+
+export type LiveDeviceVersionFailureCode =
+  | 'device_not_found'
+  | 'device_not_active'
+  | 'device_key_version_invalid'
+  | 'device_key_version_mismatch'
+  | 'device_key_version_overflow';
+
+/**
+ * Pure core: the live-device version gate, in the exact order the transaction
+ * has always applied it. Shared by the pre-transaction fail-fast read and the
+ * authoritative in-transaction re-read so the two can never drift apart.
+ */
+function checkLiveDeviceVersion(
+  deviceData: DocumentData | undefined,
+  expectedDeviceKeyVersion: number,
+): { ok: true; nextDeviceKeyVersion: number } | { ok: false; code: LiveDeviceVersionFailureCode } {
+  if (!deviceData) return { ok: false, code: 'device_not_found' };
+  if (deviceData.status !== 'ACTIVE') return { ok: false, code: 'device_not_active' };
+  if (
+    typeof deviceData.deviceKeyVersion !== 'number' ||
+    !Number.isFinite(deviceData.deviceKeyVersion) ||
+    !Number.isSafeInteger(deviceData.deviceKeyVersion) ||
+    deviceData.deviceKeyVersion <= 0 ||
+    deviceData.deviceKeyVersion > MAX_DEVICE_KEY_VERSION
+  ) {
+    return { ok: false, code: 'device_key_version_invalid' };
+  }
+  if (deviceData.deviceKeyVersion !== expectedDeviceKeyVersion) {
+    return { ok: false, code: 'device_key_version_mismatch' };
+  }
+  if (deviceData.deviceKeyVersion >= MAX_DEVICE_KEY_VERSION) {
+    return { ok: false, code: 'device_key_version_overflow' };
+  }
+  const nextDeviceKeyVersion = deviceData.deviceKeyVersion + 1;
+  if (
+    !Number.isSafeInteger(nextDeviceKeyVersion) ||
+    nextDeviceKeyVersion <= deviceData.deviceKeyVersion ||
+    nextDeviceKeyVersion > MAX_DEVICE_KEY_VERSION
+  ) {
+    return { ok: false, code: 'device_key_version_overflow' };
+  }
+  return { ok: true, nextDeviceKeyVersion };
+}
+
+/** Pure core: the live-device branch gate. Shared by the pre-read and the transaction. */
+function checkLiveDeviceBranch(
+  deviceData: DocumentData | undefined,
+): { ok: true; branchId: string } | { ok: false; code: 'device_branch_invalid' } {
+  const branchId = deviceData?.branchId;
+  if (typeof branchId !== 'string' || !isCanonicalIdentifier(branchId)) {
+    return { ok: false, code: 'device_branch_invalid' };
+  }
+  return { ok: true, branchId };
 }
 
 export type ReEnrollPrivilegedDeviceResponse =
@@ -163,67 +224,42 @@ export async function performReEnrollPrivilegedDevice(
   const securityDeviceIdHex = drp1.securityDeviceId.toString('hex');
   const deviceRef = database.collection(DEVICE_REGISTRATIONS_COLLECTION).doc(securityDeviceIdHex);
 
+  // --- Pre-transaction device read -------------------------------------------
+  // Fail-fast only. Every gate applied here is re-applied inside the
+  // transaction, which remains the sole authoritative linearization point. This
+  // read exists so the two receipt-bound values that previously existed only
+  // inside the transaction — `branchId` and `newDeviceKeyVersion` — are known
+  // before any fallible signing work runs, which is what lets that work finish
+  // BEFORE the durable commit instead of after it.
+  const preDeviceSnap = await deviceRef.get();
+  const preDeviceData = preDeviceSnap.exists ? ((preDeviceSnap.data() ?? {}) as DocumentData) : undefined;
+  const preVersionCheck = checkLiveDeviceVersion(preDeviceData, raw.expectedDeviceKeyVersion);
+  if (!preVersionCheck.ok) return { ok: false, code: preVersionCheck.code };
+  const preBranchCheck = checkLiveDeviceBranch(preDeviceData);
+  if (!preBranchCheck.ok) return { ok: false, code: preBranchCheck.code };
+
+  const preReadBranchId = preBranchCheck.branchId;
+  const newDeviceKeyVersion = preVersionCheck.nextDeviceKeyVersion;
+  // Derived exactly once and reused by both the receipt and the durable write,
+  // so the two can never describe different bytes.
+  const acceptedPublicKeyBase64 = drp1.devProofPublicKey.toString('base64');
+  const devProofRegistrationNonceBase64 = drp1.deviceRegistrationNonce.toString('base64');
+
   const activeKey = await loadActiveSigningKey(firestoreSigningKeyReaders(database));
   if (!activeKey.ok) return { ok: false, code: 'signing_key_unavailable' };
 
-  let newDeviceKeyVersion = 0;
-  let branchId = '';
-  try {
-    await database.runTransaction(async (tx) => {
-      const freshDeviceSnap = await tx.get(deviceRef);
-      if (!freshDeviceSnap.exists) {
-        throw new Error('device_not_found');
-      }
-      const deviceData = (freshDeviceSnap.data() ?? {}) as DocumentData;
-      if (deviceData.status !== 'ACTIVE') {
-        throw new Error('device_not_active');
-      }
-      if (
-        typeof deviceData.deviceKeyVersion !== 'number' ||
-        !Number.isFinite(deviceData.deviceKeyVersion) ||
-        !Number.isSafeInteger(deviceData.deviceKeyVersion) ||
-        deviceData.deviceKeyVersion <= 0 ||
-        deviceData.deviceKeyVersion > MAX_DEVICE_KEY_VERSION
-      ) {
-        throw new Error('device_key_version_invalid');
-      }
-      if (deviceData.deviceKeyVersion !== raw.expectedDeviceKeyVersion) {
-        throw new Error('device_key_version_mismatch');
-      }
-      if (deviceData.deviceKeyVersion >= MAX_DEVICE_KEY_VERSION) {
-        throw new Error('device_key_version_overflow');
-      }
-      const nextVersion = deviceData.deviceKeyVersion + 1;
-      if (!Number.isSafeInteger(nextVersion) || nextVersion <= deviceData.deviceKeyVersion || nextVersion > MAX_DEVICE_KEY_VERSION) {
-        throw new Error('device_key_version_overflow');
-      }
-
-      const freshSessionSnap = await tx.get(sessionRef);
-      const freshSession = sessionFromData(freshSessionSnap.exists ? freshSessionSnap.data() : undefined);
-      const freshSessionCheck = checkDeviceRegistrationSession(freshSession, auth.uid as string, nowMs);
-      if (!freshSessionCheck.ok) throw new Error(freshSessionCheck.code);
-
-      if (typeof deviceData.branchId !== 'string' || !isCanonicalIdentifier(deviceData.branchId)) {
-        throw new Error('device_branch_invalid');
-      }
-      branchId = deviceData.branchId;
-      newDeviceKeyVersion = nextVersion;
-      tx.update(sessionRef, { status: 'CONSUMED' });
-      tx.update(deviceRef, {
-        validatedDevProofPublicKeyBase64: drp1.devProofPublicKey.toString('base64'),
-        devProofRegistrationNonce: drp1.deviceRegistrationNonce.toString('base64'),
-        deviceKeyVersion: newDeviceKeyVersion,
-        status: 'ACTIVE',
-        reEnrolledAtServerMs: nowMs,
-        reEnrolledByStaffId: staffId,
-        reEnrolledAt: FieldValue.serverTimestamp(),
-      });
-    });
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return { ok: false, code: msg };
-  }
-
+  // F3 / OPTION_A_PRECOMPUTE_BEFORE_CONSUME — every fallible operation needed
+  // to build the success response runs BEFORE the one-time state is consumed.
+  // Previously the keyset/root/manifest/receipt work ran after the commit, so a
+  // root-key, keyset or receipt failure returned ok:false with the registration
+  // session already CONSUMED and the device already rotated to the new key at
+  // deviceKeyVersion N+1 — a durable rotation the caller never received a
+  // receipt for, which stranded the terminal on its old generation and which no
+  // retry could repair (a naive retry was rejected on the version CAS, and a
+  // version-corrected retry rotated again). All of the work below depends only
+  // on pre-transaction inputs, and every receipt-bound value is the same
+  // binding the transaction persists, so hoisting it cannot desynchronize the
+  // receipt from the stored record.
   const [verifiableKeys, revocationEpoch, rootKey] = await Promise.all([
     loadAllVerifiableSigningKeys(database, nowMs),
     readRevocationEpoch(database),
@@ -263,19 +299,64 @@ export async function performReEnrollPrivilegedDevice(
     newDeviceKeyVersion,
     drp1.devProofPublicKey,
     drp1.deviceRegistrationNonce,
-    branchId,
+    preReadBranchId,
     nowMs,
     activeKey.signingKeyId,
     activeKey.privateKey,
   );
+  const serverFinalizationReceiptBase64 = efr1Bytes.toString('base64');
+
+  // --- Durable commit. Nothing below this point may fail. ---
+  try {
+    await database.runTransaction(async (tx) => {
+      const freshDeviceSnap = await tx.get(deviceRef);
+      const freshDeviceData = freshDeviceSnap.exists ? ((freshDeviceSnap.data() ?? {}) as DocumentData) : undefined;
+      const freshVersionCheck = checkLiveDeviceVersion(freshDeviceData, raw.expectedDeviceKeyVersion as number);
+      if (!freshVersionCheck.ok) throw new Error(freshVersionCheck.code);
+      // Provably equal, because both calls gate on the same immutable
+      // `expectedDeviceKeyVersion`. Asserted anyway so the receipt can never
+      // claim a version the transaction did not write.
+      if (freshVersionCheck.nextDeviceKeyVersion !== newDeviceKeyVersion) {
+        throw new Error('device_key_version_mismatch');
+      }
+
+      const freshSessionSnap = await tx.get(sessionRef);
+      const freshSession = sessionFromData(freshSessionSnap.exists ? freshSessionSnap.data() : undefined);
+      const freshSessionCheck = checkDeviceRegistrationSession(freshSession, auth.uid as string, nowMs);
+      if (!freshSessionCheck.ok) throw new Error(freshSessionCheck.code);
+
+      const freshBranchCheck = checkLiveDeviceBranch(freshDeviceData);
+      if (!freshBranchCheck.ok) throw new Error(freshBranchCheck.code);
+      // Branch stability: the receipt was signed over `preReadBranchId`. If the
+      // live branch moved between the pre-read and this commit, fail before any
+      // write rather than persist a rotation the receipt misdescribes.
+      if (freshBranchCheck.branchId !== preReadBranchId) {
+        throw new Error('device_branch_changed');
+      }
+
+      tx.update(sessionRef, { status: 'CONSUMED' });
+      tx.update(deviceRef, {
+        validatedDevProofPublicKeyBase64: acceptedPublicKeyBase64,
+        devProofRegistrationNonce: devProofRegistrationNonceBase64,
+        deviceKeyVersion: newDeviceKeyVersion,
+        status: 'ACTIVE',
+        reEnrolledAtServerMs: nowMs,
+        reEnrolledByStaffId: staffId,
+        reEnrolledAt: FieldValue.serverTimestamp(),
+      });
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false, code: msg };
+  }
 
   return {
     ok: true,
     securityDeviceIdHex,
-    branchId,
+    branchId: preReadBranchId,
     newDeviceKeyVersion,
-    acceptedPublicKeyBase64: drp1.devProofPublicKey.toString('base64'),
-    serverFinalizationReceiptBase64: efr1Bytes.toString('base64'),
+    acceptedPublicKeyBase64,
+    serverFinalizationReceiptBase64,
     oks1Base64,
   };
 }
