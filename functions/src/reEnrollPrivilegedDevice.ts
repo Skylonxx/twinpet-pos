@@ -361,7 +361,7 @@ export async function performReEnrollPrivilegedDevice(
   };
 }
 
-export const reEnrollPrivilegedDevice = onCall({ region: FUNCTIONS_REGION }, async (request) => {
+export const reEnrollPrivilegedDevice = onCall({ region: FUNCTIONS_REGION, secrets: ['OAC_ROOT_PRIVATE_KEY_BASE64URL'] }, async (request) => {
   try {
     return await performReEnrollPrivilegedDevice(db, request.auth as AuthLike, request.data);
   } catch {

@@ -57,7 +57,7 @@ export async function performGetOacKeysetManifest(
   return { ok: true, oks1Base64: encodeOks1(result.manifest).toString('base64') };
 }
 
-export const getOacKeysetManifest = onCall({ region: FUNCTIONS_REGION }, async (request) => {
+export const getOacKeysetManifest = onCall({ region: FUNCTIONS_REGION, secrets: ['OAC_ROOT_PRIVATE_KEY_BASE64URL'] }, async (request) => {
   try {
     return await performGetOacKeysetManifest(db, request.auth as AuthLike);
   } catch {

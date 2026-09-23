@@ -459,7 +459,7 @@ export const beginDeviceRegistration = onCall({ region: FUNCTIONS_REGION }, asyn
   }
 });
 
-export const completeDeviceRegistration = onCall({ region: FUNCTIONS_REGION }, async (request) => {
+export const completeDeviceRegistration = onCall({ region: FUNCTIONS_REGION, secrets: ['OAC_ROOT_PRIVATE_KEY_BASE64URL'] }, async (request) => {
   try {
     return await performCompleteDeviceRegistration(db, request.auth as AuthLike, request.data);
   } catch {
