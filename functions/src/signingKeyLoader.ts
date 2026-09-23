@@ -129,7 +129,17 @@ export async function loadActiveSigningKey(readers: SigningKeyReaders): Promise<
   };
 }
 
-export const CANONICAL_OAC_ROOT_PUBLIC_KEY_BASE64URL = 'DXVQdU4IAKXSN-71gmA1dmubPloVhoqUCrKJlYeI47A';
+/**
+ * Canonical OAC root trust anchor — the ONLY production root the server accepts.
+ *
+ * SEC-001 R1 (Gemini-119) rotated this away from the previous anchor, whose
+ * private seed was reconstructible from committed test fixtures and must never
+ * be trusted again. This is a compile-time source constant on purpose: there is
+ * no env, request, header or Firestore path that can select a different anchor.
+ * It MUST stay byte-identical to `PRODUCTION_CANONICAL_OAC_ROOT_PUBLIC_KEY` in
+ * `src-tauri/src/privileged_auth/enrollment_meta.rs`.
+ */
+export const CANONICAL_OAC_ROOT_PUBLIC_KEY_BASE64URL = '81I9aC0XhQGf6VGrlM2KCoMsMJcEhV43ItODxHrYsU8';
 
 export interface RootSigningKey {
   rootPrivateKey: KeyObject;
@@ -142,18 +152,34 @@ export type RootSigningKeyResult =
 
 const ED25519_PKCS8_HEADER = Buffer.from('302e020100300506032b657004220420', 'hex');
 
-export async function loadRootSigningKey(injectedSecret?: string): Promise<RootSigningKeyResult> {
-  const secret = injectedSecret !== undefined ? injectedSecret : process.env.OAC_ROOT_PRIVATE_KEY_BASE64URL;
-  if (typeof secret !== 'string' || secret.trim().length === 0) {
+/**
+ * SEC-001 R1 seam (`S2`) — the whole candidate-seed validation as a pure function
+ * of (candidate secret, expected root public key): canonical-base64url decode,
+ * 32-byte length, PKCS#8 reconstruction, public-half derivation, and equality
+ * against the expected anchor. Every failure mode returns the same opaque code;
+ * absence is indistinguishable from mismatch by design.
+ *
+ * `loadRootSigningKey` is the ONLY production caller and always passes the
+ * compile-time pinned `CANONICAL_OAC_ROOT_PUBLIC_KEY_BASE64URL`, so the
+ * production trust anchor is never runtime-selectable. The second parameter
+ * exists so `signingKeyLoader.test.ts` can prove the success path against an
+ * ephemeral test root without possessing the production root seed — it must
+ * never be wired to request data, headers, callable input, env or Firestore.
+ */
+export function validateRootSigningSecret(
+  candidateSecret: string | undefined,
+  expectedRootPublicKeyBase64Url: string,
+): RootSigningKeyResult {
+  if (typeof candidateSecret !== 'string' || candidateSecret.trim().length === 0) {
     return { ok: false, code: 'root_signing_key_unavailable' };
   }
   let secretBuf: Buffer;
   try {
-    secretBuf = Buffer.from(secret, 'base64url');
+    secretBuf = Buffer.from(candidateSecret, 'base64url');
   } catch {
     return { ok: false, code: 'root_signing_key_unavailable' };
   }
-  if (secretBuf.length !== 32 || secretBuf.toString('base64url') !== secret) {
+  if (secretBuf.length !== 32 || secretBuf.toString('base64url') !== candidateSecret) {
     return { ok: false, code: 'root_signing_key_unavailable' };
   }
 
@@ -162,17 +188,22 @@ export async function loadRootSigningKey(injectedSecret?: string): Promise<RootS
     const privateKey = createPrivateKey({ key: pkcs8, format: 'der', type: 'pkcs8' });
     const pubKey = createPublicKey(privateKey);
     const pubJwk = pubKey.export({ format: 'jwk' }) as { x?: string };
-    if (pubJwk.x !== CANONICAL_OAC_ROOT_PUBLIC_KEY_BASE64URL) {
+    if (pubJwk.x !== expectedRootPublicKeyBase64Url) {
       return { ok: false, code: 'root_signing_key_unavailable' };
     }
     return {
       ok: true,
       rootPrivateKey: privateKey,
-      rootPublicKeyBase64Url: CANONICAL_OAC_ROOT_PUBLIC_KEY_BASE64URL,
+      rootPublicKeyBase64Url: expectedRootPublicKeyBase64Url,
     };
   } catch {
     return { ok: false, code: 'root_signing_key_unavailable' };
   }
+}
+
+export async function loadRootSigningKey(injectedSecret?: string): Promise<RootSigningKeyResult> {
+  const secret = injectedSecret !== undefined ? injectedSecret : process.env.OAC_ROOT_PRIVATE_KEY_BASE64URL;
+  return validateRootSigningSecret(secret, CANONICAL_OAC_ROOT_PUBLIC_KEY_BASE64URL);
 }
 
 export interface VerifiableSigningKey {

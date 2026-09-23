@@ -1631,6 +1631,30 @@ pub struct FinalizeDeviceEnrollmentOutcomeDto {
 
 /// Canonical OAC Root Public Key pinned in native client (Option A: public key raw 32 bytes only).
 /// Generated from stable server root; private root key material NEVER exists on client in production.
+///
+/// SEC-001 R1 (Gemini-119): this is the anchor the shipped binary trusts. It was
+/// rotated away from the previous anchor, whose private seed was reconstructible
+/// from committed test fixtures. It MUST stay byte-identical to
+/// `CANONICAL_OAC_ROOT_PUBLIC_KEY_BASE64URL` in `functions/src/signingKeyLoader.ts`
+/// (base64url `81I9aC0XhQGf6VGrlM2KCoMsMJcEhV43ItODxHrYsU8`), asserted by
+/// `test_production_root_pin_is_rotated_new_anchor`.
+pub const PRODUCTION_CANONICAL_OAC_ROOT_PUBLIC_KEY: [u8; 32] = [
+    0xf3, 0x52, 0x3d, 0x68, 0x2d, 0x17, 0x85, 0x01, 0x9f, 0xe9, 0x51, 0xab, 0x94, 0xcd, 0x8a, 0x0a,
+    0x83, 0x2c, 0x30, 0x97, 0x04, 0x85, 0x5e, 0x37, 0x22, 0xd3, 0x83, 0xc4, 0x7a, 0xd8, 0xb1, 0x4f,
+];
+
+/// Non-test builds — i.e. every shipped binary — trust ONLY the production anchor.
+/// `cargo build`/`cargo build --release` never set the `test` cfg, so the
+/// `#[cfg(test)]` alias below cannot reach a distributed artifact.
+#[cfg(not(test))]
+pub const CANONICAL_OAC_ROOT_PUBLIC_KEY: [u8; 32] = PRODUCTION_CANONICAL_OAC_ROOT_PUBLIC_KEY;
+
+/// Test builds keep trusting the pre-existing `TEST_OAC_ROOT_SEED` fixture root,
+/// so the ~20 in-repo fixtures that sign manifests with that seed keep exercising
+/// the real verification paths unchanged. These are the public-half bytes of
+/// `TEST_OAC_ROOT_SEED`; `test_cfg_test_root_pin_seam_separated_from_production`
+/// pins that relationship and asserts this alias never equals the production anchor.
+#[cfg(test)]
 pub const CANONICAL_OAC_ROOT_PUBLIC_KEY: [u8; 32] = [
     0x0d, 0x75, 0x50, 0x75, 0x4e, 0x08, 0x00, 0xa5, 0xd2, 0x37, 0xee, 0xf5, 0x82, 0x60, 0x35, 0x76,
     0x6b, 0x9b, 0x3e, 0x5a, 0x15, 0x86, 0x8a, 0x94, 0x0a, 0xb2, 0x89, 0x95, 0x87, 0x88, 0xe3, 0xb0,
@@ -4899,16 +4923,242 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
+    /// The exact NEW public root produced by the R2 human-custodian ceremony
+    /// (Gemini-119). Held as an independent literal so a copy-paste slip in the
+    /// production constant cannot pass unnoticed. Its private seed is in human
+    /// custody and is NOT known here — see `test_production_root_pin_*` for what
+    /// that does and does not let these tests prove.
+    const R2_NEW_PRODUCTION_ROOT_PUBLIC_KEY: [u8; 32] = [
+        0xf3, 0x52, 0x3d, 0x68, 0x2d, 0x17, 0x85, 0x01, 0x9f, 0xe9, 0x51, 0xab, 0x94, 0xcd, 0x8a,
+        0x0a, 0x83, 0x2c, 0x30, 0x97, 0x04, 0x85, 0x5e, 0x37, 0x22, 0xd3, 0x83, 0xc4, 0x7a, 0xd8,
+        0xb1, 0x4f,
+    ];
+
+    /// The previous anchor, retained ONLY as a negative fixture. Its private seed
+    /// is `TEST_OAC_ROOT_SEED`, which is committed in plaintext, so anything this
+    /// key signs must be worthless to the production trust path.
+    const OLD_COMPROMISED_ROOT_PUBLIC_KEY: [u8; 32] = [
+        0x0d, 0x75, 0x50, 0x75, 0x4e, 0x08, 0x00, 0xa5, 0xd2, 0x37, 0xee, 0xf5, 0x82, 0x60, 0x35,
+        0x76, 0x6b, 0x9b, 0x3e, 0x5a, 0x15, 0x86, 0x8a, 0x94, 0x0a, 0xb2, 0x89, 0x95, 0x87, 0x88,
+        0xe3, 0xb0,
+    ];
+
+    /// Minimal well-formed OKS1 carrying one ACTIVE key, signed by `signer`.
+    /// Returns the signed prefix and the detached signature so a caller can verify
+    /// the same bytes against an arbitrary candidate root.
+    fn oks1_prefix_signed_by(signer: &SigningKey) -> (Vec<u8>, [u8; 64]) {
+        let manifest = frames::OacKeysetManifestFrameV1 {
+            revocation_epoch: 1,
+            generated_at_server_ms: 1000,
+            keys: vec![frames::OacKeysetManifestKeyV1 {
+                signing_key_id: "key-1".to_string(),
+                public_key: SigningKey::generate(&mut OsRng).verifying_key().to_bytes(),
+                status: frames::OacKeyLifecycleStatus::Active,
+                verify_until_server_ms: None,
+            }],
+            signature: [0u8; 64],
+        };
+        let prefix = frames::oks1_signed_prefix(&manifest).unwrap();
+        let sig = signer.sign(&prefix).to_bytes();
+        (prefix, sig)
+    }
+
+    /// N1 compensating proof A — the production anchor is the exact rotated value.
+    ///
+    /// Truthfulness note: the R2 private seed is in human custody and is not known
+    /// to this suite, so a POSITIVE signature test against the new anchor is
+    /// impossible here and is deliberately not faked with some other private key.
+    /// What is proved instead: exact byte identity with the ceremony output, and
+    /// that the pin is a structurally valid Ed25519 verifying key (a malformed pin
+    /// would make every production verification path fail closed at `from_bytes`).
     #[test]
-    fn test_no_private_seed_in_production_trust_path() {
-        // Assert that the native trust anchor in production is public-only (Option A)
-        let root_pub = canonical_oac_root_public_key();
-        assert_eq!(root_pub.len(), 32);
-        // Assert that the derived public key matches the test root seed
-        let derived = SigningKey::from_bytes(&TEST_OAC_ROOT_SEED)
+    fn test_production_root_pin_is_rotated_new_anchor() {
+        assert_eq!(
+            PRODUCTION_CANONICAL_OAC_ROOT_PUBLIC_KEY, R2_NEW_PRODUCTION_ROOT_PUBLIC_KEY,
+            "production root pin must be the exact NEW public root from the R2 ceremony"
+        );
+        assert_eq!(PRODUCTION_CANONICAL_OAC_ROOT_PUBLIC_KEY.len(), 32);
+        assert!(
+            VerifyingKey::from_bytes(&PRODUCTION_CANONICAL_OAC_ROOT_PUBLIC_KEY).is_ok(),
+            "production root pin must parse as a valid Ed25519 verifying key"
+        );
+    }
+
+    /// N1 compensating proof B — the old compromised root is rejected outright.
+    ///
+    /// Two layers: the pin is not the old value, and a real OKS1 signed by the old
+    /// root's (publicly known) seed does not verify against the production pin.
+    #[test]
+    fn test_production_root_pin_rejects_old_compromised_root() {
+        assert_ne!(
+            PRODUCTION_CANONICAL_OAC_ROOT_PUBLIC_KEY, OLD_COMPROMISED_ROOT_PUBLIC_KEY,
+            "production root pin must not be the old compromised anchor"
+        );
+
+        // Premise of the negative fixture: the old anchor really is the public half
+        // of the plaintext-committed test seed.
+        let old_root = SigningKey::from_bytes(&TEST_OAC_ROOT_SEED);
+        assert_eq!(
+            old_root.verifying_key().to_bytes(),
+            OLD_COMPROMISED_ROOT_PUBLIC_KEY
+        );
+
+        let (prefix, sig) = oks1_prefix_signed_by(&old_root);
+
+        // Sanity: the signature IS valid under the old root, so the rejection below
+        // is about the anchor and not about a malformed signature.
+        let old_vk = VerifyingKey::from_bytes(&OLD_COMPROMISED_ROOT_PUBLIC_KEY).unwrap();
+        assert!(old_vk.verify(&prefix, &Signature::from_bytes(&sig)).is_ok());
+
+        let production_vk = VerifyingKey::from_bytes(&PRODUCTION_CANONICAL_OAC_ROOT_PUBLIC_KEY)
+            .expect("production pin must parse");
+        assert!(
+            production_vk
+                .verify(&prefix, &Signature::from_bytes(&sig))
+                .is_err(),
+            "a manifest signed by the old compromised root must NOT verify under the production pin"
+        );
+    }
+
+    /// BF-1 (Codex-026) — integration-style proof through a REAL production
+    /// verifier path, not a direct Ed25519 call.
+    ///
+    /// The sibling test above verifies signatures by calling `VerifyingKey::verify`
+    /// itself, which proves the crypto but never traverses the native trust-chain
+    /// code. This test drives `resolve_active_manifest_path_with_root` — the seam
+    /// behind `resolve_active_manifest_path`, which is what `mod.rs`,
+    /// `offline_verifier.rs` and `staff_session.rs` actually call in production —
+    /// over a fully committed on-disk enrollment whose cached OKS1 is signed by the
+    /// historical `TEST_OAC_ROOT_SEED` root, while explicitly supplying
+    /// `PRODUCTION_CANONICAL_OAC_ROOT_PUBLIC_KEY` as the trusted anchor.
+    ///
+    /// Three parts, in order, so the rejection cannot pass for the wrong reason:
+    ///   1. positive control under the OLD anchor — proves every non-root guard in
+    ///      the resolver (fence parse, schema version, COMMITTED state, id shape,
+    ///      gen-key SHA, gen-meta SHA, manifest SHA canonicality, digest existence
+    ///      and hash, OKS1 decode) passes on these exact bytes;
+    ///   2. the same bytes under the PRODUCTION anchor are rejected, asserting the
+    ///      exact production error string, which is emitted only by the root
+    ///      signature check;
+    ///   3. nothing on disk changed and the resolver still works under the old
+    ///      anchor afterwards — the rejected manifest was never activated and the
+    ///      rejection mutated no trust state.
+    ///
+    /// `resolve_active_manifest_path_with_root` is read-only by construction, which
+    /// is why it is the right path for (3): `persist_digest_manifest_atomic_with_hooks`
+    /// validates the root only AFTER publishing the file (its "post-publish
+    /// validation" block), so it cannot demonstrate non-mutation on rejection.
+    ///
+    /// No positive new-root signature is fabricated and the R2 private seed is not
+    /// used — that proof necessarily waits for R5.
+    #[test]
+    fn test_production_pin_rejects_old_root_signed_manifest_through_resolver_path() {
+        let dir = temp_dir();
+        let manifest_key = SigningKey::generate(&mut OsRng);
+
+        let (_dev_key, oks1_bytes, manifest_sha) = setup_committed_test_enrollment_with_manifest(
+            &dir,
+            "branch-1",
+            [0x11u8; 16],
+            vec![frames::OacKeysetManifestKeyV1 {
+                signing_key_id: "test-key-1".to_string(),
+                public_key: manifest_key.verifying_key().to_bytes(),
+                status: frames::OacKeyLifecycleStatus::Active,
+                verify_until_server_ms: None,
+            }],
+            1,
+        );
+
+        // The cached manifest really is signed by the old compromised root.
+        let old_root_pub = SigningKey::from_bytes(&TEST_OAC_ROOT_SEED)
             .verifying_key()
             .to_bytes();
-        assert_eq!(root_pub, derived);
+        assert_eq!(
+            old_root_pub, OLD_COMPROMISED_ROOT_PUBLIC_KEY,
+            "fixture premise: the historical test root IS the old compromised anchor"
+        );
+
+        let fence_path = enrollment_fence_path(&dir);
+        let digest_path = digest_manifest_path(&dir, &manifest_sha);
+        let fence_before = fs::read(&fence_path).expect("fence must exist");
+        let digest_before = fs::read(&digest_path).expect("digest manifest must exist");
+        assert_eq!(
+            digest_before, oks1_bytes,
+            "on-disk cached manifest must be the old-root-signed OKS1"
+        );
+
+        // 1. Positive control — every non-root guard in the resolver passes.
+        let accepted = resolve_active_manifest_path_with_root(&dir, Some(&old_root_pub))
+            .expect("old-root anchor must resolve this committed enrollment");
+        assert_eq!(accepted, digest_path);
+
+        // 2. BF-1 — identical bytes, production anchor, real production path.
+        let err = resolve_active_manifest_path_with_root(
+            &dir,
+            Some(&PRODUCTION_CANONICAL_OAC_ROOT_PUBLIC_KEY),
+        )
+        .expect_err("production anchor must reject an old-root-signed manifest");
+        assert_eq!(
+            err, "RESOLVER_FAIL_CLOSED: digest manifest root signature verification failed",
+            "rejection must come from the production root-signature check, not an earlier guard"
+        );
+
+        // 3. No trust state mutated by the rejection.
+        assert_eq!(
+            fs::read(&fence_path).expect("fence still readable"),
+            fence_before,
+            "fence must be untouched by a rejected resolve"
+        );
+        assert_eq!(
+            fs::read(&digest_path).expect("digest still readable"),
+            digest_before,
+            "cached manifest bytes must be untouched by a rejected resolve"
+        );
+        assert_eq!(
+            resolve_active_manifest_path_with_root(&dir, Some(&old_root_pub))
+                .expect("resolver must still work after a rejected call"),
+            digest_path
+        );
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// N1 seam integrity — the `#[cfg(test)]` alias keeps the existing fixtures
+    /// working, and must never collapse onto the production anchor. If someone
+    /// changed the alias to the production value, every fixture below would start
+    /// silently exercising an anchor whose seed nobody has, and this fails first.
+    #[test]
+    fn test_cfg_test_root_pin_seam_separated_from_production() {
+        let test_pin = canonical_oac_root_public_key();
+        let derived_test_root = SigningKey::from_bytes(&TEST_OAC_ROOT_SEED)
+            .verifying_key()
+            .to_bytes();
+        assert_eq!(
+            test_pin, derived_test_root,
+            "in a test build the alias must stay the public half of TEST_OAC_ROOT_SEED"
+        );
+        assert_ne!(
+            test_pin, PRODUCTION_CANONICAL_OAC_ROOT_PUBLIC_KEY,
+            "the cfg(test) alias must never equal the production anchor"
+        );
+    }
+
+    /// Option A invariant, unchanged in substance from the pre-rotation test this
+    /// replaces: the native trust anchor is public-only. No private root seed may
+    /// exist on the production trust path — the only private root material in this
+    /// file is `TEST_OAC_ROOT_SEED`, which is `#[cfg(test)]`-gated.
+    #[test]
+    fn test_no_private_seed_in_production_trust_path() {
+        assert_eq!(PRODUCTION_CANONICAL_OAC_ROOT_PUBLIC_KEY.len(), 32);
+        assert!(VerifyingKey::from_bytes(&PRODUCTION_CANONICAL_OAC_ROOT_PUBLIC_KEY).is_ok());
+        // The production anchor must not be derivable from any seed committed here.
+        assert_ne!(
+            PRODUCTION_CANONICAL_OAC_ROOT_PUBLIC_KEY,
+            SigningKey::from_bytes(&TEST_OAC_ROOT_SEED)
+                .verifying_key()
+                .to_bytes(),
+            "production anchor must not be the public half of a committed seed"
+        );
     }
 
     #[test]

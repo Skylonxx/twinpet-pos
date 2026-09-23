@@ -6,6 +6,7 @@ import {
   loadActiveSigningKey,
   loadAllVerifiableSigningKeys,
   loadRootSigningKey,
+  validateRootSigningSecret,
   privateKeyFromRaw,
   publicKeyFromRaw,
   CANONICAL_OAC_ROOT_PUBLIC_KEY_BASE64URL,
@@ -228,34 +229,162 @@ describe('loadRootSigningKey (IR-005 custody & fail-closed root provider)', () =
     expect(res).toEqual({ ok: false, code: 'root_signing_key_unavailable' });
   });
 
-  it('succeeds when injected secret derives fixed canonical public root', async () => {
-    const testSecret = Buffer.alloc(32, 0x5a).toString('base64url');
-    const res = await loadRootSigningKey(testSecret);
-    expect(res.ok).toBe(true);
-    if (!res.ok) throw new Error('unreachable');
-    expect(res.rootPublicKeyBase64Url).toBe(CANONICAL_OAC_ROOT_PUBLIC_KEY_BASE64URL);
+  // SEC-001 R1: the pre-rotation suite proved the success path by injecting
+  // `Buffer.alloc(32, 0x5a)` — the seed of the anchor that was rotated OUT
+  // precisely because it was committed in plaintext. After rotation the real
+  // loader's success path cannot be exercised here at all: it accepts exactly one
+  // seed, that seed is in human custody, and the production anchor is deliberately
+  // not runtime-overridable. So the success path is proved at the pure-helper level
+  // against an ephemeral root (below), and the real loader keeps every fail-closed
+  // proof plus the rotation-specific rejections here. Nothing fakes a positive
+  // result for the production anchor.
+  it('rejects the old compromised [0x5a;32] root seed after rotation', async () => {
+    const oldCompromisedSeed = Buffer.alloc(32, 0x5a).toString('base64url');
+    expect(await loadRootSigningKey(oldCompromisedSeed)).toEqual({
+      ok: false,
+      code: 'root_signing_key_unavailable',
+    });
 
-    const testMsg = Buffer.from('root-signed-manifest-test');
-    const sig = sign(null, testMsg, res.rootPrivateKey);
-    const pubKey = publicKeyFromRaw(CANONICAL_OAC_ROOT_PUBLIC_KEY_BASE64URL);
-    expect(verify(null, testMsg, pubKey, sig)).toBe(true);
+    process.env.OAC_ROOT_PRIVATE_KEY_BASE64URL = oldCompromisedSeed;
+    expect(await loadRootSigningKey()).toEqual({ ok: false, code: 'root_signing_key_unavailable' });
   });
 
-  it('succeeds via server environment variable OAC_ROOT_PRIVATE_KEY_BASE64URL', async () => {
-    process.env.OAC_ROOT_PRIVATE_KEY_BASE64URL = Buffer.alloc(32, 0x5a).toString('base64url');
-    const res = await loadRootSigningKey();
+  it('pins the rotated canonical root public key and never the old one', () => {
+    expect(CANONICAL_OAC_ROOT_PUBLIC_KEY_BASE64URL).toBe('81I9aC0XhQGf6VGrlM2KCoMsMJcEhV43ItODxHrYsU8');
+    expect(CANONICAL_OAC_ROOT_PUBLIC_KEY_BASE64URL).not.toBe('DXVQdU4IAKXSN-71gmA1dmubPloVhoqUCrKJlYeI47A');
+
+    // Byte identity with the native production pin
+    // (`PRODUCTION_CANONICAL_OAC_ROOT_PUBLIC_KEY` in enrollment_meta.rs).
+    const raw = Buffer.from(CANONICAL_OAC_ROOT_PUBLIC_KEY_BASE64URL, 'base64url');
+    expect(raw).toHaveLength(32);
+    expect(raw.toString('base64url')).toBe(CANONICAL_OAC_ROOT_PUBLIC_KEY_BASE64URL);
+    expect(raw.toString('hex')).toBe('f3523d682d1785019fe951ab94cd8a0a832c309704855e3722d383c47ad8b14f');
+
+    // The pin must be a usable Ed25519 public key, or every consumer would fail.
+    expect(publicKeyFromRaw(CANONICAL_OAC_ROOT_PUBLIC_KEY_BASE64URL).asymmetricKeyType).toBe('ed25519');
+  });
+});
+
+describe('validateRootSigningSecret (R1/S2 internal validation seam)', () => {
+  it('accepts a seed whose derived public half equals the expected anchor', () => {
+    const ephemeral = generateRawKeypair();
+    const res = validateRootSigningSecret(ephemeral.privateKeyBase64Url, ephemeral.publicKeyBase64Url);
     expect(res.ok).toBe(true);
     if (!res.ok) throw new Error('unreachable');
-    expect(res.rootPublicKeyBase64Url).toBe(CANONICAL_OAC_ROOT_PUBLIC_KEY_BASE64URL);
+    expect(res.rootPublicKeyBase64Url).toBe(ephemeral.publicKeyBase64Url);
+
+    // Real sign/verify round-trip: the returned key must actually be the private
+    // half of the expected anchor, not merely structurally valid.
+    const message = Buffer.from('root-signed-manifest-test');
+    const signature = sign(null, message, res.rootPrivateKey);
+    expect(verify(null, message, publicKeyFromRaw(ephemeral.publicKeyBase64Url), signature)).toBe(true);
+  });
+
+  it('fails closed on absent, empty, malformed, wrong-length and mismatched candidates', () => {
+    const ephemeral = generateRawKeypair();
+    const expected = ephemeral.publicKeyBase64Url;
+    const failure = { ok: false, code: 'root_signing_key_unavailable' };
+
+    expect(validateRootSigningSecret(undefined, expected)).toEqual(failure);
+    expect(validateRootSigningSecret('', expected)).toEqual(failure);
+    expect(validateRootSigningSecret('   ', expected)).toEqual(failure);
+    expect(validateRootSigningSecret('!@#$%^&*()_+', expected)).toEqual(failure);
+    expect(validateRootSigningSecret(Buffer.alloc(31, 0x11).toString('base64url'), expected)).toEqual(failure);
+    expect(validateRootSigningSecret(Buffer.alloc(33, 0x11).toString('base64url'), expected)).toEqual(failure);
+    // Valid 32-byte seed, but of a different keypair.
+    expect(validateRootSigningSecret(generateRawKeypair().privateKeyBase64Url, expected)).toEqual(failure);
+  });
+
+  it('rejects non-canonical base64url spellings of an otherwise-correct seed', () => {
+    const ephemeral = generateRawKeypair();
+    // Standard-base64 padding/alphabet is not the canonical base64url spelling the
+    // loader requires, so it must be rejected even though it decodes to the right bytes.
+    const padded = `${ephemeral.privateKeyBase64Url}=`;
+    expect(validateRootSigningSecret(padded, ephemeral.publicKeyBase64Url)).toEqual({
+      ok: false,
+      code: 'root_signing_key_unavailable',
+    });
   });
 });
 
 describe('Production Source Audit (No root private seed outside test boundaries)', () => {
+  const productionSrcDir = path.resolve(__dirname, '..');
+
+  /** Every tracked production `.ts` under functions/src (tests excluded). */
+  function productionSourceFiles(): string[] {
+    const out: string[] = [];
+    const walk = (dir: string) => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (entry.name === '__tests__' || entry.name === 'node_modules') continue;
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) walk(full);
+        else if (entry.name.endsWith('.ts') && !entry.name.endsWith('.test.ts')) out.push(full);
+      }
+    };
+    walk(productionSrcDir);
+    return out;
+  }
+
   it('functions production source has no committed root private seed', () => {
     const signingKeyLoaderPath = path.resolve(__dirname, '../signingKeyLoader.ts');
     const content = fs.readFileSync(signingKeyLoaderPath, 'utf8');
     expect(content).not.toContain('CANONICAL_SERVER_ROOT_PRIVATE_KEY_SEED');
     expect(content).not.toContain('Buffer.alloc(32, 0x5a)');
     expect(content).not.toContain('getCanonicalRootSigningKey');
+  });
+
+  // SEC-001 R1 rotation audit.
+  it('no production source retains the old compromised root public pin', () => {
+    const offenders = productionSourceFiles().filter((file) =>
+      fs.readFileSync(file, 'utf8').includes('DXVQdU4IAKXSN-71gmA1dmubPloVhoqUCrKJlYeI47A'),
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it('no tracked source carries the production root private seed', () => {
+    // Exact, not heuristic. The R2 private seed's VALUE is deliberately unknown
+    // here, so instead of string-comparing against it, every base64url-shaped
+    // literal in tracked source is fed to the REAL validator against the
+    // production anchor: a literal that validates IS the production root private
+    // seed. That proves the seed was never committed without this test — or the
+    // implementer — ever needing to know it. Covers the test files too, since the
+    // seed must not appear anywhere, not just in production code.
+    const candidateLiteral = /['"`]([A-Za-z0-9_-]{43,44}=?)['"`]/g;
+    const testFiles = fs
+      .readdirSync(__dirname)
+      .filter((f) => f.endsWith('.test.ts'))
+      .map((f) => path.join(__dirname, f));
+
+    const offenders: string[] = [];
+    for (const file of [...productionSourceFiles(), ...testFiles]) {
+      const content = fs.readFileSync(file, 'utf8');
+      for (const [, literal] of content.matchAll(candidateLiteral)) {
+        if (validateRootSigningSecret(literal, CANONICAL_OAC_ROOT_PUBLIC_KEY_BASE64URL).ok) {
+          offenders.push(path.basename(file));
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('keeps the production trust anchor non-overridable outside signingKeyLoader.ts', () => {
+    // R1/S2 invariant: `validateRootSigningSecret` takes an expected-anchor
+    // argument so tests can use an ephemeral root. No OTHER production file may
+    // call it, or the production anchor would become selectable at a call site.
+    const callers = productionSourceFiles().filter(
+      (file) =>
+        path.basename(file) !== 'signingKeyLoader.ts' &&
+        fs.readFileSync(file, 'utf8').includes('validateRootSigningSecret'),
+    );
+    expect(callers).toEqual([]);
+
+    // And inside the loader, the only anchor passed is the compile-time constant:
+    // no env, request, header or Firestore value may reach that argument.
+    const loaderSource = fs.readFileSync(path.resolve(productionSrcDir, 'signingKeyLoader.ts'), 'utf8');
+    expect(loaderSource).toContain(
+      'return validateRootSigningSecret(secret, CANONICAL_OAC_ROOT_PUBLIC_KEY_BASE64URL);',
+    );
+    // The loader still reads exactly the one documented env carrier.
+    expect(loaderSource).toContain('process.env.OAC_ROOT_PRIVATE_KEY_BASE64URL');
   });
 });

@@ -1,11 +1,40 @@
 import { generateKeyPairSync, sign as ed25519Sign } from 'node:crypto';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { performReEnrollPrivilegedDevice, MAX_DEVICE_KEY_VERSION } from '../reEnrollPrivilegedDevice';
 import { performBeginDeviceRegistration } from '../deviceEnrollment';
 import { drp1SignedPrefix, encodeDrp1 } from '../oacFrame';
 import { decodeEfr1, EFR1_OP_RE_ENROLLMENT } from '../staffSessionAssertionFrame';
 import { privateKeyFromRaw } from '../signingKeyLoader';
 import type { Firestore } from 'firebase-admin/firestore';
+
+/**
+ * SEC-001 R1 root-loader seam.
+ *
+ * The production root anchor was rotated to a key whose private seed lives only in
+ * human custody, so this suite can no longer manufacture a valid production root by
+ * setting the env var to a committed seed. It therefore substitutes an ephemeral
+ * per-run root: `loadRootSigningKey` is replaced by a call to the REAL
+ * `validateRootSigningSecret` with this suite's expected anchor, so every validation
+ * rule the production loader applies (absence, non-canonical base64url, 32-byte
+ * length, derived-public mismatch) still governs these tests — only the expected
+ * anchor differs. That is what keeps the `root_signing_key_unavailable` durability
+ * cases below honest. Fail-closed coverage of the real production loader itself
+ * lives in `signingKeyLoader.test.ts` and is NOT claimed here. No production code
+ * changes, and every other export is the real one via `importOriginal`.
+ */
+const testRootHolder = vi.hoisted(() => ({ publicKeyBase64Url: '' }));
+
+vi.mock('../signingKeyLoader', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../signingKeyLoader')>();
+  return {
+    ...actual,
+    loadRootSigningKey: async (injectedSecret?: string) =>
+      actual.validateRootSigningSecret(
+        injectedSecret !== undefined ? injectedSecret : process.env.OAC_ROOT_PRIVATE_KEY_BASE64URL,
+        testRootHolder.publicKeyBase64Url,
+      ),
+  };
+});
 
 /**
  * Deterministic injection seams for the atomicity tests. All of them are
@@ -91,6 +120,10 @@ function rawKeypair() {
   const d = (privateKey.export({ format: 'jwk' }) as { d: string }).d;
   return { publicKeyBase64Url: x, privateKeyBase64Url: d };
 }
+
+// Ephemeral per-run root for the mocked loader above (see its comment).
+const testRoot = rawKeypair();
+testRootHolder.publicKeyBase64Url = testRoot.publicKeyBase64Url;
 
 const ADMIN_STAFF_ID = 'admin-staff-1';
 const STAFF_ID = 'staff-1';
@@ -251,7 +284,7 @@ describe('reEnrollPrivilegedDevice', () => {
   const originalEnv = process.env.OAC_ROOT_PRIVATE_KEY_BASE64URL;
 
   beforeEach(() => {
-    process.env.OAC_ROOT_PRIVATE_KEY_BASE64URL = Buffer.alloc(32, 0x5a).toString('base64url');
+    process.env.OAC_ROOT_PRIVATE_KEY_BASE64URL = testRoot.privateKeyBase64Url;
   });
 
   afterEach(() => {
@@ -773,7 +806,7 @@ describe('reEnrollPrivilegedDevice', () => {
       staged.expectNoOp(before);
 
       // Repair the environment and retry with the ORIGINAL expected version.
-      process.env.OAC_ROOT_PRIVATE_KEY_BASE64URL = Buffer.alloc(32, 0x5a).toString('base64url');
+      process.env.OAC_ROOT_PRIVATE_KEY_BASE64URL = testRoot.privateKeyBase64Url;
       const retried = await staged.call();
 
       expect(retried.ok).toBe(true);
