@@ -62,13 +62,17 @@ export function validateRegisterIssuerRequest(input: unknown): RegisterIssuerVal
   };
 }
 
-/** Canonical bytes the console signs (with its new issuer private key) as possession proof. */
+/**
+ * Canonical bytes the console signs (with its new issuer private key) as possession proof.
+ * Must match the Admin Console's `issuer_key::sign_issuer_request`, which always binds
+ * `purpose` + `requestId` into the signed `{purpose, requestId, ...fields}` object.
+ */
 export function registerIssuerPossessionProofPayload(
   issuerId: string,
   bootstrapTokenId: string,
   requestId: string,
 ): Buffer {
-  return Buffer.from(canonicalJSON({ issuerId, bootstrapTokenId, requestId }), 'utf8');
+  return Buffer.from(canonicalJSON({ issuerId, bootstrapTokenId, purpose: 'registerIssuer', requestId }), 'utf8');
 }
 
 export function sha256HexOfBase64UrlToken(bootstrapToken: string): string {

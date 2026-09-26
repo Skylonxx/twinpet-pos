@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildIssuerRegistrationDoc,
+  registerIssuerPossessionProofPayload,
   sha256HexOfBase64UrlToken,
   validateRegisterIssuerRequest,
   verifyBootstrapToken,
@@ -96,6 +97,34 @@ describe('verifyBootstrapToken', () => {
       ok: false,
       code: 'bootstrap_token_hash_mismatch',
     });
+  });
+});
+
+describe('registerIssuerPossessionProofPayload', () => {
+  it('equals the exact bytes the Admin Console signer produces for registerIssuer (cross-component parity)', () => {
+    // Golden fixture of admin-issuance-console `issuer_key::sign_issuer_request`
+    // for purpose "registerIssuer" with fields {issuerId, bootstrapTokenId}
+    // (issuerApi.ts): it inserts `purpose` + `requestId`, then `canonical_json`
+    // sorts keys and joins with no whitespace.
+    const tokenId = '0123456789abcdef0123456789abcdef';
+    const requestId = 'AbCdEf0123456789_-AbCdEf01234567';
+    const consoleSignedBytes =
+      `{"bootstrapTokenId":"${tokenId}","issuerId":"hq-console-01",` +
+      `"purpose":"registerIssuer","requestId":"${requestId}"}`;
+    expect(registerIssuerPossessionProofPayload('hq-console-01', tokenId, requestId).toString('utf8')).toBe(
+      consoleSignedBytes,
+    );
+  });
+
+  it('binds purpose "registerIssuer" (differs from the legacy purpose-less shape)', () => {
+    const payload = registerIssuerPossessionProofPayload('hq-console-01', 'token-1', 'r'.repeat(32)).toString('utf8');
+    expect(JSON.parse(payload)).toEqual({
+      bootstrapTokenId: 'token-1',
+      issuerId: 'hq-console-01',
+      purpose: 'registerIssuer',
+      requestId: 'r'.repeat(32),
+    });
+    expect(payload).not.toBe('{"bootstrapTokenId":"token-1","issuerId":"hq-console-01","requestId":"' + 'r'.repeat(32) + '"}');
   });
 });
 

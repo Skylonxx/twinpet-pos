@@ -1,8 +1,9 @@
-import { generateKeyPairSync, sign as ed25519Sign } from 'node:crypto';
+import { generateKeyPairSync, sign as ed25519Sign, verify as ed25519Verify } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
+import { canonicalJSON } from '../credentialStore';
 import { performRegisterIssuer, performRevokeIssuerRegistration } from '../issuerRegistration';
 import { registerIssuerPossessionProofPayload, sha256HexOfBase64UrlToken } from '../issuerRegistrationCore';
-import { privateKeyFromRaw } from '../signingKeyLoader';
+import { privateKeyFromRaw, publicKeyFromRaw } from '../signingKeyLoader';
 import type { Firestore } from 'firebase-admin/firestore';
 
 /**
@@ -401,6 +402,107 @@ describe('performRegisterIssuer', () => {
 
     expect(result).toEqual({ ok: false, code: 'bootstrap_token_already_consumed' });
     expect(store.get('privilegedIssuerRegistrations')).toBeUndefined();
+  });
+
+  // --- B2: possession proof matches the Admin Console signed shape ---------
+
+  const B2_ISSUER = 'hq-console-01';
+  const B2_TOKEN_ID = '0123456789abcdef0123456789abcdef';
+  const B2_REQUEST_ID = 'AbCdEf0123456789_-AbCdEf01234567';
+
+  /**
+   * Signs an arbitrary object exactly the way the Admin Console signer does:
+   * canonical JSON (sorted keys, no whitespace), Ed25519, standard base64.
+   * Built independently of `registerIssuerPossessionProofPayload`.
+   */
+  function b2Request(signedObject: Record<string, unknown>, rawToken: string) {
+    const { publicKeyBase64Url, privateKeyBase64Url } = rawKeypair();
+    const signature = ed25519Sign(
+      null,
+      Buffer.from(canonicalJSON(signedObject), 'utf8'),
+      privateKeyFromRaw(publicKeyBase64Url, privateKeyBase64Url),
+    ).toString('base64');
+    return {
+      publicKeyBase64Url,
+      signature,
+      data: {
+        issuerId: B2_ISSUER,
+        requestId: B2_REQUEST_ID,
+        bootstrapTokenId: B2_TOKEN_ID,
+        bootstrapToken: rawToken,
+        publicKeyBase64Url,
+        signature,
+      },
+    };
+  }
+
+  const consoleShape = (overrides: Record<string, unknown> = {}) => ({
+    bootstrapTokenId: B2_TOKEN_ID,
+    issuerId: B2_ISSUER,
+    purpose: 'registerIssuer',
+    requestId: B2_REQUEST_ID,
+    ...overrides,
+  });
+
+  async function runB2(signedObject: Record<string, unknown>, tokenByte: number) {
+    const rawToken = Buffer.alloc(32, tokenByte).toString('base64url');
+    const { db, store } = fakeFirestore(seedPendingToken(B2_TOKEN_ID, B2_ISSUER, rawToken));
+    const req = b2Request(signedObject, rawToken);
+    const result = await performRegisterIssuer(db, { uid: ADMIN_UID, token: { role: 'admin' } }, req.data, 1000);
+    const tokenStatus = (store.get('privilegedIssuerBootstrapTokens')!.get(B2_TOKEN_ID) as { status: string }).status;
+    return { result, store, tokenStatus, req };
+  }
+
+  it('B2: accepts a proof signed over the Admin Console shape {bootstrapTokenId, issuerId, purpose:"registerIssuer", requestId}', async () => {
+    const { result, store, tokenStatus, req } = await runB2(consoleShape(), 0x81);
+    expect(result).toEqual({ ok: true, issuerId: B2_ISSUER });
+    expect(tokenStatus).toBe('CONSUMED');
+    expect(
+      (store.get('privilegedIssuerRegistrations')!.get(B2_ISSUER) as { publicKeyBase64Url: string }).publicKeyBase64Url,
+    ).toBe(req.publicKeyBase64Url);
+  });
+
+  it('B2: rejects a proof signed over the legacy purpose-less shape and writes nothing', async () => {
+    const { purpose: _purpose, ...legacy } = consoleShape();
+    const { result, store, tokenStatus } = await runB2(legacy, 0x82);
+    expect(result).toEqual({ ok: false, code: 'bad_possession_proof' });
+    expect(store.get('privilegedIssuerRegistrations')).toBeUndefined();
+    expect(tokenStatus).toBe('PENDING');
+  });
+
+  it('B2: a purpose-bound signature does not verify over the purpose-less bytes', () => {
+    const { publicKeyBase64Url, privateKeyBase64Url } = rawKeypair();
+    const signature = ed25519Sign(
+      null,
+      registerIssuerPossessionProofPayload(B2_ISSUER, B2_TOKEN_ID, B2_REQUEST_ID),
+      privateKeyFromRaw(publicKeyBase64Url, privateKeyBase64Url),
+    );
+    const { purpose: _purpose, ...legacy } = consoleShape();
+    const publicKey = publicKeyFromRaw(publicKeyBase64Url);
+    expect(ed25519Verify(null, Buffer.from(canonicalJSON(legacy), 'utf8'), publicKey, signature)).toBe(false);
+    expect(
+      ed25519Verify(null, registerIssuerPossessionProofPayload(B2_ISSUER, B2_TOKEN_ID, B2_REQUEST_ID), publicKey, signature),
+    ).toBe(true);
+  });
+
+  it('B2: rejects a proof signed with a different purpose', async () => {
+    const { result, tokenStatus } = await runB2(
+      consoleShape({ purpose: 'beginDeviceEnrollmentAuthorizationIssuance' }),
+      0x83,
+    );
+    expect(result).toEqual({ ok: false, code: 'bad_possession_proof' });
+    expect(tokenStatus).toBe('PENDING');
+  });
+
+  it.each([
+    ['issuerId', { issuerId: 'hq-console-02' }],
+    ['bootstrapTokenId', { bootstrapTokenId: 'fedcba9876543210fedcba9876543210' }],
+    ['requestId', { requestId: 'ZzZzZz0123456789_-ZzZzZz01234567' }],
+  ])('B2: rejects a proof whose signed %s differs from the request', async (_field, overrides) => {
+    const { result, store, tokenStatus } = await runB2(consoleShape(overrides), 0x84);
+    expect(result).toEqual({ ok: false, code: 'bad_possession_proof' });
+    expect(store.get('privilegedIssuerRegistrations')).toBeUndefined();
+    expect(tokenStatus).toBe('PENDING');
   });
 });
 
