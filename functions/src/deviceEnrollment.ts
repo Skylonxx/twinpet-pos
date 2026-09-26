@@ -14,7 +14,7 @@
 
 import { randomBytes, sign as ed25519Sign, verify as ed25519Verify } from 'node:crypto';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
-import type { DocumentData, Firestore } from 'firebase-admin/firestore';
+import type { DocumentData, DocumentReference, Firestore } from 'firebase-admin/firestore';
 import { FieldValue } from 'firebase-admin/firestore';
 import { db } from './db';
 import { FUNCTIONS_REGION } from './deployConfig';
@@ -30,6 +30,9 @@ import {
   checkEnrollmentAuthorizationForRegistration,
   checkExistingDeviceForInitialRegistration,
   buildSignedEfr1,
+  completionRequestDigest,
+  effectiveEnrollmentGenerationId,
+  COMPLETION_REQUEST_SHA256_RE,
   type CompleteIssuanceFailureCode,
   type DeviceRegistrationSessionRecord,
   type EnrollmentAuthorizationRecord,
@@ -39,7 +42,7 @@ import { publicKeyFromRaw, loadActiveSigningKey, loadAllVerifiableSigningKeys, l
 import { verifyIssuerSignedRequest } from './issuerSignatureAuth';
 import { readRevocationEpoch } from './privilegedRevocationState';
 import { buildOacKeysetManifest } from './oacKeysetManifestCore';
-import { EFR1_OP_INITIAL_ENROLLMENT } from './staffSessionAssertionFrame';
+import { EFR1_OP_INITIAL_ENROLLMENT, isCanonicalIdentifier } from './staffSessionAssertionFrame';
 
 export const ENROLLMENT_AUTHORIZATIONS_COLLECTION = 'privilegedDeviceEnrollmentAuthorizations';
 export const REGISTRATION_SESSIONS_COLLECTION = 'privilegedDeviceRegistrationSessions';
@@ -306,7 +309,11 @@ export async function performCompleteDeviceRegistration(
 
   const sessionRef = database.collection(REGISTRATION_SESSIONS_COLLECTION).doc(raw.registrationSessionId);
   const sessionSnap = await sessionRef.get();
-  const session = sessionFromData(sessionSnap.exists ? sessionSnap.data() : undefined);
+  const sessionData = sessionSnap.exists ? sessionSnap.data() : undefined;
+  const session = sessionFromData(sessionData);
+  if (session?.status === 'CONSUMED') {
+    return performConsumedCompletionReplay(database, auth.uid, raw, session, sessionData!, nowMs);
+  }
   const sessionCheck = checkDeviceRegistrationSession(session, auth.uid, nowMs);
   if (!sessionCheck.ok) return { ok: false, code: sessionCheck.code };
 
@@ -380,10 +387,15 @@ export async function performCompleteDeviceRegistration(
   }
   const oks1Base64 = encodeOks1(manifestRes.manifest).toString('base64');
 
-  const enrollmentGenId =
-    typeof raw.enrollmentGenerationId === 'string' && /^[0-9a-f]{32}$/i.test(raw.enrollmentGenerationId)
-      ? raw.enrollmentGenerationId
-      : '00000000000000000000000000000000';
+  const enrollmentGenId = effectiveEnrollmentGenerationId(raw.enrollmentGenerationId);
+  // Precomputed before consume: persisted atomically with the session's
+  // consumption so a lost response can later be recovered by exact replay.
+  let completionRequestSha256: string;
+  try {
+    completionRequestSha256 = completionRequestDigest(raw.registrationSessionId, drp1Bytes, enrollmentGenId);
+  } catch {
+    return { ok: false, code: 'invalid_request_shape' };
+  }
 
   const { efr1Bytes } = buildSignedEfr1(
     EFR1_OP_INITIAL_ENROLLMENT,
@@ -416,12 +428,11 @@ export async function performCompleteDeviceRegistration(
       if (!freshSessionCheck.ok) throw new Error(freshSessionCheck.code);
 
       tx.update(authRef, { status: 'CONSUMED', consumedAtServerMs: nowMs, consumedAt: FieldValue.serverTimestamp() });
-      tx.update(sessionRef, { status: 'CONSUMED' });
+      tx.update(sessionRef, { status: 'CONSUMED', completionRequestSha256 });
       tx.set(deviceRef, { ...registration, registeredAt: FieldValue.serverTimestamp() });
     });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return { ok: false, code: msg };
+    return adjudicateRejectedCompletionTransaction(database, auth.uid, raw, sessionRef, err, nowMs);
   }
 
   return {
@@ -432,6 +443,190 @@ export async function performCompleteDeviceRegistration(
     acceptedPublicKeyBase64: drp1.devProofPublicKey.toString('base64'),
     serverFinalizationReceiptBase64: efr1Bytes.toString('base64'),
     oks1Base64,
+  };
+}
+
+// --- completeDeviceRegistration: rejected-transaction outcome adjudication ----
+
+/** Thrown (never returned) when a completion's durable outcome cannot be proven. */
+const COMPLETION_OUTCOME_UNKNOWN = 'completion_outcome_unknown';
+
+/**
+ * A rejected `runTransaction` does NOT prove that nothing committed: the
+ * commit may have been applied and only its acknowledgement lost, and a
+ * retry then observes the attempt's own writes (ACTIVE device / CONSUMED
+ * session) and rejects. Returning a structured `{ok:false}` there would let
+ * the client discard its only completion intent. So the outcome is
+ * adjudicated from a fresh read of the SAME session:
+ *
+ *  - CONSUMED → possibly our commit: exact consumed replay (called directly —
+ *    it never re-enters this transaction path). Success is returned; any
+ *    replay failure is thrown as ambiguity, because on this first-call path
+ *    a structured rejection would release the client's intent.
+ *  - exactly PENDING, same session and owner → no consume happened: the
+ *    ORIGINAL semantic error keeps its existing structured mapping.
+ *  - anything else (read failure, missing, malformed, other status) →
+ *    ambiguous: thrown, so the callable fails as internal and the client
+ *    keeps its durable intent.
+ *
+ * Read-only: nothing is mutated here.
+ */
+async function adjudicateRejectedCompletionTransaction(
+  database: Firestore,
+  requesterUid: string,
+  raw: Record<string, unknown>,
+  sessionRef: DocumentReference,
+  transactionError: unknown,
+  nowMs: number,
+): Promise<CompleteRegistrationResponse> {
+  let rereadData: DocumentData | undefined;
+  try {
+    const snap = await sessionRef.get();
+    rereadData = snap.exists ? snap.data() : undefined;
+  } catch {
+    throw new Error(COMPLETION_OUTCOME_UNKNOWN);
+  }
+  const reread = sessionFromData(rereadData);
+  if (reread == null || reread.registrationSessionId !== raw.registrationSessionId) {
+    throw new Error(COMPLETION_OUTCOME_UNKNOWN);
+  }
+
+  if (reread.status === 'CONSUMED') {
+    const replay = await performConsumedCompletionReplay(database, requesterUid, raw, reread, rereadData!, nowMs);
+    if (replay.ok) return replay;
+    throw new Error(COMPLETION_OUTCOME_UNKNOWN);
+  }
+  if (reread.status === 'PENDING' && reread.requesterUid === requesterUid) {
+    const msg = transactionError instanceof Error ? transactionError.message : String(transactionError);
+    return { ok: false, code: msg };
+  }
+  throw new Error(COMPLETION_OUTCOME_UNKNOWN);
+}
+
+// --- completeDeviceRegistration: consumed-session exact replay ---------------
+
+/**
+ * Response-loss recovery for `completeDeviceRegistration` (SEC-001
+ * Gemini-178/180). The first call committed — session and authorization
+ * CONSUMED, device ACTIVE at version 1 — but the caller never received the
+ * response. The caller replays the EXACT same request; this branch proves it
+ * is the same requester, the same request (stored digest), and that the
+ * device is still exactly as that request committed it, then recomputes a
+ * fresh OKS1 + INITIAL_ENROLLMENT EFR1 for the SAME committed bindings.
+ *
+ * Read-only: no transaction, no write, no timestamp, no audit. Deliberately
+ * NOT bounded by the session's original 10-minute expiry (restart recovery),
+ * and deliberately does NOT use the initial-registration "device must not
+ * exist" gate — the committed device is exactly what it must find.
+ */
+async function performConsumedCompletionReplay(
+  database: Firestore,
+  requesterUid: string,
+  raw: Record<string, unknown>,
+  session: DeviceRegistrationSessionRecord,
+  sessionData: DocumentData,
+  nowMs: number,
+): Promise<CompleteRegistrationResponse> {
+  if (session.requesterUid !== requesterUid) return { ok: false, code: 'session_wrong_owner' };
+
+  const drp1Bytes = Buffer.from(raw.drp1Base64 as string, 'base64');
+  const decoded = decodeDrp1(drp1Bytes);
+  if (!decoded.ok) return { ok: false, code: 'drp1_decode_failed' };
+  const drp1 = decoded.value;
+
+  const nonceCheck = checkDrp1NonceBinding(drp1, session);
+  if (!nonceCheck.ok) return { ok: false, code: nonceCheck.code };
+
+  let selfSignatureValid: boolean;
+  try {
+    const devicePublicKey = publicKeyFromRaw(drp1.devProofPublicKey.toString('base64url'));
+    selfSignatureValid = ed25519Verify(null, drp1SignedPrefix(drp1), devicePublicKey, drp1.signature);
+  } catch {
+    selfSignatureValid = false;
+  }
+  if (!selfSignatureValid) return { ok: false, code: 'drp1_bad_self_signature' };
+
+  const enrollmentGenId = effectiveEnrollmentGenerationId(raw.enrollmentGenerationId);
+  let replayDigest: string;
+  try {
+    replayDigest = completionRequestDigest(raw.registrationSessionId as string, drp1Bytes, enrollmentGenId);
+  } catch {
+    return { ok: false, code: 'invalid_request_shape' };
+  }
+  const storedDigest = sessionData.completionRequestSha256;
+  if (typeof storedDigest !== 'string' || !COMPLETION_REQUEST_SHA256_RE.test(storedDigest)) {
+    return { ok: false, code: 'legacy_session_unrecoverable' };
+  }
+  if (storedDigest !== replayDigest) return { ok: false, code: 'completion_replay_mismatch' };
+
+  const securityDeviceIdHex = drp1.securityDeviceId.toString('hex');
+  const acceptedPublicKeyBase64 = drp1.devProofPublicKey.toString('base64');
+
+  const deviceSnap = await database.collection(DEVICE_REGISTRATIONS_COLLECTION).doc(securityDeviceIdHex).get();
+  const device = deviceSnap.exists ? ((deviceSnap.data() ?? {}) as DocumentData) : undefined;
+  if (
+    !device ||
+    device.status !== 'ACTIVE' ||
+    device.deviceKeyVersion !== 1 ||
+    device.validatedDevProofPublicKeyBase64 !== acceptedPublicKeyBase64 ||
+    device.devProofRegistrationNonce !== session.deviceRegistrationNonce.toString('base64') ||
+    typeof device.branchId !== 'string' ||
+    !isCanonicalIdentifier(device.branchId) ||
+    device.reEnrolledAtServerMs !== undefined
+  ) {
+    return { ok: false, code: 'device_state_changed' };
+  }
+  const branchId: string = device.branchId;
+
+  const authSnap = await database.collection(ENROLLMENT_AUTHORIZATIONS_COLLECTION).doc(drp1.enrollmentAuthId).get();
+  const authRecord = enrollmentAuthFromData(authSnap.exists ? authSnap.data() : undefined);
+  if (!authRecord || authRecord.status !== 'CONSUMED' || authRecord.branchId !== branchId) {
+    return { ok: false, code: 'device_state_changed' };
+  }
+
+  const activeKey = await loadActiveSigningKey(firestoreSigningKeyReaders(database));
+  if (!activeKey.ok) return { ok: false, code: 'signing_key_unavailable' };
+  const [verifiableKeys, revocationEpoch, rootKey] = await Promise.all([
+    loadAllVerifiableSigningKeys(database, nowMs),
+    readRevocationEpoch(database),
+    loadRootSigningKey(),
+  ]);
+  if (!rootKey.ok) return { ok: false, code: rootKey.code };
+  const manifestRes = buildOacKeysetManifest(
+    verifiableKeys.map((k) => ({
+      signingKeyId: k.signingKeyId,
+      publicKeyBase64Url: k.publicKeyBase64Url,
+      status: k.status,
+      verifyUntilServerMs: k.verifyUntilServerMs,
+    })),
+    revocationEpoch,
+    nowMs,
+    activeKey.signingKeyId,
+    rootKey.rootPrivateKey,
+  );
+  if (!manifestRes.ok) return { ok: false, code: manifestRes.code };
+
+  const { efr1Bytes } = buildSignedEfr1(
+    EFR1_OP_INITIAL_ENROLLMENT,
+    enrollmentGenId,
+    securityDeviceIdHex,
+    1,
+    drp1.devProofPublicKey,
+    drp1.deviceRegistrationNonce,
+    branchId,
+    nowMs,
+    activeKey.signingKeyId,
+    activeKey.privateKey,
+  );
+
+  return {
+    ok: true,
+    securityDeviceIdHex,
+    branchId,
+    deviceKeyVersion: 1,
+    acceptedPublicKeyBase64,
+    serverFinalizationReceiptBase64: efr1Bytes.toString('base64'),
+    oks1Base64: encodeOks1(manifestRes.manifest).toString('base64'),
   };
 }
 

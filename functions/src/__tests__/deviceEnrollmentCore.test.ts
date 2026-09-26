@@ -7,11 +7,62 @@ import {
   checkDrp1NonceBinding,
   checkEnrollmentAuthorizationForIssuance,
   checkEnrollmentAuthorizationForRegistration,
+  completionRequestDigest,
+  effectiveEnrollmentGenerationId,
   isValidBranchId,
+  LEGACY_ZERO_ENROLLMENT_GENERATION_ID,
   type EnrollmentAuthorizationRecord,
   type DeviceRegistrationSessionRecord,
 } from '../deviceEnrollmentCore';
 import type { DeviceRegistrationPossessionFrameV1 } from '../oacFrame';
+
+describe('completionRequestDigest', () => {
+  const SESSION = 'aa'.repeat(16);
+  const GEN = '0123456789abcdef0123456789abcdef';
+  const DRP1 = Buffer.alloc(185, 0x5a);
+
+  it('matches the fixed golden vector (independently computed)', () => {
+    // sha256(DRP1) = 937c3518…55bcb3; preimage = UTF-8 canonical JSON of
+    // {d, drp1Sha256, enrollmentGenerationId, registrationSessionId}.
+    expect(completionRequestDigest(SESSION, DRP1, GEN)).toBe(
+      '65bb1df564dc6479f3ab56c3e80e888e4d169b95b848589a9583d856fcb94b0e',
+    );
+  });
+
+  it('uppercase generation maps to the same effective digest as lowercase', () => {
+    expect(effectiveEnrollmentGenerationId(GEN.toUpperCase())).toBe(GEN);
+    expect(completionRequestDigest(SESSION, DRP1, effectiveEnrollmentGenerationId(GEN.toUpperCase()))).toBe(
+      completionRequestDigest(SESSION, DRP1, GEN),
+    );
+  });
+
+  it('absent/malformed generation maps to the legacy zero generation', () => {
+    for (const bad of [undefined, null, 42, '', 'xyz', GEN.slice(1), `${GEN}0`]) {
+      expect(effectiveEnrollmentGenerationId(bad)).toBe(LEGACY_ZERO_ENROLLMENT_GENERATION_ID);
+    }
+    expect(completionRequestDigest(SESSION, DRP1, effectiveEnrollmentGenerationId('not-hex'))).toBe(
+      completionRequestDigest(SESSION, DRP1, '0'.repeat(32)),
+    );
+  });
+
+  it('a one-byte DRP1 change changes the digest', () => {
+    const changed = Buffer.from(DRP1);
+    changed[100] ^= 0x01;
+    expect(completionRequestDigest(SESSION, changed, GEN)).not.toBe(completionRequestDigest(SESSION, DRP1, GEN));
+  });
+
+  it('a different session changes the digest; generation is bound too', () => {
+    expect(completionRequestDigest('bb'.repeat(16), DRP1, GEN)).not.toBe(completionRequestDigest(SESSION, DRP1, GEN));
+    expect(completionRequestDigest(SESSION, DRP1, 'f'.repeat(32))).not.toBe(completionRequestDigest(SESSION, DRP1, GEN));
+  });
+
+  it('rejects malformed session / DRP1 length / generation before hashing', () => {
+    expect(() => completionRequestDigest('AA'.repeat(16), DRP1, GEN)).toThrow('invalid registrationSessionId');
+    expect(() => completionRequestDigest('aa', DRP1, GEN)).toThrow('invalid registrationSessionId');
+    expect(() => completionRequestDigest(SESSION, Buffer.alloc(184), GEN)).toThrow('invalid DRP1 length');
+    expect(() => completionRequestDigest(SESSION, DRP1, GEN.toUpperCase())).toThrow('invalid enrollmentGenerationId');
+  });
+});
 
 describe('isValidBranchId', () => {
   it('accepts a normal branch id', () => expect(isValidBranchId('LDP-001')).toBe(true));

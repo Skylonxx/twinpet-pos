@@ -11,8 +11,9 @@
  */
 
 import type { KeyObject } from 'node:crypto';
-import { sign as ed25519Sign } from 'node:crypto';
-import type { DeviceRegistrationPossessionFrameV1 } from './oacFrame';
+import { createHash, sign as ed25519Sign } from 'node:crypto';
+import { canonicalJSON } from './credentialStore';
+import { DRP1_TOTAL_BYTES, type DeviceRegistrationPossessionFrameV1 } from './oacFrame';
 import {
   efr1SignaturePreimage,
   encodeEfr1,
@@ -188,6 +189,49 @@ export function buildValidatedDeviceRegistration(
     deviceKeyVersion: 1,
     registeredAtServerMs: nowMs,
   };
+}
+
+// --- Completion-request correlation (response-loss recovery) --------------
+
+export const COMPLETION_REQUEST_DIGEST_DOMAIN = 'twinpet.completeDeviceRegistration.request.v1';
+/** The zero generation the complete path has always used for an absent/malformed `enrollmentGenerationId`. */
+export const LEGACY_ZERO_ENROLLMENT_GENERATION_ID = '0'.repeat(32);
+export const COMPLETION_REQUEST_SHA256_RE = /^[0-9a-f]{64}$/;
+const LOWER_HEX32_RE = /^[0-9a-f]{32}$/;
+
+/**
+ * The generation id the complete path actually binds into the EFR1: a hex32
+ * request value (any case) lower-cased, otherwise the legacy zero generation.
+ * Lower-casing does not change the EFR1 bytes (hex decoding is case-blind).
+ */
+export function effectiveEnrollmentGenerationId(requested: unknown): string {
+  return typeof requested === 'string' && /^[0-9a-f]{32}$/i.test(requested)
+    ? requested.toLowerCase()
+    : LEGACY_ZERO_ENROLLMENT_GENERATION_ID;
+}
+
+/**
+ * SHA-256 (64 lowercase hex) over the UTF-8 canonical JSON of the exact
+ * logical completion request:
+ * `{d, registrationSessionId, drp1Sha256, enrollmentGenerationId}`.
+ * Every value is ASCII hex or the fixed domain string, so canonicalJSON is
+ * unambiguous. Throws on a malformed input rather than digesting it.
+ */
+export function completionRequestDigest(
+  registrationSessionId: string,
+  drp1Bytes: Buffer,
+  effectiveGenerationId: string,
+): string {
+  if (!LOWER_HEX32_RE.test(registrationSessionId)) throw new Error('invalid registrationSessionId');
+  if (drp1Bytes.length !== DRP1_TOTAL_BYTES) throw new Error('invalid DRP1 length');
+  if (!LOWER_HEX32_RE.test(effectiveGenerationId)) throw new Error('invalid enrollmentGenerationId');
+  const preimage = canonicalJSON({
+    d: COMPLETION_REQUEST_DIGEST_DOMAIN,
+    registrationSessionId,
+    drp1Sha256: createHash('sha256').update(drp1Bytes).digest('hex'),
+    enrollmentGenerationId: effectiveGenerationId,
+  });
+  return createHash('sha256').update(Buffer.from(preimage, 'utf8')).digest('hex');
 }
 
 export type CheckExistingDeviceResult =

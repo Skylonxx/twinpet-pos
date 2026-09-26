@@ -529,13 +529,9 @@ pub fn native_finalize_device_enrollment(
     oks1_base64: Option<String>,
     expected_operation_kind: Option<String>,
 ) -> Result<enrollment_meta::FinalizeDeviceEnrollmentOutcomeDto, String> {
-    if let Some(ref receipt_b64) = server_receipt_base64 {
-        state.record_receipt_ingress_from_base64(receipt_b64)?;
-    }
-    let root = app_data_dir();
-    enrollment_meta::finalize_device_enrollment_internal(
+    finalize_device_enrollment_command(
         &state,
-        &root,
+        &app_data_dir(),
         &enrollment_generation_id,
         &security_device_id_hex,
         &branch_id,
@@ -544,6 +540,62 @@ pub fn native_finalize_device_enrollment(
         server_receipt_base64.as_deref(),
         oks1_base64.as_deref(),
         expected_operation_kind.as_deref(),
+    )
+}
+
+/// Exact `expected_operation_kind` value that may use the restart fallback.
+const RESTART_FALLBACK_OPERATION_KIND: &str = "INITIAL_ENROLLMENT";
+const INGRESS_NO_MATCHING_REQUEST_PREFIX: &str = "INGRESS_NO_MATCHING_REQUEST:";
+
+/// Root-parameterized body of `native_finalize_device_enrollment` (the command
+/// is a thin shim over this), so the wrapper contract is unit-testable against
+/// a real fresh `EnrollmentRuntimeState`.
+///
+/// Receipt ingress binds the receipt to the live `PendingRequestContext` that
+/// `native_generate_device_registration_proof` recorded in this process. That
+/// context is in-memory only, so after an app restart every receipt would fail
+/// ingress with `INGRESS_NO_MATCHING_REQUEST`. SEC-001 Gemini-180 Option A:
+/// ONLY for an INITIAL_ENROLLMENT whose ingress failed with exactly that error
+/// while no live context exists for the claimed generation, finalization
+/// continues WITHOUT any observation (none is fabricated) into the unchanged
+/// internal finalizer, which still enforces every EFR1/OKS1/root/staged-
+/// generation/branch/version/key check and fails closed for a VERIFY_ONLY
+/// signer without a trusted observation. Every other ingress error — including
+/// a live-context mismatch, a boot-session mismatch, a malformed receipt, and
+/// any RE_ENROLLMENT — stays fatal.
+fn finalize_device_enrollment_command(
+    state: &enrollment_meta::EnrollmentRuntimeState,
+    root: &Path,
+    enrollment_generation_id: &str,
+    security_device_id_hex: &str,
+    branch_id: &str,
+    device_key_version: u32,
+    accepted_public_key_base64: &str,
+    server_receipt_base64: Option<&str>,
+    oks1_base64: Option<&str>,
+    expected_operation_kind: Option<&str>,
+) -> Result<enrollment_meta::FinalizeDeviceEnrollmentOutcomeDto, String> {
+    if let Some(receipt_b64) = server_receipt_base64 {
+        if let Err(ingress_error) = state.record_receipt_ingress_from_base64(receipt_b64) {
+            let restart_fallback = expected_operation_kind == Some(RESTART_FALLBACK_OPERATION_KIND)
+                && ingress_error.starts_with(INGRESS_NO_MATCHING_REQUEST_PREFIX)
+                && state.find_pending_request(enrollment_generation_id).is_none();
+            if !restart_fallback {
+                return Err(ingress_error);
+            }
+        }
+    }
+    enrollment_meta::finalize_device_enrollment_internal(
+        state,
+        root,
+        enrollment_generation_id,
+        security_device_id_hex,
+        branch_id,
+        device_key_version,
+        accepted_public_key_base64,
+        server_receipt_base64,
+        oks1_base64,
+        expected_operation_kind,
     )
 }
 
@@ -992,5 +1044,389 @@ mod command_glue_tests {
         let result = device_registration_status_internal(&dir);
         assert!(result.is_err(), "unknown-newer security device id version must propagate an error, not a false-absent success");
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    // --- Gemini-180 Option A: finalize command-wrapper restart fallback ------
+    //
+    // These drive `finalize_device_enrollment_command` (the production body of
+    // `native_finalize_device_enrollment`) with a REAL `EnrollmentRuntimeState`:
+    // "same process" keeps the runtime that recorded the pending request;
+    // "fresh runtime" drops it and builds a new one (an app restart).
+
+    use ed25519_dalek::Signer as _;
+    use enrollment_meta::EnrollmentRuntimeState;
+    use frames::OacKeyLifecycleStatus;
+
+    const FIN_BRANCH: &str = "HQ-001";
+    const FIN_SIGNER_ID: &str = "fin-signer-1";
+    const FIN_SIGNER_SEED: [u8; 32] = [0x6bu8; 32];
+    const FIN_NONCE: [u8; 32] = [0x42u8; 32];
+    const INITIAL: Option<&str> = Some("INITIAL_ENROLLMENT");
+
+    struct Staged {
+        dir: PathBuf,
+        sec_id: [u8; 16],
+        sec_id_hex: String,
+        gen: [u8; 16],
+        gen_hex: String,
+        pk: [u8; 32],
+        pk_b64: String,
+    }
+
+    fn to_hex(bytes: &[u8]) -> String {
+        bytes.iter().map(|b| format!("{b:02x}")).collect()
+    }
+
+    fn gen_from_hex(hex: &str) -> [u8; 16] {
+        let mut out = [0u8; 16];
+        for (i, byte) in out.iter_mut().enumerate() {
+            *byte = u8::from_str_radix(&hex[i * 2..i * 2 + 2], 16).unwrap();
+        }
+        out
+    }
+
+    /// Stages a real generation through the production proof generator, which
+    /// also records the live PendingRequestContext in `runtime`.
+    fn stage(runtime: &EnrollmentRuntimeState) -> Staged {
+        let dir = temp_dir();
+        let sec_id = security_device_id::resolve_or_create_security_device_id(&dir).unwrap();
+        let outcome = generate_device_registration_proof(runtime, &dir, &"ab".repeat(16), FIN_NONCE).unwrap();
+        let mut pk = [0u8; 32];
+        pk.copy_from_slice(&outcome.staged_public_key_bytes);
+        Staged {
+            sec_id,
+            sec_id_hex: to_hex(&sec_id),
+            gen: gen_from_hex(&outcome.enrollment_generation_id_hex),
+            gen_hex: outcome.enrollment_generation_id_hex,
+            pk,
+            pk_b64: enrollment_meta::base64_encode_std(&pk),
+            dir,
+        }
+    }
+
+    fn signed_oks1_b64(signer_status: OacKeyLifecycleStatus) -> String {
+        let root = SigningKey::from_bytes(&enrollment_meta::TEST_OAC_ROOT_SEED);
+        let signer = SigningKey::from_bytes(&FIN_SIGNER_SEED);
+        let verify_until_server_ms = match signer_status {
+            OacKeyLifecycleStatus::VerifyOnly => Some(u64::MAX / 2),
+            _ => None,
+        };
+        let unsigned = frames::OacKeysetManifestFrameV1 {
+            revocation_epoch: 1,
+            generated_at_server_ms: 1000,
+            keys: vec![frames::OacKeysetManifestKeyV1 {
+                signing_key_id: FIN_SIGNER_ID.to_string(),
+                public_key: signer.verifying_key().to_bytes(),
+                status: signer_status,
+                verify_until_server_ms,
+            }],
+            signature: [0u8; 64],
+        };
+        let signature = root.sign(&frames::oks1_signed_prefix(&unsigned).unwrap()).to_bytes();
+        let signed = frames::OacKeysetManifestFrameV1 { signature, ..unsigned };
+        enrollment_meta::base64_encode_std(&frames::encode_oks1(&signed).unwrap())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn signed_efr1_bytes(
+        operation_kind: u8,
+        receipt_nonce: [u8; 32],
+        gen: [u8; 16],
+        sec_id: [u8; 16],
+        device_key_version: u32,
+        pk: [u8; 32],
+        branch_id: &str,
+    ) -> Vec<u8> {
+        let signer = SigningKey::from_bytes(&FIN_SIGNER_SEED);
+        let unsigned = frames::EnrollmentFinalizationReceiptFrameV1 {
+            operation_kind,
+            receipt_nonce,
+            enrollment_generation_id: gen,
+            security_device_id: sec_id,
+            device_key_version,
+            accepted_public_key: pk,
+            server_sent_at_ms: 2000,
+            branch_id: branch_id.to_string(),
+            signing_key_id: FIN_SIGNER_ID.to_string(),
+            signature: [0u8; 64],
+        };
+        let signature = signer.sign(&frames::efr1_signature_preimage(&unsigned).unwrap()).to_bytes();
+        frames::encode_efr1(&frames::EnrollmentFinalizationReceiptFrameV1 { signature, ..unsigned }).unwrap()
+    }
+
+    /// The exact receipt a server would return for `s` (INITIAL, version 1).
+    fn valid_efr1_b64(s: &Staged) -> String {
+        enrollment_meta::base64_encode_std(&signed_efr1_bytes(
+            frames::EFR1_OP_INITIAL_ENROLLMENT,
+            FIN_NONCE,
+            s.gen,
+            s.sec_id,
+            1,
+            s.pk,
+            FIN_BRANCH,
+        ))
+    }
+
+    fn finalize(
+        runtime: &EnrollmentRuntimeState,
+        s: &Staged,
+        receipt_b64: &str,
+        oks1_b64: &str,
+        op: Option<&str>,
+    ) -> Result<enrollment_meta::FinalizeDeviceEnrollmentOutcomeDto, String> {
+        finalize_device_enrollment_command(
+            runtime,
+            &s.dir,
+            &s.gen_hex,
+            &s.sec_id_hex,
+            FIN_BRANCH,
+            1,
+            &s.pk_b64,
+            Some(receipt_b64),
+            Some(oks1_b64),
+            op,
+        )
+    }
+
+    fn expect_err_containing(result: Result<enrollment_meta::FinalizeDeviceEnrollmentOutcomeDto, String>, needle: &str) {
+        match result {
+            Ok(outcome) => panic!("expected an error containing {needle}, got success {}", outcome.status),
+            Err(e) => assert!(e.contains(needle), "expected an error containing {needle}, got: {e}"),
+        }
+    }
+
+    fn assert_not_committed(s: &Staged) {
+        assert!(
+            device_proof::load_enrolled_device_keypair(&s.dir).is_err(),
+            "a rejected finalize must not commit an enrolled device key"
+        );
+    }
+
+    #[test]
+    fn finalize_command_same_process_valid_initial_enrollment_commits() {
+        let runtime = EnrollmentRuntimeState::new();
+        let s = stage(&runtime);
+        let outcome = finalize(&runtime, &s, &valid_efr1_b64(&s), &signed_oks1_b64(OacKeyLifecycleStatus::Active), INITIAL).unwrap();
+        assert_eq!(outcome.status, "COMMITTED");
+        assert_eq!(outcome.device_key_version, 1);
+        let _ = fs::remove_dir_all(&s.dir);
+    }
+
+    #[test]
+    fn finalize_command_same_process_wrong_nonce_is_fatal() {
+        let runtime = EnrollmentRuntimeState::new();
+        let s = stage(&runtime);
+        let receipt = enrollment_meta::base64_encode_std(&signed_efr1_bytes(
+            frames::EFR1_OP_INITIAL_ENROLLMENT, [0x43u8; 32], s.gen, s.sec_id, 1, s.pk, FIN_BRANCH,
+        ));
+        expect_err_containing(finalize(&runtime, &s, &receipt, &signed_oks1_b64(OacKeyLifecycleStatus::Active), INITIAL), "INGRESS_NONCE_MISMATCH");
+        assert_not_committed(&s);
+        let _ = fs::remove_dir_all(&s.dir);
+    }
+
+    #[test]
+    fn finalize_command_same_process_wrong_security_device_id_is_fatal() {
+        let runtime = EnrollmentRuntimeState::new();
+        let s = stage(&runtime);
+        let receipt = enrollment_meta::base64_encode_std(&signed_efr1_bytes(
+            frames::EFR1_OP_INITIAL_ENROLLMENT, FIN_NONCE, s.gen, [0xeeu8; 16], 1, s.pk, FIN_BRANCH,
+        ));
+        expect_err_containing(finalize(&runtime, &s, &receipt, &signed_oks1_b64(OacKeyLifecycleStatus::Active), INITIAL), "INGRESS_DEVICE_MISMATCH");
+        assert_not_committed(&s);
+        let _ = fs::remove_dir_all(&s.dir);
+    }
+
+    #[test]
+    fn finalize_command_same_process_wrong_staged_public_key_is_fatal() {
+        let runtime = EnrollmentRuntimeState::new();
+        let s = stage(&runtime);
+        let receipt = enrollment_meta::base64_encode_std(&signed_efr1_bytes(
+            frames::EFR1_OP_INITIAL_ENROLLMENT, FIN_NONCE, s.gen, s.sec_id, 1, [0x11u8; 32], FIN_BRANCH,
+        ));
+        expect_err_containing(finalize(&runtime, &s, &receipt, &signed_oks1_b64(OacKeyLifecycleStatus::Active), INITIAL), "INGRESS_PUBLIC_KEY_MISMATCH");
+        assert_not_committed(&s);
+        let _ = fs::remove_dir_all(&s.dir);
+    }
+
+    #[test]
+    fn finalize_command_same_process_wrong_generation_is_fatal_while_live_context_exists() {
+        let runtime = EnrollmentRuntimeState::new();
+        let s = stage(&runtime);
+        // Receipt names another generation; the claimed generation still has a
+        // live pending context, so the no-matching-request error stays fatal.
+        let receipt = enrollment_meta::base64_encode_std(&signed_efr1_bytes(
+            frames::EFR1_OP_INITIAL_ENROLLMENT, FIN_NONCE, [0x99u8; 16], s.sec_id, 1, s.pk, FIN_BRANCH,
+        ));
+        expect_err_containing(finalize(&runtime, &s, &receipt, &signed_oks1_b64(OacKeyLifecycleStatus::Active), INITIAL), "INGRESS_NO_MATCHING_REQUEST");
+        assert_not_committed(&s);
+        let _ = fs::remove_dir_all(&s.dir);
+    }
+
+    #[test]
+    fn finalize_command_fresh_runtime_initial_enrollment_commits_without_fabricating_an_observation() {
+        let runtime_a = EnrollmentRuntimeState::new();
+        let s = stage(&runtime_a);
+        drop(runtime_a); // app restart: the in-memory pending context is gone
+
+        let runtime_b = EnrollmentRuntimeState::new();
+        assert!(runtime_b.find_pending_request(&s.gen_hex).is_none());
+        let receipt = valid_efr1_b64(&s);
+        let oks1 = signed_oks1_b64(OacKeyLifecycleStatus::Active);
+        let outcome = finalize(&runtime_b, &s, &receipt, &oks1, INITIAL).unwrap();
+        assert_eq!(outcome.status, "COMMITTED");
+        assert_eq!(outcome.device_key_version, 1);
+        assert_eq!(outcome.enrollment_generation_id_hex, s.gen_hex);
+        assert!(runtime_b.find_pending_request(&s.gen_hex).is_none(), "no request context may be fabricated");
+        assert_eq!(
+            device_proof::load_enrolled_device_keypair(&s.dir).unwrap().verifying_key().to_bytes(),
+            s.pk
+        );
+
+        // A second restart retrying the same saved receipt is idempotent.
+        let runtime_c = EnrollmentRuntimeState::new();
+        assert_eq!(finalize(&runtime_c, &s, &receipt, &oks1, INITIAL).unwrap().status, "ALREADY_COMMITTED");
+        let _ = fs::remove_dir_all(&s.dir);
+    }
+
+    #[test]
+    fn finalize_command_fresh_runtime_rejects_tampered_or_malformed_receipts() {
+        let runtime_a = EnrollmentRuntimeState::new();
+        let s = stage(&runtime_a);
+        drop(runtime_a);
+        let runtime_b = EnrollmentRuntimeState::new();
+        let oks1 = signed_oks1_b64(OacKeyLifecycleStatus::Active);
+
+        let mut tampered = signed_efr1_bytes(frames::EFR1_OP_INITIAL_ENROLLMENT, FIN_NONCE, s.gen, s.sec_id, 1, s.pk, FIN_BRANCH);
+        let last = tampered.len() - 1;
+        tampered[last] ^= 0x01; // flip a signature bit
+        expect_err_containing(
+            finalize(&runtime_b, &s, &enrollment_meta::base64_encode_std(&tampered), &oks1, INITIAL),
+            "RECEIPT_SIGNATURE_INVALID",
+        );
+        expect_err_containing(
+            finalize(&runtime_b, &s, &enrollment_meta::base64_encode_std(b"not-an-efr1-frame"), &oks1, INITIAL),
+            "MALFORMED_RECEIPT_INGRESS",
+        );
+        assert_not_committed(&s);
+        let _ = fs::remove_dir_all(&s.dir);
+    }
+
+    #[test]
+    fn finalize_command_fresh_runtime_rejects_an_unstaged_generation() {
+        let runtime_a = EnrollmentRuntimeState::new();
+        let s = stage(&runtime_a);
+        drop(runtime_a);
+        let runtime_b = EnrollmentRuntimeState::new();
+        let other_gen = [0x77u8; 16];
+        let receipt = enrollment_meta::base64_encode_std(&signed_efr1_bytes(
+            frames::EFR1_OP_INITIAL_ENROLLMENT, FIN_NONCE, other_gen, s.sec_id, 1, s.pk, FIN_BRANCH,
+        ));
+        let result = finalize_device_enrollment_command(
+            &runtime_b, &s.dir, &to_hex(&other_gen), &s.sec_id_hex, FIN_BRANCH, 1, &s.pk_b64,
+            Some(&receipt), Some(&signed_oks1_b64(OacKeyLifecycleStatus::Active)), INITIAL,
+        );
+        expect_err_containing(result, "STAGED_ENROLLMENT_UNAVAILABLE");
+        assert_not_committed(&s);
+        let _ = fs::remove_dir_all(&s.dir);
+    }
+
+    #[test]
+    fn finalize_command_fresh_runtime_rejects_wrong_key_device_branch_or_version() {
+        let runtime_a = EnrollmentRuntimeState::new();
+        let s = stage(&runtime_a);
+        drop(runtime_a);
+        let runtime_b = EnrollmentRuntimeState::new();
+        let oks1 = signed_oks1_b64(OacKeyLifecycleStatus::Active);
+        let receipt = valid_efr1_b64(&s);
+
+        // Wrong key: a consistently signed receipt/claim for a key that is not the staged one.
+        let other_pk = [0x11u8; 32];
+        let other_pk_receipt = enrollment_meta::base64_encode_std(&signed_efr1_bytes(
+            frames::EFR1_OP_INITIAL_ENROLLMENT, FIN_NONCE, s.gen, s.sec_id, 1, other_pk, FIN_BRANCH,
+        ));
+        expect_err_containing(
+            finalize_device_enrollment_command(
+                &runtime_b, &s.dir, &s.gen_hex, &s.sec_id_hex, FIN_BRANCH, 1,
+                &enrollment_meta::base64_encode_std(&other_pk), Some(&other_pk_receipt), Some(&oks1), INITIAL,
+            ),
+            "STAGED_PUBLIC_KEY_MISMATCH",
+        );
+        // Wrong device: the claimed security device id is not this device's.
+        expect_err_containing(
+            finalize_device_enrollment_command(
+                &runtime_b, &s.dir, &s.gen_hex, &"ee".repeat(16), FIN_BRANCH, 1, &s.pk_b64, Some(&receipt), Some(&oks1), INITIAL,
+            ),
+            "SECURITY_DEVICE_ID_MISMATCH",
+        );
+        // Wrong branch / version relative to the signed receipt.
+        expect_err_containing(
+            finalize_device_enrollment_command(
+                &runtime_b, &s.dir, &s.gen_hex, &s.sec_id_hex, "HQ-002", 1, &s.pk_b64, Some(&receipt), Some(&oks1), INITIAL,
+            ),
+            "RECEIPT_BINDING_MISMATCH",
+        );
+        expect_err_containing(
+            finalize_device_enrollment_command(
+                &runtime_b, &s.dir, &s.gen_hex, &s.sec_id_hex, FIN_BRANCH, 2, &s.pk_b64, Some(&receipt), Some(&oks1), INITIAL,
+            ),
+            "RECEIPT_BINDING_MISMATCH",
+        );
+        assert_not_committed(&s);
+        let _ = fs::remove_dir_all(&s.dir);
+    }
+
+    #[test]
+    fn finalize_command_fresh_runtime_verify_only_signer_without_observation_fails_closed() {
+        let runtime_a = EnrollmentRuntimeState::new();
+        let s = stage(&runtime_a);
+        drop(runtime_a);
+        let runtime_b = EnrollmentRuntimeState::new();
+        expect_err_containing(
+            finalize(&runtime_b, &s, &valid_efr1_b64(&s), &signed_oks1_b64(OacKeyLifecycleStatus::VerifyOnly), INITIAL),
+            "TRUSTED_TIME_UNAVAILABLE_REANCHOR_REQUIRED",
+        );
+        assert_not_committed(&s);
+        let _ = fs::remove_dir_all(&s.dir);
+    }
+
+    #[test]
+    fn finalize_command_fresh_runtime_has_no_fallback_for_reenrollment_or_unspecified_operation() {
+        let runtime_a = EnrollmentRuntimeState::new();
+        let s = stage(&runtime_a);
+        drop(runtime_a);
+        let runtime_b = EnrollmentRuntimeState::new();
+        let oks1 = signed_oks1_b64(OacKeyLifecycleStatus::Active);
+        let reenroll_receipt = enrollment_meta::base64_encode_std(&signed_efr1_bytes(
+            frames::EFR1_OP_RE_ENROLLMENT, FIN_NONCE, s.gen, s.sec_id, 1, s.pk, FIN_BRANCH,
+        ));
+        expect_err_containing(finalize(&runtime_b, &s, &reenroll_receipt, &oks1, Some("RE_ENROLLMENT")), "INGRESS_NO_MATCHING_REQUEST");
+        // The fallback requires the exact INITIAL_ENROLLMENT operation kind.
+        expect_err_containing(finalize(&runtime_b, &s, &valid_efr1_b64(&s), &oks1, None), "INGRESS_NO_MATCHING_REQUEST");
+        expect_err_containing(finalize(&runtime_b, &s, &valid_efr1_b64(&s), &oks1, Some("1")), "INGRESS_NO_MATCHING_REQUEST");
+        assert_not_committed(&s);
+        let _ = fs::remove_dir_all(&s.dir);
+    }
+
+    #[test]
+    fn finalize_command_boot_session_mismatch_stays_fatal() {
+        let runtime_a = EnrollmentRuntimeState::new();
+        let s = stage(&runtime_a);
+        drop(runtime_a);
+        let runtime_b = EnrollmentRuntimeState::new();
+        runtime_b.record_pending_request(enrollment_meta::PendingRequestContext {
+            request_qpc_ticks: 1,
+            boot_session_id: [0xeeu8; 16],
+            device_registration_nonce: FIN_NONCE,
+            security_device_id: s.sec_id,
+            enrollment_generation_id_hex: s.gen_hex.clone(),
+            staged_public_key: s.pk,
+            test_receipt_qpc_ticks: None,
+        });
+        expect_err_containing(
+            finalize(&runtime_b, &s, &valid_efr1_b64(&s), &signed_oks1_b64(OacKeyLifecycleStatus::Active), INITIAL),
+            "INGRESS_BOOT_SESSION_MISMATCH",
+        );
+        assert_not_committed(&s);
+        let _ = fs::remove_dir_all(&s.dir);
     }
 }

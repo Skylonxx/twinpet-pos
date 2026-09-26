@@ -7,6 +7,7 @@ import {
   performCompleteDeviceRegistration,
 } from '../deviceEnrollment';
 import { canonicalJSON } from '../credentialStore';
+import { completionRequestDigest } from '../deviceEnrollmentCore';
 import { decodeEnr1, drp1SignedPrefix, encodeDrp1 } from '../oacFrame';
 import { decodeEfr1, EFR1_OP_INITIAL_ENROLLMENT } from '../staffSessionAssertionFrame';
 import { privateKeyFromRaw } from '../signingKeyLoader';
@@ -630,5 +631,402 @@ describe('completeDeviceRegistration', () => {
       2100,
     );
     expect(result).toEqual({ ok: false, code: 'enrollment_authorization_wrong_status' });
+  });
+});
+
+describe('completeDeviceRegistration — consumed-session exact replay (response-loss recovery)', () => {
+  const originalEnv = process.env.OAC_ROOT_PRIVATE_KEY_BASE64URL;
+  const GEN = '0123456789abcdef0123456789abcdef';
+  const SEC_ID = Buffer.alloc(16, 0x77);
+  const SEC_ID_HEX = SEC_ID.toString('hex');
+  // Far beyond the 10-minute session TTL: consumed recovery is not expiry-bound.
+  const REPLAY_AT = 2100 + 24 * 60 * 60 * 1000;
+
+  beforeEach(() => {
+    process.env.OAC_ROOT_PRIVATE_KEY_BASE64URL = testRoot.privateKeyBase64Url;
+  });
+
+  afterEach(() => {
+    if (originalEnv !== undefined) {
+      process.env.OAC_ROOT_PRIVATE_KEY_BASE64URL = originalEnv;
+    } else {
+      delete process.env.OAC_ROOT_PRIVATE_KEY_BASE64URL;
+    }
+  });
+
+  /** Counts every durable mutation attempted through a wrapped fake db. */
+  function withWriteCounter(inner: Firestore) {
+    const counts = { writes: 0, transactions: 0 };
+    const db = {
+      collection: (name: string) => {
+        const c = inner.collection(name) as unknown as { doc: (id: string) => Record<string, (...a: unknown[]) => unknown> };
+        return {
+          ...c,
+          doc: (id: string) => {
+            const h = c.doc(id);
+            const count =
+              (fn: (...a: unknown[]) => unknown) =>
+              (...a: unknown[]) => {
+                counts.writes += 1;
+                return fn(...a);
+              };
+            return { ...h, set: count(h.set), update: count(h.update), create: count(h.create) };
+          },
+        };
+      },
+      runTransaction: async (fn: (tx: unknown) => Promise<void>) => {
+        counts.transactions += 1;
+        return (inner as unknown as { runTransaction: (f: typeof fn) => Promise<void> }).runTransaction(fn);
+      },
+    } as unknown as Firestore;
+    return { db, counts };
+  }
+
+  const snapshotAll = (store: Map<string, Map<string, unknown>>) =>
+    JSON.stringify(Array.from(store.entries()).map(([c, m]) => [c, Array.from(m.entries())]));
+
+  /** Runs a real first completion that COMMITS, then returns the replay seam. */
+  async function committedRegistration() {
+    const issuer = rawKeypair();
+    const signingKey = rawKeypair();
+    const { db, store } = genericFakeFirestore(baseSeed(issuer, signingKey) as unknown as Record<string, Record<string, unknown>>);
+    const { enrollmentAuthId } = await beginAndCompleteIssuance(db, issuer, 'LDP-001', 1000);
+    const beginReg = await performBeginDeviceRegistration(db, { uid: STAFF_UID }, 2000);
+    if (!beginReg.ok) throw new Error('unreachable');
+    const nonce = Buffer.from(beginReg.deviceRegistrationNonceBase64, 'base64');
+    const { drp1, device } = buildSignedDrp1(enrollmentAuthId, nonce, SEC_ID);
+    const request = {
+      registrationSessionId: beginReg.registrationSessionId,
+      drp1Base64: drp1.toString('base64'),
+      enrollmentGenerationId: GEN,
+    };
+    const first = await performCompleteDeviceRegistration(db, { uid: STAFF_UID }, request, 2100);
+    if (!first.ok) throw new Error(`first completion failed: ${first.code}`);
+    const replay = (req: Record<string, unknown> = request, uid = STAFF_UID, target: Firestore = db) =>
+      performCompleteDeviceRegistration(target, { uid }, req, REPLAY_AT);
+    return { db, store, request, drp1, device, nonce, enrollmentAuthId, first, replay, sessionId: beginReg.registrationSessionId };
+  }
+
+  const deviceDoc = (store: Map<string, Map<string, unknown>>) =>
+    store.get('privilegedDeviceRegistrations')!.get(SEC_ID_HEX) as Record<string, unknown>;
+
+  async function expectRejectedWithZeroWrites(
+    setup: Awaited<ReturnType<typeof committedRegistration>>,
+    expectedCode: string,
+    req?: Record<string, unknown>,
+    uid?: string,
+  ) {
+    const before = snapshotAll(setup.store);
+    const { db, counts } = withWriteCounter(setup.db);
+    const result = await setup.replay(req ?? setup.request, uid ?? STAFF_UID, db);
+    expect(result).toEqual({ ok: false, code: expectedCode });
+    expect(counts).toEqual({ writes: 0, transactions: 0 });
+    expect(snapshotAll(setup.store)).toBe(before);
+  }
+
+  it('the first happy path consumes once and stores the exact completion digest', async () => {
+    const { store, drp1, sessionId } = await committedRegistration();
+    const session = store.get('privilegedDeviceRegistrationSessions')!.get(sessionId) as Record<string, unknown>;
+    expect(session.status).toBe('CONSUMED');
+    expect(session.completionRequestSha256).toBe(completionRequestDigest(sessionId, drp1, GEN));
+    expect(store.get('privilegedDeviceRegistrations')!.size).toBe(1);
+  });
+
+  it('an exact replay of a consumed session returns fresh valid material with ZERO writes', async () => {
+    const setup = await committedRegistration();
+    const before = snapshotAll(setup.store);
+    const { db, counts } = withWriteCounter(setup.db);
+
+    const result = await setup.replay(setup.request, STAFF_UID, db);
+
+    expect(result).toEqual({
+      ok: true,
+      securityDeviceIdHex: SEC_ID_HEX,
+      branchId: 'LDP-001',
+      deviceKeyVersion: 1,
+      acceptedPublicKeyBase64: Buffer.from(setup.device.publicKeyBase64Url, 'base64url').toString('base64'),
+      serverFinalizationReceiptBase64: expect.any(String),
+      oks1Base64: expect.any(String),
+    });
+    expect(counts).toEqual({ writes: 0, transactions: 0 });
+    expect(snapshotAll(setup.store)).toBe(before); // no status/version/timestamp change anywhere
+    if (!result.ok || !setup.first.ok) throw new Error('unreachable');
+
+    const efr1 = decodeEfr1(Buffer.from(result.serverFinalizationReceiptBase64, 'base64'));
+    expect(efr1.ok).toBe(true);
+    if (!efr1.ok) throw new Error('unreachable');
+    expect(efr1.value.operationKind).toBe(EFR1_OP_INITIAL_ENROLLMENT);
+    expect(efr1.value.enrollmentGenerationId.toString('hex')).toBe(GEN);
+    expect(efr1.value.securityDeviceId).toEqual(SEC_ID);
+    expect(efr1.value.deviceKeyVersion).toBe(1);
+    expect(efr1.value.acceptedPublicKey).toEqual(Buffer.from(setup.device.publicKeyBase64Url, 'base64url'));
+    expect(efr1.value.receiptNonce).toEqual(setup.nonce);
+    expect(efr1.value.branchId).toBe('LDP-001');
+    // Freshly recomputed (new serverSentAt), not a persisted copy of the first receipt.
+    expect(result.serverFinalizationReceiptBase64).not.toBe(setup.first.serverFinalizationReceiptBase64);
+    expect(deviceDoc(setup.store).deviceKeyVersion).toBe(1);
+  });
+
+  it('rejects a replay whose request digest differs (different generation)', async () => {
+    const setup = await committedRegistration();
+    await expectRejectedWithZeroWrites(setup, 'completion_replay_mismatch', { ...setup.request, enrollmentGenerationId: 'f'.repeat(32) });
+  });
+
+  it('rejects a different validly-signed DRP1 for the same session nonce', async () => {
+    const setup = await committedRegistration();
+    const { drp1: other } = buildSignedDrp1(setup.enrollmentAuthId, setup.nonce, SEC_ID);
+    await expectRejectedWithZeroWrites(setup, 'completion_replay_mismatch', { ...setup.request, drp1Base64: other.toString('base64') });
+  });
+
+  it('rejects a tampered DRP1', async () => {
+    const setup = await committedRegistration();
+    const tampered = Buffer.from(setup.drp1);
+    tampered[tampered.length - 1] ^= 0xff;
+    await expectRejectedWithZeroWrites(setup, 'drp1_bad_self_signature', { ...setup.request, drp1Base64: tampered.toString('base64') });
+  });
+
+  it('rejects a replay from a different requester', async () => {
+    const setup = await committedRegistration();
+    await expectRejectedWithZeroWrites(setup, 'session_wrong_owner', undefined, 'someone-else');
+  });
+
+  it.each([
+    ['device missing', (s: Map<string, Map<string, unknown>>) => s.get('privilegedDeviceRegistrations')!.delete(SEC_ID_HEX)],
+    ['device REVOKED', (s: Map<string, Map<string, unknown>>) => (deviceDoc(s).status = 'REVOKED')],
+    ['device branch changed', (s: Map<string, Map<string, unknown>>) => (deviceDoc(s).branchId = 'LDP-002')],
+    ['device version 2 (re-enrolled)', (s: Map<string, Map<string, unknown>>) => (deviceDoc(s).deviceKeyVersion = 2)],
+    ['device key changed', (s: Map<string, Map<string, unknown>>) => (deviceDoc(s).validatedDevProofPublicKeyBase64 = Buffer.alloc(32, 9).toString('base64'))],
+    ['device nonce changed', (s: Map<string, Map<string, unknown>>) => (deviceDoc(s).devProofRegistrationNonce = Buffer.alloc(32, 9).toString('base64'))],
+    ['reEnrolledAtServerMs present', (s: Map<string, Map<string, unknown>>) => (deviceDoc(s).reEnrolledAtServerMs = 5000)],
+    [
+      'authorization not CONSUMED',
+      (s: Map<string, Map<string, unknown>>) => {
+        const auths = s.get('privilegedDeviceEnrollmentAuthorizations')!;
+        for (const [id, a] of auths) auths.set(id, { ...(a as object), status: 'ISSUED' });
+      },
+    ],
+    [
+      'authorization branch differs from device branch',
+      (s: Map<string, Map<string, unknown>>) => {
+        const auths = s.get('privilegedDeviceEnrollmentAuthorizations')!;
+        for (const [id, a] of auths) auths.set(id, { ...(a as object), branchId: 'LDP-009' });
+      },
+    ],
+  ])('rejects when the committed state changed: %s', async (_label, mutate) => {
+    const setup = await committedRegistration();
+    mutate(setup.store);
+    await expectRejectedWithZeroWrites(setup, 'device_state_changed');
+  });
+
+  it('a legacy consumed session without a stored digest fails closed', async () => {
+    const setup = await committedRegistration();
+    const sessions = setup.store.get('privilegedDeviceRegistrationSessions')!;
+    const { completionRequestSha256: _drop, ...legacy } = sessions.get(setup.sessionId) as Record<string, unknown>;
+    sessions.set(setup.sessionId, legacy);
+    await expectRejectedWithZeroWrites(setup, 'legacy_session_unrecoverable');
+  });
+
+  it('root key failure during replay: zero writes, and a later explicit replay still succeeds', async () => {
+    const setup = await committedRegistration();
+    delete process.env.OAC_ROOT_PRIVATE_KEY_BASE64URL;
+    await expectRejectedWithZeroWrites(setup, 'root_signing_key_unavailable');
+    process.env.OAC_ROOT_PRIVATE_KEY_BASE64URL = testRoot.privateKeyBase64Url;
+    expect((await setup.replay()).ok).toBe(true);
+  });
+
+  it('active signing key failure during replay: zero writes', async () => {
+    const setup = await committedRegistration();
+    setup.store.get('privilegedOacKeysetMeta')!.set('current', { activeSigningKeyId: 'missing-key' });
+    await expectRejectedWithZeroWrites(setup, 'signing_key_unavailable');
+  });
+
+  // --- N2: a rejected transaction is adjudicated from the session, not trusted ---
+
+  type TxMode = 'commit_then_reject' | 'commit_then_retry' | 'reject_without_commit';
+
+  /**
+   * Wraps a fake db so `runTransaction` can model Firestore outcomes the plain
+   * fake cannot: the commit is APPLIED and then the call rejects (lost commit
+   * acknowledgement), the commit is applied and the runner RETRIES the
+   * callback (which then observes its own writes), or it rejects without
+   * committing. Hooks mutate the store at exact points.
+   */
+  function faultyTransactions(
+    inner: Firestore,
+    mode: TxMode,
+    hooks: { afterCommit?: () => void; beforeReject?: () => void; failSessionRereads?: boolean } = {},
+  ) {
+    const counts = { transactions: 0, callbackRuns: 0, sessionGets: 0 };
+    const innerRun = (fn: (tx: unknown) => Promise<void>) =>
+      (inner as unknown as { runTransaction: (f: typeof fn) => Promise<void> }).runTransaction(fn);
+    const db = {
+      collection: (name: string) => {
+        const c = inner.collection(name) as unknown as { doc: (id: string) => Record<string, (...a: unknown[]) => unknown> };
+        if (name !== 'privilegedDeviceRegistrationSessions' || !hooks.failSessionRereads) return c;
+        return {
+          ...c,
+          doc: (id: string) => {
+            const h = c.doc(id);
+            return {
+              ...h,
+              get: async () => {
+                counts.sessionGets += 1;
+                if (counts.sessionGets > 1) throw new Error('UNAVAILABLE: session reread failed');
+                return h.get();
+              },
+            };
+          },
+        };
+      },
+      runTransaction: async (fn: (tx: unknown) => Promise<void>) => {
+        counts.transactions += 1;
+        const counted = async (tx: unknown) => {
+          counts.callbackRuns += 1;
+          return fn(tx);
+        };
+        if (mode === 'reject_without_commit') {
+          hooks.beforeReject?.();
+          throw new Error('ABORTED: transaction contention');
+        }
+        await innerRun(counted); // the commit is durably applied
+        hooks.afterCommit?.();
+        if (mode === 'commit_then_retry') await innerRun(counted); // retry observes its own writes and throws
+        throw new Error('DEADLINE_EXCEEDED: commit acknowledgement lost');
+      },
+    } as unknown as Firestore;
+    return { db, counts };
+  }
+
+  /** Everything up to (not including) the first completion call. */
+  async function stagedForCompletion() {
+    const issuer = rawKeypair();
+    const signingKey = rawKeypair();
+    const { db, store } = genericFakeFirestore(baseSeed(issuer, signingKey) as unknown as Record<string, Record<string, unknown>>);
+    const { enrollmentAuthId } = await beginAndCompleteIssuance(db, issuer, 'LDP-001', 1000);
+    const beginReg = await performBeginDeviceRegistration(db, { uid: STAFF_UID }, 2000);
+    if (!beginReg.ok) throw new Error('unreachable');
+    const nonce = Buffer.from(beginReg.deviceRegistrationNonceBase64, 'base64');
+    const { drp1, device } = buildSignedDrp1(enrollmentAuthId, nonce, SEC_ID);
+    const request = {
+      registrationSessionId: beginReg.registrationSessionId,
+      drp1Base64: drp1.toString('base64'),
+      enrollmentGenerationId: GEN,
+    };
+    const session = () =>
+      store.get('privilegedDeviceRegistrationSessions')!.get(beginReg.registrationSessionId) as Record<string, unknown>;
+    return { db, store, request, nonce, device, drp1, session, sessionId: beginReg.registrationSessionId };
+  }
+
+  function expectCommittedExactlyOnce(store: Map<string, Map<string, unknown>>, sessionId: string, drp1: Buffer) {
+    const session = store.get('privilegedDeviceRegistrationSessions')!.get(sessionId) as Record<string, unknown>;
+    expect(session.status).toBe('CONSUMED');
+    expect(session.completionRequestSha256).toBe(completionRequestDigest(sessionId, drp1, GEN));
+    expect(store.get('privilegedDeviceRegistrations')!.size).toBe(1);
+    expect(deviceDoc(store).deviceKeyVersion).toBe(1);
+    const auths = Array.from(store.get('privilegedDeviceEnrollmentAuthorizations')!.values()) as Array<{ status: string }>;
+    expect(auths.map((a) => a.status)).toEqual(['CONSUMED']);
+  }
+
+  it('N2-A: commit applied then acknowledgement lost -> reread CONSUMED -> exact replay success, no second write', async () => {
+    const s = await stagedForCompletion();
+    const { db: counted, counts: writes } = withWriteCounter(s.db);
+    const { db, counts } = faultyTransactions(counted, 'commit_then_reject');
+
+    const result = await performCompleteDeviceRegistration(db, { uid: STAFF_UID }, s.request, 2100);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('unreachable');
+    expect(counts).toMatchObject({ transactions: 1, callbackRuns: 1 });
+    expect(writes.writes).toBe(3); // the one applied commit only; the replay wrote nothing
+    expectCommittedExactlyOnce(s.store, s.sessionId, s.drp1);
+    const efr1 = decodeEfr1(Buffer.from(result.serverFinalizationReceiptBase64, 'base64'));
+    if (!efr1.ok) throw new Error('EFR1 must decode');
+    expect(efr1.value.operationKind).toBe(EFR1_OP_INITIAL_ENROLLMENT);
+    expect(efr1.value.enrollmentGenerationId.toString('hex')).toBe(GEN);
+    expect(efr1.value.securityDeviceId).toEqual(SEC_ID);
+    expect(efr1.value.deviceKeyVersion).toBe(1);
+    expect(efr1.value.receiptNonce).toEqual(s.nonce);
+    expect(efr1.value.branchId).toBe('LDP-001');
+    expect(typeof result.oks1Base64).toBe('string');
+  });
+
+  it('N2-B: commit applied, runner retries and observes its own ACTIVE device -> exact replay success', async () => {
+    const s = await stagedForCompletion();
+    const { db: counted, counts: writes } = withWriteCounter(s.db);
+    const { db, counts } = faultyTransactions(counted, 'commit_then_retry');
+
+    const result = await performCompleteDeviceRegistration(db, { uid: STAFF_UID }, s.request, 2100);
+
+    expect(result.ok).toBe(true);
+    expect(counts).toMatchObject({ transactions: 1, callbackRuns: 2 });
+    expect(writes.writes).toBe(3);
+    expectCommittedExactlyOnce(s.store, s.sessionId, s.drp1);
+  });
+
+  it('N2-C: a genuine pre-commit semantic failure (session still PENDING) keeps its structured code and writes nothing', async () => {
+    const s = await stagedForCompletion();
+    s.store.set('privilegedDeviceRegistrations', new Map([[SEC_ID_HEX, { status: 'ACTIVE', branchId: 'LDP-001', deviceKeyVersion: 1 }]]));
+    const durable = () =>
+      JSON.stringify(
+        ['privilegedDeviceEnrollmentAuthorizations', 'privilegedDeviceRegistrationSessions', 'privilegedDeviceRegistrations'].map(
+          (c) => Array.from(s.store.get(c)?.entries() ?? []),
+        ),
+      );
+    const before = durable();
+    const { db, counts } = withWriteCounter(s.db);
+
+    const result = await performCompleteDeviceRegistration(db, { uid: STAFF_UID }, s.request, 2100);
+
+    expect(result).toEqual({ ok: false, code: 'device_already_enrolled_reenroll_required' });
+    expect(counts.writes).toBe(0);
+    expect(s.session().status).toBe('PENDING');
+    expect(durable()).toBe(before);
+  });
+
+  it('N2-D: transaction rejected and the session reread fails -> throws (ambiguous), never a structured rejection', async () => {
+    const s = await stagedForCompletion();
+    const { db: counted, counts: writes } = withWriteCounter(s.db);
+    const { db } = faultyTransactions(counted, 'reject_without_commit', { failSessionRereads: true });
+
+    await expect(performCompleteDeviceRegistration(db, { uid: STAFF_UID }, s.request, 2100)).rejects.toThrow(
+      'completion_outcome_unknown',
+    );
+    expect(writes.writes).toBe(0);
+    expect(s.session().status).toBe('PENDING');
+  });
+
+  it.each([
+    ['unknown status', (s: Awaited<ReturnType<typeof stagedForCompletion>>) => (s.session().status = 'EXPIRED')],
+    ['malformed session', (s: Awaited<ReturnType<typeof stagedForCompletion>>) => delete s.session().requesterUid],
+    [
+      'missing session',
+      (s: Awaited<ReturnType<typeof stagedForCompletion>>) =>
+        s.store.get('privilegedDeviceRegistrationSessions')!.delete(s.sessionId),
+    ],
+  ])('N2-E: transaction rejected and the reread shows %s -> throws (ambiguous)', async (_label, mutate) => {
+    const s = await stagedForCompletion();
+    const { db } = faultyTransactions(s.db, 'reject_without_commit', { beforeReject: () => mutate(s) });
+    await expect(performCompleteDeviceRegistration(db, { uid: STAFF_UID }, s.request, 2100)).rejects.toThrow(
+      'completion_outcome_unknown',
+    );
+  });
+
+  it('N2-F: commit applied but the replay cannot prove it (device changed) -> throws, never a structured rejection', async () => {
+    const s = await stagedForCompletion();
+    const { db } = faultyTransactions(s.db, 'commit_then_reject', {
+      afterCommit: () => {
+        deviceDoc(s.store).status = 'REVOKED';
+      },
+    });
+    await expect(performCompleteDeviceRegistration(db, { uid: STAFF_UID }, s.request, 2100)).rejects.toThrow(
+      'completion_outcome_unknown',
+    );
+  });
+
+  it('keyset manifest failure during replay: zero writes', async () => {
+    const setup = await committedRegistration();
+    const keys = setup.store.get('privilegedOacSigningKeys')!;
+    keys.set('key-1-dup', { ...(keys.get('key-1') as object), status: 'VERIFY_ONLY', verifyUntilServerMs: 9e15 });
+    await expectRejectedWithZeroWrites(setup, 'duplicate_signing_key_id');
   });
 });
