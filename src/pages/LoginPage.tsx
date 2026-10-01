@@ -4,6 +4,9 @@ import { useAuth } from '../lib/hooks/useAuth';
 import type { User, UserRole } from '../lib/types';
 import { PinPad } from '../components/auth/PinPad';
 import { BranchSelector } from '../components/auth/BranchSelector';
+import { Alert, Button } from '../components/ui';
+import { isDeviceNotReadyError } from '../lib/auth/nativeDeviceReadiness';
+import DeviceSecurityEnrollmentCard from './settings/DeviceSecurityEnrollmentCard';
 
 // Note: Removing LoginPage.css as the layout has been fully transitioned to Flowbite/Tailwind primitives.
 
@@ -29,7 +32,14 @@ function formatRole(role: UserRole): string {
 }
 
 export default function LoginPage() {
-  const { loginWithPin, loginWithUsername, completeLogin, isAuthenticated } = useAuth();
+  const {
+    loginWithPin,
+    loginWithUsername,
+    completeLogin,
+    isAuthenticated,
+    deviceReadiness,
+    refreshDeviceReadiness,
+  } = useAuth();
   const { branches, loading: branchesLoading, error: branchesError, reload: reloadBranches } = useActiveBranches();
 
   const [mode, setMode] = useState<LoginMode>('pin');
@@ -49,6 +59,25 @@ export default function LoginPage() {
   );
 
   const pinSubmitting = useRef(false);
+
+  // TPOS-R7 device-wide gate (owned by AuthProvider): on a native POS that is
+  // not READY, every login mode is refused by the auth layer and this page is
+  // the enrollment / recovery surface. Web stays 'not_native'.
+  const showDeviceBootstrap =
+    deviceReadiness === 'NOT_ENROLLED' ||
+    deviceReadiness === 'INVALID_OR_INCOMPLETE' ||
+    deviceReadiness === 'UNAVAILABLE';
+  const [deviceRechecking, setDeviceRechecking] = useState(false);
+
+  const recheckDevice = useCallback(async () => {
+    setDeviceRechecking(true);
+    try {
+      await refreshDeviceReadiness();
+    } finally {
+      setDeviceRechecking(false);
+    }
+  }, [refreshDeviceReadiness]);
+
 
   useEffect(() => {
     const handleOnline = () => setBrowserOnline(true);
@@ -87,6 +116,18 @@ export default function LoginPage() {
     }, 2600);
   }, []);
 
+  // The card reports a successful finalize; only strong READY dismisses the bootstrap.
+  const handleDeviceEnrolled = useCallback(() => {
+    void refreshDeviceReadiness().then((next) => {
+      if (next !== 'READY' && next !== 'not_native') {
+        showToast(
+          'ลงทะเบียนกับเซิร์ฟเวอร์แล้ว แต่ข้อมูลความปลอดภัยในเครื่องยังไม่สมบูรณ์ — ยังเข้าสู่ระบบไม่ได้ กรุณาติดต่อผู้ดูแลระบบ',
+          'error',
+        );
+      }
+    });
+  }, [refreshDeviceReadiness, showToast]);
+
   const clearErrors = useCallback(() => {
     setPinError(false);
     setPwError(null);
@@ -118,6 +159,12 @@ export default function LoginPage() {
       } catch (err: unknown) {
         console.error('[login] completeLogin failed', err);
         setSuccessUser(null);
+        if (isDeviceNotReadyError(err)) {
+          showToast(err.message, 'error');
+          if (mode === 'password') setPwError(err.message);
+          else setPinValue('');
+          return;
+        }
         const message =
           err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการเข้าสู่ระบบ';
         showToast(message, 'error');
@@ -172,6 +219,12 @@ export default function LoginPage() {
         await handleSuccess(user);
       } catch (err) {
         console.error('[login] PIN submit failed', err);
+        if (isDeviceNotReadyError(err)) {
+          // A device problem, not a wrong PIN: no PinPad error state.
+          showToast(err.message, 'error');
+          setPinValue('');
+          return;
+        }
         const message =
           typeof navigator !== 'undefined' && navigator.onLine === false
             ? OFFLINE_LOGIN_MESSAGE
@@ -239,8 +292,9 @@ export default function LoginPage() {
       const user = await loginWithUsername(normalizedUsername, password, branchId);
       await handleSuccess(user);
     } catch (err) {
-      const message =
-        typeof navigator !== 'undefined' && navigator.onLine === false
+      const message = isDeviceNotReadyError(err)
+        ? err.message
+        : typeof navigator !== 'undefined' && navigator.onLine === false
           ? OFFLINE_LOGIN_MESSAGE
           : err instanceof Error
             ? err.message
@@ -349,6 +403,38 @@ export default function LoginPage() {
               pinSubmitting.current = false;
             }}
           />
+
+          {showDeviceBootstrap && (
+            <section className="mb-8 flex flex-col gap-3" data-testid="login-device-bootstrap">
+              <Alert
+                color={deviceReadiness === 'NOT_ENROLLED' ? 'warning' : 'failure'}
+                data-testid="login-device-gate-alert"
+              >
+                {deviceReadiness === 'NOT_ENROLLED'
+                  ? 'เครื่อง POS นี้ยังไม่ได้ลงทะเบียนความปลอดภัย — ต้องลงทะเบียนเครื่องก่อนจึงจะเข้าสู่ระบบได้ (ทั้ง Quick PIN และ Username)'
+                  : deviceReadiness === 'INVALID_OR_INCOMPLETE'
+                    ? 'ข้อมูลการลงทะเบียนความปลอดภัยของเครื่องนี้ไม่สมบูรณ์หรือไม่ถูกต้อง — ยังเข้าสู่ระบบไม่ได้ กรุณาติดต่อผู้ดูแลระบบ'
+                    : 'ตรวจสอบสถานะการลงทะเบียนของเครื่องไม่สำเร็จ — ยังเข้าสู่ระบบไม่ได้'}
+              </Alert>
+              {deviceReadiness !== 'NOT_ENROLLED' && (
+                <div>
+                  <Button
+                    color="light"
+                    className="min-h-11"
+                    onClick={() => void recheckDevice()}
+                    disabled={deviceRechecking}
+                  >
+                    ตรวจสอบสถานะเครื่องอีกครั้ง
+                  </Button>
+                </div>
+              )}
+              <DeviceSecurityEnrollmentCard
+                branchId={branchId || null}
+                onEnrolled={handleDeviceEnrolled}
+                allowFreshEnrollment={deviceReadiness === 'NOT_ENROLLED'}
+              />
+            </section>
+          )}
 
           <div className="flex bg-gray-100 dark:bg-gray-700/50 rounded-lg p-1 mb-8" role="tablist">
             <button

@@ -1,6 +1,6 @@
 //! SEC-001 Packet C-A/C-B/D — native command surface confinement.
 //!
-//! Exactly fourteen `privileged_auth` commands may ever be exposed to the
+//! Exactly fifteen `privileged_auth` commands may ever be exposed to the
 //! WebView, and nothing else from the module tree — no sign-arbitrary-bytes,
 //! no pepper/DPAPI-blob/device-private-key getter, no raw Argon2 verifier
 //! export, no arbitrary file read, no raw keyset-manifest-bytes command.
@@ -13,17 +13,22 @@
 //! generated permission. It signs one frame shape over natively-derived fields;
 //! the tests below prove it takes no caller-supplied bytes to sign, no path, no
 //! wall clock, and no branch.
+//!
+//! TPOS-R7 adds exactly one read-only command,
+//! `native_get_device_security_readiness`, and one generated permission. It
+//! takes no arguments and returns only a bare readiness enum.
 
 use std::fs;
 use std::path::PathBuf;
 
-const EXACT_FOURTEEN_COMMANDS: &[&str] = &[
+const EXACT_FIFTEEN_COMMANDS: &[&str] = &[
     "native_import_device_enrollment_file",
     "native_generate_device_registration_proof",
     "native_finalize_device_enrollment",
     "native_complete_oac_provisioning",
     "native_argon2_benchmark",
     "native_get_device_registration_status",
+    "native_get_device_security_readiness",
     "native_verify_offline_pin",
     "native_clear_offline_lockout",
     "native_prepare_staff_session_challenge",
@@ -87,9 +92,9 @@ fn lib_rs_source() -> String {
 }
 
 #[test]
-fn exactly_fourteen_native_commands_are_granted_in_capabilities() {
+fn exactly_fifteen_native_commands_are_granted_in_capabilities() {
     let granted = granted_native_permissions();
-    let mut expected: Vec<String> = EXACT_FOURTEEN_COMMANDS
+    let mut expected: Vec<String> = EXACT_FIFTEEN_COMMANDS
         .iter()
         .map(|c| format!("allow-{}", c.replace('_', "-")))
         .collect();
@@ -98,35 +103,35 @@ fn exactly_fourteen_native_commands_are_granted_in_capabilities() {
     actual.sort();
     assert_eq!(
         actual, expected,
-        "capabilities/default.json must grant exactly the fourteen frozen commands"
+        "capabilities/default.json must grant exactly the fifteen frozen commands"
     );
 }
 
 #[test]
-fn exactly_fourteen_tauri_command_functions_are_defined_in_mod_rs() {
+fn exactly_fifteen_tauri_command_functions_are_defined_in_mod_rs() {
     let source = mod_rs_source();
-    let defined: Vec<&str> = EXACT_FOURTEEN_COMMANDS
+    let defined: Vec<&str> = EXACT_FIFTEEN_COMMANDS
         .iter()
         .filter(|name| source.contains(&format!("pub fn {name}(")))
         .copied()
         .collect();
     assert_eq!(
         defined.len(),
-        14,
-        "expected exactly 14 command functions defined, found: {defined:?}"
+        15,
+        "expected exactly 15 command functions defined, found: {defined:?}"
     );
 
     let command_attr_count = source.matches("#[tauri::command]").count();
     assert_eq!(
-        command_attr_count, 14,
-        "expected exactly 14 #[tauri::command]-annotated functions in mod.rs"
+        command_attr_count, 15,
+        "expected exactly 15 #[tauri::command]-annotated functions in mod.rs"
     );
 }
 
 #[test]
-fn exactly_fourteen_commands_are_registered_in_generate_handler() {
+fn exactly_fifteen_commands_are_registered_in_generate_handler() {
     let source = lib_rs_source();
-    for name in EXACT_FOURTEEN_COMMANDS {
+    for name in EXACT_FIFTEEN_COMMANDS {
         assert!(
             source.contains(&format!("privileged_auth::{name}")),
             "lib.rs generate_handler! must register privileged_auth::{name}"
@@ -134,8 +139,8 @@ fn exactly_fourteen_commands_are_registered_in_generate_handler() {
     }
     let registered = source.matches("privileged_auth::native_").count();
     assert_eq!(
-        registered, 14,
-        "generate_handler! must register exactly 14 privileged_auth commands"
+        registered, 15,
+        "generate_handler! must register exactly 15 privileged_auth commands"
     );
 }
 
@@ -151,7 +156,7 @@ fn exactly_one_new_d1b_generated_permission_exists() {
     names.sort();
     assert_eq!(
         names.len(),
-        EXACT_FOURTEEN_COMMANDS.len(),
+        EXACT_FIFTEEN_COMMANDS.len(),
         "one generated permission file per native command, no more: {names:?}"
     );
     assert!(names.contains(&"native_attest_privileged_action.toml".to_string()));
@@ -321,7 +326,7 @@ fn native_verify_offline_pin_has_no_caller_controlled_time_or_branch_arguments()
 }
 
 #[test]
-fn all_seventeen_privileged_auth_modules_are_declared() {
+fn all_eighteen_privileged_auth_modules_are_declared() {
     let source = mod_rs_source();
     let expected_modules = [
         "action_attestation",
@@ -330,6 +335,7 @@ fn all_seventeen_privileged_auth_modules_are_declared() {
         "clock_guard",
         "device_proof",
         "device_registration_proof",
+        "device_security_readiness",
         "dpapi_envelope",
         "enrollment_import",
         "enrollment_meta",
@@ -354,7 +360,7 @@ fn all_seventeen_privileged_auth_modules_are_declared() {
 /// version-envelope inventory. Each row names the file and the explicit
 /// version constant it must declare; a future silent addition/removal of a
 /// privileged-auth store's version marker fails this test, mirroring the
-/// exhaustiveness style used for the fourteen-command surface above.
+/// exhaustiveness style used for the fifteen-command surface above.
 const EXPECTED_PRIVILEGED_AUTH_VERSION_MARKERS: &[(&str, &str)] = &[
     ("pepper_store.rs", "PEPPER_STORE_VERSION"),
     ("security_device_id.rs", "SECURITY_DEVICE_ID_STORE_VERSION"),
@@ -418,4 +424,26 @@ fn sec_001_epoch2_package_version_is_not_placeholder_in_either_manifest() {
         cargo_version, tauri_version,
         "Cargo.toml and tauri.conf.json versions must stay synchronized"
     );
+}
+
+#[test]
+fn native_get_device_security_readiness_is_argument_free_and_returns_only_the_readiness_dto() {
+    let source = mod_rs_source();
+    assert!(
+        source.contains(
+            "pub fn native_get_device_security_readiness() -> device_security_readiness::DeviceSecurityReadinessDto {"
+        ),
+        "readiness command must take no WebView arguments and return only the readiness DTO (no raw error channel)"
+    );
+
+    let toml = fs::read_to_string(
+        manifest_dir()
+            .join("permissions")
+            .join("autogenerated")
+            .join("native_get_device_security_readiness.toml"),
+    )
+    .unwrap();
+    assert!(toml.contains("identifier = \"allow-native-get-device-security-readiness\""));
+    assert!(toml.contains("commands.allow = [\"native_get_device_security_readiness\"]"));
+    assert!(toml.contains("identifier = \"deny-native-get-device-security-readiness\""));
 }

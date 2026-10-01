@@ -12,6 +12,7 @@
 
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { auth, app, isFirebaseConfigured } from '../firebase';
+import { ensureFirebaseAuth } from '../firebaseAuth';
 
 export interface FinalizeRetryContext {
   enrollmentGenerationId: string;
@@ -533,6 +534,16 @@ export async function registerDevice(
     const res = await options.customCallables.beginDeviceRegistration();
     beginResData = res.data;
   } else {
+    // Registration needs only a Firebase Auth UID (no staff claims), so a
+    // pre-login enrollment reuses the normal anonymous POS session. A fresh
+    // begin binds its session to whatever UID is current. (Explicit completion
+    // recovery deliberately does NOT do this: its saved session is bound to
+    // the original UID.)
+    try {
+      await ensureFirebaseAuth();
+    } catch {
+      return { ok: false, code: 'not_authenticated' };
+    }
     if (!isFirebaseConfigured || !auth?.currentUser || !app) {
       return { ok: false, code: 'not_authenticated' };
     }

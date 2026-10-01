@@ -23,6 +23,14 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 import { auth, app, authEmailForUsername, collections, db, isFirebaseConfigured } from '../firebase';
 import { ensureFirebaseAuth } from '../firebaseAuth';
 import type { User } from '../types';
+import {
+  assertDeviceGateOpen,
+  DeviceNotReadyError,
+  isDeviceGateOpen,
+  isNativeTauriRuntime,
+  readNativeDeviceReadiness,
+  type NativeDeviceReadiness,
+} from './nativeDeviceReadiness';
 import { getNativeStaffSessionInvoke } from './refreshStaffSession';
 import {
   findDevUserByPin,
@@ -42,8 +50,17 @@ export type AuthContextValue = {
   user: User | null;
   branchId: string | null;
   isLoading: boolean;
+  /**
+   * True only when an app session exists AND the device gate is open (web, or
+   * native with READY readiness). On a native POS that is not READY the stored
+   * session is kept but withheld (`session`/`user`/`branchId` read as null).
+   */
   isAuthenticated: boolean;
   firebaseUser: FirebaseUser | null;
+  /** TPOS-R7 device-wide native enrollment gate ('not_native' on web). */
+  deviceReadiness: NativeDeviceReadiness | 'checking';
+  /** Re-reads strong native readiness and updates the gate; returns the fresh value. */
+  refreshDeviceReadiness: () => Promise<NativeDeviceReadiness>;
   loginWithPin: (pin: string, branchId: string, username: string) => Promise<User>;
   loginWithUsername: (
     username: string,
@@ -114,6 +131,28 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const lastPersistedStaffIdRef = useRef<string | null>(null);
+  // TPOS-R7: one device-wide gate. Never signs out / replaces the Firebase UID
+  // to enforce itself (an explicit enrollment recovery may be bound to it).
+  const [deviceReadiness, setDeviceReadiness] = useState<NativeDeviceReadiness | 'checking'>(() =>
+    isNativeTauriRuntime() ? 'checking' : 'not_native',
+  );
+
+  const refreshDeviceReadiness = useCallback(async () => {
+    const next = await readNativeDeviceReadiness();
+    setDeviceReadiness(next);
+    return next;
+  }, []);
+
+  useEffect(() => {
+    if (!isNativeTauriRuntime()) return;
+    let cancelled = false;
+    void readNativeDeviceReadiness().then((next) => {
+      if (!cancelled) setDeviceReadiness(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!auth || !isFirebaseConfigured) {
@@ -176,6 +215,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     if (isFirebaseConfigured && auth) {
       try {
+        // Native POS: strong device readiness BEFORE the PIN reaches the
+        // server, so a not-READY machine never gets staff claims stamped.
+        const readiness = await refreshDeviceReadiness();
+        assertDeviceGateOpen(readiness);
+        const isNative = readiness !== 'not_native';
+
         await ensureFirebaseAuth();
         if (!auth.currentUser) {
           throw new Error(
@@ -197,48 +242,68 @@ export function AuthProvider({ children }: AuthProviderProps) {
           throw new Error('PIN ไม่ถูกต้องหรือไม่มีสิทธิ์สาขานี้');
         }
 
-        // Native offline staff session issuance if native bridge is available
-        const invoke = getNativeStaffSessionInvoke();
-        if (invoke && app) {
-          const challengeRaw = await invoke('native_prepare_staff_session_challenge', {
-            purpose: 'SSA1_LOGIN',
-            branchId,
-            intendedStaffId: user.id,
-          });
-          const challenge = challengeRaw as { generation: number; sscp1ProofBase64: string };
+        // Native offline staff session issuance (READY native device only).
+        // Every failure here is a device-session failure, never a PIN error,
+        // and never carries a raw native/server string to the UI.
+        if (isNative) {
+          const invoke = getNativeStaffSessionInvoke();
+          if (!invoke || !app) {
+            throw new DeviceNotReadyError('DEVICE_SESSION_PREPARATION_FAILED');
+          }
+          let challengeRaw: unknown;
+          try {
+            challengeRaw = await invoke('native_prepare_staff_session_challenge', {
+              purpose: 'SSA1_LOGIN',
+              branchId,
+              intendedStaffId: user.id,
+            });
+          } catch {
+            throw new DeviceNotReadyError('DEVICE_SESSION_PREPARATION_FAILED');
+          }
+          const challenge = challengeRaw as { generation?: unknown; sscp1ProofBase64?: unknown } | null;
           if (
             typeof challenge?.generation !== 'number' ||
             typeof challenge?.sscp1ProofBase64 !== 'string' ||
             !challenge.sscp1ProofBase64
           ) {
-            throw new Error('การเตรียม native challenge ล้มเหลว (challenge malformed)');
+            throw new DeviceNotReadyError('DEVICE_SESSION_PREPARATION_FAILED');
           }
 
-          const functions = getFunctions(app, import.meta.env.VITE_FUNCTIONS_REGION);
-          const issueCallable = httpsCallable<
-            { sscp1Base64: string },
-            { ok: boolean; ssa1Base64?: string; srf1Base64?: string; code?: string }
-          >(functions, 'issueOfflineStaffSessionAssertion');
-          const issueRes = await issueCallable({ sscp1Base64: challenge.sscp1ProofBase64 });
-          if (!issueRes.data.ok || !issueRes.data.ssa1Base64 || !issueRes.data.srf1Base64) {
-            throw new Error(`การออก offline staff session assertion ล้มเหลว: ${issueRes.data.code || 'issue_call_failed'}`);
+          let issued: { ssa1Base64: string; srf1Base64: string; oks1Base64: string };
+          try {
+            const functions = getFunctions(app, import.meta.env.VITE_FUNCTIONS_REGION);
+            const issueCallable = httpsCallable<
+              { sscp1Base64: string },
+              { ok: boolean; ssa1Base64?: string; srf1Base64?: string; code?: string }
+            >(functions, 'issueOfflineStaffSessionAssertion');
+            const issueRes = await issueCallable({ sscp1Base64: challenge.sscp1ProofBase64 });
+            const { ssa1Base64, srf1Base64 } = issueRes.data;
+            if (!issueRes.data.ok || !ssa1Base64 || !srf1Base64) {
+              console.warn('[auth] offline staff session issuance refused', issueRes.data.code ?? 'issue_call_failed');
+              throw new DeviceNotReadyError('DEVICE_SESSION_ISSUANCE_FAILED');
+            }
+
+            const keysetCallable = httpsCallable<unknown, { ok: boolean; oks1Base64?: string }>(
+              functions,
+              'getOacKeysetManifest',
+            );
+            const keysetRes = await keysetCallable({});
+            if (!keysetRes.data.ok || !keysetRes.data.oks1Base64) {
+              throw new DeviceNotReadyError('DEVICE_SESSION_ISSUANCE_FAILED');
+            }
+            issued = { ssa1Base64, srf1Base64, oks1Base64: keysetRes.data.oks1Base64 };
+          } catch (err) {
+            throw err instanceof DeviceNotReadyError ? err : new DeviceNotReadyError('DEVICE_SESSION_ISSUANCE_FAILED');
           }
 
-          const keysetCallable = httpsCallable<unknown, { ok: boolean; oks1Base64?: string }>(
-            functions,
-            'getOacKeysetManifest',
-          );
-          const keysetRes = await keysetCallable({});
-          if (!keysetRes.data.ok || !keysetRes.data.oks1Base64) {
-            throw new Error('การดึง keyset manifest ล้มเหลว (getOacKeysetManifest unavailable)');
+          try {
+            await invoke('native_persist_staff_session_assertion', {
+              generation: challenge.generation,
+              ...issued,
+            });
+          } catch {
+            throw new DeviceNotReadyError('DEVICE_SESSION_PERSIST_FAILED');
           }
-
-          await invoke('native_persist_staff_session_assertion', {
-            generation: challenge.generation,
-            ssa1Base64: issueRes.data.ssa1Base64,
-            srf1Base64: issueRes.data.srf1Base64,
-            oks1Base64: keysetRes.data.oks1Base64,
-          });
 
           lastPersistedStaffIdRef.current = user.id;
         }
@@ -258,9 +323,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
     throw new Error('PIN ไม่ถูกต้องหรือไม่มีสิทธิ์สาขานี้');
-  }, []);
+  }, [refreshDeviceReadiness]);
 
   const completeLogin = useCallback(async (user: User, branchId: string) => {
+    // Defense in depth: no app session is ever saved on a not-READY native device.
+    assertDeviceGateOpen(await refreshDeviceReadiness());
     if (lastPersistedStaffIdRef.current !== user.id) {
       const invoke = getNativeStaffSessionInvoke();
       if (invoke) {
@@ -270,7 +337,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
     const nextSession = await establishSession(user, branchId);
     setSession(nextSession);
-  }, []);
+  }, [refreshDeviceReadiness]);
 
   const loginWithUsername = useCallback(
     async (username: string, password: string, branchId: string) => {
@@ -278,6 +345,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
       if (!normalizedUsername || !password) {
         throw new Error('กรุณากรอกชื่อผู้ใช้และรหัสผ่าน');
       }
+
+      // Native POS: no password sign-in (and so no app session) on a device
+      // that is not fully enrolled - password login is not an enrollment bypass.
+      assertDeviceGateOpen(await refreshDeviceReadiness());
 
       let user: User | null = null;
 
@@ -312,7 +383,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       return { ...user, pin: '' };
     },
-    [],
+    [refreshDeviceReadiness],
   );
 
   const logout = useCallback(async () => {
@@ -346,14 +417,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
     [],
   );
 
+  const deviceGateOpen = isDeviceGateOpen(deviceReadiness);
+  const gatedSession = deviceGateOpen ? session : null;
+
   const value = useMemo<AuthContextValue>(
     () => ({
-      session,
-      user: session?.user ?? null,
-      branchId: session?.branchId ?? null,
-      isLoading,
-      isAuthenticated: session != null,
+      session: gatedSession,
+      user: gatedSession?.user ?? null,
+      branchId: gatedSession?.branchId ?? null,
+      isLoading: isLoading || deviceReadiness === 'checking',
+      isAuthenticated: gatedSession != null,
       firebaseUser,
+      deviceReadiness,
+      refreshDeviceReadiness,
       loginWithPin,
       loginWithUsername,
       completeLogin,
@@ -361,8 +437,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setBranchId,
     }),
     [
-      session,
+      gatedSession,
       isLoading,
+      deviceReadiness,
+      refreshDeviceReadiness,
       firebaseUser,
       loginWithPin,
       loginWithUsername,

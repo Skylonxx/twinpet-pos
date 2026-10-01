@@ -13,6 +13,10 @@
 //! exactly one command (`native_attest_privileged_action`). It signs one frame
 //! shape (`PAA1`) over natively-derived fields under a fixed domain separator;
 //! it is not, and must never become, a generic signing surface.
+//!
+//! TPOS-R7 adds exactly one module (`device_security_readiness`) and exactly
+//! one read-only command (`native_get_device_security_readiness`) that returns
+//! only a bare READY / NOT_ENROLLED / INVALID_OR_INCOMPLETE readiness value.
 
 pub mod action_attestation;
 pub mod argon2_benchmark;
@@ -20,6 +24,7 @@ pub mod argon2_kdf;
 pub mod clock_guard;
 pub mod device_proof;
 pub mod device_registration_proof;
+pub mod device_security_readiness;
 pub mod dpapi_envelope;
 pub mod enrollment_import;
 pub mod enrollment_meta;
@@ -434,6 +439,18 @@ fn device_registration_status_internal(root: &Path) -> Result<DeviceRegistration
 #[tauri::command]
 pub fn native_get_device_registration_status() -> Result<DeviceRegistrationStatusDto, String> {
     device_registration_status_internal(&app_data_dir())
+}
+
+// --- Command 5b: native_get_device_security_readiness ---
+
+/// TPOS-R7 native enrollment gate: strong, read-only readiness (see
+/// `device_security_readiness`). Never errors and never returns raw native
+/// detail; anything not provably complete is INVALID_OR_INCOMPLETE.
+#[tauri::command]
+pub fn native_get_device_security_readiness() -> device_security_readiness::DeviceSecurityReadinessDto {
+    device_security_readiness::DeviceSecurityReadinessDto {
+        readiness: device_security_readiness::device_security_readiness(&app_data_dir()),
+    }
 }
 
 // --- Command 6: native_verify_offline_pin ---

@@ -55,6 +55,15 @@ if (typeof window !== 'undefined') {
   (window as any).localStorage = mockStorage;
 }
 
+// TPOS-R7: a present Tauri bridge means a native POS, whose app session is
+// withheld until strong device readiness is READY. These IR-008 fixtures model
+// an enrolled terminal; the readiness call is answered here so each test's
+// recorded native-call order stays exactly what it asserts.
+function withReadyDevice(inner: (...args: unknown[]) => Promise<unknown>) {
+  return async (...args: unknown[]) =>
+    args[0] === 'native_get_device_security_readiness' ? { readiness: 'READY' } : inner(...args);
+}
+
 describe('IR-008 AuthProvider & PosShellRoute logout ordering and error preservation', () => {
   const validUser: User = {
     id: 'user-1',
@@ -163,7 +172,7 @@ describe('IR-008 AuthProvider & PosShellRoute logout ordering and error preserva
         return undefined;
       });
       (window as any).__TAURI__ = {
-        core: { invoke: invokeMock },
+        core: { invoke: withReadyDevice(invokeMock) },
       };
 
       const clearSessionSpy = vi.spyOn(sessionModule, 'clearSession').mockImplementation(() => {
@@ -177,8 +186,8 @@ describe('IR-008 AuthProvider & PosShellRoute logout ordering and error preserva
         </AuthProvider>,
       );
 
-      expect(screen.getByTestId('current-route').textContent).toBe('/pos');
-      expect(screen.getByTestId('session-state').textContent).toBe('user-1');
+      expect((await screen.findByTestId('current-route')).textContent).toBe('/pos');
+      await waitFor(() => expect(screen.getByTestId('session-state').textContent).toBe('user-1'));
       expect(screen.queryByTestId('mock-navigate-login')).toBeNull();
 
       const btn = screen.getByTestId('logout-button');
@@ -219,7 +228,7 @@ describe('IR-008 AuthProvider & PosShellRoute logout ordering and error preserva
       sessionModule.saveSession(validSession);
       const invokeMock = vi.fn().mockRejectedValue(new Error('NATIVE_CLEAR_FAILURE_SEC_SEAM'));
       (window as any).__TAURI__ = {
-        core: { invoke: invokeMock },
+        core: { invoke: withReadyDevice(invokeMock) },
       };
 
       const clearSessionSpy = vi.spyOn(sessionModule, 'clearSession');
@@ -230,7 +239,7 @@ describe('IR-008 AuthProvider & PosShellRoute logout ordering and error preserva
         </AuthProvider>,
       );
 
-      expect(screen.getByTestId('session-state').textContent).toBe('user-1');
+      await waitFor(() => expect(screen.getByTestId('session-state').textContent).toBe('user-1'));
 
       const btn = screen.getByTestId('logout-button');
       await act(async () => {
@@ -282,7 +291,7 @@ describe('IR-008 AuthProvider & PosShellRoute logout ordering and error preserva
         return undefined;
       });
       (window as any).__TAURI__ = {
-        core: { invoke: invokeMock },
+        core: { invoke: withReadyDevice(invokeMock) },
       };
 
       render(
@@ -316,7 +325,7 @@ describe('IR-008 AuthProvider & PosShellRoute logout ordering and error preserva
 
       const invokeMock = vi.fn().mockRejectedValue(new Error('NATIVE_CLEAR_FAILURE_SEC_SEAM'));
       (window as any).__TAURI__ = {
-        core: { invoke: invokeMock },
+        core: { invoke: withReadyDevice(invokeMock) },
       };
 
       render(

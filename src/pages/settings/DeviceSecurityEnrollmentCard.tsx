@@ -94,7 +94,25 @@ function formatServerTime(ms: number): string {
   return new Date(ms).toLocaleString('th-TH');
 }
 
-export default function DeviceSecurityEnrollmentCard({ branchId }: { branchId: string | null }) {
+export default function DeviceSecurityEnrollmentCard({
+  branchId,
+  onEnrolled,
+  allowFreshEnrollment = true,
+}: {
+  branchId: string | null;
+  /**
+   * Called after a registration / finalize / recovery reports success. It is a
+   * hint only: the pre-login caller must confirm strong native readiness
+   * (READY) before dismissing its bootstrap; key presence is never proof.
+   */
+  onEnrolled?: () => void;
+  /**
+   * False when strong readiness is not a clean NOT_ENROLLED (inconsistent or
+   * unknown local authority): explicit recovery stays available, but a fresh
+   * ENR1 ceremony is never offered.
+   */
+  allowFreshEnrollment?: boolean;
+}) {
   const [invoke] = useState<NativeInvoke | null>(() => getNativeDeviceEnrollmentInvoke());
   const [status, setStatus] = useState<StatusState>({ kind: 'loading' });
   const [recovery, setRecovery] = useState<EnrollmentRecoveryState>(() => loadEnrollmentRecoveryState());
@@ -157,7 +175,7 @@ export default function DeviceSecurityEnrollmentCard({ branchId }: { branchId: s
 
   const pickEnrollmentFile = () =>
     runExclusive(async () => {
-      if (!invoke) return;
+      if (!invoke || !allowFreshEnrollment) return;
       setNotice(null);
       setImported(null);
       let raw: unknown;
@@ -182,7 +200,7 @@ export default function DeviceSecurityEnrollmentCard({ branchId }: { branchId: s
 
   const confirmEnrollment = () =>
     runExclusive(async () => {
-      if (!imported || recovery.kind !== 'none') return;
+      if (!imported || recovery.kind !== 'none' || !allowFreshEnrollment) return;
       const enrollmentAuthId = imported.enrollmentAuthId;
       setNotice(null);
       // The authorization is single-use; the operator must re-pick after any attempt.
@@ -193,6 +211,7 @@ export default function DeviceSecurityEnrollmentCard({ branchId }: { branchId: s
           adoptRecoveryState();
           setNotice({ tone: 'success', text: 'ลงทะเบียนความปลอดภัยของเครื่องนี้สำเร็จ' });
           await refreshStatus();
+          onEnrolled?.();
           return;
         }
         if (result.code === LOCAL_FINALIZE_REQUIRED) {
@@ -218,6 +237,7 @@ export default function DeviceSecurityEnrollmentCard({ branchId }: { branchId: s
         adoptRecoveryState();
         setNotice({ tone: 'success', text: 'ยืนยันการลงทะเบียนในเครื่องนี้สำเร็จ' });
         await refreshStatus();
+        onEnrolled?.();
         return;
       }
       adoptRecoveryState(pending);
@@ -243,6 +263,7 @@ export default function DeviceSecurityEnrollmentCard({ branchId }: { branchId: s
         adoptRecoveryState();
         setNotice({ tone: 'success', text: 'กู้คืนและลงทะเบียนความปลอดภัยของเครื่องนี้สำเร็จ' });
         await refreshStatus();
+        onEnrolled?.();
         return;
       }
       if (result.code === LOCAL_FINALIZE_REQUIRED) {
@@ -297,6 +318,13 @@ export default function DeviceSecurityEnrollmentCard({ branchId }: { branchId: s
           </Button>
         </div>
       </div>
+    );
+  } else if (!allowFreshEnrollment) {
+    body = (
+      <Alert color="failure" data-testid="device-enrollment-fresh-blocked">
+        ข้อมูลความปลอดภัยในเครื่องนี้ไม่อยู่ในสถานะที่เริ่มลงทะเบียนใหม่ได้อย่างปลอดภัย — ระบบไม่เปิดให้ลงทะเบียนใหม่
+        กรุณาติดต่อผู้ดูแลระบบ
+      </Alert>
     );
   } else if (status.kind === 'loading') {
     body = <div className="stg-form-hint">กำลังตรวจสอบสถานะเครื่อง…</div>;
@@ -357,7 +385,13 @@ export default function DeviceSecurityEnrollmentCard({ branchId }: { branchId: s
     );
   }
 
-  const enrolled = invoke != null && recovery.kind === 'none' && status.kind === 'loaded' && status.deviceKeyPresent;
+  // Display-only (Settings): key presence. Never a security decision.
+  const enrolled =
+    invoke != null &&
+    allowFreshEnrollment &&
+    recovery.kind === 'none' &&
+    status.kind === 'loaded' &&
+    status.deviceKeyPresent;
 
   return (
     <div className="stg-card">
