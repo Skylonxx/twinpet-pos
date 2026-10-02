@@ -6,6 +6,8 @@ import { PinPad } from '../components/auth/PinPad';
 import { BranchSelector } from '../components/auth/BranchSelector';
 import { Alert, Button } from '../components/ui';
 import { isDeviceNotReadyError } from '../lib/auth/nativeDeviceReadiness';
+import { isPinIdentityError } from '../lib/auth/pinIdentityError';
+import { isAuthOperationSupersededError } from '../lib/auth/authOperationError';
 import DeviceSecurityEnrollmentCard from './settings/DeviceSecurityEnrollmentCard';
 
 // Note: Removing LoginPage.css as the layout has been fully transitioned to Flowbite/Tailwind primitives.
@@ -58,7 +60,29 @@ export default function LoginPage() {
     () => typeof navigator === 'undefined' || navigator.onLine !== false,
   );
 
-  const pinSubmitting = useRef(false);
+  // One interactive login (password OR PIN) at a time. Taken synchronously at
+  // submit start, released only in that submit's `finally`.
+  const authSubmitting = useRef(false);
+  // The 4th-digit PIN auto-submit timer; cancelled whenever it could go stale.
+  const pinAutoSubmitTimer = useRef<number | null>(null);
+  // Latest mode / PIN for the timer callback, which runs after a re-render.
+  const modeRef = useRef<LoginMode>(mode);
+  const pinValueRef = useRef(pinValue);
+  useEffect(() => {
+    modeRef.current = mode;
+  }, [mode]);
+  useEffect(() => {
+    pinValueRef.current = pinValue;
+  }, [pinValue]);
+
+  const cancelPinAutoSubmit = useCallback(() => {
+    if (pinAutoSubmitTimer.current !== null) {
+      window.clearTimeout(pinAutoSubmitTimer.current);
+      pinAutoSubmitTimer.current = null;
+    }
+  }, []);
+
+  useEffect(() => cancelPinAutoSubmit, [cancelPinAutoSubmit]);
 
   // TPOS-R7 device-wide gate (owned by AuthProvider): on a native POS that is
   // not READY, every login mode is refused by the auth layer and this page is
@@ -136,12 +160,14 @@ export default function LoginPage() {
 
   const switchMode = useCallback(
     (next: LoginMode) => {
+      // Switching tabs never authenticates: drop any queued PIN auto-submit.
+      cancelPinAutoSubmit();
+      modeRef.current = next;
       setMode(next);
       clearErrors();
       setPinValue('');
-      pinSubmitting.current = false;
     },
-    [clearErrors],
+    [cancelPinAutoSubmit, clearErrors],
   );
 
   const handleSuccess = useCallback(
@@ -159,7 +185,7 @@ export default function LoginPage() {
       } catch (err: unknown) {
         console.error('[login] completeLogin failed', err);
         setSuccessUser(null);
-        if (isDeviceNotReadyError(err)) {
+        if (isDeviceNotReadyError(err) || isAuthOperationSupersededError(err)) {
           showToast(err.message, 'error');
           if (mode === 'password') setPwError(err.message);
           else setPinValue('');
@@ -186,8 +212,13 @@ export default function LoginPage() {
       // SECURITY FIX: Removed raw PIN logging. Replaced with safe telemetry.
       console.log('[login] Submit clicked', { branchId, pinLength: pin.length, mode });
 
-      if (pinSubmitting.current) {
-        console.warn('[login] PIN submit ignored — already in progress');
+      cancelPinAutoSubmit();
+      if (modeRef.current !== 'pin') {
+        console.warn('[login] PIN submit ignored — not in PIN mode');
+        return;
+      }
+      if (authSubmitting.current) {
+        console.warn('[login] PIN submit ignored — another login is in progress');
         return;
       }
 
@@ -210,7 +241,7 @@ export default function LoginPage() {
         return;
       }
 
-      pinSubmitting.current = true;
+      authSubmitting.current = true;
       setIsLoading(true);
       clearErrors();
 
@@ -219,8 +250,8 @@ export default function LoginPage() {
         await handleSuccess(user);
       } catch (err) {
         console.error('[login] PIN submit failed', err);
-        if (isDeviceNotReadyError(err)) {
-          // A device problem, not a wrong PIN: no PinPad error state.
+        if (isDeviceNotReadyError(err) || isPinIdentityError(err) || isAuthOperationSupersededError(err)) {
+          // A device / PIN-identity problem, not a wrong PIN: no PinPad error state.
           showToast(err.message, 'error');
           setPinValue('');
           return;
@@ -238,13 +269,14 @@ export default function LoginPage() {
         setPinValue('');
       } finally {
         setIsLoading(false);
-        pinSubmitting.current = false;
+        authSubmitting.current = false;
       }
     },
     [
       branchId,
       branches.length,
       branchesLoading,
+      cancelPinAutoSubmit,
       clearErrors,
       handleSuccess,
       loginWithPin,
@@ -261,18 +293,24 @@ export default function LoginPage() {
       const next = pinValue + digit;
       setPinValue(next);
       if (next.length === 4) {
-        window.setTimeout(() => void submitPin(next), 200);
+        cancelPinAutoSubmit();
+        pinAutoSubmitTimer.current = window.setTimeout(() => {
+          pinAutoSubmitTimer.current = null;
+          // Still PIN mode, still this PIN, and no other login running.
+          if (modeRef.current !== 'pin' || pinValueRef.current !== next || authSubmitting.current) return;
+          void submitPin(next);
+        }, 200);
       }
     },
-    [clearErrors, isLoading, pinValue, submitPin],
+    [cancelPinAutoSubmit, clearErrors, isLoading, pinValue, submitPin],
   );
 
   const handlePinDel = useCallback(() => {
     if (isLoading) return;
+    cancelPinAutoSubmit();
     clearErrors();
     setPinValue((v) => v.slice(0, -1));
-    pinSubmitting.current = false;
-  }, [clearErrors, isLoading]);
+  }, [cancelPinAutoSubmit, clearErrors, isLoading]);
 
   const handlePasswordLogin = useCallback(async () => {
     if (!branchId) {
@@ -285,6 +323,10 @@ export default function LoginPage() {
       return;
     }
 
+    // A queued PIN auto-submit never runs alongside / after a password login.
+    cancelPinAutoSubmit();
+    if (authSubmitting.current) return;
+    authSubmitting.current = true;
     setIsLoading(true);
     clearErrors();
 
@@ -292,7 +334,7 @@ export default function LoginPage() {
       const user = await loginWithUsername(normalizedUsername, password, branchId);
       await handleSuccess(user);
     } catch (err) {
-      const message = isDeviceNotReadyError(err)
+      const message = isDeviceNotReadyError(err) || isAuthOperationSupersededError(err)
         ? err.message
         : typeof navigator !== 'undefined' && navigator.onLine === false
           ? OFFLINE_LOGIN_MESSAGE
@@ -302,9 +344,11 @@ export default function LoginPage() {
       setPwError(message);
     } finally {
       setIsLoading(false);
+      authSubmitting.current = false;
     }
   }, [
     branchId,
+    cancelPinAutoSubmit,
     clearErrors,
     handleSuccess,
     loginWithUsername,
@@ -314,7 +358,6 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (successUser) {
-      pinSubmitting.current = false;
       setPinValue('');
     }
   }, [successUser]);
@@ -397,10 +440,10 @@ export default function LoginPage() {
             disabled={isLoading}
             onRetry={() => void reloadBranches()}
             onChange={(val) => {
+              cancelPinAutoSubmit();
               setBranchId(val);
               clearErrors();
               setPinValue('');
-              pinSubmitting.current = false;
             }}
           />
 

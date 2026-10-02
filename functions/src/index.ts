@@ -194,6 +194,102 @@ export const LOGIN_DUMMY_PIN_HASH =
 
 export const GENERIC_LOGIN_DENIED = 'PIN ไม่ถูกต้องหรือไม่มีสิทธิ์สาขานี้';
 
+/**
+ * Stable reason for a Quick PIN call made from a non-anonymous Firebase
+ * identity. Sent as the `failed-precondition` message so the client can tell
+ * it apart from a wrong PIN without learning anything about the PIN.
+ */
+export const PIN_SESSION_IDENTITY_REJECTED = 'PIN_SESSION_IDENTITY_REJECTED';
+
+/**
+ * Token-level half of the Quick PIN identity check. Reads the
+ * signature-verified ID token the Functions runtime decoded, never a
+ * client-supplied field: the token must have been obtained anonymously
+ * (`firebase.sign_in_provider === 'anonymous'`, exact match). `identities` is
+ * optional on the wire; when present it must be an empty plain object.
+ * Missing / non-string / unknown providers, and null, array, primitive or
+ * non-empty identities, fail closed.
+ */
+export function isAnonymousPinCaller(auth: { token?: unknown } | undefined): boolean {
+  const token = auth?.token as { firebase?: unknown } | undefined;
+  const firebase = token?.firebase as { sign_in_provider?: unknown; identities?: unknown } | undefined;
+  if (!firebase || typeof firebase !== 'object') return false;
+  if (firebase.sign_in_provider !== 'anonymous') return false;
+  const identities = firebase.identities;
+  if (identities === undefined) return true;
+  if (identities === null || typeof identities !== 'object' || Array.isArray(identities)) return false;
+  return Object.keys(identities).length === 0;
+}
+
+type LivePinAccount = {
+  uid?: unknown;
+  disabled?: unknown;
+  email?: unknown;
+  phoneNumber?: unknown;
+  passwordHash?: unknown;
+  providerData?: unknown;
+  multiFactor?: unknown;
+};
+
+/**
+ * MFA half of the live-account check. Absent `multiFactor` means no MFA.
+ * When present it must be a plain object carrying an `enrolledFactors` array
+ * that is empty; null, primitives, arrays, `{}`, a missing/undefined or
+ * non-array `enrolledFactors`, and any enrolled factor all fail closed.
+ */
+function hasNoEnrolledMfa(multiFactor: unknown): boolean {
+  if (multiFactor === undefined) return true;
+  if (multiFactor === null || typeof multiFactor !== 'object' || Array.isArray(multiFactor)) return false;
+  if (!Object.prototype.hasOwnProperty.call(multiFactor, 'enrolledFactors')) return false;
+  const factors = (multiFactor as { enrolledFactors?: unknown }).enrolledFactors;
+  return Array.isArray(factors) && factors.length === 0;
+}
+
+/**
+ * Live-account half: an older anonymous token survives an account link /
+ * upgrade, so the CURRENT Auth user record must still look like a dedicated
+ * anonymous PIN account: exact UID, enabled, `providerData` an empty array,
+ * no email, no phone, no enrolled MFA. Combined with the token predicate
+ * (`sign_in_provider === 'anonymous'`), those documented linkage surfaces are
+ * what identify a password / provider-linked account. Ambiguous shapes fail
+ * closed.
+ *
+ * `passwordHash` is NOT proof of anything here: `getUser()` does not reliably
+ * populate it (Admin SDK documents it as a `listUsers()` field, and `''` can
+ * mean an imported hash). A non-empty value is kept only as a conservative,
+ * rejection-only extra signal; its absence proves nothing about a password.
+ */
+export function isProviderlessPinAccount(record: LivePinAccount | null | undefined, uid: string): boolean {
+  if (!record || typeof record !== 'object' || record.uid !== uid) return false;
+  if (record.disabled !== false) return false;
+  if (!Array.isArray(record.providerData) || record.providerData.length !== 0) return false;
+  if (record.email !== undefined && record.email !== null && record.email !== '') return false;
+  if (record.phoneNumber !== undefined && record.phoneNumber !== null && record.phoneNumber !== '') return false;
+  if (!hasNoEnrolledMfa(record.multiFactor)) return false;
+  // Rejection-only, non-authoritative (see above).
+  if (record.passwordHash !== undefined && record.passwordHash !== null && record.passwordHash !== '') return false;
+  return true;
+}
+
+/**
+ * Quick PIN may stamp staff claims ONLY onto a dedicated anonymous PIN
+ * identity — never onto a password / provider-linked account, whose claims
+ * are global to that real account. Token check first (no network), then one
+ * live `getUser` lookup. Every failure — including lookup errors and
+ * user-not-found — is the same non-oracular `failed-precondition`.
+ */
+async function assertDedicatedPinIdentity(auth: { uid?: unknown; token?: unknown }): Promise<void> {
+  const reject = () => new HttpsError('failed-precondition', PIN_SESSION_IDENTITY_REJECTED);
+  if (typeof auth.uid !== 'string' || !auth.uid || !isAnonymousPinCaller(auth)) throw reject();
+  let record: LivePinAccount;
+  try {
+    record = (await getAuth().getUser(auth.uid)) as unknown as LivePinAccount;
+  } catch {
+    throw reject();
+  }
+  if (!isProviderlessPinAccount(record, auth.uid)) throw reject();
+}
+
 export type PinLoginIdentityOutcome = {
   bcryptComparisons: number;
   match: { user: UserDoc; id: string } | null;
@@ -370,6 +466,10 @@ export const verifyPinLogin = onCall(
       if (!request.auth) {
         throw new HttpsError('unauthenticated', 'ต้องเข้าสู่ระบบ Firebase ก่อนยืนยัน PIN');
       }
+      // Before any PIN/identity work (arg validation, staff/credential reads,
+      // bcrypt, permissions, claims, lastLoginAt): the caller must be a
+      // dedicated anonymous PIN identity, by token AND live account record.
+      await assertDedicatedPinIdentity(request.auth);
 
       const data = (request.data ?? {}) as VerifyPinLoginRequest;
       const pin = String(data.pin ?? '').trim();

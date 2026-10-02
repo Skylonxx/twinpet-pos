@@ -344,6 +344,25 @@ export function loadEnrollmentRecoveryState(): EnrollmentRecoveryState {
 }
 
 /**
+ * TPOS-R7 PIN identity isolation: may the current Firebase UID be replaced?
+ * Stricter than `loadEnrollmentRecoveryState` — any raw value under either
+ * recovery key (valid, malformed, or conflicting) or unreadable storage counts
+ * as UID-bound recovery evidence, so a completion/finalization/conflict that
+ * may be bound to this UID is never destroyed. Read-only; never repairs.
+ */
+export function hasUidBoundEnrollmentRecoveryEvidence(): boolean {
+  try {
+    if (typeof localStorage === 'undefined') return true;
+    return (
+      localStorage.getItem(PENDING_FINALIZATION_STORAGE_KEY) !== null ||
+      localStorage.getItem(PENDING_COMPLETION_INTENT_STORAGE_KEY) !== null
+    );
+  } catch {
+    return true;
+  }
+}
+
+/**
  * Retries local finalization using the exact accepted generation details
  * without re-calling the server or generating a second key.
  */

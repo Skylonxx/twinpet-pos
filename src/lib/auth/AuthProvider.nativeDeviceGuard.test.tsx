@@ -6,7 +6,7 @@ import { getDoc } from 'firebase/firestore';
 import { AuthProvider } from './AuthProvider';
 import { useAuth, type AuthContextValue } from '../hooks/useAuth';
 import { verifyPinLogin } from './verifyPinLogin';
-import { ensureFirebaseAuth } from '../firebaseAuth';
+import { ensureAnonymousFirebaseAuthForPin } from '../firebaseAuth';
 import { DeviceNotReadyError, NATIVE_DEVICE_SECURITY_READINESS_COMMAND } from './nativeDeviceReadiness';
 
 /**
@@ -38,7 +38,11 @@ vi.mock('../firebase', () => ({
   collections: { users: 'users' },
   authEmailForUsername: (u: string) => `${u}@example.invalid`,
 }));
-vi.mock('../firebaseAuth', () => ({ ensureFirebaseAuth: vi.fn(async () => undefined) }));
+vi.mock('../firebaseAuth', () => ({
+  ensureFirebaseAuth: vi.fn(async () => undefined),
+  // Quick PIN identity helper (TPOS-R7): this suite's current user is anonymous.
+  ensureAnonymousFirebaseAuthForPin: vi.fn(async () => h.auth.currentUser),
+}));
 vi.mock('./verifyPinLogin', () => ({ verifyPinLogin: vi.fn() }));
 vi.mock('firebase/auth', () => ({
   onAuthStateChanged: (_auth: unknown, cb: (u: null) => void) => {
@@ -72,7 +76,7 @@ const mockStorage = (() => {
 Object.defineProperty(globalThis, 'localStorage', { value: mockStorage, writable: true, configurable: true });
 
 const mockVerify = vi.mocked(verifyPinLogin);
-const mockEnsure = vi.mocked(ensureFirebaseAuth);
+const mockEnsure = vi.mocked(ensureAnonymousFirebaseAuthForPin);
 const mockSignIn = vi.mocked(signInWithEmailAndPassword);
 const mockSignOut = vi.mocked(signOut);
 const mockGetDoc = vi.mocked(getDoc);

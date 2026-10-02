@@ -15,6 +15,7 @@ import {
   type PendingCompletionIntentV1,
 } from '../lib/auth/deviceRegistration';
 import { DeviceNotReadyError, type NativeDeviceReadiness } from '../lib/auth/nativeDeviceReadiness';
+import { PinIdentityError } from '../lib/auth/pinIdentityError';
 
 /**
  * TPOS-R7 pre-login bootstrap: LoginPage (a GuestRoute page, outside
@@ -336,6 +337,23 @@ describe('LoginPage — device errors are not rendered as PIN/password-invalid (
     await enterPin();
 
     expect(await screen.findByText(new DeviceNotReadyError(code).message, {}, { timeout: 3000 })).toBeDefined();
+    expect(screen.queryByText(PIN_INVALID_LABEL)).toBeNull();
+    expect(completeLoginMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'PIN_IDENTITY_UNAVAILABLE',
+    'PIN_IDENTITY_TRANSITION_BLOCKED',
+    'PIN_IDENTITY_REJECTED',
+  ] as const)('Quick PIN %s: fixed identity message shown, PinPad "PIN incorrect" NOT shown', async (code) => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    initialReadiness = 'READY';
+    loginWithPinMock.mockRejectedValue(new PinIdentityError(code));
+    render(<LoginPage />);
+
+    await enterPin();
+
+    expect(await screen.findByText(new PinIdentityError(code).message, {}, { timeout: 3000 })).toBeDefined();
     expect(screen.queryByText(PIN_INVALID_LABEL)).toBeNull();
     expect(completeLoginMock).not.toHaveBeenCalled();
   });

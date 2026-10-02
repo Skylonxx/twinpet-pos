@@ -7,6 +7,7 @@ import {
 } from 'firebase/functions';
 import { auth, app, isFirebaseConfigured, USE_EMULATOR, getEmulatorHost } from '../firebase';
 import { ensureFirebaseAuth } from '../firebaseAuth';
+import { asPinIdentityStep, PinIdentityError } from './pinIdentityError';
 import type { User } from '../types';
 
 export type VerifyPinLoginRequest = {
@@ -70,7 +71,13 @@ export async function verifyPinLogin(
       'Firebase Auth ไม่พร้อม — เปิด Anonymous Authentication ใน Firebase Console',
     );
   }
-  await auth.currentUser.getIdToken(true);
+  // TPOS-R7: never send a PIN under a password/federated identity — the server
+  // would stamp PIN claims onto that real account (it also refuses server-side).
+  if (auth.currentUser.isAnonymous !== true) {
+    throw new PinIdentityError('PIN_IDENTITY_UNAVAILABLE');
+  }
+  const pinUser = auth.currentUser;
+  await asPinIdentityStep(() => pinUser.getIdToken(true));
 
   const callable = getVerifyPinLoginCallable();
 
@@ -89,12 +96,15 @@ export async function verifyPinLogin(
     }
 
     // Force token refresh so freshly stamped custom claims are available to caller immediately
-    await auth.currentUser.getIdToken(true);
+    await asPinIdentityStep(() => pinUser.getIdToken(true));
 
     return { ...payload.user, pin: '' };
   } catch (err) {
     if (err instanceof FirebaseError) {
       console.error('[verifyPinLogin] FirebaseError', err.code, err.message);
+      if (err.code === 'functions/failed-precondition') {
+        throw new PinIdentityError('PIN_IDENTITY_REJECTED');
+      }
       if (err.code === 'functions/internal') {
         throw new Error(
           'เซิร์ฟเวอร์ PIN ไม่ตอบสนอง — รีสตาร์ท dev server (npm run dev) หรือเปิด Anonymous Auth',
