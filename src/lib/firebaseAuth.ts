@@ -30,7 +30,7 @@ export async function ensureFirebaseAuth(): Promise<void> {
   await signInAnonymouslyOnce();
 }
 
-export type AnonymousPinIdentityOptions = {
+export type AnonymousIdentityOptions = {
   /**
    * Runs ONLY when the current Firebase user is non-anonymous, before that
    * account is signed out; receives the departing user captured before any
@@ -47,20 +47,25 @@ export type AnonymousPinIdentityOptions = {
   assertCanSignOutNonAnonymous?: (departing: FirebaseUser) => void;
 };
 
+/** @deprecated name kept for the Quick PIN call sites; same shape. */
+export type AnonymousPinIdentityOptions = AnonymousIdentityOptions;
+
 /**
- * TPOS-R7 Quick PIN identity isolation. Resolves to a Firebase user that is
- * proven anonymous, so `verifyPinLogin` can never stamp PIN-resolved staff
- * claims onto a password / federated account:
+ * TPOS-R7 dedicated anonymous identity transition (shared by Quick PIN and
+ * first device enrollment). Resolves to a Firebase user that is proven
+ * anonymous:
  *  - no current user        → sign in anonymously;
  *  - anonymous current user → reused (same UID);
  *  - non-anonymous user     → `beforeLeavingNonAnonymous`, sign out, then a new
  *                             anonymous session (never the same UID).
- * Any failure is a fixed `PinIdentityError`, never a raw Firebase string.
+ * Every internal failure is `failure()` — a fixed, caller-chosen error, never
+ * a raw Firebase string. Errors thrown by the caller's hooks propagate unchanged.
  */
-export async function ensureAnonymousFirebaseAuthForPin(
-  options: AnonymousPinIdentityOptions,
+export async function ensureAnonymousFirebaseIdentity(
+  options: AnonymousIdentityOptions,
+  failure: () => Error,
 ): Promise<FirebaseUser> {
-  if (!isFirebaseConfigured || !auth) throw new PinIdentityError('PIN_IDENTITY_UNAVAILABLE');
+  if (!isFirebaseConfigured || !auth) throw failure();
 
   const previous = auth.currentUser;
   if (previous && !previous.isAnonymous) {
@@ -70,29 +75,40 @@ export async function ensureAnonymousFirebaseAuthForPin(
     // one this transition began leaving.
     const stillDeparting = auth.currentUser;
     if (!stillDeparting || stillDeparting.isAnonymous || stillDeparting.uid !== departingUid) {
-      throw new PinIdentityError('PIN_IDENTITY_UNAVAILABLE');
+      throw failure();
     }
     options.assertCanSignOutNonAnonymous?.(previous);
     try {
       await signOut(auth);
     } catch {
-      throw new PinIdentityError('PIN_IDENTITY_UNAVAILABLE');
+      throw failure();
     }
-    if (auth.currentUser) throw new PinIdentityError('PIN_IDENTITY_UNAVAILABLE');
+    if (auth.currentUser) throw failure();
   }
 
   if (!auth.currentUser) {
     try {
       await signInAnonymouslyOnce();
     } catch {
-      throw new PinIdentityError('PIN_IDENTITY_UNAVAILABLE');
+      throw failure();
     }
   }
 
   const next = auth.currentUser as FirebaseUser | null;
-  if (!next || next.isAnonymous !== true) throw new PinIdentityError('PIN_IDENTITY_UNAVAILABLE');
+  if (!next || next.isAnonymous !== true) throw failure();
   if (previous && !previous.isAnonymous && next.uid === previous.uid) {
-    throw new PinIdentityError('PIN_IDENTITY_UNAVAILABLE');
+    throw failure();
   }
   return next;
+}
+
+/**
+ * TPOS-R7 Quick PIN identity isolation: `verifyPinLogin` can never stamp
+ * PIN-resolved staff claims onto a password / federated account. Any internal
+ * failure is a fixed `PinIdentityError`.
+ */
+export function ensureAnonymousFirebaseAuthForPin(
+  options: AnonymousPinIdentityOptions,
+): Promise<FirebaseUser> {
+  return ensureAnonymousFirebaseIdentity(options, () => new PinIdentityError('PIN_IDENTITY_UNAVAILABLE'));
 }

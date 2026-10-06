@@ -41,6 +41,7 @@ export default function LoginPage() {
     isAuthenticated,
     deviceReadiness,
     refreshDeviceReadiness,
+    prepareEnrollmentIdentity,
   } = useAuth();
   const { branches, loading: branchesLoading, error: branchesError, reload: reloadBranches } = useActiveBranches();
 
@@ -475,6 +476,7 @@ export default function LoginPage() {
                 branchId={branchId || null}
                 onEnrolled={handleDeviceEnrolled}
                 allowFreshEnrollment={deviceReadiness === 'NOT_ENROLLED'}
+                prepareEnrollmentIdentity={prepareEnrollmentIdentity}
               />
             </section>
           )}

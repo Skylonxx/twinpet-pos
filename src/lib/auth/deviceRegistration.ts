@@ -12,7 +12,8 @@
 
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { auth, app, isFirebaseConfigured } from '../firebase';
-import { ensureFirebaseAuth } from '../firebaseAuth';
+import { takeEnrollmentGrant, type EnrollmentPreparationGrant } from './enrollmentGrant';
+import { loadSession } from './session';
 
 export interface FinalizeRetryContext {
   enrollmentGenerationId: string;
@@ -533,15 +534,43 @@ async function finalizeSavedContext(
 export interface RegisterDeviceOptions {
   customInvoke?: (cmd: string, args?: Record<string, unknown>) => Promise<unknown>;
   customCallables?: {
+    /**
+     * TEST-ONLY seam: honored only when `import.meta.env.MODE === 'test'`
+     * (Vitest). In any other build an injected begin is refused, so it can
+     * never bypass the enrollment preparation grant at runtime.
+     */
     beginDeviceRegistration?: (data?: unknown) => Promise<{ data: any }>;
     completeDeviceRegistration?: (data: unknown) => Promise<{ data: any }>;
   };
+  /**
+   * TPOS-R7: the one-shot grant returned by the AuthProvider's
+   * `prepareEnrollmentIdentity()`, passed through unchanged. Required on the
+   * production begin path and consumed on the attempt; see `registerDevice`.
+   */
+  enrollmentGrant?: EnrollmentPreparationGrant;
 }
 
 export async function registerDevice(
   enrollmentAuthId: string,
   options?: RegisterDeviceOptions,
 ): Promise<DeviceRegistrationResult> {
+  // 0. A fresh begin binds its session (`requesterUid`) to whatever Firebase
+  // UID is current, so it may run only under the dedicated anonymous identity
+  // that `prepareEnrollmentIdentity()` established. Proof is the one-shot
+  // grant (never a caller-supplied UID). It is consumed FIRST — before the
+  // native-bridge check and before any await — so every attempt, including
+  // one rejected for a local prerequisite, uses it up; a replay or concurrent
+  // second use never begins. Only the Vitest-only injected begin skips it; an
+  // injected begin outside test mode still consumes, then is refused.
+  // (Explicit completion recovery deliberately does NOT do this: its saved
+  // session is bound to the original UID.)
+  const injectedBegin = options?.customCallables?.beginDeviceRegistration;
+  const testInjectedBegin = injectedBegin && import.meta.env.MODE === 'test' ? injectedBegin : undefined;
+  const prepared = testInjectedBegin ? null : takeEnrollmentGrant(options?.enrollmentGrant);
+  if (!testInjectedBegin && (!prepared || injectedBegin)) {
+    return { ok: false, code: 'enrollment_identity_not_prepared' };
+  }
+
   const invoke = options?.customInvoke ?? getNativeDeviceEnrollmentInvoke();
   if (!invoke) {
     return { ok: false, code: 'native_bridge_unavailable' };
@@ -549,25 +578,41 @@ export async function registerDevice(
 
   // 1. Begin registration on server
   let beginResData: any;
-  if (options?.customCallables?.beginDeviceRegistration) {
-    const res = await options.customCallables.beginDeviceRegistration();
+  if (testInjectedBegin) {
+    const res = await testInjectedBegin();
     beginResData = res.data;
+  } else if (!prepared) {
+    // Unreachable (refused above); kept so the production path fails closed.
+    return { ok: false, code: 'enrollment_identity_not_prepared' };
   } else {
-    // Registration needs only a Firebase Auth UID (no staff claims), so a
-    // pre-login enrollment reuses the normal anonymous POS session. A fresh
-    // begin binds its session to whatever UID is current. (Explicit completion
-    // recovery deliberately does NOT do this: its saved session is bound to
-    // the original UID.)
-    try {
-      await ensureFirebaseAuth();
-    } catch {
+    if (!isFirebaseConfigured || !auth || !app) {
       return { ok: false, code: 'not_authenticated' };
     }
-    if (!isFirebaseConfigured || !auth?.currentUser || !app) {
-      return { ok: false, code: 'not_authenticated' };
+    let readiness: string;
+    try {
+      readiness = await prepared.readDeviceReadiness();
+    } catch {
+      readiness = 'UNAVAILABLE';
+    }
+    if (readiness !== 'NOT_ENROLLED') {
+      return { ok: false, code: 'enrollment_not_allowed' };
     }
     const functions = getFunctions(app, 'asia-southeast1');
     const beginFn = httpsCallable(functions, 'beginDeviceRegistration');
+    // Final boundary, synchronous with no await before the begin call.
+    if (!prepared.isPreparationCurrent()) {
+      return { ok: false, code: 'enrollment_identity_not_prepared' };
+    }
+    const requester = auth.currentUser;
+    if (!requester || requester.isAnonymous !== true || requester.uid !== prepared.requesterUid) {
+      return { ok: false, code: 'enrollment_identity_not_anonymous' };
+    }
+    if (hasUidBoundEnrollmentRecoveryEvidence()) {
+      return { ok: false, code: 'enrollment_recovery_pending' };
+    }
+    if (loadSession() !== null) {
+      return { ok: false, code: 'enrollment_session_present' };
+    }
     const res = await beginFn();
     beginResData = res.data;
   }

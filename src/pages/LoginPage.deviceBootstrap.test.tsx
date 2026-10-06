@@ -16,6 +16,7 @@ import {
 } from '../lib/auth/deviceRegistration';
 import { DeviceNotReadyError, type NativeDeviceReadiness } from '../lib/auth/nativeDeviceReadiness';
 import { PinIdentityError } from '../lib/auth/pinIdentityError';
+import type { EnrollmentPreparationGrant } from '../lib/auth/enrollmentGrant';
 
 /**
  * TPOS-R7 pre-login bootstrap: LoginPage (a GuestRoute page, outside
@@ -67,6 +68,8 @@ let loginWithPinMock: ReturnType<typeof vi.fn>;
 let loginWithUsernameMock: ReturnType<typeof vi.fn>;
 let completeLoginMock: ReturnType<typeof vi.fn>;
 let refreshSpy: Mock<() => void>;
+let prepareSpy: Mock<() => Promise<EnrollmentPreparationGrant>>;
+const GRANT = Object.freeze({}) as unknown as EnrollmentPreparationGrant;
 /** What the (stateful) mocked AuthProvider gate holds initially / after a refresh. */
 let initialReadiness: NativeDeviceReadiness;
 let readinessOnRefresh: NativeDeviceReadiness;
@@ -114,6 +117,7 @@ beforeEach(() => {
   loginWithUsernameMock = vi.fn();
   completeLoginMock = vi.fn();
   refreshSpy = vi.fn();
+  prepareSpy = vi.fn(async () => GRANT);
   vi.mocked(useAuth).mockImplementation(() => {
     const [deviceReadiness, setDeviceReadiness] = useState<NativeDeviceReadiness>(initialReadiness);
     return {
@@ -128,6 +132,7 @@ beforeEach(() => {
       logout: vi.fn(),
       session: null,
       firebaseUser: null,
+      prepareEnrollmentIdentity: prepareSpy,
       deviceReadiness,
       refreshDeviceReadiness: async () => {
         refreshSpy();
@@ -221,7 +226,11 @@ describe('LoginPage — pre-login device enrollment bootstrap (TPOS-R7)', () => 
     fireEvent.click(await screen.findByRole('button', { name: PICK }));
     fireEvent.click(await screen.findByRole('button', { name: CONFIRM }));
 
-    await waitFor(() => expect(mockRegister).toHaveBeenCalledWith(AUTH_ID));
+    await waitFor(() =>
+      expect(mockRegister).toHaveBeenCalledWith(AUTH_ID, { enrollmentGrant: GRANT }),
+    );
+    expect(mockRegister.mock.calls[0]![1]!.enrollmentGrant).toBe(GRANT);
+    expect(prepareSpy).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(screen.queryByTestId(BOOTSTRAP)).toBeNull());
     expect(refreshSpy).toHaveBeenCalledTimes(1);
     expect(loginWithPinMock).not.toHaveBeenCalled();

@@ -10,6 +10,8 @@ import {
   type EnrollmentRecoveryState,
   type FinalizeRetryContext,
 } from '../../lib/auth/deviceRegistration';
+import type { EnrollmentPreparationGrant } from '../../lib/auth/enrollmentGrant';
+import { EnrollmentIdentityError, isEnrollmentIdentityError } from '../../lib/auth/enrollmentIdentityError';
 
 /**
  * SEC-001 device security enrollment card (initial enrollment + recovery
@@ -18,9 +20,11 @@ import {
  * reads/writes Firestore directly.
  *
  * Flow: native ENR1 picker (`native_import_device_enrollment_file`) →
- * operator confirms the safe metadata → `registerDevice(enrollmentAuthId)`
- * (begin → native proof → durable completion intent → complete → native
- * finalize). Success is shown only when the native finalize commits.
+ * operator confirms the safe metadata → `prepareEnrollmentIdentity()` (ends any
+ * staff session; dedicated anonymous Firebase UID; one-shot grant) →
+ * `registerDevice(enrollmentAuthId, { enrollmentGrant })` (begin → native proof
+ * → durable completion intent → complete → native finalize). Success is shown
+ * only when the native finalize commits.
  *
  * Durable recovery states block new enrollment, in this priority:
  *  - conflict (records for different generations): fail closed, no action;
@@ -98,8 +102,11 @@ export default function DeviceSecurityEnrollmentCard({
   branchId,
   onEnrolled,
   allowFreshEnrollment = true,
+  prepareEnrollmentIdentity,
 }: {
   branchId: string | null;
+  /** AuthProvider's `prepareEnrollmentIdentity`; runs before every fresh `registerDevice`. */
+  prepareEnrollmentIdentity: () => Promise<EnrollmentPreparationGrant>;
   /**
    * Called after a registration / finalize / recovery reports success. It is a
    * hint only: the pre-login caller must confirm strong native readiness
@@ -205,8 +212,23 @@ export default function DeviceSecurityEnrollmentCard({
       setNotice(null);
       // The authorization is single-use; the operator must re-pick after any attempt.
       setImported(null);
+      // Before any server begin: the requester must be a dedicated anonymous
+      // identity, never a persisted password/provider account. A failure here
+      // is an identity problem (fixed message), never "invalid ENR1".
+      let enrollmentGrant: EnrollmentPreparationGrant;
       try {
-        const result = await registerDevice(enrollmentAuthId);
+        enrollmentGrant = await prepareEnrollmentIdentity();
+      } catch (err) {
+        adoptRecoveryState();
+        setNotice({
+          tone: 'failure',
+          text: (isEnrollmentIdentityError(err) ? err : new EnrollmentIdentityError('ENROLLMENT_IDENTITY_UNAVAILABLE'))
+            .message,
+        });
+        return;
+      }
+      try {
+        const result = await registerDevice(enrollmentAuthId, { enrollmentGrant });
         if (result.ok) {
           adoptRecoveryState();
           setNotice({ tone: 'success', text: 'ลงทะเบียนความปลอดภัยของเครื่องนี้สำเร็จ' });

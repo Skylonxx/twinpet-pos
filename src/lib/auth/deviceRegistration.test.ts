@@ -61,10 +61,15 @@ describe('deviceRegistration', () => {
   });
 
   it('fails closed when native bridge is unavailable', async () => {
+    // Test-seam begin: the production path consumes its enrollment grant before
+    // the bridge check (covered in deviceRegistration.preloginAuth.test.ts, K).
+    const begin = vi.fn();
     const res = await registerDevice('auth-1', {
       customInvoke: undefined,
+      customCallables: { beginDeviceRegistration: begin },
     });
     expect(res).toEqual({ ok: false, code: 'native_bridge_unavailable' });
+    expect(begin).not.toHaveBeenCalled();
   });
 
   it('fails closed when beginDeviceRegistration returns failure', async () => {

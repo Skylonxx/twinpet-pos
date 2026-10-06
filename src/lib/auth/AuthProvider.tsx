@@ -21,10 +21,16 @@ import {
 } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { auth, app, authEmailForUsername, collections, db, isFirebaseConfigured } from '../firebase';
-import { ensureAnonymousFirebaseAuthForPin, ensureFirebaseAuth } from '../firebaseAuth';
+import {
+  ensureAnonymousFirebaseAuthForPin,
+  ensureAnonymousFirebaseIdentity,
+  ensureFirebaseAuth,
+} from '../firebaseAuth';
 import type { User } from '../types';
 import { hasUidBoundEnrollmentRecoveryEvidence } from './deviceRegistration';
 import { AuthOperationSupersededError } from './authOperationError';
+import { EnrollmentIdentityError, isEnrollmentIdentityError } from './enrollmentIdentityError';
+import { claimEnrollmentGrantMinter, type EnrollmentPreparationGrant } from './enrollmentGrant';
 import { asPinIdentityStep, PinIdentityError } from './pinIdentityError';
 import {
   assertDeviceGateOpen,
@@ -72,6 +78,14 @@ export type AuthContextValue = {
   ) => Promise<User>;
   completeLogin: (user: User, branchId: string) => Promise<void>;
   logout: () => Promise<void>;
+  /**
+   * TPOS-R7 first device enrollment: ends any app staff session and moves
+   * Firebase to a dedicated anonymous identity (reused if already anonymous),
+   * so `beginDeviceRegistration` never binds a password/provider UID. Fails
+   * closed with a fixed `EnrollmentIdentityError`. Resolves to a one-shot
+   * grant: pass it unchanged to `registerDevice` as `enrollmentGrant`.
+   */
+  prepareEnrollmentIdentity: () => Promise<EnrollmentPreparationGrant>;
   setBranchId: (branchId: string) => Promise<void> | void;
 };
 
@@ -133,6 +147,10 @@ type PendingCompletion = {
   firebaseUid: string | null;
   userId: string;
 };
+
+// TPOS-R7: this module is the only issuer of first-enrollment grants; only a
+// completed `prepareEnrollmentIdentity()` mints one.
+const mintEnrollmentGrant = claimEnrollmentGrantMinter();
 
 type AuthProviderProps = {
   children: ReactNode;
@@ -535,6 +553,76 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, []);
 
+  const prepareEnrollmentIdentity = useCallback(async () => {
+    // Supersedes any in-flight login and drops its pending completion.
+    const op = beginAuthOp();
+    try {
+      // Only a clean NOT_ENROLLED native device may start a fresh enrollment.
+      if ((await refreshDeviceReadiness()) !== 'NOT_ENROLLED') {
+        throw new EnrollmentIdentityError('ENROLLMENT_IDENTITY_NOT_ALLOWED');
+      }
+      assertAuthOpCurrent(op, null);
+      // Recovery continuity is authoritative: any UID-bound evidence (valid,
+      // malformed, conflicting or unreadable) means nothing here may change.
+      if (hasUidBoundEnrollmentRecoveryEvidence()) {
+        throw new EnrollmentIdentityError('ENROLLMENT_IDENTITY_TRANSITION_BLOCKED');
+      }
+      // Fence any in-flight restore (e.g. a persisted password account's
+      // profile fetch) so it can never re-save that account's session.
+      identityGenerationRef.current += 1;
+      const invoke = getNativeStaffSessionInvoke();
+      if (invoke) {
+        try {
+          await invoke('native_clear_staff_session');
+        } catch {
+          throw new EnrollmentIdentityError('ENROLLMENT_IDENTITY_UNAVAILABLE');
+        }
+      }
+      assertAuthOpCurrent(op, null);
+      if (hasUidBoundEnrollmentRecoveryEvidence()) {
+        throw new EnrollmentIdentityError('ENROLLMENT_IDENTITY_TRANSITION_BLOCKED');
+      }
+      // A stale staff session must not reappear once enrollment makes the device READY.
+      clearSession();
+      setSession(null);
+      lastPersistedStaffIdRef.current = null;
+
+      const assertMayLeave = (departing: FirebaseUser) => {
+        assertAuthOpCurrent(op, departing.uid);
+        if (hasUidBoundEnrollmentRecoveryEvidence()) {
+          throw new EnrollmentIdentityError('ENROLLMENT_IDENTITY_TRANSITION_BLOCKED');
+        }
+      };
+      const identity = await ensureAnonymousFirebaseIdentity(
+        {
+          beforeLeavingNonAnonymous: (departing) => {
+            assertMayLeave(departing);
+            identityGenerationRef.current += 1;
+          },
+          // Final synchronous fence right before the local signOut.
+          assertCanSignOutNonAnonymous: assertMayLeave,
+        },
+        () => new EnrollmentIdentityError('ENROLLMENT_IDENTITY_UNAVAILABLE'),
+      );
+      assertAuthOpCurrent(op, identity.uid);
+      if (!identity.isAnonymous || loadSession() !== null) {
+        clearSession();
+        setSession(null);
+        throw new EnrollmentIdentityError('ENROLLMENT_IDENTITY_UNAVAILABLE');
+      }
+      // The only proof `registerDevice` accepts; rechecked there right before begin.
+      return mintEnrollmentGrant({
+        requesterUid: identity.uid,
+        isPreparationCurrent: () => authOpRef.current === op,
+        readDeviceReadiness: refreshDeviceReadiness,
+      });
+    } catch (err) {
+      if (isEnrollmentIdentityError(err)) throw err;
+      // Superseded, native bridge, or anything unexpected: fixed and fail closed.
+      throw new EnrollmentIdentityError('ENROLLMENT_IDENTITY_UNAVAILABLE');
+    }
+  }, [assertAuthOpCurrent, beginAuthOp, refreshDeviceReadiness]);
+
   const setBranchId = useCallback(
     async (branchId: string) => {
       const invoke = getNativeStaffSessionInvoke();
@@ -570,6 +658,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       loginWithUsername,
       completeLogin,
       logout,
+      prepareEnrollmentIdentity,
       setBranchId,
     }),
     [
@@ -582,6 +671,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       loginWithUsername,
       completeLogin,
       logout,
+      prepareEnrollmentIdentity,
       setBranchId,
     ],
   );

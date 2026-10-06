@@ -177,7 +177,7 @@ function formatDeviceLastSeen(d: PosDevice): string {
 }
 
 export default function SettingsPage() {
-  const { branchId, user } = useAuth();
+  const { branchId, user, prepareEnrollmentIdentity } = useAuth();
   const {
     form,
     updateForm,
@@ -785,7 +785,7 @@ export default function SettingsPage() {
               <div className="stg-section-title">เครื่อง POS</div>
               <div className="stg-section-sub">จัดการเครื่อง POS ที่เชื่อมต่อกับสาขานี้</div>
               <PosDevicesSettings branchId={branchId} userId={user?.id ?? null} onToast={showToast} />
-              <DeviceSecurityEnrollmentCard branchId={branchId} />
+              <DeviceSecurityEnrollmentCard branchId={branchId} prepareEnrollmentIdentity={prepareEnrollmentIdentity} />
               <div className="stg-card">
                 <div className="stg-card-head">
                   <i className="ti ti-device-desktop" aria-hidden="true" /> เครื่องที่ลงทะเบียน

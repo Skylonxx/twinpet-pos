@@ -4,6 +4,8 @@ import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import DeviceSecurityEnrollmentCard from './DeviceSecurityEnrollmentCard';
+import { EnrollmentIdentityError } from '../../lib/auth/enrollmentIdentityError';
+import type { EnrollmentPreparationGrant } from '../../lib/auth/enrollmentGrant';
 import {
   finalizeDeviceEnrollmentRetry,
   getNativeDeviceEnrollmentInvoke,
@@ -34,6 +36,9 @@ const mockRecoveryState = vi.mocked(loadEnrollmentRecoveryState);
 const mockRecover = vi.mocked(recoverDeviceRegistrationCompletion);
 const mockRegister = vi.mocked(registerDevice);
 const mockFinalize = vi.mocked(finalizeDeviceEnrollmentRetry);
+/** Opaque grant double; the card must hand this exact object to registerDevice. */
+const GRANT = Object.freeze({}) as unknown as EnrollmentPreparationGrant;
+const mockPrepare = vi.fn(async () => GRANT);
 
 /** Test double with the real precedence: finalize context > completion intent; different generations conflict. */
 function recoveryStateFromMocks() {
@@ -99,12 +104,13 @@ const statusCalls = (invoke: ReturnType<typeof installNative>) =>
   invoke.mock.calls.filter(([cmd]) => cmd === 'native_get_device_registration_status').length;
 
 async function pickFile(branchId: string | null = 'branch-1') {
-  render(<DeviceSecurityEnrollmentCard branchId={branchId} />);
+  render(<DeviceSecurityEnrollmentCard prepareEnrollmentIdentity={mockPrepare} branchId={branchId} />);
   fireEvent.click(await screen.findByRole('button', { name: PICK }));
   return screen.findByRole('button', { name: CONFIRM });
 }
 
 beforeEach(() => {
+  mockPrepare.mockReset().mockImplementation(async () => GRANT);
   mockLoadPending.mockReturnValue(null);
   mockLoadIntent.mockReturnValue(null);
   mockRecoveryState.mockImplementation(recoveryStateFromMocks);
@@ -125,7 +131,7 @@ afterEach(() => {
 describe('DeviceSecurityEnrollmentCard', () => {
   it('1. browser / non-native: shows unavailable state, no native call and no action', () => {
     mockGetInvoke.mockReturnValue(null);
-    render(<DeviceSecurityEnrollmentCard branchId="branch-1" />);
+    render(<DeviceSecurityEnrollmentCard prepareEnrollmentIdentity={mockPrepare} branchId="branch-1" />);
     expect(screen.getByText(/ใช้ได้เฉพาะในแอป Twinpet POS/)).toBeTruthy();
     expect(screen.queryAllByRole('button')).toHaveLength(0);
     expect(mockRegister).not.toHaveBeenCalled();
@@ -133,7 +139,7 @@ describe('DeviceSecurityEnrollmentCard', () => {
 
   it('2. native, unenrolled, no pending: initial enrollment action is available', async () => {
     const invoke = installNative({ deviceKeyPresent: [false] });
-    render(<DeviceSecurityEnrollmentCard branchId="branch-1" />);
+    render(<DeviceSecurityEnrollmentCard prepareEnrollmentIdentity={mockPrepare} branchId="branch-1" />);
     expect(await screen.findByRole('button', { name: PICK })).toBeTruthy();
     expect(statusCalls(invoke)).toBe(1);
     expect(invoke).not.toHaveBeenCalledWith('native_import_device_enrollment_file');
@@ -151,7 +157,7 @@ describe('DeviceSecurityEnrollmentCard', () => {
 
   it('3b. rejects a DTO whose enrollmentAuthId is not lowercase hex32', async () => {
     installNative({ deviceKeyPresent: [false], importResult: { ...SAFE_DTO, enrollmentAuthId: 'NOT-HEX' } });
-    render(<DeviceSecurityEnrollmentCard branchId="branch-1" />);
+    render(<DeviceSecurityEnrollmentCard prepareEnrollmentIdentity={mockPrepare} branchId="branch-1" />);
     fireEvent.click(await screen.findByRole('button', { name: PICK }));
     expect(await screen.findByText(/ไฟล์ลงทะเบียนไม่ถูกต้อง/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: CONFIRM })).toBeNull();
@@ -159,7 +165,7 @@ describe('DeviceSecurityEnrollmentCard', () => {
 
   it('3c. never renders raw native import error text', async () => {
     installNative({ deviceKeyPresent: [false], importError: 'cannot read enrollment file: C:\\secret\\path.enr1' });
-    render(<DeviceSecurityEnrollmentCard branchId="branch-1" />);
+    render(<DeviceSecurityEnrollmentCard prepareEnrollmentIdentity={mockPrepare} branchId="branch-1" />);
     fireEvent.click(await screen.findByRole('button', { name: PICK }));
     expect(await screen.findByText(/ไฟล์ลงทะเบียนไม่ถูกต้องหรือหมดอายุ/)).toBeTruthy();
     expect(document.body.textContent).not.toContain('secret');
@@ -172,7 +178,8 @@ describe('DeviceSecurityEnrollmentCard', () => {
     expect(screen.getByText(/ไม่ตรงกับสาขาปัจจุบัน \(branch-2\)/)).toBeTruthy();
     fireEvent.click(confirm);
     await waitFor(() => expect(mockRegister).toHaveBeenCalledTimes(1));
-    expect(mockRegister).toHaveBeenCalledWith(AUTH_ID);
+    expect(mockRegister).toHaveBeenCalledWith(AUTH_ID, { enrollmentGrant: GRANT });
+    expect(mockRegister.mock.calls[0]![1]!.enrollmentGrant).toBe(GRANT);
   });
 
   it('5. confirm: calls registerDevice exactly once with the exact enrollmentAuthId', async () => {
@@ -182,12 +189,14 @@ describe('DeviceSecurityEnrollmentCard', () => {
     expect(screen.queryByText(/ไม่ตรงกับสาขาปัจจุบัน/)).toBeNull();
     fireEvent.click(confirm);
     await waitFor(() => expect(mockRegister).toHaveBeenCalledTimes(1));
-    expect(mockRegister.mock.calls[0]).toEqual([AUTH_ID]);
+    expect(mockRegister.mock.calls[0]).toEqual([AUTH_ID, { enrollmentGrant: GRANT }]);
+    // The exact capability the preparation returned — never reconstructed.
+    expect(mockRegister.mock.calls[0]![1]!.enrollmentGrant).toBe(GRANT);
   });
 
   it('6. double-click while busy does not duplicate the picker or the registration', async () => {
     const invoke = installNative({ deviceKeyPresent: [false, true] });
-    render(<DeviceSecurityEnrollmentCard branchId="branch-1" />);
+    render(<DeviceSecurityEnrollmentCard prepareEnrollmentIdentity={mockPrepare} branchId="branch-1" />);
     const pick = await screen.findByRole('button', { name: PICK });
     fireEvent.click(pick);
     fireEvent.click(pick);
@@ -250,7 +259,7 @@ describe('DeviceSecurityEnrollmentCard', () => {
     installNative({ deviceKeyPresent: [false, true] });
     mockLoadPending.mockReturnValue(PENDING_CTX);
     mockFinalize.mockResolvedValue(OK_RESULT);
-    render(<DeviceSecurityEnrollmentCard branchId="branch-1" />);
+    render(<DeviceSecurityEnrollmentCard prepareEnrollmentIdentity={mockPrepare} branchId="branch-1" />);
     const recover = await screen.findByRole('button', { name: RECOVER });
     expect(screen.queryByRole('button', { name: PICK })).toBeNull();
     fireEvent.click(recover);
@@ -263,7 +272,7 @@ describe('DeviceSecurityEnrollmentCard', () => {
     const invoke = installNative({ deviceKeyPresent: [false, true] });
     mockLoadPending.mockReturnValueOnce(PENDING_CTX).mockReturnValue(null);
     mockFinalize.mockResolvedValue(OK_RESULT);
-    render(<DeviceSecurityEnrollmentCard branchId="branch-1" />);
+    render(<DeviceSecurityEnrollmentCard prepareEnrollmentIdentity={mockPrepare} branchId="branch-1" />);
     fireEvent.click(await screen.findByRole('button', { name: RECOVER }));
     expect(await screen.findByText('ยืนยันการลงทะเบียนในเครื่องนี้สำเร็จ')).toBeTruthy();
     await waitFor(() => expect(statusCalls(invoke)).toBe(2));
@@ -281,7 +290,7 @@ describe('DeviceSecurityEnrollmentCard', () => {
       errorDetail: 'native_finalize_failed: C:\\raw\\detail',
       retryContext: PENDING_CTX,
     });
-    render(<DeviceSecurityEnrollmentCard branchId="branch-1" />);
+    render(<DeviceSecurityEnrollmentCard prepareEnrollmentIdentity={mockPrepare} branchId="branch-1" />);
     fireEvent.click(await screen.findByRole('button', { name: RECOVER }));
     expect(await screen.findByText(/ยืนยันในเครื่องยังไม่สำเร็จ \(รหัส: LOCAL_ENROLLMENT_FINALIZATION_REQUIRED\)/)).toBeTruthy();
     expect(screen.getByRole('button', { name: RECOVER })).toBeTruthy();
@@ -292,7 +301,7 @@ describe('DeviceSecurityEnrollmentCard', () => {
 
   it('12. already enrolled: no initial enrollment action and no re-enroll action', async () => {
     const invoke = installNative({ deviceKeyPresent: [true] });
-    render(<DeviceSecurityEnrollmentCard branchId="branch-1" />);
+    render(<DeviceSecurityEnrollmentCard prepareEnrollmentIdentity={mockPrepare} branchId="branch-1" />);
     expect(await screen.findByText('เครื่องนี้ลงทะเบียนความปลอดภัยแล้ว')).toBeTruthy();
     expect(screen.queryAllByRole('button')).toHaveLength(0);
     expect(invoke).not.toHaveBeenCalledWith('native_import_device_enrollment_file');
@@ -303,7 +312,7 @@ describe('DeviceSecurityEnrollmentCard', () => {
       throw new Error('status unavailable');
     });
     mockGetInvoke.mockReturnValue(invoke);
-    render(<DeviceSecurityEnrollmentCard branchId="branch-1" />);
+    render(<DeviceSecurityEnrollmentCard prepareEnrollmentIdentity={mockPrepare} branchId="branch-1" />);
     expect(await screen.findByText('ตรวจสอบสถานะความปลอดภัยของเครื่องไม่สำเร็จ')).toBeTruthy();
     expect(screen.queryByRole('button', { name: PICK })).toBeNull();
   });
@@ -323,7 +332,7 @@ describe('DeviceSecurityEnrollmentCard', () => {
   it('14. a completion intent blocks the picker and exposes exactly one recovery action', async () => {
     const invoke = installNative({ deviceKeyPresent: [false] });
     mockLoadIntent.mockReturnValue(INTENT);
-    render(<DeviceSecurityEnrollmentCard branchId="branch-1" />);
+    render(<DeviceSecurityEnrollmentCard prepareEnrollmentIdentity={mockPrepare} branchId="branch-1" />);
     expect(await screen.findByRole('button', { name: RECOVER_COMPLETION })).toBeTruthy();
     expect(screen.queryByRole('button', { name: PICK })).toBeNull();
     expect(screen.queryByRole('button', { name: RECOVER })).toBeNull();
@@ -336,7 +345,7 @@ describe('DeviceSecurityEnrollmentCard', () => {
     mockLoadIntent.mockReturnValueOnce(INTENT).mockReturnValue(null);
     let resolveRecover!: (r: DeviceRegistrationResult) => void;
     mockRecover.mockReturnValue(new Promise((r) => (resolveRecover = r)));
-    render(<DeviceSecurityEnrollmentCard branchId="branch-1" />);
+    render(<DeviceSecurityEnrollmentCard prepareEnrollmentIdentity={mockPrepare} branchId="branch-1" />);
     const button = await screen.findByRole('button', { name: RECOVER_COMPLETION });
     fireEvent.click(button);
     fireEvent.click(button);
@@ -353,7 +362,7 @@ describe('DeviceSecurityEnrollmentCard', () => {
     const invoke = installNative({ deviceKeyPresent: [false, true] });
     mockLoadIntent.mockReturnValueOnce(INTENT).mockReturnValue(null);
     mockRecover.mockResolvedValue(OK_RESULT);
-    render(<DeviceSecurityEnrollmentCard branchId="branch-1" />);
+    render(<DeviceSecurityEnrollmentCard prepareEnrollmentIdentity={mockPrepare} branchId="branch-1" />);
     fireEvent.click(await screen.findByRole('button', { name: RECOVER_COMPLETION }));
     expect(await screen.findByText('กู้คืนและลงทะเบียนความปลอดภัยของเครื่องนี้สำเร็จ')).toBeTruthy();
     await waitFor(() => expect(statusCalls(invoke)).toBe(2));
@@ -366,7 +375,7 @@ describe('DeviceSecurityEnrollmentCard', () => {
     mockLoadIntent.mockReturnValueOnce(INTENT).mockReturnValue(null);
     mockLoadPending.mockReturnValueOnce(null).mockReturnValue(PENDING_CTX);
     mockRecover.mockResolvedValue({ ok: false, code: 'LOCAL_ENROLLMENT_FINALIZATION_REQUIRED', retryContext: PENDING_CTX });
-    render(<DeviceSecurityEnrollmentCard branchId="branch-1" />);
+    render(<DeviceSecurityEnrollmentCard prepareEnrollmentIdentity={mockPrepare} branchId="branch-1" />);
     fireEvent.click(await screen.findByRole('button', { name: RECOVER_COMPLETION }));
     expect(await screen.findByRole('button', { name: RECOVER })).toBeTruthy();
     expect(screen.queryByRole('button', { name: RECOVER_COMPLETION })).toBeNull();
@@ -378,7 +387,7 @@ describe('DeviceSecurityEnrollmentCard', () => {
     installNative({ deviceKeyPresent: [false] });
     mockLoadIntent.mockReturnValue(INTENT);
     mockRecover.mockResolvedValue({ ok: false, code: 'completion_replay_mismatch', errorDetail: 'C:\\raw\\secret' });
-    render(<DeviceSecurityEnrollmentCard branchId="branch-1" />);
+    render(<DeviceSecurityEnrollmentCard prepareEnrollmentIdentity={mockPrepare} branchId="branch-1" />);
     fireEvent.click(await screen.findByRole('button', { name: RECOVER_COMPLETION }));
     expect(await screen.findByText(/กู้คืนการลงทะเบียนไม่สำเร็จ \(รหัส: completion_replay_mismatch\)/)).toBeTruthy();
     expect(screen.getByRole('button', { name: RECOVER_COMPLETION })).toBeTruthy();
@@ -390,7 +399,7 @@ describe('DeviceSecurityEnrollmentCard', () => {
   it('19. never renders the raw intent (DRP1, session id, generation, staged key)', async () => {
     installNative({ deviceKeyPresent: [false] });
     mockLoadIntent.mockReturnValue(INTENT);
-    render(<DeviceSecurityEnrollmentCard branchId="branch-1" />);
+    render(<DeviceSecurityEnrollmentCard prepareEnrollmentIdentity={mockPrepare} branchId="branch-1" />);
     await screen.findByRole('button', { name: RECOVER_COMPLETION });
     const text = document.body.textContent ?? '';
     for (const value of [INTENT.drp1Base64, INTENT.registrationSessionId, INTENT.enrollmentGenerationId, INTENT.stagedPublicKeyBase64]) {
@@ -402,7 +411,7 @@ describe('DeviceSecurityEnrollmentCard', () => {
     installNative({ deviceKeyPresent: [false] });
     mockLoadPending.mockReturnValue(PENDING_CTX);
     mockLoadIntent.mockReturnValue(INTENT);
-    render(<DeviceSecurityEnrollmentCard branchId="branch-1" />);
+    render(<DeviceSecurityEnrollmentCard prepareEnrollmentIdentity={mockPrepare} branchId="branch-1" />);
     expect(await screen.findByText(/ข้อมูลการลงทะเบียนค้างที่ไม่ตรงกัน/)).toBeTruthy();
     expect(screen.queryAllByRole('button')).toHaveLength(0);
     expect(mockRecover).not.toHaveBeenCalled();
@@ -420,15 +429,59 @@ describe('DeviceSecurityEnrollmentCard', () => {
     expect(mockRegister).toHaveBeenCalledTimes(1);
   });
 
+  it('22. confirm: identity preparation runs once, strictly before registerDevice', async () => {
+    installNative({ deviceKeyPresent: [false, true] });
+    mockRegister.mockResolvedValue(OK_RESULT);
+    fireEvent.click(await pickFile());
+    await waitFor(() => expect(mockRegister).toHaveBeenCalledTimes(1));
+    expect(mockPrepare).toHaveBeenCalledTimes(1);
+    expect(mockPrepare.mock.invocationCallOrder[0]).toBeLessThan(mockRegister.mock.invocationCallOrder[0]!);
+  });
+
+  it('23. picking a file has no identity side effect (preparation only on confirm)', async () => {
+    installNative({ deviceKeyPresent: [false] });
+    await pickFile();
+    expect(mockPrepare).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['ENROLLMENT_IDENTITY_UNAVAILABLE', /เตรียมเซสชันสำหรับลงทะเบียนเครื่องไม่สำเร็จ/],
+    ['ENROLLMENT_IDENTITY_TRANSITION_BLOCKED', /มีข้อมูลการลงทะเบียนที่ค้างอยู่/],
+  ] as const)('24. %s: no registerDevice, fixed identity message, never "invalid ENR1"', async (code, text) => {
+    installNative({ deviceKeyPresent: [false] });
+    mockPrepare.mockRejectedValue(new EnrollmentIdentityError(code));
+    fireEvent.click(await pickFile());
+    expect(await screen.findByText(text)).toBeTruthy();
+    expect(mockRegister).not.toHaveBeenCalled();
+    expect(screen.queryByText(/ไฟล์ลงทะเบียนไม่ถูกต้อง/)).toBeNull();
+  });
+
+  it('25. a raw (non-identity) preparation error is never rendered', async () => {
+    installNative({ deviceKeyPresent: [false] });
+    mockPrepare.mockRejectedValue(new Error('FirebaseError: auth/network-request-failed uid=nbwi47'));
+    fireEvent.click(await pickFile());
+    expect(await screen.findByText(/เตรียมเซสชันสำหรับลงทะเบียนเครื่องไม่สำเร็จ/)).toBeTruthy();
+    expect(document.body.textContent).not.toContain('FirebaseError');
+    expect(document.body.textContent).not.toContain('nbwi47');
+    expect(mockRegister).not.toHaveBeenCalled();
+  });
+
   it('13. integration keeps Claim Existing Device separate (source contract)', () => {
     const settings = readFileSync(resolve(process.cwd(), 'src/pages/SettingsPage.tsx'), 'utf8').replace(/\r\n/g, '\n');
     expect(settings).toContain(
       '<PosDevicesSettings branchId={branchId} userId={user?.id ?? null} onToast={showToast} />\n' +
-        '              <DeviceSecurityEnrollmentCard branchId={branchId} />',
+        '              <DeviceSecurityEnrollmentCard branchId={branchId} prepareEnrollmentIdentity={prepareEnrollmentIdentity} />',
     );
     const card = readFileSync(resolve(process.cwd(), 'src/pages/settings/DeviceSecurityEnrollmentCard.tsx'), 'utf8');
     const imports = card.match(/from '[^']+'/g) ?? [];
-    expect(imports).toEqual(["from 'react'", "from '../../components/ui'", "from '../../lib/auth/deviceRegistration'"]);
+    expect(imports).toEqual([
+      "from 'react'",
+      "from '../../components/ui'",
+      "from '../../lib/auth/deviceRegistration'",
+      // Type-only: the opaque grant the card passes through unchanged.
+      "from '../../lib/auth/enrollmentGrant'",
+      "from '../../lib/auth/enrollmentIdentityError'",
+    ]);
     expect(card).not.toMatch(/claimDevice|registerThisDevice|reEnrollDevice|deviceKeyVersion|console\./);
   });
 });
