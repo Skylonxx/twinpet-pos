@@ -38,7 +38,42 @@ export type DeviceRegistrationResult =
       code: string;
       errorDetail?: string;
       retryContext?: FinalizeRetryContext;
+      /**
+       * TPOS-R7 0.1.6: set only when the server's rejection was definitive (no
+       * commit possible) AND the generation this attempt staged was natively
+       * abandoned, so the terminal is back to a clean NOT_ENROLLED state.
+       */
+      stagingAbandoned?: true;
     };
+
+/**
+ * TPOS-R7 0.1.6: `completeDeviceRegistration` codes that prove THIS
+ * registration session was never consumed, so the generation it carried was
+ * never committed. Each is produced only on the never-consumed path of
+ * `performCompleteDeviceRegistration` (pre-transaction checks after the
+ * CONSUMED branch, or a rejected transaction re-read as exactly PENDING) and
+ * never by the consumed-session replay branch. Every condition is also
+ * permanent (expiry is monotonic; an authorization never returns to ISSUED;
+ * the branch is fixed), so an exact replay can never commit later either.
+ *
+ * Deliberately excluded although usually pre-commit: codes the consumed-replay
+ * branch can ALSO return (e.g. `session_wrong_owner`, `drp1_*`,
+ * `invalid_request_shape`, `signing_key_unavailable`, root/manifest codes,
+ * `device_state_changed`, `completion_replay_mismatch`), `session_not_found`
+ * (also a malformed session read), `session_already_consumed`, and
+ * `device_already_enrolled_reenroll_required` (a server-side binding exists).
+ * Those keep the completion intent for explicit, exact recovery.
+ */
+export const DEFINITIVE_NO_COMMIT_COMPLETION_CODES: ReadonlySet<string> = new Set([
+  'session_expired',
+  'enrollment_authorization_not_found',
+  'enrollment_authorization_wrong_status',
+  'enrollment_authorization_expired',
+  'enrollment_authorization_branch_mismatch',
+]);
+
+/** Fixed fail-closed code: the definitive rejection's staged generation could not be abandoned. */
+export const ENROLLMENT_STAGING_ABANDON_FAILED = 'enrollment_staging_abandon_failed';
 
 export function getNativeDeviceEnrollmentInvoke(): ((cmd: string, args?: Record<string, unknown>) => Promise<unknown>) | null {
   const g = globalThis as unknown as Record<string, any>;
@@ -648,8 +683,9 @@ export async function registerDevice(
   }
 
   // 3. Durably record the exact completion request BEFORE calling the server.
-  // If this fails the server is never called (nothing is consumed; the staged
-  // generation is orphaned but harmless).
+  // If this fails the server is never called (nothing is consumed). The staged
+  // generation is NOT harmless: it keeps native readiness INVALID_OR_INCOMPLETE
+  // and is only abandoned after a definitive server rejection (step 4).
   const drp1Base64 = toCanonicalStdBase64(proof.drp1Base64);
   if (!drp1Base64) {
     return { ok: false, code: 'proof_generation_failed' };
@@ -671,14 +707,55 @@ export async function registerDevice(
   // 4. Complete registration on server. A transport error propagates to the
   // caller with the durable intent preserved for explicit recovery.
   const completeResData = await callCompleteDeviceRegistration(intent, options);
-  if ((completeResData as { ok?: unknown } | null | undefined)?.ok === false) {
-    // An explicit first-call rejection is definitive: the server validates and
-    // precomputes everything before its single atomic commit, so ok:false means
-    // nothing was consumed and there is nothing to recover. (An ok:true response
-    // that fails client validation below DID commit, so its intent is kept.)
-    clearCompletionIntent();
+  const definitiveCode = definitiveNoCommitRejectionCode(completeResData);
+  if (definitiveCode !== null) {
+    return await abandonStagedGenerationAfterDefinitiveRejection(intent, definitiveCode, invoke);
   }
+  // Every other response keeps the intent: an ok:true that fails client
+  // validation DID commit, and an ok:false outside the definitive set does not
+  // by itself prove the session was never consumed (exact recovery decides).
   return await processCompletionResponse(intent, completeResData, invoke);
+}
+
+/** The server code iff the response is a structured `{ ok: false }` whose code proves no commit. */
+function definitiveNoCommitRejectionCode(data: unknown): string | null {
+  if (data == null || typeof data !== 'object' || Array.isArray(data)) return null;
+  const r = data as { ok?: unknown; code?: unknown };
+  if (r.ok !== false || typeof r.code !== 'string') return null;
+  return DEFINITIVE_NO_COMMIT_COMPLETION_CODES.has(r.code) ? r.code : null;
+}
+
+/**
+ * First completion only. The server proved this session was never consumed,
+ * so the generation staged for it is abandoned natively. The durable intent
+ * (the only local record naming that generation) is released only AFTER the
+ * native abandon succeeds and its absence is then proven; if either step
+ * fails, the intent is kept as evidence and a fixed fail-closed code is
+ * returned — never a "safe to retry" result.
+ */
+async function abandonStagedGenerationAfterDefinitiveRejection(
+  intent: PendingCompletionIntentV1,
+  serverCode: string,
+  invoke: (cmd: string, args?: Record<string, unknown>) => Promise<unknown>,
+): Promise<DeviceRegistrationResult> {
+  const failed: DeviceRegistrationResult = {
+    ok: false,
+    code: ENROLLMENT_STAGING_ABANDON_FAILED,
+    errorDetail: `server_rejection: ${serverCode}`,
+  };
+  let status: unknown;
+  try {
+    const raw = (await invoke('native_abandon_device_enrollment_staging', {
+      enrollmentGenerationId: intent.enrollmentGenerationId,
+    })) as { status?: unknown } | null | undefined;
+    status = raw?.status;
+  } catch {
+    return failed;
+  }
+  if (status !== 'ABANDONED' && status !== 'ALREADY_CLEAN') return failed;
+  clearCompletionIntent();
+  if (inspectCompletionIntent().state !== 'ABSENT') return failed;
+  return { ok: false, code: serverCode, stagingAbandoned: true };
 }
 
 /** Calls the EXISTING completeDeviceRegistration callable with exactly the intent's request fields. */

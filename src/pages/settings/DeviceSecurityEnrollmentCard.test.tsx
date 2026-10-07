@@ -20,6 +20,7 @@ import {
 } from '../../lib/auth/deviceRegistration';
 
 vi.mock('../../lib/auth/deviceRegistration', () => ({
+  ENROLLMENT_STAGING_ABANDON_FAILED: 'enrollment_staging_abandon_failed',
   getNativeDeviceEnrollmentInvoke: vi.fn(),
   loadPendingFinalization: vi.fn(),
   loadCompletionIntent: vi.fn(),
@@ -109,7 +110,12 @@ async function pickFile(branchId: string | null = 'branch-1') {
   return screen.findByRole('button', { name: CONFIRM });
 }
 
+/** Card clock for the confirm-time expiry gate: one minute after issuance (29 min of validity left). */
+const NOW_COMFORTABLY_VALID = SAFE_DTO.issuedAtServerMs + 60_000;
+let nowSpy: ReturnType<typeof vi.spyOn>;
+
 beforeEach(() => {
+  nowSpy = vi.spyOn(Date, 'now').mockReturnValue(NOW_COMFORTABLY_VALID);
   mockPrepare.mockReset().mockImplementation(async () => GRANT);
   mockLoadPending.mockReturnValue(null);
   mockLoadIntent.mockReturnValue(null);
@@ -117,6 +123,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  nowSpy.mockRestore();
   cleanup();
   vi.clearAllMocks();
   mockGetInvoke.mockReset();
@@ -466,6 +473,78 @@ describe('DeviceSecurityEnrollmentCard', () => {
     expect(mockRegister).not.toHaveBeenCalled();
   });
 
+  // --- TPOS-R7 0.1.6: confirm-time ENR1 expiry gate (before ANY mutation) ---
+
+  const EXPIRES = SAFE_DTO.expiresAtServerMs;
+  const MARGIN = 5 * 60 * 1000;
+
+  it.each([
+    ['exactly at expiry', EXPIRES, /ไฟล์ลงทะเบียนหมดอายุแล้ว/],
+    ['after expiry', EXPIRES + 1, /ไฟล์ลงทะเบียนหมดอายุแล้ว/],
+    ['inside the safety margin', EXPIRES - MARGIN + 1, /ไฟล์ลงทะเบียนใกล้หมดอายุ/],
+    ['one second before expiry', EXPIRES - 1_000, /ไฟล์ลงทะเบียนใกล้หมดอายุ/],
+  ] as const)('26. confirm %s: no identity preparation, no registerDevice, file must be re-picked', async (_label, now, text) => {
+    installNative({ deviceKeyPresent: [false] });
+    const confirm = await pickFile();
+    nowSpy.mockReturnValue(now);
+    fireEvent.click(confirm);
+    expect(await screen.findByText(text)).toBeTruthy();
+    expect(screen.getByText(/ยังไม่ได้เริ่มการลงทะเบียน|ระบบยังไม่เริ่มการลงทะเบียน/)).toBeTruthy();
+    expect(mockPrepare).not.toHaveBeenCalled();
+    expect(mockRegister).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: CONFIRM })).toBeNull();
+    expect(screen.getByRole('button', { name: PICK })).toBeTruthy();
+  });
+
+  it('27. boundary: exactly the safety margin remaining is still allowed to start', async () => {
+    installNative({ deviceKeyPresent: [false, true] });
+    mockRegister.mockResolvedValue(OK_RESULT);
+    const confirm = await pickFile();
+    nowSpy.mockReturnValue(EXPIRES - MARGIN);
+    fireEvent.click(confirm);
+    await waitFor(() => expect(mockRegister).toHaveBeenCalledTimes(1));
+    expect(mockPrepare).toHaveBeenCalledTimes(1);
+  });
+
+  it('28. a file picked while comfortably valid but confirmed after it became unsafe is refused at confirm', async () => {
+    installNative({ deviceKeyPresent: [false] });
+    // Picked with 29 minutes left (beforeEach clock) ...
+    const confirm = await pickFile();
+    expect(screen.getByText(/หมดอายุ/)).toBeTruthy();
+    // ... confirmed 26 minutes later, with only 3 minutes left.
+    nowSpy.mockReturnValue(NOW_COMFORTABLY_VALID + 26 * 60_000);
+    fireEvent.click(confirm);
+    expect(await screen.findByText(/ไฟล์ลงทะเบียนใกล้หมดอายุ/)).toBeTruthy();
+    expect(mockPrepare).not.toHaveBeenCalled();
+    expect(mockRegister).not.toHaveBeenCalled();
+  });
+
+  // --- TPOS-R7 0.1.6: definitive post-staging rejection messaging ---
+
+  it('29. definitive rejection with the staged generation abandoned: failed, but safe to retry with a fresh ENR1', async () => {
+    installNative({ deviceKeyPresent: [false] });
+    mockRegister.mockResolvedValue({ ok: false, code: 'enrollment_authorization_expired', stagingAbandoned: true });
+    fireEvent.click(await pickFile());
+    const notice = await screen.findByText(/ล้างข้อมูลการลงทะเบียนที่ค้างในเครื่องเรียบร้อยแล้ว/);
+    expect(notice.textContent).toContain('enrollment_authorization_expired');
+    expect(notice.textContent).toContain('ลงทะเบียนใหม่ได้ด้วยไฟล์ลงทะเบียนใหม่');
+    expect(screen.queryByText(SUCCESS_TEXT)).toBeNull();
+  });
+
+  it('30. staged-generation abandon failure: fixed administrator-attention message that does not invite a retry', async () => {
+    installNative({ deviceKeyPresent: [false] });
+    mockRegister.mockResolvedValue({
+      ok: false,
+      code: 'enrollment_staging_abandon_failed',
+      errorDetail: 'server_rejection: enrollment_authorization_expired',
+    });
+    fireEvent.click(await pickFile());
+    const notice = await screen.findByText(/ต้องให้ผู้ดูแลระบบตรวจสอบ/);
+    expect(notice.textContent).toContain('ห้ามลงทะเบียนซ้ำ');
+    expect(notice.textContent).not.toContain('enrollment_authorization_expired');
+    expect(notice.textContent).not.toContain('ลงทะเบียนใหม่ได้');
+  });
+
   it('13. integration keeps Claim Existing Device separate (source contract)', () => {
     const settings = readFileSync(resolve(process.cwd(), 'src/pages/SettingsPage.tsx'), 'utf8').replace(/\r\n/g, '\n');
     expect(settings).toContain(
@@ -481,6 +560,8 @@ describe('DeviceSecurityEnrollmentCard', () => {
       // Type-only: the opaque grant the card passes through unchanged.
       "from '../../lib/auth/enrollmentGrant'",
       "from '../../lib/auth/enrollmentIdentityError'",
+      // Pure confirm-time ENR1 expiry gate (no I/O).
+      "from '../../lib/auth/enrollmentExpiry'",
     ]);
     expect(card).not.toMatch(/claimDevice|registerThisDevice|reEnrollDevice|deviceKeyVersion|console\./);
   });

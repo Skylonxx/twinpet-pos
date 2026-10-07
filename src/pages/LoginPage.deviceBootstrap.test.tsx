@@ -106,6 +106,9 @@ async function enterPin() {
 }
 
 beforeEach(() => {
+  // TPOS-R7 0.1.6 confirm-time ENR1 expiry gate: the imported fixture below is
+  // confirmed one minute after issuance (29 minutes of validity left).
+  vi.spyOn(Date, 'now').mockReturnValue(1_790_000_000_000 + 60_000);
   initialReadiness = 'NOT_ENROLLED';
   readinessOnRefresh = 'NOT_ENROLLED';
   deviceKeyPresent = false;

@@ -9,6 +9,8 @@ import {
   parseCompletionIntent,
   recoverDeviceRegistrationCompletion,
   saveCompletionIntent,
+  DEFINITIVE_NO_COMMIT_COMPLETION_CODES,
+  ENROLLMENT_STAGING_ABANDON_FAILED,
   PENDING_COMPLETION_INTENT_SCHEMA,
   PENDING_COMPLETION_INTENT_STORAGE_KEY,
   PENDING_FINALIZATION_STORAGE_KEY,
@@ -1043,13 +1045,24 @@ describe('deviceRegistration', () => {
 
     /** Records the relative order of server calls, native calls and durable storage mutations. */
     function harness(
-      opts: { finalize?: 'ok' | 'throw'; complete?: (request: unknown) => Promise<{ data: unknown }> } = {},
+      opts: {
+        finalize?: 'ok' | 'throw';
+        complete?: (request: unknown) => Promise<{ data: unknown }>;
+        /** TPOS-R7 0.1.6 native abandon behaviour (default: ABANDONED). */
+        abandon?: 'ABANDONED' | 'ALREADY_CLEAN' | 'throw' | 'unexpected';
+      } = {},
     ) {
       const events: string[] = [];
-      const invoke = vi.fn(async (cmd: string) => {
+      const invoke = vi.fn(async (cmd: string, args?: Record<string, unknown>) => {
         events.push(cmd);
         if (cmd === 'native_generate_device_registration_proof') {
           return { drp1Base64: nativeDrp1, enrollmentGenerationId: GEN, stagedPublicKeyBase64: expectedPubKeyBase64 };
+        }
+        if (cmd === 'native_abandon_device_enrollment_staging') {
+          if (args?.enrollmentGenerationId !== GEN) throw new Error('ABANDON_GENERATION_MISMATCH');
+          if (opts.abandon === 'throw') throw new Error('ABANDON_IO_FAILED');
+          if (opts.abandon === 'unexpected') return { status: 'MAYBE' };
+          return { status: opts.abandon ?? 'ABANDONED' };
         }
         if (cmd === 'native_finalize_device_enrollment') {
           if (opts.finalize === 'throw') throw new Error('NATIVE_FINALIZE_FAILED');
@@ -1219,14 +1232,27 @@ describe('deviceRegistration', () => {
       expect(recover.complete).toHaveBeenCalledTimes(0);
     });
 
-    it('an explicit first-call server rejection (nothing consumed) releases the intent; a committed-but-invalid response keeps it', async () => {
+    it('a definitive first-call rejection abandons the staged generation, THEN releases the intent; a committed-but-invalid response keeps it', async () => {
       const rejected = harness({ complete: async () => ({ data: { ok: false, code: 'enrollment_authorization_expired' } }) });
       try {
-        expect(await registerDevice('auth-1', rejected.options)).toEqual({ ok: false, code: 'enrollment_authorization_expired' });
+        expect(await registerDevice('auth-1', rejected.options)).toEqual({
+          ok: false,
+          code: 'enrollment_authorization_expired',
+          stagingAbandoned: true,
+        });
       } finally {
         rejected.restore();
       }
       expect(loadCompletionIntent()).toBeNull();
+      expect(rejected.events).toEqual([
+        'server_begin',
+        'native_generate_device_registration_proof',
+        `set:${PENDING_COMPLETION_INTENT_STORAGE_KEY}`,
+        'server_complete',
+        'native_abandon_device_enrollment_staging',
+        `remove:${PENDING_COMPLETION_INTENT_STORAGE_KEY}`,
+      ]);
+      expect(rejected.invoke).toHaveBeenCalledWith('native_abandon_device_enrollment_staging', { enrollmentGenerationId: GEN });
 
       // ok:true (the server committed) but the accepted key does not match the staged key.
       const mismatched = harness({
@@ -1239,6 +1265,180 @@ describe('deviceRegistration', () => {
       } finally {
         mismatched.restore();
       }
+      expect(loadCompletionIntent()).toEqual(validIntent());
+    });
+
+    // --- TPOS-R7 0.1.6: abandon only after a DEFINITIVE pre-commit rejection ---
+
+    it('the definitive set is exactly the five never-consumed, permanent server codes', () => {
+      expect([...DEFINITIVE_NO_COMMIT_COMPLETION_CODES].sort()).toEqual([
+        'enrollment_authorization_branch_mismatch',
+        'enrollment_authorization_expired',
+        'enrollment_authorization_not_found',
+        'enrollment_authorization_wrong_status',
+        'session_expired',
+      ]);
+    });
+
+    it.each([...DEFINITIVE_NO_COMMIT_COMPLETION_CODES])(
+      'definitive %s: exact-generation abandon, intent released only afterwards, safe-to-retry result',
+      async (code) => {
+        const h = harness({ complete: async () => ({ data: { ok: false, code } }) });
+        let res;
+        try {
+          res = await registerDevice('auth-1', h.options);
+        } finally {
+          h.restore();
+        }
+        expect(res).toEqual({ ok: false, code, stagingAbandoned: true });
+        const abandonAt = h.events.indexOf('native_abandon_device_enrollment_staging');
+        expect(abandonAt).toBeGreaterThan(h.events.indexOf('server_complete'));
+        expect(h.events.indexOf(`remove:${PENDING_COMPLETION_INTENT_STORAGE_KEY}`)).toBeGreaterThan(abandonAt);
+        expect(h.invoke).not.toHaveBeenCalledWith('native_finalize_device_enrollment', expect.anything());
+        expect(loadCompletionIntent()).toBeNull();
+        expect(loadPendingFinalization()).toBeNull();
+      },
+    );
+
+    it('ALREADY_CLEAN from native is accepted as abandoned (nothing left to remove)', async () => {
+      const h = harness({
+        complete: async () => ({ data: { ok: false, code: 'session_expired' } }),
+        abandon: 'ALREADY_CLEAN',
+      });
+      try {
+        expect(await registerDevice('auth-1', h.options)).toEqual({ ok: false, code: 'session_expired', stagingAbandoned: true });
+      } finally {
+        h.restore();
+      }
+      expect(loadCompletionIntent()).toBeNull();
+    });
+
+    it.each(['throw', 'unexpected'] as const)(
+      'native abandon failure (%s): fixed fail-closed code, intent KEPT as evidence, never "safe to retry"',
+      async (abandon) => {
+        const h = harness({ complete: async () => ({ data: { ok: false, code: 'enrollment_authorization_expired' } }), abandon });
+        let res;
+        try {
+          res = await registerDevice('auth-1', h.options);
+        } finally {
+          h.restore();
+        }
+        expect(res).toEqual({
+          ok: false,
+          code: ENROLLMENT_STAGING_ABANDON_FAILED,
+          errorDetail: 'server_rejection: enrollment_authorization_expired',
+        });
+        expect(res).not.toHaveProperty('stagingAbandoned');
+        expect(h.events).not.toContain(`remove:${PENDING_COMPLETION_INTENT_STORAGE_KEY}`);
+        expect(loadCompletionIntent()).toEqual(validIntent());
+      },
+    );
+
+    it('abandon succeeded but the intent could not be removed: fixed fail-closed code (absence must be proven)', async () => {
+      const h = harness({ complete: async () => ({ data: { ok: false, code: 'session_expired' } }) });
+      const harnessRemove = localStorage.removeItem;
+      localStorage.removeItem = (k: string) => {
+        if (k === PENDING_COMPLETION_INTENT_STORAGE_KEY) return; // silently not removed
+        harnessRemove(k);
+      };
+      let res;
+      try {
+        res = await registerDevice('auth-1', h.options);
+      } finally {
+        localStorage.removeItem = harnessRemove;
+        h.restore();
+      }
+      expect(res).toMatchObject({ ok: false, code: ENROLLMENT_STAGING_ABANDON_FAILED });
+      expect(res).not.toHaveProperty('stagingAbandoned');
+      expect(loadCompletionIntent()).toEqual(validIntent());
+    });
+
+    it.each([
+      'drp1_bad_self_signature',
+      'drp1_decode_failed',
+      'drp1_nonce_mismatch',
+      'session_wrong_owner',
+      'session_not_found',
+      'session_already_consumed',
+      'invalid_request_shape',
+      'signing_key_unavailable',
+      'device_state_changed',
+      'completion_replay_mismatch',
+      'legacy_session_unrecoverable',
+      'device_already_enrolled_reenroll_required',
+      'not_authorized',
+      '10 ABORTED: contention',
+    ])('non-definitive first-call ok:false %s: NO abandon, intent kept for exact recovery', async (code) => {
+      const h = harness({ complete: async () => ({ data: { ok: false, code } }) });
+      let res;
+      try {
+        res = await registerDevice('auth-1', h.options);
+      } finally {
+        h.restore();
+      }
+      expect(res).toEqual({ ok: false, code });
+      expect(h.invoke).not.toHaveBeenCalledWith('native_abandon_device_enrollment_staging', expect.anything());
+      expect(loadCompletionIntent()).toEqual(validIntent());
+    });
+
+    it.each([
+      ['null data', null],
+      ['ok missing', { code: 'session_expired' }],
+      ['ok not strictly false', { ok: 0, code: 'session_expired' }],
+      ['code not a string', { ok: false, code: 42 }],
+      ['array', [{ ok: false, code: 'session_expired' }]],
+    ])('malformed/ambiguous response (%s): NO abandon, intent kept', async (_label, data) => {
+      const h = harness({ complete: async () => ({ data }) });
+      try {
+        await registerDevice('auth-1', h.options);
+      } finally {
+        h.restore();
+      }
+      expect(h.invoke).not.toHaveBeenCalledWith('native_abandon_device_enrollment_staging', expect.anything());
+      expect(loadCompletionIntent()).toEqual(validIntent());
+    });
+
+    it('transport/callable exception: NO abandon, intent kept, error propagates', async () => {
+      const h = harness({
+        complete: async () => {
+          throw new Error('deadline-exceeded');
+        },
+      });
+      try {
+        await expect(registerDevice('auth-1', h.options)).rejects.toThrow('deadline-exceeded');
+      } finally {
+        h.restore();
+      }
+      expect(h.invoke).not.toHaveBeenCalledWith('native_abandon_device_enrollment_staging', expect.anything());
+      expect(loadCompletionIntent()).toEqual(validIntent());
+    });
+
+    it('intent save failure (server never called): NO abandon, complete never called', async () => {
+      const h = harness();
+      const harnessSet = localStorage.setItem;
+      localStorage.setItem = (k: string, v: string) => {
+        if (k === PENDING_COMPLETION_INTENT_STORAGE_KEY) throw new Error('QUOTA');
+        harnessSet(k, v);
+      };
+      try {
+        expect(await registerDevice('auth-1', h.options)).toMatchObject({ ok: false, code: 'completion_intent_save_failed' });
+      } finally {
+        localStorage.setItem = harnessSet;
+        h.restore();
+      }
+      expect(h.complete).not.toHaveBeenCalled();
+      expect(h.invoke).not.toHaveBeenCalledWith('native_abandon_device_enrollment_staging', expect.anything());
+    });
+
+    it('explicit recovery is unchanged: a definitive-looking replay rejection never abandons and keeps the intent', async () => {
+      saveCompletionIntent(validIntent());
+      const h = harness({ complete: async () => ({ data: { ok: false, code: 'session_expired' } }) });
+      try {
+        expect(await recoverDeviceRegistrationCompletion(h.options)).toEqual({ ok: false, code: 'session_expired' });
+      } finally {
+        h.restore();
+      }
+      expect(h.invoke).not.toHaveBeenCalledWith('native_abandon_device_enrollment_staging', expect.anything());
       expect(loadCompletionIntent()).toEqual(validIntent());
     });
 

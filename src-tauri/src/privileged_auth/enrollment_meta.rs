@@ -25,7 +25,9 @@ pub const ENROLLMENT_META_FILE_NAME: &str = "twinpet-device-enrollment-meta.dpap
 pub const ENROLLMENT_FENCE_FILE_NAME: &str = "twinpet-device-enrollment.fence";
 pub const MAX_DEVICE_KEY_VERSION: u32 = 4_294_967_295;
 
-static FINALIZE_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+/// Serializes native finalize and the TPOS-R7 staged-only abandon
+/// (`enrollment_abandon`), which both mutate the enrollment authority root.
+pub(crate) static FINALIZE_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 pub const ENRM_MAGIC: &[u8; 4] = b"ENRM";
 pub const ENRM_SCHEMA_VERSION_1: u8 = 1;
@@ -291,6 +293,14 @@ impl ReceiptContextStore {
         self.pending_requests.clear();
         self.receipt_observations.clear();
     }
+
+    /// Drops every in-memory request/receipt context for one generation.
+    pub fn forget_generation(&mut self, generation_id_hex: &str) {
+        self.pending_requests
+            .retain(|p| !p.enrollment_generation_id_hex.eq_ignore_ascii_case(generation_id_hex));
+        self.receipt_observations
+            .retain(|o| !o.enrollment_generation_id_hex.eq_ignore_ascii_case(generation_id_hex));
+    }
 }
 
 pub struct EnrollmentRuntimeState {
@@ -365,6 +375,14 @@ impl EnrollmentRuntimeState {
     pub fn clear(&self) {
         if let Ok(mut store) = self.receipt_store.lock() {
             store.clear();
+        }
+    }
+
+    /// TPOS-R7: after a staged-only generation is abandoned, its in-memory
+    /// pending request can no longer be matched by any receipt.
+    pub fn forget_generation(&self, generation_id_hex: &str) {
+        if let Ok(mut store) = self.receipt_store.lock() {
+            store.forget_generation(generation_id_hex);
         }
     }
 }

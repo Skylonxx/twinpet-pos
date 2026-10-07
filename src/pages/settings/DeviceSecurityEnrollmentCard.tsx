@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Alert, Badge, Button } from '../../components/ui';
 import {
+  ENROLLMENT_STAGING_ABANDON_FAILED,
   finalizeDeviceEnrollmentRetry,
   getNativeDeviceEnrollmentInvoke,
   loadEnrollmentRecoveryState,
@@ -12,6 +13,7 @@ import {
 } from '../../lib/auth/deviceRegistration';
 import type { EnrollmentPreparationGrant } from '../../lib/auth/enrollmentGrant';
 import { EnrollmentIdentityError, isEnrollmentIdentityError } from '../../lib/auth/enrollmentIdentityError';
+import { classifyEnr1ConfirmWindow } from '../../lib/auth/enrollmentExpiry';
 
 /**
  * SEC-001 device security enrollment card (initial enrollment + recovery
@@ -20,7 +22,9 @@ import { EnrollmentIdentityError, isEnrollmentIdentityError } from '../../lib/au
  * reads/writes Firestore directly.
  *
  * Flow: native ENR1 picker (`native_import_device_enrollment_file`) →
- * operator confirms the safe metadata → `prepareEnrollmentIdentity()` (ends any
+ * operator confirms the safe metadata → confirm-time expiry gate (expired or
+ * nearly expired files stop here, before anything changes) →
+ * `prepareEnrollmentIdentity()` (ends any
  * staff session; dedicated anonymous Firebase UID; one-shot grant) →
  * `registerDevice(enrollmentAuthId, { enrollmentGrant })` (begin → native proof
  * → durable completion intent → complete → native finalize). Success is shown
@@ -52,6 +56,12 @@ type StatusState =
 type Notice = { tone: 'success' | 'failure' | 'warning' | 'info'; text: string } | null;
 
 const LOCAL_FINALIZE_REQUIRED = 'LOCAL_ENROLLMENT_FINALIZATION_REQUIRED';
+
+const ENR1_EXPIRED_TEXT = 'ไฟล์ลงทะเบียนหมดอายุแล้ว — ยังไม่ได้เริ่มการลงทะเบียน กรุณาขอไฟล์ลงทะเบียนใหม่จากผู้ดูแลระบบ';
+const ENR1_NEAR_EXPIRY_TEXT =
+  'ไฟล์ลงทะเบียนใกล้หมดอายุ (เหลือน้อยกว่า 5 นาที) — ระบบยังไม่เริ่มการลงทะเบียนเพื่อความปลอดภัย กรุณาขอไฟล์ลงทะเบียนใหม่จากผู้ดูแลระบบแล้วใช้ทันที';
+const STAGING_ABANDON_FAILED_TEXT =
+  'ลงทะเบียนไม่สำเร็จ และระบบล้างข้อมูลการลงทะเบียนที่ค้างในเครื่องไม่สำเร็จ — สถานะความปลอดภัยของเครื่องนี้ต้องให้ผู้ดูแลระบบตรวจสอบ ห้ามลงทะเบียนซ้ำ';
 const PICKER_CANCELLED_MARKER = 'no enrollment file was selected';
 
 function toImportedEnrollment(raw: unknown): ImportedEnrollment | null {
@@ -208,6 +218,14 @@ export default function DeviceSecurityEnrollmentCard({
   const confirmEnrollment = () =>
     runExclusive(async () => {
       if (!imported || recovery.kind !== 'none' || !allowFreshEnrollment) return;
+      // Before ANY mutation (session, Firebase identity, server, native): an
+      // expired or nearly expired file must be replaced, never attempted.
+      const confirmWindow = classifyEnr1ConfirmWindow(imported.expiresAtServerMs, Date.now());
+      if (confirmWindow !== 'ok') {
+        setImported(null);
+        setNotice({ tone: 'failure', text: confirmWindow === 'expired' ? ENR1_EXPIRED_TEXT : ENR1_NEAR_EXPIRY_TEXT });
+        return;
+      }
       const enrollmentAuthId = imported.enrollmentAuthId;
       setNotice(null);
       // The authorization is single-use; the operator must re-pick after any attempt.
@@ -241,6 +259,17 @@ export default function DeviceSecurityEnrollmentCard({
           return;
         }
         adoptRecoveryState();
+        if (result.code === ENROLLMENT_STAGING_ABANDON_FAILED) {
+          setNotice({ tone: 'failure', text: STAGING_ABANDON_FAILED_TEXT });
+          return;
+        }
+        if (result.stagingAbandoned) {
+          setNotice({
+            tone: 'failure',
+            text: `ลงทะเบียนไม่สำเร็จ (รหัส: ${safeCode(result.code)}) — ล้างข้อมูลการลงทะเบียนที่ค้างในเครื่องเรียบร้อยแล้ว เครื่องนี้ปลอดภัย ลงทะเบียนใหม่ได้ด้วยไฟล์ลงทะเบียนใหม่จากผู้ดูแลระบบ`,
+          });
+          return;
+        }
         setNotice({ tone: 'failure', text: `ลงทะเบียนไม่สำเร็จ (รหัส: ${safeCode(result.code)})` });
       } catch {
         // A transport error after the durable completion intent was saved:

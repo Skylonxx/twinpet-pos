@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-native-abandon-device-enrollment-staging"
+description = "Enables the native_abandon_device_enrollment_staging command without any pre-configured scope."
+commands.allow = ["native_abandon_device_enrollment_staging"]
+
+[[permission]]
+identifier = "deny-native-abandon-device-enrollment-staging"
+description = "Denies the native_abandon_device_enrollment_staging command without any pre-configured scope."
+commands.deny = ["native_abandon_device_enrollment_staging"]

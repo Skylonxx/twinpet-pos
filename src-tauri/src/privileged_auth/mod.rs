@@ -17,6 +17,12 @@
 //! TPOS-R7 adds exactly one module (`device_security_readiness`) and exactly
 //! one read-only command (`native_get_device_security_readiness`) that returns
 //! only a bare READY / NOT_ENROLLED / INVALID_OR_INCOMPLETE readiness value.
+//!
+//! TPOS-R7 0.1.6 adds exactly one module (`enrollment_abandon`) and exactly
+//! one command (`native_abandon_device_enrollment_staging`): a generation-bound,
+//! fail-closed abandon of a never-committed staged-only first enrollment after
+//! a definitive server pre-commit rejection. It takes only the generation id
+//! and returns only a bare outcome enum.
 
 pub mod action_attestation;
 pub mod argon2_benchmark;
@@ -26,6 +32,7 @@ pub mod device_proof;
 pub mod device_registration_proof;
 pub mod device_security_readiness;
 pub mod dpapi_envelope;
+pub mod enrollment_abandon;
 pub mod enrollment_import;
 pub mod enrollment_meta;
 pub mod frames;
@@ -181,18 +188,28 @@ pub struct GenerateDeviceRegistrationProofDto {
     pub staged_public_key_base64: String,
 }
 
+/// The server issues `deviceRegistrationNonceBase64` as STANDARD base64
+/// (`Buffer.toString('base64')`, functions/src/deviceEnrollment.ts), so it is
+/// decoded with the standard alphabet. Decoding it as base64url rejected any
+/// nonce containing '+' or '/' (most random nonces) before any native state
+/// was touched, surfacing as `proof_generation_failed`.
+fn decode_device_registration_nonce(nonce_base64: &str) -> Result<[u8; 32], String> {
+    let nonce_bytes = base64_decode_std(nonce_base64)?;
+    if nonce_bytes.len() != 32 {
+        return Err("device_registration_nonce must decode to 32 bytes".to_string());
+    }
+    let mut nonce = [0u8; 32];
+    nonce.copy_from_slice(&nonce_bytes);
+    Ok(nonce)
+}
+
 #[tauri::command]
 pub fn native_generate_device_registration_proof(
     state: tauri::State<'_, enrollment_meta::EnrollmentRuntimeState>,
     enrollment_auth_id: String,
     device_registration_nonce_base64: String,
 ) -> Result<GenerateDeviceRegistrationProofDto, String> {
-    let nonce_bytes = base64_decode(&device_registration_nonce_base64)?;
-    if nonce_bytes.len() != 32 {
-        return Err("device_registration_nonce must decode to 32 bytes".to_string());
-    }
-    let mut nonce = [0u8; 32];
-    nonce.copy_from_slice(&nonce_bytes);
+    let nonce = decode_device_registration_nonce(&device_registration_nonce_base64)?;
     let outcome = generate_device_registration_proof(&state, &app_data_dir(), &enrollment_auth_id, nonce)
         .map_err(|e| format!("{e:?}"))?;
     Ok(GenerateDeviceRegistrationProofDto {
@@ -200,6 +217,31 @@ pub fn native_generate_device_registration_proof(
         enrollment_generation_id: outcome.enrollment_generation_id_hex,
         staged_public_key_base64: enrollment_meta::base64_encode_std(&outcome.staged_public_key_bytes),
     })
+}
+
+// --- TPOS-R7 0.1.6: native_abandon_device_enrollment_staging ---
+//
+// Called by the first-enrollment client ONLY after `completeDeviceRegistration`
+// returned a definitive pre-commit rejection for the generation it staged.
+// All safety preconditions are enforced natively (see `enrollment_abandon`);
+// the WebView supplies nothing but the generation id and learns nothing but a
+// bare outcome or a fixed refusal code.
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AbandonDeviceEnrollmentStagingDto {
+    pub status: enrollment_abandon::AbandonStagedEnrollmentOutcome,
+}
+
+#[tauri::command]
+pub fn native_abandon_device_enrollment_staging(
+    state: tauri::State<'_, enrollment_meta::EnrollmentRuntimeState>,
+    enrollment_generation_id: String,
+) -> Result<AbandonDeviceEnrollmentStagingDto, String> {
+    let status = enrollment_abandon::abandon_staged_initial_enrollment(&app_data_dir(), &enrollment_generation_id)
+        .map_err(|e| e.code().to_string())?;
+    state.forget_generation(&enrollment_generation_id);
+    Ok(AbandonDeviceEnrollmentStagingDto { status })
 }
 
 // --- Command 3: native_complete_oac_provisioning ---
@@ -243,12 +285,7 @@ fn produce_provisioning_proof(
         security_device_id[i] =
             u8::from_str_radix(&security_device_id_hex[i * 2..i * 2 + 2], 16).map_err(|e| e.to_string())?;
     }
-    let nonce_bytes = base64_decode(nonce_base64)?;
-    if nonce_bytes.len() != 32 {
-        return Err("nonce must decode to 32 bytes".to_string());
-    }
-    let mut nonce = [0u8; 32];
-    nonce.copy_from_slice(&nonce_bytes);
+    let nonce = decode_oac_issuance_nonce(nonce_base64)?;
 
     let signing_key = device_proof::load_enrolled_device_keypair(root).map_err(|e| format!("{e:?}"))?;
     let dev_proof_public_key = signing_key.verifying_key().to_bytes();
@@ -308,8 +345,27 @@ fn produce_provisioning_proof(
     })
 }
 
+/// The server issues the OAC issuance `nonceBase64` as STANDARD base64
+/// (`session.nonce.toString('base64')`, functions/src/oacIssuanceSession.ts);
+/// same contract and same strict decode as the device-registration nonce.
+fn decode_oac_issuance_nonce(nonce_base64: &str) -> Result<[u8; 32], String> {
+    let nonce_bytes = base64_decode_std(nonce_base64)?;
+    if nonce_bytes.len() != 32 {
+        return Err("nonce must decode to 32 bytes".to_string());
+    }
+    let mut nonce = [0u8; 32];
+    nonce.copy_from_slice(&nonce_bytes);
+    Ok(nonce)
+}
+
+/// `getOacKeysetManifest` returns `oks1Base64` as STANDARD base64
+/// (`encodeOks1(..).toString('base64')`, functions/src/oacKeysetManifest.ts).
+fn decode_server_oks1(oks1_base64: &str) -> Result<Vec<u8>, String> {
+    base64_decode_std(oks1_base64)
+}
+
 fn persist_provisioned_oac(root: &Path, oac_envelope_json: &str, oks1_base64: &str) -> Result<(), String> {
-    let oks1_bytes = base64_decode(oks1_base64)?;
+    let oks1_bytes = decode_server_oks1(oks1_base64)?;
     let active_manifest_path = enrollment_meta::resolve_active_manifest_path(root)
         .map_err(|e| format!("cannot resolve active OAC keyset manifest: {e}"))?;
     let active_manifest_bytes = fs::read(&active_manifest_path)
@@ -743,6 +799,76 @@ mod command_glue_tests {
         assert_eq!(base64_decode_std("aGVsbG8=").unwrap(), b"hello".to_vec());
     }
 
+    #[test]
+    fn device_registration_nonce_decodes_the_server_standard_base64_shape() {
+        // Regression (TPOS-R7 proof_generation_failed): the server sends
+        // `Buffer.toString('base64')`; a nonce containing '+' and '/' must decode.
+        let expected: Vec<u8> = (0..32).map(|i| [0xfbu8, 0xef, 0xbe, 0xff][i % 4]).collect();
+        // The pre-fix base64url decode rejected exactly this shape.
+        assert!(base64_decode("++++//vvvv/7777/++++//vvvv/7777/++++//vvvv8=").is_err());
+        let nonce = decode_device_registration_nonce("++++//vvvv/7777/++++//vvvv/7777/++++//vvvv8=").unwrap();
+        assert_eq!(nonce.to_vec(), expected);
+        // A nonce with neither '+' nor '/' (the shape that happened to work before).
+        assert_eq!(
+            decode_device_registration_nonce("q6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6s=").unwrap(),
+            [0xabu8; 32]
+        );
+    }
+
+    #[test]
+    fn device_registration_nonce_rejects_wrong_length_and_foreign_alphabet() {
+        assert!(decode_device_registration_nonce("aGVsbG8=").is_err());
+        assert!(decode_device_registration_nonce("----__vvvv_7777_----__vvvv_7777_----__vvvv8=").is_err());
+    }
+
+    #[test]
+    fn oac_issuance_nonce_decodes_the_server_standard_base64_shape() {
+        // Regression: `session.nonce.toString('base64')` with '+' and '/'.
+        let expected: Vec<u8> = (0..32).map(|i| [0xfbu8, 0xef, 0xbe, 0xff][i % 4]).collect();
+        assert!(base64_decode("++++//vvvv/7777/++++//vvvv/7777/++++//vvvv8=").is_err());
+        assert_eq!(
+            decode_oac_issuance_nonce("++++//vvvv/7777/++++//vvvv/7777/++++//vvvv8=").unwrap().to_vec(),
+            expected
+        );
+        assert!(decode_oac_issuance_nonce("aGVsbG8=").is_err());
+        assert!(decode_oac_issuance_nonce("----__vvvv_7777_----__vvvv_7777_----__vvvv8=").is_err());
+    }
+
+    #[test]
+    fn produce_provisioning_proof_binds_a_slash_plus_nonce_into_ptp1() {
+        let dir = temp_dir();
+        let sec_id_hex = "00112233445566778899aabbccddeeff";
+        let _key = setup_test_enrolled_device(&dir, sec_id_hex);
+        let nonce_b64 = "++++//vvvv/7777/++++//vvvv/7777/++++//vvvv8=";
+        let dto = produce_provisioning_proof(&dir, "123456", "sess-1", sec_id_hex, "staff-1", nonce_b64).unwrap();
+        let ptp1 = frames::decode_ptp1(&base64_decode(&dto.ptp1_base64).unwrap()).unwrap();
+        assert_eq!(ptp1.nonce, decode_oac_issuance_nonce(nonce_b64).unwrap());
+        // A base64url-only nonce is not the wire contract and is refused.
+        let url_only = "----__vvvv_7777_----__vvvv_7777_----__vvvv8=";
+        assert!(produce_provisioning_proof(&dir, "123456", "sess-1", sec_id_hex, "staff-1", url_only).is_err());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn server_oks1_decodes_standard_base64_and_refuses_base64url() {
+        let bytes: Vec<u8> = (0..=255u8).collect();
+        let std = base64_encode_with(&bytes, B64_STD);
+        assert!(std.contains('+') && std.contains('/'));
+        assert_eq!(decode_server_oks1(&std).unwrap(), bytes);
+        assert!(decode_server_oks1(&base64_encode(&bytes)).is_err());
+    }
+
+    #[test]
+    fn device_registration_nonce_with_slash_produces_bound_drp1() {
+        let dir = temp_dir();
+        let runtime = enrollment_meta::EnrollmentRuntimeState::new();
+        let nonce = decode_device_registration_nonce("++++//vvvv/7777/++++//vvvv/7777/++++//vvvv8=").unwrap();
+        let outcome = generate_device_registration_proof(&runtime, &dir, "00112233445566778899aabbccddeeff", nonce).unwrap();
+        let decoded = frames::decode_drp1(&outcome.drp1_bytes).unwrap();
+        assert_eq!(decoded.device_registration_nonce, nonce);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
     fn temp_dir() -> PathBuf {
         static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -872,7 +998,7 @@ mod command_glue_tests {
         let dir = temp_dir();
         let sec_id_hex = "00112233445566778899aabbccddeeff";
         let _key = setup_test_enrolled_device(&dir, sec_id_hex);
-        let nonce = base64_encode(&[7u8; 32]);
+        let nonce = base64_encode_with(&[7u8; 32], B64_STD);
         let dto =
             produce_provisioning_proof(&dir, "123456", "sess-1", sec_id_hex, "staff-1", &nonce)
                 .unwrap();
@@ -898,7 +1024,7 @@ mod command_glue_tests {
     #[test]
     fn produce_provisioning_proof_rejects_when_device_is_not_enrolled() {
         let dir = temp_dir();
-        let nonce = base64_encode(&[7u8; 32]);
+        let nonce = base64_encode_with(&[7u8; 32], B64_STD);
         let result = produce_provisioning_proof(&dir, "123456", "sess-1", "00112233445566778899aabbccddeeff", "staff-1", &nonce);
         assert!(result.is_err());
         let _ = fs::remove_dir_all(&dir);
@@ -907,7 +1033,7 @@ mod command_glue_tests {
     #[test]
     fn produce_provisioning_proof_rejects_a_malformed_device_id() {
         let dir = temp_dir();
-        let result = produce_provisioning_proof(&dir, "123456", "sess-1", "not-hex", "staff-1", &base64_encode(&[0u8; 32]));
+        let result = produce_provisioning_proof(&dir, "123456", "sess-1", "not-hex", "staff-1", &base64_encode_with(&[0u8; 32], B64_STD));
         assert!(result.is_err());
         let _ = fs::remove_dir_all(&dir);
     }
@@ -925,7 +1051,8 @@ mod command_glue_tests {
         let (_dev_key, bytes, _sha) = enrollment_meta::setup_committed_test_enrollment_with_manifest(
             dir, "LDP-001", sec_id, keys, 0,
         );
-        (base64_encode(&bytes), signing_key)
+        // Exactly what getOacKeysetManifest returns: standard base64.
+        (base64_encode_with(&bytes, B64_STD), signing_key)
     }
 
     fn signed_oac_envelope(signing_key: &ed25519_dalek::SigningKey, oac_id: &str) -> String {

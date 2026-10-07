@@ -41,6 +41,7 @@ pub fn run() {
             durable_kv::durable_manifest_lease_release,
             privileged_auth::native_import_device_enrollment_file,
             privileged_auth::native_generate_device_registration_proof,
+            privileged_auth::native_abandon_device_enrollment_staging,
             privileged_auth::native_complete_oac_provisioning,
             privileged_auth::native_argon2_benchmark,
             privileged_auth::native_get_device_registration_status,

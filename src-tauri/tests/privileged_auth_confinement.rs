@@ -1,6 +1,6 @@
 //! SEC-001 Packet C-A/C-B/D — native command surface confinement.
 //!
-//! Exactly fifteen `privileged_auth` commands may ever be exposed to the
+//! Exactly sixteen `privileged_auth` commands may ever be exposed to the
 //! WebView, and nothing else from the module tree — no sign-arbitrary-bytes,
 //! no pepper/DPAPI-blob/device-private-key getter, no raw Argon2 verifier
 //! export, no arbitrary file read, no raw keyset-manifest-bytes command.
@@ -17,13 +17,19 @@
 //! TPOS-R7 adds exactly one read-only command,
 //! `native_get_device_security_readiness`, and one generated permission. It
 //! takes no arguments and returns only a bare readiness enum.
+//!
+//! TPOS-R7 0.1.6 adds exactly one command,
+//! `native_abandon_device_enrollment_staging`, and one generated permission.
+//! It takes only the enrollment generation id (no path, no bytes, no key) and
+//! returns only a bare outcome enum.
 
 use std::fs;
 use std::path::PathBuf;
 
-const EXACT_FIFTEEN_COMMANDS: &[&str] = &[
+const EXACT_SIXTEEN_COMMANDS: &[&str] = &[
     "native_import_device_enrollment_file",
     "native_generate_device_registration_proof",
+    "native_abandon_device_enrollment_staging",
     "native_finalize_device_enrollment",
     "native_complete_oac_provisioning",
     "native_argon2_benchmark",
@@ -92,9 +98,9 @@ fn lib_rs_source() -> String {
 }
 
 #[test]
-fn exactly_fifteen_native_commands_are_granted_in_capabilities() {
+fn exactly_sixteen_native_commands_are_granted_in_capabilities() {
     let granted = granted_native_permissions();
-    let mut expected: Vec<String> = EXACT_FIFTEEN_COMMANDS
+    let mut expected: Vec<String> = EXACT_SIXTEEN_COMMANDS
         .iter()
         .map(|c| format!("allow-{}", c.replace('_', "-")))
         .collect();
@@ -103,35 +109,35 @@ fn exactly_fifteen_native_commands_are_granted_in_capabilities() {
     actual.sort();
     assert_eq!(
         actual, expected,
-        "capabilities/default.json must grant exactly the fifteen frozen commands"
+        "capabilities/default.json must grant exactly the sixteen frozen commands"
     );
 }
 
 #[test]
-fn exactly_fifteen_tauri_command_functions_are_defined_in_mod_rs() {
+fn exactly_sixteen_tauri_command_functions_are_defined_in_mod_rs() {
     let source = mod_rs_source();
-    let defined: Vec<&str> = EXACT_FIFTEEN_COMMANDS
+    let defined: Vec<&str> = EXACT_SIXTEEN_COMMANDS
         .iter()
         .filter(|name| source.contains(&format!("pub fn {name}(")))
         .copied()
         .collect();
     assert_eq!(
         defined.len(),
-        15,
-        "expected exactly 15 command functions defined, found: {defined:?}"
+        16,
+        "expected exactly 16 command functions defined, found: {defined:?}"
     );
 
     let command_attr_count = source.matches("#[tauri::command]").count();
     assert_eq!(
-        command_attr_count, 15,
-        "expected exactly 15 #[tauri::command]-annotated functions in mod.rs"
+        command_attr_count, 16,
+        "expected exactly 16 #[tauri::command]-annotated functions in mod.rs"
     );
 }
 
 #[test]
-fn exactly_fifteen_commands_are_registered_in_generate_handler() {
+fn exactly_sixteen_commands_are_registered_in_generate_handler() {
     let source = lib_rs_source();
-    for name in EXACT_FIFTEEN_COMMANDS {
+    for name in EXACT_SIXTEEN_COMMANDS {
         assert!(
             source.contains(&format!("privileged_auth::{name}")),
             "lib.rs generate_handler! must register privileged_auth::{name}"
@@ -139,8 +145,8 @@ fn exactly_fifteen_commands_are_registered_in_generate_handler() {
     }
     let registered = source.matches("privileged_auth::native_").count();
     assert_eq!(
-        registered, 15,
-        "generate_handler! must register exactly 15 privileged_auth commands"
+        registered, 16,
+        "generate_handler! must register exactly 16 privileged_auth commands"
     );
 }
 
@@ -156,7 +162,7 @@ fn exactly_one_new_d1b_generated_permission_exists() {
     names.sort();
     assert_eq!(
         names.len(),
-        EXACT_FIFTEEN_COMMANDS.len(),
+        EXACT_SIXTEEN_COMMANDS.len(),
         "one generated permission file per native command, no more: {names:?}"
     );
     assert!(names.contains(&"native_attest_privileged_action.toml".to_string()));
@@ -286,6 +292,38 @@ fn no_forbidden_public_tauri_command_exists_in_mod_rs() {
 }
 
 #[test]
+fn native_abandon_device_enrollment_staging_takes_only_the_generation_id() {
+    let source = mod_rs_source();
+    let combined: String = source
+        .lines()
+        .skip_while(|line| {
+            !line
+                .trim_start()
+                .starts_with("pub fn native_abandon_device_enrollment_staging(")
+        })
+        .take_while(|line| !line.contains('{'))
+        .collect::<Vec<_>>()
+        .join(" ");
+    assert!(
+        !combined.is_empty(),
+        "native_abandon_device_enrollment_staging signature must exist in mod.rs"
+    );
+    let arguments = combined.matches(": ").count();
+    assert_eq!(
+        arguments, 2,
+        "expected exactly the runtime state and the generation id, found: {combined}"
+    );
+    assert!(combined.contains("state: tauri::State<'_, enrollment_meta::EnrollmentRuntimeState>"));
+    assert!(combined.contains("enrollment_generation_id: String"));
+    for forbidden in ["path", "file", "bytes", "key", "seed", "force", "security_device_id"] {
+        assert!(
+            !combined.contains(forbidden),
+            "native_abandon_device_enrollment_staging must not take a '{forbidden}' argument, found: {combined}"
+        );
+    }
+}
+
+#[test]
 fn native_import_device_enrollment_file_has_no_caller_controlled_path_argument() {
     let source = mod_rs_source();
     let signature_line = source
@@ -326,7 +364,7 @@ fn native_verify_offline_pin_has_no_caller_controlled_time_or_branch_arguments()
 }
 
 #[test]
-fn all_eighteen_privileged_auth_modules_are_declared() {
+fn all_nineteen_privileged_auth_modules_are_declared() {
     let source = mod_rs_source();
     let expected_modules = [
         "action_attestation",
@@ -337,6 +375,7 @@ fn all_eighteen_privileged_auth_modules_are_declared() {
         "device_registration_proof",
         "device_security_readiness",
         "dpapi_envelope",
+        "enrollment_abandon",
         "enrollment_import",
         "enrollment_meta",
         "frames",
@@ -360,7 +399,7 @@ fn all_eighteen_privileged_auth_modules_are_declared() {
 /// version-envelope inventory. Each row names the file and the explicit
 /// version constant it must declare; a future silent addition/removal of a
 /// privileged-auth store's version marker fails this test, mirroring the
-/// exhaustiveness style used for the fifteen-command surface above.
+/// exhaustiveness style used for the sixteen-command surface above.
 const EXPECTED_PRIVILEGED_AUTH_VERSION_MARKERS: &[(&str, &str)] = &[
     ("pepper_store.rs", "PEPPER_STORE_VERSION"),
     ("security_device_id.rs", "SECURITY_DEVICE_ID_STORE_VERSION"),
