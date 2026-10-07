@@ -5243,7 +5243,7 @@ mod tests {
                     prefix.extend_from_slice(&1u32.to_le_bytes());
                     prefix.extend_from_slice(&1000u64.to_le_bytes());
                     prefix.push(1);
-                    prefix.push(raw_key_id.len() as u8);
+                    prefix.extend_from_slice(&(raw_key_id.len() as u16).to_le_bytes());
                     prefix.extend_from_slice(raw_key_id.as_bytes());
                     prefix.extend_from_slice(&oac_pubkey);
                     prefix.push(frames::OAC_KEY_STATUS_VERIFY_ONLY); // missing expiry bytes

@@ -482,7 +482,9 @@ pub fn oks1_signed_prefix(frame: &OacKeysetManifestFrameV1) -> Result<Vec<u8>, F
         if !seen_ids.insert(&key.signing_key_id) {
             return Err(FrameDecodeError::BadFieldFormat);
         }
-        write_len_prefixed_str(&mut out, &key.signing_key_id)?;
+        // Key ids are u16-LE length-prefixed, byte-identical to the server's
+        // `oks1SignedPrefix` (functions/src/oacFrame.ts), which signs these bytes.
+        write_u16_le_prefixed_str(&mut out, &key.signing_key_id)?;
         out.extend_from_slice(&key.public_key);
         match key.status {
             OacKeyLifecycleStatus::Active => {
@@ -539,7 +541,7 @@ pub fn decode_oks1(bytes: &[u8]) -> Result<OacKeysetManifestFrameV1, FrameDecode
     let mut keys = Vec::with_capacity(key_count);
     let mut seen_ids = std::collections::HashSet::new();
     for _ in 0..key_count {
-        let (signing_key_id, next) = read_len_prefixed_str(bytes, o)?;
+        let (signing_key_id, next) = read_u16_le_prefixed_str(bytes, o)?;
         if !is_canonical_identifier(&signing_key_id) {
             return Err(FrameDecodeError::BadFieldFormat);
         }
@@ -995,10 +997,55 @@ mod tests {
         let mut encoded = encode_oks1(&frame).unwrap();
         // Offset calculation:
         // MAGIC (4) + VER (1) + EPOCH (4) + GEN_MS (8) + KEY_COUNT (1) = 18
-        let id_len = encoded[18] as usize;
-        let status_offset = 18 + 1 + id_len + 32;
+        let id_len = u16::from_le_bytes([encoded[18], encoded[19]]) as usize;
+        let status_offset = 18 + 2 + id_len + 32;
         encoded[status_offset] = 0x99; // invalid status byte
         assert_eq!(decode_oks1(&encoded), Err(FrameDecodeError::BadFieldFormat));
+    }
+
+    /// Produced by the server's `encodeOks1` (functions/src/oacFrame.ts); pinned
+    /// byte-for-byte in `functions/src/__tests__/oacFrame.test.ts`. Key ids are
+    /// u16-LE length-prefixed. TPOS-R7: the native codec previously read a u8
+    /// prefix, so every server-issued manifest failed to decode and first-enrollment
+    /// finalization could never commit.
+    const OKS1_SERVER_PARITY_HEX: &str = "4f4b533102030000007b68e5cf8b0100000310003538346235633930356361666439623811111111111111111111111111111111111111111111111111111111111111110109006f6c642d6b65795f3122222222222222222222222222222222222222222222222222222222222222220200505c18a301000001007233333333333333333333333333333333333333333333333333333333333333330344444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444";
+
+    #[test]
+    fn oks1_decodes_and_reencodes_server_parity_vector() {
+        let bytes = hex_to_bytes(OKS1_SERVER_PARITY_HEX);
+        let frame = decode_oks1(&bytes).expect("server-encoded OKS1 must decode natively");
+        assert_eq!(frame.revocation_epoch, 3);
+        assert_eq!(frame.generated_at_server_ms, 1_700_000_000_123);
+        assert_eq!(frame.keys.len(), 3);
+        assert_eq!(frame.keys[0].signing_key_id, "584b5c905cafd9b8");
+        assert_eq!(frame.keys[0].public_key, [0x11; 32]);
+        assert_eq!(frame.keys[0].status, OacKeyLifecycleStatus::Active);
+        assert_eq!(frame.keys[1].signing_key_id, "old-key_1");
+        assert_eq!(frame.keys[1].status, OacKeyLifecycleStatus::VerifyOnly);
+        assert_eq!(frame.keys[1].verify_until_server_ms, Some(1_800_000_000_000));
+        assert_eq!(frame.keys[2].signing_key_id, "r");
+        assert_eq!(frame.keys[2].status, OacKeyLifecycleStatus::Retired);
+        assert_eq!(frame.signature, [0x44; 64]);
+        // The signed prefix must be byte-identical to what the server signed.
+        assert_eq!(encode_oks1(&frame).unwrap(), bytes);
+        assert_eq!(oks1_signed_prefix(&frame).unwrap(), bytes[..bytes.len() - 64].to_vec());
+    }
+
+    #[test]
+    fn oks1_rejects_legacy_u8_key_id_prefix() {
+        // The pre-fix native layout (u8 key-id length) is not the wire format.
+        let mut legacy = Vec::new();
+        legacy.extend_from_slice(b"OKS1");
+        legacy.push(2);
+        legacy.extend_from_slice(&1u32.to_le_bytes());
+        legacy.extend_from_slice(&1000u64.to_le_bytes());
+        legacy.push(1);
+        legacy.push(5);
+        legacy.extend_from_slice(b"key-1");
+        legacy.extend_from_slice(&[0x01; 32]);
+        legacy.push(OAC_KEY_STATUS_ACTIVE);
+        legacy.extend_from_slice(&[0x03; 64]);
+        assert!(decode_oks1(&legacy).is_err());
     }
 
     fn canonical_lct1_vector() -> LockoutClearTokenFrameV1 {

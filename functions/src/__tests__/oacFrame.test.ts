@@ -198,6 +198,27 @@ describe('OacKeysetManifestFrameV1 (OKS1)', () => {
     expect(decoded).toEqual({ ok: true, value: frame });
   });
 
+  it('OKS1 cross-language parity vector (pinned byte-for-byte in native frames.rs)', () => {
+    const frame = {
+      revocationEpoch: 3,
+      generatedAtServerMs: 1_700_000_000_123,
+      keys: [
+        { signingKeyId: '584b5c905cafd9b8', publicKey: Buffer.alloc(32, 0x11), status: 'ACTIVE' as const },
+        {
+          signingKeyId: 'old-key_1',
+          publicKey: Buffer.alloc(32, 0x22),
+          status: 'VERIFY_ONLY' as const,
+          verifyUntilServerMs: 1_800_000_000_000,
+        },
+        { signingKeyId: 'r', publicKey: Buffer.alloc(32, 0x33), status: 'RETIRED' as const },
+      ],
+      signature: Buffer.alloc(64, 0x44),
+    };
+    expect(encodeOks1(frame).toString('hex')).toBe(
+      '4f4b533102030000007b68e5cf8b0100000310003538346235633930356361666439623811111111111111111111111111111111111111111111111111111111111111110109006f6c642d6b65795f3122222222222222222222222222222222222222222222222222222222222222220200505c18a301000001007233333333333333333333333333333333333333333333333333333333333333330344444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444',
+    );
+  });
+
   it('rejects zero keys', () => {
     expect(() =>
       encodeOks1({ revocationEpoch: 0, generatedAtServerMs: 0, keys: [], signature: Buffer.alloc(64) }),
