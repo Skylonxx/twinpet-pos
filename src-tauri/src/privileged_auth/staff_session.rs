@@ -29,8 +29,8 @@ use super::dpapi_envelope::{dpapi_protect, dpapi_unprotect};
 use super::enrollment_meta::verify_local_enrollment;
 use super::frames::{
     decode_oks1, decode_srf1, decode_ssa1, decode_ssca1, encode_ssca1, encode_sscp1, is_canonical_identifier,
-    srf1_signature_preimage, ssa1_signature_preimage, sscp1_signed_prefix,
-    StaffSessionCacheEnvelopeV1, StaffSessionDeviceChallengeProofV1,
+    oks1_signed_prefix, srf1_signature_preimage, ssa1_signature_preimage, sscp1_signed_prefix,
+    OacKeysetManifestFrameV1, StaffSessionCacheEnvelopeV1, StaffSessionDeviceChallengeProofV1,
     SRF1_OBJECT_KIND_OAC, SRF1_OBJECT_KIND_SSA1, SSCP1_PURPOSE_LOGIN, SSCP1_PURPOSE_OAC_REANCHOR,
     SSCP1_PURPOSE_REFRESH,
 };
@@ -620,6 +620,37 @@ pub fn commit_staff_session_cache_envelope(
     commit_staff_session_cache_envelope_with_hooks(root, envelope, &DEFAULT_CACHE_COMMIT_HOOKS)
 }
 
+/// Whether the server-supplied OKS1 describes the same keyset as the trusted
+/// active manifest. The server re-signs OKS1 with `generatedAtServerMs = now`
+/// on every `getOacKeysetManifest` call, so its bytes never equal the manifest
+/// committed at enrollment even when nothing changed. Equivalence is therefore
+/// a root-signed candidate with the identical revocation epoch and key entries;
+/// any real rotation, revocation or downgrade still requires re-anchor.
+/// Signatures are always verified against the trusted on-disk manifest, never
+/// against the supplied one.
+fn supplied_keyset_matches_active(
+    active_bytes: &[u8],
+    active: &OacKeysetManifestFrameV1,
+    supplied_bytes: &[u8],
+) -> bool {
+    if supplied_bytes == active_bytes {
+        return true;
+    }
+    let Ok(supplied) = decode_oks1(supplied_bytes) else {
+        return false;
+    };
+    let Ok(root_vk) = VerifyingKey::from_bytes(&super::enrollment_meta::canonical_oac_root_public_key()) else {
+        return false;
+    };
+    let Ok(prefix) = oks1_signed_prefix(&supplied) else {
+        return false;
+    };
+    if root_vk.verify(&prefix, &Signature::from_bytes(&supplied.signature)).is_err() {
+        return false;
+    }
+    supplied.revocation_epoch == active.revocation_epoch && supplied.keys == active.keys
+}
+
 /// Persists an issued or refreshed staff session assertion with injectable commit hooks.
 pub fn persist_staff_session_assertion_internal_with_hooks(
     root: &Path,
@@ -640,11 +671,11 @@ pub fn persist_staff_session_assertion_internal_with_hooks(
         .map_err(|e| format!("cannot resolve active OAC keyset manifest: {e}"))?;
     let active_manifest_bytes = fs::read(&active_manifest_path)
         .map_err(|e| format!("cannot read active OAC keyset manifest: {e}"))?;
-    if active_manifest_bytes != oks1_bytes {
-        return Err("STAFF_SESSION_MANIFEST_MISMATCH: supplied OKS1 keyset bytes do not match active digest manifest; re-anchor required".to_string());
-    }
     let manifest = decode_oks1(&active_manifest_bytes)
         .map_err(|e| format!("OKS1 keyset manifest decode failed: {e:?}"))?;
+    if !supplied_keyset_matches_active(&active_manifest_bytes, &manifest, &oks1_bytes) {
+        return Err("STAFF_SESSION_MANIFEST_MISMATCH: supplied OKS1 keyset does not match active digest manifest; re-anchor required".to_string());
+    }
 
     let ssa1 = decode_ssa1(&ssa1_bytes)
         .map_err(|e| format!("SSA1 decode failed: {e:?}"))?;
@@ -1944,6 +1975,118 @@ mod tests {
         // Cache file must NOT exist
         assert!(!staff_session_cache_path(&root).exists());
 
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    /// Root-signs an OKS1 the way `getOacKeysetManifest` does on every call
+    /// (fresh `generated_at_server_ms`), without touching the enrolled state.
+    fn resigned_manifest_b64(
+        root_seed: &[u8; 32],
+        revocation_epoch: u32,
+        generated_at_server_ms: u64,
+        keys: Vec<OacKeysetManifestKeyV1>,
+    ) -> String {
+        use ed25519_dalek::Signer;
+        let unsigned = OacKeysetManifestFrameV1 { revocation_epoch, generated_at_server_ms, keys, signature: [0u8; 64] };
+        let prefix = super::super::frames::oks1_signed_prefix(&unsigned).unwrap();
+        let signature = SigningKey::from_bytes(root_seed).sign(&prefix).to_bytes();
+        base64_encode(&encode_oks1(&OacKeysetManifestFrameV1 { signature, ..unsigned }).unwrap())
+    }
+
+    fn active_key(server_signer: &SigningKey, key_id: &str) -> OacKeysetManifestKeyV1 {
+        OacKeysetManifestKeyV1 {
+            signing_key_id: key_id.to_string(),
+            public_key: server_signer.verifying_key().to_bytes(),
+            status: super::super::frames::OacKeyLifecycleStatus::Active,
+            verify_until_server_ms: None,
+        }
+    }
+
+    /// Runs a full SSA1_LOGIN persist against a committed test enrollment,
+    /// supplying the OKS1 built by `supplied` from the server signer.
+    fn persist_with_supplied_manifest(
+        supplied: impl FnOnce(&SigningKey) -> String,
+    ) -> (PathBuf, Result<(), String>) {
+        reset_in_process_invalidation();
+        let root = temp_dir();
+        let (_dev_key, sec_id) = setup_device_identity(&root, "B01");
+        let server_signer = SigningKey::generate(&mut OsRng);
+        let (_oks1_bytes, _oks1_b64) = make_test_manifest(&root, &server_signer, "server-k1");
+
+        let c = prepare_staff_session_challenge_internal(&root, "SSA1_LOGIN", "B01", "S01").unwrap();
+        let nonce: [u8; 32] = base64_decode(&c.challenge_nonce_base64).unwrap().try_into().unwrap();
+        let (ssa1_bytes, ssa1_digest) = build_signed_ssa1(&server_signer, "server-k1", "SSA-01", "S01", sec_id, "B01", 1, 10_000, 10_000 + 86_400_000, true);
+        let srf1_bytes = build_signed_srf1(&server_signer, "server-k1", nonce, sec_id, "B01", SRF1_OBJECT_KIND_SSA1, ssa1_digest, 10_005, true);
+
+        let res = persist_staff_session_assertion_internal_with_hooks(
+            &root,
+            c.generation,
+            &base64_encode(&ssa1_bytes),
+            &base64_encode(&srf1_bytes),
+            &supplied(&server_signer),
+            &DEFAULT_CACHE_COMMIT_HOOKS,
+        );
+        (root, res)
+    }
+
+    const ROOT_SEED: [u8; 32] = super::super::enrollment_meta::TEST_OAC_ROOT_SEED;
+    const LATER_GENERATED_AT_MS: u64 = 1_791_400_000_000;
+
+    /// TPOS-USABLE-POS-QUICK-PIN: the live Quick PIN failure. The enrolled
+    /// manifest was generated at enrollment time; `getOacKeysetManifest`
+    /// re-signs the same keyset with a later `generatedAtServerMs`, so the
+    /// bytes differ. That must persist, not fail with MANIFEST_MISMATCH.
+    #[test]
+    fn test_persist_accepts_resigned_manifest_with_same_epoch_and_keys() {
+        let _serial = TEST_SERIAL_MUTEX.lock().unwrap();
+        let (root, res) = persist_with_supplied_manifest(|server| {
+            resigned_manifest_b64(&ROOT_SEED, 0, LATER_GENERATED_AT_MS, vec![active_key(server, "server-k1")])
+        });
+        assert!(res.is_ok(), "re-signed equivalent keyset must persist: {res:?}");
+        assert!(staff_session_cache_path(&root).exists());
+        assert!(PENDING_CHALLENGE.lock().unwrap().is_none());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn test_persist_rejects_manifest_with_newer_epoch() {
+        let _serial = TEST_SERIAL_MUTEX.lock().unwrap();
+        let (root, res) = persist_with_supplied_manifest(|server| {
+            resigned_manifest_b64(&ROOT_SEED, 1, LATER_GENERATED_AT_MS, vec![active_key(server, "server-k1")])
+        });
+        assert!(res.unwrap_err().contains("STAFF_SESSION_MANIFEST_MISMATCH"));
+        assert!(!staff_session_cache_path(&root).exists());
+        assert!(PENDING_CHALLENGE.lock().unwrap().is_some());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn test_persist_rejects_manifest_with_different_keys() {
+        let _serial = TEST_SERIAL_MUTEX.lock().unwrap();
+        let (root, res) = persist_with_supplied_manifest(|_server| {
+            let rotated = SigningKey::generate(&mut OsRng);
+            resigned_manifest_b64(&ROOT_SEED, 0, LATER_GENERATED_AT_MS, vec![active_key(&rotated, "server-k1")])
+        });
+        assert!(res.unwrap_err().contains("STAFF_SESSION_MANIFEST_MISMATCH"));
+        assert!(!staff_session_cache_path(&root).exists());
+        let _ = fs::remove_dir_all(&root);
+
+        let (root, res) = persist_with_supplied_manifest(|server| {
+            resigned_manifest_b64(&ROOT_SEED, 0, LATER_GENERATED_AT_MS, vec![active_key(server, "server-k2")])
+        });
+        assert!(res.unwrap_err().contains("STAFF_SESSION_MANIFEST_MISMATCH"));
+        assert!(!staff_session_cache_path(&root).exists());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn test_persist_rejects_equivalent_manifest_not_signed_by_root() {
+        let _serial = TEST_SERIAL_MUTEX.lock().unwrap();
+        let (root, res) = persist_with_supplied_manifest(|server| {
+            resigned_manifest_b64(&[0x11u8; 32], 0, LATER_GENERATED_AT_MS, vec![active_key(server, "server-k1")])
+        });
+        assert!(res.unwrap_err().contains("STAFF_SESSION_MANIFEST_MISMATCH"));
+        assert!(!staff_session_cache_path(&root).exists());
         let _ = fs::remove_dir_all(&root);
     }
 
