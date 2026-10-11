@@ -37,6 +37,9 @@ vi.mock('../lib/hooks/useAuth', () => ({
   useAuth: () => ({
     user: { id: 'staff1', role: 'staff', name: 'Dao', firstName: 'Dao', lastName: 'K' },
     branchId: 'LDP-001',
+    // D-V8 — native staff session established for this staff + branch.
+    ensurePrivilegedStaffSession: async () => 'ready',
+    invalidateStaffSession: () => undefined,
   }),
 }));
 
@@ -220,7 +223,7 @@ describe('SalesHistoryPage — end-to-end privileged void (settled sale)', () =>
     fireEvent.click(screen.getByText('Manager One'));
 
     const pinModal = await screen.findByTestId('privileged-void-pin-modal');
-    for (const d of ['1', '2', '3', '4', '5', '6']) fireEvent.click(within(pinModal).getByText(d));
+    for (const d of ['1', '2', '3', '4']) fireEvent.click(within(pinModal).getByText(d));
     await act(async () => {
       fireEvent.click(within(pinModal).getByText('ยืนยัน'));
     });
@@ -232,7 +235,7 @@ describe('SalesHistoryPage — end-to-end privileged void (settled sale)', () =>
     expect(call.actionId).toBe('VOID_SETTLED_SALE');
     expect(call.targetOrderId).toBe('BILL-E2E');
     expect(call.managerStaffId).toBe('mgr-1');
-    expect(call.pin).toBe('123456');
+    expect(call.pin).toBe('1234');
   });
 
   test('RC-E1-003: the row becoming ineligible (e.g. voided) after the modal opens fails the final pre-D-3 gate with ZERO D-3 calls', async () => {
@@ -256,7 +259,7 @@ describe('SalesHistoryPage — end-to-end privileged void (settled sale)', () =>
     fireEvent.click(screen.getByText('Manager One'));
 
     const pinModal = await screen.findByTestId('privileged-void-pin-modal');
-    for (const d of ['1', '2', '3', '4', '5', '6']) fireEvent.click(within(pinModal).getByText(d));
+    for (const d of ['1', '2', '3', '4']) fireEvent.click(within(pinModal).getByText(d));
     fireEvent.click(within(pinModal).getByText('ยืนยัน'));
 
     await waitFor(() => expect(screen.getByText('ข้อมูลไม่ตรงกับปัจจุบันแล้ว')).toBeTruthy());
@@ -288,7 +291,7 @@ describe('SalesHistoryPage — end-to-end privileged void (settled sale)', () =>
     fireEvent.click(screen.getByText('Manager One'));
 
     const pinModal = await screen.findByTestId('privileged-void-pin-modal');
-    for (const d of ['1', '2', '3', '4', '5', '6']) fireEvent.click(within(pinModal).getByText(d));
+    for (const d of ['1', '2', '3', '4']) fireEvent.click(within(pinModal).getByText(d));
     fireEvent.click(within(pinModal).getByText('ยืนยัน'));
 
     await waitFor(() => expect(screen.getByText('ข้อมูลไม่ตรงกับปัจจุบันแล้ว')).toBeTruthy());
@@ -317,7 +320,7 @@ describe('SalesHistoryPage — end-to-end privileged void (settled sale)', () =>
     fireEvent.click(screen.getByText('Manager One'));
 
     const pinModal = await screen.findByTestId('privileged-void-pin-modal');
-    for (const d of ['1', '2', '3', '4', '5', '6']) fireEvent.click(within(pinModal).getByText(d));
+    for (const d of ['1', '2', '3', '4']) fireEvent.click(within(pinModal).getByText(d));
     fireEvent.click(within(pinModal).getByText('ยืนยัน'));
 
     await waitFor(() => expect(screen.getByText('ข้อมูลไม่ตรงกับปัจจุบันแล้ว')).toBeTruthy());
@@ -345,7 +348,7 @@ describe('SalesHistoryPage — end-to-end privileged void (settled sale)', () =>
     fireEvent.click(screen.getByText('Manager One'));
 
     const pinModal = await screen.findByTestId('privileged-void-pin-modal');
-    for (const d of ['1', '2', '3', '4', '5', '6']) fireEvent.click(within(pinModal).getByText(d));
+    for (const d of ['1', '2', '3', '4']) fireEvent.click(within(pinModal).getByText(d));
     fireEvent.click(within(pinModal).getByText('ยืนยัน'));
 
     await waitFor(() => expect(screen.getByText('ข้อมูลไม่ตรงกับปัจจุบันแล้ว')).toBeTruthy());
@@ -403,7 +406,7 @@ describe('SalesHistoryPage — end-to-end privileged void (settled sale)', () =>
       });
 
       const pinModal = screen.getByTestId('privileged-void-pin-modal');
-      for (const d of ['1', '2', '3', '4', '5', '6']) fireEvent.click(within(pinModal).getByText(d));
+      for (const d of ['1', '2', '3', '4']) fireEvent.click(within(pinModal).getByText(d));
       await act(async () => {
         fireEvent.click(within(pinModal).getByText('ยืนยัน'));
         await vi.advanceTimersByTimeAsync(0);

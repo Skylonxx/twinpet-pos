@@ -51,9 +51,12 @@ const LOCAL_FAILURE_COPY: Record<PrivilegedVoidLocalFailureReason, PrivilegedVoi
     body: 'บัญชีผู้จัดการนี้ถูกล็อกชั่วคราวจากการอนุมัติที่ผิดพลาดหลายครั้ง ไม่สามารถลองใส่ PIN ซ้ำในคำขอนี้ได้ กรุณาติดต่อผู้ดูแลระบบ',
     tone: 'error',
   },
+  // DENIED_STALE now means only the approval/request window itself (target
+  // order day / pending-execution lifetime) — the manager capability and the
+  // operator staff session have their own distinct classes below (D-V9).
   denied_stale: {
-    title: 'สิทธิ์อนุมัติออฟไลน์หมดอายุ',
-    body: 'สิทธิ์อนุมัติออฟไลน์ของผู้จัดการหมดอายุแล้ว กรุณาเชื่อมต่อระบบแล้วเริ่มคำขอยกเลิกใหม่',
+    title: 'คำขออนุมัตินี้หมดเวลาแล้ว',
+    body: 'ไม่สามารถอนุมัติคำขอยกเลิกนี้ได้แล้ว (หมดเวลาหรือข้ามวัน) กรุณาเริ่มคำขอยกเลิกใหม่',
     tone: 'error',
   },
   denied_unverifiable: {
@@ -66,13 +69,65 @@ const LOCAL_FAILURE_COPY: Record<PrivilegedVoidLocalFailureReason, PrivilegedVoi
     body: 'ไม่สามารถอนุมัติคำขอยกเลิกนี้ได้ในขณะนี้ กรุณาเริ่มคำขอยกเลิกใหม่',
     tone: 'error',
   },
+  // TPOS-USABLE-POS-VOID-OAC-DECISION D-V9 — each native class has its own copy.
+  denied_staff_session: {
+    title: 'เซสชันพนักงานสำหรับการอนุมัติไม่พร้อม',
+    body: 'เซสชันพนักงานสำหรับการอนุมัติไม่พร้อม กรุณาเข้าสู่ระบบด้วย Quick PIN ใหม่ แล้วเริ่มคำขอยกเลิกใหม่',
+    tone: 'error',
+  },
+  denied_oac_missing: {
+    title: 'ผู้อนุมัติยังไม่ได้เปิดใช้สิทธิ์บนเครื่องนี้',
+    body: 'ผู้อนุมัติคนนี้ยังไม่ได้เปิดใช้สิทธิ์อนุมัติบนเครื่องนี้ กรุณาเชื่อมต่ออินเทอร์เน็ตและอนุมัติอีกครั้ง',
+    tone: 'error',
+  },
+  denied_oac_stale: {
+    title: 'สิทธิ์อนุมัติของผู้จัดการหมดอายุ',
+    body: 'สิทธิ์อนุมัติของผู้จัดการหมดอายุ กรุณาเชื่อมต่ออินเทอร์เน็ตและอนุมัติใหม่',
+    tone: 'error',
+  },
+  // D-V7 — just-in-time provisioning outcomes (all terminal; never retried automatically).
+  provisioning_pin_rejected: {
+    title: 'PIN ผู้อนุมัติไม่ถูกต้อง',
+    body: 'ไม่สามารถยืนยัน PIN ของผู้อนุมัติได้ กรุณาเริ่มคำขอยกเลิกใหม่',
+    tone: 'error',
+  },
+  provisioning_not_eligible: {
+    title: 'ผู้อนุมัติคนนี้ไม่สามารถอนุมัติได้',
+    body: 'ผู้อนุมัติคนนี้ไม่มีสิทธิ์อนุมัติคำขอยกเลิกบนเครื่องนี้ กรุณาเลือกผู้อนุมัติคนอื่น หรือติดต่อผู้ดูแลระบบ',
+    tone: 'error',
+  },
+  provisioning_device_not_ready: {
+    title: 'เครื่องนี้ยังไม่พร้อมเปิดใช้สิทธิ์อนุมัติ',
+    body: 'เครื่องนี้ไม่สามารถเปิดใช้สิทธิ์อนุมัติได้ในขณะนี้ กรุณาติดต่อผู้ดูแลระบบ',
+    tone: 'error',
+  },
+  provisioning_failed: {
+    title: 'เปิดใช้สิทธิ์อนุมัติไม่สำเร็จ',
+    body: 'ไม่สามารถเปิดใช้สิทธิ์อนุมัติของผู้อนุมัติได้ในขณะนี้ กรุณาตรวจสอบการเชื่อมต่อแล้วเริ่มคำขอยกเลิกใหม่',
+    tone: 'error',
+  },
+  provisioning_uncertain: {
+    title: 'ไม่สามารถยืนยันผลการเปิดใช้สิทธิ์อนุมัติ',
+    body: 'ระบบไม่สามารถยืนยันผลการเปิดใช้สิทธิ์อนุมัติได้ บิลนี้ยังไม่ถูกยกเลิก กรุณาเริ่มคำขอยกเลิกใหม่',
+    tone: 'warning',
+  },
 };
+
+/**
+ * D-V8 — privileged-void preflight copy (operator staff session). Fixed,
+ * closed copy; never a raw code.
+ */
+export const PRIVILEGED_VOID_QUICK_PIN_REQUIRED_COPY =
+  'การยกเลิกบิลต้องอนุมัติด้วยเซสชัน Quick PIN กรุณาออกจากระบบ แล้วเข้าสู่ระบบด้วย Quick PIN ก่อนยกเลิกบิล';
+export const PRIVILEGED_VOID_STAFF_SESSION_UNAVAILABLE_COPY =
+  'เซสชันพนักงานสำหรับการอนุมัติไม่พร้อม กรุณาตรวจสอบการเชื่อมต่อ หรือเข้าสู่ระบบด้วย Quick PIN ใหม่';
+export const PRIVILEGED_VOID_PROVISIONING_PROGRESS_COPY = 'กำลังเปิดใช้สิทธิ์อนุมัติของผู้อนุมัติบนเครื่องนี้...';
 
 /**
  * Result/status copy for the flow machine's non-interactive states. Returns
  * `null` for the interactive steps (IDLE/PRECHECK/VOID_REASON_ENTRY/
- * MANAGER_SELECT/MANAGER_PIN_ENTRY/PROJECTING) — those render their own step
- * UI, not a single result panel.
+ * MANAGER_SELECT/MANAGER_PIN_ENTRY/PROJECTING/PROVISIONING_APPROVAL) — those
+ * render their own step UI, not a single result panel.
  */
 export function copyForFlowState(state: PrivilegedVoidFlowState): PrivilegedVoidCopyContent | null {
   switch (state.status) {

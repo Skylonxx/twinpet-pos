@@ -5,7 +5,10 @@
  * No cross-tree import. No hashing, persistence, UI, or callable wiring.
  *
  * Target policy: six digits for every role. Legacy 4-digit is a migration
- * shape only — never target-valid, never auto-converted, never OAC-capable.
+ * shape only — never target-valid and never auto-converted. It is never
+ * OAC-capable under the TARGET predicate `canProvisionOac`; the usable-POS
+ * release path uses `canProvisionOacForAuthoritativeCredential` instead
+ * (Tech Lead decision D-V5, see that function).
  */
 
 export const PIN_LENGTH = 6 as const;
@@ -139,6 +142,38 @@ export function derivePinMigrationState(input: {
 
 export function canProvisionOac(classification: DerivedPinCredentialClassification): boolean {
   return classification === PIN_MIGRATION_DERIVED_STATES.ROTATED_AUTHORITATIVE_PIN6;
+}
+
+/**
+ * D-V5 (TPOS-USABLE-POS-VOID-OAC-DECISION-IMPLEMENT-CLAUDE-002) — OAC
+ * provisioning eligibility for the CURRENT usable-POS release path.
+ *
+ * Deliberate Tech Lead product/security decision, not an accidental
+ * relaxation: the coordinated PIN6 migration/cutover is DEFERRED, and the
+ * live authoritative credential (`setUserAccount` / `verifyPinLogin`) is
+ * 4 digits. A credential that is already `rotated_authoritative` may
+ * provision an OAC with its currently valid authoritative PIN, whether that
+ * PIN is the live 4-digit shape or the target 6-digit shape.
+ *
+ * This predicate classifies only. The caller MUST already have verified the
+ * presented PIN against the stored credential (bcrypt) before asking —
+ * a wrong PIN never reaches it. It still refuses: disabled credentials,
+ * every non-`rotated_authoritative` (legacy / backfilled / cut-over /
+ * unknown) state, and any malformed (non-4, non-6 digit) PIN.
+ *
+ * `canProvisionOac` (target policy, PIN6-only) is unchanged and remains the
+ * post-cutover rule; this function is removed by the PIN6 cutover packet.
+ */
+export function canProvisionOacForAuthoritativeCredential(input: {
+  persistedCredentialState: string | null;
+  disabled?: boolean;
+  presentedPin?: string | null;
+}): boolean {
+  if (input.disabled === true) return false;
+  if (input.persistedCredentialState !== 'rotated_authoritative') return false;
+  if (typeof input.presentedPin !== 'string' || input.presentedPin === '') return false;
+  const shape = classifyPresentedPin(input.presentedPin);
+  return shape === 'PIN6' || shape === 'PIN4';
 }
 
 export function isTargetPolicyCompliant(classification: DerivedPinCredentialClassification): boolean {

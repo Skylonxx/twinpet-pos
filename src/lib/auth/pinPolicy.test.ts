@@ -6,6 +6,7 @@ import {
   PIN_MIGRATION_DERIVED_STATES,
   PIN_ROLES,
   canProvisionOac,
+  canProvisionOacForAuthoritativeCredential,
   classifyPresentedPin,
   convertLegacyPin4ToPin6,
   derivePinMigrationState,
@@ -89,12 +90,58 @@ describe('PIN target contract', () => {
     ).toBe('INVALID_OR_DISABLED');
   });
 
-  test('only rotated authoritative PIN6 may provision OAC', () => {
+  test('TARGET predicate: only rotated authoritative PIN6 may provision OAC (post-cutover rule, unchanged)', () => {
     expect(canProvisionOac(PIN_MIGRATION_DERIVED_STATES.ROTATED_AUTHORITATIVE_PIN6)).toBe(true);
     expect(canProvisionOac(PIN_MIGRATION_DERIVED_STATES.LEGACY_PIN4_REQUIRES_ROTATION)).toBe(false);
     expect(canProvisionOac('UNDETERMINED_PENDING_ROTATION_PACKET')).toBe(false);
     expect(isTargetPolicyCompliant(PIN_MIGRATION_DERIVED_STATES.LEGACY_PIN4_REQUIRES_ROTATION)).toBe(
       false,
     );
+  });
+});
+
+describe('D-V5 — usable-POS OAC provisioning eligibility (PIN6 cutover deferred)', () => {
+  test('rotated_authoritative + live authoritative PIN4 may provision', () => {
+    expect(
+      canProvisionOacForAuthoritativeCredential({ persistedCredentialState: 'rotated_authoritative', presentedPin: '1234' }),
+    ).toBe(true);
+  });
+
+  test('rotated_authoritative + PIN6 still may provision (no PIN6 regression)', () => {
+    expect(
+      canProvisionOacForAuthoritativeCredential({ persistedCredentialState: 'rotated_authoritative', presentedPin: '123456' }),
+    ).toBe(true);
+  });
+
+  test('legacy / non-authoritative / unknown credential states may not provision, whatever the PIN shape', () => {
+    for (const state of ['backfilled_not_trusted', 'readers_cut_over_rotation_required', 'unknown_state', '', null]) {
+      for (const presentedPin of ['1234', '123456']) {
+        expect(canProvisionOacForAuthoritativeCredential({ persistedCredentialState: state, presentedPin })).toBe(false);
+      }
+    }
+  });
+
+  test('disabled authoritative credential may not provision', () => {
+    expect(
+      canProvisionOacForAuthoritativeCredential({
+        persistedCredentialState: 'rotated_authoritative',
+        disabled: true,
+        presentedPin: '1234',
+      }),
+    ).toBe(false);
+  });
+
+  test('malformed / missing PINs may not provision', () => {
+    for (const presentedPin of ['', null, undefined, '123', '12345', '1234567', 'abcd', '12 34', '１２３４']) {
+      expect(
+        canProvisionOacForAuthoritativeCredential({ persistedCredentialState: 'rotated_authoritative', presentedPin }),
+      ).toBe(false);
+    }
+  });
+
+  test('the TARGET predicate and the live login/approval shapes are unchanged', () => {
+    expect(canProvisionOac(PIN_MIGRATION_DERIVED_STATES.LEGACY_PIN4_REQUIRES_ROTATION)).toBe(false);
+    expect(isTargetPinWellFormed('1234')).toBe(false);
+    expect(isLiveManagerApprovalPinCompareEligible('1234')).toBe(true);
   });
 });

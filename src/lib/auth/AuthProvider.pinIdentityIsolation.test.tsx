@@ -4,6 +4,7 @@ import { act, cleanup, render, waitFor } from '@testing-library/react';
 import { signInAnonymously, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { getDoc } from 'firebase/firestore';
 import { AuthProvider } from './AuthProvider';
+import { __resetNativeStaffSessionCoordinatorForTests } from './staffSessionNativeCoordinator';
 import { useAuth, type AuthContextValue } from '../hooks/useAuth';
 import { verifyPinLogin } from './verifyPinLogin';
 import { DeviceNotReadyError, NATIVE_DEVICE_SECURITY_READINESS_COMMAND } from './nativeDeviceReadiness';
@@ -172,6 +173,7 @@ function expectSafePinIdentityError(err: unknown, code: string) {
 }
 
 beforeEach(() => {
+  __resetNativeStaffSessionCoordinatorForTests();
   localStorage.clear();
   setCurrent(null);
   h.anonCounter = 0;
@@ -884,7 +886,9 @@ describe('stale PIN waiting in the pre-sign-out native clear cannot touch a newe
     const ctx = await renderAuth();
     setCurrent(makeUser(ADMIN_A, false)); // password user A is the departing identity
 
-    const pin = ctx().loginWithPin('4321', 'LDP-001', 'cashier');
+    // Observed at creation: this stale attempt settles while the newer
+    // completion is still queued behind its held clear.
+    const pinOutcome = rejectionOf(ctx().loginWithPin('4321', 'LDP-001', 'cashier'));
     await waitFor(() => expect(h.events).toContain('native:native_clear_staff_session'));
 
     // Newer password op for B signs in and completes while the PIN op waits.
@@ -894,11 +898,21 @@ describe('stale PIN waiting in the pre-sign-out native clear cannot touch a newe
     });
     mockGetDoc.mockResolvedValue({ exists: () => true, id: PW_B, data: () => PW_B_USER } as never);
     const userB = await ctx().loginWithUsername('bob', 'secret', 'ALL');
-    await act(() => ctx().completeLogin(userB, 'ALL'));
-    expect(savedUserId()).toBe(PW_B);
+    // SSA1-LIFECYCLE-ORDER: B's completion clear joins the one native ordering
+    // domain, so it is queued strictly AFTER the stale PIN's held clear and
+    // B's session is saved only once that older clear has landed.
+    const completeB = ctx().completeLogin(userB, 'ALL');
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(savedUserId()).toBeNull();
 
-    firstClear.resolve(undefined);
-    expectSuperseded(await rejectionOf(pin));
+    await act(async () => {
+      firstClear.resolve(undefined);
+      await completeB;
+    });
+    expect(savedUserId()).toBe(PW_B);
+    expectSuperseded(await pinOutcome);
 
     expect(current()?.uid).toBe(PW_B);
     expect(current()?.isAnonymous).toBe(false);
@@ -917,7 +931,7 @@ describe('stale PIN waiting in the pre-sign-out native clear cannot touch a newe
     const ctx = await renderAuth();
     setCurrent(makeUser(ADMIN_A, false));
 
-    const pin = ctx().loginWithPin('4321', 'LDP-001', 'cashier');
+    const pinOutcome = rejectionOf(ctx().loginWithPin('4321', 'LDP-001', 'cashier'));
     await waitFor(() => expect(h.events).toContain('native:native_clear_staff_session'));
 
     mockSignInPassword.mockImplementation(async () => {
@@ -926,11 +940,15 @@ describe('stale PIN waiting in the pre-sign-out native clear cannot touch a newe
     });
     mockGetDoc.mockResolvedValue({ exists: () => true, id: ADMIN_A, data: () => ADMIN_A_USER } as never);
     const userA = await ctx().loginWithUsername('admin', 'secret', 'ALL');
-    await act(() => ctx().completeLogin(userA, 'ALL'));
+    // SSA1-LIFECYCLE-ORDER: the newer completion clear is queued after the
+    // stale PIN's held clear (one native ordering domain).
+    const completeA = ctx().completeLogin(userA, 'ALL');
+    await act(async () => {
+      firstClear.resolve(undefined);
+      await completeA;
+    });
     const newerA = current();
-
-    firstClear.resolve(undefined);
-    expectSuperseded(await rejectionOf(pin));
+    expectSuperseded(await pinOutcome);
 
     expect(current()).toBe(newerA);
     expect(current()?.uid).toBe(ADMIN_A);

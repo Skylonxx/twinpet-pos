@@ -141,7 +141,11 @@ const MANAGER_UID = 'manager-1';
 const DEVICE_HEX = 'b'.repeat(32);
 const BRANCH_ID = 'LDP-001';
 
-async function seedManagerWithPin(pin: string, signingKey: ReturnType<typeof rawKeypair>) {
+async function seedManagerWithPin(
+  pin: string,
+  signingKey: ReturnType<typeof rawKeypair>,
+  credentialState: string = 'rotated_authoritative',
+) {
   const pinHash = await bcrypt.hash(pin, 10);
   return {
     users: {
@@ -153,7 +157,7 @@ async function seedManagerWithPin(pin: string, signingKey: ReturnType<typeof raw
         algo: 'bcrypt',
         cost: 10,
         credentialVersion: 5,
-        credentialState: 'rotated_authoritative',
+        credentialState,
         disabled: false,
       },
     },
@@ -203,9 +207,9 @@ describe('performBeginPrivilegedOacIssuanceSession', () => {
   });
 });
 
-async function fullHappyPathSetup(pin = '123456') {
+async function fullHappyPathSetup(pin = '123456', credentialState = 'rotated_authoritative') {
   const signingKey = rawKeypair();
-  const seed = await seedManagerWithPin(pin, signingKey);
+  const seed = await seedManagerWithPin(pin, signingKey, credentialState);
   const fake = genericFakeFirestore(seed);
   const { db, store } = fake;
 
@@ -286,15 +290,79 @@ describe('performCompletePrivilegedOacIssuanceSession', () => {
     expect(result).toEqual({ ok: false, code: 'invalid_pin' });
   });
 
-  it('rejects a legacy PIN4 (cannot provision OAC)', async () => {
-    const { db, begin, ptp1Base64, pin1Base64 } = await fullHappyPathSetup('1234');
+  // D-V5 (TPOS-USABLE-POS-VOID-OAC-DECISION-IMPLEMENT-CLAUDE-002): an
+  // authoritative rotated credential may provision with its live 4-digit PIN
+  // (coordinated PIN6 cutover deferred). Legacy/non-authoritative states and
+  // wrong PINs remain refused.
+  it('D-V5: rotated_authoritative + correct live PIN4 provisions an OAC', async () => {
+    const { db, begin, ptp1Base64, pin1Base64, signingKey } = await fullHappyPathSetup('1234');
     const result = await performCompletePrivilegedOacIssuanceSession(
       db,
       { uid: MANAGER_UID, token: { staffId: MANAGER_UID, authVersion: 0 } },
       { sessionId: begin.ok ? begin.sessionId : '', pin: '1234', ptp1Base64, pin1Base64 },
       1100,
     );
-    expect(result).toEqual({ ok: false, code: 'oac_provision_forbidden_legacy_pin4' });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('unreachable');
+    expect(result.oac.managerStaffId).toBe(MANAGER_UID);
+    expect(result.oac.branchId).toBe(BRANCH_ID);
+    expect(result.oac.deviceId).toBe(DEVICE_HEX);
+    expect(verifyOacEnvelopeSignature(result.oac, publicKeyFromRaw(signingKey.publicKeyBase64Url))).toBe(true);
+  });
+
+  it('D-V5: a wrong PIN4 is still refused as invalid_pin before any eligibility decision', async () => {
+    const { db, begin, ptp1Base64, pin1Base64 } = await fullHappyPathSetup('1234');
+    const result = await performCompletePrivilegedOacIssuanceSession(
+      db,
+      { uid: MANAGER_UID, token: { staffId: MANAGER_UID, authVersion: 0 } },
+      { sessionId: begin.ok ? begin.sessionId : '', pin: '9999', ptp1Base64, pin1Base64 },
+      1100,
+    );
+    expect(result).toEqual({ ok: false, code: 'invalid_pin' });
+  });
+
+  for (const legacyState of ['backfilled_not_trusted', 'readers_cut_over_rotation_required', 'not_a_known_state']) {
+    for (const pin of ['1234', '123456']) {
+      it(`D-V5: credentialState=${legacyState} with correct PIN${pin.length} cannot provision`, async () => {
+        const { db, begin, ptp1Base64, pin1Base64, store } = await fullHappyPathSetup(pin, legacyState);
+        const result = await performCompletePrivilegedOacIssuanceSession(
+          db,
+          { uid: MANAGER_UID, token: { staffId: MANAGER_UID, authVersion: 0 } },
+          { sessionId: begin.ok ? begin.sessionId : '', pin, ptp1Base64, pin1Base64 },
+          1100,
+        );
+        expect(result).toEqual({ ok: false, code: 'oac_provision_forbidden_legacy_pin4' });
+        // A refused completion never consumes the one-shot session.
+        const session = store.get('privilegedOacIssuanceSessions')!.get(begin.ok ? begin.sessionId : '') as Record<string, unknown>;
+        expect(session.status).toBe('PENDING');
+      });
+    }
+  }
+
+  it('D-V5: a PIN4 caller who is not a live manager/admin still cannot complete', async () => {
+    const { db, begin, ptp1Base64, pin1Base64, store } = await fullHappyPathSetup('1234');
+    store.get('users')!.set(MANAGER_UID, { role: 'staff', isActive: true, deletedAt: null, authVersion: 0, branchIds: [BRANCH_ID] });
+    const result = await performCompletePrivilegedOacIssuanceSession(
+      db,
+      { uid: MANAGER_UID, token: { staffId: MANAGER_UID, authVersion: 0 } },
+      { sessionId: begin.ok ? begin.sessionId : '', pin: '1234', ptp1Base64, pin1Base64 },
+      1100,
+    );
+    expect(result).toEqual({ ok: false, code: 'not_authorized' });
+  });
+
+  it('D-V5: a PIN4 completion for a device whose branch changed is still refused', async () => {
+    const { db, begin, ptp1Base64, pin1Base64, store, devicePublicRaw } = await fullHappyPathSetup('1234');
+    store
+      .get('privilegedDeviceRegistrations')!
+      .set(DEVICE_HEX, { ...activeDeviceRecord(devicePublicRaw.toString('base64')), branchId: 'OTHER-BRANCH' });
+    const result = await performCompletePrivilegedOacIssuanceSession(
+      db,
+      { uid: MANAGER_UID, token: { staffId: MANAGER_UID, authVersion: 0 } },
+      { sessionId: begin.ok ? begin.sessionId : '', pin: '1234', ptp1Base64, pin1Base64 },
+      1100,
+    );
+    expect(result).toEqual({ ok: false, code: 'device_branch_mismatch' });
   });
 
   it('rejects a PTP1 whose device key does not match the registered device', async () => {

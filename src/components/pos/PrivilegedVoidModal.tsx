@@ -2,7 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import ManagerPinModal from './ManagerPinModal';
 import { VOID_REASONS } from '../../lib/salesHistory/types';
-import { copyForFlowState, pinErrorCopy, rosterFailClosedReason } from '../../lib/pos/privilegedVoid/privilegedVoidCopy';
+import {
+  copyForFlowState,
+  pinErrorCopy,
+  PRIVILEGED_VOID_PROVISIONING_PROGRESS_COPY,
+  rosterFailClosedReason,
+} from '../../lib/pos/privilegedVoid/privilegedVoidCopy';
 import type { UsePrivilegedVoidFlowResult } from '../../hooks/pos/usePrivilegedVoidFlow';
 import './PrivilegedVoidModal.css';
 
@@ -211,7 +216,8 @@ export default function PrivilegedVoidModal({ flow, requesterDisplayName }: Priv
 
   if (state.status === 'IDLE') return null;
 
-  const dismissible = state.status !== 'PROJECTING' && !flow.isSubmitting;
+  const dismissible =
+    state.status !== 'PROJECTING' && state.status !== 'PROVISIONING_APPROVAL' && !flow.isSubmitting;
 
   if (state.status === 'MANAGER_PIN_ENTRY') {
     return (
@@ -220,7 +226,11 @@ export default function PrivilegedVoidModal({ flow, requesterDisplayName }: Priv
         title="ยืนยันสิทธิ์ผู้จัดการ"
         description="กรุณาใส่ PIN ผู้จัดการเพื่ออนุมัติคำขอยกเลิกบิล"
         sessionDisplayName={requesterDisplayName}
-        pinLength={6}
+        // D-V5 — the live authoritative manager/admin credential is the
+        // 4-digit PIN (coordinated PIN6 cutover deferred); it is the PIN both
+        // JIT provisioning (`verifyPinLogin` / OAC completion) and the native
+        // offline verifier check.
+        pinLength={4}
         isSubmitting={flow.isSubmitting}
         errorMessage={state.pinErrorCode ? pinErrorCopy(state.pinErrorCode) : null}
         onSubmitPin={flow.submitPin}
@@ -232,10 +242,14 @@ export default function PrivilegedVoidModal({ flow, requesterDisplayName }: Priv
 
   return (
     <DialogShell onDismiss={flow.close} dismissible={dismissible}>
-      {(state.status === 'PRECHECK' || state.status === 'PROJECTING') && (
+      {(state.status === 'PRECHECK' || state.status === 'PROJECTING' || state.status === 'PROVISIONING_APPROVAL') && (
         <div className="pvm-step">
           <div className="pvm-spinner" role="status" aria-live="polite">
-            {state.status === 'PRECHECK' ? 'กำลังตรวจสอบสถานะ...' : 'กำลังส่งคำขอ...'}
+            {state.status === 'PRECHECK'
+              ? 'กำลังตรวจสอบสถานะ...'
+              : state.status === 'PROVISIONING_APPROVAL'
+                ? PRIVILEGED_VOID_PROVISIONING_PROGRESS_COPY
+                : 'กำลังส่งคำขอ...'}
           </div>
         </div>
       )}

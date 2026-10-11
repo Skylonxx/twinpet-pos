@@ -256,9 +256,10 @@ pub fn native_abandon_device_enrollment_staging(
 //                        PTP1 + PIN1 for the WebView to submit to
 //                        `completePrivilegedOacIssuanceSession`.
 //   "persist_result"  — given the signed OAC envelope that call returned
-//                        (+ the OKS1 manifest fetched via `getOacKeysetManifest`),
-//                        verifies the OAC's signature against the manifest and
-//                        persists both to local storage.
+//                        (+ the OKS1 manifest fetched via `getOacKeysetManifest`,
+//                        + the selected `manager_staff_id`), verifies the OAC's
+//                        signature against the trusted on-disk manifest and its
+//                        manager binding, then persists it to local storage.
 // The PIN is used in-process for exactly one Argon2id derivation and is
 // never itself persisted, logged, or returned.
 
@@ -364,16 +365,35 @@ fn decode_server_oks1(oks1_base64: &str) -> Result<Vec<u8>, String> {
     base64_decode_std(oks1_base64)
 }
 
-fn persist_provisioned_oac(root: &Path, oac_envelope_json: &str, oks1_base64: &str) -> Result<(), String> {
+/// Persists a freshly issued OAC into this manager's active slot.
+///
+/// TPOS-USABLE-POS-VOID-OAC-DECISION (sibling of `eaac1e1`): the supplied OKS1
+/// comes from `getOacKeysetManifest`, which root-signs a fresh frame with
+/// `generatedAtServerMs = now` on every call, so its bytes never equal the
+/// manifest committed at enrollment. The supplied keyset is therefore accepted
+/// on byte equality OR when it is pinned-root-signed with the identical
+/// revocation epoch and key entries (the same predicate staff-session persist
+/// uses). The OAC signature is still verified ONLY against the trusted on-disk
+/// manifest; any real rotation, revocation or foreign signer fails closed.
+///
+/// `expected_manager_staff_id` is the manager the renderer ran the ceremony
+/// for: the envelope must be bound to exactly that manager, so a persist can
+/// only ever write the selected manager's slot.
+fn persist_provisioned_oac(
+    root: &Path,
+    oac_envelope_json: &str,
+    oks1_base64: &str,
+    expected_manager_staff_id: &str,
+) -> Result<(), String> {
     let oks1_bytes = decode_server_oks1(oks1_base64)?;
     let active_manifest_path = enrollment_meta::resolve_active_manifest_path(root)
         .map_err(|e| format!("cannot resolve active OAC keyset manifest: {e}"))?;
     let active_manifest_bytes = fs::read(&active_manifest_path)
         .map_err(|e| format!("cannot read active OAC keyset manifest: {e}"))?;
-    if active_manifest_bytes != oks1_bytes {
-        return Err("PROVISIONING_MANIFEST_MISMATCH: supplied OKS1 keyset bytes do not match active digest manifest; re-anchor required".to_string());
-    }
     let manifest = frames::decode_oks1(&active_manifest_bytes).map_err(|e| format!("{e:?}"))?;
+    if !staff_session::supplied_keyset_matches_active(&active_manifest_bytes, &manifest, &oks1_bytes) {
+        return Err("PROVISIONING_MANIFEST_MISMATCH: supplied OKS1 keyset does not match active digest manifest; re-anchor required".to_string());
+    }
 
     let envelope: serde_json::Value =
         serde_json::from_str(oac_envelope_json).map_err(|e| format!("invalid OAC envelope JSON: {e}"))?;
@@ -385,6 +405,9 @@ fn persist_provisioned_oac(root: &Path, oac_envelope_json: &str, oks1_base64: &s
         .ok_or("OAC envelope missing managerStaffId")?;
     if !frames::is_canonical_identifier(manager_staff_id) {
         return Err(format!("invalid managerStaffId grammar: '{manager_staff_id}'"));
+    }
+    if manager_staff_id != expected_manager_staff_id {
+        return Err("PROVISIONING_MANAGER_MISMATCH: OAC envelope is not bound to the selected manager".to_string());
     }
     let signing_key_id = obj
         .get("signingKeyId")
@@ -444,6 +467,7 @@ pub fn native_complete_oac_provisioning(
                 &root,
                 &oac_envelope_json.ok_or("oac_envelope_json is required for phase=persist_result")?,
                 &oks1_base64.ok_or("oks1_base64 is required for phase=persist_result")?,
+                &manager_staff_id.ok_or("manager_staff_id is required for phase=persist_result")?,
             )?;
             Ok(serde_json::Value::Null)
         }
@@ -1092,7 +1116,7 @@ mod command_glue_tests {
         let (oks1_base64, signing_key) = signed_oac_test_manifest(&dir);
         let envelope_json = signed_oac_envelope(&signing_key, "oac-1");
 
-        persist_provisioned_oac(&dir, &envelope_json, &oks1_base64).unwrap();
+        persist_provisioned_oac(&dir, &envelope_json, &oks1_base64, "staff-1").unwrap();
 
         let stored = fs::read_to_string(oac_store_dir(&dir).join("oac-1.json")).unwrap();
         assert_eq!(stored, envelope_json);
@@ -1113,10 +1137,119 @@ mod command_glue_tests {
         value["branchId"] = serde_json::Value::String("TAMPERED".to_string());
         let tampered_json = serde_json::to_string(&value).unwrap();
 
-        let result = persist_provisioned_oac(&dir, &tampered_json, &oks1_base64);
+        let result = persist_provisioned_oac(&dir, &tampered_json, &oks1_base64, "staff-1");
         assert!(result.is_err());
         assert!(!oac_store_dir(&dir).join("oac-2.json").exists());
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    // --- TPOS-USABLE-POS-VOID-OAC-DECISION: OKS1 sibling fix + manager binding ---
+
+    /// Root-signs an OKS1 exactly the way `getOacKeysetManifest` does on every
+    /// call (fresh `generated_at_server_ms`), over the given keys/epoch.
+    fn resigned_oks1_b64(root_seed: &[u8; 32], epoch: u32, keys: Vec<frames::OacKeysetManifestKeyV1>) -> String {
+        let unsigned = frames::OacKeysetManifestFrameV1 {
+            revocation_epoch: epoch,
+            generated_at_server_ms: 1_791_400_000_000,
+            keys,
+            signature: [0u8; 64],
+        };
+        let prefix = frames::oks1_signed_prefix(&unsigned).unwrap();
+        let signature = ed25519_dalek::Signer::sign(&SigningKey::from_bytes(root_seed), &prefix).to_bytes();
+        base64_encode_with(&frames::encode_oks1(&frames::OacKeysetManifestFrameV1 { signature, ..unsigned }).unwrap(), B64_STD)
+    }
+
+    fn manifest_key(signer: &SigningKey, key_id: &str) -> frames::OacKeysetManifestKeyV1 {
+        frames::OacKeysetManifestKeyV1 {
+            signing_key_id: key_id.to_string(),
+            public_key: signer.verifying_key().to_bytes(),
+            status: frames::OacKeyLifecycleStatus::Active,
+            verify_until_server_ms: None,
+        }
+    }
+
+    const ROOT_SEED: [u8; 32] = enrollment_meta::TEST_OAC_ROOT_SEED;
+
+    #[test]
+    fn persist_provisioned_oac_accepts_a_resigned_equivalent_keyset() {
+        let dir = temp_dir();
+        let (exact, signing_key) = signed_oac_test_manifest(&dir);
+        let envelope_json = signed_oac_envelope(&signing_key, "oac-resigned");
+        let resigned = resigned_oks1_b64(&ROOT_SEED, 0, vec![manifest_key(&signing_key, "key-1")]);
+        assert_ne!(resigned, exact, "fixture must actually differ in bytes");
+
+        persist_provisioned_oac(&dir, &envelope_json, &resigned, "staff-1").unwrap();
+        let active_slot = manager_active_slot_path(&dir, "staff-1").unwrap();
+        assert_eq!(fs::read_to_string(&active_slot).unwrap(), envelope_json);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn persist_provisioned_oac_rejects_a_keyset_with_a_newer_epoch() {
+        let dir = temp_dir();
+        let (_exact, signing_key) = signed_oac_test_manifest(&dir);
+        let envelope_json = signed_oac_envelope(&signing_key, "oac-epoch");
+        let resigned = resigned_oks1_b64(&ROOT_SEED, 1, vec![manifest_key(&signing_key, "key-1")]);
+        let err = persist_provisioned_oac(&dir, &envelope_json, &resigned, "staff-1").unwrap_err();
+        assert!(err.contains("PROVISIONING_MANIFEST_MISMATCH"));
+        assert!(!oac_store_dir(&dir).exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn persist_provisioned_oac_rejects_a_keyset_with_different_keys() {
+        let dir = temp_dir();
+        let (_exact, signing_key) = signed_oac_test_manifest(&dir);
+        let envelope_json = signed_oac_envelope(&signing_key, "oac-keys");
+        let rotated = SigningKey::generate(&mut rand::rngs::OsRng);
+        for keys in [vec![manifest_key(&rotated, "key-1")], vec![manifest_key(&signing_key, "key-2")]] {
+            let resigned = resigned_oks1_b64(&ROOT_SEED, 0, keys);
+            let err = persist_provisioned_oac(&dir, &envelope_json, &resigned, "staff-1").unwrap_err();
+            assert!(err.contains("PROVISIONING_MANIFEST_MISMATCH"));
+        }
+        assert!(!oac_store_dir(&dir).exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn persist_provisioned_oac_rejects_an_equivalent_keyset_signed_by_a_foreign_root() {
+        let dir = temp_dir();
+        let (_exact, signing_key) = signed_oac_test_manifest(&dir);
+        let envelope_json = signed_oac_envelope(&signing_key, "oac-foreign");
+        let resigned = resigned_oks1_b64(&[0x11u8; 32], 0, vec![manifest_key(&signing_key, "key-1")]);
+        let err = persist_provisioned_oac(&dir, &envelope_json, &resigned, "staff-1").unwrap_err();
+        assert!(err.contains("PROVISIONING_MANIFEST_MISMATCH"));
+        assert!(!oac_store_dir(&dir).exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn persist_provisioned_oac_only_writes_the_selected_managers_slot() {
+        let dir = temp_dir();
+        let (oks1_base64, signing_key) = signed_oac_test_manifest(&dir);
+        // Envelope is bound to staff-1, but the ceremony was run for staff-2.
+        let envelope_json = signed_oac_envelope(&signing_key, "oac-other");
+        let err = persist_provisioned_oac(&dir, &envelope_json, &oks1_base64, "staff-2").unwrap_err();
+        assert!(err.contains("PROVISIONING_MANAGER_MISMATCH"));
+        assert!(!oac_store_dir(&dir).exists());
+        assert!(!manager_active_slot_path(&dir, "staff-2").unwrap().exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn persist_result_phase_requires_the_selected_manager() {
+        let err = native_complete_oac_provisioning(
+            "persist_result".to_string(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some("{}".to_string()),
+            Some("AAAA".to_string()),
+        )
+        .unwrap_err();
+        assert!(err.contains("manager_staff_id is required"));
     }
 
     // --- R2: row-2 device registration status decode-error propagation ---

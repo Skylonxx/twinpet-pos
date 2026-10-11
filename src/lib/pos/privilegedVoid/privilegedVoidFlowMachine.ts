@@ -39,6 +39,7 @@ import type {
 } from '../offline/privilegedEvidenceTypes';
 import type { PrivilegedManualReviewStatus } from '../../auth/privilegedAction/privilegedActionTypes';
 import type { ActiveRowPrecheckOutcome, SafeActiveRowSummary } from './privilegedVoidActiveRow';
+import type { ProvisionManagerOacOutcome } from './provisionManagerOac';
 
 // ---------------------------------------------------------------------------
 // Identity — immutable capture + revalidation surface (GD-E-004).
@@ -153,7 +154,17 @@ export type PrivilegedVoidLocalFailureReason =
   | 'denied_locked'
   | 'denied_stale'
   | 'denied_unverifiable'
-  | 'denied_unknown';
+  | 'denied_unknown'
+  // TPOS-USABLE-POS-VOID-OAC-DECISION D-V9 — distinct native denial classes.
+  | 'denied_staff_session'
+  | 'denied_oac_missing'
+  | 'denied_oac_stale'
+  // D-V7 — just-in-time manager OAC provisioning outcomes (all terminal).
+  | 'provisioning_pin_rejected'
+  | 'provisioning_not_eligible'
+  | 'provisioning_device_not_ready'
+  | 'provisioning_failed'
+  | 'provisioning_uncertain';
 
 // ---------------------------------------------------------------------------
 // RC-E1-004 — closed D-1B denial classifier.
@@ -164,8 +175,20 @@ const DENIED_INVALID_PIN_CODE = 'DENIED_INVALID_PIN';
 const LOCKED_DENIAL_CODES: ReadonlySet<string> = new Set(['DENIED_LOCKED', 'TOO_MANY_ATTEMPTS']);
 const STALE_DENIAL_CODES: ReadonlySet<string> = new Set(['DENIED_STALE', 'CREDENTIAL_STALE']);
 const UNVERIFIABLE_DENIAL_CODES: ReadonlySet<string> = new Set(['DENIED_UNVERIFIABLE', 'APPROVAL_UNAVAILABLE']);
+/** D-V9 — native refinements (no authorization change: each is still a denial). */
+const STAFF_SESSION_DENIAL_CODE = 'DENIED_STAFF_SESSION';
+const OAC_MISSING_DENIAL_CODE = 'DENIED_OAC_MISSING';
+const OAC_STALE_DENIAL_CODE = 'DENIED_OAC_STALE';
 
-export type PrivilegedVoidPinDenialClass = 'retry_same_intent' | 'locked' | 'stale' | 'unverifiable' | 'unknown';
+export type PrivilegedVoidPinDenialClass =
+  | 'retry_same_intent'
+  | 'locked'
+  | 'stale'
+  | 'unverifiable'
+  | 'staff_session'
+  | 'oac_missing'
+  | 'oac_stale'
+  | 'unknown';
 
 /**
  * RC-E1-004 — closed classifier over the landed D-1B `errorCode` vocabulary.
@@ -181,7 +204,24 @@ export function classifyPinDenial(errorCode: string | null): PrivilegedVoidPinDe
   if (errorCode != null && LOCKED_DENIAL_CODES.has(errorCode)) return 'locked';
   if (errorCode != null && STALE_DENIAL_CODES.has(errorCode)) return 'stale';
   if (errorCode != null && UNVERIFIABLE_DENIAL_CODES.has(errorCode)) return 'unverifiable';
+  if (errorCode === STAFF_SESSION_DENIAL_CODE) return 'staff_session';
+  if (errorCode === OAC_MISSING_DENIAL_CODE) return 'oac_missing';
+  if (errorCode === OAC_STALE_DENIAL_CODE) return 'oac_stale';
   return 'unknown';
+}
+
+export type OacProvisioningTrigger = 'oac_missing' | 'oac_stale';
+
+/**
+ * D-V7 — the ONLY D-3 outcomes that may trigger just-in-time provisioning of
+ * the selected manager's OAC: a native denial proving that manager's local
+ * capability is absent or stale. Every other outcome (wrong PIN, lockout,
+ * staff session, corrupt capability, ...) never provisions.
+ */
+export function oacProvisioningTriggerFor(outcome: ProjectPrivilegedOfflineActionOutcome): OacProvisioningTrigger | null {
+  if (outcome.kind !== 'not_approved') return null;
+  const denialClass = classifyPinDenial(outcome.errorCode ?? null);
+  return denialClass === 'oac_missing' || denialClass === 'oac_stale' ? denialClass : null;
 }
 
 export type PrivilegedVoidFlowState =
@@ -197,6 +237,13 @@ export type PrivilegedVoidFlowState =
       pinErrorCode: string | null;
     }
   | { status: 'PROJECTING'; identity: PrivilegedVoidFlowIdentity; reason: string; note: string }
+  | {
+      status: 'PROVISIONING_APPROVAL';
+      identity: PrivilegedVoidFlowIdentity;
+      reason: string;
+      note: string;
+      trigger: OacProvisioningTrigger;
+    }
   | { status: 'CAPTURED_PENDING_ADJUDICATION'; identity: PrivilegedVoidFlowIdentity; record: SafeCapturedRecordSummary }
   | { status: 'TERMINAL_SERVER_ACCEPTED'; identity: PrivilegedVoidFlowIdentity; row: SafeActiveRowSummary }
   | { status: 'TERMINAL_SERVER_REJECTED'; identity: PrivilegedVoidFlowIdentity; row: SafeActiveRowSummary }
@@ -452,7 +499,13 @@ export function applyProjectionOutcome(
             ? 'denied_stale'
             : denialClass === 'unverifiable'
               ? 'denied_unverifiable'
-              : 'denied_unknown';
+              : denialClass === 'staff_session'
+                ? 'denied_staff_session'
+                : denialClass === 'oac_missing'
+                  ? 'denied_oac_missing'
+                  : denialClass === 'oac_stale'
+                    ? 'denied_oac_stale'
+                    : 'denied_unknown';
       return { status: 'LOCAL_FAILURE', identity, reasonCode };
     }
     case 'unavailable':
@@ -463,6 +516,57 @@ export function applyProjectionOutcome(
       return { status: 'LOCAL_FAILURE', identity, reasonCode: 'integrity_conflict' };
     case 'uncertain':
       return { status: 'LOCAL_UNCERTAIN', identity };
+  }
+}
+
+/**
+ * D-V7 — PROJECTING -> PROVISIONING_APPROVAL. Entered only for a D-3 outcome
+ * that `oacProvisioningTriggerFor` classifies as a missing/stale manager OAC.
+ * Identity, reason, note (and so the same `localIntentId`, manager, target)
+ * are carried unchanged. No-op from any other state or for any other outcome.
+ */
+export function beginOacProvisioning(
+  state: PrivilegedVoidFlowState,
+  outcome: ProjectPrivilegedOfflineActionOutcome,
+): PrivilegedVoidFlowState {
+  if (state.status !== 'PROJECTING') return state;
+  const trigger = oacProvisioningTriggerFor(outcome);
+  if (!trigger) return state;
+  return { status: 'PROVISIONING_APPROVAL', identity: state.identity, reason: state.reason, note: state.note, trigger };
+}
+
+/**
+ * D-V7 — applies the just-in-time provisioning outcome.
+ *   - `provisioned` -> PROJECTING (same identity) for exactly one attestation retry;
+ *   - `offline` -> the original missing/stale denial (fail closed, provision online first);
+ *   - everything else -> a terminal LOCAL_FAILURE. Never re-prompts, never loops.
+ */
+export function applyOacProvisioningOutcome(
+  state: PrivilegedVoidFlowState,
+  outcome: ProvisionManagerOacOutcome,
+): PrivilegedVoidFlowState {
+  if (state.status !== 'PROVISIONING_APPROVAL') return state;
+  const { identity } = state;
+  switch (outcome.kind) {
+    case 'provisioned':
+      return { status: 'PROJECTING', identity, reason: state.reason, note: state.note };
+    case 'offline':
+      return {
+        status: 'LOCAL_FAILURE',
+        identity,
+        reasonCode: state.trigger === 'oac_stale' ? 'denied_oac_stale' : 'denied_oac_missing',
+      };
+    case 'pin_rejected':
+      return { status: 'LOCAL_FAILURE', identity, reasonCode: 'provisioning_pin_rejected' };
+    case 'not_eligible':
+      return { status: 'LOCAL_FAILURE', identity, reasonCode: 'provisioning_not_eligible' };
+    case 'device_not_ready':
+      return { status: 'LOCAL_FAILURE', identity, reasonCode: 'provisioning_device_not_ready' };
+    case 'uncertain':
+      return { status: 'LOCAL_FAILURE', identity, reasonCode: 'provisioning_uncertain' };
+    case 'failed':
+    default:
+      return { status: 'LOCAL_FAILURE', identity, reasonCode: 'provisioning_failed' };
   }
 }
 

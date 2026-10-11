@@ -7,8 +7,11 @@
  * PIN never leaves the device: the native side computes the Argon2id
  * verifier locally and submits only the verifier/salt/pepper-commitment
  * (PIN1 frame); the manager's *online* PIN is what this callable verifies,
- * exactly like requestManagerApproval, gated additionally by `canProvisionOac`
- * (PIN6-only — D13/legacy-PIN4 forbidden).
+ * exactly like requestManagerApproval, gated additionally by
+ * `canProvisionOacForAuthoritativeCredential` (Tech Lead decision D-V5:
+ * a `rotated_authoritative` credential may provision with its currently
+ * valid authoritative PIN — live PIN4 or target PIN6; legacy/backfilled/
+ * unknown states stay forbidden; coordinated PIN6 cutover deferred).
  */
 
 import { randomBytes, randomUUID, verify as ed25519Verify } from 'node:crypto';
@@ -20,7 +23,7 @@ import { db } from './db';
 import { FUNCTIONS_REGION } from './deployConfig';
 import { evaluateFreshPrivilegedAuthority, type AuthLike } from './authorityFence';
 import { canonicalJSON, isUsableForLogin, readUserCredential } from './credentialStore';
-import { canProvisionOac, derivePinMigrationState } from './pinPolicy';
+import { canProvisionOacForAuthoritativeCredential } from './pinPolicy';
 import {
   buildOacIssuanceSession,
   buildSignedSrf1ForOac,
@@ -264,12 +267,15 @@ export async function performCompletePrivilegedOacIssuanceSession(
   const compareOk = await bcrypt.compare(raw.pin, compareHash);
   if (!compareOk || !isUsableForLogin(cred)) return { ok: false, code: 'invalid_pin' };
 
-  const classification = derivePinMigrationState({
+  // D-V5 — the PIN was verified above; eligibility is tied to the
+  // authoritative persisted credential state, not to the PIN's length.
+  // The failure code is unchanged for wire compatibility.
+  const eligible = canProvisionOacForAuthoritativeCredential({
     persistedCredentialState: cred.credentialState,
     disabled: cred.disabled,
     presentedPin: raw.pin,
   });
-  if (!canProvisionOac(classification)) return { ok: false, code: 'oac_provision_forbidden_legacy_pin4' };
+  if (!eligible) return { ok: false, code: 'oac_provision_forbidden_legacy_pin4' };
 
   const activeKey = await loadActiveSigningKey(firestoreSigningKeyReaders(database));
   if (!activeKey.ok) return { ok: false, code: 'signing_key_unavailable' };

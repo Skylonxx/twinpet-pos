@@ -628,7 +628,7 @@ pub fn commit_staff_session_cache_envelope(
 /// any real rotation, revocation or downgrade still requires re-anchor.
 /// Signatures are always verified against the trusted on-disk manifest, never
 /// against the supplied one.
-fn supplied_keyset_matches_active(
+pub(crate) fn supplied_keyset_matches_active(
     active_bytes: &[u8],
     active: &OacKeysetManifestFrameV1,
     supplied_bytes: &[u8],

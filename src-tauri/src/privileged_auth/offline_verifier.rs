@@ -485,13 +485,21 @@ pub fn verify_offline_pin_locked(
 
     let content = match fs::read_to_string(&active_slot_path) {
         Ok(c) => c,
-        Err(_) => {
-            // Absent or unreadable => fail closed / reprovision required
+        Err(e) => {
+            // Absent => fail closed, (re)provision required: DENIED_OAC_MISSING
+            // (TPOS-USABLE-POS-VOID-OAC-DECISION D-V9 — distinct from a corrupt
+            // capability so the renderer can offer online provisioning).
+            // Present but unreadable stays DENIED_UNVERIFIABLE.
+            let code = if e.kind() == std::io::ErrorKind::NotFound {
+                "DENIED_OAC_MISSING"
+            } else {
+                "DENIED_UNVERIFIABLE"
+            };
             return Ok(PrivilegedVerifyOutcomeDto {
                 ok: false,
                 verified_branch_id: None,
                 evidence_seed: None,
-                error_code: Some("DENIED_UNVERIFIABLE".to_string()),
+                error_code: Some(code.to_string()),
             });
         }
     };
@@ -607,7 +615,7 @@ pub fn verify_offline_pin_locked(
             ok: false,
             verified_branch_id: Some(verified_branch_id),
             evidence_seed: None,
-            error_code: Some("DENIED_STALE".to_string()),
+            error_code: Some("DENIED_OAC_STALE".to_string()),
         });
     }
 
@@ -641,7 +649,7 @@ pub fn verify_offline_pin_locked(
             ok: false,
             verified_branch_id: Some(verified_branch_id),
             evidence_seed: None,
-            error_code: Some("DENIED_STALE".to_string()),
+            error_code: Some("DENIED_OAC_STALE".to_string()),
         });
     }
 
@@ -651,7 +659,7 @@ pub fn verify_offline_pin_locked(
             ok: false,
             verified_branch_id: Some(verified_branch_id),
             evidence_seed: None,
-            error_code: Some("DENIED_STALE".to_string()),
+            error_code: Some("DENIED_OAC_STALE".to_string()),
         });
     }
 
@@ -1306,7 +1314,7 @@ mod tests {
 
         let res = verify_offline_pin(&root, "mgr-1", "VOID_PENDING_SALE", "123456").unwrap();
         assert!(!res.ok);
-        assert_eq!(res.error_code, Some("DENIED_STALE".to_string()));
+        assert_eq!(res.error_code, Some("DENIED_OAC_STALE".to_string()));
 
         let _ = fs::remove_dir_all(&root);
     }
@@ -1345,10 +1353,10 @@ mod tests {
             vec!["VOID_PENDING_SALE"],
         );
 
-        // Must pick newest OAC (epoch 1) and reject with DENIED_STALE, NO fallback to older OAC
+        // Must pick newest OAC (epoch 1) and reject with DENIED_OAC_STALE, NO fallback to older OAC
         let res = verify_offline_pin(&root, "mgr-1", "VOID_PENDING_SALE", "123456").unwrap();
         assert!(!res.ok);
-        assert_eq!(res.error_code, Some("DENIED_STALE".to_string()));
+        assert_eq!(res.error_code, Some("DENIED_OAC_STALE".to_string()));
 
         let _ = fs::remove_dir_all(&root);
     }
@@ -2547,7 +2555,7 @@ mod tests {
         assert!(fs::read_to_string(oac_store_dir(&root).join(format!("{oac_id}.json"))).is_ok());
         let res7 = verify_offline_pin(&root, "mgr-active", "VOID_PENDING_SALE", "123456").unwrap();
         assert!(!res7.ok);
-        assert_eq!(res7.error_code, Some("DENIED_UNVERIFIABLE".to_string()));
+        assert_eq!(res7.error_code, Some("DENIED_OAC_MISSING".to_string()));
 
         // 8. Unrelated malformed historical file + valid selected slot => works
         fs::write(&slot_path, &valid_slot_content).unwrap();

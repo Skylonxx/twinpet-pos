@@ -18,7 +18,7 @@
  * to the CTA-level wiring.
  */
 import { createElement } from 'react';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import type { SaleRecord } from '../lib/salesHistory/types';
 import type { VoidIntentRecord } from '../lib/pos/offline/voidIntentStore';
@@ -33,6 +33,9 @@ const historyState = {
 };
 
 let authBranchId: string | null = 'LDP-001';
+// D-V8 — privileged preflight result returned by the mocked AuthProvider.
+let preflightResult: 'ready' | 'not_native' | 'quick_pin_required' | 'unavailable' = 'ready';
+const ensurePrivilegedStaffSessionMock = vi.fn(async () => preflightResult);
 let voidRows: VoidIntentRecord[] = [];
 let firebaseConfigured = true;
 
@@ -43,6 +46,7 @@ vi.mock('../lib/hooks/useAuth', () => ({
   useAuth: () => ({
     user: { id: 'staff1', role: 'staff', name: 'Dao', firstName: 'Dao', lastName: 'K' },
     branchId: authBranchId,
+    ensurePrivilegedStaffSession: ensurePrivilegedStaffSessionMock,
   }),
 }));
 
@@ -180,7 +184,46 @@ async function openDrawerAndClickVoid(billId: string): Promise<void> {
     expect(screen.getByText(/^ยกเลิกบิล/)).toBeTruthy();
   });
   fireEvent.click(screen.getByText(/^ยกเลิกบิล/));
+  // The privileged CTA awaits the D-V8 staff-session preflight before opening.
+  await act(async () => {
+    await Promise.resolve();
+  });
 }
+
+describe('SalesHistoryPage — D-V8 privileged staff-session preflight', () => {
+  test('password session (no Quick PIN identity): the privileged flow never opens and Quick PIN copy is shown', async () => {
+    firebaseConfigured = true;
+    authBranchId = 'LDP-001';
+    preflightResult = 'quick_pin_required';
+    historyState.records = [record('BILL-PW', 'LDP-001')];
+
+    render(createElement(SalesHistoryPage));
+    await waitFor(() => expect(screen.getByText('BILL-PW')).toBeTruthy());
+    await openDrawerAndClickVoid('BILL-PW');
+
+    expect(ensurePrivilegedStaffSessionMock).toHaveBeenCalled();
+    expect(openPrivilegedVoidMock).not.toHaveBeenCalled();
+    expect(voidOrderSafeMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByText(/Quick PIN/)).toBeTruthy());
+    preflightResult = 'ready';
+  });
+
+  test('missing / failed staff session: the privileged flow never opens (fail closed), no online fallback', async () => {
+    firebaseConfigured = true;
+    authBranchId = 'LDP-001';
+    preflightResult = 'unavailable';
+    historyState.records = [record('BILL-NOSSA', 'LDP-001')];
+
+    render(createElement(SalesHistoryPage));
+    await waitFor(() => expect(screen.getByText('BILL-NOSSA')).toBeTruthy());
+    await openDrawerAndClickVoid('BILL-NOSSA');
+
+    expect(openPrivilegedVoidMock).not.toHaveBeenCalled();
+    expect(voidOrderSafeMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByText(/เซสชันพนักงานสำหรับการอนุมัติไม่พร้อม/)).toBeTruthy());
+    preflightResult = 'ready';
+  });
+});
 
 describe('SalesHistoryPage — privileged-only void CTA (GD-E-008)', () => {
   test('Firebase-configured: the CTA opens the privileged flow with the ORDER\'s own branch/action/operator, never the legacy dev-mock path', async () => {

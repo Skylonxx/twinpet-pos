@@ -111,3 +111,62 @@ describe('refreshStaffSession', () => {
     expect((res as any).code).toContain('DPAPI encryption failed');
   });
 });
+
+describe('refreshStaffSession — D-V8 (TPOS-USABLE-POS-VOID-OAC-DECISION)', () => {
+  it.each(['', '   ', 'ALL'])('no B-HQ fallback: branch %j fails closed before any native or server call', async (branch) => {
+    const invoked: string[] = [];
+    const res = await refreshStaffSession(branch, async (cmd: string) => {
+      invoked.push(cmd);
+      return undefined;
+    });
+    expect(res).toEqual({ ok: false, code: 'branch_required' });
+    expect(invoked).toEqual([]);
+  });
+
+  it('a primary staff claim for someone other than the expected staff fails closed with no native call', async () => {
+    const invoked: string[] = [];
+    const res = await refreshStaffSession(
+      'LDP-001',
+      async (cmd: string) => {
+        invoked.push(cmd);
+        return undefined;
+      },
+      { expectedStaffId: 'STAFF-OTHER' },
+    );
+    expect(res).toEqual({ ok: false, code: 'staff_identity_mismatch' });
+    expect(invoked).toEqual([]);
+  });
+
+  it('the requested concrete branch is passed through unchanged with SSA1_REFRESH', async () => {
+    const invoked: Array<{ cmd: string; args?: Record<string, unknown> }> = [];
+    const res = await refreshStaffSession(
+      'LDP-001',
+      async (cmd: string, args?: Record<string, unknown>) => {
+        invoked.push({ cmd, args });
+        if (cmd === 'native_prepare_staff_session_challenge') return { sscp1ProofBase64: 'p', generation: 1 };
+        return undefined;
+      },
+      { expectedStaffId: 'STAFF-1' },
+    );
+    expect(res).toEqual({ ok: true });
+    expect(invoked[0]).toEqual({
+      cmd: 'native_prepare_staff_session_challenge',
+      args: { purpose: 'SSA1_REFRESH', branchId: 'LDP-001', intendedStaffId: 'STAFF-1' },
+    });
+  });
+
+  it('a caller superseded before persist (shouldPersist false) never persists (branch-race fix)', async () => {
+    const invoked: string[] = [];
+    const res = await refreshStaffSession(
+      'LDP-001',
+      async (cmd: string) => {
+        invoked.push(cmd);
+        if (cmd === 'native_prepare_staff_session_challenge') return { sscp1ProofBase64: 'p', generation: 1 };
+        return undefined;
+      },
+      { expectedStaffId: 'STAFF-1', shouldPersist: () => false },
+    );
+    expect(res).toEqual({ ok: false, code: 'superseded' });
+    expect(invoked).toEqual(['native_prepare_staff_session_challenge']);
+  });
+});

@@ -30,10 +30,30 @@ export interface StaffSessionChallengeDto {
   challengeNonceBase64?: string;
 }
 
+/**
+ * TPOS-USABLE-POS-VOID-OAC-DECISION D-V8: the target branch is REQUIRED and
+ * concrete (no `B-HQ` / `ALL` fallback), and when the caller names the staff
+ * it expects (`expectedStaffId`), a primary-token `staffId` claim for anyone
+ * else fails closed before any native or server call — no identity broadening.
+ */
+export interface RefreshStaffSessionOptions {
+  /** The app-session staff the refreshed SSA1 must belong to. */
+  expectedStaffId?: string;
+  /**
+   * Checked right before the native persist: a caller whose operation was
+   * superseded (e.g. a newer branch selection) skips persisting entirely.
+   */
+  shouldPersist?: () => boolean;
+}
+
 export async function refreshStaffSession(
-  branchId?: string,
+  branchId: string,
   customInvoke?: (cmd: string, args?: Record<string, unknown>) => Promise<unknown>,
+  options: RefreshStaffSessionOptions = {},
 ): Promise<RefreshStaffSessionResult> {
+  if (typeof branchId !== 'string' || !branchId.trim() || branchId === 'ALL') {
+    return { ok: false, code: 'branch_required' };
+  }
   const invoke = customInvoke ?? getNativeStaffSessionInvoke();
   if (!invoke) {
     return { ok: false, code: 'native_bridge_unavailable' };
@@ -54,12 +74,15 @@ export async function refreshStaffSession(
   if (!staffId || typeof staffId !== 'string') {
     return { ok: false, code: 'staff_identity_claim_missing' };
   }
+  if (options.expectedStaffId !== undefined && staffId !== options.expectedStaffId) {
+    return { ok: false, code: 'staff_identity_mismatch' };
+  }
 
   try {
     // 1. Prepare native challenge
     const challengeRaw = await invoke('native_prepare_staff_session_challenge', {
       purpose: 'SSA1_REFRESH',
-      branchId: branchId || 'B-HQ',
+      branchId,
       intendedStaffId: staffId,
     });
     const challenge = challengeRaw as StaffSessionChallengeDto;
@@ -92,7 +115,10 @@ export async function refreshStaffSession(
       return { ok: false, code: 'keyset_manifest_unavailable' };
     }
 
-    // 4. Persist to native storage
+    // 4. Persist to native storage (unless the caller was superseded)
+    if (options.shouldPersist && !options.shouldPersist()) {
+      return { ok: false, code: 'superseded' };
+    }
     await invoke('native_persist_staff_session_assertion', {
       generation: challenge.generation,
       ssa1Base64: refreshRes.data.ssa1Base64,

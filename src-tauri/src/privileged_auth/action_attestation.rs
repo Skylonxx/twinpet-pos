@@ -196,13 +196,16 @@ pub fn attest_privileged_action(
 
     // 1. Canonical staff session (SSCA1): boot-session continuity, digests,
     //    SSA1/SRF1 signatures against OKS1, DEC-D-06 lifetime, DEC-D-07 bounds.
+    //    TPOS-USABLE-POS-VOID-OAC-DECISION D-V9: a missing/invalid operator
+    //    staff session is DENIED_STAFF_SESSION (re-login with Quick PIN), never
+    //    conflated with a stale manager capability. Still a plain denial.
     let envelope = match staff_session::load_and_validate_canonical_staff_session(root) {
         Ok(env) => env,
-        Err(_) => return Ok(denied("DENIED_STALE", None)),
+        Err(_) => return Ok(denied("DENIED_STAFF_SESSION", None)),
     };
     let ssa1 = match frames::decode_ssa1(&envelope.ssa1_bytes) {
         Ok(f) => f,
-        Err(_) => return Ok(denied("DENIED_STALE", None)),
+        Err(_) => return Ok(denied("DENIED_STAFF_SESSION", None)),
     };
 
     // 2. Trusted approval-time bounds L and U (§5), from the validated envelope
@@ -210,7 +213,7 @@ pub fn attest_privileged_action(
     //    client's arithmetic rather than trust its conclusion.
     let bounds = match staff_session::compute_trusted_approval_bounds_now(&envelope) {
         Ok(b) => b,
-        Err(_) => return Ok(denied("DENIED_STALE", None)),
+        Err(_) => return Ok(denied("DENIED_STAFF_SESSION", None)),
     };
 
     // 3. Structural validation of the four renderer-declared values.
@@ -282,7 +285,7 @@ pub fn attest_privileged_action(
         _ => return Ok(denied("DENIED_UNVERIFIABLE", Some(verified_branch_id))),
     };
     if envelope.device_key_version != device_key_version {
-        return Ok(denied("DENIED_STALE", Some(verified_branch_id)));
+        return Ok(denied("DENIED_STAFF_SESSION", Some(verified_branch_id)));
     }
 
     // 9. D8 cross-midnight bar: an offline approval may only be given on the
@@ -484,7 +487,7 @@ mod tests {
         assert!(!dto.ok);
         assert!(dto.paa1_base64.is_none());
         assert!(dto.attestation_id_hex.is_none());
-        assert_eq!(dto.error_code.as_deref(), Some("DENIED_STALE"));
+        assert_eq!(dto.error_code.as_deref(), Some("DENIED_STAFF_SESSION"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

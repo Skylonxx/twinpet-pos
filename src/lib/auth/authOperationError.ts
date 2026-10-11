@@ -16,6 +16,19 @@ export class AuthOperationSupersededError extends Error {
   }
 }
 
+/**
+ * SSA1-DISPOSED-GUARD: a public auth callback retained from an AuthProvider
+ * that has since been unmounted. It is superseded by whichever provider is
+ * mounted now and performs no work at all. A subclass, so every existing
+ * superseded handler (fixed message, no "wrong PIN") applies unchanged.
+ */
+export class AuthProviderDisposedError extends AuthOperationSupersededError {
+  constructor() {
+    super();
+    this.name = 'AuthProviderDisposedError';
+  }
+}
+
 export function isAuthOperationSupersededError(err: unknown): err is AuthOperationSupersededError {
   return err instanceof AuthOperationSupersededError;
 }

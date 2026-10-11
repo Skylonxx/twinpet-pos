@@ -10,6 +10,16 @@
  * machine's own state (only `MANAGER_PIN_ENTRY` may enter `PROJECTING`), the
  * `inFlightRef` guard below, and D-2's own atomic target exclusion
  * (`expectNoOpenRowForTarget`, inside `projectPrivilegedOfflineAction`).
+ *
+ * TPOS-USABLE-POS-VOID-OAC-DECISION D-V7 — just-in-time manager OAC
+ * provisioning lives INSIDE the same submit episode: when D-3 reports the
+ * selected manager's capability missing/stale and the terminal is online,
+ * that manager (and only that manager) is provisioned through the existing
+ * ceremony (`provisionManagerOac`), then D-3 is retried EXACTLY ONCE with the
+ * same localIntentId / manager / reason / target / in-memory PIN. Native
+ * offline PIN verification still decides the approval on that retry. Offline,
+ * or on any provisioning failure, the flow fails closed; it never loops and
+ * never falls back to an online void.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -18,15 +28,20 @@ import { useApproverRoster, type ApproverRosterState } from '../../lib/auth/useA
 import { createIndexedDbReversalStore } from '../../lib/pos/offline/reversalLocalStore';
 import { projectPrivilegedOfflineAction } from '../../lib/pos/offline/projectPrivilegedOfflineAction';
 import { precheckActiveRowForTarget } from '../../lib/pos/privilegedVoid/privilegedVoidActiveRow';
+import { provisionManagerOac } from '../../lib/pos/privilegedVoid/provisionManagerOac';
 import {
   applyActiveRowPrecheck,
+  applyOacProvisioningOutcome,
   applyProjectionOutcome,
   backToManagerSelect as backToManagerSelectTransition,
+  beginOacProvisioning,
   beginProjecting,
+  classifyPinDenial,
   chooseManager as chooseManagerTransition,
   closePrivilegedVoidFlow,
   initialPrivilegedVoidFlowState,
   mintPrivilegedVoidLocalIntentId,
+  oacProvisioningTriggerFor,
   openPrivilegedVoidFlow,
   submitReason as submitReasonTransition,
   type ChooseManagerExpectedPreconditions,
@@ -68,8 +83,12 @@ export interface UsePrivilegedVoidFlowResult {
   retryReconciliation: () => void;
 }
 
+function terminalIsOnline(): boolean {
+  return typeof navigator === 'undefined' || navigator.onLine !== false;
+}
+
 export function usePrivilegedVoidFlow(params: UsePrivilegedVoidFlowParams): UsePrivilegedVoidFlowResult {
-  const { user, branchId } = useAuth();
+  const { user, branchId, invalidateStaffSession } = useAuth();
   const [state, setState] = useState<PrivilegedVoidFlowState>(initialPrivilegedVoidFlowState);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const inFlightRef = useRef(false);
@@ -301,36 +320,86 @@ export function usePrivilegedVoidFlow(params: UsePrivilegedVoidFlowParams): UseP
 
       // Guard acquired synchronously, before the async D-3 launch — this is
       // the ONE place a submit episode can start, and it cannot run twice
-      // for the same user action.
+      // for the same user action. It is held across the whole episode,
+      // including any just-in-time provisioning and its single retry, so a
+      // repeated click can never start a second ceremony or projection.
       inFlightRef.current = true;
       setIsSubmitting(true);
       setState(projecting);
+      // The authority epoch this episode owns (acquired above). Any open/
+      // close/manager change advances it; a stale episode then stops before
+      // provisioning or retrying.
+      const episodeEpoch = authorityEpochRef.current;
+      const isSameIntent = (s: PrivilegedVoidFlowState, status: PrivilegedVoidFlowState['status']) =>
+        s.status === status && 'identity' in s && s.identity.localIntentId === identity.localIntentId;
 
-      void projectPrivilegedOfflineAction({
-        actionId: identity.actionId,
-        targetOrderId: identity.targetOrderId,
-        targetOrderUtc7Date: identity.targetOrderUtc7Date,
-        managerStaffId,
-        pin,
-        localIntentId: identity.localIntentId,
-        initiatingStaffId: identity.operatorStaffId,
-      })
-        .then((outcome) => {
-          setState((latest) => {
-            // Stale-response guard, preserved exactly: discard an outcome
-            // for an intent the flow has already moved on from.
-            if (latest.status !== 'PROJECTING' || latest.identity.localIntentId !== identity.localIntentId) {
-              return latest;
-            }
-            return applyProjectionOutcome(latest, outcome);
-          });
+      const project = () =>
+        projectPrivilegedOfflineAction({
+          actionId: identity.actionId,
+          targetOrderId: identity.targetOrderId,
+          targetOrderUtc7Date: identity.targetOrderUtc7Date,
+          managerStaffId,
+          pin,
+          localIntentId: identity.localIntentId,
+          initiatingStaffId: identity.operatorStaffId,
+        });
+
+      const applyFinal = (outcome: Awaited<ReturnType<typeof project>>) => {
+        setState((latest) => {
+          // Stale-response guard, preserved exactly: discard an outcome
+          // for an intent the flow has already moved on from.
+          if (!isSameIntent(latest, 'PROJECTING')) return latest;
+          return applyProjectionOutcome(latest, outcome);
+        });
+        if (outcome.kind === 'not_approved' && classifyPinDenial(outcome.errorCode ?? null) === 'staff_session') {
+          // D-V8 — the native operator staff session is gone/invalid: the next
+          // privileged preflight must re-establish it before proceeding.
+          invalidateStaffSession?.();
+        }
+      };
+
+      const runEpisode = async () => {
+        const first = await project();
+        if (oacProvisioningTriggerFor(first) === null || !terminalIsOnline()) {
+          // Offline + missing/stale capability falls through to the closed
+          // denied_oac_missing / denied_oac_stale copy; no network call.
+          applyFinal(first);
+          return;
+        }
+        if (authorityEpochRef.current !== episodeEpoch) return;
+
+        setState((cur) => (isSameIntent(cur, 'PROJECTING') ? beginOacProvisioning(cur, first) : cur));
+        const provisioning = await provisionManagerOac({
+          managerStaffId,
+          branchId: identity.targetBranchId,
+          pin,
+        });
+        setState((cur) =>
+          isSameIntent(cur, 'PROVISIONING_APPROVAL') ? applyOacProvisioningOutcome(cur, provisioning) : cur,
+        );
+        if (provisioning.kind !== 'provisioned') return;
+        if (authorityEpochRef.current !== episodeEpoch) return;
+
+        // Exactly one attestation retry, same intent/manager/reason/target/PIN.
+        // Whatever it returns is final — no second provisioning, no loop.
+        const second = await project();
+        applyFinal(second);
+      };
+
+      void runEpisode()
+        .catch(() => {
+          setState((latest) =>
+            isSameIntent(latest, 'PROJECTING') || isSameIntent(latest, 'PROVISIONING_APPROVAL')
+              ? { status: 'LOCAL_UNCERTAIN', identity }
+              : latest,
+          );
         })
         .finally(() => {
           inFlightRef.current = false;
           setIsSubmitting(false);
         });
     },
-    [state, currentLiveContext, tryAcquireAuthorityEpoch],
+    [state, currentLiveContext, tryAcquireAuthorityEpoch, invalidateStaffSession],
   );
 
   // A `duplicate_target` D-3 outcome resolves to RECOVERED_ACTIVE with

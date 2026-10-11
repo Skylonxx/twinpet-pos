@@ -36,6 +36,10 @@ import {
 } from '../lib/pos/offline/voidIntentStore';
 import { usePrivilegedVoidFlow } from '../hooks/pos/usePrivilegedVoidFlow';
 import PrivilegedVoidModal from '../components/pos/PrivilegedVoidModal';
+import {
+  PRIVILEGED_VOID_QUICK_PIN_REQUIRED_COPY,
+  PRIVILEGED_VOID_STAFF_SESSION_UNAVAILABLE_COPY,
+} from '../lib/pos/privilegedVoid/privilegedVoidCopy';
 import type { PrivilegedActionId } from '../lib/auth/privilegedAction/privilegedActionTypes';
 import { fetchOrderReceipt } from '../lib/documents/receiptFetch';
 import { loadReceiptSettingsForOrderBranch } from '../lib/documents/receiptSettings';
@@ -297,7 +301,7 @@ function privilegedActionIdFor(pendingSync: boolean | undefined): PrivilegedActi
 }
 
 export default function SalesHistoryPage() {
-  const { user, branchId } = useAuth();
+  const { user, branchId, ensurePrivilegedStaffSession } = useAuth();
   const { records, loading, error, refresh, syncDevRecords } = useSalesHistory(branchId);
   // Source of UOM-specific barcodes — order line items don't persist a barcode,
   // so we resolve it from each product's uomOptions by the sold unit.
@@ -553,21 +557,49 @@ export default function SalesHistoryPage() {
   // CTA is privileged-only. `handleVoidConfirm` (below) is preserved ONLY as
   // the dev/mock path (`!isFirebaseConfigured`) — it is never reachable when
   // Firebase is configured, so it never doubles as a production fallback.
-  const handleOpenVoid = useCallback(() => {
+  //
+  // TPOS-USABLE-POS-VOID-OAC-DECISION D-V8 — privileged preflight: the flow
+  // opens only once the operator's native staff session (SSA1) is ready for
+  // this staff + branch. A password session is told to use Quick PIN; a
+  // missing/failed session fails closed. Ordinary (non-privileged) use of the
+  // page is unaffected.
+  const voidPreflightInFlightRef = useRef(false);
+  const handleOpenVoid = useCallback(async () => {
     if (!selected || !user) return;
     if (isFirebaseConfigured) {
       if (!branchId) return;
-      privilegedVoidFlow.open({
+      if (voidPreflightInFlightRef.current) return;
+      // Captured before the preflight await; the flow revalidates this exact
+      // identity against the live selection again before projecting.
+      const orderRef = {
         actionId: privilegedActionIdFor(selected.pendingSync),
         targetOrderId: selected.order.id,
         targetOrderUtc7Date: utcPlus7Date(orderCreatedAt(selected.order).getTime()),
         targetBranchId: selected.order.branchId,
         operatorStaffId: user.id,
-      });
+      };
+      voidPreflightInFlightRef.current = true;
+      let preflight: Awaited<ReturnType<typeof ensurePrivilegedStaffSession>>;
+      try {
+        preflight = await ensurePrivilegedStaffSession();
+      } catch {
+        preflight = 'unavailable';
+      } finally {
+        voidPreflightInFlightRef.current = false;
+      }
+      if (preflight === 'quick_pin_required') {
+        showToast(PRIVILEGED_VOID_QUICK_PIN_REQUIRED_COPY, 'error');
+        return;
+      }
+      if (preflight !== 'ready' && preflight !== 'not_native') {
+        showToast(PRIVILEGED_VOID_STAFF_SESSION_UNAVAILABLE_COPY, 'error');
+        return;
+      }
+      privilegedVoidFlow.open(orderRef);
       return;
     }
     setVoidOpen(true);
-  }, [selected, user, branchId, privilegedVoidFlow]);
+  }, [selected, user, branchId, privilegedVoidFlow, ensurePrivilegedStaffSession, showToast]);
 
   const handleVoidConfirm = useCallback(
     async (reason: string, note: string) => {
@@ -1174,7 +1206,7 @@ export default function SalesHistoryPage() {
                       <button
                         type="button"
                         className="sh-df-btn sh-df-void"
-                        onClick={handleOpenVoid}
+                        onClick={() => void handleOpenVoid()}
                         title={
                           selected.pendingSync
                             ? 'ยกเลิกบิลที่ยังรอซิงก์ (ทำงานแบบออฟไลน์ได้)'

@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -28,7 +29,7 @@ import {
 } from '../firebaseAuth';
 import type { User } from '../types';
 import { hasUidBoundEnrollmentRecoveryEvidence } from './deviceRegistration';
-import { AuthOperationSupersededError } from './authOperationError';
+import { AuthOperationSupersededError, AuthProviderDisposedError } from './authOperationError';
 import { EnrollmentIdentityError, isEnrollmentIdentityError } from './enrollmentIdentityError';
 import { claimEnrollmentGrantMinter, type EnrollmentPreparationGrant } from './enrollmentGrant';
 import { asPinIdentityStep, PinIdentityError } from './pinIdentityError';
@@ -40,7 +41,8 @@ import {
   readNativeDeviceReadiness,
   type NativeDeviceReadiness,
 } from './nativeDeviceReadiness';
-import { getNativeStaffSessionInvoke } from './refreshStaffSession';
+import { getNativeStaffSessionInvoke, refreshStaffSession } from './refreshStaffSession';
+import { isLatestNativeStaffSessionEpisode, runNativeStaffSessionEpisode } from './staffSessionNativeCoordinator';
 import {
   findDevUserByPin,
   findDevUserByUsernamePassword,
@@ -53,6 +55,28 @@ import {
   type AuthSession,
 } from './session';
 import { verifyPinLogin } from './verifyPinLogin';
+
+/**
+ * TPOS-USABLE-POS-VOID-OAC-DECISION D-V8 — the operator's native offline
+ * staff session (SSA1) as this runtime last established it.
+ *   - `ready`: persisted for the current staff by Quick PIN login or by a
+ *     PIN-less SSA1_REFRESH for the current concrete branch;
+ *   - `refreshing`: a branch-change / on-demand refresh is in flight;
+ *   - `missing`: cleared, never established, refresh failed, or a password
+ *     session (which has no staff claim and so cannot hold one).
+ */
+export type StaffSessionStatus = 'ready' | 'refreshing' | 'missing';
+
+/** Result of the privileged-operation preflight (`ensurePrivilegedStaffSession`). */
+export type PrivilegedStaffSessionPreflight =
+  /** Native SSA1 is established for the current staff + concrete branch. */
+  | 'ready'
+  /** Web runtime: no native staff session exists to check (unchanged behavior). */
+  | 'not_native'
+  /** The primary identity is not a Quick PIN identity (e.g. password login). */
+  | 'quick_pin_required'
+  /** No usable SSA1 and it could not be (re)established now. Fail closed. */
+  | 'unavailable';
 
 export type AuthContextValue = {
   session: AuthSession | null;
@@ -87,6 +111,16 @@ export type AuthContextValue = {
    */
   prepareEnrollmentIdentity: () => Promise<EnrollmentPreparationGrant>;
   setBranchId: (branchId: string) => Promise<void> | void;
+  /** D-V8 — native operator staff-session state; privileged actions need `ready`. */
+  staffSessionStatus: StaffSessionStatus;
+  /**
+   * D-V8 — privileged-operation preflight. Never weakens login policy: a
+   * password session is told to use Quick PIN; a Quick PIN session with no
+   * current SSA1 gets one PIN-less refresh for the current concrete branch.
+   */
+  ensurePrivilegedStaffSession: () => Promise<PrivilegedStaffSessionPreflight>;
+  /** D-V8 — native reported the staff session missing/invalid: mark it so. */
+  invalidateStaffSession: () => void;
 };
 
 export const AuthContext = createContext<AuthContextValue | null>(null);
@@ -171,6 +205,78 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // latest AND Firebase is still on the UID that operation authenticated.
   const authOpRef = useRef(0);
   const pendingCompletionRef = useRef<PendingCompletion | null>(null);
+  // D-V8 — native staff-session continuity. `staffSessionOpRef` fences async
+  // refreshes: any clear/login/logout/newer refresh supersedes an older one,
+  // whose result is then ignored (native also rejects its stale challenge).
+  const [staffSessionStatus, setStaffSessionStatusState] = useState<StaffSessionStatus>('missing');
+  const staffSessionStatusRef = useRef<StaffSessionStatus>('missing');
+  const staffSessionOpRef = useRef(0);
+  const sessionRef = useRef<AuthSession | null>(session);
+  sessionRef.current = session;
+  // Branch-switch fence: `branchOpRef` is captured at the START of every
+  // setBranchId and owns that whole switch (last selection wins).
+  // Every native staff-session mutation (branch switch, logout, Quick PIN
+  // issuance, login completion, identity departure, enrollment preparation,
+  // privileged refresh) runs through the module-scope
+  // `runNativeStaffSessionEpisode` coordinator: one FIFO ordering domain for
+  // the whole runtime, so an older lifecycle's native clear can never land
+  // after a newer session's SSA1 persist. `readyBindingRef` ties `ready` to
+  // the staff, branch, branch operation and coordinator episode that
+  // persisted it; any later-submitted episode invalidates it.
+  const branchOpRef = useRef(0);
+  const branchOpsInFlightRef = useRef(0);
+  const lastPersistedSeqRef = useRef<number | null>(null);
+  const readyBindingRef = useRef<{ staffId: string; branchId: string; branchOp: number; seq: number } | null>(null);
+  // Instance lifetime: true once this provider is unmounted. Its public
+  // callbacks may still be retained (closures, pending handlers), but from
+  // then on they are inert: no native episode, no shared saved session, no
+  // Firebase Auth change, no readiness. The mounted provider owns all of it.
+  const disposedRef = useRef(false);
+  /**
+   * Submits a native staff-session episode on behalf of THIS provider. The
+   * only way this provider reaches the coordinator: a disposed provider is
+   * refused synchronously, before any queue position or sequence is taken.
+   */
+  const runOwnedStaffSessionEpisode = useCallback(<T,>(episode: (seq: number) => Promise<T>): Promise<T> => {
+    if (disposedRef.current) return Promise.reject(new AuthProviderDisposedError());
+    return runNativeStaffSessionEpisode(episode);
+  }, []);
+  const markStaffSession = useCallback((status: StaffSessionStatus) => {
+    staffSessionOpRef.current += 1;
+    staffSessionStatusRef.current = status;
+    if (status !== 'ready') readyBindingRef.current = null;
+    setStaffSessionStatusState(status);
+    return staffSessionOpRef.current;
+  }, []);
+  /** Marks ready only while `seq` is still the newest native episode; else missing. */
+  const markStaffSessionReady = useCallback(
+    (staffId: string, branchId: string, seq: number) => {
+      if (disposedRef.current || !isLatestNativeStaffSessionEpisode(seq)) {
+        markStaffSession('missing');
+        return false;
+      }
+      markStaffSession('ready');
+      readyBindingRef.current = { staffId, branchId, branchOp: branchOpRef.current, seq };
+      return true;
+    },
+    [markStaffSession],
+  );
+
+  // Provider teardown: none of its in-flight login/branch/refresh operations
+  // may queue or perform a native mutation, or report readiness, afterwards,
+  // and none of its retained callbacks may START one (a newer provider in the
+  // same runtime owns the staff session). A layout effect, so that StrictMode's
+  // simulated unmount/remount re-arms the provider before any child's passive
+  // effect runs again.
+  useLayoutEffect(() => {
+    disposedRef.current = false;
+    return () => {
+      disposedRef.current = true;
+      authOpRef.current += 1;
+      branchOpRef.current += 1;
+      staffSessionOpRef.current += 1;
+    };
+  }, []);
 
   const beginAuthOp = useCallback(() => {
     pendingCompletionRef.current = null;
@@ -179,7 +285,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, []);
 
   const isAuthOpCurrent = useCallback((op: number, firebaseUid: string | null) => {
-    if (authOpRef.current !== op) return false;
+    if (disposedRef.current || authOpRef.current !== op) return false;
     return firebaseUid === null || auth?.currentUser?.uid === firebaseUid;
   }, []);
 
@@ -235,8 +341,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
         const stored = loadSession();
         if (!stored || stored.user.id !== fbUser.uid) {
           const user = await fetchUserById(fbUser.uid);
+          // A disposed provider never saves into the shared session store.
           const stillCurrent =
-            identityGenerationRef.current === generation && auth?.currentUser?.uid === fbUser.uid;
+            !disposedRef.current &&
+            identityGenerationRef.current === generation &&
+            auth?.currentUser?.uid === fbUser.uid;
           if (stillCurrent && user && isActiveUser(user)) {
             const branchId =
               stored?.branchId && user.branchIds.includes(stored.branchId)
@@ -257,7 +366,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
 
       // Restore anonymous auth for an existing POS session (offline / page reload)
-      if (!fbUser && loadSession()) {
+      if (!fbUser && !disposedRef.current && loadSession()) {
         try {
           await ensureFirebaseAuth();
         } catch (err) {
@@ -270,6 +379,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, []);
 
   const loginWithPin = useCallback(async (pin: string, branchId: string, username: string) => {
+    // Retained from an unmounted provider: no readiness read, no Firebase
+    // identity change, no verifyPinLogin, no native issuance.
+    if (disposedRef.current) throw new AuthProviderDisposedError();
     const normalizedPin = pin.trim();
     const normalizedUsername = username.trim().toLowerCase();
     if (!/^\d{4}$/.test(normalizedPin)) {
@@ -311,7 +423,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
             const invoke = getNativeStaffSessionInvoke();
             if (invoke) {
               try {
-                await invoke('native_clear_staff_session');
+                await runOwnedStaffSessionEpisode(() => invoke('native_clear_staff_session'));
               } catch {
                 throw new PinIdentityError('PIN_IDENTITY_UNAVAILABLE');
               }
@@ -322,6 +434,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
             clearSession();
             setSession(null);
             lastPersistedStaffIdRef.current = null;
+            lastPersistedSeqRef.current = null;
+            branchOpRef.current += 1;
+            markStaffSession('missing');
           },
           // Final synchronous fence right before signOut. The generation check
           // also covers a newer login that re-signed-in the SAME UID.
@@ -358,74 +473,81 @@ export function AuthProvider({ children }: AuthProviderProps) {
           if (!invoke || !app) {
             throw new DeviceNotReadyError('DEVICE_SESSION_PREPARATION_FAILED');
           }
-          assertAuthOpCurrent(op, pinIdentity.uid);
-          let challengeRaw: unknown;
-          try {
-            challengeRaw = await invoke('native_prepare_staff_session_challenge', {
-              purpose: 'SSA1_LOGIN',
-              branchId,
-              intendedStaffId: user.id,
-            });
-          } catch {
-            throw new DeviceNotReadyError('DEVICE_SESSION_PREPARATION_FAILED');
-          }
-          const challenge = challengeRaw as { generation?: unknown; sscp1ProofBase64?: unknown } | null;
-          if (
-            typeof challenge?.generation !== 'number' ||
-            typeof challenge?.sscp1ProofBase64 !== 'string' ||
-            !challenge.sscp1ProofBase64
-          ) {
-            throw new DeviceNotReadyError('DEVICE_SESSION_PREPARATION_FAILED');
-          }
-
-          let issued: { ssa1Base64: string; srf1Base64: string; oks1Base64: string };
-          try {
-            const functions = getFunctions(app, import.meta.env.VITE_FUNCTIONS_REGION);
-            const issueCallable = httpsCallable<
-              { sscp1Base64: string },
-              { ok: boolean; ssa1Base64?: string; srf1Base64?: string; code?: string }
-            >(functions, 'issueOfflineStaffSessionAssertion');
-            const issueRes = await issueCallable({ sscp1Base64: challenge.sscp1ProofBase64 });
-            const { ssa1Base64, srf1Base64 } = issueRes.data;
-            if (!issueRes.data.ok || !ssa1Base64 || !srf1Base64) {
-              console.warn('[auth] offline staff session issuance refused', issueRes.data.code ?? 'issue_call_failed');
-              throw new DeviceNotReadyError('DEVICE_SESSION_ISSUANCE_FAILED');
-            }
-
-            const keysetCallable = httpsCallable<unknown, { ok: boolean; oks1Base64?: string }>(
-              functions,
-              'getOacKeysetManifest',
-            );
-            const keysetRes = await keysetCallable({});
-            if (!keysetRes.data.ok || !keysetRes.data.oks1Base64) {
-              throw new DeviceNotReadyError('DEVICE_SESSION_ISSUANCE_FAILED');
-            }
-            issued = { ssa1Base64, srf1Base64, oks1Base64: keysetRes.data.oks1Base64 };
-          } catch (err) {
-            throw err instanceof DeviceNotReadyError ? err : new DeviceNotReadyError('DEVICE_SESSION_ISSUANCE_FAILED');
-          }
-
-          assertAuthOpCurrent(op, pinIdentity.uid);
-          try {
-            await invoke('native_persist_staff_session_assertion', {
-              generation: challenge.generation,
-              ...issued,
-            });
-          } catch {
-            throw new DeviceNotReadyError('DEVICE_SESSION_PERSIST_FAILED');
-          }
-
-          if (!isAuthOpCurrent(op, pinIdentity.uid)) {
-            // Superseded while persisting: do not leave this staff's native
-            // session behind for whatever identity is current now.
+          // One coordinator episode from native prepare through persist: an
+          // older queued clear (branch switch, logout, departure) runs strictly
+          // BEFORE this persist and can never erase it afterwards. A login
+          // superseded while queued performs no native mutation at all.
+          await runOwnedStaffSessionEpisode(async (seq) => {
+            assertAuthOpCurrent(op, pinIdentity.uid);
+            let challengeRaw: unknown;
             try {
-              await invoke('native_clear_staff_session');
+              challengeRaw = await invoke('native_prepare_staff_session_challenge', {
+                purpose: 'SSA1_LOGIN',
+                branchId,
+                intendedStaffId: user.id,
+              });
             } catch {
-              // best effort; completeLogin clears again for a different staff
+              throw new DeviceNotReadyError('DEVICE_SESSION_PREPARATION_FAILED');
             }
-            throw new AuthOperationSupersededError();
-          }
-          lastPersistedStaffIdRef.current = user.id;
+            const challenge = challengeRaw as { generation?: unknown; sscp1ProofBase64?: unknown } | null;
+            if (
+              typeof challenge?.generation !== 'number' ||
+              typeof challenge?.sscp1ProofBase64 !== 'string' ||
+              !challenge.sscp1ProofBase64
+            ) {
+              throw new DeviceNotReadyError('DEVICE_SESSION_PREPARATION_FAILED');
+            }
+
+            let issued: { ssa1Base64: string; srf1Base64: string; oks1Base64: string };
+            try {
+              const functions = getFunctions(app, import.meta.env.VITE_FUNCTIONS_REGION);
+              const issueCallable = httpsCallable<
+                { sscp1Base64: string },
+                { ok: boolean; ssa1Base64?: string; srf1Base64?: string; code?: string }
+              >(functions, 'issueOfflineStaffSessionAssertion');
+              const issueRes = await issueCallable({ sscp1Base64: challenge.sscp1ProofBase64 });
+              const { ssa1Base64, srf1Base64 } = issueRes.data;
+              if (!issueRes.data.ok || !ssa1Base64 || !srf1Base64) {
+                console.warn('[auth] offline staff session issuance refused', issueRes.data.code ?? 'issue_call_failed');
+                throw new DeviceNotReadyError('DEVICE_SESSION_ISSUANCE_FAILED');
+              }
+
+              const keysetCallable = httpsCallable<unknown, { ok: boolean; oks1Base64?: string }>(
+                functions,
+                'getOacKeysetManifest',
+              );
+              const keysetRes = await keysetCallable({});
+              if (!keysetRes.data.ok || !keysetRes.data.oks1Base64) {
+                throw new DeviceNotReadyError('DEVICE_SESSION_ISSUANCE_FAILED');
+              }
+              issued = { ssa1Base64, srf1Base64, oks1Base64: keysetRes.data.oks1Base64 };
+            } catch (err) {
+              throw err instanceof DeviceNotReadyError ? err : new DeviceNotReadyError('DEVICE_SESSION_ISSUANCE_FAILED');
+            }
+
+            assertAuthOpCurrent(op, pinIdentity.uid);
+            try {
+              await invoke('native_persist_staff_session_assertion', {
+                generation: challenge.generation,
+                ...issued,
+              });
+            } catch {
+              throw new DeviceNotReadyError('DEVICE_SESSION_PERSIST_FAILED');
+            }
+
+            if (!isAuthOpCurrent(op, pinIdentity.uid)) {
+              // Superseded while persisting: do not leave this staff's native
+              // session behind for whatever identity is current now.
+              try {
+                await invoke('native_clear_staff_session');
+              } catch {
+                // best effort; completeLogin clears again for a different staff
+              }
+              throw new AuthOperationSupersededError();
+            }
+            lastPersistedStaffIdRef.current = user.id;
+            lastPersistedSeqRef.current = seq;
+          });
         }
 
         markCompletable(op, 'pin', pinIdentity.uid, user.id);
@@ -447,9 +569,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
     throw new Error('PIN ไม่ถูกต้องหรือไม่มีสิทธิ์สาขานี้');
-  }, [assertAuthOpCurrent, beginAuthOp, isAuthOpCurrent, markCompletable, refreshDeviceReadiness]);
+  }, [assertAuthOpCurrent, beginAuthOp, isAuthOpCurrent, markCompletable, refreshDeviceReadiness, runOwnedStaffSessionEpisode]);
 
   const completeLogin = useCallback(async (user: User, branchId: string) => {
+    // Retained from an unmounted provider: never saves a session or clears SSA1.
+    if (disposedRef.current) throw new AuthProviderDisposedError();
     // Defense in depth: no app session is ever saved on a not-READY native device.
     assertDeviceGateOpen(await refreshDeviceReadiness());
     // Only the result of the still-current login operation, for the user it
@@ -469,19 +593,36 @@ export function AuthProvider({ children }: AuthProviderProps) {
     if (lastPersistedStaffIdRef.current !== user.id) {
       const invoke = getNativeStaffSessionInvoke();
       if (invoke) {
-        await invoke('native_clear_staff_session');
+        // Invalidate readiness before this clear is even queued.
+        markStaffSession('missing');
+        await runOwnedStaffSessionEpisode(() => invoke('native_clear_staff_session'));
       }
       lastPersistedStaffIdRef.current = null;
+      lastPersistedSeqRef.current = null;
     }
     assertCompletable();
     const nextSession = establishSession(user, branchId);
     pendingCompletionRef.current = null;
+    // A new login supersedes any branch switch of the previous session.
+    branchOpRef.current += 1;
+    sessionRef.current = nextSession;
     setSession(nextSession);
+    // D-V8 — only a Quick PIN login that persisted THIS staff's SSA1 is ready;
+    // a password login (cleared above) has none. Ready also requires that no
+    // native episode was queued after that persist (it might erase it).
+    const persistedSeq = lastPersistedSeqRef.current;
+    if (lastPersistedStaffIdRef.current === user.id && getNativeStaffSessionInvoke() && persistedSeq !== null) {
+      markStaffSessionReady(user.id, branchId, persistedSeq);
+    } else {
+      markStaffSession('missing');
+    }
     await touchLastLogin(user.id);
-  }, [isAuthOpCurrent, refreshDeviceReadiness]);
+  }, [isAuthOpCurrent, markStaffSession, markStaffSessionReady, refreshDeviceReadiness, runOwnedStaffSessionEpisode]);
 
   const loginWithUsername = useCallback(
     async (username: string, password: string, branchId: string) => {
+      // Retained from an unmounted provider: never signs in.
+      if (disposedRef.current) throw new AuthProviderDisposedError();
       const normalizedUsername = username.trim().toLowerCase();
       if (!normalizedUsername || !password) {
         throw new Error('กรุณากรอกชื่อผู้ใช้และรหัสผ่าน');
@@ -538,22 +679,50 @@ export function AuthProvider({ children }: AuthProviderProps) {
   );
 
   const logout = useCallback(async () => {
+    // Retained from an unmounted provider: a silent no-op. The shared saved
+    // session, the shared Firebase user and native SSA1 now belong to the
+    // mounted provider.
+    if (disposedRef.current) return;
     // A login still in flight must not re-create a session after logout.
     authOpRef.current += 1;
+    const op = authOpRef.current;
     pendingCompletionRef.current = null;
+    // ...nor may a branch switch still in flight write or refresh anything.
+    branchOpRef.current += 1;
     const invoke = getNativeStaffSessionInvoke();
-    if (invoke) {
-      await invoke('native_clear_staff_session');
-    }
-    clearSession();
-    setSession(null);
+    markStaffSession('missing');
+    // No SSA1 may be credited to the departing session from here on (a later
+    // login of the same staff must persist and queue its own).
     lastPersistedStaffIdRef.current = null;
-    if (auth) {
+    lastPersistedSeqRef.current = null;
+    const endAppSession = () => {
+      clearSession();
+      setSession(null);
+      sessionRef.current = null;
+    };
+    if (invoke) {
+      // Queue position is reserved synchronously, before any await, so a
+      // subsequent login's native persist episode is strictly after this
+      // clear. The app session ends inside the same episode (native clear
+      // first; a failed clear keeps the session and surfaces the error).
+      await runOwnedStaffSessionEpisode(async () => {
+        await invoke('native_clear_staff_session');
+        endAppSession();
+      });
+    } else {
+      endAppSession();
+    }
+    // A newer login that started meanwhile (or a newer provider, after this
+    // one was unmounted) owns the Firebase identity now.
+    if (auth && !disposedRef.current && authOpRef.current === op) {
       await signOut(auth);
     }
-  }, []);
+  }, [markStaffSession, runOwnedStaffSessionEpisode]);
 
   const prepareEnrollmentIdentity = useCallback(async () => {
+    // Retained from an unmounted provider: the existing fixed fail-closed
+    // error, with no readiness read, native clear, session or Auth change.
+    if (disposedRef.current) throw new EnrollmentIdentityError('ENROLLMENT_IDENTITY_UNAVAILABLE');
     // Supersedes any in-flight login and drops its pending completion.
     const op = beginAuthOp();
     try {
@@ -573,7 +742,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const invoke = getNativeStaffSessionInvoke();
       if (invoke) {
         try {
-          await invoke('native_clear_staff_session');
+          await runOwnedStaffSessionEpisode(() => invoke('native_clear_staff_session'));
         } catch {
           throw new EnrollmentIdentityError('ENROLLMENT_IDENTITY_UNAVAILABLE');
         }
@@ -586,6 +755,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       clearSession();
       setSession(null);
       lastPersistedStaffIdRef.current = null;
+      lastPersistedSeqRef.current = null;
+      branchOpRef.current += 1;
+      markStaffSession('missing');
 
       const assertMayLeave = (departing: FirebaseUser) => {
         assertAuthOpCurrent(op, departing.uid);
@@ -613,7 +785,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // The only proof `registerDevice` accepts; rechecked there right before begin.
       return mintEnrollmentGrant({
         requesterUid: identity.uid,
-        isPreparationCurrent: () => authOpRef.current === op,
+        isPreparationCurrent: () => !disposedRef.current && authOpRef.current === op,
         readDeviceReadiness: refreshDeviceReadiness,
       });
     } catch (err) {
@@ -621,25 +793,137 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // Superseded, native bridge, or anything unexpected: fixed and fail closed.
       throw new EnrollmentIdentityError('ENROLLMENT_IDENTITY_UNAVAILABLE');
     }
-  }, [assertAuthOpCurrent, beginAuthOp, refreshDeviceReadiness]);
+  }, [assertAuthOpCurrent, beginAuthOp, markStaffSession, refreshDeviceReadiness, runOwnedStaffSessionEpisode]);
+
+  /**
+   * D-V8 — PIN-less SSA1_REFRESH for `branchId`, bound to `expectedStaffId`.
+   * Only for a Quick PIN primary identity (anonymous Firebase user carrying
+   * the staff claim); a password identity has no claim and is never refreshed.
+   * Must run inside the `runOwnedStaffSessionEpisode` episode `seq`. A
+   * refresh superseded by any newer staff-session or branch operation neither
+   * persists nor marks ready.
+   */
+  const refreshPrimaryStaffSession = useCallback(
+    async (branchId: string, expectedStaffId: string, branchOp: number, seq: number): Promise<boolean> => {
+      if (!getNativeStaffSessionInvoke() || !branchId || branchId === 'ALL') {
+        markStaffSession('missing');
+        return false;
+      }
+      if (auth?.currentUser?.isAnonymous !== true) {
+        markStaffSession('missing');
+        return false;
+      }
+      const op = markStaffSession('refreshing');
+      const isCurrent = () =>
+        !disposedRef.current &&
+        staffSessionOpRef.current === op &&
+        branchOpRef.current === branchOp &&
+        sessionRef.current?.user.id === expectedStaffId &&
+        sessionRef.current.branchId === branchId;
+      const result = await refreshStaffSession(branchId, undefined, { expectedStaffId, shouldPersist: isCurrent });
+      if (staffSessionOpRef.current !== op || branchOpRef.current !== branchOp) return false;
+      if (result.ok && isCurrent()) {
+        lastPersistedStaffIdRef.current = expectedStaffId;
+        lastPersistedSeqRef.current = seq;
+        return markStaffSessionReady(expectedStaffId, branchId, seq);
+      }
+      markStaffSession('missing');
+      return false;
+    },
+    [markStaffSession, markStaffSessionReady],
+  );
 
   const setBranchId = useCallback(
     async (branchId: string) => {
+      // Retained from an unmounted provider: a silent no-op (no coordinator
+      // episode, no native clear/refresh, no saved-session write).
+      if (disposedRef.current) return;
+      const owner = sessionRef.current;
+      // A forbidden selection is refused before it can supersede anything.
+      if (owner) assertBranchAccess(owner.user, branchId);
+      // This token owns the whole switch from here on: last selection wins.
+      branchOpRef.current += 1;
+      const branchOp = branchOpRef.current;
+      const staffId = owner?.user.id ?? null;
+      const isCurrent = () =>
+        !disposedRef.current && branchOpRef.current === branchOp && (sessionRef.current?.user.id ?? null) === staffId;
       const invoke = getNativeStaffSessionInvoke();
-      if (invoke) {
-        await invoke('native_clear_staff_session');
-      }
+      // D-V8 — privileged actions are blocked from this instant, and the old
+      // branch-bound SSA1 is cleared before any new one can be persisted.
       lastPersistedStaffIdRef.current = null;
-      setSession((prev) => {
-        if (!prev) return prev;
-        assertBranchAccess(prev.user, branchId);
-        const next = { ...prev, branchId };
-        saveSession(next);
-        return next;
-      });
+      lastPersistedSeqRef.current = null;
+      markStaffSession('missing');
+      branchOpsInFlightRef.current += 1;
+      try {
+        await runOwnedStaffSessionEpisode(async (seq) => {
+          // Queued behind older episodes: a selection superseded while it
+          // waited never touches native state, the session or the status.
+          if (!isCurrent()) return;
+          if (invoke) {
+            await invoke('native_clear_staff_session');
+          }
+          if (!isCurrent()) return;
+          lastPersistedStaffIdRef.current = null;
+          lastPersistedSeqRef.current = null;
+          setSession((prev) => {
+            if (!prev || prev.user.id !== staffId) return prev;
+            const next = { ...prev, branchId };
+            saveSession(next);
+            return next;
+          });
+          if (sessionRef.current && sessionRef.current.user.id === staffId) {
+            sessionRef.current = { ...sessionRef.current, branchId };
+          }
+          // Then re-establish SSA1 for the selected concrete branch when the
+          // primary identity supports it (Quick PIN). Failure leaves `missing`:
+          // ordinary POS use continues, privileged actions stay blocked.
+          if (invoke && staffId && branchId !== 'ALL' && isCurrent()) {
+            await refreshPrimaryStaffSession(branchId, staffId, branchOp, seq);
+          }
+        });
+      } finally {
+        branchOpsInFlightRef.current -= 1;
+      }
     },
-    [],
+    [markStaffSession, refreshPrimaryStaffSession, runOwnedStaffSessionEpisode],
   );
+
+  const ensurePrivilegedStaffSession = useCallback(async (): Promise<PrivilegedStaffSessionPreflight> => {
+    // Retained from an unmounted provider: fail closed, no native/server call.
+    if (disposedRef.current) return 'unavailable';
+    if (!getNativeStaffSessionInvoke()) return 'not_native';
+    const current = sessionRef.current;
+    if (!current || !current.branchId || current.branchId === 'ALL') return 'unavailable';
+    if (auth?.currentUser?.isAnonymous !== true) return 'quick_pin_required';
+    // A branch switch still owns the staff session until it settles.
+    if (branchOpsInFlightRef.current > 0) return 'unavailable';
+    const binding = readyBindingRef.current;
+    if (
+      staffSessionStatusRef.current === 'ready' &&
+      lastPersistedStaffIdRef.current === current.user.id &&
+      binding?.staffId === current.user.id &&
+      binding.branchId === current.branchId &&
+      binding.branchOp === branchOpRef.current &&
+      isLatestNativeStaffSessionEpisode(binding.seq)
+    ) {
+      return 'ready';
+    }
+    if (staffSessionStatusRef.current === 'refreshing') return 'unavailable';
+    const branchOp = branchOpRef.current;
+    const ok = await runOwnedStaffSessionEpisode(async (seq) =>
+      !disposedRef.current && branchOpRef.current === branchOp
+        ? refreshPrimaryStaffSession(current.branchId, current.user.id, branchOp, seq)
+        : false,
+    );
+    return ok ? 'ready' : 'unavailable';
+  }, [refreshPrimaryStaffSession, runOwnedStaffSessionEpisode]);
+
+  const invalidateStaffSession = useCallback(() => {
+    if (disposedRef.current) return;
+    lastPersistedStaffIdRef.current = null;
+    lastPersistedSeqRef.current = null;
+    markStaffSession('missing');
+  }, [markStaffSession]);
 
   const deviceGateOpen = isDeviceGateOpen(deviceReadiness);
   const gatedSession = deviceGateOpen ? session : null;
@@ -660,6 +944,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       logout,
       prepareEnrollmentIdentity,
       setBranchId,
+      staffSessionStatus,
+      ensurePrivilegedStaffSession,
+      invalidateStaffSession,
     }),
     [
       gatedSession,
@@ -673,6 +960,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       logout,
       prepareEnrollmentIdentity,
       setBranchId,
+      staffSessionStatus,
+      ensurePrivilegedStaffSession,
+      invalidateStaffSession,
     ],
   );
 

@@ -128,43 +128,61 @@ describe('PrivilegedVoidModal', () => {
     expect(screen.queryByRole('textbox')).toBeNull();
   });
 
-  it('MANAGER_PIN_ENTRY forwards the raw six-digit PIN buffer to flow.submitPin exactly once, never storing it in this component', () => {
+  // D-V5 (TPOS-USABLE-POS-VOID-OAC-DECISION-IMPLEMENT-CLAUDE-002): the live
+  // authoritative manager/admin credential is the 4-digit PIN (coordinated
+  // PIN6 cutover deferred) — the PIN that JIT provisioning and the native
+  // offline verifier both check — so the pad collects exactly 4 digits.
+  it('MANAGER_PIN_ENTRY forwards the raw four-digit PIN buffer to flow.submitPin exactly once, never storing it in this component', () => {
     const flow = makeFlow({ status: 'MANAGER_PIN_ENTRY', identity: IDENTITY, reason: 'r', note: '', pinErrorCode: null });
     render(<PrivilegedVoidModal flow={flow} />);
-    for (const d of ['1', '2', '3', '4', '5', '6']) fireEvent.click(screen.getByText(d));
+    for (const d of ['1', '2', '3', '4']) fireEvent.click(screen.getByText(d));
     fireEvent.click(screen.getByText('ยืนยัน'));
     expect(flow.submitPin).toHaveBeenCalledTimes(1);
-    expect(flow.submitPin).toHaveBeenCalledWith('123456');
+    expect(flow.submitPin).toHaveBeenCalledWith('1234');
   });
 
-  it('RC-E1-001: fewer than 6 digits cannot submit (Submit stays disabled)', () => {
+  it('RC-E1-001: fewer than 4 digits cannot submit (Submit stays disabled)', () => {
     const flow = makeFlow({ status: 'MANAGER_PIN_ENTRY', identity: IDENTITY, reason: 'r', note: '', pinErrorCode: null });
     render(<PrivilegedVoidModal flow={flow} />);
-    for (const d of ['1', '2', '3', '4', '5']) fireEvent.click(screen.getByText(d));
+    for (const d of ['1', '2', '3']) fireEvent.click(screen.getByText(d));
     const submit = screen.getByText('ยืนยัน') as HTMLButtonElement;
     expect(submit.disabled).toBe(true);
     fireEvent.click(submit);
     expect(flow.submitPin).not.toHaveBeenCalled();
   });
 
-  it('RC-E1-001: exactly 6 digits enables Submit', () => {
+  it('RC-E1-001: exactly 4 digits enables Submit', () => {
     const flow = makeFlow({ status: 'MANAGER_PIN_ENTRY', identity: IDENTITY, reason: 'r', note: '', pinErrorCode: null });
     render(<PrivilegedVoidModal flow={flow} />);
-    for (const d of ['1', '2', '3', '4', '5']) fireEvent.click(screen.getByText(d));
+    for (const d of ['1', '2', '3']) fireEvent.click(screen.getByText(d));
     const submit = screen.getByText('ยืนยัน') as HTMLButtonElement;
     expect(submit.disabled).toBe(true);
-    fireEvent.click(screen.getByText('6'));
+    fireEvent.click(screen.getByText('4'));
     expect(submit.disabled).toBe(false);
   });
 
-  it('RC-E1-001: the PIN buffer is capped at 6 digits — a 7th digit press is not accepted', () => {
+  it('RC-E1-001: the PIN buffer is capped at 4 digits — a 5th digit press is not accepted', () => {
     const flow = makeFlow({ status: 'MANAGER_PIN_ENTRY', identity: IDENTITY, reason: 'r', note: '', pinErrorCode: null });
     render(<PrivilegedVoidModal flow={flow} />);
-    for (const d of ['1', '2', '3', '4', '5', '6']) fireEvent.click(screen.getByText(d));
-    fireEvent.click(screen.getByText('7'));
+    for (const d of ['1', '2', '3', '4']) fireEvent.click(screen.getByText(d));
+    fireEvent.click(screen.getByText('5'));
     fireEvent.click(screen.getByText('ยืนยัน'));
-    expect(flow.submitPin).toHaveBeenCalledWith('123456');
-    expect(flow.submitPin).not.toHaveBeenCalledWith('1234567');
+    expect(flow.submitPin).toHaveBeenCalledWith('1234');
+    expect(flow.submitPin).not.toHaveBeenCalledWith('12345');
+  });
+
+  it('D-V7: PROVISIONING_APPROVAL shows fixed progress copy and is not dismissible', () => {
+    const flow = makeFlow({
+      status: 'PROVISIONING_APPROVAL',
+      identity: { ...IDENTITY, managerStaffId: 'mgr-1' },
+      reason: 'r',
+      note: '',
+      trigger: 'oac_missing',
+    });
+    render(<PrivilegedVoidModal flow={flow} />);
+    expect(screen.getByRole('status').textContent).toMatch(/เปิดใช้สิทธิ์อนุมัติ/);
+    expect(screen.queryByText('ปิด')).toBeNull();
+    expect(screen.queryByText(/DENIED_|OAC_|oac_missing/)).toBeNull();
   });
 
   it('RC-E1-001: no PIN digit is rendered anywhere — the masked display shows dot slots only', () => {
