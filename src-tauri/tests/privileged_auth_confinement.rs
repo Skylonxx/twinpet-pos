@@ -1,6 +1,6 @@
 //! SEC-001 Packet C-A/C-B/D — native command surface confinement.
 //!
-//! Exactly sixteen `privileged_auth` commands may ever be exposed to the
+//! Exactly seventeen `privileged_auth` commands may ever be exposed to the
 //! WebView, and nothing else from the module tree — no sign-arbitrary-bytes,
 //! no pepper/DPAPI-blob/device-private-key getter, no raw Argon2 verifier
 //! export, no arbitrary file read, no raw keyset-manifest-bytes command.
@@ -22,11 +22,16 @@
 //! `native_abandon_device_enrollment_staging`, and one generated permission.
 //! It takes only the enrollment generation id (no path, no bytes, no key) and
 //! returns only a bare outcome enum.
+//!
+//! D-V13 adds exactly one read-only command,
+//! `native_get_privileged_lockout_recovery_context`, and one generated
+//! permission. It takes only the canonical manager id and returns only the
+//! LCT1 request tuple plus display state for that manager's current lockout.
 
 use std::fs;
 use std::path::PathBuf;
 
-const EXACT_SIXTEEN_COMMANDS: &[&str] = &[
+const EXACT_SEVENTEEN_COMMANDS: &[&str] = &[
     "native_import_device_enrollment_file",
     "native_generate_device_registration_proof",
     "native_abandon_device_enrollment_staging",
@@ -37,6 +42,7 @@ const EXACT_SIXTEEN_COMMANDS: &[&str] = &[
     "native_get_device_security_readiness",
     "native_verify_offline_pin",
     "native_clear_offline_lockout",
+    "native_get_privileged_lockout_recovery_context",
     "native_prepare_staff_session_challenge",
     "native_persist_staff_session_assertion",
     "native_clear_staff_session",
@@ -98,9 +104,9 @@ fn lib_rs_source() -> String {
 }
 
 #[test]
-fn exactly_sixteen_native_commands_are_granted_in_capabilities() {
+fn exactly_seventeen_native_commands_are_granted_in_capabilities() {
     let granted = granted_native_permissions();
-    let mut expected: Vec<String> = EXACT_SIXTEEN_COMMANDS
+    let mut expected: Vec<String> = EXACT_SEVENTEEN_COMMANDS
         .iter()
         .map(|c| format!("allow-{}", c.replace('_', "-")))
         .collect();
@@ -109,35 +115,35 @@ fn exactly_sixteen_native_commands_are_granted_in_capabilities() {
     actual.sort();
     assert_eq!(
         actual, expected,
-        "capabilities/default.json must grant exactly the sixteen frozen commands"
+        "capabilities/default.json must grant exactly the seventeen frozen commands"
     );
 }
 
 #[test]
-fn exactly_sixteen_tauri_command_functions_are_defined_in_mod_rs() {
+fn exactly_seventeen_tauri_command_functions_are_defined_in_mod_rs() {
     let source = mod_rs_source();
-    let defined: Vec<&str> = EXACT_SIXTEEN_COMMANDS
+    let defined: Vec<&str> = EXACT_SEVENTEEN_COMMANDS
         .iter()
         .filter(|name| source.contains(&format!("pub fn {name}(")))
         .copied()
         .collect();
     assert_eq!(
         defined.len(),
-        16,
-        "expected exactly 16 command functions defined, found: {defined:?}"
+        17,
+        "expected exactly 17 command functions defined, found: {defined:?}"
     );
 
     let command_attr_count = source.matches("#[tauri::command]").count();
     assert_eq!(
-        command_attr_count, 16,
-        "expected exactly 16 #[tauri::command]-annotated functions in mod.rs"
+        command_attr_count, 17,
+        "expected exactly 17 #[tauri::command]-annotated functions in mod.rs"
     );
 }
 
 #[test]
-fn exactly_sixteen_commands_are_registered_in_generate_handler() {
+fn exactly_seventeen_commands_are_registered_in_generate_handler() {
     let source = lib_rs_source();
-    for name in EXACT_SIXTEEN_COMMANDS {
+    for name in EXACT_SEVENTEEN_COMMANDS {
         assert!(
             source.contains(&format!("privileged_auth::{name}")),
             "lib.rs generate_handler! must register privileged_auth::{name}"
@@ -145,8 +151,8 @@ fn exactly_sixteen_commands_are_registered_in_generate_handler() {
     }
     let registered = source.matches("privileged_auth::native_").count();
     assert_eq!(
-        registered, 16,
-        "generate_handler! must register exactly 16 privileged_auth commands"
+        registered, 17,
+        "generate_handler! must register exactly 17 privileged_auth commands"
     );
 }
 
@@ -162,7 +168,7 @@ fn exactly_one_new_d1b_generated_permission_exists() {
     names.sort();
     assert_eq!(
         names.len(),
-        EXACT_SIXTEEN_COMMANDS.len(),
+        EXACT_SEVENTEEN_COMMANDS.len(),
         "one generated permission file per native command, no more: {names:?}"
     );
     assert!(names.contains(&"native_attest_privileged_action.toml".to_string()));
@@ -324,6 +330,37 @@ fn native_abandon_device_enrollment_staging_takes_only_the_generation_id() {
 }
 
 #[test]
+fn native_get_privileged_lockout_recovery_context_takes_only_the_manager_id() {
+    let source = mod_rs_source();
+    let combined: String = source
+        .lines()
+        .skip_while(|line| {
+            !line
+                .trim_start()
+                .starts_with("pub fn native_get_privileged_lockout_recovery_context(")
+        })
+        .take_while(|line| !line.contains('{'))
+        .collect::<Vec<_>>()
+        .join(" ");
+    assert!(
+        !combined.is_empty(),
+        "native_get_privileged_lockout_recovery_context signature must exist in mod.rs"
+    );
+    assert_eq!(
+        combined.matches(": ").count(),
+        1,
+        "expected exactly the manager id argument, found: {combined}"
+    );
+    assert!(combined.contains("manager_staff_id: String"));
+    for forbidden in ["path", "file", "bytes", "key", "pin", "now", "branch", "token", "lockout_id"] {
+        assert!(
+            !combined.contains(forbidden),
+            "native_get_privileged_lockout_recovery_context must not take a '{forbidden}' argument, found: {combined}"
+        );
+    }
+}
+
+#[test]
 fn native_import_device_enrollment_file_has_no_caller_controlled_path_argument() {
     let source = mod_rs_source();
     let signature_line = source
@@ -399,7 +436,7 @@ fn all_nineteen_privileged_auth_modules_are_declared() {
 /// version-envelope inventory. Each row names the file and the explicit
 /// version constant it must declare; a future silent addition/removal of a
 /// privileged-auth store's version marker fails this test, mirroring the
-/// exhaustiveness style used for the sixteen-command surface above.
+/// exhaustiveness style used for the seventeen-command surface above.
 const EXPECTED_PRIVILEGED_AUTH_VERSION_MARKERS: &[(&str, &str)] = &[
     ("pepper_store.rs", "PEPPER_STORE_VERSION"),
     ("security_device_id.rs", "SECURITY_DEVICE_ID_STORE_VERSION"),

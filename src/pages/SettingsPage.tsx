@@ -24,6 +24,7 @@ import type { PosDevice, PosDeviceType, UomUnit } from '../lib/types';
 import ExpiryPolicySettings from './settings/ExpiryPolicySettings';
 import PosDevicesSettings from './settings/PosDevicesSettings';
 import DeviceSecurityEnrollmentCard from './settings/DeviceSecurityEnrollmentCard';
+import PrivilegedLockoutRecoveryCard from './settings/PrivilegedLockoutRecoveryCard';
 import PriceLevelManager from '../components/admin/PriceLevelManager';
 import './SettingsPage.css';
 
@@ -892,6 +893,8 @@ export default function SettingsPage() {
                   ) : null}
                 </div>
               </div>
+              {/* D-V15: admin-only native privileged-approval lockout recovery (this device). */}
+              {isAdmin ? <PrivilegedLockoutRecoveryCard branchId={branchId} operator={user} /> : null}
               <div className="stg-card">
                 <div className="stg-card-head">
                   <i className="ti ti-lock" aria-hidden="true" /> นโยบาย PIN &amp; Session

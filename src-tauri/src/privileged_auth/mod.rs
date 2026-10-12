@@ -23,6 +23,12 @@
 //! fail-closed abandon of a never-committed staged-only first enrollment after
 //! a definitive server pre-commit rejection. It takes only the generation id
 //! and returns only a bare outcome enum.
+//!
+//! D-V13 adds exactly one read-only command
+//! (`native_get_privileged_lockout_recovery_context`) that returns, for one
+//! canonical manager id, only the LCT1 request tuple (device id, manager id,
+//! current lockout id) plus display state, so the admin recovery surface can
+//! call `issuePrivilegedLockoutClear` and then `native_clear_offline_lockout`.
 
 pub mod action_attestation;
 pub mod argon2_benchmark;
@@ -553,6 +559,19 @@ pub fn native_clear_offline_lockout(
 ) -> Result<offline_verifier::ClearLockoutOutcomeDto, String> {
     let root = app_data_dir();
     offline_verifier::clear_offline_lockout(&root, &lct1_bytes_base64)
+}
+
+// --- Command 7b: native_get_privileged_lockout_recovery_context (D-V13) ---
+
+/// Read-only recovery context for exactly one canonical manager id: the
+/// device/manager/lockout tuple `issuePrivilegedLockoutClear` requires plus
+/// display state. Never writes, never returns PIN/verifier/salt/pepper/key.
+#[tauri::command]
+pub fn native_get_privileged_lockout_recovery_context(
+    manager_staff_id: String,
+) -> Result<offline_verifier::PrivilegedLockoutRecoveryContextDto, String> {
+    let root = app_data_dir();
+    Ok(offline_verifier::get_privileged_lockout_recovery_context(&root, &manager_staff_id))
 }
 
 // --- Command 8: native_prepare_staff_session_challenge ---

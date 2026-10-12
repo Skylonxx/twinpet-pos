@@ -335,6 +335,29 @@ pub fn check_manager_lockout(
     })
 }
 
+/// D-V13 — read-only snapshot of one manager's lockout entry for the admin
+/// recovery context. Reads through the same `read_lockout_store` (current-user
+/// DPAPI, schema + invariant validation) under the same mutex as verification,
+/// and never writes: unlike `check_manager_lockout` it does not reopen an
+/// elapsed + cleared generation. `Ok(None)` = no entry for this exact manager.
+pub fn read_manager_lockout_snapshot(
+    root: &Path,
+    manager_staff_id: &str,
+) -> Result<Option<ManagerLockoutState>, LockoutError> {
+    let _guard = LOCKOUT_MUTEX
+        .lock()
+        .map_err(|_| LockoutError::PresentMalformed("lockout mutex poisoned".to_string()))?;
+
+    if !is_canonical_identifier(manager_staff_id) {
+        return Err(LockoutError::PresentMalformed(
+            "invalid manager_staff_id grammar".to_string(),
+        ));
+    }
+
+    let store = read_lockout_store(root)?;
+    Ok(store.managers.get(manager_staff_id).cloned())
+}
+
 /// Records a failed PIN attempt.
 /// Increments attempts. At 5: locks out and mints new 32-byte CSPRNG lockoutId.
 pub fn record_failed_pin_attempt(

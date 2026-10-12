@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Phase B SQLite durable store (13 commands) + SEC-001 Packet C-A/C-B/D privileged_auth (exact 16 commands, incl. TPOS-R7 read-only device security readiness and the generation-bound staged-only enrollment abandon) — no generic SQL/fs/shell, no sign-arbitrary-bytes/pepper/DPAPI-blob/device-private-key/raw-Argon2-verifier/arbitrary-file-read/raw-keyset-manifest-bytes command",
+  "description": "Phase B SQLite durable store (13 commands) + SEC-001 Packet C-A/C-B/D privileged_auth (exact 17 commands, incl. TPOS-R7 read-only device security readiness, the generation-bound staged-only enrollment abandon and the D-V13 read-only lockout recovery context) — no generic SQL/fs/shell, no sign-arbitrary-bytes/pepper/DPAPI-blob/device-private-key/raw-Argon2-verifier/arbitrary-file-read/raw-keyset-manifest-bytes command",
   "windows": [
     "main"
   ],
@@ -29,6 +29,7 @@
     "allow-native-get-device-security-readiness",
     "allow-native-verify-offline-pin",
     "allow-native-clear-offline-lockout",
+    "allow-native-get-privileged-lockout-recovery-context",
     "allow-native-prepare-staff-session-challenge",
     "allow-native-persist-staff-session-assertion",
     "allow-native-clear-staff-session",

@@ -1084,6 +1084,96 @@ pub fn clear_offline_lockout(
     })
 }
 
+/// D-V13 — safe lockout recovery context for exactly one manager on this
+/// device. Carries only the tuple `issuePrivilegedLockoutClear` requires plus
+/// display state; never a PIN, verifier, salt, pepper or key.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PrivilegedLockoutRecoveryContextDto {
+    pub ok: bool,
+    pub manager_staff_id: Option<String>,
+    pub locked_out: bool,
+    pub consecutive_failed_attempts: u32,
+    pub locked_at_ms: Option<u64>,
+    pub cooldown_remaining_ms: u64,
+    pub security_device_id_hex: Option<String>,
+    pub lockout_id_hex: Option<String>,
+    pub clear_token_recorded: bool,
+    pub error_code: Option<String>,
+}
+
+pub const RECOVERY_CONTEXT_NOT_LOCKED: &str = "NOT_LOCKED";
+
+fn recovery_context_denial(code: &str) -> PrivilegedLockoutRecoveryContextDto {
+    PrivilegedLockoutRecoveryContextDto {
+        ok: false,
+        manager_staff_id: None,
+        locked_out: false,
+        consecutive_failed_attempts: 0,
+        locked_at_ms: None,
+        cooldown_remaining_ms: 0,
+        security_device_id_hex: None,
+        lockout_id_hex: None,
+        clear_token_recorded: false,
+        error_code: Some(code.to_string()),
+    }
+}
+
+/// Read-only: never writes the lockout store, the clock guard or the device
+/// id (no `check_manager_lockout` reopen, no `assert_valid_and_advance_clock`,
+/// no `resolve_or_create_security_device_id`). Native time only; a detected
+/// clock rollback fails closed. Not locked / no current generation returns the
+/// fixed `NOT_LOCKED` denial; any unreadable state returns `DENIED_UNVERIFIABLE`.
+pub fn get_privileged_lockout_recovery_context(
+    root: &Path,
+    manager_staff_id: &str,
+) -> PrivilegedLockoutRecoveryContextDto {
+    if !lockout_state::is_canonical_identifier(manager_staff_id) {
+        return recovery_context_denial("invalid_request_shape");
+    }
+
+    let entry = match lockout_state::read_manager_lockout_snapshot(root, manager_staff_id) {
+        Ok(Some(e)) => e,
+        Ok(None) => return recovery_context_denial(RECOVERY_CONTEXT_NOT_LOCKED),
+        Err(_) => return recovery_context_denial("DENIED_UNVERIFIABLE"),
+    };
+    let (locked_at_ms, lockout_id_hex) = match (entry.locked_out, entry.locked_at_ms, entry.current_lockout_id_hex) {
+        (true, Some(at), Some(id)) if lockout_state::is_lowercase_hex64(&id) => (at, id),
+        _ => return recovery_context_denial(RECOVERY_CONTEXT_NOT_LOCKED),
+    };
+
+    let security_device_id_hex = match security_device_id::read_persisted_security_device_id(root) {
+        Ok(Some(bytes)) => bytes.iter().map(|b| format!("{b:02x}")).collect::<String>(),
+        _ => return recovery_context_denial("DENIED_UNVERIFIABLE"),
+    };
+
+    let now_ms = match SystemTime::now().duration_since(UNIX_EPOCH) {
+        Ok(d) => d.as_millis() as u64,
+        Err(_) => return recovery_context_denial("DENIED_UNVERIFIABLE"),
+    };
+    match clock_guard::read_clock_guard_state(root) {
+        Ok(Some(state)) if now_ms < state.last_observed_system_time_ms => {
+            return recovery_context_denial("DENIED_UNVERIFIABLE");
+        }
+        Ok(_) => {}
+        Err(_) => return recovery_context_denial("DENIED_UNVERIFIABLE"),
+    }
+
+    let elapsed = now_ms.saturating_sub(locked_at_ms);
+    PrivilegedLockoutRecoveryContextDto {
+        ok: true,
+        manager_staff_id: Some(manager_staff_id.to_string()),
+        locked_out: true,
+        consecutive_failed_attempts: entry.consecutive_failed_attempts,
+        locked_at_ms: Some(locked_at_ms),
+        cooldown_remaining_ms: lockout_state::LOCKOUT_COOLDOWN_MS.saturating_sub(elapsed),
+        security_device_id_hex: Some(security_device_id_hex),
+        lockout_id_hex: Some(lockout_id_hex),
+        clear_token_recorded: entry.clear_token_recorded,
+        error_code: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2757,6 +2847,296 @@ mod tests {
         assert_eq!(m2_content_before, m2_content_after);
         let res10 = verify_offline_pin(&root, "mgr-2", "VOID_SETTLED_SALE", "654321").unwrap();
         assert!(res10.ok);
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    // --- D-V13 native_get_privileged_lockout_recovery_context ---
+
+    fn real_now_ms() -> u64 {
+        SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64
+    }
+
+    /// Locks `mgr` natively (5 failures ending at `locked_at_ms`) on a terminal
+    /// whose security device id exists. Returns the persisted device id hex.
+    fn lock_manager_at(root: &Path, mgr: &str, locked_at_ms: u64) -> String {
+        let id = security_device_id::resolve_or_create_security_device_id(root).unwrap();
+        for i in 0..5u64 {
+            lockout_state::record_failed_pin_attempt(root, mgr, locked_at_ms - 4 + i).unwrap();
+        }
+        id.iter().map(|b| format!("{b:02x}")).collect()
+    }
+
+    fn file_bytes(path: &Path) -> Option<Vec<u8>> {
+        fs::read(path).ok()
+    }
+
+    #[test]
+    fn recovery_context_locked_manager_returns_exact_safe_tuple() {
+        let root = temp_root();
+        let locked_at = real_now_ms() - 20 * 60 * 1000;
+        let device_hex = lock_manager_at(&root, "mgr-lock", locked_at);
+        let store = lockout_state::read_lockout_store(&root).unwrap();
+        let entry = store.managers.get("mgr-lock").unwrap().clone();
+
+        let ctx = get_privileged_lockout_recovery_context(&root, "mgr-lock");
+        assert!(ctx.ok);
+        assert_eq!(ctx.error_code, None);
+        assert_eq!(ctx.manager_staff_id.as_deref(), Some("mgr-lock"));
+        assert!(ctx.locked_out);
+        assert_eq!(ctx.consecutive_failed_attempts, 5);
+        assert_eq!(ctx.locked_at_ms, entry.locked_at_ms);
+        assert_eq!(ctx.lockout_id_hex, entry.current_lockout_id_hex);
+        assert_eq!(ctx.security_device_id_hex.as_deref(), Some(device_hex.as_str()));
+        assert!(!ctx.clear_token_recorded);
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn recovery_context_not_locked_returns_fixed_denial() {
+        let root = temp_root();
+        let _ = security_device_id::resolve_or_create_security_device_id(&root).unwrap();
+        let now = real_now_ms();
+
+        // No lockout store / no entry at all.
+        let none = get_privileged_lockout_recovery_context(&root, "mgr-free");
+        assert_eq!(none, recovery_context_denial(RECOVERY_CONTEXT_NOT_LOCKED));
+
+        // Entry with failures below the threshold: still not locked.
+        for i in 0..2u64 {
+            lockout_state::record_failed_pin_attempt(&root, "mgr-free", now - 10 + i).unwrap();
+        }
+        let partial = get_privileged_lockout_recovery_context(&root, "mgr-free");
+        assert_eq!(partial, recovery_context_denial(RECOVERY_CONTEXT_NOT_LOCKED));
+        assert!(partial.lockout_id_hex.is_none());
+        assert!(partial.security_device_id_hex.is_none());
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn recovery_context_never_reads_another_managers_generation() {
+        let root = temp_root();
+        lock_manager_at(&root, "mgr-a", real_now_ms() - 20 * 60 * 1000);
+
+        let other = get_privileged_lockout_recovery_context(&root, "mgr-b");
+        assert_eq!(other, recovery_context_denial(RECOVERY_CONTEXT_NOT_LOCKED));
+
+        // Near-miss and non-canonical ids never resolve to mgr-a.
+        for bad in ["mgr-A", "mgr-a ", " mgr-a", "", "../mgr-a", "mgr-a/x"] {
+            let res = get_privileged_lockout_recovery_context(&root, bad);
+            assert!(!res.ok, "{bad:?} must not read a lockout generation");
+            assert!(res.lockout_id_hex.is_none());
+            assert!(res.security_device_id_hex.is_none());
+        }
+        assert_eq!(
+            get_privileged_lockout_recovery_context(&root, "../mgr-a").error_code.as_deref(),
+            Some("invalid_request_shape")
+        );
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn recovery_context_cooldown_is_derived_from_native_locked_at() {
+        let root = temp_root();
+        let five_min = 5 * 60 * 1000;
+        lock_manager_at(&root, "mgr-recent", real_now_ms() - five_min);
+        lock_manager_at(&root, "mgr-old", real_now_ms() - 3 * lockout_state::LOCKOUT_COOLDOWN_MS);
+
+        let recent = get_privileged_lockout_recovery_context(&root, "mgr-recent");
+        assert!(recent.ok);
+        let expected = lockout_state::LOCKOUT_COOLDOWN_MS - five_min;
+        assert!(recent.cooldown_remaining_ms <= expected);
+        assert!(recent.cooldown_remaining_ms + 60_000 > expected, "{}", recent.cooldown_remaining_ms);
+
+        let old = get_privileged_lockout_recovery_context(&root, "mgr-old");
+        assert!(old.ok);
+        assert_eq!(old.cooldown_remaining_ms, 0);
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn recovery_context_read_does_not_mutate_any_native_state() {
+        let root = temp_root();
+        let locked_at = real_now_ms() - 30 * 60 * 1000;
+        lock_manager_at(&root, "mgr-ro", locked_at);
+        // Token recorded while the cooldown was still running: an elapsed +
+        // recorded generation that `check_manager_lockout` WOULD reopen.
+        let store = lockout_state::read_lockout_store(&root).unwrap();
+        let id_hex = store.managers.get("mgr-ro").unwrap().current_lockout_id_hex.clone().unwrap();
+        let mut id_raw = [0u8; 32];
+        for i in 0..32 {
+            id_raw[i] = u8::from_str_radix(&id_hex[i * 2..i * 2 + 2], 16).unwrap();
+        }
+        let rec = lockout_state::record_lockout_clear_token(&root, "mgr-ro", &id_raw, locked_at + 60_000).unwrap();
+        assert!(!rec.reopens_now);
+        clock_guard::write_clock_guard_state(
+            &root,
+            &clock_guard::ClockGuardState {
+                last_observed_system_time_ms: locked_at,
+                schema_version: clock_guard::CLOCK_GUARD_SCHEMA_VERSION,
+            },
+        )
+        .unwrap();
+
+        let lockout_path = lockout_state::lockout_state_path(&root);
+        let clock_path = clock_guard::clock_guard_path(&root);
+        let device_path = security_device_id::security_device_id_path(&root);
+        let before = (file_bytes(&lockout_path), file_bytes(&clock_path), file_bytes(&device_path));
+
+        for _ in 0..3 {
+            let ctx = get_privileged_lockout_recovery_context(&root, "mgr-ro");
+            assert!(ctx.ok);
+            assert!(ctx.locked_out, "a read must never reopen the generation");
+            assert!(ctx.clear_token_recorded);
+            assert_eq!(ctx.cooldown_remaining_ms, 0);
+            let _ = get_privileged_lockout_recovery_context(&root, "mgr-absent");
+        }
+
+        let after = (file_bytes(&lockout_path), file_bytes(&clock_path), file_bytes(&device_path));
+        assert_eq!(before, after, "lockout store, clock guard and device id must be byte-identical");
+        assert!(!lockout_path.with_extension("tmp").exists());
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn recovery_context_without_device_id_fails_closed_and_creates_nothing() {
+        let root = temp_root();
+        let locked_at = real_now_ms() - 20 * 60 * 1000;
+        for i in 0..5u64 {
+            lockout_state::record_failed_pin_attempt(&root, "mgr-nodev", locked_at + i).unwrap();
+        }
+        let device_path = security_device_id::security_device_id_path(&root);
+        assert!(!device_path.exists());
+
+        let ctx = get_privileged_lockout_recovery_context(&root, "mgr-nodev");
+        assert_eq!(ctx, recovery_context_denial("DENIED_UNVERIFIABLE"));
+        assert!(!device_path.exists(), "the read must never create a security device id");
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn recovery_context_detected_clock_rollback_fails_closed() {
+        let root = temp_root();
+        lock_manager_at(&root, "mgr-clock", real_now_ms() - 20 * 60 * 1000);
+        clock_guard::write_clock_guard_state(
+            &root,
+            &clock_guard::ClockGuardState {
+                last_observed_system_time_ms: real_now_ms() + 86_400_000,
+                schema_version: clock_guard::CLOCK_GUARD_SCHEMA_VERSION,
+            },
+        )
+        .unwrap();
+
+        let ctx = get_privileged_lockout_recovery_context(&root, "mgr-clock");
+        assert_eq!(ctx, recovery_context_denial("DENIED_UNVERIFIABLE"));
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn recovery_context_returns_no_secret_material() {
+        let root = temp_root();
+        let (signing_key, device_id_hex) = setup_test_terminal(&root, 1);
+        let now = real_now_ms();
+        provision_test_oac(
+            &root,
+            &signing_key,
+            "mgr-sec",
+            "B01",
+            &device_id_hex,
+            "123456",
+            1,
+            now - 1000,
+            now + 3_600_000,
+            vec!["VOID_PENDING_SALE"],
+        );
+        for _ in 1..=5 {
+            let _ = verify_offline_pin(&root, "mgr-sec", "VOID_PENDING_SALE", "000000").unwrap();
+        }
+
+        let ctx = get_privileged_lockout_recovery_context(&root, "mgr-sec");
+        assert!(ctx.ok);
+        let json = serde_json::to_value(&ctx).unwrap();
+        let mut keys: Vec<String> = json.as_object().unwrap().keys().cloned().collect();
+        keys.sort();
+        assert_eq!(
+            keys,
+            vec![
+                "clearTokenRecorded",
+                "consecutiveFailedAttempts",
+                "cooldownRemainingMs",
+                "errorCode",
+                "lockedAtMs",
+                "lockedOut",
+                "lockoutIdHex",
+                "managerStaffId",
+                "ok",
+                "securityDeviceIdHex",
+            ]
+        );
+        let text = json.to_string();
+        let slot = fs::read_to_string(super::super::manager_active_slot_path(&root, "mgr-sec").unwrap()).unwrap();
+        let oac: serde_json::Value = serde_json::from_str(&slot).unwrap();
+        for field in ["verifier", "verifierSalt", "pepperCommitment", "signature"] {
+            let secret = oac[field].as_str().expect("OAC slot field");
+            assert!(!secret.is_empty());
+            assert!(!text.contains(secret), "recovery context leaked OAC {field}");
+        }
+        assert!(!text.contains("123456") && !text.contains("000000"));
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn recovery_context_tuple_bridges_to_lct1_clear_and_reads_unlocked_after() {
+        let root = temp_root();
+        let (signing_key, _device_id_hex) = setup_test_terminal(&root, 1);
+        let locked_at = real_now_ms() - 20 * 60 * 1000;
+        for i in 0..5u64 {
+            lockout_state::record_failed_pin_attempt(&root, "mgr-bridge", locked_at + i).unwrap();
+        }
+
+        let ctx = get_privileged_lockout_recovery_context(&root, "mgr-bridge");
+        assert!(ctx.ok);
+        assert_eq!(ctx.cooldown_remaining_ms, 0);
+        let hex_to = |h: &str, out: &mut [u8]| {
+            for i in 0..out.len() {
+                out[i] = u8::from_str_radix(&h[i * 2..i * 2 + 2], 16).unwrap();
+            }
+        };
+        let mut device = [0u8; 16];
+        hex_to(ctx.security_device_id_hex.as_deref().unwrap(), &mut device);
+        let mut lockout_id = [0u8; 32];
+        hex_to(ctx.lockout_id_hex.as_deref().unwrap(), &mut lockout_id);
+
+        let now = real_now_ms();
+        let frame = frames::LockoutClearTokenFrameV1 {
+            security_device_id: device,
+            manager_staff_id: ctx.manager_staff_id.clone().unwrap(),
+            lockout_id,
+            issued_at_server_ms: now - 500,
+            expires_at_server_ms: now - 500 + 900_000,
+            token_nonce: [0x42u8; 32],
+            signing_key_id: "test-signing-key".to_string(),
+            signature: [0u8; 64],
+        };
+        let prefix = frames::lct1_signed_prefix(&frame).unwrap();
+        let mut signed = frame;
+        signed.signature = signing_key.sign(&prefix).to_bytes();
+        let lct1_b64 = base64_encode_std(&frames::encode_lct1(&signed).unwrap());
+
+        let cleared = clear_offline_lockout(&root, &lct1_b64).unwrap();
+        assert!(cleared.ok);
+        assert!(cleared.reopens_now);
+
+        let after = get_privileged_lockout_recovery_context(&root, "mgr-bridge");
+        assert_eq!(after, recovery_context_denial(RECOVERY_CONTEXT_NOT_LOCKED));
 
         let _ = fs::remove_dir_all(&root);
     }

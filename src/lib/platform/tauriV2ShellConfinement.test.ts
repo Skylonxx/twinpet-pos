@@ -335,6 +335,7 @@ describe('Phase C Tauri v2 shell confinement', () => {
       'allow-native-get-device-security-readiness',
       'allow-native-verify-offline-pin',
       'allow-native-clear-offline-lockout',
+      'allow-native-get-privileged-lockout-recovery-context',
       'allow-native-prepare-staff-session-challenge',
       'allow-native-persist-staff-session-assertion',
       'allow-native-clear-staff-session',
