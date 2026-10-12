@@ -32,6 +32,7 @@ import { provisionManagerOac } from '../../lib/pos/privilegedVoid/provisionManag
 import {
   applyActiveRowPrecheck,
   applyOacProvisioningOutcome,
+  applyPostProvisionProjectionOutcome,
   applyProjectionOutcome,
   backToManagerSelect as backToManagerSelectTransition,
   beginOacProvisioning,
@@ -344,12 +345,15 @@ export function usePrivilegedVoidFlow(params: UsePrivilegedVoidFlowParams): UseP
           initiatingStaffId: identity.operatorStaffId,
         });
 
-      const applyFinal = (outcome: Awaited<ReturnType<typeof project>>) => {
+      const applyFinal = (
+        outcome: Awaited<ReturnType<typeof project>>,
+        applyOutcome: typeof applyProjectionOutcome = applyProjectionOutcome,
+      ) => {
         setState((latest) => {
           // Stale-response guard, preserved exactly: discard an outcome
           // for an intent the flow has already moved on from.
           if (!isSameIntent(latest, 'PROJECTING')) return latest;
-          return applyProjectionOutcome(latest, outcome);
+          return applyOutcome(latest, outcome);
         });
         if (outcome.kind === 'not_approved' && classifyPinDenial(outcome.errorCode ?? null) === 'staff_session') {
           // D-V8 — the native operator staff session is gone/invalid: the next
@@ -381,9 +385,10 @@ export function usePrivilegedVoidFlow(params: UsePrivilegedVoidFlowParams): UseP
         if (authorityEpochRef.current !== episodeEpoch) return;
 
         // Exactly one attestation retry, same intent/manager/reason/target/PIN.
-        // Whatever it returns is final — no second provisioning, no loop.
+        // Whatever it returns is final — no second provisioning, no loop. D-V11:
+        // a wrong-PIN result here is terminal, never a return to PIN entry.
         const second = await project();
-        applyFinal(second);
+        applyFinal(second, applyPostProvisionProjectionOutcome);
       };
 
       void runEpisode()

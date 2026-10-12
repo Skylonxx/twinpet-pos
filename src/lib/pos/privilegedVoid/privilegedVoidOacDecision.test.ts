@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyOacProvisioningOutcome,
+  applyPostProvisionProjectionOutcome,
   applyProjectionOutcome,
   beginOacProvisioning,
   classifyPinDenial,
@@ -128,7 +129,7 @@ describe('D-V9 copy — distinct, closed, never raw codes', () => {
       'denied_locked', 'denied_stale', 'denied_unverifiable', 'denied_unknown',
       'denied_staff_session', 'denied_oac_missing', 'denied_oac_stale',
       'provisioning_pin_rejected', 'provisioning_not_eligible', 'provisioning_device_not_ready',
-      'provisioning_failed', 'provisioning_uncertain',
+      'provisioning_failed', 'provisioning_uncertain', 'provisioning_verifier_inconsistent',
     ];
     for (const r of reasons) {
       const c = fail(r);
@@ -149,6 +150,50 @@ describe('D-V9 copy — distinct, closed, never raw codes', () => {
     expect(
       copyForFlowState({ status: 'PROVISIONING_APPROVAL', identity: IDENTITY, reason: 'r', note: '', trigger: 'oac_missing' }),
     ).toBeNull();
+  });
+});
+
+describe('D-V11 post-provision re-attestation', () => {
+  it('an immediate DENIED_INVALID_PIN is a terminal inconsistency, never a return to PIN entry', () => {
+    expect(applyPostProvisionProjectionOutcome(PROJECTING, denied('DENIED_INVALID_PIN'))).toEqual({
+      status: 'LOCAL_FAILURE',
+      identity: IDENTITY,
+      reasonCode: 'provisioning_verifier_inconsistent',
+    });
+  });
+
+  it('every other outcome maps exactly like an ordinary projection (locked stays locked)', () => {
+    const outcomes = [
+      denied('DENIED_LOCKED'),
+      denied('DENIED_OAC_STALE'),
+      denied('DENIED_UNVERIFIABLE'),
+      denied('DENIED_STAFF_SESSION'),
+      { kind: 'projected' as const, record: { adjudicationId: 'a'.repeat(32) } as never },
+      { kind: 'uncertain' as const },
+      { kind: 'unavailable' as const },
+    ];
+    for (const outcome of outcomes) {
+      expect(applyPostProvisionProjectionOutcome(PROJECTING, outcome)).toEqual(applyProjectionOutcome(PROJECTING, outcome));
+    }
+    expect(applyPostProvisionProjectionOutcome(PROJECTING, denied('DENIED_LOCKED'))).toMatchObject({ reasonCode: 'denied_locked' });
+  });
+
+  it('is a no-op outside PROJECTING', () => {
+    const idle: PrivilegedVoidFlowState = { status: 'IDLE' };
+    expect(applyPostProvisionProjectionOutcome(idle, denied('DENIED_INVALID_PIN'))).toBe(idle);
+  });
+
+  it('the ordinary (existing-OAC) wrong PIN is unchanged: same-intent retry', () => {
+    expect(applyProjectionOutcome(PROJECTING, denied('DENIED_INVALID_PIN'))).toMatchObject({ status: 'MANAGER_PIN_ENTRY' });
+  });
+
+  it('copy is fixed, distinct, terminal (no retry / PIN invitation) and never a raw code', () => {
+    const c = copyForFlowState({ status: 'LOCAL_FAILURE', identity: IDENTITY, reasonCode: 'provisioning_verifier_inconsistent' })!;
+    expect(c.tone).toBe('error');
+    expect(c.body).toBe('ไม่สามารถยืนยันสิทธิ์ผู้อนุมัติบนเครื่องได้ กรุณาหยุดการยกเลิกบิลและติดต่อผู้ดูแลระบบ');
+    expect(`${c.title} ${c.body}`).not.toMatch(/DENIED_|INVALID_PIN|PIN|ลองใหม่|เริ่มคำขอยกเลิกใหม่/);
+    const pinRejected = copyForFlowState({ status: 'LOCAL_FAILURE', identity: IDENTITY, reasonCode: 'provisioning_pin_rejected' })!;
+    expect(c.title).not.toBe(pinRejected.title);
   });
 });
 

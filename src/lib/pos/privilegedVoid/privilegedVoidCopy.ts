@@ -111,6 +111,12 @@ const LOCAL_FAILURE_COPY: Record<PrivilegedVoidLocalFailureReason, PrivilegedVoi
     body: 'ระบบไม่สามารถยืนยันผลการเปิดใช้สิทธิ์อนุมัติได้ บิลนี้ยังไม่ถูกยกเลิก กรุณาเริ่มคำขอยกเลิกใหม่',
     tone: 'warning',
   },
+  // D-V11 — terminal; deliberately no "try again" and no PIN re-entry invitation.
+  provisioning_verifier_inconsistent: {
+    title: 'ยืนยันสิทธิ์ผู้อนุมัติบนเครื่องไม่สำเร็จ',
+    body: 'ไม่สามารถยืนยันสิทธิ์ผู้อนุมัติบนเครื่องได้ กรุณาหยุดการยกเลิกบิลและติดต่อผู้ดูแลระบบ',
+    tone: 'error',
+  },
 };
 
 /**

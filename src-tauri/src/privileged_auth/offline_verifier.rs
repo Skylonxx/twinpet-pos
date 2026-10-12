@@ -411,6 +411,15 @@ pub fn acquire_privileged_verifier_guards(root: &Path) -> Result<PrivilegedVerif
     Ok(PrivilegedVerifierGuards { _lifecycle: lifecycle, _verifier: verifier })
 }
 
+/// D-V10 — the PIN shapes the offline verifier will compare against an OAC's
+/// Argon2id verifier: exactly 4 or exactly 6 ASCII digits. D-V5 lets a
+/// `rotated_authoritative` credential provision with its live PIN4 (and
+/// `verifyPinLogin` accepts only PIN4), so a PIN6-only gate here made every
+/// JIT-provisioned OAC unverifiable. Shape only — the match is still Argon2.
+fn is_supported_offline_pin_shape(pin: &str) -> bool {
+    (pin.len() == 4 || pin.len() == 6) && pin.bytes().all(|b| b.is_ascii_digit())
+}
+
 /// Native offline PIN verification implementation (no WebView now_ms / branchId).
 /// Serialized by VERIFIER_MUTEX across the entire security-critical verify transaction.
 pub fn verify_offline_pin(
@@ -700,8 +709,10 @@ pub fn verify_offline_pin_locked(
         });
     }
 
-    // 14. Exact PIN6 shape check
-    let is_pin6 = pin.len() == 6 && pin.chars().all(|c| c.is_ascii_digit());
+    // 14. Supported PIN shape check (D-V10): exactly the shapes D-V5 lets an
+    // authoritative credential provision an OAC with — 4 or 6 ASCII digits.
+    // Any other shape is never compared and still counts as a failed attempt.
+    let is_supported_pin_shape = is_supported_offline_pin_shape(pin);
 
     // 15. Pepper commitment check
     let pepper = match pepper_store::resolve_or_create_pepper(root) {
@@ -756,7 +767,7 @@ pub fn verify_offline_pin_locked(
     verifier_arr.copy_from_slice(&expected_verifier);
 
     let mut pin_bytes = pin.as_bytes().to_vec();
-    let pin_match = if is_pin6 {
+    let pin_match = if is_supported_pin_shape {
         argon2_kdf::verify_pin(&pin_bytes, &salt_arr, &pepper, &verifier_arr).unwrap_or(false)
     } else {
         false
@@ -1261,6 +1272,147 @@ mod tests {
         assert_eq!(res6.error_code, Some("DENIED_LOCKED".to_string()));
         let seed6 = res6.evidence_seed.unwrap();
         assert_eq!(seed6.attempt_count, 5);
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    // --- D-V10: the verifier accepts the PIN shapes D-V5 provisions with ---
+
+    /// Persisted consecutive-failure count for `manager_staff_id` (0 if never seen).
+    fn persisted_failed_attempts(root: &Path, manager_staff_id: &str) -> u32 {
+        let now_ms = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64;
+        match lockout_state::check_manager_lockout(root, manager_staff_id, now_ms).unwrap() {
+            LockoutPrecheck::Unlocked { consecutive_failed_attempts } => consecutive_failed_attempts,
+            LockoutPrecheck::LockedOut { consecutive_failed_attempts, .. } => consecutive_failed_attempts,
+        }
+    }
+
+    /// A fresh, valid OAC for `mgr-1` at `B01` whose Argon2id verifier was derived from `pin`.
+    fn terminal_with_oac_for_pin(pin: &str) -> PathBuf {
+        let root = temp_root();
+        let (signing_key, device_id_hex) = setup_test_terminal(&root, 1);
+        let now_ms = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64;
+        provision_test_oac(
+            &root,
+            &signing_key,
+            "mgr-1",
+            "B01",
+            &device_id_hex,
+            pin,
+            1,
+            now_ms - 1000,
+            now_ms + 3_600_000,
+            vec!["VOID_PENDING_SALE"],
+        );
+        root
+    }
+
+    #[test]
+    fn test_supported_offline_pin_shape_is_exactly_4_or_6_ascii_digits() {
+        for ok in ["0000", "4821", "000000", "482193"] {
+            assert!(is_supported_offline_pin_shape(ok), "{ok}");
+        }
+        for bad in ["", "1", "482", "48219", "4821930", "482a", "4821 ", " 4821", "48-1", "\u{FF14}\u{FF18}\u{FF12}\u{FF11}"] {
+            assert!(!is_supported_offline_pin_shape(bad), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn test_pin4_oac_correct_pin4_approves_local_without_failure() {
+        let root = terminal_with_oac_for_pin("4821");
+
+        let res = verify_offline_pin(&root, "mgr-1", "VOID_PENDING_SALE", "4821").unwrap();
+        assert!(res.ok);
+        assert!(res.error_code.is_none());
+        assert_eq!(res.verified_branch_id, Some("B01".to_string()));
+        let seed = res.evidence_seed.unwrap();
+        assert_eq!(seed.approval_result, "APPROVED_LOCAL");
+        assert_eq!(seed.attempt_count, 0);
+        assert_eq!(persisted_failed_attempts(&root, "mgr-1"), 0);
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn test_pin4_oac_wrong_pin4_denies_and_counts_exactly_once() {
+        let root = terminal_with_oac_for_pin("4821");
+
+        let res = verify_offline_pin(&root, "mgr-1", "VOID_PENDING_SALE", "4822").unwrap();
+        assert!(!res.ok);
+        assert_eq!(res.error_code, Some("DENIED_INVALID_PIN".to_string()));
+        let seed = res.evidence_seed.unwrap();
+        assert_eq!(seed.approval_result, "DENIED_INVALID_PIN");
+        assert_eq!(seed.attempt_count, 1);
+        assert_eq!(persisted_failed_attempts(&root, "mgr-1"), 1);
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn test_pin6_oac_still_verifies_and_rejects_its_own_pin4_prefix() {
+        let root = terminal_with_oac_for_pin("482193");
+
+        // A PIN4 is now a supported shape, but it is still only an Argon2 match
+        // against the verifier the OAC carries — never a shortcut.
+        let prefix = verify_offline_pin(&root, "mgr-1", "VOID_PENDING_SALE", "4821").unwrap();
+        assert!(!prefix.ok);
+        assert_eq!(prefix.error_code, Some("DENIED_INVALID_PIN".to_string()));
+        assert_eq!(persisted_failed_attempts(&root, "mgr-1"), 1);
+
+        let res = verify_offline_pin(&root, "mgr-1", "VOID_PENDING_SALE", "482193").unwrap();
+        assert!(res.ok);
+        assert_eq!(res.evidence_seed.unwrap().approval_result, "APPROVED_LOCAL");
+        assert_eq!(persisted_failed_attempts(&root, "mgr-1"), 0);
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn test_unsupported_pin_shapes_are_denied_and_counted_as_before() {
+        let root = terminal_with_oac_for_pin("4821");
+
+        // Pre-existing accounting: an unsupported shape is never compared and
+        // is recorded as one failed attempt, exactly like a wrong PIN.
+        let shapes = ["48219", "482a", "4821 ", "\u{FF14}\u{FF18}\u{FF12}\u{FF11}"];
+        for (i, pin) in shapes.iter().enumerate() {
+            let res = verify_offline_pin(&root, "mgr-1", "VOID_PENDING_SALE", pin).unwrap();
+            assert!(!res.ok, "{pin:?}");
+            assert_eq!(res.error_code, Some("DENIED_INVALID_PIN".to_string()), "{pin:?}");
+            assert_eq!(res.evidence_seed.unwrap().attempt_count, i as u32 + 1);
+        }
+        assert_eq!(persisted_failed_attempts(&root, "mgr-1"), 4);
+
+        // Below the threshold the correct PIN4 still verifies and resets the cycle.
+        let res = verify_offline_pin(&root, "mgr-1", "VOID_PENDING_SALE", "4821").unwrap();
+        assert!(res.ok);
+        assert_eq!(persisted_failed_attempts(&root, "mgr-1"), 0);
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn test_pin4_lockout_threshold_unchanged_and_correct_pin4_cannot_bypass() {
+        assert_eq!(lockout_state::MAX_FAILED_ATTEMPTS, 5);
+        let root = terminal_with_oac_for_pin("4821");
+
+        for attempt in 1..=4 {
+            let res = verify_offline_pin(&root, "mgr-1", "VOID_PENDING_SALE", "1111").unwrap();
+            assert_eq!(res.error_code, Some("DENIED_INVALID_PIN".to_string()));
+            assert_eq!(res.evidence_seed.unwrap().attempt_count, attempt);
+        }
+        let res5 = verify_offline_pin(&root, "mgr-1", "VOID_PENDING_SALE", "1111").unwrap();
+        assert_eq!(res5.error_code, Some("DENIED_LOCKED".to_string()));
+        assert_eq!(res5.evidence_seed.unwrap().attempt_count, 5);
+
+        // An active lockout is checked before any PIN compare: the correct PIN4
+        // neither approves nor resets it.
+        let correct = verify_offline_pin(&root, "mgr-1", "VOID_PENDING_SALE", "4821").unwrap();
+        assert!(!correct.ok);
+        assert_eq!(correct.error_code, Some("DENIED_LOCKED".to_string()));
+        let seed = correct.evidence_seed.unwrap();
+        assert_eq!(seed.approval_result, "DENIED_LOCKED");
+        assert_eq!(seed.attempt_count, 5);
+        assert_eq!(persisted_failed_attempts(&root, "mgr-1"), 5);
 
         let _ = fs::remove_dir_all(&root);
     }

@@ -1252,6 +1252,79 @@ mod command_glue_tests {
         assert!(err.contains("manager_staff_id is required"));
     }
 
+    // --- D-V10: the real JIT provisioning seam with an authoritative PIN4 ---
+
+    /// What `completePrivilegedOacIssuanceSession` (`buildUnsignedOac` +
+    /// `signOacEnvelope`) does with the device's PIN1: copies its verifier
+    /// material into an OAC bound to this manager/branch/device, signed by the
+    /// active OAC key. Freshness is anchored to now so the verifier accepts it.
+    fn server_issued_oac_from_pin1(signing_key: &SigningKey, pin1_base64: &str, device_id_hex: &str) -> String {
+        let pin1 = frames::decode_pin1(&base64_decode(pin1_base64).unwrap()).unwrap();
+        let now_ms = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64;
+        let unsigned = serde_json::json!({
+            "oacId": "oac-jit-pin4",
+            "schemaVersion": 1,
+            "managerStaffId": pin1.manager_staff_id,
+            "managerRole": "manager",
+            "branchId": "LDP-001",
+            "deviceId": device_id_hex,
+            "allowedActions": ["VOID_PENDING_SALE", "VOID_SETTLED_SALE"],
+            "authVersionAtIssue": 1,
+            "credentialVersionAtIssue": 1,
+            "revocationEpoch": 0,
+            "issuedAtServerMs": now_ms - 1000,
+            "freshnessExpiresAtServerMs": now_ms + 3_600_000,
+            "verifierAlgo": pin1.verifier_algo,
+            "verifierParams": {
+                "m": pin1.m, "t": pin1.t, "p": pin1.p,
+                "saltLen": pin1.verifier_salt.len(), "hashLen": pin1.verifier.len(),
+            },
+            "verifierSalt": base64_encode_with(&pin1.verifier_salt, B64_STD),
+            "verifier": base64_encode_with(&pin1.verifier, B64_STD),
+            "pepperCommitment": base64_encode_with(&pin1.pepper_commitment, B64_STD),
+            "signingKeyId": "key-1",
+        });
+        let payload = canonical_json(&unsigned);
+        let signature = ed25519_dalek::Signer::sign(signing_key, payload.as_bytes()).to_bytes();
+        let mut full = unsigned.as_object().unwrap().clone();
+        full.insert("signature".to_string(), serde_json::Value::String(base64_encode_with(&signature, B64_STD)));
+        serde_json::to_string(&serde_json::Value::Object(full)).unwrap()
+    }
+
+    #[test]
+    fn jit_provisioned_pin4_oac_verifies_with_the_same_pin4() {
+        let dir = temp_dir();
+        // Enrolled device (security device id 0x42 * 16) + active OAC keyset.
+        let (oks1_base64, signing_key) = signed_oac_test_manifest(&dir);
+        let device_id_hex = "42".repeat(16);
+        let nonce = base64_encode_with(&[9u8; 32], B64_STD);
+
+        let proof = produce_provisioning_proof(&dir, "4821", "sess-pin4", &device_id_hex, "staff-1", &nonce).unwrap();
+        let envelope_json = server_issued_oac_from_pin1(&signing_key, &proof.pin1_base64, &device_id_hex);
+        persist_provisioned_oac(&dir, &envelope_json, &oks1_base64, "staff-1").unwrap();
+
+        // The immediate post-provision re-attestation uses the same PIN4: it must
+        // pass the shape gate, match the provisioned Argon2 verifier, and record
+        // no failed attempt.
+        let res = offline_verifier::verify_offline_pin(&dir, "staff-1", "VOID_SETTLED_SALE", "4821").unwrap();
+        assert!(res.ok, "error_code = {:?}", res.error_code);
+        assert_eq!(res.verified_branch_id, Some("LDP-001".to_string()));
+        assert_eq!(res.evidence_seed.as_ref().unwrap().approval_result, "APPROVED_LOCAL");
+        assert_eq!(res.evidence_seed.unwrap().attempt_count, 0);
+        let now_ms = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64;
+        assert_eq!(
+            lockout_state::check_manager_lockout(&dir, "staff-1", now_ms).unwrap(),
+            lockout_state::LockoutPrecheck::Unlocked { consecutive_failed_attempts: 0 }
+        );
+
+        // A different PIN4 against that same freshly provisioned OAC is still a wrong PIN.
+        let wrong = offline_verifier::verify_offline_pin(&dir, "staff-1", "VOID_SETTLED_SALE", "4822").unwrap();
+        assert!(!wrong.ok);
+        assert_eq!(wrong.error_code, Some("DENIED_INVALID_PIN".to_string()));
+        assert_eq!(wrong.evidence_seed.unwrap().attempt_count, 1);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
     // --- R2: row-2 device registration status decode-error propagation ---
     // SEC-001 epoch-2 final remediation (Claude-025 / Gemini-042 authority).
 

@@ -164,7 +164,10 @@ export type PrivilegedVoidLocalFailureReason =
   | 'provisioning_not_eligible'
   | 'provisioning_device_not_ready'
   | 'provisioning_failed'
-  | 'provisioning_uncertain';
+  | 'provisioning_uncertain'
+  // D-V11 — the one re-attestation right after a fresh provisioning reported a
+  // wrong PIN: a local verifier/provisioning inconsistency, never a user retry.
+  | 'provisioning_verifier_inconsistent';
 
 // ---------------------------------------------------------------------------
 // RC-E1-004 — closed D-1B denial classifier.
@@ -568,6 +571,28 @@ export function applyOacProvisioningOutcome(
     default:
       return { status: 'LOCAL_FAILURE', identity, reasonCode: 'provisioning_failed' };
   }
+}
+
+/**
+ * D-V11 — applies the outcome of the ONE automatic re-attestation that follows
+ * a successful just-in-time provisioning. That retry reuses the in-memory PIN
+ * that just passed `verifyPinLogin`, passed bcrypt again in
+ * `completePrivilegedOacIssuanceSession`, and produced the OAC's verifier
+ * natively — so a `DENIED_INVALID_PIN` here is an internal verifier/
+ * provisioning inconsistency, not a typo. It is terminal: it never returns to
+ * PIN entry (each further entry would only burn a native lockout attempt).
+ * Every other outcome maps exactly as `applyProjectionOutcome`; an ordinary
+ * wrong PIN against an already-present OAC never goes through here.
+ */
+export function applyPostProvisionProjectionOutcome(
+  state: PrivilegedVoidFlowState,
+  outcome: ProjectPrivilegedOfflineActionOutcome,
+): PrivilegedVoidFlowState {
+  if (state.status !== 'PROJECTING') return state;
+  if (outcome.kind === 'not_approved' && classifyPinDenial(outcome.errorCode ?? null) === 'retry_same_intent') {
+    return { status: 'LOCAL_FAILURE', identity: state.identity, reasonCode: 'provisioning_verifier_inconsistent' };
+  }
+  return applyProjectionOutcome(state, outcome);
 }
 
 /** Always resets to IDLE. Reopening mints a brand new `localIntentId` (Section 5 — close/reopen => new local intent). */

@@ -194,16 +194,77 @@ describe('D-V7 JIT manager OAC provisioning', () => {
     expect(projectMock).toHaveBeenCalledTimes(2);
   });
 
-  it('after provisioning, a wrong PIN on the native retry is the normal retry-in-place (lockout semantics stay native)', async () => {
+  // TPOS-USABLE-POS-VOID-PIN4-NATIVE-CONTRACT-FIX D-V11 — the retry right after a
+  // fresh provisioning reuses the PIN the server just verified twice, so a wrong-PIN
+  // result there is an internal inconsistency: terminal, never back to PIN entry.
+  it.each(['DENIED_OAC_MISSING', 'DENIED_OAC_STALE'])(
+    '%s -> provisioned -> immediate DENIED_INVALID_PIN: terminal inconsistency, no PIN re-entry, no third attestation',
+    async (code) => {
+      projectMock
+        .mockResolvedValueOnce(denied(code))
+        .mockResolvedValueOnce(denied('DENIED_INVALID_PIN'))
+        .mockResolvedValue({ kind: 'projected', record: projectedRecord });
+      provisionMock.mockResolvedValue({ kind: 'provisioned' });
+      const seen: string[] = [];
+      const { result } = renderHook(() => {
+        const flow = usePrivilegedVoidFlow({ liveSelection: selection });
+        seen.push(flow.state.status);
+        return flow;
+      });
+      await driveToPin(result);
+      const fromSubmit = seen.length;
+      act(() => result.current.submitPin('1234'));
+      await waitFor(() => expect(result.current.state.status).toBe('LOCAL_FAILURE'));
+      await waitFor(() => expect(result.current.isSubmitting).toBe(false));
+
+      expect(result.current.state).toMatchObject({ reasonCode: 'provisioning_verifier_inconsistent' });
+      expect(result.current.state).not.toHaveProperty('pinErrorCode');
+      expect(seen.slice(fromSubmit)).not.toContain('MANAGER_PIN_ENTRY');
+      expect(provisionMock).toHaveBeenCalledTimes(1);
+      expect(projectMock).toHaveBeenCalledTimes(2);
+
+      // A further PIN submit cannot reach native attestation or capture a void.
+      act(() => result.current.submitPin('1234'));
+      await waitFor(() => expect(result.current.isSubmitting).toBe(false));
+      expect(projectMock).toHaveBeenCalledTimes(2);
+      expect(provisionMock).toHaveBeenCalledTimes(1);
+      expect(result.current.state.status).toBe('LOCAL_FAILURE');
+      expect(seen).not.toContain('CAPTURED_PENDING_ADJUDICATION');
+    },
+  );
+
+  it('-> provisioned -> immediate DENIED_LOCKED: terminal locked failure, no retry loop', async () => {
     projectMock
       .mockResolvedValueOnce(denied('DENIED_OAC_MISSING'))
-      .mockResolvedValueOnce(denied('DENIED_INVALID_PIN'));
+      .mockResolvedValueOnce(denied('DENIED_LOCKED'));
     provisionMock.mockResolvedValue({ kind: 'provisioned' });
     const { result } = renderHook(() => usePrivilegedVoidFlow({ liveSelection: selection }));
     await driveToPin(result);
     act(() => result.current.submitPin('1234'));
+    await waitFor(() => expect(result.current.state.status).toBe('LOCAL_FAILURE'));
+    await waitFor(() => expect(result.current.isSubmitting).toBe(false));
+    expect(result.current.state).toMatchObject({ reasonCode: 'denied_locked' });
+    expect(provisionMock).toHaveBeenCalledTimes(1);
+    expect(projectMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('existing valid OAC: an ordinary wrong PIN keeps the normal retry-in-place (no provisioning, lockout stays native)', async () => {
+    projectMock
+      .mockResolvedValueOnce(denied('DENIED_INVALID_PIN'))
+      .mockResolvedValueOnce({ kind: 'projected', record: projectedRecord });
+    const { result } = renderHook(() => usePrivilegedVoidFlow({ liveSelection: selection }));
+    await driveToPin(result);
+    act(() => result.current.submitPin('9999'));
     await waitFor(() => expect(result.current.state.status).toBe('MANAGER_PIN_ENTRY'));
     expect(result.current.state).toMatchObject({ pinErrorCode: 'DENIED_INVALID_PIN' });
+    await waitFor(() => expect(result.current.isSubmitting).toBe(false));
+    const intent = (result.current.state as { identity: { localIntentId: string } }).identity.localIntentId;
+
+    act(() => result.current.submitPin('1234'));
+    await waitFor(() => expect(result.current.state.status).toBe('CAPTURED_PENDING_ADJUDICATION'));
+    expect(provisionMock).not.toHaveBeenCalled();
+    expect(projectMock).toHaveBeenCalledTimes(2);
+    expect(projectMock.mock.calls[1]![0]!.localIntentId).toBe(intent);
   });
 
   it.each(['DENIED_INVALID_PIN', 'DENIED_LOCKED', 'DENIED_UNVERIFIABLE', 'DENIED_STALE', 'MANAGER_NOT_AUTHORIZED'])(
