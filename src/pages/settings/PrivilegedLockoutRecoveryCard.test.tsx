@@ -190,9 +190,10 @@ describe('PrivilegedLockoutRecoveryCard (D-V15)', () => {
     expect(container.innerHTML.includes('DENIED_UNVERIFIABLE')).toBe(false);
   });
 
-  it('is mounted only from the Settings admin section behind isAdmin', () => {
+  it('Admin & Security Center V1 supersedes the standalone card mount (same recovery lib, per-manager row)', () => {
     const settings = readFileSync(resolve(__dirname, '..', 'SettingsPage.tsx'), 'utf8');
-    expect(settings).toMatch(/\{isAdmin \? <PrivilegedLockoutRecoveryCard branchId=\{branchId\} operator=\{user\} \/> : null\}/);
+    expect(settings).not.toMatch(/<PrivilegedLockoutRecoveryCard/);
+    expect(settings).toMatch(/<AdminSecurityCenter operator=\{user\} branchId=\{branchId\} \/>/);
     const card = readFileSync(resolve(__dirname, 'PrivilegedLockoutRecoveryCard.tsx'), 'utf8');
     expect(card).not.toMatch(/console\.|localStorage|sessionStorage|lockoutIdHex|securityDeviceIdHex|lct1Base64/);
   });

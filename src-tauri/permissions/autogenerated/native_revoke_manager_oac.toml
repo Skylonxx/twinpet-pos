@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-native-revoke-manager-oac"
+description = "Enables the native_revoke_manager_oac command without any pre-configured scope."
+commands.allow = ["native_revoke_manager_oac"]
+
+[[permission]]
+identifier = "deny-native-revoke-manager-oac"
+description = "Denies the native_revoke_manager_oac command without any pre-configured scope."
+commands.deny = ["native_revoke_manager_oac"]

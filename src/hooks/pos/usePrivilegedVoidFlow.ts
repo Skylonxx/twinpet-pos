@@ -71,9 +71,21 @@ export interface UsePrivilegedVoidFlowParams {
   liveSelection: PrivilegedVoidLiveSelection;
 }
 
+/** Display-only identity of an approver, captured from the roster the operator chose from. */
+export interface ApproverIdentity {
+  displayName: string;
+  username: string;
+}
+
 export interface UsePrivilegedVoidFlowResult {
   state: PrivilegedVoidFlowState;
   roster: ApproverRosterState;
+  /**
+   * The approver currently bound to the flow (MANAGER_PIN_ENTRY and later),
+   * for display ONLY — so the PIN dialog names whose PIN is required. Never
+   * an authority input: the bound `identity.managerStaffId` alone drives D-3.
+   */
+  selectedApprover?: ApproverIdentity | null;
   isSubmitting: boolean;
   open: (order: PrivilegedVoidOrderRef) => void;
   submitReason: (reason: string, note: string) => void;
@@ -143,6 +155,15 @@ export function usePrivilegedVoidFlow(params: UsePrivilegedVoidFlowParams): UseP
       currentVoidEligible: isCurrentlyVoidEligible(),
     };
   }, [branchId, user, selectedOrderId, selectedOrderBranchId, expectedActionId, isCurrentlyVoidEligible]);
+
+  const roster = useApproverRoster({
+    enabled: state.status === 'MANAGER_SELECT',
+    branchId: branchId ?? null,
+    requesterStaffId: user?.id ?? null,
+  });
+  // Display-only identity of approvers the operator has picked in this flow
+  // instance, keyed by staff id (see `selectedApprover`).
+  const [approverDirectory, setApproverDirectory] = useState<Record<string, ApproverIdentity>>({});
 
   // RC-E1-002 — every side effect here (the in-flight guard, the durable
   // store construction, the D-2 read launch, and the `.then()`'s own mint)
@@ -238,8 +259,17 @@ export function usePrivilegedVoidFlow(params: UsePrivilegedVoidFlowParams): UseP
       };
       const newLocalIntentId = isManagerChange ? mintPrivilegedVoidLocalIntentId() : null;
       setState((cur) => chooseManagerTransition(cur, managerStaffId, newLocalIntentId, expected));
+      // Display only: remember whom the operator picked, because the roster
+      // subscription is disabled once PIN entry starts.
+      const picked = roster.candidates.find((c) => c.userId === managerStaffId);
+      if (picked) {
+        setApproverDirectory((cur) => ({
+          ...cur,
+          [managerStaffId]: { displayName: picked.displayName, username: picked.username },
+        }));
+      }
     },
-    [state, tryAcquireAuthorityEpoch],
+    [state, tryAcquireAuthorityEpoch, roster],
   );
 
   // RC-E1-006-FRESH-001 — retained-Back epoch gate, same two-step shape as
@@ -419,15 +449,13 @@ export function usePrivilegedVoidFlow(params: UsePrivilegedVoidFlowParams): UseP
     }
   }, [state, runPrecheck]);
 
-  const roster = useApproverRoster({
-    enabled: state.status === 'MANAGER_SELECT',
-    branchId: branchId ?? null,
-    requesterStaffId: user?.id ?? null,
-  });
+  const boundManagerStaffId = 'identity' in state ? state.identity.managerStaffId : null;
+  const selectedApprover = boundManagerStaffId ? (approverDirectory[boundManagerStaffId] ?? null) : null;
 
   return {
     state,
     roster,
+    selectedApprover,
     isSubmitting,
     open,
     submitReason,

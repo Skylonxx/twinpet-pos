@@ -747,6 +747,15 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Admin & Security Center V1: server-authored security audit trail
+    // (setUserAccount, issuePrivilegedLockoutClear, OAC issuance). Written
+    // only by Cloud Functions; clients read it solely through the
+    // password-admin-only getAdminSecurityOverview projection, so no client
+    // can read, forge, edit or delete an entry.
+    match /securityAuditEvents/{eventId} {
+      allow read, write: if false;
+    }
+
     // ── Sales ──
     match /orders/{orderId} {
       allow read: if isAdmin() || (isStaff() && hasBranchAccess(resource.data.branchId));

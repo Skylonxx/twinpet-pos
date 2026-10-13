@@ -150,6 +150,9 @@ const TRUE_STANDALONE_PRIVILEGED_DEPLOY_FUNCTIONS = [
   'submitPrivilegedVoid',
 ];
 
+/** Admin & Security Center V1 read-only overview callable, appended last. */
+const ADMIN_SECURITY_CENTER_DEPLOY_FUNCTIONS = ['getAdminSecurityOverview'];
+
 function makeDb(seed: Record<string, Doc> = {}) {
   const store = new Map<string, Doc>(Object.entries(seed).map(([k, v]) => [k, { ...v }]));
   const writes: Array<{ op: string; path?: string }> = [];
@@ -579,6 +582,7 @@ describe('operator CLI entrypoints', () => {
       'setUserAccount',
       ...SEC001_PACKET_C_A_DEPLOY_FUNCTIONS,
       ...TRUE_STANDALONE_PRIVILEGED_DEPLOY_FUNCTIONS,
+      ...ADMIN_SECURITY_CENTER_DEPLOY_FUNCTIONS,
     ]);
   });
 

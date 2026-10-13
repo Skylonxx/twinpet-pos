@@ -1174,6 +1174,217 @@ pub fn get_privileged_lockout_recovery_context(
     }
 }
 
+// --- Admin & Security Center V1: per-manager OAC status + local revoke ---
+
+pub const OAC_CAPABILITY_PRESENT: &str = "PRESENT";
+pub const OAC_CAPABILITY_MISSING: &str = "MISSING";
+pub const OAC_CAPABILITY_INVALID: &str = "INVALID";
+
+/// Display-safe projection of one manager's local OAC slot and approval
+/// lockout on this device. Never carries the OAC id, device id, lockout id,
+/// verifier, salt, pepper, signature or any key material.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ManagerOacStatusDto {
+    pub ok: bool,
+    pub manager_staff_id: Option<String>,
+    /// `PRESENT` (signed, schema-valid, bound to this manager + this device),
+    /// `MISSING` (no active slot) or `INVALID` (anything else).
+    pub capability: String,
+    pub branch_id: Option<String>,
+    /// PRESENT and inside its freshness window, same UTC+7 day, current
+    /// revocation epoch, and no detected clock rollback.
+    pub fresh: bool,
+    pub issued_at_server_ms: Option<u64>,
+    pub freshness_expires_at_server_ms: Option<u64>,
+    pub auth_version_at_issue: Option<u32>,
+    pub credential_version_at_issue: Option<u32>,
+    pub locked_out: bool,
+    pub consecutive_failed_attempts: u32,
+    pub max_failed_attempts: u32,
+    pub error_code: Option<String>,
+}
+
+fn oac_status_denial(code: &str) -> ManagerOacStatusDto {
+    ManagerOacStatusDto {
+        ok: false,
+        manager_staff_id: None,
+        capability: OAC_CAPABILITY_INVALID.to_string(),
+        branch_id: None,
+        fresh: false,
+        issued_at_server_ms: None,
+        freshness_expires_at_server_ms: None,
+        auth_version_at_issue: None,
+        credential_version_at_issue: None,
+        locked_out: false,
+        consecutive_failed_attempts: 0,
+        max_failed_attempts: lockout_state::MAX_FAILED_ATTEMPTS,
+        error_code: Some(code.to_string()),
+    }
+}
+
+/// Read-only. Never writes the lockout store, clock guard, device id or OAC
+/// store, and never creates or changes a pepper: no `check_manager_lockout`
+/// reopen, no `assert_valid_and_advance_clock`, no `resolve_or_create_*` on a
+/// missing artifact. (An existing legacy-format pepper is re-encoded in place
+/// with the SAME value by `resolve_or_create_pepper`, exactly as verification
+/// already does.) A missing device id / manifest / pepper projects as INVALID.
+pub fn get_manager_oac_status(root: &Path, manager_staff_id: &str) -> ManagerOacStatusDto {
+    if !frames::is_canonical_identifier(manager_staff_id) {
+        return oac_status_denial("invalid_request_shape");
+    }
+
+    let lockout = match lockout_state::read_manager_lockout_snapshot(root, manager_staff_id) {
+        Ok(entry) => entry.unwrap_or_default(),
+        Err(_) => return oac_status_denial("DENIED_UNVERIFIABLE"),
+    };
+
+    let mut dto = ManagerOacStatusDto {
+        ok: true,
+        manager_staff_id: Some(manager_staff_id.to_string()),
+        capability: OAC_CAPABILITY_INVALID.to_string(),
+        branch_id: None,
+        fresh: false,
+        issued_at_server_ms: None,
+        freshness_expires_at_server_ms: None,
+        auth_version_at_issue: None,
+        credential_version_at_issue: None,
+        locked_out: lockout.locked_out,
+        consecutive_failed_attempts: lockout.consecutive_failed_attempts,
+        max_failed_attempts: lockout_state::MAX_FAILED_ATTEMPTS,
+        error_code: None,
+    };
+
+    let slot_path = match super::manager_active_slot_path(root, manager_staff_id) {
+        Ok(p) => p,
+        Err(_) => return oac_status_denial("invalid_request_shape"),
+    };
+    let content = match fs::read_to_string(&slot_path) {
+        Ok(c) => c,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            dto.capability = OAC_CAPABILITY_MISSING.to_string();
+            return dto;
+        }
+        Err(_) => return dto,
+    };
+    let oac: StoredOacEnvelope = match serde_json::from_str(&content) {
+        Ok(env) => env,
+        Err(_) => return dto,
+    };
+    if validate_stored_oac(&oac).is_err() || oac.manager_staff_id != manager_staff_id {
+        return dto;
+    }
+
+    // Device binding against the PERSISTED id only (never created here).
+    let device_id_hex = match security_device_id::read_persisted_security_device_id(root) {
+        Ok(Some(bytes)) => bytes.iter().map(|b| format!("{b:02x}")).collect::<String>(),
+        _ => return dto,
+    };
+    if oac.device_id.to_lowercase() != device_id_hex {
+        return dto;
+    }
+
+    let manifest = match super::enrollment_meta::resolve_active_manifest_path(root)
+        .ok()
+        .and_then(|p| fs::read(p).ok())
+        .and_then(|bytes| frames::decode_oks1(&bytes).ok())
+    {
+        Some(m) => m,
+        None => return dto,
+    };
+    if !verify_oac_signature(&oac, &manifest) {
+        return dto;
+    }
+
+    // Pepper commitment, without ever creating a pepper.
+    if !pepper_store::pepper_path(root).exists() {
+        return dto;
+    }
+    let pepper = match pepper_store::resolve_or_create_pepper(root) {
+        Ok(p) => p,
+        Err(_) => return dto,
+    };
+    if oac.pepper_commitment.trim() != base64_encode_std(&Sha256::digest(pepper)).trim() {
+        return dto;
+    }
+
+    dto.capability = OAC_CAPABILITY_PRESENT.to_string();
+    dto.branch_id = Some(oac.branch_id.clone());
+    dto.issued_at_server_ms = Some(oac.issued_at_server_ms);
+    dto.freshness_expires_at_server_ms = Some(oac.freshness_expires_at_server_ms);
+    dto.auth_version_at_issue = Some(oac.auth_version_at_issue);
+    dto.credential_version_at_issue = Some(oac.credential_version_at_issue);
+
+    let now_ms = match SystemTime::now().duration_since(UNIX_EPOCH) {
+        Ok(d) => d.as_millis() as u64,
+        Err(_) => return dto,
+    };
+    let clock_trusted = match clock_guard::read_clock_guard_state(root) {
+        Ok(Some(state)) => now_ms >= state.last_observed_system_time_ms,
+        Ok(None) => true,
+        Err(_) => false,
+    };
+    dto.fresh = clock_trusted
+        && oac.revocation_epoch == manifest.revocation_epoch
+        && now_ms >= oac.issued_at_server_ms
+        && now_ms <= oac.freshness_expires_at_server_ms
+        && !clock_guard::is_cross_midnight_utc7(oac.issued_at_server_ms, now_ms);
+    dto
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RevokeManagerOacDto {
+    pub ok: bool,
+    pub manager_staff_id: Option<String>,
+    /// True when an active slot existed and was removed; false when none existed.
+    pub revoked: bool,
+    pub error_code: Option<String>,
+}
+
+fn revoke_denial(code: &str) -> RevokeManagerOacDto {
+    RevokeManagerOacDto { ok: false, manager_staff_id: None, revoked: false, error_code: Some(code.to_string()) }
+}
+
+/// Removes exactly ONE manager's active OAC slot
+/// (`oac-store/by-manager/<managerStaffId>.json`) — the only file the offline
+/// verifier ever reads for that manager — so their local capability can no
+/// longer approve on this device. Strictly target-bound: the path is derived
+/// solely from the canonical manager id; no other manager's slot, no archived
+/// `<oacId>.json` / receipt, no lockout state, pepper, device id, enrollment
+/// or manifest is touched. Idempotent (absent => ok, `revoked: false`).
+/// Held under the same lifecycle lock + verifier mutex as verification and
+/// lockout clear, so it can never interleave with an in-flight verify.
+pub fn revoke_manager_oac(root: &Path, manager_staff_id: &str) -> RevokeManagerOacDto {
+    if !frames::is_canonical_identifier(manager_staff_id) {
+        return revoke_denial("invalid_request_shape");
+    }
+    let slot_path = match super::manager_active_slot_path(root, manager_staff_id) {
+        Ok(p) => p,
+        Err(_) => return revoke_denial("invalid_request_shape"),
+    };
+
+    let _guards = match acquire_privileged_verifier_guards(root) {
+        Ok(g) => g,
+        Err(_) => return revoke_denial("DENIED_UNVERIFIABLE"),
+    };
+
+    let revoked = match fs::remove_file(&slot_path) {
+        Ok(()) => true,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => false,
+        Err(_) => return revoke_denial("DENIED_UNVERIFIABLE"),
+    };
+    if slot_path.exists() {
+        return revoke_denial("DENIED_UNVERIFIABLE");
+    }
+    RevokeManagerOacDto {
+        ok: true,
+        manager_staff_id: Some(manager_staff_id.to_string()),
+        revoked,
+        error_code: None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3138,6 +3349,170 @@ mod tests {
         let after = get_privileged_lockout_recovery_context(&root, "mgr-bridge");
         assert_eq!(after, recovery_context_denial(RECOVERY_CONTEXT_NOT_LOCKED));
 
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    // --- Admin & Security Center V1: get_manager_oac_status / revoke_manager_oac ---
+
+    fn snapshot_tree(root: &Path) -> Vec<(String, Vec<u8>)> {
+        fn walk(dir: &Path, base: &Path, out: &mut Vec<(String, Vec<u8>)>) {
+            if let Ok(entries) = fs::read_dir(dir) {
+                for e in entries.flatten() {
+                    let p = e.path();
+                    if p.is_dir() {
+                        walk(&p, base, out);
+                    } else {
+                        let rel = p.strip_prefix(base).unwrap().to_string_lossy().replace('\\', "/");
+                        out.push((rel, fs::read(&p).unwrap_or_default()));
+                    }
+                }
+            }
+        }
+        let mut out = Vec::new();
+        walk(root, root, &mut out);
+        out.sort();
+        out
+    }
+
+    fn fresh_oac(root: &Path, key: &SigningKey, device_hex: &str, mgr: &str) -> String {
+        let now = real_now_ms();
+        provision_test_oac(root, key, mgr, "B01", device_hex, "1234", 1, now - 1000, now + 3_600_000, vec![
+            "VOID_PENDING_SALE",
+            "VOID_SETTLED_SALE",
+        ])
+    }
+
+    #[test]
+    fn oac_status_present_fresh_projects_only_safe_fields_and_writes_nothing() {
+        let root = temp_root();
+        let (key, device_hex) = setup_test_terminal(&root, 1);
+        let oac_id = fresh_oac(&root, &key, &device_hex, "mgr-ok");
+        let before = snapshot_tree(&root);
+
+        let status = get_manager_oac_status(&root, "mgr-ok");
+        assert!(status.ok);
+        assert_eq!(status.capability, OAC_CAPABILITY_PRESENT);
+        assert!(status.fresh);
+        assert_eq!(status.branch_id.as_deref(), Some("B01"));
+        assert_eq!(status.auth_version_at_issue, Some(1));
+        assert_eq!(status.credential_version_at_issue, Some(1));
+        assert!(!status.locked_out);
+        assert_eq!(status.consecutive_failed_attempts, 0);
+        assert_eq!(status.max_failed_attempts, 5);
+
+        let json = serde_json::to_string(&status).unwrap();
+        assert!(!json.contains(&oac_id));
+        assert!(!json.contains(&device_hex));
+        for forbidden in ["verifier", "salt", "pepper", "signature", "oacId", "deviceId", "lockoutId"] {
+            assert!(!json.contains(forbidden), "status DTO must not carry '{forbidden}': {json}");
+        }
+        assert_eq!(snapshot_tree(&root), before, "status read must not write anything");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn oac_status_missing_expired_invalid_and_strike_count() {
+        let root = temp_root();
+        let (key, device_hex) = setup_test_terminal(&root, 1);
+
+        assert_eq!(get_manager_oac_status(&root, "mgr-none").capability, OAC_CAPABILITY_MISSING);
+
+        let now = real_now_ms();
+        provision_test_oac(&root, &key, "mgr-old", "B01", &device_hex, "1234", 1, now - 7_200_000, now - 3_600_000, vec![
+            "VOID_PENDING_SALE",
+        ]);
+        let expired = get_manager_oac_status(&root, "mgr-old");
+        assert_eq!(expired.capability, OAC_CAPABILITY_PRESENT);
+        assert!(!expired.fresh);
+
+        // Revocation epoch moved on: present but not fresh.
+        provision_test_oac(&root, &key, "mgr-epoch", "B01", &device_hex, "1234", 0, now - 1000, now + 3_600_000, vec![
+            "VOID_PENDING_SALE",
+        ]);
+        assert!(!get_manager_oac_status(&root, "mgr-epoch").fresh);
+
+        // Bound to another device: invalid.
+        provision_test_oac(&root, &key, "mgr-dev", "B01", &"c".repeat(32), "1234", 1, now - 1000, now + 3_600_000, vec![
+            "VOID_PENDING_SALE",
+        ]);
+        assert_eq!(get_manager_oac_status(&root, "mgr-dev").capability, OAC_CAPABILITY_INVALID);
+
+        // Corrupt slot: invalid.
+        let corrupt = super::super::manager_active_slot_path(&root, "mgr-bad").unwrap();
+        fs::write(&corrupt, b"{not json").unwrap();
+        assert_eq!(get_manager_oac_status(&root, "mgr-bad").capability, OAC_CAPABILITY_INVALID);
+
+        // Strike count is surfaced without locking.
+        fresh_oac(&root, &key, &device_hex, "mgr-strike");
+        let _ = verify_offline_pin(&root, "mgr-strike", "VOID_PENDING_SALE", "9999").unwrap();
+        let struck = get_manager_oac_status(&root, "mgr-strike");
+        assert_eq!(struck.consecutive_failed_attempts, 1);
+        assert!(!struck.locked_out);
+
+        // Locked manager.
+        lock_manager_at(&root, "mgr-locked", real_now_ms());
+        let locked = get_manager_oac_status(&root, "mgr-locked");
+        assert!(locked.locked_out);
+        assert_eq!(locked.consecutive_failed_attempts, 5);
+
+        assert!(!get_manager_oac_status(&root, "../escape").ok);
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn revoke_removes_only_the_target_managers_active_slot() {
+        let root = temp_root();
+        let (key, device_hex) = setup_test_terminal(&root, 1);
+        let target_oac = fresh_oac(&root, &key, &device_hex, "mgr-target");
+        fresh_oac(&root, &key, &device_hex, "mgr-other");
+        let _ = verify_offline_pin(&root, "mgr-target", "VOID_PENDING_SALE", "9999").unwrap();
+        let before = snapshot_tree(&root);
+
+        let res = revoke_manager_oac(&root, "mgr-target");
+        assert!(res.ok);
+        assert!(res.revoked);
+        assert_eq!(res.manager_staff_id.as_deref(), Some("mgr-target"));
+
+        let after = snapshot_tree(&root);
+        let removed: Vec<&String> = before
+            .iter()
+            .filter(|(p, _)| !after.iter().any(|(q, _)| q == p))
+            .map(|(p, _)| p)
+            .collect();
+        assert_eq!(removed, vec![&"oac-store/by-manager/mgr-target.json".to_string()]);
+        for (path, bytes) in &after {
+            let prior = before.iter().find(|(p, _)| p == path).expect("no new files");
+            assert_eq!(&prior.1, bytes, "{path} must be unchanged (lockout, other slot, archive, enrollment)");
+        }
+        assert!(after.iter().any(|(p, _)| p == &format!("oac-store/{target_oac}.json")));
+
+        // The target can no longer approve locally; the other manager still can.
+        let denied = verify_offline_pin(&root, "mgr-target", "VOID_PENDING_SALE", "1234").unwrap();
+        assert_eq!(denied.error_code.as_deref(), Some("DENIED_OAC_MISSING"));
+        assert_eq!(get_manager_oac_status(&root, "mgr-target").capability, OAC_CAPABILITY_MISSING);
+        assert!(verify_offline_pin(&root, "mgr-other", "VOID_PENDING_SALE", "1234").unwrap().ok);
+        // Strike count for the target is preserved (lockout untouched).
+        assert_eq!(get_manager_oac_status(&root, "mgr-target").consecutive_failed_attempts, 1);
+
+        // Idempotent.
+        let again = revoke_manager_oac(&root, "mgr-target");
+        assert!(again.ok);
+        assert!(!again.revoked);
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn revoke_rejects_non_canonical_ids_without_touching_anything() {
+        let root = temp_root();
+        let (key, device_hex) = setup_test_terminal(&root, 1);
+        fresh_oac(&root, &key, &device_hex, "mgr-keep");
+        let before = snapshot_tree(&root);
+        for bad in ["", "../mgr-keep", "mgr keep", "mgr-keep.json", "a/b", "..\\x"] {
+            let res = revoke_manager_oac(&root, bad);
+            assert!(!res.ok, "{bad:?} must be refused");
+            assert!(!res.revoked);
+        }
+        assert_eq!(snapshot_tree(&root), before);
         let _ = fs::remove_dir_all(&root);
     }
 }

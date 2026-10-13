@@ -281,3 +281,59 @@ describe('PrivilegedVoidModal', () => {
     expect(flow.chooseManager).not.toHaveBeenCalledWith('mgr-1');
   });
 });
+
+describe('PrivilegedVoidModal — approver PIN identity (Admin & Security Center V1 UAT fix)', () => {
+  const pinState = (pinErrorCode: string | null): PrivilegedVoidFlowState => ({
+    status: 'MANAGER_PIN_ENTRY',
+    identity: IDENTITY,
+    reason: 'r',
+    note: '',
+    pinErrorCode,
+  });
+  const approver = { displayName: 'Nara Manager', username: 'nara' };
+
+  it('names the approver (display name + username) and asks for THAT person\'s Quick PIN, never the requester', () => {
+    const flow = makeFlow(pinState(null), { selectedApprover: approver });
+    render(<PrivilegedVoidModal flow={flow} requesterDisplayName="Admin Requester" />);
+    const modal = screen.getByTestId('privileged-void-pin-modal');
+    expect(within(modal).getByText('ยืนยันสิทธิ์ผู้จัดการ')).toBeTruthy();
+    expect(screen.getByTestId('pvm-approver-identity').textContent).toBe('ผู้อนุมัติ: Nara Manager (nara)');
+    expect(screen.getByTestId('pvm-approver-instruction').textContent).toBe('กรุณาใส่ Quick PIN ของ Nara Manager');
+    expect(modal.textContent).not.toContain('Admin Requester');
+    expect(modal.textContent).not.toContain('mgr-1');
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('wrong PIN copy names the approver and shows the native strike count without the raw code', async () => {
+    const readStrikes = vi.fn(async () => ({ failed: 1, max: 5 }));
+    const flow = makeFlow(pinState('DENIED_INVALID_PIN'), { selectedApprover: approver });
+    render(<PrivilegedVoidModal flow={flow} readApproverStrikes={readStrikes} />);
+    const alert = await screen.findByText(/เหลืออีก 4 ครั้งก่อนถูกล็อก/);
+    expect(alert.textContent).toContain('Quick PIN ของ Nara Manager ไม่ถูกต้อง');
+    expect(alert.textContent).toContain('กรอกไม่ถูกต้อง 1 ครั้ง');
+    expect(alert.textContent).not.toContain('DENIED_INVALID_PIN');
+    expect(readStrikes).toHaveBeenCalledWith('mgr-1');
+    expect(flow.submitPin).not.toHaveBeenCalled();
+  });
+
+  it('wrong PIN without readable strike info still names the approver and never auto-submits', async () => {
+    const readStrikes = vi.fn(async () => null);
+    const flow = makeFlow(pinState('DENIED_INVALID_PIN'), { selectedApprover: approver });
+    render(<PrivilegedVoidModal flow={flow} readApproverStrikes={readStrikes} />);
+    expect(screen.getByRole('alert').textContent).toContain('Quick PIN ของ Nara Manager ไม่ถูกต้อง');
+    expect(screen.getByRole('alert').textContent).not.toMatch(/ครั้ง/);
+    // Four digits entered: still requires an explicit confirm press.
+    const modal = screen.getByTestId('privileged-void-pin-modal');
+    for (const d of ['1', '2', '3', '4']) fireEvent.click(within(modal).getByText(d));
+    expect(flow.submitPin).not.toHaveBeenCalled();
+    fireEvent.click(within(modal).getByText('ยืนยัน'));
+    expect(flow.submitPin).toHaveBeenCalledTimes(1);
+    expect(flow.submitPin).toHaveBeenCalledWith('1234');
+  });
+
+  it('no strike read happens before any wrong PIN', () => {
+    const readStrikes = vi.fn(async () => ({ failed: 0, max: 5 }));
+    render(<PrivilegedVoidModal flow={makeFlow(pinState(null), { selectedApprover: approver })} readApproverStrikes={readStrikes} />);
+    expect(readStrikes).not.toHaveBeenCalled();
+  });
+});

@@ -29,6 +29,11 @@
 //! canonical manager id, only the LCT1 request tuple (device id, manager id,
 //! current lockout id) plus display state, so the admin recovery surface can
 //! call `issuePrivilegedLockoutClear` and then `native_clear_offline_lockout`.
+//!
+//! Admin & Security Center V1 adds exactly two commands, each taking only the
+//! canonical manager id: the read-only `native_get_manager_oac_status`
+//! (display-safe OAC + strike projection) and `native_revoke_manager_oac`
+//! (removes only that manager's active OAC slot — capability reduction only).
 
 pub mod action_attestation;
 pub mod argon2_benchmark;
@@ -572,6 +577,34 @@ pub fn native_get_privileged_lockout_recovery_context(
 ) -> Result<offline_verifier::PrivilegedLockoutRecoveryContextDto, String> {
     let root = app_data_dir();
     Ok(offline_verifier::get_privileged_lockout_recovery_context(&root, &manager_staff_id))
+}
+
+// --- Command 7c: native_get_manager_oac_status (Admin & Security Center V1) ---
+
+/// Read-only, display-safe status of exactly one canonical manager's local
+/// OAC slot plus approval-lockout strike state on this device. Never writes;
+/// never returns the OAC id, device id, lockout id, verifier, salt, pepper,
+/// signature or key material.
+#[tauri::command]
+pub fn native_get_manager_oac_status(
+    manager_staff_id: String,
+) -> Result<offline_verifier::ManagerOacStatusDto, String> {
+    let root = app_data_dir();
+    Ok(offline_verifier::get_manager_oac_status(&root, &manager_staff_id))
+}
+
+// --- Command 7d: native_revoke_manager_oac (Admin & Security Center V1) ---
+
+/// Removes exactly the named manager's active OAC slot (fail-closed local
+/// invalidation after a credential / role / branch / active-state change).
+/// Takes only the canonical manager id; touches no other manager, no lockout
+/// state, enrollment, device identity, pepper or manifest.
+#[tauri::command]
+pub fn native_revoke_manager_oac(
+    manager_staff_id: String,
+) -> Result<offline_verifier::RevokeManagerOacDto, String> {
+    let root = app_data_dir();
+    Ok(offline_verifier::revoke_manager_oac(&root, &manager_staff_id))
 }
 
 // --- Command 8: native_prepare_staff_session_challenge ---

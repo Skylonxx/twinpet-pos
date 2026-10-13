@@ -18,6 +18,7 @@ import {
   type IssuePrivilegedLockoutClearResponse,
 } from './issuePrivilegedLockoutClearCore';
 import { firestoreSigningKeyReaders, loadActiveSigningKey } from './signingKeyLoader';
+import { recordSecurityAuditEvent } from './securityAudit';
 
 async function isLiveAdmin(database: Firestore, uid: string): Promise<boolean> {
   const snap = await database.collection('users').doc(uid).get();
@@ -99,8 +100,20 @@ export async function performIssuePrivilegedLockoutClear(
     privateKey: signingKey.privateKey,
     nowMs,
   });
+  const response = buildLct1Response(frame);
 
-  return buildLct1Response(frame);
+  // Admin & Security Center V1: durable, server-authored evidence that an
+  // approval-lockout clear was authorized for this manager. Written before
+  // the LCT1 leaves the server; if it cannot be written the LCT1 is never
+  // returned (fail closed). No device id, lockout id or token is recorded.
+  await recordSecurityAuditEvent(database, {
+    type: 'APPROVAL_LOCKOUT_CLEAR_ISSUED',
+    actorStaffId: auth.uid,
+    targetStaffId: managerStaffId,
+    deviceBranchId: deviceData.branchId,
+  });
+
+  return response;
 }
 
 export const issuePrivilegedLockoutClear = onCall(

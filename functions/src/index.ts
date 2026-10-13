@@ -128,6 +128,10 @@ export { issueOfflineStaffSessionAssertion } from './issueOfflineStaffSessionAss
 export { refreshOfflineStaffSessionAssertion } from './refreshOfflineStaffSessionAssertion';
 export { reanchorPrivilegedOacReceipt } from './reanchorPrivilegedOacReceipt';
 
+// Admin & Security Center V1: read-only safe overview (users, Quick PIN state,
+// server-authored security audit events) for the primary password admin only.
+export { getAdminSecurityOverview } from './getAdminSecurityOverview';
+
 type UserRole = 'admin' | 'manager' | 'staff';
 
 // Fallback mirror of the client DEFAULT_ROLE_PERMS (src/lib/staffManagement/types.ts).

@@ -226,3 +226,15 @@
   background: var(--danger-bg, #fcebeb);
   color: var(--danger, #a32d2d);
 }
+
+/* Admin & Security Center V1 — the approver PIN dialog names whose PIN is required. */
+.pvm-approver-identity {
+  display: block;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.pvm-approver-instruction {
+  display: block;
+  margin-top: 4px;
+}

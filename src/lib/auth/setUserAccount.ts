@@ -21,6 +21,23 @@ export type SetUserAccountClientResult = {
   message?: string;
 };
 
+/**
+ * Thrown by `setUserAccount`. `message` is the existing user-facing text
+ * (unchanged for current callers). `code` lets a caller tell a DEFINITE
+ * server refusal apart from an unknown outcome without parsing text:
+ *   - `status:<status>`      — the callable answered `{ ok: false, status }`;
+ *   - `functions/<code>`     — a Functions/transport error code;
+ *   - `unknown`              — anything else.
+ */
+export class SetUserAccountError extends Error {
+  readonly code: string;
+  constructor(message: string, code: string) {
+    super(message);
+    this.name = 'SetUserAccountError';
+    this.code = code;
+  }
+}
+
 let emulatorConnected = false;
 
 function getCallable() {
@@ -49,18 +66,25 @@ export async function setUserAccount(
   if (!isFirebaseConfigured) {
     throw new Error('Firebase is not configured');
   }
+  let payload: SetUserAccountClientResult | null | undefined;
   try {
     const result = await getCallable()(command);
-    const payload = result.data;
-    if (!payload) throw new Error('ไม่สามารถบันทึกบัญชีผู้ใช้ได้');
-    if (!payload.ok) {
-      throw new Error(payload.message || 'ไม่สามารถบันทึกบัญชีผู้ใช้ได้');
-    }
-    return payload;
+    payload = result.data;
   } catch (err) {
     if (err instanceof FirebaseError) {
-      throw new Error(err.message || 'ไม่สามารถบันทึกบัญชีผู้ใช้ได้');
+      throw new SetUserAccountError(err.message || 'ไม่สามารถบันทึกบัญชีผู้ใช้ได้', err.code || 'unknown');
     }
-    throw err;
+    throw new SetUserAccountError(
+      err instanceof Error && err.message ? err.message : 'ไม่สามารถบันทึกบัญชีผู้ใช้ได้',
+      'unknown',
+    );
   }
+  if (!payload) throw new SetUserAccountError('ไม่สามารถบันทึกบัญชีผู้ใช้ได้', 'unknown');
+  if (!payload.ok) {
+    throw new SetUserAccountError(
+      payload.message || 'ไม่สามารถบันทึกบัญชีผู้ใช้ได้',
+      `status:${payload.status || 'unknown'}`,
+    );
+  }
+  return payload;
 }

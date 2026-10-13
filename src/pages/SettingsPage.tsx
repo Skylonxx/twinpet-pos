@@ -24,7 +24,7 @@ import type { PosDevice, PosDeviceType, UomUnit } from '../lib/types';
 import ExpiryPolicySettings from './settings/ExpiryPolicySettings';
 import PosDevicesSettings from './settings/PosDevicesSettings';
 import DeviceSecurityEnrollmentCard from './settings/DeviceSecurityEnrollmentCard';
-import PrivilegedLockoutRecoveryCard from './settings/PrivilegedLockoutRecoveryCard';
+import AdminSecurityCenter from './settings/AdminSecurityCenter';
 import PriceLevelManager from '../components/admin/PriceLevelManager';
 import './SettingsPage.css';
 
@@ -866,8 +866,8 @@ export default function SettingsPage() {
           {/* ── Admin ── */}
           {section === 'admin' ? (
             <>
-              <div className="stg-section-title">Admin &amp; ความปลอดภัย</div>
-              <div className="stg-section-sub">การตั้งค่าระดับระบบ — ต้องใช้สิทธิ์ Admin เท่านั้น</div>
+              {/* Admin & Security Center V1: users, Quick PIN, approval lockout + offline approval capability. */}
+              <AdminSecurityCenter operator={user} branchId={branchId} />
               {/* Phase 7B-3B: Void/Reversal password policy — Manager/Admin editable. */}
               <div className="stg-card">
                 <div className="stg-card-head">
@@ -893,8 +893,6 @@ export default function SettingsPage() {
                   ) : null}
                 </div>
               </div>
-              {/* D-V15: admin-only native privileged-approval lockout recovery (this device). */}
-              {isAdmin ? <PrivilegedLockoutRecoveryCard branchId={branchId} operator={user} /> : null}
               <div className="stg-card">
                 <div className="stg-card-head">
                   <i className="ti ti-lock" aria-hidden="true" /> นโยบาย PIN &amp; Session

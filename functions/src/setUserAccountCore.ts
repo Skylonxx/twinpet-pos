@@ -15,6 +15,7 @@ import {
   type CredentialState,
 } from './credentialStore';
 import { STAGED_ROLE_DENY_COLLECTION } from './privilegedActionAuthority';
+import { recordSecurityAuditEventInTx } from './securityAudit';
 
 const BCRYPT_COST = 10;
 const PIN_RE = /^\d{4}$/;
@@ -140,6 +141,22 @@ async function assertActor(
   const live = typeof user.authVersion === 'number' ? user.authVersion : 0;
   if (live !== actor.authVersion) return invalid('unauthorized', 'สิทธิ์หมดอายุ กรุณาเข้าสู่ระบบใหม่');
   return null;
+}
+
+function actorIdOf(actor: SetUserAccountActor): string {
+  return actor.kind === 'operator_cli' ? 'OPERATOR_CLI' : actor.staffId;
+}
+
+function stringArrayOrNull(value: unknown): string[] | null {
+  return Array.isArray(value) && value.every((v) => typeof v === 'string') ? [...(value as string[])] : null;
+}
+
+function sameStringSet(a: string[] | null, b: string[] | null): boolean {
+  if (a === null || b === null) return a === b;
+  if (a.length !== b.length) return false;
+  const sa = [...a].sort();
+  const sb = [...b].sort();
+  return sa.every((v, i) => v === sb[i]);
 }
 
 async function readReservationsMarker(
@@ -280,6 +297,13 @@ async function handleCreate(
     status: 'created',
     createdAt: now,
   });
+  recordSecurityAuditEventInTx(database, tx, {
+    type: 'USER_CREATED',
+    actorStaffId: actorId,
+    targetStaffId: userId,
+    roleAfter: cmd.role,
+    branchIdsAfter: [...cmd.branchIds],
+  });
   return { ok: true, status: 'created', userId, authVersion: 0, credentialVersion: 0 };
 }
 
@@ -353,6 +377,11 @@ async function handleRotate(
     authVersion: nextAuth,
     createdAt: now,
   });
+  recordSecurityAuditEventInTx(database, tx, {
+    type: 'QUICK_PIN_ROTATED',
+    actorStaffId: actorId,
+    targetStaffId: userId,
+  });
   return {
     ok: true,
     status: 'rotated',
@@ -387,6 +416,25 @@ async function handleUpdateProfile(
   tx.update(userRef, patch);
   bumpAuthVersion(tx, database, userId);
   const live = asUser(userSnap.data());
+  const changedFields: string[] = [];
+  if (typeof cmd.firstName === 'string' && cmd.firstName.trim() !== live.firstName) changedFields.push('firstName');
+  if (typeof cmd.lastName === 'string' && cmd.lastName.trim() !== live.lastName) changedFields.push('lastName');
+  if (cmd.role && cmd.role !== live.role) changedFields.push('role');
+  const branchIdsBefore = stringArrayOrNull(live.branchIds);
+  if (cmd.branchIds && !sameStringSet(branchIdsBefore, stringArrayOrNull(cmd.branchIds))) {
+    changedFields.push('branchIds');
+  }
+  if (cmd.permissions) changedFields.push('permissions');
+  recordSecurityAuditEventInTx(database, tx, {
+    type: 'USER_PROFILE_UPDATED',
+    actorStaffId: actorIdOf(actor),
+    targetStaffId: userId,
+    changedFields,
+    roleBefore: typeof live.role === 'string' ? live.role : null,
+    roleAfter: cmd.role ?? (typeof live.role === 'string' ? live.role : null),
+    branchIdsBefore,
+    branchIdsAfter: cmd.branchIds ? [...cmd.branchIds] : branchIdsBefore,
+  });
   return {
     ok: true,
     status: 'updated',
@@ -413,6 +461,11 @@ async function handleSetActive(
     updatedAt: FieldValue.serverTimestamp(),
   });
   bumpAuthVersion(tx, database, userId);
+  recordSecurityAuditEventInTx(database, tx, {
+    type: cmd.isActive === true ? 'USER_ENABLED' : 'USER_DISABLED',
+    actorStaffId: actorIdOf(actor),
+    targetStaffId: userId,
+  });
   const live = asUser(userSnap.data());
   return {
     ok: true,
@@ -447,6 +500,11 @@ async function handleSoftDelete(
   if (unameRef && unameSnap?.exists && asUser(unameSnap.data()).userId === userId) {
     tx.delete(unameRef);
   }
+  recordSecurityAuditEventInTx(database, tx, {
+    type: 'USER_SOFT_DELETED',
+    actorStaffId: actorIdOf(actor),
+    targetStaffId: userId,
+  });
   const live = asUser(userSnap.data());
   return {
     ok: true,
@@ -491,6 +549,11 @@ async function handleRename(
   tx.set(newRef, { userId, reservedAt: FieldValue.serverTimestamp() });
   tx.update(userRef, { username: newUsername, updatedAt: FieldValue.serverTimestamp() });
   bumpAuthVersion(tx, database, userId);
+  recordSecurityAuditEventInTx(database, tx, {
+    type: 'USER_RENAMED',
+    actorStaffId: actorIdOf(actor),
+    targetStaffId: userId,
+  });
   const live = asUser(userSnap.data());
   return {
     ok: true,

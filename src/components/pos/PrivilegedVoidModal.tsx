@@ -9,6 +9,14 @@ import {
   rosterFailClosedReason,
 } from '../../lib/pos/privilegedVoid/privilegedVoidCopy';
 import type { UsePrivilegedVoidFlowResult } from '../../hooks/pos/usePrivilegedVoidFlow';
+import {
+  approverIdentityLine,
+  enterOwnPinInstruction,
+  failedAttemptsCopy,
+  remainingAttemptsCopy,
+  wrongOwnPinCopy,
+} from '../../lib/adminSecurity/adminSecurityCopy';
+import { readManagerOacStatus } from '../../lib/adminSecurity/managerOac';
 import './PrivilegedVoidModal.css';
 
 // SEC-001 Packet E / E-1 — the privileged-only Sales History void UI.
@@ -22,6 +30,8 @@ import './PrivilegedVoidModal.css';
 export interface PrivilegedVoidModalProps {
   flow: UsePrivilegedVoidFlowResult;
   requesterDisplayName?: string;
+  /** Test seam only; production reads the native strike projection. */
+  readApproverStrikes?: (managerStaffId: string) => Promise<ApproverStrikeInfo | null>;
 }
 
 function DialogShell({
@@ -211,7 +221,97 @@ function ResultPanel({
   );
 }
 
-export default function PrivilegedVoidModal({ flow, requesterDisplayName }: PrivilegedVoidModalProps) {
+export type ApproverStrikeInfo = { failed: number; max: number };
+
+/** Read-only native strike projection for the bound approver; `null` when unknown. */
+async function defaultReadApproverStrikes(managerStaffId: string): Promise<ApproverStrikeInfo | null> {
+  const status = await readManagerOacStatus(managerStaffId);
+  if (status.kind !== 'read' || status.maxFailedAttempts <= 0) return null;
+  return { failed: status.consecutiveFailedAttempts, max: status.maxFailedAttempts };
+}
+
+/**
+ * TPOS-USABLE-POS-ADMIN-SECURITY-CENTER-V1 — the PIN dialog names WHOSE PIN
+ * is required (the bound approver), never the requester/session user, so a
+ * requester cannot mistake it for their own login PIN. After a wrong PIN the
+ * copy names the approver and, when the native store can be read safely,
+ * shows the strike count. Never auto-submits or retries; never shows a raw
+ * denial code.
+ */
+function ApproverPinStep({
+  flow,
+  managerStaffId,
+  pinErrorCode,
+  readStrikes,
+}: {
+  flow: UsePrivilegedVoidFlowResult;
+  managerStaffId: string | null;
+  pinErrorCode: string | null;
+  readStrikes: (managerStaffId: string) => Promise<ApproverStrikeInfo | null>;
+}) {
+  const approver = flow.selectedApprover ?? null;
+  const displayName = approver?.displayName || 'ผู้อนุมัติที่เลือก';
+  // Keyed so a stale read for another approver/error can never be shown.
+  const strikeKey = pinErrorCode && managerStaffId ? `${managerStaffId}|${pinErrorCode}` : null;
+  const [strikeRead, setStrikeRead] = useState<{ key: string; info: ApproverStrikeInfo | null } | null>(null);
+  const strikes = strikeRead && strikeRead.key === strikeKey ? strikeRead.info : null;
+
+  useEffect(() => {
+    if (!strikeKey || !managerStaffId) return;
+    let cancelled = false;
+    void readStrikes(managerStaffId)
+      .then((info) => {
+        if (!cancelled) setStrikeRead({ key: strikeKey, info });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [strikeKey, managerStaffId, readStrikes]);
+
+  let errorMessage: string | null = null;
+  if (pinErrorCode) {
+    const lines = [approver ? wrongOwnPinCopy(displayName) : pinErrorCopy(pinErrorCode)];
+    if (strikes && strikes.failed > 0) {
+      lines.push(failedAttemptsCopy(strikes.failed));
+      lines.push(remainingAttemptsCopy(Math.max(0, strikes.max - strikes.failed)));
+    }
+    errorMessage = lines.join(' · ');
+  }
+
+  return (
+    <ManagerPinModal
+      open
+      title="ยืนยันสิทธิ์ผู้จัดการ"
+      description={
+        <>
+          <span className="pvm-approver-identity" data-testid="pvm-approver-identity">
+            {approver ? approverIdentityLine(approver.displayName, approver.username) : `ผู้อนุมัติ: ${displayName}`}
+          </span>
+          <span className="pvm-approver-instruction" data-testid="pvm-approver-instruction">
+            {enterOwnPinInstruction(displayName)}
+          </span>
+        </>
+      }
+      // D-V5 — the live authoritative manager/admin credential is the
+      // 4-digit PIN (coordinated PIN6 cutover deferred); it is the PIN both
+      // JIT provisioning (`verifyPinLogin` / OAC completion) and the native
+      // offline verifier check.
+      pinLength={4}
+      isSubmitting={flow.isSubmitting}
+      errorMessage={errorMessage}
+      onSubmitPin={flow.submitPin}
+      onCancel={flow.backToManagerSelect}
+      data-testid="privileged-void-pin-modal"
+    />
+  );
+}
+
+export default function PrivilegedVoidModal({
+  flow,
+  requesterDisplayName,
+  readApproverStrikes = defaultReadApproverStrikes,
+}: PrivilegedVoidModalProps) {
   const { state } = flow;
 
   if (state.status === 'IDLE') return null;
@@ -221,21 +321,11 @@ export default function PrivilegedVoidModal({ flow, requesterDisplayName }: Priv
 
   if (state.status === 'MANAGER_PIN_ENTRY') {
     return (
-      <ManagerPinModal
-        open
-        title="ยืนยันสิทธิ์ผู้จัดการ"
-        description="กรุณาใส่ PIN ผู้จัดการเพื่ออนุมัติคำขอยกเลิกบิล"
-        sessionDisplayName={requesterDisplayName}
-        // D-V5 — the live authoritative manager/admin credential is the
-        // 4-digit PIN (coordinated PIN6 cutover deferred); it is the PIN both
-        // JIT provisioning (`verifyPinLogin` / OAC completion) and the native
-        // offline verifier check.
-        pinLength={4}
-        isSubmitting={flow.isSubmitting}
-        errorMessage={state.pinErrorCode ? pinErrorCopy(state.pinErrorCode) : null}
-        onSubmitPin={flow.submitPin}
-        onCancel={flow.backToManagerSelect}
-        data-testid="privileged-void-pin-modal"
+      <ApproverPinStep
+        flow={flow}
+        managerStaffId={state.identity.managerStaffId}
+        pinErrorCode={state.pinErrorCode}
+        readStrikes={readApproverStrikes}
       />
     );
   }

@@ -537,6 +537,44 @@ describe('performCompletePrivilegedOacIssuanceSession', () => {
     };
     expect(session.status).toBe('CONSUMED');
     expect(session.consumedAtServerMs).toBe(1101);
+    // Admin & Security Center V1: exactly one audit event for the one emitted OAC.
+    expect([...(store.get('securityAuditEvents')?.values() ?? [])]).toHaveLength(1);
+  });
+
+  it('Admin Security Center V1: a winning completion writes one OAC_ISSUED audit event without secrets', async () => {
+    const { db, store, begin, ptp1Base64, pin1Base64 } = await fullHappyPathSetup();
+    const result = await performCompletePrivilegedOacIssuanceSession(
+      db,
+      managerAuth,
+      { sessionId: begin.ok ? begin.sessionId : '', pin: '123456', ptp1Base64, pin1Base64 },
+      1100,
+    );
+    expect(result.ok).toBe(true);
+    const events = [...(store.get('securityAuditEvents')?.values() ?? [])] as Record<string, unknown>[];
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      schemaVersion: 1,
+      type: 'OAC_ISSUED',
+      actorStaffId: MANAGER_UID,
+      targetStaffId: MANAGER_UID,
+      deviceBranchId: BRANCH_ID,
+    });
+    const serialized = JSON.stringify(events[0]);
+    expect(serialized).not.toContain('123456');
+    expect(serialized).not.toContain(DEVICE_HEX);
+    if (result.ok) expect(serialized).not.toContain(result.oac.oacId);
+  });
+
+  it('Admin Security Center V1: a refused completion writes no audit event', async () => {
+    const { db, store, begin, ptp1Base64, pin1Base64 } = await fullHappyPathSetup('123456');
+    const result = await performCompletePrivilegedOacIssuanceSession(
+      db,
+      managerAuth,
+      { sessionId: begin.ok ? begin.sessionId : '', pin: '999999', ptp1Base64, pin1Base64 },
+      1100,
+    );
+    expect(result).toEqual({ ok: false, code: 'invalid_pin' });
+    expect(store.get('securityAuditEvents')?.size ?? 0).toBe(0);
   });
 
   it('F6: three concurrent completions yield exactly one OAC', async () => {

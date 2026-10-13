@@ -39,6 +39,7 @@ import { publicKeyFromRaw, loadActiveSigningKey, firestoreSigningKeyReaders } fr
 import { signOacEnvelope } from './oacSigner';
 import { readRevocationEpoch } from './privilegedRevocationState';
 import { DEVICE_REGISTRATIONS_COLLECTION } from './deviceEnrollment';
+import { recordSecurityAuditEventInTx } from './securityAudit';
 // F5 — the canonical strict device-record parser. Imported, never relocated:
 // it lives in the currently-deployed adjudicator core, and moving it would put
 // a live function's source out of step with its deployed bytes.
@@ -350,6 +351,15 @@ export async function performCompletePrivilegedOacIssuanceSession(
         status: 'CONSUMED',
         consumedAtServerMs: nowMs,
         consumedAt: FieldValue.serverTimestamp(),
+      });
+      // Admin & Security Center V1: commits iff this completion wins the
+      // consume, so exactly one event per emitted OAC. The OAC is minted for
+      // the authenticated manager principal itself (actor == target).
+      recordSecurityAuditEventInTx(database, tx, {
+        type: 'OAC_ISSUED',
+        actorStaffId: freshness.staffId,
+        targetStaffId: freshness.staffId,
+        deviceBranchId: freshSession!.branchId,
       });
     });
   } catch (err: unknown) {

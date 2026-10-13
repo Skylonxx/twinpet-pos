@@ -49,6 +49,8 @@ pub fn run() {
             privileged_auth::native_verify_offline_pin,
             privileged_auth::native_clear_offline_lockout,
             privileged_auth::native_get_privileged_lockout_recovery_context,
+            privileged_auth::native_get_manager_oac_status,
+            privileged_auth::native_revoke_manager_oac,
             privileged_auth::native_prepare_staff_session_challenge,
             privileged_auth::native_persist_staff_session_assertion,
             privileged_auth::native_clear_staff_session,
