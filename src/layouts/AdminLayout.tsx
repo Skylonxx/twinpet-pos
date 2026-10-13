@@ -1,75 +1,7 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/hooks/useAuth';
-
-const ADMIN_NAV = [
-  {
-    path: '/admin',
-    end: true,
-    label: 'Dashboard',
-    icon: 'ti-layout-dashboard',
-  },
-  {
-    path: '/admin/branches',
-    end: false,
-    label: 'Branches',
-    icon: 'ti-building-store',
-  },
-  {
-    path: '/admin/staff',
-    end: false,
-    label: 'Staff',
-    icon: 'ti-users',
-  },
-  {
-    path: '/admin/products',
-    end: false,
-    label: 'Products',
-    icon: 'ti-package',
-  },
-  {
-    path: '/admin/suppliers',
-    end: false,
-    label: 'Suppliers',
-    icon: 'ti-building-factory-2',
-  },
-  {
-    path: '/admin/price-levels',
-    end: false,
-    label: 'Price Levels',
-    icon: 'ti-layers-difference',
-  },
-  {
-    path: '/admin/receiving',
-    end: false,
-    label: 'Receiving (HQ)',
-    icon: 'ti-truck-delivery',
-  },
-  {
-    path: '/admin/transfers',
-    end: false,
-    label: 'Transfers (HQ)',
-    icon: 'ti-arrows-exchange',
-  },
-  {
-    path: '/admin/stock-report',
-    end: false,
-    label: 'Stock Report (HQ)',
-    icon: 'ti-box',
-  },
-  {
-    path: '/admin/sorting',
-    end: false,
-    label: 'ตั้งค่าการจัดเรียง (POS)',
-    icon: 'ti-arrows-sort',
-  },
-  {
-    path: '/admin/quick-menus',
-    end: false,
-    label: 'ตั้งค่าเมนูด่วน (Quick Menus)',
-    icon: 'ti-bolt',
-  },
-] as const;
+import { ADMIN_NAV } from '../config/adminNavigation';
 
 // Shared topbar button styling (Tailwind; replaces .admin-layout-topbar-btn).
 const TOPBAR_BTN =

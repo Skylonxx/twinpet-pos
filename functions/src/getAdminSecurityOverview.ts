@@ -10,7 +10,10 @@
  *   - users (not soft-deleted): names, username, role, branch access, active
  *     flag, live authVersion (to detect a stale local OAC binding), and a
  *     coarse Quick PIN state `set` | `required` derived server-side from
- *     `userCredentials` — never the PIN, hash, cost, salt or version;
+ *     `userCredentials` — never the PIN, hash, cost, salt or version — and,
+ *     for `role=admin` only, a coarse `securityAdminClassification`
+ *     (PASSWORD_ADMIN / POS_ADMIN / UNKNOWN, see adminTargetClassification)
+ *     — never an email, provider payload, token or claim;
  *   - the most recent `securityAuditEvents` (server-authored only).
  * Performs no writes.
  */
@@ -20,6 +23,12 @@ import { db } from './db';
 import { FUNCTIONS_REGION } from './deployConfig';
 import { evaluateFreshPrivilegedAuthority, type AuthLike } from './authorityFence';
 import { isPrimaryPasswordPrincipal } from './adminPasswordPrincipal';
+import {
+  classifyAdminTargets,
+  defaultAdminAuthLookup,
+  type AdminAuthLookup,
+  type SecurityAdminClassification,
+} from './adminTargetClassification';
 import { COLLECTIONS, isAuthoritativeRotated, isUsableForLogin, readUserCredential } from './credentialStore';
 import { SECURITY_AUDIT_EVENTS_COLLECTION, SECURITY_AUDIT_EVENT_TYPES, type SecurityAuditEventType } from './securityAudit';
 
@@ -35,6 +44,8 @@ export type AdminSecurityOverviewUser = {
   isActive: boolean;
   authVersion: number;
   quickPinState: 'set' | 'required';
+  /** `null` for non-admin roles. UNKNOWN must be rendered fail-closed (read-only). */
+  securityAdminClassification: SecurityAdminClassification | null;
 };
 
 export type AdminSecurityOverviewEvent = {
@@ -73,7 +84,12 @@ function timestampMs(v: unknown): number | null {
   return null;
 }
 
-function projectUser(id: string, data: DocumentData, quickPinState: 'set' | 'required'): AdminSecurityOverviewUser | null {
+function projectUser(
+  id: string,
+  data: DocumentData,
+  quickPinState: 'set' | 'required',
+  adminClasses: Map<string, SecurityAdminClassification>,
+): AdminSecurityOverviewUser | null {
   if (data.deletedAt != null) return null;
   if (!ROLES.has(data.role)) return null;
   return {
@@ -86,6 +102,7 @@ function projectUser(id: string, data: DocumentData, quickPinState: 'set' | 'req
     isActive: data.isActive === true,
     authVersion: typeof data.authVersion === 'number' && Number.isFinite(data.authVersion) ? data.authVersion : 0,
     quickPinState,
+    securityAdminClassification: data.role === 'admin' ? (adminClasses.get(id) ?? 'UNKNOWN') : null,
   };
 }
 
@@ -108,6 +125,7 @@ function projectEvent(data: DocumentData): AdminSecurityOverviewEvent | null {
 export async function performGetAdminSecurityOverview(
   database: Firestore,
   auth: AuthLike,
+  lookupAuth: AdminAuthLookup = defaultAdminAuthLookup,
 ): Promise<AdminSecurityOverviewResponse> {
   if (!isPrimaryPasswordPrincipal(auth)) return { ok: false, code: 'admin_password_session_required' };
   const freshness = await evaluateFreshPrivilegedAuthority(database, auth);
@@ -117,11 +135,14 @@ export async function performGetAdminSecurityOverview(
 
   const usersSnap = await database.collection(COLLECTIONS.users).get();
   const liveDocs = usersSnap.docs.filter((doc) => ((doc.data() ?? {}) as DocumentData).deletedAt == null);
+  // Only live role=admin uids are looked up in Firebase Auth (one batched call).
+  const adminIds = liveDocs.filter((doc) => ((doc.data() ?? {}) as DocumentData).role === 'admin').map((doc) => doc.id);
+  const adminClasses = await classifyAdminTargets(adminIds, lookupAuth);
   const projectedUsers = await Promise.all(
     liveDocs.map(async (doc) => {
       const cred = await readUserCredential(database, doc.id);
       const quickPinState = isUsableForLogin(cred) && isAuthoritativeRotated(cred) ? 'set' : 'required';
-      return projectUser(doc.id, (doc.data() ?? {}) as DocumentData, quickPinState);
+      return projectUser(doc.id, (doc.data() ?? {}) as DocumentData, quickPinState, adminClasses);
     }),
   );
   const users = projectedUsers.filter((u): u is AdminSecurityOverviewUser => u !== null);

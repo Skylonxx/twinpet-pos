@@ -13,6 +13,7 @@ import {
   checkAdminPasswordSession,
   clearManagerApprovalLockout,
   createAdminUser,
+  isProtectedAdminTarget,
   loadAdminSecurityOverview,
   reissueManagerOac,
   rotateAdminUserPin,
@@ -63,7 +64,16 @@ export type AdminSecurityCenterDeps = {
   fetchBranches?: () => Promise<BranchOption[]>;
 };
 
-const ROLE_LABEL: Record<string, string> = { admin: 'ผู้ดูแลระบบ', manager: 'ผู้จัดการ', staff: 'พนักงาน' };
+/** Event-history role names (a role value, not an account classification). */
+const ROLE_LABEL: Record<string, string> = { admin: 'Admin', manager: 'ผู้จัดการ', staff: 'พนักงาน' };
+
+/** D-ASC9 row role label + secondary copy; admins are split by server classification. */
+function roleDisplay(u: AdminSecurityUser): { label: string; hint: string | null } {
+  if (u.role !== 'admin') return { label: ROLE_LABEL[u.role] ?? u.role, hint: null };
+  if (u.securityAdminClassification === 'PASSWORD_ADMIN') return { label: C.roleSecurityAdmin, hint: C.roleSecurityAdminHint };
+  if (u.securityAdminClassification === 'POS_ADMIN') return { label: C.rolePosAdmin, hint: C.rolePosAdminHint };
+  return { label: C.roleAdminUnknown, hint: C.roleAdminUnknownHint };
+}
 
 const CAPABILITY_LABEL: Record<ApprovalCapabilityState, string> = {
   ready: C.oacReady,
@@ -106,6 +116,8 @@ function mutationNotice(result: AccountMutationResult, successText: string): Not
       return { tone: 'failure', text: C.passwordSessionRequired };
     case 'self_target':
       return { tone: 'warning', text: C.selfLocked };
+    case 'protected_target':
+      return { tone: 'warning', text: C.ownerRecoveryRequired };
     case 'invalid':
       return { tone: 'failure', text: result.reason === 'pin_format' ? C.pinFormat : 'กรุณากรอกข้อมูลให้ครบถ้วน' };
     case 'busy':
@@ -132,6 +144,8 @@ function reissueNotice(result: ReissueOacResult, displayName: string): Notice {
       return { tone: 'failure', text: C.passwordSessionRequired };
     case 'self_target':
       return { tone: 'warning', text: C.selfLocked };
+    case 'protected_target':
+      return { tone: 'warning', text: C.ownerRecoveryRequired };
     case 'invalid':
       return { tone: 'failure', text: C.pinFormat };
     default:
@@ -151,6 +165,8 @@ function lockoutNotice(result: LockoutClearResult): Notice {
       return { tone: 'failure', text: C.passwordSessionRequired };
     case 'self_target':
       return { tone: 'warning', text: C.selfLocked };
+    case 'protected_target':
+      return { tone: 'warning', text: C.ownerRecoveryRequired };
     default:
       return { tone: 'failure', text: C.lockoutFailure };
   }
@@ -390,6 +406,9 @@ export default function AdminSecurityCenter({
                 <TableBody>
                   {users.map((u) => {
                     const self = u.userId === operator?.id;
+                    // Security Admin / unclassified admin rows are read-only (D-ASC9).
+                    const readOnly = isProtectedAdminTarget(u);
+                    const roleView = roleDisplay(u);
                     const approver = isApproverRole(u.role);
                     const cap = approver ? capabilityOf(u) : null;
                     return (
@@ -403,7 +422,16 @@ export default function AdminSecurityCenter({
                             </Badge>
                           ) : null}
                         </TableCell>
-                        <TableCell>{ROLE_LABEL[u.role] ?? u.role}</TableCell>
+                        <TableCell>
+                          <div className="font-medium" data-testid="admin-role-label">
+                            {roleView.label}
+                          </div>
+                          {roleView.hint ? (
+                            <div className="text-xs text-gray-500" data-testid="admin-role-hint">
+                              {roleView.hint}
+                            </div>
+                          ) : null}
+                        </TableCell>
                         <TableCell>{u.branchIds.map(branchLabel).join(', ') || '—'}</TableCell>
                         <TableCell>
                           <Badge color={u.isActive ? 'success' : 'gray'} className="w-fit">
@@ -432,7 +460,11 @@ export default function AdminSecurityCenter({
                           )}
                         </TableCell>
                         <TableCell>
-                          {self ? (
+                          {readOnly ? (
+                            <span className="text-xs text-gray-500" data-testid="admin-row-readonly">
+                              {u.securityAdminClassification === 'PASSWORD_ADMIN' ? C.ownerRecoveryManaged : C.adminUnknownReadOnly}
+                            </span>
+                          ) : self ? (
                             <span className="text-xs text-gray-500">{C.selfLocked}</span>
                           ) : (
                             <div className="flex flex-wrap gap-2">

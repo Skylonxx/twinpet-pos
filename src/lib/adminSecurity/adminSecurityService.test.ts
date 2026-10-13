@@ -21,11 +21,15 @@ import {
   rotateAdminUserPin,
   setAdminUserActive,
   updateAdminUser,
+  isProtectedAdminTarget,
   type AdminSecurityDeps,
 } from './adminSecurityService';
 
 const ADMIN = { id: 'admin1', role: 'admin' };
-const MGR = { userId: 'mgr1', role: 'manager' as const, isActive: true, branchIds: ['LDP-001'] };
+const MGR = { userId: 'mgr1', role: 'manager' as const, isActive: true, branchIds: ['LDP-001'], securityAdminClassification: null };
+const SECURITY_ADMIN = { userId: 'admin2', role: 'admin' as const, isActive: true, branchIds: ['ALL'], securityAdminClassification: 'PASSWORD_ADMIN' as const };
+const UNKNOWN_ADMIN = { ...SECURITY_ADMIN, userId: 'admin3', securityAdminClassification: 'UNKNOWN' as const };
+const POS_ADMIN = { ...SECURITY_ADMIN, userId: 'posadm1', branchIds: ['LDP-001'], securityAdminClassification: 'POS_ADMIN' as const };
 const OTHER_MGR_ID = 'mgr2';
 const PIN = '4826';
 
@@ -108,6 +112,57 @@ describe('access control', () => {
     expect(await clearManagerApprovalLockout(ADMIN, self, h.deps)).toEqual({ kind: 'self_target' });
     expect(await reissueManagerOac(ADMIN, self, 'LDP-001', PIN, h.deps)).toEqual({ kind: 'self_target' });
     expect(h.callSetUserAccount).not.toHaveBeenCalled();
+  });
+});
+
+describe('D-ASC8/9 — Security Admin and unclassified admin targets are read-only', () => {
+  it('classification decides mutability (fail closed for anything but POS_ADMIN)', () => {
+    expect(isProtectedAdminTarget(SECURITY_ADMIN)).toBe(true);
+    expect(isProtectedAdminTarget(UNKNOWN_ADMIN)).toBe(true);
+    expect(isProtectedAdminTarget({ role: 'admin', securityAdminClassification: null })).toBe(true);
+    expect(isProtectedAdminTarget(POS_ADMIN)).toBe(false);
+    expect(isProtectedAdminTarget(MGR)).toBe(false);
+  });
+
+  for (const [label, target] of [
+    ['Security Admin', SECURITY_ADMIN],
+    ['UNKNOWN admin', UNKNOWN_ADMIN],
+  ] as const) {
+    it(`${label}: no mutation, PIN, toggle, lockout clear or OAC reissue is ever called`, async () => {
+      const h = harness();
+      expect(await rotateAdminUserPin(ADMIN, target, PIN, h.deps)).toEqual({ kind: 'protected_target' });
+      expect(await setAdminUserActive(ADMIN, target, false, h.deps)).toEqual({ kind: 'protected_target' });
+      expect(await setAdminUserActive(ADMIN, target, true, h.deps)).toEqual({ kind: 'protected_target' });
+      expect(
+        await updateAdminUser(ADMIN, target, { firstName: 'a', lastName: 'b', role: 'manager', branchIds: ['LDP-001'] }, h.deps),
+      ).toEqual({ kind: 'protected_target' });
+      expect(await clearManagerApprovalLockout(ADMIN, target, h.deps)).toEqual({ kind: 'protected_target' });
+      expect(await reissueManagerOac(ADMIN, target, 'LDP-001', PIN, h.deps)).toEqual({ kind: 'protected_target' });
+      expect(h.callSetUserAccount).not.toHaveBeenCalled();
+      expect(h.revokeOac).not.toHaveBeenCalled();
+      expect(h.provision).not.toHaveBeenCalled();
+      expect(h.runLockoutRecovery).not.toHaveBeenCalled();
+    });
+  }
+
+  it('a POS admin stays manageable (rotate + target-only revoke)', async () => {
+    const h = harness();
+    expect((await rotateAdminUserPin(ADMIN, POS_ADMIN, PIN, h.deps)).kind).toBe('ok');
+    expect(h.callSetUserAccount).toHaveBeenCalledTimes(1);
+    expect(h.revokeOac.mock.calls).toEqual([['posadm1']]);
+  });
+
+  it('a server PASSWORD_ADMIN_OWNER_RECOVERY_REQUIRED refusal is definite: shown verbatim, no local OAC revoke', async () => {
+    const h = harness({
+      callSetUserAccount: vi.fn(async () => {
+        throw new SetUserAccountError('บัญชีผู้ดูแลระบบหลักต้องจัดการผ่าน Owner Recovery', 'functions/failed-precondition');
+      }),
+    });
+    expect(await rotateAdminUserPin(ADMIN, POS_ADMIN, PIN, h.deps)).toEqual({
+      kind: 'rejected',
+      message: 'บัญชีผู้ดูแลระบบหลักต้องจัดการผ่าน Owner Recovery',
+    });
+    expect(h.revokeOac).not.toHaveBeenCalled();
   });
 });
 
@@ -298,7 +353,7 @@ describe('approval lockout + OAC reissue reuse', () => {
       [{ ...MGR, branchIds: ['BKK-002'] }, 'LDP-001'],
       [MGR, 'ALL'],
       [MGR, null],
-    ] as Array<[{ userId: string; role: 'manager' | 'staff'; isActive: boolean; branchIds: string[] }, string | null]>) {
+    ] as Array<[{ userId: string; role: 'manager' | 'staff'; isActive: boolean; branchIds: string[]; securityAdminClassification: null }, string | null]>) {
       expect(await reissueManagerOac(ADMIN, target, branch, PIN, h.deps)).toEqual({ kind: 'not_eligible_target' });
     }
     expect(await reissueManagerOac(ADMIN, MGR, 'LDP-001', '12', h.deps)).toEqual({ kind: 'invalid', reason: 'pin_format' });
@@ -323,7 +378,34 @@ describe('overview', () => {
     if (res.kind !== 'ok') return;
     expect(res.overview.users).toHaveLength(1);
     expect(res.overview.users[0]).not.toHaveProperty('pinHash');
+    expect(res.overview.users[0]!.securityAdminClassification).toBeNull();
     expect(res.overview.events[0]).toMatchObject({ type: 'QUICK_PIN_ROTATED', targetStaffId: 'mgr1' });
+  });
+
+  it('admin classification parses fail-closed: missing / unexpected value → UNKNOWN', async () => {
+    const base = { firstName: 'A', lastName: 'B', username: 'a', role: 'admin', branchIds: ['ALL'], isActive: true, authVersion: 0, quickPinState: 'set' };
+    const h = harness({
+      fetchOverview: vi.fn(async () => ({
+        ok: true,
+        users: [
+          { ...base, userId: 'p', securityAdminClassification: 'PASSWORD_ADMIN' },
+          { ...base, userId: 'q', securityAdminClassification: 'POS_ADMIN' },
+          { ...base, userId: 'r' },
+          { ...base, userId: 's', securityAdminClassification: 'SUPER' },
+          { ...base, userId: 't', role: 'manager', securityAdminClassification: 'POS_ADMIN' },
+        ],
+        events: [],
+      })),
+    });
+    const res = await loadAdminSecurityOverview(ADMIN, h.deps);
+    if (res.kind !== 'ok') throw new Error('expected ok');
+    expect(Object.fromEntries(res.overview.users.map((u) => [u.userId, u.securityAdminClassification]))).toEqual({
+      p: 'PASSWORD_ADMIN',
+      q: 'POS_ADMIN',
+      r: 'UNKNOWN',
+      s: 'UNKNOWN',
+      t: null,
+    });
   });
 
   it('server-side password-session refusal maps to not_admin; transport failure to failed', async () => {

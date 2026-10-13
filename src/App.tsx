@@ -32,17 +32,16 @@ import AdminStockReportPage from './pages/admin/AdminStockReportPage';
 import ReconciliationExceptionsPage from './pages/admin/ReconciliationExceptionsPage';
 import BranchManagementPage from './pages/admin/BranchManagementPage';
 import TierManagementPage from './pages/admin/TierManagementPage';
-import AdminStaffManagementPage from './pages/admin/AdminStaffManagementPage';
 import AdminSupplierManagementPage from './pages/admin/AdminSupplierManagementPage';
 import SortingSettingsPage from './pages/admin/SortingSettingsPage';
 import QuickMenuSettingsPage from './pages/admin/QuickMenuSettingsPage';
 import DocumentSettings from './pages/settings/DocumentSettings';
 import SettingsPage from './pages/SettingsPage';
 import {
+  ADMIN_SECURITY_CENTER_PATH,
   FIRST_SETTINGS_SLUG,
   SETTINGS_NAV_ITEMS,
 } from './lib/settings/settingsNav';
-import StaffManagementPage from './pages/StaffManagementPage';
 import ManualReviewOpsPage from './pages/ManualReviewOpsPage';
 import StockReportPage from './pages/StockReportPage';
 import SupplierPage from './pages/SupplierPage';
@@ -55,6 +54,15 @@ export default function App() {
     <ThemeProvider theme={twinpetTheme}>
       <Toaster />
     <BrowserRouter>
+      <AppRoutes />
+    </BrowserRouter>
+    </ThemeProvider>
+  );
+}
+
+/** The application route tree (exported so routing can be tested under a MemoryRouter). */
+export function AppRoutes() {
+  return (
       <Routes>
         <Route element={<GuestRoute />}>
           <Route path="/login" element={<LoginPage />} />
@@ -85,7 +93,8 @@ export default function App() {
             <Route path="/suppliers" element={<SupplierPage />} />
             <Route path="/stock-report" element={<StockReportPage />} />
             <Route path="/profit-report" element={<ProfitReportPage />} />
-            <Route path="/staff" element={<StaffManagementPage />} />
+            {/* D-ASC7: legacy staff-management mutation UI retired → Admin & Security Center. */}
+            <Route path="/staff" element={<Navigate to={ADMIN_SECURITY_CENTER_PATH} replace />} />
             <Route path="/manual-review" element={<ManualReviewOpsPage />} />
             {/* Route-only (direct URL); no nav entry by design — Packet 5 UI-A. */}
             <Route path="/shift-close-review" element={<ShiftCloseReviewPage />} />
@@ -110,7 +119,7 @@ export default function App() {
           <Route path="/admin" element={<AdminLayout />}>
             <Route index element={<AdminDashboardPage />} />
             <Route path="branches" element={<BranchManagementPage />} />
-            <Route path="staff" element={<AdminStaffManagementPage />} />
+            <Route path="staff" element={<Navigate to={ADMIN_SECURITY_CENTER_PATH} replace />} />
             <Route path="products" element={<AdminProductManagementPage />} />
             <Route path="suppliers" element={<AdminSupplierManagementPage />} />
             <Route path="price-levels" element={<TierManagementPage />} />
@@ -127,7 +136,5 @@ export default function App() {
 
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
-    </BrowserRouter>
-    </ThemeProvider>
   );
 }

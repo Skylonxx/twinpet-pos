@@ -25,6 +25,14 @@ vi.mock('../db', () => ({ db: {} }));
 import { isPrimaryPasswordPrincipal, ADMIN_PASSWORD_SESSION_REQUIRED } from '../adminPasswordPrincipal';
 import { performSetUserAccountCallable } from '../setUserAccount';
 import { performGetAdminSecurityOverview } from '../getAdminSecurityOverview';
+import { performSetUserAccount } from '../setUserAccountCore';
+import {
+  ADMIN_TARGET_CLASSIFICATION_UNAVAILABLE,
+  PASSWORD_ADMIN_OWNER_RECOVERY_REQUIRED,
+  PASSWORD_ADMIN_OWNER_RECOVERY_REQUIRED_MESSAGE,
+  classifyAdminTargets,
+  type AdminAuthLookup,
+} from '../adminTargetClassification';
 import { performIssuePrivilegedLockoutClear } from '../issuePrivilegedLockoutClear';
 
 type Doc = Record<string, unknown>;
@@ -120,6 +128,32 @@ const quickPinStaff = {
 
 function auditEvents(store: Map<string, Doc>): Doc[] {
   return [...store.entries()].filter(([k]) => k.startsWith('securityAuditEvents/')).map(([, v]) => v);
+}
+
+/**
+ * Fake Firebase Auth `getUsers`: uids in `password` exist with the password
+ * provider (and an email that must never leak); uids in `other` exist with a
+ * non-password provider; everything else is not found. `fail` throws.
+ */
+function fakeAuth(opts: { password?: string[]; other?: string[]; fail?: boolean } = {}) {
+  const calls: string[][] = [];
+  const lookup: AdminAuthLookup = async (uids) => {
+    calls.push([...uids]);
+    if (opts.fail) throw new Error('auth/internal-error');
+    const users: Array<{ uid: string; email: string; providerData: Array<{ providerId: string; email?: string }> }> = [];
+    const notFound: Array<{ uid: string }> = [];
+    for (const uid of uids) {
+      if (opts.password?.includes(uid)) {
+        users.push({ uid, email: `${uid}@secret.example`, providerData: [{ providerId: 'password', email: `${uid}@secret.example` }] });
+      } else if (opts.other?.includes(uid)) {
+        users.push({ uid, email: `${uid}@secret.example`, providerData: [{ providerId: 'google.com' }] });
+      } else {
+        notFound.push({ uid });
+      }
+    }
+    return { users, notFound };
+  };
+  return Object.assign(lookup, { calls });
 }
 
 async function expectRejected(promise: Promise<unknown>, code: string) {
@@ -311,7 +345,7 @@ describe('getAdminSecurityOverview', () => {
       'securityAuditEvents/e2': { type: 'SOMETHING_UNKNOWN', actorStaffId: 'x', targetStaffId: 'y' },
     });
     void store;
-    const res = await performGetAdminSecurityOverview(db as never, passwordAdmin);
+    const res = await performGetAdminSecurityOverview(db as never, passwordAdmin, fakeAuth({ password: ['admin1'] }));
     expect(writes).toEqual([]);
     expect(res.ok).toBe(true);
     if (!res.ok) return;
@@ -327,7 +361,9 @@ describe('getAdminSecurityOverview', () => {
       isActive: true,
       authVersion: 1,
       quickPinState: 'set',
+      securityAdminClassification: null,
     });
+    expect(byId.admin1.securityAdminClassification).toBe('PASSWORD_ADMIN');
     expect(byId.staff1.quickPinState).toBe('required'); // non-authoritative credential
     const serialized = JSON.stringify(res);
     expect(serialized).not.toMatch(/pinHash|\$2a\$|credentialVersion|credentialState|salt|verifier/);
@@ -418,5 +454,217 @@ describe('issuePrivilegedLockoutClear — audit', () => {
     await expect(performIssuePrivilegedLockoutClear(db as never, adminAuth, req, 1_700_000_000_000)).rejects.toThrow(
       'audit_unavailable',
     );
+  });
+});
+
+describe('D-ASC8 — password-backed admin targets are protected from staff mutation', () => {
+  function adminSeed(): Record<string, Doc> {
+    return {
+      ...seed(),
+      'users/admin2': { role: 'admin', isActive: true, deletedAt: null, authVersion: 4, firstName: 'Sec', lastName: 'Two', username: 'admin2', branchIds: ['ALL'] },
+      'users/posadm1': { role: 'admin', isActive: true, deletedAt: null, authVersion: 1, firstName: 'Pos', lastName: 'Adm', username: 'posadm', branchIds: ['LDP-001'] },
+      'userCredentials/admin2': { pinHash: '$2a$10$admin2hashadmin2hashadmin2', credentialVersion: 1, credentialState: 'rotated_authoritative', disabled: false },
+      'userCredentials/posadm1': { pinHash: '$2a$10$posadmhashposadmhashposadm', credentialVersion: 1, credentialState: 'rotated_authoritative', disabled: false },
+    };
+  }
+  const auth = () => fakeAuth({ password: ['admin1', 'admin2'] });
+
+  async function expectProtected(promise: Promise<unknown>, code: string) {
+    let caught: unknown = null;
+    try {
+      await promise;
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toMatchObject({ code: 'failed-precondition', details: { code } });
+    return caught as { message: string };
+  }
+
+  const protectedOps: Array<[string, Record<string, unknown>]> = [
+    ['rotate', { op: 'rotate', userId: 'admin2', pin: '4321', rotateIdempotencyKey: 'rot-a2' }],
+    ['updateProfile', { op: 'updateProfile', userId: 'admin2', firstName: 'X', lastName: 'Y', role: 'admin', branchIds: ['ALL'] }],
+    ['updateProfile (demote)', { op: 'updateProfile', userId: 'admin2', role: 'manager', branchIds: ['LDP-001'] }],
+    ['setActive(false)', { op: 'setActive', userId: 'admin2', isActive: false }],
+    ['setActive(true)', { op: 'setActive', userId: 'admin2', isActive: true }],
+    ['rename', { op: 'rename', userId: 'admin2', newUsername: 'renamed' }],
+    ['softDelete', { op: 'softDelete', userId: 'admin2' }],
+  ];
+
+  for (const [label, cmd] of protectedOps) {
+    test(`${label} on another password admin is refused before any write (no authVersion bump, no audit)`, async () => {
+      const { db, store, writes } = makeDb(adminSeed());
+      const err = await expectProtected(
+        performSetUserAccountCallable(db as never, cmd, passwordAdmin, auth()),
+        PASSWORD_ADMIN_OWNER_RECOVERY_REQUIRED,
+      );
+      expect(err.message).toBe(PASSWORD_ADMIN_OWNER_RECOVERY_REQUIRED_MESSAGE);
+      expect(err.message).toBe('บัญชีผู้ดูแลระบบหลักต้องจัดการผ่าน Owner Recovery');
+      expect(writes).toEqual([]);
+      expect(store.get('users/admin2')).toMatchObject({ authVersion: 4, isActive: true, username: 'admin2', role: 'admin' });
+      expect(auditEvents(store)).toHaveLength(0);
+      expect(JSON.stringify(err)).not.toContain('secret.example');
+    });
+  }
+
+  test('a password admin cannot mutate their OWN account through the callable', async () => {
+    for (const cmd of [
+      { op: 'rotate', userId: 'admin1', pin: '4321', rotateIdempotencyKey: 'rot-self' },
+      { op: 'setActive', userId: 'admin1', isActive: true },
+      { op: 'updateProfile', userId: 'admin1', branchIds: ['ALL'] },
+    ]) {
+      const { db, store, writes } = makeDb(adminSeed());
+      await expectProtected(performSetUserAccountCallable(db as never, cmd, passwordAdmin, auth()), PASSWORD_ADMIN_OWNER_RECOVERY_REQUIRED);
+      expect(writes).toEqual([]);
+      expect(store.get('users/admin1')).toMatchObject({ authVersion: 2 });
+    }
+  });
+
+  test('an Auth lookup failure fails closed with a separate code and no mutation', async () => {
+    const { db, store, writes } = makeDb(adminSeed());
+    await expectProtected(
+      performSetUserAccountCallable(db as never, { op: 'setActive', userId: 'posadm1', isActive: false }, passwordAdmin, fakeAuth({ fail: true })),
+      ADMIN_TARGET_CLASSIFICATION_UNAVAILABLE,
+    );
+    expect(writes).toEqual([]);
+    expect(store.get('users/posadm1')).toMatchObject({ authVersion: 1, isActive: true });
+    expect(auditEvents(store)).toHaveLength(0);
+  });
+
+  test('an Auth user without the password provider is UNKNOWN and fails closed', async () => {
+    const { db, writes } = makeDb(adminSeed());
+    await expectProtected(
+      performSetUserAccountCallable(
+        db as never,
+        { op: 'rotate', userId: 'posadm1', pin: '1234', rotateIdempotencyKey: 'rot-x' },
+        passwordAdmin,
+        fakeAuth({ password: ['admin1'], other: ['posadm1'] }),
+      ),
+      ADMIN_TARGET_CLASSIFICATION_UNAVAILABLE,
+    );
+    expect(writes).toEqual([]);
+  });
+
+  test('role=admin without a password principal is a POS admin and remains manageable', async () => {
+    const { db, store } = makeDb(adminSeed());
+    const lookup = auth();
+    const rotated = await performSetUserAccountCallable(
+      db as never,
+      { op: 'rotate', userId: 'posadm1', pin: '2468', rotateIdempotencyKey: 'rot-pos' },
+      passwordAdmin,
+      lookup,
+    );
+    expect(rotated).toMatchObject({ ok: true, status: 'rotated', authVersion: 2 });
+    const disabled = await performSetUserAccountCallable(
+      db as never,
+      { op: 'setActive', userId: 'posadm1', isActive: false },
+      passwordAdmin,
+      lookup,
+    );
+    expect(disabled).toMatchObject({ ok: true, status: 'updated' });
+    expect(store.get('users/posadm1')).toMatchObject({ isActive: false, authVersion: 3 });
+    expect(auditEvents(store).map((e) => e.type)).toEqual(['QUICK_PIN_ROTATED', 'USER_DISABLED']);
+    expect(lookup.calls).toEqual([['posadm1'], ['posadm1']]);
+  });
+
+  test('staff / manager targets never trigger an Auth lookup and stay manageable', async () => {
+    const { db } = makeDb(adminSeed());
+    const lookup = auth();
+    for (const cmd of [
+      { op: 'rotate', userId: 'mgr1', pin: '1357', rotateIdempotencyKey: 'rot-m' },
+      { op: 'setActive', userId: 'staff1', isActive: false },
+      { op: 'updateProfile', userId: 'mgr1', role: 'admin', branchIds: ['LDP-001'] },
+    ]) {
+      expect((await performSetUserAccountCallable(db as never, cmd, passwordAdmin, lookup)).ok).toBe(true);
+    }
+    expect(lookup.calls).toEqual([]);
+  });
+
+  test('a non-admin caller learns nothing about an admin target (no classification oracle)', async () => {
+    const { db, writes } = makeDb(adminSeed());
+    const lookup = auth();
+    await expectRejected(
+      performSetUserAccountCallable(db as never, { op: 'setActive', userId: 'admin2', isActive: false }, passwordManager, lookup),
+      'permission-denied',
+    );
+    expect(lookup.calls).toEqual([]);
+    expect(writes).toEqual([]);
+  });
+
+  test('core guard: a live admin target not pre-cleared is refused inside the transaction (role-change race)', async () => {
+    const { db, store, writes } = makeDb(adminSeed());
+    const res = await performSetUserAccount(
+      db as never,
+      { kind: 'staff', staffId: 'admin1', authVersion: 2, adminTargetGuard: { clearedPosAdminTargetId: null } },
+      { op: 'setActive', userId: 'posadm1', isActive: false },
+    );
+    expect(res).toMatchObject({ ok: false, status: 'protected_admin_target' });
+    expect(writes).toEqual([]);
+    expect(store.get('users/posadm1')).toMatchObject({ authVersion: 1 });
+    const cleared = await performSetUserAccount(
+      db as never,
+      { kind: 'staff', staffId: 'admin1', authVersion: 2, adminTargetGuard: { clearedPosAdminTargetId: 'posadm1' } },
+      { op: 'setActive', userId: 'admin2', isActive: false },
+    );
+    expect(cleared).toMatchObject({ ok: false, status: 'protected_admin_target' });
+    expect(writes).toEqual([]);
+  });
+
+  test('operator_cli recovery route is unchanged and may still rotate a password admin', async () => {
+    const { db, store } = makeDb(adminSeed());
+    const res = await performSetUserAccount(db as never, { kind: 'operator_cli' }, {
+      op: 'rotate',
+      userId: 'admin2',
+      pin: '8642',
+      rotateIdempotencyKey: 'cli-rot',
+      reasonCode: 'operator_recovery',
+    });
+    expect(res).toMatchObject({ ok: true, status: 'rotated' });
+    expect(store.get('users/admin2')).toMatchObject({ authVersion: 5 });
+    expect(auditEvents(store)[0]).toMatchObject({ type: 'QUICK_PIN_ROTATED', actorStaffId: 'OPERATOR_CLI', targetStaffId: 'admin2' });
+  });
+});
+
+describe('D-ASC9 — admin classification', () => {
+  test('classifyAdminTargets: password → PASSWORD_ADMIN, not found → POS_ADMIN, other/failed/malformed → UNKNOWN', async () => {
+    const map = await classifyAdminTargets(['a', 'b', 'c'], fakeAuth({ password: ['a'], other: ['c'] }));
+    expect(Object.fromEntries(map)).toEqual({ a: 'PASSWORD_ADMIN', b: 'POS_ADMIN', c: 'UNKNOWN' });
+    const failed = await classifyAdminTargets(['a', 'b'], fakeAuth({ fail: true }));
+    expect(Object.fromEntries(failed)).toEqual({ a: 'UNKNOWN', b: 'UNKNOWN' });
+    const malformed = await classifyAdminTargets(['a'], (async () => ({ users: 'x' })) as never);
+    expect(Object.fromEntries(malformed)).toEqual({ a: 'UNKNOWN' });
+    const silent = await classifyAdminTargets(['a'], async () => ({ users: [], notFound: [] }));
+    expect(Object.fromEntries(silent)).toEqual({ a: 'UNKNOWN' });
+    const contradictory = await classifyAdminTargets(['a'], async () => ({
+      users: [{ uid: 'a', providerData: [{ providerId: 'password' }] }],
+      notFound: [{ uid: 'a' }],
+    }));
+    expect(Object.fromEntries(contradictory)).toEqual({ a: 'UNKNOWN' });
+  });
+
+  test('overview classifies only live admins, never leaks email/provider, and fails closed to UNKNOWN', async () => {
+    const seedWithPos = {
+      ...seed(),
+      'users/posadm1': { role: 'admin', isActive: true, deletedAt: null, authVersion: 0, firstName: 'P', lastName: 'A', username: 'posadm', branchIds: ['LDP-001'] },
+    };
+    const { db, writes } = makeDb(seedWithPos);
+    const lookup = fakeAuth({ password: ['admin1'] });
+    const res = await performGetAdminSecurityOverview(db as never, passwordAdmin, lookup);
+    expect(writes).toEqual([]);
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    const cls = Object.fromEntries(res.users.map((u) => [u.userId, u.securityAdminClassification]));
+    expect(cls).toEqual({ admin1: 'PASSWORD_ADMIN', posadm1: 'POS_ADMIN', mgr1: null, staff1: null });
+    expect(lookup.calls.flat().sort()).toEqual(['admin1', 'posadm1']);
+    expect(JSON.stringify(res)).not.toMatch(/secret\.example|providerData|providerId|email/);
+
+    const { db: db2 } = makeDb(seedWithPos);
+    const failed = await performGetAdminSecurityOverview(db2 as never, passwordAdmin, fakeAuth({ fail: true }));
+    if (!failed.ok) throw new Error('expected ok');
+    expect(Object.fromEntries(failed.users.map((u) => [u.userId, u.securityAdminClassification]))).toEqual({
+      admin1: 'UNKNOWN',
+      posadm1: 'UNKNOWN',
+      mgr1: null,
+      staff1: null,
+    });
   });
 });

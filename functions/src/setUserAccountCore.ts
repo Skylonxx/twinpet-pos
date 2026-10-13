@@ -20,8 +20,18 @@ import { recordSecurityAuditEventInTx } from './securityAudit';
 const BCRYPT_COST = 10;
 const PIN_RE = /^\d{4}$/;
 
+/**
+ * D-ASC8 staff-callable guard. When present, a target whose LIVE
+ * `users.role` is `admin` may be mutated only if it is the one uid the
+ * callable pre-classified as a POS (Quick PIN) admin; any other live admin
+ * target is refused inside the transaction before any write (this also
+ * closes a role-change race after classification). `operator_cli` never
+ * carries it, so the reviewed recovery route is unchanged.
+ */
+export type AdminTargetGuard = { clearedPosAdminTargetId: string | null };
+
 export type SetUserAccountActor =
-  | { kind: 'staff'; staffId: string; authVersion: number }
+  | { kind: 'staff'; staffId: string; authVersion: number; adminTargetGuard?: AdminTargetGuard }
   | { kind: 'operator_cli' };
 
 export type SetUserAccountOp =
@@ -68,6 +78,7 @@ export type SetUserAccountStatus =
   | 'maintenance_blocked'
   | 'reservations_incomplete'
   | 'unauthorized'
+  | 'protected_admin_target'
   | 'not_found'
   | 'invalid_argument';
 
@@ -141,6 +152,17 @@ async function assertActor(
   const live = typeof user.authVersion === 'number' ? user.authVersion : 0;
   if (live !== actor.authVersion) return invalid('unauthorized', 'สิทธิ์หมดอายุ กรุณาเข้าสู่ระบบใหม่');
   return null;
+}
+
+function protectedAdminTargetRefusal(
+  actor: SetUserAccountActor,
+  userId: string,
+  live: DocumentData,
+): SetUserAccountResult | null {
+  if (actor.kind !== 'staff' || !actor.adminTargetGuard) return null;
+  if (live.role !== 'admin') return null;
+  if (actor.adminTargetGuard.clearedPosAdminTargetId === userId) return null;
+  return invalid('protected_admin_target', 'บัญชีผู้ดูแลระบบนี้ไม่สามารถแก้ไขจากหน้านี้ได้');
 }
 
 function actorIdOf(actor: SetUserAccountActor): string {
@@ -342,6 +364,8 @@ async function handleRotate(
   const userRef = database.collection(COLLECTIONS.users).doc(userId);
   const userSnap = await tx.get(userRef);
   if (!userSnap.exists) return invalid('not_found', 'ไม่พบผู้ใช้');
+  const protectedRefusal = protectedAdminTargetRefusal(actor, userId, asUser(userSnap.data()));
+  if (protectedRefusal) return protectedRefusal;
 
   const credRef = database.collection(COLLECTIONS.userCredentials).doc(userId);
   const credSnap = await tx.get(credRef);
@@ -404,6 +428,8 @@ async function handleUpdateProfile(
   const userRef = database.collection(COLLECTIONS.users).doc(userId);
   const userSnap = await tx.get(userRef);
   if (!userSnap.exists) return invalid('not_found', 'ไม่พบผู้ใช้');
+  const protectedRefusal = protectedAdminTargetRefusal(actor, userId, asUser(userSnap.data()));
+  if (protectedRefusal) return protectedRefusal;
   const patch: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() };
   if (typeof cmd.firstName === 'string') patch.firstName = cmd.firstName.trim();
   if (typeof cmd.lastName === 'string') patch.lastName = cmd.lastName.trim();
@@ -456,6 +482,8 @@ async function handleSetActive(
   const userRef = database.collection(COLLECTIONS.users).doc(userId);
   const userSnap = await tx.get(userRef);
   if (!userSnap.exists) return invalid('not_found', 'ไม่พบผู้ใช้');
+  const protectedRefusal = protectedAdminTargetRefusal(actor, userId, asUser(userSnap.data()));
+  if (protectedRefusal) return protectedRefusal;
   tx.update(userRef, {
     isActive: cmd.isActive === true,
     updatedAt: FieldValue.serverTimestamp(),
@@ -488,6 +516,8 @@ async function handleSoftDelete(
   const userRef = database.collection(COLLECTIONS.users).doc(userId);
   const userSnap = await tx.get(userRef);
   if (!userSnap.exists) return invalid('not_found', 'ไม่พบผู้ใช้');
+  const protectedRefusal = protectedAdminTargetRefusal(actor, userId, asUser(userSnap.data()));
+  if (protectedRefusal) return protectedRefusal;
   const username = normalizeUsername(String(asUser(userSnap.data()).username ?? ''));
   const unameRef = username ? database.collection(COLLECTIONS.usernames).doc(username) : null;
   const unameSnap = unameRef ? await tx.get(unameRef) : null;
@@ -532,6 +562,8 @@ async function handleRename(
   const userRef = database.collection(COLLECTIONS.users).doc(userId);
   const userSnap = await tx.get(userRef);
   if (!userSnap.exists) return invalid('not_found', 'ไม่พบผู้ใช้');
+  const protectedRefusal = protectedAdminTargetRefusal(actor, userId, asUser(userSnap.data()));
+  if (protectedRefusal) return protectedRefusal;
   const current = normalizeUsername(String(asUser(userSnap.data()).username ?? ''));
   if (current === newUsername) {
     return { ok: true, status: 'updated', userId };

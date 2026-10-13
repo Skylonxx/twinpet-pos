@@ -72,7 +72,6 @@ export const NAV_CATEGORIES: NavCategory[] = [
     label: 'ระบบ',
     icon: 'ti-settings',
     items: [
-      { path: '/staff', label: 'พนักงาน', icon: 'ti-user-cog' },
       { path: '/settings', label: 'ตั้งค่า', icon: 'ti-settings' },
       { path: '/manual-review', label: 'ตรวจสอบด้วยตนเอง', icon: 'ti-checklist' },
       { path: '/admin/branches', label: 'จัดการสาขา', icon: 'ti-building-store' },

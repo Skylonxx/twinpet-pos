@@ -17,7 +17,9 @@ export type BranchOption = { id: string; name: string };
 const ROLE_OPTIONS: Array<{ value: UserRole; label: string }> = [
   { value: 'staff', label: 'พนักงาน' },
   { value: 'manager', label: 'ผู้จัดการ' },
-  { value: 'admin', label: 'ผู้ดูแลระบบ' },
+  // D-ASC9: role=admin created here is a POS (Quick PIN) admin, never a
+  // username/password Security Admin — no Firebase password account is made.
+  { value: 'admin', label: C.rolePosAdmin },
 ];
 
 function PinInput({
@@ -215,7 +217,7 @@ export function AdminUserFormDialog({
     let problem: string | null = null;
     if (!firstName.trim() || (mode === 'create' && !normalized)) problem = 'กรุณากรอกชื่อและชื่อผู้ใช้';
     else if (branchIds.length === 0) problem = 'กรุณาเลือกสาขาอย่างน้อย 1 สาขา';
-    else if (branchIds.includes('ALL') && role !== 'admin') problem = 'สิทธิ์ทุกสาขาใช้ได้เฉพาะผู้ดูแลระบบ';
+    else if (branchIds.includes('ALL') && role !== 'admin') problem = `สิทธิ์ทุกสาขาใช้ได้เฉพาะ ${C.rolePosAdmin}`;
     else if (mode === 'create' && existingUsernames.includes(normalized)) problem = 'username นี้ถูกใช้แล้ว';
     else if (mode === 'create') problem = pinError(pin, confirm);
     if (problem) {
@@ -275,6 +277,11 @@ export function AdminUserFormDialog({
                   </option>
                 ))}
               </Select>
+              {role === 'admin' ? (
+                <Alert color="warning" data-testid="admin-pos-admin-warning">
+                  {C.posAdminCreateWarning}
+                </Alert>
+              ) : null}
             </div>
             <fieldset className="flex flex-col gap-2">
               <legend className="text-sm font-medium">สาขาที่เข้าถึงได้</legend>

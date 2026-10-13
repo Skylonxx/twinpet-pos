@@ -64,6 +64,14 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
   },
 ];
 
+/**
+ * Admin & Security Center V1 (D-ASC7): the only shipped staff/account
+ * management surface. The legacy `/staff` and `/admin/staff` mutation pages
+ * redirect here.
+ */
+export const ADMIN_SECURITY_CENTER_SLUG = 'admin-security';
+export const ADMIN_SECURITY_CENTER_PATH = `/settings/${ADMIN_SECURITY_CENTER_SLUG}`;
+
 /** Flat list of every nav item across all groups. */
 export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = SETTINGS_NAV_GROUPS.flatMap((g) => g.items);
 

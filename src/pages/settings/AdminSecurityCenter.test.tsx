@@ -22,11 +22,19 @@ const ADMIN = { id: 'uid-admin-self', role: 'admin' };
 const PIN = '4826';
 
 const USERS = [
-  { userId: 'uid-admin-self', firstName: 'Ad', lastName: 'Min', username: 'admin', role: 'admin', branchIds: ['ALL'], isActive: true, authVersion: 2, quickPinState: 'set' },
+  { userId: 'uid-admin-self', firstName: 'Ad', lastName: 'Min', username: 'admin', role: 'admin', branchIds: ['ALL'], isActive: true, authVersion: 2, quickPinState: 'set', securityAdminClassification: 'PASSWORD_ADMIN' },
   { userId: 'uid-ready-1', firstName: 'Nara', lastName: 'Ready', username: 'nara', role: 'manager', branchIds: ['LDP-001'], isActive: true, authVersion: 3, quickPinState: 'set' },
   { userId: 'uid-locked-1', firstName: 'Lock', lastName: 'Ed', username: 'locked', role: 'manager', branchIds: ['LDP-001'], isActive: true, authVersion: 1, quickPinState: 'set' },
   { userId: 'uid-missing-1', firstName: 'Mana', lastName: 'Missing', username: 'mana', role: 'manager', branchIds: ['LDP-001'], isActive: true, authVersion: 1, quickPinState: 'set' },
   { userId: 'uid-staff-1', firstName: 'Som', lastName: 'Staff', username: 'som', role: 'staff', branchIds: ['LDP-001'], isActive: true, authVersion: 0, quickPinState: 'required' },
+];
+
+// D-ASC9 fixtures: another Security Admin, a POS (Quick PIN) admin and an admin the server could not classify.
+const ADMIN_USERS = [
+  ...USERS,
+  { userId: 'uid-secadmin-2', firstName: 'Sec', lastName: 'Two', username: 'secadmin', role: 'admin', branchIds: ['ALL'], isActive: true, authVersion: 4, quickPinState: 'set', securityAdminClassification: 'PASSWORD_ADMIN' },
+  { userId: 'uid-posadmin-1', firstName: 'Pos', lastName: 'Admin', username: 'posadmin', role: 'admin', branchIds: ['LDP-001'], isActive: true, authVersion: 1, quickPinState: 'set', securityAdminClassification: 'POS_ADMIN' },
+  { userId: 'uid-unknown-admin', firstName: 'Unk', lastName: 'Nown', username: 'unknown', role: 'admin', branchIds: ['LDP-001'], isActive: false, authVersion: 1, quickPinState: 'set', securityAdminClassification: 'UNKNOWN' },
 ];
 
 function nativeStatusFor(id: string) {
@@ -46,14 +54,14 @@ function nativeStatusFor(id: string) {
   return base;
 }
 
-function setup(over: Partial<AdminSecurityDeps> = {}, opts: { native?: boolean } = {}) {
+function setup(over: Partial<AdminSecurityDeps> = {}, opts: { native?: boolean; users?: unknown[] } = {}) {
   const invoke = vi.fn(async (cmd: string, args?: Record<string, unknown>) => {
     if (cmd === 'native_get_manager_oac_status') return nativeStatusFor(String(args?.managerStaffId));
     throw new Error(`unexpected native command ${cmd}`);
   });
   const fetchOverview = vi.fn(async () => ({
     ok: true,
-    users: USERS,
+    users: opts.users ?? USERS,
     events: [{ type: 'QUICK_PIN_ROTATED', actorStaffId: 'uid-admin-self', targetStaffId: 'uid-ready-1', createdAtMs: 1_790_000_000_000 }],
   }));
   const callSetUserAccount = vi.fn(async (cmd: { op: string; userId?: string }) => ({ ok: true, status: 'updated', userId: cmd.userId }));
@@ -310,6 +318,113 @@ describe('AdminSecurityCenter — add user', () => {
     });
     expect(h.revokeOac).not.toHaveBeenCalled();
     expect(document.body.innerHTML).not.toContain(PIN);
+  });
+});
+
+describe('AdminSecurityCenter — D-ASC9 Security Admin vs POS Admin', () => {
+  const MUTATION_LABELS = ['แก้ไขผู้ใช้', 'เปลี่ยน Quick PIN', 'ปลดล็อกสิทธิ์อนุมัติ', 'ออกสิทธิ์ Offline ใหม่', 'ปิดใช้งาน', 'เปิดใช้งาน'];
+  function mutationButtons(row: HTMLElement): string[] {
+    return within(row)
+      .queryAllByRole('button')
+      .map((b) => b.textContent ?? '')
+      .filter((t) => MUTATION_LABELS.includes(t));
+  }
+
+  it('labels Security Admin and POS Admin rows distinctly; Security Admin and UNKNOWN rows have no mutation controls', async () => {
+    const h = setup({}, { users: ADMIN_USERS });
+
+    const sec = await rowFor('Sec Two');
+    expect(within(sec).getByTestId('admin-role-label').textContent).toBe('Security Admin');
+    expect(within(sec).getByTestId('admin-role-hint').textContent).toBe('เข้า Admin & ความปลอดภัยด้วย username/password');
+    expect(within(sec).getByTestId('admin-row-readonly').textContent).toBe('จัดการผ่าน Owner Recovery');
+    expect(mutationButtons(sec)).toEqual([]);
+
+    const self = await rowFor('Ad Min');
+    expect(within(self).getByTestId('admin-role-label').textContent).toBe('Security Admin');
+    expect(within(self).getByTestId('admin-row-readonly').textContent).toBe('จัดการผ่าน Owner Recovery');
+    expect(mutationButtons(self)).toEqual([]);
+
+    const pos = await rowFor('Pos Admin');
+    expect(within(pos).getByTestId('admin-role-label').textContent).toBe('POS Admin (Quick PIN)');
+    expect(within(pos).getByTestId('admin-role-hint').textContent).toBe('จัดการงาน POS ได้ตามสิทธิ์ แต่ใช้ Admin & ความปลอดภัยไม่ได้');
+    expect(within(pos).queryByTestId('admin-row-readonly')).toBeNull();
+    expect(mutationButtons(pos)).toEqual(expect.arrayContaining(['แก้ไขผู้ใช้', 'เปลี่ยน Quick PIN', 'ปิดใช้งาน']));
+
+    const unknown = await rowFor('Unk Nown');
+    expect(within(unknown).getByTestId('admin-role-label').textContent).toBe('ผู้ดูแลระบบ (ยืนยันประเภทไม่ได้)');
+    expect(within(unknown).getByTestId('admin-row-readonly')).toBeTruthy();
+    expect(mutationButtons(unknown)).toEqual([]); // not even "เปิดใช้งาน" for the disabled unknown admin
+
+    // Manager / staff labels unchanged.
+    expect(within(await rowFor('Nara Ready')).getByTestId('admin-role-label').textContent).toBe('ผู้จัดการ');
+    expect(within(await rowFor('Som Staff')).getByTestId('admin-role-label').textContent).toBe('พนักงาน');
+    expect(h.callSetUserAccount).not.toHaveBeenCalled();
+    expect(document.body.innerHTML).not.toMatch(/@|providerId|email/);
+  });
+
+  it('a POS admin row is still manageable (rotate goes through the canonical op once)', async () => {
+    const h = setup({}, { users: ADMIN_USERS });
+    fireEvent.click(within(await rowFor('Pos Admin')).getByText('เปลี่ยน Quick PIN'));
+    const dialog = await screen.findByTestId('admin-change-pin-dialog');
+    fireEvent.change(within(dialog).getByLabelText('PIN ใหม่'), { target: { value: PIN } });
+    fireEvent.change(within(dialog).getByLabelText('ยืนยัน PIN ใหม่'), { target: { value: PIN } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'เปลี่ยน Quick PIN' }));
+    await waitFor(() => expect(h.callSetUserAccount).toHaveBeenCalledTimes(1));
+    expect(h.callSetUserAccount.mock.calls[0]![0]).toMatchObject({ op: 'rotate', userId: 'uid-posadmin-1' });
+  });
+
+  it('a server Owner Recovery refusal is shown verbatim and touches no local OAC', async () => {
+    const { SetUserAccountError } = await import('../../lib/auth/setUserAccount');
+    const callSetUserAccount = vi.fn(async () => {
+      throw new SetUserAccountError('บัญชีผู้ดูแลระบบหลักต้องจัดการผ่าน Owner Recovery', 'functions/failed-precondition');
+    });
+    const h = setup({ callSetUserAccount }, { users: ADMIN_USERS });
+    fireEvent.click(within(await rowFor('Pos Admin')).getByRole('button', { name: 'ปิดใช้งาน' }));
+    fireEvent.click(within(await screen.findByTestId('admin-confirm-dialog')).getByRole('button', { name: 'ปิดใช้งาน' }));
+    expect(await screen.findByText('บัญชีผู้ดูแลระบบหลักต้องจัดการผ่าน Owner Recovery')).toBeTruthy();
+    expect(h.revokeOac).not.toHaveBeenCalled();
+  });
+
+  it('add-user offers "POS Admin (Quick PIN)" with a warning, submits internal role admin, and has no password field', async () => {
+    const h = setup();
+    fireEvent.click(await screen.findByText('เพิ่มผู้ใช้งาน'));
+    const dialog = await screen.findByTestId('admin-user-form-dialog');
+    const roleSelect = within(dialog).getByLabelText('บทบาท') as HTMLSelectElement;
+    const options = [...roleSelect.options].map((o) => [o.value, o.textContent]);
+    expect(options).toEqual([
+      ['staff', 'พนักงาน'],
+      ['manager', 'ผู้จัดการ'],
+      ['admin', 'POS Admin (Quick PIN)'],
+    ]);
+    expect(dialog.textContent).not.toContain('ผู้ดูแลระบบ');
+    expect(within(dialog).queryByTestId('admin-pos-admin-warning')).toBeNull();
+
+    fireEvent.change(roleSelect, { target: { value: 'admin' } });
+    expect(within(dialog).getByTestId('admin-pos-admin-warning').textContent).toBe(
+      'บัญชีนี้ใช้ Quick PIN สำหรับงาน POS และไม่ใช่ Security Admin แบบ username/password',
+    );
+    // Only the two masked Quick PIN fields exist — no password / email input.
+    expect(dialog.querySelectorAll('input[type="password"]')).toHaveLength(2);
+    expect(within(dialog).queryByLabelText(/รหัสผ่าน|password|อีเมล|email/i)).toBeNull();
+
+    const values: Record<string, string> = {
+      ชื่อ: 'Pos',
+      นามสกุล: 'New',
+      'ชื่อผู้ใช้ (username)': 'posnew',
+      'Quick PIN เริ่มต้น': PIN,
+      'ยืนยัน Quick PIN': PIN,
+    };
+    for (const [label, value] of Object.entries(values)) {
+      fireEvent.change(within(dialog).getByLabelText(label), { target: { value } });
+    }
+    fireEvent.click(within(dialog).getByLabelText('ลาดพร้าว'));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'เพิ่มผู้ใช้งาน' }));
+    await waitFor(() => expect(h.callSetUserAccount).toHaveBeenCalledTimes(1));
+    const payload = h.callSetUserAccount.mock.calls[0]![0] as Record<string, unknown>;
+    expect(payload).toMatchObject({ op: 'create', role: 'admin', username: 'posnew' });
+    expect(Object.keys(payload).sort()).toEqual(
+      ['branchIds', 'firstName', 'idempotencyKey', 'isActive', 'lastName', 'op', 'permissions', 'pin', 'role', 'username'].sort(),
+    );
   });
 });
 
