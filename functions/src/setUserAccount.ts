@@ -28,6 +28,7 @@ import {
   type SetUserAccountOp,
   type SetUserAccountResult,
 } from './setUserAccountCore';
+import { DESKTOP_CALLABLE_CORS } from './callableCors';
 
 function asCommand(raw: unknown): SetUserAccountOp | null {
   if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) return null;
@@ -166,7 +167,7 @@ export async function performSetUserAccountCallable(
 export const setUserAccount = onCall(
   {
     region: FUNCTIONS_REGION,
-    cors: [/^https?:\/\/localhost:\d+$/, /^https:\/\/.*\.firebaseapp\.com$/, /^https:\/\/.*\.web\.app$/],
+    cors: DESKTOP_CALLABLE_CORS,
   },
   async (request) => {
     return performSetUserAccountCallable(db, request.data, request.auth ?? null);

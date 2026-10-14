@@ -39,6 +39,7 @@ import {
 } from './requestManagerApprovalCore';
 import { isPrivilegedActionId, PRIVILEGED_REQUESTER_PERMISSION } from './privilegedActionRegistry';
 import { liveRoleHoldsPosVoid, type RolePermissionsReader, type StagedRoleDenyHeadReader } from './privilegedActionAuthority';
+import { DESKTOP_CALLABLE_CORS } from './callableCors';
 
 const C = {
   users: 'users',
@@ -531,7 +532,7 @@ export async function performRequestManagerApproval(
 export const requestManagerApproval = onCall(
   {
     region: FUNCTIONS_REGION,
-    cors: [/^https?:\/\/localhost:\d+$/, /^https:\/\/.*\.firebaseapp\.com$/, /^https:\/\/.*\.web\.app$/],
+    cors: DESKTOP_CALLABLE_CORS,
   },
   async (request) => {
     try {

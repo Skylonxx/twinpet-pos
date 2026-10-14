@@ -17,6 +17,7 @@ import {
   handleAdjudicateOfflinePrivilegedAction,
 } from '../adjudicateOfflinePrivilegedAction';
 import { OFFLINE_ADJUDICATION_RESPONSE_KINDS } from '../privilegedActionRegistry';
+import { DESKTOP_CALLABLE_CORS } from '../callableCors';
 
 const repoRoot = resolve(__dirname, '../../..');
 const NOW = 1_763_100_000_000;
@@ -36,12 +37,14 @@ describe('adjudicateOfflinePrivilegedAction callable', () => {
   test('is registered on the correct region with the landed privileged CORS allowlist', () => {
     const opts = (adjudicateOfflinePrivilegedAction as unknown as { __opts: Record<string, unknown> }).__opts;
     expect(opts.region).toBe('asia-southeast1');
-    expect(Array.isArray(opts.cors)).toBe(true);
-    expect((opts.cors as RegExp[]).map(String)).toEqual(
+    // D-CORS1: the shared desktop allowlist (existing patterns + exact Tauri origin).
+    expect(opts.cors).toBe(DESKTOP_CALLABLE_CORS);
+    expect((opts.cors as Array<string | RegExp>).map(String)).toEqual(
       [
         /^https?:\/\/localhost:\d+$/,
         /^https:\/\/.*\.firebaseapp\.com$/,
         /^https:\/\/.*\.web\.app$/,
+        'http://tauri.localhost',
       ].map(String),
     );
   });

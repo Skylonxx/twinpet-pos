@@ -53,6 +53,7 @@ import {
   requesterBranchEligible,
   type ApprovalBindingExpected,
 } from './requestManagerApprovalCore';
+import { DESKTOP_CALLABLE_CORS } from './callableCors';
 
 const C = {
   cases: 'shiftCloseCases',
@@ -472,7 +473,7 @@ export async function performResolveShiftCloseAlert(
 export const resolveShiftCloseAlert = onCall(
   {
     region: FUNCTIONS_REGION,
-    cors: [/^https?:\/\/localhost:\d+$/, /^https:\/\/.*\.firebaseapp\.com$/, /^https:\/\/.*\.web\.app$/],
+    cors: DESKTOP_CALLABLE_CORS,
   },
   async (request) => {
     return performResolveShiftCloseAlert(db, (request.data ?? {}) as ResolveShiftCloseAlertRequest, request.auth as AuthTokenLike);

@@ -21,6 +21,7 @@ import { FieldValue, type Firestore } from 'firebase-admin/firestore';
 import { db } from './db';
 import { FUNCTIONS_REGION } from './deployConfig';
 import { assertFreshPrivilegedAuthority } from './authorityFence';
+import { DESKTOP_CALLABLE_CORS } from './callableCors';
 
 /** Max TOTAL settlement attempts (automatic + admin retries) before manual investigation. */
 export const RECONCILE_RETRY_CAP = 3;
@@ -101,7 +102,7 @@ export async function performReconcileRetry(
 export const retryReconcile = onCall(
   {
     region: FUNCTIONS_REGION,
-    cors: [/^https?:\/\/localhost:\d+$/, /^https:\/\/.*\.firebaseapp\.com$/, /^https:\/\/.*\.web\.app$/],
+    cors: DESKTOP_CALLABLE_CORS,
   },
   async (request) => {
     const orderId = (request.data as { orderId?: string } | undefined)?.orderId ?? '';

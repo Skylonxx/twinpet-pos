@@ -35,6 +35,7 @@ import {
   type GetShiftCloseCaseFiguresResponse,
 } from './getShiftCloseCaseFiguresCore';
 import { evaluateFreshPrivilegedAuthority, type AuthLike } from './authorityFence';
+import { DESKTOP_CALLABLE_CORS } from './callableCors';
 
 /* MARKER:IMPORTS */
 
@@ -109,7 +110,7 @@ export async function performGetShiftCloseCaseFigures(
 export const getShiftCloseCaseFigures = onCall(
   {
     region: FUNCTIONS_REGION,
-    cors: [/^https?:\/\/localhost:\d+$/, /^https:\/\/.*\.firebaseapp\.com$/, /^https:\/\/.*\.web\.app$/],
+    cors: DESKTOP_CALLABLE_CORS,
   },
   async (request) => {
     return performGetShiftCloseCaseFigures(db, request.data, request.auth);

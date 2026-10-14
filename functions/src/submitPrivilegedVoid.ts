@@ -48,6 +48,7 @@ import {
   type PrivilegedExecutionBinding,
 } from './submitPrivilegedVoidCore';
 import { handleVoidIntent, type HandleVoidIntentOptions, type VoidIntentTxnOutcome } from './voidIntent';
+import { DESKTOP_CALLABLE_CORS } from './callableCors';
 
 const C = {
   users: 'users',
@@ -427,7 +428,7 @@ export async function performSubmitPrivilegedVoid(
 export const submitPrivilegedVoid = onCall(
   {
     region: FUNCTIONS_REGION,
-    cors: [/^https?:\/\/localhost:\d+$/, /^https:\/\/.*\.firebaseapp\.com$/, /^https:\/\/.*\.web\.app$/],
+    cors: DESKTOP_CALLABLE_CORS,
   },
   async (request) => {
     try {

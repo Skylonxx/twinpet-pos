@@ -44,6 +44,7 @@ import { db } from './db';
 import { FUNCTIONS_REGION } from './deployConfig';
 import { planFifoCutFromState, mergeLotCuts, parseReceivedAtMs, type MutableLot, type LotCut } from './fifo';
 import { isUsableForLogin, readUserCredential } from './credentialStore';
+import { DESKTOP_CALLABLE_CORS } from './callableCors';
 
 const C = {
   users: 'users',
@@ -713,7 +714,7 @@ async function resolveTransferReversal(
 export const resolveReversal = onCall(
   {
     region: FUNCTIONS_REGION,
-    cors: [/^https?:\/\/localhost:\d+$/, /^https:\/\/.*\.firebaseapp\.com$/, /^https:\/\/.*\.web\.app$/],
+    cors: DESKTOP_CALLABLE_CORS,
   },
   async (request) => {
     try {
