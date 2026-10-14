@@ -34,6 +34,9 @@ export const ADMIN_SECURITY_COPY = {
   ownerRecoveryRequired: 'บัญชีผู้ดูแลระบบหลักต้องจัดการผ่าน Owner Recovery',
   adminUnknownReadOnly: 'อ่านอย่างเดียว — ลองโหลดใหม่ภายหลัง',
   posAdminCreateWarning: 'บัญชีนี้ใช้ Quick PIN สำหรับงาน POS และไม่ใช่ Security Admin แบบ username/password',
+  // D-ASC11 — editing an existing staff/manager into role=admin.
+  posAdminPromoteWarning:
+    'เปลี่ยนเป็น POS Admin ได้เฉพาะบัญชีที่ใช้ Quick PIN เท่านั้น บัญชีที่มีการเข้าสู่ระบบด้วยรหัสผ่านจะถูกปฏิเสธและต้องใช้ Owner Recovery',
   pinSet: 'ตั้งค่าแล้ว',
   pinRequired: 'ต้องตั้งค่า',
   active: 'ใช้งาน',
@@ -46,6 +49,8 @@ export const ADMIN_SECURITY_COPY = {
   oacMissing: 'ไม่มี',
   oacLocked: 'ถูกล็อก',
   oacNativeOnly: 'ใช้ได้เฉพาะในแอป Twinpet POS',
+  // D-ASC10 — ALL workspace: no concrete terminal branch.
+  oacBranchRequired: 'เลือกสาขาจริงก่อนจัดการสิทธิ์อนุมัติบนเครื่องนี้',
   // Lockout.
   lockoutNormal: 'ปกติ',
   lockoutLocked: 'ถูกล็อกบนเครื่องนี้',

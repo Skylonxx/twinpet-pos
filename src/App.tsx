@@ -3,7 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { twinpetTheme } from './components/ui';
 import GuestRoute from './components/GuestRoute';
 import ProtectedRoute from './components/ProtectedRoute';
-import PosShellRoute from './components/PosShellRoute';
+import PosShellGate from './components/PosShellGate';
 import { Toaster } from './components/ui/toaster';
 import CustomerPage from './pages/CustomerPage';
 import DashboardPage from './pages/DashboardPage';
@@ -71,7 +71,13 @@ export function AppRoutes() {
         <Route element={<ProtectedRoute />}>
           <Route path="/workspace-selector" element={<WorkspaceSelector />} />
 
-          <Route element={<PosShellRoute />}>
+          {/* D-ASC7/D-ASC10: legacy staff-management UI retired. Outside the POS branch
+              guard so an ALL-workspace session also lands on the Admin & Security Center. */}
+          <Route path="/staff" element={<Navigate to={ADMIN_SECURITY_CENTER_PATH} replace />} />
+
+          {/* PosShellGate = PosShellRoute, except an ALL-workspace session may open exactly
+              ADMIN_SECURITY_CENTER_PATH outside the POS shell (D-ASC10). */}
+          <Route element={<PosShellGate />}>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/pos" element={<POSPage />} />
@@ -93,8 +99,6 @@ export function AppRoutes() {
             <Route path="/suppliers" element={<SupplierPage />} />
             <Route path="/stock-report" element={<StockReportPage />} />
             <Route path="/profit-report" element={<ProfitReportPage />} />
-            {/* D-ASC7: legacy staff-management mutation UI retired → Admin & Security Center. */}
-            <Route path="/staff" element={<Navigate to={ADMIN_SECURITY_CENTER_PATH} replace />} />
             <Route path="/manual-review" element={<ManualReviewOpsPage />} />
             {/* Route-only (direct URL); no nav entry by design — Packet 5 UI-A. */}
             <Route path="/shift-close-review" element={<ShiftCloseReviewPage />} />

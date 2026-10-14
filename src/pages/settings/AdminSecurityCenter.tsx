@@ -448,6 +448,12 @@ export default function AdminSecurityCenter({
                             '—'
                           ) : !invoke ? (
                             <span className="text-xs text-gray-500">{C.oacNativeOnly}</span>
+                          ) : !terminalBranchId ? (
+                            // D-ASC10: ALL workspace — never project or manage approval
+                            // capability against a substituted branch.
+                            <span className="text-xs text-gray-500" data-testid="admin-oac-branch-required">
+                              {C.oacBranchRequired}
+                            </span>
                           ) : (
                             <div className="flex flex-col gap-1">
                               <Badge color={CAPABILITY_COLOR[cap!]} className="w-fit" data-testid="admin-oac-state">
@@ -474,7 +480,7 @@ export default function AdminSecurityCenter({
                               <Button size="xs" color="light" className="min-h-11" disabled={busy} onClick={() => setDialog({ kind: 'pin', user: u })}>
                                 {C.changePin}
                               </Button>
-                              {approver && invoke && cap === 'locked' ? (
+                              {approver && invoke && terminalBranchId && cap === 'locked' ? (
                                 <Button size="xs" color="warning" className="min-h-11" disabled={busy} onClick={() => setDialog({ kind: 'lockout', user: u })}>
                                   {C.clearLockout}
                                 </Button>

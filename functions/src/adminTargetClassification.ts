@@ -16,7 +16,12 @@
  *     failure, a malformed answer, or an Auth user that exists without the
  *     password provider. Callers fail closed on it.
  *
- * Only live `role=admin` uids are ever looked up. Never logs or returns
+ * D-ASC11: the same classification gates any staff-callable transition INTO
+ * `role=admin` — a staff/manager may be promoted only when it is
+ * conclusively `POS_ADMIN` (no Auth user at all).
+ *
+ * Only live `role=admin` uids, or the target of a promotion to admin, are
+ * ever looked up. Never logs or returns
  * email / provider payloads — only the coarse classification.
  */
 import { getAuth } from 'firebase-admin/auth';
@@ -25,6 +30,9 @@ export type SecurityAdminClassification = 'PASSWORD_ADMIN' | 'POS_ADMIN' | 'UNKN
 
 export const PASSWORD_ADMIN_OWNER_RECOVERY_REQUIRED = 'PASSWORD_ADMIN_OWNER_RECOVERY_REQUIRED';
 export const PASSWORD_ADMIN_OWNER_RECOVERY_REQUIRED_MESSAGE = 'บัญชีผู้ดูแลระบบหลักต้องจัดการผ่าน Owner Recovery';
+/** D-ASC11: same code, refusal copy for a password-backed non-admin being promoted to `role=admin`. */
+export const PASSWORD_PRINCIPAL_ADMIN_PROMOTION_MESSAGE =
+  'บัญชีที่มีการเข้าสู่ระบบด้วยรหัสผ่านไม่สามารถเปลี่ยนเป็น POS Admin ผ่านหน้านี้ได้ กรุณาใช้ Owner Recovery';
 export const ADMIN_TARGET_CLASSIFICATION_UNAVAILABLE = 'ADMIN_TARGET_CLASSIFICATION_UNAVAILABLE';
 export const ADMIN_TARGET_CLASSIFICATION_UNAVAILABLE_MESSAGE =
   'ไม่สามารถยืนยันประเภทบัญชีผู้ดูแลระบบได้ จึงยังไม่บันทึกการเปลี่ยนแปลง กรุณาลองใหม่ภายหลัง';

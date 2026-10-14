@@ -54,7 +54,10 @@ function nativeStatusFor(id: string) {
   return base;
 }
 
-function setup(over: Partial<AdminSecurityDeps> = {}, opts: { native?: boolean; users?: unknown[] } = {}) {
+function setup(
+  over: Partial<AdminSecurityDeps> = {},
+  opts: { native?: boolean; users?: unknown[]; branchId?: string | null } = {},
+) {
   const invoke = vi.fn(async (cmd: string, args?: Record<string, unknown>) => {
     if (cmd === 'native_get_manager_oac_status') return nativeStatusFor(String(args?.managerStaffId));
     throw new Error(`unexpected native command ${cmd}`);
@@ -82,7 +85,7 @@ function setup(over: Partial<AdminSecurityDeps> = {}, opts: { native?: boolean; 
   const view = render(
     <AdminSecurityCenter
       operator={ADMIN}
-      branchId="LDP-001"
+      branchId={opts.branchId === undefined ? 'LDP-001' : opts.branchId}
       deps={{
         service,
         invoke: opts.native === false ? null : invoke,
@@ -425,6 +428,88 @@ describe('AdminSecurityCenter — D-ASC9 Security Admin vs POS Admin', () => {
     expect(Object.keys(payload).sort()).toEqual(
       ['branchIds', 'firstName', 'idempotencyKey', 'isActive', 'lastName', 'op', 'permissions', 'pin', 'role', 'username'].sort(),
     );
+  });
+});
+
+describe('AdminSecurityCenter — D-ASC10 ALL workspace (no concrete terminal branch)', () => {
+  for (const branchId of ['ALL', null]) {
+    it(`branchId=${String(branchId)}: branch-bound approval actions are off with safe copy; account administration still works`, async () => {
+      const h = setup({}, { branchId });
+      const locked = await rowFor('Lock Ed');
+      const ready = await rowFor('Nara Ready');
+      for (const row of [locked, ready, await rowFor('Mana Missing')]) {
+        expect(within(row).getByTestId('admin-oac-branch-required').textContent).toBe('เลือกสาขาจริงก่อนจัดการสิทธิ์อนุมัติบนเครื่องนี้');
+        expect(within(row).queryByTestId('admin-oac-state')).toBeNull();
+        expect(within(row).queryByText('ออกสิทธิ์ Offline ใหม่')).toBeNull();
+        expect(within(row).queryByText('ปลดล็อกสิทธิ์อนุมัติ')).toBeNull();
+        // Ordinary account administration is not terminal-branch-bound.
+        expect(within(row).getByText('แก้ไขผู้ใช้')).toBeTruthy();
+        expect(within(row).getByText('เปลี่ยน Quick PIN')).toBeTruthy();
+      }
+      expect(within(await rowFor('Som Staff')).queryByTestId('admin-oac-branch-required')).toBeNull();
+      expect(screen.getByText('เพิ่มผู้ใช้งาน')).toBeTruthy();
+
+      fireEvent.click(within(ready).getByRole('button', { name: 'ปิดใช้งาน' }));
+      fireEvent.click(within(await screen.findByTestId('admin-confirm-dialog')).getByRole('button', { name: 'ปิดใช้งาน' }));
+      expect(await screen.findByText('ปิดใช้งานผู้ใช้แล้ว')).toBeTruthy();
+      expect(h.callSetUserAccount).toHaveBeenCalledWith({ op: 'setActive', userId: 'uid-ready-1', isActive: false });
+      expect(h.provision).not.toHaveBeenCalled();
+      expect(h.runLockoutRecovery).not.toHaveBeenCalled();
+      // Nothing branch-bound was ever sent to native with a substituted branch.
+      for (const call of h.invoke.mock.calls) expect(call[0]).toBe('native_get_manager_oac_status');
+    });
+  }
+});
+
+describe('AdminSecurityCenter — D-ASC11 promotion to POS Admin', () => {
+  const PROMOTION_REFUSAL = 'บัญชีที่มีการเข้าสู่ระบบด้วยรหัสผ่านไม่สามารถเปลี่ยนเป็น POS Admin ผ่านหน้านี้ได้ กรุณาใช้ Owner Recovery';
+
+  async function promoteViaDialog(name: string) {
+    fireEvent.click(within(await rowFor(name)).getByText('แก้ไขผู้ใช้'));
+    const dialog = await screen.findByTestId('admin-user-form-dialog');
+    fireEvent.change(within(dialog).getByLabelText('บทบาท'), { target: { value: 'admin' } });
+    return dialog;
+  }
+
+  it('the edit dialog never tells a staff/manager they are safely a Quick PIN POS Admin', async () => {
+    setup();
+    const dialog = await promoteViaDialog('Nara Ready');
+    expect(within(dialog).queryByTestId('admin-pos-admin-warning')).toBeNull();
+    expect(within(dialog).getByTestId('admin-pos-admin-promote-warning').textContent).toBe(
+      'เปลี่ยนเป็น POS Admin ได้เฉพาะบัญชีที่ใช้ Quick PIN เท่านั้น บัญชีที่มีการเข้าสู่ระบบด้วยรหัสผ่านจะถูกปฏิเสธและต้องใช้ Owner Recovery',
+    );
+    expect(dialog.textContent).not.toContain('บัญชีนี้ใช้ Quick PIN');
+    expect(dialog.querySelectorAll('input[type="password"]')).toHaveLength(0);
+  });
+
+  it('a password-backed manager → POS Admin: server refusal shown verbatim, no local OAC revoke, row stays manager', async () => {
+    const { SetUserAccountError } = await import('../../lib/auth/setUserAccount');
+    const callSetUserAccount = vi.fn(async () => {
+      throw new SetUserAccountError(PROMOTION_REFUSAL, 'functions/failed-precondition');
+    });
+    const h = setup({ callSetUserAccount });
+    const dialog = await promoteViaDialog('Nara Ready');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'บันทึก' }));
+    expect(await screen.findByText(PROMOTION_REFUSAL)).toBeTruthy();
+    expect(callSetUserAccount).toHaveBeenCalledTimes(1);
+    expect((callSetUserAccount.mock.calls[0] as unknown[])[0]).toMatchObject({ op: 'updateProfile', userId: 'uid-ready-1', role: 'admin' });
+    expect(h.revokeOac).not.toHaveBeenCalled();
+    // The reloaded server truth still says manager; nothing claims an admin.
+    await waitFor(() => expect(h.fetchOverview).toHaveBeenCalledTimes(2));
+    expect(within(await rowFor('Nara Ready')).getByTestId('admin-role-label').textContent).toBe('ผู้จัดการ');
+  });
+
+  it('a Quick-PIN-only manager → POS Admin is accepted through one canonical updateProfile and revokes only that OAC', async () => {
+    const h = setup();
+    const dialog = await promoteViaDialog('Mana Missing');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'บันทึก' }));
+    await waitFor(() => expect(h.callSetUserAccount).toHaveBeenCalledTimes(1));
+    const cmd = h.callSetUserAccount.mock.calls[0]![0] as Record<string, unknown>;
+    expect(cmd).toMatchObject({ op: 'updateProfile', userId: 'uid-missing-1', role: 'admin', branchIds: ['LDP-001'] });
+    expect(cmd.permissions).toBeTruthy();
+    expect(Object.keys(cmd)).not.toContain('pin');
+    expect(await screen.findByText('บันทึกแล้ว — ต้องออกสิทธิ์ Offline ใหม่')).toBeTruthy();
+    expect(h.revokeOac.mock.calls).toEqual([['uid-missing-1']]);
   });
 });
 

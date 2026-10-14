@@ -1,8 +1,12 @@
+import { ADMIN_SECURITY_CENTER_PATH } from '../lib/settings/settingsNav';
+
 /**
  * HQ admin sidebar entries (consumed by AdminLayout).
  *
  * D-ASC7: no Staff entry — staff/account management lives only in the
  * Admin & Security Center (/settings/admin-security); /admin/staff redirects there.
+ * D-ASC10: that center is reachable from the ALL workspace, so the back-office
+ * links to it directly (the only in-app way there without choosing a branch).
  */
 export const ADMIN_NAV = [
   {
@@ -64,5 +68,11 @@ export const ADMIN_NAV = [
     end: false,
     label: 'ตั้งค่าเมนูด่วน (Quick Menus)',
     icon: 'ti-bolt',
+  },
+  {
+    path: ADMIN_SECURITY_CENTER_PATH,
+    end: true,
+    label: 'Admin & ความปลอดภัย',
+    icon: 'ti-shield-lock',
   },
 ] as const;

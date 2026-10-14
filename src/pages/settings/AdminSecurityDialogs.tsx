@@ -277,7 +277,13 @@ export function AdminUserFormDialog({
                   </option>
                 ))}
               </Select>
-              {role === 'admin' ? (
+              {role === 'admin' && mode === 'edit' && user && user.role !== 'admin' ? (
+                // D-ASC11: promotion is allowed only for a Quick-PIN-only account;
+                // the server refuses a password-backed one.
+                <Alert color="warning" data-testid="admin-pos-admin-promote-warning">
+                  {C.posAdminPromoteWarning}
+                </Alert>
+              ) : role === 'admin' ? (
                 <Alert color="warning" data-testid="admin-pos-admin-warning">
                   {C.posAdminCreateWarning}
                 </Alert>

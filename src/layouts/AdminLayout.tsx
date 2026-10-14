@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/hooks/useAuth';
 import { ADMIN_NAV } from '../config/adminNavigation';
@@ -7,7 +7,11 @@ import { ADMIN_NAV } from '../config/adminNavigation';
 const TOPBAR_BTN =
   'inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-[7px] border border-[var(--g200)] bg-transparent px-3 text-xs text-[#5f5e5a] transition hover:border-[#888780] hover:bg-[var(--g50)] hover:text-[var(--text-primary)]';
 
-export default function AdminLayout() {
+/**
+ * `children` (when given) replaces the nested-route `<Outlet />` — used by the
+ * ALL-workspace Admin & Security Center (D-ASC10), which is not an `/admin/*` route.
+ */
+export default function AdminLayout({ children }: { children?: ReactNode } = {}) {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
@@ -130,7 +134,7 @@ export default function AdminLayout() {
         </aside>
 
         <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto">
-          <Outlet />
+          {children ?? <Outlet />}
         </main>
       </div>
     </div>

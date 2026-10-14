@@ -21,11 +21,12 @@ const BCRYPT_COST = 10;
 const PIN_RE = /^\d{4}$/;
 
 /**
- * D-ASC8 staff-callable guard. When present, a target whose LIVE
- * `users.role` is `admin` may be mutated only if it is the one uid the
- * callable pre-classified as a POS (Quick PIN) admin; any other live admin
- * target is refused inside the transaction before any write (this also
- * closes a role-change race after classification). `operator_cli` never
+ * D-ASC8 / D-ASC11 staff-callable guard. When present, a target whose LIVE
+ * `users.role` is `admin`, or a command that would SET `role=admin`, may
+ * proceed only if the target is the one uid the callable pre-classified as a
+ * POS (Quick PIN) admin; anything else is refused inside the transaction
+ * before any write (this also closes a role-change race after
+ * classification and a promotion without classification). `operator_cli` never
  * carries it, so the reviewed recovery route is unchanged.
  */
 export type AdminTargetGuard = { clearedPosAdminTargetId: string | null };
@@ -154,13 +155,20 @@ async function assertActor(
   return null;
 }
 
+/**
+ * `resultingRole` is the role this command is about to assign (only
+ * `updateProfile` assigns one). D-ASC11: a live admin target OR a command
+ * that would make the target an admin both require the exact uid to have
+ * been pre-cleared as POS_ADMIN.
+ */
 function protectedAdminTargetRefusal(
   actor: SetUserAccountActor,
   userId: string,
   live: DocumentData,
+  resultingRole?: unknown,
 ): SetUserAccountResult | null {
   if (actor.kind !== 'staff' || !actor.adminTargetGuard) return null;
-  if (live.role !== 'admin') return null;
+  if (live.role !== 'admin' && resultingRole !== 'admin') return null;
   if (actor.adminTargetGuard.clearedPosAdminTargetId === userId) return null;
   return invalid('protected_admin_target', 'บัญชีผู้ดูแลระบบนี้ไม่สามารถแก้ไขจากหน้านี้ได้');
 }
@@ -428,7 +436,7 @@ async function handleUpdateProfile(
   const userRef = database.collection(COLLECTIONS.users).doc(userId);
   const userSnap = await tx.get(userRef);
   if (!userSnap.exists) return invalid('not_found', 'ไม่พบผู้ใช้');
-  const protectedRefusal = protectedAdminTargetRefusal(actor, userId, asUser(userSnap.data()));
+  const protectedRefusal = protectedAdminTargetRefusal(actor, userId, asUser(userSnap.data()), cmd.role);
   if (protectedRefusal) return protectedRefusal;
   const patch: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() };
   if (typeof cmd.firstName === 'string') patch.firstName = cmd.firstName.trim();
