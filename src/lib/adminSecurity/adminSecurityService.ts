@@ -12,9 +12,11 @@
  *     be refused;
  *   - an admin never mutates their own account here (a password session's
  *     claims are static, so bumping its own authVersion would strand it);
- *   - D-ASC8/D-ASC9: an `admin` row is mutable ONLY when the server
- *     classified it `POS_ADMIN` (Quick PIN admin, no password principal).
- *     A `PASSWORD_ADMIN` (Security Admin) or `UNKNOWN` admin is read-only
+ *   - D-ASC8/D-ASC9/D-ASC12/D-ASC13: ANY row is mutable ONLY when the
+ *     server classified it `QUICK_PIN_ONLY` (no Firebase Auth user, so no
+ *     static password claims an authVersion bump could strand); an `admin`
+ *     row must also be `POS_ADMIN`. A password-backed row (Security Admin, or
+ *     a username/password staff / manager) or an `UNKNOWN` row is read-only
  *     here — no edit, PIN, enable/disable, OAC reissue or lockout clear. The
  *     server refuses the same targets independently.
  *
@@ -52,6 +54,7 @@ export const ADMIN_SECURITY_ROLES: readonly UserRole[] = ['admin', 'manager', 's
 export type AdminOperator = { id: string; role: string } | null | undefined;
 
 export type SecurityAdminClassification = 'PASSWORD_ADMIN' | 'POS_ADMIN' | 'UNKNOWN';
+export type AccountAuthClassification = 'QUICK_PIN_ONLY' | 'PASSWORD_PRINCIPAL' | 'UNKNOWN';
 
 export type AdminSecurityUser = {
   userId: string;
@@ -63,19 +66,31 @@ export type AdminSecurityUser = {
   isActive: boolean;
   authVersion: number;
   quickPinState: 'set' | 'required';
+  /** Every role; a missing / unrecognized server answer is `UNKNOWN` (read-only). */
+  accountAuthClassification: AccountAuthClassification;
   /** `null` for non-admin roles; an admin with no clean server answer is `UNKNOWN`. */
   securityAdminClassification: SecurityAdminClassification | null;
 };
 
 /** Target fields every mutation / capability action needs to decide mutability. */
-export type AdminTargetRef = Pick<AdminSecurityUser, 'userId' | 'role' | 'securityAdminClassification'>;
+export type AdminTargetRef = Pick<AdminSecurityUser, 'userId' | 'role' | 'securityAdminClassification' | 'accountAuthClassification'>;
 
 /**
- * Fail-closed mutability: non-admin roles are mutable; an `admin` only when
- * the server proved it is a POS (Quick PIN) admin.
+ * D-ASC9 fail-closed admin mutability: an `admin` is mutable only when the
+ * server proved it is a POS (Quick PIN) admin.
  */
 export function isProtectedAdminTarget(target: Pick<AdminSecurityUser, 'role' | 'securityAdminClassification'>): boolean {
   return target.role === 'admin' && target.securityAdminClassification !== 'POS_ADMIN';
+}
+
+/**
+ * D-ASC12/D-ASC13 fail-closed account mutability for every role: only a
+ * server-proven Quick-PIN-only account (and, for an admin, a POS admin).
+ */
+export function isProtectedAccountTarget(
+  target: Pick<AdminSecurityUser, 'role' | 'securityAdminClassification' | 'accountAuthClassification'>,
+): boolean {
+  return isProtectedAdminTarget(target) || target.accountAuthClassification !== 'QUICK_PIN_ONLY';
 }
 
 export type AdminSecurityEvent = {
@@ -102,7 +117,7 @@ export type AccountMutationResult =
   /** Not the primary password-admin principal: nothing was called. */
   | { kind: 'not_admin' }
   | { kind: 'self_target' }
-  /** Security Admin / unclassified admin target: nothing was called. */
+  /** Password-backed or unclassified target (any role): nothing was called. */
   | { kind: 'protected_target' }
   | { kind: 'invalid'; reason: 'pin_format' | 'missing_fields' }
   | { kind: 'busy' };
@@ -199,6 +214,10 @@ function parseUser(raw: unknown): AdminSecurityUser | null {
     isActive: r.isActive === true,
     authVersion: typeof r.authVersion === 'number' && Number.isFinite(r.authVersion) ? r.authVersion : 0,
     quickPinState: r.quickPinState === 'set' ? 'set' : 'required',
+    accountAuthClassification:
+      r.accountAuthClassification === 'QUICK_PIN_ONLY' || r.accountAuthClassification === 'PASSWORD_PRINCIPAL'
+        ? r.accountAuthClassification
+        : 'UNKNOWN',
     securityAdminClassification:
       r.role !== 'admin'
         ? null
@@ -379,7 +398,7 @@ export async function updateAdminUser(
   deps: AdminSecurityDeps = {},
 ): Promise<AccountMutationResult> {
   if (operator?.id && target.userId === operator.id) return { kind: 'self_target' };
-  if (isProtectedAdminTarget(target)) return { kind: 'protected_target' };
+  if (isProtectedAccountTarget(target)) return { kind: 'protected_target' };
   if (!input.firstName.trim() || input.branchIds.length === 0 || !ADMIN_SECURITY_ROLES.includes(input.role)) {
     return { kind: 'invalid', reason: 'missing_fields' };
   }
@@ -406,7 +425,7 @@ export async function rotateAdminUserPin(
   deps: AdminSecurityDeps = {},
 ): Promise<AccountMutationResult> {
   if (operator?.id && target.userId === operator.id) return { kind: 'self_target' };
-  if (isProtectedAdminTarget(target)) return { kind: 'protected_target' };
+  if (isProtectedAccountTarget(target)) return { kind: 'protected_target' };
   if (!ADMIN_PIN_RE.test(pin)) return { kind: 'invalid', reason: 'pin_format' };
   const key = (deps.newKey ?? defaultNewKey)();
   return runOneMutation(
@@ -424,7 +443,7 @@ export async function setAdminUserActive(
   deps: AdminSecurityDeps = {},
 ): Promise<AccountMutationResult> {
   if (operator?.id && target.userId === operator.id) return { kind: 'self_target' };
-  if (isProtectedAdminTarget(target)) return { kind: 'protected_target' };
+  if (isProtectedAccountTarget(target)) return { kind: 'protected_target' };
   return runOneMutation(operator, { op: 'setActive', userId: target.userId, isActive }, target.userId, deps);
 }
 
@@ -438,7 +457,7 @@ export async function clearManagerApprovalLockout(
   deps: AdminSecurityDeps = {},
 ): Promise<LockoutClearResult> {
   if (operator?.id && target.userId === operator.id) return { kind: 'self_target' };
-  if (isProtectedAdminTarget(target)) return { kind: 'protected_target' };
+  if (isProtectedAccountTarget(target)) return { kind: 'protected_target' };
   if (!(await passesGate(operator, deps))) return { kind: 'not_admin' };
   const run = deps.runLockoutRecovery ?? runPrivilegedLockoutRecovery;
   return run({ managerStaffId: target.userId, operator }, deps.lockoutDeps ?? {});
@@ -458,7 +477,7 @@ export async function reissueManagerOac(
   deps: AdminSecurityDeps = {},
 ): Promise<ReissueOacResult> {
   if (operator?.id && target.userId === operator.id) return { kind: 'self_target' };
-  if (isProtectedAdminTarget(target)) return { kind: 'protected_target' };
+  if (isProtectedAccountTarget(target)) return { kind: 'protected_target' };
   if (!ADMIN_PIN_RE.test(pin)) return { kind: 'invalid', reason: 'pin_format' };
   const eligible =
     (target.role === 'manager' || target.role === 'admin') &&

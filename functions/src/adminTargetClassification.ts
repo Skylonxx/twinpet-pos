@@ -1,31 +1,32 @@
 /**
- * Admin & Security Center V1 (D-ASC8 / D-ASC9) — server-side classification
- * of `role=admin` targets.
+ * Admin & Security Center V1 (D-ASC8 / D-ASC9 / D-ASC11 / D-ASC12) —
+ * server-side Firebase Auth classification of account targets.
  *
- * A password-backed admin's Firebase Auth claims are static (nothing
+ * A password-backed account's Firebase Auth claims are static (nothing
  * restamps them), so any `users.authVersion` bump on that account strands
- * its username+password session until Owner Recovery exists. The normal
- * staff callable therefore must never mutate such an account, and the
- * overview must render it read-only.
+ * its username+password session until Owner Recovery can restamp claims.
+ * The normal staff callable therefore must never mutate such an account —
+ * whatever its role — and the overview must render it read-only.
  *
- *   - `PASSWORD_ADMIN` — an Auth user with the same uid exists and has the
- *     `password` provider;
- *   - `POS_ADMIN`      — no Auth user with that uid exists (a Quick PIN
- *     admin created through normal POS user management);
- *   - `UNKNOWN`        — anything that cannot be proven safe: a lookup
- *     failure, a malformed answer, or an Auth user that exists without the
- *     password provider. Callers fail closed on it.
+ *   - `PASSWORD_PRINCIPAL` — an Auth user with the same uid exists and has
+ *     the `password` provider;
+ *   - `QUICK_PIN_ONLY`     — Auth conclusively reports no user with that uid
+ *     (an account created through normal POS user management);
+ *   - `UNKNOWN`            — anything that cannot be proven safe: a lookup
+ *     failure, a malformed / silent / contradictory answer, or an Auth user
+ *     that exists without the password provider. Callers fail closed on it.
  *
- * D-ASC11: the same classification gates any staff-callable transition INTO
- * `role=admin` — a staff/manager may be promoted only when it is
- * conclusively `POS_ADMIN` (no Auth user at all).
+ * For `role=admin` rows the same answer is also exposed in the D-ASC9 admin
+ * vocabulary (`PASSWORD_ADMIN` = Security Admin, `POS_ADMIN` = Quick PIN
+ * admin, `UNKNOWN`).
  *
- * Only live `role=admin` uids, or the target of a promotion to admin, are
- * ever looked up. Never logs or returns
- * email / provider payloads — only the coarse classification.
+ * Only callers that already proved a live admin actor look anything up.
+ * Never logs or returns email / provider payloads — only the coarse
+ * classification.
  */
 import { getAuth } from 'firebase-admin/auth';
 
+export type AccountAuthClassification = 'QUICK_PIN_ONLY' | 'PASSWORD_PRINCIPAL' | 'UNKNOWN';
 export type SecurityAdminClassification = 'PASSWORD_ADMIN' | 'POS_ADMIN' | 'UNKNOWN';
 
 export const PASSWORD_ADMIN_OWNER_RECOVERY_REQUIRED = 'PASSWORD_ADMIN_OWNER_RECOVERY_REQUIRED';
@@ -36,6 +37,14 @@ export const PASSWORD_PRINCIPAL_ADMIN_PROMOTION_MESSAGE =
 export const ADMIN_TARGET_CLASSIFICATION_UNAVAILABLE = 'ADMIN_TARGET_CLASSIFICATION_UNAVAILABLE';
 export const ADMIN_TARGET_CLASSIFICATION_UNAVAILABLE_MESSAGE =
   'ไม่สามารถยืนยันประเภทบัญชีผู้ดูแลระบบได้ จึงยังไม่บันทึกการเปลี่ยนแปลง กรุณาลองใหม่ภายหลัง';
+/** D-ASC12: a password-backed staff / manager target (no admin role before or after). */
+export const PASSWORD_PRINCIPAL_OWNER_RECOVERY_REQUIRED = 'PASSWORD_PRINCIPAL_OWNER_RECOVERY_REQUIRED';
+export const PASSWORD_PRINCIPAL_OWNER_RECOVERY_REQUIRED_MESSAGE =
+  'บัญชีนี้มีการเข้าสู่ระบบด้วย username/password จึงต้องจัดการผ่าน Owner Recovery';
+/** D-ASC12: a staff / manager target whose Auth state cannot be proven Quick-PIN-only. */
+export const ACCOUNT_AUTH_CLASSIFICATION_UNAVAILABLE = 'ACCOUNT_AUTH_CLASSIFICATION_UNAVAILABLE';
+export const ACCOUNT_AUTH_CLASSIFICATION_UNAVAILABLE_MESSAGE =
+  'ไม่สามารถยืนยันประเภทการเข้าสู่ระบบของบัญชีนี้ได้ จึงยังไม่บันทึกการเปลี่ยนแปลง กรุณาลองใหม่ภายหลัง';
 
 /** Minimal shape of `Auth.getUsers()` this module relies on. */
 export type AdminAuthLookupResult = {
@@ -59,15 +68,14 @@ function hasPasswordProvider(providerData: unknown): boolean | null {
 }
 
 /**
- * Classifies each given uid (callers pass only live `role=admin` uids).
- * Every uid is present in the result; any uid the lookup did not answer
- * cleanly is `UNKNOWN`.
+ * Classifies each given uid against Firebase Auth. Every uid is present in
+ * the result; any uid the lookup did not answer cleanly is `UNKNOWN`.
  */
-export async function classifyAdminTargets(
+export async function classifyAccountTargets(
   uids: string[],
   lookup: AdminAuthLookup = defaultAdminAuthLookup,
-): Promise<Map<string, SecurityAdminClassification>> {
-  const result = new Map<string, SecurityAdminClassification>();
+): Promise<Map<string, AccountAuthClassification>> {
+  const result = new Map<string, AccountAuthClassification>();
   const unique = [...new Set(uids.filter((u) => typeof u === 'string' && u.length > 0))];
   for (const uid of unique) result.set(uid, 'UNKNOWN');
   for (let i = 0; i < unique.length; i += AUTH_GET_USERS_MAX) {
@@ -80,26 +88,42 @@ export async function classifyAdminTargets(
     }
     if (!answer || !Array.isArray(answer.users) || !Array.isArray(answer.notFound)) continue;
     const asked = new Set(chunk);
-    const found = new Map<string, SecurityAdminClassification>();
+    const found = new Map<string, AccountAuthClassification>();
     for (const user of answer.users) {
       if (!user || typeof user.uid !== 'string' || !asked.has(user.uid)) continue;
       const password = hasPasswordProvider(user.providerData);
-      found.set(user.uid, password === true ? 'PASSWORD_ADMIN' : 'UNKNOWN');
+      found.set(user.uid, password === true ? 'PASSWORD_PRINCIPAL' : 'UNKNOWN');
     }
     for (const missing of answer.notFound) {
       const uid = missing?.uid;
       // A uid reported both found and not-found is contradictory → UNKNOWN.
       if (typeof uid !== 'string' || !asked.has(uid)) continue;
-      found.set(uid, found.has(uid) ? 'UNKNOWN' : 'POS_ADMIN');
+      found.set(uid, found.has(uid) ? 'UNKNOWN' : 'QUICK_PIN_ONLY');
     }
     for (const [uid, cls] of found) result.set(uid, cls);
   }
   return result;
 }
 
-export async function classifyAdminTarget(
+export async function classifyAccountTarget(
   uid: string,
   lookup: AdminAuthLookup = defaultAdminAuthLookup,
-): Promise<SecurityAdminClassification> {
-  return (await classifyAdminTargets([uid], lookup)).get(uid) ?? 'UNKNOWN';
+): Promise<AccountAuthClassification> {
+  return (await classifyAccountTargets([uid], lookup)).get(uid) ?? 'UNKNOWN';
+}
+
+/** D-ASC9 admin vocabulary for the same Auth answer. */
+export function toSecurityAdminClassification(c: AccountAuthClassification): SecurityAdminClassification {
+  if (c === 'PASSWORD_PRINCIPAL') return 'PASSWORD_ADMIN';
+  if (c === 'QUICK_PIN_ONLY') return 'POS_ADMIN';
+  return 'UNKNOWN';
+}
+
+/** Classifies `role=admin` uids in the D-ASC9 admin vocabulary. */
+export async function classifyAdminTargets(
+  uids: string[],
+  lookup: AdminAuthLookup = defaultAdminAuthLookup,
+): Promise<Map<string, SecurityAdminClassification>> {
+  const classes = await classifyAccountTargets(uids, lookup);
+  return new Map([...classes].map(([uid, c]) => [uid, toSecurityAdminClassification(c)]));
 }

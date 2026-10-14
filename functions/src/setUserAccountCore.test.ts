@@ -72,7 +72,14 @@ function makeDb(seed: Record<string, Doc> = {}) {
 const marker = {
   'migrationControl/usernameReservations': { complete: true, maintenanceMode: false, epoch: 1 },
 };
-const adminActor = { kind: 'staff' as const, staffId: 'admin1', authVersion: 0 };
+/** D-ASC12: a staff actor mutates an existing account only with that exact uid pre-cleared. */
+const clearedFor = (userId: string | null) => ({
+  kind: 'staff' as const,
+  staffId: 'admin1',
+  authVersion: 0,
+  targetGuard: { clearedQuickPinOnlyTargetId: userId },
+});
+const adminActor = clearedFor(null);
 const adminUser = {
   'users/admin1': { role: 'admin', isActive: true, deletedAt: null, authVersion: 0 },
 };
@@ -177,7 +184,7 @@ describe('setUserAccountCore C1 create / rotate', () => {
       'users/u1': { role: 'staff', isActive: true, deletedAt: null, authVersion: 0, branchIds: ['LDP-001'] },
       'privilegedStagedRoleDeny/manager': { roleId: 'manager', state: 'VERIFYING', changeId: 'change-xyz', deniedPermissions: ['pos_void'] },
     });
-    const result = await performSetUserAccount(db as never, adminActor, {
+    const result = await performSetUserAccount(db as never, clearedFor('u1'), {
       op: 'updateProfile',
       userId: 'u1',
       role: 'manager',
@@ -202,7 +209,7 @@ describe('setUserAccountCore C1 create / rotate', () => {
       isActive: true,
       pin: '1111',
     });
-    const rotated = await performSetUserAccount(db as never, adminActor, {
+    const rotated = await performSetUserAccount(db as never, clearedFor(created.userId!), {
       op: 'rotate',
       rotateIdempotencyKey: 'rot-1',
       userId: created.userId!,
@@ -211,7 +218,7 @@ describe('setUserAccountCore C1 create / rotate', () => {
     });
     expect(rotated.status).toBe('rotated');
     expect(rotated.authVersion).toBe(1);
-    const replay = await performSetUserAccount(db as never, adminActor, {
+    const replay = await performSetUserAccount(db as never, clearedFor(created.userId!), {
       op: 'rotate',
       rotateIdempotencyKey: 'rot-1',
       userId: created.userId!,
@@ -229,7 +236,7 @@ describe('setUserAccountCore C1 create / rotate', () => {
     });
     const denied = await performSetUserAccount(
       db as never,
-      { kind: 'staff', staffId: 'staff1', authVersion: 0 },
+      { kind: 'staff', staffId: 'staff1', authVersion: 0, targetGuard: { clearedQuickPinOnlyTargetId: 'staff1' } },
       { op: 'rotate', rotateIdempotencyKey: 'x', userId: 'staff1', pin: '4444' },
     );
     expect(denied.status).toBe('unauthorized');
@@ -298,7 +305,7 @@ describe('setUserAccountCore softDelete', () => {
   test('softDelete succeeds with all reads before writes and frozen terminal semantics', async () => {
     const db = makeDb(seedSoftDeleteTarget());
     const credBefore = { ...(db.__store.get('userCredentials/target1') as Doc) };
-    const res = await performSetUserAccount(db as never, adminActor, {
+    const res = await performSetUserAccount(db as never, clearedFor('target1'), {
       op: 'softDelete',
       userId: 'target1',
     });
@@ -325,7 +332,7 @@ describe('setUserAccountCore softDelete', () => {
         'usernames/nongnuch': { userId: 'someone-else' },
       }),
     );
-    const res = await performSetUserAccount(db as never, adminActor, {
+    const res = await performSetUserAccount(db as never, clearedFor('target1'), {
       op: 'softDelete',
       userId: 'target1',
     });
@@ -353,7 +360,7 @@ describe('setUserAccountCore softDelete', () => {
       }),
     );
     db.__store.delete('usernames/nongnuch');
-    const res = await performSetUserAccount(db as never, adminActor, {
+    const res = await performSetUserAccount(db as never, clearedFor('target1'), {
       op: 'softDelete',
       userId: 'target1',
     });
@@ -399,7 +406,7 @@ describe('setUserAccountCore softDelete', () => {
 
     const denied = await performSetUserAccount(
       db as never,
-      { kind: 'staff', staffId: 'staff1', authVersion: 0 },
+      { kind: 'staff', staffId: 'staff1', authVersion: 0, targetGuard: { clearedQuickPinOnlyTargetId: 'target1' } },
       { op: 'softDelete', userId: 'target1' },
     );
     expect(denied.ok).toBe(false);
@@ -424,7 +431,7 @@ describe('setUserAccountCore softDelete', () => {
       }),
     );
     const credBefore = { ...(db.__store.get('userCredentials/target1') as Doc) };
-    const res = await performSetUserAccount(db as never, adminActor, {
+    const res = await performSetUserAccount(db as never, clearedFor('target1'), {
       op: 'updateProfile',
       userId: 'target1',
       firstName: 'Nongnuch',

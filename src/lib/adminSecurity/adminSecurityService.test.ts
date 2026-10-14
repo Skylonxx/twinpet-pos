@@ -21,15 +21,41 @@ import {
   rotateAdminUserPin,
   setAdminUserActive,
   updateAdminUser,
+  isProtectedAccountTarget,
   isProtectedAdminTarget,
   type AdminSecurityDeps,
 } from './adminSecurityService';
 
 const ADMIN = { id: 'admin1', role: 'admin' };
-const MGR = { userId: 'mgr1', role: 'manager' as const, isActive: true, branchIds: ['LDP-001'], securityAdminClassification: null };
-const SECURITY_ADMIN = { userId: 'admin2', role: 'admin' as const, isActive: true, branchIds: ['ALL'], securityAdminClassification: 'PASSWORD_ADMIN' as const };
-const UNKNOWN_ADMIN = { ...SECURITY_ADMIN, userId: 'admin3', securityAdminClassification: 'UNKNOWN' as const };
-const POS_ADMIN = { ...SECURITY_ADMIN, userId: 'posadm1', branchIds: ['LDP-001'], securityAdminClassification: 'POS_ADMIN' as const };
+const MGR = {
+  userId: 'mgr1',
+  role: 'manager' as const,
+  isActive: true,
+  branchIds: ['LDP-001'],
+  securityAdminClassification: null,
+  accountAuthClassification: 'QUICK_PIN_ONLY' as const,
+};
+const SECURITY_ADMIN = {
+  userId: 'admin2',
+  role: 'admin' as const,
+  isActive: true,
+  branchIds: ['ALL'],
+  securityAdminClassification: 'PASSWORD_ADMIN' as const,
+  accountAuthClassification: 'PASSWORD_PRINCIPAL' as const,
+};
+const UNKNOWN_ADMIN = { ...SECURITY_ADMIN, userId: 'admin3', securityAdminClassification: 'UNKNOWN' as const, accountAuthClassification: 'UNKNOWN' as const };
+const POS_ADMIN = {
+  ...SECURITY_ADMIN,
+  userId: 'posadm1',
+  branchIds: ['LDP-001'],
+  securityAdminClassification: 'POS_ADMIN' as const,
+  accountAuthClassification: 'QUICK_PIN_ONLY' as const,
+};
+// D-ASC12/D-ASC13: password-backed and unclassified staff / managers.
+const PASSWORD_MGR = { ...MGR, userId: 'pwmgr1', accountAuthClassification: 'PASSWORD_PRINCIPAL' as const };
+const PASSWORD_STAFF = { ...MGR, userId: 'pwstaff1', role: 'staff' as const, accountAuthClassification: 'PASSWORD_PRINCIPAL' as const };
+const UNKNOWN_MGR = { ...MGR, userId: 'unkmgr1', accountAuthClassification: 'UNKNOWN' as const };
+const UNKNOWN_STAFF = { ...MGR, userId: 'unkstaff1', role: 'staff' as const, accountAuthClassification: 'UNKNOWN' as const };
 const OTHER_MGR_ID = 'mgr2';
 const PIN = '4826';
 
@@ -353,7 +379,7 @@ describe('approval lockout + OAC reissue reuse', () => {
       [{ ...MGR, branchIds: ['BKK-002'] }, 'LDP-001'],
       [MGR, 'ALL'],
       [MGR, null],
-    ] as Array<[{ userId: string; role: 'manager' | 'staff'; isActive: boolean; branchIds: string[]; securityAdminClassification: null }, string | null]>) {
+    ] as Array<[typeof MGR | (Omit<typeof MGR, 'role'> & { role: 'staff' }), string | null]>) {
       expect(await reissueManagerOac(ADMIN, target, branch, PIN, h.deps)).toEqual({ kind: 'not_eligible_target' });
     }
     expect(await reissueManagerOac(ADMIN, MGR, 'LDP-001', '12', h.deps)).toEqual({ kind: 'invalid', reason: 'pin_format' });
@@ -415,5 +441,87 @@ describe('overview', () => {
     expect(
       await loadAdminSecurityOverview(ADMIN, harness({ fetchOverview: async () => { throw new Error('net'); } }).deps),
     ).toEqual({ kind: 'failed' });
+  });
+});
+
+describe('D-ASC12/D-ASC13 — password-backed and unclassified staff / manager targets are read-only', () => {
+  it('only a server-proven Quick-PIN-only account is mutable (any role)', () => {
+    expect(isProtectedAccountTarget(MGR)).toBe(false);
+    expect(isProtectedAccountTarget({ ...MGR, role: 'staff' })).toBe(false);
+    expect(isProtectedAccountTarget(POS_ADMIN)).toBe(false);
+    for (const target of [PASSWORD_MGR, PASSWORD_STAFF, UNKNOWN_MGR, UNKNOWN_STAFF, SECURITY_ADMIN, UNKNOWN_ADMIN]) {
+      expect(isProtectedAccountTarget(target)).toBe(true);
+    }
+    // An admin row must also be POS_ADMIN, whatever the account classification says.
+    expect(isProtectedAccountTarget({ ...POS_ADMIN, securityAdminClassification: 'UNKNOWN' })).toBe(true);
+  });
+
+  for (const [label, target] of [
+    ['password-backed manager', PASSWORD_MGR],
+    ['password-backed staff', PASSWORD_STAFF],
+    ['UNKNOWN manager', UNKNOWN_MGR],
+    ['UNKNOWN staff', UNKNOWN_STAFF],
+  ] as const) {
+    it(`${label}: no edit, PIN, toggle, lockout clear or OAC reissue is ever called, and no local OAC is revoked`, async () => {
+      const h = harness();
+      expect(await rotateAdminUserPin(ADMIN, target, PIN, h.deps)).toEqual({ kind: 'protected_target' });
+      expect(await setAdminUserActive(ADMIN, target, false, h.deps)).toEqual({ kind: 'protected_target' });
+      expect(await setAdminUserActive(ADMIN, target, true, h.deps)).toEqual({ kind: 'protected_target' });
+      expect(
+        await updateAdminUser(ADMIN, target, { firstName: 'a', lastName: 'b', role: target.role, branchIds: ['LDP-001'] }, h.deps),
+      ).toEqual({ kind: 'protected_target' });
+      expect(await clearManagerApprovalLockout(ADMIN, target, h.deps)).toEqual({ kind: 'protected_target' });
+      expect(await reissueManagerOac(ADMIN, target, 'LDP-001', PIN, h.deps)).toEqual({ kind: 'protected_target' });
+      expect(h.callSetUserAccount).not.toHaveBeenCalled();
+      expect(h.revokeOac).not.toHaveBeenCalled();
+      expect(h.provision).not.toHaveBeenCalled();
+      expect(h.runLockoutRecovery).not.toHaveBeenCalled();
+    });
+  }
+
+  it('a server PASSWORD_PRINCIPAL_OWNER_RECOVERY_REQUIRED refusal is definite: shown verbatim, no local OAC revoke', async () => {
+    const message = 'บัญชีนี้มีการเข้าสู่ระบบด้วย username/password จึงต้องจัดการผ่าน Owner Recovery';
+    const h = harness({
+      callSetUserAccount: vi.fn(async () => {
+        throw new SetUserAccountError(message, 'functions/failed-precondition');
+      }),
+    });
+    expect(await setAdminUserActive(ADMIN, MGR, false, h.deps)).toEqual({ kind: 'rejected', message });
+    expect(h.revokeOac).not.toHaveBeenCalled();
+  });
+
+  it('a server ACCOUNT_AUTH_CLASSIFICATION_UNAVAILABLE refusal is definite too: no local OAC revoke', async () => {
+    const message = 'ไม่สามารถยืนยันประเภทการเข้าสู่ระบบของบัญชีนี้ได้ จึงยังไม่บันทึกการเปลี่ยนแปลง กรุณาลองใหม่ภายหลัง';
+    const h = harness({
+      callSetUserAccount: vi.fn(async () => {
+        throw new SetUserAccountError(message, 'functions/failed-precondition');
+      }),
+    });
+    expect(await rotateAdminUserPin(ADMIN, MGR, PIN, h.deps)).toEqual({ kind: 'rejected', message });
+    expect(h.revokeOac).not.toHaveBeenCalled();
+  });
+
+  it('account classification parses fail-closed: missing / unexpected value → UNKNOWN', async () => {
+    const base = { firstName: 'A', lastName: 'B', username: 'a', role: 'manager', branchIds: ['LDP-001'], isActive: true, authVersion: 0, quickPinState: 'set' };
+    const h = harness({
+      fetchOverview: vi.fn(async () => ({
+        ok: true,
+        users: [
+          { ...base, userId: 'q', accountAuthClassification: 'QUICK_PIN_ONLY' },
+          { ...base, userId: 'p', role: 'staff', accountAuthClassification: 'PASSWORD_PRINCIPAL' },
+          { ...base, userId: 'm' },
+          { ...base, userId: 'x', accountAuthClassification: 'quick_pin_only' },
+        ],
+        events: [],
+      })),
+    });
+    const res = await loadAdminSecurityOverview(ADMIN, h.deps);
+    if (res.kind !== 'ok') throw new Error('expected ok');
+    expect(Object.fromEntries(res.overview.users.map((u) => [u.userId, u.accountAuthClassification]))).toEqual({
+      q: 'QUICK_PIN_ONLY',
+      p: 'PASSWORD_PRINCIPAL',
+      m: 'UNKNOWN',
+      x: 'UNKNOWN',
+    });
   });
 });

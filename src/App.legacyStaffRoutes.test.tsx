@@ -120,10 +120,11 @@ vi.mock('./pages/settings/AdminSecurityCenter', async () => {
                 {
                   userId: 'admin1', firstName: 'Ad', lastName: 'Min', username: 'admin', role: 'admin', branchIds: ['ALL'],
                   isActive: true, authVersion: 2, quickPinState: 'set', securityAdminClassification: 'PASSWORD_ADMIN',
+                  accountAuthClassification: 'PASSWORD_PRINCIPAL',
                 },
                 {
                   userId: 'mgr1', firstName: 'Na', lastName: 'Ra', username: 'nara', role: 'manager', branchIds: ['LDP-001'],
-                  isActive: true, authVersion: 1, quickPinState: 'set',
+                  isActive: true, authVersion: 1, quickPinState: 'set', accountAuthClassification: 'QUICK_PIN_ONLY',
                 },
               ],
               events: [],

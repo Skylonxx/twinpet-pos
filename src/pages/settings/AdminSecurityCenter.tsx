@@ -13,7 +13,7 @@ import {
   checkAdminPasswordSession,
   clearManagerApprovalLockout,
   createAdminUser,
-  isProtectedAdminTarget,
+  isProtectedAccountTarget,
   loadAdminSecurityOverview,
   reissueManagerOac,
   rotateAdminUserPin,
@@ -75,6 +75,25 @@ function roleDisplay(u: AdminSecurityUser): { label: string; hint: string | null
   return { label: C.roleAdminUnknown, hint: C.roleAdminUnknownHint };
 }
 
+/**
+ * D-ASC12/D-ASC13 read-only reason for a protected row: Security Admin and
+ * password-backed staff / managers are Owner Recovery territory; anything
+ * the server could not classify is fail-closed read-only.
+ */
+function readOnlyCopy(u: AdminSecurityUser): string {
+  if (u.role === 'admin') {
+    return u.securityAdminClassification === 'PASSWORD_ADMIN' ? C.ownerRecoveryManaged : C.adminUnknownReadOnly;
+  }
+  return u.accountAuthClassification === 'PASSWORD_PRINCIPAL' ? C.ownerRecoveryManaged : C.accountUnknownReadOnly;
+}
+
+/** Copy for a locally refused (protected) target; its buttons are hidden, so this is defensive. */
+function protectedTargetCopy(u: AdminSecurityUser): string {
+  if (u.role === 'admin' && u.securityAdminClassification === 'PASSWORD_ADMIN') return C.ownerRecoveryRequired;
+  if (u.accountAuthClassification === 'PASSWORD_PRINCIPAL') return C.passwordPrincipalOwnerRecoveryRequired;
+  return C.accountClassificationUnavailable;
+}
+
 const CAPABILITY_LABEL: Record<ApprovalCapabilityState, string> = {
   ready: C.oacReady,
   reissue_required: C.oacReissueRequired,
@@ -102,7 +121,7 @@ function isApproverRole(role: string): boolean {
   return role === 'manager' || role === 'admin';
 }
 
-function mutationNotice(result: AccountMutationResult, successText: string): Notice {
+function mutationNotice(result: AccountMutationResult, successText: string, protectedText: string = C.ownerRecoveryRequired): Notice {
   switch (result.kind) {
     case 'ok':
       return result.oacRevoke === 'failed'
@@ -117,7 +136,7 @@ function mutationNotice(result: AccountMutationResult, successText: string): Not
     case 'self_target':
       return { tone: 'warning', text: C.selfLocked };
     case 'protected_target':
-      return { tone: 'warning', text: C.ownerRecoveryRequired };
+      return { tone: 'warning', text: protectedText };
     case 'invalid':
       return { tone: 'failure', text: result.reason === 'pin_format' ? C.pinFormat : 'กรุณากรอกข้อมูลให้ครบถ้วน' };
     case 'busy':
@@ -125,7 +144,7 @@ function mutationNotice(result: AccountMutationResult, successText: string): Not
   }
 }
 
-function reissueNotice(result: ReissueOacResult, displayName: string): Notice {
+function reissueNotice(result: ReissueOacResult, displayName: string, protectedText: string): Notice {
   switch (result.kind) {
     case 'provisioned':
       return { tone: 'success', text: C.oacReissueSuccess };
@@ -145,7 +164,7 @@ function reissueNotice(result: ReissueOacResult, displayName: string): Notice {
     case 'self_target':
       return { tone: 'warning', text: C.selfLocked };
     case 'protected_target':
-      return { tone: 'warning', text: C.ownerRecoveryRequired };
+      return { tone: 'warning', text: protectedText };
     case 'invalid':
       return { tone: 'failure', text: C.pinFormat };
     default:
@@ -153,7 +172,7 @@ function reissueNotice(result: ReissueOacResult, displayName: string): Notice {
   }
 }
 
-function lockoutNotice(result: LockoutClearResult): Notice {
+function lockoutNotice(result: LockoutClearResult, protectedText: string): Notice {
   switch (result.kind) {
     case 'recovered':
       return { tone: 'success', text: C.lockoutSuccess };
@@ -166,7 +185,7 @@ function lockoutNotice(result: LockoutClearResult): Notice {
     case 'self_target':
       return { tone: 'warning', text: C.selfLocked };
     case 'protected_target':
-      return { tone: 'warning', text: C.ownerRecoveryRequired };
+      return { tone: 'warning', text: protectedText };
     default:
       return { tone: 'failure', text: C.lockoutFailure };
   }
@@ -406,8 +425,10 @@ export default function AdminSecurityCenter({
                 <TableBody>
                   {users.map((u) => {
                     const self = u.userId === operator?.id;
-                    // Security Admin / unclassified admin rows are read-only (D-ASC9).
-                    const readOnly = isProtectedAdminTarget(u);
+                    // Security Admin, password-backed staff / manager and unclassified
+                    // rows are read-only (D-ASC9 / D-ASC13): any mutation would bump
+                    // authVersion and strand static password claims.
+                    const readOnly = isProtectedAccountTarget(u);
                     const roleView = roleDisplay(u);
                     const approver = isApproverRole(u.role);
                     const cap = approver ? capabilityOf(u) : null;
@@ -430,6 +451,11 @@ export default function AdminSecurityCenter({
                             <div className="text-xs text-gray-500" data-testid="admin-role-hint">
                               {roleView.hint}
                             </div>
+                          ) : null}
+                          {u.role !== 'admin' && u.accountAuthClassification === 'PASSWORD_PRINCIPAL' ? (
+                            <Badge color="gray" className="mt-1 w-fit" data-testid="admin-password-principal-badge">
+                              {C.passwordPrincipalBadge}
+                            </Badge>
                           ) : null}
                         </TableCell>
                         <TableCell>{u.branchIds.map(branchLabel).join(', ') || '—'}</TableCell>
@@ -468,7 +494,7 @@ export default function AdminSecurityCenter({
                         <TableCell>
                           {readOnly ? (
                             <span className="text-xs text-gray-500" data-testid="admin-row-readonly">
-                              {u.securityAdminClassification === 'PASSWORD_ADMIN' ? C.ownerRecoveryManaged : C.adminUnknownReadOnly}
+                              {readOnlyCopy(u)}
                             </span>
                           ) : self ? (
                             <span className="text-xs text-gray-500">{C.selfLocked}</span>
@@ -505,7 +531,7 @@ export default function AdminSecurityCenter({
                                   u.isActive
                                     ? setDialog({ kind: 'toggle', user: u })
                                     : void runAction(async () =>
-                                        mutationNotice(await setAdminUserActive(operator, u, true, service), C.userEnabled),
+                                        mutationNotice(await setAdminUserActive(operator, u, true, service), C.userEnabled, protectedTargetCopy(u)),
                                       )
                                 }
                               >
@@ -575,7 +601,11 @@ export default function AdminSecurityCenter({
                 return mutationNotice(await createAdminUser(operator, values, service), C.userCreated);
               }
               const res = await updateAdminUser(operator, active.user, values, service);
-              return mutationNotice(res, isApproverRole(active.user.role) ? `${C.saved} — ต้องออกสิทธิ์ Offline ใหม่` : C.saved);
+              return mutationNotice(
+                res,
+                isApproverRole(active.user.role) ? `${C.saved} — ต้องออกสิทธิ์ Offline ใหม่` : C.saved,
+                protectedTargetCopy(active.user),
+              );
             })
           }
         />
@@ -592,6 +622,7 @@ export default function AdminSecurityCenter({
               mutationNotice(
                 await rotateAdminUserPin(operator, active.user, pin, service),
                 isApproverRole(active.user.role) ? C.pinRotated : C.pinRotatedStaff,
+                protectedTargetCopy(active.user),
               ),
             )
           }
@@ -607,7 +638,11 @@ export default function AdminSecurityCenter({
           onCancel={() => setDialog(null)}
           onConfirm={() =>
             void runAction(async () =>
-              mutationNotice(await setAdminUserActive(operator, active.user, false, service), C.userDisabled),
+              mutationNotice(
+                await setAdminUserActive(operator, active.user, false, service),
+                C.userDisabled,
+                protectedTargetCopy(active.user),
+              ),
             )
           }
         />
@@ -627,6 +662,7 @@ export default function AdminSecurityCenter({
                   ...service,
                   lockoutDeps: { invoke, ...service?.lockoutDeps },
                 }),
+                protectedTargetCopy(active.user),
               ),
             )
           }
@@ -669,6 +705,7 @@ export default function AdminSecurityCenter({
                   provisionDeps: { invoke, ...service?.provisionDeps },
                 }),
                 activeName,
+                protectedTargetCopy(active.user),
               ),
             )
           }

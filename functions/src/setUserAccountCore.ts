@@ -21,18 +21,21 @@ const BCRYPT_COST = 10;
 const PIN_RE = /^\d{4}$/;
 
 /**
- * D-ASC8 / D-ASC11 staff-callable guard. When present, a target whose LIVE
- * `users.role` is `admin`, or a command that would SET `role=admin`, may
- * proceed only if the target is the one uid the callable pre-classified as a
- * POS (Quick PIN) admin; anything else is refused inside the transaction
- * before any write (this also closes a role-change race after
- * classification and a promotion without classification). `operator_cli` never
- * carries it, so the reviewed recovery route is unchanged.
+ * D-ASC8 / D-ASC11 / D-ASC12 staff-callable guard. A staff actor may mutate
+ * an EXISTING account (every handler below except `create` — each bumps the
+ * target's `authVersion`) only when that exact uid is the one the callable
+ * pre-classified, via Firebase Auth, as Quick-PIN-only (no Auth user at all).
+ * Anything else — no guard, a null clearance, or a clearance for another uid
+ * — is refused inside the transaction before any write. This covers live and
+ * resulting `role=admin` targets (D-ASC8 / D-ASC11) and staff / manager
+ * targets (D-ASC12) alike, so the pre-transaction Auth lookup is never the
+ * only fence. `operator_cli` never carries it, so the reviewed recovery
+ * route is unchanged.
  */
-export type AdminTargetGuard = { clearedPosAdminTargetId: string | null };
+export type AccountTargetGuard = { clearedQuickPinOnlyTargetId: string | null };
 
 export type SetUserAccountActor =
-  | { kind: 'staff'; staffId: string; authVersion: number; adminTargetGuard?: AdminTargetGuard }
+  | { kind: 'staff'; staffId: string; authVersion: number; targetGuard: AccountTargetGuard }
   | { kind: 'operator_cli' };
 
 export type SetUserAccountOp =
@@ -80,6 +83,7 @@ export type SetUserAccountStatus =
   | 'reservations_incomplete'
   | 'unauthorized'
   | 'protected_admin_target'
+  | 'protected_account_target'
   | 'not_found'
   | 'invalid_argument';
 
@@ -157,20 +161,24 @@ async function assertActor(
 
 /**
  * `resultingRole` is the role this command is about to assign (only
- * `updateProfile` assigns one). D-ASC11: a live admin target OR a command
- * that would make the target an admin both require the exact uid to have
- * been pre-cleared as POS_ADMIN.
+ * `updateProfile` assigns one). A staff actor needs the exact target uid
+ * pre-cleared as Quick-PIN-only; an uncleared admin target (live or
+ * resulting `role=admin`) reports `protected_admin_target`, any other
+ * uncleared target `protected_account_target`.
  */
-function protectedAdminTargetRefusal(
+function unclearedTargetRefusal(
   actor: SetUserAccountActor,
   userId: string,
   live: DocumentData,
   resultingRole?: unknown,
 ): SetUserAccountResult | null {
-  if (actor.kind !== 'staff' || !actor.adminTargetGuard) return null;
-  if (live.role !== 'admin' && resultingRole !== 'admin') return null;
-  if (actor.adminTargetGuard.clearedPosAdminTargetId === userId) return null;
-  return invalid('protected_admin_target', 'บัญชีผู้ดูแลระบบนี้ไม่สามารถแก้ไขจากหน้านี้ได้');
+  if (actor.kind !== 'staff') return null;
+  const cleared = actor.targetGuard?.clearedQuickPinOnlyTargetId ?? null;
+  if (cleared !== null && cleared === userId) return null;
+  if (live.role === 'admin' || resultingRole === 'admin') {
+    return invalid('protected_admin_target', 'บัญชีผู้ดูแลระบบนี้ไม่สามารถแก้ไขจากหน้านี้ได้');
+  }
+  return invalid('protected_account_target', 'บัญชีนี้ไม่สามารถแก้ไขจากหน้านี้ได้');
 }
 
 function actorIdOf(actor: SetUserAccountActor): string {
@@ -372,7 +380,7 @@ async function handleRotate(
   const userRef = database.collection(COLLECTIONS.users).doc(userId);
   const userSnap = await tx.get(userRef);
   if (!userSnap.exists) return invalid('not_found', 'ไม่พบผู้ใช้');
-  const protectedRefusal = protectedAdminTargetRefusal(actor, userId, asUser(userSnap.data()));
+  const protectedRefusal = unclearedTargetRefusal(actor, userId, asUser(userSnap.data()));
   if (protectedRefusal) return protectedRefusal;
 
   const credRef = database.collection(COLLECTIONS.userCredentials).doc(userId);
@@ -436,7 +444,7 @@ async function handleUpdateProfile(
   const userRef = database.collection(COLLECTIONS.users).doc(userId);
   const userSnap = await tx.get(userRef);
   if (!userSnap.exists) return invalid('not_found', 'ไม่พบผู้ใช้');
-  const protectedRefusal = protectedAdminTargetRefusal(actor, userId, asUser(userSnap.data()), cmd.role);
+  const protectedRefusal = unclearedTargetRefusal(actor, userId, asUser(userSnap.data()), cmd.role);
   if (protectedRefusal) return protectedRefusal;
   const patch: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() };
   if (typeof cmd.firstName === 'string') patch.firstName = cmd.firstName.trim();
@@ -490,7 +498,7 @@ async function handleSetActive(
   const userRef = database.collection(COLLECTIONS.users).doc(userId);
   const userSnap = await tx.get(userRef);
   if (!userSnap.exists) return invalid('not_found', 'ไม่พบผู้ใช้');
-  const protectedRefusal = protectedAdminTargetRefusal(actor, userId, asUser(userSnap.data()));
+  const protectedRefusal = unclearedTargetRefusal(actor, userId, asUser(userSnap.data()));
   if (protectedRefusal) return protectedRefusal;
   tx.update(userRef, {
     isActive: cmd.isActive === true,
@@ -524,7 +532,7 @@ async function handleSoftDelete(
   const userRef = database.collection(COLLECTIONS.users).doc(userId);
   const userSnap = await tx.get(userRef);
   if (!userSnap.exists) return invalid('not_found', 'ไม่พบผู้ใช้');
-  const protectedRefusal = protectedAdminTargetRefusal(actor, userId, asUser(userSnap.data()));
+  const protectedRefusal = unclearedTargetRefusal(actor, userId, asUser(userSnap.data()));
   if (protectedRefusal) return protectedRefusal;
   const username = normalizeUsername(String(asUser(userSnap.data()).username ?? ''));
   const unameRef = username ? database.collection(COLLECTIONS.usernames).doc(username) : null;
@@ -570,7 +578,7 @@ async function handleRename(
   const userRef = database.collection(COLLECTIONS.users).doc(userId);
   const userSnap = await tx.get(userRef);
   if (!userSnap.exists) return invalid('not_found', 'ไม่พบผู้ใช้');
-  const protectedRefusal = protectedAdminTargetRefusal(actor, userId, asUser(userSnap.data()));
+  const protectedRefusal = unclearedTargetRefusal(actor, userId, asUser(userSnap.data()));
   if (protectedRefusal) return protectedRefusal;
   const current = normalizeUsername(String(asUser(userSnap.data()).username ?? ''));
   if (current === newUsername) {

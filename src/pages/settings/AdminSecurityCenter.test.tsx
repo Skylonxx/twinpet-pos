@@ -21,20 +21,31 @@ import { cloneDefaultMatrix } from '../../lib/staffManagement/types';
 const ADMIN = { id: 'uid-admin-self', role: 'admin' };
 const PIN = '4826';
 
+const QPO = { accountAuthClassification: 'QUICK_PIN_ONLY' };
 const USERS = [
-  { userId: 'uid-admin-self', firstName: 'Ad', lastName: 'Min', username: 'admin', role: 'admin', branchIds: ['ALL'], isActive: true, authVersion: 2, quickPinState: 'set', securityAdminClassification: 'PASSWORD_ADMIN' },
-  { userId: 'uid-ready-1', firstName: 'Nara', lastName: 'Ready', username: 'nara', role: 'manager', branchIds: ['LDP-001'], isActive: true, authVersion: 3, quickPinState: 'set' },
-  { userId: 'uid-locked-1', firstName: 'Lock', lastName: 'Ed', username: 'locked', role: 'manager', branchIds: ['LDP-001'], isActive: true, authVersion: 1, quickPinState: 'set' },
-  { userId: 'uid-missing-1', firstName: 'Mana', lastName: 'Missing', username: 'mana', role: 'manager', branchIds: ['LDP-001'], isActive: true, authVersion: 1, quickPinState: 'set' },
-  { userId: 'uid-staff-1', firstName: 'Som', lastName: 'Staff', username: 'som', role: 'staff', branchIds: ['LDP-001'], isActive: true, authVersion: 0, quickPinState: 'required' },
+  { userId: 'uid-admin-self', firstName: 'Ad', lastName: 'Min', username: 'admin', role: 'admin', branchIds: ['ALL'], isActive: true, authVersion: 2, quickPinState: 'set', securityAdminClassification: 'PASSWORD_ADMIN', accountAuthClassification: 'PASSWORD_PRINCIPAL' },
+  { userId: 'uid-ready-1', firstName: 'Nara', lastName: 'Ready', username: 'nara', role: 'manager', branchIds: ['LDP-001'], isActive: true, authVersion: 3, quickPinState: 'set', ...QPO },
+  { userId: 'uid-locked-1', firstName: 'Lock', lastName: 'Ed', username: 'locked', role: 'manager', branchIds: ['LDP-001'], isActive: true, authVersion: 1, quickPinState: 'set', ...QPO },
+  { userId: 'uid-missing-1', firstName: 'Mana', lastName: 'Missing', username: 'mana', role: 'manager', branchIds: ['LDP-001'], isActive: true, authVersion: 1, quickPinState: 'set', ...QPO },
+  { userId: 'uid-staff-1', firstName: 'Som', lastName: 'Staff', username: 'som', role: 'staff', branchIds: ['LDP-001'], isActive: true, authVersion: 0, quickPinState: 'required', ...QPO },
 ];
 
 // D-ASC9 fixtures: another Security Admin, a POS (Quick PIN) admin and an admin the server could not classify.
 const ADMIN_USERS = [
   ...USERS,
-  { userId: 'uid-secadmin-2', firstName: 'Sec', lastName: 'Two', username: 'secadmin', role: 'admin', branchIds: ['ALL'], isActive: true, authVersion: 4, quickPinState: 'set', securityAdminClassification: 'PASSWORD_ADMIN' },
-  { userId: 'uid-posadmin-1', firstName: 'Pos', lastName: 'Admin', username: 'posadmin', role: 'admin', branchIds: ['LDP-001'], isActive: true, authVersion: 1, quickPinState: 'set', securityAdminClassification: 'POS_ADMIN' },
-  { userId: 'uid-unknown-admin', firstName: 'Unk', lastName: 'Nown', username: 'unknown', role: 'admin', branchIds: ['LDP-001'], isActive: false, authVersion: 1, quickPinState: 'set', securityAdminClassification: 'UNKNOWN' },
+  { userId: 'uid-secadmin-2', firstName: 'Sec', lastName: 'Two', username: 'secadmin', role: 'admin', branchIds: ['ALL'], isActive: true, authVersion: 4, quickPinState: 'set', securityAdminClassification: 'PASSWORD_ADMIN', accountAuthClassification: 'PASSWORD_PRINCIPAL' },
+  { userId: 'uid-posadmin-1', firstName: 'Pos', lastName: 'Admin', username: 'posadmin', role: 'admin', branchIds: ['LDP-001'], isActive: true, authVersion: 1, quickPinState: 'set', securityAdminClassification: 'POS_ADMIN', ...QPO },
+  { userId: 'uid-unknown-admin', firstName: 'Unk', lastName: 'Nown', username: 'unknown', role: 'admin', branchIds: ['LDP-001'], isActive: false, authVersion: 1, quickPinState: 'set', securityAdminClassification: 'UNKNOWN', accountAuthClassification: 'UNKNOWN' },
+];
+
+// D-ASC12/D-ASC13 fixtures: password-backed and unclassified staff / managers.
+const PROTECTED_USERS = [
+  ...USERS,
+  { userId: 'uid-pw-mgr-1', firstName: 'Pass', lastName: 'Manager', username: 'pwmgr', role: 'manager', branchIds: ['LDP-001'], isActive: true, authVersion: 3, quickPinState: 'set', accountAuthClassification: 'PASSWORD_PRINCIPAL' },
+  { userId: 'uid-pw-mgr-locked', firstName: 'Pass', lastName: 'Locked', username: 'pwlocked', role: 'manager', branchIds: ['LDP-001'], isActive: true, authVersion: 1, quickPinState: 'set', accountAuthClassification: 'PASSWORD_PRINCIPAL' },
+  { userId: 'uid-pw-staff-1', firstName: 'Pass', lastName: 'Staff', username: 'pwstaff', role: 'staff', branchIds: ['LDP-001'], isActive: false, authVersion: 0, quickPinState: 'set', accountAuthClassification: 'PASSWORD_PRINCIPAL' },
+  { userId: 'uid-unk-mgr-1', firstName: 'Unk', lastName: 'Manager', username: 'unkmgr', role: 'manager', branchIds: ['LDP-001'], isActive: true, authVersion: 3, quickPinState: 'set', accountAuthClassification: 'UNKNOWN' },
+  { userId: 'uid-unk-staff-1', firstName: 'Unk', lastName: 'Staff', username: 'unkstaff', role: 'staff', branchIds: ['LDP-001'], isActive: true, authVersion: 0, quickPinState: 'set' },
 ];
 
 function nativeStatusFor(id: string) {
@@ -49,7 +60,7 @@ function nativeStatusFor(id: string) {
     consecutiveFailedAttempts: 0,
     maxFailedAttempts: 5,
   };
-  if (id === 'uid-locked-1') return { ...base, lockedOut: true, consecutiveFailedAttempts: 5, authVersionAtIssue: 1 };
+  if (id === 'uid-locked-1' || id === 'uid-pw-mgr-locked') return { ...base, lockedOut: true, consecutiveFailedAttempts: 5, authVersionAtIssue: 1 };
   if (id === 'uid-missing-1') return { ...base, capability: 'MISSING', branchId: null, authVersionAtIssue: null };
   return base;
 }
@@ -521,4 +532,101 @@ describe('AdminSecurityCenter — source hygiene', () => {
       expect(src, file).not.toMatch(/orders|payments|stockMovements|productStocks|submitPrivilegedVoid|softDelete/);
     }
   });
+});
+
+describe('AdminSecurityCenter — D-ASC13 password-backed / unclassified staff & manager rows', () => {
+  const MUTATION_LABELS = ['แก้ไขผู้ใช้', 'เปลี่ยน Quick PIN', 'ปลดล็อกสิทธิ์อนุมัติ', 'ออกสิทธิ์ Offline ใหม่', 'ปิดใช้งาน', 'เปิดใช้งาน'];
+  function mutationButtons(row: HTMLElement): string[] {
+    return within(row)
+      .queryAllByRole('button')
+      .map((b) => b.textContent ?? '')
+      .filter((t) => MUTATION_LABELS.includes(t));
+  }
+
+  for (const branchId of ['LDP-001', 'ALL']) {
+    it(`branchId=${branchId}: password-backed rows are marked username/password, read-only, Owner Recovery`, async () => {
+      const h = setup({}, { users: PROTECTED_USERS, branchId });
+      for (const name of ['Pass Manager', 'Pass Locked', 'Pass Staff']) {
+        const row = await rowFor(name);
+        expect(within(row).getByTestId('admin-password-principal-badge').textContent).toBe('username/password');
+        expect(within(row).getByTestId('admin-row-readonly').textContent).toBe('จัดการผ่าน Owner Recovery');
+        expect(mutationButtons(row)).toEqual([]); // no edit / PIN / enable-disable / OAC reissue / lockout clear
+      }
+      expect(within(await rowFor('Pass Manager')).getByTestId('admin-role-label').textContent).toBe('ผู้จัดการ');
+      expect(within(await rowFor('Pass Staff')).getByTestId('admin-role-label').textContent).toBe('พนักงาน');
+      expect(h.callSetUserAccount).not.toHaveBeenCalled();
+      expect(h.revokeOac).not.toHaveBeenCalled();
+      expect(h.provision).not.toHaveBeenCalled();
+      expect(h.runLockoutRecovery).not.toHaveBeenCalled();
+      expect(document.body.innerHTML).not.toMatch(/@|providerId|email|PASSWORD_PRINCIPAL|uid-/);
+    });
+  }
+
+  it('a password-backed manager keeps a safe read-only approval status but gets no lockout clear or reissue', async () => {
+    setup({}, { users: PROTECTED_USERS });
+    await waitFor(() => expect(screen.getAllByTestId('admin-oac-state').length).toBeGreaterThanOrEqual(6));
+    const locked = await rowFor('Pass Locked');
+    expect(within(locked).getByTestId('admin-oac-state').textContent).toBe('ถูกล็อก');
+    expect(within(locked).getByTestId('admin-lockout-state').textContent).toBe('ถูกล็อกบนเครื่องนี้');
+    expect(within(locked).queryByText('ปลดล็อกสิทธิ์อนุมัติ')).toBeNull();
+    const ready = await rowFor('Pass Manager');
+    expect(within(ready).getByTestId('admin-oac-state').textContent).toBe('พร้อมใช้');
+    expect(within(ready).queryByText('ออกสิทธิ์ Offline ใหม่')).toBeNull();
+  });
+
+  it('UNKNOWN staff / manager rows are read-only with the fail-closed copy and no badge', async () => {
+    const h = setup({}, { users: PROTECTED_USERS });
+    for (const name of ['Unk Manager', 'Unk Staff']) {
+      const row = await rowFor(name);
+      expect(within(row).getByTestId('admin-row-readonly').textContent).toBe('ยืนยันประเภทบัญชีไม่ได้ — ลองโหลดใหม่ภายหลัง');
+      expect(within(row).queryByTestId('admin-password-principal-badge')).toBeNull();
+      expect(mutationButtons(row)).toEqual([]);
+    }
+    expect(h.callSetUserAccount).not.toHaveBeenCalled();
+  });
+
+  it('Quick-PIN-only staff / manager rows keep their normal actions and carry no username/password badge', async () => {
+    setup({}, { users: PROTECTED_USERS });
+    const locked = await rowFor('Lock Ed');
+    await waitFor(() => expect(within(locked).getByText('ปลดล็อกสิทธิ์อนุมัติ')).toBeTruthy());
+    expect(mutationButtons(locked)).toEqual(expect.arrayContaining(['แก้ไขผู้ใช้', 'เปลี่ยน Quick PIN', 'ปลดล็อกสิทธิ์อนุมัติ', 'ปิดใช้งาน']));
+    const missing = await rowFor('Mana Missing');
+    expect(mutationButtons(missing)).toEqual(expect.arrayContaining(['แก้ไขผู้ใช้', 'เปลี่ยน Quick PIN', 'ออกสิทธิ์ Offline ใหม่', 'ปิดใช้งาน']));
+    const staff = await rowFor('Som Staff');
+    expect(mutationButtons(staff)).toEqual(['แก้ไขผู้ใช้', 'เปลี่ยน Quick PIN', 'ปิดใช้งาน']);
+    for (const row of [locked, missing, staff]) {
+      expect(within(row).queryByTestId('admin-password-principal-badge')).toBeNull();
+      expect(within(row).queryByTestId('admin-row-readonly')).toBeNull();
+    }
+  });
+
+  it('admin rows are unchanged: no username/password badge on Security Admin / POS Admin / UNKNOWN admin', async () => {
+    setup({}, { users: ADMIN_USERS });
+    for (const name of ['Sec Two', 'Pos Admin', 'Unk Nown', 'Ad Min']) {
+      expect(within(await rowFor(name)).queryByTestId('admin-password-principal-badge')).toBeNull();
+    }
+    expect(within(await rowFor('Unk Nown')).getByTestId('admin-row-readonly').textContent).toBe('อ่านอย่างเดียว — ลองโหลดใหม่ภายหลัง');
+  });
+
+  for (const message of [
+    'บัญชีนี้มีการเข้าสู่ระบบด้วย username/password จึงต้องจัดการผ่าน Owner Recovery',
+    'ไม่สามารถยืนยันประเภทการเข้าสู่ระบบของบัญชีนี้ได้ จึงยังไม่บันทึกการเปลี่ยนแปลง กรุณาลองใหม่ภายหลัง',
+  ]) {
+    it(`a definite server refusal on a stale Quick-PIN-only row is shown verbatim and revokes no local OAC: ${message.slice(0, 24)}…`, async () => {
+      const { SetUserAccountError } = await import('../../lib/auth/setUserAccount');
+      const callSetUserAccount = vi.fn(async () => {
+        throw new SetUserAccountError(message, 'functions/failed-precondition');
+      });
+      const h = setup({ callSetUserAccount });
+      fireEvent.click(within(await rowFor('Nara Ready')).getByText('เปลี่ยน Quick PIN'));
+      const dialog = await screen.findByTestId('admin-change-pin-dialog');
+      fireEvent.change(within(dialog).getByLabelText('PIN ใหม่'), { target: { value: PIN } });
+      fireEvent.change(within(dialog).getByLabelText('ยืนยัน PIN ใหม่'), { target: { value: PIN } });
+      fireEvent.click(within(dialog).getByRole('button', { name: 'เปลี่ยน Quick PIN' }));
+      expect(await screen.findByText(message)).toBeTruthy();
+      expect(callSetUserAccount).toHaveBeenCalledTimes(1);
+      expect(h.revokeOac).not.toHaveBeenCalled();
+      expect(document.body.innerHTML).not.toContain(PIN);
+    });
+  }
 });

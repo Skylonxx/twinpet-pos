@@ -10,10 +10,12 @@
  *   - users (not soft-deleted): names, username, role, branch access, active
  *     flag, live authVersion (to detect a stale local OAC binding), and a
  *     coarse Quick PIN state `set` | `required` derived server-side from
- *     `userCredentials` — never the PIN, hash, cost, salt or version — and,
- *     for `role=admin` only, a coarse `securityAdminClassification`
- *     (PASSWORD_ADMIN / POS_ADMIN / UNKNOWN, see adminTargetClassification)
- *     — never an email, provider payload, token or claim;
+ *     `userCredentials` — never the PIN, hash, cost, salt or version — a
+ *     coarse `accountAuthClassification` for EVERY user (QUICK_PIN_ONLY /
+ *     PASSWORD_PRINCIPAL / UNKNOWN, D-ASC13) and, for `role=admin` only, the
+ *     same answer as `securityAdminClassification` (PASSWORD_ADMIN /
+ *     POS_ADMIN / UNKNOWN, see adminTargetClassification) — never an email,
+ *     provider payload, token or claim;
  *   - the most recent `securityAuditEvents` (server-authored only).
  * Performs no writes.
  */
@@ -24,8 +26,10 @@ import { FUNCTIONS_REGION } from './deployConfig';
 import { evaluateFreshPrivilegedAuthority, type AuthLike } from './authorityFence';
 import { isPrimaryPasswordPrincipal } from './adminPasswordPrincipal';
 import {
-  classifyAdminTargets,
+  classifyAccountTargets,
   defaultAdminAuthLookup,
+  toSecurityAdminClassification,
+  type AccountAuthClassification,
   type AdminAuthLookup,
   type SecurityAdminClassification,
 } from './adminTargetClassification';
@@ -44,6 +48,8 @@ export type AdminSecurityOverviewUser = {
   isActive: boolean;
   authVersion: number;
   quickPinState: 'set' | 'required';
+  /** Every role. Only QUICK_PIN_ONLY is mutable; anything else renders read-only. */
+  accountAuthClassification: AccountAuthClassification;
   /** `null` for non-admin roles. UNKNOWN must be rendered fail-closed (read-only). */
   securityAdminClassification: SecurityAdminClassification | null;
 };
@@ -88,10 +94,11 @@ function projectUser(
   id: string,
   data: DocumentData,
   quickPinState: 'set' | 'required',
-  adminClasses: Map<string, SecurityAdminClassification>,
+  accountClasses: Map<string, AccountAuthClassification>,
 ): AdminSecurityOverviewUser | null {
   if (data.deletedAt != null) return null;
   if (!ROLES.has(data.role)) return null;
+  const accountAuthClassification = accountClasses.get(id) ?? 'UNKNOWN';
   return {
     userId: id,
     firstName: str(data.firstName),
@@ -102,7 +109,8 @@ function projectUser(
     isActive: data.isActive === true,
     authVersion: typeof data.authVersion === 'number' && Number.isFinite(data.authVersion) ? data.authVersion : 0,
     quickPinState,
-    securityAdminClassification: data.role === 'admin' ? (adminClasses.get(id) ?? 'UNKNOWN') : null,
+    accountAuthClassification,
+    securityAdminClassification: data.role === 'admin' ? toSecurityAdminClassification(accountAuthClassification) : null,
   };
 }
 
@@ -135,14 +143,17 @@ export async function performGetAdminSecurityOverview(
 
   const usersSnap = await database.collection(COLLECTIONS.users).get();
   const liveDocs = usersSnap.docs.filter((doc) => ((doc.data() ?? {}) as DocumentData).deletedAt == null);
-  // Only live role=admin uids are looked up in Firebase Auth (one batched call).
-  const adminIds = liveDocs.filter((doc) => ((doc.data() ?? {}) as DocumentData).role === 'admin').map((doc) => doc.id);
-  const adminClasses = await classifyAdminTargets(adminIds, lookupAuth);
+  // D-ASC13: every live uid is classified in Firebase Auth (batched ≤100 per
+  // call), so password-backed staff / managers render read-only too.
+  const accountClasses = await classifyAccountTargets(
+    liveDocs.map((doc) => doc.id),
+    lookupAuth,
+  );
   const projectedUsers = await Promise.all(
     liveDocs.map(async (doc) => {
       const cred = await readUserCredential(database, doc.id);
       const quickPinState = isUsableForLogin(cred) && isAuthoritativeRotated(cred) ? 'set' : 'required';
-      return projectUser(doc.id, (doc.data() ?? {}) as DocumentData, quickPinState, adminClasses);
+      return projectUser(doc.id, (doc.data() ?? {}) as DocumentData, quickPinState, accountClasses);
     }),
   );
   const users = projectedUsers.filter((u): u is AdminSecurityOverviewUser => u !== null);

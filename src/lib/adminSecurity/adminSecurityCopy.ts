@@ -33,6 +33,12 @@ export const ADMIN_SECURITY_COPY = {
   ownerRecoveryManaged: 'จัดการผ่าน Owner Recovery',
   ownerRecoveryRequired: 'บัญชีผู้ดูแลระบบหลักต้องจัดการผ่าน Owner Recovery',
   adminUnknownReadOnly: 'อ่านอย่างเดียว — ลองโหลดใหม่ภายหลัง',
+  // D-ASC12/D-ASC13 — password-backed / unclassified staff & manager rows.
+  passwordPrincipalBadge: 'username/password',
+  passwordPrincipalOwnerRecoveryRequired: 'บัญชีนี้มีการเข้าสู่ระบบด้วย username/password จึงต้องจัดการผ่าน Owner Recovery',
+  accountUnknownReadOnly: 'ยืนยันประเภทบัญชีไม่ได้ — ลองโหลดใหม่ภายหลัง',
+  accountClassificationUnavailable:
+    'ไม่สามารถยืนยันประเภทการเข้าสู่ระบบของบัญชีนี้ได้ จึงยังไม่บันทึกการเปลี่ยนแปลง กรุณาลองใหม่ภายหลัง',
   posAdminCreateWarning: 'บัญชีนี้ใช้ Quick PIN สำหรับงาน POS และไม่ใช่ Security Admin แบบ username/password',
   // D-ASC11 — editing an existing staff/manager into role=admin.
   posAdminPromoteWarning:
