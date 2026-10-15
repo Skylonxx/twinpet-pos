@@ -30,6 +30,7 @@ import {
   decideLiveRolePermission,
   firestoreStagedRoleDenyHeadReader,
   liveRoleHoldsPosVoid,
+  liveRoleHoldsVoidRequesterPermission,
   readRolePermissionsDoc,
   type RolePermissionsDocSnapshot,
   type RolePermissionsReader,
@@ -38,6 +39,7 @@ import {
 } from './privilegedActionAuthority';
 import {
   PRIVILEGED_OFFLINE_ADJUDICATIONS_COLLECTION,
+  PRIVILEGED_APPROVER_PERMISSION,
   PRIVILEGED_REQUESTER_PERMISSION,
   PRIVILEGED_VOID_AUDIENCE,
   OFFLINE_ADJUDICATION_PROTOCOL_REASON_RECOVERABILITY,
@@ -730,11 +732,25 @@ export function relayBranchEligible(role: string | null, branchIds: string[], br
 type LinearizedStagedDeny = { malformed: true } | { malformed: false; head: StagedRoleDenyHead | null };
 
 /**
- * The live `pos_void` decision for a role, evaluated against snapshots already
- * enrolled in the transaction's read set. Reuses `decideLiveRolePermission`
- * verbatim — the matrix semantics are never restated here.
+ * The live APPROVER decision (`pos_void`) for a role, evaluated against
+ * snapshots already enrolled in the transaction's read set. Reuses
+ * `decideLiveRolePermission` verbatim — the matrix semantics are never restated
+ * here.
  */
 function linearizedRoleHoldsPosVoid(
+  role: string | null,
+  snapshot: RolePermissionsDocSnapshot,
+  staged: LinearizedStagedDeny,
+): boolean {
+  if (staged.malformed) return false;
+  return decideLiveRolePermission(role, PRIVILEGED_APPROVER_PERMISSION, snapshot, staged.head).allowed;
+}
+
+/**
+ * The live REQUESTER decision (`pos_sale`, D-VOID-REQ-1) for the original
+ * initiating staff, against the same transactional snapshots.
+ */
+function linearizedRoleHoldsVoidRequesterPermission(
   role: string | null,
   snapshot: RolePermissionsDocSnapshot,
   staged: LinearizedStagedDeny,
@@ -844,13 +860,13 @@ export async function performAdjudicateOfflinePrivilegedAction(
     if (callerRole !== 'admin' && callerRole !== 'manager' && callerRole !== 'staff') {
       return protocolRejected('relay_caller_not_authorized');
     }
-    const callerHasVoid = await liveRoleHoldsPosVoid(
+    const callerMaySell = await liveRoleHoldsVoidRequesterPermission(
       database,
       callerRole,
       deps.readRolePermissions,
       deps.readStagedDenyHead,
     );
-    if (!callerHasVoid) return protocolRejected('relay_caller_not_authorized');
+    if (!callerMaySell) return protocolRejected('relay_caller_not_authorized');
     callerBranchIds = liveBranchIds(caller);
   } catch {
     return protocolRetryable('backend_unavailable');
@@ -1306,13 +1322,13 @@ export async function performAdjudicateOfflinePrivilegedAction(
     if (initiatorAuthVersion !== paa1.ssa1AuthVersionAtIssue) {
       return await terminalize('initiator_auth_version_changed');
     }
-    const initiatorHasVoid = await liveRoleHoldsPosVoid(
+    const initiatorMaySell = await liveRoleHoldsVoidRequesterPermission(
       database,
       initiatorRole,
       deps.readRolePermissions,
       deps.readStagedDenyHead,
     );
-    if (!initiatorHasVoid) return await terminalize('initiator_permission_revoked');
+    if (!initiatorMaySell) return await terminalize('initiator_permission_revoked');
     if (!relayBranchEligible(initiatorRole, liveBranchIds(initiator), paa1.branchId)) {
       return await terminalize('initiator_branch_mismatch');
     }
@@ -1519,7 +1535,7 @@ export async function performAdjudicateOfflinePrivilegedAction(
         } else if (liveAuthVersion(freshInitiator) !== paa1.ssa1AuthVersionAtIssue) {
           terminalizedInTransaction = 'initiator_auth_version_changed';
         } else if (
-          !linearizedRoleHoldsPosVoid(freshInitiatorRole, freshRolePermissions, freshInitiatorStagedDeny)
+          !linearizedRoleHoldsVoidRequesterPermission(freshInitiatorRole, freshRolePermissions, freshInitiatorStagedDeny)
         ) {
           terminalizedInTransaction = 'initiator_permission_revoked';
         } else if (!relayBranchEligible(freshInitiatorRole, liveBranchIds(freshInitiator), paa1.branchId)) {

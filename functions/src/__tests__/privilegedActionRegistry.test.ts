@@ -70,13 +70,13 @@ const validEvidence = {
 };
 
 describe('ACTION_REQUIREMENTS allowlist', () => {
-  test('registers only current void actions with privilegedVoid and pos_void', () => {
+  test('registers only current void actions with privilegedVoid; requester pos_sale, approver pos_void (D-VOID-REQ-1)', () => {
     expect([...PRIVILEGED_ACTION_IDS]).toEqual(['VOID_PENDING_SALE', 'VOID_SETTLED_SALE']);
     expect(isPrivilegedActionId('RETURN')).toBe(false);
     expect(getActionRequirement('RETURN')).toBeNull();
     expect(getActionRequirement('VOID_PENDING_SALE')).toEqual({
       audience: PRIVILEGED_VOID_AUDIENCE,
-      requesterPermission: 'pos_void',
+      requesterPermission: 'pos_sale',
       approverPermission: 'pos_void',
       approverRoles: ['manager', 'admin'],
       exactBranchRequired: true,
@@ -100,14 +100,14 @@ describe('ACTION_REQUIREMENTS allowlist', () => {
       requirements: {
         VOID_PENDING_SALE: {
           audience: PRIVILEGED_VOID_AUDIENCE,
-          requesterPermission: 'pos_void',
+          requesterPermission: 'pos_sale',
           approverPermission: 'pos_void',
           approverRoles: ['manager', 'admin'],
           exactBranchRequired: true,
         },
         VOID_SETTLED_SALE: {
           audience: PRIVILEGED_VOID_AUDIENCE,
-          requesterPermission: 'pos_void',
+          requesterPermission: 'pos_sale',
           approverPermission: 'pos_void',
           approverRoles: ['manager', 'admin'],
           exactBranchRequired: true,

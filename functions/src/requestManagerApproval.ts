@@ -38,7 +38,12 @@ import {
   validateManagerApprovalRequest,
 } from './requestManagerApprovalCore';
 import { isPrivilegedActionId, PRIVILEGED_REQUESTER_PERMISSION } from './privilegedActionRegistry';
-import { liveRoleHoldsPosVoid, type RolePermissionsReader, type StagedRoleDenyHeadReader } from './privilegedActionAuthority';
+import {
+  liveRoleHoldsPosVoid,
+  liveRoleHoldsVoidRequesterPermission,
+  type RolePermissionsReader,
+  type StagedRoleDenyHeadReader,
+} from './privilegedActionAuthority';
 import { DESKTOP_CALLABLE_CORS } from './callableCors';
 
 const C = {
@@ -283,7 +288,8 @@ export async function performRequestManagerApproval(
   };
 
   // M4′ — Model 1: manager/admin. Model 2 shift-close: staff requester only.
-  // Void: any live role may request if they hold fresh pos_void (checked below).
+  // Void: any live role may request if they hold the ordinary sale permission
+  // (pos_sale, D-VOID-REQ-1). pos_void is the distinct APPROVER's authority.
   const requesterRoleOk = voidAction
     ? role === 'admin' || role === 'manager' || role === 'staff'
     : delegated
@@ -310,8 +316,13 @@ export async function performRequestManagerApproval(
     return failWithAttempt('not_authorized', 'authorization');
   }
   if (voidAction) {
-    const requesterHasVoid = await liveRoleHoldsPosVoid(database, role, readRolePermissions, readStagedDenyHead);
-    if (!requesterHasVoid) {
+    const requesterMaySell = await liveRoleHoldsVoidRequesterPermission(
+      database,
+      role,
+      readRolePermissions,
+      readStagedDenyHead,
+    );
+    if (!requesterMaySell) {
       return failWithAttempt('not_authorized', 'authorization');
     }
   }

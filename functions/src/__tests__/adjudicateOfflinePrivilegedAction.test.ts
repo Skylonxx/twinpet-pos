@@ -53,7 +53,7 @@ describe('adjudicateOfflinePrivilegedAction callable', () => {
     const res = await handleAdjudicateOfflinePrivilegedAction(
       throwingDb(),
       { paa1Base64: 'AAAA', ssa1Base64: 'AAAA', oacEnvelopeBytesBase64: 'AAAA' },
-      { uid: 'u', token: { staffId: 's', authVersion: 0, permissions: ['pos_void'] } },
+      { uid: 'u', token: { staffId: 's', authVersion: 0, permissions: ['pos_sale'] } },
       { nowMillis: NOW },
     );
     // A backend failure at the P0 relay gate is classified precisely.
@@ -84,7 +84,7 @@ describe('adjudicateOfflinePrivilegedAction callable', () => {
               authVersion: 0,
               role: 'staff',
               branchIds: ['LDP-001'],
-              rolePermissions: { staff: ['pos_void'] },
+              rolePermissions: { staff: ['pos_sale'] },
             }),
           }),
         }),
@@ -93,7 +93,7 @@ describe('adjudicateOfflinePrivilegedAction callable', () => {
     const escaped = await handleAdjudicateOfflinePrivilegedAction(
       database,
       hostileRequest as never,
-      { uid: 'u', token: { staffId: 's1', authVersion: 0, permissions: ['pos_void'] } },
+      { uid: 'u', token: { staffId: 's1', authVersion: 0, permissions: ['pos_sale'] } },
       { nowMillis: NOW, readStagedDenyHead: async () => null },
     );
     expect(escaped).toEqual({
@@ -113,7 +113,7 @@ describe('adjudicateOfflinePrivilegedAction callable', () => {
             data: () =>
               c === 'users'
                 ? { isActive: true, deletedAt: null, authVersion: 0, role: 'staff', branchIds: ['LDP-001'] }
-                : { rolePermissions: { staff: ['pos_void'] } },
+                : { rolePermissions: { staff: ['pos_sale'] } },
           }),
         }),
       }),
@@ -121,7 +121,7 @@ describe('adjudicateOfflinePrivilegedAction callable', () => {
     const res = await handleAdjudicateOfflinePrivilegedAction(
       database,
       {},
-      { uid: 'u', token: { staffId: 's1', authVersion: 0, permissions: ['pos_void'] } },
+      { uid: 'u', token: { staffId: 's1', authVersion: 0, permissions: ['pos_sale'] } },
       { nowMillis: NOW },
     );
     expect(res).toEqual({

@@ -92,7 +92,7 @@ function makeDb(seed: Record<string, Doc> = {}) {
         rolePermissions: {
           admin: ['pos_sale', 'pos_discount', 'pos_void', 'product_view'],
           manager: ['pos_sale', 'pos_discount', 'pos_void', 'product_view'],
-          staff: ['pos_sale', 'pos_void', 'product_view'],
+          staff: ['pos_sale', 'product_view'],
         },
       },
       ...seed,
@@ -400,9 +400,10 @@ describe('requestManagerApproval Model 2 — negatives', () => {
   });
 });
 
+// D-VOID-REQ-1: a Staff Void REQUESTER carries only the ordinary sale permission.
 const voidStaff = {
   uid: 'u-s1',
-  token: { role: 'staff', staffId: 's1', branchIds: ['B1'], authVersion: 0, permissions: ['pos_void'] },
+  token: { role: 'staff', staffId: 's1', branchIds: ['B1'], authVersion: 0, permissions: ['pos_sale'] },
 };
 
 const voidReq = (over: Partial<RequestManagerApprovalRequest> = {}): RequestManagerApprovalRequest =>
@@ -469,7 +470,7 @@ describe('requestManagerApproval Packet B void audience', () => {
     const { calls, comparePin } = makeCompare();
     const mgrVoid = {
       uid: 'u-m1',
-      token: { role: 'manager', staffId: 'm1', branchIds: ['B1'], authVersion: 0, permissions: ['pos_void'] },
+      token: { role: 'manager', staffId: 'm1', branchIds: ['B1'], authVersion: 0, permissions: ['pos_sale', 'pos_void'] },
     };
     const res = await run(
       db,
@@ -490,7 +491,7 @@ describe('requestManagerApproval Packet B void audience', () => {
   test('approver without pos_void is rejected', async () => {
     const db = makeDb({
       'settings/_rolePermissions': {
-        rolePermissions: { manager: ['pos_sale'], admin: ['pos_void'], staff: ['pos_void'] },
+        rolePermissions: { manager: ['pos_sale'], admin: ['pos_sale', 'pos_void'], staff: ['pos_sale'] },
       },
     });
     const { calls, comparePin } = makeCompare();
@@ -499,7 +500,7 @@ describe('requestManagerApproval Packet B void audience', () => {
     expect(calls).toHaveLength(0);
   });
 
-  test('requester without pos_void is rejected', async () => {
+  test('requester token without pos_sale is rejected', async () => {
     const db = makeDb();
     const { calls, comparePin } = makeCompare();
     const res = await run(db, comparePin, voidReq(), staff);
@@ -524,13 +525,13 @@ describe('requestManagerApproval Packet B void audience', () => {
     expect(second).toEqual(first);
   });
 
-  test('live staff pos_void revocation denies mint even when token still carries pos_void', async () => {
+  test('live staff pos_sale revocation denies mint even when token still carries pos_sale', async () => {
     const db = makeDb({
       'settings/_rolePermissions': {
         rolePermissions: {
           admin: ['pos_sale', 'pos_void'],
           manager: ['pos_sale', 'pos_void'],
-          staff: ['pos_sale', 'product_view'],
+          staff: ['product_view'],
         },
       },
     });
@@ -538,11 +539,11 @@ describe('requestManagerApproval Packet B void audience', () => {
     const res = await run(db, comparePin, voidReq(), voidStaff);
     expect(res).toEqual({ ok: false, code: 'not_authorized' });
     expect(calls).toHaveLength(0);
-    expect(voidStaff.token.permissions).toEqual(['pos_void']);
+    expect(voidStaff.token.permissions).toEqual(['pos_sale']);
     expect(db.__store.get('users/s1')).toMatchObject({ authVersion: 0 });
   });
 
-  test('F7 (SEC-001 Packet C-A): an active staged-deny for pos_void denies the mint even though the matrix still grants it', async () => {
+  test('F7 (SEC-001 Packet C-A): an active staged-deny for pos_sale denies the mint even though the matrix still grants it', async () => {
     const db = makeDb();
     const { calls, comparePin } = makeCompare();
     const res = await performRequestManagerApproval(db as never, voidReq(), voidStaff, {
@@ -551,14 +552,14 @@ describe('requestManagerApproval Packet B void audience', () => {
       dummyPinHash: APPROVAL_DUMMY_PIN_HASH,
       readStagedDenyHead: async (roleId: string) =>
         roleId === 'staff'
-          ? { roleId: 'staff', state: 'VERIFYING', changeId: 'change-1', deniedPermissions: ['pos_void'] }
+          ? { roleId: 'staff', state: 'VERIFYING', changeId: 'change-1', deniedPermissions: ['pos_sale'] }
           : null,
     });
     expect(res).toEqual({ ok: false, code: 'not_authorized' });
     expect(calls).toHaveLength(0);
   });
 
-  test('C-A-RC-003: a staged-deny head reader failure denies the mint even though the matrix grants pos_void', async () => {
+  test('C-A-RC-003: a staged-deny head reader failure denies the mint even though the matrix grants pos_sale', async () => {
     const db = makeDb();
     const { calls, comparePin } = makeCompare();
     const res = await performRequestManagerApproval(db as never, voidReq(), voidStaff, {
@@ -588,15 +589,15 @@ describe('requestManagerApproval Packet B void audience', () => {
       'settings/_rolePermissions': {
         rolePermissions: {
           admin: ['pos_sale', 'pos_void'],
-          manager: ['pos_sale'],
-          staff: ['pos_sale', 'pos_void'],
+          manager: ['product_view'],
+          staff: ['pos_sale'],
         },
       },
     });
     const { calls, comparePin } = makeCompare();
     const mgrVoid = {
       uid: 'u-m1',
-      token: { role: 'manager', staffId: 'm1', branchIds: ['B1'], authVersion: 0, permissions: ['pos_void'] },
+      token: { role: 'manager', staffId: 'm1', branchIds: ['B1'], authVersion: 0, permissions: ['pos_sale', 'pos_void'] },
     };
     const res = await run(db, comparePin, voidReq({ approverStaffId: 'a1' }), mgrVoid);
     expect(res).toEqual({ ok: false, code: 'not_authorized' });
@@ -607,16 +608,16 @@ describe('requestManagerApproval Packet B void audience', () => {
     const db = makeDb({
       'settings/_rolePermissions': {
         rolePermissions: {
-          admin: ['pos_sale'],
+          admin: ['product_view'],
           manager: ['pos_sale', 'pos_void'],
-          staff: ['pos_sale', 'pos_void'],
+          staff: ['pos_sale'],
         },
       },
     });
     const { calls, comparePin } = makeCompare();
     const adminVoid = {
       uid: 'u-a1',
-      token: { role: 'admin', staffId: 'a1', branchIds: ['ALL'], authVersion: 0, permissions: ['pos_void'] },
+      token: { role: 'admin', staffId: 'a1', branchIds: ['ALL'], authVersion: 0, permissions: ['pos_sale', 'pos_void'] },
     };
     const res = await run(db, comparePin, voidReq({ approverStaffId: 'm1' }), adminVoid);
     expect(res).toEqual({ ok: false, code: 'not_authorized' });
@@ -629,9 +630,9 @@ describe('requestManagerApproval Packet B void audience', () => {
       const db = makeDb({
         'settings/_rolePermissions': {
           rolePermissions: {
-            admin: role === 'admin' ? [] : ['pos_void'],
-            manager: role === 'manager' ? [] : ['pos_void'],
-            staff: role === 'staff' ? [] : ['pos_void'],
+            admin: role === 'admin' ? [] : ['pos_sale', 'pos_void'],
+            manager: role === 'manager' ? [] : ['pos_sale', 'pos_void'],
+            staff: role === 'staff' ? [] : ['pos_sale'],
           },
         },
       });
@@ -641,11 +642,11 @@ describe('requestManagerApproval Packet B void audience', () => {
           : role === 'manager'
             ? {
                 uid: 'u-m1',
-                token: { role: 'manager', staffId: 'm1', branchIds: ['B1'], authVersion: 0, permissions: ['pos_void'] },
+                token: { role: 'manager', staffId: 'm1', branchIds: ['B1'], authVersion: 0, permissions: ['pos_sale', 'pos_void'] },
               }
             : {
                 uid: 'u-a1',
-                token: { role: 'admin', staffId: 'a1', branchIds: ['ALL'], authVersion: 0, permissions: ['pos_void'] },
+                token: { role: 'admin', staffId: 'a1', branchIds: ['ALL'], authVersion: 0, permissions: ['pos_sale', 'pos_void'] },
               };
       const req = role === 'staff' ? voidReq() : voidReq({ approverStaffId: role === 'manager' ? 'a1' : 'm1' });
       const res = await run(db, comparePin, req, auth);
@@ -656,7 +657,7 @@ describe('requestManagerApproval Packet B void audience', () => {
 
   test('malformed and unreadable role-permission source denies mint', async () => {
     const malformed = makeDb({
-      'settings/_rolePermissions': { rolePermissions: { staff: { pos_void: true }, manager: ['pos_void'], admin: ['pos_void'] } },
+      'settings/_rolePermissions': { rolePermissions: { staff: { pos_sale: true }, manager: ['pos_sale', 'pos_void'], admin: ['pos_sale', 'pos_void'] } },
     });
     const { comparePin, calls } = makeCompare();
     expect(await run(malformed, comparePin, voidReq(), voidStaff)).toEqual({ ok: false, code: 'not_authorized' });
@@ -672,5 +673,148 @@ describe('requestManagerApproval Packet B void audience', () => {
       }),
     ).toEqual({ ok: false, code: 'not_authorized' });
     expect(calls).toHaveLength(0);
+  });
+});
+
+describe('D-VOID-REQ-1 — Void requester needs pos_sale; the distinct approver needs pos_void', () => {
+  const credential = {
+    pinHash: REAL_HASH,
+    algo: 'bcrypt',
+    cost: 10,
+    credentialVersion: 1,
+    credentialState: 'rotated_authoritative',
+    disabled: false,
+    updatedBy: 't',
+  };
+  const mgrVoidRequester = {
+    uid: 'u-m1',
+    token: { role: 'manager', staffId: 'm1', branchIds: ['B1'], authVersion: 0, permissions: ['pos_sale'] },
+  };
+
+  test('Staff requester (pos_sale, no pos_void anywhere in its row) + distinct Manager approver (pos_void) mints', async () => {
+    const db = makeDb();
+    const matrix = db.__store.get('settings/_rolePermissions') as { rolePermissions: Record<string, string[]> };
+    expect(matrix.rolePermissions.staff).toEqual(['pos_sale', 'product_view']);
+    expect(matrix.rolePermissions.staff).not.toContain('pos_void');
+    expect(voidStaff.token.permissions).not.toContain('pos_void');
+    const { calls, comparePin } = makeCompare();
+    const res = await run(db, comparePin, voidReq(), voidStaff);
+    expect(res).toEqual({ ok: true, approvalId: deriveApprovalId('cmd-void-1'), expiresAtMillis: NOW + 120_000 });
+    expect(calls).toHaveLength(1);
+    expect(db.__store.get(approvalPath('cmd-void-1'))).toMatchObject({
+      audience: 'privilegedVoid',
+      requesterStaffId: 's1',
+      approverStaffId: 'm1',
+    });
+  });
+
+  test('Manager requester (pos_sale) + distinct Admin approver (pos_void) mints', async () => {
+    const db = makeDb();
+    const { comparePin } = makeCompare();
+    const res = await run(db, comparePin, voidReq({ approverStaffId: 'a1' }), mgrVoidRequester);
+    expect(res.ok).toBe(true);
+    expect(db.__store.get(approvalPath('cmd-void-1'))).toMatchObject({ requesterStaffId: 'm1', approverStaffId: 'a1' });
+  });
+
+  test('a staged-deny of pos_void on the Staff role does not block a Staff requester (it only withdraws approver authority)', async () => {
+    const db = makeDb();
+    const { comparePin } = makeCompare();
+    const res = await performRequestManagerApproval(db as never, voidReq(), voidStaff, {
+      nowMillis: NOW,
+      comparePin,
+      dummyPinHash: APPROVAL_DUMMY_PIN_HASH,
+      readStagedDenyHead: async (roleId: string) =>
+        roleId === 'staff'
+          ? { roleId: 'staff', state: 'VERIFYING', changeId: 'change-1', deniedPermissions: ['pos_void'] }
+          : null,
+    });
+    expect(res.ok).toBe(true);
+  });
+
+  test('a Staff approver is refused even when its matrix row carries pos_void', async () => {
+    const db = makeDb({
+      'users/s2': { isActive: true, deletedAt: null, authVersion: 0, role: 'staff', branchIds: ['B1'] },
+      'userCredentials/s2': credential,
+      'settings/_rolePermissions': {
+        rolePermissions: {
+          admin: ['pos_sale', 'pos_void'],
+          manager: ['pos_sale', 'pos_void'],
+          staff: ['pos_sale', 'pos_void'],
+        },
+      },
+    });
+    const { calls, comparePin } = makeCompare();
+    const res = await run(db, comparePin, voidReq({ approverStaffId: 's2' }), voidStaff);
+    expect(res).toEqual({ ok: false, code: 'approver_not_eligible' });
+    expect(calls).toHaveLength(0);
+  });
+
+  test('an approver whose live row lacks pos_void is refused even though it holds pos_sale', async () => {
+    const db = makeDb({
+      'settings/_rolePermissions': {
+        rolePermissions: {
+          admin: ['pos_sale', 'pos_void'],
+          manager: ['pos_sale', 'product_view'],
+          staff: ['pos_sale'],
+        },
+      },
+    });
+    const { calls, comparePin } = makeCompare();
+    const res = await run(db, comparePin, voidReq(), voidStaff);
+    expect(res).toEqual({ ok: false, code: 'approver_not_eligible' });
+    expect(calls).toHaveLength(0);
+  });
+
+  test('a requester in the wrong branch is refused', async () => {
+    const db = makeDb({
+      'users/s1': { isActive: true, deletedAt: null, authVersion: 0, role: 'staff', branchIds: ['B2'] },
+    });
+    const { calls, comparePin } = makeCompare();
+    const res = await run(db, comparePin, voidReq(), voidStaff);
+    expect(res).toEqual({ ok: false, code: 'branch_mismatch' });
+    expect(calls).toHaveLength(0);
+  });
+
+  test.each([
+    ['inactive', { isActive: false, deletedAt: null }],
+    ['deleted', { isActive: true, deletedAt: 1 }],
+  ])('an %s requester is refused', async (_label, patch) => {
+    const db = makeDb({
+      'users/s1': { authVersion: 0, role: 'staff', branchIds: ['B1'], ...patch },
+    });
+    const { calls, comparePin } = makeCompare();
+    const res = await run(db, comparePin, voidReq(), voidStaff);
+    expect(res).toEqual({ ok: false, code: 'not_authorized' });
+    expect(calls).toHaveLength(0);
+  });
+
+  test('requester == approver is refused before any bcrypt compare', async () => {
+    const db = makeDb();
+    const { calls, comparePin } = makeCompare();
+    const res = await run(db, comparePin, voidReq({ approverStaffId: 's1' }), voidStaff);
+    expect(res).toEqual({ ok: false, code: 'self_approval_not_permitted' });
+    expect(calls).toHaveLength(0);
+  });
+
+  test('D-VOID-REQ-2: a missing settings/_rolePermissions matrix denies EVERY role as requester (no default fallback)', async () => {
+    const { comparePin, calls } = makeCompare();
+    for (const [auth, approver] of [
+      [voidStaff, 'm1'],
+      [mgrVoidRequester, 'a1'],
+    ] as const) {
+      const db = makeDb();
+      db.__store.delete('settings/_rolePermissions');
+      const res = await run(db, comparePin, voidReq({ approverStaffId: approver }), auth);
+      expect(res).toEqual({ ok: false, code: 'not_authorized' });
+    }
+    expect(calls).toHaveLength(0);
+  });
+
+  test('non-Void shift-close delegated approval is unchanged by the requester split', async () => {
+    const db = makeDb();
+    const { comparePin } = makeCompare();
+    const res = await run(db, comparePin);
+    expect(res.ok).toBe(true);
+    expect(db.__store.get(approvalPath())).toMatchObject({ audience: 'resolveShiftCloseAlert' });
   });
 });

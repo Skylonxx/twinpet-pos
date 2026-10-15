@@ -57,7 +57,7 @@ function makeDb(seed: Record<string, Doc> = {}) {
         rolePermissions: {
           admin: ['pos_sale', 'pos_discount', 'pos_void', 'product_view'],
           manager: ['pos_sale', 'pos_discount', 'pos_void', 'product_view'],
-          staff: ['pos_sale', 'pos_void', 'product_view'],
+          staff: ['pos_sale', 'product_view'],
         },
       },
       ...seed,
@@ -124,9 +124,10 @@ function makeDb(seed: Record<string, Doc> = {}) {
   };
 }
 
+// D-VOID-REQ-1: the Void requester carries only the ordinary sale permission.
 const requester = {
   uid: 'u-s1',
-  token: { role: 'staff', staffId: 's1', branchIds: ['B1'], authVersion: 0, permissions: ['pos_void'] },
+  token: { role: 'staff', staffId: 's1', branchIds: ['B1'], authVersion: 0, permissions: ['pos_sale'] },
 };
 
 const baseReq = (over: Partial<SubmitPrivilegedVoidRequest> = {}): SubmitPrivilegedVoidRequest => ({
@@ -347,14 +348,14 @@ describe('submitPrivilegedVoid — rejection matrix', () => {
     expect(exec.calls).toHaveLength(0);
   });
 
-  test('requester permission missing is rejected', async () => {
+  test('requester token without pos_sale is rejected', async () => {
     const db = makeDb({
       'asyncOrders/O1': pendingOrder(),
       [approvalPath()]: matchingApproval(),
     });
     const { res, exec } = await run(db, baseReq(), {
       uid: 'u-s1',
-      token: { role: 'staff', staffId: 's1', branchIds: ['B1'], authVersion: 0, permissions: ['pos_sale'] },
+      token: { role: 'staff', staffId: 's1', branchIds: ['B1'], authVersion: 0, permissions: ['product_view'] },
     });
     expect(res).toEqual({ ok: false, code: 'not_authorized' });
     expect(exec.calls).toHaveLength(0);
@@ -375,7 +376,7 @@ describe('submitPrivilegedVoid — rejection matrix', () => {
     const db = makeDb({
       'asyncOrders/O1': pendingOrder(),
       [approvalPath()]: matchingApproval(),
-      'settings/_rolePermissions': { rolePermissions: { manager: ['pos_sale'], admin: ['pos_void'], staff: ['pos_void'] } },
+      'settings/_rolePermissions': { rolePermissions: { manager: ['pos_sale'], admin: ['pos_sale', 'pos_void'], staff: ['pos_sale'] } },
     });
     const { res, exec } = await run(db);
     expect(res).toEqual({ ok: false, code: 'approver_not_eligible' });
@@ -511,22 +512,22 @@ describe('submitPrivilegedVoid — canonical execution seam', () => {
 const LIVE_MATRIX = {
   admin: ['pos_sale', 'pos_discount', 'pos_void', 'product_view'],
   manager: ['pos_sale', 'pos_discount', 'pos_void', 'product_view'],
-  staff: ['pos_sale', 'pos_void', 'product_view'],
+  staff: ['pos_sale', 'product_view'],
 };
 
-describe('submitPrivilegedVoid — BF-1 live requester pos_void / branch', () => {
-  test('live staff pos_void revocation denies submit even when token still carries pos_void', async () => {
+describe('submitPrivilegedVoid — BF-1 live requester pos_sale / branch', () => {
+  test('live staff pos_sale revocation denies submit even when token still carries pos_sale', async () => {
     const db = makeDb({
       'asyncOrders/O1': pendingOrder(),
       [approvalPath()]: matchingApproval(),
       'settings/_rolePermissions': {
-        rolePermissions: { ...LIVE_MATRIX, staff: ['pos_sale', 'product_view'] },
+        rolePermissions: { ...LIVE_MATRIX, staff: ['product_view'] },
       },
     });
     const { res, exec } = await run(db);
     expect(res).toEqual({ ok: false, code: 'not_authorized' });
     expect(exec.calls).toHaveLength(0);
-    expect(requester.token.permissions).toEqual(['pos_void']);
+    expect(requester.token.permissions).toEqual(['pos_sale']);
     expect(db.__store.get('users/s1')).toMatchObject({ authVersion: 0 });
   });
 
@@ -563,12 +564,12 @@ describe('submitPrivilegedVoid — BF-1 live requester pos_void / branch', () =>
         updatedBy: 't',
       },
       'settings/_rolePermissions': {
-        rolePermissions: { ...LIVE_MATRIX, manager: ['pos_sale', 'product_view'] },
+        rolePermissions: { ...LIVE_MATRIX, manager: ['product_view'] },
       },
     });
     const mgrAuth = {
       uid: 'u-m1',
-      token: { role: 'manager', staffId: 'm1', branchIds: ['B1'], authVersion: 0, permissions: ['pos_void'] },
+      token: { role: 'manager', staffId: 'm1', branchIds: ['B1'], authVersion: 0, permissions: ['pos_sale'] },
     };
     const { res, exec } = await run(db, baseReq(), mgrAuth);
     expect(res).toEqual({ ok: false, code: 'not_authorized' });
@@ -585,12 +586,12 @@ describe('submitPrivilegedVoid — BF-1 live requester pos_void / branch', () =>
       }),
       'users/a1': { isActive: true, deletedAt: null, authVersion: 0, role: 'admin', branchIds: ['ALL'] },
       'settings/_rolePermissions': {
-        rolePermissions: { ...LIVE_MATRIX, admin: ['pos_sale', 'product_view'] },
+        rolePermissions: { ...LIVE_MATRIX, admin: ['product_view'] },
       },
     });
     const adminAuth = {
       uid: 'u-a1',
-      token: { role: 'admin', staffId: 'a1', branchIds: ['ALL'], authVersion: 0, permissions: ['pos_void'] },
+      token: { role: 'admin', staffId: 'a1', branchIds: ['ALL'], authVersion: 0, permissions: ['pos_sale'] },
     };
     const { res, exec } = await run(db, baseReq(), adminAuth);
     expect(res).toEqual({ ok: false, code: 'not_authorized' });
@@ -637,7 +638,7 @@ describe('submitPrivilegedVoid — BF-2 empty/malformed live matrix', () => {
     });
     const mgrAuth = {
       uid: 'u-m1',
-      token: { role: 'manager', staffId: 'm1', branchIds: ['B1'], authVersion: 0, permissions: ['pos_void'] },
+      token: { role: 'manager', staffId: 'm1', branchIds: ['B1'], authVersion: 0, permissions: ['pos_sale'] },
     };
     const { res, exec } = await run(db, baseReq(), mgrAuth);
     expect(res).toEqual({ ok: false, code: 'not_authorized' });
@@ -687,7 +688,7 @@ describe('submitPrivilegedVoid — BF-2 empty/malformed live matrix', () => {
     const db = makeDb({
       'asyncOrders/O1': pendingOrder(),
       [approvalPath()]: matchingApproval(),
-      'settings/_rolePermissions': { rolePermissions: { staff: 'pos_void', manager: ['pos_void'], admin: ['pos_void'] } },
+      'settings/_rolePermissions': { rolePermissions: { staff: 'pos_sale', manager: ['pos_sale', 'pos_void'], admin: ['pos_sale', 'pos_void'] } },
     });
     const { res, exec } = await run(db);
     expect(res).toEqual({ ok: false, code: 'not_authorized' });
@@ -722,7 +723,7 @@ describe('submitPrivilegedVoid — BF-2 empty/malformed live matrix', () => {
     expect(exec.calls).toHaveLength(0);
   });
 
-  test('F7 (SEC-001 Packet C-A): an active staged-deny for pos_void blocks the requester even though the matrix still grants it', async () => {
+  test('F7 (SEC-001 Packet C-A): an active staged-deny for pos_sale blocks the requester even though the matrix still grants it', async () => {
     const db = makeDb({
       'asyncOrders/O1': pendingOrder(),
       [approvalPath()]: matchingApproval(),
@@ -733,14 +734,14 @@ describe('submitPrivilegedVoid — BF-2 empty/malformed live matrix', () => {
       executeCanonicalVoid: exec.executeCanonicalVoid,
       readStagedDenyHead: async (roleId: string) =>
         roleId === 'staff'
-          ? { roleId: 'staff', state: 'DRAINING', changeId: 'change-1', deniedPermissions: ['pos_void'] }
+          ? { roleId: 'staff', state: 'DRAINING', changeId: 'change-1', deniedPermissions: ['pos_sale'] }
           : null,
     });
     expect(res).toEqual({ ok: false, code: 'not_authorized' });
     expect(exec.calls).toHaveLength(0);
   });
 
-  test('C-A-RC-003: a staged-deny head reader failure blocks the requester even though the matrix grants pos_void', async () => {
+  test('C-A-RC-003: a staged-deny head reader failure blocks the requester even though the matrix grants pos_sale', async () => {
     const db = makeDb({
       'asyncOrders/O1': pendingOrder(),
       [approvalPath()]: matchingApproval(),
@@ -789,7 +790,7 @@ describe('submitPrivilegedVoid — BF-3 durable exact-bound resume', () => {
     });
     const other = {
       uid: 'u-s2',
-      token: { role: 'staff', staffId: 's2', branchIds: ['B1'], authVersion: 0, permissions: ['pos_void'] },
+      token: { role: 'staff', staffId: 's2', branchIds: ['B1'], authVersion: 0, permissions: ['pos_sale'] },
     };
     const { res, exec } = await run(db, baseReq(), other);
     expect(res).toEqual({ ok: false, code: 'invalid_target' });
@@ -976,7 +977,7 @@ describe('submitPrivilegedVoid — BF-3 durable exact-bound resume', () => {
     });
     const otherRequester = {
       uid: 'u-s2',
-      token: { role: 'staff', staffId: 's2', branchIds: ['B1'], authVersion: 0, permissions: ['pos_void'] },
+      token: { role: 'staff', staffId: 's2', branchIds: ['B1'], authVersion: 0, permissions: ['pos_sale'] },
     };
     expect((await run(db, baseReq(), otherRequester)).res).toEqual({ ok: false, code: 'invalid_target' });
     expect(
@@ -993,5 +994,92 @@ describe('submitPrivilegedVoid — BF-3 durable exact-bound resume', () => {
     const afterComplete = await run(db, baseReq({ targetEntityId: 'O2' }));
     expect(afterComplete.res).toEqual({ ok: false, code: 'invalid_target' });
     expect(afterComplete.exec.calls).toHaveLength(0);
+  });
+});
+
+describe('submitPrivilegedVoid — D-VOID-REQ-1 requester pos_sale / approver pos_void', () => {
+  test('Staff requester whose live row has no pos_void completes the Void (approver holds pos_void)', async () => {
+    const db = makeDb({
+      'asyncOrders/O1': pendingOrder(),
+      [approvalPath()]: matchingApproval(),
+    });
+    const matrix = db.__store.get('settings/_rolePermissions') as { rolePermissions: Record<string, string[]> };
+    expect(matrix.rolePermissions.staff).not.toContain('pos_void');
+    expect(requester.token.permissions).not.toContain('pos_void');
+    const { res, exec } = await run(db);
+    expect(res).toMatchObject({ ok: true, orderId: 'O1', idempotent: false });
+    expect(exec.calls).toEqual(['O1']);
+  });
+
+  test('a staged-deny of pos_void on the Staff role does not block the Staff requester', async () => {
+    const db = makeDb({
+      'asyncOrders/O1': pendingOrder(),
+      [approvalPath()]: matchingApproval(),
+    });
+    const exec = makeExecutor(db.__store);
+    const res = await performSubmitPrivilegedVoid(db as never, baseReq(), requester, {
+      nowMillis: NOW,
+      executeCanonicalVoid: exec.executeCanonicalVoid,
+      readStagedDenyHead: async (roleId: string) =>
+        roleId === 'staff'
+          ? { roleId: 'staff', state: 'DRAINING', changeId: 'change-1', deniedPermissions: ['pos_void'] }
+          : null,
+    });
+    expect(res).toMatchObject({ ok: true, orderId: 'O1' });
+    expect(exec.calls).toEqual(['O1']);
+  });
+
+  test('a Staff approver is refused even when its row carries pos_void', async () => {
+    const db = makeDb({
+      'asyncOrders/O1': pendingOrder(),
+      'users/s2': { isActive: true, deletedAt: null, authVersion: 0, role: 'staff', branchIds: ['B1'] },
+      [approvalPath()]: matchingApproval({ approverStaffId: 's2', approverRole: 'staff' }),
+      'settings/_rolePermissions': {
+        rolePermissions: {
+          admin: ['pos_sale', 'pos_void'],
+          manager: ['pos_sale', 'pos_void'],
+          staff: ['pos_sale', 'pos_void'],
+        },
+      },
+    });
+    const { res, exec } = await run(db);
+    expect(res).toEqual({ ok: false, code: 'approver_not_eligible' });
+    expect(exec.calls).toHaveLength(0);
+  });
+
+  test.each([
+    ['inactive', { isActive: false, deletedAt: null }],
+    ['deleted', { isActive: true, deletedAt: 1 }],
+  ])('an %s requester is refused', async (_label, patch) => {
+    const db = makeDb({
+      'asyncOrders/O1': pendingOrder(),
+      [approvalPath()]: matchingApproval(),
+      'users/s1': { authVersion: 0, role: 'staff', branchIds: ['B1'], ...patch },
+    });
+    const { res, exec } = await run(db);
+    expect(res).toEqual({ ok: false, code: 'not_authorized' });
+    expect(exec.calls).toHaveLength(0);
+  });
+
+  test('D-VOID-REQ-2: with the matrix absent even a Staff requester holding pos_sale is refused', async () => {
+    const db = makeDb({
+      'asyncOrders/O1': pendingOrder(),
+      [approvalPath()]: matchingApproval(),
+    });
+    db.__store.delete('settings/_rolePermissions');
+    expect(requester.token.permissions).toContain('pos_sale');
+    const { res, exec } = await run(db);
+    expect(res).toEqual({ ok: false, code: 'not_authorized' });
+    expect(exec.calls).toHaveLength(0);
+  });
+
+  test('cross-day Void is refused for a fully authorized Staff requester', async () => {
+    const db = makeDb({
+      'asyncOrders/O1': pendingOrder({ serverCreatedAt: { toMillis: () => NOW - 2 * 24 * 3600 * 1000 } }),
+      [approvalPath()]: matchingApproval(),
+    });
+    const { res, exec } = await run(db);
+    expect(res).toEqual({ ok: false, code: 'invalid_target' });
+    expect(exec.calls).toHaveLength(0);
   });
 });

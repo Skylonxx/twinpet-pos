@@ -1,8 +1,9 @@
 /**
  * Shared live privileged-void authority resolver (SEC-001 Part B RC).
  *
- * Privileged `pos_void` is decided from settings/_rolePermissions, not from
- * token claims and not from login-time role defaults. Present rows are
+ * Privileged Void authority is decided from settings/_rolePermissions, not from
+ * token claims and not from login-time role defaults: the approver needs live
+ * `pos_void`, the requester live `pos_sale` (D-VOID-REQ-1). Present rows are
  * authoritative, including an explicit empty array. Ambiguous or unreadable
  * sources fail closed.
  *
@@ -12,7 +13,7 @@
  */
 
 import type { Firestore, Transaction } from 'firebase-admin/firestore';
-import { PRIVILEGED_REQUESTER_PERMISSION } from './privilegedActionRegistry';
+import { PRIVILEGED_APPROVER_PERMISSION, PRIVILEGED_REQUESTER_PERMISSION } from './privilegedActionRegistry';
 
 export const ROLE_PERMISSIONS_COLLECTION = 'settings';
 export const ROLE_PERMISSIONS_DOC_ID = '_rolePermissions';
@@ -213,14 +214,18 @@ export async function resolveLivePrivilegedPermission(
   return decideLiveRolePermission(role, permission, snapshot, stagedDenyHead);
 }
 
-/** Shared requester/approver live `pos_void` decision. Never consults token claims. */
+/**
+ * Live Void APPROVER decision (`pos_void`). Never consults token claims. Used
+ * only for the approving Manager/Admin; the requester side uses
+ * `resolveLiveVoidRequesterPermission` (D-VOID-REQ-1).
+ */
 export async function resolveLivePosVoid(
   database: Firestore,
   role: string | null | undefined,
   reader?: RolePermissionsReader,
   readStagedDenyHead?: StagedRoleDenyHeadReader,
 ): Promise<LivePermissionDecision> {
-  return resolveLivePrivilegedPermission(database, role, PRIVILEGED_REQUESTER_PERMISSION, reader, readStagedDenyHead);
+  return resolveLivePrivilegedPermission(database, role, PRIVILEGED_APPROVER_PERMISSION, reader, readStagedDenyHead);
 }
 
 export async function liveRoleHoldsPosVoid(
@@ -230,5 +235,29 @@ export async function liveRoleHoldsPosVoid(
   readStagedDenyHead?: StagedRoleDenyHeadReader,
 ): Promise<boolean> {
   const decision = await resolveLivePosVoid(database, role, reader, readStagedDenyHead);
+  return decision.allowed;
+}
+
+/**
+ * Live Void REQUESTER decision (D-VOID-REQ-1): the ordinary sale permission
+ * (`pos_sale`) from the same fail-closed live matrix. A missing, malformed or
+ * staged-denied matrix still denies; there is no default fallback here.
+ */
+export async function resolveLiveVoidRequesterPermission(
+  database: Firestore,
+  role: string | null | undefined,
+  reader?: RolePermissionsReader,
+  readStagedDenyHead?: StagedRoleDenyHeadReader,
+): Promise<LivePermissionDecision> {
+  return resolveLivePrivilegedPermission(database, role, PRIVILEGED_REQUESTER_PERMISSION, reader, readStagedDenyHead);
+}
+
+export async function liveRoleHoldsVoidRequesterPermission(
+  database: Firestore,
+  role: string | null | undefined,
+  reader?: RolePermissionsReader,
+  readStagedDenyHead?: StagedRoleDenyHeadReader,
+): Promise<boolean> {
+  const decision = await resolveLiveVoidRequesterPermission(database, role, reader, readStagedDenyHead);
   return decision.allowed;
 }

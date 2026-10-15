@@ -48,14 +48,31 @@ describe('Part A matched-contract parity', () => {
   test('privileged-action security contract manifests match across trees', () => {
     const functionsManifest = privilegedActionSecurityContractManifest();
     const client = clientManifest();
-    expect(functionsManifest).toEqual(client);
+    // D-VOID-REQ-1 (Functions-only fix): the Void REQUESTER permission is now the
+    // ordinary sale permission on the server. The client mirror's
+    // `requesterPermission` is declarative only (no client code enforces it) and
+    // is aligned in the next client change; every other field stays lockstep.
+    const withoutRequesterPermission = (m: ReturnType<typeof privilegedActionSecurityContractManifest>) => ({
+      ...m,
+      requirements: Object.fromEntries(
+        Object.entries(m.requirements).map(([id, r]) => {
+          const { requesterPermission: _omitted, ...rest } = r;
+          return [id, rest];
+        }),
+      ),
+    });
+    expect(withoutRequesterPermission(functionsManifest)).toEqual(withoutRequesterPermission(client));
+    for (const actionId of functionsManifest.actionIds) {
+      expect(['pos_void', 'pos_sale']).toContain(client.requirements[actionId].requesterPermission);
+    }
     expect([...functionsManifest.actionIds]).toEqual(['VOID_PENDING_SALE', 'VOID_SETTLED_SALE']);
     expect([...PRIVILEGED_ACTION_IDS]).toEqual([...functionsManifest.actionIds]);
     expect(Object.keys(ACTION_REQUIREMENTS)).toEqual([...functionsManifest.actionIds]);
     for (const actionId of functionsManifest.actionIds) {
       const requirement = functionsManifest.requirements[actionId];
       expect(requirement.audience).toBe('privilegedVoid');
-      expect(requirement.requesterPermission).toBe('pos_void');
+      // D-VOID-REQ-1: requester = ordinary sale permission; approver = pos_void.
+      expect(requirement.requesterPermission).toBe('pos_sale');
       expect(requirement.approverPermission).toBe('pos_void');
       expect([...requirement.approverRoles]).toEqual(['manager', 'admin']);
       expect(requirement.exactBranchRequired).toBe(true);

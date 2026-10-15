@@ -353,3 +353,48 @@ describe('performSetRolePermissions', () => {
     expect(matrixOf(store).rolePermissions.staff.sort()).toEqual(['pos_discount', 'pos_sale']);
   });
 });
+
+describe('initializing a completely missing settings/_rolePermissions (read-only readiness evidence)', () => {
+  const adminAuth = { uid: ADMIN_UID, token: { role: 'admin' } };
+  const DEFAULT_ROWS = {
+    manager: ['pos_sale', 'pos_discount', 'pos_void', 'quotation', 'product_view', 'product_edit', 'stock_receive', 'cost_view', 'report_sales', 'report_stock'],
+    staff: ['pos_sale', 'product_view'],
+    admin: ['pos_sale', 'pos_discount', 'pos_void', 'quotation', 'product_view', 'product_edit', 'stock_receive', 'cost_view', 'report_sales', 'report_stock', 'report_profit', 'employee_manage', 'settings'],
+  } as const;
+
+  it('creates the document from nothing, one pure-addition row per call, with no staging or sweep records', async () => {
+    const { db, store } = genericFakeFirestore(seedAdmin());
+    expect(store.get('settings')?.has('_rolePermissions') ?? false).toBe(false);
+
+    for (const roleId of ['manager', 'staff', 'admin'] as const) {
+      const result = await performSetRolePermissions(
+        db,
+        adminAuth,
+        { roleId, permissions: [...DEFAULT_ROWS[roleId]] },
+        1000,
+      );
+      expect(result, roleId).toEqual({ ok: true, requiresStaging: false });
+    }
+
+    const matrix = store.get('settings')!.get('_rolePermissions') as { rolePermissions: Record<string, string[]> };
+    expect(matrix.rolePermissions.manager).toEqual(DEFAULT_ROWS.manager);
+    expect(matrix.rolePermissions.staff).toEqual(DEFAULT_ROWS.staff);
+    expect(matrix.rolePermissions.admin).toEqual(DEFAULT_ROWS.admin);
+    expect(matrix.rolePermissions.staff).not.toContain('pos_void');
+    expect(store.get('privilegedStagedRoleDeny')?.size ?? 0).toBe(0);
+    expect(store.get('privilegedRoleSweepJobs')?.size ?? 0).toBe(0);
+  });
+
+  it('operation order does not matter and a partially initialized matrix only ever denies (never widens)', async () => {
+    const { db, store } = genericFakeFirestore(seedAdmin());
+    await performSetRolePermissions(db, adminAuth, { roleId: 'staff', permissions: [...DEFAULT_ROWS.staff] }, 1000);
+    const afterFirst = store.get('settings')!.get('_rolePermissions') as { rolePermissions: Record<string, string[]> };
+    // Only the written role exists; the others have no key and the privileged
+    // gates treat a missing key as deny (role_key_absent), never as a default.
+    expect(Object.keys(afterFirst.rolePermissions)).toEqual(['staff']);
+    await performSetRolePermissions(db, adminAuth, { roleId: 'manager', permissions: [...DEFAULT_ROWS.manager] }, 2000);
+    const afterSecond = store.get('settings')!.get('_rolePermissions') as { rolePermissions: Record<string, string[]> };
+    expect(Object.keys(afterSecond.rolePermissions).sort()).toEqual(['manager', 'staff']);
+    expect(afterSecond.rolePermissions.staff).toEqual(DEFAULT_ROWS.staff);
+  });
+});

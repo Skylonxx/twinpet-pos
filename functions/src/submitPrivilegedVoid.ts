@@ -18,7 +18,12 @@ import { db } from './db';
 import { FUNCTIONS_REGION } from './deployConfig';
 import { evaluateFreshPrivilegedAuthority, type AuthLike } from './authorityFence';
 import { isUsableForLogin, readUserCredential } from './credentialStore';
-import { liveRoleHoldsPosVoid, type RolePermissionsReader, type StagedRoleDenyHeadReader } from './privilegedActionAuthority';
+import {
+  liveRoleHoldsPosVoid,
+  liveRoleHoldsVoidRequesterPermission,
+  type RolePermissionsReader,
+  type StagedRoleDenyHeadReader,
+} from './privilegedActionAuthority';
 import { PRIVILEGED_REQUESTER_PERMISSION, PRIVILEGED_VOID_AUDIENCE } from './privilegedActionRegistry';
 import {
   type ApprovalRecordView,
@@ -273,8 +278,15 @@ export async function performSubmitPrivilegedVoid(
   if (requesterRole !== 'admin' && requesterRole !== 'manager' && requesterRole !== 'staff') {
     return fail('not_authorized');
   }
-  const requesterHasVoid = await liveRoleHoldsPosVoid(database, requesterRole, readRolePermissions, readStagedDenyHead);
-  if (!requesterHasVoid) return fail('not_authorized');
+  // D-VOID-REQ-1: the requester needs the ordinary sale permission; pos_void is
+  // checked on the distinct approver below.
+  const requesterMaySell = await liveRoleHoldsVoidRequesterPermission(
+    database,
+    requesterRole,
+    readRolePermissions,
+    readStagedDenyHead,
+  );
+  if (!requesterMaySell) return fail('not_authorized');
   if (!requesterLiveBranchOk(requesterRole, liveBranchIds(requester), value.branchId)) {
     return fail('branch_mismatch');
   }

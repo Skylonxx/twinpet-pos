@@ -301,7 +301,7 @@ function makeDb(seed: Record<string, Doc> = {}) {
         rolePermissions: {
           admin: ['pos_sale', 'pos_void'],
           manager: ['pos_sale', 'pos_void'],
-          staff: ['pos_sale', 'pos_void'],
+          staff: ['pos_sale', 'product_view'],
         },
       },
       'privilegedRevocationState/current': {
@@ -414,7 +414,7 @@ function makeDb(seed: Record<string, Doc> = {}) {
 
 const relayAuth = (over: Record<string, unknown> = {}) => ({
   uid: 'uid-relay',
-  token: { staffId: 'relay-1', authVersion: 0, permissions: ['pos_void'], ...over },
+  token: { staffId: 'relay-1', authVersion: 0, permissions: ['pos_sale'], ...over },
 });
 
 const voidApplied: VoidIntentTxnOutcome = { kind: 'VOID_APPLIED' };
@@ -965,7 +965,11 @@ describe('Stage F — fresh attestation always authenticates the current device'
   test('permission revocation for the original parties is durably terminal', async () => {
     const initiatorDenied = makeDb();
     initiatorDenied.store.set('settings/_rolePermissions', {
-      rolePermissions: { admin: ['pos_void'], manager: ['pos_void'], staff: ['pos_sale'] },
+      rolePermissions: {
+        admin: ['pos_sale', 'pos_void'],
+        manager: ['pos_sale', 'pos_void'],
+        staff: ['product_view'],
+      },
     });
     initiatorDenied.store.set('users/relay-1', {
       isActive: true,
@@ -981,7 +985,11 @@ describe('Stage F — fresh attestation always authenticates the current device'
 
     const managerDenied = makeDb();
     managerDenied.store.set('settings/_rolePermissions', {
-      rolePermissions: { admin: ['pos_void'], manager: ['pos_sale'], staff: ['pos_void'] },
+      rolePermissions: {
+        admin: ['pos_sale', 'pos_void'],
+        manager: ['pos_sale'],
+        staff: ['pos_sale', 'product_view'],
+      },
     });
     expect(await run(managerDenied, buildPaa1().request)).toMatchObject({
       kind: 'REJECTED',
@@ -1484,7 +1492,7 @@ describe('Model-B relay', () => {
     const res = await run(
       db,
       paa1.request,
-      { uid: 'uid-2', token: { staffId: 'relay-2', authVersion: 2, permissions: ['pos_void'] } },
+      { uid: 'uid-2', token: { staffId: 'relay-2', authVersion: 2, permissions: ['pos_sale'] } },
     );
     expect(res).toMatchObject({ kind: 'ACCEPTED' });
     // Attribution stays with the original initiating staff, not the relay.
@@ -2750,19 +2758,19 @@ describe('OPTION_A_LINEARIZE — authority is re-read inside the first-consume t
           rolePermissions: {
             admin: ['pos_sale', 'pos_void'],
             manager: ['pos_sale'],
-            staff: ['pos_sale', 'pos_void'],
+            staff: ['pos_sale', 'product_view'],
           },
         }),
       'manager_permission_revoked',
     ],
     [
-      'initiator role loses pos_void',
+      'initiator role loses pos_sale',
       (db) =>
         db.store.set('settings/_rolePermissions', {
           rolePermissions: {
             admin: ['pos_sale', 'pos_void'],
             manager: ['pos_sale', 'pos_void'],
-            staff: ['pos_sale'],
+            staff: ['product_view'],
           },
         }),
       'initiator_permission_revoked',
@@ -2783,7 +2791,7 @@ describe('OPTION_A_LINEARIZE — authority is re-read inside the first-consume t
         db.store.set('privilegedStagedRoleDeny/staff', {
           state: 'VERIFYING',
           changeId: 'change-1',
-          deniedPermissions: ['pos_void'],
+          deniedPermissions: ['pos_sale'],
         }),
       'initiator_permission_revoked',
     ],
@@ -2976,4 +2984,94 @@ describe('OPTION_A_LINEARIZE — authority is re-read inside the first-consume t
       expect(calls, label).toHaveLength(0);
     },
   );
+});
+
+describe('D-VOID-REQ-1 — requester/relay need pos_sale; the approving manager needs pos_void', () => {
+  test('a Staff initiator whose live row has no pos_void is adjudicated and the Void applies', async () => {
+    const db = makeDb();
+    const matrix = db.store.get('settings/_rolePermissions') as { rolePermissions: Record<string, string[]> };
+    expect(matrix.rolePermissions.staff).not.toContain('pos_void');
+    expect(matrix.rolePermissions.manager).toContain('pos_void');
+    const paa1 = buildPaa1();
+    const { calls, executeCanonicalVoid } = countingVoidExecutor();
+    const res = await run(db, paa1.request, relayAuth(), { executeCanonicalVoid });
+    expect(res).toMatchObject({ kind: 'ACCEPTED', outcomeKind: 'VOID_APPLIED' });
+    expect(calls).toHaveLength(1);
+  });
+
+  test('a relay token carrying only pos_void (no pos_sale) is refused at the relay gate', async () => {
+    const db = makeDb();
+    const res = await run(db, buildPaa1().request, relayAuth({ permissions: ['pos_void'] }));
+    expect(res).toMatchObject({
+      kind: 'PROTOCOL_REJECTED',
+      protocolReason: 'relay_caller_not_authorized',
+      recoverability: 'CALLER_DEPENDENT',
+    });
+    expect(db.writes).toHaveLength(0);
+  });
+
+  test('D-VOID-REQ-2: a missing role-permission matrix refuses the relay caller fail-closed and writes nothing', async () => {
+    const db = makeDb();
+    db.store.delete('settings/_rolePermissions');
+    const { calls, executeCanonicalVoid } = countingVoidExecutor();
+    const res = await run(db, buildPaa1().request, relayAuth(), { executeCanonicalVoid });
+    expect(res).toMatchObject({
+      kind: 'PROTOCOL_REJECTED',
+      protocolReason: 'relay_caller_not_authorized',
+      recoverability: 'CALLER_DEPENDENT',
+    });
+    expect(db.writes).toHaveLength(0);
+    expect(calls).toHaveLength(0);
+  });
+
+  test('a staged-deny of pos_void on the Staff role does not terminalize a Staff initiator', async () => {
+    const db = makeDb();
+    db.store.set('privilegedStagedRoleDeny/staff', {
+      state: 'DRAINING',
+      changeId: 'change-1',
+      deniedPermissions: ['pos_void'],
+    });
+    const { calls, executeCanonicalVoid } = countingVoidExecutor();
+    const res = await run(db, buildPaa1().request, relayAuth(), { executeCanonicalVoid });
+    expect(res).toMatchObject({ kind: 'ACCEPTED', outcomeKind: 'VOID_APPLIED' });
+    expect(calls).toHaveLength(1);
+  });
+
+  test('the approving manager must still hold pos_void even when it holds pos_sale', async () => {
+    const db = makeDb();
+    db.store.set('settings/_rolePermissions', {
+      rolePermissions: {
+        admin: ['pos_sale', 'pos_void'],
+        manager: ['pos_sale', 'product_view'],
+        staff: ['pos_sale', 'product_view'],
+      },
+    });
+    const { calls, executeCanonicalVoid } = countingVoidExecutor();
+    const res = await run(db, buildPaa1().request, relayAuth(), { executeCanonicalVoid });
+    expect(res).toMatchObject({ kind: 'REJECTED', rejectionReason: 'manager_permission_revoked', terminal: true });
+    expect(calls).toHaveLength(0);
+  });
+
+  test('a Staff initiator that loses pos_sale is terminalized as initiator_permission_revoked', async () => {
+    const db = makeDb();
+    db.store.set('settings/_rolePermissions', {
+      rolePermissions: {
+        admin: ['pos_sale', 'pos_void'],
+        manager: ['pos_sale', 'pos_void'],
+        staff: ['pos_void', 'product_view'],
+      },
+    });
+    // The relay is a manager here, so only the ORIGINAL (Staff) initiator is denied.
+    db.store.set('users/relay-1', {
+      isActive: true,
+      deletedAt: null,
+      authVersion: 0,
+      role: 'manager',
+      branchIds: [BRANCH],
+    });
+    const { calls, executeCanonicalVoid } = countingVoidExecutor();
+    const res = await run(db, buildPaa1().request, relayAuth(), { executeCanonicalVoid });
+    expect(res).toMatchObject({ kind: 'REJECTED', rejectionReason: 'initiator_permission_revoked', terminal: true });
+    expect(calls).toHaveLength(0);
+  });
 });

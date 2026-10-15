@@ -16,7 +16,14 @@ export type ApprovalAudience = (typeof APPROVAL_AUDIENCES)[number];
 export const PRIVILEGED_APPROVER_ROLES = ['manager', 'admin'] as const;
 export type PrivilegedApproverRole = (typeof PRIVILEGED_APPROVER_ROLES)[number];
 
-export const PRIVILEGED_REQUESTER_PERMISSION = 'pos_void' as const;
+/**
+ * D-VOID-REQ-1: any normal POS operator may INITIATE a same-day whole-bill
+ * Void, so the requester needs only the ordinary sale permission. The Void
+ * authority itself (`pos_void`) belongs to the distinct Manager/Admin approver.
+ * Never widen the requester permission to `pos_void` or the approver to
+ * `pos_sale`.
+ */
+export const PRIVILEGED_REQUESTER_PERMISSION = 'pos_sale' as const;
 export const PRIVILEGED_APPROVER_PERMISSION = 'pos_void' as const;
 
 export interface PrivilegedActionRequirement {
