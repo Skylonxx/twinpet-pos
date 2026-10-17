@@ -595,8 +595,15 @@ export interface AlertInvariantCaseView {
 }
 
 export interface AlertInvariantAlertView {
+  /** Canonical shift identity: the `shiftCloseAlerts/{shiftId}` Firestore document id. */
   id: string;
-  shiftId: string;
+  /**
+   * OPTIONAL stored payload copy. The shipped P5-C capture writer does NOT
+   * persist `shiftId` on the alert doc (its exact key set is test-pinned), so
+   * this is `undefined` for every real alert. It is only a cross-check when
+   * present (raw Firestore value, hence `unknown`): it must equal `id`.
+   */
+  shiftId?: unknown;
   branchId: unknown;
   schemaVersion: unknown;
   caseVersion: unknown;
@@ -631,7 +638,9 @@ export function validateAlertInvariants(
   caseView: AlertInvariantCaseView,
   alert: AlertInvariantAlertView,
 ): { ok: true } | { ok: false; violation: AlertInvariantViolation } {
-  if (alert.id !== alert.shiftId) return { ok: false, violation: 'doc_id_mismatch' };
+  // D-P5-A3-1: the document id is the canonical identity. An absent stored
+  // `shiftId` is valid; a PRESENT one (any value, incl. null) must equal it.
+  if (alert.shiftId !== undefined && alert.shiftId !== alert.id) return { ok: false, violation: 'doc_id_mismatch' };
   if (alert.branchId !== caseView.branchId) return { ok: false, violation: 'branch_mismatch' };
   if (alert.schemaVersion !== SCHEMA_VERSION) return { ok: false, violation: 'schema_version_mismatch' };
   if (typeof alert.caseVersion !== 'number' || alert.caseVersion > caseView.caseVersion) {

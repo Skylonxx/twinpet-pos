@@ -3,6 +3,7 @@ import { Timestamp, FieldValue } from 'firebase-admin/firestore';
 import { runValidationSweep, shiftCloseValidationSweep } from '../shiftCloseValidationWorker';
 import { foldDeviceScopedDrawer } from '../shiftCloseValidationDrawerFold';
 import { computeInputsDigestAtRevision, MAX_SOURCE_DOCS } from '../shiftCloseValidationWorkerCore';
+import { planCapture, buildInitWrites } from '../shiftCloseEvidenceCaptureCore';
 
 // Integration tests over an in-memory Firestore fake — NOT a proof of real
 // production transaction contention (Gate-1 cursor/durability addendum §21
@@ -1487,6 +1488,76 @@ describe('runValidationSweep — BF-7 alert contract', () => {
     expect(after.processingState).toBe('queued'); // Category-D non-counting defer
     expect(after.revalidationAttempts).toBe(before.revalidationAttempts); // non-counting
     expect(after.leaseOwner).toBeNull();
+  });
+
+  // ── INCIDENT 2026-10-17 (P5 A3, doc_id_mismatch) — writer/reader contract ──
+  // The capture writer persists the alert doc WITHOUT a `shiftId` field; the
+  // worker used to demand one. Seed the alert with the REAL capture output
+  // shape (no `shiftId`) and prove the worker validates the case normally.
+  function realCaptureAlertDocFields(): Record<string, unknown> {
+    const planned = planCapture({
+      shiftId: SHIFT_ID,
+      before: { status: 'open' },
+      after: {
+        status: 'closed',
+        branchId: BRANCH_ID,
+        staffId: 'staff-1',
+        deviceId: 'device-1',
+        closedAt: Timestamp.fromMillis(NOW - 60_000),
+        startingCash: 0,
+        actualCashCount: 0,
+        variance: 0,
+        expectedCash: 0,
+        expectedQr: 0,
+        expectedKbank: 0,
+        expectedCard: 0,
+        expectedCredit: 0,
+        payInTotal: 0,
+        payOutTotal: 0,
+        totalBills: 0,
+        note: '',
+        cashEntries: [],
+      },
+      eventTimeIso: new Date(NOW).toISOString(),
+    });
+    if (planned.kind !== 'capture') throw new Error('fixture setup failed: ' + JSON.stringify(planned));
+    const { alertFields } = buildInitWrites(planned.capture);
+    return { ...alertFields, updatedAt: Timestamp.fromMillis(NOW) };
+  }
+
+  test('INCIDENT-A3 regression: alert doc exactly as written by capture (no stored shiftId) is accepted — no anomaly, normal run written', async () => {
+    const alertDocAsCaptured = realCaptureAlertDocFields();
+    expect(alertDocAsCaptured).not.toHaveProperty('shiftId'); // documents the real writer shape
+
+    const firestore = new FakeFirestore();
+    seedCase(firestore, { nextEligibleAt: Timestamp.fromMillis(NOW - 1000) });
+    firestore.seed('shiftCloseAlerts', SHIFT_ID, alertDocAsCaptured as StoredDoc);
+    seedEvidence(firestore);
+
+    await runValidationSweep({ firestore: firestore as unknown as FS, nowMillis: NOW, invocationId: 'inv-1' });
+
+    const finalCase = firestore.read('shiftCloseCases', SHIFT_ID)!;
+    expect(finalCase.pendingRevalidation).toBe(false);
+    expect(finalCase.selectedRunId).toBe(`${SHIFT_ID}_${CLOSE_HASH}_1_1`);
+    const run = firestore.read('shiftCloseValidationRuns', `${SHIFT_ID}_${CLOSE_HASH}_1_1`);
+    expect(run).toBeDefined(); // pre-fix: zero runs (doc_id_mismatch anomaly + Category-D defer)
+    expect(run!.validationVerdict).toBe('match');
+  });
+
+  test('an explicitly stored mismatching shiftId is still rejected: named zero-write anomaly, no run, non-counting defer', async () => {
+    const firestore = new FakeFirestore();
+    seedCase(firestore, { nextEligibleAt: Timestamp.fromMillis(NOW - 1000) });
+    seedAlert(firestore, { shiftId: 'some-other-shift' });
+    seedEvidence(firestore);
+
+    const before = { ...firestore.read('shiftCloseCases', SHIFT_ID) };
+    await runValidationSweep({ firestore: firestore as unknown as FS, nowMillis: NOW, invocationId: 'inv-1' });
+    const after = firestore.read('shiftCloseCases', SHIFT_ID)!;
+
+    expect(firestore.all('shiftCloseValidationRuns')).toHaveLength(0);
+    expect(after.processingState).toBe('queued');
+    expect(after.revalidationAttempts).toBe(before.revalidationAttempts);
+    expect(after.pendingRevalidation).toBe(true);
   });
 
   test('retry exhaustion (resolved -> open) writes the exact projection, a deterministic alert_opened audit, no run, and preserves settlement', async () => {

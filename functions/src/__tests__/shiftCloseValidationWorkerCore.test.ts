@@ -684,6 +684,42 @@ describe('validateAlertInvariants', () => {
   test('doc id != shiftId -> violation', () => {
     expect(validateAlertInvariants(caseView(), alertView({ id: 'other' }))).toEqual({ ok: false, violation: 'doc_id_mismatch' });
   });
+  // D-P5-A3-1: the document id is the canonical identity; stored `shiftId` is an optional cross-check.
+  test('doc id with NO stored shiftId (the real capture shape) -> ok', () => {
+    const view = alertView({ id: 'ABC' });
+    delete (view as { shiftId?: unknown }).shiftId;
+    expect(view).not.toHaveProperty('shiftId');
+    expect(validateAlertInvariants(caseView(), view)).toEqual({ ok: true });
+    expect(validateAlertInvariants(caseView(), alertView({ id: 'ABC', shiftId: undefined }))).toEqual({ ok: true });
+  });
+  test('doc id with MATCHING stored shiftId -> ok', () => {
+    expect(validateAlertInvariants(caseView(), alertView({ id: 'ABC', shiftId: 'ABC' }))).toEqual({ ok: true });
+  });
+  test('doc id with MISMATCHING stored shiftId -> doc_id_mismatch', () => {
+    expect(validateAlertInvariants(caseView(), alertView({ id: 'ABC', shiftId: 'XYZ' }))).toEqual({
+      ok: false,
+      violation: 'doc_id_mismatch',
+    });
+  });
+  test('a PRESENT-but-null / empty / non-string stored shiftId is not "absent" -> doc_id_mismatch', () => {
+    for (const bad of [null, '', 0, {}]) {
+      expect(validateAlertInvariants(caseView(), alertView({ id: 'ABC', shiftId: bad }))).toEqual({
+        ok: false,
+        violation: 'doc_id_mismatch',
+      });
+    }
+  });
+  test('absent shiftId does not weaken any other alert invariant', () => {
+    const noShiftId = (o: Partial<AlertInvariantAlertView>) => {
+      const v = alertView({ id: 'ABC', ...o });
+      delete (v as { shiftId?: unknown }).shiftId;
+      return v;
+    };
+    expect(validateAlertInvariants(caseView(), noShiftId({ branchId: 'branch-2' }))).toEqual({ ok: false, violation: 'branch_mismatch' });
+    expect(validateAlertInvariants(caseView(), noShiftId({ schemaVersion: 2 }))).toEqual({ ok: false, violation: 'schema_version_mismatch' });
+    expect(validateAlertInvariants(caseView({ caseVersion: 3 }), noShiftId({ caseVersion: 5 }))).toEqual({ ok: false, violation: 'case_version_ahead' });
+    expect(validateAlertInvariants(caseView({ alertState: 'none' }), noShiftId({}))).toEqual({ ok: false, violation: 'state_disagreement' });
+  });
   test('branch mismatch -> violation', () => {
     expect(validateAlertInvariants(caseView(), alertView({ branchId: 'branch-2' }))).toEqual({ ok: false, violation: 'branch_mismatch' });
   });

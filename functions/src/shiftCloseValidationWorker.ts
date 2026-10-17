@@ -740,7 +740,8 @@ async function runT3(
       { branchId, caseVersion: t3Case.caseVersion, alertState: caseData.alertState as never },
       {
         id: alertSnap.id,
-        shiftId: alertData.shiftId as string,
+        // Optional stored cross-check only; the doc id (alertSnap.id) is canonical.
+        shiftId: alertData.shiftId,
         branchId: alertData.branchId,
         schemaVersion: alertData.schemaVersion,
         caseVersion: alertData.caseVersion,
