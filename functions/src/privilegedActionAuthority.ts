@@ -13,7 +13,12 @@
  */
 
 import type { Firestore, Transaction } from 'firebase-admin/firestore';
-import { PRIVILEGED_APPROVER_PERMISSION, PRIVILEGED_REQUESTER_PERMISSION } from './privilegedActionRegistry';
+import {
+  PRIVILEGED_APPROVER_PERMISSION,
+  PRIVILEGED_REQUESTER_PERMISSION,
+  SALE_RETURN_APPROVER_PERMISSION,
+  SALE_RETURN_REQUESTER_PERMISSION,
+} from './privilegedActionRegistry';
 
 export const ROLE_PERMISSIONS_COLLECTION = 'settings';
 export const ROLE_PERMISSIONS_DOC_ID = '_rolePermissions';
@@ -259,5 +264,42 @@ export async function liveRoleHoldsVoidRequesterPermission(
   readStagedDenyHead?: StagedRoleDenyHeadReader,
 ): Promise<boolean> {
   const decision = await resolveLiveVoidRequesterPermission(database, role, reader, readStagedDenyHead);
+  return decision.allowed;
+}
+
+/**
+ * Return/Refund V1 APPROVER decision (`pos_return`, D-RET-7). Same fail-closed
+ * live matrix + staged-deny semantics as Void; never satisfied by `pos_void`.
+ */
+export async function liveRoleHoldsPosReturn(
+  database: Firestore,
+  role: string | null | undefined,
+  reader?: RolePermissionsReader,
+  readStagedDenyHead?: StagedRoleDenyHeadReader,
+): Promise<boolean> {
+  const decision = await resolveLivePrivilegedPermission(
+    database,
+    role,
+    SALE_RETURN_APPROVER_PERMISSION,
+    reader,
+    readStagedDenyHead,
+  );
+  return decision.allowed;
+}
+
+/** Return/Refund V1 REQUESTER decision: the ordinary sale permission (`pos_sale`). */
+export async function liveRoleHoldsReturnRequesterPermission(
+  database: Firestore,
+  role: string | null | undefined,
+  reader?: RolePermissionsReader,
+  readStagedDenyHead?: StagedRoleDenyHeadReader,
+): Promise<boolean> {
+  const decision = await resolveLivePrivilegedPermission(
+    database,
+    role,
+    SALE_RETURN_REQUESTER_PERMISSION,
+    reader,
+    readStagedDenyHead,
+  );
   return decision.allowed;
 }

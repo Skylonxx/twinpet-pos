@@ -12,16 +12,19 @@ import { isLiveManagerApprovalPinCompareEligible, isWellFormedPin } from './pinP
 import {
   PRIVILEGED_ACTION_IDS,
   PRIVILEGED_VOID_AUDIENCE,
+  SALE_RETURN_ACTION_ID,
+  SALE_RETURN_AUDIENCE,
   isApprovalAudience,
   isPrivilegedActionId,
+  isSaleReturnActionId,
 } from './privilegedActionRegistry';
 
 export { isLiveManagerApprovalPinCompareEligible, isWellFormedPin };
-export { PRIVILEGED_VOID_AUDIENCE, isApprovalAudience };
+export { PRIVILEGED_VOID_AUDIENCE, SALE_RETURN_AUDIENCE, isApprovalAudience };
 
 export const APPROVAL_SCHEMA_VERSION = 1;
 export const APPROVAL_AUDIENCE = 'resolveShiftCloseAlert';
-export const APPROVAL_AUDIENCES = [APPROVAL_AUDIENCE, PRIVILEGED_VOID_AUDIENCE] as const;
+export const APPROVAL_AUDIENCES = [APPROVAL_AUDIENCE, PRIVILEGED_VOID_AUDIENCE, SALE_RETURN_AUDIENCE] as const;
 export type ApprovalAudience = (typeof APPROVAL_AUDIENCES)[number];
 export const APPROVAL_SECURITY_MODELS = ['reauth', 'delegated'] as const;
 export type ApprovalSecurityModel = (typeof APPROVAL_SECURITY_MODELS)[number];
@@ -71,12 +74,14 @@ export const SHIFT_CLOSE_PROTECTED_ACTIONS = [
 export const LIVE_MANAGER_APPROVAL_ACTIONS = [
   ...SHIFT_CLOSE_PROTECTED_ACTIONS,
   ...PRIVILEGED_ACTION_IDS,
+  SALE_RETURN_ACTION_ID,
 ] as const;
 export type LiveManagerApprovalAction = (typeof LIVE_MANAGER_APPROVAL_ACTIONS)[number];
 
 export const PROTECTED_ACTIONS = [
   ...SHIFT_CLOSE_PROTECTED_ACTIONS,
   ...PRIVILEGED_ACTION_IDS,
+  SALE_RETURN_ACTION_ID,
 ] as const;
 
 export type ProtectedAction = (typeof PROTECTED_ACTIONS)[number];
@@ -220,6 +225,8 @@ export function isLiveManagerApprovalAction(value: unknown): value is LiveManage
  */
 export function audienceForProtectedAction(action: string): ApprovalAudience | null {
   if (isPrivilegedActionId(action)) return PRIVILEGED_VOID_AUDIENCE;
+  // Return/Refund V1: its own audience — never collapses into Void or shift-close.
+  if (isSaleReturnActionId(action)) return SALE_RETURN_AUDIENCE;
   if ((SHIFT_CLOSE_PROTECTED_ACTIONS as readonly string[]).includes(action)) return APPROVAL_AUDIENCE;
   return null;
 }

@@ -12,6 +12,7 @@ import {
   type CreditAccountData,
 } from './voidReversal';
 import { isCanonicalIdentifier } from './staffSessionAssertionFrame';
+import { SALE_RETURN_COLLECTIONS, ledgerHasAcceptedReturns } from './saleReturnCore';
 function readRevision(doc: Record<string, unknown>):
   | { kind: 'ABSENT' }
   | { kind: 'VALID'; value: number }
@@ -41,6 +42,7 @@ const C = {
   creditTransactions: 'creditTransactions',
   orders: 'orders',
   auditLogs: 'auditLogs',
+  saleReturnLedgers: SALE_RETURN_COLLECTIONS.ledgers,
 } as const;
 
 type ReconcileStatus = 'pending_reconcile' | 'settled' | 'exception';
@@ -62,7 +64,10 @@ type VoidIntentOrder = {
 };
 
 export type VoidIntentTxnOutcome =
-  | { kind: 'NOOP'; reason: 'absent' | 'not_settled' | 'already_reconciled' | 'terminal_marker_present' }
+  | {
+      kind: 'NOOP';
+      reason: 'absent' | 'not_settled' | 'already_reconciled' | 'terminal_marker_present' | 'return_present';
+    }
   | { kind: 'VOID_TOMBSTONED' }
   | { kind: 'VOID_ANOMALY_COMMITTED'; anomaly: string }
   | { kind: 'VOID_REVISION_FAULT_COMMITTED'; fault: string; branchId: string }
@@ -191,6 +196,16 @@ export async function handleVoidIntent(
 
     if (terminalMarkerPresent(order)) {
       return { kind: 'NOOP', reason: 'terminal_marker_present' };
+    }
+
+    // Return/Refund V1 cross-flow guard: a whole-bill Void restores EVERY line
+    // and reverses the full tender, so voiding a sale that already has an
+    // accepted (partial) Return would restore stock/money twice. Read inside
+    // this transaction so it serializes against submitSaleReturn's ledger write.
+    // No write: the order is left untouched for manual handling.
+    const returnLedgerSnap = await tx.get(db.collection(C.saleReturnLedgers).doc(orderRef.id));
+    if (returnLedgerSnap.exists && ledgerHasAcceptedReturns(returnLedgerSnap.data())) {
+      return { kind: 'NOOP', reason: 'return_present' };
     }
 
     // Privileged path only: generic void terminal is not a claimable completion.

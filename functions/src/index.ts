@@ -70,6 +70,9 @@ export {
 export { resolveShiftCloseAlert } from './resolveShiftCloseAlert';
 export { requestManagerApproval } from './requestManagerApproval';
 export { submitPrivilegedVoid } from './submitPrivilegedVoid';
+// Return/Refund V1: sale-linked partial return + immutable refund, distinct
+// from Void. Online-only; Manager/Admin `pos_return` approval in the same call.
+export { getSaleReturnContext, submitSaleReturn } from './submitSaleReturn';
 // SEC-001 Packet D / D-1B: adjudicates a PAA1 offline privileged-action
 // attestation relayed by an authenticated, branch-eligible POS terminal.
 // Not in the deploy inventory — Packet E remains required before deploy.
@@ -140,12 +143,12 @@ type UserRole = 'admin' | 'manager' | 'staff';
 // vocabulary grows (functions cannot import from src/).
 const DEFAULT_ROLE_PERMS: Record<UserRole, string[]> = {
   admin: [
-    'pos_sale', 'pos_discount', 'pos_void', 'quotation', 'product_view',
+    'pos_sale', 'pos_discount', 'pos_void', 'pos_return', 'quotation', 'product_view',
     'product_edit', 'stock_receive', 'cost_view', 'report_sales', 'report_stock',
     'report_profit', 'employee_manage', 'settings',
   ],
   manager: [
-    'pos_sale', 'pos_discount', 'pos_void', 'quotation', 'product_view',
+    'pos_sale', 'pos_discount', 'pos_void', 'pos_return', 'quotation', 'product_view',
     'product_edit', 'stock_receive', 'cost_view', 'report_sales', 'report_stock',
   ],
   staff: ['pos_sale', 'product_view'],

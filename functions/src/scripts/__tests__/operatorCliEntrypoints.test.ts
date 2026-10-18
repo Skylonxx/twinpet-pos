@@ -153,6 +153,9 @@ const TRUE_STANDALONE_PRIVILEGED_DEPLOY_FUNCTIONS = [
 /** Admin & Security Center V1 read-only overview callable, appended last. */
 const ADMIN_SECURITY_CENTER_DEPLOY_FUNCTIONS = ['getAdminSecurityOverview'];
 
+/** Return/Refund V1 online callables, appended after the Admin & Security Center. */
+const RETURN_REFUND_V1_DEPLOY_FUNCTIONS = ['getSaleReturnContext', 'submitSaleReturn'];
+
 function makeDb(seed: Record<string, Doc> = {}) {
   const store = new Map<string, Doc>(Object.entries(seed).map(([k, v]) => [k, { ...v }]));
   const writes: Array<{ op: string; path?: string }> = [];
@@ -583,6 +586,7 @@ describe('operator CLI entrypoints', () => {
       ...SEC001_PACKET_C_A_DEPLOY_FUNCTIONS,
       ...TRUE_STANDALONE_PRIVILEGED_DEPLOY_FUNCTIONS,
       ...ADMIN_SECURITY_CENTER_DEPLOY_FUNCTIONS,
+      ...RETURN_REFUND_V1_DEPLOY_FUNCTIONS,
     ]);
   });
 

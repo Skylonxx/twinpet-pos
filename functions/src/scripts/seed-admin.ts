@@ -118,12 +118,12 @@ const ADMIN_PERMISSIONS = {
 // token's `permissions` array; the admin Staff panel edits it live.
 const DEFAULT_ROLE_PERMISSIONS_MATRIX = {
   admin: [
-    'pos_sale', 'pos_discount', 'pos_void', 'quotation', 'product_view',
+    'pos_sale', 'pos_discount', 'pos_void', 'pos_return', 'quotation', 'product_view',
     'product_edit', 'stock_receive', 'cost_view', 'report_sales', 'report_stock',
     'report_profit', 'employee_manage', 'settings',
   ],
   manager: [
-    'pos_sale', 'pos_discount', 'pos_void', 'quotation', 'product_view',
+    'pos_sale', 'pos_discount', 'pos_void', 'pos_return', 'quotation', 'product_view',
     'product_edit', 'stock_receive', 'cost_view', 'report_sales', 'report_stock',
   ],
   staff: ['pos_sale', 'product_view'],

@@ -78,7 +78,7 @@ describe('deterministic ids', () => {
 });
 
 describe('protectedAction enum', () => {
-  test('freezes Packet 2A shift-close actions plus closed void actions', () => {
+  test('freezes Packet 2A shift-close actions plus closed void actions plus the distinct Return action', () => {
     expect([...SHIFT_CLOSE_PROTECTED_ACTIONS]).toEqual([
       'shift_close_alert_acknowledge',
       'shift_close_alert_resolve',
@@ -89,7 +89,10 @@ describe('protectedAction enum', () => {
       'shift_close_alert_resolve',
       'VOID_PENDING_SALE',
       'VOID_SETTLED_SALE',
+      'SALE_RETURN',
     ]);
+    expect(isProtectedAction('SALE_RETURN')).toBe(true);
+    expect(audienceForProtectedAction('SALE_RETURN')).toBe('saleReturn');
     expect(isProtectedAction('shift_close_alert_acknowledge')).toBe(true);
     expect(isProtectedAction('shift_close_alert_resolve')).toBe(true);
     expect(isProtectedAction('VOID_PENDING_SALE')).toBe(true);

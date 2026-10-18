@@ -37,9 +37,16 @@ import {
   shouldUseRealPinCompare,
   validateManagerApprovalRequest,
 } from './requestManagerApprovalCore';
-import { isPrivilegedActionId, PRIVILEGED_REQUESTER_PERMISSION } from './privilegedActionRegistry';
 import {
+  isPrivilegedActionId,
+  isSaleReturnActionId,
+  PRIVILEGED_REQUESTER_PERMISSION,
+  SALE_RETURN_REQUESTER_PERMISSION,
+} from './privilegedActionRegistry';
+import {
+  liveRoleHoldsPosReturn,
   liveRoleHoldsPosVoid,
+  liveRoleHoldsReturnRequesterPermission,
   liveRoleHoldsVoidRequesterPermission,
   type RolePermissionsReader,
   type StagedRoleDenyHeadReader,
@@ -258,8 +265,12 @@ export async function performRequestManagerApproval(
   }
 
   const voidAction = isPrivilegedActionId(value.protectedAction);
-  // D1: void reauth is the requester approving themselves.
-  if (voidAction && !delegated) {
+  // Return/Refund V1 (D-RET-7): distinct action; same requester/approver split
+  // as Void, but the approver authority is `pos_return`, never `pos_void`.
+  const returnAction = isSaleReturnActionId(value.protectedAction);
+  const saleLinkedAction = voidAction || returnAction;
+  // D1: void/return reauth is the requester approving themselves.
+  if (saleLinkedAction && !delegated) {
     return fail('self_approval_not_permitted');
   }
 
@@ -290,7 +301,7 @@ export async function performRequestManagerApproval(
   // M4′ — Model 1: manager/admin. Model 2 shift-close: staff requester only.
   // Void: any live role may request if they hold the ordinary sale permission
   // (pos_sale, D-VOID-REQ-1). pos_void is the distinct APPROVER's authority.
-  const requesterRoleOk = voidAction
+  const requesterRoleOk = saleLinkedAction
     ? role === 'admin' || role === 'manager' || role === 'staff'
     : delegated
       ? isModel2RequesterRole(role)
@@ -300,8 +311,8 @@ export async function performRequestManagerApproval(
   }
 
   // M5 — Model 1 keeps the shared ALL-admitting helper; Model 2 is exact-only.
-  // Void requesters: staff/manager exact membership; admin may use live ALL.
-  const requesterBranchOk = voidAction
+  // Void/Return requesters: staff/manager exact membership; admin may use live ALL.
+  const requesterBranchOk = saleLinkedAction
     ? role === 'admin'
       ? hasLiveBranchAccess(branchIds, value.branchId)
       : requesterBranchEligible(branchIds, value.branchId)
@@ -315,8 +326,22 @@ export async function performRequestManagerApproval(
   if (voidAction && !tokenHasPermission(auth, PRIVILEGED_REQUESTER_PERMISSION)) {
     return failWithAttempt('not_authorized', 'authorization');
   }
+  if (returnAction && !tokenHasPermission(auth, SALE_RETURN_REQUESTER_PERMISSION)) {
+    return failWithAttempt('not_authorized', 'authorization');
+  }
   if (voidAction) {
     const requesterMaySell = await liveRoleHoldsVoidRequesterPermission(
+      database,
+      role,
+      readRolePermissions,
+      readStagedDenyHead,
+    );
+    if (!requesterMaySell) {
+      return failWithAttempt('not_authorized', 'authorization');
+    }
+  }
+  if (returnAction) {
+    const requesterMaySell = await liveRoleHoldsReturnRequesterPermission(
       database,
       role,
       readRolePermissions,
@@ -366,6 +391,17 @@ export async function performRequestManagerApproval(
     if (voidAction) {
       const approverHasVoid = await liveRoleHoldsPosVoid(database, approverRole, readRolePermissions, readStagedDenyHead);
       if (!approverHasVoid) {
+        return failWithAttempt('approver_not_eligible', 'authorization');
+      }
+    }
+    if (returnAction) {
+      const approverHasReturn = await liveRoleHoldsPosReturn(
+        database,
+        approverRole,
+        readRolePermissions,
+        readStagedDenyHead,
+      );
+      if (!approverHasReturn) {
         return failWithAttempt('approver_not_eligible', 'authorization');
       }
     }

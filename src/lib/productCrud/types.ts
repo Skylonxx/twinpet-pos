@@ -480,6 +480,7 @@ export function movementLabel(type: StockMovement['type']): string {
     transfer_in: 'โอนเข้า',
     transfer_out: 'โอนออก',
     void: 'คืนสต็อก',
+    return: 'รับคืนจากลูกค้า',
   };
   return map[type] ?? type;
 }

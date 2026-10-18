@@ -26,6 +26,24 @@ export type PrivilegedApproverRole = (typeof PRIVILEGED_APPROVER_ROLES)[number];
 export const PRIVILEGED_REQUESTER_PERMISSION = 'pos_sale' as const;
 export const PRIVILEGED_APPROVER_PERMISSION = 'pos_void' as const;
 
+/**
+ * Return/Refund V1 (D-RET-7): a sale-linked Return is a DISTINCT action with
+ * its own audience and its own approver permission. It is deliberately NOT a
+ * member of `PRIVILEGED_ACTION_IDS` — that closed set is bound into offline
+ * OAC `allowedActions` and the Void-only consumers; Return V1 is online-only
+ * (D-RET-11) and must never be reachable through an offline Void credential.
+ * Never widen the Return approver to `pos_void` or the requester beyond the
+ * ordinary sale permission.
+ */
+export const SALE_RETURN_ACTION_ID = 'SALE_RETURN' as const;
+export const SALE_RETURN_AUDIENCE = 'saleReturn' as const;
+export const SALE_RETURN_REQUESTER_PERMISSION = 'pos_sale' as const;
+export const SALE_RETURN_APPROVER_PERMISSION = 'pos_return' as const;
+
+export function isSaleReturnActionId(value: unknown): value is typeof SALE_RETURN_ACTION_ID {
+  return value === SALE_RETURN_ACTION_ID;
+}
+
 export interface PrivilegedActionRequirement {
   audience: typeof PRIVILEGED_VOID_AUDIENCE;
   requesterPermission: typeof PRIVILEGED_REQUESTER_PERMISSION;

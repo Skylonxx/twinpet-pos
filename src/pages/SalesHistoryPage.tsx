@@ -44,6 +44,8 @@ import type { PrivilegedActionId } from '../lib/auth/privilegedAction/privileged
 import { fetchOrderReceipt } from '../lib/documents/receiptFetch';
 import { loadReceiptSettingsForOrderBranch } from '../lib/documents/receiptSettings';
 import ThermalReceipt from '../components/documents/ThermalReceipt';
+import SaleReturnModal, { type SaleReturnTarget } from '../components/salesHistory/SaleReturnModal';
+import { SALE_RETURN_ACTION_LABEL, SALE_RETURN_OFFLINE_COPY } from '../lib/saleReturn/saleReturnTypes';
 import type { Order, OrderItem, Payment, PaymentMethod } from '../lib/types';
 import { DateRangeDropdown } from '../components/common/DateRangeDropdown';
 import {
@@ -333,6 +335,19 @@ export default function SalesHistoryPage() {
   const [voidIntentsByOrderId, setVoidIntentsByOrderId] = useState<Record<string, VoidIntentRecord>>(
     {},
   );
+  // Return/Refund V1 — online-only sale-linked return (distinct from Void).
+  const [returnTarget, setReturnTarget] = useState<SaleReturnTarget | null>(null);
+  const [online, setOnline] = useState(() => typeof navigator === 'undefined' || navigator.onLine !== false);
+
+  useEffect(() => {
+    const update = () => setOnline(navigator.onLine !== false);
+    window.addEventListener('online', update);
+    window.addEventListener('offline', update);
+    return () => {
+      window.removeEventListener('online', update);
+      window.removeEventListener('offline', update);
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -640,11 +655,11 @@ export default function SalesHistoryPage() {
   useEffect(() => {
     if (!selectedId) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !voidOpen) closeDrawer();
+      if (e.key === 'Escape' && !voidOpen && !returnTarget) closeDrawer();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [selectedId, voidOpen, closeDrawer]);
+  }, [selectedId, voidOpen, returnTarget, closeDrawer]);
 
   useEffect(() => {
     if (!selectedId) return;
@@ -1217,6 +1232,46 @@ export default function SalesHistoryPage() {
                         {selected.pendingSync ? ' (ออฟไลน์)' : ''}
                       </button>
                     )}
+                    {isFirebaseConfigured ? (
+                      (() => {
+                        // Return/Refund V1: sale-linked, cross-day, partial — NOT a Void.
+                        // The server classifies eligibility; these are only fail-closed pre-gates.
+                        const returnBlockedTitle = !online
+                          ? SALE_RETURN_OFFLINE_COPY
+                          : selected.pendingSync
+                            ? 'บิลยังรอซิงก์ — คืนสินค้าได้หลังซิงก์เสร็จ'
+                            : saleDisplayStatus(selected.order) === 'credit'
+                              ? 'บิลเงินเชื่อยังไม่รองรับการคืนสินค้า'
+                              : null;
+                        return returnBlockedTitle ? (
+                          <button
+                            type="button"
+                            className="sh-df-btn sh-df-disabled"
+                            disabled
+                            title={returnBlockedTitle}
+                            data-testid="sale-return-open"
+                          >
+                            <i className="ti ti-arrow-back-up" aria-hidden="true" /> {SALE_RETURN_ACTION_LABEL}
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="sh-df-btn sh-df-print"
+                            data-testid="sale-return-open"
+                            onClick={() =>
+                              setReturnTarget({
+                                orderId: selected.order.id,
+                                branchId: selected.order.branchId,
+                                billLabel: selected.order.billId || selected.order.id,
+                                saleDateLabel: formatSaleDateTime(orderCreatedAt(selected.order)),
+                              })
+                            }
+                          >
+                            <i className="ti ti-arrow-back-up" aria-hidden="true" /> {SALE_RETURN_ACTION_LABEL}
+                          </button>
+                        );
+                      })()
+                    ) : null}
                     {selected &&
                     voidIntentsByOrderId[selected.order.id]?.status === 'terminal' &&
                     voidIntentsByOrderId[selected.order.id]?.terminalReason ? (
@@ -1242,6 +1297,12 @@ export default function SalesHistoryPage() {
       <PrivilegedVoidModal
         flow={privilegedVoidFlow}
         requesterDisplayName={user ? `${user.firstName} ${user.lastName}` : undefined}
+      />
+
+      <SaleReturnModal
+        target={returnTarget}
+        onClose={() => setReturnTarget(null)}
+        onCompleted={(returnNo) => showToast(`บันทึกการคืนสินค้าแล้ว — ${returnNo}`)}
       />
 
       {toast && <div className={`sh-toast sh-toast-${toast.type}`}>{toast.msg}</div>}

@@ -21,6 +21,7 @@ import { setUserAccount } from '../setUserAccount';
 import { submitPrivilegedVoid } from '../submitPrivilegedVoid';
 import { getAdminSecurityOverview } from '../getAdminSecurityOverview';
 import { issuePrivilegedLockoutClear } from '../issuePrivilegedLockoutClear';
+import { getSaleReturnContext, submitSaleReturn } from '../submitSaleReturn';
 import { verifyPinLogin } from '../index';
 
 /**
@@ -34,7 +35,7 @@ import { verifyPinLogin } from '../index';
 
 type CallableHandler = (req: http.IncomingMessage, res: http.ServerResponse) => unknown;
 
-/** The 9 callables fixed by D-CORS1: explicit allowlist, now shared. */
+/** The 9 callables fixed by D-CORS1 (explicit allowlist, now shared) plus later callables born on it. */
 const FIXED_CALLABLES: Record<string, CallableHandler> = {
   setUserAccount: setUserAccount as unknown as CallableHandler,
   adjudicateOfflinePrivilegedAction: adjudicateOfflinePrivilegedAction as unknown as CallableHandler,
@@ -45,6 +46,9 @@ const FIXED_CALLABLES: Record<string, CallableHandler> = {
   resolveTransferDiscrepancy: resolveTransferDiscrepancy as unknown as CallableHandler,
   retryReconcile: retryReconcile as unknown as CallableHandler,
   submitPrivilegedVoid: submitPrivilegedVoid as unknown as CallableHandler,
+  // Return/Refund V1 — born on the shared policy.
+  getSaleReturnContext: getSaleReturnContext as unknown as CallableHandler,
+  submitSaleReturn: submitSaleReturn as unknown as CallableHandler,
 };
 
 /** Compatibility set: already allowed Tauri before this fix. */

@@ -54,12 +54,14 @@ import {
 } from './submitPrivilegedVoidCore';
 import { handleVoidIntent, type HandleVoidIntentOptions, type VoidIntentTxnOutcome } from './voidIntent';
 import { DESKTOP_CALLABLE_CORS } from './callableCors';
+import { SALE_RETURN_COLLECTIONS, ledgerHasAcceptedReturns } from './saleReturnCore';
 
 const C = {
   users: 'users',
   approvals: 'managerApprovals',
   asyncOrders: 'asyncOrders',
   nonces: 'privilegedActionNonces',
+  saleReturnLedgers: SALE_RETURN_COLLECTIONS.ledgers,
 } as const;
 
 export type SubmitPrivilegedVoidResponse =
@@ -229,6 +231,9 @@ export async function performSubmitPrivilegedVoid(
       await markCompleted(outcome.kind);
       return { ok: true, orderId: value.targetEntityId, outcome: outcome.kind, idempotent };
     }
+    // Return/Refund V1: a sale with an accepted Return is never voided and the
+    // execution is NOT marked completed (no false Void success).
+    if (outcome.kind === 'NOOP' && outcome.reason === 'return_present') return fail('invalid_target');
     if (outcome.kind === 'NOOP' && (outcome.reason === 'already_reconciled' || outcome.reason === 'absent')) {
       if (outcome.reason === 'absent') return fail('invalid_target');
       if (afterDecision === 'MATCHING') {
@@ -302,6 +307,13 @@ export async function performSubmitPrivilegedVoid(
   }
 
   if (isAlreadyCanonicallyVoided(order)) {
+    return fail('invalid_target');
+  }
+
+  // Return/Refund V1: refuse before consuming the approval when the sale
+  // already has an accepted Return (handleVoidIntent re-checks in-transaction).
+  const returnLedgerSnap = await database.collection(C.saleReturnLedgers).doc(value.targetEntityId).get();
+  if (returnLedgerSnap.exists && ledgerHasAcceptedReturns(returnLedgerSnap.data())) {
     return fail('invalid_target');
   }
 

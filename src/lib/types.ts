@@ -22,7 +22,9 @@ export type StockMovementType =
   | 'adjust'
   | 'transfer_in'
   | 'transfer_out'
-  | 'void';
+  | 'void'
+  /** Return/Refund V1: sale-linked customer return, restored at original FIFO cost (server-written). */
+  | 'return';
 
 export type PaymentMethod = 'cash' | 'qr' | 'kbank' | 'card' | 'credit';
 
