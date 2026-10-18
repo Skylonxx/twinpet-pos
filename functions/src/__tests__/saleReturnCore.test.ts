@@ -9,14 +9,21 @@ import {
   deriveReturnApprovalCommandId,
   deriveReturnContentDigest,
   deriveReturnId,
+  decideInPlaceLotRestore,
   emptyLedger,
-  ledgerHasAcceptedReturns,
+  exactBaseMilli,
   lineRefundForReturnMinor,
+  maxSupportedReturnQtyMilli,
   parseReturnLedger,
+  parseReturnLedgerForSale,
   parseSaleEvidence,
+  planCustomerSpendAdjustment,
   planLotRestoration,
   planSaleReturn,
+  saleReturnLedgerBlocksVoid,
   serializeReturnLedger,
+  toMilliExact,
+  toMinorExact,
   validateSubmitSaleReturnRequest,
   type ReturnLedger,
   type SaleEvidence,
@@ -346,9 +353,9 @@ describe('ledger + identity', () => {
     expect(back?.lines.get(0)?.returnedQtyMilli).toBe(2000);
     expect(parseReturnLedger({ ...ser, returnCount: 2 })).toBeNull();
     expect(parseReturnLedger({ schemaVersion: 9 })).toBeNull();
-    expect(ledgerHasAcceptedReturns(ser)).toBe(true);
-    expect(ledgerHasAcceptedReturns({ returnCount: 0 })).toBe(false);
-    expect(ledgerHasAcceptedReturns({ returnCount: 'x' })).toBe(true);
+    // D-RET-FIX-2: ANY existing ledger document blocks Void — content never trusted.
+    expect(saleReturnLedgerBlocksVoid(true)).toBe(true);
+    expect(saleReturnLedgerBlocksVoid(false)).toBe(false);
   });
 
   test('returnId depends only on branch/order/attempt; content digest binds the content', () => {
@@ -439,6 +446,242 @@ describe('server ↔ client parity and source defaults', () => {
       expect(row('admin'), file).toContain("'pos_return'");
       expect(row('manager'), file).toContain("'pos_return'");
       expect(row('staff'), file).not.toContain('pos_return');
+    }
+  });
+});
+// ─── TPOS-USABLE-POS-RETURN-REFUND-V1-BLOCKER-FIX-CLAUDE-001 ─────────────────
+
+describe('D-RET-FIX-1 exact number parsing (fixed absolute tolerance)', () => {
+  test('money: half-satang is rejected at small AND large magnitudes; ordinary 2dp passes', () => {
+    expect(toMinorExact(10000.005)).toBeNull();
+    expect(toMinorExact(0.005)).toBeNull();
+    expect(toMinorExact(0.015)).toBeNull();
+    expect(toMinorExact(999999999.995)).toBeNull();
+    expect(toMinorExact(123456789.125)).toBeNull();
+    expect(toMinorExact(123456789.12)).toBe(12345678912);
+    expect(toMinorExact(945)).toBe(94500);
+    expect(toMinorExact(0.1 + 0.2)).toBe(30); // binary noise only
+    expect(toMinorExact(19.99 * 3)).toBe(5997);
+    expect(toMinorExact(-12.34)).toBe(-1234);
+  });
+
+  test('money: out of the exact supported range, non-finite or non-number fails closed', () => {
+    expect(toMinorExact(1e9 + 1)).toBeNull();
+    expect(toMinorExact(Number.MAX_SAFE_INTEGER)).toBeNull();
+    expect(toMinorExact(Number.NaN)).toBeNull();
+    expect(toMinorExact(Number.POSITIVE_INFINITY)).toBeNull();
+    expect(toMinorExact('945')).toBeNull();
+  });
+
+  test('quantity: > 0.001 precision rejected at small and large magnitudes; 3dp passes', () => {
+    expect(toMilliExact(1.0005)).toBeNull();
+    expect(toMilliExact(12345678.0005)).toBeNull();
+    expect(toMilliExact(99999999.0004)).toBeNull();
+    expect(toMilliExact(12345.678)).toBe(12345678);
+    expect(toMilliExact(0.1 * 3)).toBe(300);
+    expect(toMilliExact(1e8 + 1)).toBeNull();
+  });
+
+  test('base derivation uses the same absolute tolerance', () => {
+    expect(exactBaseMilli(1000, 12)).toBe(12000);
+    expect(exactBaseMilli(1500, 0.5)).toBe(750);
+    expect(exactBaseMilli(1, 0.3333)).toBeNull();
+    expect(exactBaseMilli(-1, 1)).toBeNull();
+  });
+
+  test('historical evidence with a half-satang total or sub-milli quantity is unsupported', () => {
+    const halfSatang = parseSaleEvidence('O1', asyncSale({ total: 945.005 }), canonical(), 'B1');
+    expect(halfSatang).toMatchObject({ ok: false, classification: 'RETURN_UNSUPPORTED_EVIDENCE', reason: 'money_malformed' });
+    const lines = asyncSale().lines as Doc[];
+    const subMilli = parseSaleEvidence(
+      'O1',
+      asyncSale({ lines: [{ ...lines[0]!, qty: 5.0005, qtyBase: 5.0005 }, lines[1]] }),
+      canonical(),
+      'B1',
+    );
+    expect(subMilli).toMatchObject({ ok: false, reason: 'precision_unsupported' });
+    const big = parseSaleEvidence(
+      'O1',
+      asyncSale({ lines: [{ ...lines[0]!, qty: 12345678.0005, qtyBase: 12345678.0005 }, lines[1]] }),
+      canonical(),
+      'B1',
+    );
+    expect(big).toMatchObject({ ok: false, reason: 'precision_unsupported' });
+  });
+});
+
+describe('D-RET-FIX-2 ledger invariants against the original sale', () => {
+  function validLedgerDoc(): Doc {
+    const r = planSaleReturn(evidence(), emptyLedger(), req([{ lineIndex: 0, productId: 'P1', qtyMilli: 2000 }], 16200), RID);
+    if (!r.ok) throw new Error('plan');
+    return serializeReturnLedger(r.plan.nextLedger, 'O1', 'B1');
+  }
+  const linesOf = (d: Doc) => d.lines as Doc[];
+
+  test('a consistent ledger parses; an absent ledger is empty', () => {
+    expect(parseReturnLedgerForSale(validLedgerDoc(), evidence())?.returnCount).toBe(1);
+    expect(parseReturnLedgerForSale(undefined, evidence())?.returnCount).toBe(0);
+  });
+
+  test('identity: a ledger for another order/branch fails closed', () => {
+    expect(parseReturnLedgerForSale({ ...validLedgerDoc(), orderId: 'O2' }, evidence())).toBeNull();
+    expect(parseReturnLedgerForSale({ ...validLedgerDoc(), branchId: 'B2' }, evidence())).toBeNull();
+  });
+
+  test('count / accepted ids: zero-count present ledger, duplicates, length mismatch, empty ids', () => {
+    const d = validLedgerDoc();
+    expect(parseReturnLedgerForSale({ ...d, returnCount: 0, acceptedReturnIds: [] }, evidence())).toBeNull();
+    expect(parseReturnLedgerForSale({ ...d, returnCount: 2, acceptedReturnIds: [RID, RID] }, evidence())).toBeNull();
+    expect(parseReturnLedgerForSale({ ...d, returnCount: 2 }, evidence())).toBeNull();
+    expect(parseReturnLedgerForSale({ ...d, acceptedReturnIds: [''] }, evidence())).toBeNull();
+    expect(parseReturnLedgerForSale({ ...d, returnCount: -1 }, evidence())).toBeNull();
+    expect(parseReturnLedgerForSale({ ...d, returnCount: 1.5 }, evidence())).toBeNull();
+  });
+
+  test('lines: unknown/duplicate index, over-sold qty, base inconsistent with unitFactor, negative', () => {
+    const d = validLedgerDoc();
+    const l0 = linesOf(d)[0]!;
+    const withLines = (lines: Doc[]) => parseReturnLedgerForSale({ ...d, lines }, evidence());
+    expect(withLines([{ ...l0, lineIndex: 7 }])).toBeNull();
+    expect(withLines([l0, l0])).toBeNull();
+    expect(withLines([{ ...l0, returnedQtyMilli: 6000, returnedQtyBaseMilli: 6000 }])).toBeNull();
+    expect(withLines([{ ...l0, returnedQtyBaseMilli: 2001 }])).toBeNull();
+    expect(withLines([{ ...l0, returnedQtyMilli: -1 }])).toBeNull();
+    // Line 1 has unitFactor 12: 1 ลัง must be 12 base units.
+    expect(
+      withLines([l0, { lineIndex: 1, returnedQtyMilli: 1000, returnedQtyBaseMilli: 11000, refundedMinor: 27000 }]),
+    ).toBeNull();
+  });
+
+  test('money: line refund, Σ lines, Σ tenders, tender cap and sale cap must all reconcile', () => {
+    const d = validLedgerDoc();
+    const l0 = linesOf(d)[0]!;
+    expect(parseReturnLedgerForSale({ ...d, lines: [{ ...l0, refundedMinor: 16201 }], refundedTotalMinor: 16201, refundedByMethodMinor: { cash: 16201 } }, evidence())).toBeNull();
+    expect(parseReturnLedgerForSale({ ...d, refundedTotalMinor: 16000 }, evidence())).toBeNull();
+    expect(parseReturnLedgerForSale({ ...d, refundedByMethodMinor: { cash: 16000 } }, evidence())).toBeNull();
+    // The sale was paid in cash only: a QR refund total is impossible.
+    expect(parseReturnLedgerForSale({ ...d, refundedByMethodMinor: { cash: 0, qr: 16200 } }, evidence())).toBeNull();
+    expect(parseReturnLedgerForSale({ ...d, refundedByMethodMinor: { cash: -1 } }, evidence())).toBeNull();
+  });
+});
+
+describe('D-RET-FIX-4 oversell allocation fails closed in V1', () => {
+  function oversellSale(): SaleEvidence {
+    const lines = asyncSale().lines as Doc[];
+    return evidence(
+      asyncSale({
+        lines: [
+          { ...lines[0]!, lotRefs: [{ lotId: 'L1', qty: 3, cost: 40 }, { lotId: 'oversell', qty: 2, cost: 40 }] },
+          lines[1],
+        ],
+      }),
+    );
+  }
+
+  test('a return wholly within the real-lot portion is allowed even when the line was later oversold', () => {
+    const r = planSaleReturn(oversellSale(), emptyLedger(), req([{ lineIndex: 0, productId: 'P1', qtyMilli: 3000 }], 24300), RID);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.plan.lines[0]!.portions).toEqual([expect.objectContaining({ originalLotId: 'L1', qtyBaseMilli: 3000 })]);
+  });
+
+  test('a quantity that crosses into the oversell allocation is rejected', () => {
+    expect(planSaleReturn(oversellSale(), emptyLedger(), req([{ lineIndex: 0, productId: 'P1', qtyMilli: 4000 }], 32400), RID)).toEqual({
+      ok: false,
+      code: 'oversell_return_unsupported',
+    });
+    const first = planSaleReturn(oversellSale(), emptyLedger(), req([{ lineIndex: 0, productId: 'P1', qtyMilli: 3000 }], 24300), RID);
+    if (!first.ok) throw new Error('plan');
+    expect(planSaleReturn(oversellSale(), first.plan.nextLedger, req([{ lineIndex: 0, productId: 'P1', qtyMilli: 1000 }], 8100), 'x'.repeat(40))).toEqual({
+      ok: false,
+      code: 'oversell_return_unsupported',
+    });
+  });
+
+  test('context exposes the supported (oversell-free) returnable quantity', () => {
+    const sale = oversellSale();
+    expect(maxSupportedReturnQtyMilli(sale.lines[0]!, undefined)).toBe(3000);
+    const view = buildReturnContextView(sale, emptyLedger());
+    expect(view.lines[0]).toMatchObject({ returnableQty: 5, supportedReturnableQty: 3, oversellLimited: true });
+    expect(view.lines[1]).toMatchObject({ returnableQty: 2, supportedReturnableQty: 2, oversellLimited: false });
+    const first = planSaleReturn(sale, emptyLedger(), req([{ lineIndex: 0, productId: 'P1', qtyMilli: 3000 }], 24300), RID);
+    if (!first.ok) throw new Error('plan');
+    expect(maxSupportedReturnQtyMilli(sale.lines[0]!, first.plan.nextLedger.lines.get(0))).toBe(0);
+  });
+});
+
+describe('D-RET-FIX-3 in-place original-lot restore decision', () => {
+  const lot = (over: Doc = {}): Doc => ({ productId: 'P1', branchId: 'B1', qtyReceived: 3, qtyRemaining: 0, costPerUnit: 40, ...over });
+  const expectP = (restoreBaseMilli = 2000, portionCosts = [40]) => ({ productId: 'P1', branchId: 'B1', portionCosts, restoreBaseMilli });
+
+  test('intact lot with room and the same cost restores in place to an exact value', () => {
+    expect(decideInPlaceLotRestore(lot(), expectP())).toEqual({ ok: true, currentRemainingMilli: 0, nextRemainingMilli: 2000 });
+    expect(decideInPlaceLotRestore(lot({ qtyRemaining: 1 }), expectP())).toEqual({ ok: true, currentRemainingMilli: 1000, nextRemainingMilli: 3000 });
+  });
+
+  test('near-full / already-full / over-full lots never exceed qtyReceived', () => {
+    expect(decideInPlaceLotRestore(lot({ qtyRemaining: 2 }), expectP())).toEqual({ ok: false, reason: 'capacity_exceeded' });
+    expect(decideInPlaceLotRestore(lot({ qtyRemaining: 3 }), expectP())).toEqual({ ok: false, reason: 'capacity_exceeded' });
+    expect(decideInPlaceLotRestore(lot({ qtyRemaining: 4 }), expectP())).toEqual({ ok: false, reason: 'remaining_exceeds_received' });
+  });
+
+  test('a lot whose current cost differs from the sale-time cost is never merged into', () => {
+    expect(decideInPlaceLotRestore(lot({ costPerUnit: 45 }), expectP())).toEqual({ ok: false, reason: 'cost_mismatch' });
+    expect(decideInPlaceLotRestore(lot(), expectP(2000, [40, 41]))).toEqual({ ok: false, reason: 'cost_mismatch' });
+    expect(decideInPlaceLotRestore(lot({ costPerUnit: '40' }), expectP())).toEqual({ ok: false, reason: 'cost_mismatch' });
+  });
+
+  test('missing / ghost / mismatched / malformed lots', () => {
+    expect(decideInPlaceLotRestore(null, expectP())).toEqual({ ok: false, reason: 'lot_missing' });
+    expect(decideInPlaceLotRestore(lot({ isGhost: true }), expectP())).toEqual({ ok: false, reason: 'ghost_lot' });
+    expect(decideInPlaceLotRestore(lot({ productId: 'P9' }), expectP())).toEqual({ ok: false, reason: 'product_mismatch' });
+    expect(decideInPlaceLotRestore(lot({ branchId: 'B2' }), expectP())).toEqual({ ok: false, reason: 'branch_mismatch' });
+    expect(decideInPlaceLotRestore(lot({ qtyRemaining: '0' }), expectP())).toEqual({ ok: false, reason: 'qty_malformed' });
+    expect(decideInPlaceLotRestore(lot({ qtyReceived: 3.0005 }), expectP())).toEqual({ ok: false, reason: 'qty_malformed' });
+    expect(decideInPlaceLotRestore(lot({ qtyRemaining: -1 }), expectP())).toEqual({ ok: false, reason: 'qty_malformed' });
+  });
+});
+
+describe('D-RET-FIX-9 customer spend adjustment', () => {
+  test('decrements both spend aggregates by the refund, exactly', () => {
+    expect(planCustomerSpendAdjustment('C1', { lifetimeValue: 1000, totalSpent: 1000 }, 16200)).toEqual({
+      apply: true,
+      decrementMinor: 16200,
+      fields: {
+        lifetimeValue: { before: 1000, after: 838, clamped: false },
+        totalSpent: { before: 1000, after: 838, clamped: false },
+      },
+    });
+  });
+
+  test('never below the 0 floor; absent fields untouched; malformed / missing never written', () => {
+    expect(planCustomerSpendAdjustment('C1', { totalSpent: 100 }, 16200)).toEqual({
+      apply: true,
+      decrementMinor: 16200,
+      fields: { totalSpent: { before: 100, after: 0, clamped: true } },
+    });
+    expect(planCustomerSpendAdjustment('C1', { totalSpent: 'x' }, 100)).toEqual({ apply: false, reason: 'aggregate_malformed' });
+    expect(planCustomerSpendAdjustment('C1', {}, 100)).toEqual({ apply: false, reason: 'no_aggregate' });
+    expect(planCustomerSpendAdjustment('C1', null, 100)).toEqual({ apply: false, reason: 'customer_missing' });
+    expect(planCustomerSpendAdjustment(null, { totalSpent: 100 }, 100)).toEqual({ apply: false, reason: 'no_customer' });
+    expect(planCustomerSpendAdjustment('C1', { totalSpent: 100 }, 0)).toEqual({ apply: false, reason: 'zero_refund' });
+  });
+});
+
+describe('planSaleReturn line revenue reversal (reporting basis)', () => {
+  test('line revenue reversed is the cumulative-exact share of lineTotal (before bill discount)', () => {
+    const r = planSaleReturn(evidence(), emptyLedger(), req([{ lineIndex: 0, productId: 'P1', qtyMilli: 2000 }], 16200), RID);
+    if (!r.ok) throw new Error('plan');
+    // lineTotal 450 × 2/5 = 180; refund (after 10% bill discount) = 162.
+    expect(r.plan.lines[0]!.lineRevenueMinor).toBe(18000);
+    expect(r.plan.lineRevenueMinor).toBe(18000);
+    expect(r.plan.refundMinor).toBe(16200);
+  });
+});
+
+describe('client exact-quantity parity (D-RET-FIX-1)', () => {
+  test('client qtyToMilli accepts/rejects exactly like the server', () => {
+    for (const v of [0, 1, 2.5, 0.001, 0.1 * 3, 12345.678, 1.0005, 12345678.0005, 99999999.0004, 1e8, 1e8 + 1, -1, Number.NaN]) {
+      expect(clientReturn.qtyToMilli(v), String(v)).toBe(toMilliExact(v));
     }
   });
 });

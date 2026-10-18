@@ -132,7 +132,11 @@ function makeSnapshot(
   };
 }
 
+// The closeShift suites below model the OFFLINE (7C-B1) close. The online
+// cash-freshness read added by D-RET-FIX-8 is covered separately in
+// shiftService.closeFreshness.test.ts, so these run with the device offline.
 beforeEach(() => {
+  vi.stubGlobal('navigator', { onLine: false });
   getDocFromCacheMock.mockReset();
   updateDocMock.mockReset();
   updateDocMock.mockResolvedValue(undefined);
@@ -163,6 +167,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllGlobals();
 });
 
 describe('closeShift — Packet 7C-B1 local optimistic offline close', () => {

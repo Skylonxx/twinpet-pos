@@ -46,6 +46,7 @@ import {
 } from '../lib/profitReport/types';
 import { useAuth } from '../lib/hooks/useAuth';
 import { isFirebaseConfigured } from '../lib/firebase';
+import { NET_AFTER_RETURNS_LABEL } from '../lib/saleReturn/returnAdjustments';
 import {
   Table,
   TableHead,
@@ -379,7 +380,7 @@ function ProductPickerModal({
 
 export default function ProfitReportPage() {
   const { branchId } = useAuth();
-  const { lines, loading, error } = useProfitReport(branchId);
+  const { lines, loading, error, netOfReturns, returnsStatus } = useProfitReport(branchId);
 
   const initialRange = applyDatePreset('today');
   const [dateFrom, setDateFrom] = useState(initialRange.from);
@@ -771,6 +772,17 @@ export default function ProfitReportPage() {
           </div>
         ) : (
           <>
+            <div
+              className={`pr-returns-basis${netOfReturns ? ' pr-returns-basis--net' : ''}`}
+              role="status"
+              data-testid="pr-returns-basis"
+            >
+              {netOfReturns
+                ? `ยอดขาย / ต้นทุน / กำไรในรายงานนี้เป็นยอด${NET_AFTER_RETURNS_LABEL} (รายการคืนสินค้าแสดงเป็นแถวติดลบของบิลเดิม)`
+                : returnsStatus === 'loading'
+                  ? 'กำลังโหลดรายการคืนสินค้า — ตัวเลขด้านล่างยังเป็นยอดก่อนหักคืนสินค้า'
+                  : 'โหลดรายการคืนสินค้าไม่ได้ — ตัวเลขด้านล่างเป็นยอดก่อนหักคืนสินค้า (ไม่ใช่ยอดสุทธิ)'}
+            </div>
             <div className="pr-kpi-grid">
               <div className="pr-kpi-card pr-kpi-primary">
                 <i className="pr-kpi-icon ti ti-coin" aria-hidden="true" />

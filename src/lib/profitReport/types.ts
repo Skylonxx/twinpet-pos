@@ -39,6 +39,8 @@ export type ProfitSaleLine = {
   cogs: number;
   profit: number;
   margin: number;
+  /** Negative adjustment line from an accepted Return (D-RET-FIX-9). */
+  isReturnAdjustment?: boolean;
 };
 
 export type ProfitAggregateRow = {

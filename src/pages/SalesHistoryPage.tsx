@@ -45,6 +45,11 @@ import { fetchOrderReceipt } from '../lib/documents/receiptFetch';
 import { loadReceiptSettingsForOrderBranch } from '../lib/documents/receiptSettings';
 import ThermalReceipt from '../components/documents/ThermalReceipt';
 import SaleReturnModal, { type SaleReturnTarget } from '../components/salesHistory/SaleReturnModal';
+import {
+  GROSS_BEFORE_RETURNS_LABEL,
+  netAfterReturns,
+  useSaleReturnAdjustments,
+} from '../lib/saleReturn/returnAdjustments';
 import { SALE_RETURN_ACTION_LABEL, SALE_RETURN_OFFLINE_COPY } from '../lib/saleReturn/saleReturnTypes';
 import type { Order, OrderItem, Payment, PaymentMethod } from '../lib/types';
 import { DateRangeDropdown } from '../components/common/DateRangeDropdown';
@@ -414,7 +419,11 @@ export default function SalesHistoryPage() {
   );
 
   const filtered = useMemo(() => filterSales(records, filters), [records, filters]);
-  const summary = useMemo(() => computeSummary(filtered), [filtered]);
+  // D-RET-FIX-9: money metrics are NET of accepted Returns only when every
+  // Return of the branch is loaded exactly; otherwise they are labelled gross.
+  const returnAdjustments = useSaleReturnAdjustments(branchId);
+  const returnsByOrder = returnAdjustments.status === 'ready' ? returnAdjustments.byOrder : null;
+  const summary = useMemo(() => computeSummary(filtered, returnsByOrder), [filtered, returnsByOrder]);
   const pageRows = useMemo(
     () => filtered.slice((tablePage - 1) * PAGE_SIZE, tablePage * PAGE_SIZE),
     [filtered, tablePage],
@@ -713,12 +722,17 @@ export default function SalesHistoryPage() {
         ) : null}
 
         <div className="sh-metrics-grid">
-          <div className="sh-metric-card">
-            <span className="sh-metric-label">ยอดขายรวม</span>
+          <div className="sh-metric-card" data-testid="sh-metric-total">
+            <span className="sh-metric-label">
+              {summary.netOfReturns ? 'ยอดขายสุทธิ (หักคืนสินค้า)' : `ยอดขายรวม (${GROSS_BEFORE_RETURNS_LABEL})`}
+            </span>
             <span className="sh-metric-num" style={{ color: 'var(--p600, #534ab7)' }}>
               ฿{fmtShort(summary.totalAmt)}
             </span>
-            <span className="sh-metric-sub">{summary.billCount} บิล</span>
+            <span className="sh-metric-sub">
+              {summary.billCount} บิล
+              {summary.netOfReturns && summary.refundAmt > 0 ? ` · คืนเงิน ฿${fmtShort(summary.refundAmt)}` : ''}
+            </span>
           </div>
           <div className="sh-metric-card">
             <span className="sh-metric-label">บิลสำเร็จ</span>
@@ -744,9 +758,18 @@ export default function SalesHistoryPage() {
           <div className="sh-metric-card">
             <span className="sh-metric-label">เงินสด</span>
             <span className="sh-metric-num">฿{fmtShort(summary.cashAmt)}</span>
-            <span className="sh-metric-sub">ช่องทางหลัก</span>
+            <span className="sh-metric-sub">
+              {summary.netOfReturns ? 'หักคืนเงินสดแล้ว' : GROSS_BEFORE_RETURNS_LABEL}
+            </span>
           </div>
         </div>
+        {!summary.netOfReturns && (
+          <div className="sh-returns-gross-note" role="status" data-testid="sh-returns-gross-note">
+            {returnAdjustments.status === 'loading'
+              ? 'กำลังโหลดรายการคืนสินค้า — ตัวเลขด้านบนยังเป็นยอดก่อนหักคืนสินค้า'
+              : 'โหลดรายการคืนสินค้าไม่ได้ — ตัวเลขด้านบนเป็นยอดก่อนหักคืนสินค้า (ไม่ใช่ยอดสุทธิ)'}
+          </div>
+        )}
 
         <div className="sh-toolbar">
           <div className="sh-search-wrap">
@@ -906,6 +929,12 @@ export default function SalesHistoryPage() {
                               <span className={`sh-total-amt${isVoid ? ' void' : ''}`}>
                                 ฿{formatMoney(order.total)}
                               </span>
+                              {returnsByOrder?.get(order.id) ? (
+                                <div className="sh-returned-amt" data-testid={`sh-returned-${order.id}`}>
+                                  คืน -฿{formatMoney(returnsByOrder.get(order.id)!.refundMinor / 100)} · สุทธิ ฿
+                                  {formatMoney(netAfterReturns(order.total, returnsByOrder.get(order.id)))}
+                                </div>
+                              ) : null}
                             </TableCell>
                             <TableCell className="text-center">
                               {voidPending ? (
@@ -1122,6 +1151,30 @@ export default function SalesHistoryPage() {
                       <span className="sh-pay-total-lbl">รวมสุทธิ</span>
                       <span className="sh-pay-total-val">฿{formatMoney(selected.order.total)}</span>
                     </div>
+                    {returnsByOrder?.get(selected.order.id) ? (
+                      <>
+                        <div className="sh-pay-row" data-testid="sh-detail-returned">
+                          <span className="sh-pay-row-lbl">
+                            คืนสินค้าแล้ว ({returnsByOrder.get(selected.order.id)!.returnCount} ครั้ง)
+                          </span>
+                          <span className="sh-pay-row-val">
+                            -฿{formatMoney(returnsByOrder.get(selected.order.id)!.refundMinor / 100)}
+                          </span>
+                        </div>
+                        <div className="sh-pay-row">
+                          <span className="sh-pay-row-lbl">ยอดหลังหักคืนสินค้า</span>
+                          <span className="sh-pay-row-val">
+                            ฿{formatMoney(netAfterReturns(selected.order.total, returnsByOrder.get(selected.order.id)))}
+                          </span>
+                        </div>
+                      </>
+                    ) : null}
+                    {returnsByOrder == null && (
+                      <div className="sh-pay-row">
+                        <span className="sh-pay-row-lbl">ยอดคืนสินค้า</span>
+                        <span className="sh-pay-row-val">ยังโหลดไม่ได้ ({GROSS_BEFORE_RETURNS_LABEL})</span>
+                      </div>
+                    )}
                     <hr className="sh-pay-divider" style={{ marginTop: 8 }} />
                     <div
                       style={{

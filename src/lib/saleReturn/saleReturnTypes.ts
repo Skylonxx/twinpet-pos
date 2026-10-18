@@ -27,6 +27,10 @@ export type SaleReturnContextLine = {
   returnableQty: number;
   soldQtyMilli: number;
   returnedQtyMilli: number;
+  /** What V1 can return now (excludes units sold from oversell). Absent on older servers ⇒ returnable. */
+  supportedReturnableQty?: number;
+  supportedReturnableQtyMilli?: number;
+  oversellLimited?: boolean;
   unitPrice: number;
   lineDiscount: number;
   lineTotal: number;
@@ -70,7 +74,9 @@ export type SaleReturnErrorCode =
   | 'replayed_approval'
   | 'self_approval_not_permitted'
   | 'approver_not_eligible'
-  | 'invalid_target';
+  | 'invalid_target'
+  | 'oversell_return_unsupported'
+  | 'attempt_not_committed';
 
 export const SALE_RETURN_ERROR_COPY: Record<SaleReturnErrorCode, string> = {
   not_authorized: 'ไม่มีสิทธิ์ทำรายการคืนสินค้า',
@@ -82,7 +88,7 @@ export const SALE_RETURN_ERROR_COPY: Record<SaleReturnErrorCode, string> = {
   over_return: 'จำนวนคืนเกินจำนวนที่คืนได้ (อาจมีการคืนไปแล้ว) — กรุณาโหลดข้อมูลบิลใหม่',
   refund_mismatch: 'ยอดคืนเงินไม่ตรงกับที่ระบบคำนวณ — กรุณาโหลดข้อมูลบิลใหม่',
   refund_method_not_allowed: 'ช่องทางคืนเงินนี้ใช้กับบิลนี้ไม่ได้',
-  refund_cap_exceeded: 'ยอดคืนเงินเกินยอดที่ลูกค้าชำระด้วยช่องทางนี้',
+  refund_cap_exceeded: 'ยอดคืนเงินเกินยอดคงเหลือที่คืนได้ของช่องทางที่เลือก — เวอร์ชันนี้คืนเงินได้ทางเดียวต่อรายการ',
   reference_required: 'กรุณาระบุเลขอ้างอิงการคืนเงิน',
   shift_required: 'ต้องเปิดกะของคุณก่อนคืนเงินสด',
   idempotency_conflict: 'คำขอนี้ถูกใช้กับข้อมูลอื่นไปแล้ว — กรุณาเริ่มรายการใหม่',
@@ -93,12 +99,30 @@ export const SALE_RETURN_ERROR_COPY: Record<SaleReturnErrorCode, string> = {
   self_approval_not_permitted: 'ผู้อนุมัติต้องเป็นคนละคนกับผู้ทำรายการ',
   approver_not_eligible: 'ผู้อนุมัติไม่มีสิทธิ์อนุมัติการคืนสินค้า',
   invalid_target: 'ยืนยันคำขอคืนสินค้าไม่ได้ — กรุณาลองใหม่',
+  oversell_return_unsupported:
+    'สินค้าส่วนนี้ขายตอนสต็อกติดลบ (ขายเกินสต็อก) — เวอร์ชันนี้ยังคืนส่วนนี้ไม่ได้ ให้ผู้จัดการตรวจสอบ',
+  attempt_not_committed: 'ยืนยันแล้วว่ารายการคืนสินค้าครั้งก่อนไม่ได้บันทึก — เริ่มรายการใหม่ได้',
 };
+
+/** D-RET-FIX-4 line-level note when part of a line was sold from oversell. */
+export const SALE_RETURN_OVERSELL_LINE_COPY =
+  'บางส่วนของรายการนี้ขายตอนสต็อกติดลบ — คืนได้เฉพาะส่วนที่มีล็อตต้นทุนจริง';
+
+/**
+ * D-RET-FIX-10 — one refund tender per Return in V1. Shown when no single
+ * original tender has enough remaining refundable value for the drafted
+ * physical return. Never suggests splitting the same items across Returns.
+ */
+export const SALE_RETURN_SINGLE_TENDER_UNSUPPORTED_COPY =
+  'ยอดคืนเงินรวมเกินยอดคงเหลือของทุกช่องทางที่ลูกค้าจ่ายมา (แยกทีละช่องทาง) — เวอร์ชันนี้คืนเงินได้ทางเดียวต่อรายการ จึงยังคืนรายการนี้ไม่ได้ กรุณาแจ้งผู้จัดการ';
 
 export const SALE_RETURN_OFFLINE_COPY = 'ต้องออนไลน์เพื่อคืนสินค้า/คืนเงิน';
 /** Transport failure: the server MAY have committed. A retry of the same attempt never refunds twice. */
 export const SALE_RETURN_UNKNOWN_OUTCOME_COPY =
   'ติดต่อเซิร์ฟเวอร์ไม่สำเร็จ — ยังไม่ทราบผล กรุณาส่งอีกครั้งเพื่อตรวจสอบ (ระบบจะไม่คืนเงินซ้ำ)';
+/** D-RET-FIX-7: an unresolved attempt recovered after the modal was closed/reopened. */
+export const SALE_RETURN_UNRESOLVED_COPY =
+  'มีรายการคืนสินค้าของบิลนี้ที่ยังไม่ทราบผล (รายการเดิมด้านล่าง) — ต้องตรวจสอบผลรายการนี้ก่อน จึงจะเริ่มรายการใหม่ได้ ระบบจะไม่คืนเงินซ้ำ';
 
 export const SALE_RETURN_ACTION_LABEL = 'คืนสินค้า / คืนเงิน';
 
@@ -123,6 +147,8 @@ export function classificationCopy(classification: SaleReturnClassification, rea
   if (classification === 'RETURN_UNSUPPORTED_EVIDENCE') {
     if (reason === 'credit_sale_unsupported') return 'บิลที่มีการชำระแบบเงินเชื่อยังไม่รองรับการคืนสินค้าในเวอร์ชันนี้';
     if (reason === 'vat_unsupported') return 'บิลที่มี VAT ยังไม่รองรับการคืนสินค้าในเวอร์ชันนี้';
+    if (reason === 'oversell_return_unsupported') return SALE_RETURN_ERROR_COPY.oversell_return_unsupported;
+    if (reason === 'ledger_malformed') return 'ข้อมูลการคืนสินค้าเดิมของบิลนี้ไม่สอดคล้อง — ระบบหยุดไว้ก่อน ให้ผู้จัดการตรวจสอบ';
     return 'บิลเก่านี้ไม่มีข้อมูลต้นทุน/ราคาเดิมครบ — ระบบไม่คืนสินค้าแบบเดา';
   }
   switch (reason) {
@@ -144,12 +170,18 @@ export function classificationCopy(classification: SaleReturnClassification, rea
   }
 }
 
-/** Quantity → integer milli-units; `null` if not exact to 0.001 or not positive-finite. */
+/**
+ * Quantity → integer milli-units; `null` if not exact to 0.001 or out of the
+ * supported range. Mirrors the server `toMilliExact`: a FIXED absolute
+ * tolerance (never magnitude-relative), so sub-milli input is always rejected.
+ */
 export function qtyToMilli(qty: number): number | null {
-  if (!Number.isFinite(qty)) return null;
+  if (typeof qty !== 'number' || !Number.isFinite(qty)) return null;
+  if (Math.abs(qty) > 1e8) return null;
   const scaled = qty * 1000;
   const rounded = Math.round(scaled);
-  if (Math.abs(scaled - rounded) > 1e-6 * Math.max(1, Math.abs(scaled))) return null;
+  if (!Number.isSafeInteger(rounded)) return null;
+  if (Math.abs(scaled - rounded) > 1e-4) return null;
   return rounded;
 }
 
@@ -191,11 +223,23 @@ export function checkReturnDraft(context: SaleReturnContextView, draft: readonly
     if (line.returnedQtyMilli + milli > line.soldQtyMilli) {
       return { ok: false, message: `${line.productName} คืนได้สูงสุด ${line.returnableQty} ${line.unit}` };
     }
+    if (line.supportedReturnableQtyMilli != null && milli > line.supportedReturnableQtyMilli) {
+      return {
+        ok: false,
+        message: `${line.productName}: ${SALE_RETURN_OVERSELL_LINE_COPY} (สูงสุด ${line.supportedReturnableQty ?? 0} ${line.unit})`,
+      };
+    }
     refundMinor += previewLineRefundMinor(line, milli);
     out.push({ lineIndex: line.lineIndex, productId: line.productId, qty: d.qty });
   }
   if (out.length === 0) return { ok: false, message: 'กรุณาระบุจำนวนสินค้าที่คืนอย่างน้อย 1 รายการ' };
   return { ok: true, lines: out, refundMinor };
+}
+
+/** D-RET-FIX-10: can ONE original tender's remaining refundable value cover this refund? */
+export function singleTenderCanCover(context: Pick<SaleReturnContextView, 'refundMethods'>, refundMinor: number): boolean {
+  if (refundMinor <= 0) return true;
+  return context.refundMethods.some((m) => Math.round(m.remaining * 100) >= refundMinor);
 }
 
 export function minorToBaht(minor: number): number {

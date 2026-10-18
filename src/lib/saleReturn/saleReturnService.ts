@@ -12,6 +12,7 @@ import type {
   SaleReturnRefundMethod,
 } from './saleReturnTypes';
 import { SALE_RETURN_ERROR_COPY } from './saleReturnTypes';
+import { clearShiftServerCashPending, markShiftServerCashPending } from '../pos/shiftCashFreshness';
 
 export type CallableTransport = (name: string, payload: unknown) => Promise<unknown>;
 
@@ -112,24 +113,54 @@ export async function submitSaleReturnRequest(
   if (isDeviceOffline()) return { kind: 'offline' };
   try {
     const call = transport ?? (await getDefaultTransport());
-    const raw = await call('submitSaleReturn', { ...input, shiftId: input.shiftId ?? '' });
-    if (!isPlainObject(raw)) return { kind: 'unknown' };
-    if (raw.ok === true) {
-      if (typeof raw.returnId !== 'string' || typeof raw.returnNo !== 'string' || typeof raw.refundAmount !== 'number') {
-        return { kind: 'unknown' };
-      }
-      return {
-        kind: 'ok',
-        returnId: raw.returnId,
-        returnNo: raw.returnNo,
-        refundId: typeof raw.refundId === 'string' ? raw.refundId : null,
-        refundAmount: raw.refundAmount,
-        refundMethod: raw.refundMethod as SaleReturnRefundMethod,
-        idempotent: raw.idempotent === true,
-      };
-    }
-    if (raw.ok === false && isErrorCode(raw.code)) return { kind: 'error', code: raw.code };
+    const raw = await call('submitSaleReturn', { ...input, shiftId: input.shiftId ?? '', mode: 'submit' });
+    return parseSubmitResult(raw);
+  } catch {
     return { kind: 'unknown' };
+  }
+}
+
+function parseSubmitResult(raw: unknown): SubmitSaleReturnResult {
+  if (!isPlainObject(raw)) return { kind: 'unknown' };
+  if (raw.ok === true) {
+    if (typeof raw.returnId !== 'string' || typeof raw.returnNo !== 'string' || typeof raw.refundAmount !== 'number') {
+      return { kind: 'unknown' };
+    }
+    return {
+      kind: 'ok',
+      returnId: raw.returnId,
+      returnNo: raw.returnNo,
+      refundId: typeof raw.refundId === 'string' ? raw.refundId : null,
+      refundAmount: raw.refundAmount,
+      refundMethod: raw.refundMethod as SaleReturnRefundMethod,
+      idempotent: raw.idempotent === true,
+    };
+  }
+  if (raw.ok === false && isErrorCode(raw.code)) return { kind: 'error', code: raw.code };
+  return { kind: 'unknown' };
+}
+
+/**
+ * D-RET-FIX-7 — resolve an UNKNOWN outcome of one exact attempt WITHOUT a PIN.
+ * The server either replays the already-committed Return (`ok`, idempotent)
+ * or fences the attempt so it can never commit and answers
+ * `attempt_not_committed` — the only non-success outcome that makes a fresh
+ * attempt safe. Never executes a Return.
+ */
+export async function resolveSaleReturnAttempt(
+  input: Omit<SubmitSaleReturnInput, 'pin'>,
+  transport?: CallableTransport,
+): Promise<SubmitSaleReturnResult> {
+  if (isDeviceOffline()) return { kind: 'offline' };
+  try {
+    const call = transport ?? (await getDefaultTransport());
+    const raw = await call('submitSaleReturn', {
+      ...input,
+      shiftId: input.shiftId ?? '',
+      mode: 'resolve',
+      pin: '',
+    });
+    return parseSubmitResult(raw);
   } catch {
     return { kind: 'unknown' };
   }
@@ -143,10 +174,14 @@ export function newReturnAttemptId(): string {
 /**
  * After a cash refund the server appended a pay-out to the shift's
  * `cashEntries[]`. Pull the shift from the server so the local cache (which
- * the POS boot read and drawer fold use) carries it. Best-effort; the POS
- * boot read is server-first anyway when online.
+ * the POS boot read and an offline close fold) carries it. Until that read
+ * succeeds this device is marked as knowing an unsynced server cash entry for
+ * the shift, which blocks an OFFLINE close (D-RET-FIX-8). An online close
+ * always re-reads the server itself — that read is the correctness boundary,
+ * not this refresh.
  */
 export async function refreshShiftFromServer(shiftId: string): Promise<void> {
+  markShiftServerCashPending(shiftId);
   try {
     const [{ doc, getDocFromServer }, { db, collections }] = await Promise.all([
       import('firebase/firestore'),
@@ -154,7 +189,8 @@ export async function refreshShiftFromServer(shiftId: string): Promise<void> {
     ]);
     if (!db) return;
     await getDocFromServer(doc(db, collections.shifts, shiftId));
+    clearShiftServerCashPending(shiftId);
   } catch {
-    /* best-effort cache refresh only */
+    /* marker stays: an offline close is refused until a server read succeeds */
   }
 }

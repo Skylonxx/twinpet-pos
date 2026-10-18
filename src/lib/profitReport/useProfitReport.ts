@@ -8,11 +8,13 @@ import {
   query,
   where,
 } from 'firebase/firestore';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { collections, db, isFirebaseConfigured } from '../firebase';
 import type { Order, OrderItem, Product } from '../types';
+import { useSaleReturnAdjustments } from '../saleReturn/returnAdjustments';
 import { getDevProfitLines } from './devMock';
 import { orderToProfitLines, resolveOrderFinancials, safeToDate } from './devMock';
+import { buildReturnAdjustmentLines, type ProfitOrderMeta } from './returnAdjustmentLines';
 import type { ProfitSaleLine } from './types';
 
 /**
@@ -71,10 +73,25 @@ async function fetchProductImageMap(productIds: string[]): Promise<Map<string, s
   return map;
 }
 
+/**
+ * Profit/COGS lines. When every accepted Return of the branch is loaded
+ * (`netOfReturns`), negative Return adjustment lines are appended so all
+ * totals are NET of returns; otherwise the lines are the gross sale lines and
+ * the page must label its figures "before returns".
+ */
 export function useProfitReport(branchId: string | null) {
-  const [lines, setLines] = useState<ProfitSaleLine[]>([]);
+  const [saleLines, setLines] = useState<ProfitSaleLine[]>([]);
+  const [orderMeta, setOrderMeta] = useState<Map<string, ProfitOrderMeta>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const returns = useSaleReturnAdjustments(branchId);
+  const netOfReturns = returns.status === 'ready';
+  const lines = useMemo(() => {
+    if (!netOfReturns || returns.adjustments.length === 0) return saleLines;
+    const images = new Map<string, string | null>();
+    for (const l of saleLines) if (!images.has(l.productId)) images.set(l.productId, l.imageUrl ?? null);
+    return [...saleLines, ...buildReturnAdjustmentLines(returns.adjustments, orderMeta, images)];
+  }, [saleLines, orderMeta, netOfReturns, returns.adjustments]);
 
   useEffect(() => {
     if (!branchId) {
@@ -124,6 +141,17 @@ export function useProfitReport(branchId: string | null) {
           const flat = itemSets.flat();
           const imageMap = await fetchProductImageMap([...new Set(flat.map((l) => l.productId))]);
           if (cancelled || myRun !== runSeq) return;
+          const meta = new Map<string, ProfitOrderMeta>();
+          for (const order of active) {
+            const created = safeToDate(order.createdAt);
+            meta.set(order.id, {
+              date: created.toISOString().slice(0, 10),
+              time: created.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', hour12: false }),
+              bill: order.billId || order.id,
+              customer: order.customerSnap?.name ?? 'สมาชิกทั่วไป',
+            });
+          }
+          setOrderMeta(meta);
           setLines(
             flat.map((line) => ({
               ...line,
@@ -152,5 +180,5 @@ export function useProfitReport(branchId: string | null) {
     };
   }, [branchId]);
 
-  return { lines, loading, error };
+  return { lines, loading, error, netOfReturns, returnsStatus: returns.status };
 }

@@ -12,12 +12,16 @@ import {
   SALE_RETURN_ACTION_LABEL,
   SALE_RETURN_ERROR_COPY,
   SALE_RETURN_OFFLINE_COPY,
+  SALE_RETURN_OVERSELL_LINE_COPY,
+  SALE_RETURN_SINGLE_TENDER_UNSUPPORTED_COPY,
   SALE_RETURN_UNKNOWN_OUTCOME_COPY,
+  SALE_RETURN_UNRESOLVED_COPY,
   checkReturnDraft,
   classificationCopy,
   minorToBaht,
   previewLineRefundMinor,
   qtyToMilli,
+  singleTenderCanCover,
   type SaleReturnContextView,
   type SaleReturnRefundMethod,
 } from '../../lib/saleReturn/saleReturnTypes';
@@ -25,14 +29,27 @@ import {
   fetchSaleReturnContext,
   newReturnAttemptId,
   refreshShiftFromServer,
+  resolveSaleReturnAttempt,
   submitSaleReturnRequest,
   type SaleReturnContextResult,
   type SubmitSaleReturnInput,
+  type SubmitSaleReturnResult,
 } from '../../lib/saleReturn/saleReturnService';
+import {
+  clearUnresolvedReturnAttempt,
+  payloadFromUnresolved,
+  readUnresolvedReturnAttempt,
+  saveUnresolvedReturnAttempt,
+  type UnresolvedReturnAttempt,
+} from '../../lib/saleReturn/unresolvedReturnAttempt';
 
 // Return/Refund V1 (D-RET-8) — sale-linked partial return from Sales History.
 // Online-only. Distinct from the whole-bill Void: it never cancels the sale.
 // The server computes everything; this modal only previews and submits.
+//
+// D-RET-FIX-7: an attempt is persisted (non-secret, no PIN) BEFORE it is sent.
+// Once its outcome is unknown it survives closing/reopening this modal; while
+// it exists only resolve (PIN-less) or retry of the SAME attempt is offered.
 
 export type SaleReturnTarget = { orderId: string; branchId: string; billLabel: string; saleDateLabel: string };
 
@@ -42,8 +59,13 @@ type Phase =
   | { kind: 'form' }
   | { kind: 'pin' }
   | { kind: 'submitting' }
-  | { kind: 'unknown' }
-  | { kind: 'success'; returnNo: string; refundAmount: number; refundMethod: SaleReturnRefundMethod };
+  | { kind: 'unknown'; message: string | null }
+  | { kind: 'success'; returnNo: string; refundAmount: number; refundMethod: SaleReturnRefundMethod; idempotent: boolean };
+
+type LockedPayload = Omit<SubmitSaleReturnInput, 'pin'>;
+
+const STORE_UNREADABLE_COPY = 'ตรวจสอบรายการคืนสินค้าที่ค้างในเครื่องนี้ไม่ได้ — ทำรายการคืนสินค้าจากเครื่องนี้ไม่ได้ชั่วคราว';
+const STORE_UNWRITABLE_COPY = 'บันทึกข้อมูลกู้คืนรายการในเครื่องไม่ได้ — ยังไม่ได้ส่งรายการคืนสินค้า กรุณาลองใหม่';
 
 export interface SaleReturnModalProps {
   target: SaleReturnTarget | null;
@@ -67,7 +89,14 @@ function SaleReturnDialog({
   onCompleted?: (returnNo: string) => void;
 }) {
   const { user } = useAuth();
-  const [phase, setPhase] = useState<Phase>({ kind: 'loading' });
+  // Recovered unresolved attempt for THIS sale (undefined = store unreadable ⇒ fail closed).
+  const [initialRecord] = useState(() => readUnresolvedReturnAttempt(target.branchId, target.orderId));
+  const [unresolved, setUnresolved] = useState<UnresolvedReturnAttempt | null>(initialRecord ?? null);
+  const [phase, setPhase] = useState<Phase>(() => {
+    if (initialRecord === undefined) return { kind: 'blocked', message: STORE_UNREADABLE_COPY };
+    if (initialRecord) return { kind: 'unknown', message: SALE_RETURN_UNRESOLVED_COPY };
+    return { kind: 'loading' };
+  });
   const [context, setContext] = useState<SaleReturnContextView | null>(null);
   const [qtyInputs, setQtyInputs] = useState<Record<number, string>>({});
   const [refundMethod, setRefundMethod] = useState<SaleReturnRefundMethod | ''>('');
@@ -79,27 +108,29 @@ function SaleReturnDialog({
   const [pinError, setPinError] = useState<string | null>(null);
   const [activeShiftId, setActiveShiftId] = useState<string | null>(null);
   const [shiftChecked, setShiftChecked] = useState(false);
-  // Frozen request (without PIN) once approval is requested; a retry after an
-  // unknown outcome re-sends EXACTLY this payload under the same attemptId.
-  const [locked, setLocked] = useState<Omit<SubmitSaleReturnInput, 'pin'> | null>(null);
-
+  // Frozen request (without PIN) once approval is requested; a retry re-sends
+  // EXACTLY this payload under the same attemptId.
+  const [locked, setLocked] = useState<LockedPayload | null>(() =>
+    initialRecord ? payloadFromUnresolved(initialRecord) : null,
+  );
   const roster = useApproverRoster({
     enabled: phase.kind !== 'loading' && phase.kind !== 'blocked',
     branchId: target.branchId,
     requesterStaffId: user?.id ?? null,
   });
 
+  // The context load only moves the phase out of `loading`: a recovered
+  // unresolved attempt (phase `unknown`) keeps its resolve/retry-only view.
   const applyContextResult = useCallback((res: SaleReturnContextResult) => {
-    if (res.kind === 'offline') return setPhase({ kind: 'blocked', message: SALE_RETURN_OFFLINE_COPY });
-    if (res.kind === 'unavailable') {
-      return setPhase({ kind: 'blocked', message: 'โหลดข้อมูลการคืนสินค้าไม่สำเร็จ — กรุณาลองใหม่' });
-    }
-    if (res.kind === 'error') return setPhase({ kind: 'blocked', message: SALE_RETURN_ERROR_COPY[res.code] });
-    setContext(res.context);
-    if (res.classification !== 'RETURN_ELIGIBLE' || !res.context) {
-      return setPhase({ kind: 'blocked', message: classificationCopy(res.classification, res.reason) });
-    }
-    setPhase({ kind: 'form' });
+    if (res.kind === 'ok') setContext(res.context);
+    let next: Phase;
+    if (res.kind === 'offline') next = { kind: 'blocked', message: SALE_RETURN_OFFLINE_COPY };
+    else if (res.kind === 'unavailable') next = { kind: 'blocked', message: 'โหลดข้อมูลการคืนสินค้าไม่สำเร็จ — กรุณาลองใหม่' };
+    else if (res.kind === 'error') next = { kind: 'blocked', message: SALE_RETURN_ERROR_COPY[res.code] };
+    else if (res.classification !== 'RETURN_ELIGIBLE' || !res.context) {
+      next = { kind: 'blocked', message: classificationCopy(res.classification, res.reason) };
+    } else next = { kind: 'form' };
+    setPhase((cur) => (cur.kind === 'loading' ? next : cur));
   }, []);
 
   const reload = useCallback(async () => {
@@ -107,8 +138,9 @@ function SaleReturnDialog({
     applyContextResult(await fetchSaleReturnContext(target.orderId, target.branchId));
   }, [applyContextResult, target.orderId, target.branchId]);
 
-  // Initial phase is already `loading`.
+  // Initial phase is already `loading` (or the recovered unresolved view).
   useEffect(() => {
+    if (initialRecord === undefined) return;
     let cancelled = false;
     void fetchSaleReturnContext(target.orderId, target.branchId).then((res) => {
       if (!cancelled) applyContextResult(res);
@@ -116,7 +148,7 @@ function SaleReturnDialog({
     return () => {
       cancelled = true;
     };
-  }, [applyContextResult, target.orderId, target.branchId]);
+  }, [applyContextResult, initialRecord, target.orderId, target.branchId]);
 
   // Cash refunds leave the requester's own open shift drawer.
   useEffect(() => {
@@ -149,12 +181,16 @@ function SaleReturnDialog({
   const refundMinor = draft && draft.ok ? draft.refundMinor : 0;
   const effectiveMethod: SaleReturnRefundMethod | '' = refundMinor === 0 && draft?.ok ? 'none' : refundMethod;
   const approver = roster.candidates.find((c) => c.userId === approverId) ?? null;
+  const tenderUnsupported = !!context && !!draft?.ok && !singleTenderCanCover(context, refundMinor);
   const busy = phase.kind === 'submitting';
+  const foreignAttempt = unresolved != null && user != null && unresolved.requesterStaffId !== user.id;
+  const approverLabel = unresolved?.approverDisplayName ?? approver?.displayName ?? '—';
 
   const requestApproval = () => {
     setFormError(null);
-    if (!context || !user) return;
+    if (!context || !user || unresolved) return;
     if (!draft || !draft.ok) return setFormError(draft && !draft.ok ? draft.message : 'กรุณาระบุจำนวนที่คืน');
+    if (tenderUnsupported) return setFormError(SALE_RETURN_SINGLE_TENDER_UNSUPPORTED_COPY);
     if (!reason) return setFormError('กรุณาเลือกเหตุผลการคืนสินค้า');
     if (reason === 'อื่นๆ' && !note.trim()) return setFormError('กรุณาระบุรายละเอียดเหตุผล');
     if (!effectiveMethod) return setFormError('กรุณาเลือกช่องทางคืนเงิน');
@@ -183,20 +219,62 @@ function SaleReturnDialog({
     setPhase({ kind: 'pin' });
   };
 
+  /** A definitive outcome of THIS attempt: committed (replayed or new). */
+  const finishCommitted = (payload: LockedPayload, res: Extract<SubmitSaleReturnResult, { kind: 'ok' }>) => {
+    clearUnresolvedReturnAttempt(payload.branchId, payload.orderId);
+    setUnresolved(null);
+    setLocked(null);
+    if (payload.refundMethod === 'cash' && payload.shiftId) void refreshShiftFromServer(payload.shiftId);
+    setPhase({
+      kind: 'success',
+      returnNo: res.returnNo,
+      refundAmount: res.refundAmount,
+      refundMethod: res.refundMethod,
+      idempotent: res.idempotent,
+    });
+    onCompleted?.(res.returnNo);
+  };
+
+  const markUnresolved = (payload: LockedPayload, message: string | null) => {
+    const rec = readUnresolvedReturnAttempt(payload.branchId, payload.orderId);
+    setUnresolved(
+      rec ?? {
+        schemaVersion: 1,
+        state: 'UNKNOWN_PENDING_RESOLUTION',
+        ...payload,
+        requesterStaffId: user?.id ?? '',
+        approverDisplayName: approverLabel,
+        recordedAtMs: 0,
+      },
+    );
+    setPhase({ kind: 'unknown', message });
+  };
+
   const submitWithPin = async (pin: string) => {
-    if (!locked) return;
-    setPhase({ kind: 'submitting' });
-    const res = await submitSaleReturnRequest({ ...locked, pin });
-    if (res.kind === 'ok') {
-      setLocked(null);
-      if (locked.refundMethod === 'cash' && locked.shiftId) void refreshShiftFromServer(locked.shiftId);
-      setPhase({ kind: 'success', returnNo: res.returnNo, refundAmount: res.refundAmount, refundMethod: res.refundMethod });
-      onCompleted?.(res.returnNo);
-      return;
+    if (!locked || !user) return;
+    const payload = locked;
+    const wasUnresolved = unresolved != null;
+    if (!wasUnresolved) {
+      // Persist the exact attempt BEFORE sending: a lost response or a crash
+      // mid-request must never let a new attempt replace it.
+      const saved = saveUnresolvedReturnAttempt(payload, {
+        requesterStaffId: user.id,
+        approverDisplayName: approverLabel,
+      });
+      if (!saved) {
+        setLocked(null);
+        setFormError(STORE_UNWRITABLE_COPY);
+        return setPhase({ kind: 'form' });
+      }
     }
-    if (res.kind === 'unknown') return setPhase({ kind: 'unknown' });
+    setPhase({ kind: 'submitting' });
+    const res = await submitSaleReturnRequest({ ...payload, pin });
+    if (res.kind === 'ok') return finishCommitted(payload, res);
+    if (res.kind === 'unknown') return markUnresolved(payload, SALE_RETURN_UNKNOWN_OUTCOME_COPY);
     if (res.kind === 'offline') {
-      // Detected before sending: nothing reached the server, nothing is queued.
+      // Detected before sending: nothing reached the server for THIS send.
+      if (wasUnresolved) return markUnresolved(payload, SALE_RETURN_OFFLINE_COPY);
+      clearUnresolvedReturnAttempt(payload.branchId, payload.orderId);
       setLocked(null);
       setFormError(SALE_RETURN_OFFLINE_COPY);
       return setPhase({ kind: 'form' });
@@ -205,7 +283,15 @@ function SaleReturnDialog({
       setPinError(SALE_RETURN_ERROR_COPY[res.code]);
       return setPhase({ kind: 'pin' });
     }
-    // Definitive rejection: nothing committed. Start a fresh attempt on retry.
+    if (res.code === 'attempt_not_committed') return resolvedNotCommitted(payload);
+    if (wasUnresolved) {
+      // An earlier send of this attempt had an unknown outcome: a rejection of
+      // THIS send does not prove the earlier one never commits. Keep the
+      // attempt; only the PIN-less resolve (server fence) settles it.
+      return markUnresolved(payload, SALE_RETURN_ERROR_COPY[res.code]);
+    }
+    // First and only send, definitively rejected: nothing committed.
+    clearUnresolvedReturnAttempt(payload.branchId, payload.orderId);
     setLocked(null);
     setFormError(SALE_RETURN_ERROR_COPY[res.code]);
     if (res.code === 'over_return' || res.code === 'refund_mismatch' || res.code === 'return_not_eligible') {
@@ -215,14 +301,37 @@ function SaleReturnDialog({
     setPhase({ kind: 'form' });
   };
 
-  if (phase.kind === 'pin' || phase.kind === 'submitting') {
+  const resolvedNotCommitted = async (payload: LockedPayload) => {
+    clearUnresolvedReturnAttempt(payload.branchId, payload.orderId);
+    setUnresolved(null);
+    setLocked(null);
+    await reload();
+    setFormError(SALE_RETURN_ERROR_COPY.attempt_not_committed);
+  };
+
+  const resolveAttempt = async () => {
+    if (!locked) return;
+    const payload = locked;
+    setPhase({ kind: 'submitting' });
+    const res = await resolveSaleReturnAttempt(payload);
+    if (res.kind === 'ok') return finishCommitted(payload, res);
+    if (res.kind === 'error' && res.code === 'attempt_not_committed') return resolvedNotCommitted(payload);
+    if (res.kind === 'offline') return markUnresolved(payload, SALE_RETURN_OFFLINE_COPY);
+    if (res.kind === 'unknown') return markUnresolved(payload, SALE_RETURN_UNKNOWN_OUTCOME_COPY);
+    return markUnresolved(payload, SALE_RETURN_ERROR_COPY[res.code]);
+  };
+
+  const lineName = (lineIndex: number, productId: string) =>
+    context?.lines.find((l) => l.lineIndex === lineIndex)?.productName ?? productId;
+
+  if (phase.kind === 'pin' || (phase.kind === 'submitting' && !unresolved)) {
     return (
       <ManagerPinModal
         open
-        title="อนุมัติการคืนสินค้า / คืนเงิน"
+        title="อนุมัติการคืนสินค้า"
         description={
           <>
-            <span data-testid="sale-return-approver">ผู้อนุมัติ: {approver?.displayName ?? '—'}</span>
+            <span data-testid="sale-return-approver">ผู้อนุมัติ: {approverLabel}</span>
             <br />
             <span>
               บิล {target.billLabel} · คืนเงิน ฿{formatMoney(locked?.expectedRefundAmount ?? 0)} ·{' '}
@@ -237,6 +346,11 @@ function SaleReturnDialog({
         errorMessage={pinError}
         onSubmitPin={(pin) => void submitWithPin(pin)}
         onCancel={() => {
+          if (unresolved) {
+            setPhase({ kind: 'unknown', message: SALE_RETURN_UNRESOLVED_COPY });
+            return;
+          }
+          if (locked) clearUnresolvedReturnAttempt(locked.branchId, locked.orderId);
           setLocked(null);
           setPhase({ kind: 'form' });
         }}
@@ -247,16 +361,19 @@ function SaleReturnDialog({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-2 sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-label={SALE_RETURN_ACTION_LABEL}
     >
-      <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white p-4 shadow-xl sm:p-6" data-testid="sale-return-modal">
+      <div
+        className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white p-3 shadow-xl sm:p-6"
+        data-testid="sale-return-modal"
+      >
         <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
-          <div>
+          <div className="min-w-0">
             <h2 className="text-lg font-semibold text-gray-900">{SALE_RETURN_ACTION_LABEL}</h2>
-            <p className="text-sm text-gray-600">
+            <p className="break-words text-sm text-gray-600">
               บิล {target.billLabel} · {target.saleDateLabel}
               {context?.customerName ? ` · ${context.customerName}` : ''}
             </p>
@@ -278,22 +395,56 @@ function SaleReturnDialog({
           </Alert>
         )}
 
-        {phase.kind === 'unknown' && (
-          <div className="space-y-3">
-            <Alert color="warning" data-testid="sale-return-unknown">
-              {SALE_RETURN_UNKNOWN_OUTCOME_COPY}
+        {(phase.kind === 'unknown' || (phase.kind === 'submitting' && unresolved)) && locked && (
+          <div className="space-y-3" data-testid="sale-return-unknown">
+            <Alert color="warning">
+              <div>{phase.kind === 'unknown' ? (phase.message ?? SALE_RETURN_UNRESOLVED_COPY) : 'กำลังตรวจสอบ...'}</div>
             </Alert>
+            {foreignAttempt && (
+              <Alert color="failure" data-testid="sale-return-foreign-attempt">
+                รายการค้างนี้ทำโดยผู้ใช้คนอื่นในเครื่องนี้ — ต้องให้ผู้ทำรายการเดิมเข้าสู่ระบบเพื่อตรวจสอบผล
+              </Alert>
+            )}
+            <div className="rounded-md border border-gray-200 p-3 text-sm text-gray-800" data-testid="sale-return-locked-summary">
+              <div className="mb-1 font-medium">รายการเดิม (แก้ไขไม่ได้จนกว่าจะทราบผล)</div>
+              <ul className="space-y-1">
+                {locked.lines.map((l) => (
+                  <li key={l.lineIndex} className="flex flex-wrap justify-between gap-2">
+                    <span className="min-w-0 break-words">{lineName(l.lineIndex, l.productId)}</span>
+                    <span>× {l.qty}</span>
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-2 flex flex-wrap justify-between gap-2 border-t border-gray-100 pt-2">
+                <span>คืนเงิน ฿{formatMoney(locked.expectedRefundAmount)} · {REFUND_METHOD_LABEL[locked.refundMethod]}</span>
+                <span>ผู้อนุมัติ: {approverLabel}</span>
+              </div>
+              {locked.refundReference && <div>อ้างอิง: {locked.refundReference}</div>}
+              <div className="break-words">เหตุผล: {locked.reason}</div>
+            </div>
             <div className="flex flex-wrap justify-end gap-2">
-              <Button color="light" onClick={onClose}>
-                ปิด
+              <Button color="light" size="lg" onClick={onClose} disabled={busy}>
+                ปิด (เก็บรายการไว้)
               </Button>
               <Button
+                color="light"
+                size="lg"
+                disabled={busy || foreignAttempt}
+                onClick={() => void resolveAttempt()}
+                data-testid="sale-return-resolve"
+              >
+                ตรวจสอบผล
+              </Button>
+              <Button
+                size="lg"
+                disabled={busy || foreignAttempt}
                 onClick={() => {
                   setPinError(null);
                   setPhase({ kind: 'pin' });
                 }}
+                data-testid="sale-return-retry-same"
               >
-                ส่งอีกครั้ง
+                ส่งรายการเดิมอีกครั้ง
               </Button>
             </div>
           </div>
@@ -303,6 +454,7 @@ function SaleReturnDialog({
           <div className="space-y-3" data-testid="sale-return-success">
             <Alert color="success">
               <div className="font-semibold">บันทึกการคืนสินค้าแล้ว — เลขที่ {phase.returnNo}</div>
+              {phase.idempotent && <div>(ยืนยันจากรายการเดิมที่บันทึกไว้แล้ว — ไม่ได้คืนซ้ำ)</div>}
               <div>
                 คืนเงิน ฿{formatMoney(phase.refundAmount)} · {REFUND_METHOD_LABEL[phase.refundMethod]}
               </div>
@@ -312,7 +464,9 @@ function SaleReturnDialog({
               )}
             </Alert>
             <div className="flex justify-end">
-              <Button onClick={onClose}>เสร็จสิ้น</Button>
+              <Button size="lg" onClick={onClose}>
+                เสร็จสิ้น
+              </Button>
             </div>
           </div>
         )}
@@ -329,13 +483,14 @@ function SaleReturnDialog({
               {context.lines.map((l) => {
                 const raw = qtyInputs[l.lineIndex] ?? '';
                 const milli = qtyToMilli(Number(raw) || 0) ?? 0;
+                const supportedQty = l.supportedReturnableQty ?? l.returnableQty;
                 const preview = milli > 0 && l.returnedQtyMilli + milli <= l.soldQtyMilli ? previewLineRefundMinor(l, milli) : 0;
-                const exhausted = l.returnableQty <= 0;
+                const exhausted = supportedQty <= 0;
                 return (
                   <li key={l.lineIndex} className="rounded-md border border-gray-200 p-3" data-testid={`sale-return-line-${l.lineIndex}`}>
                     <div className="flex flex-wrap items-baseline justify-between gap-2">
                       <div className="min-w-0">
-                        <div className="font-medium text-gray-900">
+                        <div className="break-words font-medium text-gray-900">
                           {l.productName} <span className="text-sm text-gray-600">({l.unit})</span>
                         </div>
                         <div className="text-xs text-gray-600">
@@ -347,9 +502,14 @@ function SaleReturnDialog({
                       <div className="flex flex-wrap gap-1 text-xs">
                         <Badge color="gray">ขาย {l.soldQty}</Badge>
                         <Badge color="warning">คืนแล้ว {l.returnedQty}</Badge>
-                        <Badge color={exhausted ? 'failure' : 'success'}>คืนได้ {l.returnableQty}</Badge>
+                        <Badge color={exhausted ? 'failure' : 'success'}>คืนได้ {supportedQty}</Badge>
                       </div>
                     </div>
+                    {l.oversellLimited && (
+                      <p className="mt-1 text-xs text-amber-800" data-testid={`sale-return-oversell-${l.lineIndex}`}>
+                        {SALE_RETURN_OVERSELL_LINE_COPY}
+                      </p>
+                    )}
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                       <Label htmlFor={`ret-qty-${l.lineIndex}`} className="text-sm">
                         จำนวนคืน
@@ -359,7 +519,7 @@ function SaleReturnDialog({
                         type="number"
                         inputMode="decimal"
                         min={0}
-                        max={l.returnableQty}
+                        max={supportedQty}
                         step="any"
                         className="w-28"
                         sizing="lg"
@@ -369,9 +529,9 @@ function SaleReturnDialog({
                       />
                       <Button
                         color="light"
-                        size="sm"
+                        size="lg"
                         disabled={exhausted}
-                        onClick={() => setQtyInputs((cur) => ({ ...cur, [l.lineIndex]: String(l.returnableQty) }))}
+                        onClick={() => setQtyInputs((cur) => ({ ...cur, [l.lineIndex]: String(supportedQty) }))}
                       >
                         คืนทั้งหมด
                       </Button>
@@ -382,12 +542,18 @@ function SaleReturnDialog({
               })}
             </ul>
 
-            <div className="flex items-center justify-between rounded-md bg-gray-50 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-gray-50 p-3">
               <span className="text-sm text-gray-700">ยอดคืนเงินรวม (ตามราคาและส่วนลดเดิมของบิล)</span>
               <span className="text-xl font-semibold text-gray-900" data-testid="sale-return-total">
                 ฿{formatMoney(minorToBaht(refundMinor))}
               </span>
             </div>
+
+            {tenderUnsupported && (
+              <Alert color="warning" data-testid="sale-return-single-tender">
+                {SALE_RETURN_SINGLE_TENDER_UNSUPPORTED_COPY}
+              </Alert>
+            )}
 
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
@@ -410,6 +576,7 @@ function SaleReturnDialog({
                     ))}
                   </Select>
                 )}
+                <p className="mt-1 text-xs text-gray-600">คืนเงินได้ 1 ช่องทางต่อรายการ ไม่เกินยอดคงเหลือของช่องทางนั้น</p>
               </div>
               {effectiveMethod && effectiveMethod !== 'cash' && effectiveMethod !== 'none' && (
                 <div>
@@ -457,7 +624,12 @@ function SaleReturnDialog({
               <Button color="light" size="lg" onClick={onClose}>
                 ยกเลิก
               </Button>
-              <Button size="lg" onClick={requestApproval} data-testid="sale-return-request-approval">
+              <Button
+                size="lg"
+                onClick={requestApproval}
+                disabled={tenderUnsupported}
+                data-testid="sale-return-request-approval"
+              >
                 ขออนุมัติคืนสินค้า
               </Button>
             </div>

@@ -1075,3 +1075,18 @@
 .pr-page ::-webkit-scrollbar-thumb:hover {
   background: #c4c4d4;
 }
+
+/* Return/Refund V1 (D-RET-FIX-9): figures basis - net after returns, or explicitly gross. */
+.pr-returns-basis {
+  margin-bottom: 10px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--warn-bg, #faeeda);
+  color: var(--warn, #854f0b);
+  font-size: 12px;
+}
+
+.pr-returns-basis--net {
+  background: var(--success-bg, #e1f5ee);
+  color: var(--success, #0f6e56);
+}

@@ -28,6 +28,12 @@ export const SALE_RETURN_COLLECTIONS = {
   refunds: 'saleRefunds',
   ledgers: 'saleReturnLedgers',
   auditEvents: 'saleReturnAuditEvents',
+  /**
+   * Server-owned fence for an attempt the client resolved as NOT committed
+   * (after an unknown transport outcome). Once present, that attempt's
+   * returnId can never commit, so the client may safely start a new attempt.
+   */
+  attemptResolutions: 'saleReturnAttemptResolutions',
 } as const;
 
 /** Lot id the reconciler records for an oversold quantity — it has no lot doc. */
@@ -80,35 +86,60 @@ export type ReturnUnsupportedReason =
   | 'lot_evidence_malformed'
   | 'lot_qty_mismatch'
   | 'precision_unsupported'
-  | 'ledger_malformed';
+  | 'ledger_malformed'
+  | 'oversell_return_unsupported';
 
 // ---------------------------------------------------------------------------
 // Exact conversions
 // ---------------------------------------------------------------------------
 
-const EPS = 1e-6;
+/**
+ * FIXED absolute tolerance, in SCALED units (satang / milli-units). It only
+ * absorbs binary floating-point noise (≈1e-5 scaled units at the supported
+ * maxima below) and can never swallow half a minor unit at any supported
+ * magnitude. Never magnitude-relative.
+ */
+export const SCALED_ABS_TOLERANCE = 1e-4;
+/** Largest |Baht| value accepted as exact money evidence. */
+export const MONEY_MAX_ABS_BAHT = 1e9;
+/** Largest |quantity| accepted as exact quantity evidence. */
+export const QTY_MAX_ABS = 1e8;
 
 function isFiniteNumber(v: unknown): v is number {
   return typeof v === 'number' && Number.isFinite(v);
 }
 
-/** Baht → satang, exact to the satang. `null` when not representable. */
-export function toMinorExact(value: unknown): number | null {
+function toScaledExact(value: unknown, factor: number, maxAbs: number): number | null {
   if (!isFiniteNumber(value)) return null;
-  const scaled = value * 100;
+  if (Math.abs(value) > maxAbs) return null;
+  const scaled = value * factor;
   const rounded = Math.round(scaled);
-  if (Math.abs(scaled - rounded) > EPS * Math.max(1, Math.abs(scaled))) return null;
   if (!Number.isSafeInteger(rounded)) return null;
+  if (Math.abs(scaled - rounded) > SCALED_ABS_TOLERANCE) return null;
   return rounded;
 }
 
-/** Quantity → milli-units, exact to 0.001. `null` when not representable. */
+/** Baht → satang, exact to the satang. `null` when not representable or out of range. */
+export function toMinorExact(value: unknown): number | null {
+  return toScaledExact(value, 100, MONEY_MAX_ABS_BAHT);
+}
+
+/** Quantity → milli-units, exact to 0.001. `null` when not representable or out of range. */
 export function toMilliExact(value: unknown): number | null {
-  if (!isFiniteNumber(value)) return null;
-  const scaled = value * 1000;
-  const rounded = Math.round(scaled);
-  if (Math.abs(scaled - rounded) > EPS * Math.max(1, Math.abs(scaled))) return null;
+  return toScaledExact(value, 1000, QTY_MAX_ABS);
+}
+
+/**
+ * Sale-unit milli-quantity × unitFactor → exact base milli-units, or `null`
+ * when the product is not an exact milli-unit (same fixed absolute tolerance).
+ */
+export function exactBaseMilli(qtyMilli: number, unitFactor: number): number | null {
+  if (!Number.isSafeInteger(qtyMilli) || qtyMilli < 0) return null;
+  if (!isFiniteNumber(unitFactor) || unitFactor <= 0) return null;
+  const exact = qtyMilli * unitFactor;
+  const rounded = Math.round(exact);
   if (!Number.isSafeInteger(rounded)) return null;
+  if (Math.abs(exact - rounded) > SCALED_ABS_TOLERANCE) return null;
   return rounded;
 }
 
@@ -127,6 +158,8 @@ export function milliToQty(milli: number): number {
 export type SaleReturnRequestLine = { lineIndex?: unknown; productId?: unknown; qty?: unknown };
 
 export type SubmitSaleReturnRequest = {
+  /** 'submit' (default) executes with a PIN; 'resolve' replays-or-fences an unknown attempt without a PIN. */
+  mode?: unknown;
   attemptId?: unknown;
   orderId?: unknown;
   branchId?: unknown;
@@ -165,8 +198,14 @@ function trimmedString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+/**
+ * `requirePin: false` is used only by the PIN-less `resolve` mode, which can
+ * replay an already-committed attempt or fence an uncommitted one but never
+ * executes a Return.
+ */
 export function validateSubmitSaleReturnRequest(
   req: SubmitSaleReturnRequest,
+  opts: { requirePin?: boolean } = {},
 ): { ok: true; value: ValidatedSubmitSaleReturnRequest } | { ok: false; code: 'invalid_request' } {
   const bad = { ok: false as const, code: 'invalid_request' as const };
   const attemptId = trimmedString(req.attemptId);
@@ -208,7 +247,7 @@ export function validateSubmitSaleReturnRequest(
   const approverStaffId = trimmedString(req.approverStaffId);
   if (!approverStaffId) return bad;
   const pin = typeof req.pin === 'string' ? req.pin : '';
-  if (!pin) return bad;
+  if (opts.requirePin !== false && !pin) return bad;
 
   return {
     ok: true,
@@ -300,6 +339,7 @@ export type SaleLineEvidence = {
   productId: string;
   productName: string;
   sku: string;
+  category: string;
   unit: string;
   unitFactor: number;
   soldQtyMilli: number;
@@ -351,6 +391,10 @@ export function isOrderVoidedOrVoiding(order: Record<string, unknown>): ReturnNo
   if (order.status === 'voided' || order.voidReconciled === true) return 'voided';
   if (typeof order.privilegedVoidExecutionId === 'string' && order.privilegedVoidExecutionId.length > 0) return 'voided';
   if (order.voidRequested === true) return 'void_in_progress';
+  // The online privileged Void stamps `voidedBy` in the SAME transaction that
+  // consumes its approval (before the canonical void runs). A Return that
+  // serializes after that consume must see the Void as in progress.
+  if (typeof order.voidedBy === 'string' && order.voidedBy.length > 0) return 'void_in_progress';
   if ('voidAnomaly' in order || 'voidRevisionFault' in order) return 'void_terminal_marker';
   return null;
 }
@@ -474,8 +518,7 @@ export function parseSaleEvidence(
     if (soldQtyMilli == null || soldQtyBaseMilli == null || soldQtyMilli <= 0 || soldQtyBaseMilli <= 0) {
       return unsupported('precision_unsupported');
     }
-    const derivedBase = soldQtyMilli * line.unitFactor;
-    if (Math.abs(derivedBase - soldQtyBaseMilli) > EPS * Math.max(1, soldQtyBaseMilli)) {
+    if (exactBaseMilli(soldQtyMilli, line.unitFactor) !== soldQtyBaseMilli) {
       return unsupported('precision_unsupported');
     }
     const unitPriceMinor = toMinorExact(line.unitPrice);
@@ -504,6 +547,7 @@ export function parseSaleEvidence(
       productId,
       productName: readString(snap.name),
       sku: readString(snap.sku),
+      category: readString(snap.category),
       unit: readString(line.unit),
       unitFactor: line.unitFactor,
       soldQtyMilli,
@@ -588,7 +632,7 @@ export function parseReturnLedger(data: unknown): ReturnLedger | null {
   const refundedTotalMinor = nonNegInt(raw.refundedTotalMinor);
   if (returnCount == null || refundedTotalMinor == null) return null;
   const byMethodRaw = raw.refundedByMethodMinor as Record<string, unknown> | undefined;
-  if (byMethodRaw == null || typeof byMethodRaw !== 'object') return null;
+  if (byMethodRaw == null || typeof byMethodRaw !== 'object' || Array.isArray(byMethodRaw)) return null;
   const byMethod: NetPaidByMethod = { cash: 0, qr: 0, kbank: 0, card: 0 };
   for (const m of MONEY_REFUND_METHODS) {
     const v = nonNegInt(byMethodRaw[m] ?? 0);
@@ -608,17 +652,82 @@ export function parseReturnLedger(data: unknown): ReturnLedger | null {
     if (lines.has(lineIndex)) return null;
     lines.set(lineIndex, { returnedQtyMilli, returnedQtyBaseMilli, refundedMinor });
   }
-  if (!Array.isArray(raw.acceptedReturnIds) || !raw.acceptedReturnIds.every((x) => typeof x === 'string')) return null;
+  if (
+    !Array.isArray(raw.acceptedReturnIds) ||
+    !raw.acceptedReturnIds.every((x) => typeof x === 'string' && x.length > 0)
+  ) {
+    return null;
+  }
   const acceptedReturnIds = raw.acceptedReturnIds as string[];
   if (acceptedReturnIds.length !== returnCount) return null;
+  if (new Set(acceptedReturnIds).size !== acceptedReturnIds.length) return null;
   return { returnCount, refundedTotalMinor, refundedByMethodMinor: byMethod, lines, acceptedReturnIds };
 }
 
-export function ledgerHasAcceptedReturns(data: unknown): boolean {
-  if (data == null || typeof data !== 'object') return false;
-  const count = (data as Record<string, unknown>).returnCount;
-  // Unreadable count on a present ledger is treated as "returns exist" (fail closed).
-  return !(typeof count === 'number' && count === 0);
+/**
+ * The ledger is canonical server-owned state, but it is never trusted blindly:
+ * a present ledger must be internally consistent AND consistent with the
+ * immutable original sale before any new Return effect. `true` = valid.
+ */
+export function ledgerConsistentWithSale(sale: SaleEvidence, ledger: ReturnLedger): boolean {
+  // Only an accepted Return creates a ledger, so a present one records ≥ 1.
+  if (ledger.returnCount < 1) return false;
+  const byIndex = new Map(sale.lines.map((l) => [l.lineIndex, l]));
+  let linesRefunded = 0;
+  let returnedMilliTotal = 0;
+  for (const [lineIndex, l] of ledger.lines) {
+    const saleLine = byIndex.get(lineIndex);
+    if (!saleLine) return false;
+    if (l.returnedQtyMilli > saleLine.soldQtyMilli) return false;
+    if (l.returnedQtyBaseMilli > saleLine.soldQtyBaseMilli) return false;
+    // Base must follow the sale's own unitFactor snapshot (the final return of
+    // a line restores exactly the remaining sold base).
+    const expectedBase =
+      l.returnedQtyMilli === saleLine.soldQtyMilli
+        ? saleLine.soldQtyBaseMilli
+        : exactBaseMilli(l.returnedQtyMilli, saleLine.unitFactor);
+    if (expectedBase == null || expectedBase !== l.returnedQtyBaseMilli) return false;
+    // Cumulative refund math telescopes, so a line's refunded total is fully
+    // determined by its cumulative returned quantity.
+    if (l.refundedMinor !== cumulativeRefundMinor(saleLine.refundableShareMinor, saleLine.soldQtyMilli, l.returnedQtyMilli)) {
+      return false;
+    }
+    linesRefunded += l.refundedMinor;
+    returnedMilliTotal += l.returnedQtyMilli;
+  }
+  if (linesRefunded !== ledger.refundedTotalMinor) return false;
+  const byMethodTotal = MONEY_REFUND_METHODS.reduce((s, m) => s + ledger.refundedByMethodMinor[m], 0);
+  if (byMethodTotal !== ledger.refundedTotalMinor) return false;
+  if (ledger.refundedTotalMinor > sale.totalMinor) return false;
+  for (const m of MONEY_REFUND_METHODS) {
+    if (ledger.refundedByMethodMinor[m] > sale.netPaidByMethodMinor[m]) return false;
+  }
+  // Every accepted Return returned at least one milli-unit.
+  if (returnedMilliTotal < ledger.returnCount) return false;
+  return true;
+}
+
+/**
+ * Absent ledger → empty. Present ledger → parsed AND validated against the
+ * sale (identity + invariants). `null` = malformed / inconsistent: fail closed.
+ */
+export function parseReturnLedgerForSale(data: unknown, sale: SaleEvidence): ReturnLedger | null {
+  if (data === undefined) return emptyLedger();
+  const ledger = parseReturnLedger(data);
+  if (ledger == null) return null;
+  const raw = data as Record<string, unknown>;
+  if (raw.orderId !== sale.orderId || raw.branchId !== sale.branchId) return null;
+  return ledgerConsistentWithSale(sale, ledger) ? ledger : null;
+}
+
+/**
+ * Void cross-flow guard. In this architecture `saleReturnLedgers/{orderId}`
+ * is created ONLY by an accepted Return, so the document's existence alone
+ * blocks a whole-bill Void — its content (even `returnCount: 0`) is never
+ * trusted as proof that no Return exists. Malformed ⇒ still blocks.
+ */
+export function saleReturnLedgerBlocksVoid(ledgerSnapExists: boolean): boolean {
+  return ledgerSnapExists;
 }
 
 export function serializeReturnLedger(
@@ -723,6 +832,89 @@ export function planLotRestoration(
   return portions;
 }
 
+/**
+ * Base offset (in the recorded FIFO cut order) at which the first oversell
+ * allocation begins; `Σ lots` when the line has none. V1 never returns a unit
+ * at or past this offset (D-RET-FIX-4).
+ */
+export function oversellFreeBaseEnd(lots: readonly SaleLotEvidence[]): number {
+  let cursor = 0;
+  for (const lot of lots) {
+    if (lot.lotId === OVERSELL_LOT_ID) return cursor;
+    cursor += lot.qtyBaseMilli;
+  }
+  return cursor;
+}
+
+/**
+ * Largest further sale-unit milli-quantity of a line that V1 supports
+ * returning: bounded by the unreturned quantity AND by the oversell-free
+ * prefix of the line's FIFO allocation.
+ */
+export function maxSupportedReturnQtyMilli(line: SaleLineEvidence, prior: LedgerLine | undefined): number {
+  const returned = prior?.returnedQtyMilli ?? 0;
+  const returnedBase = prior?.returnedQtyBaseMilli ?? 0;
+  const remaining = line.soldQtyMilli - returned;
+  if (remaining <= 0) return 0;
+  const end = oversellFreeBaseEnd(line.lots);
+  if (end >= line.soldQtyBaseMilli) return remaining;
+  const availBase = end - returnedBase;
+  if (availBase <= 0) return 0;
+  let q = Math.min(remaining, Math.floor((availBase + SCALED_ABS_TOLERANCE) / line.unitFactor));
+  for (let guard = 0; q > 0 && guard < 1000; guard += 1, q -= 1) {
+    const base = exactBaseMilli(q, line.unitFactor);
+    if (base != null && base <= availBase) return q;
+  }
+  return 0;
+}
+
+export type InPlaceLotRejectReason =
+  | 'lot_missing'
+  | 'product_mismatch'
+  | 'branch_mismatch'
+  | 'ghost_lot'
+  | 'qty_malformed'
+  | 'remaining_exceeds_received'
+  | 'capacity_exceeded'
+  | 'cost_mismatch';
+
+export type InPlaceLotDecision =
+  | { ok: true; currentRemainingMilli: number; nextRemainingMilli: number }
+  | { ok: false; reason: InPlaceLotRejectReason };
+
+/**
+ * May the returned units go back INTO their original lot? Only when the lot
+ * read inside the Return transaction is provably the same, intact cost layer
+ * with room for them: exists, same product/branch, not ghost, exact
+ * non-negative quantities with remaining ≤ received, remaining + returned ≤
+ * received, and its CURRENT cost equals the sale-time cost of every portion.
+ * Anything else ⇒ a distinct restoration lot at the sale-time cost.
+ */
+export function decideInPlaceLotRestore(
+  lot: Record<string, unknown> | null,
+  expected: { productId: string; branchId: string; portionCosts: readonly number[]; restoreBaseMilli: number },
+): InPlaceLotDecision {
+  if (lot == null) return { ok: false, reason: 'lot_missing' };
+  if (lot.productId !== expected.productId) return { ok: false, reason: 'product_mismatch' };
+  if (lot.branchId !== expected.branchId) return { ok: false, reason: 'branch_mismatch' };
+  if (lot.isGhost === true) return { ok: false, reason: 'ghost_lot' };
+  const received = toMilliExact(lot.qtyReceived);
+  const remaining = toMilliExact(lot.qtyRemaining);
+  if (received == null || remaining == null || received < 0 || remaining < 0) {
+    return { ok: false, reason: 'qty_malformed' };
+  }
+  if (remaining > received) return { ok: false, reason: 'remaining_exceeds_received' };
+  if (!Number.isSafeInteger(expected.restoreBaseMilli) || expected.restoreBaseMilli <= 0) {
+    return { ok: false, reason: 'qty_malformed' };
+  }
+  if (remaining + expected.restoreBaseMilli > received) return { ok: false, reason: 'capacity_exceeded' };
+  const cost = lot.costPerUnit;
+  if (!isFiniteNumber(cost) || expected.portionCosts.length === 0 || !expected.portionCosts.every((c) => c === cost)) {
+    return { ok: false, reason: 'cost_mismatch' };
+  }
+  return { ok: true, currentRemainingMilli: remaining, nextRemainingMilli: remaining + expected.restoreBaseMilli };
+}
+
 export function portionsCostMinor(portions: readonly RestorePortion[]): number {
   // Σ qtyBase × cost, rounded once to the satang (cost may carry > 2 dp).
   const raw = portions.reduce((s, p) => s + (p.qtyBaseMilli / 1000) * p.costPerUnit * 100, 0);
@@ -741,13 +933,15 @@ export type SaleReturnPlanRejectCode =
   | 'refund_mismatch'
   | 'refund_method_not_allowed'
   | 'refund_cap_exceeded'
-  | 'reference_required';
+  | 'reference_required'
+  | 'oversell_return_unsupported';
 
 export type PlannedReturnLine = {
   lineIndex: number;
   productId: string;
   productName: string;
   sku: string;
+  category: string;
   unit: string;
   unitFactor: number;
   soldQtyMilli: number;
@@ -761,6 +955,12 @@ export type PlannedReturnLine = {
   feeAllocMinor: number;
   refundableShareMinor: number;
   refundMinor: number;
+  /**
+   * Gross line revenue reversed (line total basis, BEFORE bill discount / fee
+   * allocation), cumulative-exact like the refund. Reporting adapters that
+   * measure revenue as Σ lineTotal net with this, never with the refund.
+   */
+  lineRevenueMinor: number;
   costMinor: number;
   portions: RestorePortion[];
 };
@@ -768,6 +968,7 @@ export type PlannedReturnLine = {
 export type SaleReturnPlan = {
   lines: PlannedReturnLine[];
   refundMinor: number;
+  lineRevenueMinor: number;
   costMinor: number;
   refundMethod: SaleReturnRefundMethod;
   nextLedger: ReturnLedger;
@@ -792,11 +993,8 @@ export function planSaleReturn(
     const prior = ledger.lines.get(req.lineIndex) ?? { returnedQtyMilli: 0, returnedQtyBaseMilli: 0, refundedMinor: 0 };
     if (req.qtyMilli <= 0) return { ok: false, code: 'invalid_request' };
     if (prior.returnedQtyMilli + req.qtyMilli > line.soldQtyMilli) return { ok: false, code: 'over_return' };
-    const baseExact = req.qtyMilli * line.unitFactor;
-    const baseMilli = Math.round(baseExact);
-    if (Math.abs(baseExact - baseMilli) > EPS * Math.max(1, baseExact) || baseMilli <= 0) {
-      return { ok: false, code: 'return_unsupported_evidence' };
-    }
+    const baseMilli = exactBaseMilli(req.qtyMilli, line.unitFactor);
+    if (baseMilli == null || baseMilli <= 0) return { ok: false, code: 'return_unsupported_evidence' };
     // Returning the last units of a line restores exactly the remaining sold base.
     const remainingBase = line.soldQtyBaseMilli - prior.returnedQtyBaseMilli;
     const isFinal = prior.returnedQtyMilli + req.qtyMilli === line.soldQtyMilli;
@@ -804,8 +1002,19 @@ export function planSaleReturn(
     if (qtyBaseMilli <= 0 || qtyBaseMilli > remainingBase) return { ok: false, code: 'over_return' };
     const portions = planLotRestoration(line.lots, prior.returnedQtyBaseMilli, qtyBaseMilli);
     if (portions == null || portions.length === 0) return { ok: false, code: 'over_return' };
+    // V1: an oversold unit has no sale-time cost layer to restore into, so a
+    // Return that would reach any oversell allocation fails closed.
+    if (portions.some((p) => p.originalLotId === OVERSELL_LOT_ID)) {
+      return { ok: false, code: 'oversell_return_unsupported' };
+    }
     const refundMinor = lineRefundForReturnMinor(
       line.refundableShareMinor,
+      line.soldQtyMilli,
+      prior.returnedQtyMilli,
+      req.qtyMilli,
+    );
+    const lineRevenueMinor = lineRefundForReturnMinor(
+      line.lineTotalMinor,
       line.soldQtyMilli,
       prior.returnedQtyMilli,
       req.qtyMilli,
@@ -815,6 +1024,7 @@ export function planSaleReturn(
       productId: line.productId,
       productName: line.productName,
       sku: line.sku,
+      category: line.category,
       unit: line.unit,
       unitFactor: line.unitFactor,
       soldQtyMilli: line.soldQtyMilli,
@@ -828,12 +1038,14 @@ export function planSaleReturn(
       feeAllocMinor: line.feeAllocMinor,
       refundableShareMinor: line.refundableShareMinor,
       refundMinor,
+      lineRevenueMinor,
       costMinor: portionsCostMinor(portions),
       portions,
     });
   }
 
   const refundMinor = planned.reduce((s, l) => s + l.refundMinor, 0);
+  const lineRevenueMinor = planned.reduce((s, l) => s + l.lineRevenueMinor, 0);
   const costMinor = planned.reduce((s, l) => s + l.costMinor, 0);
   if (refundMinor !== request.expectedRefundMinor) return { ok: false, code: 'refund_mismatch' };
   if (ledger.refundedTotalMinor + refundMinor > sale.totalMinor) return { ok: false, code: 'refund_cap_exceeded' };
@@ -871,8 +1083,60 @@ export function planSaleReturn(
   };
   return {
     ok: true,
-    plan: { lines: planned, refundMinor, costMinor, refundMethod: method, nextLedger, sequence: nextLedger.returnCount },
+    plan: {
+      lines: planned,
+      refundMinor,
+      lineRevenueMinor,
+      costMinor,
+      refundMethod: method,
+      nextLedger,
+      sequence: nextLedger.returnCount,
+    },
   };
+}
+
+// ---------------------------------------------------------------------------
+// Customer spend aggregate (CRM release gate, D-RET-FIX-9)
+// ---------------------------------------------------------------------------
+
+export type CustomerSpendAdjustment =
+  | {
+      apply: true;
+      decrementMinor: number;
+      /** Field → [before, after] in Baht; only fields present on the customer doc. */
+      fields: Partial<Record<'lifetimeValue' | 'totalSpent', { before: number; after: number; clamped: boolean }>>;
+    }
+  | { apply: false; reason: 'no_customer' | 'zero_refund' | 'customer_missing' | 'no_aggregate' | 'aggregate_malformed' };
+
+/**
+ * The sale reconciler adds the sale total to `customers.{lifetimeValue,
+ * totalSpent}`; an accepted Return takes back exactly its refund, inside the
+ * Return transaction (exact-once with the return record). Never below 0 —
+ * the historical floor of a spend aggregate.
+ */
+export function planCustomerSpendAdjustment(
+  customerId: string | null,
+  customerDoc: Record<string, unknown> | null,
+  refundMinor: number,
+): CustomerSpendAdjustment {
+  if (!customerId) return { apply: false, reason: 'no_customer' };
+  if (refundMinor <= 0) return { apply: false, reason: 'zero_refund' };
+  if (customerDoc == null) return { apply: false, reason: 'customer_missing' };
+  const fields: Partial<Record<'lifetimeValue' | 'totalSpent', { before: number; after: number; clamped: boolean }>> = {};
+  for (const key of ['lifetimeValue', 'totalSpent'] as const) {
+    const raw = customerDoc[key];
+    if (raw === undefined || raw === null) continue;
+    const beforeMinor = toMinorExact(raw);
+    if (beforeMinor == null) return { apply: false, reason: 'aggregate_malformed' };
+    const afterMinor = Math.max(0, beforeMinor - refundMinor);
+    fields[key] = {
+      before: minorToBaht(beforeMinor),
+      after: minorToBaht(afterMinor),
+      clamped: beforeMinor - refundMinor < 0,
+    };
+  }
+  if (Object.keys(fields).length === 0) return { apply: false, reason: 'no_aggregate' };
+  return { apply: true, decrementMinor: refundMinor, fields };
 }
 
 // ---------------------------------------------------------------------------
@@ -890,6 +1154,11 @@ export type SaleReturnContextLine = {
   returnableQty: number;
   soldQtyMilli: number;
   returnedQtyMilli: number;
+  /** What V1 can actually return now: ≤ returnable, excludes oversold units. */
+  supportedReturnableQty: number;
+  supportedReturnableQtyMilli: number;
+  /** True when part of the unreturned quantity was sold from oversell (unsupported in V1). */
+  oversellLimited: boolean;
   unitPrice: number;
   lineDiscount: number;
   lineTotal: number;
@@ -928,6 +1197,8 @@ export function buildReturnContextView(sale: SaleEvidence, ledger: ReturnLedger)
     lines: sale.lines.map((l) => {
       const returned = ledger.lines.get(l.lineIndex);
       const returnedMilli = returned?.returnedQtyMilli ?? 0;
+      const remainingMilli = Math.max(0, l.soldQtyMilli - returnedMilli);
+      const supportedMilli = maxSupportedReturnQtyMilli(l, returned);
       return {
         lineIndex: l.lineIndex,
         productId: l.productId,
@@ -936,9 +1207,12 @@ export function buildReturnContextView(sale: SaleEvidence, ledger: ReturnLedger)
         unit: l.unit,
         soldQty: milliToQty(l.soldQtyMilli),
         returnedQty: milliToQty(returnedMilli),
-        returnableQty: milliToQty(Math.max(0, l.soldQtyMilli - returnedMilli)),
+        returnableQty: milliToQty(remainingMilli),
         soldQtyMilli: l.soldQtyMilli,
         returnedQtyMilli: returnedMilli,
+        supportedReturnableQty: milliToQty(supportedMilli),
+        supportedReturnableQtyMilli: supportedMilli,
+        oversellLimited: supportedMilli < remainingMilli,
         unitPrice: minorToBaht(l.unitPriceMinor),
         lineDiscount: minorToBaht(l.lineDiscountMinor),
         lineTotal: minorToBaht(l.lineTotalMinor),

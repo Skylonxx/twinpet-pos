@@ -31,6 +31,7 @@ import {
   TableRow,
   TableCell,
 } from '../../components/ui';
+import { GROSS_BEFORE_RETURNS_LABEL } from '../../lib/saleReturn/returnAdjustments';
 import './AdminDashboardPage.css';
 
 ChartJS.register(
@@ -278,6 +279,9 @@ export default function AdminDashboardPage() {
 
         {!loading && !error && (
           <>
+            <p className="adash-gross-note" data-testid="adash-gross-before-returns">
+              ยอดขายและกำไรในแดชบอร์ดนี้เป็นยอด{GROSS_BEFORE_RETURNS_LABEL} — ยอดสุทธิหลังคืนสินค้าดูได้ที่ประวัติการขายและรายงานกำไร
+            </p>
             <div className="adash-kpi-grid">
               <div className="adash-kpi-card adash-kc-rev">
                 <i className="adash-kpi-icon-bg ti ti-coin" aria-hidden="true" />

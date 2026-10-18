@@ -12,7 +12,7 @@ import {
   type CreditAccountData,
 } from './voidReversal';
 import { isCanonicalIdentifier } from './staffSessionAssertionFrame';
-import { SALE_RETURN_COLLECTIONS, ledgerHasAcceptedReturns } from './saleReturnCore';
+import { SALE_RETURN_COLLECTIONS, saleReturnLedgerBlocksVoid } from './saleReturnCore';
 function readRevision(doc: Record<string, unknown>):
   | { kind: 'ABSENT' }
   | { kind: 'VALID'; value: number }
@@ -202,9 +202,11 @@ export async function handleVoidIntent(
     // and reverses the full tender, so voiding a sale that already has an
     // accepted (partial) Return would restore stock/money twice. Read inside
     // this transaction so it serializes against submitSaleReturn's ledger write.
+    // Only an accepted Return creates the ledger, so its mere existence blocks
+    // (content — even a malformed `returnCount: 0` — is never trusted).
     // No write: the order is left untouched for manual handling.
     const returnLedgerSnap = await tx.get(db.collection(C.saleReturnLedgers).doc(orderRef.id));
-    if (returnLedgerSnap.exists && ledgerHasAcceptedReturns(returnLedgerSnap.data())) {
+    if (saleReturnLedgerBlocksVoid(returnLedgerSnap.exists)) {
       return { kind: 'NOOP', reason: 'return_present' };
     }
 

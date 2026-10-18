@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { fmtBaht } from '../../lib/dashboard/format';
 import {
@@ -7,6 +7,7 @@ import {
   openShift,
   type ShiftCloseConfirmation,
 } from '../../lib/pos/shiftService';
+import { isNavigatorOnline, readServerShiftCash, withMergedCashEntries } from '../../lib/pos/shiftCashFreshness';
 import { SHIFT_CLOSE_INTENT_STALE_AGE_MS } from '../../lib/pos/offline/shiftCloseIntentTypes';
 import type { Shift } from '../../lib/types';
 import './ShiftModals.css';
@@ -511,6 +512,24 @@ export function CloseShiftModal({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [closedShift, setClosedShift] = useState<Shift | null>(null);
+  // D-RET-FIX-8 (display only): show the drawer expected cash including any
+  // server-side cash entry (e.g. a cash refund) this mounted POS has not seen.
+  // `closeShift` re-reads the server itself — that is the correctness boundary.
+  const [serverCashEntries, setServerCashEntries] = useState<Shift['cashEntries'] | null>(null);
+  useEffect(() => {
+    if (!isNavigatorOnline()) return;
+    let cancelled = false;
+    void readServerShiftCash(shift.id).then((read) => {
+      if (!cancelled && read.ok && read.exists) setServerCashEntries(read.cashEntries);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [shift.id]);
+  const displayShift = useMemo(
+    () => (serverCashEntries ? withMergedCashEntries(shift, serverCashEntries) : shift),
+    [shift, serverCashEntries],
+  );
   // Packet 7C-B2 — same-runtime confirmation state, observed (never awaited by
   // the close flow itself) from `closeShift`'s `whenServerConfirmed` handle.
   const [confirmation, setConfirmation] = useState<ShiftCloseConfirmation | null>(null);
@@ -625,7 +644,7 @@ export function CloseShiftModal({
                 นับเงินสดในลิ้นชักและบันทึกผลก่อนปิดกะ
                 <br />
                 ยอดเงินที่ต้องมีในลิ้นชัก:{' '}
-                {fmtBaht(calcShiftDrawerExpected(shift), { decimals: 2 })}
+                {fmtBaht(calcShiftDrawerExpected(displayShift), { decimals: 2 })}
               </p>
             </div>
             {pendingSyncCount > 0 && (

@@ -1,4 +1,5 @@
 import type { Order, OrderItem, Payment, PaymentMethod } from '../types';
+import type { OrderReturnSummary } from '../saleReturn/returnAdjustments';
 
 export type SaleStatus = 'paid' | 'credit' | 'void';
 
@@ -214,14 +215,28 @@ export function filterSales(records: SaleRecord[], filters: SalesFilters): SaleR
   });
 }
 
-export function computeSummary(records: SaleRecord[]) {
-  let totalAmt = 0;
+/**
+ * Summary metrics. With `returns` (every accepted Return of the branch loaded,
+ * see `useSaleReturnAdjustments`) the money metrics are NET of accepted
+ * Returns, attributed to their original sale; without it they are GROSS
+ * before returns and `netOfReturns` is false so the UI labels them so.
+ * Original order documents are never altered.
+ */
+export function computeSummary(
+  records: SaleRecord[],
+  returns?: ReadonlyMap<string, OrderReturnSummary> | null,
+) {
+  // Integer satang throughout so repeated refunds never drift.
+  const toMinor = (v: number) => Math.round((Number.isFinite(v) ? v : 0) * 100);
+  let totalMinor = 0;
   let paidCount = 0;
-  let paidAmt = 0;
+  let paidMinor = 0;
   let creditCount = 0;
-  let creditAmt = 0;
+  let creditMinor = 0;
   let voidCount = 0;
-  let cashAmt = 0;
+  let cashMinor = 0;
+  let refundMinor = 0;
+  let returnCount = 0;
 
   for (const record of records) {
     const { order, payments } = record;
@@ -234,28 +249,41 @@ export function computeSummary(records: SaleRecord[]) {
       continue;
     }
 
-    totalAmt += order.total;
+    const ret = returns?.get(order.id);
+    const orderMinor = toMinor(order.total);
+    const orderRefund = ret ? Math.min(ret.refundMinor, orderMinor) : 0;
+    const netMinor = orderMinor - orderRefund;
+    refundMinor += orderRefund;
+    returnCount += ret?.returnCount ?? 0;
+
+    totalMinor += netMinor;
     if (status === 'paid') {
       paidCount += 1;
-      paidAmt += order.total;
+      paidMinor += netMinor;
     } else {
       creditCount += 1;
-      creditAmt += order.total;
+      creditMinor += netMinor;
     }
 
     for (const p of payments) {
-      if (p.method === 'cash') cashAmt += p.amount;
+      if (p.method === 'cash') cashMinor += toMinor(p.amount);
     }
+    cashMinor -= ret?.cashRefundMinor ?? 0;
   }
 
   return {
-    totalAmt,
+    totalAmt: totalMinor / 100,
     billCount: paidCount + creditCount,
     paidCount,
-    paidAmt,
+    paidAmt: paidMinor / 100,
     creditCount,
-    creditAmt,
+    creditAmt: creditMinor / 100,
     voidCount,
-    cashAmt,
+    cashAmt: cashMinor / 100,
+    /** Accepted refunds deducted above (0 when gross). */
+    refundAmt: refundMinor / 100,
+    returnCount,
+    /** True only when accepted Returns were folded in — otherwise label as gross. */
+    netOfReturns: returns != null,
   };
 }

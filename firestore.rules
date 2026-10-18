@@ -771,6 +771,16 @@ service cloud.firestore {
       }
     }
 
+    // Return/Refund V1 (D-RET-FIX-9): accepted Return records are the reporting
+    // adjustment source (Sales History / Profit report net of returns). Written
+    // ONLY by the submitSaleReturn Admin-SDK transaction; branch-scoped read
+    // exactly like `orders`. saleRefunds / saleReturnLedgers / audit events /
+    // attempt fences stay server-only through the catch-all deny below.
+    match /saleReturns/{returnId} {
+      allow read: if isAdmin() || (isStaff() && hasBranchAccess(resource.data.branchId));
+      allow create, update, delete: if false;
+    }
+
     match /payments/{paymentId} {
       allow read: if isStaff();
       allow create, update: if false;

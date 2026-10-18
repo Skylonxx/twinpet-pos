@@ -1426,6 +1426,28 @@ describe('Concurrency, resume, and the two-phase canonical contract', () => {
     });
   });
 
+  test('Return/Refund V1: an accepted Return (any ledger present) blocks the adjudicated Void → manual attention, no void effect', async () => {
+    const db = makeDb();
+    const paa1 = buildPaa1();
+    let executions = 0;
+    const res = await run(db, paa1.request, relayAuth(), {
+      // handleVoidIntent's in-transaction ledger guard outcome (see
+      // submitSaleReturn.test.ts for the real guard on the exact options shape).
+      executeCanonicalVoid: async () => {
+        executions += 1;
+        return { kind: 'NOOP', reason: 'return_present' };
+      },
+    });
+    expect(executions).toBe(1);
+    expect(res).toMatchObject({
+      kind: 'MANUAL_ATTENTION_REQUIRED',
+      manualAttentionReason: 'canonical_execution_unresolved',
+    });
+    // Replay never re-executes the canonical void.
+    expect(await run(db, paa1.request)).toEqual({ ...res, idempotent: true });
+    expect(executions).toBe(1);
+  });
+
   test('AC-7 — no transition leaves a terminal state', async () => {
     const paa1 = buildPaa1();
     const terminal = ['TERMINALLY_REJECTED', 'COMPLETED', 'MANUAL_ATTENTION_REQUIRED'] as const;

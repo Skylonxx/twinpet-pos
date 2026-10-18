@@ -27,6 +27,7 @@ import {
   TableRow,
   TableCell,
 } from '../components/ui';
+import { GROSS_BEFORE_RETURNS_LABEL } from '../lib/saleReturn/returnAdjustments';
 import './DashboardPage.css';
 
 ChartJS.register(
@@ -250,6 +251,9 @@ export default function DashboardPage() {
 
         {!loading && !error && (
           <>
+            <p className="dash-gross-note" data-testid="dash-gross-before-returns">
+              ยอดขายและกำไรในแดชบอร์ดนี้เป็นยอด{GROSS_BEFORE_RETURNS_LABEL} — ยอดสุทธิหลังคืนสินค้าดูได้ที่ประวัติการขายและรายงานกำไร
+            </p>
             <div className="dash-kpi-grid">
               <div className="dash-kpi-card dash-kc-rev">
                 <i className="dash-kpi-icon-bg ti ti-coin" aria-hidden="true" />

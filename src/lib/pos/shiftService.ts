@@ -19,6 +19,14 @@ import type { CashTransactionType, Shift, ShiftCashEntry } from '../types';
 import type { PaymentSplit } from './types';
 import { getDeviceId } from './deviceId';
 import {
+  clearShiftServerCashPending,
+  hasShiftServerCashPending,
+  isNavigatorOnline,
+  readServerShiftCash,
+  withMergedCashEntries,
+  type ServerShiftCashReader,
+} from './shiftCashFreshness';
+import {
   createShiftCloseIntentJournal,
   type ShiftCloseIntentJournal,
 } from './offline/shiftCloseIntentStore';
@@ -647,6 +655,12 @@ const CLOSE_SHIFT_STORE_UNAVAILABLE_MESSAGE =
   'บันทึกการปิดกะแบบออฟไลน์ไม่สำเร็จ (พื้นที่จัดเก็บในเครื่องไม่พร้อมใช้งานหรือเต็ม) กรุณาลองใหม่ หรือเชื่อมต่ออินเทอร์เน็ตแล้วลองอีกครั้ง';
 const CLOSE_SHIFT_CONFLICT_MESSAGE =
   'พบข้อมูลปิดกะอื่นสำหรับกะนี้ในเครื่องนี้อยู่แล้ว กรุณาตรวจสอบก่อนดำเนินการต่อ';
+/** D-RET-FIX-8: online close could not read the authoritative shift — nothing was written. */
+export const CLOSE_SHIFT_FRESHNESS_MESSAGE =
+  'ตรวจสอบยอดเงินสดล่าสุดของกะจากเซิร์ฟเวอร์ไม่สำเร็จ — ยังไม่ได้ปิดกะ กรุณาลองใหม่อีกครั้ง';
+/** D-RET-FIX-8: this device knows a server cash entry (e.g. a cash refund) it has not synced yet. */
+export const CLOSE_SHIFT_SERVER_CASH_PENDING_MESSAGE =
+  'มีรายการเงินสดของกะนี้บนเซิร์ฟเวอร์ (เช่น คืนเงินสด) ที่เครื่องนี้ยังไม่ได้ซิงก์ — กรุณาเชื่อมต่ออินเทอร์เน็ตแล้วปิดกะอีกครั้ง';
 
 let defaultShiftCloseIntentJournal: ShiftCloseIntentJournal | undefined;
 function getDefaultShiftCloseIntentJournal(): ShiftCloseIntentJournal {
@@ -751,6 +765,12 @@ export type CloseShiftDeps = {
    * Failure is isolated; never alters the close business result.
    */
   observePointerRepair?: PointerRepairObserver;
+  /** Injectable for tests; production uses {@link readServerShiftCash}. */
+  readServerShiftCash?: ServerShiftCashReader;
+  /** Injectable for tests; production uses `navigator.onLine`. */
+  isOnline?: () => boolean;
+  /** Injectable for tests; production uses the per-shift localStorage marker. */
+  serverCashPending?: { has: (shiftId: string) => boolean; clear: (shiftId: string) => void };
 };
 
 /**
@@ -761,10 +781,14 @@ export type CloseShiftDeps = {
  * DERIVED from its local ledger ({@link deriveShiftDrawer}); we never re-read
  * the (now reconciler-untouched) stored `expected*` fields.
  *
- * This function never awaits the network:
+ * This function never awaits the network EXCEPT the bounded online cash
+ * freshness read (D-RET-FIX-8, Return/Refund V1):
  *  1. Verifies the shift is still open from the LOCAL CACHE ONLY
  *     (`getDocFromCache`) — a cold/stale/unverifiable cache fails fast rather
- *     than fabricating a close.
+ *     than fabricating a close. When the device is online it then re-reads
+ *     the shift from the SERVER (bounded timeout) and re-folds cash movements
+ *     from the union of local + server `cashEntries` (a cash refund posts a
+ *     server-side pay-out); a failed online read fails closed — no write.
  *  2. Persists a durable local close-intent (survives reload) BEFORE the
  *     shift-doc write — a durable-store failure (unavailable/quota) also fails
  *     fast; there is no cache-only fallback.
@@ -819,9 +843,30 @@ export async function closeShift(
   if (!cached.exists()) {
     throw new Error(CLOSE_SHIFT_UNVERIFIABLE_MESSAGE);
   }
-  if ((cached.data() as { status?: string }).status !== 'open') {
+  const cachedData = cached.data() as { status?: string; cashEntries?: unknown };
+  if (cachedData.status !== 'open') {
     throw new Error(CLOSE_SHIFT_ALREADY_CLOSED_MESSAGE);
   }
+  const cachedEntries = Array.isArray(cachedData.cashEntries) ? (cachedData.cashEntries as ShiftCashEntry[]) : [];
+
+  // D-RET-FIX-8 — cash freshness before anything is frozen. Sale totals stay
+  // the terminal's own (single-writer); only cash movements are re-folded
+  // from the union of local, cached and (online) authoritative server entries.
+  const pending = deps?.serverCashPending ?? {
+    has: hasShiftServerCashPending,
+    clear: clearShiftServerCashPending,
+  };
+  let serverEntries: ShiftCashEntry[] = [];
+  if ((deps?.isOnline ?? isNavigatorOnline)()) {
+    const fresh = await (deps?.readServerShiftCash ?? readServerShiftCash)(shift.id);
+    if (!fresh.ok || !fresh.exists) throw new Error(CLOSE_SHIFT_FRESHNESS_MESSAGE);
+    if (fresh.status !== 'open') throw new Error(CLOSE_SHIFT_ALREADY_CLOSED_MESSAGE);
+    serverEntries = fresh.cashEntries;
+    pending.clear(shift.id);
+  } else if (pending.has(shift.id)) {
+    throw new Error(CLOSE_SHIFT_SERVER_CASH_PENDING_MESSAGE);
+  }
+  shift = withMergedCashEntries(shift, cachedEntries, serverEntries);
 
   const totalExpected = calcShiftDrawerExpected(shift);
   const variance = actualCashCount - totalExpected;

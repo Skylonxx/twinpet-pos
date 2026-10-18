@@ -1156,3 +1156,19 @@
   padding: 16px;
   font-size: 13px;
 }
+
+/* Return/Refund V1 (D-RET-FIX-9): explicit gross label / per-bill returned amount. */
+.sh-returns-gross-note {
+  margin-top: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: #faeeda;
+  color: #854f0b;
+  font-size: 12px;
+}
+
+.sh-returned-amt {
+  font-size: 11px;
+  color: #a32d2d;
+  white-space: nowrap;
+}

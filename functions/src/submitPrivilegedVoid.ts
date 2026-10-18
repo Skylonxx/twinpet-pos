@@ -54,7 +54,7 @@ import {
 } from './submitPrivilegedVoidCore';
 import { handleVoidIntent, type HandleVoidIntentOptions, type VoidIntentTxnOutcome } from './voidIntent';
 import { DESKTOP_CALLABLE_CORS } from './callableCors';
-import { SALE_RETURN_COLLECTIONS, ledgerHasAcceptedReturns } from './saleReturnCore';
+import { SALE_RETURN_COLLECTIONS, saleReturnLedgerBlocksVoid } from './saleReturnCore';
 
 const C = {
   users: 'users',
@@ -310,10 +310,12 @@ export async function performSubmitPrivilegedVoid(
     return fail('invalid_target');
   }
 
-  // Return/Refund V1: refuse before consuming the approval when the sale
-  // already has an accepted Return (handleVoidIntent re-checks in-transaction).
-  const returnLedgerSnap = await database.collection(C.saleReturnLedgers).doc(value.targetEntityId).get();
-  if (returnLedgerSnap.exists && ledgerHasAcceptedReturns(returnLedgerSnap.data())) {
+  // Return/Refund V1: fast refusal when the sale already has an accepted
+  // Return. The authoritative check is the same read INSIDE the consume
+  // transaction below; handleVoidIntent re-checks again (defense in depth).
+  const returnLedgerRef = database.collection(C.saleReturnLedgers).doc(value.targetEntityId);
+  const returnLedgerSnap = await returnLedgerRef.get();
+  if (saleReturnLedgerBlocksVoid(returnLedgerSnap.exists)) {
     return fail('invalid_target');
   }
 
@@ -377,6 +379,11 @@ export async function performSubmitPrivilegedVoid(
       const freshApproval = await tx.get(approvalRef);
       const freshNonce = await tx.get(nonceRef);
       const freshOrder = await tx.get(orderRef);
+      // Return/Refund V1 atomic guard: the Return transaction writes this
+      // ledger and reads the order this transaction stamps (`voidedBy`), so the
+      // two serialize — only one semantic path can win. A ledger present at
+      // this boundary stops the Void BEFORE approval consume / nonce / stamp.
+      const freshReturnLedger = await tx.get(returnLedgerRef);
       const latest = approvalViewFromData(freshApproval.exists ? freshApproval.data() : undefined);
       if (latest == null || latest.consumedAt != null) {
         throw Object.assign(new Error('replayed_approval'), { code: 'replayed_approval' });
@@ -389,6 +396,9 @@ export async function performSubmitPrivilegedVoid(
       }
       const latestOrder = (freshOrder.data() ?? {}) as DocumentData;
       if (isAlreadyCanonicallyVoided(latestOrder)) {
+        throw Object.assign(new Error('invalid_target'), { code: 'invalid_target' });
+      }
+      if (saleReturnLedgerBlocksVoid(freshReturnLedger.exists)) {
         throw Object.assign(new Error('invalid_target'), { code: 'invalid_target' });
       }
       tx.update(approvalRef, {

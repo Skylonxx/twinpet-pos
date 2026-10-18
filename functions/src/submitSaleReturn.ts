@@ -23,6 +23,19 @@
  * The original sale (asyncOrders / orders / orderItems / payments) is never
  * written. Void is untouched except that it now refuses a sale that already
  * has an accepted return (voidIntent.ts / submitPrivilegedVoid.ts).
+ *
+ * Blocker-fix hardening (TPOS-USABLE-POS-RETURN-REFUND-V1-BLOCKER-FIX):
+ *  - the approver credential is re-read and the approval TTL re-checked with
+ *    a FRESH clock inside each transaction attempt;
+ *  - the ledger is validated against the sale before any effect;
+ *  - an original lot is restored in place only when it is provably the same
+ *    intact cost layer with room (else a sale-time-cost restoration lot);
+ *  - oversold units fail closed (`oversell_return_unsupported`);
+ *  - a sale with `voidedBy` stamped by an in-flight online Void is refused;
+ *  - `mode: 'resolve'` (no PIN) settles an unknown outcome: it replays a
+ *    committed attempt or FENCES it (`saleReturnAttemptResolutions`) so it can
+ *    never commit later — the only safe basis for the client to start anew;
+ *  - customer spend aggregates are decremented exact-once by the refund.
  */
 
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
@@ -57,10 +70,10 @@ import {
 } from './requestManagerApprovalCore';
 import { performRequestManagerApproval, type PinCompareFn } from './requestManagerApproval';
 import {
-  OVERSELL_LOT_ID,
   SALE_RETURN_COLLECTIONS,
   SALE_RETURN_SCHEMA_VERSION,
   buildReturnContextView,
+  decideInPlaceLotRestore,
   deriveCashRefundEntryId,
   deriveReturnApprovalCommandId,
   deriveReturnAuditEventId,
@@ -71,11 +84,13 @@ import {
   isFullyReturned,
   minorToBaht,
   milliToQty,
-  parseReturnLedger,
+  parseReturnLedgerForSale,
   parseSaleEvidence,
+  planCustomerSpendAdjustment,
   planSaleReturn,
   serializeReturnLedger,
   validateSubmitSaleReturnRequest,
+  type InPlaceLotDecision,
   type SaleReturnClassification,
   type SaleReturnContextView,
   type SaleReturnPlan,
@@ -97,6 +112,7 @@ const C = {
   shifts: 'shifts',
   cashTransactions: 'cashTransactions',
   auditLogs: 'auditLogs',
+  customers: 'customers',
   ...SALE_RETURN_COLLECTIONS,
 } as const;
 
@@ -105,7 +121,9 @@ export type SaleReturnErrorCode =
   | ManagerApprovalServerErrorCode
   | 'order_not_found'
   | 'shift_required'
-  | 'idempotency_conflict';
+  | 'idempotency_conflict'
+  /** Definitive: this attempt is fenced and can never commit; a new attempt is safe. */
+  | 'attempt_not_committed';
 
 export type SubmitSaleReturnResponse =
   | {
@@ -131,7 +149,14 @@ export type GetSaleReturnContextResponse =
   | { ok: false; code: 'not_authorized' | 'branch_mismatch' | 'invalid_request' };
 
 export interface SaleReturnDeps {
+  /** Fixed clock (tests). Superseded by `clock` when both are given. */
   nowMillis?: number;
+  /**
+   * Clock read at each decision boundary — notably once per Return
+   * transaction ATTEMPT for the approval TTL, so a retried attempt that
+   * crosses the expiry boundary is rejected.
+   */
+  clock?: () => number;
   comparePin?: PinCompareFn;
   readRolePermissions?: RolePermissionsReader;
   readStagedDenyHead?: StagedRoleDenyHeadReader;
@@ -276,13 +301,17 @@ export async function performGetSaleReturnContext(
     if (evidence.reason === 'branch_mismatch') return { ok: false, code: 'branch_mismatch' };
     return { ok: true, classification: evidence.classification, reason: evidence.reason, context: null };
   }
-  const ledger = parseReturnLedger(ledgerSnap.exists ? ledgerSnap.data() : undefined);
+  const ledger = parseReturnLedgerForSale(ledgerSnap.exists ? ledgerSnap.data() : undefined, evidence.sale);
   if (ledger == null) {
     return { ok: true, classification: 'RETURN_UNSUPPORTED_EVIDENCE', reason: 'ledger_malformed', context: null };
   }
   const context = buildReturnContextView(evidence.sale, ledger);
   if (isFullyReturned(evidence.sale, ledger)) {
     return { ok: true, classification: 'RETURN_NOT_ELIGIBLE', reason: 'fully_returned', context };
+  }
+  // Every unreturned unit was sold from oversell: nothing V1 can return.
+  if (context.lines.every((l) => l.supportedReturnableQtyMilli <= 0)) {
+    return { ok: true, classification: 'RETURN_UNSUPPORTED_EVIDENCE', reason: 'oversell_return_unsupported', context };
   }
   return { ok: true, classification: 'RETURN_ELIGIBLE', reason: null, context };
 }
@@ -352,10 +381,21 @@ type PortionWrite = {
   originalLotId: string;
   qtyBaseMilli: number;
   costPerUnit: number;
-  restoreMode: 'original_lot' | 'restoration_lot' | 'oversell_no_lot';
-  restoredLotId: string | null;
+  restoreMode: 'original_lot' | 'restoration_lot';
+  /** Why the original lot was NOT used (audit); null for an in-place restore. */
+  restoreDecisionReason: string | null;
+  restoredLotId: string;
   movementId: string;
 };
+
+function defaultClock(deps: SaleReturnDeps): () => number {
+  if (deps.clock) return deps.clock;
+  if (deps.nowMillis != null) {
+    const fixed = deps.nowMillis;
+    return () => fixed;
+  }
+  return () => Date.now();
+}
 
 /**
  * Core verifier — EXPORTED so it is unit-tested without the Functions runtime.
@@ -366,10 +406,13 @@ export async function performSubmitSaleReturn(
   auth: AuthLike,
   deps: SaleReturnDeps = {},
 ): Promise<SubmitSaleReturnResponse> {
-  const nowMillis = deps.nowMillis ?? Date.now();
+  const clock = defaultClock(deps);
+  const nowMillis = clock();
   if (!auth) return fail('not_authorized');
 
-  const validated = validateSubmitSaleReturnRequest(req);
+  if (req.mode !== undefined && req.mode !== 'submit' && req.mode !== 'resolve') return fail('invalid_request');
+  const resolveOnly = req.mode === 'resolve';
+  const validated = validateSubmitSaleReturnRequest(req, { requirePin: !resolveOnly });
   if (!validated.ok) return fail('invalid_request');
   const value = validated.value;
 
@@ -384,6 +427,7 @@ export async function performSubmitSaleReturn(
   const contentDigest = deriveReturnContentDigest(value);
   const commandId = deriveReturnApprovalCommandId(returnId, contentDigest);
   const returnRef = database.collection(C.returns).doc(returnId);
+  const fenceRef = database.collection(C.attemptResolutions).doc(returnId);
 
   const reject = async (code: SaleReturnErrorCode): Promise<SubmitSaleReturnResponse> => {
     await writeRejectionAudit(database, { returnId, kind: 'rejected', code, value, requesterStaffId: staffId, nowMillis });
@@ -405,9 +449,48 @@ export async function performSubmitSaleReturn(
     return replayResponse(data);
   };
 
-  // Replay: an already-committed return answers with its own record; no new effect.
+  // ── Resolve mode (D-RET-FIX-7): no PIN, never executes a Return. ──
+  // Atomically: an already-committed attempt answers with its own record;
+  // otherwise the attempt is FENCED so it can never commit afterwards, which
+  // makes "not committed" definitive and a fresh attempt safe.
+  if (resolveOnly) {
+    let resolved: { kind: 'replay'; data: DocumentData } | { kind: 'fenced' } | { kind: 'conflict' };
+    try {
+      resolved = await database.runTransaction(async (tx) => {
+        const committedSnap = await tx.get(returnRef);
+        const fenceSnap = await tx.get(fenceRef);
+        if (committedSnap.exists) return { kind: 'replay' as const, data: (committedSnap.data() ?? {}) as DocumentData };
+        if (fenceSnap.exists) {
+          const fence = (fenceSnap.data() ?? {}) as DocumentData;
+          return fence.requesterStaffId === staffId ? { kind: 'fenced' as const } : { kind: 'conflict' as const };
+        }
+        tx.create(fenceRef, {
+          schemaVersion: SALE_RETURN_SCHEMA_VERSION,
+          returnId,
+          attemptId: value.attemptId,
+          originalOrderId: value.orderId,
+          branchId: value.branchId,
+          requesterStaffId: staffId,
+          contentDigest,
+          resolution: 'not_committed',
+          createdAt: FieldValue.serverTimestamp(),
+          createdAtMillis: clock(),
+        });
+        return { kind: 'fenced' as const };
+      });
+    } catch {
+      return fail('invalid_target');
+    }
+    if (resolved.kind === 'replay') return replayOrConflict(resolved.data);
+    if (resolved.kind === 'conflict') return reject('idempotency_conflict');
+    return reject('attempt_not_committed');
+  }
+
+  // Replay: an already-committed return answers with its own record; no new
+  // effect and no new approval work (no PIN burned for a committed attempt).
   const existing = await returnRef.get();
   if (existing.exists) return replayOrConflict((existing.data() ?? {}) as DocumentData);
+  if ((await fenceRef.get()).exists) return reject('attempt_not_committed');
 
   // Pre-flight plan (fail fast before burning a PIN attempt). Re-done in-tx.
   const [asyncSnap0, canonicalSnap0, ledgerSnap0] = await Promise.all([
@@ -428,7 +511,7 @@ export async function performSubmitSaleReturn(
       evidence0.classification === 'RETURN_UNSUPPORTED_EVIDENCE' ? 'return_unsupported_evidence' : 'return_not_eligible',
     );
   }
-  const ledger0 = parseReturnLedger(ledgerSnap0.exists ? ledgerSnap0.data() : undefined);
+  const ledger0 = parseReturnLedgerForSale(ledgerSnap0.exists ? ledgerSnap0.data() : undefined, evidence0.sale);
   if (ledger0 == null) return reject('return_unsupported_evidence');
   const plan0 = planSaleReturn(evidence0.sale, ledger0, value, returnId);
   if (!plan0.ok) return reject(plan0.code);
@@ -448,7 +531,7 @@ export async function performSubmitSaleReturn(
     },
     auth,
     {
-      nowMillis,
+      nowMillis: clock(),
       comparePin: deps.comparePin,
       readRolePermissions: deps.readRolePermissions,
       readStagedDenyHead: deps.readStagedDenyHead,
@@ -458,18 +541,6 @@ export async function performSubmitSaleReturn(
   const approvalId = deriveApprovalId(commandId);
   if (approval.approvalId !== approvalId) return reject('invalid_target');
   const approvalRef = database.collection(C.approvals).doc(approvalId);
-
-  // Approver credential must not have rotated between mint and consume.
-  const approvalPeek = approvalViewFromData((await approvalRef.get()).data());
-  const cred = await readUserCredential(database, value.approverStaffId);
-  if (
-    approvalPeek == null ||
-    !isUsableForLogin(cred) ||
-    cred.credentialState !== 'rotated_authoritative' ||
-    cred.credentialVersion !== approvalPeek.credentialVersionAtIssue
-  ) {
-    return reject('not_authorized');
-  }
 
   const ledgerRef = database.collection(C.ledgers).doc(value.orderId);
   const asyncRef = database.collection(C.asyncOrders).doc(value.orderId);
@@ -484,19 +555,26 @@ export async function performSubmitSaleReturn(
       // ── Reads (all before any write) ──
       const freshReturn = await tx.get(returnRef);
       if (freshReturn.exists) throw new ReturnTxReject('replay');
+      const freshFence = await tx.get(fenceRef);
       const freshApproval = approvalViewFromData((await tx.get(approvalRef)).data());
       const ledgerSnap = await tx.get(ledgerRef);
       const asyncSnap = await tx.get(asyncRef);
       const canonicalSnap = await tx.get(canonicalRef);
       const requesterSnap = await tx.get(requesterRef);
       const approverSnap = await tx.get(approverRef);
+      // D-RET-FIX-5: the approver credential is re-read IN this transaction,
+      // so a rotation/disable racing the commit conflicts with it.
+      const freshCred = await readUserCredential(database, value.approverStaffId, tx);
       const matrix = await readRolePermissionsDoc(database, tx);
       const headReader = firestoreStagedRoleDenyHeadReader(database, tx);
 
-      // Approval: unconsumed, unexpired, bound to this requester/approver/content.
+      if (freshFence.exists) throw new ReturnTxReject('attempt_not_committed');
+
+      // Approval: unconsumed, unexpired AT THIS ATTEMPT, bound to this requester/approver/content.
+      const attemptNowMillis = clock();
       if (freshApproval == null) throw new ReturnTxReject('invalid_target');
       if (freshApproval.consumedAt != null) throw new ReturnTxReject('replayed_approval');
-      if (freshApproval.expiresAtMillis == null || freshApproval.expiresAtMillis <= nowMillis) {
+      if (freshApproval.expiresAtMillis == null || freshApproval.expiresAtMillis <= attemptNowMillis) {
         throw new ReturnTxReject('expired_approval');
       }
       const bindingOk = checkApprovalBinding(freshApproval, {
@@ -512,6 +590,15 @@ export async function performSubmitSaleReturn(
       if (!bindingOk) throw new ReturnTxReject('invalid_target');
       if (freshApproval.requesterStaffId === freshApproval.approverStaffId) {
         throw new ReturnTxReject('self_approval_not_permitted');
+      }
+      // Same credential policy as the mint: compare-authoritative, usable, and
+      // exactly the credential version the PIN was verified against.
+      if (
+        !isUsableForLogin(freshCred) ||
+        freshCred.credentialState !== 'rotated_authoritative' ||
+        freshCred.credentialVersion !== freshApproval.credentialVersionAtIssue
+      ) {
+        throw new ReturnTxReject('not_authorized');
       }
 
       // Requester authority re-check at the commit boundary.
@@ -558,7 +645,7 @@ export async function performSubmitSaleReturn(
         throw new ReturnTxReject('approver_not_eligible');
       }
 
-      // Fresh sale evidence + cumulative ledger — the serialization point.
+      // Fresh sale evidence + validated cumulative ledger — the serialization point.
       const evidence = parseSaleEvidence(
         value.orderId,
         asyncSnap.exists ? ((asyncSnap.data() ?? {}) as Record<string, unknown>) : null,
@@ -570,12 +657,12 @@ export async function performSubmitSaleReturn(
           evidence.classification === 'RETURN_UNSUPPORTED_EVIDENCE' ? 'return_unsupported_evidence' : 'return_not_eligible',
         );
       }
-      const ledger = parseReturnLedger(ledgerSnap.exists ? ledgerSnap.data() : undefined);
+      const sale = evidence.sale;
+      const ledger = parseReturnLedgerForSale(ledgerSnap.exists ? ledgerSnap.data() : undefined, sale);
       if (ledger == null) throw new ReturnTxReject('return_unsupported_evidence');
-      const planned = planSaleReturn(evidence.sale, ledger, value, returnId);
+      const planned = planSaleReturn(sale, ledger, value, returnId);
       if (!planned.ok) throw new ReturnTxReject(planned.code);
       const plan = planned.plan;
-      const sale = evidence.sale;
 
       // Cash drawer: the requester's own open shift on this branch.
       if (plan.refundMethod === 'cash') {
@@ -592,36 +679,42 @@ export async function performSubmitSaleReturn(
         }
       }
 
-      // Target lots: restore to the ORIGINAL lot when it is still the same
-      // product/branch real lot; otherwise an explicit restoration lot.
-      const portionWrites: PortionWrite[] = [];
-      const lotData = new Map<string, DocumentData | null>();
+      // Target lots, read in this transaction (D-RET-FIX-3). Restore IN PLACE
+      // only when the original lot is provably the same intact cost layer with
+      // room for the units; otherwise a distinct restoration lot at the
+      // sale-time cost. (Oversell portions were already refused by the plan.)
+      const lotData = new Map<string, Record<string, unknown> | null>();
+      const lotAgg = new Map<string, { productIds: Set<string>; costs: number[]; baseMilli: number }>();
       for (const line of plan.lines) {
         for (const portion of line.portions) {
-          if (portion.originalLotId !== OVERSELL_LOT_ID && !lotData.has(portion.originalLotId)) {
+          if (!lotData.has(portion.originalLotId)) {
             const snap = await tx.get(database.collection(C.stockLots).doc(portion.originalLotId));
-            lotData.set(portion.originalLotId, snap.exists ? ((snap.data() ?? {}) as DocumentData) : null);
+            lotData.set(portion.originalLotId, snap.exists ? ((snap.data() ?? {}) as Record<string, unknown>) : null);
           }
+          const agg = lotAgg.get(portion.originalLotId) ?? { productIds: new Set<string>(), costs: [], baseMilli: 0 };
+          agg.productIds.add(line.productId);
+          agg.costs.push(portion.costPerUnit);
+          agg.baseMilli += portion.qtyBaseMilli;
+          lotAgg.set(portion.originalLotId, agg);
         }
       }
+      const lotDecisions = new Map<string, InPlaceLotDecision>();
+      for (const [lotId, agg] of lotAgg) {
+        lotDecisions.set(
+          lotId,
+          decideInPlaceLotRestore(lotData.get(lotId) ?? null, {
+            productId: agg.productIds.size === 1 ? [...agg.productIds][0]! : '',
+            branchId: value.branchId,
+            portionCosts: agg.costs,
+            restoreBaseMilli: agg.baseMilli,
+          }),
+        );
+      }
+      const portionWrites: PortionWrite[] = [];
       for (const line of plan.lines) {
         for (const portion of line.portions) {
           const docId = deriveReturnPortionDocId(returnId, line.lineIndex, portion.portionIndex);
-          let restoreMode: PortionWrite['restoreMode'];
-          let restoredLotId: string | null;
-          if (portion.originalLotId === OVERSELL_LOT_ID) {
-            restoreMode = 'oversell_no_lot';
-            restoredLotId = null;
-          } else {
-            const lot = lotData.get(portion.originalLotId) ?? null;
-            const safe =
-              lot != null &&
-              lot.productId === line.productId &&
-              lot.branchId === value.branchId &&
-              lot.isGhost !== true;
-            restoreMode = safe ? 'original_lot' : 'restoration_lot';
-            restoredLotId = safe ? portion.originalLotId : docId;
-          }
+          const decision = lotDecisions.get(portion.originalLotId)!;
           portionWrites.push({
             lineIndex: line.lineIndex,
             productId: line.productId,
@@ -629,12 +722,23 @@ export async function performSubmitSaleReturn(
             originalLotId: portion.originalLotId,
             qtyBaseMilli: portion.qtyBaseMilli,
             costPerUnit: portion.costPerUnit,
-            restoreMode,
-            restoredLotId,
+            restoreMode: decision.ok ? 'original_lot' : 'restoration_lot',
+            restoreDecisionReason: decision.ok ? null : decision.reason,
+            restoredLotId: decision.ok ? portion.originalLotId : docId,
             movementId: docId,
           });
         }
       }
+
+      // Customer spend aggregate (CRM release gate): read here, written below.
+      const customerRef =
+        sale.customerId && plan.refundMinor > 0 ? database.collection(C.customers).doc(sale.customerId) : null;
+      let customerDoc: Record<string, unknown> | null = null;
+      if (customerRef) {
+        const custSnap = await tx.get(customerRef);
+        customerDoc = custSnap.exists ? ((custSnap.data() ?? {}) as Record<string, unknown>) : null;
+      }
+      const customerAdjustment = planCustomerSpendAdjustment(sale.customerId, customerDoc, plan.refundMinor);
 
       const returnNo = deriveReturnNo(sale.billId, plan.sequence);
       const refundId = plan.refundMinor > 0 ? returnId : null;
@@ -664,6 +768,7 @@ export async function performSubmitSaleReturn(
         productId: l.productId,
         productName: l.productName,
         sku: l.sku,
+        category: l.category,
         unit: l.unit,
         unitFactor: l.unitFactor,
         originalSoldQty: milliToQty(l.soldQtyMilli),
@@ -679,6 +784,7 @@ export async function performSubmitSaleReturn(
           lineRefundableShare: minorToBaht(l.refundableShareMinor),
           vatAmount: 0,
           refundAmount: minorToBaht(l.refundMinor),
+          lineRevenueReversed: minorToBaht(l.lineRevenueMinor),
         },
         cost: {
           total: minorToBaht(l.costMinor),
@@ -689,6 +795,7 @@ export async function performSubmitSaleReturn(
               qtyBase: milliToQty(p.qtyBaseMilli),
               costPerUnit: p.costPerUnit,
               restoreMode: p.restoreMode,
+              restoreDecisionReason: p.restoreDecisionReason,
               restoredLotId: p.restoredLotId,
               stockMovementId: p.movementId,
             })),
@@ -718,6 +825,7 @@ export async function performSubmitSaleReturn(
         lines: linesDoc,
         totals: {
           refundAmount,
+          lineRevenueReversed: minorToBaht(plan.lineRevenueMinor),
           costRestored: minorToBaht(plan.costMinor),
           originalSaleTotal: minorToBaht(sale.totalMinor),
           refundedTotalAfter: minorToBaht(plan.nextLedger.refundedTotalMinor),
@@ -730,13 +838,16 @@ export async function performSubmitSaleReturn(
           shiftId: cashEntryId ? value.shiftId : null,
           cashEntryId,
         },
+        customerAdjustment: customerAdjustment.apply
+          ? { applied: true, customerId: sale.customerId, decrement: minorToBaht(customerAdjustment.decrementMinor), fields: customerAdjustment.fields }
+          : { applied: false, customerId: sale.customerId, reason: customerAdjustment.reason },
         idempotency: { attemptId: value.attemptId, commandId, approvalId },
         contentDigest,
         auditEventIds: Object.values(auditRefs),
         createdAt: now,
         approvedAt: now,
         completedAt: now,
-        createdAtMillis: nowMillis,
+        createdAtMillis: attemptNowMillis,
       });
 
       if (refundId) {
@@ -760,26 +871,25 @@ export async function performSubmitSaleReturn(
           requesterStaffId: staffId,
           approverStaffId: value.approverStaffId,
           createdAt: now,
-          createdAtMillis: nowMillis,
+          createdAtMillis: attemptNowMillis,
         });
       }
 
       tx.set(ledgerRef, {
         ...serializeReturnLedger(plan.nextLedger, value.orderId, value.branchId),
         updatedAt: now,
-        updatedAtMillis: nowMillis,
+        updatedAtMillis: attemptNowMillis,
       });
 
-      // FIFO cost-basis restoration — merged per lot so one lot is written once.
-      const inPlaceByLot = new Map<string, number>();
+      // FIFO cost-basis restoration. In-place lots get an EXACT value computed
+      // from the lot read in this transaction (never a blind increment), so
+      // qtyRemaining can never exceed qtyReceived.
       const stockByProduct = new Map<string, number>();
       for (const p of portionWrites) {
         const qty = milliToQty(p.qtyBaseMilli);
         stockByProduct.set(p.productId, (stockByProduct.get(p.productId) ?? 0) + p.qtyBaseMilli);
-        if (p.restoreMode === 'original_lot') {
-          inPlaceByLot.set(p.originalLotId, (inPlaceByLot.get(p.originalLotId) ?? 0) + p.qtyBaseMilli);
-        } else if (p.restoreMode === 'restoration_lot') {
-          tx.create(database.collection(C.stockLots).doc(p.restoredLotId as string), {
+        if (p.restoreMode === 'restoration_lot') {
+          tx.create(database.collection(C.stockLots).doc(p.restoredLotId), {
             id: p.restoredLotId,
             productId: p.productId,
             branchId: value.branchId,
@@ -796,8 +906,10 @@ export async function performSubmitSaleReturn(
             sourceReturnId: returnId,
             sourceOrderId: value.orderId,
             sourceLineIndex: p.lineIndex,
+            sourceMovementId: p.movementId,
             originalLotId: p.originalLotId,
             originalCostPerUnit: p.costPerUnit,
+            restoreDecisionReason: p.restoreDecisionReason,
           });
         }
         tx.create(database.collection(C.stockMovements).doc(p.movementId), {
@@ -820,9 +932,10 @@ export async function performSubmitSaleReturn(
           restoredLotId: p.restoredLotId,
         });
       }
-      for (const [lotId, qtyMilli] of inPlaceByLot) {
+      for (const [lotId, decision] of lotDecisions) {
+        if (!decision.ok) continue;
         tx.update(database.collection(C.stockLots).doc(lotId), {
-          qtyRemaining: FieldValue.increment(milliToQty(qtyMilli)),
+          qtyRemaining: milliToQty(decision.nextRemainingMilli),
           isDepleted: false,
           updatedAt: now,
         });
@@ -840,6 +953,13 @@ export async function performSubmitSaleReturn(
         );
       }
 
+      // Customer spend: exact values from the in-transaction read, floored at 0.
+      if (customerRef && customerAdjustment.apply) {
+        const custUpdate: Record<string, unknown> = { updatedAt: now };
+        for (const [k, f] of Object.entries(customerAdjustment.fields)) custUpdate[k] = f!.after;
+        tx.update(customerRef, custUpdate);
+      }
+
       // Cash refund leaves the drawer: a pay-out on the requester's open shift.
       // The terminal drawer fold (foldCashEntries) and the shift-close
       // validator (foldCashEntriesSnapshot + cash pairs) both already count it.
@@ -853,7 +973,7 @@ export async function performSubmitSaleReturn(
             note,
             staffId,
             staffName: requesterName,
-            at: nowMillis,
+            at: attemptNowMillis,
           }),
           updatedAt: now,
         });
@@ -886,7 +1006,7 @@ export async function performSubmitSaleReturn(
         refundAmount,
         refundMethod: plan.refundMethod,
         createdAt: now,
-        createdAtMillis: nowMillis,
+        createdAtMillis: attemptNowMillis,
       };
       tx.create(database.collection(C.auditEvents).doc(auditRefs.initiated), { ...auditBase, eventType: 'initiated', reason: value.reason });
       tx.create(database.collection(C.auditEvents).doc(auditRefs.approved), {
@@ -905,6 +1025,7 @@ export async function performSubmitSaleReturn(
           qtyBase: milliToQty(p.qtyBaseMilli),
           costPerUnit: p.costPerUnit,
           restoreMode: p.restoreMode,
+          restoreDecisionReason: p.restoreDecisionReason,
           restoredLotId: p.restoredLotId,
           stockMovementId: p.movementId,
         })),
@@ -988,4 +1109,3 @@ export const submitSaleReturn = onCall(
     }
   },
 );
-
