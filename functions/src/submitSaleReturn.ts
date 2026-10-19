@@ -462,7 +462,10 @@ export async function performSubmitSaleReturn(
         if (committedSnap.exists) return { kind: 'replay' as const, data: (committedSnap.data() ?? {}) as DocumentData };
         if (fenceSnap.exists) {
           const fence = (fenceSnap.data() ?? {}) as DocumentData;
-          return fence.requesterStaffId === staffId ? { kind: 'fenced' as const } : { kind: 'conflict' as const };
+          // Same identity contract as a committed replay: requester AND content.
+          return fence.requesterStaffId === staffId && fence.contentDigest === contentDigest
+            ? { kind: 'fenced' as const }
+            : { kind: 'conflict' as const };
         }
         tx.create(fenceRef, {
           schemaVersion: SALE_RETURN_SCHEMA_VERSION,

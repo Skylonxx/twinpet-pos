@@ -42,6 +42,7 @@ import {
   saveUnresolvedReturnAttempt,
   type UnresolvedReturnAttempt,
 } from '../../lib/saleReturn/unresolvedReturnAttempt';
+import { clearCashReturnAttemptPending, markCashReturnAttemptPending } from '../../lib/pos/shiftCashFreshness';
 
 // Return/Refund V1 (D-RET-8) — sale-linked partial return from Sales History.
 // Online-only. Distinct from the whole-bill Void: it never cancels the sale.
@@ -63,6 +64,11 @@ type Phase =
   | { kind: 'success'; returnNo: string; refundAmount: number; refundMethod: SaleReturnRefundMethod; idempotent: boolean };
 
 type LockedPayload = Omit<SubmitSaleReturnInput, 'pin'>;
+
+/** The shift whose drawer a cash attempt pays out of (null for non-cash: no drawer guard). */
+function cashShiftOf(payload: Pick<LockedPayload, 'refundMethod' | 'shiftId'>): string | null {
+  return payload.refundMethod === 'cash' && payload.shiftId ? payload.shiftId : null;
+}
 
 const STORE_UNREADABLE_COPY = 'ตรวจสอบรายการคืนสินค้าที่ค้างในเครื่องนี้ไม่ได้ — ทำรายการคืนสินค้าจากเครื่องนี้ไม่ได้ชั่วคราว';
 const STORE_UNWRITABLE_COPY = 'บันทึกข้อมูลกู้คืนรายการในเครื่องไม่ได้ — ยังไม่ได้ส่งรายการคืนสินค้า กรุณาลองใหม่';
@@ -90,7 +96,14 @@ function SaleReturnDialog({
 }) {
   const { user } = useAuth();
   // Recovered unresolved attempt for THIS sale (undefined = store unreadable ⇒ fail closed).
-  const [initialRecord] = useState(() => readUnresolvedReturnAttempt(target.branchId, target.orderId));
+  const [initialRecord] = useState(() => {
+    const rec = readUnresolvedReturnAttempt(target.branchId, target.orderId);
+    // A recovered unresolved CASH attempt keeps (re-asserts) its shift guard
+    // until it is resolved — e.g. a record persisted before this guard existed.
+    const cashShift = rec ? cashShiftOf(rec) : null;
+    if (rec && cashShift) markCashReturnAttemptPending(cashShift, rec.attemptId);
+    return rec;
+  });
   const [unresolved, setUnresolved] = useState<UnresolvedReturnAttempt | null>(initialRecord ?? null);
   const [phase, setPhase] = useState<Phase>(() => {
     if (initialRecord === undefined) return { kind: 'blocked', message: STORE_UNREADABLE_COPY };
@@ -219,12 +232,26 @@ function SaleReturnDialog({
     setPhase({ kind: 'pin' });
   };
 
+  /**
+   * THIS attempt definitively did not commit (never sent, rejected on its only
+   * send, PIN cancelled, or server-fenced): drop its recovery record and its
+   * shift cash guard. Other attempts' guards are separate keys and untouched.
+   */
+  const releaseAttempt = (payload: LockedPayload) => {
+    clearUnresolvedReturnAttempt(payload.branchId, payload.orderId);
+    const cashShift = cashShiftOf(payload);
+    if (cashShift) clearCashReturnAttemptPending(cashShift, payload.attemptId);
+  };
+
   /** A definitive outcome of THIS attempt: committed (replayed or new). */
   const finishCommitted = (payload: LockedPayload, res: Extract<SubmitSaleReturnResult, { kind: 'ok' }>) => {
     clearUnresolvedReturnAttempt(payload.branchId, payload.orderId);
     setUnresolved(null);
     setLocked(null);
-    if (payload.refundMethod === 'cash' && payload.shiftId) void refreshShiftFromServer(payload.shiftId);
+    // The cash guard is NOT released here: it moves to committed_unsynced and
+    // clears only after a server read of the shift succeeded.
+    const cashShift = cashShiftOf(payload);
+    if (cashShift) void refreshShiftFromServer(cashShift, payload.attemptId);
     setPhase({
       kind: 'success',
       returnNo: res.returnNo,
@@ -267,6 +294,17 @@ function SaleReturnDialog({
         return setPhase({ kind: 'form' });
       }
     }
+    // A cash Return may append a server pay-out to the shift even when the
+    // response is lost: guard the shift's offline close BEFORE every send. If
+    // the guard cannot be persisted, nothing is sent.
+    const cashShift = cashShiftOf(payload);
+    if (cashShift && !markCashReturnAttemptPending(cashShift, payload.attemptId)) {
+      if (wasUnresolved) return markUnresolved(payload, STORE_UNWRITABLE_COPY);
+      releaseAttempt(payload);
+      setLocked(null);
+      setFormError(STORE_UNWRITABLE_COPY);
+      return setPhase({ kind: 'form' });
+    }
     setPhase({ kind: 'submitting' });
     const res = await submitSaleReturnRequest({ ...payload, pin });
     if (res.kind === 'ok') return finishCommitted(payload, res);
@@ -274,7 +312,7 @@ function SaleReturnDialog({
     if (res.kind === 'offline') {
       // Detected before sending: nothing reached the server for THIS send.
       if (wasUnresolved) return markUnresolved(payload, SALE_RETURN_OFFLINE_COPY);
-      clearUnresolvedReturnAttempt(payload.branchId, payload.orderId);
+      releaseAttempt(payload);
       setLocked(null);
       setFormError(SALE_RETURN_OFFLINE_COPY);
       return setPhase({ kind: 'form' });
@@ -291,7 +329,7 @@ function SaleReturnDialog({
       return markUnresolved(payload, SALE_RETURN_ERROR_COPY[res.code]);
     }
     // First and only send, definitively rejected: nothing committed.
-    clearUnresolvedReturnAttempt(payload.branchId, payload.orderId);
+    releaseAttempt(payload);
     setLocked(null);
     setFormError(SALE_RETURN_ERROR_COPY[res.code]);
     if (res.code === 'over_return' || res.code === 'refund_mismatch' || res.code === 'return_not_eligible') {
@@ -302,7 +340,7 @@ function SaleReturnDialog({
   };
 
   const resolvedNotCommitted = async (payload: LockedPayload) => {
-    clearUnresolvedReturnAttempt(payload.branchId, payload.orderId);
+    releaseAttempt(payload);
     setUnresolved(null);
     setLocked(null);
     await reload();
@@ -350,7 +388,7 @@ function SaleReturnDialog({
             setPhase({ kind: 'unknown', message: SALE_RETURN_UNRESOLVED_COPY });
             return;
           }
-          if (locked) clearUnresolvedReturnAttempt(locked.branchId, locked.orderId);
+          if (locked) releaseAttempt(locked);
           setLocked(null);
           setPhase({ kind: 'form' });
         }}

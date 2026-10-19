@@ -8,14 +8,15 @@
  * re-reads the shift. Closing from that stale state would freeze a wrong
  * `payOutTotal` / expected cash / variance.
  *
- * Correctness boundary: immediately before an ONLINE close the authoritative
- * shift is read from the server and its `cashEntries` are unioned (by entry
- * id) with the local ones — local entries may still be queued/unflushed, the
- * server may hold entries this device never saw. If that read fails while
- * online the close fails closed (retryable). Offline closes keep the existing
- * cache-only behavior, except that a device which KNOWS a server cash
- * mutation for the shift is not yet in its cache (marker below) must not
- * close offline.
+ * Correctness boundary (final gate): an ONLINE close reads the authoritative
+ * shift INSIDE the close transaction (`closeShift` in shiftService.ts) and
+ * unions its `cashEntries` (by entry id, {@link mergeCashEntries}) with the
+ * local ones — local entries may still be queued/unflushed, the server may
+ * hold entries this device never saw — so a Return committing between that
+ * read and the commit forces a re-read. Offline closes keep the existing
+ * cache-only behavior, except that a device holding a cash Return guard for
+ * the shift (marker below) must not close offline. `readServerShiftCash` is
+ * the display-only read used by the close modal.
  */
 
 import { doc, getDocFromServer } from 'firebase/firestore';
@@ -86,9 +87,31 @@ export function isNavigatorOnline(): boolean {
   return typeof navigator === 'undefined' || navigator.onLine !== false;
 }
 
-// ── "server cash mutation not yet observed" marker (per shift, per device) ──
+// ── "possible server cash mutation not yet observed" marker ──
+//
+// Final-gate fix §3. One localStorage key PER cash Return attempt:
+//   twinpet.shift.serverCashPending.v2:<shiftId>:<attemptId>
+// A key per attempt (never a shared read-modify-write record) means two tabs,
+// or a clear racing another attempt's send, can never drop each other's guard.
+//
+// Lifecycle (driven by SaleReturnModal / saleReturnService):
+//   in_flight          written BEFORE a cash Return is sent; if it cannot be
+//                      written the Return is NOT sent.
+//   committed_unsynced the attempt is known committed; kept until a server
+//                      read of the shift succeeds (the cache then holds the
+//                      pay-out).
+//   (removed)          definitive not-committed outcome of THAT attempt, or
+//                      the server-read sync after its commit, or a committed
+//                      online close of the shift (whose transaction folded
+//                      every committed Return; a later one cannot commit onto
+//                      a closed shift).
+// While ANY key for the shift exists an OFFLINE close on this device fails
+// closed. Online closes never depend on it: their transaction reads the
+// authoritative shift. The value carries no secret (no PIN/token/OAC).
 
-const PENDING_KEY_PREFIX = 'twinpet.shift.serverCashPending.v1:';
+export const SERVER_CASH_PENDING_KEY_PREFIX = 'twinpet.shift.serverCashPending.v2:';
+
+export type CashAttemptMarkerState = 'in_flight' | 'committed_unsynced';
 
 function storage(): Storage | null {
   try {
@@ -98,26 +121,70 @@ function storage(): Storage | null {
   }
 }
 
-export function markShiftServerCashPending(shiftId: string): void {
+function attemptKey(shiftId: string, attemptId: string): string {
+  return `${SERVER_CASH_PENDING_KEY_PREFIX}${shiftId}:${attemptId}`;
+}
+
+/** Durably mark one cash Return attempt for a shift. `false` = not persisted (caller must NOT send). */
+export function markCashReturnAttemptPending(
+  shiftId: string,
+  attemptId: string,
+  state: CashAttemptMarkerState = 'in_flight',
+): boolean {
+  if (!shiftId || !attemptId) return false;
+  const s = storage();
+  if (!s) return false;
+  const key = attemptKey(shiftId, attemptId);
+  const value = JSON.stringify({ schemaVersion: 2, shiftId, attemptId, state, recordedAtMs: Date.now() });
   try {
-    storage()?.setItem(PENDING_KEY_PREFIX + shiftId, String(Date.now()));
+    s.setItem(key, value);
+    return s.getItem(key) === value;
   } catch {
-    /* best-effort: an online close still re-reads the server regardless */
+    return false;
   }
 }
 
+/** Remove ONE attempt's guard (other attempts for the shift keep theirs). */
+export function clearCashReturnAttemptPending(shiftId: string, attemptId: string): void {
+  try {
+    storage()?.removeItem(attemptKey(shiftId, attemptId));
+  } catch {
+    /* best-effort: a stale guard only forces an online close */
+  }
+}
+
+function shiftKeys(s: Storage, shiftId: string): string[] {
+  const prefix = `${SERVER_CASH_PENDING_KEY_PREFIX}${shiftId}:`;
+  const keys: string[] = [];
+  for (let i = 0; i < s.length; i += 1) {
+    const k = s.key(i);
+    if (k != null && k.startsWith(prefix)) keys.push(k);
+  }
+  return keys;
+}
+
+/** Remove every guard of a shift — only after a COMMITTED online close of it. */
 export function clearShiftServerCashPending(shiftId: string): void {
   try {
-    storage()?.removeItem(PENDING_KEY_PREFIX + shiftId);
+    const s = storage();
+    if (!s) return;
+    for (const k of shiftKeys(s, shiftId)) s.removeItem(k);
   } catch {
     /* best-effort */
   }
 }
 
+/**
+ * Any guard for the shift (value irrelevant — a corrupt value still guards).
+ * An unreadable store fails CLOSED (`true`). No store at all ⇒ no cash Return
+ * could have been sent from here (the send requires a persisted guard).
+ */
 export function hasShiftServerCashPending(shiftId: string): boolean {
   try {
-    return storage()?.getItem(PENDING_KEY_PREFIX + shiftId) != null;
+    const s = storage();
+    if (!s) return false;
+    return shiftKeys(s, shiftId).length > 0;
   } catch {
-    return false;
+    return true;
   }
 }

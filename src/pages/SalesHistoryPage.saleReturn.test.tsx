@@ -33,7 +33,7 @@ const fetchContextMock = vi.fn<(orderId: string, branchId: string) => Promise<Sa
 const submitMock = vi.fn<(input: Record<string, unknown>) => Promise<SubmitSaleReturnResult>>();
 const resolveMock = vi.fn<(input: Record<string, unknown>) => Promise<SubmitSaleReturnResult>>();
 const attemptIdMock = vi.fn(() => 'attempt-ui-0001');
-const refreshShiftMock = vi.fn(async () => undefined);
+const refreshShiftMock = vi.fn<(shiftId: string, attemptId: string) => Promise<void>>(async () => undefined);
 const getActiveShiftMock = vi.fn(async () => ({ id: 'SH1' }) as never);
 const projectVoidMock = vi.fn();
 
@@ -84,7 +84,7 @@ vi.mock('../lib/saleReturn/saleReturnService', async (importOriginal) => {
     fetchSaleReturnContext: (orderId: string, branchId: string) => fetchContextMock(orderId, branchId),
     submitSaleReturnRequest: (input: Record<string, unknown>) => submitMock(input),
     resolveSaleReturnAttempt: (input: Record<string, unknown>) => resolveMock(input),
-    refreshShiftFromServer: () => refreshShiftMock(),
+    refreshShiftFromServer: (shiftId: string, attemptId: string) => refreshShiftMock(shiftId, attemptId),
     newReturnAttemptId: () => attemptIdMock(),
   };
 });
@@ -204,6 +204,14 @@ afterEach(() => {
   historyState.records = [];
   vi.unstubAllGlobals();
 });
+
+function unresolvedValues(): string[] {
+  return [...storage.entries()].filter(([k]) => k.startsWith('twinpet.saleReturn.unresolved.')).map(([, v]) => v);
+}
+
+function guardKeys(): string[] {
+  return [...storage.keys()].filter((k) => k.startsWith('twinpet.shift.serverCashPending.v2:'));
+}
 
 async function openReturn(billId: string): Promise<void> {
   render(createElement(SalesHistoryPage));
@@ -451,8 +459,11 @@ describe('SalesHistoryPage — unresolved Return attempt recovery (D-RET-FIX-7)'
     await waitFor(() => expect(screen.getByTestId('sale-return-unknown')).toBeTruthy());
 
     // Persisted, non-secret: no PIN anywhere in the stored record.
-    const stored = [...storage.values()];
+    const stored = unresolvedValues();
     expect(stored).toHaveLength(1);
+    // The cash attempt's shift guard was persisted before the send, also secret-free.
+    expect(guardKeys()).toEqual(['twinpet.shift.serverCashPending.v2:SH1:attempt-ui-0001']);
+    expect(storage.get(guardKeys()[0]!)).not.toContain('1234');
     expect(stored[0]).toContain('attempt-ui-0001');
     expect(stored[0]).not.toContain('1234');
     expect(JSON.parse(stored[0]!)).not.toHaveProperty('pin');
@@ -474,7 +485,10 @@ describe('SalesHistoryPage — unresolved Return attempt recovery (D-RET-FIX-7)'
     expect(resolveMock.mock.calls[0]![0]).toMatchObject({ attemptId: 'attempt-ui-0001', lines: [{ lineIndex: 0, productId: 'P1', qty: 1 }] });
     expect(resolveMock.mock.calls[0]![0]).not.toHaveProperty('pin');
     expect(submitMock).toHaveBeenCalledTimes(1);
-    expect(storage.size).toBe(0);
+    expect(unresolvedValues()).toHaveLength(0);
+    // Committed: the guard is handed to the shift sync, never cleared on the ack alone.
+    expect(refreshShiftMock).toHaveBeenCalledWith('SH1', 'attempt-ui-0001');
+    expect(guardKeys()).toHaveLength(1);
   });
 
   test('response lost BEFORE commit → reopen → retry of the SAME attempt with the PIN commits once', async () => {
@@ -491,7 +505,8 @@ describe('SalesHistoryPage — unresolved Return attempt recovery (D-RET-FIX-7)'
     await waitFor(() => expect(screen.getByTestId('sale-return-success')).toBeTruthy());
     expect(submitMock).toHaveBeenCalledTimes(2);
     expect(submitMock.mock.calls[1]![0]).toMatchObject({ attemptId: 'attempt-ui-0001', expectedRefundAmount: 81, pin: '1234' });
-    expect(storage.size).toBe(0);
+    expect(unresolvedValues()).toHaveLength(0);
+    expect(refreshShiftMock).toHaveBeenCalledWith('SH1', 'attempt-ui-0001');
   });
 
   test('a rejection of a retry does NOT clear the unresolved attempt (only a server fence does)', async () => {
@@ -507,7 +522,8 @@ describe('SalesHistoryPage — unresolved Return attempt recovery (D-RET-FIX-7)'
     fireEvent.click(screen.getByTestId('sale-return-retry-same'));
     await enterPin();
     await waitFor(() => expect(screen.getByTestId('sale-return-unknown').textContent).toContain('การอนุมัติหมดอายุ'));
-    expect(storage.size).toBe(1);
+    expect(unresolvedValues()).toHaveLength(1);
+    expect(guardKeys()).toHaveLength(1);
 
     // Definitive resolution: the server fenced the attempt → a NEW attempt is allowed.
     await act(async () => {

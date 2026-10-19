@@ -47,6 +47,7 @@ import ThermalReceipt from '../components/documents/ThermalReceipt';
 import SaleReturnModal, { type SaleReturnTarget } from '../components/salesHistory/SaleReturnModal';
 import {
   GROSS_BEFORE_RETURNS_LABEL,
+  grossBasisNote,
   netAfterReturns,
   useSaleReturnAdjustments,
 } from '../lib/saleReturn/returnAdjustments';
@@ -765,9 +766,7 @@ export default function SalesHistoryPage() {
         </div>
         {!summary.netOfReturns && (
           <div className="sh-returns-gross-note" role="status" data-testid="sh-returns-gross-note">
-            {returnAdjustments.status === 'loading'
-              ? 'กำลังโหลดรายการคืนสินค้า — ตัวเลขด้านบนยังเป็นยอดก่อนหักคืนสินค้า'
-              : 'โหลดรายการคืนสินค้าไม่ได้ — ตัวเลขด้านบนเป็นยอดก่อนหักคืนสินค้า (ไม่ใช่ยอดสุทธิ)'}
+            {grossBasisNote(returnAdjustments.status, 'above')}
           </div>
         )}
 
@@ -1172,7 +1171,9 @@ export default function SalesHistoryPage() {
                     {returnsByOrder == null && (
                       <div className="sh-pay-row">
                         <span className="sh-pay-row-lbl">ยอดคืนสินค้า</span>
-                        <span className="sh-pay-row-val">ยังโหลดไม่ได้ ({GROSS_BEFORE_RETURNS_LABEL})</span>
+                        <span className="sh-pay-row-val">
+                          {`${returnAdjustments.status === 'unconfirmed' ? 'ยังยืนยันไม่ได้' : 'ยังโหลดไม่ได้'} (${GROSS_BEFORE_RETURNS_LABEL})`}
+                        </span>
                       </div>
                     )}
                     <hr className="sh-pay-divider" style={{ marginTop: 8 }} />

@@ -1283,6 +1283,17 @@ describe('D-RET-FIX-7 unknown outcome: PIN-less resolve of the SAME attempt', ()
     ).toEqual({ ok: false, code: 'idempotency_conflict' });
     expect(await performSubmitSaleReturn(db as never, { ...resolveReq(), mode: 'bogus' }, staffAuth, deps)).toEqual({ ok: false, code: 'invalid_request' });
   });
+
+  test('re-resolving an existing fence with DIFFERENT content is a conflict; the exact content stays fenced', async () => {
+    const db = makeDb(baseSeed());
+    expect(await performSubmitSaleReturn(db as never, resolveReq(), staffAuth, deps)).toEqual({ ok: false, code: 'attempt_not_committed' });
+    expect(
+      await performSubmitSaleReturn(db as never, resolveReq({ lines: [{ lineIndex: 0, productId: 'P1', qty: 1 }], expectedRefundAmount: 81 }), staffAuth, deps),
+    ).toEqual({ ok: false, code: 'idempotency_conflict' });
+    expect(await performSubmitSaleReturn(db as never, resolveReq(), staffAuth, deps)).toEqual({ ok: false, code: 'attempt_not_committed' });
+    expect(keys(db, 'saleReturnAttemptResolutions/')).toHaveLength(1);
+    expect(keys(db, 'saleReturns/')).toEqual([]);
+  });
 });
 
 describe('D-RET-FIX-1 request precision at the callable boundary', () => {

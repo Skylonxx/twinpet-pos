@@ -46,7 +46,7 @@ import {
 } from '../lib/profitReport/types';
 import { useAuth } from '../lib/hooks/useAuth';
 import { isFirebaseConfigured } from '../lib/firebase';
-import { NET_AFTER_RETURNS_LABEL } from '../lib/saleReturn/returnAdjustments';
+import { NET_AFTER_RETURNS_LABEL, grossBasisNote } from '../lib/saleReturn/returnAdjustments';
 import {
   Table,
   TableHead,
@@ -779,9 +779,7 @@ export default function ProfitReportPage() {
             >
               {netOfReturns
                 ? `ยอดขาย / ต้นทุน / กำไรในรายงานนี้เป็นยอด${NET_AFTER_RETURNS_LABEL} (รายการคืนสินค้าแสดงเป็นแถวติดลบของบิลเดิม)`
-                : returnsStatus === 'loading'
-                  ? 'กำลังโหลดรายการคืนสินค้า — ตัวเลขด้านล่างยังเป็นยอดก่อนหักคืนสินค้า'
-                  : 'โหลดรายการคืนสินค้าไม่ได้ — ตัวเลขด้านล่างเป็นยอดก่อนหักคืนสินค้า (ไม่ใช่ยอดสุทธิ)'}
+                : grossBasisNote(returnsStatus, 'below')}
             </div>
             <div className="pr-kpi-grid">
               <div className="pr-kpi-card pr-kpi-primary">

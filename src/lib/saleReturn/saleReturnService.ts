@@ -12,7 +12,7 @@ import type {
   SaleReturnRefundMethod,
 } from './saleReturnTypes';
 import { SALE_RETURN_ERROR_COPY } from './saleReturnTypes';
-import { clearShiftServerCashPending, markShiftServerCashPending } from '../pos/shiftCashFreshness';
+import { clearCashReturnAttemptPending, markCashReturnAttemptPending } from '../pos/shiftCashFreshness';
 
 export type CallableTransport = (name: string, payload: unknown) => Promise<unknown>;
 
@@ -172,16 +172,17 @@ export function newReturnAttemptId(): string {
 }
 
 /**
- * After a cash refund the server appended a pay-out to the shift's
- * `cashEntries[]`. Pull the shift from the server so the local cache (which
- * the POS boot read and an offline close fold) carries it. Until that read
- * succeeds this device is marked as knowing an unsynced server cash entry for
- * the shift, which blocks an OFFLINE close (D-RET-FIX-8). An online close
- * always re-reads the server itself — that read is the correctness boundary,
- * not this refresh.
+ * After a COMMITTED cash refund the server appended a pay-out to the shift's
+ * `cashEntries[]`. The attempt's guard (written before the send, see
+ * `markCashReturnAttemptPending`) is moved to `committed_unsynced` — never
+ * cleared on the result acknowledgement alone — and removed only once a
+ * server read of the shift succeeded, so the local cache (which the POS boot
+ * read and an offline close fold) carries the pay-out. Until then an OFFLINE
+ * close on this device is refused. An online close never depends on this: its
+ * transaction reads the authoritative shift.
  */
-export async function refreshShiftFromServer(shiftId: string): Promise<void> {
-  markShiftServerCashPending(shiftId);
+export async function refreshShiftFromServer(shiftId: string, attemptId: string): Promise<void> {
+  markCashReturnAttemptPending(shiftId, attemptId, 'committed_unsynced');
   try {
     const [{ doc, getDocFromServer }, { db, collections }] = await Promise.all([
       import('firebase/firestore'),
@@ -189,8 +190,8 @@ export async function refreshShiftFromServer(shiftId: string): Promise<void> {
     ]);
     if (!db) return;
     await getDocFromServer(doc(db, collections.shifts, shiftId));
-    clearShiftServerCashPending(shiftId);
+    clearCashReturnAttemptPending(shiftId, attemptId);
   } catch {
-    /* marker stays: an offline close is refused until a server read succeeds */
+    /* guard stays: an offline close is refused until a server read succeeds */
   }
 }

@@ -903,9 +903,15 @@ async function afterSuccessfulJournalCommit(
 // ── Public journal API ──────────────────────────────────────────────────
 
 export type ShiftCloseIntentJournal = {
+  /**
+   * `preset.closeCorrelationId` — used ONLY on the initial-create branch, by the
+   * online transactional close (Return/Refund V1 final gate), which journals a
+   * close AFTER it committed it with that id; absent → a fresh id is generated.
+   */
   upsertCloseIntent: (
     snapshot: ShiftCloseIntentBusinessSnapshot,
     observePointerRepair?: PointerRepairObserver,
+    preset?: { closeCorrelationId: string | null },
   ) => Promise<CloseIntentResult<ShiftCloseIntentEntry>>;
   getCloseIntent: (shiftId: string) => Promise<CloseIntentResult<ShiftCloseIntentEntry | undefined>>;
   listCloseIntents: () => Promise<ListCloseIntentsResult>;
@@ -1026,7 +1032,7 @@ function buildJournalApi(
     });
 
   return {
-    upsertCloseIntent: (snapshot, observePointerRepair) =>
+    upsertCloseIntent: (snapshot, observePointerRepair, preset) =>
       runStore(store, async (s) => {
         const businessResult = await s.transact(['shiftCloseIntents'], 'readwrite', async (txn) => {
           const existingRaw = await txn.get<Record<string, unknown>>(
@@ -1053,7 +1059,7 @@ function buildJournalApi(
           // inside this existing IndexedDB readwrite transaction.
           const nowMs = now();
           const closedAtLocal = nowMs;
-          const closeCorrelationId = generateCloseCorrelationId();
+          const closeCorrelationId = preset ? preset.closeCorrelationId : generateCloseCorrelationId();
           const entry: ShiftCloseIntentEntry = {
             ...snapshot,
             closedAtLocal,

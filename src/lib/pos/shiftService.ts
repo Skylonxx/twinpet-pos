@@ -9,9 +9,11 @@ import {
   increment,
   limit,
   query,
+  runTransaction,
   serverTimestamp,
   setDoc,
   updateDoc,
+  waitForPendingWrites,
   where,
 } from 'firebase/firestore';
 import { collections, db, isFirebaseConfigured } from '../firebase';
@@ -22,17 +24,17 @@ import {
   clearShiftServerCashPending,
   hasShiftServerCashPending,
   isNavigatorOnline,
-  readServerShiftCash,
   withMergedCashEntries,
-  type ServerShiftCashReader,
 } from './shiftCashFreshness';
 import {
   createShiftCloseIntentJournal,
+  generateShiftCloseCorrelationId,
   type ShiftCloseIntentJournal,
 } from './offline/shiftCloseIntentStore';
 import type {
   PointerRepairObserver,
   ShiftCloseIntentBusinessSnapshot,
+  ShiftCloseIntentEntry,
 } from './offline/shiftCloseIntentTypes';
 import {
   reconcileShiftCloseIntent,
@@ -658,9 +660,81 @@ const CLOSE_SHIFT_CONFLICT_MESSAGE =
 /** D-RET-FIX-8: online close could not read the authoritative shift — nothing was written. */
 export const CLOSE_SHIFT_FRESHNESS_MESSAGE =
   'ตรวจสอบยอดเงินสดล่าสุดของกะจากเซิร์ฟเวอร์ไม่สำเร็จ — ยังไม่ได้ปิดกะ กรุณาลองใหม่อีกครั้ง';
-/** D-RET-FIX-8: this device knows a server cash entry (e.g. a cash refund) it has not synced yet. */
+/** Final gate §3: this device has a cash Return whose server pay-out it has not confirmed/synced. */
 export const CLOSE_SHIFT_SERVER_CASH_PENDING_MESSAGE =
-  'มีรายการเงินสดของกะนี้บนเซิร์ฟเวอร์ (เช่น คืนเงินสด) ที่เครื่องนี้ยังไม่ได้ซิงก์ — กรุณาเชื่อมต่ออินเทอร์เน็ตแล้วปิดกะอีกครั้ง';
+  'มีรายการคืนเงินสดของกะนี้ที่เครื่องนี้ยังยืนยันผลหรือซิงก์จากเซิร์ฟเวอร์ไม่ได้ — ปิดกะแบบออฟไลน์ไม่ได้ กรุณาเชื่อมต่ออินเทอร์เน็ตแล้วปิดกะอีกครั้ง';
+/** Final gate §2: this device's queued sale/cash writes did not reach the server in time — nothing was written. */
+export const CLOSE_SHIFT_PENDING_WRITES_MESSAGE =
+  'ข้อมูลการขาย/เงินสดของเครื่องนี้ยังส่งขึ้นเซิร์ฟเวอร์ไม่ครบ — ยังไม่ได้ปิดกะ กรุณารอสักครู่แล้วลองใหม่อีกครั้ง';
+/** Final gate §2: the close transaction did not complete; its outcome is re-checked on retry. */
+export const CLOSE_SHIFT_TX_FAILED_MESSAGE =
+  'ปิดกะไม่สำเร็จ (บันทึกพร้อมยอดเงินสดล่าสุดจากเซิร์ฟเวอร์ไม่ได้) — กรุณาตรวจสอบการเชื่อมต่อแล้วลองใหม่อีกครั้ง';
+
+/** Bound on flushing this device's queued writes before the online close transaction. */
+export const CLOSE_SHIFT_PENDING_WRITES_TIMEOUT_MS = 5_000;
+
+/** Read/write handle of ONE shift doc inside the close transaction (test seam). */
+export type ShiftCloseTx = {
+  get: () => Promise<{ exists: boolean; data: Record<string, unknown> | undefined }>;
+  update: (payload: Record<string, unknown>) => void;
+};
+
+/**
+ * Runs `fn` as ONE optimistic Firestore transaction over `shifts/{shiftId}`:
+ * the commit fails if the doc changed after `get()` (e.g. a cash Return
+ * appended a pay-out) and `fn` is re-run on a fresh read. Production =
+ * client `runTransaction`; tests inject a faithful optimistic fake.
+ */
+export type ShiftCloseTransactionRunner = <T>(shiftId: string, fn: (tx: ShiftCloseTx) => Promise<T>) => Promise<T>;
+
+const firestoreShiftCloseTransaction: ShiftCloseTransactionRunner = (shiftId, fn) => {
+  const firestore = db;
+  if (!firestore) return Promise.reject(new Error('Firestore unavailable'));
+  const ref = doc(firestore, collections.shifts, shiftId);
+  return runTransaction(firestore, (tx) =>
+    fn({
+      get: async () => {
+        const snap = await tx.get(ref);
+        return { exists: snap.exists(), data: snap.exists() ? (snap.data() as Record<string, unknown>) : undefined };
+      },
+      update: (payload) => {
+        tx.update(ref, payload);
+      },
+    }),
+  );
+};
+
+/** `true` once every write queued on this device was acknowledged by the server (bounded). */
+async function waitForQueuedWritesFlushed(): Promise<boolean> {
+  const firestore = db;
+  if (!firestore) return false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const timeout = new Promise<false>((resolve) => {
+      timer = setTimeout(() => resolve(false), CLOSE_SHIFT_PENDING_WRITES_TIMEOUT_MS);
+    });
+    return await Promise.race([waitForPendingWrites(firestore).then(() => true as const), timeout]);
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** A definitive in-transaction refusal: the close was NOT written. */
+class ShiftCloseRefusal extends Error {}
+
+/**
+ * Same-runtime correlation id of an online close whose transaction outcome is
+ * unproven (rejected `runTransaction`, UI timeout). A retry reuses it, so a
+ * close that DID commit is recognised as this device's own (never re-closed,
+ * never reported as someone else's close). Memory only — never persisted.
+ */
+const inflightOnlineCloseCorrelation = new Map<string, string | null>();
+
+export function __resetInflightOnlineCloseForTests(): void {
+  inflightOnlineCloseCorrelation.clear();
+}
 
 let defaultShiftCloseIntentJournal: ShiftCloseIntentJournal | undefined;
 function getDefaultShiftCloseIntentJournal(): ShiftCloseIntentJournal {
@@ -765,54 +839,158 @@ export type CloseShiftDeps = {
    * Failure is isolated; never alters the close business result.
    */
   observePointerRepair?: PointerRepairObserver;
-  /** Injectable for tests; production uses {@link readServerShiftCash}. */
-  readServerShiftCash?: ServerShiftCashReader;
   /** Injectable for tests; production uses `navigator.onLine`. */
   isOnline?: () => boolean;
-  /** Injectable for tests; production uses the per-shift localStorage marker. */
+  /** Injectable for tests; production uses the per-attempt localStorage guards. */
   serverCashPending?: { has: (shiftId: string) => boolean; clear: (shiftId: string) => void };
+  /** Injectable for tests; production = client `runTransaction` on the shift doc. */
+  runCloseTransaction?: ShiftCloseTransactionRunner;
+  /** Injectable for tests; production = bounded `waitForPendingWrites`. */
+  waitForQueuedWrites?: () => Promise<boolean>;
+  /** Injectable for tests; production uses {@link generateShiftCloseCorrelationId}. */
+  generateCloseCorrelationId?: () => string | null;
 };
+
+function closeBusinessSnapshot(
+  shift: Shift,
+  actualCashCount: number,
+  note: string,
+  deviceId: string,
+): ShiftCloseIntentBusinessSnapshot {
+  const totalExpected = calcShiftDrawerExpected(shift);
+  return {
+    shiftId: shift.id,
+    branchId: shift.branchId,
+    staffId: shift.staffId,
+    staffName: shift.staffName,
+    startingCash: shift.startingCash,
+    expectedCash: shift.expectedCash,
+    expectedQr: shift.expectedQr,
+    expectedKbank: shift.expectedKbank,
+    expectedCard: shift.expectedCard,
+    expectedCredit: shift.expectedCredit,
+    payInTotal: shift.payInTotal,
+    payOutTotal: shift.payOutTotal,
+    totalBills: shift.totalBills,
+    actualCashCount,
+    variance: actualCashCount - totalExpected,
+    note,
+    deviceId,
+  };
+}
+
+/** The W3 close write (firestore.rules `isW3ShiftClose`) — identical for both paths. */
+function closeWritePayload(
+  s: ShiftCloseIntentBusinessSnapshot,
+  closeCorrelationId: string | null,
+): Record<string, unknown> {
+  return {
+    status: 'closed',
+    // Authoritative server close time on the persisted doc. Omitting it would
+    // leave a synced closed shift with `closedAt: null` forever; there is no
+    // separate `closedAtServer` mirror field to keep in sync, so none is
+    // written here (avoids an unread, unresolved, permanently-null field).
+    closedAt: serverTimestamp(),
+    actualCashCount: s.actualCashCount,
+    variance: s.variance,
+    note: s.note,
+    // Commit the terminal's authoritative sale totals onto the closed doc.
+    expectedCash: s.expectedCash,
+    expectedQr: s.expectedQr,
+    expectedKbank: s.expectedKbank,
+    expectedCard: s.expectedCard,
+    expectedCredit: s.expectedCredit,
+    totalBills: s.totalBills,
+    payInTotal: s.payInTotal,
+    payOutTotal: s.payOutTotal,
+    closedOffline: true,
+    syncState: 'pending',
+    deviceId: s.deviceId,
+    // OBS-B1B / deployed Rules: non-null UUID writes the field; null omits the key.
+    ...(closeCorrelationId !== null ? { closeCorrelationId } : {}),
+  };
+}
+
+/** The business snapshot a doc closed by THIS device's earlier attempt committed. */
+function snapshotFromClosedDoc(
+  shift: Shift,
+  d: Record<string, unknown>,
+  deviceId: string,
+): ShiftCloseIntentBusinessSnapshot {
+  const num = (v: unknown, fallback: number) => (typeof v === 'number' && Number.isFinite(v) ? v : fallback);
+  return {
+    shiftId: shift.id,
+    branchId: shift.branchId,
+    staffId: shift.staffId,
+    staffName: shift.staffName,
+    startingCash: num(d.startingCash, shift.startingCash),
+    expectedCash: num(d.expectedCash, shift.expectedCash),
+    expectedQr: num(d.expectedQr, shift.expectedQr),
+    expectedKbank: num(d.expectedKbank, shift.expectedKbank),
+    expectedCard: num(d.expectedCard, shift.expectedCard),
+    expectedCredit: num(d.expectedCredit, shift.expectedCredit),
+    payInTotal: num(d.payInTotal, shift.payInTotal),
+    payOutTotal: num(d.payOutTotal, shift.payOutTotal),
+    totalBills: num(d.totalBills, shift.totalBills),
+    actualCashCount: num(d.actualCashCount, 0),
+    variance: num(d.variance, 0),
+    note: typeof d.note === 'string' ? d.note : '',
+    deviceId,
+  };
+}
 
 /**
  * Close a shift — Packet 7C-B1 (Option 2) local optimistic offline close,
- * extended by Packet 7C-B2 with same-runtime confirmation reconciliation.
+ * extended by Packet 7C-B2 with same-runtime confirmation reconciliation and
+ * (Return/Refund V1 final gate) a transactional ONLINE close.
  * Under the drawer single-writer model the terminal is the sole authority for
  * the shift's sale totals, so the caller passes the shift it has already
  * DERIVED from its local ledger ({@link deriveShiftDrawer}); we never re-read
- * the (now reconciler-untouched) stored `expected*` fields.
+ * the (now reconciler-untouched) stored `expected*` fields. Cash MOVEMENTS are
+ * different: a cash Return appends a server-side pay-out to `cashEntries[]`.
  *
- * This function never awaits the network EXCEPT the bounded online cash
- * freshness read (D-RET-FIX-8, Return/Refund V1):
- *  1. Verifies the shift is still open from the LOCAL CACHE ONLY
- *     (`getDocFromCache`) — a cold/stale/unverifiable cache fails fast rather
- *     than fabricating a close. When the device is online it then re-reads
- *     the shift from the SERVER (bounded timeout) and re-folds cash movements
- *     from the union of local + server `cashEntries` (a cash refund posts a
- *     server-side pay-out); a failed online read fails closed — no write.
- *  2. Persists a durable local close-intent (survives reload) BEFORE the
+ *  1. Both paths first verify the shift is still open from the LOCAL CACHE
+ *     (`getDocFromCache`, which includes this device's own queued writes) — a
+ *     cold/stale/unverifiable cache fails fast rather than fabricating a
+ *     close, and a close this device already queued shows as closed here.
+ *
+ *  ONLINE (`navigator.onLine`) — the cash freeze is serialized against any
+ *  Return transaction on the SAME shift doc:
+ *  2. Waits (bounded) until every write queued on this device was ACKed, so
+ *     the transaction cannot overtake this device's own queued sale/cash
+ *     writes (the queued `updateDoc` close it replaces preserved that order).
+ *     Not flushed in time → fail closed, nothing written.
+ *  3. ONE Firestore transaction reads the authoritative shift, verifies
+ *     open + branch/staff identity, unions local + cached + authoritative
+ *     `cashEntries` by id, folds cash, computes expected cash / variance and
+ *     writes the exact W3 close. If a Return commits between that read and the
+ *     commit, the commit fails its precondition and the transaction re-runs on
+ *     a fresh read — totals are always those of the committed read; if it
+ *     cannot commit, nothing is closed (retryable). A doc already closed with
+ *     THIS attempt's correlation id is recognised as this device's own commit.
+ *  4. Only AFTER the commit is the close journaled (`local_closed_pending`, the
+ *     committed values and correlation id) — no close intent/UI claim exists
+ *     for a close that did not commit — then reconciled exactly like the
+ *     offline path (confirmation read → `synced` → Variant C normalization).
+ *     A journal failure after the commit never reports the committed close as
+ *     failed; `whenServerConfirmed` then uses a direct confirmation read.
+ *
+ *  OFFLINE — unchanged 7C-B1/7C-B2 behaviour, except that a device with an
+ *  unresolved/unsynced cash Return guard for the shift refuses (fail closed):
+ *  2'. Persists a durable local close-intent (survives reload) BEFORE the
  *     shift-doc write — a durable-store failure (unavailable/quota) also fails
  *     fast; there is no cache-only fallback.
- *  3. Queues a non-awaited `updateDoc` on the shift doc, INCLUDING
- *     `closedAt: serverTimestamp()` — the persisted shift document must keep
- *     an authoritative server close time (matching the pre-7C-B1 baseline);
- *     omitting it would leave a synced closed shift with `closedAt: null`
- *     forever. Firestore's `persistentLocalCache` applies this mutation to
- *     the local cache instantly and flushes on reconnect.
- *  4. Returns a client-built FROZEN closed snapshot immediately, PLUS
- *     `whenServerConfirmed` (Packet 7C-B2): once the queued write ACKs, a
- *     confirmation-grade read (never the ACK promise alone) reconciles the
- *     local journal (`local_closed_pending -> synced`/`rejected_manual_attention`)
- *     via the SAME {@link reconcileShiftCloseIntent} the boot/reconnect sweeps
- *     use. This fire-and-forget reconciliation always runs, whether or not any
- *     caller awaits `whenServerConfirmed` — a mounted Z-report only OBSERVES it
- *     to flip pending -> confirmed/attention; it never gates or delays this
- *     function's return. The RETURNED object's `closedAt` is never back-filled
- *     with a fake local/device timestamp — `serverTimestamp()` is a write-only
- *     sentinel that only resolves once read back from Firestore, so the
- *     immediate return keeps whatever `closedAt` the caller's shift already
- *     carried (typically `null`). `closedAtLocal` carries the honest device
- *     time for display until `whenServerConfirmed` (or a later boot/reconnect
- *     sweep) resolves the real server value.
+ *  3'. Queues a non-awaited `updateDoc` on the shift doc, INCLUDING
+ *     `closedAt: serverTimestamp()`. Firestore's `persistentLocalCache` applies
+ *     this mutation to the local cache instantly and flushes on reconnect.
+ *
+ *  Both return a client-built FROZEN closed snapshot PLUS `whenServerConfirmed`
+ *  (Packet 7C-B2): a confirmation-grade read (never an ACK promise alone)
+ *  reconciles the local journal via the SAME {@link reconcileShiftCloseIntent}
+ *  the boot/reconnect sweeps use. This fire-and-forget reconciliation always
+ *  runs, whether or not any caller awaits `whenServerConfirmed`. The RETURNED
+ *  object's `closedAt` is never back-filled with a fake local/device timestamp;
+ *  `closedAtLocal` carries the honest device time for display.
  */
 export async function closeShift(
   shift: Shift,
@@ -849,52 +1027,39 @@ export async function closeShift(
   }
   const cachedEntries = Array.isArray(cachedData.cashEntries) ? (cachedData.cashEntries as ShiftCashEntry[]) : [];
 
-  // D-RET-FIX-8 — cash freshness before anything is frozen. Sale totals stay
-  // the terminal's own (single-writer); only cash movements are re-folded
-  // from the union of local, cached and (online) authoritative server entries.
   const pending = deps?.serverCashPending ?? {
     has: hasShiftServerCashPending,
     clear: clearShiftServerCashPending,
   };
-  let serverEntries: ShiftCashEntry[] = [];
+  const journal = deps?.journal ?? getDefaultShiftCloseIntentJournal();
+  const readConfirmation = deps?.readConfirmation ?? readShiftCloseConfirmation;
+  const normalizeSyncState = deps?.normalizeSyncState ?? normalizeShiftCloseSyncState;
+  const deviceId = getDeviceId();
+
   if ((deps?.isOnline ?? isNavigatorOnline)()) {
-    const fresh = await (deps?.readServerShiftCash ?? readServerShiftCash)(shift.id);
-    if (!fresh.ok || !fresh.exists) throw new Error(CLOSE_SHIFT_FRESHNESS_MESSAGE);
-    if (fresh.status !== 'open') throw new Error(CLOSE_SHIFT_ALREADY_CLOSED_MESSAGE);
-    serverEntries = fresh.cashEntries;
-    pending.clear(shift.id);
-  } else if (pending.has(shift.id)) {
+    return closeShiftOnline(shift, actualCashCount, note, cachedEntries, {
+      deps,
+      journal,
+      readConfirmation,
+      normalizeSyncState,
+      deviceId,
+      clearPending: pending.clear,
+    });
+  }
+
+  // OFFLINE: a cash Return of this shift whose server pay-out this device has
+  // not confirmed + synced (sent, unknown, or committed-unsynced) ⇒ the cache
+  // cannot be trusted for the drawer; refuse rather than freeze a stale count.
+  if (pending.has(shift.id)) {
     throw new Error(CLOSE_SHIFT_SERVER_CASH_PENDING_MESSAGE);
   }
-  shift = withMergedCashEntries(shift, cachedEntries, serverEntries);
-
-  const totalExpected = calcShiftDrawerExpected(shift);
-  const variance = actualCashCount - totalExpected;
-  const deviceId = getDeviceId();
+  shift = withMergedCashEntries(shift, cachedEntries);
 
   // OBS-B1B: caller passes only the 17-field business snapshot. The journal store
   // owns closedAtLocal + closeCorrelationId generation on initial create.
-  const businessSnapshot: ShiftCloseIntentBusinessSnapshot = {
-    shiftId: shift.id,
-    branchId: shift.branchId,
-    staffId: shift.staffId,
-    staffName: shift.staffName,
-    startingCash: shift.startingCash,
-    expectedCash: shift.expectedCash,
-    expectedQr: shift.expectedQr,
-    expectedKbank: shift.expectedKbank,
-    expectedCard: shift.expectedCard,
-    expectedCredit: shift.expectedCredit,
-    payInTotal: shift.payInTotal,
-    payOutTotal: shift.payOutTotal,
-    totalBills: shift.totalBills,
-    actualCashCount,
-    variance,
-    note,
-    deviceId,
-  };
+  const businessSnapshot = closeBusinessSnapshot(shift, actualCashCount, note, deviceId);
+  const { variance } = businessSnapshot;
 
-  const journal = deps?.journal ?? getDefaultShiftCloseIntentJournal();
   const intentResult = await journal.upsertCloseIntent(
     businessSnapshot,
     deps?.observePointerRepair,
@@ -909,36 +1074,7 @@ export async function closeShift(
   const pendingEntry = intentResult.value;
   const closedAtLocal = pendingEntry.closedAtLocal;
 
-  const writeAck = updateDoc(ref, {
-    status: 'closed',
-    // Authoritative server close time on the persisted doc. Omitting it would
-    // leave a synced closed shift with `closedAt: null` forever; there is no
-    // separate `closedAtServer` mirror field to keep in sync, so none is
-    // written here (avoids an unread, unresolved, permanently-null field).
-    closedAt: serverTimestamp(),
-    actualCashCount,
-    variance,
-    note,
-    // Commit the terminal's authoritative sale totals onto the closed doc.
-    expectedCash: shift.expectedCash,
-    expectedQr: shift.expectedQr,
-    expectedKbank: shift.expectedKbank,
-    expectedCard: shift.expectedCard,
-    expectedCredit: shift.expectedCredit,
-    totalBills: shift.totalBills,
-    payInTotal: shift.payInTotal,
-    payOutTotal: shift.payOutTotal,
-    closedOffline: true,
-    syncState: 'pending',
-    deviceId,
-    // OBS-B1B / deployed Rules: non-null UUID writes the field; null omits the key.
-    ...(pendingEntry.closeCorrelationId !== null
-      ? { closeCorrelationId: pendingEntry.closeCorrelationId }
-      : {}),
-  });
-
-  const readConfirmation = deps?.readConfirmation ?? readShiftCloseConfirmation;
-  const normalizeSyncState = deps?.normalizeSyncState ?? normalizeShiftCloseSyncState;
+  const writeAck = updateDoc(ref, closeWritePayload(businessSnapshot, pendingEntry.closeCorrelationId));
 
   // Packet 7C-B2: the ACK promise alone must NEVER mark the journal `synced`
   // or drive confirmed copy (SAME-RUNTIME ACK RULE) — on ACK it triggers a
@@ -961,26 +1097,7 @@ export async function closeShift(
       }
       return { outcome: 'rejected', message };
     }
-
-    try {
-      const result = await reconcileShiftCloseIntent(pendingEntry, {
-        journal,
-        readConfirmation,
-        normalizeSyncState,
-        deviceId,
-      });
-      if (result.outcome === 'confirmed' && result.closedAtServer) {
-        return { outcome: 'confirmed', closedAt: result.closedAtServer };
-      }
-      if (result.outcome === 'identity_mismatch') return { outcome: 'identity_mismatch' };
-      if (result.outcome === 'unreachable') return { outcome: 'unreachable' };
-      return { outcome: 'still_pending' };
-    } catch {
-      // Reconciliation itself failed unexpectedly (e.g. a journal write
-      // error) — never fabricate confirmation/rejection; the next boot/
-      // reconnect sweep will retry.
-      return { outcome: 'unreachable' };
-    }
+    return reconcileClosed(pendingEntry, { journal, readConfirmation, normalizeSyncState, deviceId });
   })();
 
   return {
@@ -997,6 +1114,153 @@ export async function closeShift(
     deviceId,
     closedAtLocal,
     whenServerConfirmed,
+  };
+}
+
+type CloseReconcileDeps = {
+  journal: ShiftCloseIntentJournal;
+  readConfirmation: ShiftCloseConfirmationReader;
+  normalizeSyncState: ShiftCloseNormalizer;
+  deviceId: string;
+};
+
+/** Packet 7C-B2 confirmation reconciliation of a written close. Never rejects. */
+async function reconcileClosed(
+  entry: ShiftCloseIntentEntry,
+  deps: CloseReconcileDeps,
+): Promise<ShiftCloseConfirmation> {
+  try {
+    const result = await reconcileShiftCloseIntent(entry, deps);
+    if (result.outcome === 'confirmed' && result.closedAtServer) {
+      return { outcome: 'confirmed', closedAt: result.closedAtServer };
+    }
+    if (result.outcome === 'identity_mismatch') return { outcome: 'identity_mismatch' };
+    if (result.outcome === 'unreachable') return { outcome: 'unreachable' };
+    return { outcome: 'still_pending' };
+  } catch {
+    // Reconciliation itself failed unexpectedly (e.g. a journal write
+    // error) — never fabricate confirmation/rejection; the next boot/
+    // reconnect sweep will retry.
+    return { outcome: 'unreachable' };
+  }
+}
+
+async function closeShiftOnline(
+  shift: Shift,
+  actualCashCount: number,
+  note: string,
+  cachedEntries: ShiftCashEntry[],
+  ctx: CloseReconcileDeps & { deps: CloseShiftDeps | undefined; clearPending: (shiftId: string) => void },
+): Promise<CloseShiftResult> {
+  const { deps, journal, readConfirmation, deviceId } = ctx;
+
+  if (!(await (deps?.waitForQueuedWrites ?? waitForQueuedWritesFlushed)())) {
+    throw new Error(CLOSE_SHIFT_PENDING_WRITES_MESSAGE);
+  }
+
+  const correlationId = inflightOnlineCloseCorrelation.has(shift.id)
+    ? (inflightOnlineCloseCorrelation.get(shift.id) ?? null)
+    : (deps?.generateCloseCorrelationId ?? generateShiftCloseCorrelationId)();
+  inflightOnlineCloseCorrelation.set(shift.id, correlationId);
+
+  let committed: { snapshot: ShiftCloseIntentBusinessSnapshot; folded: Shift };
+  try {
+    committed = await (deps?.runCloseTransaction ?? firestoreShiftCloseTransaction)(shift.id, async (tx) => {
+      // Pure callback: reads, computes, buffers ONE write. Re-run from scratch
+      // on every retry — no state carried over, no durable side effect.
+      const fresh = await tx.get();
+      if (!fresh.exists || !fresh.data) throw new ShiftCloseRefusal(CLOSE_SHIFT_FRESHNESS_MESSAGE);
+      const d = fresh.data;
+      if (d.status !== 'open') {
+        if (d.status === 'closed' && correlationId !== null && d.closeCorrelationId === correlationId) {
+          // An earlier attempt of THIS close committed (its response was lost).
+          const snapshot = snapshotFromClosedDoc(shift, d, deviceId);
+          const entries = Array.isArray(d.cashEntries) ? (d.cashEntries as ShiftCashEntry[]) : [];
+          return { snapshot, folded: { ...withMergedCashEntries(shift, cachedEntries, entries), ...pickTotals(snapshot) } };
+        }
+        throw new ShiftCloseRefusal(CLOSE_SHIFT_ALREADY_CLOSED_MESSAGE);
+      }
+      if (d.branchId !== shift.branchId || d.staffId !== shift.staffId) {
+        throw new ShiftCloseRefusal(CLOSE_SHIFT_UNVERIFIABLE_MESSAGE);
+      }
+      const serverEntries = Array.isArray(d.cashEntries) ? (d.cashEntries as ShiftCashEntry[]) : [];
+      const folded = withMergedCashEntries(shift, cachedEntries, serverEntries);
+      const snapshot = closeBusinessSnapshot(folded, actualCashCount, note, deviceId);
+      tx.update(closeWritePayload(snapshot, correlationId));
+      return { snapshot, folded };
+    });
+  } catch (err) {
+    if (err instanceof ShiftCloseRefusal) {
+      // Definitive: the transaction refused before writing anything.
+      inflightOnlineCloseCorrelation.delete(shift.id);
+      throw new Error(err.message, { cause: err });
+    }
+    // runTransaction rejected (conflict retries exhausted, offline, rules,
+    // network): NOT closed as far as this call can prove. Keep the correlation
+    // id so a retry recognises this attempt's commit if it did land.
+    console.warn('[shiftService] online close transaction failed', err);
+    throw new Error(CLOSE_SHIFT_TX_FAILED_MESSAGE, { cause: err });
+  }
+  inflightOnlineCloseCorrelation.delete(shift.id);
+  // The committed read folded every committed cash Return of this shift, and a
+  // later Return cannot commit onto a closed shift: its guards are obsolete.
+  ctx.clearPending(shift.id);
+
+  const { snapshot, folded } = committed;
+  const result = (closedAtLocal: number, whenServerConfirmed: Promise<ShiftCloseConfirmation>): CloseShiftResult => ({
+    ...folded,
+    status: 'closed',
+    actualCashCount: snapshot.actualCashCount,
+    variance: snapshot.variance,
+    note: snapshot.note,
+    closedOffline: true,
+    syncState: 'pending',
+    deviceId,
+    closedAtLocal,
+    whenServerConfirmed,
+  });
+
+  // Journal only AFTER the commit, with the committed values and id.
+  let intentResult: Awaited<ReturnType<ShiftCloseIntentJournal['upsertCloseIntent']>>;
+  try {
+    intentResult = await journal.upsertCloseIntent(snapshot, deps?.observePointerRepair, {
+      closeCorrelationId: correlationId,
+    });
+  } catch (err) {
+    intentResult = { ok: false, code: 'tx_failed', message: err instanceof Error ? err.message : String(err) };
+  }
+  if (intentResult.ok) {
+    const entry = intentResult.value;
+    return result(entry.closedAtLocal, reconcileClosed(entry, ctx));
+  }
+  // The close IS committed; only the local journal could not record it. Never
+  // report it as failed — confirm it with a direct confirmation-grade read.
+  console.warn('[shiftService] committed online close could not be journaled', intentResult);
+  const direct = (async (): Promise<ShiftCloseConfirmation> => {
+    try {
+      const read = await readConfirmation(shift.id);
+      const closedAt = read.ok && read.doc.exists && read.doc.status === 'closed' ? read.doc.closedAt : null;
+      if (closedAt != null && typeof (closedAt as { toDate?: unknown }).toDate === 'function') {
+        return { outcome: 'confirmed', closedAt: (closedAt as { toDate: () => Date }).toDate() };
+      }
+      return { outcome: read.ok ? 'still_pending' : 'unreachable' };
+    } catch {
+      return { outcome: 'unreachable' };
+    }
+  })();
+  return result(Date.now(), direct);
+}
+
+function pickTotals(s: ShiftCloseIntentBusinessSnapshot) {
+  return {
+    expectedCash: s.expectedCash,
+    expectedQr: s.expectedQr,
+    expectedKbank: s.expectedKbank,
+    expectedCard: s.expectedCard,
+    expectedCredit: s.expectedCredit,
+    payInTotal: s.payInTotal,
+    payOutTotal: s.payOutTotal,
+    totalBills: s.totalBills,
   };
 }
 

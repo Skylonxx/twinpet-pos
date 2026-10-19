@@ -15,8 +15,8 @@
  * `returnId` (a replayed/duplicate record can never double-net).
  */
 
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
-import { useEffect, useState } from 'react';
+import { collection, onSnapshot, query, where, type Firestore } from 'firebase/firestore';
+import { useEffect, useMemo, useState } from 'react';
 import { db, isFirebaseConfigured } from '../firebase';
 import type { SaleReturnRefundMethod } from './saleReturnTypes';
 
@@ -182,66 +182,178 @@ export function netAfterReturns(originalTotal: number, summary: OrderReturnSumma
   return Math.max(0, orig - (summary?.refundMinor ?? 0)) / 100;
 }
 
+/**
+ * Completeness of the branch's accepted-Return set (final-gate fix §1):
+ *  - `loading`     — no listener event yet for this branch/subscription.
+ *  - `unconfirmed` — the latest event came from the local cache
+ *                    (`metadata.fromCache === true`): offline, before the first
+ *                    server answer, or after connectivity was lost. A cached
+ *                    result — even a valid or empty one — is NOT proof that
+ *                    every accepted Return is present.
+ *  - `ready`       — the latest event is a server-confirmed (non-cache) query
+ *                    snapshot for exactly this branch and every record parsed.
+ *  - `unavailable` — read error, or any malformed/foreign record.
+ * Only `ready` may be presented as net; every other state is gross.
+ */
+export type SaleReturnAdjustmentsStatus = 'loading' | 'unconfirmed' | 'ready' | 'unavailable';
+
 export type SaleReturnAdjustmentsState = {
-  /** `ready` = every accepted Return for the branch is loaded and parsed exactly. */
-  status: 'loading' | 'ready' | 'unavailable';
+  /** The branch this state was derived for; a state is never reused for another branch. */
+  branchId: string | null;
+  status: SaleReturnAdjustmentsStatus;
+  /** Populated only when `status === 'ready'` (never a partial set). */
   adjustments: SaleReturnAdjustment[];
   byOrder: Map<string, OrderReturnSummary>;
 };
 
-const EMPTY: SaleReturnAdjustmentsState = { status: 'loading', adjustments: [], byOrder: new Map() };
+function emptyState(branchId: string | null, status: SaleReturnAdjustmentsStatus): SaleReturnAdjustmentsState {
+  return { branchId, status, adjustments: [], byOrder: new Map() };
+}
+
+/** Minimal shape of a Firestore query snapshot this module relies on. */
+export type SaleReturnSnapshotLike = {
+  docs: ReadonlyArray<{ id: string; data(): unknown }>;
+  metadata: { fromCache: boolean };
+};
 
 /**
- * Live accepted Returns for a branch. Any read error (offline cold cache, rules
- * not yet deployed, permission) or ANY malformed record ⇒ `unavailable`, so the
- * consuming surface labels its figures gross instead of guessing.
+ * Pure: one listener event → state. Malformed data fails closed whatever its
+ * source; a cache-sourced event is `unconfirmed` and exposes no adjustments,
+ * so no surface can mix an incomplete set into a "net" figure.
  */
-export function useSaleReturnAdjustments(branchId: string | null): SaleReturnAdjustmentsState {
-  const [state, setState] = useState<SaleReturnAdjustmentsState>(EMPTY);
+export function adjustmentsStateFromSnapshot(branchId: string, snap: SaleReturnSnapshotLike): SaleReturnAdjustmentsState {
+  const parsed: SaleReturnAdjustment[] = [];
+  for (const d of snap.docs) {
+    const a = parseSaleReturnRecord(d.id, d.data());
+    if (a == null || a.branchId !== branchId) return emptyState(branchId, 'unavailable');
+    parsed.push(a);
+  }
+  if (snap.metadata?.fromCache !== false) return emptyState(branchId, 'unconfirmed');
+  const adjustments = dedupeReturns(parsed);
+  return { branchId, status: 'ready', adjustments, byOrder: summarizeReturnsByOrder(adjustments) };
+}
+
+/** Listener adapter seam: production = `onSnapshot(query, { includeMetadataChanges: true }, …)`. */
+export type SaleReturnAdjustmentsListen = (
+  branchId: string,
+  onNext: (snap: SaleReturnSnapshotLike) => void,
+  onError: (err: unknown) => void,
+) => () => void;
+
+/**
+ * One subscription generation for one branch. After the returned unsubscribe
+ * runs, late events from this generation are dropped, so a previous branch's
+ * (or previous mount's) `ready` can never be published for the current one.
+ */
+export function subscribeSaleReturnAdjustments(
+  branchId: string,
+  emit: (state: SaleReturnAdjustmentsState) => void,
+  listen: SaleReturnAdjustmentsListen,
+): () => void {
+  let active = true;
+  let unsub: () => void = () => {};
+  try {
+    unsub = listen(
+      branchId,
+      (snap) => {
+        if (!active) return;
+        let next: SaleReturnAdjustmentsState;
+        try {
+          next = adjustmentsStateFromSnapshot(branchId, snap);
+        } catch {
+          next = emptyState(branchId, 'unavailable');
+        }
+        emit(next);
+      },
+      () => {
+        if (active) emit(emptyState(branchId, 'unavailable'));
+      },
+    );
+  } catch {
+    queueMicrotask(() => {
+      if (active) emit(emptyState(branchId, 'unavailable'));
+    });
+  }
+  return () => {
+    active = false;
+    unsub();
+  };
+}
+
+/**
+ * Metadata changes are REQUIRED: without them a cache → server transition with
+ * unchanged documents raises no event and the state would stay `unconfirmed`;
+ * with them a loss of connectivity after a confirmation re-raises the snapshot
+ * with `fromCache: true` and the surfaces demote to gross (policy: a figure
+ * whose completeness cannot currently be re-established is never shown as net).
+ */
+export function firestoreSaleReturnAdjustmentsListen(firestore: Firestore): SaleReturnAdjustmentsListen {
+  return (branchId, onNext, onError) =>
+    onSnapshot(
+      query(collection(firestore, SALE_RETURNS_COLLECTION), where('branchId', '==', branchId)),
+      { includeMetadataChanges: true },
+      onNext,
+      onError,
+    );
+}
+
+/** Caption for a surface that is NOT net (`where` = position of the figures). */
+export function grossBasisNote(status: SaleReturnAdjustmentsStatus, where: 'above' | 'below'): string {
+  const figures = where === 'above' ? 'ตัวเลขด้านบน' : 'ตัวเลขด้านล่าง';
+  if (status === 'loading') return `กำลังโหลดรายการคืนสินค้า — ${figures}ยังเป็นยอดก่อนหักคืนสินค้า`;
+  if (status === 'unconfirmed') {
+    return `ยังยืนยันรายการคืนสินค้าครบถ้วนกับเซิร์ฟเวอร์ไม่ได้ (ออฟไลน์หรือใช้ข้อมูลในเครื่อง) — ${figures}เป็นยอดก่อนหักคืนสินค้า (ไม่ใช่ยอดสุทธิ)`;
+  }
+  return `โหลดรายการคืนสินค้าไม่ได้ — ${figures}เป็นยอดก่อนหักคืนสินค้า (ไม่ใช่ยอดสุทธิ)`;
+}
+
+/**
+ * Live accepted Returns for a branch, net-eligible ONLY when server-confirmed
+ * complete (see {@link SaleReturnAdjustmentsStatus}). Any read error (rules not
+ * yet deployed, permission) or ANY malformed record ⇒ `unavailable`.
+ */
+export function useSaleReturnAdjustments(
+  branchId: string | null,
+  listenOverride?: SaleReturnAdjustmentsListen,
+): SaleReturnAdjustmentsState {
+  const [state, setState] = useState<SaleReturnAdjustmentsState>(() => emptyState(null, 'loading'));
 
   useEffect(() => {
     if (!branchId) return;
-    if (!isFirebaseConfigured) {
-      // Dev mock mode has no Return records.
-      queueMicrotask(() => setState({ status: 'ready', adjustments: [], byOrder: new Map() }));
-      return;
-    }
-    let firestore: typeof db | null;
-    try {
-      firestore = db;
-    } catch {
-      firestore = null;
-    }
-    if (!firestore) {
-      // No Firestore handle: cannot prove the figures are net → gross label.
-      queueMicrotask(() => setState({ status: 'unavailable', adjustments: [], byOrder: new Map() }));
-      return;
-    }
-    const q = query(collection(firestore, SALE_RETURNS_COLLECTION), where('branchId', '==', branchId));
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        const parsed: SaleReturnAdjustment[] = [];
-        let malformed = false;
-        for (const d of snap.docs) {
-          const a = parseSaleReturnRecord(d.id, d.data());
-          if (a == null) malformed = true;
-          else parsed.push(a);
-        }
-        const adjustments = dedupeReturns(parsed);
-        setState({
-          status: malformed ? 'unavailable' : 'ready',
-          adjustments,
-          byOrder: summarizeReturnsByOrder(adjustments),
+    let listen = listenOverride;
+    if (!listen) {
+      if (!isFirebaseConfigured) {
+        // Dev mock mode has no Return records.
+        let live = true;
+        queueMicrotask(() => {
+          if (live) setState({ branchId, status: 'ready', adjustments: [], byOrder: new Map() });
         });
-      },
-      () => setState({ status: 'unavailable', adjustments: [], byOrder: new Map() }),
-    );
-    return () => {
-      unsub();
-      setState(EMPTY);
-    };
-  }, [branchId]);
+        return () => {
+          live = false;
+        };
+      }
+      let firestore: Firestore | null;
+      try {
+        firestore = db ?? null;
+      } catch {
+        firestore = null;
+      }
+      if (!firestore) {
+        // No Firestore handle: cannot prove the figures are net → gross label.
+        let live = true;
+        queueMicrotask(() => {
+          if (live) setState(emptyState(branchId, 'unavailable'));
+        });
+        return () => {
+          live = false;
+        };
+      }
+      listen = firestoreSaleReturnAdjustmentsListen(firestore);
+    }
+    return subscribeSaleReturnAdjustments(branchId, setState, listen);
+  }, [branchId, listenOverride]);
 
-  return branchId ? state : EMPTY;
+  // A state derived for another branch (or none yet) is never reused.
+  const loading = useMemo(() => emptyState(branchId, 'loading'), [branchId]);
+  return branchId && state.branchId === branchId ? state : loading;
 }
