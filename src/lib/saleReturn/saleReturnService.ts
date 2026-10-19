@@ -189,8 +189,9 @@ export type CommittedCashRefund = { branchId: string; returnId: string; refundAm
  * `markCashReturnAttemptPending`) is moved to `committed_unsynced` — never
  * cleared on the result acknowledgement alone — and removed only once a
  * server read PROVES the pay-out is on the shift: the doc exists, belongs to
- * the Return's branch, and holds THIS Return's `pay_out` entry
- * (`rfd_<returnId>`) with the refunded amount (C1 cleanup proof). A
+ * the Return's branch, and holds exactly ONE entry with THIS Return's id
+ * (`rfd_<returnId>`), which is a `pay_out` of the refunded amount (C1 cleanup
+ * proof; C1-A: a duplicate id is ambiguous to the offline fold). A
  * successful read alone is not proof: missing doc, other branch, missing or
  * different entry, or any read failure keeps the guard (an OFFLINE close on
  * this device stays refused; a committed online close of the shift, whose
@@ -217,10 +218,20 @@ export async function refreshShiftFromServer(
     const data = snap.data() as Record<string, unknown>;
     if (data.branchId !== committed.branchId) return;
     const entries = Array.isArray(data.cashEntries) ? (data.cashEntries as unknown[]) : [];
-    const proven = entries.some(
-      (e) =>
-        isPlainObject(e) && e.id === entryId && e.type === 'pay_out' && e.amount === committed.refundAmount,
-    );
+    // Gate C1-A: the offline close unions entries by id keeping the FIRST
+    // (`mergeCashEntries`), while the raw drawer fold counts every element, and
+    // `arrayUnion` / W1 Rules do not make ids unique. So the proof is the
+    // COMPLETE set of entries carrying this id: exactly ONE, and it is this
+    // Return's pay-out with the refunded amount. Duplicates (even identical
+    // objects) or a malformed entry with this id are ambiguous → guard kept.
+    const matching = entries.filter((e) => typeof e === 'object' && e !== null && (e as { id?: unknown }).id === entryId);
+    const only = matching.length === 1 ? matching[0] : undefined;
+    const proven =
+      isPlainObject(only) &&
+      only.type === 'pay_out' &&
+      typeof only.amount === 'number' &&
+      Number.isFinite(only.amount) &&
+      only.amount === committed.refundAmount;
     if (proven) clearCashReturnAttemptPending(shiftId, attemptId);
   } catch {
     /* guard stays: an offline close is refused until the pay-out is proven */

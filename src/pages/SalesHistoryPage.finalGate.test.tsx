@@ -155,7 +155,7 @@ vi.mock('../lib/saleReturn/saleReturnService', async (importOriginal) => {
 import SalesHistoryPage from './SalesHistoryPage';
 import { closeShift, CLOSE_SHIFT_SERVER_CASH_PENDING_MESSAGE } from '../lib/pos/shiftService';
 import { createInMemoryShiftCloseIntentJournal } from '../lib/pos/offline/shiftCloseIntentStore';
-import { hasShiftServerCashPending } from '../lib/pos/shiftCashFreshness';
+import { hasShiftServerCashPending, withMergedCashEntries } from '../lib/pos/shiftCashFreshness';
 import { useSaleReturnAdjustments } from '../lib/saleReturn/returnAdjustments';
 import { useProfitReport } from '../lib/profitReport/useProfitReport';
 import { computeKpi } from '../lib/profitReport/types';
@@ -821,6 +821,60 @@ describe('§3 unknown cash Return — pre-send guard and resolution', () => {
     await refreshWith(provenShiftDoc()); // confirmed entry on the matching shift
     expect(guardKeys()).toEqual([]);
     expect(await offlineClose()).toBe('closed');
+  });
+
+  // Gate C1-A — the offline close folds the FIRST entry of an id (mergeCashEntries)
+  // and the raw drawer fold counts every element; a single some() match on the
+  // committed amount is therefore not proof. Each case starts from a fresh guard.
+  const refund = (amount: unknown, extra: Record<string, unknown> = {}) => ({
+    id: `rfd_${RETURN_ID}`, type: 'pay_out', amount, note: 'คืนเงินสด', staffId: 'staff1', staffName: 'Dao', at: 1, ...extra,
+  });
+  const C1A_CASES: Array<[string, 'clears' | 'keeps', unknown[]]> = [
+    ['unique id, correct amount', 'clears', [refund(81)]],
+    ['unique id + unrelated (even malformed) entries of OTHER ids', 'clears', [{ id: 'cash-1', type: 'pay_in', amount: 5 }, null, 'junk', refund(81)]],
+    ['duplicate id: EARLIER amount 1, later correct 81', 'keeps', [refund(1), refund(81)]],
+    ['duplicate id: correct 81 first, later amount 1', 'keeps', [refund(81), refund(1)]],
+    ['exact duplicate objects with the same id', 'keeps', [refund(81), refund(81)]],
+    ['matching id but malformed amount (string)', 'keeps', [refund('81')]],
+    ['matching id but non-finite amount', 'keeps', [refund(Number.NaN)]],
+    ['correct entry + a malformed same-id entry (no amount)', 'keeps', [refund(81), { id: `rfd_${RETURN_ID}`, type: 'pay_out' }]],
+    ['correct entry + a same-id entry of the wrong type', 'keeps', [refund(81), refund(81, { type: 'pay_in' })]],
+    ['matching id as an array-shaped entry', 'keeps', [Object.assign([], { id: `rfd_${RETURN_ID}`, type: 'pay_out', amount: 81 })]],
+  ];
+
+  test.each(C1A_CASES)('C1-A duplicate-ID proof: %s → guard %s', async (_label, expected, cashEntries) => {
+    const { refreshShiftFromServer } = await import('../lib/saleReturn/saleReturnService');
+    const proof = { branchId: 'LDP-001', returnId: RETURN_ID, refundAmount: 81 };
+    fs.getDocFromServer.mockResolvedValueOnce(provenShiftDoc({ cashEntries }));
+    await refreshShiftFromServer('SH1', 'att-1', proof);
+    expect(fs.updateDoc).not.toHaveBeenCalled(); // the proof itself writes nothing (no cash / shift / inventory write)
+    if (expected === 'clears') {
+      expect(guardKeys()).toEqual([]);
+      expect(await offlineClose()).toBe('closed');
+    } else {
+      expect(guardKeys()).toEqual(['twinpet.shift.serverCashPending.v2:SH1:att-1']);
+      expect(JSON.parse(storage.get(guardKeys()[0]!)!).state).toBe('committed_unsynced');
+      expect(await offlineClose()).toBe(CLOSE_SHIFT_SERVER_CASH_PENDING_MESSAGE);
+      expect(fs.updateDoc).not.toHaveBeenCalled(); // refused offline close: nothing queued
+    }
+  });
+
+  test('C1-A counterexample (pre-005 some() defect): server [rfd amount 1, rfd amount 81] → the offline fold would freeze pay-out 1, so the guard must stay', async () => {
+    const { refreshShiftFromServer } = await import('../lib/saleReturn/saleReturnService');
+    const entries = [refund(1), refund(81)];
+    // What an offline close of this device would fold from that server list: the FIRST same-id entry.
+    expect(withMergedCashEntries(shift(), entries as never).payOutTotal).toBe(1);
+    fs.getDocFromServer.mockResolvedValueOnce(provenShiftDoc({ cashEntries: entries }));
+    await refreshShiftFromServer('SH1', 'att-1', { branchId: 'LDP-001', returnId: RETURN_ID, refundAmount: 81 });
+    expect(guardKeys()).toHaveLength(1); // pre-005: [] (cleared on the second entry's match)
+    expect(await offlineClose()).toBe(CLOSE_SHIFT_SERVER_CASH_PENDING_MESSAGE);
+    // Ambiguity persists across later reads of the same evidence; an unreachable shift keeps it too.
+    fs.getDocFromServer.mockResolvedValueOnce(provenShiftDoc({ cashEntries: entries }));
+    await refreshShiftFromServer('SH1', 'att-1', { branchId: 'LDP-001', returnId: RETURN_ID, refundAmount: 81 });
+    fs.getDocFromServer.mockRejectedValueOnce(new Error('unavailable'));
+    await refreshShiftFromServer('SH1', 'att-1', { branchId: 'LDP-001', returnId: RETURN_ID, refundAmount: 81 });
+    expect(guardKeys()).toHaveLength(1);
+    expect(fs.updateDoc).not.toHaveBeenCalled();
   });
 
   test('unknown → resolved NOT committed (server fence), no other attempt → guard released, offline close allowed', async () => {

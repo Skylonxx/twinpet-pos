@@ -306,6 +306,8 @@ describe('closeShift — Packet 7C-B1 local optimistic offline close', () => {
       listOnlineCloseAttempts: async () => ({ ok: true as const, value: [] }),
       discardOnlineCloseAttempt: async () => ({ ok: false as const, code: 'unavailable' as const }),
       setSyncStateNormalization: async () => ({ ok: false as const, code: 'unavailable' as const }),
+      recordNormalizationCheck: async () => ({ ok: false as const, code: 'unavailable' as const }),
+      markOnlineCloseAttemptCommitObserved: async () => ({ ok: false as const, code: 'unavailable' as const }),
     };
 
     await expect(closeShift(makeShift(), 1000, 'note', { journal })).rejects.toThrow();

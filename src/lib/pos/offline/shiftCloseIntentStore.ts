@@ -1014,6 +1014,17 @@ export type ShiftCloseIntentJournal = {
     closeCorrelationId: string | null,
     normalization: SyncStateNormalization,
   ) => Promise<CloseIntentResult<ShiftCloseIntentEntry>>;
+  /**
+   * Gate B2.2-A — stamps `syncStateNormalizationCheckSeq` on a LEGACY entry
+   * (`synced`, same `closeCorrelationId`, normalization field absent) as the
+   * sweep selects it. Scheduling hint only: touches no other field (not even
+   * `updatedAtLocal`); anything else → `conflict` / `not_found`, no write.
+   */
+  recordNormalizationCheck: (
+    shiftId: string,
+    closeCorrelationId: string | null,
+    seq: number,
+  ) => Promise<CloseIntentResult<true>>;
   markRejectedManualAttention: (
     shiftId: string,
     reason: string,
@@ -1048,6 +1059,16 @@ export type ShiftCloseIntentJournal = {
    * `true`); used once the server proved this attempt can never commit.
    */
   discardOnlineCloseAttempt: (
+    shiftId: string,
+    closeCorrelationId: string,
+  ) => Promise<CloseIntentResult<boolean>>;
+  /**
+   * Gate B2.1-A — records on the attempt (value `true` = written) that THIS
+   * runtime saw its W3 commit while the journal finalize failed; such an
+   * attempt is never discarded as superseded. Only the attempt carrying
+   * `closeCorrelationId` is touched.
+   */
+  markOnlineCloseAttemptCommitObserved: (
     shiftId: string,
     closeCorrelationId: string,
   ) => Promise<CloseIntentResult<boolean>>;
@@ -1257,6 +1278,30 @@ function buildJournalApi(
         }),
       ),
 
+    recordNormalizationCheck: (shiftId, closeCorrelationId, seq) =>
+      runStore(store, (s) =>
+        s.transact(['shiftCloseIntents'], 'readwrite', async (txn): Promise<CloseIntentResult<true>> => {
+          const raw = await txn.get<unknown>('shiftCloseIntents', shiftId);
+          if (raw === undefined) return notFound<true>();
+          if (!isCloseIntentEntry(raw)) {
+            return conflict<true>(`Stored close-intent for shift "${shiftId}" is unreadable.`);
+          }
+          const entry = normalizeCloseIntentEntry(raw as unknown as Record<string, unknown>);
+          if (
+            entry.status !== 'synced' ||
+            entry.closeCorrelationId !== closeCorrelationId ||
+            'syncStateNormalization' in (raw as Record<string, unknown>)
+          ) {
+            return conflict<true>(`Close-intent for shift "${shiftId}" is not a legacy synced close.`);
+          }
+          await txn.put('shiftCloseIntents', shiftId, {
+            ...(raw as unknown as Record<string, unknown>),
+            syncStateNormalizationCheckSeq: seq,
+          });
+          return { ok: true, value: true };
+        }),
+      ),
+
     markRejectedManualAttention: (shiftId, reason, observePointerRepair) =>
       markStatus(shiftId, 'rejected_manual_attention', reason, observePointerRepair),
 
@@ -1402,6 +1447,21 @@ function buildJournalApi(
             return { ok: true, value: false };
           }
           await txnDelete(txn, key);
+          return { ok: true, value: true };
+        }),
+      ),
+
+    markOnlineCloseAttemptCommitObserved: (shiftId, closeCorrelationId) =>
+      runStore(store, (s) =>
+        s.transact(['shiftCloseIntents'], 'readwrite', async (txn): Promise<CloseIntentResult<boolean>> => {
+          const key = onlineCloseAttemptKey(shiftId);
+          const raw = await txn.get<unknown>('shiftCloseIntents', key);
+          if (!isValidOnlineCloseAttempt(raw) || raw.closeCorrelationId !== closeCorrelationId) {
+            return { ok: true, value: false };
+          }
+          if (raw.commitObservedAtLocal === undefined) {
+            await txn.put('shiftCloseIntents', key, { ...raw, commitObservedAtLocal: now() });
+          }
           return { ok: true, value: true };
         }),
       ),

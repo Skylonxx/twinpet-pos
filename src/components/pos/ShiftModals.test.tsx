@@ -4,6 +4,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import { createElement } from 'react';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { CloseShiftModal, OpenShiftModal, ShiftBootBlockedModal } from './ShiftModals';
+import { CLOSE_SHIFT_COMMITTED_NOT_FINALIZED_MESSAGE } from '../../lib/pos/shiftService';
 import type { Shift } from '../../lib/types';
 
 // Packet 7C-A — offline-safe close-shift UX guard. `closeShift` is mocked so
@@ -237,6 +238,23 @@ describe('CloseShiftModal — Packet 7C-B1 optimistic close + defensive timeout 
 
     expect(mocks.closeShift).toHaveBeenCalledTimes(1);
     expect(await screen.findByText('ปิดกะสำเร็จ — Z-Report')).toBeTruthy();
+  });
+
+  test('gate B2.1-A: committed-but-unfinalized close → its honest message, NO Z-report / confirmed badge, retry stays possible', async () => {
+    setOnline(true);
+    mocks.closeShift.mockRejectedValueOnce(new Error(CLOSE_SHIFT_COMMITTED_NOT_FINALIZED_MESSAGE));
+    const confirmBtn = renderModal();
+
+    await act(async () => {
+      fireEvent.click(confirmBtn);
+    });
+
+    expect(await screen.findByText(CLOSE_SHIFT_COMMITTED_NOT_FINALIZED_MESSAGE)).toBeTruthy();
+    expect(screen.queryByText('ปิดกะสำเร็จ — Z-Report')).toBeNull();
+    expect(screen.queryByTestId('shift-zreport-sync-confirmed')).toBeNull();
+    // Never claims the close was undone / the drawer is still open.
+    expect(CLOSE_SHIFT_COMMITTED_NOT_FINALIZED_MESSAGE).not.toMatch(/ยกเลิก|ยังไม่ได้ปิดกะ|ยังเปิดอยู่/);
+    expect((screen.getByRole('button', { name: 'ปิดกะ' }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   test('timeout backstop releases submitting and shows honest connectivity error when closeShift never resolves', async () => {

@@ -23,10 +23,12 @@ import {
   createShiftCloseIntentJournal,
   type ShiftCloseIntentJournal,
 } from './offline/shiftCloseIntentStore';
+import * as reconcilerModule from './offline/shiftCloseReconciler';
 import {
   LEGACY_NORMALIZATION_CHECKS_PER_SWEEP,
   recoverOnlineCloseAttempts,
   runShiftCloseReconciliationSweep,
+  shiftCloseConfirmationDocFromData,
   type ShiftCloseConfirmationReader,
 } from './offline/shiftCloseReconciler';
 
@@ -72,6 +74,8 @@ const REFUND: ShiftCashEntry = {
 };
 const UUID_A = '11111111-1111-4111-8111-111111111111';
 const UUID_B = '22222222-2222-4222-8222-222222222222';
+/** Literal copy of CLOSE_SHIFT_COMMITTED_NOT_FINALIZED_MESSAGE (B2.1-A) so this file also runs against pre-005 sources. */
+const NOT_FINALIZED = 'ส่งการปิดกะถึงเซิร์ฟเวอร์แล้ว';
 
 function makeShift(overrides: Partial<Shift> = {}): Shift {
   return {
@@ -360,7 +364,7 @@ describe('B2 — commit / crash gap', () => {
     expect(server.state.commits).toBe(1);
   });
 
-  test('finalize THROWS after the commit → close reported closed (never failed); attempt survives; restart sweep recovers', async () => {
+  test('finalize THROWS after the commit → never reported failed/undone, but NO Z (B2.1-A); attempt survives; restart sweep recovers', async () => {
     const server = createShiftServer(openServerShift([REFUND]));
     const journal = bootJournal();
     const broken: ShiftCloseIntentJournal = {
@@ -369,9 +373,8 @@ describe('B2 — commit / crash gap', () => {
         throw new Error('disk I/O error');
       },
     };
-    const result = await closeShift(makeShift(), 1338, '', deps(server, broken));
-    expect(result).toMatchObject({ status: 'closed', payOutTotal: 162, variance: 0 });
-    await expect(result.whenServerConfirmed).resolves.toMatchObject({ outcome: 'confirmed' });
+    await expect(closeShift(makeShift(), 1338, '', deps(server, broken))).rejects.toThrow(NOT_FINALIZED);
+    expect(server.state.doc).toMatchObject({ status: 'closed', payOutTotal: 162, variance: 0 });
     expect(await entryOf(journal)).toBeUndefined();
     expect(await attemptsOf(journal)).toMatchObject([{ shiftId: 'shift-1', closeCorrelationId: UUID_A }]);
     expect(server.state.doc.syncState).toBe('pending');
@@ -910,5 +913,439 @@ describe('B2.2 — bounds and schema compatibility', () => {
     );
     const listed = await journal.listCloseIntents();
     expect(listed).toMatchObject({ ok: false, code: 'unreadable_record', reason: 'malformed_entry' });
+  });
+});
+
+// ── Codex 004 → packet 005 ────────────────────────────────────────────────
+// Every helper below is local (no new export is imported), so each test also
+// runs against pre-005 sources for the red/green proof.
+
+/**
+ * The journal finalize after the W3 commit fails (`unavailable` result, or a
+ * throw) for the first `failures` calls; `beforeFirst` runs once, first — used
+ * to make the authoritative doc read malformed by the strict recovery.
+ */
+function failingFinalize(
+  journal: ShiftCloseIntentJournal,
+  { mode = 'unavailable', failures = Number.POSITIVE_INFINITY, beforeFirst }: { mode?: 'unavailable' | 'throw'; failures?: number; beforeFirst?: () => void } = {},
+): ShiftCloseIntentJournal & { calls: () => number } {
+  let calls = 0;
+  let left = failures;
+  return {
+    ...journal,
+    finalizeOnlineClose: async (...args) => {
+      calls += 1;
+      if (calls === 1) beforeFirst?.();
+      if (left > 0) {
+        left -= 1;
+        if (mode === 'throw') throw new Error('disk I/O error');
+        return { ok: false, code: 'unavailable', message: 'IndexedDB unavailable' };
+      }
+      return journal.finalizeOnlineClose(...args);
+    },
+    calls: () => calls,
+  };
+}
+
+/** Production-faithful reader: the doc goes through the SAME mapper `readShiftCloseConfirmation` uses. */
+function mappedReader(server: ReturnType<typeof createShiftServer>): ShiftCloseConfirmationReader {
+  return async () => ({ ok: true, doc: shiftCloseConfirmationDocFromData({ ...server.state.doc }) });
+}
+
+/** Optional (absent before 005): forget the in-memory legacy schedule, like a process restart. */
+function restartProcessMemory(): void {
+  const reset = (reconcilerModule as Record<string, unknown>).resetLegacyNormalizationScheduleForTests;
+  if (typeof reset === 'function') (reset as () => void)();
+}
+
+const POST_COMMIT_DEFECTS: Array<[string, (d: ServerShift) => ServerShift]> = [
+  ['(a) own id, payOutTotal missing', (d) => without(d, 'payOutTotal')],
+  ['(b) own id, payOutTotal non-finite', (d) => ({ ...d, payOutTotal: Number.NaN })],
+  ['(b) own id, expectedCash wrong type', (d) => ({ ...d, expectedCash: '1000' })],
+  ['(c) a DIFFERENT valid correlation id', (d) => ({ ...d, closeCorrelationId: UUID_B })],
+  ['(d) wrong identity (branch)', (d) => ({ ...d, branchId: 'LDP-999' })],
+  ['(d) wrong identity (device)', (d) => ({ ...d, deviceId: 'DEV2' })],
+  ['(d) unresolved closedAt', (d) => ({ ...d, closedAt: null })],
+];
+
+describe('B2.1-A — W3 commits, journal finalize fails: Z ONLY after strict proof + durable finalization', () => {
+  test.each(POST_COMMIT_DEFECTS)(
+    'finalize unavailable, strict recovery reads %s → NO Z / no confirmation, totals not fabricated, attempt kept; restart + retry: no second W3',
+    async (_label, corrupt) => {
+      const server = createShiftServer(openServerShift([REFUND]));
+      const journal = bootJournal();
+      // The doc as read AFTER the commit is defective; any fallback read of it succeeds (status closed, closedAt toDate).
+      const broken = failingFinalize(journal, { beforeFirst: () => (server.state.doc = corrupt(server.state.doc)) });
+      const readConfirmation = vi.fn(mappedReader(server));
+      const outcome = await closeShift(makeShift(), 1338, 'นับแล้ว', deps(server, broken, { readConfirmation })).then(
+        async (r) => ({ z: r, confirmation: await r.whenServerConfirmed }),
+        (err: Error) => ({ error: err.message }),
+      );
+      // Pre-005: a Z resolved immediately and the fallback read "confirmed" it.
+      expect(outcome).toEqual({ error: expect.stringContaining(NOT_FINALIZED) });
+      expect(server.state).toMatchObject({ commits: 1, normalizeAttempts: 0 });
+      expect(await entryOf(journal)).toBeUndefined();
+      expect(await attemptsOf(journal)).toMatchObject([{ shiftId: 'shift-1', closeCorrelationId: UUID_A }]);
+
+      // ── restart: the sweep keeps the attempt (never superseded, never journaled) ──
+      const rebooted = bootJournal([UUID_B]);
+      const [rec] = await recoverOnlineCloseAttempts({ journal: rebooted, readConfirmation: mappedReader(server), deviceId: 'DEV1' });
+      expect(['manual_attention', 'unreachable']).toContain(rec!.outcome);
+      expect(await entryOf(rebooted)).toBeUndefined();
+      expect(await attemptsOf(rebooted)).toMatchObject([{ closeCorrelationId: UUID_A }]);
+
+      // ── the cashier retries (cache still open, then cache closed with our id): refused, no second W3 ──
+      await expect(closeShift(makeShift(), 1338, 'นับแล้ว', deps(server, rebooted, { readConfirmation: mappedReader(server) }))).rejects.toThrow();
+      getDocFromCacheMock.mockResolvedValue({ exists: () => true, data: () => ({ status: 'closed', closeCorrelationId: UUID_A, cashEntries: [REFUND] }) });
+      await expect(closeShift(makeShift(), 1338, 'นับแล้ว', deps(server, rebooted, { readConfirmation: mappedReader(server) }))).rejects.toThrow();
+      expect(server.state).toMatchObject({ commits: 1, normalizeAttempts: 0 });
+      expect(await entryOf(rebooted)).toBeUndefined();
+      expect(await attemptsOf(rebooted)).toMatchObject([{ closeCorrelationId: UUID_A }]);
+    },
+  );
+
+  test('(e) wholly valid committed doc, finalize THROWS once → same-runtime strict recovery finalizes → Z from the committed values + confirmed', async () => {
+    const server = createShiftServer(openServerShift([REFUND]));
+    const journal = bootJournal();
+    const flaky = failingFinalize(journal, { mode: 'throw', failures: 1 });
+    const result = await closeShift(makeShift(), 1338, 'นับแล้ว', deps(server, flaky, { readConfirmation: mappedReader(server) }));
+    expect(flaky.calls()).toBe(2); // the failed finalize + the strict recovery's finalize
+    expect(result).toMatchObject({ status: 'closed', payOutTotal: 162, actualCashCount: 1338, variance: 0, note: 'นับแล้ว' });
+    // The Z is only returned once the entry is durable.
+    expect(await entryOf(journal)).toMatchObject({ closeCorrelationId: UUID_A, payOutTotal: 162 });
+    await expect(result.whenServerConfirmed).resolves.toMatchObject({ outcome: 'confirmed' });
+    expect(await attemptsOf(journal)).toEqual([]);
+    expect(server.state).toMatchObject({ commits: 1, normalizations: 1 });
+  });
+
+  test('(e) wholly valid committed doc but the store STAYS unavailable → committed-but-unfinalized message (no Z); restart sweep finalizes; retry shows the canonical Z, one W3', async () => {
+    const server = createShiftServer(openServerShift([REFUND]));
+    const journal = bootJournal();
+    const broken = failingFinalize(journal);
+    await expect(closeShift(makeShift(), 1338, 'นับแล้ว', deps(server, broken, { readConfirmation: mappedReader(server) }))).rejects.toThrow(NOT_FINALIZED);
+    expect(await entryOf(journal)).toBeUndefined();
+    expect(await attemptsOf(journal)).toHaveLength(1);
+
+    const rebooted = bootJournal([UUID_B]);
+    const [r] = await sweep(server, rebooted);
+    expect(r).toMatchObject({ shiftId: 'shift-1', outcome: 'confirmed' });
+    expect(await entryOf(rebooted)).toMatchObject({ status: 'synced', closeCorrelationId: UUID_A, payOutTotal: 162, note: 'นับแล้ว' });
+    expect(await attemptsOf(rebooted)).toEqual([]);
+
+    getDocFromCacheMock.mockResolvedValue({ exists: () => true, data: () => ({ status: 'closed', closeCorrelationId: UUID_A, cashEntries: [REFUND] }) });
+    const retry = await closeShift(makeShift({ payOutTotal: 0 }), 1, '', deps(server, rebooted, { readConfirmation: mappedReader(server) }));
+    expect(retry).toMatchObject({ status: 'closed', payOutTotal: 162, actualCashCount: 1338, note: 'นับแล้ว' });
+    expect(server.state).toMatchObject({ commits: 1, normalizations: 1 });
+  });
+
+  test('(c) a contradicting VALID correlation after an observed commit is never treated as superseded — the observation survives a restart', async () => {
+    const server = createShiftServer(openServerShift([REFUND]));
+    const journal = bootJournal();
+    const broken = failingFinalize(journal, { beforeFirst: () => (server.state.doc = { ...server.state.doc, closeCorrelationId: UUID_B }) });
+    await expect(closeShift(makeShift(), 1338, '', deps(server, broken, { readConfirmation: mappedReader(server) }))).rejects.toThrow(NOT_FINALIZED);
+    const [kept] = await attemptsOf(journal);
+    expect(kept).toMatchObject({ closeCorrelationId: UUID_A });
+    expect(typeof (kept as { commitObservedAtLocal?: unknown }).commitObservedAtLocal).toBe('number');
+    for (let i = 0; i < 2; i += 1) {
+      const rebooted = bootJournal();
+      expect(await recoverOnlineCloseAttempts({ journal: rebooted, readConfirmation: mappedReader(server), deviceId: 'DEV1' })).toEqual([
+        { shiftId: 'shift-1', outcome: 'manual_attention' },
+      ]);
+      expect(await attemptsOf(rebooted)).toHaveLength(1);
+    }
+    expect(server.state.commits).toBe(1);
+  });
+});
+
+/** Closed-doc correlation variants: [label, value or `undefined` to DELETE the key, expected classification]. */
+const CORRELATION_VARIANTS: Array<[string, unknown, 'retained' | 'superseded' | 'own']> = [
+  ["empty string ''", '', 'retained'],
+  ['missing (key absent)', undefined, 'retained'],
+  ['present null', null, 'retained'],
+  ['malformed type (number)', 42, 'retained'],
+  ['malformed string (not a UUID)', 'not-a-uuid', 'retained'],
+  ['uppercase UUID (Rules deny)', 'AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA', 'retained'],
+  ['distinct VALID id', UUID_B, 'superseded'],
+  ['matching own id', UUID_A, 'own'],
+];
+
+function withCorrelation(d: ServerShift, value: unknown): ServerShift {
+  return value === undefined ? without(d, 'closeCorrelationId') : { ...d, closeCorrelationId: value };
+}
+
+describe('B2.1-B — empty / malformed / absent closeCorrelationId never discards the attempt', () => {
+  test.each(CORRELATION_VARIANTS)('restart sweep, doc closed with %s', async (_label, value, expected) => {
+    const server = createShiftServer(openServerShift([REFUND]));
+    await commitWithLostResponse(server, bootJournal());
+    server.state.doc = withCorrelation(server.state.doc, value);
+    const rebooted = bootJournal([UUID_B]);
+    const [r] = await recoverOnlineCloseAttempts({ journal: rebooted, readConfirmation: mappedReader(server), deviceId: 'DEV1' });
+    if (expected === 'own') {
+      expect(r!.outcome).toBe('recovered');
+      expect(await entryOf(rebooted)).toMatchObject({ closeCorrelationId: UUID_A, payOutTotal: 162 });
+      expect(await attemptsOf(rebooted)).toEqual([]);
+    } else if (expected === 'superseded') {
+      expect(r!.outcome).toBe('superseded');
+      expect(await entryOf(rebooted)).toBeUndefined();
+      expect(await attemptsOf(rebooted)).toEqual([]);
+    } else {
+      expect(r!.outcome).toBe('manual_attention'); // pre-005: 'superseded' + attempt deleted
+      expect(await entryOf(rebooted)).toBeUndefined();
+      expect(await attemptsOf(rebooted)).toMatchObject([{ closeCorrelationId: UUID_A }]);
+      // A further sweep keeps it too (no Z, no journal, no W4).
+      await sweep({ ...server, readConfirmation: mappedReader(server) }, rebooted);
+      expect(await attemptsOf(rebooted)).toHaveLength(1);
+      expect(server.state.normalizeAttempts).toBe(0);
+    }
+    expect(server.state.commits).toBe(1);
+  });
+
+  test.each(CORRELATION_VARIANTS)('same-runtime own-ID retry (cache open), doc closed with %s', async (_label, value, expected) => {
+    const server = createShiftServer(openServerShift([REFUND]));
+    const journal = bootJournal();
+    await commitWithLostResponse(server, journal);
+    server.state.doc = withCorrelation(server.state.doc, value);
+    const attempt = closeShift(makeShift(), 1338, 'นับแล้ว', deps(server, journal, { readConfirmation: mappedReader(server) }));
+    if (expected === 'own') {
+      await expect(attempt).resolves.toMatchObject({ status: 'closed', payOutTotal: 162 });
+      expect(await attemptsOf(journal)).toEqual([]);
+    } else {
+      await expect(attempt).rejects.toThrow('กะนี้ถูกปิดไปแล้ว');
+      expect(await entryOf(journal)).toBeUndefined();
+      expect(await attemptsOf(journal)).toHaveLength(expected === 'superseded' ? 0 : 1);
+    }
+    expect(server.state.commits).toBe(1);
+  });
+
+  test.each(CORRELATION_VARIANTS.filter(([, , e]) => e === 'retained'))(
+    'post-timeout retry (cache closed with OUR id), server doc closed with %s → no Z, attempt kept',
+    async (_label, value) => {
+      const server = createShiftServer(openServerShift([REFUND]));
+      const journal = bootJournal();
+      await commitWithLostResponse(server, journal);
+      server.state.doc = withCorrelation(server.state.doc, value);
+      getDocFromCacheMock.mockResolvedValue({ exists: () => true, data: () => ({ status: 'closed', closeCorrelationId: UUID_A, cashEntries: [REFUND] }) });
+      await expect(closeShift(makeShift(), 1338, '', deps(server, journal, { readConfirmation: mappedReader(server) }))).rejects.toThrow();
+      expect(await entryOf(journal)).toBeUndefined();
+      expect(await attemptsOf(journal)).toHaveLength(1);
+      expect(server.state.commits).toBe(1);
+    },
+  );
+
+  test('a distinct VALID id on a doc of ANOTHER branch/staff is not proof of supersession → retained', async () => {
+    const server = createShiftServer(openServerShift([REFUND]));
+    await commitWithLostResponse(server, bootJournal());
+    server.state.doc = { ...server.state.doc, closeCorrelationId: UUID_B, staffId: 'someone-else' };
+    const rebooted = bootJournal();
+    const [r] = await recoverOnlineCloseAttempts({ journal: rebooted, readConfirmation: mappedReader(server), deviceId: 'DEV1' });
+    expect(r!.outcome).toBe('manual_attention');
+    expect(await attemptsOf(rebooted)).toHaveLength(1);
+  });
+});
+
+// ── B2.2-A: fair, bounded legacy W4 migration ────────────────────────────
+
+const legacyUuid = (i: number) => `${i.toString(16).padStart(8, '0')}-1111-4111-8111-111111111111`;
+
+/** N pre-B2.2 `synced` entries (no normalization field), shift `L<i>`, closedAtLocal ascending with i (L<N-1> newest). */
+async function seedLegacy(n: number): Promise<void> {
+  let t = 1_000;
+  let id = 0;
+  const journal = createShiftCloseIntentJournal({ now: () => (t += 1), generateCloseCorrelationId: () => legacyUuid(id++) });
+  for (let i = 0; i < n; i += 1) {
+    const created = await journal.upsertCloseIntent({
+      shiftId: `L${i}`, branchId: 'LDP-001', staffId: 'staff-1', staffName: 'ทดสอบ', startingCash: 500, expectedCash: 1000,
+      expectedQr: 0, expectedKbank: 0, expectedCard: 0, expectedCredit: 0, payInTotal: 0, payOutTotal: 0, totalBills: 3,
+      actualCashCount: 1500, variance: 0, note: '', deviceId: 'DEV1',
+    });
+    if (!created.ok) throw new Error('seed');
+    await journal.markSynced(`L${i}`); // pre-B2.2 shape: no normalization field
+  }
+}
+
+/** Authoritative closed docs for the legacy shifts, with per-shift read failure and W4 counters. */
+function createLegacyServer(n: number) {
+  const docs = new Map<string, ServerShift>();
+  for (let i = 0; i < n; i += 1) {
+    docs.set(`L${i}`, {
+      status: 'closed', closedAt: { toDate: () => CLOSED_AT }, syncState: 'pending', deviceId: 'DEV1', branchId: 'LDP-001',
+      staffId: 'staff-1', startingCash: 500, expectedCash: 1000, expectedQr: 0, expectedKbank: 0, expectedCard: 0, expectedCredit: 0,
+      payInTotal: 0, payOutTotal: 0, totalBills: 3, actualCashCount: 1500, variance: 0, note: '', closeCorrelationId: legacyUuid(i),
+    });
+  }
+  const failing = new Set<string>();
+  const reads: string[] = [];
+  const w4: string[] = [];
+  let failNextReads = 0;
+  const readConfirmation: ShiftCloseConfirmationReader = async (id) => {
+    reads.push(id);
+    if (failNextReads > 0) {
+      failNextReads -= 1;
+      return { ok: false };
+    }
+    if (failing.has(id)) return { ok: false };
+    const d = docs.get(id);
+    return d ? { ok: true, doc: shiftCloseConfirmationDocFromData({ ...d }) } : { ok: true, doc: { exists: false } };
+  };
+  const normalizeSyncState = async (id: string) => {
+    w4.push(id);
+    const d = docs.get(id)!;
+    if (d.status !== 'closed' || d.syncState !== 'pending') throw new Error('W4 denied by Rules');
+    docs.set(id, { ...d, syncState: 'synced' });
+  };
+  return {
+    docs,
+    failing,
+    reads,
+    w4,
+    readConfirmation,
+    normalizeSyncState,
+    failNext: (k: number) => {
+      failNextReads = k;
+    },
+  };
+}
+
+/** One boot/reconnect sweep, by default on a FRESH journal + fresh process memory (a restart). Returns this sweep's reads / W4s. */
+async function legacySweep(
+  server: ReturnType<typeof createLegacyServer>,
+  opts: { restart?: boolean; journal?: ShiftCloseIntentJournal } = {},
+) {
+  if (opts.restart !== false) restartProcessMemory();
+  const r0 = server.reads.length;
+  const w0 = server.w4.length;
+  await runShiftCloseReconciliationSweep({
+    journal: opts.journal ?? createShiftCloseIntentJournal(),
+    readConfirmation: server.readConfirmation,
+    normalizeSyncState: server.normalizeSyncState,
+    deviceId: 'DEV1',
+  });
+  return { reads: server.reads.slice(r0), w4: server.w4.slice(w0) };
+}
+
+async function legacyState(shiftId: string) {
+  const got = await createShiftCloseIntentJournal().getCloseIntent(shiftId);
+  if (!got.ok || !got.value) throw new Error(`legacy ${shiftId}`);
+  return got.value.syncStateNormalization;
+}
+
+describe('B2.2-A — legacy W4 migration makes fair progress (no starvation), bounded per sweep', () => {
+  test('RED-before: 11 legacy entries, the 10 newest reads fail forever, the OLDEST is reachable + pending → reached and normalized across restarts', async () => {
+    await seedLegacy(11);
+    const server = createLegacyServer(11);
+    for (let i = 1; i <= 10; i += 1) server.failing.add(`L${i}`);
+    const perSweep: Array<{ reads: string[]; w4: string[] }> = [];
+    for (let s = 0; s < 3; s += 1) perSweep.push(await legacySweep(server));
+    // Pre-005: every sweep read exactly L10..L1 — L0 never, W4 never.
+    expect(server.reads).toContain('L0');
+    expect(server.w4).toEqual(['L0']);
+    expect(await legacyState('L0')).toBe('done');
+    for (const s of perSweep) {
+      expect(s.reads.length).toBeLessThanOrEqual(LEGACY_NORMALIZATION_CHECKS_PER_SWEEP);
+      expect(s.w4.length).toBeLessThanOrEqual(LEGACY_NORMALIZATION_CHECKS_PER_SWEEP);
+    }
+    // The unreachable ones stay legacy (never terminal without proof).
+    expect(await legacyState('L5')).toBeUndefined();
+  });
+
+  test('25 entries, 20 persistently unreadable: every entry is read within ⌈25/10⌉ = 3 sweeps (restart each time); each reachable one W4-ed exactly once; ≤10 reads per sweep, ≤1 W4 per close per sweep', async () => {
+    await seedLegacy(25);
+    const server = createLegacyServer(25);
+    for (let i = 5; i < 25; i += 1) server.failing.add(`L${i}`); // the 20 newest fail; L0..L4 reachable
+    const seen = new Set<string>();
+    for (let s = 0; s < 3; s += 1) {
+      const { reads, w4 } = await legacySweep(server);
+      expect(reads.length).toBeLessThanOrEqual(LEGACY_NORMALIZATION_CHECKS_PER_SWEEP);
+      expect(new Set(w4).size).toBe(w4.length); // at most one W4 per close per sweep
+      reads.forEach((id) => seen.add(id));
+    }
+    expect(seen.size).toBe(25);
+    expect([...server.w4].sort()).toEqual(['L0', 'L1', 'L2', 'L3', 'L4']);
+    for (let i = 0; i < 5; i += 1) expect(await legacyState(`L${i}`)).toBe('done');
+    // More sweeps: only the 20 unreadable remain, rotated 10 per sweep; never another W4.
+    const a = await legacySweep(server);
+    const b = await legacySweep(server);
+    expect(new Set([...a.reads, ...b.reads]).size).toBe(20);
+    expect(server.w4).toHaveLength(5);
+  });
+
+  test('intermittent read failures (the next 7 reads fail) still converge across restarts', async () => {
+    await seedLegacy(15);
+    const server = createLegacyServer(15);
+    server.failNext(7);
+    for (let s = 0; s < 4; s += 1) await legacySweep(server);
+    expect([...server.w4].sort()).toEqual(Array.from({ length: 15 }, (_, i) => `L${i}`).sort());
+    for (let i = 0; i < 15; i += 1) expect(await legacyState(`L${i}`)).toBe('done');
+  });
+
+  test('crash between a legacy W4 success and the local "done" write → later sweeps record done WITHOUT a second W4', async () => {
+    await seedLegacy(12);
+    const server = createLegacyServer(12);
+    const base = createShiftCloseIntentJournal();
+    const crashing: ShiftCloseIntentJournal = {
+      ...base,
+      setSyncStateNormalization: async () => {
+        throw new Error('process died');
+      },
+    };
+    await legacySweep(server, { journal: crashing }); // 10 selected: W4 lands, "done" never recorded
+    expect(server.w4).toHaveLength(10);
+    for (let s = 0; s < 3; s += 1) await legacySweep(server);
+    expect(server.w4).toHaveLength(12); // the remaining two, once each — no second W4 for the first ten
+    expect(new Set(server.w4).size).toBe(12);
+    for (let i = 0; i < 12; i += 1) expect(await legacyState(`L${i}`)).toBe('done');
+  });
+
+  test('the schedule stamp cannot be written (journal update failure) → the same runtime still rotates fairly', async () => {
+    await seedLegacy(11);
+    const server = createLegacyServer(11);
+    for (let i = 1; i <= 10; i += 1) server.failing.add(`L${i}`);
+    const base = createShiftCloseIntentJournal();
+    const noStamp = {
+      ...base,
+      recordNormalizationCheck: async () => ({ ok: false as const, code: 'unavailable' as const }),
+    } as ShiftCloseIntentJournal;
+    restartProcessMemory();
+    await legacySweep(server, { journal: noStamp, restart: false });
+    await legacySweep(server, { journal: noStamp, restart: false });
+    expect(server.w4).toEqual(['L0']);
+  });
+
+  test('exact-correlation mismatch and already-synced legacy docs: mismatch / done, ZERO W4, never re-read', async () => {
+    await seedLegacy(2);
+    const server = createLegacyServer(2);
+    server.docs.set('L0', { ...server.docs.get('L0')!, closeCorrelationId: UUID_B }); // same totals, another close
+    server.docs.set('L1', { ...server.docs.get('L1')!, syncState: 'synced' });
+    await legacySweep(server);
+    expect(await legacyState('L0')).toBe('mismatch');
+    expect(await legacyState('L1')).toBe('done');
+    expect(server.w4).toEqual([]);
+    await legacySweep(server);
+    expect(server.reads).toHaveLength(2);
+  });
+
+  test.each([['SYNCED'], [null], [7], ['']])(
+    'malformed authoritative syncState %j → never classified not_applicable/terminal, never written; retained',
+    async (bad) => {
+      await seedLegacy(1);
+      const server = createLegacyServer(1);
+      server.docs.set('L0', { ...server.docs.get('L0')!, syncState: bad });
+      await legacySweep(server);
+      await legacySweep(server);
+      expect(server.w4).toEqual([]);
+      expect(await legacyState('L0')).toBeUndefined(); // pre-005: 'not_applicable' (an owed W4 silently dropped)
+      expect(server.reads).toEqual(['L0', 'L0']); // still checked, not abandoned
+    },
+  );
+
+  test('malformed syncState at FIRST confirmation of a pending close → recorded outstanding (not not_applicable), no W4', async () => {
+    const server = createShiftServer(openServerShift([REFUND]));
+    const journal = bootJournal();
+    const r = await closeShift(makeShift(), 1338, '', deps(server, journal, { readConfirmation: async () => ({ ok: false }) }));
+    await r.whenServerConfirmed;
+    server.state.doc = { ...server.state.doc, syncState: 'weird' };
+    await sweep({ ...server, readConfirmation: mappedReader(server) }, journal);
+    expect(await entryOf(journal)).toMatchObject({ status: 'synced', syncStateNormalization: 'outstanding' });
+    expect(server.state.normalizeAttempts).toBe(0);
   });
 });

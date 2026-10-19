@@ -448,13 +448,15 @@ describe('closeShift ONLINE — commit-boundary serialization against a cash Ret
     );
   });
 
-  test('journal unavailable AFTER the commit: the committed close is never reported as failed', async () => {
+  test('journal unavailable AFTER the commit: never reported as failed/undone, but NO Z until durably journaled (B2.1-A)', async () => {
     const server = createShiftServer(openServerShift([REFUND]));
     const journal = createInMemoryShiftCloseIntentJournal();
     const broken = { ...journal, finalizeOnlineClose: async () => ({ ok: false as const, code: 'unavailable' as const, message: 'x' }) };
-    const result = await closeShift(makeShift(), 1338, '', { ...onlineDeps(server), journal: broken });
-    expect(result).toMatchObject({ status: 'closed', payOutTotal: 162 });
-    await expect(result.whenServerConfirmed).resolves.toMatchObject({ outcome: 'confirmed' });
+    // Literal (not the exported constant) so this also runs against pre-005 sources.
+    await expect(closeShift(makeShift(), 1338, '', { ...onlineDeps(server), journal: broken })).rejects.toThrow(
+      'ส่งการปิดกะถึงเซิร์ฟเวอร์แล้ว',
+    );
+    expect(server.state.doc!.status).toBe('closed');
     // Recovery gate B2: the durable attempt survives for the boot/reconnect sweep.
     const attempts = await journal.listOnlineCloseAttempts();
     expect(attempts.ok && attempts.value.map((a) => a.closeCorrelationId)).toEqual([server.state.doc!.closeCorrelationId]);

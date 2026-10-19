@@ -346,6 +346,8 @@ describe('reconcileShiftCloseIntent', () => {
           listOnlineCloseAttempts: base.listOnlineCloseAttempts,
           discardOnlineCloseAttempt: base.discardOnlineCloseAttempt,
           setSyncStateNormalization: base.setSyncStateNormalization,
+          recordNormalizationCheck: base.recordNormalizationCheck,
+          markOnlineCloseAttemptCommitObserved: base.markOnlineCloseAttemptCommitObserved,
         },
         markSynced,
         markRejectedManualAttention,
@@ -422,6 +424,8 @@ describe('runShiftCloseReconciliationSweep', () => {
       listOnlineCloseAttempts: async () => ({ ok: false as const, code: 'unavailable' as const }),
       discardOnlineCloseAttempt: async () => ({ ok: false as const, code: 'unavailable' as const }),
       setSyncStateNormalization: async () => ({ ok: false as const, code: 'unavailable' as const }),
+      recordNormalizationCheck: async () => ({ ok: false as const, code: 'unavailable' as const }),
+      markOnlineCloseAttemptCommitObserved: async () => ({ ok: false as const, code: 'unavailable' as const }),
     };
 
     const results = await runShiftCloseReconciliationSweep({
@@ -543,6 +547,8 @@ describe('OBS-B2 reconciler pointer-repair forwarding', () => {
         listOnlineCloseAttempts: base.listOnlineCloseAttempts,
         discardOnlineCloseAttempt: base.discardOnlineCloseAttempt,
         setSyncStateNormalization: base.setSyncStateNormalization,
+        recordNormalizationCheck: base.recordNormalizationCheck,
+        markOnlineCloseAttemptCommitObserved: base.markOnlineCloseAttemptCommitObserved,
       },
       readConfirmation: reader({ ok: true, doc: makeConfirmedDoc({ closeCorrelationId: entry.closeCorrelationId }) }),
       deviceId: DEVICE,

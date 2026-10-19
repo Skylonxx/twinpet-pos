@@ -667,6 +667,14 @@ const CLOSE_SHIFT_CONFLICT_MESSAGE =
  */
 export const CLOSE_SHIFT_COMMITTED_UNVERIFIED_MESSAGE =
   'ยังยืนยันยอดปิดกะนี้กับเซิร์ฟเวอร์ไม่ได้ — ยังไม่แสดงรายงานปิดกะ (Z) กรุณาตรวจสอบสถานะการซิงก์ แล้วลองใหม่อีกครั้ง';
+/**
+ * Gate B2.1-A: the close transaction COMMITTED on the server, but this device
+ * could not strictly confirm it and record it durably — no Z / confirmation is
+ * shown; the durable attempt is kept and finalized by a retry or the sync sweep.
+ * Never claims the close was undone or that the drawer is still open.
+ */
+export const CLOSE_SHIFT_COMMITTED_NOT_FINALIZED_MESSAGE =
+  'ส่งการปิดกะถึงเซิร์ฟเวอร์แล้ว แต่เครื่องนี้ยังยืนยันยอดและบันทึกผลการปิดกะไม่สำเร็จ — ยังไม่แสดงรายงานปิดกะ (Z) ระบบจะตรวจสอบและบันทึกผลอีกครั้งเมื่อซิงก์ กรุณาตรวจสอบสถานะการซิงก์ แล้วลองใหม่อีกครั้ง';
 /** Recovery gate B2: an earlier ONLINE close of this shift has an unknown outcome — no offline close over it. */
 export const CLOSE_SHIFT_ONLINE_ATTEMPT_UNRESOLVED_MESSAGE =
   'การปิดกะออนไลน์ครั้งก่อนของกะนี้ยังยืนยันผลกับเซิร์ฟเวอร์ไม่ได้ — ปิดกะแบบออฟไลน์ไม่ได้ กรุณาเชื่อมต่ออินเทอร์เน็ตแล้วปิดกะอีกครั้ง';
@@ -956,7 +964,10 @@ function ownCloseIdentity(shift: Shift, deviceId: string, closeCorrelationId: st
  *     finalize fails, or the process dies first, the prepared attempt survives
  *     and is finalized from the authoritative closed doc (same-runtime, by the
  *     boot/reconnect sweep, or by a retry that finds the shift closed with its
- *     id); the committed close is never reported as failed.
+ *     id); the committed close is never reported as failed or undone, and
+ *     (gate B2.1-A) no Z is returned until the strict recovery proved AND
+ *     durably journaled it — otherwise the call rejects with
+ *     {@link CLOSE_SHIFT_COMMITTED_NOT_FINALIZED_MESSAGE}.
  *
  *  OFFLINE — unchanged 7C-B1/7C-B2 behaviour, except that a device with an
  *  unresolved/unsynced cash Return guard for the shift refuses (fail closed):
@@ -1219,7 +1230,17 @@ async function closeShiftOnline(
             },
           };
         }
-        throw new ShiftCloseRefusal(CLOSE_SHIFT_ALREADY_CLOSED_MESSAGE, d.status === 'closed');
+        // B2.1-B: only a DISTINCT VALID correlation id of the same shift run
+        // proves this attempt can never commit (the same classification as the
+        // sweep); an empty / malformed / absent id keeps the attempt.
+        const other = parseCommittedOwnClose(
+          ownCloseIdentity(shift, deviceId, correlationId),
+          shiftCloseConfirmationDocFromData(d),
+        );
+        throw new ShiftCloseRefusal(
+          CLOSE_SHIFT_ALREADY_CLOSED_MESSAGE,
+          !other.ok && other.reason === 'other_correlation',
+        );
       }
       if (journaled) throw new ShiftCloseRefusal(CLOSE_SHIFT_CONFLICT_MESSAGE);
       if (d.branchId !== shift.branchId || d.staffId !== shift.staffId) {
@@ -1236,7 +1257,7 @@ async function closeShiftOnline(
       // Definitive: the transaction refused before writing anything. Only a
       // doc closed by ANOTHER id proves this attempt can never commit; any
       // other refusal keeps the attempt (the sweep resolves it later).
-      if (err.uncommittable && attempt) {
+      if (err.uncommittable && attempt && attempt.commitObservedAtLocal === undefined) {
         await journal.discardOnlineCloseAttempt(shift.id, correlationId).catch(() => undefined);
       }
       throw new Error(err.message, { cause: err });
@@ -1283,35 +1304,29 @@ async function closeShiftOnline(
     console.warn('[shiftService] committed online close conflicts with the local journal', finalized);
     throw new Error(CLOSE_SHIFT_COMMITTED_UNVERIFIED_MESSAGE);
   }
-  // The close IS committed; only the local finalize failed. Never report it as
-  // failed. The prepared attempt is still durable, so recovery from the
-  // authoritative doc is retried now and by every boot/reconnect sweep.
+  // B2.1-A: the W3 transaction committed, but the journal finalize failed. A Z
+  // (and the confirmed badge behind `whenServerConfirmed`) exists ONLY for a
+  // close that is strictly proven AND durably journaled: the same strict
+  // recovery the sweep uses ({@link recoverOnlineCloseAttempt}) runs now, with
+  // the attempt marked commit-observed (it is never discarded as superseded).
+  // Anything short of `recovered` → no Z, no confirmation, no second W3: the
+  // prepared attempt is kept and finalized by a retry or the boot/reconnect
+  // sweep. The message says the close was sent — never that it was rolled back.
   console.warn('[shiftService] committed online close could not be journaled', finalized);
-  const recovered = (async (): Promise<ShiftCloseConfirmation> => {
-    if (attempt) {
-      const r = await recoverOnlineCloseAttempt(attempt, ctx);
-      if (r.outcome === 'recovered' && r.entry) return reconcileClosed(r.entry, ctx);
+  if (attempt) {
+    try {
+      await journal.markOnlineCloseAttemptCommitObserved(shift.id, correlationId);
+    } catch {
+      /* best-effort: the in-memory marker below still protects this recovery */
     }
-    return directCloseConfirmation(shift.id, ctx.readConfirmation);
-  })();
-  return result(Date.now(), recovered);
-}
-
-/** Confirmation-grade read of the shift doc only (no journal transition). Never rejects. */
-async function directCloseConfirmation(
-  shiftId: string,
-  readConfirmation: ShiftCloseConfirmationReader,
-): Promise<ShiftCloseConfirmation> {
-  try {
-    const read = await readConfirmation(shiftId);
-    const closedAt = read.ok && read.doc.exists && read.doc.status === 'closed' ? read.doc.closedAt : null;
-    if (closedAt != null && typeof (closedAt as { toDate?: unknown }).toDate === 'function') {
-      return { outcome: 'confirmed', closedAt: (closedAt as { toDate: () => Date }).toDate() };
+    const observed = { ...attempt, commitObservedAtLocal: attempt.commitObservedAtLocal ?? Date.now() };
+    const r = await recoverOnlineCloseAttempt(observed, ctx);
+    if (r.outcome === 'recovered' && r.entry) {
+      return result(r.entry.closedAtLocal, reconcileClosed(r.entry, ctx));
     }
-    return { outcome: read.ok ? 'still_pending' : 'unreachable' };
-  } catch {
-    return { outcome: 'unreachable' };
+    throw new Error(CLOSE_SHIFT_COMMITTED_NOT_FINALIZED_MESSAGE);
   }
+  throw new Error(CLOSE_SHIFT_COMMITTED_UNVERIFIED_MESSAGE);
 }
 
 /**

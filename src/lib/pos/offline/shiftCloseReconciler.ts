@@ -14,7 +14,7 @@
 // store module; `ShiftCloseIntentEntry` is a data type that lives in the types
 // module (the store only imports it internally, never re-exports it) — so each
 // is imported from its true source to satisfy build-mode TypeScript (TS2459).
-import type { ShiftCloseIntentJournal } from './shiftCloseIntentStore';
+import { isValidLowercaseUuidV4, type ShiftCloseIntentJournal } from './shiftCloseIntentStore';
 import type {
   OnlineCloseAttemptRecord,
   PointerRepairOutcome,
@@ -31,6 +31,11 @@ export type ShiftCloseConfirmationDoc = {
   closedAt?: unknown;
   closedOffline?: boolean;
   syncState?: ShiftSyncState;
+  /**
+   * Gate B2.2-A: `syncState` is PRESENT but neither `'pending'` nor `'synced'`
+   * (`syncState` is then `undefined`). Never read as "nothing owed".
+   */
+  syncStateMalformed?: boolean;
   deviceId?: string | null;
   branchId?: string;
   staffId?: string;
@@ -48,6 +53,12 @@ export type ShiftCloseConfirmationDoc = {
   note?: string;
   /** Recovery gate B2: the W3 close's attempt identity (absent on legacy/foreign closes). */
   closeCorrelationId?: string | null;
+  /**
+   * Gate B2.1-B: `closeCorrelationId` is PRESENT but not a string (e.g. `null`
+   * or a number — W3 Rules deny both); `closeCorrelationId` is then `null`, so
+   * this flag is what separates it from a legitimately ABSENT id.
+   */
+  closeCorrelationIdMalformed?: boolean;
 };
 
 /**
@@ -60,12 +71,14 @@ export function shiftCloseConfirmationDocFromData(data: Record<string, unknown>)
   const num = (v: unknown): number | undefined => (typeof v === 'number' ? v : undefined);
   const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
   const syncState = data.syncState;
+  const syncStateKnown = syncState === 'pending' || syncState === 'synced';
   return {
     exists: true,
     status: str(data.status),
     closedAt: data.closedAt,
     closedOffline: typeof data.closedOffline === 'boolean' ? data.closedOffline : undefined,
-    syncState: syncState === 'pending' || syncState === 'synced' ? syncState : undefined,
+    syncState: syncStateKnown ? syncState : undefined,
+    ...(syncState !== undefined && !syncStateKnown ? { syncStateMalformed: true } : {}),
     deviceId: typeof data.deviceId === 'string' ? data.deviceId : null,
     branchId: str(data.branchId),
     staffId: str(data.staffId),
@@ -82,6 +95,9 @@ export function shiftCloseConfirmationDocFromData(data: Record<string, unknown>)
     totalBills: num(data.totalBills),
     note: str(data.note),
     closeCorrelationId: typeof data.closeCorrelationId === 'string' ? data.closeCorrelationId : null,
+    ...('closeCorrelationId' in data && typeof data.closeCorrelationId !== 'string'
+      ? { closeCorrelationIdMalformed: true }
+      : {}),
   };
 }
 
@@ -237,6 +253,10 @@ export async function reconcileShiftCloseIntent(
   // only after its authoritative write succeeded, so a W4 failure or a crash
   // anywhere before that leaves durable state the next sweep retries
   // ({@link retryOutstandingNormalizations}).
+  //
+  // B2.2-A: a PRESENT but malformed `syncState` is not proof that nothing is
+  // owed — it is recorded `outstanding` (retained; the retry reports it as
+  // `manual_attention` and never writes W4 over it), not `not_applicable`.
   const owesW4 = doc.syncState === 'pending' && doc.deviceId === deps.deviceId;
   let pointerRepair: PointerRepairOutcome | undefined;
   const syncedResult = await deps.journal.markSynced(
@@ -244,7 +264,7 @@ export async function reconcileShiftCloseIntent(
     (outcome) => {
       pointerRepair = outcome;
     },
-    owesW4 ? 'outstanding' : doc.syncState === 'synced' ? 'done' : 'not_applicable',
+    owesW4 || doc.syncStateMalformed ? 'outstanding' : doc.syncState === 'synced' ? 'done' : 'not_applicable',
   );
   if (!syncedResult.ok) {
     return { shiftId: entry.shiftId, outcome: 'unreachable', pointerRepair };
@@ -300,19 +320,58 @@ export type NormalizationRetryOutcome =
   | 'mismatch'
   /** Nothing owed by this device (legacy entry whose doc is not pending for it). */
   | 'not_applicable'
+  /**
+   * B2.2-A: the matching doc's `syncState` is present but malformed — never
+   * classified terminal, never written; the entry keeps its state (retained).
+   */
+  | 'manual_attention'
   /** Read failed, doc not a resolved close, W4 failed, or no normalizer: kept `outstanding`, retried later. */
   | 'retry_later';
 
 export type NormalizationRetryResult = { shiftId: string; outcome: NormalizationRetryOutcome };
 
 /**
+ * Same-runtime overlay of the persisted legacy check sequence, keyed by
+ * shift + correlation id: if the journal cannot record a selection, fairness
+ * still holds for the rest of this process (a restart falls back to whatever
+ * was persisted).
+ */
+const legacyCheckSeqOverlay = new Map<string, number>();
+
+/** Test-only: a "process restart" forgets the in-memory overlay. */
+export function resetLegacyNormalizationScheduleForTests(): void {
+  legacyCheckSeqOverlay.clear();
+}
+
+function legacyKey(e: Pick<ShiftCloseIntentEntry, 'shiftId' | 'closeCorrelationId'>): string {
+  return `${e.shiftId}\u0000${e.closeCorrelationId ?? ''}`;
+}
+
+function legacyCheckSeq(e: ShiftCloseIntentEntry): number {
+  const persisted = e.syncStateNormalizationCheckSeq;
+  const p = typeof persisted === 'number' && Number.isFinite(persisted) && persisted > 0 ? persisted : 0;
+  return Math.max(p, legacyCheckSeqOverlay.get(legacyKey(e)) ?? 0);
+}
+
+/**
  * B2.2 — retry every THIS-device `synced` entry whose W4 is still owed
  * (`outstanding`), plus up to {@link LEGACY_NORMALIZATION_CHECKS_PER_SWEEP}
- * pre-B2.2 `synced` entries (field absent) checked once each. One read and at
- * most one W4 per entry per sweep — no busy loop; the boot / `online` / sync
- * orchestrator triggers provide the retries. Only a confirmation-grade read
- * of THIS close (equal correlation id, identity and totals, still `pending`,
- * this device) is normalized; anything else is never written. Never throws.
+ * pre-B2.2 `synced` entries (field absent). One read and at most one W4 per
+ * entry per sweep — no busy loop; the boot / `online` / sync orchestrator
+ * triggers provide the retries. Only a confirmation-grade read of THIS close
+ * (equal correlation id, identity and totals, still `pending`, this device)
+ * is normalized; anything else is never written. Never throws.
+ *
+ * Gate B2.2-A — fair legacy progress (round robin over a logical clock, no
+ * wall clock): legacy candidates are ordered least-recently-checked first
+ * (`syncStateNormalizationCheckSeq`, absent = never), then newest close, then
+ * shift id. The selected ones are stamped `max(seq) + 1` BEFORE their server
+ * read, so a failed / hung read, a crash or a restart never re-selects the
+ * same ten ahead of the rest. Guarantee: with N legacy candidates every one is
+ * read at least once in any ⌈N / 10⌉ consecutive sweeps; per sweep at most 10
+ * legacy server reads, 10 W4 writes and 10 local stamp writes. No backoff
+ * beyond that rotation. The stamp is local to this device's journal (legacy
+ * entries are this device's own closes) — nothing is shared across devices.
  */
 export async function retryOutstandingNormalizations(
   deps: ReconcileShiftCloseIntentDeps,
@@ -330,10 +389,24 @@ export async function retryOutstandingNormalizations(
     (e) => e.status === 'synced' && e.deviceId === deps.deviceId && !skipShiftIds.has(e.shiftId),
   );
   const outstanding = mine.filter((e) => e.syncStateNormalization === 'outstanding');
-  const legacy = mine
-    .filter((e) => e.syncStateNormalization === undefined)
-    .sort((a, b) => b.closedAtLocal - a.closedAtLocal)
+  const legacyAll = mine.filter((e) => e.syncStateNormalization === undefined);
+  const legacy = [...legacyAll]
+    .sort(
+      (a, b) =>
+        legacyCheckSeq(a) - legacyCheckSeq(b) ||
+        b.closedAtLocal - a.closedAtLocal ||
+        (a.shiftId < b.shiftId ? -1 : a.shiftId > b.shiftId ? 1 : 0),
+    )
     .slice(0, LEGACY_NORMALIZATION_CHECKS_PER_SWEEP);
+  const nextSeq = legacyAll.reduce((max, e) => Math.max(max, legacyCheckSeq(e)), 0) + 1;
+  for (const entry of legacy) {
+    legacyCheckSeqOverlay.set(legacyKey(entry), nextSeq);
+    try {
+      await deps.journal.recordNormalizationCheck(entry.shiftId, entry.closeCorrelationId, nextSeq);
+    } catch {
+      /* the overlay keeps this runtime fair; persisted on a later selection */
+    }
+  }
 
   const results: NormalizationRetryResult[] = [];
   for (const entry of [...outstanding, ...legacy]) {
@@ -366,6 +439,8 @@ async function retryNormalization(
     await record('mismatch');
     return 'mismatch';
   }
+  // B2.2-A: unexpected sync marker — not terminal without proof, never written.
+  if (doc.syncStateMalformed) return 'manual_attention';
   if (doc.syncState === 'synced') {
     await record('done');
     return 'already_normalized';
@@ -389,7 +464,12 @@ export type OnlineCloseRecoveryOutcome =
   | 'not_closed'
   /** Read or journal write failed. Kept; retried on the next trigger. */
   | 'unreachable'
-  /** Closed with this id but the doc cannot be trusted as this close (identity/fields). Kept; no claim. */
+  /**
+   * Kept; no claim: closed with this id but the doc cannot be trusted as this
+   * close (identity/fields), OR closed with an empty / malformed / absent
+   * correlation id (B2.1-B: not proof of another close), OR closed by another
+   * id although this attempt's commit was observed (B2.1-A).
+   */
   | 'manual_attention';
 
 export type OnlineCloseRecoveryResult = {
@@ -418,7 +498,14 @@ export type CommittedOwnCloseParse =
       ok: false;
       /**
        * not_closed           doc missing / not `closed`
-       * other_correlation    closed by ANOTHER correlation id (or none)
+       * other_correlation    closed by ANOTHER VALID (lowercase UUID v4) id, with
+       *                      a resolved `closedAt` and this attempt's branch +
+       *                      staff — proof this attempt can never commit
+       * missing_correlation  closed WITHOUT a correlation id (legitimate for
+       *                      historical / UUID-less clients, but not provably
+       *                      another close of THIS attempt's shift run)
+       * invalid_correlation  closed with an empty / non-UUID / non-string id
+       *                      (W3 Rules deny those: corrupt or out-of-band)
        * closed_at_unresolved `closedAt` is not a resolved server Timestamp
        * identity_mismatch    branch / staff / device differ from the attempt
        * malformed_fields     a mandatory committed field is missing / non-finite
@@ -427,6 +514,8 @@ export type CommittedOwnCloseParse =
       reason:
         | 'not_closed'
         | 'other_correlation'
+        | 'missing_correlation'
+        | 'invalid_correlation'
         | 'closed_at_unresolved'
         | 'identity_mismatch'
         | 'malformed_fields'
@@ -457,7 +546,17 @@ export type CommittedOwnCloseParse =
  */
 export function parseCommittedOwnClose(identity: OwnCloseIdentity, doc: ShiftCloseConfirmationDoc): CommittedOwnCloseParse {
   if (!doc.exists || doc.status !== 'closed') return { ok: false, reason: 'not_closed' };
-  if (!identity.closeCorrelationId || doc.closeCorrelationId !== identity.closeCorrelationId) {
+  if (!isValidLowercaseUuidV4(identity.closeCorrelationId)) return { ok: false, reason: 'invalid_correlation' };
+  if (doc.closeCorrelationIdMalformed || doc.closeCorrelationId !== identity.closeCorrelationId) {
+    // B2.1-B: only a DISTINCT VALID id of the same shift run proves supersession.
+    const raw: unknown = doc.closeCorrelationId;
+    if (doc.closeCorrelationIdMalformed) return { ok: false, reason: 'invalid_correlation' };
+    if (raw === undefined || raw === null) return { ok: false, reason: 'missing_correlation' };
+    if (!isValidLowercaseUuidV4(raw)) return { ok: false, reason: 'invalid_correlation' };
+    if (!isResolvedServerTimestamp(doc.closedAt)) return { ok: false, reason: 'closed_at_unresolved' };
+    if (doc.branchId !== identity.branchId || doc.staffId !== identity.staffId) {
+      return { ok: false, reason: 'identity_mismatch' };
+    }
     return { ok: false, reason: 'other_correlation' };
   }
   if (!isResolvedServerTimestamp(doc.closedAt)) return { ok: false, reason: 'closed_at_unresolved' };
@@ -534,9 +633,11 @@ export async function recoverOnlineCloseAttempt(
   if (!parsed.ok) {
     if (parsed.reason === 'not_closed') return { shiftId, outcome: 'not_closed' };
     if (parsed.reason === 'closed_at_unresolved') return { shiftId, outcome: 'unreachable' };
-    if (parsed.reason === 'other_correlation') {
-      // Closed by another operation: W3 only closes an OPEN doc, so this attempt
-      // can never commit now — definitive, safe to drop (no Z, no journal entry).
+    if (parsed.reason === 'other_correlation' && attempt.commitObservedAtLocal === undefined) {
+      // Closed by another VALID close of the same shift run: W3 only closes an
+      // OPEN doc, so this attempt can never commit now — definitive, safe to
+      // drop (no Z, no journal entry). An attempt whose own commit was observed
+      // is never dropped (the doc contradicts a known commit: manual attention).
       try {
         await deps.journal.discardOnlineCloseAttempt(shiftId, attempt.closeCorrelationId);
       } catch {
@@ -544,6 +645,8 @@ export async function recoverOnlineCloseAttempt(
       }
       return { shiftId, outcome: 'superseded' };
     }
+    // missing / invalid correlation, observed-commit contradiction, identity /
+    // field defects: retained for investigation — never deleted, never a Z.
     return { shiftId, outcome: 'manual_attention' };
   }
   const { snapshot } = parsed;

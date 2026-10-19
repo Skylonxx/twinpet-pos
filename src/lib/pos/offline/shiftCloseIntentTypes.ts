@@ -73,6 +73,14 @@ export type ShiftCloseIntentEntry = ShiftCloseIntentSnapshot & {
   updatedAtLocal: number;
   lastErrorMessage: string | null;
   syncStateNormalization?: SyncStateNormalization;
+  /**
+   * Gate B2.2-A — legacy W4 check scheduling hint (a logical sequence number,
+   * never a clock): set on a pre-B2.2 `synced` entry (normalization absent)
+   * when a sweep selects it, BEFORE its server read, so the next sweep picks
+   * the least-recently-checked entries first (round robin). Advisory only: a
+   * missing / non-finite value reads as "never checked"; never business data.
+   */
+  syncStateNormalizationCheckSeq?: number;
 };
 
 export type CloseIntentErrorCode = 'unavailable' | 'quota' | 'conflict' | 'not_found' | 'tx_failed';
@@ -118,11 +126,20 @@ export type ShiftCloseIntentObservabilityEvent = {
  *               correlation id → the entry is rebuilt from that doc and
  *               finalized exactly as above, then the existing reconciliation
  *               (journal `synced` + Variant C) runs once.
- *   superseded  the doc is closed by another correlation id — our attempt can
- *               no longer commit (W3 requires open → closed) → deleted, no Z.
- *   kept        doc open / missing / unreadable: stays `prepared` (the next
- *               close of the shift reuses its correlation id, so a late commit
- *               is recognised as this device's own). Never silently dropped.
+ *   superseded  the doc is closed by another VALID (lowercase UUID v4)
+ *               correlation id of the same branch/staff shift — our attempt
+ *               can no longer commit (W3 requires open → closed) → deleted, no
+ *               Z. Never for an attempt whose commit was observed (below).
+ *   kept        doc open / missing / unreadable, or closed with an empty /
+ *               malformed / absent correlation id (not proof of another close;
+ *               gate B2.1-B): stays `prepared` (the next close of the shift
+ *               reuses its correlation id, so a late commit is recognised as
+ *               this device's own). Never silently dropped.
+ *
+ * Gate B2.1-A: `commitObservedAtLocal` is set (best-effort) when this runtime
+ * SAW its W3 transaction commit but could not finalize the journal. Such an
+ * attempt is never discarded as superseded — a server doc contradicting a
+ * known commit needs investigation, not deletion of the evidence.
  */
 export type OnlineCloseAttemptRecord = {
   kind: 'onlineCloseAttempt';
@@ -135,6 +152,8 @@ export type OnlineCloseAttemptRecord = {
   /** Lowercase v4 UUID written as `closeCorrelationId` by the W3 close. */
   closeCorrelationId: string;
   preparedAtLocal: number;
+  /** Optional, additive (see above). Present with ANY value ⇒ treated as commit observed. */
+  commitObservedAtLocal?: number;
 };
 
 export type OnlineCloseAttemptIdentity = Pick<
