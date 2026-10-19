@@ -305,6 +305,7 @@ describe('closeShift — Packet 7C-B1 local optimistic offline close', () => {
       finalizeOnlineClose: async () => ({ ok: false as const, code: 'unavailable' as const }),
       listOnlineCloseAttempts: async () => ({ ok: true as const, value: [] }),
       discardOnlineCloseAttempt: async () => ({ ok: false as const, code: 'unavailable' as const }),
+      setSyncStateNormalization: async () => ({ ok: false as const, code: 'unavailable' as const }),
     };
 
     await expect(closeShift(makeShift(), 1000, 'note', { journal })).rejects.toThrow();
@@ -387,6 +388,9 @@ describe('closeShift — Packet 7C-B2 whenServerConfirmed reconciliation', () =>
         payOutTotal: 0,
         totalBills: 3,
         note: 'note',
+        // The server doc carries exactly what the queued W3 close wrote (B2:
+        // the reconciler's identity match includes the correlation id).
+        closeCorrelationId: (updateDocMock.mock.calls.at(-1)?.[1] as { closeCorrelationId?: string } | undefined)?.closeCorrelationId,
         ...overrides,
       }),
     };

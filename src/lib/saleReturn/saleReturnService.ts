@@ -172,26 +172,57 @@ export function newReturnAttemptId(): string {
 }
 
 /**
+ * The shift `cashEntries[]` id of a committed cash refund. Mirrors
+ * `deriveCashRefundEntryId` in functions/src/saleReturnCore.ts (`rfd_<returnId>`);
+ * `returnId` is the 40-hex id the callable returns. Anything else → `null`.
+ */
+export function cashRefundEntryIdFor(returnId: string): string | null {
+  return /^[0-9a-f]{40}$/.test(returnId) ? `rfd_${returnId}` : null;
+}
+
+/** What the committed Return proved it wrote to the shift (from the callable result). */
+export type CommittedCashRefund = { branchId: string; returnId: string; refundAmount: number };
+
+/**
  * After a COMMITTED cash refund the server appended a pay-out to the shift's
  * `cashEntries[]`. The attempt's guard (written before the send, see
  * `markCashReturnAttemptPending`) is moved to `committed_unsynced` — never
  * cleared on the result acknowledgement alone — and removed only once a
- * server read of the shift succeeded, so the local cache (which the POS boot
- * read and an offline close fold) carries the pay-out. Until then an OFFLINE
- * close on this device is refused. An online close never depends on this: its
- * transaction reads the authoritative shift.
+ * server read PROVES the pay-out is on the shift: the doc exists, belongs to
+ * the Return's branch, and holds THIS Return's `pay_out` entry
+ * (`rfd_<returnId>`) with the refunded amount (C1 cleanup proof). A
+ * successful read alone is not proof: missing doc, other branch, missing or
+ * different entry, or any read failure keeps the guard (an OFFLINE close on
+ * this device stays refused; a committed online close of the shift, whose
+ * transaction folds every committed Return, clears it). Once proven, the
+ * server read has also brought the pay-out into the local cache that the
+ * boot read and an offline close fold.
  */
-export async function refreshShiftFromServer(shiftId: string, attemptId: string): Promise<void> {
+export async function refreshShiftFromServer(
+  shiftId: string,
+  attemptId: string,
+  committed: CommittedCashRefund,
+): Promise<void> {
   markCashReturnAttemptPending(shiftId, attemptId, 'committed_unsynced');
   try {
+    const entryId = cashRefundEntryIdFor(committed.returnId);
+    if (!entryId) return;
     const [{ doc, getDocFromServer }, { db, collections }] = await Promise.all([
       import('firebase/firestore'),
       import('../firebase'),
     ]);
     if (!db) return;
-    await getDocFromServer(doc(db, collections.shifts, shiftId));
-    clearCashReturnAttemptPending(shiftId, attemptId);
+    const snap = await getDocFromServer(doc(db, collections.shifts, shiftId));
+    if (!snap.exists()) return;
+    const data = snap.data() as Record<string, unknown>;
+    if (data.branchId !== committed.branchId) return;
+    const entries = Array.isArray(data.cashEntries) ? (data.cashEntries as unknown[]) : [];
+    const proven = entries.some(
+      (e) =>
+        isPlainObject(e) && e.id === entryId && e.type === 'pay_out' && e.amount === committed.refundAmount,
+    );
+    if (proven) clearCashReturnAttemptPending(shiftId, attemptId);
   } catch {
-    /* guard stays: an offline close is refused until a server read succeeds */
+    /* guard stays: an offline close is refused until the pay-out is proven */
   }
 }

@@ -51,11 +51,28 @@ export type ShiftCloseIntentSnapshot = ShiftCloseIntentBusinessSnapshot & {
   closeCorrelationId: string | null;
 };
 
+/**
+ * B2.2 — Variant C (W4 `syncState: 'synced'`) normalization progress of a
+ * `synced` entry. `synced` means the CLOSE is server-confirmed; this field
+ * says whether the separate W4 write is still owed:
+ *   outstanding     the confirmed doc read `syncState: 'pending'` for THIS
+ *                   device — W4 not yet proven written; retried by every sweep
+ *   done            W4 written, or the doc already read `synced`
+ *   not_applicable  no W4 owed by this device (doc not pending / other device)
+ *   mismatch        on a retry the doc no longer matches this entry
+ *                   (identity / correlation / totals): never written; terminal
+ * Optional and additive: entries written before B2.2 lack it (`synced` +
+ * absent = legacy, checked once by the sweep). Present-but-unknown fails
+ * the entry's validation (fail closed, like a malformed correlation id).
+ */
+export type SyncStateNormalization = 'outstanding' | 'done' | 'not_applicable' | 'mismatch';
+
 export type ShiftCloseIntentEntry = ShiftCloseIntentSnapshot & {
   status: ShiftCloseIntentStatus;
   createdAtLocal: number;
   updatedAtLocal: number;
   lastErrorMessage: string | null;
+  syncStateNormalization?: SyncStateNormalization;
 };
 
 export type CloseIntentErrorCode = 'unavailable' | 'quota' | 'conflict' | 'not_found' | 'tx_failed';

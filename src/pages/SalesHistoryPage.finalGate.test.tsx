@@ -649,9 +649,21 @@ function context(orderId: string, over: Partial<SaleReturnContextView> = {}): Sa
   };
 }
 
+const RETURN_ID = 'a1'.repeat(20);
 const committed = (orderId: string): SubmitSaleReturnResult => ({
-  kind: 'ok', returnId: 'r'.repeat(40), returnNo: `RT-${orderId}-1`, refundId: 'f'.repeat(40), refundAmount: 81, refundMethod: 'cash', idempotent: true,
+  kind: 'ok', returnId: RETURN_ID, returnNo: `RT-${orderId}-1`, refundId: RETURN_ID, refundAmount: 81, refundMethod: 'cash', idempotent: true,
 });
+
+/** The authoritative shift as a committed cash Return leaves it (`rfd_<returnId>` pay-out). */
+function provenShiftDoc(over: Record<string, unknown> = {}, entry: Record<string, unknown> = {}) {
+  const data = {
+    status: 'open',
+    branchId: 'LDP-001',
+    cashEntries: [{ id: `rfd_${RETURN_ID}`, type: 'pay_out', amount: 81, note: 'คืนเงินสด', staffId: 'staff1', staffName: 'Dao', at: 1, ...entry }],
+    ...over,
+  };
+  return { exists: () => true, data: () => data };
+}
 
 const guardKeys = () => [...storage.keys()].filter((k) => k.startsWith('twinpet.shift.serverCashPending.v2:'));
 
@@ -761,9 +773,52 @@ describe('§3 unknown cash Return — pre-send guard and resolution', () => {
     // Same committed attempt resolved again later (replay), sync succeeds → released.
     await renderHistory([record('BILL-R1')]);
     expect(hasShiftServerCashPending('SH1')).toBe(true);
-    // The recovery record was cleared on commit; the guard is released by the sync of a replay.
+    // The recovery record was cleared on commit; the guard is released by the sync of a replay
+    // only once the server read PROVES this Return's pay-out is on the shift (C1 cleanup proof).
     const { refreshShiftFromServer } = await import('../lib/saleReturn/saleReturnService');
-    await refreshShiftFromServer('SH1', 'att-1');
+    const proof = { branchId: 'LDP-001', returnId: RETURN_ID, refundAmount: 81 };
+    await refreshShiftFromServer('SH1', 'att-1', proof); // default server doc: no pay-out entry
+    expect(guardKeys()).toEqual(['twinpet.shift.serverCashPending.v2:SH1:att-1']);
+    fs.getDocFromServer.mockResolvedValueOnce(provenShiftDoc());
+    await refreshShiftFromServer('SH1', 'att-1', proof);
+    expect(guardKeys()).toEqual([]);
+    expect(await offlineClose()).toBe('closed');
+  });
+
+  test('C1 cleanup proof: a successful server read alone never clears the guard — only THIS Return’s pay-out on the matching shift does', async () => {
+    const { refreshShiftFromServer, cashRefundEntryIdFor } = await import('../lib/saleReturn/saleReturnService');
+    const proof = { branchId: 'LDP-001', returnId: RETURN_ID, refundAmount: 81 };
+    const guarded = () => guardKeys().length === 1;
+    const refreshWith = async (snap: unknown, p = proof) => {
+      fs.getDocFromServer.mockResolvedValueOnce(snap);
+      await refreshShiftFromServer('SH1', 'att-1', p);
+    };
+    expect(cashRefundEntryIdFor(RETURN_ID)).toBe(`rfd_${RETURN_ID}`);
+    expect(cashRefundEntryIdFor('not-a-return-id')).toBeNull();
+
+    await refreshWith({ exists: () => false, data: () => undefined }); // missing doc
+    expect(guarded()).toBe(true);
+    expect(JSON.parse(storage.get(guardKeys()[0]!)!).state).toBe('committed_unsynced');
+    await refreshWith(provenShiftDoc({ branchId: 'LDP-999' })); // wrong identity (branch)
+    expect(guarded()).toBe(true);
+    await refreshWith(provenShiftDoc({ cashEntries: [] })); // entry missing
+    expect(guarded()).toBe(true);
+    await refreshWith(provenShiftDoc({}, { id: 'rfd_' + 'b2'.repeat(20) })); // another Return's entry
+    expect(guarded()).toBe(true);
+    await refreshWith(provenShiftDoc({}, { amount: 80 })); // different amount
+    expect(guarded()).toBe(true);
+    await refreshWith(provenShiftDoc({}, { type: 'pay_in' })); // wrong type
+    expect(guarded()).toBe(true);
+    const reads = fs.getDocFromServer.mock.calls.length;
+    await refreshShiftFromServer('SH1', 'att-1', { ...proof, returnId: 'garbage' }); // unusable returnId
+    expect(fs.getDocFromServer.mock.calls.length).toBe(reads); // nothing can be proven → not even read
+    expect(guarded()).toBe(true);
+    fs.getDocFromServer.mockRejectedValueOnce(new Error('unavailable')); // read failure
+    await refreshShiftFromServer('SH1', 'att-1', proof);
+    expect(guarded()).toBe(true);
+    expect(await offlineClose()).toBe(CLOSE_SHIFT_SERVER_CASH_PENDING_MESSAGE);
+
+    await refreshWith(provenShiftDoc()); // confirmed entry on the matching shift
     expect(guardKeys()).toEqual([]);
     expect(await offlineClose()).toBe('closed');
   });

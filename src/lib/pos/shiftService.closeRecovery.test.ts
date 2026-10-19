@@ -24,6 +24,7 @@ import {
   type ShiftCloseIntentJournal,
 } from './offline/shiftCloseIntentStore';
 import {
+  LEGACY_NORMALIZATION_CHECKS_PER_SWEEP,
   recoverOnlineCloseAttempts,
   runShiftCloseReconciliationSweep,
   type ShiftCloseConfirmationReader,
@@ -109,7 +110,12 @@ function createShiftServer(initial: ServerShift) {
     version: 1,
     commits: 0,
     attempts: 0,
+    /** Successful W4 (`syncState: 'synced'`) writes. */
     normalizations: 0,
+    /** Every W4 attempt, failed or not. */
+    normalizeAttempts: 0,
+    /** The next N W4 attempts fail (transient unavailable). */
+    normalizeFailuresLeft: 0,
   };
   let beforeCommit: ((attempt: number) => void | Promise<void>) | null = null;
   /** After a commit landed: `hang` = the client never sees the response (crash / frozen), `lose` = rejects. */
@@ -147,6 +153,11 @@ function createShiftServer(initial: ServerShift) {
     doc: { exists: true, ...state.doc } as never,
   });
   const normalizeSyncState = async () => {
+    state.normalizeAttempts += 1;
+    if (state.normalizeFailuresLeft > 0) {
+      state.normalizeFailuresLeft -= 1;
+      throw Object.assign(new Error('W4 unavailable'), { code: 'unavailable' });
+    }
     state.normalizations += 1;
     state.doc = { ...state.doc, syncState: 'synced' };
   };
@@ -615,5 +626,289 @@ describe('B2 — concurrency and lifecycle', () => {
     expect(await attemptsOf(journal)).toHaveLength(1);
     // An attempt of ANOTHER device is never resolved by this one.
     expect(await recoverOnlineCloseAttempts({ journal, readConfirmation: async () => ({ ok: false }), deviceId: 'DEV9' })).toEqual([]);
+  });
+});
+
+// ── Codex 003 → packet 004 ────────────────────────────────────────────────
+// Literal copy (not an import) so this file also runs against the pre-fix
+// sources for the red/green proof.
+const UNVERIFIED = 'ยังยืนยันยอดปิดกะนี้กับเซิร์ฟเวอร์ไม่ได้';
+
+/** Commit an online close whose response is LOST (attempt kept, server closed with UUID_A). */
+async function commitWithLostResponse(server: ReturnType<typeof createShiftServer>, journal: ShiftCloseIntentJournal) {
+  server.setAfterCommit('lose');
+  await expect(closeShift(makeShift(), 1338, 'นับแล้ว', deps(server, journal))).rejects.toThrow(CLOSE_SHIFT_TX_FAILED_MESSAGE);
+  server.setAfterCommit('resolve');
+  expect(server.state.commits).toBe(1);
+  expect(server.state.doc).toMatchObject({ status: 'closed', closeCorrelationId: UUID_A, payOutTotal: 162, variance: 0 });
+}
+
+function without(d: ServerShift, key: string): ServerShift {
+  const copy = { ...d };
+  delete copy[key];
+  return copy;
+}
+
+const MALFORMED_OWN_CLOSES: Array<[string, (d: ServerShift) => ServerShift]> = [
+  ['payOutTotal missing', (d) => without(d, 'payOutTotal')],
+  ['payOutTotal non-finite', (d) => ({ ...d, payOutTotal: Number.NaN })],
+  ['payOutTotal malformed (string)', (d) => ({ ...d, payOutTotal: '162' })],
+  ['actualCashCount missing', (d) => without(d, 'actualCashCount')],
+  ['note missing', (d) => without(d, 'note')],
+  ['closedAt unresolved', (d) => ({ ...d, closedAt: null })],
+  ['wrong branch', (d) => ({ ...d, branchId: 'LDP-999' })],
+  ['wrong staff', (d) => ({ ...d, staffId: 'someone-else' })],
+  ['wrong device', (d) => ({ ...d, deviceId: 'DEV2' })],
+  ['inconsistent variance', (d) => ({ ...d, variance: 5 })],
+];
+
+describe('B2.1 — own-correlation retry: Z / journal ONLY from a strictly parsed committed close', () => {
+  test.each(MALFORMED_OWN_CLOSES)('same-runtime retry, server doc closed with OUR id but %s → refused: no Z, no journal, attempt kept, no second write', async (_label, corrupt) => {
+    const server = createShiftServer(openServerShift([REFUND]));
+    const journal = bootJournal();
+    await commitWithLostResponse(server, journal);
+    server.state.doc = corrupt(server.state.doc);
+    // The local cache still says "open": the retry's transaction reads the doc closed with its own id.
+    await expect(closeShift(makeShift(), 1338, 'นับแล้ว', deps(server, journal))).rejects.toThrow(UNVERIFIED);
+    expect(server.state.commits).toBe(1);
+    expect(await entryOf(journal)).toBeUndefined();
+    expect(await attemptsOf(journal)).toMatchObject([{ closeCorrelationId: UUID_A }]);
+    expect(server.state.normalizeAttempts).toBe(0);
+  });
+
+  test('same-runtime retry, fully valid committed doc → Z and journal carry the CANONICAL server totals (never the local shift’s)', async () => {
+    const server = createShiftServer(openServerShift([REFUND]));
+    const journal = bootJournal();
+    await commitWithLostResponse(server, journal);
+    // The retrying POS still holds a stale local shift (no refund folded, other count/note typed).
+    const result = await closeShift(makeShift({ payOutTotal: 0, expectedCash: 999 }), 1, 'อื่น', deps(server, journal));
+    expect(result).toMatchObject({ status: 'closed', payOutTotal: 162, expectedCash: 1000, actualCashCount: 1338, variance: 0, note: 'นับแล้ว' });
+    expect(await entryOf(journal)).toMatchObject({ closeCorrelationId: UUID_A, payOutTotal: 162, actualCashCount: 1338, note: 'นับแล้ว' });
+    expect(server.state.commits).toBe(1);
+  });
+
+  test.each(MALFORMED_OWN_CLOSES)('post-timeout retry (cache shows closed with OUR id, attempt only) with %s → refused, no Z, attempt kept', async (_label, corrupt) => {
+    const server = createShiftServer(openServerShift([REFUND]));
+    const journal = bootJournal();
+    await commitWithLostResponse(server, journal);
+    server.state.doc = corrupt(server.state.doc);
+    getDocFromCacheMock.mockResolvedValue({ exists: () => true, data: () => ({ status: 'closed', closeCorrelationId: UUID_A, cashEntries: [REFUND] }) });
+    await expect(closeShift(makeShift(), 1338, '', deps(server, journal))).rejects.toThrow(UNVERIFIED);
+    expect(await entryOf(journal)).toBeUndefined();
+    expect(await attemptsOf(journal)).toHaveLength(1);
+  });
+
+  test('post-timeout retry with an ALREADY finalized entry, server doc later found malformed → refused (no Z from the local entry alone)', async () => {
+    const server = createShiftServer(openServerShift([REFUND]));
+    const journal = bootJournal();
+    await closeShift(makeShift(), 1338, 'นับแล้ว', deps(server, journal)); // finalized entry exists
+    server.state.doc = { ...server.state.doc, payOutTotal: Number.NaN };
+    getDocFromCacheMock.mockResolvedValue({ exists: () => true, data: () => ({ status: 'closed', closeCorrelationId: UUID_A, cashEntries: [REFUND] }) });
+    await expect(closeShift(makeShift(), 1338, '', deps(server, journal))).rejects.toThrow(UNVERIFIED);
+  });
+
+  test('post-timeout retry, entry exists but server read UNREACHABLE → fail closed (no Z)', async () => {
+    const server = createShiftServer(openServerShift([REFUND]));
+    const journal = bootJournal();
+    await closeShift(makeShift(), 1338, 'นับแล้ว', deps(server, journal));
+    getDocFromCacheMock.mockResolvedValue({ exists: () => true, data: () => ({ status: 'closed', closeCorrelationId: UUID_A, cashEntries: [REFUND] }) });
+    await expect(
+      closeShift(makeShift(), 1338, '', deps(server, journal, { readConfirmation: async () => ({ ok: false }) })),
+    ).rejects.toThrow(UNVERIFIED);
+  });
+
+  test('post-timeout retry, valid committed doc → canonical Z', async () => {
+    const server = createShiftServer(openServerShift([REFUND]));
+    const journal = bootJournal();
+    await commitWithLostResponse(server, journal);
+    getDocFromCacheMock.mockResolvedValue({ exists: () => true, data: () => ({ status: 'closed', closeCorrelationId: UUID_A, cashEntries: [REFUND] }) });
+    const retry = await closeShift(makeShift({ payOutTotal: 0 }), 1, '', deps(server, journal));
+    expect(retry).toMatchObject({ status: 'closed', payOutTotal: 162, actualCashCount: 1338, variance: 0, note: 'นับแล้ว' });
+  });
+
+  test.each(MALFORMED_OWN_CLOSES)('restart sweep with %s → manual attention / kept, no journal entry, no W4', async (label, corrupt) => {
+    const server = createShiftServer(openServerShift([REFUND]));
+    await commitWithLostResponse(server, bootJournal());
+    server.state.doc = corrupt(server.state.doc);
+    const rebooted = bootJournal([UUID_B]);
+    const [r] = await recoverOnlineCloseAttempts({ journal: rebooted, readConfirmation: server.readConfirmation, deviceId: 'DEV1' });
+    expect(r!.outcome).toBe(label === 'closedAt unresolved' ? 'unreachable' : 'manual_attention');
+    expect(await sweep(server, rebooted)).toEqual([]);
+    expect(await entryOf(rebooted)).toBeUndefined();
+    expect(await attemptsOf(rebooted)).toHaveLength(1);
+    expect(server.state.normalizeAttempts).toBe(0);
+  });
+
+  test('own-correlation retry where the doc is closed by ANOTHER correlation → refused as already closed, attempt superseded', async () => {
+    const server = createShiftServer(openServerShift([REFUND]));
+    const journal = bootJournal();
+    await commitWithLostResponse(server, journal);
+    server.state.doc = { ...server.state.doc, closeCorrelationId: UUID_B };
+    await expect(closeShift(makeShift(), 1338, '', deps(server, journal))).rejects.toThrow('กะนี้ถูกปิดไปแล้ว');
+    expect(await entryOf(journal)).toBeUndefined();
+    expect(await attemptsOf(journal)).toEqual([]);
+  });
+});
+
+describe('B2.2 — Variant C (W4) normalization survives failure and restart', () => {
+  test('W4 fails once after confirmation → journal records it OUTSTANDING → restart → sweep retries → normalized exactly once', async () => {
+    const server = createShiftServer(openServerShift([REFUND]));
+    server.state.normalizeFailuresLeft = 1;
+    const first = bootJournal();
+    const result = await closeShift(makeShift(), 1338, '', deps(server, first));
+    await expect(result.whenServerConfirmed).resolves.toMatchObject({ outcome: 'confirmed' });
+    expect(server.state).toMatchObject({ normalizeAttempts: 1, normalizations: 0 });
+    expect(server.state.doc.syncState).toBe('pending');
+    expect(await entryOf(first)).toMatchObject({ status: 'synced', syncStateNormalization: 'outstanding' });
+
+    // ── restart on the same durable IndexedDB ──
+    const rebooted = bootJournal([UUID_B]);
+    await sweep(server, rebooted);
+    expect(server.state).toMatchObject({ normalizeAttempts: 2, normalizations: 1 });
+    expect(server.state.doc.syncState).toBe('synced');
+    expect(await entryOf(rebooted)).toMatchObject({ status: 'synced', syncStateNormalization: 'done', closeCorrelationId: UUID_A });
+
+    await sweep(server, bootJournal());
+    expect(server.state).toMatchObject({ normalizeAttempts: 2, normalizations: 1 }); // idempotent
+  });
+
+  test('repeated W4 failures across restarts → one attempt per sweep, no duplicate write once it succeeds', async () => {
+    const server = createShiftServer(openServerShift([REFUND]));
+    server.state.normalizeFailuresLeft = 3;
+    const result = await closeShift(makeShift(), 1338, '', deps(server, bootJournal()));
+    await result.whenServerConfirmed;
+    await sweep(server, bootJournal()); // fails (2)
+    await sweep(server, bootJournal()); // fails (3)
+    expect(await entryOf(bootJournal())).toMatchObject({ syncStateNormalization: 'outstanding' });
+    expect(server.state.doc.syncState).toBe('pending');
+    await sweep(server, bootJournal()); // succeeds
+    await sweep(server, bootJournal()); // nothing owed
+    expect(server.state).toMatchObject({ normalizeAttempts: 4, normalizations: 1 });
+    expect(await entryOf(bootJournal())).toMatchObject({ syncStateNormalization: 'done' });
+  });
+
+  test('same totals but a DIFFERENT correlation id on the server → never normalized (pending entry: identity mismatch; outstanding entry: mismatch)', async () => {
+    // (a) outstanding W4, then the doc turns out to carry another close's id.
+    const server = createShiftServer(openServerShift([REFUND]));
+    server.state.normalizeFailuresLeft = 1;
+    const r = await closeShift(makeShift(), 1338, '', deps(server, bootJournal()));
+    await r.whenServerConfirmed;
+    server.state.doc = { ...server.state.doc, closeCorrelationId: UUID_B };
+    await sweep(server, bootJournal());
+    expect(server.state).toMatchObject({ normalizeAttempts: 1, normalizations: 0 });
+    expect(server.state.doc.syncState).toBe('pending');
+    expect(await entryOf(bootJournal())).toMatchObject({ status: 'synced', syncStateNormalization: 'mismatch' });
+    await sweep(server, bootJournal());
+    expect(server.state.normalizeAttempts).toBe(1); // terminal: not retried
+
+    // (b) a still-pending entry is never confirmed by equal totals of another close.
+    await deleteDb();
+    const other = createShiftServer(openServerShift([REFUND]));
+    const j = bootJournal();
+    const res = await closeShift(makeShift(), 1338, '', deps(other, j, { readConfirmation: async () => ({ ok: false }) }));
+    await res.whenServerConfirmed;
+    expect(await entryOf(j)).toMatchObject({ status: 'local_closed_pending', closeCorrelationId: UUID_A });
+    other.state.doc = { ...other.state.doc, closeCorrelationId: UUID_B };
+    const [rec] = await sweep(other, j);
+    expect(rec!.outcome).toBe('identity_mismatch');
+    expect(other.state.normalizeAttempts).toBe(0);
+  });
+
+  test('already normalized elsewhere (doc reads synced) → recorded done, no W4 write', async () => {
+    const server = createShiftServer(openServerShift([REFUND]));
+    server.state.normalizeFailuresLeft = 1;
+    const r = await closeShift(makeShift(), 1338, '', deps(server, bootJournal()));
+    await r.whenServerConfirmed;
+    server.state.doc = { ...server.state.doc, syncState: 'synced' };
+    await sweep(server, bootJournal());
+    expect(server.state.normalizeAttempts).toBe(1);
+    expect(await entryOf(bootJournal())).toMatchObject({ syncStateNormalization: 'done' });
+  });
+
+  test('crash between the successful W4 and the local "done" record → next sweep reads synced and records done WITHOUT a second W4', async () => {
+    const server = createShiftServer(openServerShift([REFUND]));
+    const journal = bootJournal();
+    const crashing: ShiftCloseIntentJournal = {
+      ...journal,
+      setSyncStateNormalization: async () => {
+        throw new Error('process died');
+      },
+    };
+    const r = await closeShift(makeShift(), 1338, '', deps(server, crashing));
+    await r.whenServerConfirmed;
+    expect(server.state).toMatchObject({ normalizeAttempts: 1, normalizations: 1 });
+    expect(await entryOf(journal)).toMatchObject({ syncStateNormalization: 'outstanding' });
+    await sweep(server, bootJournal());
+    expect(server.state).toMatchObject({ normalizeAttempts: 1, normalizations: 1 });
+    expect(await entryOf(bootJournal())).toMatchObject({ syncStateNormalization: 'done' });
+  });
+
+  test('commit → crash before finalize → restart recovery whose W4 fails → later sweep completes it', async () => {
+    const server = createShiftServer(openServerShift([REFUND]));
+    server.setAfterCommit('hang');
+    void closeShift(makeShift(), 1338, '', deps(server, bootJournal()));
+    await vi.waitFor(() => expect(server.state.commits).toBe(1));
+    server.state.normalizeFailuresLeft = 1;
+    await sweep(server, bootJournal()); // recovers the attempt, confirms, W4 fails
+    expect(await entryOf(bootJournal())).toMatchObject({ status: 'synced', syncStateNormalization: 'outstanding' });
+    expect(server.state.doc.syncState).toBe('pending');
+    await sweep(server, bootJournal());
+    expect(server.state.doc.syncState).toBe('synced');
+    expect(server.state.normalizations).toBe(1);
+  });
+
+  test('legacy synced entry (pre-B2.2, no normalization field) whose doc is still pending → found by the bounded one-time check and normalized', async () => {
+    const server = createShiftServer(openServerShift([REFUND]));
+    const legacy = bootJournal();
+    const r = await closeShift(makeShift(), 1338, '', deps(server, legacy, { readConfirmation: async () => ({ ok: false }) }));
+    await r.whenServerConfirmed;
+    // Emulate the pre-B2.2 reconciler: synced written WITHOUT any normalization field, W4 failed.
+    await legacy.markSynced('shift-1');
+    const stored = await entryOf(legacy);
+    expect(stored).toMatchObject({ status: 'synced' });
+    expect(stored && 'syncStateNormalization' in stored).toBe(false);
+    expect(server.state.doc.syncState).toBe('pending');
+    await sweep(server, bootJournal());
+    expect(server.state).toMatchObject({ normalizations: 1 });
+    expect(await entryOf(bootJournal())).toMatchObject({ syncStateNormalization: 'done' });
+  });
+});
+
+describe('B2.2 — bounds and schema compatibility', () => {
+  const snapshotFor = (shiftId: string) => ({
+    shiftId, branchId: 'LDP-001', staffId: 'staff-1', staffName: 'ทดสอบ', startingCash: 500, expectedCash: 1000, expectedQr: 0,
+    expectedKbank: 0, expectedCard: 0, expectedCredit: 0, payInTotal: 0, payOutTotal: 0, totalBills: 3, actualCashCount: 1500,
+    variance: 0, note: '', deviceId: 'DEV1',
+  });
+
+  test(`legacy one-time check is bounded: at most ${LEGACY_NORMALIZATION_CHECKS_PER_SWEEP} server reads per sweep`, async () => {
+    const journal = bootJournal(Array.from({ length: 12 }, (_, i) => `${String(i + 1).padStart(8, '0')}-1111-4111-8111-111111111111`));
+    for (let i = 0; i < 12; i += 1) {
+      await journal.upsertCloseIntent(snapshotFor(`legacy-${i}`));
+      await journal.markSynced(`legacy-${i}`); // pre-B2.2 shape: no normalization field
+    }
+    const reads: string[] = [];
+    await runShiftCloseReconciliationSweep({
+      journal,
+      readConfirmation: async (id) => {
+        reads.push(id);
+        return { ok: false };
+      },
+      normalizeSyncState: async () => undefined,
+      deviceId: 'DEV1',
+    });
+    expect(reads).toHaveLength(LEGACY_NORMALIZATION_CHECKS_PER_SWEEP);
+  });
+
+  test('an entry with an UNKNOWN normalization value fails the journal read closed (never silently skipped)', async () => {
+    const mem = createInMemoryShiftCloseIntentStore();
+    const journal = createShiftCloseIntentJournal({ store: mem, generateCloseCorrelationId: () => UUID_A });
+    const created = await journal.upsertCloseIntent(snapshotFor('shift-x'));
+    if (!created.ok) throw new Error('setup');
+    await mem.transact(['shiftCloseIntents'], 'readwrite', (txn) =>
+      txn.put('shiftCloseIntents', 'shift-x', { ...created.value, status: 'synced', syncStateNormalization: 'bogus' }),
+    );
+    const listed = await journal.listCloseIntents();
+    expect(listed).toMatchObject({ ok: false, code: 'unreadable_record', reason: 'malformed_entry' });
   });
 });

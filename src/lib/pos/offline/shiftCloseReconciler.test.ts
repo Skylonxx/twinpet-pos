@@ -84,6 +84,7 @@ function makeConfirmedDoc(overrides: Partial<ShiftCloseConfirmationDoc> = {}): S
     payOutTotal: 0,
     totalBills: 3,
     note: '',
+    closeCorrelationId: FIXED_CORR,
     ...overrides,
   };
 }
@@ -282,7 +283,7 @@ describe('reconcileShiftCloseIntent', () => {
       expect(result.normalized).toBeUndefined();
     });
 
-    test('normalization failure leaves the confirmed journal state intact (best-effort, no throw)', async () => {
+    test('normalization failure leaves the close confirmed and W4 durably OUTSTANDING (no throw)', async () => {
       const { journal, entry } = await makeEntry();
       const normalizeSyncState = vi.fn().mockRejectedValue(new Error('write failed'));
 
@@ -297,6 +298,8 @@ describe('reconcileShiftCloseIntent', () => {
       expect(result.normalized).toBe(false);
       const stored = await journal.getCloseIntent('shift-1');
       expect(stored.ok && stored.value?.status).toBe('synced');
+      // B2.2: the close stays confirmed, but W4 is durably recorded as still owed.
+      expect(stored.ok && stored.value?.syncStateNormalization).toBe('outstanding');
     });
 
     test('re-running reconcile on the now-synced entry does not normalize a second time', async () => {
@@ -342,6 +345,7 @@ describe('reconcileShiftCloseIntent', () => {
           finalizeOnlineClose: base.finalizeOnlineClose,
           listOnlineCloseAttempts: base.listOnlineCloseAttempts,
           discardOnlineCloseAttempt: base.discardOnlineCloseAttempt,
+          setSyncStateNormalization: base.setSyncStateNormalization,
         },
         markSynced,
         markRejectedManualAttention,
@@ -398,11 +402,12 @@ describe('runShiftCloseReconciliationSweep', () => {
       deviceId: DEVICE,
     });
 
-    // Only the one own-device, still-pending entry is swept.
+    // Only the one own-device, still-pending entry is reconciled. B2.2: the
+    // pre-B2.2 own-device synced entry (no normalization field) gets its
+    // one-time Variant C check; the foreign-device entry is never read.
     expect(results).toHaveLength(1);
     expect(results[0]!.shiftId).toBe('shift-own-pending');
-    expect(readConfirmation).toHaveBeenCalledTimes(1);
-    expect(readConfirmation).toHaveBeenCalledWith('shift-own-pending');
+    expect(readConfirmation.mock.calls.map((c) => c[0])).toEqual(['shift-own-pending', 'shift-own-synced']);
   });
 
   test('a failed listCloseIntents() read yields no work, never throws', async () => {
@@ -416,6 +421,7 @@ describe('runShiftCloseReconciliationSweep', () => {
       finalizeOnlineClose: async () => ({ ok: false as const, code: 'unavailable' as const }),
       listOnlineCloseAttempts: async () => ({ ok: false as const, code: 'unavailable' as const }),
       discardOnlineCloseAttempt: async () => ({ ok: false as const, code: 'unavailable' as const }),
+      setSyncStateNormalization: async () => ({ ok: false as const, code: 'unavailable' as const }),
     };
 
     const results = await runShiftCloseReconciliationSweep({
@@ -453,7 +459,8 @@ describe('OBS-B1B reconciler compatibility (test-only; production source unchang
 
     const result = await reconcileShiftCloseIntent(seeded.value, {
       journal,
-      readConfirmation: reader({ ok: true, doc: makeConfirmedDoc() }),
+      // A pre-correlation close never wrote closeCorrelationId (null === null).
+      readConfirmation: reader({ ok: true, doc: makeConfirmedDoc({ closeCorrelationId: null }) }),
       deviceId: DEVICE,
     });
     expect(result.outcome).toBe('confirmed');
@@ -462,7 +469,7 @@ describe('OBS-B1B reconciler compatibility (test-only; production source unchang
     expect(stored.ok && stored.value?.closeCorrelationId).toBeNull();
   });
 
-  test('B1B-T15c: generated metadata does not cause identity misclassification', async () => {
+  test('B1B-T15c (B2 correlation-aware): an entry whose correlation id differs from the doc’s is an identity mismatch', async () => {
     const { journal, entry } = await makeEntry();
     const withDifferentCorr: ShiftCloseIntentEntry = {
       ...entry,
@@ -473,8 +480,9 @@ describe('OBS-B1B reconciler compatibility (test-only; production source unchang
       readConfirmation: reader({ ok: true, doc: makeConfirmedDoc() }),
       deviceId: DEVICE,
     });
-    // Correlation is not part of identityMatches — still confirmed.
-    expect(result.outcome).toBe('confirmed');
+    // B2 (Codex 003): the correlation id IS part of identityMatches — equal
+    // totals of a close with ANOTHER correlation id never certify this entry.
+    expect(result.outcome).toBe('identity_mismatch');
   });
 });
 
@@ -534,8 +542,9 @@ describe('OBS-B2 reconciler pointer-repair forwarding', () => {
         finalizeOnlineClose: base.finalizeOnlineClose,
         listOnlineCloseAttempts: base.listOnlineCloseAttempts,
         discardOnlineCloseAttempt: base.discardOnlineCloseAttempt,
+        setSyncStateNormalization: base.setSyncStateNormalization,
       },
-      readConfirmation: reader({ ok: true, doc: makeConfirmedDoc() }),
+      readConfirmation: reader({ ok: true, doc: makeConfirmedDoc({ closeCorrelationId: entry.closeCorrelationId }) }),
       deviceId: DEVICE,
     });
 
@@ -554,7 +563,8 @@ describe('OBS-B2 reconciler pointer-repair forwarding', () => {
     if (!seeded.ok) throw new Error('setup failed');
     const result = await reconcileShiftCloseIntent(seeded.value, {
       journal,
-      readConfirmation: reader({ ok: true, doc: makeConfirmedDoc() }),
+      // A pre-correlation close never wrote closeCorrelationId (null === null).
+      readConfirmation: reader({ ok: true, doc: makeConfirmedDoc({ closeCorrelationId: null }) }),
       deviceId: DEVICE,
     });
     expect(result.outcome).toBe('confirmed');

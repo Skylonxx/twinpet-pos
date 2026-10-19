@@ -261,7 +261,13 @@ function SaleReturnDialog({
     // The cash guard is NOT released here: it moves to committed_unsynced and
     // clears only after a server read of the shift succeeded.
     const cashShift = cashShiftOf(payload);
-    if (cashShift) void refreshShiftFromServer(cashShift, payload.attemptId);
+    if (cashShift) {
+      void refreshShiftFromServer(cashShift, payload.attemptId, {
+        branchId: payload.branchId,
+        returnId: res.returnId,
+        refundAmount: res.refundAmount,
+      });
+    }
     setPhase({
       kind: 'success',
       returnNo: res.returnNo,

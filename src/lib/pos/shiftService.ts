@@ -26,16 +26,22 @@ import {
   readShiftServerCashPending,
   withMergedCashEntries,
 } from './shiftCashFreshness';
-import { createShiftCloseIntentJournal, type ShiftCloseIntentJournal } from './offline/shiftCloseIntentStore';
+import {
+  createShiftCloseIntentJournal,
+  snapshotsEqual,
+  type ShiftCloseIntentJournal,
+} from './offline/shiftCloseIntentStore';
 import type {
   PointerRepairObserver,
   ShiftCloseIntentBusinessSnapshot,
   ShiftCloseIntentEntry,
 } from './offline/shiftCloseIntentTypes';
 import {
+  parseCommittedOwnClose,
   reconcileShiftCloseIntent,
   recoverOnlineCloseAttempt,
-  type ShiftCloseConfirmationDoc,
+  shiftCloseConfirmationDocFromData,
+  type OwnCloseIdentity,
   type ShiftCloseConfirmationRead,
   type ShiftCloseConfirmationReader,
   type ShiftCloseNormalizer,
@@ -654,6 +660,13 @@ const CLOSE_SHIFT_STORE_UNAVAILABLE_MESSAGE =
   'บันทึกการปิดกะแบบออฟไลน์ไม่สำเร็จ (พื้นที่จัดเก็บในเครื่องไม่พร้อมใช้งานหรือเต็ม) กรุณาลองใหม่ หรือเชื่อมต่ออินเทอร์เน็ตแล้วลองอีกครั้ง';
 const CLOSE_SHIFT_CONFLICT_MESSAGE =
   'พบข้อมูลปิดกะอื่นสำหรับกะนี้ในเครื่องนี้อยู่แล้ว กรุณาตรวจสอบก่อนดำเนินการต่อ';
+/**
+ * B2.1: this device's close of the shift is (or may be) on the server, but it
+ * cannot be confirmed / strictly parsed / reconciled now — no Z is shown; the
+ * durable attempt or entry is kept for the sync sweep and investigation.
+ */
+export const CLOSE_SHIFT_COMMITTED_UNVERIFIED_MESSAGE =
+  'ยังยืนยันยอดปิดกะนี้กับเซิร์ฟเวอร์ไม่ได้ — ยังไม่แสดงรายงานปิดกะ (Z) กรุณาตรวจสอบสถานะการซิงก์ แล้วลองใหม่อีกครั้ง';
 /** Recovery gate B2: an earlier ONLINE close of this shift has an unknown outcome — no offline close over it. */
 export const CLOSE_SHIFT_ONLINE_ATTEMPT_UNRESOLVED_MESSAGE =
   'การปิดกะออนไลน์ครั้งก่อนของกะนี้ยังยืนยันผลกับเซิร์ฟเวอร์ไม่ได้ — ปิดกะแบบออฟไลน์ไม่ได้ กรุณาเชื่อมต่ออินเทอร์เน็ตแล้วปิดกะอีกครั้ง';
@@ -764,31 +777,7 @@ export const readShiftCloseConfirmation: ShiftCloseConfirmationReader = async (
   try {
     const snap = await getDocFromServer(doc(db, collections.shifts, shiftId));
     if (!snap.exists()) return { ok: true, doc: { exists: false } };
-    const data = snap.data() as Record<string, unknown>;
-    const confirmationDoc: ShiftCloseConfirmationDoc = {
-      exists: true,
-      status: data.status as string | undefined,
-      closedAt: data.closedAt,
-      closedOffline: data.closedOffline as boolean | undefined,
-      syncState: data.syncState as ShiftCloseConfirmationDoc['syncState'],
-      deviceId: (data.deviceId as string | null | undefined) ?? null,
-      branchId: data.branchId as string | undefined,
-      staffId: data.staffId as string | undefined,
-      startingCash: data.startingCash as number | undefined,
-      actualCashCount: data.actualCashCount as number | undefined,
-      variance: data.variance as number | undefined,
-      expectedCash: data.expectedCash as number | undefined,
-      expectedQr: data.expectedQr as number | undefined,
-      expectedKbank: data.expectedKbank as number | undefined,
-      expectedCard: data.expectedCard as number | undefined,
-      expectedCredit: data.expectedCredit as number | undefined,
-      payInTotal: data.payInTotal as number | undefined,
-      payOutTotal: data.payOutTotal as number | undefined,
-      totalBills: data.totalBills as number | undefined,
-      note: data.note as string | undefined,
-      closeCorrelationId: typeof data.closeCorrelationId === 'string' ? data.closeCorrelationId : null,
-    };
-    return { ok: true, doc: confirmationDoc };
+    return { ok: true, doc: shiftCloseConfirmationDocFromData(snap.data() as Record<string, unknown>) };
   } catch {
     return { ok: false };
   }
@@ -914,31 +903,15 @@ function closeWritePayload(
   };
 }
 
-/** The business snapshot a doc closed by THIS device's earlier attempt committed. */
-function snapshotFromClosedDoc(
-  shift: Shift,
-  d: Record<string, unknown>,
-  deviceId: string,
-): ShiftCloseIntentBusinessSnapshot {
-  const num = (v: unknown, fallback: number) => (typeof v === 'number' && Number.isFinite(v) ? v : fallback);
+/** This device's own-close identity for a shift + correlation id (input of {@link parseCommittedOwnClose}). */
+function ownCloseIdentity(shift: Shift, deviceId: string, closeCorrelationId: string): OwnCloseIdentity {
   return {
     shiftId: shift.id,
     branchId: shift.branchId,
     staffId: shift.staffId,
     staffName: shift.staffName,
-    startingCash: num(d.startingCash, shift.startingCash),
-    expectedCash: num(d.expectedCash, shift.expectedCash),
-    expectedQr: num(d.expectedQr, shift.expectedQr),
-    expectedKbank: num(d.expectedKbank, shift.expectedKbank),
-    expectedCard: num(d.expectedCard, shift.expectedCard),
-    expectedCredit: num(d.expectedCredit, shift.expectedCredit),
-    payInTotal: num(d.payInTotal, shift.payInTotal),
-    payOutTotal: num(d.payOutTotal, shift.payOutTotal),
-    totalBills: num(d.totalBills, shift.totalBills),
-    actualCashCount: num(d.actualCashCount, 0),
-    variance: num(d.variance, 0),
-    note: typeof d.note === 'string' ? d.note : '',
     deviceId,
+    closeCorrelationId,
   };
 }
 
@@ -1048,7 +1021,8 @@ export async function closeShift(
     // committed values instead of "already closed". Anything else: refused.
     if (online && cachedData.status === 'closed' && typeof cachedData.closeCorrelationId === 'string') {
       const own = await recoverOwnCommittedClose(shift, cachedData.closeCorrelationId, cachedEntries, ctx);
-      if (own) return own;
+      if (own === 'unverified') throw new Error(CLOSE_SHIFT_COMMITTED_UNVERIFIED_MESSAGE);
+      if (own !== 'not_own') return own;
     }
     throw new Error(CLOSE_SHIFT_ALREADY_CLOSED_MESSAGE);
   }
@@ -1226,9 +1200,24 @@ async function closeShiftOnline(
       if (d.status !== 'open') {
         if (d.status === 'closed' && d.closeCorrelationId === correlationId) {
           // An earlier attempt of THIS close committed (its response was lost).
-          const snapshot = snapshotFromClosedDoc(shift, d, deviceId);
+          // B2.1: its Z / journal come ONLY from the strictly parsed committed
+          // doc — a missing / malformed / inconsistent field or a wrong
+          // identity refuses (no Z, no journal; the attempt is kept).
+          const parsed = parseCommittedOwnClose(
+            ownCloseIdentity(shift, deviceId, correlationId),
+            shiftCloseConfirmationDocFromData(d),
+          );
+          if (!parsed.ok) throw new ShiftCloseRefusal(CLOSE_SHIFT_COMMITTED_UNVERIFIED_MESSAGE);
+          const { snapshot } = parsed;
           const entries = Array.isArray(d.cashEntries) ? (d.cashEntries as ShiftCashEntry[]) : [];
-          return { snapshot, folded: { ...withMergedCashEntries(shift, cachedEntries, entries), ...pickTotals(snapshot) } };
+          return {
+            snapshot,
+            folded: {
+              ...withMergedCashEntries(shift, cachedEntries, entries),
+              ...pickTotals(snapshot),
+              startingCash: snapshot.startingCash,
+            },
+          };
         }
         throw new ShiftCloseRefusal(CLOSE_SHIFT_ALREADY_CLOSED_MESSAGE, d.status === 'closed');
       }
@@ -1288,6 +1277,12 @@ async function closeShiftOnline(
     const entry = finalized.value;
     return result(entry.closedAtLocal, reconcileClosed(entry, ctx));
   }
+  if (finalized.code === 'conflict') {
+    // A DIFFERENT local close record exists for this shift: the committed close
+    // cannot be reconciled with it — never show a Z over that disagreement.
+    console.warn('[shiftService] committed online close conflicts with the local journal', finalized);
+    throw new Error(CLOSE_SHIFT_COMMITTED_UNVERIFIED_MESSAGE);
+  }
   // The close IS committed; only the local finalize failed. Never report it as
   // failed. The prepared attempt is still durable, so recovery from the
   // authoritative doc is retried now and by every boot/reconnect sweep.
@@ -1321,21 +1316,30 @@ async function directCloseConfirmation(
 
 /**
  * Recovery gate B2 — the cached shift is closed with `closeCorrelationId`. If
- * that is THIS device's journaled close, or its prepared attempt (finalized
- * here from the authoritative server doc), return the closed snapshot built
- * from the COMMITTED values. `null` = not provably this device's own close.
+ * that is THIS device's journaled close, or its prepared attempt, the close
+ * is confirmed by a confirmation-grade read parsed with
+ * {@link parseCommittedOwnClose} (B2.1: the journaled entry must ALSO equal
+ * the parsed committed values) and its Z is returned from those values.
+ *   `not_own`     not provably this device's close (caller: "already closed")
+ *   `unverified`  this device's close, but it cannot be confirmed / parsed /
+ *                 reconciled now — no Z; the attempt / entry are kept
  */
 async function recoverOwnCommittedClose(
   shift: Shift,
   closeCorrelationId: string,
   cachedEntries: ShiftCashEntry[],
   ctx: CloseReconcileDeps,
-): Promise<CloseShiftResult | null> {
+): Promise<CloseShiftResult | 'not_own' | 'unverified'> {
   const { journal, deviceId } = ctx;
   let entry: ShiftCloseIntentEntry | null = null;
   try {
     const got = await journal.getCloseIntent(shift.id);
     if (got.ok && got.value && got.value.deviceId === deviceId && got.value.closeCorrelationId === closeCorrelationId) {
+      const read = await ctx.readConfirmation(shift.id);
+      if (!read.ok) return 'unverified';
+      const parsed = parseCommittedOwnClose(ownCloseIdentity(shift, deviceId, closeCorrelationId), read.doc);
+      if (!parsed.ok) return parsed.reason === 'other_correlation' ? 'not_own' : 'unverified';
+      if (!snapshotsEqual(parsed.snapshot, got.value)) return 'unverified';
       entry = got.value;
     }
     if (!entry) {
@@ -1343,13 +1347,14 @@ async function recoverOwnCommittedClose(
       const own = listed.ok
         ? listed.value.find((a) => a.shiftId === shift.id && a.closeCorrelationId === closeCorrelationId)
         : undefined;
-      if (!own) return null;
+      if (!own) return 'not_own';
       const r = await recoverOnlineCloseAttempt(own, ctx);
-      if (r.outcome !== 'recovered' || !r.entry) return null;
+      if (r.outcome === 'superseded') return 'not_own';
+      if (r.outcome !== 'recovered' || !r.entry) return 'unverified';
       entry = r.entry;
     }
   } catch {
-    return null;
+    return 'unverified';
   }
   return {
     ...withMergedCashEntries(shift, cachedEntries),

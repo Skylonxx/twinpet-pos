@@ -50,6 +50,41 @@ export type ShiftCloseConfirmationDoc = {
   closeCorrelationId?: string | null;
 };
 
+/**
+ * Raw shift-doc data → {@link ShiftCloseConfirmationDoc}. Pure type narrowing
+ * only — no defaults, no coercion: a wrongly-typed field becomes `undefined`
+ * (or `null` for ids), which every consumer treats as missing. Shared by the
+ * confirmation reader and the in-transaction own-correlation retry.
+ */
+export function shiftCloseConfirmationDocFromData(data: Record<string, unknown>): ShiftCloseConfirmationDoc {
+  const num = (v: unknown): number | undefined => (typeof v === 'number' ? v : undefined);
+  const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
+  const syncState = data.syncState;
+  return {
+    exists: true,
+    status: str(data.status),
+    closedAt: data.closedAt,
+    closedOffline: typeof data.closedOffline === 'boolean' ? data.closedOffline : undefined,
+    syncState: syncState === 'pending' || syncState === 'synced' ? syncState : undefined,
+    deviceId: typeof data.deviceId === 'string' ? data.deviceId : null,
+    branchId: str(data.branchId),
+    staffId: str(data.staffId),
+    startingCash: num(data.startingCash),
+    actualCashCount: num(data.actualCashCount),
+    variance: num(data.variance),
+    expectedCash: num(data.expectedCash),
+    expectedQr: num(data.expectedQr),
+    expectedKbank: num(data.expectedKbank),
+    expectedCard: num(data.expectedCard),
+    expectedCredit: num(data.expectedCredit),
+    payInTotal: num(data.payInTotal),
+    payOutTotal: num(data.payOutTotal),
+    totalBills: num(data.totalBills),
+    note: str(data.note),
+    closeCorrelationId: typeof data.closeCorrelationId === 'string' ? data.closeCorrelationId : null,
+  };
+}
+
 /** `ok: false` means the read could not be trusted (offline/unreachable/error) — never a rejection signal. */
 export type ShiftCloseConfirmationRead =
   | { ok: true; doc: ShiftCloseConfirmationDoc }
@@ -101,11 +136,16 @@ function isResolvedServerTimestamp(value: unknown): value is { toDate: () => Dat
 }
 
 /**
- * Full frozen-identity match (Codex guardrail): branch/staff/device plus every
- * drawer-relevant total. Never adjudicates a mismatch — only flags it.
+ * Full frozen-identity match (Codex guardrail): close correlation id,
+ * branch/staff/device plus every drawer-relevant total. Never adjudicates a
+ * mismatch — only flags it. B2: the correlation id must be EQUAL (a non-null
+ * id on either side must match exactly; only a pre-correlation entry, null,
+ * matches a doc without one), so identical totals of a DIFFERENT close can
+ * never certify this entry.
  */
 function identityMatches(entry: ShiftCloseIntentEntry, doc: ShiftCloseConfirmationDoc): boolean {
   return (
+    (doc.closeCorrelationId ?? null) === (entry.closeCorrelationId ?? null) &&
     doc.branchId === entry.branchId &&
     doc.staffId === entry.staffId &&
     doc.deviceId === entry.deviceId &&
@@ -191,25 +231,28 @@ export async function reconcileShiftCloseIntent(
   // to Firestore while the local journal is still `local_closed_pending` — the
   // exact local/remote inconsistency Codex Finding 5 warns against). Classify
   // as retryable `unreachable` instead.
+  //
+  // B2.2: the same journal write records whether the Variant C (W4) write is
+  // still OWED (`outstanding`). The close stays confirmed; W4 is marked `done`
+  // only after its authoritative write succeeded, so a W4 failure or a crash
+  // anywhere before that leaves durable state the next sweep retries
+  // ({@link retryOutstandingNormalizations}).
+  const owesW4 = doc.syncState === 'pending' && doc.deviceId === deps.deviceId;
   let pointerRepair: PointerRepairOutcome | undefined;
-  const syncedResult = await deps.journal.markSynced(entry.shiftId, (outcome) => {
-    pointerRepair = outcome;
-  });
+  const syncedResult = await deps.journal.markSynced(
+    entry.shiftId,
+    (outcome) => {
+      pointerRepair = outcome;
+    },
+    owesW4 ? 'outstanding' : doc.syncState === 'synced' ? 'done' : 'not_applicable',
+  );
   if (!syncedResult.ok) {
     return { shiftId: entry.shiftId, outcome: 'unreachable', pointerRepair };
   }
 
   let normalized: boolean | undefined;
-  if (deps.normalizeSyncState && doc.syncState === 'pending' && doc.deviceId === deps.deviceId) {
-    try {
-      await deps.normalizeSyncState(entry.shiftId);
-      normalized = true;
-    } catch {
-      // Best-effort, no-guaranteed-retry (Codex guardrail): the journal already
-      // carries the confirmed truth; a failed normalization write is not retried
-      // by this packet and must not be overclaimed as eventually-consistent.
-      normalized = false;
-    }
+  if (owesW4 && deps.normalizeSyncState) {
+    normalized = await writeNormalization(entry, deps.normalizeSyncState, deps.journal);
   }
 
   return {
@@ -219,6 +262,120 @@ export async function reconcileShiftCloseIntent(
     normalized,
     pointerRepair,
   };
+}
+
+/**
+ * ONE W4 attempt for a confirmed close of this device; on success records
+ * `done`. A failed W4 leaves `outstanding` (retried later). A failed `done`
+ * write after a successful W4 is harmless: the next retry reads the doc as
+ * `synced` and records `done` without writing W4 again. Never throws.
+ */
+async function writeNormalization(
+  entry: Pick<ShiftCloseIntentEntry, 'shiftId' | 'closeCorrelationId'>,
+  normalize: ShiftCloseNormalizer,
+  journal: ShiftCloseIntentJournal,
+): Promise<boolean> {
+  try {
+    await normalize(entry.shiftId);
+  } catch {
+    return false;
+  }
+  try {
+    await journal.setSyncStateNormalization(entry.shiftId, entry.closeCorrelationId, 'done');
+  } catch {
+    /* see above: recorded on the next retry */
+  }
+  return true;
+}
+
+/** Bound on pre-B2.2 (`synced`, no normalization field) entries checked per sweep. */
+export const LEGACY_NORMALIZATION_CHECKS_PER_SWEEP = 10;
+
+export type NormalizationRetryOutcome =
+  /** W4 written now. */
+  | 'normalized'
+  /** The doc already reads `synced` (an earlier W4 landed): recorded `done`, nothing written. */
+  | 'already_normalized'
+  /** The doc no longer matches this entry (correlation / identity / totals): recorded `mismatch`, nothing written. */
+  | 'mismatch'
+  /** Nothing owed by this device (legacy entry whose doc is not pending for it). */
+  | 'not_applicable'
+  /** Read failed, doc not a resolved close, W4 failed, or no normalizer: kept `outstanding`, retried later. */
+  | 'retry_later';
+
+export type NormalizationRetryResult = { shiftId: string; outcome: NormalizationRetryOutcome };
+
+/**
+ * B2.2 — retry every THIS-device `synced` entry whose W4 is still owed
+ * (`outstanding`), plus up to {@link LEGACY_NORMALIZATION_CHECKS_PER_SWEEP}
+ * pre-B2.2 `synced` entries (field absent) checked once each. One read and at
+ * most one W4 per entry per sweep — no busy loop; the boot / `online` / sync
+ * orchestrator triggers provide the retries. Only a confirmation-grade read
+ * of THIS close (equal correlation id, identity and totals, still `pending`,
+ * this device) is normalized; anything else is never written. Never throws.
+ */
+export async function retryOutstandingNormalizations(
+  deps: ReconcileShiftCloseIntentDeps,
+  /** Shifts whose W4 was already attempted in this pass (by their reconcile) — not retried again now. */
+  skipShiftIds: ReadonlySet<string> = new Set(),
+): Promise<NormalizationRetryResult[]> {
+  let listed: Awaited<ReturnType<ShiftCloseIntentJournal['listCloseIntents']>>;
+  try {
+    listed = await deps.journal.listCloseIntents();
+  } catch {
+    return [];
+  }
+  if (!listed.ok) return [];
+  const mine = listed.value.filter(
+    (e) => e.status === 'synced' && e.deviceId === deps.deviceId && !skipShiftIds.has(e.shiftId),
+  );
+  const outstanding = mine.filter((e) => e.syncStateNormalization === 'outstanding');
+  const legacy = mine
+    .filter((e) => e.syncStateNormalization === undefined)
+    .sort((a, b) => b.closedAtLocal - a.closedAtLocal)
+    .slice(0, LEGACY_NORMALIZATION_CHECKS_PER_SWEEP);
+
+  const results: NormalizationRetryResult[] = [];
+  for (const entry of [...outstanding, ...legacy]) {
+    results.push({ shiftId: entry.shiftId, outcome: await retryNormalization(entry, deps) });
+  }
+  return results;
+}
+
+async function retryNormalization(
+  entry: ShiftCloseIntentEntry,
+  deps: ReconcileShiftCloseIntentDeps,
+): Promise<NormalizationRetryOutcome> {
+  let read: ShiftCloseConfirmationRead;
+  try {
+    read = await deps.readConfirmation(entry.shiftId);
+  } catch {
+    read = { ok: false };
+  }
+  if (!read.ok) return 'retry_later';
+  const { doc } = read;
+  if (!doc.exists || doc.status !== 'closed' || !isResolvedServerTimestamp(doc.closedAt)) return 'retry_later';
+  const record = async (state: 'done' | 'mismatch' | 'not_applicable') => {
+    try {
+      await deps.journal.setSyncStateNormalization(entry.shiftId, entry.closeCorrelationId, state);
+    } catch {
+      /* re-evaluated on the next sweep */
+    }
+  };
+  if (!identityMatches(entry, doc)) {
+    await record('mismatch');
+    return 'mismatch';
+  }
+  if (doc.syncState === 'synced') {
+    await record('done');
+    return 'already_normalized';
+  }
+  if (doc.syncState !== 'pending' || doc.deviceId !== deps.deviceId) {
+    await record('not_applicable');
+    return 'not_applicable';
+  }
+  if (!deps.normalizeSyncState) return 'retry_later';
+  return (await writeNormalization(entry, deps.normalizeSyncState, deps.journal)) ? 'normalized' : 'retry_later';
 }
 
 // ── Recovery gate B2: prepared ONLINE close attempts ──────────────────────
@@ -245,56 +402,120 @@ function finiteNumber(v: unknown): v is number {
   return typeof v === 'number' && Number.isFinite(v);
 }
 
+/** The identity a W3 close of THIS device's attempt committed under. */
+export type OwnCloseIdentity = {
+  shiftId: string;
+  branchId: string;
+  staffId: string;
+  staffName: string;
+  deviceId: string;
+  closeCorrelationId: string;
+};
+
+export type CommittedOwnCloseParse =
+  | { ok: true; snapshot: ShiftCloseIntentBusinessSnapshot; closedAt: Date }
+  | {
+      ok: false;
+      /**
+       * not_closed           doc missing / not `closed`
+       * other_correlation    closed by ANOTHER correlation id (or none)
+       * closed_at_unresolved `closedAt` is not a resolved server Timestamp
+       * identity_mismatch    branch / staff / device differ from the attempt
+       * malformed_fields     a mandatory committed field is missing / non-finite
+       * inconsistent_fields  variance ≠ actualCashCount − expected drawer
+       */
+      reason:
+        | 'not_closed'
+        | 'other_correlation'
+        | 'closed_at_unresolved'
+        | 'identity_mismatch'
+        | 'malformed_fields'
+        | 'inconsistent_fields';
+    };
+
 /**
- * Strict rebuild of the COMMITTED business snapshot from the authoritative
- * closed doc (the W3 close writes every one of these fields). Any missing or
- * non-numeric field → `null`: never reconstruct a Z from guessed values.
+ * B2.1 — THE strict parser of a server-confirmed close committed by THIS
+ * device's attempt. Shared by the in-transaction own-correlation retry, the
+ * cached-closed retry and the restart / reconnect sweep, so no path can build
+ * a journal entry or a Z from anything else.
+ *
+ * Mandatory (each is written by the W3 close and is needed by the journal /
+ * Z / Variant C — none is defaulted, coerced or zero-filled):
+ *  - `status === 'closed'` and `closeCorrelationId` === the attempt's id
+ *    (proves THIS commit, not another close of the shift)
+ *  - `closedAt` a resolved server Timestamp (authoritative close time)
+ *  - `branchId`, `staffId`, `deviceId` === the attempt (deviceId gates Variant C)
+ *  - finite `startingCash`, `expectedCash`, `expectedQr`, `expectedKbank`,
+ *    `expectedCard`, `expectedCredit`, `payInTotal`, `payOutTotal`,
+ *    `totalBills`, `actualCashCount`, `variance` (every Z / journal total)
+ *  - string `note`
+ *  - `variance === actualCashCount − (startingCash + expectedCash + payInTotal
+ *    − payOutTotal)`, the exact expression W3 wrote it with
+ *    (`calcShiftDrawerExpected`), so totals that disagree are rejected.
+ * `staffName` comes from the attempt (W3 never writes it). Only used for
+ * own-correlation recovery — historical / foreign closes never pass through it.
  */
-function snapshotFromCommittedDoc(
-  attempt: OnlineCloseAttemptRecord,
-  doc: ShiftCloseConfirmationDoc,
-): ShiftCloseIntentBusinessSnapshot | null {
-  const nums = [
-    doc.startingCash,
-    doc.expectedCash,
-    doc.expectedQr,
-    doc.expectedKbank,
-    doc.expectedCard,
-    doc.expectedCredit,
-    doc.payInTotal,
-    doc.payOutTotal,
-    doc.totalBills,
-    doc.actualCashCount,
-    doc.variance,
-  ];
-  if (!nums.every(finiteNumber) || typeof doc.note !== 'string') return null;
+export function parseCommittedOwnClose(identity: OwnCloseIdentity, doc: ShiftCloseConfirmationDoc): CommittedOwnCloseParse {
+  if (!doc.exists || doc.status !== 'closed') return { ok: false, reason: 'not_closed' };
+  if (!identity.closeCorrelationId || doc.closeCorrelationId !== identity.closeCorrelationId) {
+    return { ok: false, reason: 'other_correlation' };
+  }
+  if (!isResolvedServerTimestamp(doc.closedAt)) return { ok: false, reason: 'closed_at_unresolved' };
+  if (doc.branchId !== identity.branchId || doc.staffId !== identity.staffId || doc.deviceId !== identity.deviceId) {
+    return { ok: false, reason: 'identity_mismatch' };
+  }
+  const {
+    startingCash, expectedCash, expectedQr, expectedKbank, expectedCard, expectedCredit,
+    payInTotal, payOutTotal, totalBills, actualCashCount, variance, note,
+  } = doc;
+  if (
+    !finiteNumber(startingCash) || !finiteNumber(expectedCash) || !finiteNumber(expectedQr) ||
+    !finiteNumber(expectedKbank) || !finiteNumber(expectedCard) || !finiteNumber(expectedCredit) ||
+    !finiteNumber(payInTotal) || !finiteNumber(payOutTotal) || !finiteNumber(totalBills) ||
+    !finiteNumber(actualCashCount) || !finiteNumber(variance) || typeof note !== 'string'
+  ) {
+    return { ok: false, reason: 'malformed_fields' };
+  }
+  if (variance !== actualCashCount - (startingCash + expectedCash + payInTotal - payOutTotal)) {
+    return { ok: false, reason: 'inconsistent_fields' };
+  }
+  let closedAt: Date;
+  try {
+    closedAt = doc.closedAt.toDate();
+  } catch {
+    return { ok: false, reason: 'closed_at_unresolved' };
+  }
+  if (!(closedAt instanceof Date) || Number.isNaN(closedAt.getTime())) return { ok: false, reason: 'closed_at_unresolved' };
   return {
-    shiftId: attempt.shiftId,
-    branchId: attempt.branchId,
-    staffId: attempt.staffId,
-    staffName: attempt.staffName,
-    startingCash: doc.startingCash as number,
-    expectedCash: doc.expectedCash as number,
-    expectedQr: doc.expectedQr as number,
-    expectedKbank: doc.expectedKbank as number,
-    expectedCard: doc.expectedCard as number,
-    expectedCredit: doc.expectedCredit as number,
-    payInTotal: doc.payInTotal as number,
-    payOutTotal: doc.payOutTotal as number,
-    totalBills: doc.totalBills as number,
-    actualCashCount: doc.actualCashCount as number,
-    variance: doc.variance as number,
-    note: doc.note,
-    deviceId: attempt.deviceId,
+    ok: true,
+    closedAt,
+    snapshot: {
+      shiftId: identity.shiftId,
+      branchId: identity.branchId,
+      staffId: identity.staffId,
+      staffName: identity.staffName,
+      startingCash,
+      expectedCash,
+      expectedQr,
+      expectedKbank,
+      expectedCard,
+      expectedCredit,
+      payInTotal,
+      payOutTotal,
+      totalBills,
+      actualCashCount,
+      variance,
+      note,
+      deviceId: identity.deviceId,
+    },
   };
 }
 
 /**
  * Resolve ONE prepared online close attempt against a confirmation-grade read.
- * Never invents a close: only a doc closed with THIS correlation id (and this
- * branch/staff/device) is journaled, from the doc's own committed values.
- * Idempotent: the journal finalize is a no-op for an equal existing entry.
- * Never throws.
+ * Never invents a close: only a doc that {@link parseCommittedOwnClose}
+ * accepts is journaled, from the doc's own committed values. Idempotent: the
+ * journal finalize is a no-op for an equal existing entry. Never throws.
  */
 export async function recoverOnlineCloseAttempt(
   attempt: OnlineCloseAttemptRecord,
@@ -309,24 +530,23 @@ export async function recoverOnlineCloseAttempt(
     read = { ok: false };
   }
   if (!read.ok) return { shiftId, outcome: 'unreachable' };
-  const { doc } = read;
-  if (!doc.exists || doc.status !== 'closed') return { shiftId, outcome: 'not_closed' };
-  if (doc.closeCorrelationId !== attempt.closeCorrelationId) {
-    // Closed by another operation: W3 only closes an OPEN doc, so this attempt
-    // can never commit now — definitive, safe to drop (no Z, no journal entry).
-    try {
-      await deps.journal.discardOnlineCloseAttempt(shiftId, attempt.closeCorrelationId);
-    } catch {
-      return { shiftId, outcome: 'unreachable' };
+  const parsed = parseCommittedOwnClose(attempt, read.doc);
+  if (!parsed.ok) {
+    if (parsed.reason === 'not_closed') return { shiftId, outcome: 'not_closed' };
+    if (parsed.reason === 'closed_at_unresolved') return { shiftId, outcome: 'unreachable' };
+    if (parsed.reason === 'other_correlation') {
+      // Closed by another operation: W3 only closes an OPEN doc, so this attempt
+      // can never commit now — definitive, safe to drop (no Z, no journal entry).
+      try {
+        await deps.journal.discardOnlineCloseAttempt(shiftId, attempt.closeCorrelationId);
+      } catch {
+        return { shiftId, outcome: 'unreachable' };
+      }
+      return { shiftId, outcome: 'superseded' };
     }
-    return { shiftId, outcome: 'superseded' };
-  }
-  if (!isResolvedServerTimestamp(doc.closedAt)) return { shiftId, outcome: 'unreachable' };
-  if (doc.branchId !== attempt.branchId || doc.staffId !== attempt.staffId || doc.deviceId !== attempt.deviceId) {
     return { shiftId, outcome: 'manual_attention' };
   }
-  const snapshot = snapshotFromCommittedDoc(attempt, doc);
-  if (!snapshot) return { shiftId, outcome: 'manual_attention' };
+  const { snapshot } = parsed;
   let finalized: Awaited<ReturnType<ReconcileShiftCloseIntentDeps['journal']['finalizeOnlineClose']>>;
   try {
     finalized = await deps.journal.finalizeOnlineClose(snapshot, attempt.closeCorrelationId);
@@ -383,5 +603,8 @@ export async function runShiftCloseReconciliationSweep(
   for (const entry of pending) {
     results.push(await reconcileShiftCloseIntent(entry, deps));
   }
+  // B2.2: confirmed closes whose Variant C (W4) write is still owed — at most
+  // one W4 attempt per close per sweep (just-reconciled ones already had theirs).
+  await retryOutstandingNormalizations(deps, new Set(pending.map((e) => e.shiftId)));
   return results;
 }

@@ -10,6 +10,7 @@ import type {
   ShiftCloseIntentObservabilityEvent,
   ShiftCloseIntentStatus,
   PrepareOnlineCloseResult,
+  SyncStateNormalization,
 } from './shiftCloseIntentTypes';
 import { SHIFT_CLOSE_INTENT_STALE_AGE_MS } from './shiftCloseIntentTypes';
 import {
@@ -549,8 +550,15 @@ function isCloseIntentEntry(v: unknown): v is ShiftCloseIntentEntry {
   if (!isValidLocalTimestamp(v.updatedAtLocal)) return false;
   if (!(typeof v.lastErrorMessage === 'string' || v.lastErrorMessage === null)) return false;
 
+  // B2.2: optional, additive. Absent = pre-B2.2 entry; present must be known.
+  if ('syncStateNormalization' in v && !SYNC_STATE_NORMALIZATIONS.includes(v.syncStateNormalization as SyncStateNormalization)) {
+    return false;
+  }
+
   return true;
 }
+
+const SYNC_STATE_NORMALIZATIONS: readonly SyncStateNormalization[] = ['outstanding', 'done', 'not_applicable', 'mismatch'];
 
 /**
  * Read-view normalization only: historical physical absence of
@@ -984,9 +992,27 @@ export type ShiftCloseIntentJournal = {
   ) => Promise<CloseIntentResult<ShiftCloseIntentEntry>>;
   getCloseIntent: (shiftId: string) => Promise<CloseIntentResult<ShiftCloseIntentEntry | undefined>>;
   listCloseIntents: () => Promise<ListCloseIntentsResult>;
+  /**
+   * `normalization` (B2.2) is written in the SAME store transaction as the
+   * `synced` transition — `outstanding` when a W4 write is still owed — so a
+   * failure/crash before W4 succeeds leaves durable retry state. Omitted → the
+   * field is left untouched.
+   */
   markSynced: (
     shiftId: string,
     observePointerRepair?: PointerRepairObserver,
+    normalization?: SyncStateNormalization,
+  ) => Promise<CloseIntentResult<ShiftCloseIntentEntry>>;
+  /**
+   * B2.2 — records the W4 normalization progress of a `synced` entry. Writes
+   * ONLY if the entry is `synced` and still carries `closeCorrelationId`
+   * (null === null for pre-correlation entries); otherwise `conflict` /
+   * `not_found` and nothing is written.
+   */
+  setSyncStateNormalization: (
+    shiftId: string,
+    closeCorrelationId: string | null,
+    normalization: SyncStateNormalization,
   ) => Promise<CloseIntentResult<ShiftCloseIntentEntry>>;
   markRejectedManualAttention: (
     shiftId: string,
@@ -1098,6 +1124,7 @@ function buildJournalApi(
     status: ShiftCloseIntentStatus,
     lastErrorMessage: string | null,
     observePointerRepair?: PointerRepairObserver,
+    normalization?: SyncStateNormalization,
   ): Promise<CloseIntentResult<ShiftCloseIntentEntry>> =>
     runStore(store, async (s) => {
       const businessResult = await s.transact(['shiftCloseIntents'], 'readwrite', async (txn) => {
@@ -1118,6 +1145,7 @@ function buildJournalApi(
           status,
           lastErrorMessage,
           updatedAtLocal: nowMs,
+          ...(normalization !== undefined ? { syncStateNormalization: normalization } : {}),
         };
         await txn.put('shiftCloseIntents', shiftId, next);
         return {
@@ -1208,8 +1236,26 @@ function buildJournalApi(
         return classifyListRecords(raw);
       }),
 
-    markSynced: (shiftId, observePointerRepair) =>
-      markStatus(shiftId, 'synced', null, observePointerRepair),
+    markSynced: (shiftId, observePointerRepair, normalization) =>
+      markStatus(shiftId, 'synced', null, observePointerRepair, normalization),
+
+    setSyncStateNormalization: (shiftId, closeCorrelationId, normalization) =>
+      runStore(store, (s) =>
+        s.transact(['shiftCloseIntents'], 'readwrite', async (txn): Promise<CloseIntentResult<ShiftCloseIntentEntry>> => {
+          const raw = await txn.get<unknown>('shiftCloseIntents', shiftId);
+          if (raw === undefined) return notFound<ShiftCloseIntentEntry>();
+          if (!isCloseIntentEntry(raw)) {
+            return conflict<ShiftCloseIntentEntry>(`Stored close-intent for shift "${shiftId}" is unreadable.`);
+          }
+          const entry = normalizeCloseIntentEntry(raw as unknown as Record<string, unknown>);
+          if (entry.status !== 'synced' || entry.closeCorrelationId !== closeCorrelationId) {
+            return conflict<ShiftCloseIntentEntry>(`Close-intent for shift "${shiftId}" is not this synced close.`);
+          }
+          const next = { ...(raw as unknown as Record<string, unknown>), syncStateNormalization: normalization, updatedAtLocal: now() };
+          await txn.put('shiftCloseIntents', shiftId, next);
+          return { ok: true, value: normalizeCloseIntentEntry(next) };
+        }),
+      ),
 
     markRejectedManualAttention: (shiftId, reason, observePointerRepair) =>
       markStatus(shiftId, 'rejected_manual_attention', reason, observePointerRepair),
