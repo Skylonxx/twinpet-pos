@@ -46,7 +46,7 @@ vi.mock('./deviceId', async (importOriginal) => {
 });
 
 import {
-  __resetInflightOnlineCloseForTests,
+  CLOSE_SHIFT_CASH_GUARD_UNVERIFIABLE_MESSAGE,
   CLOSE_SHIFT_FRESHNESS_MESSAGE,
   CLOSE_SHIFT_PENDING_WRITES_MESSAGE,
   CLOSE_SHIFT_SERVER_CASH_PENDING_MESSAGE,
@@ -61,6 +61,7 @@ import {
   hasShiftServerCashPending,
   markCashReturnAttemptPending,
   mergeCashEntries,
+  readShiftServerCashPending,
 } from './shiftCashFreshness';
 
 const REFUND: ShiftCashEntry = {
@@ -213,14 +214,13 @@ const noPending = { has: () => false, clear: vi.fn() };
 
 function onlineDeps(server: ReturnType<typeof createShiftServer>, extra: Partial<CloseShiftDeps> = {}): CloseShiftDeps {
   return {
-    journal: createInMemoryShiftCloseIntentJournal(),
+    journal: createInMemoryShiftCloseIntentJournal({ generateCloseCorrelationId: () => UUID_A }),
     isOnline: () => true,
     serverCashPending: noPending,
     runCloseTransaction: server.run,
     waitForQueuedWrites: async () => true,
     readConfirmation: server.readConfirmation,
     normalizeSyncState: server.normalizeSyncState,
-    generateCloseCorrelationId: () => UUID_A,
     ...extra,
   };
 }
@@ -245,7 +245,6 @@ beforeEach(() => {
   updateDocMock.mockReset();
   updateDocMock.mockResolvedValue(undefined);
   vi.stubGlobal('localStorage', memoryStorage());
-  __resetInflightOnlineCloseForTests();
 });
 
 afterEach(() => {
@@ -385,7 +384,7 @@ describe('closeShift ONLINE — commit-boundary serialization against a cash Ret
       return out;
     };
     const ids = [UUID_A, UUID_B];
-    const deps = onlineDeps(server, { runCloseTransaction: lossy, generateCloseCorrelationId: () => ids.shift()! });
+    const deps = onlineDeps(server, { runCloseTransaction: lossy, journal: createInMemoryShiftCloseIntentJournal({ generateCloseCorrelationId: () => ids.shift()! }) });
     await expect(closeShift(makeShift(), 1338, '', deps)).rejects.toThrow(CLOSE_SHIFT_TX_FAILED_MESSAGE);
     expect(server.state.commits).toBe(1);
 
@@ -412,7 +411,7 @@ describe('closeShift ONLINE — commit-boundary serialization against a cash Ret
       await gate; // first attempt stalls between its read and its commit (UI times out meanwhile)
     });
     const ids = [UUID_A, UUID_B];
-    const deps = onlineDeps(server, { generateCloseCorrelationId: () => ids.shift()! });
+    const deps = onlineDeps(server, { journal: createInMemoryShiftCloseIntentJournal({ generateCloseCorrelationId: () => ids.shift()! }) });
     const first = closeShift(makeShift(), 1500, '', deps);
     await atGate;
     const second = closeShift(makeShift(), 1500, '', deps); // cashier retries after the UI timeout
@@ -452,10 +451,13 @@ describe('closeShift ONLINE — commit-boundary serialization against a cash Ret
   test('journal unavailable AFTER the commit: the committed close is never reported as failed', async () => {
     const server = createShiftServer(openServerShift([REFUND]));
     const journal = createInMemoryShiftCloseIntentJournal();
-    const broken = { ...journal, upsertCloseIntent: async () => ({ ok: false as const, code: 'unavailable' as const, message: 'x' }) };
+    const broken = { ...journal, finalizeOnlineClose: async () => ({ ok: false as const, code: 'unavailable' as const, message: 'x' }) };
     const result = await closeShift(makeShift(), 1338, '', { ...onlineDeps(server), journal: broken });
     expect(result).toMatchObject({ status: 'closed', payOutTotal: 162 });
     await expect(result.whenServerConfirmed).resolves.toMatchObject({ outcome: 'confirmed' });
+    // Recovery gate B2: the durable attempt survives for the boot/reconnect sweep.
+    const attempts = await journal.listOnlineCloseAttempts();
+    expect(attempts.ok && attempts.value.map((a) => a.closeCorrelationId)).toEqual([server.state.doc!.closeCorrelationId]);
   });
 
   test('a committed online close clears every cash guard of that shift (and only that shift)', async () => {
@@ -518,6 +520,83 @@ describe('closeShift OFFLINE — unresolved / unsynced cash Return guard', () =>
     } as unknown as Storage);
     await expect(
       closeShift(makeShift(), 1500, '', { journal: createInMemoryShiftCloseIntentJournal(), isOnline: () => false }),
-    ).rejects.toThrow(CLOSE_SHIFT_SERVER_CASH_PENDING_MESSAGE);
+    ).rejects.toThrow(CLOSE_SHIFT_CASH_GUARD_UNVERIFIABLE_MESSAGE);
+  });
+});
+
+describe('recovery gate C1 — an unavailable guard store blocks the OFFLINE close', () => {
+  const offline = () => ({ journal: createInMemoryShiftCloseIntentJournal(), isOnline: () => false });
+
+  /** Replace `window.localStorage` with a property whose GETTER itself throws / returns `value`. */
+  function withLocalStorageProperty(get: () => unknown): () => void {
+    const prev = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+    Object.defineProperty(globalThis, 'localStorage', { configurable: true, get });
+    return () => {
+      if (prev) Object.defineProperty(globalThis, 'localStorage', prev);
+    };
+  }
+
+  async function expectRefusedUnverifiable() {
+    const deps = offline();
+    await expect(closeShift(makeShift(), 1338, '', deps)).rejects.toThrow(CLOSE_SHIFT_CASH_GUARD_UNVERIFIABLE_MESSAGE);
+    expect(updateDocMock).not.toHaveBeenCalled();
+    const none = await deps.journal.getCloseIntent('shift-1');
+    expect(none.ok && none.value).toBeFalsy();
+  }
+
+  test('a recorded unknown cash Return, then the window.localStorage GETTER throws → offline close refused', async () => {
+    expect(markCashReturnAttemptPending('shift-1', 'att-unknown')).toBe(true); // sent, response lost
+    const restore = withLocalStorageProperty(() => {
+      throw new DOMException('The operation is insecure.', 'SecurityError');
+    });
+    try {
+      expect(readShiftServerCashPending('shift-1')).toBe('unverifiable');
+      expect(hasShiftServerCashPending('shift-1')).toBe(true); // never a generic "false"
+      await expectRefusedUnverifiable();
+      // The pre-send guard cannot be persisted either → a new cash Return must not be sent.
+      expect(markCashReturnAttemptPending('shift-1', 'att-new')).toBe(false);
+    } finally {
+      restore();
+    }
+    // Storage works again: the earlier guard is still there → still refused (pending), never silently dropped.
+    await expect(closeShift(makeShift(), 1338, '', offline())).rejects.toThrow(CLOSE_SHIFT_SERVER_CASH_PENDING_MESSAGE);
+    clearCashReturnAttemptPending('shift-1', 'att-unknown'); // definitive resolution / server sync
+    const result = await closeShift(makeShift(), 1500, '', offline());
+    expect(result.status).toBe('closed');
+  });
+
+  test('null / undefined handle and a handle without Storage methods → unverifiable, refused', async () => {
+    for (const value of [null, undefined, {}, { getItem: () => null }]) {
+      const restore = withLocalStorageProperty(() => value);
+      try {
+        expect(readShiftServerCashPending('shift-1')).toBe('unverifiable');
+        await expectRefusedUnverifiable();
+        expect(markCashReturnAttemptPending('shift-1', 'att-x')).toBe(false);
+      } finally {
+        restore();
+      }
+    }
+  });
+
+  test('enumeration methods throw (key / length) → unverifiable, refused', async () => {
+    const base = memoryStorage();
+    vi.stubGlobal('localStorage', { ...base, get length() { return 1; }, key: () => { throw new Error('denied'); } } as unknown as Storage);
+    await expectRefusedUnverifiable();
+    vi.stubGlobal('localStorage', { ...base, length: Number.NaN, key: () => null } as unknown as Storage);
+    await expectRefusedUnverifiable();
+  });
+
+  test('a corrupt value under the shift’s guard key still guards (pending), other shifts unaffected', async () => {
+    localStorage.setItem('twinpet.shift.serverCashPending.v2:shift-1:att-1', '{not json');
+    expect(readShiftServerCashPending('shift-1')).toBe('pending');
+    await expect(closeShift(makeShift(), 1338, '', offline())).rejects.toThrow(CLOSE_SHIFT_SERVER_CASH_PENDING_MESSAGE);
+    expect(readShiftServerCashPending('shift-2')).toBe('none');
+  });
+
+  test('a READABLE empty store keeps the baseline offline close (no phantom lock)', async () => {
+    expect(readShiftServerCashPending('shift-1')).toBe('none');
+    const result = await closeShift(makeShift(), 1500, '', offline());
+    expect(result).toMatchObject({ status: 'closed', variance: 0 });
+    expect(updateDocMock).toHaveBeenCalledTimes(1);
   });
 });

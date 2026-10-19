@@ -22,15 +22,11 @@ import type { PaymentSplit } from './types';
 import { getDeviceId } from './deviceId';
 import {
   clearShiftServerCashPending,
-  hasShiftServerCashPending,
   isNavigatorOnline,
+  readShiftServerCashPending,
   withMergedCashEntries,
 } from './shiftCashFreshness';
-import {
-  createShiftCloseIntentJournal,
-  generateShiftCloseCorrelationId,
-  type ShiftCloseIntentJournal,
-} from './offline/shiftCloseIntentStore';
+import { createShiftCloseIntentJournal, type ShiftCloseIntentJournal } from './offline/shiftCloseIntentStore';
 import type {
   PointerRepairObserver,
   ShiftCloseIntentBusinessSnapshot,
@@ -38,6 +34,7 @@ import type {
 } from './offline/shiftCloseIntentTypes';
 import {
   reconcileShiftCloseIntent,
+  recoverOnlineCloseAttempt,
   type ShiftCloseConfirmationDoc,
   type ShiftCloseConfirmationRead,
   type ShiftCloseConfirmationReader,
@@ -657,12 +654,21 @@ const CLOSE_SHIFT_STORE_UNAVAILABLE_MESSAGE =
   'บันทึกการปิดกะแบบออฟไลน์ไม่สำเร็จ (พื้นที่จัดเก็บในเครื่องไม่พร้อมใช้งานหรือเต็ม) กรุณาลองใหม่ หรือเชื่อมต่ออินเทอร์เน็ตแล้วลองอีกครั้ง';
 const CLOSE_SHIFT_CONFLICT_MESSAGE =
   'พบข้อมูลปิดกะอื่นสำหรับกะนี้ในเครื่องนี้อยู่แล้ว กรุณาตรวจสอบก่อนดำเนินการต่อ';
+/** Recovery gate B2: an earlier ONLINE close of this shift has an unknown outcome — no offline close over it. */
+export const CLOSE_SHIFT_ONLINE_ATTEMPT_UNRESOLVED_MESSAGE =
+  'การปิดกะออนไลน์ครั้งก่อนของกะนี้ยังยืนยันผลกับเซิร์ฟเวอร์ไม่ได้ — ปิดกะแบบออฟไลน์ไม่ได้ กรุณาเชื่อมต่ออินเทอร์เน็ตแล้วปิดกะอีกครั้ง';
+/** Recovery gate B2: the online close's durable attempt could not be recorded — nothing was sent. */
+export const CLOSE_SHIFT_ONLINE_STORE_UNAVAILABLE_MESSAGE =
+  'บันทึกข้อมูลการปิดกะในเครื่องไม่สำเร็จ (พื้นที่จัดเก็บในเครื่องไม่พร้อมใช้งานหรือเต็ม) — ยังไม่ได้ปิดกะ กรุณาลองใหม่อีกครั้ง';
 /** D-RET-FIX-8: online close could not read the authoritative shift — nothing was written. */
 export const CLOSE_SHIFT_FRESHNESS_MESSAGE =
   'ตรวจสอบยอดเงินสดล่าสุดของกะจากเซิร์ฟเวอร์ไม่สำเร็จ — ยังไม่ได้ปิดกะ กรุณาลองใหม่อีกครั้ง';
 /** Final gate §3: this device has a cash Return whose server pay-out it has not confirmed/synced. */
 export const CLOSE_SHIFT_SERVER_CASH_PENDING_MESSAGE =
   'มีรายการคืนเงินสดของกะนี้ที่เครื่องนี้ยังยืนยันผลหรือซิงก์จากเซิร์ฟเวอร์ไม่ได้ — ปิดกะแบบออฟไลน์ไม่ได้ กรุณาเชื่อมต่ออินเทอร์เน็ตแล้วปิดกะอีกครั้ง';
+/** Recovery gate C1: the cash Return guard store cannot be read, so a pending guard cannot be ruled out. */
+export const CLOSE_SHIFT_CASH_GUARD_UNVERIFIABLE_MESSAGE =
+  'ตรวจสอบรายการคืนเงินสดที่ค้างในเครื่องนี้ไม่ได้ (พื้นที่จัดเก็บในเบราว์เซอร์ไม่พร้อมใช้งาน) — ปิดกะแบบออฟไลน์ไม่ได้ กรุณาเชื่อมต่ออินเทอร์เน็ตแล้วปิดกะอีกครั้ง';
 /** Final gate §2: this device's queued sale/cash writes did not reach the server in time — nothing was written. */
 export const CLOSE_SHIFT_PENDING_WRITES_MESSAGE =
   'ข้อมูลการขาย/เงินสดของเครื่องนี้ยังส่งขึ้นเซิร์ฟเวอร์ไม่ครบ — ยังไม่ได้ปิดกะ กรุณารอสักครู่แล้วลองใหม่อีกครั้ง';
@@ -721,19 +727,17 @@ async function waitForQueuedWritesFlushed(): Promise<boolean> {
   }
 }
 
-/** A definitive in-transaction refusal: the close was NOT written. */
-class ShiftCloseRefusal extends Error {}
-
 /**
- * Same-runtime correlation id of an online close whose transaction outcome is
- * unproven (rejected `runTransaction`, UI timeout). A retry reuses it, so a
- * close that DID commit is recognised as this device's own (never re-closed,
- * never reported as someone else's close). Memory only — never persisted.
+ * A definitive in-transaction refusal: the close was NOT written.
+ * `uncommittable` = the doc is closed by ANOTHER correlation id, so this
+ * attempt can never commit (W3 only closes an open doc).
  */
-const inflightOnlineCloseCorrelation = new Map<string, string | null>();
-
-export function __resetInflightOnlineCloseForTests(): void {
-  inflightOnlineCloseCorrelation.clear();
+class ShiftCloseRefusal extends Error {
+  readonly uncommittable: boolean;
+  constructor(message: string, uncommittable = false) {
+    super(message);
+    this.uncommittable = uncommittable;
+  }
 }
 
 let defaultShiftCloseIntentJournal: ShiftCloseIntentJournal | undefined;
@@ -782,6 +786,7 @@ export const readShiftCloseConfirmation: ShiftCloseConfirmationReader = async (
       payOutTotal: data.payOutTotal as number | undefined,
       totalBills: data.totalBills as number | undefined,
       note: data.note as string | undefined,
+      closeCorrelationId: typeof data.closeCorrelationId === 'string' ? data.closeCorrelationId : null,
     };
     return { ok: true, doc: confirmationDoc };
   } catch {
@@ -847,8 +852,6 @@ export type CloseShiftDeps = {
   runCloseTransaction?: ShiftCloseTransactionRunner;
   /** Injectable for tests; production = bounded `waitForPendingWrites`. */
   waitForQueuedWrites?: () => Promise<boolean>;
-  /** Injectable for tests; production uses {@link generateShiftCloseCorrelationId}. */
-  generateCloseCorrelationId?: () => string | null;
 };
 
 function closeBusinessSnapshot(
@@ -968,12 +971,19 @@ function snapshotFromClosedDoc(
  *     a fresh read — totals are always those of the committed read; if it
  *     cannot commit, nothing is closed (retryable). A doc already closed with
  *     THIS attempt's correlation id is recognised as this device's own commit.
+ *     Recovery gate B2: BEFORE the transaction a durable `prepared` attempt
+ *     (identity + correlation id only, no totals, no close claim) is written
+ *     and verified; a store failure refuses with nothing sent. Retries — also
+ *     after a UI timeout or a restart — reuse its correlation id.
  *  4. Only AFTER the commit is the close journaled (`local_closed_pending`, the
- *     committed values and correlation id) — no close intent/UI claim exists
- *     for a close that did not commit — then reconciled exactly like the
- *     offline path (confirmation read → `synced` → Variant C normalization).
- *     A journal failure after the commit never reports the committed close as
- *     failed; `whenServerConfirmed` then uses a direct confirmation read.
+ *     committed values and correlation id; the attempt is consumed in the same
+ *     store transaction) — no close intent/UI claim exists for a close that
+ *     did not commit — then reconciled exactly like the offline path
+ *     (confirmation read → `synced` → Variant C normalization). If that
+ *     finalize fails, or the process dies first, the prepared attempt survives
+ *     and is finalized from the authoritative closed doc (same-runtime, by the
+ *     boot/reconnect sweep, or by a retry that finds the shift closed with its
+ *     id); the committed close is never reported as failed.
  *
  *  OFFLINE — unchanged 7C-B1/7C-B2 behaviour, except that a device with an
  *  unresolved/unsynced cash Return guard for the shift refuses (fail closed):
@@ -1021,37 +1031,60 @@ export async function closeShift(
   if (!cached.exists()) {
     throw new Error(CLOSE_SHIFT_UNVERIFIABLE_MESSAGE);
   }
-  const cachedData = cached.data() as { status?: string; cashEntries?: unknown };
-  if (cachedData.status !== 'open') {
-    throw new Error(CLOSE_SHIFT_ALREADY_CLOSED_MESSAGE);
-  }
+  const cachedData = cached.data() as { status?: string; cashEntries?: unknown; closeCorrelationId?: unknown };
   const cachedEntries = Array.isArray(cachedData.cashEntries) ? (cachedData.cashEntries as ShiftCashEntry[]) : [];
 
-  const pending = deps?.serverCashPending ?? {
-    has: hasShiftServerCashPending,
-    clear: clearShiftServerCashPending,
-  };
+  const clearPending = deps?.serverCashPending?.clear ?? clearShiftServerCashPending;
   const journal = deps?.journal ?? getDefaultShiftCloseIntentJournal();
   const readConfirmation = deps?.readConfirmation ?? readShiftCloseConfirmation;
   const normalizeSyncState = deps?.normalizeSyncState ?? normalizeShiftCloseSyncState;
   const deviceId = getDeviceId();
+  const online = (deps?.isOnline ?? isNavigatorOnline)();
+  const ctx = { deps, journal, readConfirmation, normalizeSyncState, deviceId, clearPending };
 
-  if ((deps?.isOnline ?? isNavigatorOnline)()) {
-    return closeShiftOnline(shift, actualCashCount, note, cachedEntries, {
-      deps,
-      journal,
-      readConfirmation,
-      normalizeSyncState,
-      deviceId,
-      clearPending: pending.clear,
-    });
+  if (cachedData.status !== 'open') {
+    // Recovery gate B2: a retry after a UI timeout / lost response / restart
+    // whose close DID commit is this device's own close — show its Z from the
+    // committed values instead of "already closed". Anything else: refused.
+    if (online && cachedData.status === 'closed' && typeof cachedData.closeCorrelationId === 'string') {
+      const own = await recoverOwnCommittedClose(shift, cachedData.closeCorrelationId, cachedEntries, ctx);
+      if (own) return own;
+    }
+    throw new Error(CLOSE_SHIFT_ALREADY_CLOSED_MESSAGE);
+  }
+
+  if (online) {
+    return closeShiftOnline(shift, actualCashCount, note, cachedEntries, ctx);
   }
 
   // OFFLINE: a cash Return of this shift whose server pay-out this device has
   // not confirmed + synced (sent, unknown, or committed-unsynced) ⇒ the cache
   // cannot be trusted for the drawer; refuse rather than freeze a stale count.
-  if (pending.has(shift.id)) {
+  // Recovery gate C1: a guard store that cannot be read is NOT "no guard".
+  const pendingState = deps?.serverCashPending
+    ? deps.serverCashPending.has(shift.id)
+      ? 'pending'
+      : 'none'
+    : readShiftServerCashPending(shift.id);
+  if (pendingState === 'unverifiable') {
+    throw new Error(CLOSE_SHIFT_CASH_GUARD_UNVERIFIABLE_MESSAGE);
+  }
+  if (pendingState === 'pending') {
     throw new Error(CLOSE_SHIFT_SERVER_CASH_PENDING_MESSAGE);
+  }
+  // Recovery gate B2: an ONLINE close of this shift with an unknown outcome
+  // (durable prepared attempt) may already be committed with the server's
+  // totals — never queue a second, offline close over it. An unreadable
+  // attempt list fails closed like any other journal read.
+  let attempts: Awaited<ReturnType<ShiftCloseIntentJournal['listOnlineCloseAttempts']>>;
+  try {
+    attempts = await journal.listOnlineCloseAttempts();
+  } catch (err) {
+    attempts = { ok: false, code: 'tx_failed', message: err instanceof Error ? err.message : String(err) };
+  }
+  if (!attempts.ok) throw new Error(CLOSE_SHIFT_STORE_UNAVAILABLE_MESSAGE);
+  if (attempts.value.some((a) => a.shiftId === shift.id)) {
+    throw new Error(CLOSE_SHIFT_ONLINE_ATTEMPT_UNRESOLVED_MESSAGE);
   }
   shift = withMergedCashEntries(shift, cachedEntries);
 
@@ -1152,16 +1185,35 @@ async function closeShiftOnline(
   cachedEntries: ShiftCashEntry[],
   ctx: CloseReconcileDeps & { deps: CloseShiftDeps | undefined; clearPending: (shiftId: string) => void },
 ): Promise<CloseShiftResult> {
-  const { deps, journal, readConfirmation, deviceId } = ctx;
+  const { deps, journal, deviceId } = ctx;
 
   if (!(await (deps?.waitForQueuedWrites ?? waitForQueuedWritesFlushed)())) {
     throw new Error(CLOSE_SHIFT_PENDING_WRITES_MESSAGE);
   }
 
-  const correlationId = inflightOnlineCloseCorrelation.has(shift.id)
-    ? (inflightOnlineCloseCorrelation.get(shift.id) ?? null)
-    : (deps?.generateCloseCorrelationId ?? generateShiftCloseCorrelationId)();
-  inflightOnlineCloseCorrelation.set(shift.id, correlationId);
+  // Recovery gate B2 stage 1 — durable attempt identity BEFORE any server
+  // write. Unavailable/unverifiable store ⇒ refuse with nothing sent.
+  let prepared: Awaited<ReturnType<ShiftCloseIntentJournal['prepareOnlineCloseAttempt']>>;
+  try {
+    prepared = await journal.prepareOnlineCloseAttempt({
+      shiftId: shift.id,
+      branchId: shift.branchId,
+      staffId: shift.staffId,
+      staffName: shift.staffName,
+      deviceId,
+    });
+  } catch (err) {
+    prepared = { ok: false, code: 'tx_failed', message: err instanceof Error ? err.message : String(err) };
+  }
+  if (!prepared.ok) {
+    throw new Error(prepared.code === 'conflict' ? CLOSE_SHIFT_CONFLICT_MESSAGE : CLOSE_SHIFT_ONLINE_STORE_UNAVAILABLE_MESSAGE);
+  }
+  // `journaled`: this device already recorded a close of this shift — never
+  // write a second one; only that close's own commit may be recognised.
+  const journaled = prepared.value.kind === 'journaled' ? prepared.value.entry : null;
+  const attempt = prepared.value.kind === 'prepared' ? prepared.value.attempt : null;
+  const correlationId = journaled ? journaled.closeCorrelationId : attempt!.closeCorrelationId;
+  if (correlationId === null) throw new Error(CLOSE_SHIFT_CONFLICT_MESSAGE);
 
   let committed: { snapshot: ShiftCloseIntentBusinessSnapshot; folded: Shift };
   try {
@@ -1172,14 +1224,15 @@ async function closeShiftOnline(
       if (!fresh.exists || !fresh.data) throw new ShiftCloseRefusal(CLOSE_SHIFT_FRESHNESS_MESSAGE);
       const d = fresh.data;
       if (d.status !== 'open') {
-        if (d.status === 'closed' && correlationId !== null && d.closeCorrelationId === correlationId) {
+        if (d.status === 'closed' && d.closeCorrelationId === correlationId) {
           // An earlier attempt of THIS close committed (its response was lost).
           const snapshot = snapshotFromClosedDoc(shift, d, deviceId);
           const entries = Array.isArray(d.cashEntries) ? (d.cashEntries as ShiftCashEntry[]) : [];
           return { snapshot, folded: { ...withMergedCashEntries(shift, cachedEntries, entries), ...pickTotals(snapshot) } };
         }
-        throw new ShiftCloseRefusal(CLOSE_SHIFT_ALREADY_CLOSED_MESSAGE);
+        throw new ShiftCloseRefusal(CLOSE_SHIFT_ALREADY_CLOSED_MESSAGE, d.status === 'closed');
       }
+      if (journaled) throw new ShiftCloseRefusal(CLOSE_SHIFT_CONFLICT_MESSAGE);
       if (d.branchId !== shift.branchId || d.staffId !== shift.staffId) {
         throw new ShiftCloseRefusal(CLOSE_SHIFT_UNVERIFIABLE_MESSAGE);
       }
@@ -1191,17 +1244,20 @@ async function closeShiftOnline(
     });
   } catch (err) {
     if (err instanceof ShiftCloseRefusal) {
-      // Definitive: the transaction refused before writing anything.
-      inflightOnlineCloseCorrelation.delete(shift.id);
+      // Definitive: the transaction refused before writing anything. Only a
+      // doc closed by ANOTHER id proves this attempt can never commit; any
+      // other refusal keeps the attempt (the sweep resolves it later).
+      if (err.uncommittable && attempt) {
+        await journal.discardOnlineCloseAttempt(shift.id, correlationId).catch(() => undefined);
+      }
       throw new Error(err.message, { cause: err });
     }
     // runTransaction rejected (conflict retries exhausted, offline, rules,
-    // network): NOT closed as far as this call can prove. Keep the correlation
-    // id so a retry recognises this attempt's commit if it did land.
+    // network): NOT closed as far as this call can prove. The durable attempt
+    // keeps the correlation id so a retry/sweep recognises a commit that landed.
     console.warn('[shiftService] online close transaction failed', err);
     throw new Error(CLOSE_SHIFT_TX_FAILED_MESSAGE, { cause: err });
   }
-  inflightOnlineCloseCorrelation.delete(shift.id);
   // The committed read folded every committed cash Return of this shift, and a
   // later Return cannot commit onto a closed shift: its guards are obsolete.
   ctx.clearPending(shift.id);
@@ -1220,35 +1276,95 @@ async function closeShiftOnline(
     whenServerConfirmed,
   });
 
-  // Journal only AFTER the commit, with the committed values and id.
-  let intentResult: Awaited<ReturnType<ShiftCloseIntentJournal['upsertCloseIntent']>>;
+  // B2 stage 3 — journal only AFTER the commit, from the committed values, and
+  // consume the prepared attempt in the same store transaction.
+  let finalized: Awaited<ReturnType<ShiftCloseIntentJournal['finalizeOnlineClose']>>;
   try {
-    intentResult = await journal.upsertCloseIntent(snapshot, deps?.observePointerRepair, {
-      closeCorrelationId: correlationId,
-    });
+    finalized = await journal.finalizeOnlineClose(snapshot, correlationId, deps?.observePointerRepair);
   } catch (err) {
-    intentResult = { ok: false, code: 'tx_failed', message: err instanceof Error ? err.message : String(err) };
+    finalized = { ok: false, code: 'tx_failed', message: err instanceof Error ? err.message : String(err) };
   }
-  if (intentResult.ok) {
-    const entry = intentResult.value;
+  if (finalized.ok) {
+    const entry = finalized.value;
     return result(entry.closedAtLocal, reconcileClosed(entry, ctx));
   }
-  // The close IS committed; only the local journal could not record it. Never
-  // report it as failed — confirm it with a direct confirmation-grade read.
-  console.warn('[shiftService] committed online close could not be journaled', intentResult);
-  const direct = (async (): Promise<ShiftCloseConfirmation> => {
-    try {
-      const read = await readConfirmation(shift.id);
-      const closedAt = read.ok && read.doc.exists && read.doc.status === 'closed' ? read.doc.closedAt : null;
-      if (closedAt != null && typeof (closedAt as { toDate?: unknown }).toDate === 'function') {
-        return { outcome: 'confirmed', closedAt: (closedAt as { toDate: () => Date }).toDate() };
-      }
-      return { outcome: read.ok ? 'still_pending' : 'unreachable' };
-    } catch {
-      return { outcome: 'unreachable' };
+  // The close IS committed; only the local finalize failed. Never report it as
+  // failed. The prepared attempt is still durable, so recovery from the
+  // authoritative doc is retried now and by every boot/reconnect sweep.
+  console.warn('[shiftService] committed online close could not be journaled', finalized);
+  const recovered = (async (): Promise<ShiftCloseConfirmation> => {
+    if (attempt) {
+      const r = await recoverOnlineCloseAttempt(attempt, ctx);
+      if (r.outcome === 'recovered' && r.entry) return reconcileClosed(r.entry, ctx);
     }
+    return directCloseConfirmation(shift.id, ctx.readConfirmation);
   })();
-  return result(Date.now(), direct);
+  return result(Date.now(), recovered);
+}
+
+/** Confirmation-grade read of the shift doc only (no journal transition). Never rejects. */
+async function directCloseConfirmation(
+  shiftId: string,
+  readConfirmation: ShiftCloseConfirmationReader,
+): Promise<ShiftCloseConfirmation> {
+  try {
+    const read = await readConfirmation(shiftId);
+    const closedAt = read.ok && read.doc.exists && read.doc.status === 'closed' ? read.doc.closedAt : null;
+    if (closedAt != null && typeof (closedAt as { toDate?: unknown }).toDate === 'function') {
+      return { outcome: 'confirmed', closedAt: (closedAt as { toDate: () => Date }).toDate() };
+    }
+    return { outcome: read.ok ? 'still_pending' : 'unreachable' };
+  } catch {
+    return { outcome: 'unreachable' };
+  }
+}
+
+/**
+ * Recovery gate B2 — the cached shift is closed with `closeCorrelationId`. If
+ * that is THIS device's journaled close, or its prepared attempt (finalized
+ * here from the authoritative server doc), return the closed snapshot built
+ * from the COMMITTED values. `null` = not provably this device's own close.
+ */
+async function recoverOwnCommittedClose(
+  shift: Shift,
+  closeCorrelationId: string,
+  cachedEntries: ShiftCashEntry[],
+  ctx: CloseReconcileDeps,
+): Promise<CloseShiftResult | null> {
+  const { journal, deviceId } = ctx;
+  let entry: ShiftCloseIntentEntry | null = null;
+  try {
+    const got = await journal.getCloseIntent(shift.id);
+    if (got.ok && got.value && got.value.deviceId === deviceId && got.value.closeCorrelationId === closeCorrelationId) {
+      entry = got.value;
+    }
+    if (!entry) {
+      const listed = await journal.listOnlineCloseAttempts();
+      const own = listed.ok
+        ? listed.value.find((a) => a.shiftId === shift.id && a.closeCorrelationId === closeCorrelationId)
+        : undefined;
+      if (!own) return null;
+      const r = await recoverOnlineCloseAttempt(own, ctx);
+      if (r.outcome !== 'recovered' || !r.entry) return null;
+      entry = r.entry;
+    }
+  } catch {
+    return null;
+  }
+  return {
+    ...withMergedCashEntries(shift, cachedEntries),
+    ...pickTotals(entry),
+    startingCash: entry.startingCash,
+    status: 'closed',
+    actualCashCount: entry.actualCashCount,
+    variance: entry.variance,
+    note: entry.note,
+    closedOffline: true,
+    syncState: 'pending',
+    deviceId,
+    closedAtLocal: entry.closedAtLocal,
+    whenServerConfirmed: reconcileClosed(entry, ctx),
+  };
 }
 
 function pickTotals(s: ShiftCloseIntentBusinessSnapshot) {

@@ -47,6 +47,7 @@ const mocks = vi.hoisted(() => ({
   runShiftOpenReconciliationSweep: vi.fn().mockResolvedValue([]),
   getCloseIntent: vi.fn(),
   listCloseIntents: vi.fn().mockResolvedValue({ ok: true, value: [] }),
+  listOnlineCloseAttempts: vi.fn().mockResolvedValue({ ok: true, value: [] }),
   findRejectedOpenForDevice: vi.fn().mockResolvedValue({ ok: true, value: undefined }),
   findPendingOpenForStaff: vi.fn().mockResolvedValue({ ok: true, value: undefined }),
   listOpenIntents: vi.fn().mockResolvedValue({ ok: true, value: [] }),
@@ -137,6 +138,7 @@ vi.mock('../lib/pos/offline/shiftCloseIntentStore', () => ({
   createShiftCloseIntentJournal: () => ({
     getCloseIntent: mocks.getCloseIntent,
     listCloseIntents: mocks.listCloseIntents,
+    listOnlineCloseAttempts: mocks.listOnlineCloseAttempts,
     upsertCloseIntent: vi.fn(),
     markSynced: vi.fn(),
     markRejectedManualAttention: vi.fn(),
@@ -235,6 +237,7 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   mocks.listCloseIntents.mockResolvedValue({ ok: true, value: [] });
+  mocks.listOnlineCloseAttempts.mockResolvedValue({ ok: true, value: [] });
   mocks.findRejectedOpenForDevice.mockResolvedValue({ ok: true, value: undefined });
   mocks.findPendingOpenForStaff.mockResolvedValue({ ok: true, value: undefined });
   mocks.listOpenIntents.mockResolvedValue({ ok: true, value: [] });
@@ -287,6 +290,42 @@ describe('POSPage — Packet 7C-B2 boot fail-closed guard (RC-3)', () => {
       expect(screen.queryByTestId('shift-boot-blocked-modal')).toBeNull();
       expect(screen.queryByTestId('open-shift-modal')).toBeNull();
     });
+  });
+
+  test('recovery gate B2: found/CACHE + an unresolved online close attempt for that shift → attention, never a live drawer', async () => {
+    mocks.readActiveShiftForBoot.mockResolvedValue({ status: 'found', shift: makeOpenShift(), provenance: 'cache' });
+    mocks.getCloseIntent.mockResolvedValue({ ok: true, value: undefined });
+    mocks.listOnlineCloseAttempts.mockResolvedValue({ ok: true, value: [{ shiftId: makeOpenShift().id }] });
+
+    render(<POSPage />);
+
+    expect(await screen.findByTestId('open-shift-modal')).toBeTruthy();
+    expect(await screen.findByTestId('open-shift-attention-prop')).toBeTruthy();
+    expect(screen.queryByTestId('shift-boot-blocked-modal')).toBeNull();
+  });
+
+  test('recovery gate B2: found/CACHE + unreadable attempt list → fail closed (blocked)', async () => {
+    mocks.readActiveShiftForBoot.mockResolvedValue({ status: 'found', shift: makeOpenShift(), provenance: 'cache' });
+    mocks.getCloseIntent.mockResolvedValue({ ok: true, value: undefined });
+    mocks.listOnlineCloseAttempts.mockResolvedValue({ ok: false, code: 'unavailable' });
+
+    render(<POSPage />);
+
+    expect(await screen.findByTestId('shift-boot-blocked-modal')).toBeTruthy();
+  });
+
+  test('recovery gate B2: found/SERVER + an attempt (never committed) → live drawer restored; the server read is authoritative', async () => {
+    mocks.readActiveShiftForBoot.mockResolvedValue({ status: 'found', shift: makeOpenShift(), provenance: 'server' });
+    mocks.getCloseIntent.mockResolvedValue({ ok: true, value: undefined });
+    mocks.listOnlineCloseAttempts.mockResolvedValue({ ok: true, value: [{ shiftId: makeOpenShift().id }] });
+
+    render(<POSPage />);
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('shift-boot-blocked-modal')).toBeNull();
+      expect(screen.queryByTestId('open-shift-modal')).toBeNull();
+    });
+    expect(mocks.listOnlineCloseAttempts).not.toHaveBeenCalled();
   });
 
   test('a locally-closed shift (intent present) stays closed on boot — OpenShiftModal renders with attention, not free open', async () => {

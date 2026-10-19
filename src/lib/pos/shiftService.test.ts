@@ -137,6 +137,21 @@ function makeSnapshot(
 // shiftService.closeFreshness.test.ts, so these run with the device offline.
 beforeEach(() => {
   vi.stubGlobal('navigator', { onLine: false });
+  // Recovery gate C1: the offline close reads the cash-guard store; a host with
+  // no readable store fails closed, so give this node env a readable empty one.
+  const guardStore = new Map<string, string>();
+  vi.stubGlobal('window', {
+    localStorage: {
+      get length() {
+        return guardStore.size;
+      },
+      key: (i: number) => [...guardStore.keys()][i] ?? null,
+      getItem: (k: string) => guardStore.get(k) ?? null,
+      setItem: (k: string, v: string) => void guardStore.set(k, String(v)),
+      removeItem: (k: string) => void guardStore.delete(k),
+      clear: () => guardStore.clear(),
+    },
+  });
   getDocFromCacheMock.mockReset();
   updateDocMock.mockReset();
   updateDocMock.mockResolvedValue(undefined);
@@ -286,6 +301,10 @@ describe('closeShift — Packet 7C-B1 local optimistic offline close', () => {
       listCloseIntents: async () => ({ ok: true as const, value: [] }),
       markSynced: async () => ({ ok: false as const, code: 'not_found' as const }),
       markRejectedManualAttention: async () => ({ ok: false as const, code: 'not_found' as const }),
+      prepareOnlineCloseAttempt: async () => ({ ok: false as const, code: 'unavailable' as const }),
+      finalizeOnlineClose: async () => ({ ok: false as const, code: 'unavailable' as const }),
+      listOnlineCloseAttempts: async () => ({ ok: true as const, value: [] }),
+      discardOnlineCloseAttempt: async () => ({ ok: false as const, code: 'unavailable' as const }),
     };
 
     await expect(closeShift(makeShift(), 1000, 'note', { journal })).rejects.toThrow();

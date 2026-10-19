@@ -36,10 +36,10 @@ import {
   type SubmitSaleReturnResult,
 } from '../../lib/saleReturn/saleReturnService';
 import {
-  clearUnresolvedReturnAttempt,
+  claimUnresolvedReturnAttempt,
   payloadFromUnresolved,
   readUnresolvedReturnAttempt,
-  saveUnresolvedReturnAttempt,
+  releaseUnresolvedReturnAttempt,
   type UnresolvedReturnAttempt,
 } from '../../lib/saleReturn/unresolvedReturnAttempt';
 import { clearCashReturnAttemptPending, markCashReturnAttemptPending } from '../../lib/pos/shiftCashFreshness';
@@ -51,6 +51,9 @@ import { clearCashReturnAttemptPending, markCashReturnAttemptPending } from '../
 // D-RET-FIX-7: an attempt is persisted (non-secret, no PIN) BEFORE it is sent.
 // Once its outcome is unknown it survives closing/reopening this modal; while
 // it exists only resolve (PIN-less) or retry of the SAME attempt is offered.
+// Recovery gate C2: the persist is an atomic cross-window CLAIM made right
+// before every send — a window that opened before another window's attempt
+// existed learns of it there, adopts it and sends nothing new.
 
 export type SaleReturnTarget = { orderId: string; branchId: string; billLabel: string; saleDateLabel: string };
 
@@ -72,6 +75,9 @@ function cashShiftOf(payload: Pick<LockedPayload, 'refundMethod' | 'shiftId'>): 
 
 const STORE_UNREADABLE_COPY = 'ตรวจสอบรายการคืนสินค้าที่ค้างในเครื่องนี้ไม่ได้ — ทำรายการคืนสินค้าจากเครื่องนี้ไม่ได้ชั่วคราว';
 const STORE_UNWRITABLE_COPY = 'บันทึกข้อมูลกู้คืนรายการในเครื่องไม่ได้ — ยังไม่ได้ส่งรายการคืนสินค้า กรุณาลองใหม่';
+/** C2: another tab/window of this device holds an unresolved attempt for this sale. */
+export const SALE_RETURN_OTHER_WINDOW_COPY =
+  'บิลนี้มีรายการคืนสินค้าที่ยังไม่ทราบผลค้างอยู่ (จากหน้าต่างอื่นในเครื่องนี้) — ยังไม่ได้ส่งรายการใหม่ กรุณาตรวจสอบผลรายการเดิมก่อน';
 
 export interface SaleReturnModalProps {
   target: SaleReturnTarget | null;
@@ -95,21 +101,8 @@ function SaleReturnDialog({
   onCompleted?: (returnNo: string) => void;
 }) {
   const { user } = useAuth();
-  // Recovered unresolved attempt for THIS sale (undefined = store unreadable ⇒ fail closed).
-  const [initialRecord] = useState(() => {
-    const rec = readUnresolvedReturnAttempt(target.branchId, target.orderId);
-    // A recovered unresolved CASH attempt keeps (re-asserts) its shift guard
-    // until it is resolved — e.g. a record persisted before this guard existed.
-    const cashShift = rec ? cashShiftOf(rec) : null;
-    if (rec && cashShift) markCashReturnAttemptPending(cashShift, rec.attemptId);
-    return rec;
-  });
-  const [unresolved, setUnresolved] = useState<UnresolvedReturnAttempt | null>(initialRecord ?? null);
-  const [phase, setPhase] = useState<Phase>(() => {
-    if (initialRecord === undefined) return { kind: 'blocked', message: STORE_UNREADABLE_COPY };
-    if (initialRecord) return { kind: 'unknown', message: SALE_RETURN_UNRESOLVED_COPY };
-    return { kind: 'loading' };
-  });
+  const [unresolved, setUnresolved] = useState<UnresolvedReturnAttempt | null>(null);
+  const [phase, setPhase] = useState<Phase>({ kind: 'loading' });
   const [context, setContext] = useState<SaleReturnContextView | null>(null);
   const [qtyInputs, setQtyInputs] = useState<Record<number, string>>({});
   const [refundMethod, setRefundMethod] = useState<SaleReturnRefundMethod | ''>('');
@@ -123,9 +116,7 @@ function SaleReturnDialog({
   const [shiftChecked, setShiftChecked] = useState(false);
   // Frozen request (without PIN) once approval is requested; a retry re-sends
   // EXACTLY this payload under the same attemptId.
-  const [locked, setLocked] = useState<LockedPayload | null>(() =>
-    initialRecord ? payloadFromUnresolved(initialRecord) : null,
-  );
+  const [locked, setLocked] = useState<LockedPayload | null>(null);
   const roster = useApproverRoster({
     enabled: phase.kind !== 'loading' && phase.kind !== 'blocked',
     branchId: target.branchId,
@@ -151,17 +142,35 @@ function SaleReturnDialog({
     applyContextResult(await fetchSaleReturnContext(target.orderId, target.branchId));
   }, [applyContextResult, target.orderId, target.branchId]);
 
-  // Initial phase is already `loading` (or the recovered unresolved view).
+  /**
+   * Show `rec` (this sale's unresolved attempt) with resolve/retry-only actions.
+   * A recovered unresolved CASH attempt keeps (re-asserts) its shift guard
+   * until it is resolved — e.g. a record persisted before this guard existed.
+   */
+  const adoptUnresolved = useCallback((rec: UnresolvedReturnAttempt, message: string) => {
+    const cashShift = cashShiftOf(rec);
+    if (cashShift) markCashReturnAttemptPending(cashShift, rec.attemptId);
+    setUnresolved(rec);
+    setLocked(payloadFromUnresolved(rec));
+    setPhase({ kind: 'unknown', message });
+  }, []);
+
+  // Initial phase is `loading`: first the recovered attempt of THIS sale
+  // (unreadable ⇒ fail closed, no form), then the context.
   useEffect(() => {
-    if (initialRecord === undefined) return;
     let cancelled = false;
-    void fetchSaleReturnContext(target.orderId, target.branchId).then((res) => {
+    void (async () => {
+      const rec = await readUnresolvedReturnAttempt(target.branchId, target.orderId);
+      if (cancelled) return;
+      if (rec === undefined) return setPhase({ kind: 'blocked', message: STORE_UNREADABLE_COPY });
+      if (rec) adoptUnresolved(rec, SALE_RETURN_UNRESOLVED_COPY);
+      const res = await fetchSaleReturnContext(target.orderId, target.branchId);
       if (!cancelled) applyContextResult(res);
-    });
+    })();
     return () => {
       cancelled = true;
     };
-  }, [applyContextResult, initialRecord, target.orderId, target.branchId]);
+  }, [adoptUnresolved, applyContextResult, target.orderId, target.branchId]);
 
   // Cash refunds leave the requester's own open shift drawer.
   useEffect(() => {
@@ -238,14 +247,15 @@ function SaleReturnDialog({
    * shift cash guard. Other attempts' guards are separate keys and untouched.
    */
   const releaseAttempt = (payload: LockedPayload) => {
-    clearUnresolvedReturnAttempt(payload.branchId, payload.orderId);
+    // Owner-checked: a record holding ANOTHER attemptId is never removed.
+    void releaseUnresolvedReturnAttempt(payload.branchId, payload.orderId, payload.attemptId);
     const cashShift = cashShiftOf(payload);
     if (cashShift) clearCashReturnAttemptPending(cashShift, payload.attemptId);
   };
 
   /** A definitive outcome of THIS attempt: committed (replayed or new). */
   const finishCommitted = (payload: LockedPayload, res: Extract<SubmitSaleReturnResult, { kind: 'ok' }>) => {
-    clearUnresolvedReturnAttempt(payload.branchId, payload.orderId);
+    void releaseUnresolvedReturnAttempt(payload.branchId, payload.orderId, payload.attemptId);
     setUnresolved(null);
     setLocked(null);
     // The cash guard is NOT released here: it moves to committed_unsynced and
@@ -262,17 +272,18 @@ function SaleReturnDialog({
     onCompleted?.(res.returnNo);
   };
 
-  const markUnresolved = (payload: LockedPayload, message: string | null) => {
-    const rec = readUnresolvedReturnAttempt(payload.branchId, payload.orderId);
+  const markUnresolved = (payload: LockedPayload, message: string | null, rec?: UnresolvedReturnAttempt) => {
     setUnresolved(
-      rec ?? {
-        schemaVersion: 1,
-        state: 'UNKNOWN_PENDING_RESOLUTION',
-        ...payload,
-        requesterStaffId: user?.id ?? '',
-        approverDisplayName: approverLabel,
-        recordedAtMs: 0,
-      },
+      (cur) =>
+        rec ??
+        cur ?? {
+          schemaVersion: 1,
+          state: 'UNKNOWN_PENDING_RESOLUTION',
+          ...payload,
+          requesterStaffId: user?.id ?? '',
+          approverDisplayName: approverLabel,
+          recordedAtMs: 0,
+        },
     );
     setPhase({ kind: 'unknown', message });
   };
@@ -281,31 +292,33 @@ function SaleReturnDialog({
     if (!locked || !user) return;
     const payload = locked;
     const wasUnresolved = unresolved != null;
-    if (!wasUnresolved) {
-      // Persist the exact attempt BEFORE sending: a lost response or a crash
-      // mid-request must never let a new attempt replace it.
-      const saved = saveUnresolvedReturnAttempt(payload, {
-        requesterStaffId: user.id,
-        approverDisplayName: approverLabel,
-      });
-      if (!saved) {
-        setLocked(null);
-        setFormError(STORE_UNWRITABLE_COPY);
-        return setPhase({ kind: 'form' });
-      }
+    setPhase({ kind: 'submitting' });
+    // C2 ownership gate, before EVERY send: persist (or confirm) the exact
+    // attempt atomically across windows. A lost response or a crash
+    // mid-request must never let a new attempt replace it, and another
+    // window's unresolved attempt for this sale is adopted, never overwritten.
+    const claim = await claimUnresolvedReturnAttempt(payload, {
+      requesterStaffId: unresolved?.requesterStaffId ?? user.id,
+      approverDisplayName: approverLabel,
+    });
+    if (claim.kind === 'other') return adoptUnresolved(claim.record, SALE_RETURN_OTHER_WINDOW_COPY);
+    if (claim.kind === 'unavailable') {
+      if (wasUnresolved) return markUnresolved(payload, STORE_UNWRITABLE_COPY);
+      setLocked(null);
+      setFormError(STORE_UNWRITABLE_COPY);
+      return setPhase({ kind: 'form' });
     }
     // A cash Return may append a server pay-out to the shift even when the
     // response is lost: guard the shift's offline close BEFORE every send. If
     // the guard cannot be persisted, nothing is sent.
     const cashShift = cashShiftOf(payload);
     if (cashShift && !markCashReturnAttemptPending(cashShift, payload.attemptId)) {
-      if (wasUnresolved) return markUnresolved(payload, STORE_UNWRITABLE_COPY);
+      if (wasUnresolved) return markUnresolved(payload, STORE_UNWRITABLE_COPY, claim.record);
       releaseAttempt(payload);
       setLocked(null);
       setFormError(STORE_UNWRITABLE_COPY);
       return setPhase({ kind: 'form' });
     }
-    setPhase({ kind: 'submitting' });
     const res = await submitSaleReturnRequest({ ...payload, pin });
     if (res.kind === 'ok') return finishCommitted(payload, res);
     if (res.kind === 'unknown') return markUnresolved(payload, SALE_RETURN_UNKNOWN_OUTCOME_COPY);

@@ -338,6 +338,10 @@ describe('reconcileShiftCloseIntent', () => {
           listCloseIntents: base.listCloseIntents,
           markSynced,
           markRejectedManualAttention,
+          prepareOnlineCloseAttempt: base.prepareOnlineCloseAttempt,
+          finalizeOnlineClose: base.finalizeOnlineClose,
+          listOnlineCloseAttempts: base.listOnlineCloseAttempts,
+          discardOnlineCloseAttempt: base.discardOnlineCloseAttempt,
         },
         markSynced,
         markRejectedManualAttention,
@@ -408,6 +412,10 @@ describe('runShiftCloseReconciliationSweep', () => {
       listCloseIntents: async () => ({ ok: false as const, code: 'unavailable' as const }),
       markSynced: async () => ({ ok: false as const, code: 'not_found' as const }),
       markRejectedManualAttention: async () => ({ ok: false as const, code: 'not_found' as const }),
+      prepareOnlineCloseAttempt: async () => ({ ok: false as const, code: 'unavailable' as const }),
+      finalizeOnlineClose: async () => ({ ok: false as const, code: 'unavailable' as const }),
+      listOnlineCloseAttempts: async () => ({ ok: false as const, code: 'unavailable' as const }),
+      discardOnlineCloseAttempt: async () => ({ ok: false as const, code: 'unavailable' as const }),
     };
 
     const results = await runShiftCloseReconciliationSweep({
@@ -522,6 +530,10 @@ describe('OBS-B2 reconciler pointer-repair forwarding', () => {
         listCloseIntents: base.listCloseIntents,
         markSynced: markSynced as typeof base.markSynced,
         markRejectedManualAttention: base.markRejectedManualAttention,
+        prepareOnlineCloseAttempt: base.prepareOnlineCloseAttempt,
+        finalizeOnlineClose: base.finalizeOnlineClose,
+        listOnlineCloseAttempts: base.listOnlineCloseAttempts,
+        discardOnlineCloseAttempt: base.discardOnlineCloseAttempt,
       },
       readConfirmation: reader({ ok: true, doc: makeConfirmedDoc() }),
       deviceId: DEVICE,

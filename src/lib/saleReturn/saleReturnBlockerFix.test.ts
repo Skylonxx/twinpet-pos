@@ -8,11 +8,12 @@ import {
 } from './saleReturnTypes';
 import { resolveSaleReturnAttempt, submitSaleReturnRequest, type SubmitSaleReturnInput } from './saleReturnService';
 import {
-  clearUnresolvedReturnAttempt,
+  claimUnresolvedReturnAttempt,
+  createInMemoryReturnAttemptStore,
   readUnresolvedReturnAttempt,
-  saveUnresolvedReturnAttempt,
+  releaseUnresolvedReturnAttempt,
   unresolvedAttemptKey,
-  type AttemptStorage,
+  type ReturnAttemptStore,
 } from './unresolvedReturnAttempt';
 import {
   netAfterReturns,
@@ -27,16 +28,6 @@ import { computeKpi, type ProfitSaleLine } from '../profitReport/types';
 afterEach(() => {
   vi.unstubAllGlobals();
 });
-
-function memory(): AttemptStorage & { map: Map<string, string> } {
-  const map = new Map<string, string>();
-  return {
-    map,
-    getItem: (k) => map.get(k) ?? null,
-    setItem: (k, v) => void map.set(k, v),
-    removeItem: (k) => void map.delete(k),
-  };
-}
 
 const input: SubmitSaleReturnInput = {
   attemptId: 'attempt-0001',
@@ -117,13 +108,14 @@ describe('D-RET-FIX-4 / D-RET-FIX-10 draft limits', () => {
 });
 
 describe('D-RET-FIX-7 durable unresolved attempt record', () => {
-  test('saves the exact non-secret attempt; never the PIN', () => {
-    const s = memory();
-    expect(saveUnresolvedReturnAttempt(input, { requesterStaffId: 's1', approverDisplayName: 'M', nowMs: 5 }, s)).toBe(true);
-    const raw = s.map.get(unresolvedAttemptKey('B1', 'O1'))!;
+  test('saves the exact non-secret attempt; never the PIN', async () => {
+    const s = createInMemoryReturnAttemptStore();
+    const claim = await claimUnresolvedReturnAttempt({ ...input, pin: '1234' } as never, { requesterStaffId: 's1', approverDisplayName: 'M', nowMs: 5 }, s);
+    expect(claim.kind).toBe('owned');
+    const raw = JSON.stringify(s.dump()[unresolvedAttemptKey('B1', 'O1')]);
     expect(raw).not.toContain('1234');
     expect(JSON.parse(raw)).not.toHaveProperty('pin');
-    expect(readUnresolvedReturnAttempt('B1', 'O1', s)).toMatchObject({
+    expect(await readUnresolvedReturnAttempt('B1', 'O1', s)).toMatchObject({
       state: 'UNKNOWN_PENDING_RESOLUTION',
       attemptId: 'attempt-0001',
       lines: [{ lineIndex: 0, productId: 'P1', qty: 1 }],
@@ -133,35 +125,35 @@ describe('D-RET-FIX-7 durable unresolved attempt record', () => {
     });
   });
 
-  test('absent → null; unreadable storage or corrupt record → undefined (fail closed)', () => {
-    const s = memory();
-    expect(readUnresolvedReturnAttempt('B1', 'O1', s)).toBeNull();
-    s.map.set(unresolvedAttemptKey('B1', 'O1'), '{not json');
-    expect(readUnresolvedReturnAttempt('B1', 'O1', s)).toBeUndefined();
-    s.map.set(unresolvedAttemptKey('B1', 'O1'), JSON.stringify({ schemaVersion: 1, state: 'UNKNOWN_PENDING_RESOLUTION' }));
-    expect(readUnresolvedReturnAttempt('B1', 'O1', s)).toBeUndefined();
-    expect(readUnresolvedReturnAttempt('B1', 'O1', null)).toBeUndefined();
-    const throwing: AttemptStorage = {
-      getItem: () => {
-        throw new Error('denied');
+  test('absent → null; unreadable storage or corrupt record → undefined (fail closed)', async () => {
+    const s = createInMemoryReturnAttemptStore();
+    expect(await readUnresolvedReturnAttempt('B1', 'O1', s)).toBeNull();
+    await s.transact('readwrite', (txn) => txn.put(unresolvedAttemptKey('B1', 'O1'), '{not json'));
+    expect(await readUnresolvedReturnAttempt('B1', 'O1', s)).toBeUndefined();
+    // A corrupt record is never overwritten by a new claim.
+    expect((await claimUnresolvedReturnAttempt(input, { requesterStaffId: 's1', approverDisplayName: 'M' }, s)).kind).toBe('unavailable');
+    await s.transact('readwrite', (txn) => txn.put(unresolvedAttemptKey('B1', 'O1'), { schemaVersion: 1, state: 'UNKNOWN_PENDING_RESOLUTION' }));
+    expect(await readUnresolvedReturnAttempt('B1', 'O1', s)).toBeUndefined();
+    const throwing: ReturnAttemptStore = {
+      transact: async () => {
+        throw new Error('IndexedDB unavailable');
       },
-      setItem: () => {
-        throw new Error('quota');
-      },
-      removeItem: () => undefined,
     };
-    expect(readUnresolvedReturnAttempt('B1', 'O1', throwing)).toBeUndefined();
-    expect(saveUnresolvedReturnAttempt(input, { requesterStaffId: 's1', approverDisplayName: 'M', nowMs: 1 }, throwing)).toBe(false);
+    expect(await readUnresolvedReturnAttempt('B1', 'O1', throwing)).toBeUndefined();
+    expect((await claimUnresolvedReturnAttempt(input, { requesterStaffId: 's1', approverDisplayName: 'M', nowMs: 1 }, throwing)).kind).toBe('unavailable');
+    expect(await releaseUnresolvedReturnAttempt('B1', 'O1', 'attempt-0001', throwing)).toBe('unavailable');
   });
 
-  test('records are keyed per sale and cleared only explicitly', () => {
-    const s = memory();
-    saveUnresolvedReturnAttempt(input, { requesterStaffId: 's1', approverDisplayName: 'M', nowMs: 1 }, s);
-    expect(readUnresolvedReturnAttempt('B1', 'O2', s)).toBeNull();
-    clearUnresolvedReturnAttempt('B1', 'O1', s);
-    expect(readUnresolvedReturnAttempt('B1', 'O1', s)).toBeNull();
+  test('records are keyed per sale and released only by the SAME attemptId', async () => {
+    const s = createInMemoryReturnAttemptStore();
+    await claimUnresolvedReturnAttempt(input, { requesterStaffId: 's1', approverDisplayName: 'M', nowMs: 1 }, s);
+    expect(await readUnresolvedReturnAttempt('B1', 'O2', s)).toBeNull();
+    expect(await releaseUnresolvedReturnAttempt('B1', 'O1', 'attempt-OTHER', s)).toBe('not_owner');
+    expect(await readUnresolvedReturnAttempt('B1', 'O1', s)).toMatchObject({ attemptId: 'attempt-0001' });
+    expect(await releaseUnresolvedReturnAttempt('B1', 'O1', 'attempt-0001', s)).toBe('released');
+    expect(await readUnresolvedReturnAttempt('B1', 'O1', s)).toBeNull();
+    expect(await releaseUnresolvedReturnAttempt('B1', 'O1', 'attempt-0001', s)).toBe('absent');
   });
-
   test('resolve adapter: PIN-less resolve mode; submit adapter declares submit mode', async () => {
     vi.stubGlobal('navigator', { onLine: true });
     const transport = vi.fn(async () => ({ ok: false, code: 'attempt_not_committed' }));

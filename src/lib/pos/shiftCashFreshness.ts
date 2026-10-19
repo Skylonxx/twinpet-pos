@@ -105,17 +105,35 @@ export function isNavigatorOnline(): boolean {
 //                      online close of the shift (whose transaction folded
 //                      every committed Return; a later one cannot commit onto
 //                      a closed shift).
-// While ANY key for the shift exists an OFFLINE close on this device fails
-// closed. Online closes never depend on it: their transaction reads the
-// authoritative shift. The value carries no secret (no PIN/token/OAC).
+// While ANY key for the shift exists — or the store cannot be read at all
+// (recovery gate C1) — an OFFLINE close on this device fails closed. Online
+// closes never depend on it: their transaction reads the authoritative shift.
+// The value carries no secret (no PIN/token/OAC).
 
 export const SERVER_CASH_PENDING_KEY_PREFIX = 'twinpet.shift.serverCashPending.v2:';
 
 export type CashAttemptMarkerState = 'in_flight' | 'committed_unsynced';
 
+/**
+ * The guard store, or `null` when it is unavailable: no `window`, a throwing
+ * `window.localStorage` getter (policy / SecurityError), a null handle, or a
+ * handle without the Storage methods. Callers treat `null` as UNVERIFIABLE —
+ * never as "no guard".
+ */
 function storage(): Storage | null {
   try {
-    return typeof window !== 'undefined' && window.localStorage ? window.localStorage : null;
+    if (typeof window === 'undefined') return null;
+    const s = window.localStorage as Storage | null | undefined;
+    if (
+      s == null ||
+      typeof s.getItem !== 'function' ||
+      typeof s.setItem !== 'function' ||
+      typeof s.removeItem !== 'function' ||
+      typeof s.key !== 'function'
+    ) {
+      return null;
+    }
+    return s;
   } catch {
     return null;
   }
@@ -156,7 +174,11 @@ export function clearCashReturnAttemptPending(shiftId: string, attemptId: string
 function shiftKeys(s: Storage, shiftId: string): string[] {
   const prefix = `${SERVER_CASH_PENDING_KEY_PREFIX}${shiftId}:`;
   const keys: string[] = [];
-  for (let i = 0; i < s.length; i += 1) {
+  const length = s.length;
+  if (typeof length !== 'number' || !Number.isInteger(length) || length < 0) {
+    throw new Error('guard store length unreadable');
+  }
+  for (let i = 0; i < length; i += 1) {
     const k = s.key(i);
     if (k != null && k.startsWith(prefix)) keys.push(k);
   }
@@ -175,16 +197,26 @@ export function clearShiftServerCashPending(shiftId: string): void {
 }
 
 /**
- * Any guard for the shift (value irrelevant — a corrupt value still guards).
- * An unreadable store fails CLOSED (`true`). No store at all ⇒ no cash Return
- * could have been sent from here (the send requires a persisted guard).
+ * `none`         the store was READ and holds no guard for the shift.
+ * `pending`      at least one guard (value irrelevant — a corrupt value still guards).
+ * `unverifiable` the store could not be read (see {@link storage}) or threw
+ *                while enumerated: a guard persisted earlier may exist, so an
+ *                offline close must fail CLOSED (recovery gate C1). Only a
+ *                readable store ever yields `none`.
  */
-export function hasShiftServerCashPending(shiftId: string): boolean {
+export type ShiftServerCashPendingState = 'none' | 'pending' | 'unverifiable';
+
+export function readShiftServerCashPending(shiftId: string): ShiftServerCashPendingState {
   try {
     const s = storage();
-    if (!s) return false;
-    return shiftKeys(s, shiftId).length > 0;
+    if (!s) return 'unverifiable';
+    return shiftKeys(s, shiftId).length > 0 ? 'pending' : 'none';
   } catch {
-    return true;
+    return 'unverifiable';
   }
+}
+
+/** `true` unless the store was read and holds no guard for the shift. */
+export function hasShiftServerCashPending(shiftId: string): boolean {
+  return readShiftServerCashPending(shiftId) !== 'none';
 }

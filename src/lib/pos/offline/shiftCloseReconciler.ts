@@ -15,7 +15,12 @@
 // module (the store only imports it internally, never re-exports it) — so each
 // is imported from its true source to satisfy build-mode TypeScript (TS2459).
 import type { ShiftCloseIntentJournal } from './shiftCloseIntentStore';
-import type { PointerRepairOutcome, ShiftCloseIntentEntry } from './shiftCloseIntentTypes';
+import type {
+  OnlineCloseAttemptRecord,
+  PointerRepairOutcome,
+  ShiftCloseIntentBusinessSnapshot,
+  ShiftCloseIntentEntry,
+} from './shiftCloseIntentTypes';
 import type { ShiftSyncState } from '../../types';
 
 /** Read-only, confirmation-grade shape of the fields this packet reconciles against. */
@@ -41,6 +46,8 @@ export type ShiftCloseConfirmationDoc = {
   payOutTotal?: number;
   totalBills?: number;
   note?: string;
+  /** Recovery gate B2: the W3 close's attempt identity (absent on legacy/foreign closes). */
+  closeCorrelationId?: string | null;
 };
 
 /** `ok: false` means the read could not be trusted (offline/unreachable/error) — never a rejection signal. */
@@ -214,16 +221,157 @@ export async function reconcileShiftCloseIntent(
   };
 }
 
+// ── Recovery gate B2: prepared ONLINE close attempts ──────────────────────
+
+export type OnlineCloseRecoveryOutcome =
+  /** The doc is closed with THIS attempt's correlation id; the journal entry now exists. */
+  | 'recovered'
+  /** The doc is closed by another correlation id: this attempt can never commit; deleted. */
+  | 'superseded'
+  /** Open / missing: not closed (yet). Kept — never a close claim, never a Z source. */
+  | 'not_closed'
+  /** Read or journal write failed. Kept; retried on the next trigger. */
+  | 'unreachable'
+  /** Closed with this id but the doc cannot be trusted as this close (identity/fields). Kept; no claim. */
+  | 'manual_attention';
+
+export type OnlineCloseRecoveryResult = {
+  shiftId: string;
+  outcome: OnlineCloseRecoveryOutcome;
+  entry?: ShiftCloseIntentEntry;
+};
+
+function finiteNumber(v: unknown): v is number {
+  return typeof v === 'number' && Number.isFinite(v);
+}
+
+/**
+ * Strict rebuild of the COMMITTED business snapshot from the authoritative
+ * closed doc (the W3 close writes every one of these fields). Any missing or
+ * non-numeric field → `null`: never reconstruct a Z from guessed values.
+ */
+function snapshotFromCommittedDoc(
+  attempt: OnlineCloseAttemptRecord,
+  doc: ShiftCloseConfirmationDoc,
+): ShiftCloseIntentBusinessSnapshot | null {
+  const nums = [
+    doc.startingCash,
+    doc.expectedCash,
+    doc.expectedQr,
+    doc.expectedKbank,
+    doc.expectedCard,
+    doc.expectedCredit,
+    doc.payInTotal,
+    doc.payOutTotal,
+    doc.totalBills,
+    doc.actualCashCount,
+    doc.variance,
+  ];
+  if (!nums.every(finiteNumber) || typeof doc.note !== 'string') return null;
+  return {
+    shiftId: attempt.shiftId,
+    branchId: attempt.branchId,
+    staffId: attempt.staffId,
+    staffName: attempt.staffName,
+    startingCash: doc.startingCash as number,
+    expectedCash: doc.expectedCash as number,
+    expectedQr: doc.expectedQr as number,
+    expectedKbank: doc.expectedKbank as number,
+    expectedCard: doc.expectedCard as number,
+    expectedCredit: doc.expectedCredit as number,
+    payInTotal: doc.payInTotal as number,
+    payOutTotal: doc.payOutTotal as number,
+    totalBills: doc.totalBills as number,
+    actualCashCount: doc.actualCashCount as number,
+    variance: doc.variance as number,
+    note: doc.note,
+    deviceId: attempt.deviceId,
+  };
+}
+
+/**
+ * Resolve ONE prepared online close attempt against a confirmation-grade read.
+ * Never invents a close: only a doc closed with THIS correlation id (and this
+ * branch/staff/device) is journaled, from the doc's own committed values.
+ * Idempotent: the journal finalize is a no-op for an equal existing entry.
+ * Never throws.
+ */
+export async function recoverOnlineCloseAttempt(
+  attempt: OnlineCloseAttemptRecord,
+  deps: Pick<ReconcileShiftCloseIntentDeps, 'journal' | 'readConfirmation' | 'deviceId'>,
+): Promise<OnlineCloseRecoveryResult> {
+  const shiftId = attempt.shiftId;
+  if (attempt.deviceId !== deps.deviceId) return { shiftId, outcome: 'not_closed' };
+  let read: ShiftCloseConfirmationRead;
+  try {
+    read = await deps.readConfirmation(shiftId);
+  } catch {
+    read = { ok: false };
+  }
+  if (!read.ok) return { shiftId, outcome: 'unreachable' };
+  const { doc } = read;
+  if (!doc.exists || doc.status !== 'closed') return { shiftId, outcome: 'not_closed' };
+  if (doc.closeCorrelationId !== attempt.closeCorrelationId) {
+    // Closed by another operation: W3 only closes an OPEN doc, so this attempt
+    // can never commit now — definitive, safe to drop (no Z, no journal entry).
+    try {
+      await deps.journal.discardOnlineCloseAttempt(shiftId, attempt.closeCorrelationId);
+    } catch {
+      return { shiftId, outcome: 'unreachable' };
+    }
+    return { shiftId, outcome: 'superseded' };
+  }
+  if (!isResolvedServerTimestamp(doc.closedAt)) return { shiftId, outcome: 'unreachable' };
+  if (doc.branchId !== attempt.branchId || doc.staffId !== attempt.staffId || doc.deviceId !== attempt.deviceId) {
+    return { shiftId, outcome: 'manual_attention' };
+  }
+  const snapshot = snapshotFromCommittedDoc(attempt, doc);
+  if (!snapshot) return { shiftId, outcome: 'manual_attention' };
+  let finalized: Awaited<ReturnType<ReconcileShiftCloseIntentDeps['journal']['finalizeOnlineClose']>>;
+  try {
+    finalized = await deps.journal.finalizeOnlineClose(snapshot, attempt.closeCorrelationId);
+  } catch {
+    return { shiftId, outcome: 'unreachable' };
+  }
+  if (!finalized.ok) {
+    return { shiftId, outcome: finalized.code === 'conflict' ? 'manual_attention' : 'unreachable' };
+  }
+  return { shiftId, outcome: 'recovered', entry: finalized.value };
+}
+
+/** Every THIS-device prepared attempt through {@link recoverOnlineCloseAttempt}. Never throws. */
+export async function recoverOnlineCloseAttempts(
+  deps: Pick<ReconcileShiftCloseIntentDeps, 'journal' | 'readConfirmation' | 'deviceId'>,
+): Promise<OnlineCloseRecoveryResult[]> {
+  let listed: Awaited<ReturnType<ReconcileShiftCloseIntentDeps['journal']['listOnlineCloseAttempts']>>;
+  try {
+    listed = await deps.journal.listOnlineCloseAttempts();
+  } catch {
+    return [];
+  }
+  if (!listed.ok) return [];
+  const results: OnlineCloseRecoveryResult[] = [];
+  for (const attempt of listed.value) {
+    if (attempt.deviceId !== deps.deviceId) continue;
+    results.push(await recoverOnlineCloseAttempt(attempt, deps));
+  }
+  return results;
+}
+
 /**
  * Sweep every THIS-device `local_closed_pending` intent through {@link reconcileShiftCloseIntent}.
  * Used by both the app-boot sweep and the reconnect (`online`) sweep in `POSPage.tsx`
- * — same function, so behavior is identical regardless of trigger. Never throws;
+ * (and the sync orchestrator) — same function, so behavior is identical regardless of trigger. Never throws;
  * a failed `listCloseIntents()` read just yields no work for this pass (retried
  * on the next trigger).
  */
 export async function runShiftCloseReconciliationSweep(
   deps: ReconcileShiftCloseIntentDeps,
 ): Promise<ReconcileShiftCloseIntentResult[]> {
+  // Recovery gate B2: first turn every prepared online close that DID commit
+  // into its journal entry, so the loop below reconciles it (synced + Variant C)
+  // exactly like any other pending close.
+  await recoverOnlineCloseAttempts(deps);
   const listed = await deps.journal.listCloseIntents();
   if (!listed.ok) return [];
 

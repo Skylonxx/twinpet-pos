@@ -961,12 +961,33 @@ export default function POSPage({ trustedResumeSweep }: POSPageProps = {}) {
             );
             setShiftOpenPendingSync(false);
           } else {
-            setActiveShift(shift);
-            setShiftBootBlocked(false);
-            setShiftOpenAttention(null);
-            setShiftOpenPendingSync(
-              shift.openedOffline === true && shift.syncState === 'pending',
-            );
+            // Recovery gate B2: an ONLINE close of this shift with an unknown
+            // outcome may already be committed, so a CACHED "open" cannot be
+            // trusted — hold the drawer until an online boot / the sweep
+            // resolves it. (A server read is authoritative: restore as usual.)
+            const attempts =
+              result.provenance === 'cache' ? await closeJournal.listOnlineCloseAttempts() : null;
+            if (cancelled) return;
+            if (attempts && !attempts.ok) {
+              setActiveShift(null);
+              setShiftBootBlocked(true);
+              setShiftOpenAttention(null);
+              setShiftOpenPendingSync(false);
+            } else if (attempts?.value.some((a) => a.shiftId === shift.id)) {
+              setActiveShift(null);
+              setShiftBootBlocked(false);
+              setShiftOpenAttention(
+                'มีกะที่ปิดค้างอยู่ในเครื่องนี้และยังยืนยันสถานะไม่ได้ — ไม่สามารถเปิดกะใหม่ได้ในขณะนี้',
+              );
+              setShiftOpenPendingSync(false);
+            } else {
+              setActiveShift(shift);
+              setShiftBootBlocked(false);
+              setShiftOpenAttention(null);
+              setShiftOpenPendingSync(
+                shift.openedOffline === true && shift.syncState === 'pending',
+              );
+            }
           }
         } else {
           // result.status === 'absent'

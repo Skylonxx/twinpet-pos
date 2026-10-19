@@ -85,5 +85,50 @@ export type ShiftCloseIntentObservabilityEvent = {
   pointerRepair: PointerRepairOutcome;
 };
 
+/**
+ * Recovery gate B2 — durable two-stage ONLINE close protocol. One attempt
+ * record per shift, stored beside the close-intents (array key, like the
+ * latest-by-device pointer):
+ *
+ *   prepared    written AND read back BEFORE the close transaction: identity
+ *               plus an immutable correlation id only. It is NOT a close
+ *               claim — no totals, never listed as a close intent, never a
+ *               Z-report source, never blocks boot or a new open.
+ *   finalized   after the W3 commit, ONE store transaction creates the
+ *               `local_closed_pending` entry from the COMMITTED snapshot and
+ *               deletes the attempt (never both, never neither).
+ *   recovered   boot/reconnect sweep: the authoritative doc is closed with THIS
+ *               correlation id → the entry is rebuilt from that doc and
+ *               finalized exactly as above, then the existing reconciliation
+ *               (journal `synced` + Variant C) runs once.
+ *   superseded  the doc is closed by another correlation id — our attempt can
+ *               no longer commit (W3 requires open → closed) → deleted, no Z.
+ *   kept        doc open / missing / unreadable: stays `prepared` (the next
+ *               close of the shift reuses its correlation id, so a late commit
+ *               is recognised as this device's own). Never silently dropped.
+ */
+export type OnlineCloseAttemptRecord = {
+  kind: 'onlineCloseAttempt';
+  version: 1;
+  shiftId: string;
+  branchId: string;
+  staffId: string;
+  staffName: string;
+  deviceId: string;
+  /** Lowercase v4 UUID written as `closeCorrelationId` by the W3 close. */
+  closeCorrelationId: string;
+  preparedAtLocal: number;
+};
+
+export type OnlineCloseAttemptIdentity = Pick<
+  OnlineCloseAttemptRecord,
+  'shiftId' | 'branchId' | 'staffId' | 'staffName' | 'deviceId'
+>;
+
+/** `journaled` = this shift already has a close-intent entry (the close is already recorded). */
+export type PrepareOnlineCloseResult =
+  | { kind: 'prepared'; attempt: OnlineCloseAttemptRecord }
+  | { kind: 'journaled'; entry: ShiftCloseIntentEntry };
+
 /** Aligns with the existing `OLD_PENDING_AGE_MS` convention used by `selectDevicePendingSummary`. */
 export const SHIFT_CLOSE_INTENT_STALE_AGE_MS = 10 * 60 * 1000;

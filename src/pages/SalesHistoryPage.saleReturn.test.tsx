@@ -90,6 +90,12 @@ vi.mock('../lib/saleReturn/saleReturnService', async (importOriginal) => {
 });
 
 import SalesHistoryPage from './SalesHistoryPage';
+import {
+  __setReturnAttemptStoreForTests,
+  createInMemoryReturnAttemptStore,
+} from '../lib/saleReturn/unresolvedReturnAttempt';
+
+let attemptStore: ReturnType<typeof createInMemoryReturnAttemptStore>;
 
 function record(id: string, over: Partial<SaleRecord['order']> = {}, pendingSync = false): SaleRecord {
   const createdAt = new Date(Date.now() - 3 * 86_400_000); // cross-day sale
@@ -188,6 +194,8 @@ beforeEach(() => {
   onlineValue = true;
   storage = new Map();
   vi.stubGlobal('localStorage', memoryStorage());
+  attemptStore = createInMemoryReturnAttemptStore();
+  __setReturnAttemptStoreForTests(attemptStore);
   resolveMock.mockReset();
   attemptIdMock.mockReset();
   attemptIdMock.mockReturnValue('attempt-ui-0001');
@@ -206,7 +214,7 @@ afterEach(() => {
 });
 
 function unresolvedValues(): string[] {
-  return [...storage.entries()].filter(([k]) => k.startsWith('twinpet.saleReturn.unresolved.')).map(([, v]) => v);
+  return Object.values(attemptStore.dump()).map((v) => JSON.stringify(v));
 }
 
 function guardKeys(): string[] {
@@ -530,7 +538,7 @@ describe('SalesHistoryPage — unresolved Return attempt recovery (D-RET-FIX-7)'
       fireEvent.click(screen.getByTestId('sale-return-resolve'));
     });
     await waitFor(() => expect(screen.getByTestId('sale-return-error').textContent).toContain('เริ่มรายการใหม่ได้'));
-    expect(storage.size).toBe(0);
+    expect(storage.size + unresolvedValues().length).toBe(0);
     expect(screen.getByTestId('sale-return-lines')).toBeTruthy();
   });
 
@@ -541,14 +549,13 @@ describe('SalesHistoryPage — unresolved Return attempt recovery (D-RET-FIX-7)'
     await openReturn('BILL-R1');
     await draftAndEnterPin();
     await waitFor(() => expect(screen.getByTestId('sale-return-error')).toBeTruthy());
-    expect(storage.size).toBe(0);
+    expect(storage.size + unresolvedValues().length).toBe(0);
   });
 
   test('a stored attempt of ANOTHER user on this device blocks both actions', async () => {
     fetchContextMock.mockResolvedValue({ kind: 'ok', classification: 'RETURN_ELIGIBLE', reason: null, context: context() });
-    storage.set(
-      'twinpet.saleReturn.unresolved.v1:LDP-001:BILL-R1',
-      JSON.stringify({
+    await attemptStore.transact('readwrite', (txn) =>
+      txn.put('twinpet.saleReturn.unresolved.v1:LDP-001:BILL-R1', {
         schemaVersion: 1,
         state: 'UNKNOWN_PENDING_RESOLUTION',
         attemptId: 'attempt-x',

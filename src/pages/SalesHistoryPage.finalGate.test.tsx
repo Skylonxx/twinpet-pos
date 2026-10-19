@@ -104,6 +104,19 @@ vi.mock('../lib/hooks/useAuth', () => ({
   }),
 }));
 vi.mock('../lib/salesHistory/useSalesHistory', () => ({ useSalesHistory: () => historyState }));
+// Records the Return map of EVERY summary computation (pass-through), so a
+// single render that mixes a stale generation into "net" is observable.
+const summaryCalls = vi.hoisted(() => [] as Array<Map<string, unknown> | null>);
+vi.mock('../lib/salesHistory/types', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/salesHistory/types')>();
+  return {
+    ...actual,
+    computeSummary: (...args: Parameters<typeof actual.computeSummary>) => {
+      summaryCalls.push((args[1] as Map<string, unknown> | null | undefined) ?? null);
+      return actual.computeSummary(...args);
+    },
+  };
+});
 vi.mock('../lib/salesHistory/useOrderItemsLive', () => ({ useOrderItemsLive: () => ({ items: [], state: 'live', fromCache: false }) }));
 vi.mock('../lib/pos/usePosProducts', () => ({ usePosProducts: () => ({ products: [] }) }));
 vi.mock('../lib/documents/receiptFetch', () => ({ fetchOrderReceipt: vi.fn() }));
@@ -146,6 +159,12 @@ import { hasShiftServerCashPending } from '../lib/pos/shiftCashFreshness';
 import { useSaleReturnAdjustments } from '../lib/saleReturn/returnAdjustments';
 import { useProfitReport } from '../lib/profitReport/useProfitReport';
 import { computeKpi } from '../lib/profitReport/types';
+import {
+  __setReturnAttemptStoreForTests,
+  createInMemoryReturnAttemptStore,
+} from '../lib/saleReturn/unresolvedReturnAttempt';
+
+let attemptStore: ReturnType<typeof createInMemoryReturnAttemptStore>;
 
 // ── Fixtures ──
 
@@ -238,6 +257,8 @@ beforeEach(() => {
   storage = new Map();
   setItemFails = () => false;
   vi.stubGlobal('localStorage', memoryStorage());
+  attemptStore = createInMemoryReturnAttemptStore();
+  __setReturnAttemptStoreForTests(attemptStore);
   Object.defineProperty(window.navigator, 'onLine', { configurable: true, get: () => true });
   auth.branchId = 'LDP-001';
   historyState.records = [];
@@ -364,6 +385,193 @@ describe('§1 useSaleReturnAdjustments — branch / subscription generation', ()
     rerender({ b: 'A' });
     act(() => lA!.next(snap([returnDoc('RA', 'O1', 'A')], false)));
     expect(result.current).toMatchObject({ branchId: 'A', status: 'loading' });
+  });
+
+  // Recovery gate A1: A ready → B (NO B snapshot) → A (NO fresh A snapshot).
+  // Every render — not only the settled one — must be gross/loading for the
+  // new generation until that generation's own server-confirmed event.
+  test('A ready → B (no event) → A (no event): no render reuses the old A ready; only the NEW A server event is net', () => {
+    const renders: Array<{ b: string; branchId: string | null; status: string; n: number }> = [];
+    const { result, rerender } = renderHook(
+      ({ b }) => {
+        const s = useSaleReturnAdjustments(b);
+        renders.push({ b, branchId: s.branchId, status: s.status, n: s.adjustments.length });
+        return s;
+      },
+      { initialProps: { b: 'A' } },
+    );
+    const lA1 = returnsListeners()[0]!;
+    act(() => lA1.next(snap([returnDoc('RA', 'O1', 'A')], false)));
+    expect(result.current).toMatchObject({ branchId: 'A', status: 'ready' });
+    expect(result.current.adjustments).toHaveLength(1);
+
+    const mark = renders.length;
+    rerender({ b: 'B' });
+    rerender({ b: 'A' });
+    const after = renders.slice(mark);
+    expect(after.length).toBeGreaterThan(0);
+    for (const r of after) expect(r).toMatchObject({ branchId: r.b, status: 'loading', n: 0 });
+    expect(result.current).toMatchObject({ branchId: 'A', status: 'loading', adjustments: [] });
+
+    const [, lB, lA2] = returnsListeners();
+    expect(lA1.active).toBe(false);
+    expect(lB!.active).toBe(false);
+    expect(lA2!.active).toBe(true);
+
+    // Late callbacks from the old A and old B generations are dropped.
+    const mark2 = renders.length;
+    act(() => lA1.next(snap([returnDoc('RA', 'O1', 'A')], false)));
+    act(() => lB!.next(snap([], false)));
+    act(() => lB!.error(new Error('late')));
+    for (const r of renders.slice(mark2)) expect(r).toMatchObject({ status: 'loading', n: 0 });
+    expect(result.current.status).toBe('loading');
+
+    // New A generation: cache-only stays gross; only server-confirmed is net.
+    act(() => lA2!.next(snap([returnDoc('RA', 'O1', 'A'), returnDoc('RA2', 'O2', 'A')], true)));
+    expect(result.current).toMatchObject({ status: 'unconfirmed', adjustments: [] });
+    act(() => lA2!.next(snap([returnDoc('RA', 'O1', 'A'), returnDoc('RA2', 'O2', 'A')], false)));
+    expect(result.current).toMatchObject({ branchId: 'A', status: 'ready' });
+    expect(result.current.adjustments.map((a) => a.returnId)).toEqual(['RA', 'RA2']);
+
+    // Metadata-only demotion/promotion, malformed demotion and error demotion on the new generation.
+    act(() => lA2!.next(snap([returnDoc('RA', 'O1', 'A'), returnDoc('RA2', 'O2', 'A')], true)));
+    expect(result.current).toMatchObject({ status: 'unconfirmed', adjustments: [] });
+    act(() => lA2!.next(snap([returnDoc('RA', 'O1', 'A'), returnDoc('RA2', 'O2', 'A')], false)));
+    expect(result.current.status).toBe('ready');
+    act(() => lA2!.next(snap([returnDoc('RA', 'O1', 'A'), MALFORMED], false)));
+    expect(result.current).toMatchObject({ status: 'unavailable', adjustments: [] });
+    act(() => lA2!.next(snap([returnDoc('RA', 'O1', 'A')], false)));
+    expect(result.current.status).toBe('ready');
+    act(() => lA2!.error(new Error('permission-denied')));
+    expect(result.current).toMatchObject({ status: 'unavailable', adjustments: [] });
+    // Bounded: no render loop.
+    expect(renders.length).toBeLessThan(40);
+  });
+
+  test('A → B → A where B emitted only from cache: the A switch-back is still loading, not the old A ready', () => {
+    const { result, rerender } = renderHook(({ b }) => useSaleReturnAdjustments(b), { initialProps: { b: 'A' } });
+    act(() => returnsListeners()[0]!.next(snap([returnDoc('RA', 'O1', 'A')], false)));
+    rerender({ b: 'B' });
+    act(() => returnsListeners()[1]!.next(snap([], true)));
+    expect(result.current).toMatchObject({ branchId: 'B', status: 'unconfirmed' });
+    rerender({ b: 'A' });
+    expect(result.current).toMatchObject({ branchId: 'A', status: 'loading', adjustments: [] });
+  });
+});
+
+describe('§1 A1 — real Sales History + Profit consumers across A → B → A with no fresh snapshot', () => {
+  const A = 'LDP-001';
+  const B = 'LDP-002';
+
+  test('Sales History: every summary computation and the rendered cards stay gross until the NEW A generation is server-confirmed', async () => {
+    const rec = record('BILL-R1');
+    historyState.records = [rec];
+    const { rerender } = render(createElement(SalesHistoryPage));
+    fireEvent.click(screen.getByTestId('date-range'));
+    await waitFor(() => expect(screen.getByText('BILL-R1')).toBeTruthy());
+    emitReturns([returnDoc('R1', 'BILL-R1', A)], false);
+    expect(totalCard()).toContain('864');
+    expect(screen.getByTestId('sh-returned-BILL-R1')).toBeTruthy();
+
+    const mark = summaryCalls.length;
+    auth.branchId = B;
+    rerender(createElement(SalesHistoryPage));
+    expect(totalCard()).toContain('945');
+    expect(grossNote()).toContain('กำลังโหลดรายการคืนสินค้า');
+    auth.branchId = A;
+    rerender(createElement(SalesHistoryPage));
+    // Old A generation is never reused: every computation since the switch is gross.
+    for (const c of summaryCalls.slice(mark)) expect(c).toBeNull();
+    expect(totalCard()).toContain('945');
+    expect(totalCard()).toContain('ก่อนหักคืนสินค้า');
+    expect(grossNote()).toContain('กำลังโหลดรายการคืนสินค้า');
+    expect(screen.queryByTestId('sh-returned-BILL-R1')).toBeNull();
+
+    const listeners = returnsListeners();
+    const oldA = listeners[0]!;
+    const oldB = listeners[1]!;
+    const newA = listeners[2]!;
+    // Late old-generation callbacks change nothing.
+    emitReturns([returnDoc('R1', 'BILL-R1', A)], false, [oldA]);
+    emitReturns([], false, [oldB]);
+    for (const c of summaryCalls.slice(mark)) expect(c).toBeNull();
+    expect(totalCard()).toContain('945');
+
+    // New A: cache-only (even holding a new Return) stays gross.
+    emitReturns([returnDoc('R1', 'BILL-R1', A), returnDoc('R2', 'BILL-R1', A, 19)], true, [newA]);
+    expect(totalCard()).toContain('945');
+    expect(grossNote()).toContain('ยังยืนยันรายการคืนสินค้าครบถ้วนกับเซิร์ฟเวอร์ไม่ได้');
+    for (const c of summaryCalls.slice(mark)) expect(c).toBeNull();
+
+    // Only the new A server-confirmed event produces net — including the Return accepted meanwhile.
+    emitReturns([returnDoc('R1', 'BILL-R1', A), returnDoc('R2', 'BILL-R1', A, 19)], false, [newA]);
+    expect(totalCard()).toContain('ยอดขายสุทธิ');
+    expect(totalCard()).toContain('845');
+    expect(grossNote()).toBeNull();
+  });
+
+  test('Profit hook: every render across A → B → A is gross (no Return lines) until the NEW A server event', async () => {
+    fs.orderItems.set('O1', [
+      { id: 'i1', productId: 'P1', productSnap: { name: 'อาหารแมว', sku: 'CF', category: 'อาหาร' }, qty: 10, unitPrice: 105, lineTotal: 1050, fifoCost: 600 },
+    ]);
+    const seen: Array<{ b: string; net: boolean; status: string; returnLines: number }> = [];
+    const { result, rerender } = renderHook(
+      ({ b }) => {
+        const r = useProfitReport(b);
+        seen.push({ b, net: r.netOfReturns, status: r.returnsStatus, returnLines: r.lines.filter((l) => l.revenue < 0).length });
+        return r;
+      },
+      { initialProps: { b: A } },
+    );
+    const created = new Date();
+    const order = { id: 'O1', billId: 'O1', branchId: A, status: 'completed', subtotal: 1050, cogs: 600, profit: 450, customerSnap: null, createdAt: { toDate: () => created } };
+    act(() => {
+      for (const l of fs.listeners.filter((x) => x.name === 'orders' && x.active)) l.next({ docs: [{ id: 'O1', data: () => order }] });
+    });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    emitReturns([returnDoc('R1', 'O1', A)], false);
+    expect(result.current.netOfReturns).toBe(true);
+    expect(computeKpi(result.current.lines)).toMatchObject({ revenue: 945 });
+
+    const mark = seen.length;
+    rerender({ b: B });
+    rerender({ b: A });
+    for (const s of seen.slice(mark)) expect(s).toMatchObject({ net: false, status: 'loading', returnLines: 0 });
+    // Late old-A callback (first saleReturns listener) is dropped.
+    emitReturns([returnDoc('R1', 'O1', A)], false, [returnsListeners()[0]!]);
+    expect(result.current).toMatchObject({ netOfReturns: false, returnsStatus: 'loading' });
+
+    const newA = returnsListeners()[2]!;
+    emitReturns([returnDoc('R1', 'O1', A)], true, [newA]);
+    expect(result.current).toMatchObject({ netOfReturns: false, returnsStatus: 'unconfirmed' });
+    for (const s of seen.slice(mark)) expect(s.returnLines).toBe(0);
+    emitReturns([returnDoc('R1', 'O1', A)], false, [newA]);
+    expect(result.current).toMatchObject({ netOfReturns: true, returnsStatus: 'ready' });
+  });
+
+  test('Profit page caption: A ready → B → A shows the loading (gross) caption, then net only after the new A server event', async () => {
+    vi.doMock('react-chartjs-2', () => ({ Bar: () => null, Doughnut: () => null }));
+    const { default: ProfitReportPage } = await import('./ProfitReportPage');
+    const { rerender } = render(createElement(ProfitReportPage));
+    act(() => {
+      for (const l of fs.listeners.filter((x) => x.name === 'orders' && x.active)) l.next({ docs: [] });
+    });
+    await screen.findByTestId('pr-returns-basis');
+    emitReturns([], false);
+    expect(screen.getByTestId('pr-returns-basis').textContent).toContain('สุทธิหลังหักคืนสินค้า');
+    auth.branchId = B;
+    rerender(createElement(ProfitReportPage));
+    auth.branchId = A;
+    rerender(createElement(ProfitReportPage));
+    act(() => {
+      for (const l of fs.listeners.filter((x) => x.name === 'orders' && x.active)) l.next({ docs: [] });
+    });
+    const basis = await screen.findByTestId('pr-returns-basis');
+    expect(basis.textContent).toContain('กำลังโหลดรายการคืนสินค้า');
+    emitReturns([], false, [returnsListeners()[0]!]); // late old-A event
+    expect(screen.getByTestId('pr-returns-basis').textContent).toContain('กำลังโหลดรายการคืนสินค้า');
+    emitReturns([], false, [returnsListeners()[2]!]);
+    expect(screen.getByTestId('pr-returns-basis').textContent).toContain('สุทธิหลังหักคืนสินค้า');
   });
 });
 
@@ -636,6 +844,7 @@ describe('§3 unknown cash Return — pre-send guard and resolution', () => {
     await draftAndSubmit('cash');
     await waitFor(() => expect(screen.getByTestId('sale-return-error').textContent).toContain('ยังไม่ได้ส่งรายการคืนสินค้า'));
     expect(submitMock).not.toHaveBeenCalled();
-    expect([...storage.keys()]).toEqual([]); // recovery record rolled back too
+    expect([...storage.keys()]).toEqual([]);
+    await waitFor(() => expect(attemptStore.dump()).toEqual({})); // recovery record rolled back too
   });
 });

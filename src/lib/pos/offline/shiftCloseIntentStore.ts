@@ -1,18 +1,22 @@
 import type {
   CloseIntentErrorCode,
   CloseIntentResult,
+  OnlineCloseAttemptIdentity,
+  OnlineCloseAttemptRecord,
   PointerRepairObserver,
   PointerRepairOutcome,
   ShiftCloseIntentBusinessSnapshot,
   ShiftCloseIntentEntry,
   ShiftCloseIntentObservabilityEvent,
   ShiftCloseIntentStatus,
+  PrepareOnlineCloseResult,
 } from './shiftCloseIntentTypes';
 import { SHIFT_CLOSE_INTENT_STALE_AGE_MS } from './shiftCloseIntentTypes';
 import {
   getCommittedDurableStore,
   nativeTxnGet,
   nativeTxnGetAll,
+  nativeTxnDelete,
   nativeTxnGetAllKeys,
   nativeTxnPut,
   registerDomainDumper,
@@ -41,6 +45,13 @@ interface ShiftCloseIntentTxn {
   getAll<T>(store: ShiftCloseIntentStoreName): Promise<T[]>;
   getAllKeys?: (store: ShiftCloseIntentStoreName) => Promise<Array<string | string[]>>;
   put(store: ShiftCloseIntentStoreName, key: ShiftCloseIntentStoreKey, value: unknown): Promise<void>;
+  /** Implemented by every production backend; a wrapper without it cannot finalize/discard (fails closed). */
+  delete?: (store: ShiftCloseIntentStoreName, key: ShiftCloseIntentStoreKey) => Promise<void>;
+}
+
+function txnDelete(txn: ShiftCloseIntentTxn, key: ShiftCloseIntentStoreKey): Promise<void> {
+  if (!txn.delete) throw new Error('shift-close-intent store cannot delete');
+  return txn.delete('shiftCloseIntents', key);
 }
 
 interface ShiftCloseIntentKvStore {
@@ -102,6 +113,7 @@ export function createIndexedDbShiftCloseIntentStore(): ShiftCloseIntentKvStore 
             getAll: (store) => nativeTxnGetAll(txn, store),
             getAllKeys: (store) => nativeTxnGetAllKeys(txn, store) as Promise<Array<string | string[]>>,
             put: (store, key, value) => nativeTxnPut(txn, store, asShiftCloseDurableKey(key), value),
+            delete: (store, key) => nativeTxnDelete(txn, store, asShiftCloseDurableKey(key)),
           }),
         );
       },
@@ -144,6 +156,8 @@ export function createIndexedDbShiftCloseIntentStore(): ShiftCloseIntentKvStore 
                 reqP(tx.objectStore(store).getAllKeys()).then((keys) => keys.map(asShiftCloseDurableKey)),
               put: (store, key, value) =>
                 reqP(tx.objectStore(store).put(value, key)).then(() => undefined),
+              delete: (store, key) =>
+                reqP(tx.objectStore(store).delete(key)).then(() => undefined),
             };
 
             tx.oncomplete = () => {
@@ -193,59 +207,78 @@ export function createInMemoryShiftCloseIntentStore(): ShiftCloseIntentKvStore &
   };
 
   const clone = <T>(v: T): T => (v === undefined ? v : (JSON.parse(JSON.stringify(v)) as T));
+  // IndexedDB runs readwrite transactions over the same store one at a time;
+  // mirror that so concurrent callers (two tabs / overlapping closes) observe
+  // each other's committed writes exactly as they would on the real store.
+  let readwriteTail: Promise<unknown> = Promise.resolve();
+
+  const transactNow = async <T>(
+    stores: ShiftCloseIntentStoreName[],
+    mode: 'readonly' | 'readwrite',
+    fn: (txn: ShiftCloseIntentTxn) => Promise<T>,
+  ): Promise<T> => {
+    const working = new Map<ShiftCloseIntentStoreName, Map<string, unknown>>();
+    for (const s of stores) {
+      const copy = new Map<string, unknown>();
+      for (const [k, v] of data[s]) copy.set(k, clone(v));
+      working.set(s, copy);
+    }
+    const ensure = (store: ShiftCloseIntentStoreName): Map<string, unknown> => {
+      const m = working.get(store);
+      if (!m) throw new Error(`store "${store}" not in transaction scope`);
+      return m;
+    };
+
+    const txn: ShiftCloseIntentTxn = {
+      async get<R>(store: ShiftCloseIntentStoreName, key: ShiftCloseIntentStoreKey): Promise<R | undefined> {
+        return clone(ensure(store).get(encodeStoreKey(key))) as R | undefined;
+      },
+      async getAll<R>(store: ShiftCloseIntentStoreName): Promise<R[]> {
+        // IndexedDB orders string keys before array keys; mirror that for parity.
+        const entries: unknown[] = [];
+        const pointers: unknown[] = [];
+        for (const [k, v] of ensure(store)) {
+          if (k.startsWith('s:')) entries.push(clone(v));
+          else pointers.push(clone(v));
+        }
+        return [...entries, ...pointers] as R[];
+      },
+      async getAllKeys(store: ShiftCloseIntentStoreName): Promise<Array<string | string[]>> {
+        const strings: string[] = [];
+        const arrays: string[][] = [];
+        for (const k of ensure(store).keys()) {
+          if (k.startsWith('s:')) strings.push(k.slice(2));
+          else arrays.push(JSON.parse(k.slice(2)) as string[]);
+        }
+        return [...strings, ...arrays];
+      },
+      async put(store, key, value) {
+        if (mode !== 'readwrite') throw new Error('put in readonly transaction');
+        ensure(store).set(encodeStoreKey(key), clone(value));
+      },
+      async delete(store, key) {
+        if (mode !== 'readwrite') throw new Error('delete in readonly transaction');
+        ensure(store).delete(encodeStoreKey(key));
+      },
+    };
+
+    const result = await fn(txn);
+    if (mode === 'readwrite') {
+      for (const s of stores) data[s] = working.get(s)!;
+    }
+    return result;
+  };
 
   return {
-    async transact<T>(
+    transact<T>(
       stores: ShiftCloseIntentStoreName[],
       mode: 'readonly' | 'readwrite',
       fn: (txn: ShiftCloseIntentTxn) => Promise<T>,
     ): Promise<T> {
-      const working = new Map<ShiftCloseIntentStoreName, Map<string, unknown>>();
-      for (const s of stores) {
-        const copy = new Map<string, unknown>();
-        for (const [k, v] of data[s]) copy.set(k, clone(v));
-        working.set(s, copy);
-      }
-      const ensure = (store: ShiftCloseIntentStoreName): Map<string, unknown> => {
-        const m = working.get(store);
-        if (!m) throw new Error(`store "${store}" not in transaction scope`);
-        return m;
-      };
-
-      const txn: ShiftCloseIntentTxn = {
-        async get<R>(store: ShiftCloseIntentStoreName, key: ShiftCloseIntentStoreKey): Promise<R | undefined> {
-          return clone(ensure(store).get(encodeStoreKey(key))) as R | undefined;
-        },
-        async getAll<R>(store: ShiftCloseIntentStoreName): Promise<R[]> {
-          // IndexedDB orders string keys before array keys; mirror that for parity.
-          const entries: unknown[] = [];
-          const pointers: unknown[] = [];
-          for (const [k, v] of ensure(store)) {
-            if (k.startsWith('s:')) entries.push(clone(v));
-            else pointers.push(clone(v));
-          }
-          return [...entries, ...pointers] as R[];
-        },
-        async getAllKeys(store: ShiftCloseIntentStoreName): Promise<Array<string | string[]>> {
-          const strings: string[] = [];
-          const arrays: string[][] = [];
-          for (const k of ensure(store).keys()) {
-            if (k.startsWith('s:')) strings.push(k.slice(2));
-            else arrays.push(JSON.parse(k.slice(2)) as string[]);
-          }
-          return [...strings, ...arrays];
-        },
-        async put(store, key, value) {
-          if (mode !== 'readwrite') throw new Error('put in readonly transaction');
-          ensure(store).set(encodeStoreKey(key), clone(value));
-        },
-      };
-
-      const result = await fn(txn);
-      if (mode === 'readwrite') {
-        for (const s of stores) data[s] = working.get(s)!;
-      }
-      return result;
+      if (mode === 'readonly') return transactNow(stores, mode, fn);
+      const run = readwriteTail.then(() => transactNow(stores, mode, fn));
+      readwriteTail = run.catch(() => undefined);
+      return run;
     },
 
     dump() {
@@ -383,6 +416,7 @@ export type LatestCloseIntentPointer = {
 export type ListCloseIntentsCorruptionReason =
   | 'unknown_record'
   | 'malformed_pointer'
+  | 'malformed_attempt'
   | 'malformed_entry';
 
 export type ExistingStorageFailure = {
@@ -420,6 +454,11 @@ export function latestByDevicePointerKey(deviceId: string): IDBValidKey {
   return ['__twinpet_meta__', 'latestCloseIntentByDevice', deviceId];
 }
 
+/** Recovery gate B2: the per-shift ONLINE close attempt (see {@link OnlineCloseAttemptRecord}). */
+export function onlineCloseAttemptKey(shiftId: string): IDBValidKey {
+  return ['__twinpet_meta__', 'onlineCloseAttempt', shiftId];
+}
+
 function isPlainRecord(v: unknown): v is Record<string, unknown> {
   if (v === null || typeof v !== 'object' || Array.isArray(v)) return false;
   const p = Object.getPrototypeOf(v);
@@ -450,6 +489,30 @@ function isValidV1Pointer(v: unknown): v is LatestCloseIntentPointer {
     r.shiftId.length > 0 &&
     isValidLocalTimestamp(r.closedAtLocal)
   );
+}
+
+function isOnlineCloseAttemptShaped(v: unknown): boolean {
+  return isPlainRecord(v) && v.kind === 'onlineCloseAttempt';
+}
+
+function isValidOnlineCloseAttempt(v: unknown): v is OnlineCloseAttemptRecord {
+  if (!isOnlineCloseAttemptShaped(v)) return false;
+  const r = v as Record<string, unknown>;
+  return (
+    r.version === 1 &&
+    typeof r.shiftId === 'string' &&
+    r.shiftId.length > 0 &&
+    typeof r.branchId === 'string' &&
+    typeof r.staffId === 'string' &&
+    typeof r.staffName === 'string' &&
+    usableDeviceId(r.deviceId) &&
+    isValidLowercaseUuidV4(r.closeCorrelationId) &&
+    isValidLocalTimestamp(r.preparedAtLocal)
+  );
+}
+
+function sameAttemptIdentity(a: OnlineCloseAttemptIdentity, b: OnlineCloseAttemptIdentity): boolean {
+  return a.shiftId === b.shiftId && a.branchId === b.branchId && a.staffId === b.staffId && a.deviceId === b.deviceId;
 }
 
 function isCloseIntentEntry(v: unknown): v is ShiftCloseIntentEntry {
@@ -512,6 +575,12 @@ function classifyListRecords(records: unknown[]): ListCloseIntentsResult {
   };
 
   for (const raw of records) {
+    if (isOnlineCloseAttemptShaped(raw)) {
+      // Not a close intent (no close claim); a malformed one fails closed.
+      if (isValidOnlineCloseAttempt(raw)) continue;
+      markCorrupt('malformed_attempt');
+      continue;
+    }
     if (isPointerShaped(raw)) {
       if (isValidV1Pointer(raw)) continue;
       markCorrupt('malformed_pointer');
@@ -924,6 +993,38 @@ export type ShiftCloseIntentJournal = {
     reason: string,
     observePointerRepair?: PointerRepairObserver,
   ) => Promise<CloseIntentResult<ShiftCloseIntentEntry>>;
+  /**
+   * Recovery gate B2 stage 1 — BEFORE any server write. Returns the shift's
+   * existing close-intent (`journaled`), else the existing attempt of the same
+   * identity (its correlation id is reused), else writes a new attempt and
+   * verifies it with a separate committed read. Any failure → nothing may be
+   * sent. A missing secure correlation id is a failure (the commit could not
+   * be recognised later).
+   */
+  prepareOnlineCloseAttempt: (
+    identity: OnlineCloseAttemptIdentity,
+  ) => Promise<CloseIntentResult<PrepareOnlineCloseResult>>;
+  /**
+   * Recovery gate B2 stage 3 — after the W3 commit: in ONE store transaction,
+   * create the `local_closed_pending` entry from the COMMITTED snapshot and
+   * delete the matching attempt. Idempotent for the same snapshot + id; never
+   * overwrites a different entry nor consumes another correlation's attempt.
+   */
+  finalizeOnlineClose: (
+    snapshot: ShiftCloseIntentBusinessSnapshot,
+    closeCorrelationId: string,
+    observePointerRepair?: PointerRepairObserver,
+  ) => Promise<CloseIntentResult<ShiftCloseIntentEntry>>;
+  /** Every prepared attempt; a malformed one fails the whole read (`conflict`). */
+  listOnlineCloseAttempts: () => Promise<CloseIntentResult<OnlineCloseAttemptRecord[]>>;
+  /**
+   * Deletes the attempt ONLY if it still carries `closeCorrelationId` (value
+   * `true`); used once the server proved this attempt can never commit.
+   */
+  discardOnlineCloseAttempt: (
+    shiftId: string,
+    closeCorrelationId: string,
+  ) => Promise<CloseIntentResult<boolean>>;
 };
 
 export type ShiftCloseIntentJournalDeps = {
@@ -1112,7 +1213,160 @@ function buildJournalApi(
 
     markRejectedManualAttention: (shiftId, reason, observePointerRepair) =>
       markStatus(shiftId, 'rejected_manual_attention', reason, observePointerRepair),
+
+    prepareOnlineCloseAttempt: (identity) =>
+      runStore(store, async (s) => {
+        const key = onlineCloseAttemptKey(identity.shiftId);
+        const written = await s.transact(
+          ['shiftCloseIntents'],
+          'readwrite',
+          async (txn): Promise<CloseIntentResult<PrepareOnlineCloseResult>> => {
+            const entryRaw = await txn.get<unknown>('shiftCloseIntents', identity.shiftId);
+            if (entryRaw !== undefined) {
+              if (!isCloseIntentEntry(entryRaw)) {
+                return conflict(`Stored close-intent for shift "${identity.shiftId}" is unreadable.`);
+              }
+              const entry = normalizeCloseIntentEntry(entryRaw as unknown as Record<string, unknown>);
+              if (
+                entry.deviceId !== identity.deviceId ||
+                entry.branchId !== identity.branchId ||
+                entry.staffId !== identity.staffId
+              ) {
+                return conflict(`A different close-intent already exists locally for shift "${identity.shiftId}".`);
+              }
+              return { ok: true, value: { kind: 'journaled', entry } };
+            }
+            const existing = await txn.get<unknown>('shiftCloseIntents', key);
+            if (existing !== undefined) {
+              if (!isValidOnlineCloseAttempt(existing) || !sameAttemptIdentity(existing, identity)) {
+                return conflict(`A different online close attempt exists locally for shift "${identity.shiftId}".`);
+              }
+              return { ok: true, value: { kind: 'prepared', attempt: existing } };
+            }
+            const closeCorrelationId = generateCloseCorrelationId();
+            if (!isValidLowercaseUuidV4(closeCorrelationId)) return unavailable();
+            const attempt: OnlineCloseAttemptRecord = {
+              kind: 'onlineCloseAttempt',
+              version: 1,
+              shiftId: identity.shiftId,
+              branchId: identity.branchId,
+              staffId: identity.staffId,
+              staffName: identity.staffName,
+              deviceId: identity.deviceId,
+              closeCorrelationId,
+              preparedAtLocal: now(),
+            };
+            await txn.put('shiftCloseIntents', key, attempt);
+            return { ok: true, value: { kind: 'prepared', attempt } };
+          },
+        );
+        if (!written.ok || written.value.kind === 'journaled') return written;
+        const expected = written.value.attempt.closeCorrelationId;
+        const readBack = await s.transact(['shiftCloseIntents'], 'readonly', async (txn) => ({
+          attempt: await txn.get<unknown>('shiftCloseIntents', key),
+          entry: await txn.get<unknown>('shiftCloseIntents', identity.shiftId),
+        }));
+        if (isValidOnlineCloseAttempt(readBack.attempt) && readBack.attempt.closeCorrelationId === expected) {
+          return written;
+        }
+        // Another window finalized THIS attempt in between (its commit landed and
+        // the attempt was consumed into the entry): the close is now journaled.
+        if (readBack.attempt === undefined && isCloseIntentEntry(readBack.entry)) {
+          const entry = normalizeCloseIntentEntry(readBack.entry as unknown as Record<string, unknown>);
+          if (
+            entry.closeCorrelationId === expected &&
+            entry.deviceId === identity.deviceId &&
+            entry.branchId === identity.branchId &&
+            entry.staffId === identity.staffId
+          ) {
+            return { ok: true, value: { kind: 'journaled', entry } };
+          }
+        }
+        return txFailed<PrepareOnlineCloseResult>('online close attempt could not be verified as durable');
+      }),
+
+    finalizeOnlineClose: (snapshot, closeCorrelationId, observePointerRepair) =>
+      runStore(store, async (s) => {
+        const key = onlineCloseAttemptKey(snapshot.shiftId);
+        const businessResult = await s.transact(
+          ['shiftCloseIntents'],
+          'readwrite',
+          async (txn): Promise<CloseIntentResult<ShiftCloseIntentEntry>> => {
+            const attemptRaw = await txn.get<unknown>('shiftCloseIntents', key);
+            const ownAttempt =
+              isValidOnlineCloseAttempt(attemptRaw) && attemptRaw.closeCorrelationId === closeCorrelationId;
+            const existingRaw = await txn.get<unknown>('shiftCloseIntents', snapshot.shiftId);
+            if (existingRaw !== undefined) {
+              if (!isCloseIntentEntry(existingRaw)) {
+                return conflict(`Stored close-intent for shift "${snapshot.shiftId}" is unreadable.`);
+              }
+              const existing = normalizeCloseIntentEntry(existingRaw as unknown as Record<string, unknown>);
+              if (!snapshotsEqual(existing, snapshot) || existing.closeCorrelationId !== closeCorrelationId) {
+                return conflict(`A different close-intent already exists locally for shift "${snapshot.shiftId}".`);
+              }
+              if (ownAttempt) await txnDelete(txn, key);
+              return { ok: true, value: existing };
+            }
+            if (attemptRaw !== undefined && !ownAttempt) {
+              return conflict(`The online close attempt for shift "${snapshot.shiftId}" has another identity.`);
+            }
+            const nowMs = now();
+            const entry: ShiftCloseIntentEntry = {
+              ...pickBusinessSnapshot(snapshot),
+              closedAtLocal: nowMs,
+              closeCorrelationId,
+              status: 'local_closed_pending',
+              createdAtLocal: nowMs,
+              updatedAtLocal: nowMs,
+              lastErrorMessage: null,
+            };
+            await txn.put('shiftCloseIntents', snapshot.shiftId, entry);
+            if (ownAttempt) await txnDelete(txn, key);
+            return { ok: true, value: entry };
+          },
+        );
+        if (businessResult.ok) {
+          await afterSuccessfulJournalCommit(s, businessResult.value, observePointerRepair);
+        }
+        return businessResult;
+      }),
+
+    listOnlineCloseAttempts: () =>
+      runStore(store, async (s) => {
+        const raw = await s.transact(['shiftCloseIntents'], 'readonly', (txn) =>
+          txn.getAll<unknown>('shiftCloseIntents'),
+        );
+        const attempts: OnlineCloseAttemptRecord[] = [];
+        for (const r of raw) {
+          if (!isOnlineCloseAttemptShaped(r)) continue;
+          if (!isValidOnlineCloseAttempt(r)) {
+            return conflict<OnlineCloseAttemptRecord[]>('Stored online close attempt is unreadable.');
+          }
+          attempts.push(r);
+        }
+        return { ok: true, value: attempts };
+      }),
+
+    discardOnlineCloseAttempt: (shiftId, closeCorrelationId) =>
+      runStore(store, (s) =>
+        s.transact(['shiftCloseIntents'], 'readwrite', async (txn): Promise<CloseIntentResult<boolean>> => {
+          const key = onlineCloseAttemptKey(shiftId);
+          const raw = await txn.get<unknown>('shiftCloseIntents', key);
+          if (!isValidOnlineCloseAttempt(raw) || raw.closeCorrelationId !== closeCorrelationId) {
+            return { ok: true, value: false };
+          }
+          await txnDelete(txn, key);
+          return { ok: true, value: true };
+        }),
+      ),
   };
+}
+
+/** The 17 caller-owned business fields only (never extra keys of a wider object). */
+function pickBusinessSnapshot(s: ShiftCloseIntentBusinessSnapshot): ShiftCloseIntentBusinessSnapshot {
+  const out = {} as Record<string, unknown>;
+  for (const k of BUSINESS_SNAPSHOT_FIELDS) out[k] = s[k];
+  return out as ShiftCloseIntentBusinessSnapshot;
 }
 
 export function createShiftCloseIntentJournal(

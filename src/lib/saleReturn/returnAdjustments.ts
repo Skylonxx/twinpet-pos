@@ -308,18 +308,53 @@ export function grossBasisNote(status: SaleReturnAdjustmentsStatus, where: 'abov
 }
 
 /**
+ * Hook state slot: the adjustments state is owned by exactly one subscription
+ * generation. `generation` advances synchronously (during render) on every
+ * branch change, so a state confirmed by an earlier generation — even one for
+ * the same branchId after A → B → A — is never returned, and an emit from an
+ * earlier generation is rejected at the state update.
+ */
+type AdjustmentsSlot = {
+  generation: number;
+  branchId: string | null;
+  state: SaleReturnAdjustmentsState;
+};
+
+/**
  * Live accepted Returns for a branch, net-eligible ONLY when server-confirmed
- * complete (see {@link SaleReturnAdjustmentsStatus}). Any read error (rules not
- * yet deployed, permission) or ANY malformed record ⇒ `unavailable`.
+ * complete (see {@link SaleReturnAdjustmentsStatus}) by the CURRENT
+ * subscription generation. Any read error (rules not yet deployed, permission)
+ * or ANY malformed record ⇒ `unavailable`. `listenOverride` is a test seam and
+ * must be referentially stable.
  */
 export function useSaleReturnAdjustments(
   branchId: string | null,
   listenOverride?: SaleReturnAdjustmentsListen,
 ): SaleReturnAdjustmentsState {
-  const [state, setState] = useState<SaleReturnAdjustmentsState>(() => emptyState(null, 'loading'));
+  const [slot, setSlot] = useState<AdjustmentsSlot>(() => ({
+    generation: 0,
+    branchId,
+    state: emptyState(branchId, 'loading'),
+  }));
+
+  // Render-phase invalidation (React "adjust state when a prop changes"): a
+  // branch change starts a new generation BEFORE anything is rendered or
+  // committed with it. This pass returns `loading`, never the prior state.
+  let current = slot;
+  if (slot.branchId !== branchId) {
+    current = { generation: slot.generation + 1, branchId, state: emptyState(branchId, 'loading') };
+    setSlot(current);
+  }
+  const generation = current.generation;
 
   useEffect(() => {
     if (!branchId) return;
+    const setState = (next: SaleReturnAdjustmentsState) =>
+      setSlot((prev) =>
+        prev.generation === generation && prev.branchId === branchId && next.branchId === branchId
+          ? { ...prev, state: next }
+          : prev,
+      );
     let listen = listenOverride;
     if (!listen) {
       if (!isFirebaseConfigured) {
@@ -351,9 +386,9 @@ export function useSaleReturnAdjustments(
       listen = firestoreSaleReturnAdjustmentsListen(firestore);
     }
     return subscribeSaleReturnAdjustments(branchId, setState, listen);
-  }, [branchId, listenOverride]);
+  }, [branchId, listenOverride, generation]);
 
-  // A state derived for another branch (or none yet) is never reused.
+  // A state derived for another branch/generation (or none yet) is never reused.
   const loading = useMemo(() => emptyState(branchId, 'loading'), [branchId]);
-  return branchId && state.branchId === branchId ? state : loading;
+  return branchId && current.state.branchId === branchId ? current.state : loading;
 }
