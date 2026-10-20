@@ -304,9 +304,9 @@ describe('closeShift — Packet 7C-B1 local optimistic offline close', () => {
       prepareOnlineCloseAttempt: async () => ({ ok: false as const, code: 'unavailable' as const }),
       finalizeOnlineClose: async () => ({ ok: false as const, code: 'unavailable' as const }),
       listOnlineCloseAttempts: async () => ({ ok: true as const, value: [] }),
-      discardOnlineCloseAttempt: async () => ({ ok: false as const, code: 'unavailable' as const }),
+      supersedeOnlineCloseAttempt: async () => ({ ok: false as const, code: 'unavailable' as const }),
       setSyncStateNormalization: async () => ({ ok: false as const, code: 'unavailable' as const }),
-      recordNormalizationCheck: async () => ({ ok: false as const, code: 'unavailable' as const }),
+      claimLegacyNormalizationChecks: async () => ({ ok: false as const, code: 'unavailable' as const }),
       markOnlineCloseAttemptCommitObserved: async () => ({ ok: false as const, code: 'unavailable' as const }),
     };
 

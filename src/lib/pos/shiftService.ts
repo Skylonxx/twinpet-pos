@@ -28,6 +28,7 @@ import {
 } from './shiftCashFreshness';
 import {
   createShiftCloseIntentJournal,
+  isCommitObservedAttempt,
   snapshotsEqual,
   type ShiftCloseIntentJournal,
 } from './offline/shiftCloseIntentStore';
@@ -693,9 +694,13 @@ export const CLOSE_SHIFT_CASH_GUARD_UNVERIFIABLE_MESSAGE =
 /** Final gate §2: this device's queued sale/cash writes did not reach the server in time — nothing was written. */
 export const CLOSE_SHIFT_PENDING_WRITES_MESSAGE =
   'ข้อมูลการขาย/เงินสดของเครื่องนี้ยังส่งขึ้นเซิร์ฟเวอร์ไม่ครบ — ยังไม่ได้ปิดกะ กรุณารอสักครู่แล้วลองใหม่อีกครั้ง';
-/** Final gate §2: the close transaction did not complete; its outcome is re-checked on retry. */
+/**
+ * Final gate §2 / gate 006-A: the close transaction call was rejected, so its
+ * outcome is UNKNOWN (a lost response may follow a commit) — never worded as
+ * "failed"; a retry / the sweep re-checks it with the same correlation id.
+ */
 export const CLOSE_SHIFT_TX_FAILED_MESSAGE =
-  'ปิดกะไม่สำเร็จ (บันทึกพร้อมยอดเงินสดล่าสุดจากเซิร์ฟเวอร์ไม่ได้) — กรุณาตรวจสอบการเชื่อมต่อแล้วลองใหม่อีกครั้ง';
+  'ยังยืนยันผลการปิดกะกับเซิร์ฟเวอร์ไม่ได้ (การเชื่อมต่อหรือการบันทึกขัดข้อง) — หากกะถูกปิดไปแล้ว ระบบจะรู้จำผลเดิมและไม่ปิดกะซ้ำ กรุณาตรวจสอบการเชื่อมต่อแล้วลองใหม่อีกครั้ง';
 
 /** Bound on flushing this device's queued writes before the online close transaction. */
 export const CLOSE_SHIFT_PENDING_WRITES_TIMEOUT_MS = 5_000;
@@ -1257,8 +1262,10 @@ async function closeShiftOnline(
       // Definitive: the transaction refused before writing anything. Only a
       // doc closed by ANOTHER id proves this attempt can never commit; any
       // other refusal keeps the attempt (the sweep resolves it later).
-      if (err.uncommittable && attempt && attempt.commitObservedAtLocal === undefined) {
-        await journal.discardOnlineCloseAttempt(shift.id, correlationId).catch(() => undefined);
+      // Gate 006-B: never deleted — a retained tombstone, which the store
+      // refuses (re-reading the durable attempt) if its commit was observed.
+      if (err.uncommittable && attempt) {
+        await journal.supersedeOnlineCloseAttempt(shift.id, correlationId).catch(() => undefined);
       }
       throw new Error(err.message, { cause: err });
     }
@@ -1286,47 +1293,124 @@ async function closeShiftOnline(
     whenServerConfirmed,
   });
 
-  // B2 stage 3 — journal only AFTER the commit, from the committed values, and
-  // consume the prepared attempt in the same store transaction.
-  let finalized: Awaited<ReturnType<ShiftCloseIntentJournal['finalizeOnlineClose']>>;
+  // Gate 006-A — a resolved transaction proves the W3 commit, NOT the Z. Every
+  // Z needs BOTH (1) an authoritative server read of the committed doc that
+  // the shared strict parser accepts AND equals what this transaction wrote,
+  // and (2) a durable journal entry built from those proven values. Only then
+  // is a Z returned; its `whenServerConfirmed` reuses that same proven read
+  // (no second, unverified source). Anything less → no Z, no confirmation, no
+  // second W3: the prepared attempt is kept (marked commit-observed, checked)
+  // for a retry / the boot-reconnect sweep. The message says the close was
+  // sent — never that it was rolled back.
+  const proof = await proveCommittedOwnClose(shift, deviceId, correlationId, snapshot, ctx.readConfirmation);
+  if (journaled) {
+    // This device already journaled this close; the Z needs the proof to equal it.
+    if (!proof.ok || !snapshotsEqual(proof.snapshot, journaled) || journaled.closeCorrelationId !== correlationId) {
+      throw new Error(CLOSE_SHIFT_COMMITTED_UNVERIFIED_MESSAGE);
+    }
+    return result(journaled.closedAtLocal, reconcileClosed(journaled, withProvenRead(ctx, shift.id, proof.read)));
+  }
+  if (proof.ok) {
+    // B2 stage 3 — journal only from the PROVEN committed values; the prepared
+    // attempt is consumed in the same store transaction. One local retry.
+    for (let i = 0; i < 2; i += 1) {
+      let finalized: Awaited<ReturnType<ShiftCloseIntentJournal['finalizeOnlineClose']>>;
+      try {
+        finalized = await journal.finalizeOnlineClose(proof.snapshot, correlationId, deps?.observePointerRepair);
+      } catch (err) {
+        finalized = { ok: false, code: 'tx_failed', message: err instanceof Error ? err.message : String(err) };
+      }
+      if (finalized.ok) {
+        const entry = finalized.value;
+        return result(entry.closedAtLocal, reconcileClosed(entry, withProvenRead(ctx, shift.id, proof.read)));
+      }
+      if (finalized.code === 'conflict') {
+        // A DIFFERENT local close record exists for this shift: never show a Z over that disagreement.
+        console.warn('[shiftService] committed online close conflicts with the local journal', finalized);
+        throw new Error(CLOSE_SHIFT_COMMITTED_UNVERIFIED_MESSAGE);
+      }
+      console.warn('[shiftService] committed online close could not be journaled', finalized);
+    }
+  } else {
+    console.warn('[shiftService] committed online close could not be proven from the server', proof.reason);
+  }
+  const custody = await recordCommitObservation(journal, shift.id, correlationId);
+  throw new Error(CLOSE_SHIFT_COMMITTED_NOT_FINALIZED_MESSAGE, { cause: { commitObservation: custody } });
+}
+
+type CommittedCloseProof =
+  | { ok: true; snapshot: ShiftCloseIntentBusinessSnapshot; read: ShiftCloseConfirmationRead }
+  | { ok: false; reason: string };
+
+/**
+ * Gate 006-A — the ONE post-commit proof: an authoritative (server, never
+ * cache) read of the shift, accepted by {@link parseCommittedOwnClose} for
+ * this device's correlation id, AND equal (every business field) to the
+ * snapshot this transaction committed. A failed / unreachable read, a
+ * malformed / foreign / stale doc, or any difference is NOT proof. Never throws.
+ */
+async function proveCommittedOwnClose(
+  shift: Shift,
+  deviceId: string,
+  correlationId: string,
+  committedSnapshot: ShiftCloseIntentBusinessSnapshot,
+  readConfirmation: ShiftCloseConfirmationReader,
+): Promise<CommittedCloseProof> {
+  let read: ShiftCloseConfirmationRead;
   try {
-    finalized = await journal.finalizeOnlineClose(snapshot, correlationId, deps?.observePointerRepair);
-  } catch (err) {
-    finalized = { ok: false, code: 'tx_failed', message: err instanceof Error ? err.message : String(err) };
+    read = await readConfirmation(shift.id);
+  } catch {
+    read = { ok: false };
   }
-  if (finalized.ok) {
-    const entry = finalized.value;
-    return result(entry.closedAtLocal, reconcileClosed(entry, ctx));
+  if (!read.ok) return { ok: false, reason: 'unreachable' };
+  const parsed = parseCommittedOwnClose(ownCloseIdentity(shift, deviceId, correlationId), read.doc);
+  if (!parsed.ok) return { ok: false, reason: parsed.reason };
+  if (!snapshotsEqual(parsed.snapshot, committedSnapshot)) return { ok: false, reason: 'differs_from_commit' };
+  return { ok: true, snapshot: parsed.snapshot, read };
+}
+
+/**
+ * The reconcile that backs `whenServerConfirmed` consumes the read that already
+ * proved the Z (one authoritative read per close, never a weaker second source);
+ * any later read (sweep) goes to the real reader.
+ */
+function withProvenRead<T extends CloseReconcileDeps>(ctx: T, shiftId: string, read: ShiftCloseConfirmationRead): T {
+  let used = false;
+  return {
+    ...ctx,
+    readConfirmation: (id: string) => {
+      if (!used && id === shiftId) {
+        used = true;
+        return Promise.resolve(read);
+      }
+      return ctx.readConfirmation(id);
+    },
+  };
+}
+
+/**
+ * Gate 006-B — durably record that THIS runtime saw its W3 commit, and VERIFY
+ * it by reading the attempt back. `durable` only when both the structured
+ * write result and the read-back confirm it; otherwise `unverified` (never
+ * treated as success). Either way the attempt is retained: no deletion path
+ * exists for an attempt (supersession is a retained tombstone the store
+ * refuses for a commit-observed attempt). Never throws.
+ */
+async function recordCommitObservation(
+  journal: ShiftCloseIntentJournal,
+  shiftId: string,
+  correlationId: string,
+): Promise<'durable' | 'unverified'> {
+  try {
+    const marked = await journal.markOnlineCloseAttemptCommitObserved(shiftId, correlationId);
+    if (!marked.ok || marked.value !== true) return 'unverified';
+    const listed = await journal.listOnlineCloseAttempts();
+    if (!listed.ok) return 'unverified';
+    const own = listed.value.find((a) => a.shiftId === shiftId && a.closeCorrelationId === correlationId);
+    return own && isCommitObservedAttempt(own) ? 'durable' : 'unverified';
+  } catch {
+    return 'unverified';
   }
-  if (finalized.code === 'conflict') {
-    // A DIFFERENT local close record exists for this shift: the committed close
-    // cannot be reconciled with it — never show a Z over that disagreement.
-    console.warn('[shiftService] committed online close conflicts with the local journal', finalized);
-    throw new Error(CLOSE_SHIFT_COMMITTED_UNVERIFIED_MESSAGE);
-  }
-  // B2.1-A: the W3 transaction committed, but the journal finalize failed. A Z
-  // (and the confirmed badge behind `whenServerConfirmed`) exists ONLY for a
-  // close that is strictly proven AND durably journaled: the same strict
-  // recovery the sweep uses ({@link recoverOnlineCloseAttempt}) runs now, with
-  // the attempt marked commit-observed (it is never discarded as superseded).
-  // Anything short of `recovered` → no Z, no confirmation, no second W3: the
-  // prepared attempt is kept and finalized by a retry or the boot/reconnect
-  // sweep. The message says the close was sent — never that it was rolled back.
-  console.warn('[shiftService] committed online close could not be journaled', finalized);
-  if (attempt) {
-    try {
-      await journal.markOnlineCloseAttemptCommitObserved(shift.id, correlationId);
-    } catch {
-      /* best-effort: the in-memory marker below still protects this recovery */
-    }
-    const observed = { ...attempt, commitObservedAtLocal: attempt.commitObservedAtLocal ?? Date.now() };
-    const r = await recoverOnlineCloseAttempt(observed, ctx);
-    if (r.outcome === 'recovered' && r.entry) {
-      return result(r.entry.closedAtLocal, reconcileClosed(r.entry, ctx));
-    }
-    throw new Error(CLOSE_SHIFT_COMMITTED_NOT_FINALIZED_MESSAGE);
-  }
-  throw new Error(CLOSE_SHIFT_COMMITTED_UNVERIFIED_MESSAGE);
 }
 
 /**
@@ -1347,6 +1431,7 @@ async function recoverOwnCommittedClose(
 ): Promise<CloseShiftResult | 'not_own' | 'unverified'> {
   const { journal, deviceId } = ctx;
   let entry: ShiftCloseIntentEntry | null = null;
+  let reconcileCtx: CloseReconcileDeps = ctx;
   try {
     const got = await journal.getCloseIntent(shift.id);
     if (got.ok && got.value && got.value.deviceId === deviceId && got.value.closeCorrelationId === closeCorrelationId) {
@@ -1356,6 +1441,7 @@ async function recoverOwnCommittedClose(
       if (!parsed.ok) return parsed.reason === 'other_correlation' ? 'not_own' : 'unverified';
       if (!snapshotsEqual(parsed.snapshot, got.value)) return 'unverified';
       entry = got.value;
+      reconcileCtx = withProvenRead(ctx, shift.id, read);
     }
     if (!entry) {
       const listed = await journal.listOnlineCloseAttempts();
@@ -1383,7 +1469,7 @@ async function recoverOwnCommittedClose(
     syncState: 'pending',
     deviceId,
     closedAtLocal: entry.closedAtLocal,
-    whenServerConfirmed: reconcileClosed(entry, ctx),
+    whenServerConfirmed: reconcileClosed(entry, reconcileCtx),
   };
 }
 

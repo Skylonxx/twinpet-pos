@@ -74,13 +74,20 @@ export type ShiftCloseIntentEntry = ShiftCloseIntentSnapshot & {
   lastErrorMessage: string | null;
   syncStateNormalization?: SyncStateNormalization;
   /**
-   * Gate B2.2-A — legacy W4 check scheduling hint (a logical sequence number,
-   * never a clock): set on a pre-B2.2 `synced` entry (normalization absent)
-   * when a sweep selects it, BEFORE its server read, so the next sweep picks
-   * the least-recently-checked entries first (round robin). Advisory only: a
-   * missing / non-finite value reads as "never checked"; never business data.
+   * Gate B2.2-A / 006-C — legacy W4 check scheduling (a logical sequence
+   * number, never a clock): written on a pre-B2.2 `synced` entry
+   * (normalization absent) by the atomic legacy CLAIM transaction, BEFORE its
+   * server read, so later sweeps pick the least-recently-checked entries first
+   * (round robin). A missing / non-finite / non-positive value reads as "never
+   * checked"; never business data.
    */
   syncStateNormalizationCheckSeq?: number;
+  /**
+   * Gate 006-C — local time of that claim. While it is within the claim lease
+   * (and not in the future: clock skew never extends it) no other sweep —
+   * another window or an overlapping trigger — claims the entry again.
+   */
+  syncStateNormalizationClaimedAtLocal?: number;
 };
 
 export type CloseIntentErrorCode = 'unavailable' | 'quota' | 'conflict' | 'not_found' | 'tx_failed';
@@ -128,18 +135,29 @@ export type ShiftCloseIntentObservabilityEvent = {
  *               (journal `synced` + Variant C) runs once.
  *   superseded  the doc is closed by another VALID (lowercase UUID v4)
  *               correlation id of the same branch/staff shift — our attempt
- *               can no longer commit (W3 requires open → closed) → deleted, no
- *               Z. Never for an attempt whose commit was observed (below).
+ *               can no longer commit (W3 requires open → closed) → RETAINED as
+ *               a tombstone (`supersededAtLocal`), no Z, no further reads.
+ *               Gate 006-B: an attempt is NEVER deleted except when its own
+ *               entry is finalized (consumed in the same store transaction);
+ *               a commit-observed attempt is never tombstoned (below).
  *   kept        doc open / missing / unreadable, or closed with an empty /
  *               malformed / absent correlation id (not proof of another close;
  *               gate B2.1-B): stays `prepared` (the next close of the shift
  *               reuses its correlation id, so a late commit is recognised as
  *               this device's own). Never silently dropped.
  *
- * Gate B2.1-A: `commitObservedAtLocal` is set (best-effort) when this runtime
- * SAW its W3 transaction commit but could not finalize the journal. Such an
- * attempt is never discarded as superseded — a server doc contradicting a
- * known commit needs investigation, not deletion of the evidence.
+ * Gate B2.1-A / 006-B: `commitObservedAtLocal` is written — and verified by a
+ * read-back — when this runtime SAW its W3 transaction commit but could not
+ * prove and journal it. Such an attempt is only ever finalized or kept for
+ * manual attention. Because that write itself can fail, supersession is
+ * non-destructive for EVERY attempt: an unrecorded observation can never lead
+ * to the evidence being deleted after a restart.
+ *
+ * Both optional fields are additive. KEY PRESENCE decides (any value, even a
+ * malformed or `undefined` one): a present `commitObservedAtLocal` ⇒ commit
+ * observed (fail-safe: retained); a present `supersededAtLocal` without it ⇒
+ * tombstone. A malformed value can therefore never make a known commit look
+ * uncommitted.
  */
 export type OnlineCloseAttemptRecord = {
   kind: 'onlineCloseAttempt';
@@ -154,6 +172,8 @@ export type OnlineCloseAttemptRecord = {
   preparedAtLocal: number;
   /** Optional, additive (see above). Present with ANY value ⇒ treated as commit observed. */
   commitObservedAtLocal?: number;
+  /** Optional, additive (see above): retained-tombstone time of a superseded, never-committed attempt. */
+  supersededAtLocal?: number;
 };
 
 export type OnlineCloseAttemptIdentity = Pick<

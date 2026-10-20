@@ -512,6 +512,20 @@ function isValidOnlineCloseAttempt(v: unknown): v is OnlineCloseAttemptRecord {
   );
 }
 
+/**
+ * Gate 006-B — KEY PRESENCE, any value (even malformed / `undefined`): a
+ * present marker can never be read as "not observed", so a malformed value
+ * fails safe (the attempt is retained, never tombstoned).
+ */
+export function isCommitObservedAttempt(a: OnlineCloseAttemptRecord): boolean {
+  return 'commitObservedAtLocal' in a;
+}
+
+/** Retained supersession tombstone (never for a commit-observed attempt). */
+export function isSupersededAttempt(a: OnlineCloseAttemptRecord): boolean {
+  return 'supersededAtLocal' in a && !isCommitObservedAttempt(a);
+}
+
 function sameAttemptIdentity(a: OnlineCloseAttemptIdentity, b: OnlineCloseAttemptIdentity): boolean {
   return a.shiftId === b.shiftId && a.branchId === b.branchId && a.staffId === b.staffId && a.deviceId === b.deviceId;
 }
@@ -1015,16 +1029,22 @@ export type ShiftCloseIntentJournal = {
     normalization: SyncStateNormalization,
   ) => Promise<CloseIntentResult<ShiftCloseIntentEntry>>;
   /**
-   * Gate B2.2-A — stamps `syncStateNormalizationCheckSeq` on a LEGACY entry
-   * (`synced`, same `closeCorrelationId`, normalization field absent) as the
-   * sweep selects it. Scheduling hint only: touches no other field (not even
-   * `updatedAtLocal`); anything else → `conflict` / `not_found`, no write.
+   * Gate 006-C — atomically CLAIM the next legacy W4 checks: in ONE readwrite
+   * store transaction (serialized across windows by IndexedDB), select up to
+   * `limit` of this device's legacy entries (`synced`, normalization field
+   * absent, not in `skipShiftIds`, no claim inside its lease), ordered
+   * least-recently-checked first (`syncStateNormalizationCheckSeq`, absent =
+   * never), then newest close, then shift id; stamp each with `max(seq) + 1`
+   * and the claim time; return them. Touches no other field (not even
+   * `updatedAtLocal`). Any failure → nothing is claimed (`ok: false`), and the
+   * caller checks nothing.
    */
-  recordNormalizationCheck: (
-    shiftId: string,
-    closeCorrelationId: string | null,
-    seq: number,
-  ) => Promise<CloseIntentResult<true>>;
+  claimLegacyNormalizationChecks: (input: {
+    deviceId: string;
+    skipShiftIds: readonly string[];
+    limit: number;
+    leaseMs: number;
+  }) => Promise<CloseIntentResult<ShiftCloseIntentEntry[]>>;
   markRejectedManualAttention: (
     shiftId: string,
     reason: string,
@@ -1055,18 +1075,25 @@ export type ShiftCloseIntentJournal = {
   /** Every prepared attempt; a malformed one fails the whole read (`conflict`). */
   listOnlineCloseAttempts: () => Promise<CloseIntentResult<OnlineCloseAttemptRecord[]>>;
   /**
-   * Deletes the attempt ONLY if it still carries `closeCorrelationId` (value
-   * `true`); used once the server proved this attempt can never commit.
+   * Gate 006-B — the ONLY supersession write, and it is NON-destructive: in
+   * one readwrite transaction it re-reads the durable attempt carrying
+   * `closeCorrelationId` and returns
+   *   - `commit_observed`  it is commit-observed → NOT tombstoned, nothing written
+   *   - `superseded`       tombstoned (`supersededAtLocal`; idempotent), RETAINED
+   *   - `not_found`        no such attempt (another id / already finalized)
+   * There is no attempt-deletion API: an attempt is deleted only by
+   * `finalizeOnlineClose` consuming it in the same transaction as its entry.
    */
-  discardOnlineCloseAttempt: (
+  supersedeOnlineCloseAttempt: (
     shiftId: string,
     closeCorrelationId: string,
-  ) => Promise<CloseIntentResult<boolean>>;
+  ) => Promise<CloseIntentResult<'superseded' | 'commit_observed' | 'not_found'>>;
   /**
-   * Gate B2.1-A — records on the attempt (value `true` = written) that THIS
-   * runtime saw its W3 commit while the journal finalize failed; such an
-   * attempt is never discarded as superseded. Only the attempt carrying
-   * `closeCorrelationId` is touched.
+   * Gate B2.1-A / 006-B — records on the attempt (value `true` = written or
+   * already present) that THIS runtime saw its W3 commit while the close could
+   * not be proven / journaled. Only the attempt carrying `closeCorrelationId`
+   * is touched. Callers must check the structured result AND verify it by a
+   * read-back — a fail-soft `ok: false` is never success.
    */
   markOnlineCloseAttemptCommitObserved: (
     shiftId: string,
@@ -1278,27 +1305,46 @@ function buildJournalApi(
         }),
       ),
 
-    recordNormalizationCheck: (shiftId, closeCorrelationId, seq) =>
+    claimLegacyNormalizationChecks: ({ deviceId, skipShiftIds, limit, leaseMs }) =>
       runStore(store, (s) =>
-        s.transact(['shiftCloseIntents'], 'readwrite', async (txn): Promise<CloseIntentResult<true>> => {
-          const raw = await txn.get<unknown>('shiftCloseIntents', shiftId);
-          if (raw === undefined) return notFound<true>();
-          if (!isCloseIntentEntry(raw)) {
-            return conflict<true>(`Stored close-intent for shift "${shiftId}" is unreadable.`);
+        s.transact(['shiftCloseIntents'], 'readwrite', async (txn): Promise<CloseIntentResult<ShiftCloseIntentEntry[]>> => {
+          const nowMs = now();
+          const skip = new Set(skipShiftIds);
+          const legacy: Array<{ raw: Record<string, unknown>; entry: ShiftCloseIntentEntry }> = [];
+          for (const r of await txn.getAll<unknown>('shiftCloseIntents')) {
+            if (!isCloseIntentEntry(r)) continue;
+            const raw = r as unknown as Record<string, unknown>;
+            if ('syncStateNormalization' in raw) continue;
+            const entry = normalizeCloseIntentEntry(raw);
+            if (entry.status !== 'synced' || entry.deviceId !== deviceId) continue;
+            legacy.push({ raw, entry });
           }
-          const entry = normalizeCloseIntentEntry(raw as unknown as Record<string, unknown>);
-          if (
-            entry.status !== 'synced' ||
-            entry.closeCorrelationId !== closeCorrelationId ||
-            'syncStateNormalization' in (raw as Record<string, unknown>)
-          ) {
-            return conflict<true>(`Close-intent for shift "${shiftId}" is not a legacy synced close.`);
+          const seqOf = (e: ShiftCloseIntentEntry) => {
+            const v = e.syncStateNormalizationCheckSeq;
+            return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 0;
+          };
+          const leased = (e: ShiftCloseIntentEntry) => {
+            const at = e.syncStateNormalizationClaimedAtLocal;
+            // A claim time in the future (clock moved back) never extends the lease.
+            return typeof at === 'number' && Number.isFinite(at) && nowMs >= at && nowMs - at < leaseMs;
+          };
+          const nextSeq = legacy.reduce((max, { entry }) => Math.max(max, seqOf(entry)), 0) + 1;
+          const selected = legacy
+            .filter(({ entry }) => !skip.has(entry.shiftId) && !leased(entry))
+            .sort(
+              (a, b) =>
+                seqOf(a.entry) - seqOf(b.entry) ||
+                b.entry.closedAtLocal - a.entry.closedAtLocal ||
+                (a.entry.shiftId < b.entry.shiftId ? -1 : a.entry.shiftId > b.entry.shiftId ? 1 : 0),
+            )
+            .slice(0, Math.max(0, limit));
+          const claimed: ShiftCloseIntentEntry[] = [];
+          for (const { raw, entry } of selected) {
+            const next = { ...raw, syncStateNormalizationCheckSeq: nextSeq, syncStateNormalizationClaimedAtLocal: nowMs };
+            await txn.put('shiftCloseIntents', entry.shiftId, next);
+            claimed.push(normalizeCloseIntentEntry(next));
           }
-          await txn.put('shiftCloseIntents', shiftId, {
-            ...(raw as unknown as Record<string, unknown>),
-            syncStateNormalizationCheckSeq: seq,
-          });
-          return { ok: true, value: true };
+          return { ok: true, value: claimed };
         }),
       ),
 
@@ -1438,17 +1484,24 @@ function buildJournalApi(
         return { ok: true, value: attempts };
       }),
 
-    discardOnlineCloseAttempt: (shiftId, closeCorrelationId) =>
+    supersedeOnlineCloseAttempt: (shiftId, closeCorrelationId) =>
       runStore(store, (s) =>
-        s.transact(['shiftCloseIntents'], 'readwrite', async (txn): Promise<CloseIntentResult<boolean>> => {
-          const key = onlineCloseAttemptKey(shiftId);
-          const raw = await txn.get<unknown>('shiftCloseIntents', key);
-          if (!isValidOnlineCloseAttempt(raw) || raw.closeCorrelationId !== closeCorrelationId) {
-            return { ok: true, value: false };
-          }
-          await txnDelete(txn, key);
-          return { ok: true, value: true };
-        }),
+        s.transact(
+          ['shiftCloseIntents'],
+          'readwrite',
+          async (txn): Promise<CloseIntentResult<'superseded' | 'commit_observed' | 'not_found'>> => {
+            const key = onlineCloseAttemptKey(shiftId);
+            const raw = await txn.get<unknown>('shiftCloseIntents', key);
+            if (!isValidOnlineCloseAttempt(raw) || raw.closeCorrelationId !== closeCorrelationId) {
+              return { ok: true, value: 'not_found' };
+            }
+            if (isCommitObservedAttempt(raw)) return { ok: true, value: 'commit_observed' };
+            if (!('supersededAtLocal' in raw)) {
+              await txn.put('shiftCloseIntents', key, { ...raw, supersededAtLocal: now() });
+            }
+            return { ok: true, value: 'superseded' };
+          },
+        ),
       ),
 
     markOnlineCloseAttemptCommitObserved: (shiftId, closeCorrelationId) =>
@@ -1459,7 +1512,7 @@ function buildJournalApi(
           if (!isValidOnlineCloseAttempt(raw) || raw.closeCorrelationId !== closeCorrelationId) {
             return { ok: true, value: false };
           }
-          if (raw.commitObservedAtLocal === undefined) {
+          if (!isCommitObservedAttempt(raw)) {
             await txn.put('shiftCloseIntents', key, { ...raw, commitObservedAtLocal: now() });
           }
           return { ok: true, value: true };

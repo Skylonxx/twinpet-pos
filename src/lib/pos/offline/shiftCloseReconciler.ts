@@ -14,7 +14,13 @@
 // store module; `ShiftCloseIntentEntry` is a data type that lives in the types
 // module (the store only imports it internally, never re-exports it) — so each
 // is imported from its true source to satisfy build-mode TypeScript (TS2459).
-import { isValidLowercaseUuidV4, type ShiftCloseIntentJournal } from './shiftCloseIntentStore';
+import {
+  isCommitObservedAttempt,
+  isSupersededAttempt,
+  isValidLowercaseUuidV4,
+  snapshotsEqual,
+  type ShiftCloseIntentJournal,
+} from './shiftCloseIntentStore';
 import type {
   OnlineCloseAttemptRecord,
   PointerRepairOutcome,
@@ -136,6 +142,12 @@ export type ReconcileShiftCloseIntentResult = {
   /** Whether the Variant C normalization write was attempted and succeeded. */
   normalized?: boolean;
   /**
+   * Gate 006-C: after a successful W4, whether the local `done` record was
+   * DURABLY written (a structured `ok: false` / throw is `false`, never
+   * reported as done; the next sweep re-checks the doc and records it).
+   */
+  normalizationRecorded?: boolean;
+  /**
    * OBS-B2 pointer-repair outcome from the status-transition path, when a
    * journal markSynced / markRejectedManualAttention ran. Observability only —
    * never settlement truth; absence means no status transition wrote.
@@ -181,6 +193,36 @@ function identityMatches(entry: ShiftCloseIntentEntry, doc: ShiftCloseConfirmati
 }
 
 /**
+ * Gate 006-A — does a closed, resolved doc confirm THIS journal entry? An
+ * entry carrying a correlation id (every close this client journals) is
+ * confirmed ONLY through the shared strict parser {@link parseCommittedOwnClose}
+ * (closed, same valid correlation, branch / staff / device, resolved
+ * `closedAt`, finite totals, note, consistent variance) AND equality of every
+ * business field with the entry — so the cashier-facing "confirmed" badge and
+ * every W4 decision rest on the same proof as a Z. A pre-correlation (null)
+ * entry keeps the historical full-identity match ({@link identityMatches}).
+ *   `unresolved`  `closedAt` cannot be resolved to a valid time: retry later
+ */
+function confirmsEntry(entry: ShiftCloseIntentEntry, doc: ShiftCloseConfirmationDoc): 'match' | 'mismatch' | 'unresolved' {
+  if (entry.closeCorrelationId === null || entry.deviceId === null) {
+    return identityMatches(entry, doc) ? 'match' : 'mismatch';
+  }
+  const parsed = parseCommittedOwnClose(
+    {
+      shiftId: entry.shiftId,
+      branchId: entry.branchId,
+      staffId: entry.staffId,
+      staffName: entry.staffName,
+      deviceId: entry.deviceId,
+      closeCorrelationId: entry.closeCorrelationId,
+    },
+    doc,
+  );
+  if (!parsed.ok) return parsed.reason === 'closed_at_unresolved' ? 'unresolved' : 'mismatch';
+  return snapshotsEqual(parsed.snapshot, entry) ? 'match' : 'mismatch';
+}
+
+/**
  * Reconcile ONE `local_closed_pending` journal entry. Idempotent and safe to
  * call repeatedly: a non-pending entry (already `synced`/`rejected_manual_attention`)
  * is a no-op read with no network call and no further journal/doc write.
@@ -219,7 +261,9 @@ export async function reconcileShiftCloseIntent(
     return { shiftId: entry.shiftId, outcome: 'still_pending' };
   }
 
-  if (!identityMatches(entry, doc)) {
+  const confirmation = confirmsEntry(entry, doc);
+  if (confirmation === 'unresolved') return { shiftId: entry.shiftId, outcome: 'still_pending' };
+  if (confirmation === 'mismatch') {
     // The store API returns a structured `{ ok }` result (it fails-soft on
     // IndexedDB unavailable/quota/tx failure rather than throwing). If the
     // local manual-attention write did NOT persist, we must not report the
@@ -271,8 +315,11 @@ export async function reconcileShiftCloseIntent(
   }
 
   let normalized: boolean | undefined;
+  let normalizationRecorded: boolean | undefined;
   if (owesW4 && deps.normalizeSyncState) {
-    normalized = await writeNormalization(entry, deps.normalizeSyncState, deps.journal);
+    const w4 = await writeNormalization(entry, deps.normalizeSyncState, deps.journal);
+    normalized = w4 !== 'w4_failed';
+    normalizationRecorded = w4 === 'normalized';
   }
 
   return {
@@ -280,32 +327,43 @@ export async function reconcileShiftCloseIntent(
     outcome: 'confirmed',
     closedAtServer: doc.closedAt.toDate(),
     normalized,
+    ...(normalizationRecorded !== undefined ? { normalizationRecorded } : {}),
     pointerRepair,
   };
 }
 
 /**
  * ONE W4 attempt for a confirmed close of this device; on success records
- * `done`. A failed W4 leaves `outstanding` (retried later). A failed `done`
- * write after a successful W4 is harmless: the next retry reads the doc as
- * `synced` and records `done` without writing W4 again. Never throws.
+ * `done`. A failed W4 leaves `outstanding` (retried later). Gate 006-C: the
+ * `done` write's structured result is checked — `normalized_unrecorded` when
+ * W4 landed but `done` did not persist (harmless: the next retry reads the doc
+ * as `synced` and records `done` without writing W4 again). Never throws.
  */
 async function writeNormalization(
   entry: Pick<ShiftCloseIntentEntry, 'shiftId' | 'closeCorrelationId'>,
   normalize: ShiftCloseNormalizer,
   journal: ShiftCloseIntentJournal,
-): Promise<boolean> {
+): Promise<'normalized' | 'normalized_unrecorded' | 'w4_failed'> {
   try {
     await normalize(entry.shiftId);
   } catch {
+    return 'w4_failed';
+  }
+  return (await persistNormalization(journal, entry, 'done')) ? 'normalized' : 'normalized_unrecorded';
+}
+
+/** `true` ONLY when the store confirmed the write (a fail-soft `ok: false` or a throw is `false`). */
+async function persistNormalization(
+  journal: ShiftCloseIntentJournal,
+  entry: Pick<ShiftCloseIntentEntry, 'shiftId' | 'closeCorrelationId'>,
+  state: 'done' | 'mismatch' | 'not_applicable',
+): Promise<boolean> {
+  try {
+    const r = await journal.setSyncStateNormalization(entry.shiftId, entry.closeCorrelationId, state);
+    return r.ok;
+  } catch {
     return false;
   }
-  try {
-    await journal.setSyncStateNormalization(entry.shiftId, entry.closeCorrelationId, 'done');
-  } catch {
-    /* see above: recorded on the next retry */
-  }
-  return true;
 }
 
 /** Bound on pre-B2.2 (`synced`, no normalization field) entries checked per sweep. */
@@ -325,32 +383,28 @@ export type NormalizationRetryOutcome =
    * classified terminal, never written; the entry keeps its state (retained).
    */
   | 'manual_attention'
+  /**
+   * Gate 006-C: the server state was observed (and for a pending doc, W4 may
+   * have landed) but the local terminal record (`done` / `mismatch` /
+   * `not_applicable`) did NOT persist — nothing is claimed; re-evaluated later.
+   */
+  | 'local_write_failed'
+  /**
+   * Gate 006-C: legacy entry NOT checked — this sweep's legacy claim could not
+   * be durably recorded, so no fairness progress can be promised; nothing read.
+   */
+  | 'claim_failed'
   /** Read failed, doc not a resolved close, W4 failed, or no normalizer: kept `outstanding`, retried later. */
   | 'retry_later';
 
 export type NormalizationRetryResult = { shiftId: string; outcome: NormalizationRetryOutcome };
 
-/**
- * Same-runtime overlay of the persisted legacy check sequence, keyed by
- * shift + correlation id: if the journal cannot record a selection, fairness
- * still holds for the rest of this process (a restart falls back to whatever
- * was persisted).
- */
-const legacyCheckSeqOverlay = new Map<string, number>();
-
-/** Test-only: a "process restart" forgets the in-memory overlay. */
-export function resetLegacyNormalizationScheduleForTests(): void {
-  legacyCheckSeqOverlay.clear();
-}
-
-function legacyKey(e: Pick<ShiftCloseIntentEntry, 'shiftId' | 'closeCorrelationId'>): string {
-  return `${e.shiftId}\u0000${e.closeCorrelationId ?? ''}`;
-}
+/** Gate 006-C: a claimed legacy entry is not re-claimed by another sweep / window within this lease. */
+export const LEGACY_NORMALIZATION_CLAIM_LEASE_MS = 60_000;
 
 function legacyCheckSeq(e: ShiftCloseIntentEntry): number {
-  const persisted = e.syncStateNormalizationCheckSeq;
-  const p = typeof persisted === 'number' && Number.isFinite(persisted) && persisted > 0 ? persisted : 0;
-  return Math.max(p, legacyCheckSeqOverlay.get(legacyKey(e)) ?? 0);
+  const v = e.syncStateNormalizationCheckSeq;
+  return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 0;
 }
 
 /**
@@ -359,19 +413,25 @@ function legacyCheckSeq(e: ShiftCloseIntentEntry): number {
  * pre-B2.2 `synced` entries (field absent). One read and at most one W4 per
  * entry per sweep — no busy loop; the boot / `online` / sync orchestrator
  * triggers provide the retries. Only a confirmation-grade read of THIS close
- * (equal correlation id, identity and totals, still `pending`, this device)
- * is normalized; anything else is never written. Never throws.
+ * (shared strict parser for correlation-bearing entries, still `pending`, this
+ * device) is normalized; anything else is never written. Never throws.
  *
- * Gate B2.2-A — fair legacy progress (round robin over a logical clock, no
- * wall clock): legacy candidates are ordered least-recently-checked first
- * (`syncStateNormalizationCheckSeq`, absent = never), then newest close, then
- * shift id. The selected ones are stamped `max(seq) + 1` BEFORE their server
- * read, so a failed / hung read, a crash or a restart never re-selects the
- * same ten ahead of the rest. Guarantee: with N legacy candidates every one is
- * read at least once in any ⌈N / 10⌉ consecutive sweeps; per sweep at most 10
- * legacy server reads, 10 W4 writes and 10 local stamp writes. No backoff
- * beyond that rotation. The stamp is local to this device's journal (legacy
- * entries are this device's own closes) — nothing is shared across devices.
+ * Gate 006-C — durable, honest legacy fairness. The legacy batch is CLAIMED
+ * in ONE local readwrite transaction (`claimLegacyNormalizationChecks`):
+ * least-recently-checked first by a persisted logical sequence (never a wall
+ * clock), each claimed entry stamped `max(seq) + 1` and leased for
+ * {@link LEGACY_NORMALIZATION_CLAIM_LEASE_MS} BEFORE its server read. Only
+ * entries in a claim that DURABLY committed are read; if the claim fails
+ * (structured `ok: false` or a throw) NO legacy entry is read or written in
+ * this sweep (each candidate is reported `claim_failed`) — progress is never
+ * promised on volatile memory. Guarantees, while the local store can commit
+ * that claim: with N legacy candidates every one is read at least once in any
+ * ⌈N / 10⌉ consecutive sweeps that each start after the previous sweep's
+ * leases expired, across restarts; overlapping sweeps (another window, an
+ * overlapping trigger) claim DISJOINT entries (IndexedDB serializes the
+ * readwrite claims). With a permanently failing local store no legacy progress
+ * is possible at all — that is reported, not hidden. Per sweep: ≤10 legacy
+ * server reads, ≤10 legacy W4 attempts, one claim transaction.
  */
 export async function retryOutstandingNormalizations(
   deps: ReconcileShiftCloseIntentDeps,
@@ -390,25 +450,37 @@ export async function retryOutstandingNormalizations(
   );
   const outstanding = mine.filter((e) => e.syncStateNormalization === 'outstanding');
   const legacyAll = mine.filter((e) => e.syncStateNormalization === undefined);
-  const legacy = [...legacyAll]
-    .sort(
-      (a, b) =>
-        legacyCheckSeq(a) - legacyCheckSeq(b) ||
-        b.closedAtLocal - a.closedAtLocal ||
-        (a.shiftId < b.shiftId ? -1 : a.shiftId > b.shiftId ? 1 : 0),
-    )
-    .slice(0, LEGACY_NORMALIZATION_CHECKS_PER_SWEEP);
-  const nextSeq = legacyAll.reduce((max, e) => Math.max(max, legacyCheckSeq(e)), 0) + 1;
-  for (const entry of legacy) {
-    legacyCheckSeqOverlay.set(legacyKey(entry), nextSeq);
+
+  const results: NormalizationRetryResult[] = [];
+  let legacy: ShiftCloseIntentEntry[] = [];
+  if (legacyAll.length > 0) {
+    let claim: Awaited<ReturnType<ShiftCloseIntentJournal['claimLegacyNormalizationChecks']>>;
     try {
-      await deps.journal.recordNormalizationCheck(entry.shiftId, entry.closeCorrelationId, nextSeq);
-    } catch {
-      /* the overlay keeps this runtime fair; persisted on a later selection */
+      claim = await deps.journal.claimLegacyNormalizationChecks({
+        deviceId: deps.deviceId,
+        skipShiftIds: [...skipShiftIds],
+        limit: LEGACY_NORMALIZATION_CHECKS_PER_SWEEP,
+        leaseMs: LEGACY_NORMALIZATION_CLAIM_LEASE_MS,
+      });
+    } catch (err) {
+      claim = { ok: false, code: 'tx_failed', message: err instanceof Error ? err.message : String(err) };
+    }
+    if (claim.ok) {
+      legacy = claim.value;
+    } else {
+      // Fail closed: report the entries a claim would have selected; read / write none.
+      const wouldClaim = [...legacyAll]
+        .sort(
+          (a, b) =>
+            legacyCheckSeq(a) - legacyCheckSeq(b) ||
+            b.closedAtLocal - a.closedAtLocal ||
+            (a.shiftId < b.shiftId ? -1 : a.shiftId > b.shiftId ? 1 : 0),
+        )
+        .slice(0, LEGACY_NORMALIZATION_CHECKS_PER_SWEEP);
+      for (const e of wouldClaim) results.push({ shiftId: e.shiftId, outcome: 'claim_failed' });
     }
   }
 
-  const results: NormalizationRetryResult[] = [];
   for (const entry of [...outstanding, ...legacy]) {
     results.push({ shiftId: entry.shiftId, outcome: await retryNormalization(entry, deps) });
   }
@@ -428,29 +500,19 @@ async function retryNormalization(
   if (!read.ok) return 'retry_later';
   const { doc } = read;
   if (!doc.exists || doc.status !== 'closed' || !isResolvedServerTimestamp(doc.closedAt)) return 'retry_later';
-  const record = async (state: 'done' | 'mismatch' | 'not_applicable') => {
-    try {
-      await deps.journal.setSyncStateNormalization(entry.shiftId, entry.closeCorrelationId, state);
-    } catch {
-      /* re-evaluated on the next sweep */
-    }
-  };
-  if (!identityMatches(entry, doc)) {
-    await record('mismatch');
-    return 'mismatch';
-  }
+  // Gate 006-C: a terminal outcome is reported only once its local record persisted.
+  const record = async (state: 'done' | 'mismatch' | 'not_applicable', outcome: NormalizationRetryOutcome) =>
+    (await persistNormalization(deps.journal, entry, state)) ? outcome : ('local_write_failed' as const);
+  const confirmation = confirmsEntry(entry, doc);
+  if (confirmation === 'unresolved') return 'retry_later';
+  if (confirmation === 'mismatch') return record('mismatch', 'mismatch');
   // B2.2-A: unexpected sync marker — not terminal without proof, never written.
   if (doc.syncStateMalformed) return 'manual_attention';
-  if (doc.syncState === 'synced') {
-    await record('done');
-    return 'already_normalized';
-  }
-  if (doc.syncState !== 'pending' || doc.deviceId !== deps.deviceId) {
-    await record('not_applicable');
-    return 'not_applicable';
-  }
+  if (doc.syncState === 'synced') return record('done', 'already_normalized');
+  if (doc.syncState !== 'pending' || doc.deviceId !== deps.deviceId) return record('not_applicable', 'not_applicable');
   if (!deps.normalizeSyncState) return 'retry_later';
-  return (await writeNormalization(entry, deps.normalizeSyncState, deps.journal)) ? 'normalized' : 'retry_later';
+  const w4 = await writeNormalization(entry, deps.normalizeSyncState, deps.journal);
+  return w4 === 'normalized' ? 'normalized' : w4 === 'normalized_unrecorded' ? 'local_write_failed' : 'retry_later';
 }
 
 // ── Recovery gate B2: prepared ONLINE close attempts ──────────────────────
@@ -458,7 +520,11 @@ async function retryNormalization(
 export type OnlineCloseRecoveryOutcome =
   /** The doc is closed with THIS attempt's correlation id; the journal entry now exists. */
   | 'recovered'
-  /** The doc is closed by another correlation id: this attempt can never commit; deleted. */
+  /**
+   * The doc is closed by another VALID correlation id of the same shift run:
+   * this attempt can never commit. Gate 006-B: RETAINED as a tombstone (never
+   * deleted), no Z, no further server reads for it.
+   */
   | 'superseded'
   /** Open / missing: not closed (yet). Kept — never a close claim, never a Z source. */
   | 'not_closed'
@@ -622,6 +688,8 @@ export async function recoverOnlineCloseAttempt(
 ): Promise<OnlineCloseRecoveryResult> {
   const shiftId = attempt.shiftId;
   if (attempt.deviceId !== deps.deviceId) return { shiftId, outcome: 'not_closed' };
+  // Gate 006-B: an already-tombstoned (never commit-observed) attempt is settled.
+  if (isSupersededAttempt(attempt)) return { shiftId, outcome: 'superseded' };
   let read: ShiftCloseConfirmationRead;
   try {
     read = await deps.readConfirmation(shiftId);
@@ -633,17 +701,20 @@ export async function recoverOnlineCloseAttempt(
   if (!parsed.ok) {
     if (parsed.reason === 'not_closed') return { shiftId, outcome: 'not_closed' };
     if (parsed.reason === 'closed_at_unresolved') return { shiftId, outcome: 'unreachable' };
-    if (parsed.reason === 'other_correlation' && attempt.commitObservedAtLocal === undefined) {
+    if (parsed.reason === 'other_correlation' && !isCommitObservedAttempt(attempt)) {
       // Closed by another VALID close of the same shift run: W3 only closes an
-      // OPEN doc, so this attempt can never commit now — definitive, safe to
-      // drop (no Z, no journal entry). An attempt whose own commit was observed
-      // is never dropped (the doc contradicts a known commit: manual attention).
+      // OPEN doc, so this attempt can never commit now (no Z, no journal
+      // entry). Gate 006-B: NON-destructive — the store re-reads the DURABLE
+      // attempt and tombstones it only if it is not commit-observed there
+      // either; a contradiction with a known commit is manual attention.
+      let superseded: Awaited<ReturnType<ShiftCloseIntentJournal['supersedeOnlineCloseAttempt']>>;
       try {
-        await deps.journal.discardOnlineCloseAttempt(shiftId, attempt.closeCorrelationId);
+        superseded = await deps.journal.supersedeOnlineCloseAttempt(shiftId, attempt.closeCorrelationId);
       } catch {
         return { shiftId, outcome: 'unreachable' };
       }
-      return { shiftId, outcome: 'superseded' };
+      if (!superseded.ok) return { shiftId, outcome: 'unreachable' };
+      return { shiftId, outcome: superseded.value === 'commit_observed' ? 'manual_attention' : 'superseded' };
     }
     // missing / invalid correlation, observed-commit contradiction, identity /
     // field defects: retained for investigation — never deleted, never a Z.
@@ -688,9 +759,32 @@ export async function recoverOnlineCloseAttempts(
  * a failed `listCloseIntents()` read just yields no work for this pass (retried
  * on the next trigger).
  */
-export async function runShiftCloseReconciliationSweep(
+export function runShiftCloseReconciliationSweep(
   deps: ReconcileShiftCloseIntentDeps,
 ): Promise<ReconcileShiftCloseIntentResult[]> {
+  // Gate 006-C — single-flight per device in this process: an overlapping
+  // boot / `online` / orchestrator trigger JOINS the running sweep (same
+  // result) instead of re-reading and re-attempting W4 for the same entries.
+  // A sweep older than SWEEP_JOIN_MAX_MS (e.g. a server read that never
+  // settles) is not joined, so one stuck sweep can never stall all later ones.
+  // Across windows / processes the legacy batch is made disjoint by the
+  // transactional claim; any other overlap is bounded by W4 Rules (only one
+  // pending → synced write can succeed).
+  const nowMs = Date.now();
+  const running = sweepsInFlight.get(deps.deviceId);
+  if (running && nowMs >= running.startedAt && nowMs - running.startedAt < SWEEP_JOIN_MAX_MS) return running.promise;
+  const promise = runSweepOnce(deps).finally(() => {
+    if (sweepsInFlight.get(deps.deviceId)?.promise === promise) sweepsInFlight.delete(deps.deviceId);
+  });
+  sweepsInFlight.set(deps.deviceId, { promise, startedAt: nowMs });
+  return promise;
+}
+
+/** Gate 006-C: an in-flight sweep is joined only while younger than this. */
+const SWEEP_JOIN_MAX_MS = 60_000;
+const sweepsInFlight = new Map<string, { promise: Promise<ReconcileShiftCloseIntentResult[]>; startedAt: number }>();
+
+async function runSweepOnce(deps: ReconcileShiftCloseIntentDeps): Promise<ReconcileShiftCloseIntentResult[]> {
   // Recovery gate B2: first turn every prepared online close that DID commit
   // into its journal entry, so the loop below reconciles it (synced + Variant C)
   // exactly like any other pending close.
