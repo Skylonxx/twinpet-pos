@@ -77,6 +77,89 @@ export function mergeCashEntries(...lists: ReadonlyArray<readonly ShiftCashEntry
   return out;
 }
 
+// ── C1-R1 R1-B: cash-entry IDENTITY integrity (checked on RAW inputs) ──
+//
+// {@link mergeCashEntries} keeps the FIRST occurrence of an id, silently
+// dropping the rest. That is only safe if an id names ONE movement. It does not
+// hold for cash ids: the server's `rfd_<returnId>` payout is appended with a
+// whole-object `arrayUnion` (not id-unique), and Rules cannot prove uniqueness
+// of arbitrary client ids. So a close must prove the ids unambiguous BEFORE it
+// folds — on the raw per-source lists, before any dedupe erases the evidence.
+//
+//  • within ONE source list an id may appear once (even two identical objects
+//    are refused: uniqueness is unproven, and the raw drawer fold would count
+//    both while the merge keeps one);
+//  • across sources (local mounted shift, local cache, authoritative server) the
+//    same id is a legitimate mirror ONLY when the entries are field-for-field
+//    identical; any difference (type, amount, note, staff, time) is a collision;
+//  • money-bearing fields must be well-formed — id: non-blank string; type:
+//    'pay_in' | 'pay_out'; amount: finite number > 0 (the W1 Rules envelope).
+//    Money is never coerced. Non-money fields (note, staffName, at) are only
+//    compared across sources, not required, so a historical entry that lacks
+//    one is not a false blocker;
+//  • a source that is ABSENT (`undefined`) is empty; one that is present but not
+//    a list (null, object, string…) is corrupt.
+// Ids are compared case-sensitively (as Rules reserve the lowercase `rfd_`
+// server prefix): `rfd_X` and `RFD_X` are two different movements.
+
+export type CashEntrySource = { label: 'local' | 'cache' | 'server'; entries: unknown };
+
+export type CashEntryIntegrityFailure = {
+  ok: false;
+  reason: 'not_a_list' | 'malformed_entry' | 'duplicate_id_in_source' | 'conflicting_id_across_sources';
+  source: CashEntrySource['label'];
+  /** The offending id when one is known (never a secret; cash ids are opaque). */
+  id?: string;
+  /** The earlier source that already held a different entry for `id`. */
+  otherSource?: CashEntrySource['label'];
+};
+
+export type CashEntryIntegrity = { ok: true } | CashEntryIntegrityFailure;
+
+const CASH_ENTRY_COMPARED_FIELDS = ['type', 'amount', 'note', 'staffId', 'staffName', 'at'] as const;
+
+function isMoneyWellFormedEntry(e: unknown): e is ShiftCashEntry {
+  if (e === null || typeof e !== 'object' || Array.isArray(e)) return false;
+  const r = e as Record<string, unknown>;
+  return (
+    typeof r.id === 'string' &&
+    r.id.trim().length > 0 &&
+    (r.type === 'pay_in' || r.type === 'pay_out') &&
+    typeof r.amount === 'number' &&
+    Number.isFinite(r.amount) &&
+    r.amount > 0
+  );
+}
+
+function sameCashEntry(a: ShiftCashEntry, b: ShiftCashEntry): boolean {
+  return CASH_ENTRY_COMPARED_FIELDS.every((f) => (a as Record<string, unknown>)[f] === (b as Record<string, unknown>)[f]);
+}
+
+/** Pure. Run on the RAW sources a close is about to merge — never on the merged list. */
+export function checkCashEntryIntegrity(sources: ReadonlyArray<CashEntrySource>): CashEntryIntegrity {
+  const firstSeen = new Map<string, { entry: ShiftCashEntry; source: CashEntrySource['label'] }>();
+  for (const { label, entries } of sources) {
+    if (entries === undefined) continue;
+    if (!Array.isArray(entries)) return { ok: false, reason: 'not_a_list', source: label };
+    const inThisSource = new Set<string>();
+    for (const e of entries as unknown[]) {
+      if (!isMoneyWellFormedEntry(e)) {
+        const id = e !== null && typeof e === 'object' && typeof (e as { id?: unknown }).id === 'string' ? (e as { id: string }).id : undefined;
+        return { ok: false, reason: 'malformed_entry', source: label, ...(id ? { id } : {}) };
+      }
+      if (inThisSource.has(e.id)) return { ok: false, reason: 'duplicate_id_in_source', source: label, id: e.id };
+      inThisSource.add(e.id);
+      const prior = firstSeen.get(e.id);
+      if (!prior) {
+        firstSeen.set(e.id, { entry: e, source: label });
+      } else if (!sameCashEntry(prior.entry, e)) {
+        return { ok: false, reason: 'conflicting_id_across_sources', source: label, id: e.id, otherSource: prior.source };
+      }
+    }
+  }
+  return { ok: true };
+}
+
 /** The shift with its cash movements re-folded from the merged entries. */
 export function withMergedCashEntries(shift: Shift, ...others: ReadonlyArray<readonly ShiftCashEntry[] | null | undefined>): Shift {
   const cashEntries = mergeCashEntries(shift.cashEntries ?? [], ...others);

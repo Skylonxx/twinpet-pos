@@ -21,10 +21,12 @@ import type { CashTransactionType, Shift, ShiftCashEntry } from '../types';
 import type { PaymentSplit } from './types';
 import { getDeviceId } from './deviceId';
 import {
+  checkCashEntryIntegrity,
   clearShiftServerCashPending,
   isNavigatorOnline,
   readShiftServerCashPending,
   withMergedCashEntries,
+  type CashEntrySource,
 } from './shiftCashFreshness';
 import {
   createShiftCloseIntentJournal,
@@ -704,6 +706,25 @@ export const CLOSE_SHIFT_PENDING_WRITES_MESSAGE =
 export const CLOSE_SHIFT_TX_FAILED_MESSAGE =
   'ยังยืนยันผลการปิดกะกับเซิร์ฟเวอร์ไม่ได้ (การเชื่อมต่อหรือการบันทึกขัดข้อง) — หากกะถูกปิดไปแล้ว ระบบจะรู้จำผลเดิมและไม่ปิดกะซ้ำ กรุณาตรวจสอบการเชื่อมต่อแล้วลองใหม่อีกครั้ง';
 
+/**
+ * C1-R1 R1-B: the shift's cash entries carry a duplicate / conflicting / malformed
+ * identity (e.g. two `rfd_X` payouts of different amounts), so the drawer cannot
+ * be frozen without silently dropping one — nothing was closed or written.
+ */
+export const CLOSE_SHIFT_CASH_AMBIGUOUS_MESSAGE =
+  'ปิดกะไม่ได้: พบรายการเงินสดในลิ้นชักที่รหัสรายการเงินสดซ้ำกัน ขัดแย้งกัน หรือข้อมูลไม่ถูกต้อง — ยังไม่ได้ปิดกะและยังไม่บันทึกยอดใด ๆ กรุณาแจ้งผู้จัดการให้ตรวจสอบกะนี้ก่อน (ห้ามแก้ไขหรือลบรายการเอง)';
+
+/**
+ * `true` when the RAW cash sources are ambiguous (see {@link checkCashEntryIntegrity})
+ * and the close must be refused. Never dedupes, repairs or rewrites anything.
+ */
+function cashEntriesAmbiguous(sources: CashEntrySource[], where: string): boolean {
+  const verdict = checkCashEntryIntegrity(sources);
+  if (verdict.ok) return false;
+  console.warn(`[shiftService] close refused: ambiguous cash entries (${where})`, verdict);
+  return true;
+}
+
 /** Bound on flushing this device's queued writes before the online close transaction. */
 export const CLOSE_SHIFT_PENDING_WRITES_TIMEOUT_MS = 5_000;
 
@@ -1064,6 +1085,22 @@ export async function closeShift(
     throw new Error(CLOSE_SHIFT_ALREADY_CLOSED_MESSAGE);
   }
 
+  // C1-R1 R1-B — on the RAW local + cache lists, BEFORE the online close
+  // prepares an attempt / the offline close persists an intent: both would fold
+  // them with the first-wins merge. The online path re-checks every transaction
+  // attempt against the fresh server list (closeShiftOnline).
+  if (
+    cashEntriesAmbiguous(
+      [
+        { label: 'local', entries: shift.cashEntries },
+        { label: 'cache', entries: cachedData.cashEntries },
+      ],
+      online ? 'online:local+cache' : 'offline:local+cache',
+    )
+  ) {
+    throw new Error(CLOSE_SHIFT_CASH_AMBIGUOUS_MESSAGE);
+  }
+
   if (online) {
     return closeShiftOnline(shift, actualCashCount, note, cachedEntries, ctx);
   }
@@ -1271,6 +1308,22 @@ async function closeShiftOnline(
       if (journaled) throw new ShiftCloseRefusal(CLOSE_SHIFT_CONFLICT_MESSAGE);
       if (d.branchId !== shift.branchId || d.staffId !== shift.staffId) {
         throw new ShiftCloseRefusal(CLOSE_SHIFT_UNVERIFIABLE_MESSAGE);
+      }
+      // C1-R1 R1-B — on EVERY attempt, against THIS read, and on the raw lists
+      // (before the merge below could erase a collision): a duplicate /
+      // conflicting / malformed cash id refuses with nothing written. Pure, so
+      // it is safe to repeat on each retry.
+      if (
+        cashEntriesAmbiguous(
+          [
+            { label: 'local', entries: shift.cashEntries },
+            { label: 'cache', entries: cachedEntries },
+            { label: 'server', entries: d.cashEntries },
+          ],
+          'online:transaction',
+        )
+      ) {
+        throw new ShiftCloseRefusal(CLOSE_SHIFT_CASH_AMBIGUOUS_MESSAGE);
       }
       const serverEntries = Array.isArray(d.cashEntries) ? (d.cashEntries as ShiftCashEntry[]) : [];
       const folded = withMergedCashEntries(shift, cachedEntries, serverEntries);

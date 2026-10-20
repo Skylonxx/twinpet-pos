@@ -276,9 +276,24 @@ service cloud.firestore {
           && e.amount is number && e.amount > 0 && e.amount <= shiftMaxEntryBaht()
           && e.note is string && e.note.size() > 0
           && e.id is string && e.id.size() > 0
+          && !isServerOwnedCashEntryId(e.id)
           && e.staffId == staffId()
           && e.staffName is string
           && e.at is int && e.at > 0;
+    }
+
+    // C1-R1 — `rfd_<returnId>` is the id of the cash-refund payout that the
+    // Admin-SDK Return callable appends (deriveCashRefundEntryId; the Admin SDK
+    // bypasses Rules). A client must never be able to introduce an entry in that
+    // namespace: the online close folds cashEntries by id, so a client-made
+    // `rfd_X` could shadow the server's real `rfd_X` payout. Case-sensitive on
+    // purpose (the server prefix is lowercase); `(?s)` so a newline cannot slip
+    // past `.`. Rules cannot prove id UNIQUENESS efficiently — only the
+    // namespace of the APPENDED entry is reserved; the close refuses ambiguous
+    // ids (R1-B). The frozen P5 "prefix-rewrite residual" (W1 validates only the
+    // last element) is deliberately unchanged here: see the p5c spec.
+    function isServerOwnedCashEntryId(entryId) {
+      return entryId.matches('(?s)rfd_.*');
     }
 
     function isW1CashAppend() {
