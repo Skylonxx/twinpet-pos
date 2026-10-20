@@ -27,7 +27,7 @@ import {
   reissueShiftOpenWrite,
 } from '../lib/pos/shiftService';
 import { createShiftCloseIntentJournal } from '../lib/pos/offline/shiftCloseIntentStore';
-import { runShiftCloseReconciliationSweep } from '../lib/pos/offline/shiftCloseReconciler';
+import { runShiftCloseReconciliationSweep, shiftCloseNormalizationIssue } from '../lib/pos/offline/shiftCloseReconciler';
 import { createShiftOpenIntentJournal } from '../lib/pos/offline/shiftOpenIntentStore';
 import { runShiftOpenReconciliationSweep } from '../lib/pos/offline/shiftOpenReconciler';
 import { runTrustedResumeSweep } from '../lib/pos/offline/trustedSaleSubmissionOrchestrator';
@@ -171,6 +171,8 @@ export default function POSPage({ trustedResumeSweep }: POSPageProps = {}) {
   // shift this device already closed (offline, pending sync) is never
   // re-opened / re-folded into a live drawer after reload/restart.
   const shiftCloseIntentJournalRef = useRef(createShiftCloseIntentJournal());
+  // Gate 007-C: last reported shift-close W4 normalization issue (de-duplicates the log).
+  const closeNormalizationIssueRef = useRef<string | null>(null);
   // PK-1: durable local open-intent journal — restore pending opens and block
   // duplicate/rejected opens across boot/reconnect.
   const shiftOpenIntentJournalRef = useRef(createShiftOpenIntentJournal());
@@ -1035,9 +1037,22 @@ export default function POSPage({ trustedResumeSweep }: POSPageProps = {}) {
     };
 
     const runSweep = () => {
-      void runShiftCloseReconciliationSweep(closeSweepDeps).catch(() => {
-        // Best-effort — a failed sweep just leaves entries pending for the next trigger.
-      });
+      void runShiftCloseReconciliationSweep(closeSweepDeps)
+        .then((results) => {
+          // Gate 007-C: a W4 normalization the sweep could not persist / claim is
+          // logged (once per distinct state, never per trigger); the sync
+          // orchestrator surfaces the same summary in the Sync Center state.
+          const issue = shiftCloseNormalizationIssue(results.normalization);
+          if (issue !== closeNormalizationIssueRef.current) {
+            closeNormalizationIssueRef.current = issue;
+            if (issue) {
+              console.warn('[POSPage] shift-close W4 normalization needs attention', issue, results.normalization);
+            }
+          }
+        })
+        .catch(() => {
+          // Best-effort — a failed sweep just leaves entries pending for the next trigger.
+        });
       void runShiftOpenReconciliationSweep(openSweepDeps)
         .then((results) => {
           if (cancelled) return;

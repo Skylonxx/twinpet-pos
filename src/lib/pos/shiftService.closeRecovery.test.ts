@@ -1315,12 +1315,11 @@ describe('B2.2-A — legacy W4 migration makes fair progress (no starvation), bo
     await seedLegacy(12);
     const server = createLegacyServer(12);
     const base = clockedJournal();
-    const crashing: ShiftCloseIntentJournal = {
-      ...base,
-      setSyncStateNormalization: async () => {
-        throw new Error('process died');
-      },
+    const died = async (): Promise<never> => {
+      throw new Error('process died');
     };
+    // Legacy terminal records go through the fenced 007 writer; both "done" writers die.
+    const crashing: ShiftCloseIntentJournal = { ...base, setSyncStateNormalization: died, recordLegacyNormalization: died };
     await legacySweep(server, { journal: crashing }); // 10 selected: W4 lands, "done" never recorded
     expect(server.w4).toHaveLength(10);
     for (let s = 0; s < 3; s += 1) await legacySweep(server);
@@ -1711,12 +1710,508 @@ describe('006-C — restart-safe legacy W4 progress and overlapping sweeps', () 
   test('remote W4 lands but the local "done" write returns { ok: false } → never reported done; next sweep records done WITHOUT a second W4', async () => {
     await seedLegacy(1);
     const server = createLegacyServer(1);
-    const failingDone = { ...clockedJournal(), setSyncStateNormalization: async () => ({ ok: false as const, code: 'unavailable' as const }) } as ShiftCloseIntentJournal;
+    // Legacy terminal records go through the fenced 007 writer; both "done" writers fail.
+    const doneDown = async () => ({ ok: false as const, code: 'unavailable' as const });
+    const failingDone = { ...clockedJournal(), setSyncStateNormalization: doneDown, recordLegacyNormalization: doneDown } as ShiftCloseIntentJournal;
     await legacySweep(server, { journal: failingDone });
     expect(server.w4).toEqual(['L0']);
     expect(await legacyState('L0')).toBeUndefined(); // not claimed as done
     await legacySweep(server);
     expect(server.w4).toEqual(['L0']); // no second W4
     expect(await legacyState('L0')).toBe('done');
+  });
+});
+
+// ── Codex 006 → packet 007 ────────────────────────────────────────────────
+// Local helpers only, and new result fields are read optionally, so every test
+// also runs against the parent sources (`edc1f82`) for the red/green proof.
+
+/** The strictly proven committed close of shift-1 by DEV1 (what parseCommittedOwnClose yields). */
+const PROVEN = {
+  shiftId: 'shift-1', branchId: 'LDP-001', staffId: 'staff-1', staffName: 'ทดสอบ', startingCash: 500, expectedCash: 1000,
+  expectedQr: 0, expectedKbank: 0, expectedCard: 0, expectedCredit: 0, payInTotal: 0, payOutTotal: 162, totalBills: 3,
+  actualCashCount: 1338, variance: 0, note: '', deviceId: 'DEV1',
+};
+
+function attemptRecord(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    kind: 'onlineCloseAttempt', version: 1, shiftId: 'shift-1', branchId: 'LDP-001', staffId: 'staff-1', staffName: 'ทดสอบ',
+    deviceId: 'DEV1', closeCorrelationId: UUID_A, preparedAtLocal: 1, ...overrides,
+  };
+}
+
+/** Raw durable records of shift-1 (the entry and the attempt), straight from IndexedDB. */
+async function rawShift1() {
+  const store = createIndexedDbShiftCloseIntentStore();
+  return store.transact(['shiftCloseIntents'], 'readonly', async (txn) => ({
+    entry: await txn.get<Record<string, unknown>>('shiftCloseIntents', 'shift-1'),
+    attempt: await txn.get<Record<string, unknown>>('shiftCloseIntents', onlineCloseAttemptKey('shift-1')),
+  }));
+}
+
+async function putRawAttempt(value: unknown) {
+  const store = createIndexedDbShiftCloseIntentStore();
+  await store.transact(['shiftCloseIntents'], 'readwrite', (txn) => txn.put('shiftCloseIntents', onlineCloseAttemptKey('shift-1'), value));
+}
+
+const FOREIGN_ATTEMPTS: Array<[string, Record<string, unknown>]> = [
+  ['same correlation, WRONG branch', attemptRecord({ branchId: 'LDP-999' })],
+  ['same correlation, WRONG staff', attemptRecord({ staffId: 'someone-else' })],
+  ['same correlation, WRONG device', attemptRecord({ deviceId: 'DEV2' })],
+  ['a retained supersession tombstone', attemptRecord({ supersededAtLocal: 5 })],
+  ['a tombstone later marked commit-observed', attemptRecord({ supersededAtLocal: 5, commitObservedAtLocal: 6 })],
+  ['corrupt (unknown version)', attemptRecord({ version: 2 })],
+  ['corrupt (missing staffId)', attemptRecord({ staffId: undefined })],
+  ['another correlation id', attemptRecord({ closeCorrelationId: UUID_B })],
+];
+
+describe('007-B — finalizeOnlineClose consumes ONLY the exact, present, owned attempt', () => {
+  test('Codex 006: NO attempt (and no entry) → refused with a structured reason; nothing written', async () => {
+    const journal = bootJournal();
+    const r = await journal.finalizeOnlineClose(PROVEN, UUID_A);
+    // Parent: { ok: true } — an absent attempt authorized a brand-new entry.
+    expect(r).toMatchObject({ ok: false, code: 'conflict', reason: 'attempt_missing' });
+    expect(await rawShift1()).toEqual({ entry: undefined, attempt: undefined });
+  });
+
+  test.each(FOREIGN_ATTEMPTS)('attempt is %s → refused; no entry, the stored attempt is untouched', async (_label, stored) => {
+    await putRawAttempt(stored);
+    const before = await rawShift1();
+    const r = await bootJournal().finalizeOnlineClose(PROVEN, UUID_A);
+    expect(r.ok).toBe(false);
+    expect(r).toMatchObject({ code: 'conflict' });
+    expect((r as { reason?: string }).reason).toMatch(/^attempt_(mismatch|superseded|unreadable)$/);
+    // Parent (identity / tombstone rows): the entry was created and THAT attempt deleted.
+    expect(await rawShift1()).toEqual(before);
+    expect(before.entry).toBeUndefined();
+  });
+
+  test('valid owned attempt → exactly one entry from the proven values, attempt consumed in the same transaction; a repeat is idempotent', async () => {
+    const journal = bootJournal();
+    expect((await journal.prepareOnlineCloseAttempt({ shiftId: 'shift-1', branchId: 'LDP-001', staffId: 'staff-1', staffName: 'ทดสอบ', deviceId: 'DEV1' })).ok).toBe(true);
+    const first = await journal.finalizeOnlineClose(PROVEN, UUID_A);
+    expect(first).toMatchObject({ ok: true, value: { status: 'local_closed_pending', closeCorrelationId: UUID_A, payOutTotal: 162 } });
+    const after = await rawShift1();
+    expect(after.attempt).toBeUndefined();
+    expect(after.entry).toMatchObject({ closeCorrelationId: UUID_A, deviceId: 'DEV1' });
+    // The repeat (another window / a late retry) re-reads and verifies the SAME entry; never a second one.
+    const again = await bootJournal().finalizeOnlineClose(PROVEN, UUID_A);
+    expect(again).toMatchObject({ ok: true, value: { closedAtLocal: (first as { value: { closedAtLocal: number } }).value.closedAtLocal } });
+    expect(await rawShift1()).toEqual(after);
+    // A late callback with DIFFERENT totals never overwrites it.
+    expect(await bootJournal().finalizeOnlineClose({ ...PROVEN, actualCashCount: 1339, variance: 1 }, UUID_A)).toMatchObject({ ok: false, code: 'conflict' });
+    expect(await rawShift1()).toEqual(after);
+  });
+
+  test('competing windows finalize the same proven close concurrently → both succeed, ONE canonical entry, attempt gone', async () => {
+    const tabA = bootJournal();
+    expect((await tabA.prepareOnlineCloseAttempt({ shiftId: 'shift-1', branchId: 'LDP-001', staffId: 'staff-1', staffName: 'ทดสอบ', deviceId: 'DEV1' })).ok).toBe(true);
+    const tabB = bootJournal([UUID_B]);
+    const [a, b] = await Promise.all([tabA.finalizeOnlineClose(PROVEN, UUID_A), tabB.finalizeOnlineClose(PROVEN, UUID_A)]);
+    expect(a.ok && b.ok).toBe(true);
+    const listed = await tabA.listCloseIntents();
+    expect(listed.ok && listed.value.filter((e) => e.shiftId === 'shift-1')).toHaveLength(1);
+    expect((await rawShift1()).attempt).toBeUndefined();
+  });
+
+  test('the store transaction aborts after the entry write → NEITHER effect is durable (no entry, attempt kept)', async () => {
+    const journal = bootJournal();
+    expect((await journal.prepareOnlineCloseAttempt({ shiftId: 'shift-1', branchId: 'LDP-001', staffId: 'staff-1', staffName: 'ทดสอบ', deviceId: 'DEV1' })).ok).toBe(true);
+    const before = await rawShift1();
+    const base = createIndexedDbShiftCloseIntentStore();
+    const failingDelete = {
+      transact: <T>(stores: Parameters<typeof base.transact>[0], mode: 'readonly' | 'readwrite', fn: Parameters<typeof base.transact<T>>[2]) =>
+        base.transact(stores, mode, (txn) =>
+          fn({
+            ...txn,
+            delete: async () => {
+              throw new Error('disk I/O error');
+            },
+          }),
+        ),
+    };
+    const r = await createShiftCloseIntentJournal({ store: failingDelete }).finalizeOnlineClose(PROVEN, UUID_A);
+    expect(r).toMatchObject({ ok: false, code: 'tx_failed' });
+    expect(await rawShift1()).toEqual(before);
+  });
+
+  test('production close: the attempt no longer matches this identity when the proven commit is finalized → NO Z, no entry, refusal surfaced', async () => {
+    const server = createShiftServer(openServerShift([REFUND]));
+    const journal = bootJournal();
+    const swapped: ShiftCloseIntentJournal = {
+      ...journal,
+      finalizeOnlineClose: async (...args) => {
+        // Between prepare and finalize the durable attempt became another device's (same correlation id).
+        await putRawAttempt(attemptRecord({ deviceId: 'DEV2', preparedAtLocal: 2 }));
+        return journal.finalizeOnlineClose(...args);
+      },
+    };
+    const err = await closeShift(makeShift(), 1338, '', deps(server, swapped, { readConfirmation: mappedReader(server) })).then(
+      () => null,
+      (e: Error & { cause?: { finalizeRefusal?: string } }) => e,
+    );
+    // Parent: a Z was returned and DEV2's attempt was consumed into a DEV1 entry.
+    expect(err?.message).toContain(UNVERIFIED);
+    expect(err?.cause?.finalizeRefusal).toBe('attempt_mismatch');
+    expect(await rawShift1()).toMatchObject({ entry: undefined, attempt: { deviceId: 'DEV2' } });
+    expect(server.state).toMatchObject({ commits: 1, normalizeAttempts: 0 });
+  });
+
+  test('restart sweep: the attempt is replaced by a foreign one between listing and finalize → manual attention, no entry, foreign attempt kept', async () => {
+    const server = createShiftServer(openServerShift([REFUND]));
+    await commitWithLostResponse(server, bootJournal());
+    const rebooted = bootJournal();
+    const racing: ShiftCloseIntentJournal = {
+      ...rebooted,
+      finalizeOnlineClose: async (...args) => {
+        await putRawAttempt(attemptRecord({ staffId: 'someone-else' }));
+        return rebooted.finalizeOnlineClose(...args);
+      },
+    };
+    const [r] = await recoverOnlineCloseAttempts({ journal: racing, readConfirmation: mappedReader(server), deviceId: 'DEV1' });
+    // Parent: 'recovered' — the foreign attempt was deleted and a DEV1 entry written.
+    expect(r).toMatchObject({ shiftId: 'shift-1', outcome: 'manual_attention' });
+    expect(await rawShift1()).toMatchObject({ entry: undefined, attempt: { staffId: 'someone-else' } });
+  });
+});
+
+// ── 007-C: fenced legacy W4 claims + conditional remote W4 ────────────────
+
+/**
+ * Authoritative closed docs + a FAITHFUL model of the server side of each
+ * client's production W4 (counts every API attempt and every effective
+ * transition), so the same test runs fairly on the parent and on 007:
+ *  - called with `(id)` only (parent: a plain `updateDoc`): evaluated by W4
+ *    Rules when it ARRIVES (after `beforeCommit`): pending → written, else
+ *    rejected (permission-denied);
+ *  - called with `(id, expected)` (007: one transaction): READ at the start;
+ *    a read that is not this pending close decides `already_synced` /
+ *    `precondition_failed` (nothing written); otherwise the COMMIT (after
+ *    `beforeCommit`) is evaluated by W4 Rules against the doc as it is then —
+ *    rejected if another worker's W4 landed in between (as on the emulator,
+ *    rules-tests/shift-w4-conditional.spec.ts).
+ */
+function createW4Server(n: number) {
+  const { docs } = createLegacyServer(n);
+  const reads: string[] = [];
+  const attempts: string[] = [];
+  const written: string[] = [];
+  const events: string[] = [];
+  /** A reader whose result is the server state AT THE READ, delivered after `stall`. */
+  const reader = (who: string, stall?: Promise<unknown>): ShiftCloseConfirmationReader => async (id) => {
+    reads.push(id);
+    const atRead = { ...docs.get(id)! };
+    events.push(`${who}:read:${id}:${String(atRead.syncState)}`);
+    if (stall) await stall;
+    return { ok: true, doc: shiftCloseConfirmationDocFromData(atRead) };
+  };
+  const denied = () => Object.assign(new Error('PERMISSION_DENIED (W4 Rules: doc not pending)'), { code: 'permission-denied' });
+  const commit = (who: string, id: string, loseAck: boolean | undefined) => {
+    docs.set(id, { ...docs.get(id)!, syncState: 'synced' });
+    written.push(id);
+    events.push(`${who}:w4-commit:${id}:written`);
+    if (loseAck) throw new Error('deadline-exceeded (W4 acknowledgement lost)');
+  };
+  const normalizer = (who: string, opts: { beforeCommit?: Promise<unknown>; loseAck?: boolean } = {}) =>
+    async (id: string, expected?: { closeCorrelationId: string | null; deviceId: string }) => {
+      attempts.push(id);
+      events.push(`${who}:w4-attempt:${id}`);
+      if (!expected) {
+        // Parent: a plain updateDoc, judged by Rules on arrival.
+        if (opts.beforeCommit) await opts.beforeCommit;
+        if (docs.get(id)!.syncState !== 'pending') throw denied();
+        commit(who, id, opts.loseAck);
+        return undefined;
+      }
+      // 007: the transaction reads now and commits after `beforeCommit`.
+      const read = { ...docs.get(id)! };
+      if (read.status !== 'closed' || read.deviceId !== expected.deviceId || read.closeCorrelationId !== expected.closeCorrelationId) {
+        return 'precondition_failed' as const;
+      }
+      if (read.syncState === 'synced') {
+        events.push(`${who}:w4-read:${id}:already_synced`);
+        return 'already_synced' as const;
+      }
+      if (read.syncState !== 'pending') return 'precondition_failed' as const;
+      if (opts.beforeCommit) await opts.beforeCommit;
+      if (docs.get(id)!.syncState !== 'pending') {
+        events.push(`${who}:w4-commit:${id}:rejected`);
+        throw denied();
+      }
+      commit(who, id, opts.loseAck);
+      return 'written' as const;
+    };
+  return { docs, reads, attempts, written, events, reader, normalizer };
+}
+
+type SweepSummary = {
+  status?: string;
+  counts?: Record<string, number>;
+  owed?: number | null;
+  results?: Array<{ shiftId: string; outcome: string; remoteW4?: string }>;
+};
+const summaryOf = (r: unknown): SweepSummary | undefined => (r as { normalization?: SweepSummary }).normalization;
+
+function deferred() {
+  let release!: () => void;
+  const promise = new Promise<void>((r) => (release = r));
+  return { promise, release };
+}
+
+/** Real-timer polling (Date.now is controlled in these tests, so vi.waitFor is avoided). */
+async function until(cond: () => boolean | Promise<boolean>, label: string) {
+  for (let i = 0; i < 400; i += 1) {
+    if (await cond()) return;
+    await new Promise((r) => setTimeout(r, 5));
+  }
+  throw new Error(`timed out waiting for ${label}`);
+}
+
+/** Process + journal clocks move together (single-flight uses Date.now, the claim lease the journal clock). */
+function controlClock() {
+  legacyClock.now += 20 * LEASE_GAP_MS; // far from any earlier (possibly hung) sweep
+  return vi.spyOn(Date, 'now').mockImplementation(() => legacyClock.now);
+}
+
+async function legacyEntry(shiftId: string) {
+  const got = await createShiftCloseIntentJournal().getCloseIntent(shiftId);
+  if (!got.ok || !got.value) throw new Error(`legacy ${shiftId}`);
+  return got.value;
+}
+
+describe('007-C — an expired claim cannot let an old sweep W4 or acknowledge another sweep’s work', () => {
+  test.each([['the same runtime (single-flight no longer joins)'], ['a second window (own journal)']])(
+    'sweep A claims L0 at t0 and stalls in its server read; at t+61 s sweep B from %s re-claims it; both reads saw pending → ONE W4 attempt, A reports claim_lost, B normalized',
+    async () => {
+      await seedLegacy(1);
+      const server = createW4Server(1);
+      restartProcessMemory();
+      controlClock();
+      const stall = deferred();
+      const sweepA = runShiftCloseReconciliationSweep({ journal: clockedJournal(), readConfirmation: server.reader('A', stall.promise), normalizeSyncState: server.normalizer('A'), deviceId: 'DEV1' });
+      await until(() => server.reads.length === 1, 'A read');
+      const claimA = await legacyEntry('L0');
+      legacyClock.now += LEASE_GAP_MS; // A's lease expired while it waits
+      const resB = await runShiftCloseReconciliationSweep({ journal: clockedJournal(), readConfirmation: server.reader('B'), normalizeSyncState: server.normalizer('B'), deviceId: 'DEV1' });
+      const claimB = await legacyEntry('L0');
+      expect(claimB.syncStateNormalizationCheckSeq).toBeGreaterThan(claimA.syncStateNormalizationCheckSeq ?? 0);
+      stall.release(); // A's stale "pending" read now resolves
+      const resA = await sweepA;
+      // Parent: A then made a SECOND W4 attempt and recorded its own "done".
+      expect(server.attempts).toEqual(['L0']);
+      expect(server.written).toEqual(['L0']);
+      expect(server.reads).toEqual(['L0', 'L0']);
+      expect((await legacyEntry('L0')).syncStateNormalization).toBe('done');
+      expect(summaryOf(resB)?.results).toEqual([{ shiftId: 'L0', outcome: 'normalized', remoteW4: 'written' }]);
+      expect(summaryOf(resA)?.results).toEqual([{ shiftId: 'L0', outcome: 'claim_lost' }]);
+      expect(summaryOf(resA)?.status).toBe('ok'); // a lost claim is a handover, not a failure
+      // Later sweeps never W4 it again.
+      legacyClock.now += LEASE_GAP_MS;
+      await runShiftCloseReconciliationSweep({ journal: clockedJournal(), readConfirmation: server.reader('C'), normalizeSyncState: server.normalizer('C'), deviceId: 'DEV1' });
+      expect(server.attempts).toEqual(['L0']);
+    },
+  );
+
+  test.each([['backwards (−10 min)', -600_000], ['forwards (+2 min)', 120_000]])(
+    'wall-clock jump %s lets B re-claim early → the fence still blocks A: one W4 attempt, no false done by A',
+    async (_label, jump) => {
+      await seedLegacy(1);
+      const server = createW4Server(1);
+      restartProcessMemory();
+      controlClock();
+      const stall = deferred();
+      const sweepA = runShiftCloseReconciliationSweep({ journal: clockedJournal(), readConfirmation: server.reader('A', stall.promise), normalizeSyncState: server.normalizer('A'), deviceId: 'DEV1' });
+      await until(() => server.reads.length === 1, 'A read');
+      legacyClock.now += jump;
+      const resB = await retryOutstandingNormalizations({ journal: clockedJournal(), readConfirmation: server.reader('B'), normalizeSyncState: server.normalizer('B'), deviceId: 'DEV1' });
+      stall.release();
+      const resA = await sweepA;
+      // Parent: A's stale read led to a second W4 attempt.
+      expect(server.attempts).toEqual(['L0']);
+      expect(resB).toEqual([{ shiftId: 'L0', outcome: 'normalized', remoteW4: 'written' }]);
+      expect(summaryOf(resA)?.results).toEqual([{ shiftId: 'L0', outcome: 'claim_lost' }]);
+    },
+  );
+
+  test('W4 already IN FLIGHT when its claim expires (unavoidable overlap): B re-claims and writes; A’s commit is rejected by Rules → 2 API attempts, ONE effective transition, A reports retry_later (never normalized), done recorded once', async () => {
+    await seedLegacy(1);
+    const server = createW4Server(1);
+    restartProcessMemory();
+    controlClock();
+    const commitGate = deferred();
+    // The old worker is a bare retry pass (the sweep's normalization step), so its own result is observable on the parent too.
+    const workerA = retryOutstandingNormalizations({ journal: clockedJournal(), readConfirmation: server.reader('A'), normalizeSyncState: server.normalizer('A', { beforeCommit: commitGate.promise }), deviceId: 'DEV1' });
+    await until(() => server.attempts.length === 1, 'A W4 in flight');
+    legacyClock.now += LEASE_GAP_MS; // past the lease A renewed right before its W4
+    const resB = await runShiftCloseReconciliationSweep({ journal: clockedJournal(), readConfirmation: server.reader('B'), normalizeSyncState: server.normalizer('B'), deviceId: 'DEV1' });
+    commitGate.release();
+    const resA = await workerA;
+    // Not a counterexample on the parent either (Rules reject A there too): this pins the honest limitation.
+    expect(resA.map((r) => r.outcome)).toEqual(['retry_later']);
+    expect(server.attempts).toEqual(['L0', 'L0']); // API attempts (A's was already in flight)
+    expect(server.written).toEqual(['L0']); // effective pending → synced transitions
+    expect(resA).toEqual([{ shiftId: 'L0', outcome: 'retry_later', remoteW4: 'failed' }]);
+    expect(summaryOf(resB)?.results).toEqual([{ shiftId: 'L0', outcome: 'normalized', remoteW4: 'written' }]);
+    expect((await legacyEntry('L0')).syncStateNormalization).toBe('done');
+  });
+
+  test('abandoned (crashed) worker: its read never returns → after the lease another sweep W4s exactly once; no lock, no starvation', async () => {
+    await seedLegacy(1);
+    const server = createW4Server(1);
+    restartProcessMemory();
+    controlClock();
+    void runShiftCloseReconciliationSweep({ journal: clockedJournal(), readConfirmation: () => new Promise<never>(() => undefined), normalizeSyncState: server.normalizer('A'), deviceId: 'DEV1' });
+    await until(async () => (await legacyEntry('L0')).syncStateNormalizationClaimedAtLocal === legacyClock.now, 'A claim');
+    legacyClock.now += 1_000; // within the lease: skipped, not read
+    await retryOutstandingNormalizations({ journal: clockedJournal(), readConfirmation: server.reader('B'), normalizeSyncState: server.normalizer('B'), deviceId: 'DEV1' });
+    expect(server.reads).toEqual([]);
+    legacyClock.now += LEASE_GAP_MS;
+    const res = await retryOutstandingNormalizations({ journal: clockedJournal(), readConfirmation: server.reader('C'), normalizeSyncState: server.normalizer('C'), deviceId: 'DEV1' });
+    expect(server.attempts).toEqual(['L0']);
+    expect(res.map((r) => r.outcome)).toEqual(['normalized']);
+    expect(res).toEqual([{ shiftId: 'L0', outcome: 'normalized', remoteW4: 'written' }]);
+  });
+
+  test('slow but healthy server: the read outlives the lease and nobody re-claims → the claim is still owned (renewed), W4 once, done', async () => {
+    await seedLegacy(1);
+    const server = createW4Server(1);
+    restartProcessMemory();
+    controlClock();
+    const stall = deferred();
+    const sweep = runShiftCloseReconciliationSweep({ journal: clockedJournal(), readConfirmation: server.reader('A', stall.promise), normalizeSyncState: server.normalizer('A'), deviceId: 'DEV1' });
+    await until(() => server.reads.length === 1, 'A read');
+    legacyClock.now += 2 * LEASE_GAP_MS;
+    stall.release();
+    const res = await sweep;
+    expect(server.attempts).toEqual(['L0']);
+    expect((await legacyEntry('L0')).syncStateNormalization).toBe('done');
+    expect(summaryOf(res)?.results).toEqual([{ shiftId: 'L0', outcome: 'normalized', remoteW4: 'written' }]);
+  });
+
+  test('store failure when re-verifying the claim before W4 → claim_failed, NO W4, surfaced as degraded; once storage recovers L0 is W4-ed once', async () => {
+    await seedLegacy(1);
+    const server = createW4Server(1);
+    restartProcessMemory();
+    controlClock();
+    const down = async () => ({ ok: false as const, code: 'unavailable' as const, message: 'IndexedDB unavailable' });
+    const res = await runShiftCloseReconciliationSweep({
+      journal: { ...clockedJournal(), renewLegacyNormalizationClaim: down } as ShiftCloseIntentJournal,
+      readConfirmation: server.reader('A'),
+      normalizeSyncState: server.normalizer('A'),
+      deviceId: 'DEV1',
+    });
+    // Parent: no re-verification at all → W4 sent on an unverifiable claim.
+    expect(server.attempts).toEqual([]);
+    expect(summaryOf(res)).toMatchObject({ status: 'degraded', counts: { claim_failed: 1 }, owed: 1 });
+    legacyClock.now += LEASE_GAP_MS;
+    await runShiftCloseReconciliationSweep({ journal: clockedJournal(), readConfirmation: server.reader('B'), normalizeSyncState: server.normalizer('B'), deviceId: 'DEV1' });
+    expect(server.attempts).toEqual(['L0']);
+    expect((await legacyEntry('L0')).syncStateNormalization).toBe('done');
+  });
+
+  test('W4 committed but its acknowledgement is lost → retry_later (never done), next sweep reads synced → already_normalized with NO further API attempt', async () => {
+    await seedLegacy(1);
+    const server = createW4Server(1);
+    restartProcessMemory();
+    controlClock();
+    const first = await runShiftCloseReconciliationSweep({ journal: clockedJournal(), readConfirmation: server.reader('A'), normalizeSyncState: server.normalizer('A', { loseAck: true }), deviceId: 'DEV1' });
+    expect(summaryOf(first)?.results).toEqual([{ shiftId: 'L0', outcome: 'retry_later', remoteW4: 'failed' }]);
+    expect((await legacyEntry('L0')).syncStateNormalization).toBeUndefined();
+    legacyClock.now += LEASE_GAP_MS;
+    const second = await runShiftCloseReconciliationSweep({ journal: clockedJournal(), readConfirmation: server.reader('B'), normalizeSyncState: server.normalizer('B'), deviceId: 'DEV1' });
+    expect(summaryOf(second)?.results).toEqual([{ shiftId: 'L0', outcome: 'already_normalized' }]);
+    expect(server.attempts).toEqual(['L0']);
+    expect(server.written).toEqual(['L0']);
+    expect((await legacyEntry('L0')).syncStateNormalization).toBe('done');
+  });
+
+  test('two windows retry the same OUTSTANDING (unclaimed) close; A’s read is stale (pending) when B has already written → ONE effective transition; A’s conditional W4 reads synced → already_normalized (no failed W4), never normalized', async () => {
+    const server = createShiftServer(openServerShift([REFUND]));
+    const journal = bootJournal();
+    // First reconcile records `outstanding` (its W4 fails once).
+    server.state.normalizeFailuresLeft = 1;
+    const z = await closeShift(makeShift(), 1338, '', deps(server, journal, { readConfirmation: mappedReader(server) }));
+    await z.whenServerConfirmed;
+    expect(await entryOf(journal)).toMatchObject({ status: 'synced', syncStateNormalization: 'outstanding' });
+    let effective = 0;
+    let apiAttempts = 0;
+    /** Faithful server side of each tree's W4 (see createW4Server). */
+    const w4 = async (_id: string, expected?: { closeCorrelationId: string | null; deviceId: string }) => {
+      apiAttempts += 1;
+      if (expected && server.state.doc.syncState === 'synced') return 'already_synced' as const; // 007: the transaction read
+      if (server.state.doc.syncState !== 'pending') throw Object.assign(new Error('PERMISSION_DENIED'), { code: 'permission-denied' });
+      server.state.doc = { ...server.state.doc, syncState: 'synced' };
+      effective += 1;
+      return expected ? ('written' as const) : undefined;
+    };
+    const stall = deferred();
+    const staleRead: ShiftCloseConfirmationReader = async () => {
+      const atRead = { ...server.state.doc };
+      await stall.promise;
+      return { ok: true, doc: shiftCloseConfirmationDocFromData(atRead) };
+    };
+    const winA = retryOutstandingNormalizations({ journal: bootJournal(), readConfirmation: staleRead, normalizeSyncState: w4, deviceId: 'DEV1' });
+    await new Promise((r) => setTimeout(r, 20));
+    const winB = await retryOutstandingNormalizations({ journal: bootJournal(), readConfirmation: mappedReader(server), normalizeSyncState: w4, deviceId: 'DEV1' });
+    stall.release();
+    const resA = await winA;
+    expect(effective).toBe(1);
+    expect(apiAttempts).toBe(2);
+    // Parent: A's plain W4 was rejected by Rules → reported retry_later (a failed W4) although the close is synced.
+    expect([resA.map((r) => r.outcome), winB.map((r) => r.outcome)]).toEqual([['already_normalized'], ['normalized']]);
+    expect(resA).toEqual([{ shiftId: 'shift-1', outcome: 'already_normalized', remoteW4: 'already_synced' }]);
+    expect(winB).toEqual([{ shiftId: 'shift-1', outcome: 'normalized', remoteW4: 'written' }]);
+    expect(await entryOf(journal)).toMatchObject({ syncStateNormalization: 'done' });
+  });
+});
+
+describe('007-C — the production sweep result carries the normalization outcome', () => {
+  test('claim persistence fails → the sweep result reports claim_failed / degraded and the owed count; nothing read', async () => {
+    await seedLegacy(3);
+    const server = createW4Server(3);
+    restartProcessMemory();
+    controlClock();
+    const fail = async () => ({ ok: false as const, code: 'unavailable' as const, message: 'IndexedDB unavailable' });
+    const res = await runShiftCloseReconciliationSweep({
+      journal: { ...clockedJournal(), claimLegacyNormalizationChecks: fail } as ShiftCloseIntentJournal,
+      readConfirmation: server.reader('A'),
+      normalizeSyncState: server.normalizer('A'),
+      deviceId: 'DEV1',
+    });
+    expect(server.reads).toEqual([]);
+    expect(res).toEqual([]); // still the backward-compatible array of pending-close results
+    // Parent: the normalization results were dropped (no `normalization`).
+    expect(summaryOf(res)).toMatchObject({ status: 'degraded', counts: { claim_failed: 3 }, owed: 3 });
+  });
+
+  test('W4 landed but the local "done" record fails → local_write_failed / degraded; a healthy sweep then reports ok with owed 0', async () => {
+    await seedLegacy(1);
+    const server = createW4Server(1);
+    restartProcessMemory();
+    controlClock();
+    const down = async () => ({ ok: false as const, code: 'unavailable' as const });
+    const res = await runShiftCloseReconciliationSweep({
+      journal: { ...clockedJournal(), recordLegacyNormalization: down, setSyncStateNormalization: down } as ShiftCloseIntentJournal,
+      readConfirmation: server.reader('A'),
+      normalizeSyncState: server.normalizer('A'),
+      deviceId: 'DEV1',
+    });
+    expect(summaryOf(res)).toMatchObject({ status: 'degraded', counts: { local_write_failed: 1 }, owed: 1 });
+    legacyClock.now += LEASE_GAP_MS;
+    const healthy = await runShiftCloseReconciliationSweep({ journal: clockedJournal(), readConfirmation: server.reader('B'), normalizeSyncState: server.normalizer('B'), deviceId: 'DEV1' });
+    expect(summaryOf(healthy)).toMatchObject({ status: 'ok', counts: { already_normalized: 1 }, owed: 0 });
+    expect(server.written).toEqual(['L0']);
+  });
+
+  test('overlapping boot + orchestrator triggers join ONE sweep and observe the SAME normalization summary', async () => {
+    await seedLegacy(2);
+    const server = createW4Server(2);
+    restartProcessMemory();
+    controlClock();
+    const d = { journal: clockedJournal(), readConfirmation: server.reader('A'), normalizeSyncState: server.normalizer('A'), deviceId: 'DEV1' };
+    const [boot, orchestrator] = await Promise.all([runShiftCloseReconciliationSweep(d), runShiftCloseReconciliationSweep({ ...d, journal: clockedJournal() })]);
+    expect(summaryOf(boot)).toBeDefined();
+    expect(summaryOf(orchestrator)).toBe(summaryOf(boot));
+    expect(server.attempts.sort()).toEqual(['L0', 'L1']);
   });
 });

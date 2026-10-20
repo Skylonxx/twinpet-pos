@@ -253,7 +253,11 @@ describe('reconcileShiftCloseIntent', () => {
       expect(result.outcome).toBe('confirmed');
       expect(result.normalized).toBe(true);
       expect(normalizeSyncState).toHaveBeenCalledTimes(1);
-      expect(normalizeSyncState).toHaveBeenCalledWith('shift-1');
+      // Gate 007-C: the W4 is conditioned on THIS close of this device.
+      expect(normalizeSyncState).toHaveBeenCalledWith('shift-1', {
+        closeCorrelationId: entry.closeCorrelationId,
+        deviceId: DEVICE,
+      });
     });
 
     test('already-synced doc does not normalize', async () => {
@@ -347,6 +351,8 @@ describe('reconcileShiftCloseIntent', () => {
           supersedeOnlineCloseAttempt: base.supersedeOnlineCloseAttempt,
           setSyncStateNormalization: base.setSyncStateNormalization,
           claimLegacyNormalizationChecks: base.claimLegacyNormalizationChecks,
+          renewLegacyNormalizationClaim: base.renewLegacyNormalizationClaim,
+          recordLegacyNormalization: base.recordLegacyNormalization,
           markOnlineCloseAttemptCommitObserved: base.markOnlineCloseAttemptCommitObserved,
         },
         markSynced,
@@ -425,6 +431,8 @@ describe('runShiftCloseReconciliationSweep', () => {
       supersedeOnlineCloseAttempt: async () => ({ ok: false as const, code: 'unavailable' as const }),
       setSyncStateNormalization: async () => ({ ok: false as const, code: 'unavailable' as const }),
       claimLegacyNormalizationChecks: async () => ({ ok: false as const, code: 'unavailable' as const }),
+      renewLegacyNormalizationClaim: async () => ({ ok: false as const, code: 'unavailable' as const }),
+      recordLegacyNormalization: async () => ({ ok: false as const, code: 'unavailable' as const }),
       markOnlineCloseAttemptCommitObserved: async () => ({ ok: false as const, code: 'unavailable' as const }),
     };
 
@@ -548,6 +556,8 @@ describe('OBS-B2 reconciler pointer-repair forwarding', () => {
         supersedeOnlineCloseAttempt: base.supersedeOnlineCloseAttempt,
         setSyncStateNormalization: base.setSyncStateNormalization,
         claimLegacyNormalizationChecks: base.claimLegacyNormalizationChecks,
+        renewLegacyNormalizationClaim: base.renewLegacyNormalizationClaim,
+        recordLegacyNormalization: base.recordLegacyNormalization,
         markOnlineCloseAttemptCommitObserved: base.markOnlineCloseAttemptCommitObserved,
       },
       readConfirmation: reader({ ok: true, doc: makeConfirmedDoc({ closeCorrelationId: entry.closeCorrelationId }) }),

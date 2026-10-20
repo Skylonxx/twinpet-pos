@@ -88,7 +88,18 @@ export type ShiftCloseIntentEntry = ShiftCloseIntentSnapshot & {
    * another window or an overlapping trigger — claims the entry again.
    */
   syncStateNormalizationClaimedAtLocal?: number;
+  /**
+   * Gate 007-C — the sweep that holds the claim. With the claim's
+   * `syncStateNormalizationCheckSeq` (strictly increasing per entry, so a
+   * fencing epoch) it forms the {@link LegacyNormalizationClaimFence}: once a
+   * newer claim replaced either, the older sweep can no longer renew the claim
+   * nor record a result. Malformed / absent ⇒ no sweep holds it.
+   */
+  syncStateNormalizationClaimOwner?: string;
 };
+
+/** Gate 007-C — proof that a sweep still holds a legacy W4 claim: its owner token and the claim epoch (check sequence). */
+export type LegacyNormalizationClaimFence = { owner: string; epoch: number };
 
 export type CloseIntentErrorCode = 'unavailable' | 'quota' | 'conflict' | 'not_found' | 'tx_failed';
 
@@ -128,7 +139,11 @@ export type ShiftCloseIntentObservabilityEvent = {
  *               Z-report source, never blocks boot or a new open.
  *   finalized   after the W3 commit, ONE store transaction creates the
  *               `local_closed_pending` entry from the COMMITTED snapshot and
- *               deletes the attempt (never both, never neither).
+ *               deletes the attempt (never both, never neither). Gate 007-B:
+ *               only a PRESENT, valid, non-tombstoned attempt whose shift /
+ *               branch / staff / device / correlation id equal the proven
+ *               snapshot's authorizes the entry; anything else is refused with
+ *               a {@link FinalizeOnlineCloseRefusal} and nothing is written.
  *   recovered   boot/reconnect sweep: the authoritative doc is closed with THIS
  *               correlation id → the entry is rebuilt from that doc and
  *               finalized exactly as above, then the existing reconciliation
@@ -180,6 +195,35 @@ export type OnlineCloseAttemptIdentity = Pick<
   OnlineCloseAttemptRecord,
   'shiftId' | 'branchId' | 'staffId' | 'staffName' | 'deviceId'
 >;
+
+/**
+ * Gate 007-B — why `finalizeOnlineClose` refused (nothing was written or deleted):
+ *   attempt_missing     no attempt and no entry — an absent attempt never authorizes a new entry
+ *   attempt_unreadable  the stored attempt is malformed
+ *   attempt_mismatch    the attempt's shift / branch / staff / device / correlation id differ
+ *   attempt_superseded  the attempt is a retained supersession tombstone
+ *   entry_unreadable    the stored close-intent is malformed
+ *   entry_conflict      a DIFFERENT close-intent (totals / identity / correlation) exists
+ *   snapshot_invalid    the snapshot would not form a valid close-intent
+ */
+export type FinalizeOnlineCloseRefusal =
+  | 'attempt_missing'
+  | 'attempt_unreadable'
+  | 'attempt_mismatch'
+  | 'attempt_superseded'
+  | 'entry_unreadable'
+  | 'entry_conflict'
+  | 'snapshot_invalid';
+
+/**
+ * `consumedAttempt`: the owned attempt was deleted in this transaction
+ * (`false` = idempotent re-finalize: the equal entry already existed and its
+ * attempt was consumed earlier). A refusal is `conflict` + `reason`.
+ */
+export type FinalizeOnlineCloseResult =
+  | { ok: true; value: ShiftCloseIntentEntry; consumedAttempt: boolean }
+  | { ok: false; code: 'conflict'; reason: FinalizeOnlineCloseRefusal; message: string }
+  | { ok: false; code: Exclude<CloseIntentErrorCode, 'conflict'>; message?: string };
 
 /** `journaled` = this shift already has a close-intent entry (the close is already recorded). */
 export type PrepareOnlineCloseResult =

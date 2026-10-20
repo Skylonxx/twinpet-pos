@@ -155,7 +155,9 @@ vi.mock('../lib/pos/offline/shiftOpenIntentStore', () => ({
     markRejectedManualAttention: vi.fn(),
   }),
 }));
-vi.mock('../lib/pos/offline/shiftCloseReconciler', () => ({
+vi.mock('../lib/pos/offline/shiftCloseReconciler', async (importOriginal) => ({
+  // Gate 007-C: the real (pure) reporter of the sweep's normalization summary.
+  shiftCloseNormalizationIssue: (await importOriginal<Record<string, unknown>>()).shiftCloseNormalizationIssue,
   runShiftCloseReconciliationSweep: mocks.runShiftCloseReconciliationSweep,
 }));
 vi.mock('../lib/pos/offline/shiftOpenReconciler', () => ({
@@ -520,5 +522,44 @@ describe('POSPage — Packet 7C-B2 + PK-1 boot/reconnect reconciliation sweep', 
       expect(mocks.runShiftCloseReconciliationSweep).toHaveBeenCalledTimes(2);
       expect(mocks.runShiftOpenReconciliationSweep).toHaveBeenCalledTimes(2);
     });
+  });
+});
+
+// Gate 007-C — POSPage does not discard the sweep's W4 normalization outcome.
+describe('POSPage — shift-close W4 normalization outcome is observed (gate 007-C)', () => {
+  const ATTENTION = '[POSPage] shift-close W4 normalization needs attention';
+  /** The production sweep result: the pending-close array plus its non-enumerable `normalization`. */
+  function sweepResult(normalization: Record<string, unknown>) {
+    return Object.defineProperty([], 'normalization', { value: normalization, enumerable: false });
+  }
+  const DEGRADED = { status: 'degraded', results: [], counts: { claim_failed: 2 }, owed: 2 };
+
+  test('a degraded summary (claim_failed) is logged once per distinct state — not again on every trigger; ok is silent', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    mocks.readActiveShiftForBoot.mockResolvedValue({ status: 'absent', provenance: 'server' });
+    mocks.runShiftCloseReconciliationSweep.mockResolvedValue(sweepResult(DEGRADED));
+
+    render(<POSPage />);
+
+    await waitFor(() => {
+      expect(warn.mock.calls.filter((c) => c[0] === ATTENTION)).toHaveLength(1);
+    });
+    // Parent: nothing was logged — the normalization outcome was dropped.
+    expect(warn.mock.calls.find((c) => c[0] === ATTENTION)?.[1]).toBe('claim_failed=2');
+
+    window.dispatchEvent(new Event('online')); // same state again
+    await waitFor(() => expect(mocks.runShiftCloseReconciliationSweep).toHaveBeenCalledTimes(2));
+    await new Promise((r) => setTimeout(r, 10));
+    expect(warn.mock.calls.filter((c) => c[0] === ATTENTION)).toHaveLength(1);
+
+    mocks.runShiftCloseReconciliationSweep.mockResolvedValue(sweepResult({ status: 'ok', results: [], counts: {}, owed: 0 }));
+    window.dispatchEvent(new Event('online'));
+    await waitFor(() => expect(mocks.runShiftCloseReconciliationSweep).toHaveBeenCalledTimes(3));
+    mocks.runShiftCloseReconciliationSweep.mockResolvedValue(sweepResult({ ...DEGRADED, counts: { local_write_failed: 1 } }));
+    window.dispatchEvent(new Event('online'));
+    await waitFor(() => {
+      expect(warn.mock.calls.filter((c) => c[0] === ATTENTION).map((c) => c[1])).toEqual(['claim_failed=2', 'local_write_failed=1']);
+    });
+    warn.mockRestore();
   });
 });

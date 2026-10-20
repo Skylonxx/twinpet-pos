@@ -1,6 +1,9 @@
 import type {
   CloseIntentErrorCode,
   CloseIntentResult,
+  FinalizeOnlineCloseRefusal,
+  FinalizeOnlineCloseResult,
+  LegacyNormalizationClaimFence,
   OnlineCloseAttemptIdentity,
   OnlineCloseAttemptRecord,
   PointerRepairObserver,
@@ -530,6 +533,20 @@ function sameAttemptIdentity(a: OnlineCloseAttemptIdentity, b: OnlineCloseAttemp
   return a.shiftId === b.shiftId && a.branchId === b.branchId && a.staffId === b.staffId && a.deviceId === b.deviceId;
 }
 
+/**
+ * Gate 007-C — `raw` is a valid, still-unrecorded legacy (`synced`, no
+ * normalization) entry whose claim is EXACTLY `fence` (owner and epoch).
+ */
+function holdsLegacyClaim(raw: unknown, fence: LegacyNormalizationClaimFence): raw is Record<string, unknown> {
+  if (!isCloseIntentEntry(raw)) return false;
+  return (
+    raw.status === 'synced' &&
+    !('syncStateNormalization' in raw) &&
+    raw.syncStateNormalizationCheckSeq === fence.epoch &&
+    raw.syncStateNormalizationClaimOwner === fence.owner
+  );
+}
+
 function isCloseIntentEntry(v: unknown): v is ShiftCloseIntentEntry {
   if (!isPlainRecord(v)) return false;
   if ('kind' in v) return false;
@@ -1044,7 +1061,33 @@ export type ShiftCloseIntentJournal = {
     skipShiftIds: readonly string[];
     limit: number;
     leaseMs: number;
+    /** Gate 007-C — the claiming sweep's token, stamped beside the new epoch (the check sequence). */
+    owner?: string;
   }) => Promise<CloseIntentResult<ShiftCloseIntentEntry[]>>;
+  /**
+   * Gate 007-C — in one readwrite transaction: if the legacy entry is still
+   * unrecorded and still carries `fence` (owner AND epoch), restamp the claim
+   * time (lease renewed) → `owned`; otherwise nothing is written →
+   * `claim_lost` (a newer claim took it, or its result was already recorded).
+   * An expired claim that nobody replaced is still owned (only a claim changes
+   * the epoch), so wall-clock jumps cannot transfer ownership by themselves.
+   */
+  renewLegacyNormalizationClaim: (
+    shiftId: string,
+    fence: LegacyNormalizationClaimFence,
+  ) => Promise<CloseIntentResult<'owned' | 'claim_lost'>>;
+  /**
+   * Gate 007-C — the fenced terminal record of a CLAIMED legacy check: writes
+   * `normalization` only if the entry is the `synced` close carrying
+   * `closeCorrelationId`, has no normalization yet, and still carries `fence`
+   * → `recorded`; otherwise nothing is written → `claim_lost`.
+   */
+  recordLegacyNormalization: (
+    shiftId: string,
+    closeCorrelationId: string | null,
+    normalization: SyncStateNormalization,
+    fence: LegacyNormalizationClaimFence,
+  ) => Promise<CloseIntentResult<'recorded' | 'claim_lost'>>;
   markRejectedManualAttention: (
     shiftId: string,
     reason: string,
@@ -1063,15 +1106,21 @@ export type ShiftCloseIntentJournal = {
   ) => Promise<CloseIntentResult<PrepareOnlineCloseResult>>;
   /**
    * Recovery gate B2 stage 3 — after the W3 commit: in ONE store transaction,
-   * create the `local_closed_pending` entry from the COMMITTED snapshot and
-   * delete the matching attempt. Idempotent for the same snapshot + id; never
-   * overwrites a different entry nor consumes another correlation's attempt.
+   * create the `local_closed_pending` entry from the COMMITTED (proven)
+   * snapshot and delete the attempt it consumes — both or neither.
+   * Gate 007-B: the entry is created ONLY when the persisted attempt is
+   * present, valid, not a tombstone, and its shift / branch / staff / device /
+   * correlation id equal the snapshot's (a matching correlation id alone is
+   * not enough). Idempotent: an EQUAL entry of the same correlation already
+   * finalized (its attempt consumed earlier) is returned, never re-created.
+   * Anything else → `conflict` with a {@link FinalizeOnlineCloseRefusal};
+   * nothing is written, no attempt is touched.
    */
   finalizeOnlineClose: (
     snapshot: ShiftCloseIntentBusinessSnapshot,
     closeCorrelationId: string,
     observePointerRepair?: PointerRepairObserver,
-  ) => Promise<CloseIntentResult<ShiftCloseIntentEntry>>;
+  ) => Promise<FinalizeOnlineCloseResult>;
   /** Every prepared attempt; a malformed one fails the whole read (`conflict`). */
   listOnlineCloseAttempts: () => Promise<CloseIntentResult<OnlineCloseAttemptRecord[]>>;
   /**
@@ -1132,6 +1181,11 @@ function notFound<T>(): CloseIntentResult<T> {
   return { ok: false, code: 'not_found' };
 }
 
+/** Gate 007-B — a structured `finalizeOnlineClose` refusal (nothing written). */
+function finalizeRefused(reason: FinalizeOnlineCloseRefusal, message: string): FinalizeOnlineCloseResult {
+  return { ok: false, code: 'conflict', reason, message };
+}
+
 async function runStore<T>(
   store: ShiftCloseIntentKvStore | undefined,
   fn: (store: ShiftCloseIntentKvStore) => Promise<CloseIntentResult<T>>,
@@ -1143,6 +1197,23 @@ async function runStore<T>(
     if (isQuotaError(err)) return quota<T>();
     if (err instanceof Error && err.message === 'IndexedDB unavailable') return unavailable<T>();
     return txFailed<T>(err instanceof Error ? err.message : String(err));
+  }
+}
+
+/** {@link runStore} for `finalizeOnlineClose`, whose refusals carry a typed reason. */
+async function runFinalizeStore(
+  store: ShiftCloseIntentKvStore | undefined,
+  fn: (store: ShiftCloseIntentKvStore) => Promise<FinalizeOnlineCloseResult>,
+): Promise<FinalizeOnlineCloseResult> {
+  if (!store) return { ok: false, code: 'unavailable', message: 'IndexedDB unavailable' };
+  try {
+    return await fn(store);
+  } catch (err) {
+    if (isQuotaError(err)) return { ok: false, code: 'quota', message: 'QuotaExceededError' };
+    if (err instanceof Error && err.message === 'IndexedDB unavailable') {
+      return { ok: false, code: 'unavailable', message: 'IndexedDB unavailable' };
+    }
+    return { ok: false, code: 'tx_failed', message: err instanceof Error ? err.message : String(err) };
   }
 }
 
@@ -1305,7 +1376,7 @@ function buildJournalApi(
         }),
       ),
 
-    claimLegacyNormalizationChecks: ({ deviceId, skipShiftIds, limit, leaseMs }) =>
+    claimLegacyNormalizationChecks: ({ deviceId, skipShiftIds, limit, leaseMs, owner }) =>
       runStore(store, (s) =>
         s.transact(['shiftCloseIntents'], 'readwrite', async (txn): Promise<CloseIntentResult<ShiftCloseIntentEntry[]>> => {
           const nowMs = now();
@@ -1340,11 +1411,41 @@ function buildJournalApi(
             .slice(0, Math.max(0, limit));
           const claimed: ShiftCloseIntentEntry[] = [];
           for (const { raw, entry } of selected) {
-            const next = { ...raw, syncStateNormalizationCheckSeq: nextSeq, syncStateNormalizationClaimedAtLocal: nowMs };
+            // Gate 007-C: nextSeq exceeds this entry's own seq, so every claim of
+            // an entry carries a NEW epoch; an older claim's fence no longer matches.
+            const next = {
+              ...raw,
+              syncStateNormalizationCheckSeq: nextSeq,
+              syncStateNormalizationClaimedAtLocal: nowMs,
+              ...(owner !== undefined ? { syncStateNormalizationClaimOwner: owner } : {}),
+            };
             await txn.put('shiftCloseIntents', entry.shiftId, next);
             claimed.push(normalizeCloseIntentEntry(next));
           }
           return { ok: true, value: claimed };
+        }),
+      ),
+
+    renewLegacyNormalizationClaim: (shiftId, fence) =>
+      runStore(store, (s) =>
+        s.transact(['shiftCloseIntents'], 'readwrite', async (txn): Promise<CloseIntentResult<'owned' | 'claim_lost'>> => {
+          const raw = await txn.get<unknown>('shiftCloseIntents', shiftId);
+          if (!holdsLegacyClaim(raw, fence)) return { ok: true, value: 'claim_lost' };
+          await txn.put('shiftCloseIntents', shiftId, { ...raw, syncStateNormalizationClaimedAtLocal: now() });
+          return { ok: true, value: 'owned' };
+        }),
+      ),
+
+    recordLegacyNormalization: (shiftId, closeCorrelationId, normalization, fence) =>
+      runStore(store, (s) =>
+        s.transact(['shiftCloseIntents'], 'readwrite', async (txn): Promise<CloseIntentResult<'recorded' | 'claim_lost'>> => {
+          const raw = await txn.get<unknown>('shiftCloseIntents', shiftId);
+          if (!holdsLegacyClaim(raw, fence)) return { ok: true, value: 'claim_lost' };
+          if (normalizeCloseIntentEntry(raw).closeCorrelationId !== closeCorrelationId) {
+            return conflict(`Close-intent for shift "${shiftId}" is not this synced close.`);
+          }
+          await txn.put('shiftCloseIntents', shiftId, { ...raw, syncStateNormalization: normalization, updatedAtLocal: now() });
+          return { ok: true, value: 'recorded' };
         }),
       ),
 
@@ -1423,29 +1524,58 @@ function buildJournalApi(
       }),
 
     finalizeOnlineClose: (snapshot, closeCorrelationId, observePointerRepair) =>
-      runStore(store, async (s) => {
+      runFinalizeStore(store, async (s) => {
         const key = onlineCloseAttemptKey(snapshot.shiftId);
+        const shiftLabel = `shift "${snapshot.shiftId}"`;
         const businessResult = await s.transact(
           ['shiftCloseIntents'],
           'readwrite',
-          async (txn): Promise<CloseIntentResult<ShiftCloseIntentEntry>> => {
+          async (txn): Promise<FinalizeOnlineCloseResult> => {
             const attemptRaw = await txn.get<unknown>('shiftCloseIntents', key);
-            const ownAttempt =
-              isValidOnlineCloseAttempt(attemptRaw) && attemptRaw.closeCorrelationId === closeCorrelationId;
             const existingRaw = await txn.get<unknown>('shiftCloseIntents', snapshot.shiftId);
+            // Gate 007-B: a PRESENT attempt must be this exact close's, whether
+            // it is about to be consumed or an equal entry already exists.
+            let attemptRefusal: FinalizeOnlineCloseRefusal | null = null;
+            if (attemptRaw !== undefined) {
+              if (!isValidOnlineCloseAttempt(attemptRaw)) attemptRefusal = 'attempt_unreadable';
+              else if (
+                attemptRaw.closeCorrelationId !== closeCorrelationId ||
+                !sameAttemptIdentity(attemptRaw, {
+                  shiftId: snapshot.shiftId,
+                  branchId: snapshot.branchId,
+                  staffId: snapshot.staffId,
+                  staffName: snapshot.staffName,
+                  deviceId: snapshot.deviceId as string,
+                })
+              ) {
+                attemptRefusal = 'attempt_mismatch';
+              } else if ('supersededAtLocal' in attemptRaw) {
+                // A tombstone — even one later marked commit-observed — is a contradiction for manual attention.
+                attemptRefusal = 'attempt_superseded';
+              }
+            }
             if (existingRaw !== undefined) {
               if (!isCloseIntentEntry(existingRaw)) {
-                return conflict(`Stored close-intent for shift "${snapshot.shiftId}" is unreadable.`);
+                return finalizeRefused('entry_unreadable', `Stored close-intent for ${shiftLabel} is unreadable.`);
               }
               const existing = normalizeCloseIntentEntry(existingRaw as unknown as Record<string, unknown>);
               if (!snapshotsEqual(existing, snapshot) || existing.closeCorrelationId !== closeCorrelationId) {
-                return conflict(`A different close-intent already exists locally for shift "${snapshot.shiftId}".`);
+                return finalizeRefused('entry_conflict', `A different close-intent already exists locally for ${shiftLabel}.`);
               }
-              if (ownAttempt) await txnDelete(txn, key);
-              return { ok: true, value: existing };
+              if (attemptRefusal) {
+                return finalizeRefused(attemptRefusal, `The online close attempt for ${shiftLabel} is not this close's.`);
+              }
+              // Idempotent re-finalize: the equal entry stands; a still-present
+              // owned attempt (never expected) is consumed with it.
+              if (attemptRaw !== undefined) await txnDelete(txn, key);
+              return { ok: true, value: existing, consumedAttempt: attemptRaw !== undefined };
             }
-            if (attemptRaw !== undefined && !ownAttempt) {
-              return conflict(`The online close attempt for shift "${snapshot.shiftId}" has another identity.`);
+            if (attemptRaw === undefined) {
+              // An absent attempt never authorizes a NEW entry.
+              return finalizeRefused('attempt_missing', `No online close attempt exists for ${shiftLabel}.`);
+            }
+            if (attemptRefusal) {
+              return finalizeRefused(attemptRefusal, `The online close attempt for ${shiftLabel} is not this close's.`);
             }
             const nowMs = now();
             const entry: ShiftCloseIntentEntry = {
@@ -1457,9 +1587,14 @@ function buildJournalApi(
               updatedAtLocal: nowMs,
               lastErrorMessage: null,
             };
+            // Never persist an entry that would make the whole journal unreadable.
+            if (!isCloseIntentEntry(entry)) {
+              return finalizeRefused('snapshot_invalid', `The committed snapshot for ${shiftLabel} is not a valid close-intent.`);
+            }
+            // Both effects in this one transaction: an abort makes neither durable.
             await txn.put('shiftCloseIntents', snapshot.shiftId, entry);
-            if (ownAttempt) await txnDelete(txn, key);
-            return { ok: true, value: entry };
+            await txnDelete(txn, key);
+            return { ok: true, value: entry, consumedAttempt: true };
           },
         );
         if (businessResult.ok) {

@@ -15,6 +15,7 @@
 // module (the store only imports it internally, never re-exports it) — so each
 // is imported from its true source to satisfy build-mode TypeScript (TS2459).
 import {
+  generateShiftCloseCorrelationId,
   isCommitObservedAttempt,
   isSupersededAttempt,
   isValidLowercaseUuidV4,
@@ -22,6 +23,8 @@ import {
   type ShiftCloseIntentJournal,
 } from './shiftCloseIntentStore';
 import type {
+  CloseIntentResult,
+  LegacyNormalizationClaimFence,
   OnlineCloseAttemptRecord,
   PointerRepairOutcome,
   ShiftCloseIntentBusinessSnapshot,
@@ -120,8 +123,48 @@ export type ShiftCloseConfirmationRead =
  */
 export type ShiftCloseConfirmationReader = (shiftId: string) => Promise<ShiftCloseConfirmationRead>;
 
-/** Variant C — best-effort, single-field `syncState: 'synced'` normalization write. Never throws to the caller. */
-export type ShiftCloseNormalizer = (shiftId: string) => Promise<void>;
+/**
+ * Gate 007-C — what the doc must still be AT THE W4 COMMIT: this close
+ * (correlation id; `null` = a pre-correlation close without one) of this device.
+ */
+export type ShiftCloseNormalizeExpectation = { closeCorrelationId: string | null; deviceId: string };
+
+/**
+ * Gate 007-C — the remote W4 result, decided inside one server transaction:
+ *   written              this call made the ONE effective `pending → synced` transition
+ *   already_synced       the transaction read the doc already `synced` (another worker's W4) — nothing written
+ *   precondition_failed  the doc is no longer this pending close of this device — nothing written
+ * A commit rejected because the doc changed under it (e.g. another worker's
+ * W4 landed first) THROWS — a failed W4, never one of the above.
+ * `void` (an older normalizer) reads as `written`.
+ */
+export type ShiftCloseNormalizeOutcome = 'written' | 'already_synced' | 'precondition_failed';
+
+/**
+ * Gate 007-C — the W4 decision taken INSIDE the normalizer's server
+ * transaction, on the doc as read by that transaction (`undefined` = missing):
+ * `write` only for the `closed`, `pending` doc of `expected` (correlation id +
+ * device; absent `expected` skips that check). Pure, so the Rules emulator
+ * suite runs the very same decision in a real client transaction.
+ */
+export function shiftCloseNormalizationDecision(
+  data: Record<string, unknown> | undefined,
+  expected?: ShiftCloseNormalizeExpectation,
+): 'write' | Exclude<ShiftCloseNormalizeOutcome, 'written'> {
+  if (!data || data.status !== 'closed') return 'precondition_failed';
+  if (expected) {
+    const corr = 'closeCorrelationId' in data ? data.closeCorrelationId : null;
+    if (data.deviceId !== expected.deviceId || corr !== expected.closeCorrelationId) return 'precondition_failed';
+  }
+  if (data.syncState === 'synced') return 'already_synced';
+  return data.syncState === 'pending' ? 'write' : 'precondition_failed';
+}
+
+/** Variant C — single-field `syncState: 'synced'` normalization write. A throw = W4 failed (retried later). */
+export type ShiftCloseNormalizer = (
+  shiftId: string,
+  expected?: ShiftCloseNormalizeExpectation,
+) => Promise<void | ShiftCloseNormalizeOutcome>;
 
 export type ReconcileOutcome = 'confirmed' | 'still_pending' | 'identity_mismatch' | 'unreachable';
 
@@ -317,9 +360,9 @@ export async function reconcileShiftCloseIntent(
   let normalized: boolean | undefined;
   let normalizationRecorded: boolean | undefined;
   if (owesW4 && deps.normalizeSyncState) {
-    const w4 = await writeNormalization(entry, deps.normalizeSyncState, deps.journal);
-    normalized = w4 !== 'w4_failed';
-    normalizationRecorded = w4 === 'normalized';
+    const w4 = await writeNormalization(entry, { ...deps, normalizeSyncState: deps.normalizeSyncState });
+    normalized = w4.remote === 'written' || w4.remote === 'already_synced';
+    normalizationRecorded = normalized && w4.recorded;
   }
 
   return {
@@ -332,24 +375,39 @@ export async function reconcileShiftCloseIntent(
   };
 }
 
+/** Gate 007-C — one remote W4 API attempt, as observed by its caller. */
+export type RemoteW4Result = ShiftCloseNormalizeOutcome | 'failed';
+
+/** ONE remote W4 API attempt, conditioned on this close of this device. Never throws. */
+async function callNormalizer(
+  entry: Pick<ShiftCloseIntentEntry, 'shiftId' | 'closeCorrelationId'>,
+  normalize: ShiftCloseNormalizer,
+  deviceId: string,
+): Promise<RemoteW4Result> {
+  try {
+    const outcome = await normalize(entry.shiftId, { closeCorrelationId: entry.closeCorrelationId, deviceId });
+    return outcome ?? 'written';
+  } catch {
+    return 'failed';
+  }
+}
+
 /**
- * ONE W4 attempt for a confirmed close of this device; on success records
- * `done`. A failed W4 leaves `outstanding` (retried later). Gate 006-C: the
- * `done` write's structured result is checked — `normalized_unrecorded` when
- * W4 landed but `done` did not persist (harmless: the next retry reads the doc
- * as `synced` and records `done` without writing W4 again). Never throws.
+ * ONE W4 attempt for a confirmed close of this device; once the server state
+ * is `synced` (`written` by this call, or `already_synced` at its commit)
+ * records `done`. A failed / refused W4 leaves `outstanding` (retried later).
+ * Gate 006-C: the `done` write's structured result is checked — `recorded`
+ * false when W4 landed but `done` did not persist (harmless: the next retry
+ * reads the doc as `synced` and records `done` without writing W4 again).
+ * Never throws.
  */
 async function writeNormalization(
   entry: Pick<ShiftCloseIntentEntry, 'shiftId' | 'closeCorrelationId'>,
-  normalize: ShiftCloseNormalizer,
-  journal: ShiftCloseIntentJournal,
-): Promise<'normalized' | 'normalized_unrecorded' | 'w4_failed'> {
-  try {
-    await normalize(entry.shiftId);
-  } catch {
-    return 'w4_failed';
-  }
-  return (await persistNormalization(journal, entry, 'done')) ? 'normalized' : 'normalized_unrecorded';
+  deps: Pick<ReconcileShiftCloseIntentDeps, 'journal' | 'deviceId'> & { normalizeSyncState: ShiftCloseNormalizer },
+): Promise<{ remote: RemoteW4Result; recorded: boolean }> {
+  const remote = await callNormalizer(entry, deps.normalizeSyncState, deps.deviceId);
+  if (remote !== 'written' && remote !== 'already_synced') return { remote, recorded: false };
+  return { remote, recorded: await persistNormalization(deps.journal, entry, 'done') };
 }
 
 /** `true` ONLY when the store confirmed the write (a fail-soft `ok: false` or a throw is `false`). */
@@ -392,12 +450,28 @@ export type NormalizationRetryOutcome =
   /**
    * Gate 006-C: legacy entry NOT checked — this sweep's legacy claim could not
    * be durably recorded, so no fairness progress can be promised; nothing read.
+   * Gate 007-C: also when the claim could not be RE-verified before W4 (store
+   * failure) — then nothing is written.
    */
   | 'claim_failed'
-  /** Read failed, doc not a resolved close, W4 failed, or no normalizer: kept `outstanding`, retried later. */
+  /**
+   * Gate 007-C: this sweep's legacy claim was replaced by a newer claim (its
+   * lease expired while this sweep waited) — this sweep records nothing and,
+   * if it had not yet attempted W4, attempts none; the newer owner settles it.
+   */
+  | 'claim_lost'
+  /** Read failed, doc not a resolved close, W4 failed / refused, or no normalizer: kept `outstanding`, retried later. */
   | 'retry_later';
 
-export type NormalizationRetryResult = { shiftId: string; outcome: NormalizationRetryOutcome };
+export type NormalizationRetryResult = {
+  shiftId: string;
+  outcome: NormalizationRetryOutcome;
+  /**
+   * Gate 007-C: present iff this sweep made a remote W4 API attempt for the
+   * entry; `written` is the only result that made the effective transition.
+   */
+  remoteW4?: RemoteW4Result;
+};
 
 /** Gate 006-C: a claimed legacy entry is not re-claimed by another sweep / window within this lease. */
 export const LEGACY_NORMALIZATION_CLAIM_LEASE_MS = 60_000;
@@ -432,19 +506,43 @@ function legacyCheckSeq(e: ShiftCloseIntentEntry): number {
  * readwrite claims). With a permanently failing local store no legacy progress
  * is possible at all — that is reported, not hidden. Per sweep: ≤10 legacy
  * server reads, ≤10 legacy W4 attempts, one claim transaction.
+ *
+ * Gate 007-C — a claim is FENCED: it carries this sweep's owner token and a
+ * new epoch (the check sequence, strictly increasing per entry). A lease can
+ * expire while this sweep still waits on the server (60 s), so a newer sweep
+ * may re-claim the entry; from then on the older sweep's fence no longer
+ * matches. Before its W4 the sweep re-verifies and renews its claim in one
+ * local transaction (`claim_lost` → no W4), and its terminal record is a
+ * fenced compare-and-set (`claim_lost` → nothing recorded). Neither local
+ * check can stop an older sweep whose W4 was ALREADY in flight when it lost
+ * the claim, so the remote W4 is itself conditional: one server transaction
+ * reads the doc and writes only a `pending` doc of this close and device, and
+ * its commit is evaluated against the doc as it is THEN (W4 Rules: only
+ * `pending → synced`). Overlapping sweeps can therefore make more than one W4
+ * API ATTEMPT, but at most ONE effective transition; a loser either reads
+ * `synced` (`already_synced`) or is rejected at commit (`failed` →
+ * `retry_later`) — never `written`, never `normalized`. Outstanding
+ * (non-legacy) entries are not claimed; they rely on the same conditional W4.
  */
 export async function retryOutstandingNormalizations(
   deps: ReconcileShiftCloseIntentDeps,
   /** Shifts whose W4 was already attempted in this pass (by their reconcile) — not retried again now. */
   skipShiftIds: ReadonlySet<string> = new Set(),
 ): Promise<NormalizationRetryResult[]> {
+  return (await retryNormalizationsDetailed(deps, skipShiftIds)).results;
+}
+
+async function retryNormalizationsDetailed(
+  deps: ReconcileShiftCloseIntentDeps,
+  skipShiftIds: ReadonlySet<string>,
+): Promise<{ journalReadable: boolean; results: NormalizationRetryResult[] }> {
   let listed: Awaited<ReturnType<ShiftCloseIntentJournal['listCloseIntents']>>;
   try {
     listed = await deps.journal.listCloseIntents();
   } catch {
-    return [];
+    return { journalReadable: false, results: [] };
   }
-  if (!listed.ok) return [];
+  if (!listed.ok) return { journalReadable: false, results: [] };
   const mine = listed.value.filter(
     (e) => e.status === 'synced' && e.deviceId === deps.deviceId && !skipShiftIds.has(e.shiftId),
   );
@@ -453,6 +551,7 @@ export async function retryOutstandingNormalizations(
 
   const results: NormalizationRetryResult[] = [];
   let legacy: ShiftCloseIntentEntry[] = [];
+  const owner = newClaimOwnerToken();
   if (legacyAll.length > 0) {
     let claim: Awaited<ReturnType<ShiftCloseIntentJournal['claimLegacyNormalizationChecks']>>;
     try {
@@ -461,6 +560,7 @@ export async function retryOutstandingNormalizations(
         skipShiftIds: [...skipShiftIds],
         limit: LEGACY_NORMALIZATION_CHECKS_PER_SWEEP,
         leaseMs: LEGACY_NORMALIZATION_CLAIM_LEASE_MS,
+        owner,
       });
     } catch (err) {
       claim = { ok: false, code: 'tx_failed', message: err instanceof Error ? err.message : String(err) };
@@ -481,38 +581,88 @@ export async function retryOutstandingNormalizations(
     }
   }
 
-  for (const entry of [...outstanding, ...legacy]) {
-    results.push({ shiftId: entry.shiftId, outcome: await retryNormalization(entry, deps) });
+  for (const entry of outstanding) {
+    results.push({ shiftId: entry.shiftId, ...(await retryNormalization(entry, deps, null)) });
   }
-  return results;
+  for (const entry of legacy) {
+    // The claim just committed with THIS owner and the entry's new epoch.
+    const fence = { owner, epoch: legacyCheckSeq(entry) };
+    results.push({ shiftId: entry.shiftId, ...(await retryNormalization(entry, deps, fence)) });
+  }
+  return { journalReadable: true, results };
 }
 
+let claimOwnerCounter = 0;
+/** Gate 007-C — a per-sweep claim owner token (identification only, not a secret). */
+function newClaimOwnerToken(): string {
+  claimOwnerCounter += 1;
+  return `sweep-${generateShiftCloseCorrelationId() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`}-${claimOwnerCounter}`;
+}
+
+type FencedStep = 'ok' | 'claim_lost' | 'failed';
+
+/** `ok` ONLY when the store confirmed it (a fail-soft `ok: false` or a throw is `failed`). */
+async function fencedStep(run: () => Promise<CloseIntentResult<string>>, okValue: string): Promise<FencedStep> {
+  try {
+    const r = await run();
+    if (!r.ok) return 'failed';
+    return r.value === okValue ? 'ok' : 'claim_lost';
+  } catch {
+    return 'failed';
+  }
+}
+
+/**
+ * One read and at most one W4 for an outstanding (`fence` null) or a CLAIMED
+ * legacy entry. Gate 007-C: for a claimed entry every local write is fenced
+ * and the claim is re-verified + renewed immediately before the W4.
+ */
 async function retryNormalization(
   entry: ShiftCloseIntentEntry,
   deps: ReconcileShiftCloseIntentDeps,
-): Promise<NormalizationRetryOutcome> {
+  fence: LegacyNormalizationClaimFence | null,
+): Promise<Omit<NormalizationRetryResult, 'shiftId'>> {
   let read: ShiftCloseConfirmationRead;
   try {
     read = await deps.readConfirmation(entry.shiftId);
   } catch {
     read = { ok: false };
   }
-  if (!read.ok) return 'retry_later';
+  if (!read.ok) return { outcome: 'retry_later' };
   const { doc } = read;
-  if (!doc.exists || doc.status !== 'closed' || !isResolvedServerTimestamp(doc.closedAt)) return 'retry_later';
+  if (!doc.exists || doc.status !== 'closed' || !isResolvedServerTimestamp(doc.closedAt)) return { outcome: 'retry_later' };
   // Gate 006-C: a terminal outcome is reported only once its local record persisted.
-  const record = async (state: 'done' | 'mismatch' | 'not_applicable', outcome: NormalizationRetryOutcome) =>
-    (await persistNormalization(deps.journal, entry, state)) ? outcome : ('local_write_failed' as const);
+  // Gate 007-C: for a claimed entry, only while this sweep still holds the claim.
+  const record = async (
+    state: 'done' | 'mismatch' | 'not_applicable',
+    outcome: NormalizationRetryOutcome,
+  ): Promise<NormalizationRetryOutcome> => {
+    if (!fence) return (await persistNormalization(deps.journal, entry, state)) ? outcome : 'local_write_failed';
+    const step = await fencedStep(
+      () => deps.journal.recordLegacyNormalization(entry.shiftId, entry.closeCorrelationId, state, fence),
+      'recorded',
+    );
+    return step === 'ok' ? outcome : step === 'claim_lost' ? 'claim_lost' : 'local_write_failed';
+  };
   const confirmation = confirmsEntry(entry, doc);
-  if (confirmation === 'unresolved') return 'retry_later';
-  if (confirmation === 'mismatch') return record('mismatch', 'mismatch');
+  if (confirmation === 'unresolved') return { outcome: 'retry_later' };
+  if (confirmation === 'mismatch') return { outcome: await record('mismatch', 'mismatch') };
   // B2.2-A: unexpected sync marker — not terminal without proof, never written.
-  if (doc.syncStateMalformed) return 'manual_attention';
-  if (doc.syncState === 'synced') return record('done', 'already_normalized');
-  if (doc.syncState !== 'pending' || doc.deviceId !== deps.deviceId) return record('not_applicable', 'not_applicable');
-  if (!deps.normalizeSyncState) return 'retry_later';
-  const w4 = await writeNormalization(entry, deps.normalizeSyncState, deps.journal);
-  return w4 === 'normalized' ? 'normalized' : w4 === 'normalized_unrecorded' ? 'local_write_failed' : 'retry_later';
+  if (doc.syncStateMalformed) return { outcome: 'manual_attention' };
+  if (doc.syncState === 'synced') return { outcome: await record('done', 'already_normalized') };
+  if (doc.syncState !== 'pending' || doc.deviceId !== deps.deviceId) {
+    return { outcome: await record('not_applicable', 'not_applicable') };
+  }
+  if (!deps.normalizeSyncState) return { outcome: 'retry_later' };
+  if (fence) {
+    // The read may have outlived the lease: W4 only if the claim is still ours.
+    const owned = await fencedStep(() => deps.journal.renewLegacyNormalizationClaim(entry.shiftId, fence), 'owned');
+    if (owned === 'claim_lost') return { outcome: 'claim_lost' };
+    if (owned === 'failed') return { outcome: 'claim_failed' };
+  }
+  const remoteW4 = await callNormalizer(entry, deps.normalizeSyncState, deps.deviceId);
+  if (remoteW4 !== 'written' && remoteW4 !== 'already_synced') return { outcome: 'retry_later', remoteW4 };
+  return { outcome: await record('done', remoteW4 === 'written' ? 'normalized' : 'already_normalized'), remoteW4 };
 }
 
 // ── Recovery gate B2: prepared ONLINE close attempts ──────────────────────
@@ -758,18 +908,26 @@ export async function recoverOnlineCloseAttempts(
  * (and the sync orchestrator) — same function, so behavior is identical regardless of trigger. Never throws;
  * a failed `listCloseIntents()` read just yields no work for this pass (retried
  * on the next trigger).
+ *
+ * Gate 007-C — the resolved value is still the array of pending-close
+ * results (backward compatible); its non-enumerable `normalization` property
+ * carries the W4 normalization outcome of the same sweep, so a caller can
+ * observe `claim_failed` / `local_write_failed` / an unreadable journal and
+ * the count still owed instead of losing them. Joined callers share it.
  */
 export function runShiftCloseReconciliationSweep(
   deps: ReconcileShiftCloseIntentDeps,
-): Promise<ReconcileShiftCloseIntentResult[]> {
+): Promise<ShiftCloseSweepResult> {
   // Gate 006-C — single-flight per device in this process: an overlapping
   // boot / `online` / orchestrator trigger JOINS the running sweep (same
   // result) instead of re-reading and re-attempting W4 for the same entries.
   // A sweep older than SWEEP_JOIN_MAX_MS (e.g. a server read that never
   // settles) is not joined, so one stuck sweep can never stall all later ones.
   // Across windows / processes the legacy batch is made disjoint by the
-  // transactional claim; any other overlap is bounded by W4 Rules (only one
-  // pending → synced write can succeed).
+  // transactional claim. Gate 007-C: a sweep that outlives its claim lease is
+  // fenced (see retryOutstandingNormalizations), and any remaining overlap is
+  // bounded by the conditional W4 (one server transaction whose commit W4
+  // Rules evaluate: only one pending → synced write can take effect).
   const nowMs = Date.now();
   const running = sweepsInFlight.get(deps.deviceId);
   if (running && nowMs >= running.startedAt && nowMs - running.startedAt < SWEEP_JOIN_MAX_MS) return running.promise;
@@ -782,15 +940,75 @@ export function runShiftCloseReconciliationSweep(
 
 /** Gate 006-C: an in-flight sweep is joined only while younger than this. */
 const SWEEP_JOIN_MAX_MS = 60_000;
-const sweepsInFlight = new Map<string, { promise: Promise<ReconcileShiftCloseIntentResult[]>; startedAt: number }>();
+const sweepsInFlight = new Map<string, { promise: Promise<ShiftCloseSweepResult>; startedAt: number }>();
 
-async function runSweepOnce(deps: ReconcileShiftCloseIntentDeps): Promise<ReconcileShiftCloseIntentResult[]> {
+/**
+ * Gate 007-C — the W4 normalization outcome of one sweep.
+ *   status  `ok`                  every step reached a truthful, persisted state (or was left to retry)
+ *           `degraded`            a claim / local record could not be persisted (`claim_failed`,
+ *                                 `local_write_failed`, a pending-close W4 whose `done` did not
+ *                                 persist) or the owed count could not be read
+ *           `journal_unreadable`  the close-intent journal could not be listed: nothing was checked
+ *   results  the retry results (outstanding + claimed legacy), with `remoteW4` per API attempt
+ *   counts   per outcome
+ *   owed     after the sweep: this device's `synced` closes whose W4 is still `outstanding` or never
+ *            checked (legacy); `null` when it could not be read
+ */
+export type ShiftCloseNormalizationSummary = {
+  status: 'ok' | 'degraded' | 'journal_unreadable';
+  results: NormalizationRetryResult[];
+  counts: Partial<Record<NormalizationRetryOutcome, number>>;
+  owed: number | null;
+};
+
+export type ShiftCloseSweepResult = ReconcileShiftCloseIntentResult[] & {
+  readonly normalization: ShiftCloseNormalizationSummary;
+};
+
+function sweepResult(results: ReconcileShiftCloseIntentResult[], normalization: ShiftCloseNormalizationSummary): ShiftCloseSweepResult {
+  // Non-enumerable: existing callers / `toEqual` still see a plain array.
+  return Object.defineProperty(results, 'normalization', { value: normalization, enumerable: false }) as ShiftCloseSweepResult;
+}
+
+/**
+ * Gate 007-C — the one line a caller reports for a summary that needs
+ * attention (`null` = nothing to report). Stable for an unchanged state, so a
+ * caller can de-duplicate repeated reports.
+ */
+export function shiftCloseNormalizationIssue(summary: ShiftCloseNormalizationSummary | undefined): string | null {
+  if (!summary || summary.status === 'ok') return null;
+  if (summary.status === 'journal_unreadable') return 'journal_unreadable';
+  const parts = (['claim_failed', 'local_write_failed'] as const)
+    .filter((o) => (summary.counts[o] ?? 0) > 0)
+    .map((o) => `${o}=${summary.counts[o]}`);
+  if (summary.owed === null) parts.push('owed_unreadable');
+  return parts.length > 0 ? parts.join(',') : 'done_unrecorded';
+}
+
+async function countOwedNormalizations(deps: ReconcileShiftCloseIntentDeps): Promise<number | null> {
+  try {
+    const listed = await deps.journal.listCloseIntents();
+    if (!listed.ok) return null;
+    return listed.value.filter(
+      (e) =>
+        e.status === 'synced' &&
+        e.deviceId === deps.deviceId &&
+        (e.syncStateNormalization === 'outstanding' || e.syncStateNormalization === undefined),
+    ).length;
+  } catch {
+    return null;
+  }
+}
+
+async function runSweepOnce(deps: ReconcileShiftCloseIntentDeps): Promise<ShiftCloseSweepResult> {
   // Recovery gate B2: first turn every prepared online close that DID commit
   // into its journal entry, so the loop below reconciles it (synced + Variant C)
   // exactly like any other pending close.
   await recoverOnlineCloseAttempts(deps);
   const listed = await deps.journal.listCloseIntents();
-  if (!listed.ok) return [];
+  if (!listed.ok) {
+    return sweepResult([], { status: 'journal_unreadable', results: [], counts: {}, owed: null });
+  }
 
   const pending = listed.value.filter(
     (entry) => entry.status === 'local_closed_pending' && entry.deviceId === deps.deviceId,
@@ -802,6 +1020,19 @@ async function runSweepOnce(deps: ReconcileShiftCloseIntentDeps): Promise<Reconc
   }
   // B2.2: confirmed closes whose Variant C (W4) write is still owed — at most
   // one W4 attempt per close per sweep (just-reconciled ones already had theirs).
-  await retryOutstandingNormalizations(deps, new Set(pending.map((e) => e.shiftId)));
-  return results;
+  const retried = await retryNormalizationsDetailed(deps, new Set(pending.map((e) => e.shiftId)));
+  const counts: Partial<Record<NormalizationRetryOutcome, number>> = {};
+  for (const r of retried.results) counts[r.outcome] = (counts[r.outcome] ?? 0) + 1;
+  const owed = retried.journalReadable ? await countOwedNormalizations(deps) : null;
+  const degraded =
+    (counts.claim_failed ?? 0) > 0 ||
+    (counts.local_write_failed ?? 0) > 0 ||
+    results.some((r) => r.normalized === true && r.normalizationRecorded === false) ||
+    owed === null;
+  return sweepResult(results, {
+    status: !retried.journalReadable ? 'journal_unreadable' : degraded ? 'degraded' : 'ok',
+    results: retried.results,
+    counts,
+    owed,
+  });
 }

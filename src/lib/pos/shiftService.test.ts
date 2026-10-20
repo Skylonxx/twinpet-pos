@@ -22,6 +22,7 @@ const {
   getDocsFromCacheMock,
   updateDocMock,
   setDocMock,
+  runTransactionMock,
   docMock,
   collectionMock,
   queryMock,
@@ -34,6 +35,10 @@ const {
   getDocsFromCacheMock: vi.fn(),
   updateDocMock: vi.fn(),
   setDocMock: vi.fn(),
+  // Gate 007-C: the W4 normalizer runs in a transaction; unconfigured = fails (no false "written").
+  runTransactionMock: vi.fn<(db: unknown, fn: (tx: unknown) => Promise<unknown>) => Promise<unknown>>(async () => {
+    throw new Error('runTransaction not configured');
+  }),
   docMock: vi.fn(() => ({ id: 'shift-1' }) as never),
   collectionMock: vi.fn(() => ({ path: 'shifts' }) as never),
   queryMock: vi.fn((...args: unknown[]) => ({ __query: args }) as never),
@@ -56,6 +61,7 @@ vi.mock('firebase/firestore', async (importOriginal) => {
     getDocsFromCache: getDocsFromCacheMock,
     updateDoc: updateDocMock,
     setDoc: setDocMock,
+    runTransaction: runTransactionMock,
   };
 });
 
@@ -68,7 +74,7 @@ vi.mock('./deviceId', async (importOriginal) => {
 });
 
 // Imported AFTER the mocks are declared (vi.mock is hoisted, so this is safe).
-import { closeShift, openShift, readActiveShiftForBoot } from './shiftService';
+import { closeShift, normalizeShiftCloseSyncState, openShift, readActiveShiftForBoot } from './shiftService';
 import {
   createInMemoryShiftOpenIntentJournal,
   type ShiftOpenIntentJournal,
@@ -157,6 +163,7 @@ beforeEach(() => {
   updateDocMock.mockResolvedValue(undefined);
   setDocMock.mockReset();
   setDocMock.mockResolvedValue(undefined);
+  runTransactionMock.mockReset(); // back to the failing default implementation
   getDocFromServerMock.mockReset();
   getDocsMock.mockReset();
   getDocsFromCacheMock.mockReset();
@@ -307,6 +314,8 @@ describe('closeShift — Packet 7C-B1 local optimistic offline close', () => {
       supersedeOnlineCloseAttempt: async () => ({ ok: false as const, code: 'unavailable' as const }),
       setSyncStateNormalization: async () => ({ ok: false as const, code: 'unavailable' as const }),
       claimLegacyNormalizationChecks: async () => ({ ok: false as const, code: 'unavailable' as const }),
+      renewLegacyNormalizationClaim: async () => ({ ok: false as const, code: 'unavailable' as const }),
+      recordLegacyNormalization: async () => ({ ok: false as const, code: 'unavailable' as const }),
       markOnlineCloseAttemptCommitObserved: async () => ({ ok: false as const, code: 'unavailable' as const }),
     };
 
@@ -462,13 +471,20 @@ describe('closeShift — Packet 7C-B2 whenServerConfirmed reconciliation', () =>
     getDocFromServerMock.mockResolvedValue(makeConfirmedSnap({ syncState: 'pending' }));
     const journal = createInMemoryShiftCloseIntentJournal();
 
+    const txUpdates: Array<Record<string, unknown>> = [];
+    runTransactionMock.mockImplementationOnce(async (_db: unknown, fn: (tx: unknown) => Promise<unknown>) =>
+      fn({ get: async () => makeConfirmedSnap({ syncState: 'pending' }), update: (_ref: unknown, patch: Record<string, unknown>) => void txUpdates.push(patch) }),
+    );
+
     const result = await closeShift(makeShift(), 1000, 'note', { journal });
     await result.whenServerConfirmed;
 
-    // Call 1 = the close write itself; call 2 = the Variant C normalization.
-    expect(updateDocMock).toHaveBeenCalledTimes(2);
-    const [, normalizePatch] = updateDocMock.mock.calls[1] as [unknown, Record<string, unknown>];
-    expect(normalizePatch).toEqual({ syncState: 'synced' });
+    // The close write itself is the only plain update; Variant C (W4) is ONE
+    // conditional transaction that re-read the still-pending doc and wrote the single field.
+    expect(updateDocMock).toHaveBeenCalledTimes(1);
+    expect(runTransactionMock).toHaveBeenCalledTimes(1);
+    expect(txUpdates).toEqual([{ syncState: 'synced' }]);
+    expect((await journal.getCloseIntent('shift-1'))).toMatchObject({ ok: true, value: { status: 'synced', syncStateNormalization: 'done' } });
   });
 
   test('Variant C: a doc that already reads syncState "synced" is never re-normalized', async () => {
@@ -1141,5 +1157,108 @@ describe('readActiveShiftForBoot - PK-2A DEC-08 provenance / fail-closed', () =>
       status: 'unverifiable',
       reason: 'read_failed',
     });
+  });
+});
+
+// Gate 007-C — the production W4 normalizer is ONE conditional transaction.
+describe('normalizeShiftCloseSyncState — conditional W4 (gate 007-C)', () => {
+  const CORR = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+  const EXPECTED = { closeCorrelationId: CORR, deviceId: 'DEV1' };
+
+  /**
+   * Model of a client transaction under W4 Rules: commits only if the doc is
+   * unchanged since its read; a changed doc that is no longer pending is
+   * REJECTED by Rules at commit (permission-denied, not retried — as on the
+   * emulator, rules-tests/shift-w4-conditional.spec.ts); otherwise re-runs.
+   */
+  function optimisticShiftDoc(initial: Record<string, unknown>) {
+    const state = { doc: { ...initial }, version: 1, writes: [] as Array<Record<string, unknown>> };
+    const gates: Array<Promise<void> | undefined> = [];
+    runTransactionMock.mockImplementation(async (_db: unknown, fn: (tx: unknown) => Promise<unknown>) => {
+      const gate = gates.shift();
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        let readVersion = 0;
+        let buffered: Record<string, unknown> | null = null;
+        const out = await fn({
+          get: async () => {
+            readVersion = state.version;
+            return { exists: () => true, data: () => ({ ...state.doc }) };
+          },
+          update: (_ref: unknown, patch: Record<string, unknown>) => {
+            buffered = patch;
+          },
+        });
+        if (buffered) {
+          if (attempt === 0 && gate) await gate;
+          if (readVersion !== state.version) {
+            if (state.doc.syncState !== 'pending') throw Object.assign(new Error('PERMISSION_DENIED'), { code: 'permission-denied' });
+            continue;
+          }
+          state.doc = { ...state.doc, ...(buffered as Record<string, unknown>) };
+          state.version += 1;
+          state.writes.push(buffered);
+        }
+        return out;
+      }
+      throw new Error('aborted');
+    });
+    return { state, gateNext: (g: Promise<void>) => gates.push(g) };
+  }
+
+  const closedPending = { status: 'closed', syncState: 'pending', deviceId: 'DEV1', closeCorrelationId: CORR };
+
+  test('this pending close of this device → written: exactly one single-field write, no plain updateDoc', async () => {
+    const fs = optimisticShiftDoc(closedPending);
+    const outcome = await normalizeShiftCloseSyncState('shift-1', EXPECTED);
+    // Parent: an unconditional plain updateDoc (no re-read at commit).
+    expect(updateDocMock).not.toHaveBeenCalled();
+    expect(fs.state.writes).toEqual([{ syncState: 'synced' }]);
+    expect(outcome).toBe('written');
+  });
+
+  test.each([
+    ['already synced', { ...closedPending, syncState: 'synced' }, 'already_synced'],
+    ['another correlation id', { ...closedPending, closeCorrelationId: 'bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee' }, 'precondition_failed'],
+    ['another device', { ...closedPending, deviceId: 'DEV2' }, 'precondition_failed'],
+    ['not closed', { ...closedPending, status: 'open' }, 'precondition_failed'],
+    ['malformed syncState', { ...closedPending, syncState: 'SYNCED' }, 'precondition_failed'],
+  ])('doc %s at commit time → %s, nothing written', async (_label, docAtCommit, expected) => {
+    const fs = optimisticShiftDoc(docAtCommit);
+    const outcome = await normalizeShiftCloseSyncState('shift-1', EXPECTED);
+    // Parent: the W4 was written blindly over whatever the doc had become.
+    expect(updateDocMock).not.toHaveBeenCalled();
+    expect(fs.state.writes).toEqual([]);
+    expect(outcome).toBe(expected);
+  });
+
+  test('two overlapping workers (both read pending) → ONE effective write; the loser’s commit is rejected — a FAILED W4, never a success', async () => {
+    const fs = optimisticShiftDoc(closedPending);
+    let release!: () => void;
+    fs.gateNext(new Promise<void>((r) => (release = r))); // worker A stalls just before its commit
+    const a = normalizeShiftCloseSyncState('shift-1', EXPECTED).then(
+      (v) => v,
+      (e: { code?: string }) => `rejected:${e.code}`,
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    const b = await normalizeShiftCloseSyncState('shift-1', EXPECTED);
+    release();
+    const outcomes = [await a, b];
+    // Parent: two unconditional writes (only Rules could refuse the second).
+    expect(updateDocMock).not.toHaveBeenCalled();
+    expect(fs.state.writes).toEqual([{ syncState: 'synced' }]);
+    expect(outcomes).toEqual(['rejected:permission-denied', 'written']);
+  });
+
+  test('a worker whose transaction reads AFTER the other worker’s commit → already_synced, nothing written', async () => {
+    const fs = optimisticShiftDoc(closedPending);
+    expect(await normalizeShiftCloseSyncState('shift-1', EXPECTED)).toBe('written');
+    expect(await normalizeShiftCloseSyncState('shift-1', EXPECTED)).toBe('already_synced');
+    expect(fs.state.writes).toEqual([{ syncState: 'synced' }]);
+  });
+
+  test('a transaction failure (offline / unavailable) rejects — never a queued write that could land later', async () => {
+    runTransactionMock.mockRejectedValueOnce(Object.assign(new Error('unavailable'), { code: 'unavailable' }));
+    await expect(normalizeShiftCloseSyncState('shift-1', EXPECTED)).rejects.toThrow('unavailable');
+    expect(updateDocMock).not.toHaveBeenCalled();
   });
 });

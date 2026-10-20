@@ -42,9 +42,11 @@ import {
   reconcileShiftCloseIntent,
   recoverOnlineCloseAttempt,
   shiftCloseConfirmationDocFromData,
+  shiftCloseNormalizationDecision,
   type OwnCloseIdentity,
   type ShiftCloseConfirmationRead,
   type ShiftCloseConfirmationReader,
+  type ShiftCloseNormalizeOutcome,
   type ShiftCloseNormalizer,
 } from './offline/shiftCloseReconciler';
 import {
@@ -798,13 +800,32 @@ export const readShiftCloseConfirmation: ShiftCloseConfirmationReader = async (
 
 /**
  * Packet 7C-B2 Variant C — the ONE field this packet ever normalizes on an
- * already-closed doc. Guardrails (confirmed identity, `syncState === 'pending'`,
- * device match) are enforced by the caller (`reconcileShiftCloseIntent`); this
- * function is intentionally a "dumb", single-field writer.
+ * already-closed doc. The caller (`reconcileShiftCloseIntent` / the retry)
+ * first proves the confirmed identity from a server read.
+ *
+ * Gate 007-C — a CONDITIONAL write: one Firestore transaction reads the doc
+ * and writes `syncState: 'synced'` only if that read is the `closed`, `pending`
+ * doc of `expected` (correlation id + device); the commit carries that read's
+ * version. Of two overlapping workers at most ONE makes the effective
+ * transition: one whose read already sees `synced` returns `already_synced`
+ * (nothing written); one whose read preceded the other's commit is rejected
+ * at its commit (Rules `isW4SyncStateNormalization` evaluate the now-synced
+ * doc → permission-denied; proven on the emulator) → throws, i.e. W4 failed,
+ * retried later and never reported as success. The W4 payload is the same
+ * single field. Unavailable Firestore / offline → throws (never a queued write
+ * that could land after another worker's).
  */
-export const normalizeShiftCloseSyncState: ShiftCloseNormalizer = async (shiftId) => {
-  if (!isFirebaseConfigured || !db) return;
-  await updateDoc(doc(db, collections.shifts, shiftId), { syncState: 'synced' });
+export const normalizeShiftCloseSyncState: ShiftCloseNormalizer = async (shiftId, expected) => {
+  const firestore = db;
+  if (!isFirebaseConfigured || !firestore) throw new Error('Firestore unavailable');
+  const ref = doc(firestore, collections.shifts, shiftId);
+  return runTransaction(firestore, async (tx): Promise<ShiftCloseNormalizeOutcome> => {
+    const snap = await tx.get(ref);
+    const decision = shiftCloseNormalizationDecision(snap.exists() ? (snap.data() as Record<string, unknown>) : undefined, expected);
+    if (decision !== 'write') return decision;
+    tx.update(ref, { syncState: 'synced' });
+    return 'written';
+  });
 };
 
 /**
@@ -1325,9 +1346,14 @@ async function closeShiftOnline(
         return result(entry.closedAtLocal, reconcileClosed(entry, withProvenRead(ctx, shift.id, proof.read)));
       }
       if (finalized.code === 'conflict') {
-        // A DIFFERENT local close record exists for this shift: never show a Z over that disagreement.
+        // Gate 007-B: the store refused (a different local close record, or no
+        // attempt of exactly this identity to consume): never a Z over that.
+        // The known commit is recorded on THIS correlation's attempt, if any.
         console.warn('[shiftService] committed online close conflicts with the local journal', finalized);
-        throw new Error(CLOSE_SHIFT_COMMITTED_UNVERIFIED_MESSAGE);
+        const commitObservation = await recordCommitObservation(journal, shift.id, correlationId);
+        throw new Error(CLOSE_SHIFT_COMMITTED_UNVERIFIED_MESSAGE, {
+          cause: { finalizeRefusal: finalized.reason, commitObservation },
+        });
       }
       console.warn('[shiftService] committed online close could not be journaled', finalized);
     }
