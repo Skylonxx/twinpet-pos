@@ -833,12 +833,30 @@ describe('shifts W1 — open-shift cash append', () => {
     );
   });
 
-  it('ALLOWED: exact-one-entry append onto an existing entry', async () => {
-    await seedOpenShift('s2', { cashEntries: [cashEntry({ id: 'ce0' })] });
+  // C1-R1 010 — SUPERSEDED fixture: this test used to rebuild the earlier entry
+  // with a FRESH `Date.now()` `at` and was still ALLOWED, because W1 compared
+  // nothing but the size and the last element. W1 now requires the existing
+  // prefix to be preserved EXACTLY, so the legitimate append re-sends the very
+  // same prior object (what the production `arrayUnion` writer effectively does).
+  it('ALLOWED: exact-one-entry append onto an existing entry (prior entry preserved byte-for-byte)', async () => {
+    const prior = cashEntry({ id: 'ce0' });
+    await seedOpenShift('s2', { cashEntries: [prior] });
     const db = testEnv.authenticatedContext('staff1', staff()).firestore();
     await assertSucceeds(
       updateDoc(doc(db, 'shifts', 's2'), {
-        cashEntries: [cashEntry({ id: 'ce0' }), cashEntry({ id: 'ce1' })],
+        cashEntries: [prior, cashEntry({ id: 'ce1' })],
+        updatedAt: serverTimestamp(),
+      }),
+    );
+  });
+
+  it('DENIED (010, supersedes the old fresh-`at` reconstruction): the earlier entry re-sent with a different `at` is a prefix mutation', async () => {
+    const prior = cashEntry({ id: 'ce0' });
+    await seedOpenShift('s2b', { cashEntries: [prior] });
+    const db = testEnv.authenticatedContext('staff1', staff()).firestore();
+    await assertFails(
+      updateDoc(doc(db, 'shifts', 's2b'), {
+        cashEntries: [{ ...prior, at: (prior.at as number) + 1 }, cashEntry({ id: 'ce1' })],
         updatedAt: serverTimestamp(),
       }),
     );
@@ -1026,23 +1044,44 @@ describe('shifts W1 — open-shift cash append', () => {
     );
   });
 
-  // Frozen DETECT-ONLY residual (P5-A Blocker 5): the rule validates only the
-  // size delta (+1) and the NEW last element; it cannot compare every prior
-  // element, so a same-size-plus-one write that ALSO rewrites an earlier element
-  // is ALLOWED here and is caught only by the future P5-C evidence/cash-pair
-  // audit — never by these rules. This test documents that accepted gap.
-  it('ALLOWED (accepted prefix-rewrite residual): rewrites an earlier entry while appending', async () => {
+  // SUPERSEDED CONTRACT (Return/Refund V1 C1-R1 010).
+  // OLD (P5-A Blocker 5, "frozen DETECT-ONLY residual"): the rule validated only
+  // the size delta (+1) and the NEW last element, so a same-size-plus-one write
+  // that ALSO rewrote an earlier element was ALLOWED and left to the P5-C
+  // evidence/cash-pair audit to detect after the fact. This test used to assert
+  // `assertSucceeds` for that rewrite.
+  // NEW: a server cash Return now places a committed payout (`rfd_<returnId>`)
+  // in that prefix, and a falsified prefix is folded by the next close into a
+  // confirmed Z without the payout — detection AFTER the Z is too late. W1 must
+  // therefore keep every existing element EXACTLY (value + order) and may only
+  // append one validated entry. The audit still exists; it is no longer the
+  // only line of defence. Only THIS accepted-residual assertion is inverted;
+  // the rest of the P5 W1 assertions are unchanged.
+  it('DENIED (supersedes the accepted prefix-rewrite residual): rewrites an earlier entry while appending', async () => {
     await seedOpenShift('w1k', {
       cashEntries: [cashEntry({ id: 'ceA', amount: 100 }), cashEntry({ id: 'ceB', amount: 200 })],
     });
     const db = testEnv.authenticatedContext('staff1', staff()).firestore();
-    await assertSucceeds(
+    await assertFails(
       updateDoc(doc(db, 'shifts', 'w1k'), {
         cashEntries: [
-          cashEntry({ id: 'ceA', amount: 999999 }), // tampered earlier element — undetectable at rules layer
+          cashEntry({ id: 'ceA', amount: 999999 }), // tampered earlier element — now rejected at the rules layer
           cashEntry({ id: 'ceB', amount: 200 }),
           cashEntry({ id: 'ceC', amount: 300 }),
         ],
+        updatedAt: serverTimestamp(),
+      }),
+    );
+  });
+
+  it('ALLOWED (010 counterpart of the superseded test): the same append with the earlier entries preserved exactly', async () => {
+    const a = cashEntry({ id: 'ceA', amount: 100 });
+    const b = cashEntry({ id: 'ceB', amount: 200 });
+    await seedOpenShift('w1k2', { cashEntries: [a, b] });
+    const db = testEnv.authenticatedContext('staff1', staff()).firestore();
+    await assertSucceeds(
+      updateDoc(doc(db, 'shifts', 'w1k2'), {
+        cashEntries: [a, b, cashEntry({ id: 'ceC', amount: 300 })],
         updatedAt: serverTimestamp(),
       }),
     );

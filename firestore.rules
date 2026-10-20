@@ -290,10 +290,29 @@ service cloud.firestore {
     // purpose (the server prefix is lowercase); `(?s)` so a newline cannot slip
     // past `.`. Rules cannot prove id UNIQUENESS efficiently — only the
     // namespace of the APPENDED entry is reserved; the close refuses ambiguous
-    // ids (R1-B). The frozen P5 "prefix-rewrite residual" (W1 validates only the
-    // last element) is deliberately unchanged here: see the p5c spec.
+    // ids (R1-B).
     function isServerOwnedCashEntryId(entryId) {
       return entryId.matches('(?s)rfd_.*');
+    }
+
+    // C1-R1 010 — the EXISTING list must survive untouched, in value and order,
+    // as the prefix of the new list: W1 appends exactly ONE entry (validated
+    // above) and changes nothing else. Without this a client could replace or
+    // delete any earlier element — including the server's committed `rfd_`
+    // refund payout — as long as the size grew by one and the last element was
+    // valid, and a freshly mounted POS would then close from the falsified list
+    // (this SUPERSEDES the P5 "accepted prefix-rewrite residual").
+    //  • A malformed (non-list) old value fails closed: `is list` first.
+    //  • An empty/absent old list has no prefix to compare. The branch is
+    //    needed: `list[0:0]` is a Rules EVALUATION ERROR in the emulator
+    //    (verified in 009), which would deny every first append.
+    //  • Old elements are compared, never re-validated: historical optional
+    //    fields / shapes (and the server's `rfd_` entries) are kept as they are.
+    function shiftCashEntriesPrefixUnchanged() {
+      let oldEntries = resource.data.get('cashEntries', []);
+      return oldEntries is list
+          && (oldEntries.size() == 0
+              || request.resource.data.cashEntries[0:oldEntries.size()] == oldEntries);
     }
 
     function isW1CashAppend() {
@@ -302,7 +321,8 @@ service cloud.firestore {
           && request.resource.data.get('updatedAt', null) == request.time
           && request.resource.data.get('cashEntries', null) is list
           && request.resource.data.get('cashEntries', []).size() == shiftOldCashEntriesSize() + 1
-          && isValidNewShiftCashEntry();
+          && isValidNewShiftCashEntry()
+          && shiftCashEntriesPrefixUnchanged();
     }
 
     // W2 — open-shift credit-debt receipt. Accepted residual (frozen, P5-A R2

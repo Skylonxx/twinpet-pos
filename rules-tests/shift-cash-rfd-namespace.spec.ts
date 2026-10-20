@@ -4,8 +4,9 @@
  * which bypasses Rules). A staff client (W1) must never be able to APPEND an
  * entry carrying that prefix to a shift's `cashEntries[]`, because the online
  * close folds cash entries by id and a client-made `rfd_X` would otherwise be
- * able to shadow the server's real `rfd_X` payout. (The frozen P5 residual that
- * W1 checks only the last element is deliberately untouched — see below.)
+ * able to shadow the server's real `rfd_X` payout. (010 additionally makes the
+ * existing prefix immutable — shift-w1-prefix-integrity.spec.ts — which
+ * supersedes the former "last element only" P5 residual.)
  *
  * Run (from repo root):
  *   firebase emulators:exec --only firestore --project demo-twinpet \
@@ -150,15 +151,13 @@ describe('W1 — the rfd_ namespace is reserved for the server', () => {
     expect(ids(await readShift('s1'))).toEqual([SERVER_REFUND.id]);
   });
 
-  it('ALLOWED — PRE-EXISTING frozen P5 residual, NOT changed by C1-R1: W1 validates only the LAST element, so an earlier one can be rewritten', async () => {
-    // Documented in shift-close-p5c.spec.ts ("accepted prefix-rewrite residual"). C1-R1
-    // reserves the namespace of the APPENDED entry only. For the cash identity defect the
-    // outcome stays fail-closed: rewriting an earlier element into a duplicate of the
-    // server's rfd_ id yields a list that the online close REFUSES
-    // (shiftService.cashIntegrity.test.ts). Reported to the decision authority.
+  it('DENIED (010 — supersedes the 009 "accepted residual" assertion): rewriting an earlier element into a duplicate of the server rfd_ id', async () => {
+    // 009 asserted ALLOWED here (W1 validated only the LAST element; the duplicate was left to
+    // the online close to refuse). 010 enforces an exactly-preserved prefix at the Rules
+    // boundary (see shift-w1-prefix-integrity.spec.ts), so the write itself is now rejected.
     await seedShift('s1', [entry('c1', { type: 'pay_in', amount: 50 }), SERVER_REFUND]);
-    await assertSucceeds(writeList([entry(SERVER_REFUND.id, { amount: 1 }), SERVER_REFUND, entry('c2', { type: 'pay_in', amount: 1 })]));
-    expect(ids(await readShift('s1'))).toEqual([SERVER_REFUND.id, SERVER_REFUND.id, 'c2']);
+    await assertFails(writeList([entry(SERVER_REFUND.id, { amount: 1 }), SERVER_REFUND, entry('c2', { type: 'pay_in', amount: 1 })]));
+    expect(ids(await readShift('s1'))).toEqual(['c1', SERVER_REFUND.id]);
   });
 
   it('ALLOWED: ordinary pay_in / pay_out appends (Firestore auto-id shaped) on an empty or absent list', async () => {
