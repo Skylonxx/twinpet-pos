@@ -22,8 +22,9 @@ import {
   snapshotsEqual,
   type ShiftCloseIntentJournal,
 } from './shiftCloseIntentStore';
+import { isValidLegacyClaimEpoch } from './shiftCloseIntentTypes';
 import type {
-  CloseIntentResult,
+  LegacyClaimResult,
   LegacyNormalizationClaimFence,
   OnlineCloseAttemptRecord,
   PointerRepairOutcome,
@@ -196,6 +197,12 @@ export type ReconcileShiftCloseIntentResult = {
    * never settlement truth; absence means no status transition wrote.
    */
   pointerRepair?: PointerRepairOutcome;
+  /**
+   * Gate 008-B — present on an `unreachable` result whose server proof WAS
+   * obtained but whose local journal transition did not persist (structured
+   * `ok: false`): a local durability failure, not a transient read failure.
+   */
+  journalWriteFailed?: 'mark_synced' | 'mark_rejected_manual_attention';
 };
 
 function isResolvedServerTimestamp(value: unknown): value is { toDate: () => Date } {
@@ -322,7 +329,7 @@ export async function reconcileShiftCloseIntent(
       },
     );
     if (!rejectResult.ok) {
-      return { shiftId: entry.shiftId, outcome: 'unreachable', pointerRepair };
+      return { shiftId: entry.shiftId, outcome: 'unreachable', pointerRepair, journalWriteFailed: 'mark_rejected_manual_attention' };
     }
     return { shiftId: entry.shiftId, outcome: 'identity_mismatch', pointerRepair };
   }
@@ -354,7 +361,7 @@ export async function reconcileShiftCloseIntent(
     owesW4 || doc.syncStateMalformed ? 'outstanding' : doc.syncState === 'synced' ? 'done' : 'not_applicable',
   );
   if (!syncedResult.ok) {
-    return { shiftId: entry.shiftId, outcome: 'unreachable', pointerRepair };
+    return { shiftId: entry.shiftId, outcome: 'unreachable', pointerRepair, journalWriteFailed: 'mark_synced' };
   }
 
   let normalized: boolean | undefined;
@@ -476,9 +483,10 @@ export type NormalizationRetryResult = {
 /** Gate 006-C: a claimed legacy entry is not re-claimed by another sweep / window within this lease. */
 export const LEGACY_NORMALIZATION_CLAIM_LEASE_MS = 60_000;
 
+/** Report ordering only (the store owns the epoch rules): a non-epoch value sorts as never checked. */
 function legacyCheckSeq(e: ShiftCloseIntentEntry): number {
   const v = e.syncStateNormalizationCheckSeq;
-  return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 0;
+  return isValidLegacyClaimEpoch(v) ? v : 0;
 }
 
 /**
@@ -586,8 +594,14 @@ async function retryNormalizationsDetailed(
   }
   for (const entry of legacy) {
     // The claim just committed with THIS owner and the entry's new epoch.
-    const fence = { owner, epoch: legacyCheckSeq(entry) };
-    results.push({ shiftId: entry.shiftId, ...(await retryNormalization(entry, deps, fence)) });
+    // Gate 008-A: a claimed record that does not carry exactly that fence is
+    // not this sweep's claim — read / write nothing for it.
+    const epoch = entry.syncStateNormalizationCheckSeq;
+    if (entry.syncStateNormalizationClaimOwner !== owner || !isValidLegacyClaimEpoch(epoch)) {
+      results.push({ shiftId: entry.shiftId, outcome: 'claim_failed' });
+      continue;
+    }
+    results.push({ shiftId: entry.shiftId, ...(await retryNormalization(entry, deps, { owner, epoch })) });
   }
   return { journalReadable: true, results };
 }
@@ -601,8 +615,11 @@ function newClaimOwnerToken(): string {
 
 type FencedStep = 'ok' | 'claim_lost' | 'failed';
 
-/** `ok` ONLY when the store confirmed it (a fail-soft `ok: false` or a throw is `failed`). */
-async function fencedStep(run: () => Promise<CloseIntentResult<string>>, okValue: string): Promise<FencedStep> {
+/**
+ * `ok` ONLY when the store confirmed it (a fail-soft `ok: false` — including a
+ * gate 008-A typed refusal of an invalid fence / corrupt epoch — or a throw is `failed`).
+ */
+async function fencedStep(run: () => Promise<LegacyClaimResult<string>>, okValue: string): Promise<FencedStep> {
   try {
     const r = await run();
     if (!r.ok) return 'failed';
@@ -887,19 +904,26 @@ export async function recoverOnlineCloseAttempt(
 export async function recoverOnlineCloseAttempts(
   deps: Pick<ReconcileShiftCloseIntentDeps, 'journal' | 'readConfirmation' | 'deviceId'>,
 ): Promise<OnlineCloseRecoveryResult[]> {
+  return (await recoverOnlineCloseAttemptsDetailed(deps)).results.map(({ result }) => result);
+}
+
+/** Gate 008-B — the same pass, keeping whether the attempts could be listed and each attempt's branch. */
+async function recoverOnlineCloseAttemptsDetailed(
+  deps: Pick<ReconcileShiftCloseIntentDeps, 'journal' | 'readConfirmation' | 'deviceId'>,
+): Promise<{ readable: boolean; results: Array<{ attempt: OnlineCloseAttemptRecord; result: OnlineCloseRecoveryResult }> }> {
   let listed: Awaited<ReturnType<ReconcileShiftCloseIntentDeps['journal']['listOnlineCloseAttempts']>>;
   try {
     listed = await deps.journal.listOnlineCloseAttempts();
   } catch {
-    return [];
+    return { readable: false, results: [] };
   }
-  if (!listed.ok) return [];
-  const results: OnlineCloseRecoveryResult[] = [];
+  if (!listed.ok) return { readable: false, results: [] };
+  const results: Array<{ attempt: OnlineCloseAttemptRecord; result: OnlineCloseRecoveryResult }> = [];
   for (const attempt of listed.value) {
     if (attempt.deviceId !== deps.deviceId) continue;
-    results.push(await recoverOnlineCloseAttempt(attempt, deps));
+    results.push({ attempt, result: await recoverOnlineCloseAttempt(attempt, deps) });
   }
-  return results;
+  return { readable: true, results };
 }
 
 /**
@@ -914,6 +938,10 @@ export async function recoverOnlineCloseAttempts(
  * carries the W4 normalization outcome of the same sweep, so a caller can
  * observe `claim_failed` / `local_write_failed` / an unreadable journal and
  * the count still owed instead of losing them. Joined callers share it.
+ * Gate 008-B — that summary is `ok` ONLY when nothing needs attention (no
+ * unconfirmed / failed pending close, no owed or failed W4, no local write
+ * failure, final state readable); otherwise `unresolved` / `degraded` /
+ * `journal_unreadable` with the affected closes scoped in `attention`.
  */
 export function runShiftCloseReconciliationSweep(
   deps: ReconcileShiftCloseIntentDeps,
@@ -943,22 +971,126 @@ const SWEEP_JOIN_MAX_MS = 60_000;
 const sweepsInFlight = new Map<string, { promise: Promise<ShiftCloseSweepResult>; startedAt: number }>();
 
 /**
- * Gate 007-C — the W4 normalization outcome of one sweep.
- *   status  `ok`                  every step reached a truthful, persisted state (or was left to retry)
- *           `degraded`            a claim / local record could not be persisted (`claim_failed`,
- *                                 `local_write_failed`, a pending-close W4 whose `done` did not
- *                                 persist) or the owed count could not be read
- *           `journal_unreadable`  the close-intent journal could not be listed: nothing was checked
- *   results  the retry results (outstanding + claimed legacy), with `remoteW4` per API attempt
- *   counts   per outcome
- *   owed     after the sweep: this device's `synced` closes whose W4 is still `outstanding` or never
- *            checked (legacy); `null` when it could not be read
+ * Gate 008-B — what still needs attention after a sweep, scoped to the close
+ * it concerns (`shiftId` / `branchId` of THIS device's journal entry or
+ * attempt; `null` / `null` = scoped-unknown: the failing step could not
+ * identify the affected shift, and none is invented). Identifiers only —
+ * no totals, staff or secrets.
+ *
+ * Pending closes (`local_closed_pending`):
+ *   close_unconfirmed           the server doc is not (yet) a resolved close of it — still pending
+ *   close_unreachable           its confirmation read failed
+ *   close_journal_write_failed  server proof obtained, but `markSynced` / the manual-attention
+ *                               transition did NOT persist (degraded)
+ *   close_pending               still pending after the sweep (not evaluated by it)
+ * Confirmed closes whose W4 is owed (`synced`, `outstanding` / never checked):
+ *   w4_failed                   a remote W4 API attempt failed / was rejected — retried later
+ *   done_unrecorded             W4 landed but the local `done` did not persist (degraded)
+ *   claim_failed                legacy claim / its re-verification could not be persisted (degraded)
+ *   local_write_failed          a terminal record did not persist (degraded)
+ *   claim_lost                  another sweep holds it and has not settled it yet
+ *   manual_attention            the doc's `syncState` is malformed — never written
+ *   retry_later                 not settled (read failed, doc not resolved, no normalizer)
+ *   w4_owed                     still owed after the sweep (not evaluated by it: batch bound, leased)
+ * Online close attempts:
+ *   attempt_unreachable         its read / journal write failed
+ *   attempt_manual_attention    retained for investigation (B2.1 / 007-B refusals)
+ * Scoped-unknown (degraded):
+ *   journal_unreadable          the close-intent journal could not be listed — nothing checked
+ *   owed_unreadable             the final journal state could not be read: work left is UNKNOWN
+ *   attempts_unreadable         the online close attempts could not be listed
+ */
+export type ShiftCloseAttentionCondition =
+  | 'close_unconfirmed'
+  | 'close_unreachable'
+  | 'close_journal_write_failed'
+  | 'close_pending'
+  | 'w4_failed'
+  | 'done_unrecorded'
+  | 'claim_failed'
+  | 'local_write_failed'
+  | 'claim_lost'
+  | 'manual_attention'
+  | 'retry_later'
+  | 'w4_owed'
+  | 'attempt_unreachable'
+  | 'attempt_manual_attention'
+  | 'journal_unreadable'
+  | 'owed_unreadable'
+  | 'attempts_unreadable';
+
+export type ShiftCloseAttention = {
+  shiftId: string | null;
+  branchId: string | null;
+  condition: ShiftCloseAttentionCondition;
+};
+
+/** Report order of the conditions (local durability failures first). */
+const ATTENTION_ORDER: readonly ShiftCloseAttentionCondition[] = [
+  'journal_unreadable',
+  'owed_unreadable',
+  'attempts_unreadable',
+  'claim_failed',
+  'local_write_failed',
+  'close_journal_write_failed',
+  'done_unrecorded',
+  'w4_failed',
+  'retry_later',
+  'claim_lost',
+  'manual_attention',
+  'w4_owed',
+  'close_unreachable',
+  'close_unconfirmed',
+  'close_pending',
+  'attempt_unreachable',
+  'attempt_manual_attention',
+];
+
+/** Conditions that mean a local write / read FAILED (or the state is unknown): `degraded`. */
+const DEGRADED_CONDITIONS: ReadonlySet<ShiftCloseAttentionCondition> = new Set([
+  'owed_unreadable',
+  'attempts_unreadable',
+  'claim_failed',
+  'local_write_failed',
+  'close_journal_write_failed',
+  'done_unrecorded',
+]);
+
+/**
+ * Gate 007-C / 008-B — the reconciliation outcome of one sweep.
+ *   status   `ok`                  NOTHING needs attention: every pending close of this device was
+ *                                  confirmed (or settled), no W4 is owed, every local write persisted
+ *                                  and the final state was read — the only status a caller may show
+ *                                  as clean
+ *            `unresolved`          work remains but nothing failed locally: a close not yet
+ *                                  confirmed, a W4 that failed remotely / is still owed / is held by
+ *                                  another sweep — retried by the next trigger
+ *            `degraded`            a local write did not persist or a state is unknown
+ *            `journal_unreadable`  the close-intent journal could not be listed: nothing was checked
+ *   results   the W4 retry results (outstanding + claimed legacy), with `remoteW4` per API attempt
+ *   counts    per retry outcome
+ *   owed      after the sweep: this device's `synced` closes whose W4 is still `outstanding` or
+ *             never checked (legacy); `null` = unknown (never zero)
+ *   pendingCloses  after the sweep: this device's closes still `local_closed_pending`; `null` = unknown
+ *   closeCounts    per pending-close reconcile outcome of this sweep (`journal_write_failed` = an
+ *                  `unreachable` whose proof was obtained but whose local transition did not persist)
+ *   attempts  per online-close-attempt recovery outcome; `null` = the attempts could not be listed
+ *   attention every item above that needs attention, scoped (see {@link ShiftCloseAttention});
+ *             empty iff `status === 'ok'`
+ *   attempted / advanced  pending closes reconciled + W4 retries run / those whose close now needs
+ *             nothing (never counts a confirmed close whose W4 is still owed)
  */
 export type ShiftCloseNormalizationSummary = {
-  status: 'ok' | 'degraded' | 'journal_unreadable';
+  status: 'ok' | 'unresolved' | 'degraded' | 'journal_unreadable';
   results: NormalizationRetryResult[];
   counts: Partial<Record<NormalizationRetryOutcome, number>>;
   owed: number | null;
+  pendingCloses: number | null;
+  closeCounts: Partial<Record<ReconcileOutcome | 'journal_write_failed', number>>;
+  attempts: Partial<Record<OnlineCloseRecoveryOutcome, number>> | null;
+  attention: ShiftCloseAttention[];
+  attempted: number;
+  advanced: number;
 };
 
 export type ShiftCloseSweepResult = ReconcileShiftCloseIntentResult[] & {
@@ -970,45 +1102,123 @@ function sweepResult(results: ReconcileShiftCloseIntentResult[], normalization: 
   return Object.defineProperty(results, 'normalization', { value: normalization, enumerable: false }) as ShiftCloseSweepResult;
 }
 
+function attentionOf(summary: ShiftCloseNormalizationSummary | undefined): readonly ShiftCloseAttention[] {
+  return Array.isArray(summary?.attention) ? summary.attention : [];
+}
+
 /**
- * Gate 007-C — the one line a caller reports for a summary that needs
- * attention (`null` = nothing to report). Stable for an unchanged state, so a
- * caller can de-duplicate repeated reports.
+ * Gate 007-C / 008-B — the one line a caller reports for a summary that needs
+ * attention (`null` = nothing to report, ONLY for `status: 'ok'`): the count
+ * per condition, e.g. `claim_failed=2` or `w4_failed=1`; a scoped-unknown
+ * condition is its bare name (`journal_unreadable`). Never null for a status
+ * other than `ok`, so no caller can read unresolved work as clean.
  */
 export function shiftCloseNormalizationIssue(summary: ShiftCloseNormalizationSummary | undefined): string | null {
   if (!summary || summary.status === 'ok') return null;
+  const items = attentionOf(summary);
+  const parts: string[] = [];
+  for (const condition of ATTENTION_ORDER) {
+    const of = items.filter((a) => a.condition === condition);
+    if (of.length === 0) continue;
+    parts.push(of.every((a) => a.shiftId === null) ? condition : `${condition}=${of.length}`);
+  }
+  if (parts.length > 0) return parts.join(',');
+  // A summary without scoped items (not built by this module): its own fields.
   if (summary.status === 'journal_unreadable') return 'journal_unreadable';
-  const parts = (['claim_failed', 'local_write_failed'] as const)
-    .filter((o) => (summary.counts[o] ?? 0) > 0)
+  const legacy = (['claim_failed', 'local_write_failed'] as const)
+    .filter((o) => (summary.counts?.[o] ?? 0) > 0)
     .map((o) => `${o}=${summary.counts[o]}`);
-  if (summary.owed === null) parts.push('owed_unreadable');
-  return parts.length > 0 ? parts.join(',') : 'done_unrecorded';
+  if (summary.owed === null) legacy.push('owed_unreadable');
+  return legacy.length > 0 ? legacy.join(',') : summary.status;
 }
 
-async function countOwedNormalizations(deps: ReconcileShiftCloseIntentDeps): Promise<number | null> {
+/**
+ * Gate 008-B — a stable key of WHICH closes need attention and why (`null`
+ * iff nothing needs attention): the issue line plus every scoped item
+ * (`branch/shift:condition`, sorted). A caller de-duplicating repeated reports
+ * by this key reports again when the same count moves to another shift or
+ * branch, and stays quiet for an unchanged state.
+ */
+export function shiftCloseAttentionKey(summary: ShiftCloseNormalizationSummary | undefined): string | null {
+  const issue = shiftCloseNormalizationIssue(summary);
+  if (issue === null) return null;
+  const scoped = [...new Set(attentionOf(summary).map((a) => `${a.branchId ?? '?'}/${a.shiftId ?? '?'}:${a.condition}`))].sort();
+  return scoped.length > 0 ? `${issue}|${scoped.join(';')}` : issue;
+}
+
+type FinalJournalState = { owed: ShiftCloseIntentEntry[]; pending: ShiftCloseIntentEntry[] } | null;
+
+/** After the sweep: this device's owed (`synced`, W4 outstanding / never checked) and still-pending closes; `null` = unknown. */
+async function readFinalJournalState(deps: ReconcileShiftCloseIntentDeps): Promise<FinalJournalState> {
   try {
     const listed = await deps.journal.listCloseIntents();
     if (!listed.ok) return null;
-    return listed.value.filter(
-      (e) =>
-        e.status === 'synced' &&
-        e.deviceId === deps.deviceId &&
-        (e.syncStateNormalization === 'outstanding' || e.syncStateNormalization === undefined),
-    ).length;
+    const mine = listed.value.filter((e) => e.deviceId === deps.deviceId);
+    return {
+      owed: mine.filter(
+        (e) => e.status === 'synced' && (e.syncStateNormalization === 'outstanding' || e.syncStateNormalization === undefined),
+      ),
+      pending: mine.filter((e) => e.status === 'local_closed_pending'),
+    };
   } catch {
     return null;
   }
+}
+
+function pendingCloseCondition(r: ReconcileShiftCloseIntentResult): ShiftCloseAttentionCondition | null {
+  if (r.outcome === 'still_pending') return 'close_unconfirmed';
+  if (r.outcome === 'unreachable') return r.journalWriteFailed ? 'close_journal_write_failed' : 'close_unreachable';
+  if (r.outcome === 'confirmed') {
+    if (r.normalized === false) return 'w4_failed';
+    if (r.normalized === true && r.normalizationRecorded === false) return 'done_unrecorded';
+  }
+  return null;
+}
+
+function retryCondition(r: NormalizationRetryResult): ShiftCloseAttentionCondition | null {
+  switch (r.outcome) {
+    case 'claim_failed':
+    case 'local_write_failed':
+    case 'claim_lost':
+    case 'manual_attention':
+      return r.outcome;
+    case 'retry_later':
+      return r.remoteW4 === 'failed' ? 'w4_failed' : 'retry_later';
+    default:
+      return null;
+  }
+}
+
+function emptySummary(status: 'journal_unreadable', attention: ShiftCloseAttention[]): ShiftCloseNormalizationSummary {
+  return {
+    status,
+    results: [],
+    counts: {},
+    owed: null,
+    pendingCloses: null,
+    closeCounts: {},
+    attempts: null,
+    attention,
+    attempted: 0,
+    advanced: 0,
+  };
 }
 
 async function runSweepOnce(deps: ReconcileShiftCloseIntentDeps): Promise<ShiftCloseSweepResult> {
   // Recovery gate B2: first turn every prepared online close that DID commit
   // into its journal entry, so the loop below reconciles it (synced + Variant C)
   // exactly like any other pending close.
-  await recoverOnlineCloseAttempts(deps);
-  const listed = await deps.journal.listCloseIntents();
-  if (!listed.ok) {
-    return sweepResult([], { status: 'journal_unreadable', results: [], counts: {}, owed: null });
+  const recovered = await recoverOnlineCloseAttemptsDetailed(deps);
+  let listed: Awaited<ReturnType<ShiftCloseIntentJournal['listCloseIntents']>>;
+  try {
+    listed = await deps.journal.listCloseIntents();
+  } catch (err) {
+    listed = { ok: false, code: 'tx_failed', message: err instanceof Error ? err.message : String(err) };
   }
+  if (!listed.ok) {
+    return sweepResult([], emptySummary('journal_unreadable', [{ shiftId: null, branchId: null, condition: 'journal_unreadable' }]));
+  }
+  const branchOf = new Map(listed.value.map((e) => [e.shiftId, e.branchId] as const));
 
   const pending = listed.value.filter(
     (entry) => entry.status === 'local_closed_pending' && entry.deviceId === deps.deviceId,
@@ -1023,16 +1233,70 @@ async function runSweepOnce(deps: ReconcileShiftCloseIntentDeps): Promise<ShiftC
   const retried = await retryNormalizationsDetailed(deps, new Set(pending.map((e) => e.shiftId)));
   const counts: Partial<Record<NormalizationRetryOutcome, number>> = {};
   for (const r of retried.results) counts[r.outcome] = (counts[r.outcome] ?? 0) + 1;
-  const owed = retried.journalReadable ? await countOwedNormalizations(deps) : null;
-  const degraded =
-    (counts.claim_failed ?? 0) > 0 ||
-    (counts.local_write_failed ?? 0) > 0 ||
-    results.some((r) => r.normalized === true && r.normalizationRecorded === false) ||
-    owed === null;
+  const closeCounts: ShiftCloseNormalizationSummary['closeCounts'] = {};
+  for (const r of results) {
+    const key = r.journalWriteFailed ? 'journal_write_failed' : r.outcome;
+    closeCounts[key] = (closeCounts[key] ?? 0) + 1;
+  }
+  const attempts: Partial<Record<OnlineCloseRecoveryOutcome, number>> | null = recovered.readable ? {} : null;
+  for (const { result } of recovered.results) attempts![result.outcome] = (attempts![result.outcome] ?? 0) + 1;
+
+  if (!retried.journalReadable) {
+    return sweepResult(results, {
+      ...emptySummary('journal_unreadable', [{ shiftId: null, branchId: null, condition: 'journal_unreadable' }]),
+      closeCounts,
+      attempts,
+      attempted: results.length,
+    });
+  }
+
+  // Gate 008-B — remaining work is judged from the FINAL local journal state:
+  // an unresolved condition of this sweep is kept only while its close is
+  // still pending / owed there (another window may have settled it meanwhile);
+  // a local durability failure is always kept; an unreadable final state is
+  // itself reported (never read as "nothing owed").
+  const final = await readFinalJournalState(deps);
+  const stillOpen = final ? new Set([...final.owed, ...final.pending].map((e) => e.shiftId)) : null;
+  const attention: ShiftCloseAttention[] = [];
+  const add = (shiftId: string | null, branchId: string | null, condition: ShiftCloseAttentionCondition) => {
+    if (shiftId !== null && !DEGRADED_CONDITIONS.has(condition) && stillOpen && !stillOpen.has(shiftId)) return;
+    attention.push({ shiftId, branchId, condition });
+  };
+  for (const r of results) {
+    const condition = pendingCloseCondition(r);
+    if (condition) add(r.shiftId, branchOf.get(r.shiftId) ?? null, condition);
+  }
+  for (const r of retried.results) {
+    const condition = retryCondition(r);
+    if (condition) add(r.shiftId, branchOf.get(r.shiftId) ?? null, condition);
+  }
+  if (final) {
+    const named = new Set(attention.map((a) => a.shiftId));
+    for (const e of final.owed) if (!named.has(e.shiftId)) add(e.shiftId, e.branchId, 'w4_owed');
+    for (const e of final.pending) if (!named.has(e.shiftId)) add(e.shiftId, e.branchId, 'close_pending');
+  } else {
+    add(null, null, 'owed_unreadable');
+  }
+  if (!recovered.readable) add(null, null, 'attempts_unreadable');
+  for (const { attempt, result } of recovered.results) {
+    if (result.outcome === 'unreachable') add(attempt.shiftId, attempt.branchId, 'attempt_unreachable');
+    if (result.outcome === 'manual_attention') add(attempt.shiftId, attempt.branchId, 'attempt_manual_attention');
+  }
+
+  const status: ShiftCloseNormalizationSummary['status'] =
+    attention.length === 0 ? 'ok' : attention.some((a) => DEGRADED_CONDITIONS.has(a.condition)) ? 'degraded' : 'unresolved';
+  const needsAttention = new Set(attention.map((a) => a.shiftId));
+  const evaluated = [...results.map((r) => r.shiftId), ...retried.results.map((r) => r.shiftId)];
   return sweepResult(results, {
-    status: !retried.journalReadable ? 'journal_unreadable' : degraded ? 'degraded' : 'ok',
+    status,
     results: retried.results,
     counts,
-    owed,
+    owed: final ? final.owed.length : null,
+    pendingCloses: final ? final.pending.length : null,
+    closeCounts,
+    attempts,
+    attention,
+    attempted: evaluated.length,
+    advanced: final ? evaluated.filter((id) => !needsAttention.has(id)).length : 0,
   });
 }

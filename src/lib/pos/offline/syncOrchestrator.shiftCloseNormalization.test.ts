@@ -9,6 +9,8 @@ const fake = vi.hoisted(() => ({
   /** Authoritative legacy closed docs (pending W4) by shift id. */
   docs: new Map<string, Record<string, unknown>>(),
   w4Attempts: [] as string[],
+  /** Gate 008-B: the next N W4 attempts throw (a failed remote W4). */
+  w4FailuresLeft: 0,
   /** Journal method overrides applied to every journal the orchestrator creates. */
   journalOverride: {} as Record<string, unknown>,
 }));
@@ -29,6 +31,10 @@ vi.mock('../shiftService', async (importOriginal) => {
     },
     normalizeShiftCloseSyncState: async (id: string) => {
       fake.w4Attempts.push(id);
+      if (fake.w4FailuresLeft > 0) {
+        fake.w4FailuresLeft -= 1;
+        throw Object.assign(new Error('W4 unavailable'), { code: 'unavailable' });
+      }
       const d = fake.docs.get(id)!;
       if (d.syncState === 'synced') return 'already_synced' as const;
       fake.docs.set(id, { ...d, syncState: 'synced' });
@@ -154,6 +160,7 @@ beforeEach(async () => {
   await deleteDb();
   fake.docs.clear();
   fake.w4Attempts.length = 0;
+  fake.w4FailuresLeft = 0;
   fake.journalOverride = {};
 });
 
@@ -180,6 +187,76 @@ describe('sync orchestrator shift_intent channel — W4 normalization outcome (g
     const { state, shift } = await runCycle();
     expect(shift).toMatchObject({ status: 'ok', itemsAttempted: 2, itemsAdvanced: 2 });
     expect(fake.w4Attempts.sort()).toEqual(['L0', 'L1']);
+    expect(typeof lastSyncCheckAtMs(state)).toBe('number');
+  });
+});
+
+/** Gate 008-B: one journaled `local_closed_pending` close of DEV1 whose authoritative doc is closed with `syncState: 'pending'`. */
+async function seedPendingClose(shiftId: string) {
+  const id = '0000000a-4444-4444-8444-444444444444';
+  const journal = createShiftCloseIntentJournal({ generateCloseCorrelationId: () => id });
+  const created = await journal.upsertCloseIntent({
+    shiftId, branchId: 'LDP-001', staffId: 'staff-1', staffName: 'ทดสอบ', startingCash: 500, expectedCash: 1000,
+    expectedQr: 0, expectedKbank: 0, expectedCard: 0, expectedCredit: 0, payInTotal: 0, payOutTotal: 0, totalBills: 3,
+    actualCashCount: 1500, variance: 0, note: '', deviceId: 'DEV1',
+  });
+  if (!created.ok) throw new Error('seed');
+  fake.docs.set(shiftId, {
+    status: 'closed', closedAt: { toDate: () => CLOSED_AT }, syncState: 'pending', deviceId: 'DEV1', branchId: 'LDP-001',
+    staffId: 'staff-1', startingCash: 500, expectedCash: 1000, expectedQr: 0, expectedKbank: 0, expectedCard: 0, expectedCredit: 0,
+    payInTotal: 0, payOutTotal: 0, totalBills: 3, actualCashCount: 1500, variance: 0, note: '', closeCorrelationId: id,
+  });
+}
+
+async function entryOf(shiftId: string) {
+  const got = await createShiftCloseIntentJournal().getCloseIntent(shiftId);
+  if (!got.ok) throw new Error('read');
+  return got.value;
+}
+
+describe('sync orchestrator shift_intent channel — no clean channel with unfinished close work (gate 008-B)', () => {
+  test('confirmed close whose remote W4 THROWS → channel FAILED (w4_failed), no clean last check, nothing counted as advanced; the next cycle W4s once → ok with a clean last check', async () => {
+    await seedPendingClose('S1');
+    fake.w4FailuresLeft = 1;
+    const first = await runCycle();
+    expect(await entryOf('S1')).toMatchObject({ status: 'synced', syncStateNormalization: 'outstanding' });
+    // Parent: { status: 'ok' } and a numeric last sync check while the W4 is still owed.
+    expect(first.shift).toMatchObject({ status: 'failed', errorClass: 'shift_close_normalization:w4_failed=1', itemsAttempted: 1, itemsAdvanced: 0 });
+    expect(first.state.lastErrorAtMs).not.toBeNull();
+    expect(lastSyncCheckAtMs(first.state)).toBeNull();
+
+    __resetSyncOrchestratorForTests();
+    const second = await runCycle();
+    expect(second.shift).toMatchObject({ status: 'ok', itemsAttempted: 1, itemsAdvanced: 1 });
+    expect(typeof lastSyncCheckAtMs(second.state)).toBe('number');
+    expect(fake.w4Attempts).toEqual(['S1', 'S1']);
+    expect(fake.docs.get('S1')?.syncState).toBe('synced');
+    expect((await entryOf('S1'))?.syncStateNormalization).toBe('done');
+  });
+
+  test('server proof valid but markSynced does not persist → NO W4, channel FAILED (close_journal_write_failed) even though the synced-only owed count is 0; no clean last check', async () => {
+    await seedPendingClose('S1');
+    fake.journalOverride = { markSynced: async () => ({ ok: false, code: 'unavailable', message: 'IndexedDB unavailable' }) };
+    const { state, shift } = await runCycle();
+    // Parent: { status: 'ok' }.
+    expect(shift).toMatchObject({ status: 'failed', errorClass: 'shift_close_normalization:close_journal_write_failed=1', itemsAdvanced: 0 });
+    expect(lastSyncCheckAtMs(state)).toBeNull();
+    expect(fake.w4Attempts).toEqual([]);
+    expect((await entryOf('S1'))?.status).toBe('local_closed_pending');
+  });
+
+  test('the journal cannot be listed → channel FAILED (journal_unreadable), no clean last check, nothing read or W4-ed', async () => {
+    await seedPendingClose('S1');
+    fake.journalOverride = { listCloseIntents: async () => ({ ok: false, code: 'unavailable' }) };
+    const { state, shift } = await runCycle();
+    expect(shift).toMatchObject({ status: 'failed', errorClass: 'shift_close_normalization:journal_unreadable' });
+    expect(lastSyncCheckAtMs(state)).toBeNull();
+    expect(fake.w4Attempts).toEqual([]);
+  });
+
+  test('no-op healthy device (nothing journaled) → ok with a clean last check — distinct from the confirmed-but-W4-pending cycle above', async () => {
+    const { state, shift } = await runCycle();
+    expect(shift).toMatchObject({ status: 'ok', itemsAttempted: 0, itemsAdvanced: 0 });
     expect(typeof lastSyncCheckAtMs(state)).toBe('number');
   });
 });

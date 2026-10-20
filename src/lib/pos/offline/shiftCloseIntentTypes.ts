@@ -78,8 +78,14 @@ export type ShiftCloseIntentEntry = ShiftCloseIntentSnapshot & {
    * number, never a clock): written on a pre-B2.2 `synced` entry
    * (normalization absent) by the atomic legacy CLAIM transaction, BEFORE its
    * server read, so later sweeps pick the least-recently-checked entries first
-   * (round robin). A missing / non-finite / non-positive value reads as "never
-   * checked"; never business data.
+   * (round robin). Never business data.
+   * Gate 008-A — also the claim's fencing epoch, so it must be a positive SAFE
+   * integer ({@link isValidLegacyClaimEpoch}). ABSENT = never checked (an
+   * ordinary pre-006 entry, claimed normally). PRESENT but anything else (NaN,
+   * ±Infinity, ≤ 0, fractional, > MAX_SAFE_INTEGER such as MAX_VALUE, a
+   * string, null) = corrupt: the device's legacy claim is refused
+   * (`epoch_invalid`) instead of guessing a successor. The entry itself stays
+   * readable (it is not part of {@link ShiftCloseIntentEntry} validation).
    */
   syncStateNormalizationCheckSeq?: number;
   /**
@@ -94,6 +100,10 @@ export type ShiftCloseIntentEntry = ShiftCloseIntentSnapshot & {
    * fencing epoch) it forms the {@link LegacyNormalizationClaimFence}: once a
    * newer claim replaced either, the older sweep can no longer renew the claim
    * nor record a result. Malformed / absent ⇒ no sweep holds it.
+   * Gate 008-A: every claim REPLACES it with the claiming sweep's own
+   * nonempty token (never inherited from the previous holder); a present
+   * malformed value is simply overwritten by the next claim and can never
+   * satisfy a fence.
    */
   syncStateNormalizationClaimOwner?: string;
 };
@@ -101,11 +111,41 @@ export type ShiftCloseIntentEntry = ShiftCloseIntentSnapshot & {
 /** Gate 007-C — proof that a sweep still holds a legacy W4 claim: its owner token and the claim epoch (check sequence). */
 export type LegacyNormalizationClaimFence = { owner: string; epoch: number };
 
+/** Gate 008-A — upper bound of a claim owner token (a sweep id, not data). */
+export const LEGACY_CLAIM_OWNER_MAX_LENGTH = 256;
+
+/** Gate 008-A — a fencing epoch: a positive safe integer (so `epoch + 1` is exact). */
+export function isValidLegacyClaimEpoch(v: unknown): v is number {
+  return typeof v === 'number' && Number.isSafeInteger(v) && v >= 1;
+}
+
+/** Gate 008-A — a claim owner: a nonblank string of bounded length. */
+export function isValidLegacyClaimOwner(v: unknown): v is string {
+  return typeof v === 'string' && v.trim().length > 0 && v.length <= LEGACY_CLAIM_OWNER_MAX_LENGTH;
+}
+
+/**
+ * Gate 008-A — why a legacy claim / renew / fenced record refused (nothing
+ * was written, so no legacy server read or W4 may follow):
+ *   owner_invalid    the caller's owner token is missing / blank / not a bounded string
+ *   input_invalid    a non-finite / non-positive lease, a negative / non-integer limit
+ *   fence_invalid    the caller's fence is not a valid owner + safe-integer epoch
+ *   epoch_invalid    a legacy entry of this device carries a PRESENT corrupt check sequence
+ *                    (claim) — or the claimed entry's stored epoch / owner is corrupt (renew / record)
+ *   epoch_exhausted  the highest epoch is MAX_SAFE_INTEGER: no exact strictly larger successor exists
+ */
+export type LegacyClaimRefusal = 'owner_invalid' | 'input_invalid' | 'fence_invalid' | 'epoch_invalid' | 'epoch_exhausted';
+
 export type CloseIntentErrorCode = 'unavailable' | 'quota' | 'conflict' | 'not_found' | 'tx_failed';
 
 export type CloseIntentResult<T> =
   | { ok: true; value: T }
   | { ok: false; code: CloseIntentErrorCode; message?: string };
+
+/** Gate 008-A — a legacy claim-path result: a store result, or a typed refusal (`conflict` + `reason`). */
+export type LegacyClaimResult<T> =
+  | CloseIntentResult<T>
+  | { ok: false; code: 'conflict'; reason: LegacyClaimRefusal; message: string };
 
 /**
  * OBS-B2 — safe parallel caller-visible pointer-repair diagnostic.

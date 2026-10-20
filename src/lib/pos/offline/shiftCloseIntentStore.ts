@@ -3,6 +3,8 @@ import type {
   CloseIntentResult,
   FinalizeOnlineCloseRefusal,
   FinalizeOnlineCloseResult,
+  LegacyClaimRefusal,
+  LegacyClaimResult,
   LegacyNormalizationClaimFence,
   OnlineCloseAttemptIdentity,
   OnlineCloseAttemptRecord,
@@ -15,7 +17,11 @@ import type {
   PrepareOnlineCloseResult,
   SyncStateNormalization,
 } from './shiftCloseIntentTypes';
-import { SHIFT_CLOSE_INTENT_STALE_AGE_MS } from './shiftCloseIntentTypes';
+import {
+  SHIFT_CLOSE_INTENT_STALE_AGE_MS,
+  isValidLegacyClaimEpoch,
+  isValidLegacyClaimOwner,
+} from './shiftCloseIntentTypes';
 import {
   getCommittedDurableStore,
   nativeTxnGet,
@@ -534,17 +540,45 @@ function sameAttemptIdentity(a: OnlineCloseAttemptIdentity, b: OnlineCloseAttemp
 }
 
 /**
- * Gate 007-C — `raw` is a valid, still-unrecorded legacy (`synced`, no
- * normalization) entry whose claim is EXACTLY `fence` (owner and epoch).
+ * Gate 007-C — is `raw` a valid, still-unrecorded legacy (`synced`, no
+ * normalization) entry whose claim is EXACTLY `fence` (owner and epoch)?
+ * Gate 008-A — fail closed: the caller's fence must itself be a valid owner +
+ * safe-integer epoch (`fence_invalid`), and a stored claim whose epoch or
+ * owner is PRESENT but corrupt is never compared (`epoch_invalid`), so a
+ * corrupt row can neither be renewed nor acknowledged. `lost` = a valid entry
+ * that this fence no longer holds (newer claim, or already recorded).
  */
-function holdsLegacyClaim(raw: unknown, fence: LegacyNormalizationClaimFence): raw is Record<string, unknown> {
-  if (!isCloseIntentEntry(raw)) return false;
-  return (
-    raw.status === 'synced' &&
-    !('syncStateNormalization' in raw) &&
-    raw.syncStateNormalizationCheckSeq === fence.epoch &&
-    raw.syncStateNormalizationClaimOwner === fence.owner
-  );
+function legacyClaimHold(raw: unknown, fence: LegacyNormalizationClaimFence): 'held' | 'lost' | LegacyClaimRefusal {
+  if (!isPlainRecord(fence) || !isValidLegacyClaimOwner(fence.owner) || !isValidLegacyClaimEpoch(fence.epoch)) {
+    return 'fence_invalid';
+  }
+  if (!isCloseIntentEntry(raw)) return 'lost';
+  if (raw.status !== 'synced' || 'syncStateNormalization' in raw) return 'lost';
+  const stored = raw as unknown as Record<string, unknown>;
+  if (
+    ('syncStateNormalizationCheckSeq' in stored && !isValidLegacyClaimEpoch(stored.syncStateNormalizationCheckSeq)) ||
+    ('syncStateNormalizationClaimOwner' in stored && !isValidLegacyClaimOwner(stored.syncStateNormalizationClaimOwner))
+  ) {
+    return 'epoch_invalid';
+  }
+  return stored.syncStateNormalizationCheckSeq === fence.epoch && stored.syncStateNormalizationClaimOwner === fence.owner
+    ? 'held'
+    : 'lost';
+}
+
+/**
+ * Gate 008-A — the persisted check sequence of a legacy record: `0` when
+ * ABSENT (never checked — ordinary migration), the value when it is a valid
+ * epoch, `null` when PRESENT but corrupt (never coerced to "never checked").
+ */
+function persistedLegacyEpoch(raw: Record<string, unknown>): number | null {
+  if (!('syncStateNormalizationCheckSeq' in raw)) return 0;
+  const v = raw.syncStateNormalizationCheckSeq;
+  return isValidLegacyClaimEpoch(v) ? v : null;
+}
+
+function claimRefused<T>(reason: LegacyClaimRefusal, message: string): LegacyClaimResult<T> {
+  return { ok: false, code: 'conflict', reason, message };
 }
 
 function isCloseIntentEntry(v: unknown): v is ShiftCloseIntentEntry {
@@ -1055,15 +1089,24 @@ export type ShiftCloseIntentJournal = {
    * and the claim time; return them. Touches no other field (not even
    * `updatedAtLocal`). Any failure → nothing is claimed (`ok: false`), and the
    * caller checks nothing.
+   *
+   * Gate 008-A — the claim is a FENCE: `owner` is mandatory and validated at
+   * runtime (`owner_invalid`, before any transaction); every claimed record is
+   * stamped with THAT owner (never the previous holder's) and the new epoch
+   * `max + 1`, where `max` covers every legacy entry of this device and must
+   * be a safe integer below MAX_SAFE_INTEGER (`epoch_exhausted`). A PRESENT
+   * corrupt check sequence on any of those entries refuses the whole claim
+   * (`epoch_invalid`): no successor is guessed, nothing is reset or reused.
+   * Every refusal commits nothing.
    */
   claimLegacyNormalizationChecks: (input: {
     deviceId: string;
     skipShiftIds: readonly string[];
     limit: number;
     leaseMs: number;
-    /** Gate 007-C — the claiming sweep's token, stamped beside the new epoch (the check sequence). */
-    owner?: string;
-  }) => Promise<CloseIntentResult<ShiftCloseIntentEntry[]>>;
+    /** Gate 007-C / 008-A — the claiming sweep's own nonblank token, stamped beside the new epoch. */
+    owner: string;
+  }) => Promise<LegacyClaimResult<ShiftCloseIntentEntry[]>>;
   /**
    * Gate 007-C — in one readwrite transaction: if the legacy entry is still
    * unrecorded and still carries `fence` (owner AND epoch), restamp the claim
@@ -1071,23 +1114,26 @@ export type ShiftCloseIntentJournal = {
    * `claim_lost` (a newer claim took it, or its result was already recorded).
    * An expired claim that nobody replaced is still owned (only a claim changes
    * the epoch), so wall-clock jumps cannot transfer ownership by themselves.
+   * Gate 008-A: an invalid fence (`fence_invalid`) or a corrupt stored
+   * epoch / owner (`epoch_invalid`) is a refusal, nothing written.
    */
   renewLegacyNormalizationClaim: (
     shiftId: string,
     fence: LegacyNormalizationClaimFence,
-  ) => Promise<CloseIntentResult<'owned' | 'claim_lost'>>;
+  ) => Promise<LegacyClaimResult<'owned' | 'claim_lost'>>;
   /**
    * Gate 007-C — the fenced terminal record of a CLAIMED legacy check: writes
    * `normalization` only if the entry is the `synced` close carrying
    * `closeCorrelationId`, has no normalization yet, and still carries `fence`
    * → `recorded`; otherwise nothing is written → `claim_lost`.
+   * Gate 008-A: refusals as for the renew, nothing written.
    */
   recordLegacyNormalization: (
     shiftId: string,
     closeCorrelationId: string | null,
     normalization: SyncStateNormalization,
     fence: LegacyNormalizationClaimFence,
-  ) => Promise<CloseIntentResult<'recorded' | 'claim_lost'>>;
+  ) => Promise<LegacyClaimResult<'recorded' | 'claim_lost'>>;
   markRejectedManualAttention: (
     shiftId: string,
     reason: string,
@@ -1214,6 +1260,21 @@ async function runFinalizeStore(
       return { ok: false, code: 'unavailable', message: 'IndexedDB unavailable' };
     }
     return { ok: false, code: 'tx_failed', message: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/** {@link runStore} for the legacy claim paths, whose refusals carry a typed reason. */
+async function runClaimStore<T>(
+  store: ShiftCloseIntentKvStore | undefined,
+  fn: (store: ShiftCloseIntentKvStore) => Promise<LegacyClaimResult<T>>,
+): Promise<LegacyClaimResult<T>> {
+  if (!store) return unavailable<T>();
+  try {
+    return await fn(store);
+  } catch (err) {
+    if (isQuotaError(err)) return quota<T>();
+    if (err instanceof Error && err.message === 'IndexedDB unavailable') return unavailable<T>();
+    return txFailed<T>(err instanceof Error ? err.message : String(err));
   }
 }
 
@@ -1376,75 +1437,109 @@ function buildJournalApi(
         }),
       ),
 
-    claimLegacyNormalizationChecks: ({ deviceId, skipShiftIds, limit, leaseMs, owner }) =>
-      runStore(store, (s) =>
-        s.transact(['shiftCloseIntents'], 'readwrite', async (txn): Promise<CloseIntentResult<ShiftCloseIntentEntry[]>> => {
+    claimLegacyNormalizationChecks: (input) => {
+      // Gate 008-A: validated BEFORE any transaction — a call without a usable
+      // owner can never stamp (or inherit) a claim.
+      const { deviceId, skipShiftIds, limit, leaseMs, owner } = (isPlainRecord(input) ? input : {}) as Partial<typeof input>;
+      if (!isValidLegacyClaimOwner(owner)) {
+        return Promise.resolve(claimRefused<ShiftCloseIntentEntry[]>('owner_invalid', 'A legacy W4 claim needs a nonblank owner token.'));
+      }
+      if (
+        typeof deviceId !== 'string' ||
+        !Array.isArray(skipShiftIds) ||
+        !Number.isSafeInteger(limit) || (limit as number) < 0 ||
+        typeof leaseMs !== 'number' || !Number.isFinite(leaseMs) || leaseMs <= 0
+      ) {
+        return Promise.resolve(claimRefused<ShiftCloseIntentEntry[]>('input_invalid', 'Invalid legacy W4 claim input.'));
+      }
+      return runClaimStore(store, (s) =>
+        s.transact(['shiftCloseIntents'], 'readwrite', async (txn): Promise<LegacyClaimResult<ShiftCloseIntentEntry[]>> => {
           const nowMs = now();
           const skip = new Set(skipShiftIds);
-          const legacy: Array<{ raw: Record<string, unknown>; entry: ShiftCloseIntentEntry }> = [];
+          const legacy: Array<{ raw: Record<string, unknown>; entry: ShiftCloseIntentEntry; seq: number }> = [];
+          let corrupt = 0;
           for (const r of await txn.getAll<unknown>('shiftCloseIntents')) {
             if (!isCloseIntentEntry(r)) continue;
             const raw = r as unknown as Record<string, unknown>;
             if ('syncStateNormalization' in raw) continue;
             const entry = normalizeCloseIntentEntry(raw);
             if (entry.status !== 'synced' || entry.deviceId !== deviceId) continue;
-            legacy.push({ raw, entry });
+            const seq = persistedLegacyEpoch(raw);
+            if (seq === null) {
+              corrupt += 1;
+              continue;
+            }
+            legacy.push({ raw, entry, seq });
           }
-          const seqOf = (e: ShiftCloseIntentEntry) => {
-            const v = e.syncStateNormalizationCheckSeq;
-            return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 0;
-          };
+          // Gate 008-A: the epoch domain is every legacy entry of this device.
+          // A corrupt member means no successor can be PROVEN larger than an
+          // epoch some older holder may still carry — refuse, commit nothing.
+          if (corrupt > 0) {
+            return claimRefused('epoch_invalid', `${corrupt} legacy close-intent(s) carry a corrupt claim epoch.`);
+          }
+          const maxSeq = legacy.reduce((max, { seq }) => Math.max(max, seq), 0);
+          if (maxSeq >= Number.MAX_SAFE_INTEGER) {
+            return claimRefused('epoch_exhausted', 'The legacy claim epoch cannot be advanced exactly.');
+          }
+          const nextSeq = maxSeq + 1;
           const leased = (e: ShiftCloseIntentEntry) => {
             const at = e.syncStateNormalizationClaimedAtLocal;
             // A claim time in the future (clock moved back) never extends the lease.
             return typeof at === 'number' && Number.isFinite(at) && nowMs >= at && nowMs - at < leaseMs;
           };
-          const nextSeq = legacy.reduce((max, { entry }) => Math.max(max, seqOf(entry)), 0) + 1;
           const selected = legacy
             .filter(({ entry }) => !skip.has(entry.shiftId) && !leased(entry))
             .sort(
               (a, b) =>
-                seqOf(a.entry) - seqOf(b.entry) ||
+                a.seq - b.seq ||
                 b.entry.closedAtLocal - a.entry.closedAtLocal ||
                 (a.entry.shiftId < b.entry.shiftId ? -1 : a.entry.shiftId > b.entry.shiftId ? 1 : 0),
             )
-            .slice(0, Math.max(0, limit));
+            .slice(0, limit as number);
           const claimed: ShiftCloseIntentEntry[] = [];
           for (const { raw, entry } of selected) {
-            // Gate 007-C: nextSeq exceeds this entry's own seq, so every claim of
-            // an entry carries a NEW epoch; an older claim's fence no longer matches.
+            // Gate 007-C / 008-A: nextSeq is a safe integer strictly above this
+            // entry's own epoch, and the owner is THIS sweep's (always written,
+            // never spread from the previous holder) — an older fence can no
+            // longer match either field.
             const next = {
               ...raw,
               syncStateNormalizationCheckSeq: nextSeq,
               syncStateNormalizationClaimedAtLocal: nowMs,
-              ...(owner !== undefined ? { syncStateNormalizationClaimOwner: owner } : {}),
+              syncStateNormalizationClaimOwner: owner,
             };
             await txn.put('shiftCloseIntents', entry.shiftId, next);
             claimed.push(normalizeCloseIntentEntry(next));
           }
           return { ok: true, value: claimed };
         }),
-      ),
+      );
+    },
 
     renewLegacyNormalizationClaim: (shiftId, fence) =>
-      runStore(store, (s) =>
-        s.transact(['shiftCloseIntents'], 'readwrite', async (txn): Promise<CloseIntentResult<'owned' | 'claim_lost'>> => {
+      runClaimStore(store, (s) =>
+        s.transact(['shiftCloseIntents'], 'readwrite', async (txn): Promise<LegacyClaimResult<'owned' | 'claim_lost'>> => {
           const raw = await txn.get<unknown>('shiftCloseIntents', shiftId);
-          if (!holdsLegacyClaim(raw, fence)) return { ok: true, value: 'claim_lost' };
-          await txn.put('shiftCloseIntents', shiftId, { ...raw, syncStateNormalizationClaimedAtLocal: now() });
+          const hold = legacyClaimHold(raw, fence);
+          if (hold === 'lost') return { ok: true, value: 'claim_lost' };
+          if (hold !== 'held') return claimRefused(hold, `Legacy W4 claim of shift "${shiftId}" cannot be verified.`);
+          await txn.put('shiftCloseIntents', shiftId, { ...(raw as Record<string, unknown>), syncStateNormalizationClaimedAtLocal: now() });
           return { ok: true, value: 'owned' };
         }),
       ),
 
     recordLegacyNormalization: (shiftId, closeCorrelationId, normalization, fence) =>
-      runStore(store, (s) =>
-        s.transact(['shiftCloseIntents'], 'readwrite', async (txn): Promise<CloseIntentResult<'recorded' | 'claim_lost'>> => {
+      runClaimStore(store, (s) =>
+        s.transact(['shiftCloseIntents'], 'readwrite', async (txn): Promise<LegacyClaimResult<'recorded' | 'claim_lost'>> => {
           const raw = await txn.get<unknown>('shiftCloseIntents', shiftId);
-          if (!holdsLegacyClaim(raw, fence)) return { ok: true, value: 'claim_lost' };
-          if (normalizeCloseIntentEntry(raw).closeCorrelationId !== closeCorrelationId) {
+          const hold = legacyClaimHold(raw, fence);
+          if (hold === 'lost') return { ok: true, value: 'claim_lost' };
+          if (hold !== 'held') return claimRefused(hold, `Legacy W4 claim of shift "${shiftId}" cannot be verified.`);
+          const held = raw as Record<string, unknown>;
+          if (normalizeCloseIntentEntry(held).closeCorrelationId !== closeCorrelationId) {
             return conflict(`Close-intent for shift "${shiftId}" is not this synced close.`);
           }
-          await txn.put('shiftCloseIntents', shiftId, { ...raw, syncStateNormalization: normalization, updatedAtLocal: now() });
+          await txn.put('shiftCloseIntents', shiftId, { ...held, syncStateNormalization: normalization, updatedAtLocal: now() });
           return { ok: true, value: 'recorded' };
         }),
       ),

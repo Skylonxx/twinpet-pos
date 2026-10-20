@@ -51,6 +51,7 @@ const mocks = vi.hoisted(() => ({
   findRejectedOpenForDevice: vi.fn().mockResolvedValue({ ok: true, value: undefined }),
   findPendingOpenForStaff: vi.fn().mockResolvedValue({ ok: true, value: undefined }),
   listOpenIntents: vi.fn().mockResolvedValue({ ok: true, value: [] }),
+  claimLegacyNormalizationChecks: vi.fn().mockResolvedValue({ ok: false, code: 'unavailable', message: 'IndexedDB unavailable' }),
 }));
 
 // ── Hook mocks ──────────────────────────────────────────────────────────────
@@ -134,7 +135,9 @@ vi.mock('../lib/pos/shiftService', () => ({
   reissueShiftOpenWrite: mocks.reissueShiftOpenWrite,
   buildLocalOpenShiftSnapshot: mocks.buildLocalOpenShiftSnapshot,
 }));
-vi.mock('../lib/pos/offline/shiftCloseIntentStore', () => ({
+vi.mock('../lib/pos/offline/shiftCloseIntentStore', async (importOriginal) => ({
+  // Gate 008-B: the real pure helpers (the real sweep imports them); only the journal is replaced.
+  ...(await importOriginal<Record<string, unknown>>()),
   createShiftCloseIntentJournal: () => ({
     getCloseIntent: mocks.getCloseIntent,
     listCloseIntents: mocks.listCloseIntents,
@@ -142,6 +145,7 @@ vi.mock('../lib/pos/offline/shiftCloseIntentStore', () => ({
     upsertCloseIntent: vi.fn(),
     markSynced: vi.fn(),
     markRejectedManualAttention: vi.fn(),
+    claimLegacyNormalizationChecks: mocks.claimLegacyNormalizationChecks,
   }),
 }));
 vi.mock('../lib/pos/offline/shiftOpenIntentStore', () => ({
@@ -156,8 +160,9 @@ vi.mock('../lib/pos/offline/shiftOpenIntentStore', () => ({
   }),
 }));
 vi.mock('../lib/pos/offline/shiftCloseReconciler', async (importOriginal) => ({
-  // Gate 007-C: the real (pure) reporter of the sweep's normalization summary.
-  shiftCloseNormalizationIssue: (await importOriginal<Record<string, unknown>>()).shiftCloseNormalizationIssue,
+  // Gate 007-C / 008-B: the real (pure) reporters of the sweep's summary
+  // (every real export); only the sweep itself is replaced.
+  ...(await importOriginal<Record<string, unknown>>()),
   runShiftCloseReconciliationSweep: mocks.runShiftCloseReconciliationSweep,
 }));
 vi.mock('../lib/pos/offline/shiftOpenReconciler', () => ({
@@ -560,6 +565,76 @@ describe('POSPage — shift-close W4 normalization outcome is observed (gate 007
     await waitFor(() => {
       expect(warn.mock.calls.filter((c) => c[0] === ATTENTION).map((c) => c[1])).toEqual(['claim_failed=2', 'local_write_failed=1']);
     });
+    warn.mockRestore();
+  });
+});
+
+// Gate 008-B — the warning is scoped to WHICH close needs attention, and a
+// failing sweep is reported, not swallowed. The REAL sweep runs over the
+// mocked journal (claim persistence down), so the summary is production-built.
+describe('POSPage — scoped shift-close attention warnings (gate 008-B)', () => {
+  const ATTENTION = '[POSPage] shift-close W4 normalization needs attention';
+  const SWEEP_FAILED = '[POSPage] shift-close reconciliation sweep failed';
+  /** A pre-B2.2 `synced` close of this device (W4 never checked). */
+  function legacyClose(shiftId: string, branchId: string) {
+    return {
+      shiftId, branchId, staffId: 'U1', staffName: 'Test User', startingCash: 0, expectedCash: 0, expectedQr: 0, expectedKbank: 0,
+      expectedCard: 0, expectedCredit: 0, payInTotal: 0, payOutTotal: 0, totalBills: 0, actualCashCount: 0, variance: 0, note: '',
+      deviceId: 'DEV-TEST', closedAtLocal: 1, closeCorrelationId: null, status: 'synced', createdAtLocal: 1, updatedAtLocal: 1,
+      lastErrorMessage: null,
+    };
+  }
+  async function useRealSweep() {
+    const real = await vi.importActual<typeof import('../lib/pos/offline/shiftCloseReconciler')>('../lib/pos/offline/shiftCloseReconciler');
+    mocks.runShiftCloseReconciliationSweep.mockImplementation(real.runShiftCloseReconciliationSweep);
+  }
+  const attentionCalls = (warn: { mock: { calls: unknown[][] } }) => warn.mock.calls.filter((c) => c[0] === ATTENTION);
+  const scopeOf = (call: unknown[]) =>
+    ((call[2] as { attention?: Array<{ shiftId: string | null; branchId: string | null; condition: string }> })?.attention ?? []).map(
+      (a) => `${a.branchId}/${a.shiftId}:${a.condition}`,
+    );
+
+  test('shift A claim_failed=1 resolves, then shift B of ANOTHER branch develops the same count → a new warning naming B; unchanged B is not repeated', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    await useRealSweep();
+    mocks.readActiveShiftForBoot.mockResolvedValue({ status: 'absent', provenance: 'server' });
+    mocks.listCloseIntents.mockResolvedValue({ ok: true, value: [legacyClose('shift-A', 'B1')] });
+
+    render(<POSPage />);
+    await waitFor(() => expect(attentionCalls(warn)).toHaveLength(1));
+    expect(attentionCalls(warn)[0]![1]).toBe('claim_failed=1');
+    expect(scopeOf(attentionCalls(warn)[0]!)).toEqual(['B1/shift-A:claim_failed']);
+    expect(mocks.readShiftCloseConfirmation).not.toHaveBeenCalled(); // claim failed → nothing read
+
+    // A resolves; B (branch B2, same device) now has the identical count.
+    mocks.listCloseIntents.mockResolvedValue({ ok: true, value: [legacyClose('shift-B', 'B2')] });
+    window.dispatchEvent(new Event('online'));
+    // Parent: the issue string "claim_failed=1" is unchanged → B's problem is never reported.
+    await waitFor(() => expect(attentionCalls(warn)).toHaveLength(2));
+    expect(attentionCalls(warn)[1]![1]).toBe('claim_failed=1');
+    expect(scopeOf(attentionCalls(warn)[1]!)).toEqual(['B2/shift-B:claim_failed']);
+
+    // Unchanged B → no repeat.
+    const calls = mocks.runShiftCloseReconciliationSweep.mock.calls.length;
+    window.dispatchEvent(new Event('online'));
+    await waitFor(() => expect(mocks.runShiftCloseReconciliationSweep.mock.calls.length).toBe(calls + 1));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(attentionCalls(warn)).toHaveLength(2);
+    warn.mockRestore();
+  });
+
+  test('a sweep that throws is reported once (not swallowed), and not again while the failure is unchanged', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    mocks.readActiveShiftForBoot.mockResolvedValue({ status: 'absent', provenance: 'server' });
+    mocks.runShiftCloseReconciliationSweep.mockRejectedValue(new Error('IndexedDB transaction aborted'));
+
+    render(<POSPage />);
+    // Parent: `.catch(() => {})` — the failure was invisible.
+    await waitFor(() => expect(warn.mock.calls.filter((c) => c[0] === SWEEP_FAILED)).toHaveLength(1));
+    window.dispatchEvent(new Event('online'));
+    await waitFor(() => expect(mocks.runShiftCloseReconciliationSweep).toHaveBeenCalledTimes(2));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(warn.mock.calls.filter((c) => c[0] === SWEEP_FAILED)).toHaveLength(1);
     warn.mockRestore();
   });
 });

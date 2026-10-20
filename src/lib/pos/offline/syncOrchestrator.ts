@@ -339,22 +339,23 @@ async function defaultRunCh2(input: ChannelAdapterInput): Promise<ChannelRunResu
 }
 
 /**
- * Gate 007-C — the shift-close W4 normalization outcome as this channel's
- * result (the Sync Center reads it from the published cycle): a claim / local
- * record that could not be persisted, or an unreadable journal, is a FAILED
- * channel (`lastErrorAtMs`, no clean "last sync check"), never `ok`.
- * `itemsAttempted` = normalization checks run, `itemsAdvanced` = those that
- * reached a recorded terminal state.
+ * Gate 007-C / 008-B — the shift-close reconciliation outcome as this
+ * channel's result (the Sync Center reads it from the published cycle). Only
+ * a summary whose status is `ok` (nothing pending, owed, failed or unknown)
+ * is an `ok` channel; an unconfirmed / failed pending close, an owed or
+ * failed W4, a claim / local write that did not persist, an unreadable
+ * journal — or NO summary at all — is a FAILED channel (`lastErrorAtMs`, no
+ * clean "last sync check"). `itemsAttempted` = pending closes reconciled +
+ * W4 retries run; `itemsAdvanced` = those whose close now needs nothing.
  */
 export function shiftIntentChannelResult(summary: ShiftCloseNormalizationSummary | undefined): ChannelRunResult {
-  const results = summary?.results ?? [];
-  const advanced = results.filter((r) =>
-    ['normalized', 'already_normalized', 'mismatch', 'not_applicable'].includes(r.outcome),
-  ).length;
-  const issue = shiftCloseNormalizationIssue(summary);
-  return issue
-    ? { channel: 'shift_intent', status: 'failed', errorClass: `shift_close_normalization:${issue}`, itemsAttempted: results.length, itemsAdvanced: advanced }
-    : { channel: 'shift_intent', status: 'ok', itemsAttempted: results.length, itemsAdvanced: advanced };
+  const itemsAttempted = typeof summary?.attempted === 'number' ? summary.attempted : (summary?.results ?? []).length;
+  const itemsAdvanced = typeof summary?.advanced === 'number' ? summary.advanced : 0;
+  if (summary?.status === 'ok') {
+    return { channel: 'shift_intent', status: 'ok', itemsAttempted, itemsAdvanced };
+  }
+  const issue = shiftCloseNormalizationIssue(summary) ?? 'summary_missing';
+  return { channel: 'shift_intent', status: 'failed', errorClass: `shift_close_normalization:${issue}`, itemsAttempted, itemsAdvanced };
 }
 
 async function defaultRunCh1(_input: ChannelAdapterInput): Promise<ChannelRunResult> {

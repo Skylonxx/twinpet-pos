@@ -27,7 +27,11 @@ import {
   reissueShiftOpenWrite,
 } from '../lib/pos/shiftService';
 import { createShiftCloseIntentJournal } from '../lib/pos/offline/shiftCloseIntentStore';
-import { runShiftCloseReconciliationSweep, shiftCloseNormalizationIssue } from '../lib/pos/offline/shiftCloseReconciler';
+import {
+  runShiftCloseReconciliationSweep,
+  shiftCloseAttentionKey,
+  shiftCloseNormalizationIssue,
+} from '../lib/pos/offline/shiftCloseReconciler';
 import { createShiftOpenIntentJournal } from '../lib/pos/offline/shiftOpenIntentStore';
 import { runShiftOpenReconciliationSweep } from '../lib/pos/offline/shiftOpenReconciler';
 import { runTrustedResumeSweep } from '../lib/pos/offline/trustedSaleSubmissionOrchestrator';
@@ -171,7 +175,8 @@ export default function POSPage({ trustedResumeSweep }: POSPageProps = {}) {
   // shift this device already closed (offline, pending sync) is never
   // re-opened / re-folded into a live drawer after reload/restart.
   const shiftCloseIntentJournalRef = useRef(createShiftCloseIntentJournal());
-  // Gate 007-C: last reported shift-close W4 normalization issue (de-duplicates the log).
+  // Gate 007-C / 008-B: last reported shift-close attention key — WHICH closes
+  // (branch / shift) need attention and why — de-duplicates the log.
   const closeNormalizationIssueRef = useRef<string | null>(null);
   // PK-1: durable local open-intent journal — restore pending opens and block
   // duplicate/rejected opens across boot/reconnect.
@@ -1039,19 +1044,32 @@ export default function POSPage({ trustedResumeSweep }: POSPageProps = {}) {
     const runSweep = () => {
       void runShiftCloseReconciliationSweep(closeSweepDeps)
         .then((results) => {
-          // Gate 007-C: a W4 normalization the sweep could not persist / claim is
-          // logged (once per distinct state, never per trigger); the sync
-          // orchestrator surfaces the same summary in the Sync Center state.
-          const issue = shiftCloseNormalizationIssue(results.normalization);
-          if (issue !== closeNormalizationIssueRef.current) {
-            closeNormalizationIssueRef.current = issue;
-            if (issue) {
-              console.warn('[POSPage] shift-close W4 normalization needs attention', issue, results.normalization);
+          // Gate 007-C / 008-B: an unresolved / degraded sweep (pending close,
+          // owed or failed W4, unpersisted claim / record) is logged once per
+          // distinct SCOPED state — the key names the affected branch / shift,
+          // so the same count moving to another close is reported again — and
+          // never per trigger; the sync orchestrator surfaces the same summary
+          // in the Sync Center state.
+          const key = shiftCloseAttentionKey(results.normalization);
+          if (key !== closeNormalizationIssueRef.current) {
+            closeNormalizationIssueRef.current = key;
+            if (key) {
+              console.warn(
+                '[POSPage] shift-close W4 normalization needs attention',
+                shiftCloseNormalizationIssue(results.normalization),
+                results.normalization,
+              );
             }
           }
         })
-        .catch(() => {
-          // Best-effort — a failed sweep just leaves entries pending for the next trigger.
+        .catch((err: unknown) => {
+          // A failed sweep leaves entries pending for the next trigger — but it
+          // is reported (once until the state changes), never swallowed.
+          const key = `sweep_failed:${err instanceof Error ? err.message : String(err)}`;
+          if (key !== closeNormalizationIssueRef.current) {
+            closeNormalizationIssueRef.current = key;
+            console.warn('[POSPage] shift-close reconciliation sweep failed', err);
+          }
         });
       void runShiftOpenReconciliationSweep(openSweepDeps)
         .then((results) => {
