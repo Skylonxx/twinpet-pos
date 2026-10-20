@@ -22,6 +22,7 @@ import { submitPrivilegedVoid } from '../submitPrivilegedVoid';
 import { getAdminSecurityOverview } from '../getAdminSecurityOverview';
 import { issuePrivilegedLockoutClear } from '../issuePrivilegedLockoutClear';
 import { getSaleReturnContext, submitSaleReturn } from '../submitSaleReturn';
+import { closeShiftAuthoritative } from '../closeShiftAuthoritative';
 import { verifyPinLogin } from '../index';
 
 /**
@@ -49,6 +50,8 @@ const FIXED_CALLABLES: Record<string, CallableHandler> = {
   // Return/Refund V1 — born on the shared policy.
   getSaleReturnContext: getSaleReturnContext as unknown as CallableHandler,
   submitSaleReturn: submitSaleReturn as unknown as CallableHandler,
+  // Return/Refund V1 packet 012 — server-authoritative close, born on the shared policy.
+  closeShiftAuthoritative: closeShiftAuthoritative as unknown as CallableHandler,
 };
 
 /** Compatibility set: already allowed Tauri before this fix. */

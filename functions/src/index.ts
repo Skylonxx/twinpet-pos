@@ -73,6 +73,10 @@ export { submitPrivilegedVoid } from './submitPrivilegedVoid';
 // Return/Refund V1: sale-linked partial return + immutable refund, distinct
 // from Void. Online-only; Manager/Admin `pos_return` approval in the same call.
 export { getSaleReturnContext, submitSaleReturn } from './submitSaleReturn';
+// Return/Refund V1 packet 012: server-authoritative W3 shift close. Additive;
+// no client calls it yet and Rules still allow the legacy client W3.
+// Not in the deploy inventory — a separate release packet must add it.
+export { closeShiftAuthoritative } from './closeShiftAuthoritative';
 // SEC-001 Packet D / D-1B: adjudicates a PAA1 offline privileged-action
 // attestation relayed by an authenticated, branch-eligible POS terminal.
 // Not in the deploy inventory — Packet E remains required before deploy.
