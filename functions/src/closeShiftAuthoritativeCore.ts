@@ -101,11 +101,32 @@ function isNonEmptyString(v: unknown): v is string {
   return typeof v === 'string' && v.length > 0;
 }
 
-/** Baht → satang for a total/aggregate (≥ 0, ≤ ฿10,000,000,000, ≤ 2 dp); `null` otherwise. */
-function totalMinor(v: unknown): number | null {
+/**
+ * Packet 013 (Codex-012 F1): this contract is satang-EXACT. The shared P5
+ * converters (unchanged, still used by P5) tolerate a 1e-6 epsilon on
+ * amount × 100 and round, so e.g. 0.010000001 or 81.000000001 would be taken
+ * as an exact satang. Here a value is accepted only when it IS the canonical
+ * JS number of its satang count (`minor / 100 === x`, IEEE division is
+ * correctly rounded, so this is the double every 2-dp decimal literal parses
+ * to); anything else refuses — never adjusted. −0 keeps its existing meaning
+ * (=== 0: a zero total, never a positive movement). Bounds/shape stay the
+ * converters' own.
+ */
+function exactSatangMinor(x: number, r: { ok: true; minor: number } | { ok: false }): number | null {
+  if (!r.ok || !Number.isSafeInteger(r.minor)) return null;
+  return r.minor / 100 === x ? r.minor : null;
+}
+
+/** Baht → satang for a total/aggregate (≥ 0, ≤ ฿10,000,000,000, satang-exact); `null` otherwise. */
+function strictNonnegativeMinor(v: unknown): number | null {
   if (typeof v !== 'number') return null;
-  const r = toNonNegativeTotalMinor(v);
-  return r.ok ? r.minor : null;
+  return exactSatangMinor(v, toNonNegativeTotalMinor(v));
+}
+
+/** Baht → satang for one cash movement / refund (> 0, ≤ ฿10,000,000, satang-exact); `null` otherwise. */
+function strictPositiveMinor(v: unknown): number | null {
+  if (typeof v !== 'number') return null;
+  return exactSatangMinor(v, toPositiveEntryMinor(v));
 }
 
 
@@ -179,15 +200,15 @@ export function validateCloseShiftRequest(raw: unknown): { ok: true; value: Vali
   ) {
     return bad;
   }
-  const actualCashCountMinor = totalMinor(raw.actualCashCount);
+  const actualCashCountMinor = strictNonnegativeMinor(raw.actualCashCount);
   if (actualCashCountMinor == null) return bad;
 
   if (!isPlainObject(attestedSales) || !hasExactKeys(attestedSales, ATTESTED_SALES_KEYS)) return bad;
-  const expectedCashMinor = totalMinor(attestedSales.expectedCash);
-  const expectedQrMinor = totalMinor(attestedSales.expectedQr);
-  const expectedKbankMinor = totalMinor(attestedSales.expectedKbank);
-  const expectedCardMinor = totalMinor(attestedSales.expectedCard);
-  const expectedCreditMinor = totalMinor(attestedSales.expectedCredit);
+  const expectedCashMinor = strictNonnegativeMinor(attestedSales.expectedCash);
+  const expectedQrMinor = strictNonnegativeMinor(attestedSales.expectedQr);
+  const expectedKbankMinor = strictNonnegativeMinor(attestedSales.expectedKbank);
+  const expectedCardMinor = strictNonnegativeMinor(attestedSales.expectedCard);
+  const expectedCreditMinor = strictNonnegativeMinor(attestedSales.expectedCredit);
   if (
     expectedCashMinor == null ||
     expectedQrMinor == null ||
@@ -294,7 +315,7 @@ export function parseOpenShiftIdentity(shiftId: string, data: Record<string, unk
   if (typeof data.staffName !== 'string') return bad;
   if (data.openedAt == null) return bad;
   if (typeof data.startingCash !== 'number') return bad;
-  const startingCashMinor = totalMinor(data.startingCash);
+  const startingCashMinor = strictNonnegativeMinor(data.startingCash);
   if (startingCashMinor == null) return bad;
   return {
     ok: true,
@@ -331,8 +352,8 @@ export type CashFold = {
 /**
  * Absent ⇒ empty (W0 creates none). Present but not a list, over the cap, a
  * non-object element, a blank / non-string / duplicate id, an unknown type or
- * an amount that is not a positive ≤ 2 dp value within the W1 entry bound ⇒
- * refuse. Never dedupes, drops, rounds or repairs.
+ * an amount that is not a positive satang-exact value within the W1 entry
+ * bound ⇒ refuse. Never dedupes, drops, rounds or repairs.
  */
 export function foldShiftCashEntriesStrict(raw: unknown, present: boolean): { ok: true; value: CashFold } | Fail {
   if (present && !Array.isArray(raw)) return fail('cash_entries_invalid');
@@ -355,9 +376,8 @@ export function foldShiftCashEntriesStrict(raw: unknown, present: boolean): { ok
     seen.add(e.id);
     if (e.type !== 'pay_in' && e.type !== 'pay_out') return fail('cash_entries_invalid');
     if (typeof e.amount !== 'number') return fail('cash_entries_invalid');
-    const amount = toPositiveEntryMinor(e.amount);
-    if (!amount.ok) return fail('cash_entries_invalid');
-    const minor = amount.minor;
+    const minor = strictPositiveMinor(e.amount);
+    if (minor == null) return fail('cash_entries_invalid');
     if (e.type === 'pay_in') payInMinor += minor;
     else payOutMinor += minor;
     if (e.id.startsWith(SERVER_REFUND_ENTRY_PREFIX)) {
@@ -409,9 +429,9 @@ function parseRefundRecord(r: RawRecord, shift: OpenShiftView): RefundFact | nul
   if (d.requesterStaffId !== shift.staffId) return null;
   if (d.cashEntryId !== deriveCashRefundEntryId(returnId)) return null;
   if (typeof d.amount !== 'number') return null;
-  const amount = toPositiveEntryMinor(d.amount);
-  if (!amount.ok) return null;
-  return { returnId, cashEntryId: d.cashEntryId, minor: amount.minor };
+  const minor = strictPositiveMinor(d.amount);
+  if (minor == null) return null;
+  return { returnId, cashEntryId: d.cashEntryId, minor };
 }
 
 function parseReturnRecord(r: RawRecord, shift: OpenShiftView): RefundFact | null {
@@ -425,9 +445,9 @@ function parseReturnRecord(r: RawRecord, shift: OpenShiftView): RefundFact | nul
   if (refund.method !== 'cash' || refund.refundId !== returnId || refund.shiftId !== shift.shiftId) return null;
   if (refund.cashEntryId !== deriveCashRefundEntryId(returnId)) return null;
   if (typeof refund.amount !== 'number') return null;
-  const amount = toPositiveEntryMinor(refund.amount);
-  if (!amount.ok) return null;
-  return { returnId, cashEntryId: refund.cashEntryId, minor: amount.minor };
+  const minor = strictPositiveMinor(refund.amount);
+  if (minor == null) return null;
+  return { returnId, cashEntryId: refund.cashEntryId, minor };
 }
 
 /**
@@ -437,7 +457,9 @@ function parseReturnRecord(r: RawRecord, shift: OpenShiftView): RefundFact | nul
  * Every server cash refund must pair 1:1 with its Return record (same
  * returnId, satang amount) and with exactly one `pay_out` shift entry of the
  * same id and satang amount; every `rfd_` entry must pair with a refund.
- * Any other shape refuses — the server never picks a side.
+ * Every amount is satang-exact (an off-cent record is `refund_record_invalid`,
+ * an off-cent entry `cash_entries_invalid`), so equal satang ⇔ equal raw
+ * numbers. Any other shape refuses — the server never picks a side.
  */
 export function verifyRefundAudit(params: {
   shift: OpenShiftView;

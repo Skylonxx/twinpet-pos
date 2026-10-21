@@ -717,4 +717,150 @@ describe.skipIf(!RUN)('closeShiftAuthoritative on the Firestore emulator (demo-t
     const parsed = parseCommittedOwnClose(closeOwnIdentity(w), shiftCloseConfirmationDocFromData(shift));
     expect(parsed.ok).toBe(true);
   });
+
+  // ── 013 · Codex-012 F1: off-cent stored/request money refuses, zero close writes ──
+  // Behavioral RED on cbd4ce0: the epsilon-tolerant P5 converters accepted and
+  // rounded every value below, so each of these closes COMMITTED there.
+  describe('013 — strict satang exactness on real emulator data (Codex-012 F1)', () => {
+    const OFF_CENT = 0.010000001;
+    const OFF_81 = 81.000000001;
+
+    function closePaths(w: World, rid?: string): string[] {
+      const paths = [`shifts/${w.shiftId}`, `${SHIFT_CLOSE_AUTHORITY_COLLECTION}/${w.shiftId}`];
+      if (rid) paths.push(`saleRefunds/${rid}`, `saleReturns/${rid}`, `cashTransactions/${deriveCashRefundEntryId(rid)}`);
+      return paths;
+    }
+
+    async function authorityRecordCount(w: World): Promise<number> {
+      return (await db.collection(SHIFT_CLOSE_AUTHORITY_COLLECTION).where('shiftId', '==', w.shiftId).get()).size;
+    }
+
+    test.each([
+      ['actualCashCount 0.010000001', { actualCashCount: OFF_CENT }, {}],
+      ['attestedSales.expectedCash 81.000000001', {}, { expectedCash: OFF_81 }],
+      ['attestedSales.expectedQr 0.100000001', {}, { expectedQr: 0.100000001 }],
+    ])('request %s ⇒ invalid_request; the open shift and authority record are untouched', async (_n, over, sales) => {
+      const w = await seedWorld();
+      const paths = closePaths(w);
+      const before = await freeze(paths);
+      expect(await performClose(db, closeReq(w, over, sales), staffAuth())).toEqual({ ok: false, code: 'invalid_request' });
+      expect(await freeze(paths)).toEqual(before);
+      expect(before[`shifts/${w.shiftId}`]!.data!.status).toBe('open');
+      expect(await authorityRecordCount(w)).toBe(0);
+    });
+
+    test('stored W0 startingCash 0.010000001 ⇒ shift_record_invalid, no W3, no authority record; canonical 0.01 still closes exactly', async () => {
+      const bad = await seedWorld({ startingCash: OFF_CENT });
+      const paths = closePaths(bad);
+      const before = await freeze(paths);
+      expect(await performClose(db, closeReq(bad, { actualCashCount: 1000.01 }), staffAuth())).toEqual({ ok: false, code: 'shift_record_invalid' });
+      expect(await freeze(paths)).toEqual(before);
+      expect(before[`shifts/${bad.shiftId}`]!.data).toMatchObject({ status: 'open', startingCash: OFF_CENT });
+      expect(await authorityRecordCount(bad)).toBe(0);
+
+      const good = await seedWorld({ startingCash: 0.01 });
+      const res = okClose(await performClose(db, closeReq(good, { actualCashCount: 1000.01 }), staffAuth()));
+      expect(res.money).toMatchObject({ startingCashMinor: 1, expectedDrawerMinor: 100001, actualCashCountMinor: 100001, varianceMinor: 0 });
+      const shift = (await db.doc(`shifts/${good.shiftId}`).get()).data()!;
+      expect(shift).toMatchObject({ status: 'closed', startingCash: 0.01 });
+      expect(parseCommittedOwnClose(closeOwnIdentity(good), shiftCloseConfirmationDocFromData(shift)).ok).toBe(true);
+    });
+
+    test('a REAL Rules-checked staff W1 append of pay_out 81.000000001 is accepted by the unchanged Rules; the close then refuses (cash_entries_invalid) with zero close writes', async () => {
+      const w = await seedWorld();
+      const [{ initializeApp, deleteApp }, fs] = await Promise.all([import('firebase/app'), import('firebase/firestore')]);
+      const app = initializeApp({ projectId: 'demo-twinpet', apiKey: 'demo-key' }, `w1-${w.tag}`);
+      const clientDb = fs.getFirestore(app, 'pos-db');
+      const [host, port] = EMULATOR!.split(':');
+      // A branch-staff client (Rules evaluated), the same claims staffAuth() gives the close.
+      fs.connectFirestoreEmulator(clientDb, host!, Number(port), {
+        mockUserToken: { sub: 'u-s1', user_id: 'u-s1', staffId: 's1', role: 'staff', branchIds: ['B1'], authVersion: 0 },
+      });
+      const entry = (id: string, amount: number) => ({ id, type: 'pay_out', amount, note: 'จ่ายค่าน้ำแข็ง', staffId: 's1', staffName: 'Staff One', at: Date.now() });
+      try {
+        const shiftRef = fs.doc(clientDb, 'shifts', w.shiftId);
+        // Premise: Rules ARE enforced for this client on pos-db (a client rfd_ entry is denied).
+        await expect(
+          fs.updateDoc(shiftRef, { cashEntries: fs.arrayUnion(entry('rfd_' + 'd'.repeat(40), 81)), updatedAt: fs.serverTimestamp() }),
+        ).rejects.toMatchObject({ code: 'permission-denied' });
+        // The exact client recordCashTransaction() W1 write, off-cent amount: ACCEPTED by the unchanged Rules.
+        await fs.updateDoc(shiftRef, { cashEntries: fs.arrayUnion(entry('c-offcent', OFF_81)), updatedAt: fs.serverTimestamp() });
+      } finally {
+        await fs.terminate(clientDb);
+        await deleteApp(app);
+      }
+      const stored = (await db.doc(`shifts/${w.shiftId}`).get()).data()!;
+      expect(stored.status).toBe('open');
+      expect((stored.cashEntries as Doc[]).map((e) => [e.id, e.type, e.amount])).toEqual([['c-offcent', 'pay_out', OFF_81]]);
+
+      const paths = closePaths(w);
+      const before = await freeze(paths);
+      // Taken (wrongly) as exactly 81, this count would close at variance 0: 500 + 1000 − 81 = 1419.
+      expect(await performClose(db, closeReq(w), staffAuth())).toEqual({ ok: false, code: 'cash_entries_invalid' });
+      expect(await freeze(paths)).toEqual(before);
+      const after = (await db.doc(`shifts/${w.shiftId}`).get()).data()!;
+      expect(after.status).toBe('open');
+      expect((after.cashEntries as Doc[])[0]!.amount).toBe(OFF_81);
+      expect(await authorityRecordCount(w)).toBe(0);
+    }, 30_000);
+
+    const setRefundEntryAmount = async (w: World, amount: number) => {
+      const e = ((await db.doc(`shifts/${w.shiftId}`).get()).data()!.cashEntries as Doc[])[0]!;
+      await db.doc(`shifts/${w.shiftId}`).update({ cashEntries: [{ ...e, amount }] });
+    };
+    const refundTamper: Array<[string, (w: World, rid: string) => Promise<unknown>, (w: World, rid: string) => Promise<unknown>, string]> = [
+      [
+        'saleRefunds.amount 81.000000001 (Return 81, payout 81)',
+        (_w, rid) => db.doc(`saleRefunds/${rid}`).update({ amount: OFF_81 }),
+        (_w, rid) => db.doc(`saleRefunds/${rid}`).update({ amount: 81 }),
+        'refund_record_invalid',
+      ],
+      [
+        'saleReturns.refund.amount 81.000000001 (refund 81, payout 81)',
+        (_w, rid) => db.doc(`saleReturns/${rid}`).update({ 'refund.amount': OFF_81 }),
+        (_w, rid) => db.doc(`saleReturns/${rid}`).update({ 'refund.amount': 81 }),
+        'refund_record_invalid',
+      ],
+      [
+        'refund 81.000000001 vs Return 80.999999999 (both Math.round(×100) = 8100)',
+        async (_w, rid) => {
+          await db.doc(`saleRefunds/${rid}`).update({ amount: OFF_81 });
+          await db.doc(`saleReturns/${rid}`).update({ 'refund.amount': 80.999999999 });
+        },
+        async (_w, rid) => {
+          await db.doc(`saleRefunds/${rid}`).update({ amount: 81 });
+          await db.doc(`saleReturns/${rid}`).update({ 'refund.amount': 81 });
+        },
+        'refund_record_invalid',
+      ],
+      ['server rfd_ payout rewritten to 81.000000001 (records 81)', (w) => setRefundEntryAmount(w, OFF_81), (w) => setRefundEntryAmount(w, 81), 'cash_entries_invalid'],
+    ];
+
+    test.each(refundTamper)(
+      '%s ⇒ refused with zero writes; after correcting only the fixture, the same UUID closes exactly once',
+      async (_n, corrupt, correct, code) => {
+        const w = await seedWorld();
+        expect(await runReturn(w)).toMatchObject({ ok: true, refundAmount: 81, refundMethod: 'cash' });
+        const rid = deriveReturnId('B1', w.orderId, `attempt-a1-${w.tag}`);
+        await corrupt(w, rid);
+        const paths = closePaths(w, rid);
+        const before = await freeze(paths);
+        expect(await performClose(db, closeReq(w), staffAuth())).toEqual({ ok: false, code });
+        expect(await freeze(paths)).toEqual(before);
+        expect(await authorityRecordCount(w)).toBe(0);
+
+        // Emulator fixture correction only (production never auto-repairs): the same UUID now closes, once.
+        await correct(w, rid);
+        const res = okClose(await performClose(db, closeReq(w), staffAuth()));
+        expect(res).toMatchObject({ idempotentReplay: false, closeCorrelationId: UUID_A, shiftId: w.shiftId });
+        expect(res.money).toMatchObject({ payOutMinor: 8100, expectedDrawerMinor: 141900, varianceMinor: 0 });
+        expect(res.provenance.returnRefunds).toEqual({ status: 'server_audit_matched', count: 1, totalMinor: 8100 });
+        const replay = okClose(await performClose(db, closeReq(w), staffAuth()));
+        expect(replay.idempotentReplay).toBe(true);
+        expect(replay.closedAtMillis).toBe(res.closedAtMillis);
+        expect(await authorityRecordCount(w)).toBe(1);
+      },
+      30_000,
+    );
+  });
 });

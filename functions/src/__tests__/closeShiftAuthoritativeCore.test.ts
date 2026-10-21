@@ -30,6 +30,7 @@ import {
 } from '../closeShiftAuthoritativeCore';
 import { deriveCashRefundEntryId } from '../saleReturnCore';
 import { planCapture } from '../shiftCloseEvidenceCaptureCore';
+import { toNonNegativeTotalMinor, toPositiveEntryMinor } from '../shiftCloseValidationCore';
 import {
   parseCommittedOwnClose,
   shiftCloseConfirmationDocFromData,
@@ -544,5 +545,182 @@ describe('client / P5 compatibility (actual client parser, snapshot equality, W4
     delete before.closeCorrelationId;
     const plan = planCapture({ shiftId: 'SH1', before, after: shiftData, eventTimeIso: new Date(1_700_000_000_000).toISOString() });
     expect(plan.kind).toBe('capture');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Packet 013 — Codex-012 F1: satang-EXACT money, no sub-satang normalization.
+// Behavioral RED on cbd4ce0 (the shared P5 converters' 1e-6 epsilon on
+// amount × 100 accepted and rounded these values); GREEN once every money
+// value must BE the canonical JS number `minor / 100` of its satang count.
+// ---------------------------------------------------------------------------
+
+/** The adjacent IEEE-754 double above (dir 1) / below (dir −1) a positive finite x. */
+function adjacentDouble(x: number, dir: 1 | -1): number {
+  const f = new Float64Array([x]);
+  const bits = new BigInt64Array(f.buffer);
+  bits[0] = bits[0]! + BigInt(dir);
+  return f[0]!;
+}
+
+/** 0.010000001 × 100 = 1.0000001 — inside the P5 epsilon, so it used to be stored as 0.01. */
+const OFF_CENT = 0.010000001;
+/** 81.000000001 × 100 = 8100.0000001 — used to fold / pair as exactly 8100 satang. */
+const OFF_81 = 81.000000001;
+
+describe('013 — strict satang exactness (Codex-012 F1)', () => {
+  const W0 = { id: 'SH1', branchId: 'B1', staffId: 's1', staffName: 'S', openedAt: ts(1), startingCash: 500 };
+
+  test('premise: the shared P5 converters are unchanged and still epsilon-tolerant (their callers keep P5 semantics)', () => {
+    expect(OFF_CENT).not.toBe(0.01);
+    expect(OFF_81).not.toBe(81);
+    expect(toNonNegativeTotalMinor(OFF_CENT)).toEqual({ ok: true, minor: 1 });
+    expect(toPositiveEntryMinor(OFF_81)).toEqual({ ok: true, minor: 8100 });
+    expect(toNonNegativeTotalMinor(0.001)).toEqual({ ok: false, reason: 'total_precision' });
+  });
+
+  // ── 4A · request money ────────────────────────────────────────────────
+  test.each([
+    ['actualCashCount 0.010000001', { actualCashCount: OFF_CENT }, {}],
+    ['actualCashCount one ulp above 0.01', { actualCashCount: adjacentDouble(0.01, 1) }, {}],
+    ['actualCashCount one ulp below 1419', { actualCashCount: adjacentDouble(1419, -1) }, {}],
+    ['actualCashCount float sum 0.1 + 0.2 (≠ canonical 0.3)', { actualCashCount: 0.1 + 0.2 }, {}],
+    ['expectedCash 81.000000001', {}, { expectedCash: OFF_81 }],
+    ['expectedQr 0.100000001', {}, { expectedQr: 0.100000001 }],
+    ['expectedKbank 1000.000000001', {}, { expectedKbank: 1000.000000001 }],
+    ['expectedCard one ulp above 19.99', {}, { expectedCard: adjacentDouble(19.99, 1) }],
+    ['expectedCredit 0.009999999', {}, { expectedCredit: 0.009999999 }],
+  ])('request %s ⇒ invalid_request (never silently rounded to a satang)', (_n, over, sales) => {
+    expect(validateCloseShiftRequest(req(over, sales))).toEqual({ ok: false, code: 'invalid_request' });
+  });
+
+  test.each([
+    [0, 0],
+    [0.01, 1],
+    [0.1, 10],
+    [0.3, 30],
+    [19.99, 1999],
+    [81, 8100],
+    [1419.25, 141925],
+    [9_999_999_999.99, 999_999_999_999],
+    [10_000_000_000, 1_000_000_000_000],
+  ])('canonical %s stays accepted in every request money field (= %s satang)', (x, minor) => {
+    const r = validateCloseShiftRequest(
+      req({ actualCashCount: x }, { expectedCash: x, expectedQr: x, expectedKbank: x, expectedCard: x, expectedCredit: x }),
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.actualCashCountMinor).toBe(minor);
+    expect(r.value.attestedSales).toEqual({
+      expectedCashMinor: minor,
+      expectedQrMinor: minor,
+      expectedKbankMinor: minor,
+      expectedCardMinor: minor,
+      expectedCreditMinor: minor,
+      totalBills: 3,
+    });
+  });
+
+  test('bounds/shape refusals are unchanged at the edges (one ulp over the envelope, NaN, string, negative)', () => {
+    for (const bad of [adjacentDouble(10_000_000_000, 1), NaN, Infinity, '0.01', -0.01, null]) {
+      expect(validateCloseShiftRequest(req({ actualCashCount: bad }))).toEqual({ ok: false, code: 'invalid_request' });
+      expect(validateCloseShiftRequest(req({}, { expectedCredit: bad }))).toEqual({ ok: false, code: 'invalid_request' });
+    }
+  });
+
+  test('-0 keeps its pre-existing meaning: 0 for non-negative totals, refused as a movement/refund', () => {
+    expect(validateCloseShiftRequest(req({ actualCashCount: -0 }, { expectedQr: -0 }))).toMatchObject({
+      ok: true,
+      value: { actualCashCountMinor: 0, attestedSales: { expectedQrMinor: 0 } },
+    });
+    expect(parseOpenShiftIdentity('SH1', { ...W0, startingCash: -0 })).toMatchObject({ ok: true, value: { startingCashMinor: 0 } });
+    expect(foldShiftCashEntriesStrict([{ id: 'c', type: 'pay_in', amount: -0 }], true)).toEqual({ ok: false, code: 'cash_entries_invalid' });
+    expect(audit([refundEntry(81)], [refundDoc({ amount: -0 })], [returnDoc()])).toEqual({ ok: false, code: 'refund_record_invalid' });
+  });
+
+  // ── 4B · stored W0 startingCash ───────────────────────────────────────
+  test.each([
+    ['0.010000001', OFF_CENT],
+    ['500.000000001', 500.000000001],
+    ['one ulp below 500', adjacentDouble(500, -1)],
+  ])('stored W0 startingCash %s ⇒ shift_record_invalid (never re-based to a satang)', (_n, startingCash) => {
+    expect(parseOpenShiftIdentity('SH1', { ...W0, startingCash })).toEqual({ ok: false, code: 'shift_record_invalid' });
+  });
+
+  test.each([
+    [0, 0],
+    [0.01, 1],
+    [0.1, 10],
+    [500, 50000],
+    [9_999_999_999.99, 999_999_999_999],
+  ])('canonical stored startingCash %s parses (= %s satang), value kept as stored', (startingCash, minor) => {
+    expect(parseOpenShiftIdentity('SH1', { ...W0, startingCash })).toEqual({
+      ok: true,
+      value: { shiftId: 'SH1', branchId: 'B1', staffId: 's1', staffName: 'S', startingCash, startingCashMinor: minor },
+    });
+  });
+
+  // ── 4C · shift cash movements ─────────────────────────────────────────
+  test.each([
+    ['manual pay_out 81.000000001', [{ id: 'c1', type: 'pay_out', amount: OFF_81 }]],
+    ['manual pay_in 0.010000001', [{ id: 'c1', type: 'pay_in', amount: OFF_CENT }]],
+    ['manual pay_in one ulp below 0.3', [{ id: 'c1', type: 'pay_in', amount: adjacentDouble(0.3, -1) }]],
+    ['manual pay_in float sum 0.1 + 0.2', [{ id: 'c1', type: 'pay_in', amount: 0.1 + 0.2 }]],
+    ['server rfd_ payout 81.000000001', [refundEntry(OFF_81)]],
+    [
+      'an off-cent entry after canonical ones',
+      [
+        { id: 'c1', type: 'pay_in', amount: 0.1 },
+        { id: 'c2', type: 'pay_out', amount: 10 },
+        { id: 'c3', type: 'pay_out', amount: OFF_81 },
+      ],
+    ],
+  ])('cash entry %s ⇒ cash_entries_invalid (never folded as an exact satang)', (_n, entries) => {
+    expect(foldShiftCashEntriesStrict(entries, true)).toEqual({ ok: false, code: 'cash_entries_invalid' });
+  });
+
+  test('canonical entries at the edges fold exactly (0.01, 0.1, 9,999,999.99, the ฿10,000,000 W1 bound)', () => {
+    const f = fold([
+      { id: 'c1', type: 'pay_in', amount: 0.01 },
+      { id: 'c2', type: 'pay_in', amount: 0.1 },
+      { id: 'c3', type: 'pay_out', amount: 9_999_999.99 },
+      { id: 'c4', type: 'pay_out', amount: 10_000_000 },
+    ]);
+    expect(f).toMatchObject({ payInMinor: 11, payOutMinor: 999_999_999 + 1_000_000_000 });
+  });
+
+  // ── 4D/4E · refund authority ──────────────────────────────────────────
+  test.each([
+    ['saleRefunds.amount 81.000000001 vs Return 81 vs payout 81', [refundEntry(81)], [refundDoc({ amount: OFF_81 })], [returnDoc()], 'refund_record_invalid'],
+    ['saleReturns.refund.amount 81.000000001 vs refund 81 vs payout 81', [refundEntry(81)], [refundDoc()], [returnDoc({}, { amount: OFF_81 })], 'refund_record_invalid'],
+    [
+      'refund 81.000000001 vs Return 80.999999999 (both Math.round(×100) = 8100)',
+      [refundEntry(81)],
+      [refundDoc({ amount: OFF_81 })],
+      [returnDoc({}, { amount: 80.999999999 })],
+      'refund_record_invalid',
+    ],
+    ['refund one ulp below 81 vs Return 81', [refundEntry(81)], [refundDoc({ amount: adjacentDouble(81, -1) })], [returnDoc()], 'refund_record_invalid'],
+    [
+      'all three consistently 81.000000001 (the payout itself is refused first)',
+      [refundEntry(OFF_81)],
+      [refundDoc({ amount: OFF_81 })],
+      [returnDoc({}, { amount: OFF_81 })],
+      'cash_entries_invalid',
+    ],
+  ])('%s ⇒ typed refusal, never "server_audit_matched"', (_n, entries, refunds, returns, code) => {
+    expect(audit(entries as unknown[], refunds as RawRecord[], returns as RawRecord[])).toEqual({ ok: false, code });
+  });
+
+  test('canonical identical amounts across the distinct legitimate sources still pair (two Returns of 81, one of 0.01)', () => {
+    const R2 = 'b'.repeat(40);
+    const R3 = 'c'.repeat(40);
+    expect(
+      audit(
+        [refundEntry(81), refundEntry(81, deriveCashRefundEntryId(R2)), refundEntry(0.01, deriveCashRefundEntryId(R3))],
+        [refundDoc(), refundDoc({}, R2), refundDoc({ amount: 0.01 }, R3)],
+        [returnDoc(), returnDoc({}, {}, R2), returnDoc({}, { amount: 0.01 }, R3)],
+      ),
+    ).toEqual({ ok: true, value: { refundCount: 3, refundTotalMinor: 16201, returnIds: [RID, R2, R3].sort() } });
   });
 });
