@@ -30,15 +30,47 @@ import {
 } from './shiftCashFreshness';
 import {
   createShiftCloseIntentJournal,
+  isAuthoritativeAttempt,
   isCommitObservedAttempt,
+  isSupersededAttempt,
   snapshotsEqual,
   type ShiftCloseIntentJournal,
 } from './offline/shiftCloseIntentStore';
 import type {
+  AuthoritativeCloseRequestBody,
+  OnlineCloseAttemptRecord,
   PointerRepairObserver,
   ShiftCloseIntentBusinessSnapshot,
   ShiftCloseIntentEntry,
 } from './offline/shiftCloseIntentTypes';
+import type { LocalSale } from './localLedger';
+import {
+  CLOSE_SHIFT_AUTHORITATIVE_COUNT_INVALID_MESSAGE,
+  CLOSE_SHIFT_AUTHORITATIVE_DEVICE_INVALID_MESSAGE,
+  CLOSE_SHIFT_AUTHORITATIVE_DRAWER_CHANGED_MESSAGE,
+  CLOSE_SHIFT_AUTHORITATIVE_DRAWER_INCONSISTENT_MESSAGE,
+  CLOSE_SHIFT_AUTHORITATIVE_LEDGER_INVALID_MESSAGE,
+  CLOSE_SHIFT_AUTHORITATIVE_LOCAL_CASH_NOT_ON_SERVER_MESSAGE,
+  CLOSE_SHIFT_AUTHORITATIVE_LOCAL_CLOSE_PENDING_MESSAGE,
+  CLOSE_SHIFT_AUTHORITATIVE_NOTE_TOO_LONG_MESSAGE,
+  CLOSE_SHIFT_AUTHORITATIVE_OFFLINE_MESSAGE,
+  CLOSE_SHIFT_AUTHORITATIVE_REQUEST_CHANGED_MESSAGE,
+  CLOSE_SHIFT_AUTHORITATIVE_RESULT_MISMATCH_MESSAGE,
+  CLOSE_SHIFT_AUTHORITATIVE_SALES_UNAVAILABLE_MESSAGE,
+  CLOSE_SHIFT_AUTHORITATIVE_SERVER_CASH_INVALID_MESSAGE,
+  CLOSE_SHIFT_AUTHORITATIVE_UNAVAILABLE_MESSAGE,
+  SERVER_AUTHORITATIVE_CLOSE_ENABLED,
+  authoritativeCloseRequest,
+  authoritativeRefusalMessage,
+  buildAuthoritativeCloseRequestBody,
+  buildAuthoritativeExpectation,
+  getDefaultCloseShiftAuthoritativeCallable,
+  invokeCloseShiftAuthoritative,
+  sameAuthoritativeRequestBody,
+  type AuthoritativeCloseOutcome,
+  type AuthoritativeRequestFailure,
+  type CloseShiftAuthoritativeCallable,
+} from './shiftCloseAuthoritativeClient';
 import {
   parseCommittedOwnClose,
   reconcileShiftCloseIntent,
@@ -896,6 +928,35 @@ export type CloseShiftDeps = {
   runCloseTransaction?: ShiftCloseTransactionRunner;
   /** Injectable for tests; production = bounded `waitForPendingWrites`. */
   waitForQueuedWrites?: () => Promise<boolean>;
+  /**
+   * Packet 014 — TEST-ONLY override of the hardcoded
+   * {@link SERVER_AUTHORITATIVE_CLOSE_ENABLED} gate (`false`). No production
+   * caller passes it, so every production close is the legacy close.
+   */
+  authoritativeCloseGate?: boolean;
+  /** Packet 014 — inputs of the server-authoritative close; ignored while the gate is OFF. */
+  authoritativeClose?: AuthoritativeCloseDeps;
+};
+
+/** Packet 014 — authoritative (server, never cache) read of the whole shift doc. Never throws. */
+export type AuthoritativeShiftRead =
+  | { ok: true; exists: false }
+  | { ok: true; exists: true; data: Record<string, unknown> }
+  | { ok: false };
+
+export type AuthoritativeShiftReader = (shiftId: string) => Promise<AuthoritativeShiftRead>;
+
+export type AuthoritativeCloseDeps = {
+  /**
+   * The ledger sales the closing drawer was derived from (`LocalSale[]` of the
+   * shift — the same list `deriveShiftDrawer` folded). Required: without it no
+   * canonical attested totals exist and the close fails closed.
+   */
+  sales?: readonly LocalSale[];
+  /** Injectable for tests; production = `httpsCallable('closeShiftAuthoritative')`. */
+  callable?: CloseShiftAuthoritativeCallable;
+  /** Injectable for tests; production = `getDocFromServer` of the shift. */
+  readServerShift?: AuthoritativeShiftReader;
 };
 
 function closeBusinessSnapshot(
@@ -1049,6 +1110,12 @@ export async function closeShift(
       ...closed,
       whenServerConfirmed: Promise.resolve({ outcome: 'confirmed', closedAt: closedAtServer }),
     };
+  }
+
+  // Packet 014 — staged server-authoritative close. OFF (hardcoded) in every
+  // production build: nothing below this line changes while it is OFF.
+  if (deps?.authoritativeCloseGate ?? SERVER_AUTHORITATIVE_CLOSE_ENABLED) {
+    return closeShiftServerAuthoritative(shift, actualCashCount, note, deps);
   }
 
   const ref = doc(db, collections.shifts, shift.id);
@@ -1562,6 +1629,427 @@ function pickTotals(s: ShiftCloseIntentBusinessSnapshot) {
     payInTotal: s.payInTotal,
     payOutTotal: s.payOutTotal,
     totalBills: s.totalBills,
+  };
+}
+
+// ── Packet 014: server-authoritative close (staged, OFF by default) ───────
+
+const readAuthoritativeShift: AuthoritativeShiftReader = async (shiftId) => {
+  if (!isFirebaseConfigured || !db) return { ok: false };
+  try {
+    const snap = await getDocFromServer(doc(db, collections.shifts, shiftId));
+    return snap.exists() ? { ok: true, exists: true, data: snap.data() as Record<string, unknown> } : { ok: true, exists: false };
+  } catch {
+    return { ok: false };
+  }
+};
+
+async function safeRead(reader: AuthoritativeShiftReader, shiftId: string): Promise<AuthoritativeShiftRead> {
+  try {
+    return await reader(shiftId);
+  } catch {
+    return { ok: false };
+  }
+}
+
+function requestFailureMessage(f: AuthoritativeRequestFailure): string {
+  switch (f.reason) {
+    case 'shift_id_invalid':
+    case 'device_id_invalid':
+      return CLOSE_SHIFT_AUTHORITATIVE_DEVICE_INVALID_MESSAGE;
+    case 'note_too_long':
+      return CLOSE_SHIFT_AUTHORITATIVE_NOTE_TOO_LONG_MESSAGE;
+    case 'count_not_canonical':
+      return CLOSE_SHIFT_AUTHORITATIVE_COUNT_INVALID_MESSAGE;
+    case 'attested_differs_from_drawer':
+      return CLOSE_SHIFT_AUTHORITATIVE_DRAWER_INCONSISTENT_MESSAGE;
+    default:
+      return CLOSE_SHIFT_AUTHORITATIVE_LEDGER_INVALID_MESSAGE;
+  }
+}
+
+/** Entry ids of the local + cached lists that the authoritative server list lacks. */
+function entriesMissingOnServer(serverEntries: unknown, ...lists: unknown[]): string[] {
+  const onServer = new Set(
+    (Array.isArray(serverEntries) ? serverEntries : []).map((e) => (e as { id?: unknown } | null)?.id),
+  );
+  const missing = new Set<string>();
+  for (const list of lists) {
+    for (const e of Array.isArray(list) ? list : []) {
+      const id = (e as { id?: unknown } | null)?.id;
+      if (typeof id === 'string' && !onServer.has(id)) missing.add(id);
+    }
+  }
+  return [...missing];
+}
+
+/**
+ * Packet 014 — THE server-authoritative close (only when the gate is ON).
+ * Online-only; the W3 is written ONLY by `closeShiftAuthoritative` — this
+ * function never calls `updateDoc` / `runTransaction` on the shift, on any
+ * outcome. Ordering (each step fails closed with nothing durable or remote
+ * changed before the attempt exists):
+ *  1. offline ⇒ refuse (no intent, attempt, queued write, guard change or Z);
+ *  2. the frozen v1 request body from the cashier input + the ledger sales in
+ *     integer satang (`buildAuthoritativeCloseRequestBody`);
+ *  3. cache existence + C1-R1 raw cash ambiguity (as the legacy close);
+ *  4. a close record of this shift already in the journal ⇒ only its own
+ *     server-proven Z, else refuse (an offline-queued / unresolved close is
+ *     never flushed, reinterpreted or closed over);
+ *  5. this device's queued writes flushed (the server folds only what it has);
+ *  6. an authoritative pre-call read of the shift;
+ *  7. the durable attempt (B2): a NEW attempt is bound to the request and to
+ *     the close expected from that read; an EXISTING one must be this
+ *     protocol's, this request's, and (shift still open) this expectation's —
+ *     a legacy / tombstoned / changed one refuses; nothing is ever rewritten;
+ *  8. ONE call with the attempt's correlation id; an unknown outcome is
+ *     probed and replayed at most once with the SAME id and body;
+ *  9. 006-A proof: `ok: true` is not a Z — the server doc read
+ *     (`getDocFromServer`) must pass `parseCommittedOwnClose` and equal BOTH
+ *     the server's canonical snapshot and the attempt's expected close; then
+ *     007-B `finalizeOnlineClose` (which re-checks the expectation) and only
+ *     then the Z. Any gap ⇒ no Z, attempt kept (commit-observed when a commit
+ *     is known), retried by a later close or the sweep.
+ */
+async function closeShiftServerAuthoritative(
+  shift: Shift,
+  actualCashCount: number,
+  note: string,
+  deps: CloseShiftDeps | undefined,
+): Promise<CloseShiftResult> {
+  // 1. Online-only (contract §8, D2).
+  if (!(deps?.isOnline ?? isNavigatorOnline)()) throw new Error(CLOSE_SHIFT_AUTHORITATIVE_OFFLINE_MESSAGE);
+
+  const firestore = db;
+  if (!firestore) throw new Error(CLOSE_SHIFT_UNVERIFIABLE_MESSAGE);
+  const journal = deps?.journal ?? getDefaultShiftCloseIntentJournal();
+  const readConfirmation = deps?.readConfirmation ?? readShiftCloseConfirmation;
+  const normalizeSyncState = deps?.normalizeSyncState ?? normalizeShiftCloseSyncState;
+  const clearPending = deps?.serverCashPending?.clear ?? clearShiftServerCashPending;
+  const readServer = deps?.authoritativeClose?.readServerShift ?? readAuthoritativeShift;
+  const deviceId = getDeviceId();
+  const ctx: CloseReconcileDeps = { journal, readConfirmation, normalizeSyncState, deviceId };
+
+  // 2. Request body (pure).
+  const sales = deps?.authoritativeClose?.sales;
+  if (!sales) throw new Error(CLOSE_SHIFT_AUTHORITATIVE_SALES_UNAVAILABLE_MESSAGE);
+  const built = buildAuthoritativeCloseRequestBody({ shift, sales, actualCashCount, note, deviceId });
+  if (!built.ok) throw new Error(requestFailureMessage(built), { cause: built });
+  const body = built.body;
+
+  // 3. Cache existence + raw cash ambiguity.
+  let cached;
+  try {
+    cached = await getDocFromCache(doc(firestore, collections.shifts, shift.id));
+  } catch {
+    throw new Error(CLOSE_SHIFT_UNVERIFIABLE_MESSAGE);
+  }
+  if (!cached.exists()) throw new Error(CLOSE_SHIFT_UNVERIFIABLE_MESSAGE);
+  const cachedRaw = (cached.data() as { cashEntries?: unknown }).cashEntries;
+  const cachedEntries = Array.isArray(cachedRaw) ? (cachedRaw as ShiftCashEntry[]) : [];
+  if (
+    cashEntriesAmbiguous(
+      [
+        { label: 'local', entries: shift.cashEntries },
+        { label: 'cache', entries: cachedRaw },
+      ],
+      'authoritative:local+cache',
+    )
+  ) {
+    throw new Error(CLOSE_SHIFT_CASH_AMBIGUOUS_MESSAGE);
+  }
+
+  // 4. An existing close record of this shift on this device.
+  let existingEntry: Awaited<ReturnType<ShiftCloseIntentJournal['getCloseIntent']>>;
+  try {
+    existingEntry = await journal.getCloseIntent(shift.id);
+  } catch (err) {
+    existingEntry = { ok: false, code: 'tx_failed', message: err instanceof Error ? err.message : String(err) };
+  }
+  if (!existingEntry.ok) throw new Error(CLOSE_SHIFT_ONLINE_STORE_UNAVAILABLE_MESSAGE);
+  if (existingEntry.value) return provenJournaledAuthoritativeClose(shift, existingEntry.value, cachedEntries, ctx);
+
+  // 5. Queued sale / cash writes of this device first.
+  if (!(await (deps?.waitForQueuedWrites ?? waitForQueuedWritesFlushed)())) {
+    throw new Error(CLOSE_SHIFT_PENDING_WRITES_MESSAGE);
+  }
+
+  // 6. Authoritative pre-call read.
+  const fresh = await safeRead(readServer, shift.id);
+  if (!fresh.ok || !fresh.exists) throw new Error(CLOSE_SHIFT_FRESHNESS_MESSAGE);
+  const d = fresh.data;
+  if (d.branchId !== shift.branchId || d.staffId !== shift.staffId) throw new Error(CLOSE_SHIFT_UNVERIFIABLE_MESSAGE);
+  if (
+    cashEntriesAmbiguous(
+      [
+        { label: 'local', entries: shift.cashEntries },
+        { label: 'cache', entries: cachedRaw },
+        { label: 'server', entries: d.cashEntries },
+      ],
+      'authoritative:pre-call',
+    )
+  ) {
+    throw new Error(CLOSE_SHIFT_CASH_AMBIGUOUS_MESSAGE);
+  }
+  const serverEntries = Array.isArray(d.cashEntries) ? (d.cashEntries as ShiftCashEntry[]) : [];
+
+  // 7. The durable attempt.
+  const identity = {
+    shiftId: shift.id,
+    branchId: shift.branchId,
+    staffId: shift.staffId,
+    staffName: shift.staffName,
+    deviceId,
+  };
+  let listed: Awaited<ReturnType<ShiftCloseIntentJournal['listOnlineCloseAttempts']>>;
+  try {
+    listed = await journal.listOnlineCloseAttempts();
+  } catch (err) {
+    listed = { ok: false, code: 'tx_failed', message: err instanceof Error ? err.message : String(err) };
+  }
+  if (!listed.ok) throw new Error(CLOSE_SHIFT_ONLINE_STORE_UNAVAILABLE_MESSAGE);
+  const prior = listed.value.find((a) => a.shiftId === shift.id);
+
+  let attempt: OnlineCloseAttemptRecord & { authoritative: NonNullable<OnlineCloseAttemptRecord['authoritative']> };
+  if (prior) {
+    attempt = ownAuthoritativeAttempt(prior, identity, body);
+    if (d.status === 'open') {
+      // Never rewrite the bound expectation: if the drawer moved since it was
+      // recorded, a call now could only commit totals the attempt refuses.
+      const now = buildAuthoritativeExpectation({ identity: attempt, body, serverData: d });
+      if (!now.ok || !snapshotsEqual(now.expected, attempt.authoritative.expected)) {
+        throw new Error(CLOSE_SHIFT_AUTHORITATIVE_DRAWER_CHANGED_MESSAGE);
+      }
+    }
+  } else {
+    if (d.status !== 'open') throw new Error(CLOSE_SHIFT_ALREADY_CLOSED_MESSAGE);
+    if (entriesMissingOnServer(d.cashEntries, shift.cashEntries, cachedRaw).length > 0) {
+      throw new Error(CLOSE_SHIFT_AUTHORITATIVE_LOCAL_CASH_NOT_ON_SERVER_MESSAGE);
+    }
+    const expectation = buildAuthoritativeExpectation({ identity, body, serverData: d });
+    if (!expectation.ok) {
+      throw new Error(CLOSE_SHIFT_AUTHORITATIVE_SERVER_CASH_INVALID_MESSAGE, { cause: expectation });
+    }
+    let prepared: Awaited<ReturnType<ShiftCloseIntentJournal['prepareOnlineCloseAttempt']>>;
+    try {
+      prepared = await journal.prepareOnlineCloseAttempt(identity, {
+        protocol: 'server_authoritative_v1',
+        request: body,
+        expected: expectation.expected,
+      });
+    } catch (err) {
+      prepared = { ok: false, code: 'tx_failed', message: err instanceof Error ? err.message : String(err) };
+    }
+    if (!prepared.ok) {
+      throw new Error(prepared.code === 'conflict' ? CLOSE_SHIFT_CONFLICT_MESSAGE : CLOSE_SHIFT_ONLINE_STORE_UNAVAILABLE_MESSAGE);
+    }
+    if (prepared.value.kind === 'journaled') {
+      return provenJournaledAuthoritativeClose(shift, prepared.value.entry, cachedEntries, ctx);
+    }
+    // Another window may have bound the attempt first: it must be this very request.
+    attempt = ownAuthoritativeAttempt(prepared.value.attempt, identity, body);
+  }
+  const correlationId = attempt.closeCorrelationId;
+
+  // 8. The call (+ at most one same-id same-body replay).
+  let callable: CloseShiftAuthoritativeCallable;
+  try {
+    callable = deps?.authoritativeClose?.callable ?? (await getDefaultCloseShiftAuthoritativeCallable());
+  } catch {
+    throw new Error(CLOSE_SHIFT_AUTHORITATIVE_UNAVAILABLE_MESSAGE);
+  }
+  const request = authoritativeCloseRequest(attempt.authoritative.request, correlationId);
+  let outcome: AuthoritativeCloseOutcome = await invokeCloseShiftAuthoritative(callable, request);
+  let replayed = false;
+  while (outcome.kind !== 'committed') {
+    if (outcome.kind === 'refused') {
+      // Definitive for THAT call: nothing written by it. But the shift may be
+      // closed with THIS id (a direct W3, another body, an inconsistent
+      // record, or our own earlier commit before this replay): then it is a
+      // known commit of the id — custody recorded, never worded "not closed".
+      const code = outcome.code;
+      let closedByThis = replayed || code === 'closed_outside_authority' || code === 'idempotency_conflict';
+      if (!closedByThis && code === 'close_record_inconsistent') {
+        const probe = await safeRead(readServer, shift.id);
+        closedByThis = !probe.ok || (probe.exists && probe.data.closeCorrelationId === correlationId);
+      }
+      if (!closedByThis) throw new Error(authoritativeRefusalMessage(code), { cause: { code } });
+      const commitObservation = await recordCommitObservation(journal, shift.id, correlationId);
+      throw new Error(
+        code === 'closed_outside_authority' || code === 'idempotency_conflict'
+          ? authoritativeRefusalMessage(code)
+          : CLOSE_SHIFT_COMMITTED_UNVERIFIED_MESSAGE,
+        { cause: { code, commitObservation } },
+      );
+    }
+    if (outcome.kind === 'unknown') {
+      // UNKNOWN is never "failed, so write directly": probe this exact id.
+      const probe = await safeRead(readServer, shift.id);
+      const closedByThis =
+        probe.ok && probe.exists && probe.data.status === 'closed' && probe.data.closeCorrelationId === correlationId;
+      if (!closedByThis) throw new Error(CLOSE_SHIFT_TX_FAILED_MESSAGE, { cause: { outcome: outcome.kind } });
+    }
+    // A commit of this id is known (or claimed): durable custody, then one replay.
+    const commitObservation = await recordCommitObservation(journal, shift.id, correlationId);
+    if (replayed) {
+      throw new Error(CLOSE_SHIFT_COMMITTED_NOT_FINALIZED_MESSAGE, { cause: { outcome: outcome.kind, commitObservation } });
+    }
+    replayed = true;
+    outcome = await invokeCloseShiftAuthoritative(callable, request);
+  }
+
+  // 9. Proof-before-Z.
+  const ownIdentity: OwnCloseIdentity = {
+    shiftId: attempt.shiftId,
+    branchId: attempt.branchId,
+    staffId: attempt.staffId,
+    staffName: attempt.staffName,
+    deviceId: attempt.deviceId,
+    closeCorrelationId: correlationId,
+  };
+  let read: ShiftCloseConfirmationRead;
+  try {
+    read = await readConfirmation(shift.id);
+  } catch {
+    read = { ok: false };
+  }
+  if (!read.ok) {
+    const commitObservation = await recordCommitObservation(journal, shift.id, correlationId);
+    throw new Error(CLOSE_SHIFT_COMMITTED_NOT_FINALIZED_MESSAGE, { cause: { proof: 'unreachable', commitObservation } });
+  }
+  const parsed = parseCommittedOwnClose(ownIdentity, read.doc);
+  if (!parsed.ok) {
+    const commitObservation = await recordCommitObservation(journal, shift.id, correlationId);
+    throw new Error(CLOSE_SHIFT_COMMITTED_UNVERIFIED_MESSAGE, { cause: { proof: parsed.reason, commitObservation } });
+  }
+  if (
+    !snapshotsEqual(parsed.snapshot, outcome.success.snapshot) ||
+    !snapshotsEqual(parsed.snapshot, attempt.authoritative.expected)
+  ) {
+    console.warn('[shiftService] server-authoritative close committed values this device did not expect');
+    const commitObservation = await recordCommitObservation(journal, shift.id, correlationId);
+    throw new Error(CLOSE_SHIFT_AUTHORITATIVE_RESULT_MISMATCH_MESSAGE, { cause: { proof: 'differs_from_expected', commitObservation } });
+  }
+  for (let i = 0; i < 2; i += 1) {
+    let finalized: Awaited<ReturnType<ShiftCloseIntentJournal['finalizeOnlineClose']>>;
+    try {
+      finalized = await journal.finalizeOnlineClose(parsed.snapshot, correlationId, deps?.observePointerRepair);
+    } catch (err) {
+      finalized = { ok: false, code: 'tx_failed', message: err instanceof Error ? err.message : String(err) };
+    }
+    if (finalized.ok) {
+      const entry = finalized.value;
+      // Proven + journaled: a Return can no longer commit onto this closed shift.
+      clearPending(shift.id);
+      return {
+        ...withMergedCashEntries(shift, cachedEntries, serverEntries),
+        ...pickTotals(entry),
+        startingCash: entry.startingCash,
+        status: 'closed',
+        actualCashCount: entry.actualCashCount,
+        variance: entry.variance,
+        note: entry.note,
+        closedOffline: true,
+        syncState: 'pending',
+        deviceId,
+        closedAtLocal: entry.closedAtLocal,
+        whenServerConfirmed: reconcileClosed(entry, withProvenRead(ctx, shift.id, read)),
+      };
+    }
+    if (finalized.code === 'conflict') {
+      console.warn('[shiftService] server-authoritative close conflicts with the local journal', finalized);
+      const commitObservation = await recordCommitObservation(journal, shift.id, correlationId);
+      throw new Error(
+        finalized.reason === 'attempt_expectation_mismatch'
+          ? CLOSE_SHIFT_AUTHORITATIVE_RESULT_MISMATCH_MESSAGE
+          : CLOSE_SHIFT_COMMITTED_UNVERIFIED_MESSAGE,
+        { cause: { finalizeRefusal: finalized.reason, commitObservation } },
+      );
+    }
+    console.warn('[shiftService] server-authoritative close could not be journaled', finalized);
+  }
+  const commitObservation = await recordCommitObservation(journal, shift.id, correlationId);
+  throw new Error(CLOSE_SHIFT_COMMITTED_NOT_FINALIZED_MESSAGE, { cause: { commitObservation } });
+}
+
+/**
+ * Packet 014 — an existing attempt may carry this close only when it is THIS
+ * device's / branch's / staff's server-authoritative attempt for exactly this
+ * request body. A legacy (transaction) attempt is an unresolved close of
+ * another protocol, a tombstone can never commit, and a changed body under
+ * the same id is never sent.
+ */
+function ownAuthoritativeAttempt(
+  a: OnlineCloseAttemptRecord,
+  identity: { shiftId: string; branchId: string; staffId: string; deviceId: string },
+  body: AuthoritativeCloseRequestBody,
+): OnlineCloseAttemptRecord & { authoritative: NonNullable<OnlineCloseAttemptRecord['authoritative']> } {
+  if (a.shiftId !== identity.shiftId || a.branchId !== identity.branchId || a.staffId !== identity.staffId || a.deviceId !== identity.deviceId) {
+    throw new Error(CLOSE_SHIFT_CONFLICT_MESSAGE);
+  }
+  if (!isAuthoritativeAttempt(a) || !a.authoritative) throw new Error(CLOSE_SHIFT_AUTHORITATIVE_LOCAL_CLOSE_PENDING_MESSAGE);
+  if (isSupersededAttempt(a)) throw new Error(CLOSE_SHIFT_ALREADY_CLOSED_MESSAGE);
+  if (!sameAuthoritativeRequestBody(a.authoritative.request, body)) {
+    throw new Error(CLOSE_SHIFT_AUTHORITATIVE_REQUEST_CHANGED_MESSAGE);
+  }
+  return a as OnlineCloseAttemptRecord & { authoritative: NonNullable<OnlineCloseAttemptRecord['authoritative']> };
+}
+
+/**
+ * Packet 014 — this shift already has a close record in the journal. Its Z is
+ * shown only when the server doc is closed with ITS correlation id and the
+ * strict parse equals it (nothing is finalized, sent or written here);
+ * anything else (an offline-queued close not yet on the server, a rejected or
+ * foreign entry, an unreadable server) refuses for manual handling.
+ */
+async function provenJournaledAuthoritativeClose(
+  shift: Shift,
+  entry: ShiftCloseIntentEntry,
+  cachedEntries: ShiftCashEntry[],
+  ctx: CloseReconcileDeps,
+): Promise<CloseShiftResult> {
+  const pending = () => new Error(CLOSE_SHIFT_AUTHORITATIVE_LOCAL_CLOSE_PENDING_MESSAGE);
+  if (
+    entry.status === 'rejected_manual_attention' ||
+    entry.closeCorrelationId === null ||
+    entry.deviceId !== ctx.deviceId ||
+    entry.branchId !== shift.branchId ||
+    entry.staffId !== shift.staffId
+  ) {
+    throw pending();
+  }
+  let read: ShiftCloseConfirmationRead;
+  try {
+    read = await ctx.readConfirmation(shift.id);
+  } catch {
+    read = { ok: false };
+  }
+  if (!read.ok) throw pending();
+  const parsed = parseCommittedOwnClose(
+    {
+      shiftId: entry.shiftId,
+      branchId: entry.branchId,
+      staffId: entry.staffId,
+      staffName: entry.staffName,
+      deviceId: ctx.deviceId,
+      closeCorrelationId: entry.closeCorrelationId,
+    },
+    read.doc,
+  );
+  if (!parsed.ok || !snapshotsEqual(parsed.snapshot, entry)) throw pending();
+  return {
+    ...withMergedCashEntries(shift, cachedEntries),
+    ...pickTotals(entry),
+    startingCash: entry.startingCash,
+    status: 'closed',
+    actualCashCount: entry.actualCashCount,
+    variance: entry.variance,
+    note: entry.note,
+    closedOffline: true,
+    syncState: 'pending',
+    deviceId: ctx.deviceId,
+    closedAtLocal: entry.closedAtLocal,
+    whenServerConfirmed: reconcileClosed(entry, withProvenRead(ctx, shift.id, read)),
   };
 }
 

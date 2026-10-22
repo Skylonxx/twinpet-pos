@@ -229,6 +229,52 @@ export type OnlineCloseAttemptRecord = {
   commitObservedAtLocal?: number;
   /** Optional, additive (see above): retained-tombstone time of a superseded, never-committed attempt. */
   supersededAtLocal?: number;
+  /**
+   * Packet 014 — optional, additive: present ONLY on an attempt prepared by the
+   * (default-OFF) server-authoritative close. KEY PRESENCE decides: a present
+   * but malformed binding makes the attempt unreadable (fail closed). See
+   * {@link AuthoritativeCloseBinding}.
+   */
+  authoritative?: AuthoritativeCloseBinding;
+};
+
+/**
+ * Packet 014 — the frozen `closeShiftAuthoritative` v1 request body minus its
+ * `closeCorrelationId` (that is the attempt's own id). Money is canonical
+ * `minor / 100` (docs/contracts/close-shift-authoritative-v1.md §2).
+ */
+export type AuthoritativeCloseRequestBody = {
+  contractVersion: 1;
+  shiftId: string;
+  actualCashCount: number;
+  note: string;
+  attestedSales: {
+    expectedCash: number;
+    expectedQr: number;
+    expectedKbank: number;
+    expectedCard: number;
+    expectedCredit: number;
+    totalBills: number;
+  };
+  deviceId: string;
+};
+
+/**
+ * Packet 014 — what a server-authoritative attempt is bound to, written with
+ * the attempt BEFORE the callable is invoked and never rewritten:
+ *   request   the exact body every call / replay of this attempt sends
+ *   expected  the 17-field close this device expects the server to commit
+ *             (attested sales + count + note from `request`; startingCash and
+ *             pay-in / pay-out from the authoritative pre-call shift read)
+ * `finalizeOnlineClose` refuses (`attempt_expectation_mismatch`) a committed
+ * snapshot that differs from `expected` — e.g. a cash Return that landed
+ * between the pre-call read and the server commit — so neither the same
+ * runtime nor a later sweep can adopt server totals this device did not expect.
+ */
+export type AuthoritativeCloseBinding = {
+  protocol: 'server_authoritative_v1';
+  request: AuthoritativeCloseRequestBody;
+  expected: ShiftCloseIntentBusinessSnapshot;
 };
 
 export type OnlineCloseAttemptIdentity = Pick<
@@ -245,12 +291,15 @@ export type OnlineCloseAttemptIdentity = Pick<
  *   entry_unreadable    the stored close-intent is malformed
  *   entry_conflict      a DIFFERENT close-intent (totals / identity / correlation) exists
  *   snapshot_invalid    the snapshot would not form a valid close-intent
+ *   attempt_expectation_mismatch  (014) a server-authoritative attempt's `expected`
+ *                       close differs from the committed snapshot
  */
 export type FinalizeOnlineCloseRefusal =
   | 'attempt_missing'
   | 'attempt_unreadable'
   | 'attempt_mismatch'
   | 'attempt_superseded'
+  | 'attempt_expectation_mismatch'
   | 'entry_unreadable'
   | 'entry_conflict'
   | 'snapshot_invalid';

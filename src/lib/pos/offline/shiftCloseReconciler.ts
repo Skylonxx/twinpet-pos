@@ -16,6 +16,7 @@
 // is imported from its true source to satisfy build-mode TypeScript (TS2459).
 import {
   generateShiftCloseCorrelationId,
+  isAuthoritativeAttempt,
   isCommitObservedAttempt,
   isSupersededAttempt,
   isValidLowercaseUuidV4,
@@ -1165,6 +1166,17 @@ async function readFinalJournalState(deps: ReconcileShiftCloseIntentDeps): Promi
   }
 }
 
+/** Packet 014 — after the sweep: shift ids of THIS device's attempts still stored; `null` = unknown. */
+async function readFinalAttemptShifts(deps: ReconcileShiftCloseIntentDeps): Promise<Set<string> | null> {
+  try {
+    const listed = await deps.journal.listOnlineCloseAttempts();
+    if (!listed.ok) return null;
+    return new Set(listed.value.filter((a) => a.deviceId === deps.deviceId).map((a) => a.shiftId));
+  } catch {
+    return null;
+  }
+}
+
 function pendingCloseCondition(r: ReconcileShiftCloseIntentResult): ShiftCloseAttentionCondition | null {
   if (r.outcome === 'still_pending') return 'close_unconfirmed';
   if (r.outcome === 'unreachable') return r.journalWriteFailed ? 'close_journal_write_failed' : 'close_unreachable';
@@ -1278,9 +1290,26 @@ async function runSweepOnce(deps: ReconcileShiftCloseIntentDeps): Promise<ShiftC
     add(null, null, 'owed_unreadable');
   }
   if (!recovered.readable) add(null, null, 'attempts_unreadable');
+  // Packet 014: a server-authoritative attempt has no journal entry until it
+  // is finalized, so the entry-based filter of `add` would always drop it (a
+  // false clean Sync Center over a refused / unreachable server close). Its
+  // condition is kept while the attempt itself is still in the FINAL attempt
+  // list (unreadable ⇒ kept and reported). Legacy attempts keep `add`.
+  const authoritativeIssues = recovered.results.filter(
+    ({ attempt, result }) =>
+      isAuthoritativeAttempt(attempt) && (result.outcome === 'unreachable' || result.outcome === 'manual_attention'),
+  );
+  const finalAttemptShifts = authoritativeIssues.length > 0 ? await readFinalAttemptShifts(deps) : null;
+  if (authoritativeIssues.length > 0 && finalAttemptShifts === null) add(null, null, 'attempts_unreadable');
   for (const { attempt, result } of recovered.results) {
-    if (result.outcome === 'unreachable') add(attempt.shiftId, attempt.branchId, 'attempt_unreachable');
-    if (result.outcome === 'manual_attention') add(attempt.shiftId, attempt.branchId, 'attempt_manual_attention');
+    const condition =
+      result.outcome === 'unreachable' ? 'attempt_unreachable' : result.outcome === 'manual_attention' ? 'attempt_manual_attention' : null;
+    if (!condition) continue;
+    if (!isAuthoritativeAttempt(attempt)) {
+      add(attempt.shiftId, attempt.branchId, condition);
+    } else if (finalAttemptShifts === null || finalAttemptShifts.has(attempt.shiftId)) {
+      attention.push({ shiftId: attempt.shiftId, branchId: attempt.branchId, condition });
+    }
   }
 
   const status: ShiftCloseNormalizationSummary['status'] =

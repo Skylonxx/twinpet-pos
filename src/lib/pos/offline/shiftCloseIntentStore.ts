@@ -1,4 +1,5 @@
 import type {
+  AuthoritativeCloseBinding,
   CloseIntentErrorCode,
   CloseIntentResult,
   FinalizeOnlineCloseRefusal,
@@ -517,8 +518,59 @@ function isValidOnlineCloseAttempt(v: unknown): v is OnlineCloseAttemptRecord {
     typeof r.staffName === 'string' &&
     usableDeviceId(r.deviceId) &&
     isValidLowercaseUuidV4(r.closeCorrelationId) &&
-    isValidLocalTimestamp(r.preparedAtLocal)
+    isValidLocalTimestamp(r.preparedAtLocal) &&
+    (!('authoritative' in r) || isValidAuthoritativeBinding(r.authoritative, r))
   );
+}
+
+const AUTHORITATIVE_REQUEST_KEYS = ['contractVersion', 'shiftId', 'actualCashCount', 'note', 'attestedSales', 'deviceId'] as const;
+const AUTHORITATIVE_SALES_KEYS = ['expectedCash', 'expectedQr', 'expectedKbank', 'expectedCard', 'expectedCredit', 'totalBills'] as const;
+
+function hasExactKeys(v: Record<string, unknown>, keys: readonly string[]): boolean {
+  const own = Object.keys(v);
+  return own.length === keys.length && keys.every((k) => Object.prototype.hasOwnProperty.call(v, k));
+}
+
+function isBusinessSnapshotShaped(v: unknown): v is ShiftCloseIntentBusinessSnapshot {
+  if (!isPlainRecord(v)) return false;
+  if (!SNAPSHOT_STRING_FIELDS.every((f) => typeof v[f] === 'string')) return false;
+  if (!SNAPSHOT_NUMBER_FIELDS.every((f) => isFiniteNumber(v[f]))) return false;
+  return typeof v.deviceId === 'string';
+}
+
+/**
+ * Packet 014 — structural check of a server-authoritative attempt binding: the
+ * exact request key set (money bounds are the adapter's and the server's job),
+ * an `expected` close of THIS attempt's identity whose cashier / attested
+ * fields are the request's. Anything else makes the attempt unreadable.
+ */
+function isValidAuthoritativeBinding(b: unknown, attempt: Record<string, unknown>): b is AuthoritativeCloseBinding {
+  if (!isPlainRecord(b) || !hasExactKeys(b, ['protocol', 'request', 'expected'])) return false;
+  if (b.protocol !== 'server_authoritative_v1') return false;
+  const req = b.request;
+  const exp = b.expected;
+  if (!isPlainRecord(req) || !hasExactKeys(req, AUTHORITATIVE_REQUEST_KEYS)) return false;
+  const sales = req.attestedSales;
+  if (!isPlainRecord(sales) || !hasExactKeys(sales, AUTHORITATIVE_SALES_KEYS)) return false;
+  if (req.contractVersion !== 1 || typeof req.note !== 'string' || !isFiniteNumber(req.actualCashCount)) return false;
+  if (!AUTHORITATIVE_SALES_KEYS.every((k) => isFiniteNumber(sales[k]))) return false;
+  if (req.shiftId !== attempt.shiftId || req.deviceId !== attempt.deviceId) return false;
+  if (!isBusinessSnapshotShaped(exp)) return false;
+  return (
+    exp.shiftId === attempt.shiftId &&
+    exp.branchId === attempt.branchId &&
+    exp.staffId === attempt.staffId &&
+    exp.staffName === attempt.staffName &&
+    exp.deviceId === attempt.deviceId &&
+    exp.actualCashCount === req.actualCashCount &&
+    exp.note === req.note &&
+    AUTHORITATIVE_SALES_KEYS.every((k) => exp[k] === sales[k])
+  );
+}
+
+/** Packet 014 — the attempt was prepared by the server-authoritative close (key presence). */
+export function isAuthoritativeAttempt(a: OnlineCloseAttemptRecord): boolean {
+  return 'authoritative' in a;
 }
 
 /**
@@ -1146,9 +1198,15 @@ export type ShiftCloseIntentJournal = {
    * verifies it with a separate committed read. Any failure → nothing may be
    * sent. A missing secure correlation id is a failure (the commit could not
    * be recognised later).
+   * Packet 014: `authoritative` (server-authoritative close only) is written
+   * WITH a new attempt and verified by the read-back; an existing attempt is
+   * returned unchanged (the caller compares its binding — never rewritten).
+   * A call without it (the legacy transaction close) never reuses an attempt
+   * that carries one (`conflict`).
    */
   prepareOnlineCloseAttempt: (
     identity: OnlineCloseAttemptIdentity,
+    authoritative?: AuthoritativeCloseBinding,
   ) => Promise<CloseIntentResult<PrepareOnlineCloseResult>>;
   /**
    * Recovery gate B2 stage 3 — after the W3 commit: in ONE store transaction,
@@ -1547,7 +1605,7 @@ function buildJournalApi(
     markRejectedManualAttention: (shiftId, reason, observePointerRepair) =>
       markStatus(shiftId, 'rejected_manual_attention', reason, observePointerRepair),
 
-    prepareOnlineCloseAttempt: (identity) =>
+    prepareOnlineCloseAttempt: (identity, authoritative) =>
       runStore(store, async (s) => {
         const key = onlineCloseAttemptKey(identity.shiftId);
         const written = await s.transact(
@@ -1574,6 +1632,9 @@ function buildJournalApi(
               if (!isValidOnlineCloseAttempt(existing) || !sameAttemptIdentity(existing, identity)) {
                 return conflict(`A different online close attempt exists locally for shift "${identity.shiftId}".`);
               }
+              if (authoritative === undefined && isAuthoritativeAttempt(existing)) {
+                return conflict(`A server-authoritative online close attempt exists locally for shift "${identity.shiftId}".`);
+              }
               return { ok: true, value: { kind: 'prepared', attempt: existing } };
             }
             const closeCorrelationId = generateCloseCorrelationId();
@@ -1588,7 +1649,12 @@ function buildJournalApi(
               deviceId: identity.deviceId,
               closeCorrelationId,
               preparedAtLocal: now(),
+              ...(authoritative !== undefined ? { authoritative } : {}),
             };
+            // Never persist an attempt that would make every attempt read fail closed.
+            if (!isValidOnlineCloseAttempt(attempt)) {
+              return conflict(`The server-authoritative close binding for shift "${identity.shiftId}" is invalid.`);
+            }
             await txn.put('shiftCloseIntents', key, attempt);
             return { ok: true, value: { kind: 'prepared', attempt } };
           },
@@ -1599,7 +1665,11 @@ function buildJournalApi(
           attempt: await txn.get<unknown>('shiftCloseIntents', key),
           entry: await txn.get<unknown>('shiftCloseIntents', identity.shiftId),
         }));
-        if (isValidOnlineCloseAttempt(readBack.attempt) && readBack.attempt.closeCorrelationId === expected) {
+        if (
+          isValidOnlineCloseAttempt(readBack.attempt) &&
+          readBack.attempt.closeCorrelationId === expected &&
+          isAuthoritativeAttempt(readBack.attempt) === isAuthoritativeAttempt(written.value.attempt)
+        ) {
           return written;
         }
         // Another window finalized THIS attempt in between (its commit landed and
@@ -1647,6 +1717,10 @@ function buildJournalApi(
               } else if ('supersededAtLocal' in attemptRaw) {
                 // A tombstone — even one later marked commit-observed — is a contradiction for manual attention.
                 attemptRefusal = 'attempt_superseded';
+              } else if (attemptRaw.authoritative && !snapshotsEqual(snapshot, attemptRaw.authoritative.expected)) {
+                // Packet 014: the server committed a close this device did not
+                // expect (e.g. a Return landed after the pre-call read) — never adopted.
+                attemptRefusal = 'attempt_expectation_mismatch';
               }
             }
             if (existingRaw !== undefined) {
