@@ -277,6 +277,24 @@ export type AuthoritativeCloseBinding = {
   expected: ShiftCloseIntentBusinessSnapshot;
 };
 
+/**
+ * Packet 015 — what a successful `closeShiftAuthoritative` response (the
+ * canonical idempotent replay or the first commit, built server-side from the
+ * durable shift doc + authority record) says about THIS attempt's close. It is
+ * produced only by the callable adapter after the response shape, correlation
+ * id and provenance were validated, and it is NEVER persisted: the store's
+ * `finalizeOnlineClose` requires one for a server-authoritative attempt, so a
+ * `shifts` document alone (a Rules-accepted direct client W3 with the same
+ * UUID and amounts) can never mint a close-intent entry / Z.
+ */
+export type AuthoritativeServerProof = {
+  protocol: 'server_authoritative_v1';
+  shiftId: string;
+  closeCorrelationId: string;
+  closedAtMillis: number;
+  snapshot: ShiftCloseIntentBusinessSnapshot;
+};
+
 export type OnlineCloseAttemptIdentity = Pick<
   OnlineCloseAttemptRecord,
   'shiftId' | 'branchId' | 'staffId' | 'staffName' | 'deviceId'
@@ -293,6 +311,8 @@ export type OnlineCloseAttemptIdentity = Pick<
  *   snapshot_invalid    the snapshot would not form a valid close-intent
  *   attempt_expectation_mismatch  (014) a server-authoritative attempt's `expected`
  *                       close differs from the committed snapshot
+ *   attempt_authority_unproven  (015) a server-authoritative attempt is finalized
+ *                       without (or against) the callable's server proof
  */
 export type FinalizeOnlineCloseRefusal =
   | 'attempt_missing'
@@ -300,6 +320,7 @@ export type FinalizeOnlineCloseRefusal =
   | 'attempt_mismatch'
   | 'attempt_superseded'
   | 'attempt_expectation_mismatch'
+  | 'attempt_authority_unproven'
   | 'entry_unreadable'
   | 'entry_conflict'
   | 'snapshot_invalid';

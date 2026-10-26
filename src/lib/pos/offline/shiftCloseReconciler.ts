@@ -23,10 +23,17 @@ import {
   snapshotsEqual,
   type ShiftCloseIntentJournal,
 } from './shiftCloseIntentStore';
+import {
+  authoritativeCloseRequest,
+  getDefaultCloseShiftAuthoritativeCallable,
+  proveServerAuthoredClose,
+  type CloseShiftAuthoritativeCallable,
+} from '../shiftCloseAuthoritativeClient';
 import { isValidLegacyClaimEpoch } from './shiftCloseIntentTypes';
 import type {
   LegacyClaimResult,
   LegacyNormalizationClaimFence,
+  AuthoritativeServerProof,
   OnlineCloseAttemptRecord,
   PointerRepairOutcome,
   ShiftCloseIntentBusinessSnapshot,
@@ -177,6 +184,15 @@ export type ReconcileShiftCloseIntentDeps = {
   normalizeSyncState?: ShiftCloseNormalizer;
   /** This device's id — reconciliation is scoped to intents this device authored. */
   deviceId: string;
+  /**
+   * Packet 015 — the transport of `closeShiftAuthoritative` used ONLY to prove
+   * (by the idempotent replay of the stored request) that an already-CLOSED
+   * shift was closed by the server for a server-authoritative attempt. Omitted
+   * = the production callable (created lazily; unavailable => the attempt stays
+   * unreachable, never adopted). It is never invoked for an open / unreadable
+   * shift, so no sweep can create a W3.
+   */
+  authoritativeCallable?: CloseShiftAuthoritativeCallable;
 };
 
 export type ReconcileShiftCloseIntentResult = {
@@ -852,7 +868,7 @@ export function parseCommittedOwnClose(identity: OwnCloseIdentity, doc: ShiftClo
  */
 export async function recoverOnlineCloseAttempt(
   attempt: OnlineCloseAttemptRecord,
-  deps: Pick<ReconcileShiftCloseIntentDeps, 'journal' | 'readConfirmation' | 'deviceId'>,
+  deps: Pick<ReconcileShiftCloseIntentDeps, 'journal' | 'readConfirmation' | 'deviceId' | 'authoritativeCallable'>,
 ): Promise<OnlineCloseRecoveryResult> {
   const shiftId = attempt.shiftId;
   if (attempt.deviceId !== deps.deviceId) return { shiftId, outcome: 'not_closed' };
@@ -889,9 +905,35 @@ export async function recoverOnlineCloseAttempt(
     return { shiftId, outcome: 'manual_attention' };
   }
   const { snapshot } = parsed;
+  // Packet 015 (F1): a SERVER-AUTHORITATIVE attempt is never recovered from the
+  // shift doc alone - a direct client W3 can carry the same UUID and amounts.
+  // The doc is already definitely closed by this UUID (read above), so the
+  // callable's idempotent replay of the stored request is safe (it never
+  // writes) and is the proof; anything but a canonical replay equal to the doc
+  // keeps the attempt (and everything else) untouched.
+  let serverProof: AuthoritativeServerProof | undefined;
+  if (isAuthoritativeAttempt(attempt) && attempt.authoritative) {
+    if (!snapshotsEqual(snapshot, attempt.authoritative.expected)) {
+      return { shiftId, outcome: 'manual_attention' }; // closed with this id but not with the bound expectation
+    }
+    let callable: CloseShiftAuthoritativeCallable;
+    try {
+      callable = deps.authoritativeCallable ?? (await getDefaultCloseShiftAuthoritativeCallable());
+    } catch {
+      return { shiftId, outcome: 'unreachable' };
+    }
+    const proof = await proveServerAuthoredClose({
+      callable,
+      request: authoritativeCloseRequest(attempt.authoritative.request, attempt.closeCorrelationId),
+      closedDoc: { snapshot, closedAtMillis: parsed.closedAt.getTime() },
+    });
+    if (proof.kind === 'unreachable') return { shiftId, outcome: 'unreachable' };
+    if (proof.kind === 'manual_attention') return { shiftId, outcome: 'manual_attention' };
+    serverProof = proof.proof;
+  }
   let finalized: Awaited<ReturnType<ReconcileShiftCloseIntentDeps['journal']['finalizeOnlineClose']>>;
   try {
-    finalized = await deps.journal.finalizeOnlineClose(snapshot, attempt.closeCorrelationId);
+    finalized = await deps.journal.finalizeOnlineClose(snapshot, attempt.closeCorrelationId, undefined, serverProof);
   } catch {
     return { shiftId, outcome: 'unreachable' };
   }
@@ -903,14 +945,14 @@ export async function recoverOnlineCloseAttempt(
 
 /** Every THIS-device prepared attempt through {@link recoverOnlineCloseAttempt}. Never throws. */
 export async function recoverOnlineCloseAttempts(
-  deps: Pick<ReconcileShiftCloseIntentDeps, 'journal' | 'readConfirmation' | 'deviceId'>,
+  deps: Pick<ReconcileShiftCloseIntentDeps, 'journal' | 'readConfirmation' | 'deviceId' | 'authoritativeCallable'>,
 ): Promise<OnlineCloseRecoveryResult[]> {
   return (await recoverOnlineCloseAttemptsDetailed(deps)).results.map(({ result }) => result);
 }
 
 /** Gate 008-B — the same pass, keeping whether the attempts could be listed and each attempt's branch. */
 async function recoverOnlineCloseAttemptsDetailed(
-  deps: Pick<ReconcileShiftCloseIntentDeps, 'journal' | 'readConfirmation' | 'deviceId'>,
+  deps: Pick<ReconcileShiftCloseIntentDeps, 'journal' | 'readConfirmation' | 'deviceId' | 'authoritativeCallable'>,
 ): Promise<{ readable: boolean; results: Array<{ attempt: OnlineCloseAttemptRecord; result: OnlineCloseRecoveryResult }> }> {
   let listed: Awaited<ReturnType<ReconcileShiftCloseIntentDeps['journal']['listOnlineCloseAttempts']>>;
   try {
@@ -995,7 +1037,11 @@ const sweepsInFlight = new Map<string, { promise: Promise<ShiftCloseSweepResult>
  *   w4_owed                     still owed after the sweep (not evaluated by it: batch bound, leased)
  * Online close attempts:
  *   attempt_unreachable         its read / journal write failed
- *   attempt_manual_attention    retained for investigation (B2.1 / 007-B refusals)
+ *   attempt_manual_attention    retained for investigation (B2.1 / 007-B refusals, or a closed shift
+ *                               the server cannot prove it authored - packet 015)
+ *   attempt_unresolved          (packet 015, server-authoritative attempts only) the attempt is durably
+ *                               stored and its shift is still open: the close is owed, so the sweep is
+ *                               never clean while it exists (legacy open attempts keep their old semantics)
  * Scoped-unknown (degraded):
  *   journal_unreadable          the close-intent journal could not be listed — nothing checked
  *   owed_unreadable             the final journal state could not be read: work left is UNKNOWN
@@ -1016,6 +1062,7 @@ export type ShiftCloseAttentionCondition =
   | 'w4_owed'
   | 'attempt_unreachable'
   | 'attempt_manual_attention'
+  | 'attempt_unresolved'
   | 'journal_unreadable'
   | 'owed_unreadable'
   | 'attempts_unreadable';
@@ -1045,6 +1092,7 @@ const ATTENTION_ORDER: readonly ShiftCloseAttentionCondition[] = [
   'close_pending',
   'attempt_unreachable',
   'attempt_manual_attention',
+  'attempt_unresolved',
 ];
 
 /** Conditions that mean a local write / read FAILED (or the state is unknown): `degraded`. */
@@ -1297,13 +1345,20 @@ async function runSweepOnce(deps: ReconcileShiftCloseIntentDeps): Promise<ShiftC
   // list (unreadable ⇒ kept and reported). Legacy attempts keep `add`.
   const authoritativeIssues = recovered.results.filter(
     ({ attempt, result }) =>
-      isAuthoritativeAttempt(attempt) && (result.outcome === 'unreachable' || result.outcome === 'manual_attention'),
+      isAuthoritativeAttempt(attempt) &&
+      (result.outcome === 'unreachable' || result.outcome === 'manual_attention' || result.outcome === 'not_closed'),
   );
   const finalAttemptShifts = authoritativeIssues.length > 0 ? await readFinalAttemptShifts(deps) : null;
   if (authoritativeIssues.length > 0 && finalAttemptShifts === null) add(null, null, 'attempts_unreadable');
   for (const { attempt, result } of recovered.results) {
     const condition =
-      result.outcome === 'unreachable' ? 'attempt_unreachable' : result.outcome === 'manual_attention' ? 'attempt_manual_attention' : null;
+      result.outcome === 'unreachable'
+        ? 'attempt_unreachable'
+        : result.outcome === 'manual_attention'
+          ? 'attempt_manual_attention'
+          : result.outcome === 'not_closed' && isAuthoritativeAttempt(attempt)
+            ? 'attempt_unresolved'
+            : null;
     if (!condition) continue;
     if (!isAuthoritativeAttempt(attempt)) {
       add(attempt.shiftId, attempt.branchId, condition);

@@ -28,7 +28,9 @@ import {
   type ShiftCloseIntentJournal,
 } from './offline/shiftCloseIntentStore';
 import {
+  recoverOnlineCloseAttempt,
   runShiftCloseReconciliationSweep,
+  shiftCloseAttentionKey,
   shiftCloseConfirmationDocFromData,
   shiftCloseNormalizationIssue,
   type ShiftCloseConfirmationReader,
@@ -77,7 +79,26 @@ vi.mock('./deviceId', async (importOriginal) => {
   return { ...actual, getDeviceId: vi.fn(() => 'DEV1') };
 });
 
-import { closeShift, type CloseShiftDeps, type ShiftCloseTransactionRunner } from './shiftService';
+import * as authClient from './shiftCloseAuthoritativeClient';
+import { closeShift as closeShiftReal, type CloseShiftDeps, type ShiftCloseTransactionRunner } from './shiftService';
+
+/**
+ * Packet 015 (F2): the ON close takes the operator-reviewed drawer witness of the
+ * display the cashier confirmed. The shift an existing test passes IS that
+ * display (the modal passes its `displayShift`), so the witness is derived from
+ * it here unless a test sets `authoritativeClose.reviewedDrawer` itself (any
+ * value, even `undefined`). On the parent commit the builder does not exist and
+ * nothing is injected — the behaviour under test is unchanged.
+ */
+function closeShift(shift: Shift, count: number, note: string, deps?: CloseShiftDeps) {
+  const ac = (deps as { authoritativeClose?: Record<string, unknown> } | undefined)?.authoritativeClose;
+  const build = (authClient as unknown as { buildReviewedDrawerWitness?: (s: Shift, refresh: string) => unknown })
+    .buildReviewedDrawerWitness;
+  if (deps?.authoritativeCloseGate && ac && !('reviewedDrawer' in ac) && build) {
+    deps = { ...deps, authoritativeClose: { ...ac, reviewedDrawer: build(shift, 'loaded') } } as CloseShiftDeps;
+  }
+  return closeShiftReal(shift, count, note, deps);
+}
 
 // ── Literal message fragments (the constants are new in 014) ──
 const M = {
@@ -1048,15 +1069,441 @@ describe('014-F sync outcomes stay truthful after a callable success', () => {
       finalizeOnlineClose: async () => ({ ok: false, code: 'tx_failed', message: 'AbortError' }),
     };
     await expect(closeShift(drawer(), 1500, '', onDeps(h, broken))).rejects.toThrow(M.notFinalized);
-    // The sweep recovers it from the server doc — the expectation still holds, so it is finalized there.
-    const swept = await runShiftCloseReconciliationSweep({
-      journal,
-      readConfirmation: h.server.readConfirmation,
-      normalizeSyncState: h.server.normalizeSyncState,
-      deviceId: 'DEV1',
-    });
+    // The sweep recovers it from the server doc — the expectation still holds AND (015) the callable's
+    // idempotent replay proves the server authored that close — so it is finalized there.
+    const swept = await sweepOn(h, journal);
     expect(swept.normalization.attempts).toMatchObject({ recovered: 1 });
     expect(await entryOf(journal)).toMatchObject({ closeCorrelationId: UUID_A, status: 'synced' });
     await expectNoW3(h);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════
+// Packet 015 — Codex-014 F1–F4 closure (client recovery safety).
+//
+// Provenance: the cases tagged [RED-parent] use only symbols/behaviour that
+// exist at a844855 (the new deps keys are passed by name and ignored there), so
+// on the parent they fail on BEHAVIOUR. Cases tagged [GREEN-only] need the new
+// 015 API and are not RED evidence; [GREEN-guard] pass on both (regression).
+// ═════════════════════════════════════════════════════════════════════════
+
+const REQUEST_A = {
+  contractVersion: 1,
+  shiftId: 'shift-1',
+  closeCorrelationId: UUID_A,
+  actualCashCount: 1500,
+  note: '',
+  attestedSales: { expectedCash: 1000, expectedQr: 0, expectedKbank: 0, expectedCard: 0, expectedCredit: 0, totalBills: 3 },
+  deviceId: 'DEV1',
+};
+
+/** A direct client W3 (Rules-accepted today): this attempt's UUID and its OLD expected totals, no authority record. */
+function forgeDirectW3(h: Harness, over: Record<string, unknown> = {}) {
+  h.server.state.doc = {
+    ...h.server.state.doc,
+    status: 'closed',
+    closedAt: ts(CLOSED_AT_MS),
+    closeCorrelationId: UUID_A,
+    closedOffline: true,
+    syncState: 'pending',
+    deviceId: 'DEV1',
+    actualCashCount: 1500,
+    variance: 0,
+    note: '',
+    expectedCash: 1000,
+    expectedQr: 0,
+    expectedKbank: 0,
+    expectedCard: 0,
+    expectedCredit: 0,
+    totalBills: 3,
+    payInTotal: 0,
+    payOutTotal: 0,
+    ...over,
+  };
+}
+
+/** ON close, transport lost before the server saw it: attempt UUID_A bound (payOut 0, drawer 1500), shift still open. */
+async function openBoundAttempt(h: Harness): Promise<ShiftCloseIntentJournal> {
+  h.server.hooks.transportFailuresLeft = 1;
+  const j = bootJournal([UUID_A]);
+  await expect(closeShift(drawer(), 1500, '', onDeps(h, j))).rejects.toThrow(M.unknown);
+  return j;
+}
+
+function sweepOn(h: Harness, journal: ShiftCloseIntentJournal, extra: Record<string, unknown> = {}) {
+  return runShiftCloseReconciliationSweep({
+    journal,
+    readConfirmation: h.server.readConfirmation,
+    normalizeSyncState: h.server.normalizeSyncState,
+    deviceId: 'DEV1',
+    authoritativeCallable: h.server.callable,
+    ...extra,
+  } as Parameters<typeof runShiftCloseReconciliationSweep>[0]);
+}
+
+async function expectNothingAdopted(h: Harness, journal: ShiftCloseIntentJournal) {
+  expect(await entryOf(journal)).toBeUndefined(); // no journal entry ⇒ no Z source
+  const [attempt] = await attemptsOf(journal);
+  expect(attempt).toBeDefined(); // attempt preserved, same UUID + bound request
+  expect(attempt!.closeCorrelationId).toBe(UUID_A);
+  expect('supersededAtLocal' in attempt!).toBe(false);
+  expect(h.server.state.w4).toBe(0); // no W4
+  expect(h.server.state.doc.syncState).toBe('pending');
+  expect(h.tripwire.calls).toEqual([]);
+}
+
+describe('015-F1 a server-authored close is proven by the callable replay — never by the shift doc alone', () => {
+  test('[RED-parent] forged direct W3 (UUID A + old totals, no authority record) after a Return 81 ⇒ restart sweep: no Z / journal / W4 / consumed attempt', async () => {
+    const h = harness();
+    await openBoundAttempt(h);
+    expect(h.server.commitCashReturn('ret1', 81)).toBe('committed'); // payout 81 committed on the server
+    forgeDirectW3(h); // staff client direct W3 under the unsealed Rules: UUID A, payOut 0, count 1500
+    expect(h.server.state.record).toBeNull(); // no shiftCloseAuthorityRecords document
+    // The real callable (production decision core) classifies that doc.
+    await expect(h.server.callable(REQUEST_A)).resolves.toEqual({ ok: false, code: 'closed_outside_authority' });
+
+    const restarted = bootJournal([UUID_B]); // fresh journal instance over the same IndexedDB
+    const swept = await sweepOn(h, restarted);
+    await expectNothingAdopted(h, restarted);
+    expect(swept.normalization.status).not.toBe('ok');
+    expect(shiftCloseNormalizationIssue(swept.normalization)).toContain('attempt_manual_attention');
+    expect(swept.normalization.attempts).not.toHaveProperty('recovered');
+
+    // Repeated sweeps (a boot, then a reconnect) stay unresolved — never "caught up".
+    const again = await sweepOn(h, bootJournal([UUID_C]));
+    expect(again.normalization.status).not.toBe('ok');
+    await expectNothingAdopted(h, restarted);
+  });
+
+  test('[RED-parent] a forged W3 that even equals the saved expectation is not a Z without the replay', async () => {
+    const h = harness();
+    await openBoundAttempt(h);
+    forgeDirectW3(h); // no Return: the forged doc equals the saved expectation exactly
+    expect(h.server.state.record).toBeNull();
+    const restarted = bootJournal([UUID_B]);
+    const swept = await sweepOn(h, restarted);
+    await expectNothingAdopted(h, restarted);
+    expect(shiftCloseNormalizationIssue(swept.normalization)).toContain('attempt_manual_attention');
+  });
+
+  test.each([
+    ['timeout / transport failure', (h: Harness) => { h.server.hooks.transportFailuresLeft = 1; }, 'attempt_unreachable'],
+    ['committed_unconfirmed', (h: Harness) => { h.server.hooks.respond = () => ({ ok: false, code: 'committed_unconfirmed' }); }, 'attempt_unreachable'],
+    ['session_stale (cannot verify now)', (h: Harness) => { h.server.hooks.refuse = 'session_stale'; }, 'attempt_unreachable'],
+    ['unrecognized response', (h: Harness) => { h.server.hooks.respond = () => ({ hello: 'world' }); }, 'attempt_unreachable'],
+    ['malformed success (other correlation id)', (h: Harness) => { h.server.hooks.respond = (real) => ({ ...(real as object), closeCorrelationId: UUID_C }); }, 'attempt_manual_attention'],
+    ['malformed success (missing snapshot)', (h: Harness) => { h.server.hooks.respond = (real) => ({ ...(real as object), snapshot: undefined }); }, 'attempt_manual_attention'],
+    ['a fresh-commit claim (idempotentReplay false) on an already closed shift', (h: Harness) => { h.server.hooks.respond = (real) => ({ ...(real as object), idempotentReplay: false }); }, 'attempt_manual_attention'],
+    ['a success whose snapshot differs from the doc', (h: Harness) => { h.server.hooks.respond = (real) => { const r = real as { snapshot: object }; return { ...r, snapshot: { ...r.snapshot, note: 'tampered' } }; }; }, 'attempt_manual_attention'],
+    ['a success whose closedAtMillis differs from the doc', (h: Harness) => { h.server.hooks.respond = (real) => ({ ...(real as object), closedAtMillis: CLOSED_AT_MS + 1 }); }, 'attempt_manual_attention'],
+    ['idempotency_conflict', (h: Harness) => { h.server.hooks.refuse = 'idempotency_conflict'; }, 'attempt_manual_attention'],
+    ['close_record_inconsistent', (h: Harness) => { h.server.hooks.refuse = 'close_record_inconsistent'; }, 'attempt_manual_attention'],
+    ['closed_outside_authority', (h: Harness) => { h.server.hooks.refuse = 'closed_outside_authority'; }, 'attempt_manual_attention'],
+  ])('[RED-parent] a genuine server close whose replay is %s ⇒ no Z / journal / W4, attempt kept (%#)', async (_label, tamper, condition) => {
+    const h = harness();
+    await openBoundAttempt(h);
+    await h.server.callable(REQUEST_A); // the commit landed (record exists) but this client never heard: NOT commit-observed
+    expect(h.server.state.record).not.toBeNull();
+    tamper(h);
+    const restarted = bootJournal([UUID_B]);
+    const swept = await sweepOn(h, restarted);
+    await expectNothingAdopted(h, restarted);
+    expect(swept.normalization.status).not.toBe('ok');
+    expect(shiftCloseNormalizationIssue(swept.normalization)).toContain(condition);
+  });
+
+  test('[RED-parent] a commit-observed attempt is proven the same way (the observation is custody, not authority)', async () => {
+    const h = harness();
+    const journal = bootJournal([UUID_A]);
+    const broken: ShiftCloseIntentJournal = { ...journal, finalizeOnlineClose: async () => ({ ok: false, code: 'tx_failed', message: 'AbortError' }) };
+    await expect(closeShift(drawer(), 1500, '', onDeps(h, broken))).rejects.toThrow(M.notFinalized);
+    expect('commitObservedAtLocal' in (await attemptsOf(journal))[0]!).toBe(true);
+    h.server.hooks.refuse = 'closed_outside_authority';
+    const swept = await sweepOn(h, bootJournal([UUID_B]));
+    expect(await entryOf(journal)).toBeUndefined();
+    expect(await attemptsOf(journal)).toHaveLength(1);
+    expect(h.server.state.w4).toBe(0);
+    expect(shiftCloseNormalizationIssue(swept.normalization)).toContain('attempt_manual_attention');
+  });
+
+  test('[RED-parent] a legitimate server close (lost response) is proven by exactly ONE idempotent replay of the stored request, then recovered + reconciled', async () => {
+    const h = harness();
+    await openBoundAttempt(h);
+    await h.server.callable(REQUEST_A);
+    const before = h.server.state.calls.length;
+    const replays: boolean[] = [];
+    h.server.hooks.respond = (real) => {
+      replays.push((real as { idempotentReplay?: boolean }).idempotentReplay === true);
+      return real;
+    };
+    const restarted = bootJournal([UUID_B]);
+    const swept = await sweepOn(h, restarted);
+    expect(replays).toEqual([true]);
+    expect(h.server.state.calls.length).toBe(before + 1);
+    expect(h.server.state.calls[before]).toEqual(REQUEST_A); // the immutable stored request + UUID
+    expect(swept.normalization.attempts).toMatchObject({ recovered: 1 });
+    expect(await entryOf(restarted)).toMatchObject({ closeCorrelationId: UUID_A, status: 'synced' });
+    expect(await attemptsOf(restarted)).toEqual([]);
+    expect(h.server.state.w4).toBe(1);
+    expect(h.server.state.commits).toBe(1);
+    expect(swept.normalization.status).toBe('ok');
+  });
+
+  test('[RED-parent] no callable transport available ⇒ fail closed even for a genuine server close', async () => {
+    const h = harness();
+    await openBoundAttempt(h);
+    await h.server.callable(REQUEST_A);
+    const restarted = bootJournal([UUID_B]);
+    const swept = await sweepOn(h, restarted, { authoritativeCallable: undefined }); // production default: no Firebase app in this suite
+    expect(await entryOf(restarted)).toBeUndefined();
+    expect(shiftCloseNormalizationIssue(swept.normalization)).toContain('attempt_unreachable');
+    expect(h.server.state.w4).toBe(0);
+  });
+
+  test('[GREEN-guard] the sweep NEVER invokes the callable on an open (or unreadable) shift', async () => {
+    const h = harness();
+    await openBoundAttempt(h);
+    const guard = vi.fn(h.server.callable);
+    const before = h.server.state.calls.length;
+    await sweepOn(h, bootJournal([UUID_B]), { authoritativeCallable: guard });
+    await sweepOn(h, bootJournal([UUID_B]), { authoritativeCallable: guard, readConfirmation: async () => ({ ok: false }) });
+    expect(guard).not.toHaveBeenCalled();
+    expect(h.server.state.calls.length).toBe(before);
+    expect(h.server.state.doc.status).toBe('open');
+    expect(h.server.state.commits).toBe(0);
+  });
+
+  test('[RED-parent] two windows recovering the same genuine close: one server commit, ONE entry, the attempt consumed once, both proven', async () => {
+    const h = harness();
+    await openBoundAttempt(h);
+    await h.server.callable(REQUEST_A);
+    const w1 = bootJournal([UUID_B]);
+    const w2 = bootJournal([UUID_C]);
+    const [a1] = await attemptsOf(w1);
+    const [a2] = await attemptsOf(w2);
+    const deps = (journal: ShiftCloseIntentJournal) => ({
+      journal,
+      readConfirmation: h.server.readConfirmation,
+      deviceId: 'DEV1',
+      authoritativeCallable: h.server.callable,
+    });
+    const before = h.server.state.calls.length;
+    const [r1, r2] = await Promise.all([
+      recoverOnlineCloseAttempt(a1 as never, deps(w1) as never),
+      recoverOnlineCloseAttempt(a2 as never, deps(w2) as never),
+    ]);
+    expect([r1.outcome, r2.outcome]).toEqual(['recovered', 'recovered']);
+    expect(h.server.state.calls.length).toBe(before + 2); // each window obtained its own proof
+    expect(h.server.state.commits).toBe(1);
+    expect(await attemptsOf(w1)).toEqual([]);
+    expect(await entryOf(w1)).toMatchObject({ closeCorrelationId: UUID_A });
+  });
+
+  test('[GREEN-guard] a retry (closeShift) after restart over the forged W3 is refused: no Z, no journal, no second W3', async () => {
+    const h = harness();
+    await openBoundAttempt(h);
+    h.server.commitCashReturn('ret1', 81);
+    forgeDirectW3(h);
+    const restarted = bootJournal([UUID_B]);
+    await expect(closeShift(drawer(), 1500, '', onDeps(h, restarted))).rejects.toThrow('รหัส: closed_outside_authority');
+    expect(await entryOf(restarted)).toBeUndefined();
+    expect(h.tripwire.calls).toEqual([]);
+    expect(h.server.state.w4).toBe(0);
+  });
+
+  test('[GREEN-guard] a foreign valid close still tombstones the attempt (006-B supersession is unchanged and needs no replay)', async () => {
+    const h = harness();
+    await openBoundAttempt(h);
+    h.server.state.doc = { ...h.server.state.doc, status: 'closed', closeCorrelationId: UUID_C, deviceId: 'DEV2', closedAt: ts(CLOSED_AT_MS) };
+    const guard = vi.fn(h.server.callable);
+    await sweepOn(h, bootJournal([UUID_B]), { authoritativeCallable: guard });
+    const [attempt] = await attemptsOf(bootJournal([UUID_B]));
+    expect(typeof attempt!.supersededAtLocal).toBe('number');
+    expect(guard).not.toHaveBeenCalled();
+    expect(await entryOf(bootJournal([UUID_B]))).toBeUndefined();
+  });
+});
+
+describe('015-F3 an open server-authoritative attempt is never a clean sync state', () => {
+  test('[RED-parent] open attempt after a transport failure: the sweep is unresolved + attention (not ok), stable across boots, cleared only by the genuine close', async () => {
+    const h = harness();
+    await openBoundAttempt(h);
+    const boot1 = await sweepOn(h, bootJournal([UUID_B]));
+    expect(boot1.normalization.status).toBe('unresolved');
+    expect(boot1.normalization.attention).toEqual([{ shiftId: 'shift-1', branchId: 'LDP-001', condition: 'attempt_unresolved' }]);
+    expect(shiftCloseNormalizationIssue(boot1.normalization)).toBe('attempt_unresolved=1');
+    expect(boot1.normalization.attempts).toEqual({ not_closed: 1 });
+    expect(boot1.normalization.advanced).toBe(0);
+
+    const boot2 = await sweepOn(h, bootJournal([UUID_B]));
+    expect(shiftCloseAttentionKey(boot2.normalization)).toBe(shiftCloseAttentionKey(boot1.normalization));
+    expect(h.server.state.calls).toHaveLength(1); // the sweeps issued no remote close
+    expect(h.server.state.doc.status).toBe('open');
+
+    // The cashier retries the SAME close: the genuine server close resolves it.
+    const result = await closeShift(drawer(), 1500, '', onDeps(h, bootJournal([UUID_B])));
+    await result.whenServerConfirmed;
+    const done = await sweepOn(h, bootJournal([UUID_B]));
+    expect(done.normalization.status).toBe('ok');
+    expect(done.normalization.attention).toEqual([]);
+  });
+
+  test('[GREEN-guard] an unreadable attempt store is reported, never read as zero attempts', async () => {
+    const h = harness();
+    const journal = bootJournal();
+    const unreadable: ShiftCloseIntentJournal = { ...journal, listOnlineCloseAttempts: async () => ({ ok: false, code: 'tx_failed', message: 'AbortError' }) };
+    const swept = await sweepOn(h, unreadable);
+    expect(swept.normalization.status).toBe('degraded');
+    expect(shiftCloseNormalizationIssue(swept.normalization)).toContain('attempts_unreadable');
+    expect(swept.normalization.attempts).toBeNull();
+  });
+
+  test('[GREEN-only] the FINAL attempt list decides: an attempt another window settled meanwhile is not reported', async () => {
+    const h = harness();
+    await openBoundAttempt(h);
+    const real = bootJournal([UUID_B]);
+    let listed = 0;
+    // First list (recovery): the open attempt. Later lists: another window already settled it.
+    const racing: ShiftCloseIntentJournal = {
+      ...real,
+      listOnlineCloseAttempts: async () => {
+        listed += 1;
+        return listed === 1 ? real.listOnlineCloseAttempts() : { ok: true, value: [] };
+      },
+    };
+    const swept = await sweepOn(h, racing);
+    expect(swept.normalization.attention).toEqual([]);
+    expect(swept.normalization.status).toBe('ok');
+  });
+});
+
+describe('015-F4 a legacy close-intent entry is never relabelled as a server-authoritative Z', () => {
+  test('[RED-parent] OFF-created journal entry (direct W3) + gate flipped ON ⇒ refused: no Z, entry untouched, no second W3', async () => {
+    const h = harness();
+    const journal = bootJournal([UUID_A]);
+    // OFF (legacy) online close: the client itself writes the W3 and journals it.
+    const off = await closeShift(drawer(), 1500, '', gateOff(onDeps(h, journal)));
+    await off.whenServerConfirmed;
+    expect(h.tripwire.calls).toHaveLength(1);
+    expect(h.server.state.record).toBeNull(); // direct W3: no authority record
+    const entryBefore = await entryOf(journal);
+    expect(entryBefore).toMatchObject({ closeCorrelationId: UUID_A });
+
+    // Gate flip: the same shift/UUID/amounts, but the Z must not come from the legacy entry.
+    await expect(closeShift(drawer(), 1500, '', onDeps(h, bootJournal([UUID_B])))).rejects.toThrow();
+    expect(await entryOf(journal)).toEqual(entryBefore);
+    expect(h.tripwire.calls).toHaveLength(1); // no second W3
+    expect(h.server.state.commits).toBe(0);
+  });
+
+  test('[GREEN-guard] an ON-created, server-proven entry stays recoverable (callable replay proves it)', async () => {
+    const h = harness();
+    const journal = bootJournal([UUID_A]);
+    const first = await closeShift(drawer(), 1500, '', onDeps(h, journal));
+    await first.whenServerConfirmed;
+    expect(h.server.state.record).not.toBeNull();
+    const again = await closeShift(drawer(), 1500, '', onDeps(h, bootJournal([UUID_B])));
+    expect(again).toMatchObject({ status: 'closed', variance: 0 });
+    expect(h.server.state.commits).toBe(1);
+    expect(h.tripwire.calls).toEqual([]);
+  });
+
+  test('[GREEN-guard] an offline-queued legacy close (W3 not yet on the server) is still refused under ON', async () => {
+    const h = harness();
+    const journal = bootJournal([UUID_A]);
+    await closeShift(drawer(), 1500, '', gateOff(onDeps(h, journal, { isOnline: () => false })));
+    await expect(closeShift(drawer(), 1500, '', onDeps(h, journal))).rejects.toThrow(M.localPending);
+    expect(h.server.state.calls).toEqual([]);
+    expect(h.server.state.doc.status).toBe('open');
+  });
+});
+
+describe('015-F2 the cashier confirms the drawer that the close actually uses', () => {
+  const RFD81 = { id: 'rfd_ret1', type: 'pay_out' as const, amount: 81, note: 'คืนเงินสด', staffId: CALLER, staffName: 'ทดสอบ', at: 2 };
+  const DISPLAY_CHANGED = 'ยอดเงินสดในลิ้นชักที่แสดงอยู่ไม่ตรงกับข้อมูลล่าสุดบนเซิร์ฟเวอร์';
+  const buildWitness = (shift: Shift, refresh: string) =>
+    (authClient as unknown as { buildReviewedDrawerWitness: (s: Shift, r: string) => unknown }).buildReviewedDrawerWitness(shift, refresh);
+  const withWitness = (h: Harness, witness: unknown) => ({
+    authoritativeClose: { sales: SALES_1000, callable: h.server.callable, readServerShift: h.server.readServerShift, reviewedDrawer: witness },
+  });
+
+  async function expectRefusedBeforeAnything(h: Harness, journal: ShiftCloseIntentJournal) {
+    expect(h.server.state.calls).toEqual([]);
+    expect(await attemptsOf(journal)).toEqual([]);
+    expect(h.server.state.doc.status).toBe('open');
+    await expectNoClientW3NoZ(h, journal);
+  }
+
+  test('[RED-parent] the modal showed 1500 (no Return) but the server holds Return 81: refused before the attempt / callable — a stale count is never silently closed over the changed drawer', async () => {
+    const h = harness();
+    h.server.commitCashReturn('ret1', 81); // arrived after the display was rendered
+    const journal = bootJournal();
+    await expect(closeShift(drawer(), 1500, '', onDeps(h, journal))).rejects.toThrow(DISPLAY_CHANGED);
+    await expectRefusedBeforeAnything(h, journal);
+  });
+
+  test('[RED-parent] no reviewed-drawer witness on the ON path ⇒ refused (a witness guessed from the original shift is not accepted)', async () => {
+    const h = harness();
+    const journal = bootJournal();
+    await expect(closeShift(drawer(), 1500, '', onDeps(h, journal, withWitness(h, undefined)))).rejects.toThrow(DISPLAY_CHANGED);
+    await expectRefusedBeforeAnything(h, journal);
+  });
+
+  test('[RED-parent] a stored startingCash that differs from the displayed one is a changed drawer ⇒ refused', async () => {
+    const h = harness(serverShift([], { startingCash: 600 }));
+    const journal = bootJournal();
+    await expect(closeShift(drawer(), 1500, '', onDeps(h, journal))).rejects.toThrow(DISPLAY_CHANGED);
+    await expectRefusedBeforeAnything(h, journal);
+  });
+
+  test('[GREEN-only] the display refresh had not loaded (pending / unavailable) ⇒ refused even when the numbers happen to agree', async () => {
+    const h = harness();
+    const journal = bootJournal();
+    for (const refresh of ['pending', 'unavailable']) {
+      await expect(closeShift(drawer(), 1500, '', onDeps(h, journal, withWitness(h, buildWitness(drawer(), refresh))))).rejects.toThrow(DISPLAY_CHANGED);
+    }
+    await expectRefusedBeforeAnything(h, journal);
+  });
+
+  test('[GREEN-only] a witness of another branch / shift is never accepted', async () => {
+    const h = harness();
+    const journal = bootJournal();
+    for (const other of [{ ...drawer(), branchId: 'OTHER' }, { ...drawer(), id: 'shift-2' }]) {
+      await expect(closeShift(drawer(), 1500, '', onDeps(h, journal, withWitness(h, buildWitness(other, 'loaded'))))).rejects.toThrow(DISPLAY_CHANGED);
+    }
+    await expectRefusedBeforeAnything(h, journal);
+  });
+
+  test('[GREEN-guard] after the refresh the cashier sees drawer 1419 and confirms it: the close commits exactly that (500 + 1000 − 81, variance 0)', async () => {
+    const h = harness();
+    h.server.commitCashReturn('ret1', 81);
+    fs.cacheDoc = { status: 'open', cashEntries: [RFD81] };
+    const journal = bootJournal();
+    // The 1st confirm used the stale display ⇒ refused; the refreshed display is the new, explicit confirmation.
+    await expect(closeShift(drawer(), 1419, '', onDeps(h, journal))).rejects.toThrow(DISPLAY_CHANGED);
+    const result = await closeShift(drawer(SALES_1000, [RFD81]), 1419, '', onDeps(h, journal));
+    expect(result).toMatchObject({ status: 'closed', payOutTotal: 81, startingCash: 500, actualCashCount: 1419, variance: 0 });
+    expect(h.server.state.commits).toBe(1);
+  });
+
+  test('[GREEN-guard] a Return that lands AFTER the pre-call read (display honest at confirm time) still yields no Z', async () => {
+    const h = harness();
+    h.server.hooks.beforeTx = (call) => {
+      if (call === 1) h.server.commitCashReturn('ret1', 81);
+    };
+    const journal = bootJournal();
+    await expect(closeShift(drawer(), 1500, '', onDeps(h, journal))).rejects.toThrow(M.resultMismatch);
+    await expectNoClientW3NoZ(h, journal);
+    expect(await attemptsOf(journal)).toHaveLength(1);
+  });
+
+  test('[GREEN-guard] a retry whose attempt already holds the pre-Return expectation keeps the drawer-changed refusal', async () => {
+    const h = harness();
+    h.server.hooks.transportFailuresLeft = 1;
+    const journal = bootJournal();
+    await expect(closeShift(drawer(), 1500, '', onDeps(h, journal))).rejects.toThrow(M.unknown);
+    h.server.commitCashReturn('ret1', 81);
+    await expect(closeShift(drawer(), 1500, '', onDeps(h, journal))).rejects.toThrow(M.drawerChanged);
+    expect(h.server.state.calls).toHaveLength(1);
   });
 });

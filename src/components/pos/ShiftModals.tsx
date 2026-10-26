@@ -8,6 +8,11 @@ import {
   type ShiftCloseConfirmation,
 } from '../../lib/pos/shiftService';
 import { isNavigatorOnline, readServerShiftCash, withMergedCashEntries } from '../../lib/pos/shiftCashFreshness';
+import {
+  SERVER_AUTHORITATIVE_CLOSE_ENABLED,
+  buildReviewedDrawerWitness,
+  type ReviewedDrawerRefresh,
+} from '../../lib/pos/shiftCloseAuthoritativeClient';
 import { SHIFT_CLOSE_INTENT_STALE_AGE_MS } from '../../lib/pos/offline/shiftCloseIntentTypes';
 import type { Shift } from '../../lib/types';
 import './ShiftModals.css';
@@ -516,16 +521,44 @@ export function CloseShiftModal({
   // server-side cash entry (e.g. a cash refund) this mounted POS has not seen.
   // `closeShift` re-reads the server itself — that is the correctness boundary.
   const [serverCashEntries, setServerCashEntries] = useState<Shift['cashEntries'] | null>(null);
+  // Packet 015 (F2): freshness of that refresh, kept for the operator-reviewed
+  // drawer witness of the server-authoritative close (unused while the gate is OFF).
+  const [serverCashRefresh, setServerCashRefresh] = useState<ReviewedDrawerRefresh>(() =>
+    isNavigatorOnline() ? 'pending' : 'unavailable',
+  );
+  const refreshSeqRef = useRef(0);
+  const loadServerCash = useCallback(
+    (seq: number) => {
+      void readServerShiftCash(shift.id).then((read) => {
+        if (refreshSeqRef.current !== seq) return; // superseded / unmounted
+        if (read.ok && read.exists) {
+          setServerCashEntries(read.cashEntries);
+          setServerCashRefresh('loaded');
+        } else {
+          setServerCashRefresh('unavailable');
+        }
+      });
+    },
+    [shift.id],
+  );
+  // Mount: exactly the display-only read of the parent (nothing when offline).
   useEffect(() => {
     if (!isNavigatorOnline()) return;
-    let cancelled = false;
-    void readServerShiftCash(shift.id).then((read) => {
-      if (!cancelled && read.ok && read.exists) setServerCashEntries(read.cashEntries);
-    });
+    loadServerCash(++refreshSeqRef.current);
     return () => {
-      cancelled = true;
+      refreshSeqRef.current += 1;
     };
-  }, [shift.id]);
+  }, [loadServerCash]);
+  // After a refused (changed) drawer: re-read so the next Confirm is a new review.
+  const refreshServerCash = useCallback(() => {
+    const seq = ++refreshSeqRef.current;
+    if (!isNavigatorOnline()) {
+      setServerCashRefresh('unavailable');
+      return;
+    }
+    setServerCashRefresh('pending');
+    loadServerCash(seq);
+  }, [loadServerCash]);
   const displayShift = useMemo(
     () => (serverCashEntries ? withMergedCashEntries(shift, serverCashEntries) : shift),
     [shift, serverCashEntries],
@@ -570,7 +603,15 @@ export function CloseShiftModal({
     });
 
     try {
-      const result = await Promise.race([closeShift(shift, count, note.trim()), timeoutGuard]);
+      // Packet 015 (F2): the server-authoritative close takes a witness of the
+      // EXACT drawer shown (displayShift + its refresh state). Gate OFF: the
+      // call is exactly the legacy closeShift(shift, count, note).
+      const closing = SERVER_AUTHORITATIVE_CLOSE_ENABLED
+        ? closeShift(shift, count, note.trim(), {
+            authoritativeClose: { reviewedDrawer: buildReviewedDrawerWitness(displayShift, serverCashRefresh) },
+          })
+        : closeShift(shift, count, note.trim());
+      const result = await Promise.race([closing, timeoutGuard]);
       if (closeAttemptRef.current !== attemptId) return;
       setClosedShift(result);
       // Observe-only: never gates the close success above. `whenServerConfirmed`
@@ -590,12 +631,15 @@ export function CloseShiftModal({
         setError(CLOSE_SHIFT_TIMEOUT_MESSAGE);
       } else {
         setError(err instanceof Error ? err.message : 'ปิดกะไม่สำเร็จ');
+        // 015 (F2): the drawer the cashier reviewed was not the one the close
+        // would use - show the current one; the next Confirm is a new review.
+        if ((err as { cause?: { reviewRequired?: unknown } } | null)?.cause?.reviewRequired === true) refreshServerCash();
       }
     } finally {
       clearTimeout(timeoutId);
       if (closeAttemptRef.current === attemptId) setSubmitting(false);
     }
-  }, [shift, actualCash, note]);
+  }, [shift, actualCash, note, displayShift, serverCashRefresh, refreshServerCash]);
 
   const handlePrint = useCallback(() => {
     if (!closedShift) return;

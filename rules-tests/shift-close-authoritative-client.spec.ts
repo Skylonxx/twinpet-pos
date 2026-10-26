@@ -56,6 +56,7 @@ vi.mock('../src/lib/pos/deviceId', async (importOriginal) => ({
   getDeviceId: () => 'DEV1',
 }));
 
+import { buildReviewedDrawerWitness } from '../src/lib/pos/shiftCloseAuthoritativeClient';
 import { closeShift, type CloseShiftDeps } from '../src/lib/pos/shiftService';
 import { deriveShiftDrawer } from '../src/lib/pos/shiftLedger';
 import { createShiftCloseIntentJournal } from '../src/lib/pos/offline/shiftCloseIntentStore';
@@ -174,7 +175,7 @@ describeEmu('014 adapter ⇄ closeShiftAuthoritative on the Firestore emulator (
     });
   }
 
-  function drawerOf(shiftId: string, sales: LocalSale[]): Shift {
+  function drawerOf(shiftId: string, sales: LocalSale[], cashEntries: Shift['cashEntries'] = []): Shift {
     return deriveShiftDrawer(
       {
         id: shiftId,
@@ -196,7 +197,7 @@ describeEmu('014 adapter ⇄ closeShiftAuthoritative on the Firestore emulator (
         payOutTotal: 0,
         variance: 0,
         note: '',
-        cashEntries: [],
+        cashEntries,
       },
       sales,
     );
@@ -211,7 +212,13 @@ describeEmu('014 adapter ⇄ closeShiftAuthoritative on the Firestore emulator (
     });
   }
 
-  function onDeps(sales: LocalSale[], journal: ReturnType<typeof freshJournal>, callable: (r: Record<string, unknown>) => Promise<unknown>) {
+  /** `display` = the drawer the cashier was shown (packet 015 F2): its reviewed-drawer witness rides on the ON close. */
+  function onDeps(
+    sales: LocalSale[],
+    journal: ReturnType<typeof freshJournal>,
+    callable: (r: Record<string, unknown>) => Promise<unknown>,
+    display: Shift,
+  ) {
     const legacyW3 = vi.fn(() => Promise.reject(new Error('legacy W3 must not run')));
     const deps = {
       journal,
@@ -220,7 +227,7 @@ describeEmu('014 adapter ⇄ closeShiftAuthoritative on the Firestore emulator (
       runCloseTransaction: legacyW3,
       waitForQueuedWrites: async () => true,
       authoritativeCloseGate: true,
-      authoritativeClose: { sales, callable },
+      authoritativeClose: { sales, callable, reviewedDrawer: buildReviewedDrawerWitness(display, 'loaded') },
     } as unknown as CloseShiftDeps;
     return { deps, legacyW3 };
   }
@@ -237,8 +244,10 @@ describeEmu('014 adapter ⇄ closeShiftAuthoritative on the Firestore emulator (
     await seedCashReturn(w.shiftId, `ret_${w.shiftId}`, 81);
     env.updateDocCalls = [];
     const journal = freshJournal();
-    const { deps, legacyW3 } = onDeps(w.sales, journal, inProcessCallable);
-    const result = await closeShift(drawerOf(w.shiftId, w.sales), 1419, '', deps);
+    // The refreshed modal shows the server payout: the cashier reviewed drawer 1419 before confirming it.
+    const shown = drawerOf(w.shiftId, w.sales, (await adminDb.doc(`shifts/${w.shiftId}`).get()).data()!.cashEntries as Shift['cashEntries']);
+    const { deps, legacyW3 } = onDeps(w.sales, journal, inProcessCallable, shown);
+    const result = await closeShift(shown, 1419, '', deps);
     expect(result).toMatchObject({ status: 'closed', startingCash: 500, expectedCash: 1000, payOutTotal: 81, actualCashCount: 1419, variance: 0 });
 
     const server = (await adminDb.doc(`shifts/${w.shiftId}`).get()).data()!;
@@ -269,8 +278,9 @@ describeEmu('014 adapter ⇄ closeShiftAuthoritative on the Firestore emulator (
       if (calls === 1) await seedCashReturn(w.shiftId, `ret_${w.shiftId}`, 81);
       return inProcessCallable(request);
     };
-    const { deps, legacyW3 } = onDeps(w.sales, journal, racing);
-    await expect(closeShift(drawerOf(w.shiftId, w.sales), 1500, '', deps)).rejects.toThrow(
+    const shown = drawerOf(w.shiftId, w.sales);
+    const { deps, legacyW3 } = onDeps(w.sales, journal, racing, shown);
+    await expect(closeShift(shown, 1500, '', deps)).rejects.toThrow(
       'เซิร์ฟเวอร์ปิดกะแล้ว แต่ยอดที่บันทึกไม่ตรงกับยอดที่เครื่องนี้ส่งไป',
     );
     const server = (await adminDb.doc(`shifts/${w.shiftId}`).get()).data()!;
@@ -298,8 +308,9 @@ describeEmu('014 adapter ⇄ closeShiftAuthoritative on the Firestore emulator (
       if (calls === 1) throw Object.assign(new Error('deadline-exceeded'), { code: 'functions/deadline-exceeded' });
       return r;
     };
-    const { deps, legacyW3 } = onDeps(w.sales, journal, lossy);
-    const result = await closeShift(drawerOf(w.shiftId, w.sales), 1500, 'n', deps);
+    const shown = drawerOf(w.shiftId, w.sales);
+    const { deps, legacyW3 } = onDeps(w.sales, journal, lossy, shown);
+    const result = await closeShift(shown, 1500, 'n', deps);
     expect(result).toMatchObject({ status: 'closed', variance: 0, note: 'n' });
     expect(calls).toBe(2);
     expect(responses.map((r) => (r as { idempotentReplay?: boolean }).idempotentReplay)).toEqual([false, true]);
@@ -314,8 +325,9 @@ describeEmu('014 adapter ⇄ closeShiftAuthoritative on the Firestore emulator (
     const before = await adminDb.doc(`shifts/${w.shiftId}`).get();
     const journal = freshJournal();
     const callable = vi.fn(inProcessCallable);
-    const { deps } = onDeps(w.sales, journal, callable);
-    await expect(closeShift(drawerOf(w.shiftId, w.sales), 1500, '', { ...deps, isOnline: () => false })).rejects.toThrow(
+    const shown = drawerOf(w.shiftId, w.sales);
+    const { deps } = onDeps(w.sales, journal, callable, shown);
+    await expect(closeShift(shown, 1500, '', { ...deps, isOnline: () => false })).rejects.toThrow(
       'ปิดกะได้เฉพาะเมื่อเชื่อมต่ออินเทอร์เน็ตเท่านั้น',
     );
     const after = await adminDb.doc(`shifts/${w.shiftId}`).get();

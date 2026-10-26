@@ -53,6 +53,8 @@ import {
   CLOSE_SHIFT_AUTHORITATIVE_LOCAL_CASH_NOT_ON_SERVER_MESSAGE,
   CLOSE_SHIFT_AUTHORITATIVE_LOCAL_CLOSE_PENDING_MESSAGE,
   CLOSE_SHIFT_AUTHORITATIVE_NOTE_TOO_LONG_MESSAGE,
+  CLOSE_SHIFT_AUTHORITATIVE_DISPLAY_CHANGED_MESSAGE,
+  CLOSE_SHIFT_AUTHORITATIVE_LEGACY_ENTRY_MESSAGE,
   CLOSE_SHIFT_AUTHORITATIVE_OFFLINE_MESSAGE,
   CLOSE_SHIFT_AUTHORITATIVE_REQUEST_CHANGED_MESSAGE,
   CLOSE_SHIFT_AUTHORITATIVE_RESULT_MISMATCH_MESSAGE,
@@ -62,14 +64,19 @@ import {
   SERVER_AUTHORITATIVE_CLOSE_ENABLED,
   authoritativeCloseRequest,
   authoritativeRefusalMessage,
+  authoritativeRequestFromSnapshot,
+  authoritativeServerProof,
   buildAuthoritativeCloseRequestBody,
   buildAuthoritativeExpectation,
+  checkReviewedDrawerWitness,
   getDefaultCloseShiftAuthoritativeCallable,
   invokeCloseShiftAuthoritative,
+  proveServerAuthoredClose,
   sameAuthoritativeRequestBody,
   type AuthoritativeCloseOutcome,
   type AuthoritativeRequestFailure,
   type CloseShiftAuthoritativeCallable,
+  type ReviewedDrawerWitness,
 } from './shiftCloseAuthoritativeClient';
 import {
   parseCommittedOwnClose,
@@ -957,6 +964,14 @@ export type AuthoritativeCloseDeps = {
   callable?: CloseShiftAuthoritativeCallable;
   /** Injectable for tests; production = `getDocFromServer` of the shift. */
   readServerShift?: AuthoritativeShiftReader;
+  /**
+   * Packet 015 (F2) - the witness of the drawer the cashier was shown when they
+   * pressed Confirm (`buildReviewedDrawerWitness(displayShift, refresh)` of the
+   * close modal). REQUIRED on the ON path: absent, not refreshed from the
+   * server, or different from the authoritative cash data the close would use
+   * => refused before any attempt / call (`cause.reviewRequired`).
+   */
+  reviewedDrawer?: ReviewedDrawerWitness;
 };
 
 function closeBusinessSnapshot(
@@ -1767,7 +1782,15 @@ async function closeShiftServerAuthoritative(
     existingEntry = { ok: false, code: 'tx_failed', message: err instanceof Error ? err.message : String(err) };
   }
   if (!existingEntry.ok) throw new Error(CLOSE_SHIFT_ONLINE_STORE_UNAVAILABLE_MESSAGE);
-  if (existingEntry.value) return provenJournaledAuthoritativeClose(shift, existingEntry.value, cachedEntries, ctx);
+  // The transport is resolved once and lazily (only a proof / call needs it).
+  let callablePromise: Promise<CloseShiftAuthoritativeCallable> | undefined;
+  const getCallable = (): Promise<CloseShiftAuthoritativeCallable> => {
+    callablePromise ??= deps?.authoritativeClose?.callable
+      ? Promise.resolve(deps.authoritativeClose.callable)
+      : getDefaultCloseShiftAuthoritativeCallable();
+    return callablePromise;
+  };
+  if (existingEntry.value) return provenJournaledAuthoritativeClose(shift, existingEntry.value, cachedEntries, ctx, getCallable);
 
   // 5. Queued sale / cash writes of this device first.
   if (!(await (deps?.waitForQueuedWrites ?? waitForQueuedWritesFlushed)())) {
@@ -1820,6 +1843,8 @@ async function closeShiftServerAuthoritative(
       if (!now.ok || !snapshotsEqual(now.expected, attempt.authoritative.expected)) {
         throw new Error(CLOSE_SHIFT_AUTHORITATIVE_DRAWER_CHANGED_MESSAGE);
       }
+      // 015 (F2): the cashier must also have reviewed exactly this drawer.
+      requireReviewedDrawer(deps, shift, d, now.expected);
     }
   } else {
     if (d.status !== 'open') throw new Error(CLOSE_SHIFT_ALREADY_CLOSED_MESSAGE);
@@ -1830,6 +1855,9 @@ async function closeShiftServerAuthoritative(
     if (!expectation.ok) {
       throw new Error(CLOSE_SHIFT_AUTHORITATIVE_SERVER_CASH_INVALID_MESSAGE, { cause: expectation });
     }
+    // 015 (F2): BEFORE the attempt is prepared or anything is sent - the drawer
+    // the cashier confirmed must be the very basis of this expectation.
+    requireReviewedDrawer(deps, shift, d, expectation.expected);
     let prepared: Awaited<ReturnType<ShiftCloseIntentJournal['prepareOnlineCloseAttempt']>>;
     try {
       prepared = await journal.prepareOnlineCloseAttempt(identity, {
@@ -1844,7 +1872,7 @@ async function closeShiftServerAuthoritative(
       throw new Error(prepared.code === 'conflict' ? CLOSE_SHIFT_CONFLICT_MESSAGE : CLOSE_SHIFT_ONLINE_STORE_UNAVAILABLE_MESSAGE);
     }
     if (prepared.value.kind === 'journaled') {
-      return provenJournaledAuthoritativeClose(shift, prepared.value.entry, cachedEntries, ctx);
+      return provenJournaledAuthoritativeClose(shift, prepared.value.entry, cachedEntries, ctx, getCallable);
     }
     // Another window may have bound the attempt first: it must be this very request.
     attempt = ownAuthoritativeAttempt(prepared.value.attempt, identity, body);
@@ -1854,7 +1882,7 @@ async function closeShiftServerAuthoritative(
   // 8. The call (+ at most one same-id same-body replay).
   let callable: CloseShiftAuthoritativeCallable;
   try {
-    callable = deps?.authoritativeClose?.callable ?? (await getDefaultCloseShiftAuthoritativeCallable());
+    callable = await getCallable();
   } catch {
     throw new Error(CLOSE_SHIFT_AUTHORITATIVE_UNAVAILABLE_MESSAGE);
   }
@@ -1924,7 +1952,8 @@ async function closeShiftServerAuthoritative(
   }
   if (
     !snapshotsEqual(parsed.snapshot, outcome.success.snapshot) ||
-    !snapshotsEqual(parsed.snapshot, attempt.authoritative.expected)
+    !snapshotsEqual(parsed.snapshot, attempt.authoritative.expected) ||
+    parsed.closedAt.getTime() !== outcome.success.closedAtMillis
   ) {
     console.warn('[shiftService] server-authoritative close committed values this device did not expect');
     const commitObservation = await recordCommitObservation(journal, shift.id, correlationId);
@@ -1933,7 +1962,13 @@ async function closeShiftServerAuthoritative(
   for (let i = 0; i < 2; i += 1) {
     let finalized: Awaited<ReturnType<ShiftCloseIntentJournal['finalizeOnlineClose']>>;
     try {
-      finalized = await journal.finalizeOnlineClose(parsed.snapshot, correlationId, deps?.observePointerRepair);
+      // 015: the callable's validated success is the server proof the store requires.
+      finalized = await journal.finalizeOnlineClose(
+        parsed.snapshot,
+        correlationId,
+        deps?.observePointerRepair,
+        authoritativeServerProof(outcome.success, shift.id, correlationId),
+      );
     } catch (err) {
       finalized = { ok: false, code: 'tx_failed', message: err instanceof Error ? err.message : String(err) };
     }
@@ -1973,6 +2008,32 @@ async function closeShiftServerAuthoritative(
 }
 
 /**
+ * Packet 015 (F2) - the cashier confirmed a drawer; the close must use exactly
+ * that one. Throws (nothing durable or remote happened yet) when the
+ * operator-reviewed witness is absent, was taken before the display's server
+ * refresh loaded, or differs from the authoritative cash data this close is
+ * built from. `cause.reviewRequired` tells the modal to refresh its display
+ * and ask for a new, explicit confirmation - the count is never reused over a
+ * changed monetary basis.
+ */
+function requireReviewedDrawer(
+  deps: CloseShiftDeps | undefined,
+  shift: Shift,
+  serverData: Record<string, unknown>,
+  expected: ShiftCloseIntentBusinessSnapshot,
+): void {
+  const check = checkReviewedDrawerWitness(deps?.authoritativeClose?.reviewedDrawer, {
+    shiftId: shift.id,
+    branchId: shift.branchId,
+    serverData,
+    expected,
+  });
+  if (!check.ok) {
+    throw new Error(CLOSE_SHIFT_AUTHORITATIVE_DISPLAY_CHANGED_MESSAGE, { cause: { reviewRequired: true, reason: check.reason } });
+  }
+}
+
+/**
  * Packet 014 — an existing attempt may carry this close only when it is THIS
  * device's / branch's / staff's server-authoritative attempt for exactly this
  * request body. A legacy (transaction) attempt is an unresolved close of
@@ -2007,6 +2068,7 @@ async function provenJournaledAuthoritativeClose(
   entry: ShiftCloseIntentEntry,
   cachedEntries: ShiftCashEntry[],
   ctx: CloseReconcileDeps,
+  getCallable: () => Promise<CloseShiftAuthoritativeCallable>,
 ): Promise<CloseShiftResult> {
   const pending = () => new Error(CLOSE_SHIFT_AUTHORITATIVE_LOCAL_CLOSE_PENDING_MESSAGE);
   if (
@@ -2037,6 +2099,24 @@ async function provenJournaledAuthoritativeClose(
     read.doc,
   );
   if (!parsed.ok || !snapshotsEqual(parsed.snapshot, entry)) throw pending();
+  // 015 (F4): a journal entry says nothing about WHO wrote the W3 (an OFF
+  // close journals a direct client W3 under the same shape). The shift is
+  // definitely closed by this UUID here, so the callable's idempotent replay
+  // (never a write) decides: only a server-authored close is a server-
+  // authoritative Z; a legacy / forged one is refused, never relabelled.
+  let callable: CloseShiftAuthoritativeCallable;
+  try {
+    callable = await getCallable();
+  } catch {
+    throw pending();
+  }
+  const proof = await proveServerAuthoredClose({
+    callable,
+    request: authoritativeRequestFromSnapshot(parsed.snapshot, entry.closeCorrelationId),
+    closedDoc: { snapshot: parsed.snapshot, closedAtMillis: parsed.closedAt.getTime() },
+  });
+  if (proof.kind === 'unreachable') throw pending();
+  if (proof.kind === 'manual_attention') throw new Error(CLOSE_SHIFT_AUTHORITATIVE_LEGACY_ENTRY_MESSAGE, { cause: proof });
   return {
     ...withMergedCashEntries(shift, cachedEntries),
     ...pickTotals(entry),

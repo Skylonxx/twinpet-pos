@@ -260,3 +260,72 @@ describe('sync orchestrator shift_intent channel — no clean channel with unfin
     expect(typeof lastSyncCheckAtMs(state)).toBe('number');
   });
 });
+
+/** Packet 015 F3: one durable, unresolved server-authoritative close attempt of DEV1 whose shift is still OPEN on the server. */
+async function seedOpenAuthoritativeAttempt(shiftId: string, branchId = 'LDP-001') {
+  const id = '0000000b-5555-4555-8555-555555555555';
+  const journal = createShiftCloseIntentJournal({ generateCloseCorrelationId: () => id });
+  const expected = {
+    shiftId, branchId, staffId: 'staff-1', staffName: 'ทดสอบ', startingCash: 500, expectedCash: 1000, expectedQr: 0,
+    expectedKbank: 0, expectedCard: 0, expectedCredit: 0, payInTotal: 0, payOutTotal: 0, totalBills: 3,
+    actualCashCount: 1500, variance: 0, note: '', deviceId: 'DEV1',
+  };
+  const binding = {
+    protocol: 'server_authoritative_v1' as const,
+    request: {
+      contractVersion: 1 as const, shiftId, actualCashCount: 1500, note: '', deviceId: 'DEV1',
+      attestedSales: { expectedCash: 1000, expectedQr: 0, expectedKbank: 0, expectedCard: 0, expectedCredit: 0, totalBills: 3 },
+    },
+    expected,
+  };
+  const prepare = journal.prepareOnlineCloseAttempt as unknown as (identity: unknown, b: unknown) => Promise<{ ok: boolean }>;
+  const prepared = await prepare({ shiftId, branchId, staffId: 'staff-1', staffName: 'ทดสอบ', deviceId: 'DEV1' }, binding);
+  if (!prepared.ok) throw new Error('seed attempt');
+  fake.docs.set(shiftId, { status: 'open', closedAt: null, branchId, staffId: 'staff-1', cashEntries: [] });
+}
+
+describe('sync orchestrator shift_intent channel — an open server-authoritative attempt is never clean (packet 015 F3)', () => {
+  test('[RED-parent] open attempt, every other channel green → shift_intent FAILED (attempt_unresolved), no clean last check; stable on the next boot', async () => {
+    await seedOpenAuthoritativeAttempt('S1');
+    const first = await runCycle();
+    // Parent: { status: 'ok' } and a numeric last sync check while the owed attempt is still stored.
+    expect(first.shift).toMatchObject({ status: 'failed', errorClass: 'shift_close_normalization:attempt_unresolved=1' });
+    expect(first.state.lastErrorAtMs).not.toBeNull();
+    expect(lastSyncCheckAtMs(first.state)).toBeNull();
+
+    __resetSyncOrchestratorForTests();
+    const second = await runCycle();
+    expect(second.shift).toMatchObject({ status: 'failed', errorClass: 'shift_close_normalization:attempt_unresolved=1' });
+    expect(lastSyncCheckAtMs(second.state)).toBeNull();
+  });
+
+  test('[RED-parent] two branches: both shifts are reported (branch/shift scoped)', async () => {
+    await seedOpenAuthoritativeAttempt('S1', 'LDP-001');
+    // second attempt in the same journal (different shift/branch): the helper's id generator is deterministic per call
+    const journal = createShiftCloseIntentJournal({ generateCloseCorrelationId: () => '0000000c-6666-4666-8666-666666666666' });
+    const prepare = journal.prepareOnlineCloseAttempt as unknown as (identity: unknown, b: unknown) => Promise<{ ok: boolean }>;
+    const expected = {
+      shiftId: 'S9', branchId: 'LDP-002', staffId: 'staff-9', staffName: 'อื่น', startingCash: 500, expectedCash: 1000, expectedQr: 0,
+      expectedKbank: 0, expectedCard: 0, expectedCredit: 0, payInTotal: 0, payOutTotal: 0, totalBills: 3,
+      actualCashCount: 1500, variance: 0, note: '', deviceId: 'DEV1',
+    };
+    const ok = await prepare(
+      { shiftId: 'S9', branchId: 'LDP-002', staffId: 'staff-9', staffName: 'อื่น', deviceId: 'DEV1' },
+      {
+        protocol: 'server_authoritative_v1',
+        request: { contractVersion: 1, shiftId: 'S9', actualCashCount: 1500, note: '', deviceId: 'DEV1', attestedSales: { expectedCash: 1000, expectedQr: 0, expectedKbank: 0, expectedCard: 0, expectedCredit: 0, totalBills: 3 } },
+        expected,
+      },
+    );
+    expect(ok.ok).toBe(true);
+    fake.docs.set('S9', { status: 'open', closedAt: null, branchId: 'LDP-002', staffId: 'staff-9', cashEntries: [] });
+    const { shift } = await runCycle();
+    expect(shift).toMatchObject({ status: 'failed', errorClass: 'shift_close_normalization:attempt_unresolved=2' });
+  });
+
+  test('[GREEN-guard] no attempt at all → still the clean last check (no false alarm)', async () => {
+    const { state, shift } = await runCycle();
+    expect(shift).toMatchObject({ status: 'ok' });
+    expect(typeof lastSyncCheckAtMs(state)).toBe('number');
+  });
+});

@@ -19,6 +19,7 @@ import type { Shift, ShiftCashEntry } from '../types';
 import type { LocalSale } from './localLedger';
 import type {
   AuthoritativeCloseRequestBody,
+  AuthoritativeServerProof,
   ShiftCloseIntentBusinessSnapshot,
 } from './offline/shiftCloseIntentTypes';
 
@@ -571,3 +572,287 @@ export function authoritativeRefusalMessage(code: AuthoritativeRefusalCode): str
       : ' — ยังไม่ได้ปิดกะ';
   return `${REFUSAL_COPY[code]}${notClosed} (รหัส: ${code})`;
 }
+
+// ── Packet 015 · F1/F4: server-authored close proof (the idempotent replay) ──
+
+/** Field-for-field equality of two 17-field snapshots (the store's `snapshotsEqual`, kept local: the store imports THIS module). */
+function sameSnapshot(a: ShiftCloseIntentBusinessSnapshot, b: ShiftCloseIntentBusinessSnapshot): boolean {
+  return (
+    SNAPSHOT_STRING_FIELDS.every((f) => a[f] === b[f]) &&
+    SNAPSHOT_NUMBER_FIELDS.every((f) => a[f] === b[f]) &&
+    a.deviceId === b.deviceId
+  );
+}
+
+/**
+ * The v1 request that reproduces a close from its 17-field snapshot — the
+ * exact request the attempt sent (every request field is a snapshot field).
+ * Used to replay a close that is only known from a journal entry.
+ */
+export function authoritativeRequestFromSnapshot(
+  snapshot: ShiftCloseIntentBusinessSnapshot,
+  closeCorrelationId: string,
+): Record<string, unknown> {
+  return {
+    contractVersion: 1,
+    shiftId: snapshot.shiftId,
+    closeCorrelationId,
+    actualCashCount: snapshot.actualCashCount,
+    note: snapshot.note,
+    attestedSales: {
+      expectedCash: snapshot.expectedCash,
+      expectedQr: snapshot.expectedQr,
+      expectedKbank: snapshot.expectedKbank,
+      expectedCard: snapshot.expectedCard,
+      expectedCredit: snapshot.expectedCredit,
+      totalBills: snapshot.totalBills,
+    },
+    deviceId: snapshot.deviceId,
+  };
+}
+
+/** A definitive refusal that only means "the server cannot verify right now" (retry later), never "not server-authored". */
+const REPLAY_RETRYABLE_REFUSALS: ReadonlySet<AuthoritativeRefusalCode> = new Set<AuthoritativeRefusalCode>([
+  'unauthenticated',
+  'session_stale',
+  'refund_audit_unavailable',
+]);
+
+export type ServerAuthoredCloseProof =
+  | { kind: 'proven'; proof: AuthoritativeServerProof }
+  /** Nothing is established either way (transport / unconfirmed / cannot verify now): keep everything, retry later. */
+  | { kind: 'unreachable'; reason: 'transport' | 'unconfirmed' | 'unverifiable_now' | 'unrecognized_response' }
+  /** The server said it did NOT author this close, or its answer cannot be trusted: keep everything, manual attention. */
+  | { kind: 'manual_attention'; reason: 'refused' | 'malformed_success' | 'not_a_replay' | 'differs_from_doc'; code?: AuthoritativeRefusalCode };
+
+/**
+ * Packet 015 — THE proof that a closed `shifts` document is the work of
+ * `closeShiftAuthoritative` (so of a `shiftCloseAuthorityRecords` document whose
+ * request digest matches). While direct client W3 exists, a shift doc alone —
+ * even one with the right UUID, device and amounts — proves nothing.
+ *
+ * Call ONLY after an independent authoritative read showed the shift CLOSED by
+ * this very UUID (`closedDoc` = that read, strictly parsed): the callable then
+ * takes its idempotency path and never writes. The request is the attempt's
+ * immutable stored request + UUID. The answer must be a well-formed `ok: true`
+ * for this shift and UUID that is a REPLAY (`idempotentReplay: true` — the doc
+ * was already closed), and its server-built snapshot and close time must equal
+ * the independently read doc. `closed_outside_authority`, `idempotency_conflict`,
+ * `close_record_inconsistent`, any other refusal, a malformed success, a
+ * timeout or an unknown answer are never proof.
+ */
+export async function proveServerAuthoredClose(input: {
+  callable: CloseShiftAuthoritativeCallable;
+  request: Record<string, unknown>;
+  closedDoc: { snapshot: ShiftCloseIntentBusinessSnapshot; closedAtMillis: number };
+}): Promise<ServerAuthoredCloseProof> {
+  const outcome = await invokeCloseShiftAuthoritative(input.callable, input.request);
+  switch (outcome.kind) {
+    case 'unknown':
+      return { kind: 'unreachable', reason: outcome.cause === 'transport' ? 'transport' : 'unrecognized_response' };
+    case 'committed_unconfirmed':
+      return { kind: 'unreachable', reason: 'unconfirmed' };
+    case 'refused':
+      return REPLAY_RETRYABLE_REFUSALS.has(outcome.code)
+        ? { kind: 'unreachable', reason: 'unverifiable_now' }
+        : { kind: 'manual_attention', reason: 'refused', code: outcome.code };
+    case 'malformed_success':
+      return { kind: 'manual_attention', reason: 'malformed_success' };
+    case 'committed': {
+      const { success } = outcome;
+      if (!success.idempotentReplay) return { kind: 'manual_attention', reason: 'not_a_replay' };
+      if (!sameSnapshot(success.snapshot, input.closedDoc.snapshot) || success.closedAtMillis !== input.closedDoc.closedAtMillis) {
+        return { kind: 'manual_attention', reason: 'differs_from_doc' };
+      }
+      return {
+        kind: 'proven',
+        proof: authoritativeServerProof(success, input.request.shiftId as string, input.request.closeCorrelationId as string),
+      };
+    }
+  }
+}
+
+/** The (non-persisted) proof object a validated success yields; the store re-checks it against the attempt and the snapshot. */
+export function authoritativeServerProof(
+  success: AuthoritativeCloseSuccess,
+  shiftId: string,
+  closeCorrelationId: string,
+): AuthoritativeServerProof {
+  return { protocol: 'server_authoritative_v1', shiftId, closeCorrelationId, closedAtMillis: success.closedAtMillis, snapshot: success.snapshot };
+}
+
+// ── Packet 015 · F5: the persisted binding, validated against the exact contract ──
+
+const BINDING_REQUEST_KEYS = ['contractVersion', 'shiftId', 'actualCashCount', 'note', 'attestedSales', 'deviceId'] as const;
+const BINDING_SALES_KEYS = ['expectedCash', 'expectedQr', 'expectedKbank', 'expectedCard', 'expectedCredit', 'totalBills'] as const;
+const BINDING_SNAPSHOT_KEYS: readonly string[] = [...SNAPSHOT_STRING_FIELDS, ...SNAPSHOT_NUMBER_FIELDS];
+
+function hasExactKeys(v: Record<string, unknown>, keys: readonly string[]): boolean {
+  const own = Object.keys(v);
+  return own.length === keys.length && keys.every((k) => Object.prototype.hasOwnProperty.call(v, k));
+}
+
+/**
+ * Packet 015 — strict structural + numeric validation of a persisted
+ * server-authoritative binding (`{ protocol, request, expected }`) of the
+ * attempt `attempt` (journal read / prepare boundary):
+ *   - the exact key sets of binding, request, `attestedSales` and the 17
+ *     `expected` business fields (no extra / missing key);
+ *   - the contract-v1 request: `contractVersion 1`, the attempt's shift and
+ *     device id (bounded, untrimmed), a note ≤ 1000, a canonical-satang count
+ *     and attested money, an integer `totalBills` in 0 … 100,000;
+ *   - `expected` = the attempt's identity + the request's cashier / attested
+ *     fields, with canonical-satang startingCash / payIn / payOut and a
+ *     `variance` that is exactly `actualCashCount − (startingCash +
+ *     expectedCash + payInTotal − payOutTotal)` (the expression the server
+ *     stores and `parseCommittedOwnClose` re-checks).
+ * Local integrity only — NOT a substitute for the server proof.
+ */
+export function isStrictAuthoritativeBinding(b: unknown, attempt: Readonly<Record<string, unknown>>): boolean {
+  if (!isPlainObject(b) || !hasExactKeys(b, ['protocol', 'request', 'expected']) || b.protocol !== 'server_authoritative_v1') return false;
+  const { request: req, expected: exp } = b;
+  if (!isPlainObject(req) || !hasExactKeys(req, BINDING_REQUEST_KEYS) || req.contractVersion !== 1) return false;
+  const sales = req.attestedSales;
+  if (!isPlainObject(sales) || !hasExactKeys(sales, BINDING_SALES_KEYS)) return false;
+  if (typeof req.shiftId !== 'string' || !SHIFT_ID_RE.test(req.shiftId) || req.shiftId !== req.shiftId.trim() || req.shiftId !== attempt.shiftId) {
+    return false;
+  }
+  if (
+    typeof req.deviceId !== 'string' ||
+    req.deviceId.length === 0 ||
+    req.deviceId.length > AUTHORITATIVE_DEVICE_ID_MAX ||
+    req.deviceId !== req.deviceId.trim() ||
+    req.deviceId !== attempt.deviceId
+  ) {
+    return false;
+  }
+  if (typeof req.note !== 'string' || req.note.length > AUTHORITATIVE_NOTE_MAX) return false;
+  if (canonicalTotalMinor(req.actualCashCount) === null) return false;
+  if (ATTESTED_FIELDS.some((f) => canonicalTotalMinor(sales[f]) === null)) return false;
+  const bills = sales.totalBills;
+  if (typeof bills !== 'number' || !Number.isSafeInteger(bills) || bills < 0 || bills > AUTHORITATIVE_MAX_TOTAL_BILLS) return false;
+
+  if (!isPlainObject(exp) || !hasExactKeys(exp, BINDING_SNAPSHOT_KEYS)) return false;
+  if (!SNAPSHOT_STRING_FIELDS.every((f) => typeof exp[f] === 'string')) return false;
+  if (!SNAPSHOT_NUMBER_FIELDS.every((f) => typeof exp[f] === 'number' && Number.isFinite(exp[f]))) return false;
+  if (typeof exp.deviceId !== 'string') return false;
+  if (
+    exp.shiftId !== attempt.shiftId ||
+    exp.branchId !== attempt.branchId ||
+    exp.staffId !== attempt.staffId ||
+    exp.staffName !== attempt.staffName ||
+    exp.deviceId !== attempt.deviceId
+  ) {
+    return false;
+  }
+  if (exp.actualCashCount !== req.actualCashCount || exp.note !== req.note || exp.totalBills !== bills) return false;
+  if (ATTESTED_FIELDS.some((f) => exp[f] !== sales[f])) return false;
+  const starting = exp.startingCash as number;
+  const payIn = exp.payInTotal as number;
+  const payOut = exp.payOutTotal as number;
+  if (canonicalTotalMinor(starting) === null || canonicalTotalMinor(payIn) === null || canonicalTotalMinor(payOut) === null) return false;
+  const variance = exp.variance as number;
+  if (Math.abs(variance) > MAX_TOTAL_BAHT) return false;
+  return variance === (req.actualCashCount as number) - (starting + (sales.expectedCash as number) + payIn - payOut);
+}
+
+// ── Packet 015 · F2: the operator-reviewed drawer ──
+
+/** Freshness of the display's server cash refresh at the moment of Confirm. */
+export type ReviewedDrawerRefresh = 'loaded' | 'pending' | 'unavailable';
+
+/**
+ * Packet 015 — an immutable witness of the drawer the cashier was SHOWN when
+ * they pressed Confirm: the exact `displayShift` of the close modal (local
+ * shift merged with the server cash refresh) and whether that refresh had
+ * loaded. The ON close compares it with the freshly read authoritative cash
+ * data BEFORE it prepares an attempt or calls the server.
+ */
+export type ReviewedDrawerWitness = Readonly<{
+  shiftId: string;
+  branchId: string;
+  startingCash: number;
+  cashEntries: ReadonlyArray<Readonly<{ id: string; type: 'pay_in' | 'pay_out'; amount: number }>>;
+  payInTotal: number;
+  payOutTotal: number;
+  /** The "expected drawer" number the modal rendered: startingCash + expectedCash + payIn − payOut. */
+  expectedDrawer: number;
+  serverRefresh: ReviewedDrawerRefresh;
+}>;
+
+/** Freezes a witness from the displayed shift. Never reads the server; pure. */
+export function buildReviewedDrawerWitness(displayShift: Shift, serverRefresh: ReviewedDrawerRefresh): ReviewedDrawerWitness {
+  const entries = (Array.isArray(displayShift.cashEntries) ? displayShift.cashEntries : []).map((e) =>
+    Object.freeze({ id: e.id, type: e.type, amount: e.amount }),
+  );
+  return Object.freeze({
+    shiftId: displayShift.id,
+    branchId: displayShift.branchId,
+    startingCash: displayShift.startingCash,
+    cashEntries: Object.freeze(entries),
+    payInTotal: displayShift.payInTotal || 0,
+    payOutTotal: displayShift.payOutTotal || 0,
+    expectedDrawer:
+      displayShift.startingCash + displayShift.expectedCash + (displayShift.payInTotal || 0) - (displayShift.payOutTotal || 0),
+    serverRefresh,
+  });
+}
+
+export type ReviewedDrawerCheck =
+  | { ok: true }
+  | { ok: false; reason: 'missing' | 'not_loaded' | 'identity' | 'starting_cash' | 'cash_entries' | 'drawer' };
+
+/**
+ * Compares the witness with the authoritative cash data the close will use
+ * (`serverData` = the fresh shift read, `expected` = the close built from it).
+ * Everything must agree exactly: identity, startingCash, every cash entry
+ * (id, type, amount — none added, none missing), and the displayed drawer total
+ * to the satang. A witness that is absent, malformed or taken before the
+ * display's server refresh loaded is never accepted.
+ */
+export function checkReviewedDrawerWitness(
+  witness: unknown,
+  server: { shiftId: string; branchId: string; serverData: Record<string, unknown>; expected: ShiftCloseIntentBusinessSnapshot },
+): ReviewedDrawerCheck {
+  if (!isPlainObject(witness)) return { ok: false, reason: 'missing' };
+  const w = witness;
+  if (
+    typeof w.shiftId !== 'string' ||
+    typeof w.branchId !== 'string' ||
+    typeof w.startingCash !== 'number' ||
+    typeof w.expectedDrawer !== 'number' ||
+    !Array.isArray(w.cashEntries)
+  ) {
+    return { ok: false, reason: 'missing' };
+  }
+  if (w.serverRefresh !== 'loaded') return { ok: false, reason: 'not_loaded' };
+  if (w.shiftId !== server.shiftId || w.branchId !== server.branchId) return { ok: false, reason: 'identity' };
+  if (w.startingCash !== server.serverData.startingCash) return { ok: false, reason: 'starting_cash' };
+  const serverEntries = Array.isArray(server.serverData.cashEntries) ? (server.serverData.cashEntries as unknown[]) : [];
+  if (w.cashEntries.length !== serverEntries.length) return { ok: false, reason: 'cash_entries' };
+  const shown = new Map<string, { type: unknown; amount: unknown }>();
+  for (const e of w.cashEntries as unknown[]) {
+    if (!isPlainObject(e) || typeof e.id !== 'string' || shown.has(e.id)) return { ok: false, reason: 'cash_entries' };
+    shown.set(e.id, { type: e.type, amount: e.amount });
+  }
+  for (const raw of serverEntries) {
+    const e = raw as { id?: unknown; type?: unknown; amount?: unknown } | null;
+    const seen = typeof e?.id === 'string' ? shown.get(e.id) : undefined;
+    if (!seen || seen.type !== e?.type || seen.amount !== e?.amount) return { ok: false, reason: 'cash_entries' };
+  }
+  const x = server.expected;
+  const serverDrawer = x.startingCash + x.expectedCash + x.payInTotal - x.payOutTotal;
+  if (Math.round(w.expectedDrawer * 100) !== Math.round(serverDrawer * 100)) return { ok: false, reason: 'drawer' };
+  return { ok: true };
+}
+
+/**
+ * The refusal copy for a drawer the cashier did not review (changed, absent or
+ * not yet refreshed). The call that throws it carries `cause.reviewRequired`
+ * so the modal refreshes the display; the next Confirm is a new explicit act.
+ */
+export const CLOSE_SHIFT_AUTHORITATIVE_DISPLAY_CHANGED_MESSAGE =
+  'ยอดเงินสดในลิ้นชักที่แสดงอยู่ไม่ตรงกับข้อมูลล่าสุดบนเซิร์ฟเวอร์ หรือยังโหลดยอดล่าสุดไม่เสร็จ (เช่น มีการคืนเงินสดหรือนำเงินเข้า/ออก) — ยังไม่ได้ปิดกะ ระบบกำลังอัปเดตยอดที่แสดงแล้ว กรุณาตรวจนับเงินสดแล้วกดยืนยันปิดกะอีกครั้ง';
+/** A close journaled on this device by the legacy (direct-W3) protocol is never shown as a server-authoritative Z. */
+export const CLOSE_SHIFT_AUTHORITATIVE_LEGACY_ENTRY_MESSAGE =
+  'การปิดกะของกะนี้ที่บันทึกในเครื่องนี้ไม่ได้ผ่านการยืนยันจากเซิร์ฟเวอร์ (ปิดด้วยวิธีเดิม) — ระบบไม่แสดงรายงานปิดกะ (Z) และไม่ส่งการปิดกะซ้ำ กรุณาแจ้งผู้จัดการให้ตรวจสอบกะนี้';

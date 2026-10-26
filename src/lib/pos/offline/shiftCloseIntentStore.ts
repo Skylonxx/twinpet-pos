@@ -1,5 +1,7 @@
+import { isStrictAuthoritativeBinding } from '../shiftCloseAuthoritativeClient';
 import type {
   AuthoritativeCloseBinding,
+  AuthoritativeServerProof,
   CloseIntentErrorCode,
   CloseIntentResult,
   FinalizeOnlineCloseRefusal,
@@ -523,48 +525,37 @@ function isValidOnlineCloseAttempt(v: unknown): v is OnlineCloseAttemptRecord {
   );
 }
 
-const AUTHORITATIVE_REQUEST_KEYS = ['contractVersion', 'shiftId', 'actualCashCount', 'note', 'attestedSales', 'deviceId'] as const;
-const AUTHORITATIVE_SALES_KEYS = ['expectedCash', 'expectedQr', 'expectedKbank', 'expectedCard', 'expectedCredit', 'totalBills'] as const;
-
-function hasExactKeys(v: Record<string, unknown>, keys: readonly string[]): boolean {
-  const own = Object.keys(v);
-  return own.length === keys.length && keys.every((k) => Object.prototype.hasOwnProperty.call(v, k));
-}
-
-function isBusinessSnapshotShaped(v: unknown): v is ShiftCloseIntentBusinessSnapshot {
-  if (!isPlainRecord(v)) return false;
-  if (!SNAPSHOT_STRING_FIELDS.every((f) => typeof v[f] === 'string')) return false;
-  if (!SNAPSHOT_NUMBER_FIELDS.every((f) => isFiniteNumber(v[f]))) return false;
-  return typeof v.deviceId === 'string';
+/**
+ * Packet 014/015 — a server-authoritative attempt binding is valid only against
+ * the exact contract-v1 request and the 17-field expected close of THIS
+ * attempt's identity, in canonical satang with a coherent variance
+ * (`isStrictAuthoritativeBinding`). Anything else makes the attempt unreadable
+ * (journal read fails closed) and is never persisted by `prepareOnlineCloseAttempt`.
+ */
+function isValidAuthoritativeBinding(b: unknown, attempt: Record<string, unknown>): b is AuthoritativeCloseBinding {
+  return isStrictAuthoritativeBinding(b, attempt);
 }
 
 /**
- * Packet 014 — structural check of a server-authoritative attempt binding: the
- * exact request key set (money bounds are the adapter's and the server's job),
- * an `expected` close of THIS attempt's identity whose cashier / attested
- * fields are the request's. Anything else makes the attempt unreadable.
+ * Packet 015 — does `proof` authenticate THIS attempt's close? (the protocol,
+ * the attempt's shift and UUID, a finite server close time and a snapshot equal
+ * to the one about to be journaled). The proof object is built only from a
+ * validated `closeShiftAuthoritative` success; it is never read from storage.
  */
-function isValidAuthoritativeBinding(b: unknown, attempt: Record<string, unknown>): b is AuthoritativeCloseBinding {
-  if (!isPlainRecord(b) || !hasExactKeys(b, ['protocol', 'request', 'expected'])) return false;
-  if (b.protocol !== 'server_authoritative_v1') return false;
-  const req = b.request;
-  const exp = b.expected;
-  if (!isPlainRecord(req) || !hasExactKeys(req, AUTHORITATIVE_REQUEST_KEYS)) return false;
-  const sales = req.attestedSales;
-  if (!isPlainRecord(sales) || !hasExactKeys(sales, AUTHORITATIVE_SALES_KEYS)) return false;
-  if (req.contractVersion !== 1 || typeof req.note !== 'string' || !isFiniteNumber(req.actualCashCount)) return false;
-  if (!AUTHORITATIVE_SALES_KEYS.every((k) => isFiniteNumber(sales[k]))) return false;
-  if (req.shiftId !== attempt.shiftId || req.deviceId !== attempt.deviceId) return false;
-  if (!isBusinessSnapshotShaped(exp)) return false;
+function holdsServerProof(
+  proof: unknown,
+  attempt: OnlineCloseAttemptRecord,
+  snapshot: ShiftCloseIntentBusinessSnapshot,
+): boolean {
+  if (!isPlainRecord(proof)) return false;
   return (
-    exp.shiftId === attempt.shiftId &&
-    exp.branchId === attempt.branchId &&
-    exp.staffId === attempt.staffId &&
-    exp.staffName === attempt.staffName &&
-    exp.deviceId === attempt.deviceId &&
-    exp.actualCashCount === req.actualCashCount &&
-    exp.note === req.note &&
-    AUTHORITATIVE_SALES_KEYS.every((k) => exp[k] === sales[k])
+    proof.protocol === 'server_authoritative_v1' &&
+    proof.shiftId === attempt.shiftId &&
+    proof.closeCorrelationId === attempt.closeCorrelationId &&
+    typeof proof.closedAtMillis === 'number' &&
+    Number.isFinite(proof.closedAtMillis) &&
+    isPlainRecord(proof.snapshot) &&
+    snapshotsEqual(proof.snapshot as ShiftCloseIntentBusinessSnapshot, snapshot)
   );
 }
 
@@ -1219,11 +1210,17 @@ export type ShiftCloseIntentJournal = {
    * finalized (its attempt consumed earlier) is returned, never re-created.
    * Anything else → `conflict` with a {@link FinalizeOnlineCloseRefusal};
    * nothing is written, no attempt is touched.
+   * Packet 015: a SERVER-AUTHORITATIVE attempt is consumed only together with
+   * the callable's {@link AuthoritativeServerProof} (this attempt's shift +
+   * UUID, snapshot equal to the committed one) — a closed `shifts` document
+   * alone (a direct client W3 with the same UUID and amounts) never mints an
+   * entry (`attempt_authority_unproven`). Legacy attempts take no proof.
    */
   finalizeOnlineClose: (
     snapshot: ShiftCloseIntentBusinessSnapshot,
     closeCorrelationId: string,
     observePointerRepair?: PointerRepairObserver,
+    serverProof?: AuthoritativeServerProof,
   ) => Promise<FinalizeOnlineCloseResult>;
   /** Every prepared attempt; a malformed one fails the whole read (`conflict`). */
   listOnlineCloseAttempts: () => Promise<CloseIntentResult<OnlineCloseAttemptRecord[]>>;
@@ -1688,7 +1685,7 @@ function buildJournalApi(
         return txFailed<PrepareOnlineCloseResult>('online close attempt could not be verified as durable');
       }),
 
-    finalizeOnlineClose: (snapshot, closeCorrelationId, observePointerRepair) =>
+    finalizeOnlineClose: (snapshot, closeCorrelationId, observePointerRepair, serverProof) =>
       runFinalizeStore(store, async (s) => {
         const key = onlineCloseAttemptKey(snapshot.shiftId);
         const shiftLabel = `shift "${snapshot.shiftId}"`;
@@ -1721,6 +1718,9 @@ function buildJournalApi(
                 // Packet 014: the server committed a close this device did not
                 // expect (e.g. a Return landed after the pre-call read) — never adopted.
                 attemptRefusal = 'attempt_expectation_mismatch';
+              } else if (attemptRaw.authoritative && !holdsServerProof(serverProof, attemptRaw, snapshot)) {
+                // Packet 015: no server-authored proof for this very close.
+                attemptRefusal = 'attempt_authority_unproven';
               }
             }
             if (existingRaw !== undefined) {
