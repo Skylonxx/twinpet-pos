@@ -9,6 +9,11 @@
  *         shape) and the W4 sync-state write.
  *  REAL   The production `closeShift` from src/lib/pos/shiftService.ts, including
  *         the 009 raw-list integrity checker and the strict post-commit proof.
+ *  017    The client W3 is SEALED in the Rules source: each chain first proves the
+ *         gate-OFF close is refused by the real Rules (no Z, shift open, R kept),
+ *         then re-runs the close in a clearly labelled PRE-SEAL LEGACY MODEL whose
+ *         W3 transaction alone runs with Rules disabled (see emulatorCloseDeps) —
+ *         the hostile W1 and the W4 stay real Rules-evaluated client writes.
  *  MODEL  The POS's local persistent cache (`getDocFromCache`) is replaced by a
  *         plain server read of the shift as a *fresh, current POS* would have
  *         mounted it; the local journal is the in-memory journal; the device id,
@@ -52,7 +57,7 @@ vi.mock('../src/lib/pos/deviceId', async (importOriginal) => {
   return { ...actual, getDeviceId: vi.fn(() => 'DEV1') };
 });
 
-import { closeShift, type CloseShiftDeps, type ShiftCloseTransactionRunner } from '../src/lib/pos/shiftService';
+import { closeShift, type CloseShiftDeps, type ShiftCloseTransactionRunner, type ShiftCloseTx } from '../src/lib/pos/shiftService';
 import { createInMemoryShiftCloseIntentJournal } from '../src/lib/pos/offline/shiftCloseIntentStore';
 import { shiftCloseConfirmationDocFromData, type ShiftCloseConfirmationReader } from '../src/lib/pos/offline/shiftCloseReconciler';
 import type { Shift, ShiftCashEntry } from '../src/lib/types';
@@ -144,21 +149,44 @@ async function freshPosShift(): Promise<Shift> {
   };
 }
 
-/** Production close wiring on REAL emulator Rules (staff-authenticated W3 transaction + W4). */
-function emulatorCloseDeps(): CloseShiftDeps {
+/**
+ * Production gate-OFF close wiring.
+ *  - `sealed`: the W3 transaction runs as the staff client on the REAL emulator
+ *    Rules (packet 017 sealed it, so it is DENIED) + the real W4.
+ *  - `preSealModel`: LEGACY-HISTORY model of the pre-017 world (the gate-OFF fleet
+ *    still runs against unsealed deployed Rules until cutover). The Rules no longer
+ *    contain a client W3, so the W3 transaction runs with Rules DISABLED — this
+ *    proves ONLY the client fold / strict proof / journal chain over the
+ *    server-held list, never a Rules acceptance. The hostile W1 and the W4 stay
+ *    real Rules-evaluated client writes.
+ */
+type ClientDb = ReturnType<ReturnType<RulesTestEnvironment['authenticatedContext']>['firestore']>;
+
+function inTransaction<T>(db: ClientDb, shiftId: string, fn: (tx: ShiftCloseTx) => Promise<T>): Promise<T> {
+  const ref = real.doc(db, 'shifts', shiftId);
+  return real.runTransaction(db, (tx) =>
+    fn({
+      get: async () => {
+        const snap = await tx.get(ref);
+        return { exists: snap.exists(), data: snap.exists() ? (snap.data() as Record<string, unknown>) : undefined };
+      },
+      update: (payload) => tx.update(ref, payload),
+    }),
+  );
+}
+
+function emulatorCloseDeps(mode: 'sealed' | 'preSealModel'): CloseShiftDeps {
   const staffDb = testEnv.authenticatedContext('staff-1', staff()).firestore();
-  const run: ShiftCloseTransactionRunner = (shiftId, fn) => {
-    const ref = real.doc(staffDb, 'shifts', shiftId);
-    return real.runTransaction(staffDb, (tx) =>
-      fn({
-        get: async () => {
-          const snap = await tx.get(ref);
-          return { exists: snap.exists(), data: snap.exists() ? (snap.data() as Record<string, unknown>) : undefined };
-        },
-        update: (payload) => tx.update(ref, payload),
-      }),
-    );
-  };
+  const run: ShiftCloseTransactionRunner =
+    mode === 'sealed'
+      ? (shiftId, fn) => inTransaction(staffDb, shiftId, fn)
+      : async <T>(shiftId: string, fn: (tx: ShiftCloseTx) => Promise<T>) => {
+          let result: { value: T } | undefined;
+          await testEnv.withSecurityRulesDisabled(async (ctx) => {
+            result = { value: await inTransaction(ctx.firestore(), shiftId, fn) };
+          });
+          return result!.value;
+        };
   const readConfirmation: ShiftCloseConfirmationReader = async (shiftId) => {
     const data = await mocks.readShiftForCache!(shiftId);
     return data ? { ok: true, doc: shiftCloseConfirmationDocFromData(data) } : { ok: true, doc: { exists: false } };
@@ -185,7 +213,17 @@ function record(line: string) {
   if (process.env.W1_CHAIN_LOG) appendFileSync(process.env.W1_CHAIN_LOG, `${line}\n`);
 }
 
-describe('010 end-to-end chain (real emulator Rules + production closeShift)', () => {
+/** 017: the production gate-OFF close is refused by the sealed Rules — no Z, shift open, R and its audit doc intact. */
+async function expectSealedGateOffCloseRefused(countedCash: number, expectedIds: string[]) {
+  const refused = await closeShift(await freshPosShift(), countedCash, '', emulatorCloseDeps('sealed')).catch((e: Error) => e);
+  expect(refused).toBeInstanceOf(Error);
+  record(`017 sealed gate-OFF close refused: ${(refused as Error).message}`);
+  expect(await readDoc(['shifts', 'shift-1'])).toMatchObject({ status: 'open', closedAt: null, payOutTotal: 0 });
+  expect(((await readDoc(['shifts', 'shift-1']))!.cashEntries as ShiftCashEntry[]).map((e) => e.id)).toEqual(expectedIds);
+  expect(await readDoc(['cashTransactions', R.id])).toMatchObject({ amount: 81, source: 'sale_refund' });
+}
+
+describe('010 end-to-end chain (real emulator Rules + production closeShift; 017 sealed + pre-seal legacy model)', () => {
   it('Return-81 → hostile whole-array W1 replacement → fresh POS closes: the replacement is DENIED and the Z carries payOut 81 / variance 0', async () => {
     await serverReturnRecordsRefund();
 
@@ -198,8 +236,11 @@ describe('010 end-to-end chain (real emulator Rules + production closeShift)', (
     }
     record(`attack W1 [c_fake out 1, c_last in 1] over [rfd out 81]: ${attackAccepted ? 'ACCEPTED by Rules' : 'DENIED by Rules'}`);
 
-    // A fresh, current POS reloads the shift and the cashier counts 1419 (500 + 1000 − 81).
-    const z = await closeShift(await freshPosShift(), 1419, '', emulatorCloseDeps()).catch((e: Error) => e);
+    // 017 sealed Rules: the gate-OFF client close itself can no longer commit.
+    await expectSealedGateOffCloseRefused(1419, [R.id]);
+
+    // Pre-seal legacy model: a fresh, current POS reloads the shift and the cashier counts 1419 (500 + 1000 − 81).
+    const z = await closeShift(await freshPosShift(), 1419, '', emulatorCloseDeps('preSealModel')).catch((e: Error) => e);
     if (z instanceof Error) {
       record(`close refused: ${z.message}`);
     } else {
@@ -225,7 +266,9 @@ describe('010 end-to-end chain (real emulator Rules + production closeShift)', (
     const ordinary = entry('Aa3sQe9wLm2PqRtUvXy1', { type: 'pay_in', amount: 20, at: AT + 9 });
     await real.updateDoc(real.doc(staffDb, 'shifts', 'shift-1'), { cashEntries: real.arrayUnion(ordinary), updatedAt: real.serverTimestamp() });
 
-    const z = await closeShift(await freshPosShift(), 1439, '', emulatorCloseDeps());
+    await expectSealedGateOffCloseRefused(1439, [R.id, ordinary.id]);
+
+    const z = await closeShift(await freshPosShift(), 1439, '', emulatorCloseDeps('preSealModel'));
     expect(z).toMatchObject({ status: 'closed', payOutTotal: 81, payInTotal: 20, variance: 0 });
     expect(z.startingCash + z.expectedCash + z.payInTotal - z.payOutTotal).toBe(1439);
     await expect(z.whenServerConfirmed).resolves.toMatchObject({ outcome: 'confirmed' });

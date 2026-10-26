@@ -291,6 +291,10 @@ service cloud.firestore {
     // past `.`. Rules cannot prove id UNIQUENESS efficiently — only the
     // namespace of the APPENDED entry is reserved; the close refuses ambiguous
     // ids (R1-B).
+    // 017 — the SAME id is the `cashTransactions/{txId}` doc id the Return
+    // callable `tx.create`s, so this one predicate also reserves that ledger
+    // namespace (see the cashTransactions match). `matches` is a full-string
+    // match, so this is a PREFIX test, never a contains test.
     function isServerOwnedCashEntryId(entryId) {
       return entryId.matches('(?s)rfd_.*');
     }
@@ -341,6 +345,16 @@ service cloud.firestore {
         );
     }
 
+    // RETIRED by packet 017 (W3 client seal, Rules SOURCE only — NOT deployed):
+    // no `allow` expression references this function any more, so no client SDK
+    // write can move a shift to `closed`. The server-authoritative close
+    // (closeShiftAuthoritative, Admin SDK — bypasses Rules) is the only close
+    // writer once these Rules are deployed. Kept, unreferenced (a compiler
+    // "Unused function" warning, like voidIntentChangesOnly), because it is the
+    // exact definition of the closed-document shape the server still writes and
+    // that W4 / the client strict parser rely on (closeShiftAuthoritativeCore
+    // `w3Fields`, docs/contracts/close-shift-authoritative-v1.md §9).
+    //
     // W3 — exact one-way open→closed transition (closeShift()'s exact 16-field
     // write, shiftService.ts:400-422), plus OBS-B1A optional closeCorrelationId.
     // `closedAtLocal` is denied by construction (not in the allowlist);
@@ -960,27 +974,46 @@ service cloud.firestore {
         && hasBranchAccess(request.resource.data.branchId)
         && isW0ShiftOpen(shiftId);
 
-      // D4 W1–W4 — field-constrained open-shift accrual, one-way close, and the
-      // sole Variant C post-close sync-state normalization. Every other update
-      // shape (incl. closed→open and any broad post-close update) is denied.
+      // D4 W1 / W2 / W4 — field-constrained open-shift accrual and the sole
+      // Variant C post-close sync-state normalization. Every other update shape
+      // (incl. closed→open and any broad post-close update) is denied.
+      //
+      // 017 W3 seal: the client W3 close (isW3ShiftClose) is NOT an accepted
+      // update any more — for every role, branch and write form (update,
+      // set/merge, overwrite, batch, transaction). `status` is client-immutable
+      // after the W0 create (which only creates `open`), so the terminal closed
+      // state is reachable only through the Admin SDK. The status guard below
+      // is redundant with W1/W2/W4 today (none of them changes `status`) and is
+      // the explicit seal invariant against a future broadened branch.
+      // DEPLOY HAZARD: deployed before the client cutover this denies the close
+      // of every installed client that still writes W3 (0.1.12, gate OFF).
       allow update: if isStaff()
         && hasBranchAccess(resource.data.branchId)
+        && request.resource.data.get('status', null) == resource.data.get('status', null)
         && (
           isW1CashAppend()
           || isW2CreditDebtReceipt()
-          || isW3ShiftClose()
           || isW4SyncStateNormalization()
         );
       // Admin-only — used by the Danger Zone UAT reset to wipe shift history
       allow delete: if isAdmin();
     }
 
+    // 017 — `cashTransactions/rfd_*` is the server refund ledger (submitSaleReturn
+    // `tx.create`s `rfd_<returnId>`, Admin SDK). No client SDK write of any role
+    // may create (incl. pre-squatting the server's id), overwrite, update or
+    // delete there. There is no client `update` rule at all, so overwrite/merge
+    // of any existing record is already denied; create and delete exclude the
+    // reserved prefix. Reads are unchanged. Client ids are Firestore auto-ids
+    // ([A-Za-z0-9], never `_`), so no legitimate client id is reserved.
     match /cashTransactions/{txId} {
       allow read: if isStaff() && hasBranchAccess(resource.data.branchId);
       allow create: if isStaff()
+        && !isServerOwnedCashEntryId(txId)
         && hasFreshBranchAccess(request.resource.data.branchId);
-      // Admin-only — used by the Danger Zone UAT reset to wipe cash history
-      allow delete: if isAdmin();
+      // Admin-only — used by the Danger Zone UAT reset to wipe cash history;
+      // never a server `rfd_` refund record (017).
+      allow delete: if isAdmin() && !isServerOwnedCashEntryId(txId);
     }
 
     // ── Packet 5 server-owned collections (P5-C-2 rules hardening) ──

@@ -1,11 +1,14 @@
 /**
  * Return/Refund V1 packet 015 — F1/F2 on the REAL Firestore emulator (named
- * database `pos-db`, project `demo-twinpet`, CURRENT UNSEALED Rules, no live data).
+ * database `pos-db`, project `demo-twinpet`, the Rules from firebase.json, no live data).
  *
  *   forged W3   a Rules-authenticated staff CLIENT (`mockUserToken`, Rules from
  *               firebase.json) writes a direct W3 with the saved attempt UUID and
- *               the OLD expected totals after a REAL cash Return — accepted by the
- *               unsealed Rules, with no `shiftCloseAuthorityRecords` document;
+ *               the OLD expected totals after a REAL cash Return. Packet 017 sealed
+ *               the client W3, so that write is now asserted DENIED; the forged
+ *               document F1 recovers from is then materialized as LEGACY HISTORY
+ *               (a W3 committed before the seal) with the Admin SDK — a fixture,
+ *               not a Rules permission — with no `shiftCloseAuthorityRecords` doc;
  *   Return      the PRODUCTION `performSubmitSaleReturn` transaction (Admin SDK,
  *               PIN primitive with an injected compare) — not a copied body;
  *   callable    the PRODUCTION `performCloseShiftAuthoritative` invoked IN-PROCESS
@@ -112,7 +115,7 @@ const returnDeps = { comparePin: async (pin: string, hash: string) => pin === GO
 
 const describeEmu = RUN ? describe : describe.skip;
 
-describeEmu('015 recovery safety ⇄ closeShiftAuthoritative on the Firestore emulator (demo-twinpet / pos-db, unsealed Rules)', () => {
+describeEmu('015 recovery safety ⇄ closeShiftAuthoritative on the Firestore emulator (demo-twinpet / pos-db, Rules from firebase.json — sealed since 017)', () => {
   beforeAll(async () => {
     adminDb = ((await import('../functions/src/db')) as unknown as { db: AdminDb }).db;
     performClose = ((await import('../functions/src/closeShiftAuthoritative')) as unknown as { performCloseShiftAuthoritative: PerformClose })
@@ -328,11 +331,10 @@ describeEmu('015 recovery safety ⇄ closeShiftAuthoritative on the Firestore em
     return attempt!;
   }
 
-  /** A direct client W3 through the Rules-checked CLIENT SDK: the attempt's UUID, the OLD expected totals (payout 0). */
-  async function forgeDirectW3(w: World, uuid: string) {
-    await clientFs.updateDoc(clientFs.doc(clientDb, 'shifts', w.shiftId), {
+  /** The forged direct W3: the attempt's UUID and the OLD expected totals (payout 0). */
+  function forgedW3Fields(uuid: string): Doc {
+    return {
       status: 'closed',
-      closedAt: clientFs.serverTimestamp(),
       actualCashCount: 1500,
       variance: 0,
       note: '',
@@ -348,7 +350,24 @@ describeEmu('015 recovery safety ⇄ closeShiftAuthoritative on the Firestore em
       syncState: 'pending',
       deviceId: 'DEV1',
       closeCorrelationId: uuid,
-    });
+    };
+  }
+
+  /** 017: the forged W3 through the Rules-checked CLIENT SDK is now DENIED by the sealed Rules. */
+  async function forgeDirectW3Denied(w: World, uuid: string) {
+    await expect(
+      clientFs.updateDoc(clientFs.doc(clientDb, 'shifts', w.shiftId), { ...forgedW3Fields(uuid), closedAt: clientFs.serverTimestamp() }),
+    ).rejects.toMatchObject({ code: 'permission-denied' });
+  }
+
+  /**
+   * LEGACY-HISTORY fixture (017): the identical forged document as it exists when
+   * the W3 was committed BEFORE the seal (pre-017 Rules / an installed client
+   * before cutover). Written with the Admin SDK only to materialize that history
+   * — it is NOT a Rules permission; the live client path is denied above.
+   */
+  async function materializePreSealForgedW3(w: World, uuid: string) {
+    await adminDb.doc(`shifts/${w.shiftId}`).update({ ...forgedW3Fields(uuid), closedAt: new Date() });
   }
 
   async function expectNothingAdopted(w: World, journal: ShiftCloseIntentJournal, uuid: string) {
@@ -361,7 +380,7 @@ describeEmu('015 recovery safety ⇄ closeShiftAuthoritative on the Firestore em
 
   // ── F1 ────────────────────────────────────────────────────────────────
 
-  test('F1 chronology: attempt A (payout 0, drawer 1500) → real Return 81 → Rules-accepted forged W3 → callable says closed_outside_authority → restart sweep: NO journal / Z / W4', async () => {
+  test('F1 chronology: attempt A (payout 0, drawer 1500) → real Return 81 → client forged W3 DENIED (017) / pre-seal forged W3 history → callable says closed_outside_authority → restart sweep: NO journal / Z / W4', async () => {
     const w = await world();
     const journal = freshJournal(w);
     const attempt = await openBoundAttempt(w, journal);
@@ -373,12 +392,18 @@ describeEmu('015 recovery safety ⇄ closeShiftAuthoritative on the Firestore em
     expect(afterReturn.cashEntries).toEqual([expect.objectContaining({ id: expect.stringMatching(/^rfd_/), type: 'pay_out', amount: 81 })]);
     log.push('2 production Return committed: rfd_ pay_out 81 on the shift');
 
-    await forgeDirectW3(w, uuid); // Rules-accepted (unsealed): the premise of F1
+    // 017: the live attack is now refused by the sealed Rules and leaves the shift open…
+    await forgeDirectW3Denied(w, uuid);
+    expect(await serverShift(w.shiftId)).toMatchObject({ status: 'open', payOutTotal: 0 });
+    log.push('3a client direct W3 (UUID A, payOut 0) DENIED by the sealed Rules (017); shift still open');
+    // …but a forged W3 committed BEFORE the seal can already exist: the client recovery
+    // defence below must still hold against that legacy history (the premise of F1).
+    await materializePreSealForgedW3(w, uuid);
     env.updateDocCalls = []; // from here on the ADAPTER must not write the shift
     const forged = await serverShift(w.shiftId);
     expect(forged).toMatchObject({ status: 'closed', closeCorrelationId: uuid, payOutTotal: 0, variance: 0, actualCashCount: 1500, deviceId: 'DEV1' });
     expect(await authorityRecord(w.shiftId)).toBeUndefined();
-    log.push('3 client direct W3 ACCEPTED by the unsealed Rules (UUID A, payOut 0); no shiftCloseAuthorityRecords document');
+    log.push('3b LEGACY-HISTORY fixture: the same forged W3 as committed pre-seal (Admin SDK write, not a Rules permission); no shiftCloseAuthorityRecords document');
 
     const request = authoritativeCloseRequest(attempt.authoritative!.request, uuid);
     await expect(inProcessCallable(request)).resolves.toEqual({ ok: false, code: 'closed_outside_authority' });

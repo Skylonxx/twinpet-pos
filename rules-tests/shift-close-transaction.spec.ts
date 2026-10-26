@@ -1,13 +1,17 @@
 /**
- * Return/Refund V1 final gate §2 — the ONLINE shift close is a client
- * `runTransaction` (read shift → fold cash → W3 close write). Proves against
- * the real emulator that:
- *  - the deployed W3 rule (`isW3ShiftClose`) admits the exact close write when
- *    it is committed by a transaction (no Rules change was needed);
- *  - a write to the shift between the transaction's read and its commit (the
- *    shape of a cash Return appending a pay-out) makes the commit fail its
- *    precondition, and the SDK re-runs the update function on a fresh read —
- *    the committed totals are those of the fresh read;
+ * Return/Refund V1 final gate §2 — the gate-OFF ONLINE shift close is a client
+ * `runTransaction` (read shift → fold cash → W3 close write).
+ *
+ * Packet 017 SEALED the client W3 (Rules source; not deployed). Before 017
+ * (parent 43a651a) this spec proved the transactional W3 was ACCEPTED and that a
+ * Return landing between read and commit forced an SDK re-run on fresh data.
+ * Under the sealed Rules it proves instead that:
+ *  - the exact transactional W3 close is DENIED for the shift owner, and the
+ *    shift stays open (the close is server-only: closeShiftAuthoritative,
+ *    whose own read-fold-commit runs in an Admin SDK transaction — covered by
+ *    the functions emulator tests and shift-close-authoritative-client.spec);
+ *  - a Return that lands between the client transaction's read and commit is
+ *    preserved and the client close still cannot commit (no stale-read Z);
  *  - a transactional close of a shift that is no longer open is denied.
  *
  * Run (from repo root):
@@ -16,7 +20,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { initializeTestEnvironment, assertFails, assertSucceeds, type RulesTestEnvironment } from '@firebase/rules-unit-testing';
+import { initializeTestEnvironment, assertFails, type RulesTestEnvironment } from '@firebase/rules-unit-testing';
 import { arrayUnion, doc, getDoc, runTransaction, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
@@ -114,12 +118,12 @@ function fold(entries: Entry[]) {
   return { payIn, payOut };
 }
 
-describe('shifts W3 via client runTransaction (online close)', () => {
-  it('ALLOWED: transactional read + exact W3 close of an open shift', async () => {
+describe('shifts W3 via client runTransaction (online close) — 017 SEALED', () => {
+  it('017 SEAL — DENIED (ALLOWED pre-seal): transactional read + exact W3 close of an open shift', async () => {
     await seedOpenShift('t1', [{ id: 'rfd1', type: 'pay_out', amount: 162 }]);
     const db = testEnv.authenticatedContext('staff1', staff()).firestore();
     const ref = doc(db, 'shifts', 't1');
-    await assertSucceeds(
+    await assertFails(
       runTransaction(db, async (tx) => {
         const snap = await tx.get(ref);
         const { payIn, payOut } = fold((snap.data()?.cashEntries ?? []) as Entry[]);
@@ -127,32 +131,36 @@ describe('shifts W3 via client runTransaction (online close)', () => {
       }),
     );
     const after = await readShift('t1');
-    expect(after).toMatchObject({ status: 'closed', payOutTotal: 162, variance: 0 });
+    expect(after).toMatchObject({ status: 'open', closedAt: null, payOutTotal: 0 });
   });
 
-  it('a write between the transaction read and commit forces a re-run on fresh data (real optimistic conflict)', async () => {
+  it('017 SEAL — a Return landing between the transaction read and commit is preserved, and the client close still cannot commit', async () => {
+    // Pre-seal this proved the SDK re-ran the close on fresh data and committed
+    // the late pay-out. Sealed, no attempt (stale or fresh) may commit; the
+    // late Admin-SDK pay-out must survive untouched and the shift stay open.
     await seedOpenShift('t2', []);
     const db = testEnv.authenticatedContext('staff1', staff()).firestore();
     const ref = doc(db, 'shifts', 't2');
     let attempts = 0;
-    await runTransaction(db, async (tx) => {
-      attempts += 1;
-      const snap = await tx.get(ref);
-      if (attempts === 1) {
-        // A cash Return commits its pay-out to the same shift doc right now.
-        await testEnv.withSecurityRulesDisabled(async (ctx) => {
-          await updateDoc(doc(ctx.firestore(), 'shifts', 't2'), {
-            cashEntries: arrayUnion({ id: 'rfd_late', type: 'pay_out', amount: 162 }),
+    await assertFails(
+      runTransaction(db, async (tx) => {
+        attempts += 1;
+        const snap = await tx.get(ref);
+        if (attempts === 1) {
+          // A cash Return commits its pay-out to the same shift doc right now.
+          await testEnv.withSecurityRulesDisabled(async (ctx) => {
+            await updateDoc(doc(ctx.firestore(), 'shifts', 't2'), {
+              cashEntries: arrayUnion({ id: 'rfd_late', type: 'pay_out', amount: 162 }),
+            });
           });
-        });
-      }
-      const { payIn, payOut } = fold((snap.data()?.cashEntries ?? []) as Entry[]);
-      tx.update(ref, closePayload(payOut, payIn, 1338));
-    });
-    expect(attempts).toBeGreaterThanOrEqual(2);
+        }
+        const { payIn, payOut } = fold((snap.data()?.cashEntries ?? []) as Entry[]);
+        tx.update(ref, closePayload(payOut, payIn, 1338));
+      }),
+    );
+    expect(attempts).toBeGreaterThanOrEqual(1);
     const after = await readShift('t2');
-    // The committed close folded the late pay-out — never the stale (pre-Return) read.
-    expect(after).toMatchObject({ status: 'closed', payOutTotal: 162, variance: 0 });
+    expect(after).toMatchObject({ status: 'open', closedAt: null, payOutTotal: 0 });
     expect((after!.cashEntries as Entry[]).map((e) => e.id)).toEqual(['rfd_late']);
   });
 

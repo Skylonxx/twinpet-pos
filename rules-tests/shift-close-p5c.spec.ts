@@ -12,6 +12,8 @@
  *    accepted W2 credit-debt residual, the exact-16-field one-way close (with
  *    the frozen `totalBills` bound), and the sole post-close Variant C
  *    `syncState` normalization. Every other update shape is denied.
+ *    Packet 017 SEALED the client close: every former W3 `ALLOWED` case now
+ *    asserts DENIED (see `assertSealedClose`); the close is server-only.
  *
  * Run (from repo root):
  *   firebase emulators:exec --only firestore --project demo-twinpet \
@@ -41,7 +43,7 @@ import {
   arrayUnion,
   deleteField,
 } from 'firebase/firestore';
-import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 const BRANCH = 'LDP-001';
 const OTHER_BRANCH = 'BKK-002';
@@ -759,6 +761,25 @@ const closePayload = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
+/**
+ * Packet 017 W3 seal: NO client W3 is accepted any more, however well-formed —
+ * the close is server-only (closeShiftAuthoritative, Admin SDK). Every case in
+ * the W3 / OBS-B1A blocks that was `ALLOWED` before 017 (parent 43a651a, still
+ * the shape the installed 0.1.12 fleet writes) now asserts this denial and that
+ * the shift stays open. The `DENIED` cases are kept unchanged: they are now
+ * denied by the seal as well, and remain the regression boundary should a
+ * client close lane ever be reintroduced.
+ */
+async function assertSealedClose(shiftId: string, payload: Record<string, unknown>) {
+  const db = testEnv.authenticatedContext('staff1', staff()).firestore();
+  await assertFails(updateDoc(doc(db, 'shifts', shiftId), payload));
+  let after: Record<string, unknown> | undefined;
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    after = (await getDoc(doc(ctx.firestore(), 'shifts', shiftId))).data();
+  });
+  expect(after).toMatchObject({ status: 'open', closedAt: null });
+}
+
 describe('shifts W0 — exact openShift() create', () => {
   it('ALLOWED: exact 19-field create with staffId bound to the caller', async () => {
     const db = testEnv.authenticatedContext('staff1', staff()).firestore();
@@ -1161,11 +1182,10 @@ describe('shifts W2 — open-shift credit-debt receipt (accepted residual)', () 
   });
 });
 
-describe('shifts W3 — exact one-way open→closed transition', () => {
-  it('ALLOWED: exact 16-field close from open', async () => {
+describe('shifts W3 — exact one-way open→closed transition (017: SEALED for every client)', () => {
+  it('017 SEAL — DENIED (ALLOWED pre-seal): exact 16-field close from open', async () => {
     await seedOpenShift('s1');
-    const db = testEnv.authenticatedContext('staff1', staff()).firestore();
-    await assertSucceeds(updateDoc(doc(db, 'shifts', 's1'), closePayload()));
+    await assertSealedClose('s1', closePayload());
   });
 
   it('DENIED: closedAtLocal injected alongside a valid close', async () => {
@@ -1220,28 +1240,24 @@ describe('shifts W3 — exact one-way open→closed transition', () => {
   });
 
   describe('totalBills bound (0 .. 100000)', () => {
-    it('ALLOWED: totalBills = 0', async () => {
+    it('017 SEAL — DENIED (ALLOWED pre-seal): totalBills = 0', async () => {
       await seedOpenShift('tb1');
-      const db = testEnv.authenticatedContext('staff1', staff()).firestore();
-      await assertSucceeds(updateDoc(doc(db, 'shifts', 'tb1'), closePayload({ totalBills: 0 })));
+      await assertSealedClose('tb1', closePayload({ totalBills: 0 }));
     });
 
-    it('ALLOWED: totalBills = 1', async () => {
+    it('017 SEAL — DENIED (ALLOWED pre-seal): totalBills = 1', async () => {
       await seedOpenShift('tb2');
-      const db = testEnv.authenticatedContext('staff1', staff()).firestore();
-      await assertSucceeds(updateDoc(doc(db, 'shifts', 'tb2'), closePayload({ totalBills: 1 })));
+      await assertSealedClose('tb2', closePayload({ totalBills: 1 }));
     });
 
-    it('ALLOWED: totalBills = 250 (normal)', async () => {
+    it('017 SEAL — DENIED (ALLOWED pre-seal): totalBills = 250 (normal)', async () => {
       await seedOpenShift('tb3');
-      const db = testEnv.authenticatedContext('staff1', staff()).firestore();
-      await assertSucceeds(updateDoc(doc(db, 'shifts', 'tb3'), closePayload({ totalBills: 250 })));
+      await assertSealedClose('tb3', closePayload({ totalBills: 250 }));
     });
 
-    it('ALLOWED: totalBills = 100000 (bound edge)', async () => {
+    it('017 SEAL — DENIED (ALLOWED pre-seal): totalBills = 100000 (bound edge)', async () => {
       await seedOpenShift('tb4');
-      const db = testEnv.authenticatedContext('staff1', staff()).firestore();
-      await assertSucceeds(updateDoc(doc(db, 'shifts', 'tb4'), closePayload({ totalBills: 100000 })));
+      await assertSealedClose('tb4', closePayload({ totalBills: 100000 }));
     });
 
     it('DENIED: totalBills = 100001 (over bound)', async () => {
@@ -1317,16 +1333,14 @@ describe('shifts W3 — exact one-way open→closed transition', () => {
   });
 
   // ── Signed variance envelope ──
-  it('ALLOWED: close variance = +500 (finite, in-envelope)', async () => {
+  it('017 SEAL — DENIED (ALLOWED pre-seal): close variance = +500 (finite, in-envelope)', async () => {
     await seedOpenShift('w3i');
-    const db = testEnv.authenticatedContext('staff1', staff()).firestore();
-    await assertSucceeds(updateDoc(doc(db, 'shifts', 'w3i'), closePayload({ variance: 500 })));
+    await assertSealedClose('w3i', closePayload({ variance: 500 }));
   });
 
-  it('ALLOWED: close variance = -500 (finite negative, in-envelope)', async () => {
+  it('017 SEAL — DENIED (ALLOWED pre-seal): close variance = -500 (finite negative, in-envelope)', async () => {
     await seedOpenShift('w3j');
-    const db = testEnv.authenticatedContext('staff1', staff()).firestore();
-    await assertSucceeds(updateDoc(doc(db, 'shifts', 'w3j'), closePayload({ variance: -500 })));
+    await assertSealedClose('w3j', closePayload({ variance: -500 }));
   });
 
   it('DENIED: close variance over the positive envelope', async () => {
@@ -1392,15 +1406,15 @@ describe('shifts W3 — exact one-way open→closed transition', () => {
     await assertFails(updateDoc(doc(db, 'shifts', 'w3t'), closePayload({ expectedCash: deleteField() })));
   });
 
-  // ── Update-mask residual (frozen, unavoidable): omitting a pre-existing,
-  // already-valid close total from the update is ALLOWED because the final
-  // stored value remains present and valid. Rules see only the final document,
-  // never the update write mask. This documents the accepted residual. ──
-  it('ALLOWED (update-mask residual): omits a pre-existing expectedCash from the close update', async () => {
+  // ── Update-mask residual (pre-seal): omitting a pre-existing, already-valid
+  // close total from the update was ALLOWED because the final stored value
+  // remained present and valid (Rules see only the final document, never the
+  // update write mask). 017 closes the residual for clients: the close is
+  // server-only, so the omission is now DENIED like every other client W3. ──
+  it('017 SEAL — DENIED (update-mask residual ALLOWED pre-seal): omits a pre-existing expectedCash from the close update', async () => {
     await seedOpenShift('w3u', { expectedCash: 500 }); // already accrued via W2
-    const db = testEnv.authenticatedContext('staff1', staff()).firestore();
     const { expectedCash: _omitted, ...closeWithoutExpectedCash } = closePayload();
-    await assertSucceeds(updateDoc(doc(db, 'shifts', 'w3u'), closeWithoutExpectedCash));
+    await assertSealedClose('w3u', closeWithoutExpectedCash);
   });
 });
 
@@ -1414,20 +1428,16 @@ describe('shifts W3 — exact one-way open→closed transition', () => {
 const VALID_CLOSE_CORRELATION_ID = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
 
 describe('OBS-B1A — optional closeCorrelationId (W3 compatibility gate)', () => {
-  // R-1: absent optional key → ALLOW (existing historical close shape).
-  it('R-1 ALLOWED: close omits closeCorrelationId entirely (absent → ALLOW)', async () => {
+  // R-1: absent optional key → ALLOWED pre-seal (historical close shape); 017 SEAL → DENIED.
+  it('R-1 017 SEAL — DENIED (ALLOWED pre-seal): close omits closeCorrelationId entirely', async () => {
     await seedOpenShift('obs-r1');
-    const db = testEnv.authenticatedContext('staff1', staff()).firestore();
-    await assertSucceeds(updateDoc(doc(db, 'shifts', 'obs-r1'), closePayload()));
+    await assertSealedClose('obs-r1', closePayload());
   });
 
-  // R-2: valid lowercase RFC-4122 UUID v4 → ALLOW.
-  it('R-2 ALLOWED: close with valid lowercase UUID v4 closeCorrelationId', async () => {
+  // R-2: valid lowercase RFC-4122 UUID v4 → ALLOWED pre-seal; 017 SEAL → DENIED.
+  it('R-2 017 SEAL — DENIED (ALLOWED pre-seal): close with valid lowercase UUID v4 closeCorrelationId', async () => {
     await seedOpenShift('obs-r2');
-    const db = testEnv.authenticatedContext('staff1', staff()).firestore();
-    await assertSucceeds(
-      updateDoc(doc(db, 'shifts', 'obs-r2'), closePayload({ closeCorrelationId: VALID_CLOSE_CORRELATION_ID })),
-    );
+    await assertSealedClose('obs-r2', closePayload({ closeCorrelationId: VALID_CLOSE_CORRELATION_ID }));
   });
 
   // R-3: present null → DENY (must NOT be treated as absence).
@@ -1493,15 +1503,15 @@ describe('OBS-B1A — optional closeCorrelationId (W3 compatibility gate)', () =
     });
   });
 
-  // R-5: historical open shift (never had closeCorrelationId) can still close.
-  it('R-5 ALLOWED: historical open shift without closeCorrelationId still closes', async () => {
+  // R-5: a historical open shift (never had closeCorrelationId) could still close
+  // from a client pre-seal; 017 SEAL → DENIED (it must close via the server).
+  it('R-5 017 SEAL — DENIED (ALLOWED pre-seal): historical open shift without closeCorrelationId', async () => {
     await seedOpenShift('obs-r5'); // seed has no closeCorrelationId field
-    const db = testEnv.authenticatedContext('staff1', staff()).firestore();
     const payload = closePayload();
     if ('closeCorrelationId' in payload) {
       throw new Error('R-5 fixture must omit closeCorrelationId');
     }
-    await assertSucceeds(updateDoc(doc(db, 'shifts', 'obs-r5'), payload));
+    await assertSealedClose('obs-r5', payload);
   });
 
   // R-6: adding closeCorrelationId does not relax unrelated W3 fields.

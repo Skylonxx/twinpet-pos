@@ -295,20 +295,26 @@ describe('010 — W1 negatives preserved', () => {
     await assertFails(writeList(null));
   });
 
-  it('W2 / W3 / W4 are unaffected on a shift holding server rfd_ history', async () => {
+  it('W2 / W4 are unaffected on a shift holding server rfd_ history; the client W3 is sealed (017) and the server close keeps R', async () => {
     await seedShift('s1', [R]);
     const db = testEnv.authenticatedContext('staff1', staff()).firestore();
     const ref = doc(db, 'shifts', 's1');
     await assertSucceeds(updateDoc(ref, { expectedCash: 1100 }));
-    await assertSucceeds(
-      updateDoc(ref, {
-        status: 'closed', closedAt: serverTimestamp(), actualCashCount: 1519, variance: 0, note: '',
-        expectedCash: 1100, expectedQr: 0, expectedKbank: 0, expectedCard: 0, expectedCredit: 0,
-        totalBills: 3, payInTotal: 0, payOutTotal: 81, closedOffline: true, syncState: 'pending', deviceId: 'DEV1',
-        closeCorrelationId: '11111111-1111-4111-8111-111111111111',
-      }),
-    );
+    const close = {
+      status: 'closed', closedAt: serverTimestamp(), actualCashCount: 1519, variance: 0, note: '',
+      expectedCash: 1100, expectedQr: 0, expectedKbank: 0, expectedCard: 0, expectedCredit: 0,
+      totalBills: 3, payInTotal: 0, payOutTotal: 81, closedOffline: true, syncState: 'pending', deviceId: 'DEV1',
+      closeCorrelationId: '11111111-1111-4111-8111-111111111111',
+    };
+    // 017 SEAL: this exact client W3 was ALLOWED pre-seal; it is now DENIED.
+    await assertFails(updateDoc(ref, close));
+    expect(await readShift('s1')).toMatchObject({ status: 'open', expectedCash: 1100 });
+    // The server close (Rules bypassed — Admin-SDK stand-in, not a Rules permission), then the client W4.
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await updateDoc(doc(ctx.firestore(), 'shifts', 's1'), close);
+    });
     await assertSucceeds(updateDoc(ref, { syncState: 'synced' }));
+    expect(await readShift('s1')).toMatchObject({ status: 'closed', syncState: 'synced', payOutTotal: 81 });
     expect(list(await readShift('s1'))).toEqual([R]);
   });
 });

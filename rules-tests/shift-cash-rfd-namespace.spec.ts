@@ -209,32 +209,37 @@ describe('W1 — the rfd_ namespace is reserved for the server', () => {
 });
 
 describe('W1 namespace change does not regress W2 / W3 / W4 or the Return read path on a shift holding rfd_ history', () => {
-  it('W2 credit-debt receipt, W3 close and W4 sync-state normalization still work with a server rfd_ entry present', async () => {
+  it('W2 credit-debt receipt and W4 sync-state normalization still work with a server rfd_ entry present; the close is server-only (017 seal)', async () => {
     await seedShift('s1', [SERVER_REFUND]);
     const db = testEnv.authenticatedContext('staff1', staff()).firestore();
     const ref = doc(db, 'shifts', 's1');
     await assertSucceeds(updateDoc(ref, { expectedCash: 100 }));
-    await assertSucceeds(
-      updateDoc(ref, {
-        status: 'closed',
-        closedAt: serverTimestamp(),
-        actualCashCount: 519,
-        variance: 0,
-        note: '',
-        expectedCash: 100,
-        expectedQr: 0,
-        expectedKbank: 0,
-        expectedCard: 0,
-        expectedCredit: 0,
-        totalBills: 1,
-        payInTotal: 0,
-        payOutTotal: 81,
-        closedOffline: true,
-        syncState: 'pending',
-        deviceId: 'DEV1',
-        closeCorrelationId: '11111111-1111-4111-8111-111111111111',
-      }),
-    );
+    const close = {
+      status: 'closed',
+      closedAt: serverTimestamp(),
+      actualCashCount: 519,
+      variance: 0,
+      note: '',
+      expectedCash: 100,
+      expectedQr: 0,
+      expectedKbank: 0,
+      expectedCard: 0,
+      expectedCredit: 0,
+      totalBills: 1,
+      payInTotal: 0,
+      payOutTotal: 81,
+      closedOffline: true,
+      syncState: 'pending',
+      deviceId: 'DEV1',
+      closeCorrelationId: '11111111-1111-4111-8111-111111111111',
+    };
+    // 017 SEAL: this exact client W3 was ALLOWED pre-seal; it is now DENIED.
+    await assertFails(updateDoc(ref, close));
+    expect(await readShift('s1')).toMatchObject({ status: 'open', expectedCash: 100 });
+    // The server close (Rules bypassed — Admin-SDK stand-in, not a Rules permission), then the client W4.
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await updateDoc(doc(ctx.firestore(), 'shifts', 's1'), close);
+    });
     await assertSucceeds(updateDoc(ref, { syncState: 'synced' }));
     expect(await readShift('s1')).toMatchObject({ status: 'closed', syncState: 'synced', payOutTotal: 81 });
     expect(ids(await readShift('s1'))).toEqual([SERVER_REFUND.id]);
