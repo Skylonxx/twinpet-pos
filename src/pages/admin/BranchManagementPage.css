@@ -421,6 +421,27 @@
   color: #985353;
 }
 
+.admin-danger-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #f5b5b5;
+  background: #fff;
+  color: #b42318;
+}
+
+.admin-danger-notice > i {
+  font-size: 18px;
+  line-height: 1.3;
+  flex-shrink: 0;
+}
+
+.admin-danger-notice .admin-danger-subtitle-strong {
+  margin-bottom: 2px;
+}
+
 .admin-danger-status {
   padding: 10px 12px;
   border-radius: 8px;

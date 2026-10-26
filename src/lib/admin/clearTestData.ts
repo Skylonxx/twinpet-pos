@@ -1,29 +1,35 @@
 /**
- * Developer / UAT helpers to wipe test transactions and reset the database to a
- * clean state. These permanently delete documents — only exposed behind the
+ * Developer / UAT helpers to wipe test data — only exposed behind the
  * "Danger Zone" tools on the Branch Management admin page.
  *
- * All deletions are paged and committed in chunks so they respect Firestore's
- * 500-write-per-batch limit, regardless of how many test documents exist.
+ * 018 reset safety: every reset that would write shifts, cash, sales, the credit
+ * ledger, system logs or inventory is REFUSED before its first read, auth call or
+ * write ({@link DangerZoneResetBlockedError}). A client cannot make those resets
+ * safe:
+ *   - `cashTransactions/rfd_*` (the server refund ledger) is undeletable by any
+ *     client (017 Rules). A paged purge therefore fails part-way, after earlier
+ *     500-write batches — and, in Factory Reset, whole earlier domains — have
+ *     already committed.
+ *   - Server-only records that reference these collections are unreadable to every
+ *     client (Rules catch-all deny): `shiftCloseAuthorityRecords`, `saleRefunds`,
+ *     `saleReturnLedgers`, `saleReturnAuditEvents` (incl. rejection audits written
+ *     without any `saleReturns` doc) and `saleReturnAttemptResolutions`. The shift
+ *     close journal (`shiftCloseEvidence` / `Cases` / `AuditEvents` / `Alerts` /
+ *     `ValidationRuns`) is built from orders, asyncOrders, cash and creditPayments.
+ *     Their absence can never be proven from here, so a "safe if empty" preflight
+ *     is impossible, not merely expensive.
+ * A UAT purge of those domains needs a separately authorized server-side tool.
+ * The pre-018 implementations are in git history (d19a7cf).
  *
- * Collection names follow {@link collections} (see docs/twinpet_firestore_schema.md):
- *   - orders               + orderItems     (subcollection)
- *   - asyncOrders          (offline-first sale intents; lines embedded, no subcoll)
- *   - payments             (top-level, linked to orders)
- *   - receivings           + receivingItems (subcollection)  ← purchases / GRN
- *   - inventoryTransfers   + transferItems  (subcollection)  ← branch transfers
- *   - inventoryAdjustments + adjustmentItems (subcollection)
- *   - stockMovements       (the stock ledger / "movements")
- *   - stockLots            (the FIFO lots / "fifo-lots")
- *   - products/{id}/productStocks/{branchId}.totalStockBase   ← per-branch stock
+ * Master data hard deletes (customers, suppliers, categories) touch none of these
+ * collections and are unchanged. Their deletions are paged and committed in
+ * chunks so they respect Firestore's 500-write-per-batch limit.
  */
 import {
   collection,
-  collectionGroup,
   getDocs,
   limit,
   query,
-  serverTimestamp,
   writeBatch,
   type CollectionReference,
   type Firestore,
@@ -37,6 +43,29 @@ const BATCH_LIMIT = 500;
 
 /** Per-collection counts of how many documents were touched. */
 export type DeletionSummary = Record<string, number>;
+
+export const DANGER_ZONE_RESET_BLOCKED_CODE = 'reset_blocked_server_owned_records' as const;
+
+export const DANGER_ZONE_RESET_BLOCKED_MESSAGE =
+  'ระงับเพื่อความปลอดภัย — ไม่มีข้อมูลถูกลบ: ข้อมูลกะ เงินสด การขาย เครดิต บันทึกระบบ และสต็อก ' +
+  'เชื่อมโยงกับบันทึกการปิดกะและการคืนเงินที่เซิร์ฟเวอร์เป็นเจ้าของ ซึ่งแอปนี้ตรวจสอบหรือลบไม่ได้ ' +
+  'การล้างเพียงบางส่วนจะทำให้ประวัติไม่ครบและไม่สอดคล้องกัน';
+
+/** Typed refusal of a Danger Zone reset; thrown before anything is read or written. */
+export class DangerZoneResetBlockedError extends Error {
+  readonly code = DANGER_ZONE_RESET_BLOCKED_CODE;
+  readonly action: string;
+
+  constructor(action: string) {
+    super(DANGER_ZONE_RESET_BLOCKED_MESSAGE);
+    this.name = 'DangerZoneResetBlockedError';
+    this.action = action;
+  }
+}
+
+function refuseUnsafeReset(action: string): never {
+  throw new DangerZoneResetBlockedError(action);
+}
 
 function requireDb(): Firestore {
   if (!isFirebaseConfigured || !db) {
@@ -71,316 +100,44 @@ async function deleteAllInChunks(
   return deleted;
 }
 
-/**
- * Delete a top-level collection together with one named subcollection under each
- * of its documents. Subcollection docs are removed first so no orphans remain.
- */
-async function deleteCollectionWithSubcollection(
-  firestore: Firestore,
-  parentCollection: string,
-  subcollection: string,
-): Promise<{ parents: number; children: number }> {
-  let parents = 0;
-  let children = 0;
-
-  for (;;) {
-    const parentSnap = await getDocs(
-      query(collection(firestore, parentCollection), limit(BATCH_LIMIT)),
-    );
-    if (parentSnap.empty) break;
-
-    // Clear each parent's subcollection before removing the parent itself.
-    for (const parentDoc of parentSnap.docs) {
-      children += await deleteAllInChunks(
-        firestore,
-        collection(parentDoc.ref, subcollection),
-      );
-    }
-
-    const batch = writeBatch(firestore);
-    for (const parentDoc of parentSnap.docs) {
-      batch.delete(parentDoc.ref);
-    }
-    await batch.commit();
-
-    parents += parentSnap.size;
-    if (parentSnap.size < BATCH_LIMIT) break;
-  }
-
-  return { parents, children };
-}
-
-/**
- * Delete all sales history: every `orders` document, its `orderItems`
- * subcollection, the linked `payments`, AND the offline-first `asyncOrders`
- * intents (the local-first write-model — lines are embedded, so no subcollection).
- * Clearing asyncOrders too gives the soak test a truly clean slate; otherwise a
- * stale pending intent would re-settle into a fresh `orders` doc on reconnect.
- */
+/** Blocked (018): would delete orders + orderItems, payments and asyncOrders. */
 export async function clearSalesData(): Promise<DeletionSummary> {
-  const firestore = requireDb();
-  await ensureFirebaseAuth();
-
-  const orders = await deleteCollectionWithSubcollection(
-    firestore,
-    collections.orders,
-    collections.orderItems,
-  );
-  const payments = await deleteAllInChunks(
-    firestore,
-    collection(firestore, collections.payments),
-  );
-  const asyncOrders = await deleteAllInChunks(
-    firestore,
-    collection(firestore, collections.asyncOrders),
-  );
-
-  return {
-    orders: orders.parents,
-    orderItems: orders.children,
-    payments,
-    asyncOrders,
-  };
+  return refuseUnsafeReset('clearSalesData');
 }
 
-/**
- * Delete inventory transactions: purchases/GRN (`receivings`), branch transfers
- * (`inventoryTransfers`), and stock adjustments (`inventoryAdjustments`),
- * including each one's item subcollection.
- */
+/** Blocked (018): would delete receivings, inventoryTransfers and inventoryAdjustments (+ items). */
 export async function clearInventoryTransactions(): Promise<DeletionSummary> {
-  const firestore = requireDb();
-  await ensureFirebaseAuth();
-
-  const receivings = await deleteCollectionWithSubcollection(
-    firestore,
-    collections.receivings,
-    collections.receivingItems,
-  );
-  const transfers = await deleteCollectionWithSubcollection(
-    firestore,
-    collections.inventoryTransfers,
-    collections.transferItems,
-  );
-  const adjustments = await deleteCollectionWithSubcollection(
-    firestore,
-    collections.inventoryAdjustments,
-    collections.adjustmentItems,
-  );
-
-  return {
-    receivings: receivings.parents,
-    receivingItems: receivings.children,
-    inventoryTransfers: transfers.parents,
-    transferItems: transfers.children,
-    inventoryAdjustments: adjustments.parents,
-    adjustmentItems: adjustments.children,
-  };
+  return refuseUnsafeReset('clearInventoryTransactions');
 }
 
-/**
- * Delete the stock ledger (`stockMovements`) and the FIFO lots (`stockLots`).
- */
+/** Blocked (018): would delete the stock ledger (`stockMovements`) and FIFO lots (`stockLots`). */
 export async function clearStockLedgerAndFifo(): Promise<DeletionSummary> {
-  const firestore = requireDb();
-  await ensureFirebaseAuth();
-
-  const movements = await deleteAllInChunks(
-    firestore,
-    collection(firestore, collections.stockMovements),
-  );
-  const fifoLots = await deleteAllInChunks(
-    firestore,
-    collection(firestore, collections.stockLots),
-  );
-
-  return {
-    stockMovements: movements,
-    stockLots: fifoLots,
-  };
+  return refuseUnsafeReset('clearStockLedgerAndFifo');
 }
 
-/**
- * Reset running stock balances to zero across all products: every
- * `products/{id}/productStocks/{branchId}` doc gets `totalStockBase = 0`, and the
- * product's moving-average `avgCost` (a GRN-derived running balance) is cleared.
- * Master data (name, prices, units) is left untouched.
- */
+/** Blocked (018): would zero every `productStocks.totalStockBase` and product `avgCost`. */
 export async function resetAllProductStocks(): Promise<DeletionSummary> {
-  const firestore = requireDb();
-  await ensureFirebaseAuth();
-
-  let products = 0;
-  let stockDocs = 0;
-
-  // One batch accumulates mixed product + productStock writes; flush at the limit.
-  let batch = writeBatch(firestore);
-  let pending = 0;
-  const flushIfFull = async () => {
-    if (pending >= BATCH_LIMIT) {
-      await batch.commit();
-      batch = writeBatch(firestore);
-      pending = 0;
-    }
-  };
-
-  const productsSnap = await getDocs(collection(firestore, collections.products));
-  for (const productDoc of productsSnap.docs) {
-    batch.update(productDoc.ref, { avgCost: 0, updatedAt: serverTimestamp() });
-    pending += 1;
-    products += 1;
-    await flushIfFull();
-
-    const stockSnap = await getDocs(
-      collection(productDoc.ref, collections.productStocks),
-    );
-    for (const stockDoc of stockSnap.docs) {
-      batch.update(stockDoc.ref, {
-        totalStockBase: 0,
-        lastMovementAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-      pending += 1;
-      stockDocs += 1;
-      await flushIfFull();
-    }
-  }
-
-  if (pending > 0) {
-    await batch.commit();
-  }
-
-  return {
-    products,
-    productStocks: stockDocs,
-  };
+  return refuseUnsafeReset('resetAllProductStocks');
 }
 
-/**
- * Delete shift/cash-drawer history: `shifts` and `cashTransactions`.
- */
+/** Blocked (018): would delete `shifts` and `cashTransactions` (incl. undeletable `rfd_*`). */
 export async function clearShiftAndCashData(): Promise<DeletionSummary> {
-  const firestore = requireDb();
-  await ensureFirebaseAuth();
-
-  const shifts = await deleteAllInChunks(
-    firestore,
-    collection(firestore, collections.shifts),
-  );
-  const cashTransactions = await deleteAllInChunks(
-    firestore,
-    collection(firestore, collections.cashTransactions),
-  );
-
-  return { shifts, cashTransactions };
+  return refuseUnsafeReset('clearShiftAndCashData');
 }
 
-/**
- * Delete credit ledger history: `creditTransactions` and `creditPayments`.
- * Note: this does not touch `creditAccounts`/`customers` balances — that is
- * customer master data, not a transaction; reset those separately if needed.
- */
+/** Blocked (018): would delete `creditTransactions` and `creditPayments`. */
 export async function clearCreditData(): Promise<DeletionSummary> {
-  const firestore = requireDb();
-  await ensureFirebaseAuth();
-
-  const creditTransactions = await deleteAllInChunks(
-    firestore,
-    collection(firestore, collections.creditTransactions),
-  );
-  const creditPayments = await deleteAllInChunks(
-    firestore,
-    collection(firestore, collections.creditPayments),
-  );
-
-  return { creditTransactions, creditPayments };
+  return refuseUnsafeReset('clearCreditData');
 }
 
-/**
- * Delete system logs: `auditLogs` and `staffActivities`.
- */
+/** Blocked (018): would delete `auditLogs` (incl. server `saleReturn_*` entries) and `staffActivities`. */
 export async function clearSystemLogs(): Promise<DeletionSummary> {
-  const firestore = requireDb();
-  await ensureFirebaseAuth();
-
-  const auditLogs = await deleteAllInChunks(
-    firestore,
-    collection(firestore, collections.auditLogs),
-  );
-  const staffActivities = await deleteAllInChunks(
-    firestore,
-    collection(firestore, collections.staffActivities),
-  );
-
-  return { auditLogs, staffActivities };
+  return refuseUnsafeReset('clearSystemLogs');
 }
 
-/**
- * Reset denormalized credit balances back to a clean slate so no "ghost debt"
- * survives after {@link clearCreditData} removes the underlying transactions:
- *   - `customers.outstandingBalance` → 0 (and the now-dangling credit-history
- *     timestamps `lastCreditPurchaseDate` / `lastPaymentDate` are cleared).
- *   - `creditAccounts`: `creditUsed` → 0, `overdueAmt` → 0, and `creditBalance`
- *     restored to the account's own `creditLimit` (balance = limit − used).
- *
- * Only credit fields are touched — CRM lifetime values (totalSpent, points, …)
- * and customer master data are left intact.
- */
+/** Blocked (018): would zero customer outstanding balances and credit account usage. */
 export async function resetCustomerCreditBalances(): Promise<DeletionSummary> {
-  const firestore = requireDb();
-  await ensureFirebaseAuth();
-
-  let customers = 0;
-  let creditAccounts = 0;
-
-  // One batch accumulates mixed customer + creditAccount writes; flush at the limit.
-  let batch = writeBatch(firestore);
-  let pending = 0;
-  const flushIfFull = async () => {
-    if (pending >= BATCH_LIMIT) {
-      await batch.commit();
-      batch = writeBatch(firestore);
-      pending = 0;
-    }
-  };
-
-  const customersSnap = await getDocs(collection(firestore, collections.customers));
-  for (const customerDoc of customersSnap.docs) {
-    batch.update(customerDoc.ref, {
-      outstandingBalance: 0,
-      lastCreditPurchaseDate: null,
-      lastPaymentDate: null,
-      updatedAt: serverTimestamp(),
-    });
-    pending += 1;
-    customers += 1;
-    await flushIfFull();
-  }
-
-  const accountsSnap = await getDocs(collection(firestore, collections.creditAccounts));
-  for (const accountDoc of accountsSnap.docs) {
-    const creditLimit = (accountDoc.data().creditLimit as number) ?? 0;
-    batch.update(accountDoc.ref, {
-      creditUsed: 0,
-      // creditBalance = creditLimit − creditUsed; with usage cleared it equals the limit.
-      creditBalance: creditLimit,
-      overdueAmt: 0,
-      lastTransAt: null,
-      updatedAt: serverTimestamp(),
-    });
-    pending += 1;
-    creditAccounts += 1;
-    await flushIfFull();
-  }
-
-  if (pending > 0) {
-    await batch.commit();
-  }
-
-  return {
-    customersCreditReset: customers,
-    creditAccountsReset: creditAccounts,
-  };
+  return refuseUnsafeReset('resetCustomerCreditBalances');
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -388,26 +145,9 @@ export async function resetCustomerCreditBalances(): Promise<DeletionSummary> {
 // entirely, not just their transactions. Use with extreme care.
 // ───────────────────────────────────────────────────────────────────────────
 
-/**
- * Hard-delete the entire product catalog. The per-branch `productStocks`
- * subcollection docs are removed first via a `collectionGroup` query (so no
- * orphaned subcollections survive their parent), then the `products` docs.
- */
+/** Blocked (018): would delete every `productStocks` doc (inventory) and every product. */
 export async function hardDeleteProducts(): Promise<DeletionSummary> {
-  const firestore = requireDb();
-  await ensureFirebaseAuth();
-
-  // collectionGroup sweeps every productStocks doc regardless of parent product.
-  const productStocks = await deleteAllInChunks(
-    firestore,
-    collectionGroup(firestore, collections.productStocks),
-  );
-  const products = await deleteAllInChunks(
-    firestore,
-    collection(firestore, collections.products),
-  );
-
-  return { productStocks, products };
+  return refuseUnsafeReset('hardDeleteProducts');
 }
 
 /**
@@ -477,30 +217,25 @@ export async function hardDeleteCategories(): Promise<DeletionSummary> {
   return { categories };
 }
 
-/**
- * Factory reset: run every clear/reset step in dependency-safe order and return
- * the merged document counts. Transactions are removed first, then the ledger and
- * FIFO lots, then peripheral history (shifts/cash, credit, logs), then credit
- * balances are zeroed, and finally product stock balances are zeroed.
- */
+/** Blocked (018): Factory Reset — would run every transaction / ledger / stock reset above in sequence. */
 export async function clearAllTransactionData(): Promise<DeletionSummary> {
-  const sales = await clearSalesData();
-  const inventory = await clearInventoryTransactions();
-  const ledger = await clearStockLedgerAndFifo();
-  const shiftAndCash = await clearShiftAndCashData();
-  const credit = await clearCreditData();
-  const logs = await clearSystemLogs();
-  const creditBalances = await resetCustomerCreditBalances();
-  const stocks = await resetAllProductStocks();
+  return refuseUnsafeReset('clearAllTransactionData');
+}
 
-  return {
-    ...sales,
-    ...inventory,
-    ...ledger,
-    ...shiftAndCash,
-    ...credit,
-    ...logs,
-    ...creditBalances,
-    ...stocks,
-  };
+const BLOCKED_RESETS: ReadonlySet<() => Promise<DeletionSummary>> = new Set([
+  clearSalesData,
+  clearInventoryTransactions,
+  clearStockLedgerAndFifo,
+  resetAllProductStocks,
+  clearShiftAndCashData,
+  clearCreditData,
+  clearSystemLogs,
+  resetCustomerCreditBalances,
+  hardDeleteProducts,
+  clearAllTransactionData,
+]);
+
+/** Whether a Danger Zone action is refused by the 018 reset safety gate (drives the UI). */
+export function isResetBlocked(run: () => Promise<DeletionSummary>): boolean {
+  return BLOCKED_RESETS.has(run);
 }

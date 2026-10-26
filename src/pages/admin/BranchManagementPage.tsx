@@ -19,7 +19,9 @@ import {
   hardDeleteCustomers,
   hardDeleteProducts,
   hardDeleteSuppliers,
+  isResetBlocked,
   resetAllProductStocks,
+  DANGER_ZONE_RESET_BLOCKED_MESSAGE,
   type DeletionSummary,
 } from '../../lib/admin/clearTestData';
 import { seedMockData } from '../../lib/seedData';
@@ -138,6 +140,14 @@ function DangerZone() {
 
   const handleRun = async (action: DangerAction) => {
     if (busy) return;
+    // 018: a blocked reset never reaches the confirm or the network.
+    if (isResetBlocked(action.run)) {
+      setStatus({
+        kind: 'error',
+        message: `❌ ${action.label}: ${DANGER_ZONE_RESET_BLOCKED_MESSAGE}`,
+      });
+      return;
+    }
     const confirmMessage = `${action.confirmPrefix ?? ''}${DANGER_CONFIRM}`;
     if (!window.confirm(confirmMessage)) return;
 
@@ -164,16 +174,19 @@ function DangerZone() {
 
   const renderButton = (action: DangerAction, master = false) => {
     const isRunning = runningKey === action.key;
+    const blocked = isResetBlocked(action.run);
     return (
       <button
         key={action.key}
         type="button"
         className={`admin-danger-btn${master ? ' admin-danger-btn-master' : ''}`}
         onClick={() => void handleRun(action)}
-        disabled={busy}
+        disabled={busy || blocked}
+        aria-describedby={blocked ? 'admin-danger-blocked-notice' : undefined}
+        title={blocked ? 'ปิดใช้งานเพื่อความปลอดภัย' : undefined}
       >
         <i
-          className={`ti ${isRunning ? 'ti-loader-2 spin' : action.icon}`}
+          className={`ti ${isRunning ? 'ti-loader-2 spin' : blocked ? 'ti-lock' : action.icon}`}
           aria-hidden="true"
         />
         {isRunning ? 'กำลังดำเนินการ…' : action.label}
@@ -190,6 +203,20 @@ function DangerZone() {
           <p className="admin-danger-subtitle">
             ใช้สำหรับล้างข้อมูลทดสอบในช่วง UAT เท่านั้น — การลบเป็นการถาวรและกู้คืนไม่ได้
           </p>
+        </div>
+      </div>
+
+      <div
+        id="admin-danger-blocked-notice"
+        className="admin-danger-notice"
+        role="note"
+      >
+        <i className="ti ti-lock" aria-hidden="true" />
+        <div>
+          <p className="admin-danger-subtitle-strong">
+            ปิดใช้งานการล้างข้อมูลธุรกรรม สต็อก และ Factory Reset
+          </p>
+          <p className="admin-danger-subtitle">{DANGER_ZONE_RESET_BLOCKED_MESSAGE}</p>
         </div>
       </div>
 
