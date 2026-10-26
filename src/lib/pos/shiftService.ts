@@ -746,6 +746,14 @@ export const CLOSE_SHIFT_TX_FAILED_MESSAGE =
   'ยังยืนยันผลการปิดกะกับเซิร์ฟเวอร์ไม่ได้ (การเชื่อมต่อหรือการบันทึกขัดข้อง) — หากกะถูกปิดไปแล้ว ระบบจะรู้จำผลเดิมและไม่ปิดกะซ้ำ กรุณาตรวจสอบการเชื่อมต่อแล้วลองใหม่อีกครั้ง';
 
 /**
+ * Packet 016: the server-authoritative close is ON but this build has no
+ * configured Firebase / Firestore — a definite refusal before anything happened
+ * (not an unknown outcome): no dev-mock close, no Z, nothing sent or written.
+ */
+export const CLOSE_SHIFT_AUTHORITATIVE_FIREBASE_UNCONFIGURED_MESSAGE =
+  'ปิดกะแบบยืนยันโดยเซิร์ฟเวอร์ไม่ได้ เพราะเครื่องนี้ยังไม่ได้ตั้งค่าการเชื่อมต่อเซิร์ฟเวอร์ (Firebase) — ยังไม่ได้ปิดกะ ไม่มีการส่งหรือบันทึกการปิดกะใด ๆ และไม่มีรายงานปิดกะ (Z) กรุณาแจ้งผู้ดูแลระบบ';
+
+/**
  * C1-R1 R1-B: the shift's cash entries carry a duplicate / conflicting / malformed
  * identity (e.g. two `rfd_X` payouts of different amounts), so the drawer cannot
  * be frozen without silently dropping one — nothing was closed or written.
@@ -1115,7 +1123,15 @@ export async function closeShift(
   note: string,
   deps?: CloseShiftDeps,
 ): Promise<CloseShiftResult> {
+  // Packet 014 — staged server-authoritative close. OFF (hardcoded) in every
+  // production build: nothing below this line changes while it is OFF.
+  const authoritative = deps?.authoritativeCloseGate ?? SERVER_AUTHORITATIVE_CLOSE_ENABLED;
   if (!isFirebaseConfigured || !db) {
+    // Packet 016 — the dev mock is never a server-authoritative close: refused
+    // before anything is closed, sent or written (no Z, nothing committed).
+    if (authoritative) {
+      throw new Error(CLOSE_SHIFT_AUTHORITATIVE_FIREBASE_UNCONFIGURED_MESSAGE, { cause: { reason: 'firebase_unconfigured' } });
+    }
     const closed = devCloseShift(shift.id, actualCashCount, note);
     const closedAtServer =
       closed.closedAt != null && typeof (closed.closedAt as { toDate?: unknown }).toDate === 'function'
@@ -1127,9 +1143,7 @@ export async function closeShift(
     };
   }
 
-  // Packet 014 — staged server-authoritative close. OFF (hardcoded) in every
-  // production build: nothing below this line changes while it is OFF.
-  if (deps?.authoritativeCloseGate ?? SERVER_AUTHORITATIVE_CLOSE_ENABLED) {
+  if (authoritative) {
     return closeShiftServerAuthoritative(shift, actualCashCount, note, deps);
   }
 
