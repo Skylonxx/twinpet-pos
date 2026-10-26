@@ -171,6 +171,18 @@ export default function POSPage({ trustedResumeSweep }: POSPageProps = {}) {
   const [shiftBootBlocked, setShiftBootBlocked] = useState(false);
   // Bumped by the boot-blocked retry button to re-run the boot check below.
   const [bootCheckAttempt, setBootCheckAttempt] = useState(0);
+  // 022-R2/R3: the shift-boot run for THIS user / branch / attempt. `settledBootKey`
+  // is set only by that run's own (non-cancelled) completion and cleared in the
+  // SAME render as any change of the key, so a mounted shift of a previous
+  // branch or an earlier boot of the same branch (A→B→A) is never treated as
+  // the current boot. Read only by the server-authoritative close handoff.
+  const bootKey = JSON.stringify([user?.id ?? null, branchId ?? null, bootCheckAttempt]);
+  const [settledBootKey, setSettledBootKey] = useState<string | null>(null);
+  const [renderedBootKey, setRenderedBootKey] = useState(bootKey);
+  if (renderedBootKey !== bootKey) {
+    setRenderedBootKey(bootKey);
+    setSettledBootKey(null);
+  }
   // Packet 7C-B1: durable local close-intent journal, consulted at boot so a
   // shift this device already closed (offline, pending sync) is never
   // re-opened / re-folded into a live drawer after reload/restart.
@@ -388,6 +400,22 @@ export default function POSPage({ trustedResumeSweep }: POSPageProps = {}) {
     if (!isFirebaseConfigured) return activeShift;
     return deriveShiftDrawer(activeShift, shiftSales);
   }, [activeShift, shiftSales]);
+  // 022-R1: the list offered to the server-authoritative close, bound to the
+  // shift it belongs to. Only when the selected branch, the ledger answer (the
+  // hook's `loaded` is for this `branchId`), the mounted shift's own branch and
+  // the CURRENT settled boot all agree; otherwise `undefined` (the adapter
+  // refuses) — never a filtered `[]` of another branch / boot.
+  const authoritativeCloseSales = useMemo(
+    () =>
+      activeShift &&
+      branchId &&
+      localLedgerLoaded &&
+      activeShift.branchId === branchId &&
+      settledBootKey === bootKey
+        ? { shiftId: activeShift.id, branchId: activeShift.branchId, sales: shiftSales }
+        : undefined,
+    [activeShift, branchId, localLedgerLoaded, settledBootKey, bootKey, shiftSales],
+  );
 
   // ── Admin Broadcast → Smart Auto-Sync ──────────────────────────────────────
   // One cheap listener on the branch's sync_state doc. When the admin "rings the
@@ -1015,7 +1043,10 @@ export default function POSPage({ trustedResumeSweep }: POSPageProps = {}) {
           setShiftOpenPendingSync(false);
         }
       } finally {
-        if (!cancelled) setShiftReady(true);
+        if (!cancelled) {
+          setShiftReady(true);
+          setSettledBootKey(JSON.stringify([user.id, branchId, bootCheckAttempt]));
+        }
       }
     })();
 
@@ -2057,9 +2088,9 @@ export default function POSPage({ trustedResumeSweep }: POSPageProps = {}) {
       {showCloseShift && drawerShift && (
         <CloseShiftModal
           shift={drawerShift}
-          // Packet 022: the very list `drawerShift` folded, only once the ledger
-          // listener answered — an unloaded ledger is never handed over as [].
-          sales={localLedgerLoaded ? shiftSales : undefined}
+          // Packet 022: the very list `drawerShift` folded, bound to its shift
+          // and offered only under a consistent branch / ledger / boot (022-R1).
+          closeSales={authoritativeCloseSales}
           pendingSyncCount={saleIntentStatus.pendingCount}
           pendingSyncStale={saleIntentStatus.isStale}
           onClose={() => {

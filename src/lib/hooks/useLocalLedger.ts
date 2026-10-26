@@ -9,10 +9,12 @@ export type LocalLedgerState = {
   /** The normalized, ordered ledger — what the drawer folds (unaffected by `loaded`). */
   sales: LocalSale[];
   /**
-   * Packet 022 — true only once THIS branch's listener has delivered a snapshot
-   * and has not errored since. False before the first answer, after a listener
-   * error, after a branch change until the new branch answers, and in dev (no
-   * Firebase): an unloaded `sales` is "unknown", never "no sales".
+   * Packet 022 — true only once the CURRENT subscription for this branch has
+   * delivered a snapshot and has not errored since. False before the first
+   * answer, after a listener error, after a branch change (or re-subscription)
+   * until the new subscription answers, and in dev (no Firebase): an unloaded
+   * `sales` is "unknown", never "no sales". Loaded is NOT completeness (a
+   * cache-only first snapshot can omit server-held sales).
    */
   loaded: boolean;
 };
@@ -48,20 +50,27 @@ export function useLocalLedger(branchId: string | null): LocalLedgerState {
       where('branchId', '==', branchId),
       where('deviceId', '==', deviceId),
     );
+    // 022-R3: this subscription's generation. Once superseded (branch change,
+    // A→B→A re-subscription, unmount) a late snapshot / error of it is ignored —
+    // it can neither replace the current list nor mark it loaded / unloaded.
+    let active = true;
     const unsub = onSnapshot(
       q,
       (snap) => {
+        if (!active) return;
         const orders = snap.docs.map((d) => ({ ...(d.data() as AsyncOrder), id: d.id }));
         setSales(selectLocalLedger(orders));
         setLoadedBranchId(branchId);
       },
       (err) => {
         console.warn('[useLocalLedger] listener error', err);
+        if (!active) return;
         // A failed listener no longer tracks new sales.
-        setLoadedBranchId((cur) => (cur === branchId ? null : cur));
+        setLoadedBranchId(null);
       },
     );
     return () => {
+      active = false;
       unsub();
       setLoadedBranchId(null);
     };

@@ -10,6 +10,11 @@
 // Provenance: on the parent (6376403) the modal has no `sales` input, so the
 // ON cases that expect the list fail on BEHAVIOUR (the adapter would refuse
 // every authoritative close with "sales unavailable").
+//
+// 022-REPAIR: the input is now `closeSales` — the list bound to the shift /
+// branch it belongs to — and is forwarded only when that binding is the shift
+// being closed (Confirm-time check). Against 2f47412 (which reads `sales`)
+// the list cases fail on the CONTRACT (renamed input), not on behaviour.
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { createElement } from 'react';
@@ -104,10 +109,13 @@ function makeShift(overrides: Partial<Shift> = {}): Shift {
 
 const SALES = [sale('DEV-1-1', 400), sale('DEV-1-2', 600)];
 
-type Props = { shift: Shift; sales?: readonly LocalSale[] };
+type CloseSales = { shiftId: string; branchId: string; sales: readonly LocalSale[] };
+type Props = { shift: Shift; sales?: readonly LocalSale[]; closeSales?: CloseSales };
 
-function modal(props: Props) {
-  return createElement(CloseShiftModal, { onClose: vi.fn(), onSuccess: vi.fn(), ...props } as Parameters<typeof CloseShiftModal>[0]);
+/** 022-REPAIR: sales is shorthand for a list the page bound to this very shift. */
+function modal({ sales, ...props }: Props) {
+  const closeSales = props.closeSales ?? (sales ? { shiftId: props.shift.id, branchId: props.shift.branchId, sales } : undefined);
+  return createElement(CloseShiftModal, { onClose: vi.fn(), onSuccess: vi.fn(), ...props, closeSales } as Parameters<typeof CloseShiftModal>[0]);
 }
 
 async function flush() {
@@ -213,5 +221,45 @@ describe('022 — gate ON: the adapter receives the scoped ledger sales', () => 
     await confirm('1500');
     expect(lastCall()[3]?.authoritativeClose?.sales).toBeUndefined();
     expect(mocks.closeShift).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('022-REPAIR — Confirm-time binding: a list is only ever handed to the shift it was bound to', () => {
+  beforeEach(() => {
+    mocks.gate.on = true;
+  });
+
+  test.each([
+    ['another shift', { shiftId: 'shift-OTHER', branchId: 'LDP-001' }],
+    ['another branch', { shiftId: 'shift-1', branchId: 'LDP-002' }],
+  ])('[GREEN-guard] a list bound to %s ⇒ `undefined` (refused), even when it is empty', async (_label, binding) => {
+    for (const sales of [SALES, [] as LocalSale[]]) {
+      render(modal({ shift: makeShift(), closeSales: { ...binding, sales } }));
+      await flush();
+      await confirm('1500');
+      expect(lastCall()[3]?.authoritativeClose?.sales).toBeUndefined();
+      cleanup();
+    }
+  });
+
+  test('[GREEN-guard] an open modal whose shift changes under it hands the old shift\'s list to nobody', async () => {
+    const { rerender } = render(modal({ shift: makeShift(), sales: SALES }));
+    await flush();
+    const other = makeShift({ id: 'shift-2', branchId: 'LDP-002' });
+    // The page re-rendered with another shift but (wrongly) the old binding.
+    rerender(modal({ shift: other, closeSales: { shiftId: 'shift-1', branchId: 'LDP-001', sales: SALES } }));
+    await flush();
+    await confirm('1500');
+    expect(lastCall()[0]).toBe(other);
+    expect(lastCall()[3]?.authoritativeClose?.sales).toBeUndefined();
+  });
+
+  test('[GREEN-guard] gate OFF: a bound list never reaches the legacy close (three arguments)', async () => {
+    mocks.gate.on = false;
+    const shift = makeShift();
+    render(modal({ shift, sales: SALES }));
+    await flush();
+    await confirm('1500');
+    expect(mocks.closeShift.mock.calls[0]).toEqual([shift, 1500, '']);
   });
 });

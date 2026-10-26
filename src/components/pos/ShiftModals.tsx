@@ -225,12 +225,14 @@ type CloseShiftModalProps = {
   /** True when the oldest pending entry has aged past the sync-panel's stale threshold. */
   pendingSyncStale?: boolean;
   /**
-   * Packet 022 — this shift's ledger sales, the list `shift` (the drawer) was
-   * derived from; `undefined` while the ledger is not loaded (the
-   * server-authoritative close then refuses). Handed only to that close; the
-   * legacy (gate OFF) close never receives it.
+   * Packet 022 — the ledger sales `shift` (the drawer) was derived from, bound
+   * to the shift / branch they belong to; `undefined` while the page cannot
+   * vouch for them (ledger not loaded, branch / boot mismatch). At Confirm the
+   * list is handed to the server-authoritative close only if that binding is
+   * the shift being closed — otherwise `undefined` (the close then refuses),
+   * never `[]`. The legacy (gate OFF) close never receives it.
    */
-  sales?: readonly LocalSale[];
+  closeSales?: { shiftId: string; branchId: string; sales: readonly LocalSale[] };
 };
 
 /**
@@ -519,7 +521,7 @@ export function CloseShiftModal({
   onSuccess,
   pendingSyncCount = 0,
   pendingSyncStale = false,
-  sales,
+  closeSales,
 }: CloseShiftModalProps) {
   const [actualCash, setActualCash] = useState('');
   const [note, setNote] = useState('');
@@ -614,11 +616,17 @@ export function CloseShiftModal({
     try {
       // Packet 015 (F2): the server-authoritative close takes a witness of the
       // EXACT drawer shown (displayShift + its refresh state); 022: plus the
-      // ledger sales that drawer was derived from. Gate OFF: the call is
-      // exactly the legacy closeShift(shift, count, note).
+      // ledger sales that drawer was derived from, only if bound to THIS shift.
+      // Gate OFF: the call is exactly the legacy closeShift(shift, count, note).
       const closing = SERVER_AUTHORITATIVE_CLOSE_ENABLED
         ? closeShift(shift, count, note.trim(), {
-            authoritativeClose: { sales, reviewedDrawer: buildReviewedDrawerWitness(displayShift, serverCashRefresh) },
+            authoritativeClose: {
+              sales:
+                closeSales && closeSales.shiftId === shift.id && closeSales.branchId === shift.branchId
+                  ? closeSales.sales
+                  : undefined,
+              reviewedDrawer: buildReviewedDrawerWitness(displayShift, serverCashRefresh),
+            },
           })
         : closeShift(shift, count, note.trim());
       const result = await Promise.race([closing, timeoutGuard]);
@@ -649,7 +657,7 @@ export function CloseShiftModal({
       clearTimeout(timeoutId);
       if (closeAttemptRef.current === attemptId) setSubmitting(false);
     }
-  }, [shift, actualCash, note, displayShift, serverCashRefresh, refreshServerCash, sales]);
+  }, [shift, actualCash, note, displayShift, serverCashRefresh, refreshServerCash, closeSales]);
 
   const handlePrint = useCallback(() => {
     if (!closedShift) return;

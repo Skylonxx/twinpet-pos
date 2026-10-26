@@ -132,3 +132,55 @@ describe('022 — useLocalLedger loaded signal', () => {
     expect(fx.subs).toHaveLength(0);
   });
 });
+
+// 022-REPAIR (Codex 022): listener GENERATIONS. Against 2f47412 these fail on
+// behaviour where marked: a superseded subscription's late callback still wrote
+// the list / the loaded key.
+describe('022-REPAIR — superseded subscriptions are inert', () => {
+  test('[RED-parent] a late snapshot of the OLD branch listener cannot replace the NEW branch\'s list', () => {
+    const { result, rerender } = renderHook(({ b }) => useLocalLedger(b), { initialProps: { b: 'B1' as string | null } });
+    rerender({ b: 'B2' });
+    act(() => fx.subs[1]!.next(snap(order('DEV-1-9', 'shift-B2', 'B2'))));
+    act(() => fx.subs[0]!.next(snap(order('DEV-1-1', 'shift-B1'))));
+    expect(state(result).loaded).toBe(true);
+    expect(state(result).sales.map((s) => s.shiftId)).toEqual(['shift-B2']);
+  });
+
+  test('[GREEN-guard] a late error of the OLD branch listener cannot un-load the NEW branch', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { result, rerender } = renderHook(({ b }) => useLocalLedger(b), { initialProps: { b: 'B1' as string | null } });
+    rerender({ b: 'B2' });
+    act(() => fx.subs[1]!.next(snap()));
+    act(() => fx.subs[0]!.error(new Error('late')));
+    expect(state(result)).toEqual({ sales: [], loaded: true });
+    vi.restoreAllMocks();
+  });
+
+  test('[RED-parent] A→B→A: the FIRST A listener\'s late snapshot is not the current A generation — not loaded, list untouched', () => {
+    const { result, rerender } = renderHook(({ b }) => useLocalLedger(b), { initialProps: { b: 'B1' as string | null } });
+    rerender({ b: 'B2' });
+    rerender({ b: 'B1' });
+    expect(fx.subs.map((s) => s.constraints[0]!.value)).toEqual(['B1', 'B2', 'B1']);
+    act(() => fx.subs[0]!.next(snap())); // generation 1 of B1, superseded
+    expect(state(result).loaded).toBe(false);
+    act(() => fx.subs[2]!.next(snap(order('DEV-1-1', 'shift-B1')))); // current generation
+    expect(state(result).loaded).toBe(true);
+    expect(state(result).sales.map((s) => s.id)).toEqual(['DEV-1-1']);
+    act(() => fx.subs[0]!.next(snap())); // still inert afterwards
+    expect(state(result).sales.map((s) => s.id)).toEqual(['DEV-1-1']);
+  });
+
+  test('[GREEN-guard] the very render that switches branch (before any effect) already reports not loaded', () => {
+    const seen: boolean[] = [];
+    const { rerender } = renderHook(({ b }) => {
+      const s = useLocalLedger(b);
+      seen.push(s.loaded);
+      return s;
+    }, { initialProps: { b: 'B1' as string | null } });
+    act(() => fx.subs[0]!.next(snap()));
+    seen.length = 0;
+    rerender({ b: 'B2' });
+    expect(seen[0]).toBe(false);
+    expect(seen.every((l) => l === false)).toBe(true);
+  });
+});

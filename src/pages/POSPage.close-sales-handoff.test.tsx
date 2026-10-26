@@ -254,7 +254,10 @@ async function openCloseModal() {
   });
   fireEvent.click(button);
   await waitFor(() => expect(mocks.closeModalProps.length).toBeGreaterThan(0));
-  return mocks.closeModalProps.at(-1)! as { shift: Shift; sales?: readonly LocalSale[] };
+  // 022-REPAIR: the list now travels bound to its shift (`closeSales`); `sales`
+  // below is that bound list, so the 022 assertions read unchanged.
+  const p = mocks.closeModalProps.at(-1)! as { shift: Shift; closeSales?: { shiftId: string; branchId: string; sales: readonly LocalSale[] } };
+  return { ...p, sales: p.closeSales?.sales };
 }
 
 afterEach(() => {
@@ -272,6 +275,7 @@ describe('022 — POSPage → CloseShiftModal sales handoff', () => {
     expect(props.shift).toMatchObject({ id: 'shift-1', branchId: 'B1', expectedCash: 400, expectedQr: 250, totalBills: 2 });
     expect(props.sales?.map((s) => s.id)).toEqual(['DEV-TEST-1', 'DEV-TEST-2']);
     expect(props.sales?.every((s) => s.shiftId === 'shift-1')).toBe(true);
+    expect(props.closeSales).toMatchObject({ shiftId: 'shift-1', branchId: 'B1' });
     // The real request builder: attested totals == the shown drawer (no
     // `attested_differs_from_drawer`), and the foreign 7,000 is nowhere.
     const built = buildAuthoritativeCloseRequestBody({ shift: props.shift, sales: props.sales!, actualCashCount: 900, note: '', deviceId: 'DEV-TEST' });
