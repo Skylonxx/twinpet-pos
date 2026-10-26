@@ -20,11 +20,15 @@ import {
   hardDeleteProducts,
   hardDeleteSuppliers,
   isResetBlocked,
+  isUatToolRetired,
   resetAllProductStocks,
   DANGER_ZONE_RESET_BLOCKED_MESSAGE,
   type DeletionSummary,
 } from '../../lib/admin/clearTestData';
-import { seedMockData } from '../../lib/seedData';
+import {
+  UAT_MASTER_HARD_DELETE_RETIRED_MESSAGE,
+  UAT_SEED_RETIRED_MESSAGE,
+} from '../../lib/admin/uatToolRetired';
 import {
   Table,
   TableHead,
@@ -84,8 +88,9 @@ const FACTORY_RESET: DangerAction = {
 };
 
 /**
- * Hard-deletes of MASTER data (catalog/contacts), not just transactions. Each
- * carries its own explicit warning describing exactly what is removed.
+ * Hard-deletes of MASTER data (catalog/contacts), not just transactions. Products
+ * is blocked by 018; customers / suppliers / categories are retired by 019 (see
+ * `isUatToolRetired`). All four render disabled and never reach a confirm or a write.
  */
 const HARD_DELETE_ACTIONS: DangerAction[] = [
   {
@@ -140,11 +145,15 @@ function DangerZone() {
 
   const handleRun = async (action: DangerAction) => {
     if (busy) return;
-    // 018: a blocked reset never reaches the confirm or the network.
-    if (isResetBlocked(action.run)) {
+    // 018/019: a blocked or retired tool never reaches the confirm or the network.
+    if (isResetBlocked(action.run) || isUatToolRetired(action.run)) {
       setStatus({
         kind: 'error',
-        message: `❌ ${action.label}: ${DANGER_ZONE_RESET_BLOCKED_MESSAGE}`,
+        message: `❌ ${action.label}: ${
+          isUatToolRetired(action.run)
+            ? UAT_MASTER_HARD_DELETE_RETIRED_MESSAGE
+            : DANGER_ZONE_RESET_BLOCKED_MESSAGE
+        }`,
       });
       return;
     }
@@ -174,7 +183,8 @@ function DangerZone() {
 
   const renderButton = (action: DangerAction, master = false) => {
     const isRunning = runningKey === action.key;
-    const blocked = isResetBlocked(action.run);
+    const retired = isUatToolRetired(action.run);
+    const blocked = isResetBlocked(action.run) || retired;
     return (
       <button
         key={action.key}
@@ -182,7 +192,13 @@ function DangerZone() {
         className={`admin-danger-btn${master ? ' admin-danger-btn-master' : ''}`}
         onClick={() => void handleRun(action)}
         disabled={busy || blocked}
-        aria-describedby={blocked ? 'admin-danger-blocked-notice' : undefined}
+        aria-describedby={
+          retired
+            ? 'admin-danger-retired-notice'
+            : blocked
+              ? 'admin-danger-blocked-notice'
+              : undefined
+        }
         title={blocked ? 'ปิดใช้งานเพื่อความปลอดภัย' : undefined}
       >
         <i
@@ -244,6 +260,19 @@ function DangerZone() {
         <p className="admin-danger-subtitle">
           ลบ catalog / รายชื่อผู้ติดต่อออกถาวร — ไม่ใช่แค่ธุรกรรม ใช้ด้วยความระมัดระวังสูงสุด
         </p>
+        <div
+          id="admin-danger-retired-notice"
+          className="admin-danger-notice"
+          role="note"
+        >
+          <i className="ti ti-lock" aria-hidden="true" />
+          <div>
+            <p className="admin-danger-subtitle-strong">
+              ยกเลิกเครื่องมือลบข้อมูลหลักทั้งหมด (ลูกค้า / ซัพพลายเออร์ / หมวดหมู่)
+            </p>
+            <p className="admin-danger-subtitle">{UAT_MASTER_HARD_DELETE_RETIRED_MESSAGE}</p>
+          </div>
+        </div>
         <div className="admin-danger-actions">
           {HARD_DELETE_ACTIONS.map((action) => renderButton(action))}
         </div>
@@ -253,77 +282,38 @@ function DangerZone() {
 }
 
 function SeedZone() {
-  const [running, setRunning] = useState(false);
-  const [status, setStatus] = useState<
-    { kind: 'success' | 'error'; message: string } | null
-  >(null);
-
-  const handleSeed = async () => {
-    if (running) return;
-    if (
-      !window.confirm(
-        'นำเข้าข้อมูลตัวอย่างสำหรับ UAT (ลูกค้า + สินค้า 10 รายการ)?\n\nรายการที่มี ID เดิมจะถูกเขียนทับ',
-      )
-    ) {
-      return;
-    }
-
-    setRunning(true);
-    setStatus(null);
-    try {
-      const summary = await seedMockData();
-      setStatus({
-        kind: 'success',
-        message: `✅ นำเข้าข้อมูลสำเร็จ — ลูกค้า: ${summary.customers}, ผู้จำหน่าย: ${summary.suppliers}, ระดับราคา: ${summary.priceLevels}, หมวดหมู่: ${summary.categories}, บัญชีเครดิต: ${summary.creditAccounts}, สินค้า: ${summary.products}, สต็อก (${summary.branches} สาขา): ${summary.productStocks}, ล็อตต้นทุน: ${summary.stockLots}`,
-      });
-    } catch (err) {
-      console.error('[SeedZone] seedMockData failed', err);
-      setStatus({
-        kind: 'error',
-        message: `❌ นำเข้าข้อมูลล้มเหลว: ${
-          err instanceof Error ? err.message : 'เกิดข้อผิดพลาด'
-        }`,
-      });
-    } finally {
-      setRunning(false);
-    }
-  };
-
   return (
     <section className="admin-seed-zone" aria-label="Seed Mock Data">
       <div className="admin-seed-header">
         <i className="ti ti-database-import" aria-hidden="true" />
         <div>
-          <h2 className="admin-seed-title">นำเข้าข้อมูลตัวอย่าง (UAT Seed Data)</h2>
+          <h2 className="admin-seed-title">นำเข้าข้อมูลตัวอย่าง (UAT Seed Data) — ปิดใช้งาน</h2>
           <p className="admin-seed-subtitle">
-            สร้างลูกค้า/ผู้จำหน่าย และสินค้าตัวอย่าง 10 รายการ พร้อมสต็อกเริ่มต้น 0
-            สำหรับการทดสอบ — รันซ้ำได้โดยไม่สร้างข้อมูลซ้ำ
+            เครื่องมือนำเข้าข้อมูลตัวอย่างสำหรับ UAT ถูกยกเลิกแล้ว ไม่สามารถใช้งานได้
           </p>
         </div>
       </div>
 
-      {status && (
-        <div
-          className={`admin-seed-status${
-            status.kind === 'error' ? ' admin-seed-status-error' : ''
-          }`}
-          role={status.kind === 'error' ? 'alert' : 'status'}
-        >
-          {status.message}
+      <div
+        id="admin-seed-retired-notice"
+        className="admin-danger-notice"
+        role="note"
+      >
+        <i className="ti ti-lock" aria-hidden="true" />
+        <div>
+          <p className="admin-danger-subtitle">{UAT_SEED_RETIRED_MESSAGE}</p>
         </div>
-      )}
+      </div>
 
       <button
         type="button"
         className="admin-seed-btn"
-        onClick={() => void handleSeed()}
-        disabled={running}
+        disabled
+        aria-describedby="admin-seed-retired-notice"
+        title="ปิดใช้งานเพื่อความปลอดภัย"
       >
-        <i
-          className={`ti ${running ? 'ti-loader-2 spin' : 'ti-database-plus'}`}
-          aria-hidden="true"
-        />
-        {running ? 'กำลังนำเข้าข้อมูล…' : 'นำเข้าข้อมูลตัวอย่าง'}
+        <i className="ti ti-lock" aria-hidden="true" />
+        นำเข้าข้อมูลตัวอย่าง (ปิดใช้งาน)
       </button>
     </section>
   );

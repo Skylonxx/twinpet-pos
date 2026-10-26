@@ -21,25 +21,15 @@
  * A UAT purge of those domains needs a separately authorized server-side tool.
  * The pre-018 implementations are in git history (d19a7cf).
  *
- * Master data hard deletes (customers, suppliers, categories) touch none of these
- * collections and are unchanged. Their deletions are paged and committed in
- * chunks so they respect Firestore's 500-write-per-batch limit.
+ * 019: the master data hard deletes (customers, suppliers, categories) are retired
+ * the same way ({@link UatToolRetiredError}, see ./uatToolRetired): global, cross-branch,
+ * paged and non-atomic, they leave sales, credit and receiving records dangling.
+ * Ordinary per-record customer / supplier / category CRUD is unaffected.
  */
 import {
-  collection,
-  getDocs,
-  limit,
-  query,
-  writeBatch,
-  type CollectionReference,
-  type Firestore,
-  type Query,
-} from 'firebase/firestore';
-import { collections, db, isFirebaseConfigured } from '../firebase';
-import { ensureFirebaseAuth } from '../firebaseAuth';
-
-/** Firestore caps a single committed batch at 500 writes. */
-const BATCH_LIMIT = 500;
+  refuseRetiredUatTool,
+  UAT_MASTER_HARD_DELETE_RETIRED_MESSAGE,
+} from './uatToolRetired';
 
 /** Per-collection counts of how many documents were touched. */
 export type DeletionSummary = Record<string, number>;
@@ -65,39 +55,6 @@ export class DangerZoneResetBlockedError extends Error {
 
 function refuseUnsafeReset(action: string): never {
   throw new DangerZoneResetBlockedError(action);
-}
-
-function requireDb(): Firestore {
-  if (!isFirebaseConfigured || !db) {
-    throw new Error('ไม่รองรับการล้างข้อมูลในโหมด dev (Firebase ไม่ได้ตั้งค่า)');
-  }
-  return db;
-}
-
-/**
- * Delete every document matched by `source`, paging in chunks of {@link BATCH_LIMIT}
- * so we never load the whole collection into memory or exceed the batch limit.
- * Re-queries after each commit because the just-deleted docs drop out of the result.
- */
-async function deleteAllInChunks(
-  firestore: Firestore,
-  source: Query | CollectionReference,
-): Promise<number> {
-  let deleted = 0;
-  for (;;) {
-    const snap = await getDocs(query(source, limit(BATCH_LIMIT)));
-    if (snap.empty) break;
-
-    const batch = writeBatch(firestore);
-    for (const docSnap of snap.docs) {
-      batch.delete(docSnap.ref);
-    }
-    await batch.commit();
-
-    deleted += snap.size;
-    if (snap.size < BATCH_LIMIT) break;
-  }
-  return deleted;
 }
 
 /** Blocked (018): would delete orders + orderItems, payments and asyncOrders. */
@@ -151,76 +108,33 @@ export async function hardDeleteProducts(): Promise<DeletionSummary> {
 }
 
 /**
- * Hard-delete all customers along with their `creditAccounts` (a 1:1 master-data
- * record keyed by customerId). Credit accounts are removed first to avoid leaving
- * them orphaned.
+ * Retired (019): would hard-delete every `creditAccounts` doc and then every customer,
+ * across all branches, leaving credit payments / sales / Return CRM references dangling.
  */
 export async function hardDeleteCustomers(): Promise<DeletionSummary> {
-  const firestore = requireDb();
-  await ensureFirebaseAuth();
-
-  const creditAccounts = await deleteAllInChunks(
-    firestore,
-    collection(firestore, collections.creditAccounts),
-  );
-  const customers = await deleteAllInChunks(
-    firestore,
-    collection(firestore, collections.customers),
-  );
-
-  return { creditAccounts, customers };
+  return refuseRetiredUatTool('hardDeleteCustomers', UAT_MASTER_HARD_DELETE_RETIRED_MESSAGE);
 }
 
-/**
- * Hard-delete all supplier master records.
- */
+/** Retired (019): would hard-delete every supplier across all branches (receiving references dangle). */
 export async function hardDeleteSuppliers(): Promise<DeletionSummary> {
-  const firestore = requireDb();
-  await ensureFirebaseAuth();
-
-  const suppliers = await deleteAllInChunks(
-    firestore,
-    collection(firestore, collections.suppliers),
-  );
-
-  return { suppliers };
+  return refuseRetiredUatTool('hardDeleteSuppliers', UAT_MASTER_HARD_DELETE_RETIRED_MESSAGE);
 }
 
-/** Protected default category — must never be deleted (mirrors categoryService). */
-const GENERAL_CATEGORY_ID = 'general';
-
-/**
- * Hard-delete all product categories EXCEPT the protected default ('general').
- * Paged in chunks; the preserved 'general' doc is filtered out of every batch,
- * so once only it remains the loop finds nothing deletable and terminates.
- */
+/** Retired (019): would hard-delete every category except 'general' across all branches. */
 export async function hardDeleteCategories(): Promise<DeletionSummary> {
-  const firestore = requireDb();
-  await ensureFirebaseAuth();
-
-  let categories = 0;
-  for (;;) {
-    const snap = await getDocs(
-      query(collection(firestore, collections.categories), limit(BATCH_LIMIT)),
-    );
-    const deletable = snap.docs.filter((d) => d.id !== GENERAL_CATEGORY_ID);
-    if (deletable.length === 0) break;
-
-    const batch = writeBatch(firestore);
-    for (const docSnap of deletable) batch.delete(docSnap.ref);
-    await batch.commit();
-    categories += deletable.length;
-
-    if (snap.size < BATCH_LIMIT) break;
-  }
-
-  return { categories };
+  return refuseRetiredUatTool('hardDeleteCategories', UAT_MASTER_HARD_DELETE_RETIRED_MESSAGE);
 }
 
 /** Blocked (018): Factory Reset — would run every transaction / ledger / stock reset above in sequence. */
 export async function clearAllTransactionData(): Promise<DeletionSummary> {
   return refuseUnsafeReset('clearAllTransactionData');
 }
+
+const RETIRED_UAT_TOOLS: ReadonlySet<() => Promise<DeletionSummary>> = new Set([
+  hardDeleteCustomers,
+  hardDeleteSuppliers,
+  hardDeleteCategories,
+]);
 
 const BLOCKED_RESETS: ReadonlySet<() => Promise<DeletionSummary>> = new Set([
   clearSalesData,
@@ -238,4 +152,9 @@ const BLOCKED_RESETS: ReadonlySet<() => Promise<DeletionSummary>> = new Set([
 /** Whether a Danger Zone action is refused by the 018 reset safety gate (drives the UI). */
 export function isResetBlocked(run: () => Promise<DeletionSummary>): boolean {
   return BLOCKED_RESETS.has(run);
+}
+
+/** Whether a Danger Zone action is a retired UAT master hard delete (019; drives the UI). */
+export function isUatToolRetired(run: () => Promise<DeletionSummary>): boolean {
+  return RETIRED_UAT_TOOLS.has(run);
 }

@@ -1,8 +1,9 @@
 /**
  * 018 — Danger Zone reset safety. Every reset that writes shifts, cash, sales,
  * the credit ledger, system logs or inventory must refuse BEFORE its first read
- * or write (typed refusal, truthful Thai notice, zero committed writes). Master
- * data hard deletes (customers / suppliers / categories) keep working.
+ * or write (typed refusal, truthful Thai notice, zero committed writes).
+ * 019 retired the customers / suppliers / categories hard deletes too — their
+ * refusal contract is covered in clearTestData.uatRetired.test.ts.
  */
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
@@ -19,10 +20,7 @@ import {
   clearShiftAndCashData,
   clearStockLedgerAndFifo,
   clearSystemLogs,
-  hardDeleteCategories,
-  hardDeleteCustomers,
   hardDeleteProducts,
-  hardDeleteSuppliers,
   isResetBlocked,
   resetAllProductStocks,
   resetCustomerCreditBalances,
@@ -156,42 +154,8 @@ describe('018 — blocked resets refuse before any read or write', () => {
     },
   );
 
-  test('unconfigured Firebase: blocked resets give the safety refusal, unaffected ones keep the dev notice', async () => {
+  test('unconfigured Firebase: blocked resets still give the safety refusal', async () => {
     fakeDb.configured = false;
     for (const [, run] of BLOCKED) await expectRefusedWithoutSideEffects(run);
-    await expect(hardDeleteSuppliers()).rejects.toThrow('Firebase ไม่ได้ตั้งค่า');
-  });
-});
-
-describe('018 — master data hard deletes are unchanged', () => {
-  test('customers / suppliers / categories hard deletes are not blocked', () => {
-    expect(isResetBlocked(hardDeleteCustomers)).toBe(false);
-    expect(isResetBlocked(hardDeleteSuppliers)).toBe(false);
-    expect(isResetBlocked(hardDeleteCategories)).toBe(false);
-  });
-
-  test('hardDeleteSuppliers deletes every supplier', async () => {
-    fakeDb.seed('suppliers/sup1');
-    fakeDb.seed('suppliers/sup2');
-    await expect(hardDeleteSuppliers()).resolves.toEqual({ suppliers: 2 });
-    expect(fakeDb.idsIn('suppliers')).toEqual([]);
-  });
-
-  test('hardDeleteCustomers deletes credit accounts, then customers', async () => {
-    fakeDb.seed('customers/c1');
-    fakeDb.seed('creditAccounts/c1');
-    await expect(hardDeleteCustomers()).resolves.toEqual({ creditAccounts: 1, customers: 1 });
-    const commits = fakeDb.ops.filter((op) => op.kind === 'commit');
-    expect(commits.map((op) => op.kind === 'commit' && op.deletes)).toEqual([
-      ['creditAccounts/c1'],
-      ['customers/c1'],
-    ]);
-  });
-
-  test('hardDeleteCategories keeps the protected "general" category', async () => {
-    fakeDb.seed('categories/general');
-    fakeDb.seed('categories/cat1');
-    await expect(hardDeleteCategories()).resolves.toEqual({ categories: 1 });
-    expect(fakeDb.idsIn('categories')).toEqual(['general']);
   });
 });

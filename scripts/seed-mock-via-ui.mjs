@@ -1,5 +1,10 @@
 /**
- * Re-seed UAT mock data (PROD-001..010 + customers/suppliers/price-levels/stocks)
+ * RETIRED (019): the in-app Seed Zone and `seedMockData()` are disabled on every runtime
+ * because the fixed-id upserts overwrite real stock, FIFO lots and credit usage. This
+ * script now exits before launching a browser. Kept for history; a UAT seed needs a
+ * separately authorized server-side tool.
+ *
+ * (Former description) Re-seed UAT mock data (PROD-001..010 + customers/suppliers/price-levels/stocks)
  * by driving the in-app "นำเข้าข้อมูลตัวอย่าง" button on /admin/branches headlessly.
  * Reuses the app's own seedMockData() so the schema (prices, productStocks, lots)
  * is exactly correct. Requires a running dev server in EMULATOR mode.
@@ -7,6 +12,11 @@
  * Run: SMOKE_BASE=http://localhost:5173 node scripts/seed-mock-via-ui.mjs
  */
 import { chromium } from '@playwright/test';
+
+console.error(
+  'seed-mock-via-ui is retired (019): the Seed Zone is disabled because it overwrites real stock, FIFO lots and credit usage.',
+);
+process.exit(2);
 
 const BASE = process.env.SMOKE_BASE ?? 'http://localhost:5173';
 const browser = await chromium.launch();

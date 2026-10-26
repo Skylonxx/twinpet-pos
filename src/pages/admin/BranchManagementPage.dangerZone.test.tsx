@@ -3,10 +3,11 @@
 /**
  * 018 — Danger Zone UI: resets that would touch shifts, cash, sales or inventory
  * are disabled with an explicit safety notice and never reach a confirm or a
- * write; master data hard deletes still run end to end.
+ * write. (019 also retired the master data hard deletes — see
+ * BranchManagementPage.uatRetired.test.tsx.)
  */
 import { createElement } from 'react';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 vi.mock('firebase/firestore', async () =>
@@ -32,8 +33,6 @@ const BLOCKED_LABELS = [
   'Factory Reset',
   'Hard Delete Products',
 ];
-
-const OPEN_LABELS = ['Hard Delete Customers', 'Hard Delete Suppliers', 'Hard Delete Categories'];
 
 function button(label: string): HTMLButtonElement {
   return screen.getByRole('button', { name: new RegExp(label.replace(/[()]/g, '\\$&')) });
@@ -64,10 +63,8 @@ describe('018 — Danger Zone UI reset safety', () => {
     for (const label of BLOCKED_LABELS) {
       expect(button(label).disabled, label).toBe(true);
     }
-    for (const label of OPEN_LABELS) {
-      expect(button(label).disabled, label).toBe(false);
-    }
-    const notice = screen.getByRole('note');
+    const notice = document.getElementById('admin-danger-blocked-notice')!;
+    expect(notice.getAttribute('role')).toBe('note');
     expect(notice.textContent).toContain('ไม่มีข้อมูลถูกลบ');
     expect(notice.textContent).toContain('Factory Reset');
   });
@@ -84,14 +81,5 @@ describe('018 — Danger Zone UI reset safety', () => {
     expect(fakeDb.has('shifts/s1')).toBe(true);
     expect(fakeDb.has('orders/o1')).toBe(true);
     expect(screen.queryByText(/สำเร็จ/)).toBeNull();
-  });
-
-  test('Hard Delete Suppliers still confirms, deletes and reports success', async () => {
-    render(createElement(BranchManagementPage));
-    fireEvent.click(button('Hard Delete Suppliers'));
-    expect(confirmSpy).toHaveBeenCalledTimes(1);
-    await waitFor(() => expect(screen.getByRole('status').textContent).toContain('suppliers: 1'));
-    expect(fakeDb.idsIn('suppliers')).toEqual([]);
-    expect(fakeDb.has('shifts/s1')).toBe(true);
   });
 });

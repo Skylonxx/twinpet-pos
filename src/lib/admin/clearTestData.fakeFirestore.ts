@@ -2,7 +2,9 @@
  * Test-only in-memory stand-in for the `firebase/firestore` surface that
  * {@link ./clearTestData} uses (collection / collectionGroup / query / limit /
  * getDocs / writeBatch / serverTimestamp). Shared by the Danger Zone reset
- * safety specs (018) so they can count every read and committed write.
+ * safety specs (018) so they can count every read and committed write. 019 adds
+ * `doc` and `batch.set` (merge upsert) so the retired Seed Zone can be exercised
+ * against the pre-019 implementation too.
  *
  * It mirrors the two Rules facts the reset safety depends on:
  *   - a batch deleting `cashTransactions/rfd_*` is denied ATOMICALLY (017 seal),
@@ -15,7 +17,7 @@ type DocData = Record<string, unknown>;
 export type FakeOp =
   | { kind: 'read'; target: string }
   | { kind: 'auth' }
-  | { kind: 'commit'; deletes: string[]; updates: string[] };
+  | { kind: 'commit'; deletes: string[]; updates: string[]; sets: string[] };
 
 type DocRef = { kind: 'doc'; path: string; id: string };
 type CollectionRef = { kind: 'collection'; path: string };
@@ -70,7 +72,8 @@ export const fakeDb = {
 
   get committedWrites(): number {
     return this.ops.reduce(
-      (n, op) => (op.kind === 'commit' ? n + op.deletes.length + op.updates.length : n),
+      (n, op) =>
+        op.kind === 'commit' ? n + op.deletes.length + op.updates.length + op.sets.length : n,
       0,
     );
   },
@@ -90,6 +93,11 @@ export const fakeFirestoreModule = {
       ? `${(base as DocRef).path}/`
       : '';
     return { kind: 'collection', path: `${parent}${name}` };
+  },
+
+  doc(_base: unknown, ...segments: string[]): DocRef {
+    const path = segments.join('/');
+    return { kind: 'doc', path, id: lastSegment(path) };
   },
 
   collectionGroup(_firestore: unknown, id: string): GroupRef {
@@ -132,7 +140,11 @@ export const fakeFirestoreModule = {
   writeBatch() {
     const deletes: string[] = [];
     const updates: Array<{ path: string; data: DocData }> = [];
+    const sets: Array<{ path: string; data: DocData }> = [];
     return {
+      set(ref: DocRef, data: DocData) {
+        sets.push({ path: ref.path, data });
+      },
       delete(ref: DocRef) {
         deletes.push(ref.path);
       },
@@ -149,10 +161,14 @@ export const fakeFirestoreModule = {
         for (const u of updates) {
           fakeDb.docs.set(u.path, { ...(fakeDb.docs.get(u.path) ?? {}), ...u.data });
         }
+        for (const u of sets) {
+          fakeDb.docs.set(u.path, { ...(fakeDb.docs.get(u.path) ?? {}), ...u.data });
+        }
         fakeDb.ops.push({
           kind: 'commit',
           deletes: [...deletes],
           updates: updates.map((u) => u.path),
+          sets: sets.map((u) => u.path),
         });
       },
     };
