@@ -135,7 +135,7 @@ vi.mock('../components/ui/use-toast', () => ({
   useToastDispatcher: () => mocks.showToast,
 }));
 vi.mock('../lib/hooks/useLocalLedger', () => ({
-  useLocalLedger: () => [],
+  useLocalLedger: () => ({ sales: [], loaded: false }),
 }));
 
 // ── Service / config mocks ──────────────────────────────────────────────────────────

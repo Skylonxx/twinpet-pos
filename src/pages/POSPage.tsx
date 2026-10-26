@@ -378,13 +378,16 @@ export default function POSPage({ trustedResumeSweep }: POSPageProps = {}) {
   // ignored online (the reconciler no longer maintains them); we derive them live
   // — instantly, offline-safe — from the ledger for the active shift. Dev (no
   // Firebase) keeps using the mock shift store, which the dev path still updates.
-  const localLedger = useLocalLedger(branchId);
+  const { sales: localLedger, loaded: localLedgerLoaded } = useLocalLedger(branchId);
+  const shiftSales = useMemo(
+    () => (activeShift ? localLedger.filter((s) => s.shiftId === activeShift.id) : []),
+    [activeShift, localLedger],
+  );
   const drawerShift = useMemo(() => {
     if (!activeShift) return null;
     if (!isFirebaseConfigured) return activeShift;
-    const shiftSales = localLedger.filter((s) => s.shiftId === activeShift.id);
     return deriveShiftDrawer(activeShift, shiftSales);
-  }, [activeShift, localLedger]);
+  }, [activeShift, shiftSales]);
 
   // ── Admin Broadcast → Smart Auto-Sync ──────────────────────────────────────
   // One cheap listener on the branch's sync_state doc. When the admin "rings the
@@ -2054,6 +2057,9 @@ export default function POSPage({ trustedResumeSweep }: POSPageProps = {}) {
       {showCloseShift && drawerShift && (
         <CloseShiftModal
           shift={drawerShift}
+          // Packet 022: the very list `drawerShift` folded, only once the ledger
+          // listener answered — an unloaded ledger is never handed over as [].
+          sales={localLedgerLoaded ? shiftSales : undefined}
           pendingSyncCount={saleIntentStatus.pendingCount}
           pendingSyncStale={saleIntentStatus.isStale}
           onClose={() => {

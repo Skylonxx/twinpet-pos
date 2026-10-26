@@ -114,7 +114,7 @@ vi.mock('../components/ui/use-toast', () => ({
   useToastDispatcher: () => mocks.showToast,
 }));
 vi.mock('../lib/hooks/useLocalLedger', () => ({
-  useLocalLedger: () => [],
+  useLocalLedger: () => ({ sales: [], loaded: false }),
 }));
 vi.mock('../lib/pos/shiftService', () => ({
   readActiveShiftForBoot: mocks.readActiveShiftForBoot,

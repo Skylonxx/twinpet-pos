@@ -14,6 +14,7 @@ import {
   type ReviewedDrawerRefresh,
 } from '../../lib/pos/shiftCloseAuthoritativeClient';
 import { SHIFT_CLOSE_INTENT_STALE_AGE_MS } from '../../lib/pos/offline/shiftCloseIntentTypes';
+import type { LocalSale } from '../../lib/pos/localLedger';
 import type { Shift } from '../../lib/types';
 import './ShiftModals.css';
 
@@ -223,6 +224,13 @@ type CloseShiftModalProps = {
   pendingSyncCount?: number;
   /** True when the oldest pending entry has aged past the sync-panel's stale threshold. */
   pendingSyncStale?: boolean;
+  /**
+   * Packet 022 — this shift's ledger sales, the list `shift` (the drawer) was
+   * derived from; `undefined` while the ledger is not loaded (the
+   * server-authoritative close then refuses). Handed only to that close; the
+   * legacy (gate OFF) close never receives it.
+   */
+  sales?: readonly LocalSale[];
 };
 
 /**
@@ -511,6 +519,7 @@ export function CloseShiftModal({
   onSuccess,
   pendingSyncCount = 0,
   pendingSyncStale = false,
+  sales,
 }: CloseShiftModalProps) {
   const [actualCash, setActualCash] = useState('');
   const [note, setNote] = useState('');
@@ -604,11 +613,12 @@ export function CloseShiftModal({
 
     try {
       // Packet 015 (F2): the server-authoritative close takes a witness of the
-      // EXACT drawer shown (displayShift + its refresh state). Gate OFF: the
-      // call is exactly the legacy closeShift(shift, count, note).
+      // EXACT drawer shown (displayShift + its refresh state); 022: plus the
+      // ledger sales that drawer was derived from. Gate OFF: the call is
+      // exactly the legacy closeShift(shift, count, note).
       const closing = SERVER_AUTHORITATIVE_CLOSE_ENABLED
         ? closeShift(shift, count, note.trim(), {
-            authoritativeClose: { reviewedDrawer: buildReviewedDrawerWitness(displayShift, serverCashRefresh) },
+            authoritativeClose: { sales, reviewedDrawer: buildReviewedDrawerWitness(displayShift, serverCashRefresh) },
           })
         : closeShift(shift, count, note.trim());
       const result = await Promise.race([closing, timeoutGuard]);
@@ -639,7 +649,7 @@ export function CloseShiftModal({
       clearTimeout(timeoutId);
       if (closeAttemptRef.current === attemptId) setSubmitting(false);
     }
-  }, [shift, actualCash, note, displayShift, serverCashRefresh, refreshServerCash]);
+  }, [shift, actualCash, note, displayShift, serverCashRefresh, refreshServerCash, sales]);
 
   const handlePrint = useCallback(() => {
     if (!closedShift) return;

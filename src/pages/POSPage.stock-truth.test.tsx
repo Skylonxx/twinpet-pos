@@ -120,7 +120,7 @@ vi.mock('../hooks/pos/useCheckout', () => ({
 vi.mock('../components/ui/use-toast', () => ({
   useToastDispatcher: () => vi.fn(),
 }));
-vi.mock('../lib/hooks/useLocalLedger', () => ({ useLocalLedger: () => [] }));
+vi.mock('../lib/hooks/useLocalLedger', () => ({ useLocalLedger: () => ({ sales: [], loaded: false }) }));
 vi.mock('../lib/pos/shiftService', () => ({
   readActiveShiftForBoot: vi.fn().mockResolvedValue({
     status: 'found',
