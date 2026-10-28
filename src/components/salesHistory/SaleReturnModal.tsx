@@ -5,7 +5,11 @@ import ManagerPinModal from '../pos/ManagerPinModal';
 import { formatMoney } from '../../lib/pos/cartUtils';
 import { useAuth } from '../../lib/hooks/useAuth';
 import { useApproverRoster } from '../../lib/auth/useApproverRoster';
-import { getActiveShift } from '../../lib/pos/shiftService';
+import {
+  ACTIVE_SHIFT_LOCAL_STATE_UNAVAILABLE_MESSAGE,
+  ActiveShiftUnavailableError,
+  getActiveShift,
+} from '../../lib/pos/shiftService';
 import {
   REFUND_METHOD_LABEL,
   RETURN_REASONS,
@@ -114,6 +118,8 @@ function SaleReturnDialog({
   const [pinError, setPinError] = useState<string | null>(null);
   const [activeShiftId, setActiveShiftId] = useState<string | null>(null);
   const [shiftChecked, setShiftChecked] = useState(false);
+  // Packet 023: the active shift could not be told (local close journal unreadable) — not "no shift open".
+  const [shiftUnavailable, setShiftUnavailable] = useState(false);
   // Frozen request (without PIN) once approval is requested; a retry re-sends
   // EXACTLY this payload under the same attemptId.
   const [locked, setLocked] = useState<LockedPayload | null>(null);
@@ -181,8 +187,10 @@ function SaleReturnDialog({
       .then((shift) => {
         if (!cancelled) setActiveShiftId(shift?.id ?? null);
       })
-      .catch(() => {
-        if (!cancelled) setActiveShiftId(null);
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setActiveShiftId(null);
+        setShiftUnavailable(err instanceof ActiveShiftUnavailableError);
       })
       .finally(() => {
         if (!cancelled) setShiftChecked(true);
@@ -221,7 +229,9 @@ function SaleReturnDialog({
       if (!tender) return setFormError(SALE_RETURN_ERROR_COPY.refund_method_not_allowed);
       if (Math.round(tender.remaining * 100) < refundMinor) return setFormError(SALE_RETURN_ERROR_COPY.refund_cap_exceeded);
       if (effectiveMethod !== 'cash' && !reference.trim()) return setFormError(SALE_RETURN_ERROR_COPY.reference_required);
-      if (effectiveMethod === 'cash' && !activeShiftId) return setFormError(SALE_RETURN_ERROR_COPY.shift_required);
+      if (effectiveMethod === 'cash' && !activeShiftId) {
+        return setFormError(shiftUnavailable ? ACTIVE_SHIFT_LOCAL_STATE_UNAVAILABLE_MESSAGE : SALE_RETURN_ERROR_COPY.shift_required);
+      }
     }
     if (!approver) return setFormError('กรุณาเลือกผู้จัดการที่อนุมัติ');
     setLocked({
@@ -535,6 +545,11 @@ function SaleReturnDialog({
                 {formError}
               </Alert>
             )}
+            {shiftUnavailable && (
+              <Alert color="warning" data-testid="sale-return-shift-unavailable">
+                {ACTIVE_SHIFT_LOCAL_STATE_UNAVAILABLE_MESSAGE} — คืนเงินสดจากเครื่องนี้ไม่ได้ชั่วคราว
+              </Alert>
+            )}
 
             <ul className="space-y-2" data-testid="sale-return-lines">
               {context.lines.map((l) => {
@@ -628,7 +643,11 @@ function SaleReturnDialog({
                     {context.refundMethods.map((m) => (
                       <option key={m.method} value={m.method} disabled={m.method === 'cash' && shiftChecked && !activeShiftId}>
                         {REFUND_METHOD_LABEL[m.method]} · คืนได้ ฿{formatMoney(m.remaining)}
-                        {m.method === 'cash' && shiftChecked && !activeShiftId ? ' (ต้องเปิดกะ)' : ''}
+                        {m.method === 'cash' && shiftChecked && !activeShiftId
+                          ? shiftUnavailable
+                            ? ' (ตรวจสอบสถานะกะไม่ได้)'
+                            : ' (ต้องเปิดกะ)'
+                          : ''}
                       </option>
                     ))}
                   </Select>

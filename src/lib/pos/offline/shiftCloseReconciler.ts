@@ -24,12 +24,21 @@ import {
   type ShiftCloseIntentJournal,
 } from './shiftCloseIntentStore';
 import {
+  CLOSE_SHIFT_AUTHORITATIVE_RESULT_MISMATCH_MESSAGE,
+  CLOSE_SHIFT_DEFERRED_CLOSED_BY_OTHER_MESSAGE,
+  CLOSE_SHIFT_DEFERRED_DRAWER_CHANGED_MESSAGE,
+  CLOSE_SHIFT_DEFERRED_IDENTITY_MISMATCH_MESSAGE,
+  CLOSE_SHIFT_DEFERRED_SERVER_CASH_INVALID_MESSAGE,
   authoritativeCloseRequest,
+  authoritativeRequestBodyFromSnapshot,
+  buildAuthoritativeExpectation,
+  deferredCloseRefusalMessage,
   getDefaultCloseShiftAuthoritativeCallable,
+  invokeCloseShiftAuthoritative,
   proveServerAuthoredClose,
   type CloseShiftAuthoritativeCallable,
 } from '../shiftCloseAuthoritativeClient';
-import { isValidLegacyClaimEpoch } from './shiftCloseIntentTypes';
+import { isDeferredAuthoritativeEntry, isValidLegacyClaimEpoch } from './shiftCloseIntentTypes';
 import type {
   LegacyClaimResult,
   LegacyNormalizationClaimFence,
@@ -190,9 +199,18 @@ export type ReconcileShiftCloseIntentDeps = {
    * shift was closed by the server for a server-authoritative attempt. Omitted
    * = the production callable (created lazily; unavailable => the attempt stays
    * unreachable, never adopted). It is never invoked for an open / unreadable
-   * shift, so no sweep can create a W3.
+   * shift by the attempt recovery, so that path can never create a W3.
+   * Packet 023: it is ALSO the transport of {@link replayDeferredAuthoritativeClose},
+   * which sends the close of an OPEN shift — only the request a cashier
+   * recorded locally (deferred entry), only under the owner's own session.
    */
   authoritativeCallable?: CloseShiftAuthoritativeCallable;
+  /**
+   * Packet 023 — server I/O of the deferred server-authoritative close replay
+   * ({@link replayDeferredAuthoritativeClose}). Omitted = a deferred entry is
+   * never sent (kept pending, `deferred_close_replay_unavailable`).
+   */
+  deferredReplay?: DeferredCloseReplayIo;
 };
 
 export type ReconcileShiftCloseIntentResult = {
@@ -220,6 +238,14 @@ export type ReconcileShiftCloseIntentResult = {
    * `ok: false`): a local durability failure, not a transient read failure.
    */
   journalWriteFailed?: 'mark_synced' | 'mark_rejected_manual_attention';
+  /**
+   * Packet 023 — present on the result of a deferred server-authoritative close
+   * replay: the precise outcome (`outcome` is then `confirmed`, `unreachable`,
+   * `identity_mismatch` = durably marked `rejected_manual_attention`, or
+   * `still_pending`) and a diagnostic reason (a code, never data).
+   */
+  deferred?: DeferredReplayOutcome;
+  deferredReason?: string;
 };
 
 function isResolvedServerTimestamp(value: unknown): value is { toDate: () => Date } {
@@ -295,6 +321,20 @@ function confirmsEntry(entry: ShiftCloseIntentEntry, doc: ShiftCloseConfirmation
  * is a no-op read with no network call and no further journal/doc write.
  */
 export async function reconcileShiftCloseIntent(
+  entry: ShiftCloseIntentEntry,
+  deps: ReconcileShiftCloseIntentDeps,
+): Promise<ReconcileShiftCloseIntentResult> {
+  // Packet 023: a deferred server-authoritative close is confirmed ONLY by the
+  // callable's proof ({@link replayDeferredAuthoritativeClose}) — a closed shift
+  // doc alone (a direct client W3 can carry the same UUID and amounts) never.
+  if (entry.status === 'local_closed_pending' && isDeferredAuthoritativeEntry(entry)) {
+    return { shiftId: entry.shiftId, outcome: 'still_pending' };
+  }
+  return reconcileProvenEntry(entry, deps);
+}
+
+/** {@link reconcileShiftCloseIntent} without the deferred guard — for a deferred entry ONLY after its callable proof. */
+async function reconcileProvenEntry(
   entry: ShiftCloseIntentEntry,
   deps: ReconcileShiftCloseIntentDeps,
 ): Promise<ReconcileShiftCloseIntentResult> {
@@ -969,8 +1009,214 @@ async function recoverOnlineCloseAttemptsDetailed(
   return { readable: true, results };
 }
 
+// ── Packet 023: deferred (locally recorded) server-authoritative closes ────
+
+/** Authoritative (server, never cache) read of the whole shift doc. Never throws. */
+export type DeferredCloseServerRead =
+  | { ok: true; exists: false }
+  | { ok: true; exists: true; data: Record<string, unknown> }
+  | { ok: false };
+
+/** Injected server I/O of the deferred replay (production: `deferredCloseReplayIo` in shiftService). */
+export type DeferredCloseReplayIo = {
+  readServerShift: (shiftId: string) => Promise<DeferredCloseServerRead>;
+  /** `true` once every write queued on this device was acknowledged by the server (bounded). */
+  waitForQueuedWrites: () => Promise<boolean>;
+  /** The `staffId` claim of the CURRENT signed-in session — the identity the callable will see; `null` = none. */
+  sessionStaffId: () => Promise<string | null>;
+};
+
 /**
- * Sweep every THIS-device `local_closed_pending` intent through {@link reconcileShiftCloseIntent}.
+ *   confirmed               the callable committed (or replayed) THIS close, its
+ *                           snapshot and an independent server read equal the
+ *                           entry: journal `synced` (+ Variant C W4)
+ *   awaiting_owner_session  no session of the shift's owner on this device (or the
+ *                           server said the session is stale): nothing sent
+ *   replay_unavailable      no server I/O / callable transport: nothing sent
+ *   unreachable             queued writes not flushed, a read failed, unknown /
+ *                           unconfirmed outcome, or a local write failed: retried
+ *                           with the SAME correlation id
+ *   not_authorized          the server refused the owner (deactivated / branch /
+ *                           owner changed): kept, never retried under anyone else
+ *   manual_attention        kept, nothing written (shift not on the server, an
+ *                           untrustworthy success, a doc the strict parser refuses)
+ *   rejected                definitive: durably marked `rejected_manual_attention`
+ *                           (server refusal, drawer changed, closed by another
+ *                           close, identity / result mismatch) — never a Z
+ */
+export type DeferredReplayOutcome =
+  | 'confirmed'
+  | 'awaiting_owner_session'
+  | 'replay_unavailable'
+  | 'unreachable'
+  | 'not_authorized'
+  | 'manual_attention'
+  | 'rejected';
+
+/**
+ * Packet 023 — replay ONE deferred server-authoritative close: the close the
+ * cashier recorded locally while this device could not reach the server
+ * (`closeProtocol`), sent now through `closeShiftAuthoritative` — the only
+ * trusted W3 writer; nothing here writes the shift doc except the existing
+ * Variant C W4 after proof. Ordering (each step keeps the entry on failure):
+ *  1. the CURRENT session must be the shift owner's (contract D7: owner only);
+ *     no other actor's token is ever used and no credential is stored;
+ *  2. this device's queued writes are flushed (its cash movements first);
+ *  3. an authoritative read: same branch / staff; closed by ANOTHER close ⇒
+ *     rejected; open ⇒ the close the server would commit for the entry's request
+ *     must EQUAL the recorded one (startingCash, every pay-in / pay-out) —
+ *     otherwise nothing is sent and the entry is rejected (never adopts totals
+ *     the cashier did not count against);
+ *  4. ONE call with the entry's own request + correlation id (a replay of an
+ *     already-committed close is the callable's idempotent path — never twice);
+ *  5. proof: the canonical snapshot AND a strict server read of the doc (close
+ *     time included) must equal the entry; only then the existing reconcile
+ *     (journal `synced`, W4). `salesTotals` stay `attested_unverified`.
+ * Never throws.
+ */
+export async function replayDeferredAuthoritativeClose(
+  entry: ShiftCloseIntentEntry,
+  deps: ReconcileShiftCloseIntentDeps,
+): Promise<ReconcileShiftCloseIntentResult> {
+  const shiftId = entry.shiftId;
+  if (entry.status !== 'local_closed_pending' || !isDeferredAuthoritativeEntry(entry)) {
+    return reconcileShiftCloseIntent(entry, deps);
+  }
+  const correlationId = entry.closeCorrelationId;
+  const deviceId = entry.deviceId;
+  if (deviceId !== deps.deviceId || deviceId === null || !isValidLowercaseUuidV4(correlationId)) {
+    return { shiftId, outcome: 'still_pending' };
+  }
+  const kept = (deferred: Exclude<DeferredReplayOutcome, 'confirmed' | 'rejected'>, reason?: string): ReconcileShiftCloseIntentResult => ({
+    shiftId,
+    outcome: deferred === 'unreachable' ? 'unreachable' : 'still_pending',
+    deferred,
+    ...(reason ? { deferredReason: reason } : {}),
+  });
+  const reject = async (message: string, reason: string): Promise<ReconcileShiftCloseIntentResult> => {
+    let marked: Awaited<ReturnType<ShiftCloseIntentJournal['markRejectedManualAttention']>>;
+    try {
+      marked = await deps.journal.markRejectedManualAttention(shiftId, message);
+    } catch (err) {
+      marked = { ok: false, code: 'tx_failed', message: err instanceof Error ? err.message : String(err) };
+    }
+    if (!marked.ok) {
+      return { ...kept('unreachable', reason), journalWriteFailed: 'mark_rejected_manual_attention' };
+    }
+    return { shiftId, outcome: 'identity_mismatch', deferred: 'rejected', deferredReason: reason };
+  };
+
+  const io = deps.deferredReplay;
+  if (!io) return kept('replay_unavailable');
+
+  // 1. Owner-only (D7): the callable decides from the session's token alone.
+  let session: string | null;
+  try {
+    session = await io.sessionStaffId();
+  } catch {
+    session = null;
+  }
+  if (session === null || session !== entry.staffId) return kept('awaiting_owner_session');
+
+  // 2. This device's queued sale / cash writes reach the server first.
+  let flushed: boolean;
+  try {
+    flushed = await io.waitForQueuedWrites();
+  } catch {
+    flushed = false;
+  }
+  if (!flushed) return kept('unreachable', 'queued_writes_pending');
+
+  // 3. Authoritative pre-call read.
+  let read: DeferredCloseServerRead;
+  try {
+    read = await io.readServerShift(shiftId);
+  } catch {
+    read = { ok: false };
+  }
+  if (!read.ok) return kept('unreachable', 'server_read_failed');
+  if (!read.exists) return kept('manual_attention', 'shift_not_on_server');
+  const d = read.data;
+  if (d.branchId !== entry.branchId || d.staffId !== entry.staffId) {
+    return reject(CLOSE_SHIFT_DEFERRED_IDENTITY_MISMATCH_MESSAGE, 'identity_mismatch');
+  }
+  const body = authoritativeRequestBodyFromSnapshot({ ...entry, deviceId });
+  if (d.status === 'closed') {
+    // Closed by THIS id: the call below is the callable's idempotent replay (the proof).
+    if (d.closeCorrelationId !== correlationId) return reject(CLOSE_SHIFT_DEFERRED_CLOSED_BY_OTHER_MESSAGE, 'closed_by_other');
+  } else if (d.status !== 'open') {
+    return reject(deferredCloseRefusalMessage('shift_state_invalid'), 'shift_state_invalid');
+  } else {
+    const expectation = buildAuthoritativeExpectation({
+      identity: { shiftId, branchId: entry.branchId, staffId: entry.staffId, staffName: entry.staffName, deviceId },
+      body,
+      serverData: d,
+    });
+    if (!expectation.ok) return reject(CLOSE_SHIFT_DEFERRED_SERVER_CASH_INVALID_MESSAGE, expectation.reason);
+    if (!snapshotsEqual(expectation.expected, entry)) return reject(CLOSE_SHIFT_DEFERRED_DRAWER_CHANGED_MESSAGE, 'drawer_changed');
+  }
+
+  // 4. The call: the entry's own request + correlation id.
+  let callable: CloseShiftAuthoritativeCallable;
+  try {
+    callable = deps.authoritativeCallable ?? (await getDefaultCloseShiftAuthoritativeCallable());
+  } catch {
+    return kept('replay_unavailable', 'transport_unavailable');
+  }
+  const outcome = await invokeCloseShiftAuthoritative(callable, authoritativeCloseRequest(body, correlationId));
+  if (outcome.kind === 'unknown') return kept('unreachable', outcome.cause);
+  if (outcome.kind === 'committed_unconfirmed') return kept('unreachable', 'committed_unconfirmed');
+  if (outcome.kind === 'malformed_success') return kept('manual_attention', 'malformed_success');
+  if (outcome.kind === 'refused') {
+    const code = outcome.code;
+    if (code === 'unauthenticated' || code === 'session_stale') return kept('awaiting_owner_session', code);
+    if (code === 'refund_audit_unavailable') return kept('unreachable', code);
+    if (code === 'not_authorized' || code === 'branch_not_authorized' || code === 'not_shift_owner') {
+      return kept('not_authorized', code);
+    }
+    return reject(deferredCloseRefusalMessage(code), code);
+  }
+
+  // 5. Proof before confirmation.
+  const { success } = outcome;
+  if (!snapshotsEqual(success.snapshot, entry)) return reject(CLOSE_SHIFT_AUTHORITATIVE_RESULT_MISMATCH_MESSAGE, 'result_mismatch');
+  let proofRead: ShiftCloseConfirmationRead;
+  try {
+    proofRead = await deps.readConfirmation(shiftId);
+  } catch {
+    proofRead = { ok: false };
+  }
+  if (!proofRead.ok) return kept('unreachable', 'proof_read_failed');
+  const parsed = parseCommittedOwnClose(
+    { shiftId, branchId: entry.branchId, staffId: entry.staffId, staffName: entry.staffName, deviceId, closeCorrelationId: correlationId },
+    proofRead.doc,
+  );
+  if (!parsed.ok) {
+    return parsed.reason === 'closed_at_unresolved' ? kept('unreachable', parsed.reason) : kept('manual_attention', parsed.reason);
+  }
+  if (!snapshotsEqual(parsed.snapshot, entry) || parsed.closedAt.getTime() !== success.closedAtMillis) {
+    return reject(CLOSE_SHIFT_AUTHORITATIVE_RESULT_MISMATCH_MESSAGE, 'differs_from_doc');
+  }
+  // The existing reconcile consumes that same proven read (never a weaker second source).
+  let used = false;
+  const proven = await reconcileProvenEntry(entry, {
+    ...deps,
+    readConfirmation: (id) => {
+      if (!used && id === shiftId) {
+        used = true;
+        return Promise.resolve(proofRead);
+      }
+      return deps.readConfirmation(id);
+    },
+  });
+  const deferred: DeferredReplayOutcome =
+    proven.outcome === 'confirmed' ? 'confirmed' : proven.outcome === 'identity_mismatch' ? 'rejected' : 'unreachable';
+  return { ...proven, deferred };
+}
+
+/**
+ * Sweep every THIS-device `local_closed_pending` intent through {@link reconcileShiftCloseIntent}
+ * (packet 023: a deferred server-authoritative one through {@link replayDeferredAuthoritativeClose}).
  * Used by both the app-boot sweep and the reconnect (`online`) sweep in `POSPage.tsx`
  * (and the sync orchestrator) — same function, so behavior is identical regardless of trigger. Never throws;
  * a failed `listCloseIntents()` read just yields no work for this pass (retried
@@ -1026,6 +1272,13 @@ const sweepsInFlight = new Map<string, { promise: Promise<ShiftCloseSweepResult>
  *   close_journal_write_failed  server proof obtained, but `markSynced` / the manual-attention
  *                               transition did NOT persist (degraded)
  *   close_pending               still pending after the sweep (not evaluated by it)
+ * Deferred server-authoritative closes (packet 023; still `local_closed_pending`, nothing sent):
+ *   deferred_close_awaiting_owner      no live session of the shift's owner on this device
+ *   deferred_close_replay_unavailable  no server I/O / callable transport for the replay
+ *   deferred_close_not_authorized      the server refused the owner (deactivated / branch / owner)
+ *   deferred_close_manual_attention    kept for investigation (shift not on the server, untrusted answer)
+ *   deferred_close_rejected            durably `rejected_manual_attention` (never a Z); reported on every
+ *                                      sweep while it exists — it does not block the device's other shifts
  * Confirmed closes whose W4 is owed (`synced`, `outstanding` / never checked):
  *   w4_failed                   a remote W4 API attempt failed / was rejected — retried later
  *   done_unrecorded             W4 landed but the local `done` did not persist (degraded)
@@ -1052,6 +1305,11 @@ export type ShiftCloseAttentionCondition =
   | 'close_unreachable'
   | 'close_journal_write_failed'
   | 'close_pending'
+  | 'deferred_close_awaiting_owner'
+  | 'deferred_close_replay_unavailable'
+  | 'deferred_close_not_authorized'
+  | 'deferred_close_manual_attention'
+  | 'deferred_close_rejected'
   | 'w4_failed'
   | 'done_unrecorded'
   | 'claim_failed'
@@ -1090,6 +1348,11 @@ const ATTENTION_ORDER: readonly ShiftCloseAttentionCondition[] = [
   'close_unreachable',
   'close_unconfirmed',
   'close_pending',
+  'deferred_close_rejected',
+  'deferred_close_not_authorized',
+  'deferred_close_manual_attention',
+  'deferred_close_replay_unavailable',
+  'deferred_close_awaiting_owner',
   'attempt_unreachable',
   'attempt_manual_attention',
   'attempt_unresolved',
@@ -1195,7 +1458,12 @@ export function shiftCloseAttentionKey(summary: ShiftCloseNormalizationSummary |
   return scoped.length > 0 ? `${issue}|${scoped.join(';')}` : issue;
 }
 
-type FinalJournalState = { owed: ShiftCloseIntentEntry[]; pending: ShiftCloseIntentEntry[] } | null;
+type FinalJournalState = {
+  owed: ShiftCloseIntentEntry[];
+  pending: ShiftCloseIntentEntry[];
+  /** Packet 023 — this device's REJECTED deferred closes: manual attention for as long as they exist. */
+  rejectedDeferred: ShiftCloseIntentEntry[];
+} | null;
 
 /** After the sweep: this device's owed (`synced`, W4 outstanding / never checked) and still-pending closes; `null` = unknown. */
 async function readFinalJournalState(deps: ReconcileShiftCloseIntentDeps): Promise<FinalJournalState> {
@@ -1208,6 +1476,7 @@ async function readFinalJournalState(deps: ReconcileShiftCloseIntentDeps): Promi
         (e) => e.status === 'synced' && (e.syncStateNormalization === 'outstanding' || e.syncStateNormalization === undefined),
       ),
       pending: mine.filter((e) => e.status === 'local_closed_pending'),
+      rejectedDeferred: mine.filter((e) => e.status === 'rejected_manual_attention' && isDeferredAuthoritativeEntry(e)),
     };
   } catch {
     return null;
@@ -1226,6 +1495,10 @@ async function readFinalAttemptShifts(deps: ReconcileShiftCloseIntentDeps): Prom
 }
 
 function pendingCloseCondition(r: ReconcileShiftCloseIntentResult): ShiftCloseAttentionCondition | null {
+  if (r.deferred === 'awaiting_owner_session') return 'deferred_close_awaiting_owner';
+  if (r.deferred === 'replay_unavailable') return 'deferred_close_replay_unavailable';
+  if (r.deferred === 'not_authorized') return 'deferred_close_not_authorized';
+  if (r.deferred === 'manual_attention') return 'deferred_close_manual_attention';
   if (r.outcome === 'still_pending') return 'close_unconfirmed';
   if (r.outcome === 'unreachable') return r.journalWriteFailed ? 'close_journal_write_failed' : 'close_unreachable';
   if (r.outcome === 'confirmed') {
@@ -1286,7 +1559,12 @@ async function runSweepOnce(deps: ReconcileShiftCloseIntentDeps): Promise<ShiftC
 
   const results: ReconcileShiftCloseIntentResult[] = [];
   for (const entry of pending) {
-    results.push(await reconcileShiftCloseIntent(entry, deps));
+    // Packet 023: a deferred server-authoritative close has no queued W3 — it is replayed through the callable.
+    results.push(
+      isDeferredAuthoritativeEntry(entry)
+        ? await replayDeferredAuthoritativeClose(entry, deps)
+        : await reconcileShiftCloseIntent(entry, deps),
+    );
   }
   // B2.2: confirmed closes whose Variant C (W4) write is still owed — at most
   // one W4 attempt per close per sweep (just-reconciled ones already had theirs).
@@ -1334,6 +1612,9 @@ async function runSweepOnce(deps: ReconcileShiftCloseIntentDeps): Promise<ShiftC
     const named = new Set(attention.map((a) => a.shiftId));
     for (const e of final.owed) if (!named.has(e.shiftId)) add(e.shiftId, e.branchId, 'w4_owed');
     for (const e of final.pending) if (!named.has(e.shiftId)) add(e.shiftId, e.branchId, 'close_pending');
+    // Packet 023: a rejected deferred close no longer blocks the device's other
+    // shifts (boot / open), so it is reported on every sweep until resolved.
+    for (const e of final.rejectedDeferred) attention.push({ shiftId: e.shiftId, branchId: e.branchId, condition: 'deferred_close_rejected' });
   } else {
     add(null, null, 'owed_unreadable');
   }

@@ -36,12 +36,15 @@ import {
   snapshotsEqual,
   type ShiftCloseIntentJournal,
 } from './offline/shiftCloseIntentStore';
-import type {
-  AuthoritativeCloseRequestBody,
-  OnlineCloseAttemptRecord,
-  PointerRepairObserver,
-  ShiftCloseIntentBusinessSnapshot,
-  ShiftCloseIntentEntry,
+import {
+  DEFERRED_AUTHORITATIVE_CLOSE_PROTOCOL,
+  deferredLocalCloseShiftIds,
+  isDeferredAuthoritativeEntry,
+  type AuthoritativeCloseRequestBody,
+  type OnlineCloseAttemptRecord,
+  type PointerRepairObserver,
+  type ShiftCloseIntentBusinessSnapshot,
+  type ShiftCloseIntentEntry,
 } from './offline/shiftCloseIntentTypes';
 import type { LocalSale } from './localLedger';
 import {
@@ -55,12 +58,12 @@ import {
   CLOSE_SHIFT_AUTHORITATIVE_NOTE_TOO_LONG_MESSAGE,
   CLOSE_SHIFT_AUTHORITATIVE_DISPLAY_CHANGED_MESSAGE,
   CLOSE_SHIFT_AUTHORITATIVE_LEGACY_ENTRY_MESSAGE,
-  CLOSE_SHIFT_AUTHORITATIVE_OFFLINE_MESSAGE,
   CLOSE_SHIFT_AUTHORITATIVE_REQUEST_CHANGED_MESSAGE,
   CLOSE_SHIFT_AUTHORITATIVE_RESULT_MISMATCH_MESSAGE,
   CLOSE_SHIFT_AUTHORITATIVE_SALES_UNAVAILABLE_MESSAGE,
   CLOSE_SHIFT_AUTHORITATIVE_SERVER_CASH_INVALID_MESSAGE,
   CLOSE_SHIFT_AUTHORITATIVE_UNAVAILABLE_MESSAGE,
+  CLOSE_SHIFT_DEFERRED_LOCAL_CASH_INVALID_MESSAGE,
   SERVER_AUTHORITATIVE_CLOSE_ENABLED,
   authoritativeCloseRequest,
   authoritativeRefusalMessage,
@@ -199,24 +202,76 @@ function mapShift(id: string, data: Record<string, unknown>): Shift {
   };
 }
 
-export async function getActiveShift(branchId: string, staffId: string): Promise<Shift | null> {
+/** Packet 023 — cashier copy of {@link ActiveShiftUnavailableError}; never claims the server closed / confirmed anything. */
+export const ACTIVE_SHIFT_LOCAL_STATE_UNAVAILABLE_MESSAGE = 'ตรวจสอบสถานะกะในเครื่องไม่ได้ กรุณาลองอีกครั้ง';
+
+/**
+ * Packet 023 — gate ON, the device's close journal could not be read, so which
+ * open shift is this device's working shift cannot be told (a shift closed
+ * locally by a deferred close still reads `open`). NOT "no active shift": the
+ * caller must not attach — nor proceed without — a shift for cash / refund /
+ * payment work until the journal reads.
+ */
+export class ActiveShiftUnavailableError extends Error {
+  constructor(options?: { cause?: unknown }) {
+    super(ACTIVE_SHIFT_LOCAL_STATE_UNAVAILABLE_MESSAGE, options);
+    this.name = 'ActiveShiftUnavailableError';
+  }
+}
+
+/**
+ * @throws {ActiveShiftUnavailableError} gate ON and the close journal is
+ * unreadable (`{ok:false}` or a thrown read) — never resolves a shift then.
+ */
+export async function getActiveShift(
+  branchId: string,
+  staffId: string,
+  deps?: { closeJournal?: ShiftCloseIntentJournal; authoritativeCloseGate?: boolean },
+): Promise<Shift | null> {
   if (!isFirebaseConfigured || !db) {
     return devGetActiveShift(branchId, staffId);
   }
 
+  // Packet 023: a shift this device closed locally (deferred) can still read
+  // `open` — a cash movement / refund must never be attached to it.
+  const locallyClosed = await readDeferredLocalCloseShiftIds(
+    deps?.closeJournal,
+    deps?.authoritativeCloseGate ?? SERVER_AUTHORITATIVE_CLOSE_ENABLED,
+  );
   const snap = await getDocs(
     query(
       collection(db, collections.shifts),
       where('branchId', '==', branchId),
       where('staffId', '==', staffId),
       where('status', '==', 'open'),
-      limit(1),
+      limit(1 + locallyClosed.size),
     ),
   );
 
-  if (snap.empty) return null;
-  const docSnap = snap.docs[0]!;
-  return mapShift(docSnap.id, docSnap.data());
+  const docSnap = snap.docs.find((d) => !locallyClosed.has(d.id));
+  return docSnap ? mapShift(docSnap.id, docSnap.data()) : null;
+}
+
+/**
+ * Packet 023 — this device's deferred-closed shift ids (see
+ * `deferredLocalCloseShiftIds`). An unreadable journal is not an empty one:
+ * gate ON it throws {@link ActiveShiftUnavailableError}; gate OFF (no deferred
+ * close is ever recorded) it yields none — the legacy read, unchanged.
+ */
+async function readDeferredLocalCloseShiftIds(
+  journal: ShiftCloseIntentJournal | undefined,
+  failClosed: boolean,
+): Promise<Set<string>> {
+  let failure: unknown;
+  try {
+    const listed = await (journal ?? getDefaultShiftCloseIntentJournal()).listCloseIntents();
+    if (listed.ok) return deferredLocalCloseShiftIds(listed.value, getDeviceId());
+    failure = listed;
+  } catch (err) {
+    failure = err;
+  }
+  if (failClosed) throw new ActiveShiftUnavailableError({ cause: failure });
+  return new Set();
 }
 
 /**
@@ -229,7 +284,14 @@ export async function getActiveShift(branchId: string, staffId: string): Promise
  */
 export type ActiveShiftReadResult =
   | { status: 'found'; shift: Shift; provenance: 'server' | 'cache' | 'local_dev' }
-  | { status: 'absent'; provenance: 'server' | 'local_dev' }
+  /**
+   * Packet 023 — `local_close_record`: the read returned open shift(s), but
+   * every one of them is a shift THIS device durably closed locally (deferred
+   * server-authoritative close). The cache is not cold for this staff/branch
+   * (it answered with the shift), and that shift is closed on this device —
+   * so there is no open shift to restore. Never produced for an empty cache.
+   */
+  | { status: 'absent'; provenance: 'server' | 'local_dev' | 'local_close_record' }
   | {
       status: 'unverifiable';
       reason: 'cache_empty' | 'cache_unavailable' | 'read_failed';
@@ -252,6 +314,8 @@ function isOfflineLikeShiftReadError(err: unknown): boolean {
 export async function readActiveShiftForBoot(
   branchId: string,
   staffId: string,
+  /** Packet 023 — shifts this device closed locally (deferred); never restored. Empty = unchanged legacy read. */
+  locallyClosedShiftIds: ReadonlySet<string> = new Set(),
 ): Promise<ActiveShiftReadResult> {
   if (!isFirebaseConfigured || !db) {
     const shift = devGetActiveShift(branchId, staffId);
@@ -265,8 +329,9 @@ export async function readActiveShiftForBoot(
     where('branchId', '==', branchId),
     where('staffId', '==', staffId),
     where('status', '==', 'open'),
-    limit(1),
+    limit(1 + locallyClosedShiftIds.size),
   );
+  const firstOpen = (docs: Array<{ id: string; data: () => unknown }>) => docs.find((d) => !locallyClosedShiftIds.has(d.id));
 
   let snap;
   try {
@@ -281,16 +346,18 @@ export async function readActiveShiftForBoot(
       return { status: 'unverifiable', reason: 'cache_unavailable' };
     }
     if (snap.empty) return { status: 'unverifiable', reason: 'cache_empty' };
-    const d = snap.docs[0]!;
-    return { status: 'found', shift: mapShift(d.id, d.data()), provenance: 'cache' };
+    const d = firstOpen(snap.docs);
+    if (!d) return { status: 'absent', provenance: 'local_close_record' };
+    return { status: 'found', shift: mapShift(d.id, d.data() as Record<string, unknown>), provenance: 'cache' };
   }
 
   const fromCache = snap.metadata?.fromCache === true;
   if (!snap.empty) {
-    const d = snap.docs[0]!;
+    const d = firstOpen(snap.docs);
+    if (!d) return { status: 'absent', provenance: fromCache ? 'local_close_record' : 'server' };
     return {
       status: 'found',
-      shift: mapShift(d.id, d.data()),
+      shift: mapShift(d.id, d.data() as Record<string, unknown>),
       provenance: fromCache ? 'cache' : 'server',
     };
   }
@@ -528,12 +595,18 @@ export async function openShift(
   }
 
   // Conflict: rejected close for this device blocks a new open.
+  // Packet 023: a DEFERRED server-authoritative close is a record of its own
+  // shift only — its shift was never closed (nor left half-written) on the
+  // server by this device, so it neither blocks nor is replaced by a DIFFERENT
+  // shift: rejected → manual attention on that shift (sweep attention), pending
+  // → owner-only replay. Legacy closes keep their existing guards below.
   const closeListed = await closeJournal.listCloseIntents();
   if (!closeListed.ok) {
     throw new Error(OPEN_SHIFT_STORE_UNAVAILABLE_MESSAGE);
   }
+  const locallyClosed = deferredLocalCloseShiftIds(closeListed.value, deviceId);
   const rejectedClose = closeListed.value.find(
-    (e) => e.status === 'rejected_manual_attention' && e.deviceId === deviceId,
+    (e) => e.status === 'rejected_manual_attention' && e.deviceId === deviceId && !isDeferredAuthoritativeEntry(e),
   );
   if (rejectedClose) {
     throw new Error(OPEN_SHIFT_REJECTED_CLOSE_MESSAGE);
@@ -542,8 +615,10 @@ export async function openShift(
   // Conflict: pending close whose shift still appears open in local cache —
   // fail closed (would otherwise invite a duplicate open). Pending close for an
   // already-closed shift does NOT block (existing multi-shift contract).
+  // Packet 023: a deferred close's shift reads `open` BY DESIGN (no client W3)
+  // and its journal entry is the close record — never a duplicate-open risk.
   const pendingCloses = closeListed.value.filter(
-    (e) => e.status === 'local_closed_pending' && e.deviceId === deviceId,
+    (e) => e.status === 'local_closed_pending' && e.deviceId === deviceId && !isDeferredAuthoritativeEntry(e),
   );
   for (const pendingClose of pendingCloses) {
     try {
@@ -559,7 +634,8 @@ export async function openShift(
   }
 
   // Resume existing pending open for this staff+device — never allocate a second id.
-  const existingPending = await journal.findPendingOpenForStaff(branchId, staffId, deviceId);
+  // Packet 023: never "resume" a shift this device already closed locally.
+  const existingPending = await journal.findPendingOpenForStaff(branchId, staffId, deviceId, locallyClosed);
   if (!existingPending.ok) {
     throw new Error(OPEN_SHIFT_STORE_UNAVAILABLE_MESSAGE);
   }
@@ -806,8 +882,8 @@ const firestoreShiftCloseTransaction: ShiftCloseTransactionRunner = (shiftId, fn
   );
 };
 
-/** `true` once every write queued on this device was acknowledged by the server (bounded). */
-async function waitForQueuedWritesFlushed(): Promise<boolean> {
+/** `true` once every write queued on this device was acknowledged by the server (bounded). Packet 023: also the deferred replay's flush. */
+export async function waitForQueuedWritesFlushed(): Promise<boolean> {
   const firestore = db;
   if (!firestore) return false;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -921,6 +997,14 @@ export type CloseShiftResult = Shift & {
    * awaits this handle — see the fire-and-forget wiring in `closeShift`.
    */
   whenServerConfirmed: Promise<ShiftCloseConfirmation>;
+  /**
+   * Packet 023 — `true` ONLY for a server-authoritative close RECORDED LOCALLY
+   * because the server could not be reached (deferred). Nothing was sent: the
+   * shift is still open on the server until the reconciliation sweep replays
+   * the close under the owner's session. This is a local close record pending
+   * server reconciliation — never a server-confirmed Z.
+   */
+  authoritativeDeferred?: true;
 };
 
 export type CloseShiftDeps = {
@@ -1609,6 +1693,8 @@ async function recoverOwnCommittedClose(
   let reconcileCtx: CloseReconcileDeps = ctx;
   try {
     const got = await journal.getCloseIntent(shift.id);
+    // Packet 023: a deferred server-authoritative close is proven only by the callable (the sweep), never here.
+    if (got.ok && got.value && isDeferredAuthoritativeEntry(got.value)) return 'unverified';
     if (got.ok && got.value && got.value.deviceId === deviceId && got.value.closeCorrelationId === closeCorrelationId) {
       const read = await ctx.readConfirmation(shift.id);
       if (!read.ok) return 'unverified';
@@ -1663,7 +1749,8 @@ function pickTotals(s: ShiftCloseIntentBusinessSnapshot) {
 
 // ── Packet 014: server-authoritative close (staged, OFF by default) ───────
 
-const readAuthoritativeShift: AuthoritativeShiftReader = async (shiftId) => {
+/** Packet 014 — server-only read of the whole shift doc. Packet 023: also the deferred replay's pre-call read. */
+export const readAuthoritativeShift: AuthoritativeShiftReader = async (shiftId) => {
   if (!isFirebaseConfigured || !db) return { ok: false };
   try {
     const snap = await getDocFromServer(doc(db, collections.shifts, shiftId));
@@ -1714,19 +1801,24 @@ function entriesMissingOnServer(serverEntries: unknown, ...lists: unknown[]): st
 
 /**
  * Packet 014 — THE server-authoritative close (only when the gate is ON).
- * Online-only; the W3 is written ONLY by `closeShiftAuthoritative` — this
- * function never calls `updateDoc` / `runTransaction` on the shift, on any
- * outcome. Ordering (each step fails closed with nothing durable or remote
- * changed before the attempt exists):
- *  1. offline ⇒ refuse (no intent, attempt, queued write, guard change or Z);
+ * The W3 is written ONLY by `closeShiftAuthoritative` — this function never
+ * calls `updateDoc` / `runTransaction` on the shift, on any outcome. Ordering
+ * (each step fails closed with nothing durable or remote changed before the
+ * attempt exists):
+ *  1. (packet 023 supersedes "offline ⇒ refuse") the device's connectivity is
+ *     noted; the request is built and checked the same way either way;
  *  2. the frozen v1 request body from the cashier input + the ledger sales in
  *     integer satang (`buildAuthoritativeCloseRequestBody`);
  *  3. cache existence + C1-R1 raw cash ambiguity (as the legacy close);
+ *     OFFLINE ⇒ {@link closeShiftDeferredLocally}: the close is RECORDED in the
+ *     existing 7C-B1 journal (offline-first) and nothing is sent or queued;
  *  4. a close record of this shift already in the journal ⇒ only its own
  *     server-proven Z, else refuse (an offline-queued / unresolved close is
  *     never flushed, reinterpreted or closed over);
  *  5. this device's queued writes flushed (the server folds only what it has);
- *  6. an authoritative pre-call read of the shift;
+ *     not flushed in time (connection failing) ⇒ deferred local close (023);
+ *  6. an authoritative pre-call read of the shift; unreadable ⇒ deferred
+ *     local close (023) — in both cases no attempt exists and nothing was sent;
  *  7. the durable attempt (B2): a NEW attempt is bound to the request and to
  *     the close expected from that read; an EXISTING one must be this
  *     protocol's, this request's, and (shift still open) this expectation's —
@@ -1746,8 +1838,8 @@ async function closeShiftServerAuthoritative(
   note: string,
   deps: CloseShiftDeps | undefined,
 ): Promise<CloseShiftResult> {
-  // 1. Online-only (contract §8, D2).
-  if (!(deps?.isOnline ?? isNavigatorOnline)()) throw new Error(CLOSE_SHIFT_AUTHORITATIVE_OFFLINE_MESSAGE);
+  // 1. Packet 023: offline-first — an offline close is recorded locally (step 3), never refused for being offline.
+  const online = (deps?.isOnline ?? isNavigatorOnline)();
 
   const firestore = db;
   if (!firestore) throw new Error(CLOSE_SHIFT_UNVERIFIABLE_MESSAGE);
@@ -1774,7 +1866,8 @@ async function closeShiftServerAuthoritative(
     throw new Error(CLOSE_SHIFT_UNVERIFIABLE_MESSAGE);
   }
   if (!cached.exists()) throw new Error(CLOSE_SHIFT_UNVERIFIABLE_MESSAGE);
-  const cachedRaw = (cached.data() as { cashEntries?: unknown }).cashEntries;
+  const cachedData = cached.data() as { status?: unknown; startingCash?: unknown; cashEntries?: unknown };
+  const cachedRaw = cachedData.cashEntries;
   const cachedEntries = Array.isArray(cachedRaw) ? (cachedRaw as ShiftCashEntry[]) : [];
   if (
     cashEntriesAmbiguous(
@@ -1787,6 +1880,9 @@ async function closeShiftServerAuthoritative(
   ) {
     throw new Error(CLOSE_SHIFT_CASH_AMBIGUOUS_MESSAGE);
   }
+  // Packet 023 — the server cannot be reached: record the close locally.
+  const deferLocally = () => closeShiftDeferredLocally(shift, body, cachedData, cachedEntries, ctx, deps);
+  if (!online) return deferLocally();
 
   // 4. An existing close record of this shift on this device.
   let existingEntry: Awaited<ReturnType<ShiftCloseIntentJournal['getCloseIntent']>>;
@@ -1806,14 +1902,17 @@ async function closeShiftServerAuthoritative(
   };
   if (existingEntry.value) return provenJournaledAuthoritativeClose(shift, existingEntry.value, cachedEntries, ctx, getCallable);
 
-  // 5. Queued sale / cash writes of this device first.
+  // 5. Queued sale / cash writes of this device first. Not flushed in time =
+  // the connection is failing: nothing was sent, so the close is recorded
+  // locally (023) instead of refused.
   if (!(await (deps?.waitForQueuedWrites ?? waitForQueuedWritesFlushed)())) {
-    throw new Error(CLOSE_SHIFT_PENDING_WRITES_MESSAGE);
+    return deferLocally();
   }
 
-  // 6. Authoritative pre-call read.
+  // 6. Authoritative pre-call read (unreachable ⇒ recorded locally, 023).
   const fresh = await safeRead(readServer, shift.id);
-  if (!fresh.ok || !fresh.exists) throw new Error(CLOSE_SHIFT_FRESHNESS_MESSAGE);
+  if (!fresh.ok) return deferLocally();
+  if (!fresh.exists) throw new Error(CLOSE_SHIFT_FRESHNESS_MESSAGE);
   const d = fresh.data;
   if (d.branchId !== shift.branchId || d.staffId !== shift.staffId) throw new Error(CLOSE_SHIFT_UNVERIFIABLE_MESSAGE);
   if (
@@ -2144,6 +2243,107 @@ async function provenJournaledAuthoritativeClose(
     deviceId: ctx.deviceId,
     closedAtLocal: entry.closedAtLocal,
     whenServerConfirmed: reconcileClosed(entry, withProvenRead(ctx, shift.id, read)),
+  };
+}
+
+/**
+ * Packet 023 — the OFFLINE-FIRST server-authoritative close: this device cannot
+ * reach the server (offline, its queued writes did not flush, or the
+ * authoritative read failed) and nothing has been sent. The close the cashier
+ * counted is RECORDED in the existing 7C-B1 close-intent journal as a deferred
+ * server-authoritative close (`closeProtocol`) — the same durable record that
+ * keeps the shift closed locally across a restart (boot never restores it, no
+ * second open over it) — and NOTHING else happens: no client W3 / queued
+ * `updateDoc`, no attempt, no callable, no guard change. The reconciliation
+ * sweep replays it through `closeShiftAuthoritative` under the owner's session
+ * (`replayDeferredAuthoritativeClose`); only that callable's proof makes it
+ * `synced`.
+ *  a. the legacy offline guards: an unresolved / unreadable cash Return guard
+ *     or an online close attempt of this shift (unknown outcome) refuses;
+ *  b. the recorded close is the EXACT close the server commits for this request
+ *     over this device's drawer basis (stored startingCash + local ∪ cached cash
+ *     movements), in canonical satang (`buildAuthoritativeExpectation`);
+ *  c. the cashier reviewed exactly that drawer (F2 witness, without the server
+ *     refresh it cannot have);
+ *  d. one journal write (idempotent for the same close; a different / legacy
+ *     record of the shift is a conflict).
+ * The result is a LOCAL close record (`authoritativeDeferred`): never a
+ * server-confirmed Z, `whenServerConfirmed` = `still_pending`.
+ */
+async function closeShiftDeferredLocally(
+  shift: Shift,
+  body: AuthoritativeCloseRequestBody,
+  cachedData: { startingCash?: unknown },
+  cachedEntries: ShiftCashEntry[],
+  ctx: CloseReconcileDeps,
+  deps: CloseShiftDeps | undefined,
+): Promise<CloseShiftResult> {
+  const { journal, deviceId } = ctx;
+  // a. The same guards as the legacy offline close.
+  const pendingState = deps?.serverCashPending
+    ? deps.serverCashPending.has(shift.id)
+      ? 'pending'
+      : 'none'
+    : readShiftServerCashPending(shift.id);
+  if (pendingState === 'unverifiable') throw new Error(CLOSE_SHIFT_CASH_GUARD_UNVERIFIABLE_MESSAGE);
+  if (pendingState === 'pending') throw new Error(CLOSE_SHIFT_SERVER_CASH_PENDING_MESSAGE);
+  let attempts: Awaited<ReturnType<ShiftCloseIntentJournal['listOnlineCloseAttempts']>>;
+  try {
+    attempts = await journal.listOnlineCloseAttempts();
+  } catch (err) {
+    attempts = { ok: false, code: 'tx_failed', message: err instanceof Error ? err.message : String(err) };
+  }
+  if (!attempts.ok) throw new Error(CLOSE_SHIFT_STORE_UNAVAILABLE_MESSAGE);
+  if (attempts.value.some((a) => a.shiftId === shift.id)) throw new Error(CLOSE_SHIFT_ONLINE_ATTEMPT_UNRESOLVED_MESSAGE);
+
+  // b. The drawer basis this device has, as the server will fold it.
+  // The stored W0 value, as the legacy offline close uses it; a cached doc that disagrees is not trusted.
+  if (cachedData.startingCash !== undefined && cachedData.startingCash !== shift.startingCash) {
+    throw new Error(CLOSE_SHIFT_UNVERIFIABLE_MESSAGE);
+  }
+  const basis = withMergedCashEntries(shift, cachedEntries);
+  const serverData = { startingCash: shift.startingCash, cashEntries: basis.cashEntries ?? [] };
+  const identity = { shiftId: shift.id, branchId: shift.branchId, staffId: shift.staffId, staffName: shift.staffName, deviceId };
+  const expectation = buildAuthoritativeExpectation({ identity, body, serverData });
+  if (!expectation.ok) throw new Error(CLOSE_SHIFT_DEFERRED_LOCAL_CASH_INVALID_MESSAGE, { cause: expectation });
+
+  // c. F2 on the local basis.
+  const check = checkReviewedDrawerWitness(
+    deps?.authoritativeClose?.reviewedDrawer,
+    { shiftId: shift.id, branchId: shift.branchId, serverData, expected: expectation.expected },
+    { requireServerRefresh: false },
+  );
+  if (!check.ok) {
+    throw new Error(CLOSE_SHIFT_AUTHORITATIVE_DISPLAY_CHANGED_MESSAGE, { cause: { reviewRequired: true, reason: check.reason } });
+  }
+
+  // d. The durable local close record.
+  let recorded: Awaited<ReturnType<ShiftCloseIntentJournal['upsertCloseIntent']>>;
+  try {
+    recorded = await journal.upsertCloseIntent(expectation.expected, deps?.observePointerRepair, undefined, {
+      closeProtocol: DEFERRED_AUTHORITATIVE_CLOSE_PROTOCOL,
+    });
+  } catch (err) {
+    recorded = { ok: false, code: 'tx_failed', message: err instanceof Error ? err.message : String(err) };
+  }
+  if (!recorded.ok) {
+    throw new Error(recorded.code === 'conflict' ? CLOSE_SHIFT_CONFLICT_MESSAGE : CLOSE_SHIFT_STORE_UNAVAILABLE_MESSAGE);
+  }
+  const entry = recorded.value;
+  return {
+    ...basis,
+    ...pickTotals(entry),
+    startingCash: entry.startingCash,
+    status: 'closed',
+    actualCashCount: entry.actualCashCount,
+    variance: entry.variance,
+    note: entry.note,
+    closedOffline: true,
+    syncState: 'pending',
+    deviceId,
+    closedAtLocal: entry.closedAtLocal,
+    whenServerConfirmed: Promise.resolve({ outcome: 'still_pending' }),
+    authoritativeDeferred: true,
   };
 }
 

@@ -176,7 +176,7 @@ and is a separate decision. Consequence for the Return rollout: the server
 guarantees Return payouts cannot be dropped or misstated in a callable close;
 it does **not** certify sale totals.
 
-## 8. Future client adapter (later packet — NOT implemented)
+## 8. Client adapter (packets 014–016, 022; staged, gate OFF)
 
 The adapter replaces only the `tx.update(closeWritePayload)` inside
 `closeShiftOnline` with this call and keeps: durable prepared attempt +
@@ -184,8 +184,73 @@ correlation id before the call (B2); 006-A strict authoritative server read +
 `snapshotsEqual` against `response.snapshot`; 007-B exact-attempt finalize;
 008 W4 retry. `ok:true` proves the server commit only — the journal/Z still
 require the client's own proof. Unknown outcome / `committed_unconfirmed` ⇒
-keep the attempt and retry with the same UUID. Online-only for the Return
-rollout (D2); offline close must fail closed explicitly before the seal.
+keep the attempt and retry with the same UUID.
+
+~~Online-only for the Return rollout (D2); offline close must fail closed
+explicitly before the seal.~~ **Superseded by packet 023 (§8.1)** for the
+cashier's local close capture. That D2 sentence was never an Owner decision to
+remove the offline shift close already delivered by 7C-B1 (`1e41b0e`) / 7C-B2
+(`3ef5fed`) and conflicted with the binding Offline-First / TRUE-STANDALONE
+architecture (`docs/skills/SKILL-OFFLINE-FIRST-POS.md`,
+`docs/skills/SKILL-GLOBAL-ARCHITECTURE.md`). Owner direction of 2026-10-27
+restores the Master Plan; backend-authoritative confirmation and every
+security rule of this contract are unchanged.
+
+### 8.1 Offline-first deferred close (packet 023)
+
+When the gate is ON and the device cannot reach the server **before anything
+is sent** (offline, its queued writes do not flush in time, or the
+authoritative pre-call read fails), the client does not refuse:
+
+- **Local capture.** The close is recorded in the existing 7C-B1 close-intent
+  journal (`local_closed_pending`) with an additive tag
+  `closeProtocol: 'server_authoritative_v1'`, a store-generated correlation id
+  (required), and the 17-field snapshot computed exactly as §4 would commit it
+  for this request over the device's drawer basis (stored `startingCash` +
+  local ∪ cached cash entries, integer satang). The legacy offline guards still
+  apply (pending cash-Return guard, unresolved online attempt) and the
+  operator-reviewed drawer (F2) must equal that basis. **No client W3 is
+  queued**, no attempt is prepared, the callable is not invoked. The UI shows a
+  local close record pending server confirmation — never a server-confirmed Z.
+  ~~The record … blocks a new open on this device until it is reconciled~~
+  (first 023 cut; Codex 023 `MASTER_PLAN_PARITY_BLOCKER`). **Parity
+  remediation:** the record is this device's close of THAT shift only. Its
+  shift is never restored at boot, never resumed as a pending open, and never
+  resolved by `getActiveShift` (no sale, cash movement or refund attaches to
+  it), although its cached / server doc may still read `open`. An unreadable
+  journal is never read as "no deferred record": gate ON, `getActiveShift`
+  fails closed (`ActiveShiftUnavailableError`, `{ok:false}` or a thrown read)
+  and its callers refuse the cash refund / credit payment until it reads
+  (Codex 023 re-review fail-closed remediation). It does not
+  block opening a DIFFERENT shift on the device (the 7C-B1/B2 offline
+  continuity), with or without a restart. A boot read whose only open result
+  is such a shift is `absent` (`local_close_record`); an empty cache stays
+  `unverifiable` (PK-2A unchanged). A rejected deferred record is reported as
+  sweep attention (`deferred_close_rejected`) rather than blocking other
+  shifts. Legacy pending / rejected closes keep their existing guards.
+- **Replay on reconnect.** The reconciliation sweep (boot / `online` / sync
+  orchestrator) sends the entry's own request + correlation id to this callable
+  only when: the CURRENT session's `staffId` claim is the shift owner's (D7 —
+  no other actor, no stored credential); this device's queued writes flushed;
+  an authoritative read shows the same branch/staff and either an open shift
+  whose recomputed close **equals** the recorded one (else nothing is sent) or
+  a shift already closed by this very correlation id (idempotent replay).
+- **Proof.** Only a canonical success whose snapshot, and an independent strict
+  server read (close time included), equal the record marks it `synced` (then
+  W4). A closed doc alone never confirms a deferred record.
+- **Outcomes.** Unknown / `committed_unconfirmed` / transport ⇒ kept, same
+  correlation id next sweep. `unauthenticated` / `session_stale` ⇒ kept
+  (awaiting the owner's session). `not_authorized` / `branch_not_authorized` /
+  `not_shift_owner` ⇒ kept with a scoped attention, never retried as anyone
+  else. Every other refusal, a changed server drawer, a close by another
+  correlation id, an identity or result mismatch ⇒ durably
+  `rejected_manual_attention` with cashier copy (no Z).
+- **Unchanged.** Gate OFF (`SERVER_AUTHORITATIVE_CLOSE_ENABLED = false`, the
+  shipped value) never records a deferred close: the legacy close path, its
+  offline queue and the legacy empty-set `getActiveShift` read are as before.
+  `salesTotals.status` stays `attested_unverified`; Return /
+  Refund itself is not made offline. A pre-existing online attempt with an
+  unknown outcome is still resolved only by an online retry (014/015).
 
 ## 9. Text-only Rules cutover specification (NOT applied)
 
@@ -199,8 +264,9 @@ risk cases to `assertFails`; migrate the specs that drive client W3.
 
 ## 10. Release ordering and rollback (document only)
 
-012 server core (this) → independent review → 013+ client adapter (online-only
-close for Return, offline fail-closed) → Rules seal packet (local) → deploy
+012 server core (this) → independent review → 013+ client adapter (online
+callable close; offline close recorded locally and replayed — §8.1, packet 023,
+superseding "offline fail-closed") → Rules seal packet (local) → deploy
 additive callable → validate upgraded client in a controlled environment →
 fleet operational readiness + manager fallback → read-only historical audit →
 deploy sealed Rules (explicit authority) → verify old W3 denied, callable

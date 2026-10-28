@@ -26,7 +26,9 @@ import {
   readShiftOpenConfirmation,
   reissueShiftOpenWrite,
 } from '../lib/pos/shiftService';
+import { deferredCloseReplayIo } from '../lib/pos/deferredCloseReplayIo';
 import { createShiftCloseIntentJournal } from '../lib/pos/offline/shiftCloseIntentStore';
+import { deferredLocalCloseShiftIds } from '../lib/pos/offline/shiftCloseIntentTypes';
 import {
   runShiftCloseReconciliationSweep,
   shiftCloseAttentionKey,
@@ -930,8 +932,13 @@ export default function POSPage({ trustedResumeSweep }: POSPageProps = {}) {
           setShiftOpenPendingSync(false);
           return;
         }
+        // Packet 023: shifts closed locally by a deferred server-authoritative
+        // close (cached / server doc may still read `open`, no client W3) — never
+        // restored or resumed; a rejected one is that shift's attention item
+        // (sweep), not a block on a DIFFERENT shift of this device.
+        const locallyClosed = deferredLocalCloseShiftIds(closeListed.value, deviceId);
         const rejectedClose = closeListed.value.find(
-          (e) => e.status === 'rejected_manual_attention' && e.deviceId === deviceId,
+          (e) => e.status === 'rejected_manual_attention' && e.deviceId === deviceId && !locallyClosed.has(e.shiftId),
         );
         if (rejectedClose) {
           setActiveShift(null);
@@ -945,7 +952,7 @@ export default function POSPage({ trustedResumeSweep }: POSPageProps = {}) {
         }
 
         // PK-1: restore pending local open before remote active-shift discovery.
-        const pendingOpen = await openJournal.findPendingOpenForStaff(branchId, user.id, deviceId);
+        const pendingOpen = await openJournal.findPendingOpenForStaff(branchId, user.id, deviceId, locallyClosed);
         if (cancelled) return;
         if (!pendingOpen.ok) {
           setActiveShift(null);
@@ -962,7 +969,7 @@ export default function POSPage({ trustedResumeSweep }: POSPageProps = {}) {
           return;
         }
 
-        const result = await readActiveShiftForBoot(branchId, user.id);
+        const result = await readActiveShiftForBoot(branchId, user.id, locallyClosed);
         if (cancelled) return;
         if (result.status === 'unverifiable') {
           setActiveShift(null);
@@ -1067,6 +1074,8 @@ export default function POSPage({ trustedResumeSweep }: POSPageProps = {}) {
       readConfirmation: readShiftCloseConfirmation,
       normalizeSyncState: normalizeShiftCloseSyncState,
       deviceId: deviceIdRef.current,
+      // Packet 023: replays deferred (offline-recorded) server-authoritative closes, owner session only.
+      deferredReplay: deferredCloseReplayIo,
     };
     const openSweepDeps = {
       journal: shiftOpenIntentJournalRef.current,

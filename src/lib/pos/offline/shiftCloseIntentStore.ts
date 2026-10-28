@@ -21,6 +21,7 @@ import type {
   SyncStateNormalization,
 } from './shiftCloseIntentTypes';
 import {
+  DEFERRED_AUTHORITATIVE_CLOSE_PROTOCOL,
   SHIFT_CLOSE_INTENT_STALE_AGE_MS,
   isValidLegacyClaimEpoch,
   isValidLegacyClaimOwner,
@@ -663,6 +664,13 @@ function isCloseIntentEntry(v: unknown): v is ShiftCloseIntentEntry {
     return false;
   }
 
+  // Packet 023: optional, additive. A deferred server-authoritative close is
+  // replayed by its correlation id from this device — both are mandatory.
+  if ('closeProtocol' in v) {
+    if (v.closeProtocol !== DEFERRED_AUTHORITATIVE_CLOSE_PROTOCOL) return false;
+    if (!isValidLowercaseUuidV4(v.closeCorrelationId) || !usableDeviceId(v.deviceId)) return false;
+  }
+
   return true;
 }
 
@@ -1097,6 +1105,15 @@ export type ShiftCloseIntentJournal = {
     snapshot: ShiftCloseIntentBusinessSnapshot,
     observePointerRepair?: PointerRepairObserver,
     preset?: { closeCorrelationId: string | null },
+    /**
+     * Packet 023 — `closeProtocol` records the entry as a deferred
+     * server-authoritative close (no client W3 queued; see
+     * `ShiftCloseIntentEntry.closeProtocol`). The initial create then REQUIRES a
+     * secure correlation id (else `unavailable`, nothing written). An existing
+     * entry is reused only when its business snapshot AND protocol tag are
+     * equal — a legacy entry never becomes deferred, nor the reverse (`conflict`).
+     */
+    options?: { closeProtocol?: typeof DEFERRED_AUTHORITATIVE_CLOSE_PROTOCOL },
   ) => Promise<CloseIntentResult<ShiftCloseIntentEntry>>;
   getCloseIntent: (shiftId: string) => Promise<CloseIntentResult<ShiftCloseIntentEntry | undefined>>;
   listCloseIntents: () => Promise<ListCloseIntentsResult>;
@@ -1396,8 +1413,12 @@ function buildJournalApi(
     });
 
   return {
-    upsertCloseIntent: (snapshot, observePointerRepair, preset) =>
+    upsertCloseIntent: (snapshot, observePointerRepair, preset, options) =>
       runStore(store, async (s) => {
+        const closeProtocol = options?.closeProtocol;
+        if (closeProtocol !== undefined && closeProtocol !== DEFERRED_AUTHORITATIVE_CLOSE_PROTOCOL) {
+          return conflict<ShiftCloseIntentEntry>(`Unknown close protocol for shift "${snapshot.shiftId}" — not written.`);
+        }
         const businessResult = await s.transact(['shiftCloseIntents'], 'readwrite', async (txn) => {
           const existingRaw = await txn.get<Record<string, unknown>>(
             'shiftCloseIntents',
@@ -1405,7 +1426,7 @@ function buildJournalApi(
           );
           if (existingRaw && isCloseIntentEntry(existingRaw)) {
             const existing = normalizeCloseIntentEntry(existingRaw);
-            if (snapshotsEqual(existing, snapshot)) {
+            if (snapshotsEqual(existing, snapshot) && existing.closeProtocol === closeProtocol) {
               // Idempotent equal-retry: reuse persisted generated metadata; no put.
               return { ok: true as const, value: existing };
             }
@@ -1424,6 +1445,10 @@ function buildJournalApi(
           const nowMs = now();
           const closedAtLocal = nowMs;
           const closeCorrelationId = preset ? preset.closeCorrelationId : generateCloseCorrelationId();
+          // Packet 023: a deferred close is replayed by this id — none, no entry.
+          if (closeProtocol !== undefined && !isValidLowercaseUuidV4(closeCorrelationId)) {
+            return unavailable<ShiftCloseIntentEntry>();
+          }
           const entry: ShiftCloseIntentEntry = {
             ...snapshot,
             closedAtLocal,
@@ -1432,6 +1457,7 @@ function buildJournalApi(
             createdAtLocal: nowMs,
             updatedAtLocal: nowMs,
             lastErrorMessage: null,
+            ...(closeProtocol !== undefined ? { closeProtocol } : {}),
           };
           await txn.put('shiftCloseIntents', snapshot.shiftId, entry);
           return { ok: true as const, value: entry };

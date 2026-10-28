@@ -10,7 +10,9 @@ import {
 } from '../../lib/customers/creditService';
 import { customerFullName, fmtBaht, fmtBahtDec } from '../../lib/customers/types';
 import { db, isFirebaseConfigured } from '../../lib/firebase';
-import { useActiveShift } from '../../lib/hooks/useActiveShift';
+import { ACTIVE_SHIFT_LOOKUP_PENDING_MESSAGE, useActiveShift } from '../../lib/hooks/useActiveShift';
+import { SERVER_AUTHORITATIVE_CLOSE_ENABLED } from '../../lib/pos/shiftCloseAuthoritativeClient';
+import { ACTIVE_SHIFT_LOCAL_STATE_UNAVAILABLE_MESSAGE } from '../../lib/pos/shiftService';
 import type { CreditAccount, Customer } from '../../lib/types';
 import {
   Table,
@@ -64,7 +66,10 @@ export default function DebtorManagerDialog({
   const outstanding = resolveOutstandingBalance(customer, creditAccount);
   const creditLimit = creditAccount?.creditLimit ?? customer.creditLimit;
   const creditRemain = creditAvailable(creditLimit, outstanding);
-  const { activeShift } = useActiveShift(branchId, actorId);
+  const { activeShift, loading: shiftLoading, unavailable: shiftUnavailable } = useActiveShift(branchId, actorId);
+  // Packet 023: gate ON, a payment may not be submitted until the lookup for the CURRENT branch/staff has settled.
+  // Gate OFF keeps the legacy behavior (no wait on the lookup).
+  const shiftLookupPending = SERVER_AUTHORITATIVE_CLOSE_ENABLED && shiftLoading;
   const { payments, loading: historyLoading, error: historyError } = useCustomerCreditPayments(
     customer.id,
     refreshKey,
@@ -97,6 +102,15 @@ export default function DebtorManagerDialog({
     }
     if (payAmount > outstanding) {
       onToast?.('ยอดชำระเกินหนี้ค้างชำระ', 'warn');
+      return;
+    }
+    // Packet 023: the payment lands in the active shift's drawer — never record it without knowing which shift that is.
+    if (shiftLookupPending) {
+      onToast?.(ACTIVE_SHIFT_LOOKUP_PENDING_MESSAGE, 'warn');
+      return;
+    }
+    if (shiftUnavailable) {
+      onToast?.(ACTIVE_SHIFT_LOCAL_STATE_UNAVAILABLE_MESSAGE, 'warn');
       return;
     }
 
@@ -280,10 +294,10 @@ export default function DebtorManagerDialog({
               <button
                 type="button"
                 className="ar-dlg-btn ar-dlg-btn-primary"
-                disabled={paying || payAmount <= 0 || payAmount > outstanding}
+                disabled={paying || shiftLookupPending || payAmount <= 0 || payAmount > outstanding}
                 onClick={() => void handleSubmit()}
               >
-                {paying ? 'กำลังบันทึก...' : 'บันทึกรับชำระ'}
+                {paying ? 'กำลังบันทึก...' : shiftLookupPending ? 'กำลังตรวจสอบกะ...' : 'บันทึกรับชำระ'}
               </button>
             </>
           ) : (

@@ -1,5 +1,11 @@
 # Current Work Packet
 
+## Return/Refund V1 — Packet 023 offline-first shift close: SOURCE CLOSED (2026-10-28)
+
+- Packet 023 (offline-first deferred server-authoritative shift close + continuity/fail-closed/pending-lookup remediations) is **SOURCE_CLOSED** on top of `c8f18f8`: Codex Third Re-review `PASS_WITH_NOTES` (source review only; Codex ran no tests) + Claude source-closure gates (targeted 206/206 + corrected dialog tests 38/38, `tsc` 0, lint delta 0 new, full unit failing-name set == HEAD baseline set, modified Rules spec 6/6). Commit recorded in the git log and in `TPOS-RETURN-REFUND-V1-OFFLINE-FIRST-SHIFT-CLOSE-CLAUDE-023-SOURCE-CLOSURE-REPORT`.
+- **Release stays `ACTIVATION_BLOCKED`.** `SERVER_AUTHORITATIVE_CLOSE_ENABLED = false`, `pos_return` OFF, no Rules/Functions deploy, no native build/install, no store UAT. Not proven by source closure: real HTTPS callable transport, native durable storage, cross-device behavior, `useCheckout` persisted sale, mixed-fleet migration, readiness to seal W3 Rules (sealed Rules must not deploy before fleet cutover).
+- Scope note: this trio was last reconciled for SEC-001 (2026-09-15) and does not track the Return/Refund packet series 003–022; those records live in the Claude/Codex reports and git history and are intentionally not reconstructed here. No successor packet is selected by this entry.
+
 ## Phase
 
 **TRUE-STANDALONE — Architecture `APPROVED_WITH_NOTES` / Planning Gate `CLOSED` / Phase A `CLOSED_WITH_NOTES` / Phase C `CLOSED_WITH_NOTES` / Phase B `CLOSED` / SEC-001 Part P/A/B `CLOSED` / SEC-001 Packet C architecture `CLOSED / PASS` / F9 canonical documentation `COMPLETED` / SEC-001 Packet C / C-A implementation `LANDED / CLOSED` / SEC-001 Packet C / C-B implementation `LANDED / CLOSED` / Packet C `COMPLETE` / Packet D + Packet E source `LANDED / SOURCE_COMPLETE` / SEC-001 native subgate `CLOSED_RUNTIME_PROVEN` / SEC-001 Firestore Rules `LANDED_LIVE_VERIFIED` / SEC-001 Packet H docs reconciliation `COMPLETE` / SEC-001 overall `CLOSED`**

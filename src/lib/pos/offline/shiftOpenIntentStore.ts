@@ -312,10 +312,16 @@ export type ShiftOpenIntentJournal = {
   ) => Promise<OpenIntentResult<ShiftOpenIntentEntry>>;
   getOpenIntent: (shiftId: string) => Promise<OpenIntentResult<ShiftOpenIntentEntry | undefined>>;
   listOpenIntents: () => Promise<ListOpenIntentsResult>;
+  /**
+   * Packet 023 — `excludeShiftIds`: shifts this device already closed locally
+   * (deferred server-authoritative close) — their still-pending open intent is
+   * never returned (never restored / resumed). Omitted = unchanged behaviour.
+   */
   findPendingOpenForStaff: (
     branchId: string,
     staffId: string,
     deviceId: string | null,
+    excludeShiftIds?: ReadonlySet<string>,
   ) => Promise<OpenIntentResult<ShiftOpenIntentEntry | undefined>>;
   findRejectedOpenForDevice: (
     deviceId: string | null,
@@ -507,7 +513,7 @@ function buildJournalApi(store: ShiftOpenIntentKvStore, now: () => number): Shif
         return { ok: true, value: entries };
       }),
 
-    findPendingOpenForStaff: (branchId, staffId, deviceId) =>
+    findPendingOpenForStaff: (branchId, staffId, deviceId, excludeShiftIds) =>
       runStore(store, async (s) => {
         const listed = await s.transact(['shiftOpenIntents'], 'readonly', (txn) =>
           txn.getAll<unknown>('shiftOpenIntents'),
@@ -519,7 +525,8 @@ function buildJournalApi(store: ShiftOpenIntentKvStore, now: () => number): Shif
             entry.status === 'local_open_pending' &&
             entry.branchId === branchId &&
             entry.staffId === staffId &&
-            entry.deviceId === deviceId
+            entry.deviceId === deviceId &&
+            !excludeShiftIds?.has(entry.shiftId)
           ) {
             return { ok: true, value: entry };
           }

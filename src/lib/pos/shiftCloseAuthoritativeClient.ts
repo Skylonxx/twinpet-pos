@@ -498,6 +498,10 @@ export function isLowercaseUuidV4(v: unknown): v is string {
 
 // ── Cashier copy (Thai). Never includes request data, tokens or ids beyond the code. ──
 
+/**
+ * Superseded by packet 023 (no longer thrown): an offline / unreachable ON close
+ * is RECORDED locally (deferred) instead of refused. Kept for reference only.
+ */
 export const CLOSE_SHIFT_AUTHORITATIVE_OFFLINE_MESSAGE =
   'ปิดกะได้เฉพาะเมื่อเชื่อมต่ออินเทอร์เน็ตเท่านั้น — ยังไม่ได้ปิดกะ และไม่มีการบันทึกการปิดกะในเครื่อง กรุณาเชื่อมต่ออินเทอร์เน็ตแล้วปิดกะอีกครั้ง';
 export const CLOSE_SHIFT_AUTHORITATIVE_SALES_UNAVAILABLE_MESSAGE =
@@ -597,6 +601,31 @@ export function authoritativeRequestFromSnapshot(
     contractVersion: 1,
     shiftId: snapshot.shiftId,
     closeCorrelationId,
+    actualCashCount: snapshot.actualCashCount,
+    note: snapshot.note,
+    attestedSales: {
+      expectedCash: snapshot.expectedCash,
+      expectedQr: snapshot.expectedQr,
+      expectedKbank: snapshot.expectedKbank,
+      expectedCard: snapshot.expectedCard,
+      expectedCredit: snapshot.expectedCredit,
+      totalBills: snapshot.totalBills,
+    },
+    deviceId: snapshot.deviceId,
+  };
+}
+
+/**
+ * Packet 023 — the request body (no correlation id) of a close known from its
+ * 17-field snapshot: the body a deferred close recorded and replays. Same
+ * fields as {@link authoritativeRequestFromSnapshot}.
+ */
+export function authoritativeRequestBodyFromSnapshot(
+  snapshot: ShiftCloseIntentBusinessSnapshot & { deviceId: string },
+): AuthoritativeCloseRequestBody {
+  return {
+    contractVersion: 1,
+    shiftId: snapshot.shiftId,
     actualCashCount: snapshot.actualCashCount,
     note: snapshot.note,
     attestedSales: {
@@ -809,10 +838,15 @@ export type ReviewedDrawerCheck =
  * (id, type, amount — none added, none missing), and the displayed drawer total
  * to the satang. A witness that is absent, malformed or taken before the
  * display's server refresh loaded is never accepted.
+ * Packet 023: a deferred (offline-recorded) close passes its LOCAL basis as
+ * `server` with `requireServerRefresh: false` — the server cannot be read, so
+ * the refresh state is not required, but every other equality still is (the
+ * replay later re-checks that basis against the server before sending).
  */
 export function checkReviewedDrawerWitness(
   witness: unknown,
   server: { shiftId: string; branchId: string; serverData: Record<string, unknown>; expected: ShiftCloseIntentBusinessSnapshot },
+  options: { requireServerRefresh?: boolean } = {},
 ): ReviewedDrawerCheck {
   if (!isPlainObject(witness)) return { ok: false, reason: 'missing' };
   const w = witness;
@@ -825,7 +859,7 @@ export function checkReviewedDrawerWitness(
   ) {
     return { ok: false, reason: 'missing' };
   }
-  if (w.serverRefresh !== 'loaded') return { ok: false, reason: 'not_loaded' };
+  if (options.requireServerRefresh !== false && w.serverRefresh !== 'loaded') return { ok: false, reason: 'not_loaded' };
   if (w.shiftId !== server.shiftId || w.branchId !== server.branchId) return { ok: false, reason: 'identity' };
   if (w.startingCash !== server.serverData.startingCash) return { ok: false, reason: 'starting_cash' };
   const serverEntries = Array.isArray(server.serverData.cashEntries) ? (server.serverData.cashEntries as unknown[]) : [];
@@ -853,6 +887,26 @@ export function checkReviewedDrawerWitness(
  */
 export const CLOSE_SHIFT_AUTHORITATIVE_DISPLAY_CHANGED_MESSAGE =
   'ยอดเงินสดในลิ้นชักที่แสดงอยู่ไม่ตรงกับข้อมูลล่าสุดบนเซิร์ฟเวอร์ หรือยังโหลดยอดล่าสุดไม่เสร็จ (เช่น มีการคืนเงินสดหรือนำเงินเข้า/ออก) — ยังไม่ได้ปิดกะ ระบบกำลังอัปเดตยอดที่แสดงแล้ว กรุณาตรวจนับเงินสดแล้วกดยืนยันปิดกะอีกครั้ง';
+// ── Packet 023: deferred (offline-recorded) server-authoritative close copy ──
+
+/** The local drawer basis of a deferred close is not canonical / not satang-exact: nothing recorded. */
+export const CLOSE_SHIFT_DEFERRED_LOCAL_CASH_INVALID_MESSAGE =
+  'ข้อมูลเงินทอนเริ่มต้นหรือรายการเงินสดของกะในเครื่องนี้ไม่ถูกต้อง — ยังไม่ได้ปิดกะและยังไม่บันทึกยอดใด ๆ กรุณาแจ้งผู้จัดการให้ตรวจสอบกะนี้ (ห้ามแก้ไขหรือลบรายการเอง)';
+/** Replay refused before sending: the server drawer differs from the one the cashier counted against. */
+export const CLOSE_SHIFT_DEFERRED_DRAWER_CHANGED_MESSAGE =
+  'รายการเงินสดของกะบนเซิร์ฟเวอร์ไม่ตรงกับยอดที่บันทึกไว้ตอนปิดกะในเครื่องนี้ขณะออฟไลน์ (เช่น มีการคืนเงินสดหรือนำเงินเข้า/ออกจากที่อื่น) — ระบบไม่ส่งการปิดกะ กะยังไม่ถูกปิดบนเซิร์ฟเวอร์และไม่มีรายงานปิดกะ (Z) ที่ยืนยันแล้ว กรุณาแจ้งผู้จัดการให้ตรวจสอบกะนี้';
+export const CLOSE_SHIFT_DEFERRED_SERVER_CASH_INVALID_MESSAGE =
+  'ข้อมูลเงินทอนเริ่มต้นหรือรายการเงินสดของกะบนเซิร์ฟเวอร์ไม่ถูกต้อง — ระบบไม่ส่งการปิดกะที่บันทึกไว้ในเครื่องนี้ขณะออฟไลน์ กรุณาแจ้งผู้จัดการให้ตรวจสอบกะนี้ (ห้ามแก้ไขหรือลบรายการเอง)';
+export const CLOSE_SHIFT_DEFERRED_CLOSED_BY_OTHER_MESSAGE =
+  'กะนี้ถูกปิดบนเซิร์ฟเวอร์ด้วยการปิดกะอื่น ไม่ใช่การปิดกะที่บันทึกไว้ในเครื่องนี้ขณะออฟไลน์ — ไม่มีรายงานปิดกะ (Z) ที่ยืนยันแล้วของเครื่องนี้ กรุณาแจ้งผู้จัดการให้ตรวจสอบกะนี้';
+export const CLOSE_SHIFT_DEFERRED_IDENTITY_MISMATCH_MESSAGE =
+  'สาขาหรือพนักงานของกะบนเซิร์ฟเวอร์ไม่ตรงกับการปิดกะที่บันทึกไว้ในเครื่องนี้ขณะออฟไลน์ — ระบบไม่ส่งการปิดกะ กรุณาแจ้งผู้จัดการให้ตรวจสอบกะนี้';
+
+/** A definitive server refusal of a replayed deferred close (recorded as the entry's manual-attention reason). */
+export function deferredCloseRefusalMessage(code: AuthoritativeRefusalCode): string {
+  return `เซิร์ฟเวอร์ไม่รับการปิดกะที่บันทึกไว้ในเครื่องนี้ขณะออฟไลน์: ${authoritativeRefusalMessage(code)} — กรุณาแจ้งผู้จัดการ`;
+}
+
 /** A close journaled on this device by the legacy (direct-W3) protocol is never shown as a server-authoritative Z. */
 export const CLOSE_SHIFT_AUTHORITATIVE_LEGACY_ENTRY_MESSAGE =
   'การปิดกะของกะนี้ที่บันทึกในเครื่องนี้ไม่ได้ผ่านการยืนยันจากเซิร์ฟเวอร์ (ปิดด้วยวิธีเดิม) — ระบบไม่แสดงรายงานปิดกะ (Z) และไม่ส่งการปิดกะซ้ำ กรุณาแจ้งผู้จัดการให้ตรวจสอบกะนี้';

@@ -504,11 +504,19 @@ describe('014-A gate / cutover', () => {
     expect(h.clear).toHaveBeenCalledWith('shift-1');
   });
 
-  test('ON offline: refused BEFORE any intent / attempt / queued write / guard change / callable / Z', async () => {
+  // Packet 023 supersedes D2 "offline ⇒ refuse": the close is RECORDED locally
+  // (deferred) — still no attempt / queued write / client W3 / callable / guard
+  // change, and never a server-confirmed result (see shiftService.deferredAuthoritativeClose.test.ts).
+  test('ON offline: recorded locally as a deferred close — no attempt / queued write / client W3 / callable / guard change', async () => {
     const h = harness();
     const journal = bootJournal();
-    await expect(closeShift(drawer(), 1500, '', onDeps(h, journal, { isOnline: () => false }))).rejects.toThrow(M.offline);
-    await expectNoClientW3NoZ(h, journal);
+    const result = await closeShift(drawer(), 1500, '', onDeps(h, journal, { isOnline: () => false }));
+    expect(result).toMatchObject({ status: 'closed', syncState: 'pending', authoritativeDeferred: true, variance: 0 });
+    await expect(result.whenServerConfirmed).resolves.toEqual({ outcome: 'still_pending' });
+    expect(h.tripwire.calls).toEqual([]);
+    expect(fs.updateDoc).not.toHaveBeenCalled();
+    expect(fs.runTransaction).not.toHaveBeenCalled();
+    expect(await entryOf(journal)).toMatchObject({ status: 'local_closed_pending', closeProtocol: 'server_authoritative_v1', closeCorrelationId: UUID_A });
     expect(await attemptsOf(journal)).toEqual([]);
     expect(h.server.state.calls).toEqual([]);
     expect(h.clear).not.toHaveBeenCalled();

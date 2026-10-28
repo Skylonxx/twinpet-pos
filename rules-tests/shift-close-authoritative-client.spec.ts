@@ -57,7 +57,14 @@ vi.mock('../src/lib/pos/deviceId', async (importOriginal) => ({
 }));
 
 import { buildReviewedDrawerWitness } from '../src/lib/pos/shiftCloseAuthoritativeClient';
-import { closeShift, type CloseShiftDeps } from '../src/lib/pos/shiftService';
+import {
+  closeShift,
+  normalizeShiftCloseSyncState,
+  readAuthoritativeShift,
+  readShiftCloseConfirmation,
+  type CloseShiftDeps,
+} from '../src/lib/pos/shiftService';
+import { runShiftCloseReconciliationSweep } from '../src/lib/pos/offline/shiftCloseReconciler';
 import { deriveShiftDrawer } from '../src/lib/pos/shiftLedger';
 import { createShiftCloseIntentJournal } from '../src/lib/pos/offline/shiftCloseIntentStore';
 import type { LocalSale } from '../src/lib/pos/localLedger';
@@ -320,22 +327,104 @@ describeEmu('014 adapter ⇄ closeShiftAuthoritative on the Firestore emulator (
     w.unsubscribe();
   });
 
-  test('ON offline: refused before anything — server shift untouched, no attempt, no callable', async () => {
+  // Packet 023 supersedes D2 "offline ⇒ refuse": recorded locally, nothing sent.
+  test('ON offline: recorded locally (deferred) — server shift untouched, no attempt, no callable, no client W3', async () => {
     const w = await world();
     const before = await adminDb.doc(`shifts/${w.shiftId}`).get();
+    env.updateDocCalls = [];
     const journal = freshJournal();
     const callable = vi.fn(inProcessCallable);
     const shown = drawerOf(w.shiftId, w.sales);
-    const { deps } = onDeps(w.sales, journal, callable, shown);
-    await expect(closeShift(shown, 1500, '', { ...deps, isOnline: () => false })).rejects.toThrow(
-      'ปิดกะได้เฉพาะเมื่อเชื่อมต่ออินเทอร์เน็ตเท่านั้น',
-    );
+    const { deps, legacyW3 } = onDeps(w.sales, journal, callable, shown);
+    const result = await closeShift(shown, 1500, '', { ...deps, isOnline: () => false });
+    expect(result).toMatchObject({ status: 'closed', authoritativeDeferred: true, variance: 0 });
     const after = await adminDb.doc(`shifts/${w.shiftId}`).get();
     expect(after.data()).toEqual(before.data());
     expect(after.updateTime?.toMillis()).toBe(before.updateTime?.toMillis());
     expect(callable).not.toHaveBeenCalled();
+    expect(legacyW3).not.toHaveBeenCalled();
+    expect(env.updateDocCalls).toEqual([]);
     const listed = await journal.listOnlineCloseAttempts();
     expect(listed.ok && listed.value.filter((a) => a.shiftId === w.shiftId)).toEqual([]);
+    const entry = await journal.getCloseIntent(w.shiftId);
+    expect(entry.ok && entry.value).toMatchObject({ status: 'local_closed_pending', closeProtocol: 'server_authoritative_v1' });
+    w.unsubscribe();
+  });
+
+  test('023 reconnect: the sweep replays the deferred close through the callable — ONE authority record, synced, W4 under Rules, no client W3', async () => {
+    const w = await world();
+    env.updateDocCalls = [];
+    const journal = freshJournal();
+    const callable = vi.fn(inProcessCallable);
+    const shown = drawerOf(w.shiftId, w.sales);
+    const { deps, legacyW3 } = onDeps(w.sales, journal, callable, shown);
+    await closeShift(shown, 1500, 'offline', { ...deps, isOnline: () => false });
+    expect(callable).not.toHaveBeenCalled();
+
+    const sweepDeps = {
+      journal,
+      readConfirmation: readShiftCloseConfirmation,
+      normalizeSyncState: normalizeShiftCloseSyncState,
+      deviceId: 'DEV1',
+      authoritativeCallable: callable,
+      deferredReplay: {
+        readServerShift: readAuthoritativeShift,
+        waitForQueuedWrites: async () => true,
+        sessionStaffId: async () => STAFF,
+      },
+    };
+    const first = await runShiftCloseReconciliationSweep(sweepDeps);
+    expect(first.find((r) => r.shiftId === w.shiftId)).toMatchObject({ outcome: 'confirmed', deferred: 'confirmed' });
+    const server = (await adminDb.doc(`shifts/${w.shiftId}`).get()).data()!;
+    const entry = await journal.getCloseIntent(w.shiftId);
+    expect(entry.ok && entry.value).toMatchObject({ status: 'synced', note: 'offline', closeCorrelationId: server.closeCorrelationId });
+    expect(server).toMatchObject({ status: 'closed', variance: 0, note: 'offline', syncState: 'synced' });
+    expect(await authorityRecordCount(w.shiftId)).toBe(1);
+
+    // A second sweep sends nothing more for THIS shift (the entry is synced): still ONE record.
+    // (The journal DB is shared by this file, so the sweep may also replay an earlier test's
+    // still-pending deferred close of another shift — only this shift's calls are counted.)
+    const callsForShift = () => callable.mock.calls.filter(([r]) => (r as { shiftId?: unknown }).shiftId === w.shiftId).length;
+    expect(callsForShift()).toBe(1);
+    await runShiftCloseReconciliationSweep(sweepDeps);
+    expect(callsForShift()).toBe(1);
+    expect(await authorityRecordCount(w.shiftId)).toBe(1);
+    expect(legacyW3).not.toHaveBeenCalled();
+    expect(env.updateDocCalls).toEqual([]);
+    w.unsubscribe();
+  });
+
+  test('023 sealed-W3 semantics: the deferred close never relies on a client W3 — a direct client W3 of the same close is denied by the Rules', async () => {
+    const w = await world();
+    const journal = freshJournal();
+    const shown = drawerOf(w.shiftId, w.sales);
+    const { deps } = onDeps(w.sales, journal, vi.fn(inProcessCallable), shown);
+    await closeShift(shown, 1500, '', { ...deps, isOnline: () => false });
+    const got = await journal.getCloseIntent(w.shiftId);
+    const e = got.ok ? got.value! : null;
+    // The exact W3 a legacy client would queue for this close: Rules 017 (this repo's firestore.rules) deny it.
+    await expect(
+      clientFs.updateDoc(clientFs.doc(clientDb, 'shifts', w.shiftId), {
+        status: 'closed',
+        closedAt: clientFs.serverTimestamp(),
+        actualCashCount: e!.actualCashCount,
+        variance: e!.variance,
+        note: e!.note,
+        expectedCash: e!.expectedCash,
+        expectedQr: e!.expectedQr,
+        expectedKbank: e!.expectedKbank,
+        expectedCard: e!.expectedCard,
+        expectedCredit: e!.expectedCredit,
+        totalBills: e!.totalBills,
+        payInTotal: e!.payInTotal,
+        payOutTotal: e!.payOutTotal,
+        closedOffline: true,
+        syncState: 'pending',
+        deviceId: 'DEV1',
+        closeCorrelationId: e!.closeCorrelationId,
+      }),
+    ).rejects.toMatchObject({ code: 'permission-denied' });
+    expect((await adminDb.doc(`shifts/${w.shiftId}`).get()).data()!.status).toBe('open');
     w.unsubscribe();
   });
 });

@@ -106,7 +106,45 @@ export type ShiftCloseIntentEntry = ShiftCloseIntentSnapshot & {
    * satisfy a fence.
    */
   syncStateNormalizationClaimOwner?: string;
+  /**
+   * Packet 023 — optional, additive: present ONLY on a close recorded LOCALLY by
+   * the server-authoritative close while this device could not reach the server
+   * (offline-first deferred close, {@link DEFERRED_AUTHORITATIVE_CLOSE_PROTOCOL}).
+   * No client W3 was queued for it: the shift stays open on the server until the
+   * reconciliation sweep replays the entry's own request (17-field snapshot +
+   * correlation id) through `closeShiftAuthoritative` under the shift owner's
+   * live session, and it becomes `synced` ONLY on that callable's proof. KEY
+   * PRESENCE decides; a present value other than the protocol, or a deferred
+   * entry without a valid correlation id / device id, makes the entry unreadable
+   * (fail closed).
+   */
+  closeProtocol?: typeof DEFERRED_AUTHORITATIVE_CLOSE_PROTOCOL;
 };
+
+/** Packet 023 — the protocol tag of a locally recorded, not-yet-sent server-authoritative close. */
+export const DEFERRED_AUTHORITATIVE_CLOSE_PROTOCOL = 'server_authoritative_v1' as const;
+
+/** Packet 023 — the entry is a deferred server-authoritative close (key presence; see `closeProtocol`). */
+export function isDeferredAuthoritativeEntry(e: Pick<ShiftCloseIntentEntry, 'closeProtocol'>): boolean {
+  return 'closeProtocol' in e;
+}
+
+/**
+ * Packet 023 (parity remediation) — the shifts THIS device closed locally with a
+ * deferred server-authoritative close, in ANY status (pending, rejected, or
+ * synced while the cache may still read the doc `open`). No client W3 was
+ * queued for them, so the cached / server shift doc can stay `open`; the
+ * journal entry is the device's close record. Such a shift is never restored
+ * at boot, never resumed as an open, never the target of a new cash movement
+ * and never blocks the open of a DIFFERENT shift. Server confirmation of the
+ * close itself is unaffected (owner-only replay, see the reconciler).
+ */
+export function deferredLocalCloseShiftIds(
+  entries: readonly ShiftCloseIntentEntry[],
+  deviceId: string | null,
+): Set<string> {
+  return new Set(entries.filter((e) => isDeferredAuthoritativeEntry(e) && e.deviceId === deviceId).map((e) => e.shiftId));
+}
 
 /** Gate 007-C — proof that a sweep still holds a legacy W4 claim: its owner token and the claim epoch (check sequence). */
 export type LegacyNormalizationClaimFence = { owner: string; epoch: number };

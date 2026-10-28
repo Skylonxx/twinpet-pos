@@ -15,6 +15,7 @@ import {
   normalizeShiftCloseSyncState,
   reissueShiftOpenWrite,
 } from '../shiftService';
+import { deferredCloseReplayIo } from '../deferredCloseReplayIo';
 import { createAsyncOrderServerLookup } from './asyncOrderLookup';
 import { createSaleIntentJournal } from './saleIntentJournal';
 import { runSaleIntentSweep } from './saleIntentSweep';
@@ -328,6 +329,8 @@ async function defaultRunCh2(input: ChannelAdapterInput): Promise<ChannelRunResu
     readConfirmation: readShiftCloseConfirmation,
     normalizeSyncState: normalizeShiftCloseSyncState,
     deviceId: input.deviceId,
+    // Packet 023: replays deferred (offline-recorded) server-authoritative closes, owner session only.
+    deferredReplay: deferredCloseReplayIo,
   });
   await runShiftOpenReconciliationSweep({
     journal: createShiftOpenIntentJournal(),

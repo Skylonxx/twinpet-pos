@@ -1,5 +1,11 @@
 # Agent Workflow -- State Board
 
+## Return/Refund V1 — Packet 023 offline-first shift close: SOURCE CLOSED (2026-10-28)
+
+- Packet 023 (offline-first deferred server-authoritative shift close + continuity/fail-closed/pending-lookup remediations) is **SOURCE_CLOSED** on top of `c8f18f8`: Codex Third Re-review `PASS_WITH_NOTES` (source review only; Codex ran no tests) + Claude source-closure gates (targeted 206/206 + corrected dialog tests 38/38, `tsc` 0, lint delta 0 new, full unit failing-name set == HEAD baseline set, modified Rules spec 6/6). Commit recorded in the git log and in `TPOS-RETURN-REFUND-V1-OFFLINE-FIRST-SHIFT-CLOSE-CLAUDE-023-SOURCE-CLOSURE-REPORT`.
+- **Release stays `ACTIVATION_BLOCKED`.** `SERVER_AUTHORITATIVE_CLOSE_ENABLED = false`, `pos_return` OFF, no Rules/Functions deploy, no native build/install, no store UAT. Not proven by source closure: real HTTPS callable transport, native durable storage, cross-device behavior, `useCheckout` persisted sale, mixed-fleet migration, readiness to seal W3 Rules (sealed Rules must not deploy before fleet cutover).
+- Scope note: this trio was last reconciled for SEC-001 (2026-09-15) and does not track the Return/Refund packet series 003–022; those records live in the Claude/Codex reports and git history and are intentionally not reconstructed here. No successor packet is selected by this entry.
+
 ## Current pass — SEC-001 Packet H workflow trio reconciliation (Claude-053)
 
 **Baseline: `HEAD == origin/main == remote main == f0ac21dda6a445398e5349d75e0f7b1399663bbf`** (`docs: close sec-001 standalone readiness`). Authority: Gemini `TWINPET-TRUE-STANDALONE-POST-SEC001-PACKET-H-WORKFLOW-RECONCILIATION-GEMINI-070` (`SEC001_PACKET_H_RECONCILIATION_REQUIRED: YES`; `SEC001_PACKET_H_RUNTIME_OR_SOURCE_REOPEN_REQUIRED: NO`; `SEC001_PACKET_H_TARGET_FINAL_STATUS: COMPLETE`). Prompt/report: `TWINPET-TRUE-STANDALONE-POST-SEC001-PACKET-H-WORKFLOW-RECONCILIATION-CLAUDE-053`. Preceding passes: roadmap audit `TWINPET-TRUE-STANDALONE-POST-SEC001-ROADMAP-READ-ONLY-AUDIT-CLAUDE-052`; exact2 docs landing closure `TWINPET-TRUE-STANDALONE-SEC-001-EXACT2-DOCS-LANDING-CLOSURE-CLAUDE-051` (landed `f0ac21d`).

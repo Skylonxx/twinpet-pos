@@ -195,15 +195,18 @@ describe('016 — gate OFF keeps the unconfigured dev behaviour exactly', () => 
 });
 
 describe('016 — a configured Firebase is unaffected by the guard', () => {
-  test('[GREEN-guard] gate ON, configured + db ⇒ the server-authoritative close runs (offline ⇒ its own refusal, not 016)', async () => {
+  // Packet 023: offline no longer refuses (it records a deferred close), so the
+  // authoritative path is observed by its own cache check (cache unreadable ⇒ its refusal, not 016).
+  test('[GREEN-guard] gate ON, configured + db ⇒ the server-authoritative close runs (offline ⇒ its own cache check, not 016)', async () => {
     h.firebase.isFirebaseConfigured = true;
     h.firebase.db = {};
     const shift = openDevShift();
     const { deps } = sideEffects();
     const d = deps(true) as CloseShiftDeps & { isOnline: () => boolean };
     d.isOnline = () => false;
+    h.fs.getDocFromCache.mockRejectedValueOnce(new Error('cache unavailable'));
 
-    await expect(closeShift(shift, 500, '', d)).rejects.toThrow('ปิดกะได้เฉพาะเมื่อเชื่อมต่ออินเทอร์เน็ตเท่านั้น');
+    await expect(closeShift(shift, 500, '', d)).rejects.toThrow('ไม่สามารถยืนยันสถานะกะจากข้อมูลในเครื่องได้');
     expect(devCloseShift).not.toHaveBeenCalled();
     expect(devMock.devGetActiveShift(shift.branchId, shift.staffId)?.status).toBe('open');
   });

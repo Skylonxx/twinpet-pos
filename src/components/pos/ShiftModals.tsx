@@ -365,11 +365,14 @@ function ZReportView({
   confirmation,
   onPrint,
   onDone,
+  deferred = false,
 }: {
   shift: Shift;
   confirmation: ShiftCloseConfirmation | null;
   onPrint: () => void;
   onDone: () => void;
+  /** Packet 023: a server-authoritative close recorded locally only (nothing sent yet) — never a server-confirmed Z. */
+  deferred?: boolean;
 }) {
   const totalExpected = calcShiftDrawerExpected(shift);
   const varianceDisplay = getVarianceDisplay(shift.variance);
@@ -396,12 +399,27 @@ function ZReportView({
         <div className="shift-modal-icon" style={{ margin: '0 auto' }} aria-hidden="true">
           <i className="ti ti-report-analytics" />
         </div>
-        <h2 className="shift-zreport-title">ปิดกะสำเร็จ — Z-Report</h2>
+        <h2 className="shift-zreport-title">
+          {deferred ? 'บันทึกการปิดกะในเครื่องแล้ว — รอเซิร์ฟเวอร์ยืนยัน' : 'ปิดกะสำเร็จ — Z-Report'}
+        </h2>
         <p className="shift-zreport-meta">
           {shift.staffName} · เปิดกะ {formatShiftTime(shift.openedAt)} · ปิดกะ{' '}
           {getClosedTimeLabel(shift, confirmation)}
         </p>
-        {badgeState === 'pending' && (
+        {deferred && (badgeState === 'pending' || badgeState === 'stale') && (
+          <div
+            className={`shift-zreport-sync-badge${badgeState === 'stale' ? ' shift-zreport-sync-badge--stale' : ''}`}
+            role="status"
+            data-testid="shift-zreport-sync-deferred"
+          >
+            <i className="ti ti-cloud-off" aria-hidden="true" />
+            <span>
+              บันทึกการปิดกะไว้ในเครื่องนี้แล้ว แต่ยังไม่ได้ส่งถึงเซิร์ฟเวอร์ — ระบบจะส่งให้เซิร์ฟเวอร์ยืนยันเมื่อเชื่อมต่ออินเทอร์เน็ตและพนักงานเจ้าของกะเข้าสู่ระบบในเครื่องนี้
+              ยอดด้านล่างยังไม่ใช่รายงานปิดกะ (Z) ที่เซิร์ฟเวอร์ยืนยัน
+            </span>
+          </div>
+        )}
+        {!deferred && badgeState === 'pending' && (
           <div
             className="shift-zreport-sync-badge"
             role="status"
@@ -411,7 +429,7 @@ function ZReportView({
             <span>ปิดกะแล้ว (รอซิงก์) — บันทึกในเครื่องนี้แล้ว ยังไม่ได้รับการยืนยันจากเซิร์ฟเวอร์</span>
           </div>
         )}
-        {badgeState === 'stale' && (
+        {!deferred && badgeState === 'stale' && (
           <div
             className="shift-zreport-sync-badge shift-zreport-sync-badge--stale"
             role="status"
@@ -528,6 +546,8 @@ export function CloseShiftModal({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [closedShift, setClosedShift] = useState<Shift | null>(null);
+  // Packet 023: the close was recorded locally only (server-authoritative, nothing sent yet).
+  const [closedDeferred, setClosedDeferred] = useState(false);
   // D-RET-FIX-8 (display only): show the drawer expected cash including any
   // server-side cash entry (e.g. a cash refund) this mounted POS has not seen.
   // `closeShift` re-reads the server itself — that is the correctness boundary.
@@ -631,6 +651,7 @@ export function CloseShiftModal({
         : closeShift(shift, count, note.trim());
       const result = await Promise.race([closing, timeoutGuard]);
       if (closeAttemptRef.current !== attemptId) return;
+      setClosedDeferred(result.authoritativeDeferred === true);
       setClosedShift(result);
       // Observe-only: never gates the close success above. `whenServerConfirmed`
       // may be absent on a plain mocked/legacy result shape — guarded, not awaited.
@@ -664,7 +685,9 @@ export function CloseShiftModal({
     const totalExpected = calcShiftDrawerExpected(closedShift);
     const fmt = (n: number) => fmtBaht(n, { decimals: 2 });
     window.alert(
-      `[Mock Print Z-Report]\n` +
+      (closedDeferred
+        ? `[Mock Print — บันทึกการปิดกะในเครื่อง ยังไม่ใช่รายงานปิดกะ (Z) ที่เซิร์ฟเวอร์ยืนยัน]\n`
+        : `[Mock Print Z-Report]\n`) +
         `พนักงาน: ${closedShift.staffName}\n` +
         `เงินทอนเริ่มต้น: ${fmt(closedShift.startingCash)}\n` +
         `ยอดขายเงินสด: ${fmt(closedShift.expectedCash)}\n` +
@@ -675,7 +698,7 @@ export function CloseShiftModal({
         `ส่วนต่าง: ${closedShift.variance >= 0 ? '+' : '-'}${fmt(Math.abs(closedShift.variance))}\n` +
         `บิล: ${closedShift.totalBills}`,
     );
-  }, [closedShift]);
+  }, [closedShift, closedDeferred]);
 
   return createPortal(
     <div
@@ -694,6 +717,7 @@ export function CloseShiftModal({
             confirmation={confirmation}
             onPrint={handlePrint}
             onDone={onSuccess}
+            deferred={closedDeferred}
           />
         ) : (
           <>

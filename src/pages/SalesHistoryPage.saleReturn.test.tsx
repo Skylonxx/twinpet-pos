@@ -90,6 +90,7 @@ vi.mock('../lib/saleReturn/saleReturnService', async (importOriginal) => {
 });
 
 import SalesHistoryPage from './SalesHistoryPage';
+import { ACTIVE_SHIFT_LOCAL_STATE_UNAVAILABLE_MESSAGE, ActiveShiftUnavailableError } from '../lib/pos/shiftService';
 import {
   __setReturnAttemptStoreForTests,
   createInMemoryReturnAttemptStore,
@@ -288,6 +289,33 @@ describe('SalesHistoryPage — คืนสินค้า / คืนเงิ�
     });
     expect(refreshShiftMock).toHaveBeenCalledTimes(1);
     expect(projectVoidMock).not.toHaveBeenCalled();
+  });
+
+  test('023 fail-closed: active shift unavailable (close journal unreadable) — a cash refund is refused with honest copy: no approval, no submit, no shift guard', async () => {
+    getActiveShiftMock.mockRejectedValueOnce(new ActiveShiftUnavailableError());
+    fetchContextMock.mockResolvedValue({ kind: 'ok', classification: 'RETURN_ELIGIBLE', reason: null, context: context() });
+    historyState.records = [record('BILL-R1')];
+    await openReturn('BILL-R1');
+    fireEvent.click(screen.getByTestId('sale-return-open'));
+    const modal = await screen.findByTestId('sale-return-modal');
+    const line = await within(modal).findByTestId('sale-return-line-0');
+    fireEvent.change(within(line).getByLabelText('จำนวนคืน'), { target: { value: '1' } });
+    await waitFor(() => expect(getActiveShiftMock).toHaveBeenCalled());
+    expect((await within(modal).findByTestId('sale-return-shift-unavailable')).textContent).toContain(ACTIVE_SHIFT_LOCAL_STATE_UNAVAILABLE_MESSAGE);
+    const cashOption = within(modal).getByRole('option', { name: /เงินสด/ }) as HTMLOptionElement;
+    expect(cashOption.disabled).toBe(true);
+    expect(cashOption.textContent).toContain('ตรวจสอบสถานะกะไม่ได้');
+    expect(cashOption.textContent).not.toContain('ต้องเปิดกะ');
+    // even if cash is forced, the request never leaves the form
+    fireEvent.change(within(modal).getByLabelText(/ช่องทางคืนเงิน/), { target: { value: 'cash' } });
+    fireEvent.change(within(modal).getByLabelText(/เหตุผลการคืน/), { target: { value: 'สินค้าชำรุด/เสียหาย' } });
+    fireEvent.change(within(modal).getByLabelText(/ผู้จัดการที่อนุมัติ/), { target: { value: 'mgr-1' } });
+    fireEvent.click(within(modal).getByTestId('sale-return-request-approval'));
+    expect(within(modal).getByTestId('sale-return-error').textContent).toBe(ACTIVE_SHIFT_LOCAL_STATE_UNAVAILABLE_MESSAGE);
+    expect(screen.queryByTestId('sale-return-pin-modal')).toBeNull();
+    expect(submitMock).not.toHaveBeenCalled();
+    expect(guardKeys()).toEqual([]);
+    expect(unresolvedValues()).toEqual([]);
   });
 
   test('qty above returnable is blocked locally with a visible error (no approval, no submit)', async () => {
