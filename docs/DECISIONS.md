@@ -77,6 +77,14 @@
 - **NOT authorized:** edits/checkout/reset/clean in original Windows `main` or protected untracked/stash, commit/push/merge (even clone commit postponed), live AppData, native app/installer/UAT, Cloud/Functions/Rules, network, production rollout, Candidate I, MP1.3. Authorization does NOT claim M0 or M1 formal closure; the canonical workflow trio remains as-is until separate adjudication.
 - User also requested **clickable Approve/Do-not-approve buttons at the next approval gate** rather than typed confirmation. In the ChatGPT interaction, use actions to submit their explicit choice; do not turn a displayed button into implicit approval.
 
+## 2026-11-21 — Candidate N implementation STOPPED: DESIGN CONFLICT; risk decision pending
+
+- Reviewed actual Claude Windows-host report `TPOS-MP1-CAND-N-001-NATIVE-CUSTODY-IMPLEMENTATION-CLAUDE-REPORT(1).md`: exact verdict `BLOCKED_DESIGN_CONFLICT`. Isolated clone pinned `f034301`, **no file changed**, **tests NOT_RUN_ENV_LIMIT** because C: free ≈0.3 GiB. Source-derived state analysis must not be represented as test PASS. Original protected repo and GitHub main unchanged as reported/checked.
+- Code/design deadlock: virgin/auth-only floor-only legitimately exists and allows startup but `manifest_get`/creation rejects; true prior Phase-B data-loss floor-only has the same on-disk floor fields. Removing floor check (058 hunk) fixes first install but can classify lost Phase-B data as virgin with no warning. Neither risk acceptance nor a production recovery policy has been granted.
+- **Owner decision REQUIRED:** A = explicitly accept silent floor-only-as-virgin behavior/risk with a new separately authorised implementation and test packet; B = expand design scope to trusted provenance marker with backfill/recovery/crash-window specification and independent review **before** later code authorization; C = HOLD. Recommended B to preserve bill/data integrity; this recommendation alone is not owner consent.
+- No current permission to retry Candidate N or run Rust tests without resolving storage pressure. Do **not** erase old binaries, evidence, backups, original clone, OneDrive files or protected profiles just to free disk. No automatic Codex review/Claude follow-up packet; Candidate I/MP1.3/MP2/MP3 remain LOCKED.
+- Process discrepancy worth noting: initial macOS preflight report overwritten by Windows pass; Claude resolved prompt from an alternate OneDrive folder; report also states temporary scratch draft written outside strict output allowlist. This merits procedural correction, not speculation of source modification.
+
 ## Planning policy to review at M0 (PROPOSED, not final)
 - Immediate goal: reliable Native POS for real cashier operations before nonessential feature expansion.
 - Proposed sequence: MP1 preserve/reconcile UAT → MP2 native offline operational UAT → MP3 release-readiness and Owner GO/NO-GO.
@@ -88,7 +96,7 @@
 |---|---|---|
 | M0 next implementation phase | MP1.1/MP1.2 evidence-only handoff approved; MP1.3 implementation separately requires gate | SCOPED_READ_ONLY; FORMAL_PHASE_PENDING |
 | Canonical status reconciliation | Exact allowed `STATE/CURRENT_PACKET/NEXT_ACTION` changes & their approval authority | PENDING |
-| MP1 integration scope and test gates | Candidate N isolated implementation + bounded offline synthetic tests Owner-authorized; independent review, main merge and later phases not authorized | MP1_CAND_N_OWNER_APPROVED_ISOLATED_IMPLEMENTATION / M1_OPEN / MP1_3_LOCKED |
+| MP1 integration scope and test gates | Candidate N run stopped without edits/tests: floor-only virgin vs prior-loss indistinguishable; Owner A/B/HOLD policy decision pending | CAND_N_BLOCKED_DESIGN_CONFLICT / M1_OPEN / MP1_3_LOCKED |
 | U1/B1-R evidence acceptance | Headless EV-3 vs native GUI; EV-1; M1 mutant skipped | DEFERRED with release trigger; **not risk accepted** |
 | Return/Refund activation | Separate owner/technology/cutover gate, retains gate OFF | LOCKED |
 | EV-2, Android, cloud deployments, production upgrade/rollout | Separate scoped approval | NOT AUTHORIZED |
