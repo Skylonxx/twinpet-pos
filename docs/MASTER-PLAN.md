@@ -1,6 +1,6 @@
 # Twinpet POS — Master Plan Rebaseline
 
-**Version 0.2 — PLANNING DRAFT / SCOPED OWNER READ-ONLY HANDOFF**  
+**Version 0.3 — PLANNING DRAFT / MP1.1 REVIEWED; MP1.2 READ-ONLY NEXT**  
 **Prepared:** 2026-11-21 · **Current approved scope:** MP0 planning + MP1.1/MP1.2 read-only evidence collection only  
 **Explicit non-authority:** this new file on a planning branch does NOT change the live workflow gate, authorize MP1 integration/implementation, MP2/MP3, code changes, merge or release.
 
@@ -8,7 +8,7 @@
 
 **2026-11-21 — M0_SCOPED_MP1_READ_ONLY_AUTHORIZED / FORMAL_PHASE_ADJUDICATION_PENDING.** The Owner directed continuation after reviewing the MP0 draft. MP1.1/MP1.2 **read-only evidence identification and source-delta classification** is the only newly authorized next action. The live workflow trio still says successor implementation = NONE; formal reconciliation is pending. MP1.3 integrations, code changes, builds, UAT, Git commits/merges to main, deployment and cloud work are not authorized by this handoff.
 
-**One next execution packet:** Codex read-only UAT baseline custody and bounded source comparison. Stop after report; no automatic follow-on packet or tests.
+**Next execution packet after review of MP1-001:** Codex MP1.2 read-only Stage056 manifest-equivalence and source-delta classification (no build/tests/merge). MP1.1 is completed with partial identity; formal phase gate remains pending.
 
 ## 1. Authority and source precedence
 
@@ -29,7 +29,7 @@
 | TRUE-STANDALONE Phases A/B/C | CLOSED or CLOSED_WITH_NOTES | No Production authorization |
 | SEC-001 | CLOSED incl. native and Rules evidence | Does not auto-select successor phase |
 | Return/Refund Packet 023 | SOURCE_CLOSED; `pos_return` OFF and server-authoritative close gate OFF | Activation, Functions/Rules release remain locked |
-| Stage056 + 058/061–065 UAT line | Prior reports and Owner observations show working trial | Source/build traceability and main drift unresolved |
+| Stage056 + 058/061–065 UAT line | MP1-001 verified selected artifact hashes and SB63/SB64 EXE hashes; prior Owner results remain report-only | Current full Stage056 manifest equivalence, scratch/source provenance and main drift unresolved |
 | U1/B1-R 016–024 | Compile PASS, focused 5/5, selected mutants killed 3 (M1 skipped), EV-3 headless evidence, EV-4 Windows binding check | EV-1 and GUI EV-3 missing; U1 NOT ACCEPTED |
 | Native production release/upgrade | NOT AUTHORIZED; candidate not ready for release | Real-data migration and installer proof pending |
 | Android | DEFERRED | No Phase selection |
@@ -50,7 +50,7 @@
 - **MP1.2 READ-ONLY:** compare actual working candidate and local main, classify required production delta / UAT-only / discard / unknown. If baseline missing/identity uncertain: report BLOCKED, do not reconstruct.
 - Owner-authorized guarded integration branch with independent Code Review and bounded regressions, covering checkout, shift, stock and sync. No automatic merge into main.
 
-**M1:** source→build traceability and reviewed integration baseline; existing UAT success preserved. MP1.1/1.2 reports are preliminary and cannot alone close M1.
+**M1:** source→build traceability and reviewed integration baseline; existing UAT success preserved. **MP1-001 verdict `MP1_001_PARTIAL_IDENTITY`**: selected hash chain valid for SB63/SB64 and Stage056 patch pins; current manifest equivalence not checked and UAT gate toggle differs from official source. MP1.1 evidence documented, M1 still OPEN; MP1.2 report cannot alone close M1.
 
 ### MP2 — Native Offline Operational UAT [LOCKED pending M1]
 - On a sanctioned, isolated native UAT environment: one offline sale → app restart → reconnect → exactly-one order/payment/stock effect.
@@ -71,7 +71,8 @@
 | ID | Classification | State | Reopen trigger |
 |---|---|---|---|
 | TD-001 U1/B1-R | Evidence retained + pending validation, **not accepted risk** | 016–024: 5/5 focused; M2–M4 killed; M1 skipped; EV-3 headless complete; EV-4 binding verified; EV-1/GUI remaining | Affected durable code enters integration/release, or new material defect |
-| RISK-002 UAT source drift | Integration / release risk (HIGH) | Stage056 + overlay/source drift from main | MP1 baseline preservation and branch reconciliation |
+| RISK-002 UAT source/build drift | Integration / release risk (HIGH) | MP1-001: Stage056 1,366-file manifest not compared to current tree; 167-file cumulative delta vs main; SB63/SB64 hashed and identity files matched; scratch Git IDs are not main commits | MP1.2 read-only complete classification, then separate Owner integration gate |
+| RISK-006 UAT vs official shift-close gate | Integration / business-behavior risk (HIGH) | MP1-001: identity files report `SERVER_AUTHORITATIVE_CLOSE_ENABLED=true` for SB61–64 whereas official main/source closure records `false`; configuration/behavior parity unproven | MP1.2 identify exact config delta and isolate UAT-only semantics; no gate flip/deploy without Owner |
 | GOV-003 stale workflow / plan gap | Process/governance debt (NOW) | live trio lacks later UAT line; no one consolidated product plan | MP0 + M0 reconciliation |
 | UAT-004 native E2E | Release acceptance blocker | sale/restart/reconnect/stock/shift not signed off on a traceable candidate | MP2 |
 | TEST-005 baseline shift tests | Verification readiness risk | Historical `shiftService.*` baseline failures on Node 26 (prior report) | Integration regression testing under MP1 |
