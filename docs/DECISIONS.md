@@ -102,6 +102,13 @@
 - Claude works only in new isolated clone, makes no Git commit/push/merge and reports one exact verdict. **Codex remains an independent reviewer after Claude report**; no autonomous inter-agent initiation and no independent-review result preclaimed.
 - **NOT AUTHORISED:** original `main` worktree changes, Source outside allowlist, Production, UAT, installer, live AppData, Cloud/Functions/Rules, deployment, integration/merge, Candidate I/MP1.3, release or M1 closure. Formal next-phase workflow trio on main remains `ACTIVE_IMPLEMENTATION_PACKET=NONE`.
 
+## 2026-11-21 — OWNER APPROVES EXACT-TWO UAT CACHE DELETION + READ-ONLY LEGACY CLASSIFICATION
+
+- After TPOS-DISK-001 (7.19 GiB logical TPOS023-UAT), Owner approved cleanup of the **two exact candidate paths**: `TPOS023-UAT\integration-u1-b1r-impl-20261118\src-tauri\target` (~2.49 GiB) and `TPOS023-UAT\scratchpad\review023-independent\node_modules` (~0.51 GiB). The combined 3.00 GiB is *potential logical reclaim*, not verified actual recovery.
+- Authority: delete these two only **if** exact canonical path, non-following reparse handling, no in-use process, no Git-tracked/unique evidence, and rebuild/retention checks are satisfied; otherwise STOP that candidate. Never delete parent directories or additional files as substitutes.
+- Owner also asked why historical tests occupy so much space and thinks further generated items may be disposable. Authorize one **READ-ONLY inventory** of up to 15 other generated targets, Node caches and old test staging/proof folders; extra deletion is **not** authorized by this gate. Stage056 source, binaries, patches, actual evidence, profiles, backup, original Git and UAT identity artifacts remain protected.
+- Manual Codex Prompt: `TPOS-DISK-002-UAT-EXACT2-CLEANUP-AND-LEGACY-CACHE-INVENTORY-CODEX-PROMPT.md`. One report in `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Codex\`. No automatic N-002 retry, build/test, Cloud or production activity. Candidate N-002 remains `BLOCKED_DISK_CAPACITY` until separately reviewed.
+
 ## Planning policy to review at M0 (PROPOSED, not final)
 - Immediate goal: reliable Native POS for real cashier operations before nonessential feature expansion.
 - Proposed sequence: MP1 preserve/reconcile UAT → MP2 native offline operational UAT → MP3 release-readiness and Owner GO/NO-GO.
