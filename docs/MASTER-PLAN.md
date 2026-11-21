@@ -1,7 +1,7 @@
 # Twinpet POS — Master Plan Rebaseline
 
-**Version 1.0 — PLANNING DRAFT / CANDIDATE N BLOCKED DESIGN CONFLICT; OWNER POLICY DECISION NEXT**  
-**Prepared / updated:** 2026-11-21 · **Last scoped execution:** Candidate N authorized in isolation and ended `BLOCKED_DESIGN_CONFLICT`; no code changes or tests executed. `main`, Cloud, merge, release remain NOT authorized.  
+**Version 1.1 — PLANNING DRAFT / OWNER POLICY A ACCEPTED; CANDIDATE N-002 IMPLEMENTATION NOT AUTHORIZED**  
+**Prepared / updated:** 2026-11-21 · **Latest Owner decision:** accepted Policy A floor-only design risk, **not** Candidate N-002 source implementation. Candidate N-001 ended `BLOCKED_DESIGN_CONFLICT` without code/tests. `main`, Cloud, merge, release remain NOT authorized.  
 **Explicit non-authority:** this new file on a planning branch does NOT change the live workflow gate, authorize MP1 integration/implementation, MP2/MP3, code changes, merge or release.
 
 ## 0. Current Owner handoff — bounded decision
@@ -74,6 +74,8 @@
 | RISK-002 UAT source/build drift | Integration / release risk (HIGH) | MP1-002: 1,364 manifest entries match; two `.env` protected + extras unchecked. 167 delta paths grouped into 64 production-review, 101 tooling, 2 UNKNOWN. Scratch Git build IDs not main commits. | Scope independent per-hunk review of cashier-critical deltas before any integration, not repeated broad rehash |
 | RISK-006 UAT vs official shift-close gate | Integration / business-behavior risk (HIGH) | MP1-002 confirmed overlay 058 flips `false` to `true`, all SB61–SB64 script inputs include overlay, but actual executed native branch remains UNKNOWN | Owner decision on keeping official Gate-OFF and what UAT evidence can be reused; **no automatic Gate-ON adoption** |
 | RISK-007 privileged action / ledger seams | Security and sale-integrity BLOCKER for privileged atomicity | MP1-R01: ledger now `PRODUCTION_REVIEW_REQUIRED` (HIGH); privileged scope check happens outside IndexedDB transaction, unsafe race remains unproven (BLOCKER) | Do not integrate until store/ingest/retry contract and scope-change proof; do not treat as accepted technical debt |
+| RISK-008 Floor-only ambiguous prior loss | Owner-accepted design trade-off (HIGH residual risk; NOT RELEASE ACCEPTED) | If floor exists with all Phase-B manifest/domain files missing, accepted Policy A may silently reinitialize, masking total prior loss | Record explicit A acceptance; validate negative controls under a *separately approved* Candidate N-002 packet; re-evaluate at release gate |
+| ENV-001 Windows Rust disk headroom | Implementation/test environment BLOCKER | N-001 C: ~0.3 GiB, 0 Rust tests executed | Verify sufficient safe capacity before any offline build; no unauthorized cleanup |
 | GOV-003 stale workflow / plan gap | Process/governance debt (NOW) | live trio lacks later UAT line; no one consolidated product plan | MP0 + M0 reconciliation |
 | UAT-004 native E2E | Release acceptance blocker | sale/restart/reconnect/stock/shift not signed off on a traceable candidate | MP2 |
 | TEST-005 baseline shift tests | Verification readiness risk | Historical `shiftService.*` baseline failures on Node 26 (prior report) | Integration regression testing under MP1 |
@@ -120,9 +122,17 @@
 
 **Competing cases:** a legitimate floor-only root from virgin first boot or privileged-auth state (startup succeeds but `manifest_get`/creation blocks), versus a floor-only root after complete manifest+domain loss. Existing floor fields cannot distinguish these according to the Claude source analysis. Removing floor check as in isolated overlay 058 would let first migration proceed but **could silently create new state after prior data loss**. Provenance marker (BOOTSTRAP→SEALED) may disambiguate but requires a larger explicit design/compatibility/recovery and crash-window gate. Neither alternative is accepted by this record.
 
-**Owner policy choice next:** (A) explicitly accept floor-only-as-virgin and its silent-reset risk **before any new implementation packet**; (B, recommended for integrity) authorise **design-only provenance marker + compatibility/backfill/crash-window plan** and later independent review, no code yet; or (C) HOLD. This is a materially new policy/scope gate; prior Candidate N approval does NOT permit Claude to implement A or B automatically. **No command should run** until the Owner chooses. Before any permitted Rust build, resolve disk headroom safely; no automatic cleanup on Windows.
+**Owner chose A explicitly:** Accept floor-only-as-virgin and its risk of silently starting a new Phase-B epoch after total Manifest/Domain loss. This supersedes the floor-only fail-closed default in MP1-P01 **only for the defined case**; do not treat as blanket safety or release acceptance. A new scoped Candidate N-002 document is prepared; **no implementation permission was given**. Before any authorised Rust build resolve disk headroom safely; no automatic cleanup on Windows.
 
 **Process notes:** report found the prompt under a different OneDrive folder than the launcher; initial macOS preflight had been overwritten by the Windows pass, and the report admits a temporary scratch draft outside the strict one-report output set. These are reporting/traceability issues to correct for future packets, **not evidence of modified protected source**.
+
+## 4.6 Owner Policy A acceptance / Candidate N-002 pending implementation gate (2026-11-21)
+
+**Decision:** `RISK_008_OWNER_ACCEPTED_POLICY_A_DESIGN_ONLY` — Owner knowingly accepts that a root with an epoch floor but zero Phase-B manifest/domain files can be classified virgin even after **total prior Phase-B file loss**, with fresh-epoch creation possibly **without warning**. This is a deliberate trade-off to unblock legitimate first-boot/privileged-auth floor-only migration and does not prove data recovery, existing-bill preservation, idempotency or Production readiness. No automatic code edit or re-run of the blocked N-001 packet.
+
+**Next scoped approval document:** [Candidate N-002 — Policy A implementation scope](planning/MP1-CAND-N-002-FLOOR-ONLY-POLICY-A-IMPLEMENTATION-SCOPE.md). Proposed minimal change is removing the floor-existence limb from `prior_phase_b_state_exists` *only* in `src-tauri/src/durable_kv.rs`; preserve domain-presence and manifest-path fail-closed guards, inventory/version validation, and official shift-close Gate-OFF. Proposed future synthetic oracles include first-install auth-only, missing manifest with remaining domains, corrupt/nonfile/dangling manifest, valid committed domains, and acknowledged all-files-lost risk. `epoch_floor.rs` remains read-only absent a new separate scope approval.
+
+**Next one decision:** Owner GO/NO-GO for **Candidate N-002 isolated implementation + targeted offline synthetic tests**, contingent on disk safety preflight (Windows C: ~0.3 GiB in N-001) and later independent Codex review. Candidate I, MP1.3 integration, UAT, Git main merge, release and cloud all remain locked. Previous `BLOCKED_DESIGN_CONFLICT` is a closed evidence result, not an instruction to rerun the old prompt.
 
 ## 5. Other initiatives / deferred (LOCKED)
 Return/Refund activation and sealing Rules; Android/Capacitor; EV-2 VM hard reset; broad mutation matrix; unrelated UI polish; unapproved Cloud/deployment or live POS data contact.
