@@ -37,8 +37,8 @@ gantt
 | Gate | Acceptance evidence | Current status |
 |---|---|---|
 | MP0/M0 | Approved Goal, phase, priorities, roles, lock list, authority reconciliation | SCOPED_READ_ONLY; FORMAL_PHASE_PENDING |
-| MP1/M1 | UAT baseline and commit/build identity, reviewed integration delta | MP1-R01 done with blockers; MP1-P01 planning draft ready; Candidate N/I & MP1.3 implementation LOCKED |
+| MP1/M1 | UAT baseline and commit/build identity, reviewed integration delta | MP1-R01 reviewed; MP1-P01 OWNER_ACCEPTED PLAN; Candidate N decision pending, Candidate I/MP1.3 LOCKED |
 | MP2/M2 | Safe native offline E2E + cashier critical path on controlled build | LOCKED |
 | MP3/M3 | Installer/upgrade proof and explicit Owner decision | LOCKED |
 
-No MP1–MP3 delivery dates until formal successor phase decision. MP1-P01 is a planning draft awaiting Owner content review, not an implementation authorization. An approved evidence-only MP1.1/1.2 task does not authorize implementation. Todoist mirrors this proposal, not vice versa.
+No MP1–MP3 delivery dates until formal successor phase decision. MP1-P01 is OWNER-ACCEPTED as planning criteria only; Candidate N implementation authorization remains PENDING, not auto-granted. An approved evidence-only MP1.1/1.2 task does not authorize implementation. Todoist mirrors this proposal, not vice versa.
