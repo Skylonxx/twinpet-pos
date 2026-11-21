@@ -44,6 +44,14 @@
 - Review completion is **not** MP1.3 integration approval, M1 acceptance, formal M0 successor implementation selection, Tech Debt risk acceptance, or release authorization. Next decision only after report review. Live workflow trio on main unchanged.
 - Approval ID: `MP1_R01_REVIEW_ONLY_APPROVED`. Active task in Todoist Twinpet POS — Planning.
 
+## 2026-11-21 — MP1-R01 review complete; **Owner next decision required**
+
+- Received independent scoped Codex report `TPOS-MP1-R01-INDEPENDENT-PREINTEGRATION-RISK-REVIEW-READONLY-CODEX-REPORT.md` with verdict **`MP1_R01_REVIEW_COMPLETE_WITH_BLOCKERS`**. No source writes/build/tests/Cloud or deployment in that pass; authoring independence is supported for reviewed source/patches but full historical authorship is not proven.
+- Source-level blockers **to a future integration decision**: (A) UAT overlay 058 Gate-ON is not official Gate-OFF behavior; (B) native/device order sequence and sale journal safety are not proven atomic through restart/retry; (C) `durable_kv.rs` prior Phase-B floor-only virgin predicate changes; (E2) privileged offline action scope is checked outside the IndexedDB transaction. High-priority inventory/FIFO, ledger and sync checks remain. These are **not observed runtime failures**.
+- UAT-only 058 trust anchor/app ID and 063/064 self-enrollment routes must not bleed into production. 064 Functions issuance reads/creates separate records without an observed transaction in the reviewed hunk, potential concurrency risk, not a proven exploit.
+- Codex recommends a **single next OWNER DECISION**: accept/reject **MP1-P01 native custody & identity safety PLANNING ONLY** as the next design packet, under official Gate-OFF; define a bounded contract/proof plan. Do not launch it automatically. MP1.3 code/integration, build/test/native UAT, Git merge, cloud/production and release remain LOCKED; M1 NOT ACCEPTED. Live workflow trio `main` remains unchanged.
+- No further 167-file sweep, manifest rehash or spontaneous EV-1/EV-3 test loop is authorized.
+
 ## Planning policy to review at M0 (PROPOSED, not final)
 - Immediate goal: reliable Native POS for real cashier operations before nonessential feature expansion.
 - Proposed sequence: MP1 preserve/reconcile UAT → MP2 native offline operational UAT → MP3 release-readiness and Owner GO/NO-GO.
@@ -55,7 +63,7 @@
 |---|---|---|
 | M0 next implementation phase | MP1.1/MP1.2 evidence-only handoff approved; MP1.3 implementation separately requires gate | SCOPED_READ_ONLY; FORMAL_PHASE_PENDING |
 | Canonical status reconciliation | Exact allowed `STATE/CURRENT_PACKET/NEXT_ACTION` changes & their approval authority | PENDING |
-| MP1 integration scope and test gates | Owner approved bounded independent MP1-R01 read-only design/security review; MP1.3 code integration still pending | MP1_R01_REVIEW_ONLY_APPROVED / MP1_3_LOCKED |
+| MP1 integration scope and test gates | MP1-R01 reviewed, blockers documented; Owner to authorize/reject MP1-P01 design-only packet, not implementation | MP1_R01_COMPLETE_WITH_BLOCKERS / MP1_3_LOCKED |
 | U1/B1-R evidence acceptance | Headless EV-3 vs native GUI; EV-1; M1 mutant skipped | DEFERRED with release trigger; **not risk accepted** |
 | Return/Refund activation | Separate owner/technology/cutover gate, retains gate OFF | LOCKED |
 | EV-2, Android, cloud deployments, production upgrade/rollout | Separate scoped approval | NOT AUTHORIZED |
