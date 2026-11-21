@@ -35,6 +35,15 @@
 - **Next action = OWNER_ADJUDICATION_REQUIRED**, not another automatic Agent prompt. Recommended decision: define a **bounded independent pre-integration risk review** scope for cashier/security-critical deltas (native epoch, identity/sequences, sale journal, stock/FIFO, shift Gate-OFF/ON and two unknown privileged/ledger files), with UAT-only guards excluded from any implied production change.
 - **Still LOCKED:** MP1.3 code/integration, tests/builds/native runtime, Cloud/Functions/Rules, local Git writes on Windows, protected AppData, installer, Production and merge; M1 not accepted, live workflow trio unchanged. No broad rehash of matching 1,364 files merely to claim whole-tree equivalence.
 
+## 2026-11-21 — OWNER APPROVES MP1-R01 independent pre-integration READ-ONLY review
+
+- Product Owner explicitly replied **"อนุมัติครับ"** to the proposal for an **independent, bounded pre-integration design/security review** of high-risk source delta paths after MP1-002.
+- Approved scope **ONLY**: read selected original `main` and Stage056/overlay 058/patch 061–064 source hunks, analyze product/security impact, classify production-needed vs UAT-only vs reject/unknown, and write one report for the Owner. Areas: native durable epoch/migration; identity/sequence; order journal/dedupe; inventory/FIFO/branch; legacy Gate-OFF vs sandbox Gate-ON; the two UNKNOWN ledger/privileged seams; UAT trust anchor/enrollment.
+- Default assignment: **Codex CLI as independent Reviewer / Tester / Project Manager**, in **READ-ONLY** mode (no test execution). Do not self-review code that Codex authored substantively; if found, flag conflict and STOP the affected area.
+- **Explicit exclusions:** no file/source/Git edits in POS repo, tests/build, native GUI, installer, production data/cloud, Firebase Functions/Rules, network access, patch application, branch/merge/deploy, or env secrets. The sole executor write is the approved OneDrive report. Keep `SERVER_AUTHORITATIVE_CLOSE_ENABLED=false` as the official baseline; do not enable sandbox Gate-ON.
+- Review completion is **not** MP1.3 integration approval, M1 acceptance, formal M0 successor implementation selection, Tech Debt risk acceptance, or release authorization. Next decision only after report review. Live workflow trio on main unchanged.
+- Approval ID: `MP1_R01_REVIEW_ONLY_APPROVED`. Active task in Todoist Twinpet POS — Planning.
+
 ## Planning policy to review at M0 (PROPOSED, not final)
 - Immediate goal: reliable Native POS for real cashier operations before nonessential feature expansion.
 - Proposed sequence: MP1 preserve/reconcile UAT → MP2 native offline operational UAT → MP3 release-readiness and Owner GO/NO-GO.
@@ -46,7 +55,7 @@
 |---|---|---|
 | M0 next implementation phase | MP1.1/MP1.2 evidence-only handoff approved; MP1.3 implementation separately requires gate | SCOPED_READ_ONLY; FORMAL_PHASE_PENDING |
 | Canonical status reconciliation | Exact allowed `STATE/CURRENT_PACKET/NEXT_ACTION` changes & their approval authority | PENDING |
-| MP1 integration scope and test gates | MP1-002 triage done; decide targeted independent review before choosing any production hunks | TRIAGE_COMPLETE_PARTIAL / OWNER_DECISION_REQUIRED |
+| MP1 integration scope and test gates | Owner approved bounded independent MP1-R01 read-only design/security review; MP1.3 code integration still pending | MP1_R01_REVIEW_ONLY_APPROVED / MP1_3_LOCKED |
 | U1/B1-R evidence acceptance | Headless EV-3 vs native GUI; EV-1; M1 mutant skipped | DEFERRED with release trigger; **not risk accepted** |
 | Return/Refund activation | Separate owner/technology/cutover gate, retains gate OFF | LOCKED |
 | EV-2, Android, cloud deployments, production upgrade/rollout | Separate scoped approval | NOT AUTHORIZED |
