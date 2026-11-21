@@ -3,7 +3,7 @@
 **Owner authorization:** 2026-11-21. Product Owner explicitly approved **Candidate N Implementation** with limited scope and synthetic isolated tests. This is a **scoped execution authorization**, not approval of MP1.3 integration, Git commit/push to main, release, real UAT, production data, Cloud, Candidate I, or change to official Gate-OFF.
 
 **Packet ID:** `TPOS-MP1-CAND-N-001`  
-**State:** `OWNER_APPROVED_FOR_ISOLATED_IMPLEMENTATION / EXECUTOR_NOT_YET_RUN`  
+**State (updated 2026-11-21):** `EXECUTED_BLOCKED_DESIGN_CONFLICT / NO_CODE_CHANGE / TESTS_NOT_RUN_ENV_LIMIT`  
 **Repo baseline:** `Skylonxx/twinpet-pos` `main@f034301c46dd9e08190f869cc85dbb140ac28a3c` (verify local before execution; stop on mismatch)  
 **Design contract:** [MP1-P01](MP1-P01-NATIVE-CUSTODY-IDENTITY-SAFETY-PLAN.md) · evidence MP1-R01 `MP1_R01_REVIEW_COMPLETE_WITH_BLOCKERS`  
 **Authority:** Product Owner final; Gemini legacy formal phase and commit gate still recorded in `AUTHORITY_MATRIX.md`; do not silently modify workflow trio on main. This bounded packet does not represent acceptance of M0 or M1.
@@ -68,6 +68,12 @@ Existing inline Rust unit tests in these files may be added/modified if possible
 - Exact changed file paths and small diff summary; total changes limited to allowlist; no .env/secrets.
 - Targeted test commands, pass/fail/skipped and sanitized output; note if tests not run due to offline deps/time. No fabricated PASS.
 - Concise next independent review checklist for Codex (NOT automatically executed); one Owner decision/recommendation. Do not request merge/release.
+
+## 7.1 Execution closure / pending Owner policy gate
+
+Claude Windows report returned `BLOCKED_DESIGN_CONFLICT`: source inspection only, no modified files, no Rust tests (C: ≈0.3 GiB free). A legitimate privileged-auth floor-only start and a prior committed Phase-B root whose manifest/domain are gone are observationally indistinguishable using current floor fields. Original approval's STOP condition fired; **this packet is closed as BLOCKED, not left RUNNABLE**.
+
+Next Owner choice: (A) explicitly accept floor-only-as-virgin silent data-loss reinterpretation risk and separately scope implementation/tests; (B) design provenance marker/backfill/crash-window architecture before further code (recommended); (C) HOLD. No automatic re-run or reuse of this packet as implicit new authority. Preserve cloned repo and main until separate decision; do not auto-clean disk.
 
 ## 8. STOP
 
