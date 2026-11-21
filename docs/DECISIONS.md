@@ -94,6 +94,14 @@
 - Environment blocker persists: Windows C: about 0.3 GiB free in N-001. Do not auto-clean backups/AppData/OneDrive/UAT or rerun Cargo. Before an implementation packet, verify safe isolated clone, adequate storage, exact source baseline and allowed writes.
 - **Next one owner decision:** explicitly approve/reject **Candidate N-002 isolated implementation plus bounded offline synthetic tests**. If approved, it will still not authorize commit/push/merge or release. Candidate I/MP1.3, MP2/MP3 remain LOCKED. Formal M0 phase/trio adjudication remains pending.
 
+## 2026-11-21 — OWNER APPROVES CANDIDATE N-002 IMPLEMENTATION (isolated only)
+
+- Owner explicitly approved `Candidate N-002 Implementation` after prior separate acceptance of Policy A: Claude may change **only `src-tauri/src/durable_kv.rs`** in a **new isolated clone** of pinned `main@f034301c46dd9e08190f869cc85dbb140ac28a3c`, with bounded offline Rust tests against synthetic roots **only after checking sufficient disk capacity**.
+- Approved code intent: remove only epoch-floor-existence check from `prior_phase_b_state_exists` to permit legitimate floor-only Phase-B startup. Preserve recognised Phase-B domain evidence, present/invalid manifest (including symlink and non-file), committed inventory and epoch legality. `epoch_floor.rs` is **read-only**; no UAT 058 blanket patch, Gate-ON, Candidate I or other code path. Maintain RISK-008 as Owner-accepted residual danger of silent virgin interpretation after total previous Manifest/Domain disappearance.
+- Runnable manual prompt: `TPOS-MP1-CAND-N-002-POLICY-A-ISOLATED-IMPLEMENTATION-CLAUDE-PROMPT.md`. A conservative **minimum 10 GiB verified available on intended clone/build volume BEFORE clone or Rust compile** is a safety gate. Previous Windows C: ≈0.3 GiB means it may immediately return `BLOCKED_DISK_CAPACITY`. No auto disk cleanup, downloading dependencies, moving/deleting evidence or improvising a new drive. Prompt is not yet run.
+- Claude works only in new isolated clone, makes no Git commit/push/merge and reports one exact verdict. **Codex remains an independent reviewer after Claude report**; no autonomous inter-agent initiation and no independent-review result preclaimed.
+- **NOT AUTHORISED:** original `main` worktree changes, Source outside allowlist, Production, UAT, installer, live AppData, Cloud/Functions/Rules, deployment, integration/merge, Candidate I/MP1.3, release or M1 closure. Formal next-phase workflow trio on main remains `ACTIVE_IMPLEMENTATION_PACKET=NONE`.
+
 ## Planning policy to review at M0 (PROPOSED, not final)
 - Immediate goal: reliable Native POS for real cashier operations before nonessential feature expansion.
 - Proposed sequence: MP1 preserve/reconcile UAT → MP2 native offline operational UAT → MP3 release-readiness and Owner GO/NO-GO.
@@ -105,7 +113,7 @@
 |---|---|---|
 | M0 next implementation phase | MP1.1/MP1.2 evidence-only handoff approved; MP1.3 implementation separately requires gate | SCOPED_READ_ONLY; FORMAL_PHASE_PENDING |
 | Canonical status reconciliation | Exact allowed `STATE/CURRENT_PACKET/NEXT_ACTION` changes & their approval authority | PENDING |
-| MP1 integration scope and test gates | Owner accepted A design risk RISK-008; Candidate N-002 isolated implementation scope drafted, separate code approval not yet granted | POLICY_A_OWNER_ACCEPTED_DESIGN_ONLY / CAND_N_002_APPROVAL_PENDING / M1_OPEN / MP1_3_LOCKED |
+| MP1 integration scope and test gates | Owner explicitly approved Candidate N-002 in isolated new clone and conditional synthetic offline Rust tests; Claude not yet run; independent Codex review later, no merge/release | CAND_N_002_OWNER_APPROVED_EXECUTION_NOT_RUN / M1_OPEN / MP1_3_LOCKED |
 | U1/B1-R evidence acceptance | Headless EV-3 vs native GUI; EV-1; M1 mutant skipped | DEFERRED with release trigger; **not risk accepted** |
 | Return/Refund activation | Separate owner/technology/cutover gate, retains gate OFF | LOCKED |
 | EV-2, Android, cloud deployments, production upgrade/rollout | Separate scoped approval | NOT AUTHORIZED |
