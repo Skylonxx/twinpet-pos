@@ -11,7 +11,7 @@
 | MP0.2 priority/dependencies | DRAFT_READY | `MASTER-PLAN.md`, Gantt; critical path proposal only |
 | MP0.3 debt/risk register | DRAFT_READY | U1/B1-R 016–024 evidence retained; TD-001/RISK-002/UAT-004/GOV-003 |
 | M0 Owner/Gemini phase selection | MP1_R01_REVIEW_ONLY_APPROVED / FORMAL_PENDING | Owner authorized focused independent pre-integration read-only review; no implementation successor chosen in live trio |
-| MP1 preserve/integrate UAT | MP1-P01 PLAN_OWNER_ACCEPTED | Seven planned invariants and state matrix adopted as criteria; Candidate N implementation gate pending; M1 OPEN and MP1.3 LOCKED |
+| MP1 preserve/integrate UAT | Candidate N ISOLATED_IMPLEMENTATION_OWNER_APPROVED / NOT_RUN | Claude implementer prompt prepared; original main and release untouched; independent Codex review pending; M1 OPEN, MP1.3 LOCKED |
 | MP2 native offline E2E | LOCKED | M1 acceptance, safe isolated UAT environment |
 | MP3 release readiness | LOCKED | M2 acceptance + explicit Owner GO/NO-GO |
 
@@ -31,6 +31,11 @@
 | Report 023 EV-4 | BINDINGS_VERIFIED | FFI imports/link, not full Windows semantics |
 | Report 024 workflow adjudication | PLAN_AUTHORITY_UNRESOLVED | Current authority trio lacks latest UAT/selection |
 | Native EV-1 / EV-2 / GUI EV-3 / offline operational UAT | NOT_RUN or NOT_AUTHORIZED | Do not infer PASS, release or durability |
+
+## Candidate N implementation authorization (2026-11-21)
+- Owner approved Candidate N source changes **in a fresh isolated clone only**, restricted to native-custody files `src-tauri/src/durable_kv.rs` and `src-tauri/src/epoch_floor.rs` plus inline tests; no `main` checkout/modification, no Git commit/merge/Cloud/AppData/Production or Candidate I.
+- Conditional minimal fix only if justified; `NO_CHANGE_REQUIRED` and `BLOCKED_DESIGN_CONFLICT` are valid verdicts. Legitimate privileged-auth-only floor epoch 2 without a Phase-B manifest must remain compatible; **do not blanket fail closed floor-only roots**.
+- The [Candidate N boundary document](planning/MP1-CAND-N-NATIVE-CUSTODY-IMPLEMENTATION-PACKET.md) is a planned execution control, not runtime evidence. CLI prompt generated for manual Owner launch; no executor report yet and no independent Codex review.
 
 ## MP1-P01 Owner acceptance (2026-11-21)
 - Owner explicitly accepted the MP1-P01 planning contract after reviewing the deliverables. `MP1_P01_PLAN_OWNER_ACCEPTED` is **planning status only**; this is not runtime/UAT acceptance.
@@ -72,7 +77,7 @@
 - No Source Code, tests, build, native app/profile, Cloud, Rules/Functions, release or data cleanup in this pass.
 
 ## Next one action
-**Owner Candidate N GO/NO-GO required:** MP1-P01 planning contract is OWNER_ACCEPTED. Next, consider authorization for a **small guarded Native Custody implementation packet only** with exact source allowlist, isolated synthetic test data, independent review, and no broad UAT overlay import. **No implementation is authorized now.** MP1.3 integration and Candidate I LOCKED; M1 OPEN; formal successor phase pending.
+**Next one action:** Owner manually runs `TPOS-MP1-CAND-N-001-NATIVE-CUSTODY-ISOLATED-IMPLEMENTATION-CLAUDE-PROMPT.md` in Claude CLI on Windows. It may create a new isolated clone, conditionally edit only two native custody files and run bounded offline synthetic tests, then STOP with one report. No autonomous CLI execution by ChatGPT. **After the report**, ChatGPT reviews whether independent Codex read-only inspection is warranted and asks Owner by buttons. M1 OPEN; MP1.3, Candidate I, MP2/3 and main merge remain LOCKED.
 
 **Formal M0 phase registration and workflow-trio reconciliation:** still pending; this scoped authorization does not change the live `ACTIVE_IMPLEMENTATION_PACKET=NONE`.
 
