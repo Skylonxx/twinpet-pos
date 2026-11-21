@@ -75,6 +75,10 @@ Claude Windows report returned `BLOCKED_DESIGN_CONFLICT`: source inspection only
 
 Next Owner choice: (A) explicitly accept floor-only-as-virgin silent data-loss reinterpretation risk and separately scope implementation/tests; (B) design provenance marker/backfill/crash-window architecture before further code (recommended); (C) HOLD. No automatic re-run or reuse of this packet as implicit new authority. Preserve cloned repo and main until separate decision; do not auto-clean disk.
 
+## 7.2 Superseding Owner Policy A selection (2026-11-21)
+
+Owner has since selected Policy A and accepted `RISK_008_OWNER_ACCEPTED_POLICY_A_DESIGN_ONLY` for complete Phase-B file loss with a floor-only root. **This does not resurrect or re-authorize this closed N-001 packet.** A separate, still-unapproved [N-002 implementation scope](planning/MP1-CAND-N-002-FLOOR-ONLY-POLICY-A-IMPLEMENTATION-SCOPE.md) describes the minimal patch and synthetic tests. N-001 remains `BLOCKED_DESIGN_CONFLICT / NO_CODE_CHANGE / TESTS_NOT_RUN_ENV_LIMIT` as historical evidence.
+
 ## 8. STOP
 
 If anything deviates from safe path, baseline, no-network rule, two-file allowlist, auth-only floor compatibility or synthetic-test isolation, do **not** escalate into a fix loop. Write a `BLOCKED_*` report and stop. Candidate I, MP1.3, MP2, MP3 remain locked.
