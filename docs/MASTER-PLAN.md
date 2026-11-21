@@ -1,8 +1,14 @@
 # Twinpet POS — Master Plan Rebaseline
 
-**Version 0.1 — DRAFT FOR OWNER/GEMINI ADJUDICATION**  
-**Prepared:** 2026-11-21 · **Current approved scope:** MP0 *planning only*  
-**Explicit non-authority:** this new file on a planning branch does NOT change the live workflow gate, approve MP1–MP3, authorize code changes or release.
+**Version 0.2 — PLANNING DRAFT / SCOPED OWNER READ-ONLY HANDOFF**  
+**Prepared:** 2026-11-21 · **Current approved scope:** MP0 planning + MP1.1/MP1.2 read-only evidence collection only  
+**Explicit non-authority:** this new file on a planning branch does NOT change the live workflow gate, authorize MP1 integration/implementation, MP2/MP3, code changes, merge or release.
+
+## 0. Current Owner handoff — bounded decision
+
+**2026-11-21 — M0_SCOPED_MP1_READ_ONLY_AUTHORIZED / FORMAL_PHASE_ADJUDICATION_PENDING.** The Owner directed continuation after reviewing the MP0 draft. MP1.1/MP1.2 **read-only evidence identification and source-delta classification** is the only newly authorized next action. The live workflow trio still says successor implementation = NONE; formal reconciliation is pending. MP1.3 integrations, code changes, builds, UAT, Git commits/merges to main, deployment and cloud work are not authorized by this handoff.
+
+**One next execution packet:** Codex read-only UAT baseline custody and bounded source comparison. Stop after report; no automatic follow-on packet or tests.
 
 ## 1. Authority and source precedence
 
@@ -39,12 +45,12 @@
 
 **M0 PASS criteria:** one approved next phase/work packet and Owner signoff; no contradictory authority; technical debt has reopen triggers; locked items remain locked.
 
-### MP1 — Preserve / Integrate known-good UAT [LOCKED pending M0]
-- Record immutable identity/hash of Stage056 + 058/061–065 binaries, patches, evidence and UAT-only guards without destructive operations.
-- Compare real working candidate and local main; classify required production delta / UAT-only / discard / unknown.
+### MP1 — Preserve / Integrate known-good UAT [MP1.1/1.2 READ-ONLY AUTHORIZED; IMPLEMENTATION LOCKED]
+- **MP1.1 READ-ONLY:** record identity/hash of existing Stage056 + 058/061–065 source, binaries, patches, evidence, UAT-only guards. *Do not create/copy/move/delete a preservation archive or modify a manifest in the host*. Report observed paths/hashes only.
+- **MP1.2 READ-ONLY:** compare actual working candidate and local main, classify required production delta / UAT-only / discard / unknown. If baseline missing/identity uncertain: report BLOCKED, do not reconstruct.
 - Owner-authorized guarded integration branch with independent Code Review and bounded regressions, covering checkout, shift, stock and sync. No automatic merge into main.
 
-**M1:** source→build traceability and reviewed integration baseline; existing UAT success preserved.
+**M1:** source→build traceability and reviewed integration baseline; existing UAT success preserved. MP1.1/1.2 reports are preliminary and cannot alone close M1.
 
 ### MP2 — Native Offline Operational UAT [LOCKED pending M1]
 - On a sanctioned, isolated native UAT environment: one offline sale → app restart → reconnect → exactly-one order/payment/stock effect.
