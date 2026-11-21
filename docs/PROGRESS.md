@@ -32,6 +32,10 @@
 | Report 024 workflow adjudication | PLAN_AUTHORITY_UNRESOLVED | Current authority trio lacks latest UAT/selection |
 | Native EV-1 / EV-2 / GUI EV-3 / offline operational UAT | NOT_RUN or NOT_AUTHORIZED | Do not infer PASS, release or durability |
 
+## Candidate N-002 — TWO-FILE CLAUDE SOURCE_ONLY_READY / INDEPENDENT CODEX REVIEW PENDING (2026-11-22)
+
+Claude uploaded `TPOS-MP1-CAND-N-002-FAILCLOSED-ENUMERATION-SOURCE-ONLY-CLAUDE-REPORT.md`, verdict SOURCE_ONLY_READY with no compilation/tests. Report confirms original main `f034301` untouched; existing independent detached clone had exactly one approved prior Policy A `durable_kv.rs` diff before remediation. Now exactly two uncommitted changed files: `epoch_floor.rs` (+114/-22) and `durable_kv.rs` (+21/-12). `git diff --check` 0. Checked `Result<bool,String>` domain probe, `?` propagation, missing-floor `evaluate_floor` fail-closed; 3 added tests and 5 adapted asserts in allowed files, all NOT_RUN. C: last ~5.54 GiB free vs unchanged >=10 GiB build gate. Pending independent Codex read-only review and later separate runtime proof; no M1 PASS, merge/release, main/Cloud/Production changes claimed.
+
 ## Candidate N-002 — two-file fail-closed remediation OWNER_APPROVED / NOT RUN (2026-11-22)
 
 - Owner explicitly approved the bounded [domain-enumeration fail-closed remediation](planning/MP1-CAND-N-002-DOMAIN-ENUMERATION-FAILCLOSED-PROPOSAL.md) as a NEW source-only packet in the **same** N-001 clone at pinned f034301. Expected clone state on preflight: **one previous approved uncommitted** `durable_kv.rs` Policy A diff (+6/-2), not clean; any additional source/untracked issues STOP with no repair.
@@ -150,7 +154,7 @@ Owner explicitly closed UAT cleanup, refused any further C: cleanup or disk incr
 - No Source Code, tests, build, native app/profile, Cloud, Rules/Functions, release or data cleanup in this pass.
 
 ## Next one action
-**Next one action: Owner manually pastes the self-contained two-file N-002 fail-closed remediation instruction into Claude CLI**, using the existing pinned detached N-001 clone whose ONLY initial modification must be the approved Policy A diff. Claude may modify `epoch_floor.rs` and `durable_kv.rs` only; static checks and one report. No Cargo/build/tests/cleanup/new workspace, unchanged >=10 GiB build gate. If any third file needed STOP. Then independently dispatch Codex read-only source review only after Claude report; A-N1–A-N8 remain NOT_RUN; M1/main/Cloud/release gated.
+**Next one action: Owner manually pastes the self-contained N-002 two-file independent Codex READ-ONLY review instruction**, using same existing clone. Review true diff, caller compatibility, error handling, Windows NotFound/permission uncertainty, manifest symlink cases, unexecuted test source. Report to `Ai-Report\twinpet-pos\Codex\TPOS-MP1-CAND-N-002-FAILCLOSED-ENUMERATION-INDEPENDENT-CODEX-REPORT.md`. No Cargo/tests/build/new clone/cleanup/source edit/merge/Cloud/Prod or build gate waiver. A-N1..A-N8 NOT_RUN and M1 LOCKED.
 
 **Formal M0 phase registration and workflow-trio reconciliation:** still pending; this scoped authorization does not change the live `ACTIVE_IMPLEMENTATION_PACKET=NONE`.
 
