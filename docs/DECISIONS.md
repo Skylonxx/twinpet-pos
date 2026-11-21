@@ -154,6 +154,14 @@
 - Not independently reviewed yet: relation of callers/startup/epoch floor to Policy A; any historical Rust tests or comments asserting older floor-only behavior. No M1 PASS, compile PASS, merge or release claim.
 - **Next scope:** Codex independent source inspection **read-only** of existing clone and baseline, one result report. No code repair, test/build, re-clone, safety threshold change or automatic next packet. RISK-008 Owner acceptance retained as explicit limitation.
 
+## 2026-11-22 — N-002 independent static review FINDINGS, awaiting remediation decision
+
+- Codex independent report `TPOS-MP1-CAND-N-002-SOURCE-ONLY-INDEPENDENT-REVIEW-CODEX-REPORT.md` returned **STATIC_REVIEW_FINDINGS**, not PASS. Exact one-file Policy A diff and pinned detached clone custody verified, with no untracked files, and original `main@f034301` tracked-clean. No Cargo or runtime tests.
+- `epoch_floor::durable_domain_files_exist` in `epoch_floor.rs:239-260` can swallow directory/entry errors and report no domains; removal of floor limb in N-002 creates a **source-derived false-virgin scenario with domain files physically present but not enumerated**, distinct from Owner's narrow `RISK-008` acceptance of files completely lost. Windows ACL and observed exploitation NOT_RUN.
+- Source review also flagged `durable_kv.rs` comment overclaim, startup/floor interactions and interrupted first manifest creation (availability risk). All A-N1…A-N8 NOT_RUN.
+- **Owner approval pending** for [one two-file source-only fail-closed remediation](planning/MP1-CAND-N-002-DOMAIN-ENUMERATION-FAILCLOSED-PROPOSAL.md) in the same detached N-001 clone; keep the existing approved diff, no new clone/workspace, build/test, cleanup or 10 GiB build gate change. No expansion to privileged-auth enumeration without separate Owner scope. No source modification by ChatGPT, Codex reviewer, or another agent under this log alone.
+- M1, Candidate I, MP1.3, merge/Production/release remain LOCKED.
+
 ## Planning policy to review at M0 (PROPOSED, not final)
 - Immediate goal: reliable Native POS for real cashier operations before nonessential feature expansion.
 - Proposed sequence: MP1 preserve/reconcile UAT → MP2 native offline operational UAT → MP3 release-readiness and Owner GO/NO-GO.
