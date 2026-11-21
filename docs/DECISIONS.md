@@ -138,6 +138,15 @@
 - **One proposed path:** use **existing clone only if still pinned/clean**, one Policy A limb edit in `durable_kv.rs`, static diff checks and one report; no new clone/build/Cargo/tests. Existing >=10 GiB **build gate remains intact and is never invoked** in source-only stage. See [low-disk adaptation proposal](planning/MP1-CAND-N-002-LOW-DISK-SOURCE-ONLY-ADAPTATION-PROPOSAL.md).
 - **NOT APPROVED YET:** substitution of the original N-002 fresh-clone-plus-tests package with source-only work. No CLI execution, source change, integration, M1 acceptance, merge, production, or Cloud. All A-N1…A-N8 runtime tests remain NOT_RUN. Owner approval required before any source-only implementation.
 
+## 2026-11-22 — OWNER APPROVES N-002 EXISTING-CLONE SOURCE-ONLY SUBSTITUTE
+
+- Owner explicitly approved adapting the previously blocked N-002 packet to a **source-only phase** with the existing N-001 detached clone `C:\Users\Narachat\TPOS-MP1-CAND-N-ISO-20261121`. This is a new limited permission; previous N-002 had been stopped at 10 GiB disk preflight and remains historical.
+- Claude **must first verify read-only** both original main at pinned `f034301c46dd9e08190f869cc85dbb140ac28a3c` tracked clean and existing clone independently rooted, clean and detached at that exact SHA. Unavailable/dirty/mismatch → STOP without making any clone, worktree, checkout, reset or source edits.
+- If preflight passes, permitted mutation is **only** `src-tauri/src/durable_kv.rs` in that existing clone: remove `epoch_floor::floor_path(root).exists() ||` from `prior_phase_b_state_exists`; minimally align stale comment in same file if necessary. Preserve domain-file guard, manifest-path state fail-closed error propagation, epoch/inventory validation and `SERVER_AUTHORITATIVE_CLOSE_ENABLED=false`.
+- Only static diff checks (`git diff --check`, changed-file list, source inspection). **NO Rust/Cargo build, tests, network, cloning/workspace, disk cleanup or 10 GiB build-gate relaxation**. Report all A-N1–A-N8 tests `NOT_RUN` and owner accepted RISK-008 floor-only data-loss ambiguity. No automatic Codex run.
+- Report to `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Claude\TPOS-MP1-CAND-N-002-LOW-DISK-SOURCE-ONLY-CLAUDE-REPORT.md`. **Next after Claude result:** independent Codex read-only source review by separate dispatch/Owner handoff. No M1 PASS, merge, deployment, main source changes or release.
+- [Owner-approved scope](planning/MP1-CAND-N-002-LOW-DISK-SOURCE-ONLY-ADAPTATION-PROPOSAL.md); no evidence of running Claude yet.
+
 ## Planning policy to review at M0 (PROPOSED, not final)
 - Immediate goal: reliable Native POS for real cashier operations before nonessential feature expansion.
 - Proposed sequence: MP1 preserve/reconcile UAT → MP2 native offline operational UAT → MP3 release-readiness and Owner GO/NO-GO.
