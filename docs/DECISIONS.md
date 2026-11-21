@@ -85,6 +85,15 @@
 - No current permission to retry Candidate N or run Rust tests without resolving storage pressure. Do **not** erase old binaries, evidence, backups, original clone, OneDrive files or protected profiles just to free disk. No automatic Codex review/Claude follow-up packet; Candidate I/MP1.3/MP2/MP3 remain LOCKED.
 - Process discrepancy worth noting: initial macOS preflight report overwritten by Windows pass; Claude resolved prompt from an alternate OneDrive folder; report also states temporary scratch draft written outside strict output allowlist. This merits procedural correction, not speculation of source modification.
 
+## 2026-11-21 — OWNER CHOOSES POLICY A; accepts RISK-008 by design only
+
+- Owner selected **A** explicitly in chat: `Floor-only` may be treated as `Virgin` even when all prior Phase-B Manifest/Domain files have disappeared; a fresh native epoch may then be initialized **without a warning that previous Phase-B data were lost**. Owner knowingly accepts that narrowly defined danger of masking prior committed data loss. **Decision ID:** `RISK_008_OWNER_ACCEPTED_POLICY_A_DESIGN_ONLY`.
+- **Explicit guardrails:** this does not authorize source changes, an auto-retry of Candidate N-001, synthetic tests, Git commit/merge, production UAT, deployment or release. Not a blanket waiver for missing/corrupt manifests still present, partial missing-domain cases, bill duplication or any other Offline First invariant. No claim that previously lost data are recoverable or that runtime proves safety.
+- Supersession: MP1-P01's prior conservative `FAIL_CLOSED + OWNER_RECOVERY_REQUIRED` **floor-only design default** is superseded only for the precise all-Phase-B-artifacts-absent case by this explicit Owner decision. All remaining fail-closed invariants (present invalid manifest, remaining domain file without manifest, damaged committed state) remain binding.
+- Created [Candidate N-002 Policy A implementation approval scope](planning/MP1-CAND-N-002-FLOOR-ONLY-POLICY-A-IMPLEMENTATION-SCOPE.md). Proposed single-limb change in `src-tauri/src/durable_kv.rs` only, targeted synthetic offline tests and separate independent reviewer gate; no patch from UAT overlay 058 wholesale and no `SERVER_AUTHORITATIVE_CLOSE_ENABLED` change.
+- Environment blocker persists: Windows C: about 0.3 GiB free in N-001. Do not auto-clean backups/AppData/OneDrive/UAT or rerun Cargo. Before an implementation packet, verify safe isolated clone, adequate storage, exact source baseline and allowed writes.
+- **Next one owner decision:** explicitly approve/reject **Candidate N-002 isolated implementation plus bounded offline synthetic tests**. If approved, it will still not authorize commit/push/merge or release. Candidate I/MP1.3, MP2/MP3 remain LOCKED. Formal M0 phase/trio adjudication remains pending.
+
 ## Planning policy to review at M0 (PROPOSED, not final)
 - Immediate goal: reliable Native POS for real cashier operations before nonessential feature expansion.
 - Proposed sequence: MP1 preserve/reconcile UAT → MP2 native offline operational UAT → MP3 release-readiness and Owner GO/NO-GO.
@@ -96,7 +105,7 @@
 |---|---|---|
 | M0 next implementation phase | MP1.1/MP1.2 evidence-only handoff approved; MP1.3 implementation separately requires gate | SCOPED_READ_ONLY; FORMAL_PHASE_PENDING |
 | Canonical status reconciliation | Exact allowed `STATE/CURRENT_PACKET/NEXT_ACTION` changes & their approval authority | PENDING |
-| MP1 integration scope and test gates | Candidate N run stopped without edits/tests: floor-only virgin vs prior-loss indistinguishable; Owner A/B/HOLD policy decision pending | CAND_N_BLOCKED_DESIGN_CONFLICT / M1_OPEN / MP1_3_LOCKED |
+| MP1 integration scope and test gates | Owner accepted A design risk RISK-008; Candidate N-002 isolated implementation scope drafted, separate code approval not yet granted | POLICY_A_OWNER_ACCEPTED_DESIGN_ONLY / CAND_N_002_APPROVAL_PENDING / M1_OPEN / MP1_3_LOCKED |
 | U1/B1-R evidence acceptance | Headless EV-3 vs native GUI; EV-1; M1 mutant skipped | DEFERRED with release trigger; **not risk accepted** |
 | Return/Refund activation | Separate owner/technology/cutover gate, retains gate OFF | LOCKED |
 | EV-2, Android, cloud deployments, production upgrade/rollout | Separate scoped approval | NOT AUTHORIZED |
