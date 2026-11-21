@@ -1,6 +1,6 @@
 # Twinpet POS — Master Plan Rebaseline
 
-**Version 0.3 — PLANNING DRAFT / MP1.1 REVIEWED; MP1.2 READ-ONLY NEXT**  
+**Version 0.4 — PLANNING DRAFT / MP1.1–1.2 TRIAGE REVIEWED; OWNER DECISION NEXT**  
 **Prepared:** 2026-11-21 · **Current approved scope:** MP0 planning + MP1.1/MP1.2 read-only evidence collection only  
 **Explicit non-authority:** this new file on a planning branch does NOT change the live workflow gate, authorize MP1 integration/implementation, MP2/MP3, code changes, merge or release.
 
@@ -8,7 +8,7 @@
 
 **2026-11-21 — M0_SCOPED_MP1_READ_ONLY_AUTHORIZED / FORMAL_PHASE_ADJUDICATION_PENDING.** The Owner directed continuation after reviewing the MP0 draft. MP1.1/MP1.2 **read-only evidence identification and source-delta classification** is the only newly authorized next action. The live workflow trio still says successor implementation = NONE; formal reconciliation is pending. MP1.3 integrations, code changes, builds, UAT, Git commits/merges to main, deployment and cloud work are not authorized by this handoff.
 
-**Next execution packet after review of MP1-001:** Codex MP1.2 read-only Stage056 manifest-equivalence and source-delta classification (no build/tests/merge). MP1.1 is completed with partial identity; formal phase gate remains pending.
+**Current STOP after MP1-002:** both bounded read-only evidence packets are complete with partial verdicts. Next action is **Owner scoping/adjudication**, not an automatically assigned Codex/Claude packet. M1 remains open and the formal successor phase gate pending.
 
 ## 1. Authority and source precedence
 
@@ -29,7 +29,7 @@
 | TRUE-STANDALONE Phases A/B/C | CLOSED or CLOSED_WITH_NOTES | No Production authorization |
 | SEC-001 | CLOSED incl. native and Rules evidence | Does not auto-select successor phase |
 | Return/Refund Packet 023 | SOURCE_CLOSED; `pos_return` OFF and server-authoritative close gate OFF | Activation, Functions/Rules release remain locked |
-| Stage056 + 058/061–065 UAT line | MP1-001 verified selected artifact hashes and SB63/SB64 EXE hashes; prior Owner results remain report-only | Current full Stage056 manifest equivalence, scratch/source provenance and main drift unresolved |
+| Stage056 + 058/061–065 UAT line | MP1-001 verified SB63/SB64 identity; MP1-002 matched 1,364/1,366 manifest entries and grouped all 167 paths (64 production-review; 101 tooling; 2 UNKNOWN) | Protected env files and extras unchecked; no per-hunk production acceptance or full-tree proof |
 | U1/B1-R 016–024 | Compile PASS, focused 5/5, selected mutants killed 3 (M1 skipped), EV-3 headless evidence, EV-4 Windows binding check | EV-1 and GUI EV-3 missing; U1 NOT ACCEPTED |
 | Native production release/upgrade | NOT AUTHORIZED; candidate not ready for release | Real-data migration and installer proof pending |
 | Android | DEFERRED | No Phase selection |
@@ -50,7 +50,7 @@
 - **MP1.2 READ-ONLY:** compare actual working candidate and local main, classify required production delta / UAT-only / discard / unknown. If baseline missing/identity uncertain: report BLOCKED, do not reconstruct.
 - Owner-authorized guarded integration branch with independent Code Review and bounded regressions, covering checkout, shift, stock and sync. No automatic merge into main.
 
-**M1:** source→build traceability and reviewed integration baseline; existing UAT success preserved. **MP1-001 verdict `MP1_001_PARTIAL_IDENTITY`**: selected hash chain valid for SB63/SB64 and Stage056 patch pins; current manifest equivalence not checked and UAT gate toggle differs from official source. MP1.1 evidence documented, M1 still OPEN; MP1.2 report cannot alone close M1.
+**M1:** source→build traceability and reviewed integration baseline; existing UAT success preserved. MP1-001 verdict `MP1_001_PARTIAL_IDENTITY`; MP1-002 verdict `MP1_002_PARTIAL_CLASSIFICATION`: 1,364 Stage056 manifest file hashes match, two protected `.env` files skipped, extras unchecked. The 167 delta paths were clustered only, **not reviewed per hunk**. UAT overlay 058 sets close gate ON although main/raw Stage056 are OFF. Actual native runtime path UNKNOWN. **M1 still OPEN; MP1.3 implementation LOCKED.**
 
 ### MP2 — Native Offline Operational UAT [LOCKED pending M1]
 - On a sanctioned, isolated native UAT environment: one offline sale → app restart → reconnect → exactly-one order/payment/stock effect.
@@ -71,13 +71,22 @@
 | ID | Classification | State | Reopen trigger |
 |---|---|---|---|
 | TD-001 U1/B1-R | Evidence retained + pending validation, **not accepted risk** | 016–024: 5/5 focused; M2–M4 killed; M1 skipped; EV-3 headless complete; EV-4 binding verified; EV-1/GUI remaining | Affected durable code enters integration/release, or new material defect |
-| RISK-002 UAT source/build drift | Integration / release risk (HIGH) | MP1-001: Stage056 1,366-file manifest not compared to current tree; 167-file cumulative delta vs main; SB63/SB64 hashed and identity files matched; scratch Git IDs are not main commits | MP1.2 read-only complete classification, then separate Owner integration gate |
-| RISK-006 UAT vs official shift-close gate | Integration / business-behavior risk (HIGH) | MP1-001: identity files report `SERVER_AUTHORITATIVE_CLOSE_ENABLED=true` for SB61–64 whereas official main/source closure records `false`; configuration/behavior parity unproven | MP1.2 identify exact config delta and isolate UAT-only semantics; no gate flip/deploy without Owner |
+| RISK-002 UAT source/build drift | Integration / release risk (HIGH) | MP1-002: 1,364 manifest entries match; two `.env` protected + extras unchecked. 167 delta paths grouped into 64 production-review, 101 tooling, 2 UNKNOWN. Scratch Git build IDs not main commits. | Scope independent per-hunk review of cashier-critical deltas before any integration, not repeated broad rehash |
+| RISK-006 UAT vs official shift-close gate | Integration / business-behavior risk (HIGH) | MP1-002 confirmed overlay 058 flips `false` to `true`, all SB61–SB64 script inputs include overlay, but actual executed native branch remains UNKNOWN | Owner decision on keeping official Gate-OFF and what UAT evidence can be reused; **no automatic Gate-ON adoption** |
+| RISK-007 privileged action / ledger seams | Security and sale-integrity risk (HIGH until classified) | MP1-002 marked `useLocalLedger.ts` and `projectPrivilegedOfflineAction.ts` as UNKNOWN; may impact sensitive sale/privileged behavior | Prioritize focused independent review before integration/risk acceptance |
 | GOV-003 stale workflow / plan gap | Process/governance debt (NOW) | live trio lacks later UAT line; no one consolidated product plan | MP0 + M0 reconciliation |
 | UAT-004 native E2E | Release acceptance blocker | sale/restart/reconnect/stock/shift not signed off on a traceable candidate | MP2 |
 | TEST-005 baseline shift tests | Verification readiness risk | Historical `shiftService.*` baseline failures on Node 26 (prior report) | Integration regression testing under MP1 |
 
 **No blanket risk acceptance.** Anything risking duplicate/missing bills, unauthorized privileged action, inventory misstatement, or data loss requires mitigation or an explicit Owner gate before that candidate's release.
+
+## 4.1 MP1-002 disposition and Owner review gate
+
+**Triage evidence accepted, not production acceptance:** manifest 1,364/1,366 matched; two protected `.env` paths skipped, extras and concurrent changes unchecked. Parsed all 167 Stage056 source path names (90 added, 77 modified) but only selectively reviewed source; 64 require production risk review, 101 are tests/tooling, two remain UNKNOWN. No patch replay, new build or UAT runtime proof.
+
+**Do not repeat** the 1,364 hash checks or blanket-scan 167 paths. Protected `.env` contents must not be opened for mere completeness. Treat unverified extras and provenance as evidence gaps, not automatically release-stopping defects; raise them when defining reproducible integrated candidate.
+
+**Next ONE Owner decision:** approve/reject a *bounded independent pre-integration design/security review* focused on high-risk changed hunks: official Gate-OFF semantics vs UAT overlay Gate-ON, epoch/migration, device identity/sequence, sale journal/idempotency, inventory/FIFO and branch scope, two UNKNOWN privileged/ledger files, and UAT trust/enrollment guards. Specify acceptance criteria and owner risk boundaries. **This review does not authorize source edits, integration branches, tests/builds, cloud, deployment, merge or release.**
 
 ## 5. Other initiatives / deferred (LOCKED)
 Return/Refund activation and sealing Rules; Android/Capacitor; EV-2 VM hard reset; broad mutation matrix; unrelated UI polish; unapproved Cloud/deployment or live POS data contact.
