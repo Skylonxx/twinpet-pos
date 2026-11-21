@@ -1,0 +1,26 @@
+# MP1 Candidate N-002 — Domain Enumeration Fail-Closed Remediation (proposal)
+
+**Date:** 2026-11-22 · **Status:** FINDING_CONFIRMED_IN_SOURCE / REMEDIATION_SCOPE_OWNER_APPROVAL_REQUIRED / NO_EXECUTION
+**Independent evidence:** `TPOS-MP1-CAND-N-002-SOURCE-ONLY-INDEPENDENT-REVIEW-CODEX-REPORT.md` — `STATIC_REVIEW_FINDINGS`. No compile, runtime tests or reproduction performed.
+
+## Verified source-level findings
+- Exact one-file Policy A diff in existing detached N-001 clone removed `epoch_floor::floor_path(root).exists() ||` within `durable_kv::prior_phase_b_state_exists`. Code only in `src-tauri/src/durable_kv.rs` is modified and uncommitted; `git diff --check` passed per Codex. Original `main@f034301c46dd9e08190f869cc85dbb140ac28a3c` unchanged.
+- `src-tauri/src/epoch_floor.rs:239-260` exposes `pub fn durable_domain_files_exist(...) -> bool`: it checks `dir.is_dir()`, `fs::read_dir` in an `if let Ok(...)` guard, then `entries.flatten()`. Failed directory open or per-entry iterator error can be swallowed and mistaken for false. This was corroborated directly against the pinned source on GitHub.
+- `durable_kv.rs:220-226` now relies on that boolean, plus `manifest_path_state` for manifest pathname. For floor-present, manifest-path-absent, domain-present-but-unreadable directory enumeration, `manifest_get` and `open_or_create_manifest_if_virgin` may treat a root as virgin. The Windows pathname-access combination is not independently reproduced. This is not RISK-008 Owner-accepted *complete physical loss* scenario, because surviving domain files may be present but invisible.
+- `epoch_floor::evaluate_floor` also uses that boolean combined with `privileged_auth_state_exists` (`epoch_floor.rs:299-320`); the latter and `oac_store_contains_recognized_state` independently swallow some listing errors in a different preexisting path. This adjacent issue must be **recorded, not silently broadened** into an auth overhaul.
+- Static report additionally noted a possible interrupted initialization/restart availability outcome, and stale `durable_kv.rs:211-215` comment. All A-N1…A-N8 remain NOT_RUN. This is a source-inferred safety issue, not runtime-confirmed.
+
+## One recommended narrow scope — NOT YET AUTHORIZED
+One follow-up **SOURCE-ONLY / NO BUILD / NO TEST** change in the **same existing detached clone**, preserving its already-authorized uncommitted `durable_kv.rs` Policy A patch. The requested *expanded* write allowlist would be strictly:
+1. `src-tauri/src/epoch_floor.rs` — introduce a **checked/fallible domain-presence probe** that returns `Result<bool, String>` and never converts directory metadata/open/list-entry errors to `false`. Genuine directory/manifest absence must be distinguished from inaccessible or unusable entries; keep recognition of eight known durable-domain prefixes. Apply the checked probe to relevant startup `evaluate_floor` logic only if necessary to ensure errors lead to `FloorDecision::FailClosed`, preserving the established enum result and first-boot behavior. No blanket API rewrite.
+2. `src-tauri/src/durable_kv.rs` — replace the current boolean domain-presence use in `prior_phase_b_state_exists` with the checked Result-probe and `?` propagation; correct the adjacent inaccurate comment. Preserve the previously approved floor-only Policy A exception, manifest-path classifier, committed/inventory/epoch checks and all other source.
+
+Guard rails:
+- Before any edits, read-only reconfirm original main pinned/tracked-clean and isolated clone detached pinned exact baseline with ONLY the expected `durable_kv.rs` uncommitted +6/-2 Policy A diff; not a clean clone anymore, do not reset/checkout/discard it. If any other diff, untracked or reparse/path issue, STOP and report.
+- No new clone/workspace, Cargo, rustc, tests, build, disk cleanup, network, app/Production/Cloud/real AppData, Git staging/commit/push/merge or 10 GiB build-gate adjustment. No automatic independent agent. Only static diff `git diff --check`, read-only scope/content inspection and one report.
+- Do not change `privileged_auth_state_exists` or other auth storage code, `lib.rs`, tests or any other paths without fresh scope approval. If the errors cannot safely be distinguished in the two-file allowlist, STOP and report; no unreviewed silent fallback.
+- Existing RISK-008 acceptance stays narrowly scoped to total Phase-B manifest/domain loss with surviving floor; unreadable existing domains MUST fail closed by design in the proposed patch.
+- A-N1…A-N8 remain **NOT_RUN** plus new enumeration-failure scenarios NOT_RUN. Source-only output cannot be called M1 PASS, runtime validated, merged or released. Independent Codex reviewer required after a Claude report under a separate dispatch.
+- Track the preexisting privileged-auth inventory error suppression, interrupted virgin manifest restart behavior and Windows ACL realizability as explicit unresolved risks for future separate consideration; do not automatically expand this packet.
+
+**Owner gate:** approve or reject the two-file source-only remediation exactly above. Until approved, do not edit, rerun N-002, modify Safety Gate, run Cargo or open new cleanup/storage work.
