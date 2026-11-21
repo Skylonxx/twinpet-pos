@@ -11,7 +11,7 @@
 | MP0.2 priority/dependencies | DRAFT_READY | `MASTER-PLAN.md`, Gantt; critical path proposal only |
 | MP0.3 debt/risk register | DRAFT_READY | U1/B1-R 016–024 evidence retained; TD-001/RISK-002/UAT-004/GOV-003 |
 | M0 Owner/Gemini phase selection | MP1_R01_REVIEW_ONLY_APPROVED / FORMAL_PENDING | Owner authorized focused independent pre-integration read-only review; no implementation successor chosen in live trio |
-| MP1 preserve/integrate UAT | MP1.1/1.2 triage done; MP1-R01 REVIEW_COMPLETE_WITH_BLOCKERS | Owner decision on MP1-P01 planning only next; M1 OPEN, MP1.3 implementation/merge LOCKED |
+| MP1 preserve/integrate UAT | MP1-P01 PLANNING_DRAFT_READY after MP1-R01 review | 7 proposed invariants and state matrix documented; Owner plan-review next; M1 OPEN, MP1.3 implementation/merge LOCKED |
 | MP2 native offline E2E | LOCKED | M1 acceptance, safe isolated UAT environment |
 | MP3 release readiness | LOCKED | M2 acceptance + explicit Owner GO/NO-GO |
 
@@ -31,6 +31,12 @@
 | Report 023 EV-4 | BINDINGS_VERIFIED | FFI imports/link, not full Windows semantics |
 | Report 024 workflow adjudication | PLAN_AUTHORITY_UNRESOLVED | Current authority trio lacks latest UAT/selection |
 | Native EV-1 / EV-2 / GUI EV-3 / offline operational UAT | NOT_RUN or NOT_AUTHORIZED | Do not infer PASS, release or durability |
+
+## MP1-P01 planning completed as draft (2026-11-21)
+- Owner explicitly authorized **planning only** for Native Custody & Device Identity after MP1-R01.
+- Created `docs/planning/MP1-P01-NATIVE-CUSTODY-IDENTITY-SAFETY-PLAN.md` on planning branch: proposed N1–N3 + I1–I4 invariants, safe state/acceptance matrix, two smaller future candidates N then I, explicit stop/no-go rules and source-vs-unknown evidence labels.
+- Status is **PLANNING_DRAFT_READY / NOT_IMPLEMENTATION_APPROVED**. No source edits, code tests, native run, UAT, Cloud, merge or policy gate activation. The official workflow trio still has no successor implementation selected.
+- One next owner action: **review/accept or revise MP1-P01 plan**; future Candidate N implementation is separately gated. Do not start another automatic CLI packet.
 
 ## MP1-R01 independent review result (2026-11-21)
 - Received scoped Codex source/design review with `MP1_R01_REVIEW_COMPLETE_WITH_BLOCKERS`; no modification of source, Git, runtime, Cloud or protected data in the report.
@@ -61,7 +67,7 @@
 - No Source Code, tests, build, native app/profile, Cloud, Rules/Functions, release or data cleanup in this pass.
 
 ## Next one action
-**Owner decision required:** decide whether to authorize **MP1-P01 native custody + identity safety DESIGN/PLANNING ONLY**; candidate scope durable manifest/epoch floor, device identity/seq source lineage and acceptance proof plan under official Gate-OFF. Do not execute, edit, build, test, integrate or merge automatically. **MP1.3 implementation locked, M1 open and formal successor phase still pending.**
+**Owner plan review required:** approve/revise the new [MP1-P01 Native Custody & Identity Safety draft](planning/MP1-P01-NATIVE-CUSTODY-IDENTITY-SAFETY-PLAN.md), particularly floor-only/orphan-sequence policy and N/I acceptance contract. Only after explicit separate approval consider a small guarded Candidate N implementation packet. **MP1.3 integration and Candidate I LOCKED; M1 remains OPEN; formal successor phase pending.**
 
 **Formal M0 phase registration and workflow-trio reconciliation:** still pending; this scoped authorization does not change the live `ACTIVE_IMPLEMENTATION_PACKET=NONE`.
 
