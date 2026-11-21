@@ -11,7 +11,7 @@
 | MP0.2 priority/dependencies | DRAFT_READY | `MASTER-PLAN.md`, Gantt; critical path proposal only |
 | MP0.3 debt/risk register | DRAFT_READY | U1/B1-R 016–024 evidence retained; TD-001/RISK-002/UAT-004/GOV-003 |
 | M0 Owner/Gemini phase selection | MP1_R01_REVIEW_ONLY_APPROVED / FORMAL_PENDING | Owner authorized focused independent pre-integration read-only review; no implementation successor chosen in live trio |
-| MP1 preserve/integrate UAT | CAND_N_BLOCKED_DESIGN_CONFLICT / NO_CODE_CHANGES | Claude Windows report received; Rust tests NOT_RUN_ENV_LIMIT (C: ~0.3 GiB); Owner floor-only A/B/HOLD decision next; M1 OPEN, MP1.3 LOCKED |
+| MP1 preserve/integrate UAT | POLICY_A_OWNER_ACCEPTED_DESIGN_ONLY / CAND_N_002_APPROVAL_PENDING | N-001 ended blocked with no code/tests; Owner accepted RISK-008 floor-only risk; next approval for new isolated patch/test scope; M1 OPEN, MP1.3 LOCKED |
 | MP2 native offline E2E | LOCKED | M1 acceptance, safe isolated UAT environment |
 | MP3 release readiness | LOCKED | M2 acceptance + explicit Owner GO/NO-GO |
 
@@ -31,6 +31,12 @@
 | Report 023 EV-4 | BINDINGS_VERIFIED | FFI imports/link, not full Windows semantics |
 | Report 024 workflow adjudication | PLAN_AUTHORITY_UNRESOLVED | Current authority trio lacks latest UAT/selection |
 | Native EV-1 / EV-2 / GUI EV-3 / offline operational UAT | NOT_RUN or NOT_AUTHORIZED | Do not infer PASS, release or durability |
+
+## Candidate N Owner Policy A decision (2026-11-21)
+- Owner explicitly accepted the RISK-008 design tradeoff: epoch floor present, Phase-B manifest AND all domain files missing → may treat as virgin and start new epoch without notifying of complete prior loss. This is **limited design risk acceptance**, NOT Production-release or source write approval.
+- Created [Candidate N-002 implementation scope](planning/MP1-CAND-N-002-FLOOR-ONLY-POLICY-A-IMPLEMENTATION-SCOPE.md) for separate approval: remove only epoch-floor limb in `prior_phase_b_state_exists` in `src-tauri/src/durable_kv.rs`, maintain domain-path and manifest symlink/invalid/committed guards. No future work on `epoch_floor.rs` or adjacent files without separate scope approval.
+- Existing N-001 `BLOCKED_DESIGN_CONFLICT` stands as historical outcome; 0 changes / 0 tests. The A decision does not retroactively mean N-001 passed.
+- Next: Owner approves/holds N-002 isolated implementation; Windows C: disk-pressure `ENV-001` requires safe preflight before offline Rust test. No Git original/main/source changes or Cloud actions in this planning pass.
 
 ## Candidate N Windows execution result (2026-11-21)
 - Report verdict `BLOCKED_DESIGN_CONFLICT` (source analysis only, 0 modified files, 0 tests). Fresh detached clone `C:\\Users\\Narachat\\TPOS-MP1-CAND-N-ISO-20261121` exists; original main `f034301` and protected untracked/stash reported unchanged. Tests `NOT_RUN_ENV_LIMIT` due to ~0.3 GiB C: free; no test PASS.
@@ -83,7 +89,7 @@
 - No Source Code, tests, build, native app/profile, Cloud, Rules/Functions, release or data cleanup in this pass.
 
 ## Next one action
-**Next one action: Owner selects via approval buttons** A explicit floor-only-as-virgin risk acceptance (implementation still separately scoped); B (recommended) authorise **provenance marker design/planning only** with legacy compatibility, backfill and crash-window review; or C HOLD. Rust tests blocked until safe disk headroom; do not clean AppData/OneDrive/protected evidence. No automatic Claude or Codex packet after a selection; issue a new bounded packet only for approved scope. M1 OPEN, MP1.3/Candidate I/MP2/MP3 and main merge LOCKED.
+**Next one action: Owner Candidate N-002 implementation GO/NO-GO (buttons).** Policy A accepted with explicit RISK-008 exception and proposed minimal patch/test acceptance matrix documented. No implementation, test or automatic Codex/Claude dispatch yet. Disk capacity `ENV-001` remains an execution preflight blocker. Main, M1, Candidate I, MP1.3, MP2/MP3, Cloud and release remain unchanged/LOCKED.
 
 **Formal M0 phase registration and workflow-trio reconciliation:** still pending; this scoped authorization does not change the live `ACTIVE_IMPLEMENTATION_PACKET=NONE`.
 
