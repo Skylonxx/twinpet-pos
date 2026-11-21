@@ -52,6 +52,14 @@
 - Codex recommends a **single next OWNER DECISION**: accept/reject **MP1-P01 native custody & identity safety PLANNING ONLY** as the next design packet, under official Gate-OFF; define a bounded contract/proof plan. Do not launch it automatically. MP1.3 code/integration, build/test/native UAT, Git merge, cloud/production and release remain LOCKED; M1 NOT ACCEPTED. Live workflow trio `main` remains unchanged.
 - No further 167-file sweep, manifest rehash or spontaneous EV-1/EV-3 test loop is authorized.
 
+## 2026-11-21 — Owner approves MP1-P01 PLANNING ONLY; acceptance contract drafted
+
+- Product Owner explicitly approved the proposal **MP1-P01 — Native Custody & Identity Safety (Planning Only)** after Codex MP1-R01. Approval scope: write/record a planning document and Todoist status **on the existing planning branch**, not editing operational source or running builds/tests.
+- Created [MP1-P01 acceptance contract](planning/MP1-P01-NATIVE-CUSTODY-IDENTITY-SAFETY-PLAN.md): N1–N3 native manifest/epoch/floor invariants; I1–I4 device identity/sequence/scope/journal invariants; future state/proof matrix; two intentionally separate future candidate boundaries (N native custody, I device identity).
+- Proposed default for ambiguous floor-only or orphan-sequence states: conservative **FAIL_CLOSED + OWNER_RECOVERY_REQUIRED** pending explicit Owner recovery-design decision. This is a proposal, not a signed-off behavior change. Historical UAT source review and prior test results are not presented as runtime PASS.
+- **Not approved:** Candidate N or I source implementation, branch creation on Windows host, applying overlay 058/patch 061, enabling Gate-ON, targeted test/build, Native UAT, cloud, Firebase rules/functions, integration/merge, or release. M1 stays open; workflow trio stays canonical with active implementation NONE; roles must follow `AUTHORITY_MATRIX.md` until formally reconciled.
+- **Next Owner gate:** review/accept/revise MP1-P01 planning contract, choose whether to authorize a separate bounded Candidate N implementation design/write packet with precise acceptance tests and isolated environment, or HOLD. No agent follow-up packet auto-starts.
+
 ## Planning policy to review at M0 (PROPOSED, not final)
 - Immediate goal: reliable Native POS for real cashier operations before nonessential feature expansion.
 - Proposed sequence: MP1 preserve/reconcile UAT → MP2 native offline operational UAT → MP3 release-readiness and Owner GO/NO-GO.
@@ -63,7 +71,7 @@
 |---|---|---|
 | M0 next implementation phase | MP1.1/MP1.2 evidence-only handoff approved; MP1.3 implementation separately requires gate | SCOPED_READ_ONLY; FORMAL_PHASE_PENDING |
 | Canonical status reconciliation | Exact allowed `STATE/CURRENT_PACKET/NEXT_ACTION` changes & their approval authority | PENDING |
-| MP1 integration scope and test gates | MP1-R01 reviewed, blockers documented; Owner to authorize/reject MP1-P01 design-only packet, not implementation | MP1_R01_COMPLETE_WITH_BLOCKERS / MP1_3_LOCKED |
+| MP1 integration scope and test gates | Owner approved MP1-P01 planning; Native Custody/Identity acceptance contract drafted and awaiting Owner content review; implementation not authorized | MP1_P01_PLANNING_DRAFT_READY / MP1_3_LOCKED |
 | U1/B1-R evidence acceptance | Headless EV-3 vs native GUI; EV-1; M1 mutant skipped | DEFERRED with release trigger; **not risk accepted** |
 | Return/Refund activation | Separate owner/technology/cutover gate, retains gate OFF | LOCKED |
 | EV-2, Android, cloud deployments, production upgrade/rollout | Separate scoped approval | NOT AUTHORIZED |
