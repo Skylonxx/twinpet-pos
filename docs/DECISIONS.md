@@ -18,6 +18,14 @@
 - Current repository `main` remains unchanged. No merge or live deployment authorization. MP2/MP3 and Return/Refund/Android remain locked.
 - M0 label for this decision: `M0_SCOPED_MP1_READ_ONLY_AUTHORIZED / FORMAL_PHASE_ADJUDICATION_PENDING`.
 
+## 2026-11-21 — MP1-001 review & scoped MP1.2 routing
+
+- Received `TPOS-MP1-001-UAT-BASELINE-CUSTODY-READONLY-CODEX-REPORT.md`, verdict `MP1_001_PARTIAL_IDENTITY`. MP1.1 evidence recorded: Stage056 pinned to base `f034301`, 167-file cumulative patch; selected patch/script/manifest hashes match; SB63/SB64 exe SHA-256 independently matched recorded `BUILD-IDENTITY`. Not a full source-tree proof or runtime PASS.
+- **Unresolved:** current Stage056 tree vs historical 1,366-file manifest; scratch Git build IDs not main commits; separate 064 client vs Functions inputs; selected Stage056/main deltas; UAT SB61–64 build metadata says `SERVER_AUTHORITATIVE_CLOSE_ENABLED=true` whereas official main gate OFF. No source/production policy change authorized.
+- Next single approved execution focus: **MP1.2 READ-ONLY source-delta and manifest classification** under previously scoped Owner continuation. Report only, no code changes, UAT execution, build, install, cloud/network, merge or cleanup.
+- Local offline Codex host did not find remote-only GitHub planning branch; this is expected possible local-ref drift, not permission to fetch or change local Git. Planning docs are on GitHub draft branch.
+- MP1.3 implementation remains locked; M0 formal successor phase decision remains pending.
+
 ## Planning policy to review at M0 (PROPOSED, not final)
 - Immediate goal: reliable Native POS for real cashier operations before nonessential feature expansion.
 - Proposed sequence: MP1 preserve/reconcile UAT → MP2 native offline operational UAT → MP3 release-readiness and Owner GO/NO-GO.
