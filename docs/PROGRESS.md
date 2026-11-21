@@ -1,6 +1,6 @@
 # Twinpet POS — Progress / Evidence Register (MP0 DRAFT)
 
-**Prepared:** 2026-11-21 · Baseline main `f034301c46dd9e08190f869cc85dbb140ac28a3c`  
+**Prepared / updated:** 2026-11-21 · Baseline main `f034301c46dd9e08190f869cc85dbb140ac28a3c`  
 **Applies to:** proposed MP0 portfolio only. Actual live phase is still `POST_SEC001_NEXT_PHASE_SELECTION_ADJUDICATION` / active implementation NONE.
 
 ## Planned milestones
@@ -10,8 +10,8 @@
 | MP0.1 source-of-truth map | DRAFT_READY | GitHub tracked workflow trio, skills, historical Task/Context/UI trackers, prior reports |
 | MP0.2 priority/dependencies | DRAFT_READY | `MASTER-PLAN.md`, Gantt; critical path proposal only |
 | MP0.3 debt/risk register | DRAFT_READY | U1/B1-R 016–024 evidence retained; TD-001/RISK-002/UAT-004/GOV-003 |
-| M0 Owner/Gemini phase selection | NOT_APPROVED | Formal choice of next execution phase + reconciliation gate |
-| MP1 preserve/integrate UAT | LOCKED | M0 and separate packet approval |
+| M0 Owner/Gemini phase selection | SCOPED_READ_ONLY / FORMAL_PENDING | Owner continuation authorized MP1.1–MP1.2 evidence-only; workflow authority not changed |
+| MP1 preserve/integrate UAT | EVIDENCE_ONLY_AUTHORIZED | MP1.1/MP1.2 read-only; MP1.3 implementation/merge still LOCKED |
 | MP2 native offline E2E | LOCKED | M1 acceptance, safe isolated UAT environment |
 | MP3 release readiness | LOCKED | M2 acceptance + explicit Owner GO/NO-GO |
 
@@ -36,6 +36,8 @@
 - No Source Code, tests, build, native app/profile, Cloud, Rules/Functions, release or data cleanup in this pass.
 
 ## Next one action
-**M0 Owner planning review**: choose/approve target critical path and boundaries, decide whether to formally register MP1 as next authorized phase, and authorize any change to live workflow docs. Do not begin MP1 without this decision.
+**MP1.1 READ-ONLY evidence handoff**: Codex manually launched on Windows to identify existing UAT Stage056/058/061–065 artifacts and source/build traceability, compare a bounded delta set to `main` if safe, write only the authorized OneDrive report, and STOP. No source/Git/build/UAT/cloud writes. If evidence cannot be read, return BLOCKED, not a new fix packet. MP1.3 remains locked.
+
+**Formal M0 phase registration and workflow-trio reconciliation:** still pending; this scoped authorization does not change the live `ACTIVE_IMPLEMENTATION_PACKET=NONE`.
 
 **Operating rule:** after approved scope changes, reconcile Master Plan, Gantt, Decisions, Progress and Todoist together; otherwise keep proposal status and backlog separate.
