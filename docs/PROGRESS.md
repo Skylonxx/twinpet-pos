@@ -32,9 +32,9 @@
 | Report 024 workflow adjudication | PLAN_AUTHORITY_UNRESOLVED | Current authority trio lacks latest UAT/selection |
 | Native EV-1 / EV-2 / GUI EV-3 / offline operational UAT | NOT_RUN or NOT_AUTHORIZED | Do not infer PASS, release or durability |
 
-## Candidate N-002 low-disk source-only substitution — PROPOSED (2026-11-22)
+## Candidate N-002 low-disk source-only substitution — OWNER APPROVED; NOT RUN (2026-11-22)
 
-Owner explicitly closed UAT cleanup, refused any further C: cleanup or disk increase to 10 GiB, and prohibited N-002 rerun or code/Safety Gate edits without permission. The 10 GiB requirement was conservative build/clone headroom and the 8–10 GiB Tauri estimate was not a measured footprint. Existing N-001 ~43 MB clone was last reported clean and pinned, but **its current state is unknown**. Proposed one route: reuse that clone after strict read-only verification to implement only Policy A in `durable_kv.rs`, static checks without Cargo/build/new workspace. Do not lower build-time disk safety threshold or call N-002 tests. Runtime verification and M1 remain pending. [Proposal](planning/MP1-CAND-N-002-LOW-DISK-SOURCE-ONLY-ADAPTATION-PROPOSAL.md). No source implementation authorised by this replan.
+Owner explicitly closed UAT cleanup, refused any further C: cleanup or disk increase to 10 GiB, and prohibited N-002 rerun or code/Safety Gate edits without permission. The 10 GiB requirement was conservative build/clone headroom and the 8–10 GiB Tauri estimate was not a measured footprint. Existing N-001 ~43 MB clone was last reported clean and pinned, but **its current state is unknown**. Proposed one route: reuse that clone after strict read-only verification to implement only Policy A in `durable_kv.rs`, static checks without Cargo/build/new workspace. Do not lower build-time disk safety threshold or call N-002 tests. Runtime verification and M1 remain pending. [Proposal](planning/MP1-CAND-N-002-LOW-DISK-SOURCE-ONLY-ADAPTATION-PROPOSAL.md). Owner subsequently **explicitly authorised** the source-only method, but no Claude execution or source patch is claimed in this planning update.
 
 ## ENV-001 — UAT one-pass cleanup final (2026-11-21 report, reviewed 2026-11-22)
 
@@ -131,7 +131,7 @@ Owner explicitly closed UAT cleanup, refused any further C: cleanup or disk incr
 - No Source Code, tests, build, native app/profile, Cloud, Rules/Functions, release or data cleanup in this pass.
 
 ## Next one action
-**Next one action: Owner decision on ONE low-disk source-only adaptation proposal**, not further storage work. Owner refused additional disk cleanup/capacity and closed UAT cleanup. Reuse the existing N-001 clone (only if clean/pinned on fresh preflight), proposed one-file Policy A edit and static diff checks WITHOUT new clone/workspace/Cargo/build/tests, keeping >=10 GiB Cargo/build rule unchanged. This changed execution/testing method is NOT APPROVED YET. [Scope](planning/MP1-CAND-N-002-LOW-DISK-SOURCE-ONLY-ADAPTATION-PROPOSAL.md). A-N1–A-N8 remain NOT_RUN and M1/MP1.3/main/Cloud/release locked.
+**Next one action: Owner manually pastes the self-contained N-002 source-only prompt into Claude CLI.** This changed method is now approved, conditional on strict existing-clone clean/pinned preflight. If valid, only the floor-limb edit within `durable_kv.rs` in existing clone plus static checks, one report under `Ai-Report\twinpet-pos\Claude` (not source repo). NO new clone/workspace, Cargo, Rust tests, cleanup or 10 GiB build-gate change. A-N1..A-N8 NOT_RUN. Once Claude report arrives, independently dispatch Codex for read-only source diff review; do not auto-run or mark M1/MP1.3/main/Cloud/release accepted.
 
 **Formal M0 phase registration and workflow-trio reconciliation:** still pending; this scoped authorization does not change the live `ACTIVE_IMPLEMENTATION_PACKET=NONE`.
 
