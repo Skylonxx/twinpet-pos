@@ -1,14 +1,14 @@
 # Twinpet POS — Master Plan Rebaseline
 
-**Version 0.9 — PLANNING DRAFT / CANDIDATE N ISOLATED IMPLEMENTATION APPROVED**  
-**Prepared:** 2026-11-21 · **Current approved scope:** MP0 planning + MP1 evidence/review + Owner-approved **Candidate N isolated native custody implementation and bounded synthetic offline tests only**. `main`, Cloud, merge, release are NOT authorized.  
+**Version 1.0 — PLANNING DRAFT / CANDIDATE N BLOCKED DESIGN CONFLICT; OWNER POLICY DECISION NEXT**  
+**Prepared / updated:** 2026-11-21 · **Last scoped execution:** Candidate N authorized in isolation and ended `BLOCKED_DESIGN_CONFLICT`; no code changes or tests executed. `main`, Cloud, merge, release remain NOT authorized.  
 **Explicit non-authority:** this new file on a planning branch does NOT change the live workflow gate, authorize MP1 integration/implementation, MP2/MP3, code changes, merge or release.
 
 ## 0. Current Owner handoff — bounded decision
 
 **2026-11-21 — M0_SCOPED_MP1_READ_ONLY_AUTHORIZED / FORMAL_PHASE_ADJUDICATION_PENDING.** The Owner directed continuation after reviewing the MP0 draft. MP1.1/MP1.2 **read-only evidence identification and source-delta classification** is the only newly authorized next action. The live workflow trio still says successor implementation = NONE; formal reconciliation is pending. MP1.3 integrations, code changes, builds, UAT, Git commits/merges to main, deployment and cloud work are not authorized by this handoff.
 
-**MP1-R01 COMPLETE and MP1-P01 PLANNING DRAFT_READY (2026-11-21):** Product Owner authorized MP1-P01 design/planning only. See [MP1-P01 Native Custody & Identity Safety acceptance contract](planning/MP1-P01-NATIVE-CUSTODY-IDENTITY-SAFETY-PLAN.md). **Owner explicitly approved Candidate N isolated implementation (2026-11-21)** after accepting MP1-P01. Exact scope and guardrails are in [Candidate N implementation packet](planning/MP1-CAND-N-NATIVE-CUSTODY-IMPLEMENTATION-PACKET.md). Next action is one owner-launched Claude CLI implementer packet, **not** automatic Git main edits. Candidate I remains locked; independent Codex reviewer follows only after implementation report. MP1.3 implementation remains LOCKED; M1 OPEN and formal successor phase selection pending.
+**MP1-R01 COMPLETE and MP1-P01 PLANNING DRAFT_READY (2026-11-21):** Product Owner authorized MP1-P01 design/planning only. See [MP1-P01 Native Custody & Identity Safety acceptance contract](planning/MP1-P01-NATIVE-CUSTODY-IDENTITY-SAFETY-PLAN.md). **Owner explicitly approved Candidate N isolated implementation (2026-11-21)** after accepting MP1-P01. Exact scope and guardrails are in [Candidate N implementation packet](planning/MP1-CAND-N-NATIVE-CUSTODY-IMPLEMENTATION-PACKET.md). Claude returned `BLOCKED_DESIGN_CONFLICT` with no source changes or tests. **Next action is Owner's explicit policy selection on floor-only classification**, not an automatic retry or independent code review. Candidate I and MP1.3 remain locked. MP1.3 implementation remains LOCKED; M1 OPEN and formal successor phase selection pending.
 
 ## 1. Authority and source precedence
 
@@ -113,6 +113,16 @@
 
 **Packet:** [MP1-CAND-N Native Custody Implementation](planning/MP1-CAND-N-NATIVE-CUSTODY-IMPLEMENTATION-PACKET.md). 
 **Decision:** `MP1_CAND_N_OWNER_APPROVED_ISOLATED_IMPLEMENTATION` (not M1 accepted). Claude may only work in a new standalone local clone of pinned `f034301`, editing `src-tauri/src/durable_kv.rs` and/or `src-tauri/src/epoch_floor.rs`, optionally inline tests. All Cargo runs offline and scoped to synthetic roots; `NO_CHANGE_REQUIRED` is valid. Independently review before any later integration. Preserve valid auth-only floor-only behavior, existing manifest validation, official Gate-OFF. If safe differentiation of floor-only partial loss requires extra trusted evidence, stop with `BLOCKED_DESIGN_CONFLICT` instead of a speculative fix. No code has been executed by ChatGPT through this planning record.
+
+## 4.5 Candidate N execution result / decision gate (2026-11-21)
+
+**Claude report:** `TPOS-MP1-CAND-N-001-NATIVE-CUSTODY-IMPLEMENTATION-CLAUDE-REPORT(1).md` received; `BLOCKED_DESIGN_CONFLICT`. Local Windows original repo and GitHub main both reference `f034301c46dd9e08190f869cc85dbb140ac28a3c`. In isolated clone, **0 files changed**, **0 Rust tests run** (`NOT_RUN_ENV_LIMIT`; host C: ≈0.3 GiB free). Report's N1–N3 state table is **source-derived, not test-verified**. Clone remains, no deletion authorised.
+
+**Competing cases:** a legitimate floor-only root from virgin first boot or privileged-auth state (startup succeeds but `manifest_get`/creation blocks), versus a floor-only root after complete manifest+domain loss. Existing floor fields cannot distinguish these according to the Claude source analysis. Removing floor check as in isolated overlay 058 would let first migration proceed but **could silently create new state after prior data loss**. Provenance marker (BOOTSTRAP→SEALED) may disambiguate but requires a larger explicit design/compatibility/recovery and crash-window gate. Neither alternative is accepted by this record.
+
+**Owner policy choice next:** (A) explicitly accept floor-only-as-virgin and its silent-reset risk **before any new implementation packet**; (B, recommended for integrity) authorise **design-only provenance marker + compatibility/backfill/crash-window plan** and later independent review, no code yet; or (C) HOLD. This is a materially new policy/scope gate; prior Candidate N approval does NOT permit Claude to implement A or B automatically. **No command should run** until the Owner chooses. Before any permitted Rust build, resolve disk headroom safely; no automatic cleanup on Windows.
+
+**Process notes:** report found the prompt under a different OneDrive folder than the launcher; initial macOS preflight had been overwritten by the Windows pass, and the report admits a temporary scratch draft outside the strict one-report output set. These are reporting/traceability issues to correct for future packets, **not evidence of modified protected source**.
 
 ## 5. Other initiatives / deferred (LOCKED)
 Return/Refund activation and sealing Rules; Android/Capacitor; EV-2 VM hard reset; broad mutation matrix; unrelated UI polish; unapproved Cloud/deployment or live POS data contact.
