@@ -1,6 +1,6 @@
 # Twinpet POS — Master Plan Dependencies (MP0 DRAFT)
 
-**Prepared:** 2026-11-21. **Planning only.** No execution phase besides MP0 planning is authorized. Dates and dependencies do not create deployment or code-write authority.
+**Prepared / updated:** 2026-11-21. **MP0 planning and MP1.1/1.2 READ-ONLY evidence review only are authorized.** No implementation phase, Git merge or release is authorized. Dates and dependencies do not create deployment or code-write authority.
 
 ```mermaid
 flowchart LR
@@ -36,9 +36,9 @@ gantt
 
 | Gate | Acceptance evidence | Current status |
 |---|---|---|
-| MP0/M0 | Approved Goal, phase, priorities, roles, lock list, authority reconciliation | DRAFT / planning approved only |
-| MP1/M1 | UAT baseline and commit/build identity, reviewed integration delta | LOCKED |
+| MP0/M0 | Approved Goal, phase, priorities, roles, lock list, authority reconciliation | SCOPED_READ_ONLY; FORMAL_PHASE_PENDING |
+| MP1/M1 | UAT baseline and commit/build identity, reviewed integration delta | MP1.1/MP1.2 READ_ONLY; MP1.3 LOCKED |
 | MP2/M2 | Safe native offline E2E + cashier critical path on controlled build | LOCKED |
 | MP3/M3 | Installer/upgrade proof and explicit Owner decision | LOCKED |
 
-No MP1–MP3 delivery dates until a separate M0 decision. Todoist mirrors this proposal, not vice versa.
+No MP1–MP3 delivery dates until formal successor phase decision. An approved evidence-only MP1.1/1.2 task does not authorize implementation. Todoist mirrors this proposal, not vice versa.
