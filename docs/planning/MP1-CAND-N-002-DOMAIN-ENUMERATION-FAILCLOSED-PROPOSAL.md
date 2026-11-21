@@ -1,6 +1,6 @@
 # MP1 Candidate N-002 — Domain Enumeration Fail-Closed Remediation (proposal)
 
-**Date:** 2026-11-22 · **Status:** OWNER_APPROVED_TWO_FILE_SOURCE_ONLY / EXECUTOR_NOT_RUN / TESTS_NOT_RUN
+**Date:** 2026-11-22 · **Status:** CLAUDE_SOURCE_ONLY_READY / INDEPENDENT_CODEX_REVIEW_PENDING / TESTS_NOT_RUN
 **Independent evidence:** `TPOS-MP1-CAND-N-002-SOURCE-ONLY-INDEPENDENT-REVIEW-CODEX-REPORT.md` — `STATIC_REVIEW_FINDINGS`. No compile, runtime tests or reproduction performed.
 
 ## Verified source-level findings
@@ -23,4 +23,4 @@ Guard rails:
 - A-N1…A-N8 remain **NOT_RUN** plus new enumeration-failure scenarios NOT_RUN. Source-only output cannot be called M1 PASS, runtime validated, merged or released. Independent Codex reviewer required after a Claude report under a separate dispatch.
 - Track the preexisting privileged-auth inventory error suppression, interrupted virgin manifest restart behavior and Windows ACL realizability as explicit unresolved risks for future separate consideration; do not automatically expand this packet.
 
-**Owner decision: APPROVED (2026-11-22)** the exact two-file source-only fail-closed remediation in the existing detached clone, conditional on custody and the exact preexisting one-file Policy A diff. Claude manual direct-paste implementation is the next authorized action. No agent execution, source mutation, tests or independent Codex review has been performed by this document update. One Claude report to `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Claude\TPOS-MP1-CAND-N-002-FAILCLOSED-ENUMERATION-SOURCE-ONLY-CLAUDE-REPORT.md`; independent Codex read-only review only AFTER report is received and separately handed off.
+**Owner decision: APPROVED (2026-11-22)**; execution **reported SOURCE_ONLY_READY by Claude** in `TPOS-MP1-CAND-N-002-FAILCLOSED-ENUMERATION-SOURCE-ONLY-CLAUDE-REPORT.md`. Same existing detached clone, initial prior Policy A diff verified and preserved; final two modified files (epoch_floor.rs and durable_kv.rs) uncommitted, static diff check 0. Fallible domain enumeration and call-site propagation included. Three tests added in allowed source file and five existing test assertions adapted; all NOT_RUN. Independent Codex read-only review is now the next manually dispatched action; no M1 PASS/merge/release or Cargo/build/test permission.
