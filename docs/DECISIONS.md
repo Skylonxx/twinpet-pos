@@ -123,6 +123,14 @@
 - **Protected:** Stage056/MP1 source, overlay 058 / patches 061–065, hashed SB63/SB64 binaries, MP1 review reports, UAT evidence, `focused-runtime-017-scratch`, SQLite/provenance/committed epoch and unique runtime state, Git histories, `.env`, backups and profiles. Do not delete original `twinpet-pos` repo or touch real AppData, Cloud, installer or Production.
 - **Output:** `Ai-Report\twinpet-pos\Codex\TPOS-UAT-CONSOLIDATE-001-RESULT.md` and `...-RETAINED-INDEX.md`; exact C: bytes free before/after and actual removed/skipped paths. No code edits/build/tests/automatic Candidate N-002 retry/merge/deploy. Approval does not claim cleanup completed until report is received.
 
+## 2026-11-22 — Final disposition TPOS-UAT-CONSOLIDATE-001 (evidence 2026-11-21)
+
+- Uploaded report `TPOS-UAT-CONSOLIDATE-001-RESULT-20261121-235602-876935.md` is the **latest final** `PARTIAL` result, superseding previous zero-delete `TPOS-UAT-CONSOLIDATE-001-RESULT.md`.
+- 2,130 generated compile-cache files deleted (2,555,084,967 logical bytes). Actual observed C: free changed **2,509,815,808 → 5,365,436,416 bytes**, +2,855,620,608 bytes (~2.66 GiB) during cleanup; concurrent filesystem activity means it is not precisely attributable. UAT still contains 5,164,986,380 logical bytes across 203,335 regular files.
+- Retained index confirms sample presence of Stage056, patches 058/061–064, proof 065, UAT SB63/64 executables, Git, SQLite/provenance/epoch fixture and evidence. It **does not independently verify hash integrity or complete MP1/U1/B1-R evidence; standalone patch065 diff was not established**.
+- **Decision disposition:** one-pass cleanup **execution concluded PARTIAL** because ambiguous, linked/in-use-sensitive and protected material must remain; no more in-UAT deletion automatically authorised. N-002 still blocked by its separate >=10 GiB capacity preflight (last reported ~5.00 GiB free), and may resume only with renewed safe capacity evidence and Owner handoff. No automatic cleanup, Cargo, clone, source modification, Git merge or Cloud work.
+- Prevent recurrence by eventually isolating disposable Cargo targets from runtime proof and app data in a separately scoped environment-maintenance action.
+
 ## Planning policy to review at M0 (PROPOSED, not final)
 - Immediate goal: reliable Native POS for real cashier operations before nonessential feature expansion.
 - Proposed sequence: MP1 preserve/reconcile UAT → MP2 native offline operational UAT → MP3 release-readiness and Owner GO/NO-GO.
