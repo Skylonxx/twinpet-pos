@@ -162,6 +162,14 @@
 - **Owner approval pending** for [one two-file source-only fail-closed remediation](planning/MP1-CAND-N-002-DOMAIN-ENUMERATION-FAILCLOSED-PROPOSAL.md) in the same detached N-001 clone; keep the existing approved diff, no new clone/workspace, build/test, cleanup or 10 GiB build gate change. No expansion to privileged-auth enumeration without separate Owner scope. No source modification by ChatGPT, Codex reviewer, or another agent under this log alone.
 - M1, Candidate I, MP1.3, merge/Production/release remain LOCKED.
 
+## 2026-11-22 — Owner APPROVES N-002 two-file source-only fail-closed remediation
+
+- Based on independent Codex `STATIC_REVIEW_FINDINGS` regarding `epoch_floor::durable_domain_files_exist` swallowing directory/entry I/O errors, Owner explicitly approved a narrow fix in the *existing*, already-Policy-A-modified detached N-001 clone. The source-derived false-virgin with existing-but-unreadable domains is **not** accepted under RISK-008 (which covers total previous Phase-B data loss).
+- Fresh read-only custody must confirm original main pinned/tracked-clean and clone detached at `f034301c46dd9e08190f869cc85dbb140ac28a3c`, with **only** the preexisting authorized `durable_kv.rs` +6/-2 Policy A modification; clone is **intentionally dirty**. Any different state BLOCK/STOP without any reset/clean/reclone.
+- **New write allowlist:** strictly `src-tauri/src/epoch_floor.rs` and `src-tauri/src/durable_kv.rs` in the same isolated clone; introduce checked fallible domain enumeration with fail-closed error handling and `?` propagation, adjust `evaluate_floor` only if necessary, align inaccurate comment. Preserve manifest/epoch/inventory logic, Offline First, official Gate-OFF and previous narrow Policy A. No change in privileged-auth scanners, `lib.rs` or test sources without a new Owner gate.
+- **No** Cargo/rustc/build/tests, new clone/workspace, disk cleanup/capacity increase, changing >=10 GiB BUILD safety gate, source `main`/Git commit/merge, Cloud/Production or automated Codex handoff. Source-only static checks and one Claude report; later independent Codex read-only source review is a separate manual handoff. A-N1..A-N8 and enumeration runtime cases remain NOT_RUN; no M1 PASS/merge/release.
+- [Approved bounded scope](planning/MP1-CAND-N-002-DOMAIN-ENUMERATION-FAILCLOSED-PROPOSAL.md); implementation status `OWNER_APPROVED_EXECUTOR_NOT_RUN` until Claude report.
+
 ## Planning policy to review at M0 (PROPOSED, not final)
 - Immediate goal: reliable Native POS for real cashier operations before nonessential feature expansion.
 - Proposed sequence: MP1 preserve/reconcile UAT → MP2 native offline operational UAT → MP3 release-readiness and Owner GO/NO-GO.
