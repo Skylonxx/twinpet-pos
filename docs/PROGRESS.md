@@ -32,6 +32,12 @@
 | Report 024 workflow adjudication | PLAN_AUTHORITY_UNRESOLVED | Current authority trio lacks latest UAT/selection |
 | Native EV-1 / EV-2 / GUI EV-3 / offline operational UAT | NOT_RUN or NOT_AUTHORIZED | Do not infer PASS, release or durability |
 
+## Candidate N-002 — two-file fail-closed remediation OWNER_APPROVED / NOT RUN (2026-11-22)
+
+- Owner explicitly approved the bounded [domain-enumeration fail-closed remediation](planning/MP1-CAND-N-002-DOMAIN-ENUMERATION-FAILCLOSED-PROPOSAL.md) as a NEW source-only packet in the **same** N-001 clone at pinned f034301. Expected clone state on preflight: **one previous approved uncommitted** `durable_kv.rs` Policy A diff (+6/-2), not clean; any additional source/untracked issues STOP with no repair.
+- Exactly two writable source files in clone: `src-tauri/src/epoch_floor.rs` (fallible domain scanner and related `evaluate_floor` fail-closed routing if necessary) and `src-tauri/src/durable_kv.rs` (use checked scanner and propagate errors; align adjacent comment). Keep all existing Policy A, manifest, epoch, offline, Gate-OFF rules. No new clone/workspace/Cargo/build/tests/disk cleanup; >=10 GiB Cargo gate unchanged.
+- Claude SOURCE execution `NOT RUN` at this planning update. One report `TPOS-MP1-CAND-N-002-FAILCLOSED-ENUMERATION-SOURCE-ONLY-CLAUDE-REPORT.md` under `Ai-Report\twinpet-pos\Claude`. Independent Codex read-only review to be launched only AFTER Claude report. A-N1–A-N8 and new runtime enumeration checks NOT_RUN, M1/MP1.3/release blocked.
+
 ## Candidate N-002 — Codex independent STATIC_REVIEW_FINDINGS (2026-11-22)
 
 - Received `TPOS-MP1-CAND-N-002-SOURCE-ONLY-INDEPENDENT-REVIEW-CODEX-REPORT.md`. Codex independently confirmed exact Policy A one-file uncommitted diff, detached clone pinned `f034301`, original tracked-clean main, no unexpected untracked changes and diff --check exit 0. No compile/tests; all A-N1..A-N8 still NOT_RUN.
@@ -144,7 +150,7 @@ Owner explicitly closed UAT cleanup, refused any further C: cleanup or disk incr
 - No Source Code, tests, build, native app/profile, Cloud, Rules/Functions, release or data cleanup in this pass.
 
 ## Next one action
-**Next one action: Owner decides whether to approve the two-file N-002 fallible domain enumeration remediation** in the existing clone, per [scoped proposal](planning/MP1-CAND-N-002-DOMAIN-ENUMERATION-FAILCLOSED-PROPOSAL.md). Do NOT rerun Claude one-file N-002 or Codex old review; do not create clone, build/test, reopen disk cleanup, edit source or change >=10 GiB Cargo safety gate without the new specific approval. All A-N1..A-N8 remain NOT_RUN, M1/MP1.3/main/Cloud/release locked.
+**Next one action: Owner manually pastes the self-contained two-file N-002 fail-closed remediation instruction into Claude CLI**, using the existing pinned detached N-001 clone whose ONLY initial modification must be the approved Policy A diff. Claude may modify `epoch_floor.rs` and `durable_kv.rs` only; static checks and one report. No Cargo/build/tests/cleanup/new workspace, unchanged >=10 GiB build gate. If any third file needed STOP. Then independently dispatch Codex read-only source review only after Claude report; A-N1–A-N8 remain NOT_RUN; M1/main/Cloud/release gated.
 
 **Formal M0 phase registration and workflow-trio reconciliation:** still pending; this scoped authorization does not change the live `ACTIVE_IMPLEMENTATION_PACKET=NONE`.
 
