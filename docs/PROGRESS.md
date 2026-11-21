@@ -11,7 +11,7 @@
 | MP0.2 priority/dependencies | DRAFT_READY | `MASTER-PLAN.md`, Gantt; critical path proposal only |
 | MP0.3 debt/risk register | DRAFT_READY | U1/B1-R 016–024 evidence retained; TD-001/RISK-002/UAT-004/GOV-003 |
 | M0 Owner/Gemini phase selection | MP1_R01_REVIEW_ONLY_APPROVED / FORMAL_PENDING | Owner authorized focused independent pre-integration read-only review; no implementation successor chosen in live trio |
-| MP1 preserve/integrate UAT | CAND_N_002_OWNER_APPROVED / EXECUTOR_NOT_RUN | Manual Claude Prompt ready; 10 GiB disk safety gate before clone/build, then one-file isolated patch and synthetic offline tests; M1 OPEN/MP1.3 LOCKED |
+| MP1 preserve/integrate UAT | N-002 BLOCKED_DISK_CAPACITY / ZERO_CODE_ZERO_TEST | C: 0.359 GiB; UAT read-only size inventory complete PARTIAL; Owner-selected exact cleanup approval next; M1 OPEN/MP1.3 LOCKED |
 | MP2 native offline E2E | LOCKED | M1 acceptance, safe isolated UAT environment |
 | MP3 release readiness | LOCKED | M2 acceptance + explicit Owner GO/NO-GO |
 
@@ -31,6 +31,12 @@
 | Report 023 EV-4 | BINDINGS_VERIFIED | FFI imports/link, not full Windows semantics |
 | Report 024 workflow adjudication | PLAN_AUTHORITY_UNRESOLVED | Current authority trio lacks latest UAT/selection |
 | Native EV-1 / EV-2 / GUI EV-3 / offline operational UAT | NOT_RUN or NOT_AUTHORIZED | Do not infer PASS, release or durability |
+
+## ENV-001 — Disk inventory evidence and cleanup gate (2026-11-21)
+- Claude Candidate N-002 report: `BLOCKED_DISK_CAPACITY`, preflight C: free 0.359 GiB (vs >=10 GiB), no clone, no source edits, no tests. No reason to rerun until disk capacity changes.
+- Codex `TPOS-DISK-001-UAT-STORAGE-INVENTORY-REPORT.md` measured TPOS023-UAT at 7.19 GiB *logical* (205,469 files; 23 reparse-point directories skipped). Status PARTIAL because expected prompt path absent; no cleanup performed and no drive-wide audit.
+- Candidate generated material needing verification: `integration-u1-b1r-impl-20261118\\src-tauri\\target` 2.49 GiB and `scratchpad\\review023-independent\\node_modules` 0.51 GiB; 3.00 GiB potential total. **NOT approved for deletion**; require Owner approval and live-process/evidence/dependency checks. Evidence, source, snapshots, profiles, stage028 proof targets (0.70 GiB), UAT binary and scripts retained.
+- Even if 3.00 GiB is reclaimed, approx 3.36 GiB free is far below 10 GiB; need additional separately verified safe capacity. No automatic cleanup or re-run.
 
 ## Candidate N-002 separate Implementation approval (2026-11-21)
 
@@ -96,7 +102,7 @@
 - No Source Code, tests, build, native app/profile, Cloud, Rules/Functions, release or data cleanup in this pass.
 
 ## Next one action
-**Next one action: Owner manually launches Claude CLI with the verified N-002 Prompt file, if saved to the exact launcher path.** Clone/edit/testing begin only after strict 10 GiB disk preflight and other safety checks; otherwise report `BLOCKED_DISK_CAPACITY` without code changes. Do not retry old N-001 or launch Codex automatically. Review returned report first, then separate independent Codex review scope. Main, M1, Candidate I, MP1.3, MP2/MP3, Cloud and release remain unchanged/LOCKED.
+**Next one action: Owner decision on restricted UAT cleanup candidates** from TPOS-DISK-001 (2.49 GiB Rust target + 0.51 GiB node_modules) conditional on exact-path/process/evidence/dependency checks. No deletion yet. Need additional capacity beyond these candidates to reach 10 GiB and rerun N-002. Avoid another N-002 test until disk preflight passes. Main, M1, Candidate I, MP1.3, MP2/MP3, Cloud and release remain unchanged/LOCKED.
 
 **Formal M0 phase registration and workflow-trio reconciliation:** still pending; this scoped authorization does not change the live `ACTIVE_IMPLEMENTATION_PACKET=NONE`.
 
