@@ -32,6 +32,12 @@
 | Report 024 workflow adjudication | PLAN_AUTHORITY_UNRESOLVED | Current authority trio lacks latest UAT/selection |
 | Native EV-1 / EV-2 / GUI EV-3 / offline operational UAT | NOT_RUN or NOT_AUTHORIZED | Do not infer PASS, release or durability |
 
+## ENV-001 — Owner approved generated-only Rust cache cleanup (TPOS-DISK-003; 2026-11-21)
+
+- TPOS-DISK-002 actual result `SKIPPED`: 0 bytes recovered. Root `target` contains protected durable synthetic state in `focused-runtime-017-scratch` (SQLite manifest/provenance/committed epoch); `review023-independent\node_modules` has junction-linked `review027` consumers. Do **not** retry delete whole directories.
+- User explicitly approved narrow generated-only Rust/Tauri compilation cache cleanup under `TPOS023-UAT\integration-u1-b1r-impl-20261118\src-tauri\target` with protections and reparse/in-use checks. No files are known deleted by this planning update; direct-paste self-contained Codex CLI message (no OneDrive Prompt input dependency).
+- Intended report: `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Codex\TPOS-DISK-003-GENERATED-RUST-CACHE-CLEANUP-REPORT.md`. Requires actual free bytes C: before/after and exact deletions vs skips; no N-002 rerun and no cleanup elsewhere. Older Stage028 proof targets and shared `node_modules` remain protected.
+
 ## ENV-001 — Owner approved EXACT2 cleanup, awaiting Codex report (2026-11-21)
 - Two paths scoped for conditional deletion within `TPOS023-UAT`: Rust `integration-u1-b1r-impl-20261118\src-tauri\target` (2.49 GiB logical) and `scratchpad\review023-independent\node_modules` (0.51 GiB). User approved only these exact paths; each needs independent safety checks. **No deletion yet by ChatGPT.**
 - Codex Prompt prepared: `TPOS-DISK-002-UAT-EXACT2-CLEANUP-AND-LEGACY-CACHE-INVENTORY-CODEX-PROMPT.md`. Besides conditional exact-two cleanup, it requires **read-only** top-15 classification of other historical test/build caches. Extra paths are not authorized for deletion; retain Stage056, evidence, profiles, UAT binaries, source and backups.
@@ -107,7 +113,7 @@
 - No Source Code, tests, build, native app/profile, Cloud, Rules/Functions, release or data cleanup in this pass.
 
 ## Next one action
-**Next one action: Owner manually runs `TPOS-DISK-002-UAT-EXACT2-CLEANUP-AND-LEGACY-CACHE-INVENTORY-CODEX-PROMPT.md` using Codex CLI.** Only the two named generated-cache paths may be deleted after safety gates; other historical test directories are READ-ONLY classification. Obtain a single report with actual freed disk delta and recommendations. No automatic cleanup elsewhere, N-002 retry, Cloud, main or release actions. M1, Candidate I, MP1.3, MP2/3 still gated.
+**Next one action: Owner pastes self-contained TPOS-DISK-003 instruction directly into Codex CLI**, no prompt file lookup, to clean only verified Rust generated compilation artifacts under the approved `target` and preserve all durable fixtures and UAT evidence. Await one report with measured actual C: free bytes before/after, list of removed/skipped paths. Do not rerun N-002, change Git main, Cloud or production. M1, Candidate I, MP1.3, MP2/3 still gated.
 
 **Formal M0 phase registration and workflow-trio reconciliation:** still pending; this scoped authorization does not change the live `ACTIVE_IMPLEMENTATION_PACKET=NONE`.
 
