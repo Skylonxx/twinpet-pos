@@ -68,6 +68,15 @@
 - **Candidate N implementation authorization is PENDING**. No approval for source edits, new Windows Git branch/worktree, tests/builds, data root operations, UAT, cloud, merge, deployment, or official Gate-OFF change. Candidate I and MP1.3 remain LOCKED; live workflow trio still shows no formal successor implementation phase.
 - Next decision: issue or withhold a separate **Candidate N narrowly scoped implementation gate**, including exact code allowlist, synthetic isolation and proof strategy, independent reviewer and stop conditions. Do not auto-start an agent.
 
+## 2026-11-21 — Owner authorizes Candidate N isolated implementation (scoped)
+
+- Owner explicitly replied **"อนุมัติครับ"** to: **Candidate N Implementation** under a limited native-custody scope and synthetic testing, with no Production or `main`. Decision: `MP1_CAND_N_OWNER_APPROVED_ISOLATED_IMPLEMENTATION`.
+- The bounded implementation packet is [MP1-CAND-N](planning/MP1-CAND-N-NATIVE-CUSTODY-IMPLEMENTATION-PACKET.md). Implementer: Claude CLI; next independent reviewer: distinct Codex instance *after* report and a separate review handoff. Owner to launch locally. Source-edit allowlist in **fresh isolated clone only**: `src-tauri/src/durable_kv.rs`, `src-tauri/src/epoch_floor.rs`, including narrow inline Rust tests. Targeted offline Cargo tests only in synthetic test roots; stop if dependencies/environment unsafe or scope must expand.
+- **Key compatibility safeguard:** official source documents privileged-auth-only floor/epoch 2 without a Phase-B manifest as a legitimate restart. Owner-approved planning default `FAIL_CLOSED` for ambiguous partial loss must **not** be implemented as blanket floor-only rejection. Preserve compatibility and all existing manifest/epoch controls; if indistinguishable, report `BLOCKED_DESIGN_CONFLICT` and escalate.
+- No mandatory code change: `NO_CHANGE_REQUIRED` is valid if pinned main already satisfies safe invariants. No silent import of UAT overlay 058, `SERVER_AUTHORITATIVE_CLOSE_ENABLED` Gate-ON, trust anchors, device identity Candidate I, sales/stock or privileged action paths.
+- **NOT authorized:** edits/checkout/reset/clean in original Windows `main` or protected untracked/stash, commit/push/merge (even clone commit postponed), live AppData, native app/installer/UAT, Cloud/Functions/Rules, network, production rollout, Candidate I, MP1.3. Authorization does NOT claim M0 or M1 formal closure; the canonical workflow trio remains as-is until separate adjudication.
+- User also requested **clickable Approve/Do-not-approve buttons at the next approval gate** rather than typed confirmation. In the ChatGPT interaction, use actions to submit their explicit choice; do not turn a displayed button into implicit approval.
+
 ## Planning policy to review at M0 (PROPOSED, not final)
 - Immediate goal: reliable Native POS for real cashier operations before nonessential feature expansion.
 - Proposed sequence: MP1 preserve/reconcile UAT → MP2 native offline operational UAT → MP3 release-readiness and Owner GO/NO-GO.
@@ -79,7 +88,7 @@
 |---|---|---|
 | M0 next implementation phase | MP1.1/MP1.2 evidence-only handoff approved; MP1.3 implementation separately requires gate | SCOPED_READ_ONLY; FORMAL_PHASE_PENDING |
 | Canonical status reconciliation | Exact allowed `STATE/CURRENT_PACKET/NEXT_ACTION` changes & their approval authority | PENDING |
-| MP1 integration scope and test gates | Owner accepted MP1-P01 planning contract; independent Candidate N implementation gate not issued | MP1_P01_PLAN_OWNER_ACCEPTED / CANDIDATE_N_PENDING / MP1_3_LOCKED |
+| MP1 integration scope and test gates | Candidate N isolated implementation + bounded offline synthetic tests Owner-authorized; independent review, main merge and later phases not authorized | MP1_CAND_N_OWNER_APPROVED_ISOLATED_IMPLEMENTATION / M1_OPEN / MP1_3_LOCKED |
 | U1/B1-R evidence acceptance | Headless EV-3 vs native GUI; EV-1; M1 mutant skipped | DEFERRED with release trigger; **not risk accepted** |
 | Return/Refund activation | Separate owner/technology/cutover gate, retains gate OFF | LOCKED |
 | EV-2, Android, cloud deployments, production upgrade/rollout | Separate scoped approval | NOT AUTHORIZED |
