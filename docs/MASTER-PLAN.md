@@ -1,14 +1,14 @@
 # Twinpet POS — Master Plan Rebaseline
 
-**Version 0.7 — PLANNING DRAFT / MP1-P01 DESIGN CONTRACT READY FOR OWNER REVIEW**  
-**Prepared:** 2026-11-21 · **Current approved scope:** MP0 planning, MP1.1/1.2 evidence, MP1-R01 read-only review and Owner-authorized MP1-P01 planning only  
+**Version 0.8 — PLANNING DRAFT / MP1-P01 OWNER-ACCEPTED; CANDIDATE N GATE PENDING**  
+**Prepared:** 2026-11-21 · **Current approved scope:** MP0 planning, MP1.1/1.2 evidence, MP1-R01 read-only review and OWNER-ACCEPTED MP1-P01 plan only (not Candidate N implementation)  
 **Explicit non-authority:** this new file on a planning branch does NOT change the live workflow gate, authorize MP1 integration/implementation, MP2/MP3, code changes, merge or release.
 
 ## 0. Current Owner handoff — bounded decision
 
 **2026-11-21 — M0_SCOPED_MP1_READ_ONLY_AUTHORIZED / FORMAL_PHASE_ADJUDICATION_PENDING.** The Owner directed continuation after reviewing the MP0 draft. MP1.1/MP1.2 **read-only evidence identification and source-delta classification** is the only newly authorized next action. The live workflow trio still says successor implementation = NONE; formal reconciliation is pending. MP1.3 integrations, code changes, builds, UAT, Git commits/merges to main, deployment and cloud work are not authorized by this handoff.
 
-**MP1-R01 COMPLETE and MP1-P01 PLANNING DRAFT_READY (2026-11-21):** Product Owner authorized MP1-P01 design/planning only. See [MP1-P01 Native Custody & Identity Safety acceptance contract](planning/MP1-P01-NATIVE-CUSTODY-IDENTITY-SAFETY-PLAN.md). **Next action is Owner review of that plan**; future Candidate N implementation and Candidate I are not authorized, no further automatic Codex/Claude packet. MP1.3 implementation remains LOCKED; M1 OPEN and formal successor phase selection pending.
+**MP1-R01 COMPLETE and MP1-P01 PLANNING DRAFT_READY (2026-11-21):** Product Owner authorized MP1-P01 design/planning only. See [MP1-P01 Native Custody & Identity Safety acceptance contract](planning/MP1-P01-NATIVE-CUSTODY-IDENTITY-SAFETY-PLAN.md). **Owner has accepted that plan**; next action is the explicit **Candidate N implementation authorization gate**, which remains pending. Candidate I not authorized; no automatic Codex/Claude packet. MP1.3 implementation remains LOCKED; M1 OPEN and formal successor phase selection pending.
 
 ## 1. Authority and source precedence
 
@@ -107,7 +107,7 @@
 
 [MP1-P01 — Native Custody & Identity Safety Plan](planning/MP1-P01-NATIVE-CUSTODY-IDENTITY-SAFETY-PLAN.md) is prepared as a **planning-only acceptance contract**. It defines 7 proposed invariants (N1–N3 native manifest/floor/epoch and I1–I4 device identity/sequence/scope/idempotency), a focused state/acceptance matrix, and two **separate, still unapproved** future candidates: N (native durability custody) then I (device identity/sequence). Source vs historical report vs future proof are explicitly distinguished; conservative design default is FAIL_CLOSED rather than silent virgin/sequence reset, subject to Owner recovery policy. The official shift-close Gate-OFF remains unchanged. This document **does not** complete M1, accept risk, approve code edits/tests or start integration.
 
-**Next one decision:** Owner accepts/revises the planning contract and either authorizes *a separate small, guarded Candidate N implementation packet* under the formal phase gate or keeps work on hold. No implicit authority is conveyed by Todoist or this draft. Candidate I, journal/stock/privileged/shift/UAT issues and MP2–MP3 remain locked.
+**OWNER ACCEPTED MP1-P01 PLANNING CONTRACT (2026-11-21).** Next one decision is **GO/NO-GO for a separately bounded Candidate N native-custody implementation packet**, under the formal phase gate, with explicit paths, isolation, independent review and named proof requirements. Approval of planning acceptance criteria is NOT permission to edit source, run tests/builds or merge. Candidate I, journal/stock/privileged/shift/UAT issues and MP2–MP3 remain locked.
 
 ## 5. Other initiatives / deferred (LOCKED)
 Return/Refund activation and sealing Rules; Android/Capacitor; EV-2 VM hard reset; broad mutation matrix; unrelated UI polish; unapproved Cloud/deployment or live POS data contact.
