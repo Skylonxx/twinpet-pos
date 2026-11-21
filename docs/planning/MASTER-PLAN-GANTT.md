@@ -1,6 +1,6 @@
 # Twinpet POS — Master Plan Dependencies (MP0 DRAFT)
 
-**Prepared / updated:** 2026-11-21. **MP0 planning, MP1.1/1.2 evidence review and MP1-R01 independent READ-ONLY review are authorized.** No implementation phase, Git merge or release is authorized. Dates and dependencies do not create deployment or code-write authority.
+**Prepared / updated:** 2026-11-21. **MP0 planning, MP1.1/1.2 evidence review, MP1-R01 independent review and MP1-P01 planning only have been authorized.** No implementation phase, Git merge or release is authorized. Dates and dependencies do not create deployment or code-write authority.
 
 ```mermaid
 flowchart LR
@@ -37,8 +37,8 @@ gantt
 | Gate | Acceptance evidence | Current status |
 |---|---|---|
 | MP0/M0 | Approved Goal, phase, priorities, roles, lock list, authority reconciliation | SCOPED_READ_ONLY; FORMAL_PHASE_PENDING |
-| MP1/M1 | UAT baseline and commit/build identity, reviewed integration delta | MP1.1/1.2 triaged; MP1-R01 REVIEW_ONLY approved; MP1.3 LOCKED |
+| MP1/M1 | UAT baseline and commit/build identity, reviewed integration delta | MP1-R01 done with blockers; MP1-P01 planning draft ready; Candidate N/I & MP1.3 implementation LOCKED |
 | MP2/M2 | Safe native offline E2E + cashier critical path on controlled build | LOCKED |
 | MP3/M3 | Installer/upgrade proof and explicit Owner decision | LOCKED |
 
-No MP1–MP3 delivery dates until formal successor phase decision. MP1-R01 is independent read-only review, not an implementation phase. An approved evidence-only MP1.1/1.2 task does not authorize implementation. Todoist mirrors this proposal, not vice versa.
+No MP1–MP3 delivery dates until formal successor phase decision. MP1-P01 is a planning draft awaiting Owner content review, not an implementation authorization. An approved evidence-only MP1.1/1.2 task does not authorize implementation. Todoist mirrors this proposal, not vice versa.
