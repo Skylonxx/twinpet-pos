@@ -131,6 +131,13 @@
 - **Decision disposition:** one-pass cleanup **execution concluded PARTIAL** because ambiguous, linked/in-use-sensitive and protected material must remain; no more in-UAT deletion automatically authorised. N-002 still blocked by its separate >=10 GiB capacity preflight (last reported ~5.00 GiB free), and may resume only with renewed safe capacity evidence and Owner handoff. No automatic cleanup, Cargo, clone, source modification, Git merge or Cloud work.
 - Prevent recurrence by eventually isolating disposable Cargo targets from runtime proof and app data in a separately scoped environment-maintenance action.
 
+## 2026-11-22 — Owner closes disk cleanup; N-002 low-disk path proposed only
+
+- Owner explicitly declined any additional disk cleanup or added capacity to reach 10 GiB, confirmed TPOS-UAT-CONSOLIDATE-001 CLOSED, and prohibited N-002 retry/source edits/safety-gate changes without fresh approval.
+- N-001 reported an isolated detached clean 43 MB clone at `C:\Users\Narachat\TPOS-MP1-CAND-N-ISO-20261121` when created; current existence/cleanliness not verified. N-002 preflight >=10 GiB was conservative for NEW clone + Cargo, based on an unmeasured 8–10 GiB build estimate, not a measured tiny source-edit need. Latest post-UAT cleanup C: free measured ≈5.00 GiB.
+- **One proposed path:** use **existing clone only if still pinned/clean**, one Policy A limb edit in `durable_kv.rs`, static diff checks and one report; no new clone/build/Cargo/tests. Existing >=10 GiB **build gate remains intact and is never invoked** in source-only stage. See [low-disk adaptation proposal](planning/MP1-CAND-N-002-LOW-DISK-SOURCE-ONLY-ADAPTATION-PROPOSAL.md).
+- **NOT APPROVED YET:** substitution of the original N-002 fresh-clone-plus-tests package with source-only work. No CLI execution, source change, integration, M1 acceptance, merge, production, or Cloud. All A-N1…A-N8 runtime tests remain NOT_RUN. Owner approval required before any source-only implementation.
+
 ## Planning policy to review at M0 (PROPOSED, not final)
 - Immediate goal: reliable Native POS for real cashier operations before nonessential feature expansion.
 - Proposed sequence: MP1 preserve/reconcile UAT → MP2 native offline operational UAT → MP3 release-readiness and Owner GO/NO-GO.
