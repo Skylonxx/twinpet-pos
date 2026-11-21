@@ -1,7 +1,7 @@
 # Twinpet POS — Master Plan Rebaseline
 
-**Version 1.8 — PLANNING DRAFT / N-002 LOW-DISK SOURCE-ONLY ADAPTATION PROPOSED; OWNER DECISION PENDING**  
-**Prepared / updated:** 2026-11-21 · **Latest Owner decision:** accepted Policy A RISK-008 and separately approved Candidate N-002 **isolated** implementation and bounded offline synthetic Rust tests, but Claude has **not yet run**. Candidate N-001 remains BLOCKED; `main`, Cloud, merge, release NOT authorised.  
+**Version 1.9 — PLANNING DRAFT / OWNER-APPROVED N-002 SOURCE-ONLY IN EXISTING CLONE; NOT RUN**  
+**Prepared / updated:** 2026-11-21 · **Latest Owner decision:** accepted Policy A RISK-008 and **approved replacing** the blocked N-002 new-clone-plus-tests method with **source-only work in the already-existing N-001 isolated clone**, conditional on fresh clean/pinned preflight. Claude **has not run this new method**. Candidate N-001 remains BLOCKED; `main`, Cloud, merge, release NOT authorised.  
 **Explicit non-authority:** this new file on a planning branch does NOT change the live workflow gate, authorize MP1 integration/implementation, MP2/MP3, code changes, merge or release.
 
 ## 0. Current Owner handoff — bounded decision
@@ -193,6 +193,12 @@ Owner formally closed TPOS-UAT-CONSOLIDATE-001 and declined additional disk clea
 **Only proposed route, not yet authorised:** [Candidate N-002 Low-Disk Source-Only Adaptation](planning/MP1-CAND-N-002-LOW-DISK-SOURCE-ONLY-ADAPTATION-PROPOSAL.md). Reuse the *existing* ≈43 MB N-001 detached clone at pinned f034301 (only after a fresh read-only clean/existence/identity check) for the one-limb Policy A change in `durable_kv.rs`; perform only source diff/static checks and produce one report. **NO new clone, workspace, Cargo build, test, cleanup, main, Cloud or Production.** Keep >=10 GiB rule in force **for Cargo/build**; avoid invoking that activity in the proposed source-only stage, rather than reducing the actual build gate. Any A-N runtime acceptance remains NOT_RUN; no M1 PASS/merge/release from static evidence.
 
 **Next single gate:** Owner approval to substitute the existing-clone source-only method for the earlier N-002 new-clone-plus-tests packet. **Until new approval: code and Safety Gate unchanged.**
+
+## 4.14 OWNER AUTHORIZES N-002 source-only substitution, NOT RUN (2026-11-22)
+
+Owner expressly approved [low-disk source-only adaptation](planning/MP1-CAND-N-002-LOW-DISK-SOURCE-ONLY-ADAPTATION-PROPOSAL.md): use **existing** `C:\Users\Narachat\TPOS-MP1-CAND-N-ISO-20261121` *only if* read-only preflight confirms independent non-reparse clone, clean status, detached and pinned `f034301c46dd9e08190f869cc85dbb140ac28a3c`; original `main` must be pinned/tracked-clean. If absent, dirty or mismatched STOP — no new clone, workspace, reset or checkout. Claude can then edit **only** `src-tauri/src/durable_kv.rs` and remove floor-existence limb in `prior_phase_b_state_exists`, updating only directly stale adjacent comments if needed. Domain-presence, `manifest_path_state`, other fail-closed/epoch invariants and official Gate-OFF remain intact.
+
+**Source-only verification:** changed-file list, `git diff --check`, exact diff and relevant static guard inspection only. NO Cargo, build, tests, new workspace, dependency download, cleanup or reduction of the >=10 GiB **build** gate. All A-N1..A-N8 runtime tests remain NOT_RUN; no M1 PASS. Emit `TPOS-MP1-CAND-N-002-LOW-DISK-SOURCE-ONLY-CLAUDE-REPORT.md` under `Ai-Report\twinpet-pos\Claude`; independent Codex **read-only** reviewer only after Owner/ChatGPT receives report (not auto-launched). No original main/Cloud/Production/merge/release or live workflow-trio edits. This is authorization to manually hand Claude one bounded prompt, **not evidence of any code execution**.
 
 ## 5. Other initiatives / deferred (LOCKED)
 Return/Refund activation and sealing Rules; Android/Capacitor; EV-2 VM hard reset; broad mutation matrix; unrelated UI polish; unapproved Cloud/deployment or live POS data contact.
