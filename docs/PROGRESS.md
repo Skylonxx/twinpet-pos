@@ -32,6 +32,11 @@
 | Report 024 workflow adjudication | PLAN_AUTHORITY_UNRESOLVED | Current authority trio lacks latest UAT/selection |
 | Native EV-1 / EV-2 / GUI EV-3 / offline operational UAT | NOT_RUN or NOT_AUTHORIZED | Do not infer PASS, release or durability |
 
+## ENV-001 — Owner approved EXACT2 cleanup, awaiting Codex report (2026-11-21)
+- Two paths scoped for conditional deletion within `TPOS023-UAT`: Rust `integration-u1-b1r-impl-20261118\src-tauri\target` (2.49 GiB logical) and `scratchpad\review023-independent\node_modules` (0.51 GiB). User approved only these exact paths; each needs independent safety checks. **No deletion yet by ChatGPT.**
+- Codex Prompt prepared: `TPOS-DISK-002-UAT-EXACT2-CLEANUP-AND-LEGACY-CACHE-INVENTORY-CODEX-PROMPT.md`. Besides conditional exact-two cleanup, it requires **read-only** top-15 classification of other historical test/build caches. Extra paths are not authorized for deletion; retain Stage056, evidence, profiles, UAT binaries, source and backups.
+- Expected report path under OneDrive `Ai-Report\twinpet-pos\Codex`, not repository root. No further N-002 retry until actual free-space measurement and safety assessment.
+
 ## ENV-001 — Disk inventory evidence and cleanup gate (2026-11-21)
 - Claude Candidate N-002 report: `BLOCKED_DISK_CAPACITY`, preflight C: free 0.359 GiB (vs >=10 GiB), no clone, no source edits, no tests. No reason to rerun until disk capacity changes.
 - Codex `TPOS-DISK-001-UAT-STORAGE-INVENTORY-REPORT.md` measured TPOS023-UAT at 7.19 GiB *logical* (205,469 files; 23 reparse-point directories skipped). Status PARTIAL because expected prompt path absent; no cleanup performed and no drive-wide audit.
@@ -102,7 +107,7 @@
 - No Source Code, tests, build, native app/profile, Cloud, Rules/Functions, release or data cleanup in this pass.
 
 ## Next one action
-**Next one action: Owner decision on restricted UAT cleanup candidates** from TPOS-DISK-001 (2.49 GiB Rust target + 0.51 GiB node_modules) conditional on exact-path/process/evidence/dependency checks. No deletion yet. Need additional capacity beyond these candidates to reach 10 GiB and rerun N-002. Avoid another N-002 test until disk preflight passes. Main, M1, Candidate I, MP1.3, MP2/MP3, Cloud and release remain unchanged/LOCKED.
+**Next one action: Owner manually runs `TPOS-DISK-002-UAT-EXACT2-CLEANUP-AND-LEGACY-CACHE-INVENTORY-CODEX-PROMPT.md` using Codex CLI.** Only the two named generated-cache paths may be deleted after safety gates; other historical test directories are READ-ONLY classification. Obtain a single report with actual freed disk delta and recommendations. No automatic cleanup elsewhere, N-002 retry, Cloud, main or release actions. M1, Candidate I, MP1.3, MP2/3 still gated.
 
 **Formal M0 phase registration and workflow-trio reconciliation:** still pending; this scoped authorization does not change the live `ACTIVE_IMPLEMENTATION_PACKET=NONE`.
 
