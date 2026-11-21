@@ -1,6 +1,6 @@
 # Twinpet POS — Master Plan Rebaseline
 
-**Version 1.7 — PLANNING DRAFT / UAT ONE-PASS CACHE CLEANUP PARTIAL-COMPLETE; DISK GATE STILL BLOCKED**  
+**Version 1.8 — PLANNING DRAFT / N-002 LOW-DISK SOURCE-ONLY ADAPTATION PROPOSED; OWNER DECISION PENDING**  
 **Prepared / updated:** 2026-11-21 · **Latest Owner decision:** accepted Policy A RISK-008 and separately approved Candidate N-002 **isolated** implementation and bounded offline synthetic Rust tests, but Claude has **not yet run**. Candidate N-001 remains BLOCKED; `main`, Cloud, merge, release NOT authorised.  
 **Explicit non-authority:** this new file on a planning branch does NOT change the live workflow gate, authorize MP1 integration/implementation, MP2/MP3, code changes, merge or release.
 
@@ -183,6 +183,16 @@ Owner explicitly requested to **finish UAT folder cleanup in one pass** instead 
 - Skipped 968 ambiguous/excluded, 103 protected-name, 508 hard-link-count/attribute concerns; installed dependencies, junction-linked Node modules, exe/DLL, fingerprint metadata, unique durable state and historical proof were retained. No source/Git/build/test/Cloud/Production or Candidate N-002 execution.
 - **Disposition:** treat one-pass legacy UAT cleanup as finished at its approved safe limit, **not an invitation to run another UAT cleanup loop**. Existing N-002 preflight requires **>=10 GiB** verified before cloning/testing. Latest measured C: free ~5.00 GiB, still **~5.00 GiB short** at that instant. If continuing N-002, independently verify free space and choose separately authorised capacity resolution *outside protected UAT evidence*; do not auto-retry N-002 or reduce its threshold without Owner decision.
 - **Prevention:** future disposable Cargo target directories should be isolated from UAT proof/SQLite/test-state, with documented cleanup rules after builds stop. This is a recommendation only, not a code/config change authorisation.
+
+## 4.13 Owner refuses additional C: cleanup/capacity; one low-disk N-002 path proposed (2026-11-22)
+
+Owner formally closed TPOS-UAT-CONSOLIDATE-001 and declined additional disk cleanup or increasing C: to 10 GiB. **Do not reopen ENV-001 disk-cleanup loops, rerun N-002 or alter code or safety gates on this instruction.** Current last measured free C: ≈5.00 GiB.
+
+**Evidence-based correction:** 10 GiB was a conservative build-time/pre-clone headroom safeguard, not a measured prerequisite for a one-line source change. Report N-001 estimated Tauri/Rust Cargo build ≈8–10 GiB but did not measure compilation requirements. We cannot claim Rust tests fit within 5 GiB.
+
+**Only proposed route, not yet authorised:** [Candidate N-002 Low-Disk Source-Only Adaptation](planning/MP1-CAND-N-002-LOW-DISK-SOURCE-ONLY-ADAPTATION-PROPOSAL.md). Reuse the *existing* ≈43 MB N-001 detached clone at pinned f034301 (only after a fresh read-only clean/existence/identity check) for the one-limb Policy A change in `durable_kv.rs`; perform only source diff/static checks and produce one report. **NO new clone, workspace, Cargo build, test, cleanup, main, Cloud or Production.** Keep >=10 GiB rule in force **for Cargo/build**; avoid invoking that activity in the proposed source-only stage, rather than reducing the actual build gate. Any A-N runtime acceptance remains NOT_RUN; no M1 PASS/merge/release from static evidence.
+
+**Next single gate:** Owner approval to substitute the existing-clone source-only method for the earlier N-002 new-clone-plus-tests packet. **Until new approval: code and Safety Gate unchanged.**
 
 ## 5. Other initiatives / deferred (LOCKED)
 Return/Refund activation and sealing Rules; Android/Capacitor; EV-2 VM hard reset; broad mutation matrix; unrelated UI polish; unapproved Cloud/deployment or live POS data contact.
