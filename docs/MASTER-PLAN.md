@@ -1,14 +1,14 @@
 # Twinpet POS — Master Plan Rebaseline
 
-**Version 0.4 — PLANNING DRAFT / MP1.1–1.2 TRIAGE REVIEWED; OWNER DECISION NEXT**  
-**Prepared:** 2026-11-21 · **Current approved scope:** MP0 planning + MP1.1/MP1.2 read-only evidence collection only  
+**Version 0.5 — PLANNING DRAFT / MP1-R01 INDEPENDENT REVIEW AUTHORIZED**  
+**Prepared:** 2026-11-21 · **Current approved scope:** MP0 planning, MP1.1/1.2 evidence collection and MP1-R01 read-only risk review only  
 **Explicit non-authority:** this new file on a planning branch does NOT change the live workflow gate, authorize MP1 integration/implementation, MP2/MP3, code changes, merge or release.
 
 ## 0. Current Owner handoff — bounded decision
 
 **2026-11-21 — M0_SCOPED_MP1_READ_ONLY_AUTHORIZED / FORMAL_PHASE_ADJUDICATION_PENDING.** The Owner directed continuation after reviewing the MP0 draft. MP1.1/MP1.2 **read-only evidence identification and source-delta classification** is the only newly authorized next action. The live workflow trio still says successor implementation = NONE; formal reconciliation is pending. MP1.3 integrations, code changes, builds, UAT, Git commits/merges to main, deployment and cloud work are not authorized by this handoff.
 
-**Current STOP after MP1-002:** both bounded read-only evidence packets are complete with partial verdicts. Next action is **Owner scoping/adjudication**, not an automatically assigned Codex/Claude packet. M1 remains open and the formal successor phase gate pending.
+**Owner approved 2026-11-21:** **MP1-R01 single bounded independent pre-integration design/security REVIEW ONLY**. Codex may read selected source/patch hunks and produce one evidence report; no code, Git, build/test, app/cloud, installer or profile changes. MP1.3 implementation stays LOCKED; M1 OPEN and formal successor phase selection pending.
 
 ## 1. Authority and source precedence
 
@@ -86,7 +86,7 @@
 
 **Do not repeat** the 1,364 hash checks or blanket-scan 167 paths. Protected `.env` contents must not be opened for mere completeness. Treat unverified extras and provenance as evidence gaps, not automatically release-stopping defects; raise them when defining reproducible integrated candidate.
 
-**Next ONE Owner decision:** approve/reject a *bounded independent pre-integration design/security review* focused on high-risk changed hunks: official Gate-OFF semantics vs UAT overlay Gate-ON, epoch/migration, device identity/sequence, sale journal/idempotency, inventory/FIFO and branch scope, two UNKNOWN privileged/ledger files, and UAT trust/enrollment guards. Specify acceptance criteria and owner risk boundaries. **This review does not authorize source edits, integration branches, tests/builds, cloud, deployment, merge or release.**
+**OWNER APPROVED FOR MP1-R01 READ-ONLY REVIEW:** focused independent assessment of high-risk changed hunks: official Gate-OFF vs UAT Gate-ON, epoch/migration, device identity/sequence, sale journal/idempotency, inventory/FIFO/branch scope, the two UNKNOWN privileged/ledger files and UAT trust/enrollment guards. Require file:line evidence, risk severity, target Production vs UAT-only disposition and exactly one Owner decision recommendation. This review **does not authorize** source edits, integration branches, tests/builds, cloud, deployment, merge or release. No blanket scan of 167 paths or rehash of verified source entries.
 
 ## 5. Other initiatives / deferred (LOCKED)
 Return/Refund activation and sealing Rules; Android/Capacitor; EV-2 VM hard reset; broad mutation matrix; unrelated UI polish; unapproved Cloud/deployment or live POS data contact.
