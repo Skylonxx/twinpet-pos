@@ -170,6 +170,13 @@
 - **No** Cargo/rustc/build/tests, new clone/workspace, disk cleanup/capacity increase, changing >=10 GiB BUILD safety gate, source `main`/Git commit/merge, Cloud/Production or automated Codex handoff. Source-only static checks and one Claude report; later independent Codex read-only source review is a separate manual handoff. A-N1..A-N8 and enumeration runtime cases remain NOT_RUN; no M1 PASS/merge/release.
 - [Approved bounded scope](planning/MP1-CAND-N-002-DOMAIN-ENUMERATION-FAILCLOSED-PROPOSAL.md); implementation status `OWNER_APPROVED_EXECUTOR_NOT_RUN` until Claude report.
 
+## 2026-11-22 — Two-file fail-closed Claude source-only implementation reported; independent review pending
+
+- Received `TPOS-MP1-CAND-N-002-FAILCLOSED-ENUMERATION-SOURCE-ONLY-CLAUDE-REPORT.md` with Claude `SOURCE_ONLY_READY`, **NOT compile/test PASS**. Original main pinned/tracked-clean; existing detached clone previously contained only approved Policy A diff and now has exactly two uncommitted changes `epoch_floor.rs` (+114/-22) and `durable_kv.rs` (+21/-12). Static `git diff --check` exit 0.
+- New fallible `Result<bool,String>` probe and propagated errors to `prior_phase_b_state_exists`, `assert_startup_integrity` and missing-floor `evaluate_floor`; three new tests and five updated assertions inside allowlisted files (NOT_RUN). Previous Policy A RISK-008 narrow exception retained.
+- Latest report C: ~5.54 GiB free, under unchanged 10 GiB **build** gate. No new clone/workspace, Cargo/build/tests, cleanup, main/Cloud/Production.
+- **Next:** owner-requested independent Codex READ-ONLY review, especially NotFound, error propagation, symlinks, caller compatibility and newly authored test sources; one report, no new code authorisation. All A-N1..A-N8 remain NOT_RUN. M1 OPEN, no merge or release.
+
 ## Planning policy to review at M0 (PROPOSED, not final)
 - Immediate goal: reliable Native POS for real cashier operations before nonessential feature expansion.
 - Proposed sequence: MP1 preserve/reconcile UAT → MP2 native offline operational UAT → MP3 release-readiness and Owner GO/NO-GO.
