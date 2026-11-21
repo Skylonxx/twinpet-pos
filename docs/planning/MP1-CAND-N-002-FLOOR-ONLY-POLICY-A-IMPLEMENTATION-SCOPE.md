@@ -1,8 +1,8 @@
 # Twinpet POS — Candidate N-002: Floor-only Policy A / Implementation Scope
 
 **Prepared:** 2026-11-21  
-**Decision status:** `OWNER_ACCEPTED_POLICY_A_RISK / IMPLEMENTATION_NOT_AUTHORIZED`  
-**Scope type:** APPROVAL DRAFT ONLY — do not run Claude/Codex, edit code, build/test, Git commit, merge, deploy or touch AppData.  
+**Decision status (2026-11-21):** `OWNER_APPROVED_CAND_N_002_ISOLATED_EXECUTION / EXECUTOR_NOT_RUN`  
+**Scope type (Owner-approved now):** limited Claude CLI implementation in a new isolated clone, one-source-file write allowlist and targeted offline synthetic Rust tests **only if safe disk preflight passes**. No changes to original repo/main, Git commit/merge, deploy, Cloud or AppData.  
 **Baseline:** GitHub `main@f034301c46dd9e08190f869cc85dbb140ac28a3c`; live workflow trio authority remains `POST_SEC001_NEXT_PHASE_SELECTION_ADJUDICATION / ACTIVE_IMPLEMENTATION_PACKET=NONE`.  
 **Prior packet:** `TPOS-MP1-CAND-N-001` ended `BLOCKED_DESIGN_CONFLICT` (0 code changes; 0 tests), **not reusable as authorisation to execute this packet**.
 
@@ -33,7 +33,7 @@ Claude Windows report `TPOS-MP1-CAND-N-001-NATIVE-CUSTODY-IMPLEMENTATION-CLAUDE-
 - `src-tauri/src/epoch_floor.rs` — **read-only unless a specific necessary change receives a new Owner scope approval**; no default edit.
 - Any other file: **NOT AUTHORIZED**. Even a seemingly needed `lib.rs` or test-file change must STOP and request a new allowlist decision.
 
-**No automatic execution on this approval:** A selected is a policy choice. A separate Owner "Approve Candidate N-002 Implementation" must authorize (a) isolated clone creation/edits; (b) targeted offline synthetic tests with confirmed storage capacity; (c) independent Codex review, with separate Reviewer identity from Implementer; and (d) report output path. No subsequent commit, merge or release permission is implied.
+**Separate approval now granted:** Owner subsequently explicitly approved **Candidate N-002 Implementation**, including (a) a **new** isolated clone of pinned main, (b) conditional one-file change, (c) targeted Rust offline synthetic tests **after safe disk-space check**, and (d) independent Codex review **after the Claude report as a separate review handoff**. Exact runnable prompt: `TPOS-MP1-CAND-N-002-POLICY-A-ISOLATED-IMPLEMENTATION-CLAUDE-PROMPT.md`. It is for manual Owner launch; no CLI execution/commit/merge/release is implicit in this document.
 
 ## 4. Proposed acceptance checks (to run only after separate approval & safe environment)
 
@@ -60,9 +60,9 @@ Claude Windows report `TPOS-MP1-CAND-N-001-NATIVE-CUSTODY-IMPLEMENTATION-CLAUDE-
 
 ## 6. Definitions of done and subsequent decisions
 
-**Implementation readiness (not execution):** this document records the Owner's Policy A risk acceptance, minimum patch target, expected negative controls, environment constraints, and reviewer roles. **Next single Owner gate:** separately approve or reject **Candidate N-002 isolated source implementation + bounded synthetic tests**. Approval must not be interpreted as permission to commit/push/merge/release.
+**Implementation readiness (not execution):** this document records the Owner's Policy A risk acceptance, minimum patch target, expected negative controls, environment constraints, and reviewer roles. **Owner implementation gate APPROVED**. This document is now a runnable **scope reference**, not a result: execution is `NOT_RUN`. Next one action is Owner manually launches the exact Claude CLI Prompt after ensuring it exists at the specified local path. Completion is a source diff plus real test evidence or a safe `BLOCKED_*` report; independent Codex review remains a separate phase. No commit/push/merge/release is approved.
 
-**After a future implementation report (not now):** independent review; Owner chooses whether to accept code evidence; formal M0/M1/governance gate remains pending. Candidate I/MP1.3 and MP2/MP3 remain locked.
+**After a future implementation report (not now):** separately initiate independent read-only Codex review and seek Owner acceptance; formal M0/M1/governance gate remains pending. Disk threshold in the runnable Prompt is **10 GiB minimum verified free before cloning/building** (a safety preflight threshold, not a predicted exact build size); any shortage must produce `BLOCKED_DISK_CAPACITY`, never cleanup. Candidate I/MP1.3 and MP2/MP3 remain locked.
 
 ## 7. Source links
 
