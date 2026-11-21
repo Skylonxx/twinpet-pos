@@ -1,6 +1,6 @@
 # Twinpet POS — Master Plan Rebaseline
 
-**Version 1.2 — PLANNING DRAFT / CANDIDATE N-002 ISOLATED IMPLEMENTATION OWNER-APPROVED, NOT RUN**  
+**Version 1.3 — PLANNING DRAFT / N-002 DISK-BLOCKED; UAT STORAGE INVENTORY REVIEWED**  
 **Prepared / updated:** 2026-11-21 · **Latest Owner decision:** accepted Policy A RISK-008 and separately approved Candidate N-002 **isolated** implementation and bounded offline synthetic Rust tests, but Claude has **not yet run**. Candidate N-001 remains BLOCKED; `main`, Cloud, merge, release NOT authorised.  
 **Explicit non-authority:** this new file on a planning branch does NOT change the live workflow gate, authorize MP1 integration/implementation, MP2/MP3, code changes, merge or release.
 
@@ -75,7 +75,7 @@
 | RISK-006 UAT vs official shift-close gate | Integration / business-behavior risk (HIGH) | MP1-002 confirmed overlay 058 flips `false` to `true`, all SB61–SB64 script inputs include overlay, but actual executed native branch remains UNKNOWN | Owner decision on keeping official Gate-OFF and what UAT evidence can be reused; **no automatic Gate-ON adoption** |
 | RISK-007 privileged action / ledger seams | Security and sale-integrity BLOCKER for privileged atomicity | MP1-R01: ledger now `PRODUCTION_REVIEW_REQUIRED` (HIGH); privileged scope check happens outside IndexedDB transaction, unsafe race remains unproven (BLOCKER) | Do not integrate until store/ingest/retry contract and scope-change proof; do not treat as accepted technical debt |
 | RISK-008 Floor-only ambiguous prior loss | Owner-accepted design trade-off (HIGH residual risk; NOT RELEASE ACCEPTED) | If floor exists with all Phase-B manifest/domain files missing, accepted Policy A may silently reinitialize, masking total prior loss | Record explicit A acceptance; validate negative controls under a *separately approved* Candidate N-002 packet; re-evaluate at release gate |
-| ENV-001 Windows Rust disk headroom | Implementation/test environment BLOCKER | N-001 C: ~0.3 GiB, 0 Rust tests executed | Verify sufficient safe capacity before any offline build; no unauthorized cleanup |
+| ENV-001 Windows Rust disk headroom | Implementation/test environment BLOCKER | N-002 `BLOCKED_DISK_CAPACITY`: C: free 0.359 GiB, no clone/code/tests. TPOS-DISK-001 PARTIAL inventory: TPOS023-UAT 7.19 GiB logical; candidate generated Rust target 2.49 GiB and review023 node_modules 0.51 GiB (combined 3.00 GiB *potential*). Not enough alone to meet 10 GiB gate. | Owner path-specific approval only after process/retention/rebuild checks; no automatic deletion or UAT evidence cleanup |
 | GOV-003 stale workflow / plan gap | Process/governance debt (NOW) | live trio lacks later UAT line; no one consolidated product plan | MP0 + M0 reconciliation |
 | UAT-004 native E2E | Release acceptance blocker | sale/restart/reconnect/stock/shift not signed off on a traceable candidate | MP2 |
 | TEST-005 baseline shift tests | Verification readiness risk | Historical `shiftService.*` baseline failures on Node 26 (prior report) | Integration regression testing under MP1 |
@@ -139,6 +139,12 @@
 Owner explicitly approved implementing Policy A in a fresh isolated clone of `main@f034301`, **one-file source allowlist `src-tauri/src/durable_kv.rs`**, targeted offline synthetic Rust tests **if and only if** disk safety preflight is satisfied. `epoch_floor.rs` is **read-only**. Approved code intent: remove only the floor-existence limb in `prior_phase_b_state_exists`; keep missing-domain and manifest invalid/present paths fail closed, preserve legal epoch/inventory validation and official Gate-OFF. `RISK-008` is an Owner-accepted *specific* residual risk of full prior Phase-B file loss masquerading as virgin, not a blanket safety waiver.
 
 **Execution preflight:** N-001 Windows C: ≈0.3 GiB free; runnable prompt uses a conservative **10 GiB verified free threshold before clone or Cargo**. If not met, report `BLOCKED_DISK_CAPACITY` without any disk cleanup or code change. Exact one-time manual Prompt: `TPOS-MP1-CAND-N-002-POLICY-A-ISOLATED-IMPLEMENTATION-CLAUDE-PROMPT.md`. Report to `OneDrive/Ai-Report/twinpet-pos/Claude/`; no retry of N-001, no auto-call Codex. After a Claude report, Owner/ChatGPT open a separate independent Codex review gate. **No code executed by ChatGPT**, no release/merge or M1 closure.
+
+## 4.8 Disk-blocked execution and UAT storage triage (2026-11-21)
+
+Claude N-002 report `BLOCKED_DISK_CAPACITY`: original baseline pinned, 0.359 GiB free, no clone/source edits/Cargo/tests. **Do not rerun unchanged**. Codex `TPOS-DISK-001-UAT-STORAGE-INVENTORY-REPORT.md` scanned `C:\Users\Narachat\TPOS023-UAT` **read-only** and reported PARTIAL (the intended prompt path was absent). Enumerated 7.19 GiB logical across 205,469 files, excluding 23 reparse-point directories; not a disk allocation/recovery guarantee.
+
+Two *conditional candidate* cleanup targets: `integration-u1-b1r-impl-20261118\src-tauri\target` 2.49 GiB, `scratchpad\review023-independent\node_modules` 0.51 GiB; together 3.00 GiB logical. Require explicit Owner approval and pre-delete verification of exact paths, use by processes, original ownership/evidence-retention and rebuild/offline-dependency availability. Do not delete parent folders. An additional 0.70 GiB of stage028 Rust targets remains **protected pending evidence review**. The UAT source, Stage056, binaries, patches, evidence, profiles, .git/stashes and backups remain protected. Even ideal 3.00 GiB recovery plus 0.359 GiB free would remain well under 10 GiB; seek further safe capacity outside a blind UAT cleanup. No delete/move yet.
 
 ## 5. Other initiatives / deferred (LOCKED)
 Return/Refund activation and sealing Rules; Android/Capacitor; EV-2 VM hard reset; broad mutation matrix; unrelated UI polish; unapproved Cloud/deployment or live POS data contact.
