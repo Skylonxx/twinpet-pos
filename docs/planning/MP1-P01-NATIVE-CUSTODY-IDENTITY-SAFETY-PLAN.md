@@ -7,6 +7,10 @@
 **Source baseline:** GitHub `main` `f034301c46dd9e08190f869cc85dbb140ac28a3c`, separate preserved Stage056 tree and overlay 058 / patch 061.  
 **Status distinction:** This is an architecture/acceptance **proposal** derived from MP1-R01 source risk review and selected main source reads; no independent Stage056 full replay, runtime test or production proof is claimed.
 
+## 0. Owner Policy A exception (2026-11-21; supersedes only the floor-only default)
+
+Owner expressly accepted `RISK_008_OWNER_ACCEPTED_POLICY_A_DESIGN_ONLY`: in Candidate N, a root with **floor present and all Phase-B manifest/domain files absent** may be classified virgin even after *complete prior Phase-B file loss*, potentially allowing new epoch creation **without warning**. This explicitly supersedes the earlier `FAIL_CLOSED + OWNER_RECOVERY_REQUIRED` *floor-only case* used in this planning contract; it does **not** supersede other integrity/identity/sync requirements or authorize implementation/release. N1 is now subject to a **known Owner-accepted exception**, not fully satisfied/proven. The older planning matrix below is preserved as historical proposal rather than silently edited. See [Candidate N-002 scope](planning/MP1-CAND-N-002-FLOOR-ONLY-POLICY-A-IMPLEMENTATION-SCOPE.md).
+
 ## 1. Product outcome (why this packet exists)
 
 Protect the cashier's ability to accept a sale while offline **without allowing lost/duplicate bills, sequence reuse, unsafe identity restoration, or silent loss of native committed data**. An online response is not a prerequisite for local checkout; a corrupt/unverifiable committed local authority must **fail closed** rather than invent fresh trusted state. Keep honest UI states: locally accepted, pending sync, rejected/failed, server-confirmed.
