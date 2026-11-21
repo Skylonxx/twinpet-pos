@@ -1,6 +1,6 @@
 # Twinpet POS — Master Plan Rebaseline
 
-**Version 0.5 — PLANNING DRAFT / MP1-R01 INDEPENDENT REVIEW AUTHORIZED**  
+**Version 0.6 — PLANNING DRAFT / MP1-R01 COMPLETE WITH INTEGRATION BLOCKERS**  
 **Prepared:** 2026-11-21 · **Current approved scope:** MP0 planning, MP1.1/1.2 evidence collection and MP1-R01 read-only risk review only  
 **Explicit non-authority:** this new file on a planning branch does NOT change the live workflow gate, authorize MP1 integration/implementation, MP2/MP3, code changes, merge or release.
 
@@ -8,7 +8,7 @@
 
 **2026-11-21 — M0_SCOPED_MP1_READ_ONLY_AUTHORIZED / FORMAL_PHASE_ADJUDICATION_PENDING.** The Owner directed continuation after reviewing the MP0 draft. MP1.1/MP1.2 **read-only evidence identification and source-delta classification** is the only newly authorized next action. The live workflow trio still says successor implementation = NONE; formal reconciliation is pending. MP1.3 integrations, code changes, builds, UAT, Git commits/merges to main, deployment and cloud work are not authorized by this handoff.
 
-**Owner approved 2026-11-21:** **MP1-R01 single bounded independent pre-integration design/security REVIEW ONLY**. Codex may read selected source/patch hunks and produce one evidence report; no code, Git, build/test, app/cloud, installer or profile changes. MP1.3 implementation stays LOCKED; M1 OPEN and formal successor phase selection pending.
+**MP1-R01 COMPLETE (2026-11-21):** Codex delivered `MP1_R01_REVIEW_COMPLETE_WITH_BLOCKERS`. High-risk source/design review done and blockers remain for the future integration decision. **Next action is Owner decision on planning Packet 1 for native custody + identity safety only**, not another automatic Codex review. MP1.3 implementation stays LOCKED; M1 OPEN and formal successor phase selection pending.
 
 ## 1. Authority and source precedence
 
@@ -73,7 +73,7 @@
 | TD-001 U1/B1-R | Evidence retained + pending validation, **not accepted risk** | 016–024: 5/5 focused; M2–M4 killed; M1 skipped; EV-3 headless complete; EV-4 binding verified; EV-1/GUI remaining | Affected durable code enters integration/release, or new material defect |
 | RISK-002 UAT source/build drift | Integration / release risk (HIGH) | MP1-002: 1,364 manifest entries match; two `.env` protected + extras unchecked. 167 delta paths grouped into 64 production-review, 101 tooling, 2 UNKNOWN. Scratch Git build IDs not main commits. | Scope independent per-hunk review of cashier-critical deltas before any integration, not repeated broad rehash |
 | RISK-006 UAT vs official shift-close gate | Integration / business-behavior risk (HIGH) | MP1-002 confirmed overlay 058 flips `false` to `true`, all SB61–SB64 script inputs include overlay, but actual executed native branch remains UNKNOWN | Owner decision on keeping official Gate-OFF and what UAT evidence can be reused; **no automatic Gate-ON adoption** |
-| RISK-007 privileged action / ledger seams | Security and sale-integrity risk (HIGH until classified) | MP1-002 marked `useLocalLedger.ts` and `projectPrivilegedOfflineAction.ts` as UNKNOWN; may impact sensitive sale/privileged behavior | Prioritize focused independent review before integration/risk acceptance |
+| RISK-007 privileged action / ledger seams | Security and sale-integrity BLOCKER for privileged atomicity | MP1-R01: ledger now `PRODUCTION_REVIEW_REQUIRED` (HIGH); privileged scope check happens outside IndexedDB transaction, unsafe race remains unproven (BLOCKER) | Do not integrate until store/ingest/retry contract and scope-change proof; do not treat as accepted technical debt |
 | GOV-003 stale workflow / plan gap | Process/governance debt (NOW) | live trio lacks later UAT line; no one consolidated product plan | MP0 + M0 reconciliation |
 | UAT-004 native E2E | Release acceptance blocker | sale/restart/reconnect/stock/shift not signed off on a traceable candidate | MP2 |
 | TEST-005 baseline shift tests | Verification readiness risk | Historical `shiftService.*` baseline failures on Node 26 (prior report) | Integration regression testing under MP1 |
@@ -87,6 +87,21 @@
 **Do not repeat** the 1,364 hash checks or blanket-scan 167 paths. Protected `.env` contents must not be opened for mere completeness. Treat unverified extras and provenance as evidence gaps, not automatically release-stopping defects; raise them when defining reproducible integrated candidate.
 
 **OWNER APPROVED FOR MP1-R01 READ-ONLY REVIEW:** focused independent assessment of high-risk changed hunks: official Gate-OFF vs UAT Gate-ON, epoch/migration, device identity/sequence, sale journal/idempotency, inventory/FIFO/branch scope, the two UNKNOWN privileged/ledger files and UAT trust/enrollment guards. Require file:line evidence, risk severity, target Production vs UAT-only disposition and exactly one Owner decision recommendation. This review **does not authorize** source edits, integration branches, tests/builds, cloud, deployment, merge or release. No blanket scan of 167 paths or rehash of verified source entries.
+
+## 4.2 MP1-R01 independent review disposition (2026-11-21)
+
+**Verdict: `MP1_R01_REVIEW_COMPLETE_WITH_BLOCKERS` — review task done, integration acceptance BLOCKED.** Source evidence indicates design risks, not confirmed exploitation or actual customer-data loss.
+
+| Area | Decision risk | Disposition |
+|---|---|---|
+| Official Gate-OFF vs UAT overlay Gate-ON | BLOCKER (behavior not interchangeable) | Gate-ON overlay `NOT_FOR_INTEGRATION` without a separate Owner policy gate; prove actual Gate-OFF close later on a controlled candidate |
+| Native epoch / virgin state | BLOCKER (058 removes floor-only prior-state check) | Plan invariant/manifest/data preservation proof before adapting to main |
+| Device identity, seq, journal | BLOCKER (fence not proven atomic over native commit, restart/retry) | Plan bounded identity/sequence proof and exactly-once contract |
+| Privileged offline action | BLOCKER (JS scope check outside IndexedDB transaction) | Keep hold pending atomic ingest/retry authority proof |
+| Inventory / FIFO / branch, local ledger | HIGH (late/cache-only and authoritative effects unproven) | Targeted semantics review in a later separately approved packet |
+| UAT trust anchor/enrollment | BLOCKER *if production leakage* | Explicit `UAT_ONLY_GUARD`, exclude from production default; note 064 issuance concurrency risk |
+
+**Owner decision now:** whether to select **MP1-P01 PLANNING ONLY — Native Custody & Identity Safety** as the one next bounded design packet. Scope candidate: `durable_kv.rs` virgin/floor/manifest invariant and device identity/sequence/source provenance; produce an acceptance contract and proposed implementation boundaries, **no source edits, tests/build, UAT, branch/merge or cloud changes**. Do not start until Owner authorizes it. All other areas remain tracked release/integration risks, not waived. U1/B1-R evidence retains prior status and must not restart by default.
 
 ## 5. Other initiatives / deferred (LOCKED)
 Return/Refund activation and sealing Rules; Android/Capacitor; EV-2 VM hard reset; broad mutation matrix; unrelated UI polish; unapproved Cloud/deployment or live POS data contact.
