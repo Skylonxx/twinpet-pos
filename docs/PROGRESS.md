@@ -11,7 +11,7 @@
 | MP0.2 priority/dependencies | DRAFT_READY | `MASTER-PLAN.md`, Gantt; critical path proposal only |
 | MP0.3 debt/risk register | DRAFT_READY | U1/B1-R 016–024 evidence retained; TD-001/RISK-002/UAT-004/GOV-003 |
 | M0 Owner/Gemini phase selection | MP1_R01_REVIEW_ONLY_APPROVED / FORMAL_PENDING | Owner authorized focused independent pre-integration read-only review; no implementation successor chosen in live trio |
-| MP1 preserve/integrate UAT | MP1.1/1.2 triage completed with partial verdicts; MP1-R01 APPROVED NEXT | Codex independent source/design review read-only, one report; MP1.3 implementation/merge LOCKED |
+| MP1 preserve/integrate UAT | MP1.1/1.2 triage done; MP1-R01 REVIEW_COMPLETE_WITH_BLOCKERS | Owner decision on MP1-P01 planning only next; M1 OPEN, MP1.3 implementation/merge LOCKED |
 | MP2 native offline E2E | LOCKED | M1 acceptance, safe isolated UAT environment |
 | MP3 release readiness | LOCKED | M2 acceptance + explicit Owner GO/NO-GO |
 
@@ -23,6 +23,7 @@
 | UAT Stage056 + 058/061–065 | MP1-001 builds checked; MP1-002 1,364 source hashes matched, 167 paths triaged | 2 protected env files and extra files unchecked; UAT overlay gate ON vs official OFF; no full tree/runtime PASS |
 | Report MP1-001 UAT baseline custody | MP1_001_PARTIAL_IDENTITY | SB63/SB64 file hashes match identities; Stage056 pins/patch manifest hashed; 1,366-file current-tree proof NOT_RUN; build IDs scratch Git; UAT flag true vs official false |
 | Report MP1-002 source-delta triage | MP1_002_PARTIAL_CLASSIFICATION | 1,364/1,366 manifest matches; 64 production-review, 101 tooling, 2 unknown from 167 paths; no per-hunk review or integration acceptance |
+| Report MP1-R01 independent risk review | MP1_R01_REVIEW_COMPLETE_WITH_BLOCKERS | Gate-ON/OFF, native floor-only, identity/journal, privileged scope atomicity block integration decisions; high inventory/ledger risks; no runtime exploits proven |
 | Report 016 compile | PASS | Compile is not runtime |
 | Reports 018+019 focused runtime | PASS 5/5 | Limited exact cases only |
 | Report 020 behavioral mutations | PASS_LIMITED 3 KILLED; M1 SKIPPED | Not 4/4 and not full catalog |
@@ -30,6 +31,12 @@
 | Report 023 EV-4 | BINDINGS_VERIFIED | FFI imports/link, not full Windows semantics |
 | Report 024 workflow adjudication | PLAN_AUTHORITY_UNRESOLVED | Current authority trio lacks latest UAT/selection |
 | Native EV-1 / EV-2 / GUI EV-3 / offline operational UAT | NOT_RUN or NOT_AUTHORIZED | Do not infer PASS, release or durability |
+
+## MP1-R01 independent review result (2026-11-21)
+- Received scoped Codex source/design review with `MP1_R01_REVIEW_COMPLETE_WITH_BLOCKERS`; no modification of source, Git, runtime, Cloud or protected data in the report.
+- Integration blockers to resolve before accepting production deltas: UAT Gate-ON (058) vs official Gate-OFF, native floor-only prior-state predicate, identity/sequence + journal/restart atomicity, privileged offline scope check outside IndexedDB transaction. These are source/design concerns, not proven runtime failures.
+- Inventory/FIFO and local ledger remain HIGH risk; two prior UNKNOWN seams reclassified: ledger `PRODUCTION_REVIEW_REQUIRED`/HIGH and privileged action `PRODUCTION_REVIEW_REQUIRED`/BLOCKER. UAT trust/enrollment guards remain UAT-only; 064 issuance concurrency review future.
+- **Next: OWNER DECISION** on MP1-P01 native custody + identity safety *planning packet only*, not automatic Codex/Claude task. MP1.3/M1 remain LOCKED/OPEN; no new U1 EV test loop.
 
 ## Owner scoped review approval (2026-11-21)
 - User explicitly approved the proposed **Independent Pre-Integration Review** after MP1-002. Approval ID `MP1_R01_REVIEW_ONLY_APPROVED`. No approval to fix, merge, test or deploy.
@@ -54,7 +61,7 @@
 - No Source Code, tests, build, native app/profile, Cloud, Rules/Functions, release or data cleanup in this pass.
 
 ## Next one action
-**MP1-R01 independent REVIEW ONLY (Owner approved):** Run exactly one bounded read-only Codex review on cashier/security-critical Stage056+058/061–064 source delta hunks against main. Report source:line evidence, risk, Production/UAT-only disposition, residual unknowns, and one Owner action. No source/Git/build/test/cloud/runtime write; stop after report. Do not expand into the full 167-file set. **MP1.3 implementation and formal successor phase still LOCKED / PENDING.**
+**Owner decision required:** decide whether to authorize **MP1-P01 native custody + identity safety DESIGN/PLANNING ONLY**; candidate scope durable manifest/epoch floor, device identity/seq source lineage and acceptance proof plan under official Gate-OFF. Do not execute, edit, build, test, integrate or merge automatically. **MP1.3 implementation locked, M1 open and formal successor phase still pending.**
 
 **Formal M0 phase registration and workflow-trio reconciliation:** still pending; this scoped authorization does not change the live `ACTIVE_IMPLEMENTATION_PACKET=NONE`.
 
