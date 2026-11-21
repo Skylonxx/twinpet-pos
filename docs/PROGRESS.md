@@ -11,7 +11,7 @@
 | MP0.2 priority/dependencies | DRAFT_READY | `MASTER-PLAN.md`, Gantt; critical path proposal only |
 | MP0.3 debt/risk register | DRAFT_READY | U1/B1-R 016–024 evidence retained; TD-001/RISK-002/UAT-004/GOV-003 |
 | M0 Owner/Gemini phase selection | MP1_R01_REVIEW_ONLY_APPROVED / FORMAL_PENDING | Owner authorized focused independent pre-integration read-only review; no implementation successor chosen in live trio |
-| MP1 preserve/integrate UAT | POLICY_A_OWNER_ACCEPTED_DESIGN_ONLY / CAND_N_002_APPROVAL_PENDING | N-001 ended blocked with no code/tests; Owner accepted RISK-008 floor-only risk; next approval for new isolated patch/test scope; M1 OPEN, MP1.3 LOCKED |
+| MP1 preserve/integrate UAT | CAND_N_002_OWNER_APPROVED / EXECUTOR_NOT_RUN | Manual Claude Prompt ready; 10 GiB disk safety gate before clone/build, then one-file isolated patch and synthetic offline tests; M1 OPEN/MP1.3 LOCKED |
 | MP2 native offline E2E | LOCKED | M1 acceptance, safe isolated UAT environment |
 | MP3 release readiness | LOCKED | M2 acceptance + explicit Owner GO/NO-GO |
 
@@ -31,6 +31,13 @@
 | Report 023 EV-4 | BINDINGS_VERIFIED | FFI imports/link, not full Windows semantics |
 | Report 024 workflow adjudication | PLAN_AUTHORITY_UNRESOLVED | Current authority trio lacks latest UAT/selection |
 | Native EV-1 / EV-2 / GUI EV-3 / offline operational UAT | NOT_RUN or NOT_AUTHORIZED | Do not infer PASS, release or durability |
+
+## Candidate N-002 separate Implementation approval (2026-11-21)
+
+- Owner explicitly authorised Candidate N-002 Implementation with exact one-file write allowlist (`src-tauri/src/durable_kv.rs` only), new isolated pinned `main@f034301` clone, bounded offline Rust synthetic tests and independent Codex reviewer **later**, not automatic. Policy A risk RISK-008 remains explicit.
+- Runnable one-time manual Claude Prompt: `TPOS-MP1-CAND-N-002-POLICY-A-ISOLATED-IMPLEMENTATION-CLAUDE-PROMPT.md` with report `TPOS-MP1-CAND-N-002-POLICY-A-ISOLATED-IMPLEMENTATION-CLAUDE-REPORT.md`. Local file supplied via chat; it must be saved at the same exact path given to Claude.
+- Hard environment preflight: before clone/edit/build require at least 10 GiB verified free on intended clone/build volume, because N-001 had ≈0.3 GiB on C:. Insufficient capacity must return `BLOCKED_DISK_CAPACITY`; no auto cleanup, no Cargo, no source edit or clone.
+- **This is authorisation, not execution evidence:** no N-002 Claude report yet. Git main/trio, Cloud, original source, Candidate I/MP1.3/MP2/MP3/release remain unchanged/locked.
 
 ## Candidate N Owner Policy A decision (2026-11-21)
 - Owner explicitly accepted the RISK-008 design tradeoff: epoch floor present, Phase-B manifest AND all domain files missing → may treat as virgin and start new epoch without notifying of complete prior loss. This is **limited design risk acceptance**, NOT Production-release or source write approval.
@@ -89,7 +96,7 @@
 - No Source Code, tests, build, native app/profile, Cloud, Rules/Functions, release or data cleanup in this pass.
 
 ## Next one action
-**Next one action: Owner Candidate N-002 implementation GO/NO-GO (buttons).** Policy A accepted with explicit RISK-008 exception and proposed minimal patch/test acceptance matrix documented. No implementation, test or automatic Codex/Claude dispatch yet. Disk capacity `ENV-001` remains an execution preflight blocker. Main, M1, Candidate I, MP1.3, MP2/MP3, Cloud and release remain unchanged/LOCKED.
+**Next one action: Owner manually launches Claude CLI with the verified N-002 Prompt file, if saved to the exact launcher path.** Clone/edit/testing begin only after strict 10 GiB disk preflight and other safety checks; otherwise report `BLOCKED_DISK_CAPACITY` without code changes. Do not retry old N-001 or launch Codex automatically. Review returned report first, then separate independent Codex review scope. Main, M1, Candidate I, MP1.3, MP2/MP3, Cloud and release remain unchanged/LOCKED.
 
 **Formal M0 phase registration and workflow-trio reconciliation:** still pending; this scoped authorization does not change the live `ACTIVE_IMPLEMENTATION_PACKET=NONE`.
 
