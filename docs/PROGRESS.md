@@ -32,6 +32,12 @@
 | Report 024 workflow adjudication | PLAN_AUTHORITY_UNRESOLVED | Current authority trio lacks latest UAT/selection |
 | Native EV-1 / EV-2 / GUI EV-3 / offline operational UAT | NOT_RUN or NOT_AUTHORIZED | Do not infer PASS, release or durability |
 
+## ENV-001 — One-pass UAT consolidation approval (2026-11-21; NOT RUN)
+
+- User rejected continued narrow-file cleanup loops and approved the earlier one-time consolidation proposal. **TPOS-UAT-CONSOLIDATE-001** is one manually launched Codex session with full instruction directly pasted (no OneDrive Prompt path required). Archive by creating a tiny **retained index** of MP1-critical files already in place (Stage056, patches 058/061–065, binaries, reports, SQLite/epochs/provenance, focused scratch, profiles, Git); **no large duplicate backup** on the nearly full drive.
+- Authorized removal expands from DISK-003 single Rust target to **only validated obsolete generated build/dependency caches across `C:\Users\Narachat\TPOS023-UAT`** including selected historical stage target caches. No blanket deletion of whole stage/UAT/target if they contain state/evidence; no follow/delete junctions linked to retained projects; continue safe independent deletions and report skips. Distinguish logical removed bytes from filesystem free-space delta.
+- Report `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Codex\TPOS-UAT-CONSOLIDATE-001-RESULT.md`, retained index same folder. Execution not yet confirmed, zero additional deletion claimed. N-002 still disk-blocked and **not** automatically rerun.
+
 ## ENV-001 — Owner approved generated-only Rust cache cleanup (TPOS-DISK-003; 2026-11-21)
 
 - TPOS-DISK-002 actual result `SKIPPED`: 0 bytes recovered. Root `target` contains protected durable synthetic state in `focused-runtime-017-scratch` (SQLite manifest/provenance/committed epoch); `review023-independent\node_modules` has junction-linked `review027` consumers. Do **not** retry delete whole directories.
@@ -113,7 +119,7 @@
 - No Source Code, tests, build, native app/profile, Cloud, Rules/Functions, release or data cleanup in this pass.
 
 ## Next one action
-**Next one action: Owner pastes self-contained TPOS-DISK-003 instruction directly into Codex CLI**, no prompt file lookup, to clean only verified Rust generated compilation artifacts under the approved `target` and preserve all durable fixtures and UAT evidence. Await one report with measured actual C: free bytes before/after, list of removed/skipped paths. Do not rerun N-002, change Git main, Cloud or production. M1, Candidate I, MP1.3, MP2/3 still gated.
+**Next one action: Owner pastes the complete TPOS-UAT-CONSOLIDATE-001 one-pass instruction into Codex CLI**, without searching for a Prompt file. It logically consolidates retained MP1 evidence, selectively deletes confirmed generated historical UAT compilation/cache material, then writes one result report + retained index under Ai-Report. No further repeated narrow DISK-002/003 loop or automatic N-002 restart. Git main/Cloud/Production/M1 and Candidate I/MP1.3/MP2/3 remain gated.
 
 **Formal M0 phase registration and workflow-trio reconciliation:** still pending; this scoped authorization does not change the live `ACTIVE_IMPLEMENTATION_PACKET=NONE`.
 
