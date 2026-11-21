@@ -1,6 +1,6 @@
 # MP1 Candidate N-002 — Domain Enumeration Fail-Closed Remediation (proposal)
 
-**Date:** 2026-11-22 · **Status:** FINDING_CONFIRMED_IN_SOURCE / REMEDIATION_SCOPE_OWNER_APPROVAL_REQUIRED / NO_EXECUTION
+**Date:** 2026-11-22 · **Status:** OWNER_APPROVED_TWO_FILE_SOURCE_ONLY / EXECUTOR_NOT_RUN / TESTS_NOT_RUN
 **Independent evidence:** `TPOS-MP1-CAND-N-002-SOURCE-ONLY-INDEPENDENT-REVIEW-CODEX-REPORT.md` — `STATIC_REVIEW_FINDINGS`. No compile, runtime tests or reproduction performed.
 
 ## Verified source-level findings
@@ -10,17 +10,17 @@
 - `epoch_floor::evaluate_floor` also uses that boolean combined with `privileged_auth_state_exists` (`epoch_floor.rs:299-320`); the latter and `oac_store_contains_recognized_state` independently swallow some listing errors in a different preexisting path. This adjacent issue must be **recorded, not silently broadened** into an auth overhaul.
 - Static report additionally noted a possible interrupted initialization/restart availability outcome, and stale `durable_kv.rs:211-215` comment. All A-N1…A-N8 remain NOT_RUN. This is a source-inferred safety issue, not runtime-confirmed.
 
-## One recommended narrow scope — NOT YET AUTHORIZED
+## Owner-approved narrow scope — approval recorded 2026-11-22; not executed
 One follow-up **SOURCE-ONLY / NO BUILD / NO TEST** change in the **same existing detached clone**, preserving its already-authorized uncommitted `durable_kv.rs` Policy A patch. The requested *expanded* write allowlist would be strictly:
 1. `src-tauri/src/epoch_floor.rs` — introduce a **checked/fallible domain-presence probe** that returns `Result<bool, String>` and never converts directory metadata/open/list-entry errors to `false`. Genuine directory/manifest absence must be distinguished from inaccessible or unusable entries; keep recognition of eight known durable-domain prefixes. Apply the checked probe to relevant startup `evaluate_floor` logic only if necessary to ensure errors lead to `FloorDecision::FailClosed`, preserving the established enum result and first-boot behavior. No blanket API rewrite.
 2. `src-tauri/src/durable_kv.rs` — replace the current boolean domain-presence use in `prior_phase_b_state_exists` with the checked Result-probe and `?` propagation; correct the adjacent inaccurate comment. Preserve the previously approved floor-only Policy A exception, manifest-path classifier, committed/inventory/epoch checks and all other source.
 
 Guard rails:
-- Before any edits, read-only reconfirm original main pinned/tracked-clean and isolated clone detached pinned exact baseline with ONLY the expected `durable_kv.rs` uncommitted +6/-2 Policy A diff; not a clean clone anymore, do not reset/checkout/discard it. If any other diff, untracked or reparse/path issue, STOP and report.
+- Before any edits, read-only reconfirm original main pinned/tracked-clean and isolated clone detached pinned exact baseline with ONLY the expected `durable_kv.rs` uncommitted +6/-2 Policy A diff; **the clone is intentionally dirty in exactly that file** (do not insist on a clean working tree). No staged diff, extra untracked, unexpected ignored/write-target changes or reparse/path issues. If anything else differs, STOP and report, do not reset/checkout/discard it.
 - No new clone/workspace, Cargo, rustc, tests, build, disk cleanup, network, app/Production/Cloud/real AppData, Git staging/commit/push/merge or 10 GiB build-gate adjustment. No automatic independent agent. Only static diff `git diff --check`, read-only scope/content inspection and one report.
 - Do not change `privileged_auth_state_exists` or other auth storage code, `lib.rs`, tests or any other paths without fresh scope approval. If the errors cannot safely be distinguished in the two-file allowlist, STOP and report; no unreviewed silent fallback.
 - Existing RISK-008 acceptance stays narrowly scoped to total Phase-B manifest/domain loss with surviving floor; unreadable existing domains MUST fail closed by design in the proposed patch.
 - A-N1…A-N8 remain **NOT_RUN** plus new enumeration-failure scenarios NOT_RUN. Source-only output cannot be called M1 PASS, runtime validated, merged or released. Independent Codex reviewer required after a Claude report under a separate dispatch.
 - Track the preexisting privileged-auth inventory error suppression, interrupted virgin manifest restart behavior and Windows ACL realizability as explicit unresolved risks for future separate consideration; do not automatically expand this packet.
 
-**Owner gate:** approve or reject the two-file source-only remediation exactly above. Until approved, do not edit, rerun N-002, modify Safety Gate, run Cargo or open new cleanup/storage work.
+**Owner decision: APPROVED (2026-11-22)** the exact two-file source-only fail-closed remediation in the existing detached clone, conditional on custody and the exact preexisting one-file Policy A diff. Claude manual direct-paste implementation is the next authorized action. No agent execution, source mutation, tests or independent Codex review has been performed by this document update. One Claude report to `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Claude\TPOS-MP1-CAND-N-002-FAILCLOSED-ENUMERATION-SOURCE-ONLY-CLAUDE-REPORT.md`; independent Codex read-only review only AFTER report is received and separately handed off.
