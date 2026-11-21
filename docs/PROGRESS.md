@@ -10,8 +10,8 @@
 | MP0.1 source-of-truth map | DRAFT_READY | GitHub tracked workflow trio, skills, historical Task/Context/UI trackers, prior reports |
 | MP0.2 priority/dependencies | DRAFT_READY | `MASTER-PLAN.md`, Gantt; critical path proposal only |
 | MP0.3 debt/risk register | DRAFT_READY | U1/B1-R 016–024 evidence retained; TD-001/RISK-002/UAT-004/GOV-003 |
-| M0 Owner/Gemini phase selection | SCOPED_READ_ONLY / FORMAL_PENDING | Owner continuation authorized MP1.1–MP1.2 evidence-only; workflow authority not changed |
-| MP1 preserve/integrate UAT | MP1.1 PARTIAL_IDENTITY; MP1.2 PARTIAL_CLASSIFICATION (triage complete) | MP1-002 report reviewed; independent risk-based review requires Owner; MP1.3 LOCKED |
+| M0 Owner/Gemini phase selection | MP1_R01_REVIEW_ONLY_APPROVED / FORMAL_PENDING | Owner authorized focused independent pre-integration read-only review; no implementation successor chosen in live trio |
+| MP1 preserve/integrate UAT | MP1.1/1.2 triage completed with partial verdicts; MP1-R01 APPROVED NEXT | Codex independent source/design review read-only, one report; MP1.3 implementation/merge LOCKED |
 | MP2 native offline E2E | LOCKED | M1 acceptance, safe isolated UAT environment |
 | MP3 release readiness | LOCKED | M2 acceptance + explicit Owner GO/NO-GO |
 
@@ -30,6 +30,10 @@
 | Report 023 EV-4 | BINDINGS_VERIFIED | FFI imports/link, not full Windows semantics |
 | Report 024 workflow adjudication | PLAN_AUTHORITY_UNRESOLVED | Current authority trio lacks latest UAT/selection |
 | Native EV-1 / EV-2 / GUI EV-3 / offline operational UAT | NOT_RUN or NOT_AUTHORIZED | Do not infer PASS, release or durability |
+
+## Owner scoped review approval (2026-11-21)
+- User explicitly approved the proposed **Independent Pre-Integration Review** after MP1-002. Approval ID `MP1_R01_REVIEW_ONLY_APPROVED`. No approval to fix, merge, test or deploy.
+- Next agent Codex CLI, independent reviewer, read-only; one approved report in OneDrive. Planning branch/board updated; live `main` workflow remains unchanged.
 
 ## MP1.2 evidence reviewed (2026-11-21)
 - MP1-002 verdict `MP1_002_PARTIAL_CLASSIFICATION`. Matched 1,364 of 1,366 manifest paths; `.env.example` and `.env.test` skipped as protected; unchecked extras and non-atomic source snapshot mean whole-tree equivalence UNKNOWN, not a discovered mismatch.
@@ -50,7 +54,7 @@
 - No Source Code, tests, build, native app/profile, Cloud, Rules/Functions, release or data cleanup in this pass.
 
 ## Next one action
-**Owner adjudication required:** Decide whether to authorize a bounded independent **pre-integration design/security review** of high-risk changed production hunks and UAT-only isolation guards. Focus native epoch, sale identity/journal, inventory/FIFO, shift Gate ON vs OFF, privileged/ledger unknown seams. Do not rerun bulk hash/traverse, build/test, integrate, flip gate, or modify Cloud/production. Formal M0 phase registration remains pending.
+**MP1-R01 independent REVIEW ONLY (Owner approved):** Run exactly one bounded read-only Codex review on cashier/security-critical Stage056+058/061–064 source delta hunks against main. Report source:line evidence, risk, Production/UAT-only disposition, residual unknowns, and one Owner action. No source/Git/build/test/cloud/runtime write; stop after report. Do not expand into the full 167-file set. **MP1.3 implementation and formal successor phase still LOCKED / PENDING.**
 
 **Formal M0 phase registration and workflow-trio reconciliation:** still pending; this scoped authorization does not change the live `ACTIVE_IMPLEMENTATION_PACKET=NONE`.
 
