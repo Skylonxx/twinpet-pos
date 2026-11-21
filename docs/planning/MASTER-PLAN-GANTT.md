@@ -37,7 +37,7 @@ gantt
 | Gate | Acceptance evidence | Current status |
 |---|---|---|
 | MP0/M0 | Approved Goal, phase, priorities, roles, lock list, authority reconciliation | SCOPED_READ_ONLY; FORMAL_PHASE_PENDING |
-| MP1/M1 | UAT baseline and commit/build identity, reviewed integration delta | Owner APPROVED N-002 existing-clone SOURCE-ONLY static patch; Claude NOT RUN, no Cargo/tests; independent Codex read-only review follows report; M1 OPEN, Candidate I/MP1.3 LOCKED |
+| MP1/M1 | UAT baseline and commit/build identity, reviewed integration delta | Claude N-002 SOURCE_ONLY_READY in existing detached clone (+6/-2 one file); independent Codex READ-ONLY source review PENDING. All runtime tests NOT_RUN; M1 OPEN, Candidate I/MP1.3 LOCKED |
 | MP2/M2 | Safe native offline E2E + cashier critical path on controlled build | LOCKED |
 | MP3/M3 | Installer/upgrade proof and explicit Owner decision | LOCKED |
 
