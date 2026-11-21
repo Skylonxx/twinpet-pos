@@ -37,7 +37,7 @@ gantt
 | Gate | Acceptance evidence | Current status |
 |---|---|---|
 | MP0/M0 | Approved Goal, phase, priorities, roles, lock list, authority reconciliation | SCOPED_READ_ONLY; FORMAL_PHASE_PENDING |
-| MP1/M1 | UAT baseline and commit/build identity, reviewed integration delta | UAT consolidation PARTIAL completed: +2.66 GiB observed C: free, still ~5.00 GiB below N-002 >=10 GiB preflight; N-002 BLOCKED, no code/tests; Candidate I/MP1.3 LOCKED |
+| MP1/M1 | UAT baseline and commit/build identity, reviewed integration delta | UAT cleanup CLOSED, Owner will not add/clean disk; N-002 reuse-existing-clone SOURCE-ONLY path PROPOSED/NOT APPROVED; no Cargo/tests, M1 OPEN and Candidate I/MP1.3 LOCKED |
 | MP2/M2 | Safe native offline E2E + cashier critical path on controlled build | LOCKED |
 | MP3/M3 | Installer/upgrade proof and explicit Owner decision | LOCKED |
 
