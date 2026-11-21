@@ -37,8 +37,8 @@ gantt
 | Gate | Acceptance evidence | Current status |
 |---|---|---|
 | MP0/M0 | Approved Goal, phase, priorities, roles, lock list, authority reconciliation | SCOPED_READ_ONLY; FORMAL_PHASE_PENDING |
-| MP1/M1 | UAT baseline and commit/build identity, reviewed integration delta | Candidate N-002 OWNER_APPROVED / NOT_RUN, guarded disk then isolated synthetic tests; independent review later; Candidate I/MP1.3 LOCKED |
+| MP1/M1 | UAT baseline and commit/build identity, reviewed integration delta | UAT consolidation PARTIAL completed: +2.66 GiB observed C: free, still ~5.00 GiB below N-002 >=10 GiB preflight; N-002 BLOCKED, no code/tests; Candidate I/MP1.3 LOCKED |
 | MP2/M2 | Safe native offline E2E + cashier critical path on controlled build | LOCKED |
 | MP3/M3 | Installer/upgrade proof and explicit Owner decision | LOCKED |
 
-No MP1–MP3 delivery dates until formal successor phase decision. Owner authorised N-002 only in a separate local clone, conditional on safe disk; no current CLI execution. No auto-retry/merge/Cloud. This does not close M1 or authorise other implementation phases. An approved evidence-only MP1.1/1.2 task does not authorize implementation. Todoist mirrors this proposal, not vice versa.
+No MP1–MP3 delivery dates until formal successor phase decision. UAT cleanup finished at its bounded safe scope; N-002 **was attempted but BLOCKED at disk preflight** with no clone/code/tests, and later observed capacity remains under its 10 GiB threshold. No auto-retry/merge/Cloud. This does not close M1 or authorise other implementation phases. An approved evidence-only MP1.1/1.2 task does not authorize implementation. Todoist mirrors this proposal, not vice versa.
