@@ -1,7 +1,7 @@
 # Twinpet POS — Master Plan Rebaseline
 
-**Version 1.1 — PLANNING DRAFT / OWNER POLICY A ACCEPTED; CANDIDATE N-002 IMPLEMENTATION NOT AUTHORIZED**  
-**Prepared / updated:** 2026-11-21 · **Latest Owner decision:** accepted Policy A floor-only design risk, **not** Candidate N-002 source implementation. Candidate N-001 ended `BLOCKED_DESIGN_CONFLICT` without code/tests. `main`, Cloud, merge, release remain NOT authorized.  
+**Version 1.2 — PLANNING DRAFT / CANDIDATE N-002 ISOLATED IMPLEMENTATION OWNER-APPROVED, NOT RUN**  
+**Prepared / updated:** 2026-11-21 · **Latest Owner decision:** accepted Policy A RISK-008 and separately approved Candidate N-002 **isolated** implementation and bounded offline synthetic Rust tests, but Claude has **not yet run**. Candidate N-001 remains BLOCKED; `main`, Cloud, merge, release NOT authorised.  
 **Explicit non-authority:** this new file on a planning branch does NOT change the live workflow gate, authorize MP1 integration/implementation, MP2/MP3, code changes, merge or release.
 
 ## 0. Current Owner handoff — bounded decision
@@ -132,7 +132,13 @@
 
 **Next scoped approval document:** [Candidate N-002 — Policy A implementation scope](planning/MP1-CAND-N-002-FLOOR-ONLY-POLICY-A-IMPLEMENTATION-SCOPE.md). Proposed minimal change is removing the floor-existence limb from `prior_phase_b_state_exists` *only* in `src-tauri/src/durable_kv.rs`; preserve domain-presence and manifest-path fail-closed guards, inventory/version validation, and official shift-close Gate-OFF. Proposed future synthetic oracles include first-install auth-only, missing manifest with remaining domains, corrupt/nonfile/dangling manifest, valid committed domains, and acknowledged all-files-lost risk. `epoch_floor.rs` remains read-only absent a new separate scope approval.
 
-**Next one decision:** Owner GO/NO-GO for **Candidate N-002 isolated implementation + targeted offline synthetic tests**, contingent on disk safety preflight (Windows C: ~0.3 GiB in N-001) and later independent Codex review. Candidate I, MP1.3 integration, UAT, Git main merge, release and cloud all remain locked. Previous `BLOCKED_DESIGN_CONFLICT` is a closed evidence result, not an instruction to rerun the old prompt.
+**Owner approved Candidate N-002 isolated implementation** with strict guardrails. **Next one action:** Owner manually runs Claude CLI using `TPOS-MP1-CAND-N-002-POLICY-A-ISOLATED-IMPLEMENTATION-CLAUDE-PROMPT.md`; new separate clone, `durable_kv.rs` only, min 10 GiB verified free before clone/build, bounded offline Rust synthetic checks, one report. If low space or any boundary fails, STOP `BLOCKED_*` with no clone/edit/test. Independent Codex reviewer follows only after Claude report as a separate step. Candidate I, MP1.3 integration, native UAT, Git main merge, release and cloud stay locked.
+
+## 4.7 Candidate N-002 Owner code gate approved (EXECUTOR_NOT_RUN)
+
+Owner explicitly approved implementing Policy A in a fresh isolated clone of `main@f034301`, **one-file source allowlist `src-tauri/src/durable_kv.rs`**, targeted offline synthetic Rust tests **if and only if** disk safety preflight is satisfied. `epoch_floor.rs` is **read-only**. Approved code intent: remove only the floor-existence limb in `prior_phase_b_state_exists`; keep missing-domain and manifest invalid/present paths fail closed, preserve legal epoch/inventory validation and official Gate-OFF. `RISK-008` is an Owner-accepted *specific* residual risk of full prior Phase-B file loss masquerading as virgin, not a blanket safety waiver.
+
+**Execution preflight:** N-001 Windows C: ≈0.3 GiB free; runnable prompt uses a conservative **10 GiB verified free threshold before clone or Cargo**. If not met, report `BLOCKED_DISK_CAPACITY` without any disk cleanup or code change. Exact one-time manual Prompt: `TPOS-MP1-CAND-N-002-POLICY-A-ISOLATED-IMPLEMENTATION-CLAUDE-PROMPT.md`. Report to `OneDrive/Ai-Report/twinpet-pos/Claude/`; no retry of N-001, no auto-call Codex. After a Claude report, Owner/ChatGPT open a separate independent Codex review gate. **No code executed by ChatGPT**, no release/merge or M1 closure.
 
 ## 5. Other initiatives / deferred (LOCKED)
 Return/Refund activation and sealing Rules; Android/Capacitor; EV-2 VM hard reset; broad mutation matrix; unrelated UI polish; unapproved Cloud/deployment or live POS data contact.
