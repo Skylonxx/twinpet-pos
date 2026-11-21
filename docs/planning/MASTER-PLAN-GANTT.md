@@ -37,7 +37,7 @@ gantt
 | Gate | Acceptance evidence | Current status |
 |---|---|---|
 | MP0/M0 | Approved Goal, phase, priorities, roles, lock list, authority reconciliation | SCOPED_READ_ONLY; FORMAL_PHASE_PENDING |
-| MP1/M1 | UAT baseline and commit/build identity, reviewed integration delta | Independent Codex STATIC_REVIEW_FINDINGS: durable domain enumeration can silently hide I/O errors after Policy A floor-limb removal; source-only two-file fail-closed remediation OWNER APPROVAL PENDING; A-N1..8 NOT_RUN, M1 OPEN, Candidate I/MP1.3 LOCKED |
+| MP1/M1 | UAT baseline and commit/build identity, reviewed integration delta | Owner APPROVED two-file N-002 fallible domain-enumeration source-only remediation in existing clone; Claude NOT RUN, A-N1..8 NOT_RUN, independent Codex source review after report; M1 OPEN, Candidate I/MP1.3 LOCKED |
 | MP2/M2 | Safe native offline E2E + cashier critical path on controlled build | LOCKED |
 | MP3/M3 | Installer/upgrade proof and explicit Owner decision | LOCKED |
 
