@@ -1,6 +1,6 @@
 # Twinpet POS — Master Plan Rebaseline
 
-**Version 1.4 — PLANNING DRAFT / OWNER-APPROVED UAT EXACT2 CACHE CLEANUP; NOT RUN**  
+**Version 1.5 — PLANNING DRAFT / OWNER APPROVES RUST GENERATED-ONLY CLEANUP; AWAITING CODEX RESULT**  
 **Prepared / updated:** 2026-11-21 · **Latest Owner decision:** accepted Policy A RISK-008 and separately approved Candidate N-002 **isolated** implementation and bounded offline synthetic Rust tests, but Claude has **not yet run**. Candidate N-001 remains BLOCKED; `main`, Cloud, merge, release NOT authorised.  
 **Explicit non-authority:** this new file on a planning branch does NOT change the live workflow gate, authorize MP1 integration/implementation, MP2/MP3, code changes, merge or release.
 
@@ -155,6 +155,14 @@ Owner approved deletion of **exactly two generated-cache candidates**, only afte
 Combined **potential** 3.00 GiB logical, not guaranteed freed disk bytes. If a candidate cannot pass any check, it is BLOCKED, **not** replaced by another folder. No deletion has been executed by ChatGPT. Manual Codex Prompt: `TPOS-DISK-002-UAT-EXACT2-CLEANUP-AND-LEGACY-CACHE-INVENTORY-CODEX-PROMPT.md`; report canonical `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Codex\TPOS-DISK-002-UAT-EXACT2-CLEANUP-AND-LEGACY-CACHE-INVENTORY-CODEX-REPORT.md`.
 
 Same run separately produces a **READ-ONLY TOP-15** inventory of historical Rust/Tauri/Node test caches including stage028, stage024 and replay targets; **no additional deletion** (especially protected evidence, Stage056, UAT binaries, profiles, backups, Git). Old N-002 remains disk-blocked; do not automatically retry. Reassess disk headroom and actual reclaim only after report. This is a single bounded cleanup authorization, not a general 'delete test history' policy.
+
+## 4.10 TPOS-DISK-003 — exact generated compilation artifacts only (Owner-approved; NOT RUN)
+
+**Owner explicit scope update, 2026-11-21:** Previous TPOS-DISK-002 found **0 deleted**: Rust `target` contains protected `focused-runtime-017-scratch` with SQLite manifest, provenance and committed-epoch data; `review023-independent\node_modules` is junction-backed by `review027`, hence unsafe to remove wholesale. TPOS-DISK-002 measurement C: around 2.10 GiB free. This replaces the earlier exact-two whole-directory delete approach; do **not** retry it.
+
+**New approved action, manual Codex CLI direct-paste prompt only:** inspect then conditionally remove **positively identified Rust/Tauri generated compilation/cache material within** `C:\Users\Narachat\TPOS023-UAT\integration-u1-b1r-impl-20261118\src-tauri\target`. Confine deletion to validated Cargo-produced build subtrees and known compiled extensions within `debug\deps`, with explicit protection of `focused-runtime-017-scratch`, every SQLite, manifest, provenance, committed epoch/marker, unique UAT evidence, executables/images needed as proof and any user/test data. Reject any reparse point, junction, active-use conflict or ambiguous contents; delete **only safe siblings/files**, not `target` or `debug` parent. No deletion of shared `node_modules`, profile, Stage056, older proof runs or other paths; no source/Git/Cloud/Production/build/test/N-002 retry. No automatic process termination. **The risk of any ambiguous file should be resolved by SKIP, not by destroying data.**
+
+**Evidence:** Codex measures free C: before and after and reports actual byte delta (not theoretical logical target size) and list of exact deleted/skipped entries, protected fixture verification and next cleanup candidates (read-only). One report to `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Codex\TPOS-DISK-003-GENERATED-RUST-CACHE-CLEANUP-REPORT.md`. No file deletion occurred by ChatGPT. Original main and build/release gates remain unchanged.
 
 ## 5. Other initiatives / deferred (LOCKED)
 Return/Refund activation and sealing Rules; Android/Capacitor; EV-2 VM hard reset; broad mutation matrix; unrelated UI polish; unapproved Cloud/deployment or live POS data contact.
