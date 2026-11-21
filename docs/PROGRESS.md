@@ -32,6 +32,10 @@
 | Report 024 workflow adjudication | PLAN_AUTHORITY_UNRESOLVED | Current authority trio lacks latest UAT/selection |
 | Native EV-1 / EV-2 / GUI EV-3 / offline operational UAT | NOT_RUN or NOT_AUTHORIZED | Do not infer PASS, release or durability |
 
+## Candidate N-002 low-disk source-only substitution — PROPOSED (2026-11-22)
+
+Owner explicitly closed UAT cleanup, refused any further C: cleanup or disk increase to 10 GiB, and prohibited N-002 rerun or code/Safety Gate edits without permission. The 10 GiB requirement was conservative build/clone headroom and the 8–10 GiB Tauri estimate was not a measured footprint. Existing N-001 ~43 MB clone was last reported clean and pinned, but **its current state is unknown**. Proposed one route: reuse that clone after strict read-only verification to implement only Policy A in `durable_kv.rs`, static checks without Cargo/build/new workspace. Do not lower build-time disk safety threshold or call N-002 tests. Runtime verification and M1 remain pending. [Proposal](planning/MP1-CAND-N-002-LOW-DISK-SOURCE-ONLY-ADAPTATION-PROPOSAL.md). No source implementation authorised by this replan.
+
 ## ENV-001 — UAT one-pass cleanup final (2026-11-21 report, reviewed 2026-11-22)
 
 - Latest timestamped `TPOS-UAT-CONSOLIDATE-001-RESULT-20261121-235602-876935.md` **supersedes** earlier unsuffixed `RESULT.md` with 0 deletions. Final `PARTIAL` with **2,130 verified generated Cargo cache files deleted**; 2,555,084,967 *logical bytes* removed.
@@ -127,7 +131,7 @@
 - No Source Code, tests, build, native app/profile, Cloud, Rules/Functions, release or data cleanup in this pass.
 
 ## Next one action
-**Next one action:** close the UAT cleanup loop; do not rerun consolidation. C: measured ~5.00 GiB after 2,130 cache-file deletions, **below N-002 >=10 GiB preflight**. Request a separate Owner choice for additional non-UAT storage capacity cleanup/space provision if pursuing N-002; recheck free bytes before any actual clone/build. Preserve retained UAT evidence. No automatic N-002 retry or Gate-OFF/Cloud/source changes; M1, Candidate I, MP1.3, MP2/MP3 remain LOCKED.
+**Next one action: Owner decision on ONE low-disk source-only adaptation proposal**, not further storage work. Owner refused additional disk cleanup/capacity and closed UAT cleanup. Reuse the existing N-001 clone (only if clean/pinned on fresh preflight), proposed one-file Policy A edit and static diff checks WITHOUT new clone/workspace/Cargo/build/tests, keeping >=10 GiB Cargo/build rule unchanged. This changed execution/testing method is NOT APPROVED YET. [Scope](planning/MP1-CAND-N-002-LOW-DISK-SOURCE-ONLY-ADAPTATION-PROPOSAL.md). A-N1–A-N8 remain NOT_RUN and M1/MP1.3/main/Cloud/release locked.
 
 **Formal M0 phase registration and workflow-trio reconciliation:** still pending; this scoped authorization does not change the live `ACTIVE_IMPLEMENTATION_PACKET=NONE`.
 
