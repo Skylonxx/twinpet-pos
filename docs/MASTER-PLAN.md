@@ -1,14 +1,14 @@
 # Twinpet POS — Master Plan Rebaseline
 
-**Version 0.6 — PLANNING DRAFT / MP1-R01 COMPLETE WITH INTEGRATION BLOCKERS**  
-**Prepared:** 2026-11-21 · **Current approved scope:** MP0 planning, MP1.1/1.2 evidence collection and MP1-R01 read-only risk review only  
+**Version 0.7 — PLANNING DRAFT / MP1-P01 DESIGN CONTRACT READY FOR OWNER REVIEW**  
+**Prepared:** 2026-11-21 · **Current approved scope:** MP0 planning, MP1.1/1.2 evidence, MP1-R01 read-only review and Owner-authorized MP1-P01 planning only  
 **Explicit non-authority:** this new file on a planning branch does NOT change the live workflow gate, authorize MP1 integration/implementation, MP2/MP3, code changes, merge or release.
 
 ## 0. Current Owner handoff — bounded decision
 
 **2026-11-21 — M0_SCOPED_MP1_READ_ONLY_AUTHORIZED / FORMAL_PHASE_ADJUDICATION_PENDING.** The Owner directed continuation after reviewing the MP0 draft. MP1.1/MP1.2 **read-only evidence identification and source-delta classification** is the only newly authorized next action. The live workflow trio still says successor implementation = NONE; formal reconciliation is pending. MP1.3 integrations, code changes, builds, UAT, Git commits/merges to main, deployment and cloud work are not authorized by this handoff.
 
-**MP1-R01 COMPLETE (2026-11-21):** Codex delivered `MP1_R01_REVIEW_COMPLETE_WITH_BLOCKERS`. High-risk source/design review done and blockers remain for the future integration decision. **Next action is Owner decision on planning Packet 1 for native custody + identity safety only**, not another automatic Codex review. MP1.3 implementation stays LOCKED; M1 OPEN and formal successor phase selection pending.
+**MP1-R01 COMPLETE and MP1-P01 PLANNING DRAFT_READY (2026-11-21):** Product Owner authorized MP1-P01 design/planning only. See [MP1-P01 Native Custody & Identity Safety acceptance contract](planning/MP1-P01-NATIVE-CUSTODY-IDENTITY-SAFETY-PLAN.md). **Next action is Owner review of that plan**; future Candidate N implementation and Candidate I are not authorized, no further automatic Codex/Claude packet. MP1.3 implementation remains LOCKED; M1 OPEN and formal successor phase selection pending.
 
 ## 1. Authority and source precedence
 
@@ -102,6 +102,12 @@
 | UAT trust anchor/enrollment | BLOCKER *if production leakage* | Explicit `UAT_ONLY_GUARD`, exclude from production default; note 064 issuance concurrency risk |
 
 **Owner decision now:** whether to select **MP1-P01 PLANNING ONLY — Native Custody & Identity Safety** as the one next bounded design packet. Scope candidate: `durable_kv.rs` virgin/floor/manifest invariant and device identity/sequence/source provenance; produce an acceptance contract and proposed implementation boundaries, **no source edits, tests/build, UAT, branch/merge or cloud changes**. Do not start until Owner authorizes it. All other areas remain tracked release/integration risks, not waived. U1/B1-R evidence retains prior status and must not restart by default.
+
+## 4.3 MP1-P01 planning result (Owner-authorized; not accepted implementation)
+
+[MP1-P01 — Native Custody & Identity Safety Plan](planning/MP1-P01-NATIVE-CUSTODY-IDENTITY-SAFETY-PLAN.md) is prepared as a **planning-only acceptance contract**. It defines 7 proposed invariants (N1–N3 native manifest/floor/epoch and I1–I4 device identity/sequence/scope/idempotency), a focused state/acceptance matrix, and two **separate, still unapproved** future candidates: N (native durability custody) then I (device identity/sequence). Source vs historical report vs future proof are explicitly distinguished; conservative design default is FAIL_CLOSED rather than silent virgin/sequence reset, subject to Owner recovery policy. The official shift-close Gate-OFF remains unchanged. This document **does not** complete M1, accept risk, approve code edits/tests or start integration.
+
+**Next one decision:** Owner accepts/revises the planning contract and either authorizes *a separate small, guarded Candidate N implementation packet* under the formal phase gate or keeps work on hold. No implicit authority is conveyed by Todoist or this draft. Candidate I, journal/stock/privileged/shift/UAT issues and MP2–MP3 remain locked.
 
 ## 5. Other initiatives / deferred (LOCKED)
 Return/Refund activation and sealing Rules; Android/Capacitor; EV-2 VM hard reset; broad mutation matrix; unrelated UI polish; unapproved Cloud/deployment or live POS data contact.
