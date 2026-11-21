@@ -1,6 +1,6 @@
 # Twinpet POS — Master Plan Rebaseline
 
-**Version 1.3 — PLANNING DRAFT / N-002 DISK-BLOCKED; UAT STORAGE INVENTORY REVIEWED**  
+**Version 1.4 — PLANNING DRAFT / OWNER-APPROVED UAT EXACT2 CACHE CLEANUP; NOT RUN**  
 **Prepared / updated:** 2026-11-21 · **Latest Owner decision:** accepted Policy A RISK-008 and separately approved Candidate N-002 **isolated** implementation and bounded offline synthetic Rust tests, but Claude has **not yet run**. Candidate N-001 remains BLOCKED; `main`, Cloud, merge, release NOT authorised.  
 **Explicit non-authority:** this new file on a planning branch does NOT change the live workflow gate, authorize MP1 integration/implementation, MP2/MP3, code changes, merge or release.
 
@@ -145,6 +145,16 @@ Owner explicitly approved implementing Policy A in a fresh isolated clone of `ma
 Claude N-002 report `BLOCKED_DISK_CAPACITY`: original baseline pinned, 0.359 GiB free, no clone/source edits/Cargo/tests. **Do not rerun unchanged**. Codex `TPOS-DISK-001-UAT-STORAGE-INVENTORY-REPORT.md` scanned `C:\Users\Narachat\TPOS023-UAT` **read-only** and reported PARTIAL (the intended prompt path was absent). Enumerated 7.19 GiB logical across 205,469 files, excluding 23 reparse-point directories; not a disk allocation/recovery guarantee.
 
 Two *conditional candidate* cleanup targets: `integration-u1-b1r-impl-20261118\src-tauri\target` 2.49 GiB, `scratchpad\review023-independent\node_modules` 0.51 GiB; together 3.00 GiB logical. Require explicit Owner approval and pre-delete verification of exact paths, use by processes, original ownership/evidence-retention and rebuild/offline-dependency availability. Do not delete parent folders. An additional 0.70 GiB of stage028 Rust targets remains **protected pending evidence review**. The UAT source, Stage056, binaries, patches, evidence, profiles, .git/stashes and backups remain protected. Even ideal 3.00 GiB recovery plus 0.359 GiB free would remain well under 10 GiB; seek further safe capacity outside a blind UAT cleanup. No delete/move yet.
+
+## 4.9 Owner-authorized disk cleanup scope (2026-11-21; executor NOT RUN)
+
+Owner approved deletion of **exactly two generated-cache candidates**, only after non-following canonical path/reparse checks, in-use/process, Git tracked-status, unique evidence retention and reconstruction safety are confirmed. Exact paths relative to `C:\Users\Narachat\TPOS023-UAT`:
+- `integration-u1-b1r-impl-20261118\src-tauri\target` — 2.49 GiB logical (Rust target)
+- `scratchpad\review023-independent\node_modules` — 0.51 GiB logical (Node dependencies)
+
+Combined **potential** 3.00 GiB logical, not guaranteed freed disk bytes. If a candidate cannot pass any check, it is BLOCKED, **not** replaced by another folder. No deletion has been executed by ChatGPT. Manual Codex Prompt: `TPOS-DISK-002-UAT-EXACT2-CLEANUP-AND-LEGACY-CACHE-INVENTORY-CODEX-PROMPT.md`; report canonical `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Codex\TPOS-DISK-002-UAT-EXACT2-CLEANUP-AND-LEGACY-CACHE-INVENTORY-CODEX-REPORT.md`.
+
+Same run separately produces a **READ-ONLY TOP-15** inventory of historical Rust/Tauri/Node test caches including stage028, stage024 and replay targets; **no additional deletion** (especially protected evidence, Stage056, UAT binaries, profiles, backups, Git). Old N-002 remains disk-blocked; do not automatically retry. Reassess disk headroom and actual reclaim only after report. This is a single bounded cleanup authorization, not a general 'delete test history' policy.
 
 ## 5. Other initiatives / deferred (LOCKED)
 Return/Refund activation and sealing Rules; Android/Capacitor; EV-2 VM hard reset; broad mutation matrix; unrelated UI polish; unapproved Cloud/deployment or live POS data contact.
