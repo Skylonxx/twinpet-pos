@@ -1,7 +1,7 @@
 # Twinpet POS — Project Goal (MP0 proposal)
 
-**Version:** 0.1 DRAFT · **Prepared:** 2026-11-21 · **Owner:** Product Owner  
-**Approval:** MP0 planning authorized; **next implementation phase NOT AUTHORIZED**.  
+**Version:** 0.2 PLANNING DRAFT · **Prepared / updated:** 2026-11-21 · **Owner:** Product Owner  
+**Approval:** MP0 planning + MP1.1/MP1.2 read-only evidence review authorized. **Next implementation phase NOT AUTHORIZED**.  
 **Authority:** existing `docs/agent-workflow/{STATE,CURRENT_PACKET,NEXT_ACTION}.md` + `AUTHORITY_MATRIX.md` control current gate until explicit adjudication. No replacement by this draft.
 
 ## Product outcome
@@ -20,6 +20,9 @@
 
 ## What counts as evidence
 ต้องแยก SOURCE_CLOSED, TEST_PASS, NATIVE_UAT_PASS, RELEASE_READY และ OWNER_RELEASE_APPROVED ออกจากกัน. แสดงที่มาของ test command/build hash, candidate identity, ข้อมูลจำลอง vs จริง และข้อจำกัด; ไม่ถือว่าการ Compile ผ่านเท่ากับขายได้จริง
+
+## Scope decision (2026-11-21)
+Owner directed the next planning step. This authorizes read-only UAT artifact/source reconciliation under MP1.1/MP1.2; it does not approve MP1 integration code, native build, test, UAT, merge, production or Cloud. The live workflow trio remains unchanged pending formal phase adjudication.
 
 ## Source lineage
 - Current technical baseline used for rebaseline proposal: GitHub main `f034301c46dd9e08190f869cc85dbb140ac28a3c` observed 2026-11-21
