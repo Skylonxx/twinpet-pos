@@ -1,8 +1,8 @@
 # Twinpet POS — MP1-P01 Native Custody & Identity Safety
-## Planning-only acceptance contract (Owner-authorized draft)
+## Owner-accepted planning contract (NOT implementation authorization)
 
-**Prepared:** 2026-11-21 · **Document status:** `DESIGN_DRAFT_READY / NOT_IMPLEMENTATION_APPROVED`  
-**Approval:** Product Owner approved **MP1-P01 planning only** after MP1-R01, not code/build/test/native/cloud/merge/release.  
+**Prepared / approved:** 2026-11-21 · **Document status:** `OWNER_ACCEPTED_PLANNING_CONTRACT / NOT_IMPLEMENTATION_APPROVED`  
+**Approval:** Product Owner first authorized MP1-P01 planning, then explicitly **accepted the MP1-P01 plan** in the next turn. Acceptance of planning criteria and conservative safety defaults does **not** approve code/build/test/native/cloud/merge/release or direct a production recovery-policy change.  
 **Current authority:** `POST_SEC001_NEXT_PHASE_SELECTION_ADJUDICATION`, `ACTIVE_IMPLEMENTATION_PACKET=NONE`; the workflow trio on `main` still prevails.  
 **Source baseline:** GitHub `main` `f034301c46dd9e08190f869cc85dbb140ac28a3c`, separate preserved Stage056 tree and overlay 058 / patch 061.  
 **Status distinction:** This is an architecture/acceptance **proposal** derived from MP1-R01 source risk review and selected main source reads; no independent Stage056 full replay, runtime test or production proof is claimed.
@@ -79,9 +79,9 @@ The current `AUTHORITY_MATRIX.md` still places Product Owner as final authority,
 
 **STOP on:** missing lineage, unsafe assumption that floor-only means virgin, sequence reuse, loss of branch/principal fence, protected env/credential access, bypassing official Gate-OFF, any source/git/build/test/installer/cloud/runtime write or renewed U1 EV rabbit-hole.
 
-## 8. Next one Owner decision (AFTER P01 review, not implicit approval)
+## 8. Next one Owner decision (P01 plan accepted; Candidate N remains locked)
 
-Choose to accept/revise this **planning acceptance contract**, then separately authorize **one design-to-implementation Candidate N** under a dedicated safety/isolation/verification packet *or* keep implementation on hold. Candidate I is downstream and remains unapproved. Formal M0 successor implementation phase and live workflow-trio reconciliation are still pending.
+**Owner accepted the MP1-P01 planning contract.** The next required decision is whether to authorize **a single Candidate N implementation packet**, with bounded write allowlist, isolated test target, independent reviewer, rollback/no-fallback guardrails and explicit test permissions, **or HOLD**. This is NOT approved by acceptance of the plan. Candidate I is downstream and remains unapproved. Formal M0 successor implementation phase and live workflow-trio reconciliation are still pending.
 
 **Linked evidence:** MP1-001 custody report; MP1-002 delta report; MP1-R01 `MP1_R01_REVIEW_COMPLETE_WITH_BLOCKERS`.  
 **Portfolio:** [Master Plan](../MASTER-PLAN.md) · [Decisions](../DECISIONS.md) · [Progress](../PROGRESS.md) · [Todoist](https://app.todoist.com/app/project/6j43w86FgC6PhQh6).
