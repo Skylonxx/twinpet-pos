@@ -11,7 +11,7 @@
 | MP0.2 priority/dependencies | DRAFT_READY | `MASTER-PLAN.md`, Gantt; critical path proposal only |
 | MP0.3 debt/risk register | DRAFT_READY | U1/B1-R 016–024 evidence retained; TD-001/RISK-002/UAT-004/GOV-003 |
 | M0 Owner/Gemini phase selection | SCOPED_READ_ONLY / FORMAL_PENDING | Owner continuation authorized MP1.1–MP1.2 evidence-only; workflow authority not changed |
-| MP1 preserve/integrate UAT | MP1.1 EVIDENCE_COMPLETE_PARTIAL_IDENTITY; MP1.2 NEXT_READ_ONLY | MP1-001 report recorded; MP1.3 implementation/merge still LOCKED |
+| MP1 preserve/integrate UAT | MP1.1 PARTIAL_IDENTITY; MP1.2 PARTIAL_CLASSIFICATION (triage complete) | MP1-002 report reviewed; independent risk-based review requires Owner; MP1.3 LOCKED |
 | MP2 native offline E2E | LOCKED | M1 acceptance, safe isolated UAT environment |
 | MP3 release readiness | LOCKED | M2 acceptance + explicit Owner GO/NO-GO |
 
@@ -20,8 +20,9 @@
 |---|---|---|
 | SEC-001 native/Rules | CLOSED per live workflow | Does not authorize successor packet |
 | PK-1–PK-6 and Phase A/B/C | CLOSED / CLOSED_WITH_NOTES | Not a release acceptance of future candidate |
-| UAT Stage056 + 058/061–065 | MP1-001 SELECTED_HASH_VERIFIED + HISTORICAL_OWNER_REPORT | Current Stage056 manifest equivalence & effective UAT gate diverging from official main unverified |
+| UAT Stage056 + 058/061–065 | MP1-001 builds checked; MP1-002 1,364 source hashes matched, 167 paths triaged | 2 protected env files and extra files unchecked; UAT overlay gate ON vs official OFF; no full tree/runtime PASS |
 | Report MP1-001 UAT baseline custody | MP1_001_PARTIAL_IDENTITY | SB63/SB64 file hashes match identities; Stage056 pins/patch manifest hashed; 1,366-file current-tree proof NOT_RUN; build IDs scratch Git; UAT flag true vs official false |
+| Report MP1-002 source-delta triage | MP1_002_PARTIAL_CLASSIFICATION | 1,364/1,366 manifest matches; 64 production-review, 101 tooling, 2 unknown from 167 paths; no per-hunk review or integration acceptance |
 | Report 016 compile | PASS | Compile is not runtime |
 | Reports 018+019 focused runtime | PASS 5/5 | Limited exact cases only |
 | Report 020 behavioral mutations | PASS_LIMITED 3 KILLED; M1 SKIPPED | Not 4/4 and not full catalog |
@@ -29,6 +30,12 @@
 | Report 023 EV-4 | BINDINGS_VERIFIED | FFI imports/link, not full Windows semantics |
 | Report 024 workflow adjudication | PLAN_AUTHORITY_UNRESOLVED | Current authority trio lacks latest UAT/selection |
 | Native EV-1 / EV-2 / GUI EV-3 / offline operational UAT | NOT_RUN or NOT_AUTHORIZED | Do not infer PASS, release or durability |
+
+## MP1.2 evidence reviewed (2026-11-21)
+- MP1-002 verdict `MP1_002_PARTIAL_CLASSIFICATION`. Matched 1,364 of 1,366 manifest paths; `.env.example` and `.env.test` skipped as protected; unchecked extras and non-atomic source snapshot mean whole-tree equivalence UNKNOWN, not a discovered mismatch.
+- 167 path names triaged: 64 `PRODUCTION_REVIEW_REQUIRED`, 101 `TEST_OR_TOOLING`, 2 `UNKNOWN` (`useLocalLedger.ts`, `projectPrivilegedOfflineAction.ts`). No comprehensive per-hunk assessment.
+- Source-verified UAT overlay 058 sets `SERVER_AUTHORITATIVE_CLOSE_ENABLED=true` while raw Stage056 and main are `false`. Recorded SB61–SB64 scripts apply overlay; actual runtime branch UNKNOWN.
+- MP1.2 bounded evidence task complete with partial outcome. M1 NOT ACCEPTED; MP1.3 implementation LOCKED. No automatic Agent next packet.
 
 ## MP1.1 evidence reviewed (2026-11-21)
 - MP1-001 report `MP1_001_PARTIAL_IDENTITY`: SHA-256 of SB63 `9f7fddf10ae89bd7364a973cbde670e0ddc2f81be1e93a347df54b9622159e91`; SB64 & Stage065 copied EXE `3caee049721e09735dc5a3c18b5cda786d91af5d6a4952d02db79b4efaa674a0`. These hashes establish existing bytes, not runtime proof.
@@ -43,7 +50,7 @@
 - No Source Code, tests, build, native app/profile, Cloud, Rules/Functions, release or data cleanup in this pass.
 
 ## Next one action
-**MP1.2 READ-ONLY delta classification:** bounded compare Stage056 current tree against 1,366-file manifest, summarize the 167-file cumulative patch + overlay 058 and Stage061–064 client/functions differences, distinguish current main from UAT build config (authoritative shift-close gate true/false) and categorize production-review/UAT-only/unknown. Do not reconstruct the candidate, recompile, retest, fetch Git, touch cloud or merge. Return one report; Owner reviews before any MP1.3.
+**Owner adjudication required:** Decide whether to authorize a bounded independent **pre-integration design/security review** of high-risk changed production hunks and UAT-only isolation guards. Focus native epoch, sale identity/journal, inventory/FIFO, shift Gate ON vs OFF, privileged/ledger unknown seams. Do not rerun bulk hash/traverse, build/test, integrate, flip gate, or modify Cloud/production. Formal M0 phase registration remains pending.
 
 **Formal M0 phase registration and workflow-trio reconciliation:** still pending; this scoped authorization does not change the live `ACTIVE_IMPLEMENTATION_PACKET=NONE`.
 
