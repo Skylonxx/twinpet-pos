@@ -11,7 +11,7 @@
 | MP0.2 priority/dependencies | DRAFT_READY | `MASTER-PLAN.md`, Gantt; critical path proposal only |
 | MP0.3 debt/risk register | DRAFT_READY | U1/B1-R 016–024 evidence retained; TD-001/RISK-002/UAT-004/GOV-003 |
 | M0 Owner/Gemini phase selection | MP1_R01_REVIEW_ONLY_APPROVED / FORMAL_PENDING | Owner authorized focused independent pre-integration read-only review; no implementation successor chosen in live trio |
-| MP1 preserve/integrate UAT | N-002 BLOCKED_DISK_CAPACITY / ZERO_CODE_ZERO_TEST | C: 0.359 GiB; UAT read-only size inventory complete PARTIAL; Owner-selected exact cleanup approval next; M1 OPEN/MP1.3 LOCKED |
+| MP1 preserve/integrate UAT | N-002 BLOCKED_DISK_CAPACITY / ZERO_CODE_ZERO_TEST | One-pass UAT cleanup concluded PARTIAL; C: latest measured ~5.00 GiB free, below 10 GiB N-002 preflight; M1 OPEN/MP1.3 LOCKED |
 | MP2 native offline E2E | LOCKED | M1 acceptance, safe isolated UAT environment |
 | MP3 release readiness | LOCKED | M2 acceptance + explicit Owner GO/NO-GO |
 
@@ -31,6 +31,14 @@
 | Report 023 EV-4 | BINDINGS_VERIFIED | FFI imports/link, not full Windows semantics |
 | Report 024 workflow adjudication | PLAN_AUTHORITY_UNRESOLVED | Current authority trio lacks latest UAT/selection |
 | Native EV-1 / EV-2 / GUI EV-3 / offline operational UAT | NOT_RUN or NOT_AUTHORIZED | Do not infer PASS, release or durability |
+
+## ENV-001 — UAT one-pass cleanup final (2026-11-21 report, reviewed 2026-11-22)
+
+- Latest timestamped `TPOS-UAT-CONSOLIDATE-001-RESULT-20261121-235602-876935.md` **supersedes** earlier unsuffixed `RESULT.md` with 0 deletions. Final `PARTIAL` with **2,130 verified generated Cargo cache files deleted**; 2,555,084,967 *logical bytes* removed.
+- C: free before **2,509,815,808**, after **5,365,436,416** bytes: observed change **+2,855,620,608 bytes (~2.66 GiB)**; snapshot includes external disk activity. UAT remains 203,335 regular files, 5,164,986,380 logical bytes (~4.81 GiB); 27 reparse entries excluded, 0 scan errors.
+- Retained-index reports sampled presence of Stage056 and manifests, overlay 058, patches 061–064, 065 proof/scripts, SB63/SB64 EXE, U1 source/Git, durable focused-runtime-017-scratch/epoch/SQLite/provenance, profiles and evidence. Existence is **not** proof of complete or hash-verified MP1/U1/B1-R artifacts; no standalone Patch065 diff established.
+- Skipped: 968 ambiguous files; 103 protected names; 508 hardlink/unsafe-attribute cases. No Cargo build/test, repo/Cloud/live application or N-002 run. **No further UAT cleanup packet by default**.
+- N-002 unchanged `BLOCKED_DISK_CAPACITY`: its 10 GiB preflight gate remains; ~5.00 GiB still missing at last measurement. **Next capacity action requires new scope/Owner decision**, not silent threshold change.
 
 ## ENV-001 — One-pass UAT consolidation approval (2026-11-21; NOT RUN)
 
@@ -119,7 +127,7 @@
 - No Source Code, tests, build, native app/profile, Cloud, Rules/Functions, release or data cleanup in this pass.
 
 ## Next one action
-**Next one action: Owner pastes the complete TPOS-UAT-CONSOLIDATE-001 one-pass instruction into Codex CLI**, without searching for a Prompt file. It logically consolidates retained MP1 evidence, selectively deletes confirmed generated historical UAT compilation/cache material, then writes one result report + retained index under Ai-Report. No further repeated narrow DISK-002/003 loop or automatic N-002 restart. Git main/Cloud/Production/M1 and Candidate I/MP1.3/MP2/3 remain gated.
+**Next one action:** close the UAT cleanup loop; do not rerun consolidation. C: measured ~5.00 GiB after 2,130 cache-file deletions, **below N-002 >=10 GiB preflight**. Request a separate Owner choice for additional non-UAT storage capacity cleanup/space provision if pursuing N-002; recheck free bytes before any actual clone/build. Preserve retained UAT evidence. No automatic N-002 retry or Gate-OFF/Cloud/source changes; M1, Candidate I, MP1.3, MP2/MP3 remain LOCKED.
 
 **Formal M0 phase registration and workflow-trio reconciliation:** still pending; this scoped authorization does not change the live `ACTIVE_IMPLEMENTATION_PACKET=NONE`.
 
