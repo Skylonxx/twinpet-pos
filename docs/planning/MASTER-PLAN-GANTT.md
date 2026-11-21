@@ -1,6 +1,6 @@
 # Twinpet POS — Master Plan Dependencies (MP0 DRAFT)
 
-**Prepared / updated:** 2026-11-21. Candidate N-001 stopped BLOCKED_DESIGN_CONFLICT (no code/test); Owner selected Policy A and accepted RISK-008 for design only. Candidate N-002 implementation requires **separate approval**. No new execution, Git merge or release authorized.
+**Prepared / updated:** 2026-11-21. Candidate N-001 stopped BLOCKED_DESIGN_CONFLICT; Policy A accepted and Candidate N-002 **isolated** implementation Owner-approved, CLI **NOT RUN**. Disk safe preflight mandatory. Git main merge/release still forbidden.
 
 ```mermaid
 flowchart LR
@@ -37,8 +37,8 @@ gantt
 | Gate | Acceptance evidence | Current status |
 |---|---|---|
 | MP0/M0 | Approved Goal, phase, priorities, roles, lock list, authority reconciliation | SCOPED_READ_ONLY; FORMAL_PHASE_PENDING |
-| MP1/M1 | UAT baseline and commit/build identity, reviewed integration delta | Policy A accepted for floor-only; Candidate N-002 implementation approval PENDING, disk preflight blocker; Candidate I/MP1.3 LOCKED |
+| MP1/M1 | UAT baseline and commit/build identity, reviewed integration delta | Candidate N-002 OWNER_APPROVED / NOT_RUN, guarded disk then isolated synthetic tests; independent review later; Candidate I/MP1.3 LOCKED |
 | MP2/M2 | Safe native offline E2E + cashier critical path on controlled build | LOCKED |
 | MP3/M3 | Installer/upgrade proof and explicit Owner decision | LOCKED |
 
-No MP1–MP3 delivery dates until formal successor phase decision. Owner selected A; Candidate N-002 implementation/testing is NOT authorized. No auto-retry/test/merge. This does not close M1 or authorize other implementation phases. An approved evidence-only MP1.1/1.2 task does not authorize implementation. Todoist mirrors this proposal, not vice versa.
+No MP1–MP3 delivery dates until formal successor phase decision. Owner authorised N-002 only in a separate local clone, conditional on safe disk; no current CLI execution. No auto-retry/merge/Cloud. This does not close M1 or authorise other implementation phases. An approved evidence-only MP1.1/1.2 task does not authorize implementation. Todoist mirrors this proposal, not vice versa.
