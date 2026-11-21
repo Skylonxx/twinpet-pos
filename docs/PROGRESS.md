@@ -11,7 +11,7 @@
 | MP0.2 priority/dependencies | DRAFT_READY | `MASTER-PLAN.md`, Gantt; critical path proposal only |
 | MP0.3 debt/risk register | DRAFT_READY | U1/B1-R 016–024 evidence retained; TD-001/RISK-002/UAT-004/GOV-003 |
 | M0 Owner/Gemini phase selection | MP1_R01_REVIEW_ONLY_APPROVED / FORMAL_PENDING | Owner authorized focused independent pre-integration read-only review; no implementation successor chosen in live trio |
-| MP1 preserve/integrate UAT | Candidate N ISOLATED_IMPLEMENTATION_OWNER_APPROVED / NOT_RUN | Claude implementer prompt prepared; original main and release untouched; independent Codex review pending; M1 OPEN, MP1.3 LOCKED |
+| MP1 preserve/integrate UAT | CAND_N_BLOCKED_DESIGN_CONFLICT / NO_CODE_CHANGES | Claude Windows report received; Rust tests NOT_RUN_ENV_LIMIT (C: ~0.3 GiB); Owner floor-only A/B/HOLD decision next; M1 OPEN, MP1.3 LOCKED |
 | MP2 native offline E2E | LOCKED | M1 acceptance, safe isolated UAT environment |
 | MP3 release readiness | LOCKED | M2 acceptance + explicit Owner GO/NO-GO |
 
@@ -31,6 +31,12 @@
 | Report 023 EV-4 | BINDINGS_VERIFIED | FFI imports/link, not full Windows semantics |
 | Report 024 workflow adjudication | PLAN_AUTHORITY_UNRESOLVED | Current authority trio lacks latest UAT/selection |
 | Native EV-1 / EV-2 / GUI EV-3 / offline operational UAT | NOT_RUN or NOT_AUTHORIZED | Do not infer PASS, release or durability |
+
+## Candidate N Windows execution result (2026-11-21)
+- Report verdict `BLOCKED_DESIGN_CONFLICT` (source analysis only, 0 modified files, 0 tests). Fresh detached clone `C:\\Users\\Narachat\\TPOS-MP1-CAND-N-ISO-20261121` exists; original main `f034301` and protected untracked/stash reported unchanged. Tests `NOT_RUN_ENV_LIMIT` due to ~0.3 GiB C: free; no test PASS.
+- Baseline rejects native manifest operations after legitimate auth-only/virgin floor-only startup, while a lost Phase-B committed root with only floor remaining cannot be distinguished from that legitimate state using currently reported floor fields. Overlay 058 floor limb removal would cure first-install path at potential cost of silent virgin reinterpretation of lost data.
+- New **policy gate**, not an implementation fix loop: Owner A accept floor-only-as-virgin risk, B design trusted provenance marker/backfill/crash-window semantics (recommended for integrity), or C HOLD. No new Claude/Codex runs without selection and a separate scoped approval; no automatic disk cleanup.
+- Report notes alternate OneDrive prompt path and overwritten initial macOS preflight; future packet delivery must use one canonical path and retained report version.
 
 ## Candidate N implementation authorization (2026-11-21)
 - Owner approved Candidate N source changes **in a fresh isolated clone only**, restricted to native-custody files `src-tauri/src/durable_kv.rs` and `src-tauri/src/epoch_floor.rs` plus inline tests; no `main` checkout/modification, no Git commit/merge/Cloud/AppData/Production or Candidate I.
@@ -77,7 +83,7 @@
 - No Source Code, tests, build, native app/profile, Cloud, Rules/Functions, release or data cleanup in this pass.
 
 ## Next one action
-**Next one action:** Owner manually runs `TPOS-MP1-CAND-N-001-NATIVE-CUSTODY-ISOLATED-IMPLEMENTATION-CLAUDE-PROMPT.md` in Claude CLI on Windows. It may create a new isolated clone, conditionally edit only two native custody files and run bounded offline synthetic tests, then STOP with one report. No autonomous CLI execution by ChatGPT. **After the report**, ChatGPT reviews whether independent Codex read-only inspection is warranted and asks Owner by buttons. M1 OPEN; MP1.3, Candidate I, MP2/3 and main merge remain LOCKED.
+**Next one action: Owner selects via approval buttons** A explicit floor-only-as-virgin risk acceptance (implementation still separately scoped); B (recommended) authorise **provenance marker design/planning only** with legacy compatibility, backfill and crash-window review; or C HOLD. Rust tests blocked until safe disk headroom; do not clean AppData/OneDrive/protected evidence. No automatic Claude or Codex packet after a selection; issue a new bounded packet only for approved scope. M1 OPEN, MP1.3/Candidate I/MP2/MP3 and main merge LOCKED.
 
 **Formal M0 phase registration and workflow-trio reconciliation:** still pending; this scoped authorization does not change the live `ACTIVE_IMPLEMENTATION_PACKET=NONE`.
 
