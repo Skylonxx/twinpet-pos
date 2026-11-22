@@ -263,6 +263,12 @@ Owner explicitly closed UAT cleanup, refused any further C: cleanup or disk incr
 - A single full Markdown Prompt TPOS-MP1-CAND-N-002-GUARDIAN-SYNTHETIC-ONLY-REDESIGN-PROOF-CODEX-PROMPT.md delivered for Owner to save in OneDrive Prompt folder. Short inline Launcher only, no Launcher file. Report to canonical OneDrive Codex folder. Local compile of NEW Guardian prototype and bounded harmless synthetic processes ONLY. No npm/Cargo/network, POS Build/Test/GUI, Source/Main/UAT023/Cloud/real AppData, or OS global changes. Keep 500ms completed-sample rule, C/D stop bounds. Windows Codex execution NOT_RUN_IN_CHAT; no synthetic proof yet.
 - Prior provisioning one-shot closed; offline build and M1 NOT_PASS, F01/F02 OPEN.
 
+## 2026-11-22 — GUARD-SYNTH-001 BLOCKED_TOOLING_OR_SANDBOX: preflight only
+
+- 17:34+07 report confirms **NO** new Guardian code, compile, D synthetic workspace, synthetic process/scenario or 500ms proof. OneDrive Prompt readable and Windows installed csc.exe detected; unable to establish independent watchdog/process and log safety rules before implementation. These were NOT tested; Windows tooling has not been proven incapable.
+- Preserved old D GUARD evidence seven hashes unchanged and npm-stage/cache untouched; C last snapshot 5,845,770,240 B, D 998,728,765,440 B. New D child root remained ABSENT. No npm/Cargo, Build/Test/GUI, Source/Cloud/real AppData or cleanup. Original main/clone were **not inspected** this run.
+- [Assessment and next owner gate](planning/MP1-CAND-N-002-GUARD-SYNTH-001-PREFLIGHT-STOP-ADJUDICATION.md): simplify into G1 compile-only source artifact inside new isolated D root (NO running Guardian or synthetic process) followed by a future separately approved G2 synthetic runtime proof; do not assert G1 is approved. The prior GUARD-SYNTH one-shot CLOSED, M1 NOT_PASS, F01/F02 OPEN.
+
 ## Next one action
 **Next one action: Owner saves GUARD-SYNTH-001 full .md Prompt under the canonical OneDrive Ai-Report/twinpet-pos/Prompt folder, pastes the short inline Launcher into Windows Codex CLI once and uploads the synthetic-proof Codex Report from the canonical OneDrive Codex folder.** [Scope](planning/MP1-CAND-N-002-GUARD-SYNTH-001-ISOLATED-OWNER-AUTHORIZATION.md). Prior npm/Cargo provisioning remains CLOSED; no Build, GUI, Source/Main/UAT023/Cloud/real AppData or cleanup, maintain <=500ms and preserve original D evidence. F01/F02 OPEN; M1 NOT_PASS.
 
