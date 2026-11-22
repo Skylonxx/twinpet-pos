@@ -1,6 +1,6 @@
 # Twinpet POS — Master Plan Dependencies (MP0 DRAFT)
 
-**Prepared / updated:** 2026-11-21. Candidate N-001 stopped BLOCKED_DESIGN_CONFLICT; Policy A accepted and Candidate N-002 **isolated** implementation Owner-approved, CLI **NOT RUN**. Disk safe preflight mandatory. Git main merge/release still forbidden.
+**Prepared / updated:** 2026-11-22. Candidate N-001 remains BLOCKED_DESIGN_CONFLICT; Owner accepted Policy A and approved Candidate N-002 source-only work in the existing isolated clone. Claude implemented two-file source-only changes; latest independent Codex STATIC_REVIEW_FINDINGS requires a consolidated startup-integrity Owner design decision. Cargo/build/tests NOT_RUN and >=10 GiB build gate unchanged. Main/Cloud/merge/release still forbidden.
 
 ```mermaid
 flowchart LR
