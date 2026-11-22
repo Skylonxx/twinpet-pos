@@ -1,6 +1,6 @@
 # Twinpet POS — Master Plan Rebaseline
 
-**Version 3.8 — PLANNING DRAFT / N-002 GUARD-AUDIT-001 READ-ONLY APPROVED; REPORT PENDING**  
+**Version 3.9 — PLANNING DRAFT / N-002 GUARD-AUDIT-001 BLOCKED_PROMPT_UNREADABLE; PARTIAL EVIDENCE ONLY**  
 **Prepared / updated:** 2026-11-22 · **Latest Owner decision:** accepted Policy A RISK-008 and approved N-002 source-only existing-clone work, including the two-file fallible scanner patch. Two Codex independent source reviews were performed; latest **STATIC_REVIEW_FINDINGS (07:27 +07)** on dangling app-data ancestor and non-atomic startup manifest checks. **Owner-approved design-only consolidation COMPLETE; new implementation approval is pending.** All runtime tests remain NOT_RUN; M1, main, Cloud, merge, release not authorized.  
 **Explicit non-authority:** this new file on a planning branch does NOT change the live workflow gate, authorize MP1 integration/implementation, MP2/MP3, code changes, merge or release.
 
@@ -339,6 +339,12 @@ Owner's **single-use DEPS-PROV-001 authorization is CLOSED** on required stop. P
 After DEPS-PROV-001 stopped on a 736ms MONITOR_GAP (>500ms contract), Owner approved only a read-only Codex inspection of existing D:/Twinpet-POS/Twinpet-N002-Build-20261122 guardian source (Guardian.cs), evidence disk CSV/result files and logs. [Exact scope](planning/MP1-CAND-N-002-GUARD-AUDIT-001-OWNER-APPROVED-READONLY-PROMPT.md). Analyze sample timing and source lines, correlate with logs, rank confirmed versus speculative causes, recommend a future guardian fix (design only). Do not run Guardian or npm, Cargo fetch, download, compile, Build, Test, GUI, Cloud or touch real POS profiles, Main, Source, UAT023, or partial D npm files.
 
 Full Markdown Prompt delivered to be saved in established OneDrive Ai-Report/twinpet-pos/Prompt; report will go to existing OneDrive Ai-Report/twinpet-pos/Codex; Launcher inline short only, no Launcher file. **Codex Windows audit NOT_RUN yet; only Prompt prepared**. Prior one-shot provisioning remained closed and existing D partial files are preserved. <=500ms policy unchanged; F-01/F-02 OPEN, M1 NOT_PASS, merge/release locked.
+
+## 4.33 GUARD-AUDIT-001 report — Prompt OneDrive read failure, partial monitor-gap evidence (2026-11-22 16:17 +07)
+
+Codex returned **BLOCKED_PROMPT_UNREADABLE**: the exact canonical OneDrive full Prompt was visible (14,076 bytes) but Get-Content failed exit 1 with `The cloud operation was unsuccessful` / `GetContentReaderIOError`. Therefore audit instructions could not be verified and audit **NOT complete**. File attributes 525344 (0x80420) include PINNED, REPARSE_POINT, ARCHIVE; locally pinned intent **does not prove hydrated readable bytes**. Fix OneDrive hydration/sync without changing canonical Prompt/Report paths or touching POS source.
+
+Limited independent evidence: npm-disk.csv 291 intervals, one >=500ms (736ms final), second-highest 304ms. Code measures monotonic loop-entry gap while querying C/D free bytes and writing/flushing CSV before the stop decision/sleep(150ms); **the 736ms cannot be assigned to disk I/O alone**. Current watchdog cannot stop instantly at 500ms while its loop is stalled; exact stall mechanism remains unproven. Guardian evidence and partial D npm cache preserved; **no new npm/Cargo, Build/Test/GUI**, no new provisioning authorization. [Evidence adjudication](planning/MP1-CAND-N-002-GUARD-AUDIT-001-PROMPT-UNREADABLE-PARTIAL-FINDINGS.md). Next Owner decision: restore Prompt readability and authorize read-only audit rerun, or accept partial evidence for separate design-only evaluation. F-01/F-02 OPEN; M1 NOT_PASS; original main/Cloud/UAT023 untouched.
 
 ## 5. Other initiatives / deferred (LOCKED)
 Return/Refund activation and sealing Rules; Android/Capacitor; EV-2 VM hard reset; broad mutation matrix; unrelated UI polish; unapproved Cloud/deployment or live POS data contact.
