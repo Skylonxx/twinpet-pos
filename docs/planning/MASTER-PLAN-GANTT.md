@@ -37,7 +37,7 @@ gantt
 | Gate | Acceptance evidence | Current status |
 |---|---|---|
 | MP0/M0 | Approved Goal, phase, priorities, roles, lock list, authority reconciliation | SCOPED_READ_ONLY; FORMAL_PHASE_PENDING |
-| MP1/M1 | UAT baseline and commit/build identity, reviewed integration delta | D-drive precheck failure evidenced (wrong Prompt path, dist junction vs provenance verifier, guardian untested). Owner APPROVED NEW one-shot real C: dist + heavy D: caches/targets with tested guardian, official pinned registries, no GUI; Windows execution pending, M1 OPEN, MP1.3 LOCKED |
+| MP1/M1 | UAT baseline and commit/build identity, reviewed integration delta | Corrected N-002 D-drive one-shot STOPPED BLOCKED_NETWORK_ISOLATION at read-only preflight: allowlisted egress/redirect and child process/disk guardian not proven, no downloads/npm/Cargo/build/tests. New separate provisioning risk/permission decision required before offline Build; M1 OPEN, MP1.3 LOCKED |
 | MP2/M2 | Safe native offline E2E + cashier critical path on controlled build | LOCKED |
 | MP3/M3 | Installer/upgrade proof and explicit Owner decision | LOCKED |
 
