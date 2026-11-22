@@ -37,7 +37,7 @@ gantt
 | Gate | Acceptance evidence | Current status |
 |---|---|---|
 | MP0/M0 | Approved Goal, phase, priorities, roles, lock list, authority reconciliation | SCOPED_READ_ONLY; FORMAL_PHASE_PENDING |
-| MP1/M1 | UAT baseline and commit/build identity, reviewed integration delta | DEPS-PLAN-001 read-only Codex inspection returned READY_FOR_OWNER_RISK_DECISION: 1,088 npm locked official-host entries, 512 locked Cargo registry packages; no actual download/install/build. Explicit Owner risk choice A bounded official-registry provisioning-only, B enforceable egress sandbox first, C HOLD; M1 OPEN, MP1.3 LOCKED |
+| MP1/M1 | UAT baseline and commit/build identity, reviewed integration delta | DEPS-PLAN-001 read-only report reviewed. Owner ACCEPTED bounded official npm/crates.io network/supply-chain residual risk and AUTHORIZED ONE guarded D-only dependency-provisioning run (npm ci + cargo fetch conditionally), report PENDING; NO frontend/native Build, no M1 PASS, MP1.3 LOCKED |
 | MP2/M2 | Safe native offline E2E + cashier critical path on controlled build | LOCKED |
 | MP3/M3 | Installer/upgrade proof and explicit Owner decision | LOCKED |
 
