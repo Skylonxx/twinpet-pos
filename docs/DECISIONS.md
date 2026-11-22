@@ -228,6 +228,10 @@
 - ONE guarded npm staging ci (ignore lifecycle scripts), ONE Cargo target fetch, ONE `npm run build` after output safety (creates ignored `.env`, `functions/src/deployConfig.ts`, `.artifact-provenance.json`, dist manifest), ONE frozen Native development Cargo Build, and if PASS ONE synthetic test, with external D scratch and continuous <=500ms volume monitoring. C: early stop 2.25 GiB / hard 2.00 GiB, D: stop <=10 GiB/disconnect. No cleanup, retry, UAT023, Source edits, original main, Cloud/Production, installer or Release. Normal 10 GiB preflight policy itself remains unchanged; this run receives a guarded external-volume direction, not a blanket waiver.
 - [Exact scope and Launcher report target](planning/MP1-CAND-N-002-DRIVE-D-GUARDED-REGISTRY-BUILD-PLAN.md). Windows work NOT RUN in ChatGPT, D drive not measured here, M1 still NOT_PASS, F-01/F-02 source risks remain OPEN. Next: manually dispatch one complete Codex CLI Launcher and report measurements/results.
 
+## 2026-11-22 — Owner refines N-002 D: scratch root (no scope expansion)
+
+- Use `D:\Twinpet-POS\Twinpet-N002-Build-20261122` as the **only** scratch workspace for N-002; `D:\Twinpet-POS` is the parent and may exist, must not be deleted, overwritten or redirected. All npm/Cargo caches, target outputs, dist and disposable test data are placed inside the child root. No new clone or impact to main/UAT023/Cloud; guardian and single-attempt limits unchanged.
+
 ## Planning policy to review at M0 (PROPOSED, not final)
 - Immediate goal: reliable Native POS for real cashier operations before nonessential feature expansion.
 - Proposed sequence: MP1 preserve/reconcile UAT → MP2 native offline operational UAT → MP3 release-readiness and Owner GO/NO-GO.
