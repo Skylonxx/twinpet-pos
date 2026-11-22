@@ -232,6 +232,12 @@
 
 - Use `D:\Twinpet-POS\Twinpet-N002-Build-20261122` as the **only** scratch workspace for N-002; `D:\Twinpet-POS` is the parent and may exist, must not be deleted, overwritten or redirected. All npm/Cargo caches, target outputs, dist and disposable test data are placed inside the child root. No new clone or impact to main/UAT023/Cloud; guardian and single-attempt limits unchanged.
 
+## 2026-11-22 — N-002 D: Build PRECHECK BLOCKED twice; proposed design correction
+
+- First Codex report at 13:53: Launcher wrongly directed Prompt to nonexistent `D:\Twinpet-POS\Prompts`; canonical Owner Prompt folder remains `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Prompt\`, Report under `...\Codex\`; D is scratch only.
+- Second report at 13:57: read-only inspection of `lstatSync(dist).isDirectory()` verifier and a separate NTFS junction yielded likely incompatible `dist`-to-D junction design; NOT actually validated in candidate. Required <=500ms disk/process watcher and comprehensive outbound/mutation guardian not constructed or tested, so STOP before dependency downloads/install/build/test. D WD My Passport NTFS observed Healthy/OK, ~930 GiB free, C ~5.47 GiB in point samples; full stability unknown. Source two prior diffs intact, original main tracked-clean; no Cloud/UAT/Production.
+- The D-run authorization ended at Stop Condition; no automatic retry/clearance. See [read-only adjudication](planning/MP1-CAND-N-002-DRIVE-D-PRECHECK-JUNCTION-GUARDIAN-ADJUDICATION.md). Future proposed packet: real `dist` folder on C (postbuild verifier intact), heavy npm/Cargo artifacts on D, test a process-tree guardian, sample C/D <=500ms, bounded official Registry-only provisioning, **GUI SKIP** without verified zero egress. Strict Cloud and real AppData prohibitions still apply; do not claim impossible-to-prove total network isolation. **Requires a fresh explicit Owner one-shot Build approval and bounded 10 GiB exception**. M1 NOT_PASS; F01/F02 OPEN; merge/release locked.
+
 ## Planning policy to review at M0 (PROPOSED, not final)
 - Immediate goal: reliable Native POS for real cashier operations before nonessential feature expansion.
 - Proposed sequence: MP1 preserve/reconcile UAT → MP2 native offline operational UAT → MP3 release-readiness and Owner GO/NO-GO.
