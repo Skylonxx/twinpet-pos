@@ -196,7 +196,7 @@
 |---|---|---|
 | M0 next implementation phase | MP1.1/MP1.2 evidence-only handoff approved; MP1.3 implementation separately requires gate | SCOPED_READ_ONLY; FORMAL_PHASE_PENDING |
 | Canonical status reconciliation | Exact allowed `STATE/CURRENT_PACKET/NEXT_ACTION` changes & their approval authority | PENDING |
-| MP1 integration scope and test gates | Owner explicitly approved Candidate N-002 in isolated new clone and conditional synthetic offline Rust tests; Claude not yet run; independent Codex review later, no merge/release | CAND_N_002_OWNER_APPROVED_EXECUTION_NOT_RUN / M1_OPEN / MP1_3_LOCKED |
+| MP1 integration scope and test gates | Original new-clone-plus-Cargo approach superseded by Owner-approved low-disk source-only patches in existing detached clone; both Claude implementations reported, two independent Codex reviews now show STATIC_REVIEW_FINDINGS; startup-integrity design decision pending, no runtime tests or merge | CAND_N_002_STATIC_REVIEW_FINDINGS / DESIGN_GATE_PENDING / M1_OPEN / MP1_3_LOCKED |
 | U1/B1-R evidence acceptance | Headless EV-3 vs native GUI; EV-1; M1 mutant skipped | DEFERRED with release trigger; **not risk accepted** |
 | Return/Refund activation | Separate owner/technology/cutover gate, retains gate OFF | LOCKED |
 | EV-2, Android, cloud deployments, production upgrade/rollout | Separate scoped approval | NOT AUTHORIZED |
