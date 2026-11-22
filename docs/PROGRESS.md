@@ -223,8 +223,14 @@ Owner explicitly closed UAT cleanup, refused any further C: cleanup or disk incr
 
 - Owner specified the new build root `D:\Twinpet-POS\Twinpet-N002-Build-20261122`; the existing `D:\Twinpet-POS` parent may remain and must be preserved. Codex Launcher adjusted to this exact path throughout, including npm/Cargo/dist/temp/synthetic/logs. This is a path-only adjustment, not another run or permission expansion.
 
+## 2026-11-22 — DEPS-PLAN-001 Codex report received: READY_FOR_OWNER_RISK_DECISION
+
+- Report `TPOS-MP1-CAND-N-002-DEPENDENCY-PROVISIONING-ONLY-PLAN-CODEX-REPORT.md` 14:59+07: READ-ONLY analysis complete. npm lockfile official registry/SRI syntax 1,088 entries, 1,022 individually Win/x64 compatible (not exact install set), 5 install-script flags; 512 locked Cargo registry packages + one local/root. Actual downloaded content hashes NOT_VERIFIED, network guard/redirect and Job Object/disk watcher NOT_PROVEN. Original main and exact detached two-source-diff SHA unchanged.
+- C: last observed 5,853,659,136 B; D: 999,109,189,632 B (~930GiB); snapshot only, no D write probe. No D scratch, npm install/Cargo fetch, frontend/native Build, synthetic test, GUI, Cloud or AppData contact.
+- **Next Owner Gate:** [risk decision](planning/MP1-CAND-N-002-DEPS-PLAN-001-READONLY-RISK-ADJUDICATION.md) A accept bounded official-registry provisioning-only residual risks with separate explicit execution packet, B require enforceable network egress first, or C HOLD. Prior Build waiver closed and no new network/download/Build execution approval yet. F-01/F-02 open; M1 NOT_PASS.
+
 ## Next one action
-**Next one action: Owner saves DEPS-PLAN-001 full `.md` Prompt into `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Prompt\`, copies only its short inline Launcher into Windows Codex CLI for read-only inspection, and uploads the risk-decision Report from `...\Codex\`.** [Scope](planning/MP1-CAND-N-002-DEPENDENCY-PROVISIONING-ONLY-PLAN-001.md). Do not download/provision/install yet; explicit fresh Owner risk acceptance must precede any official registry request. Do not Build even after provisioning unless separate Owner approval. Main/Source/Cloud/UAT023/real AppData/cleanup untouched, M1 NOT_PASS and F-01/F-02 OPEN.
+**Next one action: Product Owner selects A/B/C after reviewing [DEPS-PLAN-001 risk adjudication](planning/MP1-CAND-N-002-DEPS-PLAN-001-READONLY-RISK-ADJUDICATION.md).** A: explicitly approve a separate official npm/crates.io dependency-provisioning-only execution with documented residual network/supply-chain risk (no Build); B: require independently verified network enforcement first; C: HOLD. Read-only report is complete; do NOT repeat its Prompt or claim packages were fetched. Future Codex executable Prompt only after new Owner authorization, stored under existing OneDrive Prompt directory; Launcher short inline only; report into OneDrive Codex. M1 NOT_PASS; F-01/F-02 OPEN.
 
 **Formal M0 phase registration and workflow-trio reconciliation:** still pending; this scoped authorization does not change the live `ACTIVE_IMPLEMENTATION_PACKET=NONE`.
 
