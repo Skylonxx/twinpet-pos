@@ -281,6 +281,12 @@
 - Owner authorized preparation of a Codex CLI Prompt limited to static/read-only inspection of existing Guardian.cs, D evidence CSV and logs to diagnose the recorded 736ms monitoring gap against <=500ms rule. [Scope](planning/MP1-CAND-N-002-GUARD-AUDIT-001-OWNER-APPROVED-READONLY-PROMPT.md). No Guardian exercise/compilation, npm retry/install/download, Cargo/Build/Test/GUI, Source/Main/UAT023/Cloud/real POS AppData, Cleanup or D partial staging reuse.
 - Only one new sanitized audit Report to canonical OneDrive Codex folder is authorized as a file write; the full Prompt is manually saved in canonical OneDrive Prompt folder and short Launcher is inline text only. Audit execution/report pending. Existing provisioning one-shot closed, threshold unchanged; F01/F02 and M1 open.
 
+## 2026-11-22 — GUARD-AUDIT-001 BLOCKED_PROMPT_UNREADABLE, limited independent findings
+
+- 16:17+07 Codex could see OneDrive Prompt metadata but **Get-Content failed** `The cloud operation was unsuccessful` / `GetContentReaderIOError` (14,076 bytes, 525344 attributes). Cannot certify compliance with original full audit Prompt. Pinned+reparse attributes do not prove local content hydration. [Evidence and next decision](planning/MP1-CAND-N-002-GUARD-AUDIT-001-PROMPT-UNREADABLE-PARTIAL-FINDINGS.md).
+- Independently readable evidence: 291 npm disk CSV rows, one final 736ms gap above <=500ms (second largest 304ms); confirmed guardian loop reads clock, queries disk, flushes CSV, then gap-check/stop and sleeps 150ms. Source cannot attribute delay to disk query vs logging vs scheduling; hard real-time stop at exact 500ms not demonstrated.
+- No new process/Guardian/npm/Cargo/Build/Test/GUI executed, no D partial data edited. Prior provisioning one-shot remains closed, current GUARD-AUDIT read-only report **PARTIAL/BLOCKED**. Next Owner authorization needed for rerun after file becomes readable or for design-only alternative; no automatic npm repeat/cleanup/threshold change/Cloud/Source/UAT023. F01/F02 OPEN; M1 NOT_PASS.
+
 ## Planning policy to review at M0 (PROPOSED, not final)
 - Immediate goal: reliable Native POS for real cashier operations before nonessential feature expansion.
 - Proposed sequence: MP1 preserve/reconcile UAT → MP2 native offline operational UAT → MP3 release-readiness and Owner GO/NO-GO.
