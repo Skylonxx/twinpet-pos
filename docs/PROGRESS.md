@@ -245,8 +245,14 @@ Owner explicitly closed UAT cleanup, refused any further C: cleanup or disk incr
 - Owner approved only a read-only inspection of Guardian.cs, disk sampling CSV, guardian result and logs from the preserved existing D build scratch after 736ms MONITOR_GAP. No modification to D data, Guardian.cs, source or <=500ms threshold. No npm/Cargo, network/download, Build/Test/GUI or Cloud.
 - [Full authorization](planning/MP1-CAND-N-002-GUARD-AUDIT-001-OWNER-APPROVED-READONLY-PROMPT.md). Prompt: TPOS-MP1-CAND-N-002-GUARDIAN-MONITOR-GAP-READONLY-AUDIT-CODEX-PROMPT.md (manual save OneDrive Prompt). Report: TPOS-MP1-CAND-N-002-GUARDIAN-MONITOR-GAP-READONLY-AUDIT-CODEX-REPORT.md (OneDrive Codex). Launcher short inline only, no file. Windows Codex audit not yet run. F01/F02/M1 open.
 
+## 2026-11-22 — GUARD-AUDIT-001 partial result: BLOCKED_PROMPT_UNREADABLE
+
+- 16:17+07 Codex report: OneDrive Prompt file located (14,076 bytes) but Get-Content failed `The cloud operation was unsuccessful` / `GetContentReaderIOError`. **No complete audit against full Prompt**. Attributes 525344 = PINNED + REPARSE_POINT + ARCHIVE; possible OneDrive hydration/sync issue, not yet proved root cause.
+- Independent D evidence: 291 npm-disk rows, one 736ms >500ms, second largest 304ms; Guardian.cs loop clocks before free-space queries and CSV flush, cannot isolate 736ms to disk/network/scheduler; exact cause unknown. No npm/Cargo/Guardian run, Build/Test/GUI or cleanup. Partial D npm/cache preserved. [Read-only adjudication](planning/MP1-CAND-N-002-GUARD-AUDIT-001-PROMPT-UNREADABLE-PARTIAL-FINDINGS.md). Next: make exact OneDrive Prompt readable, then Owner approve read-only re-audit (or separate design-only route).
+- M1 NOT_PASS, F-01/F-02 OPEN; source/main/UAT023/Cloud/real AppData untouched.
+
 ## Next one action
-**Next one action: Owner saves the newly approved GUARD-AUDIT-001 full Prompt into the established OneDrive Prompt folder, pastes the short inline Launcher into Windows Codex CLI once, and returns the sanitized audit Report from OneDrive Codex.** [Scope](planning/MP1-CAND-N-002-GUARD-AUDIT-001-OWNER-APPROVED-READONLY-PROMPT.md). Static evidence inspection only; do not run Guardian, restart npm/Cargo, Build, Test, GUI, edit Source or cleanup/reuse preserved D partial files. F01/F02 open; M1 NOT_PASS.
+**Next one action: Owner verifies that the exact canonical OneDrive Guardian Prompt can be opened/read locally (Windows OneDrive sync/hydration).** Then decide on a newly authorized READ-ONLY rerun of the same evidence audit, or accept partial evidence and request separate design-only Guardian analysis. [Current partial findings](planning/MP1-CAND-N-002-GUARD-AUDIT-001-PROMPT-UNREADABLE-PARTIAL-FINDINGS.md). No automatic retry or new npm/Cargo/Guardian process, Build/Test/GUI, source/Cloud/UAT023 changes; partial D preserved. F01/F02 OPEN, M1 NOT_PASS.
 
 **Formal M0 phase registration and workflow-trio reconciliation:** still pending; this scoped authorization does not change the live `ACTIVE_IMPLEMENTATION_PACKET=NONE`.
 
