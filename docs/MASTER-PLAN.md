@@ -1,6 +1,6 @@
 # Twinpet POS — Master Plan Rebaseline
 
-**Version 2.3 — PLANNING DRAFT / N-002 TWO-FILE CLAUDE SOURCE_ONLY_READY; CODEX INDEPENDENT REVIEW PENDING**  
+**Version 2.4 — PLANNING DRAFT / N-002 SECOND CODEX STATIC_REVIEW_FINDINGS; STARTUP-INTEGRITY OWNER DECISION PENDING**  
 **Prepared / updated:** 2026-11-21 · **Latest Owner decision:** accepted Policy A RISK-008 and approved N-002 source-only existing-clone implementation. Claude **reported SOURCE_ONLY_READY (2026-11-22)**, one-file uncommitted diff; independent Codex read-only review is next. All runtime tests remain NOT_RUN. Candidate N-001 remains BLOCKED; `main`, Cloud, merge, release NOT authorised.  
 **Explicit non-authority:** this new file on a planning branch does NOT change the live workflow gate, authorize MP1 integration/implementation, MP2/MP3, code changes, merge or release.
 
@@ -233,6 +233,16 @@ Proposed implementation based on Claude full diff: `durable_domain_files_exist()
 Claude reported C: free **5,952,966,656 → 5,951,614,976 bytes (~5.54 GiB)**; >=10 GiB Cargo/build preflight unchanged. All A-N1..A-N8 and new Windows ACL, read_dir/entry error and interruption scenarios are **NOT_RUN**, not runtime evidence. Risks to independently check: NotFound vs PermissionDenied, parent/child existence races, no false virgin for unreadable domains, manifest dangling symlink, all callers handling Result, test source compatibility, `evaluate_floor` missing-floor guard. Pre-existing privileged-auth scanner error suppression and crash/restart remain out of scope.
 
 **Next one action:** independent Codex **READ-ONLY source review** of two-file uncommitted diff, no implementation, clone, Cargo, tests, cleanup, main/Cloud/Production or 10 GiB-gate changes. Prompt artifact `TPOS-MP1-CAND-N-002-FAILCLOSED-ENUMERATION-INDEPENDENT-CODEX-PROMPT.md` is self-contained direct-paste; one report `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Codex\TPOS-MP1-CAND-N-002-FAILCLOSED-ENUMERATION-INDEPENDENT-CODEX-REPORT.md`. No M1 PASS, merge/release or automatic next implementation.
+
+## 4.19 N-002 second independent Codex result — startup integrity findings (2026-11-22 07:27 +07)
+
+Uploaded independent review `TPOS-MP1-CAND-N-002-FAILCLOSED-ENUMERATION-INDEPENDENT-CODEX-REPORT.md`: **`STATIC_REVIEW_FINDINGS`**, not PASS. Original main `f034301c46dd9e08190f869cc85dbb140ac28a3c` tracked-clean; same detached existing clone; two and only two unstaged modifications `epoch_floor.rs` (+114/-22), `durable_kv.rs` (+21/-12); no staged or non-ignored untracked changes; `git diff --check` passed. Domain scanner's new Result propagation works for normally surfaced metadata/read_dir/entry errors. **No Cargo, build, Rust tests, source modification or runtime proof** from reviewer.
+
+**F-01 confirmed source-level false absence:** `epoch_floor.rs:256–266` checks `app_data/durable` with `symlink_metadata` but follows `metadata(app_data)` after NotFound; a dangling app-data symlink may be misread as truly absent and return `Ok(false)`. Windows mapping remains untested.
+
+**F-02 source-level startup race:** `epoch_floor.rs:278–297` and `durable_kv.rs:667–704` check manifest and domain paths in separate operations. A manifest appearing after prior absence can be classified `RegularFile` in the virgin branch but its result is ignored, allowing startup without committed-state validation; compatible branch and older manifest-creation sequence also have interleaving exposure. No runtime race reproduced; do not promise no TOCTOU without a supported concurrency design. Older floor `!path.exists()` and privileged-auth scanner error suppression also remain unresolved and are NOT silently covered by RISK-008. A-N1..A-N8 and new cases NOT_RUN; compilation NOT_VERIFIED; M1 NOT_PASS.
+
+**One next Owner gate:** see [consolidated startup-integrity decision proposal](planning/MP1-CAND-N-002-STARTUP-INTEGRITY-ONE-PACKET-DECISION.md). Establish a bounded concurrency threat model and one consolidated repair/test acceptance contract BEFORE more source edits, rather than another one-off patch-and-audit loop. This proposal is **NOT** execution permission. Owner has refused added disk/cleanup; no new clone, Cargo/build/test or change to >=10 GiB build gate, main/Cloud/Production, merge/release.
 
 ## 5. Other initiatives / deferred (LOCKED)
 Return/Refund activation and sealing Rules; Android/Capacitor; EV-2 VM hard reset; broad mutation matrix; unrelated UI polish; unapproved Cloud/deployment or live POS data contact.
