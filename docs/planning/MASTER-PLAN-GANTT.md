@@ -37,7 +37,7 @@ gantt
 | Gate | Acceptance evidence | Current status |
 |---|---|---|
 | MP0/M0 | Approved Goal, phase, priorities, roles, lock list, authority reconciliation | SCOPED_READ_ONLY; FORMAL_PHASE_PENDING |
-| MP1/M1 | UAT baseline and commit/build identity, reviewed integration delta | N-002 consolidated design still pending source implementation; Owner authorized ONE guarded low-disk Build/Synthetic Run in existing clone with <=2 GiB stop, Windows execution RESULT PENDING, M1 OPEN, Candidate I/MP1.3 LOCKED |
+| MP1/M1 | UAT baseline and commit/build identity, reviewed integration delta | N-002 one-shot Build/Run STOPPED AT PREFLIGHT: missing dist/node_modules under no-frontend-build/install scope, Cargo Build/Tests NOT_RUN. New bounded frontend preparation + fresh low-disk exception needs Owner approval; M1 OPEN, MP1.3 LOCKED |
 | MP2/M2 | Safe native offline E2E + cashier critical path on controlled build | LOCKED |
 | MP3/M3 | Installer/upgrade proof and explicit Owner decision | LOCKED |
 
