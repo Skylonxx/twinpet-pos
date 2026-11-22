@@ -207,6 +207,13 @@
 - **One-shot approval fulfilled by STOP** at preflight; it does NOT authorize a retry, dependency install or npm/prebuild. Permanent >=10 GiB gate remains intact outside that closed exception.
 - [One proposed new Owner decision](planning/MP1-CAND-N-002-BUILD-PREFLIGHT-FRONTEND-INPUTS-BLOCKER.md): authorize separately a bounded frontend-input preparation and ONE supervised offline experiment only if trusted cached dependencies, generated-path side effects, resource guards and synthetic/no-cloud isolation are confirmed. NO execution without fresh approval. F-01/F-02 and M1 remain open; compilation/tests NOT_RUN.
 
+## 2026-11-22 — Owner authorizes NEW one-shot guarded Offline Frontend + Native Build/Run
+
+- After previous `BLOCKED_AT_PREFLIGHT` report due to missing `dist` and `node_modules`, Owner explicitly approved a NEW separate single-use low-disk exception to normal >=10 GiB build preflight. Permanent gate unchanged; monitor each process <=500 ms, proactively stop at C: <=2.25 GiB, mandatory <=2 GiB, terminate only experiment descendants; no retries or disk cleanup.
+- Only existing detached N-002 clone; original `main@f034301` untouched; two preexisting `epoch_floor.rs` / `durable_kv.rs` diffs preserved. `npm ci --offline` only if lockfile-required offline package cache is proven complete, `node_modules` absent and unsafe lifecycle scripts disabled; `npm run build` only if source-reviewed prebuild/postbuild are safe, create ONLY new ignored generated assets within isolated clone, do not overwrite protected source/secret .env or communicate with Cloud. Scripts will write `functions/src/deployConfig.ts`, `.env`, `.artifact-provenance.json` and `dist/twinpet-artifact-manifest.json`; `tsc` build-info under `node_modules/.tmp`. These are not zero-write operations.
+- Frontend PASS prerequisite to one frozen offline dev Cargo Build and one optional targeted synthetic Rust test with disposable AppData; GUI only if no-cloud isolation proven, otherwise SKIP. No UAT023, real POS profiles/data, new clone/workspace, protected source, main/Cloud/Production, commit/merge/release or automatic retry. See [approved one-pass bounded execution](planning/MP1-CAND-N-002-ONEPASS-OFFLINE-FRONTEND-NATIVE-BUILD-AUTHORIZATION.md).
+- This is an execution **authorization, not execution evidence**: Windows runner has not been invoked from ChatGPT, report pending, no build outcome yet. Prior F-01/F-02 OPEN, A-N1–A-N8 NOT_RUN and M1 NOT_PASS.
+
 ## Planning policy to review at M0 (PROPOSED, not final)
 - Immediate goal: reliable Native POS for real cashier operations before nonessential feature expansion.
 - Proposed sequence: MP1 preserve/reconcile UAT → MP2 native offline operational UAT → MP3 release-readiness and Owner GO/NO-GO.
