@@ -32,6 +32,12 @@
 | Report 024 workflow adjudication | PLAN_AUTHORITY_UNRESOLVED | Current authority trio lacks latest UAT/selection |
 | Native EV-1 / EV-2 / GUI EV-3 / offline operational UAT | NOT_RUN or NOT_AUTHORIZED | Do not infer PASS, release or durability |
 
+## Candidate N-002 — D-DRIVE PRECHECK BLOCKED / NO DEPENDENCY FETCH OR BUILD (2026-11-22)
+
+- Two uploaded reports at 13:53 and 13:57+07. First incorrectly targeted nonexistent `D:\Twinpet-POS\Prompts` for reading Prompt, instead of established `OneDrive\Ai-Report\twinpet-pos\Prompt\`; no execution.
+- Second PRECHECK BLOCKED: likely `dist` NTFS junction incompatibility with `scripts/gen-artifact-provenance.mjs` `lstatSync(dist).isDirectory()`, based on different Windows junction sample, no candidate-dist build proof; process-tree + network/file mutation guardian unverified. No npm ci, cargo fetch, frontend/native Build, test, GUI or generated outputs. Actual D NTFS WD My Passport reported Healthy/OK ~930 GiB free; C ~5.47 GiB in two snapshots, no continuous monitor. Existing pinned detached candidate exactly two source diffs, hashes unchanged; original main clean, UAT023/Cloud/Production untouched.
+- Prior one-shot ended at STOP. [Next bounded design and Owner gate](planning/MP1-CAND-N-002-DRIVE-D-PRECHECK-JUNCTION-GUARDIAN-ADJUDICATION.md): real C clone `dist`, D heavy build caches/target, experimentally validate process/disk guardian, official registry fetch scope only, GUI SKIP; require **fresh approval and fresh one-shot <10 GiB exception**. Do NOT auto retry. F-01/F-02/M1 remain OPEN.
+
 ## Candidate N-002 — OWNER APPROVES EXTERNAL D: BUILD RESOURCES / WINDOWS EXECUTION PENDING (2026-11-22)
 
 - Owner reports ample external Windows D: drive and instructs proceeding. New guarded D resource strategy [plan](planning/MP1-CAND-N-002-DRIVE-D-GUARDED-REGISTRY-BUILD-PLAN.md) now drafted: keep C original main and exact existing detached N-002 source clone, use fresh D scratch for npm-stage/cache, Cargo home/target, temp, Frontend dist and synthetic profile through controlled junctions for absent ignored paths. D capacity/NTFS/health unverified until Windows checks; no C cleanup and no new clone.
@@ -200,7 +206,7 @@ Owner explicitly closed UAT cleanup, refused any further C: cleanup or disk incr
 - Owner specified the new build root `D:\Twinpet-POS\Twinpet-N002-Build-20261122`; the existing `D:\Twinpet-POS` parent may remain and must be preserved. Codex Launcher adjusted to this exact path throughout, including npm/Cargo/dist/temp/synthetic/logs. This is a path-only adjustment, not another run or permission expansion.
 
 ## Next one action
-**Next one action: Owner pastes the self-contained N-002 D-drive guarded registry Build Launcher into Codex CLI on existing Windows host**, with no additional sub-approval for its bounded dependency fetch, Frontend/Native build and synthetic test. Codex must verify D: health/free, exact original/clone hashes, official registries and guardian; stop honestly on any blocker, never auto retry, cleanup or touch UAT023/Cloud/real AppData/main. Upload one `TPOS-MP1-CAND-N-002-DRIVE-D-GUARDED-REGISTRY-BUILD-REPORT.md` with real C/D disk measurements. M1 remains NOT_PASS, F01/F02 OPEN.
+**Next one action: Owner decides whether to authorize a NEW bounded N-002 guarded D-drive Build packet using a REAL `dist` directory on C: and a tested process/disk watcher**, per [preflight adjudication](planning/MP1-CAND-N-002-DRIVE-D-PRECHECK-JUNCTION-GUARDIAN-ADJUDICATION.md). Previous attempt STOPPED twice preflight; no automatic retry or claim of registry fetch/build. If approved, prepare full `.md` Prompt at OneDrive `Ai-Report\twinpet-pos\Prompt\` and a SHORT inline Launcher (no Launcher file); reports go to `Ai-Report\twinpet-pos\Codex\`. New one-shot <10 GiB exception must be explicit, C: proactive <=2.25 GiB and hard <=2 GiB; D: heavy outputs, no GUI/network app, Source/main/UAT023/Cloud/real AppData/cleanup/release. M1 NOT_PASS.
 
 **Formal M0 phase registration and workflow-trio reconciliation:** still pending; this scoped authorization does not change the live `ACTIVE_IMPLEMENTATION_PACKET=NONE`.
 
