@@ -26,4 +26,8 @@ Use timestamp suffix for report collisions, no overwrite.
 
 **Expected results:** `PROVISIONED_VERIFIED` or `PROVISIONED_WITH_DOCUMENTED_GAPS` only if **both** provisioning commands actually ran successfully and relevant evidence exists; otherwise a truthful `BLOCKED_*`/`FAILED_*` with not-run stages, no silent retry. Even on PASS, **offline frontend/native Build requires a separate future Owner approval** and may need its own specific low-C-disk waiver. This authorization does not change the live workflow trio or source/main.
 
+## Outcome addendum (2026-11-22 15:33+07)
+
+Codex uploaded `TPOS-MP1-CAND-N-002-DEPENDENCY-PROVISIONING-ONLY-EXEC-CODEX-REPORT.md`: **BLOCKED_GUARDIAN**. One npm ci actually started in the D: scratch, logged 910 GET responses from the official npm Registry, and was terminated by the experiment-owned Job Object after a 736ms disk-sample gap exceeded the explicitly approved <=500ms constraint (forced `exit=125` is NOT an npm-native result). D: now holds partial unverified npm stage/cache and guardian evidence; no Cargo fetch/Build/test/GUI. No cleanup or retry. This one-shot authority is **CLOSED**; the original assumption "root absent" is no longer true. See [guardian-stop adjudication](planning/MP1-CAND-N-002-DEPS-PROV-001-GUARDIAN-STOP-ADJUDICATION.md) for next limited read-only audit proposal; no additional execution or reuse of partial data is approved.
+
 **Execution not performed by ChatGPT:** Windows Codex CLI remains Owner-operated; this GitHub document and Todoist edits are planning records only.
