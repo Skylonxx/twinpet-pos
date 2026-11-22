@@ -11,7 +11,7 @@
 | MP0.2 priority/dependencies | DRAFT_READY | `MASTER-PLAN.md`, Gantt; critical path proposal only |
 | MP0.3 debt/risk register | DRAFT_READY | U1/B1-R 016–024 evidence retained; TD-001/RISK-002/UAT-004/GOV-003 |
 | M0 Owner/Gemini phase selection | MP1_R01_REVIEW_ONLY_APPROVED / FORMAL_PENDING | Owner authorized focused independent pre-integration read-only review; no implementation successor chosen in live trio |
-| MP1 preserve/integrate UAT | N-002 BLOCKED_DISK_CAPACITY / ZERO_CODE_ZERO_TEST | One-pass UAT cleanup concluded PARTIAL; C: latest measured ~5.00 GiB free, below 10 GiB N-002 preflight; M1 OPEN/MP1.3 LOCKED |
+| MP1 preserve/integrate UAT | N-002 STATIC_REVIEW_FINDINGS / TESTS_NOT_RUN | Two-file source-only patch remains uncommitted in detached clone; latest Codex identified dangling ancestor false-absence and startup manifest interleaving; one design decision pending, M1 OPEN/MP1.3 LOCKED; >=10 GiB Cargo gate unchanged |
 | MP2 native offline E2E | LOCKED | M1 acceptance, safe isolated UAT environment |
 | MP3 release readiness | LOCKED | M2 acceptance + explicit Owner GO/NO-GO |
 
