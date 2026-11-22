@@ -287,6 +287,13 @@
 - Independently readable evidence: 291 npm disk CSV rows, one final 736ms gap above <=500ms (second largest 304ms); confirmed guardian loop reads clock, queries disk, flushes CSV, then gap-check/stop and sleeps 150ms. Source cannot attribute delay to disk query vs logging vs scheduling; hard real-time stop at exact 500ms not demonstrated.
 - No new process/Guardian/npm/Cargo/Build/Test/GUI executed, no D partial data edited. Prior provisioning one-shot remains closed, current GUARD-AUDIT read-only report **PARTIAL/BLOCKED**. Next Owner authorization needed for rerun after file becomes readable or for design-only alternative; no automatic npm repeat/cleanup/threshold change/Cloud/Source/UAT023. F01/F02 OPEN; M1 NOT_PASS.
 
+## 2026-11-22 — GUARD-AUDIT-001 read-only retry succeeded; ROOT_CAUSE_INCONCLUSIVE
+
+- Codex successful read of original OneDrive Prompt and full read-only D evidence examination at 16:49+07, with seven evidence hashes unchanged. Previous 16:17 cloud read error no longer blocks this audit. [Evidence adjudication](planning/MP1-CAND-N-002-GUARD-AUDIT-001-RETRY-COMPLETE-ROOT-CAUSE-INCONCLUSIVE.md).
+- 291 npm sample rows, 290 measured intervals, one 736ms >500ms final, second largest 304ms; Guardian.cs single loop couples disk queries, CSV write/flush, wall clock and polling. Displacement of UTC vs Stopwatch entries supports delay in preceding iteration but **cannot pinpoint** USB/drive, log flush, scheduling, GC or npm. Forced exit125 is JobObject stop, not npm result. Synthetic 26 measured intervals max158ms.
+- No new Guardian test or run, npm/Cargo/network, Build, GUI, source changes or D cleanup. One-shot provisioning remains closed, D partial npm content still unverified, Cargo fetch NOT_RUN. Owner has **not authorized guardian code changes/testing** from this report.
+- Proposed Owner next action: separately decide on guardian-only instrumented redesign and synthetic proof **on a new safely isolated D work path**, preserving existing evidence, no npm/Cargo/Build, no threshold relaxation, separate later provisioning approval. F01/F02 OPEN, M1 NOT_PASS; main/Cloud/UAT023/real POS data/release locked.
+
 ## Planning policy to review at M0 (PROPOSED, not final)
 - Immediate goal: reliable Native POS for real cashier operations before nonessential feature expansion.
 - Proposed sequence: MP1 preserve/reconcile UAT → MP2 native offline operational UAT → MP3 release-readiness and Owner GO/NO-GO.
