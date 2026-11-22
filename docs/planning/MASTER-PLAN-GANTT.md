@@ -37,7 +37,7 @@ gantt
 | Gate | Acceptance evidence | Current status |
 |---|---|---|
 | MP0/M0 | Approved Goal, phase, priorities, roles, lock list, authority reconciliation | SCOPED_READ_ONLY; FORMAL_PHASE_PENDING |
-| MP1/M1 | UAT baseline and commit/build identity, reviewed integration delta | Earlier N-002 Build BLOCKED_OFFLINE_CACHE before npm. Owner now approves new D: external-drive guarded registry dependency staging/Frontend/Native development Build (not executed yet), preserve C source clone/main, monitor C/D disk, M1 OPEN, MP1.3 LOCKED |
+| MP1/M1 | UAT baseline and commit/build identity, reviewed integration delta | D-drive attempt stopped PRECHECK twice (wrong Prompt location, likely incompatible dist junction and unproven guardian); npm/install/Cargo fetch/Build/test NOT_RUN. Proposed real C: dist with heavy D: caches and guardian design requires NEW Owner one-shot authorization. M1 OPEN, MP1.3 LOCKED |
 | MP2/M2 | Safe native offline E2E + cashier critical path on controlled build | LOCKED |
 | MP3/M3 | Installer/upgrade proof and explicit Owner decision | LOCKED |
 
