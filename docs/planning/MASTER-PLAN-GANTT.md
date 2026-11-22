@@ -37,7 +37,7 @@ gantt
 | Gate | Acceptance evidence | Current status |
 |---|---|---|
 | MP0/M0 | Approved Goal, phase, priorities, roles, lock list, authority reconciliation | SCOPED_READ_ONLY; FORMAL_PHASE_PENDING |
-| MP1/M1 | UAT baseline and commit/build identity, reviewed integration delta | Claude N-002 2-file source-only remediation SOURCE_ONLY_READY; independent Codex READ-ONLY review PENDING, A-N1..8 NOT_RUN, no compile, M1 OPEN, Candidate I/MP1.3 LOCKED |
+| MP1/M1 | UAT baseline and commit/build identity, reviewed integration delta | Independent Codex second STATIC_REVIEW_FINDINGS: dangling app-data false absence + non-atomic startup manifest classification; one consolidated design gate OWNER DECISION PENDING. A-N1..A-N8 NOT_RUN, M1 OPEN, Candidate I/MP1.3 LOCKED |
 | MP2/M2 | Safe native offline E2E + cashier critical path on controlled build | LOCKED |
 | MP3/M3 | Installer/upgrade proof and explicit Owner decision | LOCKED |
 
