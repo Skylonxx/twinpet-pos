@@ -250,6 +250,13 @@
 - Prior corrected one-shot approval and its temporary low-C-drive waiver **CLOSED at Stop Condition**; default permanent >=10 GiB unchanged. Existing Codex F-01/F-02 and M1 remain OPEN.
 - [Decision proposal](planning/MP1-CAND-N-002-NETWORK-ISOLATION-PREFLIGHT-BLOCKER-ADJUDICATION.md): split online dependency provisioning and offline build into two **separately approved** bounded actions. Avoid universal zero-egress claims based on lockfile URLs or `--ignore-scripts`; any residual risk from official-registry fetching should be explicitly described and approved before fetching. No cleanup, retry, UAT023, original main, real POS data, Cloud or Release. **NOT YET AUTHORIZED.**
 
+## 2026-11-22 — Owner approves N-002 dependency provisioning PLAN + risk review ONLY
+
+- Owner expressly approved preparing a plan and complete Codex Prompt for **N-002 dependency provisioning ONLY on D:** separate from Build, with Official npm/crates.io hosts, lockfile SRI/Cargo checksums, network boundaries and residual risks explicitly decided **before actual execution**. [Plan and owner gates](planning/MP1-CAND-N-002-DEPENDENCY-PROVISIONING-ONLY-PLAN-001.md).
+- **Current packet = READ-ONLY local Windows preflight and risk-decision report**, not permission to contact network, run npm ci or cargo fetch, create D workspace, try process guardian child, install, build, test or GUI. Prior N-002 `BLOCKED_NETWORK_ISOLATION` remains the last Build attempt, no executable results. Future strict official-registry network permission and nonzero residual risk require a **new separate Owner risk-acceptance decision**, then a separate offline Build authorization.
+- Proposed official endpoints (not currently contacted): `registry.npmjs.org`, `index.crates.io`, `static.crates.io`. SRI/lock sources are not guarantees of safe package code or blocked redirects. C Build >=10GiB permanent gate unchanged; all former one-time low-disk waivers closed. Source/main/UAT023/real AppData/Cloud/Production/cleanup prohibited. F-01/F-02 open; M1 NOT_PASS; no Merge/Release.
+- Full `.md` Prompt downloadable for manual save under canonical **OneDrive Prompt** folder, Report under canonical **OneDrive Codex** folder; **Launcher only inline short Code Block, never a file**.
+
 ## Planning policy to review at M0 (PROPOSED, not final)
 - Immediate goal: reliable Native POS for real cashier operations before nonessential feature expansion.
 - Proposed sequence: MP1 preserve/reconcile UAT → MP2 native offline operational UAT → MP3 release-readiness and Owner GO/NO-GO.
