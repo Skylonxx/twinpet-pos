@@ -193,6 +193,13 @@
 - All A-N1..A-N8 and new runtime/collision tests still `NOT_RUN`, no compilation verification/M1 PASS. Owner refuses C: storage increase or further Cleanup; >=10 GiB Cargo/build gate unchanged. Git `main`, Cloud and Production untouched by this design pass.
 - **One next decision:** Owner approve or hold that one future implementation packet. No change in live workflow authority.
 
+## 2026-11-22 — Owner authorizes ONE low-disk Candidate N-002 Build/Run with hard reserve
+
+- Owner authorized one **guarded offline Build & Synthetic Run** on the existing detached N-001/N-002 clone, excepting the >=10 GiB preflight **only for this attempt**; the permanent threshold stays unchanged. Actual C: free measured before/during/after; STOP and terminate launched children by <=2 GiB, proactively ~2.25 GiB. No unlimited retry; no disk cleanup/other deletes/moves/UAT023 touches.
+- No new clone/workspace, Source/config/Git `main` edits, Cloud/Production, real POS AppData, business data, credentials or network contact. One frozen offline Build; if successful, narrowly targeted synthetic test with disposable profile. GUI only if network and profile isolation are positively proven, otherwise skip and report.
+- Any Build/Rust synthetic test PASS is **not** proof of startup safety, M1 or Release: earlier Codex F-01/F-02 and unimplemented consolidated design remain open. [Exact one-shot execution boundary](planning/MP1-CAND-N-002-ONEPASS-LOWDISK-BUILD-RUN-AUTHORIZATION.md).
+- `OWNER_APPROVED_ONE_SHOT / NOT_RUN_IN_CHAT`: connected chat tools cannot execute on user's local Windows machine; prepared self-contained Codex manual handoff. A measured report from the real Windows executor is still pending.
+
 ## Planning policy to review at M0 (PROPOSED, not final)
 - Immediate goal: reliable Native POS for real cashier operations before nonessential feature expansion.
 - Proposed sequence: MP1 preserve/reconcile UAT → MP2 native offline operational UAT → MP3 release-readiness and Owner GO/NO-GO.
