@@ -257,6 +257,12 @@
 - Proposed official endpoints (not currently contacted): `registry.npmjs.org`, `index.crates.io`, `static.crates.io`. SRI/lock sources are not guarantees of safe package code or blocked redirects. C Build >=10GiB permanent gate unchanged; all former one-time low-disk waivers closed. Source/main/UAT023/real AppData/Cloud/Production/cleanup prohibited. F-01/F-02 open; M1 NOT_PASS; no Merge/Release.
 - Full `.md` Prompt downloadable for manual save under canonical **OneDrive Prompt** folder, Report under canonical **OneDrive Codex** folder; **Launcher only inline short Code Block, never a file**.
 
+## 2026-11-22 — DEPS-PLAN-001 read-only PASS for decision readiness, not network authorization
+
+- Codex `TPOS-MP1-CAND-N-002-DEPENDENCY-PROVISIONING-ONLY-PLAN-CODEX-REPORT.md`, timestamp 14:59+07: verdict **READY_FOR_OWNER_RISK_DECISION**. Git/source custody pinned and two candidate Rust SHA unchanged. npm lockfile 1,088 official HTTPS registry entries with syntax-valid SHA-512 SRI, 1,022 individually Win/x64 compatible (not actual install list); 5 have install scripts. Cargo 512 canonical locked crates.io registry source/checksums, no artifacts fetched. D: WD My Passport healthy ~930GiB free in snapshots; C ~5.45GiB.
+- Unverified: downloaded npm/Cargo content integrity, network redirect/proxy/per-process isolation, compatibility after ignoring install scripts, external disk sustained writes, Windows Job Object and <=500ms disk guardian (not exercised). No network/npm/Cargo/Build/Test/GUI/write beyond report. No low-C-drive Build waiver.
+- [Owner risk decision required](planning/MP1-CAND-N-002-DEPS-PLAN-001-READONLY-RISK-ADJUDICATION.md): A separately authorize trusted official-registry **provisioning only** accepting specific residual network/supply chain risks, B require independently enforced egress sandbox, C HOLD. Under NO option is Build/Main/Cloud/Production/UAT023/real AppData/source/cleanup/merge/release implicitly permitted. M1 NOT_PASS; F-01/F-02 OPEN.
+
 ## Planning policy to review at M0 (PROPOSED, not final)
 - Immediate goal: reliable Native POS for real cashier operations before nonessential feature expansion.
 - Proposed sequence: MP1 preserve/reconcile UAT → MP2 native offline operational UAT → MP3 release-readiness and Owner GO/NO-GO.
