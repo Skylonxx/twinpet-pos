@@ -28,4 +28,8 @@ Source evidence: `TPOS-MP1-CAND-N-002-GUARDIAN-SYNTHETIC-ONLY-REDESIGN-PROOF-COD
 
 **Next Gate G2 not approved:** review G1 result then separately authorize bounded synthetic-only execution, preserving prior D partial npm and evidence. Any additional compile, synthetic runtime, npm/Cargo provisioning or POS Build requires NEW Product Owner authorization. `M1 NOT_PASS`, F-01/F-02 remain OPEN; no merge/release; Offline First and Gate-OFF unchanged.
 
+## Post-run result (2026-11-22 17:59 +07)
+
+Codex returned **G1_COMPILE_PASS_ONLY**, satisfied the explicitly authorized code+single-compile G1 scope in new D root. New GuardianNative.cs, GuardianPrototype.cs, G1-DESIGN.md, GuardianPrototype.dll (14,336 B), compiler-output.txt with hashes; csc.exe compilation exit 0. DLL **not loaded/run**, no synthetic proof. Static controls PARTIAL for untrusted process launch inputs, watchdog self-liveness, trusted C/D sensor/identity, durable log sink, watcher integration and process-end ack. Old seven D evidence hashes unchanged, partial npm/cache preserved. [G1 results and recommended new G1.5 read-only source-review gate](planning/MP1-CAND-N-002-GUARD-G1-001-COMPILE-PASS-STATIC-GAPS-ADJUDICATION.md). G1 one-shot CLOSED; new root EXISTS, no automatic G1 rerun or G2 tests/compile/provisioning. All other prohibitions remain.
+
 **Execution attestation:** ChatGPT authored and verified the Prompt file but has **not run Windows Codex, compiler or a prototype**. This document is on the planning branch, not main.
