@@ -214,6 +214,13 @@
 - Frontend PASS prerequisite to one frozen offline dev Cargo Build and one optional targeted synthetic Rust test with disposable AppData; GUI only if no-cloud isolation proven, otherwise SKIP. No UAT023, real POS profiles/data, new clone/workspace, protected source, main/Cloud/Production, commit/merge/release or automatic retry. See [approved one-pass bounded execution](planning/MP1-CAND-N-002-ONEPASS-OFFLINE-FRONTEND-NATIVE-BUILD-AUTHORIZATION.md).
 - This is an execution **authorization, not execution evidence**: Windows runner has not been invoked from ChatGPT, report pending, no build outcome yet. Prior F-01/F-02 OPEN, A-N1–A-N8 NOT_RUN and M1 NOT_PASS.
 
+## 2026-11-22 — Second N-002 guarded one-shot BLOCKED_OFFLINE_CACHE; authorization closed
+
+- Received 12:25+07 Codex report `TPOS-MP1-CAND-N-002-GUARDED-OFFLINE-FRONTEND-NATIVE-ONESHOT-REPORT.md` `BLOCKED_OFFLINE_CACHE`. Local Windows x64 lockfile cache integrity preflight found **1,022 compatible entries missing matching cached objects, 0 validated** (not proof all are required); 66 platform-incompatible skipped. No `npm ci`, frontend build, cargo build/test, GUI or native profile run; no install/cleanup/network.
+- Original main pinned/tracked clean and existing detached clone exactly two approved modified source files with previous expected SHA-256; no protected files touched. C: before 5,879,382,016; final point sample 5,876,973,568 bytes; continuous monitoring NOT STARTED because no build ran, true minimum UNKNOWN.
+- The Owner's specific second one-shot <10 GiB exception is **CLOSED at preflight STOP**. Permanent >=10 GiB requirement applies to later work unless separately waived. Prior Startup Integrity F-01/F-02 unresolved, M1 NOT_PASS, merge/release LOCKED.
+- **Next Owner gate:** [offline dependency source decision](planning/MP1-CAND-N-002-OFFLINE-CACHE-BLOCKER-DECISION.md) — hold until a trusted verified offline cache/source is available, OR separately authorize a dependency provisioning proposal specifying provenance and safety, not an unconditional network download or new Build. Do not rerun identical CLI packet, borrow from UAT023/Production, cleanup, change Source or install packages without new scope.
+
 ## Planning policy to review at M0 (PROPOSED, not final)
 - Immediate goal: reliable Native POS for real cashier operations before nonessential feature expansion.
 - Proposed sequence: MP1 preserve/reconcile UAT → MP2 native offline operational UAT → MP3 release-readiness and Owner GO/NO-GO.
