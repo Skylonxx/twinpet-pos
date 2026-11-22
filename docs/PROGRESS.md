@@ -32,6 +32,12 @@
 | Report 024 workflow adjudication | PLAN_AUTHORITY_UNRESOLVED | Current authority trio lacks latest UAT/selection |
 | Native EV-1 / EV-2 / GUI EV-3 / offline operational UAT | NOT_RUN or NOT_AUTHORIZED | Do not infer PASS, release or durability |
 
+## Candidate N-002 — NEW GUARDED OFFLINE FRONTEND+NATIVE ONE-SHOT OWNER APPROVED / RESULT PENDING (2026-11-22)
+
+- Owner specifically authorised new separate one-pass offline frontend inputs and monitored native Build/conditional synthetic Test in existing detached N-002 clone (no source edits). Last one-shot stopped at missing `dist` and `node_modules`, no Cargo run; renewed <10 GiB waiver FOR THIS NEW ATTEMPT ONLY, permanent >=10 GiB gate unchanged. Before/during/after C: bytes, <=500ms monitoring, proactive 2.25 GiB and mandatory 2 GiB STOP, no cleanup, retry or touching UAT023.
+- `npm ci --offline --ignore-scripts` only after proof cache complete; `npm run build` only after verified side-effects: new ignored `functions/src/deployConfig.ts`, `.env`, `.artifact-provenance.json`, `node_modules/.tmp`, `dist` and manifest (no overwrite, tracked source, credentials, Cloud/network). Then at most one Cargo dev build and one focused synthetic test; GUI no-cloud isolation or explicit SKIP. Reference [execution boundaries](planning/MP1-CAND-N-002-ONEPASS-OFFLINE-FRONTEND-NATIVE-BUILD-AUTHORIZATION.md).
+- Prepared self-contained Codex CLI Launcher `TPOS-MP1-CAND-N-002-GUARDED-OFFLINE-FRONTEND-NATIVE-ONESHOT-CODEX-PROMPT.md`. ChatGPT cannot execute Windows shell from connected tools; `WINDOWS_NOT_RUN_IN_CHAT / REPORT_PENDING`. Prior Codex startup findings F-01/F-02 not waived; M1/merge/release remain LOCKED.
+
 ## Candidate N-002 — GUARDED ONE-SHOT STOPPED AT FRONTEND PREFLIGHT / BUILD NOT RUN (2026-11-22)
 
 - Report `TPOS-MP1-CAND-N-002-GUARDED-LOWDISK-BUILD-RUN-REPORT.md` verdict **BLOCKED AT PREFLIGHT**. Existing detached clone verified pinned `f034301` with the two preapproved `epoch_floor.rs` / `durable_kv.rs` uncommitted changes; original main tracked clean. No source edits, cleanup, UAT023 access or other side effects.
@@ -178,7 +184,7 @@ Owner explicitly closed UAT cleanup, refused any further C: cleanup or disk incr
 - No Source Code, tests, build, native app/profile, Cloud, Rules/Functions, release or data cleanup in this pass.
 
 ## Next one action
-**Next one action: Owner decides whether to approve the narrowly bounded frontend-input preparation and one NEW supervised Build/Run attempt**, per [recorded blocker](planning/MP1-CAND-N-002-BUILD-PREFLIGHT-FRONTEND-INPUTS-BLOCKER.md). Earlier one-shot was stopped at preflight and is closed; no automatic retry, npm install or source edits. Keep permanent >=10 GiB gate unless a fresh single-use waiver is explicitly granted. No cleanup, UAT023, new clone, real AppData, Cloud, Production or merge. M1 NOT_PASS.
+**Next one action: Owner manually pastes the complete approved offline-frontend + guarded native one-shot Launcher into Codex CLI on the Windows host.** The once-only packet is fully authorised; no further sub-approval. `npm ci --offline` only with complete verified cache, guarded `npm run build` side-effects and native Cargo/test steps, stop at C: <=2.25 GiB, absolute <=2 GiB. One report `TPOS-MP1-CAND-N-002-GUARDED-OFFLINE-FRONTEND-NATIVE-ONESHOT-REPORT.md`. No auto retry/cleanup/source/new clone/UAT023/main/Cloud/real AppData. M1 NOT_PASS.
 
 **Formal M0 phase registration and workflow-trio reconciliation:** still pending; this scoped authorization does not change the live `ACTIVE_IMPLEMENTATION_PACKET=NONE`.
 
