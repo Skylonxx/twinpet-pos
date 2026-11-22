@@ -32,6 +32,12 @@
 | Report 024 workflow adjudication | PLAN_AUTHORITY_UNRESOLVED | Current authority trio lacks latest UAT/selection |
 | Native EV-1 / EV-2 / GUI EV-3 / offline operational UAT | NOT_RUN or NOT_AUTHORIZED | Do not infer PASS, release or durability |
 
+## Candidate N-002 — OWNER-APPROVED CONSOLIDATED DESIGN COMPLETE / IMPLEMENTATION HOLD (2026-11-22)
+
+- Owner design-only authorization fulfilled: [Consolidated Startup Integrity Specification](planning/MP1-CAND-N-002-STARTUP-INTEGRITY-CONSOLIDATED-SPEC.md) prepared and committed **only to planning branch**. Records source-evidenced F-01 dangling app-data false absence, F-02 manifest startup interleaving, preexisting L-01 floor `exists()` and L-02 privileged-auth error suppression, single-instance mutex limits, threat model and consolidated remediation/acceptance criteria SI-01–SI-13 and A-N1..A-N8.
+- Next future Owner choice: approve or hold **one bounded source-only implementation** (same existing detached N-001 clone, proposed writable `epoch_floor.rs` and `durable_kv.rs` only; any extra file required => STOP). `lib.rs` and `single_instance.rs` remain read-only planning dependencies. All runtime tests NOT_RUN, compilation NOT_VERIFIED, M1 NOT_PASS, integration/Cloud/Production locked.
+- This design update launched NO Claude/Codex, cloned nothing, built/tested nothing, changed NO Rust source/Safety Gate, and performed NO disk cleanup. Existing >=10 GiB Cargo gate unchanged.
+
 ## Candidate N-002 — SECOND CODEX STATIC_REVIEW_FINDINGS / OWNER DESIGN GATE PENDING (2026-11-22)
 
 - Independent Codex report `TPOS-MP1-CAND-N-002-FAILCLOSED-ENUMERATION-INDEPENDENT-CODEX-REPORT.md` reviewed 07:27 +07. Custody unchanged: original main pinned/tracked-clean, same detached N-001 clone, two unstaged allowlisted edits only; `git diff --check` exit 0. Domain Result probe now propagates normal metadata/read_dir/entry errors.
@@ -161,7 +167,7 @@ Owner explicitly closed UAT cleanup, refused any further C: cleanup or disk incr
 - No Source Code, tests, build, native app/profile, Cloud, Rules/Functions, release or data cleanup in this pass.
 
 ## Next one action
-**Next one action: Owner reviews the single consolidated N-002 startup-integrity/concurrency design gate** in [proposal](planning/MP1-CAND-N-002-STARTUP-INTEGRITY-ONE-PACKET-DECISION.md). Pending a clear approval, preserve existing two-file uncommitted clone diff and DO NOT launch any more Claude/Codex patch/audit cycles, new clone, Cargo/build/tests, cleanup or change >=10 GiB build preflight. No M1 acceptance or merge/release.
+**Next one action: Owner decides whether to approve one future N-002 source-only implementation under the now-complete [Consolidated Startup Integrity Specification](planning/MP1-CAND-N-002-STARTUP-INTEGRITY-CONSOLIDATED-SPEC.md). Until that explicit approval, preserve the existing two-file uncommitted clone diff and DO NOT launch Claude/Codex or any patch/review cycle, create clones, run Cargo/build/tests/cleanup, alter >=10 GiB build gate, main/Cloud/Production or release. No M1 acceptance.
 
 **Formal M0 phase registration and workflow-trio reconciliation:** still pending; this scoped authorization does not change the live `ACTIVE_IMPLEMENTATION_PACKET=NONE`.
 
