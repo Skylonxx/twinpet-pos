@@ -37,7 +37,7 @@ gantt
 | Gate | Acceptance evidence | Current status |
 |---|---|---|
 | MP0/M0 | Approved Goal, phase, priorities, roles, lock list, authority reconciliation | SCOPED_READ_ONLY; FORMAL_PHASE_PENDING |
-| MP1/M1 | UAT baseline and commit/build identity, reviewed integration delta | Owner-approved N-002 consolidated Startup Integrity DESIGN COMPLETE, implementation packet OWNER APPROVAL PENDING; prior Codex STATIC_REVIEW_FINDINGS remain, runtime A-N1..8 NOT_RUN, M1 OPEN, Candidate I/MP1.3 LOCKED |
+| MP1/M1 | UAT baseline and commit/build identity, reviewed integration delta | N-002 consolidated design still pending source implementation; Owner authorized ONE guarded low-disk Build/Synthetic Run in existing clone with <=2 GiB stop, Windows execution RESULT PENDING, M1 OPEN, Candidate I/MP1.3 LOCKED |
 | MP2/M2 | Safe native offline E2E + cashier critical path on controlled build | LOCKED |
 | MP3/M3 | Installer/upgrade proof and explicit Owner decision | LOCKED |
 
