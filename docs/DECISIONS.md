@@ -312,6 +312,12 @@
 - Strictly no running/loading DLL or any test/synthetic process, npm/Cargo/network, POS frontend/native Build/GUI, Cloud/Production, Source/Main/UAT023/real POS AppData, cleanup, OS global settings, or changes to old D Guardian/evidence/logs/partial npm stage/cache. No retries after compiler failure. 500ms rule and C >=10GiB POS Build preflight unchanged.
 - Full .md Prompt created for canonical OneDrive Prompt folder; only short inline Launcher; report canonical OneDrive Codex folder. Execution PENDING; source/C# compile PASS must not be reported as Guardian runtime PASS or M1 acceptance. G2 synthetic execution and all future provisioning require separate Owner decisions; F01/F02 OPEN.
 
+## 2026-11-22 — GUARD-G1-001 compile-only completed; Guardian still PARTIAL and not runtime-approved
+
+- Owner-uploaded G1 Codex report, timestamp 17:59 +07: new GuardianNative.cs / GuardianPrototype.cs + G1-DESIGN.md, DLL and compiler evidence under isolated NEW D root; one installed csc DLL compile exit 0. **G1_COMPILE_PASS_ONLY**; new DLL has not been loaded/run and no synthetic tests. Old D seven evidence hashes unchanged; old partial npm/cache preserved. Original main/clone not independently re-checked this run.
+- Static checklist PARTIAL for caller-controlled process ownership, independent watchdog liveness, real trusted disk identity/disconnect adapter, bounded durable logging, watcher failures and job-termination acknowledgment; <=500ms appears in source but no runtime verification. Do NOT call this Guardian PASS or npm/Build readiness. [Evidence analysis](planning/MP1-CAND-N-002-GUARD-G1-001-COMPILE-PASS-STATIC-GAPS-ADJUDICATION.md).
+- Proposal for Product Owner: a **G1.5 independent READ-ONLY SOURCE REVIEW** using the new two C# sources and design note, followed by separate owner-approved G2 synthesis/implementation/testing. G1 D root now EXISTS and cannot be reused under 'create only if absent' assumption. No permission for G1 rerun or G2 tests, npm/Cargo, POS Build/GUI, Cloud/Main/Source/UAT023/real AppData or cleanup. F01/F02 OPEN, M1 NOT_PASS.
+
 ## Planning policy to review at M0 (PROPOSED, not final)
 - Immediate goal: reliable Native POS for real cashier operations before nonessential feature expansion.
 - Proposed sequence: MP1 preserve/reconcile UAT → MP2 native offline operational UAT → MP3 release-readiness and Owner GO/NO-GO.
