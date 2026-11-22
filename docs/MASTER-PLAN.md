@@ -1,6 +1,6 @@
 # Twinpet POS — Master Plan Rebaseline
 
-**Version 3.7 — PLANNING DRAFT / N-002 DEPS-PROV-001 BLOCKED_GUARDIAN; NPM INTERRUPTED; NO BUILD**  
+**Version 3.8 — PLANNING DRAFT / N-002 GUARD-AUDIT-001 READ-ONLY APPROVED; REPORT PENDING**  
 **Prepared / updated:** 2026-11-22 · **Latest Owner decision:** accepted Policy A RISK-008 and approved N-002 source-only existing-clone work, including the two-file fallible scanner patch. Two Codex independent source reviews were performed; latest **STATIC_REVIEW_FINDINGS (07:27 +07)** on dangling app-data ancestor and non-atomic startup manifest checks. **Owner-approved design-only consolidation COMPLETE; new implementation approval is pending.** All runtime tests remain NOT_RUN; M1, main, Cloud, merge, release not authorized.  
 **Explicit non-authority:** this new file on a planning branch does NOT change the live workflow gate, authorize MP1 integration/implementation, MP2/MP3, code changes, merge or release.
 
@@ -333,6 +333,12 @@ Codex report `TPOS-MP1-CAND-N-002-DEPENDENCY-PROVISIONING-ONLY-EXEC-CODEX-REPORT
 **Important existing D partial workspace:** `D:\Twinpet-POS\Twinpet-N002-Build-20261122` was created, with incomplete `npm-stage\node_modules` 16,294 files/255,961,921 logical bytes, `npm-cache` 1,816 files/58,965,960 bytes, empty `cargo-home`, `guard\Guardian.cs`, evidence CSVs and logs. Nothing cleaned; **NO SILENT REUSE, OVERWRITE, npm ci RETRY OR CLEANUP**. Future packet must explicitly handle this now-existing root and existing partial node_modules. C: final sample 5,849,927,680 bytes; D: final 998,728,765,440 bytes; continuous actual minima unknown during one monitor gap. Original main tracked clean, detached candidate exactly two previous Rust SHA-preserved edits, no reported Source/UAT023/Cloud/real AppData access.
 
 Owner's **single-use DEPS-PROV-001 authorization is CLOSED** on required stop. Permanent C >=10GiB Build gate unchanged; no Build permission. **Next Owner gate:** [read-only guardian stop adjudication](planning/MP1-CAND-N-002-DEPS-PROV-001-GUARDIAN-STOP-ADJUDICATION.md) — first authorize a bounded read-only evidence audit of `Guardian.cs`, disk CSV, guard result and npm logs on D, without reinstall, new scratch, altering thresholds, cleanup or network. A further guarded provisioning run would require fresh scope and explicit policy for preserving existing D files. F01/F02 OPEN; M1 NOT_PASS, merge/release locked.
+
+## 4.32 N-002 GUARD-AUDIT-001: Owner approves READ-ONLY Guardian evidence inspection (2026-11-22)
+
+After DEPS-PROV-001 stopped on a 736ms MONITOR_GAP (>500ms contract), Owner approved only a read-only Codex inspection of existing D:/Twinpet-POS/Twinpet-N002-Build-20261122 guardian source (Guardian.cs), evidence disk CSV/result files and logs. [Exact scope](planning/MP1-CAND-N-002-GUARD-AUDIT-001-OWNER-APPROVED-READONLY-PROMPT.md). Analyze sample timing and source lines, correlate with logs, rank confirmed versus speculative causes, recommend a future guardian fix (design only). Do not run Guardian or npm, Cargo fetch, download, compile, Build, Test, GUI, Cloud or touch real POS profiles, Main, Source, UAT023, or partial D npm files.
+
+Full Markdown Prompt delivered to be saved in established OneDrive Ai-Report/twinpet-pos/Prompt; report will go to existing OneDrive Ai-Report/twinpet-pos/Codex; Launcher inline short only, no Launcher file. **Codex Windows audit NOT_RUN yet; only Prompt prepared**. Prior one-shot provisioning remained closed and existing D partial files are preserved. <=500ms policy unchanged; F-01/F-02 OPEN, M1 NOT_PASS, merge/release locked.
 
 ## 5. Other initiatives / deferred (LOCKED)
 Return/Refund activation and sealing Rules; Android/Capacitor; EV-2 VM hard reset; broad mutation matrix; unrelated UI polish; unapproved Cloud/deployment or live POS data contact.
