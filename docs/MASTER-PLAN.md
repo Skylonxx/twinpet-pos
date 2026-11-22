@@ -1,6 +1,6 @@
 # Twinpet POS — Master Plan Rebaseline
 
-**Version 3.4 — PLANNING DRAFT / N-002 DEPENDENCY-PROVISIONING-ONLY PLAN APPROVED; READ-ONLY PREFLIGHT PENDING**  
+**Version 3.5 — PLANNING DRAFT / N-002 DEPS-PLAN-001 READY_FOR_OWNER_RISK_DECISION; NO FETCH/BUILD**  
 **Prepared / updated:** 2026-11-22 · **Latest Owner decision:** accepted Policy A RISK-008 and approved N-002 source-only existing-clone work, including the two-file fallible scanner patch. Two Codex independent source reviews were performed; latest **STATIC_REVIEW_FINDINGS (07:27 +07)** on dangling app-data ancestor and non-atomic startup manifest checks. **Owner-approved design-only consolidation COMPLETE; new implementation approval is pending.** All runtime tests remain NOT_RUN; M1, main, Cloud, merge, release not authorized.  
 **Explicit non-authority:** this new file on a planning branch does NOT change the live workflow gate, authorize MP1 integration/implementation, MP2/MP3, code changes, merge or release.
 
@@ -311,6 +311,12 @@ Owner approved **creating the plan and full Codex Prompt** to address N-002 netw
 Official proposed endpoints: `https://registry.npmjs.org/`, `https://index.crates.io/`, `https://static.crates.io/`. Existing pinned npm lockfile has 1,088 non-root entries, explicit resolved URLs under npm Registry with integrity, and Cargo.lock has canonical crates.io registry identity. **These do not prove package safety, redirect constraints or zero unexpected egress**. Product Owner must separately accept bounded residual risks before a *later* provisioning-only execution; a further independent Owner approval is required before any offline Build. Earlier <10GiB C Build waiver remains CLOSED and permanent >=10GiB gate unchanged.
 
 **Next:** Owner saves full `TPOS-MP1-CAND-N-002-DEPENDENCY-PROVISIONING-ONLY-PLAN-CODEX-PROMPT.md` into canonical OneDrive `Ai-Report\twinpet-pos\Prompt\`, dispatches short **INLINE** Launcher (no file) to Codex Windows for **read-only** fact-finding, receives `TPOS-MP1-CAND-N-002-DEPENDENCY-PROVISIONING-ONLY-PLAN-CODEX-REPORT.md` in OneDrive `...\Codex\`. No Registry execution is currently approved; no M1 PASS, merge or release; F-01/F-02 OPEN.
+
+## 4.29 N-002 DEPS-PLAN-001 read-only report — READY_FOR_OWNER_RISK_DECISION (2026-11-22 14:59 +07)
+
+Codex **completed the Owner-approved planning inspection only** and uploaded `TPOS-MP1-CAND-N-002-DEPENDENCY-PROVISIONING-ONLY-PLAN-CODEX-REPORT.md`. The result is **READY_FOR_OWNER_RISK_DECISION**, NOT a downloaded/install-ready dependency set. Source and candidate custody PASS: original main and detached clone HEAD f034301c pinned, original tracked clean, candidate exactly two prior source diffs SHA unchanged. npm lockfile v3: 1,088 non-root entries HTTPS registry.npmjs.org + syntactically valid SHA-512 SRI, 1,022 individually Windows x64 compatible (not exact install set), 5 install-script flags, including optional native re2; no downloaded hash proof. Cargo.lock 512 canonical crates.io registry blocks with 64-hex checksums, one local/root, no downloaded crate proof. D: WD My Passport NTFS ~930 GiB free, C ~5.45 GiB in point samples only; no sustained write or disk guardian proof. `D:\Twinpet-POS` still absent. No network, npm ci, cargo fetch, build, test or GUI. No C<10 GiB waiver currently active.
+
+**Next Owner decision:** [read-only risk adjudication](planning/MP1-CAND-N-002-DEPS-PLAN-001-READONLY-RISK-ADJUDICATION.md) — Option A explicitly accept bounded official-registry provisioning-only residual risk, with process/disk protections and stop on anomalous endpoints; Option B demand proven preventive per-process egress sandbox first; Option C HOLD. **No download/install/Build authorized by receiving this report**. Even after provisioning Build would require a separate new one-shot Owner gate; M1 NOT_PASS, F-01/F-02 OPEN, merge/release locked.
 
 ## 5. Other initiatives / deferred (LOCKED)
 Return/Refund activation and sealing Rules; Android/Capacitor; EV-2 VM hard reset; broad mutation matrix; unrelated UI polish; unapproved Cloud/deployment or live POS data contact.
