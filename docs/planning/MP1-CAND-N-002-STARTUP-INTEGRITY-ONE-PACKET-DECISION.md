@@ -1,6 +1,6 @@
 # Twinpet POS — N-002 Startup Integrity: consolidated decision gate
 
-**Prepared:** 2026-11-22 (Bangkok) · **Status:** PROPOSAL_ONLY / OWNER_DECISION_REQUIRED / NO_SOURCE_AUTHORIZATION
+**Prepared:** 2026-11-22 (Bangkok) · **Status:** DESIGN_SPEC_APPROVED_AND_COMPLETE / IMPLEMENTATION_APPROVAL_PENDING / NO_SOURCE_AUTHORIZATION
 **Evidence:** independent Codex `TPOS-MP1-CAND-N-002-FAILCLOSED-ENUMERATION-INDEPENDENT-CODEX-REPORT.md`, review 2026-11-22 07:27 +07, verdict `STATIC_REVIEW_FINDINGS`. The report was independently read in full.
 
 ## What passed static review (bounded)
@@ -29,3 +29,10 @@ Rather than launch another ad-hoc two-file remediation and repeat static review 
 **Authorization boundary:** This planning document records only a proposed ONE-PACKET security/design decision for Owner review. Do not modify the existing clone, source, tests or policy; do not run Claude/Codex, clone, Cargo/build/test, disk cleanup, change the 10 GiB build preflight, main/Cloud/Production, integrate or release. Remediation code needs a separately approved exact allowlist and test/gate plan; if a race-free guarantee cannot be supported under the approved threat model, record BLOCKED_DESIGN instead of false PASS.
 
 **Requested Owner decision:** authorize a *single consolidated startup-integrity design specification* (read-only based on known sources; no additional audit loop) to resolve the concurrency and path semantics, then seek approval for one bounded implementation packet. No new implementation approval is implied by receipt of the Codex report.
+
+
+## 2026-11-22 — DESIGN-ONLY OWNER APPROVAL EXECUTED
+
+Owner explicitly **approved writing ONE consolidated Startup Integrity specification**, not Claude/Codex execution, Source changes, tests/build or any new clone/cleanup. The completed design lives at [MP1-CAND-N-002-STARTUP-INTEGRITY-CONSOLIDATED-SPEC.md](MP1-CAND-N-002-STARTUP-INTEGRITY-CONSOLIDATED-SPEC.md). It fixes the *planning contract*, not the software: threat model for ordinary app-controlled concurrency vs uncontrolled external writers, dangling ancestor/false-absence semantics, manifest authority/atomic-create policy, legacy floor/privileged-auth errors, bounded future two-file Source allowlist, acceptance matrix SI-01..SI-13 plus A-N1..A-N8, and STOP boundaries.
+
+**Next one Owner decision:** approve or hold *future implementation under that exact consolidated specification*. No automatic extra review, agent, code patch, Rust tests, M1 PASS or integration. Existing clone/diff and 10 GiB Cargo/build rule remain unchanged.
