@@ -37,7 +37,7 @@ gantt
 | Gate | Acceptance evidence | Current status |
 |---|---|---|
 | MP0/M0 | Approved Goal, phase, priorities, roles, lock list, authority reconciliation | SCOPED_READ_ONLY; FORMAL_PHASE_PENDING |
-| MP1/M1 | UAT baseline and commit/build identity, reviewed integration delta | D-drive attempt stopped PRECHECK twice (wrong Prompt location, likely incompatible dist junction and unproven guardian); npm/install/Cargo fetch/Build/test NOT_RUN. Proposed real C: dist with heavy D: caches and guardian design requires NEW Owner one-shot authorization. M1 OPEN, MP1.3 LOCKED |
+| MP1/M1 | UAT baseline and commit/build identity, reviewed integration delta | D-drive precheck failure evidenced (wrong Prompt path, dist junction vs provenance verifier, guardian untested). Owner APPROVED NEW one-shot real C: dist + heavy D: caches/targets with tested guardian, official pinned registries, no GUI; Windows execution pending, M1 OPEN, MP1.3 LOCKED |
 | MP2/M2 | Safe native offline E2E + cashier critical path on controlled build | LOCKED |
 | MP3/M3 | Installer/upgrade proof and explicit Owner decision | LOCKED |
 
