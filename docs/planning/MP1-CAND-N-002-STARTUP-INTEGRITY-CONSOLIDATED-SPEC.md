@@ -85,7 +85,7 @@
 | SI-10 | Crash before/during manifest creation/floor write -> fail-closed or documented safe resume, never silent reset | Interrupted-init/restart fixtures |
 | SI-11 | Same-session second Twinpet POS instance -> rejected under named mutex | Named-mutex synthetic/integration test |
 | SI-12 | Out-of-namespace/cross-session writers sharing root -> no claim of protection unless common ownership proven | Architecture evidence or `BLOCKED_DESIGN_CONCURRENCY` |
-| SI-13 | Preserved legacy data/inventory/Offine First/Gate-OFF | Diff invariants plus future runtime proof |
+| SI-13 | Preserved legacy data/inventory/Offline First/Gate-OFF | Diff invariants plus future runtime proof |
 | A-N1..A-N8 | Preserve full original Policy A negative and positive controls | Actual synthetic runtime executions, no skipped-as-PASS |
 
 **Evidence grades:** `STATIC_REVIEW_ONLY`, `NOT_RUN`, `NOT_VERIFIED`, `OWNER_ACCEPTED_RISK`, or actual test PASS/FAIL with pinned SHA and synthetic fixture; no treating static checks as runtime PASS. Before any Cargo/build test the existing **>=10 GiB verified free space gate** remains unchanged and is not currently met. Runtime proof is deferred, not waived; with Owner refusing added capacity and cleanup the project may remain STOPPED at M1, not falsely complete.
