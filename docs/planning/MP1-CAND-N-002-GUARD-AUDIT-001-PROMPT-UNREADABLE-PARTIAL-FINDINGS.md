@@ -1,4 +1,8 @@
-# MP1 Candidate N-002 — GUARD-AUDIT-001 Prompt Unreadable / Partial Evidence Findings
+# MP1 Candidate N-002 — GUARD-AUDIT-001 Initial Prompt Unreadable / Partial Findings (Historical)
+
+**Later resolution:** A new Codex retry at 16:49+07 **successfully read the exact OneDrive Prompt and completed the requested read-only Guardian evidence audit**, with verdict `ROOT_CAUSE_INCONCLUSIVE`. See [successful full audit](planning/MP1-CAND-N-002-GUARD-AUDIT-001-RETRY-COMPLETE-ROOT-CAUSE-INCONCLUSIVE.md). The read failure described below applies to the previous 16:17 attempt only; do not use it as a current blocker.
+
+
 
 **Date:** 2026-11-22 (Asia/Bangkok)  
 **Evidence:** Owner-uploaded `TPOS-MP1-CAND-N-002-GUARDIAN-MONITOR-GAP-READONLY-AUDIT-CODEX-REPORT.md`, timestamp `2026-11-22T16:17:48.5874593+07:00`.  
