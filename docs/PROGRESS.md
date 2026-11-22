@@ -32,6 +32,13 @@
 | Report 024 workflow adjudication | PLAN_AUTHORITY_UNRESOLVED | Current authority trio lacks latest UAT/selection |
 | Native EV-1 / EV-2 / GUI EV-3 / offline operational UAT | NOT_RUN or NOT_AUTHORIZED | Do not infer PASS, release or durability |
 
+## Candidate N-002 — SECOND CODEX STATIC_REVIEW_FINDINGS / OWNER DESIGN GATE PENDING (2026-11-22)
+
+- Independent Codex report `TPOS-MP1-CAND-N-002-FAILCLOSED-ENUMERATION-INDEPENDENT-CODEX-REPORT.md` reviewed 07:27 +07. Custody unchanged: original main pinned/tracked-clean, same detached N-001 clone, two unstaged allowlisted edits only; `git diff --check` exit 0. Domain Result probe now propagates normal metadata/read_dir/entry errors.
+- **F-01:** dangling app-data ancestor via `metadata` following symlink could yield false `Ok(false)` instead of error. **F-02:** multiple metadata/path checks are non-atomic; virgin startup may ignore a newly present `RegularFile` manifest (skipping committed validation); compatible branch/manifest creation have additional interleaving concerns. Source-level findings; Windows reproduction/runtime cases NOT_RUN.
+- Pre-existing floor existence error suppression and privileged-auth scanner errors remain out of previous two-file remediation; RISK-008 accepted *only* complete prior Phase-B loss, not missing-but-present or unreadable state.
+- **Next owner decision (not code approval):** [one consolidated startup-integrity gate](planning/MP1-CAND-N-002-STARTUP-INTEGRITY-ONE-PACKET-DECISION.md) defines normal-concurrency threat model, false-absence and manifest validation requirements and deferred test matrix. NO more automatic Claude patch/review loops. A-N1..A-N8 and compilation NOT_RUN, M1 OPEN.
+
 ## Candidate N-002 — TWO-FILE CLAUDE SOURCE_ONLY_READY / INDEPENDENT CODEX REVIEW PENDING (2026-11-22)
 
 Claude uploaded `TPOS-MP1-CAND-N-002-FAILCLOSED-ENUMERATION-SOURCE-ONLY-CLAUDE-REPORT.md`, verdict SOURCE_ONLY_READY with no compilation/tests. Report confirms original main `f034301` untouched; existing independent detached clone had exactly one approved prior Policy A `durable_kv.rs` diff before remediation. Now exactly two uncommitted changed files: `epoch_floor.rs` (+114/-22) and `durable_kv.rs` (+21/-12). `git diff --check` 0. Checked `Result<bool,String>` domain probe, `?` propagation, missing-floor `evaluate_floor` fail-closed; 3 added tests and 5 adapted asserts in allowed files, all NOT_RUN. C: last ~5.54 GiB free vs unchanged >=10 GiB build gate. Pending independent Codex read-only review and later separate runtime proof; no M1 PASS, merge/release, main/Cloud/Production changes claimed.
@@ -154,7 +161,7 @@ Owner explicitly closed UAT cleanup, refused any further C: cleanup or disk incr
 - No Source Code, tests, build, native app/profile, Cloud, Rules/Functions, release or data cleanup in this pass.
 
 ## Next one action
-**Next one action: Owner manually pastes the self-contained N-002 two-file independent Codex READ-ONLY review instruction**, using same existing clone. Review true diff, caller compatibility, error handling, Windows NotFound/permission uncertainty, manifest symlink cases, unexecuted test source. Report to `Ai-Report\twinpet-pos\Codex\TPOS-MP1-CAND-N-002-FAILCLOSED-ENUMERATION-INDEPENDENT-CODEX-REPORT.md`. No Cargo/tests/build/new clone/cleanup/source edit/merge/Cloud/Prod or build gate waiver. A-N1..A-N8 NOT_RUN and M1 LOCKED.
+**Next one action: Owner reviews the single consolidated N-002 startup-integrity/concurrency design gate** in [proposal](planning/MP1-CAND-N-002-STARTUP-INTEGRITY-ONE-PACKET-DECISION.md). Pending a clear approval, preserve existing two-file uncommitted clone diff and DO NOT launch any more Claude/Codex patch/audit cycles, new clone, Cargo/build/tests, cleanup or change >=10 GiB build preflight. No M1 acceptance or merge/release.
 
 **Formal M0 phase registration and workflow-trio reconciliation:** still pending; this scoped authorization does not change the live `ACTIVE_IMPLEMENTATION_PACKET=NONE`.
 
