@@ -32,6 +32,13 @@
 | Report 024 workflow adjudication | PLAN_AUTHORITY_UNRESOLVED | Current authority trio lacks latest UAT/selection |
 | Native EV-1 / EV-2 / GUI EV-3 / offline operational UAT | NOT_RUN or NOT_AUTHORIZED | Do not infer PASS, release or durability |
 
+## Candidate N-002 — GUARDED ONE-SHOT STOPPED AT FRONTEND PREFLIGHT / BUILD NOT RUN (2026-11-22)
+
+- Report `TPOS-MP1-CAND-N-002-GUARDED-LOWDISK-BUILD-RUN-REPORT.md` verdict **BLOCKED AT PREFLIGHT**. Existing detached clone verified pinned `f034301` with the two preapproved `epoch_floor.rs` / `durable_kv.rs` uncommitted changes; original main tracked clean. No source edits, cleanup, UAT023 access or other side effects.
+- Toolchain installed (Cargo 1.98, rustc 1.98, VS 2022 VC); offline frozen Cargo metadata on Windows passed. Missing `dist` and `node_modules` prevented proceeding under prior explicit bans on frontend build/install. No actual Cargo Build, no Rust Test, no GUI. Cannot infer whether <10 GiB is adequate for compilation.
+- C: before 5,879,668,736 bytes, minimum sampled/after 5,876,760,576; intermittent preflight only, no active 500ms watcher or process to terminate. Single-use Build authorization CLOSED at stop; no retry.
+- **Next:** one separately approved bounded frontend input/optional offline dependency-preparation packet, with reapproval for any new <10 GiB Build attempt. [Proposal](planning/MP1-CAND-N-002-BUILD-PREFLIGHT-FRONTEND-INPUTS-BLOCKER.md). No automatic run. F-01/F-02 unresolved; M1/merge/release still locked.
+
 ## Candidate N-002 — OWNER-AUTHORIZED GUARDED LOW-DISK BUILD/RUN, RESULT PENDING (2026-11-22)
 
 Owner authorized a **one-attempt exception** to the >=10 GiB build preflight for experimental Build & Synthetic Run in the **existing** pinned detached N-002 clone only. Safety: live C: monitor <=500ms, cease launched process tree by <=2 GiB (prefer near 2.25 GiB); no source edits, cleanup, UAT023, real POS profile, Firebase/Cloud, new clone/workspace, Git main, install or network fetch; no retry. Test only with synthetic disposable profile; GUI launch only if no cloud egress and profile isolation can be established. One report `TPOS-MP1-CAND-N-002-GUARDED-LOWDISK-BUILD-RUN-REPORT.md` to OneDrive Ai-Report/Codex. ChatGPT prepared the one-pass Codex instruction but cannot execute on the local Windows host from this connection. **BUILD_NOT_RUN_IN_CHAT / RUNTIME_NOT_RUN / M1_NOT_PASS**; F-01/F-02 and consolidated design remain open. [Execution authorization](planning/MP1-CAND-N-002-ONEPASS-LOWDISK-BUILD-RUN-AUTHORIZATION.md).
@@ -171,7 +178,7 @@ Owner explicitly closed UAT cleanup, refused any further C: cleanup or disk incr
 - No Source Code, tests, build, native app/profile, Cloud, Rules/Functions, release or data cleanup in this pass.
 
 ## Next one action
-**Next one action: Owner manually runs the already-authorized one-shot guarded Build/Run instruction in Codex CLI on the Windows host** against existing detached N-002 clone, then sends the single measured report. This ONE attempt waives >=10 GiB preflight only for this session, stops at <=2 GiB C: reserve with continuous watcher, and permits synthetic disposable-only Run if Build passes. No source edits, new clone/workspace, cleanup, UAT023, Cloud/Production, real AppData or unconditional GUI/network. No extra approval needed for the bounded attempt, no retry or change in permanent disk policy. M1, source/design remediation, merge/release remain gated.
+**Next one action: Owner decides whether to approve the narrowly bounded frontend-input preparation and one NEW supervised Build/Run attempt**, per [recorded blocker](planning/MP1-CAND-N-002-BUILD-PREFLIGHT-FRONTEND-INPUTS-BLOCKER.md). Earlier one-shot was stopped at preflight and is closed; no automatic retry, npm install or source edits. Keep permanent >=10 GiB gate unless a fresh single-use waiver is explicitly granted. No cleanup, UAT023, new clone, real AppData, Cloud, Production or merge. M1 NOT_PASS.
 
 **Formal M0 phase registration and workflow-trio reconciliation:** still pending; this scoped authorization does not change the live `ACTIVE_IMPLEMENTATION_PACKET=NONE`.
 
