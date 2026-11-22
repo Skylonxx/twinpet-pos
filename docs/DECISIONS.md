@@ -177,6 +177,14 @@
 - Latest report C: ~5.54 GiB free, under unchanged 10 GiB **build** gate. No new clone/workspace, Cargo/build/tests, cleanup, main/Cloud/Production.
 - **Next:** owner-requested independent Codex READ-ONLY review, especially NotFound, error propagation, symlinks, caller compatibility and newly authored test sources; one report, no new code authorisation. All A-N1..A-N8 remain NOT_RUN. M1 OPEN, no merge or release.
 
+## 2026-11-22 — Second Codex N-002 source review: FINDINGS / design gate pending
+
+- Uploaded `TPOS-MP1-CAND-N-002-FAILCLOSED-ENUMERATION-INDEPENDENT-CODEX-REPORT.md` (07:27 +07): **STATIC_REVIEW_FINDINGS**. Existing detached clone `main@f034301` baseline, exactly the two intended unstaged changes `epoch_floor.rs`, `durable_kv.rs`; `git diff --check` clean. Existing fallible domain scanner now propagates ordinary metadata/entry errors, but that is not a global safety PASS.
+- **F-01** `epoch_floor.rs:256-266`: following `metadata(app_data_dir)` can misread dangling app-data ancestor as absent (`Ok(false)`). **F-02** `epoch_floor.rs:278-297` / `durable_kv.rs:667-704`: manifest presence can change between path checks; virgin startup ignores `RegularFile` returned by classifier, potentially skipping committed-state validation. Both are source-inferred; Windows behavior and concurrent reproduction NOT_RUN.
+- Existing `!floor_path.exists()` and privileged-auth scanner error suppression are known preexisting scope dependencies. They are NOT accepted under RISK-008 narrow total-loss approval.
+- **One proposed gate** [consolidated startup integrity/concurrency design](planning/MP1-CAND-N-002-STARTUP-INTEGRITY-ONE-PACKET-DECISION.md): agree on normal-concurrency vs hostile-admin threat model, semantics of truly absent vs unreadable/reparse, manifest validation before startup, and a single bounded implementation + deferred tests. NOT owner-approved for code yet. Avoid another sequence of ad-hoc source-only patches without a stable safety contract.
+- **Do not change** existing clone/source, Git main, Cargo/build/test, disk/storage, 10 GiB gate, Cloud/Production, merge/release. A-N1..A-N8 and new runtime cases NOT_RUN, M1 OPEN.
+
 ## Planning policy to review at M0 (PROPOSED, not final)
 - Immediate goal: reliable Native POS for real cashier operations before nonessential feature expansion.
 - Proposed sequence: MP1 preserve/reconcile UAT → MP2 native offline operational UAT → MP3 release-readiness and Owner GO/NO-GO.
