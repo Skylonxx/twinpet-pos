@@ -263,6 +263,12 @@
 - Unverified: downloaded npm/Cargo content integrity, network redirect/proxy/per-process isolation, compatibility after ignoring install scripts, external disk sustained writes, Windows Job Object and <=500ms disk guardian (not exercised). No network/npm/Cargo/Build/Test/GUI/write beyond report. No low-C-drive Build waiver.
 - [Owner risk decision required](planning/MP1-CAND-N-002-DEPS-PLAN-001-READONLY-RISK-ADJUDICATION.md): A separately authorize trusted official-registry **provisioning only** accepting specific residual network/supply chain risks, B require independently enforced egress sandbox, C HOLD. Under NO option is Build/Main/Cloud/Production/UAT023/real AppData/source/cleanup/merge/release implicitly permitted. M1 NOT_PASS; F-01/F-02 OPEN.
 
+## 2026-11-22 — Owner approves N-002 ONE official-Registry dependency provisioning attempt, no Build
+
+- Product Owner expressly chose **Option A** after 14:59 DEPS-PLAN-001 read-only report; accepts bounded risks of official npm/crates.io package supply-chain compromise despite lock hashes, redirect/proxy unknowns and no full zero-egress proof. [Exact one-shot permission](planning/MP1-CAND-N-002-DEPS-PROV-001-OFFICIAL-REGISTRY-ONEPASS-AUTHORIZATION.md). This replaces prior risk DECISION PENDING; no further owner subapproval for this narrow execution.
+- One guarded D: npm-stage `npm ci --ignore-scripts --no-audit --no-fund` via `registry.npmjs.org`, then (only if npm PASS) one D-isolated `cargo fetch --locked --target x86_64-pc-windows-msvc` via `index.crates.io`/`static.crates.io`; locked file/hash readback, process-owned watcher <=500ms and safety STOP. C <=2.25 GiB early/2.00 GiB hard; D <=10 GiB/disconnect. Do not require impossible universal zero-egress proof, but STOP on actual observed out-of-scope network host/redirect.
+- No frontend/Native Build, Cargo tests, GUI, Source/Main/UAT023/real AppData, Cloud/Production/ZORT, cleanup, global networking changes, auto retry, merge or release. Permanent 10 GiB C: Build gate unchanged, F-01/F-02 OPEN and M1 NOT_PASS. Full executable `.md` Prompt delivered; short inline Launcher only, OneDrive Prompt/Report paths unchanged. **Execution pending on Owner Windows**.
+
 ## Planning policy to review at M0 (PROPOSED, not final)
 - Immediate goal: reliable Native POS for real cashier operations before nonessential feature expansion.
 - Proposed sequence: MP1 preserve/reconcile UAT → MP2 native offline operational UAT → MP3 release-readiness and Owner GO/NO-GO.
