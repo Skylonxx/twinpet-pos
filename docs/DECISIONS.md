@@ -269,6 +269,13 @@
 - One guarded D: npm-stage `npm ci --ignore-scripts --no-audit --no-fund` via `registry.npmjs.org`, then (only if npm PASS) one D-isolated `cargo fetch --locked --target x86_64-pc-windows-msvc` via `index.crates.io`/`static.crates.io`; locked file/hash readback, process-owned watcher <=500ms and safety STOP. C <=2.25 GiB early/2.00 GiB hard; D <=10 GiB/disconnect. Do not require impossible universal zero-egress proof, but STOP on actual observed out-of-scope network host/redirect.
 - No frontend/Native Build, Cargo tests, GUI, Source/Main/UAT023/real AppData, Cloud/Production/ZORT, cleanup, global networking changes, auto retry, merge or release. Permanent 10 GiB C: Build gate unchanged, F-01/F-02 OPEN and M1 NOT_PASS. Full executable `.md` Prompt delivered; short inline Launcher only, OneDrive Prompt/Report paths unchanged. **Execution pending on Owner Windows**.
 
+## 2026-11-22 — N-002 DEPS-PROV-001 npm started, guardian stopped on >500ms sample gap
+
+- 15:33+07 Codex `BLOCKED_GUARDIAN`: one approved npm installation on D ran ~47sec and logged 910 registry.npmjs.org GET responses, no other host in *parsed response log* (network visibility incomplete). Windows Job Object guardian synthetic child test succeeded (158ms max sampled gap), but real npm had **736ms** gap on its 291 samples, exceeding <=500ms; `TerminateJobObject` stopped experiment-owned job. Exit 125 is guardian-forced, not npm's normal CLI exit. Cargo not run, no Build/test/GUI.
+- New `D:\Twinpet-POS\Twinpet-N002-Build-20261122` partial root exists: ~256MB incomplete node_modules, ~59MB npm cache, diagnostic guardian/evidence/logs, empty cargo-home. **Not verified/provisioned or offline-Build-ready**. No cleanup/retries. C/D disk thresholds not observed breached; final point samples C 5,849,927,680 B, D 998,728,765,440 B, continuous minima unknown.
+- Original pinned main & detached clone unchanged, exactly prior two Rust diffs; no Source/Cloud/UAT023/real POS AppData contact reported. One-shot DEPS-PROV-001 permission ended at STOP, >=10GiB Build preflight intact, F01/F02/M1 remain open.
+- [Next proposed decision](planning/MP1-CAND-N-002-DEPS-PROV-001-GUARDIAN-STOP-ADJUDICATION.md): bounded READ-ONLY audit of existing D: `guard\Guardian.cs`, `evidence`, `logs` and source manifests, specifically why 736ms occurred. No automatic npm rerun, threshold relaxation, D cleanup, reusing existing stage, Build or new executable authorisation.
+
 ## Planning policy to review at M0 (PROPOSED, not final)
 - Immediate goal: reliable Native POS for real cashier operations before nonessential feature expansion.
 - Proposed sequence: MP1 preserve/reconcile UAT → MP2 native offline operational UAT → MP3 release-readiness and Owner GO/NO-GO.
