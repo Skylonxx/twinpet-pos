@@ -294,6 +294,12 @@
 - No new Guardian test or run, npm/Cargo/network, Build, GUI, source changes or D cleanup. One-shot provisioning remains closed, D partial npm content still unverified, Cargo fetch NOT_RUN. Owner has **not authorized guardian code changes/testing** from this report.
 - Proposed Owner next action: separately decide on guardian-only instrumented redesign and synthetic proof **on a new safely isolated D work path**, preserving existing evidence, no npm/Cargo/Build, no threshold relaxation, separate later provisioning approval. F01/F02 OPEN, M1 NOT_PASS; main/Cloud/UAT023/real POS data/release locked.
 
+## 2026-11-22 — GUARD-SYNTH-001 owner approval: isolated synthetic Guardian only
+
+- Owner explicitly approves a new D-only Guardian prototype and harmless synthetic child/descendant tests based on GUARD-AUDIT-001, keeping the <=500ms rule. [Authorization](planning/MP1-CAND-N-002-GUARD-SYNTH-001-ISOLATED-OWNER-AUTHORIZATION.md). Old Guardian.cs/evidence/logs and partial npm-stage/cache on D preserved untouched. New root D:\Twinpet-POS\Twinpet-N002-Guardian-Synthetic-20261122-001 only if absent/non-reparse. Compile NEW Guardian test code with preinstalled offline compiler only; no POS Build.
+- Evaluate isolated Windows Job Object containment, independent deadline/heartbeat and C/D disk-sensor freshness, bounded async log, injected sensor delays/failed log/watcher/disconnect/threshold test values; bounded total synthetic runtime/files and no cleanup. C early STOP<=2.25GiB/hard<=2GiB, D<=10GiB/disconnect. Never assert absolute hard realtime.
+- No npm/Cargo or dependency downloads, POS Build/Test/GUI, Source/Main/UAT023/real AppData, Cloud/Production/ZORT, OS global changes, old D data overwrite/reuse, auto retry or release. Existing provisioning one-shot closed. Synthetic result not M1 PASS; F01/F02 OPEN.
+
 ## Planning policy to review at M0 (PROPOSED, not final)
 - Immediate goal: reliable Native POS for real cashier operations before nonessential feature expansion.
 - Proposed sequence: MP1 preserve/reconcile UAT → MP2 native offline operational UAT → MP3 release-readiness and Owner GO/NO-GO.
