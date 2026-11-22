@@ -1,0 +1,33 @@
+# MP1 Candidate N-002 — DEPS-PLAN-001 Read-only Risk Adjudication
+
+**Date:** 2026-11-22 (Asia/Bangkok). **Codex report:** `TPOS-MP1-CAND-N-002-DEPENDENCY-PROVISIONING-ONLY-PLAN-CODEX-REPORT.md`, timestamp `2026-11-22T14:59:46.9401109+07:00`.  
+**Verdict:** `READY_FOR_OWNER_RISK_DECISION`, **NOT** `PROVISIONED`, `READY_TO_BUILD`, or `M1_PASS`. This is a read-only result.
+**Authority:** Owner approved **planning only**. There is no permission to fetch/install/download packages, create scratch files, Build, test, open GUI or contact Cloud/Production. Previous Build one-shot and <10 GiB C: exception expired at stop.
+
+## Report-derived facts
+
+- Original `C:\Users\Narachat\twinpet-pos` on main and existing independent detached candidate `C:\Users\Narachat\TPOS-MP1-CAND-N-ISO-20261121` pinned to `f034301c46dd9e08190f869cc85dbb140ac28a3c`. Original tracked clean with pre-existing untracked `ops/lib/` untouched; clone exactly two unchanged approved Rust diffs. Source SHA256: `epoch_floor.rs D1293678C81BABEAFFBE98224C3A964A2EEB3639B56162579DFABE887606CE23`; `durable_kv.rs 0471DEFA6A4DDBD899293A5AA49A67D9FDB25302228EA26AA2590DB8C964ECE5`. Candidate lockfiles/package JSON match HEAD. Path inspection targeted only, not complete filesystem audit.
+- npm lockfile v3: **1,088 nonroot entries**, all HTTPS `registry.npmjs.org` URLs and syntactically valid SHA-512 SRI fields, **zero alternate hosts, links, missing integrity/resolved** in the scanned records. 92 optional, 68 with OS restrictions, 69 with CPU restrictions, 5 install-script entries. Windows x64-compatible count **1,022**, incompatible **66**; 26 compatible optional, **3 compatible with install scripts**. These are per-entry applicability counts, NOT exact required downloads. The script-flagged packages include `@firebase/util`, `protobufjs`, optional native `re2`, and two Darwin-only `fsevents` variants. Future `--ignore-scripts` can affect native compatibility. **No tarball hashes verified because no fetch.**
+- Cargo.lock: 513 package blocks (512 canonical `registry+https://github.com/rust-lang/crates.io-index` registry identity with syntactically valid checksums, 1 local/root). This is not a permitted GitHub network destination; proposed sparse index `index.crates.io`, package archives `static.crates.io`. **No crate payload hashes verified because no fetch.**
+- Windows local observations: C: BOOTCAMP NTFS free bytes **5,855,571,968 before / 5,853,659,136 last** (~5.45 GiB); D: WD My Passport NTFS `999,109,189,632` bytes free (~930 GiB), both point samples, devices report Healthy/OK. No D writeability/long duration reliability proof. `D:\Twinpet-POS` and child scratch root absent at inspection. Node v26.8.1, npm 11.19.0, Rust/Cargo v1.98.0 and VS2022 Build Tools located, compiler execution not tested.
+- npm root/user/global/proxy configs inspected to extent reported: relevant files/variables absent; less-common config, system proxy, transparent TLS interception and future process environment remain **unknown**. No exact on-wire host allowlisting, redirect blocking, per-process transport isolation or guardian implementation demonstrated. Windows Job Object and <=500ms C/D watchdog are designs **only**, harmless-child proof **NOT_RUN**.
+- `NETWORK / NPM_CI / CARGO_FETCH / BUILD / TEST / GUI = NOT_RUN`. No D mkdir or dependent artifacts, real customer data, POS AppData, UAT023, Cloud, Production or Source modification. **M1 NOT_PASS**, merge/release not authorized, F-01/F-02 open, Offline First and Gate-OFF unchanged.
+
+## Decision needed from Product Owner — NOT already granted
+
+**Option A — limited official-registry provisioning only (recommended if operationally acceptable).** Owner expressly accepts these bounded **residual risks**: official-Registry package compromise/supply chain despite lockfile hash matching, redirect/proxy/TLS unknowns, limited network guard (if no independently verified process-level enforcement), install-script suppression breakage, disk/USB disconnect, and inability to claim universal zero egress. Before any network attempt, authorise a new **provisioning-only execution packet** that:
+1. verifies original/clone lockfiles/hashes and D path absent, no source modifications;
+2. uses only expected `https://registry.npmjs.org/`, `https://index.crates.io/`, `https://static.crates.io/` for approved fetch, explicit STOP on any observed other/redirect endpoint (do not silently allow GitHub or Firebase);
+3. installs npm dependencies to isolated D stage with `--ignore-scripts --no-audit --no-fund` and process-local sanitized environment, fetches Cargo locked source archives into isolated D Cargo home, validates actual downloaded hashes, inventories effective endpoints and mismatches;
+4. demonstrates experiment-only child-process containment and C/D <=500ms space watchdog before substantial writes; C proactive STOP <=2.25 GiB, mandatory <=2 GiB, D STOP <=10 GiB or disconnect; touches no unrelated processes or cleanup;
+5. reports limitations truthfully: logging observed hosts is not **preventive** enforcement; if any hard network boundary is a nonwaivable owner requirement and cannot be demonstrated, STOP and request new decision;
+6. **does not run frontend prebuild/build, Cargo build/test, GUI, dev servers, Cloud apps, clone junctions/dist or real AppData**, and never merges/releases.
+No automatic retry. Request an **explicit owner authorization** for new network access and acknowledgment of bounded residual risk **before** preparing an executable provisioning Prompt as approved for execution.
+
+**Option B — enforceable egress first:** require independently proven process-specific egress/redirect sandbox before any online work. This remains blocked until demonstrated; a Windows Job Object alone is a process/disk guard, not network isolation.
+
+**Option C — HOLD:** stop further N-002 dependency work and return to isolated design/source review.
+
+**Recommendation:** Offer Owner Option A/B/C in concise Thai. Do not label approved until Owner selects. No new execution, hidden downloads, unconditional npm network request, Build, or C<10GiB waiver authorized by this document.
+
+**Conventions:** Full subsequent Prompt as downloadable `.md` manually saved to `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Prompt\`; **short inline Launcher only**, no Launcher file; single sanitized Report to `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Codex\`. Dependencies scratch under `D:\Twinpet-POS\Twinpet-N002-Build-20261122` only. The planning branch may be updated; original main, source and active workflow authority remain unchanged.
