@@ -300,6 +300,12 @@
 - Evaluate isolated Windows Job Object containment, independent deadline/heartbeat and C/D disk-sensor freshness, bounded async log, injected sensor delays/failed log/watcher/disconnect/threshold test values; bounded total synthetic runtime/files and no cleanup. C early STOP<=2.25GiB/hard<=2GiB, D<=10GiB/disconnect. Never assert absolute hard realtime.
 - No npm/Cargo or dependency downloads, POS Build/Test/GUI, Source/Main/UAT023/real AppData, Cloud/Production/ZORT, OS global changes, old D data overwrite/reuse, auto retry or release. Existing provisioning one-shot closed. Synthetic result not M1 PASS; F01/F02 OPEN.
 
+## 2026-11-22 — GUARD-SYNTH-001 stopped before prototype; proposed two-gate remedy
+
+- 17:34+07 Codex report `BLOCKED_TOOLING_OR_SANDBOX` after successful read-only preflight; existing Windows .NET Framework csc compiler found but NOT_RUN. New isolated D synthetic root remained absent and no Guardian source, compiled program or synthetic process created. All 7 old D evidence hashes unchanged; older partial npm cache/stage preserved. Neither C/D sampled floor threatened. No npm/Cargo/Build/Cloud or real POS AppData. Original main/candidate not inspected in this run (do not assert fresh SHA custody).
+- [Planning assessment](planning/MP1-CAND-N-002-GUARD-SYNTH-001-PREFLIGHT-STOP-ADJUDICATION.md): do not overinterpret unproven watchdog/Job Object as missing tooling. The previous one-shot packet may have made a circular demand to prove a full implementation before permitting its construction. Proposal for new **separately Owner-authorized Gate G1**: write/compile isolated NEW C# prototype only, no execution/test, no npm/Cargo/Build/GUI/network; later **independently authorized Gate G2**: synthetic-only proof after reviewing G1 source, with <=500ms criterion unchanged.
+- Current GUARD-SYNTH-001 one-shot CLOSED at STOP; no new G1/G2 permission implied. F01/F02 open; M1 NOT_PASS, Merge/Release not authorized.
+
 ## Planning policy to review at M0 (PROPOSED, not final)
 - Immediate goal: reliable Native POS for real cashier operations before nonessential feature expansion.
 - Proposed sequence: MP1 preserve/reconcile UAT → MP2 native offline operational UAT → MP3 release-readiness and Owner GO/NO-GO.
