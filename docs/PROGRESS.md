@@ -32,6 +32,12 @@
 | Report 024 workflow adjudication | PLAN_AUTHORITY_UNRESOLVED | Current authority trio lacks latest UAT/selection |
 | Native EV-1 / EV-2 / GUI EV-3 / offline operational UAT | NOT_RUN or NOT_AUTHORIZED | Do not infer PASS, release or durability |
 
+## Candidate N-002 — GUARDED OFFLINE FRONTEND+NATIVE ONE-SHOT BLOCKED_OFFLINE_CACHE / BUILD NOT RUN (2026-11-22)
+
+- New Codex report `TPOS-MP1-CAND-N-002-GUARDED-OFFLINE-FRONTEND-NATIVE-ONESHOT-REPORT.md` at 12:25 +07: **BLOCKED_OFFLINE_CACHE**. Read-only Windows x64 npm content-addressed cache scan identified 1,022 potentially compatible lockfile entries without matching objects, 0 verified cached; not a claim that all would be installed. Correct stop prior to `npm ci`; no frontend/native Build, Cargo Test or GUI, no artifacts. Startup F-01/F-02 remain OPEN, A-N1..A-N8 NOT_RUN.
+- Existing original main pinned/tracked clean; detached clone at f034301 with exact 2 Source modified SHA hashes preserved; no new Clone, Source edits, UAT023, Cloud, real AppData, cleanup or network. C: before 5,879,382,016, last lowest point sample 5,876,973,568; continuous <=500ms watcher NOT STARTED because no child job began, true minimum unknown. No 2.25/2 GiB stop observed.
+- Second one-shot build waiver expired upon required preflight stop. No automatic retry; permanent >=10 GiB build gate remains. [Next Owner decision](planning/MP1-CAND-N-002-OFFLINE-CACHE-BLOCKER-DECISION.md): pause Build until independently verifiable trusted offline dependency source exists, or authorise **dependency provisioning only** with exact provenance and destination, not a renewed Build silently. M1 NOT_PASS/MP1.3 locked.
+
 ## Candidate N-002 — NEW GUARDED OFFLINE FRONTEND+NATIVE ONE-SHOT OWNER APPROVED / RESULT PENDING (2026-11-22)
 
 - Owner specifically authorised new separate one-pass offline frontend inputs and monitored native Build/conditional synthetic Test in existing detached N-002 clone (no source edits). Last one-shot stopped at missing `dist` and `node_modules`, no Cargo run; renewed <10 GiB waiver FOR THIS NEW ATTEMPT ONLY, permanent >=10 GiB gate unchanged. Before/during/after C: bytes, <=500ms monitoring, proactive 2.25 GiB and mandatory 2 GiB STOP, no cleanup, retry or touching UAT023.
@@ -184,7 +190,7 @@ Owner explicitly closed UAT cleanup, refused any further C: cleanup or disk incr
 - No Source Code, tests, build, native app/profile, Cloud, Rules/Functions, release or data cleanup in this pass.
 
 ## Next one action
-**Next one action: Owner manually pastes the complete approved offline-frontend + guarded native one-shot Launcher into Codex CLI on the Windows host.** The once-only packet is fully authorised; no further sub-approval. `npm ci --offline` only with complete verified cache, guarded `npm run build` side-effects and native Cargo/test steps, stop at C: <=2.25 GiB, absolute <=2 GiB. One report `TPOS-MP1-CAND-N-002-GUARDED-OFFLINE-FRONTEND-NATIVE-ONESHOT-REPORT.md`. No auto retry/cleanup/source/new clone/UAT023/main/Cloud/real AppData. M1 NOT_PASS.
+**Next one action: Owner chooses HOLD or a narrowly bounded trusted offline dependency-provisioning proposal** via [N-002 offline cache blocker](planning/MP1-CAND-N-002-OFFLINE-CACHE-BLOCKER-DECISION.md). Previous one-shot returned BLOCKED_OFFLINE_CACHE and is CLOSED. Do NOT reissue the same Codex Build/Run prompt, npm install, fetch/download, copy from UAT023/Production, edit source, cleanup, change permanent >=10 GiB gate, touch main/Cloud/AppData, merge or release. Any later Build requires new explicit Owner scope and separate one-time low-disk waiver. M1 remains NOT_PASS.
 
 **Formal M0 phase registration and workflow-trio reconciliation:** still pending; this scoped authorization does not change the live `ACTIVE_IMPLEMENTATION_PACKET=NONE`.
 
