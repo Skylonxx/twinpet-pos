@@ -244,6 +244,12 @@
 - Scope [exact Owner authorization](planning/MP1-CAND-N-002-REAL-DIST-DRIVE-D-ONEPASS-OWNER-AUTHORIZATION.md): one pinned npm install (official registry, ignore-scripts), one crates.io dependency fetch (pinned), one frontend Build with protected ignored generated files, one offline Cargo dev Build, and one targeted synthetic test if previous steps succeed. C stop early <=2.25 GiB/hard <=2 GiB; D <=10 GiB/disconnect. Single-use exception to normal C >=10 GiB preflight; permanent gate untouched. No retries/cleanup/Source/new Clone/UAT023/real POS AppData/main/Cloud/Production/merge/release.
 - Prompt stored by Owner in established OneDrive Prompt folder, Codex report to established OneDrive Codex folder; Launcher inline short only, no Launcher file. ChatGPT cannot run Windows shell in this conversation, so status `OWNER_APPROVED / NOT_YET_EXECUTED`. F-01/F-02 still open; M1 NOT_PASS.
 
+## 2026-11-22 — Corrected D-drive build stopped at network-isolation preflight
+
+- 14:27+07 Codex report `BLOCKED_NETWORK_ISOLATION`: process-local allowlisted/redirect guard for arbitrary build process egress not demonstrated; process-tree+<=500ms disk watchdog not implemented/tested. NO npm ci, Cargo fetch, frontend/native build, tests, GUI, D scratch or artifacts. C: last snapshot 5,870,264,320; D: 999,109,189,632 bytes, not continuous minima. Main and two-file detached candidate unchanged; no production/cloud/real AppData accessed.
+- Prior corrected one-shot approval and its temporary low-C-drive waiver **CLOSED at Stop Condition**; default permanent >=10 GiB unchanged. Existing Codex F-01/F-02 and M1 remain OPEN.
+- [Decision proposal](planning/MP1-CAND-N-002-NETWORK-ISOLATION-PREFLIGHT-BLOCKER-ADJUDICATION.md): split online dependency provisioning and offline build into two **separately approved** bounded actions. Avoid universal zero-egress claims based on lockfile URLs or `--ignore-scripts`; any residual risk from official-registry fetching should be explicitly described and approved before fetching. No cleanup, retry, UAT023, original main, real POS data, Cloud or Release. **NOT YET AUTHORIZED.**
+
 ## Planning policy to review at M0 (PROPOSED, not final)
 - Immediate goal: reliable Native POS for real cashier operations before nonessential feature expansion.
 - Proposed sequence: MP1 preserve/reconcile UAT → MP2 native offline operational UAT → MP3 release-readiness and Owner GO/NO-GO.
