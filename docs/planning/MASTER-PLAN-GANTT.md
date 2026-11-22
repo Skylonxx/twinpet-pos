@@ -37,7 +37,7 @@ gantt
 | Gate | Acceptance evidence | Current status |
 |---|---|---|
 | MP0/M0 | Approved Goal, phase, priorities, roles, lock list, authority reconciliation | SCOPED_READ_ONLY; FORMAL_PHASE_PENDING |
-| MP1/M1 | UAT baseline and commit/build identity, reviewed integration delta | Second N-002 offline frontend/native one-shot STOPPED BLOCKED_OFFLINE_CACHE (1,022 cache objects unmatched in conservative scan, 0 verified; no npm/build/tests). One-shot waiver closed. Owner decision on trusted offline dependency sourcing or HOLD; M1 OPEN, MP1.3 LOCKED |
+| MP1/M1 | UAT baseline and commit/build identity, reviewed integration delta | Earlier N-002 Build BLOCKED_OFFLINE_CACHE before npm. Owner now approves new D: external-drive guarded registry dependency staging/Frontend/Native development Build (not executed yet), preserve C source clone/main, monitor C/D disk, M1 OPEN, MP1.3 LOCKED |
 | MP2/M2 | Safe native offline E2E + cashier critical path on controlled build | LOCKED |
 | MP3/M3 | Installer/upgrade proof and explicit Owner decision | LOCKED |
 
