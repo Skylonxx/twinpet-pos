@@ -1,7 +1,7 @@
 # Twinpet POS — Master Plan Rebaseline
 
 **Version 2.4 — PLANNING DRAFT / N-002 SECOND CODEX STATIC_REVIEW_FINDINGS; STARTUP-INTEGRITY OWNER DECISION PENDING**  
-**Prepared / updated:** 2026-11-21 · **Latest Owner decision:** accepted Policy A RISK-008 and approved N-002 source-only existing-clone implementation. Claude **reported SOURCE_ONLY_READY (2026-11-22)**, one-file uncommitted diff; independent Codex read-only review is next. All runtime tests remain NOT_RUN. Candidate N-001 remains BLOCKED; `main`, Cloud, merge, release NOT authorised.  
+**Prepared / updated:** 2026-11-22 · **Latest Owner decision:** accepted Policy A RISK-008 and approved N-002 source-only existing-clone work, including the two-file fallible scanner patch. Two Codex independent source reviews were performed; latest **STATIC_REVIEW_FINDINGS (07:27 +07)** on dangling app-data ancestor and non-atomic startup manifest checks. **ONE consolidated startup-integrity Owner design decision pending.** All runtime tests remain NOT_RUN; M1, main, Cloud, merge, release not authorized.  
 **Explicit non-authority:** this new file on a planning branch does NOT change the live workflow gate, authorize MP1 integration/implementation, MP2/MP3, code changes, merge or release.
 
 ## 0. Current Owner handoff — bounded decision
