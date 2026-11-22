@@ -306,6 +306,12 @@
 - [Planning assessment](planning/MP1-CAND-N-002-GUARD-SYNTH-001-PREFLIGHT-STOP-ADJUDICATION.md): do not overinterpret unproven watchdog/Job Object as missing tooling. The previous one-shot packet may have made a circular demand to prove a full implementation before permitting its construction. Proposal for new **separately Owner-authorized Gate G1**: write/compile isolated NEW C# prototype only, no execution/test, no npm/Cargo/Build/GUI/network; later **independently authorized Gate G2**: synthetic-only proof after reviewing G1 source, with <=500ms criterion unchanged.
 - Current GUARD-SYNTH-001 one-shot CLOSED at STOP; no new G1/G2 permission implied. F01/F02 open; M1 NOT_PASS, Merge/Release not authorized.
 
+## 2026-11-22 — GUARD-G1-001 source + compile only approved; runtime separately gated
+
+- Product Owner expressly approved [GUARD-G1-001](planning/MP1-CAND-N-002-GUARD-G1-001-SOURCE-COMPILE-ONLY-OWNER-AUTHORIZATION.md) after GUARD-SYNTH-001 preflight stop. Create new Guardian prototype C# source inside fresh absent `D:\Twinpet-POS\Twinpet-N002-Guardian-Synthetic-20261122-001`, and compile exactly once via existing local csc to a DLL. A static-source/compile result can be produced **before** testing independent watchdog/Job Object functionality; do not demand pre-proof of unbuilt code.
+- Strictly no running/loading DLL or any test/synthetic process, npm/Cargo/network, POS frontend/native Build/GUI, Cloud/Production, Source/Main/UAT023/real POS AppData, cleanup, OS global settings, or changes to old D Guardian/evidence/logs/partial npm stage/cache. No retries after compiler failure. 500ms rule and C >=10GiB POS Build preflight unchanged.
+- Full .md Prompt created for canonical OneDrive Prompt folder; only short inline Launcher; report canonical OneDrive Codex folder. Execution PENDING; source/C# compile PASS must not be reported as Guardian runtime PASS or M1 acceptance. G2 synthetic execution and all future provisioning require separate Owner decisions; F01/F02 OPEN.
+
 ## Planning policy to review at M0 (PROPOSED, not final)
 - Immediate goal: reliable Native POS for real cashier operations before nonessential feature expansion.
 - Proposed sequence: MP1 preserve/reconcile UAT → MP2 native offline operational UAT → MP3 release-readiness and Owner GO/NO-GO.
