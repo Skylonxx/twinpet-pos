@@ -1,6 +1,6 @@
 # Twinpet POS — Master Plan Rebaseline
 
-**Version 4.1 — PLANNING DRAFT / GUARD-SYNTH-001 OWNER APPROVED; SYNTHETIC-ONLY EXECUTION PENDING**  
+**Version 4.2 — PLANNING DRAFT / GUARD-SYNTH-001 BLOCKED_TOOLING_OR_SANDBOX; NO PROTOTYPE/TEST**  
 **Prepared / updated:** 2026-11-22 · **Latest Owner decision:** accepted Policy A RISK-008 and approved N-002 source-only existing-clone work, including the two-file fallible scanner patch. Two Codex independent source reviews were performed; latest **STATIC_REVIEW_FINDINGS (07:27 +07)** on dangling app-data ancestor and non-atomic startup manifest checks. **Owner-approved design-only consolidation COMPLETE; new implementation approval is pending.** All runtime tests remain NOT_RUN; M1, main, Cloud, merge, release not authorized.  
 **Explicit non-authority:** this new file on a planning branch does NOT change the live workflow gate, authorize MP1 integration/implementation, MP2/MP3, code changes, merge or release.
 
@@ -361,6 +361,12 @@ After successful 16:49 GUARD-AUDIT-001, Owner expressly authorized a NEW Guardia
 Allowed: local compile of isolated NEW C# Guardian code with existing offline tooling, synthetic child/grandchild Job Object containment and independent fail-closed heartbeat/disk-monitor design, bounded D-only I/O and injected delays/errors, <=120sec active test and <=64MiB synthetic file writes. Keep <=500ms completed-disk-monitor criterion (heartbeat-only is insufficient), stop C <=2.25GiB proactive / <=2.0GiB hard, D <=10GiB/disconnect; no hard Windows real-time guarantee. Do NOT npm/Cargo fetch/execute, build or test POS, contact Network/Cloud, modify old D artifact, auto-retry failed synthetic scenarios, or cleanup. Permanent C >=10GiB POS Build rule remains. One-shot DEPS-PROV closed.
 
 FULL .md Prompt artifact delivered for manual OneDrive Ai-Report/twinpet-pos/Prompt placement; Launcher inline short only; report to OneDrive Ai-Report/twinpet-pos/Codex. No Windows test performed in ChatGPT. Even successful synthetic proof does not authorize provisioning or Build and M1 stays NOT_PASS; F-01/F-02 OPEN.
+
+## 4.36 GUARD-SYNTH-001 stopped preflight; no prototype or test (2026-11-22 17:34 +07)
+
+Codex `TPOS-MP1-CAND-N-002-GUARDIAN-SYNTHETIC-ONLY-REDESIGN-PROOF-CODEX-REPORT.md` returned **BLOCKED_TOOLING_OR_SANDBOX** at read-only preflight: although canonical OneDrive Prompt readable and built-in C# csc compiler found, the intended isolated process ownership/independent watchdog and <=500ms disk sample rules were not demonstrated; Codex STOPPED **before creating `D:\Twinpet-POS\Twinpet-N002-Guardian-Synthetic-20261122-001`, compiling, spawning synthetic children or running scenarios.** No npm/Cargo/Build, and no code or evidence artifacts were created. Old D Guardian/evidence/logs preserved and seven hash checks PASS; old npm/cache intentionally untouched, original main/candidate not inspected this run. C last free 5,845,770,240 bytes, D 998,728,765,440 bytes (snapshots only). This is not evidence Windows compiler cannot work or Guardian is impossible.
+
+**Coordination diagnosis:** Previous packet requested proof of full safety properties before the new code/harness existed, creating a possible circular preflight. [Scoped next-decision memo](planning/MP1-CAND-N-002-GUARD-SYNTH-001-PREFLIGHT-STOP-ADJUDICATION.md) recommends **Gate G1: NEW Owner-approved code/write and compile ONLY** in a fresh D isolated root (no execution of produced prototype), followed by **Gate G2: separately approved synthetic runtime proof** after code review. Do NOT automatically retry GUARD-SYNTH-001 or simplify by waiving real POS/Cloud/data prohibitions. Existing npm partial stage remains frozen; previous DEPS-PROV one-shot closed, <=500ms rule and permanent C >=10GiB POS Build gate unchanged. M1 NOT_PASS, F01/F02 OPEN, Merge/Release locked.
 
 ## 5. Other initiatives / deferred (LOCKED)
 Return/Refund activation and sealing Rules; Android/Capacitor; EV-2 VM hard reset; broad mutation matrix; unrelated UI polish; unapproved Cloud/deployment or live POS data contact.
