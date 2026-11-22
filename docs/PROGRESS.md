@@ -32,6 +32,12 @@
 | Report 024 workflow adjudication | PLAN_AUTHORITY_UNRESOLVED | Current authority trio lacks latest UAT/selection |
 | Native EV-1 / EV-2 / GUI EV-3 / offline operational UAT | NOT_RUN or NOT_AUTHORIZED | Do not infer PASS, release or durability |
 
+## Candidate N-002 — OWNER APPROVES EXTERNAL D: BUILD RESOURCES / WINDOWS EXECUTION PENDING (2026-11-22)
+
+- Owner reports ample external Windows D: drive and instructs proceeding. New guarded D resource strategy [plan](planning/MP1-CAND-N-002-DRIVE-D-GUARDED-REGISTRY-BUILD-PLAN.md) now drafted: keep C original main and exact existing detached N-002 source clone, use fresh D scratch for npm-stage/cache, Cargo home/target, temp, Frontend dist and synthetic profile through controlled junctions for absent ignored paths. D capacity/NTFS/health unverified until Windows checks; no C cleanup and no new clone.
+- GitHub pinned lockfile read-only inspection: 1,089 npm package records, registry.npmjs.org explicit resolutions and no local/file/link dependencies; Cargo.lock no Git/non-crates.io source. Authorise only lockfile-verified npm/crates.io network provisioning, no Cloud/Firebase/ZORT. Supervised C/D <=500ms, proactive C stop 2.25 GiB/mandatory 2 GiB, D stop 10 GiB/disconnect, and experiment-only process-tree termination. One npm ci staged on D with ignore-scripts, one cargo fetch, one guarded frontend build with reviewed generated file effects, one frozen Cargo dev build, one narrow synthetic test if PASS; GUI default SKIP unless isolation proven.
+- Self-contained Launcher artifact prepared in conversation `TPOS-MP1-CAND-N-002-DRIVE-D-GUARDED-REGISTRY-BUILD-CODEX-LAUNCHER.md`. No local Windows executor available in ChatGPT: **NOT_RUN_IN_CHAT / REPORT_PENDING**. Previous cache preflight failure remains evidence, not an active reason to prevent approved official registry provisioning. F01/F02/M1 OPEN, no source or main/production mutation.
+
 ## Candidate N-002 — GUARDED OFFLINE FRONTEND+NATIVE ONE-SHOT BLOCKED_OFFLINE_CACHE / BUILD NOT RUN (2026-11-22)
 
 - New Codex report `TPOS-MP1-CAND-N-002-GUARDED-OFFLINE-FRONTEND-NATIVE-ONESHOT-REPORT.md` at 12:25 +07: **BLOCKED_OFFLINE_CACHE**. Read-only Windows x64 npm content-addressed cache scan identified 1,022 potentially compatible lockfile entries without matching objects, 0 verified cached; not a claim that all would be installed. Correct stop prior to `npm ci`; no frontend/native Build, Cargo Test or GUI, no artifacts. Startup F-01/F-02 remain OPEN, A-N1..A-N8 NOT_RUN.
@@ -190,7 +196,7 @@ Owner explicitly closed UAT cleanup, refused any further C: cleanup or disk incr
 - No Source Code, tests, build, native app/profile, Cloud, Rules/Functions, release or data cleanup in this pass.
 
 ## Next one action
-**Next one action: Owner chooses HOLD or a narrowly bounded trusted offline dependency-provisioning proposal** via [N-002 offline cache blocker](planning/MP1-CAND-N-002-OFFLINE-CACHE-BLOCKER-DECISION.md). Previous one-shot returned BLOCKED_OFFLINE_CACHE and is CLOSED. Do NOT reissue the same Codex Build/Run prompt, npm install, fetch/download, copy from UAT023/Production, edit source, cleanup, change permanent >=10 GiB gate, touch main/Cloud/AppData, merge or release. Any later Build requires new explicit Owner scope and separate one-time low-disk waiver. M1 remains NOT_PASS.
+**Next one action: Owner pastes the self-contained N-002 D-drive guarded registry Build Launcher into Codex CLI on existing Windows host**, with no additional sub-approval for its bounded dependency fetch, Frontend/Native build and synthetic test. Codex must verify D: health/free, exact original/clone hashes, official registries and guardian; stop honestly on any blocker, never auto retry, cleanup or touch UAT023/Cloud/real AppData/main. Upload one `TPOS-MP1-CAND-N-002-DRIVE-D-GUARDED-REGISTRY-BUILD-REPORT.md` with real C/D disk measurements. M1 remains NOT_PASS, F01/F02 OPEN.
 
 **Formal M0 phase registration and workflow-trio reconciliation:** still pending; this scoped authorization does not change the live `ACTIVE_IMPLEMENTATION_PACKET=NONE`.
 
