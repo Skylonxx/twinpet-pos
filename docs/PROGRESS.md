@@ -32,6 +32,12 @@
 | Report 024 workflow adjudication | PLAN_AUTHORITY_UNRESOLVED | Current authority trio lacks latest UAT/selection |
 | Native EV-1 / EV-2 / GUI EV-3 / offline operational UAT | NOT_RUN or NOT_AUTHORIZED | Do not infer PASS, release or durability |
 
+## Candidate N-002 — DEPENDENCY-PROVISIONING-ONLY PLAN APPROVED / READ-ONLY CODEX REPORT PENDING (2026-11-22)
+
+- Owner approved **plan + full Prompt creation** only for D: official-registry dependency provisioning, separately from Build, with explicit lockfile integrity, host scope, and Owner risk gate **before downloading**. [Planning document](planning/MP1-CAND-N-002-DEPENDENCY-PROVISIONING-ONLY-PLAN-001.md) and Codex Prompt artifact prepared; **NO Windows Code/Shell execution in ChatGPT and NO actual registry request/install/fetch/build**.
+- Read-only pinned locks examined: npm lockfile v3 with 1,088 non-root entries (explicit resolved HTTPS npm Registry + SRI; no links), Cargo.lock only canonical crates.io registry identity; these are not download-verification, absence-of-redirect or supply-chain safety proof. Proposed endpoints `registry.npmjs.org`, `index.crates.io`, `static.crates.io` only, subject to future explicit risk acceptance. Hard egress enforcement remains unproven.
+- New DEPS-PLAN-001 Codex packet is **READ-ONLY Windows inspection** of Git custody/lock SHA/config/disk and one risk register Report in `OneDrive\Ai-Report\twinpet-pos\Codex\`; full Prompt saved by Owner to `...\Prompt\`, short Launcher inline only. Future provisioning-only command requires separate Owner risk acceptance, later offline Build requires another Owner grant and low-C waiver if needed. Existing N-002 C clone/main/source, UAT023, Cloud, real AppData untouched; M1 NOT_PASS and F01/F02 OPEN.
+
 ## Candidate N-002 — CORRECTED D: REAL DIST BUILD BLOCKED_NETWORK_ISOLATION / NO RUN (2026-11-22)
 
 - 14:27+07 uploaded Codex report: **BLOCKED_NETWORK_ISOLATION at read-only preflight**; needed network allowlist/redirect containment and process-tree/disk guardian NOT built or demonstrated. No Registry/Cargo download, npm ci, Frontend/Native Build, synthetic test, GUI or D: workspace. No Build error evidence or disk threshold breach. C: last observed 5,870,264,320 bytes, D: ~999,109,189,632 bytes; point samples only.
@@ -218,7 +224,7 @@ Owner explicitly closed UAT cleanup, refused any further C: cleanup or disk incr
 - Owner specified the new build root `D:\Twinpet-POS\Twinpet-N002-Build-20261122`; the existing `D:\Twinpet-POS` parent may remain and must be preserved. Codex Launcher adjusted to this exact path throughout, including npm/Cargo/dist/temp/synthetic/logs. This is a path-only adjustment, not another run or permission expansion.
 
 ## Next one action
-**Next one action: Product Owner decides whether to authorise a NEW dependency-provisioning-only packet** with official locked npm/crates.io endpoints and explicit documented residual network/redirect risk, or HOLD. See [network preflight adjudication](planning/MP1-CAND-N-002-NETWORK-ISOLATION-PREFLIGHT-BLOCKER-ADJUDICATION.md). The latest corrected D: one-shot ended BLOCKED_NETWORK_ISOLATION and C<10GiB waiver is CLOSED; do not rerun old Launcher, fetch dependencies, create new Build workspace, or change Source. An offline Build, if later possible, needs its own separate Owner approval and guarded C/D space stop limits. M1 NOT_PASS; F-01/F-02 OPEN.
+**Next one action: Owner saves DEPS-PLAN-001 full `.md` Prompt into `C:\Users\Narachat\OneDrive\Ai-Report\twinpet-pos\Prompt\`, copies only its short inline Launcher into Windows Codex CLI for read-only inspection, and uploads the risk-decision Report from `...\Codex\`.** [Scope](planning/MP1-CAND-N-002-DEPENDENCY-PROVISIONING-ONLY-PLAN-001.md). Do not download/provision/install yet; explicit fresh Owner risk acceptance must precede any official registry request. Do not Build even after provisioning unless separate Owner approval. Main/Source/Cloud/UAT023/real AppData/cleanup untouched, M1 NOT_PASS and F-01/F-02 OPEN.
 
 **Formal M0 phase registration and workflow-trio reconciliation:** still pending; this scoped authorization does not change the live `ACTIVE_IMPLEMENTATION_PACKET=NONE`.
 
