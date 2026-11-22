@@ -32,6 +32,12 @@
 | Report 024 workflow adjudication | PLAN_AUTHORITY_UNRESOLVED | Current authority trio lacks latest UAT/selection |
 | Native EV-1 / EV-2 / GUI EV-3 / offline operational UAT | NOT_RUN or NOT_AUTHORIZED | Do not infer PASS, release or durability |
 
+## Candidate N-002 — CORRECTED D: REAL DIST BUILD BLOCKED_NETWORK_ISOLATION / NO RUN (2026-11-22)
+
+- 14:27+07 uploaded Codex report: **BLOCKED_NETWORK_ISOLATION at read-only preflight**; needed network allowlist/redirect containment and process-tree/disk guardian NOT built or demonstrated. No Registry/Cargo download, npm ci, Frontend/Native Build, synthetic test, GUI or D: workspace. No Build error evidence or disk threshold breach. C: last observed 5,870,264,320 bytes, D: ~999,109,189,632 bytes; point samples only.
+- Same pinned `f034301` original main tracked-clean and detached candidate exact previous two Rust source hashes; UAT023, real AppData, business data and Cloud/Production untouched. The specific one-shot <10 GiB exception CLOSED at Stop. M1 NOT_PASS; F-01/F-02 remain open.
+- [Read-only adjudication](planning/MP1-CAND-N-002-NETWORK-ISOLATION-PREFLIGHT-BLOCKER-ADJUDICATION.md) recommends a separate **dependency-provisioning-only** Owner decision with official-registry trust and acknowledged residual network-safety limitations, then a separate guarded **offline Build** approval when dependencies are verifiably staged on D. No new CLI Prompt yet, no automatic execution.
+
 ## Candidate N-002 — NEW CORRECTED D-DRIVE ONE-SHOT APPROVED / EXECUTION PENDING (2026-11-22)
 
 - Owner authorised one new narrowed attempt after Codex precheck blocks. Real `dist` must be in same C: detached clone (postbuild `lstatSync` expects normal directory), not an NTFS junction. Heavy npm/Cargo cache/staging/targets and synthetic profile D: `D:\Twinpet-POS\Twinpet-N002-Build-20261122`; `node_modules` junction only if verified safe. Same pinned main/detached clone and exactly two prior Rust source changes; no new clone, cleanup or UAT023.
@@ -212,7 +218,7 @@ Owner explicitly closed UAT cleanup, refused any further C: cleanup or disk incr
 - Owner specified the new build root `D:\Twinpet-POS\Twinpet-N002-Build-20261122`; the existing `D:\Twinpet-POS` parent may remain and must be preserved. Codex Launcher adjusted to this exact path throughout, including npm/Cargo/dist/temp/synthetic/logs. This is a path-only adjustment, not another run or permission expansion.
 
 ## Next one action
-**Next one action: Owner saves the new full N-002 corrected one-shot `.md` Prompt at the canonical OneDrive `Ai-Report\twinpet-pos\Prompt\` location, pastes only the short inline Launcher into Codex CLI on Windows, then uploads the measured Report from `Ai-Report\twinpet-pos\Codex\`. The approved scope is documented in [one-shot authorization](planning/MP1-CAND-N-002-REAL-DIST-DRIVE-D-ONEPASS-OWNER-AUTHORIZATION.md). This is NOT an automatic retry; no further subapproval inside the specific new packet. C: real dist, D: heavy build, tested guardian, C early <=2.25 GiB/hard <=2 GiB, D <=10 GiB stop, no GUI, Source/main/UAT023/Cloud/real AppData/cleanup. M1 NOT_PASS.
+**Next one action: Product Owner decides whether to authorise a NEW dependency-provisioning-only packet** with official locked npm/crates.io endpoints and explicit documented residual network/redirect risk, or HOLD. See [network preflight adjudication](planning/MP1-CAND-N-002-NETWORK-ISOLATION-PREFLIGHT-BLOCKER-ADJUDICATION.md). The latest corrected D: one-shot ended BLOCKED_NETWORK_ISOLATION and C<10GiB waiver is CLOSED; do not rerun old Launcher, fetch dependencies, create new Build workspace, or change Source. An offline Build, if later possible, needs its own separate Owner approval and guarded C/D space stop limits. M1 NOT_PASS; F-01/F-02 OPEN.
 
 **Formal M0 phase registration and workflow-trio reconciliation:** still pending; this scoped authorization does not change the live `ACTIVE_IMPLEMENTATION_PACKET=NONE`.
 
