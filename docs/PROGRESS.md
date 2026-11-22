@@ -32,6 +32,12 @@
 | Report 024 workflow adjudication | PLAN_AUTHORITY_UNRESOLVED | Current authority trio lacks latest UAT/selection |
 | Native EV-1 / EV-2 / GUI EV-3 / offline operational UAT | NOT_RUN or NOT_AUTHORIZED | Do not infer PASS, release or durability |
 
+## Candidate N-002 — NEW CORRECTED D-DRIVE ONE-SHOT APPROVED / EXECUTION PENDING (2026-11-22)
+
+- Owner authorised one new narrowed attempt after Codex precheck blocks. Real `dist` must be in same C: detached clone (postbuild `lstatSync` expects normal directory), not an NTFS junction. Heavy npm/Cargo cache/staging/targets and synthetic profile D: `D:\Twinpet-POS\Twinpet-N002-Build-20261122`; `node_modules` junction only if verified safe. Same pinned main/detached clone and exactly two prior Rust source changes; no new clone, cleanup or UAT023.
+- New one-time waiver from C >=10 GiB preflight, but proactive STOP at C<=2.25 GiB and mandatory <=2 GiB, D<=10 GiB/disconnect; tested process-tree guardian and disk sampling <=500ms **before installs/build**, official npm+crates.io locked dependency source only, no GUI/Firebase/Cloud or production. Any guardian or outbound-scope safety blocker STOP. One npm ci, Cargo fetch, Frontend Build, frozen Native dev Build and one targeted synthetic test if previous phases PASS. No retry or source modifications. [Exact authorization](planning/MP1-CAND-N-002-REAL-DIST-DRIVE-D-ONEPASS-OWNER-AUTHORIZATION.md).
+- `OWNER_APPROVED / WINDOWS_NOT_EXECUTED_IN_CHAT`. Full `.md` Prompt delivered for saving to canonical OneDrive Prompt directory; only SHORT inline Launcher, report to canonical OneDrive Codex directory. F-01/F-02 and M1 still OPEN; release forbidden.
+
 ## Candidate N-002 — D-DRIVE PRECHECK BLOCKED / NO DEPENDENCY FETCH OR BUILD (2026-11-22)
 
 - Two uploaded reports at 13:53 and 13:57+07. First incorrectly targeted nonexistent `D:\Twinpet-POS\Prompts` for reading Prompt, instead of established `OneDrive\Ai-Report\twinpet-pos\Prompt\`; no execution.
@@ -206,7 +212,7 @@ Owner explicitly closed UAT cleanup, refused any further C: cleanup or disk incr
 - Owner specified the new build root `D:\Twinpet-POS\Twinpet-N002-Build-20261122`; the existing `D:\Twinpet-POS` parent may remain and must be preserved. Codex Launcher adjusted to this exact path throughout, including npm/Cargo/dist/temp/synthetic/logs. This is a path-only adjustment, not another run or permission expansion.
 
 ## Next one action
-**Next one action: Owner decides whether to authorize a NEW bounded N-002 guarded D-drive Build packet using a REAL `dist` directory on C: and a tested process/disk watcher**, per [preflight adjudication](planning/MP1-CAND-N-002-DRIVE-D-PRECHECK-JUNCTION-GUARDIAN-ADJUDICATION.md). Previous attempt STOPPED twice preflight; no automatic retry or claim of registry fetch/build. If approved, prepare full `.md` Prompt at OneDrive `Ai-Report\twinpet-pos\Prompt\` and a SHORT inline Launcher (no Launcher file); reports go to `Ai-Report\twinpet-pos\Codex\`. New one-shot <10 GiB exception must be explicit, C: proactive <=2.25 GiB and hard <=2 GiB; D: heavy outputs, no GUI/network app, Source/main/UAT023/Cloud/real AppData/cleanup/release. M1 NOT_PASS.
+**Next one action: Owner saves the new full N-002 corrected one-shot `.md` Prompt at the canonical OneDrive `Ai-Report\twinpet-pos\Prompt\` location, pastes only the short inline Launcher into Codex CLI on Windows, then uploads the measured Report from `Ai-Report\twinpet-pos\Codex\`. The approved scope is documented in [one-shot authorization](planning/MP1-CAND-N-002-REAL-DIST-DRIVE-D-ONEPASS-OWNER-AUTHORIZATION.md). This is NOT an automatic retry; no further subapproval inside the specific new packet. C: real dist, D: heavy build, tested guardian, C early <=2.25 GiB/hard <=2 GiB, D <=10 GiB stop, no GUI, Source/main/UAT023/Cloud/real AppData/cleanup. M1 NOT_PASS.
 
 **Formal M0 phase registration and workflow-trio reconciliation:** still pending; this scoped authorization does not change the live `ACTIVE_IMPLEMENTATION_PACKET=NONE`.
 
