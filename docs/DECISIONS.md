@@ -276,6 +276,11 @@
 - Original pinned main & detached clone unchanged, exactly prior two Rust diffs; no Source/Cloud/UAT023/real POS AppData contact reported. One-shot DEPS-PROV-001 permission ended at STOP, >=10GiB Build preflight intact, F01/F02/M1 remain open.
 - [Next proposed decision](planning/MP1-CAND-N-002-DEPS-PROV-001-GUARDIAN-STOP-ADJUDICATION.md): bounded READ-ONLY audit of existing D: `guard\Guardian.cs`, `evidence`, `logs` and source manifests, specifically why 736ms occurred. No automatic npm rerun, threshold relaxation, D cleanup, reusing existing stage, Build or new executable authorisation.
 
+## 2026-11-22 — GUARD-AUDIT-001 read-only evidence Prompt authorized
+
+- Owner authorized preparation of a Codex CLI Prompt limited to static/read-only inspection of existing Guardian.cs, D evidence CSV and logs to diagnose the recorded 736ms monitoring gap against <=500ms rule. [Scope](planning/MP1-CAND-N-002-GUARD-AUDIT-001-OWNER-APPROVED-READONLY-PROMPT.md). No Guardian exercise/compilation, npm retry/install/download, Cargo/Build/Test/GUI, Source/Main/UAT023/Cloud/real POS AppData, Cleanup or D partial staging reuse.
+- Only one new sanitized audit Report to canonical OneDrive Codex folder is authorized as a file write; the full Prompt is manually saved in canonical OneDrive Prompt folder and short Launcher is inline text only. Audit execution/report pending. Existing provisioning one-shot closed, threshold unchanged; F01/F02 and M1 open.
+
 ## Planning policy to review at M0 (PROPOSED, not final)
 - Immediate goal: reliable Native POS for real cashier operations before nonessential feature expansion.
 - Proposed sequence: MP1 preserve/reconcile UAT → MP2 native offline operational UAT → MP3 release-readiness and Owner GO/NO-GO.
