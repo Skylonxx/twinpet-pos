@@ -37,7 +37,7 @@ gantt
 | Gate | Acceptance evidence | Current status |
 |---|---|---|
 | MP0/M0 | Approved Goal, phase, priorities, roles, lock list, authority reconciliation | SCOPED_READ_ONLY; FORMAL_PHASE_PENDING |
-| MP1/M1 | UAT baseline and commit/build identity, reviewed integration delta | GUARD-AUDIT-001 report returned BLOCKED_PROMPT_UNREADABLE: OneDrive Prompt GET failed; partial D evidence shows 291 monitor rows with one 736ms gap, cause unknown. Restore Prompt hydration and Owner authorize read-only re-audit/design-only next; no npm/Cargo/Build, M1 OPEN, MP1.3 LOCKED |
+| MP1/M1 | UAT baseline and commit/build identity, reviewed integration delta | GUARD-AUDIT-001 retry completed read-only: OneDrive Prompt readable, 290 measured npm intervals with one 736ms gap; guardian's single blocking loop identified as exposure but exact stall cause inconclusive. Owner decision pending for guardian-only instrumentation/synthetic proof (not npm/Build). M1 OPEN, MP1.3 LOCKED |
 | MP2/M2 | Safe native offline E2E + cashier critical path on controlled build | LOCKED |
 | MP3/M3 | Installer/upgrade proof and explicit Owner decision | LOCKED |
 
