@@ -200,6 +200,13 @@
 - Any Build/Rust synthetic test PASS is **not** proof of startup safety, M1 or Release: earlier Codex F-01/F-02 and unimplemented consolidated design remain open. [Exact one-shot execution boundary](planning/MP1-CAND-N-002-ONEPASS-LOWDISK-BUILD-RUN-AUTHORIZATION.md).
 - `OWNER_APPROVED_ONE_SHOT / NOT_RUN_IN_CHAT`: connected chat tools cannot execute on user's local Windows machine; prepared self-contained Codex manual handoff. A measured report from the real Windows executor is still pending.
 
+## 2026-11-22 — N-002 low-disk one-shot stopped at missing frontend inputs (NO BUILD)
+
+- Uploaded Codex report `TPOS-MP1-CAND-N-002-GUARDED-LOWDISK-BUILD-RUN-REPORT.md` verdict `BLOCKED AT PREFLIGHT`. Missing `dist` and `node_modules` in existing clone, while pinned Tauri config expects `../dist`; prior packet explicitly prohibited frontend build/install. Cargo/rustc/VC tools available; Windows frozen-offline Cargo metadata PASS, but **cargo build was never invoked**. Not disk-threshold stopped.
+- C: before 5,879,668,736; minimum observed/after 5,876,760,576 bytes; sparse preflight samples, no 500ms runtime monitor, no process killed. Clone two prior uncommitted source edits remain, original main tracked clean; no generated Build/test artifacts, Cleanup, Cloud, Production or UAT023.
+- **One-shot approval fulfilled by STOP** at preflight; it does NOT authorize a retry, dependency install or npm/prebuild. Permanent >=10 GiB gate remains intact outside that closed exception.
+- [One proposed new Owner decision](planning/MP1-CAND-N-002-BUILD-PREFLIGHT-FRONTEND-INPUTS-BLOCKER.md): authorize separately a bounded frontend-input preparation and ONE supervised offline experiment only if trusted cached dependencies, generated-path side effects, resource guards and synthetic/no-cloud isolation are confirmed. NO execution without fresh approval. F-01/F-02 and M1 remain open; compilation/tests NOT_RUN.
+
 ## Planning policy to review at M0 (PROPOSED, not final)
 - Immediate goal: reliable Native POS for real cashier operations before nonessential feature expansion.
 - Proposed sequence: MP1 preserve/reconcile UAT → MP2 native offline operational UAT → MP3 release-readiness and Owner GO/NO-GO.
