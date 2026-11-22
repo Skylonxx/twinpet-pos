@@ -195,6 +195,10 @@ Owner explicitly closed UAT cleanup, refused any further C: cleanup or disk incr
 - Created proposal branch `planning/mp0-rebaseline-20261121` containing Goal, Master Plan, Gantt, Decisions and this Progress file; **main untouched**, existing live gate unchanged.
 - No Source Code, tests, build, native app/profile, Cloud, Rules/Functions, release or data cleanup in this pass.
 
+## 2026-11-22 — N-002 D: scratch folder path updated
+
+- Owner specified the new build root `D:\Twinpet-POS\Twinpet-N002-Build-20261122`; the existing `D:\Twinpet-POS` parent may remain and must be preserved. Codex Launcher adjusted to this exact path throughout, including npm/Cargo/dist/temp/synthetic/logs. This is a path-only adjustment, not another run or permission expansion.
+
 ## Next one action
 **Next one action: Owner pastes the self-contained N-002 D-drive guarded registry Build Launcher into Codex CLI on existing Windows host**, with no additional sub-approval for its bounded dependency fetch, Frontend/Native build and synthetic test. Codex must verify D: health/free, exact original/clone hashes, official registries and guardian; stop honestly on any blocker, never auto retry, cleanup or touch UAT023/Cloud/real AppData/main. Upload one `TPOS-MP1-CAND-N-002-DRIVE-D-GUARDED-REGISTRY-BUILD-REPORT.md` with real C/D disk measurements. M1 remains NOT_PASS, F01/F02 OPEN.
 
