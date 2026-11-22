@@ -37,7 +37,7 @@ gantt
 | Gate | Acceptance evidence | Current status |
 |---|---|---|
 | MP0/M0 | Approved Goal, phase, priorities, roles, lock list, authority reconciliation | SCOPED_READ_ONLY; FORMAL_PHASE_PENDING |
-| MP1/M1 | UAT baseline and commit/build identity, reviewed integration delta | DEPS-PROV-001 actual npm started on D, then targeted guardian STOP after 736ms sampling gap (<=500ms required): partial node_modules/cache retained, npm NOT_PASS, Cargo NOT_RUN, no Build/tests. One-shot CLOSED; proposed read-only guardian evidence audit, Owner decision pending, M1 OPEN, MP1.3 LOCKED |
+| MP1/M1 | UAT baseline and commit/build identity, reviewed integration delta | DEPS-PROV-001 partial npm stopped after Guardian 736ms gap. Owner APPROVED GUARD-AUDIT-001 read-only Guardian.cs/evidence/log inspection; report PENDING, no Guardian runtime test/npm repeat/download/Build. M1 OPEN, MP1.3 LOCKED |
 | MP2/M2 | Safe native offline E2E + cashier critical path on controlled build | LOCKED |
 | MP3/M3 | Installer/upgrade proof and explicit Owner decision | LOCKED |
 
