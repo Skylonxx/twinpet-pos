@@ -185,6 +185,14 @@
 - **One proposed gate** [consolidated startup integrity/concurrency design](planning/MP1-CAND-N-002-STARTUP-INTEGRITY-ONE-PACKET-DECISION.md): agree on normal-concurrency vs hostile-admin threat model, semantics of truly absent vs unreadable/reparse, manifest validation before startup, and a single bounded implementation + deferred tests. NOT owner-approved for code yet. Avoid another sequence of ad-hoc source-only patches without a stable safety contract.
 - **Do not change** existing clone/source, Git main, Cargo/build/test, disk/storage, 10 GiB gate, Cloud/Production, merge/release. A-N1..A-N8 and new runtime cases NOT_RUN, M1 OPEN.
 
+## 2026-11-22 — Owner-approved N-002 STARTUP INTEGRITY DESIGN completed; implementation NOT approved
+
+- Owner authorised a **single design-only consolidation** of startup threat model, dangling App-data / false-absence handling, manifest startup race/authority, and acceptance tests. Created [Consolidated Specification](planning/MP1-CAND-N-002-STARTUP-INTEGRITY-CONSOLIDATED-SPEC.md) on the planning branch with precise Sections 1–6 and SI-01..SI-13 plus A-N1..A-N8; **no Source edits, Claude/Codex launches, Build, Tests, new Clone or Cleanup**.
+- Documented baseline single-instance local Windows mutex and `lib.rs` call ordering as **partial same-session app-instance coordination**, not full writer ownership nor protection from arbitrary external filesystem replacement. Threat model includes normal app-controlled concurrency and detectable I/O failures; unsupported external session/shared-profile or hostile-admin mutation is not claimed protected.
+- **Future proposed scope — requires separate Owner approval:** reuse same existing detached clone, two writable Rust files (`epoch_floor.rs`, `durable_kv.rs`) to cover source findings F-01/F-02 and legacy L-01/L-02 together, preserving Policy A / RISK-008, Offline First and Gate-OFF; `lib.rs` and `single_instance.rs` read-only dependencies. If additional file or lock scope required STOP. No automatic correction/review loop.
+- All A-N1..A-N8 and new runtime/collision tests still `NOT_RUN`, no compilation verification/M1 PASS. Owner refuses C: storage increase or further Cleanup; >=10 GiB Cargo/build gate unchanged. Git `main`, Cloud and Production untouched by this design pass.
+- **One next decision:** Owner approve or hold that one future implementation packet. No change in live workflow authority.
+
 ## Planning policy to review at M0 (PROPOSED, not final)
 - Immediate goal: reliable Native POS for real cashier operations before nonessential feature expansion.
 - Proposed sequence: MP1 preserve/reconcile UAT → MP2 native offline operational UAT → MP3 release-readiness and Owner GO/NO-GO.
@@ -196,7 +204,7 @@
 |---|---|---|
 | M0 next implementation phase | MP1.1/MP1.2 evidence-only handoff approved; MP1.3 implementation separately requires gate | SCOPED_READ_ONLY; FORMAL_PHASE_PENDING |
 | Canonical status reconciliation | Exact allowed `STATE/CURRENT_PACKET/NEXT_ACTION` changes & their approval authority | PENDING |
-| MP1 integration scope and test gates | Original new-clone-plus-Cargo approach superseded by Owner-approved low-disk source-only patches in existing detached clone; both Claude implementations reported, two independent Codex reviews now show STATIC_REVIEW_FINDINGS; startup-integrity design decision pending, no runtime tests or merge | CAND_N_002_STATIC_REVIEW_FINDINGS / DESIGN_GATE_PENDING / M1_OPEN / MP1_3_LOCKED |
+| MP1 integration scope and test gates | Consolidated startup-integrity DESIGN completed on planning branch; Owner decision for proposed two-file implementation pending; existing N-002 Codex STATIC_REVIEW_FINDINGS unresolved, no runtime tests/merge | CAND_N_002_DESIGN_SPEC_READY / IMPLEMENTATION_APPROVAL_PENDING / M1_OPEN / MP1_3_LOCKED |
 | U1/B1-R evidence acceptance | Headless EV-3 vs native GUI; EV-1; M1 mutant skipped | DEFERRED with release trigger; **not risk accepted** |
 | Return/Refund activation | Separate owner/technology/cutover gate, retains gate OFF | LOCKED |
 | EV-2, Android, cloud deployments, production upgrade/rollout | Separate scoped approval | NOT AUTHORIZED |
