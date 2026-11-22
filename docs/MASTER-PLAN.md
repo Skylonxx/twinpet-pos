@@ -1,6 +1,6 @@
 # Twinpet POS — Master Plan Rebaseline
 
-**Version 4.3 — PLANNING DRAFT / GUARD-G1-001 OWNER APPROVED; SOURCE+COMPILE ONLY PENDING**  
+**Version 4.4 — PLANNING DRAFT / N-002 GUARD-G1-001 COMPILE PASS ONLY; G1.5 SOURCE REVIEW PROPOSED**  
 **Prepared / updated:** 2026-11-22 · **Latest Owner decision:** accepted Policy A RISK-008 and approved N-002 source-only existing-clone work, including the two-file fallible scanner patch. Two Codex independent source reviews were performed; latest **STATIC_REVIEW_FINDINGS (07:27 +07)** on dangling app-data ancestor and non-atomic startup manifest checks. **Owner-approved design-only consolidation COMPLETE; new implementation approval is pending.** All runtime tests remain NOT_RUN; M1, main, Cloud, merge, release not authorized.  
 **Explicit non-authority:** this new file on a planning branch does NOT change the live workflow gate, authorize MP1 integration/implementation, MP2/MP3, code changes, merge or release.
 
@@ -373,6 +373,14 @@ Codex `TPOS-MP1-CAND-N-002-GUARDIAN-SYNTHETIC-ONLY-REDESIGN-PROOF-CODEX-REPORT.m
 Owner approved [GUARD-G1-001](planning/MP1-CAND-N-002-GUARD-G1-001-SOURCE-COMPILE-ONLY-OWNER-AUTHORIZATION.md): create isolated new C# Guardian source in the ONLY new D child `D:\Twinpet-POS\Twinpet-N002-Guardian-Synthetic-20261122-001` if ABSENT; then run locally installed .NET Framework `csc.exe` ONCE as DLL compilation and record source/compiled hashes and exit. **No proof of still-unwritten code's runtime guardian safety is demanded before G1 compile.** This resolves the circular preflight that blocked GUARD-SYNTH-001. No execution/load of DLL, Guardian or synthetic scenarios, no npm/Cargo, POS Build/Test/GUI, Cloud, Source/Main/UAT023/real AppData, existing D partial npm/cache modifications, cleanup, new clone or threshold relaxation.
 
 Prior old D build root `D:\Twinpet-POS\Twinpet-N002-Build-20261122` remains read-only, including Guardian.cs, seven evidence/log hashes, npm cache and partial node_modules. Keep <=500ms completed C/D disk sample rule for future G2, experimental C stop<=2.25GiB early/<=2GiB hard, D stop<=10GiB/disconnect; unchanged permanent C>=10GiB POS Build policy. G1 compilation success is not functional proof or M1 PASS. Owner must separately authorize G2 after reading G1 source/compile report. Prompt file delivered for Owner placement in existing OneDrive Prompt folder; short inline Launcher only, report to OneDrive Codex. Windows execution pending.
+
+## 4.38 GUARD-G1-001 one DLL compile PASS; no Guardian runtime proof (2026-11-22 17:59 +07)
+
+Owner's G1 scope was completed: source and a 14,336-byte DLL were created in NEW isolated `D:\Twinpet-POS\Twinpet-N002-Guardian-Synthetic-20261122-001` (root **NOW EXISTS**). Built-in Windows .NET Framework csc C#5 compiled ONCE, exit 0; hashes recorded for two .cs sources, design note, DLL and compiler evidence. **No DLL load/execution, synthetic tests, npm/Cargo, POS Build/Test/GUI/Cloud.** Seven old D Guardian/evidence/log hashes unchanged; existing partial npm/cache preserved, original main/candidate not inspected during this run. C final point 5,843,185,664 bytes and D final 998,728,720,384 bytes, not monitored minima.
+
+Codex static gaps: caller-controlled process executable/path/environment unvalidated; Job Object and forced termination untested; sampler/watchdog/logger threads exist but watchdog death not independently detected; genuine disk identity/disconnect sensor, durable log sink and watcher/overflow adapter missing; <=500ms only a source constant, not validated behavior. [Full report adjudication](planning/MP1-CAND-N-002-GUARD-G1-001-COMPILE-PASS-STATIC-GAPS-ADJUDICATION.md). **Recommendation G1.5:** independent read-only review of new .cs files and G1-DESIGN prior to any G2 implementation or synthetic execution. The source itself has not been independently fetched/reviewed by ChatGPT; findings are those reported by Codex. Any G1.5 or G2 action requires separate Owner authorization; do not rerun G1 compile, silently overwrite existing D root, or resume old one-shot npm cache/download.
+
+Permanent Offline First and Gate-OFF retained, F01/F02 OPEN; M1 NOT_PASS; POS Build requires a separate Owner authorization and permanent C >=10GiB gate (or separately approved waiver). No merge/release.
 
 ## 5. Other initiatives / deferred (LOCKED)
 Return/Refund activation and sealing Rules; Android/Capacitor; EV-2 VM hard reset; broad mutation matrix; unrelated UI polish; unapproved Cloud/deployment or live POS data contact.
