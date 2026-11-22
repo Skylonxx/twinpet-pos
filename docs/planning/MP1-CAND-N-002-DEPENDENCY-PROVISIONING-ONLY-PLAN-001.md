@@ -2,7 +2,7 @@
 
 **Date:** 2026-11-22 · **Decision:** Owner authorizes creating a **plan + full Codex Prompt** for N-002 *dependency provisioning only*, split from Build, identifying official npm/crates.io sources, integrity, network scope and residual risk **before real execution**. **Not an authorization to download, npm install, Cargo fetch, compile or test yet.** Previous all-in-one N-002 attempt ended `BLOCKED_NETWORK_ISOLATION`; the prior temporary C: <10 GiB Build waiver is closed; standard >=10 GiB Build preflight unchanged.
 
-**Current status:** `OWNER_APPROVED_READONLY_PLANNING / PROMPT_PREPARED / CODEX_PREFLIGHT_NOT_YET_RUN / NETWORK_FETCH_NOT_AUTHORIZED / BUILD_NOT_AUTHORIZED`.
+**Current status (2026-11-22 14:59+07):** `CODEX_READONLY_COMPLETE / READY_FOR_OWNER_RISK_DECISION / NETWORK_FETCH_NOT_AUTHORIZED / BUILD_NOT_AUTHORIZED`. See [decision report adjudication](MP1-CAND-N-002-DEPS-PLAN-001-READONLY-RISK-ADJUDICATION.md).
 
 ## Source evidence and fixed boundaries
 - Original `C:\Users\Narachat\twinpet-pos` main and detached independent clone `C:\Users\Narachat\TPOS-MP1-CAND-N-ISO-20261121`, baseline SHA `f034301c46dd9e08190f869cc85dbb140ac28a3c`; exact two previously modified source files remain protected. Source/Master Plan main/Cloud/Production/real POS AppData/UAT023/Gate-OFF/Offline First unchanged. No source modification, no new clone, no GUI, no cleanup, no external downloads, no deployment.
