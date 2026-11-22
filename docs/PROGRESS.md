@@ -32,6 +32,10 @@
 | Report 024 workflow adjudication | PLAN_AUTHORITY_UNRESOLVED | Current authority trio lacks latest UAT/selection |
 | Native EV-1 / EV-2 / GUI EV-3 / offline operational UAT | NOT_RUN or NOT_AUTHORIZED | Do not infer PASS, release or durability |
 
+## Candidate N-002 — OWNER-AUTHORIZED GUARDED LOW-DISK BUILD/RUN, RESULT PENDING (2026-11-22)
+
+Owner authorized a **one-attempt exception** to the >=10 GiB build preflight for experimental Build & Synthetic Run in the **existing** pinned detached N-002 clone only. Safety: live C: monitor <=500ms, cease launched process tree by <=2 GiB (prefer near 2.25 GiB); no source edits, cleanup, UAT023, real POS profile, Firebase/Cloud, new clone/workspace, Git main, install or network fetch; no retry. Test only with synthetic disposable profile; GUI launch only if no cloud egress and profile isolation can be established. One report `TPOS-MP1-CAND-N-002-GUARDED-LOWDISK-BUILD-RUN-REPORT.md` to OneDrive Ai-Report/Codex. ChatGPT prepared the one-pass Codex instruction but cannot execute on the local Windows host from this connection. **BUILD_NOT_RUN_IN_CHAT / RUNTIME_NOT_RUN / M1_NOT_PASS**; F-01/F-02 and consolidated design remain open. [Execution authorization](planning/MP1-CAND-N-002-ONEPASS-LOWDISK-BUILD-RUN-AUTHORIZATION.md).
+
 ## Candidate N-002 — OWNER-APPROVED CONSOLIDATED DESIGN COMPLETE / IMPLEMENTATION HOLD (2026-11-22)
 
 - Owner design-only authorization fulfilled: [Consolidated Startup Integrity Specification](planning/MP1-CAND-N-002-STARTUP-INTEGRITY-CONSOLIDATED-SPEC.md) prepared and committed **only to planning branch**. Records source-evidenced F-01 dangling app-data false absence, F-02 manifest startup interleaving, preexisting L-01 floor `exists()` and L-02 privileged-auth error suppression, single-instance mutex limits, threat model and consolidated remediation/acceptance criteria SI-01–SI-13 and A-N1..A-N8.
@@ -167,7 +171,7 @@ Owner explicitly closed UAT cleanup, refused any further C: cleanup or disk incr
 - No Source Code, tests, build, native app/profile, Cloud, Rules/Functions, release or data cleanup in this pass.
 
 ## Next one action
-**Next one action: Owner decides whether to approve one future N-002 source-only implementation under the now-complete [Consolidated Startup Integrity Specification](planning/MP1-CAND-N-002-STARTUP-INTEGRITY-CONSOLIDATED-SPEC.md). Until that explicit approval, preserve the existing two-file uncommitted clone diff and DO NOT launch Claude/Codex or any patch/review cycle, create clones, run Cargo/build/tests/cleanup, alter >=10 GiB build gate, main/Cloud/Production or release. No M1 acceptance.
+**Next one action: Owner manually runs the already-authorized one-shot guarded Build/Run instruction in Codex CLI on the Windows host** against existing detached N-002 clone, then sends the single measured report. This ONE attempt waives >=10 GiB preflight only for this session, stops at <=2 GiB C: reserve with continuous watcher, and permits synthetic disposable-only Run if Build passes. No source edits, new clone/workspace, cleanup, UAT023, Cloud/Production, real AppData or unconditional GUI/network. No extra approval needed for the bounded attempt, no retry or change in permanent disk policy. M1, source/design remediation, merge/release remain gated.
 
 **Formal M0 phase registration and workflow-trio reconciliation:** still pending; this scoped authorization does not change the live `ACTIVE_IMPLEMENTATION_PACKET=NONE`.
 
