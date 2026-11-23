@@ -37,7 +37,7 @@ gantt
 | Gate | Acceptance evidence | Current status |
 |---|---|---|
 | MP0/M0 | Approved Goal, phase, priorities, roles, lock list, authority reconciliation | SCOPED_READ_ONLY; FORMAL_PHASE_PENDING |
-| MP1/M1 | UAT baseline and commit/build identity, reviewed integration delta | GUARD-G1-001 DONE: two C# sources + design + 14,336-byte DLL, one C#5 compiler EXIT 0, no runtime/synthetic test/npm/Cargo/POS Build. G1 static safety adapters PARTIAL; recommend Owner-approved G1.5 read-only source review then separately gated G2. M1 OPEN, MP1.3 LOCKED |
+| MP1/M1 | UAT baseline and commit/build identity, reviewed integration delta | G1 compile-only DONE; Owner APPROVED GUARD-G1.5-001 READ-ONLY line-numbered source/design/compiler audit of existing D prototype, Report PENDING. DLL not loaded, no G2/synthetic tests/npm/Cargo/POS Build. M1 OPEN, MP1.3 LOCKED |
 | MP2/M2 | Safe native offline E2E + cashier critical path on controlled build | LOCKED |
 | MP3/M3 | Installer/upgrade proof and explicit Owner decision | LOCKED |
 
