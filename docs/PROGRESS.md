@@ -286,8 +286,14 @@ Owner explicitly closed UAT cleanup, refused any further C: cleanup or disk incr
 - Full Prompt `TPOS-MP1-CAND-N-002-GUARDIAN-G1-5-READONLY-SOURCE-AUDIT-CODEX-PROMPT.md` created for manual save under canonical OneDrive Prompt. Expected Codex report `TPOS-MP1-CAND-N-002-GUARDIAN-G1-5-READONLY-SOURCE-AUDIT-CODEX-REPORT.md` under OneDrive Codex; Launcher short inline text only. Windows Codex review **not executed in ChatGPT**.
 - NO compile/run DLL, Guardian/synthetic child, npm/Cargo/download, POS Build/Test/GUI, Cloud, Source/Main/UAT023/real AppData, cleanup or threshold relaxation. G1 G1_COMPILE_PASS_ONLY still holds; G2 requires new separate Owner approval. F01/F02 OPEN and M1 NOT_PASS.
 
+## 2026-11-23 — G1.5 original Prompt and Owner anti-loop Addendum combined, report pending
+
+- [Combined packet record](planning/MP1-CAND-N-002-GUARD-G1-5-001-COMBINED-WORK-PACKET-ADDENDUM.md). Entire original read-only G1.5 Prompt plus Owner-supplied Addendum were packaged byte-for-byte in new combined Markdown file: TPOS-MP1-CAND-N-002-GUARDIAN-G1-5-READONLY-SOURCE-AUDIT-CODEX-PROMPT-COMBINED-001.md. This is not new technical scope or G2 approval.
+- Owner manually saves combined Prompt to established OneDrive Prompt folder, launches once via short inline Launcher, and uploads one consolidated report from established Codex folder. Anti-loop: review whole original scope in one pass, line-cited issue register and requirement matrix, unknowns classified not simulated, next bounded Owner decision only.
+- No Codex Windows execution by ChatGPT. Preserve old Guardian/npm D files, source and DLL; no compile/runtime/synthetic tests, npm/Cargo/POS Build, GUI/Cloud/Main/UAT023/real AppData, cleanup or rule change. 500ms unchanged, G2 NOT_AUTHORIZED, M1 NOT_PASS, F01/F02 OPEN.
+
 ## Next one action
-**Next one action: Owner saves the GUARD-G1.5-001 `.md` Prompt into the existing OneDrive Prompt folder, pastes its short inline Launcher once into Windows Codex CLI, and uploads the read-only source audit Report from the established OneDrive Codex folder.** [Authorized exact scope](planning/MP1-CAND-N-002-GUARD-G1-5-001-READONLY-SOURCE-AUDIT-OWNER-AUTHORIZATION.md). No DLL run or tests, no npm/Cargo/Build, no D source edits/cleanup. Review G1.5 findings before any separately approved G2 implementation or synthetic run. <=500ms unchanged; F01/F02 OPEN, M1 NOT_PASS.
+**Next one action: Owner saves the G1.5 COMBINED read-only Prompt (original + Owner Addendum) to the canonical OneDrive Prompt folder, pastes the short inline Launcher once in Windows Codex CLI, and submits ONE consolidated source audit Report.** [Combined record](planning/MP1-CAND-N-002-GUARD-G1-5-001-COMBINED-WORK-PACKET-ADDENDUM.md). Do not run Addendum standalone or separately repeat original G1.5. No compile/DLL run/npm/Cargo/POS Build/GUI/Cloud, no D edits or cleanup; G2 NOT_AUTHORIZED, <=500ms unchanged, M1 NOT_PASS, F01/F02 OPEN.
 
 **Formal M0 phase registration and workflow-trio reconciliation:** still pending; this scoped authorization does not change the live `ACTIVE_IMPLEMENTATION_PACKET=NONE`.
 
