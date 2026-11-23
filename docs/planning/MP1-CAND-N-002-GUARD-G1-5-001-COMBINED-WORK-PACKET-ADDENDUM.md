@@ -18,4 +18,8 @@ Original complete 19,299-byte `TPOS-MP1-CAND-N-002-GUARDIAN-G1-5-READONLY-SOURCE
 - **One** sanitized Markdown report to canonical OneDrive `Ai-Report\twinpet-pos\Codex\TPOS-MP1-CAND-N-002-GUARDIAN-G1-5-READONLY-SOURCE-AUDIT-CODEX-REPORT.md` (timestamp suffix on collision; no overwrite). Preserve original G1.5's 8 report headings and exact G1.5 verdict codes while including Addendum's 5 content categories, severity register, PASS/FAIL/PARTIAL/BLOCKED status and one next Owner decision. Reconcile format without narrowing technical inspection.
 - A report of the G1.5 review may recommend separately scoped G2-A/B work, but such recommendation is **not** implementation/proof authority. M1 NOT_PASS, F-01/F-02 OPEN, Cloud/Main/merge/release untouched.
 
+## Attempted-run addendum (2026-11-23 08:28 +07)
+
+Owner-uploaded report is `BLOCKED_READONLY_BOUNDARY`. The combined Prompt itself was readable, but Codex also ran git/rg metadata queries in the original POS repo *before* confirming its read-only scope, so the bounded review STOPPED without reading Guardian source or checking any of the 12 hashes. The original combined Prompt remains unchanged. [Boundary-stop adjudication](planning/MP1-CAND-N-002-GUARD-G1-5-001-READONLY-BOUNDARY-STOP-ADJUDICATION.md). The prior anti-loop instruction is still in force: next proposed Owner action is ONE clean retry with Prompt read **first alone** from neutral non-POS cwd, then the exact allowed D paths and ONE consolidated report. No new G1.5 micro-prompt, no automatic rerun, no G2 execution.
+
 **Not yet done:** Windows Codex has not been launched from ChatGPT and no source code from the user's D drive has been read here. This planning-branch record is not a code/test report.
