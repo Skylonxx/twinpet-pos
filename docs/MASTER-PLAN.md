@@ -1,6 +1,6 @@
 # Twinpet POS — Master Plan Rebaseline
 
-**Version 4.5 — PLANNING DRAFT / GUARD-G1.5-001 READ-ONLY OWNER APPROVED; CODEX REPORT PENDING**  
+**Version 4.6 — PLANNING DRAFT / GUARD-G1.5-001 COMBINED READ-ONLY WORK PACKET; REPORT PENDING**  
 **Prepared / updated:** 2026-11-22 · **Latest Owner decision:** accepted Policy A RISK-008 and approved N-002 source-only existing-clone work, including the two-file fallible scanner patch. Two Codex independent source reviews were performed; latest **STATIC_REVIEW_FINDINGS (07:27 +07)** on dangling app-data ancestor and non-atomic startup manifest checks. **Owner-approved design-only consolidation COMPLETE; new implementation approval is pending.** All runtime tests remain NOT_RUN; M1, main, Cloud, merge, release not authorized.  
 **Explicit non-authority:** this new file on a planning branch does NOT change the live workflow gate, authorize MP1 integration/implementation, MP2/MP3, code changes, merge or release.
 
@@ -389,6 +389,12 @@ Owner has approved [G1.5 read-only source review](planning/MP1-CAND-N-002-GUARD-
 **Scope is completely READ-ONLY** on D and code; only a new one-shot sanitized Markdown report under established OneDrive Codex directory may be written. NO new code, compile, DLL load, synthetic tests/Guardian process, npm/Cargo, POS Build/Test/GUI, Cloud/Production, original Source/Main/UAT023/real AppData, partial npm cache traversal/reuse, cleanup or 500ms rule change. Finish the source audit even when runtime proof is absent; classify those as gaps rather than introducing the old circular preflight. G2 implementation and synthetic proof remain future separate Owner decisions. No G1 replay, no npm provisioning repeat; F01/F02 OPEN and M1 NOT_PASS.
 
 Full Prompt `.md` provided for Owner to save in canonical OneDrive Prompt folder; Launcher short INLINE only; one report to canonical Codex folder. ChatGPT did not access D source or run Windows Codex. **Audit report PENDING.**
+
+## 4.40 GUARD-G1.5-001 combined Owner anti-loop work packet (2026-11-23)
+
+Owner supplied TPOS-GUARDIAN-G1-5-WORK-PACKET-ADDENDUM-001.md, which explicitly says to append it to the original G1.5 Prompt without changing technical scope. [Combined packet record](planning/MP1-CAND-N-002-GUARD-G1-5-001-COMBINED-WORK-PACKET-ADDENDUM.md). The existing 19,299-byte Prompt and entire 5,288-byte Addendum were preserved byte-for-byte and packaged as TPOS-MP1-CAND-N-002-GUARDIAN-G1-5-READONLY-SOURCE-AUDIT-CODEX-PROMPT-COMBINED-001.md. Original standalone artifacts unchanged. One comprehensive line-cited STATIC review, one consolidated severity issue register, one report and one next Owner decision; no cascading micro-prompts.
+
+Use original eight report headings with Addendum five content categories, original exact verdict code plus generic PASS/FAIL/PARTIAL/BLOCKED status; more restrictive rule wins on any conflict. Prompt to canonical OneDrive Prompt directory, Launcher short inline only, report under the unchanged canonical OneDrive Codex filename. Do NOT launch Addendum standalone. No D edits, compile/DLL load/synthetic runtime, npm/Cargo, POS Build/GUI, Cloud/Main/UAT023/real AppData, cleanup, 500ms change or G2 authorization. Existing old npm and Guardian evidence preserved, M1 NOT_PASS, F01/F02 OPEN. Windows Codex review not performed by ChatGPT; report pending.
 
 ## 5. Other initiatives / deferred (LOCKED)
 Return/Refund activation and sealing Rules; Android/Capacitor; EV-2 VM hard reset; broad mutation matrix; unrelated UI polish; unapproved Cloud/deployment or live POS data contact.
