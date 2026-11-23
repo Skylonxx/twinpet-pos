@@ -1,6 +1,6 @@
 # Twinpet POS — Master Plan Rebaseline
 
-**Version 4.4 — PLANNING DRAFT / N-002 GUARD-G1-001 COMPILE PASS ONLY; G1.5 SOURCE REVIEW PROPOSED**  
+**Version 4.5 — PLANNING DRAFT / GUARD-G1.5-001 READ-ONLY OWNER APPROVED; CODEX REPORT PENDING**  
 **Prepared / updated:** 2026-11-22 · **Latest Owner decision:** accepted Policy A RISK-008 and approved N-002 source-only existing-clone work, including the two-file fallible scanner patch. Two Codex independent source reviews were performed; latest **STATIC_REVIEW_FINDINGS (07:27 +07)** on dangling app-data ancestor and non-atomic startup manifest checks. **Owner-approved design-only consolidation COMPLETE; new implementation approval is pending.** All runtime tests remain NOT_RUN; M1, main, Cloud, merge, release not authorized.  
 **Explicit non-authority:** this new file on a planning branch does NOT change the live workflow gate, authorize MP1 integration/implementation, MP2/MP3, code changes, merge or release.
 
@@ -381,6 +381,14 @@ Owner's G1 scope was completed: source and a 14,336-byte DLL were created in NEW
 Codex static gaps: caller-controlled process executable/path/environment unvalidated; Job Object and forced termination untested; sampler/watchdog/logger threads exist but watchdog death not independently detected; genuine disk identity/disconnect sensor, durable log sink and watcher/overflow adapter missing; <=500ms only a source constant, not validated behavior. [Full report adjudication](planning/MP1-CAND-N-002-GUARD-G1-001-COMPILE-PASS-STATIC-GAPS-ADJUDICATION.md). **Recommendation G1.5:** independent read-only review of new .cs files and G1-DESIGN prior to any G2 implementation or synthetic execution. The source itself has not been independently fetched/reviewed by ChatGPT; findings are those reported by Codex. Any G1.5 or G2 action requires separate Owner authorization; do not rerun G1 compile, silently overwrite existing D root, or resume old one-shot npm cache/download.
 
 Permanent Offline First and Gate-OFF retained, F01/F02 OPEN; M1 NOT_PASS; POS Build requires a separate Owner authorization and permanent C >=10GiB gate (or separately approved waiver). No merge/release.
+
+## 4.39 N-002 GUARD-G1.5-001 — read-only source audit Owner-approved (2026-11-23)
+
+Owner has approved [G1.5 read-only source review](planning/MP1-CAND-N-002-GUARD-G1-5-001-READONLY-SOURCE-AUDIT-OWNER-AUTHORIZATION.md) of the **already existing** isolated D G1 root: `D:\Twinpet-POS\Twinpet-N002-Guardian-Synthetic-20261122-001`. G1's two .cs files, G1-DESIGN.md, compiler-output.txt and DLL **SHA-only** can be inspected; narrow before/after hash verification of seven OLD Guardian/evidence/log files in the preserved `D:\Twinpet-POS\Twinpet-N002-Build-20261122` root. Report actual file:line findings for Job Object/process ownership, independent watchdog and its own liveness, authentic C/D completed sample identity/freshness, bounded durable logging, watcher/termination failure paths and child executable/env trust boundary.
+
+**Scope is completely READ-ONLY** on D and code; only a new one-shot sanitized Markdown report under established OneDrive Codex directory may be written. NO new code, compile, DLL load, synthetic tests/Guardian process, npm/Cargo, POS Build/Test/GUI, Cloud/Production, original Source/Main/UAT023/real AppData, partial npm cache traversal/reuse, cleanup or 500ms rule change. Finish the source audit even when runtime proof is absent; classify those as gaps rather than introducing the old circular preflight. G2 implementation and synthetic proof remain future separate Owner decisions. No G1 replay, no npm provisioning repeat; F01/F02 OPEN and M1 NOT_PASS.
+
+Full Prompt `.md` provided for Owner to save in canonical OneDrive Prompt folder; Launcher short INLINE only; one report to canonical Codex folder. ChatGPT did not access D source or run Windows Codex. **Audit report PENDING.**
 
 ## 5. Other initiatives / deferred (LOCKED)
 Return/Refund activation and sealing Rules; Android/Capacitor; EV-2 VM hard reset; broad mutation matrix; unrelated UI polish; unapproved Cloud/deployment or live POS data contact.
