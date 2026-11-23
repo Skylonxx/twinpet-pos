@@ -330,6 +330,13 @@
 - Preserve original G1.5 eight sections and exact verdict, include Addendum five content categories and generic PASS/FAIL/PARTIAL/BLOCKED status. More restrictive instruction wins. No automatic remediation or G2 work.
 - Full combined .md saved manually to canonical OneDrive Prompt directory; only short inline Launcher; one report to same OneDrive Codex G1.5 report path. No compile, DLL run, npm/Cargo, POS Build/Test/GUI, Cloud, Source/Main/UAT023, real AppData, cleanup, 500ms adjustment. M1 NOT_PASS, F01/F02 OPEN.
 
+## 2026-11-23 — G1.5 COMBINED returned BLOCKED_READONLY_BOUNDARY, not source-audit findings
+
+- Owner-uploaded G1.5 report at 08:28+07 records prompt read success but unauthorized concurrent POS workspace enumeration (`git status`, `git rev-parse`, `rg --files`) before confirming the Prompt's pre-read constraints. Codex fail-closed STOP was appropriate; effects on Git index/metadata remain unverified and original main/candidate custody was NOT assessed.
+- Zero of twelve D G1/OLD hashes and no original source files read, and **all six requirements A–F NOT_ASSESSED**. Zero classified severity findings means no findings assessed, **not a safety PASS**. [Boundary-stop analysis](planning/MP1-CAND-N-002-GUARD-G1-5-001-READONLY-BOUNDARY-STOP-ADJUDICATION.md).
+- No DLL runtime, synthetic tests, npm/Cargo, POS Build/GUI/Cloud, network/cleanup. Retain original G1 COMPILE_PASS_ONLY, G2 NOT_AUTHORIZED, 500ms unchanged, F01/F02 OPEN and M1 NOT_PASS.
+- Proposed ONE new Owner decision: one clean invocation of SAME prepared G1.5 COMBINED Prompt only, with sequential Prompt read from neutral non-POS working directory, no POS `git`/`rg`, then only the exactly scoped D source/evidence and before/after 12 hashes; one report, no micro-prompt. Do not silently restart without Owner's new go-ahead.
+
 ## Planning policy to review at M0 (PROPOSED, not final)
 - Immediate goal: reliable Native POS for real cashier operations before nonessential feature expansion.
 - Proposed sequence: MP1 preserve/reconcile UAT → MP2 native offline operational UAT → MP3 release-readiness and Owner GO/NO-GO.
