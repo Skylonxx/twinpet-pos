@@ -324,6 +324,12 @@
 - Rehash five G1 files and seven old D Guardian evidence/log files before/after; preserve old partial npm cache/node_modules. Only write a single sanitized Markdown Codex Report under canonical OneDrive; full `.md` Prompt in OneDrive Prompt, Launcher short inline only.
 - Explicit NO source edits, compilation, DLL runtime, synthetic tests, npm/Cargo/network, POS Build/GUI, Cloud/Production, Source/Main/UAT023/real AppData, cleanup or merger. A completed audit is not Guardian runtime PASS or G2 approval. Original DEPS-PROV one-shot remains CLOSED; F01/F02 OPEN, M1 NOT_PASS.
 
+## 2026-11-23 — Owner G1.5 anti-loop Addendum packaged; no technical scope change
+
+- [Combined Addendum](planning/MP1-CAND-N-002-GUARD-G1-5-001-COMBINED-WORK-PACKET-ADDENDUM.md) appends full Owner work-packet instruction after byte-preserved original G1.5 Prompt. This is the same G1.5 packet: one comprehensive read-only static review of exactly approved source/evidence, one consolidated severity-ranked issue register, one report and one next Owner gate; no new G1.5a/b micro-task cycle.
+- Preserve original G1.5 eight sections and exact verdict, include Addendum five content categories and generic PASS/FAIL/PARTIAL/BLOCKED status. More restrictive instruction wins. No automatic remediation or G2 work.
+- Full combined .md saved manually to canonical OneDrive Prompt directory; only short inline Launcher; one report to same OneDrive Codex G1.5 report path. No compile, DLL run, npm/Cargo, POS Build/Test/GUI, Cloud, Source/Main/UAT023, real AppData, cleanup, 500ms adjustment. M1 NOT_PASS, F01/F02 OPEN.
+
 ## Planning policy to review at M0 (PROPOSED, not final)
 - Immediate goal: reliable Native POS for real cashier operations before nonessential feature expansion.
 - Proposed sequence: MP1 preserve/reconcile UAT → MP2 native offline operational UAT → MP3 release-readiness and Owner GO/NO-GO.
