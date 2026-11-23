@@ -20,6 +20,10 @@
 5. **PARTIAL — bounded logs and watcher:** queue/stall/fault path exists but durable local sink and measured enqueue/write/flush incomplete; actual watcher/overflow adapter, independent watchdog-death detector, termination acknowledgment and timestamps absent.
 6. **STATIC ONLY — no intended Cloud/POS integration:** delegated probe/sink/process inputs could be unsafe unless explicitly bounded and independently reviewed.
 
+## Subsequent Owner decision (2026-11-23)
+
+Owner has **NOW APPROVED** creating the exact read-only G1.5 Prompt, with the work limited to independently reading existing D G1 sources, design and compiler evidence, hashing DLL and old evidence, and producing a single OneDrive Codex report. [G1.5 Owner authorization](planning/MP1-CAND-N-002-GUARD-G1-5-001-READONLY-SOURCE-AUDIT-OWNER-AUTHORIZATION.md). This replaces the earlier G1.5 decision-pending status **for the review only**. **G2 implementation and synthetic execution remain NOT_AUTHORIZED**; old partial npm/cache preserved.
+
 ## Next recommended gate — not approved for execution
 
 **Recommend G1.5 independent READ-ONLY SOURCE REVIEW first**, using only the two NEW `.cs` files, `G1-DESIGN.md`, compiler evidence and hashes under the NOW-EXISTING G1 D root. Review P/Invoke signatures, handle ownership, cancellation/lock ordering, proposed independent watchdog, volume-sensor trust boundary, queue stall behavior, side-effect paths and child-process launch input validation. Do NOT execute/load/reflection-invoke the DLL, run synthetic processes, rewrite G1 files or touch old D cache. Produce one read-only review report in canonical OneDrive Codex location. This helps define a concrete minimum G2 implementation/proof packet without running known incomplete code.
