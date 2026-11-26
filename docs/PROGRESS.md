@@ -1,5 +1,12 @@
 # Twinpet POS — Progress / Evidence Register (MP0 DRAFT)
 
+## 2026-11-26 — CURRENT OWNER-APPROVED RECOVERY (supersedes earlier proposed next actions)
+
+- **Active:** [TPOS-PROJECT-RECOVERY-001](planning/TPOS-PROJECT-RECOVERY-001.md) — one bounded read-only Codex Windows readiness assessment. Guardian G1–G2E and Conditional C blueprint **HOLD/DEFERRED**, STOP_LOOP active; source defects open, no runtime approval. Do not rerun G1.5 or expand Guardian.
+- Return to product MP1: verify local candidate and normal build environment, C >=10 GiB unchanged, determine any mandatory Guardian dependency from authority, and propose smallest N-002 source remediation. D capacity alone is not proof. No source, build, tests, dependency provisioning, cloud, merge or production authorization. Formal workflow trio on main unchanged; M0 formal phase pending, M1 NOT_PASS; MP1.3/MP2/MP3 locked.
+- **Single next action:** run the approved recovery readiness packet, produce a decision-ready report; no automatic next packet. Historical text below is retained evidence, not current instructions. Git/Todoist reconciliation required after each completed packet.
+
+
 **Prepared / updated:** 2026-11-21 · Baseline main `f034301c46dd9e08190f869cc85dbb140ac28a3c`  
 **Applies to:** proposed MP0 portfolio only. Actual live phase is still `POST_SEC001_NEXT_PHASE_SELECTION_ADJUDICATION` / active implementation NONE.
 
@@ -298,7 +305,7 @@ Owner explicitly closed UAT cleanup, refused any further C: cleanup or disk incr
 - G1/OLD D Guardian paths not touched or hashed; **0/12** expected hashes verified, all A–F technical requirements NOT_ASSESSED. Thus G1.5 remains incomplete and cannot qualify G1 DLL for G2. No compile, DLL load, synthetic test, npm/Cargo, POS Build, GUI/Cloud/cleanup. Prior G1 compile-only success historical; F-01/F-02 OPEN, M1 NOT_PASS; <=500ms unchanged.
 - Next proposed step: Owner approves ONE clean retry of EXISTING G1.5 COMBINED Prompt, using sequential Prompt-first reading from neutral cwd and scoped D paths only, one consolidated issue register/report, no duplicate micro-prompt or additional technical authorization. The first BLOCKED report remains preserved.
 
-## Next one action
+## Historical next action (superseded 2026-11-26)
 **Next one action: Owner decides whether to authorize ONE clean retry of the SAME G1.5 COMBINED Prompt, with Prompt read FIRST alone from neutral non-POS working directory, no `git`/`rg` in original POS repo, and only the approved D source/evidence hashes and one static review report.** [G1.5 boundary-stop adjudication](planning/MP1-CAND-N-002-GUARD-G1-5-001-READONLY-BOUNDARY-STOP-ADJUDICATION.md). Do not create a G1.5a/1.6 micro-prompt or launch G2/npm/Cargo/Build, do not change <=500ms or cleanup files. Existing BLOCKED report retained; F01/F02 OPEN, M1 NOT_PASS.
 
 **Formal M0 phase registration and workflow-trio reconciliation:** still pending; this scoped authorization does not change the live `ACTIVE_IMPLEMENTATION_PACKET=NONE`.
