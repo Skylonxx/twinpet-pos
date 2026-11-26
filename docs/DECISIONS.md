@@ -1,5 +1,12 @@
 # Twinpet POS — Decision Log (MP0 DRAFT)
 
+## 2026-11-26 — CURRENT OWNER-APPROVED RECOVERY (supersedes earlier proposed next actions)
+
+- **Active:** [TPOS-PROJECT-RECOVERY-001](planning/TPOS-PROJECT-RECOVERY-001.md) — one bounded read-only Codex Windows readiness assessment. Guardian G1–G2E and Conditional C blueprint **HOLD/DEFERRED**, STOP_LOOP active; source defects open, no runtime approval. Do not rerun G1.5 or expand Guardian.
+- Return to product MP1: verify local candidate and normal build environment, C >=10 GiB unchanged, determine any mandatory Guardian dependency from authority, and propose smallest N-002 source remediation. D capacity alone is not proof. No source, build, tests, dependency provisioning, cloud, merge or production authorization. Formal workflow trio on main unchanged; M0 formal phase pending, M1 NOT_PASS; MP1.3/MP2/MP3 locked.
+- **Single next action:** run the approved recovery readiness packet, produce a decision-ready report; no automatic next packet. Historical text below is retained evidence, not current instructions. Git/Todoist reconciliation required after each completed packet.
+
+
 **Version:** 0.1 · 2026-11-21  
 **Scope:** planning decisions only; does not replace `docs/agent-workflow/AUTHORITY_MATRIX.md` or live workflow trio.
 
