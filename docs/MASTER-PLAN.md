@@ -1,5 +1,12 @@
 # Twinpet POS — Master Plan Rebaseline
 
+## 2026-11-26 — CURRENT OWNER-APPROVED RECOVERY (supersedes earlier proposed next actions)
+
+- **Active:** [TPOS-PROJECT-RECOVERY-001](planning/TPOS-PROJECT-RECOVERY-001.md) — one bounded read-only Codex Windows readiness assessment. Guardian G1–G2E and Conditional C blueprint **HOLD/DEFERRED**, STOP_LOOP active; source defects open, no runtime approval. Do not rerun G1.5 or expand Guardian.
+- Return to product MP1: verify local candidate and normal build environment, C >=10 GiB unchanged, determine any mandatory Guardian dependency from authority, and propose smallest N-002 source remediation. D capacity alone is not proof. No source, build, tests, dependency provisioning, cloud, merge or production authorization. Formal workflow trio on main unchanged; M0 formal phase pending, M1 NOT_PASS; MP1.3/MP2/MP3 locked.
+- **Single next action:** run the approved recovery readiness packet, produce a decision-ready report; no automatic next packet. Historical text below is retained evidence, not current instructions. Git/Todoist reconciliation required after each completed packet.
+
+
 **Version 4.7 — PLANNING DRAFT / GUARD-G1.5-001 BLOCKED_READONLY_BOUNDARY; SOURCE NOT ASSESSED**  
 **Prepared / updated:** 2026-11-22 · **Latest Owner decision:** accepted Policy A RISK-008 and approved N-002 source-only existing-clone work, including the two-file fallible scanner patch. Two Codex independent source reviews were performed; latest **STATIC_REVIEW_FINDINGS (07:27 +07)** on dangling app-data ancestor and non-atomic startup manifest checks. **Owner-approved design-only consolidation COMPLETE; new implementation approval is pending.** All runtime tests remain NOT_RUN; M1, main, Cloud, merge, release not authorized.  
 **Explicit non-authority:** this new file on a planning branch does NOT change the live workflow gate, authorize MP1 integration/implementation, MP2/MP3, code changes, merge or release.
