@@ -1,5 +1,13 @@
 # Twinpet POS — Master Plan Rebaseline
 
+## 2026-11-27 — CURRENT RECOVERY RESULT / next Owner decision pending
+
+- RECOVERY_REVIEW=PARTIAL; NORMAL_BUILD_READINESS=BLOCKED. Local main and detached candidate baseline matched f034301; two named N-002 Rust file hashes matched; no tracked main changes, limited custody only. Local planning ref absent, formal live-trio adjudication pending. Remote planning documents are not local workflow authorization.
+- Environment: C free 5.556 GiB vs mandatory 10 GiB (shortfall 4.444 GiB plus build headroom); D free 930.137 GiB. Candidate node_modules/dist absent, compiler/SDK and dependency integrity unverified. Prior partial provisioning is not usable proof. No cleanup, install, build, migration, or exception authorized. Normal-build Guardian requirement UNDETERMINED; hold G1–G2E/Conditional C, STOP_LOOP active. Resolve policy before execution, not by another Guardian development cycle.
+- **Next Owner decision (NOT APPROVED):** resolve scoped authority against live trio; commission one source-only N-002 remediation by Claude in existing isolated candidate, limited to durable_kv.rs and epoch_floor.rs. Correct false absence of dangling/inaccessible ancestors, coherent manifest/startup classification under stated ordinary concurrency model, floor/privileged-auth error flattening (or explicitly bound remaining issues). Preserve Policy A/RISK-008, Offline First, Gate-OFF and original; stop on custody drift, need for broader scope or unresolved authority/model. Deliver bounded diff and disposable-fixture test design, then independent Codex review. No compile/test/runtime/merge/production implied.
+- M1 NOT_PASS; F-01/F-02 OPEN; MP1.3/MP2/MP3 locked. Historical recovery instructions below retained as history; do not rerun readiness or Guardian automatically. Source report: TPOS-PROJECT-RECOVERY-001-CODEX-REPORT.md (2026-11-27, retained separately; no raw local evidence published).
+
+
 ## 2026-11-26 — CURRENT OWNER-APPROVED RECOVERY (supersedes earlier proposed next actions)
 
 - **Active:** [TPOS-PROJECT-RECOVERY-001](planning/TPOS-PROJECT-RECOVERY-001.md) — one bounded read-only Codex Windows readiness assessment. Guardian G1–G2E and Conditional C blueprint **HOLD/DEFERRED**, STOP_LOOP active; source defects open, no runtime approval. Do not rerun G1.5 or expand Guardian.
